@@ -1,0 +1,21 @@
+# Secrets — never commit
+config/config.php
+bin/scanner.config.json
+
+# User-uploaded content
+public/uploads/
+
+# Runtime logs
+*.log
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini

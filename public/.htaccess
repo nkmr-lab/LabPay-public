@@ -1,0 +1,47 @@
+# LabPay public/.htaccess
+# Routes /api/* to the front controller, falls back to SPA index.html.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Forward Authorization header to PHP (mod_php strips it by default)
+    RewriteCond %{HTTP:Authorization} ^(.+)$
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+    # API: rewrite anything under /api/ to api/index.php (preserving the original URI in REQUEST_URI)
+    RewriteRule ^api(/.*)?$ api/index.php [L,QSA]
+
+    # SPA fallback: everything else that isn't an existing file/dir goes to index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
+
+# Sensible defaults
+AddDefaultCharset UTF-8
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    # Allow camera access for in-page barcode scanning (HTTPS still required by the browser).
+    Header always set Permissions-Policy "camera=(self)"
+
+    # SPA shell + service worker: never cache. Lets every deploy propagate immediately.
+    <FilesMatch "\.(html|js|css|webmanifest)$">
+        Header set Cache-Control "no-cache, must-revalidate"
+    </FilesMatch>
+    # The service worker itself must always be fresh.
+    <Files "sw.js">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </Files>
+</IfModule>
+
+# Deny sensitive files if accidentally placed alongside public/ (e.g. when DocumentRoot points one level up)
+<FilesMatch "(^\.|composer\.(json|lock)|package\.json|README\.md|.*\.sql|.*\.sh)$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,6 @@
+{
+  "labpay_url": "https://pay.nkmr.io",
+  "room_id": "10F",
+  "scanner_token": "REPLACE_WITH_TOKEN_FROM_ADMIN_PAGE",
+  "subnet": "192.168.50.0/24"
+}
