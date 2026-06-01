@@ -35,7 +35,11 @@
 | PATCH | `/api/me`                | プロフィール更新: `{ display_name?, avatar_url?, scrapbox_username? }` |
 | GET   | `/api/me/transactions?limit=&offset=` | 取引履歴 (購入/販売/手数料/来室/送金/タスク報酬/取消 全部) |
 | GET   | `/api/me/listings?status=` | 自分の出品 |
-| GET   | `/api/me/achievements`   | 実績 8軸 × 4段階の獲得状況・進捗 |
+| GET   | `/api/me/achievements`   | 実績 9軸 × 4段階の獲得状況・進捗 |
+| GET   | `/api/me/presence_summary` | 自分のラボ滞在時間 (today/week/month/total minutes + 現在開いてるセッションの開始時刻) |
+| GET   | `/api/me/scrapbox_handles` | 自分が申告した Scrapbox 表示名一覧 + 直近30日の獲得 pt サマリー |
+| POST  | `/api/me/scrapbox_handles` | `{ handle: "..." }` を申告 (既に他人が持っていた場合は奪取される — 自己責任) |
+| DELETE| `/api/me/scrapbox_handles/{handle}` | 自分の handle を解除 |
 
 GET `/api/me` 応答例:
 
@@ -142,23 +146,35 @@ QR コードの URI 仕様 (フロントで使用): `labpay:transfer?to=<user_id
 
 ---
 
-## 来室チェックイン `/api/checkins`
+## ラボイン (来室) `/api/checkins`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET  | `/api/checkins/status` | 本日の状態確認 (バッジ表示用) |
-| POST | `/api/checkins`        | 手動チェックイン |
-| POST | `/api/checkins/geo`    | `{ lat, lng, accuracy? }` 位置情報チェックイン (50m 圏内なら成功) |
+| GET  | `/api/checkins/status` | 本日の状態確認 + ボーナス式パラメータ |
+| POST | `/api/checkins`        | 手動チェックイン (本番では Wi-Fi 自動。テスト/フォールバック用) |
 
-応答:
+`/api/checkins/status` 応答例:
 ```json
 {
-  "already_checked_in": false, "points": 10, "awarded_today": 10,
-  "current_streak": 1, "longest_streak": 1, "new_balance": 1010
+  "checked_in_today": true,
+  "points_today": 12,
+  "current_streak": 3,
+  "longest_streak": 12,
+  "today_is_workday": true,
+  "bonus_rule": {
+    "base": 10, "per_day": 1, "cap": 10, "divisor": 1,
+    "max_total": 20, "days_to_max": 11
+  }
 }
 ```
 
-`/api/checkins/geo` は追加で `verified_room` と `distance_m` を返す。圏外なら `403 too_far`。
+POST `/api/checkins` 応答:
+```json
+{
+  "already_checked_in": false, "points": 12, "awarded_today": 12,
+  "current_streak": 3, "longest_streak": 12, "new_balance": 1012
+}
+```
 
 > 通常は presence scanner が登録 MAC を観測した瞬間にサーバ側で自動チェックインされるので、明示的に呼ぶ必要は少ない。
 
@@ -177,6 +193,9 @@ QR コードの URI 仕様 (フロントで使用): `labpay:transfer?to=<user_id
 | POST   | `/api/tasks/{id}/claims/{cid}/report` | `{ notes? }` 完了報告 |
 | POST   | `/api/tasks/{id}/claims/{cid}/approve` | 依頼者: 承認 → 報酬支払 |
 | POST   | `/api/tasks/{id}/claims/{cid}/reject`  | 依頼者: 却下 |
+| POST   | `/api/tasks/{id}/attachments`        | 依頼者: ファイル添付 (multipart `file`、~50MB / PDF・docx・画像等) |
+| GET    | `/api/tasks/{id}/attachments/{aid}`  | 添付 download (元のファイル名で) |
+| DELETE | `/api/tasks/{id}/attachments/{aid}`  | 依頼者または uploader: 添付削除 |
 
 POST `/api/tasks` body:
 ```json
@@ -185,9 +204,12 @@ POST `/api/tasks` body:
   "reward": 10, "capacity": 3,
   "per_user_limit": 1,            // 0=無制限
   "deadline": "2026-06-30 18:00:00", // 任意。空なら無期限
-  "audience_grades": ["B3","B4"]   // 任意。空なら全員
+  "audience_grades": ["B3","B4"],  // 任意。空なら全員
+  "slots_spec": "6/15 11:00-15:00 30分刻み"   // 任意。指定すると capacity が自動算出される
 }
 ```
+
+タスク詳細 (`GET /api/tasks/{id}`) は `slots[]` (時間枠) と `attachments[]` (添付ファイル) を含みます。
 
 タスクの状態遷移:
 - 作成時 `status='open'`、エスクローに `reward × capacity` 預け入れ
@@ -202,11 +224,25 @@ POST `/api/tasks` body:
 | Method | Path | 説明 |
 |---|---|---|
 | GET    | `/api/presence`                       | 部屋ごとの「今いる人」(直近 N 分内に登録 MAC が観測された人) |
+| GET    | `/api/presence/heatmap?days=7`        | 部屋 × 曜日 × 時間 の平均在室人数行列 (7-365 日) |
 | GET    | `/api/presence/devices`               | 自分の登録 MAC 一覧 |
 | POST   | `/api/presence/devices`               | `{ mac, label? }` MAC 登録 |
 | DELETE | `/api/presence/devices/{id}`          | 削除 |
 | GET    | `/api/presence/unregistered_macs`     | 直近観測の未登録 MAC (自分のを見つけるため。OUI ヒントと「NEW」候補付き) |
 | POST   | `/api/presence/scan`                  | Scanner 専用 (Bearer token 認証)。`{ room_id, observations: [{mac, ip}] }` |
+
+`/api/presence/heatmap` 応答:
+```json
+{
+  "days": 7, "range_from": "...", "range_to": "...",
+  "days_of_week": [1,1,1,1,1,1,1],  // Sun..Sat 各曜日が何日分含まれるか
+  "rooms": [
+    { "id": "10F", "display_name": "10階研究室",
+      "matrix": [[0,...24 hours], ..., 7 weekdays] }
+  ]
+}
+```
+`matrix[w][h]` は Sun=0..Sat=6 / 0..23 時の平均同時在室人数 (距 distinct user)。
 
 ---
 
@@ -315,10 +351,10 @@ Content-Type: multipart/form-data
 | POST   | `/api/admin/calendar_overrides`      | `{ override_date, kind, label? }` (`kind` = `lab_closed`/`lab_open`) |
 | DELETE | `/api/admin/calendar_overrides/{date}` | 解除 |
 
-### Scrapbox 同期
+### Scrapbox 同期 (Slack ブリッジ)
 | Method | Path | 説明 |
 |---|---|---|
-| POST   | `/api/admin/scrapbox/sync`           | `{ day? }` 指定日 (デフォルト前日) を再集計 |
+| POST   | `/api/admin/scrapbox_slack/sync`     | `{ day?, dry_run? }` Slack の `#scrapbox` から指定日分を集計 (cron が日次自動実行) |
 
 ---
 
