@@ -11,7 +11,7 @@ export async function renderHome() {
     <div class="card balance-hero">
       <div class="lbl">残高</div>
       <div class="num" id="home-balance">— pt</div>
-      <div class="muted" id="streak-line">連続来室 — 日 (最長 — 日)</div>
+      <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
       <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
@@ -25,7 +25,6 @@ export async function renderHome() {
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">今ラボにいる人</h2>
-        <a href="#/activity" class="muted" style="font-size:13px; margin-right:10px">活動マップ →</a>
         <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
           名前を表示
           <span class="switch">
@@ -35,6 +34,9 @@ export async function renderHome() {
         </label>
       </div>
       <div id="presence" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+      <div style="text-align:right; margin-top:8px">
+        <a href="#/activity" class="muted" style="font-size:13px">活動マップ →</a>
+      </div>
     </div>
 
     <div class="card">
@@ -75,7 +77,7 @@ export async function renderHome() {
     document.getElementById('home-balance').textContent = (me.balance ?? 0).toLocaleString() + ' pt';
     const s = me.streak || {};
     document.getElementById('streak-line').textContent =
-      `連続来室 ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
+      `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
     state.balance = me.balance;
   } catch (e) {
     toast('情報の取得に失敗: ' + e.message);
@@ -269,7 +271,7 @@ async function renderRecentTx() {
 
 // Render the check-in area based on today's status:
 //  - Already checked in:     subtle ✓ message
-//  - Not yet, today is workday: "位置情報で来室" button (geolocation)
+//  - Not yet, today is workday: passive message (Wi-Fi scanner handles it)
 //  - Not yet, not workday:   inert message, but still allow optional checkin
 async function renderCheckinArea() {
   const root = document.getElementById('checkin-area');
@@ -283,7 +285,7 @@ async function renderCheckinArea() {
   // Check-in happens entirely via the lab Wi-Fi scanner — no manual UI here.
   // Show today's state + the bonus rule explainer, nothing actionable.
   if (status.checked_in_today) {
-    root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日来室済み (+${status.points_today}pt / 連続来室 ${status.current_streak} 日)</div>
+    root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日ラボイン済み (+${status.points_today}pt / 連続ラボイン ${status.current_streak} 日)</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
@@ -303,7 +305,7 @@ function bonusRuleHtml(rule) {
   if (!rule) return '';
   const { base, max_total, days_to_max } = rule;
   return `<div class="muted" style="font-size:11px; margin-top:8px; line-height:1.5">
-    💰 来室ボーナス: ベース <b>${base}</b>pt + 連続日数で上乗せ、最大 <b>${max_total}</b>pt
+    💰 ラボインボーナス: ベース <b>${base}</b>pt + 連続日数で上乗せ、最大 <b>${max_total}</b>pt
     (${days_to_max} 日連続で上限到達)
   </div>`;
 }
@@ -371,7 +373,7 @@ function renderTxItem(t) {
 function labelFor(type) {
   return ({
     initial: '初期配布',
-    checkin: '来室',
+    checkin: 'ラボイン',
     purchase: '購入',
     fee: '手数料',
     reversal: '取消',

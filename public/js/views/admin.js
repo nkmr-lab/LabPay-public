@@ -369,7 +369,7 @@ async function populateIssueUserPicker() {
 
 // Pretty label for ledger row type, matches home.js but kept local to avoid coupling.
 const LEDGER_TYPE_LABEL = {
-  initial: '初期/配布', checkin: '来室', purchase: '購入', fee: '手数料',
+  initial: '初期/配布', checkin: 'ラボイン', purchase: '購入', fee: '手数料',
   reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
   deposit: '預け入れ', refund: '返金', burn: '消却',
 };

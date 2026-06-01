@@ -6,7 +6,7 @@ export async function renderHistory() {
   app.innerHTML = `
     <div class="card">
       <h2>取引履歴</h2>
-      <p class="muted">すべての出入り (購入・販売・来室・手数料・取消) が並びます。</p>
+      <p class="muted">すべての出入り (購入・販売・ラボイン・手数料・取消) が並びます。</p>
     </div>
     <div id="list" class="list"><div class="muted">読み込み中…</div></div>
   `;
@@ -28,7 +28,7 @@ function row(t) {
   const sign = t.signed_amount > 0 ? '+' : '';
   const color = t.signed_amount > 0 ? 'var(--primary)' : 'var(--danger)';
   const lbl = ({
-    initial: '初期配布', checkin: '来室ボーナス', purchase: '購入', fee: '手数料',
+    initial: '初期配布', checkin: 'ラボインボーナス', purchase: '購入', fee: '手数料',
     reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
     deposit: '預け入れ', refund: '返金', burn: '消却'
   })[t.type] || t.type;

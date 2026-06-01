@@ -1,6 +1,23 @@
 <?php
-// /api/admin/* — allowlist, issue, reversal, config, dashboard, broadcast.
-// Every sub-route enforces role=admin.
+// /api/admin/* — admin-only endpoints. The function is long but flat; this
+// header lists the sub-domains in the same order they appear so you can jump
+// to the right block fast.
+//
+//   allowlist                   GET / POST / DELETE  — who can sign in
+//   issue                       POST                 — mint points (one user or broadcast)
+//   ledger                      GET                  — recent rows (for reversal picker)
+//   reversal                    POST                 — undo a ledger row
+//   config                      GET / PATCH          — runtime knobs (fees, streak shape, ...)
+//   dashboard                   GET                  — supply totals, counts
+//   broadcast                   POST                 — push a notification to everyone
+//   rooms                       GET / POST / PATCH / DELETE / rotate_token  — Wi-Fi scanner rooms
+//   holidays                    GET / sync           — national holidays import
+//   calendar_overrides          GET / POST / DELETE  — lab_open / lab_closed flags
+//   presence_infrastructure     GET / POST / DELETE  — lab equipment MACs (never user)
+//   scrapbox_slack              sync POST            — trigger #scrapbox bridge sync
+//   users                       GET                  — user roster + balances
+//
+// Every sub-route enforces role=admin via Auth::requireAdmin at the top.
 
 declare(strict_types=1);
 

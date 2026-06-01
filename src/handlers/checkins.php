@@ -1,6 +1,9 @@
 <?php
 // /api/checkins — once-per-day room check-in with streak bonuses.
-// Sources: explicit ('manual'), 'presence' (auto from WiFi scan), 'geo' (from geolocation).
+// Source codes recorded in ledger memos:
+//   'presence' — auto-attributed by the Wi-Fi scanner via presence.php (the
+//                normal path in production)
+//   'manual'   — POST /api/checkins (kept for testing / future fallback UI)
 
 declare(strict_types=1);
 
@@ -8,7 +11,6 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
     $sub = $seg[1] ?? '';
 
     if ($sub === '' && $method === 'POST') { checkin_manual($pdo, $cfg); return; }
-    if ($sub === 'geo' && $method === 'POST') { checkin_geo($pdo, $cfg); return; }
     if ($sub === 'status' && $method === 'GET') { checkin_status($pdo, $cfg); return; }
 
     json_error('not_found', "no checkins route for $method $sub", 404);
@@ -107,7 +109,7 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
         // Ledger transfer: SYSTEM -> user
         $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
         $userAcc = Ledger::accountIdForUser($pdo, $userId);
-        $memo = "来室 {$today} (streak {$newStreak}, src={$source})";
+        $memo = "ラボイン {$today} (streak {$newStreak}, src={$source})";
         Ledger::transfer($pdo, $sysAcc, $userAcc, $points, 'checkin',
             'checkin', $userId, $memo);
 
@@ -139,59 +141,6 @@ function checkin_manual(PDO $pdo, array $cfg): void {
         'current_streak' => $r['current_streak'],
         'longest_streak' => $r['longest_streak'],
         'new_balance'    => $r['new_balance'],
-    ]);
-}
-
-// POST /api/checkins/geo {lat, lng}  — geolocation-verified checkin
-function checkin_geo(PDO $pdo, array $cfg): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $body = read_json_body();
-    $lat = $body['lat'] ?? null;
-    $lng = $body['lng'] ?? null;
-    if (!is_numeric($lat) || !is_numeric($lng)) {
-        throw new ApiException('bad_request', 'lat/lng must be numeric', 400);
-    }
-    $lat = (float)$lat; $lng = (float)$lng;
-    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
-        throw new ApiException('bad_request', 'lat/lng out of range', 400);
-    }
-    $accuracy = isset($body['accuracy']) ? (float)$body['accuracy'] : null;
-
-    $defaultRadius = (int)cfg_get($pdo, 'geo_default_radius_m', '50');
-
-    // Find nearest room with coords set
-    $st = $pdo->query('SELECT id, display_name, lat, lng, geo_radius_m FROM rooms
-        WHERE lat IS NOT NULL AND lng IS NOT NULL');
-    $rooms = $st->fetchAll();
-    $best = null; // ['room' => row, 'dist' => float, 'radius' => int]
-    foreach ($rooms as $r) {
-        $d = Calendar::distanceMeters($lat, $lng, (float)$r['lat'], (float)$r['lng']);
-        $radius = (int)($r['geo_radius_m'] ?? $defaultRadius);
-        if ($radius <= 0) $radius = $defaultRadius;
-        if ($best === null || $d < $best['dist']) {
-            $best = ['room' => $r, 'dist' => $d, 'radius' => $radius];
-        }
-    }
-    if ($best === null) {
-        throw new ApiException('no_room', 'no rooms with coordinates configured', 503);
-    }
-    if ($best['dist'] > $best['radius']) {
-        throw new ApiException('too_far',
-            sprintf('現在地はラボから %dm 離れています (許容 %dm)', round($best['dist']), $best['radius']),
-            403, ['distance_m' => (int)round($best['dist']), 'radius_m' => $best['radius'],
-                  'nearest_room' => $best['room']['id']]);
-    }
-
-    $r = do_checkin_for_user($pdo, (int)$u['id'], 'geo:' . $best['room']['id']);
-    json_response([
-        'already_checked_in' => $r['already'],
-        'points'         => $r['points'],
-        'awarded_today'  => $r['awarded_today'],
-        'current_streak' => $r['current_streak'],
-        'longest_streak' => $r['longest_streak'],
-        'new_balance'    => $r['new_balance'],
-        'verified_room'  => $best['room']['id'],
-        'distance_m'     => (int)round($best['dist']),
     ]);
 }
 

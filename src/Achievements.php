@@ -9,8 +9,8 @@ class Achievements {
     // Each tier: ['count' => threshold, 'label' => display, 'medal' => icon].
     public const DEFS = [
         'checkin_total' => [
-            'title' => '来室マスター',
-            'desc'  => '通算で来室した日数',
+            'title' => 'ラボイン マスター',
+            'desc'  => '通算でラボインした日数',
             'unit'  => '日',
             'tiers' => [
                 ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
@@ -21,7 +21,7 @@ class Achievements {
         ],
         'streak_best' => [
             'title' => '皆勤の鬼',
-            'desc'  => '連続来室の最長記録',
+            'desc'  => '連続ラボインの最長記録',
             'unit'  => '日連続',
             'tiers' => [
                 ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],

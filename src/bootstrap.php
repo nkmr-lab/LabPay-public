@@ -311,6 +311,16 @@ function slack_api_get(array $cfg, string $endpoint, array $params = []): array 
     return $data;
 }
 
+// ---------------- Notification helpers ----------------
+// Wrapper around Notifier::notify that catches any exception. Use this when a
+// notification is a "nice-to-have" — never let an email/template failure tank
+// the underlying ledger transaction the caller just committed.
+function notify_safely(PDO $pdo, array $cfg, int $userId, string $type,
+                       string $body, ?string $refType = null, ?int $refId = null): void {
+    try { Notifier::notify($pdo, $cfg, $userId, $type, $body, $refType, $refId); }
+    catch (Throwable $e) { /* swallow on purpose */ }
+}
+
 // ---------------- Slack notifications (incoming webhook) ----------------
 // Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
 // and swallows all errors — Slack being down must never break a listing/scan/etc.
