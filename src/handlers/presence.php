@@ -77,6 +77,9 @@ function presence_mac_hint(string $mac): string {
 }
 
 // ---------------- GET /api/presence ----------------
+// A user is rendered in *at most one* room: the room where their device was most
+// recently observed. When two rooms scan the same /24 (or signal leaks between
+// floors), the older sighting silently loses. Window: presence_window_minutes.
 function presence_list(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $window = (int)cfg_get($pdo, 'presence_window_minutes', '5');
@@ -84,31 +87,49 @@ function presence_list(PDO $pdo, array $cfg): void {
 
     $rooms = $pdo->query('SELECT id, display_name, last_scan_at FROM rooms ORDER BY id')->fetchAll();
 
-    // For each room: which registered users have been seen within the window
+    // For every (user, room) pair within the window, compute the latest sighting.
     $st = $pdo->prepare("
-        SELECT u.id, u.display_name, u.avatar_url, MAX(ps.last_seen_at) AS last_seen_at
+        SELECT u.id AS user_id, u.display_name, u.avatar_url,
+               ps.room_id, MAX(ps.last_seen_at) AS last_seen_at
           FROM presence_seen ps
           JOIN presence_devices pd ON pd.mac = ps.mac
           JOIN users u ON u.id = pd.user_id AND u.kind = 'human'
-         WHERE ps.room_id = ?
-           AND ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-         GROUP BY u.id, u.display_name, u.avatar_url
-         ORDER BY last_seen_at DESC
+         WHERE ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+         GROUP BY u.id, u.display_name, u.avatar_url, ps.room_id
     ");
+    $st->execute([$window]);
+    $rows = $st->fetchAll();
+
+    // Reduce: for each user keep only the row with the latest last_seen_at.
+    $bestPerUser = [];
+    foreach ($rows as $r) {
+        $uid = (int)$r['user_id'];
+        if (!isset($bestPerUser[$uid]) || $r['last_seen_at'] > $bestPerUser[$uid]['last_seen_at']) {
+            $bestPerUser[$uid] = $r;
+        }
+    }
+
+    // Bucket users back into their winning room.
+    $usersByRoom = [];
+    foreach ($bestPerUser as $r) {
+        $usersByRoom[$r['room_id']][] = [
+            'id'           => (int)$r['user_id'],
+            'display_name' => $r['display_name'],
+            'avatar_url'   => $r['avatar_url'] ?? null,
+            'last_seen_at' => $r['last_seen_at'],
+        ];
+    }
+    foreach ($usersByRoom as &$list) {
+        usort($list, fn($a, $b) => strcmp($b['last_seen_at'], $a['last_seen_at']));
+    }
+
     $out = [];
     foreach ($rooms as $r) {
-        $st->execute([$r['id'], $window]);
-        $users = $st->fetchAll();
         $out[] = [
             'id'           => $r['id'],
             'display_name' => $r['display_name'],
             'last_scan_at' => $r['last_scan_at'],
-            'users'        => array_map(fn($u) => [
-                'id'           => (int)$u['id'],
-                'display_name' => $u['display_name'],
-                'avatar_url'   => $u['avatar_url'] ?? null,
-                'last_seen_at' => $u['last_seen_at'],
-            ], $users),
+            'users'        => $usersByRoom[$r['id']] ?? [],
         ];
     }
     json_response(['rooms' => $out, 'window_minutes' => $window]);
