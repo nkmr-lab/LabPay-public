@@ -263,8 +263,12 @@ export async function renderAdmin() {
     if (!id || !display_name) { toast('id と表示名を入力してください'); return; }
     try {
       const res = await post('/api/admin/rooms', { id, display_name });
-      const msg = `部屋 "${id}" を作成しました。\n\nscanner_token (一度しか表示されません):\n${res.scanner_token}\n\nこの値を scanner の設定に入れてください。`;
-      alert(msg);
+      showTokenModal({
+        title: `部屋 "${id}" を作成しました`,
+        body: 'scanner_token (一度しか表示されません):',
+        token: res.scanner_token,
+        footer: 'この値を scanner の設定 (scanner.config.json or install_scanner.ps1) に入れてください。',
+      });
       document.getElementById('rm-id').value = '';
       document.getElementById('rm-name').value = '';
       await loadRooms();
@@ -406,10 +410,16 @@ async function loadRooms() {
     });
     document.querySelectorAll('[data-rotate]').forEach(b => {
       b.addEventListener('click', async () => {
+        const roomId = decodeURIComponent(b.dataset.rotate);
         if (!confirm('token を再発行すると古い token は無効になります。続行しますか?')) return;
         try {
           const res = await post('/api/admin/rooms/' + b.dataset.rotate + '/rotate_token', {});
-          alert(`新しい scanner_token (一度しか表示されません):\n${res.scanner_token}`);
+          showTokenModal({
+            title: `部屋 "${roomId}" の token を再発行しました`,
+            body: '新しい scanner_token (一度しか表示されません):',
+            token: res.scanner_token,
+            footer: '古い token は無効になりました。この値を scanner の設定に入れ直してください。',
+          });
         } catch (e) { toast('失敗: ' + e.message); }
       });
     });
@@ -528,4 +538,54 @@ async function loadAllow() {
       });
     });
   });
+}
+
+// Modal for one-shot secrets (scanner_token). The browser's native alert() doesn't
+// let users select the text, which makes copying impossible on iOS Safari. This shows
+// the token inside a selectable monospace box with an explicit COPY button that
+// uses the Clipboard API (with a fallback to manual selection if denied).
+function showTokenModal({ title, body, token, footer }) {
+  const existing = document.getElementById('token-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'token-modal';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:9999; padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px; box-shadow:0 12px 40px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 8px; color:var(--primary)">${escapeHtml(title)}</h3>
+      <p style="margin:0 0 10px; font-size:14px; color:#444">${escapeHtml(body)}</p>
+      <textarea id="token-modal-text" readonly
+                style="width:100%; box-sizing:border-box; font-family:Consolas,Menlo,monospace; font-size:13px; padding:10px; border:1px solid var(--line); border-radius:8px; word-break:break-all; resize:none; height:60px; background:#f6f3fa"
+                onclick="this.select()">${escapeHtml(token)}</textarea>
+      <p style="margin:8px 0 14px; font-size:12px; color:#666">${escapeHtml(footer)}</p>
+      <div id="token-modal-status" class="muted" style="font-size:12px; margin-bottom:8px; min-height:16px"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end">
+        <button id="token-modal-close">閉じる</button>
+        <button id="token-modal-copy" class="primary">📋 コピー</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const ta = overlay.querySelector('#token-modal-text');
+  const status = overlay.querySelector('#token-modal-status');
+  ta.focus();
+  ta.select();
+
+  overlay.querySelector('#token-modal-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      status.textContent = '✓ クリップボードにコピーしました';
+      status.style.color = 'var(--primary)';
+    } catch (e) {
+      ta.select();
+      status.textContent = 'クリップボード API 拒否。テキストを選択したので Ctrl+C / Cmd+C でコピーしてください';
+      status.style.color = 'var(--warn)';
+    }
+  });
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#token-modal-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
