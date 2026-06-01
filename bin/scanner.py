@@ -98,6 +98,13 @@ def iter_hosts(cidr: str):
     return [str(h) for h in net.hosts()]
 
 
+# Under pythonw.exe (the windowless interpreter Task Scheduler uses to avoid the
+# per-minute console flash) the parent has no console, so any subprocess we spawn
+# would otherwise get its OWN console window. With ~254 pings per /24 sweep that
+# means ~254 windows flashing every minute. CREATE_NO_WINDOW suppresses it.
+_WIN_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0
+
+
 def ping_one(ip: str, timeout_ms: int) -> None:
     if sys.platform.startswith("win"):
         cmd = ["ping", "-n", "1", "-w", str(timeout_ms), ip]
@@ -110,6 +117,7 @@ def ping_one(ip: str, timeout_ms: int) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=max(2, timeout_ms / 1000 + 1),
+            creationflags=_WIN_NO_WINDOW,
         )
     except Exception:
         pass
@@ -131,7 +139,8 @@ def read_arp(cidr: str) -> list[dict]:
     observations: dict[str, str] = {}  # mac -> ip (dedup; keep last)
 
     if sys.platform.startswith("win"):
-        out = subprocess.check_output(["arp", "-a"], text=True, errors="ignore")
+        out = subprocess.check_output(["arp", "-a"], text=True, errors="ignore",
+                                      creationflags=_WIN_NO_WINDOW)
         for line in out.splitlines():
             m = _MAC_RE_WIN.match(line)
             if not m:
