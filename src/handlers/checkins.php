@@ -206,11 +206,26 @@ function checkin_status(PDO $pdo, array $cfg): void {
     $stkSt->execute([$u['id']]);
     $stk = $stkSt->fetch() ?: ['current_streak'=>0,'longest_streak'=>0];
 
+    // Expose the bonus knobs so the UI can render an accurate explainer that survives
+    // future tweaks via admin config. Mirrors the formula in do_checkin_for_user().
+    $base    = (int)cfg_get($pdo, 'checkin_base', '5');
+    $perDay  = (int)cfg_get($pdo, 'streak_bonus_per_day', '1');
+    $cap     = (int)cfg_get($pdo, 'streak_bonus_cap', '15');
+    $div     = max(1, (int)cfg_get($pdo, 'streak_bonus_divisor', '1'));
+
     json_response([
         'checked_in_today' => $row !== false,
         'points_today'     => $row ? (int)$row['points_awarded'] : 0,
         'current_streak'   => (int)$stk['current_streak'],
         'longest_streak'   => (int)$stk['longest_streak'],
         'today_is_workday' => Calendar::isWorkday($pdo, $today),
+        'bonus_rule' => [
+            'base'         => $base,
+            'per_day'      => $perDay,
+            'cap'          => $cap,
+            'divisor'      => $div,
+            'max_total'    => $base + intdiv($cap * $perDay, $div),
+            'days_to_max'  => $cap + 1,
+        ],
     ]);
 }

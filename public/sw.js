@@ -5,7 +5,7 @@
 //   * NEVER cache /api/* — ledger consistency requires fresh reads.
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v59';
+const CACHE_NAME = 'labpay-shell-v60';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

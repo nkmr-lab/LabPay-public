@@ -280,18 +280,33 @@ async function renderCheckinArea() {
     return;
   }
   if (status.checked_in_today) {
-    root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日来室済み (+${status.points_today}pt / 連続来室 ${status.current_streak} 日)</div>`;
+    root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日来室済み (+${status.points_today}pt / 連続来室 ${status.current_streak} 日)</div>
+      ${bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
   if (status.today_is_workday) {
     root.innerHTML = `
       <button class="btn" id="geo-checkin-btn">📍 来室する (位置情報)</button>
       <div class="muted" style="font-size:12px; margin-top:4px">通常は WiFi で自動チェックインされます。検知されないときだけ使ってください。</div>
+      ${bonusRuleHtml(status.bonus_rule)}
     `;
     document.getElementById('geo-checkin-btn').addEventListener('click', onGeoCheckin);
   } else {
-    root.innerHTML = `<div class="muted" style="font-size:13px">今日はラボの稼働日ではないため、streak には影響しません。</div>`;
+    root.innerHTML = `<div class="muted" style="font-size:13px">今日はラボの稼働日ではないため、streak には影響しません。</div>
+      ${bonusRuleHtml(status.bonus_rule)}`;
   }
+}
+
+// Tiny inline explainer of the checkin bonus formula. Values come from /api/checkins/status
+// so they survive admin tweaks without re-deploying. Returns '' when the API didn't
+// include the field (older server, defensive).
+function bonusRuleHtml(rule) {
+  if (!rule) return '';
+  const { base, max_total, days_to_max } = rule;
+  return `<div class="muted" style="font-size:11px; margin-top:8px; line-height:1.5">
+    💰 来室ボーナス: ベース <b>${base}</b>pt + 連続日数で上乗せ、最大 <b>${max_total}</b>pt
+    (${days_to_max} 日連続で上限到達)
+  </div>`;
 }
 
 function onGeoCheckin(ev) {
