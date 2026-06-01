@@ -9,6 +9,9 @@ public/uploads/*
 # Runtime logs
 *.log
 
+# CSV presence observation logs (written by presence_scan)
+var/log/
+
 # Editors
 .idea/
 .vscode/

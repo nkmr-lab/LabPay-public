@@ -76,6 +76,52 @@ function presence_mac_hint(string $mac): string {
     return '💻 デバイス';
 }
 
+// Append one row per observation to var/log/presence/YYYY-MM-DD.csv.
+// Columns: timestamp, room_id, mac, ip, user_id, user_display_name. Empty for unregistered.
+// File-locked; safe under concurrent scanners.
+function presence_append_csv_log(PDO $pdo, string $now, string $roomId, array $obs, array $candidateMacs): void {
+    if (!$obs) return;
+    // Resolve MAC -> {user_id, display_name} for registered macs in this scan.
+    $macInfo = [];
+    if ($candidateMacs) {
+        $place = implode(',', array_fill(0, count($candidateMacs), '?'));
+        $st = $pdo->prepare("SELECT pd.mac, u.id, u.display_name
+            FROM presence_devices pd JOIN users u ON u.id = pd.user_id
+            WHERE pd.mac IN ($place)");
+        $st->execute($candidateMacs);
+        foreach ($st->fetchAll() as $r) {
+            $macInfo[$r['mac']] = ['id' => (int)$r['id'], 'name' => $r['display_name']];
+        }
+    }
+
+    $logDir = realpath(__DIR__ . '/../../var/log/presence');
+    if (!$logDir) {
+        $logDir = __DIR__ . '/../../var/log/presence';
+        if (!is_dir($logDir)) @mkdir($logDir, 0750, true);
+        $logDir = realpath($logDir) ?: $logDir;
+    }
+    $day = substr($now, 0, 10);
+    $path = $logDir . '/' . $day . '.csv';
+
+    $fh = @fopen($path, 'ab');
+    if (!$fh) return;
+    if (flock($fh, LOCK_EX)) {
+        if (ftell($fh) === 0) {
+            fputcsv($fh, ['timestamp', 'room_id', 'mac', 'ip', 'user_id', 'user_display_name']);
+        }
+        foreach ($obs as $o) {
+            $mac = presence_normalize_mac($o['mac'] ?? null);
+            if ($mac === null || presence_is_excluded_mac($mac)) continue;
+            $ip = isset($o['ip']) ? (string)$o['ip'] : '';
+            $u  = $macInfo[$mac] ?? null;
+            fputcsv($fh, [$now, $roomId, $mac, $ip, $u['id'] ?? '', $u['name'] ?? '']);
+        }
+        fflush($fh);
+        flock($fh, LOCK_UN);
+    }
+    fclose($fh);
+}
+
 // ---------------- GET /api/presence ----------------
 // A user is rendered in *at most one* room: the room where their device was most
 // recently observed. When two rooms scan the same /24 (or signal leaks between
@@ -329,6 +375,14 @@ function presence_scan(PDO $pdo, array $cfg): void {
     }
     $registeredUserIds = array_keys($registeredUserIds);
     $freshRegisteredUserIds = array_keys($freshRegisteredUserIds);
+
+    // Append a row per observation to a daily CSV log. Append-only, no DB, no impact
+    // on the response. Useful for "who was in the lab when" analysis later.
+    try {
+        presence_append_csv_log($pdo, $now, $roomId, $obs, $candidateMacs);
+    } catch (Throwable $e) {
+        error_log('[labpay/presence] csv log failed: ' . $e->getMessage());
+    }
 
     // Auto-checkin AFTER commit (each in its own TX so a single failure doesn't break the scan).
     // do_checkin_for_user is idempotent thanks to the UNIQUE PK on (user_id, checkin_date).

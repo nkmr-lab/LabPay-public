@@ -23,19 +23,12 @@ export async function renderHome() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; flex-wrap:wrap; gap:10px">
+      <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">今ラボにいる人</h2>
-        <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px" class="muted">
-          名前
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
+          名前を表示
           <span class="switch">
             <input type="checkbox" id="presence-names-toggle">
-            <span class="slider"></span>
-          </span>
-        </label>
-        <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px" class="muted">
-          滞在時間
-          <span class="switch">
-            <input type="checkbox" id="presence-duration-toggle">
             <span class="slider"></span>
           </span>
         </label>
@@ -128,23 +121,14 @@ async function fetchAndRenderPresence() {
 }
 
 async function renderPresence() {
-  const nameToggle = document.getElementById('presence-names-toggle');
-  const durToggle  = document.getElementById('presence-duration-toggle');
+  const toggle = document.getElementById('presence-names-toggle');
   const SHOW_NAMES_KEY = 'labpay-presence-show-names';
-  const SHOW_DURATION_KEY = 'labpay-presence-show-duration';
   const showNames = localStorage.getItem(SHOW_NAMES_KEY) !== '0';
-  const showDuration = localStorage.getItem(SHOW_DURATION_KEY) === '1';
-  nameToggle.checked = showNames;
-  durToggle.checked  = showDuration;
+  toggle.checked = showNames;
   applyPresenceMode(showNames);
-  applyDurationMode(showDuration);
-  nameToggle.addEventListener('change', () => {
-    localStorage.setItem(SHOW_NAMES_KEY, nameToggle.checked ? '1' : '0');
-    applyPresenceMode(nameToggle.checked);
-  });
-  durToggle.addEventListener('change', () => {
-    localStorage.setItem(SHOW_DURATION_KEY, durToggle.checked ? '1' : '0');
-    applyDurationMode(durToggle.checked);
+  toggle.addEventListener('change', () => {
+    localStorage.setItem(SHOW_NAMES_KEY, toggle.checked ? '1' : '0');
+    applyPresenceMode(toggle.checked);
   });
 
   await fetchAndRenderPresence();
@@ -322,18 +306,11 @@ function formatStayDuration(sessionStartAt) {
 function renderRoom(r) {
   const peopleHtml = r.users.length
     ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
-         ${r.users.map(u => {
-           const dur = formatStayDuration(u.session_start_at);
-           const durSpan = dur
-             ? `<span class="presence-pill-duration">${escapeHtml(dur)}</span>`
-             : '';
-           return `
-           <span class="presence-pill" title="${escapeHtml(u.display_name)}${dur ? ' · ' + dur : ''}">
+         ${r.users.map(u => `
+           <span class="presence-pill" title="${escapeHtml(u.display_name)}">
              ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
              <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
-             ${durSpan}
-           </span>`;
-         }).join('')}
+           </span>`).join('')}
        </div>`
     : `<div class="muted" style="font-size:13px; margin-top:4px">誰も検知されていません</div>`;
   const scan = r.last_scan_at ? `· 最終スキャン ${escapeHtml(r.last_scan_at)}` : '· 未スキャン';
