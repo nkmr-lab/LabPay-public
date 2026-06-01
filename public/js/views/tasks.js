@@ -35,6 +35,13 @@ function toggleCreateForm(open = null) {
   card.innerHTML = `
     <div class="card">
       <h3>タスクを依頼する</h3>
+      <div class="muted" style="font-size:12px; background:#faf7fd; border-left:3px solid var(--primary); padding:8px 10px; margin-bottom:10px; line-height:1.7">
+        <b>これでできること:</b><br>
+        ・<b>対象を絞れる</b> — 学年指定 (B3/B4/M1/M2/D) または全員に出せる<br>
+        ・<b>作業 URL や詳細</b>を渡せる (PDF などのファイル添付も可)<br>
+        ・<b>時間枠で予定調整</b> — 例「6/15 11:00-15:00 30分刻み」と書くと枠ごとに 1人ずつ申込形式に<br>
+        ・<b>報酬 × 人数の pt が ESCROW に預けられます</b>。残高が足りないと依頼できません。承認した分だけ支払われ、取り消し時は未承認分が返金されます
+      </div>
       <label class="field">
         <span class="lbl">タイトル</span>
         <input type="text" id="t-title" maxlength="200">

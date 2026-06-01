@@ -48,12 +48,27 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
     // Rooms (so the response keeps empty rooms in the result, easier UI)
     $rooms = $pdo->query("SELECT id, display_name FROM rooms ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 
-    // Pull every session that overlaps the window.
-    $stmt = $pdo->prepare("SELECT user_id, room_id, started_at, ended_at
-        FROM presence_sessions
-        WHERE user_id IS NOT NULL AND started_at < ? AND ended_at > ?
-        ORDER BY started_at");
-    $stmt->execute([$end->format('Y-m-d H:i:s'), $start->format('Y-m-d H:i:s')]);
+    // Combine two data sources so morning/late-night activity isn't lost:
+    //   1) presence_sessions — CLOSED sessions (recorded when someone "leaves")
+    //   2) presence_seen     — currently-open sessions (latest observation still fresh)
+    // Without merging (2), anyone sitting in the lab right now would be missing
+    // from today's heatmap because their session row only gets written when their
+    // phone stops being observed (the "close" event).
+    $stmt = $pdo->prepare("
+        SELECT user_id, room_id, started_at, ended_at FROM presence_sessions
+         WHERE user_id IS NOT NULL AND started_at < ? AND ended_at > ?
+        UNION ALL
+        SELECT pd.user_id, ps.room_id,
+               ps.session_start_at AS started_at,
+               ps.last_seen_at AS ended_at
+          FROM presence_seen ps
+          JOIN presence_devices pd ON pd.mac = ps.mac
+         WHERE ps.session_start_at IS NOT NULL
+           AND ps.session_start_at < ?
+           AND ps.last_seen_at > ?");
+    $endStr   = $end->format('Y-m-d H:i:s');
+    $startStr = $start->format('Y-m-d H:i:s');
+    $stmt->execute([$endStr, $startStr, $endStr, $startStr]);
 
     // bucket[room][weekday(0=Sun..6=Sat)][hour(0..23)] = set of user_ids
     // PHP 0=Sun..6=Sat (date('w')); UI converts to Mon-first labels.
@@ -512,12 +527,15 @@ function presence_scan(PDO $pdo, array $cfg): void {
     }
 
     // Auto-checkin AFTER commit (each in its own TX so a single failure doesn't break the scan).
-    // do_checkin_for_user is idempotent thanks to the UNIQUE PK on (user_id, checkin_date).
-    // IMPORTANT: only run on fresh entries — leaving a phone in the lab overnight should
-    // NOT count as "showed up today" the next morning. The user must physically step out
-    // (no scan for >= reentry threshold) and come back.
+    // do_checkin_for_user is idempotent thanks to the UNIQUE PK on (user_id, checkin_date),
+    // so the FIRST scan that observes the user on any given calendar date is what fires the
+    // reward — subsequent scans the same day are no-ops. We deliberately use ALL observed
+    // registered users (not just the "fresh entry" subset) so that a phone that stayed in
+    // the lab overnight still earns its owner the next day's bonus on the first scan after
+    // midnight. Trade-off: a forgotten phone in the lab earns the owner pt while they're
+    // physically away — accepted in exchange for not silently skipping the daily bonus.
     $auto_checked_in = 0;
-    foreach ($freshRegisteredUserIds as $uid) {
+    foreach ($registeredUserIds as $uid) {
         try {
             $r = do_checkin_for_user($pdo, $uid, 'presence:' . $roomId);
             if (!$r['already']) $auto_checked_in++;

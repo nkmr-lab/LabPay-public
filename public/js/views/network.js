@@ -49,16 +49,17 @@ export async function renderNetwork() {
         <button class="btn ${activeTab==='purchases'?'primary':''}" data-tab="purchases">売買</button>
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
         <button class="btn ${activeTab==='combined'?'primary':''}" data-tab="combined">統合</button>
-        <span style="flex:1"></span>
-        <select id="net-weight-mode" style="font-size:13px" title="線の重み">
+      </div>
+      <div style="display:flex; gap:6px; margin-top:6px; align-items:center; flex-wrap:nowrap">
+        <select id="net-weight-mode" style="font-size:13px; flex:1; min-width:0" title="線の重み">
           <option value="count" ${weightMode==='count'?'selected':''}>件数</option>
           <option value="total" ${weightMode==='total'?'selected':''}>総額</option>
         </select>
-        <select id="net-layout-mode" style="font-size:13px">
+        <select id="net-layout-mode" style="font-size:13px; flex:1; min-width:0">
           <option value="force" ${layoutMode==='force'?'selected':''}>自動配置</option>
           <option value="circle" ${layoutMode==='circle'?'selected':''}>円形配置</option>
         </select>
-        <button class="btn" id="net-relayout" title="配置をやり直す">⟳</button>
+        <button class="btn" id="net-relayout" title="配置をやり直す" style="flex:0 0 auto">⟳</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
         矢印は <span id="net-arrow-desc"></span>。タップで関連を強調 / ドラッグで移動。
