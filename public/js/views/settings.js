@@ -254,11 +254,16 @@ async function loadUnregistered() {
         : (isFresh ? `border-left:4px solid ${rc}` : `border-left:4px solid ${rc}33`);
       const claimBtnCls = isMine ? 'primary' : 'primary';
       const claimBtnTxt = isMine ? 'これは私 ✓' : 'これは私';
+      // Show 最終観測 only when it's different from 初観測 (single-shot observations
+      // would otherwise duplicate the same timestamp twice).
+      const lastTxt = (x.last_seen_at && x.last_seen_at !== x.first_seen_at)
+        ? ` · 最終観測 ${escapeHtml(x.last_seen_at)}`
+        : '';
       return `
       <div class="list-item" style="${borderStyle}">
         <div>
           <div class="bold mono">${roomTag}${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
-          <div class="meta">${escapeHtml(x.room_name)} · IP ${ipHtml(x.ip)} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
+          <div class="meta">${escapeHtml(x.room_name)} · IP ${ipHtml(x.ip)} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}${lastTxt}</div>
         </div>
         <div>
           <button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>
