@@ -214,19 +214,15 @@ textarea { min-height: 80px; resize: vertical; }
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
 .tile-badge.gift { background: #fce4ec; color: #b71c50; }
-/* Stack of seller avatars in the top-right of the tile when multiple people sell. */
-.tile-sellers {
+/* Single representative seller avatar in the top-right of each tile. */
+.tile-seller {
   position: absolute; top: 6px; right: 6px;
-  display: flex; align-items: center;
-  background: rgba(255,255,255,0.92); padding: 3px 6px 3px 3px; border-radius: 99px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  font-size: 11px; font-weight: 700; color: #1b1820;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 2px white;
 }
-.tile-sellers .avatar,
-.tile-sellers .avatar-fallback { width: 18px; height: 18px; margin-left: -4px; border: 1.5px solid white; }
-.tile-sellers .avatar-fallback { font-size: 10px; }
-.tile-sellers .avatar:first-child,
-.tile-sellers .avatar-fallback:first-child { margin-left: 0; }
+.tile-seller .avatar,
+.tile-seller .avatar-fallback { width: 26px; height: 26px; }
+.tile-seller .avatar-fallback { font-size: 12px; }
 
 /* Presence pill: one chip per person in the "今ラボにいる人" list */
 .presence-pill {

@@ -153,12 +153,20 @@ async function loadListings() {
       const badge = giftOnly
         ? '<span class="tile-badge gift">🎁</span>'
         : (giftCount > 0 ? '<span class="tile-badge">🎁あり</span>' : '');
-      // No seller info on the tile — the catalog view treats each JAN as one product.
-      // Per-seller pricing, avatars, and the resale chain appear on the product detail.
+      // Pick a single representative seller for the tile: cheapest sale listing,
+      // or the first gift listing if it's gift-only. Multi-seller details still
+      // surface on the product detail page.
+      const repListing = sale.length
+        ? sale.reduce((a, b) => a.price <= b.price ? a : b)
+        : g.listings[0];
+      const sellerBadge = repListing
+        ? `<div class="tile-seller">${avatarHtml(repListing.seller_name, repListing.seller_avatar_url, 'sm')}</div>`
+        : '';
       return `
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
           ${badge}
+          ${sellerBadge}
           <div class="tile-overlay">
             <div class="name">${escapeHtml(g.name)}</div>
             <div class="price">${priceLabel}</div>
