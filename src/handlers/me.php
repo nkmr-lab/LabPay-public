@@ -235,11 +235,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             ? $openMins
             : ($openStart !== null ? max(0, (strtotime((new DateTimeImmutable('now', $tz))->format('Y-m-d H:i:s')) - strtotime($bucketStart)) / 60) : 0);
 
+        // PDO returns SUM() results as strings; cast to float before round() —
+        // PHP 8.1+ rejects non-numeric arg types even when the string is itself numeric.
         json_response([
-            'today_minutes'     => (int)round($closed['today'] + $addOpen($todayStart)),
-            'yesterday_minutes' => (int)round($closed['yesterday']),  // closed-day, no open-session adjustment needed
-            'week_minutes'      => (int)round($closed['week']  + $addOpen($weekStart)),
-            'month_minutes'     => (int)round($closed['month'] + $addOpen($monthStart)),
+            'today_minutes'     => (int)round((float)$closed['today']     + $addOpen($todayStart)),
+            'yesterday_minutes' => (int)round((float)$closed['yesterday']),  // closed-day, no open-session adjustment needed
+            'week_minutes'      => (int)round((float)$closed['week']      + $addOpen($weekStart)),
+            'month_minutes'     => (int)round((float)$closed['month']     + $addOpen($monthStart)),
             'currently_present' => $openStart !== null,
             'current_session_started_at' => $openStart,
         ]);

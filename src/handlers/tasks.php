@@ -79,7 +79,7 @@ function tasks_auto_expire_one(PDO $pdo, array $cfg, int $taskId): void {
     }
     try {
         Notifier::notify($pdo, $cfg, $requesterId, 'task_expired',
-            "「$title」が期限切れで取消されました" . ($refund > 0 ? " ({$refund}pt 返金)" : ''),
+            "「{$title}」が期限切れで取消されました" . ($refund > 0 ? " ({$refund}pt 返金)" : ''),
             'task', $taskId);
     } catch (Throwable $e) {}
 }
@@ -470,7 +470,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
         $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
         Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit',
-            'task', $taskId, "タスク「$title」報酬預け");
+            'task', $taskId, "タスク「{$title}」報酬預け");
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -717,7 +717,7 @@ function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     try {
         // Requester's thank-you message piggy-backs on the approval notification
         // so it surfaces immediately like note's purchase-time message.
-        $body = "「$title」承認 — {$rewardForNotify}pt が付与されました"
+        $body = "「{$title}」承認 — {$rewardForNotify}pt が付与されました"
               . notification_quote($completionMsg);
         Notifier::notify($pdo, $cfg, $claimantId, 'task_approved', $body, 'task', $taskId);
     } catch (Throwable $e) {}
@@ -781,7 +781,7 @@ function tasks_cancel(PDO $pdo, array $cfg, int $taskId): void {
     foreach ($affectedClaimants as $cid) {
         try {
             Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',
-                "引き受け中のタスク「$taskTitle」が依頼者により取り消されました", 'task', $taskId);
+                "引き受け中のタスク「{$taskTitle}」が依頼者により取り消されました", 'task', $taskId);
         } catch (Throwable $e) {}
     }
     json_response(['ok' => true, 'refunded' => $refund]);
