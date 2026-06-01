@@ -19,11 +19,16 @@ $ErrorActionPreference = 'Stop'
 
 function Read-NonEmpty([string]$prompt, [string]$default = '') {
     while ($true) {
-        $val = Read-Host ("$prompt" + ($default ? " [$default]" : ''))
+        $suffix = if ($default) { " [$default]" } else { '' }
+        $val = Read-Host ($prompt + $suffix)
         if ([string]::IsNullOrWhiteSpace($val) -and $default) { return $default }
         if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
         Write-Host '  (空欄不可)' -ForegroundColor Yellow
     }
+}
+
+function Get-OrDefault($value, $default) {
+    if ($null -eq $value -or "$value" -eq '') { return $default } else { return $value }
 }
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -55,8 +60,8 @@ if (Test-Path $config) {
     try { $existing = Get-Content $config -Raw | ConvertFrom-Json } catch {}
 }
 
-$labpayUrl = Read-NonEmpty 'labpay_url' ($existing.labpay_url ?? 'https://pay.nkmr.io')
-$roomId    = Read-NonEmpty 'room_id (例: 7F)' ($existing.room_id ?? '')
+$labpayUrl = Read-NonEmpty 'labpay_url' (Get-OrDefault $existing.labpay_url 'https://pay.nkmr.io')
+$roomId    = Read-NonEmpty 'room_id (例: 7F)' (Get-OrDefault $existing.room_id '')
 
 # Prefer env var so token doesn't appear in shell history.
 $token = $env:LABPAY_SCANNER_TOKEN
