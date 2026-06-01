@@ -1,5 +1,5 @@
 import { get } from '../api.js';
-import { escapeHtml, navigate } from '../router.js';
+import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 import { startScanner } from '../scan.js';
 
@@ -154,14 +154,43 @@ async function loadListings() {
       const badge = giftOnly
         ? '<span class="tile-badge gift">🎁</span>'
         : (giftCount > 0 ? '<span class="tile-badge">🎁あり</span>' : '');
+      // Distinct sellers (by user_id). Show top 3 avatars stacked top-right
+      // ("avatar pill") with "+N" when more, plus a primary-seller name on the bottom.
+      const seenSellers = new Map();
+      g.listings.forEach(l => {
+        if (!seenSellers.has(l.seller_user_id)) {
+          seenSellers.set(l.seller_user_id, {
+            name: l.seller_name,
+            avatar_url: l.seller_avatar_url ?? null,
+          });
+        }
+      });
+      const distinctSellers = [...seenSellers.values()];
+      const stackAvatars = distinctSellers.slice(0, 3)
+        .map(s => avatarHtml(s.name, s.avatar_url, 'sm')).join('');
+      const moreCount = distinctSellers.length - 3;
+      const tileSellersBadge = `
+        <div class="tile-sellers">
+          ${stackAvatars}
+          <span style="margin-left:5px">${distinctSellers.length}人${moreCount > 0 ? ' (+' + moreCount + ')' : ''}</span>
+        </div>`;
+      const primary = distinctSellers[0];
+      const sellerRow = primary
+        ? `<div class="seller-row">
+             ${avatarHtml(primary.name, primary.avatar_url, 'sm')}
+             <span>${escapeHtml(primary.name)}${distinctSellers.length > 1 ? ' 他' : ''}</span>
+           </div>`
+        : '';
       return `
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
           ${badge}
+          ${tileSellersBadge}
           <div class="tile-overlay">
             <div class="name">${escapeHtml(g.name)}</div>
             <div class="price">${priceLabel}</div>
-            <div class="meta">${sellers}人 / 在庫 ${totalQty}${locs.length ? ' · 📍 ' + escapeHtml(locs.join('/')) : ''}</div>
+            ${sellerRow}
+            <div class="meta">在庫 ${totalQty}${locs.length ? ' · 📍 ' + escapeHtml(locs.join('/')) : ''}</div>
           </div>
         </a>`;
     });

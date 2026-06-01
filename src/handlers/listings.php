@@ -170,7 +170,21 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                 p.image_url
             FROM listings l JOIN products p ON p.jan=l.jan WHERE l.id=?");
         $get->execute([$lid]);
-        json_response($get->fetch(), 200);
+        $listing = $get->fetch();
+
+        // Slack 入荷通知 — fire-and-forget; never blocks the response if Slack is slow/down.
+        try {
+            $productName = $listing['name'] ?? $jan;
+            $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+            $prodUrl = $baseUrl . '/#/product/' . urlencode($jan);
+            $priceLine = $isGift ? '🎁 これどうぞ' : ($price . 'pt × ' . $qty . '個');
+            $sellerLine = '出品: ' . $u['display_name'];
+            $locationLine = $location ? "\n📍 " . $location : '';
+            $msg = "🛒 *新規入荷*  <{$prodUrl}|{$productName}>\n{$sellerLine}  ·  {$priceLine}{$locationLine}";
+            slack_notify($cfg, $msg);
+        } catch (Throwable $e) { /* swallow */ }
+
+        json_response($listing, 200);
         return;
     }
 

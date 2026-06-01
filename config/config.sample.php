@@ -43,6 +43,13 @@ return [
     'access_key'     => '',
   ],
 
+  // Slack incoming webhook. Posts a short message when a new listing goes up
+  // (商品入荷通知). Leave webhook_url empty to disable.
+  // Create at: https://api.slack.com/apps -> Incoming Webhooks -> Add to channel.
+  'slack' => [
+    'webhook_url' => '',
+  ],
+
   // Feature flags (used by require_exposure() guards in handlers).
   'exposure' => [
     'public_read'    => true,

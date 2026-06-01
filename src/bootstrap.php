@@ -235,6 +235,27 @@ function idempotency_save(PDO $pdo, string $ukey, int $userId, string $endpoint,
     $st->execute([$ukey, $userId, $endpoint, json_encode($body, JSON_UNESCAPED_UNICODE), $status]);
 }
 
+// ---------------- Slack notifications (incoming webhook) ----------------
+// Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
+// and swallows all errors — Slack being down must never break a listing/scan/etc.
+function slack_notify(array $cfg, string $text, ?array $blocks = null): void {
+    $url = (string)($cfg['slack']['webhook_url'] ?? '');
+    if ($url === '') return;
+    $payload = ['text' => $text];
+    if ($blocks !== null) $payload['blocks'] = $blocks;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 5,
+        CURLOPT_CONNECTTIMEOUT => 3,
+    ]);
+    @curl_exec($ch);
+    curl_close($ch);
+}
+
 // ---------------- Path helpers ----------------
 function path_segments(string $path): array {
     $p = trim($path, '/');
