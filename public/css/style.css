@@ -150,6 +150,21 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .presence-icons-only .presence-pill-name { display:none; }
 
+/* Stay-duration mode: append a small label inside each pill ("35分" / "2時間"). */
+.presence-pill-duration {
+  display:none;
+  font-size:11px; color:var(--muted);
+  margin-left:2px; padding-left:6px;
+  border-left:1px solid var(--line);
+}
+.presence-show-duration .presence-pill-duration { display:inline; }
+.presence-show-duration.presence-icons-only .presence-pill {
+  /* When both name-hidden and duration-shown are active, keep the pill background so
+     the duration label has enough contrast — otherwise it floats in mid-air. */
+  padding:2px 8px 2px 2px; background:var(--primary-soft);
+}
+.presence-show-duration.presence-icons-only .presence-pill-name { display:none; }
+
 /* iOS-style toggle switch */
 .switch {
   position:relative; display:inline-block; width:42px; height:24px;

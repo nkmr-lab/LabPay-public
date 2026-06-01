@@ -87,10 +87,14 @@ function presence_list(PDO $pdo, array $cfg): void {
 
     $rooms = $pdo->query('SELECT id, display_name, last_scan_at FROM rooms ORDER BY id')->fetchAll();
 
-    // For every (user, room) pair within the window, compute the latest sighting.
+    // For every (user, room) pair within the window, compute the latest sighting and the
+    // earliest session_start_at across the user's devices in that room (so a user with
+    // multiple registered MACs gets the earliest one — they've been there at least that long).
     $st = $pdo->prepare("
         SELECT u.id AS user_id, u.display_name, u.avatar_url,
-               ps.room_id, MAX(ps.last_seen_at) AS last_seen_at
+               ps.room_id,
+               MAX(ps.last_seen_at)      AS last_seen_at,
+               MIN(ps.session_start_at)  AS session_start_at
           FROM presence_seen ps
           JOIN presence_devices pd ON pd.mac = ps.mac
           JOIN users u ON u.id = pd.user_id AND u.kind = 'human'
@@ -113,10 +117,11 @@ function presence_list(PDO $pdo, array $cfg): void {
     $usersByRoom = [];
     foreach ($bestPerUser as $r) {
         $usersByRoom[$r['room_id']][] = [
-            'id'           => (int)$r['user_id'],
-            'display_name' => $r['display_name'],
-            'avatar_url'   => $r['avatar_url'] ?? null,
-            'last_seen_at' => $r['last_seen_at'],
+            'id'               => (int)$r['user_id'],
+            'display_name'     => $r['display_name'],
+            'avatar_url'       => $r['avatar_url'] ?? null,
+            'last_seen_at'     => $r['last_seen_at'],
+            'session_start_at' => $r['session_start_at'],
         ];
     }
     foreach ($usersByRoom as &$list) {
@@ -242,32 +247,74 @@ function presence_scan(PDO $pdo, array $cfg): void {
     $accepted = 0;
     $skipped  = 0;
 
-    // first_seen_at is set only on initial INSERT; the ON DUPLICATE branch never touches it,
-    // so it preserves the very first observation timestamp for this (room, mac).
-    $upsert = $pdo->prepare('INSERT INTO presence_seen (room_id, mac, ip, last_seen_at, first_seen_at)
-        VALUES (?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE ip=VALUES(ip), last_seen_at=VALUES(last_seen_at)');
+    // A "fresh entry" = gap >= threshold minutes since the (room, mac) was last observed
+    // (or the row didn't exist). We use this both to start a new session and to gate
+    // streak auto-checkin: leaving a phone in the lab overnight no longer counts as
+    // "you showed up today" — you have to step out and come back.
+    $threshold = (int)cfg_get($pdo, 'presence_reentry_threshold_minutes', '10');
+    if ($threshold < 1) $threshold = 10;
+
+    // first_seen_at is set only on initial INSERT; the ON DUPLICATE branch never touches it.
+    // session_start_at is initialized on INSERT and only refreshed when the previous
+    // last_seen_at is older than $threshold minutes (or NULL after the migration).
+    $upsert = $pdo->prepare("INSERT INTO presence_seen
+            (room_id, mac, ip, last_seen_at, first_seen_at, session_start_at)
+         VALUES (?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+            ip = VALUES(ip),
+            last_seen_at = VALUES(last_seen_at),
+            session_start_at = IF(
+                session_start_at IS NULL
+                OR last_seen_at < DATE_SUB(VALUES(last_seen_at), INTERVAL ? MINUTE),
+                VALUES(last_seen_at),
+                session_start_at
+            )");
+
+    // For each (room, mac) observed this scan, decide if it's a fresh entry. We collect
+    // the macs (keyed) so we can later map back to registered users for auto-checkin.
+    $freshMacs = []; // mac => true when this scan opens a new session
 
     $registeredUserIds = []; // user ids whose registered MAC was seen this scan
+    $freshRegisteredUserIds = []; // user ids whose MAC just had a fresh entry
     $pdo->beginTransaction();
     try {
+        // Look up the existing last_seen_at for each candidate mac in this room so we can
+        // decide freshness before the upsert.
+        $candidateMacs = array_values(array_unique(array_filter(array_map(
+            fn($o) => presence_normalize_mac($o['mac'] ?? null), $obs))));
+        $prevSeen = [];
+        if ($candidateMacs) {
+            $place = implode(',', array_fill(0, count($candidateMacs), '?'));
+            $params = array_merge([$roomId], $candidateMacs);
+            $stPrev = $pdo->prepare("SELECT mac, last_seen_at FROM presence_seen
+                WHERE room_id = ? AND mac IN ($place)");
+            $stPrev->execute($params);
+            foreach ($stPrev->fetchAll() as $r) { $prevSeen[$r['mac']] = $r['last_seen_at']; }
+        }
+
         foreach ($obs as $o) {
             $mac = presence_normalize_mac($o['mac'] ?? null);
             if ($mac === null || presence_is_excluded_mac($mac)) { $skipped++; continue; }
             $ip  = isset($o['ip']) ? mb_substr((string)$o['ip'], 0, 45) : null;
-            $upsert->execute([$roomId, $mac, $ip, $now, $now]);
+            $prev = $prevSeen[$mac] ?? null;
+            $isFresh = $prev === null
+                || strtotime($prev) < strtotime($now) - $threshold * 60;
+            if ($isFresh) $freshMacs[$mac] = true;
+            $upsert->execute([$roomId, $mac, $ip, $now, $now, $now, $threshold]);
             $accepted++;
         }
         $pdo->prepare('UPDATE rooms SET last_scan_at=? WHERE id=?')->execute([$now, $roomId]);
 
-        // Find which registered users this scan saw — for auto-checkin (still inside TX
-        // so we have a consistent view of presence_seen)
-        $obsMacs = array_values(array_filter(array_map(fn($o) => presence_normalize_mac($o['mac'] ?? null), $obs)));
-        if ($obsMacs) {
-            $place = implode(',', array_fill(0, count($obsMacs), '?'));
-            $st = $pdo->prepare("SELECT DISTINCT user_id FROM presence_devices WHERE mac IN ($place)");
-            $st->execute($obsMacs);
-            $registeredUserIds = array_map('intval', array_column($st->fetchAll(), 'user_id'));
+        // Map observed MACs to registered users — for auto-checkin (still inside TX).
+        if ($candidateMacs) {
+            $place = implode(',', array_fill(0, count($candidateMacs), '?'));
+            $st = $pdo->prepare("SELECT mac, user_id FROM presence_devices WHERE mac IN ($place)");
+            $st->execute($candidateMacs);
+            foreach ($st->fetchAll() as $r) {
+                $uid = (int)$r['user_id'];
+                $registeredUserIds[$uid] = true;
+                if (isset($freshMacs[$r['mac']])) $freshRegisteredUserIds[$uid] = true;
+            }
         }
 
         $pdo->commit();
@@ -275,11 +322,16 @@ function presence_scan(PDO $pdo, array $cfg): void {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+    $registeredUserIds = array_keys($registeredUserIds);
+    $freshRegisteredUserIds = array_keys($freshRegisteredUserIds);
 
     // Auto-checkin AFTER commit (each in its own TX so a single failure doesn't break the scan).
     // do_checkin_for_user is idempotent thanks to the UNIQUE PK on (user_id, checkin_date).
+    // IMPORTANT: only run on fresh entries — leaving a phone in the lab overnight should
+    // NOT count as "showed up today" the next morning. The user must physically step out
+    // (no scan for >= reentry threshold) and come back.
     $auto_checked_in = 0;
-    foreach ($registeredUserIds as $uid) {
+    foreach ($freshRegisteredUserIds as $uid) {
         try {
             $r = do_checkin_for_user($pdo, $uid, 'presence:' . $roomId);
             if (!$r['already']) $auto_checked_in++;

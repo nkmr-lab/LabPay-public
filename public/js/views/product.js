@@ -163,6 +163,13 @@ function renderListingRow(l) {
   const dnameLine = (l.display_name && l.display_name !== l.product_name)
     ? `<div class="meta">出品名: ${escapeHtml(l.display_name)}</div>`
     : '';
+  // Resale chain — show "原始出品者 → ... → 現在の出品者" when the listing has been
+  // resold at least once. We trim long chains visually with an ellipsis but keep the
+  // first and last names since they're the most informative.
+  const chain = Array.isArray(l.resale_chain) ? l.resale_chain : [];
+  const chainLine = l.is_resale && chain.length >= 2
+    ? `<div class="meta" style="color:#7a5a00">🔄 ${renderChainNames(chain)}</div>`
+    : '';
   return `
     <div class="list-item">
       <div style="display:flex; align-items:center; gap:10px; flex:1">
@@ -172,8 +179,21 @@ function renderListingRow(l) {
           <div class="meta">在庫 ${l.qty} · 累計販売 ${l.seller_sales ?? 0}</div>
           ${dnameLine}
           ${locLine}
+          ${chainLine}
         </div>
       </div>
       <div>${btn}</div>
     </div>`;
+}
+
+// Render the resale chain as "原始 → 中継 → 現在" using display_name. When the chain
+// gets long (>3) we collapse the middle into a "...+N..." marker so the row stays compact.
+function renderChainNames(chain) {
+  if (chain.length <= 3) {
+    return chain.map(c => escapeHtml(c.display_name)).join(' → ');
+  }
+  const first = chain[0];
+  const last = chain[chain.length - 1];
+  const middle = chain.length - 2;
+  return `${escapeHtml(first.display_name)} → …+${middle}人… → ${escapeHtml(last.display_name)}`;
 }

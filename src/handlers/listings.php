@@ -3,6 +3,53 @@
 
 declare(strict_types=1);
 
+// Walk backwards from a listing through the resold_from_purchase_id chain. Returns the
+// chain of sellers, OLDEST first, INCLUDING the current listing's seller as the last entry.
+// Capped at 20 hops to defend against any malformed cycle that slipped past the FK.
+function listings_resale_chain(PDO $pdo, int $listingId): array {
+    $chain = [];
+    $curListing = $listingId;
+    $seen = [];
+    for ($i = 0; $i < 20 && $curListing && !isset($seen[$curListing]); $i++) {
+        $seen[$curListing] = true;
+        $st = $pdo->prepare("SELECT l.id, l.seller_user_id, u.display_name, u.avatar_url,
+                                    l.resold_from_purchase_id
+              FROM listings l JOIN users u ON u.id = l.seller_user_id
+             WHERE l.id = ?");
+        $st->execute([$curListing]);
+        $row = $st->fetch();
+        if (!$row) break;
+        $chain[] = [
+            'user_id'      => (int)$row['seller_user_id'],
+            'display_name' => $row['display_name'],
+            'avatar_url'   => $row['avatar_url'],
+        ];
+        if (!$row['resold_from_purchase_id']) break;
+        // Find the listing this purchase came from.
+        $st2 = $pdo->prepare('SELECT listing_id FROM purchases WHERE id = ?');
+        $st2->execute([(int)$row['resold_from_purchase_id']]);
+        $curListing = (int)$st2->fetchColumn();
+    }
+    // We collected newest-first; reverse so the original seller is first.
+    return array_reverse($chain);
+}
+
+// Attach `resale_chain` (array of {user_id,display_name,avatar_url}) and a convenience
+// `is_resale` boolean to each listing row.
+function listings_attach_chain(PDO $pdo, array $rows): array {
+    foreach ($rows as &$r) {
+        if (!empty($r['resold_from_purchase_id'])) {
+            $chain = listings_resale_chain($pdo, (int)$r['id']);
+            $r['resale_chain'] = $chain;
+            $r['is_resale'] = count($chain) > 1;
+        } else {
+            $r['resale_chain'] = [];
+            $r['is_resale'] = false;
+        }
+    }
+    return $rows;
+}
+
 function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void {
     $id = isset($seg[1]) && $seg[1] !== '' ? (int)$seg[1] : 0;
 
@@ -30,7 +77,8 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         foreach ($params as $i => $v) $st->bindValue($i+1, $v);
         $st->bindValue(count($params)+1, $limit, PDO::PARAM_INT);
         $st->execute();
-        json_response(['items' => $st->fetchAll()]);
+        $rows = listings_attach_chain($pdo, $st->fetchAll());
+        json_response(['items' => $rows]);
         return;
     }
 
@@ -49,6 +97,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $st->execute([$id]);
         $row = $st->fetch();
         if (!$row) { json_error('not_found', "listing $id not found", 404); return; }
+        $row = listings_attach_chain($pdo, [$row])[0];
         json_response($row);
         return;
     }
@@ -72,11 +121,20 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             throw new ApiException('product_unknown',
                 "product $jan not registered. POST /api/products first", 400);
         }
+        // Resale detection: if this seller previously bought this JAN on LabPay, link the
+        // new listing to their most recent purchase so the product page can show the
+        // chain (中村 -> 田中 -> あなた).
+        $rs = $pdo->prepare("SELECT id FROM purchases
+            WHERE buyer_user_id = ? AND jan = ?
+            ORDER BY id DESC LIMIT 1");
+        $rs->execute([$u['id'], $jan]);
+        $resoldFromPurchaseId = $rs->fetchColumn() ?: null;
+
         $ins = $pdo->prepare(
-            'INSERT INTO listings (jan, seller_user_id, price, is_gift, qty, display_name, status, completion_message, location)
-             VALUES (?,?,?,?,?,?, "on_sale", ?, ?)'
+            'INSERT INTO listings (jan, seller_user_id, price, is_gift, qty, display_name, status, completion_message, location, resold_from_purchase_id)
+             VALUES (?,?,?,?,?,?, "on_sale", ?, ?, ?)'
         );
-        $ins->execute([$jan, $u['id'], $price, $isGift, $qty, $displayName, $completionMsg, $location]);
+        $ins->execute([$jan, $u['id'], $price, $isGift, $qty, $displayName, $completionMsg, $location, $resoldFromPurchaseId]);
         $lid = (int)$pdo->lastInsertId();
         $get = $pdo->prepare("SELECT l.*,
                 p.name AS product_name,
