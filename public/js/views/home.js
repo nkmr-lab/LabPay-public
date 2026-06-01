@@ -34,6 +34,9 @@ export async function renderHome() {
         </label>
       </div>
       <div id="presence" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+      <div class="muted" style="font-size:11px; margin-top:6px; line-height:1.5">
+        🙈 スマホの Wi-Fi を OFF にしたり、MIND に接続すると検知されなくなります。
+      </div>
       <div style="text-align:right; margin-top:8px">
         <a href="#/activity" class="muted" style="font-size:13px">活動マップ →</a>
       </div>
