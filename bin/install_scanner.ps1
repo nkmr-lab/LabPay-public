@@ -6,7 +6,7 @@
 # What it does:
 #   1. Verifies Python 3.10+ is on PATH (`python --version`)
 #   2. Prompts for room_id, scanner_token, labpay_url (default https://pay.nkmr.io)
-#      — token can also be piped via env var LABPAY_SCANNER_TOKEN to avoid screen echo
+#      - token can also be piped via env var LABPAY_SCANNER_TOKEN to avoid screen echo
 #   3. Writes scanner.config.json next to this script
 #   4. Runs scanner.py once and shows the result so you know it works
 #   5. Registers a Scheduled Task "LabPay Scanner" that re-runs every 1 minute
@@ -37,7 +37,7 @@ $bat     = Join-Path $here 'scanner_run.bat'
 $config  = Join-Path $here 'scanner.config.json'
 
 # 1) sanity: scanner.py + scanner_run.bat present
-if (-not (Test-Path $scanner)) { throw "scanner.py not found at $scanner — copy bin/ to this PC first." }
+if (-not (Test-Path $scanner)) { throw "scanner.py not found at $scanner - copy bin/ to this PC first." }
 if (-not (Test-Path $bat))     { throw "scanner_run.bat not found at $bat" }
 
 # 2) sanity: python
@@ -72,7 +72,7 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 }
 if ([string]::IsNullOrWhiteSpace($token)) { throw 'scanner_token が空です。中止します。' }
 
-$subnet = Read-Host 'subnet (例: 192.168.50.0/24 — 空欄なら自動検出)'
+$subnet = Read-Host 'subnet (例: 192.168.50.0/24 - 空欄なら自動検出)'
 
 $cfgObj = [ordered]@{
     labpay_url    = $labpayUrl.TrimEnd('/')
@@ -81,7 +81,7 @@ $cfgObj = [ordered]@{
 }
 if (-not [string]::IsNullOrWhiteSpace($subnet)) { $cfgObj.subnet = $subnet.Trim() }
 
-# 4) write config (utf-8 NO BOM — scanner.py uses utf-8-sig so BOM is fine too, but cleaner)
+# 4) write config (utf-8 NO BOM - scanner.py uses utf-8-sig so BOM is fine too, but cleaner)
 $json = ($cfgObj | ConvertTo-Json -Depth 3)
 [System.IO.File]::WriteAllText($config, $json, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host ""
@@ -95,14 +95,14 @@ try {
     $out = & python scanner.py 2>&1
     $out | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -ne 0) {
-        throw "scanner.py exited $LASTEXITCODE — config か token を確認してください。"
+        throw "scanner.py exited $LASTEXITCODE - config か token を確認してください。"
     }
     if ($out -notmatch 'HTTP 200') {
         Write-Host '  (warning) HTTP 200 が確認できませんでした。後でログを確認してください。' -ForegroundColor Yellow
     }
 } finally { Pop-Location }
 
-# 6) register Scheduled Task — current user, AtLogOn + 1-min repeat
+# 6) register Scheduled Task - current user, AtLogOn + 1-min repeat
 $taskName = 'LabPay Scanner'
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
@@ -130,4 +130,4 @@ Write-Host "Task: $taskName  /  Next run: $($info.NextRunTime)"
 Write-Host "Log:  $here\scanner.log"
 Write-Host ""
 Write-Host "1分後にサーバ側で last_scan_at が更新されているか確認:"
-Write-Host '  https://pay.nkmr.io/#/admin → 詳細管理 → 部屋'
+Write-Host '  https://pay.nkmr.io/#/admin -> 詳細管理 -> 部屋'
