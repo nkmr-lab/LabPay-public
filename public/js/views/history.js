@@ -30,7 +30,8 @@ function row(t) {
   const lbl = ({
     initial: '初期配布', checkin: 'ラボインボーナス', purchase: '購入', fee: '手数料',
     reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
-    deposit: '預け入れ', refund: '返金', burn: '消却'
+    deposit: '預け入れ', refund: '返金', burn: '消却',
+    scrapbox_reward: 'Scrapbox編集ボーナス',
   })[t.type] || t.type;
   return `
     <div class="list-item">

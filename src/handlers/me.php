@@ -196,20 +196,23 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'presence_summary' && $method === 'GET') {
         $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
         $now = new DateTimeImmutable('now', $tz);
-        $todayStart = $now->setTime(0, 0, 0)->format('Y-m-d H:i:s');
+        $todayStart     = $now->setTime(0, 0, 0)->format('Y-m-d H:i:s');
+        $yesterdayStart = $now->modify('-1 day')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
         $weekStart  = $now->modify('monday this week')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
         $monthStart = $now->modify('first day of this month')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
 
-        // Closed sessions: bucket by start time.
+        // Closed sessions: bucket by start time. Yesterday is a half-open
+        // [yesterdayStart, todayStart) range so a session starting at 23:55
+        // counts to yesterday, not today.
         $st = $pdo->prepare("
             SELECT
               COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS today,
+              COALESCE(SUM(IF(started_at >= ? AND started_at < ?, duration_minutes, 0)), 0) AS yesterday,
               COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS week,
-              COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS month,
-              COALESCE(SUM(duration_minutes), 0)                         AS total
+              COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS month
             FROM presence_sessions
             WHERE user_id = ?");
-        $st->execute([$todayStart, $weekStart, $monthStart, $u['id']]);
+        $st->execute([$todayStart, $yesterdayStart, $todayStart, $weekStart, $monthStart, $u['id']]);
         $closed = $st->fetch();
 
         // Currently-open session: any presence_seen row whose MAC belongs to this
@@ -233,12 +236,61 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             : ($openStart !== null ? max(0, (strtotime((new DateTimeImmutable('now', $tz))->format('Y-m-d H:i:s')) - strtotime($bucketStart)) / 60) : 0);
 
         json_response([
-            'today_minutes'    => (int)round($closed['today'] + $addOpen($todayStart)),
-            'week_minutes'     => (int)round($closed['week']  + $addOpen($weekStart)),
-            'month_minutes'    => (int)round($closed['month'] + $addOpen($monthStart)),
-            'total_minutes'    => (int)round($closed['total'] + $openMins),
+            'today_minutes'     => (int)round($closed['today'] + $addOpen($todayStart)),
+            'yesterday_minutes' => (int)round($closed['yesterday']),  // closed-day, no open-session adjustment needed
+            'week_minutes'      => (int)round($closed['week']  + $addOpen($weekStart)),
+            'month_minutes'     => (int)round($closed['month'] + $addOpen($monthStart)),
             'currently_present' => $openStart !== null,
             'current_session_started_at' => $openStart,
+        ]);
+        return;
+    }
+
+    // GET /api/me/contribution_calendar?days=84
+    // GitHub-style daily activity for the user: one entry per calendar day with
+    // minutes_present aggregated from presence_sessions, plus the open session's
+    // current-day fraction. The UI renders this as a 7-row grass plot.
+    if ($sub === 'contribution_calendar' && $method === 'GET') {
+        $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
+        $days = max(7, min(366, (int)($_GET['days'] ?? 84)));
+        $end   = new DateTimeImmutable('tomorrow midnight', $tz);
+        $start = $end->modify("-{$days} days");
+
+        // Bucket closed sessions by DATE(started_at). A 23:55→01:30 session counts
+        // entirely to its start date — same simplification as presence_summary.
+        $st = $pdo->prepare("
+            SELECT DATE(started_at) AS d, SUM(duration_minutes) AS mins
+              FROM presence_sessions
+             WHERE user_id = ? AND started_at >= ? AND started_at < ?
+             GROUP BY DATE(started_at)");
+        $st->execute([$u['id'], $start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')]);
+        $byDay = [];
+        foreach ($st->fetchAll() as $r) $byDay[$r['d']] = (int)$r['mins'];
+
+        // Attribute any currently-open session to its start date.
+        $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
+            FROM presence_seen ps
+            JOIN presence_devices pd ON pd.mac = ps.mac
+            WHERE pd.user_id = ?
+              AND ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)");
+        $stOpen->execute([$u['id']]);
+        $row = $stOpen->fetch();
+        if ($row && !empty($row['s']) && !empty($row['e'])) {
+            $openMin = (int)round(max(0, (strtotime($row['e']) - strtotime($row['s'])) / 60));
+            $openDate = substr($row['s'], 0, 10);
+            $byDay[$openDate] = ($byDay[$openDate] ?? 0) + $openMin;
+        }
+
+        // Fill the whole range so the client gets a dense array.
+        $entries = [];
+        for ($d = $start; $d < $end; $d = $d->modify('+1 day')) {
+            $key = $d->format('Y-m-d');
+            $entries[] = ['date' => $key, 'minutes' => $byDay[$key] ?? 0];
+        }
+        json_response([
+            'from' => $start->format('Y-m-d'),
+            'to'   => $end->modify('-1 day')->format('Y-m-d'),
+            'days' => $entries,
         ]);
         return;
     }

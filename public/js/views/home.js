@@ -64,7 +64,7 @@ export async function renderHome() {
 
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">最近の取引</h2>
+        <h2 style="flex:1; margin:0">履歴</h2>
         <a href="#/history" class="muted" style="font-size:13px">すべて見る →</a>
       </div>
       <div id="recent" class="list"><div class="muted">読み込み中…</div></div>
@@ -110,7 +110,11 @@ async function renderPresenceSummary() {
       ? `<div style="margin-top:6px; color:#0e7c63; font-weight:600">● いまラボに居ます</div>`
       : '';
     root.innerHTML = `
-      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; text-align:center">
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center">
+        <div>
+          <div class="muted" style="font-size:11px">昨日</div>
+          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.yesterday_minutes)}</div>
+        </div>
         <div>
           <div class="muted" style="font-size:11px">今日</div>
           <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.today_minutes)}</div>
@@ -125,9 +129,65 @@ async function renderPresenceSummary() {
         </div>
       </div>
       ${live}
+      <div id="presence-grass" style="margin-top:14px"></div>
     `;
+    renderPresenceGrass();
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// GitHub-style daily contribution grid. Each cell = 1 day; columns = weeks
+// (Mon..Sun rows). Color intensity scales with minutes_present that day:
+//   0 → light grey, then 4 green steps up to "very long stay".
+async function renderPresenceGrass() {
+  const root = document.getElementById('presence-grass');
+  if (!root) return;
+  try {
+    const c = await get('/api/me/contribution_calendar', { days: 84 }); // ~12 週
+    if (!c.days.length) { root.innerHTML = ''; return; }
+    // Pad so the first column starts on a Monday. dow: 1=Mon..0=Sun in JS;
+    // we want Mon-first, so map (d.getDay()+6)%7 → 0=Mon..6=Sun.
+    const cells = c.days.map(d => ({ ...d, dow: (new Date(d.date).getDay() + 6) % 7 }));
+    const lead = cells[0].dow;
+    const padded = [...Array(lead).fill(null), ...cells];
+    // Pack into 7-row columns
+    const weeks = [];
+    for (let i = 0; i < padded.length; i += 7) weeks.push(padded.slice(i, i + 7));
+    const max = Math.max(60, ...cells.map(d => d.minutes));  // floor at 60min so single-checkin days don't max the scale
+    const color = m => {
+      if (m <= 0) return '#ebedf0';
+      const t = Math.min(1, m / max);
+      if (t < 0.2) return '#c6e48b';
+      if (t < 0.4) return '#7bc96f';
+      if (t < 0.7) return '#239a3b';
+      return '#196127';
+    };
+    const fmtMin = m => m < 60 ? `${m}分` : `${Math.floor(m/60)}時間${m%60?(m%60)+'分':''}`;
+    const dayLabels = ['月','','水','','金','',''];  // sparse: Mon/Wed/Fri only
+    const cellHtml = (d) => d
+      ? `<div class="grass-cell" style="background:${color(d.minutes)}"
+              title="${d.date}: ${d.minutes > 0 ? fmtMin(d.minutes) : '不在'}"></div>`
+      : `<div class="grass-cell" style="background:transparent"></div>`;
+    root.innerHTML = `
+      <div class="muted" style="font-size:11px; margin-bottom:4px">直近 ${c.days.length} 日のラボ滞在 (GitHub の草風)</div>
+      <div style="display:flex; gap:3px; overflow-x:auto; padding-bottom:2px">
+        <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px; padding-right:2px">
+          ${dayLabels.map(l => `<div style="font-size:9px; color:var(--muted); line-height:12px">${l}</div>`).join('')}
+        </div>
+        ${weeks.map(w => `
+          <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px">
+            ${[0,1,2,3,4,5,6].map(r => cellHtml(w[r] ?? null)).join('')}
+          </div>`).join('')}
+      </div>
+      <div class="muted" style="font-size:10px; margin-top:4px; display:flex; align-items:center; gap:4px">
+        少
+        ${['#ebedf0','#c6e48b','#7bc96f','#239a3b','#196127'].map(c => `<span class="grass-cell" style="background:${c}; width:10px; height:10px"></span>`).join('')}
+        多
+      </div>
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="muted" style="font-size:11px">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -373,7 +433,7 @@ function renderTxItem(t) {
 function labelFor(type) {
   return ({
     initial: '初期配布',
-    checkin: 'ラボイン',
+    checkin: 'ラボインボーナス',
     purchase: '購入',
     fee: '手数料',
     reversal: '取消',
@@ -382,5 +442,6 @@ function labelFor(type) {
     deposit: '預け入れ',
     refund: '返金',
     burn: '消却',
+    scrapbox_reward: 'Scrapbox編集ボーナス',
   })[type] || type;
 }

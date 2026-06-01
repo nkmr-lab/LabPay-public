@@ -442,6 +442,12 @@ table.table th { color: var(--muted); font-weight: 600; }
 .supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
 .supply-sub   { font-size: 11px; color: var(--muted); }
 
+/* Presence grass — GitHub-style 7-row contribution grid. Fixed 12px cells so the
+   grid stays readable; horizontal overflow scrolls on narrow screens. */
+.grass-cell {
+  width: 12px; height: 12px; border-radius: 2px;
+}
+
 /* Activity heatmap.
    Uses CSS grid with 1 day-label column + 24 hour columns. Cells stay square-ish
    via aspect-ratio to keep the visual rhythm readable on phones. */
