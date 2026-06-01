@@ -250,16 +250,17 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
     // GET /api/me/contribution_calendar?days=84
     // GitHub-style daily activity for the user: one entry per calendar day with
-    // minutes_present aggregated from presence_sessions, plus the open session's
-    // current-day fraction. The UI renders this as a 7-row grass plot.
+    // minutes_present aggregated from presence_sessions, plus any presence_seen
+    // visits that never got "closed" (phone left without returning, so the
+    // close-event never fired). For those, we fall back to first_seen_at when
+    // session_start_at is NULL — legacy rows from before migration 015.
     if ($sub === 'contribution_calendar' && $method === 'GET') {
         $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
         $days = max(7, min(366, (int)($_GET['days'] ?? 84)));
         $end   = new DateTimeImmutable('tomorrow midnight', $tz);
         $start = $end->modify("-{$days} days");
 
-        // Bucket closed sessions by DATE(started_at). A 23:55→01:30 session counts
-        // entirely to its start date — same simplification as presence_summary.
+        // Bucket closed sessions by DATE(started_at).
         $st = $pdo->prepare("
             SELECT DATE(started_at) AS d, SUM(duration_minutes) AS mins
               FROM presence_sessions
@@ -269,18 +270,27 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $byDay = [];
         foreach ($st->fetchAll() as $r) $byDay[$r['d']] = (int)$r['mins'];
 
-        // Attribute any currently-open session to its start date.
-        $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
-            FROM presence_seen ps
-            JOIN presence_devices pd ON pd.mac = ps.mac
-            WHERE pd.user_id = ?
-              AND ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)");
-        $stOpen->execute([$u['id']]);
-        $row = $stOpen->fetch();
-        if ($row && !empty($row['s']) && !empty($row['e'])) {
-            $openMin = (int)round(max(0, (strtotime($row['e']) - strtotime($row['s'])) / 60));
-            $openDate = substr($row['s'], 0, 10);
-            $byDay[$openDate] = ($byDay[$openDate] ?? 0) + $openMin;
+        // ALSO include any presence_seen rows in the window — covers visits whose
+        // phone left without returning (no close-event), plus currently-open sessions.
+        // Approximation: bucket the whole [start, last_seen] span on its DATE(start).
+        // A multi-day open span would be slightly mis-attributed, but typical lab
+        // visits don't cross midnight in a single uninterrupted observation window.
+        $stSeen = $pdo->prepare("
+            SELECT COALESCE(ps.session_start_at, ps.first_seen_at) AS s,
+                   ps.last_seen_at AS e
+              FROM presence_seen ps
+              JOIN presence_devices pd ON pd.mac = ps.mac
+             WHERE pd.user_id = ?
+               AND COALESCE(ps.session_start_at, ps.first_seen_at) >= ?
+               AND ps.last_seen_at < ?");
+        $stSeen->execute([$u['id'],
+            $start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')]);
+        foreach ($stSeen->fetchAll() as $row) {
+            if (empty($row['s']) || empty($row['e'])) continue;
+            $mins = (int)round(max(0, (strtotime($row['e']) - strtotime($row['s'])) / 60));
+            if ($mins <= 0) continue;
+            $day = substr($row['s'], 0, 10);
+            $byDay[$day] = ($byDay[$day] ?? 0) + $mins;
         }
 
         // Fill the whole range so the client gets a dense array.
