@@ -312,7 +312,10 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                 throw new ApiException('bad_request', 'display_name length 1..100', 400);
 
             // Generate plaintext token; store only its sha256 hash. Plaintext is returned ONCE.
-            $token = bin2hex(random_bytes(24));
+            // 6 random bytes = 12 hex chars = 48 bits of entropy. Low-stakes per-room token
+            // for a small lab — easy to copy/dictate, online brute force is impractical at
+            // request rates. Hashed at rest so a DB leak isn't an immediate exposure.
+            $token = bin2hex(random_bytes(6));
             $hash  = hash('sha256', $token);
             $ins = $pdo->prepare('INSERT INTO rooms (id, display_name, scanner_token_hash) VALUES (?,?,?)
                 ON DUPLICATE KEY UPDATE display_name=VALUES(display_name), scanner_token_hash=VALUES(scanner_token_hash)');
@@ -384,7 +387,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         $chk = $pdo->prepare('SELECT id FROM rooms WHERE id=?');
         $chk->execute([$rid]);
         if ($chk->fetchColumn() === false) throw new ApiException('not_found', "room $rid not found", 404);
-        $token = bin2hex(random_bytes(24));
+        // Match the create endpoint's 12-hex token length (6 random bytes / 48 bits).
+        $token = bin2hex(random_bytes(6));
         $hash  = hash('sha256', $token);
         $pdo->prepare('UPDATE rooms SET scanner_token_hash=? WHERE id=?')->execute([$hash, $rid]);
         json_response(['ok' => true, 'id' => $rid, 'scanner_token' => $token,
