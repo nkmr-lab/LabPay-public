@@ -4,16 +4,15 @@
 #     powershell -ExecutionPolicy Bypass -File install_scanner.ps1
 #
 # What it does:
-#   1. Verifies Python 3.10+ is on PATH (`python --version`)
-#   2. Prompts for room_id, scanner_token, labpay_url (default https://pay.nkmr.io)
-#      - token can also be piped via env var LABPAY_SCANNER_TOKEN to avoid screen echo
+#   1. Verifies Python 3.10+ is on PATH
+#   2. Prompts for room_id, scanner_token, labpay_url
+#      (env var LABPAY_SCANNER_TOKEN can pre-fill the token)
 #   3. Writes scanner.config.json next to this script
-#   4. Runs scanner.py once and shows the result so you know it works
+#   4. Runs scanner.py once and shows the result
 #   5. Registers a Scheduled Task "LabPay Scanner" that re-runs every 1 minute
-#      and survives login (re-registers on AtLogOn so the same user picks it up)
 #
-# Re-run safe: existing task is replaced, existing config is overwritten only after
-# explicit confirmation.
+# Re-run safe: the existing task is replaced. The script is intentionally
+# ASCII-only so it parses under Windows PowerShell 5.1 without a UTF-8 BOM.
 
 $ErrorActionPreference = 'Stop'
 
@@ -23,7 +22,7 @@ function Read-NonEmpty([string]$prompt, [string]$default = '') {
         $val = Read-Host ($prompt + $suffix)
         if ([string]::IsNullOrWhiteSpace($val) -and $default) { return $default }
         if (-not [string]::IsNullOrWhiteSpace($val)) { return $val.Trim() }
-        Write-Host '  (空欄不可)' -ForegroundColor Yellow
+        Write-Host '  (cannot be blank)' -ForegroundColor Yellow
     }
 }
 
@@ -48,7 +47,7 @@ try {
     }
     Write-Host "OK $pyver" -ForegroundColor Green
 } catch {
-    throw "Python が見つからないか古すぎます。python.org or Microsoft Store から 3.10+ を入れてください。元の例外: $_"
+    throw "Python not found or too old. Install Python 3.10+ from python.org or Microsoft Store. Inner: $_"
 }
 
 # 3) collect config
@@ -61,16 +60,16 @@ if (Test-Path $config) {
 }
 
 $labpayUrl = Read-NonEmpty 'labpay_url' (Get-OrDefault $existing.labpay_url 'https://pay.nkmr.io')
-$roomId    = Read-NonEmpty 'room_id (例: 7F)' (Get-OrDefault $existing.room_id '')
+$roomId    = Read-NonEmpty 'room_id (e.g. 7F)' (Get-OrDefault $existing.room_id '')
 
-# Prefer env var so token doesn't appear in shell history.
+# Prefer env var so the token does not appear in shell history.
 $token = $env:LABPAY_SCANNER_TOKEN
 if ([string]::IsNullOrWhiteSpace($token)) {
-    $secure = Read-Host 'scanner_token (admin 画面で部屋作成時に表示されたもの)' -AsSecureString
+    $secure = Read-Host 'scanner_token (one-shot value shown when the room was created in admin)' -AsSecureString
     $token  = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
               [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
 }
-if ([string]::IsNullOrWhiteSpace($token)) { throw 'scanner_token が空です。中止します。' }
+if ([string]::IsNullOrWhiteSpace($token)) { throw 'scanner_token is empty. Aborting.' }
 
 $subnet = Read-Host 'subnet (e.g. 192.168.50.0/24, blank = auto-detect)'
 
@@ -81,7 +80,7 @@ $cfgObj = [ordered]@{
 }
 if (-not [string]::IsNullOrWhiteSpace($subnet)) { $cfgObj.subnet = $subnet.Trim() }
 
-# 4) write config (utf-8 NO BOM - scanner.py uses utf-8-sig so BOM is fine too, but cleaner)
+# 4) write config (utf-8 without BOM)
 $json = ($cfgObj | ConvertTo-Json -Depth 3)
 [System.IO.File]::WriteAllText($config, $json, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host ""
@@ -95,10 +94,10 @@ try {
     $out = & python scanner.py 2>&1
     $out | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -ne 0) {
-        throw "scanner.py exited $LASTEXITCODE - config か token を確認してください。"
+        throw "scanner.py exited $LASTEXITCODE - check config or token."
     }
     if ($out -notmatch 'HTTP 200') {
-        Write-Host '  (warning) HTTP 200 が確認できませんでした。後でログを確認してください。' -ForegroundColor Yellow
+        Write-Host '  (warning) HTTP 200 not seen. Check the log later.' -ForegroundColor Yellow
     }
 } finally { Pop-Location }
 
@@ -129,5 +128,4 @@ Write-Host "=== Done ===" -ForegroundColor Green
 Write-Host "Task: $taskName  /  Next run: $($info.NextRunTime)"
 Write-Host "Log:  $here\scanner.log"
 Write-Host ""
-Write-Host "1分後にサーバ側で last_scan_at が更新されているか確認:"
-Write-Host '  https://pay.nkmr.io/#/admin -> 詳細管理 -> 部屋'
+Write-Host "Verify in admin: https://pay.nkmr.io/#/admin -> rooms -> last_scan_at should refresh within a minute."
