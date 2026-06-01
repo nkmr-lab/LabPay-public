@@ -188,6 +188,25 @@ def post_to_labpay(cfg: dict, observations: list[dict]) -> tuple[int, str]:
         return e.code, e.read().decode(errors="replace")
 
 
+LOG_PATH = Path(__file__).with_name("scanner.log")
+
+
+def _log(msg: str) -> None:
+    """Write `msg` to scanner.log AND stdout. Under pythonw.exe (used by Task Scheduler
+    to avoid console flashes) there's no stdout, so the file is the only record."""
+    import datetime
+    line = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}"
+    try:
+        print(line)
+    except Exception:
+        pass
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
 def main() -> int:
     cfg = load_config()
     cidr = cfg.get("subnet") or autodetect_subnet()
@@ -201,9 +220,9 @@ def main() -> int:
         if not any(o["mac"] == me_mac for o in obs):
             obs.append({"mac": me_mac, "ip": own_ip()})
     status, body = post_to_labpay(cfg, obs)
-    print(f"[scanner] room={cfg['room_id']} subnet={cidr} observed={len(obs)} -> HTTP {status}")
+    _log(f"[scanner] room={cfg['room_id']} subnet={cidr} observed={len(obs)} -> HTTP {status}")
     if status >= 400:
-        print(body, file=sys.stderr)
+        _log(f"[scanner] error body: {body[:300]}")
         return 1
     return 0
 

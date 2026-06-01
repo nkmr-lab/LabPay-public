@@ -32,12 +32,10 @@ function Get-OrDefault($value, $default) {
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $scanner = Join-Path $here 'scanner.py'
-$bat     = Join-Path $here 'scanner_run.bat'
 $config  = Join-Path $here 'scanner.config.json'
 
-# 1) sanity: scanner.py + scanner_run.bat present
+# 1) sanity: scanner.py present
 if (-not (Test-Path $scanner)) { throw "scanner.py not found at $scanner - copy bin/ to this PC first." }
-if (-not (Test-Path $bat))     { throw "scanner_run.bat not found at $bat" }
 
 # 2) sanity: python
 try {
@@ -102,10 +100,21 @@ try {
 } finally { Pop-Location }
 
 # 6) register Scheduled Task - current user, AtLogOn + 1-min repeat
+# Use pythonw.exe (windowless variant) so the task does not flash a console window
+# every minute. scanner.py writes its own scanner.log.
+$pythonExe = (Get-Command python).Source
+$pythonDir = Split-Path -Parent $pythonExe
+$pythonw   = Join-Path $pythonDir 'pythonw.exe'
+if (-not (Test-Path $pythonw)) {
+    Write-Host "WARNING: pythonw.exe not found next to python.exe at $pythonDir." -ForegroundColor Yellow
+    Write-Host "Falling back to python.exe (a brief console window will appear each minute)." -ForegroundColor Yellow
+    $pythonw = $pythonExe
+}
+
 $taskName = 'LabPay Scanner'
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
-$action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $here
+$action = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$scanner`"" -WorkingDirectory $here
 $start  = (Get-Date).AddMinutes(1)
 $repeat = New-ScheduledTaskTrigger -Once -At $start `
             -RepetitionInterval (New-TimeSpan -Minutes 1) `
