@@ -114,7 +114,7 @@ export async function renderSell() {
             <input type="checkbox" id="is_gift">
             <span class="slider"></span>
           </span>
-          <span>🎁 これは「これどうぞ！」(無料配布)</span>
+          <span>🎁 「これどうぞ！」(無料配布)</span>
         </label>
         <div class="row">
           <label class="field" style="flex:1" id="price-field">
@@ -160,7 +160,7 @@ export async function renderSell() {
           <input type="checkbox" id="nj-is_gift">
           <span class="slider"></span>
         </span>
-        <span>🎁 これは「これどうぞ！」(無料配布)</span>
+        <span>🎁 「これどうぞ！」(無料配布)</span>
       </label>
       <div class="row">
         <label class="field" style="flex:1" id="nj-price-field">

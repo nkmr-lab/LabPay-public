@@ -29,12 +29,26 @@ html, body {
   width: 100%;
   max-width: 100vw;
 }
+/* Belt-and-suspenders against horizontal scroll: stop any wide child from
+   pushing the layout sideways, and let long unbreakable strings (URLs, hex
+   tokens, long product names) wrap instead of growing a column. */
+main#app, .card { max-width: 100%; overflow-x: hidden; min-width: 0; }
+.card .meta, .card .bold, .card .name { overflow-wrap: anywhere; word-break: break-word; }
+.mono { overflow-wrap: anywhere; word-break: break-all; }
 html, body { background: var(--bg); color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
                "Helvetica Neue", Arial, "Yu Gothic", "Meiryo", sans-serif;
   font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-a { color: var(--primary); text-decoration: none; }
+a { color: var(--primary); text-decoration: none; -webkit-tap-highlight-color: transparent; }
 a:hover { text-decoration: underline; }
+/* Mobile taps shouldn't underline navigation chrome — the underline-on-hover above
+   also fires on touch and looks janky. Hard-suppress it for known nav surfaces. */
+nav#tabs a, nav#tabs a:hover,
+header#topbar a, header#topbar a:hover,
+.brand, .brand:hover {
+  text-decoration: none;
+}
+button { -webkit-tap-highlight-color: transparent; }
 input, button, select, textarea {
   font: inherit; color: inherit;
 }
@@ -46,6 +60,10 @@ header#topbar {
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
 }
 header .brand { font-weight: 800; font-size: 18px; color: var(--primary); }
+header .brand-version {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  margin-left: 2px; vertical-align: super;
+}
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .pill { background: var(--primary-soft); color: var(--primary); padding: 4px 10px;
   border-radius: 999px; font-weight: 700; font-size: 14px; }
