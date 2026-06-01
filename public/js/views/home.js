@@ -101,18 +101,13 @@ async function renderMedalsStrip() {
   } catch (e) { root.innerHTML = ''; }
 }
 
-async function renderPresence() {
-  const presenceRoot = document.getElementById('presence');
-  const toggle = document.getElementById('presence-names-toggle');
-  const SHOW_NAMES_KEY = 'labpay-presence-show-names';
-  const showNames = localStorage.getItem(SHOW_NAMES_KEY) !== '0';
-  toggle.checked = showNames;
-  applyPresenceMode(showNames);
-  toggle.addEventListener('change', () => {
-    localStorage.setItem(SHOW_NAMES_KEY, toggle.checked ? '1' : '0');
-    applyPresenceMode(toggle.checked);
-  });
+// Held at module scope so the interval can be cleared when the user navigates away
+// from the home page (otherwise it stacks up on repeated home renders).
+let presenceTimer = null;
 
+async function fetchAndRenderPresence() {
+  const presenceRoot = document.getElementById('presence');
+  if (!presenceRoot) return;
   try {
     const pres = await get('/api/presence');
     if (!pres.rooms.length) {
@@ -123,6 +118,32 @@ async function renderPresence() {
   } catch (e) {
     presenceRoot.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function renderPresence() {
+  const toggle = document.getElementById('presence-names-toggle');
+  const SHOW_NAMES_KEY = 'labpay-presence-show-names';
+  const showNames = localStorage.getItem(SHOW_NAMES_KEY) !== '0';
+  toggle.checked = showNames;
+  applyPresenceMode(showNames);
+  toggle.addEventListener('change', () => {
+    localStorage.setItem(SHOW_NAMES_KEY, toggle.checked ? '1' : '0');
+    applyPresenceMode(toggle.checked);
+  });
+
+  await fetchAndRenderPresence();
+
+  // Refresh every 60s while the user is on the home view. Scanner pushes new
+  // presence data roughly once a minute, so this keeps it ~live.
+  if (presenceTimer) clearInterval(presenceTimer);
+  presenceTimer = setInterval(() => {
+    if (document.getElementById('presence')) {
+      fetchAndRenderPresence();
+    } else {
+      clearInterval(presenceTimer);
+      presenceTimer = null;
+    }
+  }, 60_000);
 }
 
 // Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC
