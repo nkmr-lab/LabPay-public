@@ -255,20 +255,25 @@ function presence_scan(PDO $pdo, array $cfg): void {
     if ($threshold < 1) $threshold = 10;
 
     // first_seen_at is set only on initial INSERT; the ON DUPLICATE branch never touches it.
-    // session_start_at is initialized on INSERT and only refreshed when the previous
-    // last_seen_at is older than $threshold minutes (or NULL after the migration).
+    // session_start_at is initialized on INSERT and only refreshed when the PREVIOUS
+    // last_seen_at is older than $threshold minutes.
+    //
+    // CRITICAL: MySQL evaluates ON DUPLICATE KEY UPDATE assignments left-to-right and
+    // later expressions see the already-updated values. We must compute session_start_at
+    // BEFORE updating last_seen_at so the IF() sees the OLD last_seen_at; otherwise
+    // the comparison reduces to NOW < NOW - 10min and never fires.
     $upsert = $pdo->prepare("INSERT INTO presence_seen
             (room_id, mac, ip, last_seen_at, first_seen_at, session_start_at)
          VALUES (?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE
-            ip = VALUES(ip),
-            last_seen_at = VALUES(last_seen_at),
             session_start_at = IF(
                 session_start_at IS NULL
                 OR last_seen_at < DATE_SUB(VALUES(last_seen_at), INTERVAL ? MINUTE),
                 VALUES(last_seen_at),
                 session_start_at
-            )");
+            ),
+            last_seen_at = VALUES(last_seen_at),
+            ip = VALUES(ip)");
 
     // For each (room, mac) observed this scan, decide if it's a fresh entry. We collect
     // the macs (keyed) so we can later map back to registered users for auto-checkin.
