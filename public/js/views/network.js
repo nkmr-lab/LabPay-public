@@ -10,6 +10,7 @@ import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
 const TAB_KEY = 'labpay-network-tab';
+const LAYOUT_KEY = 'labpay-network-layout';
 const W = 1000, H = 1000;
 
 // Module-scope reference to the active graph data + render handle so drag /
@@ -19,22 +20,28 @@ let GRAPH = null;
 export async function renderNetwork() {
   const app = document.getElementById('app');
   const activeTab = localStorage.getItem(TAB_KEY) || 'purchases';
+  const layoutMode = localStorage.getItem(LAYOUT_KEY) || 'force';
   app.innerHTML = `
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">ネットワーク</h2>
       </div>
-      <div class="row" style="gap:6px; margin-top:8px">
+      <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn ${activeTab==='purchases'?'primary':''}" data-tab="purchases">売買</button>
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
-        <button class="btn" id="net-relayout" title="配置をやり直す">⟳ 整列</button>
+        <span style="flex:1"></span>
+        <select id="net-layout-mode" style="font-size:13px">
+          <option value="force" ${layoutMode==='force'?'selected':''}>自動配置</option>
+          <option value="circle" ${layoutMode==='circle'?'selected':''}>円形配置</option>
+        </select>
+        <button class="btn" id="net-relayout" title="配置をやり直す">⟳</button>
       </div>
-      <p class="muted" style="font-size:13px; margin:8px 0 0">
-        矢印は <span id="net-arrow-desc"></span>。線の太さ=取引回数。ノードはドラッグで移動、タップで関連だけハイライト。
+      <p class="muted" style="font-size:12px; margin:8px 0 0">
+        矢印は <span id="net-arrow-desc"></span>。タップで関連を強調 / ドラッグで移動。
       </p>
     </div>
     <div class="card" style="padding:0; overflow:hidden">
-      <div id="net-canvas-wrap" style="position:relative; width:100%; aspect-ratio:1/1; max-height:80vh; background:#faf8fc">
+      <div id="net-canvas-wrap" style="position:relative; width:100%; height:75vh; background:#fbfafd">
         <div id="net-loading" class="muted" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center">読み込み中…</div>
       </div>
     </div>
@@ -48,16 +55,21 @@ export async function renderNetwork() {
       renderNetwork();
     });
   });
+  document.getElementById('net-layout-mode').addEventListener('change', (ev) => {
+    localStorage.setItem(LAYOUT_KEY, ev.target.value);
+    renderNetwork();
+  });
   document.getElementById('net-relayout').addEventListener('click', () => {
     if (!GRAPH) return;
-    layout(GRAPH.nodes, GRAPH.edges, /*seedCircle*/ true);
+    if (GRAPH.layoutMode === 'circle') circleLayout(GRAPH.nodes);
+    else layout(GRAPH.nodes, GRAPH.edges, true);
     drawSvg();
   });
 
-  await loadAndRender(activeTab);
+  await loadAndRender(activeTab, layoutMode);
 }
 
-async function loadAndRender(tab) {
+async function loadAndRender(tab, layoutMode) {
   document.getElementById('net-arrow-desc').textContent =
     tab === 'tasks' ? '依頼者 → 引き受けた人' : '売り手 → 買い手';
   try {
@@ -68,8 +80,6 @@ async function loadAndRender(tab) {
       document.getElementById('net-loading').textContent = 'データがまだありません';
       return;
     }
-    // Node degree drives the visual size and influences layout (heavier nodes
-    // sit more centrally because they have more attractive forces on them).
     const inDeg = new Map(), outDeg = new Map();
     edges.forEach(e => {
       inDeg.set(e.to,   (inDeg.get(e.to)   || 0) + e.count);
@@ -79,9 +89,9 @@ async function loadAndRender(tab) {
     nodes.forEach(n => {
       const deg = (inDeg.get(n.id)||0) + (outDeg.get(n.id)||0);
       n.deg = deg;
-      n.r   = 18 + 22 * (deg / maxDeg);  // px radius in SVG units
+      n.r   = 22 + 26 * (deg / maxDeg);
     });
-    // Group bidirectional pairs so we can curve them in opposite directions.
+    // Curve bidirectional pairs in opposite directions so A<->B reads as two arcs.
     const pairKey = (a, b) => a < b ? `${a}_${b}` : `${b}_${a}`;
     const groups = new Map();
     edges.forEach(e => {
@@ -90,17 +100,34 @@ async function loadAndRender(tab) {
       groups.get(k).push(e);
     });
     edges.forEach(e => {
-      const k = pairKey(e.from, e.to);
-      const g = groups.get(k);
+      const g = groups.get(pairKey(e.from, e.to));
       e.curveSign = g.length > 1 ? (g[0] === e ? 1 : -1) : 0;
     });
-    GRAPH = { nodes, edges, tab, selectedId: null, inDeg, outDeg };
+    // Pre-compute neighbor sets so the label/highlight logic is O(1) per draw.
+    const neighbors = new Map(nodes.map(n => [n.id, new Set([n.id])]));
+    edges.forEach(e => { neighbors.get(e.from)?.add(e.to); neighbors.get(e.to)?.add(e.from); });
 
-    layout(nodes, edges, true);
+    GRAPH = { nodes, edges, tab, layoutMode, selectedId: null, inDeg, outDeg, neighbors };
+
+    if (layoutMode === 'circle') circleLayout(nodes);
+    else layout(nodes, edges, true);
     drawSvg();
   } catch (e) {
     document.getElementById('net-loading').textContent = '失敗: ' + e.message;
   }
+}
+
+// Pure circular layout: sort nodes by degree DESC, place evenly on a perimeter
+// circle. Lightweight, deterministic, very readable for small N.
+function circleLayout(nodes) {
+  const sorted = nodes.slice().sort((a, b) => (b.deg||0) - (a.deg||0));
+  const N = sorted.length;
+  const R = Math.min(W, H) * 0.40;
+  sorted.forEach((n, i) => {
+    const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+    n.x = W / 2 + R * Math.cos(a);
+    n.y = H / 2 + R * Math.sin(a);
+  });
 }
 
 // Fruchterman-Reingold + node-radius collision. Coordinates in SVG units.
@@ -183,37 +210,38 @@ function layout(nodes, edges, seedCircle) {
 }
 
 function drawSvg() {
-  const { nodes, edges, selectedId, tab } = GRAPH;
+  const { nodes, edges, selectedId, neighbors } = GRAPH;
   const wrap = document.getElementById('net-canvas-wrap');
   document.getElementById('net-loading')?.remove();
   const maxCount = Math.max(1, ...edges.map(e => e.count));
 
-  const isHi = (id) => selectedId === null
-    || id === selectedId
-    || edges.some(e =>
-        (e.from === selectedId && e.to === id) ||
-        (e.to === selectedId && e.from === id));
-  const edgeHi = (e) => selectedId === null
-    || e.from === selectedId || e.to === selectedId;
+  const isHi    = (id) => selectedId === null || neighbors.get(selectedId)?.has(id);
+  const edgeHi  = (e) => selectedId === null || e.from === selectedId || e.to === selectedId;
+  // Labels appear only on selected node + direct neighbors (and on everything when
+  // nothing is selected and there are <= 12 nodes — small graphs read fine with all
+  // labels). Big graphs without selection: labels hidden = no clutter.
+  const showLbl = (id) =>
+    selectedId !== null
+      ? neighbors.get(selectedId)?.has(id)
+      : nodes.length <= 12;
 
-  // Render: edges first (so nodes sit on top), then nodes.
   const edgesHtml = edges.map(e => {
     const a = nodes.find(n => n.id === e.from);
     const b = nodes.find(n => n.id === e.to);
     if (!a || !b) return '';
     const dx = b.x - a.x, dy = b.y - a.y;
     const len = Math.sqrt(dx*dx + dy*dy) || 1;
-    // Shorten so arrow doesn't bury inside the target circle.
     const sx = a.x + (dx / len) * a.r;
     const sy = a.y + (dy / len) * a.r;
     const ex = b.x - (dx / len) * (b.r + 4);
     const ey = b.y - (dy / len) * (b.r + 4);
-    // Bend bidirectional pairs in opposite directions; single edges stay straight.
     const bend = e.curveSign * 0.18 * len;
     const mx = (sx + ex) / 2 - (dy / len) * bend;
     const my = (sy + ey) / 2 + (dx / len) * bend;
-    const sw = 0.6 + 5 * (e.count / maxCount);
-    const op = (edgeHi(e) ? 1 : 0.08) * (0.18 + 0.65 * (e.count / maxCount));
+    const sw = 0.6 + 4 * (e.count / maxCount);
+    // Edges are deliberately faint by default — emphasis is on nodes and selection.
+    const baseOp = 0.10 + 0.35 * (e.count / maxCount);
+    const op = edgeHi(e) ? baseOp + 0.4 : baseOp * 0.35;
     return `<path d="M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}"
                    fill="none" stroke="#4a106d" stroke-opacity="${op.toFixed(2)}"
                    stroke-width="${sw.toFixed(2)}" marker-end="url(#net-arrow)"/>`;
@@ -221,7 +249,7 @@ function drawSvg() {
 
   const nodesHtml = nodes.map(n => {
     const hi = isHi(n.id);
-    const op = hi ? 1 : 0.18;
+    const op = hi ? 1 : 0.22;
     const r = n.r;
     const cx = n.x, cy = n.y;
     const img = n.avatar
@@ -231,32 +259,37 @@ function drawSvg() {
             preserveAspectRatio="xMidYMid slice"/>`
       : '';
     const initial = (n.name || '?').trim().charAt(0).toUpperCase();
+    const sel = n.id === selectedId;
+    const label = showLbl(n.id)
+      ? `<text x="${cx.toFixed(1)}" y="${(cy + r + 16).toFixed(1)}"
+               text-anchor="middle" font-size="13" font-weight="700"
+               fill="#1b1820" paint-order="stroke" stroke="#fbfafd" stroke-width="4"
+              >${escapeHtml(n.name || '')}</text>`
+      : '';
     return `
       <g data-node="${n.id}" style="cursor:pointer; opacity:${op.toFixed(2)}">
         <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
-                fill="#ede4f3" stroke="#4a106d" stroke-width="${n.id===selectedId?3:2}"
+                fill="#ede4f3" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"
                 filter="url(#net-shadow)"/>
         ${img}
         ${n.avatar ? '' :
-          `<text x="${cx.toFixed(1)}" y="${(cy+5).toFixed(1)}"
-                 text-anchor="middle" font-size="${(r*0.8).toFixed(1)}" font-weight="700"
+          `<text x="${cx.toFixed(1)}" y="${(cy+r*0.18).toFixed(1)}"
+                 text-anchor="middle" font-size="${(r*0.85).toFixed(1)}" font-weight="700"
                  fill="#4a106d">${escapeHtml(initial)}</text>`}
-        <text x="${cx.toFixed(1)}" y="${(cy + r + 13).toFixed(1)}"
-              text-anchor="middle" font-size="11" font-weight="600"
-              fill="#2a1a3a" paint-order="stroke" stroke="#faf8fc" stroke-width="3"
-              >${escapeHtml(n.name || '')}</text>
+        ${label}
       </g>`;
   }).join('');
 
   wrap.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" style="display:block; touch-action:none">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%"
+         preserveAspectRatio="xMidYMid meet" style="display:block; touch-action:none">
       <defs>
         <marker id="net-arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a106d" opacity="0.85"/>
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a106d" opacity="0.75"/>
         </marker>
         <filter id="net-shadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.18"/>
+          <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.15"/>
         </filter>
       </defs>
       ${edgesHtml}
