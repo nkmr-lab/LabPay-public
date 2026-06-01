@@ -50,33 +50,35 @@ class ScrapboxSlackSync {
         if ($channel === '') {
             return ['day' => $day, 'error' => 'slack.scrapbox_channel_id is empty'];
         }
-        // Formula: any contribution → base; each extra update adds per_extra, bonus capped.
-        // Defaults base=5, per_extra=1, bonus_cap=5 → 1 update = 5pt, 6+ updates = 10pt.
-        $basePt  = (int)cfg_get($this->pdo, 'scrapbox_base_pt', '5');
-        $perEx   = (int)cfg_get($this->pdo, 'scrapbox_pt_per_extra', '1');
-        $bonusCap= (int)cfg_get($this->pdo, 'scrapbox_bonus_cap', '5');
+        // Formula: 5 pt if any edit at all, +5 pt if any edit on the user's
+        // OWN research note. Max 10pt/day. Counts (attachments / own_note_attachments)
+        // are still stored for transparency but no longer drive the pt math.
+        $anyEditPt = (int)cfg_get($this->pdo, 'scrapbox_any_edit_pt', '5');
+        $ownNotePt = (int)cfg_get($this->pdo, 'scrapbox_own_note_pt', '5');
 
         $oldest = (new DateTimeImmutable($day . ' 00:00:00', $tz))->getTimestamp();
         $latest = (new DateTimeImmutable($day . ' 23:59:59', $tz))->getTimestamp();
 
         $messages = $this->fetchHistory($channel, $oldest, $latest);
 
-        // Per author_name attachment tally
-        $perAuthor = [];
+        // Per author_name: collect every (page title) so we can later check whether
+        // any of them is the editor's OWN research note. An empty title still counts
+        // as 1 edit for the "any edit" check but obviously can't be matched as own.
+        $perAuthor = [];   // name => [['title' => '...'], ...]
         foreach ($messages as $m) {
             if (($m['username'] ?? '') !== 'Scrapbox') continue;
             if (empty($m['attachments'])) continue;
             foreach ($m['attachments'] as $a) {
                 $name = trim((string)($a['author_name'] ?? ''));
                 if ($name === '') continue;
-                $perAuthor[$name] = ($perAuthor[$name] ?? 0) + 1;
+                $perAuthor[$name][] = ['title' => trim((string)($a['title'] ?? ''))];
             }
         }
 
         // Resolve handles → user_id. Unmapped goes to $unmapped.
-        $mapped = [];   // user_id => attachments
-        $mappedNames = []; // user_id => [scrapbox_name, ...]
-        $unmapped = []; // name => count
+        $mapped = [];        // user_id => [titles]
+        $mappedNames = [];   // user_id => [scrapbox_name, ...]
+        $unmapped = [];      // name => count (for the summary)
         if ($perAuthor) {
             $names = array_keys($perAuthor);
             $place = implode(',', array_fill(0, count($names), '?'));
@@ -87,14 +89,27 @@ class ScrapboxSlackSync {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $resolved[$r['scrapbox_name']] = (int)$r['user_id'];
             }
-            foreach ($perAuthor as $name => $cnt) {
+            foreach ($perAuthor as $name => $edits) {
                 if (isset($resolved[$name])) {
                     $uid = $resolved[$name];
-                    $mapped[$uid] = ($mapped[$uid] ?? 0) + $cnt;
+                    foreach ($edits as $e) $mapped[$uid][] = $e['title'];
                     $mappedNames[$uid][] = $name;
                 } else {
-                    $unmapped[$name] = $cnt;
+                    $unmapped[$name] = count($edits);
                 }
+            }
+        }
+
+        // Look up users.display_name once for all mapped uids — used to match
+        // page titles against the user's "own research note".
+        $userNames = [];
+        if ($mapped) {
+            $uids = array_keys($mapped);
+            $place = implode(',', array_fill(0, count($uids), '?'));
+            $st = $this->pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($place)");
+            $st->execute($uids);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $userNames[(int)$r['id']] = (string)$r['display_name'];
             }
         }
 
@@ -112,32 +127,50 @@ class ScrapboxSlackSync {
         $awarded = [];
         $skipped = [];
         $sysAcc  = (int)Ledger::accountIdByCode($this->pdo, 'SYSTEM');
-        foreach ($mapped as $uid => $cnt) {
+        foreach ($mapped as $uid => $titles) {
             if (isset($alreadyPaid[$uid])) {
                 $skipped[] = ['user_id' => $uid, 'reason' => 'already_paid'];
                 continue;
             }
-            $pts = $cnt > 0 ? $basePt + min($bonusCap, max(0, $cnt - 1)) * $perEx : 0;
-            if ($pts <= 0) continue;
+            $totalEdits = count($titles);
+            if ($totalEdits <= 0) continue;
+
+            // "Own research note" = page title contains BOTH 研究ノート AND the
+            // user's LabPay display_name. Guard against an empty display_name
+            // matching every page (unlikely but defensive).
+            $userName = $userNames[$uid] ?? '';
+            $ownNoteEdits = 0;
+            if ($userName !== '') {
+                foreach ($titles as $t) {
+                    if (mb_strpos($t, '研究ノート') !== false
+                        && mb_strpos($t, $userName) !== false) {
+                        $ownNoteEdits++;
+                    }
+                }
+            }
+            $pts = $anyEditPt + ($ownNoteEdits > 0 ? $ownNotePt : 0);
             $names = implode(', ', $mappedNames[$uid]);
 
             if ($this->dryRun) {
-                $awarded[] = ['user_id'=>$uid, 'attachments'=>$cnt, 'points'=>$pts, 'names'=>$names, 'ledger_id'=>null];
+                $awarded[] = ['user_id'=>$uid, 'attachments'=>$totalEdits,
+                    'own_note_attachments'=>$ownNoteEdits, 'points'=>$pts,
+                    'names'=>$names, 'ledger_id'=>null];
                 continue;
             }
 
             $this->pdo->beginTransaction();
             try {
                 $toAcc = Ledger::accountIdForUser($this->pdo, $uid);
-                $memo  = "Scrapbox 寄稿 {$day} ({$cnt} 件 / {$names})";
+                $ownNote = $ownNoteEdits > 0 ? " · 自身ノート {$ownNoteEdits}" : '';
+                $memo  = "Scrapbox 寄稿 {$day} ({$totalEdits} 件{$ownNote} / {$names})";
                 $ledgerId = Ledger::transfer(
                     $this->pdo, $sysAcc, $toAcc, $pts,
                     'scrapbox_reward', 'scrapbox', null, mb_substr($memo, 0, 255)
                 );
                 $ins = $this->pdo->prepare("INSERT INTO scrapbox_awards
-                    (award_date, user_id, attachments, points, ledger_id)
-                    VALUES (?,?,?,?,?)");
-                $ins->execute([$day, $uid, $cnt, $pts, $ledgerId]);
+                    (award_date, user_id, attachments, own_note_attachments, points, ledger_id)
+                    VALUES (?,?,?,?,?,?)");
+                $ins->execute([$day, $uid, $totalEdits, $ownNoteEdits, $pts, $ledgerId]);
                 $this->pdo->commit();
             } catch (Throwable $e) {
                 if ($this->pdo->inTransaction()) $this->pdo->rollBack();
@@ -145,13 +178,16 @@ class ScrapboxSlackSync {
                 continue;
             }
 
-            // Notification — swallow errors so one bad row doesn't tank the loop.
             try {
+                $ownPart = $ownNoteEdits > 0 ? " (自身ノート ✓)" : '';
                 Notifier::notify($this->pdo, $this->cfg, $uid, 'admin_notice',
-                    "Scrapbox 寄稿 {$cnt} 件で +{$pts}pt ({$day})", 'scrapbox', null);
+                    "Scrapbox 寄稿 {$totalEdits} 件で +{$pts}pt{$ownPart} ({$day})",
+                    'scrapbox', null);
             } catch (Throwable $e) { /* swallow */ }
 
-            $awarded[] = ['user_id'=>$uid, 'attachments'=>$cnt, 'points'=>$pts, 'names'=>$names, 'ledger_id'=>$ledgerId];
+            $awarded[] = ['user_id'=>$uid, 'attachments'=>$totalEdits,
+                'own_note_attachments'=>$ownNoteEdits, 'points'=>$pts,
+                'names'=>$names, 'ledger_id'=>$ledgerId];
         }
 
         // Slack summary
