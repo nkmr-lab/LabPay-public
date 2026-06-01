@@ -264,6 +264,22 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                     (COALESCE((SELECT SUM(amount) FROM ledger WHERE to_account_id=a.id),0)
                     -COALESCE((SELECT SUM(amount) FROM ledger WHERE from_account_id=a.id),0)) AS b
                   FROM accounts a WHERE a.kind='user') t)                                   AS held_by_users,
+              (SELECT COALESCE(SUM(b),0) FROM (
+                  SELECT
+                    (COALESCE((SELECT SUM(amount) FROM ledger WHERE to_account_id=a.id),0)
+                    -COALESCE((SELECT SUM(amount) FROM ledger WHERE from_account_id=a.id),0)) AS b
+                  FROM accounts a
+                  JOIN users u ON u.id = a.owner_user_id
+                  WHERE a.kind='user' AND u.kind='human' AND u.role='admin') t)             AS held_by_admins,
+              (SELECT COALESCE(SUM(b),0) FROM (
+                  SELECT
+                    (COALESCE((SELECT SUM(amount) FROM ledger WHERE to_account_id=a.id),0)
+                    -COALESCE((SELECT SUM(amount) FROM ledger WHERE from_account_id=a.id),0)) AS b
+                  FROM accounts a
+                  JOIN users u ON u.id = a.owner_user_id
+                  WHERE a.kind='user' AND u.kind='human' AND u.role='member') t)            AS held_by_members,
+              (SELECT COUNT(*) FROM users WHERE kind='human' AND role='admin')              AS admin_count,
+              (SELECT COUNT(*) FROM users WHERE kind='human' AND role='member')             AS member_count,
               (SELECT COUNT(*) FROM users WHERE kind='human')                               AS user_count,
               (SELECT COUNT(*) FROM allowlist WHERE active=1)                               AS allowlist_active,
               (SELECT COUNT(*) FROM purchases)                                              AS purchase_count,

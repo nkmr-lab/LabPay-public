@@ -424,6 +424,24 @@ table.table th { color: var(--muted); font-weight: 600; }
 .cal-workday-swatch { background: #e6f4ec; border: 1px solid #cbe5d7; }
 .cal-off-swatch     { background: #fde2e0; border: 1px solid #f5c8c4; }
 
+/* Admin: circulating supply summary card.
+   2-up on phone, 4-up on wide so admin/member balances always sit side by side. */
+.supply-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+@media (min-width: 720px) {
+  .supply-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.supply-cell {
+  background: #faf7fd; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; text-align: center;
+}
+.supply-cell.supply-admin  { background: #efeafa; border-color: #d4c8f0; }
+.supply-cell.supply-member { background: #eaf5ef; border-color: #c4dccd; }
+.supply-label { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
+.supply-sub   { font-size: 11px; color: var(--muted); }
+
 /* Achievements */
 .ach-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .ach-tier {

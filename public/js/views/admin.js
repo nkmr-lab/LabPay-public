@@ -18,6 +18,14 @@ export async function renderAdmin() {
   }
   const app = document.getElementById('app');
   app.innerHTML = `
+    <div class="card" id="supply-card">
+      <h3 style="margin-top:0">流通ポイント</h3>
+      <div id="supply" class="muted">読み込み中…</div>
+      <div class="muted" style="font-size:11px; margin-top:8px">
+        Admin 以外の保有量が増えすぎたらインフレ気味、減りすぎたら手数料/還流不足の目安。
+      </div>
+    </div>
+
     <div class="card">
       <h3>カレンダー</h3>
       <div class="row" style="align-items:center">
@@ -123,24 +131,16 @@ export async function renderAdmin() {
     </details>
   `;
 
-  // --- Dashboard ---
-  await loadTable('dash', async (el) => {
-    const d = await get('/api/admin/dashboard');
-    el.innerHTML = `
-      <table class="table">
-        <tr><th>SYSTEM残高</th><td class="right mono">${d.system_balance.toLocaleString()}</td>
-            <th>ESCROW残高</th><td class="right mono">${d.escrow_balance.toLocaleString()}</td></tr>
-        <tr><th>総発行 (initial+checkin)</th><td class="right mono">${d.total_minted.toLocaleString()}</td>
-            <th>手数料総額</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
-        <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
-            <th>取引数</th><td class="right mono">${d.purchase_count.toLocaleString()}</td></tr>
-        <tr><th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td>
-            <th>商品マスタ数</th><td class="right mono">${d.product_count.toLocaleString()}</td></tr>
-        <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>
-            <th>稼働中出品</th><td class="right mono">${d.listings_active.toLocaleString()}</td></tr>
-      </table>
-    `;
-  });
+  // --- Supply (top-of-page inflation guard) + Dashboard ---
+  // Both views consume the same /api/admin/dashboard payload — fetch once, render twice.
+  let dash = null;
+  try { dash = await get('/api/admin/dashboard'); }
+  catch (e) {
+    document.getElementById('supply').textContent = '取得失敗: ' + e.message;
+    document.getElementById('dash').textContent = '取得失敗: ' + e.message;
+  }
+  if (dash) renderSupply(dash);
+  if (dash) renderDashboard(dash);
 
   // --- Allowlist ---
   await loadAllow();
@@ -285,6 +285,73 @@ export async function renderAdmin() {
       document.getElementById('bc-body').value = '';
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+// Render the prominent "circulating supply" summary card at the top of the admin page.
+// Shows admin vs non-admin balances side by side so inflation pressure (members holding
+// runaway pt) is visible at a glance. Per-capita averages help spot skew vs accumulation.
+function renderSupply(d) {
+  const el = document.getElementById('supply');
+  if (!el) return;
+  const fmt = n => Number(n).toLocaleString();
+  const safeDiv = (a, b) => (b > 0 ? Math.round(a / b) : 0);
+  // 「流通中」= 人 (admin + 一般) が持っている合計。double-entry なので
+  // system_balance は負の値 (= 純発行量の符号反転) になるため、流通量を
+  // (system + escrow + held) で出すと常に 0 になってしまい意味がない。
+  // 代わりに、held_by_users をそのまま流通量とし、発行純額 (-system_balance)
+  // を文脈として併記する。
+  const circulating  = d.held_by_users;
+  const netIssued    = -d.system_balance; // = held_by_users + escrow_balance
+  const memberShare  = circulating > 0
+    ? ((d.held_by_members / circulating) * 100).toFixed(1)
+    : '0.0';
+  const adminAvg  = safeDiv(d.held_by_admins,  d.admin_count);
+  const memberAvg = safeDiv(d.held_by_members, d.member_count);
+  el.innerHTML = `
+    <div class="supply-grid">
+      <div class="supply-cell">
+        <div class="supply-label">流通中 (admin + 一般)</div>
+        <div class="supply-value">${fmt(circulating)}</div>
+        <div class="supply-sub">発行純額 ${fmt(netIssued)} / ESCROW ${fmt(d.escrow_balance)}</div>
+      </div>
+      <div class="supply-cell supply-admin">
+        <div class="supply-label">Admin 保有</div>
+        <div class="supply-value">${fmt(d.held_by_admins)}</div>
+        <div class="supply-sub">${d.admin_count}人 / 平均 ${fmt(adminAvg)} pt</div>
+      </div>
+      <div class="supply-cell supply-member">
+        <div class="supply-label">一般 保有</div>
+        <div class="supply-value">${fmt(d.held_by_members)}</div>
+        <div class="supply-sub">${d.member_count}人 / 平均 ${fmt(memberAvg)} pt</div>
+      </div>
+      <div class="supply-cell">
+        <div class="supply-label">一般保有 / 流通中</div>
+        <div class="supply-value">${memberShare}<span style="font-size:14px">%</span></div>
+        <div class="supply-sub">手数料総額 ${fmt(d.total_fees)} pt</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboard(d) {
+  const el = document.getElementById('dash');
+  if (!el) return;
+  el.innerHTML = `
+    <table class="table">
+      <tr><th>SYSTEM残高</th><td class="right mono">${d.system_balance.toLocaleString()}</td>
+          <th>ESCROW残高</th><td class="right mono">${d.escrow_balance.toLocaleString()}</td></tr>
+      <tr><th>総発行 (initial+checkin)</th><td class="right mono">${d.total_minted.toLocaleString()}</td>
+          <th>手数料総額</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
+      <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
+          <th>取引数</th><td class="right mono">${d.purchase_count.toLocaleString()}</td></tr>
+      <tr><th>うち Admin 保有</th><td class="right mono">${d.held_by_admins.toLocaleString()}</td>
+          <th>うち 一般 保有</th><td class="right mono">${d.held_by_members.toLocaleString()}</td></tr>
+      <tr><th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td>
+          <th>商品マスタ数</th><td class="right mono">${d.product_count.toLocaleString()}</td></tr>
+      <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>
+          <th>稼働中出品</th><td class="right mono">${d.listings_active.toLocaleString()}</td></tr>
+    </table>
+  `;
 }
 
 // Populate the issue-points user dropdown from /api/users.
