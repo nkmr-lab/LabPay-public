@@ -54,6 +54,13 @@ export async function renderHome() {
 
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">あなたのラボ滞在</h2>
+      </div>
+      <div id="presence-summary" class="muted" style="font-size:13px">読み込み中…</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">最近の取引</h2>
         <a href="#/history" class="muted" style="font-size:13px">すべて見る →</a>
       </div>
@@ -78,7 +85,47 @@ export async function renderHome() {
   await renderPresence();
   await renderFreshListings();
   await renderFreshTasks();
+  await renderPresenceSummary();
   await renderRecentTx();
+}
+
+// Personal lab-stay stat card. Aggregates closed sessions from presence_sessions
+// plus the currently-open session if you're still here.
+async function renderPresenceSummary() {
+  const root = document.getElementById('presence-summary');
+  if (!root) return;
+  try {
+    const s = await get('/api/me/presence_summary');
+    const fmt = (m) => {
+      if (m < 1) return '-';
+      if (m < 60) return `${m}分`;
+      const h = Math.floor(m / 60);
+      const r = m % 60;
+      return r === 0 ? `${h}時間` : `${h}時間${r}分`;
+    };
+    const live = s.currently_present
+      ? `<div style="margin-top:6px; color:#0e7c63; font-weight:600">● いまラボに居ます</div>`
+      : '';
+    root.innerHTML = `
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; text-align:center">
+        <div>
+          <div class="muted" style="font-size:11px">今日</div>
+          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.today_minutes)}</div>
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px">今週</div>
+          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.week_minutes)}</div>
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px">今月</div>
+          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.month_minutes)}</div>
+        </div>
+      </div>
+      ${live}
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // Compact medals strip rendered inside the balance-hero. Each earned achievement is a

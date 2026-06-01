@@ -329,27 +329,56 @@ function presence_scan(PDO $pdo, array $cfg): void {
     $freshRegisteredUserIds = []; // user ids whose MAC just had a fresh entry
     $pdo->beginTransaction();
     try {
-        // Look up the existing last_seen_at for each candidate mac in this room so we can
-        // decide freshness before the upsert.
+        // Look up the existing last_seen_at + session_start_at for each candidate mac
+        // in this room so we can decide freshness AND log the closed session before
+        // overwriting it.
         $candidateMacs = array_values(array_unique(array_filter(array_map(
             fn($o) => presence_normalize_mac($o['mac'] ?? null), $obs))));
         $prevSeen = [];
         if ($candidateMacs) {
             $place = implode(',', array_fill(0, count($candidateMacs), '?'));
             $params = array_merge([$roomId], $candidateMacs);
-            $stPrev = $pdo->prepare("SELECT mac, last_seen_at FROM presence_seen
+            $stPrev = $pdo->prepare("SELECT mac, last_seen_at, session_start_at FROM presence_seen
                 WHERE room_id = ? AND mac IN ($place)");
             $stPrev->execute($params);
-            foreach ($stPrev->fetchAll() as $r) { $prevSeen[$r['mac']] = $r['last_seen_at']; }
+            foreach ($stPrev->fetchAll() as $r) {
+                $prevSeen[$r['mac']] = [
+                    'last'  => $r['last_seen_at'],
+                    'start' => $r['session_start_at'],
+                ];
+            }
         }
 
+        // Resolve macs -> registered user_id (for the session log + auto-checkin gate).
+        $macToUser = [];
+        if ($candidateMacs) {
+            $place = implode(',', array_fill(0, count($candidateMacs), '?'));
+            $stU = $pdo->prepare("SELECT mac, user_id FROM presence_devices WHERE mac IN ($place)");
+            $stU->execute($candidateMacs);
+            foreach ($stU->fetchAll() as $r) { $macToUser[$r['mac']] = (int)$r['user_id']; }
+        }
+
+        $sessionsToLog = [];
         foreach ($obs as $o) {
             $mac = presence_normalize_mac($o['mac'] ?? null);
             if ($mac === null || presence_is_excluded_mac($mac)) { $skipped++; continue; }
             $ip  = isset($o['ip']) ? mb_substr((string)$o['ip'], 0, 45) : null;
             $prev = $prevSeen[$mac] ?? null;
             $isFresh = $prev === null
-                || strtotime($prev) < strtotime($now) - $threshold * 60;
+                || strtotime($prev['last']) < strtotime($now) - $threshold * 60;
+            // A fresh entry that had a prior session means that prior session is now
+            // closing. Capture (start, end) so we can write it to presence_sessions
+            // AFTER commit (so a slow insert can't slow down the scan path).
+            if ($isFresh && $prev !== null && $prev['start'] !== null
+                && strtotime($prev['last']) > strtotime($prev['start'])) {
+                $sessionsToLog[] = [
+                    'user_id' => $macToUser[$mac] ?? null,
+                    'mac'     => $mac,
+                    'room_id' => $roomId,
+                    'start'   => $prev['start'],
+                    'end'     => $prev['last'],
+                ];
+            }
             if ($isFresh) $freshMacs[$mac] = true;
             $upsert->execute([$roomId, $mac, $ip, $now, $now, $now, $threshold]);
             $accepted++;
@@ -357,15 +386,10 @@ function presence_scan(PDO $pdo, array $cfg): void {
         $pdo->prepare('UPDATE rooms SET last_scan_at=? WHERE id=?')->execute([$now, $roomId]);
 
         // Map observed MACs to registered users — for auto-checkin (still inside TX).
-        if ($candidateMacs) {
-            $place = implode(',', array_fill(0, count($candidateMacs), '?'));
-            $st = $pdo->prepare("SELECT mac, user_id FROM presence_devices WHERE mac IN ($place)");
-            $st->execute($candidateMacs);
-            foreach ($st->fetchAll() as $r) {
-                $uid = (int)$r['user_id'];
-                $registeredUserIds[$uid] = true;
-                if (isset($freshMacs[$r['mac']])) $freshRegisteredUserIds[$uid] = true;
-            }
+        // (We already populated $macToUser earlier; reuse it.)
+        foreach ($macToUser as $mac => $uid) {
+            $registeredUserIds[$uid] = true;
+            if (isset($freshMacs[$mac])) $freshRegisteredUserIds[$uid] = true;
         }
 
         $pdo->commit();
@@ -375,6 +399,22 @@ function presence_scan(PDO $pdo, array $cfg): void {
     }
     $registeredUserIds = array_keys($registeredUserIds);
     $freshRegisteredUserIds = array_keys($freshRegisteredUserIds);
+
+    // Write any closed sessions to the log AFTER the main transaction so they can't
+    // block the upsert. Per-row inserts in their own transaction; errors swallowed.
+    if (!empty($sessionsToLog)) {
+        try {
+            $ins = $pdo->prepare("INSERT INTO presence_sessions
+                (user_id, mac, room_id, started_at, ended_at, duration_minutes)
+                VALUES (?,?,?,?,?, GREATEST(0, TIMESTAMPDIFF(MINUTE, ?, ?)))");
+            foreach ($sessionsToLog as $s) {
+                $ins->execute([$s['user_id'], $s['mac'], $s['room_id'],
+                               $s['start'], $s['end'], $s['start'], $s['end']]);
+            }
+        } catch (Throwable $e) {
+            error_log('[labpay/presence] session log failed: ' . $e->getMessage());
+        }
+    }
 
     // Append a row per observation to a daily CSV log. Append-only, no DB, no impact
     // on the response. Useful for "who was in the lab when" analysis later.

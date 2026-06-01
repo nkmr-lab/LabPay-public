@@ -11,6 +11,7 @@ import { state, toast } from '../app.js';
 
 const TAB_KEY = 'labpay-network-tab';
 const LAYOUT_KEY = 'labpay-network-layout';
+const WEIGHT_KEY = 'labpay-network-weight';   // 'count' (件数) or 'total' (総額)
 const W = 1000, H = 1000;
 
 // Lazy local-vendor loader for d3 v7. Cached so multiple openings of the network
@@ -38,6 +39,7 @@ export async function renderNetwork() {
   const app = document.getElementById('app');
   const activeTab = localStorage.getItem(TAB_KEY) || 'purchases';
   const layoutMode = localStorage.getItem(LAYOUT_KEY) || 'force';
+  const weightMode = localStorage.getItem(WEIGHT_KEY) || 'count';
   app.innerHTML = `
     <div class="card">
       <div class="row" style="align-items:center">
@@ -48,6 +50,10 @@ export async function renderNetwork() {
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
         <button class="btn ${activeTab==='combined'?'primary':''}" data-tab="combined">統合</button>
         <span style="flex:1"></span>
+        <select id="net-weight-mode" style="font-size:13px" title="線の重み">
+          <option value="count" ${weightMode==='count'?'selected':''}>件数</option>
+          <option value="total" ${weightMode==='total'?'selected':''}>総額</option>
+        </select>
         <select id="net-layout-mode" style="font-size:13px">
           <option value="force" ${layoutMode==='force'?'selected':''}>自動配置</option>
           <option value="circle" ${layoutMode==='circle'?'selected':''}>円形配置</option>
@@ -77,6 +83,10 @@ export async function renderNetwork() {
     localStorage.setItem(LAYOUT_KEY, ev.target.value);
     renderNetwork();
   });
+  document.getElementById('net-weight-mode').addEventListener('change', (ev) => {
+    localStorage.setItem(WEIGHT_KEY, ev.target.value);
+    renderNetwork();
+  });
   document.getElementById('net-relayout').addEventListener('click', () => {
     if (!GRAPH) return;
     if (GRAPH.layoutMode === 'circle') circleLayout(GRAPH.nodes);
@@ -84,10 +94,10 @@ export async function renderNetwork() {
     drawSvg();
   });
 
-  await loadAndRender(activeTab, layoutMode);
+  await loadAndRender(activeTab, layoutMode, weightMode);
 }
 
-async function loadAndRender(tab, layoutMode) {
+async function loadAndRender(tab, layoutMode, weightMode) {
   const desc = document.getElementById('net-arrow-desc');
   if (tab === 'tasks')          desc.textContent = '依頼者 → 引き受けた人';
   else if (tab === 'combined')  desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
@@ -130,7 +140,13 @@ async function loadAndRender(tab, layoutMode) {
     const neighbors = new Map(nodes.map(n => [n.id, new Set([n.id])]));
     edges.forEach(e => { neighbors.get(e.from)?.add(e.to); neighbors.get(e.to)?.add(e.from); });
 
-    GRAPH = { nodes, edges, tab, layoutMode, selectedId: null, inDeg, outDeg, neighbors };
+    // Pre-compute the weight per edge based on the chosen metric so the layout and
+    // the renderer both honor the same scale ('count' = number of transactions,
+    // 'total' = sum of pt amounts).
+    const wKey = weightMode === 'total' ? 'total' : 'count';
+    edges.forEach(e => { e.weight = Math.max(0, e[wKey] || 0); });
+
+    GRAPH = { nodes, edges, tab, layoutMode, weightMode, selectedId: null, inDeg, outDeg, neighbors };
 
     if (layoutMode === 'circle') circleLayout(nodes);
     else d3Layout(nodes, edges);
@@ -148,7 +164,7 @@ function d3Layout(nodes, edges) {
   if (!d3) return;
   // Clear stale fixed positions from a previous run.
   nodes.forEach(n => { n.fx = null; n.fy = null; n.x = W/2; n.y = H/2; });
-  const links = edges.map(e => ({ source: e.from, target: e.to, value: e.count }));
+  const links = edges.map(e => ({ source: e.from, target: e.to, value: e.weight || e.count }));
   const sim = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id)
         .distance(d => 110 + 30 / Math.log(2 + d.value))
@@ -186,7 +202,8 @@ function drawSvg() {
   const { nodes, edges, selectedId, neighbors } = GRAPH;
   const wrap = document.getElementById('net-canvas-wrap');
   document.getElementById('net-loading')?.remove();
-  const maxCount = Math.max(1, ...edges.map(e => e.count));
+  // Use the active weight metric (count or total pt) for stroke thickness.
+  const maxWeight = Math.max(1, ...edges.map(e => e.weight || 0));
 
   const isHi    = (id) => selectedId === null || neighbors.get(selectedId)?.has(id);
   const edgeHi  = (e) => selectedId === null || e.from === selectedId || e.to === selectedId;
@@ -214,8 +231,9 @@ function drawSvg() {
     const bend = e.curveSign * 0.18 * len;
     const mx = (sx + ex) / 2 - (dy / len) * bend;
     const my = (sy + ey) / 2 + (dx / len) * bend;
-    const sw = 0.6 + 4 * (e.count / maxCount);
-    const baseOp = 0.10 + 0.35 * (e.count / maxCount);
+    const w = e.weight || 0;
+    const sw = 0.6 + 4 * (w / maxWeight);
+    const baseOp = 0.10 + 0.35 * (w / maxWeight);
     const op = edgeHi(e) ? baseOp + 0.4 : baseOp * 0.35;
     const color = colorFor(e);
     // In combined mode, the arrowhead also needs to be colored; we have a per-type

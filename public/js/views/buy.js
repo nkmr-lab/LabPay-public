@@ -162,6 +162,11 @@ async function loadListings() {
       const sellerBadge = repListing
         ? `<div class="tile-seller">${avatarHtml(repListing.seller_name, repListing.seller_avatar_url, 'sm')}</div>`
         : '';
+      // Hide the stock line when totalQty == 1 — that's the default "I'm selling
+      // one of these" case and listing it adds noise. Only show when there's more.
+      const stockText = totalQty > 1 ? `在庫 ${totalQty}` : '';
+      const locText = locs.length ? '📍 ' + escapeHtml(locs.join('/')) : '';
+      const metaParts = [stockText, locText].filter(Boolean);
       return `
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
@@ -170,7 +175,7 @@ async function loadListings() {
           <div class="tile-overlay">
             <div class="name">${escapeHtml(g.name)}</div>
             <div class="price">${priceLabel}</div>
-            <div class="meta">在庫 ${totalQty}${locs.length ? ' · 📍 ' + escapeHtml(locs.join('/')) : ''}</div>
+            ${metaParts.length ? `<div class="meta">${metaParts.join(' · ')}</div>` : ''}
           </div>
         </a>`;
     });
