@@ -69,6 +69,12 @@ export async function renderSell() {
     <div class="card">
       <h2>売る</h2>
       <p class="muted">バーコードを読み取って新規出品します。バーコードが無い商品は下の「バーコードが無い商品を出品」を使ってください。</p>
+      <div style="background:#fff8e6; border-left:4px solid var(--warn); padding:10px 12px; border-radius:8px; margin-top:10px; font-size:13px; line-height:1.6">
+        💡 <span class="bold">価格のヒント</span><br>
+        ・1pt ≈ 1円 換算が目安です<br>
+        ・売れた時に <span class="bold">5%</span> が手数料として差し引かれるので、仕入れ値 + 手数料を考慮した値付けがオススメ<br>
+        ・<span class="bold">20pt 未満</span> の出品は手数料がかかりません (端数切捨てで 0pt)
+      </div>
     </div>
 
     <!-- ============= 新規出品 ============= -->
@@ -96,6 +102,11 @@ export async function renderSell() {
         <label class="field">
           <span class="lbl">出品名 (任意・例:「賞味期限近」/ 空欄なら商品名)</span>
           <input type="text" id="display_name" maxlength="200" placeholder="">
+        </label>
+        <label class="field">
+          <span class="lbl">販売期限 (任意・無指定なら無期限)</span>
+          <input type="datetime-local" id="expires_at">
+          <span class="muted" style="font-size:12px">期限を過ぎると自動で「取り下げ」になります。</span>
         </label>
         <h3 style="margin:6px 0">出品条件</h3>
         <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
@@ -165,6 +176,10 @@ export async function renderSell() {
       <label class="field">
         <span class="lbl">出品名 (任意・空欄なら商品名)</span>
         <input type="text" id="nj-display_name" maxlength="200">
+      </label>
+      <label class="field">
+        <span class="lbl">販売期限 (任意・無指定なら無期限)</span>
+        <input type="datetime-local" id="nj-expires_at">
       </label>
       <label class="field">
         <span class="lbl">購入時のメッセージ (任意)</span>
@@ -283,6 +298,7 @@ async function submitListing(kind) {
   const qty   = Number(document.getElementById(prefix + 'qty'  ).value);
   const completion_message = document.getElementById(prefix + 'completion_message')?.value.trim() || '';
   const display_name = document.getElementById(prefix + 'display_name')?.value.trim() || '';
+  const expires_at = document.getElementById(prefix + 'expires_at')?.value || '';
   const location = readLocation(prefix);
 
   // JAN flow needs a scanned JAN; no-JAN flow doesn't.
@@ -305,6 +321,7 @@ async function submitListing(kind) {
       display_name: display_name || null,
       completion_message: completion_message || null,
       location: location || null,
+      expires_at: expires_at || null,
     });
     const summary = isGift ? `これどうぞ × 在庫 ${qty}` : `単価 ${price}pt × 在庫 ${qty}`;
     toast(`出品しました (#${listing.id} / ${summary})`);
@@ -328,6 +345,8 @@ function resetListingForm(kind) {
   if (cm) cm.value = '';
   const dn = document.getElementById(prefix + 'display_name');
   if (dn) dn.value = '';
+  const ex = document.getElementById(prefix + 'expires_at');
+  if (ex) ex.value = '';
   const gift = document.getElementById(prefix + 'is_gift');
   if (gift) { gift.checked = false; gift.dispatchEvent(new Event('change')); }
   const locSel = document.getElementById(prefix + 'location_select');

@@ -25,7 +25,7 @@ export async function renderBuy() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
+      <div class="row" style="align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px">
         <h3 style="flex:1; margin:0">出品中の商品</h3>
         <select id="buy-sort" style="font-size:13px">
           <option value="newest">新しい順</option>
@@ -34,7 +34,7 @@ export async function renderBuy() {
           <option value="priciest">高い順</option>
         </select>
       </div>
-      <div id="grouped" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="grouped"><div class="muted">読み込み中…</div></div>
     </div>
   `;
 
@@ -124,8 +124,7 @@ async function loadListings() {
       }
     });
 
-    const html = [];
-    for (const { g } of annotated) {
+    const tiles = annotated.map(({ g }) => {
       // Gift listings are surfaced with their own "🎁 これどうぞ" indicator so the price
       // column doesn't read as "0 pt〜" (which feels devaluing). Mixed groups show both.
       const giftCount = g.listings.filter(x => x.is_gift).length;
@@ -146,22 +145,27 @@ async function loadListings() {
       const sellers = g.listings.length;
       const totalQty = g.listings.reduce((a, b) => a + b.qty, 0);
       const locs = [...new Set(g.listings.map(x => x.location).filter(Boolean))];
-      const locTag = locs.length
-        ? `<span class="tag muted" style="margin-left:6px">📍 ${escapeHtml(locs.join(' / '))}</span>`
+      const giftOnly = sale.length === 0;
+      const initial = (g.name || '?').trim().charAt(0).toUpperCase();
+      const bg = g.image_url
+        ? `style="background-image:url('${escapeHtml(g.image_url)}')"`
         : '';
-      html.push(`
-        <a class="list-item" href="#/product/${encodeURIComponent(g.jan)}">
-          <div>
-            <div class="bold">${escapeHtml(g.name)}${locTag}</div>
-            <div class="meta">JAN <span class="mono">${escapeHtml(g.jan)}</span> · ${sellers}人が出品 · 在庫 ${totalQty}</div>
+      const inner = g.image_url ? '' : `<div class="tile-noimg">${escapeHtml(initial)}</div>`;
+      const badge = giftOnly
+        ? '<span class="tile-badge gift">🎁</span>'
+        : (giftCount > 0 ? '<span class="tile-badge">🎁あり</span>' : '');
+      return `
+        <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
+          ${inner}
+          ${badge}
+          <div class="tile-overlay">
+            <div class="name">${escapeHtml(g.name)}</div>
+            <div class="price">${priceLabel}</div>
+            <div class="meta">${sellers}人 / 在庫 ${totalQty}${locs.length ? ' · 📍 ' + escapeHtml(locs.join('/')) : ''}</div>
           </div>
-          <div style="text-align:right; flex-shrink:0">
-            <div class="bold" style="color:var(--primary); white-space:nowrap">${priceLabel}</div>
-          </div>
-        </a>
-      `);
-    }
-    root.innerHTML = html.join('');
+        </a>`;
+    });
+    root.innerHTML = `<div class="tile-grid">${tiles.join('')}</div>`;
   } catch (e) {
     document.getElementById('grouped').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

@@ -3,6 +3,32 @@
 
 declare(strict_types=1);
 
+// Sweep listings whose expires_at has passed into status='withdrawn'. Called at
+// the top of public read paths so the seller's "this is for sale until X" promise
+// is honored without needing a separate cron.
+function listings_sweep_expired(PDO $pdo): void {
+    $pdo->exec("UPDATE listings
+        SET status='withdrawn'
+        WHERE status='on_sale'
+          AND expires_at IS NOT NULL
+          AND expires_at < NOW()");
+}
+
+// Parse the loose datetime-local format the browser sends ("Y-m-d\TH:i" / "Y-m-d H:i:s")
+// and require it to be in the future (with a 1-minute slack for clock drift).
+// Returns null when the input is null/empty.
+function listings_parse_deadline($raw): ?string {
+    if ($raw === null || trim((string)$raw) === '') return null;
+    $s = str_replace('T', ' ', trim((string)$raw));
+    if (strlen($s) === 16) $s .= ':00';
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $s);
+    if (!$dt) throw new ApiException('bad_request', 'expires_at must be Y-m-d H:i:s', 400);
+    if ($dt < (new DateTimeImmutable('now'))->modify('-1 minute')) {
+        throw new ApiException('bad_request', '販売期限は未来の日時で', 400);
+    }
+    return $dt->format('Y-m-d H:i:s');
+}
+
 // Walk backwards from a listing through the resold_from_purchase_id chain. Returns the
 // chain of sellers, OLDEST first, INCLUDING the current listing's seller as the last entry.
 // Capped at 20 hops to defend against any malformed cycle that slipped past the FK.
@@ -55,6 +81,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
 
     if ($id === 0 && $method === 'GET') {
         require_exposure($cfg, 'public_read');
+        listings_sweep_expired($pdo);
         $jan = trim((string)($_GET['jan'] ?? ''));
         $limit = min(500, max(1, (int)($_GET['limit'] ?? 200)));
         $sql = "
@@ -114,6 +141,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $completionMsg = optional_text_field($body, 'completion_message', 2000);
         $location      = optional_text_field($body, 'location', 100);
         $displayName   = optional_text_field($body, 'display_name', 200);
+        $expiresAt     = listings_parse_deadline($body['expires_at'] ?? null);
         // Product must already exist (client should POST /api/products first)
         $chk = $pdo->prepare('SELECT 1 FROM products WHERE jan=?');
         $chk->execute([$jan]);
@@ -131,10 +159,10 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $resoldFromPurchaseId = $rs->fetchColumn() ?: null;
 
         $ins = $pdo->prepare(
-            'INSERT INTO listings (jan, seller_user_id, price, is_gift, qty, display_name, status, completion_message, location, resold_from_purchase_id)
-             VALUES (?,?,?,?,?,?, "on_sale", ?, ?, ?)'
+            'INSERT INTO listings (jan, seller_user_id, price, is_gift, qty, display_name, status, expires_at, completion_message, location, resold_from_purchase_id)
+             VALUES (?,?,?,?,?,?, "on_sale", ?, ?, ?, ?)'
         );
-        $ins->execute([$jan, $u['id'], $price, $isGift, $qty, $displayName, $completionMsg, $location, $resoldFromPurchaseId]);
+        $ins->execute([$jan, $u['id'], $price, $isGift, $qty, $displayName, $expiresAt, $completionMsg, $location, $resoldFromPurchaseId]);
         $lid = (int)$pdo->lastInsertId();
         $get = $pdo->prepare("SELECT l.*,
                 p.name AS product_name,
@@ -208,6 +236,11 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                 $dn = optional_text_field($body, 'display_name', 200);
                 if ($dn === null) { $sets[] = 'display_name = NULL'; }
                 else              { $sets[] = 'display_name = ?'; $params[] = $dn; }
+            }
+            if (array_key_exists('expires_at', $body)) {
+                $ea = listings_parse_deadline($body['expires_at']);
+                if ($ea === null) { $sets[] = 'expires_at = NULL'; }
+                else              { $sets[] = 'expires_at = ?'; $params[] = $ea; }
             }
             if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
             $params[] = $id;

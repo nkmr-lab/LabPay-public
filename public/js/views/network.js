@@ -1,9 +1,9 @@
 // /#/network — social graph view.
 //
-// All vanilla JS, no library. Layout = hand-rolled Fruchterman-Reingold with
-// node-radius collision detection. Rendering = SVG with curved quadratic edges
-// (so bidirectional pairs don't overlap), drop shadow on nodes, avatar images
-// clipped to circles, drag-to-rearrange, and click-to-highlight neighborhood.
+// Uses d3-force for the simulation (lazy-loaded from /vendor/d3.min.js — only
+// when this view is actually opened, so the rest of the app stays library-free).
+// Rendering is still our own SVG so we keep the LabPay look (drop shadow +
+// avatar clip + curved bidirectional edges).
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -12,6 +12,23 @@ import { state, toast } from '../app.js';
 const TAB_KEY = 'labpay-network-tab';
 const LAYOUT_KEY = 'labpay-network-layout';
 const W = 1000, H = 1000;
+
+// Lazy local-vendor loader for d3 v7. Cached so multiple openings of the network
+// tab don't re-add the script tag.
+let _d3Promise = null;
+function loadD3() {
+  if (window.d3) return Promise.resolve(window.d3);
+  if (_d3Promise) return _d3Promise;
+  _d3Promise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/vendor/d3.min.js';
+    s.async = true;
+    s.onload  = () => resolve(window.d3);
+    s.onerror = () => reject(new Error('failed to load /vendor/d3.min.js'));
+    document.head.appendChild(s);
+  });
+  return _d3Promise;
+}
 
 // Module-scope reference to the active graph data + render handle so drag /
 // highlight handlers can mutate positions and re-render without re-fetching.
@@ -62,7 +79,7 @@ export async function renderNetwork() {
   document.getElementById('net-relayout').addEventListener('click', () => {
     if (!GRAPH) return;
     if (GRAPH.layoutMode === 'circle') circleLayout(GRAPH.nodes);
-    else layout(GRAPH.nodes, GRAPH.edges, true);
+    else d3Layout(GRAPH.nodes, GRAPH.edges);
     drawSvg();
   });
 
@@ -73,6 +90,9 @@ async function loadAndRender(tab, layoutMode) {
   document.getElementById('net-arrow-desc').textContent =
     tab === 'tasks' ? '依頼者 → 引き受けた人' : '売り手 → 買い手';
   try {
+    // d3 is needed for the force simulation; circle mode could skip it but a
+    // single load on first open is fine and keeps the code path simple.
+    await loadD3();
     const d = await get('/api/network/' + tab);
     const nodes = d.nodes || [];
     const edges = d.edges || [];
@@ -110,15 +130,44 @@ async function loadAndRender(tab, layoutMode) {
     GRAPH = { nodes, edges, tab, layoutMode, selectedId: null, inDeg, outDeg, neighbors };
 
     if (layoutMode === 'circle') circleLayout(nodes);
-    else layout(nodes, edges, true);
+    else d3Layout(nodes, edges);
     drawSvg();
   } catch (e) {
     document.getElementById('net-loading').textContent = '失敗: ' + e.message;
   }
 }
 
+// d3.forceSimulation tuned for ~30-node lab graphs. We tick synchronously
+// (no animation) and let the renderer take over; manual drag still updates
+// node coordinates directly afterwards.
+function d3Layout(nodes, edges) {
+  const d3 = window.d3;
+  if (!d3) return;
+  // Clear stale fixed positions from a previous run.
+  nodes.forEach(n => { n.fx = null; n.fy = null; n.x = W/2; n.y = H/2; });
+  const links = edges.map(e => ({ source: e.from, target: e.to, value: e.count }));
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+        .distance(d => 110 + 30 / Math.log(2 + d.value))
+        .strength(d => Math.min(1, 0.15 + Math.log(1 + d.value) / 4)))
+    .force('charge', d3.forceManyBody().strength(-520).distanceMax(W * 0.6))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collide', d3.forceCollide().radius(d => d.r + 6).iterations(2))
+    .force('x', d3.forceX(W / 2).strength(0.04))
+    .force('y', d3.forceY(H / 2).strength(0.04))
+    .stop();
+  // Run enough iterations to settle. d3 docs recommend log(alphaMin)/log(1-alphaDecay)
+  // ≈ 300 by default; we use 350 for a bit more polish on noisy small graphs.
+  for (let i = 0; i < 350; i++) sim.tick();
+  // Clamp inside canvas so nothing drifts past the frame.
+  nodes.forEach(n => {
+    n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
+    n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
+  });
+}
+
 // Pure circular layout: sort nodes by degree DESC, place evenly on a perimeter
-// circle. Lightweight, deterministic, very readable for small N.
+// circle. Doesn't need d3.
 function circleLayout(nodes) {
   const sorted = nodes.slice().sort((a, b) => (b.deg||0) - (a.deg||0));
   const N = sorted.length;
@@ -128,85 +177,6 @@ function circleLayout(nodes) {
     n.x = W / 2 + R * Math.cos(a);
     n.y = H / 2 + R * Math.sin(a);
   });
-}
-
-// Fruchterman-Reingold + node-radius collision. Coordinates in SVG units.
-function layout(nodes, edges, seedCircle) {
-  const N = nodes.length;
-  if (seedCircle) {
-    nodes.forEach((n, i) => {
-      const a = (i / N) * Math.PI * 2;
-      n.x = W / 2 + (Math.min(W, H) * 0.3) * Math.cos(a);
-      n.y = H / 2 + (Math.min(W, H) * 0.3) * Math.sin(a);
-    });
-  }
-  const idIndex = new Map(nodes.map((n, i) => [n.id, i]));
-  const eIdx = edges.map(e => [idIndex.get(e.from), idIndex.get(e.to), e.count])
-                    .filter(([a, b]) => a !== undefined && b !== undefined);
-  const ideal = Math.sqrt((W * H) / N) * 0.65; // ideal edge length
-  let temp = Math.min(W, H) * 0.12;
-  const ITERATIONS = 280;
-  for (let it = 0; it < ITERATIONS; it++) {
-    // Reset accumulated displacement.
-    nodes.forEach(n => { n.dx = 0; n.dy = 0; });
-    // Repulsive forces between all pairs (FR core).
-    for (let i = 0; i < N; i++) {
-      for (let j = i + 1; j < N; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = a.x - b.x, dy = a.y - b.y;
-        let d  = Math.sqrt(dx*dx + dy*dy) || 0.01;
-        const f = (ideal * ideal) / d;
-        dx /= d; dy /= d;
-        a.dx += dx * f; a.dy += dy * f;
-        b.dx -= dx * f; b.dy -= dy * f;
-      }
-    }
-    // Attractive forces along edges (weighted by log(count+1)).
-    for (const [ai, bi, c] of eIdx) {
-      const a = nodes[ai], b = nodes[bi];
-      let dx = a.x - b.x, dy = a.y - b.y;
-      const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
-      const f = (d * d / ideal) * Math.log(1 + c);
-      dx /= d; dy /= d;
-      a.dx -= dx * f; a.dy -= dy * f;
-      b.dx += dx * f; b.dy += dy * f;
-    }
-    // Centering pull so isolated components don't drift off-canvas.
-    for (const n of nodes) {
-      n.dx += (W / 2 - n.x) * 0.015;
-      n.dy += (H / 2 - n.y) * 0.015;
-    }
-    // Apply with cooling.
-    for (const n of nodes) {
-      const mag = Math.sqrt(n.dx*n.dx + n.dy*n.dy) || 0.01;
-      const step = Math.min(mag, temp);
-      n.x += (n.dx / mag) * step;
-      n.y += (n.dy / mag) * step;
-    }
-    // Collision: push apart nodes whose circles overlap. Run a couple of relax passes.
-    for (let pass = 0; pass < 2; pass++) {
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = nodes[i], b = nodes[j];
-          const minD = a.r + b.r + 6;
-          let dx = b.x - a.x, dy = b.y - a.y;
-          let d = Math.sqrt(dx*dx + dy*dy) || 0.01;
-          if (d < minD) {
-            const overlap = (minD - d) / 2;
-            dx /= d; dy /= d;
-            a.x -= dx * overlap; a.y -= dy * overlap;
-            b.x += dx * overlap; b.y += dy * overlap;
-          }
-        }
-      }
-    }
-    // Keep inside canvas.
-    for (const n of nodes) {
-      n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
-      n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
-    }
-    temp *= 0.985;
-  }
 }
 
 function drawSvg() {
