@@ -148,6 +148,9 @@ function renderRow(t, filter) {
     cancelled: '<span class="tag danger">取消</span>',
   })[t.status] || '';
   const deadlineTag = t.deadline ? `<span class="tag warn" style="margin-left:4px">締切 ${escapeHtml(t.deadline)}</span>` : '';
+  const pendingTag = (filter === 'mine' && t.pending_count > 0)
+    ? `<span class="tag" style="margin-left:4px; background:#fff3df; color:var(--warn)">🔔 承認待ち ${t.pending_count}</span>`
+    : '';
 
   let progressLine = '';
   if (t.approved_count !== undefined) {
@@ -166,7 +169,7 @@ function renderRow(t, filter) {
       <div style="flex:1">
         <div>
           <a class="bold" href="#/tasks/${t.id}">${escapeHtml(t.title)}</a>
-          ${statusTag}${audTag}${deadlineTag}
+          ${statusTag}${pendingTag}${audTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
         ${progressLine}
@@ -245,7 +248,20 @@ async function loadDetail(id) {
          </div>`
       : '';
 
+    // For requesters: surface any 'reported' claims at the top so the approval action
+    // is impossible to miss (otherwise the approve button sits below the fold).
+    const reportedClaims = (isRequester && t.claims) ? t.claims.filter(c => c.status === 'reported') : [];
+    const pendingAlert = reportedClaims.length > 0
+      ? `<div class="card" style="background:#fff8e6; border-left:4px solid var(--warn)">
+           <h3 style="margin:0 0 4px; color:var(--warn)">🔔 ${reportedClaims.length} 件の完了報告 — 承認待ち</h3>
+           <p class="muted" style="font-size:13px; margin:0 0 8px">内容を確認して承認すると、${t.reward}pt が報酬として支払われます。違う場合は却下してください。</p>
+           ${reportedClaims.map(c => renderReportedClaimCard(c, t.reward)).join('')}
+         </div>`
+      : '';
+
     root.innerHTML = `
+      ${pendingAlert}
+
       <div class="card">
         <div class="row" style="align-items:center; gap:10px">
           ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
@@ -285,6 +301,26 @@ async function loadDetail(id) {
   } catch (e) {
     document.getElementById('task-detail').innerHTML = `<div class="card muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// One reported-claim card inside the top pendingAlert: avatar, worker name, notes,
+// and big inline approve/reject buttons so the requester can act immediately.
+function renderReportedClaimCard(c, reward) {
+  return `
+    <div class="list-item" style="background:#fff; align-items:flex-start; margin-top:6px">
+      <div style="display:flex; gap:8px; align-items:flex-start; flex:1">
+        ${avatarHtml(c.display_name, c.avatar_url, 'md')}
+        <div style="flex:1">
+          <div class="bold">${escapeHtml(c.display_name)}</div>
+          ${c.notes ? `<div style="margin-top:4px; padding:8px 10px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : '<div class="meta" style="margin-top:4px">(完了メモなし)</div>'}
+          <div class="meta">報告 ${escapeHtml(c.reported_at ?? '')}</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; align-items:stretch">
+        <button class="primary" data-approve="${c.id}">承認 (+${reward}pt)</button>
+        <button class="danger" data-reject="${c.id}">却下</button>
+      </div>
+    </div>`;
 }
 
 function renderClaimsAdmin(t) {

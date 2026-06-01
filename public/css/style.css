@@ -74,10 +74,14 @@ main#app > .card:last-child { margin-bottom: 0; }
    strip of gray body background below the last card — looks like a layout bug.
    The stretched card just shows white space below its content, which reads as intentional.
    `body[data-view]` is set by router.js so this only fires for actual views (not the
-   pre-render blank state). */
+   pre-render blank state).
+   In flex column the cross-axis defaults to `align-items: stretch`, which would also
+   stretch main beyond its max-width and disable the `margin: 0 auto` centering. We
+   explicitly center main back via `align-self: center` and keep it full-width up to the cap. */
 body[data-view] { display: flex; flex-direction: column; min-height: 100vh; }
 body[data-view] main#app {
   flex: 1; display: flex; flex-direction: column;
+  align-self: center; width: 100%;
 }
 body[data-view] main#app > .card:last-child { flex: 1; }
 .card h2 { margin: 0 0 8px; font-size: 16px; }
