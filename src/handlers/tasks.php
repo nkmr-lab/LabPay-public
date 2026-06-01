@@ -75,6 +75,23 @@ function tasks_auto_expire_one(PDO $pdo, array $cfg, int $taskId): void {
     } catch (Throwable $e) {}
 }
 
+// Validate a task URL: optional, http(s) only, max 2000 chars, no embedded credentials.
+function tasks_validate_url($raw): ?string {
+    if ($raw === null) return null;
+    $u = trim((string)$raw);
+    if ($u === '') return null;
+    if (strlen($u) > 2000) throw new ApiException('bad_request', 'url too long (max 2000)', 400);
+    if (!filter_var($u, FILTER_VALIDATE_URL)) throw new ApiException('bad_request', 'url is not a valid URL', 400);
+    $scheme = strtolower((string)parse_url($u, PHP_URL_SCHEME));
+    if ($scheme !== 'http' && $scheme !== 'https') {
+        throw new ApiException('bad_request', 'url must be http(s)', 400);
+    }
+    if (parse_url($u, PHP_URL_USER) !== null) {
+        throw new ApiException('bad_request', 'url must not contain credentials', 400);
+    }
+    return $u;
+}
+
 function tasks_user_grade(PDO $pdo, int $userId): ?string {
     $st = $pdo->prepare('SELECT grade FROM users WHERE id=?');
     $st->execute([$userId]);
@@ -200,7 +217,9 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $title = trim((string)require_field($body, 'title'));
-    $description = isset($body['description']) ? mb_substr((string)$body['description'], 0, 5000) : null;
+    $description   = optional_text_field($body, 'description', 5000);
+    $url           = tasks_validate_url($body['url'] ?? null);
+    $completionMsg = optional_text_field($body, 'completion_message', 2000);
     $reward   = require_int_positive($body['reward']   ?? null, 'reward');
     $capacity = require_int_positive($body['capacity'] ?? null, 'capacity');
     $perLimit = require_int_nonneg($body['per_user_limit'] ?? 1, 'per_user_limit');
@@ -234,9 +253,9 @@ function tasks_create(PDO $pdo, array $cfg): void {
     try {
         // Insert task first to get id
         $ins = $pdo->prepare('INSERT INTO tasks
-            (requester_user_id, title, description, reward, capacity, per_user_limit, deadline, audience_grades)
-            VALUES (?,?,?,?,?,?,?,?)');
-        $ins->execute([$u['id'], $title, $description, $reward, $capacity, $perLimit, $deadline, $aud]);
+            (requester_user_id, title, description, url, reward, capacity, per_user_limit, deadline, audience_grades, completion_message)
+            VALUES (?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
 
         // Move escrow: requester → ESCROW
@@ -273,11 +292,13 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             throw new ApiException('not_open', 'task is not open', 409);
 
         $approved   = tasks_approved_count($pdo, $taskId);
-        $newTitle   = array_key_exists('title', $body)         ? trim((string)$body['title'])       : (string)$task['title'];
-        $newDesc    = array_key_exists('description', $body)   ? ($body['description']             === null ? null : mb_substr((string)$body['description'], 0, 5000)) : $task['description'];
-        $newReward  = array_key_exists('reward', $body)        ? require_int_positive($body['reward'],   'reward')        : (int)$task['reward'];
-        $newCap     = array_key_exists('capacity', $body)      ? require_int_positive($body['capacity'], 'capacity')      : (int)$task['capacity'];
-        $newPerLim  = array_key_exists('per_user_limit', $body)? require_int_nonneg($body['per_user_limit'], 'per_user_limit') : (int)$task['per_user_limit'];
+        $newTitle   = array_key_exists('title', $body) ? trim((string)$body['title']) : (string)$task['title'];
+        $newDesc    = patch_text_field($body, 'description',        5000, $task['description']);
+        $newUrl     = array_key_exists('url', $body) ? tasks_validate_url($body['url']) : ($task['url'] ?? null);
+        $newCMsg    = patch_text_field($body, 'completion_message', 2000, $task['completion_message'] ?? null);
+        $newReward  = array_key_exists('reward', $body)         ? require_int_positive($body['reward'],   'reward')        : (int)$task['reward'];
+        $newCap     = array_key_exists('capacity', $body)       ? require_int_positive($body['capacity'], 'capacity')      : (int)$task['capacity'];
+        $newPerLim  = array_key_exists('per_user_limit', $body) ? require_int_nonneg($body['per_user_limit'], 'per_user_limit') : (int)$task['per_user_limit'];
 
         if ($newTitle === '' || mb_strlen($newTitle) > 200)
             throw new ApiException('bad_request', 'title length 1..200', 400);
@@ -326,9 +347,10 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             }
         }
 
-        $pdo->prepare('UPDATE tasks SET title=?, description=?, reward=?, capacity=?,
-            per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
-            ->execute([$newTitle, $newDesc, $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
+        $pdo->prepare('UPDATE tasks SET title=?, description=?, url=?, completion_message=?,
+            reward=?, capacity=?, per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
+            ->execute([$newTitle, $newDesc, $newUrl, $newCMsg,
+                       $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -361,7 +383,7 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
 
         $myActive = tasks_user_active_claim_count($pdo, $taskId, (int)$u['id']);
         if ((int)$task['per_user_limit'] > 0 && $myActive >= (int)$task['per_user_limit'])
-            throw new ApiException('per_user_limit', '受諾上限に達しています', 409);
+            throw new ApiException('per_user_limit', '引き受け上限に達しています', 409);
 
         $ins = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, status) VALUES (?,?,'claimed')");
         $ins->execute([$taskId, $u['id']]);
@@ -383,7 +405,7 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
 function tasks_report(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
-    $notes = isset($body['notes']) ? mb_substr((string)$body['notes'], 0, 2000) : null;
+    $notes = optional_text_field($body, 'notes', 2000);
 
     $upd = $pdo->prepare("UPDATE task_claims
         SET status='reported', notes=?, reported_at=NOW()
@@ -394,8 +416,10 @@ function tasks_report(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 
     $task = tasks_fetch_with_meta($pdo, $taskId);
     try {
+        $body = "{$u['display_name']} が「{$task['title']}」を完了報告しました — 承認をお願いします"
+              . notification_quote($notes);
         Notifier::notify($pdo, $cfg, (int)$task['requester_user_id'], 'task_reported',
-            "{$u['display_name']} が「{$task['title']}」を完了報告しました — 承認をお願いします", 'task', $taskId);
+            $body, 'task', $taskId);
     } catch (Throwable $e) {}
     json_response(['ok' => true]);
 }
@@ -405,6 +429,7 @@ function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     $u = Auth::requireUser($pdo, $cfg);
 
     $rewardForNotify = 0; $claimantId = 0; $title = ''; $taskClosed = false;
+    $completionMsg = null;
     $pdo->beginTransaction();
     try {
         $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? AND requester_user_id=? FOR UPDATE');
@@ -438,6 +463,7 @@ function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
         $rewardForNotify = (int)$task['reward'];
         $claimantId      = (int)$claim['user_id'];
         $title           = (string)$task['title'];
+        $completionMsg   = $task['completion_message'] ?? null;
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -446,10 +472,13 @@ function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     }
 
     try {
-        Notifier::notify($pdo, $cfg, $claimantId, 'task_approved',
-            "「$title」承認 — {$rewardForNotify}pt が付与されました", 'task', $taskId);
+        // Requester's thank-you message piggy-backs on the approval notification
+        // so it surfaces immediately like note's purchase-time message.
+        $body = "「$title」承認 — {$rewardForNotify}pt が付与されました"
+              . notification_quote($completionMsg);
+        Notifier::notify($pdo, $cfg, $claimantId, 'task_approved', $body, 'task', $taskId);
     } catch (Throwable $e) {}
-    json_response(['ok' => true, 'task_closed' => $taskClosed]);
+    json_response(['ok' => true, 'task_closed' => $taskClosed, 'completion_message' => $completionMsg]);
 }
 
 // ---------- POST /api/tasks/{id}/claims/{claim_id}/reject ----------
@@ -509,7 +538,7 @@ function tasks_cancel(PDO $pdo, array $cfg, int $taskId): void {
     foreach ($affectedClaimants as $cid) {
         try {
             Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',
-                "受諾中のタスク「$taskTitle」が依頼者により取り消されました", 'task', $taskId);
+                "引き受け中のタスク「$taskTitle」が依頼者により取り消されました", 'task', $taskId);
         } catch (Throwable $e) {}
     }
     json_response(['ok' => true, 'refunded' => $refund]);

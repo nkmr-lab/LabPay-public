@@ -13,15 +13,17 @@ LabPay は **使い切りの軽さ**を最優先に設計されています:
 
 | 領域 | 内容 |
 |---|---|
-| 残高・取引 | 購入 / 販売 / 個人送金 (QR コード対応) |
+| 残高・取引 | 購入 / 販売 / 個人送金 (QR コード対応) / 自己消費 (在庫を自分用に減らす・手数料なし) |
 | 来室チェックイン | ラボ WiFi で自動検知 + Geolocation フォールバック (50m 圏内) |
-| 連続来室 streak | 祝日・休業日カレンダー対応、途切れ時は減衰 (リセットしない) |
-| マーケット | バーコード読取 + 楽天 API で商品名・画像自動取得 |
-| タスク | 依頼 → 受諾 → 承認、エスクロー預け、対象学年フィルタ、締切設定 |
-| 実績 | 8 軸 × 4 段階のメダル (来室・販売・購入・タスク完了等) |
-| Scrapbox 連携 | 日次の更新ページ数に応じてポイント付与 (cron) |
-| 在室検知 | scanner 経由で部屋単位の MAC 観測 → アバター付きで「今ラボにいる人」表示 |
+| 連続来室 streak | 祝日・休業日カレンダー対応、来た日は曜日問わず連続日数が進む。来なくても祝日/週末はマイナスしない |
+| マーケット | バーコード読取 + 楽天 API で商品名・画像自動取得 / 置き場所表示 / 出品ごとに購入時お礼メッセージ (note 風) |
+| タスク | 依頼 → 引き受け → 承認、エスクロー預け、URL/詳細/対象学年/締切、完了報告に気づきフィードバック、承認時に依頼者からのお礼メッセージ |
+| 実績 | 8 カテゴリ × 4 段階のメダル (来室・販売・購入・タスク完了等) |
+| 在室検知 | scanner 経由で部屋単位の MAC 観測 → アバター付きで「今ラボにいる人」表示 (名前/アイコンのみトグルあり) |
+| 管理機能 | 取引一覧から選んで取消、ポイント発行 (全員配布 or 個人指定)、カレンダー編集、配信、出品/タスクの監督 |
 | PWA | オフライン shell / ホーム画面追加 / インストール可 |
+
+> Scrapbox 連携の cron 同期は現状無効化されています (`scrapbox_project` を空のままにすると同期処理はスキップ)。
 
 ## アーキテクチャ
 
@@ -38,6 +40,7 @@ LabPay/
 │   │   └── views/          ← ページ毎の renderer
 │   ├── vendor/             ← ZXing (バーコード/QR)
 │   └── uploads/            ← ユーザアップロード (gitignore)
+│       └── .htaccess       ← PHP 実行不可化 (多段防御)
 ├── src/                    ← PHP (DocumentRoot 外推奨)
 │   ├── bootstrap.php       ← config 読込・PDO 生成・ヘルパ
 │   ├── Db.php, Ledger.php, Money.php, Auth.php, Calendar.php,
@@ -46,10 +49,11 @@ LabPay/
 ├── config/
 │   ├── config.sample.php   ← 設定テンプレ
 │   └── config.php          ← 実設定 (gitignore)
-├── migrations/             ← 001…009 順に流す
+├── migrations/             ← 001…011 順に流す
 ├── bin/
 │   ├── scanner.py          ← 部屋常駐スキャナ (Windows/Linux/Mac)
-│   ├── scrapbox_sync.php   ← Scrapbox 同期 (cron)
+│   ├── scrapbox_sync.php   ← Scrapbox 同期 (現状未使用)
+│   ├── run_migration.php   ← マイグレーション適用 (app config 共用)
 │   ├── backup.sh           ← mysqldump バックアップ
 │   └── make_icons.py       ← PWA アイコン生成 (Pillow)
 └── docs/api.md             ← 自作クライアント向け API リファレンス
@@ -106,7 +110,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 ```bash
 sudo dnf install -y epel-release
 sudo dnf install -y httpd mod_ssl php php-mysqlnd php-pdo php-mbstring php-json \
-                    mariadb-server certbot python3-certbot-apache git rsync
+                    mariadb-server certbot python3-certbot-apache git rsync tar
 sudo systemctl enable --now mariadb httpd
 sudo mysql_secure_installation
 
@@ -141,9 +145,11 @@ sudoedit config/config.php   # 後述の「設定リファレンス」を参照
 
 ### 4. マイグレーション
 
+`bin/run_migration.php` が app の config を読み込んで適用するヘルパー (mysql コマンドの credentials を別管理しなくて済む):
+
 ```bash
 for f in /var/www/labpay/migrations/*.sql; do
-  sudo bash -c "mysql labpay < $f"
+  sudo -u apache php /var/www/labpay/bin/run_migration.php "$f"
 done
 ```
 
@@ -223,13 +229,15 @@ DB 上のランタイム設定 (admin UI から変更可) は `config` テーブ
 |---|---|---|
 | `fee_rate` | 0.05 | 取引手数料率 (売り手負担、floor) |
 | `initial_points` | 500 | 初回ログイン時の付与額 |
-| `checkin_base` | 10 | 来室1回の基本ポイント |
-| `streak_bonus_cap` | 10 | streak ボーナス計算の上限 |
-| `streak_bonus_divisor` | 2 | `points = base + floor(min(cap, streak-1) / divisor)` |
-| `streak_decay_per_missed_workday` | 5 | 連続が途切れた時の減衰量 |
-| `presence_window_minutes` | 5 | 在室判定の有効秒 |
+| `checkin_base` | 5 | 来室1回の基本ポイント |
+| `streak_bonus_per_day` | 1 | streak ボーナスの 1日あたり単位 |
+| `streak_bonus_cap` | 15 | streak ボーナス計算の上限 |
+| `streak_bonus_divisor` | 1 | `points = base + floor(min(cap, streak-1) * per_day / divisor)` |
+| `streak_weekday_only` | 0 | 0=祝日/週末でも来れば streak が進む (現行) |
+| `streak_decay_per_missed_workday` | 5 | 連続が途切れた時の減衰量 (workday を逃した時のみ) |
+| `presence_window_minutes` | 5 | 在室判定の有効分 |
 | `geo_default_radius_m` | 50 | 位置情報チェックインの許容距離 |
-| `scrapbox_project` | (空) | Scrapbox 連携先 project 名 |
+| `scrapbox_project` | (空) | Scrapbox 連携先 project 名 (空なら同期スキップ) |
 | `scrapbox_pt_per_page / daily_cap` | 3 / 20 | 1ページあたり/1日あたりのポイント |
 
 ---
@@ -285,15 +293,6 @@ python3 scanner.py
 
 30日保持。`mysqldump --single-transaction` で整合性を保ちます。
 
-### Scrapbox 同期
-
-```bash
-# /etc/cron.d/labpay-scrapbox
-30 4 * * * apache /usr/bin/php /var/www/labpay/bin/scrapbox_sync.php >> /var/log/labpay-scrapbox.log 2>&1
-```
-
-前日の更新を翌朝に集計してポイント付与。同じ日に対する重複付与は `scrapbox_credits` テーブルで防いでいます。手動同期は admin 画面から `POST /api/admin/scrapbox/sync` でも可能。
-
 ### Let's Encrypt 自動更新
 
 certbot が `/etc/cron.d/certbot` を作るので追加作業不要。`sudo certbot renew --dry-run` で確認可。
@@ -303,7 +302,6 @@ certbot が `/etc/cron.d/certbot` を作るので追加作業不要。`sudo cert
 - Apache: `/var/log/httpd/labpay_*.log`
 - PHP の `error_log`: Apache の error.log に流れる
 - Scanner: 各部屋のローカルログ (`bin/scanner.log`)
-- Scrapbox sync: cron でリダイレクト先
 
 ---
 
@@ -312,11 +310,13 @@ certbot が `/etc/cron.d/certbot` を作るので追加作業不要。`sudo cert
 ```bash
 cd /var/www/labpay
 sudo -u apache git pull
+
 # migration を追加した回のみ
-for f in migrations/00X_*.sql; do
-  sudo bash -c "mysql labpay < $f"
+for f in migrations/01X_*.sql; do
+  sudo -u apache php bin/run_migration.php "$f"
 done
-sudo systemctl reload httpd
+
+sudo systemctl reload httpd   # opcache クリア
 ```
 
 PHP は配置で即反映。常駐プロセス無し。SW のキャッシュは `sw.js` 内の `CACHE_NAME` を bump すると強制更新されます。
@@ -332,6 +332,19 @@ PHP は配置で即反映。常駐プロセス無し。SW のキャッシュは 
 - [ ] `bin/backup.sh` を cron 登録、復元手順を1回試す
 - [ ] DB と config の オフサイトバックアップを別途構築
 - [ ] Apache の `mod_security` または `fail2ban` を入れて bruteforce 対策
+- [ ] `public/uploads/.htaccess` が反映されている (PHP 実行不可) ことを確認
+
+### 既に実施済の堅牢化 (参考)
+
+- 全 state-changing API は `X-Requested-With: labpay` ヘッダ強制 (CSRF)
+- prepared statement + `escapeHtml` の徹底 (XSS / SQLi)
+- avatar_url・タスク URL に同一オリジン / http(s) のみ許可するバリデーション + クライアント側 `safeHttpUrl` ガード
+- アップロードは MIME 判定 + ファイル名 random + SVG 拒否
+- `idempotency_keys` の PK は `(ukey, user_id, endpoint)` 合成キー
+- `public/uploads/.htaccess` で `.php` 等の実行・解釈を全て拒否
+- 取引の取消は admin の「最近の取引から選ぶ」UI 経由 (ID 入力ミスを排除)
+
+> **プロンプトインジェクション**: LabPay は LLM を内蔵していないので直接の攻撃面は無し。ただし管理者が DB の文字列 (タスク名・商品名・notes・お礼メッセージ) を Claude 等の AI に直接渡す運用をする場合は「未信頼入力」として扱うこと。
 
 ---
 
@@ -339,12 +352,32 @@ PHP は配置で即反映。常駐プロセス無し。SW のキャッシュは 
 
 - 1pt = 1円相当 / **正の整数のみ** (小数なし)
 - 手数料 5% (売り手負担・floor)
-- ポイント発行は **SYSTEM 口座のみ** (初期配布・来室ボーナス・タスク報酬・Scrapbox 更新)
+- ポイント発行は **SYSTEM 口座のみ** (初期配布・来室ボーナス・タスク報酬・admin 配布)
 - 初期付与: 500pt
-- 来室: 10pt + 連続 streak ボーナス (`+ floor(min(10, streak-1) / 2)`、上限 +5pt → 1日最大15pt)
-- 手数料の SYSTEM 口座への戻入で経済をクローズ
+- 来室: `5 + min(15, max(0, streak-1))` → **5〜20pt** / 1日1回 (上限は連続16日目で到達)
+  - 祝日・週末に来ても streak は進む / 来なくてもマイナスは無し
+  - 平日 (workday) を逃した分だけ `streak_decay_per_missed_workday` (デフォルト 5) で減衰
+- 自己消費 (自分の出品を自分で減らす) はポイント移動なし・手数料なし、在庫だけ減る
 - 全移転は 1 つの `Ledger::transfer()` 関数を通り、`BEGIN + FOR UPDATE + 残高チェック` で整合性を担保
 - 台帳 (`ledger` テーブル) は**追記専用**。訂正は逆仕訳 (`type='reversal'`) で行う
+
+---
+
+## マイグレーション履歴
+
+| # | 内容 |
+|---|---|
+| 001 | 初期スキーマ + seed (system/escrow 口座、初期 config) |
+| 002 | Presence (在室検知) テーブル |
+| 003 | カレンダー overrides + Geo 座標フィールド |
+| 004 | Streak 線形上限式へ変更 (milestone 表は廃止) |
+| 005 | Presence first_seen_at 追加 |
+| 006 | Presence infrastructure (機材 MAC 除外) |
+| 007 | users.avatar_url 追加 |
+| 008 | tasks/task_claims/transfers/scrapbox_credits + grade 列 + 35人 bulk allowlist |
+| 009 | tasks.deadline + streak 微調整 |
+| 010 | streak 5+min(15,…) 簡素化 + idempotency_keys PK 合成キー化 + tasks.url/completion_message + listings.completion_message |
+| 011 | listings.location (置き場所) |
 
 ---
 

@@ -18,12 +18,16 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 // $source is recorded only for telemetry/memo. Returns:
 //   ['already' => bool, 'points' => int, 'awarded_today' => int,
 //    'current_streak' => int, 'longest_streak' => int, 'new_balance' => int]
+//
+// Streak rule (simplified 2026-06): the streak advances every day the user shows up,
+// weekends and holidays included. Missing workdays still breaks the chain (only workdays
+// are "owed"); missing weekends/holidays does NOT — "no minus, only plus."
 function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): array {
     $today = (new DateTimeImmutable('now'))->format('Y-m-d');
-    $base    = (int)cfg_get($pdo, 'checkin_base', '10');
+    $base    = (int)cfg_get($pdo, 'checkin_base', '5');
     $perDay  = (int)cfg_get($pdo, 'streak_bonus_per_day', '1');
-    $bonusCap= (int)cfg_get($pdo, 'streak_bonus_cap', '10');
-    $divisor = (int)cfg_get($pdo, 'streak_bonus_divisor', '2');
+    $bonusCap= (int)cfg_get($pdo, 'streak_bonus_cap', '15');
+    $divisor = (int)cfg_get($pdo, 'streak_bonus_divisor', '1');
     if ($divisor < 1) $divisor = 1;
     $decay   = (int)cfg_get($pdo, 'streak_decay_per_missed_workday', '5');
 
@@ -51,7 +55,8 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
             ];
         }
 
-        // Compute streak using Calendar
+        // Compute streak. Any show-up day advances the chain; only missed *workdays*
+        // strictly between prev and today break it.
         $st = $pdo->prepare('SELECT current_streak, longest_streak, last_checkin_date
             FROM streaks WHERE user_id=? FOR UPDATE');
         $st->execute([$userId]);
@@ -59,44 +64,29 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
         $prev = $streak ? $streak['last_checkin_date'] : null;
         $curStreak = $streak ? (int)$streak['current_streak'] : 0;
 
-        $todayIsWork = Calendar::isWorkday($pdo, $today);
-        if ($todayIsWork) {
-            if ($prev === null) {
-                $newStreak = 1;
-            } else {
-                // Count missed workdays strictly between prev and today (exclusive both ends).
-                // Weekends/holidays between prev and today do NOT count as missed.
-                $missed = 0;
-                $cursor = new DateTimeImmutable($prev);
-                $end    = new DateTimeImmutable($today);
-                while (true) {
-                    $cursor = $cursor->modify('+1 day');
-                    if ($cursor >= $end) break;
-                    if (Calendar::isWorkday($pdo, $cursor->format('Y-m-d'))) $missed++;
-                }
-                if ($missed === 0) {
-                    // Consecutive workday → +1
-                    $newStreak = $curStreak + 1;
-                } else {
-                    // Break: decay by missed*decay, but credit today as +1 from the decayed value
-                    $newStreak = max(1, $curStreak - $missed * $decay + 1);
-                }
-            }
+        if ($prev === null) {
+            $newStreak = 1;
         } else {
-            // Non-workday checkin: ensure the user gets credit for showing up.
-            // First-ever checkin on a non-workday seeds streak at 1; otherwise carry forward.
-            $newStreak = max(1, $curStreak);
+            $missed = 0;
+            $cursor = new DateTimeImmutable($prev);
+            $end    = new DateTimeImmutable($today);
+            while (true) {
+                $cursor = $cursor->modify('+1 day');
+                if ($cursor >= $end) break;
+                if (Calendar::isWorkday($pdo, $cursor->format('Y-m-d'))) $missed++;
+            }
+            if ($missed === 0) {
+                $newStreak = $curStreak + 1;
+            } else {
+                $newStreak = max(1, $curStreak - $missed * $decay + 1);
+            }
         }
         $newLongest = max((int)($streak['longest_streak'] ?? 0), $newStreak);
 
-        // Linear-capped streak bonus, paid every workday. divisor splits the per_day rate
-        // (default 2 → half-point per day, integer-floored, so day 3 first sees +1).
-        //   points = base + floor(min(cap, max(0, streak-1)) * per_day / divisor)
-        $points = $base;
-        if ($todayIsWork) {
-            $bonus = intdiv(min($bonusCap, max(0, $newStreak - 1)) * $perDay, $divisor);
-            $points += $bonus;
-        }
+        // points = base + floor(min(cap, max(0, streak-1)) * per_day / divisor)
+        // With defaults base=5, cap=15, per_day=1, divisor=1 → 5..20pt; cap reached on day 16.
+        $bonus  = intdiv(min($bonusCap, max(0, $newStreak - 1)) * $perDay, $divisor);
+        $points = $base + $bonus;
 
         $pdo->prepare('INSERT INTO checkins (user_id, checkin_date, points_awarded)
             VALUES (?,?,?)')->execute([$userId, $today, $points]);

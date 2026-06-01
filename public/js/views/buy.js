@@ -71,9 +71,16 @@ async function toggleScanner() {
 async function loadListings() {
   try {
     const data = await get('/api/listings');
+    // Grouped overview uses the canonical product name (multiple sellers might each pick
+    // a different display_name like 「賞味期限近」 — the group header still shows the catalog name).
     const groups = new Map();
     for (const l of data.items) {
-      if (!groups.has(l.jan)) groups.set(l.jan, { jan: l.jan, name: l.name, image_url: l.image_url, listings: [] });
+      if (!groups.has(l.jan)) groups.set(l.jan, {
+        jan: l.jan,
+        name: l.product_name ?? l.name,
+        image_url: l.image_url,
+        listings: [],
+      });
       groups.get(l.jan).listings.push(l);
     }
     const root = document.getElementById('grouped');
@@ -83,17 +90,36 @@ async function loadListings() {
     }
     const html = [];
     for (const g of groups.values()) {
-      const min = Math.min(...g.listings.map(x => x.price));
+      // Gift listings are surfaced with their own "🎁 これどうぞ" indicator so the price
+      // column doesn't read as "0 pt〜" (which feels devaluing). Mixed groups show both.
+      const giftCount = g.listings.filter(x => x.is_gift).length;
+      const sale = g.listings.filter(x => !x.is_gift);
+      let priceLabel;
+      if (sale.length === 0) {
+        priceLabel = '🎁 これどうぞ';
+      } else {
+        const prices = sale.map(x => x.price);
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        priceLabel = (min === max)
+          ? `${min.toLocaleString()} pt`
+          : `${min.toLocaleString()}〜${max.toLocaleString()} pt`;
+        if (giftCount > 0) priceLabel += ' / 🎁あり';
+      }
       const sellers = g.listings.length;
       const totalQty = g.listings.reduce((a, b) => a + b.qty, 0);
+      const locs = [...new Set(g.listings.map(x => x.location).filter(Boolean))];
+      const locTag = locs.length
+        ? `<span class="tag muted" style="margin-left:6px">📍 ${escapeHtml(locs.join(' / '))}</span>`
+        : '';
       html.push(`
         <a class="list-item" href="#/product/${encodeURIComponent(g.jan)}">
           <div>
-            <div class="bold">${escapeHtml(g.name)}</div>
-            <div class="meta">JAN ${escapeHtml(g.jan)} · ${sellers}人が出品 · 在庫 ${totalQty}</div>
+            <div class="bold">${escapeHtml(g.name)}${locTag}</div>
+            <div class="meta">JAN <span class="mono">${escapeHtml(g.jan)}</span> · ${sellers}人が出品 · 在庫 ${totalQty}</div>
           </div>
           <div style="text-align:right">
-            <div class="bold" style="color:var(--primary)">${min.toLocaleString()} pt〜</div>
+            <div class="bold" style="color:var(--primary)">${priceLabel}</div>
           </div>
         </a>
       `);

@@ -38,21 +38,37 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
-      <h3>取消 (reversal)</h3>
-      <div class="row">
-        <input id="rv-id" type="number" placeholder="ledger.id" style="max-width:140px">
-        <input id="rv-memo" type="text" placeholder="memo">
-        <button id="rv-go" class="danger">取消する</button>
+      <h3>決済の取消</h3>
+      <p class="muted" style="font-size:13px; margin:4px 0">最近の取引から、取り消す決済を選んでください。</p>
+      <div class="row" style="margin-bottom:8px">
+        <button id="rv-reload">最新の取引を読み込み</button>
+        <input id="rv-memo" type="text" placeholder="取消理由 (任意)" style="flex:1">
       </div>
+      <div id="rv-list" class="list"><div class="muted">「最新の取引を読み込み」を押してください</div></div>
     </div>
 
     <div class="card">
       <h3>ポイント発行</h3>
+      <div class="row" style="gap:14px; margin-bottom:8px">
+        <label style="display:inline-flex; align-items:center; gap:4px">
+          <input type="radio" name="is-mode" value="all" id="is-mode-all" checked> 全員に配布
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:4px">
+          <input type="radio" name="is-mode" value="user" id="is-mode-user"> 個人を指定
+        </label>
+      </div>
+      <div id="is-user-row" class="row" hidden>
+        <select id="is-user" style="flex:1; max-width:260px">
+          <option value="">— 受け取る人を選択 —</option>
+        </select>
+      </div>
       <div class="row">
-        <input id="is-user" type="number" placeholder="user_id" style="max-width:120px">
-        <input id="is-amount" type="number" placeholder="amount" min="1" style="max-width:140px">
-        <input id="is-memo" type="text" placeholder="memo (任意)">
+        <input id="is-amount" type="number" placeholder="ポイント数" min="1" style="max-width:140px">
+        <input id="is-memo" type="text" placeholder="メモ (任意)" style="flex:1">
         <button id="is-go" class="primary">発行</button>
+      </div>
+      <div class="muted" style="font-size:12px; margin-top:4px">
+        全員配布の場合、許可リストの全ユーザーに同じポイント数が付与されます。
       </div>
     </div>
 
@@ -159,29 +175,42 @@ export async function renderAdmin() {
       </table>`;
   });
 
-  // --- Issue points ---
+  // --- Issue points (broadcast vs single user) ---
+  await populateIssueUserPicker();
+  function syncIssueMode() {
+    const mode = document.querySelector('input[name="is-mode"]:checked').value;
+    document.getElementById('is-user-row').hidden = (mode !== 'user');
+  }
+  document.querySelectorAll('input[name="is-mode"]').forEach(r => {
+    r.addEventListener('change', syncIssueMode);
+  });
+  syncIssueMode();
   document.getElementById('is-go').addEventListener('click', async () => {
+    const mode = document.querySelector('input[name="is-mode"]:checked').value;
+    const amount = Number(document.getElementById('is-amount').value);
+    const memo = document.getElementById('is-memo').value.trim() || null;
+    if (!(amount > 0)) { toast('ポイント数を入力してください'); return; }
+    let body = { mode, amount, memo };
+    if (mode === 'user') {
+      const uid = Number(document.getElementById('is-user').value);
+      if (!(uid > 0)) { toast('受け取る人を選択してください'); return; }
+      body.to_user_id = uid;
+    } else {
+      if (!confirm(`全員に ${amount}pt を配布します。よろしいですか?`)) return;
+    }
     try {
-      const res = await post('/api/admin/issue', {
-        to_user_id: Number(document.getElementById('is-user').value),
-        amount: Number(document.getElementById('is-amount').value),
-        memo: document.getElementById('is-memo').value || null,
-      });
-      toast('発行しました (ledger #' + res.ledger_id + ')');
+      const res = await post('/api/admin/issue', body);
+      if (res.mode === 'all') {
+        const fc = Object.keys(res.failures || {}).length;
+        toast(`発行しました (${res.recipients}人${fc ? ` / 失敗 ${fc}件` : ''})`);
+      } else {
+        toast('発行しました (ledger #' + res.ledger_id + ')');
+      }
     } catch (e) { toast('失敗: ' + e.message); }
   });
 
-  // --- Reversal ---
-  document.getElementById('rv-go').addEventListener('click', async () => {
-    if (!confirm('本当に取り消しますか?')) return;
-    try {
-      const res = await post('/api/admin/reversal', {
-        ledger_id: Number(document.getElementById('rv-id').value),
-        memo: document.getElementById('rv-memo').value || null,
-      });
-      toast('取消しました: reversal_ids=' + res.reversal_ids.join(','));
-    } catch (e) { toast('失敗: ' + e.message); }
-  });
+  // --- Reversal (pick from recent ledger list) ---
+  document.getElementById('rv-reload').addEventListener('click', loadReversalCandidates);
 
   // --- Config ---
   await loadTable('cfg', async (el) => {
@@ -252,6 +281,79 @@ export async function renderAdmin() {
       document.getElementById('bc-body').value = '';
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+// Populate the issue-points user dropdown from /api/users.
+async function populateIssueUserPicker() {
+  try {
+    const u = await get('/api/users');
+    const sel = document.getElementById('is-user');
+    if (!sel) return;
+    const opts = u.items.map(x =>
+      `<option value="${x.id}">${escapeHtml(x.display_name)} (#${x.id})</option>`
+    ).join('');
+    sel.insertAdjacentHTML('beforeend', opts);
+  } catch (e) { /* dropdown stays with just the placeholder option */ }
+}
+
+// Pretty label for ledger row type, matches home.js but kept local to avoid coupling.
+const LEDGER_TYPE_LABEL = {
+  initial: '初期/配布', checkin: '来室', purchase: '購入', fee: '手数料',
+  reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
+  deposit: '預け入れ', refund: '返金', burn: '消却',
+};
+
+// Fetch recent ledger candidates and render a clickable list. Clicking 取消 confirms,
+// posts the reversal, then refreshes the list so the now-reversed row drops out.
+async function loadReversalCandidates() {
+  const root = document.getElementById('rv-list');
+  if (!root) return;
+  root.innerHTML = `<div class="muted">読み込み中…</div>`;
+  try {
+    const d = await get('/api/admin/ledger', { limit: 30 });
+    if (!d.items.length) {
+      root.innerHTML = `<div class="empty">取消可能な取引はありません</div>`;
+      return;
+    }
+    root.innerHTML = d.items.map(rvRow).join('');
+    root.querySelectorAll('[data-rv]').forEach(b => {
+      b.addEventListener('click', () => onReverse(Number(b.dataset.rv), b));
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function rvRow(r) {
+  const typeLabel = LEDGER_TYPE_LABEL[r.type] || r.type;
+  const from = r.from_name || r.from_code || '?';
+  const to   = r.to_name   || r.to_code   || '?';
+  const sub  = r.product_name
+    ? ` · ${escapeHtml(r.product_name)}`
+    : (r.memo ? ` · ${escapeHtml(r.memo)}` : '');
+  return `
+    <div class="list-item">
+      <div style="flex:1">
+        <div class="bold">#${r.id} ${escapeHtml(typeLabel)} · ${r.amount.toLocaleString()}pt</div>
+        <div class="meta">${escapeHtml(from)} → ${escapeHtml(to)}${sub}</div>
+        <div class="meta">${escapeHtml(r.created_at)}</div>
+      </div>
+      <div><button class="danger" data-rv="${r.id}">取消</button></div>
+    </div>`;
+}
+
+async function onReverse(ledgerId, btn) {
+  if (!confirm(`ledger #${ledgerId} を取り消しますか? (購入の場合、手数料行もまとめて取消されます)`)) return;
+  btn.disabled = true;
+  const memo = document.getElementById('rv-memo').value.trim() || null;
+  try {
+    const res = await post('/api/admin/reversal', { ledger_id: ledgerId, memo });
+    toast(`取消しました (reversal #${res.reversal_ids.join(', #')})`);
+    await loadReversalCandidates();
+  } catch (e) {
+    toast('失敗: ' + e.message);
+    btn.disabled = false;
+  }
 }
 
 async function loadRooms() {

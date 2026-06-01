@@ -25,7 +25,7 @@ return [
     'google_client_id'     => 'YOUR_CLIENT_ID.apps.googleusercontent.com',
     'google_client_secret' => 'YOUR_CLIENT_SECRET',
     // Dev login uses the allowlist directly — fine for testing, MUST be false in production.
-    'dev_login_enabled'    => true,
+    'dev_login_enabled'    => false,
     // Bootstrap admin: auto-added to allowlist with role=admin on first request.
     'bootstrap_admin_email' => 'you@example.com',
   ],

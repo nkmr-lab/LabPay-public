@@ -45,29 +45,67 @@ class ProductInfo {
         // the JAN doesn't appear in the public fields). UI surfaces this as "needs confirmation".
         $best = null;        // [name, img, confidence]
         foreach ($d['Items'] as $w) {
-            $it = $w['Item'] ?? null;
+            // Older Ichiba endpoint wraps each item in {"Item": {...}};
+            // the new openapi endpoint sometimes returns the Item fields at the top level.
+            $it = $w['Item'] ?? $w;
             if (!is_array($it)) continue;
             $name = trim((string)($it['itemName'] ?? ''));
             if ($name === '') continue;
-            $img = (string)($it['mediumImageUrls'][0]['imageUrl']
-                ?? $it['smallImageUrls'][0]['imageUrl']
-                ?? '');
+            $img = self::extractImage($it);
             $hay = $name . ' ' . (string)($it['itemCaption'] ?? '');
             $high = strpos($hay, $jan) !== false;
             if ($high) {
                 return [
                     'name'       => mb_substr($name, 0, 200),
-                    'image_url'  => $img !== '' ? $img : null,
+                    'image_url'  => $img,
                     'confidence' => 'high',
                 ];
             }
             if ($best === null) $best = ['name' => $name, 'img' => $img];
         }
         if ($best === null) return null;
+        if ($best['img'] === null) {
+            // Log raw response once so the admin can adjust the extractor if Rakuten changes shape.
+            error_log("[labpay/productinfo] no image extracted for jan=$jan; raw item="
+                . substr(json_encode($d['Items'][0] ?? null, JSON_UNESCAPED_UNICODE), 0, 500));
+        }
         return [
             'name'       => mb_substr($best['name'], 0, 200),
-            'image_url'  => $best['img'] !== '' ? $best['img'] : null,
+            'image_url'  => $best['img'],
             'confidence' => 'low',
         ];
+    }
+
+    // Pull an image URL out of a Rakuten item record. Handles both response shapes we've seen:
+    //   legacy:  mediumImageUrls => [ {imageUrl: "..."}, ... ]
+    //   openapi: mediumImageUrls => [ "...", ... ]   OR images => [ {imageUrl: "..."} ]
+    // Returns null when no usable URL is found.
+    private static function extractImage(array $it): ?string {
+        $tryKeys = ['mediumImageUrls', 'smallImageUrls', 'largeImageUrls', 'images'];
+        foreach ($tryKeys as $k) {
+            if (!isset($it[$k]) || !is_array($it[$k]) || empty($it[$k])) continue;
+            $first = $it[$k][0];
+            if (is_string($first) && $first !== '') return self::normalizeRakutenImageUrl($first);
+            if (is_array($first)) {
+                $u = (string)($first['imageUrl'] ?? $first['url'] ?? '');
+                if ($u !== '') return self::normalizeRakutenImageUrl($u);
+            }
+        }
+        // Top-level fallback: some openapi variants put a single string at 'imageUrl'.
+        if (isset($it['imageUrl']) && is_string($it['imageUrl']) && $it['imageUrl'] !== '') {
+            return self::normalizeRakutenImageUrl($it['imageUrl']);
+        }
+        return null;
+    }
+
+    // Rakuten image URLs often arrive with "?_ex=128x128" thumbnail params. Strip them
+    // so we display the largest version the CDN serves.
+    private static function normalizeRakutenImageUrl(string $url): string {
+        $url = trim($url);
+        if ($url === '') return $url;
+        // Force https
+        if (str_starts_with($url, 'http://')) $url = 'https://' . substr($url, 7);
+        // Drop "?_ex=NxN" thumbnail-size query
+        return preg_replace('/[?&]_ex=\d+x\d+/', '', $url) ?? $url;
     }
 }

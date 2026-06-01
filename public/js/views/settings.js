@@ -11,23 +11,19 @@ export async function renderSettings() {
 
     <div class="card">
       <h3>プロフィール</h3>
-      <div style="display:flex; gap:14px; align-items:flex-start">
-        <div id="profile-avatar-wrap"></div>
-        <div style="flex:1">
-          <label class="field">
-            <span class="lbl">表示名</span>
-            <input type="text" id="profile-name" maxlength="100">
-          </label>
-          <label class="field">
-            <span class="lbl">アバター画像</span>
-            <input type="file" id="profile-avatar-file" accept="image/*">
-            <div id="profile-avatar-status" class="muted" style="font-size:12px"></div>
-          </label>
-          <div class="row" style="gap:6px">
-            <button id="profile-save" class="primary">保存</button>
-            <button id="profile-clear-avatar">アバター削除</button>
-          </div>
-        </div>
+      <div id="profile-avatar-wrap" style="display:flex; justify-content:center; margin:8px 0 14px"></div>
+      <label class="field">
+        <span class="lbl">表示名</span>
+        <input type="text" id="profile-name" maxlength="100">
+      </label>
+      <label class="field">
+        <span class="lbl">アバター画像</span>
+        <input type="file" id="profile-avatar-file" accept="image/*">
+        <div id="profile-avatar-status" class="muted" style="font-size:12px"></div>
+      </label>
+      <div class="row" style="gap:6px">
+        <button id="profile-save" class="primary">保存</button>
+        <button id="profile-clear-avatar">アバター削除</button>
       </div>
     </div>
 
@@ -59,16 +55,6 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
-      <h3>Scrapbox 連携</h3>
-      <p class="muted" style="font-size:13px">研究ノートを毎日更新するとポイントが付きます (1日1回 admin が同期)。</p>
-      <label class="field">
-        <span class="lbl">あなたの Scrapbox username</span>
-        <input type="text" id="sb-name" maxlength="60" placeholder="例: nakamura-satoshi">
-      </label>
-      <button id="sb-save">保存</button>
-    </div>
-
-    <div class="card">
       <h3>その他</h3>
       <button id="logout-from-settings" class="danger">ログアウト</button>
     </div>
@@ -77,31 +63,12 @@ export async function renderSettings() {
   await loadProfile();
   await load();
   await loadUnregistered();
-  await loadScrapbox();
   document.getElementById('add-btn').addEventListener('click', onAdd);
   document.getElementById('reload-unreg').addEventListener('click', loadUnregistered);
   document.getElementById('profile-save').addEventListener('click', onProfileSave);
   document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
-  document.getElementById('sb-save').addEventListener('click', onScrapboxSave);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
-}
-
-// ---------------- Scrapbox ----------------
-async function loadScrapbox() {
-  try {
-    const me = await get('/api/me');
-    document.getElementById('sb-name').value = me.user.scrapbox_username || '';
-  } catch (e) {}
-}
-
-async function onScrapboxSave() {
-  const sb_name = document.getElementById('sb-name').value.trim();
-  if (!sb_name) { toast('username を入力してください'); return; }
-  try {
-    await patch('/api/me', { scrapbox_username: sb_name });
-    toast('保存しました');
-  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 // ---------------- Profile ----------------

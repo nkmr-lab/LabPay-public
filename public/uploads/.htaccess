@@ -1,0 +1,25 @@
+# Defense-in-depth for the user-upload directory.
+# Even though the upload handler validates MIME and rewrites filenames, an attacker
+# who somehow lands a .php (or .phtml, etc.) here must NOT get it executed.
+#
+# - SetHandler: clear any handler Apache might have inherited from the parent vhost.
+# - <FilesMatch>: explicitly forbid known script/exec extensions.
+# - php_flag engine off: belt-and-suspenders if mod_php is loaded.
+# - AddType text/plain: serve unknown extensions as plain text (no exec, no XSS in MIME-sniffers).
+# - Options -ExecCGI -Includes: disable any other server-side execution paths.
+
+<IfModule mod_mime.c>
+  RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phps .pl .py .cgi .asp .aspx .jsp .sh
+  RemoveType    .php .phtml .php3 .php4 .php5 .php7 .phps .pl .py .cgi .asp .aspx .jsp .sh
+</IfModule>
+
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|pl|py|cgi|asp|aspx|jsp|sh|htaccess|htpasswd)$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+
+SetHandler none
+Options -ExecCGI -Includes

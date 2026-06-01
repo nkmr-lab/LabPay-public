@@ -48,7 +48,7 @@ const TYPE_LABELS = {
   sale:              '販売',
   sold_out:          '在庫切れ',
   transfer_received: '送金受領',
-  task_claimed:      'タスク受諾',
+  task_claimed:      'タスク引受',
   task_reported:     'タスク完了報告',
   task_approved:     'タスク承認',
   task_cancelled:    'タスク取消',

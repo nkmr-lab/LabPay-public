@@ -67,12 +67,9 @@ function route_products(PDO $pdo, array $cfg, string $method, array $seg): void 
         $u = Auth::requireUser($pdo, $cfg);
         $body = read_json_body();
         $name  = trim((string)require_field($body, 'name'));
-        $image = isset($body['image_url']) ? trim((string)$body['image_url']) : null;
+        $image = validate_product_image_url($body['image_url'] ?? null);
         if ($name === '' || mb_strlen($name) > 200) {
             throw new ApiException('bad_request', 'name length 1..200', 400);
-        }
-        if ($image !== null && $image !== '' && !filter_var($image, FILTER_VALIDATE_URL)) {
-            throw new ApiException('bad_request', 'image_url must be a URL', 400);
         }
         // Synthetic JAN: 13-digit "9" + timestamp(yymmddhhmm) + 2 random digits.
         // Leading 9 dodges all real GS1 ranges; retry on the rare collision.
@@ -99,15 +96,10 @@ function route_products(PDO $pdo, array $cfg, string $method, array $seg): void 
         $body = read_json_body();
         $jan_in = trim((string)require_field($body, 'jan'));
         $name = trim((string)require_field($body, 'name'));
-        $image = isset($body['image_url']) ? trim((string)$body['image_url']) : null;
+        $image = validate_product_image_url($body['image_url'] ?? null);
         $jan_in = normalize_jan($jan_in);
         if ($name === '' || mb_strlen($name) > 200) {
             throw new ApiException('bad_request', 'name length 1..200', 400);
-        }
-        if ($image !== null && $image !== ''
-            && !filter_var($image, FILTER_VALIDATE_URL)
-            && !preg_match('#^/uploads/[A-Za-z0-9._/-]+$#', $image)) {
-            throw new ApiException('bad_request', 'image_url must be a URL or /uploads/... path', 400);
         }
         $ins = $pdo->prepare(
             'INSERT INTO products (jan, name, image_url, source, created_by_user_id)
@@ -118,6 +110,53 @@ function route_products(PDO $pdo, array $cfg, string $method, array $seg): void 
         $st = $pdo->prepare('SELECT jan, name, image_url, source, created_at FROM products WHERE jan=?');
         $st->execute([$jan_in]);
         json_response($st->fetch(), 200);
+        return;
+    }
+
+    // PATCH /api/products/{jan} — fix the product name and/or image after the fact.
+    // Allowed: admin, the user who originally registered it, or anyone currently selling
+    // a listing of this JAN (the catalog is community-owned and typos get fixed by hand).
+    if ($jan !== '' && $method === 'PATCH') {
+        require_exposure($cfg, 'listings_write');
+        $u = Auth::requireUser($pdo, $cfg);
+
+        $st = $pdo->prepare('SELECT * FROM products WHERE jan=?');
+        $st->execute([$jan]);
+        $prod = $st->fetch();
+        if (!$prod) throw new ApiException('not_found', "product $jan not found", 404);
+
+        $authorized = ($u['role'] === 'admin')
+            || ((int)$prod['created_by_user_id'] === (int)$u['id']);
+        if (!$authorized) {
+            $chk = $pdo->prepare('SELECT 1 FROM listings WHERE jan=? AND seller_user_id=? LIMIT 1');
+            $chk->execute([$jan, $u['id']]);
+            $authorized = (bool)$chk->fetchColumn();
+        }
+        if (!$authorized) {
+            throw new ApiException('forbidden', '商品情報を編集する権限がありません', 403);
+        }
+
+        $body = read_json_body();
+        $sets = []; $params = [];
+        if (array_key_exists('name', $body)) {
+            $name = trim((string)$body['name']);
+            if ($name === '' || mb_strlen($name) > 200) {
+                throw new ApiException('bad_request', 'name length 1..200', 400);
+            }
+            $sets[] = 'name = ?'; $params[] = $name;
+        }
+        if (array_key_exists('image_url', $body)) {
+            $img = validate_product_image_url($body['image_url']);
+            if ($img === null) { $sets[] = 'image_url = NULL'; }
+            else               { $sets[] = 'image_url = ?'; $params[] = $img; }
+        }
+        if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
+        $params[] = $jan;
+        $pdo->prepare('UPDATE products SET ' . implode(',', $sets) . ' WHERE jan=?')->execute($params);
+
+        $st = $pdo->prepare('SELECT jan, name, image_url, source, created_at FROM products WHERE jan=?');
+        $st->execute([$jan]);
+        json_response($st->fetch());
         return;
     }
 

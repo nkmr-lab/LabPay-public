@@ -2,8 +2,9 @@
 config/config.php
 bin/scanner.config.json
 
-# User-uploaded content
-public/uploads/
+# User-uploaded content (but keep the .htaccess hardening guard)
+public/uploads/*
+!public/uploads/.htaccess
 
 # Runtime logs
 *.log

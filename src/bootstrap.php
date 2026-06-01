@@ -109,6 +109,64 @@ function require_int_nonneg($v, string $name): int {
     return $n;
 }
 
+// Read an optional free-text field from a parsed JSON body. Returns null when the key
+// is missing, the value is null, or trimming leaves it empty. Otherwise trims and caps to $maxLen.
+// Use for fields where "" and whitespace should both collapse to NULL in the DB
+// (memo, completion_message, location, notes, etc).
+function optional_text_field(array $body, string $key, int $maxLen): ?string {
+    if (!array_key_exists($key, $body) || $body[$key] === null) return null;
+    $v = trim((string)$body[$key]);
+    if ($v === '') return null;
+    return mb_substr($v, 0, $maxLen);
+}
+
+// PATCH-style: three-state read for an optional free-text field.
+//   key absent  → keep $current
+//   key present → null-out when empty/whitespace, else trimmed & capped
+function patch_text_field(array $body, string $key, int $maxLen, ?string $current): ?string {
+    if (!array_key_exists($key, $body)) return $current;
+    return optional_text_field($body, $key, $maxLen);
+}
+
+// Compose " — <truncated text>" when text is non-empty, otherwise empty string.
+// Used to glue user-provided notes/messages onto a notification body without trailing dashes.
+function notification_quote(?string $text, int $maxLen = 180): string {
+    if ($text === null) return '';
+    $t = trim($text);
+    if ($t === '') return '';
+    return "\n— " . mb_substr($t, 0, $maxLen);
+}
+
+// Render an optional Japanese parenthetical suffix for admin/transfer memos.
+// Returns "（$memo）" when present, else empty string.
+function format_memo_suffix(?string $memo): string {
+    if ($memo === null) return '';
+    $m = trim($memo);
+    return $m === '' ? '' : "（{$m}）";
+}
+
+// Validate a product image URL: optional, http(s) only, OR a local /uploads/...<ext> path.
+// External http(s) is allowed (Rakuten serves product photos from its CDN). Path traversal
+// and weird schemes (javascript:, data:, file:, etc) are rejected.
+// Returns the trimmed URL or null when empty. Throws on invalid input.
+function validate_product_image_url($url): ?string {
+    if ($url === null) return null;
+    $u = trim((string)$url);
+    if ($u === '') return null;
+    // Local upload path: /uploads/<dir>?/<file>.<ext> with the same restrictive charset as me.php.
+    if (preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $u)) {
+        return $u;
+    }
+    // External: http(s) URL only, validated by PHP, no embedded credentials.
+    if (filter_var($u, FILTER_VALIDATE_URL)
+        && (str_starts_with($u, 'http://') || str_starts_with($u, 'https://'))
+        && parse_url($u, PHP_URL_USER) === null) {
+        return $u;
+    }
+    throw new ApiException('bad_request',
+        'image_url must be http(s) URL or /uploads/<file>.<ext>', 400);
+}
+
 // Normalize a JAN-like input: strip non-digits and validate length. Throws on bad input.
 // Hyphens/spaces from sloppy scanner reads are silently stripped so retries don't desync.
 function normalize_jan(string $raw): string {

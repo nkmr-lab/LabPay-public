@@ -44,30 +44,107 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // ----- issue points -----
+    // mode='user'  : require to_user_id, issue once to that user (legacy default).
+    // mode='all'   : issue the same amount to every active human user.
+    //   Each user gets their own ledger row + notification; if a row fails for one user,
+    //   the rest still go through (per-user transactions, swallowed individually).
     if ($sub === 'issue' && $method === 'POST') {
         $body = read_json_body();
-        $toUserId = require_int_positive($body['to_user_id'] ?? null, 'to_user_id');
         $amount   = require_int_positive($body['amount'] ?? null, 'amount');
         $memo     = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 255) : null;
-
-        $pdo->beginTransaction();
-        $ledgerId = null;
-        try {
-            $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
-            $toAcc   = Ledger::accountIdForUser($pdo, $toUserId);
-            $ledgerId = Ledger::transfer($pdo, $sysAcc, $toAcc, $amount, 'initial',
-                'admin_issue', $admin['id'], $memo ?? 'admin issue');
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
+        $mode     = (string)($body['mode'] ?? (isset($body['to_user_id']) ? 'user' : 'all'));
+        if (!in_array($mode, ['user','all'], true)) {
+            throw new ApiException('bad_request', "mode must be 'user' or 'all'", 400);
         }
-        try {
-            Notifier::notify($pdo, $cfg, $toUserId, 'admin_notice',
-                "管理者から {$amount}pt が付与されました" . ($memo ? "（{$memo}）" : ''),
-                'admin_issue', $ledgerId);
-        } catch (Throwable $e) { /* swallow */ }
-        json_response(['ok' => true, 'ledger_id' => $ledgerId]);
+
+        $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
+        $memoText = $memo ?? 'admin issue';
+
+        // Single-recipient path
+        if ($mode === 'user') {
+            $toUserId = require_int_positive($body['to_user_id'] ?? null, 'to_user_id');
+            $pdo->beginTransaction();
+            $ledgerId = null;
+            try {
+                $toAcc = Ledger::accountIdForUser($pdo, $toUserId);
+                $ledgerId = Ledger::transfer($pdo, $sysAcc, $toAcc, $amount, 'initial',
+                    'admin_issue', $admin['id'], $memoText);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+            try {
+                Notifier::notify($pdo, $cfg, $toUserId, 'admin_notice',
+                    "管理者から {$amount}pt が付与されました" . format_memo_suffix($memo),
+                    'admin_issue', $ledgerId);
+            } catch (Throwable $e) { /* swallow */ }
+            json_response(['ok' => true, 'mode' => 'user', 'ledger_id' => $ledgerId, 'recipients' => 1]);
+            return;
+        }
+
+        // Broadcast path: every human user in allowlist (active) gets one row.
+        $st = $pdo->query("
+            SELECT u.id FROM users u
+              JOIN allowlist a ON a.email = u.email AND a.active = 1
+             WHERE u.kind='human'");
+        $userIds = array_map('intval', array_column($st->fetchAll(), 'id'));
+        $ledgerIds = [];
+        $failures  = [];
+        foreach ($userIds as $uid) {
+            $pdo->beginTransaction();
+            try {
+                $toAcc = Ledger::accountIdForUser($pdo, $uid);
+                $lid   = Ledger::transfer($pdo, $sysAcc, $toAcc, $amount, 'initial',
+                    'admin_issue', $admin['id'], $memoText);
+                $pdo->commit();
+                $ledgerIds[$uid] = $lid;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $failures[$uid] = $e->getMessage();
+                continue;
+            }
+            try {
+                Notifier::notify($pdo, $cfg, $uid, 'admin_notice',
+                    "管理者から {$amount}pt が付与されました" . format_memo_suffix($memo),
+                    'admin_issue', $lid);
+            } catch (Throwable $e) { /* swallow */ }
+        }
+        json_response([
+            'ok' => true, 'mode' => 'all',
+            'recipients' => count($ledgerIds),
+            'failures'   => $failures,
+        ]);
+        return;
+    }
+
+    // ----- recent ledger (feeds the reversal picker) -----
+    // Returns the N most recent ledger rows that are *candidates* for reversal:
+    // skip rows that already have a reversal pointing at them, and skip rows that
+    // are themselves reversals.
+    if ($sub === 'ledger' && $method === 'GET') {
+        $limit = min(100, max(1, (int)($_GET['limit'] ?? 30)));
+        $sql = "
+            SELECT l.id, l.amount, l.type, l.ref_type, l.ref_id, l.memo, l.created_at,
+                   af.code AS from_code, at.code AS to_code,
+                   uf.display_name AS from_name, ut.display_name AS to_name,
+                   pr.name AS product_name
+              FROM ledger l
+              JOIN accounts af ON af.id = l.from_account_id
+              JOIN accounts at ON at.id = l.to_account_id
+              LEFT JOIN users uf ON uf.id = af.owner_user_id
+              LEFT JOIN users ut ON ut.id = at.owner_user_id
+              LEFT JOIN purchases p ON l.ref_type='purchase' AND p.id = l.ref_id
+              LEFT JOIN products  pr ON pr.jan = p.jan
+             WHERE l.type != 'reversal'
+               AND l.reversed_of IS NULL
+               AND NOT EXISTS (SELECT 1 FROM ledger r WHERE r.reversed_of = l.id)
+             ORDER BY l.id DESC
+             LIMIT ?";
+        $st = $pdo->prepare($sql);
+        $st->bindValue(1, $limit, PDO::PARAM_INT);
+        $st->execute();
+        json_response(['items' => $st->fetchAll()]);
         return;
     }
 

@@ -1,5 +1,5 @@
 import { get, post, patch } from '../api.js';
-import { escapeHtml, avatarHtml, navigate } from '../router.js';
+import { escapeHtml, avatarHtml, navigate, safeHttpUrl } from '../router.js';
 import { state, toast } from '../app.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
@@ -41,8 +41,18 @@ function toggleCreateForm(open = null) {
         <input type="text" id="t-title" maxlength="200">
       </label>
       <label class="field">
+        <span class="lbl">作業 URL (任意)</span>
+        <input type="url" id="t-url" maxlength="2000" placeholder="https://...">
+        <div class="muted" style="font-size:12px">引き受けた人が「作業を開く」を押すと新しいタブで開きます。</div>
+      </label>
+      <label class="field">
         <span class="lbl">詳細 (任意)</span>
         <textarea id="t-desc" maxlength="5000" rows="3"></textarea>
+      </label>
+      <label class="field">
+        <span class="lbl">完了時のメッセージ (任意)</span>
+        <textarea id="t-cmsg" maxlength="2000" rows="2" placeholder="ありがとうございます!次もよろしくね"></textarea>
+        <div class="muted" style="font-size:12px">承認時にやってくれた人へ表示されます (note 風)。</div>
       </label>
       <div class="row">
         <label class="field" style="flex:1">
@@ -91,7 +101,9 @@ function toggleCreateForm(open = null) {
 
 async function onCreate() {
   const title = document.getElementById('t-title').value.trim();
+  const url = document.getElementById('t-url').value.trim();
   const description = document.getElementById('t-desc').value.trim();
+  const completion_message = document.getElementById('t-cmsg').value.trim();
   const reward   = Number(document.getElementById('t-reward').value);
   const capacity = Number(document.getElementById('t-capacity').value);
   const per_user_limit = Number(document.getElementById('t-perlimit').value);
@@ -100,7 +112,10 @@ async function onCreate() {
   if (!title || !(reward > 0) || !(capacity > 0)) { toast('入力を確認してください'); return; }
   try {
     await post('/api/tasks', {
-      title, description: description || null,
+      title,
+      url: url || null,
+      description: description || null,
+      completion_message: completion_message || null,
       reward, capacity, per_user_limit, deadline,
       audience_grades: aud,
     });
@@ -139,7 +154,7 @@ function renderRow(t, filter) {
     progressLine = `<div class="meta">承認 ${t.approved_count} / ${t.capacity}人${t.pending_count ? ` · 報告待ち ${t.pending_count}` : ''}</div>`;
   }
   if (filter === 'active' && t.my_status) {
-    const lbl = t.my_status === 'claimed' ? '受諾中 (完了報告まち)'
+    const lbl = t.my_status === 'claimed' ? '引き受け中 (完了報告まち)'
               : t.my_status === 'reported' ? '報告済み (承認まち)'
               : '';
     progressLine = `<div class="meta">${lbl}</div>`;
@@ -177,24 +192,33 @@ async function loadDetail(id) {
     const myActive = (t.my_claims || []).filter(c => ['claimed','reported','approved'].includes(c.status));
     const myLastClaim = (t.my_claims || []).find(c => ['claimed','reported'].includes(c.status));
 
+    // Has THIS user already been approved on this task? If so, surface the requester's
+    // thank-you message (note-style).
+    const myApproved = (t.my_claims || []).find(c => c.status === 'approved');
+
     let actions = '';
     if (!isRequester && t.status === 'open') {
       const canClaim = t.remaining > 0
         && (t.per_user_limit === 0 || myActive.length < t.per_user_limit);
       if (myLastClaim) {
         if (myLastClaim.status === 'claimed') {
+          const safeUrl = safeHttpUrl(t.url);
+          const openBtn = safeUrl
+            ? `<a class="btn primary" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">作業を開く ↗</a>`
+            : '';
           actions = `
-            <textarea id="report-notes" maxlength="2000" placeholder="完了内容のメモ (任意)" rows="2"></textarea>
+            ${openBtn}
+            <textarea id="report-notes" maxlength="2000" placeholder="完了内容や気づき (任意) — 実験で問題があった点なども" rows="3" style="margin-top:6px; width:100%; box-sizing:border-box"></textarea>
             <button id="report-btn" class="primary" data-claim="${myLastClaim.id}">完了報告</button>`;
         } else if (myLastClaim.status === 'reported') {
           actions = `<div class="muted">承認待ち</div>`;
         }
       } else if (canClaim) {
-        actions = `<button id="claim-btn" class="primary">これを受諾する</button>`;
+        actions = `<button id="claim-btn" class="primary">これを引き受ける</button>`;
       } else if (t.remaining === 0) {
         actions = `<div class="muted">定員に達しています</div>`;
       } else {
-        actions = `<div class="muted">受諾上限/対象外で受けられません</div>`;
+        actions = `<div class="muted">引き受け上限/対象外で受けられません</div>`;
       }
     }
 
@@ -206,6 +230,21 @@ async function loadDetail(id) {
         </div>`;
     }
 
+    const safeDetailUrl = safeHttpUrl(t.url);
+    const urlBlock = safeDetailUrl
+      ? `<div style="margin-top:6px">
+           <a href="${escapeHtml(safeDetailUrl)}" target="_blank" rel="noopener noreferrer" class="bold" style="color:var(--primary)">
+             🔗 ${escapeHtml(safeDetailUrl)} ↗
+           </a>
+         </div>`
+      : '';
+    const thankBlock = (myApproved && t.completion_message)
+      ? `<div class="card" style="border-left:4px solid var(--primary); background:#faf6ff">
+           <div class="bold" style="margin-bottom:4px">${escapeHtml(t.requester_name)} さんから</div>
+           <div style="white-space:pre-wrap">${escapeHtml(t.completion_message)}</div>
+         </div>`
+      : '';
+
     root.innerHTML = `
       <div class="card">
         <div class="row" style="align-items:center; gap:10px">
@@ -215,6 +254,7 @@ async function loadDetail(id) {
             <div class="meta">${escapeHtml(t.requester_name)} · ${t.created_at}</div>
           </div>
         </div>
+        ${urlBlock}
         ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${escapeHtml(t.description)}</div>` : ''}
         <div class="sep"></div>
         <div>
@@ -228,6 +268,8 @@ async function loadDetail(id) {
         </div>
         <div style="margin-top:12px">${actions}</div>
       </div>
+
+      ${thankBlock}
 
       <div id="edit-form-wrap" hidden></div>
 
@@ -247,14 +289,14 @@ async function loadDetail(id) {
 
 function renderClaimsAdmin(t) {
   if (!t.claims) return '';
-  if (t.claims.length === 0) return `<div class="card"><h3>申請</h3><div class="empty">まだ誰も受諾していません</div></div>`;
+  if (t.claims.length === 0) return `<div class="card"><h3>申請</h3><div class="empty">まだ誰も引き受けていません</div></div>`;
   const rows = t.claims.map(c => `
-    <div class="list-item">
-      <div style="flex:1; display:flex; align-items:center; gap:8px">
+    <div class="list-item" style="align-items:flex-start">
+      <div style="flex:1; display:flex; align-items:flex-start; gap:8px">
         ${avatarHtml(c.display_name, c.avatar_url, 'sm')}
-        <div>
+        <div style="flex:1">
           <div class="bold">${escapeHtml(c.display_name)} <span class="tag muted">${escapeHtml(c.status)}</span></div>
-          ${c.notes ? `<div class="meta">${escapeHtml(c.notes)}</div>` : ''}
+          ${c.notes ? `<div style="margin-top:4px; padding:6px 8px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : ''}
           <div class="meta">${escapeHtml(c.created_at)}${c.reported_at ? ' · 報告 ' + escapeHtml(c.reported_at) : ''}</div>
         </div>
       </div>
@@ -268,7 +310,7 @@ function renderClaimsAdmin(t) {
 }
 
 async function onClaim(taskId) {
-  try { await post(`/api/tasks/${taskId}/claim`, {}); toast('受諾しました'); await loadDetail(taskId); }
+  try { await post(`/api/tasks/${taskId}/claim`, {}); toast('引き受けました'); await loadDetail(taskId); }
   catch (e) { toast('失敗: ' + e.message); }
 }
 
@@ -280,8 +322,13 @@ async function onReport(taskId, claimId) {
 
 async function onApprove(taskId, claimId) {
   if (!confirm('承認して報酬を支払いますか?')) return;
-  try { await post(`/api/tasks/${taskId}/claims/${claimId}/approve`, {}); toast('承認しました'); await loadDetail(taskId); }
-  catch (e) { toast('失敗: ' + e.message); }
+  try {
+    const r = await post(`/api/tasks/${taskId}/claims/${claimId}/approve`, {});
+    toast(r.completion_message
+      ? '承認しました — やってくれた人へお礼メッセージを送信'
+      : '承認しました');
+    await loadDetail(taskId);
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 async function onReject(taskId, claimId) {
@@ -304,8 +351,16 @@ function renderEditForm(t) {
         <input type="text" id="e-title" maxlength="200" value="${escapeHtml(t.title)}">
       </label>
       <label class="field">
+        <span class="lbl">作業 URL</span>
+        <input type="url" id="e-url" maxlength="2000" placeholder="https://..." value="${escapeHtml(t.url ?? '')}">
+      </label>
+      <label class="field">
         <span class="lbl">詳細</span>
         <textarea id="e-desc" maxlength="5000" rows="3">${escapeHtml(t.description ?? '')}</textarea>
+      </label>
+      <label class="field">
+        <span class="lbl">完了時のメッセージ</span>
+        <textarea id="e-cmsg" maxlength="2000" rows="2">${escapeHtml(t.completion_message ?? '')}</textarea>
       </label>
       <div class="row">
         <label class="field" style="flex:1">
@@ -354,7 +409,9 @@ function renderEditForm(t) {
 
 async function onSaveEdit(taskId) {
   const title = document.getElementById('e-title').value.trim();
+  const url = document.getElementById('e-url').value.trim();
   const description = document.getElementById('e-desc').value.trim();
+  const completion_message = document.getElementById('e-cmsg').value.trim();
   const reward   = Number(document.getElementById('e-reward').value);
   const capacity = Number(document.getElementById('e-capacity').value);
   const per_user_limit = Number(document.getElementById('e-perlimit').value);
@@ -363,7 +420,10 @@ async function onSaveEdit(taskId) {
   if (!title || !(reward > 0) || !(capacity > 0)) { toast('入力を確認してください'); return; }
   try {
     await patch('/api/tasks/' + taskId, {
-      title, description: description || null,
+      title,
+      url: url || null,
+      description: description || null,
+      completion_message: completion_message || null,
       reward, capacity, per_user_limit, deadline,
       audience_grades: aud,
     });

@@ -62,11 +62,24 @@ nav#tabs a {
 }
 nav#tabs a.active { background: var(--primary); color: var(--primary-fg); }
 
-main#app { padding: 14px; max-width: 720px; margin: 0 auto; }
+main#app { padding: 14px 14px 4px 14px; max-width: 720px; margin: 0 auto; }
 
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+main#app > .card:last-child { margin-bottom: 0; }
+
+/* Stretch the last card so the white area fills the remaining viewport height.
+   Without this, short pages (history with a few items, settings, etc.) leave a wide
+   strip of gray body background below the last card — looks like a layout bug.
+   The stretched card just shows white space below its content, which reads as intentional.
+   `body[data-view]` is set by router.js so this only fires for actual views (not the
+   pre-render blank state). */
+body[data-view] { display: flex; flex-direction: column; min-height: 100vh; }
+body[data-view] main#app {
+  flex: 1; display: flex; flex-direction: column;
+}
+body[data-view] main#app > .card:last-child { flex: 1; }
 .card h2 { margin: 0 0 8px; font-size: 16px; }
 .card h3 { margin: 6px 0; font-size: 14px; color: var(--muted); font-weight: 600; }
 
@@ -84,6 +97,7 @@ button.primary:hover { filter: brightness(0.97); }
 button.danger { background: var(--danger); color: white; border-color: var(--danger); }
 button.ghost { background: transparent; border-color: transparent; color: var(--primary); }
 button:disabled { opacity: .55; cursor: not-allowed; }
+button.tip-chip { padding: 6px 12px; font-size: 13px; font-weight: 600; }
 
 /* Form fields */
 label.field { display: block; margin: 10px 0; }
@@ -104,20 +118,70 @@ textarea { min-height: 80px; resize: vertical; }
 .list-item .meta { color: var(--muted); font-size: 12px; }
 
 /* Avatars */
-.avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; }
+.avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
 .avatar-sm   { width:24px; height:24px; }
 .avatar-md   { width:36px; height:36px; }
 .avatar-lg   { width:72px; height:72px; }
 .avatar-fallback {
   display:inline-flex; align-items:center; justify-content:center;
   border-radius:50%; background:var(--primary-soft); color:var(--primary);
-  font-weight:700; vertical-align:middle;
+  font-weight:700; vertical-align:middle; flex-shrink:0;
 }
+
+/* Presence pill: one chip per person in the "今ラボにいる人" list */
+.presence-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:2px 10px 2px 2px;
+  background:var(--primary-soft); border-radius:99px;
+  max-width:100%; min-height:28px;
+}
+.presence-pill-name {
+  font-size:13px; line-height:1.2;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  max-width:160px;
+}
+/* Icons-only mode: shrink the pill so just the avatar circle shows. */
+.presence-icons-only .presence-pill {
+  padding:0; background:transparent;
+}
+.presence-icons-only .presence-pill-name { display:none; }
+
+/* iOS-style toggle switch */
+.switch {
+  position:relative; display:inline-block; width:42px; height:24px;
+  flex-shrink:0;
+}
+.switch input { opacity:0; width:0; height:0; }
+.switch .slider {
+  position:absolute; cursor:pointer; inset:0;
+  background:#ccc; border-radius:24px;
+  transition:.2s;
+}
+.switch .slider::before {
+  content:""; position:absolute;
+  width:20px; height:20px; left:2px; bottom:2px;
+  background:white; border-radius:50%;
+  box-shadow:0 1px 3px rgba(0,0,0,0.2);
+  transition:.2s;
+}
+.switch input:checked + .slider { background:var(--primary); }
+.switch input:checked + .slider::before { transform:translateX(18px); }
+.switch input:focus-visible + .slider { outline:2px solid var(--primary); outline-offset:2px; }
 
 /* Balance hero */
 .balance-hero { text-align: center; padding: 24px 12px; }
 .balance-hero .num { font-size: 44px; font-weight: 800; color: var(--primary); letter-spacing: 1px; }
 .balance-hero .lbl { color: var(--muted); }
+
+/* Medals strip inside balance-hero — compact one-line achievement summary */
+.home-medals {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 8px; padding: 4px 12px;
+  text-decoration: none; color: inherit;
+  background: var(--primary-soft); border-radius: 999px;
+  max-width: 100%; flex-wrap: nowrap; overflow-x: auto;
+}
+.home-medals:empty { display: none; }
 
 /* Balance strip (compact, used at top of buy/sell pages) */
 .balance-strip { display: flex; align-items: baseline; justify-content: space-between;

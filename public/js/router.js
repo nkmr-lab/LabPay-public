@@ -56,6 +56,9 @@ function highlightTab() {
 async function dispatch() {
   const { parts, query } = parse(location.hash);
   const target = parts.length === 0 ? [''] : parts;
+  // Expose the active view as a body data attribute so per-view CSS
+  // (e.g. body[data-view="home"] for the fill-bottom layout) can target it.
+  document.body.dataset.view = (target.filter(Boolean).join('-') || 'home');
   for (const r of routes) {
     const params = match(r.parts.length === 0 ? [''] : r.parts, target);
     if (params) {
@@ -76,6 +79,22 @@ async function dispatch() {
 export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]));
+}
+
+// Defense-in-depth href guard. Server already rejects non-http(s) URLs (tasks_validate_url),
+// but if a bad URL ever lands in the DB (manual edit, future migration, etc.) we still refuse
+// to emit it as a clickable href. Returns null if the URL is not safe to use in an <a href>.
+export function safeHttpUrl(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s === '') return null;
+  // Anything starting with whitespace/control chars or known dangerous schemes is rejected.
+  // Browsers tolerate "javascript:" with leading spaces/control chars, so normalize first.
+  const lower = s.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:')
+      || lower.startsWith('vbscript:') || lower.startsWith('file:')) return null;
+  if (!(lower.startsWith('http://') || lower.startsWith('https://'))) return null;
+  return s;
 }
 
 // Render either an <img class="avatar"> when avatar_url is set, or a colored

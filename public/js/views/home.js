@@ -1,6 +1,6 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
-import { refreshMe, refreshUnread, state, toast } from '../app.js';
+import { refreshMe, state, toast } from '../app.js';
 
 export async function renderHome() {
   if (!state.me) await refreshMe();
@@ -12,6 +12,7 @@ export async function renderHome() {
       <div class="lbl">残高</div>
       <div class="num" id="home-balance">— pt</div>
       <div class="muted" id="streak-line">連続来室 — 日 (最長 — 日)</div>
+      <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
       <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
         <a class="btn primary" href="#/buy">買う</a>
@@ -22,16 +23,35 @@ export async function renderHome() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">実績</h2>
-        <a href="#/achievements" class="muted" style="font-size:13px">すべて見る →</a>
+      <div class="row" style="align-items:center">
+        <h2 style="flex:1; margin:0">今ラボにいる人</h2>
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
+          名前を表示
+          <span class="switch">
+            <input type="checkbox" id="presence-names-toggle">
+            <span class="slider"></span>
+          </span>
+        </label>
       </div>
-      <div id="ach-summary"><div class="muted">読み込み中…</div></div>
+      <div id="presence" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
     </div>
+
     <div class="card">
-      <h2>今ラボにいる人</h2>
-      <div id="presence"><div class="muted">読み込み中…</div></div>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">新規入荷</h2>
+        <a href="#/buy" class="muted" style="font-size:13px">買う →</a>
+      </div>
+      <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
+
+    <div class="card">
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">新規タスク</h2>
+        <a href="#/tasks" class="muted" style="font-size:13px">一覧 →</a>
+      </div>
+      <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">最近の取引</h2>
@@ -42,9 +62,8 @@ export async function renderHome() {
   `;
 
   // Fill balance + streak from /api/me
-  let me;
   try {
-    me = await get('/api/me');
+    const me = await get('/api/me');
     document.getElementById('home-balance').textContent = (me.balance ?? 0).toLocaleString() + ' pt';
     const s = me.streak || {};
     document.getElementById('streak-line').textContent =
@@ -54,43 +73,129 @@ export async function renderHome() {
     toast('情報の取得に失敗: ' + e.message);
   }
 
-  // Render the contextual check-in area
   await renderCheckinArea();
+  await renderMedalsStrip();
+  await renderPresence();
+  await renderFreshListings();
+  await renderFreshTasks();
+  await renderRecentTx();
+}
 
-  // Achievement summary
+// Compact medals strip rendered inside the balance-hero. Each earned achievement is a
+// solid emoji, unearned ones are dimmed. Tapping the strip opens /achievements.
+async function renderMedalsStrip() {
+  const root = document.getElementById('home-medals');
+  if (!root) return;
   try {
     const ach = await get('/api/me/achievements');
-    document.getElementById('ach-summary').innerHTML = renderAchSummary(ach.items);
-  } catch (e) {
-    document.getElementById('ach-summary').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
-  }
+    const items = ach.items || [];
+    if (!items.length) { root.innerHTML = ''; return; }
+    const earned = items.filter(a => a.earned_tier > 0).length;
+    const medals = items.map(a => {
+      const m = a.earned ? a.earned.medal : '⚪';
+      const lbl = a.earned ? a.earned.label : '未獲得';
+      const dim = a.earned ? '' : 'opacity:.3';
+      return `<span title="${escapeHtml(a.title)}: ${escapeHtml(lbl)}" style="font-size:20px; ${dim}">${m}</span>`;
+    }).join(' ');
+    root.innerHTML = `${medals} <span class="muted" style="font-size:11px">${earned}/${items.length}</span>`;
+  } catch (e) { root.innerHTML = ''; }
+}
 
-  // Presence (今ラボにいる人)
+async function renderPresence() {
+  const presenceRoot = document.getElementById('presence');
+  const toggle = document.getElementById('presence-names-toggle');
+  const SHOW_NAMES_KEY = 'labpay-presence-show-names';
+  const showNames = localStorage.getItem(SHOW_NAMES_KEY) !== '0';
+  toggle.checked = showNames;
+  applyPresenceMode(showNames);
+  toggle.addEventListener('change', () => {
+    localStorage.setItem(SHOW_NAMES_KEY, toggle.checked ? '1' : '0');
+    applyPresenceMode(toggle.checked);
+  });
+
   try {
     const pres = await get('/api/presence');
-    const root = document.getElementById('presence');
     if (!pres.rooms.length) {
-      root.innerHTML = `<div class="empty">部屋が登録されていません</div>`;
+      presenceRoot.innerHTML = `<div class="empty">部屋が登録されていません</div>`;
     } else {
-      root.innerHTML = pres.rooms.map(renderRoom).join('');
+      presenceRoot.innerHTML = pres.rooms.map(renderRoom).join('');
     }
   } catch (e) {
-    document.getElementById('presence').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    presenceRoot.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
 
-  // Recent tx
+// Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC
+// for /api/listings — we re-sort by created_at DESC client-side for "新規入荷".
+async function renderFreshListings() {
+  const root = document.getElementById('home-fresh-listings');
+  try {
+    const d = await get('/api/listings', { limit: 50 });
+    const items = (d.items || [])
+      .slice()
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, 5);
+    if (!items.length) {
+      root.innerHTML = `<div class="empty">まだ出品はありません</div>`;
+      return;
+    }
+    root.innerHTML = items.map(l => {
+      const priceTag = l.is_gift
+        ? `<div class="bold" style="color:#b71c50">🎁 これどうぞ</div>`
+        : `<div class="bold" style="color:var(--primary)">${l.price.toLocaleString()} pt</div>`;
+      return `
+        <a class="list-item" href="#/product/${encodeURIComponent(l.jan)}">
+          <div>
+            <div class="bold">${escapeHtml(l.name)}</div>
+            <div class="meta">${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''} · ${escapeHtml(l.created_at)}</div>
+          </div>
+          ${priceTag}
+        </a>`;
+    }).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Open tasks I can apply for (top 5 by id DESC).
+async function renderFreshTasks() {
+  const root = document.getElementById('home-fresh-tasks');
+  try {
+    const d = await get('/api/tasks', { filter: 'available' });
+    const items = (d.items || []).slice(0, 5);
+    if (!items.length) {
+      root.innerHTML = `<div class="empty">受けられるタスクはありません</div>`;
+      return;
+    }
+    root.innerHTML = items.map(t => `
+      <a class="list-item" href="#/tasks/${t.id}">
+        <div style="display:flex; align-items:center; gap:8px; flex:1">
+          ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
+          <div>
+            <div class="bold">${escapeHtml(t.title)}</div>
+            <div class="meta">${escapeHtml(t.requester_name)} · 残 ${t.remaining ?? '-'}人${t.deadline ? ' · 締切 ' + escapeHtml(t.deadline) : ''}</div>
+          </div>
+        </div>
+        <div class="bold" style="color:var(--primary)">${t.reward}pt</div>
+      </a>
+    `).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function renderRecentTx() {
+  const root = document.getElementById('recent');
   try {
     const tx = await get('/api/me/transactions', { limit: 5 });
-    const root = document.getElementById('recent');
     if (!tx.items.length) {
       root.innerHTML = `<div class="empty">まだ取引がありません</div>`;
     } else {
       root.innerHTML = tx.items.map(renderTxItem).join('');
     }
   } catch (e) {
-    document.getElementById('recent').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
-
 }
 
 // Render the check-in area based on today's status:
@@ -149,52 +254,30 @@ function onGeoCheckin(ev) {
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 
-function renderAchSummary(items) {
-  // Show: medals strip (one per achievement, dimmed if not earned), top 3 nearest-to-next
-  const earnedCount = items.filter(a => a.earned_tier > 0).length;
-  const medalsRow = items.map(a => {
-    const m = a.earned ? a.earned.medal : '⚪';
-    const cls = a.earned ? '' : 'style="opacity:.3"';
-    return `<span ${cls} title="${escapeHtml(a.title)}: ${escapeHtml(a.earned ? a.earned.label : '未獲得')}" style="font-size:22px">${m}</span>`;
-  }).join(' ');
-
-  // Top 3 by progress toward next (excluding maxed)
-  const next = items
-    .filter(a => !a.is_maxed)
-    .sort((x, y) => (y.next_progress || 0) - (x.next_progress || 0))
-    .slice(0, 3);
-  const progressHtml = next.map(a => {
-    const tier = a.next.label;
-    const pct  = Math.round((a.next_progress || 0) * 100);
-    return `
-      <div style="margin-top:6px">
-        <div class="meta" style="font-size:12px">${escapeHtml(a.title)} → ${escapeHtml(tier)} (${a.value} / ${a.next.count} ${escapeHtml(a.unit)})</div>
-        <div style="height:6px; background:var(--line); border-radius:99px; overflow:hidden">
-          <div style="height:100%; width:${pct}%; background:var(--primary)"></div>
-        </div>
-      </div>`;
-  }).join('');
-
-  return `
-    <div style="text-align:center; line-height:1.7">${medalsRow}</div>
-    <div class="meta" style="text-align:center; font-size:12px; margin-top:4px">獲得 ${earnedCount} / ${items.length}</div>
-    ${progressHtml}
-  `;
+// Apply the icon/name display mode to the presence container.
+// On = names visible (default), Off = icons only. Toggled by adding a class on the parent
+// so the same DOM serves both modes — no re-render needed.
+function applyPresenceMode(showNames) {
+  const root = document.getElementById('presence');
+  if (!root) return;
+  root.classList.toggle('presence-icons-only', !showNames);
 }
 
 function renderRoom(r) {
   const peopleHtml = r.users.length
-    ? r.users.map(u => `
-        <span style="display:inline-flex; align-items:center; gap:6px; margin:2px 6px 2px 0; padding:2px 8px 2px 2px; background:var(--primary-soft); border-radius:99px">
-          ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
-          <span style="font-size:13px">${escapeHtml(u.display_name)}</span>
-        </span>`).join('')
-    : `<span class="muted" style="font-size:13px">誰も検知されていません</span>`;
+    ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
+         ${r.users.map(u => `
+           <span class="presence-pill" title="${escapeHtml(u.display_name)}">
+             ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
+             <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
+           </span>`).join('')}
+       </div>`
+    : `<div class="muted" style="font-size:13px; margin-top:4px">誰も検知されていません</div>`;
   const scan = r.last_scan_at ? `· 最終スキャン ${escapeHtml(r.last_scan_at)}` : '· 未スキャン';
   return `
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:12px">
       <div class="bold">${escapeHtml(r.display_name)} (${r.users.length}人) <span class="muted" style="font-weight:normal; font-size:12px">${scan}</span></div>
-      <div style="margin-top:4px">${peopleHtml}</div>
+      ${peopleHtml}
     </div>`;
 }
 

@@ -11,9 +11,11 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $jan = trim((string)($_GET['jan'] ?? ''));
         $limit = min(500, max(1, (int)($_GET['limit'] ?? 200)));
         $sql = "
-            SELECT l.id, l.jan, l.seller_user_id, l.price, l.qty, l.status,
-                   l.created_at, l.updated_at,
-                   p.name, p.image_url,
+            SELECT l.id, l.jan, l.seller_user_id, l.price, l.is_gift, l.qty, l.status,
+                   l.location, l.display_name, l.created_at, l.updated_at,
+                   p.name AS product_name,
+                   COALESCE(l.display_name, p.name) AS name,
+                   p.image_url,
                    u.display_name AS seller_name,
                    u.avatar_url   AS seller_avatar_url,
                    (SELECT COALESCE(SUM(qty),0) FROM purchases pu WHERE pu.seller_user_id = l.seller_user_id) AS seller_sales
@@ -35,7 +37,10 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
     if ($id > 0 && $method === 'GET') {
         require_exposure($cfg, 'public_read');
         $st = $pdo->prepare("
-            SELECT l.*, p.name, p.image_url,
+            SELECT l.*,
+                   p.name AS product_name,
+                   COALESCE(l.display_name, p.name) AS name,
+                   p.image_url,
                    u.display_name AS seller_name, u.avatar_url AS seller_avatar_url
               FROM listings l
               JOIN products p ON p.jan = l.jan
@@ -53,8 +58,13 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $u = Auth::requireUser($pdo, $cfg);
         $body = read_json_body();
         $jan = normalize_jan((string)require_field($body, 'jan'));
-        $price = require_int_positive($body['price'] ?? null, 'price');
+        $isGift = !empty($body['is_gift']) ? 1 : 0;
+        // For sale listings we still require price > 0; gift listings force price = 0.
+        $price = $isGift ? 0 : require_int_positive($body['price'] ?? null, 'price');
         $qty = require_int_positive($body['qty'] ?? null, 'qty');
+        $completionMsg = optional_text_field($body, 'completion_message', 2000);
+        $location      = optional_text_field($body, 'location', 100);
+        $displayName   = optional_text_field($body, 'display_name', 200);
         // Product must already exist (client should POST /api/products first)
         $chk = $pdo->prepare('SELECT 1 FROM products WHERE jan=?');
         $chk->execute([$jan]);
@@ -63,13 +73,16 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                 "product $jan not registered. POST /api/products first", 400);
         }
         $ins = $pdo->prepare(
-            'INSERT INTO listings (jan, seller_user_id, price, qty, status)
-             VALUES (?,?,?,?, "on_sale")'
+            'INSERT INTO listings (jan, seller_user_id, price, is_gift, qty, display_name, status, completion_message, location)
+             VALUES (?,?,?,?,?,?, "on_sale", ?, ?)'
         );
-        $ins->execute([$jan, $u['id'], $price, $qty]);
+        $ins->execute([$jan, $u['id'], $price, $isGift, $qty, $displayName, $completionMsg, $location]);
         $lid = (int)$pdo->lastInsertId();
-        $get = $pdo->prepare("SELECT l.*, p.name, p.image_url FROM listings l
-            JOIN products p ON p.jan=l.jan WHERE l.id=?");
+        $get = $pdo->prepare("SELECT l.*,
+                p.name AS product_name,
+                COALESCE(l.display_name, p.name) AS name,
+                p.image_url
+            FROM listings l JOIN products p ON p.jan=l.jan WHERE l.id=?");
         $get->execute([$lid]);
         json_response($get->fetch(), 200);
         return;
@@ -90,9 +103,17 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             }
             $sets = [];
             $params = [];
+            if (array_key_exists('is_gift', $body)) {
+                $gift = !empty($body['is_gift']) ? 1 : 0;
+                $sets[] = 'is_gift = ?'; $params[] = $gift;
+                // Gift listings always store price = 0; flipping to gift zeros it,
+                // flipping back to sale requires the caller to also set a new price.
+                if ($gift) { $sets[] = 'price = 0'; }
+            }
             if (array_key_exists('price', $body) && $body['price'] !== null) {
                 $sets[] = 'price = ?';
-                $params[] = require_int_positive($body['price'], 'price');
+                // 0 is only valid for gift listings; otherwise > 0.
+                $params[] = require_int_nonneg($body['price'], 'price');
             }
             if (array_key_exists('qty', $body) && $body['qty'] !== null) {
                 $newqty = require_int_nonneg($body['qty'], 'qty');
@@ -115,6 +136,21 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                 $sets[] = 'status = ?';
                 $params[] = $s;
             }
+            if (array_key_exists('completion_message', $body)) {
+                $cm = optional_text_field($body, 'completion_message', 2000);
+                if ($cm === null) { $sets[] = 'completion_message = NULL'; }
+                else              { $sets[] = 'completion_message = ?'; $params[] = $cm; }
+            }
+            if (array_key_exists('location', $body)) {
+                $loc = optional_text_field($body, 'location', 100);
+                if ($loc === null) { $sets[] = 'location = NULL'; }
+                else               { $sets[] = 'location = ?'; $params[] = $loc; }
+            }
+            if (array_key_exists('display_name', $body)) {
+                $dn = optional_text_field($body, 'display_name', 200);
+                if ($dn === null) { $sets[] = 'display_name = NULL'; }
+                else              { $sets[] = 'display_name = ?'; $params[] = $dn; }
+            }
             if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
             $params[] = $id;
             $upd = $pdo->prepare('UPDATE listings SET ' . implode(',', $sets) . ' WHERE id=?');
@@ -124,10 +160,48 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             $pdo->rollBack();
             throw $e;
         }
-        $get = $pdo->prepare("SELECT l.*, p.name, p.image_url FROM listings l
-            JOIN products p ON p.jan=l.jan WHERE l.id=?");
+        $get = $pdo->prepare("SELECT l.*,
+                p.name AS product_name,
+                COALESCE(l.display_name, p.name) AS name,
+                p.image_url
+            FROM listings l JOIN products p ON p.jan=l.jan WHERE l.id=?");
         $get->execute([$id]);
         json_response($get->fetch());
+        return;
+    }
+
+    // POST /api/listings/{id}/consume — seller decrements their own stock by 1 for
+    // self-consumption. No ledger entry, no fee, no purchase record (it never left them).
+    // Status flips to sold_out when qty hits 0.
+    if ($id > 0 && isset($seg[2]) && $seg[2] === 'consume' && $method === 'POST') {
+        require_exposure($cfg, 'listings_write');
+        $u = Auth::requireUser($pdo, $cfg);
+        $body = read_json_body();
+        $qtyToConsume = isset($body['qty']) ? require_int_positive($body['qty'], 'qty') : 1;
+
+        $pdo->beginTransaction();
+        try {
+            $st = $pdo->prepare('SELECT * FROM listings WHERE id=? FOR UPDATE');
+            $st->execute([$id]);
+            $row = $st->fetch();
+            if (!$row) throw new ApiException('not_found', "listing $id not found", 404);
+            if ((int)$row['seller_user_id'] !== (int)$u['id']) {
+                throw new ApiException('forbidden', '自分の出品のみ消費できます', 403);
+            }
+            if ((int)$row['qty'] < $qtyToConsume) {
+                throw new ApiException('insufficient_qty',
+                    "在庫が足りません (残 {$row['qty']}, 消費 {$qtyToConsume})", 409);
+            }
+            $newQty = (int)$row['qty'] - $qtyToConsume;
+            $newStatus = $newQty <= 0 ? 'sold_out' : $row['status'];
+            $pdo->prepare('UPDATE listings SET qty=?, status=? WHERE id=?')
+                ->execute([$newQty, $newStatus, $id]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        json_response(['ok' => true, 'qty_remaining' => $newQty, 'status' => $newStatus]);
         return;
     }
 

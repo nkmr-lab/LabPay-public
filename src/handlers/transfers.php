@@ -13,7 +13,7 @@ function transfers_create(PDO $pdo, array $cfg): void {
     $body   = read_json_body();
     $toUserId = require_int_positive($body['to_user_id'] ?? null, 'to_user_id');
     $amount   = require_int_positive($body['amount']    ?? null, 'amount');
-    $memo     = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 255) : null;
+    $memo     = optional_text_field($body, 'memo', 255);
     $ukey     = (string)require_field($body, 'idempotency_key');
     if (strlen($ukey) < 8 || strlen($ukey) > 80)
         throw new ApiException('bad_request', 'idempotency_key length 8..80', 400);
@@ -64,7 +64,7 @@ function transfers_create(PDO $pdo, array $cfg): void {
 
     try {
         Notifier::notify($pdo, $cfg, $toUserId, 'transfer_received',
-            "{$sender['display_name']} から {$amount}pt を受け取りました" . ($memo ? "（{$memo}）" : ''),
+            "{$sender['display_name']} から {$amount}pt を受け取りました" . format_memo_suffix($memo),
             'transfer', $transferId);
     } catch (Throwable $e) {}
     json_response($payload);

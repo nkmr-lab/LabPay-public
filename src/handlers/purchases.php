@@ -4,6 +4,12 @@
 declare(strict_types=1);
 
 function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void {
+    // POST /api/purchases/{id}/thank
+    $id = isset($seg[1]) ? (int)$seg[1] : 0;
+    if ($id > 0 && ($seg[2] ?? '') === 'thank' && $method === 'POST') {
+        purchases_thank($pdo, $cfg, $id);
+        return;
+    }
     if ($method !== 'POST' || isset($seg[1])) {
         json_error('not_found', "no purchases route for $method", 404);
         return;
@@ -45,23 +51,29 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
         }
 
         $price = (int)$listing['price'];
-        [$fee, $sellerTake, $buyerPay] = Money::split($price, $feeRate);
-        if ($buyerPay !== $sellerTake + $fee) {
-            throw new RuntimeException('split invariant violation');
-        }
-
+        $isGift = !empty($listing['is_gift']);
         $sellerId = (int)$listing['seller_user_id'];
         $buyerAcc  = Ledger::accountIdForUser($pdo, (int)$buyer['id']);
         $sellerAcc = Ledger::accountIdForUser($pdo, $sellerId);
         $sysAcc    = Ledger::accountIdByCode($pdo, 'SYSTEM');
 
-        // Upfront buyer balance check covers seller_take + fee together; per-transfer
-        // checks alone could let the first transfer succeed and the second one fail.
-        $buyerBal = Ledger::balanceOf($pdo, $buyerAcc);
-        if ($buyerBal < $buyerPay) {
-            throw new ApiException('insufficient_funds',
-                "balance $buyerBal < price $buyerPay", 402,
-                ['balance' => $buyerBal, 'required' => $buyerPay]);
+        // Gift items (or any price=0 listing) skip the fee/split math + ledger transfer entirely.
+        if ($isGift || $price === 0) {
+            $fee = 0; $sellerTake = 0; $buyerPay = 0;
+            $buyerBal = Ledger::balanceOf($pdo, $buyerAcc);
+        } else {
+            [$fee, $sellerTake, $buyerPay] = Money::split($price, $feeRate);
+            if ($buyerPay !== $sellerTake + $fee) {
+                throw new RuntimeException('split invariant violation');
+            }
+            // Upfront buyer balance check covers seller_take + fee together; per-transfer
+            // checks alone could let the first transfer succeed and the second one fail.
+            $buyerBal = Ledger::balanceOf($pdo, $buyerAcc);
+            if ($buyerBal < $buyerPay) {
+                throw new ApiException('insufficient_funds',
+                    "balance $buyerBal < price $buyerPay", 402,
+                    ['balance' => $buyerBal, 'required' => $buyerPay]);
+            }
         }
 
         // Product name for memos/notifications
@@ -69,7 +81,8 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
         $pn->execute([$listing['jan']]);
         $productName = (string)($pn->fetchColumn() ?: $listing['jan']);
 
-        // Insert purchase row first to obtain id for ledger ref
+        // Insert purchase row first to obtain id for ledger ref (also for free items, so
+        // we can attach a thank-you / tip to a real purchase id later).
         $ins = $pdo->prepare(
             'INSERT INTO purchases (listing_id, jan, buyer_user_id, seller_user_id,
                                     unit_price, fee, qty, idempotency_key)
@@ -79,9 +92,12 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
                        $price, $fee, 1, $ukey]);
         $purchaseId = (int)$pdo->lastInsertId();
 
-        // Ledger: buyer -> seller (seller_take), then buyer -> SYSTEM (fee, if any)
-        Ledger::transfer($pdo, $buyerAcc, $sellerAcc, $sellerTake, 'purchase',
-            'purchase', $purchaseId, "購入: {$productName}");
+        // Ledger: buyer -> seller (seller_take), then buyer -> SYSTEM (fee, if any).
+        // Skipped entirely for free items.
+        if ($sellerTake > 0) {
+            Ledger::transfer($pdo, $buyerAcc, $sellerAcc, $sellerTake, 'purchase',
+                'purchase', $purchaseId, "購入: {$productName}");
+        }
         if ($fee > 0) {
             Ledger::transfer($pdo, $buyerAcc, $sysAcc, $fee, 'fee',
                 'purchase', $purchaseId, "手数料: {$productName}");
@@ -97,15 +113,23 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
         $newBalance = $buyerBal - $buyerPay;
 
         $payload = [
-            'purchase_id'  => $purchaseId,
-            'listing_id'   => $listingId,
-            'product_name' => $productName,
-            'unit_price'   => $price,
-            'seller_take'  => $sellerTake,
-            'fee'          => $fee,
-            'new_balance'  => $newBalance,
-            'qty_remaining'=> $newQty,
+            'purchase_id'    => $purchaseId,
+            'listing_id'     => $listingId,
+            'product_name'   => $productName,
+            'unit_price'     => $price,
+            'seller_take'    => $sellerTake,
+            'fee'            => $fee,
+            'new_balance'    => $newBalance,
+            'qty_remaining'  => $newQty,
+            'seller_user_id' => $sellerId,
+            'is_gift'        => $isGift,
+            // Seller-authored thank-you (note-style). May be null. Shown to buyer post-purchase.
+            'completion_message' => $listing['completion_message'] ?? null,
+            'seller_name'    => null,
         ];
+        $sn = $pdo->prepare('SELECT display_name FROM users WHERE id=?');
+        $sn->execute([$sellerId]);
+        $payload['seller_name'] = $sn->fetchColumn() ?: null;
 
         // Save idempotency key INSIDE the transaction so a retry after partial failure
         // cannot create a second purchase.
@@ -121,6 +145,8 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
             'fee'        => $fee,
             'purchaseId' => $purchaseId,
             'listingId'  => $listingId,
+            'isGift'     => $isGift,
+            'buyerName'  => (string)$buyer['display_name'],
         ];
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -129,8 +155,10 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
 
     // Fire notifications AFTER commit. Failures must not propagate.
     try {
-        Notifier::notify($pdo, $cfg, $notify['sellerId'], 'sale',
-            "{$notify['productName']} が {$notify['sellerTake']}pt で売れました（手数料 {$notify['fee']}pt）",
+        $body = $notify['isGift']
+            ? "{$notify['buyerName']} が「{$notify['productName']}」をもらいました"
+            : "{$notify['productName']} が {$notify['sellerTake']}pt で売れました（手数料 {$notify['fee']}pt）";
+        Notifier::notify($pdo, $cfg, $notify['sellerId'], 'sale', $body,
             'purchase', $notify['purchaseId']);
         if ($notify['newQty'] === 0) {
             Notifier::notify($pdo, $cfg, $notify['sellerId'], 'sold_out',
@@ -140,4 +168,78 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
     } catch (Throwable $e) { /* swallow */ }
 
     json_response($payload);
+}
+
+// POST /api/purchases/{id}/thank — buyer sends a thank-you message (and optionally a tip)
+// to the seller after a purchase. Either message or tip > 0 is required.
+function purchases_thank(PDO $pdo, array $cfg, int $purchaseId): void {
+    $buyer = Auth::requireUser($pdo, $cfg);
+    $body  = read_json_body();
+    $message = optional_text_field($body, 'message', 500);
+    $tip = isset($body['tip']) ? (int)$body['tip'] : 0;
+    if ($tip < 0)         throw new ApiException('bad_request', 'tip must be >= 0', 400);
+    if ($tip > 100000)    throw new ApiException('bad_request', 'tip too large', 400);
+    if ($message === null && $tip === 0) {
+        throw new ApiException('bad_request', 'message かチップ、どちらかは入れてください', 400);
+    }
+
+    $st = $pdo->prepare('SELECT * FROM purchases WHERE id=?');
+    $st->execute([$purchaseId]);
+    $purchase = $st->fetch();
+    if (!$purchase) throw new ApiException('not_found', 'purchase not found', 404);
+    if ((int)$purchase['buyer_user_id'] !== (int)$buyer['id']) {
+        throw new ApiException('forbidden', '自分の購入にのみお礼を送れます', 403);
+    }
+
+    $sellerId = (int)$purchase['seller_user_id'];
+    if ($sellerId === (int)$buyer['id']) {
+        throw new ApiException('bad_request', '自分自身にはお礼を送れません', 400);
+    }
+
+    // Product name for notification body
+    $pn = $pdo->prepare('SELECT name FROM products WHERE jan=?');
+    $pn->execute([$purchase['jan']]);
+    $productName = (string)($pn->fetchColumn() ?: $purchase['jan']);
+
+    $ledgerId = null; $newBalance = null;
+    $pdo->beginTransaction();
+    try {
+        if ($tip > 0) {
+            $buyerAcc  = Ledger::accountIdForUser($pdo, (int)$buyer['id']);
+            $sellerAcc = Ledger::accountIdForUser($pdo, $sellerId);
+            $bal = Ledger::balanceOf($pdo, $buyerAcc);
+            if ($bal < $tip) {
+                throw new ApiException('insufficient_funds',
+                    "balance $bal < tip $tip", 402,
+                    ['balance' => $bal, 'required' => $tip]);
+            }
+            $ledgerId = Ledger::transfer($pdo, $buyerAcc, $sellerAcc, $tip, 'transfer',
+                'thanks', $purchaseId, "「{$productName}」のお礼");
+            $newBalance = $bal - $tip;
+        }
+        $ins = $pdo->prepare('INSERT INTO purchase_thanks
+            (purchase_id, from_user_id, to_user_id, message, tip_amount, ledger_id)
+            VALUES (?,?,?,?,?,?)');
+        $ins->execute([$purchaseId, $buyer['id'], $sellerId, $message, $tip, $ledgerId]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+
+    try {
+        $bits = ["「{$productName}」のお礼"];
+        if ($tip > 0)         $bits[] = "{$tip}pt";
+        $head = "{$buyer['display_name']} から " . implode(' · ', $bits);
+        $body = $head . notification_quote($message);
+        Notifier::notify($pdo, $cfg, $sellerId, 'transfer_received', $body,
+            'purchase', $purchaseId);
+    } catch (Throwable $e) { /* swallow */ }
+
+    json_response([
+        'ok'          => true,
+        'tip'         => $tip,
+        'ledger_id'   => $ledgerId,
+        'new_balance' => $newBalance,
+    ]);
 }

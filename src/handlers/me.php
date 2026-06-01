@@ -45,9 +45,20 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'avatar_url = NULL';
             } else {
                 $url = (string)$url;
-                if (!filter_var($url, FILTER_VALIDATE_URL)
-                    && !preg_match('#^/uploads/[A-Za-z0-9._/-]+$#', $url)) {
-                    throw new ApiException('bad_request', 'avatar_url must be a URL or /uploads/... path', 400);
+                // Local upload path: /uploads/<dir>?/<file>.<ext>, charset restricted, no ".." or extra segments.
+                $isLocal = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $url);
+                // Absolute URL: only http(s), and only pointing at this app's own origin.
+                $isHttp = false;
+                if (filter_var($url, FILTER_VALIDATE_URL) && (str_starts_with($url, 'http://') || str_starts_with($url, 'https://'))) {
+                    $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+                    if ($baseUrl !== '' && str_starts_with($url, $baseUrl . '/uploads/')) {
+                        // Re-run the local check against the path portion.
+                        $rel = substr($url, strlen($baseUrl));
+                        $isHttp = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $rel);
+                    }
+                }
+                if (!$isHttp && !$isLocal) {
+                    throw new ApiException('bad_request', 'avatar_url must be /uploads/<file>.<ext> on this origin', 400);
                 }
                 $sets[] = 'avatar_url = ?'; $params[] = $url;
             }
@@ -133,7 +144,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'listings' && $method === 'GET') {
         require_exposure($cfg, 'listings_write');
         $status = $_GET['status'] ?? '';
-        $sql = "SELECT l.*, p.name, p.image_url
+        $sql = "SELECT l.*,
+                       p.name AS product_name,
+                       COALESCE(l.display_name, p.name) AS name,
+                       p.image_url
                   FROM listings l JOIN products p ON p.jan = l.jan
                  WHERE l.seller_user_id = ?";
         $params = [$u['id']];
