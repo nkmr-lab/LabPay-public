@@ -96,15 +96,15 @@ class Achievements {
                 ['count' => 150, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
-        'scrapbox_total' => [
+        'scrapbox_days' => [
             'title' => 'メモ魔',
-            'desc'  => 'Scrapbox に書き込んだ累計件数',
-            'unit'  => '件',
+            'desc'  => 'Scrapbox を更新した累計日数',
+            'unit'  => '日',
             'tiers' => [
-                ['count' => 10,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 50,   'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 200,  'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 1000, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
+                ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
+                ['count' => 150, 'label' => 'ゴールド',   'medal' => '🥇'],
+                ['count' => 365, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
     ];
@@ -146,11 +146,12 @@ class Achievements {
         $st->execute([$userId]);
         $out['tasks_completed'] = (int)$st->fetchColumn();
 
-        // Cumulative Scrapbox attachments — populated daily by bin/scrapbox_slack_sync.php
-        // tallying #scrapbox author_name attachments against user_scrapbox_handles.
-        $st = $pdo->prepare('SELECT COALESCE(SUM(attachments),0) FROM scrapbox_awards WHERE user_id=?');
+        // Distinct days the user contributed to Scrapbox. scrapbox_awards has
+        // (award_date, user_id) as its PK so a plain COUNT(*) is the day count.
+        // Rewards consistency over bursts: 30 writes in one day = 1 day.
+        $st = $pdo->prepare('SELECT COUNT(*) FROM scrapbox_awards WHERE user_id=?');
         $st->execute([$userId]);
-        $out['scrapbox_total'] = (int)$st->fetchColumn();
+        $out['scrapbox_days'] = (int)$st->fetchColumn();
 
         return $out;
     }
