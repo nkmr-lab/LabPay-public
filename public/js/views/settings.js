@@ -37,8 +37,13 @@ export async function renderSettings() {
         <span style="display:inline-block; margin-left:14px">3. 30〜60秒待ってから下の「最新の観測を取得」を押す</span><br>
         <span style="display:inline-block; margin-left:14px">→ 自分の端末が <span class="tag" style="font-size:10px">NEW</span> タグ付きで一番上に出てくるはず</span>
       </p>
-      <div class="row" style="margin-bottom:8px">
+      <div class="row" style="margin-bottom:8px; gap:6px; align-items:center">
         <button id="reload-unreg">最新の観測を取得</button>
+        <span class="muted" style="font-size:12px">または</span>
+        <input type="text" id="my-ip-input" placeholder="自分の IP (例 192.168.50.42)"
+               inputmode="decimal" maxlength="15"
+               style="flex:1; max-width:200px; font-family:Consolas,Menlo,monospace; font-size:13px">
+        <span class="muted" style="font-size:11px">設定→WiFi→ネットワーク名で確認</span>
       </div>
       <div id="unreg-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
@@ -66,9 +71,19 @@ export async function renderSettings() {
 
   await loadProfile();
   await load();
+  // Pre-fill saved "my IP" if any so the user doesn't re-type each visit.
+  const savedIp = localStorage.getItem('labpay-my-ip');
+  if (savedIp) document.getElementById('my-ip-input').value = savedIp;
   await loadUnregistered();
   document.getElementById('add-btn').addEventListener('click', onAdd);
   document.getElementById('reload-unreg').addEventListener('click', loadUnregistered);
+  // Re-render on every IP change so highlight updates live.
+  document.getElementById('my-ip-input').addEventListener('input', (ev) => {
+    const v = ev.target.value.trim();
+    if (v === '') localStorage.removeItem('labpay-my-ip');
+    else          localStorage.setItem('labpay-my-ip', v);
+    loadUnregistered();
+  });
   document.getElementById('profile-save').addEventListener('click', onProfileSave);
   document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
@@ -184,24 +199,42 @@ async function loadUnregistered() {
     }
     const now = Date.now();
     const isAdmin = state.me?.role === 'admin';
-    root.innerHTML = d.items.map(x => {
+    const myIp = document.getElementById('my-ip-input')?.value.trim() || '';
+    // If the user typed their own IP, that record floats to the top with a yellow highlight
+    // (server-side IP match can't work due to NAT — see git history). Otherwise keep the
+    // server-side first_seen_at DESC order.
+    const items = d.items.slice().sort((a, b) => {
+      const am = myIp && a.ip === myIp ? 1 : 0;
+      const bm = myIp && b.ip === myIp ? 1 : 0;
+      return bm - am;
+    });
+    root.innerHTML = items.map(x => {
       // "NEW" tag for MACs first observed in the last 90s — i.e., devices that just joined.
-      // Toggling Wi-Fi off→on makes your phone the freshest one in the list.
       const firstAgeSec = x.first_seen_at ? (now - new Date(x.first_seen_at.replace(' ', 'T') + '+09:00').getTime()) / 1000 : Infinity;
-      const isFresh = firstAgeSec >= 0 && firstAgeSec < 90;
-      const newTag  = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
-      const hintTag = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
+      const isFresh  = firstAgeSec >= 0 && firstAgeSec < 90;
+      const isMine   = !!(myIp && x.ip === myIp);
+      const newTag   = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
+      const hintTag  = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
+      const mineTag  = isMine
+        ? '<span class="tag" style="font-size:10px; margin-left:6px; background:#fff8d6; color:#7a5a00">📱 あなた</span>'
+        : '';
       const adminBtn = isAdmin
         ? `<button data-infra="${escapeHtml(x.mac)}" style="margin-left:4px">機材登録</button>`
         : '';
+      // Border priority: IP match (yellow) > fresh (purple) > none.
+      const borderStyle = isMine
+        ? 'style="border-left:4px solid #f2c700; background:#fffdf4"'
+        : (isFresh ? 'style="border-left:4px solid var(--primary)"' : '');
+      const claimBtnCls = isMine ? 'primary' : 'primary';
+      const claimBtnTxt = isMine ? 'これは私 ✓' : 'これは私';
       return `
-      <div class="list-item" ${isFresh ? 'style="border-left:4px solid var(--primary)"' : ''}>
+      <div class="list-item" ${borderStyle}>
         <div>
-          <div class="bold mono">${escapeHtml(x.mac)}${newTag}${hintTag}</div>
+          <div class="bold mono">${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
           <div class="meta">${escapeHtml(x.room_name)} · IP ${escapeHtml(x.ip ?? '-')} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
         </div>
         <div>
-          <button data-claim="${escapeHtml(x.mac)}" class="primary">これは私</button>
+          <button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>
           ${adminBtn}
         </div>
       </div>`;
