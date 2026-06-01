@@ -144,7 +144,14 @@ async function renderPresenceGrass() {
   const root = document.getElementById('presence-grass');
   if (!root) return;
   try {
-    const c = await get('/api/me/contribution_calendar', { days: 84 }); // ~12 週
+    // Year-to-date: from Jan 1 of the current year through today. Day count
+    // grows naturally as the year progresses (max 366).
+    const now = new Date();
+    const year = now.getFullYear();
+    const jan1 = new Date(year, 0, 1);
+    const daysSoFar = Math.min(366,
+      Math.floor((now - jan1) / 86400000) + 1);
+    const c = await get('/api/me/contribution_calendar', { days: daysSoFar });
     if (!c.days.length) { root.innerHTML = ''; return; }
     // Pad so the first column starts on a Monday. dow: 1=Mon..0=Sun in JS;
     // we want Mon-first, so map (d.getDay()+6)%7 → 0=Mon..6=Sun.
@@ -170,7 +177,7 @@ async function renderPresenceGrass() {
               title="${d.date}: ${d.minutes > 0 ? fmtMin(d.minutes) : '不在'}"></div>`
       : `<div class="grass-cell" style="background:transparent"></div>`;
     root.innerHTML = `
-      <div class="muted" style="font-size:11px; margin-bottom:4px">直近 ${c.days.length} 日のラボ滞在 (GitHub の草風)</div>
+      <div class="muted" style="font-size:11px; margin-bottom:4px">${year} 年のラボ滞在</div>
       <div style="display:flex; gap:3px; overflow-x:auto; padding-bottom:2px">
         <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px; padding-right:2px">
           ${dayLabels.map(l => `<div style="font-size:9px; color:var(--muted); line-height:12px">${l}</div>`).join('')}
