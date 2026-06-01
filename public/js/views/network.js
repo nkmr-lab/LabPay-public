@@ -217,16 +217,29 @@ function drawSvg() {
                    stroke-width="${sw.toFixed(2)}" marker-end="url(#net-arrow)"/>`;
   }).join('');
 
+  // Build a <clipPath> per node that has an avatar so the image is clipped to a circle.
+  // Using the SVG element form (vs. the CSS basic-shape attribute form) is bullet-
+  // proof across browsers.
+  const clipDefs = nodes.filter(n => n.avatar).map(n =>
+    `<clipPath id="net-clip-${n.id}">
+       <circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r.toFixed(1)}"/>
+     </clipPath>`
+  ).join('');
+
   const nodesHtml = nodes.map(n => {
     const hi = isHi(n.id);
     const op = hi ? 1 : 0.22;
     const r = n.r;
     const cx = n.x, cy = n.y;
+    // SVG 2 uses href, SVG 1.1 used xlink:href. Some older renderers and a few
+    // PWA/in-app browsers still need xlink:href, so include both.
+    const url = escapeHtml(n.avatar || '');
     const img = n.avatar
-      ? `<image href="${escapeHtml(n.avatar)}" x="${(cx-r).toFixed(1)}" y="${(cy-r).toFixed(1)}"
-            width="${(r*2).toFixed(1)}" height="${(r*2).toFixed(1)}"
-            clip-path="circle(${r.toFixed(1)}px at ${cx.toFixed(1)} ${cy.toFixed(1)})"
-            preserveAspectRatio="xMidYMid slice"/>`
+      ? `<image href="${url}" xlink:href="${url}"
+                x="${(cx-r).toFixed(1)}" y="${(cy-r).toFixed(1)}"
+                width="${(r*2).toFixed(1)}" height="${(r*2).toFixed(1)}"
+                clip-path="url(#net-clip-${n.id})"
+                preserveAspectRatio="xMidYMid slice"/>`
       : '';
     const initial = (n.name || '?').trim().charAt(0).toUpperCase();
     const sel = n.id === selectedId;
@@ -236,22 +249,31 @@ function drawSvg() {
                fill="#1b1820" paint-order="stroke" stroke="#fbfafd" stroke-width="4"
               >${escapeHtml(n.name || '')}</text>`
       : '';
+    // For avatar nodes we draw the image and then a stroked-only ring on top so the
+    // border sits cleanly over the photo. No-avatar nodes get the filled circle +
+    // initial as before.
     return `
       <g data-node="${n.id}" style="cursor:pointer; opacity:${op.toFixed(2)}">
-        <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
-                fill="#ede4f3" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"
-                filter="url(#net-shadow)"/>
-        ${img}
-        ${n.avatar ? '' :
-          `<text x="${cx.toFixed(1)}" y="${(cy+r*0.18).toFixed(1)}"
-                 text-anchor="middle" font-size="${(r*0.85).toFixed(1)}" font-weight="700"
-                 fill="#4a106d">${escapeHtml(initial)}</text>`}
+        ${n.avatar
+          ? `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+                     fill="#ede4f3" filter="url(#net-shadow)"/>
+             ${img}
+             <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+                     fill="none" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"/>`
+          : `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+                     fill="#ede4f3" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"
+                     filter="url(#net-shadow)"/>
+             <text x="${cx.toFixed(1)}" y="${(cy+r*0.18).toFixed(1)}"
+                   text-anchor="middle" font-size="${(r*0.85).toFixed(1)}" font-weight="700"
+                   fill="#4a106d">${escapeHtml(initial)}</text>`}
         ${label}
       </g>`;
   }).join('');
 
   wrap.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%"
+         xmlns="http://www.w3.org/2000/svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
          preserveAspectRatio="xMidYMid meet" style="display:block; touch-action:none">
       <defs>
         <marker id="net-arrow" viewBox="0 0 10 10" refX="9" refY="5"
@@ -261,6 +283,7 @@ function drawSvg() {
         <filter id="net-shadow" x="-30%" y="-30%" width="160%" height="160%">
           <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.15"/>
         </filter>
+        ${clipDefs}
       </defs>
       ${edgesHtml}
       ${nodesHtml}
