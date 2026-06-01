@@ -40,9 +40,9 @@ export async function renderSettings() {
       <div class="row" style="margin-bottom:8px; gap:6px; align-items:center">
         <button id="reload-unreg">最新の観測を取得</button>
         <span class="muted" style="font-size:12px">または</span>
-        <input type="text" id="my-ip-input" placeholder="自分の IP (例 192.168.50.42)"
+        <input type="text" id="my-ip-input" placeholder="自分の IP (例 42 や 192.168.50.42)"
                inputmode="decimal" maxlength="15"
-               style="flex:1; max-width:200px; font-family:Consolas,Menlo,monospace; font-size:13px">
+               style="flex:1; max-width:240px; font-family:Consolas,Menlo,monospace; font-size:13px">
         <span class="muted" style="font-size:11px">設定→WiFi→ネットワーク名で確認</span>
       </div>
       <div id="unreg-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -200,19 +200,27 @@ async function loadUnregistered() {
     const now = Date.now();
     const isAdmin = state.me?.role === 'admin';
     const myIp = document.getElementById('my-ip-input')?.value.trim() || '';
-    // If the user typed their own IP, that record floats to the top with a yellow highlight
-    // (server-side IP match can't work due to NAT — see git history). Otherwise keep the
-    // server-side first_seen_at DESC order.
+    // Match rule:
+    //   - "42"               → last octet exact match (so "42" matches .42 but NOT .142)
+    //   - "50.42" / "192.168" → substring match (handles partial prefixes too)
+    //   - full IP            → substring also handles exact
+    const ipMatches = (candidate) => {
+      if (!myIp || !candidate) return false;
+      if (myIp.includes('.')) return candidate.includes(myIp);
+      const parts = candidate.split('.');
+      return parts[parts.length - 1] === myIp;
+    };
+    // Matching records float to the top, otherwise keep server-side first_seen_at DESC order.
     const items = d.items.slice().sort((a, b) => {
-      const am = myIp && a.ip === myIp ? 1 : 0;
-      const bm = myIp && b.ip === myIp ? 1 : 0;
+      const am = ipMatches(a.ip) ? 1 : 0;
+      const bm = ipMatches(b.ip) ? 1 : 0;
       return bm - am;
     });
     root.innerHTML = items.map(x => {
       // "NEW" tag for MACs first observed in the last 90s — i.e., devices that just joined.
       const firstAgeSec = x.first_seen_at ? (now - new Date(x.first_seen_at.replace(' ', 'T') + '+09:00').getTime()) / 1000 : Infinity;
       const isFresh  = firstAgeSec >= 0 && firstAgeSec < 90;
-      const isMine   = !!(myIp && x.ip === myIp);
+      const isMine   = ipMatches(x.ip);
       const newTag   = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
       const hintTag  = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
       const mineTag  = isMine
