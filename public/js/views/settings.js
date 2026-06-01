@@ -30,8 +30,12 @@ export async function renderSettings() {
     <div class="card">
       <h3>自動検出 (おすすめ)</h3>
       <p class="muted" style="font-size:13px">
-        ラボ内 scanner が直近 5 分以内に観測した「まだ誰のものでもない MAC」を、新しく現れた順に並べます。<br>
-        <span style="color:var(--primary); font-weight:600">📶 自分を見つけるコツ:</span> スマホの WiFi を一度オフ → オンに切り替えてから「最新の観測を取得」を押すと、自分の MAC が <span class="tag" style="font-size:10px">NEW</span> として一番上に出てきます。
+        ラボ内 scanner が直近の数分間に観測した「まだ誰のものでもない MAC」一覧。<br>
+        <span style="color:var(--primary); font-weight:700">📶 確実な見つけ方:</span><br>
+        <span style="display:inline-block; margin-left:14px">1. スマホの WiFi をオフにする</span><br>
+        <span style="display:inline-block; margin-left:14px">2. 数秒待ってからオンに戻す</span><br>
+        <span style="display:inline-block; margin-left:14px">3. 30〜60秒待ってから下の「最新の観測を取得」を押す</span><br>
+        <span style="display:inline-block; margin-left:14px">→ 自分の端末が <span class="tag" style="font-size:10px">NEW</span> タグ付きで一番上に出てくるはず</span>
       </p>
       <div class="row" style="margin-bottom:8px">
         <button id="reload-unreg">最新の観測を取得</button>
@@ -180,35 +184,24 @@ async function loadUnregistered() {
     }
     const now = Date.now();
     const isAdmin = state.me?.role === 'admin';
-    // Sort so the "likely mine" candidate (server-side IP match against requester) floats
-    // to the top — the most likely answer to "which one is me?" should be the first thing you see.
-    const items = d.items.slice().sort((a, b) => (b.likely_mine ? 1 : 0) - (a.likely_mine ? 1 : 0));
-    root.innerHTML = items.map(x => {
+    root.innerHTML = d.items.map(x => {
+      // "NEW" tag for MACs first observed in the last 90s — i.e., devices that just joined.
+      // Toggling Wi-Fi off→on makes your phone the freshest one in the list.
       const firstAgeSec = x.first_seen_at ? (now - new Date(x.first_seen_at.replace(' ', 'T') + '+09:00').getTime()) / 1000 : Infinity;
       const isFresh = firstAgeSec >= 0 && firstAgeSec < 90;
       const newTag  = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
       const hintTag = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
-      const mineTag = x.likely_mine
-        ? '<span class="tag" style="font-size:10px; margin-left:6px; background:#fff8d6; color:#7a5a00">📱 たぶんあなた</span>'
-        : '';
       const adminBtn = isAdmin
         ? `<button data-infra="${escapeHtml(x.mac)}" style="margin-left:4px">機材登録</button>`
         : '';
-      // Highlight border: prefer "likely_mine" (yellow), else "fresh" (purple), else nothing
-      const borderStyle = x.likely_mine
-        ? 'style="border-left:4px solid #f2c700; background:#fffdf4"'
-        : (isFresh ? 'style="border-left:4px solid var(--primary)"' : '');
-      const claimBtn = x.likely_mine
-        ? `<button data-claim="${escapeHtml(x.mac)}" class="primary">これは私 ✓</button>`
-        : `<button data-claim="${escapeHtml(x.mac)}" class="primary">これは私</button>`;
       return `
-      <div class="list-item" ${borderStyle}>
+      <div class="list-item" ${isFresh ? 'style="border-left:4px solid var(--primary)"' : ''}>
         <div>
-          <div class="bold mono">${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
+          <div class="bold mono">${escapeHtml(x.mac)}${newTag}${hintTag}</div>
           <div class="meta">${escapeHtml(x.room_name)} · IP ${escapeHtml(x.ip ?? '-')} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
         </div>
         <div>
-          ${claimBtn}
+          <button data-claim="${escapeHtml(x.mac)}" class="primary">これは私</button>
           ${adminBtn}
         </div>
       </div>`;
