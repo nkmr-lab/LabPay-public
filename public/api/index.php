@@ -113,6 +113,12 @@ try {
         return;
     }
 
+    // /network (social graph aggregates for the #/network view)
+    if (($seg[0] ?? '') === 'network') {
+        route_network($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

@@ -216,11 +216,30 @@ async function loadUnregistered() {
       const bm = ipMatches(b.ip) ? 1 : 0;
       return bm - am;
     });
+    // Distinct color per room so 7F/10F devices are visually separable at a glance.
+    const ROOM_COLORS = {
+      '10F': '#4a106d',   // shikon (primary purple)
+      '7F':  '#0e7c63',   // teal
+    };
+    const roomColor = (rid) => ROOM_COLORS[rid] || '#999';
+    // Split an IP and emphasize the last octet so it's easy to match against your phone's
+    // "192.168.50.XX" value at a glance.
+    const ipHtml = (ip) => {
+      if (!ip) return '-';
+      const parts = String(ip).split('.');
+      if (parts.length < 2) return escapeHtml(ip);
+      const head = parts.slice(0, -1).join('.');
+      const tail = parts[parts.length - 1];
+      return `<span style="color:#666">${escapeHtml(head)}.</span><span style="color:#c0392b; font-weight:700">${escapeHtml(tail)}</span>`;
+    };
+
     root.innerHTML = items.map(x => {
       // "NEW" tag for MACs first observed in the last 90s — i.e., devices that just joined.
       const firstAgeSec = x.first_seen_at ? (now - new Date(x.first_seen_at.replace(' ', 'T') + '+09:00').getTime()) / 1000 : Infinity;
       const isFresh  = firstAgeSec >= 0 && firstAgeSec < 90;
       const isMine   = ipMatches(x.ip);
+      const rc       = roomColor(x.room_id);
+      const roomTag  = `<span class="tag" style="font-size:10px; margin-right:6px; background:${rc}; color:white">${escapeHtml(x.room_id)}</span>`;
       const newTag   = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
       const hintTag  = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
       const mineTag  = isMine
@@ -231,15 +250,15 @@ async function loadUnregistered() {
         : '';
       // Border priority: IP match (yellow) > fresh (purple) > none.
       const borderStyle = isMine
-        ? 'style="border-left:4px solid #f2c700; background:#fffdf4"'
-        : (isFresh ? 'style="border-left:4px solid var(--primary)"' : '');
+        ? `border-left:4px solid #f2c700; background:#fffdf4`
+        : (isFresh ? `border-left:4px solid ${rc}` : `border-left:4px solid ${rc}33`);
       const claimBtnCls = isMine ? 'primary' : 'primary';
       const claimBtnTxt = isMine ? 'これは私 ✓' : 'これは私';
       return `
-      <div class="list-item" ${borderStyle}>
+      <div class="list-item" style="${borderStyle}">
         <div>
-          <div class="bold mono">${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
-          <div class="meta">${escapeHtml(x.room_name)} · IP ${escapeHtml(x.ip ?? '-')} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
+          <div class="bold mono">${roomTag}${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
+          <div class="meta">${escapeHtml(x.room_name)} · IP ${ipHtml(x.ip)} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
         </div>
         <div>
           <button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>

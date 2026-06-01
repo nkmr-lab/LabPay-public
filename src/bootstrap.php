@@ -256,3 +256,4 @@ require_once __DIR__ . '/handlers/presence.php';
 require_once __DIR__ . '/handlers/uploads.php';
 require_once __DIR__ . '/handlers/tasks.php';
 require_once __DIR__ . '/handlers/transfers.php';
+require_once __DIR__ . '/handlers/network.php';

@@ -15,6 +15,7 @@ import { renderSettings } from './views/settings.js';
 import { renderAchievements } from './views/achievements.js';
 import { renderTasks, renderTaskDetail } from './views/tasks.js';
 import { renderTransfer } from './views/transfer.js';
+import { renderNetwork } from './views/network.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -172,6 +173,7 @@ route('/tasks',          renderTasks);
 route('/tasks/:id',      renderTaskDetail);
 route('/send',           renderTransfer);
 route('/product/:jan',   renderProduct);
+route('/network',        renderNetwork);
 
 // ---------- Boot ----------
 (async function boot() {
