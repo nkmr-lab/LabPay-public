@@ -224,7 +224,6 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'streak_decay_per_missed_workday',
                         'streak_weekday_only','session_ttl_days',
                         'presence_window_minutes','geo_default_radius_m',
-                        'scrapbox_project','scrapbox_pt_per_page','scrapbox_pt_daily_cap',
                         'scrapbox_base_pt','scrapbox_pt_per_extra','scrapbox_bonus_cap','scrapbox_start_date'];
             $updated = [];
             foreach ($body as $k => $v) {
@@ -496,16 +495,6 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         $mac = presence_normalize_mac((string)$seg[2]);
         $pdo->prepare('DELETE FROM presence_infrastructure WHERE mac=?')->execute([$mac]);
         json_response(['ok' => true]);
-        return;
-    }
-
-    // ----- scrapbox sync trigger -----
-    if ($sub === 'scrapbox' && ($seg[2] ?? '') === 'sync' && $method === 'POST') {
-        require_once __DIR__ . '/../../bin/scrapbox_sync.php';
-        $body = read_json_body();
-        $day = isset($body['day']) ? (string)$body['day'] : null;
-        $sync = new ScrapboxSync($pdo, $cfg);
-        json_response($sync->syncDay($day));
         return;
     }
 

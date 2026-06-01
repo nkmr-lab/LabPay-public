@@ -262,59 +262,30 @@ function task_attachments_upload(PDO $pdo, array $cfg, int $taskId): void {
     if ((int)$task['requester_user_id'] !== (int)$u['id']) {
         throw new ApiException('forbidden', '依頼者のみ添付できます', 403);
     }
-
     if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
         throw new ApiException('no_file', 'multipart field "file" is required', 400);
     }
-    $f = $_FILES['file'];
-    if ((int)$f['error'] !== UPLOAD_ERR_OK) {
-        throw new ApiException('upload_error', 'upload error code ' . (int)$f['error'], 400);
-    }
-    if ((int)$f['size'] > TASK_ATTACHMENT_MAX_BYTES) {
-        throw new ApiException('too_large', 'file exceeds 50MB', 413);
-    }
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime  = (string)$finfo->file($f['tmp_name']);
-    if (!isset(TASK_ATTACHMENT_MIME[$mime])) {
-        throw new ApiException('bad_mime', "unsupported type: $mime", 415);
-    }
-    $ext = TASK_ATTACHMENT_MIME[$mime];
+    $saved = save_uploaded_file($_FILES['file'], 'uploads/tasks/' . $taskId,
+        TASK_ATTACHMENT_MAX_BYTES, TASK_ATTACHMENT_MIME);
 
-    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
-    $dir = $publicDir . '/uploads/tasks/' . $taskId;
-    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
-        throw new ApiException('mkdir_failed', 'could not create upload dir', 500);
-    }
-    if (!is_writable($dir)) {
-        throw new ApiException('not_writable', "upload dir not writable: $dir", 500);
-    }
-
-    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
-    $dest = $dir . '/' . $stored;
-    if (!move_uploaded_file($f['tmp_name'], $dest)) {
-        throw new ApiException('save_failed', 'could not save file', 500);
-    }
-    @chmod($dest, 0644);
-
-    // Sanitize original filename: strip path components, keep up to 255 chars.
-    $orig = (string)($f['name'] ?? 'attachment');
-    $orig = basename($orig);
-    $orig = mb_substr($orig, 0, 255);
-    if ($orig === '') $orig = 'attachment.' . $ext;
+    // Sanitize the client-supplied original filename for display only. The
+    // on-disk name uses the helper-generated random stored_name.
+    $orig = mb_substr(basename((string)($_FILES['file']['name'] ?? '')), 0, 255);
+    if ($orig === '') $orig = 'attachment.' . $saved['ext'];
 
     $ins = $pdo->prepare("INSERT INTO task_attachments
         (task_id, filename, stored_name, size_bytes, mime, uploaded_by_user_id)
         VALUES (?,?,?,?,?,?)");
-    $ins->execute([$taskId, $orig, $stored, (int)$f['size'], $mime, $u['id']]);
+    $ins->execute([$taskId, $orig, $saved['stored_name'], $saved['size'], $saved['mime'], $u['id']]);
     $attId = (int)$pdo->lastInsertId();
 
     json_response([
         'ok' => true,
         'id' => $attId,
         'filename'   => $orig,
-        'size_bytes' => (int)$f['size'],
-        'mime'       => $mime,
+        'size_bytes' => $saved['size'],
+        'mime'       => $saved['mime'],
     ]);
 }
 

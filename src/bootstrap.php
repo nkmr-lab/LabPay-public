@@ -235,6 +235,55 @@ function idempotency_save(PDO $pdo, string $ukey, int $userId, string $endpoint,
     $st->execute([$ukey, $userId, $endpoint, json_encode($body, JSON_UNESCAPED_UNICODE), $status]);
 }
 
+// ---------------- File upload helper ----------------
+// Common spine for /api/uploads/image and /api/tasks/{id}/attachments.
+// Validates a $_FILES[...] entry, picks the extension from a MIME allowlist
+// (so we never trust the client-supplied filename for the on-disk name), and
+// moves it into public/{subDir}/{random}.{ext}. Returns metadata; the caller
+// decides whether to record a DB row or just return the URL.
+//
+// $mimeAllowlist: ['mime/type' => 'ext', ...] — keys that match get accepted.
+function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mimeAllowlist): array {
+    if ((int)$f['error'] !== UPLOAD_ERR_OK) {
+        throw new ApiException('upload_error', 'upload error code ' . (int)$f['error'], 400);
+    }
+    if ((int)$f['size'] > $maxBytes) {
+        $mb = (int)round($maxBytes / 1024 / 1024);
+        throw new ApiException('too_large', "file exceeds {$mb}MB", 413);
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = (string)$finfo->file($f['tmp_name']);
+    if (!isset($mimeAllowlist[$mime])) {
+        throw new ApiException('bad_mime', "unsupported type: $mime", 415);
+    }
+    $ext = $mimeAllowlist[$mime];
+
+    $publicDir = realpath(__DIR__ . '/../public') ?: (__DIR__ . '/../public');
+    $sub = trim($subDir, '/');
+    $dir = $publicDir . '/' . $sub;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new ApiException('mkdir_failed', 'could not create upload dir', 500);
+    }
+    if (!is_writable($dir)) {
+        throw new ApiException('not_writable', "upload dir not writable: $dir", 500);
+    }
+
+    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
+    $dest = $dir . '/' . $stored;
+    if (!move_uploaded_file($f['tmp_name'], $dest)) {
+        throw new ApiException('save_failed', 'could not save file', 500);
+    }
+    @chmod($dest, 0644);
+
+    return [
+        'stored_name' => $stored,
+        'mime'        => $mime,
+        'ext'         => $ext,
+        'size'        => (int)$f['size'],
+        'path'        => '/' . $sub . '/' . $stored,  // relative URL, suitable for public href
+    ];
+}
+
 // ---------------- Slack Web API (Bot Token GET) ----------------
 // Synchronous GET against api.slack.com. Used by the Scrapbox-via-Slack bridge
 // to pull conversation history. Returns the decoded JSON array. Throws on

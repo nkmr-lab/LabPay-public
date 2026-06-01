@@ -280,18 +280,16 @@ async function renderCheckinArea() {
     root.innerHTML = `<div class="muted" style="font-size:13px">${escapeHtml(e.message)}</div>`;
     return;
   }
+  // Check-in happens entirely via the lab Wi-Fi scanner — no manual UI here.
+  // Show today's state + the bonus rule explainer, nothing actionable.
   if (status.checked_in_today) {
     root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日来室済み (+${status.points_today}pt / 連続来室 ${status.current_streak} 日)</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
   if (status.today_is_workday) {
-    root.innerHTML = `
-      <button class="btn" id="geo-checkin-btn">📍 来室する (位置情報)</button>
-      <div class="muted" style="font-size:12px; margin-top:4px">通常は WiFi で自動チェックインされます。検知されないときだけ使ってください。</div>
-      ${bonusRuleHtml(status.bonus_rule)}
-    `;
-    document.getElementById('geo-checkin-btn').addEventListener('click', onGeoCheckin);
+    root.innerHTML = `<div class="muted" style="font-size:13px">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
+      ${bonusRuleHtml(status.bonus_rule)}`;
   } else {
     root.innerHTML = `<div class="muted" style="font-size:13px">今日はラボの稼働日ではないため、streak には影響しません。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
@@ -308,34 +306,6 @@ function bonusRuleHtml(rule) {
     💰 来室ボーナス: ベース <b>${base}</b>pt + 連続日数で上乗せ、最大 <b>${max_total}</b>pt
     (${days_to_max} 日連続で上限到達)
   </div>`;
-}
-
-function onGeoCheckin(ev) {
-  const btn = ev.currentTarget;
-  btn.disabled = true;
-  btn.textContent = '位置情報取得中…';
-  if (!('geolocation' in navigator)) {
-    toast('このブラウザは位置情報をサポートしていません'); btn.disabled = false; btn.textContent = '📍 来室する (位置情報)';
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(async (pos) => {
-    try {
-      const res = await post('/api/checkins/geo', {
-        lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy,
-      });
-      if (res.already_checked_in) toast('既に本日来室済みでした');
-      else toast(`+${res.points}pt 来室確認 (距離 ${res.distance_m}m / 連続来室 ${res.current_streak} 日)`);
-      await refreshMe();
-      await renderHome();
-    } catch (e) {
-      const dist = e.details && e.details.distance_m ? ` (現在地は ${e.details.distance_m}m 離れています)` : '';
-      toast('チェックイン失敗: ' + e.message + dist);
-      btn.disabled = false; btn.textContent = '📍 来室する (位置情報)';
-    }
-  }, (err) => {
-    toast('位置情報の取得に失敗: ' + err.message);
-    btn.disabled = false; btn.textContent = '📍 来室する (位置情報)';
-  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 
 // Apply the icon/name display mode to the presence container.
