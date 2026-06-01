@@ -60,8 +60,19 @@ if (Test-Path $config) {
 $labpayUrl = Read-NonEmpty 'labpay_url' (Get-OrDefault $existing.labpay_url 'https://pay.nkmr.io')
 $roomId    = Read-NonEmpty 'room_id (e.g. 7F)' (Get-OrDefault $existing.room_id '')
 
-# Prefer env var so the token does not appear in shell history.
+# Token: prefer env var; otherwise reuse the one in the existing config (if any);
+# otherwise prompt. This is the bit that bites people on re-runs: the admin UI shows
+# the token only once, so prompting again would force a token rotation.
 $token = $env:LABPAY_SCANNER_TOKEN
+if ([string]::IsNullOrWhiteSpace($token) -and $existing -and $existing.scanner_token) {
+    Write-Host ''
+    Write-Host "An existing scanner_token was found in $config." -ForegroundColor Green
+    $reuse = Read-Host 'Reuse it? [Y/n]'
+    if ($reuse -eq '' -or $reuse -match '^[Yy]') {
+        $token = $existing.scanner_token
+        Write-Host '  (reusing existing token)' -ForegroundColor Green
+    }
+}
 if ([string]::IsNullOrWhiteSpace($token)) {
     $secure = Read-Host 'scanner_token (one-shot value shown when the room was created in admin)' -AsSecureString
     $token  = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
