@@ -183,6 +183,10 @@ function presence_devices_delete(PDO $pdo, array $cfg, int $id): void {
 // ---------------- GET /api/presence/unregistered_macs ----------------
 // For "auto MAC detection" UX in settings: list MACs seen recently in any room
 // that are not yet linked to a user. Caller picks theirs from the (typically short) list.
+//
+// Bonus: when the requester's own IP matches a candidate's IP, mark it `likely_mine`
+// so the UI can highlight the device that almost certainly belongs to the caller.
+// (The browser making this request IS the device on the lab WiFi, after all.)
 function presence_unregistered_macs(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $window = (int)cfg_get($pdo, 'presence_window_minutes', '5');
@@ -200,10 +204,31 @@ function presence_unregistered_macs(PDO $pdo, array $cfg): void {
     ");
     $st->execute([$window]);
     $rows = $st->fetchAll();
+    $requesterIp = presence_requester_ip();
     foreach ($rows as &$r) {
         $r['hint'] = presence_mac_hint((string)$r['mac']);
+        $r['likely_mine'] = ($requesterIp !== null && (string)$r['ip'] === $requesterIp);
     }
-    json_response(['items' => $rows, 'window_minutes' => $window]);
+    json_response([
+        'items' => $rows,
+        'window_minutes' => $window,
+        'requester_ip' => $requesterIp,
+    ]);
+}
+
+// Best-effort: figure out what IP the caller's device has on the lab subnet.
+// Trust REMOTE_ADDR; honor X-Forwarded-For only when present (reverse-proxied
+// deployments). Returns null if we can't determine a clean IPv4.
+function presence_requester_ip(): ?string {
+    $fwd = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+    if ($fwd !== '') {
+        // First entry in the comma list is the originating client.
+        $first = trim(explode(',', $fwd)[0]);
+        if (filter_var($first, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return $first;
+    }
+    $remote = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return $remote;
+    return null;
 }
 
 // ---------------- POST /api/presence/scan (scanner token) ----------------

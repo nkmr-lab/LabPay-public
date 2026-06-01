@@ -180,23 +180,35 @@ async function loadUnregistered() {
     }
     const now = Date.now();
     const isAdmin = state.me?.role === 'admin';
-    root.innerHTML = d.items.map(x => {
-      // "NEW" tag for MACs first observed in the last 90s — i.e., devices that just joined.
+    // Sort so the "likely mine" candidate (server-side IP match against requester) floats
+    // to the top — the most likely answer to "which one is me?" should be the first thing you see.
+    const items = d.items.slice().sort((a, b) => (b.likely_mine ? 1 : 0) - (a.likely_mine ? 1 : 0));
+    root.innerHTML = items.map(x => {
       const firstAgeSec = x.first_seen_at ? (now - new Date(x.first_seen_at.replace(' ', 'T') + '+09:00').getTime()) / 1000 : Infinity;
       const isFresh = firstAgeSec >= 0 && firstAgeSec < 90;
       const newTag  = isFresh ? '<span class="tag" style="font-size:10px; margin-left:6px">NEW</span>' : '';
       const hintTag = x.hint  ? `<span class="tag muted" style="font-size:10px; margin-left:6px">${escapeHtml(x.hint)}</span>` : '';
+      const mineTag = x.likely_mine
+        ? '<span class="tag" style="font-size:10px; margin-left:6px; background:#fff8d6; color:#7a5a00">📱 たぶんあなた</span>'
+        : '';
       const adminBtn = isAdmin
         ? `<button data-infra="${escapeHtml(x.mac)}" style="margin-left:4px">機材登録</button>`
         : '';
+      // Highlight border: prefer "likely_mine" (yellow), else "fresh" (purple), else nothing
+      const borderStyle = x.likely_mine
+        ? 'style="border-left:4px solid #f2c700; background:#fffdf4"'
+        : (isFresh ? 'style="border-left:4px solid var(--primary)"' : '');
+      const claimBtn = x.likely_mine
+        ? `<button data-claim="${escapeHtml(x.mac)}" class="primary">これは私 ✓</button>`
+        : `<button data-claim="${escapeHtml(x.mac)}" class="primary">これは私</button>`;
       return `
-      <div class="list-item" ${isFresh ? 'style="border-left:4px solid var(--primary)"' : ''}>
+      <div class="list-item" ${borderStyle}>
         <div>
-          <div class="bold mono">${escapeHtml(x.mac)}${newTag}${hintTag}</div>
+          <div class="bold mono">${escapeHtml(x.mac)}${mineTag}${newTag}${hintTag}</div>
           <div class="meta">${escapeHtml(x.room_name)} · IP ${escapeHtml(x.ip ?? '-')} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}</div>
         </div>
         <div>
-          <button data-claim="${escapeHtml(x.mac)}" class="primary">これは私</button>
+          ${claimBtn}
           ${adminBtn}
         </div>
       </div>`;
