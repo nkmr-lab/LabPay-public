@@ -72,7 +72,7 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 }
 if ([string]::IsNullOrWhiteSpace($token)) { throw 'scanner_token が空です。中止します。' }
 
-$subnet = Read-Host 'subnet (例: 192.168.50.0/24 - 空欄なら自動検出)'
+$subnet = Read-Host 'subnet (e.g. 192.168.50.0/24, blank = auto-detect)'
 
 $cfgObj = [ordered]@{
     labpay_url    = $labpayUrl.TrimEnd('/')
