@@ -39,6 +39,6 @@ function row(t) {
         <div class="meta">${escapeHtml(t.counterparty ?? '')} ${t.memo ? '· ' + escapeHtml(t.memo) : ''}</div>
         <div class="meta">${escapeHtml(t.created_at)}</div>
       </div>
-      <div style="color:${color}; font-weight:800">${sign}${t.signed_amount.toLocaleString()} pt</div>
+      <div style="color:${color}; font-weight:800; white-space:nowrap">${sign}${t.signed_amount.toLocaleString()} pt</div>
     </div>`;
 }

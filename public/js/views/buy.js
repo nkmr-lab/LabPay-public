@@ -25,12 +25,27 @@ export async function renderBuy() {
     </div>
 
     <div class="card">
-      <h3>出品中の商品 (安い順)</h3>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h3 style="flex:1; margin:0">出品中の商品</h3>
+        <select id="buy-sort" style="font-size:13px">
+          <option value="newest">新しい順</option>
+          <option value="oldest">古い順</option>
+          <option value="cheapest">安い順</option>
+          <option value="priciest">高い順</option>
+        </select>
+      </div>
       <div id="grouped" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
 
   document.getElementById('scan-toggle').addEventListener('click', toggleScanner);
+  // Restore the saved sort preference; default is "newest".
+  const savedSort = localStorage.getItem('labpay-buy-sort') || 'newest';
+  document.getElementById('buy-sort').value = savedSort;
+  document.getElementById('buy-sort').addEventListener('change', (ev) => {
+    localStorage.setItem('labpay-buy-sort', ev.target.value);
+    loadListings();
+  });
 
   await loadListings();
   get('/api/me').then(d => {
@@ -88,8 +103,29 @@ async function loadListings() {
       root.innerHTML = `<div class="empty">出品はまだありません</div>`;
       return;
     }
+    // Pre-compute sort keys (cheapest sale price, newest/oldest created_at) per group.
+    const annotated = [...groups.values()].map(g => {
+      const sale = g.listings.filter(x => !x.is_gift);
+      const prices = sale.map(x => x.price);
+      const minPrice = prices.length ? Math.min(...prices) : Infinity;
+      const maxPrice = prices.length ? Math.max(...prices) : -Infinity;
+      const newest = g.listings.reduce((acc, x) => x.created_at > acc ? x.created_at : acc, '');
+      const oldest = g.listings.reduce((acc, x) => (acc === '' || x.created_at < acc) ? x.created_at : acc, '');
+      return { g, minPrice, maxPrice, newest, oldest };
+    });
+    const sortMode = document.getElementById('buy-sort')?.value || 'newest';
+    annotated.sort((a, b) => {
+      switch (sortMode) {
+        case 'oldest':   return a.oldest.localeCompare(b.oldest);
+        case 'cheapest': return a.minPrice - b.minPrice;
+        case 'priciest': return b.maxPrice - a.maxPrice;
+        case 'newest':
+        default:         return b.newest.localeCompare(a.newest);
+      }
+    });
+
     const html = [];
-    for (const g of groups.values()) {
+    for (const { g } of annotated) {
       // Gift listings are surfaced with their own "🎁 これどうぞ" indicator so the price
       // column doesn't read as "0 pt〜" (which feels devaluing). Mixed groups show both.
       const giftCount = g.listings.filter(x => x.is_gift).length;
@@ -101,9 +137,10 @@ async function loadListings() {
         const prices = sale.map(x => x.price);
         const min = Math.min(...prices);
         const max = Math.max(...prices);
+        //   (non-breaking space) keeps "100 pt" on one line even when the column wraps.
         priceLabel = (min === max)
-          ? `${min.toLocaleString()} pt`
-          : `${min.toLocaleString()}〜${max.toLocaleString()} pt`;
+          ? `${min.toLocaleString()} pt`
+          : `${min.toLocaleString()}〜${max.toLocaleString()} pt`;
         if (giftCount > 0) priceLabel += ' / 🎁あり';
       }
       const sellers = g.listings.length;
@@ -118,8 +155,8 @@ async function loadListings() {
             <div class="bold">${escapeHtml(g.name)}${locTag}</div>
             <div class="meta">JAN <span class="mono">${escapeHtml(g.jan)}</span> · ${sellers}人が出品 · 在庫 ${totalQty}</div>
           </div>
-          <div style="text-align:right">
-            <div class="bold" style="color:var(--primary)">${priceLabel}</div>
+          <div style="text-align:right; flex-shrink:0">
+            <div class="bold" style="color:var(--primary); white-space:nowrap">${priceLabel}</div>
           </div>
         </a>
       `);

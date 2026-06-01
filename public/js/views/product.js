@@ -151,7 +151,7 @@ function renderListingRow(l) {
   const isGift = !!l.is_gift;
   const priceTag = isGift
     ? `<span class="bold" style="color:#b71c50">🎁 これどうぞ</span>`
-    : `<span class="bold" style="color:var(--primary)">${l.price.toLocaleString()} pt</span>`;
+    : `<span class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</span>`;
   const btn = isMe
     ? `<button disabled title="自分の出品は買えません">自分の出品</button>`
     : `<button class="primary" data-buy="${l.id}" data-price="${l.price}" data-gift="${isGift ? '1' : '0'}" data-seller="${escapeHtml(l.seller_name)}">

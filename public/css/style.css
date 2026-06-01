@@ -174,7 +174,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* Balance hero */
 .balance-hero { text-align: center; padding: 24px 12px; }
-.balance-hero .num { font-size: 44px; font-weight: 800; color: var(--primary); letter-spacing: 1px; }
+.balance-hero .num { font-size: 44px; font-weight: 800; color: var(--primary); letter-spacing: 1px; white-space: nowrap; }
 .balance-hero .lbl { color: var(--muted); }
 
 /* Medals strip inside balance-hero — compact one-line achievement summary */

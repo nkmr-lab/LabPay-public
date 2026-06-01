@@ -162,8 +162,8 @@ async function renderFreshListings() {
     }
     root.innerHTML = items.map(l => {
       const priceTag = l.is_gift
-        ? `<div class="bold" style="color:#b71c50">🎁 これどうぞ</div>`
-        : `<div class="bold" style="color:var(--primary)">${l.price.toLocaleString()} pt</div>`;
+        ? `<div class="bold" style="color:#b71c50; white-space:nowrap">🎁 これどうぞ</div>`
+        : `<div class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</div>`;
       return `
         <a class="list-item" href="#/product/${encodeURIComponent(l.jan)}">
           <div>
@@ -312,7 +312,7 @@ function renderTxItem(t) {
         <div class="bold">${label}</div>
         <div class="meta">${escapeHtml(t.counterparty ?? '')} · ${escapeHtml(t.created_at)}</div>
       </div>
-      <div style="color:${color}; font-weight:800">${sign}${t.signed_amount.toLocaleString()} pt</div>
+      <div style="color:${color}; font-weight:800; white-space:nowrap">${sign}${t.signed_amount.toLocaleString()} pt</div>
     </div>`;
 }
 
