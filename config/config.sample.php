@@ -43,11 +43,19 @@ return [
     'access_key'     => '',
   ],
 
-  // Slack incoming webhook. Posts a short message when a new listing goes up
-  // (商品入荷通知). Leave webhook_url empty to disable.
-  // Create at: https://api.slack.com/apps -> Incoming Webhooks -> Add to channel.
+  // Slack integration.
+  //   webhook_url: Incoming webhook for outbound notifications (商品入荷, タスク追加など).
+  //     Create at https://api.slack.com/apps -> Incoming Webhooks -> Add to channel.
+  //   bot_token: Bot User OAuth Token (xoxb-) for READING channel history. Needed only
+  //     for the Scrapbox-via-Slack contribution counter. Scopes: channels:history
+  //     (public) or groups:history (private). Bot must be /invite-d to the channel.
+  //   scrapbox_channel_id: Cxxxxxxxxxx — the channel where Scrapbox edit notifications
+  //     are posted. Leave empty to disable the Scrapbox bridge.
+  // Leave any field empty to disable the corresponding feature.
   'slack' => [
-    'webhook_url' => '',
+    'webhook_url'         => '',
+    'bot_token'           => '',
+    'scrapbox_channel_id' => '',
   ],
 
   // Feature flags (used by require_exposure() guards in handlers).

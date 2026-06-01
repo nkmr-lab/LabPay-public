@@ -141,6 +141,54 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ----- scrapbox handles (self-claim list) -----
+    // GET    /api/me/scrapbox_handles                → list my handles + recent pt earned
+    // POST   /api/me/scrapbox_handles  {handle: "x"} → claim a handle (or steal if already owned)
+    // DELETE /api/me/scrapbox_handles/{handle}       → release my handle
+    if ($sub === 'scrapbox_handles') {
+        if ($method === 'GET') {
+            $st = $pdo->prepare('SELECT scrapbox_name, created_at
+                FROM user_scrapbox_handles WHERE user_id=? ORDER BY created_at');
+            $st->execute([$u['id']]);
+            $handles = $st->fetchAll(PDO::FETCH_ASSOC);
+            // Aggregate recent (last 30 days) Scrapbox awards for context.
+            $ag = $pdo->prepare("SELECT COALESCE(SUM(points),0) AS total_pts,
+                                        COALESCE(SUM(attachments),0) AS total_atts,
+                                        COUNT(*) AS days
+                FROM scrapbox_awards
+                WHERE user_id=? AND award_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)");
+            $ag->execute([$u['id']]);
+            $sum = $ag->fetch(PDO::FETCH_ASSOC) ?: ['total_pts'=>0,'total_atts'=>0,'days'=>0];
+            json_response(['handles' => $handles, 'recent_30d' => $sum]);
+            return;
+        }
+        if ($method === 'POST') {
+            $body = read_json_body();
+            $name = trim((string)require_field($body, 'handle'));
+            if ($name === '' || mb_strlen($name) > 100) {
+                throw new ApiException('bad_request', 'handle length 1..100', 400);
+            }
+            // ON DUPLICATE KEY UPDATE: claiming a name already owned by someone else
+            // reassigns it to the current user. This is intentional — if you set a
+            // wrong name, fixing it (or transferring after a teammate's mistake)
+            // shouldn't require admin intervention. The Scrapbox bridge attributes
+            // future edits to whoever currently owns the name.
+            $st = $pdo->prepare('INSERT INTO user_scrapbox_handles (scrapbox_name, user_id)
+                VALUES (?,?) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)');
+            $st->execute([$name, $u['id']]);
+            json_response(['ok' => true, 'handle' => $name]);
+            return;
+        }
+        if (isset($seg[2]) && $method === 'DELETE') {
+            $name = (string)$seg[2];
+            $st = $pdo->prepare('DELETE FROM user_scrapbox_handles
+                WHERE scrapbox_name=? AND user_id=?');
+            $st->execute([$name, $u['id']]);
+            json_response(['ok' => true]);
+            return;
+        }
+    }
+
     // GET /api/me/presence_summary
     // Returns cumulative minutes spent in any lab room (today / this_week / this_month)
     // by summing closed sessions in presence_sessions plus the currently-open one,

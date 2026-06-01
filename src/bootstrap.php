@@ -235,6 +235,33 @@ function idempotency_save(PDO $pdo, string $ukey, int $userId, string $endpoint,
     $st->execute([$ukey, $userId, $endpoint, json_encode($body, JSON_UNESCAPED_UNICODE), $status]);
 }
 
+// ---------------- Slack Web API (Bot Token GET) ----------------
+// Synchronous GET against api.slack.com. Used by the Scrapbox-via-Slack bridge
+// to pull conversation history. Returns the decoded JSON array. Throws on
+// transport failure or {ok:false}; callers may catch and report.
+// Bot Token lives in $cfg['slack']['bot_token'] (production config only).
+function slack_api_get(array $cfg, string $endpoint, array $params = []): array {
+    $tok = (string)($cfg['slack']['bot_token'] ?? '');
+    if ($tok === '') throw new RuntimeException('slack.bot_token is empty');
+    $url = 'https://slack.com/api/' . ltrim($endpoint, '/');
+    if ($params) $url .= '?' . http_build_query($params);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $tok],
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_CONNECTTIMEOUT => 5,
+    ]);
+    $resp = curl_exec($ch);
+    $err  = curl_error($ch);
+    curl_close($ch);
+    if ($resp === false) throw new RuntimeException("slack curl failed: $err");
+    $data = json_decode($resp, true);
+    if (!is_array($data)) throw new RuntimeException("slack response not JSON: " . substr($resp, 0, 200));
+    if (empty($data['ok'])) throw new RuntimeException("slack error: " . ($data['error'] ?? 'unknown'));
+    return $data;
+}
+
 // ---------------- Slack notifications (incoming webhook) ----------------
 // Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
 // and swallows all errors — Slack being down must never break a listing/scan/etc.

@@ -224,7 +224,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'streak_decay_per_missed_workday',
                         'streak_weekday_only','session_ttl_days',
                         'presence_window_minutes','geo_default_radius_m',
-                        'scrapbox_project','scrapbox_pt_per_page','scrapbox_pt_daily_cap'];
+                        'scrapbox_project','scrapbox_pt_per_page','scrapbox_pt_daily_cap',
+                        'scrapbox_base_pt','scrapbox_pt_per_extra','scrapbox_bonus_cap','scrapbox_start_date'];
             $updated = [];
             foreach ($body as $k => $v) {
                 if (!in_array($k, $allowed, true)) continue;
@@ -504,6 +505,18 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         $body = read_json_body();
         $day = isset($body['day']) ? (string)$body['day'] : null;
         $sync = new ScrapboxSync($pdo, $cfg);
+        json_response($sync->syncDay($day));
+        return;
+    }
+
+    // ----- scrapbox-via-slack sync trigger -----
+    // POST /api/admin/scrapbox_slack/sync {day?: "Y-m-d", dry_run?: bool}
+    if ($sub === 'scrapbox_slack' && ($seg[2] ?? '') === 'sync' && $method === 'POST') {
+        require_once __DIR__ . '/../../bin/scrapbox_slack_sync.php';
+        $body = read_json_body();
+        $day  = isset($body['day']) ? (string)$body['day'] : null;
+        $dry  = !empty($body['dry_run']);
+        $sync = new ScrapboxSlackSync($pdo, $cfg, $dry);
         json_response($sync->syncDay($day));
         return;
     }

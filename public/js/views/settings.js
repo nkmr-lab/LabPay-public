@@ -64,6 +64,21 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>Scrapbox 連携</h3>
+      <p class="muted" style="font-size:13px; margin:4px 0 8px">
+        nkmr-lab の Scrapbox に書き込んだ分が pt に変わります。
+        Slack の #scrapbox 通知で見える <b>表示名</b> をそのまま追加してください
+        (例: Latin と漢字の両方を使ってる場合は両方登録)。
+      </p>
+      <div id="sb-status" class="muted" style="font-size:12px"></div>
+      <div id="sb-list" class="list" style="margin:8px 0"><div class="muted">読み込み中…</div></div>
+      <div class="row">
+        <input type="text" id="sb-new" placeholder="Scrapbox 表示名" maxlength="100" style="flex:2">
+        <button id="sb-add" class="primary">追加</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>その他</h3>
       <button id="logout-from-settings" class="danger">ログアウト</button>
     </div>
@@ -88,6 +103,51 @@ export async function renderSettings() {
   document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
+  document.getElementById('sb-add').addEventListener('click', onScrapboxAdd);
+  await loadScrapboxHandles();
+}
+
+// ---------------- Scrapbox handles ----------------
+async function loadScrapboxHandles() {
+  const list = document.getElementById('sb-list');
+  const status = document.getElementById('sb-status');
+  try {
+    const r = await get('/api/me/scrapbox_handles');
+    const s = r.recent_30d || { total_pts: 0, total_atts: 0, days: 0 };
+    status.textContent = `直近 30 日: ${s.days} 日 / ${s.total_atts} 件で +${s.total_pts}pt`;
+    if (!r.handles.length) {
+      list.innerHTML = `<div class="muted">まだ登録なし。下の入力欄から追加してください。</div>`;
+      return;
+    }
+    list.innerHTML = r.handles.map(h => `
+      <div class="list-item">
+        <div class="bold mono">${escapeHtml(h.scrapbox_name)}</div>
+        <button data-sb-del="${encodeURIComponent(h.scrapbox_name)}">削除</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-sb-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        try {
+          await del('/api/me/scrapbox_handles/' + b.dataset.sbDel);
+          toast('削除しました');
+          await loadScrapboxHandles();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function onScrapboxAdd() {
+  const input = document.getElementById('sb-new');
+  const handle = input.value.trim();
+  if (!handle) { toast('表示名を入力してください'); return; }
+  try {
+    await post('/api/me/scrapbox_handles', { handle });
+    input.value = '';
+    toast('追加しました');
+    await loadScrapboxHandles();
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 // ---------------- Profile ----------------
