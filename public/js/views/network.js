@@ -46,6 +46,7 @@ export async function renderNetwork() {
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn ${activeTab==='purchases'?'primary':''}" data-tab="purchases">売買</button>
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
+        <button class="btn ${activeTab==='combined'?'primary':''}" data-tab="combined">統合</button>
         <span style="flex:1"></span>
         <select id="net-layout-mode" style="font-size:13px">
           <option value="force" ${layoutMode==='force'?'selected':''}>自動配置</option>
@@ -87,8 +88,10 @@ export async function renderNetwork() {
 }
 
 async function loadAndRender(tab, layoutMode) {
-  document.getElementById('net-arrow-desc').textContent =
-    tab === 'tasks' ? '依頼者 → 引き受けた人' : '売り手 → 買い手';
+  const desc = document.getElementById('net-arrow-desc');
+  if (tab === 'tasks')          desc.textContent = '依頼者 → 引き受けた人';
+  else if (tab === 'combined')  desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
+  else                          desc.textContent = '売り手 → 買い手';
   try {
     // d3 is needed for the force simulation; circle mode could skip it but a
     // single load on first open is fine and keeps the code path simple.
@@ -195,6 +198,9 @@ function drawSvg() {
       ? neighbors.get(selectedId)?.has(id)
       : nodes.length <= 12;
 
+  // In combined mode, edges have a `type` field (purchase / task). Color accordingly
+  // so purple+green strands are visually distinguishable when they overlap a pair.
+  const colorFor = (e) => e.type === 'task' ? '#0e7c63' : '#4a106d';
   const edgesHtml = edges.map(e => {
     const a = nodes.find(n => n.id === e.from);
     const b = nodes.find(n => n.id === e.to);
@@ -209,12 +215,15 @@ function drawSvg() {
     const mx = (sx + ex) / 2 - (dy / len) * bend;
     const my = (sy + ey) / 2 + (dx / len) * bend;
     const sw = 0.6 + 4 * (e.count / maxCount);
-    // Edges are deliberately faint by default — emphasis is on nodes and selection.
     const baseOp = 0.10 + 0.35 * (e.count / maxCount);
     const op = edgeHi(e) ? baseOp + 0.4 : baseOp * 0.35;
+    const color = colorFor(e);
+    // In combined mode, the arrowhead also needs to be colored; we have a per-type
+    // marker for that. Single-mode tabs reuse the default purple marker.
+    const marker = e.type === 'task' ? 'url(#net-arrow-task)' : 'url(#net-arrow)';
     return `<path d="M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}"
-                   fill="none" stroke="#4a106d" stroke-opacity="${op.toFixed(2)}"
-                   stroke-width="${sw.toFixed(2)}" marker-end="url(#net-arrow)"/>`;
+                   fill="none" stroke="${color}" stroke-opacity="${op.toFixed(2)}"
+                   stroke-width="${sw.toFixed(2)}" marker-end="${marker}"/>`;
   }).join('');
 
   // Build a <clipPath> per node that has an avatar so the image is clipped to a circle.
@@ -279,6 +288,10 @@ function drawSvg() {
         <marker id="net-arrow" viewBox="0 0 10 10" refX="9" refY="5"
                 markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a106d" opacity="0.75"/>
+        </marker>
+        <marker id="net-arrow-task" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#0e7c63" opacity="0.75"/>
         </marker>
         <filter id="net-shadow" x="-30%" y="-30%" width="160%" height="160%">
           <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.15"/>
@@ -350,11 +363,18 @@ function showNodeDetail(userId) {
   const inn = edges.filter(e => e.to === userId);
   const dir = tab === 'tasks'
     ? { out: '依頼してやってもらった相手', in: '依頼を引き受けてくれた相手' }
-    : { out: '買った相手 (この人から)',    in: '売った相手 (この人へ)' };
+    : tab === 'combined'
+      ? { out: '送り出した相手 (買った / 依頼した)', in: '受け取った相手 (売った / 引き受けた)' }
+      : { out: '買った相手 (この人から)', in: '売った相手 (この人へ)' };
+  const typeBadge = (t) => {
+    if (t === 'task')     return ' <span class="tag" style="background:#0e7c63; color:white; font-size:10px">タスク</span>';
+    if (t === 'purchase') return ' <span class="tag" style="background:#4a106d; color:white; font-size:10px">売買</span>';
+    return '';
+  };
   const lineFor = e => {
     const other = nodes.find(n => n.id === (e.from === userId ? e.to : e.from));
     return `<div class="list-item">
-      <div>${escapeHtml(other?.name || '?')}</div>
+      <div>${escapeHtml(other?.name || '?')}${tab === 'combined' ? typeBadge(e.type) : ''}</div>
       <div class="meta">${e.count}回 / ${e.total.toLocaleString()} pt</div>
     </div>`;
   };

@@ -18,7 +18,63 @@ function route_network(PDO $pdo, array $cfg, string $method, array $seg): void {
 
     if ($sub === 'purchases') { network_purchases($pdo); return; }
     if ($sub === 'tasks')     { network_tasks($pdo); return; }
+    if ($sub === 'combined')  { network_combined($pdo); return; }
     json_error('not_found', "unknown network kind: $sub", 404);
+}
+
+// 売買 + タスクを 1 グラフに重ねる。エッジに type を付けてクライアントが
+// 色分けできるようにする (purchase / task)。
+function network_combined(PDO $pdo): void {
+    $stP = $pdo->query("
+        SELECT p.buyer_user_id AS from_id, p.seller_user_id AS to_id,
+               'purchase' AS type,
+               COUNT(*) AS n,
+               COALESCE(SUM(p.unit_price * p.qty), 0) AS total
+          FROM purchases p
+          JOIN users bu ON bu.id = p.buyer_user_id  AND bu.kind='human'
+          JOIN users su ON su.id = p.seller_user_id AND su.kind='human'
+         WHERE p.buyer_user_id <> p.seller_user_id
+         GROUP BY p.buyer_user_id, p.seller_user_id");
+    $stT = $pdo->query("
+        SELECT t.requester_user_id AS from_id, tc.user_id AS to_id,
+               'task' AS type,
+               COUNT(*) AS n,
+               COALESCE(SUM(t.reward), 0) AS total
+          FROM task_claims tc
+          JOIN tasks t  ON t.id  = tc.task_id
+          JOIN users ru ON ru.id = t.requester_user_id AND ru.kind='human'
+          JOIN users wu ON wu.id = tc.user_id          AND wu.kind='human'
+         WHERE tc.status = 'approved'
+           AND t.requester_user_id <> tc.user_id
+         GROUP BY t.requester_user_id, tc.user_id");
+    $rows = array_merge($stP->fetchAll(), $stT->fetchAll());
+
+    $nodeIds = [];
+    foreach ($rows as $r) {
+        $nodeIds[(int)$r['from_id']] = true;
+        $nodeIds[(int)$r['to_id']]   = true;
+    }
+    $nodes = [];
+    if ($nodeIds) {
+        $place = implode(',', array_fill(0, count($nodeIds), '?'));
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
+        $st->execute(array_keys($nodeIds));
+        foreach ($st->fetchAll() as $n) {
+            $nodes[] = [
+                'id'     => (int)$n['id'],
+                'name'   => $n['display_name'],
+                'avatar' => $n['avatar_url'] ?? null,
+            ];
+        }
+    }
+    $edges = array_map(fn($r) => [
+        'from'  => (int)$r['from_id'],
+        'to'    => (int)$r['to_id'],
+        'count' => (int)$r['n'],
+        'total' => (int)$r['total'],
+        'type'  => (string)$r['type'],
+    ], $rows);
+    json_response(['nodes' => $nodes, 'edges' => $edges]);
 }
 
 // Aggregate every (buyer, seller) pair into a single edge with totals.
