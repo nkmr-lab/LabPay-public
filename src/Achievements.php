@@ -104,7 +104,7 @@ class Achievements {
                 ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
                 ['count' => 150, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 365, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 300, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
     ];
