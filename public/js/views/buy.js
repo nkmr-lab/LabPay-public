@@ -162,11 +162,12 @@ async function loadListings() {
       const sellerBadge = repListing
         ? `<div class="tile-seller">${avatarHtml(repListing.seller_name, repListing.seller_avatar_url, 'sm')}</div>`
         : '';
-      // Hide the stock line when totalQty == 1 — that's the default "I'm selling
-      // one of these" case and listing it adds noise. Only show when there's more.
-      const stockText = totalQty > 1 ? `在庫 ${totalQty}` : '';
+      // Stock shown inline next to the price when > 1 (the qty=1 case is implicit
+      // and listing "在庫 1" is noise). Location stays on the meta line below.
+      const stockInline = totalQty > 1
+        ? `<span class="stock-pill">×${totalQty}</span>`
+        : '';
       const locText = locs.length ? '📍 ' + escapeHtml(locs.join('/')) : '';
-      const metaParts = [stockText, locText].filter(Boolean);
       return `
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
@@ -174,8 +175,8 @@ async function loadListings() {
           ${sellerBadge}
           <div class="tile-overlay">
             <div class="name">${escapeHtml(g.name)}</div>
-            <div class="price">${priceLabel}</div>
-            ${metaParts.length ? `<div class="meta">${metaParts.join(' · ')}</div>` : ''}
+            <div class="price-row"><span class="price">${priceLabel}</span>${stockInline}</div>
+            ${locText ? `<div class="meta">${locText}</div>` : ''}
           </div>
         </a>`;
     });

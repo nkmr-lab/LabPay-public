@@ -269,6 +269,20 @@ function tasks_create(PDO $pdo, array $cfg): void {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+
+    // Slack 新規タスク通知 — fire-and-forget; never blocks the response.
+    try {
+        $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+        $taskLink = $baseUrl . '/#/tasks/' . $taskId;
+        $deadlineLine = $deadline ? "\n⏰ 締切: " . $deadline : '';
+        $audLine = $aud ? "\n🎓 対象: " . $aud : '';
+        $urlLine = $url ? "\n🔗 " . $url : '';
+        $msg = "📋 *新規タスク*  <{$taskLink}|{$title}>\n"
+             . "依頼: {$u['display_name']}  ·  {$reward}pt × {$capacity}人"
+             . $deadlineLine . $audLine . $urlLine;
+        slack_notify($cfg, $msg);
+    } catch (Throwable $e) { /* swallow */ }
+
     json_response(tasks_fetch_with_meta($pdo, $taskId, (int)$u['id']));
 }
 

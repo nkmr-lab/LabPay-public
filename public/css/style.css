@@ -193,9 +193,21 @@ textarea { min-height: 80px; resize: vertical; }
   overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+.tile-overlay .price-row {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 2px;
+}
 .tile-overlay .price {
   color: #fff; font-weight: 800; font-size: 15px;
-  margin-top: 2px; white-space: nowrap;
+  white-space: nowrap;
+}
+.tile-overlay .stock-pill {
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,0.95);
+  background: rgba(255,255,255,0.18);
+  padding: 1px 7px; border-radius: 99px;
+  border: 1px solid rgba(255,255,255,0.3);
+  white-space: nowrap;
 }
 .tile-overlay .seller-row {
   display: flex; align-items: center; gap: 6px; margin-top: 4px;
