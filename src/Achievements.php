@@ -96,6 +96,17 @@ class Achievements {
                 ['count' => 150, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
+        'scrapbox_total' => [
+            'title' => 'メモ魔',
+            'desc'  => 'Scrapbox に書き込んだ累計件数',
+            'unit'  => '件',
+            'tiers' => [
+                ['count' => 10,   'label' => 'ブロンズ',   'medal' => '🥉'],
+                ['count' => 50,   'label' => 'シルバー',   'medal' => '🥈'],
+                ['count' => 200,  'label' => 'ゴールド',   'medal' => '🥇'],
+                ['count' => 1000, 'label' => 'プラチナ',   'medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -134,6 +145,12 @@ class Achievements {
         $st = $pdo->prepare("SELECT COUNT(*) FROM task_claims WHERE user_id=? AND status='approved'");
         $st->execute([$userId]);
         $out['tasks_completed'] = (int)$st->fetchColumn();
+
+        // Cumulative Scrapbox attachments — populated daily by bin/scrapbox_slack_sync.php
+        // tallying #scrapbox author_name attachments against user_scrapbox_handles.
+        $st = $pdo->prepare('SELECT COALESCE(SUM(attachments),0) FROM scrapbox_awards WHERE user_id=?');
+        $st->execute([$userId]);
+        $out['scrapbox_total'] = (int)$st->fetchColumn();
 
         return $out;
     }
