@@ -1,4 +1,4 @@
-import { get, post, patch } from '../api.js';
+import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate, safeHttpUrl } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -90,6 +90,12 @@ function toggleCreateForm(open = null) {
             </label>`).join('')}
         </div>
       </div>
+      <label class="field">
+        <span class="lbl">ファイル添付 (任意・複数 OK / 1ファイル 50MB まで)</span>
+        <input type="file" id="t-files" multiple
+               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*">
+        <span class="muted" style="font-size:12px">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
+      </label>
       <div class="muted" style="font-size:12px; margin:4px 0 8px">
         報酬 × 募集人数 が ESCROW に預けられます (取り消し時は未承認分が返金されます)。
       </div>
@@ -116,8 +122,9 @@ async function onCreate() {
   const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
   if (!title || !(reward > 0)) { toast('タイトルと報酬を確認してください'); return; }
   if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
+  const files = Array.from(document.getElementById('t-files')?.files || []);
   try {
-    await post('/api/tasks', {
+    const created = await post('/api/tasks', {
       title,
       url: url || null,
       description: description || null,
@@ -126,11 +133,41 @@ async function onCreate() {
       audience_grades: aud,
       slots_spec: slots_spec || null,
     });
-    toast('タスクを依頼しました');
+    // Upload attachments after the task row is created so the task_id exists.
+    // Failures here are surfaced but don't roll back the task — uploader can
+    // retry from the task detail page (TODO: per-detail upload UI).
+    let attachFails = 0;
+    for (const f of files) {
+      try { await uploadTaskAttachment(created.id, f); }
+      catch (e) { attachFails++; console.warn('attach failed:', f.name, e); }
+    }
+    if (attachFails > 0) toast(`タスク作成 (添付 ${attachFails}件 失敗)`);
+    else toast('タスクを依頼しました' + (files.length ? ` (添付 ${files.length}件)` : ''));
     toggleCreateForm(false);
     await loadList();
     navigate('#/tasks');
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// Multipart upload for one file. Same conventions as the existing
+// /api/uploads/image flow — credentials + CSRF header, raw FormData body.
+async function uploadTaskAttachment(taskId, file) {
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'labpay' },
+    credentials: 'same-origin',
+    body: fd,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
 }
 
 async function loadList() {
@@ -290,6 +327,36 @@ async function loadDetail(id) {
            </a>
          </div>`
       : '';
+    // Attachments block: visible to anyone who can see the task. Same-origin
+    // <a> works for download (cookie auth flows automatically); the server
+    // sends Content-Disposition: attachment with the original filename.
+    const atts = t.attachments || [];
+    const canEditAtt = isRequester;
+    const attBlock = (atts.length || canEditAtt) ? `
+      <div class="sep"></div>
+      <div class="bold" style="margin-bottom:6px">📎 添付ファイル (${atts.length})</div>
+      ${atts.length ? `<div class="list" style="margin-bottom:6px">
+        ${atts.map(a => `
+          <div class="list-item">
+            <div style="flex:1; min-width:0">
+              <a href="/api/tasks/${t.id}/attachments/${a.id}" class="bold" style="color:var(--primary); word-break:break-all">
+                ${escapeHtml(a.filename)}
+              </a>
+              <div class="meta">${formatBytes(a.size_bytes)} · ${escapeHtml(a.mime)}</div>
+            </div>
+            ${canEditAtt
+              ? `<button class="danger" data-att-del="${a.id}" title="削除">削除</button>`
+              : ''}
+          </div>`).join('')}
+      </div>` : ''}
+      ${canEditAtt ? `
+        <div class="row" style="align-items:center; gap:6px">
+          <input type="file" id="t-add-files" multiple
+                 accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*"
+                 style="flex:1">
+          <button id="t-add-files-btn">追加アップロード</button>
+        </div>` : ''}
+    ` : '';
     const thankBlock = (myApproved && t.completion_message)
       ? `<div class="card" style="border-left:4px solid var(--primary); background:#faf6ff">
            <div class="bold" style="margin-bottom:4px">${escapeHtml(t.requester_name)} さんから</div>
@@ -321,6 +388,7 @@ async function loadDetail(id) {
         </div>
         ${urlBlock}
         ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${escapeHtml(t.description)}</div>` : ''}
+        ${attBlock}
         <div class="sep"></div>
         <div>
           <div>報酬: <span class="bold" style="color:var(--primary)">${t.reward}pt</span> × ${t.capacity}人 (残 ${t.remaining}人)</div>
@@ -362,6 +430,27 @@ async function loadDetail(id) {
     document.getElementById('edit-task')?.addEventListener('click', () => renderEditForm(t));
     root.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => onApprove(id, b.dataset.approve)));
     root.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => onReject(id, b.dataset.reject)));
+    root.querySelectorAll('[data-att-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('この添付を削除しますか?')) return;
+        try {
+          await del(`/api/tasks/${id}/attachments/${b.dataset.attDel}`);
+          toast('削除しました');
+          await loadDetail(id);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    document.getElementById('t-add-files-btn')?.addEventListener('click', async () => {
+      const files = Array.from(document.getElementById('t-add-files')?.files || []);
+      if (!files.length) { toast('ファイルを選んでください'); return; }
+      let fails = 0;
+      for (const f of files) {
+        try { await uploadTaskAttachment(id, f); }
+        catch (e) { fails++; console.warn(e); }
+      }
+      toast(fails ? `${files.length - fails}件成功 / ${fails}件失敗` : `添付 ${files.length}件 追加`);
+      await loadDetail(id);
+    });
   } catch (e) {
     document.getElementById('task-detail').innerHTML = `<div class="card muted">${escapeHtml(e.message)}</div>`;
   }

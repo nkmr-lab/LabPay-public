@@ -15,6 +15,15 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($id > 0 && $method === 'PATCH' && !isset($seg[2])) { tasks_update($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'claim'  && $method === 'POST') { tasks_claim($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'cancel' && $method === 'POST') { tasks_cancel($pdo, $cfg, $id); return; }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && $method === 'POST' && !isset($seg[3])) {
+        task_attachments_upload($pdo, $cfg, $id); return;
+    }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && $method === 'DELETE') {
+        task_attachments_delete($pdo, $cfg, $id, (int)$seg[3]); return;
+    }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && $method === 'GET') {
+        task_attachments_download($pdo, $cfg, $id, (int)$seg[3]); return;
+    }
     if ($id > 0 && ($seg[2] ?? '') === 'claims' && isset($seg[3])) {
         $claimId = (int)$seg[3];
         $action  = $seg[4] ?? '';
@@ -199,7 +208,161 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     $stS->execute([$taskId]);
     $row['slots'] = $stS->fetchAll();
 
+    // Attachments. The download URL goes through /api/tasks/{id}/attachments/{att_id}
+    // (not the raw /uploads path) so we can attribute hits and could later gate on
+    // task visibility — currently all logged-in users can see all tasks anyway.
+    $stA = $pdo->prepare("
+        SELECT id, filename, size_bytes, mime, uploaded_by_user_id, created_at
+          FROM task_attachments
+         WHERE task_id = ? ORDER BY id");
+    $stA->execute([$taskId]);
+    $row['attachments'] = $stA->fetchAll();
+
     return $row;
+}
+
+// ---------- attachment upload / download / delete ----------
+// Stored under public/uploads/tasks/{task_id}/{stored_name}. The bytes ARE
+// also reachable via /uploads/... if someone discovers the path — accepted
+// trade-off given the small lab scope, no auth-walled download required.
+// Allowlist of MIME types — keeps an obvious foothold against drive-by uploads
+// of executable content. Extend cautiously.
+const TASK_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024; // 50MB
+const TASK_ATTACHMENT_MIME = [
+    'application/pdf'                                                         => 'pdf',
+    'application/msword'                                                      => 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+    'application/vnd.ms-excel'                                                => 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'       => 'xlsx',
+    'application/vnd.ms-powerpoint'                                           => 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'=> 'pptx',
+    'application/zip'                                                         => 'zip',
+    'application/x-zip-compressed'                                            => 'zip',
+    'text/plain'                                                              => 'txt',
+    'text/markdown'                                                           => 'md',
+    'text/csv'                                                                => 'csv',
+    'image/jpeg'                                                              => 'jpg',
+    'image/png'                                                               => 'png',
+    'image/gif'                                                               => 'gif',
+    'image/webp'                                                              => 'webp',
+    'image/heic'                                                              => 'heic',
+    'image/heif'                                                              => 'heif',
+];
+
+function task_attachments_upload(PDO $pdo, array $cfg, int $taskId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+
+    // Authorization: only the requester can attach files. We could broaden this
+    // (claimed workers, admin) but for the 原稿チェック flow the requester is
+    // the only sensible uploader.
+    $st = $pdo->prepare("SELECT requester_user_id, title, status FROM tasks WHERE id=?");
+    $st->execute([$taskId]);
+    $task = $st->fetch();
+    if (!$task) throw new ApiException('not_found', "task $taskId not found", 404);
+    if ((int)$task['requester_user_id'] !== (int)$u['id']) {
+        throw new ApiException('forbidden', '依頼者のみ添付できます', 403);
+    }
+
+    if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+        throw new ApiException('no_file', 'multipart field "file" is required', 400);
+    }
+    $f = $_FILES['file'];
+    if ((int)$f['error'] !== UPLOAD_ERR_OK) {
+        throw new ApiException('upload_error', 'upload error code ' . (int)$f['error'], 400);
+    }
+    if ((int)$f['size'] > TASK_ATTACHMENT_MAX_BYTES) {
+        throw new ApiException('too_large', 'file exceeds 50MB', 413);
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = (string)$finfo->file($f['tmp_name']);
+    if (!isset(TASK_ATTACHMENT_MIME[$mime])) {
+        throw new ApiException('bad_mime', "unsupported type: $mime", 415);
+    }
+    $ext = TASK_ATTACHMENT_MIME[$mime];
+
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    $dir = $publicDir . '/uploads/tasks/' . $taskId;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new ApiException('mkdir_failed', 'could not create upload dir', 500);
+    }
+    if (!is_writable($dir)) {
+        throw new ApiException('not_writable', "upload dir not writable: $dir", 500);
+    }
+
+    $stored = bin2hex(random_bytes(12)) . '.' . $ext;
+    $dest = $dir . '/' . $stored;
+    if (!move_uploaded_file($f['tmp_name'], $dest)) {
+        throw new ApiException('save_failed', 'could not save file', 500);
+    }
+    @chmod($dest, 0644);
+
+    // Sanitize original filename: strip path components, keep up to 255 chars.
+    $orig = (string)($f['name'] ?? 'attachment');
+    $orig = basename($orig);
+    $orig = mb_substr($orig, 0, 255);
+    if ($orig === '') $orig = 'attachment.' . $ext;
+
+    $ins = $pdo->prepare("INSERT INTO task_attachments
+        (task_id, filename, stored_name, size_bytes, mime, uploaded_by_user_id)
+        VALUES (?,?,?,?,?,?)");
+    $ins->execute([$taskId, $orig, $stored, (int)$f['size'], $mime, $u['id']]);
+    $attId = (int)$pdo->lastInsertId();
+
+    json_response([
+        'ok' => true,
+        'id' => $attId,
+        'filename'   => $orig,
+        'size_bytes' => (int)$f['size'],
+        'mime'       => $mime,
+    ]);
+}
+
+function task_attachments_download(PDO $pdo, array $cfg, int $taskId, int $attId): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT * FROM task_attachments WHERE id=? AND task_id=?");
+    $st->execute([$attId, $taskId]);
+    $att = $st->fetch();
+    if (!$att) throw new ApiException('not_found', "attachment not found", 404);
+
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    $path = $publicDir . '/uploads/tasks/' . $taskId . '/' . $att['stored_name'];
+    if (!is_file($path)) throw new ApiException('gone', 'file missing on disk', 410);
+
+    // Stream the bytes inline-or-attachment with the original filename.
+    if (!headers_sent()) {
+        // Note: we already sent Content-Type: application/json from the front
+        // controller. Override.
+        header_remove('Content-Type');
+    }
+    header('Content-Type: ' . $att['mime']);
+    header('Content-Length: ' . (int)$att['size_bytes']);
+    // RFC 5987 filename* fallback for non-ASCII names.
+    $asciiName = preg_replace('/[^\x20-\x7e]/', '_', $att['filename']);
+    header('Content-Disposition: attachment; filename="' . addslashes($asciiName) . '"; '
+        . "filename*=UTF-8''" . rawurlencode($att['filename']));
+    readfile($path);
+    exit;
+}
+
+function task_attachments_delete(PDO $pdo, array $cfg, int $taskId, int $attId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT a.*, t.requester_user_id
+        FROM task_attachments a JOIN tasks t ON t.id=a.task_id
+        WHERE a.id=? AND a.task_id=?");
+    $st->execute([$attId, $taskId]);
+    $att = $st->fetch();
+    if (!$att) throw new ApiException('not_found', "attachment not found", 404);
+    if ((int)$att['uploaded_by_user_id'] !== (int)$u['id']
+        && (int)$att['requester_user_id'] !== (int)$u['id']) {
+        throw new ApiException('forbidden', '削除権限がありません', 403);
+    }
+
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    $path = $publicDir . '/uploads/tasks/' . $taskId . '/' . $att['stored_name'];
+    if (is_file($path)) @unlink($path);
+    $pdo->prepare("DELETE FROM task_attachments WHERE id=?")->execute([$attId]);
+    json_response(['ok' => true]);
 }
 
 // ---------- GET /api/tasks ----------
