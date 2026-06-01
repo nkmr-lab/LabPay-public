@@ -23,8 +23,95 @@ function route_presence(PDO $pdo, array $cfg, string $method, array $seg): void 
         presence_unregistered_macs($pdo, $cfg); return;
     }
     if ($sub === 'scan' && $method === 'POST')          { presence_scan($pdo, $cfg); return; }
+    if ($sub === 'heatmap' && $method === 'GET')        { presence_heatmap($pdo, $cfg); return; }
 
     json_error('not_found', "no presence route for $method $sub", 404);
+}
+
+// GET /api/presence/heatmap?days=7
+// Returns, for each room, a 7x24 matrix of "average distinct users present in
+// that (weekday, hour) bucket" over the requested past window. Buckets collapse
+// dates with the same weekday so the more days of history we accumulate, the
+// finer the weekly pattern becomes.
+//
+// Methodology: each closed presence_session contributes 1 to every (weekday, hour)
+// bucket it overlaps; then we divide by how many distinct calendar dates we observed
+// for that weekday in the window. Multiple overlapping sessions from the same user
+// in the same hour collapse to 1 (set semantics).
+function presence_heatmap(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $days = max(1, min(365, (int)($_GET['days'] ?? 7)));
+    $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
+    $end   = new DateTimeImmutable('tomorrow midnight', $tz); // exclusive upper bound
+    $start = $end->modify("-{$days} days");
+
+    // Rooms (so the response keeps empty rooms in the result, easier UI)
+    $rooms = $pdo->query("SELECT id, display_name FROM rooms ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+
+    // Pull every session that overlaps the window.
+    $stmt = $pdo->prepare("SELECT user_id, room_id, started_at, ended_at
+        FROM presence_sessions
+        WHERE user_id IS NOT NULL AND started_at < ? AND ended_at > ?
+        ORDER BY started_at");
+    $stmt->execute([$end->format('Y-m-d H:i:s'), $start->format('Y-m-d H:i:s')]);
+
+    // bucket[room][weekday(0=Sun..6=Sat)][hour(0..23)] = set of user_ids
+    // PHP 0=Sun..6=Sat (date('w')); UI converts to Mon-first labels.
+    $bucket = [];
+    foreach ($rooms as $r) {
+        $bucket[$r['id']] = array_fill(0, 7, array_fill(0, 24, []));
+    }
+    $startTs = $start->getTimestamp();
+    $endTs   = $end->getTimestamp();
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+        $room = $s['room_id'];
+        if (!isset($bucket[$room])) continue;
+        $a = max(strtotime($s['started_at']), $startTs);
+        $b = min(strtotime($s['ended_at']),   $endTs);
+        if ($b <= $a) continue;
+        // Walk hour boundaries inside [a, b)
+        $h = $a - ($a % 3600);
+        while ($h < $b) {
+            $w = (int)date('w', $h);
+            $hr = (int)date('G', $h);
+            $bucket[$room][$w][$hr][(int)$s['user_id']] = true;
+            $h += 3600;
+        }
+    }
+
+    // Count distinct calendar dates per weekday in the window (the denominator
+    // for averaging — one Monday in a 7-day window contributes once, three
+    // Mondays in a 21-day window contribute thrice).
+    $daysOfWeek = array_fill(0, 7, 0);
+    for ($t = $startTs; $t < $endTs; $t += 86400) {
+        $daysOfWeek[(int)date('w', $t)]++;
+    }
+
+    // Convert sets to averages.
+    $out = [];
+    foreach ($bucket as $room => $weekdays) {
+        $matrix = [];
+        foreach ($weekdays as $w => $hours) {
+            $row = [];
+            foreach ($hours as $hr => $set) {
+                $denom = max(1, $daysOfWeek[$w]);
+                $row[$hr] = round(count($set) / $denom, 2);
+            }
+            $matrix[$w] = $row;
+        }
+        $out[$room] = $matrix;
+    }
+
+    json_response([
+        'days'        => $days,
+        'range_from'  => $start->format('Y-m-d H:i:s'),
+        'range_to'    => $end->format('Y-m-d H:i:s'),
+        'days_of_week' => $daysOfWeek, // [Sun..Sat] count of dates sampled
+        'rooms'       => array_map(fn($r) => [
+            'id' => $r['id'], 'display_name' => $r['display_name'],
+            'matrix' => $out[$r['id']] ?? array_fill(0, 7, array_fill(0, 24, 0)),
+        ], $rooms),
+    ]);
 }
 
 // Normalize a MAC string to canonical lowercase aa:bb:cc:dd:ee:ff.

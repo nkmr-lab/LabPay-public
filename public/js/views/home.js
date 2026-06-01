@@ -25,6 +25,7 @@ export async function renderHome() {
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">今ラボにいる人</h2>
+        <a href="#/activity" class="muted" style="font-size:13px; margin-right:10px">活動マップ →</a>
         <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
           名前を表示
           <span class="switch">
