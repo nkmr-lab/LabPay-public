@@ -132,6 +132,23 @@ textarea { min-height: 80px; resize: vertical; }
   font-weight:700; vertical-align:middle; flex-shrink:0;
 }
 
+/* Product detail hero — large image on top so the photo the seller uploaded is
+   actually used. Falls back to a colored block with the initial when no image. */
+.product-hero { padding: 16px; }
+.product-image {
+  width: 100%; max-width: 480px; margin: 0 auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px; overflow: hidden;
+  background: var(--primary-soft);
+  display: flex; align-items: center; justify-content: center;
+}
+.product-image img {
+  width: 100%; height: 100%; object-fit: contain; display: block; background: white;
+}
+.product-image-fallback {
+  font-size: 72px; font-weight: 800; color: var(--primary);
+}
+
 /* Product tile grid (buy page). Each tile = the product photo as background +
    an overlay strip at the bottom carrying price + seller count. Tiles wrap to
    fit; the photo is the focus, text is secondary. */

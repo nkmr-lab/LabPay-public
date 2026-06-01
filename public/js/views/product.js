@@ -6,8 +6,9 @@ export async function renderProduct({ params }) {
   const jan = params.jan;
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card">
-      <h2 id="product-title">読み込み中…</h2>
+    <div class="card product-hero" id="product-hero">
+      <div class="product-image" id="product-image"></div>
+      <h2 id="product-title" style="margin:14px 0 4px">読み込み中…</h2>
       <div class="meta">JAN <span class="mono">${escapeHtml(jan)}</span></div>
     </div>
     <div class="card">
@@ -19,8 +20,16 @@ export async function renderProduct({ params }) {
   try {
     const prod = await get('/api/products/' + encodeURIComponent(jan));
     document.getElementById('product-title').textContent = prod.name || jan;
+    const imgEl = document.getElementById('product-image');
+    if (prod.image_url) {
+      imgEl.innerHTML = `<img src="${escapeHtml(prod.image_url)}" alt="${escapeHtml(prod.name || '')}">`;
+    } else {
+      const initial = (prod.name || jan).trim().charAt(0).toUpperCase();
+      imgEl.innerHTML = `<div class="product-image-fallback">${escapeHtml(initial)}</div>`;
+    }
   } catch (e) {
     document.getElementById('product-title').textContent = '(商品未登録) ' + jan;
+    document.getElementById('product-image').remove();
   }
 
   try {
