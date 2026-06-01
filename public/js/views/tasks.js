@@ -4,27 +4,26 @@ import { state, toast } from '../app.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 
-export async function renderTasks({ query }) {
-  const filter = query?.filter || 'available';
+export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">タスク</h2>
-        <button id="task-new" class="primary">+ 出す</button>
+        <button id="task-new" class="primary">+ 依頼する</button>
       </div>
-      <div class="row" style="gap:6px; margin-top:8px">
-        <a href="#/tasks?filter=available" class="${filter==='available'?'btn primary':'btn'}">受けられる</a>
-        <a href="#/tasks?filter=active"    class="${filter==='active'?'btn primary':'btn'}">進行中</a>
-        <a href="#/tasks?filter=mine"      class="${filter==='mine'?'btn primary':'btn'}">自分が出した</a>
-      </div>
+      <p class="muted" style="font-size:12px; margin:8px 0 0">
+        <span style="color:var(--primary)">●</span> 自分が依頼  ·
+        <span style="color:#b54708">●</span> 引き受け中/報告済み  ·
+        <span style="color:#0e7c63">●</span> 受けられる
+      </p>
     </div>
     <div id="task-form-card" hidden></div>
     <div id="task-list"><div class="muted">読み込み中…</div></div>
   `;
 
   document.getElementById('task-new').addEventListener('click', () => toggleCreateForm());
-  await loadList(filter);
+  await loadList();
 }
 
 function toggleCreateForm(open = null) {
@@ -35,7 +34,7 @@ function toggleCreateForm(open = null) {
   card.hidden = false;
   card.innerHTML = `
     <div class="card">
-      <h3>タスクを出す</h3>
+      <h3>タスクを依頼する</h3>
       <label class="field">
         <span class="lbl">タイトル</span>
         <input type="text" id="t-title" maxlength="200">
@@ -77,6 +76,11 @@ function toggleCreateForm(open = null) {
         <span class="lbl">締切 (任意・無指定なら無期限)</span>
         <input type="datetime-local" id="t-deadline">
       </label>
+      <label class="field">
+        <span class="lbl">時間枠 (任意・指定すると枠ごとに 1 人ずつ募集)</span>
+        <textarea id="t-slots" rows="3" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み"></textarea>
+        <span class="muted" style="font-size:12px">指定すると「募集人数」は枠数から自動算出されます。</span>
+      </label>
       <div class="field">
         <span class="lbl">対象学年 (チェック無し = 全員)</span>
         <div class="row" style="gap:8px; flex-wrap:wrap">
@@ -90,7 +94,7 @@ function toggleCreateForm(open = null) {
         報酬 × 募集人数 が ESCROW に預けられます (取り消し時は未承認分が返金されます)。
       </div>
       <div class="row">
-        <button id="t-submit" class="primary">出す</button>
+        <button id="t-submit" class="primary">依頼する</button>
         <button id="t-cancel">キャンセル</button>
       </div>
     </div>
@@ -105,11 +109,13 @@ async function onCreate() {
   const description = document.getElementById('t-desc').value.trim();
   const completion_message = document.getElementById('t-cmsg').value.trim();
   const reward   = Number(document.getElementById('t-reward').value);
+  const slots_spec = document.getElementById('t-slots').value.trim();
   const capacity = Number(document.getElementById('t-capacity').value);
   const per_user_limit = Number(document.getElementById('t-perlimit').value);
   const deadline = document.getElementById('t-deadline').value || null;
   const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
-  if (!title || !(reward > 0) || !(capacity > 0)) { toast('入力を確認してください'); return; }
+  if (!title || !(reward > 0)) { toast('タイトルと報酬を確認してください'); return; }
+  if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
   try {
     await post('/api/tasks', {
       title,
@@ -118,29 +124,47 @@ async function onCreate() {
       completion_message: completion_message || null,
       reward, capacity, per_user_limit, deadline,
       audience_grades: aud,
+      slots_spec: slots_spec || null,
     });
-    toast('タスクを出しました');
+    toast('タスクを依頼しました');
     toggleCreateForm(false);
-    await loadList('mine');
-    navigate('#/tasks?filter=mine');
+    await loadList();
+    navigate('#/tasks');
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-async function loadList(filter) {
+async function loadList() {
   try {
-    const d = await get('/api/tasks', { filter });
+    const d = await get('/api/tasks');
     const root = document.getElementById('task-list');
     if (!d.items.length) {
       root.innerHTML = `<div class="card empty">該当するタスクはありません</div>`;
       return;
     }
-    root.innerHTML = d.items.map(t => renderRow(t, filter)).join('');
+    // Sort: 自分が引き受け中/報告済みを先頭 → 承認待ちのある自分のタスク
+    //     → その他自分のタスク → 受けられるタスク → 完了・参加済み
+    const score = t => {
+      if (['claimed', 'reported'].includes(t.my_status)) return 0;
+      if (t.is_mine && t.pending_count > 0) return 1;
+      if (t.is_mine) return 2;
+      if (t.can_claim) return 3;
+      return 4;
+    };
+    const sorted = d.items.slice().sort((a, b) => {
+      const sa = score(a), sb = score(b);
+      if (sa !== sb) return sa - sb;
+      return b.id - a.id;
+    });
+    root.innerHTML = sorted.map(renderRow).join('');
   } catch (e) {
     document.getElementById('task-list').innerHTML = `<div class="card muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
-function renderRow(t, filter) {
+// Role-coloured task row: each task carries a left border whose color tells the
+// viewer their relationship to it at a glance — own task (purple), in-progress
+// (orange), claimable (green), or neutral (gray).
+function renderRow(t) {
   const audTag = t.audience_grades ? `<span class="tag muted" style="margin-left:4px">${escapeHtml(t.audience_grades)}</span>` : '';
   const statusTag = ({
     open: '<span class="tag">募集中</span>',
@@ -148,28 +172,36 @@ function renderRow(t, filter) {
     cancelled: '<span class="tag danger">取消</span>',
   })[t.status] || '';
   const deadlineTag = t.deadline ? `<span class="tag warn" style="margin-left:4px">締切 ${escapeHtml(t.deadline)}</span>` : '';
-  const pendingTag = (filter === 'mine' && t.pending_count > 0)
+  const pendingTag = (t.is_mine && t.pending_count > 0)
     ? `<span class="tag" style="margin-left:4px; background:#fff3df; color:var(--warn)">🔔 承認待ち ${t.pending_count}</span>`
     : '';
 
-  let progressLine = '';
-  if (t.approved_count !== undefined) {
-    progressLine = `<div class="meta">承認 ${t.approved_count} / ${t.capacity}人${t.pending_count ? ` · 報告待ち ${t.pending_count}` : ''}</div>`;
-  }
-  if (filter === 'active' && t.my_status) {
-    const lbl = t.my_status === 'claimed' ? '引き受け中 (完了報告まち)'
-              : t.my_status === 'reported' ? '報告済み (承認まち)'
-              : '';
-    progressLine = `<div class="meta">${lbl}</div>`;
+  // Decide row role + border color.
+  let borderColor = '#dadbe2', roleBadge = '';
+  if (['claimed', 'reported'].includes(t.my_status)) {
+    borderColor = '#b54708';
+    const lbl = t.my_status === 'claimed' ? '引き受け中' : '報告済み (承認まち)';
+    roleBadge = `<span class="tag" style="background:#fff3df; color:#b54708; margin-left:4px">${lbl}</span>`;
+  } else if (t.is_mine) {
+    borderColor = 'var(--primary)';
+    roleBadge = '<span class="tag" style="background:var(--primary-soft); color:var(--primary); margin-left:4px">自分が依頼</span>';
+  } else if (t.can_claim) {
+    borderColor = '#0e7c63';
+  } else {
+    // Open but not claimable (audience mismatch / per-user limit reached / etc),
+    // or closed. Still showing so requester/participants can see context.
+    borderColor = '#dadbe2';
   }
 
+  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 報告待ち ${t.pending_count}` : ''}</div>`;
+
   return `
-    <div class="card" style="display:flex; gap:10px; align-items:flex-start">
+    <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">
       ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
       <div style="flex:1">
         <div>
           <a class="bold" href="#/tasks/${t.id}">${escapeHtml(t.title)}</a>
-          ${statusTag}${pendingTag}${audTag}${deadlineTag}
+          ${statusTag}${roleBadge}${pendingTag}${audTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
         ${progressLine}
@@ -217,7 +249,24 @@ async function loadDetail(id) {
           actions = `<div class="muted">承認待ち</div>`;
         }
       } else if (canClaim) {
-        actions = `<button id="claim-btn" class="primary">これを引き受ける</button>`;
+        // Slot-aware claim: when slots exist, the worker must pick one before
+        // calling /claim. Slots that have already filled their capacity are disabled.
+        if (Array.isArray(t.slots) && t.slots.length > 0) {
+          actions = `
+            <div style="font-weight:700; margin-bottom:6px">時間枠を選んでください</div>
+            <div class="row" style="flex-wrap:wrap; gap:6px">
+              ${t.slots.map(s => {
+                const full = (s.taken|0) >= (s.capacity|0);
+                return `<button class="slot-chip ${full?'disabled':''}" data-slot="${s.id}" ${full?'disabled':''}>
+                  ${escapeHtml(s.started_at.slice(5, 16).replace(' ', ' '))} 〜 ${escapeHtml(s.ended_at.slice(11, 16))}
+                  ${full ? '(満)' : ''}
+                </button>`;
+              }).join('')}
+            </div>
+            <button id="claim-btn" class="primary" style="margin-top:10px" disabled>枠を選択 → 引き受ける</button>`;
+        } else {
+          actions = `<button id="claim-btn" class="primary">これを引き受ける</button>`;
+        }
       } else if (t.remaining === 0) {
         actions = `<div class="muted">定員に達しています</div>`;
       } else {
@@ -292,7 +341,22 @@ async function loadDetail(id) {
       ${isRequester ? renderClaimsAdmin(t) : ''}
     `;
 
-    document.getElementById('claim-btn')?.addEventListener('click', () => onClaim(id));
+    // Slot selection wiring (when the task uses time slots).
+    let selectedSlotId = null;
+    root.querySelectorAll('.slot-chip').forEach(b => {
+      if (b.disabled) return;
+      b.addEventListener('click', () => {
+        root.querySelectorAll('.slot-chip').forEach(o => o.classList.remove('primary'));
+        b.classList.add('primary');
+        selectedSlotId = Number(b.dataset.slot);
+        const claimBtn = document.getElementById('claim-btn');
+        if (claimBtn) {
+          claimBtn.disabled = false;
+          claimBtn.textContent = 'この枠で引き受ける';
+        }
+      });
+    });
+    document.getElementById('claim-btn')?.addEventListener('click', () => onClaim(id, selectedSlotId));
     document.getElementById('report-btn')?.addEventListener('click', e => onReport(id, e.currentTarget.dataset.claim));
     document.getElementById('cancel-task')?.addEventListener('click', () => onCancelTask(id));
     document.getElementById('edit-task')?.addEventListener('click', () => renderEditForm(t));
@@ -345,9 +409,12 @@ function renderClaimsAdmin(t) {
   return `<div class="card"><h3>申請 (${t.claims.length}件)</h3><div class="list">${rows}</div></div>`;
 }
 
-async function onClaim(taskId) {
-  try { await post(`/api/tasks/${taskId}/claim`, {}); toast('引き受けました'); await loadDetail(taskId); }
-  catch (e) { toast('失敗: ' + e.message); }
+async function onClaim(taskId, slotId) {
+  try {
+    await post(`/api/tasks/${taskId}/claim`, slotId ? { slot_id: slotId } : {});
+    toast('引き受けました');
+    await loadDetail(taskId);
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 async function onReport(taskId, claimId) {

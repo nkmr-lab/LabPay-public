@@ -103,6 +103,11 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 button:disabled { opacity: .55; cursor: not-allowed; }
 button.tip-chip { padding: 6px 12px; font-size: 13px; font-weight: 600; }
 
+/* Slot chips on the task detail page — one per time window. Selected gets the
+   primary purple; disabled (already full) gets a struck-through grey look. */
+button.slot-chip { padding: 6px 10px; font-size: 13px; font-weight: 600; }
+button.slot-chip.disabled { color: #aaa; text-decoration: line-through; cursor: not-allowed; }
+
 /* Form fields */
 label.field { display: block; margin: 10px 0; }
 label.field .lbl { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }

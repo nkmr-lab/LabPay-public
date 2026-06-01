@@ -92,6 +92,56 @@ function tasks_validate_url($raw): ?string {
     return $u;
 }
 
+// Parse a free-text "時間枠" spec into a list of (start, end) DateTime pairs.
+//
+// Supported per-line patterns (use a multi-line spec to mix days):
+//   6/15 11:00-15:00 30分刻み      -> generates 8 slots (start..start+30) until end
+//   6/15 11:00-15:00 60分刻み      -> 4 slots
+//   2026-06-15 11:00-15:00 30分刻み -> explicit year
+//
+// Year fallback: when omitted, use the current year — bumping to next year if the
+// resulting date is already in the past.
+function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): array {
+    $now = $now ?? new DateTimeImmutable('now');
+    $slots = [];
+    foreach (preg_split('/\R/u', $spec) as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        // YYYY-M(M)-D(D)  or  M(M)/D(D)  then  HH:MM-HH:MM  then  N分刻み
+        $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み\s*$/u';
+        if (!preg_match($pat, $line, $m)) continue;
+        $year   = $m[1] !== '' ? (int)$m[1] : (int)$now->format('Y');
+        $month  = (int)$m[2];
+        $day    = (int)$m[3];
+        $startH = (int)$m[4]; $startM = (int)$m[5];
+        $endH   = (int)$m[6]; $endM   = (int)$m[7];
+        $stride = (int)$m[8];
+        if ($stride < 1 || $stride > 24 * 60) continue;
+        try {
+            $start = new DateTimeImmutable(sprintf('%04d-%02d-%02d %02d:%02d:00', $year, $month, $day, $startH, $startM));
+            $end   = $start->setTime($endH, $endM);
+        } catch (Throwable $e) { continue; }
+        // Year omitted + day already passed → bump to next year.
+        if ($m[1] === '' && $end < $now) {
+            $start = $start->modify('+1 year');
+            $end   = $end->modify('+1 year');
+        }
+        if ($end <= $start) continue;
+        $cur = $start;
+        while ($cur < $end) {
+            $next = $cur->modify("+{$stride} minutes");
+            if ($next > $end) break;
+            $slots[] = [
+                'start' => $cur->format('Y-m-d H:i:s'),
+                'end'   => $next->format('Y-m-d H:i:s'),
+            ];
+            $cur = $next;
+        }
+        if (count($slots) > 200) break; // safety: cap absurd specs
+    }
+    return $slots;
+}
+
 function tasks_user_grade(PDO $pdo, int $userId): ?string {
     $st = $pdo->prepare('SELECT grade FROM users WHERE id=?');
     $st->execute([$userId]);
@@ -130,66 +180,69 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     $row['approved_count'] = tasks_approved_count($pdo, $taskId);
     $row['remaining']      = max(0, (int)$row['capacity'] - $row['approved_count']);
     if ($forUserId !== null) {
-        $st2 = $pdo->prepare("SELECT id, status, reported_at, approved_at, notes, created_at
+        $st2 = $pdo->prepare("SELECT id, status, slot_id, reported_at, approved_at, notes, created_at
             FROM task_claims WHERE task_id=? AND user_id=? ORDER BY id DESC");
         $st2->execute([$taskId, $forUserId]);
         $row['my_claims'] = $st2->fetchAll();
     }
+
+    // Slots (if any) — include per-slot claim counts so the picker can grey out
+    // already-filled options.
+    $stS = $pdo->prepare("
+        SELECT s.id, s.started_at, s.ended_at, s.capacity,
+               COALESCE((SELECT COUNT(*) FROM task_claims tc
+                  WHERE tc.slot_id = s.id
+                    AND tc.status IN ('claimed','reported','approved')), 0) AS taken
+          FROM task_slots s
+         WHERE s.task_id = ?
+         ORDER BY s.started_at");
+    $stS->execute([$taskId]);
+    $row['slots'] = $stS->fetchAll();
+
     return $row;
 }
 
-// ---------- GET /api/tasks?filter=... ----------
+// ---------- GET /api/tasks ----------
+// Unified list: every task the caller has any relationship to —
+// (a) tasks they created, (b) tasks they have an active claim on, (c) open tasks
+// they could claim. Each row gets enough flags (is_mine / my_status / can_claim /
+// pending_count) for the frontend to color-code without further roundtrips.
 function tasks_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     tasks_sweep_expired($pdo, $cfg);
-    $filter = $_GET['filter'] ?? 'available';
     $userGrade = tasks_user_grade($pdo, (int)$u['id']);
+    $uid = (int)$u['id'];
 
-    if ($filter === 'mine') {
-        // tasks I created
-        $st = $pdo->prepare("
-            SELECT t.*, u.display_name AS requester_name, u.avatar_url AS requester_avatar_url,
-                   (SELECT COUNT(*) FROM task_claims WHERE task_id=t.id AND status='approved') AS approved_count,
-                   (SELECT COUNT(*) FROM task_claims WHERE task_id=t.id AND status IN ('claimed','reported')) AS pending_count
-              FROM tasks t JOIN users u ON u.id = t.requester_user_id
-             WHERE t.requester_user_id = ? ORDER BY t.id DESC");
-        $st->execute([$u['id']]);
-    } elseif ($filter === 'active') {
-        // tasks I'm working on (claimed or reported)
-        $st = $pdo->prepare("
-            SELECT t.*, u.display_name AS requester_name, u.avatar_url AS requester_avatar_url,
-                   tc.status AS my_status
-              FROM task_claims tc
-              JOIN tasks t ON t.id = tc.task_id
-              JOIN users u ON u.id = t.requester_user_id
-             WHERE tc.user_id = ? AND tc.status IN ('claimed','reported')
-             ORDER BY tc.id DESC");
-        $st->execute([$u['id']]);
-    } else {
-        // 'available': open tasks I haven't filled my slot on, and audience matches
-        $st = $pdo->prepare("
-            SELECT t.*, u.display_name AS requester_name, u.avatar_url AS requester_avatar_url,
-                   (SELECT COUNT(*) FROM task_claims WHERE task_id=t.id AND status='approved') AS approved_count,
-                   (SELECT COUNT(*) FROM task_claims
-                      WHERE task_id=t.id AND user_id=?
-                        AND status IN ('claimed','reported','approved')) AS my_active
-              FROM tasks t JOIN users u ON u.id = t.requester_user_id
-             WHERE t.status = 'open' AND t.requester_user_id != ?
-             ORDER BY t.id DESC");
-        $st->execute([$u['id'], $u['id']]);
-    }
+    $st = $pdo->prepare("
+        SELECT t.*, u.display_name AS requester_name, u.avatar_url AS requester_avatar_url,
+               (SELECT COUNT(*) FROM task_claims WHERE task_id=t.id AND status='approved') AS approved_count,
+               (SELECT COUNT(*) FROM task_claims WHERE task_id=t.id AND status IN ('claimed','reported')) AS pending_count,
+               (SELECT status FROM task_claims
+                  WHERE task_id=t.id AND user_id=? ORDER BY id DESC LIMIT 1) AS my_status,
+               (SELECT COUNT(*) FROM task_claims
+                  WHERE task_id=t.id AND user_id=?
+                    AND status IN ('claimed','reported','approved')) AS my_active_count
+          FROM tasks t
+          JOIN users u ON u.id = t.requester_user_id
+         WHERE t.requester_user_id = ?
+            OR EXISTS (SELECT 1 FROM task_claims WHERE task_id=t.id AND user_id=?)
+            OR (t.status = 'open' AND t.requester_user_id <> ?)
+         ORDER BY t.id DESC");
+    $st->execute([$uid, $uid, $uid, $uid, $uid]);
     $rows = $st->fetchAll();
+
     foreach ($rows as &$r) {
-        $r['remaining'] = isset($r['approved_count'])
-            ? max(0, (int)$r['capacity'] - (int)$r['approved_count'])
-            : null;
-        if ($filter === 'available') {
-            $myActive = (int)($r['my_active'] ?? 0);
-            $perLimit = (int)$r['per_user_limit'];
-            $r['can_claim'] = ($perLimit === 0 || $myActive < $perLimit)
-                && $r['remaining'] > 0
-                && tasks_can_apply_to_grade($userGrade, $r['audience_grades']);
-        }
+        $r['remaining']   = max(0, (int)$r['capacity'] - (int)$r['approved_count']);
+        $r['is_mine']     = ((int)$r['requester_user_id'] === $uid);
+        $myActive = (int)$r['my_active_count'];
+        $perLimit = (int)$r['per_user_limit'];
+        // Can the caller still pick this task up? Closed tasks => no; own task => no;
+        // already maxed under per_user_limit => no; audience mismatch => no.
+        $r['can_claim'] = $r['status'] === 'open'
+            && !$r['is_mine']
+            && $r['remaining'] > 0
+            && ($perLimit === 0 || $myActive < $perLimit)
+            && tasks_can_apply_to_grade($userGrade, $r['audience_grades']);
     }
     json_response(['items' => $rows]);
 }
@@ -221,8 +274,20 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $url           = tasks_validate_url($body['url'] ?? null);
     $completionMsg = optional_text_field($body, 'completion_message', 2000);
     $reward   = require_int_positive($body['reward']   ?? null, 'reward');
-    $capacity = require_int_positive($body['capacity'] ?? null, 'capacity');
     $perLimit = require_int_nonneg($body['per_user_limit'] ?? 1, 'per_user_limit');
+    // Optional time slot spec — parsed to (start, end) list. When present,
+    // capacity becomes the slot count (1 person per slot by default).
+    $slotsSpec = optional_text_field($body, 'slots_spec', 2000);
+    $parsedSlots = $slotsSpec !== null ? tasks_parse_slot_spec($slotsSpec) : [];
+    if ($slotsSpec !== null && empty($parsedSlots)) {
+        throw new ApiException('bad_request',
+            '時間枠の書式: 6/15 11:00-15:00 30分刻み (行ごとに複数日)', 400);
+    }
+    // If slots are provided, derive capacity from them. Otherwise require an
+    // explicit capacity number like before.
+    $capacity = !empty($parsedSlots)
+        ? count($parsedSlots)
+        : require_int_positive($body['capacity'] ?? null, 'capacity');
 
     // Optional deadline (accept ISO Y-m-d H:i:s or Y-m-d\TH:i from <input type=datetime-local>)
     $deadline = null;
@@ -257,6 +322,15 @@ function tasks_create(PDO $pdo, array $cfg): void {
             VALUES (?,?,?,?,?,?,?,?,?,?)');
         $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
+
+        // Insert any time slots derived from slots_spec.
+        if (!empty($parsedSlots)) {
+            $slotIns = $pdo->prepare('INSERT INTO task_slots (task_id, started_at, ended_at, capacity)
+                VALUES (?,?,?,1)');
+            foreach ($parsedSlots as $s) {
+                $slotIns->execute([$taskId, $s['start'], $s['end']]);
+            }
+        }
 
         // Move escrow: requester → ESCROW
         $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
@@ -378,6 +452,8 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
 function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $userGrade = tasks_user_grade($pdo, (int)$u['id']);
+    $body = read_json_body();
+    $slotId = isset($body['slot_id']) ? (int)$body['slot_id'] : 0;
 
     $pdo->beginTransaction();
     try {
@@ -399,8 +475,27 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
         if ((int)$task['per_user_limit'] > 0 && $myActive >= (int)$task['per_user_limit'])
             throw new ApiException('per_user_limit', '引き受け上限に達しています', 409);
 
-        $ins = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, status) VALUES (?,?,'claimed')");
-        $ins->execute([$taskId, $u['id']]);
+        // Slot-aware claim: when this task has slots, a slot_id must be picked AND
+        // that specific slot's capacity must not be full.
+        $hasSlots = (int)$pdo->query("SELECT COUNT(*) FROM task_slots WHERE task_id=" . (int)$taskId)->fetchColumn() > 0;
+        if ($hasSlots) {
+            if ($slotId <= 0) throw new ApiException('bad_request', '時間枠を選択してください', 400);
+            $stSlot = $pdo->prepare("SELECT s.capacity,
+                  (SELECT COUNT(*) FROM task_claims
+                    WHERE slot_id = s.id AND status IN ('claimed','reported','approved')) AS taken
+                FROM task_slots s WHERE s.id = ? AND s.task_id = ? FOR UPDATE");
+            $stSlot->execute([$slotId, $taskId]);
+            $slot = $stSlot->fetch();
+            if (!$slot) throw new ApiException('not_found', '時間枠が見つかりません', 404);
+            if ((int)$slot['taken'] >= (int)$slot['capacity'])
+                throw new ApiException('slot_full', 'この時間枠は埋まっています', 409);
+        } else {
+            $slotId = 0; // ignore any incoming slot_id when the task has no slots
+        }
+
+        $ins = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, slot_id, status)
+            VALUES (?,?,?,'claimed')");
+        $ins->execute([$taskId, $u['id'], $slotId > 0 ? $slotId : null]);
         $claimId = (int)$pdo->lastInsertId();
         $pdo->commit();
     } catch (Throwable $e) {
