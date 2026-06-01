@@ -109,26 +109,16 @@ async function renderPresenceSummary() {
     const live = s.currently_present
       ? `<div style="margin-top:6px; color:#0e7c63; font-weight:600">● いまラボに居ます</div>`
       : '';
+    // 今日の滞在時間 + ライブインジケータだけを 1 行で。詳しい内訳は草の
+     // セルにホバーすれば日ごとに出るので、上の数値スタックは省略。
     root.innerHTML = `
-      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center">
+      <div style="display:flex; align-items:baseline; gap:14px">
         <div>
-          <div class="muted" style="font-size:11px">昨日</div>
-          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.yesterday_minutes)}</div>
-        </div>
-        <div>
-          <div class="muted" style="font-size:11px">今日</div>
+          <div class="muted" style="font-size:11px">今日のラボ滞在</div>
           <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.today_minutes)}</div>
         </div>
-        <div>
-          <div class="muted" style="font-size:11px">今週</div>
-          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.week_minutes)}</div>
-        </div>
-        <div>
-          <div class="muted" style="font-size:11px">今月</div>
-          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.month_minutes)}</div>
-        </div>
+        <div style="flex:1; text-align:right">${live}</div>
       </div>
-      ${live}
       <div id="presence-grass" style="margin-top:14px"></div>
     `;
     renderPresenceGrass();
@@ -144,13 +134,14 @@ async function renderPresenceGrass() {
   const root = document.getElementById('presence-grass');
   if (!root) return;
   try {
-    // Year-to-date: from Jan 1 of the current year through today. Day count
-    // grows naturally as the year progresses (max 366).
+    // 日本の学校年度 (4/1 - 翌 3/31)。今が 4 月以降なら今年、それより前なら去年が
+    // 年度の起点。グリッドはその起点日から今日までを表示する。
     const now = new Date();
-    const year = now.getFullYear();
-    const jan1 = new Date(year, 0, 1);
+    const m = now.getMonth();          // 0=Jan..11=Dec
+    const fiscalYear = m >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fiscalStart = new Date(fiscalYear, 3, 1); // April 1
     const daysSoFar = Math.min(366,
-      Math.floor((now - jan1) / 86400000) + 1);
+      Math.floor((now - fiscalStart) / 86400000) + 1);
     const c = await get('/api/me/contribution_calendar', { days: daysSoFar });
     if (!c.days.length) { root.innerHTML = ''; return; }
     // Pad so the first column starts on a Monday. dow: 1=Mon..0=Sun in JS;
@@ -177,7 +168,7 @@ async function renderPresenceGrass() {
               title="${d.date}: ${d.minutes > 0 ? fmtMin(d.minutes) : '不在'}"></div>`
       : `<div class="grass-cell" style="background:transparent"></div>`;
     root.innerHTML = `
-      <div class="muted" style="font-size:11px; margin-bottom:4px">${year} 年のラボ滞在</div>
+      <div class="muted" style="font-size:11px; margin-bottom:4px">${fiscalYear} 年度のラボ滞在</div>
       <div style="display:flex; gap:3px; overflow-x:auto; padding-bottom:2px">
         <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px; padding-right:2px">
           ${dayLabels.map(l => `<div style="font-size:9px; color:var(--muted); line-height:12px">${l}</div>`).join('')}
