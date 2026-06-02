@@ -324,11 +324,17 @@ let wariFor = new Set();
 function renderWariForm() {
   const root = document.getElementById('gd-wari-form');
   if (!root) return;
-  const ccyOpts = CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  // OTHER は最後の sentinel。選ぶと自由入力欄が現れる。
+  const ccyOpts = [...CURRENCIES, 'OTHER'].map(c =>
+    `<option value="${c}">${c === 'OTHER' ? 'その他…' : c}</option>`).join('');
   root.innerHTML = `
-    <div style="display:grid; grid-template-columns: minmax(0,1fr) 90px; gap:6px; margin-bottom:6px">
+    <div style="display:grid; grid-template-columns: minmax(0,1fr) 110px; gap:6px; margin-bottom:6px">
       <input type="number" id="ex-amt" min="0" step="0.01" placeholder="金額" inputmode="decimal">
       <select id="ex-ccy">${ccyOpts}</select>
+    </div>
+    <div id="ex-custom-row" hidden style="display:grid; grid-template-columns: 110px minmax(0,1fr); gap:6px; margin-bottom:6px">
+      <input type="text" id="ex-ccy-custom" maxlength="3" placeholder="通貨 (例: THB)" style="text-transform:uppercase">
+      <input type="number" id="ex-rate-manual" min="0" step="0.000001" placeholder="1 通貨 = ? JPY">
     </div>
     <div id="ex-rate-row" hidden style="margin-bottom:6px; font-size:12px"></div>
     <label class="muted" style="font-size:12px; display:block; margin-bottom:2px">立て替えた人</label>
@@ -341,6 +347,11 @@ function renderWariForm() {
   `;
   const ccyEl = document.getElementById('ex-ccy');
   ccyEl.addEventListener('change', () => syncFxPreview());
+  // For OTHER: try auto-fetch when user finishes typing a 3-letter code.
+  document.getElementById('ex-ccy-custom').addEventListener('blur', () => tryFetchCustomRate());
+  document.getElementById('ex-ccy-custom').addEventListener('input', (e) => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  });
   syncFxPreview();
   // Default payer to me if present in the group, else first member.
   const sel = document.getElementById('ex-payer');
@@ -352,13 +363,21 @@ function renderWariForm() {
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
 }
 
-// Last-fetched rate (kept on the form for submit). Cleared on currency change.
+// Last-fetched rate for the preset dropdown path. Cleared on currency change.
 let pendingFxRate = null;
 
 async function syncFxPreview() {
   const ccy = document.getElementById('ex-ccy').value;
   const row = document.getElementById('ex-rate-row');
+  const customRow = document.getElementById('ex-custom-row');
   pendingFxRate = null;
+  if (ccy === 'OTHER') {
+    customRow.hidden = false;
+    row.hidden = false;
+    row.innerHTML = `<span class="muted">通貨コード (3文字) と 1通貨=?円 を入れてください。コードが対応していれば自動取得します。</span>`;
+    return;
+  }
+  customRow.hidden = true;
   if (ccy === 'JPY') { row.hidden = true; row.innerHTML = ''; return; }
   row.hidden = false;
   row.innerHTML = `<span class="muted">レート取得中…</span>`;
@@ -369,6 +388,22 @@ async function syncFxPreview() {
   } catch (e) {
     pendingFxRate = null;
     row.innerHTML = `<span style="color:var(--warn)">レート取得失敗 (${escapeHtml(e.message)}) — 送信時にサーバー側で再取得します</span>`;
+  }
+}
+
+async function tryFetchCustomRate() {
+  const code = document.getElementById('ex-ccy-custom').value.trim();
+  const rateEl = document.getElementById('ex-rate-manual');
+  const row = document.getElementById('ex-rate-row');
+  if (code.length !== 3) return;
+  if (rateEl.value && Number(rateEl.value) > 0) return; // user already typed → don't overwrite
+  row.innerHTML = `<span class="muted">${escapeHtml(code)} のレートを取得中…</span>`;
+  try {
+    const entry = await fetchFxRate(code);
+    rateEl.value = entry.rate.toFixed(6);
+    row.innerHTML = `<span class="muted">登録時点のレート: 1 ${escapeHtml(code)} = ${entry.rate.toFixed(4)} JPY <span style="font-size:11px">(${escapeHtml(entry.source)})</span></span>`;
+  } catch (e) {
+    row.innerHTML = `<span class="muted">${escapeHtml(code)} は自動取得できませんでした。手動でレートを入れてください。</span>`;
   }
 }
 
@@ -409,15 +444,23 @@ function renderForPicker() {
 async function onAddExpense() {
   const gid = currentGroupId;
   const amount = Number(document.getElementById('ex-amt').value);
-  const currency = document.getElementById('ex-ccy').value;
+  let currency = document.getElementById('ex-ccy').value;
   const payer_user_id = Number(document.getElementById('ex-payer').value);
   const memo = document.getElementById('ex-memo').value.trim() || null;
   if (!(amount > 0)) { toast('金額を入れてください'); return; }
-  const body = { amount, currency, payer_user_id, memo };
-  // Use the previewed rate if we have one; otherwise let the server fetch.
-  if (currency !== 'JPY' && pendingFxRate) {
+  const body = { amount, payer_user_id, memo };
+  if (currency === 'OTHER') {
+    const code = document.getElementById('ex-ccy-custom').value.trim();
+    const manualRate = Number(document.getElementById('ex-rate-manual').value);
+    if (!/^[A-Z]{3}$/.test(code))   { toast('通貨コード (3文字) を入れてください'); return; }
+    if (!(manualRate > 0))           { toast('レートを入れてください'); return; }
+    currency = code;
+    body.rate_to_jpy = manualRate;
+  } else if (currency !== 'JPY' && pendingFxRate) {
+    // Use the previewed rate if we have one; otherwise let the server fetch.
     body.rate_to_jpy = pendingFxRate;
   }
+  body.currency = currency;
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
   // Omit participant_ids if it's everyone — backend default is the full
   // current member list, which keeps a member added later handled identically.
