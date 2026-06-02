@@ -14,6 +14,10 @@ const SLICE_COLORS = [
 let lastResult = null;        // remembered between renders so the wheel stays on the winner
 let spinning = false;
 let selected = new Set();     // user_ids currently checked
+// roomId → Set of user_ids currently observed in that room. Populated from
+// /api/presence at load time so the '10F に今いる人' buttons can flip those
+// ids without an extra call.
+let ROOM_USERS = {};
 
 export async function renderRoulette() {
   const app = document.getElementById('app');
@@ -53,7 +57,7 @@ export async function renderRoulette() {
       <div id="rl-wheel-wrap" style="position:relative; width:280px; height:280px; margin:0 auto">
         <div id="rl-pointer" style="position:absolute; top:-4px; left:50%; transform:translateX(-50%); font-size:24px; z-index:2">▼</div>
         <svg id="rl-wheel" viewBox="-150 -150 300 300" width="280" height="280"
-             style="display:block; transition:transform 8s cubic-bezier(.32,.08,.18,1)">
+             style="display:block; transition:transform 14s cubic-bezier(.22,.04,.08,1)">
           <circle cx="0" cy="0" r="140" fill="#e9eaee"></circle>
           <text x="0" y="5" text-anchor="middle" font-size="14" fill="#666">メンバーを選択</text>
         </svg>
@@ -86,7 +90,13 @@ function gradeRank(g) {
 
 async function loadMembers() {
   try {
-    const u = await get('/api/users');
+    const [u, p] = await Promise.all([
+      get('/api/users'),
+      // Presence is best-effort — if it fails we still want member chips to
+      // render. Catch and fall back to empty so the room buttons just become
+      // no-ops.
+      get('/api/presence').catch(() => ({ rooms: [] })),
+    ]);
     // Sort by grade, then alphabetically inside each grade. The API returns
     // alphabetical already, so a stable sort by gradeRank preserves that order
     // within each group.
@@ -95,21 +105,30 @@ async function loadMembers() {
       if (d !== 0) return d;
       return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
     });
+    // Build the room-occupant map. Only rooms with at least one observed user
+    // get a bulk button so we don't show '7F に今いる人 (0)'.
+    ROOM_USERS = {};
+    (p.rooms || []).forEach(r => {
+      if (r.users && r.users.length) {
+        ROOM_USERS[r.id] = new Set(r.users.map(x => Number(x.id)));
+      }
+    });
     const root = document.getElementById('rl-members');
     const me = state.me?.id;
-    // Bulk-select toolbar — render once based on the unique grades present in
-    // the directory. Skip the empty-grade case ("その他") on purpose: a single
-    // button labeled 'その他' for the ungraded leftovers wasn't useful in
-    // practice; users still get pulled in via '全員'.
     const presentGrades = [...new Set(ALL_USERS.map(x => x.grade || ''))];
     const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
+    const roomButtons = (p.rooms || [])
+      .filter(r => ROOM_USERS[r.id])
+      .map(r => `<button class="btn" data-bulk="room" data-room="${escapeHtml(r.id)}">${escapeHtml(r.id)}にいる人 (${ROOM_USERS[r.id].size})</button>`)
+      .join('');
     const bulkRoot = document.getElementById('rl-bulk');
     bulkRoot.innerHTML = `
       <button class="btn" data-bulk="all">全員 ON / OFF</button>
       ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+      ${roomButtons}
     `;
     bulkRoot.querySelectorAll('[data-bulk]').forEach(b => {
-      b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade));
+      b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade || b.dataset.room));
     });
 
     root.innerHTML = ALL_USERS.map(x => {
@@ -143,16 +162,21 @@ async function loadMembers() {
   }
 }
 
-// 全員 ON/OFF: 'are EVERYONE on?' semantics. If everyone in the target set is
-// already checked, the click DESELECTS the whole set. Otherwise it SELECTS the
-// whole set. Means the first press from the default state (only self checked)
-// turns everyone ON — what the user reaches for when they tap '全員'.
-// Per-grade buttons keep the older 'any-checked → off' toggle since the typical
-// grade has a small head-count and either intent is one press away anyway.
-function onBulk(kind, grade) {
-  const target = kind === 'grade'
-    ? ALL_USERS.filter(x => (x.grade || '') === grade)
-    : ALL_USERS;
+// Bulk toggles. The 'all' button uses 'are EVERYONE on?' semantics: turn on if
+// anyone is still off, turn off only when EVERY member is already on. Grade
+// and room buttons use the simpler 'any-checked → off' toggle since both
+// target small subsets and either intent is one tap away.
+function onBulk(kind, key) {
+  let target;
+  if (kind === 'grade') {
+    target = ALL_USERS.filter(x => (x.grade || '') === key);
+  } else if (kind === 'room') {
+    const ids = ROOM_USERS[key] || new Set();
+    target = ALL_USERS.filter(x => ids.has(x.id));
+  } else {
+    target = ALL_USERS;
+  }
+  if (!target.length) return;
   let turnOn;
   if (kind === 'all') {
     const allOn = target.every(x => selected.has(x.id));
@@ -267,13 +291,15 @@ async function onSpin() {
     const N = ids.length;
     const sliceDeg = 360 / N;
     const target = -(r.winner_index * sliceDeg + sliceDeg / 2);
-    // 8 full spins + the offset to land on the winner. cubic-bezier(.32,.08,.18,1)
-    // starts gently (the original was too snappy off the line), holds speed
-    // through the middle, then decelerates smoothly into place — feels like a
-    // slot-machine wheel rather than a spring.
-    const total = 360 * 8 + target;
+    // 12 full turns + the offset to land on the winner. The bezier
+    // (.22, .04, .08, 1) starts very gently — barely creeps off the line —
+    // then carries plenty of momentum through the middle, then trails off in
+    // a long smooth deceleration. Total time tuned with the rotation amount
+    // so the final degree-per-second is slow enough to read each name as it
+    // passes the pointer.
+    const total = 360 * 12 + target;
     const svg = document.getElementById('rl-wheel');
-    svg.style.transition = 'transform 8s cubic-bezier(.32,.08,.18,1)';
+    svg.style.transition = 'transform 14s cubic-bezier(.22,.04,.08,1)';
     requestAnimationFrame(() => {
       svg.style.transform = `rotate(${total}deg)`;
     });
@@ -308,7 +334,7 @@ async function onSpin() {
       document.getElementById('rl-spin').disabled = false;
       spinning = false;
       if (!r.dry_run) loadHistory();
-    }, 8100);
+    }, 14100);
   } catch (e) {
     toast('失敗: ' + e.message);
     document.getElementById('rl-spin').disabled = false;
