@@ -100,7 +100,7 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
-        $url = Calendar::authorizeUrl($cfg, (string)$u['email'], $state);
+        $url = GoogleCalendar::authorizeUrl($cfg, (string)$u['email'], $state);
         header('Location: ' . $url, true, 302);
         return;
     }
@@ -114,8 +114,8 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
             return;
         }
         setcookie('labpay_calendar_state', '', ['expires' => time() - 3600, 'path' => '/']);
-        $exch = Calendar::exchangeCode($cfg, (string)$code);
-        Calendar::storeTokens($pdo, (int)$u['id'], $exch);
+        $exch = GoogleCalendar::exchangeCode($cfg, (string)$code);
+        GoogleCalendar::storeTokens($pdo, (int)$u['id'], $exch);
         // Settings に戻す。
         $back = rtrim((string)$cfg['app']['base_url'], '/') . '/#/settings?calendar=connected';
         header('Location: ' . $back, true, 302);

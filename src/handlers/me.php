@@ -388,13 +388,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'calendars' && $method === 'GET') {
         try {
-            $token = Calendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
-            $cals  = Calendar::listCalendars($token);
+            $token = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+            $cals  = GoogleCalendar::listCalendars($token);
         } catch (ApiException $e) {
             if ($e->errCode === 'calendar_unauthorized') {
                 // refresh は ensureValidAccessToken の中でやってるので、ここに来る
                 // ならその refresh 自体が失敗 / token 取消 → 再連携を促す。
-                Calendar::disconnect($pdo, (int)$u['id']);
+                GoogleCalendar::disconnect($pdo, (int)$u['id']);
                 throw new ApiException('calendar_reauth', '再連携が必要です', 409);
             }
             throw $e;
@@ -433,11 +433,11 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $timeMin = $today0->format(DateTime::RFC3339);
         $timeMax = $tomorrow24->format(DateTime::RFC3339);
 
-        $token = Calendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        $token = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
         $merged = [];
         foreach ($selected as $cid) {
             try {
-                $events = Calendar::listEvents($token, $cid, $timeMin, $timeMax);
+                $events = GoogleCalendar::listEvents($token, $cid, $timeMin, $timeMax);
                 foreach ($events as $e) {
                     $start = $e['start']['dateTime'] ?? $e['start']['date'] ?? null;
                     $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
@@ -450,13 +450,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'end'      => $end,
                         'all_day'  => !isset($e['start']['dateTime']),
                         'location' => (string)($e['location'] ?? ''),
-                        'url'      => Calendar::extractMeetingUrl($e),
+                        'url'      => GoogleCalendar::extractMeetingUrl($e),
                         'html_url' => (string)($e['htmlLink'] ?? ''),
                     ];
                 }
             } catch (ApiException $exc) {
                 if ($exc->errCode === 'calendar_unauthorized') {
-                    Calendar::disconnect($pdo, (int)$u['id']);
+                    GoogleCalendar::disconnect($pdo, (int)$u['id']);
                     throw new ApiException('calendar_reauth', '再連携が必要です', 409);
                 }
                 // 個別 calendar の失敗 (権限剥奪など) は skip して他の calendar は出す。
@@ -468,7 +468,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'DELETE') {
-        Calendar::disconnect($pdo, (int)$u['id']);
+        GoogleCalendar::disconnect($pdo, (int)$u['id']);
         json_response(['ok' => true]);
         return;
     }
