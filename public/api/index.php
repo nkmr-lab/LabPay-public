@@ -140,6 +140,12 @@ try {
         return;
     }
 
+    // /roulettes (group lottery)
+    if (($seg[0] ?? '') === 'roulettes') {
+        route_roulettes($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

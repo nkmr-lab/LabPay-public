@@ -442,6 +442,19 @@ table.table th { color: var(--muted); font-weight: 600; }
 .supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
 .supply-sub   { font-size: 11px; color: var(--muted); }
 
+/* Roulette member-pick chip — checkbox + avatar + name in one tappable row. */
+.rl-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 6px; border-radius: 999px;
+  border: 1px solid var(--line); background: white;
+  cursor: pointer; font-size: 13px;
+}
+.rl-chip input { margin: 0; cursor: pointer; }
+.rl-chip:has(input:checked) {
+  background: var(--primary-soft, #efeafa);
+  border-color: var(--primary);
+}
+
 /* Presence grass — GitHub-style 7-row contribution grid. Fixed 12px cells so the
    grid stays readable; horizontal overflow scrolls on narrow screens. */
 .grass-cell {

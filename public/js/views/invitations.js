@@ -8,7 +8,10 @@ export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <h2 style="margin:0">募集</h2>
+      <div class="row" style="align-items:center">
+        <h2 style="flex:1; margin:0">募集</h2>
+        <a href="#/roulette" class="muted" style="font-size:13px">🎰 ルーレット →</a>
+      </div>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         「お昼ご飯食べに行こう」「ビアガーデン」「ポケモン GO」「スキー」など、
         誰でも参加表明できるカジュアルな募集です。pt のやり取りはありません。

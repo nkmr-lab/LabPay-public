@@ -19,6 +19,7 @@ import { renderNetwork } from './views/network.js';
 import { renderActivity } from './views/activity.js';
 import { renderWishlist } from './views/wishlist.js';
 import { renderInvitations } from './views/invitations.js';
+import { renderRoulette } from './views/roulette.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -184,6 +185,7 @@ route('/network',        renderNetwork);
 route('/activity',       renderActivity);
 route('/wishlist',       renderWishlist);
 route('/invitations',    renderInvitations);
+route('/roulette',       renderRoulette);
 
 // ---------- Boot ----------
 (async function boot() {
