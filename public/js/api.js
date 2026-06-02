@@ -33,10 +33,23 @@ export async function api(method, path, { body, query, withIdempotency = false }
     headers['X-Requested-With'] = 'labpay';
   }
 
-  const res = await fetch(url, {
-    method, headers, body: payload,
-    credentials: 'same-origin', cache: 'no-store',
-  });
+  // iOS Safari (and the PWA wrapper) occasionally returns a TypeError
+  // 'Load Failed' / 'Failed to fetch' on the FIRST request after the page has
+  // been suspended (sleep, tab swap). A bare retry usually succeeds and the
+  // user-visible behavior is much smoother than a toast asking them to tap
+  // again. We retry once, only on transport-level failures — HTTP errors
+  // (4xx/5xx) still bubble unchanged so legitimate problems aren't masked.
+  let res;
+  try {
+    res = await fetch(url, { method, headers, body: payload,
+      credentials: 'same-origin', cache: 'no-store' });
+  } catch (e) {
+    const transient = e && (e.name === 'TypeError' || /load failed|failed to fetch|network/i.test(e.message || ''));
+    if (!transient) throw e;
+    await new Promise(r => setTimeout(r, 250));
+    res = await fetch(url, { method, headers, body: payload,
+      credentials: 'same-origin', cache: 'no-store' });
+  }
 
   const text = await res.text();
   let data = null;
