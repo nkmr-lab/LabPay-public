@@ -219,30 +219,36 @@ let presenceTimer = null;
 async function fetchAndRenderPresence() {
   const presenceRoot = document.getElementById('presence');
   if (!presenceRoot) return;
-  try {
-    const pres = await get('/api/presence');
-    // Onboarding banner: if the user has no registered MAC, surface a
-    // prominent how-to right above the room list. Once any MAC is claimed,
-    // state.hasMac flips true and the banner disappears.
-    const banner = state.hasMac ? '' : `
-      <div style="background:#fff8e6; border:1px solid #f5d089; border-radius:10px; padding:10px 12px; margin-bottom:10px">
-        <div class="bold" style="color:#b54708; margin-bottom:4px">📱 スマホの MAC アドレスを登録してください</div>
-        <div style="font-size:13px; line-height:1.6">
-          無線 LAN を <b>nkmr-lab-wifi</b> に接続し、スマホのネットワーク設定から自身の IP アドレスをチェックしてください。
-          <a href="#/settings" style="color:var(--primary); font-weight:600">設定</a> からそれに該当するものを見つけて <b>「これは私」</b> を押してください。
+
+  // If the user hasn't claimed a MAC, the in-lab list is hidden entirely and
+  // replaced with the onboarding instructions. This works as a stronger nudge
+  // than a banner above the list — they can't peek at who's in the lab
+  // until they register, which gives them a concrete reason to do it.
+  if (!state.hasMac) {
+    presenceRoot.innerHTML = `
+      <div style="background:#fff8e6; border:1px solid #f5d089; border-radius:10px; padding:12px 14px">
+        <div class="bold" style="color:#b54708; margin-bottom:6px">📱 スマホの MAC アドレスを登録すると、ここに表示されるようになります</div>
+        <div style="font-size:13px; line-height:1.7">
+          1. 無線 LAN を <b>nkmr-lab-wifi</b> に接続する<br>
+          2. スマホのネットワーク設定から自身の IP アドレスをチェック<br>
+          3. <a href="#/settings" style="color:var(--primary); font-weight:600">設定</a> でそれに該当するものを見つけて <b>「これは私」</b> を押す
         </div>
-        <div class="muted" style="font-size:11px; margin-top:6px">
+        <div class="muted" style="font-size:11px; margin-top:8px">
           登録するまで在室検知・ラボインボーナス・購入が動きません。
         </div>
       </div>`;
+    return;
+  }
 
+  try {
+    const pres = await get('/api/presence');
     if (!pres.rooms.length) {
-      presenceRoot.innerHTML = banner + `<div class="empty">部屋が登録されていません</div>`;
+      presenceRoot.innerHTML = `<div class="empty">部屋が登録されていません</div>`;
     } else {
       // Pass window_minutes through so each pill can fade based on its
       // last_seen_at age relative to the cutoff window.
       const win = Number(pres.window_minutes) || 3;
-      presenceRoot.innerHTML = banner + pres.rooms.map(r => renderRoom(r, win)).join('');
+      presenceRoot.innerHTML = pres.rooms.map(r => renderRoom(r, win)).join('');
     }
   } catch (e) {
     presenceRoot.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
