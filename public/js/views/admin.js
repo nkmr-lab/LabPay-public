@@ -130,12 +130,6 @@ export async function renderAdmin() {
       <textarea id="bc-body" maxlength="255" placeholder="本文"></textarea>
       <button id="bc-go" class="primary" style="margin-top:6px">送信</button>
     </details>
-
-    <div class="card">
-      <h3 style="margin-top:0">バグ報告 / 機能要望</h3>
-      <p class="muted" style="font-size:12px; margin:4px 0 8px">「対応したよ！」と返信すると投稿者に通知されます。</p>
-      <div id="fb-list" class="list"><div class="muted">読み込み中…</div></div>
-    </div>
   `;
 
   // --- Supply (top-of-page inflation guard) + Dashboard ---

@@ -27,6 +27,7 @@ import { renderGroups, renderGroupDetail } from './views/groups.js';
 import { renderScrapboxFeed } from './views/scrapbox_feed.js';
 import { renderRandomGroups } from './views/random_groups.js';
 import { renderMoneyRequests, renderMoneyRequestDetail } from './views/money_requests.js';
+import { renderFeedbackAdmin } from './views/feedback_admin.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -76,6 +77,7 @@ function renderChrome() {
   const top = document.getElementById('topbar');
   const tabs = document.getElementById('tabs');
   const adminLink = document.getElementById('admin-link');
+  const feedbackAdminLink = document.getElementById('feedback-admin-link');
   const badge = document.getElementById('unread-badge');
 
   if (!state.me) {
@@ -85,7 +87,13 @@ function renderChrome() {
   }
   top.hidden = false;
   tabs.hidden = false;
-  if (state.me.role === 'admin') adminLink.hidden = false; else adminLink.hidden = true;
+  if (state.me.role === 'admin') {
+    adminLink.hidden = false;
+    if (feedbackAdminLink) feedbackAdminLink.hidden = false;
+  } else {
+    adminLink.hidden = true;
+    if (feedbackAdminLink) feedbackAdminLink.hidden = true;
+  }
   if (state.unread > 0) {
     badge.hidden = false;
     badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
@@ -182,6 +190,7 @@ route('/sell',           renderSell);
 route('/history',        renderHistory);
 route('/notifications',  renderNotifications);
 route('/admin',          renderAdmin);
+route('/feedback-admin', renderFeedbackAdmin);
 route('/settings',       renderSettings);
 route('/achievements',   renderAchievements);
 route('/tasks',          renderTasks);
