@@ -94,7 +94,6 @@ async function populatePicker() {
       ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
       <span>${escapeHtml(x.display_name)}</span>
       ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
-      ${x.gender === 'F' ? `<span class="muted" style="font-size:10px">♀</span>` : ''}
     </span>`).join('');
   picker.querySelectorAll('.rl-chip').forEach(c => {
     c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
