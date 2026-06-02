@@ -20,10 +20,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['avatar_url']        = $row['avatar_url']        ?? null;
         $u['scrapbox_username'] = $row['scrapbox_username'] ?? null;
         $u['grade']             = $row['grade']             ?? null;
+        // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
+        // button when the user is off the lab network (purchases are server-gated).
         json_response([
             'user' => $u,
             'balance' => $bal,
             'streak' => $streak,
+            'in_lab' => user_is_in_lab($pdo, (int)$u['id']),
         ]);
         return;
     }

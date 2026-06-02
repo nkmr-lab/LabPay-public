@@ -3,6 +3,19 @@
 
 declare(strict_types=1);
 
+// Has the user been observed via a registered MAC within the presence window?
+// Used as the lab-Wi-Fi gate on purchases.
+function user_is_in_lab(PDO $pdo, int $userId): bool {
+    $window = max(1, (int)cfg_get($pdo, 'presence_window_minutes', '3'));
+    $st = $pdo->prepare("SELECT 1 FROM presence_seen ps
+        JOIN presence_devices pd ON pd.mac = ps.mac
+        WHERE pd.user_id = ?
+          AND ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+        LIMIT 1");
+    $st->execute([$userId, $window]);
+    return (bool)$st->fetchColumn();
+}
+
 function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void {
     // POST /api/purchases/{id}/thank
     $id = isset($seg[1]) ? (int)$seg[1] : 0;
@@ -17,6 +30,16 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
     require_exposure($cfg, 'purchase');
 
     $buyer = Auth::requireUser($pdo, $cfg);
+
+    // Lab-wifi gate: the buyer must be currently observed via a registered
+    // MAC in any room (= connected to the lab Wi-Fi). Window is the same
+    // presence_window_minutes used for the home "今ラボにいる人" card so
+    // the UI's view of the world matches what the server enforces.
+    if (!user_is_in_lab($pdo, (int)$buyer['id'])) {
+        throw new ApiException('not_in_lab',
+            '購入はラボのWi-Fiに繋いでいる時だけ可能です', 403);
+    }
+
     $body = read_json_body();
     $listingId = require_int_positive($body['listing_id'] ?? null, 'listing_id');
     $ukey = (string)require_field($body, 'idempotency_key');

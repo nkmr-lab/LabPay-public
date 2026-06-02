@@ -158,14 +158,24 @@ function showPostPurchaseModal({ purchaseId, sellerName, sellerMessage, productN
 function renderListingRow(l) {
   const isMe = state.me && state.me.id === Number(l.seller_user_id);
   const isGift = !!l.is_gift;
+  const inLab = state.inLab === true;  // refreshed from /api/me
   const priceTag = isGift
     ? `<span class="bold" style="color:#b71c50">🎁 これどうぞ</span>`
     : `<span class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</span>`;
-  const btn = isMe
-    ? `<button disabled title="自分の出品は買えません">自分の出品</button>`
-    : `<button class="primary" data-buy="${l.id}" data-price="${l.price}" data-gift="${isGift ? '1' : '0'}" data-seller="${escapeHtml(l.seller_name)}">
+  // Three button states:
+  //   - own listing: 'cannot buy'
+  //   - not in lab: greyed out with explainer (server also enforces this)
+  //   - normal: enabled
+  let btn;
+  if (isMe) {
+    btn = `<button disabled title="自分の出品は買えません">自分の出品</button>`;
+  } else if (!inLab) {
+    btn = `<button disabled title="ラボのWi-Fiに繋いでいる時だけ購入できます">ラボWi-Fi必須</button>`;
+  } else {
+    btn = `<button class="primary" data-buy="${l.id}" data-price="${l.price}" data-gift="${isGift ? '1' : '0'}" data-seller="${escapeHtml(l.seller_name)}">
          ${isGift ? 'もらう' : `${l.price.toLocaleString()}pt で買う`}
        </button>`;
+  }
   const locLine = l.location
     ? `<div class="meta">📍 ${escapeHtml(l.location)}</div>`
     : '';

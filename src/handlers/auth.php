@@ -14,7 +14,10 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         $av = $pdo->prepare('SELECT avatar_url FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $u['avatar_url'] = $av->fetchColumn() ?: null;
-        json_response(['user' => $u, 'balance' => $bal]);
+        // in_lab is the buy-button gate: client greys out 購入 when false.
+        // Defined in purchases.php (loaded by bootstrap).
+        json_response(['user' => $u, 'balance' => $bal,
+            'in_lab' => user_is_in_lab($pdo, (int)$u['id'])]);
         return;
     }
 

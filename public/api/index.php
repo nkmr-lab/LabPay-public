@@ -6,6 +6,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/bootstrap.php';
 // $CFG, $PDO, helpers, and handlers are all available.
 
+// Wall clock for activity_log duration_ms.
+$reqStart = microtime(true);
+
 // Parse request
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $uri    = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
@@ -119,6 +122,18 @@ try {
         return;
     }
 
+    // /feedback (bug reports + feature requests)
+    if (($seg[0] ?? '') === 'feedback') {
+        route_feedback($PDO, $CFG, $method, $seg);
+        return;
+    }
+
+    // /wishlist ('these I want' product requests)
+    if (($seg[0] ?? '') === 'wishlist') {
+        route_wishlist($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {
@@ -127,4 +142,12 @@ try {
     // Hide internals from clients; logs still get the real message.
     error_log('[labpay] ' . $e::class . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString());
     json_error('server_error', 'internal server error', 500);
+} finally {
+    // Activity log — written after the response is dispatched so a slow insert
+    // never blocks the user. Failures are swallowed (logging must never break
+    // the API).
+    try {
+        activity_log_write($PDO, $CFG, $method, $path, http_response_code() ?: 200,
+            (int)round((microtime(true) - $reqStart) * 1000));
+    } catch (Throwable $_) { /* swallow */ }
 }

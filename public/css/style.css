@@ -449,18 +449,28 @@ table.table th { color: var(--muted); font-weight: 600; }
 }
 
 /* Activity heatmap.
-   Uses CSS grid with 1 day-label column + 24 hour columns. Cells stay square-ish
-   via aspect-ratio to keep the visual rhythm readable on phones. */
-.hm-grid { display: grid; gap: 1px; }
-.hm-row { display: grid; grid-template-columns: 18px repeat(24, 1fr); gap: 1px; }
+   Uses CSS grid with 1 day-label column + 24 hour columns. The grid sits inside
+   a min-width:0 flex/grid context so the 24 fractional columns clamp to fit
+   the container; aspect-ratio keeps cells square-ish without leaking horizontally. */
+.hm-grid { display: grid; gap: 1px; min-width: 0; width: 100%; overflow: hidden; }
+.hm-row {
+  display: grid; gap: 1px; min-width: 0; width: 100%;
+  /* minmax(0, 1fr) lets each hour column shrink below its label/content width;
+     without the explicit 0 floor the 'fr' default is min-content and the
+     rightmost columns (22/23h) push past the container edge. */
+  grid-template-columns: 18px repeat(24, minmax(0, 1fr));
+}
 .hm-row.hm-head .hm-h-label,
 .hm-d-label { font-size: 10px; color: var(--muted); text-align: center; align-self: center; }
-.hm-h-label { font-size: 10px; color: var(--muted); text-align: left; padding-left: 1px; }
+.hm-h-label { font-size: 10px; color: var(--muted); text-align: left; padding-left: 1px;
+  min-width: 0; overflow: hidden;
+}
 .hm-cell {
   aspect-ratio: 1 / 1;
   display: flex; align-items: center; justify-content: center;
   font-size: 9px; color: rgba(0,0,0,0.55);
   border-radius: 2px;
+  min-width: 0;
 }
 
 /* Achievements */

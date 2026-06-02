@@ -311,6 +311,33 @@ function slack_api_get(array $cfg, string $endpoint, array $params = []): array 
     return $data;
 }
 
+// ---------------- Activity log ----------------
+// Cheap append-only log of every API request. user_id is best-effort: we look
+// up the session cookie without forcing auth (so anonymous requests still get
+// rows with NULL user). For high-volume scanner POSTs this is one extra INSERT
+// per scan tick, which is acceptable given the table's minimal index footprint.
+function activity_log_write(PDO $pdo, array $cfg, string $method, string $path,
+                            int $status, int $durationMs): void {
+    // Skip the log itself for our own health-check / static-y stuff to keep
+    // analysis cleaner; keep everything else including 4xx/5xx so error patterns
+    // are preserved.
+    if ($path === '/' || $path === '/favicon.ico') return;
+
+    // Best-effort user resolution — don't throw if no session.
+    $userId = null;
+    try {
+        $u = Auth::currentUser($pdo, $cfg);
+        if ($u && isset($u['id'])) $userId = (int)$u['id'];
+    } catch (Throwable $_) { /* swallow */ }
+
+    $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+    $ua = mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+    $st = $pdo->prepare("INSERT INTO activity_log
+        (user_id, method, path, status, duration_ms, ip, user_agent)
+        VALUES (?,?,?,?,?,?,?)");
+    $st->execute([$userId, $method, mb_substr($path, 0, 255), $status, $durationMs, $ip, $ua ?: null]);
+}
+
 // ---------------- Notification helpers ----------------
 // Wrapper around Notifier::notify that catches any exception. Use this when a
 // notification is a "nice-to-have" — never let an email/template failure tank
@@ -364,3 +391,5 @@ require_once __DIR__ . '/handlers/uploads.php';
 require_once __DIR__ . '/handlers/tasks.php';
 require_once __DIR__ . '/handlers/transfers.php';
 require_once __DIR__ . '/handlers/network.php';
+require_once __DIR__ . '/handlers/feedback.php';
+require_once __DIR__ . '/handlers/wishlist.php';

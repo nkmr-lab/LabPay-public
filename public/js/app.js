@@ -17,6 +17,7 @@ import { renderTasks, renderTaskDetail } from './views/tasks.js';
 import { renderTransfer } from './views/transfer.js';
 import { renderNetwork } from './views/network.js';
 import { renderActivity } from './views/activity.js';
+import { renderWishlist } from './views/wishlist.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -33,6 +34,7 @@ export const state = {
   me: null,
   balance: null,
   unread: 0,
+  inLab: false,   // server-enforced lab-Wi-Fi gate; mirrored here so the UI can grey out 購入 buttons
 };
 
 export async function refreshMe() {
@@ -40,6 +42,7 @@ export async function refreshMe() {
     const data = await get('/api/auth/me');
     state.me = data.user;
     state.balance = data.balance;
+    state.inLab = !!data.in_lab;
     renderChrome();
     return data;
   } catch (e) {
@@ -176,6 +179,7 @@ route('/send',           renderTransfer);
 route('/product/:jan',   renderProduct);
 route('/network',        renderNetwork);
 route('/activity',       renderActivity);
+route('/wishlist',       renderWishlist);
 
 // ---------- Boot ----------
 (async function boot() {
