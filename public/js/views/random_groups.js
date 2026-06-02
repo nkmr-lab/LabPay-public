@@ -17,7 +17,7 @@ export async function renderRandomGroups() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">ランダムグループ生成</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         選んだメンバーをランダムに N チームに分けます。学年や性別を
@@ -44,11 +44,11 @@ export async function renderRandomGroups() {
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:6px 0">
         <span class="switch"><input type="checkbox" id="rg-grade"><span class="slider"></span></span>
-        <span>学年を考慮 <span class="muted" style="font-size:12px">— 各グループに学年がばらつくようにする</span></span>
+        <span>学年を考慮 <span class="hint-sm">— 各グループに学年がばらつくようにする</span></span>
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:6px 0">
         <span class="switch"><input type="checkbox" id="rg-gender"><span class="slider"></span></span>
-        <span>男女を考慮 <span class="muted" style="font-size:12px">— 各グループに男女がばらつくようにする</span></span>
+        <span>男女を考慮 <span class="hint-sm">— 各グループに男女がばらつくようにする</span></span>
       </label>
       <div class="row" style="gap:6px; margin-top:8px">
         <button id="rg-go" class="primary">ランダムに分ける</button>
@@ -222,7 +222,7 @@ function renderResult(groups, title) {
     return `
       <div class="card" style="margin:8px 0; background:#faf7fd">
         <div class="row" style="align-items:center; margin-bottom:6px">
-          <h4 style="flex:1; margin:0">グループ ${idx + 1} <span class="muted" style="font-size:12px">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
+          <h4 style="flex:1; margin:0">グループ ${idx + 1} <span class="hint-sm">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
           <button class="btn" data-mk-group="${ids}" data-title="グループ ${idx + 1}">このメンバーでグループ作成</button>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">${memberHtml}</div>

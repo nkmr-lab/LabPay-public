@@ -17,7 +17,7 @@ export async function renderBuy() {
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">買う</h2>
-        <a href="#/wishlist" class="muted" style="font-size:13px">これ欲しい! →</a>
+        <a href="#/wishlist" class="hint">これ欲しい! →</a>
       </div>
       <p class="muted" style="margin-top:6px">バーコードを読み取るか、下の一覧から選んでください。</p>
       <button class="primary" id="scan-toggle" style="width:100%">📷 バーコードを読み取って買う</button>

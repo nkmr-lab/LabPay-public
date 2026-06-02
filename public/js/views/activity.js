@@ -96,7 +96,7 @@ function renderRoomCard(room, globalMax) {
 
   return `
     <div class="card">
-      <h3 style="margin:0 0 8px">${escapeHtml(room.display_name)} <span class="muted" style="font-size:12px">(${room.id})</span></h3>
+      <h3 style="margin:0 0 8px">${escapeHtml(room.display_name)} <span class="hint-sm">(${room.id})</span></h3>
       <div class="hm-grid">
         <div class="hm-row hm-head">
           <div class="hm-d-label"></div>

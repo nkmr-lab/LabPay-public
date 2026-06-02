@@ -56,7 +56,7 @@ export async function renderRoulette({ query } = {}) {
           <input type="checkbox" id="rl-dry">
           <span class="slider"></span>
         </span>
-        <span>🧪 テストモード <span class="muted" style="font-size:12px">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
+        <span>🧪 テストモード <span class="hint-sm">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
       </label>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
@@ -373,7 +373,7 @@ export async function renderRouletteResult({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/roulette" class="muted" style="font-size:13px">← 新しいルーレットを回す</a>
+      <a href="#/roulette" class="hint">← 新しいルーレットを回す</a>
       <h2 style="margin:6px 0 0">ルーレット結果</h2>
       <div id="rl-detail" class="muted" style="margin-top:8px">読み込み中…</div>
     </div>

@@ -20,7 +20,7 @@ export async function renderSettings() {
       <label class="field">
         <span class="lbl">アバター画像</span>
         <input type="file" id="profile-avatar-file" accept="image/*">
-        <div id="profile-avatar-status" class="muted" style="font-size:12px"></div>
+        <div id="profile-avatar-status" class="hint-sm"></div>
       </label>
       <div class="row" style="gap:6px">
         <button id="profile-save" class="primary">保存</button>
@@ -30,7 +30,7 @@ export async function renderSettings() {
 
     <div class="card">
       <h3>自動検出 (おすすめ)</h3>
-      <p class="muted" style="font-size:13px">
+      <p class="hint">
         ラボ内 scanner が直近の数分間に観測した「まだ誰のものでもない MAC」一覧。<br>
         <span style="color:var(--primary); font-weight:700">📶 確実な見つけ方:</span><br>
         <span style="display:inline-block; margin-left:14px">1. スマホの WiFi をオフにする</span><br>
@@ -40,7 +40,7 @@ export async function renderSettings() {
       </p>
       <div class="row" style="margin-bottom:8px; gap:6px; align-items:center">
         <button id="reload-unreg">最新の観測を取得</button>
-        <span class="muted" style="font-size:12px">または</span>
+        <span class="hint-sm">または</span>
         <input type="text" id="my-ip-input" placeholder="自分の IP (例 42 や 192.168.50.42)"
                inputmode="decimal" maxlength="15"
                style="flex:1; max-width:240px; font-family:Consolas,Menlo,monospace; font-size:13px">
@@ -54,7 +54,7 @@ export async function renderSettings() {
       <div id="dev-list" class="list"><div class="muted">読み込み中…</div></div>
       <div class="sep"></div>
       <h3 style="margin:6px 0">手動で追加</h3>
-      <p class="muted" style="font-size:12px">
+      <p class="hint-sm">
         スマホの「設定 → Wi-Fi → nkmr-lab-wifi → MAC アドレス」を直接入れる場合はこちら。
       </p>
       <div class="row">
@@ -71,7 +71,7 @@ export async function renderSettings() {
         Slack の #scrapbox 通知で見える <b>表示名</b> をそのまま追加してください
         (例: Latin と漢字の両方を使ってる場合は両方登録)。
       </p>
-      <div id="sb-status" class="muted" style="font-size:12px"></div>
+      <div id="sb-status" class="hint-sm"></div>
       <div id="sb-list" class="list" style="margin:8px 0"><div class="muted">読み込み中…</div></div>
       <div class="row">
         <input type="text" id="sb-new" placeholder="Scrapbox 表示名" maxlength="100" style="flex:2">

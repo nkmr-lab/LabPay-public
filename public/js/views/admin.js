@@ -81,8 +81,8 @@ export async function renderAdmin() {
       </div>
     </div>
 
-    <details class="card" style="padding: 12px 16px">
-      <summary style="cursor:pointer; font-weight:700">詳細管理 (普段触らない設定など)</summary>
+    <details class="card collapsible-form">
+      <summary>詳細管理 (普段触らない設定など)</summary>
       <div style="margin-top:10px">
         <h3>管理ダッシュボード</h3>
         <div id="dash" class="muted">読み込み中…</div>
@@ -448,7 +448,7 @@ async function loadRooms() {
       <tr data-room="${escapeHtml(x.id)}">
         <td class="mono">${escapeHtml(x.id)}</td>
         <td>${escapeHtml(x.display_name)}</td>
-        <td class="muted" style="font-size:12px">${escapeHtml(x.last_scan_at ?? '(未スキャン)')}</td>
+        <td class="hint-sm">${escapeHtml(x.last_scan_at ?? '(未スキャン)')}</td>
         <td>
           <input type="number" step="0.0000001" placeholder="lat" value="${x.lat ?? ''}" data-lat="${x.id}" style="width:110px">
           <input type="number" step="0.0000001" placeholder="lng" value="${x.lng ?? ''}" data-lng="${x.id}" style="width:110px">

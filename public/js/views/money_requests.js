@@ -24,7 +24,7 @@ export async function renderMoneyRequests() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">請求 (集金)</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         メンバーを選んでお金を集めるための機能です。全員同額または指定額で
@@ -33,8 +33,8 @@ export async function renderMoneyRequests() {
       </p>
     </div>
 
-    <details class="card" style="padding:12px 16px">
-      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規請求</summary>
+    <details class="card collapsible-form">
+      <summary>＋ 新規請求</summary>
       <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル</span>
@@ -341,7 +341,7 @@ export async function renderMoneyRequestDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/requests" class="muted" style="font-size:13px">← 請求一覧</a>
+      <a href="#/requests" class="hint">← 請求一覧</a>
       <div id="mr-detail" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">

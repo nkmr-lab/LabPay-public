@@ -6,7 +6,7 @@ export async function renderAchievements() {
   app.innerHTML = `
     <div class="card">
       <h2>実績</h2>
-      <p class="muted" style="font-size:13px">11カテゴリ × 4段階。リアルタイムに集計しています。</p>
+      <p class="hint">11カテゴリ × 4段階。リアルタイムに集計しています。</p>
     </div>
     <div id="ach-list"><div class="muted">読み込み中…</div></div>
   `;

@@ -15,7 +15,7 @@ export async function renderWari() {
   const rates = loadRates();
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">ワリカ</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         多通貨 (出張ランチなど) を JPY 換算してメンバーで割ります。為替レートは下で編集可、ブラウザに保存されます。

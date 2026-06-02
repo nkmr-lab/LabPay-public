@@ -74,12 +74,12 @@ export async function renderSell() {
     </div>
 
     <!-- ============= 新規出品 (折りたたみ) ============= -->
-    <details class="card" style="padding:12px 16px">
-      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規出品</summary>
+    <details class="card collapsible-form">
+      <summary>＋ 新規出品</summary>
       <div style="margin-top:10px"></div>
 
-      <details style="margin-bottom:10px" open>
-        <summary style="cursor:pointer; font-weight:600; padding:6px 0">📷 バーコードで登録</summary>
+      <details class="collapsible-sub" open>
+        <summary>📷 バーコードで登録</summary>
         <div style="margin-top:8px"></div>
       <button class="primary" id="scan-toggle" style="width:100%">📷 バーコードを読み取って出品</button>
       <div id="scanner-wrap" hidden style="margin-top:10px">
@@ -107,7 +107,7 @@ export async function renderSell() {
         <label class="field">
           <span class="lbl">販売期限 (任意・無指定なら無期限)</span>
           <input type="datetime-local" id="expires_at">
-          <span class="muted" style="font-size:12px">期限を過ぎると自動で「取り下げ」になります。</span>
+          <span class="hint-sm">期限を過ぎると自動で「取り下げ」になります。</span>
         </label>
         <h3 style="margin:6px 0">出品条件</h3>
         <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
@@ -131,17 +131,17 @@ export async function renderSell() {
         <label class="field">
           <span class="lbl">購入時のメッセージ (任意)</span>
           <textarea id="completion_message" maxlength="2000" rows="2" placeholder="ご購入ありがとうございます!"></textarea>
-          <div class="muted" style="font-size:12px">買ってくれた人に表示されます (note 風)。</div>
+          <div class="hint-sm">買ってくれた人に表示されます (note 風)。</div>
         </label>
         <button class="primary" id="submit-listing">出品する</button>
         <div class="muted" style="margin-top:6px; font-size:13px">手数料は売れたときに価格×5%が差し引かれます。</div>
       </div>
       </details>
 
-      <details>
-        <summary style="cursor:pointer; font-weight:600; padding:6px 0">✏️ バーコードなしで登録</summary>
+      <details class="collapsible-sub">
+        <summary>✏️ バーコードなしで登録</summary>
         <div style="margin-top:8px"></div>
-      <p class="muted" style="font-size:13px">
+      <p class="hint">
         カプセルコーヒー1個、お手製のお菓子、ばら売り商品など。<br>
         内部用に擬似 JAN を自動生成します (購入フローからは普通の商品と同じに見えます)。
       </p>
@@ -193,7 +193,7 @@ export async function renderSell() {
     <!-- ============= 出品管理 ============= -->
     <div class="card">
       <h3>出品管理</h3>
-      <p class="muted" style="font-size:13px">価格変更・在庫補充・取り下げ。</p>
+      <p class="hint">価格変更・在庫補充・取り下げ。</p>
       <div id="my-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;

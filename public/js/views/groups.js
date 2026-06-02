@@ -13,7 +13,7 @@ export async function renderGroups() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">グループ</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         出張・旅行・連幹事など、短期間だけ使うメンバー枠。フィード (メモ・URL・
@@ -22,8 +22,8 @@ export async function renderGroups() {
       </p>
     </div>
 
-    <details class="card" style="padding:12px 16px">
-      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規グループ</summary>
+    <details class="card collapsible-form">
+      <summary>＋ 新規グループ</summary>
       <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル</span>
@@ -180,7 +180,7 @@ export async function renderGroupDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/groups" class="muted" style="font-size:13px">← グループ一覧</a>
+      <a href="#/groups" class="hint">← グループ一覧</a>
       <div id="gd-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">
@@ -486,7 +486,7 @@ function renderForPicker() {
         ? `全員 (${n}人)`
         : `${n}人で割る`);
   root.innerHTML = `
-    <label class="muted" style="font-size:12px">誰の分? <span style="margin-left:6px">${summary}</span></label>
+    <label class="hint-sm">誰の分? <span style="margin-left:6px">${summary}</span></label>
     <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
       ${wariMembers.map(m => {
         const on = wariFor.has(m.id);

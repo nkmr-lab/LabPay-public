@@ -15,8 +15,8 @@ export async function renderInvitations() {
       </p>
     </div>
 
-    <details class="card" style="padding:12px 16px">
-      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新しく募集</summary>
+    <details class="card collapsible-form">
+      <summary>＋ 新しく募集</summary>
       <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル (必須)</span>
@@ -135,13 +135,13 @@ export async function renderInvitationDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/invitations" class="muted" style="font-size:13px">← 募集一覧</a>
+      <a href="#/invitations" class="hint">← 募集一覧</a>
       <div id="inv-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">
       <h3>参加表明している人で…</h3>
       <div id="inv-shortcuts" class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
-        <span class="muted" style="font-size:13px">読み込み中…</span>
+        <span class="hint">読み込み中…</span>
       </div>
     </div>
     <div class="card">

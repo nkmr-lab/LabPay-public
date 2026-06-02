@@ -87,25 +87,36 @@ main#app { padding: 14px 14px 4px 14px; max-width: 720px; margin: 0 auto; }
   padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
 main#app > .card:last-child { margin-bottom: 0; }
 
-/* Stretch the last card so the white area fills the remaining viewport height.
-   Without this, short pages (history with a few items, settings, etc.) leave a wide
-   strip of gray body background below the last card — looks like a layout bug.
-   The stretched card just shows white space below its content, which reads as intentional.
-   `body[data-view]` is set by router.js so this only fires for actual views (not the
-   pre-render blank state).
-   In flex column the cross-axis defaults to `align-items: stretch`, which would also
-   stretch main beyond its max-width and disable the `margin: 0 auto` centering. We
-   explicitly center main back via `align-self: center` and keep it full-width up to the cap. */
-/* main はコンテンツ高に従う。背景色は html / body 両方に塗ってあるので
-   viewport より短いページでも背景は viewport 全体を覆う (body に min-height:
-   100vh を持たせると、iOS Safari で URL バーが出ているときに 100vh が
-   可視領域より大きくなり、その分余計にスクロールできてしまうので持たない)。 */
-body[data-view] main#app {
-  margin: 0 auto;
-  width: 100%;
-}
+/* main はコンテンツ高に従う。背景色は html/body の両方に塗ってあるので、
+   ページが viewport より短くても背景は viewport 全体を覆う。
+   body には min-height:100vh を付けない — iOS Safari は URL バーが見えている
+   状態だと 100vh が「URL バー collapse 時の高さ」を返すので、その分縦に
+   伸びて余分なスクロールが出てしまうため。 */
+body[data-view] main#app { margin: 0 auto; width: 100%; }
+
 .card h2 { margin: 0 0 8px; font-size: 16px; }
 .card h3 { margin: 6px 0; font-size: 14px; color: var(--muted); font-weight: 600; }
+
+/* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
+   グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
+.card.collapsible-form { padding: 12px 16px; }
+.card.collapsible-form > summary {
+  cursor: pointer; font-weight: 700; font-size: 16px;
+  list-style: none;  /* hide default ▶ on WebKit/Blink — Safari uses ::-webkit-details-marker */
+}
+.card.collapsible-form > summary::-webkit-details-marker { display: none; }
+/* Sub-collapsible inside a collapsible-form (e.g. sell.js のバーコード有/無) */
+.collapsible-sub { margin-bottom: 10px; }
+.collapsible-sub > summary {
+  cursor: pointer; font-weight: 600; padding: 6px 0;
+  list-style: none;
+}
+.collapsible-sub > summary::-webkit-details-marker { display: none; }
+
+/* Small descriptive text utility. 「muted で font-size:13px (or 12px)」 という
+   組み合わせが view 全体で散らかっていたのを集約。 */
+.hint { color: var(--muted); font-size: 13px; }
+.hint-sm { color: var(--muted); font-size: 12px; }
 
 /* Buttons */
 button, .btn {

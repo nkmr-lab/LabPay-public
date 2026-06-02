@@ -12,7 +12,7 @@ export async function renderTransfer() {
 
     <div class="card">
       <h2>送る</h2>
-      <p class="muted" style="font-size:13px">他のメンバーにポイントを渡します。</p>
+      <p class="hint">他のメンバーにポイントを渡します。</p>
     </div>
 
     <div class="card">

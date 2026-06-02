@@ -50,7 +50,7 @@ function toggleCreateForm(open = null) {
       <label class="field">
         <span class="lbl">作業 URL (任意)</span>
         <input type="url" id="t-url" maxlength="2000" placeholder="https://...">
-        <div class="muted" style="font-size:12px">引き受けた人が「作業を開く」を押すと新しいタブで開きます。</div>
+        <div class="hint-sm">引き受けた人が「作業を開く」を押すと新しいタブで開きます。</div>
       </label>
       <label class="field">
         <span class="lbl">詳細 (任意)</span>
@@ -59,7 +59,7 @@ function toggleCreateForm(open = null) {
       <label class="field">
         <span class="lbl">完了時のメッセージ (任意)</span>
         <textarea id="t-cmsg" maxlength="2000" rows="2" placeholder="ありがとうございます!次もよろしくね"></textarea>
-        <div class="muted" style="font-size:12px">承認時にやってくれた人へ表示されます (note 風)。</div>
+        <div class="hint-sm">承認時にやってくれた人へ表示されます (note 風)。</div>
       </label>
       <div class="row">
         <label class="field" style="flex:1">
@@ -87,7 +87,7 @@ function toggleCreateForm(open = null) {
       <label class="field">
         <span class="lbl">時間枠 (任意・指定すると枠ごとに 1 人ずつ募集)</span>
         <textarea id="t-slots" rows="3" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み"></textarea>
-        <span class="muted" style="font-size:12px">指定すると「募集人数」は枠数から自動算出されます。</span>
+        <span class="hint-sm">指定すると「募集人数」は枠数から自動算出されます。</span>
       </label>
       <div class="field">
         <span class="lbl">対象学年 (チェック無し = 全員)</span>
@@ -101,15 +101,15 @@ function toggleCreateForm(open = null) {
       <div class="field">
         <span class="lbl">名指しで依頼 (任意・指定するとこの人だけが引き受け可能)</span>
         <div id="t-assigned-picker" class="row" style="gap:6px; flex-wrap:wrap; min-height:32px">
-          <span class="muted" style="font-size:13px">読み込み中…</span>
+          <span class="hint">読み込み中…</span>
         </div>
-        <span class="muted" style="font-size:12px">空欄なら学年フィルタに従って誰でも引受可。1 人以上指名すると「この人達だけ」に絞られて本人に通知が飛びます。</span>
+        <span class="hint-sm">空欄なら学年フィルタに従って誰でも引受可。1 人以上指名すると「この人達だけ」に絞られて本人に通知が飛びます。</span>
       </div>
       <label class="field">
         <span class="lbl">ファイル添付 (任意・複数 OK / 1ファイル 50MB まで)</span>
         <input type="file" id="t-files" multiple
                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*">
-        <span class="muted" style="font-size:12px">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
+        <span class="hint-sm">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
       </label>
       <div class="muted" style="font-size:12px; margin:4px 0 8px">
         報酬 × 募集人数 が ESCROW に預けられます (取り消し時は未承認分が返金されます)。

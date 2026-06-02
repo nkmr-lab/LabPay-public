@@ -39,14 +39,14 @@ export async function renderHome() {
         🙈 スマホの Wi-Fi を OFF にしたり、MIND に接続すると検知されなくなります。
       </div>
       <div style="text-align:right; margin-top:8px">
-        <a href="#/activity" class="muted" style="font-size:13px">活動マップ →</a>
+        <a href="#/activity" class="hint">活動マップ →</a>
       </div>
     </div>
 
     <div class="card" id="home-groups-card" hidden>
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">あなたのグループ</h2>
-        <a href="#/groups" class="muted" style="font-size:13px">一覧 →</a>
+        <a href="#/groups" class="hint">一覧 →</a>
       </div>
       <div id="home-groups" class="list"></div>
     </div>
@@ -54,7 +54,7 @@ export async function renderHome() {
     <div class="card" id="home-invs-card" hidden>
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">募集</h2>
-        <a href="#/invitations" class="muted" style="font-size:13px">一覧 →</a>
+        <a href="#/invitations" class="hint">一覧 →</a>
       </div>
       <div id="home-invs" class="list"></div>
     </div>
@@ -62,7 +62,7 @@ export async function renderHome() {
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">新規入荷</h2>
-        <a href="#/buy" class="muted" style="font-size:13px">買う →</a>
+        <a href="#/buy" class="hint">買う →</a>
       </div>
       <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
@@ -77,7 +77,7 @@ export async function renderHome() {
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">新規タスク</h2>
-        <a href="#/tasks" class="muted" style="font-size:13px">一覧 →</a>
+        <a href="#/tasks" class="hint">一覧 →</a>
       </div>
       <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
     </div>
@@ -86,13 +86,13 @@ export async function renderHome() {
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">あなたのラボ滞在</h2>
       </div>
-      <div id="presence-summary" class="muted" style="font-size:13px">読み込み中…</div>
+      <div id="presence-summary" class="hint">読み込み中…</div>
     </div>
 
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">履歴</h2>
-        <a href="#/history" class="muted" style="font-size:13px">すべて見る →</a>
+        <a href="#/history" class="hint">すべて見る →</a>
       </div>
       <div id="recent" class="list"><div class="muted">読み込み中…</div></div>
     </div>
@@ -353,7 +353,7 @@ async function renderMyGroups() {
           <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
           <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人</div>
         </div>
-        <div class="muted" style="font-size:13px">→</div>
+        <div class="hint">→</div>
       </a>`).join('');
   } catch (_) {
     // Silent: groups are nice-to-have on home; failing should not break the page.
@@ -382,7 +382,7 @@ async function renderFreshInvitations() {
             <div class="meta">${when}${where}${cap}</div>
             <div class="meta">${escapeHtml(i.creator_name)}</div>
           </div>
-          <div class="muted" style="font-size:13px">→</div>
+          <div class="hint">→</div>
         </a>`;
     }).join('');
   } catch (_) {
@@ -511,7 +511,7 @@ async function renderCheckinArea() {
   let status;
   try { status = await get('/api/checkins/status'); }
   catch (e) {
-    root.innerHTML = `<div class="muted" style="font-size:13px">${escapeHtml(e.message)}</div>`;
+    root.innerHTML = `<div class="hint">${escapeHtml(e.message)}</div>`;
     return;
   }
   // Check-in happens entirely via the lab Wi-Fi scanner — no manual UI here.
@@ -522,10 +522,10 @@ async function renderCheckinArea() {
     return;
   }
   if (status.today_is_workday) {
-    root.innerHTML = `<div class="muted" style="font-size:13px">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
+    root.innerHTML = `<div class="hint">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   } else {
-    root.innerHTML = `<div class="muted" style="font-size:13px">今日はラボの稼働日ではないため、streak には影響しません。</div>
+    root.innerHTML = `<div class="hint">今日はラボの稼働日ではないため、streak には影響しません。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   }
 }

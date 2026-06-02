@@ -17,7 +17,7 @@ export async function renderScrapboxFeed() {
   const saved = Number(localStorage.getItem('labpay-scrapbox-days') || 7);
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <div class="row" style="align-items:center">
         <h2 style="flex:1; margin:0">Scrapbox 研究ノート フィード</h2>
         <select id="sb-feed-days" style="max-width:120px">

@@ -43,7 +43,7 @@ export async function renderNetwork() {
   app.innerHTML = `
     <div class="card">
       <div class="row" style="align-items:center">
-        <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+        <a href="#/apps" class="hint">← アプリ</a>
       </div>
       <h2 style="margin:6px 0 0">関係性グラフ</h2>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">

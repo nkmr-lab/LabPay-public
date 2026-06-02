@@ -29,7 +29,7 @@ export async function renderNomikai({ query } = {}) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">飲み会割り勘</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         新歓・追いコン等の幹事用。まずはメンバーを絞り込み → 次の画面で各人の飲酒/ソフドリと重み付けを調整して計算します。
@@ -177,7 +177,7 @@ export async function renderNomikaiNew({ query }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/nomikai" class="muted" style="font-size:13px">← メンバー選択</a>
+      <a href="#/nomikai" class="hint">← メンバー選択</a>
       <h2 style="margin:6px 0 0">2. 詳細を入力</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
         各人の飲酒/ソフドリ、必要なら weight を調整。総額と分配が一致するように rounding は主催者に寄せます。
@@ -207,7 +207,7 @@ export async function renderNomikaiNew({ query }) {
       </div>
       <div id="nm-people"></div>
       <div class="row" style="gap:4px; flex-wrap:wrap; margin-top:10px; align-items:center">
-        <span class="muted" style="font-size:12px">区切り:</span>
+        <span class="hint-sm">区切り:</span>
         <button data-round="1"    class="btn">なし</button>
         <button data-round="10"   class="btn">10円</button>
         <button data-round="100"  class="btn">100円</button>
@@ -448,7 +448,7 @@ export async function renderNomikaiDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/nomikai" class="muted" style="font-size:13px">← 飲み会割り勘 一覧</a>
+      <a href="#/nomikai" class="hint">← 飲み会割り勘 一覧</a>
       <div id="nm-detail" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">
