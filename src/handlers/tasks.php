@@ -487,6 +487,22 @@ function tasks_create(PDO $pdo, array $cfg): void {
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
+
+    // 指名タスク (assigned non-empty + 時間枠なし) は 「指名 = やる人として確定」
+    // セマンティクスにする。承諾ボタンを踏まなくても task_claims に 'claimed' で
+    // 入れておく。capacity は assigned 人数に揃える (依頼者本人は除外)。
+    // 時間枠つきタスクは枠を本人が選ぶ前提なので auto-claim 対象外。
+    $autoClaim = !empty($assignedIds) && empty($parsedSlots);
+    $autoClaimIds = [];
+    if ($autoClaim) {
+        $autoClaimIds = array_values(array_filter(
+            $assignedIds, fn($x) => $x !== (int)$u['id']));
+        if (!$autoClaimIds) {
+            throw new ApiException('bad_request',
+                '指名タスクは自分以外を 1 人以上指定してください', 400);
+        }
+        $capacity = count($autoClaimIds);
+    }
     $totalEscrow = $reward * $capacity;
 
     $pdo->beginTransaction();
@@ -504,6 +520,15 @@ function tasks_create(PDO $pdo, array $cfg): void {
                 VALUES (?,?,?,1)');
             foreach ($parsedSlots as $s) {
                 $slotIns->execute([$taskId, $s['start'], $s['end']]);
+            }
+        }
+
+        // 指名タスクの auto-claim: 承諾ボタン要らずで最初から 「あなたがやる人」 状態に。
+        if ($autoClaim) {
+            $cIns = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, slot_id, status)
+                VALUES (?,?,NULL,'claimed')");
+            foreach ($autoClaimIds as $aid) {
+                $cIns->execute([$taskId, $aid]);
             }
         }
 
@@ -534,10 +559,15 @@ function tasks_create(PDO $pdo, array $cfg): void {
         slack_notify($cfg, $msg);
     } catch (Throwable $e) { /* swallow */ }
 
-    // 指名タスクなら指名された人に個別通知 (見落とし防止)。
+    // 指名タスクなら指名された人に個別通知 (見落とし防止)。auto-claim 経路では
+    // すでに「やる人」として登録済みなので、本人には承諾ではなく完了報告を促す文面に。
     foreach ($assignedIds as $aid) {
         if ($aid === (int)$u['id']) continue;
-        $msg = "👉 {$u['display_name']} さんからあなた宛のタスク: 「{$title}」 ({$reward}pt)";
+        if ($autoClaim) {
+            $msg = "👉 {$u['display_name']} さんからあなた宛のタスク: 「{$title}」 ({$reward}pt) — 登録済み。完了したら「タスク」タブから報告してください";
+        } else {
+            $msg = "👉 {$u['display_name']} さんからあなた宛のタスク: 「{$title}」 ({$reward}pt)";
+        }
         if ($deadline) $msg .= " · 締切 {$deadline}";
         notify_safely($pdo, $cfg, $aid, 'admin_notice', $msg, 'task', $taskId);
     }

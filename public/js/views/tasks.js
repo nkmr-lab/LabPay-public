@@ -5,6 +5,11 @@ import { uploadTaskAttachment } from '../upload.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 
+// 履歴トグル: デフォは 「進行中のみ」、ON にすると終了/取消も含めて表示する。
+// 同一セッション内では維持したいが、メモリ上の変数で十分 (renderTasks 呼び直し
+// で初期化されても利便性は下がらない)。
+let showHistory = false;
+
 export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -15,15 +20,23 @@ export async function renderTasks() {
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
         <span class="text-primary">●</span> 自分が依頼  ·
-        <span style="color:#b54708">●</span> 引き受け中/報告済み  ·
+        <span style="color:#b54708">●</span> 引き受け中/承認待ち  ·
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
+      <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
+        <input type="checkbox" id="task-show-history" ${showHistory ? 'checked' : ''}>
+        終了・取消したタスクも表示
+      </label>
     </div>
     <div id="task-form-card" hidden></div>
     <div id="task-list"><div class="muted">読み込み中…</div></div>
   `;
 
   document.getElementById('task-new').addEventListener('click', () => toggleCreateForm());
+  document.getElementById('task-show-history').addEventListener('change', (ev) => {
+    showHistory = ev.currentTarget.checked;
+    loadList();
+  });
   await loadList();
 }
 
@@ -207,8 +220,16 @@ async function loadList() {
   try {
     const d = await get('/api/tasks');
     const root = document.getElementById('task-list');
-    if (!d.items.length) {
-      root.innerHTML = `<div class="card empty">該当するタスクはありません</div>`;
+    // 表示フィルタ: 進行中 (status='open') のみが default。トグル ON で
+    // closed/cancelled も含めて表示。
+    const items = showHistory
+      ? d.items
+      : d.items.filter(t => t.status === 'open');
+    if (!items.length) {
+      const msg = showHistory
+        ? '該当するタスクはありません'
+        : '進行中のタスクはありません (チェックを入れると終了・取消も表示)';
+      root.innerHTML = `<div class="card empty">${msg}</div>`;
       return;
     }
     // Sort: 自分が引き受け中/報告済みを先頭 → 承認待ちのある自分のタスク
@@ -220,7 +241,7 @@ async function loadList() {
       if (t.can_claim) return 3;
       return 4;
     };
-    const sorted = d.items.slice().sort((a, b) => {
+    const sorted = items.slice().sort((a, b) => {
       const sa = score(a), sb = score(b);
       if (sa !== sb) return sa - sb;
       return b.id - a.id;
