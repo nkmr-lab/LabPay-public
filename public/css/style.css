@@ -101,7 +101,8 @@ body[data-view] main#app {
   flex: 1; display: flex; flex-direction: column;
   align-self: center; width: 100%;
 }
-body[data-view] main#app > .card:last-child { flex: 1; }
+/* 旧: 最後のカードを flex:1 で画面下まで伸ばしていたが、履歴/一覧が
+   少ないと外枠だけが余白として残るので撤去。コンテンツ高さに従う。 */
 .card h2 { margin: 0 0 8px; font-size: 16px; }
 .card h3 { margin: 6px 0; font-size: 14px; color: var(--muted); font-weight: 600; }
 
