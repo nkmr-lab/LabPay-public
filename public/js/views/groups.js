@@ -693,7 +693,9 @@ function openSettleModal(gid) {
           </div>
         </div>
         ${d.settlements.length ? `
-          <div style="margin-top:12px; text-align:right">
+          <div id="gd-settle-preview" class="list" style="margin-top:10px" hidden></div>
+          <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+            <button id="gd-settle-dry" class="btn">通知内容を確認する</button>
             <button id="gd-settle-notify" class="primary">全員に通知する</button>
           </div>` : ''}
         <p class="muted" style="font-size:11px; margin-top:8px">
@@ -708,6 +710,34 @@ function openSettleModal(gid) {
       root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('primary', b === btn));
       root.querySelectorAll('[data-stab-pane]').forEach(p => p.hidden = p.dataset.stabPane !== key);
     });
+  });
+  // Dry-run preview: ask the server to compute the messages without sending,
+  // then render them inline. Same Set() guard so spamming the button doesn't
+  // re-render mid-fetch.
+  root.querySelector('#gd-settle-dry')?.addEventListener('click', async (ev) => {
+    ev.currentTarget.disabled = true;
+    try {
+      const r = await post(`/api/groups/${gid}/settle`, { dry_run: true });
+      const previewRoot = root.querySelector('#gd-settle-preview');
+      const meId = Number(state.me?.id) || 0;
+      if (!r.previews || !r.previews.length) {
+        previewRoot.innerHTML = `<div class="muted">送信される通知はありません</div>`;
+      } else {
+        previewRoot.innerHTML = `<div class="muted" style="font-size:11px; margin-bottom:4px">↓ 通知する内容のプレビュー (${r.previews.length} 人)</div>`
+          + r.previews.map(p => {
+              const mine = Number(p.user_id) === meId;
+              return `
+                <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
+                  <div style="flex:1">
+                    <div class="bold" style="font-size:13px">→ ${escapeHtml(p.display_name)}${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
+                    <div class="meta" style="white-space:pre-wrap; font-size:12px">${escapeHtml(p.message)}</div>
+                  </div>
+                </div>`;
+            }).join('');
+      }
+      previewRoot.hidden = false;
+    } catch (e) { toast('失敗: ' + e.message); }
+    ev.currentTarget.disabled = false;
   });
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
   root.querySelector('#gd-settle-notify')?.addEventListener('click', async (ev) => {

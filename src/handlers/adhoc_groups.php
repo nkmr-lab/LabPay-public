@@ -553,9 +553,14 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
     }
     $plan = compute_settlements($balances);
     if (!$plan) {
-        json_response(['ok' => true, 'sent' => 0, 'note' => 'no transfers required']);
+        json_response(['ok' => true, 'sent' => 0, 'note' => 'no transfers required', 'previews' => []]);
         return;
     }
+
+    // body.dry_run=true なら通知は送らず、各人に送ろうとしている本文だけを
+    // previews[] で返す (フロントで「通知内容を確認」する用)。
+    $body = read_json_body();
+    $dryRun = !empty($body['dry_run']);
 
     // For each member with at least one outgoing or incoming line, send a
     // single notification summarizing their share of the plan. One per person
@@ -565,6 +570,7 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         $perUser[$p['from_user_id']]['send'][] = $p;
         $perUser[$p['to_user_id']]['recv'][]   = $p;
     }
+    $previews = [];
     $sent = 0;
     foreach ($perUser as $uid => $lines) {
         $msg = "💴 グループ「{$title}」精算:\n";
@@ -574,8 +580,12 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         foreach (($lines['recv'] ?? []) as $p) {
             $msg .= "← {$p['from_name']} から ¥" . number_format($p['amount_jpy']) . " を受け取れます\n";
         }
-        notify_safely($pdo, $cfg, (int)$uid, 'admin_notice', rtrim($msg), 'group', $id);
-        $sent++;
+        $msgBody = rtrim($msg);
+        $previews[] = ['user_id' => (int)$uid, 'display_name' => $names[$uid] ?? "user#$uid", 'message' => $msgBody];
+        if (!$dryRun) {
+            notify_safely($pdo, $cfg, (int)$uid, 'admin_notice', $msgBody, 'group', $id);
+            $sent++;
+        }
     }
-    json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan)]);
+    json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan), 'previews' => $previews, 'dry_run' => $dryRun]);
 }
