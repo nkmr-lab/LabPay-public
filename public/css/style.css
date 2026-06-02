@@ -448,6 +448,18 @@ table.table th { color: var(--muted); font-weight: 600; }
   width: 12px; height: 12px; border-radius: 2px;
 }
 
+/* Home '新規入荷' thumb — small square so the list still reads as text-first. */
+.fresh-thumb {
+  width: 40px; height: 40px; border-radius: 8px;
+  object-fit: cover; flex: 0 0 auto;
+  background: #f1f1f4;
+}
+.fresh-thumb-fallback {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-weight: 600;
+  border: 1px solid var(--line);
+}
+
 /* Activity heatmap.
    Uses CSS grid with 1 day-label column + 24 hour columns. The grid sits inside
    a min-width:0 flex/grid context so the 24 fractional columns clamp to fit

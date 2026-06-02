@@ -275,9 +275,17 @@ async function renderFreshListings() {
       const priceTag = l.is_gift
         ? `<div class="bold" style="color:#b71c50; white-space:nowrap">🎁 これどうぞ</div>`
         : `<div class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</div>`;
+      // 商品サムネ — 画像あれば 40px 角、無ければ商品名の頭文字を載せた灰色プレースホルダ。
+      // 「タイル全部」じゃなく「左にちょこっと」入る程度に留めることで、テキスト中心の
+      // 「新規入荷」リストの空気感を残しつつ "あ、これ何だっけ" の認知を助ける。
+      const initial = (l.name || '?').trim().charAt(0).toUpperCase();
+      const thumb = l.image_url
+        ? `<img src="${escapeHtml(l.image_url)}" class="fresh-thumb" alt="">`
+        : `<div class="fresh-thumb fresh-thumb-fallback">${escapeHtml(initial)}</div>`;
       return `
-        <a class="list-item" href="#/product/${encodeURIComponent(l.jan)}">
-          <div>
+        <a class="list-item" href="#/product/${encodeURIComponent(l.jan)}" style="align-items:center; gap:10px">
+          ${thumb}
+          <div style="flex:1; min-width:0">
             <div class="bold">${escapeHtml(l.name)}</div>
             <div class="meta">${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''} · ${escapeHtml(l.created_at)}</div>
           </div>
