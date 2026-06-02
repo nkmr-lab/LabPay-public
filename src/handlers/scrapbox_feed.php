@@ -44,23 +44,30 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
 
     // Flatten attachments → edits. Each attachment is one notification line.
     // ts is a Slack-style 'unix_int.frac' string; we keep it as a float for sort.
+    //
+    // author_name は時々「Sora, Satoshi Nakamura」のようにカンマ区切りで
+    // 複数人になることがある (共同編集など)。それぞれを独立した編集として
+    // 展開して、後段の集計で各人に正しくカウントされるようにする。
     $edits = [];
     foreach ($messages as $m) {
         if (($m['username'] ?? '') !== 'Scrapbox') continue;
         $ts = (float)($m['ts'] ?? 0);
         foreach ($m['attachments'] ?? [] as $a) {
-            $author = trim((string)($a['author_name'] ?? ''));
-            $title  = trim((string)($a['title'] ?? ''));
-            $link   = trim((string)($a['title_link'] ?? ''));
+            $rawAuthor = trim((string)($a['author_name'] ?? ''));
+            $title     = trim((string)($a['title'] ?? ''));
+            $link      = trim((string)($a['title_link'] ?? ''));
             // Filter: research-note pages only (per the user's spec).
-            if ($author === '' || mb_strpos($title, '研究ノート') === false) continue;
-            $edits[] = [
-                'ts'     => $ts,
-                'author' => $author,
-                'title'  => $title,
-                'url'    => $link,
-                'text'   => trim((string)($a['text'] ?? '')),
-            ];
+            if ($rawAuthor === '' || mb_strpos($title, '研究ノート') === false) continue;
+            $authors = array_values(array_filter(array_map('trim', explode(',', $rawAuthor)), fn($s) => $s !== ''));
+            foreach ($authors as $author) {
+                $edits[] = [
+                    'ts'     => $ts,
+                    'author' => $author,
+                    'title'  => $title,
+                    'url'    => $link,
+                    'text'   => trim((string)($a['text'] ?? '')),
+                ];
+            }
         }
     }
     // Latest first.
