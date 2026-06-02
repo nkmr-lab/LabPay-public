@@ -63,8 +63,8 @@ function toggleCreateForm(open = null) {
       </label>
       <div class="row">
         <label class="field" style="flex:1">
-          <span class="lbl">報酬 (pt / 1人あたり)</span>
-          <input type="number" id="t-reward" min="1" value="10">
+          <span class="lbl">報酬 (pt / 1人あたり、0 OK)</span>
+          <input type="number" id="t-reward" min="0" value="10">
         </label>
         <label class="field" style="flex:1">
           <span class="lbl">募集人数</span>
@@ -166,7 +166,7 @@ async function onCreate() {
   const per_user_limit = Number(document.getElementById('t-perlimit').value);
   const deadline = document.getElementById('t-deadline').value || null;
   const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
-  if (!title || !(reward > 0)) { toast('タイトルと報酬を確認してください'); return; }
+  if (!title || !(reward >= 0)) { toast('タイトルと報酬を確認してください (0pt も OK)'); return; }
   if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
   try {

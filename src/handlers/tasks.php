@@ -425,7 +425,8 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $description   = optional_text_field($body, 'description', 5000);
     $url           = tasks_validate_url($body['url'] ?? null);
     $completionMsg = optional_text_field($body, 'completion_message', 2000);
-    $reward   = require_int_positive($body['reward']   ?? null, 'reward');
+    // 0 pt 許可 (ボランティア / お願いベースのタスク用)。
+    $reward   = require_int_nonneg($body['reward']   ?? null, 'reward');
     $perLimit = require_int_nonneg($body['per_user_limit'] ?? 1, 'per_user_limit');
     // Optional time slot spec — parsed to (start, end) list. When present,
     // capacity becomes the slot count (1 person per slot by default).
@@ -506,11 +507,13 @@ function tasks_create(PDO $pdo, array $cfg): void {
             }
         }
 
-        // Move escrow: requester → ESCROW
-        $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
-        $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
-        Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit',
-            'task', $taskId, "タスク「{$title}」報酬預け");
+        // Move escrow: requester → ESCROW (0pt タスクは送金不要)
+        if ($totalEscrow > 0) {
+            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
+            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
+            Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit',
+                'task', $taskId, "タスク「{$title}」報酬預け");
+        }
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -566,7 +569,7 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
         $newDesc    = patch_text_field($body, 'description',        5000, $task['description']);
         $newUrl     = array_key_exists('url', $body) ? tasks_validate_url($body['url']) : ($task['url'] ?? null);
         $newCMsg    = patch_text_field($body, 'completion_message', 2000, $task['completion_message'] ?? null);
-        $newReward  = array_key_exists('reward', $body)         ? require_int_positive($body['reward'],   'reward')        : (int)$task['reward'];
+        $newReward  = array_key_exists('reward', $body)         ? require_int_nonneg($body['reward'],     'reward')        : (int)$task['reward'];
         $newCap     = array_key_exists('capacity', $body)       ? require_int_positive($body['capacity'], 'capacity')      : (int)$task['capacity'];
         $newPerLim  = array_key_exists('per_user_limit', $body) ? require_int_nonneg($body['per_user_limit'], 'per_user_limit') : (int)$task['per_user_limit'];
 
@@ -758,10 +761,14 @@ function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
         $claim = $st2->fetch();
         if (!$claim) throw new ApiException('bad_state', '報告済みの請求が見つかりません', 409);
 
-        $escAcc      = Ledger::accountIdByCode($pdo, 'ESCROW');
-        $claimantAcc = Ledger::accountIdForUser($pdo, (int)$claim['user_id']);
-        $ledgerId = Ledger::transfer($pdo, $escAcc, $claimantAcc, (int)$task['reward'],
-            'task_reward', 'task', $taskId, "タスク「{$task['title']}」報酬");
+        // 0pt タスクは ledger を動かさない (escrow ⇄ claimant のやり取り無し)。
+        $ledgerId = null;
+        if ((int)$task['reward'] > 0) {
+            $escAcc      = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $claimantAcc = Ledger::accountIdForUser($pdo, (int)$claim['user_id']);
+            $ledgerId = Ledger::transfer($pdo, $escAcc, $claimantAcc, (int)$task['reward'],
+                'task_reward', 'task', $taskId, "タスク「{$task['title']}」報酬");
+        }
 
         $upd = $pdo->prepare("UPDATE task_claims SET status='approved', approved_at=NOW(),
             approved_by_user_id=?, ledger_id=? WHERE id=?");
