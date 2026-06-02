@@ -219,13 +219,16 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
 
 function money_requests_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT creator_user_id FROM money_requests WHERE id=?");
+    $st = $pdo->prepare("SELECT creator_user_id, created_by_user_id FROM money_requests WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'request not found', 404);
+    // 編集できるのは: creator (formally 発起人) / 代理生成した本人 (created_by) / admin
+    // ワリカ精算からのバルク生成で創られた請求は created_by = ボタン押した人。
     if ((int)$row['creator_user_id'] !== (int)$u['id']
+        && (int)($row['created_by_user_id'] ?? 0) !== (int)$u['id']
         && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '発起人のみ編集できます', 403);
+        throw new ApiException('forbidden', '発起人または代理生成者のみ編集できます', 403);
     }
     $body = read_json_body();
     $sets = [];
@@ -267,13 +270,16 @@ function money_requests_patch(PDO $pdo, array $cfg, int $id): void {
 
 function money_requests_close(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT creator_user_id FROM money_requests WHERE id=?");
+    $st = $pdo->prepare("SELECT creator_user_id, created_by_user_id FROM money_requests WHERE id=?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'request not found', 404);
+    // 削除できるのは: creator / 代理生成した本人 / admin。バルク生成した本人が
+    // 誤って大量に作ってしまったときに 1 件ずつ消せるように。
     if ((int)$r['creator_user_id'] !== (int)$u['id']
+        && (int)($r['created_by_user_id'] ?? 0) !== (int)$u['id']
         && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '発起人または admin だけが削除できます', 403);
+        throw new ApiException('forbidden', '発起人・代理生成者・admin のみ削除できます', 403);
     }
     $pdo->prepare("DELETE FROM money_requests WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);

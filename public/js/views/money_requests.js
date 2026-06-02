@@ -356,13 +356,15 @@ async function loadDetail(id) {
     const r = await get('/api/money-requests/' + id);
     const meId = state.me?.id;
     const isCreator = Number(r.creator_user_id) === Number(meId);
+    const isGenerator = Number(r.created_by_user_id) === Number(meId);
+    const canManage = isCreator || isGenerator;
     const myRow = (r.recipients || []).find(x => Number(x.user_id) === Number(meId));
     const settle = settlementInfo(r);
 
     document.getElementById('mr-detail').innerHTML = `
       <div style="display:flex; align-items:start; gap:8px">
         <div class="bold" style="font-size:18px; flex:1">${escapeHtml(r.title)}</div>
-        ${isCreator ? `<button id="mr-edit" class="btn" style="padding:2px 8px; font-size:12px">編集</button>` : ''}
+        ${canManage ? `<button id="mr-edit" class="btn" style="padding:2px 8px; font-size:12px">編集</button>` : ''}
       </div>
       <div class="meta">${escapeHtml(r.creator_name)} · ${escapeHtml(r.created_at)}</div>
       ${r.memo ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(r.memo)}</div>` : ''}
@@ -383,7 +385,7 @@ async function loadDetail(id) {
                  <button data-pay="proxy">他の人に立替えてもらった</button>
                </div>`}
         </div>` : ''}
-      ${isCreator ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を削除する</button></div>` : ''}
+      ${canManage ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を削除する</button></div>` : ''}
     `;
 
     // 受取人リスト (発起人は全件、受取人は自分含めて全員見れる)
