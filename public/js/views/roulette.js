@@ -37,7 +37,7 @@ export async function renderRoulette() {
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
         <span class="switch">
-          <input type="checkbox" id="rl-dry" checked>
+          <input type="checkbox" id="rl-dry">
           <span class="slider"></span>
         </span>
         <span>🧪 テストモード <span class="muted" style="font-size:12px">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
