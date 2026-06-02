@@ -27,158 +27,44 @@ $seg = path_segments($path);
 // Always JSON.
 header('Content-Type: application/json; charset=utf-8');
 
+// Dispatch table — URL 第1セグメント → route_* 関数。新しいリソースは
+// ここに 1 行追加するだけで生える。複雑な権限/前処理が要るときは route_*
+// 関数の中で済ませる方針 (front controller には残さない)。
+$routes = [
+    'auth'           => 'route_auth',
+    'me'             => 'route_me',
+    'users'          => 'route_users',           // me.php に居る軽い一覧
+    'products'       => 'route_products',
+    'listings'       => 'route_listings',
+    'purchases'      => 'route_purchases',
+    'checkins'       => 'route_checkins',
+    'sellers'        => 'route_sellers',
+    'notifications'  => 'route_notifications',
+    'admin'          => 'route_admin',
+    'presence'       => 'route_presence',
+    'uploads'        => 'route_uploads',
+    'tasks'          => 'route_tasks',
+    'transfers'      => 'route_transfers',
+    'network'        => 'route_network',
+    'feedback'       => 'route_feedback',
+    'wishlist'       => 'route_wishlist',
+    'invitations'    => 'route_invitations',
+    'roulettes'      => 'route_roulettes',
+    'nomikai'        => 'route_nomikai',
+    'groups'         => 'route_groups',          // ad-hoc groups
+    'scrapbox'       => 'route_scrapbox',
+    'fx'             => 'route_fx',
+    'random-groups'  => 'route_random_groups',
+    'money-requests' => 'route_money_requests',
+];
+
 try {
     // CSRF guard for state-changing methods (skipped on OAuth callback because Google redirects via GET).
     require_csrf_header($method);
 
-    // ---- Routing ----
-    // /auth/*
-    if (($seg[0] ?? '') === 'auth') {
-        route_auth($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /me, /me/*
-    if (($seg[0] ?? '') === 'me') {
-        route_me($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /products, /products/{jan}
-    if (($seg[0] ?? '') === 'products') {
-        route_products($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /listings, /listings/{id}
-    if (($seg[0] ?? '') === 'listings') {
-        route_listings($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /purchases
-    if (($seg[0] ?? '') === 'purchases') {
-        route_purchases($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /checkins
-    if (($seg[0] ?? '') === 'checkins') {
-        route_checkins($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /sellers/{id}/stats
-    if (($seg[0] ?? '') === 'sellers') {
-        route_sellers($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /notifications
-    if (($seg[0] ?? '') === 'notifications') {
-        route_notifications($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /admin/*
-    if (($seg[0] ?? '') === 'admin') {
-        route_admin($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /presence, /presence/*
-    if (($seg[0] ?? '') === 'presence') {
-        route_presence($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /uploads/*
-    if (($seg[0] ?? '') === 'uploads') {
-        route_uploads($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /tasks, /tasks/{id}/...
-    if (($seg[0] ?? '') === 'tasks') {
-        route_tasks($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /transfers
-    if (($seg[0] ?? '') === 'transfers') {
-        route_transfers($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /users (lightweight directory, used by transfer recipient picker)
-    if (($seg[0] ?? '') === 'users') {
-        route_users($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /network (social graph aggregates for the #/network view)
-    if (($seg[0] ?? '') === 'network') {
-        route_network($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /feedback (bug reports + feature requests)
-    if (($seg[0] ?? '') === 'feedback') {
-        route_feedback($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /wishlist ('these I want' product requests)
-    if (($seg[0] ?? '') === 'wishlist') {
-        route_wishlist($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /invitations (casual hangout board)
-    if (($seg[0] ?? '') === 'invitations') {
-        route_invitations($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /roulettes (group lottery)
-    if (($seg[0] ?? '') === 'roulettes') {
-        route_roulettes($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /nomikai (drinking-party split)
-    if (($seg[0] ?? '') === 'nomikai') {
-        route_nomikai($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /groups (ad-hoc groups for short-lived contexts)
-    if (($seg[0] ?? '') === 'groups') {
-        route_groups($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /scrapbox (read-only feed over #scrapbox Slack channel)
-    if (($seg[0] ?? '') === 'scrapbox') {
-        route_scrapbox($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /fx (live FX rate snapshot for ワリカ)
-    if (($seg[0] ?? '') === 'fx') {
-        route_fx($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /random-groups (notify the result of an ad-hoc グループ分け)
-    if (($seg[0] ?? '') === 'random-groups') {
-        route_random_groups($PDO, $CFG, $method, $seg);
-        return;
-    }
-
-    // /money-requests (集金 / 請求)
-    if (($seg[0] ?? '') === 'money-requests') {
-        route_money_requests($PDO, $CFG, $method, $seg);
+    $first = $seg[0] ?? '';
+    if (isset($routes[$first])) {
+        $routes[$first]($PDO, $CFG, $method, $seg);
         return;
     }
 

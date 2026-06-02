@@ -160,16 +160,14 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
 
     // All persistence + the (optional) pt transfer happen inside one TX so a
     // late failure can't leave a roulette row with no matching ledger entry.
-    $rouletteId = 0;
-    $ledgerId   = null;
-    $pdo->beginTransaction();
-    try {
+    [$rouletteId, $ledgerId] = db_tx($pdo, function () use ($pdo, $u, $title, $winnerId, $ids, $reward) {
         $ins = $pdo->prepare("INSERT INTO roulettes
             (creator_user_id, title, winner_user_id, member_ids, reward)
             VALUES (?,?,?,?,?)");
         $ins->execute([$u['id'], $title, $winnerId,
             json_encode($ids, JSON_UNESCAPED_UNICODE), $reward]);
         $rouletteId = (int)$pdo->lastInsertId();
+        $ledgerId = null;
 
         // If the creator IS the winner, the transfer would be self → self, which
         // Ledger::transfer rejects. Skip it silently — the pt effectively stays
@@ -185,11 +183,8 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
             $pdo->prepare("UPDATE roulettes SET ledger_id=? WHERE id=?")
                 ->execute([$ledgerId, $rouletteId]);
         }
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return [$rouletteId, $ledgerId];
+    });
 
     // Notify every participant. Winner gets the punchy 'YOU' phrasing with
     // the pt note; everyone else hears who won and how much.

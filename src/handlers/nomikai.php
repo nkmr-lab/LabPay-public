@@ -133,8 +133,7 @@ function nomikai_create(PDO $pdo, array $cfg): void {
         $norm[$absorbIdx]['amount_yen'] += $delta;
     }
 
-    $pdo->beginTransaction();
-    try {
+    $sid = db_tx($pdo, function () use ($pdo, $u, $title, $total, $notes, $norm) {
         $ins = $pdo->prepare("INSERT INTO nomikai_sessions (creator_user_id, title, total_yen, notes)
             VALUES (?,?,?,?)");
         $ins->execute([$u['id'], $title, $total, $notes]);
@@ -144,11 +143,8 @@ function nomikai_create(PDO $pdo, array $cfg): void {
         foreach ($norm as $n) {
             $pIns->execute([$sid, $n['user_id'], $n['amount_yen'], $n['alcohol'], $n['weight']]);
         }
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return $sid;
+    });
 
     // Notify every participant of their share (skip the creator themselves).
     foreach ($norm as $n) {

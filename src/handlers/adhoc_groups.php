@@ -123,18 +123,14 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'one or more member_ids not found', 400);
     }
 
-    $pdo->beginTransaction();
-    try {
+    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $memberIds) {
         $st = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description) VALUES (?,?,?,?)");
         $st->execute([$slug, $u['id'], $title, $description]);
         $gid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?,?)");
         foreach ($memberIds as $uid) $st->execute([$gid, $uid]);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return $gid;
+    });
 
     // Notify non-creator members.
     foreach ($memberIds as $uid) {

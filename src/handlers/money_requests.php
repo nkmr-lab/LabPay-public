@@ -145,19 +145,15 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         return;
     }
 
-    $pdo->beginTransaction();
-    try {
+    $rid = db_tx($pdo, function () use ($pdo, $creatorId, $u, $title, $memo, $rows) {
         $st = $pdo->prepare("INSERT INTO money_requests
             (creator_user_id, created_by_user_id, title, memo) VALUES (?,?,?,?)");
         $st->execute([$creatorId, (int)$u['id'], $title, $memo]);
         $rid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO money_request_recipients (request_id, user_id, amount_yen) VALUES (?,?,?)");
         foreach ($rows as $r) $st->execute([$rid, $r['user_id'], $r['amount_yen']]);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return $rid;
+    });
 
     // recipients に通知 (発起人は除く)
     foreach ($rows as $r) {

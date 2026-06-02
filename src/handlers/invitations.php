@@ -115,8 +115,7 @@ function invitations_create(PDO $pdo, array $cfg): void {
 
 function invitations_join(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $pdo->beginTransaction();
-    try {
+    db_tx($pdo, function () use ($pdo, $cfg, $id, $u) {
         $st = $pdo->prepare("SELECT * FROM invitations WHERE id=? FOR UPDATE");
         $st->execute([$id]);
         $inv = $st->fetch();
@@ -137,11 +136,7 @@ function invitations_join(PDO $pdo, array $cfg, int $id): void {
                 "🎉 「{$inv['title']}」に {$u['display_name']} さんが参加表明しました",
                 'invitation', $id);
         }
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+    });
     json_response(['ok' => true]);
 }
 

@@ -202,8 +202,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         require_exposure($cfg, 'listings_write');
         $u = Auth::requireUser($pdo, $cfg);
         $body = read_json_body();
-        $pdo->beginTransaction();
-        try {
+        db_tx($pdo, function () use ($pdo, $id, $u, $body) {
             $st = $pdo->prepare('SELECT * FROM listings WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $row = $st->fetch();
@@ -270,11 +269,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             $params[] = $id;
             $upd = $pdo->prepare('UPDATE listings SET ' . implode(',', $sets) . ' WHERE id=?');
             $upd->execute($params);
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
-        }
+        });
         $get = $pdo->prepare("SELECT l.*,
                 p.name AS product_name,
                 COALESCE(l.display_name, p.name) AS name,
@@ -294,8 +289,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         $body = read_json_body();
         $qtyToConsume = isset($body['qty']) ? require_int_positive($body['qty'], 'qty') : 1;
 
-        $pdo->beginTransaction();
-        try {
+        [$newQty, $newStatus] = db_tx($pdo, function () use ($pdo, $id, $u, $qtyToConsume) {
             $st = $pdo->prepare('SELECT * FROM listings WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $row = $st->fetch();
@@ -311,11 +305,8 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             $newStatus = $newQty <= 0 ? 'sold_out' : $row['status'];
             $pdo->prepare('UPDATE listings SET qty=?, status=? WHERE id=?')
                 ->execute([$newQty, $newStatus, $id]);
-            $pdo->commit();
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
-            throw $e;
-        }
+            return [$newQty, $newStatus];
+        });
         json_response(['ok' => true, 'qty_remaining' => $newQty, 'status' => $newStatus]);
         return;
     }
@@ -324,8 +315,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         require_exposure($cfg, 'listings_write');
         $u = Auth::requireUser($pdo, $cfg);
         $hard = !empty($_GET['hard']); // DELETE /api/listings/{id}?hard=1 → real delete (no history)
-        $pdo->beginTransaction();
-        try {
+        db_tx($pdo, function () use ($pdo, $id, $u, $hard) {
             $st = $pdo->prepare('SELECT seller_user_id, status FROM listings WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $row = $st->fetch();
@@ -346,11 +336,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             } else {
                 $pdo->prepare('UPDATE listings SET status="withdrawn" WHERE id=?')->execute([$id]);
             }
-            $pdo->commit();
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
-            throw $e;
-        }
+        });
         json_response(['ok' => true, 'hard' => $hard]);
         return;
     }

@@ -217,6 +217,23 @@ function require_csrf_header(string $method): void {
     }
 }
 
+// ---------------- DB transaction helper ----------------
+// handler 全体で `$pdo->beginTransaction(); try {...} commit(); catch { rollBack; throw }`
+// の boilerplate が散らかっていたので集約。callable の戻り値をそのまま返すので
+// `$id = db_tx($pdo, fn() => ...)` で透過的に書ける。
+// 例外時は inTransaction チェックの上で rollBack して例外を再 throw。
+function db_tx(PDO $pdo, callable $fn) {
+    $pdo->beginTransaction();
+    try {
+        $r = $fn();
+        $pdo->commit();
+        return $r;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
 // ---------------- Idempotency ----------------
 function idempotency_get(PDO $pdo, string $ukey, int $userId, string $endpoint): ?array {
     $st = $pdo->prepare('SELECT response_json, status_code FROM idempotency_keys

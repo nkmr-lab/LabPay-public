@@ -30,8 +30,7 @@ function transfers_create(PDO $pdo, array $cfg): void {
     $recipient = $st->fetch();
     if (!$recipient) throw new ApiException('not_found', '送金先のユーザーが見つかりません', 404);
 
-    $pdo->beginTransaction();
-    try {
+    $payload = db_tx($pdo, function () use ($pdo, $sender, $toUserId, $amount, $memo, $ukey, $recipient, $endpoint) {
         $senderAcc = Ledger::accountIdForUser($pdo, (int)$sender['id']);
         $recipAcc  = Ledger::accountIdForUser($pdo, $toUserId);
 
@@ -56,16 +55,13 @@ function transfers_create(PDO $pdo, array $cfg): void {
             'new_balance' => $newBalance,
         ];
         idempotency_save($pdo, $ukey, (int)$sender['id'], $endpoint, $payload, 200);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return $payload;
+    });
 
     try {
         Notifier::notify($pdo, $cfg, $toUserId, 'transfer_received',
             "{$sender['display_name']} から {$amount}pt を受け取りました" . format_memo_suffix($memo),
-            'transfer', $transferId);
+            'transfer', $payload['transfer_id']);
     } catch (Throwable $e) {}
     json_response($payload);
 }
