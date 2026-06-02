@@ -445,52 +445,66 @@ function renderRow(l) {
   const priceLine = l.is_gift
     ? `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 🎁 無料配布 · 在庫 ${l.qty}</div>`
     : `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 価格 ${l.price.toLocaleString()}pt · 在庫 ${l.qty}</div>`;
-  const priceControls = l.is_gift
-    ? `<button data-action="ungift" data-id="${l.id}">通常販売に戻す</button>`
-    : `<input type="number" min="1" value="${l.price}" data-price="${l.id}" style="max-width:120px">
-       <button data-action="price" data-id="${l.id}">価格更新</button>
-       <button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>`;
+  // Editable fields stack — each row is its own label + input. The single
+  // [更新] button below collects every field's current value and writes them
+  // in one call. Gift listings hide the price field (replaced with the gift
+  // chip + 通常販売に戻す button); everything else is identical.
+  const priceField = l.is_gift
+    ? `<div class="row" style="margin-top:6px; gap:6px; align-items:center">
+         <span class="muted" style="font-size:12px; min-width:70px">価格</span>
+         <span style="flex:1; color:#b71c50; font-weight:600">🎁 これどうぞ (0pt)</span>
+       </div>`
+    : `<div class="row" style="margin-top:6px; gap:6px; align-items:center">
+         <span class="muted" style="font-size:12px; min-width:70px">価格 (pt)</span>
+         <input type="number" min="1" value="${l.price}" data-price="${l.id}" style="flex:1">
+       </div>`;
+  // Action row: per the consolidation, only 更新 / 取り下げ are universal;
+  // 🎁 toggle and 1個消費 stay as separate intents because they're mode
+  // changes / inventory adjustments rather than "save what I just typed".
+  const actionRow = l.status === 'withdrawn'
+    ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
+       <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
+    : `<button data-action="update" data-id="${l.id}" data-jan="${escapeHtml(l.jan)}" class="primary">更新</button>
+       ${l.is_gift
+         ? `<button data-action="ungift" data-id="${l.id}">通常販売に戻す</button>`
+         : `<button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>`}
+       <button data-action="consume" data-id="${l.id}" ${l.qty > 0 ? '' : 'disabled'}>1個消費</button>
+       <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
   return `
     <div class="list-item" data-id="${l.id}" style="align-items:flex-start">
       <div style="flex:1">
         <div class="bold">${escapeHtml(effectiveName)} ${statusTag}${giftTag}${locTag}</div>
         ${priceLine}
-        <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
-          ${priceControls}
-          <input type="number" min="0" value="${l.qty}" data-qty="${l.id}" style="max-width:90px">
-          <button data-action="qty" data-id="${l.id}">在庫更新</button>
-          ${l.status === 'withdrawn'
-            ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
-               <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
-            : `<button data-action="consume" data-id="${l.id}" ${l.qty > 0 ? '' : 'disabled'}>1個消費</button>
-               <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`
-          }
+        ${priceField}
+        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
+          <span class="muted" style="font-size:12px; min-width:70px">在庫</span>
+          <input type="number" min="0" value="${l.qty}" data-qty="${l.id}" style="flex:1">
         </div>
         <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:62px">出品名</span>
+          <span class="muted" style="font-size:12px; min-width:70px">出品名</span>
           <input type="text" maxlength="200" value="${escapeHtml(l.display_name ?? '')}" data-dname="${l.id}" placeholder="空欄なら「${escapeHtml(productName)}」" style="flex:1">
-          <button data-action="dname" data-id="${l.id}">出品名更新</button>
         </div>
         <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:62px">商品名</span>
-          <input type="text" maxlength="200" value="${escapeHtml(productName)}" data-pname="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1">
-          <button data-action="pname" data-id="${l.id}">商品名更新</button>
+          <span class="muted" style="font-size:12px; min-width:70px">商品名</span>
+          <input type="text" maxlength="200" value="${escapeHtml(productName)}" data-pname="${l.id}" style="flex:1">
         </div>
         <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:62px">置き場所</span>
+          <span class="muted" style="font-size:12px; min-width:70px">置き場所</span>
           <input type="text" maxlength="100" value="${escapeHtml(l.location ?? '')}" data-loc="${l.id}" placeholder="例: 10階冷蔵庫" style="flex:1">
-          <button data-action="loc" data-id="${l.id}">場所更新</button>
         </div>
         <div class="row" style="margin-top:6px; gap:6px; align-items:flex-start">
+          <span class="muted" style="font-size:12px; min-width:70px">メッセージ</span>
           <textarea data-cmsg="${l.id}" maxlength="2000" rows="2" placeholder="購入時のメッセージ (任意)" style="flex:1">${escapeHtml(l.completion_message ?? '')}</textarea>
-          <button data-action="cmsg" data-id="${l.id}">メッセージ更新</button>
         </div>
         <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:62px">画像</span>
+          <span class="muted" style="font-size:12px; min-width:70px">画像</span>
           ${l.image_url
             ? `<img src="${escapeHtml(l.image_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:6px">`
             : `<span class="muted" style="font-size:12px">未設定</span>`}
           <input type="file" accept="image/*" data-img-file="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1">
+        </div>
+        <div class="row" style="margin-top:8px; gap:6px; flex-wrap:wrap">
+          ${actionRow}
         </div>
       </div>
     </div>`;
@@ -500,35 +514,43 @@ async function onAction(btn) {
   const id = btn.dataset.id;
   const action = btn.dataset.action;
   try {
-    if (action === 'price') {
-      const v = Number(document.querySelector(`[data-price="${id}"]`).value);
-      if (!(v > 0)) return toast('価格は1以上');
-      await patch('/api/listings/' + id, { price: v });
-      toast('価格を更新しました');
-    } else if (action === 'qty') {
-      const v = Number(document.querySelector(`[data-qty="${id}"]`).value);
-      if (!(v >= 0)) return toast('在庫は0以上');
-      await patch('/api/listings/' + id, { qty: v });
-      toast('在庫を更新しました');
-    } else if (action === 'cmsg') {
-      const v = document.querySelector(`[data-cmsg="${id}"]`).value.trim();
-      await patch('/api/listings/' + id, { completion_message: v || null });
-      toast('メッセージを更新しました');
-    } else if (action === 'loc') {
-      const v = document.querySelector(`[data-loc="${id}"]`).value.trim();
-      await patch('/api/listings/' + id, { location: v || null });
-      toast('置き場所を更新しました');
-    } else if (action === 'pname') {
-      const input = document.querySelector(`[data-pname="${id}"]`);
-      const v = input.value.trim();
-      const jan = input.dataset.jan;
-      if (!v) { toast('商品名は必須'); return; }
-      await patch('/api/products/' + encodeURIComponent(jan), { name: v });
-      toast('商品名を更新しました');
-    } else if (action === 'dname') {
-      const v = document.querySelector(`[data-dname="${id}"]`).value.trim();
-      await patch('/api/listings/' + id, { display_name: v || null });
-      toast(v ? '出品名を更新しました' : '出品名をクリアしました');
+    if (action === 'update') {
+      // Bundle every editable field into one PATCH on the listing. If the
+      // product name (catalog-side, keyed by JAN) was also touched, send a
+      // separate PATCH for that — there's no combined endpoint.
+      const jan = btn.dataset.jan;
+      const qtyEl   = document.querySelector(`[data-qty="${id}"]`);
+      const priceEl = document.querySelector(`[data-price="${id}"]`);
+      const dnameEl = document.querySelector(`[data-dname="${id}"]`);
+      const pnameEl = document.querySelector(`[data-pname="${id}"]`);
+      const locEl   = document.querySelector(`[data-loc="${id}"]`);
+      const cmsgEl  = document.querySelector(`[data-cmsg="${id}"]`);
+
+      const qty = Number(qtyEl.value);
+      if (!(qty >= 0)) return toast('在庫は0以上');
+      const listingPatch = {
+        qty,
+        display_name:       dnameEl.value.trim() || null,
+        location:           locEl.value.trim()   || null,
+        completion_message: cmsgEl.value.trim()  || null,
+      };
+      // Gift listings hide the price input; only attach price when it's there.
+      if (priceEl) {
+        const v = Number(priceEl.value);
+        if (!(v > 0)) return toast('価格は1以上');
+        listingPatch.price = v;
+      }
+      const pname = pnameEl.value.trim();
+      if (!pname) return toast('商品名は必須');
+
+      await patch('/api/listings/' + id, listingPatch);
+      // Only touch the product if the catalog name actually changed (saves a
+      // round-trip when the user just tweaked price or stock).
+      const prevPname = pnameEl.defaultValue;
+      if (pname !== prevPname) {
+        await patch('/api/products/' + encodeURIComponent(jan), { name: pname });
+      }
+      toast('更新しました');
     } else if (action === 'makegift') {
       if (!confirm('この出品を「これどうぞ！」(無料配布) に切り替えます。価格は 0pt になります。よろしいですか?')) return;
       await patch('/api/listings/' + id, { is_gift: true });
