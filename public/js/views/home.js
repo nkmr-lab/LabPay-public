@@ -609,12 +609,17 @@ function renderRoom(r, windowMin) {
            if (u.session_start_at && u.last_seen_at) {
              stayMinutes = Math.max(0, Math.round(
                (parseJst(u.last_seen_at) - parseJst(u.session_start_at)) / 60000));
-             dur = `滞在 ${formatDur(stayMinutes)}`;
            }
            // 12h+ 連続検知 = ほぼ間違いなくデバイス置き忘れ。化石化 (sepia + 重い
            // grayscale) して 🗿 を添える。本人がうっかり連泊してたら戻ってきた
            // 時に普通の色に戻るので false positive はそんなに痛くない。
            const isFossil = stayMinutes >= 12 * 60;
+           // 化石化した場合の生の数値は意味がない (端末が一晩中つながり
+           // っぱなしだっただけ) ので「12時間+」と頭打ちで表示。それ未満
+           // は通常の「滞在 N時間Y分」。
+           if (stayMinutes > 0) {
+             dur = isFossil ? '滞在 12時間+' : `滞在 ${formatDur(stayMinutes)}`;
+           }
            const ageHint = opacity < 1 ? ' (検知途切れ気味)' : '';
            const fossilHint = isFossil ? ' (12時間以上連続検知 — 端末忘れかも)' : '';
            const tooltip = `${u.display_name}${dur ? ' — ' + dur : ''}${ageHint}${fossilHint}`;

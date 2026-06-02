@@ -238,11 +238,14 @@ function presence_list(PDO $pdo, array $cfg): void {
     // For every (user, room) pair within the window, compute the latest sighting and the
     // earliest session_start_at across the user's devices in that room (so a user with
     // multiple registered MACs gets the earliest one — they've been there at least that long).
+    // session_start_at は migration 015 以前の行で NULL のことがある。
+    // その場合は first_seen_at で代用 (= ユーザーがその MAC で初めて検知
+    // された時刻)。これがないと「-」表示になって滞在時間が出ない。
     $st = $pdo->prepare("
         SELECT u.id AS user_id, u.display_name, u.avatar_url,
                ps.room_id,
-               MAX(ps.last_seen_at)      AS last_seen_at,
-               MIN(ps.session_start_at)  AS session_start_at
+               MAX(ps.last_seen_at) AS last_seen_at,
+               MIN(COALESCE(ps.session_start_at, ps.first_seen_at)) AS session_start_at
           FROM presence_seen ps
           JOIN presence_devices pd ON pd.mac = ps.mac
           JOIN users u ON u.id = pd.user_id AND u.kind = 'human'
