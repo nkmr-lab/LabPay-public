@@ -35,18 +35,13 @@ export async function renderRoulette() {
         <span class="lbl">当たった人にあなたからポイントを送る (任意・空欄 = 送らない)</span>
         <input type="number" id="rl-reward" min="0" max="1000000" placeholder="例: 100">
       </label>
-      <label style="display:flex; align-items:center; gap:10px; margin:4px 0 6px">
+      <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
         <span class="switch">
           <input type="checkbox" id="rl-dry" checked>
           <span class="slider"></span>
         </span>
         <span>🧪 テストモード <span class="muted" style="font-size:12px">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
       </label>
-      <div id="rl-dry-warn" hidden
-           style="background:#fff8e6; border:1px solid #f5d089; border-radius:8px;
-                  padding:8px 10px; margin:0 0 10px; font-size:12px; color:#b54708">
-        ⚠️ テストモードが OFF です。「回す!」を押すと <b>ルーレットの結果が対象者全員に通知</b>されます (履歴にも残ります)。
-      </div>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
         <div id="rl-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
@@ -73,14 +68,6 @@ export async function renderRoulette() {
     </div>
   `;
   document.getElementById('rl-spin').addEventListener('click', onSpin);
-  // Toggle the warning callout in sync with the テストモード switch — keeps the
-  // 'about to broadcast' reminder visible whenever the user has armed a real
-  // spin.
-  const dryToggle = document.getElementById('rl-dry');
-  const dryWarn   = document.getElementById('rl-dry-warn');
-  const syncWarn  = () => { dryWarn.hidden = dryToggle.checked; };
-  dryToggle.addEventListener('change', syncWarn);
-  syncWarn();
   await loadMembers();
   await loadHistory();
 }
@@ -249,6 +236,16 @@ async function onSpin() {
   const rewardRaw = document.getElementById('rl-reward').value.trim();
   const reward = rewardRaw ? Math.max(0, Math.floor(Number(rewardRaw))) : 0;
   const dryRun = document.getElementById('rl-dry').checked;
+
+  // Real spins push notifications to every selected member + (optionally)
+  // move pt — confirm before pulling the trigger so a misclick can't broadcast.
+  if (!dryRun) {
+    const rewardLine = reward > 0
+      ? `\n(あなたから当選者に ${reward}pt が送られます)`
+      : '';
+    const ok = confirm(`本番モードです。ルーレットの結果が対象者全員 (${ids.length}人) に通知されます。${rewardLine}\n実行しますか?`);
+    if (!ok) return;
+  }
 
   spinning = true;
   document.getElementById('rl-spin').disabled = true;
