@@ -16,6 +16,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($id > 0) {
             $next = $seg[2] ?? '';
             if ($next === '' && $method === 'GET')    { groups_detail($pdo, $cfg, $id); return; }
+            if ($next === '' && $method === 'PATCH')  { groups_patch($pdo, $cfg, $id);  return; }
             if ($next === '' && $method === 'DELETE') { groups_close($pdo, $cfg, $id);  return; }
             if ($next === 'items' && $method === 'POST')                { group_items_add($pdo, $cfg, $id);    return; }
             if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
@@ -175,6 +176,37 @@ function groups_detail(PDO $pdo, array $cfg, int $id): void {
     $g['items'] = $stI->fetchAll(PDO::FETCH_ASSOC);
 
     json_response($g);
+}
+
+// 既存グループの slug を作成者/admin が後から付け替え。空文字 / null 指定で
+// クリア (URL 用の名前を外す)。重複・全数字・不正文字はそれぞれエラー。
+function groups_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_creator_or_admin($pdo, $id, $u);
+    $body = read_json_body();
+    if (!array_key_exists('slug', $body)) {
+        throw new ApiException('bad_request', 'nothing to update', 400);
+    }
+    $raw = $body['slug'];
+    if ($raw === null || $raw === '') {
+        $pdo->prepare("UPDATE adhoc_groups SET slug = NULL WHERE id = ?")->execute([$id]);
+        json_response(['ok' => true, 'slug' => null]);
+        return;
+    }
+    $s = trim((string)$raw);
+    if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $s)) {
+        throw new ApiException('bad_request', 'slug は英数字・_・- の 1..64 文字で', 400);
+    }
+    if (ctype_digit($s)) {
+        throw new ApiException('bad_request', 'slug は数字だけの形式は使えません (id と衝突するため)', 400);
+    }
+    $check = $pdo->prepare("SELECT id FROM adhoc_groups WHERE slug = ? AND id <> ?");
+    $check->execute([$s, $id]);
+    if ($check->fetchColumn()) {
+        throw new ApiException('conflict', "slug『{$s}』は既に使われています", 409);
+    }
+    $pdo->prepare("UPDATE adhoc_groups SET slug = ? WHERE id = ?")->execute([$s, $id]);
+    json_response(['ok' => true, 'slug' => $s]);
 }
 
 function groups_close(PDO $pdo, array $cfg, int $id): void {

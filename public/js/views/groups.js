@@ -1,7 +1,7 @@
 // /#/groups — list + create. /#/groups/{id} — detail with feed + ワリカ +
 // member-context shortcuts for ルーレット / 飲み会割り勘.
 
-import { get, post, del } from '../api.js';
+import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -243,15 +243,49 @@ function switchKind(btn) {
   }
 }
 
+// URL 用の名前を後から設定/変更/解除。サーバ側で creator/admin チェック。
+// 変更後は新しい URL にナビゲートし直す (古い numeric id でも引き続き解決
+// するが、表示を最新の slug に合わせる)。
+async function onEditSlug(g) {
+  const cur = g.slug || '';
+  const ans = prompt('URL 用の名前を入力してください\n英数字・_・- の 1〜64 文字 / 数字だけは不可', cur);
+  if (ans === null) return;
+  const s = ans.trim();
+  if (s === cur) return;
+  if (s !== '' && !/^[A-Za-z0-9_-]{1,64}$/.test(s)) { toast('英数字・_・- の 1〜64 文字で'); return; }
+  if (s !== '' && /^\d+$/.test(s)) { toast('数字だけにはできません'); return; }
+  try {
+    const r = await patch('/api/groups/' + g.id, { slug: s === '' ? null : s });
+    toast('更新しました');
+    location.hash = '#/groups/' + (r.slug || g.id);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onClearSlug(g) {
+  if (!confirm(`URL 用の名前『${g.slug}』を解除しますか? (このリンクは無効になります)`)) return;
+  try {
+    await patch('/api/groups/' + g.id, { slug: null });
+    toast('解除しました');
+    location.hash = '#/groups/' + g.id;
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
 async function loadDetail(id) {
   try {
     const g = await get('/api/groups/' + id);
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
     setWariMembers(g.members);
+    const slugRow = isCreator
+      ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">${g.slug ? '/#/groups/' + escapeHtml(g.slug) : '(未設定)'}</span>
+           <button id="gd-edit-slug" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">${g.slug ? '変更' : '設定'}</button>
+           ${g.slug ? `<button id="gd-clear-slug" class="btn" style="padding:2px 6px; font-size:11px">解除</button>` : ''}
+         </div>`
+      : (g.slug ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">/#/groups/${escapeHtml(g.slug)}</span></div>` : '');
     document.getElementById('gd-head').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(g.created_at)}</div>
+      ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}
       <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center">
         ${g.members.map(m => `
@@ -273,6 +307,8 @@ async function loadDetail(id) {
         location.hash = '#/groups';
       } catch (e) { toast('失敗: ' + e.message); }
     });
+    document.getElementById('gd-edit-slug')?.addEventListener('click', () => onEditSlug(g));
+    document.getElementById('gd-clear-slug')?.addEventListener('click', () => onClearSlug(g));
 
     const root = document.getElementById('gd-feed');
     if (!g.items.length) {
