@@ -371,6 +371,10 @@ async function loadUnregistered() {
         try {
           await post('/api/presence/devices', { mac, label: label || null });
           toast('登録しました');
+          // Refresh global state so state.hasMac flips true immediately — without
+          // this, navigating back to home would still show the onboarding card
+          // until the next full page reload.
+          await refreshMe();
           await load();
           await loadUnregistered();
         } catch (e) {
