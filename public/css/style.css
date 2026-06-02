@@ -96,12 +96,10 @@ main#app > .card:last-child { margin-bottom: 0; }
    In flex column the cross-axis defaults to `align-items: stretch`, which would also
    stretch main beyond its max-width and disable the `margin: 0 auto` centering. We
    explicitly center main back via `align-self: center` and keep it full-width up to the cap. */
-/* body は背景色を viewport まで広げる用途で min-height だけ持たせる。
-   main は align-self:center + width:100% (max-width 720px) で中央寄せ。
-   flex:1 / 内部 flex column 指定は撤去 — 旧 ".card:last-child{flex:1}" と
-   合わせて使う構造だったが、その rule を消した今は main を flex container
-   にする意味も無くなり、最後のカード下に余白が残るだけだった。 */
-body[data-view] { min-height: 100vh; }
+/* main はコンテンツ高に従う。背景色は html / body 両方に塗ってあるので
+   viewport より短いページでも背景は viewport 全体を覆う (body に min-height:
+   100vh を持たせると、iOS Safari で URL バーが出ているときに 100vh が
+   可視領域より大きくなり、その分余計にスクロールできてしまうので持たない)。 */
 body[data-view] main#app {
   margin: 0 auto;
   width: 100%;
