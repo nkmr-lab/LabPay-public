@@ -417,15 +417,22 @@ function renderRoom(r, windowMin) {
   // of the list entirely.
   const now = Date.now();
   const parseJst = ts => Date.parse(ts.replace(' ', 'T') + '+09:00');
-  const opacityFor = lastSeen => {
-    if (!lastSeen) return 1;
+  // Two values per user: opacity 1.0→0.15 and grayscale 0→100%. Both ramp
+  // linearly over [fresh, cutoff]. The grayscale is what really sells "this
+  // is not a current observation" — opacity alone gets visually lost against
+  // the white card background.
+  const fadeFor = lastSeen => {
+    if (!lastSeen) return { opacity: 1, gray: 0 };
     const ageSec = Math.max(0, (now - parseJst(lastSeen)) / 1000);
-    const fresh = 30;
+    const fresh = 15;                 // <15s = unmistakably fresh
     const cutoff = windowMin * 60;
-    if (ageSec <= fresh) return 1;
-    if (ageSec >= cutoff) return 0.35;
+    if (ageSec <= fresh)  return { opacity: 1,    gray: 0 };
+    if (ageSec >= cutoff) return { opacity: 0.15, gray: 100 };
     const t = (ageSec - fresh) / Math.max(1, cutoff - fresh);
-    return Number((1 - 0.65 * t).toFixed(2));
+    return {
+      opacity: Number((1 - 0.85 * t).toFixed(2)),
+      gray:    Math.round(100 * t),
+    };
   };
   const formatDur = mins => {
     if (mins < 1) return '1分未満';
@@ -436,18 +443,18 @@ function renderRoom(r, windowMin) {
   const peopleHtml = r.users.length
     ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
          ${r.users.map(u => {
-           const op = opacityFor(u.last_seen_at);
-           // 滞在時間 = last_seen - session_start_at, clipped at 0
+           const { opacity, gray } = fadeFor(u.last_seen_at);
            let dur = '';
            if (u.session_start_at && u.last_seen_at) {
              const mins = Math.max(0, Math.round(
                (parseJst(u.last_seen_at) - parseJst(u.session_start_at)) / 60000));
              dur = `滞在 ${formatDur(mins)}`;
            }
-           const ageHint = op < 1 ? ' (検知途切れ気味)' : '';
+           const ageHint = opacity < 1 ? ' (検知途切れ気味)' : '';
            const tooltip = `${u.display_name}${dur ? ' — ' + dur : ''}${ageHint}`;
+           const style = `opacity:${opacity}; filter:grayscale(${gray}%)`;
            return `
-             <span class="presence-pill" title="${escapeHtml(tooltip)}" style="opacity:${op}">
+             <span class="presence-pill" title="${escapeHtml(tooltip)}" style="${style}">
                ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
                <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
              </span>`;
