@@ -225,18 +225,22 @@ async function fetchAndRenderPresence() {
   // than a banner above the list — they can't peek at who's in the lab
   // until they register, which gives them a concrete reason to do it.
   if (!state.hasMac) {
+    // Entire card is a tappable link straight to 設定 so a one-tap onboarding
+    // path exists from the home page.
     presenceRoot.innerHTML = `
-      <div style="background:#fff8e6; border:1px solid #f5d089; border-radius:10px; padding:12px 14px">
+      <a href="#/settings" style="display:block; text-decoration:none; color:inherit;
+              background:#fff8e6; border:1px solid #f5d089; border-radius:10px;
+              padding:12px 14px; -webkit-tap-highlight-color:rgba(245,208,137,0.3)">
         <div class="bold" style="color:#b54708; margin-bottom:6px">📱 スマホの MAC アドレスを登録すると、ここに表示されるようになります</div>
         <div style="font-size:13px; line-height:1.7">
           1. 無線 LAN を <b>nkmr-lab-wifi</b> に接続する<br>
           2. スマホのネットワーク設定から自身の IP アドレスをチェック<br>
-          3. <a href="#/settings" style="color:var(--primary); font-weight:600">設定</a> でそれに該当するものを見つけて <b>「これは私」</b> を押す
+          3. このカードをタップ → 設定でそれに該当するものを見つけて <b>「これは私」</b> を押す
         </div>
         <div class="muted" style="font-size:11px; margin-top:8px">
-          登録するまで在室検知・ラボインボーナス・購入が動きません。
+          登録するまで在室検知・ラボインボーナス・購入が動きません。タップで設定へ →
         </div>
-      </div>`;
+      </a>`;
     return;
   }
 

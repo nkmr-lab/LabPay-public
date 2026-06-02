@@ -363,7 +363,11 @@ async function loadUnregistered() {
     root.querySelectorAll('[data-claim]').forEach(b => {
       b.addEventListener('click', async () => {
         const mac = b.dataset.claim;
-        const label = prompt('この端末のラベル (例: iPhone、空欄でも OK):', '') || '';
+        // Pre-fill the label with "{自分の名前}スマートフォン" so the most common
+        // case (= it's the user's own phone) takes 0 typing. Power users can
+        // edit to "iPhone 16" / "iPad" / "サブ機" etc. inline.
+        const defaultLabel = `${state.me?.display_name ?? ''}スマートフォン`;
+        const label = prompt('この端末のラベル:', defaultLabel) || '';
         try {
           await post('/api/presence/devices', { mac, label: label || null });
           toast('登録しました');
