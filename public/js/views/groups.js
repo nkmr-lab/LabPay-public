@@ -727,27 +727,31 @@ function openSettleModal(gid) {
   // 1 creditor = 1 請求。タイトルは全件共通で prompt 編集可能 (デフォルト
   // グループ名)。
   root.querySelector('#gd-settle-asreq')?.addEventListener('click', async (ev) => {
-    if (!d.settlements.length) { toast('送金プランがありません'); return; }
-    const g = await get('/api/groups/' + currentGroupId);
-    const defaultTitle = g?.title || '精算';
-    // creditor → [{user_id, amount_yen}, ...]
-    const grouped = new Map();
-    for (const s of d.settlements) {
-      const to = Number(s.to_user_id);
-      if (!grouped.has(to)) grouped.set(to, []);
-      grouped.get(to).push({ user_id: Number(s.from_user_id), amount_yen: Number(s.amount_jpy) });
-    }
-    const ans = prompt(
-      `${grouped.size} 件の請求を一斉に作成します (${d.settlements.length} 件の送金プラン)。\nタイトルを入力してください:`,
-      defaultTitle
-    );
-    if (ans === null) return;
-    const title = ans.trim();
-    if (!title) { toast('タイトルを入れてください'); return; }
-    ev.currentTarget.disabled = true;
+    // 失敗ケースをサイレントにしないよう全体を try-catch でくるむ。
+    // 以前の実装は最初の await get の失敗が無音だったため click 後何も
+    // 起きないように見える事故があった。
     try {
+      if (!d.settlements.length) { toast('送金プランがありません'); return; }
+      const g = await get('/api/groups/' + currentGroupId);
+      const defaultTitle = g?.title || '精算';
+      // creditor → [{user_id, amount_yen}, ...]
+      const grouped = new Map();
+      for (const s of d.settlements) {
+        const to = Number(s.to_user_id);
+        if (!grouped.has(to)) grouped.set(to, []);
+        grouped.get(to).push({ user_id: Number(s.from_user_id), amount_yen: Number(s.amount_jpy) });
+      }
+      const ans = prompt(
+        `${grouped.size} 件の請求を一斉に作成します (${d.settlements.length} 件の送金プラン)。\nタイトルを入力してください:`,
+        defaultTitle
+      );
+      if (ans === null) return;
+      const title = ans.trim();
+      if (!title) { toast('タイトルを入れてください'); return; }
+      ev.currentTarget.disabled = true;
       let firstId = null;
       let ok = 0, fail = 0;
+      const errs = [];
       for (const [creatorId, recipients] of grouped) {
         try {
           const created = await post('/api/money-requests', {
@@ -758,14 +762,17 @@ function openSettleModal(gid) {
           });
           if (firstId === null) firstId = created.id;
           ok++;
-        } catch (e) { fail++; }
+        } catch (e) { fail++; errs.push(e.message || String(e)); }
       }
-      toast(`${ok} 件の請求を作成しました${fail ? ` (${fail} 件失敗)` : ''}`);
+      toast(`${ok} 件の請求を作成しました${fail ? ` (${fail} 件失敗: ${errs[0]})` : ''}`);
       root.hidden = true; root.innerHTML = '';
       // 一覧に飛ぶ (詳細だと creator 以外で recipient でもない自分が
       // 見えない請求もあるため。一覧は created_by=me でも拾われる)
       location.hash = '#/requests';
-    } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
+    } catch (e) {
+      toast('失敗: ' + (e?.message || e));
+      ev.currentTarget.disabled = false;
+    }
   });
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
   // 推奨送金プラン: 全員に通知 (kind=transfer)
