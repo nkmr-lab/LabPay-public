@@ -15,8 +15,9 @@ export async function renderInvitations() {
       </p>
     </div>
 
-    <div class="card">
-      <h3>新しく募集</h3>
+    <details class="card" style="padding:12px 16px">
+      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新しく募集</summary>
+      <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル (必須)</span>
         <input type="text" id="inv-title" maxlength="200" placeholder="例: お昼ご飯食べに行こう">
@@ -38,7 +39,7 @@ export async function renderInvitations() {
         <textarea id="inv-desc" maxlength="5000" rows="3" placeholder="集合場所・予算・装備など"></textarea>
       </label>
       <button id="inv-add" class="primary">募集する</button>
-    </div>
+    </details>
 
     <div class="card">
       <div class="row" style="align-items:center">

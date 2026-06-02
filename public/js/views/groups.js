@@ -22,8 +22,9 @@ export async function renderGroups() {
       </p>
     </div>
 
-    <div class="card">
-      <h3>新規グループ</h3>
+    <details class="card" style="padding:12px 16px">
+      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規グループ</summary>
+      <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル</span>
         <input type="text" id="gr-title" maxlength="200" placeholder="例: 学会 in 神戸">
@@ -43,7 +44,7 @@ export async function renderGroups() {
         <div id="gr-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
       </div>
       <button id="gr-submit" class="primary">作成</button>
-    </div>
+    </details>
 
     <div class="card">
       <h3>あなたのグループ</h3>

@@ -33,8 +33,9 @@ export async function renderMoneyRequests() {
       </p>
     </div>
 
-    <div class="card">
-      <h3>新規請求</h3>
+    <details class="card" style="padding:12px 16px">
+      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規請求</summary>
+      <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル</span>
         <input type="text" id="mr-title" maxlength="200" placeholder="例: 学会参加費 集金">
@@ -67,7 +68,7 @@ export async function renderMoneyRequests() {
         <button id="mr-dry"    class="btn">通知内容を確認</button>
         <button id="mr-clear"  class="btn">クリア</button>
       </div>
-    </div>
+    </details>
 
     <div class="card">
       <h3>履歴</h3>
