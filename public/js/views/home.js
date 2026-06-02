@@ -533,19 +533,28 @@ function renderRoom(r, windowMin) {
          ${r.users.map(u => {
            const { opacity, gray, isFresh } = fadeFor(u.last_seen_at);
            let dur = '';
+           let stayMinutes = 0;
            if (u.session_start_at && u.last_seen_at) {
-             const mins = Math.max(0, Math.round(
+             stayMinutes = Math.max(0, Math.round(
                (parseJst(u.last_seen_at) - parseJst(u.session_start_at)) / 60000));
-             dur = `滞在 ${formatDur(mins)}`;
+             dur = `滞在 ${formatDur(stayMinutes)}`;
            }
+           // 12h+ 連続検知 = ほぼ間違いなくデバイス置き忘れ。化石化 (sepia + 重い
+           // grayscale) して 🗿 を添える。本人がうっかり連泊してたら戻ってきた
+           // 時に普通の色に戻るので false positive はそんなに痛くない。
+           const isFossil = stayMinutes >= 12 * 60;
            const ageHint = opacity < 1 ? ' (検知途切れ気味)' : '';
-           const tooltip = `${u.display_name}${dur ? ' — ' + dur : ''}${ageHint}`;
-           const style = `opacity:${opacity}; filter:grayscale(${gray}%)`;
-           const nameStyle = isFresh ? 'font-weight:700' : '';
+           const fossilHint = isFossil ? ' (12時間以上連続検知 — 端末忘れかも)' : '';
+           const tooltip = `${u.display_name}${dur ? ' — ' + dur : ''}${ageHint}${fossilHint}`;
+           const style = isFossil
+             ? `opacity:0.5; filter:grayscale(100%) sepia(40%) brightness(.85)`
+             : `opacity:${opacity}; filter:grayscale(${gray}%)`;
+           const nameStyle = isFossil ? 'font-weight:400; color:#666' : (isFresh ? 'font-weight:700' : '');
+           const fossilBadge = isFossil ? ' 🗿' : '';
            return `
              <span class="presence-pill" title="${escapeHtml(tooltip)}" style="${style}">
                ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
-               <span class="presence-pill-name" style="${nameStyle}">${escapeHtml(u.display_name)}</span>
+               <span class="presence-pill-name" style="${nameStyle}">${escapeHtml(u.display_name)}${fossilBadge}</span>
              </span>`;
          }).join('')}
        </div>`

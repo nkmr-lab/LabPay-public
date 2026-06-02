@@ -146,6 +146,12 @@ try {
         return;
     }
 
+    // /nomikai (drinking-party split)
+    if (($seg[0] ?? '') === 'nomikai') {
+        route_nomikai($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

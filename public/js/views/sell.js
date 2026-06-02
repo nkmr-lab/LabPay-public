@@ -509,10 +509,10 @@ function renderEditRow(l) {
   // changes / inventory adjustments rather than "save what I just typed".
   // Gift toggle moved up next to 価格. Bottom action row is just [更新] and
   // [取り下げ] now — the two universal operations on an active listing.
+  // [取り下げ] はサマリ側に既にあるので編集中には出さない (誤爆防止 + UI 簡素化)。
   const actionRow = `
     <button data-action="update" data-id="${l.id}" data-jan="${escapeHtml(l.jan)}" class="primary">更新</button>
-    <button data-action="edit-cancel" data-id="${l.id}">キャンセル</button>
-    <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
+    <button data-action="edit-cancel" data-id="${l.id}">キャンセル</button>`;
   // Field rows share a fixed-width left label + flex-grow input. min-width:0 on
   // every flex item is the canonical fix for inputs (especially <input type="file">)
   // pushing their parent wider than its container.

@@ -10,7 +10,49 @@ function route_roulettes(PDO $pdo, array $cfg, string $method, array $seg): void
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { roulettes_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { roulettes_spin($pdo, $cfg);   return; }
+    if ((int)$sub > 0 && $method === 'GET') {
+        roulettes_detail($pdo, $cfg, (int)$sub);
+        return;
+    }
     json_error('not_found', "no roulettes route for $method $sub", 404);
+}
+
+// GET /api/roulettes/{id} — public-to-logged-in result page. Returns the
+// roulette plus the member roster (names + avatars) so the result page can
+// re-render the wheel exactly as it stopped.
+function roulettes_detail(PDO $pdo, array $cfg, int $id): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("
+        SELECT r.id, r.title, r.winner_user_id, r.member_ids, r.reward, r.created_at,
+               uc.id AS creator_user_id, uc.display_name AS creator_name, uc.avatar_url AS creator_avatar_url,
+               uw.display_name AS winner_name, uw.avatar_url AS winner_avatar_url
+          FROM roulettes r
+          JOIN users uc ON uc.id = r.creator_user_id
+          JOIN users uw ON uw.id = r.winner_user_id
+         WHERE r.id = ?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', "roulette $id not found", 404);
+    $ids = json_decode($row['member_ids'], true) ?: [];
+
+    // Pull avatars + names so the result page can draw the original member list.
+    $members = [];
+    if ($ids) {
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
+        $st->execute($ids);
+        $byId = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $u) $byId[(int)$u['id']] = $u;
+        // Preserve the original order so winner_index still points at the right slice.
+        foreach ($ids as $uid) {
+            $members[] = $byId[(int)$uid] ?? ['id' => $uid, 'display_name' => '?', 'avatar_url' => null];
+        }
+    }
+    $row['member_ids'] = $ids;
+    $row['reward'] = (int)$row['reward'];
+    $row['winner_index'] = array_search((int)$row['winner_user_id'], $ids, true);
+    $row['members'] = $members;
+    json_response($row);
 }
 
 function roulettes_list(PDO $pdo, array $cfg): void {

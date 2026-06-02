@@ -55,13 +55,34 @@ const TYPE_LABELS = {
   task_expired:      'タスク期限切れ',
   admin_notice:      'お知らせ',
 };
+// Map (ref_type, ref_id) → the SPA URL the notification points at. Tapping
+// the body wraps to a real link so users can jump straight to the relevant
+// page from the bell.
+function refUrl(n) {
+  if (!n.ref_type || !n.ref_id) return null;
+  switch (n.ref_type) {
+    case 'task':        return '#/tasks/' + n.ref_id;
+    case 'roulette':    return '#/roulette/' + n.ref_id;
+    case 'invitation':  return '#/invitations';
+    case 'wishlist':    return '#/wishlist';
+    case 'purchase':    return '#/history';
+    case 'scrapbox':    return '#/history';
+    case 'feedback':    return '#/admin';
+    default: return null;
+  }
+}
+
 function row(n) {
   const unread = !n.read_at;
   const lbl = TYPE_LABELS[n.type] || n.type;
+  const url = refUrl(n);
+  const body = url
+    ? `<a href="${url}" style="color:inherit; text-decoration:none">${escapeHtml(n.body)}</a>`
+    : escapeHtml(n.body);
   return `
     <div class="list-item" style="${unread ? 'border-left:4px solid var(--primary)' : ''}">
       <div>
-        <div class="bold">${escapeHtml(n.body)}</div>
+        <div class="bold">${body}</div>
         <div class="meta">${escapeHtml(lbl)} · ${escapeHtml(n.created_at)}</div>
       </div>
       <div>${unread ? `<button data-read="${n.id}">既読</button>` : '<span class="tag muted">既読</span>'}</div>

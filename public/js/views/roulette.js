@@ -306,6 +306,11 @@ async function onSpin() {
     requestAnimationFrame(() => {
       svg.style.transform = `rotate(${total}deg)`;
     });
+    // Sound: tick once for every slice that passes the pointer during the spin
+    // (modelled by the same bezier the visuals use). Final ding! when the
+    // wheel stops. AudioContext can only be created after a user gesture, so
+    // this call lives inside the click handler.
+    playSpinSounds(N);
     // Reveal result after animation completes (matches the CSS transition).
     setTimeout(() => {
       let prize = '';
@@ -343,6 +348,163 @@ async function onSpin() {
     document.getElementById('rl-spin').disabled = false;
     spinning = false;
   }
+}
+
+// /#/roulette/{id} — read-only result page. Linked from notification taps so
+// every participant (winner or not) can see the wheel as it stopped, the
+// member list, and the prize.
+export async function renderRouletteResult({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/roulette" class="muted" style="font-size:13px">← 新しいルーレットを回す</a>
+      <h2 style="margin:6px 0 0">ルーレット結果</h2>
+      <div id="rl-detail" class="muted" style="margin-top:8px">読み込み中…</div>
+    </div>
+    <div class="card" style="text-align:center" id="rl-detail-wheel-card" hidden>
+      <svg id="rl-detail-wheel" viewBox="-150 -150 300 300" width="280" height="280" style="display:block; margin:0 auto"></svg>
+      <div id="rl-detail-pointer" style="position:relative; margin-top:-280px; height:0">
+        <div style="position:relative; top:-12px; text-align:center; font-size:22px">▼</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px">候補メンバー</h3>
+      <div id="rl-detail-members" class="muted">—</div>
+    </div>
+  `;
+  try {
+    const r = await get('/api/roulettes/' + id);
+    const wcard = document.getElementById('rl-detail-wheel-card');
+    const detail = document.getElementById('rl-detail');
+    const meId = state.me?.id;
+    const prizeText = r.reward > 0
+      ? (Number(r.winner_user_id) === Number(r.creator_user_id)
+          ? ` (賞金 ${r.reward}pt · 主催者が当選なので移動なし)`
+          : ` (+${r.reward}pt が ${escapeHtml(r.creator_name)} → ${escapeHtml(r.winner_name)})`)
+      : '';
+    detail.innerHTML = `
+      <div class="bold" style="font-size:16px">${escapeHtml(r.title)}</div>
+      <div class="meta">${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
+      <div style="margin-top:8px; font-size:18px">
+        🎯 当選: <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
+        ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag" style="background:var(--primary-soft); color:var(--primary)">あなた</span>' : ''}
+      </div>
+      <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
+    // Draw the wheel stopped at the winner's slice (no animation, just position).
+    drawStaticWheel(r);
+    wcard.hidden = false;
+    document.getElementById('rl-detail-members').innerHTML = r.members.map(m =>
+      `<span class="presence-pill" style="${Number(m.id) === Number(r.winner_user_id) ? 'background:var(--primary-soft); border:1px solid var(--primary)' : ''}">
+        ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+        <span class="presence-pill-name">${escapeHtml(m.display_name)}</span>
+      </span>`).join(' ');
+  } catch (e) {
+    document.getElementById('rl-detail').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function drawStaticWheel(r) {
+  const svg = document.getElementById('rl-detail-wheel');
+  if (!svg) return;
+  const N = r.members.length;
+  if (N < 2) {
+    svg.innerHTML = `<circle cx="0" cy="0" r="140" fill="#e9eaee"></circle>`;
+    return;
+  }
+  const sliceDeg = 360 / N;
+  // Reuse the same slice-rendering math as the live wheel. Stop with the
+  // pointer over the winner's slice by rotating the whole <svg> in CSS.
+  const target = -(r.winner_index * sliceDeg + sliceDeg / 2);
+  svg.style.transform = `rotate(${target}deg)`;
+  const slices = r.members.map((u, i) => {
+    const a0 = (i * sliceDeg - 90) * Math.PI / 180;
+    const a1 = ((i + 1) * sliceDeg - 90) * Math.PI / 180;
+    const x0 = 140 * Math.cos(a0), y0 = 140 * Math.sin(a0);
+    const x1 = 140 * Math.cos(a1), y1 = 140 * Math.sin(a1);
+    const large = sliceDeg > 180 ? 1 : 0;
+    const color = SLICE_COLORS[i % SLICE_COLORS.length];
+    const path = `M 0 0 L ${x0.toFixed(1)} ${y0.toFixed(1)} A 140 140 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z`;
+    const am = ((i + 0.5) * sliceDeg - 90) * Math.PI / 180;
+    const ax = 95 * Math.cos(am), ay = 95 * Math.sin(am);
+    const tx = 60 * Math.cos(am), ty = 60 * Math.sin(am);
+    const ROT = (i + 0.5) * sliceDeg;
+    const initial = (u.display_name || '?').trim().charAt(0).toUpperCase();
+    const compact = (u.display_name || '?').length > 5 ? u.display_name.slice(0, 4) + '…' : (u.display_name || '?');
+    const r2 = 16;
+    const clipId = `rl-clip-d-${u.id}`;
+    const isWinner = Number(u.id) === Number(r.winner_user_id);
+    const winnerRing = isWinner
+      ? `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r2 + 3}" fill="none" stroke="#ffd700" stroke-width="3"></circle>` : '';
+    const avatar = u.avatar_url
+      ? `<defs><clipPath id="${clipId}"><circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r2}"></circle></clipPath></defs>
+         <circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r2}" fill="white" stroke="white" stroke-width="2"></circle>
+         <image href="${escapeHtml(u.avatar_url)}" x="${(ax - r2).toFixed(1)}" y="${(ay - r2).toFixed(1)}" width="${r2 * 2}" height="${r2 * 2}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"></image>${winnerRing}`
+      : `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r2}" fill="white" stroke="white" stroke-width="2"></circle>
+         <text x="${ax.toFixed(1)}" y="${(ay + 5).toFixed(1)}" text-anchor="middle" font-size="16" font-weight="700" fill="${color}">${escapeHtml(initial)}</text>${winnerRing}`;
+    return `
+      <path d="${path}" fill="${color}" stroke="white" stroke-width="2"></path>
+      ${avatar}
+      <text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" dominant-baseline="middle"
+            font-size="10" fill="white" font-weight="700"
+            transform="rotate(${ROT} ${tx.toFixed(1)} ${ty.toFixed(1)})">${escapeHtml(compact)}</text>`;
+  }).join('');
+  svg.innerHTML = `${slices}<circle cx="0" cy="0" r="14" fill="white" stroke="#999" stroke-width="2"></circle>`;
+}
+
+// Synthesizes the spin's tick + ding entirely from oscillators so we don't
+// have to ship audio assets. Tick timing follows the same bezier the wheel
+// uses, so each click lines up with a slice passing the pointer.
+function playSpinSounds(sliceCount) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  const ctx = new Ctx();
+  const totalSec = 14;
+  const totalTurns = 12;
+  const totalTicks = sliceCount * totalTurns;
+  // cubic-bezier(.22,.04,.08,1) sampled via easeInOutQuart-ish proxy. Good
+  // enough — the perceptual goal is 'slow, fast, slow', not bit-perfect.
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  for (let i = 0; i < totalTicks; i++) {
+    const t = ease((i + 1) / totalTicks) * totalSec;
+    schedule(ctx, t, () => tick(ctx));
+  }
+  schedule(ctx, totalSec, () => ding(ctx));
+  // Tear down once the last sound is done playing.
+  setTimeout(() => { try { ctx.close(); } catch (_) {} }, (totalSec + 1.5) * 1000);
+}
+
+function schedule(ctx, sec, fn) { setTimeout(fn, sec * 1000); }
+
+function tick(ctx) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.connect(g).connect(ctx.destination);
+  osc.type = 'square';
+  osc.frequency.value = 880;
+  const now = ctx.currentTime;
+  g.gain.setValueAtTime(0.08, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+  osc.start(now);
+  osc.stop(now + 0.05);
+}
+
+function ding(ctx) {
+  // Two-note 'taa-da' — root + perfect fifth above.
+  const root = 988;   // ~B5
+  [root, root * 1.5].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.connect(g).connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const start = ctx.currentTime + i * 0.18;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + 0.7);
+    osc.start(start);
+    osc.stop(start + 0.75);
+  });
 }
 
 async function loadHistory() {
