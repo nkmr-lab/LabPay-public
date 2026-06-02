@@ -165,6 +165,16 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         notify_safely($pdo, $cfg, (int)$r['user_id'], 'admin_notice',
             $buildMsg((int)$r['amount_yen']), 'money_request', $rid);
     }
+    // 代理生成 (creator が呼び出し元と別人) の場合、creator 本人にも通知。
+    // 自分の名前で勝手に請求が立てられたのに気づけないと困るため。
+    if ($creatorId !== (int)$u['id']) {
+        $totalYen = 0;
+        foreach ($rows as $r) $totalYen += (int)$r['amount_yen'];
+        $msg = "💼 {$u['display_name']} さんがあなた宛の請求 "
+            . "「{$title}」 (" . count($rows) . " 人, 合計 ¥" . number_format($totalYen) . ") "
+            . "を代理で作成しました";
+        notify_safely($pdo, $cfg, $creatorId, 'admin_notice', $msg, 'money_request', $rid);
+    }
     json_response(['ok' => true, 'id' => $rid, 'creator_user_id' => $creatorId]);
 }
 
@@ -176,9 +186,11 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
         SELECT r.*,
                uc.display_name AS creator_name, uc.avatar_url AS creator_avatar_url,
                uc.paypay_id    AS creator_paypay_id,
-               uc.bank_info    AS creator_bank_info
+               uc.bank_info    AS creator_bank_info,
+               ucb.display_name AS created_by_name
           FROM money_requests r
           JOIN users uc ON uc.id = r.creator_user_id
+          LEFT JOIN users ucb ON ucb.id = r.created_by_user_id
          WHERE r.id = ?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);

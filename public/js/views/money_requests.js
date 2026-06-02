@@ -367,6 +367,9 @@ async function loadDetail(id) {
         ${canManage ? `<button id="mr-edit" class="btn" style="padding:2px 8px; font-size:12px">編集</button>` : ''}
       </div>
       <div class="meta">${escapeHtml(r.creator_name)} · ${escapeHtml(r.created_at)}</div>
+      ${r.created_by_user_id && Number(r.created_by_user_id) !== Number(r.creator_user_id) && r.created_by_name
+        ? `<div class="meta" style="margin-top:2px; color:#b54708">📝 ${escapeHtml(r.created_by_name)} さんが代理生成 (ワリカ精算からの一括作成など)</div>`
+        : ''}
       ${r.memo ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(r.memo)}</div>` : ''}
       ${settle ? `
         <div style="margin-top:8px; padding:8px 10px; background:#faf6ff; border-left:3px solid var(--primary); border-radius:6px; font-size:13px">
