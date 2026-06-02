@@ -16,14 +16,14 @@ export async function renderApps() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">アプリ</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         ラボ内・出張中で使える小道具集です。
       </p>
     </div>
     <div class="list">
       ${APPS.map(a => `
-        <a class="list-item" href="${a.url}" style="text-decoration:none; color:inherit">
-          <div style="flex:1">
+        <a class="list-item" href="${a.url}">
+          <div class="grow">
             <div class="bold">${escapeHtml(a.title)} →</div>
             <div class="meta">${escapeHtml(a.desc)}</div>
           </div>

@@ -24,8 +24,8 @@ export async function renderHome() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">今ラボにいる人</h2>
+      <div class="row center">
+        <h2 class="row-title">今ラボにいる人</h2>
         <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
           名前を表示
           <span class="switch">
@@ -44,54 +44,54 @@ export async function renderHome() {
     </div>
 
     <div class="card" id="home-groups-card" hidden>
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">あなたのグループ</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">あなたのグループ</h2>
         <a href="#/groups" class="hint">一覧 →</a>
       </div>
       <div id="home-groups" class="list"></div>
     </div>
 
     <div class="card" id="home-invs-card" hidden>
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">募集</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">募集</h2>
         <a href="#/invitations" class="hint">一覧 →</a>
       </div>
       <div id="home-invs" class="list"></div>
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">新規入荷</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">新規入荷</h2>
         <a href="#/buy" class="hint">買う →</a>
       </div>
       <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card" id="home-my-claims-card" hidden>
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">あなたが引き受け中のタスク</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">あなたが引き受け中のタスク</h2>
       </div>
       <div id="home-my-claims" class="list"></div>
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">新規タスク</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">新規タスク</h2>
         <a href="#/tasks" class="hint">一覧 →</a>
       </div>
       <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">あなたのラボ滞在</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">あなたのラボ滞在</h2>
       </div>
       <div id="presence-summary" class="hint">読み込み中…</div>
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h2 style="flex:1; margin:0">履歴</h2>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">履歴</h2>
         <a href="#/history" class="hint">すべて見る →</a>
       </div>
       <div id="recent" class="list"><div class="muted">読み込み中…</div></div>
@@ -348,8 +348,8 @@ async function renderMyGroups() {
     // open は上に並ぶよう API 側でソート済み (closed_at IS NULL DESC, created_at DESC)。
     // 過去 (closed) も同じカードに含めて [終了] バッジ付きで出す。
     root.innerHTML = items.slice(0, 5).map(g => `
-      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}" style="text-decoration:none; color:inherit">
-        <div style="flex:1">
+      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}">
+        <div class="grow">
           <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
           <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人</div>
         </div>
@@ -376,8 +376,8 @@ async function renderFreshInvitations() {
       const cap = i.capacity ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       return `
-        <a class="list-item" href="#/invitations/${i.id}" style="text-decoration:none; color:inherit">
-          <div style="flex:1">
+        <a class="list-item" href="#/invitations/${i.id}">
+          <div class="grow">
             <div class="bold">${escapeHtml(i.title)}${joined}</div>
             <div class="meta">${when}${where}${cap}</div>
             <div class="meta">${escapeHtml(i.creator_name)}</div>
@@ -479,7 +479,7 @@ async function renderFreshTasks() {
             <div class="meta">${escapeHtml(t.requester_name)} · 残 ${t.remaining ?? '-'}人${t.deadline ? ' · 締切 ' + escapeHtml(t.deadline) : ''}</div>
           </div>
         </div>
-        <div class="bold" style="color:var(--primary)">${t.reward}pt</div>
+        <div class=" bold text-primary">${t.reward}pt</div>
       </a>
     `).join('');
   } catch (e) {

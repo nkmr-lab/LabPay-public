@@ -11,12 +11,12 @@ export async function renderBuy() {
   app.innerHTML = `
     <div class="card balance-strip">
       <span class="muted">残高</span>
-      <span class="bold" id="buy-balance" style="color:var(--primary)">— pt</span>
+      <span class="bold text-primary" id="buy-balance">— pt</span>
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">買う</h2>
+      <div class="row center">
+        <h2 class="row-title">買う</h2>
         <a href="#/wishlist" class="hint">これ欲しい! →</a>
       </div>
       <p class="muted" style="margin-top:6px">バーコードを読み取るか、下の一覧から選んでください。</p>
@@ -28,8 +28,8 @@ export async function renderBuy() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px">
-        <h3 style="flex:1; margin:0">出品中の商品</h3>
+      <div class="row center" style="margin-bottom:8px; flex-wrap:wrap; gap:6px">
+        <h3 class="row-title">出品中の商品</h3>
         <select id="buy-sort" style="font-size:13px">
           <option value="newest">新しい順</option>
           <option value="oldest">古い順</option>

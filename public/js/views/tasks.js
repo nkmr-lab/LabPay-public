@@ -9,12 +9,12 @@ export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">タスク</h2>
+      <div class="row center">
+        <h2 class="row-title">タスク</h2>
         <button id="task-new" class="primary">+ 依頼する</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
-        <span style="color:var(--primary)">●</span> 自分が依頼  ·
+        <span class="text-primary">●</span> 自分が依頼  ·
         <span style="color:#b54708">●</span> 引き受け中/報告済み  ·
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
@@ -62,11 +62,11 @@ function toggleCreateForm(open = null) {
         <div class="hint-sm">承認時にやってくれた人へ表示されます (note 風)。</div>
       </label>
       <div class="row">
-        <label class="field" style="flex:1">
+        <label class="field grow">
           <span class="lbl">報酬 (pt / 1人あたり、0 OK)</span>
           <input type="number" id="t-reward" min="0" value="10">
         </label>
-        <label class="field" style="flex:1">
+        <label class="field grow">
           <span class="lbl">募集人数</span>
           <input type="number" id="t-capacity" min="1" value="1">
         </label>
@@ -271,7 +271,7 @@ function renderRow(t) {
   return `
     <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">
       ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
-      <div style="flex:1">
+      <div class="grow">
         <div>
           <a class="bold" href="#/tasks/${t.id}">${escapeHtml(t.title)}</a>
           ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
@@ -358,7 +358,7 @@ async function loadDetail(id) {
     const safeDetailUrl = safeHttpUrl(t.url);
     const urlBlock = safeDetailUrl
       ? `<div style="margin-top:6px">
-           <a href="${escapeHtml(safeDetailUrl)}" target="_blank" rel="noopener noreferrer" class="bold" style="color:var(--primary)">
+           <a href="${escapeHtml(safeDetailUrl)}" target="_blank" rel="noopener noreferrer" class=" bold text-primary">
              🔗 ${escapeHtml(safeDetailUrl)} ↗
            </a>
          </div>`
@@ -386,10 +386,10 @@ async function loadDetail(id) {
           </div>`).join('')}
       </div>` : ''}
       ${canEditAtt ? `
-        <div class="row" style="align-items:center; gap:6px">
+        <div class="row center" style="gap:6px">
           <input type="file" id="t-add-files" multiple
                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*"
-                 style="flex:1">
+                 class="grow">
           <button id="t-add-files-btn">追加アップロード</button>
         </div>` : ''}
     ` : '';
@@ -415,9 +415,9 @@ async function loadDetail(id) {
       ${pendingAlert}
 
       <div class="card">
-        <div class="row" style="align-items:center; gap:10px">
+        <div class="row center" style="gap:10px">
           ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
-          <div style="flex:1">
+          <div class="grow">
             <div class="bold" style="font-size:18px">${escapeHtml(t.title)}</div>
             <div class="meta">${escapeHtml(t.requester_name)} · ${t.created_at}</div>
           </div>
@@ -427,7 +427,7 @@ async function loadDetail(id) {
         ${attBlock}
         <div class="sep"></div>
         <div>
-          <div>報酬: <span class="bold" style="color:var(--primary)">${t.reward}pt</span> × ${t.capacity}人 (残 ${t.remaining}人)</div>
+          <div>報酬: <span class=" bold text-primary">${t.reward}pt</span> × ${t.capacity}人 (残 ${t.remaining}人)</div>
           <div class="meta">
             ${t.per_user_limit === 0 ? '各自無制限' : `各自 ${t.per_user_limit} 回まで`}
             ${t.audience_grades ? ` · 対象: ${escapeHtml(t.audience_grades)}` : ''}
@@ -499,7 +499,7 @@ function renderReportedClaimCard(c, reward) {
     <div class="list-item" style="background:#fff; align-items:flex-start; margin-top:6px">
       <div style="display:flex; gap:8px; align-items:flex-start; flex:1">
         ${avatarHtml(c.display_name, c.avatar_url, 'md')}
-        <div style="flex:1">
+        <div class="grow">
           <div class="bold">${escapeHtml(c.display_name)}</div>
           ${c.notes ? `<div style="margin-top:4px; padding:8px 10px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : '<div class="meta" style="margin-top:4px">(完了メモなし)</div>'}
           <div class="meta">報告 ${escapeHtml(c.reported_at ?? '')}</div>
@@ -519,7 +519,7 @@ function renderClaimsAdmin(t) {
     <div class="list-item" style="align-items:flex-start">
       <div style="flex:1; display:flex; align-items:flex-start; gap:8px">
         ${avatarHtml(c.display_name, c.avatar_url, 'sm')}
-        <div style="flex:1">
+        <div class="grow">
           <div class="bold">${escapeHtml(c.display_name)} <span class="tag muted">${escapeHtml(c.status)}</span></div>
           ${c.notes ? `<div style="margin-top:4px; padding:6px 8px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : ''}
           <div class="meta">${escapeHtml(c.created_at)}${c.reported_at ? ' · 報告 ' + escapeHtml(c.reported_at) : ''}</div>
@@ -591,11 +591,11 @@ function renderEditForm(t) {
         <textarea id="e-cmsg" maxlength="2000" rows="2">${escapeHtml(t.completion_message ?? '')}</textarea>
       </label>
       <div class="row">
-        <label class="field" style="flex:1">
+        <label class="field grow">
           <span class="lbl">報酬 (pt / 1人あたり)</span>
           <input type="number" id="e-reward" min="1" value="${t.reward}">
         </label>
-        <label class="field" style="flex:1">
+        <label class="field grow">
           <span class="lbl">募集人数 (承認済み ${t.approved_count} 件以上必須)</span>
           <input type="number" id="e-capacity" min="${t.approved_count || 1}" value="${t.capacity}">
         </label>

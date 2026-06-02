@@ -118,11 +118,11 @@ export async function renderSell() {
           <span>🎁 「これどうぞ！」(無料配布)</span>
         </label>
         <div class="row">
-          <label class="field" style="flex:1" id="price-field">
+          <label class="field grow" id="price-field">
             <span class="lbl">価格 (pt)</span>
             <input type="number" id="price" min="1" step="1" value="100">
           </label>
-          <label class="field" style="flex:1">
+          <label class="field grow">
             <span class="lbl">数量</span>
             <input type="number" id="qty" min="1" step="1" value="1">
           </label>
@@ -164,11 +164,11 @@ export async function renderSell() {
         <span>🎁 「これどうぞ！」(無料配布)</span>
       </label>
       <div class="row">
-        <label class="field" style="flex:1" id="nj-price-field">
+        <label class="field grow" id="nj-price-field">
           <span class="lbl">単価 (pt)</span>
           <input type="number" id="nj-price" min="1" step="1" value="30">
         </label>
-        <label class="field" style="flex:1">
+        <label class="field grow">
           <span class="lbl">数量 (在庫)</span>
           <input type="number" id="nj-qty" min="1" step="1" value="20">
         </label>

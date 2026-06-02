@@ -26,7 +26,7 @@ export async function renderMoneyRequests() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">請求 (集金)</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         メンバーを選んでお金を集めるための機能です。全員同額または指定額で
         請求 → 各人が「支払い済」を方法 (現金/PayPay/銀行/立替) 付きで
         チェックします。実際の送金は外で。
@@ -213,7 +213,7 @@ function renderCustomArea() {
     ${arr.map(u => `
       <div class="row" style="gap:6px; align-items:center; padding:3px 0">
         ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
-        <span style="flex:1">${escapeHtml(u.display_name)} ${u.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(u.grade)}]</span>` : ''}</span>
+        <span class="grow">${escapeHtml(u.display_name)} ${u.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(u.grade)}]</span>` : ''}</span>
         <input type="number" min="0" step="100" data-amt="${u.id}" value="${customAmount.get(u.id) ?? ''}" placeholder="¥" style="width:110px; text-align:right">
       </div>`).join('')}
   `;
@@ -261,7 +261,7 @@ async function onDryRun() {
     const r = await post('/api/money-requests', { title, memo, recipients, dry_run: true });
     const meId = Number(state.me?.id) || 0;
     const header = `
-      <div class="row" style="align-items:center; margin-bottom:4px">
+      <div class="row center" style="margin-bottom:4px">
         <span class="muted" style="font-size:11px; flex:1">↓ 各受取人に届く通知 (${(r.previews || []).length} 件)</span>
         <button id="mr-preview-clear" class="btn" style="padding:2px 8px; font-size:11px">プレビューをクリア</button>
       </div>`;
@@ -272,7 +272,7 @@ async function onDryRun() {
             const mine = Number(p.user_id) === meId;
             return `
               <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
-                <div style="flex:1">
+                <div class="grow">
                   <div class="bold" style="font-size:13px">→ ${escapeHtml(p.display_name)} (¥${Number(p.amount_yen).toLocaleString()})${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
                   <div class="meta" style="white-space:pre-wrap; font-size:12px">${escapeHtml(p.message)}</div>
                 </div>
@@ -321,8 +321,8 @@ async function loadList() {
                 ? `代理生成: ${escapeHtml(r.creator_name)} 宛 / ${r.member_count} 人`
                 : 'あなたは受取人ではありません'));
       return `
-        <a class="list-item" href="#/requests/${r.id}" style="text-decoration:none; color:inherit">
-          <div style="flex:1">
+        <a class="list-item" href="#/requests/${r.id}">
+          <div class="grow">
             <div class="bold">${escapeHtml(r.title)} ${tagBits.join(' ')}</div>
             <div class="meta">${escapeHtml(r.creator_name)} · 支払い済 ${r.paid_count}/${r.member_count}</div>
             <div class="meta">${myLine} · ${escapeHtml(r.created_at)}</div>
@@ -470,8 +470,8 @@ function openEdit(r) {
   overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px';
   overlay.innerHTML = `
     <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px">
-      <div class="row" style="align-items:center">
-        <h3 style="flex:1; margin:0">請求を編集</h3>
+      <div class="row center">
+        <h3 class="row-title">請求を編集</h3>
         <button id="mr-edit-close">×</button>
       </div>
       <label class="field" style="margin-top:8px">
@@ -485,9 +485,9 @@ function openEdit(r) {
       <div class="muted" style="font-size:12px; margin:6px 0 2px">各人の金額</div>
       <div style="overflow:auto; max-height:40vh">
         ${r.recipients.map(rec => `
-          <div class="row" style="align-items:center; gap:6px; padding:3px 0">
+          <div class="row center" style="gap:6px; padding:3px 0">
             ${avatarHtml(rec.display_name, rec.avatar_url, 'sm')}
-            <span style="flex:1">${escapeHtml(rec.display_name)} ${rec.paid_at ? '<span class="tag ok" style="font-size:10px">✓払</span>' : ''}</span>
+            <span class="grow">${escapeHtml(rec.display_name)} ${rec.paid_at ? '<span class="tag ok" style="font-size:10px">✓払</span>' : ''}</span>
             <input type="number" min="0" step="100" data-eamt="${rec.user_id}" value="${Number(rec.amount_yen)}" style="width:110px; text-align:right">
           </div>`).join('')}
       </div>

@@ -11,7 +11,7 @@ export async function renderWishlist() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">これ欲しい!</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         欲しい商品を書いておくと、誰かが買って出品してくれるかも。
         JAN がわかれば一緒に書いておくと正確です。
       </p>
@@ -35,8 +35,8 @@ export async function renderWishlist() {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h3 style="flex:1; margin:0">募集中</h3>
+      <div class="row center">
+        <h3 class="row-title">募集中</h3>
         <label class="muted" style="font-size:13px; display:inline-flex; align-items:center; gap:6px">
           <input type="checkbox" id="wl-show-closed"> 達成済も表示
         </label>
@@ -84,7 +84,7 @@ function renderRow(w) {
     : `<button class="primary" data-fulfill="${w.id}">出ました!</button>`);
   return `
     <div class="list-item">
-      <div style="flex:1">
+      <div class="grow">
         <div class="bold">${escapeHtml(w.product_name)} ${statusTag}</div>
         ${janLine}${noteLine}
         <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:4px">

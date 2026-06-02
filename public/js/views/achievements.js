@@ -47,7 +47,7 @@ function renderOne(a) {
     <div class="card">
       <div class="row" style="align-items:baseline">
         <h3 style="margin:0; flex:1">${escapeHtml(a.title)}</h3>
-        <div class="bold" style="color:var(--primary)">${a.value.toLocaleString()} ${escapeHtml(a.unit)}</div>
+        <div class=" bold text-primary">${a.value.toLocaleString()} ${escapeHtml(a.unit)}</div>
       </div>
       <div class="muted" style="font-size:12px; margin-bottom:8px">${escapeHtml(a.desc)}</div>
       <div class="ach-tiers">${tiersHtml}</div>

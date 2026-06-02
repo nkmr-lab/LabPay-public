@@ -36,7 +36,7 @@ export async function renderRoulette({ query } = {}) {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">ルーレット</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         誰かを決めたいときに。タイトルとメンバーを選んで、回すボタンで決まり。
         参加メンバーには通知で結果が届きます。
       </p>
@@ -332,7 +332,7 @@ async function onSpin() {
       if (r.dry_run) {
         prize = ' <span class="muted">(テストモード: pt は動いてません)</span>';
       } else if (r.reward > 0 && r.winner_user_id !== state.me?.id) {
-        prize = ` <span style="color:var(--primary)">+${r.reward}pt</span>`;
+        prize = ` <span class="text-primary">+${r.reward}pt</span>`;
       } else if (r.reward > 0) {
         prize = ' <span class="muted">(自分が当選: pt 移動なし)</span>';
       }
@@ -342,7 +342,7 @@ async function onSpin() {
       if (r.dry_run && Array.isArray(r.notifications_preview)) {
         const rows = r.notifications_preview.map(n => `
           <div class="list-item" style="padding:6px 10px; ${n.is_winner ? 'border-left:3px solid var(--primary); background:#faf6ff' : ''}">
-            <div style="flex:1">
+            <div class="grow">
               <div class="bold" style="font-size:13px">→ ${escapeHtml(n.display_name)}${n.is_winner ? ' 🎯' : ''}</div>
               <div class="meta" style="white-space:pre-wrap">${escapeHtml(n.body)}</div>
             </div>
@@ -402,7 +402,7 @@ export async function renderRouletteResult({ params }) {
       <div class="bold" style="font-size:16px">${escapeHtml(r.title)}</div>
       <div class="meta">${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
       <div style="margin-top:8px; font-size:18px">
-        🎯 当選: <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
+        🎯 当選: <span class=" bold text-primary">${escapeHtml(r.winner_name)}</span>
         ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag">あなた</span>' : ''}
       </div>
       <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
@@ -556,17 +556,17 @@ async function loadHistory() {
     }
     root.innerHTML = d.items.map(r => {
       const rewardTag = r.reward > 0
-        ? ` <span class="bold" style="color:var(--primary)">+${r.reward}pt</span>`
+        ? ` <span class=" bold text-primary">+${r.reward}pt</span>`
         : '';
       return `
         <div class="list-item">
-          <div style="flex:1">
+          <div class="grow">
             <div class="bold">${escapeHtml(r.title)}${rewardTag}</div>
             <div class="meta">候補 ${r.member_ids.length} 人 · ${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
           </div>
           <div style="display:flex; align-items:center; gap:6px">
             ${avatarHtml(r.winner_name, r.winner_avatar_url, 'sm')}
-            <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
+            <span class=" bold text-primary">${escapeHtml(r.winner_name)}</span>
           </div>
         </div>`;
     }).join('');

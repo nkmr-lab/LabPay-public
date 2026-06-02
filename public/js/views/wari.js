@@ -17,7 +17,7 @@ export async function renderWari() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">ワリカ</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         多通貨 (出張ランチなど) を JPY 換算してメンバーで割ります。為替レートは下で編集可、ブラウザに保存されます。
       </p>
     </div>
@@ -27,7 +27,7 @@ export async function renderWari() {
         <span class="lbl">総額</span>
         <div class="row">
           <input type="number" id="wari-amount" min="0" step="0.01" style="flex:2" placeholder="例: 24.50">
-          <select id="wari-currency" style="flex:1">
+          <select id="wari-currency" class="grow">
             ${Object.keys(rates).map(c => `<option value="${c}">${c}</option>`).join('')}
           </select>
         </div>
@@ -76,7 +76,7 @@ function onCalc(rates) {
       総額 <span class="bold">${totalJpy.toLocaleString()}</span> JPY
     </div>
     <div style="font-size:24px; margin-top:6px">
-      1人あたり <span class="bold" style="color:var(--primary)">${perJpy.toLocaleString()}</span> JPY
+      1人あたり <span class=" bold text-primary">${perJpy.toLocaleString()}</span> JPY
       <span class="muted" style="font-size:14px">(${perCcy.toFixed(2)} ${escapeHtml(ccy)})</span>
     </div>
   `;

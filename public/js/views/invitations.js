@@ -9,7 +9,7 @@ export async function renderInvitations() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">募集</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         「お昼ご飯食べに行こう」「ビアガーデン」「ポケモン GO」「スキー」など、
         誰でも参加表明できるカジュアルな募集です。pt のやり取りはありません。
       </p>
@@ -42,8 +42,8 @@ export async function renderInvitations() {
     </details>
 
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h3 style="flex:1; margin:0">募集一覧</h3>
+      <div class="row center">
+        <h3 class="row-title">募集一覧</h3>
         <label class="muted" style="font-size:13px; display:inline-flex; gap:6px; align-items:center">
           <input type="checkbox" id="inv-show-closed"> 終了も表示
         </label>
@@ -114,8 +114,8 @@ function renderRow(i) {
     : '';
 
   return `
-    <a class="list-item" href="#/invitations/${i.id}" style="text-decoration:none; color:inherit">
-      <div style="flex:1">
+    <a class="list-item" href="#/invitations/${i.id}">
+      <div class="grow">
         <div class="bold">${escapeHtml(i.title)} ${statusTag}</div>
         ${whenLine}${whereLine}${capLine}
         ${descBlock}

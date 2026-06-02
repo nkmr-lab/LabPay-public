@@ -429,6 +429,24 @@ table.table th { color: var(--muted); font-weight: 600; }
 .hstack.wrap { flex-wrap: wrap; }
 .vstack { display: flex; flex-direction: column; gap: var(--space-2); }
 
+/* flex 子要素を余白いっぱいに伸ばす ("style=\"flex:1\"" の代わり) */
+.grow { flex: 1; }
+/* 行内タイトル: .row 内の h2/h3 が伸びる + デフォルト margin を消す。
+   .card h2/h3 が持つ縦 margin と衝突するのを避けるための定型。 */
+.row-title { flex: 1; margin: 0; }
+/* .row のクロス軸を中央寄せに上書きする modifier (デフォは align-items: stretch)。 */
+.row.center { align-items: center; }
+/* color: var(--primary) を直書きしてた箇所が散らかってたので集約。 */
+.text-primary { color: var(--primary); }
+
+/* a.list-item: list 行をまるごとリンクにする時、毎回 inline で
+   text-decoration:none と color:inherit を書いていたので自動適用。 */
+a.list-item { text-decoration: none; color: inherit; }
+
+/* カードの h2/h3 直下に置く説明文。.hint と同じ muted 13px だが、
+   タイトルから 6px 開ける margin を持っている定型なので分離した。 */
+.card-subtitle { color: var(--muted); font-size: var(--text-md); margin: 6px 0 0; }
+
 @media (min-width: 720px) {
   nav#tabs { justify-content: center; }
 }

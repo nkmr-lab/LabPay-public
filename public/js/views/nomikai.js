@@ -31,7 +31,7 @@ export async function renderNomikai({ query } = {}) {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">飲み会割り勘</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         新歓・追いコン等の幹事用。まずはメンバーを絞り込み → 次の画面で各人の飲酒/ソフドリと重み付けを調整して計算します。
       </p>
     </div>
@@ -41,7 +41,7 @@ export async function renderNomikai({ query } = {}) {
       <div id="nm-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
       <div id="nm-picker" class="row" style="gap:6px; flex-wrap:wrap"></div>
       <div class="row" style="margin-top:10px; align-items:center">
-        <div id="nm-count" class="muted" style="flex:1">0 人選択中</div>
+        <div id="nm-count" class="muted grow">0 人選択中</div>
         <button id="nm-next" class="primary">次へ →</button>
       </div>
     </div>
@@ -150,7 +150,7 @@ async function loadHistory() {
     if (!d.items.length) { root.innerHTML = `<div class="empty">まだ履歴はありません</div>`; return; }
     root.innerHTML = d.items.map(s => `
       <a class="list-item" href="#/nomikai/${s.id}">
-        <div style="flex:1">
+        <div class="grow">
           <div class="bold">${escapeHtml(s.title)} ${s.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
           <div class="meta">${escapeHtml(s.creator_name)} · 総額 ¥${Number(s.total_yen).toLocaleString()} · 参加 ${s.member_count}人</div>
           <div class="meta">支払い済 ${s.paid_count}/${s.member_count} · ${escapeHtml(s.created_at)}</div>
@@ -179,7 +179,7 @@ export async function renderNomikaiNew({ query }) {
     <div class="card">
       <a href="#/nomikai" class="hint">← メンバー選択</a>
       <h2 style="margin:6px 0 0">2. 詳細を入力</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         各人の飲酒/ソフドリ、必要なら weight を調整。総額と分配が一致するように rounding は主催者に寄せます。
       </p>
     </div>
@@ -217,8 +217,8 @@ export async function renderNomikaiNew({ query }) {
     </div>
 
     <div class="card">
-      <div class="row" style="align-items:center">
-        <div id="nm-preview-total" class="muted" style="flex:1">参加者ごとの金額を計算します</div>
+      <div class="row center">
+        <div id="nm-preview-total" class="muted grow">参加者ごとの金額を計算します</div>
         <button id="nm-submit" class="primary">作成 + 全員に通知</button>
       </div>
     </div>

@@ -28,15 +28,15 @@ export async function renderActivity() {
   const savedDays = Number(localStorage.getItem('labpay-activity-days') || 7);
   app.innerHTML = `
     <div class="card">
-      <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">ラボ活動マップ</h2>
+      <div class="row center">
+        <h2 class="row-title">ラボ活動マップ</h2>
         <select id="act-window" style="max-width:160px">
           ${WINDOWS.map(w => `
             <option value="${w.days}" ${w.days === savedDays ? 'selected' : ''}>${w.label}</option>
           `).join('')}
         </select>
       </div>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         曜日 × 時間あたりの平均在室人数。色が濃いほど人が多いです。
       </p>
     </div>

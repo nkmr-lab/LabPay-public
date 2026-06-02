@@ -18,13 +18,13 @@ export async function renderScrapboxFeed() {
   app.innerHTML = `
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
-      <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">Scrapbox 研究ノート フィード</h2>
+      <div class="row center">
+        <h2 class="row-title">Scrapbox 研究ノート フィード</h2>
         <select id="sb-feed-days" style="max-width:120px">
           ${WINDOWS.map(w => `<option value="${w.days}" ${w.days === saved ? 'selected' : ''}>${w.label}</option>`).join('')}
         </select>
       </div>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         #scrapbox の通知のうち「研究ノート」を含むものだけ表示。同じ人の連続編集はまとめて、最新が上です。タイトルをタップで Scrapbox のページへ。
       </p>
     </div>
@@ -69,7 +69,7 @@ function renderGroup(g) {
     : '';
   return `
     <div class="list-item" style="align-items:flex-start">
-      <div style="flex:1">
+      <div class="grow">
         <div style="display:flex; align-items:center; gap:6px">${who}</div>
         <div class="meta">${escapeHtml(g.first_at)}${g.edit_count > 1 ? ` · ${g.edit_count} 回編集` : ''}</div>
         <ul style="margin:4px 0 0; padding-left:18px; font-size:14px">${pages}</ul>

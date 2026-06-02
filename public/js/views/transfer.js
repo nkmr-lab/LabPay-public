@@ -7,7 +7,7 @@ export async function renderTransfer() {
   app.innerHTML = `
     <div class="card balance-strip">
       <span class="muted">残高</span>
-      <span class="bold" id="send-balance" style="color:var(--primary)">— pt</span>
+      <span class="bold text-primary" id="send-balance">— pt</span>
     </div>
 
     <div class="card">
@@ -17,7 +17,7 @@ export async function renderTransfer() {
 
     <div class="card">
       <div class="row">
-        <select id="xfer-to" style="flex:1"><option value="">— 受取人 —</option></select>
+        <select id="xfer-to" class="grow"><option value="">— 受取人 —</option></select>
         <input type="number" id="xfer-amt" min="1" placeholder="pt" style="max-width:120px">
       </div>
       <input type="text" id="xfer-memo" placeholder="メモ (任意)" maxlength="255" style="margin-top:6px">

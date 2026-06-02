@@ -19,7 +19,7 @@ export async function renderRandomGroups() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">ランダムグループ生成</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         選んだメンバーをランダムに N チームに分けます。学年や性別を
         「できるだけ均等」にしたい場合は配慮 ON にしてください。
       </p>
@@ -57,8 +57,8 @@ export async function renderRandomGroups() {
     </div>
 
     <div class="card" id="rg-result-card" hidden>
-      <div class="row" style="align-items:center; margin-bottom:6px">
-        <h3 id="rg-result-title" style="flex:1; margin:0">結果</h3>
+      <div class="row center" style="margin-bottom:6px">
+        <h3 id="rg-result-title" class="row-title">結果</h3>
         <button id="rg-notify" class="primary">📢 結果を全員に通知</button>
       </div>
       <div id="rg-result"></div>
@@ -221,8 +221,8 @@ function renderResult(groups, title) {
     const ids = g.map(m => m.id).join(',');
     return `
       <div class="card" style="margin:8px 0; background:#faf7fd">
-        <div class="row" style="align-items:center; margin-bottom:6px">
-          <h4 style="flex:1; margin:0">グループ ${idx + 1} <span class="hint-sm">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
+        <div class="row center" style="margin-bottom:6px">
+          <h4 class="row-title">グループ ${idx + 1} <span class="hint-sm">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
           <button class="btn" data-mk-group="${ids}" data-title="グループ ${idx + 1}">このメンバーでグループ作成</button>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">${memberHtml}</div>

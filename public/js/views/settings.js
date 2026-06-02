@@ -59,7 +59,7 @@ export async function renderSettings() {
       </p>
       <div class="row">
         <input type="text" id="new-mac" placeholder="aa:bb:cc:dd:ee:ff" maxlength="32" style="flex:2">
-        <input type="text" id="new-label" placeholder="ラベル (例: iPhone)" maxlength="100" style="flex:1">
+        <input type="text" id="new-label" placeholder="ラベル (例: iPhone)" maxlength="100" class="grow">
         <button id="add-btn" class="primary">追加</button>
       </div>
     </div>

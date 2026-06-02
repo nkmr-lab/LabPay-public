@@ -15,7 +15,7 @@ export async function renderGroups() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">グループ</h2>
-      <p class="muted" style="font-size:13px; margin:6px 0 0">
+      <p class="card-subtitle">
         出張・旅行・連幹事など、短期間だけ使うメンバー枠。フィード (メモ・URL・
         時間) + ワリカ (立替を積み上げ → 精算) を共有しつつ、ルーレットや
         飲み会割り勘をそのメンバーで即起動できます。
@@ -160,7 +160,7 @@ async function loadList() {
     }
     root.innerHTML = d.items.map(g => `
       <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}">
-        <div style="flex:1">
+        <div class="grow">
           <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
           <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}</div>
         </div>
@@ -199,8 +199,8 @@ export async function renderGroupDetail({ params }) {
     </div>
 
     <div class="card" id="gd-wari-card">
-      <div class="row" style="align-items:center">
-        <h3 style="flex:1; margin:0">ワリカ</h3>
+      <div class="row center">
+        <h3 class="row-title">ワリカ</h3>
         <button id="gd-settle" class="btn">貸し借りを精算する</button>
       </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
@@ -358,7 +358,7 @@ function renderItem(it, gid) {
   }
   return `
     <div class="list-item">
-      <div style="flex:1">
+      <div class="grow">
         <div class="bold">${kindBadge} ${escapeHtml(it.author_name)}</div>
         ${when}${middle}
         <div class="meta" style="margin-top:4px">${escapeHtml(it.created_at)}</div>
@@ -636,14 +636,14 @@ function openExpenseEdit(gid, e) {
 
   overlay.innerHTML = `
     <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px; overflow:auto">
-      <div class="row" style="align-items:center">
-        <h3 style="flex:1; margin:0">支出を編集</h3>
+      <div class="row center">
+        <h3 class="row-title">支出を編集</h3>
         <button id="ex-edit-close">×</button>
       </div>
       <label class="field" style="margin-top:8px">
         <span class="lbl">金額</span>
         <div class="row" style="gap:6px">
-          <input type="number" id="ex-edit-amt" min="0" step="0.01" value="${initialAmount}" style="flex:1">
+          <input type="number" id="ex-edit-amt" min="0" step="0.01" value="${initialAmount}" class="grow">
           <select id="ex-edit-ccy" style="width:90px">${ccyOpts}</select>
         </div>
       </label>
@@ -757,7 +757,7 @@ function renderExpense(e, gid) {
     </div>` : '';
   return `
     <div class="list-item">
-      <div style="flex:1">
+      <div class="grow">
         <div class="bold">${escapeHtml(e.payer_name)} 立替: ¥${e.amount_jpy.toLocaleString()}${orig}</div>
         ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
         <div class="meta">${escapeHtml(e.created_at)} · ${escapeHtml(forText)}</div>
@@ -780,7 +780,7 @@ function openSettleModal(gid) {
         const mine = Number(s.from_user_id) === meId || Number(s.to_user_id) === meId;
         return `
           <div class="list-item" style="${mine ? mineStyle : ''}">
-            <div style="flex:1">
+            <div class="grow">
               <span class="bold">${escapeHtml(s.from_name)}</span> →
               <span class="bold">${escapeHtml(s.to_name)}</span>
               ${mine ? '<span class="muted" style="font-size:10px; margin-left:4px">(あなた)</span>' : ''}
@@ -793,11 +793,11 @@ function openSettleModal(gid) {
   root.innerHTML = `
     <div style="position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px">
       <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px">
-        <div class="row" style="align-items:center">
-          <h3 style="flex:1; margin:0">精算サマリ</h3>
+        <div class="row center">
+          <h3 class="row-title">精算サマリ</h3>
           <button id="gd-settle-close">×</button>
         </div>
-        <p class="muted" style="font-size:13px; margin:6px 0 0">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
+        <p class="card-subtitle">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
         <div style="margin-top:10px; overflow:auto; flex:1; min-height:0">
           <h4 style="margin:0 0 6px">推奨送金プラン</h4>
           <div class="list">${planRows}</div>

@@ -29,12 +29,12 @@ export async function renderAdmin() {
 
     <div class="card">
       <h3>カレンダー</h3>
-      <div class="row" style="align-items:center">
+      <div class="row center">
         <div id="hol-status" class="muted" style="font-size:13px; flex:1">読み込み中…</div>
         <button id="hol-sync">国民の祝日を同期</button>
       </div>
       <div class="sep"></div>
-      <div class="row" style="align-items:center; gap:6px">
+      <div class="row center" style="gap:6px">
         <button id="cal-prev">←</button>
         <div id="cal-title" class="bold" style="flex:1; text-align:center">読み込み中…</div>
         <button id="cal-next">→</button>
@@ -51,7 +51,7 @@ export async function renderAdmin() {
       <p class="muted" style="font-size:13px; margin:4px 0">最近の取引から、取り消す決済を選んでください。</p>
       <div class="row" style="margin-bottom:8px">
         <button id="rv-reload">最新の取引を読み込み</button>
-        <input id="rv-memo" type="text" placeholder="取消理由 (任意)" style="flex:1">
+        <input id="rv-memo" type="text" placeholder="取消理由 (任意)" class="grow">
       </div>
       <div id="rv-list" class="list"><div class="muted">「最新の取引を読み込み」を押してください</div></div>
     </div>
@@ -73,7 +73,7 @@ export async function renderAdmin() {
       </div>
       <div class="row">
         <input id="is-amount" type="number" placeholder="ポイント数" min="1" style="max-width:140px">
-        <input id="is-memo" type="text" placeholder="メモ (任意)" style="flex:1">
+        <input id="is-memo" type="text" placeholder="メモ (任意)" class="grow">
         <button id="is-go" class="primary">発行</button>
       </div>
       <div class="muted" style="font-size:12px; margin-top:4px">
@@ -113,7 +113,7 @@ export async function renderAdmin() {
         <summary>部屋を追加</summary>
         <div class="row" style="margin-top:6px">
           <input id="rm-id" type="text" placeholder="id (例: 10F)" style="max-width:120px">
-          <input id="rm-name" type="text" placeholder="表示名 (例: 10階研究室)" style="flex:1">
+          <input id="rm-name" type="text" placeholder="表示名 (例: 10階研究室)" class="grow">
           <button id="rm-add" class="primary">作成</button>
         </div>
         <div class="muted" style="font-size:12px; margin-top:4px">
@@ -418,7 +418,7 @@ function rvRow(r) {
     : (r.memo ? ` · ${escapeHtml(r.memo)}` : '');
   return `
     <div class="list-item">
-      <div style="flex:1">
+      <div class="grow">
         <div class="bold">#${r.id} ${escapeHtml(typeLabel)} · ${r.amount.toLocaleString()}pt</div>
         <div class="meta">${escapeHtml(from)} → ${escapeHtml(to)}${sub}</div>
         <div class="meta">${escapeHtml(r.created_at)}</div>

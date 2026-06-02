@@ -42,7 +42,7 @@ export async function renderNetwork() {
   const weightMode = localStorage.getItem(WEIGHT_KEY) || 'count';
   app.innerHTML = `
     <div class="card">
-      <div class="row" style="align-items:center">
+      <div class="row center">
         <a href="#/apps" class="hint">← アプリ</a>
       </div>
       <h2 style="margin:6px 0 0">関係性グラフ</h2>
