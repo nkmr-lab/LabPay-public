@@ -242,11 +242,11 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         //   * stale = それ以前 → 「いま居る」は false、ただし last_seen までの
         //     滞在は今日 (週 / 月) の集計に算入
         //
-        // MIN(session_start_at) を採用、ただし 12 時間以上の連続検知行 (化石化
+        // MIN(session_start_at) を採用、ただし 24 時間以上の連続検知行 (化石化
         // 候補 = 端末を置き忘れ) は除外して MIN を計算する。これで:
         //   * 同じ MAC が複数 room で検知されている (signal leak) ケース: MIN で
         //     一番古い session_start が拾われて正しい滞在時間が出る
-        //   * 化石デバイスがあるケース: 12h+ の行は除外されるので、その古い
+        //   * 化石デバイスがあるケース: 24h+ の行は除外されるので、その古い
         //     start_at は拾われない
         $openStart = null; $openEnd = null; $isFresh = false;
         $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e

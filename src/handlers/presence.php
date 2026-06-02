@@ -239,7 +239,7 @@ function presence_list(PDO $pdo, array $cfg): void {
     // earliest session_start_at across the user's devices in that room (so a user with
     // multiple registered MACs gets the earliest one — they've been there at least that long).
     // session_start_at は MIN を取る (= 一番古いセッション開始 = 「いつから
-    // ラボにいるか」)。ただし 12 時間以上連続検知の行 (化石化候補) は
+    // ラボにいるか」)。ただし 24 時間以上連続検知の行 (化石化候補) は
     // COALESCE の中で除外して、化石の古い start_at に引きずられないように。
     // NULL 行 (legacy) は COALESCE で first_seen → last_seen にフォールバック。
     $st = $pdo->prepare("
