@@ -241,14 +241,21 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         //     まで滞在として加算
         //   * stale = それ以前 → 「いま居る」は false、ただし last_seen までの
         //     滞在は今日 (週 / 月) の集計に算入
-        // 複数 MAC 持ちは MAX を取って「直近に始まった active セッション」を
-        // 採用 (MIN だと化石化端末の古い start を拾ってしまうため)。
+        //
+        // MIN(session_start_at) を採用、ただし 12 時間以上の連続検知行 (化石化
+        // 候補 = 端末を置き忘れ) は除外して MIN を計算する。これで:
+        //   * 同じ MAC が複数 room で検知されている (signal leak) ケース: MIN で
+        //     一番古い session_start が拾われて正しい滞在時間が出る
+        //   * 化石デバイスがあるケース: 12h+ の行は除外されるので、その古い
+        //     start_at は拾われない
         $openStart = null; $openEnd = null; $isFresh = false;
-        $stOpen = $pdo->prepare("SELECT MAX(session_start_at) AS s, MAX(last_seen_at) AS e
+        $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
             FROM presence_seen ps
             JOIN presence_devices pd ON pd.mac = ps.mac
-            WHERE pd.user_id = ? AND ps.session_start_at IS NOT NULL");
-        $stOpen->execute([$u['id']]);
+            WHERE pd.user_id = ?
+              AND ps.session_start_at IS NOT NULL
+              AND TIMESTAMPDIFF(MINUTE, ps.session_start_at, ps.last_seen_at) < ?");
+        $stOpen->execute([$u['id'], 12 * 60]);
         if ($row = $stOpen->fetch()) {
             if (!empty($row['s']) && !empty($row['e'])) {
                 $openStart = $row['s'];

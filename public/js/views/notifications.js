@@ -31,12 +31,24 @@ async function load() {
       return;
     }
     root.innerHTML = data.items.map(row).join('');
+    // 既読ボタン (行リンクの click を奪う)
     root.querySelectorAll('[data-read]').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         try { await patch('/api/notifications/' + btn.dataset.read + '/read', {}); }
         catch (e) { toast('失敗: ' + e.message); return; }
         await refreshUnread();
         await load();
+      });
+    });
+    // 行 (<a>) タップ時: 未読なら裏で既読化してから遷移を許可
+    root.querySelectorAll('[data-jump]').forEach(a => {
+      a.addEventListener('click', () => {
+        // fire-and-forget: バッジ消すための裏処理。遷移は通常通り進む。
+        patch('/api/notifications/' + a.dataset.jump + '/read', {})
+          .then(() => refreshUnread())
+          .catch(() => { /* ignore */ });
       });
     });
   } catch (e) {
@@ -59,15 +71,19 @@ const TYPE_LABELS = {
 // the body wraps to a real link so users can jump straight to the relevant
 // page from the bell.
 function refUrl(n) {
-  if (!n.ref_type || !n.ref_id) return null;
+  if (!n.ref_type) return null;
   switch (n.ref_type) {
-    case 'task':        return '#/tasks/' + n.ref_id;
-    case 'roulette':    return '#/roulette/' + n.ref_id;
-    case 'invitation':  return '#/invitations';
-    case 'wishlist':    return '#/wishlist';
-    case 'purchase':    return '#/history';
-    case 'scrapbox':    return '#/history';
-    case 'feedback':    return '#/admin';
+    case 'task':           return n.ref_id ? '#/tasks/' + n.ref_id : '#/tasks';
+    case 'roulette':       return n.ref_id ? '#/roulette/' + n.ref_id : '#/roulette';
+    case 'invitation':     return n.ref_id ? '#/invitations/' + n.ref_id : '#/invitations';
+    case 'group':          return n.ref_id ? '#/groups/' + n.ref_id : '#/groups';
+    case 'money_request':  return n.ref_id ? '#/requests/' + n.ref_id : '#/requests';
+    case 'nomikai':        return n.ref_id ? '#/nomikai/' + n.ref_id : '#/nomikai';
+    case 'random_groups':  return '#/random-groups';
+    case 'wishlist':       return '#/wishlist';
+    case 'purchase':       return '#/history';
+    case 'scrapbox':       return '#/history';
+    case 'feedback':       return '#/admin';
     default: return null;
   }
 }
@@ -76,15 +92,17 @@ function row(n) {
   const unread = !n.read_at;
   const lbl = TYPE_LABELS[n.type] || n.type;
   const url = refUrl(n);
-  const body = url
-    ? `<a href="${url}" style="color:inherit; text-decoration:none">${escapeHtml(n.body)}</a>`
-    : escapeHtml(n.body);
+  // 行全体をリンク化: タップしたら関連ページに飛ぶ。未読ならタップで自動既読も。
+  // 「既読」ボタンと competing しないよう、ボタンには stopPropagation を効かせる。
+  const baseStyle = `display:block; text-decoration:none; color:inherit; ${unread ? 'border-left:4px solid var(--primary);' : ''}`;
+  const tag = url ? 'a' : 'div';
+  const href = url ? `href="${url}" data-jump="${n.id}"` : '';
   return `
-    <div class="list-item" style="${unread ? 'border-left:4px solid var(--primary)' : ''}">
-      <div>
-        <div class="bold">${body}</div>
+    <${tag} class="list-item" style="${baseStyle}" ${href}>
+      <div style="flex:1; min-width:0">
+        <div class="bold" style="white-space:pre-wrap">${escapeHtml(n.body)}</div>
         <div class="meta">${escapeHtml(lbl)} · ${escapeHtml(n.created_at)}</div>
       </div>
       <div>${unread ? `<button data-read="${n.id}">既読</button>` : '<span class="tag muted">既読</span>'}</div>
-    </div>`;
+    </${tag}>`;
 }
