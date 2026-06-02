@@ -648,22 +648,6 @@ function openSettleModal(gid) {
   const meId = Number(state.me?.id) || 0;
   const mineStyle = 'background:#fff8e6; border-left:3px solid var(--primary)';
 
-  // 各人の支払った総額 (= spent_jpy)。降順、自分の行は黄色背景でハイライト。
-  const spendRows = [...(d.balances || [])]
-    .filter(b => (b.spent_jpy || 0) > 0)
-    .sort((a, b) => (b.spent_jpy || 0) - (a.spent_jpy || 0))
-    .map(b => {
-      const mine = Number(b.user_id) === meId;
-      return `
-        <div class="list-item" style="${mine ? mineStyle : ''}">
-          <div style="flex:1; display:flex; align-items:center; gap:8px">
-            ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
-            <div class="bold">${escapeHtml(b.display_name)}${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
-          </div>
-          <div class="bold" style="font-size:16px">¥${(b.spent_jpy || 0).toLocaleString()}</div>
-        </div>`;
-    }).join('');
-
   // 推奨送金プラン。自分が from/to のどちらかなら黄色背景でハイライト。
   const planRows = d.settlements.length
     ? d.settlements.map(s => {
@@ -688,37 +672,20 @@ function openSettleModal(gid) {
           <button id="gd-settle-close">×</button>
         </div>
         <p class="muted" style="font-size:13px; margin:6px 0 0">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
-        <div class="row" style="gap:6px; margin-top:10px">
-          <button data-stab="plan"  class="btn primary" style="flex:1">推奨送金プラン</button>
-          <button data-stab="spend" class="btn" style="flex:1">支払った総額</button>
+        <div style="margin-top:10px; overflow:auto; flex:1; min-height:0">
+          <h4 style="margin:0 0 6px">推奨送金プラン</h4>
+          <div class="list">${planRows}</div>
         </div>
-        <div id="gd-settle-body" style="margin-top:10px; overflow:auto; flex:1; min-height:0">
-          <div data-stab-pane="plan">
-            <div class="list">${planRows}</div>
-            ${d.settlements.length ? `
-              <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap">
-                <button id="gd-settle-notify" class="btn">全員に通知</button>
-                <button id="gd-settle-asreq"  class="primary">請求一括生成</button>
-              </div>` : ''}
-          </div>
-          <div data-stab-pane="spend" hidden>
-            <p class="muted" style="font-size:11px; margin:0 0 4px">立替してもらった分も含めて、実質いくら使ったか</p>
-            <div class="list">${spendRows || '<div class="muted">支払いがまだありません</div>'}</div>
-          </div>
-        </div>
+        ${d.settlements.length ? `
+          <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap">
+            <button id="gd-settle-notify" class="btn">全員に通知</button>
+            <button id="gd-settle-asreq"  class="primary">請求一括生成</button>
+          </div>` : ''}
         <p class="muted" style="font-size:11px; margin-top:8px">
           ※ 実際の送金は外 (現金 / PayPay / 銀行) でやり取りしてください。
         </p>
       </div>
     </div>`;
-  // Tab switching
-  root.querySelectorAll('[data-stab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.dataset.stab;
-      root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('primary', b === btn));
-      root.querySelectorAll('[data-stab-pane]').forEach(p => p.hidden = p.dataset.stabPane !== key);
-    });
-  });
   // 私あての送金プラン分を「請求」フォーマットで発射する。各 from_user が
   // 私 (creator=me) に支払うべき額を recipient として登録した money_request
   // を新規作成。受取人はその後 PayPay/銀行 等で「支払い済」をチェックできる。
