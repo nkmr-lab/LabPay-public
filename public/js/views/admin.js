@@ -159,21 +159,40 @@ export async function renderAdmin() {
     } catch (e) { toast('失敗: ' + e.message); }
   });
 
-  // --- Users ---
+  // --- Users (with inline grade + gender editors) ---
   await loadTable('users', async (el) => {
     const u = await get('/api/admin/users');
+    const gradeOpts = ['', 'D', 'M2', 'M1', 'B4', 'B3'];
+    const genderOpts = [['', '—'], ['M', '男'], ['F', '女'], ['X', '他']];
     el.innerHTML = `
       <table class="table">
-        <thead><tr><th>id</th><th>name</th><th>email</th><th>role</th><th class="right">balance</th></tr></thead>
+        <thead><tr><th>id</th><th>name</th><th>email</th><th>role</th><th>学年</th><th>性別</th><th class="right">balance</th></tr></thead>
         <tbody>${u.items.map(x => `
           <tr>
             <td class="mono right">${x.id}</td>
             <td>${escapeHtml(x.display_name)}</td>
             <td class="muted mono">${escapeHtml(x.email)}</td>
             <td>${escapeHtml(x.role)}</td>
+            <td><select data-edit="grade" data-uid="${x.id}">
+              ${gradeOpts.map(g => `<option value="${g}" ${(x.grade ?? '') === g ? 'selected' : ''}>${g || '—'}</option>`).join('')}
+            </select></td>
+            <td><select data-edit="gender" data-uid="${x.id}">
+              ${genderOpts.map(([v, lbl]) => `<option value="${v}" ${(x.gender ?? '') === v ? 'selected' : ''}>${lbl}</option>`).join('')}
+            </select></td>
             <td class="right mono">${(x.balance ?? 0).toLocaleString()}</td>
           </tr>`).join('')}</tbody>
       </table>`;
+    el.querySelectorAll('[data-edit]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const uid = Number(sel.dataset.uid);
+        const field = sel.dataset.edit;
+        const value = sel.value || null;
+        try {
+          await patch(`/api/admin/users/${uid}`, { [field]: value });
+          toast('更新しました');
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
   });
 
   // --- Issue points (broadcast vs single user) ---

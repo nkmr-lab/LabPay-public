@@ -22,7 +22,7 @@ import { renderInvitations } from './views/invitations.js';
 import { renderRoulette, renderRouletteResult } from './views/roulette.js';
 import { renderApps } from './views/apps.js';
 import { renderWari } from './views/wari.js';
-import { renderNomikai, renderNomikaiDetail } from './views/nomikai.js';
+import { renderNomikai, renderNomikaiNew, renderNomikaiDetail } from './views/nomikai.js';
 import { renderGroups, renderGroupDetail } from './views/groups.js';
 import { renderScrapboxFeed } from './views/scrapbox_feed.js';
 
@@ -195,6 +195,7 @@ route('/roulette/:id',   renderRouletteResult);
 route('/apps',           renderApps);
 route('/wari',           renderWari);
 route('/nomikai',        renderNomikai);
+route('/nomikai/new',    renderNomikaiNew);
 route('/nomikai/:id',    renderNomikaiDetail);
 route('/groups',         renderGroups);
 route('/groups/:id',     renderGroupDetail);

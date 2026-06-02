@@ -343,13 +343,13 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
     $q = trim((string)($_GET['q'] ?? ''));
     if ($q !== '') {
-        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, gender
             FROM users WHERE kind='human'
               AND (display_name LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))
             ORDER BY display_name LIMIT 50");
         $st->execute([$q, $q]);
     } else {
-        $st = $pdo->query("SELECT id, display_name, avatar_url, grade
+        $st = $pdo->query("SELECT id, display_name, avatar_url, grade, gender
             FROM users WHERE kind='human' ORDER BY display_name");
     }
     json_response(['items' => $st->fetchAll()]);

@@ -529,20 +529,54 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // ----- users (lightweight list to support admin UI) -----
-    if ($sub === 'users' && $method === 'GET') {
+    if ($sub === 'users' && !isset($seg[2]) && $method === 'GET') {
         $st = $pdo->query("
-            SELECT u.id, u.email, u.display_name, u.role, u.kind, u.created_at, u.last_login_at,
+            SELECT u.id, u.email, u.display_name, u.role, u.kind, u.grade, u.gender,
+                   u.created_at, u.last_login_at,
                    a.id AS account_id
               FROM users u LEFT JOIN accounts a ON a.owner_user_id = u.id
              WHERE u.kind='human' ORDER BY u.id");
         $rows = $st->fetchAll();
-        // Add balances
         foreach ($rows as &$r) {
             if ($r['account_id']) {
                 $r['balance'] = Ledger::balanceOf($pdo, (int)$r['account_id']);
             }
         }
         json_response(['items' => $rows]);
+        return;
+    }
+
+    // ----- PATCH a single user's grade / gender (admin-only edits to lookup data) -----
+    if ($sub === 'users' && isset($seg[2]) && $method === 'PATCH') {
+        $uid = (int)$seg[2];
+        if ($uid <= 0) throw new ApiException('bad_request', 'bad user id', 400);
+        $body = read_json_body();
+        $fields = []; $args = [];
+        if (array_key_exists('grade', $body)) {
+            $g = $body['grade'];
+            if ($g === null || $g === '') { $fields[] = 'grade = NULL'; }
+            else {
+                if (!in_array($g, ['D','M2','M1','B4','B3'], true)) {
+                    throw new ApiException('bad_request', 'bad grade', 400);
+                }
+                $fields[] = 'grade = ?'; $args[] = $g;
+            }
+        }
+        if (array_key_exists('gender', $body)) {
+            $g = $body['gender'];
+            if ($g === null || $g === '') { $fields[] = 'gender = NULL'; }
+            else {
+                if (!in_array($g, ['M','F','X'], true)) {
+                    throw new ApiException('bad_request', "gender must be M/F/X", 400);
+                }
+                $fields[] = 'gender = ?'; $args[] = $g;
+            }
+        }
+        if (!$fields) throw new ApiException('bad_request', 'nothing to update', 400);
+        $args[] = $uid;
+        $sql = 'UPDATE users SET ' . implode(', ', $fields) . " WHERE id = ? AND kind='human'";
+        $pdo->prepare($sql)->execute($args);
+        json_response(['ok' => true]);
         return;
     }
 
