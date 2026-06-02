@@ -1,0 +1,230 @@
+// /#/random-groups — メンバーから N 個のチームをランダム生成。
+// 学年 / 性別 を「できるだけ均等」に配慮するオプション付き (バケット分け
+// → 各バケット内シャッフル → ラウンドロビンで分配)。純粋なローカル計算で、
+// DB には書き込まない。結果は「このメンバーでグループ作成」ショートカットから
+// 1グループずつ実体化できる。
+
+import { get, post } from '../api.js';
+import { escapeHtml, avatarHtml } from '../router.js';
+import { state, toast } from '../app.js';
+
+const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
+
+let allUsers = [];
+const picked = new Set();
+
+export async function renderRandomGroups() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <h2 style="margin:6px 0 0">ランダムグループ生成</h2>
+      <p class="muted" style="font-size:13px; margin:6px 0 0">
+        選んだメンバーをランダムに N チームに分けます。学年や性別を
+        「できるだけ均等」にしたい場合は配慮 ON にしてください。
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>メンバーを選ぶ</h3>
+      <div id="rg-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
+      <div id="rg-picker" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      <div id="rg-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
+    </div>
+
+    <div class="card">
+      <h3>条件</h3>
+      <label class="field">
+        <span class="lbl">グループ数</span>
+        <input type="number" id="rg-n" min="2" max="20" value="2" style="max-width:120px">
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; margin:6px 0">
+        <span class="switch"><input type="checkbox" id="rg-grade"><span class="slider"></span></span>
+        <span>学年を考慮 <span class="muted" style="font-size:12px">— 各グループに学年がばらつくようにする</span></span>
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; margin:6px 0">
+        <span class="switch"><input type="checkbox" id="rg-gender"><span class="slider"></span></span>
+        <span>男女を考慮 <span class="muted" style="font-size:12px">— 各グループに男女がばらつくようにする</span></span>
+      </label>
+      <div class="row" style="gap:6px; margin-top:8px">
+        <button id="rg-go" class="primary">ランダムに分ける</button>
+        <button id="rg-reshuffle" disabled>再シャッフル</button>
+      </div>
+    </div>
+
+    <div class="card" id="rg-result-card" hidden>
+      <h3>結果</h3>
+      <div id="rg-result"></div>
+    </div>
+  `;
+  await populatePicker();
+  document.getElementById('rg-go').addEventListener('click', () => runShuffle());
+  document.getElementById('rg-reshuffle').addEventListener('click', () => runShuffle());
+}
+
+async function populatePicker() {
+  const u = await get('/api/users');
+  picked.clear();
+  allUsers = [...u.items].sort((a, b) => {
+    const ga = GRADE_ORDER.indexOf(a.grade || '');
+    const gb = GRADE_ORDER.indexOf(b.grade || '');
+    return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
+      (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+  });
+
+  const grades = [...new Set(allUsers.map(u => u.grade).filter(Boolean))]
+    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  const bulk = document.getElementById('rg-bulk');
+  bulk.innerHTML = `
+    <button data-bulk="all"  class="btn">全員</button>
+    ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
+    <button data-bulk="gender:M" class="btn">男</button>
+    <button data-bulk="gender:F" class="btn">女</button>
+    <button data-bulk="clear" class="btn">クリア</button>
+  `;
+  bulk.querySelectorAll('[data-bulk]').forEach(b => {
+    b.addEventListener('click', () => applyBulk(b.dataset.bulk));
+  });
+
+  const picker = document.getElementById('rg-picker');
+  picker.innerHTML = allUsers.map(x => `
+    <span class="rl-chip" data-uid="${x.id}">
+      ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+      <span>${escapeHtml(x.display_name)}</span>
+      ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
+    </span>`).join('');
+  picker.querySelectorAll('.rl-chip').forEach(c => {
+    c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
+  });
+  refreshChips();
+}
+
+function memberMatches(user, key) {
+  if (key === 'all') return true;
+  if (key.startsWith('grade:')) return (user.grade || '') === key.slice(6);
+  if (key.startsWith('gender:')) return (user.gender || '') === key.slice(7);
+  return false;
+}
+
+function applyBulk(key) {
+  if (key === 'clear') { picked.clear(); refreshChips(); return; }
+  const targets = allUsers.filter(u => memberMatches(u, key));
+  const allOn = targets.every(u => picked.has(u.id));
+  if (allOn) targets.forEach(u => picked.delete(u.id));
+  else       targets.forEach(u => picked.add(u.id));
+  refreshChips();
+}
+
+function togglePick(uid) {
+  if (picked.has(uid)) picked.delete(uid);
+  else picked.add(uid);
+  refreshChips();
+}
+
+function refreshChips() {
+  document.querySelectorAll('#rg-picker .rl-chip').forEach(c => {
+    const on = picked.has(Number(c.dataset.uid));
+    c.style.background = on ? 'var(--primary-soft, #efeafa)' : '';
+    c.style.borderColor = on ? 'var(--primary)' : '';
+  });
+  document.getElementById('rg-count').textContent = `${picked.size} 人選択中`;
+}
+
+// ─── shuffling ────────────────────────────────────────────────────────
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Bucket members by (grade?, gender?), shuffle each bucket, then deal members
+// out across groups round-robin with a rotating start cursor so the first
+// group doesn't always end up the "biggest" of the leftovers.
+function partition(members, numGroups, considerGrade, considerGender) {
+  if (!considerGrade && !considerGender) {
+    const groups = Array.from({ length: numGroups }, () => []);
+    shuffle(members).forEach((m, i) => groups[i % numGroups].push(m));
+    return groups;
+  }
+  const buckets = new Map();
+  for (const m of members) {
+    const key = [
+      considerGrade  ? (m.grade  || '_') : '',
+      considerGender ? (m.gender || '_') : '',
+    ].join('|');
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(m);
+  }
+  const groups = Array.from({ length: numGroups }, () => []);
+  let cursor = 0;
+  // Order buckets largest-first so smaller buckets fill last (smoother spread).
+  const ordered = [...buckets.values()].sort((a, b) => b.length - a.length);
+  for (const arr of ordered) {
+    shuffle(arr).forEach((m, i) => groups[(cursor + i) % numGroups].push(m));
+    cursor = (cursor + arr.length) % numGroups;
+  }
+  return groups;
+}
+
+function runShuffle() {
+  const n = Math.max(2, Math.min(20, Number(document.getElementById('rg-n').value) || 2));
+  const considerGrade  = document.getElementById('rg-grade').checked;
+  const considerGender = document.getElementById('rg-gender').checked;
+  const ids = [...picked];
+  if (ids.length < n) {
+    toast(`メンバー ${ids.length} 人ではグループ数 ${n} に届きません`);
+    return;
+  }
+  const members = allUsers.filter(u => picked.has(u.id));
+  const groups = partition(members, n, considerGrade, considerGender);
+  renderResult(groups);
+  document.getElementById('rg-reshuffle').disabled = false;
+}
+
+function renderResult(groups) {
+  document.getElementById('rg-result-card').hidden = false;
+  const root = document.getElementById('rg-result');
+  root.innerHTML = groups.map((g, idx) => {
+    const counts = countByGrade(g);
+    const memberHtml = g.map(m => `
+      <span class="rl-chip" style="background:var(--primary-soft,#efeafa); border-color:var(--primary)">
+        ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+        <span>${escapeHtml(m.display_name)}</span>
+        ${m.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(m.grade)}]</span>` : ''}
+      </span>`).join('');
+    const ids = g.map(m => m.id).join(',');
+    return `
+      <div class="card" style="margin:8px 0; background:#faf7fd">
+        <div class="row" style="align-items:center; margin-bottom:6px">
+          <h4 style="flex:1; margin:0">グループ ${idx + 1} <span class="muted" style="font-size:12px">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
+          <button class="btn" data-mk-group="${ids}" data-title="グループ ${idx + 1}">このメンバーでグループ作成</button>
+        </div>
+        <div class="row" style="gap:6px; flex-wrap:wrap">${memberHtml}</div>
+      </div>`;
+  }).join('');
+  root.querySelectorAll('[data-mk-group]').forEach(b => {
+    b.addEventListener('click', () => onCreateGroup(
+      b.dataset.title,
+      b.dataset.mkGroup.split(',').map(Number).filter(Boolean),
+    ));
+  });
+}
+
+function countByGrade(members) {
+  const counts = {};
+  members.forEach(m => { const g = m.grade || '?'; counts[g] = (counts[g] || 0) + 1; });
+  return GRADE_ORDER.filter(g => g && counts[g]).map(g => `${g}:${counts[g]}`).join(' ');
+}
+
+async function onCreateGroup(title, memberIds) {
+  if (!confirm(`「${title}」グループを ${memberIds.length}人で作成します。よろしいですか?`)) return;
+  try {
+    const r = await post('/api/groups', { title, member_ids: memberIds });
+    toast('グループを作成しました');
+    location.hash = '#/groups/' + r.id;
+  } catch (e) { toast('失敗: ' + e.message); }
+}

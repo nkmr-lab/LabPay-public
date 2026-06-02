@@ -25,6 +25,7 @@ import { renderWari } from './views/wari.js';
 import { renderNomikai, renderNomikaiNew, renderNomikaiDetail } from './views/nomikai.js';
 import { renderGroups, renderGroupDetail } from './views/groups.js';
 import { renderScrapboxFeed } from './views/scrapbox_feed.js';
+import { renderRandomGroups } from './views/random_groups.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -201,6 +202,7 @@ route('/nomikai/:id',    renderNomikaiDetail);
 route('/groups',         renderGroups);
 route('/groups/:id',     renderGroupDetail);
 route('/scrapbox',       renderScrapboxFeed);
+route('/random-groups',  renderRandomGroups);
 
 // ---------- Boot ----------
 (async function boot() {
