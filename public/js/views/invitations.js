@@ -188,22 +188,21 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
 
-    // Shortcuts for using the *participant* set elsewhere. Use joins (not joins
-    // ∪ creator) since the creator may have intentionally not joined.
-    const memberIds = (i.joins || []).map(j => j.id);
+    // Shortcuts for using this set elsewhere. Creator is always included
+    // (organizer is assumed to be in the gathering too) — dedupe in case they
+    // also tapped 参加表明.
+    const creatorId = Number(i.creator_user_id);
+    const memberIds = [...new Set([creatorId, ...(i.joins || []).map(j => Number(j.id))])];
     const shortcuts = document.getElementById('inv-shortcuts');
     if (shortcuts) {
-      if (memberIds.length === 0) {
-        shortcuts.innerHTML = `<div class="muted" style="font-size:13px">参加表明者がまだいないので、ルーレット/割り勘などはまだ使えません</div>`;
-      } else {
-        const ids = memberIds.join(',');
-        shortcuts.innerHTML = `
-          <a class="btn primary" href="#/roulette?members=${ids}">🎰 ルーレット</a>
-          <a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>
-          <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
-        `;
-        document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
-      }
+      const ids = memberIds.join(',');
+      shortcuts.innerHTML = `
+        <div class="muted" style="font-size:12px; width:100%; margin-bottom:4px">募集者 + 参加表明者 (${memberIds.length}人) で:</div>
+        <a class="btn primary" href="#/roulette?members=${ids}">🎰 ルーレット</a>
+        <a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>
+        <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
+      `;
+      document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
     }
 
     const root = document.getElementById('inv-joins');
