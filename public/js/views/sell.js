@@ -393,6 +393,11 @@ async function doLookup(jan) {
 }
 
 // ---------------- 出品管理 ----------------
+// Listing IDs the user has tapped [編集] on — those render the full edit form,
+// the rest render a compact summary with [編集] / [取り下げ]. Module-level so
+// the state survives re-renders triggered by 更新 etc.
+const editingIds = new Set();
+
 async function loadMyListings() {
   try {
     const data = await get('/api/me/listings');
@@ -401,7 +406,9 @@ async function loadMyListings() {
       root.innerHTML = `<div class="empty">まだ出品がありません</div>`;
       return;
     }
-    root.innerHTML = data.items.map(renderRow).join('');
+    root.innerHTML = data.items.map(l =>
+      editingIds.has(l.id) ? renderEditRow(l) : renderSummaryRow(l)
+    ).join('');
     root.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => onAction(btn));
     });
@@ -432,7 +439,8 @@ async function loadMyListings() {
   }
 }
 
-function renderRow(l) {
+// Shared bits between summary and edit modes.
+function listingTags(l) {
   const statusTag = ({
     on_sale:   '<span class="tag">販売中</span>',
     sold_out:  '<span class="tag warn">在庫切れ</span>',
@@ -440,6 +448,45 @@ function renderRow(l) {
   })[l.status] || '';
   const locTag = l.location ? `<span class="tag muted" style="margin-left:4px">📍 ${escapeHtml(l.location)}</span>` : '';
   const giftTag = l.is_gift ? `<span class="tag" style="margin-left:4px; background:#fce4ec; color:#b71c50">🎁 これどうぞ</span>` : '';
+  return statusTag + giftTag + locTag;
+}
+
+// Compact read-only summary — the default view. Tap [編集] to expand into the
+// full form. Withdrawn listings expose [再出品] / [完全削除] inline since
+// there are no fields to edit anyway.
+function renderSummaryRow(l) {
+  const productName = l.product_name ?? l.name;
+  const effectiveName = l.name ?? productName;
+  const tags = listingTags(l);
+  const priceLine = l.is_gift
+    ? `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 🎁 無料配布 · 在庫 ${l.qty}</div>`
+    : `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 価格 ${l.price.toLocaleString()}pt · 在庫 ${l.qty}</div>`;
+  const thumb = l.image_url
+    ? `<img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex:0 0 auto">`
+    : `<div style="width:48px; height:48px; border-radius:6px; background:#f1f1f4; flex:0 0 auto"></div>`;
+  const actions = l.status === 'withdrawn'
+    ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
+       <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
+    : `<button data-action="edit-start" data-id="${l.id}">編集</button>
+       <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
+  return `
+    <div class="list-item sell-row" data-id="${l.id}" style="align-items:center; gap:10px">
+      ${thumb}
+      <div style="flex:1; min-width:0">
+        <div class="bold">${escapeHtml(effectiveName)} ${tags}</div>
+        ${priceLine}
+        ${l.completion_message ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(l.completion_message.slice(0, 80))}${l.completion_message.length > 80 ? '…' : ''}</div>` : ''}
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px; flex:0 0 auto">
+        ${actions}
+      </div>
+    </div>`;
+}
+
+// Full edit form — what [編集] expands to. Bottom row gets a キャンセル so the
+// user can bail without saving. 更新 collapses back to summary on success.
+function renderEditRow(l) {
+  const tags = listingTags(l);
   const productName = l.product_name ?? l.name;
   const effectiveName = l.name ?? productName;
   const priceLine = l.is_gift
@@ -477,11 +524,10 @@ function renderRow(l) {
   // changes / inventory adjustments rather than "save what I just typed".
   // Gift toggle moved up next to 価格. Bottom action row is just [更新] and
   // [取り下げ] now — the two universal operations on an active listing.
-  const actionRow = l.status === 'withdrawn'
-    ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
-       <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
-    : `<button data-action="update" data-id="${l.id}" data-jan="${escapeHtml(l.jan)}" class="primary">更新</button>
-       <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
+  const actionRow = `
+    <button data-action="update" data-id="${l.id}" data-jan="${escapeHtml(l.jan)}" class="primary">更新</button>
+    <button data-action="edit-cancel" data-id="${l.id}">キャンセル</button>
+    <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
   // Field rows share a fixed-width left label + flex-grow input. min-width:0 on
   // every flex item is the canonical fix for inputs (especially <input type="file">)
   // pushing their parent wider than its container.
@@ -493,7 +539,7 @@ function renderRow(l) {
   return `
     <div class="list-item sell-row" data-id="${l.id}" style="align-items:flex-start">
       <div style="flex:1; min-width:0; max-width:100%">
-        <div class="bold">${escapeHtml(effectiveName)} ${statusTag}${giftTag}${locTag}</div>
+        <div class="bold">${escapeHtml(effectiveName)} ${tags}</div>
         ${priceLine}
         ${priceField}
         ${fieldRow('在庫',     `<input type="number" min="0" value="${l.qty}" data-qty="${l.id}">`)}
@@ -528,6 +574,10 @@ async function onAction(btn) {
   const id = btn.dataset.id;
   const action = btn.dataset.action;
   try {
+    // Flip the row between summary/edit modes without hitting the API.
+    if (action === 'edit-start')  { editingIds.add(Number(id));    await loadMyListings(); return; }
+    if (action === 'edit-cancel') { editingIds.delete(Number(id)); await loadMyListings(); return; }
+
     if (action === 'update') {
       // Bundle every editable field into one PATCH on the listing. If the
       // product name (catalog-side, keyed by JAN) was also touched, send a
@@ -564,6 +614,8 @@ async function onAction(btn) {
       if (pname !== prevPname) {
         await patch('/api/products/' + encodeURIComponent(jan), { name: pname });
       }
+      // Collapse back to the summary view now that the save succeeded.
+      editingIds.delete(Number(id));
       toast('更新しました');
     } else if (action === 'makegift') {
       if (!confirm('この出品を「これどうぞ！」(無料配布) に切り替えます。価格は 0pt になります。よろしいですか?')) return;
