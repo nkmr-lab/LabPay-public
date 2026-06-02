@@ -416,23 +416,38 @@ function renderRoom(r, windowMin) {
   // This makes brief detection gaps visible without yanking the avatar out
   // of the list entirely.
   const now = Date.now();
+  const parseJst = ts => Date.parse(ts.replace(' ', 'T') + '+09:00');
   const opacityFor = lastSeen => {
     if (!lastSeen) return 1;
-    const ageSec = Math.max(0, (now - Date.parse(lastSeen.replace(' ', 'T') + '+09:00')) / 1000);
-    const fresh = 30; // <30s = fully solid
+    const ageSec = Math.max(0, (now - parseJst(lastSeen)) / 1000);
+    const fresh = 30;
     const cutoff = windowMin * 60;
     if (ageSec <= fresh) return 1;
     if (ageSec >= cutoff) return 0.35;
     const t = (ageSec - fresh) / Math.max(1, cutoff - fresh);
     return Number((1 - 0.65 * t).toFixed(2));
   };
+  const formatDur = mins => {
+    if (mins < 1) return '1分未満';
+    if (mins < 60) return `${mins}分`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m === 0 ? `${h}時間` : `${h}時間${m}分`;
+  };
   const peopleHtml = r.users.length
     ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
          ${r.users.map(u => {
            const op = opacityFor(u.last_seen_at);
-           const ageHint = op < 1 ? '  (検知が一時的に途切れ気味)' : '';
+           // 滞在時間 = last_seen - session_start_at, clipped at 0
+           let dur = '';
+           if (u.session_start_at && u.last_seen_at) {
+             const mins = Math.max(0, Math.round(
+               (parseJst(u.last_seen_at) - parseJst(u.session_start_at)) / 60000));
+             dur = `滞在 ${formatDur(mins)}`;
+           }
+           const ageHint = op < 1 ? ' (検知途切れ気味)' : '';
+           const tooltip = `${u.display_name}${dur ? ' — ' + dur : ''}${ageHint}`;
            return `
-             <span class="presence-pill" title="${escapeHtml(u.display_name)}${ageHint}" style="opacity:${op}">
+             <span class="presence-pill" title="${escapeHtml(tooltip)}" style="opacity:${op}">
                ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
                <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
              </span>`;
