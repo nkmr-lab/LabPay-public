@@ -57,6 +57,30 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
     $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
+
+    // creator_user_id を任意で指定可能 (ワリカ精算で各 creditor を creator
+    // として一斉に作るとき用)。指定がなければ呼び出し元自身。指定された
+    // ユーザーは存在する human である必要あり。「自分以外を creator にする」
+    // のは group 文脈の信頼前提なので追加権限チェックはしない。
+    $creatorId = (int)$u['id'];
+    $creatorName = (string)$u['display_name'];
+    if (isset($body['creator_user_id'])) {
+        $cid = (int)$body['creator_user_id'];
+        if ($cid <= 0) {
+            throw new ApiException('bad_request', 'creator_user_id must be a positive integer', 400);
+        }
+        if ($cid !== $creatorId) {
+            $stC = $pdo->prepare("SELECT display_name FROM users WHERE id=? AND kind='human'");
+            $stC->execute([$cid]);
+            $cname = $stC->fetchColumn();
+            if ($cname === false) {
+                throw new ApiException('bad_request', 'creator_user_id not found', 400);
+            }
+            $creatorId = $cid;
+            $creatorName = (string)$cname;
+        }
+    }
+
     $recipients = $body['recipients'] ?? null;
     if (!is_array($recipients) || !$recipients) {
         throw new ApiException('bad_request', 'recipients must be a non-empty array', 400);
@@ -92,8 +116,8 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $n) $names[(int)$n['id']] = $n['display_name'];
 
     // 通知本文を組み立てる (実送信 / preview 共通)。memo があれば改行つきで添える。
-    $buildMsg = function(int $amount) use ($u, $title, $memo): string {
-        $msg = "💴 {$u['display_name']} から請求: 「{$title}」¥" . number_format($amount);
+    $buildMsg = function(int $amount) use ($creatorName, $title, $memo): string {
+        $msg = "💴 {$creatorName} から請求: 「{$title}」¥" . number_format($amount);
         if ($memo !== null && trim($memo) !== '') {
             $msg .= "\nメモ: " . $memo;
         }
@@ -104,7 +128,7 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     if ($dryRun) {
         $previews = [];
         foreach ($rows as $r) {
-            if ((int)$r['user_id'] === (int)$u['id']) continue;
+            if ((int)$r['user_id'] === $creatorId) continue;
             $previews[] = [
                 'user_id'      => (int)$r['user_id'],
                 'display_name' => $names[(int)$r['user_id']] ?? "user#{$r['user_id']}",
@@ -119,7 +143,7 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     $pdo->beginTransaction();
     try {
         $st = $pdo->prepare("INSERT INTO money_requests (creator_user_id, title, memo) VALUES (?,?,?)");
-        $st->execute([$u['id'], $title, $memo]);
+        $st->execute([$creatorId, $title, $memo]);
         $rid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO money_request_recipients (request_id, user_id, amount_yen) VALUES (?,?,?)");
         foreach ($rows as $r) $st->execute([$rid, $r['user_id'], $r['amount_yen']]);
@@ -131,11 +155,11 @@ function money_requests_create(PDO $pdo, array $cfg): void {
 
     // recipients に通知 (発起人は除く)
     foreach ($rows as $r) {
-        if ((int)$r['user_id'] === (int)$u['id']) continue;
+        if ((int)$r['user_id'] === $creatorId) continue;
         notify_safely($pdo, $cfg, (int)$r['user_id'], 'admin_notice',
             $buildMsg((int)$r['amount_yen']), 'money_request', $rid);
     }
-    json_response(['ok' => true, 'id' => $rid]);
+    json_response(['ok' => true, 'id' => $rid, 'creator_user_id' => $creatorId]);
 }
 
 // ─── DETAIL ─────────────────────────────────────────────────
