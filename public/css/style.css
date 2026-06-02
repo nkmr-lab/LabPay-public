@@ -442,24 +442,31 @@ table.table th { color: var(--muted); font-weight: 600; }
 .supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
 .supply-sub   { font-size: 11px; color: var(--muted); }
 
-/* 出品中 row edit grid — fixed label column, flexible input column. The
-   min-width:0 cascade is what stops a wide <input type=number> spinner or a
-   <textarea> from blowing past the card edge on iOS. */
+/* 出品中 row edit grid — fixed label column + minmax(0,1fr) input column.
+   minmax(0,1fr) is the canonical 'shrink below content width' incantation
+   in grid: without the explicit 0 floor the input keeps its intrinsic
+   ~20ch min-width and pushes the whole row past the card edge on iOS.
+   The list-item gets overflow:hidden as belt-and-suspenders so even a
+   misbehaving child can't drag the card wider than its container. */
+.list-item.sell-row { overflow: hidden; }
 .sell-edit-row {
-  display: flex; gap: 8px; margin-top: 6px;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+  align-items: center;
 }
 .sell-edit-label {
-  flex: 0 0 80px;
-  color: var(--muted); font-size: 12px; line-height: 36px;
+  color: var(--muted); font-size: 12px;
+  line-height: 36px;
 }
-.sell-edit-input {
-  flex: 1 1 auto; min-width: 0;
-  display: flex;     /* lets inner input fill */
-}
+.sell-edit-input { min-width: 0; }
 .sell-edit-input > input,
 .sell-edit-input > textarea {
-  width: 100%; min-width: 0; box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* Roulette member-pick chip — checkbox + avatar + name in one tappable row. */

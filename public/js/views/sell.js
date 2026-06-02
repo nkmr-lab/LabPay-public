@@ -479,8 +479,8 @@ function renderRow(l) {
       <div class="sell-edit-input">${inputHtml}</div>
     </div>`;
   return `
-    <div class="list-item" data-id="${l.id}" style="align-items:flex-start">
-      <div style="flex:1; min-width:0">
+    <div class="list-item sell-row" data-id="${l.id}" style="align-items:flex-start">
+      <div style="flex:1; min-width:0; max-width:100%">
         <div class="bold">${escapeHtml(effectiveName)} ${statusTag}${giftTag}${locTag}</div>
         ${priceLine}
         ${priceField}
