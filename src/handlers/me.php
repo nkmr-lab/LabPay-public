@@ -204,19 +204,34 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $weekStart  = $now->modify('monday this week')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
         $monthStart = $now->modify('first day of this month')->setTime(0, 0, 0)->format('Y-m-d H:i:s');
 
-        // Closed sessions: bucket by start time. Yesterday is a half-open
-        // [yesterdayStart, todayStart) range so a session starting at 23:55
-        // counts to yesterday, not today.
-        $st = $pdo->prepare("
-            SELECT
-              COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS today,
-              COALESCE(SUM(IF(started_at >= ? AND started_at < ?, duration_minutes, 0)), 0) AS yesterday,
-              COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS week,
-              COALESCE(SUM(IF(started_at >= ?, duration_minutes, 0)), 0) AS month
+        // Closed sessions: 月始まり以降の全 session を取り出して MAC ごと
+        // 重複を merge してから bucket に振り分ける。SUM(duration_minutes) を
+        // そのまま使うと、複数 MAC 持ち (例: iPhone14 + iPhone17 同時) の
+        // 場合に同じ時間帯が 2 倍 3 倍にカウントされて滞在時間が膨らむ。
+        $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(started_at) AS s,
+                                    UNIX_TIMESTAMP(ended_at)   AS e
             FROM presence_sessions
-            WHERE user_id = ?");
-        $st->execute([$todayStart, $yesterdayStart, $todayStart, $weekStart, $monthStart, $u['id']]);
-        $closed = $st->fetch();
+            WHERE user_id = ? AND started_at >= ?
+            ORDER BY started_at");
+        $st->execute([$u['id'], $monthStart]);
+        $intervals = array_map(fn($r) => [(int)$r['s'], (int)$r['e']], $st->fetchAll());
+        $merged = presence_merge_intervals($intervals);
+        $clip = function (int $from) use ($merged): int {
+            $sum = 0;
+            foreach ($merged as $iv) {
+                $s = max($iv[0], $from);
+                if ($iv[1] > $s) $sum += $iv[1] - $s;
+            }
+            return $sum;
+        };
+        $todayStartTs     = strtotime($todayStart);
+        $yesterdayStartTs = strtotime($yesterdayStart);
+        $closed = [
+            'today'     => $clip($todayStartTs) / 60,
+            'yesterday' => ($clip($yesterdayStartTs) - $clip($todayStartTs)) / 60,
+            'week'      => $clip(strtotime($weekStart))  / 60,
+            'month'     => $clip(strtotime($monthStart)) / 60,
+        ];
 
         // Open / dangling session: presence_seen が最新の "session 中" を表す。
         // scanner は「再入店 (gap > threshold)」のときしか session を閉じない
@@ -345,6 +360,26 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     json_error('not_found', "no me route for $method $sub", 404);
+}
+
+// 同じ user の overlapping intervals を merge (複数 MAC の重複カウントを解消)。
+// 入力: [[start_ts, end_ts], ...] (unix seconds, 任意順)
+// 出力: [[s,e],...] でソート済 + 隣接/重複が全部マージされたもの
+function presence_merge_intervals(array $iv): array {
+    if (!$iv) return [];
+    usort($iv, fn($a, $b) => $a[0] <=> $b[0]);
+    $merged = [$iv[0]];
+    for ($i = 1; $i < count($iv); $i++) {
+        $last = &$merged[count($merged) - 1];
+        if ($iv[$i][0] <= $last[1]) {
+            // 重複 or 隣接: end を伸ばす
+            if ($iv[$i][1] > $last[1]) $last[1] = $iv[$i][1];
+        } else {
+            $merged[] = $iv[$i];
+        }
+        unset($last);
+    }
+    return $merged;
 }
 
 // GET /api/users — lightweight list of all human users for recipient pickers.
