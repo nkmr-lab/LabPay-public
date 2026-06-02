@@ -1,5 +1,6 @@
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
+import { ledgerTypeLabel } from '../labels.js';
 
 export async function renderHistory() {
   const app = document.getElementById('app');
@@ -27,12 +28,7 @@ export async function renderHistory() {
 function row(t) {
   const sign = t.signed_amount > 0 ? '+' : '';
   const color = t.signed_amount > 0 ? 'var(--primary)' : 'var(--danger)';
-  const lbl = ({
-    initial: '初期配布', checkin: 'ラボインボーナス', purchase: '購入', fee: '手数料',
-    reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
-    deposit: '預け入れ', refund: '返金', burn: '消却',
-    scrapbox_reward: 'Scrapbox編集ボーナス',
-  })[t.type] || t.type;
+  const lbl = ledgerTypeLabel(t.type);
   return `
     <div class="list-item">
       <div>

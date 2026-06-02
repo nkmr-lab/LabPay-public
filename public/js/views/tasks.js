@@ -1,6 +1,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate, safeHttpUrl } from '../router.js';
 import { state, toast } from '../app.js';
+import { uploadTaskAttachment } from '../upload.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 
@@ -156,20 +157,6 @@ async function onCreate() {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// Multipart upload for one file. Same conventions as the existing
-// /api/uploads/image flow — credentials + CSRF header, raw FormData body.
-async function uploadTaskAttachment(taskId, file) {
-  const fd = new FormData(); fd.append('file', file);
-  const res = await fetch(`/api/tasks/${taskId}/attachments`, {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'labpay' },
-    credentials: 'same-origin',
-    body: fd,
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
-  return data;
-}
 
 function formatBytes(n) {
   if (n < 1024) return n + ' B';

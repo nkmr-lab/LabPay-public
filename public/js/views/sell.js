@@ -2,6 +2,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { toast } from '../app.js';
 import { startScanner } from '../scan.js';
+import { uploadImage } from '../upload.js';
 
 let currentScanner = null;
 let currentJan = '';     // The JAN held internally for the active new-listing flow (set by scanner)
@@ -260,16 +261,8 @@ function setupImagePicker(prefix) {
     rdr.readAsDataURL(f);
     const status = document.getElementById(prefix + '_status');
     status.textContent = 'アップロード中…';
-    const fd = new FormData(); fd.append('file', f);
     try {
-      const res = await fetch('/api/uploads/image', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'labpay' },
-        credentials: 'same-origin',
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || 'upload failed');
+      const data = await uploadImage(f);
       document.getElementById(prefix + '_url').value = data.url;
       status.textContent = `アップロード済 (${Math.round(data.size/1024)} KB)`;
       showPreview(prefix, data.url);
@@ -419,15 +412,7 @@ async function loadMyListings() {
         if (!file) return;
         const jan = input.dataset.jan;
         try {
-          const fd = new FormData(); fd.append('file', file);
-          const upRes = await fetch('/api/uploads/image', {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'labpay' },
-            credentials: 'same-origin',
-            body: fd,
-          });
-          const upData = await upRes.json();
-          if (!upRes.ok) throw new Error(upData?.error?.message || 'upload failed');
+          const upData = await uploadImage(file);
           await patch('/api/products/' + encodeURIComponent(jan), { image_url: upData.url });
           toast('画像を差し替えました');
           await loadMyListings();

@@ -1,6 +1,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe } from '../app.js';
+import { uploadImage } from '../upload.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
@@ -219,16 +220,8 @@ async function onAvatarFile(ev) {
   if (!f) return;
   const status = document.getElementById('profile-avatar-status');
   status.textContent = 'アップロード中…';
-  const fd = new FormData(); fd.append('file', f);
   try {
-    const res = await fetch('/api/uploads/image', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'labpay' },
-      credentials: 'same-origin',
-      body: fd,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'upload failed');
+    const data = await uploadImage(f);
     pendingAvatarUrl = data.url;
     status.textContent = 'アップロード完了 — 「保存」で確定';
     // Preview using the just-uploaded URL

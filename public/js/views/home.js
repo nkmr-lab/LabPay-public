@@ -1,6 +1,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
+import { ledgerTypeLabel } from '../labels.js';
 
 export async function renderHome() {
   if (!state.me) await refreshMe();
@@ -571,18 +572,4 @@ function renderTxItem(t) {
     </div>`;
 }
 
-function labelFor(type) {
-  return ({
-    initial: '初期配布',
-    checkin: 'ラボインボーナス',
-    purchase: '購入',
-    fee: '手数料',
-    reversal: '取消',
-    transfer: '送金',
-    task_reward: 'タスク報酬',
-    deposit: '預け入れ',
-    refund: '返金',
-    burn: '消却',
-    scrapbox_reward: 'Scrapbox編集ボーナス',
-  })[type] || type;
-}
+function labelFor(type) { return ledgerTypeLabel(type); }

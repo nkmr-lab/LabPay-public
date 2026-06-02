@@ -1,6 +1,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { LEDGER_TYPE_LABEL } from '../labels.js';
 
 // Common fetch-into-element wrapper used by every admin sub-section.
 // fetcher(el) does the actual GET + DOM build + event wiring; on throw we set a friendly message.
@@ -367,13 +368,6 @@ async function populateIssueUserPicker() {
   } catch (e) { /* dropdown stays with just the placeholder option */ }
 }
 
-// Pretty label for ledger row type, matches home.js but kept local to avoid coupling.
-const LEDGER_TYPE_LABEL = {
-  initial: '初期/配布', checkin: 'ラボインボーナス', purchase: '購入', fee: '手数料',
-  reversal: '取消', transfer: '送金', task_reward: 'タスク報酬',
-  deposit: '預け入れ', refund: '返金', burn: '消却',
-  scrapbox_reward: 'Scrapbox編集ボーナス',
-};
 
 // Fetch recent ledger candidates and render a clickable list. Clicking 取消 confirms,
 // posts the reversal, then refreshes the list so the now-reversed row drops out.
