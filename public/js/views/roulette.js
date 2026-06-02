@@ -119,11 +119,11 @@ async function loadMembers() {
     const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
     const roomButtons = (p.rooms || [])
       .filter(r => ROOM_USERS[r.id])
-      .map(r => `<button class="btn" data-bulk="room" data-room="${escapeHtml(r.id)}">${escapeHtml(r.id)}にいる人 (${ROOM_USERS[r.id].size})</button>`)
+      .map(r => `<button class="btn" data-bulk="room" data-room="${escapeHtml(r.id)}">${escapeHtml(r.id)}にいる (${ROOM_USERS[r.id].size})</button>`)
       .join('');
     const bulkRoot = document.getElementById('rl-bulk');
     bulkRoot.innerHTML = `
-      <button class="btn" data-bulk="all">全員 ON / OFF</button>
+      <button class="btn" data-bulk="all">全員</button>
       ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
       ${roomButtons}
     `;
@@ -162,10 +162,13 @@ async function loadMembers() {
   }
 }
 
-// Bulk toggles. The 'all' button uses 'are EVERYONE on?' semantics: turn on if
-// anyone is still off, turn off only when EVERY member is already on. Grade
-// and room buttons use the simpler 'any-checked → off' toggle since both
-// target small subsets and either intent is one tap away.
+// Bulk toggles. 'all' and 'room' buttons use 'are EVERYONE in this set on?'
+// semantics: turn on whenever anyone in the set is still off, turn off only
+// when every member is already on. Means the first tap from a partial state
+// is always 'select all of this set' — what the user reaches for when they
+// tap '10F にいる'. Grade buttons keep the simpler 'any-checked → off' toggle
+// since grades are bigger swaths and the alternate intent (start from one
+// grade, swap to a different one) is one-tap away anyway.
 function onBulk(kind, key) {
   let target;
   if (kind === 'grade') {
@@ -178,12 +181,12 @@ function onBulk(kind, key) {
   }
   if (!target.length) return;
   let turnOn;
-  if (kind === 'all') {
-    const allOn = target.every(x => selected.has(x.id));
-    turnOn = !allOn;
-  } else {
+  if (kind === 'grade') {
     const anyOn = target.some(x => selected.has(x.id));
     turnOn = !anyOn;
+  } else {
+    const allOn = target.every(x => selected.has(x.id));
+    turnOn = !allOn;
   }
   if (turnOn) target.forEach(x => selected.add(x.id));
   else        target.forEach(x => selected.delete(x.id));
