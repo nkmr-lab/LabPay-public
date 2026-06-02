@@ -164,6 +164,12 @@ try {
         return;
     }
 
+    // /fx (live FX rate snapshot for ワリカ)
+    if (($seg[0] ?? '') === 'fx') {
+        route_fx($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

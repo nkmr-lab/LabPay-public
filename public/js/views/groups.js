@@ -302,21 +302,21 @@ function renderItem(it, gid) {
 
 // ──────────────────────────── WARI (ワリカ) ────────────────────────────
 
-const DEFAULT_RATES = { JPY: 1, USD: 158, EUR: 168, GBP: 198, CNY: 22, KRW: 0.11, TWD: 4.9, AUD: 103 };
-
-function loadRates() {
-  try {
-    const v = JSON.parse(localStorage.getItem('labpay-wari-rates') || 'null');
-    if (v && typeof v === 'object') return { ...DEFAULT_RATES, ...v };
-  } catch (_) {}
-  return { ...DEFAULT_RATES };
-}
-function saveRates(r) {
-  try { localStorage.setItem('labpay-wari-rates', JSON.stringify(r)); } catch (_) {}
-}
+// 通貨候補。表示順だけ持てばよい — レートは /api/fx で取得 (登録時点を snapshot)。
+const CURRENCIES = ['JPY', 'USD', 'EUR', 'GBP', 'CNY', 'KRW', 'TWD', 'AUD'];
 
 let wariMembers = []; // populated by loadDetail() via setWariMembers()
-let wariRates = loadRates();
+// セッション内 fetch キャッシュ: currency → {rate, fetched_at}
+const fxCache = new Map();
+
+async function fetchFxRate(ccy) {
+  if (ccy === 'JPY') return { rate: 1, source: 'identity' };
+  if (fxCache.has(ccy)) return fxCache.get(ccy);
+  const d = await get('/api/fx', { currency: ccy });
+  const entry = { rate: Number(d.rate_to_jpy), source: d.source };
+  fxCache.set(ccy, entry);
+  return entry;
+}
 // Set of user_ids the next expense applies to. Initialized to all current
 // members when setWariMembers() runs; user deselects chips to exclude people.
 let wariFor = new Set();
@@ -324,16 +324,13 @@ let wariFor = new Set();
 function renderWariForm() {
   const root = document.getElementById('gd-wari-form');
   if (!root) return;
-  const ccyOpts = Object.keys(wariRates).map(c => `<option value="${c}">${c}</option>`).join('');
+  const ccyOpts = CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('');
   root.innerHTML = `
     <div style="display:grid; grid-template-columns: minmax(0,1fr) 90px; gap:6px; margin-bottom:6px">
       <input type="number" id="ex-amt" min="0" step="0.01" placeholder="金額" inputmode="decimal">
       <select id="ex-ccy">${ccyOpts}</select>
     </div>
-    <div id="ex-rate-row" hidden style="margin-bottom:6px">
-      <label class="muted" style="font-size:12px">レート (1 通貨 = ? JPY)</label>
-      <input type="number" id="ex-rate" min="0" step="0.0001">
-    </div>
+    <div id="ex-rate-row" hidden style="margin-bottom:6px; font-size:12px"></div>
     <label class="muted" style="font-size:12px; display:block; margin-bottom:2px">立て替えた人</label>
     <select id="ex-payer" style="margin-bottom:6px">
       ${wariMembers.map(m => `<option value="${m.id}">${escapeHtml(m.display_name)}</option>`).join('')}
@@ -343,20 +340,8 @@ function renderWariForm() {
     <button id="ex-submit" class="primary">支出を記録</button>
   `;
   const ccyEl = document.getElementById('ex-ccy');
-  const rateRow = document.getElementById('ex-rate-row');
-  const rateEl = document.getElementById('ex-rate');
-  const syncRate = () => {
-    const c = ccyEl.value;
-    if (c === 'JPY') { rateRow.hidden = true; return; }
-    rateRow.hidden = false;
-    rateEl.value = wariRates[c] ?? 1;
-  };
-  ccyEl.addEventListener('change', syncRate);
-  rateEl.addEventListener('change', () => {
-    wariRates[ccyEl.value] = Number(rateEl.value) || 1;
-    saveRates(wariRates);
-  });
-  syncRate();
+  ccyEl.addEventListener('change', () => syncFxPreview());
+  syncFxPreview();
   // Default payer to me if present in the group, else first member.
   const sel = document.getElementById('ex-payer');
   if (state.me?.id && wariMembers.some(m => m.id === state.me.id)) {
@@ -365,6 +350,26 @@ function renderWariForm() {
   wariFor = new Set(wariMembers.map(m => m.id));
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
+}
+
+// Last-fetched rate (kept on the form for submit). Cleared on currency change.
+let pendingFxRate = null;
+
+async function syncFxPreview() {
+  const ccy = document.getElementById('ex-ccy').value;
+  const row = document.getElementById('ex-rate-row');
+  pendingFxRate = null;
+  if (ccy === 'JPY') { row.hidden = true; row.innerHTML = ''; return; }
+  row.hidden = false;
+  row.innerHTML = `<span class="muted">レート取得中…</span>`;
+  try {
+    const entry = await fetchFxRate(ccy);
+    pendingFxRate = entry.rate;
+    row.innerHTML = `<span class="muted">登録時点のレート: 1 ${escapeHtml(ccy)} = ${entry.rate.toFixed(4)} JPY <span style="font-size:11px">(${escapeHtml(entry.source)})</span></span>`;
+  } catch (e) {
+    pendingFxRate = null;
+    row.innerHTML = `<span style="color:var(--warn)">レート取得失敗 (${escapeHtml(e.message)}) — 送信時にサーバー側で再取得します</span>`;
+  }
 }
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
@@ -409,10 +414,9 @@ async function onAddExpense() {
   const memo = document.getElementById('ex-memo').value.trim() || null;
   if (!(amount > 0)) { toast('金額を入れてください'); return; }
   const body = { amount, currency, payer_user_id, memo };
-  if (currency !== 'JPY') {
-    const rate = Number(document.getElementById('ex-rate').value);
-    if (!(rate > 0)) { toast('レートを入れてください'); return; }
-    body.rate_to_jpy = rate;
+  // Use the previewed rate if we have one; otherwise let the server fetch.
+  if (currency !== 'JPY' && pendingFxRate) {
+    body.rate_to_jpy = pendingFxRate;
   }
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
   // Omit participant_ids if it's everyone — backend default is the full

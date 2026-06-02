@@ -351,7 +351,15 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
     }
     $rate = ($currency === 'JPY') ? null : (float)($body['rate_to_jpy'] ?? 0);
     if ($currency !== 'JPY' && (!$rate || $rate <= 0)) {
-        throw new ApiException('bad_request', 'rate_to_jpy required for non-JPY', 400);
+        // Client didn't preview a rate (or fetch failed) — try server-side
+        // snapshot via /api/fx's helper. If that also fails, surface 502 so
+        // the user knows to retry / enter manually.
+        $live = fx_rate_to_jpy($currency);
+        if ($live === null) {
+            throw new ApiException('bad_gateway',
+                "為替レートを取得できませんでした (currency=$currency)。手動で入力してください", 502);
+        }
+        $rate = $live;
     }
     $amountJpy = ($currency === 'JPY')
         ? (int)round((float)$amountRaw)
