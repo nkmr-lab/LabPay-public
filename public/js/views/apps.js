@@ -7,6 +7,7 @@ const APPS = [
   { url: '#/nomikai',     title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。' },
   { url: '#/groups',      title: 'グループ',           desc: '出張・旅行・連幹事などの短期メンバー枠。連絡 (メモ/URL/時間) + ワリカ (立替を積み上げ → 精算) + ルーレット/飲み会割り勘ショートカット。' },
   { url: '#/scrapbox',    title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。' },
+  { url: '#/network',     title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。' },
 ];
 
 export async function renderApps() {

@@ -43,8 +43,9 @@ export async function renderNetwork() {
   app.innerHTML = `
     <div class="card">
       <div class="row" style="align-items:center">
-        <h2 style="flex:1; margin:0">ネットワーク</h2>
+        <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
       </div>
+      <h2 style="margin:6px 0 0">関係性グラフ</h2>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn ${activeTab==='purchases'?'primary':''}" data-tab="purchases">売買</button>
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
