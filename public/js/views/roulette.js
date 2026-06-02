@@ -31,6 +31,10 @@ export async function renderRoulette() {
         <span class="lbl">タイトル</span>
         <input type="text" id="rl-title" maxlength="200" placeholder="例: 今日のゴミ捨て当番">
       </label>
+      <label class="field">
+        <span class="lbl">賞金 (任意・空欄=無し) — 当たった人にあなたから送られます</span>
+        <input type="number" id="rl-reward" min="0" max="1000000" placeholder="例: 100">
+      </label>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
         <div id="rl-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
@@ -65,17 +69,31 @@ export async function renderRoulette() {
 // without re-fetching.
 let ALL_USERS = [];
 
+// Grade ordering: B3 → B4 → M1 → M2 → D → (no grade). Same ordering rule
+// drives both the member chip list and the bulk-select bar.
+const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
+function gradeRank(g) {
+  const i = GRADE_ORDER.indexOf(g || '');
+  return i < 0 ? GRADE_ORDER.length : i;
+}
+
 async function loadMembers() {
   try {
     const u = await get('/api/users');
-    ALL_USERS = u.items;
+    // Sort by grade, then alphabetically inside each grade. The API returns
+    // alphabetical already, so a stable sort by gradeRank preserves that order
+    // within each group.
+    ALL_USERS = [...u.items].sort((a, b) => {
+      const d = gradeRank(a.grade) - gradeRank(b.grade);
+      if (d !== 0) return d;
+      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+    });
     const root = document.getElementById('rl-members');
     const me = state.me?.id;
     // Bulk-select toolbar — render once based on the unique grades present in
     // the directory (so we don't show 'D' if no D students exist).
-    const presentGrades = [...new Set(u.items.map(x => x.grade || ''))];
-    const gradeOrder = ['B3','B4','M1','M2','D',''];
-    const sortedGrades = gradeOrder.filter(g => presentGrades.includes(g));
+    const presentGrades = [...new Set(ALL_USERS.map(x => x.grade || ''))];
+    const sortedGrades = GRADE_ORDER.filter(g => presentGrades.includes(g));
     const bulkRoot = document.getElementById('rl-bulk');
     bulkRoot.innerHTML = `
       <button class="btn" data-bulk="all">全員 ON / OFF</button>
@@ -88,16 +106,20 @@ async function loadMembers() {
       b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade));
     });
 
-    root.innerHTML = u.items.map(x => {
+    root.innerHTML = ALL_USERS.map(x => {
       const checked = selected.has(x.id) ? 'checked' : '';
       // Default: include self so a "ルーレットで誰がやる?" naturally has you in
       const auto = (selected.size === 0 && x.id === me) ? 'checked' : '';
       if (auto) selected.add(x.id);
+      const gradeBadge = x.grade
+        ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>`
+        : '';
       return `
         <label class="rl-chip">
           <input type="checkbox" data-uid="${x.id}" ${checked || auto}>
           ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
           <span>${escapeHtml(x.display_name)}</span>
+          ${gradeBadge}
         </label>`;
     }).join('');
     root.querySelectorAll('input[data-uid]').forEach(cb => {
@@ -190,13 +212,15 @@ async function onSpin() {
   if (!title) { toast('タイトルを入れてください'); return; }
   const ids = [...selected];
   if (ids.length < 2) { toast('2 人以上選んでください'); return; }
+  const rewardRaw = document.getElementById('rl-reward').value.trim();
+  const reward = rewardRaw ? Math.max(0, Math.floor(Number(rewardRaw))) : 0;
 
   spinning = true;
   document.getElementById('rl-spin').disabled = true;
   document.getElementById('rl-result').textContent = '';
 
   try {
-    const r = await post('/api/roulettes', { title, member_ids: ids });
+    const r = await post('/api/roulettes', { title, member_ids: ids, reward });
     lastResult = r;
     // Animate: spin many full turns, ending with the pointer over the winning slice.
     // Pointer is fixed at the top (-90° in SVG). Slice i covers [i*sliceDeg, (i+1)*sliceDeg)
@@ -214,8 +238,11 @@ async function onSpin() {
     });
     // Reveal result after animation completes (matches the CSS transition).
     setTimeout(() => {
+      const prize = (r.reward > 0 && r.winner_user_id !== state.me?.id)
+        ? ` <span style="color:var(--primary)">+${r.reward}pt</span>`
+        : (r.reward > 0 ? ` <span class="muted">(自分が当選: pt 移動なし)</span>` : '');
       document.getElementById('rl-result').innerHTML =
-        `🎯 <span style="color:var(--primary); font-size:18px">${escapeHtml(r.winner_name)}</span> さん!`;
+        `🎯 <span style="color:var(--primary); font-size:18px">${escapeHtml(r.winner_name)}</span> さん!${prize}`;
       document.getElementById('rl-spin').disabled = false;
       spinning = false;
       loadHistory();
@@ -235,18 +262,22 @@ async function loadHistory() {
       root.innerHTML = `<div class="empty">まだ履歴はありません</div>`;
       return;
     }
-    root.innerHTML = d.items.map(r => `
-      <div class="list-item">
-        <div style="flex:1">
-          <div class="bold">${escapeHtml(r.title)}</div>
-          <div class="meta">候補 ${r.member_ids.length} 人 · ${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px">
-          ${avatarHtml(r.winner_name, r.winner_avatar_url, 'sm')}
-          <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
-        </div>
-      </div>
-    `).join('');
+    root.innerHTML = d.items.map(r => {
+      const rewardTag = r.reward > 0
+        ? ` <span class="bold" style="color:var(--primary)">+${r.reward}pt</span>`
+        : '';
+      return `
+        <div class="list-item">
+          <div style="flex:1">
+            <div class="bold">${escapeHtml(r.title)}${rewardTag}</div>
+            <div class="meta">候補 ${r.member_ids.length} 人 · ${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px">
+            ${avatarHtml(r.winner_name, r.winner_avatar_url, 'sm')}
+            <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
+          </div>
+        </div>`;
+    }).join('');
   } catch (e) {
     document.getElementById('rl-history').innerHTML =
       `<div class="muted">${escapeHtml(e.message)}</div>`;
