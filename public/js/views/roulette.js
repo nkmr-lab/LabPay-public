@@ -151,15 +151,12 @@ async function loadMembers() {
 
     root.innerHTML = ALL_USERS.map(x => {
       const checked = selected.has(x.id) ? 'checked' : '';
-      // Default: include self so a "ルーレットで誰がやる?" naturally has you in
-      const auto = (selected.size === 0 && x.id === me) ? 'checked' : '';
-      if (auto) selected.add(x.id);
       const gradeBadge = x.grade
         ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>`
         : '';
       return `
         <label class="rl-chip">
-          <input type="checkbox" data-uid="${x.id}" ${checked || auto}>
+          <input type="checkbox" data-uid="${x.id}" ${checked}>
           ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
           <span>${escapeHtml(x.display_name)}</span>
           ${gradeBadge}

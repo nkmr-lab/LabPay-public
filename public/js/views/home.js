@@ -51,6 +51,14 @@ export async function renderHome() {
       <div id="home-groups" class="list"></div>
     </div>
 
+    <div class="card" id="home-invs-card" hidden>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">募集</h2>
+        <a href="#/invitations" class="muted" style="font-size:13px">一覧 →</a>
+      </div>
+      <div id="home-invs" class="list"></div>
+    </div>
+
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">新規入荷</h2>
@@ -95,6 +103,7 @@ export async function renderHome() {
   await renderMedalsStrip();
   await renderPresence();
   await renderMyGroups();
+  await renderFreshInvitations();
   await renderFreshListings();
   await renderFreshTasks();
   await renderPresenceSummary();
@@ -346,6 +355,35 @@ async function renderMyGroups() {
       </a>`).join('');
   } catch (_) {
     // Silent: groups are nice-to-have on home; failing should not break the page.
+    card.hidden = true;
+  }
+}
+
+async function renderFreshInvitations() {
+  const card = document.getElementById('home-invs-card');
+  const root = document.getElementById('home-invs');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/invitations', { status: 'open' });
+    const open = d.items || [];
+    if (!open.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = open.slice(0, 5).map(i => {
+      const when = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
+      const where = i.location ? `📍 ${escapeHtml(i.location)} ・` : '';
+      const cap = i.capacity ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
+      const joined = Number(i.i_joined) === 1 ? ' <span class="tag" style="background:#eaf5ef; color:#0e7c63">✓参加</span>' : '';
+      return `
+        <a class="list-item" href="#/invitations/${i.id}" style="text-decoration:none; color:inherit">
+          <div style="flex:1">
+            <div class="bold">${escapeHtml(i.title)}${joined}</div>
+            <div class="meta">${when}${where}${cap}</div>
+            <div class="meta">${escapeHtml(i.creator_name)}</div>
+          </div>
+          <div class="muted" style="font-size:13px">→</div>
+        </a>`;
+    }).join('');
+  } catch (_) {
     card.hidden = true;
   }
 }

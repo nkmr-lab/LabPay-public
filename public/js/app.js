@@ -190,6 +190,7 @@ route('/network',        renderNetwork);
 route('/activity',       renderActivity);
 route('/wishlist',       renderWishlist);
 route('/invitations',    renderInvitations);
+route('/invitations/:id', renderInvitations);
 route('/roulette',       renderRoulette);
 route('/roulette/:id',   renderRouletteResult);
 route('/apps',           renderApps);
