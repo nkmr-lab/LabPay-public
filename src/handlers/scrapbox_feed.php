@@ -66,39 +66,37 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     // Latest first.
     usort($edits, fn($x, $y) => $y['ts'] <=> $x['ts']);
 
-    // Collapse consecutive runs by the same author_name into one 'group'.
-    // Each group preserves the order pages were edited (latest within the
-    // group also at the top, matching the outer order).
-    $groups = [];
-    $cur = null;
+    // Aggregate by author across the entire window (not just consecutive runs).
+    // 'first_ts' = latest edit by that author, 'last_ts' = earliest. Pages are
+    // deduplicated by title and ordered with the most-recently-edited first
+    // (which matches how we iterate, since edits are sorted desc by ts).
+    $byAuthor = [];
     foreach ($edits as $e) {
-        if ($cur && $cur['author'] === $e['author']) {
-            // Same author as previous → append page if not already present
-            // (people often re-edit the same page; show it once).
-            $cur['edit_count']++;
-            $alreadyHavePage = false;
-            foreach ($cur['pages'] as $p) {
-                if ($p['title'] === $e['title']) { $alreadyHavePage = true; break; }
-            }
-            if (!$alreadyHavePage) {
-                $cur['pages'][] = ['title' => $e['title'], 'url' => $e['url']];
-            }
-            // Update window — first_ts is later of the two (since latest first),
-            // last_ts is the earlier.
-            $cur['last_ts'] = $e['ts'];
-        } else {
-            if ($cur) $groups[] = $cur;
-            $cur = [
-                'author'      => $e['author'],
-                'first_ts'    => $e['ts'],
+        $a = $e['author'];
+        if (!isset($byAuthor[$a])) {
+            $byAuthor[$a] = [
+                'author'      => $a,
+                'first_ts'    => $e['ts'],          // newest (we walk newest→oldest)
                 'last_ts'     => $e['ts'],
                 'edit_count'  => 1,
                 'pages'       => [['title' => $e['title'], 'url' => $e['url']]],
                 'preview'     => mb_substr($e['text'], 0, 200),
             ];
+            continue;
         }
+        $g = &$byAuthor[$a];
+        $g['edit_count']++;
+        $g['last_ts'] = $e['ts']; // current edit is older than what we have
+        $haveTitle = false;
+        foreach ($g['pages'] as $p) {
+            if ($p['title'] === $e['title']) { $haveTitle = true; break; }
+        }
+        if (!$haveTitle) $g['pages'][] = ['title' => $e['title'], 'url' => $e['url']];
+        unset($g);
     }
-    if ($cur) $groups[] = $cur;
+    // Output: sort by latest activity desc.
+    $groups = array_values($byAuthor);
+    usort($groups, fn($x, $y) => $y['first_ts'] <=> $x['first_ts']);
 
     // Resolve author_name → LabPay user (display_name + avatar_url) via the
     // existing user_scrapbox_handles table.
