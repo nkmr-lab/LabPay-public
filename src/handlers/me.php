@@ -218,35 +218,48 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $st->execute([$todayStart, $yesterdayStart, $todayStart, $weekStart, $monthStart, $u['id']]);
         $closed = $st->fetch();
 
-        // Currently-open session: any presence_seen row whose MAC belongs to this
-        // user and whose last_seen_at is fresh. Add the open span to each bucket
-        // depending on whether the session start falls inside it.
-        $openMins = 0; $openStart = null;
-        $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
+        // Open / dangling session: presence_seen が最新の "session 中" を表す。
+        // scanner は「再入店 (gap > threshold)」のときしか session を閉じない
+        // ので、Wi-Fi が切れて検知が止まっただけだとそのまま開きっぱなしになる。
+        // ここでは:
+        //   * fresh = last_seen が直近 10 分 → 「いま居る」フラグ true、現在時刻
+        //     まで滞在として加算
+        //   * stale = それ以前 → 「いま居る」は false、ただし last_seen までの
+        //     滞在は今日 (週 / 月) の集計に算入
+        // 複数 MAC 持ちは MAX を取って「直近に始まった active セッション」を
+        // 採用 (MIN だと化石化端末の古い start を拾ってしまうため)。
+        $openStart = null; $openEnd = null; $isFresh = false;
+        $stOpen = $pdo->prepare("SELECT MAX(session_start_at) AS s, MAX(last_seen_at) AS e
             FROM presence_seen ps
             JOIN presence_devices pd ON pd.mac = ps.mac
-            WHERE pd.user_id = ?
-              AND ps.last_seen_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)");
+            WHERE pd.user_id = ? AND ps.session_start_at IS NOT NULL");
         $stOpen->execute([$u['id']]);
         if ($row = $stOpen->fetch()) {
             if (!empty($row['s']) && !empty($row['e'])) {
                 $openStart = $row['s'];
-                $openMins = max(0, (strtotime($row['e']) - strtotime($row['s'])) / 60);
+                $openEnd   = $row['e'];
+                $isFresh   = strtotime($row['e']) >= time() - 10 * 60;
             }
         }
-        $addOpen = fn($bucketStart) => ($openStart !== null && strtotime($openStart) >= strtotime($bucketStart))
-            ? $openMins
-            : ($openStart !== null ? max(0, (strtotime((new DateTimeImmutable('now', $tz))->format('Y-m-d H:i:s')) - strtotime($bucketStart)) / 60) : 0);
+        // バケットへの寄与: max(0, MIN(end, NOW) - max(start, bucketStart))
+        // fresh のときは end = NOW、stale のときは end = last_seen。
+        $nowTs = time();
+        $contribute = function($bucketStart) use ($openStart, $openEnd, $isFresh, $nowTs) {
+            if ($openStart === null) return 0;
+            $effectiveEnd   = $isFresh ? $nowTs : strtotime($openEnd);
+            $effectiveStart = max(strtotime($openStart), strtotime($bucketStart));
+            return max(0, ($effectiveEnd - $effectiveStart) / 60);
+        };
 
         // PDO returns SUM() results as strings; cast to float before round() —
         // PHP 8.1+ rejects non-numeric arg types even when the string is itself numeric.
         json_response([
-            'today_minutes'     => (int)round((float)$closed['today']     + $addOpen($todayStart)),
+            'today_minutes'     => (int)round((float)$closed['today']     + $contribute($todayStart)),
             'yesterday_minutes' => (int)round((float)$closed['yesterday']),  // closed-day, no open-session adjustment needed
-            'week_minutes'      => (int)round((float)$closed['week']      + $addOpen($weekStart)),
-            'month_minutes'     => (int)round((float)$closed['month']     + $addOpen($monthStart)),
-            'currently_present' => $openStart !== null,
-            'current_session_started_at' => $openStart,
+            'week_minutes'      => (int)round((float)$closed['week']      + $contribute($weekStart)),
+            'month_minutes'     => (int)round((float)$closed['month']     + $contribute($monthStart)),
+            'currently_present' => $isFresh,
+            'current_session_started_at' => $isFresh ? $openStart : null,
         ]);
         return;
     }
