@@ -317,8 +317,9 @@ function saveRates(r) {
 
 let wariMembers = []; // populated by loadDetail() via setWariMembers()
 let wariRates = loadRates();
-// Set of user_ids the next expense applies to. null === everyone (default).
-let wariFor = null;
+// Set of user_ids the next expense applies to. Initialized to all current
+// members when setWariMembers() runs; user deselects chips to exclude people.
+let wariFor = new Set();
 
 function renderWariForm() {
   const root = document.getElementById('gd-wari-form');
@@ -361,49 +362,37 @@ function renderWariForm() {
   if (state.me?.id && wariMembers.some(m => m.id === state.me.id)) {
     sel.value = String(state.me.id);
   }
-  wariFor = null;
+  wariFor = new Set(wariMembers.map(m => m.id));
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
 }
 
-// 「誰の分?」 picker. Compact summary line + a hidden chip row that toggles
-// individual members. Default = 全員 (wariFor === null). Tapping 一部 opens
-// the chip row with everyone pre-checked so deselecting some yields a subset.
+// 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
+// exclude that person from this expense.
 function renderForPicker() {
   const root = document.getElementById('ex-for');
   if (!root) return;
-  const everyone = wariFor === null;
-  const targets = everyone ? wariMembers.map(m => m.id) : [...wariFor];
-  const summary = everyone
-    ? `全員 (${wariMembers.length}人)`
-    : (targets.length === 0
-        ? `<span style="color:var(--warn)">対象者を 1 人以上選んでください</span>`
-        : `${targets.length}人で割る`);
+  const n = wariFor.size;
+  const summary = n === 0
+    ? `<span style="color:var(--warn)">対象者を 1 人以上選んでください</span>`
+    : (n === wariMembers.length
+        ? `全員 (${n}人)`
+        : `${n}人で割る`);
   root.innerHTML = `
-    <label class="muted" style="font-size:12px">誰の分?</label>
-    <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
-      <button type="button" data-for-mode="all"  class="btn ${everyone ? 'primary' : ''}">全員</button>
-      <button type="button" data-for-mode="some" class="btn ${everyone ? '' : 'primary'}">一部</button>
-      <span class="muted" style="font-size:12px">${summary}</span>
-    </div>
-    <div id="ex-for-chips" class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px" ${everyone ? 'hidden' : ''}>
-      ${wariMembers.map(m => `
-        <span class="rl-chip" data-for-uid="${m.id}" style="${(wariFor && wariFor.has(m.id)) ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : ''}">
+    <label class="muted" style="font-size:12px">誰の分? <span style="margin-left:6px">${summary}</span></label>
+    <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
+      ${wariMembers.map(m => {
+        const on = wariFor.has(m.id);
+        return `
+        <span class="rl-chip" data-for-uid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}">
           ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
           <span>${escapeHtml(m.display_name)}</span>
-        </span>`).join('')}
+        </span>`;
+      }).join('')}
     </div>
   `;
-  root.querySelectorAll('[data-for-mode]').forEach(b => {
-    b.addEventListener('click', () => {
-      if (b.dataset.forMode === 'all') wariFor = null;
-      else if (wariFor === null) wariFor = new Set(wariMembers.map(m => m.id)); // start from 全員
-      renderForPicker();
-    });
-  });
   root.querySelectorAll('[data-for-uid]').forEach(c => {
     c.addEventListener('click', () => {
-      if (wariFor === null) wariFor = new Set(wariMembers.map(m => m.id));
       const uid = Number(c.dataset.forUid);
       if (wariFor.has(uid)) wariFor.delete(uid);
       else wariFor.add(uid);
@@ -425,20 +414,18 @@ async function onAddExpense() {
     if (!(rate > 0)) { toast('レートを入れてください'); return; }
     body.rate_to_jpy = rate;
   }
-  if (wariFor !== null) {
-    if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
-    // Omit participant_ids if it's everyone — backend default is the full
-    // current member list, which means a member added later is handled
-    // identically. Send a subset only when it's actually a subset.
-    if (wariFor.size !== wariMembers.length) {
-      body.participant_ids = [...wariFor];
-    }
+  if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
+  // Omit participant_ids if it's everyone — backend default is the full
+  // current member list, which keeps a member added later handled identically.
+  // Send a subset only when it's actually a subset.
+  if (wariFor.size !== wariMembers.length) {
+    body.participant_ids = [...wariFor];
   }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
-    wariFor = null;
+    wariFor = new Set(wariMembers.map(m => m.id));
     renderForPicker();
     toast('記録しました');
     await loadWari(gid);
@@ -547,18 +534,31 @@ function openSettleModal(gid) {
         <div class="list">${balRows}</div>
         <h4 style="margin:12px 0 6px">推奨送金プラン</h4>
         <div class="list">${planRows}</div>
+        ${d.settlements.length ? `
+          <div style="margin-top:12px; text-align:right">
+            <button id="gd-settle-notify" class="primary">全員に通知する</button>
+          </div>` : ''}
         <p class="muted" style="font-size:11px; margin-top:8px">
-          ※ 実際の送金は外でやり取りしてください。送金が済んだら、別途立替を 1 件マイナスで…ではなく、
-          グループを閉じて新しいセッションを作るのがおすすめです。
+          ※ 実際の送金は外 (現金 / PayPay / 銀行) でやり取りしてください。
         </p>
       </div>
     </div>`;
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
+  root.querySelector('#gd-settle-notify')?.addEventListener('click', async (ev) => {
+    if (!confirm('参加者全員に「誰が誰に送る」通知を送信します。よろしいですか?')) return;
+    ev.currentTarget.disabled = true;
+    try {
+      const r = await post(`/api/groups/${gid}/settle`, {});
+      toast(`${r.sent} 人に通知しました`);
+      root.hidden = true; root.innerHTML = '';
+    } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
+  });
 }
 
 // Called from loadDetail() after members are known.
 function setWariMembers(members) {
   wariMembers = members;
+  wariFor = new Set(members.map(m => m.id));
   renderWariForm();
 }
 

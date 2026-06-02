@@ -23,6 +23,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
         if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
         if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+        if ($next === 'settle'   && $method === 'POST')             { group_settle_notify($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
 }
@@ -415,4 +416,84 @@ function group_expenses_del(PDO $pdo, array $cfg, int $groupId, int $eid): void 
     }
     $pdo->prepare("DELETE FROM adhoc_group_expenses WHERE id=?")->execute([$eid]);
     json_response(['ok' => true]);
+}
+
+// 精算「全員に通知」: recompute net balances + transfer plan, send one
+// notification per directional pair (debtor sees a 'send' line, creditor sees
+// a 'receive' line). Settlement happens outside LabPay (cash/PayPay/bank),
+// so no pt movement.
+function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+
+    $stT = $pdo->prepare("SELECT title FROM adhoc_groups WHERE id=?");
+    $stT->execute([$id]);
+    $title = (string)$stT->fetchColumn();
+    if ($title === '') throw new ApiException('not_found', 'group not found', 404);
+
+    // Re-derive expenses → balances → settlements (same logic as the GET).
+    $st = $pdo->prepare("
+        SELECT id, payer_user_id, amount_jpy, participants_json
+          FROM adhoc_group_expenses WHERE group_id = ?");
+    $st->execute([$id]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) throw new ApiException('bad_request', '支出がまだありません', 400);
+
+    $balance = [];
+    foreach ($rows as $r) {
+        $amount = (int)$r['amount_jpy'];
+        $parts = json_decode((string)$r['participants_json'], true);
+        if (!is_array($parts) || !$parts) continue;
+        $parts = array_values(array_map('intval', $parts));
+        $n = count($parts);
+        $share = (int)floor($amount / $n);
+        $leftover = $amount - $share * $n;
+        $balance[(int)$r['payer_user_id']] = ($balance[(int)$r['payer_user_id']] ?? 0) + $amount;
+        foreach ($parts as $i => $pid) {
+            $debit = $share + ($i === 0 ? $leftover : 0);
+            $balance[$pid] = ($balance[$pid] ?? 0) - $debit;
+        }
+    }
+    // Build name map.
+    $uids = array_keys($balance);
+    $names = [];
+    if ($uids) {
+        $place = implode(',', array_fill(0, count($uids), '?'));
+        $stU = $pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($place)");
+        $stU->execute($uids);
+        foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $r) $names[(int)$r['id']] = $r['display_name'];
+    }
+
+    // Greedy transfer plan (same as compute_settlements()).
+    $balances = [];
+    foreach ($balance as $uid => $b) {
+        $balances[] = ['user_id' => $uid, 'display_name' => $names[$uid] ?? "user#$uid", 'net_jpy' => (int)$b];
+    }
+    $plan = compute_settlements($balances);
+    if (!$plan) {
+        json_response(['ok' => true, 'sent' => 0, 'note' => 'no transfers required']);
+        return;
+    }
+
+    // For each member with at least one outgoing or incoming line, send a
+    // single notification summarizing their share of the plan. One per person
+    // (not one per pair) so people don't get spammed in larger groups.
+    $perUser = []; // user_id => ['send' => [], 'recv' => []]
+    foreach ($plan as $p) {
+        $perUser[$p['from_user_id']]['send'][] = $p;
+        $perUser[$p['to_user_id']]['recv'][]   = $p;
+    }
+    $sent = 0;
+    foreach ($perUser as $uid => $lines) {
+        $msg = "💴 グループ「{$title}」精算:\n";
+        foreach (($lines['send'] ?? []) as $p) {
+            $msg .= "→ {$p['to_name']} に ¥" . number_format($p['amount_jpy']) . " を送ってください\n";
+        }
+        foreach (($lines['recv'] ?? []) as $p) {
+            $msg .= "← {$p['from_name']} から ¥" . number_format($p['amount_jpy']) . " を受け取れます\n";
+        }
+        notify_safely($pdo, $cfg, (int)$uid, 'admin_notice', rtrim($msg), 'group', $id);
+        $sent++;
+    }
+    json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan)]);
 }
