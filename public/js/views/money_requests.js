@@ -276,11 +276,15 @@ async function onDryRun() {
   try {
     const r = await post('/api/money-requests', { title, memo, recipients, dry_run: true });
     const meId = Number(state.me?.id) || 0;
+    const header = `
+      <div class="row" style="align-items:center; margin-bottom:4px">
+        <span class="muted" style="font-size:11px; flex:1">↓ 各受取人に届く通知 (${(r.previews || []).length} 件)</span>
+        <button id="mr-preview-clear" class="btn" style="padding:2px 8px; font-size:11px">プレビューをクリア</button>
+      </div>`;
     if (!(r.previews || []).length) {
-      previewRoot.innerHTML = `<div class="muted">送信される通知はありません</div>`;
+      previewRoot.innerHTML = header + `<div class="muted">送信される通知はありません</div>`;
     } else {
-      previewRoot.innerHTML = `<div class="muted" style="font-size:11px; margin-bottom:4px">↓ 各受取人に届く通知 (${r.previews.length} 件)</div>`
-        + r.previews.map(p => {
+      previewRoot.innerHTML = header + r.previews.map(p => {
             const mine = Number(p.user_id) === meId;
             return `
               <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
@@ -292,6 +296,10 @@ async function onDryRun() {
           }).join('');
     }
     previewRoot.hidden = false;
+    document.getElementById('mr-preview-clear')?.addEventListener('click', () => {
+      previewRoot.innerHTML = '';
+      previewRoot.hidden = true;
+    });
   } catch (e) { toast('失敗: ' + e.message); }
 }
 

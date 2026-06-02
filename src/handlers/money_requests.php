@@ -90,17 +90,25 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     $names = [];
     foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $n) $names[(int)$n['id']] = $n['display_name'];
 
+    // 通知本文を組み立てる (実送信 / preview 共通)。memo があれば改行つきで添える。
+    $buildMsg = function(int $amount) use ($u, $title, $memo): string {
+        $msg = "💴 {$u['display_name']} から請求: 「{$title}」¥" . number_format($amount);
+        if ($memo !== null && trim($memo) !== '') {
+            $msg .= "\nメモ: " . $memo;
+        }
+        return $msg;
+    };
+
     // dry_run: DB を触らず、各人に届くはずの本文を previews[] で返すだけ
     if ($dryRun) {
         $previews = [];
         foreach ($rows as $r) {
             if ((int)$r['user_id'] === (int)$u['id']) continue;
-            $msg = "💴 {$u['display_name']} から請求: 「{$title}」¥" . number_format($r['amount_yen']);
             $previews[] = [
                 'user_id'      => (int)$r['user_id'],
                 'display_name' => $names[(int)$r['user_id']] ?? "user#{$r['user_id']}",
                 'amount_yen'   => (int)$r['amount_yen'],
-                'message'      => $msg,
+                'message'      => $buildMsg((int)$r['amount_yen']),
             ];
         }
         json_response(['ok' => true, 'dry_run' => true, 'previews' => $previews]);
@@ -123,8 +131,8 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     // recipients に通知 (発起人は除く)
     foreach ($rows as $r) {
         if ((int)$r['user_id'] === (int)$u['id']) continue;
-        $msg = "💴 {$u['display_name']} から請求: 「{$title}」¥" . number_format($r['amount_yen']);
-        notify_safely($pdo, $cfg, (int)$r['user_id'], 'admin_notice', $msg, 'money_request', $rid);
+        notify_safely($pdo, $cfg, (int)$r['user_id'], 'admin_notice',
+            $buildMsg((int)$r['amount_yen']), 'money_request', $rid);
     }
     json_response(['ok' => true, 'id' => $rid]);
 }
