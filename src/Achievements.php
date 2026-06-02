@@ -24,10 +24,10 @@ class Achievements {
             'desc'  => '連続ラボインの最長記録',
             'unit'  => '日連続',
             'tiers' => [
-                ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 10,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 30,  'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 100, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 5,  'label' => 'ブロンズ',   'medal' => '🥉'],
+                ['count' => 10, 'label' => 'シルバー',   'medal' => '🥈'],
+                ['count' => 20, 'label' => 'ゴールド',   'medal' => '🥇'],
+                ['count' => 50, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
         'unique_listings' => [

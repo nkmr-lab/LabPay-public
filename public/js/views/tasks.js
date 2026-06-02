@@ -253,7 +253,7 @@ function renderRow(t) {
   let borderColor = '#dadbe2', roleBadge = '';
   if (['claimed', 'reported'].includes(t.my_status)) {
     borderColor = '#b54708';
-    const lbl = t.my_status === 'claimed' ? '引き受け中' : '報告済み (承認まち)';
+    const lbl = t.my_status === 'claimed' ? '引き受け中' : '承認待ち';
     roleBadge = `<span class="tag warn" style="margin-left:4px">${lbl}</span>`;
   } else if (t.is_mine) {
     borderColor = 'var(--primary)';
@@ -266,7 +266,7 @@ function renderRow(t) {
     borderColor = '#dadbe2';
   }
 
-  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 報告待ち ${t.pending_count}` : ''}</div>`;
+  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 承認待ち ${t.pending_count}` : ''}</div>`;
 
   return `
     <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">

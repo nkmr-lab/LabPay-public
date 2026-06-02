@@ -247,7 +247,7 @@ function presence_list(PDO $pdo, array $cfg): void {
                ps.room_id,
                MAX(ps.last_seen_at) AS last_seen_at,
                MIN(COALESCE(
-                 IF(TIMESTAMPDIFF(MINUTE, ps.session_start_at, ps.last_seen_at) < 12*60,
+                 IF(TIMESTAMPDIFF(MINUTE, ps.session_start_at, ps.last_seen_at) < 24*60,
                     ps.session_start_at, NULL),
                  ps.first_seen_at,
                  ps.last_seen_at)) AS session_start_at

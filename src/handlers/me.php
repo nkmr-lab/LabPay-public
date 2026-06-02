@@ -255,7 +255,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             WHERE pd.user_id = ?
               AND ps.session_start_at IS NOT NULL
               AND TIMESTAMPDIFF(MINUTE, ps.session_start_at, ps.last_seen_at) < ?");
-        $stOpen->execute([$u['id'], 12 * 60]);
+        $stOpen->execute([$u['id'], 24 * 60]);
         if ($row = $stOpen->fetch()) {
             if (!empty($row['s']) && !empty($row['e'])) {
                 $openStart = $row['s'];
