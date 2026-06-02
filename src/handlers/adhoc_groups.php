@@ -521,7 +521,9 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     if (!$rows) throw new ApiException('bad_request', '支出がまだありません', 400);
 
-    $balance = [];
+    // paid / spent / net を集計 (group_expenses_list と同じロジック)
+    $paid  = [];
+    $spent = [];
     foreach ($rows as $r) {
         $amount = (int)$r['amount_jpy'];
         $parts = json_decode((string)$r['participants_json'], true);
@@ -530,14 +532,14 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         $n = count($parts);
         $share = (int)floor($amount / $n);
         $leftover = $amount - $share * $n;
-        $balance[(int)$r['payer_user_id']] = ($balance[(int)$r['payer_user_id']] ?? 0) + $amount;
+        $paid[(int)$r['payer_user_id']] = ($paid[(int)$r['payer_user_id']] ?? 0) + $amount;
         foreach ($parts as $i => $pid) {
-            $debit = $share + ($i === 0 ? $leftover : 0);
-            $balance[$pid] = ($balance[$pid] ?? 0) - $debit;
+            $myShare = $share + ($i === 0 ? $leftover : 0);
+            $spent[$pid] = ($spent[$pid] ?? 0) + $myShare;
         }
     }
-    // Build name map.
-    $uids = array_keys($balance);
+    // Build name map across everyone who paid or spent.
+    $uids = array_unique(array_merge(array_keys($paid), array_keys($spent)));
     $names = [];
     if ($uids) {
         $place = implode(',', array_fill(0, count($uids), '?'));
@@ -545,22 +547,57 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         $stU->execute($uids);
         foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $r) $names[(int)$r['id']] = $r['display_name'];
     }
-
-    // Greedy transfer plan (same as compute_settlements()).
     $balances = [];
-    foreach ($balance as $uid => $b) {
-        $balances[] = ['user_id' => $uid, 'display_name' => $names[$uid] ?? "user#$uid", 'net_jpy' => (int)$b];
+    foreach ($uids as $uid) {
+        $p = (int)($paid[$uid]  ?? 0);
+        $s = (int)($spent[$uid] ?? 0);
+        $balances[] = [
+            'user_id'      => $uid,
+            'display_name' => $names[$uid] ?? "user#$uid",
+            'paid_jpy'     => $p,
+            'spent_jpy'    => $s,
+            'net_jpy'      => $p - $s,
+        ];
     }
     $plan = compute_settlements($balances);
-    if (!$plan) {
-        json_response(['ok' => true, 'sent' => 0, 'note' => 'no transfers required', 'previews' => []]);
+    // body.kind:
+    //   'transfer' (default) — 推奨送金プランベース。「→ X に ¥Y 送って」「← X から ¥Y 受け取れます」
+    //   'spent'              — 支払った総額ベース。「あなたが使った額は ¥X 円です」
+    // body.dry_run=true なら通知は送らず previews[] だけ返す。
+    $body = read_json_body();
+    $dryRun = !empty($body['dry_run']);
+    $kind = (string)($body['kind'] ?? 'transfer');
+    if (!in_array($kind, ['transfer','spent'], true)) {
+        throw new ApiException('bad_request', "kind must be 'transfer' or 'spent'", 400);
+    }
+
+    if ($kind === 'spent') {
+        // 個々人の使った額 (spent_jpy) を通知。0 の人はスキップ。
+        $previews = [];
+        $sent = 0;
+        foreach ($balances as $b) {
+            $spent = (int)($b['spent_jpy'] ?? 0);
+            if ($spent <= 0) continue;
+            $msg = "💴 グループ「{$title}」: あなたが使った額は ¥" . number_format($spent) . " です";
+            $previews[] = [
+                'user_id' => (int)$b['user_id'],
+                'display_name' => $b['display_name'],
+                'message' => $msg,
+            ];
+            if (!$dryRun) {
+                notify_safely($pdo, $cfg, (int)$b['user_id'], 'admin_notice', $msg, 'group', $id);
+                $sent++;
+            }
+        }
+        json_response(['ok' => true, 'sent' => $sent, 'kind' => 'spent', 'previews' => $previews, 'dry_run' => $dryRun]);
         return;
     }
 
-    // body.dry_run=true なら通知は送らず、各人に送ろうとしている本文だけを
-    // previews[] で返す (フロントで「通知内容を確認」する用)。
-    $body = read_json_body();
-    $dryRun = !empty($body['dry_run']);
+    // kind=transfer: 推奨送金プランに従って通知
+    if (!$plan) {
+        json_response(['ok' => true, 'sent' => 0, 'note' => 'no transfers required', 'previews' => [], 'kind' => 'transfer']);
+        return;
+    }
 
     // For each member with at least one outgoing or incoming line, send a
     // single notification summarizing their share of the plan. One per person
@@ -587,5 +624,5 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
             $sent++;
         }
     }
-    json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan), 'previews' => $previews, 'dry_run' => $dryRun]);
+    json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan), 'previews' => $previews, 'dry_run' => $dryRun, 'kind' => 'transfer']);
 }
