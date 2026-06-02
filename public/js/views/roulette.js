@@ -325,7 +325,7 @@ async function onSpin() {
     // (modelled by the same bezier the visuals use). Final ding! when the
     // wheel stops. AudioContext can only be created after a user gesture, so
     // this call lives inside the click handler.
-    playSpinSounds(N);
+    playSpinSounds(N, total);
     // Reveal result after animation completes (matches the CSS transition).
     setTimeout(() => {
       let prize = '';
@@ -468,25 +468,49 @@ function drawStaticWheel(r) {
 }
 
 // Synthesizes the spin's tick + ding entirely from oscillators so we don't
-// have to ship audio assets. Tick timing follows the same bezier the wheel
-// uses, so each click lines up with a slice passing the pointer.
-function playSpinSounds(sliceCount) {
+// have to ship audio assets. Ticks fire at the exact instants when each slice
+// boundary crosses the pointer — computed by inverting the same CSS
+// cubic-bezier(.22, .04, .08, 1) that drives the visual rotation.
+function playSpinSounds(sliceCount, totalRotationDeg) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;
   const ctx = new Ctx();
   const totalSec = 14;
-  const totalTurns = 12;
-  const totalTicks = sliceCount * totalTurns;
-  // cubic-bezier(.22,.04,.08,1) sampled via easeInOutQuart-ish proxy. Good
-  // enough — the perceptual goal is 'slow, fast, slow', not bit-perfect.
-  const ease = (t) => 1 - Math.pow(1 - t, 3);
-  for (let i = 0; i < totalTicks; i++) {
-    const t = ease((i + 1) / totalTicks) * totalSec;
-    schedule(ctx, t, () => tick(ctx));
+  const sliceDeg = 360 / sliceCount;
+  const totalRot = Math.abs(totalRotationDeg);   // direction doesn't matter for tick timing
+  const numCrossings = Math.floor(totalRot / sliceDeg);
+  const invBezier = bezierTimeForOutput(0.22, 0.04, 0.08, 1);
+  for (let i = 1; i <= numCrossings; i++) {
+    const rotDeg = i * sliceDeg;
+    const y = rotDeg / totalRot;        // fraction of total rotation traversed
+    const x = invBezier(y);             // timeline fraction at which the bezier hits that y
+    schedule(ctx, x * totalSec, () => tick(ctx));
   }
   schedule(ctx, totalSec, () => ding(ctx));
   // Tear down once the last sound is done playing.
   setTimeout(() => { try { ctx.close(); } catch (_) {} }, (totalSec + 1.5) * 1000);
+}
+
+// Invert the CSS cubic-bezier(p1x, p1y, p2x, p2y) with endpoints (0,0),(1,1):
+// given a desired output y, return the timeline x such that the bezier maps
+// x → y. Binary-searches the curve parameter u (≈30 iterations is plenty for
+// audio-grade precision).
+function bezierTimeForOutput(p1x, p1y, p2x, p2y) {
+  return (yTarget) => {
+    if (yTarget <= 0) return 0;
+    if (yTarget >= 1) return 1;
+    let lo = 0, hi = 1;
+    for (let it = 0; it < 30; it++) {
+      const u = (lo + hi) / 2;
+      const v = 1 - u;
+      // y(u) = 3v²u·p1y + 3v·u²·p2y + u³
+      const yu = 3 * v * v * u * p1y + 3 * v * u * u * p2y + u * u * u;
+      if (yu < yTarget) lo = u; else hi = u;
+    }
+    const u = (lo + hi) / 2;
+    const v = 1 - u;
+    return 3 * v * v * u * p1x + 3 * v * u * u * p2x + u * u * u;
+  };
 }
 
 function schedule(ctx, sec, fn) { setTimeout(fn, sec * 1000); }
