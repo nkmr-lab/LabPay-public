@@ -686,23 +686,15 @@ function openSettleModal(gid) {
         <div id="gd-settle-body" style="margin-top:10px; overflow:auto; flex:1; min-height:0">
           <div data-stab-pane="plan">
             <div class="list">${planRows}</div>
-            <div id="gd-plan-preview" class="list" style="margin-top:10px" hidden></div>
             ${d.settlements.length ? `
               <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap">
-                <button id="gd-settle-dry"    class="btn">通知内容を確認する</button>
-                <button id="gd-settle-notify" class="btn">全員に通知する</button>
-                <button id="gd-settle-asreq"  class="primary">請求を一斉に生成</button>
+                <button id="gd-settle-notify" class="btn">全員に通知</button>
+                <button id="gd-settle-asreq"  class="primary">請求一括生成</button>
               </div>` : ''}
           </div>
           <div data-stab-pane="spend" hidden>
             <p class="muted" style="font-size:11px; margin:0 0 4px">立替してもらった分も含めて、実質いくら使ったか</p>
             <div class="list">${spendRows || '<div class="muted">支払いがまだありません</div>'}</div>
-            <div id="gd-spend-preview" class="list" style="margin-top:10px" hidden></div>
-            ${spendRows ? `
-              <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap">
-                <button id="gd-spend-dry"    class="btn">通知内容を確認する</button>
-                <button id="gd-spend-notify" class="primary">全員に通知する</button>
-              </div>` : ''}
           </div>
         </div>
         <p class="muted" style="font-size:11px; margin-top:8px">
@@ -766,35 +758,6 @@ function openSettleModal(gid) {
       location.hash = '#/requests';
     } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
   });
-  // Dry-run preview: ask the server to compute the messages without sending,
-  // then render them inline. Same Set() guard so spamming the button doesn't
-  // re-render mid-fetch.
-  // 推奨送金プラン用の dry-run preview (kind=transfer)
-  root.querySelector('#gd-settle-dry')?.addEventListener('click', async (ev) => {
-    ev.currentTarget.disabled = true;
-    try {
-      const r = await post(`/api/groups/${gid}/settle`, { dry_run: true, kind: 'transfer' });
-      const previewRoot = root.querySelector('#gd-plan-preview');
-      const meId = Number(state.me?.id) || 0;
-      if (!r.previews || !r.previews.length) {
-        previewRoot.innerHTML = `<div class="muted">送信される通知はありません</div>`;
-      } else {
-        previewRoot.innerHTML = `<div class="muted" style="font-size:11px; margin-bottom:4px">↓ 通知する内容のプレビュー (${r.previews.length} 人)</div>`
-          + r.previews.map(p => {
-              const mine = Number(p.user_id) === meId;
-              return `
-                <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
-                  <div style="flex:1">
-                    <div class="bold" style="font-size:13px">→ ${escapeHtml(p.display_name)}${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
-                    <div class="meta" style="white-space:pre-wrap; font-size:12px">${escapeHtml(p.message)}</div>
-                  </div>
-                </div>`;
-            }).join('');
-      }
-      previewRoot.hidden = false;
-    } catch (e) { toast('失敗: ' + e.message); }
-    ev.currentTarget.disabled = false;
-  });
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
   // 推奨送金プラン: 全員に通知 (kind=transfer)
   root.querySelector('#gd-settle-notify')?.addEventListener('click', async (ev) => {
@@ -802,41 +765,6 @@ function openSettleModal(gid) {
     ev.currentTarget.disabled = true;
     try {
       const r = await post(`/api/groups/${gid}/settle`, { kind: 'transfer' });
-      toast(`${r.sent} 人に通知しました`);
-      root.hidden = true; root.innerHTML = '';
-    } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
-  });
-  // 支払った総額タブ用: dry-run + 全員に通知 (kind=spent)
-  root.querySelector('#gd-spend-dry')?.addEventListener('click', async (ev) => {
-    ev.currentTarget.disabled = true;
-    try {
-      const r = await post(`/api/groups/${gid}/settle`, { dry_run: true, kind: 'spent' });
-      const previewRoot = root.querySelector('#gd-spend-preview');
-      const meId = Number(state.me?.id) || 0;
-      if (!r.previews || !r.previews.length) {
-        previewRoot.innerHTML = `<div class="muted">送信される通知はありません</div>`;
-      } else {
-        previewRoot.innerHTML = `<div class="muted" style="font-size:11px; margin-bottom:4px">↓ 通知される内容のプレビュー (${r.previews.length} 人)</div>`
-          + r.previews.map(p => {
-            const mine = Number(p.user_id) === meId;
-            return `
-              <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
-                <div style="flex:1">
-                  <div class="bold" style="font-size:13px">→ ${escapeHtml(p.display_name)}${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
-                  <div class="meta" style="white-space:pre-wrap; font-size:12px">${escapeHtml(p.message)}</div>
-                </div>
-              </div>`;
-          }).join('');
-      }
-      previewRoot.hidden = false;
-    } catch (e) { toast('失敗: ' + e.message); }
-    ev.currentTarget.disabled = false;
-  });
-  root.querySelector('#gd-spend-notify')?.addEventListener('click', async (ev) => {
-    if (!confirm('各人に「使った額」を通知します。よろしいですか?')) return;
-    ev.currentTarget.disabled = true;
-    try {
-      const r = await post(`/api/groups/${gid}/settle`, { kind: 'spent' });
       toast(`${r.sent} 人に通知しました`);
       root.hidden = true; root.innerHTML = '';
     } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
