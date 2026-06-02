@@ -6,10 +6,9 @@ import { get, post, patch } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 
-// Per-grade default weights (seniors absorb more) and bumps.
-const GRADE_WEIGHT = { D: 1.5, M2: 1.2, M1: 1.0, B4: 0.7, B3: 0.5 };
-const GRADE_ORDER  = ['D','M2','M1','B4','B3',''];
-const ALCOHOL_BUMP = 1.5;
+// 基本は全員 ×1.0 でスタート。アルコール/学年での自動補正は廃止
+// (UI から [−][+] で操作する方式に変更)。GRADE_ORDER はソートのみで使う。
+const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
 // Step-1 picker keeps just a Set of user ids; step-2 form attaches weight/alcohol
 // in its own local state when the picker handoff happens via URL query.
@@ -164,8 +163,14 @@ async function loadHistory() {
 
 // ─────────────── STEP 2: per-person calc form ──────────────────────────
 
-// uid → { alcohol, weight, grade, display_name, avatar_url }
+// uid → { alcohol, weight, fixed_yen|null, grade, display_name, avatar_url }
+// fixed_yen non-null means "this person pays exactly this", and they're
+// excluded from the weighted split — used for "幹事は ¥3000 だけ" 系。
 const stepTwo = new Map();
+
+// Round each (non-creator) row's computed amount to the nearest multiple of
+// roundBucket if > 1. Delta absorbed by the creator. Buttons set this.
+let roundBucket = 1;
 
 export async function renderNomikaiNew({ query }) {
   const uids = String(query?.uids || '').split(',').map(Number).filter(Boolean);
@@ -197,9 +202,18 @@ export async function renderNomikaiNew({ query }) {
     <div class="card">
       <h3>参加者</h3>
       <div class="muted" style="font-size:12px; margin-bottom:6px">
-        🍺 = 飲酒 (×${ALCOHOL_BUMP}) / 🥤 = ソフドリのみ。タップで切替。
+        🍺/🥤 はタップで切替。基本 ×1.0、[−][+] で 0.2 ずつ調整。
+        [固定] にすると金額直接指定 (他の人で割り直し)。
       </div>
       <div id="nm-people"></div>
+      <div class="row" style="gap:4px; flex-wrap:wrap; margin-top:10px; align-items:center">
+        <span class="muted" style="font-size:12px">区切り:</span>
+        <button data-round="1"    class="btn">なし</button>
+        <button data-round="10"   class="btn">10円</button>
+        <button data-round="100"  class="btn">100円</button>
+        <button data-round="500"  class="btn">500円</button>
+        <button data-round="1000" class="btn">1000円</button>
+      </div>
     </div>
 
     <div class="card">
@@ -222,10 +236,10 @@ export async function renderNomikaiNew({ query }) {
     uids.forEach(uid => {
       const ent = byId.get(uid);
       if (!ent) return;
-      const w = GRADE_WEIGHT[ent.grade] ?? 1.0;
       stepTwo.set(uid, {
         alcohol: true,                 // default: drinker (most-common case)
-        weight: w,
+        weight: 1.0,                    // 基本 ×1.0; 上ボタン/下ボタンで ±0.2
+        fixed_yen: null,                // null = weighted; number = 固定額
         grade: ent.grade || '',
         display_name: ent.display_name,
         avatar_url: ent.avatar_url,
@@ -236,67 +250,142 @@ export async function renderNomikaiNew({ query }) {
     return;
   }
 
+  roundBucket = 1;
   renderPeople();
   document.getElementById('nm-total').addEventListener('input', renderPeople);
   document.getElementById('nm-submit').addEventListener('click', onCreate);
-}
-
-function renderPeople() {
-  const total = Number(document.getElementById('nm-total').value) || 0;
-  const arr = [...stepTwo.entries()].map(([uid, v]) => ({ uid, ...v }));
-  const sumW = arr.reduce((s, x) => s + x.weight, 0) || 1;
-  let allocated = 0;
-  arr.forEach(x => { x.amount = Math.round(total * x.weight / sumW); allocated += x.amount; });
-  const delta = total - allocated;
-  if (delta) {
-    const meIdx = arr.findIndex(x => x.uid === state.me?.id);
-    arr[(meIdx >= 0 ? meIdx : 0)].amount += delta;
-  }
-  document.getElementById('nm-people').innerHTML = arr.map(x => `
-    <div class="nm-row" data-uid="${x.uid}">
-      <div style="flex:1; display:flex; align-items:center; gap:8px">
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <div>
-          <div class="bold">${escapeHtml(x.display_name)} ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}</div>
-          <div class="meta">¥${x.amount.toLocaleString()}</div>
-        </div>
-      </div>
-      <button data-flag="${x.uid}" class="btn" style="min-width:54px">${x.alcohol ? '🍺' : '🥤'}</button>
-      <input type="number" min="0.1" step="0.1" value="${x.weight.toFixed(1)}" data-w="${x.uid}" style="width:60px; text-align:right">
-      <button data-rm="${x.uid}" class="danger" style="padding:4px 8px">×</button>
-    </div>`).join('');
-  document.getElementById('nm-preview-total').innerHTML = total
-    ? `合計 ¥${allocated.toLocaleString()}${delta ? ` (端数 ${delta > 0 ? '+' : ''}${delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}`
-    : '総額を入力してください';
-  document.querySelectorAll('[data-flag]').forEach(b => {
-    b.addEventListener('click', () => toggleAlcohol(Number(b.dataset.flag)));
-  });
-  document.querySelectorAll('[data-w]').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const uid = Number(inp.dataset.w);
-      const v = Math.max(0.1, Math.min(10, Number(inp.value) || 1));
-      const cur = stepTwo.get(uid);
-      if (cur) { cur.weight = v; stepTwo.set(uid, cur); renderPeople(); }
-    });
-  });
-  document.querySelectorAll('[data-rm]').forEach(b => {
+  document.querySelectorAll('[data-round]').forEach(b => {
     b.addEventListener('click', () => {
-      stepTwo.delete(Number(b.dataset.rm));
+      roundBucket = Number(b.dataset.round) || 1;
       renderPeople();
     });
   });
 }
 
+function renderPeople() {
+  const total = Number(document.getElementById('nm-total').value) || 0;
+  const arr = [...stepTwo.entries()].map(([uid, v]) => ({ uid, ...v }));
+
+  // 1) Fixed-amount rows are pinned at their declared value. Subtract them from
+  // the total; the rest is split among weighted rows.
+  const fixedTotal = arr.reduce((s, x) => s + (x.fixed_yen ?? 0), 0);
+  const remaining  = Math.max(0, total - fixedTotal);
+  const weighted   = arr.filter(x => x.fixed_yen === null);
+  const sumW = weighted.reduce((s, x) => s + x.weight, 0) || 1;
+
+  let allocated = 0;
+  for (const x of arr) {
+    if (x.fixed_yen !== null) {
+      x.amount = x.fixed_yen;
+    } else {
+      let v = remaining * x.weight / sumW;
+      x.amount = roundBucket > 1
+        ? Math.round(v / roundBucket) * roundBucket
+        : Math.round(v);
+    }
+    allocated += x.amount;
+  }
+  // Creator absorbs the delta (or first row if creator isn't in the list).
+  const delta = total - allocated;
+  if (delta && arr.length) {
+    const meIdx = arr.findIndex(x => x.uid === state.me?.id);
+    arr[(meIdx >= 0 ? meIdx : 0)].amount += delta;
+  }
+
+  // Highlight the active rounding button.
+  document.querySelectorAll('[data-round]').forEach(b => {
+    b.classList.toggle('primary', Number(b.dataset.round) === roundBucket);
+  });
+
+  document.getElementById('nm-people').innerHTML = arr.map(renderRow).join('');
+  document.getElementById('nm-preview-total').innerHTML = total
+    ? `合計 ¥${allocated.toLocaleString()}${delta ? ` (端数 ${delta > 0 ? '+' : ''}${delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}`
+    : '総額を入力してください';
+
+  document.querySelectorAll('[data-flag]') .forEach(b   => b.addEventListener('click', () => toggleAlcohol (Number(b.dataset.flag))));
+  document.querySelectorAll('[data-dec]')  .forEach(b   => b.addEventListener('click', () => bumpWeight   (Number(b.dataset.dec), -0.2)));
+  document.querySelectorAll('[data-inc]')  .forEach(b   => b.addEventListener('click', () => bumpWeight   (Number(b.dataset.inc),  0.2)));
+  document.querySelectorAll('[data-fix]')  .forEach(b   => b.addEventListener('click', () => toggleFixed  (Number(b.dataset.fix))));
+  document.querySelectorAll('[data-fixyen]').forEach(inp => inp.addEventListener('input', () => setFixedYen(Number(inp.dataset.fixyen), Number(inp.value) || 0)));
+  document.querySelectorAll('[data-rm]')   .forEach(b   => b.addEventListener('click', () => { stepTwo.delete(Number(b.dataset.rm)); renderPeople(); }));
+}
+
+function renderRow(x) {
+  const grade = x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : '';
+  const isFixed = x.fixed_yen !== null;
+  // Compact 2-line layout: line1 = icon + name + amount + remove; line2 = weight/fixed controls.
+  const controls = isFixed
+    ? `<input type="number" min="0" step="100" value="${x.fixed_yen}" data-fixyen="${x.uid}" style="width:90px; text-align:right">
+       <span class="muted" style="font-size:11px">円 固定</span>
+       <button data-fix="${x.uid}" class="btn" style="padding:2px 6px; font-size:11px">解除</button>`
+    : `<button data-dec="${x.uid}" class="btn" style="padding:2px 8px">−</button>
+       <span class="bold" style="min-width:42px; text-align:center">×${x.weight.toFixed(1)}</span>
+       <button data-inc="${x.uid}" class="btn" style="padding:2px 8px">+</button>
+       <button data-fix="${x.uid}" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">固定</button>`;
+  return `
+    <div class="nm-row" style="display:grid; grid-template-columns: auto 1fr auto auto; gap:6px 8px; align-items:center; padding:6px 0; border-bottom:1px solid #eee">
+      <button data-flag="${x.uid}" class="btn" style="grid-row:1/3; min-width:46px; font-size:18px">${x.alcohol ? '🍺' : '🥤'}</button>
+      <div style="display:flex; align-items:center; gap:6px; min-width:0">
+        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+        <span class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(x.display_name)}</span>
+        ${grade}
+      </div>
+      <div class="bold" style="text-align:right; font-size:15px">¥${x.amount.toLocaleString()}</div>
+      <button data-rm="${x.uid}" class="danger" style="padding:4px 8px">×</button>
+      <div style="grid-column:2/5; display:flex; align-items:center; gap:4px; flex-wrap:wrap">
+        ${controls}
+      </div>
+    </div>`;
+}
+
+function bumpWeight(uid, delta) {
+  const cur = stepTwo.get(uid);
+  if (!cur || cur.fixed_yen !== null) return;
+  cur.weight = Math.max(0.2, Math.min(10, Math.round((cur.weight + delta) * 10) / 10));
+  stepTwo.set(uid, cur);
+  renderPeople();
+}
+
+function toggleFixed(uid) {
+  const cur = stepTwo.get(uid);
+  if (!cur) return;
+  if (cur.fixed_yen === null) {
+    // Pre-fill with the current computed amount so the switch feels natural.
+    cur.fixed_yen = guessCurrentAmount(uid) ?? 0;
+  } else {
+    cur.fixed_yen = null;
+  }
+  stepTwo.set(uid, cur);
+  renderPeople();
+}
+
+function setFixedYen(uid, yen) {
+  const cur = stepTwo.get(uid);
+  if (!cur || cur.fixed_yen === null) return;
+  cur.fixed_yen = Math.max(0, Math.floor(yen));
+  stepTwo.set(uid, cur);
+  renderPeople();
+}
+
+// Re-derive the amount the user is currently seeing for `uid` from the latest
+// weighted/fixed mix — used as a sensible initial value when switching to 固定.
+function guessCurrentAmount(uid) {
+  const total = Number(document.getElementById('nm-total').value) || 0;
+  const arr = [...stepTwo.entries()].map(([k, v]) => ({ uid: k, ...v }));
+  const fixedTotal = arr.reduce((s, x) => s + (x.fixed_yen ?? 0), 0);
+  const remaining = Math.max(0, total - fixedTotal);
+  const weighted = arr.filter(x => x.fixed_yen === null);
+  const sumW = weighted.reduce((s, x) => s + x.weight, 0) || 1;
+  const me = arr.find(x => x.uid === uid);
+  if (!me || me.fixed_yen !== null) return null;
+  let v = remaining * me.weight / sumW;
+  return roundBucket > 1 ? Math.round(v / roundBucket) * roundBucket : Math.round(v);
+}
+
 function toggleAlcohol(uid) {
   const cur = stepTwo.get(uid);
   if (!cur) return;
-  if (cur.alcohol) {
-    cur.alcohol = false;
-    cur.weight = Math.max(0.2, cur.weight / ALCOHOL_BUMP);
-  } else {
-    cur.alcohol = true;
-    cur.weight = cur.weight * ALCOHOL_BUMP;
-  }
+  cur.alcohol = !cur.alcohol;
   stepTwo.set(uid, cur);
   renderPeople();
 }
