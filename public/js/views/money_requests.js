@@ -391,9 +391,12 @@ async function loadDetail(id) {
       ${canManage ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を削除する</button></div>` : ''}
     `;
 
-    // 受取人リスト (発起人は全件、受取人は自分含めて全員見れる)
-    document.getElementById('mr-detail-list').innerHTML = r.recipients.map(rec => `
-      <div class="list-item">
+    // 受取人リスト: 未払いを上、支払い済を下にまとめる。支払い済は薄く
+    // グレーアウトして「終わった人」感を出す。
+    const unpaid = (r.recipients || []).filter(rec => !rec.paid_at);
+    const paid   = (r.recipients || []).filter(rec =>  rec.paid_at);
+    const renderRow = (rec, dim) => `
+      <div class="list-item" style="${dim ? 'opacity:.55; filter:grayscale(40%)' : ''}">
         <div style="flex:1; display:flex; align-items:center; gap:8px">
           ${avatarHtml(rec.display_name, rec.avatar_url, 'sm')}
           <div>
@@ -406,7 +409,14 @@ async function loadDetail(id) {
             ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ ${escapeHtml(METHOD_LABEL[rec.paid_method] || rec.paid_method)}${rec.proxy_name ? ' (←' + escapeHtml(rec.proxy_name) + ')' : ''}</span>`
             : `<span class="tag" style="background:#fff3df; color:#b54708">未払い</span>`}
         </div>
-      </div>`).join('');
+      </div>`;
+    const sep = (paid.length && unpaid.length)
+      ? `<div class="muted" style="font-size:11px; margin:6px 0 2px">─── 支払い済 (${paid.length}/${(r.recipients || []).length}) ───</div>`
+      : '';
+    document.getElementById('mr-detail-list').innerHTML =
+      unpaid.map(rec => renderRow(rec, false)).join('')
+      + sep
+      + paid.map(rec => renderRow(rec, true)).join('');
 
     document.querySelectorAll('[data-pay]').forEach(b => {
       b.addEventListener('click', () => onPay(id, b.dataset.pay, r));
