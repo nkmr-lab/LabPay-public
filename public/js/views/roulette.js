@@ -143,21 +143,26 @@ async function loadMembers() {
   }
 }
 
-// Toggle behavior: if any member of the target set is already checked,
-// the click DESELECTS the whole set. Otherwise it SELECTS the whole set.
-// Matches '全員 ON / OFF' wording — same button handles both directions
-// depending on current state.
+// 全員 ON/OFF: 'are EVERYONE on?' semantics. If everyone in the target set is
+// already checked, the click DESELECTS the whole set. Otherwise it SELECTS the
+// whole set. Means the first press from the default state (only self checked)
+// turns everyone ON — what the user reaches for when they tap '全員'.
+// Per-grade buttons keep the older 'any-checked → off' toggle since the typical
+// grade has a small head-count and either intent is one press away anyway.
 function onBulk(kind, grade) {
   const target = kind === 'grade'
     ? ALL_USERS.filter(x => (x.grade || '') === grade)
     : ALL_USERS;
-  const anySelected = target.some(x => selected.has(x.id));
-  if (anySelected) {
-    target.forEach(x => selected.delete(x.id));
+  let turnOn;
+  if (kind === 'all') {
+    const allOn = target.every(x => selected.has(x.id));
+    turnOn = !allOn;
   } else {
-    target.forEach(x => selected.add(x.id));
+    const anyOn = target.some(x => selected.has(x.id));
+    turnOn = !anyOn;
   }
-  // Reflect into the DOM checkboxes.
+  if (turnOn) target.forEach(x => selected.add(x.id));
+  else        target.forEach(x => selected.delete(x.id));
   document.querySelectorAll('#rl-members input[data-uid]').forEach(cb => {
     cb.checked = selected.has(Number(cb.dataset.uid));
   });
