@@ -727,9 +727,10 @@ function openSettleModal(gid) {
   // 1 creditor = 1 請求。タイトルは全件共通で prompt 編集可能 (デフォルト
   // グループ名)。
   root.querySelector('#gd-settle-asreq')?.addEventListener('click', async (ev) => {
-    // 失敗ケースをサイレントにしないよう全体を try-catch でくるむ。
-    // 以前の実装は最初の await get の失敗が無音だったため click 後何も
-    // 起きないように見える事故があった。
+    // ev.currentTarget は async の await を跨いだ後 null になるので、最初に
+    // 参照を捕まえておく (caching pattern)。これがないと後で disabled を
+    // 戻すときに 「Cannot set properties of null」 で吹き飛ぶ。
+    const btn = ev.currentTarget;
     try {
       if (!d.settlements.length) { toast('送金プランがありません'); return; }
       const g = await get('/api/groups/' + currentGroupId);
@@ -748,7 +749,7 @@ function openSettleModal(gid) {
       if (ans === null) return;
       const title = ans.trim();
       if (!title) { toast('タイトルを入れてください'); return; }
-      ev.currentTarget.disabled = true;
+      if (btn) btn.disabled = true;
       let firstId = null;
       let ok = 0, fail = 0;
       const errs = [];
@@ -771,7 +772,7 @@ function openSettleModal(gid) {
       location.hash = '#/requests';
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
-      ev.currentTarget.disabled = false;
+      if (btn) btn.disabled = false;
     }
   });
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
