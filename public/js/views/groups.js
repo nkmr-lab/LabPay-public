@@ -560,6 +560,12 @@ async function loadWari(id) {
       : '<span class="muted">まだ支出はありません</span>';
     if (!d.expenses.length) { root.innerHTML = ''; return; }
     root.innerHTML = d.expenses.map(e => renderExpense(e, id)).join('');
+    root.querySelectorAll('[data-edit-ex]').forEach(b => {
+      b.addEventListener('click', () => {
+        const exp = d.expenses.find(x => Number(x.id) === Number(b.dataset.editEx));
+        if (exp) openExpenseEdit(id, exp);
+      });
+    });
     root.querySelectorAll('[data-rm-ex]').forEach(b => {
       b.addEventListener('click', async () => {
         if (!confirm('この支出を削除しますか?')) return;
@@ -613,13 +619,124 @@ function renderSpendCard(balances) {
   }).join('');
 }
 
+// 既存の支出を編集するモーダル。金額 / 通貨 / 立替人 / 対象者 / メモを
+// 個別に変更可能。レートは通貨変更時のみ再取得 (JPY なら null)。
+function openExpenseEdit(gid, e) {
+  const existing = document.getElementById('ex-edit-modal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'ex-edit-modal';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px';
+
+  const ccyOpts = [...CURRENCIES, 'OTHER'].map(c =>
+    `<option value="${c}" ${c === e.currency ? 'selected' : ''}>${c === 'OTHER' ? 'その他…' : c}</option>`).join('');
+  const initSet = new Set((e.participants || []).map(Number));
+  const initialAmount = e.currency === 'JPY' ? e.amount_jpy : (e.amount_original || e.amount_jpy);
+
+  overlay.innerHTML = `
+    <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px; overflow:auto">
+      <div class="row" style="align-items:center">
+        <h3 style="flex:1; margin:0">支出を編集</h3>
+        <button id="ex-edit-close">×</button>
+      </div>
+      <label class="field" style="margin-top:8px">
+        <span class="lbl">金額</span>
+        <div class="row" style="gap:6px">
+          <input type="number" id="ex-edit-amt" min="0" step="0.01" value="${initialAmount}" style="flex:1">
+          <select id="ex-edit-ccy" style="width:90px">${ccyOpts}</select>
+        </div>
+      </label>
+      <div id="ex-edit-rate-row" class="muted" style="font-size:12px; margin-bottom:6px"></div>
+      <label class="field">
+        <span class="lbl">立替えた人</span>
+        <select id="ex-edit-payer">
+          ${wariMembers.map(m => `<option value="${m.id}" ${m.id === Number(e.payer_user_id) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">メモ</span>
+        <input type="text" id="ex-edit-memo" maxlength="500" value="${escapeHtml(e.memo || '')}">
+      </label>
+      <div class="muted" style="font-size:12px; margin:4px 0 2px">対象者 (チップタップで除外)</div>
+      <div id="ex-edit-for" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+        <button id="ex-edit-cancel" class="btn">キャンセル</button>
+        <button id="ex-edit-save"   class="primary">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // for picker
+  const renderFor = () => {
+    const root = overlay.querySelector('#ex-edit-for');
+    root.innerHTML = wariMembers.map(m => {
+      const on = initSet.has(m.id);
+      return `
+        <span class="rl-chip" data-eduid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}">
+          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+          <span>${escapeHtml(m.display_name)}</span>
+        </span>`;
+    }).join('');
+    root.querySelectorAll('[data-eduid]').forEach(c => {
+      c.addEventListener('click', () => {
+        const uid = Number(c.dataset.eduid);
+        if (initSet.has(uid)) initSet.delete(uid);
+        else initSet.add(uid);
+        renderFor();
+      });
+    });
+  };
+  renderFor();
+
+  // rate hint (read-only): re-fetch when currency changes
+  let liveRate = e.currency === 'JPY' ? null : Number(e.rate_to_jpy) || null;
+  const rateRow = overlay.querySelector('#ex-edit-rate-row');
+  const setRateHint = (txt) => { rateRow.textContent = txt; };
+  if (e.currency !== 'JPY' && liveRate) {
+    setRateHint(`現在のレート: 1 ${e.currency} = ${liveRate.toFixed(4)} JPY (元の値、保存時に再取得します)`);
+  }
+  overlay.querySelector('#ex-edit-ccy').addEventListener('change', async (ev) => {
+    const c = ev.target.value;
+    if (c === 'JPY' || c === 'OTHER') { liveRate = null; setRateHint(c === 'OTHER' ? 'OTHER は v1 では未対応 — JPY か USD/EUR 等を選んでください' : ''); return; }
+    setRateHint(`${c} レートを取得中…`);
+    try {
+      const r = await fetchFxRate(c);
+      liveRate = r.rate;
+      setRateHint(`登録時点のレート: 1 ${c} = ${r.rate.toFixed(4)} JPY (${r.source})`);
+    } catch (_) {
+      liveRate = null;
+      setRateHint(`レート取得失敗。送信時にサーバ側で再取得します。`);
+    }
+  });
+
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(); });
+  overlay.querySelector('#ex-edit-close') .addEventListener('click', close);
+  overlay.querySelector('#ex-edit-cancel').addEventListener('click', close);
+  overlay.querySelector('#ex-edit-save')  .addEventListener('click', async () => {
+    const amount = Number(overlay.querySelector('#ex-edit-amt').value);
+    const currency = overlay.querySelector('#ex-edit-ccy').value;
+    const payer_user_id = Number(overlay.querySelector('#ex-edit-payer').value);
+    const memo = overlay.querySelector('#ex-edit-memo').value.trim() || null;
+    if (!(amount > 0)) { toast('金額を入れてください'); return; }
+    if (currency === 'OTHER') { toast('「その他」通貨での編集は未対応'); return; }
+    if (!initSet.size) { toast('対象者を 1 人以上選んでください'); return; }
+    const body = { amount, currency, payer_user_id, memo, participant_ids: [...initSet] };
+    if (currency !== 'JPY' && liveRate) body.rate_to_jpy = liveRate;
+    try {
+      await patch(`/api/groups/${gid}/expenses/${e.id}`, body);
+      toast('保存しました');
+      close();
+      await loadWari(gid);
+    } catch (err) { toast('失敗: ' + err.message); }
+  });
+}
+
 function renderExpense(e, gid) {
   const meId = state.me?.id;
-  const canDelete = Number(e.created_by_user_id) === Number(meId);
+  const canManage = Number(e.created_by_user_id) === Number(meId);
   const orig = (e.currency !== 'JPY' && e.amount_original)
     ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)})</span>` : '';
-  // Resolve participant ids to short names for "対象: X, Y, Z" if it's a
-  // proper subset of current members; show "全員 (N人)" otherwise.
   const names = e.participants.map(uid => {
     const m = wariMembers.find(x => x.id === uid);
     return m ? m.display_name : `#${uid}`;
@@ -629,6 +746,11 @@ function renderExpense(e, gid) {
   const forText = isAll
     ? `全員 (${e.participants.length}人)`
     : `対象: ${names.join(', ')}`;
+  const actions = canManage ? `
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <button data-edit-ex="${e.id}" class="btn" style="padding:2px 6px; font-size:11px">編集</button>
+      <button data-rm-ex="${e.id}" class="danger" style="padding:2px 6px; font-size:11px">×</button>
+    </div>` : '';
   return `
     <div class="list-item">
       <div style="flex:1">
@@ -636,7 +758,7 @@ function renderExpense(e, gid) {
         ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
         <div class="meta">${escapeHtml(e.created_at)} · ${escapeHtml(forText)}</div>
       </div>
-      ${canDelete ? `<div><button data-rm-ex="${e.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
+      ${actions}
     </div>`;
 }
 

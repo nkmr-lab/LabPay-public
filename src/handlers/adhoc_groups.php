@@ -24,6 +24,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
             if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
+            if ($next === 'expenses' && isset($seg[3]) && $method === 'PATCH')  { group_expenses_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'settle'   && $method === 'POST')             { group_settle_notify($pdo, $cfg, $id); return; }
         }
@@ -482,6 +483,83 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
             'group', $id);
     }
     json_response(['ok' => true, 'id' => $eid]);
+}
+
+// 既に投稿済みの支出を編集 (記録者本人 or admin のみ)。
+// body で渡せる項目: payer_user_id / amount (+ currency + rate_to_jpy) / memo / participant_ids
+// 各項目は省略可。currency を変えるときは amount も lookup し直しが必要。
+function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $groupId, (int)$u['id']);
+    $st = $pdo->prepare("SELECT * FROM adhoc_group_expenses WHERE id=? AND group_id=?");
+    $st->execute([$eid, $groupId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'expense not found', 404);
+    if ((int)$row['created_by_user_id'] !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '記録した本人のみ編集可能', 403);
+    }
+    $body = read_json_body();
+
+    // 既存のメンバー (validation 用)
+    $stM = $pdo->prepare("SELECT user_id FROM adhoc_group_members WHERE group_id=?");
+    $stM->execute([$groupId]);
+    $allMembers = array_map('intval', array_column($stM->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+
+    $sets = []; $args = [];
+
+    if (array_key_exists('memo', $body)) {
+        $memo = ($body['memo'] === null || $body['memo'] === '')
+            ? null : mb_substr((string)$body['memo'], 0, 500);
+        $sets[] = 'memo = ?'; $args[] = $memo;
+    }
+    if (array_key_exists('payer_user_id', $body)) {
+        $pid = (int)$body['payer_user_id'];
+        if (!in_array($pid, $allMembers, true)) {
+            throw new ApiException('bad_request', 'payer must be a group member', 400);
+        }
+        $sets[] = 'payer_user_id = ?'; $args[] = $pid;
+    }
+    if (array_key_exists('amount', $body) || array_key_exists('currency', $body) || array_key_exists('rate_to_jpy', $body)) {
+        $amountRaw = $body['amount'] ?? null;
+        if (!is_numeric($amountRaw) || (float)$amountRaw <= 0) {
+            throw new ApiException('bad_request', 'amount must be positive', 400);
+        }
+        $currency = strtoupper(trim((string)($body['currency'] ?? $row['currency'])));
+        if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+            throw new ApiException('bad_request', 'currency must be 3-letter ISO code', 400);
+        }
+        $rate = ($currency === 'JPY') ? null : (float)($body['rate_to_jpy'] ?? 0);
+        if ($currency !== 'JPY' && (!$rate || $rate <= 0)) {
+            // フォールバック: server-side fx
+            $live = fx_rate_to_jpy($currency);
+            if ($live === null) {
+                throw new ApiException('bad_gateway',
+                    "為替レートを取得できませんでした (currency=$currency)", 502);
+            }
+            $rate = $live;
+        }
+        $amountJpy = ($currency === 'JPY')
+            ? (int)round((float)$amountRaw)
+            : (int)round((float)$amountRaw * $rate);
+        $amountOriginal = ($currency === 'JPY') ? null : (float)$amountRaw;
+        $sets[] = 'amount_jpy = ?';      $args[] = $amountJpy;
+        $sets[] = 'amount_original = ?'; $args[] = $amountOriginal;
+        $sets[] = 'currency = ?';        $args[] = $currency;
+        $sets[] = 'rate_to_jpy = ?';     $args[] = $rate;
+    }
+    if (array_key_exists('participant_ids', $body) && is_array($body['participant_ids'])) {
+        $req = array_values(array_unique(array_map('intval', $body['participant_ids'])));
+        $bad = array_diff($req, $allMembers);
+        if ($bad) throw new ApiException('bad_request', 'participant not in group', 400);
+        if (!$req) throw new ApiException('bad_request', 'participant_ids cannot be empty', 400);
+        $sets[] = 'participants_json = ?'; $args[] = json_encode($req);
+    }
+
+    if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
+    $args[] = $eid;
+    $pdo->prepare('UPDATE adhoc_group_expenses SET ' . implode(', ', $sets) . ' WHERE id=?')
+        ->execute($args);
+    json_response(['ok' => true]);
 }
 
 function group_expenses_del(PDO $pdo, array $cfg, int $groupId, int $eid): void {
