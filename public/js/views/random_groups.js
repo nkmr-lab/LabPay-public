@@ -259,6 +259,6 @@ async function onCreateGroup(title, memberIds) {
   try {
     const r = await post('/api/groups', { title, member_ids: memberIds });
     toast('グループを作成しました');
-    location.hash = '#/groups/' + r.id;
+    location.hash = '#/groups/' + (r.slug || r.id);
   } catch (e) { toast('失敗: ' + e.message); }
 }

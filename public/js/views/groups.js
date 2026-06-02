@@ -29,6 +29,10 @@ export async function renderGroups() {
         <input type="text" id="gr-title" maxlength="200" placeholder="例: 学会 in 神戸">
       </label>
       <label class="field">
+        <span class="lbl">URL 用の名前 (任意・英数字/_/- のみ・後から変えられません)</span>
+        <input type="text" id="gr-slug" maxlength="64" placeholder="例: avi2026">
+      </label>
+      <label class="field">
         <span class="lbl">説明 (任意)</span>
         <textarea id="gr-notes" maxlength="2000" rows="2"></textarea>
       </label>
@@ -128,13 +132,20 @@ function refreshChips() {
 async function onCreate() {
   const title = document.getElementById('gr-title').value.trim();
   const description = document.getElementById('gr-notes').value.trim() || null;
+  const slug = document.getElementById('gr-slug').value.trim() || null;
   if (!title) { toast('タイトルを入れてください'); return; }
+  if (slug && !/^[A-Za-z0-9_-]{1,64}$/.test(slug)) {
+    toast('URL 用の名前は英数字・_・- の 1〜64 文字で'); return;
+  }
+  if (slug && /^\d+$/.test(slug)) {
+    toast('URL 用の名前を数字だけにはできません'); return;
+  }
   try {
     const r = await post('/api/groups', {
-      title, description, member_ids: [...picked],
+      title, description, slug, member_ids: [...picked],
     });
     toast('作成しました');
-    location.hash = '#/groups/' + r.id;
+    location.hash = '#/groups/' + (r.slug || r.id);
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
@@ -147,7 +158,7 @@ async function loadList() {
       return;
     }
     root.innerHTML = d.items.map(g => `
-      <a class="list-item" href="#/groups/${g.id}">
+      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}">
         <div style="flex:1">
           <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
           <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}</div>
@@ -161,7 +172,10 @@ async function loadList() {
 // ──────────────────────────── DETAIL ───────────────────────────────────
 
 export async function renderGroupDetail({ params }) {
-  const id = Number(params.id);
+  // params.id は数字 or slug。サーバ側 resolve_group_id() で両方解決するので
+  // ここでは文字列のまま回す。loadDetail で取得した実 id (g.id) を
+  // ボタンの POST 先など内部 API 呼び出しでは使う。
+  const id = String(params.id);
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">

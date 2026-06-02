@@ -342,13 +342,15 @@ async function renderMyGroups() {
   if (!card || !root) return;
   try {
     const d = await get('/api/groups');
-    const open = (d.items || []).filter(g => !g.closed_at);
-    if (!open.length) { card.hidden = true; return; }
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
     card.hidden = false;
-    root.innerHTML = open.slice(0, 5).map(g => `
-      <a class="list-item" href="#/groups/${g.id}" style="text-decoration:none; color:inherit">
+    // open は上に並ぶよう API 側でソート済み (closed_at IS NULL DESC, created_at DESC)。
+    // 過去 (closed) も同じカードに含めて [終了] バッジ付きで出す。
+    root.innerHTML = items.slice(0, 5).map(g => `
+      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}" style="text-decoration:none; color:inherit">
         <div style="flex:1">
-          <div class="bold">${escapeHtml(g.title)}</div>
+          <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
           <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人</div>
         </div>
         <div class="muted" style="font-size:13px">→</div>

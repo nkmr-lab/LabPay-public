@@ -11,21 +11,38 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === '' && $method === 'GET')  { groups_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { groups_create($pdo, $cfg); return; }
 
-    $id = (int)$sub;
-    if ($id > 0) {
-        $next = $seg[2] ?? '';
-        if ($next === '' && $method === 'GET')    { groups_detail($pdo, $cfg, $id); return; }
-        if ($next === '' && $method === 'DELETE') { groups_close($pdo, $cfg, $id);  return; }
-        if ($next === 'items' && $method === 'POST')                { group_items_add($pdo, $cfg, $id);    return; }
-        if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
-        if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
-        if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
-        if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
-        if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
-        if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
-        if ($next === 'settle'   && $method === 'POST')             { group_settle_notify($pdo, $cfg, $id); return; }
+    if ($sub !== '') {
+        $id = resolve_group_id($pdo, $sub);
+        if ($id > 0) {
+            $next = $seg[2] ?? '';
+            if ($next === '' && $method === 'GET')    { groups_detail($pdo, $cfg, $id); return; }
+            if ($next === '' && $method === 'DELETE') { groups_close($pdo, $cfg, $id);  return; }
+            if ($next === 'items' && $method === 'POST')                { group_items_add($pdo, $cfg, $id);    return; }
+            if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
+            if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
+            if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
+            if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'settle'   && $method === 'POST')             { group_settle_notify($pdo, $cfg, $id); return; }
+        }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
+}
+
+// Accept either a numeric id ("123") or a slug ("avi2026"). Returns the
+// numeric id or 0 if not found. 数字オンリーは id として解決するので、slug は
+// 必ず英字を含むよう INSERT 側で弾く。
+function resolve_group_id(PDO $pdo, string $key): int {
+    if ($key === '') return 0;
+    if (ctype_digit($key)) {
+        $st = $pdo->prepare("SELECT id FROM adhoc_groups WHERE id = ?");
+        $st->execute([(int)$key]);
+        return (int)$st->fetchColumn();
+    }
+    $st = $pdo->prepare("SELECT id FROM adhoc_groups WHERE slug = ?");
+    $st->execute([$key]);
+    return (int)$st->fetchColumn();
 }
 
 // Helpers
@@ -51,13 +68,13 @@ function group_assert_creator_or_admin(PDO $pdo, int $groupId, array $u): void {
 function groups_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("
-        SELECT g.id, g.title, g.description, g.closed_at, g.created_at,
+        SELECT g.id, g.slug, g.title, g.description, g.closed_at, g.created_at,
                uc.display_name AS creator_name,
                (SELECT COUNT(*) FROM adhoc_group_members WHERE group_id = g.id) AS member_count
           FROM adhoc_groups g
           JOIN users uc ON uc.id = g.creator_user_id
           JOIN adhoc_group_members m ON m.group_id = g.id AND m.user_id = ?
-         ORDER BY g.closed_at IS NULL DESC, g.created_at DESC LIMIT 50");
+         ORDER BY g.closed_at IS NULL DESC, g.created_at DESC LIMIT 100");
     $st->execute([$u['id']]);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
@@ -70,6 +87,26 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
     $description = isset($body['description']) ? mb_substr((string)$body['description'], 0, 5000) : null;
+
+    // Optional slug: URL 用の短い名前。^[A-Za-z0-9_-]{1,64}$ で、かつ全数字は禁止
+    // (数字オンリーは既存 id の解決と衝突するため)。空文字 / 未指定 は NULL。
+    $slug = null;
+    if (isset($body['slug']) && $body['slug'] !== null && $body['slug'] !== '') {
+        $s = trim((string)$body['slug']);
+        if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $s)) {
+            throw new ApiException('bad_request', 'slug は英数字・_・- の 1..64 文字で', 400);
+        }
+        if (ctype_digit($s)) {
+            throw new ApiException('bad_request', 'slug は数字だけの形式は使えません (id と衝突するため)', 400);
+        }
+        $check = $pdo->prepare("SELECT 1 FROM adhoc_groups WHERE slug = ?");
+        $check->execute([$s]);
+        if ($check->fetchColumn()) {
+            throw new ApiException('conflict', "slug『{$s}』は既に使われています", 409);
+        }
+        $slug = $s;
+    }
+
     $memberIds = array_values(array_unique(array_filter(array_map('intval', (array)($body['member_ids'] ?? [])))));
     // Creator is always a member.
     $memberIds[] = (int)$u['id'];
@@ -86,8 +123,8 @@ function groups_create(PDO $pdo, array $cfg): void {
 
     $pdo->beginTransaction();
     try {
-        $st = $pdo->prepare("INSERT INTO adhoc_groups (creator_user_id, title, description) VALUES (?,?,?)");
-        $st->execute([$u['id'], $title, $description]);
+        $st = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description) VALUES (?,?,?,?)");
+        $st->execute([$slug, $u['id'], $title, $description]);
         $gid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?,?)");
         foreach ($memberIds as $uid) $st->execute([$gid, $uid]);
@@ -103,7 +140,7 @@ function groups_create(PDO $pdo, array $cfg): void {
         notify_safely($pdo, $cfg, $uid, 'admin_notice',
             "👥 グループ「{$title}」に追加されました", 'group', $gid);
     }
-    json_response(['ok' => true, 'id' => $gid]);
+    json_response(['ok' => true, 'id' => $gid, 'slug' => $slug]);
 }
 
 // ─── DETAIL ──────────────────────────────────────────────────
