@@ -39,7 +39,7 @@ export async function renderHome() {
         🙈 スマホの Wi-Fi を OFF にしたり、MIND に接続すると検知されなくなります。
       </div>
       <div style="text-align:right; margin-top:8px">
-        <a href="#/activity" class="hint">活動マップ →</a>
+        <a href="#/activity" class="hint">ラボ滞在・活動マップ →</a>
       </div>
     </div>
 
@@ -84,13 +84,6 @@ export async function renderHome() {
 
     <div class="card">
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">あなたのラボ滞在</h2>
-      </div>
-      <div id="presence-summary" class="hint">読み込み中…</div>
-    </div>
-
-    <div class="card">
-      <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">履歴</h2>
         <a href="#/history" class="hint">すべて見る →</a>
       </div>
@@ -106,7 +99,6 @@ export async function renderHome() {
   await renderFreshInvitations();
   await renderFreshListings();
   await renderFreshTasks();
-  await renderPresenceSummary();
   await renderRecentTx();
 
   // Poll balance + streak + recent transactions every 30s while the user is
@@ -141,103 +133,6 @@ async function refreshFinancials({ silent }) {
     state.balance = me.balance;
   } catch (e) {
     if (!silent) toast('情報の取得に失敗: ' + e.message);
-  }
-}
-
-// Personal lab-stay stat card. Aggregates closed sessions from presence_sessions
-// plus the currently-open session if you're still here.
-async function renderPresenceSummary() {
-  const root = document.getElementById('presence-summary');
-  if (!root) return;
-  try {
-    const s = await get('/api/me/presence_summary');
-    const fmt = (m) => {
-      if (m < 1) return '-';
-      if (m < 60) return `${m}分`;
-      const h = Math.floor(m / 60);
-      const r = m % 60;
-      return r === 0 ? `${h}時間` : `${h}時間${r}分`;
-    };
-    const live = s.currently_present
-      ? `<div style="margin-top:6px; color:#0e7c63; font-weight:600">● いまラボに居ます</div>`
-      : '';
-    // 今日の滞在時間 + ライブインジケータだけを 1 行で。詳しい内訳は草の
-     // セルにホバーすれば日ごとに出るので、上の数値スタックは省略。
-    root.innerHTML = `
-      <div style="display:flex; align-items:baseline; gap:14px">
-        <div>
-          <div class="muted" style="font-size:11px">今日のラボ滞在</div>
-          <div class="bold" style="font-size:18px; color:var(--primary)">${fmt(s.today_minutes)}</div>
-        </div>
-        <div style="flex:1; text-align:right">${live}</div>
-      </div>
-      <div id="presence-grass" style="margin-top:14px"></div>
-    `;
-    renderPresenceGrass();
-  } catch (e) {
-    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-// GitHub-style daily contribution grid. Each cell = 1 day; columns = weeks
-// (Mon..Sun rows). Color intensity scales with minutes_present that day:
-//   0 → light grey, then 4 green steps up to "very long stay".
-async function renderPresenceGrass() {
-  const root = document.getElementById('presence-grass');
-  if (!root) return;
-  try {
-    // 日本の学校年度 (4/1 - 翌 3/31)。今が 4 月以降なら今年、それより前なら去年が
-    // 年度の起点。グリッドはその起点日から今日までを表示する。
-    const now = new Date();
-    const m = now.getMonth();          // 0=Jan..11=Dec
-    const fiscalYear = m >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-    const fiscalStart = new Date(fiscalYear, 3, 1); // April 1
-    const daysSoFar = Math.min(366,
-      Math.floor((now - fiscalStart) / 86400000) + 1);
-    const c = await get('/api/me/contribution_calendar', { days: daysSoFar });
-    if (!c.days.length) { root.innerHTML = ''; return; }
-    // Pad so the first column starts on a Monday. dow: 1=Mon..0=Sun in JS;
-    // we want Mon-first, so map (d.getDay()+6)%7 → 0=Mon..6=Sun.
-    const cells = c.days.map(d => ({ ...d, dow: (new Date(d.date).getDay() + 6) % 7 }));
-    const lead = cells[0].dow;
-    const padded = [...Array(lead).fill(null), ...cells];
-    // Pack into 7-row columns
-    const weeks = [];
-    for (let i = 0; i < padded.length; i += 7) weeks.push(padded.slice(i, i + 7));
-    const max = Math.max(60, ...cells.map(d => d.minutes));  // floor at 60min so single-checkin days don't max the scale
-    const color = m => {
-      if (m <= 0) return '#ebedf0';
-      const t = Math.min(1, m / max);
-      if (t < 0.2) return '#c6e48b';
-      if (t < 0.4) return '#7bc96f';
-      if (t < 0.7) return '#239a3b';
-      return '#196127';
-    };
-    const fmtMin = m => m < 60 ? `${m}分` : `${Math.floor(m/60)}時間${m%60?(m%60)+'分':''}`;
-    const dayLabels = ['月','','水','','金','',''];  // sparse: Mon/Wed/Fri only
-    const cellHtml = (d) => d
-      ? `<div class="grass-cell" style="background:${color(d.minutes)}"
-              title="${d.date}: ${d.minutes > 0 ? fmtMin(d.minutes) : '不在'}"></div>`
-      : `<div class="grass-cell" style="background:transparent"></div>`;
-    root.innerHTML = `
-      <div class="muted" style="font-size:11px; margin-bottom:4px">${fiscalYear} 年度のラボ滞在</div>
-      <div style="display:flex; gap:3px; overflow-x:auto; padding-bottom:2px">
-        <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px; padding-right:2px">
-          ${dayLabels.map(l => `<div style="font-size:9px; color:var(--muted); line-height:12px">${l}</div>`).join('')}
-        </div>
-        ${weeks.map(w => `
-          <div style="display:grid; grid-template-rows:repeat(7, 12px); gap:2px">
-            ${[0,1,2,3,4,5,6].map(r => cellHtml(w[r] ?? null)).join('')}
-          </div>`).join('')}
-      </div>
-      <div class="muted" style="font-size:10px; margin-top:4px; display:flex; align-items:center; gap:4px">
-        少
-        ${['#ebedf0','#c6e48b','#7bc96f','#239a3b','#196127'].map(c => `<span class="grass-cell" style="background:${c}; width:10px; height:10px"></span>`).join('')}
-        多
-      </div>
-    `;
-  } catch (e) {
-    root.innerHTML = `<div class="muted" style="font-size:11px">${escapeHtml(e.message)}</div>`;
   }
 }
 
