@@ -636,20 +636,19 @@ function openSettleModal(gid) {
   if (!d || !d.expenses.length) { toast('支出がまだありません'); return; }
   const root = document.getElementById('gd-settle-modal');
   root.hidden = false;
-  const balRows = d.balances.map(b => `
-    <div class="list-item">
-      <div style="flex:1; display:flex; align-items:center; gap:8px">
-        ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
-        <div class="bold">${escapeHtml(b.display_name)}</div>
-      </div>
-      <div style="font-size:16px; text-align:right">
-        ${b.net_jpy > 0
-          ? `<span style="color:#0e7c63" class="bold">+¥${b.net_jpy.toLocaleString()}</span><div class="meta">受取</div>`
-          : b.net_jpy < 0
-            ? `<span style="color:#b54708" class="bold">-¥${Math.abs(b.net_jpy).toLocaleString()}</span><div class="meta">支払</div>`
-            : `<span class="muted">±0</span>`}
-      </div>
-    </div>`).join('');
+  // 各人の支払った総額 (= spent_jpy, 立替してもらった分も含めて実質
+  // いくら使ったか)。使った額の大きい順。
+  const spendRows = [...(d.balances || [])]
+    .filter(b => (b.spent_jpy || 0) > 0)
+    .sort((a, b) => (b.spent_jpy || 0) - (a.spent_jpy || 0))
+    .map(b => `
+      <div class="list-item">
+        <div style="flex:1; display:flex; align-items:center; gap:8px">
+          ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
+          <div class="bold">${escapeHtml(b.display_name)}</div>
+        </div>
+        <div class="bold" style="font-size:16px">¥${(b.spent_jpy || 0).toLocaleString()}</div>
+      </div>`).join('');
   const planRows = d.settlements.length
     ? d.settlements.map(s => `
         <div class="list-item">
@@ -668,8 +667,9 @@ function openSettleModal(gid) {
           <button id="gd-settle-close">×</button>
         </div>
         <p class="muted" style="font-size:13px">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
-        <h4 style="margin:12px 0 6px">ネット残高</h4>
-        <div class="list">${balRows}</div>
+        <h4 style="margin:12px 0 6px">各人の支払った総額</h4>
+        <p class="muted" style="font-size:11px; margin:0 0 4px">立替してもらった分も含めて、実質いくら使ったか</p>
+        <div class="list">${spendRows || '<div class="muted">支払いがまだありません</div>'}</div>
         <h4 style="margin:12px 0 6px">推奨送金プラン</h4>
         <div class="list">${planRows}</div>
         ${d.settlements.length ? `
