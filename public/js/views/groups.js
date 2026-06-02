@@ -719,16 +719,20 @@ function openSettleModal(gid) {
   root.querySelector('#gd-settle-asreq')?.addEventListener('click', async (ev) => {
     const myPlans = d.settlements.filter(s => Number(s.to_user_id) === meId);
     if (!myPlans.length) { toast('あなた宛の送金プランがありません'); return; }
-    const title = (lastWariData?._title) || '精算';
-    // グループタイトルが分かれば優先 (loadDetail で渡されている)。フォール
-    // バックは「精算」固定。
-    const r = await get('/api/groups/' + currentGroupId);
-    const groupTitle = r?.title || '精算';
-    if (!confirm(`${myPlans.length} 人にあなた宛の請求を送ります。タイトル「${groupTitle} 精算」 でよろしいですか?`)) return;
+    // タイトルは prompt で編集可能に。デフォルトはグループ名。
+    const g = await get('/api/groups/' + currentGroupId);
+    const defaultTitle = g?.title || '精算';
+    const ans = prompt(
+      `${myPlans.length} 人にあなた宛の請求を送ります。\nタイトルを入力してください:`,
+      defaultTitle
+    );
+    if (ans === null) return;
+    const title = ans.trim();
+    if (!title) { toast('タイトルを入れてください'); return; }
     ev.currentTarget.disabled = true;
     try {
       const created = await post('/api/money-requests', {
-        title: `${groupTitle} 精算`,
+        title,
         memo: null,
         recipients: myPlans.map(s => ({ user_id: s.from_user_id, amount_yen: s.amount_jpy })),
       });
