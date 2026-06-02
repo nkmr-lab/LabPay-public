@@ -73,9 +73,14 @@ export async function renderSell() {
       </div>
     </div>
 
-    <!-- ============= 新規出品 ============= -->
-    <div class="card">
-      <h3>新規出品</h3>
+    <!-- ============= 新規出品 (折りたたみ) ============= -->
+    <details class="card" style="padding:12px 16px">
+      <summary style="cursor:pointer; font-weight:700; font-size:16px">＋ 新規出品</summary>
+      <div style="margin-top:10px"></div>
+
+      <details style="margin-bottom:10px" open>
+        <summary style="cursor:pointer; font-weight:600; padding:6px 0">📷 バーコードで登録</summary>
+        <div style="margin-top:8px"></div>
       <button class="primary" id="scan-toggle" style="width:100%">📷 バーコードを読み取って出品</button>
       <div id="scanner-wrap" hidden style="margin-top:10px">
         <video id="sell-video" playsinline style="width:100%; max-width:320px; border-radius:12px; background:#000; display:block; margin:0 auto"></video>
@@ -131,11 +136,11 @@ export async function renderSell() {
         <button class="primary" id="submit-listing">出品する</button>
         <div class="muted" style="margin-top:6px; font-size:13px">手数料は売れたときに価格×5%が差し引かれます。</div>
       </div>
-    </div>
+      </details>
 
-    <!-- ============= バーコード無し ============= -->
-    <div class="card">
-      <h3>バーコードが無い商品を出品</h3>
+      <details>
+        <summary style="cursor:pointer; font-weight:600; padding:6px 0">✏️ バーコードなしで登録</summary>
+        <div style="margin-top:8px"></div>
       <p class="muted" style="font-size:13px">
         カプセルコーヒー1個、お手製のお菓子、ばら売り商品など。<br>
         内部用に擬似 JAN を自動生成します (購入フローからは普通の商品と同じに見えます)。
@@ -182,7 +187,8 @@ export async function renderSell() {
         <textarea id="nj-completion_message" maxlength="2000" rows="2" placeholder="ご購入ありがとうございます!"></textarea>
       </label>
       <button class="primary" id="nj-submit">出品する</button>
-    </div>
+      </details>
+    </details>
 
     <!-- ============= 出品管理 ============= -->
     <div class="card">
