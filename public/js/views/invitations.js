@@ -4,12 +4,7 @@ import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 
-let highlightInvitationId = null;
-
-// /#/invitations and /#/invitations/:id both land here — the :id variant just
-// scrolls to that row + flashes it so notification deep-links work.
-export async function renderInvitations({ params } = {}) {
-  highlightInvitationId = params?.id ? Number(params.id) : null;
+export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -70,23 +65,15 @@ async function loadList() {
       return;
     }
     root.innerHTML = d.items.map(renderRow).join('');
-    if (highlightInvitationId) {
-      const row = root.querySelector(`[data-inv-id="${highlightInvitationId}"]`);
-      if (row) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        row.style.outline = '2px solid var(--primary)';
-        row.style.transition = 'outline-color 1.5s';
-        setTimeout(() => { row.style.outline = '0 solid transparent'; }, 50);
-      }
-    }
+    // 行は <a>。中の参加/取消ボタンは click を握り潰してナビゲートさせない。
     root.querySelectorAll('[data-join]').forEach(b => {
-      b.addEventListener('click', () => onJoin(Number(b.dataset.join)));
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onJoin(Number(b.dataset.join)); });
     });
     root.querySelectorAll('[data-leave]').forEach(b => {
-      b.addEventListener('click', () => onLeave(Number(b.dataset.leave)));
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onLeave(Number(b.dataset.leave)); });
     });
     root.querySelectorAll('[data-cancel]').forEach(b => {
-      b.addEventListener('click', () => onCancel(Number(b.dataset.cancel)));
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onCancel(Number(b.dataset.cancel)); });
     });
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -97,7 +84,6 @@ function renderRow(i) {
   const meId = state.me?.id;
   const isMine = meId === Number(i.creator_user_id);
   const isClosed = !!i.closed_at;
-  const dataId = `data-inv-id="${i.id}"`;
   const iJoined = Number(i.i_joined) === 1;
   const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(i.starts_at)}</div>` : '';
   const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
@@ -127,7 +113,7 @@ function renderRow(i) {
     : '';
 
   return `
-    <div class="list-item" ${dataId}>
+    <a class="list-item" href="#/invitations/${i.id}" style="text-decoration:none; color:inherit">
       <div style="flex:1">
         <div class="bold">${escapeHtml(i.title)} ${statusTag}</div>
         ${whenLine}${whereLine}${capLine}
@@ -138,7 +124,80 @@ function renderRow(i) {
         </div>
       </div>
       ${actions ? `<div style="display:flex; flex-direction:column; gap:4px">${actions}</div>` : ''}
-    </div>`;
+    </a>`;
+}
+
+// ─── DETAIL ───────────────────────────────────────────────────────────
+
+export async function renderInvitationDetail({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/invitations" class="muted" style="font-size:13px">← 募集一覧</a>
+      <div id="inv-head" class="muted" style="margin-top:6px">読み込み中…</div>
+    </div>
+    <div class="card">
+      <h3>参加表明している人</h3>
+      <div id="inv-joins" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+  `;
+  await loadDetail(id);
+}
+
+async function loadDetail(id) {
+  try {
+    const i = await get('/api/invitations/' + id);
+    const meId = state.me?.id;
+    const isMine = meId === Number(i.creator_user_id);
+    const isClosed = !!i.closed_at;
+    const iJoined = (i.joins || []).some(j => Number(j.id) === Number(meId));
+    const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(i.starts_at)}</div>` : '';
+    const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
+    const capLine = i.capacity
+      ? `<div class="meta">参加 ${(i.joins || []).length} / 上限 ${i.capacity}</div>`
+      : `<div class="meta">参加 ${(i.joins || []).length} 人</div>`;
+    const statusTag = isClosed
+      ? `<span class="tag muted">終了</span>`
+      : (iJoined
+          ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ 参加表明済</span>`
+          : `<span class="tag" style="background:#fff3df; color:#b54708">募集中</span>`);
+    let actions = '';
+    if (!isClosed) {
+      if (iJoined) actions += `<button id="inv-detail-leave">参加表明を取消</button>`;
+      else         actions += `<button id="inv-detail-join" class="primary">参加表明する</button>`;
+      if (isMine)  actions += ` <button id="inv-detail-cancel" class="danger">募集を取消</button>`;
+    }
+    document.getElementById('inv-head').innerHTML = `
+      <div class="bold" style="font-size:18px">${escapeHtml(i.title)} ${statusTag}</div>
+      ${whenLine}${whereLine}${capLine}
+      ${i.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:6px">${escapeHtml(i.description)}</div>` : ''}
+      <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:6px">
+        ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
+        ${escapeHtml(i.creator_name)} · ${escapeHtml(i.created_at)}
+      </div>
+      ${actions ? `<div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">${actions}</div>` : ''}
+    `;
+    document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
+    document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
+    document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
+    const root = document.getElementById('inv-joins');
+    if (!(i.joins || []).length) {
+      root.innerHTML = `<div class="empty">まだ参加表明している人はいません</div>`;
+    } else {
+      root.innerHTML = i.joins.map(j => `
+        <div class="list-item">
+          <div style="flex:1; display:flex; align-items:center; gap:8px">
+            ${avatarHtml(j.display_name, j.avatar_url, 'sm')}
+            <div class="bold">${escapeHtml(j.display_name)}</div>
+          </div>
+          <div class="meta">${escapeHtml(j.joined_at)}</div>
+        </div>`).join('');
+    }
+  } catch (e) {
+    document.getElementById('inv-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    document.getElementById('inv-joins').innerHTML = '';
+  }
 }
 
 async function onCreate() {
