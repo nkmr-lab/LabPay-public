@@ -1,9 +1,11 @@
-// /#/groups — list + create. /#/groups/{id} — detail with feed + member-context
-// shortcuts for ルーレット / 飲み会割り勘.
+// /#/groups — list + create. /#/groups/{id} — detail with feed + ワリカ +
+// member-context shortcuts for ルーレット / 飲み会割り勘.
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+
+const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
 // ──────────────────────────── LIST + CREATE ────────────────────────────
 
@@ -12,11 +14,11 @@ export async function renderGroups() {
   app.innerHTML = `
     <div class="card">
       <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
-      <h2 style="margin:6px 0 0">暫定グループ</h2>
+      <h2 style="margin:6px 0 0">グループ</h2>
       <p class="muted" style="font-size:13px; margin:6px 0 0">
-        出張中・旅行・連幹事など、短期間だけ使う臨時グループ。連絡用のフィード
-        (メモ・URL・時間) を共有しつつ、ルーレットや飲み会割り勘をそのメンバーで
-        即起動できます。
+        出張・旅行・連幹事など、短期間だけ使うメンバー枠。フィード (メモ・URL・
+        時間) + ワリカ (立替を積み上げ → 精算) を共有しつつ、ルーレットや
+        飲み会割り勘をそのメンバーで即起動できます。
       </p>
     </div>
 
@@ -31,8 +33,10 @@ export async function renderGroups() {
         <textarea id="gr-notes" maxlength="2000" rows="2"></textarea>
       </label>
       <div class="field">
-        <span class="lbl">メンバー (タップして選択)</span>
+        <span class="lbl">メンバー</span>
+        <div id="gr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
         <div id="gr-picker" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        <div id="gr-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
       </div>
       <button id="gr-submit" class="primary">作成</button>
     </div>
@@ -48,27 +52,78 @@ export async function renderGroups() {
 }
 
 const picked = new Set();
+let allUsers = [];
 
 async function populatePicker() {
   const u = await get('/api/users');
-  const root = document.getElementById('gr-picker');
-  root.innerHTML = u.items.map(x => `
+  picked.clear();
+  // Sort: D → M2 → M1 → B4 → B3 → (no grade), 50音順
+  allUsers = [...u.items].sort((a, b) => {
+    const ga = GRADE_ORDER.indexOf(a.grade || '');
+    const gb = GRADE_ORDER.indexOf(b.grade || '');
+    return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
+      (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+  });
+
+  const grades = [...new Set(allUsers.map(u => u.grade).filter(Boolean))]
+    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  const bulk = document.getElementById('gr-bulk');
+  bulk.innerHTML = `
+    <button data-bulk="all"  class="btn">全員</button>
+    ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
+    <button data-bulk="gender:M" class="btn">男</button>
+    <button data-bulk="gender:F" class="btn">女</button>
+    <button data-bulk="clear" class="btn">クリア</button>
+  `;
+  bulk.querySelectorAll('[data-bulk]').forEach(b => {
+    b.addEventListener('click', () => applyBulk(b.dataset.bulk));
+  });
+
+  const picker = document.getElementById('gr-picker');
+  picker.innerHTML = allUsers.map(x => `
     <span class="rl-chip" data-uid="${x.id}">
       ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
       <span>${escapeHtml(x.display_name)}</span>
       ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
+      ${x.gender === 'F' ? `<span class="muted" style="font-size:10px">♀</span>` : ''}
     </span>`).join('');
-  root.querySelectorAll('.rl-chip').forEach(c => {
-    c.addEventListener('click', () => {
-      const uid = Number(c.dataset.uid);
-      if (picked.has(uid)) {
-        picked.delete(uid); c.style.background = ''; c.style.borderColor = '';
-      } else {
-        picked.add(uid); c.style.background = 'var(--primary-soft, #efeafa)';
-        c.style.borderColor = 'var(--primary)';
-      }
-    });
+  picker.querySelectorAll('.rl-chip').forEach(c => {
+    c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
   });
+  refreshChips();
+}
+
+function memberMatches(user, key) {
+  if (key === 'all') return true;
+  if (key.startsWith('grade:')) return (user.grade || '') === key.slice(6);
+  if (key.startsWith('gender:')) return (user.gender || '') === key.slice(7);
+  return false;
+}
+
+function applyBulk(key) {
+  if (key === 'clear') { picked.clear(); refreshChips(); return; }
+  const targets = allUsers.filter(u => memberMatches(u, key));
+  // Two-state toggle: if all targets are already on → turn them off; else add all.
+  const allOn = targets.every(u => picked.has(u.id));
+  if (allOn) targets.forEach(u => picked.delete(u.id));
+  else       targets.forEach(u => picked.add(u.id));
+  refreshChips();
+}
+
+function togglePick(uid) {
+  if (picked.has(uid)) picked.delete(uid);
+  else picked.add(uid);
+  refreshChips();
+}
+
+function refreshChips() {
+  document.querySelectorAll('#gr-picker .rl-chip').forEach(c => {
+    const on = picked.has(Number(c.dataset.uid));
+    c.style.background = on ? 'var(--primary-soft, #efeafa)' : '';
+    c.style.borderColor = on ? 'var(--primary)' : '';
+  });
+  const countEl = document.getElementById('gr-count');
+  if (countEl) countEl.textContent = `${picked.size} 人選択中`;
 }
 
 async function onCreate() {
@@ -111,7 +166,7 @@ export async function renderGroupDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/groups" class="muted" style="font-size:13px">← 一覧</a>
+      <a href="#/groups" class="muted" style="font-size:13px">← グループ一覧</a>
       <div id="gd-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">

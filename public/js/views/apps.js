@@ -5,7 +5,7 @@ import { escapeHtml } from '../router.js';
 const APPS = [
   { url: '#/roulette',    title: 'ルーレット',         desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。' },
   { url: '#/nomikai',     title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。' },
-  { url: '#/groups',      title: '暫定グループ',       desc: '出張中の臨時メンバー枠。連絡 (メモ/URL/時間) + ワリカ (Splitwise 風 立替記録 → 精算) + ルーレット/割り勘ショートカット。' },
+  { url: '#/groups',      title: 'グループ',           desc: '出張・旅行・連幹事などの短期メンバー枠。連絡 (メモ/URL/時間) + ワリカ (立替を積み上げ → 精算) + ルーレット/飲み会割り勘ショートカット。' },
   { url: '#/scrapbox',    title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。' },
 ];
 

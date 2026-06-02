@@ -1,5 +1,5 @@
 <?php
-// /api/groups — 暫定グループ (ad-hoc groups for short-lived contexts:
+// /api/groups — グループ (ad-hoc, for short-lived contexts:
 // 出張中, 旅行, 学会, 飲み会連幹事). Creator picks members; everyone in the
 // group can post items (memo / url / time) into a shared feed and launch
 // ルーレット or 飲み会割り勘 pre-filled with the group's members.
@@ -100,7 +100,7 @@ function groups_create(PDO $pdo, array $cfg): void {
     foreach ($memberIds as $uid) {
         if ($uid === (int)$u['id']) continue;
         notify_safely($pdo, $cfg, $uid, 'admin_notice',
-            "👥 暫定グループ「{$title}」に追加されました", 'group', $gid);
+            "👥 グループ「{$title}」に追加されました", 'group', $gid);
     }
     json_response(['ok' => true, 'id' => $gid]);
 }
@@ -212,7 +212,7 @@ function group_members_add(PDO $pdo, array $cfg, int $id): void {
     $stT = $pdo->prepare("SELECT title FROM adhoc_groups WHERE id=?");
     $stT->execute([$id]); $title = (string)$stT->fetchColumn();
     notify_safely($pdo, $cfg, $uid, 'admin_notice',
-        "👥 暫定グループ「{$title}」に追加されました", 'group', $id);
+        "👥 グループ「{$title}」に追加されました", 'group', $id);
     json_response(['ok' => true]);
 }
 
