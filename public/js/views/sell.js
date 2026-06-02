@@ -461,6 +461,9 @@ function renderRow(l) {
   // Action row: per the consolidation, only 更新 / 取り下げ are universal;
   // 🎁 toggle and 1個消費 stay as separate intents because they're mode
   // changes / inventory adjustments rather than "save what I just typed".
+  // No dedicated 1個消費 button — adjusting 在庫 directly and hitting [更新]
+  // does the same thing (the listing.qty UPDATE has no ledger side-effect
+  // either way), so one less button to look at.
   const actionRow = l.status === 'withdrawn'
     ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
        <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
@@ -468,7 +471,6 @@ function renderRow(l) {
        ${l.is_gift
          ? `<button data-action="ungift" data-id="${l.id}">通常販売に戻す</button>`
          : `<button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>`}
-       <button data-action="consume" data-id="${l.id}" ${l.qty > 0 ? '' : 'disabled'}>1個消費</button>
        <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
   // Field rows share a fixed-width left label + flex-grow input. min-width:0 on
   // every flex item is the canonical fix for inputs (especially <input type="file">)
