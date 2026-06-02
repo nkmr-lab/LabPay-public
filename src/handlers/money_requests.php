@@ -28,21 +28,26 @@ function route_money_requests(PDO $pdo, array $cfg, string $method, array $seg):
 
 function money_requests_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // 自分が発起人 or 受取人 のいずれかにいる請求を返す。
+    // 自分が「発起人 (creator) / 代理生成 (created_by) / 受取人」のいずれかに
+    // いる請求を返す。
     $st = $pdo->prepare("
         SELECT r.id, r.title, r.memo, r.closed_at, r.created_at,
-               uc.display_name AS creator_name, uc.id AS creator_user_id,
+               r.creator_user_id, r.created_by_user_id,
+               uc.display_name AS creator_name,
+               ucb.display_name AS created_by_name,
                (SELECT COUNT(*) FROM money_request_recipients WHERE request_id = r.id) AS member_count,
                (SELECT COUNT(*) FROM money_request_recipients WHERE request_id = r.id AND paid_at IS NOT NULL) AS paid_count,
                (SELECT amount_yen FROM money_request_recipients WHERE request_id = r.id AND user_id = ?) AS my_amount,
                (SELECT paid_at    FROM money_request_recipients WHERE request_id = r.id AND user_id = ?) AS my_paid_at
           FROM money_requests r
           JOIN users uc ON uc.id = r.creator_user_id
+          LEFT JOIN users ucb ON ucb.id = r.created_by_user_id
          WHERE r.creator_user_id = ?
+            OR r.created_by_user_id = ?
             OR EXISTS (SELECT 1 FROM money_request_recipients
                         WHERE request_id = r.id AND user_id = ?)
          ORDER BY r.closed_at IS NULL DESC, r.created_at DESC LIMIT 100");
-    $st->execute([$u['id'], $u['id'], $u['id'], $u['id']]);
+    $st->execute([$u['id'], $u['id'], $u['id'], $u['id'], $u['id']]);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
 
@@ -142,8 +147,9 @@ function money_requests_create(PDO $pdo, array $cfg): void {
 
     $pdo->beginTransaction();
     try {
-        $st = $pdo->prepare("INSERT INTO money_requests (creator_user_id, title, memo) VALUES (?,?,?)");
-        $st->execute([$creatorId, $title, $memo]);
+        $st = $pdo->prepare("INSERT INTO money_requests
+            (creator_user_id, created_by_user_id, title, memo) VALUES (?,?,?,?)");
+        $st->execute([$creatorId, (int)$u['id'], $title, $memo]);
         $rid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO money_request_recipients (request_id, user_id, amount_yen) VALUES (?,?,?)");
         foreach ($rows as $r) $st->execute([$rid, $r['user_id'], $r['amount_yen']]);
@@ -192,10 +198,11 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
     $stR->execute([$id]);
     $recipients = $stR->fetchAll(PDO::FETCH_ASSOC);
 
-    $isCreator = (int)$r['creator_user_id'] === (int)$u['id'];
+    $isCreator   = (int)$r['creator_user_id']    === (int)$u['id'];
+    $isGenerator = (int)($r['created_by_user_id'] ?? 0) === (int)$u['id'];
     $isRecipient = false;
     foreach ($recipients as $rec) if ((int)$rec['user_id'] === (int)$u['id']) $isRecipient = true;
-    if (!$isCreator && !$isRecipient) {
+    if (!$isCreator && !$isGenerator && !$isRecipient) {
         throw new ApiException('forbidden', 'この請求に関わっていません', 403);
     }
     $r['recipients'] = $recipients;

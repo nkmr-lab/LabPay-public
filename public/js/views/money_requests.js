@@ -307,16 +307,24 @@ async function loadList() {
     if (!d.items.length) { root.innerHTML = `<div class="empty">まだ請求はありません</div>`; return; }
     const meId = state.me?.id;
     root.innerHTML = d.items.map(r => {
-      const isMine = Number(r.creator_user_id) === Number(meId);
+      const isMine      = Number(r.creator_user_id) === Number(meId);
+      const isGenerator = Number(r.created_by_user_id) === Number(meId) && !isMine;
+      const tagBits = [];
+      if (isMine)      tagBits.push('<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>');
+      if (isGenerator) tagBits.push(`<span class="tag" style="background:#fff8e6; color:#b54708">代理生成</span>`);
       const myLine = r.my_amount != null
         ? `あなたへ ¥${Number(r.my_amount).toLocaleString()} ${r.my_paid_at ? '✓支払済' : '未払い'}`
-        : 'あなたは受取人ではありません';
+        : (isMine
+            ? `あなたが受取側 (${r.member_count} 人から)`
+            : (isGenerator
+                ? `代理生成: ${escapeHtml(r.creator_name)} 宛 / ${r.member_count} 人`
+                : 'あなたは受取人ではありません'));
       return `
         <a class="list-item" href="#/requests/${r.id}" style="text-decoration:none; color:inherit">
           <div style="flex:1">
-            <div class="bold">${escapeHtml(r.title)} ${isMine ? '<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>' : ''}</div>
+            <div class="bold">${escapeHtml(r.title)} ${tagBits.join(' ')}</div>
             <div class="meta">${escapeHtml(r.creator_name)} · 支払い済 ${r.paid_count}/${r.member_count}</div>
-            <div class="meta">${escapeHtml(myLine)} · ${escapeHtml(r.created_at)}</div>
+            <div class="meta">${myLine} · ${escapeHtml(r.created_at)}</div>
           </div>
         </a>`;
     }).join('');

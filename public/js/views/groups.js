@@ -755,7 +755,9 @@ function openSettleModal(gid) {
       }
       toast(`${ok} 件の請求を作成しました${fail ? ` (${fail} 件失敗)` : ''}`);
       root.hidden = true; root.innerHTML = '';
-      if (firstId) location.hash = '#/requests/' + firstId;
+      // 一覧に飛ぶ (詳細だと creator 以外で recipient でもない自分が
+      // 見えない請求もあるため。一覧は created_by=me でも拾われる)
+      location.hash = '#/requests';
     } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
   });
   // Dry-run preview: ask the server to compute the messages without sending,
