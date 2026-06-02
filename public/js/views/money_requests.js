@@ -1,0 +1,366 @@
+// /#/requests          → 一覧 + 新規作成
+// /#/requests/{id}     → 詳細 (受取人視点 = 自分の額 + 支払うボタン / 発起人視点 = 全員の支払い状況)
+//
+// 飲み会割り勘とは独立した一般用途の「集金」: 学会参加費、事務局費、
+// 部屋の備品代など。支払いは外 (現金/PayPay/銀行/立替) でやり取り。
+
+import { get, post, patch, del } from '../api.js';
+import { escapeHtml, avatarHtml, navigate } from '../router.js';
+import { state, toast } from '../app.js';
+
+const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
+const METHOD_LABEL = { cash: '現金', paypay: 'PayPay', bank: '銀行振込', proxy: '立替' };
+
+// ─── LIST + CREATE ────────────────────────────────────────────────────
+
+let allUsers = [];
+const picked = new Set();
+// uid → 円. mode === 'flat' のときは無視 (flatAmount を使う)
+const customAmount = new Map();
+let mode = 'flat';        // 'flat' = 全員同額 / 'custom' = 指定額
+let flatAmount = 1000;
+
+export async function renderMoneyRequests() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/apps" class="muted" style="font-size:13px">← アプリ</a>
+      <h2 style="margin:6px 0 0">請求 (集金)</h2>
+      <p class="muted" style="font-size:13px; margin:6px 0 0">
+        メンバーを選んでお金を集めるための機能です。全員同額または指定額で
+        請求 → 各人が「支払い済」を方法 (現金/PayPay/銀行/立替) 付きで
+        チェックします。実際の送金は外で。
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>新規請求</h3>
+      <label class="field">
+        <span class="lbl">タイトル</span>
+        <input type="text" id="mr-title" maxlength="200" placeholder="例: 学会参加費 集金">
+      </label>
+      <label class="field">
+        <span class="lbl">メモ (任意)</span>
+        <textarea id="mr-memo" maxlength="2000" rows="2" placeholder="期限・振込み先補足など"></textarea>
+      </label>
+
+      <div class="field">
+        <span class="lbl">メンバー</span>
+        <div id="mr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
+        <div id="mr-picker" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        <div id="mr-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
+      </div>
+
+      <div class="field">
+        <span class="lbl">金額の指定</span>
+        <div class="row" style="gap:6px; flex-wrap:wrap; align-items:center">
+          <button data-mode="flat"   class="btn primary" id="mr-mode-flat">全員に同額</button>
+          <button data-mode="custom" class="btn" id="mr-mode-custom">人ごとに指定</button>
+        </div>
+        <div id="mr-amount-area" style="margin-top:8px"></div>
+      </div>
+
+      <div id="mr-preview-total" class="muted" style="font-size:13px; margin-bottom:6px"></div>
+      <button id="mr-submit" class="primary">作成 + 全員に通知</button>
+    </div>
+
+    <div class="card">
+      <h3>履歴</h3>
+      <div id="mr-list" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+  `;
+  await populatePicker();
+  document.getElementById('mr-title').addEventListener('input', renderPreview);
+  document.getElementById('mr-mode-flat')  .addEventListener('click', () => switchMode('flat'));
+  document.getElementById('mr-mode-custom').addEventListener('click', () => switchMode('custom'));
+  document.getElementById('mr-submit')     .addEventListener('click', onCreate);
+  switchMode('flat');
+  await loadList();
+}
+
+async function populatePicker() {
+  const u = await get('/api/users');
+  picked.clear();
+  customAmount.clear();
+  allUsers = [...u.items].sort((a, b) => {
+    const ga = GRADE_ORDER.indexOf(a.grade || '');
+    const gb = GRADE_ORDER.indexOf(b.grade || '');
+    return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
+      (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+  });
+  const grades = [...new Set(allUsers.map(u => u.grade).filter(Boolean))]
+    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  const bulk = document.getElementById('mr-bulk');
+  bulk.innerHTML = `
+    <button data-bulk="all"  class="btn">全員</button>
+    ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
+    <button data-bulk="gender:M" class="btn">男</button>
+    <button data-bulk="gender:F" class="btn">女</button>
+    <button data-bulk="clear" class="btn">クリア</button>
+  `;
+  bulk.querySelectorAll('[data-bulk]').forEach(b => {
+    b.addEventListener('click', () => applyBulk(b.dataset.bulk));
+  });
+  const picker = document.getElementById('mr-picker');
+  picker.innerHTML = allUsers.map(x => `
+    <span class="rl-chip" data-uid="${x.id}">
+      ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+      <span>${escapeHtml(x.display_name)}</span>
+      ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
+    </span>`).join('');
+  picker.querySelectorAll('.rl-chip').forEach(c => {
+    c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
+  });
+  refreshChips();
+}
+
+function memberMatches(u, key) {
+  if (key === 'all') return true;
+  if (key.startsWith('grade:')) return (u.grade || '') === key.slice(6);
+  if (key.startsWith('gender:')) return (u.gender || '') === key.slice(7);
+  return false;
+}
+function applyBulk(key) {
+  if (key === 'clear') { picked.clear(); refreshChips(); return; }
+  const targets = allUsers.filter(u => memberMatches(u, key));
+  const allOn = targets.every(u => picked.has(u.id));
+  if (allOn) targets.forEach(u => picked.delete(u.id));
+  else       targets.forEach(u => picked.add(u.id));
+  refreshChips();
+}
+function togglePick(uid) {
+  if (picked.has(uid)) picked.delete(uid);
+  else picked.add(uid);
+  refreshChips();
+}
+function refreshChips() {
+  document.querySelectorAll('#mr-picker .rl-chip').forEach(c => {
+    const on = picked.has(Number(c.dataset.uid));
+    c.style.background = on ? 'var(--primary-soft, #efeafa)' : '';
+    c.style.borderColor = on ? 'var(--primary)' : '';
+  });
+  document.getElementById('mr-count').textContent = `${picked.size} 人選択中`;
+  if (mode === 'custom') renderCustomArea();
+  renderPreview();
+}
+
+function switchMode(m) {
+  mode = m;
+  document.getElementById('mr-mode-flat')  .classList.toggle('primary', m === 'flat');
+  document.getElementById('mr-mode-custom').classList.toggle('primary', m === 'custom');
+  if (m === 'flat') {
+    document.getElementById('mr-amount-area').innerHTML = `
+      <label class="field" style="margin-top:6px">
+        <span class="lbl">1 人あたり (円)</span>
+        <input type="number" id="mr-flat" min="0" step="100" value="${flatAmount}" style="max-width:160px">
+      </label>`;
+    document.getElementById('mr-flat').addEventListener('input', () => {
+      flatAmount = Math.max(0, Math.floor(Number(document.getElementById('mr-flat').value) || 0));
+      renderPreview();
+    });
+  } else {
+    renderCustomArea();
+  }
+  renderPreview();
+}
+
+function renderCustomArea() {
+  const root = document.getElementById('mr-amount-area');
+  if (!root) return;
+  if (mode !== 'custom') return;
+  const arr = allUsers.filter(u => picked.has(u.id));
+  if (!arr.length) {
+    root.innerHTML = `<div class="muted" style="font-size:13px; margin-top:6px">メンバーを選んでください</div>`;
+    return;
+  }
+  root.innerHTML = `
+    <div class="muted" style="font-size:12px; margin:6px 0 4px">各人の金額を入力 (空欄は ¥0 扱い、0円は除外されます)</div>
+    ${arr.map(u => `
+      <div class="row" style="gap:6px; align-items:center; padding:3px 0">
+        ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
+        <span style="flex:1">${escapeHtml(u.display_name)} ${u.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(u.grade)}]</span>` : ''}</span>
+        <input type="number" min="0" step="100" data-amt="${u.id}" value="${customAmount.get(u.id) ?? ''}" placeholder="¥" style="width:110px; text-align:right">
+      </div>`).join('')}
+  `;
+  root.querySelectorAll('[data-amt]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const uid = Number(inp.dataset.amt);
+      const v = Math.max(0, Math.floor(Number(inp.value) || 0));
+      if (v > 0) customAmount.set(uid, v);
+      else customAmount.delete(uid);
+      renderPreview();
+    });
+  });
+}
+
+function renderPreview() {
+  const root = document.getElementById('mr-preview-total');
+  if (!root) return;
+  const recipients = buildRecipients();
+  if (!recipients.length) {
+    root.textContent = '対象者と金額を入れてください';
+    return;
+  }
+  const sum = recipients.reduce((s, r) => s + r.amount_yen, 0);
+  root.textContent = `合計 ¥${sum.toLocaleString()} (${recipients.length} 人)`;
+}
+
+function buildRecipients() {
+  const out = [];
+  for (const u of allUsers) {
+    if (!picked.has(u.id)) continue;
+    const amt = mode === 'flat' ? flatAmount : (customAmount.get(u.id) ?? 0);
+    if (amt > 0) out.push({ user_id: u.id, amount_yen: amt });
+  }
+  return out;
+}
+
+async function onCreate() {
+  const title = document.getElementById('mr-title').value.trim();
+  const memo = document.getElementById('mr-memo').value.trim() || null;
+  if (!title) { toast('タイトルを入れてください'); return; }
+  const recipients = buildRecipients();
+  if (!recipients.length) { toast('対象者と金額を入れてください'); return; }
+  if (!confirm(`${recipients.length} 人に請求を送ります。よろしいですか?`)) return;
+  try {
+    const r = await post('/api/money-requests', { title, memo, recipients });
+    toast('作成しました');
+    navigate('#/requests/' + r.id);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function loadList() {
+  try {
+    const d = await get('/api/money-requests');
+    const root = document.getElementById('mr-list');
+    if (!d.items.length) { root.innerHTML = `<div class="empty">まだ請求はありません</div>`; return; }
+    const meId = state.me?.id;
+    root.innerHTML = d.items.map(r => {
+      const isMine = Number(r.creator_user_id) === Number(meId);
+      const myLine = r.my_amount != null
+        ? `あなたへ ¥${Number(r.my_amount).toLocaleString()} ${r.my_paid_at ? '✓支払済' : '未払い'}`
+        : 'あなたは受取人ではありません';
+      return `
+        <a class="list-item" href="#/requests/${r.id}" style="text-decoration:none; color:inherit">
+          <div style="flex:1">
+            <div class="bold">${escapeHtml(r.title)} ${r.closed_at ? '<span class="tag muted">close</span>' : ''} ${isMine ? '<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>' : ''}</div>
+            <div class="meta">${escapeHtml(r.creator_name)} · 支払い済 ${r.paid_count}/${r.member_count}</div>
+            <div class="meta">${escapeHtml(myLine)} · ${escapeHtml(r.created_at)}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('mr-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ─── DETAIL ───────────────────────────────────────────────────────────
+
+export async function renderMoneyRequestDetail({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/requests" class="muted" style="font-size:13px">← 請求一覧</a>
+      <div id="mr-detail" class="muted" style="margin-top:6px">読み込み中…</div>
+    </div>
+    <div class="card">
+      <h3>支払い状況</h3>
+      <div id="mr-detail-list" class="list"></div>
+    </div>
+  `;
+  await loadDetail(id);
+}
+
+async function loadDetail(id) {
+  try {
+    const r = await get('/api/money-requests/' + id);
+    const meId = state.me?.id;
+    const isCreator = Number(r.creator_user_id) === Number(meId);
+    const myRow = (r.recipients || []).find(x => Number(x.user_id) === Number(meId));
+    const settle = settlementInfo(r);
+
+    document.getElementById('mr-detail').innerHTML = `
+      <div class="bold" style="font-size:18px">${escapeHtml(r.title)} ${r.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
+      <div class="meta">${escapeHtml(r.creator_name)} · ${escapeHtml(r.created_at)}</div>
+      ${r.memo ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(r.memo)}</div>` : ''}
+      ${settle ? `
+        <div style="margin-top:8px; padding:8px 10px; background:#faf6ff; border-left:3px solid var(--primary); border-radius:6px; font-size:13px">
+          振込先 (${escapeHtml(r.creator_name)} さん): ${settle}
+        </div>` : ''}
+      ${myRow ? `
+        <div style="margin-top:8px; padding:8px 10px; background:#fff8e6; border-radius:6px">
+          <div class="bold">あなたの支払額: ¥${Number(myRow.amount_yen).toLocaleString()}</div>
+          ${myRow.paid_at
+            ? `<div class="meta">✅ 支払い済 (${escapeHtml(METHOD_LABEL[myRow.paid_method] || myRow.paid_method)}) · ${escapeHtml(myRow.paid_at)}
+                 <button id="mr-unpay" style="margin-left:8px; padding:4px 8px">取消</button></div>`
+            : `<div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
+                 <button data-pay="cash"   class="primary">現金で払った</button>
+                 <button data-pay="paypay">PayPay で払った</button>
+                 <button data-pay="bank">銀行振込で払った</button>
+                 <button data-pay="proxy">他の人に立替えてもらった</button>
+               </div>`}
+        </div>` : ''}
+      ${isCreator && !r.closed_at ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を閉じる</button></div>` : ''}
+    `;
+
+    // 受取人リスト (発起人は全件、受取人は自分含めて全員見れる)
+    document.getElementById('mr-detail-list').innerHTML = r.recipients.map(rec => `
+      <div class="list-item">
+        <div style="flex:1; display:flex; align-items:center; gap:8px">
+          ${avatarHtml(rec.display_name, rec.avatar_url, 'sm')}
+          <div>
+            <div class="bold">${escapeHtml(rec.display_name)} ${rec.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(rec.grade)}]</span>` : ''}</div>
+            <div class="meta">¥${Number(rec.amount_yen).toLocaleString()}</div>
+          </div>
+        </div>
+        <div>
+          ${rec.paid_at
+            ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ ${escapeHtml(METHOD_LABEL[rec.paid_method] || rec.paid_method)}${rec.proxy_name ? ' (←' + escapeHtml(rec.proxy_name) + ')' : ''}</span>`
+            : `<span class="tag" style="background:#fff3df; color:#b54708">未払い</span>`}
+        </div>
+      </div>`).join('');
+
+    document.querySelectorAll('[data-pay]').forEach(b => {
+      b.addEventListener('click', () => onPay(id, b.dataset.pay, r));
+    });
+    document.getElementById('mr-unpay')?.addEventListener('click', () => onUnpay(id));
+    document.getElementById('mr-close')?.addEventListener('click', async () => {
+      if (!confirm('この請求を閉じますか?')) return;
+      try { await del('/api/money-requests/' + id); toast('閉じました'); location.hash = '#/requests'; }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+  } catch (e) {
+    document.getElementById('mr-detail').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function settlementInfo(r) {
+  const bits = [];
+  if (r.creator_paypay_id) bits.push(`PayPay: ${escapeHtml(r.creator_paypay_id)}`);
+  if (r.creator_bank_info) bits.push(`口座: ${escapeHtml(r.creator_bank_info)}`);
+  return bits.join(' · ');
+}
+
+async function onPay(id, method, r) {
+  let proxyId = null;
+  if (method === 'proxy') {
+    const others = r.recipients
+      .filter(x => Number(x.user_id) !== Number(state.me?.id))
+      .map(x => `${x.user_id}: ${x.display_name}`).join('\n');
+    const ans = prompt('立て替えてくれた人の user_id を入れてください\n対象:\n' + others);
+    proxyId = Number(ans);
+    if (!proxyId) { toast('user_id を入れてください'); return; }
+  }
+  try {
+    await patch(`/api/money-requests/${id}/pay`, { method, proxy_user_id: proxyId });
+    toast('支払い済にしました');
+    await loadDetail(id);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onUnpay(id) {
+  if (!confirm('支払い済を取り消しますか?')) return;
+  try { await patch(`/api/money-requests/${id}/unpay`, {}); toast('取消しました'); await loadDetail(id); }
+  catch (e) { toast('失敗: ' + e.message); }
+}

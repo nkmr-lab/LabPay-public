@@ -26,6 +26,7 @@ import { renderNomikai, renderNomikaiNew, renderNomikaiDetail } from './views/no
 import { renderGroups, renderGroupDetail } from './views/groups.js';
 import { renderScrapboxFeed } from './views/scrapbox_feed.js';
 import { renderRandomGroups } from './views/random_groups.js';
+import { renderMoneyRequests, renderMoneyRequestDetail } from './views/money_requests.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -203,6 +204,8 @@ route('/groups',         renderGroups);
 route('/groups/:id',     renderGroupDetail);
 route('/scrapbox',       renderScrapboxFeed);
 route('/random-groups',  renderRandomGroups);
+route('/requests',       renderMoneyRequests);
+route('/requests/:id',   renderMoneyRequestDetail);
 
 // ---------- Boot ----------
 (async function boot() {

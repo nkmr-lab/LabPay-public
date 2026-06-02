@@ -176,6 +176,12 @@ try {
         return;
     }
 
+    // /money-requests (集金 / 請求)
+    if (($seg[0] ?? '') === 'money-requests') {
+        route_money_requests($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {
