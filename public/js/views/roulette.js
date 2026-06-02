@@ -33,6 +33,7 @@ export async function renderRoulette() {
       </label>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
+        <div id="rl-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
         <div id="rl-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
     </div>
@@ -60,11 +61,33 @@ export async function renderRoulette() {
   await loadHistory();
 }
 
+// Cached after first /api/users so bulk-select buttons can flip checkboxes
+// without re-fetching.
+let ALL_USERS = [];
+
 async function loadMembers() {
   try {
     const u = await get('/api/users');
+    ALL_USERS = u.items;
     const root = document.getElementById('rl-members');
     const me = state.me?.id;
+    // Bulk-select toolbar — render once based on the unique grades present in
+    // the directory (so we don't show 'D' if no D students exist).
+    const presentGrades = [...new Set(u.items.map(x => x.grade || ''))];
+    const gradeOrder = ['B3','B4','M1','M2','D',''];
+    const sortedGrades = gradeOrder.filter(g => presentGrades.includes(g));
+    const bulkRoot = document.getElementById('rl-bulk');
+    bulkRoot.innerHTML = `
+      <button class="btn" data-bulk="all">全員 ON / OFF</button>
+      ${sortedGrades.map(g => {
+        const label = g === '' ? 'その他' : g;
+        return `<button class="btn" data-bulk="grade" data-grade="${g}">${label}</button>`;
+      }).join('')}
+    `;
+    bulkRoot.querySelectorAll('[data-bulk]').forEach(b => {
+      b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade));
+    });
+
     root.innerHTML = u.items.map(x => {
       const checked = selected.has(x.id) ? 'checked' : '';
       // Default: include self so a "ルーレットで誰がやる?" naturally has you in
@@ -90,6 +113,27 @@ async function loadMembers() {
     document.getElementById('rl-members').innerHTML =
       `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// Toggle behavior: if any member of the target set is already checked,
+// the click DESELECTS the whole set. Otherwise it SELECTS the whole set.
+// Matches '全員 ON / OFF' wording — same button handles both directions
+// depending on current state.
+function onBulk(kind, grade) {
+  const target = kind === 'grade'
+    ? ALL_USERS.filter(x => (x.grade || '') === grade)
+    : ALL_USERS;
+  const anySelected = target.some(x => selected.has(x.id));
+  if (anySelected) {
+    target.forEach(x => selected.delete(x.id));
+  } else {
+    target.forEach(x => selected.add(x.id));
+  }
+  // Reflect into the DOM checkboxes.
+  document.querySelectorAll('#rl-members input[data-uid]').forEach(cb => {
+    cb.checked = selected.has(Number(cb.dataset.uid));
+  });
+  redrawWheel();
 }
 
 function redrawWheel() {
