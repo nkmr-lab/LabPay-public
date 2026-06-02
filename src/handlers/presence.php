@@ -238,18 +238,18 @@ function presence_list(PDO $pdo, array $cfg): void {
     // For every (user, room) pair within the window, compute the latest sighting and the
     // earliest session_start_at across the user's devices in that room (so a user with
     // multiple registered MACs gets the earliest one — they've been there at least that long).
-    // session_start_at は migration 015 以前の行で NULL のことがある。
-    // first_seen_at も NULL なら最終手段として last_seen_at で代用
-    // (= 「ちょうど来たばかり」扱い、0分相当)。これでどう転んでも「-」
-    // にはならない。
-    // ※ WHERE は「直近 ${window} 分以内に検知された行」だけに絞ってから
-    //   GROUP BY するので、別 room の古い NULL 行が紛れ込まないように
-    //   先に session_start_at を埋めてから MIN を取る。
+    // 複数 MAC 持ち (iPhone + iPad + ノート等) の場合、片方が化石化
+    // (一晩中つなぎっぱなし) してると MIN(session_start_at) でそっちが
+    // 拾われて「滞在 21時間」みたいに膨らむ。実際の滞在は「今 active な
+    // デバイスのセッション開始」が一番正確なので MAX を採用 — 一番直近に
+    // セッションが始まった MAC を「今ここで使ってる端末」とみなす。
+    //   NULL 行 (legacy) は COALESCE で first_seen_at → last_seen_at に
+    //   フォールバックして「-」を防止。
     $st = $pdo->prepare("
         SELECT u.id AS user_id, u.display_name, u.avatar_url,
                ps.room_id,
                MAX(ps.last_seen_at) AS last_seen_at,
-               MIN(COALESCE(ps.session_start_at, ps.first_seen_at, ps.last_seen_at)) AS session_start_at
+               MAX(COALESCE(ps.session_start_at, ps.first_seen_at, ps.last_seen_at)) AS session_start_at
           FROM presence_seen ps
           JOIN presence_devices pd ON pd.mac = ps.mac
           JOIN users u ON u.id = pd.user_id AND u.kind = 'human'
