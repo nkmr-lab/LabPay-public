@@ -449,28 +449,38 @@ function renderRow(l) {
   // [更新] button below collects every field's current value and writes them
   // in one call. Gift listings hide the price field (replaced with the gift
   // chip + 通常販売に戻す button); everything else is identical.
+  // Price row + gift-toggle row sit together so the mode change is read as
+  // 'about the price', not a stray button at the bottom of the card.
   const priceField = l.is_gift
     ? `<div class="sell-edit-row" style="align-items:center">
          <span class="sell-edit-label">価格</span>
          <div class="sell-edit-input" style="color:#b71c50; font-weight:600">🎁 これどうぞ (0pt)</div>
+       </div>
+       <div class="sell-edit-row" style="align-items:center">
+         <span class="sell-edit-label"></span>
+         <div class="sell-edit-input" style="display:block">
+           <button data-action="ungift" data-id="${l.id}">通常販売に戻す</button>
+         </div>
        </div>`
     : `<div class="sell-edit-row" style="align-items:center">
          <span class="sell-edit-label">価格 (pt)</span>
          <div class="sell-edit-input"><input type="number" min="1" value="${l.price}" data-price="${l.id}"></div>
+       </div>
+       <div class="sell-edit-row" style="align-items:center">
+         <span class="sell-edit-label"></span>
+         <div class="sell-edit-input" style="display:block">
+           <button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>
+         </div>
        </div>`;
   // Action row: per the consolidation, only 更新 / 取り下げ are universal;
   // 🎁 toggle and 1個消費 stay as separate intents because they're mode
   // changes / inventory adjustments rather than "save what I just typed".
-  // No dedicated 1個消費 button — adjusting 在庫 directly and hitting [更新]
-  // does the same thing (the listing.qty UPDATE has no ledger side-effect
-  // either way), so one less button to look at.
+  // Gift toggle moved up next to 価格. Bottom action row is just [更新] and
+  // [取り下げ] now — the two universal operations on an active listing.
   const actionRow = l.status === 'withdrawn'
     ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
        <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
     : `<button data-action="update" data-id="${l.id}" data-jan="${escapeHtml(l.jan)}" class="primary">更新</button>
-       ${l.is_gift
-         ? `<button data-action="ungift" data-id="${l.id}">通常販売に戻す</button>`
-         : `<button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>`}
        <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
   // Field rows share a fixed-width left label + flex-grow input. min-width:0 on
   // every flex item is the canonical fix for inputs (especially <input type="file">)
