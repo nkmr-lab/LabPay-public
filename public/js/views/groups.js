@@ -200,14 +200,22 @@ export async function renderGroupDetail({ params }) {
     <div class="card" id="gd-wari-card">
       <div class="row" style="align-items:center">
         <h3 style="flex:1; margin:0">ワリカ</h3>
-        <button id="gd-settle" class="btn">精算する</button>
+        <button id="gd-settle" class="btn">貸し借りを精算する</button>
       </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
-        誰がいくら立て替えたかを積み上げて、最後にまとめて精算します。
+        立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
       <div id="gd-wari-form"></div>
       <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
       <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="gd-spend-card" hidden>
+      <h3 style="margin:0">支出情報 (個々人)</h3>
+      <p class="muted" style="font-size:13px; margin:6px 0">
+        各人が「使った額」(参加した支出の自分の取り分) と「立替えた額」 (払った合計)。
+      </p>
+      <div id="gd-spend-list" class="list"></div>
     </div>
 
     <div id="gd-settle-modal" hidden></div>
@@ -555,12 +563,46 @@ async function loadWari(id) {
     });
     // Stash latest data for the settle modal.
     lastWariData = d;
+    // Render per-person spent / paid summary.
+    renderSpendCard(d.balances || []);
   } catch (e) {
     summary.innerHTML = `<span class="muted">${escapeHtml(e.message)}</span>`;
   }
 }
 
 let lastWariData = null;
+
+function renderSpendCard(balances) {
+  const card = document.getElementById('gd-spend-card');
+  const root = document.getElementById('gd-spend-list');
+  if (!card || !root) return;
+  const meaningful = balances.filter(b => (b.spent_jpy || 0) > 0 || (b.paid_jpy || 0) > 0);
+  if (!meaningful.length) { card.hidden = true; return; }
+  card.hidden = false;
+  // 使った額の大きい順
+  const sorted = [...meaningful].sort((a, b) => (b.spent_jpy || 0) - (a.spent_jpy || 0));
+  root.innerHTML = sorted.map(b => {
+    const spent = b.spent_jpy || 0;
+    const paid  = b.paid_jpy  || 0;
+    const diff  = paid - spent;
+    const diffTxt = diff === 0
+      ? `<span class="muted">±0</span>`
+      : diff > 0
+        ? `<span style="color:#0e7c63" class="bold">+¥${diff.toLocaleString()}</span>`
+        : `<span style="color:#b54708" class="bold">-¥${Math.abs(diff).toLocaleString()}</span>`;
+    return `
+      <div class="list-item">
+        <div style="flex:1; display:flex; align-items:center; gap:8px">
+          ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
+          <div class="bold">${escapeHtml(b.display_name)}</div>
+        </div>
+        <div style="text-align:right; font-size:13px">
+          <div>使った <span class="bold">¥${spent.toLocaleString()}</span></div>
+          <div class="muted">立替 ¥${paid.toLocaleString()} · 差引 ${diffTxt}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
 
 function renderExpense(e, gid) {
   const meId = state.me?.id;

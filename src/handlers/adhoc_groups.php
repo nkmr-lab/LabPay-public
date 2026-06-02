@@ -313,10 +313,13 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // Compute per-user balance: each row credits payer +amount, debits each
-    // participant by amount/N. Net = sum of credits − sum of debits.
-    // (A positive balance = others owe me; negative = I owe.)
-    $balance = []; // user_id => int
+    // Compute per-user numbers:
+    //   paid_jpy  = この人が立替えた合計 (各 expense の amount_jpy 全額)
+    //   spent_jpy = この人が「使った額」(参加した expense における自分の取り分の合計)
+    //   net_jpy   = paid_jpy - spent_jpy  (＋なら受取、−なら支払)
+    // 「貸し借り情報」 = net (送金プランの元) / 「支出情報」 = spent + paid
+    $paid  = []; // user_id => int
+    $spent = []; // user_id => int
     foreach ($rows as &$r) {
         $r['amount_jpy'] = (int)$r['amount_jpy'];
         $parts = json_decode((string)$r['participants_json'], true);
@@ -325,38 +328,40 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
         $n = max(1, count($r['participants']));
         $share = (int)floor($r['amount_jpy'] / $n);
         $leftover = $r['amount_jpy'] - $share * $n;
-        // Payer gets full credit.
-        $balance[(int)$r['payer_user_id']] = ($balance[(int)$r['payer_user_id']] ?? 0) + $r['amount_jpy'];
-        // Each participant debits by share; leftover yen pushed onto first participant
-        // so the books always balance exactly to the yen.
+        $payerId = (int)$r['payer_user_id'];
+        $paid[$payerId] = ($paid[$payerId] ?? 0) + $r['amount_jpy'];
+        // Leftover を最初の参加者に乗せて、合計が常に amount_jpy にぴったり一致するように。
         foreach ($r['participants'] as $i => $pid) {
-            $debit = $share + ($i === 0 ? $leftover : 0);
-            $balance[$pid] = ($balance[$pid] ?? 0) - $debit;
+            $myShare = $share + ($i === 0 ? $leftover : 0);
+            $spent[$pid] = ($spent[$pid] ?? 0) + $myShare;
         }
     }
     unset($r);
 
-    // Look up display names for everyone with a non-zero balance (in case some
-    // people are no longer members but appeared in past expense snapshots).
-    $uids = array_keys($balance);
+    // 全部の関与者 (払ったか使ったかどちらかでも) を拾う
+    $allUids = array_unique(array_merge(array_keys($paid), array_keys($spent)));
     $byUser = [];
-    if ($uids) {
-        $place = implode(',', array_fill(0, count($uids), '?'));
+    if ($allUids) {
+        $place = implode(',', array_fill(0, count($allUids), '?'));
         $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
-        $stU->execute($uids);
+        $stU->execute($allUids);
         foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $r) $byUser[(int)$r['id']] = $r;
     }
     $balances = [];
-    foreach ($balance as $uid => $bal) {
+    foreach ($allUids as $uid) {
         $info = $byUser[$uid] ?? ['display_name' => "user#$uid", 'avatar_url' => null];
+        $p = (int)($paid[$uid]  ?? 0);
+        $s = (int)($spent[$uid] ?? 0);
         $balances[] = [
             'user_id' => $uid,
             'display_name' => $info['display_name'],
             'avatar_url'   => $info['avatar_url'],
-            'net_jpy'      => (int)$bal,
+            'paid_jpy'     => $p,
+            'spent_jpy'    => $s,
+            'net_jpy'      => $p - $s,
         ];
     }
-    // Sort: biggest creditors first, biggest debtors last (UX).
+    // Sort: 大口債権者が上、大口債務者が下
     usort($balances, fn($a, $b) => $b['net_jpy'] <=> $a['net_jpy']);
 
     // Settlement plan: greedy match of creditors and debtors.
