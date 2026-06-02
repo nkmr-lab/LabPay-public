@@ -101,24 +101,54 @@ export async function renderHome() {
   await renderFreshTasks();
   await renderRecentTx();
 
-  // Poll balance + streak + recent transactions every 30s while the user is
-  // looking at home, so a fellow lab member's purchase / a task approval /
-  // a roulette payout shows up without a manual refresh.
-  if (financialsTimer) clearInterval(financialsTimer);
-  financialsTimer = setInterval(() => {
-    if (!document.getElementById('home-balance')) {
-      clearInterval(financialsTimer);
-      financialsTimer = null;
-      return;
-    }
-    refreshFinancials({ silent: true });
-    renderRecentTx();
-  }, 30_000);
+  // Home polling: 1 分ごとに各カードを 「静かに」 リロード。
+  // - 「読み込み中…」 placeholder は出さない (各 render は初期 HTML を持つ
+  //   ので、再 fetch 中は前回の値を見せたまま、結果が届いたら DOM 差し替え)
+  // - ページが非表示 (タブ裏 / 画面ロック) のときは skip
+  // - 戻ってきた瞬間 (visibilitychange → visible) に即 1 回ポーリング
+  // - home から離れたら timer 停止 (#home-balance 消失で検知)
+  startHomePolling();
 }
 
-// Module-scoped so a re-mounted home view replaces the prior timer instead of
-// stacking it.
-let financialsTimer = null;
+// Module-scoped: 単一の home polling 用 timer + visibilitychange handler。
+// renderHome() が再度呼ばれたら start で reset、home から離れたら次の tick で
+// stop する。
+let homePollTimer = null;
+let homeVisHandler = null;
+
+function stopHomePolling() {
+  if (homePollTimer) { clearInterval(homePollTimer); homePollTimer = null; }
+  if (homeVisHandler) {
+    document.removeEventListener('visibilitychange', homeVisHandler);
+    homeVisHandler = null;
+  }
+}
+
+async function doHomePoll() {
+  // home が unmount されたら停止 (router が他の view に差し替えた目印)。
+  if (!document.getElementById('home-balance')) {
+    stopHomePolling();
+    return;
+  }
+  if (document.hidden) return;
+  // Promise.allSettled: 1 つのカードが失敗しても残りは更新される。
+  await Promise.allSettled([
+    refreshFinancials({ silent: true }),
+    fetchAndRenderPresence(),     // 「今ラボにいる人」 (renderPresence の内部関数)
+    renderMyGroups(),
+    renderFreshInvitations(),
+    renderFreshListings(),
+    renderFreshTasks(),
+    renderRecentTx(),
+  ]);
+}
+
+function startHomePolling() {
+  stopHomePolling();
+  homePollTimer = setInterval(doHomePoll, 60_000);
+  homeVisHandler = () => { if (!document.hidden) doHomePoll(); };
+  document.addEventListener('visibilitychange', homeVisHandler);
+}
 
 async function refreshFinancials({ silent }) {
   try {
@@ -155,10 +185,6 @@ async function renderMedalsStrip() {
     root.innerHTML = `${medals} <span class="muted" style="font-size:11px">${earned}/${items.length}</span>`;
   } catch (e) { root.innerHTML = ''; }
 }
-
-// Held at module scope so the interval can be cleared when the user navigates away
-// from the home page (otherwise it stacks up on repeated home renders).
-let presenceTimer = null;
 
 async function fetchAndRenderPresence() {
   const presenceRoot = document.getElementById('presence');
@@ -215,18 +241,7 @@ async function renderPresence() {
   });
 
   await fetchAndRenderPresence();
-
-  // Refresh every 60s while the user is on the home view. Scanner pushes new
-  // presence data roughly once a minute, so this keeps it ~live.
-  if (presenceTimer) clearInterval(presenceTimer);
-  presenceTimer = setInterval(() => {
-    if (document.getElementById('presence')) {
-      fetchAndRenderPresence();
-    } else {
-      clearInterval(presenceTimer);
-      presenceTimer = null;
-    }
-  }, 60_000);
+  // 定期 refresh は startHomePolling() に集約 (旧 presenceTimer は撤去)。
 }
 
 // Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC

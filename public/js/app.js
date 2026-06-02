@@ -225,10 +225,15 @@ route('/requests/:id',   renderMoneyRequestDetail);
     navigate('#/');
   }
   start();
-  // Periodic unread refresh
+  // Periodic unread refresh — 1 分間隔。タブが裏 (visibility hidden) の時は
+  // スキップして、表に戻った瞬間に即 1 回叩く。これでスマホをロックしてた
+  // 間にバッテリーを使わず、戻ってきた直後にバッジが正しく出る。
   if (state.me) {
     refreshUnread();
-    setInterval(() => refreshUnread(), 30000);
+    setInterval(() => { if (!document.hidden) refreshUnread(); }, 60000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshUnread();
+    });
   }
   // Install banner: iOS Safari doesn't fire beforeinstallprompt, so we may need to show it
   // proactively. For Android Chrome the event might fire before login completed; if so we
