@@ -20,6 +20,9 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
         if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
         if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+        if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
+        if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
+        if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
 }
@@ -219,5 +222,197 @@ function group_members_del(PDO $pdo, array $cfg, int $groupId, int $uid): void {
     if ($uid !== (int)$u['id']) group_assert_creator_or_admin($pdo, $groupId, $u);
     $pdo->prepare("DELETE FROM adhoc_group_members WHERE group_id=? AND user_id=?")
         ->execute([$groupId, $uid]);
+    json_response(['ok' => true]);
+}
+
+// ─── EXPENSES (ワリカ) ──────────────────────────────────────────
+// Splitwise-style: each expense records (payer, amount in JPY, currency snapshot,
+// memo, participants snapshot). Settlement computes net balance per user and
+// proposes a minimal greedy transfer plan (largest creditor ↔ largest debtor).
+
+function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+
+    $st = $pdo->prepare("
+        SELECT e.*, up.display_name AS payer_name, up.avatar_url AS payer_avatar_url
+          FROM adhoc_group_expenses e
+          JOIN users up ON up.id = e.payer_user_id
+         WHERE e.group_id = ?
+         ORDER BY e.id DESC LIMIT 200");
+    $st->execute([$id]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Compute per-user balance: each row credits payer +amount, debits each
+    // participant by amount/N. Net = sum of credits − sum of debits.
+    // (A positive balance = others owe me; negative = I owe.)
+    $balance = []; // user_id => int
+    foreach ($rows as &$r) {
+        $r['amount_jpy'] = (int)$r['amount_jpy'];
+        $parts = json_decode((string)$r['participants_json'], true);
+        $r['participants'] = is_array($parts) ? array_values(array_map('intval', $parts)) : [];
+        unset($r['participants_json']);
+        $n = max(1, count($r['participants']));
+        $share = (int)floor($r['amount_jpy'] / $n);
+        $leftover = $r['amount_jpy'] - $share * $n;
+        // Payer gets full credit.
+        $balance[(int)$r['payer_user_id']] = ($balance[(int)$r['payer_user_id']] ?? 0) + $r['amount_jpy'];
+        // Each participant debits by share; leftover yen pushed onto first participant
+        // so the books always balance exactly to the yen.
+        foreach ($r['participants'] as $i => $pid) {
+            $debit = $share + ($i === 0 ? $leftover : 0);
+            $balance[$pid] = ($balance[$pid] ?? 0) - $debit;
+        }
+    }
+    unset($r);
+
+    // Look up display names for everyone with a non-zero balance (in case some
+    // people are no longer members but appeared in past expense snapshots).
+    $uids = array_keys($balance);
+    $byUser = [];
+    if ($uids) {
+        $place = implode(',', array_fill(0, count($uids), '?'));
+        $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
+        $stU->execute($uids);
+        foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $r) $byUser[(int)$r['id']] = $r;
+    }
+    $balances = [];
+    foreach ($balance as $uid => $bal) {
+        $info = $byUser[$uid] ?? ['display_name' => "user#$uid", 'avatar_url' => null];
+        $balances[] = [
+            'user_id' => $uid,
+            'display_name' => $info['display_name'],
+            'avatar_url'   => $info['avatar_url'],
+            'net_jpy'      => (int)$bal,
+        ];
+    }
+    // Sort: biggest creditors first, biggest debtors last (UX).
+    usort($balances, fn($a, $b) => $b['net_jpy'] <=> $a['net_jpy']);
+
+    // Settlement plan: greedy match of creditors and debtors.
+    $settlements = compute_settlements($balances);
+
+    $total = 0;
+    foreach ($rows as $r) $total += (int)$r['amount_jpy'];
+
+    json_response([
+        'expenses'    => $rows,
+        'balances'    => $balances,
+        'settlements' => $settlements,
+        'total_jpy'   => $total,
+        'count'       => count($rows),
+    ]);
+}
+
+// Greedy minimal-transfer settlement. Not provably optimal in pathological
+// cases but produces small plans for typical lab/trip groups.
+function compute_settlements(array $balances): array {
+    $cred = []; $debt = [];
+    foreach ($balances as $b) {
+        if ($b['net_jpy'] > 0) $cred[] = ['user_id' => $b['user_id'], 'name' => $b['display_name'], 'remaining' => $b['net_jpy']];
+        elseif ($b['net_jpy'] < 0) $debt[] = ['user_id' => $b['user_id'], 'name' => $b['display_name'], 'remaining' => -$b['net_jpy']];
+    }
+    usort($cred, fn($a, $b) => $b['remaining'] <=> $a['remaining']);
+    usort($debt, fn($a, $b) => $b['remaining'] <=> $a['remaining']);
+
+    $plan = [];
+    $i = 0; $j = 0;
+    while ($i < count($cred) && $j < count($debt)) {
+        $amt = min($cred[$i]['remaining'], $debt[$j]['remaining']);
+        if ($amt <= 0) break;
+        $plan[] = [
+            'from_user_id' => $debt[$j]['user_id'],
+            'from_name'    => $debt[$j]['name'],
+            'to_user_id'   => $cred[$i]['user_id'],
+            'to_name'      => $cred[$i]['name'],
+            'amount_jpy'   => $amt,
+        ];
+        $cred[$i]['remaining'] -= $amt;
+        $debt[$j]['remaining'] -= $amt;
+        if ($cred[$i]['remaining'] === 0) $i++;
+        if ($debt[$j]['remaining'] === 0) $j++;
+    }
+    return $plan;
+}
+
+function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+
+    $body = read_json_body();
+    $amountRaw = $body['amount'] ?? null;
+    if (!is_numeric($amountRaw) || (float)$amountRaw <= 0) {
+        throw new ApiException('bad_request', 'amount must be positive', 400);
+    }
+    $currency = strtoupper(trim((string)($body['currency'] ?? 'JPY')));
+    if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+        throw new ApiException('bad_request', 'currency must be 3-letter ISO code', 400);
+    }
+    $rate = ($currency === 'JPY') ? null : (float)($body['rate_to_jpy'] ?? 0);
+    if ($currency !== 'JPY' && (!$rate || $rate <= 0)) {
+        throw new ApiException('bad_request', 'rate_to_jpy required for non-JPY', 400);
+    }
+    $amountJpy = ($currency === 'JPY')
+        ? (int)round((float)$amountRaw)
+        : (int)round((float)$amountRaw * $rate);
+    if ($amountJpy <= 0) throw new ApiException('bad_request', 'computed amount_jpy <= 0', 400);
+
+    $payerId = isset($body['payer_user_id']) ? (int)$body['payer_user_id'] : (int)$u['id'];
+    // Snapshot participants: default to all current members. Allow caller to
+    // restrict via participant_ids (used when an expense only applies to a
+    // subset, e.g. "ランチに来た人だけ").
+    $stM = $pdo->prepare("SELECT user_id FROM adhoc_group_members WHERE group_id=?");
+    $stM->execute([$id]);
+    $allMembers = array_map('intval', array_column($stM->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+    if (!$allMembers) throw new ApiException('bad_request', 'group has no members', 400);
+    if (!in_array($payerId, $allMembers, true)) {
+        throw new ApiException('bad_request', 'payer must be a group member', 400);
+    }
+    $participants = $allMembers;
+    if (isset($body['participant_ids']) && is_array($body['participant_ids'])) {
+        $req = array_values(array_unique(array_map('intval', $body['participant_ids'])));
+        $bad = array_diff($req, $allMembers);
+        if ($bad) throw new ApiException('bad_request', 'participant not in group', 400);
+        if (!$req) throw new ApiException('bad_request', 'participant_ids cannot be empty', 400);
+        $participants = $req;
+    }
+
+    $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 500) : null;
+    $amountOriginal = ($currency === 'JPY') ? null : (float)$amountRaw;
+
+    $st = $pdo->prepare("INSERT INTO adhoc_group_expenses
+        (group_id, payer_user_id, amount_jpy, amount_original, currency, rate_to_jpy,
+         memo, participants_json, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?)");
+    $st->execute([
+        $id, $payerId, $amountJpy, $amountOriginal, $currency, $rate,
+        $memo, json_encode($participants), $u['id'],
+    ]);
+    $eid = (int)$pdo->lastInsertId();
+
+    // Notify the payer if creator ≠ payer (someone logged on behalf of another).
+    if ($payerId !== (int)$u['id']) {
+        $stT = $pdo->prepare("SELECT title FROM adhoc_groups WHERE id=?");
+        $stT->execute([$id]); $title = (string)$stT->fetchColumn();
+        notify_safely($pdo, $cfg, $payerId, 'admin_notice',
+            "💸 「{$title}」の立替を登録しました: ¥" . number_format($amountJpy),
+            'group', $id);
+    }
+    json_response(['ok' => true, 'id' => $eid]);
+}
+
+function group_expenses_del(PDO $pdo, array $cfg, int $groupId, int $eid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $groupId, (int)$u['id']);
+    // Only the creator of the expense row can delete (admin override).
+    $st = $pdo->prepare("SELECT created_by_user_id FROM adhoc_group_expenses
+        WHERE id = ? AND group_id = ?");
+    $st->execute([$eid, $groupId]);
+    $owner = (int)$st->fetchColumn();
+    if ($owner === 0) throw new ApiException('not_found', 'expense not found', 404);
+    if ($owner !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '記録した本人のみ削除可能', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_expenses WHERE id=?")->execute([$eid]);
     json_response(['ok' => true]);
 }

@@ -128,6 +128,21 @@ export async function renderGroupDetail({ params }) {
       <h3>フィード</h3>
       <div id="gd-feed" class="list"></div>
     </div>
+
+    <div class="card" id="gd-wari-card">
+      <div class="row" style="align-items:center">
+        <h3 style="flex:1; margin:0">ワリカ</h3>
+        <button id="gd-settle" class="btn">精算する</button>
+      </div>
+      <p class="muted" style="font-size:13px; margin:6px 0">
+        誰がいくら立て替えたかを積み上げて、最後にまとめて精算します。
+      </p>
+      <div id="gd-wari-form"></div>
+      <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
+      <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
+    </div>
+
+    <div id="gd-settle-modal" hidden></div>
   `;
   document.querySelectorAll('[data-kind]').forEach(b => {
     b.addEventListener('click', () => switchKind(b));
@@ -135,7 +150,9 @@ export async function renderGroupDetail({ params }) {
   // Default kind: memo.
   switchKind(document.querySelector('[data-kind="memo"]'));
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
+  document.getElementById('gd-settle').addEventListener('click', () => openSettleModal(id));
   await loadDetail(id);
+  await loadWari(id);
 }
 
 let currentKind = 'memo';
@@ -163,6 +180,7 @@ async function loadDetail(id) {
     const g = await get('/api/groups/' + id);
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
+    setWariMembers(g.members);
     document.getElementById('gd-head').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(g.created_at)}</div>
@@ -225,6 +243,194 @@ function renderItem(it, gid) {
       </div>
       ${canDelete ? `<div><button data-rm="${it.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
     </div>`;
+}
+
+// ──────────────────────────── WARI (ワリカ) ────────────────────────────
+
+const DEFAULT_RATES = { JPY: 1, USD: 158, EUR: 168, GBP: 198, CNY: 22, KRW: 0.11, TWD: 4.9, AUD: 103 };
+
+function loadRates() {
+  try {
+    const v = JSON.parse(localStorage.getItem('labpay-wari-rates') || 'null');
+    if (v && typeof v === 'object') return { ...DEFAULT_RATES, ...v };
+  } catch (_) {}
+  return { ...DEFAULT_RATES };
+}
+function saveRates(r) {
+  try { localStorage.setItem('labpay-wari-rates', JSON.stringify(r)); } catch (_) {}
+}
+
+let wariMembers = []; // populated by loadDetail() via setWariMembers()
+let wariRates = loadRates();
+
+function renderWariForm() {
+  const root = document.getElementById('gd-wari-form');
+  if (!root) return;
+  const ccyOpts = Object.keys(wariRates).map(c => `<option value="${c}">${c}</option>`).join('');
+  root.innerHTML = `
+    <div style="display:grid; grid-template-columns: minmax(0,1fr) 90px; gap:6px; margin-bottom:6px">
+      <input type="number" id="ex-amt" min="0" step="0.01" placeholder="金額" inputmode="decimal">
+      <select id="ex-ccy">${ccyOpts}</select>
+    </div>
+    <div id="ex-rate-row" hidden style="margin-bottom:6px">
+      <label class="muted" style="font-size:12px">レート (1 通貨 = ? JPY)</label>
+      <input type="number" id="ex-rate" min="0" step="0.0001">
+    </div>
+    <select id="ex-payer" style="margin-bottom:6px">
+      ${wariMembers.map(m => `<option value="${m.id}">${escapeHtml(m.display_name)}</option>`).join('')}
+    </select>
+    <input type="text" id="ex-memo" maxlength="500" placeholder="メモ (例: ランチ, タクシー)" style="margin-bottom:6px">
+    <button id="ex-submit" class="primary">支出を記録</button>
+  `;
+  const ccyEl = document.getElementById('ex-ccy');
+  const rateRow = document.getElementById('ex-rate-row');
+  const rateEl = document.getElementById('ex-rate');
+  const syncRate = () => {
+    const c = ccyEl.value;
+    if (c === 'JPY') { rateRow.hidden = true; return; }
+    rateRow.hidden = false;
+    rateEl.value = wariRates[c] ?? 1;
+  };
+  ccyEl.addEventListener('change', syncRate);
+  rateEl.addEventListener('change', () => {
+    wariRates[ccyEl.value] = Number(rateEl.value) || 1;
+    saveRates(wariRates);
+  });
+  syncRate();
+  // Default payer to me if present in the group, else first member.
+  const sel = document.getElementById('ex-payer');
+  if (state.me?.id && wariMembers.some(m => m.id === state.me.id)) {
+    sel.value = String(state.me.id);
+  }
+  document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
+}
+
+async function onAddExpense() {
+  const gid = currentGroupId;
+  const amount = Number(document.getElementById('ex-amt').value);
+  const currency = document.getElementById('ex-ccy').value;
+  const payer_user_id = Number(document.getElementById('ex-payer').value);
+  const memo = document.getElementById('ex-memo').value.trim() || null;
+  if (!(amount > 0)) { toast('金額を入れてください'); return; }
+  const body = { amount, currency, payer_user_id, memo };
+  if (currency !== 'JPY') {
+    const rate = Number(document.getElementById('ex-rate').value);
+    if (!(rate > 0)) { toast('レートを入れてください'); return; }
+    body.rate_to_jpy = rate;
+  }
+  try {
+    await post(`/api/groups/${gid}/expenses`, body);
+    document.getElementById('ex-amt').value = '';
+    document.getElementById('ex-memo').value = '';
+    toast('記録しました');
+    await loadWari(gid);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+let currentGroupId = 0;
+
+async function loadWari(id) {
+  currentGroupId = id;
+  if (!wariMembers.length) renderWariForm();
+  const root = document.getElementById('gd-wari-list');
+  const summary = document.getElementById('gd-wari-summary');
+  if (!root || !summary) return;
+  try {
+    const d = await get(`/api/groups/${id}/expenses`);
+    summary.innerHTML = d.count
+      ? `${d.count} 件 / 合計 ¥${d.total_jpy.toLocaleString()}`
+      : '<span class="muted">まだ支出はありません</span>';
+    if (!d.expenses.length) { root.innerHTML = ''; return; }
+    root.innerHTML = d.expenses.map(e => renderExpense(e, id)).join('');
+    root.querySelectorAll('[data-rm-ex]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('この支出を削除しますか?')) return;
+        try {
+          await del(`/api/groups/${id}/expenses/${b.dataset.rmEx}`);
+          toast('削除しました');
+          await loadWari(id);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    // Stash latest data for the settle modal.
+    lastWariData = d;
+  } catch (e) {
+    summary.innerHTML = `<span class="muted">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+let lastWariData = null;
+
+function renderExpense(e, gid) {
+  const meId = state.me?.id;
+  const canDelete = Number(e.created_by_user_id) === Number(meId);
+  const orig = (e.currency !== 'JPY' && e.amount_original)
+    ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)})</span>` : '';
+  return `
+    <div class="list-item">
+      <div style="flex:1">
+        <div class="bold">${escapeHtml(e.payer_name)} 立替: ¥${e.amount_jpy.toLocaleString()}${orig}</div>
+        ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
+        <div class="meta">${escapeHtml(e.created_at)} · ${e.participants.length}人で割る</div>
+      </div>
+      ${canDelete ? `<div><button data-rm-ex="${e.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
+    </div>`;
+}
+
+function openSettleModal(gid) {
+  const d = lastWariData;
+  if (!d || !d.expenses.length) { toast('支出がまだありません'); return; }
+  const root = document.getElementById('gd-settle-modal');
+  root.hidden = false;
+  const balRows = d.balances.map(b => `
+    <div class="list-item">
+      <div style="flex:1; display:flex; align-items:center; gap:8px">
+        ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
+        <div class="bold">${escapeHtml(b.display_name)}</div>
+      </div>
+      <div style="font-size:16px; text-align:right">
+        ${b.net_jpy > 0
+          ? `<span style="color:#0e7c63" class="bold">+¥${b.net_jpy.toLocaleString()}</span><div class="meta">受取</div>`
+          : b.net_jpy < 0
+            ? `<span style="color:#b54708" class="bold">-¥${Math.abs(b.net_jpy).toLocaleString()}</span><div class="meta">支払</div>`
+            : `<span class="muted">±0</span>`}
+      </div>
+    </div>`).join('');
+  const planRows = d.settlements.length
+    ? d.settlements.map(s => `
+        <div class="list-item">
+          <div style="flex:1">
+            <span class="bold">${escapeHtml(s.from_name)}</span> →
+            <span class="bold">${escapeHtml(s.to_name)}</span>
+          </div>
+          <div class="bold" style="color:var(--primary); font-size:16px">¥${s.amount_jpy.toLocaleString()}</div>
+        </div>`).join('')
+    : `<div class="muted">送金不要 (全員ぴったり)</div>`;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px">
+      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; overflow:auto; padding:20px">
+        <div class="row" style="align-items:center">
+          <h3 style="flex:1; margin:0">精算サマリ</h3>
+          <button id="gd-settle-close">×</button>
+        </div>
+        <p class="muted" style="font-size:13px">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
+        <h4 style="margin:12px 0 6px">ネット残高</h4>
+        <div class="list">${balRows}</div>
+        <h4 style="margin:12px 0 6px">推奨送金プラン</h4>
+        <div class="list">${planRows}</div>
+        <p class="muted" style="font-size:11px; margin-top:8px">
+          ※ 実際の送金は外でやり取りしてください。送金が済んだら、別途立替を 1 件マイナスで…ではなく、
+          グループを閉じて新しいセッションを作るのがおすすめです。
+        </p>
+      </div>
+    </div>`;
+  root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
+}
+
+// Called from loadDetail() after members are known.
+function setWariMembers(members) {
+  wariMembers = members;
+  renderWariForm();
 }
 
 async function onPost(gid) {

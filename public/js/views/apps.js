@@ -4,9 +4,8 @@ import { escapeHtml } from '../router.js';
 
 const APPS = [
   { url: '#/roulette',    title: 'ルーレット',         desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。' },
-  { url: '#/wari',        title: 'ワリカ',             desc: '多通貨対応の割り勘計算 — 円換算でメンバー均等割り。' },
-  { url: '#/nomikai',     title: '飲み会割り勘',       desc: '総額 + メンバー + 飲酒/学年傾斜で算出、支払い済みチェックまで。' },
-  { url: '#/groups',      title: '暫定グループ',       desc: '出張中などの臨時メンバー枠で連絡 (メモ/URL/時間) + ルーレット/割り勘ショートカット。' },
+  { url: '#/nomikai',     title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。' },
+  { url: '#/groups',      title: '暫定グループ',       desc: '出張中の臨時メンバー枠。連絡 (メモ/URL/時間) + ワリカ (Splitwise 風 立替記録 → 精算) + ルーレット/割り勘ショートカット。' },
   { url: '#/scrapbox',    title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。' },
 ];
 
