@@ -467,7 +467,7 @@ async function loadDetail(id) {
     const myRow = (s.participants || []).find(p => Number(p.user_id) === Number(meId));
     const settle = settlementInfo(s);
     const asReqBtn = isCreator
-      ? `<div style="margin-top:8px"><button id="nm-asreq" class="btn">この内容で「請求」を作る</button></div>`
+      ? `<div style="margin-top:8px"><button id="nm-asreq" class="primary">この内容で「請求」を作る</button></div>`
       : '';
     document.getElementById('nm-detail').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(s.title)} ${s.closed_at ? '<span class="tag muted">close</span>' : ''}</div>

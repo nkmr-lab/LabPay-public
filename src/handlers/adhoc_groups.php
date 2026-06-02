@@ -488,12 +488,18 @@ function group_expenses_del(PDO $pdo, array $cfg, int $groupId, int $eid): void 
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $groupId, (int)$u['id']);
     // Only the creator of the expense row can delete (admin override).
+    // 既に削除済みの行に対する DELETE は idempotent に成功扱い (UI 再クリック
+    // や race で 2 度走った場合に「失敗」 toast が出ないように)。
     $st = $pdo->prepare("SELECT created_by_user_id FROM adhoc_group_expenses
         WHERE id = ? AND group_id = ?");
     $st->execute([$eid, $groupId]);
-    $owner = (int)$st->fetchColumn();
-    if ($owner === 0) throw new ApiException('not_found', 'expense not found', 404);
-    if ($owner !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
+    $owner = $st->fetchColumn();
+    if ($owner === false) {
+        // 既に存在しない → 成功扱いで返す (idempotent delete)
+        json_response(['ok' => true, 'already_deleted' => true]);
+        return;
+    }
+    if ((int)$owner !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
         throw new ApiException('forbidden', '記録した本人のみ削除可能', 403);
     }
     $pdo->prepare("DELETE FROM adhoc_group_expenses WHERE id=?")->execute([$eid]);
