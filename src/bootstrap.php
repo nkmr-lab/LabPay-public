@@ -396,3 +396,5 @@ require_once __DIR__ . '/handlers/wishlist.php';
 require_once __DIR__ . '/handlers/invitations.php';
 require_once __DIR__ . '/handlers/roulettes.php';
 require_once __DIR__ . '/handlers/nomikai.php';
+require_once __DIR__ . '/handlers/adhoc_groups.php';
+require_once __DIR__ . '/handlers/scrapbox_feed.php';

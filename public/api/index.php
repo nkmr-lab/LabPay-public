@@ -152,6 +152,18 @@ try {
         return;
     }
 
+    // /groups (ad-hoc groups for short-lived contexts)
+    if (($seg[0] ?? '') === 'groups') {
+        route_groups($PDO, $CFG, $method, $seg);
+        return;
+    }
+
+    // /scrapbox (read-only feed over #scrapbox Slack channel)
+    if (($seg[0] ?? '') === 'scrapbox') {
+        route_scrapbox($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

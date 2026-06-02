@@ -20,6 +20,11 @@ import { renderActivity } from './views/activity.js';
 import { renderWishlist } from './views/wishlist.js';
 import { renderInvitations } from './views/invitations.js';
 import { renderRoulette, renderRouletteResult } from './views/roulette.js';
+import { renderApps } from './views/apps.js';
+import { renderWari } from './views/wari.js';
+import { renderNomikai, renderNomikaiDetail } from './views/nomikai.js';
+import { renderGroups, renderGroupDetail } from './views/groups.js';
+import { renderScrapboxFeed } from './views/scrapbox_feed.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -191,6 +196,9 @@ route('/apps',           renderApps);
 route('/wari',           renderWari);
 route('/nomikai',        renderNomikai);
 route('/nomikai/:id',    renderNomikaiDetail);
+route('/groups',         renderGroups);
+route('/groups/:id',     renderGroupDetail);
+route('/scrapbox',       renderScrapboxFeed);
 
 // ---------- Boot ----------
 (async function boot() {
