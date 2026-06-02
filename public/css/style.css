@@ -442,6 +442,26 @@ table.table th { color: var(--muted); font-weight: 600; }
 .supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
 .supply-sub   { font-size: 11px; color: var(--muted); }
 
+/* 出品中 row edit grid — fixed label column, flexible input column. The
+   min-width:0 cascade is what stops a wide <input type=number> spinner or a
+   <textarea> from blowing past the card edge on iOS. */
+.sell-edit-row {
+  display: flex; gap: 8px; margin-top: 6px;
+  min-width: 0;
+}
+.sell-edit-label {
+  flex: 0 0 80px;
+  color: var(--muted); font-size: 12px; line-height: 36px;
+}
+.sell-edit-input {
+  flex: 1 1 auto; min-width: 0;
+  display: flex;     /* lets inner input fill */
+}
+.sell-edit-input > input,
+.sell-edit-input > textarea {
+  width: 100%; min-width: 0; box-sizing: border-box;
+}
+
 /* Roulette member-pick chip — checkbox + avatar + name in one tappable row. */
 .rl-chip {
   display: inline-flex; align-items: center; gap: 6px;

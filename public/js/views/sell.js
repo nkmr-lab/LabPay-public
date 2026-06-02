@@ -450,13 +450,13 @@ function renderRow(l) {
   // in one call. Gift listings hide the price field (replaced with the gift
   // chip + 通常販売に戻す button); everything else is identical.
   const priceField = l.is_gift
-    ? `<div class="row" style="margin-top:6px; gap:6px; align-items:center">
-         <span class="muted" style="font-size:12px; min-width:70px">価格</span>
-         <span style="flex:1; color:#b71c50; font-weight:600">🎁 これどうぞ (0pt)</span>
+    ? `<div class="sell-edit-row" style="align-items:center">
+         <span class="sell-edit-label">価格</span>
+         <div class="sell-edit-input" style="color:#b71c50; font-weight:600">🎁 これどうぞ (0pt)</div>
        </div>`
-    : `<div class="row" style="margin-top:6px; gap:6px; align-items:center">
-         <span class="muted" style="font-size:12px; min-width:70px">価格 (pt)</span>
-         <input type="number" min="1" value="${l.price}" data-price="${l.id}" style="flex:1">
+    : `<div class="sell-edit-row" style="align-items:center">
+         <span class="sell-edit-label">価格 (pt)</span>
+         <div class="sell-edit-input"><input type="number" min="1" value="${l.price}" data-price="${l.id}"></div>
        </div>`;
   // Action row: per the consolidation, only 更新 / 取り下げ are universal;
   // 🎁 toggle and 1個消費 stay as separate intents because they're mode
@@ -470,39 +470,41 @@ function renderRow(l) {
          : `<button data-action="makegift" data-id="${l.id}">🎁 これどうぞに切替</button>`}
        <button data-action="consume" data-id="${l.id}" ${l.qty > 0 ? '' : 'disabled'}>1個消費</button>
        <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
+  // Field rows share a fixed-width left label + flex-grow input. min-width:0 on
+  // every flex item is the canonical fix for inputs (especially <input type="file">)
+  // pushing their parent wider than its container.
+  const fieldRow = (label, inputHtml, align = 'center') => `
+    <div class="sell-edit-row" style="align-items:${align}">
+      <span class="sell-edit-label">${label}</span>
+      <div class="sell-edit-input">${inputHtml}</div>
+    </div>`;
   return `
     <div class="list-item" data-id="${l.id}" style="align-items:flex-start">
-      <div style="flex:1">
+      <div style="flex:1; min-width:0">
         <div class="bold">${escapeHtml(effectiveName)} ${statusTag}${giftTag}${locTag}</div>
         ${priceLine}
         ${priceField}
-        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:70px">在庫</span>
-          <input type="number" min="0" value="${l.qty}" data-qty="${l.id}" style="flex:1">
+        ${fieldRow('在庫',     `<input type="number" min="0" value="${l.qty}" data-qty="${l.id}">`)}
+        ${fieldRow('出品名',   `<input type="text" maxlength="200" value="${escapeHtml(l.display_name ?? '')}" data-dname="${l.id}" placeholder="空欄なら「${escapeHtml(productName)}」">`)}
+        ${fieldRow('商品名',   `<input type="text" maxlength="200" value="${escapeHtml(productName)}" data-pname="${l.id}">`)}
+        ${fieldRow('置き場所', `<input type="text" maxlength="100" value="${escapeHtml(l.location ?? '')}" data-loc="${l.id}" placeholder="例: 10階冷蔵庫">`)}
+        ${fieldRow('メッセージ',
+          `<textarea data-cmsg="${l.id}" maxlength="2000" rows="2" placeholder="購入時のメッセージ (任意)">${escapeHtml(l.completion_message ?? '')}</textarea>`,
+          'flex-start')}
+
+        <!-- Image block lives in its own outlined section so the wide <input
+             type="file"> rendering on iOS doesn't push the text rows off
+             alignment / out of the card. -->
+        <div style="margin-top:10px; padding:8px 10px; border:1px dashed var(--line); border-radius:8px">
+          <div class="muted" style="font-size:12px; margin-bottom:6px">画像</div>
+          <div style="display:flex; align-items:center; gap:8px; min-width:0">
+            ${l.image_url
+              ? `<img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex:0 0 auto">`
+              : `<div style="width:48px; height:48px; border-radius:6px; background:#f1f1f4; display:flex; align-items:center; justify-content:center; flex:0 0 auto; color:var(--muted); font-size:11px">未設定</div>`}
+            <input type="file" accept="image/*" data-img-file="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1; min-width:0">
+          </div>
         </div>
-        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:70px">出品名</span>
-          <input type="text" maxlength="200" value="${escapeHtml(l.display_name ?? '')}" data-dname="${l.id}" placeholder="空欄なら「${escapeHtml(productName)}」" style="flex:1">
-        </div>
-        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:70px">商品名</span>
-          <input type="text" maxlength="200" value="${escapeHtml(productName)}" data-pname="${l.id}" style="flex:1">
-        </div>
-        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:70px">置き場所</span>
-          <input type="text" maxlength="100" value="${escapeHtml(l.location ?? '')}" data-loc="${l.id}" placeholder="例: 10階冷蔵庫" style="flex:1">
-        </div>
-        <div class="row" style="margin-top:6px; gap:6px; align-items:flex-start">
-          <span class="muted" style="font-size:12px; min-width:70px">メッセージ</span>
-          <textarea data-cmsg="${l.id}" maxlength="2000" rows="2" placeholder="購入時のメッセージ (任意)" style="flex:1">${escapeHtml(l.completion_message ?? '')}</textarea>
-        </div>
-        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
-          <span class="muted" style="font-size:12px; min-width:70px">画像</span>
-          ${l.image_url
-            ? `<img src="${escapeHtml(l.image_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:6px">`
-            : `<span class="muted" style="font-size:12px">未設定</span>`}
-          <input type="file" accept="image/*" data-img-file="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1">
-        </div>
+
         <div class="row" style="margin-top:8px; gap:6px; flex-wrap:wrap">
           ${actionRow}
         </div>
