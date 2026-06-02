@@ -1,7 +1,7 @@
 /* LabPay — single stylesheet. Mobile-first. */
 
 :root {
-  /* Meiji University 紫紺 (shikon) — dark purple */
+  /* Color — Meiji University 紫紺 (shikon) ベース */
   --bg: #f6f4f8;
   --fg: #1b1820;
   --muted: #6f6678;
@@ -12,8 +12,26 @@
   --primary-soft: #ede4f3;
   --warn: #b54708;
   --danger: #b42318;
+
+  /* Surface */
+  --radius-sm: 8px;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.04);
+
+  /* Type scale — 大体これに集約。10px / 22px 等の one-off は raw のまま */
+  --text-xs:   11px;   /* 小チップ、grade ラベル */
+  --text-sm:   12px;   /* キャプション、補足 */
+  --text-md:   13px;   /* hint、戻るリンク */
+  --text-base: 14px;   /* リスト等の本文 */
+  --text-lg:   16px;   /* カード見出し、summary */
+  --text-xl:   18px;   /* 強調 */
+
+  /* Spacing ladder — 4-base。6px / 10px は半端値として raw のまま残す */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +56,7 @@ main#app, .card { max-width: 100%; overflow-x: hidden; min-width: 0; }
 html, body { background: var(--bg); color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
                "Helvetica Neue", Arial, "Yu Gothic", "Meiryo", sans-serif;
-  font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  font-size: var(--text-lg); line-height: 1.5; -webkit-font-smoothing: antialiased; }
 a { color: var(--primary); text-decoration: none; -webkit-tap-highlight-color: transparent; }
 a:hover { text-decoration: underline; }
 /* Mobile taps shouldn't underline navigation chrome — the underline-on-hover above
@@ -59,24 +77,24 @@ header#topbar {
   background: white; padding: 10px 14px;
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
 }
-header .brand { font-weight: 800; font-size: 18px; color: var(--primary); }
+header .brand { font-weight: 800; font-size: var(--text-xl); color: var(--primary); }
 header .brand-version {
-  font-size: 11px; font-weight: 600; color: var(--muted);
+  font-size: var(--text-xs); font-weight: 600; color: var(--muted);
   margin-left: 2px; vertical-align: super;
 }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .pill { background: var(--primary-soft); color: var(--primary); padding: 4px 10px;
-  border-radius: 999px; font-weight: 700; font-size: 14px; }
+  border-radius: 999px; font-weight: 700; font-size: var(--text-base); }
 .bell { position: relative; }
 .bell .badge { position: absolute; top: -8px; right: -12px; background: var(--danger);
-  color: white; font-size: 11px; padding: 1px 6px; border-radius: 999px; font-weight: 700; }
+  color: white; font-size: var(--text-xs); padding: 1px 6px; border-radius: 999px; font-weight: 700; }
 
 nav#tabs {
-  display: flex; gap: 4px; padding: 6px; background: white;
+  display: flex; gap: var(--space-1); padding: 6px; background: white;
   border-bottom: 1px solid var(--line); overflow-x: auto; position: sticky; top: 53px; z-index: 10;
 }
 nav#tabs a {
-  padding: 8px 12px; border-radius: 999px; color: var(--muted); white-space: nowrap;
+  padding: var(--space-2) var(--space-3); border-radius: 999px; color: var(--muted); white-space: nowrap;
 }
 nav#tabs a.active { background: var(--primary); color: var(--primary-fg); }
 
@@ -84,7 +102,7 @@ main#app { padding: 14px 14px 4px 14px; max-width: 720px; margin: 0 auto; }
 
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  padding: var(--space-4); box-shadow: var(--shadow); margin-bottom: var(--space-3); }
 main#app > .card:last-child { margin-bottom: 0; }
 
 /* main はコンテンツ高に従う。背景色は html/body の両方に塗ってあるので、
@@ -94,14 +112,14 @@ main#app > .card:last-child { margin-bottom: 0; }
    伸びて余分なスクロールが出てしまうため。 */
 body[data-view] main#app { margin: 0 auto; width: 100%; }
 
-.card h2 { margin: 0 0 8px; font-size: 16px; }
-.card h3 { margin: 6px 0; font-size: 14px; color: var(--muted); font-weight: 600; }
+.card h2 { margin: 0 0 8px; font-size: var(--text-lg); }
+.card h3 { margin: 6px 0; font-size: var(--text-base); color: var(--muted); font-weight: 600; }
 
 /* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
-.card.collapsible-form { padding: 12px 16px; }
+.card.collapsible-form { padding: var(--space-3) var(--space-4); }
 .card.collapsible-form > summary {
-  cursor: pointer; font-weight: 700; font-size: 16px;
+  cursor: pointer; font-weight: 700; font-size: var(--text-lg);
   list-style: none;  /* hide default ▶ on WebKit/Blink — Safari uses ::-webkit-details-marker */
 }
 .card.collapsible-form > summary::-webkit-details-marker { display: none; }
@@ -113,10 +131,10 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 }
 .collapsible-sub > summary::-webkit-details-marker { display: none; }
 
-/* Small descriptive text utility. 「muted で font-size:13px (or 12px)」 という
-   組み合わせが view 全体で散らかっていたのを集約。 */
-.hint { color: var(--muted); font-size: 13px; }
-.hint-sm { color: var(--muted); font-size: 12px; }
+/* Small descriptive text utility. 「muted + 細字」 の組み合わせを集約。
+   .hint = --text-md (13px) / .hint-sm = --text-sm (12px) */
+.hint { color: var(--muted); font-size: var(--text-md); }
+.hint-sm { color: var(--muted); font-size: var(--text-sm); }
 
 /* Buttons */
 button, .btn {
@@ -132,30 +150,30 @@ button.primary:hover { filter: brightness(0.97); }
 button.danger { background: var(--danger); color: white; border-color: var(--danger); }
 button.ghost { background: transparent; border-color: transparent; color: var(--primary); }
 button:disabled { opacity: .55; cursor: not-allowed; }
-button.tip-chip { padding: 6px 12px; font-size: 13px; font-weight: 600; }
+button.tip-chip { padding: 6px 12px; font-size: var(--text-md); font-weight: 600; }
 
 /* Slot chips on the task detail page — one per time window. Selected gets the
    primary purple; disabled (already full) gets a struck-through grey look. */
-button.slot-chip { padding: 6px 10px; font-size: 13px; font-weight: 600; }
+button.slot-chip { padding: 6px 10px; font-size: var(--text-md); font-weight: 600; }
 button.slot-chip.disabled { color: #aaa; text-decoration: line-through; cursor: not-allowed; }
 
 /* Form fields */
 label.field { display: block; margin: 10px 0; }
-label.field .lbl { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+label.field .lbl { display: block; font-size: var(--text-md); color: var(--muted); margin-bottom: 4px; }
 input[type=text], input[type=number], input[type=url], input[type=email], select, textarea {
-  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: white;
+  width: 100%; padding: 10px var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--line); background: white;
 }
 textarea { min-height: 80px; resize: vertical; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 
 /* Lists */
-.list { display: grid; gap: 8px; }
+.list { display: grid; gap: var(--space-2); }
 .list-item {
   background: white; border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 12px; display: flex; justify-content: space-between; gap: 10px;
+  padding: var(--space-3); display: flex; justify-content: space-between; gap: 10px;
 }
-.list-item .meta { color: var(--muted); font-size: 12px; }
+.list-item .meta { color: var(--muted); font-size: var(--text-sm); }
 
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
@@ -170,7 +188,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* Product detail hero — large image on top so the photo the seller uploaded is
    actually used. Falls back to a colored block with the initial when no image. */
-.product-hero { padding: 16px; }
+.product-hero { padding: var(--space-4); }
 .product-image {
   width: 100%; max-width: 480px; margin: 0 auto;
   aspect-ratio: 1 / 1;
@@ -221,11 +239,11 @@ textarea { min-height: 80px; resize: vertical; }
     rgba(0,0,0,0.0)  100%);
   color: white;
   padding: 28px 10px 10px;
-  font-size: 13px; line-height: 1.3;
+  font-size: var(--text-md); line-height: 1.3;
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 .tile-overlay .name {
-  font-weight: 800; font-size: 14px;
+  font-weight: 800; font-size: var(--text-base);
   overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
@@ -238,7 +256,7 @@ textarea { min-height: 80px; resize: vertical; }
   white-space: nowrap;
 }
 .tile-overlay .stock-pill {
-  font-size: 11px; font-weight: 700;
+  font-size: var(--text-xs); font-weight: 700;
   color: rgba(255,255,255,0.95);
   background: rgba(255,255,255,0.18);
   padding: 1px 7px; border-radius: 99px;
@@ -247,18 +265,18 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .tile-overlay .seller-row {
   display: flex; align-items: center; gap: 6px; margin-top: 4px;
-  font-size: 11px; color: rgba(255,255,255,0.95);
+  font-size: var(--text-xs); color: rgba(255,255,255,0.95);
 }
 .tile-overlay .seller-row .avatar { border: 1.5px solid white; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
 .tile-overlay .seller-row .avatar-fallback {
   border: 1.5px solid white; box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
   background: rgba(255,255,255,0.2); color: white;
 }
-.tile-overlay .meta { color: rgba(255,255,255,0.88); font-size: 11px; margin-top: 2px; }
+.tile-overlay .meta { color: rgba(255,255,255,0.88); font-size: var(--text-xs); margin-top: 2px; }
 .tile-badge {
   position: absolute; top: 6px; left: 6px;
   background: rgba(255,255,255,0.95); color: #1b1820;
-  font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 99px;
+  font-size: var(--text-xs); font-weight: 800; padding: 3px 8px; border-radius: 99px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
 .tile-badge.gift { background: #fce4ec; color: #b71c50; }
@@ -270,7 +288,7 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .tile-seller .avatar,
 .tile-seller .avatar-fallback { width: 26px; height: 26px; }
-.tile-seller .avatar-fallback { font-size: 12px; }
+.tile-seller .avatar-fallback { font-size: var(--text-sm); }
 
 /* Presence pill: one chip per person in the "今ラボにいる人" list */
 .presence-pill {
@@ -280,7 +298,7 @@ textarea { min-height: 80px; resize: vertical; }
   max-width:100%; min-height:28px;
 }
 .presence-pill-name {
-  font-size:13px; line-height:1.2;
+  font-size: var(--text-md); line-height:1.2;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-width:160px;
 }
@@ -293,7 +311,7 @@ textarea { min-height: 80px; resize: vertical; }
 /* Stay-duration mode: append a small label inside each pill ("35分" / "2時間"). */
 .presence-pill-duration {
   display:none;
-  font-size:11px; color:var(--muted);
+  font-size: var(--text-xs); color:var(--muted);
   margin-left:2px; padding-left:6px;
   border-left:1px solid var(--line);
 }
@@ -345,7 +363,7 @@ textarea { min-height: 80px; resize: vertical; }
 /* Balance strip (compact, used at top of buy/sell pages) */
 .balance-strip { display: flex; align-items: baseline; justify-content: space-between;
   padding: 10px 16px; }
-.balance-strip .bold { font-size: 18px; }
+.balance-strip .bold { font-size: var(--text-xl); }
 
 /* Toast */
 #toast {
@@ -364,30 +382,30 @@ textarea { min-height: 80px; resize: vertical; }
   box-shadow: 0 -2px 8px rgba(0,0,0,.18);
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
-#install-banner .install-text { flex: 1; font-size: 13px; line-height: 1.3; }
+#install-banner .install-text { flex: 1; font-size: var(--text-md); line-height: 1.3; }
 #install-banner button {
   border: none; padding: 7px 14px; border-radius: 8px; font-weight: 700; cursor: pointer;
 }
 #install-banner #install-btn { background: white; color: var(--primary); }
 #install-banner #install-close {
-  background: transparent; color: white; padding: 4px 8px; font-size: 18px; line-height: 1;
+  background: transparent; color: white; padding: 4px 8px; font-size: var(--text-xl); line-height: 1;
 }
 
 /* Scan view */
 .scanner-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .scanner-wrap video { width: 100%; max-width: 480px; border-radius: var(--radius); background: black; }
-.scanner-status { font-size: 13px; color: var(--muted); }
+.scanner-status { font-size: var(--text-md); color: var(--muted); }
 
 /* Tables for admin */
 table.table { width: 100%; border-collapse: collapse; }
-table.table th, table.table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; }
+table.table th, table.table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: var(--text-base); }
 table.table th { color: var(--muted); font-weight: 600; }
 
 /* Empty state */
 .empty { color: var(--muted); text-align: center; padding: 32px 12px; }
 
 .tag { display: inline-block; padding: 2px 8px; background: var(--primary-soft); color: var(--primary);
-  border-radius: 999px; font-size: 11px; font-weight: 700; }
+  border-radius: 999px; font-size: var(--text-xs); font-weight: 700; }
 .tag.warn { background: #fff3df; color: var(--warn); }
 .tag.danger { background: #ffe1de; color: var(--danger); }
 .tag.muted { background: #eef0ef; color: var(--muted); }
@@ -411,7 +429,7 @@ table.table th { color: var(--muted); font-weight: 600; }
 }
 .cal-head {
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   padding: 4px 0;
 }
@@ -424,7 +442,7 @@ table.table th { color: var(--muted); font-weight: 600; }
   border-radius: 8px;
   background: white;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-base);
   user-select: none;
   transition: background .12s, transform .08s;
 }
@@ -451,9 +469,9 @@ table.table th { color: var(--muted); font-weight: 600; }
 }
 .supply-cell.supply-admin  { background: #efeafa; border-color: #d4c8f0; }
 .supply-cell.supply-member { background: #eaf5ef; border-color: #c4dccd; }
-.supply-label { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.supply-label { font-size: var(--text-xs); color: var(--muted); letter-spacing: .04em; }
 .supply-value { font-size: 22px; font-weight: 700; font-family: Menlo, Consolas, monospace; margin: 2px 0; }
-.supply-sub   { font-size: 11px; color: var(--muted); }
+.supply-sub   { font-size: var(--text-xs); color: var(--muted); }
 
 /* 出品中 row edit grid — fixed label column + minmax(0,1fr) input column.
    minmax(0,1fr) is the canonical 'shrink below content width' incantation
@@ -470,7 +488,7 @@ table.table th { color: var(--muted); font-weight: 600; }
   align-items: center;
 }
 .sell-edit-label {
-  color: var(--muted); font-size: 12px;
+  color: var(--muted); font-size: var(--text-sm);
   line-height: 36px;
 }
 .sell-edit-input { min-width: 0; }
@@ -487,7 +505,7 @@ table.table th { color: var(--muted); font-weight: 600; }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px 4px 6px; border-radius: 999px;
   border: 1px solid var(--line); background: white;
-  cursor: pointer; font-size: 13px;
+  cursor: pointer; font-size: var(--text-md);
 }
 .rl-chip input { margin: 0; cursor: pointer; }
 .rl-chip:has(input:checked) {
