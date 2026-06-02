@@ -39,6 +39,7 @@ require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Calendar.php';
 require_once __DIR__ . '/Achievements.php';
 require_once __DIR__ . '/Labels.php';
+require_once __DIR__ . '/Calendar.php';
 
 // ---------------- API exception ----------------
 class ApiException extends RuntimeException {

@@ -366,6 +366,113 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ─── Google Calendar ──────────────────────────────────────────────
+    // 連携状態を返す + 一覧 / 選択保存 / events / 解除 を担当。
+    if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'GET') {
+        $st = $pdo->prepare('SELECT calendar_connected_at, calendar_selected_ids
+                             FROM users WHERE id=?');
+        $st->execute([$u['id']]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        $connected = !empty($row['calendar_connected_at']);
+        $selected = [];
+        if (!empty($row['calendar_selected_ids'])) {
+            $j = json_decode((string)$row['calendar_selected_ids'], true);
+            if (is_array($j)) $selected = array_values(array_map('strval', $j));
+        }
+        json_response([
+            'connected'    => $connected,
+            'connected_at' => $row['calendar_connected_at'] ?? null,
+            'selected_ids' => $selected,
+        ]);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'calendars' && $method === 'GET') {
+        try {
+            $token = Calendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+            $cals  = Calendar::listCalendars($token);
+        } catch (ApiException $e) {
+            if ($e->errCode === 'calendar_unauthorized') {
+                // refresh は ensureValidAccessToken の中でやってるので、ここに来る
+                // ならその refresh 自体が失敗 / token 取消 → 再連携を促す。
+                Calendar::disconnect($pdo, (int)$u['id']);
+                throw new ApiException('calendar_reauth', '再連携が必要です', 409);
+            }
+            throw $e;
+        }
+        json_response(['items' => $cals]);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'selection' && $method === 'PATCH') {
+        $body = read_json_body();
+        $ids = $body['ids'] ?? [];
+        if (!is_array($ids)) {
+            throw new ApiException('bad_request', 'ids must be an array', 400);
+        }
+        $clean = array_values(array_unique(array_filter(
+            array_map(fn($x) => mb_substr(trim((string)$x), 0, 255), $ids))));
+        $pdo->prepare('UPDATE users SET calendar_selected_ids=? WHERE id=?')
+            ->execute([json_encode($clean, JSON_UNESCAPED_UNICODE), $u['id']]);
+        json_response(['ok' => true, 'selected_ids' => $clean]);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'events' && $method === 'GET') {
+        $st = $pdo->prepare('SELECT calendar_selected_ids FROM users WHERE id=?');
+        $st->execute([$u['id']]);
+        $sel = $st->fetchColumn();
+        $selected = [];
+        if ($sel) {
+            $j = json_decode((string)$sel, true);
+            if (is_array($j)) $selected = array_map('strval', $j);
+        }
+        if (!$selected) $selected = ['primary']; // default = primary
+        // 「今日 00:00 〜 明日 24:00」 (JST) を timeMin/timeMax に変換 (RFC3339)。
+        $tz = new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
+        $now = new DateTimeImmutable('now', $tz);
+        $today0 = $now->setTime(0, 0, 0);
+        $tomorrow24 = $today0->modify('+2 day');
+        $timeMin = $today0->format(DateTime::RFC3339);
+        $timeMax = $tomorrow24->format(DateTime::RFC3339);
+
+        $token = Calendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        $merged = [];
+        foreach ($selected as $cid) {
+            try {
+                $events = Calendar::listEvents($token, $cid, $timeMin, $timeMax);
+                foreach ($events as $e) {
+                    $start = $e['start']['dateTime'] ?? $e['start']['date'] ?? null;
+                    $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
+                    if (!$start) continue;
+                    $merged[] = [
+                        'id'       => (string)($e['id'] ?? ''),
+                        'calendar' => $cid,
+                        'title'    => (string)($e['summary'] ?? '(無題)'),
+                        'start'    => $start,
+                        'end'      => $end,
+                        'all_day'  => !isset($e['start']['dateTime']),
+                        'location' => (string)($e['location'] ?? ''),
+                        'url'      => Calendar::extractMeetingUrl($e),
+                        'html_url' => (string)($e['htmlLink'] ?? ''),
+                    ];
+                }
+            } catch (ApiException $exc) {
+                if ($exc->errCode === 'calendar_unauthorized') {
+                    Calendar::disconnect($pdo, (int)$u['id']);
+                    throw new ApiException('calendar_reauth', '再連携が必要です', 409);
+                }
+                // 個別 calendar の失敗 (権限剥奪など) は skip して他の calendar は出す。
+            }
+        }
+        // start 昇順。
+        usort($merged, fn($a, $b) => strcmp($a['start'], $b['start']));
+        json_response(['items' => $merged]);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'DELETE') {
+        Calendar::disconnect($pdo, (int)$u['id']);
+        json_response(['ok' => true]);
+        return;
+    }
+
     json_error('not_found', "no me route for $method $sub", 404);
 }
 

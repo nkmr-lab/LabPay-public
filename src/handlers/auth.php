@@ -85,6 +85,43 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ─── Google Calendar incremental authorization ────────────────────
+    // /api/auth/calendar/connect (GET): 既存ログイン中ユーザーに対して追加 scope
+    //   (calendar.readonly) を要求するため Google の認可画面にリダイレクト。
+    // /api/auth/calendar/callback (GET): code を access/refresh token に交換して
+    //   users テーブルに保存、Settings ページに戻す。
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'connect' && $method === 'GET') {
+        $u = Auth::requireUser($pdo, $cfg);
+        $state = bin2hex(random_bytes(16));
+        setcookie('labpay_calendar_state', $state, [
+            'expires'  => time() + 600,
+            'path'     => '/',
+            'secure'   => (bool)($cfg['app']['cookie_secure'] ?? true),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        $url = Calendar::authorizeUrl($cfg, (string)$u['email'], $state);
+        header('Location: ' . $url, true, 302);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'callback' && $method === 'GET') {
+        $u = Auth::requireUser($pdo, $cfg);
+        $code  = $_GET['code']  ?? '';
+        $state = $_GET['state'] ?? '';
+        $cookieState = $_COOKIE['labpay_calendar_state'] ?? '';
+        if (!$code || !$state || !$cookieState || !hash_equals($cookieState, (string)$state)) {
+            json_error('oauth_state', 'invalid calendar OAuth state', 400);
+            return;
+        }
+        setcookie('labpay_calendar_state', '', ['expires' => time() - 3600, 'path' => '/']);
+        $exch = Calendar::exchangeCode($cfg, (string)$code);
+        Calendar::storeTokens($pdo, (int)$u['id'], $exch);
+        // Settings に戻す。
+        $back = rtrim((string)$cfg['app']['base_url'], '/') . '/#/settings?calendar=connected';
+        header('Location: ' . $back, true, 302);
+        return;
+    }
+
     if ($sub === 'logout' && $method === 'POST') {
         $sid = Auth::readSessionId($cfg);
         if ($sid) {

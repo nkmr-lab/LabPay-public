@@ -80,6 +80,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>Google Calendar 連携</h3>
+      <p class="hint">
+        連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
+        どのカレンダーを表示するかは下で個別に切り替えられます。
+      </p>
+      <div id="cal-section"><div class="muted">読み込み中…</div></div>
+    </div>
+
+    <div class="card">
       <h3>バグ報告 / 機能要望</h3>
       <p class="muted" style="font-size:12px; margin:4px 0 8px">
         気づいたバグや「こんな機能あったら」みたいなアイデアを管理者 (中村) に直接届けます。
@@ -124,6 +133,7 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   document.getElementById('sb-add').addEventListener('click', onScrapboxAdd);
   await loadScrapboxHandles();
+  await loadCalendar();
 
   document.getElementById('fb-send').addEventListener('click', async () => {
     const kind = document.getElementById('fb-kind').value;
@@ -135,6 +145,77 @@ export async function renderSettings() {
       document.getElementById('fb-body').value = '';
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+// ---------------- Google Calendar ----------------
+// 連携状態を /api/me/calendar で取得し、未連携なら 「連携する」 ボタン
+// (Google OAuth incremental authz)、連携済みなら calendar 一覧 + toggle + 解除 を出す。
+async function loadCalendar() {
+  const root = document.getElementById('cal-section');
+  if (!root) return;
+  try {
+    const s = await get('/api/me/calendar');
+    if (!s.connected) {
+      root.innerHTML = `
+        <p class="hint-sm">未連携です。下のボタンで Google の同意画面に遷移します。</p>
+        <a href="/api/auth/calendar/connect" class="btn primary">📅 Google Calendar を連携する</a>`;
+      return;
+    }
+    // 連携済み → calendar 一覧を出す。
+    root.innerHTML = `
+      <div class="hint-sm">${escapeHtml(s.connected_at ?? '')} に連携</div>
+      <div id="cal-list" class="list" style="margin-top:8px"><div class="muted">カレンダー読み込み中…</div></div>
+      <div class="row" style="margin-top:8px; gap:6px">
+        <button id="cal-refresh">再取得</button>
+        <button id="cal-disconnect" class="danger">連携を解除</button>
+      </div>`;
+    document.getElementById('cal-refresh').addEventListener('click', loadCalendar);
+    document.getElementById('cal-disconnect').addEventListener('click', async () => {
+      if (!confirm('Google Calendar の連携を解除しますか?')) return;
+      try { await del('/api/me/calendar'); toast('解除しました'); await loadCalendar(); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+
+    let cals;
+    try { cals = await get('/api/me/calendar/calendars'); }
+    catch (e) {
+      // 401/409 で 再連携を促されたら 「連携する」 に戻ったような表示に。
+      document.getElementById('cal-list').innerHTML =
+        `<div class="muted">${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    const selected = new Set(s.selected_ids?.length ? s.selected_ids : ['primary']);
+    const items = cals.items || [];
+    if (!items.length) {
+      document.getElementById('cal-list').innerHTML =
+        `<div class="empty">カレンダーが見つかりません</div>`;
+      return;
+    }
+    document.getElementById('cal-list').innerHTML = items.map(c => `
+      <label class="list-item" style="gap:8px; align-items:center; cursor:pointer">
+        <input type="checkbox" data-cid="${escapeHtml(c.id)}"
+               ${selected.has(c.id) || (c.primary && selected.has('primary')) ? 'checked' : ''}>
+        <div class="grow">
+          <div class="bold">${escapeHtml(c.summary)} ${c.primary ? '<span class="tag" style="font-size:10px">primary</span>' : ''}</div>
+          <div class="meta mono" style="font-size:11px">${escapeHtml(c.id)}</div>
+        </div>
+        ${c.bg ? `<span style="width:14px; height:14px; border-radius:50%; background:${escapeHtml(c.bg)}"></span>` : ''}
+      </label>`).join('');
+    // チェック変更 → API に PATCH。primary は特別扱い: primary cal が選ばれてれば
+    // 'primary' を ID リストに含める (API は primary alias を解釈する)。
+    document.getElementById('cal-list').querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const ids = Array.from(document.querySelectorAll('#cal-list input[type=checkbox]:checked'))
+          .map(b => b.dataset.cid);
+        try {
+          await patch('/api/me/calendar/selection', { ids });
+          toast('表示対象を更新');
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // ---------------- Scrapbox handles ----------------

@@ -43,6 +43,14 @@ export async function renderHome() {
       </div>
     </div>
 
+    <div class="card" id="home-calendar-card" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">今日の予定</h2>
+        <a href="#/settings" class="hint">設定 →</a>
+      </div>
+      <div id="home-calendar" class="list"></div>
+    </div>
+
     <div class="card" id="home-groups-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">あなたのグループ</h2>
@@ -95,6 +103,7 @@ export async function renderHome() {
   await renderCheckinArea();
   await renderMedalsStrip();
   await renderPresence();
+  await renderCalendarEvents();
   await renderMyGroups();
   await renderFreshInvitations();
   await renderFreshListings();
@@ -135,6 +144,7 @@ async function doHomePoll() {
   await Promise.allSettled([
     refreshFinancials({ silent: true }),
     fetchAndRenderPresence(),     // 「今ラボにいる人」 (renderPresence の内部関数)
+    renderCalendarEvents(),
     renderMyGroups(),
     renderFreshInvitations(),
     renderFreshListings(),
@@ -242,6 +252,54 @@ async function renderPresence() {
 
   await fetchAndRenderPresence();
   // 定期 refresh は startHomePolling() に集約 (旧 presenceTimer は撤去)。
+}
+
+// Google Calendar 予定。連携してない人にはカード自体を隠す。連携済みで
+// 「今日 0:00 〜 明日 24:00」 に予定があれば 5 件まで表示。Zoom/Meet URL
+// が拾えればその場でタップして join できるようリンクボタンを出す。
+async function renderCalendarEvents() {
+  const card = document.getElementById('home-calendar-card');
+  const root = document.getElementById('home-calendar');
+  if (!card || !root) return;
+  try {
+    const data = await get('/api/me/calendar/events');
+    const items = (data.items || []).slice(0, 5);
+    if (!items.length) {
+      // 連携はしてるけど予定なし → 「今日は予定なし」 と出す価値あり (連携が
+      // 効いてることが分かる)。完全に隠すのではなく empty で表示。
+      card.hidden = false;
+      root.innerHTML = `<div class="empty">今日は予定なし</div>`;
+      return;
+    }
+    card.hidden = false;
+    const fmtTime = (s, allDay) => {
+      if (allDay) return '終日';
+      const d = new Date(s);
+      const h = d.getHours(), m = d.getMinutes();
+      const today = new Date().toDateString() === d.toDateString();
+      const prefix = today ? '' : '明日 ';
+      return `${prefix}${h}:${String(m).padStart(2,'0')}`;
+    };
+    root.innerHTML = items.map(ev => {
+      const zoomBtn = ev.url
+        ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 8px; font-size:12px">参加</a>`
+        : '';
+      const loc = ev.location ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+      return `
+        <a class="list-item" href="${escapeHtml(ev.html_url || '#')}" target="_blank" rel="noopener" style="align-items:center; gap:8px">
+          <div style="min-width:64px; font-weight:700; color:var(--primary)">${fmtTime(ev.start, ev.all_day)}</div>
+          <div class="grow">
+            <div class="bold">${escapeHtml(ev.title)}</div>
+            ${loc}
+          </div>
+          ${zoomBtn}
+        </a>`;
+    }).join('');
+  } catch (e) {
+    // 未連携 (409 calendar_not_connected) はカード非表示で OK。それ以外も
+    // 「連携してる人の Calendar が落ちた」 等は静かに隠す方が UX 良し。
+    card.hidden = true;
+  }
 }
 
 // Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC
