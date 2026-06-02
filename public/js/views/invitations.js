@@ -200,7 +200,7 @@ async function loadDetail(id) {
         shortcuts.innerHTML = `
           <a class="btn primary" href="#/roulette?members=${ids}">🎰 このメンバーでルーレット</a>
           <a class="btn" href="#/nomikai?members=${ids}">🍻 このメンバーで飲み会割り勘</a>
-          <button id="inv-mkgroup" class="btn">👥 このメンバーでグループ作成 (ワリカへ)</button>
+          <button id="inv-mkgroup" class="btn">👥 このメンバーでグループ作成</button>
         `;
         document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
       }
