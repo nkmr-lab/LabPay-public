@@ -107,6 +107,28 @@ class Achievements {
                 ['count' => 365, 'label' => 'プラチナ',   'medal' => '💎'],
             ],
         ],
+        'roulettes_spun' => [
+            'title' => 'ルーレット主催',
+            'desc'  => 'あなたが回したルーレットの回数',
+            'unit'  => '回',
+            'tiers' => [
+                ['count' => 3,   'label' => 'ブロンズ',   'medal' => '🥉'],
+                ['count' => 15,  'label' => 'シルバー',   'medal' => '🥈'],
+                ['count' => 50,  'label' => 'ゴールド',   'medal' => '🥇'],
+                ['count' => 150, 'label' => 'プラチナ',   'medal' => '💎'],
+            ],
+        ],
+        'roulettes_won' => [
+            'title' => '運命の人',
+            'desc'  => 'ルーレットで選ばれた回数',
+            'unit'  => '回',
+            'tiers' => [
+                ['count' => 1,  'label' => 'ブロンズ',   'medal' => '🥉'],
+                ['count' => 5,  'label' => 'シルバー',   'medal' => '🥈'],
+                ['count' => 20, 'label' => 'ゴールド',   'medal' => '🥇'],
+                ['count' => 50, 'label' => 'プラチナ',   'medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -152,6 +174,17 @@ class Achievements {
         $st = $pdo->prepare('SELECT COUNT(*) FROM scrapbox_awards WHERE user_id=?');
         $st->execute([$userId]);
         $out['scrapbox_days'] = (int)$st->fetchColumn();
+
+        // Roulettes the user spun. dry-run spins never get a row, so the count
+        // is naturally limited to real ones.
+        $st = $pdo->prepare('SELECT COUNT(*) FROM roulettes WHERE creator_user_id=?');
+        $st->execute([$userId]);
+        $out['roulettes_spun'] = (int)$st->fetchColumn();
+
+        // Times the user was selected as the winner.
+        $st = $pdo->prepare('SELECT COUNT(*) FROM roulettes WHERE winner_user_id=?');
+        $st->execute([$userId]);
+        $out['roulettes_won'] = (int)$st->fetchColumn();
 
         return $out;
     }
