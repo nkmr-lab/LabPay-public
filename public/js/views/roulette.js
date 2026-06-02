@@ -168,16 +168,13 @@ function redrawWheel() {
   const svg = document.getElementById('rl-wheel');
   const wrap = document.getElementById('rl-wheel-wrap');
   if (!svg || !wrap) return;
-  // Reset rotation between draws so we don't accumulate.
   svg.style.transform = 'rotate(0deg)';
   svg.style.transition = 'none';
 
-  // Look up names for selected ids from the checkbox labels we already rendered.
-  const labels = {};
-  document.querySelectorAll('#rl-members input[data-uid]').forEach(cb => {
-    const text = cb.parentElement?.querySelector('span')?.textContent || '?';
-    labels[Number(cb.dataset.uid)] = text;
-  });
+  // Build a quick id → user map so each slice can pick up avatar_url.
+  const byId = {};
+  ALL_USERS.forEach(u => { byId[u.id] = u; });
+
   const ids = [...selected];
   if (ids.length < 2) {
     svg.innerHTML = `
@@ -187,7 +184,11 @@ function redrawWheel() {
   }
   const N = ids.length;
   const sliceDeg = 360 / N;
+  // Compact name (limit length so text fits even on dense wheels).
+  const compact = (s) => (s || '?').length > 5 ? s.slice(0, 4) + '…' : (s || '?');
+
   const slices = ids.map((uid, i) => {
+    const user = byId[uid] || { display_name: '?', avatar_url: null };
     const a0 = (i * sliceDeg - 90) * Math.PI / 180;
     const a1 = ((i + 1) * sliceDeg - 90) * Math.PI / 180;
     const x0 = 140 * Math.cos(a0), y0 = 140 * Math.sin(a0);
@@ -195,17 +196,31 @@ function redrawWheel() {
     const large = sliceDeg > 180 ? 1 : 0;
     const color = SLICE_COLORS[i % SLICE_COLORS.length];
     const path = `M 0 0 L ${x0.toFixed(1)} ${y0.toFixed(1)} A 140 140 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z`;
-    // Label: center of slice at 95px radius
+    // Slice midline angle (in screen coords, -90° offset to put 0 at top).
     const am = ((i + 0.5) * sliceDeg - 90) * Math.PI / 180;
-    const tx = 95 * Math.cos(am), ty = 95 * Math.sin(am);
-    const name = labels[uid] || '?';
-    // Truncate to keep slices readable
-    const short = name.length > 6 ? name.slice(0, 5) + '…' : name;
+    // Avatar near the outer edge (~r=95), name a little closer to center (~r=60).
+    const ax = 95 * Math.cos(am), ay = 95 * Math.sin(am);
+    const tx = 60 * Math.cos(am), ty = 60 * Math.sin(am);
+    const ROT = (i + 0.5) * sliceDeg;
+    const initial = (user.display_name || '?').trim().charAt(0).toUpperCase();
+    // Avatar: SVG <image> clipped to a per-user circle. Fall back to a colored
+    // initial bubble when there's no avatar_url. Background white so PNGs with
+    // alpha don't show the slice color through transparent pixels.
+    const r = 16;
+    const clipId = `rl-clip-${uid}`;
+    const avatarChunk = user.avatar_url
+      ? `<defs><clipPath id="${clipId}"><circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r}"></circle></clipPath></defs>
+         <circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r}" fill="white" stroke="white" stroke-width="2"></circle>
+         <image href="${escapeHtml(user.avatar_url)}" x="${(ax - r).toFixed(1)}" y="${(ay - r).toFixed(1)}"
+                width="${r * 2}" height="${r * 2}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"></image>`
+      : `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${r}" fill="white" stroke="white" stroke-width="2"></circle>
+         <text x="${ax.toFixed(1)}" y="${(ay + 5).toFixed(1)}" text-anchor="middle" font-size="16" font-weight="700" fill="${color}">${escapeHtml(initial)}</text>`;
     return `
       <path d="${path}" fill="${color}" stroke="white" stroke-width="2"></path>
+      ${avatarChunk}
       <text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" dominant-baseline="middle"
-            font-size="11" fill="white" font-weight="700"
-            transform="rotate(${(i + 0.5) * sliceDeg} ${tx.toFixed(1)} ${ty.toFixed(1)})">${escapeHtml(short)}</text>`;
+            font-size="10" fill="white" font-weight="700"
+            transform="rotate(${ROT} ${tx.toFixed(1)} ${ty.toFixed(1)})">${escapeHtml(compact(user.display_name))}</text>`;
   }).join('');
   svg.innerHTML = `
     ${slices}
