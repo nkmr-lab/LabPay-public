@@ -638,8 +638,22 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
     }
 
     try {
+        // Notify the requester so they know someone signed up.
         Notifier::notify($pdo, $cfg, (int)$task['requester_user_id'], 'task_claimed',
             "{$u['display_name']} が「{$task['title']}」を引き受けました", 'task', $taskId);
+    } catch (Throwable $e) {}
+    try {
+        // Notify the CLAIMER too so the next time they open the app, they're
+        // reminded what they signed up for and how to mark it done. Without
+        // this, claimers often forget — they tap '引き受ける' and never see
+        // a follow-up until the requester nudges them.
+        $reward = (int)$task['reward'];
+        $urlLine = !empty($task['url'])
+            ? " · 作業: {$task['url']}"
+            : '';
+        $body = "✅ 「{$task['title']}」を引き受けました ({$reward}pt) — 完了したら「タスク」タブから完了報告してください{$urlLine}";
+        Notifier::notify($pdo, $cfg, (int)$u['id'], 'task_my_claim',
+            $body, 'task', $taskId);
     } catch (Throwable $e) {}
     json_response(['ok' => true, 'claim_id' => $claimId]);
 }

@@ -50,6 +50,13 @@ export async function renderHome() {
       <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-my-claims-card" hidden>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">あなたが引き受け中のタスク</h2>
+      </div>
+      <div id="home-my-claims" class="list"></div>
+    </div>
+
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">新規タスク</h2>
@@ -325,17 +332,49 @@ async function renderFreshListings() {
   }
 }
 
-// Open tasks I can apply for (top 5 by id DESC).
+// Open tasks I can apply for (top 5 by id DESC). Also splits out tasks the
+// user is CURRENTLY working on (my_status = claimed / reported) into a
+// separate top-of-page card — without this, workers who claimed a task often
+// forget to come back and report done because nothing on home reminded them.
 async function renderFreshTasks() {
   const root = document.getElementById('home-fresh-tasks');
+  const myCard = document.getElementById('home-my-claims-card');
+  const myList = document.getElementById('home-my-claims');
   try {
-    const d = await get('/api/tasks', { filter: 'available' });
-    const items = (d.items || []).slice(0, 5);
-    if (!items.length) {
+    const d = await get('/api/tasks');
+    const items = d.items || [];
+    const myActive = items.filter(t => t.my_status === 'claimed' || t.my_status === 'reported');
+    const available = items.filter(t => t.can_claim).slice(0, 5);
+
+    if (myActive.length) {
+      myCard.hidden = false;
+      myList.innerHTML = myActive.map(t => {
+        const statusTag = t.my_status === 'reported'
+          ? '<span class="tag" style="background:#fff3df; color:#b54708">承認待ち</span>'
+          : '<span class="tag" style="background:#fff3df; color:#b54708">引き受け中</span>';
+        return `
+          <a class="list-item" href="#/tasks/${t.id}" style="border-left:4px solid #b54708">
+            <div style="display:flex; align-items:center; gap:8px; flex:1">
+              ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
+              <div>
+                <div class="bold">${escapeHtml(t.title)} ${statusTag}</div>
+                <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt${t.deadline ? ' · 締切 ' + escapeHtml(t.deadline) : ''}</div>
+                ${t.my_status === 'claimed'
+                  ? '<div class="meta" style="color:#b54708">→ タップして完了報告</div>'
+                  : '<div class="meta">依頼者の承認待ち</div>'}
+              </div>
+            </div>
+          </a>`;
+      }).join('');
+    } else {
+      myCard.hidden = true;
+    }
+
+    if (!available.length) {
       root.innerHTML = `<div class="empty">受けられるタスクはありません</div>`;
       return;
     }
-    root.innerHTML = items.map(t => `
+    root.innerHTML = available.map(t => `
       <a class="list-item" href="#/tasks/${t.id}">
         <div style="display:flex; align-items:center; gap:8px; flex:1">
           ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
