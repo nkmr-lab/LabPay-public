@@ -36,6 +36,7 @@ export const state = {
   balance: null,
   unread: 0,
   inLab: false,   // server-enforced lab-Wi-Fi gate; mirrored here so the UI can grey out 購入 buttons
+  hasMac: true,   // false → show "Mac 登録してね" onboarding banner on home
 };
 
 export async function refreshMe() {
@@ -44,6 +45,7 @@ export async function refreshMe() {
     state.me = data.user;
     state.balance = data.balance;
     state.inLab = !!data.in_lab;
+    state.hasMac = !!data.has_registered_mac;
     renderChrome();
     return data;
   } catch (e) {

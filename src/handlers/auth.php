@@ -14,10 +14,17 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         $av = $pdo->prepare('SELECT avatar_url FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $u['avatar_url'] = $av->fetchColumn() ?: null;
+        // Mac-registration flag drives a home-screen onboarding banner: the
+        // user can't be auto-detected at all until at least one MAC is
+        // attached to their account.
+        $stMac = $pdo->prepare('SELECT COUNT(*) FROM presence_devices WHERE user_id=?');
+        $stMac->execute([$u['id']]);
+        $hasMac = (int)$stMac->fetchColumn() > 0;
         // in_lab is the buy-button gate: client greys out 購入 when false.
         // Defined in purchases.php (loaded by bootstrap).
         json_response(['user' => $u, 'balance' => $bal,
-            'in_lab' => user_is_in_lab($pdo, (int)$u['id'])]);
+            'in_lab' => user_is_in_lab($pdo, (int)$u['id']),
+            'has_registered_mac' => $hasMac]);
         return;
     }
 
