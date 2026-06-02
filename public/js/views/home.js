@@ -81,18 +81,7 @@ export async function renderHome() {
     </div>
   `;
 
-  // Fill balance + streak from /api/me
-  try {
-    const me = await get('/api/me');
-    document.getElementById('home-balance').textContent = (me.balance ?? 0).toLocaleString() + ' pt';
-    const s = me.streak || {};
-    document.getElementById('streak-line').textContent =
-      `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
-    state.balance = me.balance;
-  } catch (e) {
-    toast('情報の取得に失敗: ' + e.message);
-  }
-
+  await refreshFinancials({ silent: false });
   await renderCheckinArea();
   await renderMedalsStrip();
   await renderPresence();
@@ -100,6 +89,40 @@ export async function renderHome() {
   await renderFreshTasks();
   await renderPresenceSummary();
   await renderRecentTx();
+
+  // Poll balance + streak + recent transactions every 30s while the user is
+  // looking at home, so a fellow lab member's purchase / a task approval /
+  // a roulette payout shows up without a manual refresh.
+  if (financialsTimer) clearInterval(financialsTimer);
+  financialsTimer = setInterval(() => {
+    if (!document.getElementById('home-balance')) {
+      clearInterval(financialsTimer);
+      financialsTimer = null;
+      return;
+    }
+    refreshFinancials({ silent: true });
+    renderRecentTx();
+  }, 30_000);
+}
+
+// Module-scoped so a re-mounted home view replaces the prior timer instead of
+// stacking it.
+let financialsTimer = null;
+
+async function refreshFinancials({ silent }) {
+  try {
+    const me = await get('/api/me');
+    const bal = document.getElementById('home-balance');
+    if (bal) bal.textContent = (me.balance ?? 0).toLocaleString() + ' pt';
+    const sl = document.getElementById('streak-line');
+    if (sl) {
+      const s = me.streak || {};
+      sl.textContent = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
+    }
+    state.balance = me.balance;
+  } catch (e) {
+    if (!silent) toast('情報の取得に失敗: ' + e.message);
+  }
 }
 
 // Personal lab-stay stat card. Aggregates closed sessions from presence_sessions
