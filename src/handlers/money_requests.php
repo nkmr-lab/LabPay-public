@@ -299,7 +299,7 @@ function money_requests_pay(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $method = (string)($body['method'] ?? '');
-    if (!in_array($method, ['cash','paypay','bank','proxy'], true)) {
+    if (!isset(Labels::PAYMENT_METHOD[$method])) {
         throw new ApiException('bad_request', "method must be cash|paypay|bank|proxy", 400);
     }
     $proxyId = null;
@@ -326,7 +326,7 @@ function money_requests_pay(PDO $pdo, array $cfg, int $id): void {
 
     // creator に通知
     if ((int)$row['creator_user_id'] !== (int)$u['id']) {
-        $methodLabel = ['cash' => '現金', 'paypay' => 'PayPay', 'bank' => '銀行振込', 'proxy' => '立替'][$method] ?? $method;
+        $methodLabel = Labels::paymentMethod($method);
         $msg = "💰 「{$row['title']}」: {$u['display_name']} から ¥" . number_format((int)$row['amount_yen']) . " ({$methodLabel}) 支払い済";
         notify_safely($pdo, $cfg, (int)$row['creator_user_id'], 'admin_notice', $msg, 'money_request', $id);
     }

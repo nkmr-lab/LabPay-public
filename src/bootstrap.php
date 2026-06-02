@@ -38,6 +38,7 @@ require_once __DIR__ . '/ProductInfo.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Calendar.php';
 require_once __DIR__ . '/Achievements.php';
+require_once __DIR__ . '/Labels.php';
 
 // ---------------- API exception ----------------
 class ApiException extends RuntimeException {
@@ -363,6 +364,16 @@ function notify_safely(PDO $pdo, array $cfg, int $userId, string $type,
                        string $body, ?string $refType = null, ?int $refId = null): void {
     try { Notifier::notify($pdo, $cfg, $userId, $type, $body, $refType, $refId); }
     catch (Throwable $e) { /* swallow on purpose */ }
+}
+
+// 全 admin に同じ通知をブロードキャスト。バグ報告等の「誰でもいいから admin に
+// 届かせたい」用途。1 通でも届けば運用回るので 1 人ずつ swallow しながら
+// 進む (notify_safely と同じスタンス)。
+function notify_admins(PDO $pdo, array $cfg, string $type, string $body,
+                       ?string $refType = null, ?int $refId = null): void {
+    foreach ($pdo->query("SELECT id FROM users WHERE kind='human' AND role='admin'") as $r) {
+        notify_safely($pdo, $cfg, (int)$r['id'], $type, $body, $refType, $refId);
+    }
 }
 
 // ---------------- Slack notifications (incoming webhook) ----------------

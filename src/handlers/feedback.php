@@ -55,7 +55,7 @@ function feedback_reply(PDO $pdo, array $cfg, int $id): void {
     $pdo->prepare("UPDATE feedback SET replied_at=NOW(), reply_body=?, replied_by_user_id=? WHERE id=?")
         ->execute([$reply, $admin['id'], $id]);
 
-    $kindLabel = ['bug'=>'🐛 バグ報告', 'feature'=>'✨ 機能要望', 'other'=>'💬 フィードバック'][$row['kind']] ?? 'フィードバック';
+    $kindLabel = Labels::feedbackKind((string)$row['kind']);
     $origSnip = mb_substr((string)$row['body'], 0, 60) . (mb_strlen((string)$row['body']) > 60 ? '…' : '');
     $msg = "✅ あなたの {$kindLabel}「{$origSnip}」 に {$admin['display_name']} さんから返信:\n{$reply}";
     notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice', $msg, 'feedback', $id);
@@ -68,7 +68,7 @@ function feedback_create(PDO $pdo, array $cfg): void {
     $body = read_json_body();
     $text = trim((string)require_field($body, 'body'));
     $kind = (string)($body['kind'] ?? 'other');
-    if (!in_array($kind, ['bug','feature','other'], true)) $kind = 'other';
+    if (!isset(Labels::FEEDBACK_KIND[$kind])) $kind = 'other';
     if ($text === '' || mb_strlen($text) > 4000) {
         throw new ApiException('bad_request', 'body length 1..4000', 400);
     }
@@ -81,12 +81,10 @@ function feedback_create(PDO $pdo, array $cfg): void {
     $fbId = (int)$pdo->lastInsertId();
 
     // Notify every admin so it's not solo-dependent on one person being awake.
-    $kindLabel = ['bug'=>'🐛 バグ報告', 'feature'=>'✨ 機能要望', 'other'=>'💬 フィードバック'][$kind];
+    $kindLabel = Labels::feedbackKind($kind);
     $snippet = mb_substr($text, 0, 80) . (mb_strlen($text) > 80 ? '…' : '');
     $msg = "{$kindLabel} ({$u['display_name']}): {$snippet}";
-    foreach ($pdo->query("SELECT id FROM users WHERE kind='human' AND role='admin'") as $r) {
-        notify_safely($pdo, $cfg, (int)$r['id'], 'admin_notice', $msg, 'feedback', $fbId);
-    }
+    notify_admins($pdo, $cfg, 'admin_notice', $msg, 'feedback', $fbId);
 
     // And blast to Slack so admin sees it on their phone immediately.
     try {

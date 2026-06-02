@@ -159,7 +159,7 @@ function nomikai_pay(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $method  = (string)($body['method'] ?? 'cash');
-    if (!in_array($method, ['cash','paypay','bank','proxy'], true)) {
+    if (!isset(Labels::PAYMENT_METHOD[$method])) {
         throw new ApiException('bad_request', "method must be cash/paypay/bank/proxy", 400);
     }
     $proxyId = ($method === 'proxy') ? (int)($body['proxy_user_id'] ?? 0) : null;
