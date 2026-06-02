@@ -69,9 +69,15 @@ class ScrapboxSlackSync {
             if (($m['username'] ?? '') !== 'Scrapbox') continue;
             if (empty($m['attachments'])) continue;
             foreach ($m['attachments'] as $a) {
-                $name = trim((string)($a['author_name'] ?? ''));
-                if ($name === '') continue;
-                $perAuthor[$name][] = ['title' => trim((string)($a['title'] ?? ''))];
+                $rawName = trim((string)($a['author_name'] ?? ''));
+                if ($rawName === '') continue;
+                $title = trim((string)($a['title'] ?? ''));
+                // author_name が「Sora, Satoshi Nakamura」のようにカンマ区切りで
+                // 複数人入る場合は、各人にそれぞれ 1編集ぶんカウントする (共同編集)。
+                $names = array_values(array_filter(array_map('trim', explode(',', $rawName)), fn($s) => $s !== ''));
+                foreach ($names as $name) {
+                    $perAuthor[$name][] = ['title' => $title];
+                }
             }
         }
 
