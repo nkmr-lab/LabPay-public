@@ -53,7 +53,7 @@ export async function renderRoulette() {
       <div id="rl-wheel-wrap" style="position:relative; width:280px; height:280px; margin:0 auto">
         <div id="rl-pointer" style="position:absolute; top:-4px; left:50%; transform:translateX(-50%); font-size:24px; z-index:2">▼</div>
         <svg id="rl-wheel" viewBox="-150 -150 300 300" width="280" height="280"
-             style="display:block; transition:transform 4.5s cubic-bezier(.18,.85,.25,1)">
+             style="display:block; transition:transform 8s cubic-bezier(.32,.08,.18,1)">
           <circle cx="0" cy="0" r="140" fill="#e9eaee"></circle>
           <text x="0" y="5" text-anchor="middle" font-size="14" fill="#666">メンバーを選択</text>
         </svg>
@@ -237,9 +237,13 @@ async function onSpin() {
     const N = ids.length;
     const sliceDeg = 360 / N;
     const target = -(r.winner_index * sliceDeg + sliceDeg / 2);
-    const total = 360 * 5 + target;  // 5 full spins
+    // 8 full spins + the offset to land on the winner. cubic-bezier(.32,.08,.18,1)
+    // starts gently (the original was too snappy off the line), holds speed
+    // through the middle, then decelerates smoothly into place — feels like a
+    // slot-machine wheel rather than a spring.
+    const total = 360 * 8 + target;
     const svg = document.getElementById('rl-wheel');
-    svg.style.transition = 'transform 4.5s cubic-bezier(.18,.85,.25,1)';
+    svg.style.transition = 'transform 8s cubic-bezier(.32,.08,.18,1)';
     requestAnimationFrame(() => {
       svg.style.transform = `rotate(${total}deg)`;
     });
@@ -253,14 +257,28 @@ async function onSpin() {
       } else if (r.reward > 0) {
         prize = ' <span class="muted">(自分が当選: pt 移動なし)</span>';
       }
-      document.getElementById('rl-result').innerHTML =
-        `🎯 <span style="color:var(--primary); font-size:18px">${escapeHtml(r.winner_name)}</span> さん!${prize}`;
+      let html = `🎯 <span style="color:var(--primary); font-size:18px">${escapeHtml(r.winner_name)}</span> さん!${prize}`;
+      // In test mode, also show the would-be notification per participant so the
+      // user can sanity-check the message text before doing it for real.
+      if (r.dry_run && Array.isArray(r.notifications_preview)) {
+        const rows = r.notifications_preview.map(n => `
+          <div class="list-item" style="padding:6px 10px; ${n.is_winner ? 'border-left:3px solid var(--primary); background:#faf6ff' : ''}">
+            <div style="flex:1">
+              <div class="bold" style="font-size:13px">→ ${escapeHtml(n.display_name)}${n.is_winner ? ' 🎯' : ''}</div>
+              <div class="meta" style="white-space:pre-wrap">${escapeHtml(n.body)}</div>
+            </div>
+          </div>`).join('');
+        html += `
+          <div class="muted" style="font-size:12px; text-align:left; margin:14px 0 4px">
+            ↓ テストモード OFF だと、以下の通知が各メンバーに届きます (${r.notifications_preview.length}人)
+          </div>
+          <div class="list" style="text-align:left">${rows}</div>`;
+      }
+      document.getElementById('rl-result').innerHTML = html;
       document.getElementById('rl-spin').disabled = false;
       spinning = false;
-      // History only updates on real spins; dry-run skips this to keep the
-      // recent-list noise-free.
       if (!r.dry_run) loadHistory();
-    }, 4600);
+    }, 8100);
   } catch (e) {
     toast('失敗: ' + e.message);
     document.getElementById('rl-spin').disabled = false;

@@ -83,9 +83,25 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
     $winnerId  = $ids[$winnerIdx];
 
     // Dry-run path: just return the winner. No DB row, no ledger move, no
-    // notifications — the spin is a rehearsal, not a real event.
+    // notifications — the spin is a rehearsal, not a real event. We DO compute
+    // the would-be notification text per participant so the UI can preview
+    // exactly who would hear what before the user commits.
     if ($dryRun) {
         $winnerName = $idToName[$winnerId] ?? 'someone';
+        $rewardWinnerSuffix = $reward > 0 && $winnerId !== (int)$u['id']
+            ? " (+{$reward}pt)" : '';
+        $rewardOthersSuffix = $reward > 0 ? " (賞金 {$reward}pt)" : '';
+        $preview = [];
+        foreach ($ids as $uid) {
+            $preview[] = [
+                'user_id'      => $uid,
+                'display_name' => $idToName[$uid] ?? '',
+                'is_winner'    => $uid === $winnerId,
+                'body'         => $uid === $winnerId
+                    ? "🎯 ルーレット「{$title}」で あなた が選ばれました!{$rewardWinnerSuffix}"
+                    : "🎰 ルーレット「{$title}」の結果: {$winnerName} さんが選ばれました{$rewardOthersSuffix}",
+            ];
+        }
         json_response([
             'ok' => true,
             'dry_run' => true,
@@ -95,6 +111,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
             'winner_index' => $winnerIdx,
             'winner_name'  => $winnerName,
             'reward' => $reward,
+            'notifications_preview' => $preview,
         ]);
         return;
     }
