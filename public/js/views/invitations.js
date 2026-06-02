@@ -138,6 +138,12 @@ export async function renderInvitationDetail({ params }) {
       <div id="inv-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">
+      <h3>参加表明している人で…</h3>
+      <div id="inv-shortcuts" class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
+        <span class="muted" style="font-size:13px">読み込み中…</span>
+      </div>
+    </div>
+    <div class="card">
       <h3>参加表明している人</h3>
       <div id="inv-joins" class="list"><div class="muted">読み込み中…</div></div>
     </div>
@@ -181,6 +187,25 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
+
+    // Shortcuts for using the *participant* set elsewhere. Use joins (not joins
+    // ∪ creator) since the creator may have intentionally not joined.
+    const memberIds = (i.joins || []).map(j => j.id);
+    const shortcuts = document.getElementById('inv-shortcuts');
+    if (shortcuts) {
+      if (memberIds.length === 0) {
+        shortcuts.innerHTML = `<div class="muted" style="font-size:13px">参加表明者がまだいないので、ルーレット/割り勘などはまだ使えません</div>`;
+      } else {
+        const ids = memberIds.join(',');
+        shortcuts.innerHTML = `
+          <a class="btn primary" href="#/roulette?members=${ids}">🎰 このメンバーでルーレット</a>
+          <a class="btn" href="#/nomikai?members=${ids}">🍻 このメンバーで飲み会割り勘</a>
+          <button id="inv-mkgroup" class="btn">👥 このメンバーでグループ作成 (ワリカへ)</button>
+        `;
+        document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
+      }
+    }
+
     const root = document.getElementById('inv-joins');
     if (!(i.joins || []).length) {
       root.innerHTML = `<div class="empty">まだ参加表明している人はいません</div>`;
@@ -236,6 +261,17 @@ async function onLeave(id) {
     await post(`/api/invitations/${id}/leave`, {});
     toast('取消しました');
     await loadList();
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// 募集の参加メンバーで一発グループ作成 → そのグループ詳細 (ワリカ可) に遷移。
+async function onCreateGroupFromInv(inv, memberIds) {
+  const title = inv.title || 'グループ';
+  if (!confirm(`「${title}」グループを ${memberIds.length}人で作成します。よろしいですか?`)) return;
+  try {
+    const r = await post('/api/groups', { title, member_ids: memberIds });
+    toast('グループを作成しました');
+    location.hash = '#/groups/' + r.id;
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
