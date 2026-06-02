@@ -248,8 +248,8 @@ async function loadDetail(id) {
           </span>`).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <a class="btn primary" href="#/roulette?members=${memberIds}">🎰 このメンバーでルーレット</a>
-        <a class="btn" href="#/nomikai?members=${memberIds}">🍻 このメンバーで割り勘</a>
+        <a class="btn primary" href="#/roulette?members=${memberIds}">🎰 ルーレット</a>
+        <a class="btn" href="#/nomikai?members=${memberIds}">🍻 割り勘</a>
         ${isCreator && !g.closed_at ? `<button id="gd-close" class="danger">閉じる</button>` : ''}
       </div>`;
     document.getElementById('gd-close')?.addEventListener('click', async () => {

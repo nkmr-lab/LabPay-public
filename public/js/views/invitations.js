@@ -198,9 +198,9 @@ async function loadDetail(id) {
       } else {
         const ids = memberIds.join(',');
         shortcuts.innerHTML = `
-          <a class="btn primary" href="#/roulette?members=${ids}">🎰 このメンバーでルーレット</a>
-          <a class="btn" href="#/nomikai?members=${ids}">🍻 このメンバーで飲み会割り勘</a>
-          <button id="inv-mkgroup" class="btn">👥 このメンバーでグループ作成</button>
+          <a class="btn primary" href="#/roulette?members=${ids}">🎰 ルーレット</a>
+          <a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>
+          <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
         `;
         document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
       }
