@@ -343,14 +343,23 @@ function renderItem(it, gid) {
   const meId = state.me?.id;
   const canDelete = Number(it.created_by_user_id) === Number(meId);
   const kindBadge = ({ memo: '📝', url: '🔗', time: '🕒' })[it.kind] || '';
-  const body = it.body ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(it.body)}</div>` : '';
-  const link = it.url ? `<div style="margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); word-break:break-all">${escapeHtml(it.url)} ↗</a></div>` : '';
+  // URL + メモ両方 → メモをリンク化、URL は表示しない。
+  // URL のみ (メモなし)   → URL をそのままリンク表示。
+  // メモのみ            → プレーン表示。
   const when = it.scheduled_at ? `<div class="meta">🕒 ${escapeHtml(it.scheduled_at)}</div>` : '';
+  let middle = '';
+  if (it.url && it.body) {
+    middle = `<div style="margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); white-space:pre-wrap">${escapeHtml(it.body)} ↗</a></div>`;
+  } else if (it.url) {
+    middle = `<div style="margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); word-break:break-all">${escapeHtml(it.url)} ↗</a></div>`;
+  } else if (it.body) {
+    middle = `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(it.body)}</div>`;
+  }
   return `
     <div class="list-item">
       <div style="flex:1">
         <div class="bold">${kindBadge} ${escapeHtml(it.author_name)}</div>
-        ${when}${link}${body}
+        ${when}${middle}
         <div class="meta" style="margin-top:4px">${escapeHtml(it.created_at)}</div>
       </div>
       ${canDelete ? `<div><button data-rm="${it.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
