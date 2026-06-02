@@ -62,11 +62,6 @@ export async function renderSell() {
   stopCurrent();
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card balance-strip">
-      <span class="muted">残高</span>
-      <span class="bold" id="sell-balance" style="color:var(--primary)">— pt</span>
-    </div>
-
     <div class="card">
       <h2>売る</h2>
       <p class="muted">バーコードを読み取って新規出品します。バーコードが無い商品は下の「バーコードが無い商品を出品」を使ってください。</p>
@@ -210,12 +205,6 @@ export async function renderSell() {
   document.getElementById('nj-submit'    ).addEventListener('click', () => submitListing('no_jan'));
 
   await loadMyListings();
-  // Balance strip
-  get('/api/me').then(d => {
-    const el = document.getElementById('sell-balance');
-    if (el) el.textContent = (d.balance ?? 0).toLocaleString() + ' pt';
-  }).catch(() => {});
-
   window.addEventListener('hashchange', stopCurrent, { once: true });
 }
 
