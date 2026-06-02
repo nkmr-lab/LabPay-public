@@ -43,6 +43,8 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'member_ids must have at least 2 entries', 400);
     }
     $reward = isset($body['reward']) ? max(0, min(1_000_000, (int)$body['reward'])) : 0;
+    // テストモード: 抽選結果だけ返す。DB insert・pt 送金・通知すべてスキップ。
+    $dryRun = !empty($body['dry_run']);
 
     // Normalize + dedupe + validate.
     $ids = array_values(array_unique(array_map('intval', $ids)));
@@ -64,7 +66,9 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
 
     // If the creator has set a prize, sanity-check the wallet BEFORE spinning
     // so we don't pick a winner and then fail the transfer afterward.
-    if ($reward > 0) {
+    // Skipped in dry-run mode — testing should always succeed regardless of
+    // the creator's balance.
+    if ($reward > 0 && !$dryRun) {
         $creatorAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
         $bal = Ledger::balanceOf($pdo, $creatorAcc);
         if ($bal < $reward) {
@@ -77,6 +81,23 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
     // Uniform random pick — random_int is the right primitive here (CSPRNG).
     $winnerIdx = random_int(0, count($ids) - 1);
     $winnerId  = $ids[$winnerIdx];
+
+    // Dry-run path: just return the winner. No DB row, no ledger move, no
+    // notifications — the spin is a rehearsal, not a real event.
+    if ($dryRun) {
+        $winnerName = $idToName[$winnerId] ?? 'someone';
+        json_response([
+            'ok' => true,
+            'dry_run' => true,
+            'title' => $title,
+            'member_ids' => $ids,
+            'winner_user_id' => $winnerId,
+            'winner_index' => $winnerIdx,
+            'winner_name'  => $winnerName,
+            'reward' => $reward,
+        ]);
+        return;
+    }
 
     // All persistence + the (optional) pt transfer happen inside one TX so a
     // late failure can't leave a roulette row with no matching ledger entry.
@@ -126,6 +147,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
 
     json_response([
         'ok' => true,
+        'dry_run' => false,
         'id' => $rouletteId,
         'title' => $title,
         'member_ids' => $ids,

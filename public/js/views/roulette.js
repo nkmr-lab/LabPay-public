@@ -28,12 +28,19 @@ export async function renderRoulette() {
 
     <div class="card">
       <label class="field">
-        <span class="lbl">タイトル</span>
+        <span class="lbl">ルーレットのタイトル</span>
         <input type="text" id="rl-title" maxlength="200" placeholder="例: 今日のゴミ捨て当番">
       </label>
       <label class="field">
-        <span class="lbl">賞金 (任意・空欄=無し) — 当たった人にあなたから送られます</span>
+        <span class="lbl">当たった人にあなたからポイントを送る (任意・空欄 = 送らない)</span>
         <input type="number" id="rl-reward" min="0" max="1000000" placeholder="例: 100">
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
+        <span class="switch">
+          <input type="checkbox" id="rl-dry">
+          <span class="slider"></span>
+        </span>
+        <span>🧪 テストモード <span class="muted" style="font-size:12px">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
       </label>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
@@ -91,16 +98,15 @@ async function loadMembers() {
     const root = document.getElementById('rl-members');
     const me = state.me?.id;
     // Bulk-select toolbar — render once based on the unique grades present in
-    // the directory (so we don't show 'D' if no D students exist).
+    // the directory. Skip the empty-grade case ("その他") on purpose: a single
+    // button labeled 'その他' for the ungraded leftovers wasn't useful in
+    // practice; users still get pulled in via '全員'.
     const presentGrades = [...new Set(ALL_USERS.map(x => x.grade || ''))];
-    const sortedGrades = GRADE_ORDER.filter(g => presentGrades.includes(g));
+    const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
     const bulkRoot = document.getElementById('rl-bulk');
     bulkRoot.innerHTML = `
       <button class="btn" data-bulk="all">全員 ON / OFF</button>
-      ${sortedGrades.map(g => {
-        const label = g === '' ? 'その他' : g;
-        return `<button class="btn" data-bulk="grade" data-grade="${g}">${label}</button>`;
-      }).join('')}
+      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
     `;
     bulkRoot.querySelectorAll('[data-bulk]').forEach(b => {
       b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade));
@@ -214,13 +220,14 @@ async function onSpin() {
   if (ids.length < 2) { toast('2 人以上選んでください'); return; }
   const rewardRaw = document.getElementById('rl-reward').value.trim();
   const reward = rewardRaw ? Math.max(0, Math.floor(Number(rewardRaw))) : 0;
+  const dryRun = document.getElementById('rl-dry').checked;
 
   spinning = true;
   document.getElementById('rl-spin').disabled = true;
   document.getElementById('rl-result').textContent = '';
 
   try {
-    const r = await post('/api/roulettes', { title, member_ids: ids, reward });
+    const r = await post('/api/roulettes', { title, member_ids: ids, reward, dry_run: dryRun });
     lastResult = r;
     // Animate: spin many full turns, ending with the pointer over the winning slice.
     // Pointer is fixed at the top (-90° in SVG). Slice i covers [i*sliceDeg, (i+1)*sliceDeg)
@@ -238,14 +245,21 @@ async function onSpin() {
     });
     // Reveal result after animation completes (matches the CSS transition).
     setTimeout(() => {
-      const prize = (r.reward > 0 && r.winner_user_id !== state.me?.id)
-        ? ` <span style="color:var(--primary)">+${r.reward}pt</span>`
-        : (r.reward > 0 ? ` <span class="muted">(自分が当選: pt 移動なし)</span>` : '');
+      let prize = '';
+      if (r.dry_run) {
+        prize = ' <span class="muted">(テストモード: pt は動いてません)</span>';
+      } else if (r.reward > 0 && r.winner_user_id !== state.me?.id) {
+        prize = ` <span style="color:var(--primary)">+${r.reward}pt</span>`;
+      } else if (r.reward > 0) {
+        prize = ' <span class="muted">(自分が当選: pt 移動なし)</span>';
+      }
       document.getElementById('rl-result').innerHTML =
         `🎯 <span style="color:var(--primary); font-size:18px">${escapeHtml(r.winner_name)}</span> さん!${prize}`;
       document.getElementById('rl-spin').disabled = false;
       spinning = false;
-      loadHistory();
+      // History only updates on real spins; dry-run skips this to keep the
+      // recent-list noise-free.
+      if (!r.dry_run) loadHistory();
     }, 4600);
   } catch (e) {
     toast('失敗: ' + e.message);
