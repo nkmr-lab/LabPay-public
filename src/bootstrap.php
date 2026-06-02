@@ -399,3 +399,4 @@ require_once __DIR__ . '/handlers/nomikai.php';
 require_once __DIR__ . '/handlers/adhoc_groups.php';
 require_once __DIR__ . '/handlers/scrapbox_feed.php';
 require_once __DIR__ . '/handlers/fx.php';
+require_once __DIR__ . '/handlers/random_groups.php';

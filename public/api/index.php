@@ -170,6 +170,12 @@ try {
         return;
     }
 
+    // /random-groups (notify the result of an ad-hoc グループ分け)
+    if (($seg[0] ?? '') === 'random-groups') {
+        route_random_groups($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

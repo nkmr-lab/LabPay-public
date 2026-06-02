@@ -35,6 +35,10 @@ export async function renderRandomGroups() {
     <div class="card">
       <h3>条件</h3>
       <label class="field">
+        <span class="lbl">名前 (空欄なら日付で自動)</span>
+        <input type="text" id="rg-title" maxlength="200" placeholder="例: 新歓 班分け">
+      </label>
+      <label class="field">
         <span class="lbl">グループ数</span>
         <input type="number" id="rg-n" min="2" max="20" value="2" style="max-width:120px">
       </label>
@@ -53,13 +57,28 @@ export async function renderRandomGroups() {
     </div>
 
     <div class="card" id="rg-result-card" hidden>
-      <h3>結果</h3>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h3 id="rg-result-title" style="flex:1; margin:0">結果</h3>
+        <button id="rg-notify" class="primary">📢 結果を全員に通知</button>
+      </div>
       <div id="rg-result"></div>
     </div>
   `;
   await populatePicker();
   document.getElementById('rg-go').addEventListener('click', () => runShuffle());
   document.getElementById('rg-reshuffle').addEventListener('click', () => runShuffle());
+  document.getElementById('rg-notify').addEventListener('click', () => onNotifyAll());
+}
+
+// Last successful partition result, kept here so 「全員に通知」 can re-use it
+// without re-shuffling.
+let lastResult = null;
+let lastTitle = '';
+
+function autoTitle() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `グループ分け ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 async function populatePicker() {
@@ -181,12 +200,15 @@ function runShuffle() {
   }
   const members = allUsers.filter(u => picked.has(u.id));
   const groups = partition(members, n, considerGrade, considerGender);
-  renderResult(groups);
+  lastResult = groups;
+  lastTitle = document.getElementById('rg-title').value.trim() || autoTitle();
+  renderResult(groups, lastTitle);
   document.getElementById('rg-reshuffle').disabled = false;
 }
 
-function renderResult(groups) {
+function renderResult(groups, title) {
   document.getElementById('rg-result-card').hidden = false;
+  document.getElementById('rg-result-title').textContent = title;
   const root = document.getElementById('rg-result');
   root.innerHTML = groups.map((g, idx) => {
     const counts = countByGrade(g);
@@ -218,6 +240,18 @@ function countByGrade(members) {
   const counts = {};
   members.forEach(m => { const g = m.grade || '?'; counts[g] = (counts[g] || 0) + 1; });
   return GRADE_ORDER.filter(g => g && counts[g]).map(g => `${g}:${counts[g]}`).join(' ');
+}
+
+async function onNotifyAll() {
+  if (!lastResult) { toast('まず分けてください'); return; }
+  const title = lastTitle || autoTitle();
+  const total = lastResult.reduce((s, g) => s + g.length, 0);
+  if (!confirm(`「${title}」の結果を ${total} 人に通知します。よろしいですか?`)) return;
+  const groups = lastResult.map(g => g.map(m => m.id));
+  try {
+    const r = await post('/api/random-groups/notify', { title, groups });
+    toast(`${r.sent} 人に通知しました`);
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 async function onCreateGroup(title, memberIds) {
