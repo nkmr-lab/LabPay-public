@@ -177,21 +177,22 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
     json_response($r);
 }
 
-// ─── CLOSE (creator) ─────────────────────────────────────────
+// ─── DELETE (creator) ────────────────────────────────────────
+// 請求の本番 DELETE。間違って送った請求を完全に消す用途。受取人テーブルは
+// money_request_recipients の ON DELETE CASCADE で一緒に消える。
+// 既送の通知 (notifications テーブル) は残るが、ref が無効になるだけで害は無い。
 
 function money_requests_close(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT creator_user_id, closed_at FROM money_requests WHERE id=?");
+    $st = $pdo->prepare("SELECT creator_user_id FROM money_requests WHERE id=?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'request not found', 404);
     if ((int)$r['creator_user_id'] !== (int)$u['id']
         && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '発起人または admin だけが閉じられます', 403);
+        throw new ApiException('forbidden', '発起人または admin だけが削除できます', 403);
     }
-    if (!$r['closed_at']) {
-        $pdo->prepare("UPDATE money_requests SET closed_at=NOW() WHERE id=?")->execute([$id]);
-    }
+    $pdo->prepare("DELETE FROM money_requests WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }
 

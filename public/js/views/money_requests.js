@@ -331,7 +331,7 @@ async function loadList() {
       return `
         <a class="list-item" href="#/requests/${r.id}" style="text-decoration:none; color:inherit">
           <div style="flex:1">
-            <div class="bold">${escapeHtml(r.title)} ${r.closed_at ? '<span class="tag muted">close</span>' : ''} ${isMine ? '<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>' : ''}</div>
+            <div class="bold">${escapeHtml(r.title)} ${isMine ? '<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>' : ''}</div>
             <div class="meta">${escapeHtml(r.creator_name)} · 支払い済 ${r.paid_count}/${r.member_count}</div>
             <div class="meta">${escapeHtml(myLine)} · ${escapeHtml(r.created_at)}</div>
           </div>
@@ -369,7 +369,7 @@ async function loadDetail(id) {
     const settle = settlementInfo(r);
 
     document.getElementById('mr-detail').innerHTML = `
-      <div class="bold" style="font-size:18px">${escapeHtml(r.title)} ${r.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
+      <div class="bold" style="font-size:18px">${escapeHtml(r.title)}</div>
       <div class="meta">${escapeHtml(r.creator_name)} · ${escapeHtml(r.created_at)}</div>
       ${r.memo ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(r.memo)}</div>` : ''}
       ${settle ? `
@@ -389,7 +389,7 @@ async function loadDetail(id) {
                  <button data-pay="proxy">他の人に立替えてもらった</button>
                </div>`}
         </div>` : ''}
-      ${isCreator && !r.closed_at ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を閉じる</button></div>` : ''}
+      ${isCreator ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を削除する</button></div>` : ''}
     `;
 
     // 受取人リスト (発起人は全件、受取人は自分含めて全員見れる)
@@ -414,8 +414,10 @@ async function loadDetail(id) {
     });
     document.getElementById('mr-unpay')?.addEventListener('click', () => onUnpay(id));
     document.getElementById('mr-close')?.addEventListener('click', async () => {
-      if (!confirm('この請求を閉じますか?')) return;
-      try { await del('/api/money-requests/' + id); toast('閉じました'); location.hash = '#/requests'; }
+      const paidCount = (r.recipients || []).filter(x => x.paid_at).length;
+      const extra = paidCount > 0 ? `\n(${paidCount} 人がすでに支払い済とマークしています)` : '';
+      if (!confirm(`この請求を削除します。元に戻せません。${extra}\n受取人にすでに送った通知は残ります。よろしいですか?`)) return;
+      try { await del('/api/money-requests/' + id); toast('削除しました'); location.hash = '#/requests'; }
       catch (e) { toast('失敗: ' + e.message); }
     });
   } catch (e) {
