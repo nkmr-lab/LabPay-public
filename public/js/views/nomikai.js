@@ -252,7 +252,34 @@ export async function renderNomikaiNew({ query }) {
 
   roundBucket = 1;
   renderPeople();
-  document.getElementById('nm-total').addEventListener('input', renderPeople);
+
+  // 親に 1 度だけ event delegation を貼って、子ノードを innerHTML で
+  // 入れ替えてもリスナーが重複しないようにする。+ ボタンを連打すると
+  // ×1.2 のはずが ×2.0 になる症状は、ここを行ごとに毎回貼り直していた
+  // (renderPeople 内で addEventListener) ことによる二重バインドが原因。
+  const peopleRoot = document.getElementById('nm-people');
+  peopleRoot.addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t || !peopleRoot.contains(t)) return;
+    if (t.dataset.flag !== undefined) { toggleAlcohol(Number(t.dataset.flag)); return; }
+    if (t.dataset.dec  !== undefined) { bumpWeight(Number(t.dataset.dec), -0.2); return; }
+    if (t.dataset.inc  !== undefined) { bumpWeight(Number(t.dataset.inc),  0.2); return; }
+    if (t.dataset.fix  !== undefined) { toggleFixed(Number(t.dataset.fix)); return; }
+    if (t.dataset.rm   !== undefined) { stepTwo.delete(Number(t.dataset.rm)); renderPeople(); return; }
+  });
+  // 固定額入力は input ノードを壊さず amount セルだけを更新する (フォーカス・
+  // キャレット保持 + iOS Safari でスクロールがズレない)
+  peopleRoot.addEventListener('input', (e) => {
+    if (!e.target.matches('[data-fixyen]')) return;
+    const uid = Number(e.target.dataset.fixyen);
+    const cur = stepTwo.get(uid);
+    if (!cur || cur.fixed_yen === null) return;
+    cur.fixed_yen = Math.max(0, Math.floor(Number(e.target.value) || 0));
+    stepTwo.set(uid, cur);
+    recomputeAmounts();
+  });
+
+  document.getElementById('nm-total').addEventListener('input', recomputeAmounts);
   document.getElementById('nm-submit').addEventListener('click', onCreate);
   document.querySelectorAll('[data-round]').forEach(b => {
     b.addEventListener('click', () => {
@@ -262,52 +289,66 @@ export async function renderNomikaiNew({ query }) {
   });
 }
 
+// 計算結果を全行に書き戻し、行は (fixed/weighted モード切替などで構造が
+// 変わるとき) この関数で完全に redraw。リスナーは親で 1 回だけ。
 function renderPeople() {
+  const arr = computeAmounts();
+  document.querySelectorAll('[data-round]').forEach(b => {
+    b.classList.toggle('primary', Number(b.dataset.round) === roundBucket);
+  });
+  document.getElementById('nm-people').innerHTML = arr.map(renderRow).join('');
+  updatePreviewTotal(arr);
+}
+
+// 行の構造を変えずに金額表示だけ書き換える (固定額の入力中に呼ぶ)。
+function recomputeAmounts() {
+  const arr = computeAmounts();
+  const root = document.getElementById('nm-people');
+  if (!root) return;
+  arr.forEach(x => {
+    const cell = root.querySelector(`[data-amt="${x.uid}"]`);
+    if (cell) cell.textContent = `¥${x.amount.toLocaleString()}`;
+  });
+  updatePreviewTotal(arr);
+}
+
+function computeAmounts() {
   const total = Number(document.getElementById('nm-total').value) || 0;
   const arr = [...stepTwo.entries()].map(([uid, v]) => ({ uid, ...v }));
-
-  // 1) Fixed-amount rows are pinned at their declared value. Subtract them from
-  // the total; the rest is split among weighted rows.
   const fixedTotal = arr.reduce((s, x) => s + (x.fixed_yen ?? 0), 0);
   const remaining  = Math.max(0, total - fixedTotal);
   const weighted   = arr.filter(x => x.fixed_yen === null);
   const sumW = weighted.reduce((s, x) => s + x.weight, 0) || 1;
-
   let allocated = 0;
   for (const x of arr) {
     if (x.fixed_yen !== null) {
       x.amount = x.fixed_yen;
     } else {
-      let v = remaining * x.weight / sumW;
+      const v = remaining * x.weight / sumW;
       x.amount = roundBucket > 1
         ? Math.round(v / roundBucket) * roundBucket
         : Math.round(v);
     }
     allocated += x.amount;
   }
-  // Creator absorbs the delta (or first row if creator isn't in the list).
   const delta = total - allocated;
   if (delta && arr.length) {
     const meIdx = arr.findIndex(x => x.uid === state.me?.id);
     arr[(meIdx >= 0 ? meIdx : 0)].amount += delta;
   }
+  arr._allocated = allocated + delta;
+  arr._delta = delta;
+  arr._total = total;
+  return arr;
+}
 
-  // Highlight the active rounding button.
-  document.querySelectorAll('[data-round]').forEach(b => {
-    b.classList.toggle('primary', Number(b.dataset.round) === roundBucket);
-  });
-
-  document.getElementById('nm-people').innerHTML = arr.map(renderRow).join('');
-  document.getElementById('nm-preview-total').innerHTML = total
-    ? `合計 ¥${allocated.toLocaleString()}${delta ? ` (端数 ${delta > 0 ? '+' : ''}${delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}`
+function updatePreviewTotal(arr) {
+  const el = document.getElementById('nm-preview-total');
+  if (!el) return;
+  const total = arr._total;
+  el.innerHTML = total
+    ? `合計 ¥${arr._allocated.toLocaleString()}${arr._delta ? ` (端数 ${arr._delta > 0 ? '+' : ''}${arr._delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}`
     : '総額を入力してください';
-
-  document.querySelectorAll('[data-flag]') .forEach(b   => b.addEventListener('click', () => toggleAlcohol (Number(b.dataset.flag))));
-  document.querySelectorAll('[data-dec]')  .forEach(b   => b.addEventListener('click', () => bumpWeight   (Number(b.dataset.dec), -0.2)));
-  document.querySelectorAll('[data-inc]')  .forEach(b   => b.addEventListener('click', () => bumpWeight   (Number(b.dataset.inc),  0.2)));
-  document.querySelectorAll('[data-fix]')  .forEach(b   => b.addEventListener('click', () => toggleFixed  (Number(b.dataset.fix))));
-  document.querySelectorAll('[data-fixyen]').forEach(inp => inp.addEventListener('input', () => setFixedYen(Number(inp.dataset.fixyen), Number(inp.value) || 0)));
-  document.querySelectorAll('[data-rm]')   .forEach(b   => b.addEventListener('click', () => { stepTwo.delete(Number(b.dataset.rm)); renderPeople(); }));
 }
 
 function renderRow(x) {
@@ -330,7 +371,7 @@ function renderRow(x) {
         <span class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(x.display_name)}</span>
         ${grade}
       </div>
-      <div class="bold" style="text-align:right; font-size:15px">¥${x.amount.toLocaleString()}</div>
+      <div class="bold" data-amt="${x.uid}" style="text-align:right; font-size:15px">¥${x.amount.toLocaleString()}</div>
       <button data-rm="${x.uid}" class="danger" style="padding:4px 8px">×</button>
       <div style="grid-column:2/5; display:flex; align-items:center; gap:4px; flex-wrap:wrap">
         ${controls}
@@ -355,14 +396,6 @@ function toggleFixed(uid) {
   } else {
     cur.fixed_yen = null;
   }
-  stepTwo.set(uid, cur);
-  renderPeople();
-}
-
-function setFixedYen(uid, yen) {
-  const cur = stepTwo.get(uid);
-  if (!cur || cur.fixed_yen === null) return;
-  cur.fixed_yen = Math.max(0, Math.floor(yen));
   stepTwo.set(uid, cur);
   renderPeople();
 }

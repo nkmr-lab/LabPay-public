@@ -1,6 +1,6 @@
 // /#/invitations — 募集 board. Light-weight hang-out invitations (no pt, no escrow).
 
-import { get, post, del } from '../api.js';
+import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -173,6 +173,10 @@ async function loadDetail(id) {
       if (iJoined) actions += `<button id="inv-detail-leave">参加表明を取消</button>`;
       else         actions += `<button id="inv-detail-join" class="primary">参加表明する</button>`;
       if (isMine)  actions += ` <button id="inv-detail-cancel" class="danger">募集を取消</button>`;
+    } else if (isMine) {
+      // 終了済みなら発起人だけが「再募集」できる。新しい starts_at を入れて
+      // closed_at を NULL に戻す。
+      actions += `<button id="inv-detail-reopen" class="primary">再募集する</button>`;
     }
     document.getElementById('inv-head').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(i.title)} ${statusTag}</div>
@@ -187,6 +191,7 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
+    document.getElementById('inv-detail-reopen')?.addEventListener('click', async () => { await onReopen(id); await loadDetail(id); });
 
     // Shortcuts for using this set elsewhere. Creator is always included
     // (organizer is assumed to be in the gathering too) — dedupe in case they
@@ -271,6 +276,22 @@ async function onCreateGroupFromInv(inv, memberIds) {
     const r = await post('/api/groups', { title, member_ids: memberIds });
     toast('グループを作成しました');
     location.hash = '#/groups/' + r.id;
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// 再募集: 新しい開催日時を datetime-local で受け取って PATCH。
+async function onReopen(id) {
+  const def = (() => {
+    const d = new Date(Date.now() + 86400 * 1000); // tomorrow same time as default
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+  const ans = prompt('新しい開催日時を入れてください (YYYY-MM-DD HH:MM)', def);
+  if (!ans) return;
+  const raw = ans.replace('T', ' ').trim();
+  try {
+    await patch(`/api/invitations/${id}`, { starts_at: raw });
+    toast('再募集しました');
   } catch (e) { toast('失敗: ' + e.message); }
 }
 

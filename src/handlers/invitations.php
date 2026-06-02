@@ -12,6 +12,7 @@ function route_invitations(PDO $pdo, array $cfg, string $method, array $seg): vo
     $id = (int)$sub;
     if ($id > 0) {
         if ($method === 'GET')                                             { invitations_detail($pdo, $cfg, $id); return; }
+        if ($method === 'PATCH')                                           { invitations_reopen($pdo, $cfg, $id); return; }
         if ($method === 'DELETE')                                          { invitations_cancel($pdo, $cfg, $id); return; }
         if (($seg[2] ?? '') === 'join'  && $method === 'POST')            { invitations_join($pdo, $cfg, $id);   return; }
         if (($seg[2] ?? '') === 'leave' && $method === 'POST')            { invitations_leave($pdo, $cfg, $id);  return; }
@@ -22,13 +23,13 @@ function route_invitations(PDO $pdo, array $cfg, string $method, array $seg): vo
 function invitations_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $status = $_GET['status'] ?? 'open'; // open | all
-    // Auto-close anything whose start time has passed by > 6 hours (the event is
-    // probably done) so the open list stays meaningful without a separate cron.
+    // 開始時刻を過ぎた募集は自動で終了に。発起人が「再募集」(PATCH) で
+    // 復活させない限り、starts_at <= NOW() のものは募集中に出さない。
     $pdo->exec("UPDATE invitations
         SET closed_at = NOW()
         WHERE closed_at IS NULL
           AND starts_at IS NOT NULL
-          AND starts_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)");
+          AND starts_at <= NOW()");
 
     $where = $status === 'open' ? 'i.closed_at IS NULL' : '1=1';
     $st = $pdo->prepare("
@@ -48,6 +49,11 @@ function invitations_list(PDO $pdo, array $cfg): void {
 
 function invitations_detail(PDO $pdo, array $cfg, int $id): void {
     Auth::requireUser($pdo, $cfg);
+    // 開始時刻を過ぎていれば list と同じく自動終了
+    $pdo->prepare("UPDATE invitations
+        SET closed_at = NOW()
+        WHERE id = ? AND closed_at IS NULL
+          AND starts_at IS NOT NULL AND starts_at <= NOW()")->execute([$id]);
     $st = $pdo->prepare("
         SELECT i.*, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url
           FROM invitations i JOIN users u ON u.id = i.creator_user_id
@@ -143,6 +149,35 @@ function invitations_leave(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $pdo->prepare("DELETE FROM invitation_joins WHERE invitation_id=? AND user_id=?")
         ->execute([$id, $u['id']]);
+    json_response(['ok' => true]);
+}
+
+// 発起人が「再募集」: starts_at を新しい日時に更新して closed_at を NULL に戻す。
+function invitations_reopen(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, title FROM invitations WHERE id=?");
+    $st->execute([$id]);
+    $inv = $st->fetch();
+    if (!$inv) throw new ApiException('not_found', "invitation $id not found", 404);
+    if ((int)$inv['creator_user_id'] !== (int)$u['id']
+        && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '発起人または admin だけが再募集できます', 403);
+    }
+    $body = read_json_body();
+    $startsAt = null;
+    if (!empty($body['starts_at'])) {
+        $raw = str_replace('T', ' ', trim((string)$body['starts_at']));
+        if (strlen($raw) === 16) $raw .= ':00';
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) throw new ApiException('bad_request', 'starts_at must be Y-m-d H:i', 400);
+        // 過去日は意味がない (即終了になる)
+        if ($dt->getTimestamp() <= time()) {
+            throw new ApiException('bad_request', '新しい開催日時は現在より未来にしてください', 400);
+        }
+        $startsAt = $dt->format('Y-m-d H:i:s');
+    }
+    $pdo->prepare("UPDATE invitations SET closed_at=NULL, starts_at=? WHERE id=?")
+        ->execute([$startsAt, $id]);
     json_response(['ok' => true]);
 }
 
