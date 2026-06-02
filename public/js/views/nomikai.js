@@ -13,11 +13,20 @@ const ALCOHOL_BUMP = 1.5;
 
 // Step-1 picker keeps just a Set of user ids; step-2 form attaches weight/alcohol
 // in its own local state when the picker handoff happens via URL query.
-const stepOne = { selected: new Set(), users: [] };
+// When `lockedIds` is non-null (e.g. coming from a group's "このメンバーで割り勘"
+// shortcut), only those users are shown and they're all pre-selected.
+const stepOne = { selected: new Set(), users: [], lockedIds: null };
 
 // ─────────────── STEP 1: picker ────────────────────────────────────────
 
-export async function renderNomikai() {
+export async function renderNomikai({ query } = {}) {
+  stepOne.selected = new Set();
+  stepOne.lockedIds = null;
+  const raw = String(query?.members || '').trim();
+  if (raw) {
+    const ids = raw.split(',').map(Number).filter(Boolean);
+    if (ids.length) stepOne.lockedIds = new Set(ids);
+  }
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -50,8 +59,13 @@ export async function renderNomikai() {
 
 async function populatePicker() {
   const u = await get('/api/users');
+  let pool = u.items;
+  if (stepOne.lockedIds) {
+    pool = pool.filter(x => stepOne.lockedIds.has(Number(x.id)));
+    pool.forEach(x => stepOne.selected.add(Number(x.id)));
+  }
   // Sort: D → M2 → M1 → B4 → B3 → (no grade), 50音順.
-  stepOne.users = [...u.items].sort((a, b) => {
+  stepOne.users = [...pool].sort((a, b) => {
     const ga = GRADE_ORDER.indexOf(a.grade || '');
     const gb = GRADE_ORDER.indexOf(b.grade || '');
     return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||

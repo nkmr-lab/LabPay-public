@@ -317,6 +317,8 @@ function saveRates(r) {
 
 let wariMembers = []; // populated by loadDetail() via setWariMembers()
 let wariRates = loadRates();
+// Set of user_ids the next expense applies to. null === everyone (default).
+let wariFor = null;
 
 function renderWariForm() {
   const root = document.getElementById('gd-wari-form');
@@ -331,9 +333,11 @@ function renderWariForm() {
       <label class="muted" style="font-size:12px">レート (1 通貨 = ? JPY)</label>
       <input type="number" id="ex-rate" min="0" step="0.0001">
     </div>
+    <label class="muted" style="font-size:12px; display:block; margin-bottom:2px">立て替えた人</label>
     <select id="ex-payer" style="margin-bottom:6px">
       ${wariMembers.map(m => `<option value="${m.id}">${escapeHtml(m.display_name)}</option>`).join('')}
     </select>
+    <div id="ex-for" style="margin-bottom:6px"></div>
     <input type="text" id="ex-memo" maxlength="500" placeholder="メモ (例: ランチ, タクシー)" style="margin-bottom:6px">
     <button id="ex-submit" class="primary">支出を記録</button>
   `;
@@ -357,7 +361,55 @@ function renderWariForm() {
   if (state.me?.id && wariMembers.some(m => m.id === state.me.id)) {
     sel.value = String(state.me.id);
   }
+  wariFor = null;
+  renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
+}
+
+// 「誰の分?」 picker. Compact summary line + a hidden chip row that toggles
+// individual members. Default = 全員 (wariFor === null). Tapping 一部 opens
+// the chip row with everyone pre-checked so deselecting some yields a subset.
+function renderForPicker() {
+  const root = document.getElementById('ex-for');
+  if (!root) return;
+  const everyone = wariFor === null;
+  const targets = everyone ? wariMembers.map(m => m.id) : [...wariFor];
+  const summary = everyone
+    ? `全員 (${wariMembers.length}人)`
+    : (targets.length === 0
+        ? `<span style="color:var(--warn)">対象者を 1 人以上選んでください</span>`
+        : `${targets.length}人で割る`);
+  root.innerHTML = `
+    <label class="muted" style="font-size:12px">誰の分?</label>
+    <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+      <button type="button" data-for-mode="all"  class="btn ${everyone ? 'primary' : ''}">全員</button>
+      <button type="button" data-for-mode="some" class="btn ${everyone ? '' : 'primary'}">一部</button>
+      <span class="muted" style="font-size:12px">${summary}</span>
+    </div>
+    <div id="ex-for-chips" class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px" ${everyone ? 'hidden' : ''}>
+      ${wariMembers.map(m => `
+        <span class="rl-chip" data-for-uid="${m.id}" style="${(wariFor && wariFor.has(m.id)) ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : ''}">
+          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+          <span>${escapeHtml(m.display_name)}</span>
+        </span>`).join('')}
+    </div>
+  `;
+  root.querySelectorAll('[data-for-mode]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.forMode === 'all') wariFor = null;
+      else if (wariFor === null) wariFor = new Set(wariMembers.map(m => m.id)); // start from 全員
+      renderForPicker();
+    });
+  });
+  root.querySelectorAll('[data-for-uid]').forEach(c => {
+    c.addEventListener('click', () => {
+      if (wariFor === null) wariFor = new Set(wariMembers.map(m => m.id));
+      const uid = Number(c.dataset.forUid);
+      if (wariFor.has(uid)) wariFor.delete(uid);
+      else wariFor.add(uid);
+      renderForPicker();
+    });
+  });
 }
 
 async function onAddExpense() {
@@ -373,10 +425,21 @@ async function onAddExpense() {
     if (!(rate > 0)) { toast('レートを入れてください'); return; }
     body.rate_to_jpy = rate;
   }
+  if (wariFor !== null) {
+    if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
+    // Omit participant_ids if it's everyone — backend default is the full
+    // current member list, which means a member added later is handled
+    // identically. Send a subset only when it's actually a subset.
+    if (wariFor.size !== wariMembers.length) {
+      body.participant_ids = [...wariFor];
+    }
+  }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
+    wariFor = null;
+    renderForPicker();
     toast('記録しました');
     await loadWari(gid);
   } catch (e) { toast('失敗: ' + e.message); }
@@ -421,12 +484,23 @@ function renderExpense(e, gid) {
   const canDelete = Number(e.created_by_user_id) === Number(meId);
   const orig = (e.currency !== 'JPY' && e.amount_original)
     ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)})</span>` : '';
+  // Resolve participant ids to short names for "対象: X, Y, Z" if it's a
+  // proper subset of current members; show "全員 (N人)" otherwise.
+  const names = e.participants.map(uid => {
+    const m = wariMembers.find(x => x.id === uid);
+    return m ? m.display_name : `#${uid}`;
+  });
+  const isAll = e.participants.length === wariMembers.length
+    && e.participants.every(uid => wariMembers.some(m => m.id === uid));
+  const forText = isAll
+    ? `全員 (${e.participants.length}人)`
+    : `対象: ${names.join(', ')}`;
   return `
     <div class="list-item">
       <div style="flex:1">
         <div class="bold">${escapeHtml(e.payer_name)} 立替: ¥${e.amount_jpy.toLocaleString()}${orig}</div>
         ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
-        <div class="meta">${escapeHtml(e.created_at)} · ${e.participants.length}人で割る</div>
+        <div class="meta">${escapeHtml(e.created_at)} · ${escapeHtml(forText)}</div>
       </div>
       ${canDelete ? `<div><button data-rm-ex="${e.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
     </div>`;

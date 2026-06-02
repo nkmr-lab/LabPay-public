@@ -19,7 +19,19 @@ let selected = new Set();     // user_ids currently checked
 // ids without an extra call.
 let ROOM_USERS = {};
 
-export async function renderRoulette() {
+// When non-null, the picker is locked to this set of user_ids (e.g. coming
+// from a group's "このメンバーでルーレット" shortcut). 他のユーザーは表示
+// しないし、bulk ボタンも基本的にこの部分集合の中だけで動く。
+let lockedIds = null;
+
+export async function renderRoulette({ query } = {}) {
+  selected = new Set();
+  lockedIds = null;
+  const raw = String(query?.members || '').trim();
+  if (raw) {
+    const ids = raw.split(',').map(Number).filter(Boolean);
+    if (ids.length) lockedIds = new Set(ids);
+  }
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -100,7 +112,13 @@ async function loadMembers() {
     // Sort by grade, then alphabetically inside each grade. The API returns
     // alphabetical already, so a stable sort by gradeRank preserves that order
     // within each group.
-    ALL_USERS = [...u.items].sort((a, b) => {
+    let pool = u.items;
+    if (lockedIds) {
+      pool = pool.filter(x => lockedIds.has(Number(x.id)));
+      // Pre-select everyone in the locked set so the wheel is ready to spin.
+      pool.forEach(x => selected.add(Number(x.id)));
+    }
+    ALL_USERS = [...pool].sort((a, b) => {
       const d = gradeRank(a.grade) - gradeRank(b.grade);
       if (d !== 0) return d;
       return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
