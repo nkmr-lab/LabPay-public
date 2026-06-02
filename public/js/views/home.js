@@ -224,7 +224,10 @@ async function fetchAndRenderPresence() {
     if (!pres.rooms.length) {
       presenceRoot.innerHTML = `<div class="empty">部屋が登録されていません</div>`;
     } else {
-      presenceRoot.innerHTML = pres.rooms.map(renderRoom).join('');
+      // Pass window_minutes through so each pill can fade based on its
+      // last_seen_at age relative to the cutoff window.
+      const win = Number(pres.window_minutes) || 3;
+      presenceRoot.innerHTML = pres.rooms.map(r => renderRoom(r, win)).join('');
     }
   } catch (e) {
     presenceRoot.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -407,14 +410,33 @@ function formatStayDuration(sessionStartAt) {
   return rem === 0 ? `${hours}時間` : `${hours}時間${rem}分`;
 }
 
-function renderRoom(r) {
+function renderRoom(r, windowMin) {
+  // Fade-by-age: pills are fully opaque when last seen <30s ago, then ramp
+  // linearly to 0.35 by the window edge (after which the API drops them).
+  // This makes brief detection gaps visible without yanking the avatar out
+  // of the list entirely.
+  const now = Date.now();
+  const opacityFor = lastSeen => {
+    if (!lastSeen) return 1;
+    const ageSec = Math.max(0, (now - Date.parse(lastSeen.replace(' ', 'T') + '+09:00')) / 1000);
+    const fresh = 30; // <30s = fully solid
+    const cutoff = windowMin * 60;
+    if (ageSec <= fresh) return 1;
+    if (ageSec >= cutoff) return 0.35;
+    const t = (ageSec - fresh) / Math.max(1, cutoff - fresh);
+    return Number((1 - 0.65 * t).toFixed(2));
+  };
   const peopleHtml = r.users.length
     ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
-         ${r.users.map(u => `
-           <span class="presence-pill" title="${escapeHtml(u.display_name)}">
-             ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
-             <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
-           </span>`).join('')}
+         ${r.users.map(u => {
+           const op = opacityFor(u.last_seen_at);
+           const ageHint = op < 1 ? '  (検知が一時的に途切れ気味)' : '';
+           return `
+             <span class="presence-pill" title="${escapeHtml(u.display_name)}${ageHint}" style="opacity:${op}">
+               ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
+               <span class="presence-pill-name">${escapeHtml(u.display_name)}</span>
+             </span>`;
+         }).join('')}
        </div>`
     : `<div class="muted" style="font-size:13px; margin-top:4px">誰も検知されていません</div>`;
   const scan = r.last_scan_at ? `· 最終スキャン ${escapeHtml(r.last_scan_at)}` : '· 未スキャン';
