@@ -106,7 +106,9 @@ async function loadListings() {
       root.innerHTML = `<div class="empty">出品はまだありません</div>`;
       return;
     }
-    // Pre-compute sort keys (cheapest sale price, newest/oldest created_at) per group.
+    // Pre-compute sort keys per group. Includes a "リピート" flag — true when
+    // the user has bought this JAN before and there's still stock. These rise
+    // to the top so re-purchase is one tap away.
     const annotated = [...groups.values()].map(g => {
       const sale = g.listings.filter(x => !x.is_gift);
       const prices = sale.map(x => x.price);
@@ -114,10 +116,13 @@ async function loadListings() {
       const maxPrice = prices.length ? Math.max(...prices) : -Infinity;
       const newest = g.listings.reduce((acc, x) => x.created_at > acc ? x.created_at : acc, '');
       const oldest = g.listings.reduce((acc, x) => (acc === '' || x.created_at < acc) ? x.created_at : acc, '');
-      return { g, minPrice, maxPrice, newest, oldest };
+      const isRepeat = g.listings.some(x => Number(x.i_bought_before) === 1);
+      return { g, minPrice, maxPrice, newest, oldest, isRepeat };
     });
     const sortMode = document.getElementById('buy-sort')?.value || 'newest';
     annotated.sort((a, b) => {
+      // Repeats always rise to the top, regardless of the user-chosen sort axis.
+      if (a.isRepeat !== b.isRepeat) return a.isRepeat ? -1 : 1;
       switch (sortMode) {
         case 'oldest':   return a.oldest.localeCompare(b.oldest);
         case 'cheapest': return a.minPrice - b.minPrice;
@@ -127,7 +132,7 @@ async function loadListings() {
       }
     });
 
-    const tiles = annotated.map(({ g }) => {
+    const tiles = annotated.map(({ g, isRepeat }) => {
       // Gift listings are surfaced with their own "🎁 これどうぞ" indicator so the price
       // column doesn't read as "0 pt〜" (which feels devaluing). Mixed groups show both.
       const giftCount = g.listings.filter(x => x.is_gift).length;
@@ -156,6 +161,11 @@ async function loadListings() {
       const badge = giftOnly
         ? '<span class="tile-badge gift">🎁</span>'
         : (giftCount > 0 ? '<span class="tile-badge">🎁あり</span>' : '');
+      // Repeat badge — only visible to the buyer themselves (the API computes
+      // i_bought_before per requesting user).
+      const repeatBadge = isRepeat
+        ? '<span class="tile-badge" style="background:#0e7c63; color:white; left:6px; right:auto">🔁 リピート</span>'
+        : '';
       // Pick a single representative seller for the tile: cheapest sale listing,
       // or the first gift listing if it's gift-only. Multi-seller details still
       // surface on the product detail page.
@@ -175,6 +185,7 @@ async function loadListings() {
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
           ${badge}
+          ${repeatBadge}
           ${sellerBadge}
           <div class="tile-overlay">
             <div class="name">${escapeHtml(g.name)}</div>

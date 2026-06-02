@@ -84,6 +84,13 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
         listings_sweep_expired($pdo);
         $jan = trim((string)($_GET['jan'] ?? ''));
         $limit = min(500, max(1, (int)($_GET['limit'] ?? 200)));
+        // Best-effort "have I bought this before" flag for the caller. Unauthenticated
+        // requests get false everywhere (default). We don't require login here.
+        $meId = 0;
+        try {
+            $me = Auth::currentUser($pdo, $cfg);
+            if ($me) $meId = (int)$me['id'];
+        } catch (Throwable $e) { /* anonymous OK */ }
         $sql = "
             SELECT l.id, l.jan, l.seller_user_id, l.price, l.is_gift, l.qty, l.status,
                    l.location, l.display_name, l.created_at, l.updated_at,
@@ -92,12 +99,15 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                    p.image_url,
                    u.display_name AS seller_name,
                    u.avatar_url   AS seller_avatar_url,
-                   (SELECT COALESCE(SUM(qty),0) FROM purchases pu WHERE pu.seller_user_id = l.seller_user_id) AS seller_sales
+                   (SELECT COALESCE(SUM(qty),0) FROM purchases pu
+                     WHERE pu.seller_user_id = l.seller_user_id) AS seller_sales,
+                   EXISTS(SELECT 1 FROM purchases pb
+                            WHERE pb.buyer_user_id = ? AND pb.jan = l.jan) AS i_bought_before
               FROM listings l
               JOIN products p ON p.jan = l.jan
               JOIN users u    ON u.id  = l.seller_user_id
              WHERE l.status='on_sale' AND l.qty > 0";
-        $params = [];
+        $params = [$meId];
         if ($jan !== '') { $sql .= ' AND l.jan = ?'; $params[] = $jan; }
         $sql .= ' ORDER BY l.price ASC, l.created_at ASC LIMIT ?';
         $st = $pdo->prepare($sql);

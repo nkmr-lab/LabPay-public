@@ -393,3 +393,4 @@ require_once __DIR__ . '/handlers/transfers.php';
 require_once __DIR__ . '/handlers/network.php';
 require_once __DIR__ . '/handlers/feedback.php';
 require_once __DIR__ . '/handlers/wishlist.php';
+require_once __DIR__ . '/handlers/invitations.php';

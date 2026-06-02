@@ -40,6 +40,22 @@ export async function renderProduct({ params }) {
       return;
     }
     root.innerHTML = data.items.map(renderListingRow).join('');
+    // 自己消費 (在庫だけ -1、ledger に動きなし) — seller が自分の出品ボタンを押した時
+    root.querySelectorAll('button[data-consume]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const lid = Number(btn.dataset.consume);
+        if (!confirm('在庫を 1 個 自分用に減らしますか? (ポイント移動なし)')) return;
+        btn.disabled = true;
+        try {
+          const res = await post(`/api/listings/${lid}/consume`, { qty: 1 });
+          toast(`在庫を 1 減らしました (残 ${res.qty_remaining})`);
+          await renderProduct({ params });
+        } catch (e) {
+          toast('失敗: ' + e.message);
+          btn.disabled = false;
+        }
+      });
+    });
     root.querySelectorAll('button[data-buy]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const lid = Number(btn.dataset.buy);
@@ -168,7 +184,8 @@ function renderListingRow(l) {
   //   - normal: enabled
   let btn;
   if (isMe) {
-    btn = `<button disabled title="自分の出品は買えません">自分の出品</button>`;
+    // 自分の出品: 自己消費 (在庫だけ減らす・ledger 動かない) ボタンを出す。
+    btn = `<button data-consume="${l.id}" title="自己消費 (自分用に在庫を減らす)">自分用に減らす</button>`;
   } else if (!inLab) {
     btn = `<button disabled title="ラボのWi-Fiに繋いでいる時だけ購入できます">ラボWi-Fi必須</button>`;
   } else {

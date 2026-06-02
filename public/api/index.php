@@ -134,6 +134,12 @@ try {
         return;
     }
 
+    // /invitations (casual hangout board)
+    if (($seg[0] ?? '') === 'invitations') {
+        route_invitations($PDO, $CFG, $method, $seg);
+        return;
+    }
+
     throw new ApiException('not_found', "no route for $method $path", 404);
 
 } catch (ApiException $e) {

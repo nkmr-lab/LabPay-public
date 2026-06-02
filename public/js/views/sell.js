@@ -305,6 +305,13 @@ async function submitListing(kind) {
   if (kind === 'jan' && !currentJan) { toast('バーコードを読み取ってください'); return; }
   if (!name || !(qty > 0)) { toast('入力を確認してください'); return; }
   if (!isGift && !(price > 0)) { toast('価格を入力してください'); return; }
+  // Race guard — user selected an image file but the upload hasn't populated the
+  // hidden URL yet. Submitting now would race against a half-finished upload.
+  const fileInputId = (kind === 'jan' ? 'image' : 'nj-image') + '_file';
+  const fileInput = document.getElementById(fileInputId);
+  if (fileInput && fileInput.files && fileInput.files.length > 0 && !image_url) {
+    toast('画像のアップロード完了をお待ちください'); return;
+  }
 
   try {
     let jan;
@@ -398,6 +405,28 @@ async function loadMyListings() {
     root.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => onAction(btn));
     });
+    // 画像差し替え: ファイル選択するだけで自動 upload + PATCH。
+    root.querySelectorAll('[data-img-file]').forEach(input => {
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const jan = input.dataset.jan;
+        try {
+          const fd = new FormData(); fd.append('file', file);
+          const upRes = await fetch('/api/uploads/image', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'labpay' },
+            credentials: 'same-origin',
+            body: fd,
+          });
+          const upData = await upRes.json();
+          if (!upRes.ok) throw new Error(upData?.error?.message || 'upload failed');
+          await patch('/api/products/' + encodeURIComponent(jan), { image_url: upData.url });
+          toast('画像を差し替えました');
+          await loadMyListings();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
   } catch (e) {
     document.getElementById('my-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -455,6 +484,13 @@ function renderRow(l) {
         <div class="row" style="margin-top:6px; gap:6px; align-items:flex-start">
           <textarea data-cmsg="${l.id}" maxlength="2000" rows="2" placeholder="購入時のメッセージ (任意)" style="flex:1">${escapeHtml(l.completion_message ?? '')}</textarea>
           <button data-action="cmsg" data-id="${l.id}">メッセージ更新</button>
+        </div>
+        <div class="row" style="margin-top:6px; gap:6px; align-items:center">
+          <span class="muted" style="font-size:12px; min-width:62px">画像</span>
+          ${l.image_url
+            ? `<img src="${escapeHtml(l.image_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:6px">`
+            : `<span class="muted" style="font-size:12px">未設定</span>`}
+          <input type="file" accept="image/*" data-img-file="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1">
         </div>
       </div>
     </div>`;
