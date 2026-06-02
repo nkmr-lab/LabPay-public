@@ -490,14 +490,12 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
 // 各項目は省略可。currency を変えるときは amount も lookup し直しが必要。
 function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): void {
     $u = Auth::requireUser($pdo, $cfg);
+    // 編集はグループメンバーなら誰でも可 (入力ミスを他の人が直せるように)。
     group_assert_member($pdo, $groupId, (int)$u['id']);
     $st = $pdo->prepare("SELECT * FROM adhoc_group_expenses WHERE id=? AND group_id=?");
     $st->execute([$eid, $groupId]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'expense not found', 404);
-    if ((int)$row['created_by_user_id'] !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '記録した本人のみ編集可能', 403);
-    }
     $body = read_json_body();
 
     // 既存のメンバー (validation 用)
@@ -564,21 +562,14 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
 
 function group_expenses_del(PDO $pdo, array $cfg, int $groupId, int $eid): void {
     $u = Auth::requireUser($pdo, $cfg);
+    // 削除もグループメンバーなら誰でも可 (入力ミスの掃除がしやすいように)。
+    // 既に削除済みなら idempotent に成功扱いで返す (race / 二重クリック対応)。
     group_assert_member($pdo, $groupId, (int)$u['id']);
-    // Only the creator of the expense row can delete (admin override).
-    // 既に削除済みの行に対する DELETE は idempotent に成功扱い (UI 再クリック
-    // や race で 2 度走った場合に「失敗」 toast が出ないように)。
-    $st = $pdo->prepare("SELECT created_by_user_id FROM adhoc_group_expenses
-        WHERE id = ? AND group_id = ?");
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_expenses WHERE id=? AND group_id=?");
     $st->execute([$eid, $groupId]);
-    $owner = $st->fetchColumn();
-    if ($owner === false) {
-        // 既に存在しない → 成功扱いで返す (idempotent delete)
+    if ($st->fetchColumn() === false) {
         json_response(['ok' => true, 'already_deleted' => true]);
         return;
-    }
-    if ((int)$owner !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '記録した本人のみ削除可能', 403);
     }
     $pdo->prepare("DELETE FROM adhoc_group_expenses WHERE id=?")->execute([$eid]);
     json_response(['ok' => true]);

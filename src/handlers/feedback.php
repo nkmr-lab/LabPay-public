@@ -12,7 +12,55 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
         feedback_create($pdo, $cfg);
         return;
     }
+    if ($sub === '' && $method === 'GET') {
+        feedback_list($pdo, $cfg);
+        return;
+    }
+    $id = (int)$sub;
+    if ($id > 0 && ($seg[2] ?? '') === 'reply' && $method === 'POST') {
+        feedback_reply($pdo, $cfg, $id);
+        return;
+    }
     json_error('not_found', "no feedback route for $method $sub", 404);
+}
+
+// admin 専用: 最近の feedback 一覧 (返信状態付き)
+function feedback_list(PDO $pdo, array $cfg): void {
+    Auth::requireAdmin($pdo, $cfg);
+    $st = $pdo->query("
+        SELECT f.id, f.kind, f.body, f.url, f.user_agent, f.created_at,
+               f.replied_at, f.reply_body, f.replied_by_user_id,
+               u.display_name AS user_name, u.avatar_url AS user_avatar_url,
+               ub.display_name AS replied_by_name
+          FROM feedback f
+          JOIN users u ON u.id = f.user_id
+          LEFT JOIN users ub ON ub.id = f.replied_by_user_id
+         ORDER BY f.id DESC LIMIT 100");
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+// admin が feedback に返信。投稿者には「対応したよ」通知が届く。
+function feedback_reply(PDO $pdo, array $cfg, int $id): void {
+    $admin = Auth::requireAdmin($pdo, $cfg);
+    $body = read_json_body();
+    $reply = trim((string)require_field($body, 'reply'));
+    if ($reply === '' || mb_strlen($reply) > 4000) {
+        throw new ApiException('bad_request', 'reply length 1..4000', 400);
+    }
+    $st = $pdo->prepare("SELECT user_id, body, kind FROM feedback WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'feedback not found', 404);
+
+    $pdo->prepare("UPDATE feedback SET replied_at=NOW(), reply_body=?, replied_by_user_id=? WHERE id=?")
+        ->execute([$reply, $admin['id'], $id]);
+
+    $kindLabel = ['bug'=>'🐛 バグ報告', 'feature'=>'✨ 機能要望', 'other'=>'💬 フィードバック'][$row['kind']] ?? 'フィードバック';
+    $origSnip = mb_substr((string)$row['body'], 0, 60) . (mb_strlen((string)$row['body']) > 60 ? '…' : '');
+    $msg = "✅ あなたの {$kindLabel}「{$origSnip}」 に {$admin['display_name']} さんから返信:\n{$reply}";
+    notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice', $msg, 'feedback', $id);
+
+    json_response(['ok' => true]);
 }
 
 function feedback_create(PDO $pdo, array $cfg): void {

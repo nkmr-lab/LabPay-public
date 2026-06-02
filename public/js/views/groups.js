@@ -734,7 +734,10 @@ function openExpenseEdit(gid, e) {
 
 function renderExpense(e, gid) {
   const meId = state.me?.id;
-  const canManage = Number(e.created_by_user_id) === Number(meId);
+  // グループメンバーなら誰でも編集/削除可 (入力ミスをみんなで直せる)。
+  // wariMembers は loadDetail で全 group member セット済みなので、me がそこに
+  // いれば canManage = true とみなす。
+  const canManage = !!meId && wariMembers.some(m => Number(m.id) === Number(meId));
   const orig = (e.currency !== 'JPY' && e.amount_original)
     ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)})</span>` : '';
   const names = e.participants.map(uid => {
