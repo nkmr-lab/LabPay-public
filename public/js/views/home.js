@@ -43,6 +43,14 @@ export async function renderHome() {
       </div>
     </div>
 
+    <div class="card" id="home-groups-card" hidden>
+      <div class="row" style="align-items:center; margin-bottom:6px">
+        <h2 style="flex:1; margin:0">あなたのグループ</h2>
+        <a href="#/groups" class="muted" style="font-size:13px">一覧 →</a>
+      </div>
+      <div id="home-groups" class="list"></div>
+    </div>
+
     <div class="card">
       <div class="row" style="align-items:center; margin-bottom:6px">
         <h2 style="flex:1; margin:0">新規入荷</h2>
@@ -86,6 +94,7 @@ export async function renderHome() {
   await renderCheckinArea();
   await renderMedalsStrip();
   await renderPresence();
+  await renderMyGroups();
   await renderFreshListings();
   await renderFreshTasks();
   await renderPresenceSummary();
@@ -318,6 +327,29 @@ async function renderPresence() {
 
 // Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC
 // for /api/listings — we re-sort by created_at DESC client-side for "新規入荷".
+async function renderMyGroups() {
+  const card = document.getElementById('home-groups-card');
+  const root = document.getElementById('home-groups');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/groups');
+    const open = (d.items || []).filter(g => !g.closed_at);
+    if (!open.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = open.slice(0, 5).map(g => `
+      <a class="list-item" href="#/groups/${g.id}" style="text-decoration:none; color:inherit">
+        <div style="flex:1">
+          <div class="bold">${escapeHtml(g.title)}</div>
+          <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人</div>
+        </div>
+        <div class="muted" style="font-size:13px">→</div>
+      </a>`).join('');
+  } catch (_) {
+    // Silent: groups are nice-to-have on home; failing should not break the page.
+    card.hidden = true;
+  }
+}
+
 async function renderFreshListings() {
   const root = document.getElementById('home-fresh-listings');
   try {
