@@ -61,7 +61,12 @@ export async function renderMoneyRequests() {
       </div>
 
       <div id="mr-preview-total" class="muted" style="font-size:13px; margin-bottom:6px"></div>
-      <button id="mr-submit" class="primary">作成 + 全員に通知</button>
+      <div id="mr-preview-list" class="list" style="margin-bottom:8px" hidden></div>
+      <div class="row" style="gap:6px">
+        <button id="mr-submit" class="primary">作成 + 全員に通知</button>
+        <button id="mr-dry"    class="btn">通知内容を確認</button>
+        <button id="mr-clear"  class="btn">クリア</button>
+      </div>
     </div>
 
     <div class="card">
@@ -74,8 +79,54 @@ export async function renderMoneyRequests() {
   document.getElementById('mr-mode-flat')  .addEventListener('click', () => switchMode('flat'));
   document.getElementById('mr-mode-custom').addEventListener('click', () => switchMode('custom'));
   document.getElementById('mr-submit')     .addEventListener('click', onCreate);
+  document.getElementById('mr-dry')        .addEventListener('click', onDryRun);
+  document.getElementById('mr-clear')      .addEventListener('click', resetForm);
   switchMode('flat');
   await loadList();
+  // 直近の自分作成の請求があればプリロード (タイトル/メモ/受取人/金額)。
+  // 「またあの集金やる」が大半なので、ベース設定を毎回入れ直さなくて
+  // 済むようにする。要らないときは [クリア] で消せる。
+  await prefillFromLast();
+}
+
+async function prefillFromLast() {
+  try {
+    const d = await get('/api/money-requests');
+    const meId = state.me?.id;
+    const mine = (d.items || []).find(r => Number(r.creator_user_id) === Number(meId));
+    if (!mine) return;
+    const r = await get('/api/money-requests/' + mine.id);
+    document.getElementById('mr-title').value = r.title || '';
+    document.getElementById('mr-memo').value  = r.memo  || '';
+    picked.clear(); customAmount.clear();
+    for (const rec of (r.recipients || [])) {
+      picked.add(Number(rec.user_id));
+      customAmount.set(Number(rec.user_id), Number(rec.amount_yen) || 0);
+    }
+    // 全員同額か検出: 受取人の amount_yen が全部同じなら flat モード
+    const amounts = [...customAmount.values()];
+    const allSame = amounts.length > 1 && amounts.every(a => a === amounts[0]);
+    if (allSame) {
+      flatAmount = amounts[0];
+      customAmount.clear();
+      switchMode('flat');
+      const flat = document.getElementById('mr-flat');
+      if (flat) flat.value = flatAmount;
+    } else {
+      switchMode('custom');
+    }
+    refreshChips();
+  } catch (_) { /* prefill は best-effort */ }
+}
+
+function resetForm() {
+  document.getElementById('mr-title').value = '';
+  document.getElementById('mr-memo') .value = '';
+  picked.clear();
+  customAmount.clear();
+  flatAmount = 1000;
+  switchMode('flat');
+  refreshChips();
 }
 
 async function populatePicker() {
@@ -213,6 +264,35 @@ function buildRecipients() {
     if (amt > 0) out.push({ user_id: u.id, amount_yen: amt });
   }
   return out;
+}
+
+async function onDryRun() {
+  const title = document.getElementById('mr-title').value.trim();
+  const memo  = document.getElementById('mr-memo') .value.trim() || null;
+  if (!title) { toast('タイトルを入れてください'); return; }
+  const recipients = buildRecipients();
+  if (!recipients.length) { toast('対象者と金額を入れてください'); return; }
+  const previewRoot = document.getElementById('mr-preview-list');
+  try {
+    const r = await post('/api/money-requests', { title, memo, recipients, dry_run: true });
+    const meId = Number(state.me?.id) || 0;
+    if (!(r.previews || []).length) {
+      previewRoot.innerHTML = `<div class="muted">送信される通知はありません</div>`;
+    } else {
+      previewRoot.innerHTML = `<div class="muted" style="font-size:11px; margin-bottom:4px">↓ 各受取人に届く通知 (${r.previews.length} 件)</div>`
+        + r.previews.map(p => {
+            const mine = Number(p.user_id) === meId;
+            return `
+              <div class="list-item" style="${mine ? 'background:#fff8e6; border-left:3px solid var(--primary)' : ''}; align-items:flex-start">
+                <div style="flex:1">
+                  <div class="bold" style="font-size:13px">→ ${escapeHtml(p.display_name)} (¥${Number(p.amount_yen).toLocaleString()})${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
+                  <div class="meta" style="white-space:pre-wrap; font-size:12px">${escapeHtml(p.message)}</div>
+                </div>
+              </div>`;
+          }).join('');
+    }
+    previewRoot.hidden = false;
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 async function onCreate() {

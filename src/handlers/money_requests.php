@@ -55,6 +55,7 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
+    $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
     $recipients = $body['recipients'] ?? null;
     if (!is_array($recipients) || !$recipients) {
         throw new ApiException('bad_request', 'recipients must be a non-empty array', 400);
@@ -81,6 +82,29 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     $st->execute($uids);
     if (count($st->fetchAll()) !== count($uids)) {
         throw new ApiException('bad_request', 'unknown user_id in recipients', 400);
+    }
+
+    // recipients の名前を引いておく (preview に必要なので、send 経路と共通化)
+    $stN = $pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($place)");
+    $stN->execute($uids);
+    $names = [];
+    foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $n) $names[(int)$n['id']] = $n['display_name'];
+
+    // dry_run: DB を触らず、各人に届くはずの本文を previews[] で返すだけ
+    if ($dryRun) {
+        $previews = [];
+        foreach ($rows as $r) {
+            if ((int)$r['user_id'] === (int)$u['id']) continue;
+            $msg = "💴 {$u['display_name']} から請求: 「{$title}」¥" . number_format($r['amount_yen']);
+            $previews[] = [
+                'user_id'      => (int)$r['user_id'],
+                'display_name' => $names[(int)$r['user_id']] ?? "user#{$r['user_id']}",
+                'amount_yen'   => (int)$r['amount_yen'],
+                'message'      => $msg,
+            ];
+        }
+        json_response(['ok' => true, 'dry_run' => true, 'previews' => $previews]);
+        return;
     }
 
     $pdo->beginTransaction();
