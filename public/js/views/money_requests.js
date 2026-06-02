@@ -90,32 +90,15 @@ export async function renderMoneyRequests() {
 }
 
 async function prefillFromLast() {
+  // 直近の自分作成の請求から memo だけ取り出してフォームに乗せる。
+  // タイトル/受取人/金額は毎回違うので prefill しない (誤送信を避ける)。
   try {
     const d = await get('/api/money-requests');
     const meId = state.me?.id;
     const mine = (d.items || []).find(r => Number(r.creator_user_id) === Number(meId));
-    if (!mine) return;
-    const r = await get('/api/money-requests/' + mine.id);
-    document.getElementById('mr-title').value = r.title || '';
-    document.getElementById('mr-memo').value  = r.memo  || '';
-    picked.clear(); customAmount.clear();
-    for (const rec of (r.recipients || [])) {
-      picked.add(Number(rec.user_id));
-      customAmount.set(Number(rec.user_id), Number(rec.amount_yen) || 0);
-    }
-    // 全員同額か検出: 受取人の amount_yen が全部同じなら flat モード
-    const amounts = [...customAmount.values()];
-    const allSame = amounts.length > 1 && amounts.every(a => a === amounts[0]);
-    if (allSame) {
-      flatAmount = amounts[0];
-      customAmount.clear();
-      switchMode('flat');
-      const flat = document.getElementById('mr-flat');
-      if (flat) flat.value = flatAmount;
-    } else {
-      switchMode('custom');
-    }
-    refreshChips();
+    if (!mine || !mine.memo) return;
+    const memoEl = document.getElementById('mr-memo');
+    if (memoEl && !memoEl.value) memoEl.value = mine.memo;
   } catch (_) { /* prefill は best-effort */ }
 }
 
