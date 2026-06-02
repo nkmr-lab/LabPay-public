@@ -636,42 +636,62 @@ function openSettleModal(gid) {
   if (!d || !d.expenses.length) { toast('支出がまだありません'); return; }
   const root = document.getElementById('gd-settle-modal');
   root.hidden = false;
-  // 各人の支払った総額 (= spent_jpy, 立替してもらった分も含めて実質
-  // いくら使ったか)。使った額の大きい順。
+  const meId = Number(state.me?.id) || 0;
+  const mineStyle = 'background:#fff8e6; border-left:3px solid var(--primary)';
+
+  // 各人の支払った総額 (= spent_jpy)。降順、自分の行は黄色背景でハイライト。
   const spendRows = [...(d.balances || [])]
     .filter(b => (b.spent_jpy || 0) > 0)
     .sort((a, b) => (b.spent_jpy || 0) - (a.spent_jpy || 0))
-    .map(b => `
-      <div class="list-item">
-        <div style="flex:1; display:flex; align-items:center; gap:8px">
-          ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
-          <div class="bold">${escapeHtml(b.display_name)}</div>
-        </div>
-        <div class="bold" style="font-size:16px">¥${(b.spent_jpy || 0).toLocaleString()}</div>
-      </div>`).join('');
-  const planRows = d.settlements.length
-    ? d.settlements.map(s => `
-        <div class="list-item">
-          <div style="flex:1">
-            <span class="bold">${escapeHtml(s.from_name)}</span> →
-            <span class="bold">${escapeHtml(s.to_name)}</span>
+    .map(b => {
+      const mine = Number(b.user_id) === meId;
+      return `
+        <div class="list-item" style="${mine ? mineStyle : ''}">
+          <div style="flex:1; display:flex; align-items:center; gap:8px">
+            ${avatarHtml(b.display_name, b.avatar_url, 'sm')}
+            <div class="bold">${escapeHtml(b.display_name)}${mine ? ' <span class="muted" style="font-size:10px">(あなた)</span>' : ''}</div>
           </div>
-          <div class="bold" style="color:var(--primary); font-size:16px">¥${s.amount_jpy.toLocaleString()}</div>
-        </div>`).join('')
+          <div class="bold" style="font-size:16px">¥${(b.spent_jpy || 0).toLocaleString()}</div>
+        </div>`;
+    }).join('');
+
+  // 推奨送金プラン。自分が from/to のどちらかなら黄色背景でハイライト。
+  const planRows = d.settlements.length
+    ? d.settlements.map(s => {
+        const mine = Number(s.from_user_id) === meId || Number(s.to_user_id) === meId;
+        return `
+          <div class="list-item" style="${mine ? mineStyle : ''}">
+            <div style="flex:1">
+              <span class="bold">${escapeHtml(s.from_name)}</span> →
+              <span class="bold">${escapeHtml(s.to_name)}</span>
+              ${mine ? '<span class="muted" style="font-size:10px; margin-left:4px">(あなた)</span>' : ''}
+            </div>
+            <div class="bold" style="color:var(--primary); font-size:16px">¥${s.amount_jpy.toLocaleString()}</div>
+          </div>`;
+      }).join('')
     : `<div class="muted">送金不要 (全員ぴったり)</div>`;
+
   root.innerHTML = `
     <div style="position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px">
-      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; overflow:auto; padding:20px">
+      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px">
         <div class="row" style="align-items:center">
           <h3 style="flex:1; margin:0">精算サマリ</h3>
           <button id="gd-settle-close">×</button>
         </div>
-        <p class="muted" style="font-size:13px">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
-        <h4 style="margin:12px 0 6px">各人の支払った総額</h4>
-        <p class="muted" style="font-size:11px; margin:0 0 4px">立替してもらった分も含めて、実質いくら使ったか</p>
-        <div class="list">${spendRows || '<div class="muted">支払いがまだありません</div>'}</div>
-        <h4 style="margin:12px 0 6px">推奨送金プラン</h4>
-        <div class="list">${planRows}</div>
+        <p class="muted" style="font-size:13px; margin:6px 0 0">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
+        <div class="row" style="gap:6px; margin-top:10px">
+          <button data-stab="spend" class="btn primary" style="flex:1">支払った総額</button>
+          <button data-stab="plan"  class="btn" style="flex:1">推奨送金プラン</button>
+        </div>
+        <div id="gd-settle-body" style="margin-top:10px; overflow:auto; flex:1; min-height:0">
+          <div data-stab-pane="spend">
+            <p class="muted" style="font-size:11px; margin:0 0 4px">立替してもらった分も含めて、実質いくら使ったか</p>
+            <div class="list">${spendRows || '<div class="muted">支払いがまだありません</div>'}</div>
+          </div>
+          <div data-stab-pane="plan" hidden>
+            <div class="list">${planRows}</div>
+          </div>
+        </div>
         ${d.settlements.length ? `
           <div style="margin-top:12px; text-align:right">
             <button id="gd-settle-notify" class="primary">全員に通知する</button>
@@ -681,6 +701,14 @@ function openSettleModal(gid) {
         </p>
       </div>
     </div>`;
+  // Tab switching
+  root.querySelectorAll('[data-stab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.stab;
+      root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('primary', b === btn));
+      root.querySelectorAll('[data-stab-pane]').forEach(p => p.hidden = p.dataset.stabPane !== key);
+    });
+  });
   root.querySelector('#gd-settle-close').addEventListener('click', () => { root.hidden = true; root.innerHTML = ''; });
   root.querySelector('#gd-settle-notify')?.addEventListener('click', async (ev) => {
     if (!confirm('参加者全員に「誰が誰に送る」通知を送信します。よろしいですか?')) return;
