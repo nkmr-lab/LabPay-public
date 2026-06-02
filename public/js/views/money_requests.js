@@ -369,7 +369,10 @@ async function loadDetail(id) {
     const settle = settlementInfo(r);
 
     document.getElementById('mr-detail').innerHTML = `
-      <div class="bold" style="font-size:18px">${escapeHtml(r.title)}</div>
+      <div style="display:flex; align-items:start; gap:8px">
+        <div class="bold" style="font-size:18px; flex:1">${escapeHtml(r.title)}</div>
+        ${isCreator ? `<button id="mr-edit" class="btn" style="padding:2px 8px; font-size:12px">編集</button>` : ''}
+      </div>
       <div class="meta">${escapeHtml(r.creator_name)} · ${escapeHtml(r.created_at)}</div>
       ${r.memo ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(r.memo)}</div>` : ''}
       ${settle ? `
@@ -413,6 +416,7 @@ async function loadDetail(id) {
       b.addEventListener('click', () => onPay(id, b.dataset.pay, r));
     });
     document.getElementById('mr-unpay')?.addEventListener('click', () => onUnpay(id));
+    document.getElementById('mr-edit')?.addEventListener('click', () => openEdit(r));
     document.getElementById('mr-close')?.addEventListener('click', async () => {
       const paidCount = (r.recipients || []).filter(x => x.paid_at).length;
       const extra = paidCount > 0 ? `\n(${paidCount} 人がすでに支払い済とマークしています)` : '';
@@ -447,6 +451,66 @@ async function onPay(id, method, r) {
     toast('支払い済にしました');
     await loadDetail(id);
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// 編集モーダル: タイトル / メモ / 各受取人の金額を変更可能。受取人の
+// 追加・削除はここでは扱わない (作り直しを推奨)。
+function openEdit(r) {
+  const existing = document.getElementById('mr-edit-modal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'mr-edit-modal';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px">
+      <div class="row" style="align-items:center">
+        <h3 style="flex:1; margin:0">請求を編集</h3>
+        <button id="mr-edit-close">×</button>
+      </div>
+      <label class="field" style="margin-top:8px">
+        <span class="lbl">タイトル</span>
+        <input type="text" id="mr-edit-title" maxlength="200" value="${escapeHtml(r.title || '')}">
+      </label>
+      <label class="field">
+        <span class="lbl">メモ</span>
+        <textarea id="mr-edit-memo" maxlength="5000" rows="3">${escapeHtml(r.memo || '')}</textarea>
+      </label>
+      <div class="muted" style="font-size:12px; margin:6px 0 2px">各人の金額</div>
+      <div style="overflow:auto; max-height:40vh">
+        ${r.recipients.map(rec => `
+          <div class="row" style="align-items:center; gap:6px; padding:3px 0">
+            ${avatarHtml(rec.display_name, rec.avatar_url, 'sm')}
+            <span style="flex:1">${escapeHtml(rec.display_name)} ${rec.paid_at ? '<span class="tag" style="background:#eaf5ef; color:#0e7c63; font-size:10px">✓払</span>' : ''}</span>
+            <input type="number" min="0" step="100" data-eamt="${rec.user_id}" value="${Number(rec.amount_yen)}" style="width:110px; text-align:right">
+          </div>`).join('')}
+      </div>
+      <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+        <button id="mr-edit-cancel" class="btn">キャンセル</button>
+        <button id="mr-edit-save"   class="primary">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#mr-edit-close') .addEventListener('click', close);
+  overlay.querySelector('#mr-edit-cancel').addEventListener('click', close);
+  overlay.querySelector('#mr-edit-save')  .addEventListener('click', async () => {
+    const title = overlay.querySelector('#mr-edit-title').value.trim();
+    const memo  = overlay.querySelector('#mr-edit-memo') .value.trim() || null;
+    if (!title) { toast('タイトルを入れてください'); return; }
+    const recipient_amounts = {};
+    overlay.querySelectorAll('[data-eamt]').forEach(inp => {
+      const uid = Number(inp.dataset.eamt);
+      const v = Math.max(0, Math.floor(Number(inp.value) || 0));
+      if (v > 0) recipient_amounts[uid] = v;
+    });
+    try {
+      await patch('/api/money-requests/' + r.id, { title, memo, recipient_amounts });
+      toast('保存しました');
+      close();
+      await loadDetail(r.id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }
 
 async function onUnpay(id) {

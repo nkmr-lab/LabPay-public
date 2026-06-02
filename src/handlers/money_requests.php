@@ -16,6 +16,7 @@ function route_money_requests(PDO $pdo, array $cfg, string $method, array $seg):
     if ($id > 0) {
         $next = $seg[2] ?? '';
         if ($next === '' && $method === 'GET')    { money_requests_detail($pdo, $cfg, $id); return; }
+        if ($next === '' && $method === 'PATCH')  { money_requests_patch ($pdo, $cfg, $id); return; }
         if ($next === '' && $method === 'DELETE') { money_requests_close($pdo, $cfg, $id);  return; }
         if ($next === 'pay'    && $method === 'PATCH') { money_requests_pay  ($pdo, $cfg, $id); return; }
         if ($next === 'unpay'  && $method === 'PATCH') { money_requests_unpay($pdo, $cfg, $id); return; }
@@ -175,6 +176,57 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
     }
     $r['recipients'] = $recipients;
     json_response($r);
+}
+
+// ─── PATCH (creator edits) ───────────────────────────────────
+// 発起人だけが編集可能。受け取る body:
+//   title         : 文字列 (任意)
+//   memo          : 文字列 or null (任意)
+//   recipient_amounts : { user_id: amount_yen, ... } (任意)
+// recipient_amounts は「すでに recipient として入っている user_id の金額更新」
+// だけ受け付ける。追加/削除は v1 では非対応 (誤操作防止)。
+
+function money_requests_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id FROM money_requests WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'request not found', 404);
+    if ((int)$row['creator_user_id'] !== (int)$u['id']
+        && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '発起人のみ編集できます', 403);
+    }
+    $body = read_json_body();
+    $sets = [];
+    $args = [];
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) {
+            throw new ApiException('bad_request', 'title length 1..200', 400);
+        }
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('memo', $body)) {
+        $m = ($body['memo'] === null || $body['memo'] === '')
+            ? null : mb_substr((string)$body['memo'], 0, 5000);
+        $sets[] = 'memo = ?'; $args[] = $m;
+    }
+    if ($sets) {
+        $args[] = $id;
+        $pdo->prepare('UPDATE money_requests SET ' . implode(', ', $sets) . ' WHERE id = ?')
+            ->execute($args);
+    }
+    if (array_key_exists('recipient_amounts', $body) && is_array($body['recipient_amounts'])) {
+        $up = $pdo->prepare("UPDATE money_request_recipients
+            SET amount_yen = ? WHERE request_id = ? AND user_id = ?");
+        foreach ($body['recipient_amounts'] as $uid => $amt) {
+            $uid = (int)$uid;
+            $amt = (int)$amt;
+            if ($uid <= 0 || $amt <= 0) continue;
+            $up->execute([$amt, $id, $uid]);
+        }
+    }
+    json_response(['ok' => true]);
 }
 
 // ─── DELETE (creator) ────────────────────────────────────────

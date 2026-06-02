@@ -463,13 +463,18 @@ async function loadDetail(id) {
   try {
     const s = await get('/api/nomikai/' + id);
     const meId = state.me?.id;
+    const isCreator = Number(s.creator_user_id) === Number(meId);
     const myRow = (s.participants || []).find(p => Number(p.user_id) === Number(meId));
     const settle = settlementInfo(s);
+    const asReqBtn = isCreator
+      ? `<div style="margin-top:8px"><button id="nm-asreq" class="btn">この内容で「請求」を作る</button></div>`
+      : '';
     document.getElementById('nm-detail').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(s.title)} ${s.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
       <div class="meta">${escapeHtml(s.creator_name)} · ${escapeHtml(s.created_at)}</div>
       <div style="margin-top:6px">総額 <span class="bold">¥${s.total_yen.toLocaleString()}</span> · 参加 ${s.participants.length}人</div>
       ${s.notes ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(s.notes)}</div>` : ''}
+      ${asReqBtn}
       ${settle ? `
         <div style="margin-top:8px; padding:8px 10px; background:#faf6ff; border-left:3px solid var(--primary); border-radius:6px; font-size:13px">
           振込先 (${escapeHtml(s.creator_name)} さん): ${settle}
@@ -509,9 +514,28 @@ async function loadDetail(id) {
       b.addEventListener('click', () => onPay(id, b.dataset.pay, s));
     });
     document.getElementById('nm-unpay')?.addEventListener('click', () => onUnpay(id));
+    document.getElementById('nm-asreq')?.addEventListener('click', () => onConvertToRequest(s));
   } catch (e) {
     document.getElementById('nm-detail').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// 飲み会割り勘の各参加者 (主催者自身は除く) を「請求」フォーマットで送る。
+// メモには元の飲み会タイトル + メモが入る。
+async function onConvertToRequest(s) {
+  const meId = state.me?.id;
+  const recipients = (s.participants || [])
+    .filter(p => Number(p.user_id) !== Number(meId) && Number(p.amount_yen) > 0)
+    .map(p => ({ user_id: Number(p.user_id), amount_yen: Number(p.amount_yen) }));
+  if (!recipients.length) { toast('請求対象がありません'); return; }
+  const title = `${s.title}`;
+  const memo  = s.notes || null;
+  if (!confirm(`「${title}」を ${recipients.length} 人に請求として送ります。よろしいですか?`)) return;
+  try {
+    const r = await post('/api/money-requests', { title, memo, recipients });
+    toast('請求を作成しました');
+    location.hash = '#/requests/' + r.id;
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 function settlementInfo(s) {

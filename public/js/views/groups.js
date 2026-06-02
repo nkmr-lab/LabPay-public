@@ -694,7 +694,9 @@ function openSettleModal(gid) {
         </div>
         ${d.settlements.length ? `
           <div id="gd-settle-preview" class="list" style="margin-top:10px" hidden></div>
-          <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+          <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end; flex-wrap:wrap">
+            ${meId && d.settlements.some(s => Number(s.to_user_id) === meId)
+              ? `<button id="gd-settle-asreq" class="btn">私あての分を「請求」として送る</button>` : ''}
             <button id="gd-settle-dry" class="btn">通知内容を確認する</button>
             <button id="gd-settle-notify" class="primary">全員に通知する</button>
           </div>` : ''}
@@ -710,6 +712,30 @@ function openSettleModal(gid) {
       root.querySelectorAll('[data-stab]').forEach(b => b.classList.toggle('primary', b === btn));
       root.querySelectorAll('[data-stab-pane]').forEach(p => p.hidden = p.dataset.stabPane !== key);
     });
+  });
+  // 私あての送金プラン分を「請求」フォーマットで発射する。各 from_user が
+  // 私 (creator=me) に支払うべき額を recipient として登録した money_request
+  // を新規作成。受取人はその後 PayPay/銀行 等で「支払い済」をチェックできる。
+  root.querySelector('#gd-settle-asreq')?.addEventListener('click', async (ev) => {
+    const myPlans = d.settlements.filter(s => Number(s.to_user_id) === meId);
+    if (!myPlans.length) { toast('あなた宛の送金プランがありません'); return; }
+    const title = (lastWariData?._title) || '精算';
+    // グループタイトルが分かれば優先 (loadDetail で渡されている)。フォール
+    // バックは「精算」固定。
+    const r = await get('/api/groups/' + currentGroupId);
+    const groupTitle = r?.title || '精算';
+    if (!confirm(`${myPlans.length} 人にあなた宛の請求を送ります。タイトル「${groupTitle} 精算」 でよろしいですか?`)) return;
+    ev.currentTarget.disabled = true;
+    try {
+      const created = await post('/api/money-requests', {
+        title: `${groupTitle} 精算`,
+        memo: null,
+        recipients: myPlans.map(s => ({ user_id: s.from_user_id, amount_yen: s.amount_jpy })),
+      });
+      toast('請求を作成しました');
+      root.hidden = true; root.innerHTML = '';
+      location.hash = '#/requests/' + created.id;
+    } catch (e) { toast('失敗: ' + e.message); ev.currentTarget.disabled = false; }
   });
   // Dry-run preview: ask the server to compute the messages without sending,
   // then render them inline. Same Set() guard so spamming the button doesn't
