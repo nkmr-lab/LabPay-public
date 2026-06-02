@@ -94,8 +94,8 @@ function renderRow(i) {
   const statusTag = isClosed
     ? `<span class="tag muted">終了</span>`
     : (iJoined
-      ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ 参加表明済</span>`
-      : `<span class="tag" style="background:#fff3df; color:#b54708">募集中</span>`);
+      ? `<span class="tag ok">✓ 参加表明済</span>`
+      : `<span class="tag warn">募集中</span>`);
 
   let actions = '';
   if (!isClosed) {
@@ -167,8 +167,8 @@ async function loadDetail(id) {
     const statusTag = isClosed
       ? `<span class="tag muted">終了</span>`
       : (iJoined
-          ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ 参加表明済</span>`
-          : `<span class="tag" style="background:#fff3df; color:#b54708">募集中</span>`);
+          ? `<span class="tag ok">✓ 参加表明済</span>`
+          : `<span class="tag warn">募集中</span>`);
     let actions = '';
     if (!isClosed) {
       if (iJoined) actions += `<button id="inv-detail-leave">参加表明を取消</button>`;

@@ -403,7 +403,7 @@ export async function renderRouletteResult({ params }) {
       <div class="meta">${escapeHtml(r.created_at)} · 起案 ${escapeHtml(r.creator_name)}</div>
       <div style="margin-top:8px; font-size:18px">
         🎯 当選: <span class="bold" style="color:var(--primary)">${escapeHtml(r.winner_name)}</span>
-        ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag" style="background:var(--primary-soft); color:var(--primary)">あなた</span>' : ''}
+        ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag">あなた</span>' : ''}
       </div>
       <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
     // Draw the wheel stopped at the winner's slice (no animation, just position).

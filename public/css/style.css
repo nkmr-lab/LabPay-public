@@ -11,7 +11,11 @@
   --primary-fg: #ffffff;
   --primary-soft: #ede4f3;
   --warn: #b54708;
+  --warn-soft: #fff3df;
   --danger: #b42318;
+  --danger-soft: #ffe1de;
+  --ok: #0e7c63;
+  --ok-soft: #eaf5ef;
 
   /* Surface */
   --radius-sm: 8px;
@@ -404,11 +408,12 @@ table.table th { color: var(--muted); font-weight: 600; }
 /* Empty state */
 .empty { color: var(--muted); text-align: center; padding: 32px 12px; }
 
-.tag { display: inline-block; padding: 2px 8px; background: var(--primary-soft); color: var(--primary);
+.tag { display: inline-block; padding: 2px var(--space-2); background: var(--primary-soft); color: var(--primary);
   border-radius: 999px; font-size: var(--text-xs); font-weight: 700; }
-.tag.warn { background: #fff3df; color: var(--warn); }
-.tag.danger { background: #ffe1de; color: var(--danger); }
-.tag.muted { background: #eef0ef; color: var(--muted); }
+.tag.ok     { background: var(--ok-soft);     color: var(--ok); }
+.tag.warn   { background: var(--warn-soft);   color: var(--warn); }
+.tag.danger { background: var(--danger-soft); color: var(--danger); }
+.tag.muted  { background: #eef0ef;            color: var(--muted); }
 
 .sep { height: 1px; background: var(--line); margin: 10px 0; }
 
@@ -416,6 +421,13 @@ table.table th { color: var(--muted); font-weight: 600; }
 .right { text-align: right; }
 .bold { font-weight: 700; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* Layout utilities — view 全体に散らかってた display:flex + align-items:center +
+   gap の組み合わせを集約。gap が default (--space-2 = 8px) で足りない時は
+   inline style="gap: ..." で上書きする想定。 */
+.hstack { display: flex; align-items: center; gap: var(--space-2); }
+.hstack.wrap { flex-wrap: wrap; }
+.vstack { display: flex; flex-direction: column; gap: var(--space-2); }
 
 @media (min-width: 720px) {
   nav#tabs { justify-content: center; }

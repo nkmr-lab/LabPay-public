@@ -311,8 +311,8 @@ async function loadList() {
       const isMine      = Number(r.creator_user_id) === Number(meId);
       const isGenerator = Number(r.created_by_user_id) === Number(meId) && !isMine;
       const tagBits = [];
-      if (isMine)      tagBits.push('<span class="tag" style="background:#faf6ff; color:var(--primary)">発起人</span>');
-      if (isGenerator) tagBits.push(`<span class="tag" style="background:#fff8e6; color:#b54708">代理生成</span>`);
+      if (isMine)      tagBits.push('<span class="tag">発起人</span>');
+      if (isGenerator) tagBits.push(`<span class="tag warn">代理生成</span>`);
       const myLine = r.my_amount != null
         ? `あなたへ ¥${Number(r.my_amount).toLocaleString()} ${r.my_paid_at ? '✓支払済' : '未払い'}`
         : (isMine
@@ -407,8 +407,8 @@ async function loadDetail(id) {
         </div>
         <div>
           ${rec.paid_at
-            ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ ${escapeHtml(METHOD_LABEL[rec.paid_method] || rec.paid_method)}${rec.proxy_name ? ' (←' + escapeHtml(rec.proxy_name) + ')' : ''}</span>`
-            : `<span class="tag" style="background:#fff3df; color:#b54708">未払い</span>`}
+            ? `<span class="tag ok">✓ ${escapeHtml(METHOD_LABEL[rec.paid_method] || rec.paid_method)}${rec.proxy_name ? ' (←' + escapeHtml(rec.proxy_name) + ')' : ''}</span>`
+            : `<span class="tag warn">未払い</span>`}
         </div>
       </div>`;
     const sep = (paid.length && unpaid.length)
@@ -487,7 +487,7 @@ function openEdit(r) {
         ${r.recipients.map(rec => `
           <div class="row" style="align-items:center; gap:6px; padding:3px 0">
             ${avatarHtml(rec.display_name, rec.avatar_url, 'sm')}
-            <span style="flex:1">${escapeHtml(rec.display_name)} ${rec.paid_at ? '<span class="tag" style="background:#eaf5ef; color:#0e7c63; font-size:10px">✓払</span>' : ''}</span>
+            <span style="flex:1">${escapeHtml(rec.display_name)} ${rec.paid_at ? '<span class="tag ok" style="font-size:10px">✓払</span>' : ''}</span>
             <input type="number" min="0" step="100" data-eamt="${rec.user_id}" value="${Number(rec.amount_yen)}" style="width:110px; text-align:right">
           </div>`).join('')}
       </div>

@@ -78,7 +78,7 @@ function renderRow(w) {
   const noteLine = w.note ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(w.note)}</div>` : '';
   const statusTag = isClosed
     ? `<span class="tag muted">✓ 達成</span>`
-    : `<span class="tag" style="background:#eaf5ef; color:#0e7c63">募集中</span>`;
+    : `<span class="tag ok">募集中</span>`;
   const actions = isClosed ? '' : (isMine
     ? `<button data-del="${w.id}" class="danger">取消</button>`
     : `<button class="primary" data-fulfill="${w.id}">出ました!</button>`);

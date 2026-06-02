@@ -374,7 +374,7 @@ async function renderFreshInvitations() {
       const when = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
       const where = i.location ? `📍 ${escapeHtml(i.location)} ・` : '';
       const cap = i.capacity ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
-      const joined = Number(i.i_joined) === 1 ? ' <span class="tag" style="background:#eaf5ef; color:#0e7c63">✓参加</span>' : '';
+      const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       return `
         <a class="list-item" href="#/invitations/${i.id}" style="text-decoration:none; color:inherit">
           <div style="flex:1">
@@ -446,8 +446,8 @@ async function renderFreshTasks() {
       myCard.hidden = false;
       myList.innerHTML = myActive.map(t => {
         const statusTag = t.my_status === 'reported'
-          ? '<span class="tag" style="background:#fff3df; color:#b54708">承認待ち</span>'
-          : '<span class="tag" style="background:#fff3df; color:#b54708">引き受け中</span>';
+          ? '<span class="tag warn">承認待ち</span>'
+          : '<span class="tag warn">引き受け中</span>';
         return `
           <a class="list-item" href="#/tasks/${t.id}" style="border-left:4px solid #b54708">
             <div style="display:flex; align-items:center; gap:8px; flex:1">

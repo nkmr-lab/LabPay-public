@@ -237,7 +237,7 @@ async function loadList() {
 function renderRow(t) {
   const audTag = t.audience_grades ? `<span class="tag muted" style="margin-left:4px">${escapeHtml(t.audience_grades)}</span>` : '';
   const assignedTag = t.assigned_user_ids
-    ? `<span class="tag" style="background:#fff8e6; color:#b54708; margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名タスク'}</span>`
+    ? `<span class="tag warn" style="margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名タスク'}</span>`
     : '';
   const statusTag = ({
     open: '<span class="tag">募集中</span>',
@@ -254,10 +254,10 @@ function renderRow(t) {
   if (['claimed', 'reported'].includes(t.my_status)) {
     borderColor = '#b54708';
     const lbl = t.my_status === 'claimed' ? '引き受け中' : '報告済み (承認まち)';
-    roleBadge = `<span class="tag" style="background:#fff3df; color:#b54708; margin-left:4px">${lbl}</span>`;
+    roleBadge = `<span class="tag warn" style="margin-left:4px">${lbl}</span>`;
   } else if (t.is_mine) {
     borderColor = 'var(--primary)';
-    roleBadge = '<span class="tag" style="background:var(--primary-soft); color:var(--primary); margin-left:4px">自分が依頼</span>';
+    roleBadge = '<span class="tag" style="margin-left:4px">自分が依頼</span>';
   } else if (t.can_claim) {
     borderColor = '#0e7c63';
   } else {

@@ -505,8 +505,8 @@ async function loadDetail(id) {
         </div>
         <div>
           ${p.paid_at
-            ? `<span class="tag" style="background:#eaf5ef; color:#0e7c63">✓ ${escapeHtml(p.paid_method)}${p.proxy_name ? ' (←' + escapeHtml(p.proxy_name) + ')' : ''}</span>`
-            : `<span class="tag" style="background:#fff3df; color:#b54708">未払い</span>`}
+            ? `<span class="tag ok">✓ ${escapeHtml(p.paid_method)}${p.proxy_name ? ' (←' + escapeHtml(p.proxy_name) + ')' : ''}</span>`
+            : `<span class="tag warn">未払い</span>`}
         </div>
       </div>
     `).join('');
