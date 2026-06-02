@@ -370,14 +370,32 @@ function tasks_list(PDO $pdo, array $cfg): void {
         $r['is_mine']     = ((int)$r['requester_user_id'] === $uid);
         $myActive = (int)$r['my_active_count'];
         $perLimit = (int)$r['per_user_limit'];
-        // Can the caller still pick this task up? Closed tasks => no; own task => no;
-        // already maxed under per_user_limit => no; audience mismatch => no.
+        // 指名タスクの判定 (assigned_user_ids が空でなく、自分の id が含まれるか)
+        $assignedIds = empty($r['assigned_user_ids'])
+            ? null
+            : array_map('intval', explode(',', (string)$r['assigned_user_ids']));
+        $r['is_assigned_to_me'] = $assignedIds !== null && in_array($uid, $assignedIds, true);
+        // can_claim: 指名タスクなら指名者本人だけ true、それ以外は従来の学年判定
+        $audienceOk = $assignedIds !== null
+            ? $r['is_assigned_to_me']
+            : tasks_can_apply_to_grade($userGrade, $r['audience_grades']);
         $r['can_claim'] = $r['status'] === 'open'
             && !$r['is_mine']
             && $r['remaining'] > 0
             && ($perLimit === 0 || $myActive < $perLimit)
-            && tasks_can_apply_to_grade($userGrade, $r['audience_grades']);
+            && $audienceOk;
     }
+    // 指名タスクは指名された本人 / 依頼者 / 既 claim 者 にだけ見せる。
+    // (audience_grades の filter は SQL では効いていなくて PHP 側で「open は全員に
+    // 見せる」状態だったので、指名タスクが全員に見えると煩いため frontend に
+    // 投げる前に絞る)
+    $rows = array_values(array_filter($rows, function ($r) use ($uid) {
+        if (empty($r['assigned_user_ids'])) return true; // 通常タスク: そのまま
+        if ((int)$r['requester_user_id'] === $uid)        return true; // 依頼者
+        if (!empty($r['is_assigned_to_me']))              return true; // 指名された本人
+        if (!empty($r['my_status']))                       return true; // 既に claim 履歴あり
+        return false; // それ以外には見せない
+    }));
     json_response(['items' => $rows]);
 }
 
@@ -443,6 +461,28 @@ function tasks_create(PDO $pdo, array $cfg): void {
     if (is_string($aud)) $aud = trim($aud);
     if ($aud === '' || $aud === null) $aud = null;
 
+    // assigned_user_ids: 指名タスク。array or CSV を受ける。存在チェックして
+    // CSV 文字列で保存。指定が空なら NULL (誰でも条件を満たせば claim 可)。
+    $assignedCsv = null;
+    $assignedIds = [];
+    if (isset($body['assigned_user_ids'])) {
+        $raw = $body['assigned_user_ids'];
+        if (is_string($raw)) $raw = explode(',', $raw);
+        if (is_array($raw)) {
+            $assignedIds = array_values(array_unique(array_filter(array_map('intval', $raw))));
+        }
+        if ($assignedIds) {
+            $place = implode(',', array_fill(0, count($assignedIds), '?'));
+            $stCk = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
+            $stCk->execute($assignedIds);
+            $found = array_map('intval', array_column($stCk->fetchAll(PDO::FETCH_ASSOC), 'id'));
+            if (count($found) !== count($assignedIds)) {
+                throw new ApiException('bad_request', 'assigned_user_ids: 該当しない id があります', 400);
+            }
+            $assignedCsv = implode(',', $assignedIds);
+        }
+    }
+
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
@@ -452,9 +492,9 @@ function tasks_create(PDO $pdo, array $cfg): void {
     try {
         // Insert task first to get id
         $ins = $pdo->prepare('INSERT INTO tasks
-            (requester_user_id, title, description, url, reward, capacity, per_user_limit, deadline, audience_grades, completion_message)
-            VALUES (?,?,?,?,?,?,?,?,?,?)');
-        $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $completionMsg]);
+            (requester_user_id, title, description, url, reward, capacity, per_user_limit, deadline, audience_grades, assigned_user_ids, completion_message)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $assignedCsv, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
 
         // Insert any time slots derived from slots_spec.
@@ -490,6 +530,14 @@ function tasks_create(PDO $pdo, array $cfg): void {
              . $deadlineLine . $audLine . $urlLine;
         slack_notify($cfg, $msg);
     } catch (Throwable $e) { /* swallow */ }
+
+    // 指名タスクなら指名された人に個別通知 (見落とし防止)。
+    foreach ($assignedIds as $aid) {
+        if ($aid === (int)$u['id']) continue;
+        $msg = "👉 {$u['display_name']} さんからあなた宛のタスク: 「{$title}」 ({$reward}pt)";
+        if ($deadline) $msg .= " · 締切 {$deadline}";
+        notify_safely($pdo, $cfg, $aid, 'admin_notice', $msg, 'task', $taskId);
+    }
 
     json_response(tasks_fetch_with_meta($pdo, $taskId, (int)$u['id']));
 }
@@ -598,8 +646,16 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
         if ($task['status'] !== 'open') throw new ApiException('not_open', 'task is not open', 409);
         if ((int)$task['requester_user_id'] === (int)$u['id'])
             throw new ApiException('self_claim', '自分のタスクには参加できません', 400);
-        if (!tasks_can_apply_to_grade($userGrade, $task['audience_grades']))
+        // 指名タスクは指名された人だけが claim できる (学年フィルタは無視)。
+        // 指名が無い場合だけ従来の学年フィルタを適用。
+        if (!empty($task['assigned_user_ids'])) {
+            $assigned = array_map('intval', explode(',', (string)$task['assigned_user_ids']));
+            if (!in_array((int)$u['id'], $assigned, true)) {
+                throw new ApiException('not_assigned', '指名されていません', 403);
+            }
+        } elseif (!tasks_can_apply_to_grade($userGrade, $task['audience_grades'])) {
             throw new ApiException('audience', '対象外の学年です', 403);
+        }
 
         $approved = tasks_approved_count($pdo, $taskId);
         if ($approved >= (int)$task['capacity'])

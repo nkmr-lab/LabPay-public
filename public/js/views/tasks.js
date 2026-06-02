@@ -98,6 +98,13 @@ function toggleCreateForm(open = null) {
             </label>`).join('')}
         </div>
       </div>
+      <div class="field">
+        <span class="lbl">名指しで依頼 (任意・指定するとこの人だけが引き受け可能)</span>
+        <div id="t-assigned-picker" class="row" style="gap:6px; flex-wrap:wrap; min-height:32px">
+          <span class="muted" style="font-size:13px">読み込み中…</span>
+        </div>
+        <span class="muted" style="font-size:12px">空欄なら学年フィルタに従って誰でも引受可。1 人以上指名すると「この人達だけ」に絞られて本人に通知が飛びます。</span>
+      </div>
       <label class="field">
         <span class="lbl">ファイル添付 (任意・複数 OK / 1ファイル 50MB まで)</span>
         <input type="file" id="t-files" multiple
@@ -115,6 +122,37 @@ function toggleCreateForm(open = null) {
   `;
   document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(false));
   document.getElementById('t-submit').addEventListener('click', onCreate);
+  populateAssignedPicker();
+}
+
+// 指名タスクのメンバーピッカー (任意)。タップで toggle。
+const assignedPicked = new Set();
+async function populateAssignedPicker() {
+  assignedPicked.clear();
+  try {
+    const u = await get('/api/users');
+    const root = document.getElementById('t-assigned-picker');
+    if (!root) return;
+    root.innerHTML = u.items.map(x => `
+      <span class="rl-chip" data-uid="${x.id}" style="cursor:pointer">
+        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+        <span>${escapeHtml(x.display_name)}</span>
+        ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
+      </span>`).join('');
+    root.querySelectorAll('.rl-chip').forEach(c => {
+      c.addEventListener('click', () => {
+        const uid = Number(c.dataset.uid);
+        if (assignedPicked.has(uid)) {
+          assignedPicked.delete(uid);
+          c.style.background = ''; c.style.borderColor = '';
+        } else {
+          assignedPicked.add(uid);
+          c.style.background = 'var(--primary-soft, #efeafa)';
+          c.style.borderColor = 'var(--primary)';
+        }
+      });
+    });
+  } catch (_) { /* best-effort */ }
 }
 
 async function onCreate() {
@@ -139,6 +177,7 @@ async function onCreate() {
       completion_message: completion_message || null,
       reward, capacity, per_user_limit, deadline,
       audience_grades: aud,
+      assigned_user_ids: [...assignedPicked],
       slots_spec: slots_spec || null,
     });
     // Upload attachments after the task row is created so the task_id exists.
@@ -197,6 +236,9 @@ async function loadList() {
 // (orange), claimable (green), or neutral (gray).
 function renderRow(t) {
   const audTag = t.audience_grades ? `<span class="tag muted" style="margin-left:4px">${escapeHtml(t.audience_grades)}</span>` : '';
+  const assignedTag = t.assigned_user_ids
+    ? `<span class="tag" style="background:#fff8e6; color:#b54708; margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名タスク'}</span>`
+    : '';
   const statusTag = ({
     open: '<span class="tag">募集中</span>',
     closed: '<span class="tag muted">完了</span>',
@@ -232,7 +274,7 @@ function renderRow(t) {
       <div style="flex:1">
         <div>
           <a class="bold" href="#/tasks/${t.id}">${escapeHtml(t.title)}</a>
-          ${statusTag}${roleBadge}${pendingTag}${audTag}${deadlineTag}
+          ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
         ${progressLine}

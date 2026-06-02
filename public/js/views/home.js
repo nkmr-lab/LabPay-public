@@ -19,7 +19,7 @@ export async function renderHome() {
         <a class="btn primary" href="#/buy">買う</a>
         <a class="btn" href="#/sell">売る</a>
         <a class="btn" href="#/tasks">タスク</a>
-        <a class="btn" href="#/send">送る</a>
+        <a class="btn" href="#/requests">請求</a>
       </div>
     </div>
 
