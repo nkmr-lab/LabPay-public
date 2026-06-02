@@ -380,8 +380,17 @@ async function loadDetail(id) {
         <div style="margin-top:8px; padding:8px 10px; background:#fff8e6; border-radius:6px">
           <div class="bold">あなたの支払額: ¥${Number(myRow.amount_yen).toLocaleString()}</div>
           ${myRow.paid_at
-            ? `<div class="meta">✅ 支払い済 (${escapeHtml(METHOD_LABEL[myRow.paid_method] || myRow.paid_method)}) · ${escapeHtml(myRow.paid_at)}
-                 <button id="mr-unpay" style="margin-left:8px; padding:4px 8px">取消</button></div>`
+            ? `<div class="meta">✅ 支払い済 (${escapeHtml(METHOD_LABEL[myRow.paid_method] || myRow.paid_method)}) · ${escapeHtml(myRow.paid_at)}</div>
+               <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
+                 <button id="mr-correct" style="padding:4px 8px; font-size:13px">✏️ 方法を訂正</button>
+                 <button id="mr-unpay"   style="padding:4px 8px; font-size:13px">未払いに戻す</button>
+               </div>
+               <div id="mr-correct-picker" hidden class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
+                 <button data-pay="cash"   class="primary">現金で払った</button>
+                 <button data-pay="paypay">PayPay で払った</button>
+                 <button data-pay="bank">銀行振込で払った</button>
+                 <button data-pay="proxy">他の人に立替えてもらった</button>
+               </div>`
             : `<div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
                  <button data-pay="cash"   class="primary">現金で払った</button>
                  <button data-pay="paypay">PayPay で払った</button>
@@ -423,6 +432,13 @@ async function loadDetail(id) {
       b.addEventListener('click', () => onPay(id, b.dataset.pay, r));
     });
     document.getElementById('mr-unpay')?.addEventListener('click', () => onUnpay(id));
+    document.getElementById('mr-correct')?.addEventListener('click', () => {
+      // 訂正ボタン: 隠れていた method picker を出すだけ。タップ後は data-pay の
+      // 通常フローで /pay を再呼び出し → backend が paid_at の有無で訂正/新規を分岐。
+      const picker = document.getElementById('mr-correct-picker');
+      if (picker) picker.hidden = false;
+      document.getElementById('mr-correct')?.setAttribute('disabled', 'disabled');
+    });
     document.getElementById('mr-edit')?.addEventListener('click', () => openEdit(r));
     document.getElementById('mr-close')?.addEventListener('click', async () => {
       const paidCount = (r.recipients || []).filter(x => x.paid_at).length;
@@ -454,8 +470,10 @@ async function onPay(id, method, r) {
     if (!proxyId) { toast('user_id を入れてください'); return; }
   }
   try {
-    await patch(`/api/money-requests/${id}/pay`, { method, proxy_user_id: proxyId });
-    toast('支払い済にしました');
+    // backend が paid_at の有無を見て 「新規 / 訂正」 を自動判定し、
+    // res.corrected で結果を返す。toast はそれで切り替える。
+    const res = await patch(`/api/money-requests/${id}/pay`, { method, proxy_user_id: proxyId });
+    toast(res?.corrected ? '支払い方法を訂正しました' : '支払い済にしました');
     await loadDetail(id);
   } catch (e) { toast('失敗: ' + e.message); }
 }

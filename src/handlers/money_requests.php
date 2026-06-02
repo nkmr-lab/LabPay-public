@@ -294,6 +294,9 @@ function money_requests_close(PDO $pdo, array $cfg, int $id): void {
 }
 
 // ─── PAY / UNPAY (recipient) ─────────────────────────────────
+// pay は冪等に「上書き」 仕様: paid_at が既にある場合は paid_at を keep して
+// method/proxy/note だけ差し替える (「方法を間違えて記録した」 を後から訂正
+// するための経路)。通知も訂正用の文面に切り替えて creator に飛ばす。
 
 function money_requests_pay(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -312,7 +315,8 @@ function money_requests_pay(PDO $pdo, array $cfg, int $id): void {
     $note = isset($body['note']) ? mb_substr((string)$body['note'], 0, 500) : null;
 
     $st = $pdo->prepare("
-        SELECT rr.id, rr.amount_yen, r.title, r.creator_user_id
+        SELECT rr.id, rr.amount_yen, rr.paid_at, rr.paid_method,
+               r.title, r.creator_user_id
           FROM money_request_recipients rr
           JOIN money_requests r ON r.id = rr.request_id
          WHERE rr.request_id = ? AND rr.user_id = ?");
@@ -320,17 +324,31 @@ function money_requests_pay(PDO $pdo, array $cfg, int $id): void {
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'あなた宛の請求が見つかりません', 404);
 
-    $pdo->prepare("UPDATE money_request_recipients
-        SET paid_at = NOW(), paid_method = ?, paid_proxy_user_id = ?, paid_note = ?
-        WHERE id = ?")->execute([$method, $proxyId, $note, $row['id']]);
+    $isCorrection = $row['paid_at'] !== null;
+    $oldMethodLabel = $isCorrection ? Labels::paymentMethod((string)$row['paid_method']) : null;
 
-    // creator に通知
+    if ($isCorrection) {
+        // 訂正: 初回マークした時刻を keep。method/proxy/note のみ差し替える。
+        $pdo->prepare("UPDATE money_request_recipients
+            SET paid_method = ?, paid_proxy_user_id = ?, paid_note = ?
+            WHERE id = ?")->execute([$method, $proxyId, $note, $row['id']]);
+    } else {
+        $pdo->prepare("UPDATE money_request_recipients
+            SET paid_at = NOW(), paid_method = ?, paid_proxy_user_id = ?, paid_note = ?
+            WHERE id = ?")->execute([$method, $proxyId, $note, $row['id']]);
+    }
+
+    // creator に通知。訂正と新規で文面を切り替え、誤通知の二重化を避ける。
     if ((int)$row['creator_user_id'] !== (int)$u['id']) {
         $methodLabel = Labels::paymentMethod($method);
-        $msg = "💰 「{$row['title']}」: {$u['display_name']} から ¥" . number_format((int)$row['amount_yen']) . " ({$methodLabel}) 支払い済";
+        if ($isCorrection) {
+            $msg = "✏️ 「{$row['title']}」: {$u['display_name']} が支払い方法を訂正 ({$oldMethodLabel} → {$methodLabel})";
+        } else {
+            $msg = "💰 「{$row['title']}」: {$u['display_name']} から ¥" . number_format((int)$row['amount_yen']) . " ({$methodLabel}) 支払い済";
+        }
         notify_safely($pdo, $cfg, (int)$row['creator_user_id'], 'admin_notice', $msg, 'money_request', $id);
     }
-    json_response(['ok' => true]);
+    json_response(['ok' => true, 'corrected' => $isCorrection]);
 }
 
 function money_requests_unpay(PDO $pdo, array $cfg, int $id): void {
