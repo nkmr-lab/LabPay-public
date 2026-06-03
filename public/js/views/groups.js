@@ -232,7 +232,16 @@ export function wireCoverEditor({ idPrefix, onChange }) {
 
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
-export function coverListItem({ href, image_url, title, meta, rightExtra = '' }) {
+export function coverListItem({ href, image_url, title, meta, rightExtra = '', members = null }) {
+  // 参加者アバター行。 8 人までアイコン、 残りは +N で省略。 members は
+  // {id, display_name, avatar_url} の配列。 null/空 ならアバター行を出さない。
+  const memberRow = (Array.isArray(members) && members.length)
+    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:2px; margin-top:4px; align-items:center">
+         ${members.slice(0, 8).map(m =>
+           `<span title="${escapeHtml(m.display_name || '')}">${avatarHtml(m.display_name, m.avatar_url, 'xs')}</span>`).join('')}
+         ${members.length > 8 ? `<span class="muted" style="font-size:11px; margin-left:2px">+${members.length - 8}</span>` : ''}
+       </div>`
+    : '';
   if (image_url) {
     return `
       <a class="list-item with-cover" href="${href}">
@@ -240,6 +249,7 @@ export function coverListItem({ href, image_url, title, meta, rightExtra = '' })
         <div class="grow">
           <div class="bold">${title}</div>
           <div class="meta">${meta}</div>
+          ${memberRow}
         </div>
         ${rightExtra}
       </a>`;
@@ -249,6 +259,7 @@ export function coverListItem({ href, image_url, title, meta, rightExtra = '' })
       <div class="grow">
         <div class="bold">${title}</div>
         <div class="meta">${meta}</div>
+        ${memberRow}
       </div>
       <div class="hint">→</div>
       ${rightExtra}
@@ -268,6 +279,7 @@ async function loadList() {
       image_url: g.image_url,
       title: escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
       meta: `${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}`,
+      members: g.members || [],
     })).join('');
   } catch (e) {
     document.getElementById('gr-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;

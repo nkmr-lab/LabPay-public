@@ -103,6 +103,6 @@ export function avatarHtml(displayName, avatarUrl, size = 'sm') {
   const cls = 'avatar-' + size;
   if (avatarUrl) return `<img class="avatar ${cls}" src="${escapeHtml(avatarUrl)}" alt="">`;
   const ch = (displayName || '?').trim().charAt(0).toUpperCase();
-  const fontSize = size === 'lg' ? '28px' : size === 'md' ? '16px' : '12px';
+  const fontSize = size === 'lg' ? '28px' : size === 'md' ? '16px' : size === 'xs' ? '10px' : '12px';
   return `<span class="avatar-fallback ${cls}" style="font-size:${fontSize}">${escapeHtml(ch)}</span>`;
 }

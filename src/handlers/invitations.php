@@ -44,7 +44,33 @@ function invitations_list(PDO $pdo, array $cfg): void {
                   COALESCE(i.starts_at, i.created_at) ASC,
                   i.id DESC");
     $st->execute([$u['id']]);
-    json_response(['items' => $st->fetchAll()]);
+    $items = $st->fetchAll();
+    // 各募集の参加者 avatar を 1 クエリで取って付ける (UI でリストに並べる用)。
+    if ($items) {
+        $ids = array_map(fn($r) => (int)$r['id'], $items);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $jst = $pdo->prepare("
+            SELECT j.invitation_id, u.id, u.display_name, u.avatar_url
+              FROM invitation_joins j
+              JOIN users u ON u.id = j.user_id
+             WHERE j.invitation_id IN ($place)
+             ORDER BY j.invitation_id, j.joined_at");
+        $jst->execute($ids);
+        $byInv = [];
+        foreach ($jst as $r) {
+            $iid = (int)$r['invitation_id'];
+            $byInv[$iid][] = [
+                'id'           => (int)$r['id'],
+                'display_name' => $r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+            ];
+        }
+        foreach ($items as &$it) {
+            $it['joins'] = $byInv[(int)$it['id']] ?? [];
+        }
+        unset($it);
+    }
+    json_response(['items' => $items]);
 }
 
 function invitations_detail(PDO $pdo, array $cfg, int $id): void {

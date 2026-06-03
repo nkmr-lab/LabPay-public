@@ -223,6 +223,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
+.avatar-xs   { width:18px; height:18px; }
 .avatar-sm   { width:24px; height:24px; }
 .avatar-md   { width:36px; height:36px; }
 .avatar-lg   { width:72px; height:72px; }

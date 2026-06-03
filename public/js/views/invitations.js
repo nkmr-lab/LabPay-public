@@ -137,12 +137,23 @@ function renderRow(i) {
     ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(i.description)}</div>`
     : '';
 
+  // 参加表明している人の avatar 列。 8 人まで、 残りは +N。
+  const joins = Array.isArray(i.joins) ? i.joins : [];
+  const joinAvatars = joins.length
+    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:2px; margin-top:4px; align-items:center">
+         ${joins.slice(0, 8).map(j =>
+           `<span title="${escapeHtml(j.display_name || '')}">${avatarHtml(j.display_name, j.avatar_url, 'xs')}</span>`).join('')}
+         ${joins.length > 8 ? `<span class="muted" style="font-size:11px; margin-left:2px">+${joins.length - 8}</span>` : ''}
+       </div>`
+    : '';
+
   return `
     <a class="list-item" href="#/invitations/${i.id}">
       <div class="grow">
         <div class="bold">${escapeHtml(i.title)} ${statusTag}</div>
         ${whenLine}${whereLine}${capLine}
         ${descBlock}
+        ${joinAvatars}
         <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:4px">
           ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
           ${escapeHtml(i.creator_name)} · ${escapeHtml(i.created_at)}

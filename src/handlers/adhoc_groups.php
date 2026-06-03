@@ -82,7 +82,34 @@ function groups_list(PDO $pdo, array $cfg): void {
           JOIN adhoc_group_members m ON m.group_id = g.id AND m.user_id = ?
          ORDER BY g.closed_at IS NULL DESC, g.created_at DESC LIMIT 100");
     $st->execute([$u['id']]);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // 各グループのメンバ avatar 一覧 (リスト UI で並べる用)。 N+1 を避けるため
+    // group_id IN (...) で 1 クエリにまとめる。
+    if ($items) {
+        $ids = array_map(fn($r) => (int)$r['id'], $items);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $mst = $pdo->prepare("
+            SELECT m.group_id, u.id, u.display_name, u.avatar_url
+              FROM adhoc_group_members m
+              JOIN users u ON u.id = m.user_id
+             WHERE m.group_id IN ($place)
+             ORDER BY m.group_id, m.id");
+        $mst->execute($ids);
+        $byGroup = [];
+        foreach ($mst as $r) {
+            $gid = (int)$r['group_id'];
+            $byGroup[$gid][] = [
+                'id'           => (int)$r['id'],
+                'display_name' => $r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+            ];
+        }
+        foreach ($items as &$it) {
+            $it['members'] = $byGroup[(int)$it['id']] ?? [];
+        }
+        unset($it);
+    }
+    json_response(['items' => $items]);
 }
 
 function groups_create(PDO $pdo, array $cfg): void {
