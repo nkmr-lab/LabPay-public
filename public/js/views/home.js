@@ -256,13 +256,68 @@ async function renderPresence() {
 // Google Calendar 予定。連携してない人にはカード自体を隠す。連携済みで
 // 「今日 0:00 〜 明日 24:00」 に予定があれば 5 件まで表示。Zoom/Meet URL
 // が拾えればその場でタップして join できるようリンクボタンを出す。
+//
+// 1 分ごとの auto-refresh で毎回 Google API を叩くと重いので
+// localStorage に { items, etags, timestamp } を 5 分 TTL で保存:
+//   - TTL 内 → サーバ問合せ skip、cache をそのまま使う
+//   - TTL 切れ → サーバへ /events?etags=<JSON> を投げ、サーバが
+//     Google に If-None-Match で revalidate。 全 cal 変更なしなら
+//     {not_modified:true} で返り cache を続投、変更あれば新 items + 新 etags。
+const CAL_CACHE_KEY = 'labpay-cal-events-cache';
+const CAL_CACHE_TTL_MS = 5 * 60 * 1000;
+function readCalCache() {
+  try {
+    const raw = localStorage.getItem(CAL_CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (!c || !Array.isArray(c.items)) return null;
+    return c;
+  } catch { return null; }
+}
+function writeCalCache(items, etags) {
+  try {
+    localStorage.setItem(CAL_CACHE_KEY, JSON.stringify({
+      items, etags: etags || {}, timestamp: Date.now()
+    }));
+  } catch {}
+}
+
 async function renderCalendarEvents() {
   const card = document.getElementById('home-calendar-card');
   const root = document.getElementById('home-calendar');
   if (!card || !root) return;
+  let items = null;
   try {
-    const data = await get('/api/me/calendar/events');
-    const items = (data.items || []).slice(0, 5);
+    const cache = readCalCache();
+    const fresh = cache && (Date.now() - cache.timestamp < CAL_CACHE_TTL_MS);
+    if (fresh) {
+      items = cache.items;
+    } else {
+      const etagsQuery = (cache && cache.etags && Object.keys(cache.etags).length)
+        ? JSON.stringify(cache.etags) : undefined;
+      const data = await get('/api/me/calendar/events',
+        etagsQuery ? { etags: etagsQuery } : undefined);
+      if (data && data.not_modified && cache) {
+        writeCalCache(cache.items, cache.etags); // bump timestamp
+        items = cache.items;
+      } else {
+        items = (data && data.items) || [];
+        writeCalCache(items, (data && data.etags) || {});
+      }
+    }
+  } catch (e) {
+    // 未連携 / fetch 失敗 / offline などはここに来る。
+    // cache が残ってればそれを使う、無ければカード非表示。
+    const cache = readCalCache();
+    if (cache && cache.items && cache.items.length) {
+      items = cache.items;
+    } else {
+      card.hidden = true;
+      return;
+    }
+  }
+  items = items.slice(0, 5);
+  try {
     if (!items.length) {
       // 連携はしてるけど予定なし → 「今日は予定なし」 と出す価値あり (連携が
       // 効いてることが分かる)。完全に隠すのではなく empty で表示。
@@ -318,8 +373,7 @@ async function renderCalendarEvents() {
         </div>`;
     }).join('');
   } catch (e) {
-    // 未連携 (409 calendar_not_connected) はカード非表示で OK。それ以外も
-    // 「連携してる人の Calendar が落ちた」 等は静かに隠す方が UX 良し。
+    // render 中の例外 (DOM 破壊 etc) は無視して隠す。
     card.hidden = true;
   }
 }

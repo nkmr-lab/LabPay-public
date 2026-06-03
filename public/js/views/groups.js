@@ -188,8 +188,8 @@ export function renderCoverEditor({ imageUrl, canEdit, idPrefix }) {
         <img src="${escapeHtml(imageUrl)}" alt="" style="width:100%; height:100%; object-fit:cover; display:block">
         ${canEdit ? `
           <div style="position:absolute; right:6px; bottom:6px; display:flex; gap:4px">
-            <button id="${ip}-cover-change" class="btn" style="padding:4px 10px; font-size:12px; background:rgba(255,255,255,0.92)">✏️ 変更</button>
-            <button id="${ip}-cover-clear"  class="btn" style="padding:4px 10px; font-size:12px; background:rgba(255,255,255,0.92)">🗑️ 削除</button>
+            <button id="${ip}-cover-change" class="btn" title="変更" style="padding:4px 8px; font-size:14px; background:rgba(255,255,255,0.92)">✏️</button>
+            <button id="${ip}-cover-clear"  class="btn" title="削除" style="padding:4px 8px; font-size:14px; background:rgba(255,255,255,0.92)">🗑️</button>
           </div>` : ''}
       </div>
       ${fileInput}
@@ -493,7 +493,7 @@ function renderItem(it, gid) {
     <div class="list-item" style="gap:10px; align-items:flex-start">
       <span title="${escapeHtml(it.author_name)}">${avatarHtml(it.author_name, it.author_avatar_url, 'sm')}</span>
       <div class="grow">
-        <div>${kindBadge ? kindBadge + ' ' : ''}${middle}</div>
+        <div>${middle}</div>
         ${when}
         <div class="meta" style="margin-top:4px">${escapeHtml(it.created_at)}</div>
       </div>

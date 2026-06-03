@@ -475,40 +475,73 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $timeMin = $today0->format(DateTime::RFC3339);
         $timeMax = $tomorrow24->format(DateTime::RFC3339);
 
+        // クライアントが送ってきた前回 ETag を per-calendar で受け取る (JSON)。
+        // 全 calendar が 304 (= 変更なし) なら not_modified を返してクライアントは
+        // cache をそのまま使う。 1 つでも変更があれば全 calendar を fetch し直す
+        // (一部 304 / 一部 200 を merge するのは複雑なので、すべて再取得する方を取った)。
+        $clientEtags = [];
+        if (!empty($_GET['etags'])) {
+            $j = json_decode((string)$_GET['etags'], true);
+            if (is_array($j)) $clientEtags = array_map('strval', $j);
+        }
         $token = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
-        $merged = [];
+        $perCal = [];
+        $allNotModified = !empty($clientEtags);
         foreach ($selected as $cid) {
             try {
-                $events = GoogleCalendar::listEvents($token, $cid, $timeMin, $timeMax);
-                foreach ($events as $e) {
-                    $start = $e['start']['dateTime'] ?? $e['start']['date'] ?? null;
-                    $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
-                    if (!$start) continue;
-                    $title = (string)($e['summary'] ?? '(無題)');
-                    if (calendar_filter_rules_match($filterRules, $title)) continue;
-                    $merged[] = [
-                        'id'       => (string)($e['id'] ?? ''),
-                        'calendar' => $cid,
-                        'title'    => $title,
-                        'start'    => $start,
-                        'end'      => $end,
-                        'all_day'  => !isset($e['start']['dateTime']),
-                        'location' => (string)($e['location'] ?? ''),
-                        'url'      => GoogleCalendar::extractMeetingUrl($e),
-                        'html_url' => (string)($e['htmlLink'] ?? ''),
-                    ];
-                }
+                $etagIn = $clientEtags[$cid] ?? null;
+                $r = GoogleCalendar::listEvents($token, $cid, $timeMin, $timeMax, $etagIn);
+                $perCal[$cid] = $r;
+                if ($r['status'] !== 304) $allNotModified = false;
             } catch (ApiException $exc) {
                 if ($exc->errCode === 'calendar_unauthorized') {
                     GoogleCalendar::disconnect($pdo, (int)$u['id']);
                     throw new ApiException('calendar_reauth', '再連携が必要です', 409);
                 }
-                // 個別 calendar の失敗 (権限剥奪など) は skip して他の calendar は出す。
+                // 個別 calendar の失敗は skip して他の calendar は出す。
+                $perCal[$cid] = null;
+                $allNotModified = false;
             }
         }
-        // start 昇順。
+        if ($allNotModified) {
+            json_response(['not_modified' => true]);
+            return;
+        }
+        // 304 の cal は items が無いので再 fetch (etag なし) してデータを得る。
+        foreach ($perCal as $cid => $r) {
+            if ($r !== null && $r['status'] === 304) {
+                try {
+                    $perCal[$cid] = GoogleCalendar::listEvents($token, $cid, $timeMin, $timeMax, null);
+                } catch (Throwable $_) { $perCal[$cid] = null; }
+            }
+        }
+        $merged = [];
+        $etags  = [];
+        foreach ($perCal as $cid => $r) {
+            if ($r === null || empty($r['items'])) continue;
+            $etags[$cid] = $r['etag'];
+            foreach ($r['items'] as $e) {
+                $start = $e['start']['dateTime'] ?? $e['start']['date'] ?? null;
+                $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
+                if (!$start) continue;
+                $title = (string)($e['summary'] ?? '(無題)');
+                if (calendar_filter_rules_match($filterRules, $title)) continue;
+                $merged[] = [
+                    'id'       => (string)($e['id'] ?? ''),
+                    'calendar' => $cid,
+                    'title'    => $title,
+                    'start'    => $start,
+                    'end'      => $end,
+                    'all_day'  => !isset($e['start']['dateTime']),
+                    'location' => (string)($e['location'] ?? ''),
+                    'url'      => GoogleCalendar::extractMeetingUrl($e),
+                    'html_url' => (string)($e['htmlLink'] ?? ''),
+                ];
+            }
+        }
         usort($merged, fn($a, $b) => strcmp($a['start'], $b['start']));
-        json_response(['items' => $merged]);
+        // etags は (object) でキャストして JSON で {} を出す (空 [] にならないよう)
+        json_response(['items' => $merged, 'etags' => (object)$etags]);
         return;
     }
     if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'DELETE') {

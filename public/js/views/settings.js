@@ -218,6 +218,7 @@ async function loadCalendar() {
           .map(b => b.dataset.cid);
         try {
           await patch('/api/me/calendar/selection', { ids });
+          try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
           toast('表示対象を更新');
         } catch (e) { toast('失敗: ' + e.message); }
       });

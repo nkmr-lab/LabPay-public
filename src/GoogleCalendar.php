@@ -149,17 +149,43 @@ class GoogleCalendar {
     }
 
     private static function get(string $url, string $accessToken): array {
+        $r = self::getWithMeta($url, $accessToken, null);
+        return $r['data'];
+    }
+
+    // ETag 対応の GET。If-None-Match を渡せて、レスポンスから ETag を読める。
+    // 戻り値: ['status' => 200|304, 'etag' => string, 'data' => array|null].
+    // 304 のとき data は null (body 無し)。
+    private static function getWithMeta(string $url, string $accessToken, ?string $ifNoneMatch): array {
+        $headers = ['Authorization: Bearer ' . $accessToken];
+        if ($ifNoneMatch !== null && $ifNoneMatch !== '') {
+            $headers[] = 'If-None-Match: ' . $ifNoneMatch;
+        }
+        $respHeaders = [];
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $accessToken],
+            CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_TIMEOUT        => 15,
+            CURLOPT_HEADERFUNCTION => function ($ch, $line) use (&$respHeaders) {
+                $pos = strpos($line, ':');
+                if ($pos !== false) {
+                    $name = strtolower(trim(substr($line, 0, $pos)));
+                    $value = trim(substr($line, $pos + 1));
+                    $respHeaders[$name] = $value;
+                }
+                return strlen($line);
+            },
         ]);
         $resp = curl_exec($ch);
-        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($resp === false) {
             throw new ApiException('calendar_api', 'calendar API transport failed', 502);
+        }
+        $etag = (string)($respHeaders['etag'] ?? '');
+        if ($http === 304) {
+            return ['status' => 304, 'etag' => $etag, 'data' => null];
         }
         if ($http === 401) {
             throw new ApiException('calendar_unauthorized', 'access token rejected', 401);
@@ -171,7 +197,7 @@ class GoogleCalendar {
         if (!is_array($data)) {
             throw new ApiException('calendar_api', 'calendar API non-JSON response', 502);
         }
-        return $data;
+        return ['status' => 200, 'etag' => $etag, 'data' => $data];
     }
 
     public static function listCalendars(string $accessToken): array {
@@ -187,8 +213,13 @@ class GoogleCalendar {
         ], $items);
     }
 
+    // ETag つきで events list を取得。 ifNoneMatch を渡すと Google が「変わって
+    // なければ 304」 を返す。 戻り値:
+    //   ['status' => 200, 'etag' => '...', 'items' => [...]]  ← 新データ
+    //   ['status' => 304, 'etag' => '...', 'items' => null]   ← 変更なし
     public static function listEvents(string $accessToken, string $calendarId,
-                                      string $timeMinIso, string $timeMaxIso): array {
+                                      string $timeMinIso, string $timeMaxIso,
+                                      ?string $ifNoneMatch = null): array {
         $url = 'https://www.googleapis.com/calendar/v3/calendars/'
              . rawurlencode($calendarId) . '/events?'
              . http_build_query([
@@ -198,8 +229,15 @@ class GoogleCalendar {
                  'orderBy'      => 'startTime',
                  'maxResults'   => 50,
              ]);
-        $data = self::get($url, $accessToken);
-        return $data['items'] ?? [];
+        $r = self::getWithMeta($url, $accessToken, $ifNoneMatch);
+        if ($r['status'] === 304) {
+            return ['status' => 304, 'etag' => $r['etag'], 'items' => null];
+        }
+        return [
+            'status' => 200,
+            'etag'   => $r['etag'],
+            'items'  => $r['data']['items'] ?? [],
+        ];
     }
 
     // event の description / location から Zoom / Meet URL を抽出。
