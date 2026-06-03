@@ -2,6 +2,7 @@ import { get, post } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
+import { coverListItem } from './groups.js';
 
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
@@ -640,34 +641,16 @@ async function renderMyGroups() {
     const items = d.items || [];
     if (!items.length) { card.hidden = true; return; }
     card.hidden = false;
-    // open は上に並ぶよう API 側でソート済み (closed_at IS NULL DESC, created_at DESC)。
-    // 過去 (closed) も同じカードに含めて [終了] バッジ付きで出す。
-    // 表紙画像があれば cover-style (左 110px) で、無ければ素のテキスト行で。
-    root.innerHTML = items.slice(0, 5).map(g => {
-      const title = escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : '');
-      const meta  = `${escapeHtml(g.creator_name)} · ${g.member_count}人`;
-      const href  = '#/groups/' + escapeHtml(g.slug || g.id);
-      if (g.image_url) {
-        return `
-          <a class="list-item with-cover" href="${href}">
-            <div class="cover-img" style="background-image:url('${escapeHtml(g.image_url)}')"></div>
-            <div class="grow">
-              <div class="bold">${title}</div>
-              <div class="meta">${meta}</div>
-            </div>
-          </a>`;
-      }
-      return `
-        <a class="list-item" href="${href}">
-          <div class="grow">
-            <div class="bold">${title}</div>
-            <div class="meta">${meta}</div>
-          </div>
-          <div class="hint">→</div>
-        </a>`;
-    }).join('');
+    // groups.js の coverListItem を共有 (avatar 行 + 表紙画像のオン/オフが
+    // 同じロジックでまとまる)。 closed は [終了] バッジ付きで同じカードに混ぜる。
+    root.innerHTML = items.slice(0, 5).map(g => coverListItem({
+      href:      '#/groups/' + escapeHtml(g.slug || g.id),
+      image_url: g.image_url,
+      title:     escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
+      meta:      `${escapeHtml(g.creator_name)} · ${g.member_count}人`,
+      members:   g.members || [],
+    })).join('');
   } catch (_) {
-    // Silent: groups are nice-to-have on home; failing should not break the page.
     card.hidden = true;
   }
 }
