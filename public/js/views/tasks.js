@@ -343,10 +343,11 @@ function renderRow(t) {
     borderColor = '#dadbe2';
   }
 
-  // pending_count は 「claimed + reported」 の合算。表記は 「完了待ち」 に統一
-  // (claimed = 作業中、reported = 報告済み承認まち、どちらも 「未完了」)。
-  // 個人の状態を 「承認待ち」 と呼ぶのは roleBadge と reportedClaims の所だけ。
-  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 完了待ち ${t.pending_count}` : ''}</div>`;
+  // 集計の表記は 「完了 X/Y · 完了待ち N」 に統一。「承認」 という単語は曖昧
+  // (受諾承認 vs 作業内容承認) なので、aggregate には使わない。承認まち
+  // (= 個人が報告した後の作業内容承認まち) だけ roleBadge と reportedClaims
+  // セクションで使い、それも 「自分が報告した後」 という単一文脈で限定する。
+  const progressLine = `<div class="meta">完了 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 完了待ち ${t.pending_count}` : ''}</div>`;
 
   return `
     <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">
