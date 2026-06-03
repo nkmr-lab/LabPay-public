@@ -12,6 +12,7 @@ export const LEDGER_TYPE_LABEL = {
   refund:          '返金',
   burn:            '消却',
   scrapbox_reward: 'Scrapbox編集ボーナス',
+  app_open_reward: 'アプリ起動ボーナス',
 };
 
 export function ledgerTypeLabel(type) {

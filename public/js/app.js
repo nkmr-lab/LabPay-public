@@ -70,6 +70,34 @@ export async function refreshUnread() {
     const d = await get('/api/notifications/unread_count');
     state.unread = d.unread || 0;
     renderChrome();
+    // 未読 0 になった瞬間にアプリ起動ボーナスを試す (1 日 1 回・サーバ側で冪等)。
+    if (state.unread === 0) tryAppOpenReward();
+  } catch (_) {}
+}
+
+// 「今日のアプリ起動ボーナス」 すでに試した日を localStorage に持っておく。
+// awarded / already_today を貰えた日はこれ以上 ping しない。 unread_pending /
+// fetch エラーは未着なので残しておいて、 次の refreshUnread でまた試す。
+const REWARD_CACHE_KEY = 'labpay-app-open-reward-date';
+function todayJST() {
+  // サーバ側は date('Y-m-d') (= JST。 PHP の default_timezone)。 ブラウザは
+  // ユーザ環境依存だが、 日本国内利用なので Asia/Tokyo に揃える。
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+async function tryAppOpenReward() {
+  const today = todayJST();
+  if (localStorage.getItem(REWARD_CACHE_KEY) === today) return;
+  try {
+    const r = await post('/api/me/app-open-reward', {});
+    if (r.awarded) {
+      toast(`🎁 アプリ起動ボーナス +${r.points}pt`);
+      localStorage.setItem(REWARD_CACHE_KEY, today);
+    } else if (r.reason === 'already_today' || r.reason === 'disabled') {
+      // 既に貰った / 機能無効。 今日はもう ping しない。
+      localStorage.setItem(REWARD_CACHE_KEY, today);
+    }
+    // unread_pending やネットワークエラーは cache しない (次の機会に再試行)。
   } catch (_) {}
 }
 

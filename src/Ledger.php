@@ -8,7 +8,7 @@ class Ledger {
     public const TYPES = [
         'initial','checkin','purchase','fee','reversal',
         'transfer','task_reward','deposit','refund','burn',
-        'scrapbox_reward',
+        'scrapbox_reward','app_open_reward',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

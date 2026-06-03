@@ -138,6 +138,66 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // POST /api/me/app-open-reward — 1 日 1 回、未読通知 0 の状態で叩かれた時のみ
+    // pt を出す。 既に今日もらってる / 未読がある場合は no-op (silent OK)。
+    // フロント側は通知バッジが 0 になるたびに ping する想定で、 冪等を確保する
+    // ため (user_id, awarded_on) PK で衝突したら 「もう貰った」 扱い。
+    if ($sub === 'app-open-reward' && $method === 'POST') {
+        $st = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id=? AND read_at IS NULL');
+        $st->execute([$u['id']]);
+        $unread = (int)$st->fetchColumn();
+        if ($unread > 0) {
+            json_response(['awarded' => false, 'reason' => 'unread_pending', 'unread' => $unread]);
+            return;
+        }
+        $today  = date('Y-m-d');
+        $points = (int)cfg_get($pdo, 'app_open_reward_pt', '5');
+        if ($points <= 0) {
+            json_response(['awarded' => false, 'reason' => 'disabled']);
+            return;
+        }
+        // 既に今日もらってる?
+        $chk = $pdo->prepare('SELECT 1 FROM app_open_rewards WHERE user_id=? AND awarded_on=?');
+        $chk->execute([$u['id'], $today]);
+        if ($chk->fetchColumn()) {
+            json_response(['awarded' => false, 'reason' => 'already_today']);
+            return;
+        }
+        $result = null;
+        try {
+            $pdo->beginTransaction();
+            // ledger 移転 (SYSTEM → user)。
+            $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
+            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
+            $ledgerId = Ledger::transfer($pdo, $sysAcc, $userAcc, $points,
+                'app_open_reward', 'app_open_reward', (int)$u['id'],
+                "アプリ起動ボーナス {$today}");
+            // 同じ日に 2 回 INSERT されないよう PK 衝突を握り潰す。
+            $ins = $pdo->prepare('INSERT INTO app_open_rewards (user_id, awarded_on, points, ledger_id)
+                VALUES (?,?,?,?)');
+            try {
+                $ins->execute([$u['id'], $today, $points, $ledgerId]);
+                $result = ['awarded' => true, 'points' => $points];
+            } catch (PDOException $e) {
+                // 並行 POST で衝突した場合は ledger を巻き戻す。
+                if ($e->getCode() === '23000') {
+                    $pdo->rollBack();
+                    json_response(['awarded' => false, 'reason' => 'already_today']);
+                    return;
+                }
+                throw $e;
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+        $bal = Ledger::balanceOf($pdo, Ledger::accountIdForUser($pdo, (int)$u['id']));
+        $result['new_balance'] = $bal;
+        json_response($result);
+        return;
+    }
+
     if ($sub === 'achievements' && $method === 'GET') {
         $items = Achievements::reportFor($pdo, (int)$u['id']);
         json_response(['items' => $items]);
