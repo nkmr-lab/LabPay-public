@@ -59,14 +59,6 @@ export async function renderHome() {
       <div id="home-groups" class="list"></div>
     </div>
 
-    <div class="card" id="home-invs-card" hidden>
-      <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">募集</h2>
-        <a href="#/invitations" class="hint">一覧 →</a>
-      </div>
-      <div id="home-invs" class="list"></div>
-    </div>
-
     <div class="card">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">新規入荷</h2>
@@ -90,13 +82,20 @@ export async function renderHome() {
       <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="home-invs-card" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">履歴</h2>
-        <a href="#/history" class="hint">すべて見る →</a>
+        <h2 class="row-title">募集</h2>
+        <a href="#/invitations" class="hint">一覧 →</a>
       </div>
-      <div id="recent" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-invs" class="list"></div>
     </div>
+
+    <details class="card">
+      <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
+        履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
+      </summary>
+      <div id="recent" class="list" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+    </details>
   `;
 
   await refreshFinancials({ silent: false });
