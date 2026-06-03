@@ -244,35 +244,41 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $duration = max(5, min(720, (int)($body['duration_minutes'] ?? 30)));
         $calendarId = trim((string)($body['calendar_id'] ?? 'primary'));
         if ($calendarId === '') $calendarId = 'primary';
-        // Zoom 側に渡す start_time は timezone 上のローカル時刻 (末尾 Z なし)。
-        $zoomStart = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
-        $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
-        $meeting = Zoom::createMeeting($zoomAccess, [
-            'topic'      => $topic,
-            'start_time' => $zoomStart,
-            'duration'   => $duration,
-            'timezone'   => 'Asia/Tokyo',
-        ]);
-        $joinUrl = (string)($meeting['join_url'] ?? '');
-        if ($joinUrl === '') {
-            throw new ApiException('zoom_api', 'Zoom did not return join_url', 502);
-        }
-        $passcode = (string)($meeting['password'] ?? '');
-        // Google Calendar 側のイベント
+        // with_zoom 省略 / true → Zoom MTG を一緒に作る (従来挙動)。
+        // false → カレンダー予定だけ作る (location/description は空)。
+        $withZoom = !array_key_exists('with_zoom', $body) || !empty($body['with_zoom']);
         $endDt = $startDt->modify('+' . $duration . ' minutes');
-        $descLines = [
-            'Zoom MTG',
-            $joinUrl,
-        ];
-        if ($passcode !== '') $descLines[] = 'パスコード: ' . $passcode;
-        if (!empty($meeting['id'])) $descLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+
+        $joinUrl = ''; $passcode = ''; $meeting = null;
+        if ($withZoom) {
+            // Zoom 側に渡す start_time は timezone 上のローカル時刻 (末尾 Z なし)。
+            $zoomStart  = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
+            $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+            $meeting = Zoom::createMeeting($zoomAccess, [
+                'topic'      => $topic,
+                'start_time' => $zoomStart,
+                'duration'   => $duration,
+                'timezone'   => 'Asia/Tokyo',
+            ]);
+            $joinUrl = (string)($meeting['join_url'] ?? '');
+            if ($joinUrl === '') {
+                throw new ApiException('zoom_api', 'Zoom did not return join_url', 502);
+            }
+            $passcode = (string)($meeting['password'] ?? '');
+        }
+
         $event = [
-            'summary'     => $topic,
-            'location'    => $joinUrl,
-            'description' => implode("\n", $descLines),
-            'start'       => ['dateTime' => $startDt->format(DateTimeImmutable::RFC3339), 'timeZone' => 'Asia/Tokyo'],
-            'end'         => ['dateTime' => $endDt->format(DateTimeImmutable::RFC3339),   'timeZone' => 'Asia/Tokyo'],
+            'summary' => $topic,
+            'start'   => ['dateTime' => $startDt->format(DateTimeImmutable::RFC3339), 'timeZone' => 'Asia/Tokyo'],
+            'end'     => ['dateTime' => $endDt->format(DateTimeImmutable::RFC3339),   'timeZone' => 'Asia/Tokyo'],
         ];
+        if ($withZoom) {
+            $descLines = ['Zoom MTG', $joinUrl];
+            if ($passcode !== '')        $descLines[] = 'パスコード: ' . $passcode;
+            if (!empty($meeting['id']))  $descLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+            $event['location']    = $joinUrl;
+            $event['description'] = implode("\n", $descLines);
+        }
         $calAccess = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
         try {
             $created = GoogleCalendar::createEvent($calAccess, $calendarId, $event);
@@ -283,16 +289,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
             throw $e;
         }
-        // localStorage キャッシュを無効化させたいので events cache invalidation
-        // フラグを返す。 フロント側で消す。
         json_response([
             'ok'         => true,
             'invalidate_calendar_cache' => true,
-            'zoom'       => [
+            'zoom'       => $withZoom ? [
                 'meeting_id' => $meeting['id']    ?? null,
                 'join_url'   => $joinUrl,
                 'password'   => $passcode,
-            ],
+            ] : null,
             'event'      => [
                 'id'        => (string)($created['id']       ?? ''),
                 'html_link' => (string)($created['htmlLink'] ?? ''),

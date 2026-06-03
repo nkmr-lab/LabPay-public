@@ -102,7 +102,7 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
-        <button id="home-mtg-new" class="btn primary" style="padding:3px 10px; font-size:12px">＋ Zoom MTG</button>
+        <button id="home-mtg-new" class="btn primary" style="padding:3px 10px; font-size:12px">＋ MTG</button>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>
@@ -467,10 +467,19 @@ async function renderCalendarEvents() {
   }
 }
 
-// ──── 「＋ Zoom MTG」 modal ──────────────────────────────────────────────
+// ──── 「＋ MTG」 modal ─────────────────────────────────────────────────
 // 出先で 「今 30 分後に 30 分の MTG やろう」 を 1 タップで作るための簡易フォーム。
-// 今 / +15 / +30 / +60 分後 のショートカット + タイトル + 長さ 30/45/60。
-// サーバ側で Zoom create_meeting → Google Calendar create event の 2 段。
+// 今 / +15 / +30 / +60 分後 のショートカット + タイトル + 長さ + 登録先カレンダー
+// + 「Zoom も付ける」 toggle。 Zoom OFF にすれば 普通の Google Calendar 予定だけ作成。
+let CACHED_CALENDARS = null;
+async function getCalendarsCached() {
+  if (CACHED_CALENDARS) return CACHED_CALENDARS;
+  try {
+    const d = await get('/api/me/calendar/calendars');
+    CACHED_CALENDARS = Array.isArray(d.items) ? d.items : [];
+  } catch { CACHED_CALENDARS = []; }
+  return CACHED_CALENDARS;
+}
 function openMtgModal() {
   const root = document.getElementById('home-mtg-modal');
   if (!root) return;
@@ -484,7 +493,7 @@ function openMtgModal() {
          id="mtg-overlay">
       <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px">
         <div class="row center">
-          <h3 class="row-title">Zoom MTG を立てる</h3>
+          <h3 class="row-title">MTG を立てる</h3>
           <button id="mtg-close">×</button>
         </div>
         <label class="field" style="margin-top:8px">
@@ -512,10 +521,19 @@ function openMtgModal() {
             <option value="120">2 時間</option>
           </select>
         </label>
-        <div class="hint-sm" style="margin:6px 0">
-          作成すると Zoom MTG が生成され、 Google Calendar (primary) に予定が立ちます。
-          参加 URL は予定の場所欄に入ります。
-        </div>
+        <label class="field">
+          <span class="lbl">登録先カレンダー</span>
+          <select id="mtg-calendar">
+            <option value="primary">(読み込み中…)</option>
+          </select>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
+          <span class="switch">
+            <input type="checkbox" id="mtg-zoom" checked>
+            <span class="slider"></span>
+          </span>
+          <span>📹 Zoom MTG を含める <span class="hint-sm">— OFF なら予定だけ作成</span></span>
+        </label>
         <div id="mtg-error" class="muted" style="color:var(--danger); margin:6px 0; min-height:18px"></div>
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
           <button id="mtg-cancel">キャンセル</button>
@@ -538,24 +556,47 @@ function openMtgModal() {
       document.getElementById('mtg-start').value = fmtLocal(t);
     });
   });
+  // カレンダー一覧を非同期で埋める。 modal はすぐ出して 「読み込み中…」 を後で
+  // 置換する流れにし、 ネットワーク遅延でフォーム操作が止まらないように。
+  (async () => {
+    const cals = await getCalendarsCached();
+    const sel = document.getElementById('mtg-calendar');
+    if (!sel) return; // modal 閉じられた
+    if (!cals.length) {
+      sel.innerHTML = `<option value="primary">primary</option>`;
+      return;
+    }
+    // primary を先頭、 残りは name 順。
+    const sorted = [...cals].sort((a, b) => {
+      if (a.primary && !b.primary) return -1;
+      if (!a.primary && b.primary) return 1;
+      return (a.summary || '').localeCompare(b.summary || '', 'ja');
+    });
+    sel.innerHTML = sorted.map(c => {
+      const label = (c.summary || c.id) + (c.primary ? ' (メイン)' : '');
+      return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
+    }).join('');
+  })();
   document.getElementById('mtg-create').addEventListener('click', async () => {
     const btn   = document.getElementById('mtg-create');
     const errEl = document.getElementById('mtg-error');
     errEl.textContent = '';
-    const topic    = document.getElementById('mtg-topic').value.trim();
-    const startRaw = document.getElementById('mtg-start').value;
-    const duration = Number(document.getElementById('mtg-duration').value);
+    const topic       = document.getElementById('mtg-topic').value.trim();
+    const startRaw    = document.getElementById('mtg-start').value;
+    const duration    = Number(document.getElementById('mtg-duration').value);
+    const calendar_id = document.getElementById('mtg-calendar').value || 'primary';
+    const with_zoom   = document.getElementById('mtg-zoom').checked;
     if (!topic)    { errEl.textContent = 'タイトルを入れてください'; return; }
     if (!startRaw) { errEl.textContent = '開始時刻を入れてください'; return; }
-    // datetime-local の値は 「YYYY-MM-DDTHH:MM」 (timezone なし)。 JST と解釈。
     const start = startRaw + ':00+09:00';
     btn.disabled = true; btn.textContent = '作成中…';
     try {
-      const r = await post('/api/me/calendar/events', { topic, start, duration_minutes: duration });
+      const r = await post('/api/me/calendar/events',
+        { topic, start, duration_minutes: duration, calendar_id, with_zoom });
       if (r.invalidate_calendar_cache) {
         try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
       }
-      toast('Zoom MTG を作成しました');
+      toast(with_zoom ? 'Zoom MTG を作成しました' : '予定を作成しました');
       close();
       await renderCalendarEvents();
     } catch (e) {
