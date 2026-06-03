@@ -93,7 +93,7 @@ function groups_list(PDO $pdo, array $cfg): void {
               FROM adhoc_group_members m
               JOIN users u ON u.id = m.user_id
              WHERE m.group_id IN ($place)
-             ORDER BY m.group_id, m.id");
+             ORDER BY m.group_id, m.joined_at, u.id");
         $mst->execute($ids);
         $byGroup = [];
         foreach ($mst as $r) {
