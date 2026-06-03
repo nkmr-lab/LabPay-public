@@ -335,23 +335,19 @@ export async function renderGroupDetail({ params }) {
     <div class="card" id="gd-wari-card">
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">ワリカ</h3>
-        <button id="gd-settle" class="primary">精算する</button>
+        <div class="row" style="gap:6px">
+          <button id="gd-wari-open-form" class="primary">＋ 支出を記録</button>
+          <button id="gd-settle" class="primary">精算する</button>
+        </div>
       </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
         立替えた支出を積み上げて、 最後にまとめて精算 (貸し借り) します。
       </p>
-      <div class="row" style="gap:10px; align-items:flex-start; flex-wrap:wrap">
-        <div style="flex:1; min-width:260px">
-          <h4 style="margin:0 0 4px">支払い登録</h4>
-          <div id="gd-wari-form"></div>
-        </div>
-        <div style="flex:1; min-width:260px">
-          <h4 style="margin:0 0 4px">支払いの記録</h4>
-          <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
-          <div id="gd-wari-list" class="list" style="margin-top:4px"></div>
-        </div>
-      </div>
+      <h4 style="margin:8px 0 4px">支払いの記録</h4>
+      <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
+      <div id="gd-wari-list" class="list" style="margin-top:4px"></div>
     </div>
+    <div id="gd-wari-form-modal" hidden></div>
 
     <div class="card" id="gd-spend-card" hidden>
       <h3 style="margin:0">支出情報 (個々人)</h3>
@@ -378,6 +374,7 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
+  document.getElementById('gd-wari-open-form')?.addEventListener('click', () => openWariFormModal(id));
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
   document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
@@ -572,10 +569,33 @@ async function fetchFxRate(ccy) {
 // Set of user_ids the next expense applies to. Initialized to all current
 // members when setWariMembers() runs; user deselects chips to exclude people.
 let wariFor = new Set();
+let wariFormOnSubmitted = null;
 
-function renderWariForm() {
+function openWariFormModal(gid) {
+  const root = document.getElementById('gd-wari-form-modal');
+  if (!root) return;
+  root.hidden = false;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" id="wfm-overlay">
+      <div style="background:#fff; border-radius:14px; max-width:420px; width:100%; padding:20px">
+        <div class="row center">
+          <h3 class="row-title">支出を記録</h3>
+          <button id="wfm-close">×</button>
+        </div>
+        <div id="gd-wari-form"></div>
+      </div>
+    </div>`;
+  const close = () => { root.hidden = true; root.innerHTML = ''; };
+  document.getElementById('wfm-close').addEventListener('click', close);
+  document.getElementById('wfm-overlay').addEventListener('click', (e) => { if (e.target.id === 'wfm-overlay') close(); });
+  renderWariForm({ onSubmitted: close });
+}
+
+function renderWariForm(opts = {}) {
   const root = document.getElementById('gd-wari-form');
   if (!root) return;
+  // 提出 success 時に modal を閉じるためのフック。
+  wariFormOnSubmitted = opts.onSubmitted || null;
   // OTHER は最後の sentinel。選ぶと自由入力欄が現れる。
   const ccyOpts = [...CURRENCIES, 'OTHER'].map(c =>
     `<option value="${c}">${c === 'OTHER' ? 'その他…' : c}</option>`).join('');
@@ -881,6 +901,11 @@ async function onAddExpense() {
     renderForPicker();
     toast('記録しました');
     await loadWari(gid);
+    if (typeof wariFormOnSubmitted === 'function') {
+      const cb = wariFormOnSubmitted;
+      wariFormOnSubmitted = null;
+      cb();
+    }
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
@@ -888,7 +913,6 @@ let currentGroupId = 0;
 
 async function loadWari(id) {
   currentGroupId = id;
-  if (!wariMembers.length) renderWariForm();
   const root = document.getElementById('gd-wari-list');
   const summary = document.getElementById('gd-wari-summary');
   if (!root || !summary) return;
@@ -1446,9 +1470,9 @@ async function loadSchedule(gid) {
     <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0">
       <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
       <div class="schedule-items" style="margin-top:6px">
-        ${stockItems.map(it => renderSchedItem({ ...it, _occ: 'single' })).join('') || '<div class="empty" style="padding:6px">候補なし。 下の 「＋ 候補を追加」 で。</div>'}
+        ${stockItems.map(it => renderSchedItem({ ...it, _occ: 'single' })).join('') || '<div class="empty" style="padding:6px">候補なし。 編集モードで 「＋ 候補を追加」。</div>'}
       </div>
-      <button class="btn primary" id="gd-sched-add-stock" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 候補を追加</button>
+      ${schedEditMode ? `<button class="btn primary" id="gd-sched-add-stock" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 候補を追加</button>` : ''}
     </details>` : '';
 
   body.innerHTML = `
@@ -1464,7 +1488,7 @@ async function loadSchedule(gid) {
           <div class="schedule-items" style="margin-top:6px">
             ${items.map(it => renderSchedItem(it)).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
           </div>
-          <button class="btn primary" data-add-sched-day="${date}" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 追加</button>
+          ${schedEditMode ? `<button class="btn primary" data-add-sched-day="${date}" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 追加</button>` : ''}
         </details>`;
     }).join('')}
   `;
@@ -1609,7 +1633,7 @@ function renderSchedItem(it) {
     ? schedPairStyleFromId(it.link_pair_id, isTransport)
     : null;
   const pairStrip = stripStyle
-    ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; bottom:0; width:20px; background:${stripStyle.color}; border-radius:10px; pointer-events:none"></div>`
+    ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; bottom:0; width:20px; background:${stripStyle.color}; pointer-events:none"></div>`
     : '';
   // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
   // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
