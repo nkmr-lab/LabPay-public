@@ -37,9 +37,6 @@ export async function renderHome() {
         </label>
       </div>
       <div id="presence" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
-      <div class="muted" style="font-size:11px; margin-top:6px; line-height:1.5">
-        🙈 スマホの Wi-Fi を OFF にしたり、MIND に接続すると検知されなくなります。
-      </div>
       <div style="text-align:right; margin-top:8px">
         <a href="#/activity" class="hint">ラボ滞在・活動マップ →</a>
       </div>
@@ -165,7 +162,8 @@ async function refreshFinancials({ silent }) {
   try {
     const me = await get('/api/me');
     const bal = document.getElementById('home-balance');
-    if (bal) bal.textContent = (me.balance ?? 0).toLocaleString() + ' pt';
+    // 数字は大きく、単位 pt は小さくサブ的に。CSS .balance-hero .num .num-unit。
+    if (bal) bal.innerHTML = `${(me.balance ?? 0).toLocaleString()}<span class="num-unit">pt</span>`;
     const sl = document.getElementById('streak-line');
     if (sl) {
       const s = me.streak || {};
@@ -420,7 +418,7 @@ async function renderFreshListings() {
     const items = (d.items || [])
       .slice()
       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-      .slice(0, 5);
+      .slice(0, 3);
     if (!items.length) {
       root.innerHTML = `<div class="empty">まだ出品はありません</div>`;
       return;

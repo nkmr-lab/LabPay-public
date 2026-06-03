@@ -14,13 +14,18 @@ export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <div style="text-align:right">
-        <button id="task-new" class="primary">+ 依頼する</button>
+      <div class="row" style="justify-content:flex-end; gap:6px">
+        <button id="task-new"    class="primary">+ 依頼する</button>
+        <button id="task-assign" class="btn">+ 割り当てる</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
         <span class="text-primary">●</span> 自分が依頼  ·
         <span style="color:#b54708">●</span> 引き受け中/承認待ち  ·
         <span style="color:#0e7c63">●</span> 受けられる
+      </p>
+      <p class="hint-sm" style="margin:6px 0 0">
+        <b>依頼する</b> = 募集型 (対象学年で公募 → 引き受けて完了報告) /
+        <b>割り当てる</b> = 指名型 (特定の人にアサイン、承諾不要で完了報告から)
       </p>
       <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
         <input type="checkbox" id="task-show-history" ${showHistory ? 'checked' : ''}>
@@ -31,7 +36,8 @@ export async function renderTasks() {
     <div id="task-list"><div class="muted">読み込み中…</div></div>
   `;
 
-  document.getElementById('task-new').addEventListener('click', () => toggleCreateForm());
+  document.getElementById('task-new')   .addEventListener('click', () => toggleCreateForm('request'));
+  document.getElementById('task-assign').addEventListener('click', () => toggleCreateForm('assign'));
   document.getElementById('task-show-history').addEventListener('change', (ev) => {
     showHistory = ev.currentTarget.checked;
     loadList();
@@ -39,22 +45,21 @@ export async function renderTasks() {
   await loadList();
 }
 
-function toggleCreateForm(open = null) {
-  const card = document.getElementById('task-form-card');
-  const shouldOpen = open !== null ? open : card.hidden;
-  if (!shouldOpen) { card.hidden = true; card.innerHTML = ''; return; }
+// 作成フォームのモード: 'request' (募集型) / 'assign' (指名型)。
+// renderForm の出し分けと onCreate のペイロード組み立てに使う。
+let createMode = null;
 
-  card.hidden = false;
-  card.innerHTML = `
-    <div class="card">
-      <h3>タスクを依頼する</h3>
-      <div class="muted" style="font-size:12px; background:#faf7fd; border-left:3px solid var(--primary); padding:8px 10px; margin-bottom:10px; line-height:1.7">
-        <b>これでできること:</b><br>
-        ・<b>対象を絞れる</b> — 学年指定 (B3/B4/M1/M2/D) または全員に出せる<br>
-        ・<b>作業 URL や詳細</b>を渡せる (PDF などのファイル添付も可)<br>
-        ・<b>時間枠で予定調整</b> — 例「6/15 11:00-15:00 30分刻み」と書くと枠ごとに 1人ずつ申込形式に<br>
-        ・<b>報酬 × 人数の pt が ESCROW に預けられます</b>。残高が足りないと依頼できません。承認した分だけ支払われ、取り消し時は未承認分が返金されます
-      </div>
+function toggleCreateForm(mode = null) {
+  const card = document.getElementById('task-form-card');
+  // 同じモードを再度押す or mode=null → 閉じる
+  if (mode === null || (createMode === mode && !card.hidden)) {
+    card.hidden = true; card.innerHTML = ''; createMode = null; return;
+  }
+  createMode = mode;
+  const isAssign = mode === 'assign';
+
+  // 共通フィールド
+  const commonTop = `
       <label class="field">
         <span class="lbl">タイトル</span>
         <input type="text" id="t-title" maxlength="200">
@@ -72,17 +77,27 @@ function toggleCreateForm(open = null) {
         <span class="lbl">完了時のメッセージ (任意)</span>
         <textarea id="t-cmsg" maxlength="2000" rows="2" placeholder="ありがとうございます!次もよろしくね"></textarea>
         <div class="hint-sm">承認時にやってくれた人へ表示されます (note 風)。</div>
-      </label>
-      <div class="row">
-        <label class="field grow">
-          <span class="lbl">報酬 (pt / 1人あたり、0 OK)</span>
-          <input type="number" id="t-reward" min="0" value="10">
-        </label>
-        <label class="field grow">
-          <span class="lbl">募集人数</span>
-          <input type="number" id="t-capacity" min="1" value="1">
-        </label>
-      </div>
+      </label>`;
+
+  // 報酬欄: 募集型は「報酬 + 募集人数」 2 列、指名型は「報酬」 1 列のみ。
+  const rewardRow = isAssign
+    ? `<label class="field">
+         <span class="lbl">報酬 (pt / 1人あたり、0 OK)</span>
+         <input type="number" id="t-reward" min="0" value="10">
+       </label>`
+    : `<div class="row">
+         <label class="field grow">
+           <span class="lbl">報酬 (pt / 1人あたり、0 OK)</span>
+           <input type="number" id="t-reward" min="0" value="10">
+         </label>
+         <label class="field grow">
+           <span class="lbl">募集人数</span>
+           <input type="number" id="t-capacity" min="1" value="1">
+         </label>
+       </div>`;
+
+  // 募集型のみ: 参加回数、時間枠、対象学年。
+  const requestOnly = isAssign ? '' : `
       <label class="field">
         <span class="lbl">1人あたりの参加可能回数</span>
         <select id="t-perlimit">
@@ -91,10 +106,6 @@ function toggleCreateForm(open = null) {
           <option value="5">5回まで</option>
           <option value="0">無制限</option>
         </select>
-      </label>
-      <label class="field">
-        <span class="lbl">締切 (任意・無指定なら無期限)</span>
-        <input type="datetime-local" id="t-deadline">
       </label>
       <label class="field">
         <span class="lbl">時間枠 (任意・指定すると枠ごとに 1 人ずつ募集)</span>
@@ -109,32 +120,61 @@ function toggleCreateForm(open = null) {
               <input type="checkbox" value="${g}" class="t-aud"> ${g}
             </label>`).join('')}
         </div>
-      </div>
+      </div>`;
+
+  // 指名型のみ: メンバーピッカー (必須)
+  const assignOnly = isAssign ? `
       <div class="field">
-        <span class="lbl">名指しで依頼 (任意・指定するとこの人だけが引き受け可能)</span>
+        <span class="lbl">割り当てる人 (必須・1 人以上)</span>
         <div id="t-assigned-picker" class="row" style="gap:6px; flex-wrap:wrap; min-height:32px">
           <span class="hint">読み込み中…</span>
         </div>
-        <span class="hint-sm">空欄なら学年フィルタに従って誰でも引受可。1 人以上指名すると「この人達だけ」に絞られて本人に通知が飛びます。</span>
-      </div>
+        <span class="hint-sm">承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認 で支払い。</span>
+      </div>` : '';
+
+  const deadline = `
+      <label class="field">
+        <span class="lbl">締切 (任意・無指定なら無期限)</span>
+        <input type="datetime-local" id="t-deadline">
+      </label>`;
+
+  const files = `
       <label class="field">
         <span class="lbl">ファイル添付 (任意・複数 OK / 1ファイル 50MB まで)</span>
         <input type="file" id="t-files" multiple
                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*">
         <span class="hint-sm">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
-      </label>
-      <div class="muted" style="font-size:12px; margin:4px 0 8px">
-        報酬 × 募集人数 が ESCROW に預けられます (取り消し時は未承認分が返金されます)。
+      </label>`;
+
+  const heading = isAssign ? 'タスクを割り当てる' : 'タスクを依頼する';
+  const intro = isAssign
+    ? `<b>指定した人に直接アサイン</b>します。承諾不要で 「やる人」 として登録され、本人に通知が飛びます。完了報告→承認の流れは募集型と同じ。
+       <br>・<b>報酬 × 指名人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`
+    : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
+       <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」 と書くと枠ごとに 1 人ずつ申込形式に。
+       <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
+
+  card.hidden = false;
+  card.innerHTML = `
+    <div class="card">
+      <h3>${heading}</h3>
+      <div class="muted" style="font-size:12px; background:#faf7fd; border-left:3px solid var(--primary); padding:8px 10px; margin-bottom:10px; line-height:1.7">
+        ${intro}
       </div>
-      <div class="row">
-        <button id="t-submit" class="primary">依頼する</button>
+      ${commonTop}
+      ${rewardRow}
+      ${deadline}
+      ${requestOnly}
+      ${assignOnly}
+      ${files}
+      <div class="row" style="margin-top:6px">
+        <button id="t-submit" class="primary">${isAssign ? '割り当てる' : '依頼する'}</button>
         <button id="t-cancel">キャンセル</button>
       </div>
-    </div>
-  `;
-  document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(false));
+    </div>`;
+  document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(null));
   document.getElementById('t-submit').addEventListener('click', onCreate);
-  populateAssignedPicker();
+  if (isAssign) populateAssignedPicker();
 }
 
 // 指名タスクのメンバーピッカー (任意)。タップで toggle。
@@ -168,30 +208,46 @@ async function populateAssignedPicker() {
 }
 
 async function onCreate() {
+  const isAssign = createMode === 'assign';
   const title = document.getElementById('t-title').value.trim();
   const url = document.getElementById('t-url').value.trim();
   const description = document.getElementById('t-desc').value.trim();
   const completion_message = document.getElementById('t-cmsg').value.trim();
   const reward   = Number(document.getElementById('t-reward').value);
-  const slots_spec = document.getElementById('t-slots').value.trim();
-  const capacity = Number(document.getElementById('t-capacity').value);
-  const per_user_limit = Number(document.getElementById('t-perlimit').value);
   const deadline = document.getElementById('t-deadline').value || null;
-  const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
   if (!title || !(reward >= 0)) { toast('タイトルと報酬を確認してください (0pt も OK)'); return; }
-  if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
+
+  // モード別ペイロード組み立て:
+  // * request: 募集人数 / per-user limit / 時間枠 / 対象学年 を含める
+  // * assign : assigned_user_ids を含め、capacity は backend が指名人数に強制セット
+  let payload = {
+    title,
+    url: url || null,
+    description: description || null,
+    completion_message: completion_message || null,
+    reward,
+    deadline,
+  };
+  if (isAssign) {
+    if (assignedPicked.size === 0) { toast('割り当てる人を 1 人以上選んでください'); return; }
+    payload.assigned_user_ids = [...assignedPicked];
+    payload.per_user_limit = 1;
+    payload.capacity = assignedPicked.size; // backend 側でも上書きされるが明示。
+  } else {
+    const slots_spec = document.getElementById('t-slots').value.trim();
+    const capacity = Number(document.getElementById('t-capacity').value);
+    const per_user_limit = Number(document.getElementById('t-perlimit').value);
+    const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
+    if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
+    payload.capacity = capacity;
+    payload.per_user_limit = per_user_limit;
+    payload.audience_grades = aud;
+    payload.slots_spec = slots_spec || null;
+  }
+
   try {
-    const created = await post('/api/tasks', {
-      title,
-      url: url || null,
-      description: description || null,
-      completion_message: completion_message || null,
-      reward, capacity, per_user_limit, deadline,
-      audience_grades: aud,
-      assigned_user_ids: [...assignedPicked],
-      slots_spec: slots_spec || null,
-    });
+    const created = await post('/api/tasks', payload);
     // Upload attachments after the task row is created so the task_id exists.
     // Failures here are surfaced but don't roll back the task — uploader can
     // retry from the task detail page (TODO: per-detail upload UI).
@@ -200,9 +256,10 @@ async function onCreate() {
       try { await uploadTaskAttachment(created.id, f); }
       catch (e) { attachFails++; console.warn('attach failed:', f.name, e); }
     }
+    const verb = isAssign ? '割り当てました' : '依頼しました';
     if (attachFails > 0) toast(`タスク作成 (添付 ${attachFails}件 失敗)`);
-    else toast('タスクを依頼しました' + (files.length ? ` (添付 ${files.length}件)` : ''));
-    toggleCreateForm(false);
+    else toast(`タスクを${verb}` + (files.length ? ` (添付 ${files.length}件)` : ''));
+    toggleCreateForm(null);
     await loadList();
     navigate('#/tasks');
   } catch (e) { toast('失敗: ' + e.message); }

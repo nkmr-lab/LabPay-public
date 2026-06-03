@@ -385,6 +385,8 @@ textarea { min-height: 80px; resize: vertical; }
   display: flex; align-items: baseline; justify-content: center; gap: 8px;
 }
 .balance-hero .num { font-size: 44px; font-weight: 800; color: var(--primary); letter-spacing: 1px; white-space: nowrap; }
+/* 単位 pt は数字より控えめに。letter-spacing は親から継承させず標準に戻す。 */
+.balance-hero .num .num-unit { font-size: 0.5em; margin-left: 4px; font-weight: 600; letter-spacing: normal; }
 .balance-hero .lbl { color: var(--muted); font-size: var(--text-md); }
 
 /* Medals strip inside balance-hero — compact one-line achievement summary */
