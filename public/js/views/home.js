@@ -493,7 +493,7 @@ async function renderCheckinArea() {
     root.innerHTML = `<div class="hint">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   } else {
-    root.innerHTML = `<div class="hint">今日はラボの稼働日ではないため、streak には影響しません。</div>
+    root.innerHTML = `<div class="hint">今日はラボの稼働日ではないため、連続ラボインボーナスには影響しません。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   }
 }
