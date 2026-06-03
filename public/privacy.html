@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>LabPay プライバシーポリシー</title>
+  <style>
+    :root { --primary:#4a106d; --muted:#6f6678; --line:#e4e0e9; --fg:#1b1820; --bg:#f6f4f8; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Helvetica Neue",Arial,"Yu Gothic","Meiryo",sans-serif;
+      font-size:16px; line-height:1.7; }
+    main { max-width:760px; margin:0 auto; padding:32px 20px 80px; }
+    h1 { font-size:28px; margin:0 0 4px; color:var(--primary); }
+    .subtitle { color:var(--muted); margin:0 0 28px; font-size:14px; }
+    h2 { font-size:20px; margin:36px 0 8px; color:var(--primary); padding-bottom:4px; border-bottom:1px solid var(--line); }
+    h3 { font-size:16px; margin:18px 0 6px; }
+    p, ul, ol { margin:6px 0 10px; }
+    ul, ol { padding-left:1.5em; }
+    li { margin:3px 0; }
+    code { background:#ede4f3; padding:1px 5px; border-radius:3px; font-size:0.9em; font-family:ui-monospace,Menlo,Consolas,monospace; }
+    .card { background:white; border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin:16px 0; }
+    .note { background:#fff8e6; border-left:4px solid #b54708; padding:10px 14px; border-radius:6px; font-size:14px; }
+    a { color:var(--primary); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>LabPay プライバシーポリシー</h1>
+  <p class="subtitle">最終更新: 2026年6月3日</p>
+
+  <h2>1. はじめに</h2>
+  <p>
+    LabPay (以下「本アプリ」) は、明治大学 中村研究室 (nkmr-lab) のメンバーが
+    研究室内で利用する非営利の内部ツールです。本ポリシーは、本アプリが収集・
+    利用するデータと、利用者の権利について説明します。本アプリは
+    <strong>研究室のメンバー以外には公開されていません</strong>。
+  </p>
+
+  <h2>2. 運営者・連絡先</h2>
+  <ul>
+    <li>運営者: 明治大学 総合数理学部 先端メディアサイエンス学科 中村研究室</li>
+    <li>運営責任者: 中村聡史 (Satoshi Nakamura)</li>
+    <li>連絡先メール: <a href="mailto:nakamura.satoshi@gmail.com">nakamura.satoshi@gmail.com</a></li>
+    <li>アプリ URL: <a href="https://pay.nkmr.io/">https://pay.nkmr.io/</a></li>
+  </ul>
+
+  <h2>3. 収集する情報</h2>
+
+  <h3>3.1 Google ログイン時に取得する情報</h3>
+  <p>本アプリは Google アカウントによる認証を採用しています。下記のスコープでのみ情報を取得します。</p>
+  <ul>
+    <li><code>openid</code> / <code>email</code> / <code>profile</code> — メールアドレス、表示名、プロフィール画像</li>
+  </ul>
+
+  <h3>3.2 Google Calendar 連携 (任意)</h3>
+  <p>
+    利用者が「設定」 画面から明示的に連携を許可した場合に限り、<code>https://www.googleapis.com/auth/calendar.readonly</code>
+    スコープを取得します。連携は任意で、連携しなくても本アプリは利用できます。
+  </p>
+
+  <h3>3.3 利用者がアプリ内で入力する情報</h3>
+  <ul>
+    <li>表示名、アバター画像 (任意)、Scrapbox ハンドル (任意)</li>
+    <li>研究室内 Wi-Fi に接続する端末の MAC アドレス (在室判定のため、利用者本人が登録)</li>
+    <li>商品の出品情報、購入・送金・タスクなどの活動履歴</li>
+    <li>バグ報告・機能要望のテキスト</li>
+  </ul>
+
+  <h3>3.4 自動的に記録される情報</h3>
+  <ul>
+    <li>本アプリへの API リクエスト履歴 (アクセス時刻、メソッド、パス、ステータス、IP アドレス、User-Agent)</li>
+    <li>研究室内 Wi-Fi スキャナによる端末検知記録 (登録 MAC のみ、研究室在室判定のため)</li>
+  </ul>
+
+  <h2>4. Google API データの取り扱い</h2>
+  <div class="note">
+    本アプリによる Google ユーザーデータの利用は、Google API Services
+    User Data Policy (Limited Use 要件を含む) に準拠します。
+  </div>
+
+  <h3>4.1 calendar.readonly スコープの利用範囲</h3>
+  <p>連携した Google Calendar データを下記の目的にのみ利用します。</p>
+  <ul>
+    <li>利用者本人のホーム画面上に「今日・明日の予定」 を表示する</li>
+    <li>利用者が選択した「表示対象カレンダー」のイベント一覧を取得する</li>
+    <li>イベントに含まれる Zoom / Google Meet URL を表示し、ワンタップで会議に参加できるようにする</li>
+  </ul>
+
+  <h3>4.2 やらないこと</h3>
+  <ul>
+    <li>取得した Calendar データを <strong>他のユーザーに表示しない</strong> (本人のホーム画面でのみ表示)</li>
+    <li>取得した Calendar データを <strong>第三者に提供・販売しない</strong></li>
+    <li>取得した Calendar データを <strong>広告や AI モデルの訓練に利用しない</strong></li>
+    <li>イベント本文・参加者情報を <strong>サーバー側で永続保存しない</strong> (リクエスト時に Google から取得して即時表示)</li>
+    <li>カレンダーの <strong>書き込み・編集・削除はしない</strong> (readonly スコープのみ)</li>
+  </ul>
+
+  <h3>4.3 トークンの保存</h3>
+  <p>
+    Google から発行された access_token / refresh_token は、本アプリのデータベースに
+    利用者単位で暗号化された通信経路で保存されます。これらは本人の Calendar API
+    呼び出しにのみ使用されます。利用者は設定画面から
+    <strong>いつでも連携を解除</strong> できます。
+  </p>
+
+  <h2>5. データの利用目的</h2>
+  <ul>
+    <li>研究室内のポイント (LabPay) 経済の運営 (出品・購入・送金・タスク報酬の記録)</li>
+    <li>研究室における在室状況の可視化 (本人および同僚)</li>
+    <li>研究室内で募集される予定 (お昼ご飯・スキー旅行など) の調整</li>
+    <li>請求 (集金)・割り勘の管理</li>
+    <li>利用者本人のスケジュール表示 (Google Calendar 連携時)</li>
+  </ul>
+
+  <h2>6. データの第三者提供</h2>
+  <p>本アプリは収集したデータを第三者に提供しません。例外:</p>
+  <ul>
+    <li>法令に基づく要請がある場合</li>
+    <li>利用者本人が表示を許可した範囲のデータ (例: 出品物の出品者名は研究室内の他メンバーに表示されます)</li>
+    <li>本アプリの運用に必要なインフラ事業者 (本アプリは自前サーバーで運用しており、外部 SaaS 上にユーザーデータは置いていません)</li>
+  </ul>
+
+  <h2>7. データの保管期間</h2>
+  <ul>
+    <li>利用者が研究室を卒業・退室した場合、本人の申し出により <strong>原則 30 日以内に</strong>個人を特定する情報を削除します</li>
+    <li>Google Calendar 連携トークンは、利用者が「連携を解除」 を押した時点で即座に DB から削除されます</li>
+    <li>API リクエストログは運用上必要な範囲 (90 日以内) で保管します</li>
+  </ul>
+
+  <h2>8. データ削除・連携解除の方法</h2>
+  <ol>
+    <li><strong>Google Calendar 連携の解除:</strong> 本アプリ内 「設定」 → 「Google Calendar 連携」 → 「連携を解除」 をタップ</li>
+    <li><strong>Google アカウント側からの取り消し:</strong> <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google アカウント &gt; サードパーティ アプリとサービス</a> から LabPay を選んで「アクセス権を取り消す」</li>
+    <li><strong>アカウント削除の依頼:</strong> 上記の連絡先メールに「LabPay アカウント削除希望」 と送ってください</li>
+  </ol>
+
+  <h2>9. セキュリティ</h2>
+  <ul>
+    <li>本アプリは HTTPS (TLS) でのみ通信します</li>
+    <li>セッションは HttpOnly + SameSite=Lax の Cookie で管理します</li>
+    <li>状態変更 API には X-Requested-With ヘッダーによる CSRF 対策を行っています</li>
+    <li>パスワードは保存しません (Google OAuth のみで認証)</li>
+  </ul>
+
+  <h2>10. 本ポリシーの改定</h2>
+  <p>
+    本ポリシーは、機能追加または法令の改定に応じて改定されることがあります。
+    重要な変更は研究室メンバーに事前に通知します。本ページ冒頭の
+    「最終更新」 日が改定日となります。
+  </p>
+
+  <h2>11. お問い合わせ</h2>
+  <p>
+    本ポリシーまたは本アプリに関するご質問は、上記の連絡先メールまで
+    お願いいたします。
+  </p>
+</main>
+</body>
+</html>
