@@ -147,6 +147,19 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   display: flex; flex-direction: column; justify-content: center;
   min-width: 0;
 }
+/* 画像なし出品のフォールバック — cover サイズに頭文字を大きく載せる。 */
+.list-item.with-cover > .cover-img.cover-img-fallback {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700; color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+/* ホームの 「＋ 新しく〜」 行 — 薄い背景で 「これは行動を促す行」 と分かる。 */
+.list .list-item.add-row {
+  background: var(--primary-soft);
+}
+/* ホームのカード非表示 — 設定 → ホームのカスタマイズ で外したカードに付く。
+   [hidden] 属性より強制したいので !important。 */
+.home-card-user-hidden { display: none !important; }
 
 /* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */

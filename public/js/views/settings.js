@@ -2,6 +2,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe } from '../app.js';
 import { uploadImage } from '../upload.js';
+import { HOME_CARDS, readHomeLayout, writeHomeLayout } from './home.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
@@ -80,6 +81,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>ホームのカスタマイズ</h3>
+      <p class="hint">
+        ホームに表示するカードと、その並び順を変えられます。チェックを外すと
+        非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
+      </p>
+      <div id="home-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
       <h3>Google Calendar 連携</h3>
       <p class="hint">
         連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
@@ -141,6 +151,7 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   document.getElementById('sb-add').addEventListener('click', onScrapboxAdd);
   await loadScrapboxHandles();
+  renderHomeLayoutEditor();
   await loadCalendar();
   await loadCalendarFilterRules();
 
@@ -154,6 +165,69 @@ export async function renderSettings() {
       document.getElementById('fb-body').value = '';
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+// ---------------- ホームのカスタマイズ ----------------
+// 表示順と非表示を localStorage (labpay-home-layout) に保存。ここで並べた結果を
+// home.js の applyHomeLayout が読んで反映する。 ↑ ↓ で順序、チェックで表示/非表示。
+function renderHomeLayoutEditor() {
+  const root = document.getElementById('home-layout-list');
+  if (!root) return;
+  const layout = readHomeLayout();
+  const knownIds = HOME_CARDS.map(c => c.id);
+  // 保存 order に無いものは末尾。 未知の id は捨てる。
+  const orderedIds = [
+    ...layout.order.filter(id => knownIds.includes(id)),
+    ...knownIds.filter(id => !layout.order.includes(id)),
+  ];
+  const hiddenSet = new Set(layout.hidden);
+
+  root.innerHTML = orderedIds.map((id, idx) => {
+    const card = HOME_CARDS.find(c => c.id === id);
+    if (!card) return '';
+    const visible = !hiddenSet.has(id);
+    const isFirst = idx === 0;
+    const isLast  = idx === orderedIds.length - 1;
+    return `
+      <div class="list-item" data-card-id="${escapeHtml(id)}" style="gap:6px; align-items:center">
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+          <input type="checkbox" class="hl-show" ${visible ? 'checked' : ''}>
+          <span class="bold">${escapeHtml(card.title)}</span>
+        </label>
+        <button class="hl-up"   ${isFirst ? 'disabled' : ''}>↑</button>
+        <button class="hl-down" ${isLast  ? 'disabled' : ''}>↓</button>
+      </div>`;
+  }).join('');
+
+  root.querySelectorAll('.list-item[data-card-id]').forEach(row => {
+    const id = row.dataset.cardId;
+    row.querySelector('.hl-show').addEventListener('change', (ev) => {
+      const l = readHomeLayout();
+      const set = new Set(l.hidden);
+      if (ev.target.checked) set.delete(id); else set.add(id);
+      l.hidden = [...set];
+      // order が未保存 (初回) ならここで現在順を確定して持たせる。
+      if (!l.order.length) l.order = orderedIds.slice();
+      writeHomeLayout(l);
+      // 即時反映の見せ場は home なので、 ここでは UI 整合だけ取り直す。
+      renderHomeLayoutEditor();
+    });
+    row.querySelector('.hl-up')  .addEventListener('click', () => moveCard(id, -1, orderedIds));
+    row.querySelector('.hl-down').addEventListener('click', () => moveCard(id, +1, orderedIds));
+  });
+}
+
+function moveCard(id, delta, currentOrder) {
+  const arr = currentOrder.slice();
+  const i = arr.indexOf(id);
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  const l = readHomeLayout();
+  l.order = arr;
+  writeHomeLayout(l);
+  renderHomeLayoutEditor();
 }
 
 // ---------------- Google Calendar ----------------

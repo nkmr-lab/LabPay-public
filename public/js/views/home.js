@@ -3,6 +3,61 @@ import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
 
+// 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
+// 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
+// データは localStorage に保存し、サーバ側には送らない。
+export const HOME_CARDS = [
+  { id: 'presence',       title: '今ラボにいる人' },
+  { id: 'calendar',       title: '今日の予定' },
+  { id: 'groups',         title: 'あなたのグループ' },
+  { id: 'fresh-listings', title: '新規入荷' },
+  { id: 'my-claims',      title: 'あなたが引き受け中のタスク' },
+  { id: 'fresh-tasks',    title: '新規タスク' },
+  { id: 'invitations',    title: '募集' },
+  { id: 'history',        title: '履歴' },
+];
+
+const HOME_LAYOUT_KEY = 'labpay-home-layout';
+export function readHomeLayout() {
+  try {
+    const j = JSON.parse(localStorage.getItem(HOME_LAYOUT_KEY) || '{}');
+    return {
+      order:  Array.isArray(j.order)  ? j.order  : [],
+      hidden: Array.isArray(j.hidden) ? j.hidden : [],
+    };
+  } catch { return { order: [], hidden: [] }; }
+}
+export function writeHomeLayout(layout) {
+  try {
+    localStorage.setItem(HOME_LAYOUT_KEY, JSON.stringify({
+      order:  Array.isArray(layout.order)  ? layout.order  : [],
+      hidden: Array.isArray(layout.hidden) ? layout.hidden : [],
+    }));
+  } catch {}
+}
+
+// 初期 render 後に呼ぶ。 #home-cards-region の中の data-card-id 持ち要素を
+// 保存された order に並び替え + hidden 指定のものに .home-card-user-hidden を付与。
+function applyHomeLayout() {
+  const region = document.getElementById('home-cards-region');
+  if (!region) return;
+  const layout = readHomeLayout();
+  const cards = Array.from(region.querySelectorAll(':scope > [data-card-id]'));
+  const knownIds = cards.map(c => c.dataset.cardId);
+  // 保存 order に無いカード (新規追加された機能など) は既定順のまま末尾に。
+  const orderedKnown = [
+    ...layout.order.filter(id => knownIds.includes(id)),
+    ...knownIds.filter(id => !layout.order.includes(id)),
+  ];
+  for (const id of orderedKnown) {
+    const el = cards.find(c => c.dataset.cardId === id);
+    if (el) region.appendChild(el);
+  }
+  for (const card of cards) {
+    card.classList.toggle('home-card-user-hidden', layout.hidden.includes(card.dataset.cardId));
+  }
+}
+
 export async function renderHome() {
   if (!state.me) await refreshMe();
   if (!state.me) { navigate('#/login'); return; }
@@ -25,7 +80,8 @@ export async function renderHome() {
       </div>
     </div>
 
-    <div class="card">
+    <div id="home-cards-region">
+    <div class="card" data-card-id="presence">
       <div class="row center">
         <h2 class="row-title">今ラボにいる人</h2>
         <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px" class="muted">
@@ -42,7 +98,7 @@ export async function renderHome() {
       </div>
     </div>
 
-    <div class="card" id="home-calendar-card" hidden>
+    <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
         <a href="#/settings" class="hint">設定 →</a>
@@ -50,7 +106,7 @@ export async function renderHome() {
       <div id="home-calendar" class="list"></div>
     </div>
 
-    <div class="card" id="home-groups-card" hidden>
+    <div class="card" id="home-groups-card" data-card-id="groups" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">あなたのグループ</h2>
         <a href="#/groups" class="hint">グループ一覧 →</a>
@@ -58,7 +114,7 @@ export async function renderHome() {
       <div id="home-groups" class="list"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-card-id="fresh-listings">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">新規入荷</h2>
         <a href="#/buy" class="hint">商品一覧 →</a>
@@ -66,14 +122,14 @@ export async function renderHome() {
       <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
-    <div class="card" id="home-my-claims-card" hidden>
+    <div class="card" id="home-my-claims-card" data-card-id="my-claims" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">あなたが引き受け中のタスク</h2>
       </div>
       <div id="home-my-claims" class="list"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-card-id="fresh-tasks">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">新規タスク</h2>
         <a href="#/tasks" class="hint">一覧 →</a>
@@ -81,7 +137,7 @@ export async function renderHome() {
       <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
-    <div class="card" id="home-invs-card">
+    <div class="card" id="home-invs-card" data-card-id="invitations">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">募集</h2>
         <a href="#/invitations" class="hint">一覧 →</a>
@@ -89,13 +145,15 @@ export async function renderHome() {
       <div id="home-invs" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
-    <details class="card">
+    <details class="card" data-card-id="history">
       <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
         履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
       </summary>
       <div id="recent" class="list" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
     </details>
+    </div>
   `;
+  applyHomeLayout();
 
   await refreshFinancials({ silent: false });
   await renderCheckinArea();
@@ -428,9 +486,14 @@ async function renderFreshInvitations() {
   try {
     const d = await get('/api/invitations', { status: 'open' });
     const open = d.items || [];
+    // ゼロでもカードは消さない (「＋ 新しく募集する」 動線を残すため)。
+    const addLink = `
+      <a class="list-item add-row" href="#/invitations">
+        <div class="grow bold" style="color:var(--primary)">＋ 新しく募集する</div>
+        <div class="hint">→</div>
+      </a>`;
     if (!open.length) {
-      // 募集ゼロでもカードは見せておく — 「ここから新規募集できる」 導線を維持。
-      root.innerHTML = `<div class="empty" style="padding:14px">募集中のものはありません<br><a href="#/invitations" class="hint">＋ 新しく募集する →</a></div>`;
+      root.innerHTML = addLink;
       return;
     }
     root.innerHTML = open.slice(0, 5).map(i => {
@@ -459,7 +522,7 @@ async function renderFreshInvitations() {
           </div>
           <div class="hint">→</div>
         </a>`;
-    }).join('');
+    }).join('') + addLink;
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -477,23 +540,34 @@ async function renderFreshListings() {
       root.innerHTML = `<div class="empty">まだ出品はありません</div>`;
       return;
     }
+    // グループ / 募集と同じ with-cover レイアウト (左 110px の表紙画像) で
+    // 新規入荷も大きく見せる。 残数が分かるようメタ行に 「在庫 N」 を入れる。
     root.innerHTML = items.map(l => {
       const priceTag = l.is_gift
-        ? `<div class="bold" style="color:#b71c50; white-space:nowrap">🎁 これどうぞ</div>`
-        : `<div class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</div>`;
-      // 商品サムネ — 画像あれば 40px 角、無ければ商品名の頭文字を載せた灰色プレースホルダ。
-      // 「タイル全部」じゃなく「左にちょこっと」入る程度に留めることで、テキスト中心の
-      // 「新規入荷」リストの空気感を残しつつ "あ、これ何だっけ" の認知を助ける。
+        ? `<div class="bold" style="color:#b71c50; white-space:nowrap; padding:8px 12px 0 0">🎁 これどうぞ</div>`
+        : `<div class="bold" style="color:var(--primary); white-space:nowrap; padding:8px 12px 0 0">${l.price.toLocaleString()} pt</div>`;
+      const qtyTag = (l.qty !== undefined && l.qty !== null) ? ` · 在庫 ${l.qty}` : '';
+      const meta = `${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(l.created_at)}`;
+      const href = `#/product/${encodeURIComponent(l.jan)}`;
+      if (l.image_url) {
+        return `
+          <a class="list-item with-cover" href="${href}">
+            <div class="cover-img" style="background-image:url('${escapeHtml(l.image_url)}')"></div>
+            <div class="grow">
+              <div class="bold">${escapeHtml(l.name)}</div>
+              <div class="meta">${meta}</div>
+            </div>
+            ${priceTag}
+          </a>`;
+      }
+      // 画像なし: 頭文字プレースホルダを cover サイズに引き伸ばす。
       const initial = (l.name || '?').trim().charAt(0).toUpperCase();
-      const thumb = l.image_url
-        ? `<img src="${escapeHtml(l.image_url)}" class="fresh-thumb" alt="">`
-        : `<div class="fresh-thumb fresh-thumb-fallback">${escapeHtml(initial)}</div>`;
       return `
-        <a class="list-item" href="#/product/${encodeURIComponent(l.jan)}" style="align-items:center; gap:10px">
-          ${thumb}
-          <div style="flex:1; min-width:0">
+        <a class="list-item with-cover" href="${href}">
+          <div class="cover-img cover-img-fallback">${escapeHtml(initial)}</div>
+          <div class="grow">
             <div class="bold">${escapeHtml(l.name)}</div>
-            <div class="meta">${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''} · ${escapeHtml(l.created_at)}</div>
+            <div class="meta">${meta}</div>
           </div>
           ${priceTag}
         </a>`;
@@ -541,8 +615,15 @@ async function renderFreshTasks() {
       myCard.hidden = true;
     }
 
+    // 「＋ 新しくタスクを設定する」 は常に出す。受けられるタスクがゼロでも、
+    // 「設定する」 という能動的な行動が一発でできるように。
+    const addLink = `
+      <a class="list-item add-row" href="#/tasks?new=request">
+        <div class="grow bold" style="color:var(--primary)">＋ 新しくタスクを設定する</div>
+        <div class="hint">→</div>
+      </a>`;
     if (!available.length) {
-      root.innerHTML = `<div class="empty">受けられるタスクはありません</div>`;
+      root.innerHTML = addLink;
       return;
     }
     root.innerHTML = available.map(t => `
@@ -556,7 +637,7 @@ async function renderFreshTasks() {
         </div>
         <div class=" bold text-primary">${t.reward}pt</div>
       </a>
-    `).join('');
+    `).join('') + addLink;
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

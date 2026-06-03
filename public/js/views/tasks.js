@@ -44,6 +44,14 @@ export async function renderTasks() {
     showHistory = ev.currentTarget.checked;
     loadList();
   });
+  // ホームの「＋ 新しくタスクを設定する」 経由など、 #/tasks?new=request / ?new=assign
+  // で来た場合は対応フォームを自動展開。query 部分はそのまま残しておくと再 render
+  // で毎回開いて鬱陶しいので、 URL を綺麗にしてから開く。
+  const m = (location.hash || '').match(/[?&]new=(request|assign)/);
+  if (m) {
+    history.replaceState(null, '', '#/tasks');
+    toggleCreateForm(m[1]);
+  }
   await loadList();
 }
 
