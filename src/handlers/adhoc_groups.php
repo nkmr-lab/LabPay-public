@@ -477,15 +477,16 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
     }
 
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 500) : null;
+    $imageUrl = validate_product_image_url($body['image_url'] ?? null);
     $amountOriginal = ($currency === 'JPY') ? null : (float)$amountRaw;
 
     $st = $pdo->prepare("INSERT INTO adhoc_group_expenses
         (group_id, payer_user_id, amount_jpy, amount_original, currency, rate_to_jpy,
-         memo, participants_json, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?)");
+         memo, image_url, participants_json, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?)");
     $st->execute([
         $id, $payerId, $amountJpy, $amountOriginal, $currency, $rate,
-        $memo, json_encode($participants), $u['id'],
+        $memo, $imageUrl, json_encode($participants), $u['id'],
     ]);
     $eid = (int)$pdo->lastInsertId();
 
@@ -524,6 +525,11 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
         $memo = ($body['memo'] === null || $body['memo'] === '')
             ? null : mb_substr((string)$body['memo'], 0, 500);
         $sets[] = 'memo = ?'; $args[] = $memo;
+    }
+    if (array_key_exists('image_url', $body)) {
+        $img = validate_product_image_url($body['image_url']);
+        if ($img === null) { $sets[] = 'image_url = NULL'; }
+        else               { $sets[] = 'image_url = ?'; $args[] = $img; }
     }
     if (array_key_exists('payer_user_id', $body)) {
         $pid = (int)$body['payer_user_id'];

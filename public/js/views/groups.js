@@ -476,25 +476,28 @@ function renderItem(it, gid) {
   const canDelete = Number(it.created_by_user_id) === Number(meId);
   const kindBadge = ({ memo: '📝', url: '🔗', time: '🕒' })[it.kind] || '';
   // URL + メモ両方 → メモをリンク化、URL は表示しない。
-  // URL のみ (メモなし)   → URL をそのままリンク表示。
-  // メモのみ            → プレーン表示。
+  // URL のみ          → URL をそのままリンク表示。
+  // メモのみ          → プレーン表示。
   const when = it.scheduled_at ? `<div class="meta">🕒 ${escapeHtml(it.scheduled_at)}</div>` : '';
   let middle = '';
   if (it.url && it.body) {
-    middle = `<div style="margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); white-space:pre-wrap">${escapeHtml(it.body)} ↗</a></div>`;
+    middle = `<div><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); white-space:pre-wrap">${escapeHtml(it.body)} ↗</a></div>`;
   } else if (it.url) {
-    middle = `<div style="margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); word-break:break-all">${escapeHtml(it.url)} ↗</a></div>`;
+    middle = `<div><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); word-break:break-all">${escapeHtml(it.url)} ↗</a></div>`;
   } else if (it.body) {
-    middle = `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(it.body)}</div>`;
+    middle = `<div style="white-space:pre-wrap">${escapeHtml(it.body)}</div>`;
   }
+  // 「アバター: 投稿内容 / 日付」 形式。投稿者名は冗長なので出さない (タップ
+  // すれば avatar の title 属性で確認できる)。
   return `
-    <div class="list-item">
+    <div class="list-item" style="gap:10px; align-items:flex-start">
+      <span title="${escapeHtml(it.author_name)}">${avatarHtml(it.author_name, it.author_avatar_url, 'sm')}</span>
       <div class="grow">
-        <div class="bold">${kindBadge} ${escapeHtml(it.author_name)}</div>
-        ${when}${middle}
+        <div>${kindBadge ? kindBadge + ' ' : ''}${middle}</div>
+        ${when}
         <div class="meta" style="margin-top:4px">${escapeHtml(it.created_at)}</div>
       </div>
-      ${canDelete ? `<div><button data-rm="${it.id}" class="danger" style="padding:4px 8px">×</button></div>` : ''}
+      ${canDelete ? `<button data-rm="${it.id}" class="btn" style="padding:2px 8px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>` : ''}
     </div>`;
 }
 
@@ -541,6 +544,13 @@ function renderWariForm() {
     </select>
     <div id="ex-for" style="margin-bottom:6px"></div>
     <input type="text" id="ex-memo" maxlength="500" placeholder="メモ (例: ランチ, タクシー)" style="margin-bottom:6px">
+    <label class="hint-sm" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px">
+      <span>📸 レシート (任意)</span>
+      <input type="file" id="ex-image-file" accept="image/*" style="font-size:11px">
+      <span id="ex-image-status"></span>
+    </label>
+    <input type="hidden" id="ex-image-url" value="">
+    <img id="ex-image-preview" alt="" hidden style="max-width:140px; max-height:140px; margin:0 0 6px; border-radius:6px; object-fit:contain; display:block; border:1px solid var(--line)">
     <div class="row" style="gap:6px">
       <button id="ex-submit" class="primary">支出を記録</button>
       <button id="gd-settle" class="btn">精算する</button>
@@ -564,6 +574,22 @@ function renderWariForm() {
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
   // 精算する: 別画面ではなく modal を開いて、貸し借りの清算プランを提示する。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(currentGroupId));
+  document.getElementById('ex-image-file').addEventListener('change', onExImageFile);
+}
+
+async function onExImageFile(ev) {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  const status = document.getElementById('ex-image-status');
+  status.textContent = 'アップロード中…';
+  try {
+    const data = await uploadImage(f);
+    document.getElementById('ex-image-url').value = data.url;
+    const prev = document.getElementById('ex-image-preview');
+    prev.src = data.url;
+    prev.hidden = false;
+    status.textContent = '✓ 完了';
+  } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
 // Last-fetched rate for the preset dropdown path. Cleared on currency change.
@@ -650,8 +676,9 @@ async function onAddExpense() {
   let currency = document.getElementById('ex-ccy').value;
   const payer_user_id = Number(document.getElementById('ex-payer').value);
   const memo = document.getElementById('ex-memo').value.trim() || null;
+  const image_url = document.getElementById('ex-image-url').value || null;
   if (!(amount > 0)) { toast('金額を入れてください'); return; }
-  const body = { amount, payer_user_id, memo };
+  const body = { amount, payer_user_id, memo, image_url };
   if (currency === 'OTHER') {
     const code = document.getElementById('ex-ccy-custom').value.trim();
     const manualRate = Number(document.getElementById('ex-rate-manual').value);
@@ -675,6 +702,10 @@ async function onAddExpense() {
     await post(`/api/groups/${gid}/expenses`, body);
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
+    document.getElementById('ex-image-file').value = '';
+    document.getElementById('ex-image-url').value = '';
+    document.getElementById('ex-image-preview').hidden = true;
+    document.getElementById('ex-image-status').textContent = '';
     wariFor = new Set(wariMembers.map(m => m.id));
     renderForPicker();
     toast('記録しました');
@@ -889,10 +920,17 @@ function renderExpense(e, gid) {
   const actions = canManage ? `
     <div style="display:flex; flex-direction:column; gap:4px">
       <button data-edit-ex="${e.id}" class="btn" style="padding:2px 6px; font-size:11px">編集</button>
-      <button data-rm-ex="${e.id}" class="danger" style="padding:2px 6px; font-size:11px">×</button>
+      <button data-rm-ex="${e.id}" class="btn" style="padding:2px 6px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>
     </div>` : '';
+  // レシート写真があれば左にサムネイル (タップで拡大表示は OS に任せる)。
+  const thumb = e.image_url
+    ? `<a href="${escapeHtml(e.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0">
+         <img src="${escapeHtml(e.image_url)}" alt="" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
+       </a>`
+    : '';
   return `
-    <div class="list-item">
+    <div class="list-item" style="gap:10px">
+      ${thumb}
       <div class="grow">
         <div class="bold">${escapeHtml(e.payer_name)} 立替: ¥${e.amount_jpy.toLocaleString()}${orig}</div>
         ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
