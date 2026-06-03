@@ -82,12 +82,12 @@ export async function renderHome() {
       <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
-    <div class="card" id="home-invs-card" hidden>
+    <div class="card" id="home-invs-card">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">募集</h2>
         <a href="#/invitations" class="hint">一覧 →</a>
       </div>
-      <div id="home-invs" class="list"></div>
+      <div id="home-invs" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
     <details class="card">
@@ -335,8 +335,11 @@ async function renderFreshInvitations() {
   try {
     const d = await get('/api/invitations', { status: 'open' });
     const open = d.items || [];
-    if (!open.length) { card.hidden = true; return; }
-    card.hidden = false;
+    if (!open.length) {
+      // 募集ゼロでもカードは見せておく — 「ここから新規募集できる」 導線を維持。
+      root.innerHTML = `<div class="empty" style="padding:14px">募集中のものはありません<br><a href="#/invitations" class="hint">＋ 新しく募集する →</a></div>`;
+      return;
+    }
     root.innerHTML = open.slice(0, 5).map(i => {
       const when = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
       const where = i.location ? `📍 ${escapeHtml(i.location)} ・` : '';
@@ -352,8 +355,8 @@ async function renderFreshInvitations() {
           <div class="hint">→</div>
         </a>`;
     }).join('');
-  } catch (_) {
-    card.hidden = true;
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
