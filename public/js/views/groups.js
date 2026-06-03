@@ -624,7 +624,13 @@ async function onReceiptFile(ev, gid) {
   const f = ev.target.files?.[0];
   ev.target.value = ''; // 同じファイルを連続選択できるよう reset
   if (!f) return;
-  const takenAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  // 撮影時刻 = ブラウザ ローカル時刻 (= 撮影者が今いる場所の時刻)。 toISOString
+  // だと UTC になってサーバ側で JST 扱いされて 9 時間ズレるので、 ローカル時刻
+  // を手で組み立てる。 MTG 立てる時の入力フォームと同じ規約。
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const takenAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `
+                + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   let lat = null, lng = null;
   if (navigator.geolocation) {
     try {
