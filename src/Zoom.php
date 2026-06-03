@@ -8,6 +8,12 @@
 declare(strict_types=1);
 
 class Zoom {
+    // Marketplace で許可済みの scope を明示的に要求する。 これを付けないと
+    // Zoom はトークンに scope を全く載せずに返してくる仕様で、 後で API が
+    // 「Invalid access token, does not contain scopes」 で落ちる。 スペース
+    // 区切りで複数 scope を渡せる。
+    public const SCOPES = 'meeting:write:meeting user:read:user';
+
     // 認可 URL を組み立てる。 state は CSRF 用のランダム文字列を呼び出し側で。
     public static function authorizeUrl(array $cfg, string $state): string {
         $redirect = self::redirectUri($cfg);
@@ -16,6 +22,7 @@ class Zoom {
             'client_id'     => (string)$cfg['zoom']['client_id'],
             'redirect_uri'  => $redirect,
             'state'         => $state,
+            'scope'         => self::SCOPES,
         ];
         return 'https://zoom.us/oauth/authorize?' . http_build_query($params);
     }
