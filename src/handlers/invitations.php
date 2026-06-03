@@ -85,6 +85,7 @@ function invitations_create(PDO $pdo, array $cfg): void {
     $location = isset($body['location'])    ? mb_substr((string)$body['location'], 0, 200) : null;
     $capacity = isset($body['capacity']) && $body['capacity'] !== '' && $body['capacity'] !== null
         ? max(1, min(1000, (int)$body['capacity'])) : null;
+    $imageUrl = validate_product_image_url($body['image_url'] ?? null);
     // starts_at: accept Y-m-d H:i:s or datetime-local (Y-m-d\TH:i)
     $startsAt = null;
     if (!empty($body['starts_at'])) {
@@ -94,9 +95,9 @@ function invitations_create(PDO $pdo, array $cfg): void {
         if ($dt) $startsAt = $dt->format('Y-m-d H:i:s');
     }
     $ins = $pdo->prepare("INSERT INTO invitations
-        (creator_user_id, title, description, starts_at, location, capacity)
-        VALUES (?,?,?,?,?,?)");
-    $ins->execute([$u['id'], $title, $desc, $startsAt, $location, $capacity]);
+        (creator_user_id, title, description, starts_at, location, capacity, image_url)
+        VALUES (?,?,?,?,?,?,?)");
+    $ins->execute([$u['id'], $title, $desc, $startsAt, $location, $capacity, $imageUrl]);
     $invId = (int)$pdo->lastInsertId();
 
     // Slack 通知: あれば

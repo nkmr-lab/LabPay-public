@@ -3,6 +3,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { uploadImage } from '../upload.js';
 
 export async function renderInvitations() {
   const app = document.getElementById('app');
@@ -38,6 +39,13 @@ export async function renderInvitations() {
         <span class="lbl">詳細 (任意)</span>
         <textarea id="inv-desc" maxlength="5000" rows="3" placeholder="集合場所・予算・装備など"></textarea>
       </label>
+      <label class="field">
+        <span class="lbl">表紙画像 (任意・タップで撮影 or アルバム選択)</span>
+        <input type="file" id="inv-image-file" accept="image/*">
+        <input type="hidden" id="inv-image-url" value="">
+        <img id="inv-image-preview" alt="" hidden style="max-width:140px; max-height:140px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
+        <div id="inv-image-status" class="hint-sm"></div>
+      </label>
       <button id="inv-add" class="primary">募集する</button>
     </details>
 
@@ -53,7 +61,23 @@ export async function renderInvitations() {
   `;
   document.getElementById('inv-add').addEventListener('click', onCreate);
   document.getElementById('inv-show-closed').addEventListener('change', loadList);
+  document.getElementById('inv-image-file').addEventListener('change', onInvImageFile);
   await loadList();
+}
+
+async function onInvImageFile(ev) {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  const status = document.getElementById('inv-image-status');
+  status.textContent = 'アップロード中…';
+  try {
+    const data = await uploadImage(f);
+    document.getElementById('inv-image-url').value = data.url;
+    const prev = document.getElementById('inv-image-preview');
+    prev.src = data.url;
+    prev.hidden = false;
+    status.textContent = '✓ アップロード完了';
+  } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
 async function loadList() {
@@ -237,9 +261,10 @@ async function onCreate() {
   const location = document.getElementById('inv-where').value.trim() || null;
   const capacity = document.getElementById('inv-cap').value;
   const description = document.getElementById('inv-desc').value.trim() || null;
+  const image_url = document.getElementById('inv-image-url').value || null;
   try {
     await post('/api/invitations', {
-      title, starts_at, location, description,
+      title, starts_at, location, description, image_url,
       capacity: capacity ? Number(capacity) : null,
     });
     document.getElementById('inv-title').value = '';
@@ -247,6 +272,9 @@ async function onCreate() {
     document.getElementById('inv-where').value = '';
     document.getElementById('inv-cap').value = '';
     document.getElementById('inv-desc').value = '';
+    document.getElementById('inv-image-url').value = '';
+    document.getElementById('inv-image-preview').hidden = true;
+    document.getElementById('inv-image-status').textContent = '';
     toast('募集しました');
     await loadList();
   } catch (e) { toast('失敗: ' + e.message); }

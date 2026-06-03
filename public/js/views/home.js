@@ -314,14 +314,30 @@ async function renderMyGroups() {
     card.hidden = false;
     // open は上に並ぶよう API 側でソート済み (closed_at IS NULL DESC, created_at DESC)。
     // 過去 (closed) も同じカードに含めて [終了] バッジ付きで出す。
-    root.innerHTML = items.slice(0, 5).map(g => `
-      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}">
-        <div class="grow">
-          <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
-          <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人</div>
-        </div>
-        <div class="hint">→</div>
-      </a>`).join('');
+    // 表紙画像があれば cover-style (左 110px) で、無ければ素のテキスト行で。
+    root.innerHTML = items.slice(0, 5).map(g => {
+      const title = escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : '');
+      const meta  = `${escapeHtml(g.creator_name)} · ${g.member_count}人`;
+      const href  = '#/groups/' + escapeHtml(g.slug || g.id);
+      if (g.image_url) {
+        return `
+          <a class="list-item with-cover" href="${href}">
+            <div class="cover-img" style="background-image:url('${escapeHtml(g.image_url)}')"></div>
+            <div class="grow">
+              <div class="bold">${title}</div>
+              <div class="meta">${meta}</div>
+            </div>
+          </a>`;
+      }
+      return `
+        <a class="list-item" href="${href}">
+          <div class="grow">
+            <div class="bold">${title}</div>
+            <div class="meta">${meta}</div>
+          </div>
+          <div class="hint">→</div>
+        </a>`;
+    }).join('');
   } catch (_) {
     // Silent: groups are nice-to-have on home; failing should not break the page.
     card.hidden = true;
@@ -341,16 +357,28 @@ async function renderFreshInvitations() {
       return;
     }
     root.innerHTML = open.slice(0, 5).map(i => {
-      const when = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
-      const where = i.location ? `📍 ${escapeHtml(i.location)} ・` : '';
-      const cap = i.capacity ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
+      const when  = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
+      const where = i.location  ? `📍 ${escapeHtml(i.location)} ・` : '';
+      const cap   = i.capacity  ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
+      const title = `${escapeHtml(i.title)}${joined}`;
+      const meta  = `${when}${where}${cap} · ${escapeHtml(i.creator_name)}`;
+      const href  = '#/invitations/' + i.id;
+      if (i.image_url) {
+        return `
+          <a class="list-item with-cover" href="${href}">
+            <div class="cover-img" style="background-image:url('${escapeHtml(i.image_url)}')"></div>
+            <div class="grow">
+              <div class="bold">${title}</div>
+              <div class="meta">${meta}</div>
+            </div>
+          </a>`;
+      }
       return `
-        <a class="list-item" href="#/invitations/${i.id}">
+        <a class="list-item" href="${href}">
           <div class="grow">
-            <div class="bold">${escapeHtml(i.title)}${joined}</div>
-            <div class="meta">${when}${where}${cap}</div>
-            <div class="meta">${escapeHtml(i.creator_name)}</div>
+            <div class="bold">${title}</div>
+            <div class="meta">${meta}</div>
           </div>
           <div class="hint">→</div>
         </a>`;

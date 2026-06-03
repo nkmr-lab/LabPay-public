@@ -129,6 +129,25 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 }
 .card.page-header h2 { color: var(--primary); }
 
+/* 画像つき list-item: 左に大きめの cover image (110×90) + 右にテキスト。
+   グループ/募集に表紙画像を付けたとき用。画像が無い時は素の .list-item を使う。 */
+.list-item.with-cover {
+  padding: 0;
+  overflow: hidden;
+  align-items: stretch;
+  min-height: 90px;
+}
+.list-item.with-cover > .cover-img {
+  width: 110px;
+  background: var(--primary-soft) center/cover no-repeat;
+  flex-shrink: 0;
+}
+.list-item.with-cover > .grow {
+  padding: var(--space-3);
+  display: flex; flex-direction: column; justify-content: center;
+  min-width: 0;
+}
+
 /* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
 .card.collapsible-form { padding: var(--space-3) var(--space-4); }

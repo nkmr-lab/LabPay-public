@@ -70,7 +70,8 @@ function group_assert_creator_or_admin(PDO $pdo, int $groupId, array $u): void {
 function groups_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("
-        SELECT g.id, g.slug, g.title, g.description, g.closed_at, g.created_at,
+        SELECT g.id, g.slug, g.title, g.description, g.image_url,
+               g.closed_at, g.created_at,
                uc.display_name AS creator_name,
                (SELECT COUNT(*) FROM adhoc_group_members WHERE group_id = g.id) AS member_count
           FROM adhoc_groups g
@@ -89,6 +90,7 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
     $description = isset($body['description']) ? mb_substr((string)$body['description'], 0, 5000) : null;
+    $imageUrl    = validate_product_image_url($body['image_url'] ?? null);
 
     // Optional slug: URL 用の短い名前。^[A-Za-z0-9_-]{1,64}$ で、かつ全数字は禁止
     // (数字オンリーは既存 id の解決と衝突するため)。空文字 / 未指定 は NULL。
@@ -123,9 +125,9 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'one or more member_ids not found', 400);
     }
 
-    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $memberIds) {
-        $st = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description) VALUES (?,?,?,?)");
-        $st->execute([$slug, $u['id'], $title, $description]);
+    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $imageUrl, $memberIds) {
+        $st = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description, image_url) VALUES (?,?,?,?,?)");
+        $st->execute([$slug, $u['id'], $title, $description, $imageUrl]);
         $gid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?,?)");
         foreach ($memberIds as $uid) $st->execute([$gid, $uid]);
@@ -175,35 +177,48 @@ function groups_detail(PDO $pdo, array $cfg, int $id): void {
     json_response($g);
 }
 
-// 既存グループの slug を作成者/admin が後から付け替え。空文字 / null 指定で
-// クリア (URL 用の名前を外す)。重複・全数字・不正文字はそれぞれエラー。
+// 既存グループの slug / image_url を作成者/admin が後から編集。slug は空文字 / null で
+// クリア (URL 用の名前を外す)。image_url も同様に空 → NULL。重複・全数字・不正文字は
+// それぞれエラー。
 function groups_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_creator_or_admin($pdo, $id, $u);
     $body = read_json_body();
-    if (!array_key_exists('slug', $body)) {
+    $hasSlug  = array_key_exists('slug', $body);
+    $hasImage = array_key_exists('image_url', $body);
+    if (!$hasSlug && !$hasImage) {
         throw new ApiException('bad_request', 'nothing to update', 400);
     }
-    $raw = $body['slug'];
-    if ($raw === null || $raw === '') {
-        $pdo->prepare("UPDATE adhoc_groups SET slug = NULL WHERE id = ?")->execute([$id]);
-        json_response(['ok' => true, 'slug' => null]);
-        return;
+    $sets = []; $args = [];
+    $respSlug = null; $respImage = null;
+    if ($hasSlug) {
+        $raw = $body['slug'];
+        if ($raw === null || $raw === '') {
+            $sets[] = 'slug = NULL';
+        } else {
+            $s = trim((string)$raw);
+            if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $s)) {
+                throw new ApiException('bad_request', 'slug は英数字・_・- の 1..64 文字で', 400);
+            }
+            if (ctype_digit($s)) {
+                throw new ApiException('bad_request', 'slug は数字だけの形式は使えません (id と衝突するため)', 400);
+            }
+            $check = $pdo->prepare("SELECT id FROM adhoc_groups WHERE slug = ? AND id <> ?");
+            $check->execute([$s, $id]);
+            if ($check->fetchColumn()) {
+                throw new ApiException('conflict', "slug『{$s}』は既に使われています", 409);
+            }
+            $sets[] = 'slug = ?'; $args[] = $s; $respSlug = $s;
+        }
     }
-    $s = trim((string)$raw);
-    if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $s)) {
-        throw new ApiException('bad_request', 'slug は英数字・_・- の 1..64 文字で', 400);
+    if ($hasImage) {
+        $img = validate_product_image_url($body['image_url']);
+        if ($img === null) { $sets[] = 'image_url = NULL'; }
+        else               { $sets[] = 'image_url = ?'; $args[] = $img; $respImage = $img; }
     }
-    if (ctype_digit($s)) {
-        throw new ApiException('bad_request', 'slug は数字だけの形式は使えません (id と衝突するため)', 400);
-    }
-    $check = $pdo->prepare("SELECT id FROM adhoc_groups WHERE slug = ? AND id <> ?");
-    $check->execute([$s, $id]);
-    if ($check->fetchColumn()) {
-        throw new ApiException('conflict', "slug『{$s}』は既に使われています", 409);
-    }
-    $pdo->prepare("UPDATE adhoc_groups SET slug = ? WHERE id = ?")->execute([$s, $id]);
-    json_response(['ok' => true, 'slug' => $s]);
+    $args[] = $id;
+    $pdo->prepare('UPDATE adhoc_groups SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($args);
+    json_response(['ok' => true, 'slug' => $respSlug, 'image_url' => $respImage]);
 }
 
 function groups_close(PDO $pdo, array $cfg, int $id): void {

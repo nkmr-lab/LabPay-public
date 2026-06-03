@@ -4,6 +4,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { uploadImage } from '../upload.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
@@ -37,6 +38,13 @@ export async function renderGroups() {
         <span class="lbl">説明 (任意)</span>
         <textarea id="gr-notes" maxlength="2000" rows="2"></textarea>
       </label>
+      <label class="field">
+        <span class="lbl">表紙画像 (任意・タップで撮影 or アルバム選択)</span>
+        <input type="file" id="gr-image-file" accept="image/*">
+        <input type="hidden" id="gr-image-url" value="">
+        <img id="gr-image-preview" alt="" hidden style="max-width:140px; max-height:140px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
+        <div id="gr-image-status" class="hint-sm"></div>
+      </label>
       <div class="field">
         <span class="lbl">メンバー</span>
         <div id="gr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
@@ -53,7 +61,23 @@ export async function renderGroups() {
   `;
   await populatePicker();
   document.getElementById('gr-submit').addEventListener('click', onCreate);
+  document.getElementById('gr-image-file').addEventListener('change', onGroupImageFile);
   await loadList();
+}
+
+async function onGroupImageFile(ev) {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  const status = document.getElementById('gr-image-status');
+  status.textContent = 'アップロード中…';
+  try {
+    const data = await uploadImage(f);
+    document.getElementById('gr-image-url').value = data.url;
+    const prev = document.getElementById('gr-image-preview');
+    prev.src = data.url;
+    prev.hidden = false;
+    status.textContent = '✓ アップロード完了';
+  } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
 const picked = new Set();
@@ -141,13 +165,39 @@ async function onCreate() {
   if (slug && /^\d+$/.test(slug)) {
     toast('URL 用の名前を数字だけにはできません'); return;
   }
+  const image_url = document.getElementById('gr-image-url').value || null;
   try {
     const r = await post('/api/groups', {
-      title, description, slug, member_ids: [...picked],
+      title, description, slug, image_url, member_ids: [...picked],
     });
     toast('作成しました');
     location.hash = '#/groups/' + (r.slug || r.id);
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
+// レイアウトに fallback (.list-item の素の見た目)。
+export function coverListItem({ href, image_url, title, meta, rightExtra = '' }) {
+  if (image_url) {
+    return `
+      <a class="list-item with-cover" href="${href}">
+        <div class="cover-img" style="background-image:url('${escapeHtml(image_url)}')"></div>
+        <div class="grow">
+          <div class="bold">${title}</div>
+          <div class="meta">${meta}</div>
+        </div>
+        ${rightExtra}
+      </a>`;
+  }
+  return `
+    <a class="list-item" href="${href}">
+      <div class="grow">
+        <div class="bold">${title}</div>
+        <div class="meta">${meta}</div>
+      </div>
+      <div class="hint">→</div>
+      ${rightExtra}
+    </a>`;
 }
 
 async function loadList() {
@@ -158,13 +208,12 @@ async function loadList() {
       root.innerHTML = `<div class="empty">まだ参加グループはありません</div>`;
       return;
     }
-    root.innerHTML = d.items.map(g => `
-      <a class="list-item" href="#/groups/${escapeHtml(g.slug || g.id)}">
-        <div class="grow">
-          <div class="bold">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
-          <div class="meta">${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}</div>
-        </div>
-      </a>`).join('');
+    root.innerHTML = d.items.map(g => coverListItem({
+      href: '#/groups/' + escapeHtml(g.slug || g.id),
+      image_url: g.image_url,
+      title: escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
+      meta: `${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}`,
+    })).join('');
   } catch (e) {
     document.getElementById('gr-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
