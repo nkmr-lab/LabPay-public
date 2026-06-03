@@ -291,9 +291,13 @@ async function loadCalendar() {
     root.innerHTML = `
       <div class="hint-sm">${escapeHtml(s.connected_at ?? '')} に連携</div>
       <div id="cal-list" class="list" style="margin-top:8px"><div class="muted">カレンダー読み込み中…</div></div>
-      <div class="row" style="margin-top:8px; gap:6px">
-        <button id="cal-refresh">再取得</button>
+      <div class="row" style="margin-top:8px; gap:6px; flex-wrap:wrap">
+        <button id="cal-refresh">カレンダー一覧を再取得</button>
+        <a id="cal-reconnect" href="/api/auth/calendar/connect" class="btn">再連携 (権限を更新)</a>
         <button id="cal-disconnect" class="danger">連携を解除</button>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">
+        書き込み権限 (Zoom MTG 作成など) を追加で要求する時は 「再連携」 でもう一度 Google の同意画面を通してください。
       </div>`;
     document.getElementById('cal-refresh').addEventListener('click', loadCalendar);
     document.getElementById('cal-disconnect').addEventListener('click', async () => {
