@@ -102,7 +102,6 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
-        <button id="home-mtg-new" class="btn primary" style="padding:3px 10px; font-size:12px">＋ MTG</button>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>
@@ -162,7 +161,6 @@ export async function renderHome() {
   await renderMedalsStrip();
   await renderPresence();
   await renderCalendarEvents();
-  document.getElementById('home-mtg-new')?.addEventListener('click', openMtgModal);
   await renderMyGroups();
   await renderFreshInvitations();
   await renderFreshListings();
@@ -382,12 +380,18 @@ async function renderCalendarEvents() {
   try {
     if (!items.length) {
       // 連携はしてるけど予定なし → 「今日は予定なし」 と出す価値あり (連携が
-      // 効いてることが分かる)。完全に隠すのではなく empty で表示。
+      // 効いてることが分かる)。完全に隠すのではなく empty で表示。 add-row は
+      // 後で追記される。
       card.hidden = false;
-      root.innerHTML = `<div class="empty">今日は予定なし</div>`;
-      return;
+      // ここで return しない: 下で renderCalendarEvents 末尾の add-row もくっつける
     }
     card.hidden = false;
+    // タスク/募集と同じノリで、 カード末尾に 「＋ MTG を立てる」 行を常設。
+    const addRow = `
+      <div class="list-item add-row" id="home-mtg-add" style="cursor:pointer">
+        <div class="grow bold" style="color:var(--primary)">＋ MTG を立てる</div>
+        <div class="hint">→</div>
+      </div>`;
     const fmtTime = (s, allDay) => {
       if (allDay) return '終日';
       const d = new Date(s);
@@ -406,7 +410,9 @@ async function renderCalendarEvents() {
       return { ...ev, _isPast: !isNaN(endMs) && endMs < nowMs };
     });
     const nextIdx = withFlags.findIndex(e => !e._isPast);
-    root.innerHTML = withFlags.map((ev, idx) => {
+    const eventsHtml = !items.length
+      ? `<div class="empty">今日は予定なし</div>`
+      : withFlags.map((ev, idx) => {
       const locIsUrl = ev.location && /^https?:\/\//i.test(ev.location.trim());
       const loc = (ev.location && !locIsUrl) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
       const titleHtml = ev.html_url
@@ -438,6 +444,8 @@ async function renderCalendarEvents() {
           </div>
         </div>`;
     }).join('');
+    root.innerHTML = eventsHtml + addRow;
+    document.getElementById('home-mtg-add')?.addEventListener('click', openMtgModal);
     // 「＋ Zoom を追加」 ボタンの click ハンドラ。 押下中はラベル変更 + disable。
     root.querySelectorAll('[data-add-zoom]').forEach(btn => {
       btn.addEventListener('click', async () => {
