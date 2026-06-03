@@ -18,7 +18,7 @@ export async function renderHome() {
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
       <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
-        <a class="btn primary" href="#/buy">買う</a>
+        <a class="btn" href="#/buy">買う</a>
         <a class="btn" href="#/sell">売る</a>
         <a class="btn" href="#/tasks">タスク</a>
         <a class="btn" href="#/send">送る</a>

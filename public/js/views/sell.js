@@ -63,8 +63,7 @@ export async function renderSell() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <h2>売る</h2>
-      <p class="muted">バーコードを読み取って新規出品します。バーコードが無い商品は下の「バーコードが無い商品を出品」を使ってください。</p>
+      <p class="muted" style="margin:0">バーコードを読み取って新規出品します。バーコードが無い商品は下の「バーコードが無い商品を出品」を使ってください。</p>
       <div style="background:#fff8e6; border-left:4px solid var(--warn); padding:10px 12px; border-radius:8px; margin-top:10px; font-size:13px; line-height:1.6">
         💡 <span class="bold">価格のヒント</span><br>
         ・1pt ≈ 1円 換算が目安です<br>

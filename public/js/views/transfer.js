@@ -10,9 +10,8 @@ export async function renderTransfer() {
       <span class="bold text-primary" id="send-balance">— pt</span>
     </div>
 
-    <div class="card">
-      <h2>送る</h2>
-      <p class="hint">他のメンバーにポイントを渡します。</p>
+    <div class="card page-header">
+      <p class="card-subtitle" style="margin:0">他のメンバーにポイントを渡します。</p>
     </div>
 
     <div class="card">

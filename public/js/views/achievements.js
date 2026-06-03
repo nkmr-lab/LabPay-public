@@ -5,8 +5,7 @@ export async function renderAchievements() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">実績</h2>
-      <p class="hint">11カテゴリ × 4段階。リアルタイムに集計しています。</p>
+      <p class="card-subtitle" style="margin:0">11カテゴリ × 4段階。リアルタイムに集計しています。</p>
     </div>
     <div id="ach-list"><div class="muted">読み込み中…</div></div>
   `;

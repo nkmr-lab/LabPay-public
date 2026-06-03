@@ -16,8 +16,7 @@ export async function renderApps() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">アプリ</h2>
-      <p class="card-subtitle">
+      <p class="card-subtitle" style="margin:0">
         ラボ内・出張中で使える小道具集です。
       </p>
     </div>

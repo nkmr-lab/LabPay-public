@@ -14,8 +14,7 @@ export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <div class="row center">
-        <h2 class="row-title">タスク</h2>
+      <div style="text-align:right">
         <button id="task-new" class="primary">+ 依頼する</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
