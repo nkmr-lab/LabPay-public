@@ -65,10 +65,11 @@ export async function renderHome() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card balance-hero">
-      <div class="balance-line">
+      <a href="#/history" class="balance-line" id="home-balance-link"
+         style="display:block; text-decoration:none; color:inherit; cursor:pointer">
         <span class="lbl">残高</span>
         <span class="num" id="home-balance">— pt</span>
-      </div>
+      </a>
       <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>

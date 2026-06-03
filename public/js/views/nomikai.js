@@ -194,6 +194,11 @@ export async function renderNomikaiNew({ query }) {
         <input type="number" id="nm-total" min="0" placeholder="例: 28000">
       </label>
       <label class="field">
+        <span class="lbl">ソフトドリンク割引 (1人あたり、円・任意)</span>
+        <input type="number" id="nm-sd-discount" min="0" step="100" placeholder="例: 1000">
+        <div class="hint-sm">🥤 の人を 1 人につき N 円引きにし、 その差額を 🍺 の人で weight 按分して吸収します。</div>
+      </label>
+      <label class="field">
         <span class="lbl">メモ (任意)</span>
         <textarea id="nm-notes" maxlength="2000" rows="2" placeholder="場所・コース内容など"></textarea>
       </label>
@@ -280,6 +285,7 @@ export async function renderNomikaiNew({ query }) {
   });
 
   document.getElementById('nm-total').addEventListener('input', recomputeAmounts);
+  document.getElementById('nm-sd-discount').addEventListener('input', recomputeAmounts);
   document.getElementById('nm-submit').addEventListener('click', onCreate);
   document.querySelectorAll('[data-round]').forEach(b => {
     b.addEventListener('click', () => {
@@ -313,32 +319,56 @@ function recomputeAmounts() {
 }
 
 function computeAmounts() {
-  const total = Number(document.getElementById('nm-total').value) || 0;
+  const total      = Number(document.getElementById('nm-total').value) || 0;
+  const sdDiscount = Math.max(0, Math.floor(Number(document.getElementById('nm-sd-discount')?.value) || 0));
   const arr = [...stepTwo.entries()].map(([uid, v]) => ({ uid, ...v }));
   const fixedTotal = arr.reduce((s, x) => s + (x.fixed_yen ?? 0), 0);
   const remaining  = Math.max(0, total - fixedTotal);
   const weighted   = arr.filter(x => x.fixed_yen === null);
   const sumW = weighted.reduce((s, x) => s + x.weight, 0) || 1;
-  let allocated = 0;
+  // Step 1: 通常 weighted 配分 (割引前)。
   for (const x of arr) {
     if (x.fixed_yen !== null) {
       x.amount = x.fixed_yen;
     } else {
-      const v = remaining * x.weight / sumW;
+      x.amount = remaining * x.weight / sumW;
+    }
+  }
+  // Step 2: ソフドリ割引 (weighted のみが対象)。 ソフドリの人から -D、
+  // 飲み手の人で weight 按分して +(D * numSoftdri / sumDrinkerW) を上乗せ。
+  // 飲み手 0 / ソフドリ 0 のどちらかなら適用不能 → 何もしない。
+  if (sdDiscount > 0) {
+    const sd = weighted.filter(x => !x.alcohol);
+    const dr = weighted.filter(x =>  x.alcohol);
+    if (sd.length && dr.length) {
+      const totalOffset = sdDiscount * sd.length;
+      const drSumW = dr.reduce((s, x) => s + x.weight, 0) || 1;
+      for (const x of sd) x.amount = Math.max(0, x.amount - sdDiscount);
+      for (const x of dr) x.amount += totalOffset * x.weight / drSumW;
+    }
+  }
+  // Step 3: rounding bucket は weighted のみ (固定額は弄らない)。
+  let allocated = 0;
+  for (const x of arr) {
+    if (x.fixed_yen === null) {
       x.amount = roundBucket > 1
-        ? Math.round(v / roundBucket) * roundBucket
-        : Math.round(v);
+        ? Math.round(x.amount / roundBucket) * roundBucket
+        : Math.round(x.amount);
     }
     allocated += x.amount;
   }
+  // Step 4: 端数は主催者へ。
   const delta = total - allocated;
   if (delta && arr.length) {
     const meIdx = arr.findIndex(x => x.uid === state.me?.id);
     arr[(meIdx >= 0 ? meIdx : 0)].amount += delta;
   }
-  arr._allocated = allocated + delta;
-  arr._delta = delta;
-  arr._total = total;
+  arr._allocated   = allocated + delta;
+  arr._delta       = delta;
+  arr._total       = total;
+  arr._sdDiscount  = sdDiscount;
+  arr._sdCount     = weighted.filter(x => !x.alcohol).length;
+  arr._drCount     = weighted.filter(x =>  x.alcohol).length;
   return arr;
 }
 
@@ -346,8 +376,16 @@ function updatePreviewTotal(arr) {
   const el = document.getElementById('nm-preview-total');
   if (!el) return;
   const total = arr._total;
+  // ソフドリ割引が指定されてるのに 飲み手 0 / ソフドリ 0 で適用不能なケースは
+  // ユーザに分かるように 「適用不能」 を明示。
+  let sdHint = '';
+  if (arr._sdDiscount > 0) {
+    if (arr._sdCount === 0)       sdHint = ' · ソフドリ 0 人 → 割引なし';
+    else if (arr._drCount === 0)  sdHint = ' · 飲み手 0 人 → 割引適用不能';
+    else                          sdHint = ` · 🥤 ${arr._sdCount}人 × -¥${arr._sdDiscount.toLocaleString()}`;
+  }
   el.innerHTML = total
-    ? `合計 ¥${arr._allocated.toLocaleString()}${arr._delta ? ` (端数 ${arr._delta > 0 ? '+' : ''}${arr._delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}`
+    ? `合計 ¥${arr._allocated.toLocaleString()}${arr._delta ? ` (端数 ${arr._delta > 0 ? '+' : ''}${arr._delta} 円は ${escapeHtml(state.me?.display_name || '主催')} に)` : ''}${sdHint}`
     : '総額を入力してください';
 }
 
@@ -430,12 +468,14 @@ async function onCreate() {
   if (!title) { toast('タイトルを入力してください'); return; }
   if (!(total > 0)) { toast('総額を入力してください'); return; }
   if (stepTwo.size < 1) { toast('参加者がいません'); return; }
+  const sdDiscount = Math.max(0, Math.floor(Number(document.getElementById('nm-sd-discount')?.value) || 0));
   const participants = [];
   stepTwo.forEach((v, uid) => participants.push({
     user_id: uid, alcohol: v.alcohol, weight: v.weight,
   }));
   try {
-    const r = await post('/api/nomikai', { title, total_yen: total, notes, participants });
+    const r = await post('/api/nomikai',
+      { title, total_yen: total, notes, participants, softdri_discount_yen: sdDiscount });
     toast('作成しました');
     navigate('#/nomikai/' + r.id);
   } catch (e) { toast('失敗: ' + e.message); }
@@ -472,7 +512,10 @@ async function loadDetail(id) {
     document.getElementById('nm-detail').innerHTML = `
       <div class="bold" style="font-size:18px">${escapeHtml(s.title)} ${s.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
       <div class="meta">${escapeHtml(s.creator_name)} · ${escapeHtml(s.created_at)}</div>
-      <div style="margin-top:6px">総額 <span class="bold">¥${s.total_yen.toLocaleString()}</span> · 参加 ${s.participants.length}人</div>
+      <div style="margin-top:6px">総額 <span class="bold">¥${s.total_yen.toLocaleString()}</span> · 参加 ${s.participants.length}人${
+        Number(s.softdri_discount_yen) > 0
+          ? ` · 🥤 -¥${Number(s.softdri_discount_yen).toLocaleString()}/人`
+          : ''}</div>
       ${s.notes ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(s.notes)}</div>` : ''}
       ${asReqBtn}
       ${settle ? `

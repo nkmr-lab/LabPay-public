@@ -50,6 +50,7 @@ function nomikai_detail(PDO $pdo, array $cfg, int $id): void {
     $session = $st->fetch(PDO::FETCH_ASSOC);
     if (!$session) throw new ApiException('not_found', "nomikai $id not found", 404);
     $session['total_yen'] = (int)$session['total_yen'];
+    $session['softdri_discount_yen'] = (int)($session['softdri_discount_yen'] ?? 0);
 
     $st = $pdo->prepare("
         SELECT p.*, u.display_name, u.avatar_url, u.grade, u.paypay_id, u.bank_info,
@@ -81,6 +82,10 @@ function nomikai_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'total_yen 1..10000000', 400);
     }
     $notes = isset($body['notes']) ? mb_substr((string)$body['notes'], 0, 5000) : null;
+    // ソフドリ割引額 (1 人あたり、円)。 0 = 適用なし。 client が amount_yen に
+    // 反映済みなので、 server はそのまま保存して詳細表示に使うだけ。
+    $sdDisc = (int)($body['softdri_discount_yen'] ?? 0);
+    if ($sdDisc < 0 || $sdDisc > 100000) $sdDisc = 0;
     $parts = $body['participants'] ?? null;
     if (!is_array($parts) || count($parts) < 1) {
         throw new ApiException('bad_request', 'participants required', 400);
@@ -133,10 +138,11 @@ function nomikai_create(PDO $pdo, array $cfg): void {
         $norm[$absorbIdx]['amount_yen'] += $delta;
     }
 
-    $sid = db_tx($pdo, function () use ($pdo, $u, $title, $total, $notes, $norm) {
-        $ins = $pdo->prepare("INSERT INTO nomikai_sessions (creator_user_id, title, total_yen, notes)
-            VALUES (?,?,?,?)");
-        $ins->execute([$u['id'], $title, $total, $notes]);
+    $sid = db_tx($pdo, function () use ($pdo, $u, $title, $total, $notes, $norm, $sdDisc) {
+        $ins = $pdo->prepare("INSERT INTO nomikai_sessions
+            (creator_user_id, title, total_yen, notes, softdri_discount_yen)
+            VALUES (?,?,?,?,?)");
+        $ins->execute([$u['id'], $title, $total, $notes, $sdDisc]);
         $sid = (int)$pdo->lastInsertId();
         $pIns = $pdo->prepare("INSERT INTO nomikai_participants
             (session_id, user_id, amount_yen, alcohol, weight) VALUES (?,?,?,?,?)");
