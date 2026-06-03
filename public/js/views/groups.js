@@ -1575,9 +1575,19 @@ function renderSchedItem(it) {
     ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary); margin-left:4px">🔗</a>`
     : '';
   // 1 行目: アイコン + タイトル + 時刻
-  // 2 行目: 場所 / メモ / URL (溢れたら 1 行で切る)
+  // 2 行目: 場所 (Map link) / メモ / URL (溢れたら 1 行で切る)
+  const hasGeo = it.lat !== null && it.lng !== null && it.lat !== undefined && it.lng !== undefined;
+  const mapUrl = hasGeo
+    ? `https://maps.google.com/?q=${it.lat},${it.lng}`
+    : (it.location ? `https://maps.google.com/?q=${encodeURIComponent(it.location)}` : null);
   const line2bits = [];
-  if (it.location) line2bits.push(`📍 ${escapeHtml(it.location)}`);
+  if (it.location) {
+    line2bits.push(mapUrl
+      ? `<a href="${escapeHtml(mapUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍 ${escapeHtml(it.location)}</a>`
+      : `📍 ${escapeHtml(it.location)}`);
+  } else if (hasGeo) {
+    line2bits.push(`<a href="${escapeHtml(mapUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍 地図</a>`);
+  }
   if (it.memo)     line2bits.push(escapeHtml(it.memo).replace(/\n/g, ' '));
   const line2 = line2bits.length
     ? `<div class="meta" style="font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${line2bits.join(' · ')}${urlIcon}</div>`
