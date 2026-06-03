@@ -1370,6 +1370,8 @@ async function onPost(gid) {
 // 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
 // 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
 let schedEditMode = false;
+let schedPairSlots = {};
+let schedPairMaxSlot = -1;
 const SCHED_KINDS = {
   flight:  { label: '飛行機', icon: '✈️' },
   train:   { label: '電車',   icon: '🚆' },
@@ -1457,6 +1459,20 @@ async function loadSchedule(gid) {
     pairPartner[arr[0].id] = { partner: arr[1], side: 'first' };
     pairPartner[arr[1].id] = { partner: arr[0], side: 'second' };
   });
+  // 帯の被り対策: 各 pair_id を 「最初に出現する日 + 開始時刻」 順に sort
+  // してスロット番号 (0, 1, 2, ...) を割り振る。 同時刻が重なる時は別の
+  // pair_id でも 右側にズレて描かれるので帯が混ざらない。
+  const pairSlots = {};
+  Object.entries(pairs)
+    .filter(([, arr]) => arr.length === 2)
+    .sort(([, a], [, b]) => {
+      const aKey = a[0].day_date + (a[0].start_time || '99:99');
+      const bKey = b[0].day_date + (b[0].start_time || '99:99');
+      return aKey.localeCompare(bKey);
+    })
+    .forEach(([pid], idx) => { pairSlots[pid] = idx; });
+  schedPairSlots = pairSlots;
+  schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
   const dayLabels = ['日','月','火','水','木','金','土'];
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
@@ -1582,19 +1598,22 @@ function renderSchedItem(it, pairInfo) {
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
   // ペア帯: link_pair_id があれば 行の右端 30px 内側に 10px 幅の半透明縦
-  // ストリップを敷く。 同じ pair_id → 同じ色 → 別の日でも縦に並ぶと
-  // 帯がつながって見えて 「ペアだ」 と分かる。 absolute なので row 高さ
-  // に追従して 上から下まで埋まる。
+  // ストリップを敷く。 ペアが複数ある時 (slot N) は 30 + N*14 px に
+  // ずらして 縦に並ぶ別ペアの帯と被らないように。
+  const pairSlot = it.link_pair_id ? (schedPairSlots[it.link_pair_id] ?? 0) : 0;
+  const pairRight = 30 + pairSlot * 14;
   const pairStrip = it.link_pair_id
-    ? `<div aria-hidden="true" style="position:absolute; right:30px; top:0; bottom:0; width:10px; background:${schedPairColor(it.link_pair_id)}; border-radius:5px; pointer-events:none"></div>`
+    ? `<div aria-hidden="true" style="position:absolute; right:${pairRight}px; top:0; bottom:0; width:10px; background:${schedPairColor(it.link_pair_id)}; border-radius:5px; pointer-events:none"></div>`
     : '';
   // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
   // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
   // 2 行目 (line2) は空でも HTML 上は存在させる。
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
-  // ペア帯のぶん右側に余白を確保 (40px = 30px + 10px) してアイコンや
-  // ↑↓× ボタンに被らないように。
-  const rightPad = it.link_pair_id ? 'padding-right:48px;' : '';
+  // ペア帯のぶん右側に余白を確保。 ペアが無いアイテムも 帯がある列が
+  // 揃うよう、 同じグループの最大スロットぶんだけ余白を取る。
+  const rightPad = schedPairMaxSlot >= 0
+    ? `padding-right:${30 + (schedPairMaxSlot + 1) * 14 + 8}px;`
+    : '';
   return `
     <div class="list-item" data-sched-item="${it.id}"
          style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${isMid ? 'opacity:0.55' : ''}">
