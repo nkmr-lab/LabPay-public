@@ -361,6 +361,11 @@ function writeCalCache(items, etags) {
   } catch {}
 }
 
+// 「今日の予定」 カードを 全件 / 5 件 に切替えるトグル状態 (セッション内)。
+// home polling で再描画されても状態が保たれるよう module-level に置く。
+let calExpanded = false;
+const CAL_DEFAULT_LIMIT = 5;
+
 // 終了後 N 分経過した予定を 「今日の予定」 から消すための設定 (1..1440)。
 // 「2 時間経ったら消したい」 が default。 設定 → Google Calendar 連携 から変更可。
 const CAL_HIDE_KEY = 'labpay-cal-hide-after-min';
@@ -422,10 +427,22 @@ async function renderCalendarEvents() {
       return endMs + hideAfterMin * 60000 >= nowMs0;
     });
   }
-  items = items.slice(0, 5);
+  const totalCount = items.length;
+  const truncated = !calExpanded && totalCount > CAL_DEFAULT_LIMIT;
+  if (truncated) items = items.slice(0, CAL_DEFAULT_LIMIT);
   try {
     card.hidden = false;
     // タスク/募集と同じノリで、 カード末尾に 「＋ MTG を立てる」 行を常設。
+    // 件数オーバー時は 「あと N 件」 / 「上位 N 件に戻す」 トグル行も追加。
+    const expandRow = truncated
+      ? `<div class="list-item add-row" id="home-cal-expand" style="cursor:pointer">
+           <div class="grow bold" style="color:var(--primary)">▼ あと ${totalCount - CAL_DEFAULT_LIMIT} 件を表示</div>
+         </div>`
+      : (calExpanded && totalCount > CAL_DEFAULT_LIMIT
+          ? `<div class="list-item add-row" id="home-cal-collapse" style="cursor:pointer">
+               <div class="grow" style="color:var(--muted)">▲ 上位 ${CAL_DEFAULT_LIMIT} 件に戻す</div>
+             </div>`
+          : '');
     const addRow = `
       <div class="list-item add-row" id="home-mtg-add" style="cursor:pointer">
         <div class="grow bold" style="color:var(--primary)">＋ MTG を立てる</div>
@@ -498,8 +515,16 @@ async function renderCalendarEvents() {
           </div>
         </div>`;
     }).join('');
-    root.innerHTML = eventsHtml + addRow;
+    root.innerHTML = eventsHtml + expandRow + addRow;
     document.getElementById('home-mtg-add')?.addEventListener('click', openMtgModal);
+    document.getElementById('home-cal-expand')?.addEventListener('click', () => {
+      calExpanded = true;
+      renderCalendarEvents();
+    });
+    document.getElementById('home-cal-collapse')?.addEventListener('click', () => {
+      calExpanded = false;
+      renderCalendarEvents();
+    });
     // 「＋ Zoom を追加」 ボタンの click ハンドラ。 押下中はラベル変更 + disable。
     root.querySelectorAll('[data-add-zoom]').forEach(btn => {
       btn.addEventListener('click', async () => {
