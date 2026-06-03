@@ -4,6 +4,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
+import { renderCoverEditor, wireCoverEditor } from './groups.js';
 
 export async function renderInvitations() {
   const app = document.getElementById('app');
@@ -203,7 +204,13 @@ async function loadDetail(id) {
       // closed_at を NULL に戻す。
       actions += `<button id="inv-detail-reopen" class="primary">再募集する</button>`;
     }
+    const imgBlock = renderCoverEditor({
+      imageUrl: i.image_url,
+      canEdit:  isMine,
+      idPrefix: 'id',
+    });
     document.getElementById('inv-head').innerHTML = `
+      ${imgBlock}
       <div class="bold" style="font-size:18px">${escapeHtml(i.title)} ${statusTag}</div>
       ${whenLine}${whereLine}${capLine}
       ${i.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:6px">${escapeHtml(i.description)}</div>` : ''}
@@ -213,6 +220,13 @@ async function loadDetail(id) {
       </div>
       ${actions ? `<div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">${actions}</div>` : ''}
     `;
+    wireCoverEditor({
+      idPrefix: 'id',
+      onChange: async (url) => {
+        try { await patch('/api/invitations/' + id, { image_url: url }); toast(url ? '画像を保存しました' : '画像を削除しました'); await loadDetail(id); }
+        catch (e) { toast('失敗: ' + e.message); }
+      },
+    });
     document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });

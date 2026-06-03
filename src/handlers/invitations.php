@@ -12,7 +12,7 @@ function route_invitations(PDO $pdo, array $cfg, string $method, array $seg): vo
     $id = (int)$sub;
     if ($id > 0) {
         if ($method === 'GET')                                             { invitations_detail($pdo, $cfg, $id); return; }
-        if ($method === 'PATCH')                                           { invitations_reopen($pdo, $cfg, $id); return; }
+        if ($method === 'PATCH')                                           { invitations_patch($pdo, $cfg, $id); return; }
         if ($method === 'DELETE')                                          { invitations_cancel($pdo, $cfg, $id); return; }
         if (($seg[2] ?? '') === 'join'  && $method === 'POST')            { invitations_join($pdo, $cfg, $id);   return; }
         if (($seg[2] ?? '') === 'leave' && $method === 'POST')            { invitations_leave($pdo, $cfg, $id);  return; }
@@ -148,8 +148,9 @@ function invitations_leave(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// 発起人が「再募集」: starts_at を新しい日時に更新して closed_at を NULL に戻す。
-function invitations_reopen(PDO $pdo, array $cfg, int $id): void {
+// 発起人が編集する: starts_at (= 再募集) または image_url (= 表紙画像差し替え)。
+// どちらか/両方を送れる。starts_at が送られた場合は closed_at を NULL に戻して再募集扱い。
+function invitations_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, title FROM invitations WHERE id=?");
     $st->execute([$id]);
@@ -157,24 +158,37 @@ function invitations_reopen(PDO $pdo, array $cfg, int $id): void {
     if (!$inv) throw new ApiException('not_found', "invitation $id not found", 404);
     if ((int)$inv['creator_user_id'] !== (int)$u['id']
         && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '発起人または admin だけが再募集できます', 403);
+        throw new ApiException('forbidden', '発起人または admin だけが編集できます', 403);
     }
     $body = read_json_body();
-    $startsAt = null;
-    if (!empty($body['starts_at'])) {
-        $raw = str_replace('T', ' ', trim((string)$body['starts_at']));
-        if (strlen($raw) === 16) $raw .= ':00';
-        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
-        if (!$dt) throw new ApiException('bad_request', 'starts_at must be Y-m-d H:i', 400);
-        // 過去日は意味がない (即終了になる)
-        if ($dt->getTimestamp() <= time()) {
-            throw new ApiException('bad_request', '新しい開催日時は現在より未来にしてください', 400);
+    $sets = []; $args = [];
+    $reopened = false;
+    if (array_key_exists('starts_at', $body)) {
+        $startsAt = null;
+        if (!empty($body['starts_at'])) {
+            $raw = str_replace('T', ' ', trim((string)$body['starts_at']));
+            if (strlen($raw) === 16) $raw .= ':00';
+            $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
+            if (!$dt) throw new ApiException('bad_request', 'starts_at must be Y-m-d H:i', 400);
+            if ($dt->getTimestamp() <= time()) {
+                throw new ApiException('bad_request', '新しい開催日時は現在より未来にしてください', 400);
+            }
+            $startsAt = $dt->format('Y-m-d H:i:s');
         }
-        $startsAt = $dt->format('Y-m-d H:i:s');
+        $sets[] = 'starts_at = ?'; $args[] = $startsAt;
+        $sets[] = 'closed_at = NULL';
+        $reopened = true;
     }
-    $pdo->prepare("UPDATE invitations SET closed_at=NULL, starts_at=? WHERE id=?")
-        ->execute([$startsAt, $id]);
-    json_response(['ok' => true]);
+    if (array_key_exists('image_url', $body)) {
+        $img = validate_product_image_url($body['image_url']);
+        if ($img === null) { $sets[] = 'image_url = NULL'; }
+        else               { $sets[] = 'image_url = ?'; $args[] = $img; }
+    }
+    if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
+    $args[] = $id;
+    $pdo->prepare('UPDATE invitations SET ' . implode(', ', $sets) . ' WHERE id=?')
+        ->execute($args);
+    json_response(['ok' => true, 'reopened' => $reopened]);
 }
 
 function invitations_cancel(PDO $pdo, array $cfg, int $id): void {

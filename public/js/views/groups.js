@@ -175,6 +175,62 @@ async function onCreate() {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
+// 共通: 詳細ページの 「表紙画像 + 編集ボタン」 UI を組み立てる。
+// idPrefix で複数ページの ID 衝突を避ける ('gd' = groups detail, 'id' = invitation detail)。
+export function renderCoverEditor({ imageUrl, canEdit, idPrefix }) {
+  const ip = idPrefix;
+  // 編集ボタンは hidden file input をトリガする。
+  const fileInput = canEdit
+    ? `<input type="file" id="${ip}-cover-file" accept="image/*" hidden>` : '';
+  if (imageUrl) {
+    return `
+      <div style="position:relative; margin-bottom:10px; border-radius:12px; overflow:hidden; aspect-ratio:16/9; background:var(--primary-soft); max-height:200px">
+        <img src="${escapeHtml(imageUrl)}" alt="" style="width:100%; height:100%; object-fit:cover; display:block">
+        ${canEdit ? `
+          <div style="position:absolute; right:6px; bottom:6px; display:flex; gap:4px">
+            <button id="${ip}-cover-change" class="btn" style="padding:4px 10px; font-size:12px; background:rgba(255,255,255,0.92)">✏️ 変更</button>
+            <button id="${ip}-cover-clear"  class="btn" style="padding:4px 10px; font-size:12px; background:rgba(255,255,255,0.92)">🗑️ 削除</button>
+          </div>` : ''}
+      </div>
+      ${fileInput}
+    `;
+  }
+  if (canEdit) {
+    return `
+      <div style="margin-bottom:10px">
+        <button id="${ip}-cover-change" class="btn">📷 表紙画像を追加</button>
+        <span id="${ip}-cover-status" class="hint-sm" style="margin-left:8px"></span>
+      </div>
+      ${fileInput}
+    `;
+  }
+  return '';
+}
+
+// 上の renderCoverEditor に対応する click / change ハンドラ配線。
+export function wireCoverEditor({ idPrefix, onChange }) {
+  const ip = idPrefix;
+  const fileEl = document.getElementById(`${ip}-cover-file`);
+  if (!fileEl) return;
+  document.getElementById(`${ip}-cover-change`)?.addEventListener('click', () => fileEl.click());
+  document.getElementById(`${ip}-cover-clear`)?.addEventListener('click', async () => {
+    if (!confirm('表紙画像を削除しますか?')) return;
+    await onChange(null);
+  });
+  fileEl.addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const status = document.getElementById(`${ip}-cover-status`);
+    if (status) status.textContent = 'アップロード中…';
+    try {
+      const data = await uploadImage(f);
+      await onChange(data.url);
+    } catch (e) {
+      if (status) status.textContent = '失敗: ' + e.message;
+    }
+  });
+}
+
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
 export function coverListItem({ href, image_url, title, meta, rightExtra = '' }) {
@@ -340,7 +396,15 @@ async function loadDetail(id) {
            ${g.slug ? `<button id="gd-clear-slug" class="btn" style="padding:2px 6px; font-size:11px">解除</button>` : ''}
          </div>`
       : (g.slug ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">/#/groups/${escapeHtml(g.slug)}</span></div>` : '');
+    // 表紙画像: 設定済みなら 16:9 ヒーロー、creator なら 「変更/削除」 ボタン付き。
+    // 未設定 + creator なら 「📷 表紙画像を追加」 ボタンだけ表示。
+    const imgBlock = renderCoverEditor({
+      imageUrl: g.image_url,
+      canEdit:  isCreator,
+      idPrefix: 'gd',
+    });
     document.getElementById('gd-head').innerHTML = `
+      ${imgBlock}
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(g.created_at)}</div>
       ${slugRow}
@@ -357,6 +421,13 @@ async function loadDetail(id) {
         <a class="btn" href="#/nomikai?members=${memberIds}">🍻 割り勘</a>
         ${isCreator && !g.closed_at ? `<button id="gd-close" class="danger">閉じる</button>` : ''}
       </div>`;
+    wireCoverEditor({
+      idPrefix: 'gd',
+      onChange: async (url) => {
+        try { await patch('/api/groups/' + id, { image_url: url }); toast(url ? '画像を保存しました' : '画像を削除しました'); await loadDetail(id); }
+        catch (e) { toast('失敗: ' + e.message); }
+      },
+    });
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉じますか?')) return;
       try {
