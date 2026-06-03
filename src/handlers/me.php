@@ -301,6 +301,90 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // POST /api/me/calendar/events/{eventId}/zoom  body: {calendar_id?}
+    // 既存予定に Zoom MTG を追加する。 event を Google から取って start/end/title
+    // を読み、 Zoom MTG を作成 → location/description に join_url を追記して
+    // PATCH。 終日予定は対象外 (Zoom 不要)、 既に Zoom URL がある予定も拒否
+    // (重複作成を防ぐ — UI 側でも button 出さないが server gate)。
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'events'
+        && ($seg[3] ?? '') !== '' && ($seg[4] ?? '') === 'zoom' && $method === 'POST') {
+        $eventId = (string)$seg[3];
+        $body = read_json_body();
+        $calendarId = trim((string)($body['calendar_id'] ?? 'primary'));
+        if ($calendarId === '') $calendarId = 'primary';
+
+        $calAccess = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        $event = GoogleCalendar::getEvent($calAccess, $calendarId, $eventId);
+        if (!$event || empty($event['id'])) {
+            throw new ApiException('not_found', '予定が見つかりません', 404);
+        }
+        if (!isset($event['start']['dateTime'])) {
+            throw new ApiException('bad_request', '終日予定には追加できません', 400);
+        }
+        $existingUrl = GoogleCalendar::extractMeetingUrl($event);
+        if ($existingUrl) {
+            throw new ApiException('bad_request', 'この予定には既に MTG URL が入ってます', 400);
+        }
+        $title    = trim((string)($event['summary'] ?? 'Meeting'));
+        if ($title === '') $title = 'Meeting';
+        try {
+            $startDt = new DateTimeImmutable((string)$event['start']['dateTime']);
+            $endDt   = new DateTimeImmutable((string)$event['end']['dateTime']);
+        } catch (Throwable $e) {
+            throw new ApiException('bad_request', 'event start/end が不正です', 400);
+        }
+        $duration = max(5, (int)round(($endDt->getTimestamp() - $startDt->getTimestamp()) / 60));
+
+        $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        $zoomStart = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
+        $meeting = Zoom::createMeeting($zoomAccess, [
+            'topic'      => $title,
+            'start_time' => $zoomStart,
+            'duration'   => $duration,
+            'timezone'   => 'Asia/Tokyo',
+        ]);
+        $joinUrl = (string)($meeting['join_url'] ?? '');
+        if ($joinUrl === '') {
+            throw new ApiException('zoom_api', 'Zoom did not return join_url', 502);
+        }
+        $passcode = (string)($meeting['password'] ?? '');
+
+        // 既存値を保持しつつ追記。 location は空なら join_url を、 あるなら
+        // 改行で join_url を後ろに追加。 description は空行を挟んで Zoom 情報を追記。
+        $oldLocation    = (string)($event['location']    ?? '');
+        $oldDescription = (string)($event['description'] ?? '');
+        $extraLines = ['', '— Zoom MTG —', $joinUrl];
+        if ($passcode !== '')         $extraLines[] = 'パスコード: ' . $passcode;
+        if (!empty($meeting['id']))   $extraLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+        $newLocation = $oldLocation === '' ? $joinUrl : ($oldLocation . "\n" . $joinUrl);
+        $newDescription = $oldDescription === ''
+            ? trim(implode("\n", array_slice($extraLines, 1)))
+            : ($oldDescription . "\n" . implode("\n", $extraLines));
+
+        try {
+            GoogleCalendar::patchEvent($calAccess, $calendarId, $eventId, [
+                'location'    => $newLocation,
+                'description' => $newDescription,
+            ]);
+        } catch (ApiException $e) {
+            if ($e->errCode === 'calendar_scope') {
+                throw new ApiException('calendar_scope',
+                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携 から 再連携 してください', 403);
+            }
+            throw $e;
+        }
+        json_response([
+            'ok' => true,
+            'invalidate_calendar_cache' => true,
+            'zoom' => [
+                'join_url' => $joinUrl,
+                'password' => $passcode,
+                'meeting_id' => $meeting['id'] ?? null,
+            ],
+        ]);
+        return;
+    }
+
     if ($sub === 'achievements' && $method === 'GET') {
         $items = Achievements::reportFor($pdo, (int)$u['id']);
         json_response(['items' => $items]);

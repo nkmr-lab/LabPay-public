@@ -412,9 +412,13 @@ async function renderCalendarEvents() {
       const titleHtml = ev.html_url
         ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${escapeHtml(ev.title)}</a>`
         : `<span class="bold">${escapeHtml(ev.title)}</span>`;
-      const zoomBtn = ev.url
-        ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start">📹 参加する</a>`
-        : '';
+      // 既に MTG URL がある: 参加ボタン。 無い + 終日でない: Zoom 追加ボタン。
+      let zoomBtn = '';
+      if (ev.url) {
+        zoomBtn = `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start">📹 参加する</a>`;
+      } else if (!ev.all_day) {
+        zoomBtn = `<button class="btn" data-add-zoom="${escapeHtml(ev.id)}" data-cal="${escapeHtml(ev.calendar || 'primary')}" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start; color:var(--primary)">＋ Zoom を追加</button>`;
+      }
       const isNext = idx === nextIdx;
       // box-shadow:inset で左バーを描く (border-left を使うと content が右に
       // ずれて他の行と縦が揃わなくなるので)。
@@ -434,6 +438,29 @@ async function renderCalendarEvents() {
           </div>
         </div>`;
     }).join('');
+    // 「＋ Zoom を追加」 ボタンの click ハンドラ。 押下中はラベル変更 + disable。
+    root.querySelectorAll('[data-add-zoom]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const eventId = btn.dataset.addZoom;
+        const calId   = btn.dataset.cal || 'primary';
+        if (!eventId) return;
+        const original = btn.textContent;
+        btn.disabled = true; btn.textContent = '作成中…';
+        try {
+          const r = await post(
+            `/api/me/calendar/events/${encodeURIComponent(eventId)}/zoom`,
+            { calendar_id: calId });
+          if (r?.invalidate_calendar_cache) {
+            try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
+          }
+          toast('Zoom MTG を追加しました');
+          await renderCalendarEvents();
+        } catch (e) {
+          toast('失敗: ' + (e.message || String(e)));
+          btn.disabled = false; btn.textContent = original;
+        }
+      });
+    });
   } catch (e) {
     // render 中の例外 (DOM 破壊 etc) は無視して隠す。
     card.hidden = true;

@@ -243,6 +243,53 @@ class GoogleCalendar {
         ];
     }
 
+    // 既存 event を読む。 patchEvent 前に description / location 維持のため必要。
+    public static function getEvent(string $accessToken, string $calendarId, string $eventId): array {
+        $url = 'https://www.googleapis.com/calendar/v3/calendars/'
+             . rawurlencode($calendarId) . '/events/' . rawurlencode($eventId);
+        $r = self::getWithMeta($url, $accessToken, null);
+        return $r['data'] ?? [];
+    }
+
+    // event の部分更新 (PATCH)。 patch に入れたフィールドだけ上書き、 他はそのまま。
+    public static function patchEvent(string $accessToken, string $calendarId, string $eventId, array $patch): array {
+        $url = 'https://www.googleapis.com/calendar/v3/calendars/'
+             . rawurlencode($calendarId) . '/events/' . rawurlencode($eventId);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => 'PATCH',
+            CURLOPT_POSTFIELDS     => json_encode($patch, JSON_UNESCAPED_UNICODE),
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 20,
+        ]);
+        $resp = curl_exec($ch);
+        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($resp === false) {
+            throw new ApiException('calendar_api', 'calendar patch transport failed', 502);
+        }
+        if ($http === 401) {
+            throw new ApiException('calendar_unauthorized', 'access token rejected', 401);
+        }
+        if ($http === 403) {
+            throw new ApiException('calendar_scope', 'Calendar の書き込み権限がありません (再連携してください)', 403);
+        }
+        if ($http < 200 || $http >= 300) {
+            $msg = 'calendar patch error: ' . $http;
+            $data = json_decode((string)$resp, true);
+            if (is_array($data) && !empty($data['error']['message'])) {
+                $msg .= ' — ' . (string)$data['error']['message'];
+            }
+            throw new ApiException('calendar_api', $msg, 502);
+        }
+        $data = json_decode((string)$resp, true);
+        return is_array($data) ? $data : [];
+    }
+
     // POST /calendars/{calendarId}/events で予定を作成。 戻り値は Google の event
      // オブジェクト全体 (htmlLink, hangoutLink などが入る)。
     // start/end は RFC3339 (例: '2026-06-03T15:00:00+09:00')、 timeZone は IANA 名。
