@@ -323,12 +323,19 @@ export async function renderGroupDetail({ params }) {
     </div>
 
     <div class="card" id="gd-wari-card">
-      <h3 style="margin:0">ワリカ</h3>
+      <div class="row center" style="margin-bottom:6px">
+        <h3 class="row-title" style="margin:0">ワリカ</h3>
+        <button id="gd-settle" class="primary">精算する</button>
+      </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
         立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
-      <div id="gd-wari-form"></div>
-      <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
+      <details id="gd-wari-form-card" class="collapsible-sub" style="margin-top:6px">
+        <summary>＋ 支払い登録</summary>
+        <div id="gd-wari-form" style="margin-top:8px"></div>
+      </details>
+      <h4 style="margin:10px 0 4px">支払いの記録</h4>
+      <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
       <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
     </div>
 
@@ -355,8 +362,8 @@ export async function renderGroupDetail({ params }) {
   // Default kind: memo.
   switchKind(document.querySelector('[data-kind="memo"]'));
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
-  // gd-settle ボタンは renderWariForm() で出る (「支出を記録」 の右に並ぶ)。
-  // この時点では未生成なのでバインドは renderWariForm 側で行う。
+  // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
+  document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
   await loadDetail(id);
   await loadWari(id);
 }
@@ -576,7 +583,6 @@ function renderWariForm() {
     <img id="ex-image-preview" alt="" hidden style="max-width:140px; max-height:140px; margin:0 0 6px; border-radius:6px; object-fit:contain; display:block; border:1px solid var(--line)">
     <div class="row" style="gap:6px">
       <button id="ex-submit" class="primary">支出を記録</button>
-      <button id="gd-settle" class="btn">精算する</button>
     </div>
   `;
   const ccyEl = document.getElementById('ex-ccy');
@@ -595,8 +601,6 @@ function renderWariForm() {
   wariFor = new Set(wariMembers.map(m => m.id));
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
-  // 精算する: 別画面ではなく modal を開いて、貸し借りの清算プランを提示する。
-  document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(currentGroupId));
   document.getElementById('ex-image-file').addEventListener('change', onExImageFile);
 }
 
@@ -787,6 +791,8 @@ async function tryFetchCustomRate() {
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
 // exclude that person from this expense.
+// 個別固定額。 uid → 円。 wariFor から外れた人は自動で消える。
+let wariFixed = new Map();
 function renderForPicker() {
   const root = document.getElementById('ex-for');
   if (!root) return;
@@ -796,25 +802,46 @@ function renderForPicker() {
     : (n === wariMembers.length
         ? `全員 (${n}人)`
         : `${n}人で割る`);
+  // 各メンバ行: チップ全体タップで in/out 切替、 右の input に円を入れると 固定額。
+  // 空欄 = 等分。 in/out は visually opacity & border で表す。
   root.innerHTML = `
     <label class="hint-sm">誰の分? <span style="margin-left:6px">${summary}</span></label>
-    <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
+    <div class="hint-sm" style="margin:2px 0 4px">タップで in/out。 右に金額を入れると 「その人だけ固定」 (= 残りを等分)。</div>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px">
       ${wariMembers.map(m => {
         const on = wariFor.has(m.id);
+        const fx = wariFixed.get(m.id);
         return `
-        <span class="rl-chip" data-for-uid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}">
-          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
-          <span>${escapeHtml(m.display_name)}</span>
-        </span>`;
+          <div class="row" data-for-uid="${m.id}" style="gap:6px; align-items:center; padding:4px 6px; border:1px solid ${on ? 'var(--primary)' : 'var(--line)'}; border-radius:6px; ${on ? '' : 'opacity:.4'}; background:${on ? 'var(--primary-soft, #efeafa)' : 'transparent'}">
+            <span class="wari-toggle" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; flex:1; min-width:0">
+              ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+              <span class="bold" style="white-space:nowrap">${escapeHtml(m.display_name)}</span>
+            </span>
+            <input type="number" class="wari-fixed-input" data-fixed-uid="${m.id}"
+                   value="${fx != null ? fx : ''}"
+                   min="0" step="1" placeholder="等分"
+                   style="width:80px; text-align:right; font-size:13px"
+                   ${on ? '' : 'disabled'}>
+            <span class="muted" style="font-size:11px">円</span>
+          </div>`;
       }).join('')}
     </div>
   `;
-  root.querySelectorAll('[data-for-uid]').forEach(c => {
-    c.addEventListener('click', () => {
-      const uid = Number(c.dataset.forUid);
-      if (wariFor.has(uid)) wariFor.delete(uid);
-      else wariFor.add(uid);
+  // チップ全体タップ (input 以外) で in/out 切替。 input は別途固定額入力。
+  root.querySelectorAll('[data-for-uid]').forEach(row => {
+    const uid = Number(row.dataset.forUid);
+    row.querySelector('.wari-toggle').addEventListener('click', () => {
+      if (wariFor.has(uid)) { wariFor.delete(uid); wariFixed.delete(uid); }
+      else                  wariFor.add(uid);
       renderForPicker();
+    });
+  });
+  root.querySelectorAll('.wari-fixed-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const uid = Number(inp.dataset.fixedUid);
+      const v = Number(inp.value);
+      if (Number.isFinite(v) && v > 0) wariFixed.set(uid, Math.floor(v));
+      else wariFixed.delete(uid);
     });
   });
 }
@@ -841,10 +868,21 @@ async function onAddExpense() {
   }
   body.currency = currency;
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
-  // Omit participant_ids if it's everyone — backend default is the full
-  // current member list, which keeps a member added later handled identically.
-  // Send a subset only when it's actually a subset.
-  if (wariFor.size !== wariMembers.length) {
+  // 固定額がある人がいれば rich format で送る。 無ければ legacy で。
+  const hasFixed = [...wariFor].some(uid => wariFixed.has(uid));
+  if (hasFixed) {
+    // 検算: 固定額合計が total を超えてないか、 全員固定で合計 != total など。
+    const fixedTotal = [...wariFor]
+      .filter(uid => wariFixed.has(uid))
+      .reduce((s, uid) => s + wariFixed.get(uid), 0);
+    if (currency === 'JPY' && fixedTotal > amount) {
+      toast('固定額の合計が支払金額を超えています'); return;
+    }
+    body.participants = [...wariFor].map(uid => {
+      const f = wariFixed.get(uid);
+      return f != null ? { user_id: uid, fixed: f } : { user_id: uid };
+    });
+  } else if (wariFor.size !== wariMembers.length) {
     body.participant_ids = [...wariFor];
   }
   try {
@@ -856,7 +894,11 @@ async function onAddExpense() {
     document.getElementById('ex-image-preview').hidden = true;
     document.getElementById('ex-image-status').textContent = '';
     wariFor = new Set(wariMembers.map(m => m.id));
+    wariFixed.clear();
     renderForPicker();
+    // 登録後は支払い登録フォームを畳む (記録画面に戻る感じ)。
+    const det = document.getElementById('gd-wari-form-card');
+    if (det) det.open = false;
     toast('記録しました');
     await loadWari(gid);
   } catch (e) { toast('失敗: ' + e.message); }

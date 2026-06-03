@@ -430,18 +430,50 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     $spent = []; // user_id => int
     foreach ($rows as &$r) {
         $r['amount_jpy'] = (int)$r['amount_jpy'];
+        // participants_json は 2 形式を受ける:
+        //   旧 (legacy):  [1, 2, 3]                              全員等分
+        //   新 (rich):    [{"u":1,"fixed":5000},{"u":2},{"u":3}] 一部固定 + 残り等分
+        // 内部で 「ids + fixed map」 に normalize して扱う。
         $parts = json_decode((string)$r['participants_json'], true);
-        $r['participants'] = is_array($parts) ? array_values(array_map('intval', $parts)) : [];
+        $ids = []; $fixed = []; // user_id => int
+        if (is_array($parts)) {
+            foreach ($parts as $p) {
+                if (is_array($p) && isset($p['u'])) {
+                    $uid = (int)$p['u'];
+                    $ids[] = $uid;
+                    if (isset($p['fixed'])) $fixed[$uid] = max(0, (int)$p['fixed']);
+                } else {
+                    $ids[] = (int)$p;
+                }
+            }
+        }
         unset($r['participants_json']);
-        $n = max(1, count($r['participants']));
-        $share = (int)floor($r['amount_jpy'] / $n);
-        $leftover = $r['amount_jpy'] - $share * $n;
+        $r['participants'] = $ids;
+        // 各参加者の share を計算 (固定 + 残り等分 + rounding leftover) して
+        // フロントが breakdown 表示できるように shares を返す。
+        $r['shares'] = [];
+        $fixedTotal = array_sum($fixed);
+        $unfixed = array_values(array_filter($ids, fn($u) => !isset($fixed[$u])));
+        $remaining = max(0, $r['amount_jpy'] - $fixedTotal);
+        $n = count($unfixed);
+        $share = $n > 0 ? (int)floor($remaining / $n) : 0;
+        $leftover = $n > 0 ? $remaining - $share * $n : 0;
         $payerId = (int)$r['payer_user_id'];
         $paid[$payerId] = ($paid[$payerId] ?? 0) + $r['amount_jpy'];
-        // Leftover を最初の参加者に乗せて、合計が常に amount_jpy にぴったり一致するように。
-        foreach ($r['participants'] as $i => $pid) {
-            $myShare = $share + ($i === 0 ? $leftover : 0);
-            $spent[$pid] = ($spent[$pid] ?? 0) + $myShare;
+        $sharesByUid = [];
+        $uIdx = 0;
+        foreach ($ids as $pid) {
+            if (isset($fixed[$pid])) {
+                $sharesByUid[$pid] = ['share_jpy' => $fixed[$pid], 'fixed' => true];
+            } else {
+                $myShare = $share + ($uIdx === 0 ? $leftover : 0);
+                $sharesByUid[$pid] = ['share_jpy' => $myShare, 'fixed' => false];
+                $uIdx++;
+            }
+            $spent[$pid] = ($spent[$pid] ?? 0) + $sharesByUid[$pid]['share_jpy'];
+        }
+        foreach ($ids as $pid) {
+            $r['shares'][] = ['user_id' => $pid] + $sharesByUid[$pid];
         }
     }
     unset($r);
@@ -563,8 +595,32 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
     if (!in_array($payerId, $allMembers, true)) {
         throw new ApiException('bad_request', 'payer must be a group member', 400);
     }
+    // participants は 2 形式どちらも受ける:
+    //   participant_ids: [1, 2, 3]                                (旧 / 全員等分)
+    //   participants:    [{user_id:1, fixed:5000}, {user_id:2}]   (新 / 固定額あり)
+    // どちらも省略すれば 「全員」 が対象 (= 全員等分)。
     $participants = $allMembers;
-    if (isset($body['participant_ids']) && is_array($body['participant_ids'])) {
+    if (isset($body['participants']) && is_array($body['participants'])) {
+        $rich = []; $seen = [];
+        foreach ($body['participants'] as $p) {
+            if (!is_array($p) || !isset($p['user_id'])) continue;
+            $uid = (int)$p['user_id'];
+            if ($uid <= 0 || isset($seen[$uid])) continue;
+            $seen[$uid] = true;
+            if (!in_array($uid, $allMembers, true)) {
+                throw new ApiException('bad_request', 'participant not in group', 400);
+            }
+            $entry = ['u' => $uid];
+            if (isset($p['fixed'])) {
+                $f = (int)$p['fixed'];
+                if ($f < 0) throw new ApiException('bad_request', 'fixed must be >= 0', 400);
+                if ($f > 0) $entry['fixed'] = $f;
+            }
+            $rich[] = $entry;
+        }
+        if (!$rich) throw new ApiException('bad_request', 'participants cannot be empty', 400);
+        $participants = $rich;
+    } elseif (isset($body['participant_ids']) && is_array($body['participant_ids'])) {
         $req = array_values(array_unique(array_map('intval', $body['participant_ids'])));
         $bad = array_diff($req, $allMembers);
         if ($bad) throw new ApiException('bad_request', 'participant not in group', 400);
@@ -682,7 +738,27 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
             $sets[] = 'is_draft = 0';
         }
     }
-    if (array_key_exists('participant_ids', $body) && is_array($body['participant_ids'])) {
+    if (array_key_exists('participants', $body) && is_array($body['participants'])) {
+        $rich = []; $seen = [];
+        foreach ($body['participants'] as $p) {
+            if (!is_array($p) || !isset($p['user_id'])) continue;
+            $uid = (int)$p['user_id'];
+            if ($uid <= 0 || isset($seen[$uid])) continue;
+            $seen[$uid] = true;
+            if (!in_array($uid, $allMembers, true)) {
+                throw new ApiException('bad_request', 'participant not in group', 400);
+            }
+            $entry = ['u' => $uid];
+            if (isset($p['fixed'])) {
+                $f = (int)$p['fixed'];
+                if ($f < 0) throw new ApiException('bad_request', 'fixed must be >= 0', 400);
+                if ($f > 0) $entry['fixed'] = $f;
+            }
+            $rich[] = $entry;
+        }
+        if (!$rich) throw new ApiException('bad_request', 'participants cannot be empty', 400);
+        $sets[] = 'participants_json = ?'; $args[] = json_encode($rich);
+    } elseif (array_key_exists('participant_ids', $body) && is_array($body['participant_ids'])) {
         $req = array_values(array_unique(array_map('intval', $body['participant_ids'])));
         $bad = array_diff($req, $allMembers);
         if ($bad) throw new ApiException('bad_request', 'participant not in group', 400);
@@ -733,21 +809,40 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     if (!$rows) throw new ApiException('bad_request', '支出がまだありません', 400);
 
-    // paid / spent / net を集計 (group_expenses_list と同じロジック)
+    // paid / spent / net を集計 (group_expenses_list と同じロジック、
+    // legacy [id,...] と新 [{u, fixed?}, ...] の両方を受ける)。
     $paid  = [];
     $spent = [];
     foreach ($rows as $r) {
         $amount = (int)$r['amount_jpy'];
         $parts = json_decode((string)$r['participants_json'], true);
         if (!is_array($parts) || !$parts) continue;
-        $parts = array_values(array_map('intval', $parts));
-        $n = count($parts);
-        $share = (int)floor($amount / $n);
-        $leftover = $amount - $share * $n;
+        $ids = []; $fixed = [];
+        foreach ($parts as $p) {
+            if (is_array($p) && isset($p['u'])) {
+                $uid = (int)$p['u'];
+                $ids[] = $uid;
+                if (isset($p['fixed'])) $fixed[$uid] = max(0, (int)$p['fixed']);
+            } else {
+                $ids[] = (int)$p;
+            }
+        }
+        if (!$ids) continue;
+        $unfixed = array_values(array_filter($ids, fn($x) => !isset($fixed[$x])));
+        $remaining = max(0, $amount - array_sum($fixed));
+        $n = count($unfixed);
+        $share = $n > 0 ? (int)floor($remaining / $n) : 0;
+        $leftover = $n > 0 ? $remaining - $share * $n : 0;
         $paid[(int)$r['payer_user_id']] = ($paid[(int)$r['payer_user_id']] ?? 0) + $amount;
-        foreach ($parts as $i => $pid) {
-            $myShare = $share + ($i === 0 ? $leftover : 0);
-            $spent[$pid] = ($spent[$pid] ?? 0) + $myShare;
+        $uIdx = 0;
+        foreach ($ids as $pid) {
+            if (isset($fixed[$pid])) {
+                $spent[$pid] = ($spent[$pid] ?? 0) + $fixed[$pid];
+            } else {
+                $myShare = $share + ($uIdx === 0 ? $leftover : 0);
+                $spent[$pid] = ($spent[$pid] ?? 0) + $myShare;
+                $uIdx++;
+            }
         }
     }
     // Build name map across everyone who paid or spent.
