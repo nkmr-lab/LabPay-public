@@ -402,6 +402,43 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['items' => $cals]);
         return;
     }
+    // 「今日の予定」 タイトル個人フィルタ (ホームの calendar カードで適用)。
+    // ルール = JSON 配列、各要素は {pattern: string, regex?: bool}。
+    // どれか 1 つにタイトルがマッチすれば hide。
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'filter-rules' && $method === 'GET') {
+        $st = $pdo->prepare('SELECT calendar_filter_rules FROM users WHERE id=?');
+        $st->execute([$u['id']]);
+        $raw = $st->fetchColumn();
+        $rules = [];
+        if ($raw) {
+            $j = json_decode((string)$raw, true);
+            if (is_array($j)) $rules = calendar_filter_rules_clean($j);
+        }
+        json_response(['rules' => $rules]);
+        return;
+    }
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'filter-rules' && $method === 'PATCH') {
+        $body = read_json_body();
+        $raw  = $body['rules'] ?? [];
+        if (!is_array($raw)) {
+            throw new ApiException('bad_request', 'rules must be an array', 400);
+        }
+        $rules = calendar_filter_rules_clean($raw);
+        // regex ルールはサーバ側でも 1 度 preg_match を試して invalid なら弾く。
+        foreach ($rules as $r) {
+            if (!empty($r['regex'])) {
+                $pat = '/' . str_replace('/', '\/', $r['pattern']) . '/iu';
+                if (@preg_match($pat, '') === false) {
+                    throw new ApiException('bad_request',
+                        "正規表現が不正です: {$r['pattern']}", 400);
+                }
+            }
+        }
+        $pdo->prepare('UPDATE users SET calendar_filter_rules=? WHERE id=?')
+            ->execute([json_encode($rules, JSON_UNESCAPED_UNICODE), $u['id']]);
+        json_response(['ok' => true, 'rules' => $rules]);
+        return;
+    }
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'selection' && $method === 'PATCH') {
         $body = read_json_body();
         $ids = $body['ids'] ?? [];
@@ -416,15 +453,20 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'events' && $method === 'GET') {
-        $st = $pdo->prepare('SELECT calendar_selected_ids FROM users WHERE id=?');
+        $st = $pdo->prepare('SELECT calendar_selected_ids, calendar_filter_rules FROM users WHERE id=?');
         $st->execute([$u['id']]);
-        $sel = $st->fetchColumn();
+        $row = $st->fetch(PDO::FETCH_ASSOC);
         $selected = [];
-        if ($sel) {
-            $j = json_decode((string)$sel, true);
+        if (!empty($row['calendar_selected_ids'])) {
+            $j = json_decode((string)$row['calendar_selected_ids'], true);
             if (is_array($j)) $selected = array_map('strval', $j);
         }
         if (!$selected) $selected = ['primary']; // default = primary
+        $filterRules = [];
+        if (!empty($row['calendar_filter_rules'])) {
+            $j = json_decode((string)$row['calendar_filter_rules'], true);
+            if (is_array($j)) $filterRules = calendar_filter_rules_clean($j);
+        }
         // 「今日 00:00 〜 明日 24:00」 (JST) を timeMin/timeMax に変換 (RFC3339)。
         $tz = new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
         $now = new DateTimeImmutable('now', $tz);
@@ -442,10 +484,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $start = $e['start']['dateTime'] ?? $e['start']['date'] ?? null;
                     $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
                     if (!$start) continue;
+                    $title = (string)($e['summary'] ?? '(無題)');
+                    if (calendar_filter_rules_match($filterRules, $title)) continue;
                     $merged[] = [
                         'id'       => (string)($e['id'] ?? ''),
                         'calendar' => $cid,
-                        'title'    => (string)($e['summary'] ?? '(無題)'),
+                        'title'    => $title,
                         'start'    => $start,
                         'end'      => $end,
                         'all_day'  => !isset($e['start']['dateTime']),
@@ -494,6 +538,37 @@ function presence_merge_intervals(array $iv): array {
         unset($last);
     }
     return $merged;
+}
+
+// ─── Calendar filter rules helpers ─────────────────────────────────────
+// 受領した配列 (DB 又は body) を妥当な形に正規化: pattern が空文字なものは捨て、
+// regex フラグは bool に揃え、pattern 長は 200 文字で頭打ち。
+function calendar_filter_rules_clean(array $raw): array {
+    $out = [];
+    foreach ($raw as $r) {
+        if (!is_array($r)) continue;
+        $p = trim((string)($r['pattern'] ?? ''));
+        if ($p === '') continue;
+        $rule = ['pattern' => mb_substr($p, 0, 200)];
+        if (!empty($r['regex'])) $rule['regex'] = true;
+        $out[] = $rule;
+    }
+    return array_slice($out, 0, 50); // 上限 50 ルール
+}
+
+// タイトルがどれか 1 つのルールにマッチするか。マッチ = この予定を hide。
+function calendar_filter_rules_match(array $rules, string $title): bool {
+    foreach ($rules as $r) {
+        $p = (string)($r['pattern'] ?? '');
+        if ($p === '') continue;
+        if (!empty($r['regex'])) {
+            $pat = '/' . str_replace('/', '\/', $p) . '/iu';
+            if (@preg_match($pat, $title) === 1) return true;
+        } else {
+            if (mb_stripos($title, $p) !== false) return true;
+        }
+    }
+    return false;
 }
 
 // GET /api/users — lightweight list of all human users for recipient pickers.

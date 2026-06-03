@@ -86,6 +86,14 @@ export async function renderSettings() {
         どのカレンダーを表示するかは下で個別に切り替えられます。
       </p>
       <div id="cal-section"><div class="muted">読み込み中…</div></div>
+      <div class="sep" style="margin:14px 0 10px"></div>
+      <h3 style="margin:0">予定の非表示ルール</h3>
+      <p class="hint">
+        タイトルにこの文字列を含む予定はホームの「今日の予定」に出ない。
+        正規表現も可 (チェック ON で <code>^MTG </code>、<code>(個人|サブ)</code> など)。
+        どれか 1 ルールにでもマッチすれば hide。
+      </p>
+      <div id="cal-filter-section" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
@@ -134,6 +142,7 @@ export async function renderSettings() {
   document.getElementById('sb-add').addEventListener('click', onScrapboxAdd);
   await loadScrapboxHandles();
   await loadCalendar();
+  await loadCalendarFilterRules();
 
   document.getElementById('fb-send').addEventListener('click', async () => {
     const kind = document.getElementById('fb-kind').value;
@@ -216,6 +225,78 @@ async function loadCalendar() {
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// ---------------- Calendar filter rules ----------------
+// タイトル部分一致 / 正規表現で 「今日の予定」 カードに出さない予定を絞る。
+// rules = [{pattern, regex?: true}, ...]
+let cachedFilterRules = [];
+
+async function loadCalendarFilterRules() {
+  const root = document.getElementById('cal-filter-section');
+  if (!root) return;
+  try {
+    const r = await get('/api/me/calendar/filter-rules');
+    cachedFilterRules = Array.isArray(r.rules) ? r.rules : [];
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  renderCalendarFilterRules();
+}
+
+function renderCalendarFilterRules() {
+  const root = document.getElementById('cal-filter-section');
+  if (!root) return;
+  const list = cachedFilterRules.length
+    ? cachedFilterRules.map((r, i) => `
+        <div class="list-item" style="padding:8px 12px; gap:6px; align-items:center">
+          ${r.regex ? '<span class="tag" style="font-size:10px">regex</span>' : ''}
+          <div class="bold mono grow" style="min-width:0; word-break:break-all">${escapeHtml(r.pattern)}</div>
+          <button data-rm-rule="${i}" class="btn" style="padding:2px 8px; font-size:12px">削除</button>
+        </div>`).join('')
+    : `<div class="empty" style="padding:10px">ルールはまだありません</div>`;
+  root.innerHTML = `
+    <div class="list">${list}</div>
+    <div class="row" style="margin-top:8px; gap:6px; align-items:center; flex-wrap:wrap">
+      <input type="text" id="cal-rule-pat" maxlength="200" placeholder="例: w/o 先生 / ^個人 / (サブコミ|二重)" class="grow">
+      <label class="hint-sm" style="display:inline-flex; align-items:center; gap:4px">
+        <input type="checkbox" id="cal-rule-regex"> 正規表現
+      </label>
+      <button id="cal-rule-add" class="primary">追加</button>
+    </div>
+  `;
+  document.getElementById('cal-rule-add').addEventListener('click', onCalendarRuleAdd);
+  document.getElementById('cal-rule-pat').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onCalendarRuleAdd(); }
+  });
+  root.querySelectorAll('[data-rm-rule]').forEach(b => {
+    b.addEventListener('click', () => onCalendarRuleRemove(Number(b.dataset.rmRule)));
+  });
+}
+
+async function onCalendarRuleAdd() {
+  const pat = document.getElementById('cal-rule-pat').value.trim();
+  if (!pat) { toast('パターンを入力してください'); return; }
+  const regex = !!document.getElementById('cal-rule-regex').checked;
+  const newRule = regex ? { pattern: pat, regex: true } : { pattern: pat };
+  const next = [...cachedFilterRules, newRule];
+  try {
+    const r = await patch('/api/me/calendar/filter-rules', { rules: next });
+    cachedFilterRules = r.rules || next;
+    toast('追加しました');
+    renderCalendarFilterRules();
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onCalendarRuleRemove(idx) {
+  const next = cachedFilterRules.filter((_, i) => i !== idx);
+  try {
+    const r = await patch('/api/me/calendar/filter-rules', { rules: next });
+    cachedFilterRules = r.rules || next;
+    toast('削除しました');
+    renderCalendarFilterRules();
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 // ---------------- Scrapbox handles ----------------
