@@ -3,7 +3,7 @@
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { state, toast } from '../app.js';
+import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
@@ -171,6 +171,7 @@ async function onCreate() {
       title, description, slug, image_url, member_ids: [...picked],
     });
     toast('作成しました');
+    refreshHasGroups();
     location.hash = '#/groups/' + (r.slug || r.id);
   } catch (e) { toast('失敗: ' + e.message); }
 }

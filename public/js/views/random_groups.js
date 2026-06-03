@@ -6,7 +6,7 @@
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { state, toast } from '../app.js';
+import { state, toast, refreshHasGroups } from '../app.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
@@ -268,6 +268,7 @@ async function onBulkCreate() {
       errors.push(`${title}: ${e.message}`);
     }
   }
+  if (ok > 0) refreshHasGroups();
   if (errors.length === 0) {
     toast(`${ok} 個のグループを作成しました`);
     location.hash = '#/groups';

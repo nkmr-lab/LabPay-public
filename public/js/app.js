@@ -46,6 +46,7 @@ export const state = {
   unread: 0,
   inLab: false,   // server-enforced lab-Wi-Fi gate; mirrored here so the UI can grey out 購入 buttons
   hasMac: true,   // false → show "Mac 登録してね" onboarding banner on home
+  hasGroups: false, // 自分が入ってるグループが 1 つ以上あるか (タブの 「グループ」 表示制御)
 };
 
 export async function refreshMe() {
@@ -56,12 +57,26 @@ export async function refreshMe() {
     state.inLab = !!data.in_lab;
     state.hasMac = !!data.has_registered_mac;
     renderChrome();
+    // タブの 「グループ」 表示判定。 失敗・遅延しても他の処理を止めないよう
+    // fire-and-forget。 結果が遅れて来てもタブが追加で出るだけなので無害。
+    refreshHasGroups();
     return data;
   } catch (e) {
     state.me = null;
     renderChrome();
     return null;
   }
+}
+
+// 自分が入ってるグループの有無を /api/groups で確認してタブ可視を更新。
+// home / groups の各 view で再度叩かれるが、 タブ判定だけは bootstrap で
+// 走らないと初回ページが home 以外の時 タブが出ないので app.js でも呼ぶ。
+export async function refreshHasGroups() {
+  try {
+    const d = await get('/api/groups');
+    state.hasGroups = Array.isArray(d.items) && d.items.length > 0;
+    renderChrome();
+  } catch (_) { /* 取れなければ前回値を保持 */ }
 }
 
 export async function refreshUnread() {
@@ -128,6 +143,8 @@ function renderChrome() {
   } else {
     badge.hidden = true;
   }
+  const groupsTab = document.getElementById('tab-groups');
+  if (groupsTab) groupsTab.hidden = !state.hasGroups;
 }
 
 // (Logout button moved to settings page)

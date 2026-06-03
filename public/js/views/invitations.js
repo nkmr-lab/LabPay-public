@@ -2,7 +2,7 @@
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
-import { state, toast } from '../app.js';
+import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { renderCoverEditor, wireCoverEditor } from './groups.js';
 
@@ -317,6 +317,7 @@ async function onCreateGroupFromInv(inv, memberIds) {
   try {
     const r = await post('/api/groups', { title, member_ids: memberIds });
     toast('グループを作成しました');
+    refreshHasGroups();
     location.hash = '#/groups/' + (r.slug || r.id);
   } catch (e) { toast('失敗: ' + e.message); }
 }
