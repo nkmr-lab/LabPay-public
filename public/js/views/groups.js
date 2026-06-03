@@ -617,6 +617,61 @@ async function onExImageFile(ev) {
 
 // ─── RECEIPTS (撮影ストック → 後でワリカに転用) ─────────────────────
 
+// JPEG の EXIF から DateTimeOriginal (tag 0x9003) を読む。 戻り値は
+// 「YYYY-MM-DD HH:MM:SS」 形式 (server 期待) または null。 ライブラリ不要、
+// 自前で TIFF を辿る最小実装。 EXIF が無い / HEIC / 解析失敗 で null。
+//
+// EXIF 仕様: JPEG (FFD8) → APP1 マーカー (FFE1) + "Exif\0\0" + TIFF。
+// TIFF は "II" (little-endian) または "MM" (big-endian) + 0x002A magic +
+// IFD0 offset。 IFD0 の中に ExifIFD pointer (tag 0x8769) があり、 その先に
+// DateTimeOriginal (tag 0x9003、 ASCII 20 byte 「YYYY:MM:DD HH:MM:SS\0」)。
+async function readExifDateTime(file) {
+  if (!file || !/^image\/jpe?g$/i.test(file.type)) return null;
+  const buf = await file.slice(0, 128 * 1024).arrayBuffer(); // EXIF はだいたい先頭
+  const dv = new DataView(buf);
+  if (dv.getUint16(0) !== 0xFFD8) return null;
+  let off = 2;
+  while (off + 4 < dv.byteLength) {
+    const marker = dv.getUint16(off);
+    if ((marker & 0xFF00) !== 0xFF00) return null;
+    const segLen = dv.getUint16(off + 2);
+    if (marker === 0xFFE1
+        && off + 10 < dv.byteLength
+        && dv.getUint32(off + 4) === 0x45786966   // "Exif"
+        && dv.getUint16(off + 8) === 0x0000) {
+      const tiff = off + 10;
+      const le = dv.getUint16(tiff) === 0x4949;
+      const u16 = o => dv.getUint16(o, le);
+      const u32 = o => dv.getUint32(o, le);
+      if (u16(tiff + 2) !== 0x002A) return null;
+      const ifd0 = tiff + u32(tiff + 4);
+      const n0 = u16(ifd0);
+      let exifIfd = 0;
+      for (let i = 0; i < n0; i++) {
+        const e = ifd0 + 2 + i * 12;
+        if (u16(e) === 0x8769) { exifIfd = tiff + u32(e + 8); break; }
+      }
+      if (!exifIfd) return null;
+      const nE = u16(exifIfd);
+      for (let i = 0; i < nE; i++) {
+        const e = exifIfd + 2 + i * 12;
+        if (u16(e) === 0x9003) {
+          const dataOff = tiff + u32(e + 8);
+          if (dataOff + 19 > dv.byteLength) return null;
+          const bytes = new Uint8Array(buf, dataOff, 19);
+          const s = String.fromCharCode(...bytes);
+          // "YYYY:MM:DD HH:MM:SS" → "YYYY-MM-DD HH:MM:SS"
+          if (!/^\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) return null;
+          return s.replace(':', '-').replace(':', '-');
+        }
+      }
+      return null;
+    }
+    off += 2 + segLen;
+  }
+  return null;
+}
+
 // 撮影 1 タップ運用: file picker (capture=environment) でカメラ起動 →
 // 並行で GPS を取り (許可されてれば) アップロード時に taken_at + lat/lng を送る。
 // 失敗 / 拒否されても GPS なしで普通に保存される。
@@ -624,13 +679,18 @@ async function onReceiptFile(ev, gid) {
   const f = ev.target.files?.[0];
   ev.target.value = ''; // 同じファイルを連続選択できるよう reset
   if (!f) return;
-  // 撮影時刻 = ブラウザ ローカル時刻 (= 撮影者が今いる場所の時刻)。 toISOString
-  // だと UTC になってサーバ側で JST 扱いされて 9 時間ズレるので、 ローカル時刻
-  // を手で組み立てる。 MTG 立てる時の入力フォームと同じ規約。
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const takenAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `
-                + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  // 撮影時刻の決め方:
+  //   (1) JPEG なら EXIF の DateTimeOriginal を優先 (= カメラがその場で
+  //       記録した時刻、 後でアルバムから古い写真を選んだ時も正しい)
+  //   (2) 取れなければブラウザの 「今」 ローカル時刻 (= 今その場で撮った想定)
+  // 規約は MTG 入力と同じく 「YYYY-MM-DD HH:MM:SS」 のローカル時刻文字列。
+  let takenAt = await readExifDateTime(f);
+  if (!takenAt) {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    takenAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `
+            + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
   let lat = null, lng = null;
   if (navigator.geolocation) {
     try {
