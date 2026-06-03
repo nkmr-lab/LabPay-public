@@ -222,6 +222,8 @@ export async function renderPollNew() {
 }
 
 let countdownTimer = null;
+let tallyRefreshTimer = null;
+let lastDeadline = null;     // 直近 detail の締切。 refresh 間隔判定に使う。
 
 export async function renderPollDetail({ params }) {
   const id = Number(params.id);
@@ -250,7 +252,10 @@ export async function renderPollDetail({ params }) {
       <div class="muted" style="font-size:13px">投票済 (再投票は許可されていません)</div>
     </div>
     <div class="card" id="pd-tally-card" hidden>
-      <h3 style="margin:0 0 6px">集計</h3>
+      <h3 style="margin:0 0 6px; display:flex; align-items:baseline; gap:8px">
+        <span>集計</span>
+        <span class="hint-sm" id="pd-tally-updated"></span>
+      </h3>
       <div id="pd-tally"></div>
     </div>
     <div class="card">
@@ -266,6 +271,7 @@ export async function renderPollDetail({ params }) {
     </div>
   `;
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  if (tallyRefreshTimer) { clearTimeout(tallyRefreshTimer); tallyRefreshTimer = null; }
   // URL コピー (ページが描かれた時点で 1 回だけ wire-up。 ボタン自体は常設)。
   document.getElementById('pd-copy-url')?.addEventListener('click', async () => {
     const url = location.origin + location.pathname + '#/polls/' + id;
@@ -345,6 +351,9 @@ async function loadPollDetail(id) {
         </label>`).join('');
       document.getElementById('pd-vote-title').textContent =
         alreadyVoted ? '投票し直す' : (p.multi_select ? '投票 (複数可)' : '投票');
+      // 保存ボタンの文言も同期。 投票済 + 再投票可 = 「投票し直す」。
+      document.getElementById('pd-vote-save').textContent =
+        alreadyVoted ? '投票し直す' : '投票する';
       // 自由記述 (複数選択 + allow_free_text)
       const ftWrap = document.getElementById('pd-ft-wrap');
       const ftInput = document.getElementById('pd-ft');
@@ -374,43 +383,19 @@ async function loadPollDetail(id) {
       votedCard.hidden = !(d.is_voter && alreadyVoted && !p.allow_revote);
     }
 
-    // 集計カード
-    const tallyCard = document.getElementById('pd-tally-card');
-    if (d.tally_visible && d.tallies) {
-      tallyCard.hidden = false;
-      const total = Object.values(d.tallies).reduce((a, b) => a + b, 0) || 1;
-      let html = d.options.map(o => {
-        const n = d.tallies[o.id] || 0;
-        const pct = Math.round((n / total) * 100);
-        return `
-          <div style="margin-bottom:6px">
-            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px">
-              <span>${escapeHtml(o.label)}</span>
-              <span class="muted">${n} 票 (${pct}%)</span>
-            </div>
-            <div style="background:#eee; height:8px; border-radius:4px; overflow:hidden">
-              <div style="background:var(--primary); height:100%; width:${pct}%"></div>
-            </div>
-          </div>`;
-      }).join('');
-      if (Array.isArray(d.free_texts) && d.free_texts.length) {
-        html += `<div style="margin-top:12px">
-          <div class="bold" style="font-size:13px; margin-bottom:4px">自由記述 (${d.free_texts.length} 件) <span class="hint-sm">— 誰が書いたかは匿名</span></div>
-          ${d.free_texts.map(t => `<div class="list-item" style="padding:6px 8px; white-space:pre-wrap; font-size:13px">${escapeHtml(t)}</div>`).join('')}
-        </div>`;
-      }
-      document.getElementById('pd-tally').innerHTML = html;
-    } else {
-      tallyCard.hidden = true;
-    }
-
-    // 対象者
+    // 集計カード (本体描画は専用関数に切り出し、 自動更新でも再利用)。
+    renderTallySection(d);
+    // 対象者 (server 側で 学年順 + 表示名で並べて返ってくる)。
     document.getElementById('pd-voters').innerHTML = d.voters.map(v => `
       <span class="presence-pill" style="${v.has_voted ? 'background:#e8f5e9; border:1px solid #66bb6a' : ''}">
         ${avatarHtml(v.display_name, v.avatar_url, 'sm')}
         <span class="presence-pill-name">${escapeHtml(v.display_name)}</span>
+        ${v.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(v.grade)}]</span>` : ''}
         ${v.has_voted ? '<span style="color:#2e7d32; font-size:11px">✓</span>' : ''}
       </span>`).join('');
+    // 締切と集計の自動更新スケジュール (締切までの距離で間隔を変える)。
+    lastDeadline = p.deadline_at;
+    scheduleTallyRefresh(id, isOpen);
 
     // 管理ボタン
     if (isCreator) {
@@ -449,4 +434,75 @@ async function loadPollDetail(id) {
     document.getElementById('pd-head').innerHTML =
       `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// 集計セクションだけを描画 (URL コピーや投票 UI を触らないので 入力フォーカスを壊さない)。
+function renderTallySection(d) {
+  const tallyCard = document.getElementById('pd-tally-card');
+  if (!tallyCard) return;
+  if (!d.tally_visible || !d.tallies) {
+    tallyCard.hidden = true;
+    return;
+  }
+  tallyCard.hidden = false;
+  const total = Object.values(d.tallies).reduce((a, b) => a + b, 0) || 1;
+  let html = d.options.map(o => {
+    const n = d.tallies[o.id] || 0;
+    const pct = Math.round((n / total) * 100);
+    return `
+      <div style="margin-bottom:6px">
+        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px">
+          <span>${escapeHtml(o.label)}</span>
+          <span class="muted">${n} 票 (${pct}%)</span>
+        </div>
+        <div style="background:#eee; height:8px; border-radius:4px; overflow:hidden">
+          <div style="background:var(--primary); height:100%; width:${pct}%"></div>
+        </div>
+      </div>`;
+  }).join('');
+  if (Array.isArray(d.free_texts) && d.free_texts.length) {
+    html += `<div style="margin-top:12px">
+      <div class="bold" style="font-size:13px; margin-bottom:4px">自由記述 (${d.free_texts.length} 件) <span class="hint-sm">— 誰が書いたかは匿名</span></div>
+      ${d.free_texts.map(t => `<div class="list-item" style="padding:6px 8px; white-space:pre-wrap; font-size:13px">${escapeHtml(t)}</div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('pd-tally').innerHTML = html;
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const updated = document.getElementById('pd-tally-updated');
+  if (updated) updated.textContent = `(${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} 更新)`;
+}
+
+// 締切までの残り時間で更新間隔を決める。 締切過ぎ / 集計不可視 (詳細レスポンス
+// で tally_visible=false) のときは止める。
+function pickRefreshIntervalMs() {
+  if (!lastDeadline) return 60_000;
+  const dt = new Date(String(lastDeadline).replace(' ', 'T'));
+  const remaining = dt - new Date();
+  if (remaining <= 0) return 0;       // 締切過ぎ
+  if (remaining < 10 * 60 * 1000) return 10_000;  // 残 10 分未満
+  return 60_000;
+}
+
+function scheduleTallyRefresh(id, isOpen) {
+  if (tallyRefreshTimer) { clearTimeout(tallyRefreshTimer); tallyRefreshTimer = null; }
+  const ms = isOpen ? pickRefreshIntervalMs() : 0;
+  if (!ms) return;
+  tallyRefreshTimer = setTimeout(async () => {
+    try {
+      const d = await get('/api/polls/' + id);
+      renderTallySection(d);
+      // 状態 (締切過ぎ → status=closed への遷移など) を踏まえて次回スケジューリング。
+      const stillOpen = d.poll?.status === 'open';
+      if (!stillOpen) {
+        // 締切直後の集計は一度描画した時点で安定。 これ以上 polling しない。
+        return;
+      }
+      lastDeadline = d.poll.deadline_at;
+      scheduleTallyRefresh(id, true);
+    } catch {
+      // 失敗しても次回試みる。
+      scheduleTallyRefresh(id, isOpen);
+    }
+  }, ms);
 }

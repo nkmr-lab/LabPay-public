@@ -145,11 +145,15 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
     if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
     $isCreator = (int)$poll['creator_user_id'] === (int)$u['id'];
     // 対象者リスト + 自分が対象か。
-    $stV = $pdo->prepare("SELECT pv.user_id, pv.voted_at, u.display_name, u.avatar_url
+    $stV = $pdo->prepare("SELECT pv.user_id, pv.voted_at, u.display_name, u.avatar_url, u.grade
                            FROM poll_voters pv
                            JOIN users u ON u.id = pv.user_id
                           WHERE pv.poll_id = ?
-                          ORDER BY u.display_name");
+                          ORDER BY CASE u.grade
+                                     WHEN 'B3' THEN 1 WHEN 'B4' THEN 2
+                                     WHEN 'M1' THEN 3 WHEN 'M2' THEN 4
+                                     WHEN 'D'  THEN 5 ELSE 99 END,
+                                   u.display_name");
     $stV->execute([$id]);
     $voters = $stV->fetchAll(PDO::FETCH_ASSOC);
     $isVoter = false;
@@ -214,6 +218,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
             'user_id' => (int)$v['user_id'],
             'display_name' => $v['display_name'],
             'avatar_url' => $v['avatar_url'],
+            'grade' => $v['grade'] ?? '',
             'has_voted' => $v['voted_at'] !== null,
         ], $voters),
         'my_votes' => $myVotes,
