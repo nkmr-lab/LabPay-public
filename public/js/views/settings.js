@@ -256,7 +256,7 @@ async function loadZoom() {
       root.innerHTML = `
         <div style="padding:8px 10px; background:#eef7ee; border-radius:6px">
           <div class="bold">✓ Zoom 連携済み</div>
-          <div class="meta">${escapeHtml(d.email || '(Zoom アカウント)')}</div>
+          <div class="meta">${escapeHtml(d.email || '(アカウント名は user:read scope 未付与のため非表示)')}</div>
         </div>
         <div style="margin-top:8px; display:flex; gap:6px">
           <a class="btn" href="/api/auth/zoom/connect">再連携</a>

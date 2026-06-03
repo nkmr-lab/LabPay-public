@@ -200,10 +200,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
     // ─── Zoom 連携状態取得 / 解除 ─────────────────────────────────────
     if ($sub === 'zoom' && ($seg[2] ?? '') === '' && $method === 'GET') {
-        $st = $pdo->prepare('SELECT zoom_user_id, zoom_email FROM users WHERE id=?');
+        // 連携判定は token の有無で。 zoom_user_id / email は scope 不足だと
+        // 取れないので、 オプショナル表示のみに使う。
+        $st = $pdo->prepare('SELECT zoom_access_token, zoom_email FROM users WHERE id=?');
         $st->execute([$u['id']]);
         $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
-        $connected = !empty($row['zoom_user_id']);
+        $connected = !empty($row['zoom_access_token']);
         json_response([
             'connected' => $connected,
             'email'     => $connected ? (string)($row['zoom_email'] ?? '') : null,

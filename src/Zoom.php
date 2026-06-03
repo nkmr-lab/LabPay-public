@@ -101,7 +101,9 @@ class Zoom {
     }
 
     // exchange / refresh のレスポンスを users に保存する共通ルーチン。
-    // 初回 (exchange) は zoom_user_id/email も埋める。 refresh の時は token だけ更新。
+    // identity (zoom_user_id / email) は best-effort — user:read:user scope が
+    // 無いトークンでも meeting:write だけで MTG は作れるので、 getMe が失敗
+    // しても token 保存は通す。
     public static function storeTokens(PDO $pdo, int $userId, array $tokenResp, bool $keepIdentity = false): void {
         $access  = (string)($tokenResp['access_token']  ?? '');
         $refresh = (string)($tokenResp['refresh_token'] ?? '');
@@ -123,17 +125,23 @@ class Zoom {
             }
             return;
         }
-        // 初回 exchange: identity も拾って保存。
-        $me = self::getMe($access);
+        // 初回 exchange: まず token を保存して連携完了状態にする。
         $pdo->prepare('UPDATE users
-            SET zoom_access_token=?, zoom_refresh_token=?, zoom_token_expires_at=?,
-                zoom_user_id=?, zoom_email=?
-            WHERE id=?')->execute([
-            $access, $refresh, $exp,
-            (string)($me['id']    ?? ''),
-            (string)($me['email'] ?? ''),
-            $userId,
-        ]);
+            SET zoom_access_token=?, zoom_refresh_token=?, zoom_token_expires_at=?
+            WHERE id=?')->execute([$access, $refresh, $exp, $userId]);
+        // identity 取得は best-effort。 scope 無くても無視。
+        try {
+            $me = self::getMe($access);
+            $pdo->prepare('UPDATE users SET zoom_user_id=?, zoom_email=? WHERE id=?')
+                ->execute([
+                    (string)($me['id']    ?? ''),
+                    (string)($me['email'] ?? ''),
+                    $userId,
+                ]);
+        } catch (Throwable $e) {
+            // user:read:user scope 無し → silently skip。 ログだけ残す。
+            error_log('[labpay/zoom] identity fetch skipped: ' . $e->getMessage());
+        }
     }
 
     public static function disconnect(PDO $pdo, int $userId): void {
