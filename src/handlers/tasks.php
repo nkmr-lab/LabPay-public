@@ -365,6 +365,28 @@ function tasks_list(PDO $pdo, array $cfg): void {
     $st->execute([$uid, $uid, $uid, $uid, $uid]);
     $rows = $st->fetchAll();
 
+    // 指名タスクで使う user_id → display_name の lookup を作る。各 task で個別に
+    // SELECT すると N+1 になるので、全 task の assigned_user_ids を集めて 1 回で引く。
+    $allAssignedIds = [];
+    foreach ($rows as $r) {
+        if (!empty($r['assigned_user_ids'])) {
+            foreach (explode(',', (string)$r['assigned_user_ids']) as $aid) {
+                $aid = (int)trim($aid);
+                if ($aid > 0) $allAssignedIds[$aid] = true;
+            }
+        }
+    }
+    $nameById = [];
+    if ($allAssignedIds) {
+        $ids = array_keys($allAssignedIds);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $stN = $pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($place)");
+        $stN->execute($ids);
+        foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $nameById[(int)$row['id']] = (string)$row['display_name'];
+        }
+    }
+
     foreach ($rows as &$r) {
         $r['remaining']   = max(0, (int)$r['capacity'] - (int)$r['approved_count']);
         $r['is_mine']     = ((int)$r['requester_user_id'] === $uid);
@@ -375,6 +397,9 @@ function tasks_list(PDO $pdo, array $cfg): void {
             ? null
             : array_map('intval', explode(',', (string)$r['assigned_user_ids']));
         $r['is_assigned_to_me'] = $assignedIds !== null && in_array($uid, $assignedIds, true);
+        // 指名されてる人の名前リストを add (UI 表示用)。 lookup に無ければ 「user#42」 で fallback。
+        $r['assigned_names'] = $assignedIds === null ? []
+            : array_map(fn($aid) => $nameById[$aid] ?? "user#$aid", $assignedIds);
         // can_claim: 指名タスクなら指名者本人だけ true、それ以外は従来の学年判定
         $audienceOk = $assignedIds !== null
             ? $r['is_assigned_to_me']

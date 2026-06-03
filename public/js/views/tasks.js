@@ -316,6 +316,10 @@ function renderRow(t) {
   const assignedTag = t.assigned_user_ids
     ? `<span class="tag warn" style="margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名タスク'}</span>`
     : '';
+  // 指名タスクは誰が指名されたかも 1 行で出す (自分指名は太字で強調)。
+  const assignedLine = (t.assigned_names && t.assigned_names.length)
+    ? `<div class="meta">指名: ${t.assigned_names.map(n => escapeHtml(n)).join(', ')}</div>`
+    : '';
   const statusTag = ({
     open: '<span class="tag">募集中</span>',
     closed: '<span class="tag muted">完了</span>',
@@ -358,6 +362,7 @@ function renderRow(t) {
           ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
+        ${assignedLine}
         ${progressLine}
       </div>
     </div>`;
