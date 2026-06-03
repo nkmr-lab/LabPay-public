@@ -647,7 +647,6 @@ async function renderMyGroups() {
       href:      '#/groups/' + escapeHtml(g.slug || g.id),
       image_url: g.image_url,
       title:     escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
-      meta:      `${escapeHtml(g.creator_name)} · ${g.member_count}人`,
       members:   g.members || [],
     })).join('');
   } catch (_) {

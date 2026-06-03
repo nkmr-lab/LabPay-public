@@ -232,23 +232,29 @@ export function wireCoverEditor({ idPrefix, onChange }) {
 
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
-export function coverListItem({ href, image_url, title, meta, rightExtra = '', members = null }) {
-  // 参加者アバター行。 8 人までアイコン、 残りは +N で省略。 members は
-  // {id, display_name, avatar_url} の配列。 null/空 ならアバター行を出さない。
+export function coverListItem({ href, image_url, title, meta = '', rightExtra = '', members = null }) {
+  // メンバ行: avatar + 名前のチップを 8 人まで並べて、 末尾に (N人)。
+  // 9 人以上いれば 「+N」 を入れる。 メタ行 (発起人/日時) は呼び出し側が
+  // 空にすれば省略される。
   const memberRow = (Array.isArray(members) && members.length)
-    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:2px; margin-top:4px; align-items:center">
+    ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; align-items:center">
          ${members.slice(0, 8).map(m =>
-           `<span title="${escapeHtml(m.display_name || '')}">${avatarHtml(m.display_name, m.avatar_url, 'xs')}</span>`).join('')}
-         ${members.length > 8 ? `<span class="muted" style="font-size:11px; margin-left:2px">+${members.length - 8}</span>` : ''}
+           `<span style="display:inline-flex; align-items:center; gap:3px; font-size:12px">
+              ${avatarHtml(m.display_name, m.avatar_url, 'xs')}
+              <span>${escapeHtml(m.display_name)}</span>
+            </span>`).join('')}
+         ${members.length > 8 ? `<span class="muted" style="font-size:11px">+${members.length - 8}</span>` : ''}
+         <span class="muted" style="font-size:11px; margin-left:auto">(${members.length}人)</span>
        </div>`
     : '';
+  const metaBlock = meta ? `<div class="meta">${meta}</div>` : '';
   if (image_url) {
     return `
       <a class="list-item with-cover" href="${href}">
         <div class="cover-img" style="background-image:url('${escapeHtml(image_url)}')"></div>
         <div class="grow">
           <div class="bold">${title}</div>
-          <div class="meta">${meta}</div>
+          ${metaBlock}
           ${memberRow}
         </div>
         ${rightExtra}
@@ -258,7 +264,7 @@ export function coverListItem({ href, image_url, title, meta, rightExtra = '', m
     <a class="list-item" href="${href}">
       <div class="grow">
         <div class="bold">${title}</div>
-        <div class="meta">${meta}</div>
+        ${metaBlock}
         ${memberRow}
       </div>
       <div class="hint">→</div>
@@ -278,7 +284,7 @@ async function loadList() {
       href: '#/groups/' + escapeHtml(g.slug || g.id),
       image_url: g.image_url,
       title: escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
-      meta: `${escapeHtml(g.creator_name)} · ${g.member_count}人 · ${escapeHtml(g.created_at)}`,
+      // meta は avatar 行が代わりに伝えるので省略 (発起人 / 日時 は重複情報)。
       members: g.members || [],
     })).join('');
   } catch (e) {

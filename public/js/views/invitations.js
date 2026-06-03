@@ -110,7 +110,9 @@ function renderRow(i) {
   const isMine = meId === Number(i.creator_user_id);
   const isClosed = !!i.closed_at;
   const iJoined = Number(i.i_joined) === 1;
-  const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(i.starts_at)}</div>` : '';
+  // 秒は表示しない (YYYY-MM-DD HH:MM:SS → 16 文字で切る)。
+  const trimSec = (s) => (s || '').toString().slice(0, 16);
+  const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(trimSec(i.starts_at))}</div>` : '';
   const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
   const capLine = i.capacity
     ? `<div class="meta">参加 ${i.join_count} / 上限 ${i.capacity}</div>`
@@ -137,27 +139,36 @@ function renderRow(i) {
     ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(i.description)}</div>`
     : '';
 
-  // 参加表明している人の avatar 列。 8 人まで、 残りは +N。
+  // 参加表明している人の avatar + 名前 行 (一番下にまとめる、 (N人) 付き)。
   const joins = Array.isArray(i.joins) ? i.joins : [];
-  const joinAvatars = joins.length
-    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:2px; margin-top:4px; align-items:center">
+  const joinRow = joins.length
+    ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center">
          ${joins.slice(0, 8).map(j =>
-           `<span title="${escapeHtml(j.display_name || '')}">${avatarHtml(j.display_name, j.avatar_url, 'xs')}</span>`).join('')}
-         ${joins.length > 8 ? `<span class="muted" style="font-size:11px; margin-left:2px">+${joins.length - 8}</span>` : ''}
+           `<span style="display:inline-flex; align-items:center; gap:3px; font-size:12px">
+              ${avatarHtml(j.display_name, j.avatar_url, 'xs')}
+              <span>${escapeHtml(j.display_name)}</span>
+            </span>`).join('')}
+         ${joins.length > 8 ? `<span class="muted" style="font-size:11px">+${joins.length - 8}</span>` : ''}
+         <span class="muted" style="font-size:11px; margin-left:auto">(${joins.length}人)</span>
        </div>`
     : '';
+
+  // 発起人ヘッダ: 一番上に配置 (誰が立ち上げた募集か即わかる)。
+  const creatorHeader = `
+    <div class="meta" style="display:flex; align-items:center; gap:6px; margin-bottom:4px">
+      ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
+      <span>${escapeHtml(i.creator_name)}</span>
+      <span class="muted">· ${escapeHtml(trimSec(i.created_at))}</span>
+    </div>`;
 
   return `
     <a class="list-item" href="#/invitations/${i.id}">
       <div class="grow">
+        ${creatorHeader}
         <div class="bold">${escapeHtml(i.title)} ${statusTag}</div>
         ${whenLine}${whereLine}${capLine}
         ${descBlock}
-        ${joinAvatars}
-        <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:4px">
-          ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
-          ${escapeHtml(i.creator_name)} · ${escapeHtml(i.created_at)}
-        </div>
+        ${joinRow}
       </div>
       ${actions ? `<div style="display:flex; flex-direction:column; gap:4px">${actions}</div>` : ''}
     </a>`;
