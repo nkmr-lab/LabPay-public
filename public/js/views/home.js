@@ -53,7 +53,7 @@ export async function renderHome() {
     <div class="card" id="home-groups-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">あなたのグループ</h2>
-        <a href="#/groups" class="hint">一覧 →</a>
+        <a href="#/groups" class="hint">グループ一覧 →</a>
       </div>
       <div id="home-groups" class="list"></div>
     </div>
@@ -61,7 +61,7 @@ export async function renderHome() {
     <div class="card">
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">新規入荷</h2>
-        <a href="#/buy" class="hint">買う →</a>
+        <a href="#/buy" class="hint">商品一覧 →</a>
       </div>
       <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
     </div>
