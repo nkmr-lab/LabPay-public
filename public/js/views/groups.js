@@ -328,7 +328,6 @@ export async function renderGroupDetail({ params }) {
         立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
       <div id="gd-wari-form"></div>
-      <div id="gd-receipts-pending" class="list" hidden style="margin-top:8px"></div>
       <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
       <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
     </div>
@@ -462,7 +461,7 @@ async function loadDetail(id) {
       document.getElementById('gd-receipt-file').click();
     });
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
-    loadReceipts(id).catch(() => {}); // best-effort
+    // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉じますか?')) return;
       try {
@@ -643,87 +642,37 @@ async function onReceiptFile(ev, gid) {
     await post(`/api/groups/${gid}/receipts`,
       { image_url: data.url, taken_at: takenAt, lat, lng });
     toast(`レシートを保存しました${lat !== null ? ' (📍位置付き)' : ''}`);
-    await loadReceipts(gid);
+    await loadWari(gid);
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// 保存済みレシート (draft expense) を 「支出を記録」 フォームの下に list-item
-// 形式で並べる。 通常の支出行と同じ見た目だが、 左ボーダー破線 + 「立替: ?」 で
-// 「まだ確定してない」 ことを示す。 編集ボタンで openExpenseEdit モーダル、
-// × で破棄。 0 件なら hidden。
+// 未確定レシート (draft) 1 行を確定支出と同じ list-item 形式でレンダリング。
+// 視覚的に区別しすぎず、 「立替: ?」 で 「まだ修正が必要」 と促す。
+// loadWari の中で expense と一緒にソートされて出る。
 let cachedReceipts = [];
-async function loadReceipts(gid) {
-  const root = document.getElementById('gd-receipts-pending');
-  if (!root) return;
-  try {
-    const d = await get(`/api/groups/${gid}/receipts`);
-    cachedReceipts = d.items || [];
-  } catch (_) {
-    cachedReceipts = [];
-  }
-  if (!cachedReceipts.length) { root.hidden = true; root.innerHTML = ''; return; }
-  root.hidden = false;
-  root.innerHTML = cachedReceipts.map(r => {
-    const time   = r.taken_at || r.created_at || '';
-    const timeShort = (time || '').slice(0, 16);
-    const hasGps = r.lat !== null && r.lng !== null;
-    const gpsLink = hasGps
-      ? ` · <a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍地図</a>`
-      : '';
-    const thumb = `
-      <a href="${escapeHtml(r.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0" onclick="event.stopPropagation()">
-        <img src="${escapeHtml(r.image_url)}" alt="" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
-      </a>`;
-    return `
-      <div class="list-item" style="gap:10px; border-left:3px dashed var(--primary); background:#faf7fd">
-        ${thumb}
-        <div class="grow" style="min-width:0">
-          <div class="bold">${escapeHtml(r.uploaded_by_name || '誰か')} 立替: <span class="muted">?</span></div>
-          <div class="meta">📅 ${escapeHtml(timeShort)}${gpsLink}</div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:4px">
-          <button data-edit-receipt="${r.id}" class="btn primary" style="padding:2px 8px; font-size:11px">編集</button>
-          <button data-rm-receipt="${r.id}" class="btn" style="padding:2px 6px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>
-        </div>
-      </div>`;
-  }).join('');
-  // 編集ボタン: openExpenseEdit を draft 用デフォルトで開く。
-  // GET /receipts は image_url / taken_at / lat / lng / uploaded_by_user_id しか
-  // 返さないので、 amount=0 / participants=全員 / payer=登録者 を補完。
-  // payer は 「登録者本人が立替えた」 という想定で uploaded_by_user_id をプリセット
-  // (= 「立替: ?」 の ? を 「登録者」 で埋める意味)。 違えば編集で変えられる。
-  root.querySelectorAll('[data-edit-receipt]').forEach(b => {
-    b.addEventListener('click', () => {
-      const rid = Number(b.dataset.editReceipt);
-      const r = cachedReceipts.find(x => Number(x.id) === rid);
-      if (!r) return;
-      openExpenseEdit(currentGroupId, {
-        id: rid,
-        amount_jpy: 0,
-        amount_original: null,
-        currency: 'JPY',
-        rate_to_jpy: null,
-        payer_user_id: r.uploaded_by_user_id || null,
-        memo: '',
-        image_url: r.image_url,
-        taken_at: r.taken_at,
-        lat: r.lat,
-        lng: r.lng,
-        participants: wariMembers.map(m => m.id),
-        is_draft: 1,
-      });
-    });
-  });
-  root.querySelectorAll('[data-rm-receipt]').forEach(b => {
-    b.addEventListener('click', async (ev) => {
-      ev.stopPropagation();
-      if (!confirm('このレシートを破棄しますか? (元には戻せません)')) return;
-      try {
-        await del(`/api/groups/${currentGroupId}/receipts/${b.dataset.rmReceipt}`);
-        await loadReceipts(currentGroupId);
-      } catch (e) { toast('失敗: ' + e.message); }
-    });
-  });
+function renderReceiptRow(r) {
+  const time     = r.taken_at || r.created_at || '';
+  const timeShort = (time || '').slice(0, 16);
+  const hasGps   = r.lat !== null && r.lng !== null;
+  const gpsLink  = hasGps
+    ? ` · <a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍地図</a>`
+    : '';
+  const thumb = `
+    <a href="${escapeHtml(r.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0" onclick="event.stopPropagation()">
+      <img src="${escapeHtml(r.image_url)}" alt="" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
+    </a>`;
+  return `
+    <div class="list-item" style="gap:10px">
+      ${thumb}
+      <div class="grow" style="min-width:0">
+        <div class="bold">${escapeHtml(r.uploaded_by_name || '誰か')} 立替: <span class="muted">?</span></div>
+        <div class="meta">${escapeHtml(timeShort)}${gpsLink}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <button data-edit-receipt="${r.id}" class="btn primary" style="padding:2px 8px; font-size:11px">編集</button>
+        <button data-rm-receipt="${r.id}" class="btn" style="padding:2px 6px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>
+      </div>
+    </div>`;
 }
 
 // Last-fetched rate for the preset dropdown path. Cleared on currency change.
@@ -856,15 +805,40 @@ async function loadWari(id) {
   const summary = document.getElementById('gd-wari-summary');
   if (!root || !summary) return;
   try {
-    const d = await get(`/api/groups/${id}/expenses`);
+    // 確定済み支出 + 下書きレシート を時系列で混ぜて並べる。
+    // (支出と receipt は同じ adhoc_group_expenses 表だが、 API は分かれてる)
+    const [d, recd] = await Promise.all([
+      get(`/api/groups/${id}/expenses`),
+      get(`/api/groups/${id}/receipts`).catch(() => ({ items: [] })),
+    ]);
+    cachedReceipts = recd.items || [];
     summary.innerHTML = d.count
-      ? `${d.count} 件 / 合計 ¥${d.total_jpy.toLocaleString()}`
-      : '<span class="muted">まだ支出はありません</span>';
-    if (!d.expenses.length) { root.innerHTML = ''; return; }
-    root.innerHTML = d.expenses.map(e => renderExpense(e, id)).join('');
+      ? `${d.count} 件 (確定) / 合計 ¥${d.total_jpy.toLocaleString()}`
+      + (cachedReceipts.length ? ` + 未確定 ${cachedReceipts.length} 件` : '')
+      : (cachedReceipts.length
+          ? `<span class="muted">確定支出はまだなし (未確定レシート ${cachedReceipts.length} 件)</span>`
+          : '<span class="muted">まだ支出はありません</span>');
+    // 各 row に sort 用キー (created_at desc) を付けて 一覧 を組む。
+    const expRows = (d.expenses || []).map(e => ({
+      _ts: e.created_at || '',
+      _draft: false,
+      data: e,
+      html: renderExpense(e, id),
+    }));
+    const recRows = cachedReceipts.map(r => ({
+      _ts: r.taken_at || r.created_at || '',
+      _draft: true,
+      data: r,
+      html: renderReceiptRow(r),
+    }));
+    const merged = [...expRows, ...recRows]
+      .sort((a, b) => (b._ts || '').localeCompare(a._ts || ''));
+    if (!merged.length) { root.innerHTML = ''; lastWariData = d; renderSpendCard(d.balances || []); return; }
+    root.innerHTML = merged.map(r => r.html).join('');
+    // 確定支出の編集/削除
     root.querySelectorAll('[data-edit-ex]').forEach(b => {
       b.addEventListener('click', () => {
-        const exp = d.expenses.find(x => Number(x.id) === Number(b.dataset.editEx));
+        const exp = (d.expenses || []).find(x => Number(x.id) === Number(b.dataset.editEx));
         if (exp) openExpenseEdit(id, exp);
       });
     });
@@ -874,6 +848,37 @@ async function loadWari(id) {
         try {
           await del(`/api/groups/${id}/expenses/${b.dataset.rmEx}`);
           toast('削除しました');
+          await loadWari(id);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    // 未確定 (receipt) の編集/破棄。 編集は openExpenseEdit を draft 用 default で。
+    root.querySelectorAll('[data-edit-receipt]').forEach(b => {
+      b.addEventListener('click', () => {
+        const r = cachedReceipts.find(x => Number(x.id) === Number(b.dataset.editReceipt));
+        if (!r) return;
+        openExpenseEdit(id, {
+          id: r.id,
+          amount_jpy: 0,
+          amount_original: null,
+          currency: 'JPY',
+          rate_to_jpy: null,
+          payer_user_id: r.uploaded_by_user_id || null,
+          memo: '',
+          image_url: r.image_url,
+          taken_at: r.taken_at,
+          lat: r.lat,
+          lng: r.lng,
+          participants: wariMembers.map(m => m.id),
+          is_draft: 1,
+        });
+      });
+    });
+    root.querySelectorAll('[data-rm-receipt]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('このレシートを破棄しますか? (元には戻せません)')) return;
+        try {
+          await del(`/api/groups/${id}/receipts/${b.dataset.rmReceipt}`);
           await loadWari(id);
         } catch (e) { toast('失敗: ' + e.message); }
       });
@@ -1047,7 +1052,6 @@ function openExpenseEdit(gid, e) {
       toast(e.is_draft && amount > 0 ? '支出として登録しました' : '保存しました');
       close();
       await loadWari(gid);
-      await loadReceipts(gid).catch(() => {});
     } catch (err) { toast('失敗: ' + err.message); }
   });
 }
