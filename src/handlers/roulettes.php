@@ -141,7 +141,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
                 'is_winner'    => $uid === $winnerId,
                 'body'         => $uid === $winnerId
                     ? "🎯 ルーレット「{$title}」で あなた が選ばれました!{$rewardWinnerSuffix}"
-                    : "🎰 ルーレット「{$title}」の結果: {$winnerName} さんが選ばれました{$rewardOthersSuffix}",
+                    : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}",
             ];
         }
         json_response([
@@ -195,7 +195,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
     foreach ($ids as $uid) {
         $body = ($uid === $winnerId)
             ? "🎯 ルーレット「{$title}」で あなた が選ばれました!{$rewardWinnerSuffix}"
-            : "🎰 ルーレット「{$title}」の結果: {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
+            : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
         notify_safely($pdo, $cfg, $uid, 'admin_notice', $body, 'roulette', $rouletteId);
     }
 
