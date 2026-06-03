@@ -41,7 +41,7 @@ export async function renderPolls() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center">
-        <h2 style="margin:0">投票</h2>
+        <h2 style="margin:0">投票・アンケート</h2>
         <a class="btn primary" href="#/polls/new">＋ 新規</a>
       </div>
       <p class="card-subtitle" style="margin:6px 0 0">
@@ -56,7 +56,7 @@ export async function renderPolls() {
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('polls-list').innerHTML =
-        '<div class="empty">投票はまだありません</div>';
+        '<div class="empty">投票・アンケートはまだありません</div>';
       return;
     }
     document.getElementById('polls-list').innerHTML = items.map(p => {
@@ -228,7 +228,7 @@ export async function renderPollNew() {
   app.innerHTML = `
     <div class="card">
       <a href="#/polls" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">投票を作る</h2>
+      <h2 style="margin:6px 0 0">投票・アンケートを作る</h2>
     </div>
     ${pollFormCardHtml({
       title: '', body: '', deadline: '', multi: false,
@@ -250,7 +250,7 @@ export async function renderPollEdit({ params }) {
   app.innerHTML = `
     <div class="card">
       <a href="#/polls/${id}" class="hint">← 詳細</a>
-      <h2 style="margin:6px 0 0">投票を編集</h2>
+      <h2 style="margin:6px 0 0">投票・アンケートを編集</h2>
       <div id="pe-status" class="muted" style="font-size:13px">読み込み中…</div>
     </div>
     <div id="pe-form"></div>
@@ -505,6 +505,12 @@ async function loadPollDetail(id) {
 }
 
 // 集計セクションだけを描画 (URL コピーや投票 UI を触らないので 入力フォーカスを壊さない)。
+// 表示ルール:
+//   ・「N 票 (P%)」 の P = N / 回答済み人数 × 100
+//     (複数選択時は 1 人で複数票入るので 「総票数 ÷ 」 だと違和感がある)
+//   ・棒グラフの長さ = N / 対象者総数 × 100
+//     (= 「対象の何割がコレを支持してるか」 一目で見える)
+//   ・ヘッダ右に 「X/Y 人回答 · (HH:MM:SS 更新)」
 function renderTallySection(d) {
   const tallyCard = document.getElementById('pd-tally-card');
   if (!tallyCard) return;
@@ -513,18 +519,21 @@ function renderTallySection(d) {
     return;
   }
   tallyCard.hidden = false;
-  const total = Object.values(d.tallies).reduce((a, b) => a + b, 0) || 1;
+  const totalPeople  = d.voters.length;
+  const votedPeople  = d.voters.filter(v => v.has_voted).length;
+  const denomText    = votedPeople || 1;      // 0 除算回避 (回答者ゼロの間は P=0%)
   let html = d.options.map(o => {
     const n = d.tallies[o.id] || 0;
-    const pct = Math.round((n / total) * 100);
+    const pctText = votedPeople ? Math.round((n / denomText) * 100) : 0;
+    const pctBar  = totalPeople ? Math.round((n / totalPeople) * 100) : 0;
     return `
       <div style="margin-bottom:6px">
         <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px">
           <span>${escapeHtml(o.label)}</span>
-          <span class="muted">${n} 票 (${pct}%)</span>
+          <span class="muted">${n} 票 (回答者の ${pctText}%)</span>
         </div>
         <div style="background:#eee; height:8px; border-radius:4px; overflow:hidden">
-          <div style="background:var(--primary); height:100%; width:${pct}%"></div>
+          <div style="background:var(--primary); height:100%; width:${pctBar}%"></div>
         </div>
       </div>`;
   }).join('');
@@ -534,11 +543,13 @@ function renderTallySection(d) {
       ${d.free_texts.map(t => `<div class="list-item" style="padding:6px 8px; white-space:pre-wrap; font-size:13px">${escapeHtml(t)}</div>`).join('')}
     </div>`;
   }
+  html += `<div class="hint-sm" style="margin-top:8px">棒グラフは対象者 ${totalPeople} 人に対する割合。</div>`;
   document.getElementById('pd-tally').innerHTML = html;
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
   const updated = document.getElementById('pd-tally-updated');
-  if (updated) updated.textContent = `(${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} 更新)`;
+  if (updated) updated.textContent =
+    `${votedPeople}/${totalPeople} 人回答 · (${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} 更新)`;
 }
 
 // 締切までの残り時間で更新間隔を決める。 締切過ぎ / 集計不可視 (詳細レスポンス
