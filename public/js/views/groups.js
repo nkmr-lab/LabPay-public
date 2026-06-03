@@ -325,7 +325,8 @@ export async function renderGroupDetail({ params }) {
     <div class="card" id="gd-sched-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">スケジュール</h3>
-        <button id="gd-sched-range" class="btn">日程設定</button>
+        <button id="gd-sched-editmode" class="btn" style="padding:2px 10px; font-size:12px">編集モード</button>
+        <button id="gd-sched-range" class="btn" style="padding:2px 10px; font-size:12px">日程設定</button>
       </div>
       <div id="gd-sched-body" class="muted" style="font-size:13px">読み込み中…</div>
     </div>
