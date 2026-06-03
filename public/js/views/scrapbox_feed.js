@@ -6,22 +6,26 @@ import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 
-const WINDOWS = [
-  { days: 1,  label: '今日' },
-  { days: 7,  label: '1 週間' },
-  { days: 30, label: '1 ヶ月' },
+// 範囲は 「今日 / 昨日 / 今週」 の 3 択。 1 ヶ月だと量が多すぎて読めなくなるので
+// 廃止。 サーバ側は range キーで oldest/latest を切り出して Slack を叩く。
+const RANGES = [
+  { key: 'today',     label: '今日' },
+  { key: 'yesterday', label: '昨日' },
+  { key: 'this_week', label: '今週' },
 ];
 
 export async function renderScrapboxFeed() {
   const app = document.getElementById('app');
-  const saved = Number(localStorage.getItem('labpay-scrapbox-days') || 7);
+  // 旧 'labpay-scrapbox-days' は廃止し、新しいキーに切替。
+  let saved = localStorage.getItem('labpay-scrapbox-range') || 'today';
+  if (!RANGES.some(r => r.key === saved)) saved = 'today';
   app.innerHTML = `
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <div class="row center">
         <h2 class="row-title">Scrapbox 研究ノート フィード</h2>
-        <select id="sb-feed-days" style="max-width:120px">
-          ${WINDOWS.map(w => `<option value="${w.days}" ${w.days === saved ? 'selected' : ''}>${w.label}</option>`).join('')}
+        <select id="sb-feed-range" style="max-width:120px">
+          ${RANGES.map(r => `<option value="${r.key}" ${r.key === saved ? 'selected' : ''}>${r.label}</option>`).join('')}
         </select>
       </div>
       <p class="card-subtitle">
@@ -30,19 +34,19 @@ export async function renderScrapboxFeed() {
     </div>
     <div id="sb-feed-body" class="list"><div class="muted">読み込み中…</div></div>
   `;
-  document.getElementById('sb-feed-days').addEventListener('change', e => {
-    localStorage.setItem('labpay-scrapbox-days', e.target.value);
+  document.getElementById('sb-feed-range').addEventListener('change', e => {
+    localStorage.setItem('labpay-scrapbox-range', e.target.value);
     load();
   });
   await load();
 }
 
 async function load() {
-  const days = Number(document.getElementById('sb-feed-days').value);
+  const range = document.getElementById('sb-feed-range').value;
   const root = document.getElementById('sb-feed-body');
   root.innerHTML = `<div class="muted">読み込み中…</div>`;
   try {
-    const d = await get('/api/scrapbox/feed', { days });
+    const d = await get('/api/scrapbox/feed', { range });
     if (!d.groups.length) {
       root.innerHTML = `<div class="empty">期間中に該当する編集はありません</div>`;
       return;

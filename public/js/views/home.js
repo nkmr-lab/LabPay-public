@@ -76,7 +76,7 @@ export async function renderHome() {
       <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
         <a class="btn" href="#/buy">買う</a>
         <a class="btn" href="#/sell">売る</a>
-        <a class="btn" href="#/tasks">タスク</a>
+        <a class="btn" href="#/tasks?new=request">頼む</a>
         <a class="btn" href="#/send">送る</a>
       </div>
     </div>

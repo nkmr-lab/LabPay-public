@@ -23,18 +23,33 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
         return;
     }
 
-    // How many days of history. 'feed view, latest on top' → 7-day default is
-    // plenty for a glance, 30 for catch-up. Cap at 90 so a misbehaving caller
-    // can't drag the whole channel history.
-    $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
+    // 期間の切り出し。 'range' (today / yesterday / this_week) が来たら
+    // それで oldest+latest を決め、 来なければ legacy 'days' (rolling N days) で
+    // 後方互換。 today/this_week は latest=now、 yesterday だけ latest=今日 0:00。
     $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
-    $oldest = (new DateTimeImmutable("-{$days} days", $tz))->getTimestamp();
+    $now        = new DateTimeImmutable('now', $tz);
+    $todayStart = $now->setTime(0, 0, 0);
+    $range = (string)($_GET['range'] ?? '');
+    $latest = null;
+    if ($range === 'today') {
+        $oldest = $todayStart->getTimestamp();
+    } elseif ($range === 'yesterday') {
+        $oldest = $todayStart->modify('-1 day')->getTimestamp();
+        $latest = $todayStart->getTimestamp();
+    } elseif ($range === 'this_week') {
+        $dow = (int)$now->format('N');
+        $oldest = $todayStart->modify('-' . ($dow - 1) . ' days')->getTimestamp();
+    } else {
+        $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
+        $oldest = (new DateTimeImmutable("-{$days} days", $tz))->getTimestamp();
+    }
 
     // Paginated fetch — same shape as bin/scrapbox_slack_sync.php.
     $messages = [];
     $cursor = null;
     for ($i = 0; $i < 10; $i++) {
         $params = ['channel' => $channel, 'oldest' => $oldest, 'limit' => 200, 'inclusive' => 'true'];
+        if ($latest !== null) $params['latest'] = $latest;
         if ($cursor) $params['cursor'] = $cursor;
         $r = slack_api_get($cfg, 'conversations.history', $params);
         $messages = array_merge($messages, $r['messages'] ?? []);
