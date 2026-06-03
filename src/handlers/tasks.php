@@ -513,18 +513,26 @@ function tasks_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
 
-    // 指名タスク (assigned non-empty + 時間枠なし) は 「指名 = やる人として確定」
-    // セマンティクスにする。承諾ボタンを踏まなくても task_claims に 'claimed' で
-    // 入れておく。capacity は assigned 人数に揃える (依頼者本人は除外)。
-    // 時間枠つきタスクは枠を本人が選ぶ前提なので auto-claim 対象外。
-    $autoClaim = !empty($assignedIds) && empty($parsedSlots);
+    // 指名 = 「やる人として確定 (auto-claim)」 か 「audience filter (誰が claim 可)」 か。
+    // - 依頼 mode (auto_claim=false): assigned_user_ids は audience filter として保存、
+    //   本人が踏みに来るのを待つ。 capacity は body で指定された値。
+    // - 割り当て mode (auto_claim=true): assigned_ids に task_claims を 'claimed' で
+    //   先入れ。 capacity は assigned 人数に強制。
+    // 後方互換: auto_claim 未指定 + assigned あり + 時間枠なし → 旧仕様の auto-claim。
+    $explicitAutoClaim = $body['auto_claim'] ?? null;
+    if ($explicitAutoClaim === null) {
+        // legacy: 旧クライアントが assigned だけ送ってきたら auto-claim
+        $autoClaim = !empty($assignedIds) && empty($parsedSlots);
+    } else {
+        $autoClaim = (bool)$explicitAutoClaim && !empty($assignedIds) && empty($parsedSlots);
+    }
     $autoClaimIds = [];
     if ($autoClaim) {
         $autoClaimIds = array_values(array_filter(
             $assignedIds, fn($x) => $x !== (int)$u['id']));
         if (!$autoClaimIds) {
             throw new ApiException('bad_request',
-                '指名タスクは自分以外を 1 人以上指定してください', 400);
+                '割り当てるタスクは自分以外を 1 人以上指定してください', 400);
         }
         $capacity = count($autoClaimIds);
     }

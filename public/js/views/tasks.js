@@ -4,6 +4,8 @@ import { state, toast } from '../app.js';
 import { uploadTaskAttachment } from '../upload.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
+// 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
+const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
 // 履歴トグル: デフォは 「進行中のみ」、ON にすると終了/取消も含めて表示する。
 // 同一セッション内では維持したいが、メモリ上の変数で十分 (renderTasks 呼び直し
@@ -96,7 +98,8 @@ function toggleCreateForm(mode = null) {
          </label>
        </div>`;
 
-  // 募集型のみ: 参加回数、時間枠、対象学年。
+  // 募集型のみ: 参加回数、時間枠。 対象学年の checkbox は廃止し、共通の picker
+  // (全員/学年/性別 bulk + 個別 chip) で対象を絞る。
   const requestOnly = isAssign ? '' : `
       <label class="field">
         <span class="lbl">1人あたりの参加可能回数</span>
@@ -111,26 +114,27 @@ function toggleCreateForm(mode = null) {
         <span class="lbl">時間枠 (任意・指定すると枠ごとに 1 人ずつ募集)</span>
         <textarea id="t-slots" rows="3" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み"></textarea>
         <span class="hint-sm">指定すると「募集人数」は枠数から自動算出されます。</span>
-      </label>
-      <div class="field">
-        <span class="lbl">対象学年 (チェック無し = 全員)</span>
-        <div class="row" style="gap:8px; flex-wrap:wrap">
-          ${GRADES.map(g => `
-            <label class="muted" style="display:inline-flex; align-items:center; gap:4px">
-              <input type="checkbox" value="${g}" class="t-aud"> ${g}
-            </label>`).join('')}
-        </div>
-      </div>`;
+      </label>`;
 
-  // 指名型のみ: メンバーピッカー (必須)
-  const assignOnly = isAssign ? `
+  // 依頼 / 割り当て 共通の picker: 全員/学年/性別 bulk + 個別 chip。
+  // 依頼 mode は picked = audience filter (空 OK = 全員)、
+  // 割り当て mode は picked = 直接アサイン (1人以上必須)。
+  const pickerLabel = isAssign
+    ? '割り当てる人 (必須・1 人以上)'
+    : '対象 (空欄なら全員 OK / 絞り込みたい時に選ぶ)';
+  const pickerHint = isAssign
+    ? '承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認 で支払い。'
+    : 'チェックを入れた人だけが引き受け可能になります。空欄なら学年制限なし。';
+  const pickerSection = `
       <div class="field">
-        <span class="lbl">割り当てる人 (必須・1 人以上)</span>
-        <div id="t-assigned-picker" class="row" style="gap:6px; flex-wrap:wrap; min-height:32px">
+        <span class="lbl">${pickerLabel}</span>
+        <div id="t-pick-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px"></div>
+        <div id="t-assigned-picker" class="row" style="gap:6px; flex-wrap:wrap">
           <span class="hint">読み込み中…</span>
         </div>
-        <span class="hint-sm">承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認 で支払い。</span>
-      </div>` : '';
+        <div id="t-pick-count" class="hint-sm" style="margin-top:6px">0 人選択中</div>
+        <span class="hint-sm">${pickerHint}</span>
+      </div>`;
 
   const deadline = `
       <label class="field">
@@ -165,7 +169,7 @@ function toggleCreateForm(mode = null) {
       ${rewardRow}
       ${deadline}
       ${requestOnly}
-      ${assignOnly}
+      ${pickerSection}
       ${files}
       <div class="row" style="margin-top:6px">
         <button id="t-submit" class="primary">${isAssign ? '割り当てる' : '依頼する'}</button>
@@ -174,37 +178,82 @@ function toggleCreateForm(mode = null) {
     </div>`;
   document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(null));
   document.getElementById('t-submit').addEventListener('click', onCreate);
-  if (isAssign) populateAssignedPicker();
+  populateAssignedPicker();
 }
 
-// 指名タスクのメンバーピッカー (任意)。タップで toggle。
+// 指名 / 対象 picker — 「全員」 「学年」 「性別」 の bulk filter + 個別 chip。
+// 学年順 (D → M2 → M1 → B4 → B3 → 他) でソート。同学年内は表示名 50 音順。
+// 依頼 mode / 割り当て mode の両方で同じ picker を使う (上位 toggleCreateForm が
+// label と hint だけ出し分け、picker の使い方は同じ)。
 const assignedPicked = new Set();
+let allTaskUsers = [];
+
 async function populateAssignedPicker() {
   assignedPicked.clear();
   try {
     const u = await get('/api/users');
+    allTaskUsers = [...u.items].sort((a, b) => {
+      const ga = GRADE_ORDER.indexOf(a.grade || '');
+      const gb = GRADE_ORDER.indexOf(b.grade || '');
+      return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
+             (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+    });
+    const grades = [...new Set(allTaskUsers.map(x => x.grade).filter(Boolean))]
+      .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+    const bulk = document.getElementById('t-pick-bulk');
+    if (bulk) {
+      bulk.innerHTML = `
+        <button data-bulk="all"      class="btn">全員</button>
+        ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
+        <button data-bulk="gender:M" class="btn">男</button>
+        <button data-bulk="gender:F" class="btn">女</button>
+        <button data-bulk="clear"    class="btn">クリア</button>`;
+      bulk.querySelectorAll('[data-bulk]').forEach(b => {
+        b.addEventListener('click', () => applyBulkPick(b.dataset.bulk));
+      });
+    }
     const root = document.getElementById('t-assigned-picker');
     if (!root) return;
-    root.innerHTML = u.items.map(x => `
+    root.innerHTML = allTaskUsers.map(x => `
       <span class="rl-chip" data-uid="${x.id}" style="cursor:pointer">
         ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
         <span>${escapeHtml(x.display_name)}</span>
         ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
       </span>`).join('');
     root.querySelectorAll('.rl-chip').forEach(c => {
-      c.addEventListener('click', () => {
-        const uid = Number(c.dataset.uid);
-        if (assignedPicked.has(uid)) {
-          assignedPicked.delete(uid);
-          c.style.background = ''; c.style.borderColor = '';
-        } else {
-          assignedPicked.add(uid);
-          c.style.background = 'var(--primary-soft, #efeafa)';
-          c.style.borderColor = 'var(--primary)';
-        }
-      });
+      c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
     });
+    refreshPickChips();
   } catch (_) { /* best-effort */ }
+}
+
+function memberMatchesBulk(u, key) {
+  if (key === 'all') return true;
+  if (key.startsWith('grade:'))  return (u.grade  || '') === key.slice(6);
+  if (key.startsWith('gender:')) return (u.gender || '') === key.slice(7);
+  return false;
+}
+function applyBulkPick(key) {
+  if (key === 'clear') { assignedPicked.clear(); refreshPickChips(); return; }
+  const targets = allTaskUsers.filter(u => memberMatchesBulk(u, key));
+  const allOn = targets.every(u => assignedPicked.has(u.id));
+  if (allOn) targets.forEach(u => assignedPicked.delete(u.id));
+  else       targets.forEach(u => assignedPicked.add(u.id));
+  refreshPickChips();
+}
+function togglePick(uid) {
+  if (assignedPicked.has(uid)) assignedPicked.delete(uid);
+  else assignedPicked.add(uid);
+  refreshPickChips();
+}
+function refreshPickChips() {
+  document.querySelectorAll('#t-assigned-picker .rl-chip').forEach(c => {
+    const on = assignedPicked.has(Number(c.dataset.uid));
+    c.style.background  = on ? 'var(--primary-soft, #efeafa)' : '';
+    c.style.borderColor = on ? 'var(--primary)' : '';
+  });
+  const count = document.getElementById('t-pick-count');
+  if (count) count.textContent = `${assignedPicked.size} 人選択中`;
 }
 
 async function onCreate() {
@@ -232,18 +281,23 @@ async function onCreate() {
   if (isAssign) {
     if (assignedPicked.size === 0) { toast('割り当てる人を 1 人以上選んでください'); return; }
     payload.assigned_user_ids = [...assignedPicked];
+    payload.auto_claim = true;
     payload.per_user_limit = 1;
     payload.capacity = assignedPicked.size; // backend 側でも上書きされるが明示。
   } else {
     const slots_spec = document.getElementById('t-slots').value.trim();
     const capacity = Number(document.getElementById('t-capacity').value);
     const per_user_limit = Number(document.getElementById('t-perlimit').value);
-    const aud = Array.from(document.querySelectorAll('.t-aud:checked')).map(el => el.value);
     if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
     payload.capacity = capacity;
     payload.per_user_limit = per_user_limit;
-    payload.audience_grades = aud;
     payload.slots_spec = slots_spec || null;
+    // 依頼 mode の picker: 0 人選択 = 全員可、それ以上 = audience filter として
+    // assigned_user_ids を送る (auto_claim=false で auto-claim はしない)。
+    if (assignedPicked.size > 0) {
+      payload.assigned_user_ids = [...assignedPicked];
+      payload.auto_claim = false;
+    }
   }
 
   try {
