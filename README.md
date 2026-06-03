@@ -282,56 +282,56 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 
 | # | 日付 | 内容 |
 |---|---|---|
-| 001 | 2026-06-01 | 初期スキーマ + seed (system / escrow 口座、初期 config) |
-| 002 | 2026-06-01 | Presence (在室検知) テーブル |
-| 003 | 2026-06-01 | カレンダー overrides + Geo 座標フィールド |
-| 004 | 2026-06-01 | Streak 線形上限式へ変更 (milestone 表は廃止) |
-| 005 | 2026-06-01 | Presence first_seen_at 追加 |
-| 006 | 2026-06-01 | Presence infrastructure (機材 MAC 除外) |
-| 007 | 2026-06-01 | `users.avatar_url` 追加 |
-| 008 | 2026-06-01 | tasks / task_claims / transfers + grade 列 + 35人 bulk allowlist |
-| 009 | 2026-06-01 | tasks.deadline + streak 微調整 |
-| 010 | 2026-06-01 | streak 簡素化 + idempotency_keys PK 合成 + tasks.url / completion_message + listings.completion_message |
-| 011 | 2026-06-01 | listings.location (置き場所) |
-| 012 | 2026-06-01 | listings.display_name (出品者表示名スナップショット) |
-| 013 | 2026-06-01 | 無料 (`これどうぞ`) 出品 + 購入時お礼メッセージ |
-| 014 | 2026-06-01 | listings.resale_chain (転売経路) |
-| 015 | 2026-06-01 | presence_seen.session_start_at (連続在室セッション計測) |
-| 016 | 2026-06-01 | listings.expires_at (締切自動取消) |
-| 017 | 2026-06-01 | presence_sessions テーブル (閉じたセッションログ) |
-| 018 | 2026-06-01 | task_slots + task_claims.slot_id (時間枠分割) |
-| 019 | 2026-06-01 | user_scrapbox_handles + scrapbox_awards + ledger 'scrapbox_reward' 追加 |
-| 020 | 2026-06-01 | Scrapbox handle 22 件 seed |
-| 021 | 2026-06-01 | Scrapbox handle `Sakura` 追加 |
-| 022 | 2026-06-01 | Scrapbox handle `Member 03` 追加 |
-| 023 | 2026-06-02 | task_attachments (タスク添付ファイル) |
-| 024 | 2026-06-02 | 旧 Scrapbox 直接 API 関連 config row 削除 |
-| 025 | 2026-06-02 | Scrapbox 寄稿ルール変更 — any-edit +5 + own-note +5 / 1日最大 10pt |
-| 026 | 2026-06-02 | feedback (バグ報告 / 機能要望) + activity_log (利用ログ) |
-| 027 | 2026-06-02 | wishlist (これ欲しい) |
-| 028 | 2026-06-02 | invitations + invitation_joins (募集機能) |
-| 029 | 2026-06-02 | roulettes (ルーレット履歴) |
-| 030 | 2026-06-02 | roulettes に reward / ledger_id 列追加 |
-| 031 | 2026-06-02 | nomikai (飲み会割り勘) |
-| 032 | 2026-06-02 | adhoc_groups + adhoc_group_members + adhoc_group_feed (暫定グループ + フィード) |
-| 033 | 2026-06-02 | `users.gender` 追加 (M/F/X/NULL) |
-| 034 | 2026-06-02 | gender seed (現メンバーの一括初期化) |
-| 035 | 2026-06-02 | adhoc_group_expenses (ワリカ Splitwise 風) |
-| 036 | 2026-06-02 | Scrapbox handle 追加 seed (033 以降の新メンバー対応) |
-| 037 | 2026-06-02 | adhoc_groups.slug (人間が読める URL 識別子) |
-| 038 | 2026-06-02 | Scrapbox handle `shige` 追加 |
-| 039 | 2026-06-02 | money_requests (請求 / 集金) |
-| 040 | 2026-06-02 | money_requests.actor_user_id (bulk 生成の操作者を保持) |
-| 041 | 2026-06-02 | presence_seen.session_start_at の過去 backfill |
-| 042 | 2026-06-02 | task_assigned_users (指名タスク) |
-| 043 | 2026-06-02 | 0pt タスク許可 (`reward >= 0` に緩和) |
-| 044 | 2026-06-02 | feedback に admin 返信 + 通知 |
-| 045 | 2026-06-03 | Google Calendar OAuth (`calendar.readonly`) + 選択カレンダー JSON |
-| 046 | 2026-06-03 | groups / invitations.image_url (表紙画像) |
-| 047 | 2026-06-03 | users.calendar_filter_rules (今日の予定の非表示ルール) |
-| 048 | 2026-06-03 | adhoc_group_expenses.image_url (ワリカ支出にレシート添付) |
-| 049 | 2026-06-03 | adhoc_group_receipts (撮影だけしておくレシートストック / v225 限り) |
-| 050 | 2026-06-03 | adhoc_group_expenses を draft 対応 (`is_draft / taken_at / lat / lng` + `payer_user_id` NULL 許容)。レシートは draft 支出として一元化 |
+| 001 | 2026‑06‑01 | 初期スキーマ + seed (system / escrow 口座、初期 config) |
+| 002 | 2026‑06‑01 | Presence (在室検知) テーブル |
+| 003 | 2026‑06‑01 | カレンダー overrides + Geo 座標フィールド |
+| 004 | 2026‑06‑01 | Streak 線形上限式へ変更 (milestone 表は廃止) |
+| 005 | 2026‑06‑01 | Presence first_seen_at 追加 |
+| 006 | 2026‑06‑01 | Presence infrastructure (機材 MAC 除外) |
+| 007 | 2026‑06‑01 | `users.avatar_url` 追加 |
+| 008 | 2026‑06‑01 | tasks / task_claims / transfers + grade 列 + 35人 bulk allowlist |
+| 009 | 2026‑06‑01 | tasks.deadline + streak 微調整 |
+| 010 | 2026‑06‑01 | streak 簡素化 + idempotency_keys PK 合成 + tasks.url / completion_message + listings.completion_message |
+| 011 | 2026‑06‑01 | listings.location (置き場所) |
+| 012 | 2026‑06‑01 | listings.display_name (出品者表示名スナップショット) |
+| 013 | 2026‑06‑01 | 無料 (`これどうぞ`) 出品 + 購入時お礼メッセージ |
+| 014 | 2026‑06‑01 | listings.resale_chain (転売経路) |
+| 015 | 2026‑06‑01 | presence_seen.session_start_at (連続在室セッション計測) |
+| 016 | 2026‑06‑01 | listings.expires_at (締切自動取消) |
+| 017 | 2026‑06‑01 | presence_sessions テーブル (閉じたセッションログ) |
+| 018 | 2026‑06‑01 | task_slots + task_claims.slot_id (時間枠分割) |
+| 019 | 2026‑06‑01 | user_scrapbox_handles + scrapbox_awards + ledger 'scrapbox_reward' 追加 |
+| 020 | 2026‑06‑01 | Scrapbox handle 22 件 seed |
+| 021 | 2026‑06‑01 | Scrapbox handle `Sakura` 追加 |
+| 022 | 2026‑06‑01 | Scrapbox handle `Member 03` 追加 |
+| 023 | 2026‑06‑02 | task_attachments (タスク添付ファイル) |
+| 024 | 2026‑06‑02 | 旧 Scrapbox 直接 API 関連 config row 削除 |
+| 025 | 2026‑06‑02 | Scrapbox 寄稿ルール変更 — any-edit +5 + own-note +5 / 1日最大 10pt |
+| 026 | 2026‑06‑02 | feedback (バグ報告 / 機能要望) + activity_log (利用ログ) |
+| 027 | 2026‑06‑02 | wishlist (これ欲しい) |
+| 028 | 2026‑06‑02 | invitations + invitation_joins (募集機能) |
+| 029 | 2026‑06‑02 | roulettes (ルーレット履歴) |
+| 030 | 2026‑06‑02 | roulettes に reward / ledger_id 列追加 |
+| 031 | 2026‑06‑02 | nomikai (飲み会割り勘) |
+| 032 | 2026‑06‑02 | adhoc_groups + adhoc_group_members + adhoc_group_feed (暫定グループ + フィード) |
+| 033 | 2026‑06‑02 | `users.gender` 追加 (M/F/X/NULL) |
+| 034 | 2026‑06‑02 | gender seed (現メンバーの一括初期化) |
+| 035 | 2026‑06‑02 | adhoc_group_expenses (ワリカ Splitwise 風) |
+| 036 | 2026‑06‑02 | Scrapbox handle 追加 seed (033 以降の新メンバー対応) |
+| 037 | 2026‑06‑02 | adhoc_groups.slug (人間が読める URL 識別子) |
+| 038 | 2026‑06‑02 | Scrapbox handle `shige` 追加 |
+| 039 | 2026‑06‑02 | money_requests (請求 / 集金) |
+| 040 | 2026‑06‑02 | money_requests.actor_user_id (bulk 生成の操作者を保持) |
+| 041 | 2026‑06‑02 | presence_seen.session_start_at の過去 backfill |
+| 042 | 2026‑06‑02 | task_assigned_users (指名タスク) |
+| 043 | 2026‑06‑02 | 0pt タスク許可 (`reward >= 0` に緩和) |
+| 044 | 2026‑06‑02 | feedback に admin 返信 + 通知 |
+| 045 | 2026‑06‑03 | Google Calendar OAuth (`calendar.readonly`) + 選択カレンダー JSON |
+| 046 | 2026‑06‑03 | groups / invitations.image_url (表紙画像) |
+| 047 | 2026‑06‑03 | users.calendar_filter_rules (今日の予定の非表示ルール) |
+| 048 | 2026‑06‑03 | adhoc_group_expenses.image_url (ワリカ支出にレシート添付) |
+| 049 | 2026‑06‑03 | adhoc_group_receipts (撮影だけしておくレシートストック / v225 限り) |
+| 050 | 2026‑06‑03 | adhoc_group_expenses を draft 対応 (`is_draft / taken_at / lat / lng` + `payer_user_id` NULL 許容)。レシートは draft 支出として一元化 |
 
 ---
 
