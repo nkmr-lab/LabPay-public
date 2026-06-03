@@ -1362,14 +1362,22 @@ async function onPost(gid) {
 // 日程範囲 (開始日 〜 終了日) を持ち、 範囲内の各日に時刻付きアイテムを並べる。
 // 種類は ✈️ 移動 / 🏨 宿 / 🎓 学会 / 👥 会議 / 🍽 食事 / 🎢 観光 / 📝 その他。
 
+// 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
+// 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
 const SCHED_KINDS = {
-  move:    { label: '移動',    icon: '✈️' },
+  flight:  { label: '飛行機', icon: '✈️' },
+  train:   { label: '電車',   icon: '🚆' },
+  bus:     { label: 'バス',   icon: '🚌' },
+  taxi:    { label: 'タクシー', icon: '🚖' },
+  car:     { label: '車',     icon: '🚗' },
+  walk:    { label: '徒歩',   icon: '🚶' },
   hotel:   { label: '宿',     icon: '🏨' },
-  conf:    { label: '学会',    icon: '🎓' },
-  meeting: { label: '会議',    icon: '👥' },
-  food:    { label: '食事',    icon: '🍽' },
-  fun:     { label: '観光',    icon: '🎢' },
-  other:   { label: 'その他',  icon: '📝' },
+  conf:    { label: '学会',   icon: '🎓' },
+  meeting: { label: '会議',   icon: '👥' },
+  food:    { label: '食事',   icon: '🍽' },
+  fun:     { label: '観光',   icon: '🎢' },
+  other:   { label: 'その他', icon: '📝' },
+  move:    { label: '移動',   icon: '🚐' }, // legacy fallback
 };
 
 async function loadSchedule(gid) {
@@ -1464,20 +1472,21 @@ function renderSchedItem(it) {
       timeStr = t;
     }
   }
-  const loc  = it.location ? `<div class="meta">📍 ${escapeHtml(it.location)}</div>` : '';
-  const memo = it.memo     ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(it.memo)}</div>` : '';
+  // 場所/メモはあれば 1 行ずつ。 list-item の padding を抑えて密度を上げる。
+  const loc  = it.location ? `<span class="muted"> · 📍 ${escapeHtml(it.location)}</span>` : '';
+  const memo = it.memo     ? `<div class="meta" style="white-space:pre-wrap; font-size:11px">${escapeHtml(it.memo)}</div>` : '';
   return `
-    <div class="list-item" style="gap:8px; align-items:flex-start">
-      <span style="font-size:18px; line-height:1.4">${k.icon}</span>
-      <div class="grow" style="min-width:0">
-        <div class="bold">${escapeHtml(it.title)}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}</div>
-        ${loc}${memo}
+    <div class="list-item" style="gap:6px; padding:4px 6px; align-items:center">
+      <span style="font-size:14px">${k.icon}</span>
+      <div class="grow" style="min-width:0; font-size:13px">
+        <span class="bold">${escapeHtml(it.title)}</span>${timeStr ? ` <span class="muted">${timeStr}</span>` : ''}${loc}
+        ${memo}
       </div>
-      <div style="display:flex; flex-direction:column; gap:2px">
-        <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:1px 6px; font-size:11px">↑</button>
-        <button data-sched-edit="${it.id}"                 class="btn" style="padding:1px 6px; font-size:11px">編集</button>
-        <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:1px 6px; font-size:11px">↓</button>
-        <button data-sched-rm="${it.id}"                   class="btn" style="padding:1px 6px; font-size:11px; color:var(--muted)">×</button>
+      <div style="display:flex; gap:2px; align-items:center">
+        <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:1px 4px; font-size:10px">↑</button>
+        <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:1px 4px; font-size:10px">↓</button>
+        <button data-sched-edit="${it.id}"                 class="btn" style="padding:1px 6px; font-size:10px">編集</button>
+        <button data-sched-rm="${it.id}"                   class="btn" style="padding:1px 4px; font-size:11px; color:var(--muted)">×</button>
       </div>
     </div>`;
 }

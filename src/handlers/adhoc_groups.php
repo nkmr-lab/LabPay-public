@@ -32,9 +32,11 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'receipts' && isset($seg[3]) && $method === 'DELETE') { group_receipts_delete($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
             if ($next === 'schedule' && $method === 'POST')             { group_schedule_add($pdo, $cfg, $id);    return; }
+            // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
+            // より具体的な move ルートを先に判定する。
+            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && isset($seg[3]) && $method === 'PATCH')  { group_schedule_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && isset($seg[3]) && $method === 'DELETE') { group_schedule_del($pdo, $cfg, $id, (int)$seg[3]); return; }
-            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
         }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
@@ -966,7 +968,10 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
 // グループ (主に学会 / 旅行) の日程表。 schedule_start_date 〜 schedule_end_date
 // の範囲内の各日にアイテムを並べる。 並び順は start_time → sort_order → id。
 
-const GROUP_SCHEDULE_KINDS = ['move','hotel','conf','food','fun','meeting','other'];
+const GROUP_SCHEDULE_KINDS = [
+    'flight','train','bus','taxi','car','walk','move',
+    'hotel','conf','meeting','food','fun','other',
+];
 
 function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
