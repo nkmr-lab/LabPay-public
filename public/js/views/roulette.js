@@ -32,6 +32,9 @@ export async function renderRoulette({ query } = {}) {
     const ids = raw.split(',').map(Number).filter(Boolean);
     if (ids.length) lockedIds = new Set(ids);
   }
+  // グループから飛んでくる時 title=<グループ名> 付き。 何も入っていない人間が
+  // 「タイトル考えるの面倒」 で止まらないように初期値として埋める。
+  const initialTitle = String(query?.title || '').trim();
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -45,7 +48,7 @@ export async function renderRoulette({ query } = {}) {
     <div class="card">
       <label class="field">
         <span class="lbl">ルーレットのタイトル</span>
-        <input type="text" id="rl-title" maxlength="200" placeholder="例: 今日のゴミ捨て当番">
+        <input type="text" id="rl-title" maxlength="200" placeholder="例: 今日のゴミ捨て当番" value="${escapeHtml(initialTitle)}">
       </label>
       <label class="field">
         <span class="lbl">当たった人にあなたからポイントを送る (任意・空欄 = 送らない)</span>
@@ -140,14 +143,22 @@ async function loadMembers() {
       .map(r => `<button class="btn" data-bulk="room" data-room="${escapeHtml(r.id)}">${escapeHtml(r.id)}にいる (${ROOM_USERS[r.id].size})</button>`)
       .join('');
     const bulkRoot = document.getElementById('rl-bulk');
-    bulkRoot.innerHTML = `
-      <button class="btn" data-bulk="all">全員</button>
-      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-      ${roomButtons}
-    `;
-    bulkRoot.querySelectorAll('[data-bulk]').forEach(b => {
-      b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade || b.dataset.room));
-    });
+    // メンバーが 5 人以下なら bulk select の出番はないので隠す
+    // (全員・学年・部屋 を出しても結局個別チェックが速い)。
+    if (ALL_USERS.length <= 5) {
+      bulkRoot.innerHTML = '';
+      bulkRoot.style.display = 'none';
+    } else {
+      bulkRoot.style.display = '';
+      bulkRoot.innerHTML = `
+        <button class="btn" data-bulk="all">全員</button>
+        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+        ${roomButtons}
+      `;
+      bulkRoot.querySelectorAll('[data-bulk]').forEach(b => {
+        b.addEventListener('click', () => onBulk(b.dataset.bulk, b.dataset.grade || b.dataset.room));
+      });
+    }
 
     root.innerHTML = ALL_USERS.map(x => {
       const checked = selected.has(x.id) ? 'checked' : '';

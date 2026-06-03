@@ -426,7 +426,7 @@ async function loadDetail(id) {
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="gd-snap-receipt">レシート</button>
-        <a class="btn" href="#/roulette?members=${memberIds}">ルーレット</a>
+        <a class="btn" href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
