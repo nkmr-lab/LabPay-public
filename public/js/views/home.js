@@ -279,23 +279,30 @@ async function renderCalendarEvents() {
       const prefix = today ? '' : '明日 ';
       return `${prefix}${h}:${String(m).padStart(2,'0')}`;
     };
+    // 行全体を <a> でくくっていたが、右端の [参加] ボタンが「縦に区切り線」
+     // のように見えるという指摘を受けて構造変更:
+     // * 外側は <div class="list-item"> (タップ範囲全部 ≒ リンクは持たない)
+     // * タイトルは <a> でラップして Google Calendar の event detail へ
+     // * 参加ボタンはタイトル/場所の下に inline で並べる
+     // ネストした <a> が無くなって HTML 的にも妥当に。
     root.innerHTML = items.map(ev => {
-      const zoomBtn = ev.url
-        ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 8px; font-size:12px">参加</a>`
-        : '';
-      // location が URL だけ (Zoom / Meet などのリンク) のときは [参加] と二重に
-      // なるので 📍 行を出さない。テキストの場所だけ表示する。
       const locIsUrl = ev.location && /^https?:\/\//i.test(ev.location.trim());
       const loc = (ev.location && !locIsUrl) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+      const titleHtml = ev.html_url
+        ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${escapeHtml(ev.title)}</a>`
+        : `<span class="bold">${escapeHtml(ev.title)}</span>`;
+      const zoomBtn = ev.url
+        ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start">📹 参加する</a>`
+        : '';
       return `
-        <a class="list-item" href="${escapeHtml(ev.html_url || '#')}" target="_blank" rel="noopener" style="align-items:center; gap:8px">
-          <div style="min-width:64px; font-weight:700; color:var(--primary)">${fmtTime(ev.start, ev.all_day)}</div>
-          <div class="grow">
-            <div class="bold">${escapeHtml(ev.title)}</div>
+        <div class="list-item" style="align-items:flex-start; gap:8px">
+          <div style="min-width:64px; font-weight:700; color:var(--primary); padding-top:1px">${fmtTime(ev.start, ev.all_day)}</div>
+          <div class="grow" style="display:flex; flex-direction:column">
+            ${titleHtml}
             ${loc}
+            ${zoomBtn}
           </div>
-          ${zoomBtn}
-        </a>`;
+        </div>`;
     }).join('');
   } catch (e) {
     // 未連携 (409 calendar_not_connected) はカード非表示で OK。それ以外も
