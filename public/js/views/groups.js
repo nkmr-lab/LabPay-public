@@ -1456,20 +1456,16 @@ async function loadSchedule(gid) {
   for (const it of (d.items || [])) {
     if (it.link_pair_id) (pairs[it.link_pair_id] ||= []).push(it);
   }
-  const pairPartner = {};
-  Object.values(pairs).forEach(arr => {
-    if (arr.length !== 2) return; // 2 つペアでだけ機能 (3 つ以上は無視)
-    arr.sort((a, b) => (a.day_date + (a.start_time || '99:99')).localeCompare(
-                       b.day_date + (b.start_time || '99:99')));
-    pairPartner[arr[0].id] = { partner: arr[1], side: 'first' };
-    pairPartner[arr[1].id] = { partner: arr[0], side: 'second' };
-  });
-  // 帯の被り対策: 各 pair_id を 「最初に出現する日 + 開始時刻」 順に sort
-  // してスロット番号 (0, 1, 2, ...) を割り振る。 同時刻が重なる時は別の
-  // pair_id でも 右側にズレて描かれるので帯が混ざらない。
+  // 連結グループ (N >= 2) を 「最初の日時」 順に slot 番号付け。 同 pair_id を
+  // 持つアイテムが 2 つ以上あれば帯を描く。 単独 (1 つだけ pair_id) は無視。
   const pairSlots = {};
   Object.entries(pairs)
-    .filter(([, arr]) => arr.length === 2)
+    .filter(([, arr]) => arr.length >= 2)
+    .map(([pid, arr]) => {
+      arr.sort((a, b) => (a.day_date + (a.start_time || '99:99'))
+        .localeCompare(b.day_date + (b.start_time || '99:99')));
+      return [pid, arr];
+    })
     .sort(([, a], [, b]) => {
       const aKey = a[0].day_date + (a[0].start_time || '99:99');
       const bKey = b[0].day_date + (b[0].start_time || '99:99');
@@ -1501,7 +1497,9 @@ async function loadSchedule(gid) {
   });
   // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
   body.querySelectorAll('[data-sched-item]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (ev) => {
+      // 内部 button / a / select 等 のクリックは編集 modal を開かない (個別 handler 用)。
+      if (ev.target.closest('button,a,input,select')) return;
       const id = Number(el.dataset.schedItem);
       const it = (d.items || []).find(x => Number(x.id) === id);
       if (it) openSchedItemModal(gid, it);
@@ -1673,35 +1671,43 @@ function openSchedRangeModal(gid) {
   });
 }
 
-// ペア picker: このアイテム以外の同グループ全アイテムを 「日付 タイトル」 で
-// 並べた dropdown。 既にペア済みなら 相手をプリセット。
+// リンク picker: このアイテム以外の同グループ全アイテムをチェックボックスで
+// 並べる。 複数選択可。 同じ link_pair_id を持つ予定 (= 既に同じグループに
+// 居る) はプリセットでチェック済み。
 function renderSchedPairPickerHtml(it) {
   const others = lastSchedItems.filter(x => Number(x.id) !== Number(it.id));
   if (!others.length) return '';
-  // 現在のペア相手を特定 (同 pair_id の別アイテム)。
-  let currentPartnerId = '';
-  if (it.link_pair_id) {
-    const pa = lastSchedItems.find(x => x.link_pair_id === it.link_pair_id && Number(x.id) !== Number(it.id));
-    if (pa) currentPartnerId = String(pa.id);
-  }
-  const opts = others
+  const linkedIds = it.link_pair_id
+    ? new Set(lastSchedItems
+        .filter(x => x.link_pair_id === it.link_pair_id && Number(x.id) !== Number(it.id))
+        .map(x => Number(x.id)))
+    : new Set();
+  const rows = others
     .slice()
     .sort((a, b) => (a.day_date + (a.start_time || '99:99'))
       .localeCompare(b.day_date + (b.start_time || '99:99')))
     .map(o => {
       const t = (o.start_time || '').slice(0, 5);
       const label = `${o.day_date.slice(5).replace('-', '/')}${t ? ' ' + t : ''} ${o.title}`;
-      const sel = String(o.id) === currentPartnerId ? 'selected' : '';
-      return `<option value="${o.id}" ${sel}>${escapeHtml(label)}</option>`;
+      const k = SCHED_KINDS[o.kind] || SCHED_KINDS.other;
+      const ch = linkedIds.has(Number(o.id)) ? 'checked' : '';
+      return `
+        <label style="display:flex; align-items:center; gap:6px; padding:3px 0; font-size:13px">
+          <input type="checkbox" data-link-item="${o.id}" ${ch}>
+          <span>${k.icon}</span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(label)}</span>
+        </label>`;
     }).join('');
   return `
-    <label class="field"><span class="lbl">ペアにする予定 (任意)</span>
-      <select id="sim-pair-partner">
-        <option value="">(なし)</option>
-        ${opts}
-      </select>
-      <div class="hint-sm">選んだ予定と縦の帯で連結して表示されます。</div>
-    </label>`;
+    <details class="field" ${linkedIds.size ? 'open' : ''}>
+      <summary style="cursor:pointer; font-size:13px; color:var(--muted)">
+        🔗 連結する予定 ${linkedIds.size ? `(${linkedIds.size} 件選択中)` : '(任意・複数選択可)'}
+      </summary>
+      <div style="display:flex; flex-direction:column; gap:0; max-height:240px; overflow-y:auto; margin-top:4px; padding:4px 6px; border:1px solid var(--line); border-radius:6px">
+        ${rows}
+      </div>
+      <div class="hint-sm">選んだ予定とは同じ色の帯で連結表示されます。 3 つ以上の連結も可。</div>
+    </details>`;
 }
 
 function openSchedItemModal(gid, it) {
@@ -1762,6 +1768,7 @@ function openSchedItemModal(gid, it) {
         </label>
         ${renderSchedPairPickerHtml(it)}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap">
+          ${!isNew ? `<button id="sim-copy" type="button" class="btn">📋 コピー</button>` : ''}
           <button id="sim-cancel">キャンセル</button>
           <button id="sim-save" class="primary">保存</button>
         </div>
@@ -1808,9 +1815,10 @@ function openSchedItemModal(gid, it) {
     };
     if (!body.title)    { toast('タイトルを入れてください'); return; }
     if (!body.day_date) { toast('日付を入れてください'); return; }
-    // ペア相手: 選択値に応じて pair_id を 「共有」 / 「解除」 する。
-    const partnerSelEl = document.getElementById('sim-pair-partner');
-    const partnerId = partnerSelEl ? partnerSelEl.value : '';
+    // リンク picker: チェック済み 他アイテムをすべて自分と同じ pair_id に揃える。
+    // 自分の現 pair_id (it.link_pair_id) は 「外された人」 を NULL に戻すための比較に使う。
+    const linkChecks = Array.from(document.querySelectorAll('[data-link-item]'));
+    const selectedIds = linkChecks.filter(c => c.checked).map(c => Number(c.dataset.linkItem));
     try {
       let saveId;
       if (isNew) {
@@ -1820,26 +1828,72 @@ function openSchedItemModal(gid, it) {
         await patch(`/api/groups/${gid}/schedule/${it.id}`, body);
         saveId = it.id;
       }
-      // ペア処理 (本体保存後に走らせる)
-      if (partnerSelEl) {
-        if (partnerId === '') {
-          // 「なし」: 既にペアなら自分の pair_id をクリア。
+      // リンク処理
+      if (linkChecks.length) {
+        if (selectedIds.length === 0) {
+          // 全部外し → 自分の pair_id を NULL に。 残ったメンバはそのまま連結状態。
           if (it.link_pair_id) {
             await patch(`/api/groups/${gid}/schedule/${saveId}`, { link_pair_id: null });
           }
         } else {
-          const partner = lastSchedItems.find(x => String(x.id) === partnerId);
-          // 相手の現 pair_id を使う、 無ければ生成
-          let pid = partner?.link_pair_id;
-          if (!pid) pid = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-          // 双方に同じ pair_id を書き込み
-          await patch(`/api/groups/${gid}/schedule/${saveId}`,  { link_pair_id: pid });
-          await patch(`/api/groups/${gid}/schedule/${partnerId}`, { link_pair_id: pid });
+          // 既存連結グループの pair_id を引き継ぐか、 新規生成。
+          let pid = it.link_pair_id;
+          if (!pid) {
+            const someone = selectedIds.map(id => lastSchedItems.find(x => Number(x.id) === id))
+                                       .find(x => x?.link_pair_id);
+            pid = someone?.link_pair_id
+              || ('p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36));
+          }
+          // 自分 + 選択された全員 に pair_id を伝播。
+          await patch(`/api/groups/${gid}/schedule/${saveId}`, { link_pair_id: pid });
+          for (const id of selectedIds) {
+            await patch(`/api/groups/${gid}/schedule/${id}`, { link_pair_id: pid });
+          }
+          // 元グループに居て選び直しで外れたアイテム → pair_id クリア。
+          if (it.link_pair_id) {
+            const oldGroupMembers = lastSchedItems
+              .filter(x => x.link_pair_id === it.link_pair_id && Number(x.id) !== Number(it.id));
+            const toRemove = oldGroupMembers.filter(x => !selectedIds.includes(Number(x.id)));
+            for (const x of toRemove) {
+              await patch(`/api/groups/${gid}/schedule/${x.id}`, { link_pair_id: null });
+            }
+          }
         }
       }
       toast('保存しました');
       close();
       await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  // コピー: 現在のアイテムをほぼそのまま別 row として複製。 day_date は 1 日後を
+  // 初期値に (連泊や同じ予定の翌日繰り返しを楽にする)。 ペアリンクは引き継がない。
+  document.getElementById('sim-copy')?.addEventListener('click', async () => {
+    if (!confirm('このアイテムをコピーしますか? (翌日に複製します)')) return;
+    const next = (() => {
+      const [y, m, dd] = (it.day_date || '').split('-').map(Number);
+      if (!y) return it.day_date;
+      const dt = new Date(y, m - 1, dd); dt.setDate(dt.getDate() + 1);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}`;
+    })();
+    const copyBody = {
+      day_date:   next,
+      title:      it.title,
+      kind:       it.kind,
+      start_time: it.start_time || null,
+      end_date:   null,
+      duration_minutes: it.duration_minutes || null,
+      location:   it.location || null,
+      url:        it.url || null,
+      image_url:  it.image_url || null,
+      memo:       it.memo || null,
+    };
+    try {
+      const r = await post(`/api/groups/${gid}/schedule`, copyBody);
+      toast('コピーしました');
+      close();
+      await loadSchedule(gid);
+      openSchedItemModal(gid, { ...copyBody, id: r.id });
     } catch (e) { toast('失敗: ' + e.message); }
   });
 }
