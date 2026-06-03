@@ -1387,20 +1387,22 @@ async function loadSchedule(gid) {
     days.push(cur);
     cur = addOneDay(cur);
   }
-  // 最新の生 items を modal の 「ペア相手」 picker のために保持。
+  // 最新の生 items を modal の picker のために保持。
   lastSchedItems = d.items || [];
+  // day_date 無し = 行きたい場所ストック (別枠で表示)。
+  const stockItems = (d.items || []).filter(it => !it.day_date);
+  const dayItems = (d.items || []).filter(it => it.day_date);
   // end_date がある (= 複数日に渡る) アイテムは、 当日・終了日・(宿泊の中間日)
   // に展開して each day に並べる。 元の id をそのまま保持し、 _occ で
   // 「'start' / 'mid' / 'end'」 のロールを付ける (描画時に label を出し分け)。
   const byDay = {};
-  for (const it of (d.items || [])) {
+  for (const it of dayItems) {
     const start = it.day_date;
     const end   = it.end_date;
     if (!end || end === start) {
       (byDay[start] ||= []).push({ ...it, _occ: 'single' });
       continue;
     }
-    // 範囲展開
     const addOne = (s) => {
       const [y, m, dd] = s.split('-').map(Number);
       const dt = new Date(y, m - 1, dd); dt.setDate(dt.getDate() + 1);
@@ -1438,8 +1440,20 @@ async function loadSchedule(gid) {
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
   const dayLabels = ['日','月','火','水','木','金','土'];
+  // ストック (日付未定) 領域。 行きたい場所候補をここに溜めて、 編集モードで
+  // 「日付を割り当てて投入」 する。
+  const stockCard = stockItems.length || schedEditMode ? `
+    <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0">
+      <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
+      <div class="schedule-items" style="margin-top:6px">
+        ${stockItems.map(it => renderSchedItem({ ...it, _occ: 'single' })).join('') || '<div class="empty" style="padding:6px">候補なし。 下の 「＋ 候補を追加」 で。</div>'}
+      </div>
+      <button class="btn primary" id="gd-sched-add-stock" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 候補を追加</button>
+    </details>` : '';
+
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
+    ${stockCard}
     ${days.map(date => {
       const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
       const md  = date.slice(5).replace('-', '/');
@@ -1458,6 +1472,9 @@ async function loadSchedule(gid) {
   body.querySelectorAll('[data-add-sched-day]').forEach(b => {
     b.addEventListener('click', () => openSchedItemModal(gid, { day_date: b.dataset.addSchedDay }));
   });
+  // ストックに候補を追加 (day_date = null で作成)
+  document.getElementById('gd-sched-add-stock')?.addEventListener('click', () =>
+    openSchedItemModal(gid, { day_date: null }));
   // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
@@ -1707,7 +1724,7 @@ function openSchedItemModal(gid, it) {
           <h3 class="row-title">${isNew ? '予定を追加' : '予定を編集'}</h3>
           <button id="sim-close">×</button>
         </div>
-        <label class="field"><span class="lbl">日付</span>
+        <label class="field"><span class="lbl">日付 (空欄 = ストックに保存)</span>
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
         <label class="field"><span class="lbl">タイトル</span>
@@ -1727,6 +1744,15 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">緯度 (任意)</span>
+            <input type="number" id="sim-lat" step="0.0000001" placeholder="例: 35.6586" value="${it.lat ?? ''}">
+          </label>
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">経度 (任意)</span>
+            <input type="number" id="sim-lng" step="0.0000001" placeholder="例: 139.7454" value="${it.lng ?? ''}">
+          </label>
+        </div>
+        <div class="hint-sm">緯度経度が入っていれば 📍 タップで Google Maps の正確な位置へ。</div>
         <label class="field"><span class="lbl">URL (任意)</span>
           <input type="url" id="sim-url" maxlength="2000" placeholder="https://..." value="${escapeHtml(it.url || '')}">
         </label>
@@ -1778,18 +1804,20 @@ function openSchedItemModal(gid, it) {
   });
   document.getElementById('sim-save').addEventListener('click', async () => {
     const body = {
-      day_date:        document.getElementById('sim-date').value,
+      day_date:        document.getElementById('sim-date').value || null,
       title:           document.getElementById('sim-title').value.trim(),
       kind:            document.getElementById('sim-kind').value,
       start_time:      document.getElementById('sim-start').value || null,
       duration_minutes: document.getElementById('sim-dur').value || null,
       location:        document.getElementById('sim-loc').value.trim() || null,
+      lat:             document.getElementById('sim-lat').value || null,
+      lng:             document.getElementById('sim-lng').value || null,
       url:             document.getElementById('sim-url').value.trim() || null,
       image_url:       stagedImage || null,
       memo:            document.getElementById('sim-memo').value.trim() || null,
     };
     if (!body.title)    { toast('タイトルを入れてください'); return; }
-    if (!body.day_date) { toast('日付を入れてください'); return; }
+    // day_date は null OK (= ストック)
     // リンク picker: チェック済み 他アイテムをすべて自分と同じ pair_id に揃える。
     // 自分の現 pair_id (it.link_pair_id) は 「外された人」 を NULL に戻すための比較に使う。
     const linkChecks = Array.from(document.querySelectorAll('[data-link-item]'));

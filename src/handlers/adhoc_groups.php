@@ -983,13 +983,14 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("
         SELECT s.id, s.day_date, s.end_date, s.start_time, s.end_time,
                s.duration_minutes, s.kind, s.title,
-               s.location, s.memo, s.image_url, s.url, s.link_pair_id,
+               s.location, s.lat, s.lng, s.memo, s.image_url, s.url, s.link_pair_id,
                s.sort_order, s.created_by_user_id,
                u.display_name AS created_by_name
           FROM adhoc_group_schedule_items s
           JOIN users u ON u.id = s.created_by_user_id
          WHERE s.group_id = ?
-         ORDER BY s.day_date,
+         ORDER BY (s.day_date IS NULL),
+                  s.day_date,
                   (s.start_time IS NULL),
                   s.start_time,
                   s.sort_order,
@@ -1006,8 +1007,9 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
     $body = read_json_body();
-    $day = (string)($body['day_date'] ?? '');
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+    // day_date は NULL OK (= ストック / 行きたい場所候補)。 値あるなら YYYY-MM-DD。
+    $day = isset($body['day_date']) && $body['day_date'] !== '' ? (string)$body['day_date'] : null;
+    if ($day !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
         throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
     }
     $title = trim((string)($body['title'] ?? ''));
@@ -1047,7 +1049,16 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
             throw new ApiException('bad_request', 'end_date は YYYY-MM-DD', 400);
         }
         $endDate = (string)$body['end_date'];
-        if ($endDate < $day) throw new ApiException('bad_request', 'end_date は day_date 以降', 400);
+        if ($day !== null && $endDate < $day) throw new ApiException('bad_request', 'end_date は day_date 以降', 400);
+    }
+    $latVal = null; $lngVal = null;
+    if (isset($body['lat']) && $body['lat'] !== '') {
+        $latVal = (float)$body['lat'];
+        if ($latVal < -90 || $latVal > 90) throw new ApiException('bad_request', 'lat 範囲外', 400);
+    }
+    if (isset($body['lng']) && $body['lng'] !== '') {
+        $lngVal = (float)$body['lng'];
+        if ($lngVal < -180 || $lngVal > 180) throw new ApiException('bad_request', 'lng 範囲外', 400);
     }
     $endTime = null;
     if (!empty($body['end_time'])) {
@@ -1065,17 +1076,23 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
         }
         $linkPair = $lp;
     }
-    // 同日の末尾に積む。
-    $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
-        FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
-    $stm->execute([$id, $day]);
+    // 同日 (またはストック day=NULL) の末尾に積む。
+    if ($day === null) {
+        $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+            FROM adhoc_group_schedule_items WHERE group_id=? AND day_date IS NULL");
+        $stm->execute([$id]);
+    } else {
+        $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+            FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
+        $stm->execute([$id, $day]);
+    }
     $sortOrder = ((int)$stm->fetchColumn()) + 1;
     $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
         (group_id, day_date, end_date, start_time, end_time, duration_minutes, kind, title,
-         location, memo, image_url, url, link_pair_id, sort_order, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+         location, lat, lng, memo, image_url, url, link_pair_id, sort_order, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     $ins->execute([$id, $day, $endDate, $startTime, $endTime, $duration, $kind, $title,
-        $location, $memo, $imageUrl, $extraUrl, $linkPair, $sortOrder, $u['id']]);
+        $location, $latVal, $lngVal, $memo, $imageUrl, $extraUrl, $linkPair, $sortOrder, $u['id']]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -1090,11 +1107,32 @@ function group_schedule_patch(PDO $pdo, array $cfg, int $id, int $itemId): void 
     $body = read_json_body();
     $sets = []; $args = [];
     if (array_key_exists('day_date', $body)) {
-        $v = (string)$body['day_date'];
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
-            throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
+        $v = $body['day_date'];
+        if ($v === null || $v === '') { $sets[] = 'day_date = NULL'; }
+        else {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$v)) {
+                throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
+            }
+            $sets[] = 'day_date = ?'; $args[] = (string)$v;
         }
-        $sets[] = 'day_date = ?'; $args[] = $v;
+    }
+    if (array_key_exists('lat', $body)) {
+        $v = $body['lat'];
+        if ($v === null || $v === '') { $sets[] = 'lat = NULL'; }
+        else {
+            $fv = (float)$v;
+            if ($fv < -90 || $fv > 90) throw new ApiException('bad_request', 'lat 範囲外', 400);
+            $sets[] = 'lat = ?'; $args[] = $fv;
+        }
+    }
+    if (array_key_exists('lng', $body)) {
+        $v = $body['lng'];
+        if ($v === null || $v === '') { $sets[] = 'lng = NULL'; }
+        else {
+            $fv = (float)$v;
+            if ($fv < -180 || $fv > 180) throw new ApiException('bad_request', 'lng 範囲外', 400);
+            $sets[] = 'lng = ?'; $args[] = $fv;
+        }
     }
     if (array_key_exists('title', $body)) {
         $t = trim((string)$body['title']);
