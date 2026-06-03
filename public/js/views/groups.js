@@ -1581,18 +1581,23 @@ function renderSchedItem(it, pairInfo) {
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
-  // ペア帯: link_pair_id があれば左 5px の半透明縦バーで上下にいるペアを連結。
-  // 同じ pair_id → 同じ色 → 別の日にいても一目でペアと分かる。
-  const pairBar = it.link_pair_id
-    ? `border-left:5px solid ${schedPairColor(it.link_pair_id)};`
+  // ペア帯: link_pair_id があれば 行の右端 30px 内側に 10px 幅の半透明縦
+  // ストリップを敷く。 同じ pair_id → 同じ色 → 別の日でも縦に並ぶと
+  // 帯がつながって見えて 「ペアだ」 と分かる。 absolute なので row 高さ
+  // に追従して 上から下まで埋まる。
+  const pairStrip = it.link_pair_id
+    ? `<div aria-hidden="true" style="position:absolute; right:30px; top:0; bottom:0; width:10px; background:${schedPairColor(it.link_pair_id)}; border-radius:5px; pointer-events:none"></div>`
     : '';
   // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
   // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
   // 2 行目 (line2) は空でも HTML 上は存在させる。
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
+  // ペア帯のぶん右側に余白を確保 (40px = 30px + 10px) してアイコンや
+  // ↑↓× ボタンに被らないように。
+  const rightPad = it.link_pair_id ? 'padding-right:48px;' : '';
   return `
     <div class="list-item" data-sched-item="${it.id}"
-         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer; min-height:68px; ${pairBar} ${isMid ? 'opacity:0.55' : ''}">
+         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${isMid ? 'opacity:0.55' : ''}">
       ${thumb}
       <div class="grow" style="min-width:0; overflow:hidden">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
@@ -1601,6 +1606,7 @@ function renderSchedItem(it, pairInfo) {
         ${line2Slot}
       </div>
       ${editControls}
+      ${pairStrip}
     </div>`;
 }
 
