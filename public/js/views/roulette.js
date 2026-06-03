@@ -49,9 +49,10 @@ export async function renderRoulette({ query } = {}) {
       <label class="field">
         <span class="lbl">ルーレットのタイトル</span>
         <input type="text" id="rl-title" maxlength="200" placeholder="例: 今日のゴミ捨て当番" value="${escapeHtml(initialTitle)}">
+        <div id="rl-tag-row" class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px"></div>
       </label>
       <label class="field">
-        <span class="lbl">当たった人にあなたからポイントを送る (任意・空欄 = 送らない)</span>
+        <span class="lbl">当たった人にあなたからポイントを送る (空欄 = 送らない)</span>
         <input type="number" id="rl-reward" min="0" max="1000000" placeholder="例: 100">
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
@@ -59,7 +60,7 @@ export async function renderRoulette({ query } = {}) {
           <input type="checkbox" id="rl-dry">
           <span class="slider"></span>
         </span>
-        <span>🧪 テストモード <span class="hint-sm">— ON の時は結果だけ表示、pt 移動・通知・履歴なし</span></span>
+        <span>🧪 テストモード <span class="hint-sm">— ON の時は結果を送信しない</span></span>
       </label>
       <div class="field">
         <span class="lbl">参加メンバー (2 人以上)</span>
@@ -89,6 +90,94 @@ export async function renderRoulette({ query } = {}) {
   document.getElementById('rl-spin').addEventListener('click', onSpin);
   await loadMembers();
   await loadHistory();
+  await loadTags();
+}
+
+// ---------------- タグ (タイトル補助) ----------------
+// admin が config.roulette_tags にカンマ区切りで持つ共通タグと、 ユーザが
+// localStorage に持つ個人タグをマージしてチップで並べる。 タップで現在の
+// タイトル末尾に半角スペース + タグを差し込む。 末尾に既にそのタグがあれば
+// 重複追加しない。「＋」 で個人タグを追加可。 個人タグは右上に小さな
+// × が出て削除できる。
+const PERSONAL_TAGS_KEY = 'labpay-roulette-tags-personal';
+function readPersonalTags() {
+  try {
+    const j = JSON.parse(localStorage.getItem(PERSONAL_TAGS_KEY) || '[]');
+    return Array.isArray(j) ? j.filter(t => typeof t === 'string' && t.trim()) : [];
+  } catch { return []; }
+}
+function writePersonalTags(arr) {
+  try { localStorage.setItem(PERSONAL_TAGS_KEY, JSON.stringify(arr)); } catch {}
+}
+function normalizeTag(s) {
+  const t = String(s || '').trim().replace(/\s+/g, '');
+  if (!t) return '';
+  return t.startsWith('#') ? t : '#' + t;
+}
+
+let SHARED_TAGS = [];
+async function loadTags() {
+  try {
+    const d = await get('/api/roulettes/tags');
+    SHARED_TAGS = Array.isArray(d.tags) ? d.tags : [];
+  } catch { SHARED_TAGS = []; }
+  renderTagRow();
+}
+
+function renderTagRow() {
+  const row = document.getElementById('rl-tag-row');
+  if (!row) return;
+  const personal = readPersonalTags();
+  // 共通タグは ×不可、 個人タグは × 付き。 重複時は共通を優先。
+  const sharedSet = new Set(SHARED_TAGS);
+  const personalOnly = personal.filter(t => !sharedSet.has(t));
+  const chips = [
+    ...SHARED_TAGS.map(t => `
+      <button type="button" class="btn rl-tag" data-tag="${escapeHtml(t)}"
+              style="padding:2px 10px; font-size:12px">${escapeHtml(t)}</button>`),
+    ...personalOnly.map(t => `
+      <span class="rl-tag-wrap" style="display:inline-flex; align-items:center; gap:2px">
+        <button type="button" class="btn rl-tag" data-tag="${escapeHtml(t)}"
+                style="padding:2px 10px; font-size:12px">${escapeHtml(t)}</button>
+        <button type="button" class="rl-tag-rm" data-tag-rm="${escapeHtml(t)}"
+                title="このタグを削除" style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 2px; font-size:11px">×</button>
+      </span>`),
+  ];
+  row.innerHTML = chips.join('') + `
+    <button type="button" id="rl-tag-add" class="btn"
+            style="padding:2px 10px; font-size:12px; color:var(--muted)">＋ 追加</button>`;
+  row.querySelectorAll('.rl-tag').forEach(b =>
+    b.addEventListener('click', () => insertTagIntoTitle(b.dataset.tag)));
+  row.querySelectorAll('.rl-tag-rm').forEach(b =>
+    b.addEventListener('click', () => removePersonalTag(b.dataset.tagRm)));
+  document.getElementById('rl-tag-add').addEventListener('click', onAddPersonalTag);
+}
+
+function insertTagIntoTitle(tag) {
+  const input = document.getElementById('rl-title');
+  if (!input) return;
+  const cur = input.value;
+  // 既に末尾にそのタグがあれば付け足さない (連打防止)。
+  if (cur.trimEnd().endsWith(tag)) return;
+  input.value = cur ? cur.trimEnd() + ' ' + tag : tag;
+  input.focus();
+}
+
+function onAddPersonalTag() {
+  const raw = prompt('追加するタグを入力 (# 不要、ハッシュは自動付与)\n例: 当番');
+  const t = normalizeTag(raw);
+  if (!t) return;
+  if (t.length > 30) { toast('タグが長すぎます'); return; }
+  const cur = readPersonalTags();
+  if (cur.includes(t) || SHARED_TAGS.includes(t)) { toast('既に登録済み'); return; }
+  writePersonalTags([...cur, t]);
+  renderTagRow();
+}
+
+function removePersonalTag(t) {
+  if (!confirm(`タグ ${t} を消しますか?`)) return;
+  writePersonalTags(readPersonalTags().filter(x => x !== t));
+  renderTagRow();
 }
 
 // Cached after first /api/users so bulk-select buttons can flip checkboxes

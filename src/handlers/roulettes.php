@@ -10,11 +10,22 @@ function route_roulettes(PDO $pdo, array $cfg, string $method, array $seg): void
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { roulettes_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { roulettes_spin($pdo, $cfg);   return; }
+    if ($sub === 'tags' && $method === 'GET') { roulettes_tags($pdo, $cfg); return; }
     if ((int)$sub > 0 && $method === 'GET') {
         roulettes_detail($pdo, $cfg, (int)$sub);
         return;
     }
     json_error('not_found', "no roulettes route for $method $sub", 404);
+}
+
+// GET /api/roulettes/tags — admin が config テーブルにカンマ区切りで持つ
+// 共通タグの list を返す。 ユーザはこれを localStorage の個人タグとマージして
+// 表示する (ハイブリッド方式)。
+function roulettes_tags(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $raw = (string)($pdo->query("SELECT v FROM config WHERE k='roulette_tags'")->fetchColumn() ?: '');
+    $tags = array_values(array_filter(array_map('trim', explode(',', $raw)), 'strlen'));
+    json_response(['tags' => $tags]);
 }
 
 // GET /api/roulettes/{id} — public-to-logged-in result page. Returns the

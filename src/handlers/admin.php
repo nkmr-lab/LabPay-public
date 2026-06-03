@@ -228,7 +228,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'streak_weekday_only','session_ttl_days',
                         'presence_window_minutes','geo_default_radius_m',
                         'scrapbox_base_pt','scrapbox_pt_per_extra','scrapbox_bonus_cap',
-                        'scrapbox_any_edit_pt','scrapbox_own_note_pt','scrapbox_start_date'];
+                        'scrapbox_any_edit_pt','scrapbox_own_note_pt','scrapbox_start_date',
+                        'roulette_tags'];
             $updated = [];
             foreach ($body as $k => $v) {
                 if (!in_array($k, $allowed, true)) continue;
