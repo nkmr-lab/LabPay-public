@@ -140,7 +140,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
                 'display_name' => $idToName[$uid] ?? '',
                 'is_winner'    => $uid === $winnerId,
                 'body'         => $uid === $winnerId
-                    ? "🎯 ルーレット「{$title}」で あなた が選ばれました!{$rewardWinnerSuffix}"
+                    ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
                     : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}",
             ];
         }
@@ -194,7 +194,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
     $rewardOthersSuffix = $reward > 0 ? " (賞金 {$reward}pt)" : '';
     foreach ($ids as $uid) {
         $body = ($uid === $winnerId)
-            ? "🎯 ルーレット「{$title}」で あなた が選ばれました!{$rewardWinnerSuffix}"
+            ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
             : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
         notify_safely($pdo, $cfg, $uid, 'admin_notice', $body, 'roulette', $rouletteId);
     }
