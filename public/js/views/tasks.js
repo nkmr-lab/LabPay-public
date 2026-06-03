@@ -323,7 +323,7 @@ function renderRow(t) {
   })[t.status] || '';
   const deadlineTag = t.deadline ? `<span class="tag warn" style="margin-left:4px">締切 ${escapeHtml(t.deadline)}</span>` : '';
   const pendingTag = (t.is_mine && t.pending_count > 0)
-    ? `<span class="tag" style="margin-left:4px; background:#fff3df; color:var(--warn)">🔔 承認待ち ${t.pending_count}</span>`
+    ? `<span class="tag" style="margin-left:4px; background:#fff3df; color:var(--warn)">🔔 完了待ち ${t.pending_count}</span>`
     : '';
 
   // Decide row role + border color.
@@ -343,7 +343,10 @@ function renderRow(t) {
     borderColor = '#dadbe2';
   }
 
-  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 承認待ち ${t.pending_count}` : ''}</div>`;
+  // pending_count は 「claimed + reported」 の合算。表記は 「完了待ち」 に統一
+  // (claimed = 作業中、reported = 報告済み承認まち、どちらも 「未完了」)。
+  // 個人の状態を 「承認待ち」 と呼ぶのは roleBadge と reportedClaims の所だけ。
+  const progressLine = `<div class="meta">承認 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 完了待ち ${t.pending_count}` : ''}</div>`;
 
   return `
     <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">
