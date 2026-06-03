@@ -324,6 +324,14 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-spend-list" class="list"></div>
     </div>
 
+    <div class="card" id="gd-danger-card" hidden>
+      <h3 style="margin:0; color:var(--danger)">グループを閉じる</h3>
+      <p class="muted" style="font-size:13px; margin:6px 0">
+        閉じてもデータは残ります。新規投稿・ワリカ追加ができなくなるだけ。
+      </p>
+      <button id="gd-close" class="danger">閉じる</button>
+    </div>
+
     <div id="gd-settle-modal" hidden></div>
   `;
   document.querySelectorAll('[data-kind]').forEach(b => {
@@ -419,8 +427,11 @@ async function loadDetail(id) {
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <a class="btn primary" href="#/roulette?members=${memberIds}">🎰 ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">🍻 割り勘</a>
-        ${isCreator && !g.closed_at ? `<button id="gd-close" class="danger">閉じる</button>` : ''}
       </div>`;
+    // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
+    // にぶら下げる。表示は creator かつ未 close の時だけ。
+    const dangerCard = document.getElementById('gd-danger-card');
+    if (dangerCard) dangerCard.hidden = !(isCreator && !g.closed_at);
     wireCoverEditor({
       idPrefix: 'gd',
       onChange: async (url) => {
