@@ -289,25 +289,24 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">
-      <h3>新規投稿</h3>
-      <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
-        <button data-kind="memo" class="btn primary">📝 メモ</button>
-        <button data-kind="url"  class="btn">🔗 URL</button>
-        <button data-kind="time" class="btn">🕒 時間</button>
-      </div>
-      <div id="gd-post-fields"></div>
-      <button id="gd-post" class="primary" style="margin-top:6px">投稿</button>
-    </div>
-    <div class="card">
-      <h3>フィード</h3>
-      <div id="gd-feed" class="list"></div>
+      <h3 style="margin:0">フィード</h3>
+      <details class="collapsible-sub" style="margin-top:8px">
+        <summary>＋ 新規投稿</summary>
+        <div style="margin-top:8px">
+          <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
+            <button data-kind="memo" class="btn primary">📝 メモ</button>
+            <button data-kind="url"  class="btn">🔗 URL</button>
+            <button data-kind="time" class="btn">🕒 時間</button>
+          </div>
+          <div id="gd-post-fields"></div>
+          <button id="gd-post" class="primary" style="margin-top:6px">投稿</button>
+        </div>
+      </details>
+      <div id="gd-feed" class="list" style="margin-top:8px"></div>
     </div>
 
     <div class="card" id="gd-wari-card">
-      <div class="row center">
-        <h3 class="row-title">ワリカ</h3>
-        <button id="gd-settle" class="btn">貸し借りを精算する</button>
-      </div>
+      <h3 style="margin:0">ワリカ</h3>
       <p class="muted" style="font-size:13px; margin:6px 0">
         立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
@@ -340,7 +339,8 @@ export async function renderGroupDetail({ params }) {
   // Default kind: memo.
   switchKind(document.querySelector('[data-kind="memo"]'));
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
-  document.getElementById('gd-settle').addEventListener('click', () => openSettleModal(id));
+  // gd-settle ボタンは renderWariForm() で出る (「支出を記録」 の右に並ぶ)。
+  // この時点では未生成なのでバインドは renderWariForm 側で行う。
   await loadDetail(id);
   await loadWari(id);
 }
@@ -541,7 +541,10 @@ function renderWariForm() {
     </select>
     <div id="ex-for" style="margin-bottom:6px"></div>
     <input type="text" id="ex-memo" maxlength="500" placeholder="メモ (例: ランチ, タクシー)" style="margin-bottom:6px">
-    <button id="ex-submit" class="primary">支出を記録</button>
+    <div class="row" style="gap:6px">
+      <button id="ex-submit" class="primary">支出を記録</button>
+      <button id="gd-settle" class="btn">精算する</button>
+    </div>
   `;
   const ccyEl = document.getElementById('ex-ccy');
   ccyEl.addEventListener('change', () => syncFxPreview());
@@ -559,6 +562,8 @@ function renderWariForm() {
   wariFor = new Set(wariMembers.map(m => m.id));
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
+  // 精算する: 別画面ではなく modal を開いて、貸し借りの清算プランを提示する。
+  document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(currentGroupId));
 }
 
 // Last-fetched rate for the preset dropdown path. Cleared on currency change.
