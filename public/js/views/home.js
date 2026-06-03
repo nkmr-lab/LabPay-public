@@ -301,6 +301,7 @@ async function fetchAndRenderPresence() {
 
 async function renderPresence() {
   const toggle = document.getElementById('presence-names-toggle');
+  if (!toggle) return;
   const SHOW_NAMES_KEY = 'labpay-presence-show-names';
   const showNames = localStorage.getItem(SHOW_NAMES_KEY) !== '0';
   toggle.checked = showNames;
@@ -631,6 +632,7 @@ async function renderFreshInvitations() {
 
 async function renderFreshListings() {
   const root = document.getElementById('home-fresh-listings');
+  if (!root) return; // 非同期 await 中にユーザが home から離れて DOM が消えてるケース
   try {
     const d = await get('/api/listings', { limit: 50 });
     const items = (d.items || [])
@@ -689,6 +691,7 @@ async function renderFreshTasks() {
   const root = document.getElementById('home-fresh-tasks');
   const myCard = document.getElementById('home-my-claims-card');
   const myList = document.getElementById('home-my-claims');
+  if (!root || !myCard || !myList) return;
   try {
     const d = await get('/api/tasks');
     const items = d.items || [];
@@ -749,6 +752,7 @@ async function renderFreshTasks() {
 
 async function renderRecentTx() {
   const root = document.getElementById('recent');
+  if (!root) return;
   try {
     const tx = await get('/api/me/transactions', { limit: 5 });
     if (!tx.items.length) {
