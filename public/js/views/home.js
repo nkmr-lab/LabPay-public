@@ -283,7 +283,10 @@ async function renderCalendarEvents() {
       const zoomBtn = ev.url
         ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 8px; font-size:12px">参加</a>`
         : '';
-      const loc = ev.location ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+      // location が URL だけ (Zoom / Meet などのリンク) のときは [参加] と二重に
+      // なるので 📍 行を出さない。テキストの場所だけ表示する。
+      const locIsUrl = ev.location && /^https?:\/\//i.test(ev.location.trim());
+      const loc = (ev.location && !locIsUrl) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
       return `
         <a class="list-item" href="${escapeHtml(ev.html_url || '#')}" target="_blank" rel="noopener" style="align-items:center; gap:8px">
           <div style="min-width:64px; font-weight:700; color:var(--primary)">${fmtTime(ev.start, ev.all_day)}</div>
