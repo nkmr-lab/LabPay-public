@@ -350,8 +350,12 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     }
     unset($r);
 
-    // 全部の関与者 (払ったか使ったかどちらかでも) を拾う
-    $allUids = array_unique(array_merge(array_keys($paid), array_keys($spent)));
+    // 全部の関与者 (払ったか使ったかどちらかでも) を拾う。
+    // 注: array_unique は元の key を保持するので [0=>A, 2=>B] のように index が
+    // 飛ぶことがあり、その配列をそのまま $st->execute() に渡すと PDO が positional
+    // binding を array key で解釈して 「Invalid parameter number」 になる。
+    // array_values で 0,1,2,... に詰め直してから渡す。
+    $allUids = array_values(array_unique(array_merge(array_keys($paid), array_keys($spent))));
     $byUser = [];
     if ($allUids) {
         $place = implode(',', array_fill(0, count($allUids), '?'));
@@ -625,7 +629,8 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         }
     }
     // Build name map across everyone who paid or spent.
-    $uids = array_unique(array_merge(array_keys($paid), array_keys($spent)));
+    // array_values で 0,1,2,... に詰め直す (array_unique は元 key 維持で gap が出るため)。
+    $uids = array_values(array_unique(array_merge(array_keys($paid), array_keys($spent))));
     $names = [];
     if ($uids) {
         $place = implode(',', array_fill(0, count($uids), '?'));
