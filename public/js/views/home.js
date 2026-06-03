@@ -546,7 +546,8 @@ async function renderFreshListings() {
       const priceTag = l.is_gift
         ? `<div class="bold" style="color:#b71c50; white-space:nowrap; padding:8px 12px 0 0">🎁 これどうぞ</div>`
         : `<div class="bold" style="color:var(--primary); white-space:nowrap; padding:8px 12px 0 0">${l.price.toLocaleString()} pt</div>`;
-      const qtyTag = (l.qty !== undefined && l.qty !== null) ? ` · 在庫 ${l.qty}` : '';
+      // 在庫数: 2 個以上の時だけ表示。 1 個は 「言うまでもない」 のでノイズ削減。
+      const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';
       // created_at は 'YYYY-MM-DD HH:MM:SS' 形式。 秒は要らないので 16 文字で切る。
       const when = (l.created_at || '').slice(0, 16);
       const meta = `${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
