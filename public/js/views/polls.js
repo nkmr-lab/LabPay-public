@@ -223,20 +223,30 @@ async function wirePollForm(initial, isEdit, onSave) {
   });
 }
 
-export async function renderPollNew() {
+export async function renderPollNew({ query } = {}) {
+  // グループ詳細から ?members=1,2,3&title=... で飛んで来た時の初期値。
+  const rawMembers = String(query?.members || '').trim();
+  const presetVoters = rawMembers
+    ? rawMembers.split(',').map(Number).filter(Boolean)
+    : [];
+  const presetTitle  = String(query?.title || '').trim();
+  const initial = {
+    title: presetTitle, body: '', deadline: '', multi: false,
+    allowRevote: true, allowFreeText: false,
+    visibility: 'after_deadline', options: [],
+    voterIds: presetVoters,
+  };
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
       <a href="#/polls" class="hint">← 一覧</a>
       <h2 style="margin:6px 0 0">投票・アンケートを作る</h2>
     </div>
-    ${pollFormCardHtml({
-      title: '', body: '', deadline: '', multi: false,
-      allowRevote: true, allowFreeText: false,
-      visibility: 'after_deadline', options: [],
-    }, false)}
+    ${pollFormCardHtml(initial, false)}
   `;
-  await wirePollForm({}, false, async (payload) => {
+  // wirePollForm の isEdit=false で 「自分をデフォ ON」 がかかるが、 グループから来た
+  // 場合は そちらの voterIds を優先したい → isEdit=true 相当として渡す。
+  await wirePollForm(initial, presetVoters.length > 0, async (payload) => {
     const r = await post('/api/polls', payload);
     toast('作成しました');
     navigate('#/polls/' + r.id);

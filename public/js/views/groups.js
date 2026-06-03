@@ -469,6 +469,7 @@ async function loadDetail(id) {
         <button class="btn primary" id="gd-snap-receipt">レシート</button>
         <a class="btn" href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
+        <a class="btn" href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">投票・アンケート</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
     // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
@@ -1359,6 +1360,8 @@ async function onPost(gid) {
 let schedEditMode = false;
 let schedPairSlots = {};
 let schedPairMaxSlot = -1;
+let schedPairFirstIds = new Set();
+let schedPairLastIds  = new Set();
 // modal の 「ペア相手」 dropdown で 同グループの他アイテムを出すために、
 // 最新の取得結果を持っておく。
 let lastSchedItems = [];
@@ -1463,6 +1466,17 @@ async function loadSchedule(gid) {
     .forEach(([pid], idx) => { pairSlots[pid] = idx; });
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
+  // 連結グループの 「最初 / 最後」 を id 集合化。 描画時に端だけ濃く塗るのに使う。
+  schedPairFirstIds = new Set();
+  schedPairLastIds  = new Set();
+  for (const [pid, arr] of Object.entries(pairs)) {
+    if (arr.length < 2) continue;
+    const sorted = [...arr].sort((a, b) =>
+      (a.day_date + (a.start_time || '99:99'))
+        .localeCompare(b.day_date + (b.start_time || '99:99')));
+    schedPairFirstIds.add(Number(sorted[0].id));
+    schedPairLastIds.add(Number(sorted[sorted.length - 1].id));
+  }
   const dayLabels = ['日','月','火','水','木','金','土'];
   // ストック (日付未定) 領域。 行きたい場所候補をここに溜めて、 編集モードで
   // 「日付を割り当てて投入」 する。
@@ -1544,6 +1558,8 @@ function schedPairStyleFromId(pid, isTransport) {
   const sat   = 55 + (Math.abs(h2) % 30);            // 55-85%
   const light = 45 + (Math.abs(h1 >> 4) % 15);       // 45-60%
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.45)`;
+  // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
+  const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
   // 位置: 右端 〜 左 1/3 のレンジを 2 つに分ける。
   //   右端側 (非移動): right 16 〜 80 px (画像/ボタン領域を避ける)
   //   左半分 (移動系): right の min を半分くらいに → 100 〜 200 px ぐらい
@@ -1552,7 +1568,7 @@ function schedPairStyleFromId(pid, isTransport) {
   const rightPx = isTransport
     ? Math.round(110 + r * 100)   // 移動: 110〜210 px (= 左半分)
     : Math.round(16  + r * 70);   // 非移動: 16〜86 px (= 右半分)
-  return { color, rightPx };
+  return { color, capColor, rightPx };
 }
 
 function renderSchedItem(it) {
@@ -1632,8 +1648,14 @@ function renderSchedItem(it) {
   const stripStyle = it.link_pair_id
     ? schedPairStyleFromId(it.link_pair_id, isTransport)
     : null;
+  // 連結グループの 「最初」「最後」 のアイテムは帯の端 5px を濃い同系色で塗って、
+  // チェーンの始点 / 終点が一目で分かるようにする (中間はフラット)。
+  const isFirst = stripStyle && schedPairFirstIds.has(Number(it.id));
+  const isLast  = stripStyle && schedPairLastIds.has(Number(it.id));
+  const topCap    = isFirst ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; width:20px; height:5px; background:${stripStyle.capColor}; pointer-events:none"></div>` : '';
+  const bottomCap = isLast  ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; bottom:0; width:20px; height:5px; background:${stripStyle.capColor}; pointer-events:none"></div>` : '';
   const pairStrip = stripStyle
-    ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; bottom:0; width:20px; background:${stripStyle.color}; pointer-events:none"></div>`
+    ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; bottom:0; width:20px; background:${stripStyle.color}; pointer-events:none"></div>${topCap}${bottomCap}`
     : '';
   // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
   // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
