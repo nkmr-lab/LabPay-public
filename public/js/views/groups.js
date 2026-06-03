@@ -1384,13 +1384,20 @@ async function loadSchedule(gid) {
     body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「日程設定」 から 開始日〜終了日 を入れると 各日のカードが並びます。</div>`;
     return;
   }
-  // 日付範囲を 1 日ずつ展開。
+  // 日付範囲を 1 日ずつ展開。 toISOString は UTC に変換してしまい JST 環境で
+  // 1 日前にズレるバグの元。 文字列のまま素直に +1 する。
+  const addOneDay = (s) => {
+    const [y, m, dd] = s.split('-').map(Number);
+    const dt = new Date(y, m - 1, dd);
+    dt.setDate(dt.getDate() + 1);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+  };
   const days = [];
-  let cur = new Date(d.start_date + 'T00:00:00');
-  const end = new Date(d.end_date   + 'T00:00:00');
-  while (cur <= end) {
-    days.push(cur.toISOString().slice(0, 10));
-    cur = new Date(cur.getTime() + 86400000);
+  let cur = d.start_date;
+  while (cur <= d.end_date) {
+    days.push(cur);
+    cur = addOneDay(cur);
   }
   const byDay = {};
   for (const it of (d.items || [])) {
