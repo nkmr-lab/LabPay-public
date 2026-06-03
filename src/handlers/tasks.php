@@ -400,6 +400,11 @@ function tasks_list(PDO $pdo, array $cfg): void {
         // 指名されてる人の名前リストを add (UI 表示用)。 lookup に無ければ 「user#42」 で fallback。
         $r['assigned_names'] = $assignedIds === null ? []
             : array_map(fn($aid) => $nameById[$aid] ?? "user#$aid", $assignedIds);
+        // avatar 付きの assigned/approved リストを追加 (フロントが chip 表示するのに使う)。
+        $r['assigned_users'] = $assignedIds === null ? []
+            : array_values(array_filter(array_map(fn($aid) => $userById[$aid] ?? null, $assignedIds)));
+        $approvedIds = $approvedByTask[(int)$r['id']] ?? [];
+        $r['approved_users'] = array_values(array_filter(array_map(fn($aid) => $userById[$aid] ?? null, $approvedIds)));
         // can_claim: 指名タスクなら指名者本人だけ true、それ以外は従来の学年判定
         $audienceOk = $assignedIds !== null
             ? $r['is_assigned_to_me']

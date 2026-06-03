@@ -376,11 +376,7 @@ async function loadList() {
 function renderRow(t) {
   const audTag = t.audience_grades ? `<span class="tag muted" style="margin-left:4px">${escapeHtml(t.audience_grades)}</span>` : '';
   const assignedTag = t.assigned_user_ids
-    ? `<span class="tag warn" style="margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名タスク'}</span>`
-    : '';
-  // 指名タスクは誰が指名されたかも 1 行で出す (自分指名は太字で強調)。
-  const assignedLine = (t.assigned_names && t.assigned_names.length)
-    ? `<div class="meta">指名: ${t.assigned_names.map(n => escapeHtml(n)).join(', ')}</div>`
+    ? `<span class="tag warn" style="margin-left:4px">${t.is_assigned_to_me ? '👉 あなた指名' : '指名'}</span>`
     : '';
   const statusTag = ({
     open: '<span class="tag">募集中</span>',
@@ -404,30 +400,42 @@ function renderRow(t) {
   } else if (t.can_claim) {
     borderColor = '#0e7c63';
   } else {
-    // Open but not claimable (audience mismatch / per-user limit reached / etc),
-    // or closed. Still showing so requester/participants can see context.
     borderColor = '#dadbe2';
   }
 
-  // 集計の表記は 「完了 X/Y · 完了待ち N」 に統一。「承認」 という単語は曖昧
-  // (受諾承認 vs 作業内容承認) なので、aggregate には使わない。承認まち
-  // (= 個人が報告した後の作業内容承認まち) だけ roleBadge と reportedClaims
-  // セクションで使い、それも 「自分が報告した後」 という単一文脈で限定する。
+  // 指名対象 / 完了者 を avatar chips で。 avatar に hover title で名前。
+  const peopleChip = (u) =>
+    `<span title="${escapeHtml(u.display_name)}" style="display:inline-flex; align-items:center; gap:2px">
+       ${avatarHtml(u.display_name, u.avatar_url, 'xs')}
+     </span>`;
+  const assignedRow = (Array.isArray(t.assigned_users) && t.assigned_users.length)
+    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center">
+         <span class="muted" style="min-width:42px">指名:</span>
+         ${t.assigned_users.map(peopleChip).join('')}
+       </div>` : '';
+  const approvedRow = (Array.isArray(t.approved_users) && t.approved_users.length)
+    ? `<div class="meta" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center">
+         <span class="muted" style="min-width:42px">完了:</span>
+         ${t.approved_users.map(peopleChip).join('')}
+       </div>` : '';
+
+  // 進捗集計。 完了者を avatar で出すなら 「X / Y 人」 だけで十分。
   const progressLine = `<div class="meta">完了 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 完了待ち ${t.pending_count}` : ''}</div>`;
 
   return `
-    <div class="card" style="display:flex; gap:10px; align-items:flex-start; border-left:5px solid ${borderColor}">
-      ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
-      <div class="grow">
-        <div>
-          <a class="bold" href="#/tasks/${t.id}">${escapeHtml(t.title)}</a>
+    <a href="#/tasks/${t.id}" class="list-item" style="align-items:flex-start; gap:10px; border-left:5px solid ${borderColor}; text-decoration:none; color:inherit">
+      ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
+      <div class="grow" style="min-width:0">
+        <div style="font-size:14px">
+          <span class="bold">${escapeHtml(t.title)}</span>
           ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
-        ${assignedLine}
+        ${assignedRow}
         ${progressLine}
+        ${approvedRow}
       </div>
-    </div>`;
+    </a>`;
 }
 
 // ==================== Task detail (#/tasks/:id) ====================

@@ -121,10 +121,13 @@ function renderRow(i) {
   } else if (i.starts_at) {
     placeLine = `<div class="meta">🕒 ${escapeHtml(trimSec(i.starts_at))}</div>`;
   }
-  // 参加者数 / 募集人数。 capacity が無い場合は N人 のみ。
-  const capLine = i.capacity
-    ? `<div class="meta">${i.join_count} / ${i.capacity} 人</div>`
-    : `<div class="meta">${i.join_count} 人</div>`;
+  // 参加者数 / 募集人数。 終了時は人数 をピープル行右端に出すので、 ここでは
+  // 募集中の時だけ出す。
+  const capLine = !isClosed
+    ? (i.capacity
+        ? `<div class="meta">${i.join_count} / ${i.capacity} 人</div>`
+        : `<div class="meta">${i.join_count} 人</div>`)
+    : '';
   const statusTag = isClosed
     ? `<span class="tag muted">終了</span>`
     : (iJoined
@@ -147,8 +150,13 @@ function renderRow(i) {
     ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(i.description)}</div>`
     : '';
 
-  // 発起人｜参加者リスト 行。 発起人を左、 参加者の avatar+名前 を区切り | の後ろに。
+  // 発起人｜参加者リスト 行。 発起人を左、 参加者を | の後ろに。
+  // 終了時は 「発起人を含めた合計人数」 を右端に。
   const joins = Array.isArray(i.joins) ? i.joins : [];
+  const creatorJoined = joins.some(j => Number(j.id) === Number(i.creator_user_id));
+  const totalCount = joins.length + (creatorJoined ? 0 : 1);
+  const closedCount = isClosed
+    ? `<span class="muted" style="font-size:11px; margin-left:auto">${totalCount} 人</span>` : '';
   const peopleRow = `
     <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center; font-size:12px">
       <span style="display:inline-flex; align-items:center; gap:3px; font-weight:600">
@@ -163,6 +171,7 @@ function renderRow(i) {
              <span>${escapeHtml(j.display_name)}</span>
            </span>`).join('')}
         ${joins.length > 8 ? `<span class="muted">+${joins.length - 8}</span>` : ''}` : ''}
+      ${closedCount}
     </div>`;
 
   return `
