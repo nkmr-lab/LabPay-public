@@ -122,6 +122,43 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ─── Zoom OAuth (User-managed) ────────────────────────────────────
+    // /api/auth/zoom/connect  (GET): 認可画面へリダイレクト。 CSRF state を cookie に。
+    // /api/auth/zoom/callback (GET): code → token、 users 更新、 設定ページへ戻す。
+    if ($sub === 'zoom' && ($seg[2] ?? '') === 'connect' && $method === 'GET') {
+        $u = Auth::requireUser($pdo, $cfg);
+        if (empty($cfg['zoom']['client_id'])) {
+            json_error('zoom_disabled', 'Zoom 連携の設定がされていません (config.zoom)', 503);
+            return;
+        }
+        $state = bin2hex(random_bytes(16));
+        setcookie('labpay_zoom_state', $state, [
+            'expires'  => time() + 600,
+            'path'     => '/',
+            'secure'   => (bool)($cfg['app']['cookie_secure'] ?? true),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        header('Location: ' . Zoom::authorizeUrl($cfg, $state), true, 302);
+        return;
+    }
+    if ($sub === 'zoom' && ($seg[2] ?? '') === 'callback' && $method === 'GET') {
+        $u = Auth::requireUser($pdo, $cfg);
+        $code  = $_GET['code']  ?? '';
+        $state = $_GET['state'] ?? '';
+        $cookieState = $_COOKIE['labpay_zoom_state'] ?? '';
+        if (!$code || !$state || !$cookieState || !hash_equals($cookieState, (string)$state)) {
+            json_error('oauth_state', 'invalid zoom OAuth state', 400);
+            return;
+        }
+        setcookie('labpay_zoom_state', '', ['expires' => time() - 3600, 'path' => '/']);
+        $exch = Zoom::exchangeCode($cfg, (string)$code);
+        Zoom::storeTokens($pdo, (int)$u['id'], $exch, /*keepIdentity=*/false);
+        $back = rtrim((string)$cfg['app']['base_url'], '/') . '/#/settings?zoom=connected';
+        header('Location: ' . $back, true, 302);
+        return;
+    }
+
     if ($sub === 'logout' && $method === 'POST') {
         $sid = Auth::readSessionId($cfg);
         if ($sid) {

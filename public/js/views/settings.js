@@ -90,6 +90,17 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>Zoom 連携</h3>
+      <p class="hint">
+        連携すると、 ホームの 「今日の予定」 から 「＋ MTG を立てる」 で
+        Zoom MTG 付きの Google Calendar 予定を 1 タップで作れるようになります。
+        Calendar 側の書き込み権限も必要なので、 まだなら 下の Google Calendar
+        セクションで 「再連携」 してください (events scope が要ります)。
+      </p>
+      <div id="zoom-section"><div class="muted">読み込み中…</div></div>
+    </div>
+
+    <div class="card">
       <h3>Google Calendar 連携</h3>
       <p class="hint">
         連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
@@ -154,6 +165,7 @@ export async function renderSettings() {
   renderHomeLayoutEditor();
   await loadCalendar();
   await loadCalendarFilterRules();
+  await loadZoom();
 
   document.getElementById('fb-send').addEventListener('click', async () => {
     const kind = document.getElementById('fb-kind').value;
@@ -228,6 +240,37 @@ function moveCard(id, delta, currentOrder) {
   l.order = arr;
   writeHomeLayout(l);
   renderHomeLayoutEditor();
+}
+
+// ---------------- Zoom 連携 ----------------
+async function loadZoom() {
+  const root = document.getElementById('zoom-section');
+  if (!root) return;
+  try {
+    const d = await get('/api/me/zoom');
+    if (!d.connected) {
+      root.innerHTML = `
+        <a class="btn primary" href="/api/auth/zoom/connect">Zoom と連携する</a>
+        <div class="hint-sm" style="margin-top:6px">タップで Zoom の認可画面が開きます。 承認後この設定ページに戻ってきます。</div>`;
+    } else {
+      root.innerHTML = `
+        <div style="padding:8px 10px; background:#eef7ee; border-radius:6px">
+          <div class="bold">✓ Zoom 連携済み</div>
+          <div class="meta">${escapeHtml(d.email || '(Zoom アカウント)')}</div>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px">
+          <a class="btn" href="/api/auth/zoom/connect">再連携</a>
+          <button id="zoom-disconnect" class="danger">解除</button>
+        </div>`;
+      document.getElementById('zoom-disconnect').addEventListener('click', async () => {
+        if (!confirm('Zoom 連携を解除しますか?')) return;
+        try { await del('/api/me/zoom'); toast('解除しました'); await loadZoom(); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    }
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // ---------------- Google Calendar ----------------

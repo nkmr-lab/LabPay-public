@@ -198,6 +198,107 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ─── Zoom 連携状態取得 / 解除 ─────────────────────────────────────
+    if ($sub === 'zoom' && ($seg[2] ?? '') === '' && $method === 'GET') {
+        $st = $pdo->prepare('SELECT zoom_user_id, zoom_email FROM users WHERE id=?');
+        $st->execute([$u['id']]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        $connected = !empty($row['zoom_user_id']);
+        json_response([
+            'connected' => $connected,
+            'email'     => $connected ? (string)($row['zoom_email'] ?? '') : null,
+        ]);
+        return;
+    }
+    if ($sub === 'zoom' && ($seg[2] ?? '') === '' && $method === 'DELETE') {
+        Zoom::disconnect($pdo, (int)$u['id']);
+        json_response(['ok' => true]);
+        return;
+    }
+
+    // ─── Google Calendar + Zoom で予定作成 ────────────────────────────
+    // POST /api/me/calendar/events
+    // body: {topic, start (ISO8601 w/ tz), duration_minutes, calendar_id?, attendees?}
+    // 1. Zoom で MTG 作成 → join_url 取得
+    // 2. Google Calendar の指定カレンダー (省略時 primary) に予定を作って
+    //    location に Zoom URL を、 description にも join_url を埋める
+    // 3. 作成された event オブジェクトを返す
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'events' && $method === 'POST') {
+        $body = read_json_body();
+        $topic = trim((string)($body['topic'] ?? ''));
+        if ($topic === '' || mb_strlen($topic) > 200) {
+            throw new ApiException('bad_request', 'topic length 1..200', 400);
+        }
+        $startRaw = (string)($body['start'] ?? '');
+        if ($startRaw === '') throw new ApiException('bad_request', 'start (ISO8601) required', 400);
+        try {
+            $startDt = new DateTimeImmutable($startRaw, new DateTimeZone('Asia/Tokyo'));
+        } catch (Throwable $e) {
+            throw new ApiException('bad_request', 'start must be ISO8601', 400);
+        }
+        $duration = max(5, min(720, (int)($body['duration_minutes'] ?? 30)));
+        $calendarId = trim((string)($body['calendar_id'] ?? 'primary'));
+        if ($calendarId === '') $calendarId = 'primary';
+        // Zoom 側に渡す start_time は timezone 上のローカル時刻 (末尾 Z なし)。
+        $zoomStart = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
+        $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        $meeting = Zoom::createMeeting($zoomAccess, [
+            'topic'      => $topic,
+            'start_time' => $zoomStart,
+            'duration'   => $duration,
+            'timezone'   => 'Asia/Tokyo',
+        ]);
+        $joinUrl = (string)($meeting['join_url'] ?? '');
+        if ($joinUrl === '') {
+            throw new ApiException('zoom_api', 'Zoom did not return join_url', 502);
+        }
+        $passcode = (string)($meeting['password'] ?? '');
+        // Google Calendar 側のイベント
+        $endDt = $startDt->modify('+' . $duration . ' minutes');
+        $descLines = [
+            'Zoom MTG',
+            $joinUrl,
+        ];
+        if ($passcode !== '') $descLines[] = 'パスコード: ' . $passcode;
+        if (!empty($meeting['id'])) $descLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+        $event = [
+            'summary'     => $topic,
+            'location'    => $joinUrl,
+            'description' => implode("\n", $descLines),
+            'start'       => ['dateTime' => $startDt->format(DateTimeImmutable::RFC3339), 'timeZone' => 'Asia/Tokyo'],
+            'end'         => ['dateTime' => $endDt->format(DateTimeImmutable::RFC3339),   'timeZone' => 'Asia/Tokyo'],
+        ];
+        $calAccess = GoogleCalendar::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        try {
+            $created = GoogleCalendar::createEvent($calAccess, $calendarId, $event);
+        } catch (ApiException $e) {
+            if ($e->errCode === 'calendar_scope') {
+                throw new ApiException('calendar_scope',
+                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携 から 再連携 してください', 403);
+            }
+            throw $e;
+        }
+        // localStorage キャッシュを無効化させたいので events cache invalidation
+        // フラグを返す。 フロント側で消す。
+        json_response([
+            'ok'         => true,
+            'invalidate_calendar_cache' => true,
+            'zoom'       => [
+                'meeting_id' => $meeting['id']    ?? null,
+                'join_url'   => $joinUrl,
+                'password'   => $passcode,
+            ],
+            'event'      => [
+                'id'        => (string)($created['id']       ?? ''),
+                'html_link' => (string)($created['htmlLink'] ?? ''),
+                'summary'   => (string)($created['summary']  ?? ''),
+                'start'     => (string)($created['start']['dateTime'] ?? ''),
+                'end'       => (string)($created['end']['dateTime']   ?? ''),
+            ],
+        ]);
+        return;
+    }
+
     if ($sub === 'achievements' && $method === 'GET') {
         $items = Achievements::reportFor($pdo, (int)$u['id']);
         json_response(['items' => $items]);

@@ -102,10 +102,11 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
-        <a href="#/settings" class="hint">設定 →</a>
+        <button id="home-mtg-new" class="btn primary" style="padding:3px 10px; font-size:12px">＋ Zoom MTG</button>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>
+    <div id="home-mtg-modal" hidden></div>
 
     <div class="card" id="home-groups-card" data-card-id="groups" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -161,6 +162,7 @@ export async function renderHome() {
   await renderMedalsStrip();
   await renderPresence();
   await renderCalendarEvents();
+  document.getElementById('home-mtg-new')?.addEventListener('click', openMtgModal);
   await renderMyGroups();
   await renderFreshInvitations();
   await renderFreshListings();
@@ -435,6 +437,104 @@ async function renderCalendarEvents() {
     // render 中の例外 (DOM 破壊 etc) は無視して隠す。
     card.hidden = true;
   }
+}
+
+// ──── 「＋ Zoom MTG」 modal ──────────────────────────────────────────────
+// 出先で 「今 30 分後に 30 分の MTG やろう」 を 1 タップで作るための簡易フォーム。
+// 今 / +15 / +30 / +60 分後 のショートカット + タイトル + 長さ 30/45/60。
+// サーバ側で Zoom create_meeting → Google Calendar create event の 2 段。
+function openMtgModal() {
+  const root = document.getElementById('home-mtg-modal');
+  if (!root) return;
+  const now = new Date();
+  const round5 = new Date(Math.ceil(now.getTime() / (5 * 60 * 1000)) * 5 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmtLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  root.hidden = false;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto"
+         id="mtg-overlay">
+      <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px">
+        <div class="row center">
+          <h3 class="row-title">Zoom MTG を立てる</h3>
+          <button id="mtg-close">×</button>
+        </div>
+        <label class="field" style="margin-top:8px">
+          <span class="lbl">タイトル</span>
+          <input type="text" id="mtg-topic" maxlength="200" placeholder="例: 中村と打合せ" autofocus>
+        </label>
+        <label class="field">
+          <span class="lbl">開始</span>
+          <div class="row" style="gap:4px; flex-wrap:wrap">
+            <button class="btn" data-quick="0">今すぐ</button>
+            <button class="btn" data-quick="15">+15分</button>
+            <button class="btn" data-quick="30">+30分</button>
+            <button class="btn" data-quick="60">+1時間</button>
+          </div>
+          <input type="datetime-local" id="mtg-start" value="${fmtLocal(round5)}" style="margin-top:6px">
+        </label>
+        <label class="field">
+          <span class="lbl">長さ</span>
+          <select id="mtg-duration">
+            <option value="15">15 分</option>
+            <option value="30" selected>30 分</option>
+            <option value="45">45 分</option>
+            <option value="60">1 時間</option>
+            <option value="90">1.5 時間</option>
+            <option value="120">2 時間</option>
+          </select>
+        </label>
+        <div class="hint-sm" style="margin:6px 0">
+          作成すると Zoom MTG が生成され、 Google Calendar (primary) に予定が立ちます。
+          参加 URL は予定の場所欄に入ります。
+        </div>
+        <div id="mtg-error" class="muted" style="color:var(--danger); margin:6px 0; min-height:18px"></div>
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+          <button id="mtg-cancel">キャンセル</button>
+          <button id="mtg-create" class="primary">作成</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { root.hidden = true; root.innerHTML = ''; };
+  document.getElementById('mtg-close').addEventListener('click', close);
+  document.getElementById('mtg-cancel').addEventListener('click', close);
+  document.getElementById('mtg-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'mtg-overlay') close();
+  });
+  root.querySelectorAll('[data-quick]').forEach(b => {
+    b.addEventListener('click', () => {
+      const add = Number(b.dataset.quick) || 0;
+      const t = new Date(Date.now() + add * 60 * 1000);
+      // 5 分単位に丸める。
+      t.setMinutes(Math.ceil(t.getMinutes() / 5) * 5, 0, 0);
+      document.getElementById('mtg-start').value = fmtLocal(t);
+    });
+  });
+  document.getElementById('mtg-create').addEventListener('click', async () => {
+    const btn   = document.getElementById('mtg-create');
+    const errEl = document.getElementById('mtg-error');
+    errEl.textContent = '';
+    const topic    = document.getElementById('mtg-topic').value.trim();
+    const startRaw = document.getElementById('mtg-start').value;
+    const duration = Number(document.getElementById('mtg-duration').value);
+    if (!topic)    { errEl.textContent = 'タイトルを入れてください'; return; }
+    if (!startRaw) { errEl.textContent = '開始時刻を入れてください'; return; }
+    // datetime-local の値は 「YYYY-MM-DDTHH:MM」 (timezone なし)。 JST と解釈。
+    const start = startRaw + ':00+09:00';
+    btn.disabled = true; btn.textContent = '作成中…';
+    try {
+      const r = await post('/api/me/calendar/events', { topic, start, duration_minutes: duration });
+      if (r.invalidate_calendar_cache) {
+        try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
+      }
+      toast('Zoom MTG を作成しました');
+      close();
+      await renderCalendarEvents();
+    } catch (e) {
+      errEl.textContent = e.message || String(e);
+      btn.disabled = false; btn.textContent = '作成';
+    }
+  });
 }
 
 // Newest listings (top 5 by created_at). Server returns sorted by price ASC + created_at ASC

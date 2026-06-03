@@ -37,9 +37,10 @@ require_once __DIR__ . '/Notifier.php';
 require_once __DIR__ . '/ProductInfo.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Calendar.php';
+require_once __DIR__ . '/GoogleCalendar.php';
+require_once __DIR__ . '/Zoom.php';
 require_once __DIR__ . '/Achievements.php';
 require_once __DIR__ . '/Labels.php';
-require_once __DIR__ . '/GoogleCalendar.php';
 
 // ---------------- API exception ----------------
 class ApiException extends RuntimeException {

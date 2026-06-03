@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 class GoogleCalendar {
     public const READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+    // events スコープは 「ユーザが作成したカレンダー」 への CRUD 可。 全体読み取りは
+    // readonly が必要なので両方リクエストする。 既存ユーザはこの bump で再連携必要。
+    public const EVENTS_SCOPE   = 'https://www.googleapis.com/auth/calendar.events';
 
     // 既存セッションに対して追加 scope を要求する認可 URL。access_type=offline +
     // prompt=consent で refresh_token を必ず受け取る。
@@ -20,7 +23,7 @@ class GoogleCalendar {
         $params = [
             'client_id'     => (string)$cfg['auth']['google_client_id'],
             'response_type' => 'code',
-            'scope'         => self::READONLY_SCOPE,
+            'scope'         => self::READONLY_SCOPE . ' ' . self::EVENTS_SCOPE,
             'redirect_uri'  => $redirect,
             'state'         => $state,
             'access_type'   => 'offline',
@@ -238,6 +241,48 @@ class GoogleCalendar {
             'etag'   => $r['etag'],
             'items'  => $r['data']['items'] ?? [],
         ];
+    }
+
+    // POST /calendars/{calendarId}/events で予定を作成。 戻り値は Google の event
+     // オブジェクト全体 (htmlLink, hangoutLink などが入る)。
+    // start/end は RFC3339 (例: '2026-06-03T15:00:00+09:00')、 timeZone は IANA 名。
+    public static function createEvent(string $accessToken, string $calendarId, array $event): array {
+        $url = 'https://www.googleapis.com/calendar/v3/calendars/'
+             . rawurlencode($calendarId) . '/events';
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($event, JSON_UNESCAPED_UNICODE),
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 20,
+        ]);
+        $resp = curl_exec($ch);
+        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($resp === false) {
+            throw new ApiException('calendar_api', 'calendar create transport failed', 502);
+        }
+        if ($http === 401) {
+            throw new ApiException('calendar_unauthorized', 'access token rejected', 401);
+        }
+        if ($http === 403) {
+            // events scope が無いユーザは insufficient permission を返す。
+            throw new ApiException('calendar_scope', 'Calendar の書き込み権限がありません (再連携してください)', 403);
+        }
+        if ($http < 200 || $http >= 300) {
+            $msg = 'calendar create error: ' . $http;
+            $data = json_decode((string)$resp, true);
+            if (is_array($data) && !empty($data['error']['message'])) {
+                $msg .= ' — ' . (string)$data['error']['message'];
+            }
+            throw new ApiException('calendar_api', $msg, 502);
+        }
+        $data = json_decode((string)$resp, true);
+        return is_array($data) ? $data : [];
     }
 
     // event の description / location から Zoom / Meet URL を抽出。
