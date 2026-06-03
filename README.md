@@ -172,6 +172,7 @@ LabPay/
 | **[docs/INSTALL.md](docs/INSTALL.md)** | サーバへの導入を最初から最後まで。学生が読んでセットアップできることを目標にしています |
 | **[docs/HACKATHON.md](docs/HACKATHON.md)** | LabPay の API を使って何か作る人向け。認証フロー・主要エンドポイント・サンプルクライアント |
 | **[docs/api.md](docs/api.md)** | 全エンドポイントの簡易リファレンス |
+| **[samples/](samples/)** | API を叩く短い Python サンプル集 (在室一覧 / 商品一覧 / タスク一覧 / 送金 など、 1 ファイル 1 目的) |
 | **[bin/README.md](bin/README.md)** | Scanner のセットアップ詳細 (Windows/Linux/Mac) |
 
 ---
