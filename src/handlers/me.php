@@ -225,7 +225,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     // 2. Google Calendar の指定カレンダー (省略時 primary) に予定を作って
     //    location に Zoom URL を、 description にも join_url を埋める
     // 3. 作成された event オブジェクトを返す
-    if ($sub === 'calendar' && ($seg[2] ?? '') === 'events' && $method === 'POST') {
+    // /me/calendar/events 本体 (seg[3] 無し)。 seg[3] 付きの POST は別 route
+     // (events/{id}/zoom) に通すので、 ここで吸い込まないよう segment 制限。
+    if ($sub === 'calendar' && ($seg[2] ?? '') === 'events'
+        && ($seg[3] ?? '') === '' && $method === 'POST') {
         $body = read_json_body();
         $topic = trim((string)($body['topic'] ?? ''));
         if ($topic === '' || mb_strlen($topic) > 200) {
