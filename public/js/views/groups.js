@@ -1506,6 +1506,15 @@ async function loadSchedule(gid) {
   });
 }
 
+// ペア id を hash 化して安定した色相を返す。 同じ pair_id = 同じ色 → 上下
+// 離れた日にあっても 「これは繋がってる」 と一目で分かる薄い帯。
+function schedPairColor(pid) {
+  let h = 0;
+  for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsla(${hue}, 70%, 50%, 0.35)`;
+}
+
 function renderSchedItem(it, pairInfo) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   // 複数日展開: start / mid / end によって 時刻と接尾語を変える。
@@ -1572,15 +1581,24 @@ function renderSchedItem(it, pairInfo) {
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
+  // ペア帯: link_pair_id があれば左 5px の半透明縦バーで上下にいるペアを連結。
+  // 同じ pair_id → 同じ色 → 別の日にいても一目でペアと分かる。
+  const pairBar = it.link_pair_id
+    ? `border-left:5px solid ${schedPairColor(it.link_pair_id)};`
+    : '';
+  // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
+  // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
+  // 2 行目 (line2) は空でも HTML 上は存在させる。
+  const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
   return `
     <div class="list-item" data-sched-item="${it.id}"
-         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer; ${isMid ? 'opacity:0.55' : ''}">
+         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer; min-height:68px; ${pairBar} ${isMid ? 'opacity:0.55' : ''}">
       ${thumb}
       <div class="grow" style="min-width:0; overflow:hidden">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
           ${escapeHtml(it.title)}${roleSuffix ? `<span class="muted" style="font-weight:400">${roleSuffix}</span>` : ''}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}${pairBadge}
         </div>
-        ${line2}
+        ${line2Slot}
       </div>
       ${editControls}
     </div>`;
