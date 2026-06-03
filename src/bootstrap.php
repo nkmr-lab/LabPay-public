@@ -295,13 +295,49 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
     }
     @chmod($dest, 0644);
 
+    // 画像ならサムネ (一辺最大 320px) を作って横に置く: <stored>.thumb.jpg
+    // GD が無い / 失敗しても本体は成功扱い (サムネはオプション)。
+    $thumbPath = null;
+    if (in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true) && function_exists('imagecreatefromstring')) {
+        try {
+            $raw = @file_get_contents($dest);
+            $src = $raw ? @imagecreatefromstring($raw) : false;
+            if ($src) {
+                $sw = imagesx($src); $sh = imagesy($src);
+                $maxDim = 320;
+                $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
+                $tw = max(1, (int)round($sw * $ratio));
+                $th = max(1, (int)round($sh * $ratio));
+                $thumb = imagecreatetruecolor($tw, $th);
+                imagecopyresampled($thumb, $src, 0, 0, 0, 0, $tw, $th, $sw, $sh);
+                $thumbName = preg_replace('/\.[^.]+$/', '', $stored) . '.thumb.jpg';
+                imagejpeg($thumb, $dir . '/' . $thumbName, 82);
+                @chmod($dir . '/' . $thumbName, 0644);
+                imagedestroy($thumb); imagedestroy($src);
+                $thumbPath = '/' . $sub . '/' . $thumbName;
+            }
+        } catch (Throwable $_) { /* サムネ失敗は無視 */ }
+    }
+
     return [
         'stored_name' => $stored,
         'mime'        => $mime,
         'ext'         => $ext,
         'size'        => (int)$f['size'],
         'path'        => '/' . $sub . '/' . $stored,  // relative URL, suitable for public href
+        'thumb_path'  => $thumbPath,                  // 画像のみ。 失敗時は null
     ];
+}
+
+// 既存画像 URL から サムネ URL を推定するヘルパ (uploads/<name>.<ext> →
+// uploads/<name>.thumb.jpg)。 サムネが存在しない場合はオリジナルを返す。
+function thumb_url_for(string $imageUrl): string {
+    if (!preg_match('#^/uploads/([^.]+)\.([A-Za-z0-9]+)$#', $imageUrl, $m)) return $imageUrl;
+    $base = $m[1];
+    $thumbRel = '/uploads/' . $base . '.thumb.jpg';
+    $publicDir = realpath(__DIR__ . '/../public') ?: (__DIR__ . '/../public');
+    if (is_file($publicDir . $thumbRel)) return $thumbRel;
+    return $imageUrl;
 }
 
 // ---------------- Slack Web API (Bot Token GET) ----------------

@@ -32,10 +32,15 @@ function uploads_image(PDO $pdo, array $cfg): void {
         UPLOAD_IMAGE_MAX_BYTES, UPLOAD_IMAGE_MIME);
 
     $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
-    json_response([
+    $resp = [
         'url'  => $baseUrl !== '' ? ($baseUrl . $saved['path']) : $saved['path'],
         'path' => $saved['path'],
         'mime' => $saved['mime'],
         'size' => $saved['size'],
-    ]);
+    ];
+    if (!empty($saved['thumb_path'])) {
+        $resp['thumb_url']  = $baseUrl !== '' ? ($baseUrl . $saved['thumb_path']) : $saved['thumb_path'];
+        $resp['thumb_path'] = $saved['thumb_path'];
+    }
+    json_response($resp);
 }
