@@ -400,16 +400,24 @@ async function renderCalendarEvents() {
       const prefix = today ? '' : '明日 ';
       return `${prefix}${h}:${String(m).padStart(2,'0')}`;
     };
-    // 各予定について 「終わってる / 次にやって来る」 を判定して描画スタイルを
-    // 変える: 終わったやつは grayscale + 半透明、これから一番近い未来の予定は
-    // primary-soft 背景 + 左に primary バーで強調。
+    // 各予定の状態を 4 つに分類:
+    //   過去 (終了済み)       → 半透明 + grayscale
+    //   進行中 (start ≤ now < end) → 強い primary 色 + 左バー
+    //   次の予定 (今日未来の最初) → 薄い黄色 + amber 左バー
+    //   翌日                  → 薄い青 + blue 左バー
     const nowMs = Date.now();
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStartMs = todayStart.getTime() + 86400000;
     const withFlags = items.map(ev => {
       const startMs = ev.start ? Date.parse(ev.start) : NaN;
       const endMs   = ev.end   ? Date.parse(ev.end)   : (isNaN(startMs) ? NaN : startMs + 3600000);
-      return { ...ev, _isPast: !isNaN(endMs) && endMs < nowMs };
+      const isPast       = !isNaN(endMs) && endMs < nowMs;
+      const isInProgress = !isPast && !isNaN(startMs) && startMs <= nowMs && nowMs < endMs;
+      const isTomorrow   = !isNaN(startMs) && startMs >= tomorrowStartMs;
+      return { ...ev, _isPast: isPast, _isInProgress: isInProgress, _isTomorrow: isTomorrow };
     });
-    const nextIdx = withFlags.findIndex(e => !e._isPast);
+    // 「次の予定」 は 今日の未来で 進行中じゃない最初。 翌日は別扱い。
+    const nextIdx = withFlags.findIndex(e => !e._isPast && !e._isInProgress && !e._isTomorrow);
     const eventsHtml = !items.length
       ? `<div class="empty">今日は予定なし</div>`
       : withFlags.map((ev, idx) => {
@@ -427,13 +435,20 @@ async function renderCalendarEvents() {
       }
       const isNext = idx === nextIdx;
       // box-shadow:inset で左バーを描く (border-left を使うと content が右に
-      // ずれて他の行と縦が揃わなくなるので)。
+      // ずれて他の行と縦が揃わなくなるので)。 優先順位は 過去 → 進行中 → 次 → 翌日。
       const styles = [
         'align-items:flex-start',
         'gap:8px',
       ];
-      if (ev._isPast)   styles.push('opacity:0.5', 'filter:grayscale(60%)');
-      if (isNext)       styles.push('background:var(--primary-soft)', 'box-shadow:inset 4px 0 0 var(--primary)');
+      if (ev._isPast) {
+        styles.push('opacity:0.5', 'filter:grayscale(60%)');
+      } else if (ev._isInProgress) {
+        styles.push('background:var(--primary-soft)', 'box-shadow:inset 4px 0 0 var(--primary)');
+      } else if (isNext) {
+        styles.push('background:#fff7d6', 'box-shadow:inset 4px 0 0 #d4a017');
+      } else if (ev._isTomorrow) {
+        styles.push('background:#e8f0fd', 'box-shadow:inset 4px 0 0 #4a8ce5');
+      }
       return `
         <div class="list-item" style="${styles.join('; ')}">
           <div style="min-width:64px; font-weight:700; color:var(--primary); padding-top:1px">${fmtTime(ev.start, ev.all_day)}</div>

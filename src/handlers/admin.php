@@ -567,5 +567,45 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ----- scrapbox_handles (admin が 各 user の handle を管理) -----
+    // GET    /api/admin/scrapbox_handles               全 user × handle 一覧
+    // PATCH  /api/admin/scrapbox_handles {user_id, scrapbox_name}
+    //         指定 user の handle を 1 つに置き換える (空文字なら全削除)。
+    //         scrapbox_name が他 user に紐づいてれば剥がす (steal)。
+    if ($sub === 'scrapbox_handles' && $method === 'GET') {
+        $sql = "SELECT u.id, u.display_name, u.grade,
+                       h.scrapbox_name
+                  FROM users u
+             LEFT JOIN user_scrapbox_handles h ON h.user_id = u.id
+                 WHERE u.kind='human'
+                 ORDER BY CASE u.grade
+                            WHEN 'D' THEN 0 WHEN 'M2' THEN 1 WHEN 'M1' THEN 2
+                            WHEN 'B4' THEN 3 WHEN 'B3' THEN 4 ELSE 5 END,
+                          u.display_name, h.scrapbox_name";
+        $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        // 1 user に複数 handle が残ってるレガシーケースは そのまま 返す (UI が
+        // 1 つに統合する流れ)。
+        json_response(['items' => $rows]);
+        return;
+    }
+    if ($sub === 'scrapbox_handles' && $method === 'PATCH') {
+        $body = read_json_body();
+        $uid = (int)($body['user_id'] ?? 0);
+        $name = trim((string)($body['scrapbox_name'] ?? ''));
+        if ($uid <= 0) throw new ApiException('bad_request', 'user_id required', 400);
+        if (mb_strlen($name) > 100) throw new ApiException('bad_request', 'name too long', 400);
+        db_tx($pdo, function () use ($pdo, $uid, $name) {
+            // 既存の handle を user から全部はがす (1 user 1 handle に強制)。
+            $pdo->prepare('DELETE FROM user_scrapbox_handles WHERE user_id=?')->execute([$uid]);
+            if ($name === '') return; // 空文字は 「未設定にする」 = 削除のみ
+            // 他 user が同じ handle を持ってたら 剥がす (steal)。
+            $pdo->prepare('DELETE FROM user_scrapbox_handles WHERE scrapbox_name=?')->execute([$name]);
+            $pdo->prepare('INSERT INTO user_scrapbox_handles (scrapbox_name, user_id) VALUES (?,?)')
+                ->execute([$name, $uid]);
+        });
+        json_response(['ok' => true]);
+        return;
+    }
+
     json_error('not_found', "no admin route for $method $sub", 404);
 }

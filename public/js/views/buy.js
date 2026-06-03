@@ -15,11 +15,9 @@ export async function renderBuy() {
     </div>
 
     <div class="card">
-      <div style="text-align:right">
-        <a href="#/wishlist" class="hint">これ欲しい! →</a>
-      </div>
       <p class="muted" style="margin:6px 0">バーコードを読み取るか、下の一覧から選んでください。</p>
       <button class="primary" id="scan-toggle" style="width:100%">📷 バーコードを読み取って買う</button>
+      <a href="#/wishlist" class="btn" style="display:block; width:100%; text-align:center; margin-top:8px">これ欲しい!</a>
       <div id="scanner-wrap" hidden style="margin-top:10px">
         <video id="buy-video" playsinline style="width:100%; max-width:480px; border-radius:12px; background:#000; display:block; margin:0 auto"></video>
         <div class="scanner-status" id="scan-status" style="text-align:center; margin-top:4px"></div>

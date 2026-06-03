@@ -30,8 +30,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
-      <h3>自動検出 (おすすめ)</h3>
-      <p class="hint">
+      <h3>自分の端末 (登録済み)</h3>
+      <div id="dev-list" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
+    <details class="card" id="auto-detect-card" ${state.hasMac ? '' : 'open'}>
+      <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
+        自動検出 ${state.hasMac ? '<span class="hint-sm">— 登録済み (タップで開く)</span>' : '<span class="hint-sm">— 未登録なのでここから追加</span>'}
+      </summary>
+      <p class="hint" style="margin-top:8px">
         ラボ内 scanner が直近の数分間に観測した「まだ誰のものでもない MAC」一覧。<br>
         <span style="color:var(--primary); font-weight:700">📶 確実な見つけ方:</span><br>
         <span style="display:inline-block; margin-left:14px">1. スマホの WiFi をオフにする</span><br>
@@ -48,37 +55,7 @@ export async function renderSettings() {
         <span class="muted" style="font-size:11px">設定→WiFi→ネットワーク名で確認</span>
       </div>
       <div id="unreg-list" class="list"><div class="muted">読み込み中…</div></div>
-    </div>
-
-    <div class="card">
-      <h3>自分の端末 (登録済み)</h3>
-      <div id="dev-list" class="list"><div class="muted">読み込み中…</div></div>
-      <div class="sep"></div>
-      <h3 style="margin:6px 0">手動で追加</h3>
-      <p class="hint-sm">
-        スマホの「設定 → Wi-Fi → nkmr-lab-wifi → MAC アドレス」を直接入れる場合はこちら。
-      </p>
-      <div class="row">
-        <input type="text" id="new-mac" placeholder="aa:bb:cc:dd:ee:ff" maxlength="32" style="flex:2">
-        <input type="text" id="new-label" placeholder="ラベル (例: iPhone)" maxlength="100" class="grow">
-        <button id="add-btn" class="primary">追加</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Scrapbox 連携</h3>
-      <p class="muted" style="font-size:13px; margin:4px 0 8px">
-        nkmr-lab の Scrapbox に書き込んだ分が pt に変わります。
-        Slack の #scrapbox 通知で見える <b>表示名</b> をそのまま追加してください
-        (例: Latin と漢字の両方を使ってる場合は両方登録)。
-      </p>
-      <div id="sb-status" class="hint-sm"></div>
-      <div id="sb-list" class="list" style="margin:8px 0"><div class="muted">読み込み中…</div></div>
-      <div class="row">
-        <input type="text" id="sb-new" placeholder="Scrapbox 表示名" maxlength="100" style="flex:2">
-        <button id="sb-add" class="primary">追加</button>
-      </div>
-    </div>
+    </details>
 
     <div class="card">
       <h3>ホームのカスタマイズ</h3>
@@ -87,17 +64,6 @@ export async function renderSettings() {
         非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-layout-list" class="list" style="margin-top:6px"></div>
-    </div>
-
-    <div class="card">
-      <h3>Zoom 連携</h3>
-      <p class="hint">
-        連携すると、 ホームの 「今日の予定」 から 「＋ MTG を立てる」 で
-        Zoom MTG 付きの Google Calendar 予定を 1 タップで作れるようになります。
-        Calendar 側の書き込み権限も必要なので、 まだなら 下の Google Calendar
-        セクションで 「再連携」 してください (events scope が要ります)。
-      </p>
-      <div id="zoom-section"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
@@ -147,7 +113,6 @@ export async function renderSettings() {
   const savedIp = localStorage.getItem('labpay-my-ip');
   if (savedIp) document.getElementById('my-ip-input').value = savedIp;
   await loadUnregistered();
-  document.getElementById('add-btn').addEventListener('click', onAdd);
   document.getElementById('reload-unreg').addEventListener('click', loadUnregistered);
   // Re-render on every IP change so highlight updates live.
   document.getElementById('my-ip-input').addEventListener('input', (ev) => {
@@ -160,12 +125,9 @@ export async function renderSettings() {
   document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
-  document.getElementById('sb-add').addEventListener('click', onScrapboxAdd);
-  await loadScrapboxHandles();
   renderHomeLayoutEditor();
   await loadCalendar();
   await loadCalendarFilterRules();
-  await loadZoom();
 
   document.getElementById('fb-send').addEventListener('click', async () => {
     const kind = document.getElementById('fb-kind').value;
@@ -240,37 +202,6 @@ function moveCard(id, delta, currentOrder) {
   l.order = arr;
   writeHomeLayout(l);
   renderHomeLayoutEditor();
-}
-
-// ---------------- Zoom 連携 ----------------
-async function loadZoom() {
-  const root = document.getElementById('zoom-section');
-  if (!root) return;
-  try {
-    const d = await get('/api/me/zoom');
-    if (!d.connected) {
-      root.innerHTML = `
-        <a class="btn primary" href="/api/auth/zoom/connect">Zoom と連携する</a>
-        <div class="hint-sm" style="margin-top:6px">タップで Zoom の認可画面が開きます。 承認後この設定ページに戻ってきます。</div>`;
-    } else {
-      root.innerHTML = `
-        <div style="padding:8px 10px; background:#eef7ee; border-radius:6px">
-          <div class="bold">✓ Zoom 連携済み</div>
-          <div class="meta">${escapeHtml(d.email || '(アカウント名は user:read scope 未付与のため非表示)')}</div>
-        </div>
-        <div style="margin-top:8px; display:flex; gap:6px">
-          <a class="btn" href="/api/auth/zoom/connect">再連携</a>
-          <button id="zoom-disconnect" class="danger">解除</button>
-        </div>`;
-      document.getElementById('zoom-disconnect').addEventListener('click', async () => {
-        if (!confirm('Zoom 連携を解除しますか?')) return;
-        try { await del('/api/me/zoom'); toast('解除しました'); await loadZoom(); }
-        catch (e) { toast('失敗: ' + e.message); }
-      });
-    }
-  } catch (e) {
-    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
-  }
 }
 
 // ---------------- Google Calendar ----------------
@@ -418,49 +349,6 @@ async function onCalendarRuleRemove(idx) {
     cachedFilterRules = r.rules || next;
     toast('削除しました');
     renderCalendarFilterRules();
-  } catch (e) { toast('失敗: ' + e.message); }
-}
-
-// ---------------- Scrapbox handles ----------------
-async function loadScrapboxHandles() {
-  const list = document.getElementById('sb-list');
-  const status = document.getElementById('sb-status');
-  try {
-    const r = await get('/api/me/scrapbox_handles');
-    const s = r.recent_30d || { total_pts: 0, total_atts: 0, days: 0 };
-    status.textContent = `直近 30 日: ${s.days} 日 / ${s.total_atts} 件で +${s.total_pts}pt`;
-    if (!r.handles.length) {
-      list.innerHTML = `<div class="muted">まだ登録なし。下の入力欄から追加してください。</div>`;
-      return;
-    }
-    list.innerHTML = r.handles.map(h => `
-      <div class="list-item">
-        <div class="bold mono">${escapeHtml(h.scrapbox_name)}</div>
-        <button data-sb-del="${encodeURIComponent(h.scrapbox_name)}">削除</button>
-      </div>`).join('');
-    list.querySelectorAll('[data-sb-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        try {
-          await del('/api/me/scrapbox_handles/' + b.dataset.sbDel);
-          toast('削除しました');
-          await loadScrapboxHandles();
-        } catch (e) { toast('失敗: ' + e.message); }
-      });
-    });
-  } catch (e) {
-    list.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-async function onScrapboxAdd() {
-  const input = document.getElementById('sb-new');
-  const handle = input.value.trim();
-  if (!handle) { toast('表示名を入力してください'); return; }
-  try {
-    await post('/api/me/scrapbox_handles', { handle });
-    input.value = '';
-    toast('追加しました');
-    await loadScrapboxHandles();
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
@@ -676,17 +564,3 @@ async function loadUnregistered() {
   }
 }
 
-async function onAdd() {
-  const mac = document.getElementById('new-mac').value.trim();
-  const label = document.getElementById('new-label').value.trim();
-  if (!mac) { toast('MAC を入力してください'); return; }
-  try {
-    await post('/api/presence/devices', { mac, label: label || null });
-    document.getElementById('new-mac').value = '';
-    document.getElementById('new-label').value = '';
-    toast('登録しました');
-    await load();
-  } catch (e) {
-    toast('失敗: ' + e.message);
-  }
-}

@@ -12,6 +12,92 @@ async function loadTable(elementId, fetcher) {
   catch (e) { el.textContent = '取得失敗: ' + e.message; }
 }
 
+// ---------------- Admin: Zoom 連携 (旧 settings から移設) ----------------
+async function loadAdminZoom() {
+  const root = document.getElementById('zoom-section');
+  if (!root) return;
+  try {
+    const d = await get('/api/me/zoom');
+    if (!d.connected) {
+      root.innerHTML = `
+        <a class="btn primary" href="/api/auth/zoom/connect">Zoom と連携する</a>
+        <div class="hint-sm" style="margin-top:6px">タップで Zoom 認可画面 → 承認後この管理ページに戻ります。</div>`;
+    } else {
+      root.innerHTML = `
+        <div style="padding:8px 10px; background:#eef7ee; border-radius:6px">
+          <div class="bold">✓ Zoom 連携済み</div>
+          <div class="meta">${escapeHtml(d.email || '(アカウント名取得スコープなし)')}</div>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px">
+          <a class="btn" href="/api/auth/zoom/connect">再連携</a>
+          <button id="zoom-disconnect" class="danger">解除</button>
+        </div>`;
+      document.getElementById('zoom-disconnect').addEventListener('click', async () => {
+        if (!confirm('Zoom 連携を解除しますか?')) return;
+        try { await del('/api/me/zoom'); toast('解除しました'); await loadAdminZoom(); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    }
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------------- Admin: Scrapbox 名簿 ----------------
+// 各 user の 「Slack #scrapbox で使う表示名」 を 1 つだけ管理。
+// レガシー (1 user に複数 handle 行) は同 user_id でグループ化して
+// カンマ区切り表示するが、 保存時は 1 つに統合。
+async function loadScrapboxRoster() {
+  const root = document.getElementById('sb-roster');
+  if (!root) return;
+  try {
+    const r = await get('/api/admin/scrapbox_handles');
+    const rows = r.items || [];
+    // (user_id) でまとめる: 1 user に複数 handle が残ってる場合のため。
+    const byUid = new Map();
+    for (const r of rows) {
+      if (!byUid.has(r.id)) {
+        byUid.set(r.id, { id: r.id, display_name: r.display_name, grade: r.grade, names: [] });
+      }
+      if (r.scrapbox_name) byUid.get(r.id).names.push(r.scrapbox_name);
+    }
+    const list = [...byUid.values()];
+    if (!list.length) { root.innerHTML = `<div class="muted">ユーザが居ません</div>`; return; }
+    root.innerHTML = list.map(u => {
+      const cur = u.names.join(',');
+      const tag = u.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(u.grade)}]</span>` : '';
+      return `
+        <div class="list-item" data-uid="${u.id}" style="gap:6px; align-items:center">
+          <div style="flex:1; min-width:0">
+            <div class="bold">${escapeHtml(u.display_name)} ${tag}</div>
+          </div>
+          <input type="text" class="sb-input" value="${escapeHtml(cur)}" placeholder="(未設定)"
+                 maxlength="100" style="width:160px; font-size:13px">
+          <button class="sb-save primary" style="padding:4px 10px; font-size:12px">保存</button>
+        </div>`;
+    }).join('');
+    root.querySelectorAll('.list-item[data-uid]').forEach(row => {
+      const uid = Number(row.dataset.uid);
+      const input = row.querySelector('.sb-input');
+      const btn = row.querySelector('.sb-save');
+      btn.addEventListener('click', async () => {
+        const name = input.value.trim();
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await patch('/api/admin/scrapbox_handles', { user_id: uid, scrapbox_name: name });
+          toast(name === '' ? '未設定に戻しました' : '保存しました');
+          await loadScrapboxRoster();
+        } catch (e) {
+          toast('失敗: ' + e.message);
+          btn.disabled = false; btn.textContent = '保存';
+        }
+      });
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 export async function renderAdmin() {
   if (!state.me || state.me.role !== 'admin') {
     document.getElementById('app').innerHTML = `<div class="card"><h2>管理者専用</h2><p>権限がありません。</p></div>`;
@@ -81,6 +167,23 @@ export async function renderAdmin() {
       </div>
     </div>
 
+    <div class="card">
+      <h3>外部サービス連携</h3>
+      <p class="hint">
+        ラボ全体で 1 つ持つ連携。 Zoom は管理者の Zoom アカウントで MTG を立てる権限、
+        Scrapbox は各メンバーの Scrapbox 表示名を Slack 通知名にマッピングするための名簿。
+      </p>
+      <h4 style="margin:10px 0 4px">Zoom 連携</h4>
+      <div id="zoom-section"><div class="muted">読み込み中…</div></div>
+      <div class="sep" style="margin:14px 0 6px"></div>
+      <h4 style="margin:6px 0 4px">Scrapbox 名簿</h4>
+      <p class="hint-sm">
+        各メンバー の Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
+        他メンバーに既に紐づいてる名前を登録すると steal される。
+      </p>
+      <div id="sb-roster" class="list" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <details class="card collapsible-form">
       <summary>詳細管理 (普段触らない設定など)</summary>
       <div style="margin-top:10px">
@@ -142,6 +245,10 @@ export async function renderAdmin() {
   }
   if (dash) renderSupply(dash);
   if (dash) renderDashboard(dash);
+
+  // --- Zoom 連携 + Scrapbox 名簿 ---
+  await loadAdminZoom();
+  await loadScrapboxRoster();
 
   // --- Allowlist ---
   await loadAllow();

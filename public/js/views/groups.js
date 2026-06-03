@@ -13,10 +13,8 @@ const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 export async function renderGroups() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card">
-      <a href="#/apps" class="hint">← アプリ</a>
-      <h2 style="margin:6px 0 0">グループ</h2>
-      <p class="card-subtitle">
+    <div class="card page-header">
+      <p class="card-subtitle" style="margin:0">
         出張・旅行・連幹事など、短期間だけ使うメンバー枠。フィード (メモ・URL・
         時間) + ワリカ (立替を積み上げ → 精算) を共有しつつ、ルーレットや
         飲み会割り勘をそのメンバーで即起動できます。
