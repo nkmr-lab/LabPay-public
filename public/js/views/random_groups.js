@@ -1,8 +1,8 @@
 // /#/random-groups — メンバーから N 個のチームをランダム生成。
 // 学年 / 性別 を「できるだけ均等」に配慮するオプション付き (バケット分け
 // → 各バケット内シャッフル → ラウンドロビンで分配)。純粋なローカル計算で、
-// DB には書き込まない。結果は「このメンバーでグループ作成」ショートカットから
-// 1グループずつ実体化できる。
+// DB には書き込まない。結果は「このメンバーでグループ一括作成」で
+// 「グループ1」 「グループ2」 … という名前で順に実体化できる。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -59,7 +59,10 @@ export async function renderRandomGroups() {
     <div class="card" id="rg-result-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 id="rg-result-title" class="row-title">結果</h3>
-        <button id="rg-notify" class="primary">📢 結果を全員に通知</button>
+      </div>
+      <div class="row" style="gap:6px; margin-bottom:10px; flex-wrap:wrap">
+        <button id="rg-bulk-create" class="primary">このメンバーでグループ一括作成</button>
+        <button id="rg-notify">📢 結果を全員に通知</button>
       </div>
       <div id="rg-result"></div>
     </div>
@@ -68,6 +71,7 @@ export async function renderRandomGroups() {
   document.getElementById('rg-go').addEventListener('click', () => runShuffle());
   document.getElementById('rg-reshuffle').addEventListener('click', () => runShuffle());
   document.getElementById('rg-notify').addEventListener('click', () => onNotifyAll());
+  document.getElementById('rg-bulk-create').addEventListener('click', () => onBulkCreate());
 }
 
 // Last successful partition result, kept here so 「全員に通知」 can re-use it
@@ -218,22 +222,14 @@ function renderResult(groups, title) {
         <span>${escapeHtml(m.display_name)}</span>
         ${m.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(m.grade)}]</span>` : ''}
       </span>`).join('');
-    const ids = g.map(m => m.id).join(',');
     return `
       <div class="card" style="margin:8px 0; background:#faf7fd">
         <div class="row center" style="margin-bottom:6px">
-          <h4 class="row-title">グループ ${idx + 1} <span class="hint-sm">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
-          <button class="btn" data-mk-group="${ids}" data-title="グループ ${idx + 1}">このメンバーでグループ作成</button>
+          <h4 class="row-title">グループ${idx + 1} <span class="hint-sm">(${g.length}人${counts ? ' · ' + counts : ''})</span></h4>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">${memberHtml}</div>
       </div>`;
   }).join('');
-  root.querySelectorAll('[data-mk-group]').forEach(b => {
-    b.addEventListener('click', () => onCreateGroup(
-      b.dataset.title,
-      b.dataset.mkGroup.split(',').map(Number).filter(Boolean),
-    ));
-  });
 }
 
 function countByGrade(members) {
@@ -254,11 +250,28 @@ async function onNotifyAll() {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-async function onCreateGroup(title, memberIds) {
-  if (!confirm(`「${title}」グループを ${memberIds.length}人で作成します。よろしいですか?`)) return;
-  try {
-    const r = await post('/api/groups', { title, member_ids: memberIds });
-    toast('グループを作成しました');
-    location.hash = '#/groups/' + (r.slug || r.id);
-  } catch (e) { toast('失敗: ' + e.message); }
+// 「グループN」 という名前で全グループを順番に作成。 1 つでも失敗したら
+// 進行状況を toast で報せつつ続行する。
+async function onBulkCreate() {
+  if (!lastResult || !lastResult.length) { toast('まず分けてください'); return; }
+  const n = lastResult.length;
+  if (!confirm(`グループ1〜グループ${n} の ${n} 個を一括作成します。よろしいですか?`)) return;
+  let ok = 0;
+  const errors = [];
+  for (let i = 0; i < lastResult.length; i++) {
+    const title = `グループ${i + 1}`;
+    const memberIds = lastResult[i].map(m => m.id);
+    try {
+      await post('/api/groups', { title, member_ids: memberIds });
+      ok++;
+    } catch (e) {
+      errors.push(`${title}: ${e.message}`);
+    }
+  }
+  if (errors.length === 0) {
+    toast(`${ok} 個のグループを作成しました`);
+    location.hash = '#/groups';
+  } else {
+    toast(`完了 ${ok}/${n}。 失敗: ${errors[0]}`);
+  }
 }
