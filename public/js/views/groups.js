@@ -310,6 +310,7 @@ export async function renderGroupDetail({ params }) {
       <p class="muted" style="font-size:13px; margin:6px 0">
         立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
+      <div id="gd-receipts-pending" hidden style="margin-bottom:10px"></div>
       <div id="gd-wari-form"></div>
       <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
       <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
@@ -427,6 +428,8 @@ async function loadDetail(id) {
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <a class="btn primary" href="#/roulette?members=${memberIds}">🎰 ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">🍻 割り勘</a>
+        <button class="btn" id="gd-snap-receipt">📸 レシート</button>
+        <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
     // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
     // にぶら下げる。表示は creator かつ未 close の時だけ。
@@ -439,6 +442,11 @@ async function loadDetail(id) {
         catch (e) { toast('失敗: ' + e.message); }
       },
     });
+    document.getElementById('gd-snap-receipt')?.addEventListener('click', () => {
+      document.getElementById('gd-receipt-file').click();
+    });
+    document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
+    loadReceipts(id).catch(() => {}); // best-effort
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉じますか?')) return;
       try {
@@ -592,6 +600,108 @@ async function onExImageFile(ev) {
   } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
+// ─── RECEIPTS (撮影ストック → 後でワリカに転用) ─────────────────────
+
+// 撮影 1 タップ運用: file picker (capture=environment) でカメラ起動 →
+// 並行で GPS を取り (許可されてれば) アップロード時に taken_at + lat/lng を送る。
+// 失敗 / 拒否されても GPS なしで普通に保存される。
+async function onReceiptFile(ev, gid) {
+  const f = ev.target.files?.[0];
+  ev.target.value = ''; // 同じファイルを連続選択できるよう reset
+  if (!f) return;
+  const takenAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  let lat = null, lng = null;
+  if (navigator.geolocation) {
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject,
+          { timeout: 8000, maximumAge: 60000 });
+      });
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+    } catch (_) { /* user denied or timeout — OK */ }
+  }
+  toast('アップロード中…');
+  try {
+    const data = await uploadImage(f);
+    await post(`/api/groups/${gid}/receipts`,
+      { image_url: data.url, taken_at: takenAt, lat, lng });
+    toast(`レシートを保存しました${lat !== null ? ' (📍位置付き)' : ''}`);
+    await loadReceipts(gid);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// 保存済みレシートを ワリカ card のフォーム上に並べる。0 件なら hidden。
+let cachedReceipts = [];
+async function loadReceipts(gid) {
+  const root = document.getElementById('gd-receipts-pending');
+  if (!root) return;
+  try {
+    const d = await get(`/api/groups/${gid}/receipts`);
+    cachedReceipts = d.items || [];
+  } catch (_) {
+    cachedReceipts = [];
+  }
+  if (!cachedReceipts.length) { root.hidden = true; root.innerHTML = ''; return; }
+  root.hidden = false;
+  root.innerHTML = `
+    <div class="muted" style="font-size:12px; margin-bottom:6px">
+      📸 保存済みレシート (${cachedReceipts.length}枚) — タップしてワリカに使う
+    </div>
+    <div class="row" style="gap:6px; flex-wrap:wrap">
+      ${cachedReceipts.map(r => {
+        const time = r.taken_at || r.created_at || '';
+        const hasGps = r.lat !== null && r.lng !== null;
+        return `
+          <div class="receipt-card" data-rid="${r.id}" data-url="${escapeHtml(r.image_url)}"
+               style="position:relative; width:84px; cursor:pointer; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:white">
+            <img src="${escapeHtml(r.image_url)}" alt="" style="width:84px; height:84px; object-fit:cover; display:block">
+            <div class="muted" style="font-size:9px; padding:2px 4px; line-height:1.2">
+              ${escapeHtml(time.slice(5, 16))}
+              ${hasGps ? `<br><a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍地図</a>` : ''}
+            </div>
+            <button data-rm-receipt="${r.id}" title="破棄"
+              style="position:absolute; top:2px; right:2px; padding:0 4px; font-size:10px; line-height:1.4; background:rgba(255,255,255,0.85); border:1px solid var(--line); border-radius:3px; color:var(--muted)">×</button>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+  root.querySelectorAll('.receipt-card').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      // × ボタンや 地図リンクのクリックは別ハンドラで処理 (stopPropagation 済み)
+      if (ev.target.closest('[data-rm-receipt]')) return;
+      const rid = Number(el.dataset.rid);
+      const url = el.dataset.url;
+      useReceiptInWari(rid, url);
+    });
+  });
+  root.querySelectorAll('[data-rm-receipt]').forEach(b => {
+    b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('このレシートを破棄しますか? (元には戻せません)')) return;
+      try {
+        await del(`/api/groups/${currentGroupId}/receipts/${b.dataset.rmReceipt}`);
+        await loadReceipts(currentGroupId);
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+}
+
+// ワリカ form の image_url にセット + フォーム内に視認できるよう preview 表示。
+// この receipt の id を覚えておいて、 onAddExpense 成功時に削除する。
+let pendingReceiptId = null;
+function useReceiptInWari(rid, url) {
+  pendingReceiptId = rid;
+  document.getElementById('ex-image-url').value = url;
+  const prev = document.getElementById('ex-image-preview');
+  prev.src = url;
+  prev.hidden = false;
+  const status = document.getElementById('ex-image-status');
+  if (status) status.textContent = '✓ レシートを紐づけました';
+  // フォームへスクロール
+  document.getElementById('gd-wari-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 // Last-fetched rate for the preset dropdown path. Cleared on currency change.
 let pendingFxRate = null;
 
@@ -700,6 +810,13 @@ async function onAddExpense() {
   }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
+    // 紐づけられたレシートがあれば消費 (ベストエフォート)。
+    if (pendingReceiptId) {
+      try { await del(`/api/groups/${gid}/receipts/${pendingReceiptId}`); }
+      catch (_) { /* swallow — 残ってても次回 UI から再使用/破棄可 */ }
+      pendingReceiptId = null;
+      await loadReceipts(gid);
+    }
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
     document.getElementById('ex-image-file').value = '';

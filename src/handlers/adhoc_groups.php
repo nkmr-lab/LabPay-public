@@ -27,6 +27,9 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'expenses' && isset($seg[3]) && $method === 'PATCH')  { group_expenses_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'expenses' && isset($seg[3]) && $method === 'DELETE') { group_expenses_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'settle'   && $method === 'POST')             { group_settle_notify($pdo, $cfg, $id); return; }
+            if ($next === 'receipts' && $method === 'GET')              { group_receipts_list($pdo, $cfg, $id);   return; }
+            if ($next === 'receipts' && $method === 'POST')             { group_receipts_add($pdo, $cfg, $id);    return; }
+            if ($next === 'receipts' && isset($seg[3]) && $method === 'DELETE') { group_receipts_delete($pdo, $cfg, $id, (int)$seg[3]); return; }
         }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
@@ -279,6 +282,63 @@ function group_items_del(PDO $pdo, array $cfg, int $groupId, int $itemId): void 
 }
 
 // ─── MEMBERS ─────────────────────────────────────────────────
+
+// ─── RECEIPTS (レシートストック) ─────────────────────────────
+// 撮影だけして後で 「これを ワリカ に使う」 二段運用のためのストック。
+// taken_at / lat / lng はクライアントから送信、 GPS は許可された時だけ。
+
+function group_receipts_list(PDO $pdo, array $cfg, int $groupId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $groupId, (int)$u['id']);
+    $st = $pdo->prepare("
+        SELECT r.id, r.image_url, r.uploaded_by_user_id, r.created_at,
+               r.taken_at, r.lat, r.lng,
+               u.display_name AS uploaded_by_name, u.avatar_url AS uploaded_by_avatar_url
+          FROM adhoc_group_receipts r
+          JOIN users u ON u.id = r.uploaded_by_user_id
+         WHERE r.group_id = ?
+         ORDER BY r.id DESC LIMIT 100");
+    $st->execute([$groupId]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function group_receipts_add(PDO $pdo, array $cfg, int $groupId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $groupId, (int)$u['id']);
+    $body = read_json_body();
+    $img = validate_product_image_url($body['image_url'] ?? null);
+    if ($img === null) throw new ApiException('bad_request', 'image_url required', 400);
+    // taken_at: ISO-ish。 不正なら NULL に寄せる。
+    $takenAt = null;
+    if (!empty($body['taken_at'])) {
+        $raw = str_replace('T', ' ', trim((string)$body['taken_at']));
+        // strip trailing Z or timezone (簡易)。
+        $raw = preg_replace('/[Zz].*$/', '', $raw);
+        $raw = preg_replace('/[\+\-]\d{2}:?\d{2}$/', '', $raw);
+        $raw = substr($raw, 0, 19); // YYYY-MM-DD HH:MM:SS
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
+        if ($dt) $takenAt = $dt->format('Y-m-d H:i:s');
+    }
+    $lat = isset($body['lat']) && is_numeric($body['lat']) ? (float)$body['lat'] : null;
+    $lng = isset($body['lng']) && is_numeric($body['lng']) ? (float)$body['lng'] : null;
+    // 範囲チェック (GPS 噴飯対策)
+    if ($lat !== null && ($lat < -90 || $lat > 90))   $lat = null;
+    if ($lng !== null && ($lng < -180 || $lng > 180)) $lng = null;
+
+    $st = $pdo->prepare("INSERT INTO adhoc_group_receipts
+        (group_id, image_url, uploaded_by_user_id, taken_at, lat, lng)
+        VALUES (?,?,?,?,?,?)");
+    $st->execute([$groupId, $img, $u['id'], $takenAt, $lat, $lng]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_receipts_delete(PDO $pdo, array $cfg, int $groupId, int $rid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $groupId, (int)$u['id']);
+    $pdo->prepare("DELETE FROM adhoc_group_receipts WHERE id=? AND group_id=?")
+        ->execute([$rid, $groupId]);
+    json_response(['ok' => true]);
+}
 
 function group_members_add(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
