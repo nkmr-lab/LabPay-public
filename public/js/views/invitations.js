@@ -7,7 +7,7 @@ import { state, toast } from '../app.js';
 export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card">
+    <div class="card page-header">
       <h2 style="margin:0">募集</h2>
       <p class="card-subtitle">
         「お昼ご飯食べに行こう」「ビアガーデン」「ポケモン GO」「スキー」など、

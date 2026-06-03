@@ -119,6 +119,16 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 .card h2 { margin: 0 0 8px; font-size: var(--text-lg); }
 .card h3 { margin: 6px 0; font-size: var(--text-base); color: var(--muted); font-weight: 600; }
 
+/* ページ先頭の「タイトル + 説明だけ」 カード — タップできる list-item と並ぶと
+   見分けがつかない問題があったので、薄い primary-soft 背景 + 影なしで
+   「これは情報、押せない」 を視覚的に示す。 */
+.card.page-header {
+  background: var(--primary-soft);
+  border-color: var(--primary-soft);
+  box-shadow: none;
+}
+.card.page-header h2 { color: var(--primary); }
+
 /* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
 .card.collapsible-form { padding: var(--space-3) var(--space-4); }
