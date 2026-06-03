@@ -505,8 +505,10 @@ function tasks_create(PDO $pdo, array $cfg): void {
     }
     $totalEscrow = $reward * $capacity;
 
-    $pdo->beginTransaction();
-    try {
+    $taskId = db_tx($pdo, function () use ($pdo, $u, $title, $description, $url, $reward,
+                                            $capacity, $perLimit, $deadline, $aud, $assignedCsv,
+                                            $completionMsg, $parsedSlots, $autoClaim, $autoClaimIds,
+                                            $totalEscrow) {
         // Insert task first to get id
         $ins = $pdo->prepare('INSERT INTO tasks
             (requester_user_id, title, description, url, reward, capacity, per_user_limit, deadline, audience_grades, assigned_user_ids, completion_message)
@@ -514,7 +516,6 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $assignedCsv, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
 
-        // Insert any time slots derived from slots_spec.
         if (!empty($parsedSlots)) {
             $slotIns = $pdo->prepare('INSERT INTO task_slots (task_id, started_at, ended_at, capacity)
                 VALUES (?,?,?,1)');
@@ -523,7 +524,6 @@ function tasks_create(PDO $pdo, array $cfg): void {
             }
         }
 
-        // 指名タスクの auto-claim: 承諾ボタン要らずで最初から 「あなたがやる人」 状態に。
         if ($autoClaim) {
             $cIns = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, slot_id, status)
                 VALUES (?,?,NULL,'claimed')");
@@ -532,19 +532,14 @@ function tasks_create(PDO $pdo, array $cfg): void {
             }
         }
 
-        // Move escrow: requester → ESCROW (0pt タスクは送金不要)
         if ($totalEscrow > 0) {
             $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
             $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
             Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit',
                 'task', $taskId, "タスク「{$title}」報酬預け");
         }
-
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return $taskId;
+    });
 
     // Slack 新規タスク通知 — fire-and-forget; never blocks the response.
     try {
@@ -582,8 +577,7 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
 
-    $pdo->beginTransaction();
-    try {
+    db_tx($pdo, function () use ($pdo, $taskId, $u, $body) {
         $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? FOR UPDATE');
         $st->execute([$taskId]);
         $task = $st->fetch();
@@ -608,7 +602,6 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
         if ($newCap < $approved)
             throw new ApiException('bad_capacity', "承認済み {$approved} 件あるため募集人数を {$newCap} に減らせません", 400);
 
-        // Deadline (NULL clears it)
         $newDeadline = $task['deadline'];
         if (array_key_exists('deadline', $body)) {
             $d = $body['deadline'];
@@ -625,7 +618,6 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             }
         }
 
-        // Audience grades
         $newAud = $task['audience_grades'];
         if (array_key_exists('audience_grades', $body)) {
             $aud = $body['audience_grades'];
@@ -654,12 +646,7 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             reward=?, capacity=?, per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
             ->execute([$newTitle, $newDesc, $newUrl, $newCMsg,
                        $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
-
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+    });
     json_response(tasks_fetch_with_meta($pdo, $taskId, (int)$u['id']));
 }
 
@@ -670,8 +657,7 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
     $body = read_json_body();
     $slotId = isset($body['slot_id']) ? (int)$body['slot_id'] : 0;
 
-    $pdo->beginTransaction();
-    try {
+    [$task, $claimId] = db_tx($pdo, function () use ($pdo, $taskId, $u, $userGrade, &$slotId) {
         $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? FOR UPDATE');
         $st->execute([$taskId]);
         $task = $st->fetch();
@@ -679,8 +665,7 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
         if ($task['status'] !== 'open') throw new ApiException('not_open', 'task is not open', 409);
         if ((int)$task['requester_user_id'] === (int)$u['id'])
             throw new ApiException('self_claim', '自分のタスクには参加できません', 400);
-        // 指名タスクは指名された人だけが claim できる (学年フィルタは無視)。
-        // 指名が無い場合だけ従来の学年フィルタを適用。
+        // 指名タスクは指名された人だけが claim 可。指名がない場合は学年フィルタ適用。
         if (!empty($task['assigned_user_ids'])) {
             $assigned = array_map('intval', explode(',', (string)$task['assigned_user_ids']));
             if (!in_array((int)$u['id'], $assigned, true)) {
@@ -698,8 +683,6 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
         if ((int)$task['per_user_limit'] > 0 && $myActive >= (int)$task['per_user_limit'])
             throw new ApiException('per_user_limit', '引き受け上限に達しています', 409);
 
-        // Slot-aware claim: when this task has slots, a slot_id must be picked AND
-        // that specific slot's capacity must not be full.
         $hasSlots = (int)$pdo->query("SELECT COUNT(*) FROM task_slots WHERE task_id=" . (int)$taskId)->fetchColumn() > 0;
         if ($hasSlots) {
             if ($slotId <= 0) throw new ApiException('bad_request', '時間枠を選択してください', 400);
@@ -713,18 +696,14 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
             if ((int)$slot['taken'] >= (int)$slot['capacity'])
                 throw new ApiException('slot_full', 'この時間枠は埋まっています', 409);
         } else {
-            $slotId = 0; // ignore any incoming slot_id when the task has no slots
+            $slotId = 0;
         }
 
         $ins = $pdo->prepare("INSERT INTO task_claims (task_id, user_id, slot_id, status)
             VALUES (?,?,?,'claimed')");
         $ins->execute([$taskId, $u['id'], $slotId > 0 ? $slotId : null]);
-        $claimId = (int)$pdo->lastInsertId();
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return [$task, (int)$pdo->lastInsertId()];
+    });
 
     try {
         // Notify the requester so they know someone signed up.
@@ -774,52 +753,48 @@ function tasks_report(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 function tasks_approve(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     $u = Auth::requireUser($pdo, $cfg);
 
-    $rewardForNotify = 0; $claimantId = 0; $title = ''; $taskClosed = false;
-    $completionMsg = null;
-    $pdo->beginTransaction();
-    try {
-        $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? AND requester_user_id=? FOR UPDATE');
-        $st->execute([$taskId, $u['id']]);
-        $task = $st->fetch();
-        if (!$task) throw new ApiException('forbidden', '依頼者のみ承認できます', 403);
-        if ($task['status'] !== 'open')
-            throw new ApiException('not_open', 'task is not open', 409);
+    [$rewardForNotify, $claimantId, $title, $taskClosed, $completionMsg] = db_tx($pdo,
+        function () use ($pdo, $taskId, $claimId, $u) {
+            $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? AND requester_user_id=? FOR UPDATE');
+            $st->execute([$taskId, $u['id']]);
+            $task = $st->fetch();
+            if (!$task) throw new ApiException('forbidden', '依頼者のみ承認できます', 403);
+            if ($task['status'] !== 'open')
+                throw new ApiException('not_open', 'task is not open', 409);
 
-        $st2 = $pdo->prepare("SELECT * FROM task_claims
-            WHERE id=? AND task_id=? AND status='reported' FOR UPDATE");
-        $st2->execute([$claimId, $taskId]);
-        $claim = $st2->fetch();
-        if (!$claim) throw new ApiException('bad_state', '報告済みの請求が見つかりません', 409);
+            $st2 = $pdo->prepare("SELECT * FROM task_claims
+                WHERE id=? AND task_id=? AND status='reported' FOR UPDATE");
+            $st2->execute([$claimId, $taskId]);
+            $claim = $st2->fetch();
+            if (!$claim) throw new ApiException('bad_state', '報告済みの請求が見つかりません', 409);
 
-        // 0pt タスクは ledger を動かさない (escrow ⇄ claimant のやり取り無し)。
-        $ledgerId = null;
-        if ((int)$task['reward'] > 0) {
-            $escAcc      = Ledger::accountIdByCode($pdo, 'ESCROW');
-            $claimantAcc = Ledger::accountIdForUser($pdo, (int)$claim['user_id']);
-            $ledgerId = Ledger::transfer($pdo, $escAcc, $claimantAcc, (int)$task['reward'],
-                'task_reward', 'task', $taskId, "タスク「{$task['title']}」報酬");
-        }
+            // 0pt タスクは ledger を動かさない (escrow ⇄ claimant のやり取り無し)。
+            $ledgerId = null;
+            if ((int)$task['reward'] > 0) {
+                $escAcc      = Ledger::accountIdByCode($pdo, 'ESCROW');
+                $claimantAcc = Ledger::accountIdForUser($pdo, (int)$claim['user_id']);
+                $ledgerId = Ledger::transfer($pdo, $escAcc, $claimantAcc, (int)$task['reward'],
+                    'task_reward', 'task', $taskId, "タスク「{$task['title']}」報酬");
+            }
 
-        $upd = $pdo->prepare("UPDATE task_claims SET status='approved', approved_at=NOW(),
-            approved_by_user_id=?, ledger_id=? WHERE id=?");
-        $upd->execute([$u['id'], $ledgerId, $claimId]);
+            $upd = $pdo->prepare("UPDATE task_claims SET status='approved', approved_at=NOW(),
+                approved_by_user_id=?, ledger_id=? WHERE id=?");
+            $upd->execute([$u['id'], $ledgerId, $claimId]);
 
-        // Auto-close when capacity reached
-        $approved = tasks_approved_count($pdo, $taskId);
-        if ($approved >= (int)$task['capacity']) {
-            $pdo->prepare("UPDATE tasks SET status='closed', closed_at=NOW() WHERE id=?")->execute([$taskId]);
-            $taskClosed = true;
-        }
-        $rewardForNotify = (int)$task['reward'];
-        $claimantId      = (int)$claim['user_id'];
-        $title           = (string)$task['title'];
-        $completionMsg   = $task['completion_message'] ?? null;
-
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+            $taskClosed = false;
+            $approved = tasks_approved_count($pdo, $taskId);
+            if ($approved >= (int)$task['capacity']) {
+                $pdo->prepare("UPDATE tasks SET status='closed', closed_at=NOW() WHERE id=?")->execute([$taskId]);
+                $taskClosed = true;
+            }
+            return [
+                (int)$task['reward'],
+                (int)$claim['user_id'],
+                (string)$task['title'],
+                $taskClosed,
+                $task['completion_message'] ?? null,
+            ];
+        });
 
     try {
         // Requester's thank-you message piggy-backs on the approval notification
@@ -849,20 +824,14 @@ function tasks_reject(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 function tasks_cancel(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
 
-    $affectedClaimants = [];
-    $taskTitle = '';
-    $refund = 0;
-    $pdo->beginTransaction();
-    try {
+    [$affectedClaimants, $taskTitle, $refund] = db_tx($pdo, function () use ($pdo, $taskId, $u) {
         $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? AND requester_user_id=? FOR UPDATE');
         $st->execute([$taskId, $u['id']]);
         $task = $st->fetch();
         if (!$task) throw new ApiException('forbidden', '依頼者のみ取消可能です', 403);
         if ($task['status'] !== 'open')
             throw new ApiException('not_open', 'task is not open', 409);
-        $taskTitle = (string)$task['title'];
 
-        // Collect pending claimants for notification
         $aq = $pdo->prepare("SELECT DISTINCT user_id FROM task_claims
             WHERE task_id=? AND status IN ('claimed','reported')");
         $aq->execute([$taskId]);
@@ -880,11 +849,8 @@ function tasks_cancel(PDO $pdo, array $cfg, int $taskId): void {
         $pdo->prepare("UPDATE tasks SET status='cancelled', closed_at=NOW() WHERE id=?")->execute([$taskId]);
         $pdo->prepare("UPDATE task_claims SET status='cancelled'
             WHERE task_id=? AND status IN ('claimed','reported')")->execute([$taskId]);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return [$affectedClaimants, (string)$task['title'], $refund];
+    });
     foreach ($affectedClaimants as $cid) {
         try {
             Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',

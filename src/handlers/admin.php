@@ -80,17 +80,11 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         // Single-recipient path
         if ($mode === 'user') {
             $toUserId = require_int_positive($body['to_user_id'] ?? null, 'to_user_id');
-            $pdo->beginTransaction();
-            $ledgerId = null;
-            try {
+            $ledgerId = db_tx($pdo, function () use ($pdo, $sysAcc, $toUserId, $amount, $admin, $memoText) {
                 $toAcc = Ledger::accountIdForUser($pdo, $toUserId);
-                $ledgerId = Ledger::transfer($pdo, $sysAcc, $toAcc, $amount, 'initial',
+                return Ledger::transfer($pdo, $sysAcc, $toAcc, $amount, 'initial',
                     'admin_issue', $admin['id'], $memoText);
-                $pdo->commit();
-            } catch (Throwable $e) {
-                $pdo->rollBack();
-                throw $e;
-            }
+            });
             try {
                 Notifier::notify($pdo, $cfg, $toUserId, 'admin_notice',
                     "管理者から {$amount}pt が付与されました" . format_memo_suffix($memo),
@@ -171,20 +165,16 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         $ledgerId = require_int_positive($body['ledger_id'] ?? null, 'ledger_id');
         $memo = isset($body['memo']) ? (string)$body['memo'] : null;
 
-        $reversalIds = [];
-        $purchaseToNotify = null;
-        $pdo->beginTransaction();
-        try {
-            // Look up source
+        [$reversalIds, $purchaseToNotify] = db_tx($pdo, function () use ($pdo, $ledgerId, $memo) {
+            $reversalIds = [];
+            $purchaseToNotify = null;
             $st = $pdo->prepare('SELECT * FROM ledger WHERE id=? FOR UPDATE');
             $st->execute([$ledgerId]);
             $src = $st->fetch();
             if (!$src) throw new ApiException('not_found', "ledger $ledgerId not found", 404);
 
-            // Always reverse the requested row
             $reversalIds[] = Ledger::reverse($pdo, $ledgerId, $memo);
 
-            // If it is a purchase, also reverse its sibling fee row (if any)
             if ($src['type'] === 'purchase' && $src['ref_type'] === 'purchase' && $src['ref_id']) {
                 $st2 = $pdo->prepare("SELECT id FROM ledger
                     WHERE ref_type='purchase' AND ref_id=? AND type='fee'");
@@ -206,12 +196,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $purchaseToNotify['seller_id'] = (int)$pr['seller_user_id'];
                 }
             }
-
-            $pdo->commit();
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
-            throw $e;
-        }
+            return [$reversalIds, $purchaseToNotify];
+        });
 
         if ($purchaseToNotify) {
             try {

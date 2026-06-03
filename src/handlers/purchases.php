@@ -56,12 +56,7 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
 
     $feeRate = Money::feeRate($pdo);
 
-    // Captured for post-commit notifications
-    $notify = null;
-
-    $pdo->beginTransaction();
-    try {
-        // Lock listing
+    [$payload, $notify] = db_tx($pdo, function () use ($pdo, $listingId, $buyer, $feeRate, $ukey, $endpoint) {
         $st = $pdo->prepare('SELECT * FROM listings WHERE id=? FOR UPDATE');
         $st->execute([$listingId]);
         $listing = $st->fetch();
@@ -80,7 +75,6 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
         $sellerAcc = Ledger::accountIdForUser($pdo, $sellerId);
         $sysAcc    = Ledger::accountIdByCode($pdo, 'SYSTEM');
 
-        // Gift items (or any price=0 listing) skip the fee/split math + ledger transfer entirely.
         if ($isGift || $price === 0) {
             $fee = 0; $sellerTake = 0; $buyerPay = 0;
             $buyerBal = Ledger::balanceOf($pdo, $buyerAcc);
@@ -89,8 +83,6 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
             if ($buyerPay !== $sellerTake + $fee) {
                 throw new RuntimeException('split invariant violation');
             }
-            // Upfront buyer balance check covers seller_take + fee together; per-transfer
-            // checks alone could let the first transfer succeed and the second one fail.
             $buyerBal = Ledger::balanceOf($pdo, $buyerAcc);
             if ($buyerBal < $buyerPay) {
                 throw new ApiException('insufficient_funds',
@@ -99,13 +91,10 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
             }
         }
 
-        // Product name for memos/notifications
         $pn = $pdo->prepare('SELECT name FROM products WHERE jan=?');
         $pn->execute([$listing['jan']]);
         $productName = (string)($pn->fetchColumn() ?: $listing['jan']);
 
-        // Insert purchase row first to obtain id for ledger ref (also for free items, so
-        // we can attach a thank-you / tip to a real purchase id later).
         $ins = $pdo->prepare(
             'INSERT INTO purchases (listing_id, jan, buyer_user_id, seller_user_id,
                                     unit_price, fee, qty, idempotency_key)
@@ -115,8 +104,6 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
                        $price, $fee, 1, $ukey]);
         $purchaseId = (int)$pdo->lastInsertId();
 
-        // Ledger: buyer -> seller (seller_take), then buyer -> SYSTEM (fee, if any).
-        // Skipped entirely for free items.
         if ($sellerTake > 0) {
             Ledger::transfer($pdo, $buyerAcc, $sellerAcc, $sellerTake, 'purchase',
                 'purchase', $purchaseId, "購入: {$productName}");
@@ -126,15 +113,12 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
                 'purchase', $purchaseId, "手数料: {$productName}");
         }
 
-        // Decrement stock
         $newQty = (int)$listing['qty'] - 1;
         $newStatus = $newQty <= 0 ? 'sold_out' : 'on_sale';
         $pdo->prepare('UPDATE listings SET qty=?, status=? WHERE id=?')
             ->execute([$newQty, $newStatus, $listingId]);
 
-        // Compose payload (new_balance can be derived; avoids a re-query in TX)
         $newBalance = $buyerBal - $buyerPay;
-
         $payload = [
             'purchase_id'    => $purchaseId,
             'listing_id'     => $listingId,
@@ -146,7 +130,6 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
             'qty_remaining'  => $newQty,
             'seller_user_id' => $sellerId,
             'is_gift'        => $isGift,
-            // Seller-authored thank-you (note-style). May be null. Shown to buyer post-purchase.
             'completion_message' => $listing['completion_message'] ?? null,
             'seller_name'    => null,
         ];
@@ -154,11 +137,7 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
         $sn->execute([$sellerId]);
         $payload['seller_name'] = $sn->fetchColumn() ?: null;
 
-        // Save idempotency key INSIDE the transaction so a retry after partial failure
-        // cannot create a second purchase.
         idempotency_save($pdo, $ukey, (int)$buyer['id'], $endpoint, $payload, 200);
-
-        $pdo->commit();
 
         $notify = [
             'sellerId'   => $sellerId,
@@ -171,10 +150,8 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
             'isGift'     => $isGift,
             'buyerName'  => (string)$buyer['display_name'],
         ];
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return [$payload, $notify];
+    });
 
     // Fire notifications AFTER commit. Failures must not propagate.
     try {
@@ -224,9 +201,8 @@ function purchases_thank(PDO $pdo, array $cfg, int $purchaseId): void {
     $pn->execute([$purchase['jan']]);
     $productName = (string)($pn->fetchColumn() ?: $purchase['jan']);
 
-    $ledgerId = null; $newBalance = null;
-    $pdo->beginTransaction();
-    try {
+    [$ledgerId, $newBalance] = db_tx($pdo, function () use ($pdo, $purchaseId, $buyer, $sellerId, $tip, $message, $productName) {
+        $ledgerId = null; $newBalance = null;
         if ($tip > 0) {
             $buyerAcc  = Ledger::accountIdForUser($pdo, (int)$buyer['id']);
             $sellerAcc = Ledger::accountIdForUser($pdo, $sellerId);
@@ -244,11 +220,8 @@ function purchases_thank(PDO $pdo, array $cfg, int $purchaseId): void {
             (purchase_id, from_user_id, to_user_id, message, tip_amount, ledger_id)
             VALUES (?,?,?,?,?,?)');
         $ins->execute([$purchaseId, $buyer['id'], $sellerId, $message, $tip, $ledgerId]);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
+        return [$ledgerId, $newBalance];
+    });
 
     try {
         $bits = ["「{$productName}」のお礼"];
