@@ -430,7 +430,7 @@ async function loadDetail(id) {
     document.getElementById('gd-head').innerHTML = `
       ${imgBlock}
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
-      <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(g.created_at)}</div>
+      <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml((g.created_at || '').slice(0, 16))}</div>
       ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}
       <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center">
@@ -1156,7 +1156,7 @@ function renderExpense(e, gid) {
       <div class="grow">
         <div class="bold">${escapeHtml(e.payer_name)} 立替: ¥${e.amount_jpy.toLocaleString()}${orig}</div>
         ${e.memo ? `<div class="meta">${escapeHtml(e.memo)}</div>` : ''}
-        <div class="meta">${escapeHtml(e.created_at)} · ${escapeHtml(forText)}</div>
+        <div class="meta">${escapeHtml((e.created_at || '').slice(0, 16))} · ${escapeHtml(forText)}</div>
       </div>
       ${actions}
     </div>`;
