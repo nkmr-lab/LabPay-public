@@ -327,8 +327,8 @@ export async function renderGroupDetail({ params }) {
       <p class="muted" style="font-size:13px; margin:6px 0">
         立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
-      <div id="gd-receipts-pending" hidden style="margin-bottom:10px"></div>
       <div id="gd-wari-form"></div>
+      <div id="gd-receipts-pending" class="list" hidden style="margin-top:8px"></div>
       <div id="gd-wari-summary" class="muted" style="margin-top:8px; font-size:13px">読み込み中…</div>
       <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
     </div>
@@ -647,7 +647,10 @@ async function onReceiptFile(ev, gid) {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// 保存済みレシートを ワリカ card のフォーム上に並べる。0 件なら hidden。
+// 保存済みレシート (draft expense) を 「支出を記録」 フォームの下に list-item
+// 形式で並べる。 通常の支出行と同じ見た目だが、 左ボーダー破線 + 「立替: ?」 で
+// 「まだ確定してない」 ことを示す。 編集ボタンで openExpenseEdit モーダル、
+// × で破棄。 0 件なら hidden。
 let cachedReceipts = [];
 async function loadReceipts(gid) {
   const root = document.getElementById('gd-receipts-pending');
@@ -660,35 +663,38 @@ async function loadReceipts(gid) {
   }
   if (!cachedReceipts.length) { root.hidden = true; root.innerHTML = ''; return; }
   root.hidden = false;
-  root.innerHTML = `
-    <div class="muted" style="font-size:12px; margin-bottom:6px">
-      📸 保存済みレシート (${cachedReceipts.length}枚) — タップで金額や立替人を入力
-    </div>
-    <div class="row" style="gap:6px; flex-wrap:wrap">
-      ${cachedReceipts.map(r => {
-        const time = r.taken_at || r.created_at || '';
-        const hasGps = r.lat !== null && r.lng !== null;
-        return `
-          <div class="receipt-card" data-rid="${r.id}"
-               style="position:relative; width:84px; cursor:pointer; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:white">
-            <img src="${escapeHtml(r.image_url)}" alt="" style="width:84px; height:84px; object-fit:cover; display:block">
-            <div class="muted" style="font-size:9px; padding:2px 4px; line-height:1.2">
-              ${escapeHtml(time.slice(5, 16))}
-              ${hasGps ? `<br><a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍地図</a>` : ''}
-            </div>
-            <button data-rm-receipt="${r.id}" title="破棄"
-              style="position:absolute; top:2px; right:2px; padding:0 4px; font-size:10px; line-height:1.4; background:rgba(255,255,255,0.85); border:1px solid var(--line); border-radius:3px; color:var(--muted)">×</button>
-          </div>`;
-      }).join('')}
-    </div>
-  `;
-  // レシート (draft expense) のタップ → 既存の openExpenseEdit modal を draft 用
-  // データで開く。 GET /receipts は image_url / taken_at / lat / lng しか返さない
-  // ので、 amount=0 / participants=[] / payer=null など他の draft default を補完。
-  root.querySelectorAll('.receipt-card').forEach(el => {
-    el.addEventListener('click', (ev) => {
-      if (ev.target.closest('[data-rm-receipt]')) return;
-      const rid = Number(el.dataset.rid);
+  root.innerHTML = cachedReceipts.map(r => {
+    const time   = r.taken_at || r.created_at || '';
+    const timeShort = (time || '').slice(0, 16);
+    const hasGps = r.lat !== null && r.lng !== null;
+    const gpsLink = hasGps
+      ? ` · <a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍地図</a>`
+      : '';
+    const thumb = `
+      <a href="${escapeHtml(r.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0" onclick="event.stopPropagation()">
+        <img src="${escapeHtml(r.image_url)}" alt="" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
+      </a>`;
+    return `
+      <div class="list-item" style="gap:10px; border-left:3px dashed var(--primary); background:#faf7fd">
+        ${thumb}
+        <div class="grow" style="min-width:0">
+          <div class="bold">${escapeHtml(r.uploaded_by_name || '誰か')} 立替: <span class="muted">?</span></div>
+          <div class="meta">📅 ${escapeHtml(timeShort)}${gpsLink}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <button data-edit-receipt="${r.id}" class="btn primary" style="padding:2px 8px; font-size:11px">編集</button>
+          <button data-rm-receipt="${r.id}" class="btn" style="padding:2px 6px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>
+        </div>
+      </div>`;
+  }).join('');
+  // 編集ボタン: openExpenseEdit を draft 用デフォルトで開く。
+  // GET /receipts は image_url / taken_at / lat / lng / uploaded_by_user_id しか
+  // 返さないので、 amount=0 / participants=全員 / payer=登録者 を補完。
+  // payer は 「登録者本人が立替えた」 という想定で uploaded_by_user_id をプリセット
+  // (= 「立替: ?」 の ? を 「登録者」 で埋める意味)。 違えば編集で変えられる。
+  root.querySelectorAll('[data-edit-receipt]').forEach(b => {
+    b.addEventListener('click', () => {
+      const rid = Number(b.dataset.editReceipt);
       const r = cachedReceipts.find(x => Number(x.id) === rid);
       if (!r) return;
       openExpenseEdit(currentGroupId, {
@@ -697,13 +703,13 @@ async function loadReceipts(gid) {
         amount_original: null,
         currency: 'JPY',
         rate_to_jpy: null,
-        payer_user_id: null,
+        payer_user_id: r.uploaded_by_user_id || null,
         memo: '',
         image_url: r.image_url,
         taken_at: r.taken_at,
         lat: r.lat,
         lng: r.lng,
-        participants: wariMembers.map(m => m.id), // default: 全員
+        participants: wariMembers.map(m => m.id),
         is_draft: 1,
       });
     });
