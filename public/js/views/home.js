@@ -332,13 +332,15 @@ function readCalCache() {
     if (!raw) return null;
     const c = JSON.parse(raw);
     if (!c || !Array.isArray(c.items)) return null;
+    // 滞在 TZ が変わったら 「今日」 の意味が変わるので cache 無効化。
+    if (c.tz && c.tz !== localTzInfo().iana) return null;
     return c;
   } catch { return null; }
 }
 function writeCalCache(items, etags) {
   try {
     localStorage.setItem(CAL_CACHE_KEY, JSON.stringify({
-      items, etags: etags || {}, timestamp: Date.now()
+      items, etags: etags || {}, timestamp: Date.now(), tz: localTzInfo().iana
     }));
   } catch {}
 }
@@ -369,8 +371,10 @@ async function renderCalendarEvents() {
     } else {
       const etagsQuery = (cache && cache.etags && Object.keys(cache.etags).length)
         ? JSON.stringify(cache.etags) : undefined;
-      const data = await get('/api/me/calendar/events',
-        etagsQuery ? { etags: etagsQuery } : undefined);
+      // 滞在 TZ をサーバに伝え、 「今日」 をその TZ で計算してもらう。
+      const params = { tz: localTzInfo().iana };
+      if (etagsQuery) params.etags = etagsQuery;
+      const data = await get('/api/me/calendar/events', params);
       if (data && data.not_modified && cache) {
         writeCalCache(cache.items, cache.etags); // bump timestamp
         items = cache.items;
@@ -630,11 +634,14 @@ function openMtgModal() {
     const with_zoom   = document.getElementById('mtg-zoom').checked;
     if (!topic)    { errEl.textContent = 'タイトルを入れてください'; return; }
     if (!startRaw) { errEl.textContent = '開始時刻を入れてください'; return; }
-    const start = startRaw + ':00+09:00';
+    // datetime-local の値はブラウザ ローカル時刻。 そのまま 「自分の今いる場所」
+    // の時刻として扱い、 ISO suffix も実 offset から計算 (海外滞在対応)。
+    const tzInfo = localTzInfo();
+    const start = startRaw + ':00' + tzInfo.suffix;
     btn.disabled = true; btn.textContent = '作成中…';
     try {
       const r = await post('/api/me/calendar/events',
-        { topic, start, duration_minutes: duration, calendar_id, with_zoom });
+        { topic, start, duration_minutes: duration, calendar_id, with_zoom, timezone: tzInfo.iana });
       if (r.invalidate_calendar_cache) {
         try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
       }

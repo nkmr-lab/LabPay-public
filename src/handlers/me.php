@@ -236,29 +236,36 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         $startRaw = (string)($body['start'] ?? '');
         if ($startRaw === '') throw new ApiException('bad_request', 'start (ISO8601) required', 400);
+        // クライアントの実 TZ。 海外滞在中はここを Europe/Rome 等に切り替え、
+        // Zoom / Calendar に 「その場所のローカル時刻」 として登録できるように。
+        $tzName = (string)($body['timezone'] ?? '');
+        if ($tzName !== '') {
+            try { $localTz = new DateTimeZone($tzName); }
+            catch (Throwable $e) { $localTz = new DateTimeZone('Asia/Tokyo'); $tzName = 'Asia/Tokyo'; }
+        } else {
+            $localTz = new DateTimeZone('Asia/Tokyo'); $tzName = 'Asia/Tokyo';
+        }
         try {
-            $startDt = new DateTimeImmutable($startRaw, new DateTimeZone('Asia/Tokyo'));
+            $startDt = new DateTimeImmutable($startRaw, $localTz);
         } catch (Throwable $e) {
             throw new ApiException('bad_request', 'start must be ISO8601', 400);
         }
         $duration = max(5, min(720, (int)($body['duration_minutes'] ?? 30)));
         $calendarId = trim((string)($body['calendar_id'] ?? 'primary'));
         if ($calendarId === '') $calendarId = 'primary';
-        // with_zoom 省略 / true → Zoom MTG を一緒に作る (従来挙動)。
-        // false → カレンダー予定だけ作る (location/description は空)。
         $withZoom = !array_key_exists('with_zoom', $body) || !empty($body['with_zoom']);
         $endDt = $startDt->modify('+' . $duration . ' minutes');
 
         $joinUrl = ''; $passcode = ''; $meeting = null;
         if ($withZoom) {
-            // Zoom 側に渡す start_time は timezone 上のローカル時刻 (末尾 Z なし)。
-            $zoomStart  = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
+            // Zoom の start_time は 「その TZ における ローカル時刻」 (Z なし)。
+            $zoomStart  = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
             $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
             $meeting = Zoom::createMeeting($zoomAccess, [
                 'topic'      => $topic,
                 'start_time' => $zoomStart,
                 'duration'   => $duration,
-                'timezone'   => 'Asia/Tokyo',
+                'timezone'   => $tzName,
             ]);
             $joinUrl = (string)($meeting['join_url'] ?? '');
             if ($joinUrl === '') {
@@ -269,8 +276,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
         $event = [
             'summary' => $topic,
-            'start'   => ['dateTime' => $startDt->format(DateTimeImmutable::RFC3339), 'timeZone' => 'Asia/Tokyo'],
-            'end'     => ['dateTime' => $endDt->format(DateTimeImmutable::RFC3339),   'timeZone' => 'Asia/Tokyo'],
+            'start'   => ['dateTime' => $startDt->format(DateTimeImmutable::RFC3339), 'timeZone' => $tzName],
+            'end'     => ['dateTime' => $endDt->format(DateTimeImmutable::RFC3339),   'timeZone' => $tzName],
         ];
         if ($withZoom) {
             $descLines = ['Zoom MTG', $joinUrl];
@@ -342,13 +349,19 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         $duration = max(5, (int)round(($endDt->getTimestamp() - $startDt->getTimestamp()) / 60));
 
+        // Google Calendar イベントが持つ timeZone をそのまま Zoom 側にも使う
+        // (= 既存予定の現地時刻で Zoom MTG を立てる)。 取れなければ Asia/Tokyo。
+        $eventTz = (string)($event['start']['timeZone'] ?? '');
+        if ($eventTz === '') $eventTz = 'Asia/Tokyo';
+        try { $localTz = new DateTimeZone($eventTz); }
+        catch (Throwable $e) { $localTz = new DateTimeZone('Asia/Tokyo'); $eventTz = 'Asia/Tokyo'; }
         $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
-        $zoomStart = $startDt->setTimezone(new DateTimeZone('Asia/Tokyo'))->format('Y-m-d\TH:i:s');
+        $zoomStart = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
         $meeting = Zoom::createMeeting($zoomAccess, [
             'topic'      => $title,
             'start_time' => $zoomStart,
             'duration'   => $duration,
-            'timezone'   => 'Asia/Tokyo',
+            'timezone'   => $eventTz,
         ]);
         $joinUrl = (string)($meeting['join_url'] ?? '');
         if ($joinUrl === '') {
@@ -721,8 +734,17 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $j = json_decode((string)$row['calendar_filter_rules'], true);
             if (is_array($j)) $filterRules = calendar_filter_rules_clean($j);
         }
-        // 「今日 00:00 〜 明日 24:00」 (JST) を timeMin/timeMax に変換 (RFC3339)。
-        $tz = new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
+        // 「今日 00:00 〜 明日 24:00」 を timeMin/timeMax に変換 (RFC3339)。
+        // クライアントが ?tz=Europe/Rome みたいに送ってきたらそれで日付境界を
+        // 計算する (海外滞在時に 「今日」 がズレないように)。 不正な TZ 名は
+        // 設定 default にフォールバック。
+        $clientTz = (string)($_GET['tz'] ?? '');
+        try {
+            $tz = $clientTz !== '' ? new DateTimeZone($clientTz)
+                                   : new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
+        } catch (Throwable $e) {
+            $tz = new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
+        }
         $now = new DateTimeImmutable('now', $tz);
         $today0 = $now->setTime(0, 0, 0);
         $tomorrow24 = $today0->modify('+2 day');
