@@ -17,8 +17,9 @@ function route_polls(PDO $pdo, array $cfg, string $method, array $seg): void {
         $next = $seg[2] ?? '';
         if ($next === '' && $method === 'GET')    { polls_detail($pdo, $cfg, $id); return; }
         if ($next === '' && $method === 'DELETE') { polls_delete($pdo, $cfg, $id); return; }
-        if ($next === 'vote'  && $method === 'POST')  { polls_vote($pdo, $cfg, $id); return; }
-        if ($next === 'close' && $method === 'PATCH') { polls_close($pdo, $cfg, $id); return; }
+        if ($next === 'vote'   && $method === 'POST')  { polls_vote($pdo, $cfg, $id); return; }
+        if ($next === 'close'  && $method === 'PATCH') { polls_close($pdo, $cfg, $id); return; }
+        if ($next === 'remind' && $method === 'POST')  { polls_remind($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no polls route for $method $sub", 404);
 }
@@ -72,6 +73,11 @@ function polls_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '締切は現在より先に', 400);
     }
     $multi = !empty($body['multi_select']) ? 1 : 0;
+    $allowRevote   = array_key_exists('allow_revote', $body)   ? (!empty($body['allow_revote'])   ? 1 : 0) : 1;
+    $allowFreeText = !empty($body['allow_free_text']) ? 1 : 0;
+    // 自由記述は 「複数選択可」 と組み合わせる前提。 単一選択で許可しても意味が
+    // 無いので無効化 (UI 側のチェック漏れを backend でも止める)。
+    if (!$multi) $allowFreeText = 0;
     $vis = (string)($body['visibility'] ?? 'after_deadline');
     if (!in_array($vis, POLL_VISIBILITIES, true)) {
         throw new ApiException('bad_request', 'visibility 不正', 400);
@@ -105,10 +111,10 @@ function polls_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '存在しない user_id が含まれます', 400);
     }
     $pollId = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $bodyText, $deadline, $multi, $vis, $cleanOpts, $voterIds, &$pollId) {
-        $ins = $pdo->prepare("INSERT INTO polls (title, body, creator_user_id, deadline_at, multi_select, visibility, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'open', NOW())");
-        $ins->execute([$title, $bodyText, (int)$u['id'], $deadline, $multi, $vis]);
+    db_tx($pdo, function () use ($pdo, $u, $title, $bodyText, $deadline, $multi, $vis, $allowRevote, $allowFreeText, $cleanOpts, $voterIds, &$pollId) {
+        $ins = $pdo->prepare("INSERT INTO polls (title, body, creator_user_id, deadline_at, multi_select, visibility, allow_revote, allow_free_text, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())");
+        $ins->execute([$title, $bodyText, (int)$u['id'], $deadline, $multi, $vis, $allowRevote, $allowFreeText]);
         $pollId = (int)$pdo->lastInsertId();
         $stO = $pdo->prepare("INSERT INTO poll_options (poll_id, label, sort_order) VALUES (?, ?, ?)");
         foreach ($cleanOpts as $i => $label) $stO->execute([$pollId, $label, $i]);
@@ -159,6 +165,10 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
     $stMy = $pdo->prepare("SELECT option_id FROM poll_votes WHERE poll_id = ? AND user_id = ?");
     $stMy->execute([$id, (int)$u['id']]);
     $myVotes = array_map('intval', array_column($stMy->fetchAll(PDO::FETCH_ASSOC), 'option_id'));
+    // 自分の自由記述 (allow_free_text 有効時のみ意味あり)
+    $stMyFt = $pdo->prepare("SELECT free_text FROM poll_voters WHERE poll_id=? AND user_id=?");
+    $stMyFt->execute([$id, (int)$u['id']]);
+    $myFreeText = (string)($stMyFt->fetchColumn() ?: '');
     // 集計の可視性
     $vis = (string)$poll['visibility'];
     $isClosed = (string)$poll['status'] === 'closed';
@@ -166,11 +176,20 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         || ($vis === 'open' && !empty($myVotes))
         || ($vis === 'after_deadline' && $isClosed);
     $tallies = null;
+    $freeTexts = null;
     if ($tallyVisible) {
         $stT = $pdo->prepare("SELECT option_id, COUNT(*) AS n FROM poll_votes WHERE poll_id = ? GROUP BY option_id");
         $stT->execute([$id]);
         $tallies = [];
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) $tallies[(int)$r['option_id']] = (int)$r['n'];
+        // 自由記述は本文のみ。 user_id は晒さない (個人匿名集計の方針に合わせる)。
+        if (!empty($poll['allow_free_text'])) {
+            $stF = $pdo->prepare("SELECT free_text FROM poll_voters
+                                   WHERE poll_id=? AND free_text IS NOT NULL AND free_text <> ''
+                                   ORDER BY voted_at, user_id");
+            $stF->execute([$id]);
+            $freeTexts = array_map('strval', array_column($stF->fetchAll(PDO::FETCH_ASSOC), 'free_text'));
+        }
     }
     json_response([
         'poll' => [
@@ -181,6 +200,8 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
             'creator_name' => $poll['creator_name'],
             'deadline_at' => $poll['deadline_at'],
             'multi_select' => (bool)$poll['multi_select'],
+            'allow_revote' => (bool)$poll['allow_revote'],
+            'allow_free_text' => (bool)$poll['allow_free_text'],
             'visibility' => $vis,
             'status' => $poll['status'],
             'created_at' => $poll['created_at'],
@@ -196,8 +217,10 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
             'has_voted' => $v['voted_at'] !== null,
         ], $voters),
         'my_votes' => $myVotes,
+        'my_free_text' => $myFreeText,
         'tally_visible' => $tallyVisible,
         'tallies' => $tallies,
+        'free_texts' => $freeTexts,
     ]);
 }
 
@@ -208,8 +231,9 @@ function polls_vote(PDO $pdo, array $cfg, int $id): void {
     $optionIds = $body['option_ids'] ?? [];
     if (!is_array($optionIds)) throw new ApiException('bad_request', 'option_ids 配列', 400);
     $optionIds = array_values(array_unique(array_filter(array_map('intval', $optionIds))));
-    if (!count($optionIds)) throw new ApiException('bad_request', '1 つ以上選んでください', 400);
-    $st = $pdo->prepare("SELECT multi_select, status FROM polls WHERE id = ?");
+    $freeText = isset($body['free_text']) ? trim((string)$body['free_text']) : '';
+    if ($freeText !== '') $freeText = mb_substr($freeText, 0, 2000);
+    $st = $pdo->prepare("SELECT multi_select, allow_revote, allow_free_text, status FROM polls WHERE id = ?");
     $st->execute([$id]);
     $poll = $st->fetch(PDO::FETCH_ASSOC);
     if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
@@ -217,28 +241,75 @@ function polls_vote(PDO $pdo, array $cfg, int $id): void {
     if (empty($poll['multi_select']) && count($optionIds) > 1) {
         throw new ApiException('bad_request', '単一選択の投票です', 400);
     }
-    // 対象者チェック。
-    $stV = $pdo->prepare("SELECT 1 FROM poll_voters WHERE poll_id=? AND user_id=?");
+    // 投票内容のバリデーション。 自由記述 OK の時のみ 「候補 0 + 自由記述あり」
+    // を許す (= 既存の選択肢に該当無し時の脱出口)。
+    if (count($optionIds) === 0 && !(empty($poll['multi_select']) === false && !empty($poll['allow_free_text']) && $freeText !== '')) {
+        throw new ApiException('bad_request',
+            empty($poll['allow_free_text']) ? '1 つ以上選んでください' : '選択肢を選ぶか、 自由記述を書いてください',
+            400);
+    }
+    // 対象者チェック + 再投票可否判定。
+    $stV = $pdo->prepare("SELECT voted_at FROM poll_voters WHERE poll_id=? AND user_id=?");
     $stV->execute([$id, (int)$u['id']]);
-    if ($stV->fetchColumn() === false) {
+    $voterRow = $stV->fetch(PDO::FETCH_ASSOC);
+    if ($voterRow === false) {
         throw new ApiException('forbidden', 'この投票の対象者ではありません', 403);
     }
-    // 選択肢が同じ poll 内にあるか。
-    $in = implode(',', array_fill(0, count($optionIds), '?'));
-    $stO = $pdo->prepare("SELECT COUNT(*) FROM poll_options WHERE poll_id=? AND id IN ($in)");
-    $stO->execute(array_merge([$id], $optionIds));
-    if ((int)$stO->fetchColumn() !== count($optionIds)) {
-        throw new ApiException('bad_request', '選択肢が不正です', 400);
+    if (empty($poll['allow_revote']) && $voterRow['voted_at'] !== null) {
+        throw new ApiException('locked', '再投票は禁止されています', 400);
     }
-    // 上書き: 既存の票を消して新規 insert。
-    db_tx($pdo, function () use ($pdo, $id, $u, $optionIds) {
+    // 選択肢が同じ poll 内にあるか。
+    if (count($optionIds)) {
+        $in = implode(',', array_fill(0, count($optionIds), '?'));
+        $stO = $pdo->prepare("SELECT COUNT(*) FROM poll_options WHERE poll_id=? AND id IN ($in)");
+        $stO->execute(array_merge([$id], $optionIds));
+        if ((int)$stO->fetchColumn() !== count($optionIds)) {
+            throw new ApiException('bad_request', '選択肢が不正です', 400);
+        }
+    }
+    $storeFreeText = (!empty($poll['allow_free_text']) && count($optionIds) === 0) ? $freeText : null;
+    // 上書き: 既存の票を消して新規 insert。 free_text も上書き or NULL。
+    db_tx($pdo, function () use ($pdo, $id, $u, $optionIds, $storeFreeText) {
         $pdo->prepare("DELETE FROM poll_votes WHERE poll_id=? AND user_id=?")->execute([$id, (int)$u['id']]);
         $ins = $pdo->prepare("INSERT INTO poll_votes (poll_id, user_id, option_id, created_at) VALUES (?, ?, ?, NOW())");
         foreach ($optionIds as $oid) $ins->execute([$id, (int)$u['id'], $oid]);
-        $pdo->prepare("UPDATE poll_voters SET voted_at=NOW() WHERE poll_id=? AND user_id=?")
-            ->execute([$id, (int)$u['id']]);
+        $pdo->prepare("UPDATE poll_voters SET voted_at=NOW(), free_text=? WHERE poll_id=? AND user_id=?")
+            ->execute([$storeFreeText, $id, (int)$u['id']]);
     });
     json_response(['ok' => true]);
+}
+
+// 未投票の対象者に 「まだ投票してないよ」 push を一斉送信 (起案者のみ)。
+// 過剰連打を避けるため、 polls.last_reminded_at は無いが、 1 回の API 呼び出しで
+// 全員に 1 通だけ届くシンプル実装。 通知のレート制限は Notifier 側に任せる。
+function polls_remind(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    polls_autoclose($pdo);
+    $st = $pdo->prepare("SELECT title, creator_user_id, deadline_at, status FROM polls WHERE id=?");
+    $st->execute([$id]);
+    $poll = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$poll['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ催促可', 403);
+    }
+    if ((string)$poll['status'] !== 'open') {
+        throw new ApiException('closed', '締切後は催促できません', 400);
+    }
+    $stV = $pdo->prepare("SELECT user_id FROM poll_voters WHERE poll_id=? AND voted_at IS NULL");
+    $stV->execute([$id]);
+    $ids = array_map('intval', array_column($stV->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+    $sent = 0;
+    foreach ($ids as $uid) {
+        if ((int)$uid === (int)$u['id']) continue;
+        try {
+            Notifier::notify($pdo, $cfg, (int)$uid, 'poll',
+                "📣 まだ未投票です: 「{$poll['title']}」 (締切 " . substr((string)$poll['deadline_at'], 0, 16) . ")",
+                'poll', $id);
+            $sent++;
+        } catch (Throwable $_) { /* 通知失敗は無視して残りを送る */ }
+    }
+    json_response(['ok' => true, 'sent' => $sent, 'unvoted' => count($ids)]);
 }
 
 function polls_close(PDO $pdo, array $cfg, int $id): void {

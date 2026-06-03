@@ -104,6 +104,14 @@ export async function renderPollNew() {
         <span class="switch"><input type="checkbox" id="pn-multi"><span class="slider"></span></span>
         <span>複数選択可</span>
       </label>
+      <label style="display:flex; align-items:center; gap:10px; margin:4px 0">
+        <span class="switch"><input type="checkbox" id="pn-revote" checked><span class="slider"></span></span>
+        <span>再投票を許可する <span class="hint-sm">— OFF にすると 1 回投票したら変更不可</span></span>
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; margin:4px 0" id="pn-ft-row" hidden>
+        <span class="switch"><input type="checkbox" id="pn-ft"><span class="slider"></span></span>
+        <span>自由記述も受ける <span class="hint-sm">— 候補に該当が無い時に文章で答えられる (複数選択 ON 時のみ)</span></span>
+      </label>
       <label class="field"><span class="lbl">集計の見え方</span>
         <select id="pn-vis">
           <option value="after_deadline">${VIS_LABEL.after_deadline}</option>
@@ -125,6 +133,16 @@ export async function renderPollNew() {
       </div>
     </div>
   `;
+  // 自由記述行は 「複数選択 ON」 のときだけ意味があるので連動表示。
+  const multiEl = document.getElementById('pn-multi');
+  const ftRow = document.getElementById('pn-ft-row');
+  const syncFtRow = () => {
+    ftRow.hidden = !multiEl.checked;
+    if (!multiEl.checked) document.getElementById('pn-ft').checked = false;
+  };
+  multiEl.addEventListener('change', syncFtRow);
+  syncFtRow();
+
   // 締切デフォルト: 翌日 18:00。
   const def = new Date(); def.setDate(def.getDate() + 1); def.setHours(18, 0, 0, 0);
   const p = n => String(n).padStart(2, '0');
@@ -182,6 +200,8 @@ export async function renderPollNew() {
     const body  = document.getElementById('pn-body').value.trim();
     const deadline = document.getElementById('pn-deadline').value;
     const multi = document.getElementById('pn-multi').checked;
+    const allowRevote = document.getElementById('pn-revote').checked;
+    const allowFreeText = document.getElementById('pn-ft').checked;
     const vis   = document.getElementById('pn-vis').value;
     const optsRaw = document.getElementById('pn-options').value;
     const opts = optsRaw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length).slice(0, 30);
@@ -192,6 +212,7 @@ export async function renderPollNew() {
     try {
       const r = await post('/api/polls', {
         title, body, deadline_at: deadline, multi_select: multi,
+        allow_revote: allowRevote, allow_free_text: allowFreeText,
         visibility: vis, options: opts, voter_ids: [...selected],
       });
       toast('作成しました');
@@ -209,13 +230,24 @@ export async function renderPollDetail({ params }) {
     <div class="card">
       <a href="#/polls" class="hint">← 一覧</a>
       <div id="pd-head"><div class="muted">読み込み中…</div></div>
+      <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+        <button id="pd-copy-url" class="btn">🔗 URL をコピー</button>
+      </div>
     </div>
     <div class="card" id="pd-vote-card" hidden>
       <h3 style="margin:0 0 6px" id="pd-vote-title">投票</h3>
       <div id="pd-options" class="list"></div>
+      <div id="pd-ft-wrap" hidden style="margin-top:8px">
+        <label class="field"><span class="lbl">自由記述 <span class="hint-sm">— 候補を選ばずにここだけ書いて投票も可</span></span>
+          <textarea id="pd-ft" rows="2" maxlength="2000" placeholder="候補に該当が無いときの自由回答 (任意)"></textarea>
+        </label>
+      </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <button id="pd-vote-save" class="primary">投票する</button>
       </div>
+    </div>
+    <div class="card" id="pd-voted-card" hidden>
+      <div class="muted" style="font-size:13px">投票済 (再投票は許可されていません)</div>
     </div>
     <div class="card" id="pd-tally-card" hidden>
       <h3 style="margin:0 0 6px">集計</h3>
@@ -226,13 +258,29 @@ export async function renderPollDetail({ params }) {
       <div id="pd-voters" class="row" style="gap:6px; flex-wrap:wrap"></div>
     </div>
     <div class="card" id="pd-admin-card" hidden>
-      <div class="row" style="gap:6px">
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="pd-remind" class="btn">📣 未投票者に催促</button>
         <button id="pd-close" class="btn">締切る</button>
         <button id="pd-del"   class="danger">削除</button>
       </div>
     </div>
   `;
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  // URL コピー (ページが描かれた時点で 1 回だけ wire-up。 ボタン自体は常設)。
+  document.getElementById('pd-copy-url')?.addEventListener('click', async () => {
+    const url = location.origin + location.pathname + '#/polls/' + id;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('URL をコピーしました');
+    } catch (_) {
+      // clipboard API が無い環境 (古い iOS / 非 https) は textarea で fallback。
+      const ta = document.createElement('textarea');
+      ta.value = url; document.body.appendChild(ta);
+      ta.select(); try { document.execCommand('copy'); toast('URL をコピーしました'); }
+      catch (e) { toast('コピー失敗: ' + e.message); }
+      finally { document.body.removeChild(ta); }
+    }
+  });
   await loadPollDetail(id);
 }
 
@@ -281,10 +329,14 @@ async function loadPollDetail(id) {
       countdownTimer = setInterval(updateCountdown, 1000);
     }
 
-    // 投票カード
+    // 投票カード。 再投票禁止 + 既に投票済の場合は投票 UI 非表示にし 「投票済」 カード表示。
     const voteCard = document.getElementById('pd-vote-card');
-    if (d.is_voter && isOpen) {
+    const votedCard = document.getElementById('pd-voted-card');
+    const alreadyVoted = d.my_votes.length > 0 || (d.my_free_text && d.my_free_text.length > 0);
+    const canVote = d.is_voter && isOpen && (p.allow_revote || !alreadyVoted);
+    if (canVote) {
       voteCard.hidden = false;
+      votedCard.hidden = true;
       const inputType = p.multi_select ? 'checkbox' : 'radio';
       document.getElementById('pd-options').innerHTML = d.options.map(o => `
         <label class="list-item" style="cursor:pointer">
@@ -292,13 +344,26 @@ async function loadPollDetail(id) {
           <span class="grow">${escapeHtml(o.label)}</span>
         </label>`).join('');
       document.getElementById('pd-vote-title').textContent =
-        d.my_votes.length ? '投票し直す' : (p.multi_select ? '投票 (複数可)' : '投票');
+        alreadyVoted ? '投票し直す' : (p.multi_select ? '投票 (複数可)' : '投票');
+      // 自由記述 (複数選択 + allow_free_text)
+      const ftWrap = document.getElementById('pd-ft-wrap');
+      const ftInput = document.getElementById('pd-ft');
+      if (p.multi_select && p.allow_free_text) {
+        ftWrap.hidden = false;
+        ftInput.value = d.my_free_text || '';
+      } else {
+        ftWrap.hidden = true;
+      }
       document.getElementById('pd-vote-save').addEventListener('click', async () => {
         const ids = Array.from(document.querySelectorAll('#pd-options input:checked'))
           .map(i => Number(i.value));
-        if (!ids.length) { toast('1 つ以上選んでください'); return; }
+        const freeText = (p.multi_select && p.allow_free_text && ftInput) ? ftInput.value.trim() : '';
+        if (!ids.length && !(p.multi_select && p.allow_free_text && freeText)) {
+          toast(p.allow_free_text ? '選択肢を選ぶか、 自由記述を書いてください' : '1 つ以上選んでください');
+          return;
+        }
         try {
-          await post(`/api/polls/${id}/vote`, { option_ids: ids });
+          await post(`/api/polls/${id}/vote`, { option_ids: ids, free_text: freeText });
           toast('投票しました');
           if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
           await loadPollDetail(id);
@@ -306,6 +371,7 @@ async function loadPollDetail(id) {
       });
     } else {
       voteCard.hidden = true;
+      votedCard.hidden = !(d.is_voter && alreadyVoted && !p.allow_revote);
     }
 
     // 集計カード
@@ -313,7 +379,7 @@ async function loadPollDetail(id) {
     if (d.tally_visible && d.tallies) {
       tallyCard.hidden = false;
       const total = Object.values(d.tallies).reduce((a, b) => a + b, 0) || 1;
-      document.getElementById('pd-tally').innerHTML = d.options.map(o => {
+      let html = d.options.map(o => {
         const n = d.tallies[o.id] || 0;
         const pct = Math.round((n / total) * 100);
         return `
@@ -327,6 +393,13 @@ async function loadPollDetail(id) {
             </div>
           </div>`;
       }).join('');
+      if (Array.isArray(d.free_texts) && d.free_texts.length) {
+        html += `<div style="margin-top:12px">
+          <div class="bold" style="font-size:13px; margin-bottom:4px">自由記述 (${d.free_texts.length} 件) <span class="hint-sm">— 誰が書いたかは匿名</span></div>
+          ${d.free_texts.map(t => `<div class="list-item" style="padding:6px 8px; white-space:pre-wrap; font-size:13px">${escapeHtml(t)}</div>`).join('')}
+        </div>`;
+      }
+      document.getElementById('pd-tally').innerHTML = html;
     } else {
       tallyCard.hidden = true;
     }
@@ -343,6 +416,17 @@ async function loadPollDetail(id) {
     if (isCreator) {
       const adminCard = document.getElementById('pd-admin-card');
       adminCard.hidden = false;
+      const unvoted = d.voters.filter(v => !v.has_voted).length;
+      const remindBtn = document.getElementById('pd-remind');
+      remindBtn.disabled = !isOpen || unvoted === 0;
+      remindBtn.textContent = `📣 未投票者に催促 (${unvoted})`;
+      remindBtn.addEventListener('click', async () => {
+        if (!confirm(`未投票の ${unvoted} 人に通知を送りますか?`)) return;
+        try {
+          const r = await post(`/api/polls/${id}/remind`, {});
+          toast(`${r.sent} 人に送りました`);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
       document.getElementById('pd-close').disabled = !isOpen;
       document.getElementById('pd-close').addEventListener('click', async () => {
         if (!confirm('この投票を締切ますか?')) return;
