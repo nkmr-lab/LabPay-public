@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>LabPay 商品一覧</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 20px auto; padding: 0 12px; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:10px; margin:8px 0; display:flex; gap:10px; align-items:center }
+    img { width:48px; height:48px; object-fit:cover; border-radius:6px; background:#eee }
+    .price { font-weight:bold; color:#7a3aa0; font-size:18px; min-width:80px; text-align:right }
+    .gift { color:#b71c50 }
+    select { margin: 6px 0 12px }
+  </style>
+</head>
+<body>
+  <h1>🛒 出品中の商品</h1>
+  <label>並び順:
+    <select id="sort">
+      <option value="cheapest" selected>安い順</option>
+      <option value="newest">新しい順</option>
+    </select>
+  </label>
+  <div id="out">読み込み中…</div>
+
+<script>
+const BASE = 'https://pay.nkmr.io/api';
+
+async function load() {
+  const sort = document.getElementById('sort').value;
+  const r = await fetch(BASE + '/listings?limit=200', { credentials: 'include' });
+  const d = await r.json();
+  let items = d.items.slice();
+  if (sort === 'cheapest') items.sort((a, b) => a.price - b.price);
+  else                     items.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  document.getElementById('out').innerHTML = items.map(l => `
+    <div class="card">
+      ${l.image_url ? `<img src="${l.image_url}">` : '<div style="width:48px;height:48px;background:#eee;border-radius:6px"></div>'}
+      <div style="flex:1">
+        <div><b>${l.name}</b></div>
+        <div style="color:#666;font-size:13px">@ ${l.seller_name}${l.location ? ' · 📍 ' + l.location : ''} · 在庫 ${l.qty}</div>
+      </div>
+      <div class="price ${l.is_gift ? 'gift' : ''}">
+        ${l.is_gift ? '🎁 これどうぞ' : l.price.toLocaleString() + ' pt'}
+      </div>
+    </div>
+  `).join('') || '<p>出品がありません</p>';
+}
+
+document.getElementById('sort').addEventListener('change', load);
+load();
+</script>
+</body>
+</html>

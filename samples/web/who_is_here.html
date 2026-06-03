@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>誰が今ラボにいる?</title>
+  <style>
+    body { font-family: sans-serif; max-width: 480px; margin: 20px auto; padding: 0 12px; }
+    h2 { margin: 16px 0 6px; font-size: 16px }
+    ul { list-style: none; padding: 0; margin: 0 }
+    li { padding: 4px 0; display:flex; align-items:center; gap:8px }
+    img { width:24px; height:24px; border-radius:50% }
+    .updated { color: #888; font-size: 12px; text-align:right }
+  </style>
+</head>
+<body>
+  <h1>🪑 今ラボにいる人</h1>
+  <div id="out">読み込み中…</div>
+  <div class="updated" id="ts"></div>
+
+<script>
+// === LabPay API を Vanilla JS で叩く最小サンプル ===
+// この HTML を pay.nkmr.io 配下に置けば そのまま動きます (Cookie が共有される)。
+// 別ホストから叩くなら CORS と dev-login の login_via_token が必要 (HACKATHON.md 参照)。
+
+const BASE = 'https://pay.nkmr.io/api';
+
+async function render() {
+  const r = await fetch(BASE + '/presence', { credentials: 'include' });
+  if (!r.ok) {
+    document.getElementById('out').textContent = '取得失敗 (ログインが必要かも): ' + r.status;
+    return;
+  }
+  const d = await r.json();
+  document.getElementById('out').innerHTML = d.rooms.map(room => `
+    <h2>${room.display_name} <small>(${room.users.length}人)</small></h2>
+    <ul>
+      ${room.users.map(u => `
+        <li>
+          ${u.avatar_url ? `<img src="${u.avatar_url}">` : '👤'}
+          <span>${u.display_name}</span>
+          ${u.stay_minutes ? `<small style="color:#888">滞在 ${Math.floor(u.stay_minutes/60)}h${u.stay_minutes%60}m</small>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+  `).join('') || '<p>誰も居ません</p>';
+  document.getElementById('ts').textContent = '更新: ' + new Date().toLocaleTimeString();
+}
+
+render();
+setInterval(render, 60_000);  // 1 分ごと自動更新
+</script>
+</body>
+</html>

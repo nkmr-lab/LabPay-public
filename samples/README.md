@@ -22,6 +22,19 @@ export LABPAY_EMAIL=you@example.ac.jp
 
 ## サンプル一覧
 
+### 🌐 ブラウザ Vanilla JS (samples/web/)
+
+ファイルを `pay.nkmr.io` 配下に置けば そのまま動きます (LabPay にログイン中の
+Cookie がそのまま使えるので 認証コード不要)。 1 ファイル 1 機能、 ~40 行:
+
+| ファイル | 内容 |
+|---|---|
+| [web/who_is_here.html](web/who_is_here.html) | 今ラボにいる人を 1 分ごとに表示 (LED 看板的用途に) |
+| [web/product_list.html](web/product_list.html) | 出品中の商品を安い順/新しい順で一覧 |
+| [web/my_balance.html](web/my_balance.html) | 残高 + streak を 30 秒ごとに更新するウィジェット |
+
+### 🐍 Python (samples/0X_*.py)
+
 | ファイル | 内容 | API |
 |---|---|---|
 | [01_my_balance.py](01_my_balance.py)         | 自分の残高と streak を表示    | `GET /api/me` |

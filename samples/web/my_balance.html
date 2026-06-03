@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>残高ウィジェット</title>
+  <style>
+    body { font-family: sans-serif; text-align:center; padding:40px }
+    .bal { font-size: 56px; font-weight: bold; color: #7a3aa0 }
+    .lbl { color: #888; font-size: 13px }
+  </style>
+</head>
+<body>
+  <div id="who" class="lbl">読み込み中…</div>
+  <div class="bal" id="bal">— pt</div>
+  <div class="lbl" id="streak"></div>
+
+<script>
+// LabPay 残高を 30 秒ごとに表示するだけの 1 ファイルウィジェット。
+// 同一オリジン (pay.nkmr.io) ホスト想定。
+const BASE = 'https://pay.nkmr.io/api';
+
+async function refresh() {
+  const r = await fetch(BASE + '/me', { credentials: 'include' });
+  if (!r.ok) {
+    document.getElementById('who').textContent = 'ログインが必要';
+    return;
+  }
+  const me = await r.json();
+  document.getElementById('who').textContent = me.user.display_name + ' さん';
+  document.getElementById('bal').textContent = me.balance.toLocaleString() + ' pt';
+  document.getElementById('streak').textContent =
+    '連続ラボイン ' + me.streak.current_streak + ' 日 (最長 ' + me.streak.longest_streak + ' 日)';
+}
+
+refresh();
+setInterval(refresh, 30_000);
+</script>
+</body>
+</html>

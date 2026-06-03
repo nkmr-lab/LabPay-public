@@ -343,6 +343,19 @@ function writeCalCache(items, etags) {
   } catch {}
 }
 
+// 終了後 N 分経過した予定を 「今日の予定」 から消すための設定 (1..1440)。
+// 「2 時間経ったら消したい」 が default。 設定 → Google Calendar 連携 から変更可。
+const CAL_HIDE_KEY = 'labpay-cal-hide-after-min';
+export function readCalHideAfterMin() {
+  const v = Number(localStorage.getItem(CAL_HIDE_KEY));
+  if (!Number.isFinite(v) || v < 0) return 120;
+  return Math.min(1440, Math.max(0, Math.floor(v)));
+}
+export function writeCalHideAfterMin(min) {
+  const v = Math.min(1440, Math.max(0, Math.floor(Number(min) || 0)));
+  try { localStorage.setItem(CAL_HIDE_KEY, String(v)); } catch {}
+}
+
 async function renderCalendarEvents() {
   const card = document.getElementById('home-calendar-card');
   const root = document.getElementById('home-calendar');
@@ -377,15 +390,20 @@ async function renderCalendarEvents() {
       return;
     }
   }
+  // 終了後 N 分経過した予定を消す (設定: localStorage labpay-cal-hide-after-min、
+  // デフォルト 120)。 すべての枝の前にここで一度だけフィルタする。
+  {
+    const nowMs0 = Date.now();
+    const hideAfterMin = readCalHideAfterMin();
+    items = items.filter(ev => {
+      const endMs = ev.end ? Date.parse(ev.end)
+                  : (ev.start ? Date.parse(ev.start) + 3600000 : NaN);
+      if (isNaN(endMs)) return true;
+      return endMs + hideAfterMin * 60000 >= nowMs0;
+    });
+  }
   items = items.slice(0, 5);
   try {
-    if (!items.length) {
-      // 連携はしてるけど予定なし → 「今日は予定なし」 と出す価値あり (連携が
-      // 効いてることが分かる)。完全に隠すのではなく empty で表示。 add-row は
-      // 後で追記される。
-      card.hidden = false;
-      // ここで return しない: 下で renderCalendarEvents 末尾の add-row もくっつける
-    }
     card.hidden = false;
     // タスク/募集と同じノリで、 カード末尾に 「＋ MTG を立てる」 行を常設。
     const addRow = `

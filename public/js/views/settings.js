@@ -2,7 +2,8 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe } from '../app.js';
 import { uploadImage } from '../upload.js';
-import { HOME_CARDS, readHomeLayout, writeHomeLayout } from './home.js';
+import { HOME_CARDS, readHomeLayout, writeHomeLayout,
+         readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
 
 export async function renderSettings() {
   const app = document.getElementById('app');
@@ -74,6 +75,17 @@ export async function renderSettings() {
       </p>
       <div id="cal-section"><div class="muted">読み込み中…</div></div>
       <div class="sep" style="margin:14px 0 10px"></div>
+      <h3 style="margin:0">終わった予定を消すまでの時間</h3>
+      <p class="hint">
+        予定の終了時刻から指定した分数が経過したら、 ホームの「今日の予定」 から
+        消えます (0 で即時、 1440 で 24 時間)。 default 120 分。
+      </p>
+      <div class="row" style="gap:6px; align-items:center; margin-top:4px">
+        <input type="number" id="cal-hide-after-min" min="0" max="1440" step="10" style="max-width:120px">
+        <span class="muted" style="font-size:13px">分</span>
+        <button id="cal-hide-save" class="primary">保存</button>
+      </div>
+      <div class="sep" style="margin:14px 0 10px"></div>
       <h3 style="margin:0">予定の非表示ルール</h3>
       <p class="hint">
         タイトルにこの文字列を含む予定はホームの「今日の予定」に出ない。
@@ -126,6 +138,19 @@ export async function renderSettings() {
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
+  // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
+  // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
+  const hideInput = document.getElementById('cal-hide-after-min');
+  if (hideInput) {
+    hideInput.value = String(readCalHideAfterMin());
+    document.getElementById('cal-hide-save').addEventListener('click', () => {
+      writeCalHideAfterMin(hideInput.value);
+      hideInput.value = String(readCalHideAfterMin());
+      // 反映を早めるためカレンダーキャッシュも捨てる。
+      try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
+      toast('保存しました');
+    });
+  }
   await loadCalendar();
   await loadCalendarFilterRules();
 
