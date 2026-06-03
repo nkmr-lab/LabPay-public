@@ -16,6 +16,7 @@ function route_polls(PDO $pdo, array $cfg, string $method, array $seg): void {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
         if ($next === '' && $method === 'GET')    { polls_detail($pdo, $cfg, $id); return; }
+        if ($next === '' && $method === 'PATCH')  { polls_update($pdo, $cfg, $id); return; }
         if ($next === '' && $method === 'DELETE') { polls_delete($pdo, $cfg, $id); return; }
         if ($next === 'vote'   && $method === 'POST')  { polls_vote($pdo, $cfg, $id); return; }
         if ($next === 'close'  && $method === 'PATCH') { polls_close($pdo, $cfg, $id); return; }
@@ -315,6 +316,136 @@ function polls_remind(PDO $pdo, array $cfg, int $id): void {
         } catch (Throwable $_) { /* 通知失敗は無視して残りを送る */ }
     }
     json_response(['ok' => true, 'sent' => $sent, 'unvoted' => count($ids)]);
+}
+
+// PATCH /api/polls/{id} — 起案者 / admin による編集。 渡したフィールドだけ更新。
+//   options : 配列が来たら 「同じラベルは残し、 無くなったものは削除 (=その option への票も cascade で消える)、
+//             新規ラベルは追加」 の差分更新。
+//   voter_ids: 同様に差分更新。 外された voter の票は削除。 追加された voter は voted_at=NULL。
+function polls_update(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT * FROM polls WHERE id=?");
+    $st->execute([$id]);
+    $poll = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$poll['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ編集可', 403);
+    }
+    $body = read_json_body();
+    $sets = []; $args = [];
+
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) throw new ApiException('bad_request', 'title 1..200', 400);
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('body', $body)) {
+        $b = isset($body['body']) ? mb_substr((string)$body['body'], 0, 2000) : null;
+        if ($b === '') $b = null;
+        $sets[] = 'body = ?'; $args[] = $b;
+    }
+    if (array_key_exists('deadline_at', $body)) {
+        $raw = (string)$body['deadline_at'];
+        $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
+        $sets[] = 'deadline_at = ?'; $args[] = $dt->format('Y-m-d H:i:s');
+    }
+    $multiNow = (int)$poll['multi_select'];
+    if (array_key_exists('multi_select', $body)) {
+        $multiNow = !empty($body['multi_select']) ? 1 : 0;
+        $sets[] = 'multi_select = ?'; $args[] = $multiNow;
+    }
+    if (array_key_exists('allow_revote', $body)) {
+        $sets[] = 'allow_revote = ?'; $args[] = !empty($body['allow_revote']) ? 1 : 0;
+    }
+    if (array_key_exists('allow_free_text', $body)) {
+        // 単一選択時は意味が無いので 0 に強制。
+        $aft = (!empty($body['allow_free_text']) && $multiNow) ? 1 : 0;
+        $sets[] = 'allow_free_text = ?'; $args[] = $aft;
+    }
+    if (array_key_exists('visibility', $body)) {
+        $v = (string)$body['visibility'];
+        if (!in_array($v, POLL_VISIBILITIES, true)) throw new ApiException('bad_request', 'visibility 不正', 400);
+        $sets[] = 'visibility = ?'; $args[] = $v;
+    }
+    $newOptions = null;
+    if (array_key_exists('options', $body)) {
+        if (!is_array($body['options'])) throw new ApiException('bad_request', 'options 配列', 400);
+        $newOptions = [];
+        foreach ($body['options'] as $o) {
+            $s = trim((string)$o);
+            if ($s === '' || mb_strlen($s) > 200) continue;
+            $newOptions[] = $s;
+        }
+        if (count($newOptions) < 2 || count($newOptions) > 30) {
+            throw new ApiException('bad_request', '有効な選択肢が 2〜30 個必要', 400);
+        }
+    }
+    $newVoters = null;
+    if (array_key_exists('voter_ids', $body)) {
+        $arr = is_array($body['voter_ids'])
+            ? array_values(array_unique(array_filter(array_map('intval', $body['voter_ids']))))
+            : [];
+        if (!count($arr) || count($arr) > 200) throw new ApiException('bad_request', '対象者 1〜200', 400);
+        $in = implode(',', array_fill(0, count($arr), '?'));
+        $stU = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id IN ($in)");
+        $stU->execute($arr);
+        if ((int)$stU->fetchColumn() !== count($arr)) {
+            throw new ApiException('bad_request', '存在しない user_id', 400);
+        }
+        $newVoters = $arr;
+    }
+    db_tx($pdo, function () use ($pdo, $id, $sets, $args, $newOptions, $newVoters) {
+        if ($sets) {
+            $pdo->prepare("UPDATE polls SET " . implode(', ', $sets) . " WHERE id = ?")
+                ->execute(array_merge($args, [$id]));
+        }
+        if ($newOptions !== null) {
+            $stE = $pdo->prepare("SELECT id, label FROM poll_options WHERE poll_id = ?");
+            $stE->execute([$id]);
+            $byLabel = [];
+            foreach ($stE->fetchAll(PDO::FETCH_ASSOC) as $r) $byLabel[(string)$r['label']] = (int)$r['id'];
+            foreach ($newOptions as $i => $label) {
+                if (isset($byLabel[$label])) {
+                    $pdo->prepare("UPDATE poll_options SET sort_order=? WHERE id=?")
+                        ->execute([$i, $byLabel[$label]]);
+                    unset($byLabel[$label]);
+                } else {
+                    $pdo->prepare("INSERT INTO poll_options (poll_id, label, sort_order) VALUES (?,?,?)")
+                        ->execute([$id, $label, $i]);
+                }
+            }
+            if ($byLabel) {
+                $ids = array_values($byLabel);
+                $in = implode(',', array_fill(0, count($ids), '?'));
+                $pdo->prepare("DELETE FROM poll_options WHERE id IN ($in)")->execute($ids);
+            }
+        }
+        if ($newVoters !== null) {
+            $stE = $pdo->prepare("SELECT user_id FROM poll_voters WHERE poll_id=?");
+            $stE->execute([$id]);
+            $cur = array_map('intval', array_column($stE->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+            $curSet = array_flip($cur);
+            $newSet = array_flip($newVoters);
+            foreach ($newVoters as $uid) {
+                if (!isset($curSet[$uid])) {
+                    $pdo->prepare("INSERT INTO poll_voters (poll_id, user_id) VALUES (?,?)")
+                        ->execute([$id, $uid]);
+                }
+            }
+            foreach ($cur as $uid) {
+                if (!isset($newSet[$uid])) {
+                    $pdo->prepare("DELETE FROM poll_votes  WHERE poll_id=? AND user_id=?")->execute([$id, $uid]);
+                    $pdo->prepare("DELETE FROM poll_voters WHERE poll_id=? AND user_id=?")->execute([$id, $uid]);
+                }
+            }
+        }
+    });
+    json_response(['ok' => true]);
 }
 
 function polls_close(PDO $pdo, array $cfg, int $id): void {

@@ -83,57 +83,59 @@ export async function renderPolls() {
   }
 }
 
-export async function renderPollNew() {
-  const app = document.getElementById('app');
-  app.innerHTML = `
-    <div class="card">
-      <a href="#/polls" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">投票を作る</h2>
-    </div>
+// 作成 / 編集 共通のフォーム本体 HTML。 初期値は createMode の時 default、
+// editMode の時 既存値。
+function pollFormCardHtml(initial, isEdit) {
+  return `
     <div class="card">
       <label class="field"><span class="lbl">タイトル</span>
-        <input type="text" id="pn-title" maxlength="200" placeholder="例: 飲み会の店、 どこにする?" autofocus>
+        <input type="text" id="pn-title" maxlength="200" placeholder="例: 飲み会の店、 どこにする?" value="${escapeHtml(initial.title || '')}" autofocus>
       </label>
       <label class="field"><span class="lbl">本文 (任意)</span>
-        <textarea id="pn-body" rows="2" maxlength="2000" placeholder="補足説明など"></textarea>
+        <textarea id="pn-body" rows="2" maxlength="2000" placeholder="補足説明など">${escapeHtml(initial.body || '')}</textarea>
       </label>
       <label class="field"><span class="lbl">締切</span>
-        <input type="datetime-local" id="pn-deadline">
+        <input type="datetime-local" id="pn-deadline" value="${escapeHtml(initial.deadline || '')}">
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0">
-        <span class="switch"><input type="checkbox" id="pn-multi"><span class="slider"></span></span>
+        <span class="switch"><input type="checkbox" id="pn-multi" ${initial.multi ? 'checked' : ''}><span class="slider"></span></span>
         <span>複数選択可</span>
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0">
-        <span class="switch"><input type="checkbox" id="pn-revote" checked><span class="slider"></span></span>
+        <span class="switch"><input type="checkbox" id="pn-revote" ${initial.allowRevote ? 'checked' : ''}><span class="slider"></span></span>
         <span>再投票を許可する <span class="hint-sm">— OFF にすると 1 回投票したら変更不可</span></span>
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0" id="pn-ft-row" hidden>
-        <span class="switch"><input type="checkbox" id="pn-ft"><span class="slider"></span></span>
+        <span class="switch"><input type="checkbox" id="pn-ft" ${initial.allowFreeText ? 'checked' : ''}><span class="slider"></span></span>
         <span>自由記述も受ける <span class="hint-sm">— 候補に該当が無い時に文章で答えられる (複数選択 ON 時のみ)</span></span>
       </label>
       <label class="field"><span class="lbl">集計の見え方</span>
         <select id="pn-vis">
-          <option value="after_deadline">${VIS_LABEL.after_deadline}</option>
-          <option value="open">${VIS_LABEL.open}</option>
-          <option value="creator">${VIS_LABEL.creator}</option>
+          <option value="after_deadline" ${initial.visibility === 'after_deadline' ? 'selected' : ''}>${VIS_LABEL.after_deadline}</option>
+          <option value="open"           ${initial.visibility === 'open' ? 'selected' : ''}>${VIS_LABEL.open}</option>
+          <option value="creator"        ${initial.visibility === 'creator' ? 'selected' : ''}>${VIS_LABEL.creator}</option>
         </select>
       </label>
       <label class="field"><span class="lbl">選択肢 (1 行に 1 つ、 2 個以上)</span>
-        <textarea id="pn-options" rows="5" placeholder="例:&#10;A 店&#10;B 店&#10;C 店"></textarea>
+        <textarea id="pn-options" rows="5" placeholder="例:&#10;A 店&#10;B 店&#10;C 店">${escapeHtml((initial.options || []).join('\n'))}</textarea>
+        ${isEdit ? `<div class="hint-sm">既存ラベルと一致する行はそのまま残ります (票も維持)。 削除した行の票は消えます。</div>` : ''}
       </label>
       <div class="field">
         <span class="lbl">対象者</span>
         <div id="pn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="pn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        ${isEdit ? `<div class="hint-sm">対象から外したメンバーの票は削除されます。</div>` : ''}
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
-        <a href="#/polls" class="btn">キャンセル</a>
-        <button id="pn-save" class="primary">作成</button>
+        <a href="${isEdit ? '#/polls/' + initial.id : '#/polls'}" class="btn">キャンセル</a>
+        <button id="pn-save" class="primary">${isEdit ? '保存' : '作成'}</button>
       </div>
     </div>
   `;
-  // 自由記述行は 「複数選択 ON」 のときだけ意味があるので連動表示。
+}
+
+// フォームに 自由記述行 連動 + 締切デフォルト + メンバー チップ + save ハンドラを wire-up。
+async function wirePollForm(initial, isEdit, onSave) {
   const multiEl = document.getElementById('pn-multi');
   const ftRow = document.getElementById('pn-ft-row');
   const syncFtRow = () => {
@@ -143,14 +145,16 @@ export async function renderPollNew() {
   multiEl.addEventListener('change', syncFtRow);
   syncFtRow();
 
-  // 締切デフォルト: 翌日 18:00。
-  const def = new Date(); def.setDate(def.getDate() + 1); def.setHours(18, 0, 0, 0);
-  const p = n => String(n).padStart(2, '0');
-  document.getElementById('pn-deadline').value =
-    `${def.getFullYear()}-${p(def.getMonth()+1)}-${p(def.getDate())}T${p(def.getHours())}:${p(def.getMinutes())}`;
+  if (!isEdit && !initial.deadline) {
+    // 締切デフォルト: 翌日 18:00 (作成時のみ)。
+    const def = new Date(); def.setDate(def.getDate() + 1); def.setHours(18, 0, 0, 0);
+    const p = n => String(n).padStart(2, '0');
+    document.getElementById('pn-deadline').value =
+      `${def.getFullYear()}-${p(def.getMonth()+1)}-${p(def.getDate())}T${p(def.getHours())}:${p(def.getMinutes())}`;
+  }
 
   let allUsers = [];
-  const selected = new Set();
+  const selected = new Set((initial.voterIds || []).map(Number));
   try {
     const u = await get('/api/users');
     allUsers = [...(u.items || [])].sort((a, b) => {
@@ -158,7 +162,7 @@ export async function renderPollNew() {
       if (d !== 0) return d;
       return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
     });
-    if (state.me?.id) selected.add(Number(state.me.id));   // デフォで自分は入れておく
+    if (!isEdit && state.me?.id) selected.add(Number(state.me.id));   // 作成時は自分をデフォ ON
     const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
     const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
     document.getElementById('pn-bulk').innerHTML = `
@@ -210,15 +214,78 @@ export async function renderPollNew() {
     if (opts.length < 2) { toast('選択肢を 2 つ以上'); return; }
     if (!selected.size) { toast('対象者を 1 人以上'); return; }
     try {
-      const r = await post('/api/polls', {
+      await onSave({
         title, body, deadline_at: deadline, multi_select: multi,
         allow_revote: allowRevote, allow_free_text: allowFreeText,
         visibility: vis, options: opts, voter_ids: [...selected],
       });
-      toast('作成しました');
-      navigate('#/polls/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+export async function renderPollNew() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/polls" class="hint">← 一覧</a>
+      <h2 style="margin:6px 0 0">投票を作る</h2>
+    </div>
+    ${pollFormCardHtml({
+      title: '', body: '', deadline: '', multi: false,
+      allowRevote: true, allowFreeText: false,
+      visibility: 'after_deadline', options: [],
+    }, false)}
+  `;
+  await wirePollForm({}, false, async (payload) => {
+    const r = await post('/api/polls', payload);
+    toast('作成しました');
+    navigate('#/polls/' + r.id);
+  });
+}
+
+// /#/polls/:id/edit — 投票編集 (起案者のみ)。
+export async function renderPollEdit({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/polls/${id}" class="hint">← 詳細</a>
+      <h2 style="margin:6px 0 0">投票を編集</h2>
+      <div id="pe-status" class="muted" style="font-size:13px">読み込み中…</div>
+    </div>
+    <div id="pe-form"></div>
+  `;
+  try {
+    const d = await get('/api/polls/' + id);
+    if (!d.is_creator) {
+      document.getElementById('pe-status').innerHTML =
+        '<span style="color:var(--danger)">起案者のみ編集できます。</span>';
+      return;
+    }
+    document.getElementById('pe-status').textContent = '';
+    // datetime-local 用に「YYYY-MM-DDTHH:MM」 へ。
+    const dl = String(d.poll.deadline_at || '').slice(0, 16).replace(' ', 'T');
+    const initial = {
+      id,
+      title: d.poll.title,
+      body: d.poll.body || '',
+      deadline: dl,
+      multi: !!d.poll.multi_select,
+      allowRevote: !!d.poll.allow_revote,
+      allowFreeText: !!d.poll.allow_free_text,
+      visibility: d.poll.visibility,
+      options: d.options.map(o => o.label),
+      voterIds: d.voters.map(v => v.user_id),
+    };
+    document.getElementById('pe-form').innerHTML = pollFormCardHtml(initial, true);
+    await wirePollForm(initial, true, async (payload) => {
+      await patch('/api/polls/' + id, payload);
+      toast('保存しました');
+      navigate('#/polls/' + id);
+    });
+  } catch (e) {
+    document.getElementById('pe-status').innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message)}</span>`;
+  }
 }
 
 let countdownTimer = null;
@@ -264,6 +331,7 @@ export async function renderPollDetail({ params }) {
     </div>
     <div class="card" id="pd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
+        <a id="pd-edit" class="btn" href="#/polls/${id}/edit">✏️ 編集</a>
         <button id="pd-remind" class="btn">📣 未投票者に催促</button>
         <button id="pd-close" class="btn">締切る</button>
         <button id="pd-del"   class="danger">削除</button>
