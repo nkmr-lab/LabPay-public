@@ -373,8 +373,12 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
-  // スケジュールの日程設定 + 一覧
+  // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
+  document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
+    schedEditMode = !schedEditMode;
+    loadSchedule(id);
+  });
   loadSchedule(id);
   await loadDetail(id);
   await loadWari(id);
@@ -1364,6 +1368,7 @@ async function onPost(gid) {
 
 // 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
 // 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
+let schedEditMode = false;
 const SCHED_KINDS = {
   flight:  { label: '飛行機', icon: '✈️' },
   train:   { label: '電車',   icon: '🚆' },
@@ -1384,6 +1389,12 @@ async function loadSchedule(gid) {
   const card = document.getElementById('gd-sched-card');
   const body = document.getElementById('gd-sched-body');
   if (!card || !body) return;
+  // 編集モード ボタンの label を現在状態に同期。
+  const emBtn = document.getElementById('gd-sched-editmode');
+  if (emBtn) {
+    emBtn.textContent = schedEditMode ? '完了' : '編集モード';
+    emBtn.classList.toggle('primary', schedEditMode);
+  }
   let d;
   try { d = await get(`/api/groups/${gid}/schedule`); }
   catch (e) { card.hidden = false; body.textContent = '取得失敗: ' + e.message; return; }
@@ -1432,23 +1443,26 @@ async function loadSchedule(gid) {
   body.querySelectorAll('[data-add-sched-day]').forEach(b => {
     b.addEventListener('click', () => openSchedItemModal(gid, { day_date: b.dataset.addSchedDay }));
   });
-  // 編集 / 削除 / ↑ ↓
-  body.querySelectorAll('[data-sched-edit]').forEach(b => {
-    b.addEventListener('click', () => {
-      const id = Number(b.dataset.schedEdit);
+  // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
+  body.querySelectorAll('[data-sched-item]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = Number(el.dataset.schedItem);
       const it = (d.items || []).find(x => Number(x.id) === id);
       if (it) openSchedItemModal(gid, it);
     });
   });
+  // 編集モード ON の時だけ ↑ ↓ × ボタンが出る。
   body.querySelectorAll('[data-sched-rm]').forEach(b => {
-    b.addEventListener('click', async () => {
+    b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       if (!confirm('この予定を削除しますか?')) return;
       try { await del(`/api/groups/${gid}/schedule/${b.dataset.schedRm}`); await loadSchedule(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
   });
   body.querySelectorAll('[data-sched-move]').forEach(b => {
-    b.addEventListener('click', async () => {
+    b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       try {
         await patch(`/api/groups/${gid}/schedule/${b.dataset.schedMove}/move`, { dir: b.dataset.dir });
         await loadSchedule(gid);
@@ -1461,7 +1475,7 @@ function renderSchedItem(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   let timeStr = '';
   if (it.start_time) {
-    const t = it.start_time.slice(0, 5); // HH:MM
+    const t = it.start_time.slice(0, 5);
     if (it.duration_minutes) {
       const startMs = Date.parse(`2000-01-01T${it.start_time}`);
       const endDt = new Date(startMs + it.duration_minutes * 60000);
@@ -1472,22 +1486,41 @@ function renderSchedItem(it) {
       timeStr = t;
     }
   }
-  // 場所/メモはあれば 1 行ずつ。 list-item の padding を抑えて密度を上げる。
-  const loc  = it.location ? `<span class="muted"> · 📍 ${escapeHtml(it.location)}</span>` : '';
-  const memo = it.memo     ? `<div class="meta" style="white-space:pre-wrap; font-size:11px">${escapeHtml(it.memo)}</div>` : '';
+  // 画像があれば左に 60px 角でかっこよく出す。 タップは行全体に乗ってる
+  // ので画像クリックも編集を開く (拡大表示したい時は edit modal から飛ぶ)。
+  const thumb = it.image_url
+    ? `<div style="width:60px; height:60px; flex-shrink:0; background:#f1f1f4 center/cover no-repeat url('${escapeHtml(it.image_url)}'); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08)"></div>`
+    : `<span style="font-size:22px; line-height:1; width:32px; text-align:center; flex-shrink:0">${k.icon}</span>`;
+  const urlIcon = it.url
+    ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary); margin-left:4px">🔗</a>`
+    : '';
+  // 1 行目: アイコン + タイトル + 時刻
+  // 2 行目: 場所 / メモ / URL (溢れたら 1 行で切る)
+  const line2bits = [];
+  if (it.location) line2bits.push(`📍 ${escapeHtml(it.location)}`);
+  if (it.memo)     line2bits.push(escapeHtml(it.memo).replace(/\n/g, ' '));
+  const line2 = line2bits.length
+    ? `<div class="meta" style="font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${line2bits.join(' · ')}${urlIcon}</div>`
+    : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
+  // 編集モード ON だけ ボタンを出す。 OFF 時は完全に隠す (アイテム自体が
+  // タップ可能で edit modal が開く)。
+  const editControls = schedEditMode ? `
+    <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px">
+      <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:0 6px; font-size:11px">↑</button>
+      <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
+      <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
+    </div>` : '';
   return `
-    <div class="list-item" style="gap:6px; padding:4px 6px; align-items:center">
-      <span style="font-size:14px">${k.icon}</span>
-      <div class="grow" style="min-width:0; font-size:13px">
-        <span class="bold">${escapeHtml(it.title)}</span>${timeStr ? ` <span class="muted">${timeStr}</span>` : ''}${loc}
-        ${memo}
+    <div class="list-item" data-sched-item="${it.id}"
+         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer">
+      ${thumb}
+      <div class="grow" style="min-width:0; overflow:hidden">
+        <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+          ${escapeHtml(it.title)}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}
+        </div>
+        ${line2}
       </div>
-      <div style="display:flex; gap:2px; align-items:center">
-        <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:1px 4px; font-size:10px">↑</button>
-        <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:1px 4px; font-size:10px">↓</button>
-        <button data-sched-edit="${it.id}"                 class="btn" style="padding:1px 6px; font-size:10px">編集</button>
-        <button data-sched-rm="${it.id}"                   class="btn" style="padding:1px 4px; font-size:11px; color:var(--muted)">×</button>
-      </div>
+      ${editControls}
     </div>`;
 }
 
@@ -1542,7 +1575,11 @@ function openSchedItemModal(gid, it) {
   if (!root) return;
   const isNew = !it.id;
   const kindOpts = Object.entries(SCHED_KINDS)
+    // legacy move は新規 dropdown には出さない (互換表示専用)。
+    .filter(([k]) => k !== 'move' || it.kind === 'move')
     .map(([k, v]) => `<option value="${k}" ${it.kind === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
+  // 現在の image_url を staged 値として持ち回す (アップロードで書き換わる)。
+  let stagedImage = it.image_url || '';
   root.hidden = false;
   root.innerHTML = `
     <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" id="sim-overlay">
@@ -1571,6 +1608,18 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
+        <label class="field"><span class="lbl">URL (任意)</span>
+          <input type="url" id="sim-url" maxlength="2000" placeholder="https://..." value="${escapeHtml(it.url || '')}">
+        </label>
+        <label class="field"><span class="lbl">画像 (任意)</span>
+          <div class="row" style="gap:6px; flex-wrap:wrap; align-items:center">
+            <input type="file" id="sim-img-file" accept="image/*" style="font-size:12px">
+            <button id="sim-img-clear" type="button" class="btn" style="padding:2px 8px; font-size:11px" ${stagedImage ? '' : 'hidden'}>削除</button>
+            <span id="sim-img-status" class="hint-sm"></span>
+          </div>
+          <img id="sim-img-preview" alt="" ${stagedImage ? `src="${escapeHtml(stagedImage)}"` : 'hidden'}
+               style="max-width:140px; max-height:140px; margin-top:6px; border-radius:8px; object-fit:cover; display:${stagedImage ? 'block' : 'none'}; border:1px solid var(--line)">
+        </label>
         <label class="field"><span class="lbl">メモ (任意)</span>
           <textarea id="sim-memo" maxlength="2000" rows="3">${escapeHtml(it.memo || '')}</textarea>
         </label>
@@ -1584,6 +1633,28 @@ function openSchedItemModal(gid, it) {
   document.getElementById('sim-close') .addEventListener('click', close);
   document.getElementById('sim-cancel').addEventListener('click', close);
   document.getElementById('sim-overlay').addEventListener('click', e => { if (e.target.id === 'sim-overlay') close(); });
+  // 画像アップロード / クリア
+  document.getElementById('sim-img-file').addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const st = document.getElementById('sim-img-status');
+    st.textContent = 'アップロード中…';
+    try {
+      const data = await uploadImage(f);
+      stagedImage = data.url;
+      const pv = document.getElementById('sim-img-preview');
+      pv.src = data.url; pv.hidden = false; pv.style.display = 'block';
+      document.getElementById('sim-img-clear').hidden = false;
+      st.textContent = '✓';
+    } catch (e) { st.textContent = '失敗: ' + e.message; }
+  });
+  document.getElementById('sim-img-clear').addEventListener('click', () => {
+    stagedImage = '';
+    const pv = document.getElementById('sim-img-preview');
+    pv.src = ''; pv.hidden = true; pv.style.display = 'none';
+    document.getElementById('sim-img-file').value = '';
+    document.getElementById('sim-img-clear').hidden = true;
+  });
   document.getElementById('sim-save').addEventListener('click', async () => {
     const body = {
       day_date:        document.getElementById('sim-date').value,
@@ -1592,6 +1663,8 @@ function openSchedItemModal(gid, it) {
       start_time:      document.getElementById('sim-start').value || null,
       duration_minutes: document.getElementById('sim-dur').value || null,
       location:        document.getElementById('sim-loc').value.trim() || null,
+      url:             document.getElementById('sim-url').value.trim() || null,
+      image_url:       stagedImage || null,
       memo:            document.getElementById('sim-memo').value.trim() || null,
     };
     if (!body.title)    { toast('タイトルを入れてください'); return; }

@@ -982,7 +982,7 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     if (!$g) throw new ApiException('not_found', 'group not found', 404);
     $st = $pdo->prepare("
         SELECT s.id, s.day_date, s.start_time, s.duration_minutes, s.kind, s.title,
-               s.location, s.memo, s.sort_order, s.created_by_user_id,
+               s.location, s.memo, s.image_url, s.url, s.sort_order, s.created_by_user_id,
                u.display_name AS created_by_name
           FROM adhoc_group_schedule_items s
           JOIN users u ON u.id = s.created_by_user_id
@@ -1028,17 +1028,25 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
     if ($location === '') $location = null;
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 2000) : null;
     if ($memo === '') $memo = null;
+    $imageUrl = validate_product_image_url($body['image_url'] ?? null);
+    $extraUrl = null;
+    if (!empty($body['url'])) {
+        $raw = trim((string)$body['url']);
+        if (!preg_match('#^https?://#i', $raw)) {
+            throw new ApiException('bad_request', 'url は http(s) で始まる必要があります', 400);
+        }
+        if (mb_strlen($raw) > 2000) throw new ApiException('bad_request', 'url 長すぎ', 400);
+        $extraUrl = $raw;
+    }
     // 同日の末尾に積む。
-    $maxOrder = (int)$pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
-            FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?")->fetchColumn();
     $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
         FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
     $stm->execute([$id, $day]);
     $sortOrder = ((int)$stm->fetchColumn()) + 1;
     $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
-        (group_id, day_date, start_time, duration_minutes, kind, title, location, memo, sort_order, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?)");
-    $ins->execute([$id, $day, $startTime, $duration, $kind, $title, $location, $memo, $sortOrder, $u['id']]);
+        (group_id, day_date, start_time, duration_minutes, kind, title, location, memo, image_url, url, sort_order, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$id, $day, $startTime, $duration, $kind, $title, $location, $memo, $imageUrl, $extraUrl, $sortOrder, $u['id']]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -1096,6 +1104,23 @@ function group_schedule_patch(PDO $pdo, array $cfg, int $id, int $itemId): void 
         $v = $body['memo'];
         if ($v === null || $v === '') { $sets[] = 'memo = NULL'; }
         else { $sets[] = 'memo = ?'; $args[] = mb_substr((string)$v, 0, 2000); }
+    }
+    if (array_key_exists('image_url', $body)) {
+        $v = validate_product_image_url($body['image_url']);
+        if ($v === null) { $sets[] = 'image_url = NULL'; }
+        else             { $sets[] = 'image_url = ?'; $args[] = $v; }
+    }
+    if (array_key_exists('url', $body)) {
+        $v = $body['url'];
+        if ($v === null || $v === '') { $sets[] = 'url = NULL'; }
+        else {
+            $raw = trim((string)$v);
+            if (!preg_match('#^https?://#i', $raw)) {
+                throw new ApiException('bad_request', 'url は http(s) で始まる必要があります', 400);
+            }
+            if (mb_strlen($raw) > 2000) throw new ApiException('bad_request', 'url 長すぎ', 400);
+            $sets[] = 'url = ?'; $args[] = $raw;
+        }
     }
     if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
     $args[] = $itemId; $args[] = $id;
