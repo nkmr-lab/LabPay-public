@@ -164,10 +164,20 @@ function shuffle(arr) {
   return a;
 }
 
-// Bucket members by (grade?, gender?), shuffle each bucket, then deal members
-// out across groups round-robin with a rotating start cursor so the first
-// group doesn't always end up the "biggest" of the leftovers.
+// Phase 1: bucket → round-robin で 大まかに均等に配置。
+// Phase 2: ランダム 2-swap を 200 回試行し、 不均衡スコアが下がる時だけ
+// 採用する貪欲法で安定解に近づける。 何の attribute を考えるかは
+// considerGrade / considerGender / 常に size でカウント。
 function partition(members, numGroups, considerGrade, considerGender) {
+  const groups = phase1Initial(members, numGroups, considerGrade, considerGender);
+  if (!considerGrade && !considerGender) {
+    // size の変動だけなら round-robin で完璧均等。 swap 最適化 不要。
+    return groups;
+  }
+  return phase2Swap(groups, considerGrade, considerGender, 200);
+}
+
+function phase1Initial(members, numGroups, considerGrade, considerGender) {
   if (!considerGrade && !considerGender) {
     const groups = Array.from({ length: numGroups }, () => []);
     shuffle(members).forEach((m, i) => groups[i % numGroups].push(m));
@@ -184,13 +194,57 @@ function partition(members, numGroups, considerGrade, considerGender) {
   }
   const groups = Array.from({ length: numGroups }, () => []);
   let cursor = 0;
-  // Order buckets largest-first so smaller buckets fill last (smoother spread).
   const ordered = [...buckets.values()].sort((a, b) => b.length - a.length);
   for (const arr of ordered) {
     shuffle(arr).forEach((m, i) => groups[(cursor + i) % numGroups].push(m));
     cursor = (cursor + arr.length) % numGroups;
   }
   return groups;
+}
+
+// 全 group × 全 attribute 値 のカウントが平均にどれだけ近いかを 2 乗誤差で
+// 評価。 小さいほど均等。 size の変動も常に評価に含める。
+function imbalanceScore(groups, considerGrade, considerGender) {
+  let score = 0;
+  const addAttr = (getter) => {
+    const values = new Set();
+    groups.forEach(g => g.forEach(m => values.add(getter(m))));
+    for (const v of values) {
+      const counts = groups.map(g => g.reduce((s, m) => s + (getter(m) === v ? 1 : 0), 0));
+      const mean = counts.reduce((s, c) => s + c, 0) / counts.length;
+      score += counts.reduce((s, c) => s + (c - mean) ** 2, 0);
+    }
+  };
+  if (considerGrade)  addAttr(m => m.grade  || '_');
+  if (considerGender) addAttr(m => m.gender || '_');
+  const sizes = groups.map(g => g.length);
+  const meanSize = sizes.reduce((s, c) => s + c, 0) / sizes.length;
+  score += sizes.reduce((s, c) => s + (c - meanSize) ** 2, 0);
+  return score;
+}
+
+function phase2Swap(initial, considerGrade, considerGender, iterations) {
+  const current = initial.map(g => g.slice());
+  let best = imbalanceScore(current, considerGrade, considerGender);
+  for (let it = 0; it < iterations; it++) {
+    if (best === 0) break; // 完全均等到達
+    const gi = Math.floor(Math.random() * current.length);
+    let gj = Math.floor(Math.random() * current.length);
+    if (gi === gj) gj = (gj + 1) % current.length;
+    if (!current[gi].length || !current[gj].length) continue;
+    const mi = Math.floor(Math.random() * current[gi].length);
+    const mj = Math.floor(Math.random() * current[gj].length);
+    // try swap
+    [current[gi][mi], current[gj][mj]] = [current[gj][mj], current[gi][mi]];
+    const ns = imbalanceScore(current, considerGrade, considerGender);
+    if (ns < best) {
+      best = ns; // 採用
+    } else {
+      // 戻す
+      [current[gi][mi], current[gj][mj]] = [current[gj][mj], current[gi][mi]];
+    }
+  }
+  return current;
 }
 
 function runShuffle() {
