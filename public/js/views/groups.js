@@ -1485,7 +1485,7 @@ async function loadSchedule(gid) {
         <details class="card collapsible-sub" data-day="${date}" open style="margin:6px 0; padding:8px 10px">
           <summary style="font-weight:700">${md} (${dow}) <span class="hint-sm">— ${items.length} 件</span></summary>
           <div class="schedule-items" style="margin-top:6px">
-            ${items.map(it => renderSchedItem(it, pairPartner[it.id])).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
+            ${items.map(it => renderSchedItem(it)).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
           </div>
           <button class="btn primary" data-add-sched-day="${date}" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 追加</button>
         </details>`;
@@ -1534,7 +1534,7 @@ function schedPairColor(pid) {
   return `hsla(${hue}, 70%, 50%, 0.35)`;
 }
 
-function renderSchedItem(it, pairInfo) {
+function renderSchedItem(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   // 複数日展開: start / mid / end によって 時刻と接尾語を変える。
   const isHotel = (it.kind === 'hotel');
