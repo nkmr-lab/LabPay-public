@@ -1,12 +1,12 @@
 # LabPay
 
-研究室ローカルポイントシステム。約 35 人規模のクローズドコミュニティ向けに「**買う・売る・タスク・送る・実績**」+ ラボ活動の可視化を最小実装した PWA + バックエンド。
+研究室ローカルポイントシステム。約 35 人規模のクローズドコミュニティ向けに「**買う・売る・タスク・送る・実績**」+ ラボ活動の可視化、さらに**ワリカ / 飲み会割り勘 / 請求 / ルーレット / 募集 / グループ**などの小道具をひとつにまとめた PWA + バックエンド。
 
 ```
 本番稼働: https://pay.nkmr.io  (中村研 内部)
 ```
 
-LabPay は **使い切りの軽さ**を最優先に設計されています:
+LabPay は **使い切りの軽さ** を最優先に設計されています:
 
 - **フレームワークなし** — 素の PHP 8.x + Vanilla JS。React や Composer を入れない
 - **ビルド工程なし** — `git pull` + `systemctl reload httpd` で反映
@@ -17,28 +17,60 @@ LabPay は **使い切りの軽さ**を最優先に設計されています:
 
 ## 機能一覧
 
+### 残高・取引
+
 | 領域 | 内容 |
 |---|---|
 | 残高・取引 | 購入 / 販売 / 個人送金 (QR) / 自己消費 (在庫を自分用に減らす・手数料なし) |
 | 購入 | ラボ Wi-Fi 接続中のみ許可 (オフラインからは閲覧のみ) / リピート購入は履歴一致のタイル上位表示 / バーコード読取 |
 | マーケット (販売) | バーコード読取 + 楽天 API で商品名・画像自動取得 / 置き場所 / 出品ごとに購入時お礼メッセージ / Slack 入荷通知 / 出品中はサマリ表示 → 編集モードでフィールド一括更新 |
+
+### タスク・依頼
+
+| 領域 | 内容 |
+|---|---|
 | タスク | 依頼 → 引き受け → 承認、エスクロー預け / 時間枠分割 (`6/15 11:00-15:00 30分刻み`) / 締切自動取消 + 返金 / 完了報告フィードバック / **ファイル添付** (原稿チェック向け、最大 50MB) / 引き受け本人にも通知 / ホームに「あなたが引き受け中のタスク」カード |
-| 募集 | 「お昼ご飯」「ビアガーデン」「ポケモン GO」など pt の無いカジュアル招集。日時/場所/上限/詳細、参加表明、6h 経過で自動 close |
+| 指名タスク | 特定メンバーに限定して送れるタスク (誰でも受諾できる通常タスクと別動線)。指名された人だけが受諾可能 / 0pt タスクも作れる (「お願いベース」用) |
+| 募集 | 「お昼ご飯」「ビアガーデン」「ポケモン GO」など pt の無いカジュアル招集。日時 / 場所 / 上限 / 詳細、参加表明、6h 経過で自動 close / 表紙画像対応 |
+
+### 小道具 (`#/apps` から)
+
+| 領域 | 内容 |
+|---|---|
+| グループ (ad-hoc) | 学会・出張・イベント用の暫定メンバー枠。表紙画像 + slug URL (`#/groups/avi2026`) / 自由投稿のフィード (memo / URL / 時刻) / 中で「ワリカ」「ルーレット」「📸 レシート撮影」を呼び出せる |
+| ワリカ (Splitwise 風) | グループ内で「誰が何を立て替えたか」を積み上げ、ネット残高と推奨送金を計算。各支出はメンバースナップショット保存 / 多通貨 + 自動 FX レート / レシート写真添付可 |
+| 📸 レシート撮影 | グループ内で `<input capture="environment">` + GPS で即撮影。 内部的には「下書き状態のワリカ支出 (`is_draft=1`)」として保存され、後で金額 / 立替人 / 対象を埋めると自動で本物の支出に昇格 (移動中の精緻化を想定) |
+| 飲み会割り勘 (nomikai) | 新歓・送別会用の一回精算。学年傾斜 + 飲酒 / ソフドリで割って通知 |
+| 請求 (集金 / money_requests) | メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金 / PayPay / 銀行 / 立替) のチェック付き / ワリカの精算結果から bulk 生成も可 |
 | ルーレット | タイトル + メンバー (学年 / 部屋単位 bulk select 可) + 任意の賞金、サーバ側 CSPRNG 抽選 → SVG 円盤 14s スピン → 当選者へ送金 + 全員通知。テストモード (dry-run) で空回し可 |
+| ランダムグループ生成 | 選んだメンバーを N チームにランダム分け。学年 / 性別を「できるだけ均等」にする配慮オプション付き。結果は「このメンバーでグループ作成」から ad-hoc グループに実体化可能 |
 | これ欲しい (Wishlist) | 商品名 + 任意 JAN + メモでリクエスト掲示、誰でも閲覧可・誰でも「出ました!」で達成扱い |
-| バグ報告 / 機能要望 | 設定から送信、admin の通知 + Slack に転送 |
-| 利用ログ | 全 API リクエストを `activity_log` に記録 (user/method/path/status/duration/ip/UA) — 将来の論文用 |
+| Scrapbox 履歴 | `#scrapbox` の研究ノート編集を「誰が・いつ・どの page を」読みやすくまとめて表示 (read-only feed) |
+| 関係グラフ | 売買 / タスク / 統合の 3 タブ。d3 v7 force-directed、アバター node + 件数 or 総額ベースのエッジ太さ切替 |
+
+### ラボ活動の可視化
+
+| 領域 | 内容 |
+|---|---|
 | ラボイン (来室) | ラボ Wi-Fi で自動検知 → 1日1回ボーナス。連続日数で base に最大 +10 上乗せ。`base + min(cap, max(0, streak-1)) * per_day / divisor` 式で全パラメータ admin 編集可。MAC 未登録ユーザにはホームでオンボーディング誘導 |
-| 連続ラボイン streak | 祝日・休業日カレンダー対応。来た日は曜日問わず連続日数が進む。来なくても祝日/週末はマイナスしない。平日 (workday) を逃した分だけ `streak_decay_per_missed_workday` (デフォルト 5) で減衰 |
+| 連続ラボイン streak | 祝日・休業日カレンダー対応。来た日は曜日問わず連続日数が進む。来なくても祝日 / 週末はマイナスしない。平日 (workday) を逃した分だけ `streak_decay_per_missed_workday` (デフォルト 5) で減衰 |
 | 在室検知 | scanner 経由で部屋単位の MAC 観測 → アバター付きで「今ラボにいる人」表示。直近 30 秒以内は太字フルカラー、それ以降は徐々にグレースケール化、`presence_window_minutes` を超えると消える。閉じたセッションは `presence_sessions` に記録、CSV ログにも追記 |
 | ラボ活動マップ | 部屋 × 曜日 × 時間の在室人数ヒートマップ (`#/activity`)。ログが蓄積されるほど長期間のパターン (1週間 → 1年) が選べる |
 | 草 (GitHub 風) | ホームに本年度 (4/1 起点) の日次滞在時間グリッド |
-| 実績 | 11 カテゴリ × 4 段階のメダル (ラボイン日数・連続記録・販売・購入・取扱高・タスク完了・Scrapbox 寄稿日数・ルーレット主催/当選 など) |
+| 今日の予定 (Google Calendar) | 各ユーザの Google Calendar (`calendar.readonly`) と incremental authorization で連携。複数カレンダー選択可 / 個人ルール (正規表現含む) で非表示にできるイベントを設定可 / **ETag + localStorage 5 分 TTL** でクライアント側キャッシュし、Google API 呼出を抑制 |
+| 実績 | 11 カテゴリ × 4 段階のメダル (ラボイン日数・連続記録・販売・購入・取扱高・タスク完了・Scrapbox 寄稿日数・ルーレット主催 / 当選 など) |
 | Scrapbox 寄稿ボーナス | Slack の `#scrapbox` 通知を読んで `author_name` ごとに集計 → 申告 handle 経由で LabPay user に配布 (日次 23:59 JST cron)。任意編集 5pt + 自身の研究ノート編集で +5pt (= 最大 10pt/日) |
-| 関係グラフ | 売買 / タスク / 統合の 3 タブ。d3 v7 force-directed、アバター node + 件数 or 総額ベースのエッジ太さ切替 |
+
+### 横断機能
+
+| 領域 | 内容 |
+|---|---|
+| バグ報告 / 機能要望 | 設定から送信、admin の通知 + Slack に転送。admin から返信を打てて、投稿者には通知が飛ぶ |
+| 利用ログ | 全 API リクエストを `activity_log` に記録 (user / method / path / status / duration / ip / UA) — 将来の論文用 |
 | 通知 | アプリ内通知 + (任意) メール + Slack incoming webhook。残高・履歴・通知数はホームで 30 秒間隔ポーリング |
-| 管理機能 | 取引一覧から取消 / ポイント発行 (全員配布 or 個人指定) / 流通量サマリ (Admin vs 一般保有) / カレンダー編集 / 部屋登録 (scanner_token 発行) / 配信 / 設定ノブ編集 |
-| PWA | オフライン shell / ホーム画面追加 / インストール可 |
+| 性別フラグ | 'M' / 'F' / 'X' / NULL。新歓ワリカン振り分けやランダムグループの「できるだけ均等」配慮で使用。プロフィール非表示可 |
+| 管理機能 | 取引一覧から取消 / ポイント発行 (全員配布 or 個人指定) / 流通量サマリ (Admin vs 一般保有) / カレンダー編集 / 部屋登録 (scanner_token 発行) / 配信 / 設定ノブ編集 / feedback 返信 |
+| PWA | オフライン shell / ホーム画面追加 / インストール可 / Service Worker は `/api/*` を絶対にキャッシュしない (台帳整合性) |
 
 ---
 
@@ -48,10 +80,11 @@ LabPay は **使い切りの軽さ**を最優先に設計されています:
 LabPay/
 ├── public/                  ← Apache DocumentRoot
 │   ├── index.html           ← SPA shell
-│   ├── api/index.php        ← フロントコントローラ (全 API 入口)
+│   ├── api/index.php        ← フロントコントローラ (全 API 入口、dispatch table)
 │   ├── manifest.webmanifest, sw.js
 │   ├── css/style.css
 │   ├── img/                 ← PWA アイコン
+│   ├── privacy.html         ← Google OAuth 審査用プライバシーポリシー
 │   ├── js/
 │   │   ├── app.js           ← 起動 + ルータ + 認証
 │   │   ├── router.js, api.js, scan.js
@@ -63,14 +96,25 @@ LabPay/
 │   │       ├── achievements.js, network.js, activity.js
 │   │       ├── notifications.js, settings.js, admin.js, login.js
 │   │       ├── invitations.js, roulette.js, wishlist.js
-│   ├── vendor/              ← ZXing (バーコード/QR) + d3 (関係グラフ)
+│   │       ├── apps.js            ← 小道具ハブ
+│   │       ├── groups.js          ← ad-hoc グループ
+│   │       ├── wari.js            ← ワリカ (Splitwise 風)
+│   │       ├── nomikai.js         ← 飲み会割り勘
+│   │       ├── money_requests.js  ← 請求 (集金)
+│   │       ├── random_groups.js   ← ランダム N チーム分け
+│   │       ├── scrapbox_feed.js   ← Scrapbox 履歴 read-only feed
+│   │       └── feedback_admin.js  ← 報告・要望 admin UI
+│   ├── vendor/              ← ZXing (バーコード / QR) + d3 (関係グラフ)
 │   └── uploads/             ← ユーザアップロード (gitignore)
 │       ├── products/        ← 商品画像・アバター
 │       ├── tasks/{task_id}/ ← タスク添付ファイル
 │       └── .htaccess        ← PHP 実行不可化 (多段防御)
 ├── src/                     ← PHP (DocumentRoot 外)
-│   ├── bootstrap.php        ← config 読込・PDO 生成・ヘルパ (save_uploaded_file / slack_notify / notify_safely / slack_api_get / activity_log_write)
-│   ├── Db.php, Ledger.php, Money.php, Auth.php, Calendar.php
+│   ├── bootstrap.php        ← config 読込・PDO 生成・ヘルパ (save_uploaded_file / slack_notify / notify_safely / slack_api_get / activity_log_write / fx_rate_to_jpy / db_tx)
+│   ├── Db.php, Ledger.php, Money.php, Auth.php
+│   ├── Calendar.php         ← 祝日 / workday ヘルパ
+│   ├── GoogleCalendar.php   ← /me/calendar/events 用 OAuth クライアント + ETag 対応
+│   ├── Labels.php           ← サーバ側ラベル定数
 │   ├── Notifier.php, ProductInfo.php, Achievements.php
 │   └── handlers/            ← /api/* の各リソース
 │       ├── auth.php, me.php, products.php
@@ -81,13 +125,20 @@ LabPay/
 │       ├── uploads.php, admin.php
 │       ├── feedback.php, wishlist.php
 │       ├── invitations.php, roulettes.php
+│       ├── nomikai.php, money_requests.php
+│       ├── adhoc_groups.php   ← グループ + ワリカ + レシート (draft 支出) + フィード
+│       ├── random_groups.php
+│       ├── scrapbox_feed.php
+│       ├── fx.php             ← 為替レート (ワリカ多通貨)
 ├── config/
 │   ├── config.sample.php    ← 設定テンプレ
 │   └── config.php           ← 実設定 (gitignore — シークレットを含む)
-├── migrations/              ← 001…030 順に流す
+├── migrations/              ← 001…050 順に流す
 ├── bin/
 │   ├── scanner.py           ← 部屋常駐スキャナ
 │   ├── scanner.config.json  ← scanner 設定 (gitignore)
+│   ├── scanner.config.sample.json
+│   ├── scanner_run.bat      ← Windows タスクスケジューラ用 wrapper
 │   ├── install_scanner.ps1  ← Windows 一発セットアップ
 │   ├── install_scanner.sh   ← Linux/Mac 一発セットアップ
 │   ├── scrapbox_slack_sync.php  ← Scrapbox-via-Slack 集計 (日次 cron)
@@ -103,13 +154,14 @@ LabPay/
 技術スタック:
 
 - **OS**: Rocky Linux 10 (本番想定)
-- **HTTP**: Apache 2.4 + mod_rewrite
+- **HTTP**: Apache 2.4 + mod_rewrite + PHP-FPM
 - **DB**: MariaDB 10.11 (InnoDB)
 - **言語**: PHP 8.3 + PDO
 - **フロント**: ES Modules + 素 CSS、ベンダはローカル配置の ZXing と d3 v7
-- **認証**: Google OAuth + dev login (Cookie session)
+- **認証**: Google OAuth + dev login (Cookie session) / Google Calendar も incremental authorization で同じ OAuth を再利用
 - **HTTPS**: Let's Encrypt (certbot)
 - **Slack**: incoming webhook (送信) + Bot Token (`conversations.history` 取得)
+- **HTTP cache**: Google Calendar 連携は ETag + localStorage 5 分 TTL でクライアント側 revalidate
 
 ---
 
@@ -156,7 +208,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 # → http://127.0.0.1:8080/ にアクセス
 ```
 
-> ビルトインサーバには `.htaccess` の rewrite が無いので `public/api/index.php` をルータとして渡しています。ブラウザのカメラ機能 (バーコード読取) は HTTPS 必須なので、本格テストは本番デプロイか `mkcert` で TLS を張ってください。
+> ビルトインサーバには `.htaccess` の rewrite が無いので `public/api/index.php` をルータとして渡しています。ブラウザのカメラ機能 (バーコード読取・📸 レシート撮影) は HTTPS 必須なので、本格テストは本番デプロイか `mkcert` で TLS を張ってください。
 
 ---
 
@@ -171,7 +223,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | `app.cookie_secure` | 本番は `true`、HTTPS 前提 |
 | `app.timezone` | デフォルト `Asia/Tokyo` |
 | `auth.google_oauth_enabled` | Google OAuth を使うか |
-| `auth.google_client_id / client_secret` | Google Cloud Console で発行 |
+| `auth.google_client_id / client_secret` | Google Cloud Console で発行。Calendar API も有効化しておく (今日の予定用) |
 | `auth.dev_login_enabled` | 許可リスト email を選ぶだけでログイン。**本番は false** |
 | `auth.bootstrap_admin_email` | 起動時に許可リストへ admin として自動登録される |
 | `mail.enabled` | 通知メール (`mail()` 経由) を送るか |
@@ -191,13 +243,14 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | `streak_bonus_per_day` | 1 | streak ボーナスの 1日あたり単位 |
 | `streak_bonus_cap` | 10 | streak ボーナス計算の上限 |
 | `streak_bonus_divisor` | 1 | `points = base + floor(min(cap, max(0, streak-1)) * per_day / divisor)` |
-| `streak_weekday_only` | 0 | 0=祝日/週末でも来れば streak が進む (現行) |
+| `streak_weekday_only` | 0 | 0=祝日 / 週末でも来れば streak が進む (現行) |
 | `streak_decay_per_missed_workday` | 5 | 連続が途切れた時の減衰量 (workday を逃した時のみ) |
 | `presence_window_minutes` | 3 | 在室判定の有効分 |
-| `scrapbox_base_pt` | 5 | Scrapbox 寄稿ボーナスのベース pt |
-| `scrapbox_pt_per_extra` | 1 | 1 件追加更新ごとの上乗せ |
-| `scrapbox_bonus_cap` | 5 | bonus 部分の上限 (`pt = base + min(cap, max(0, attachments-1)) * per_extra`) |
+| `scrapbox_any_edit_pt` | 5 | その日に 1 件以上 Scrapbox を編集していれば +5 |
+| `scrapbox_own_note_pt` | 5 | さらに自分の研究ノート page を編集していれば +5 |
 | `scrapbox_start_date` | `2026-06-01` | この日付以降のみ Scrapbox 集計対象 |
+
+> 旧 `scrapbox_base_pt / pt_per_extra / bonus_cap` は migration 025 で any-edit + own-note 方式に切り替わって以降は参照されない (互換のため row は残置)。
 
 ---
 
@@ -210,10 +263,12 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 - ラボイン: `10 + min(10, max(0, streak-1))` → **10〜20 pt** / 1日1回 (11 日連続で天井)
   - 祝日・週末に来ても streak は進む / 来なくてもマイナスは無し
   - 平日 (workday) を逃した分だけ `-5` で減衰
-- Scrapbox 寄稿: `5 + min(5, max(0, 更新回数-1))` → **5〜10 pt** / 1日上限
+- Scrapbox 寄稿: 任意 page 編集で **+5**、自分の研究ノート編集でさらに **+5** (= 1日最大 10pt)
+- タスク報酬: `>= 0` (0pt も許容)。0pt はお願いベース、誰でも受諾可。指名タスクは指名された人だけ受諾可
 - 自己消費 (自分の出品を自分で減らす) はポイント移動なし・手数料なし、在庫だけ減る
 - 全移転は 1 つの `Ledger::transfer()` 関数を通り、`BEGIN + FOR UPDATE + 残高チェック` で整合性を担保
-- 台帳 (`ledger` テーブル) は**追記専用**。訂正は逆仕訳 (`type='reversal'`) で行う
+- 台帳 (`ledger` テーブル) は **追記専用**。訂正は逆仕訳 (`type='reversal'`) で行う
+- **ワリカ / 飲み会割り勘 / 請求** は LabPay の pt を動かさない。「誰が誰に外でいくら払うべきか」の計算と払った / 払ってないチェックのみ。実際の決済は現金 / PayPay / 銀行 / 立替で外でやり取りする
 
 ### Admin の流通量ビュー
 
@@ -225,7 +280,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 
 | # | 内容 |
 |---|---|
-| 001 | 初期スキーマ + seed (system/escrow 口座、初期 config) |
+| 001 | 初期スキーマ + seed (system / escrow 口座、初期 config) |
 | 002 | Presence (在室検知) テーブル |
 | 003 | カレンダー overrides + Geo 座標フィールド |
 | 004 | Streak 線形上限式へ変更 (milestone 表は廃止) |
@@ -234,7 +289,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 007 | `users.avatar_url` 追加 |
 | 008 | tasks / task_claims / transfers + grade 列 + 35人 bulk allowlist |
 | 009 | tasks.deadline + streak 微調整 |
-| 010 | streak 簡素化 + idempotency_keys PK 合成 + tasks.url/completion_message + listings.completion_message |
+| 010 | streak 簡素化 + idempotency_keys PK 合成 + tasks.url / completion_message + listings.completion_message |
 | 011 | listings.location (置き場所) |
 | 012 | listings.display_name (出品者表示名スナップショット) |
 | 013 | 無料 (`これどうぞ`) 出品 + 購入時お礼メッセージ |
@@ -249,12 +304,32 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 022 | Scrapbox handle `Member 03` 追加 |
 | 023 | task_attachments (タスク添付ファイル) |
 | 024 | 旧 Scrapbox 直接 API 関連 config row 削除 |
-| 025 | Scrapbox 寄稿ルール変更 — any-edit + 自身研究ノートで +5 / +5 |
+| 025 | Scrapbox 寄稿ルール変更 — any-edit +5 + own-note +5 / 1日最大 10pt |
 | 026 | feedback (バグ報告 / 機能要望) + activity_log (利用ログ) |
 | 027 | wishlist (これ欲しい) |
 | 028 | invitations + invitation_joins (募集機能) |
 | 029 | roulettes (ルーレット履歴) |
 | 030 | roulettes に reward / ledger_id 列追加 |
+| 031 | nomikai (飲み会割り勘) |
+| 032 | adhoc_groups + adhoc_group_members + adhoc_group_feed (暫定グループ + フィード) |
+| 033 | `users.gender` 追加 (M/F/X/NULL) |
+| 034 | gender seed (現メンバーの一括初期化) |
+| 035 | adhoc_group_expenses (ワリカ Splitwise 風) |
+| 036 | Scrapbox handle 追加 seed (033 以降の新メンバー対応) |
+| 037 | adhoc_groups.slug (人間が読める URL 識別子) |
+| 038 | Scrapbox handle `shige` 追加 |
+| 039 | money_requests (請求 / 集金) |
+| 040 | money_requests.actor_user_id (bulk 生成の操作者を保持) |
+| 041 | presence_seen.session_start_at の過去 backfill |
+| 042 | task_assigned_users (指名タスク) |
+| 043 | 0pt タスク許可 (`reward >= 0` に緩和) |
+| 044 | feedback に admin 返信 + 通知 |
+| 045 | Google Calendar OAuth (`calendar.readonly`) + 選択カレンダー JSON |
+| 046 | groups / invitations.image_url (表紙画像) |
+| 047 | users.calendar_filter_rules (今日の予定の非表示ルール) |
+| 048 | adhoc_group_expenses.image_url (ワリカ支出にレシート添付) |
+| 049 | adhoc_group_receipts (撮影だけしておくレシートストック / v225 限り) |
+| 050 | adhoc_group_expenses を draft 対応 (`is_draft / taken_at / lat / lng` + `payer_user_id` NULL 許容)。レシートは draft 支出として一元化 |
 
 ---
 
@@ -276,6 +351,8 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 - **コメントは "WHY" のみ**: 何をしているかはコードで読める。なぜそうしたかは制約・過去のバグ・微妙な不変条件に対してのみ書く
 - **エラーハンドリングは境界だけ**: 内部呼び出しは契約を信じる。`ApiException` でラップしてフロントコントローラが JSON で返す
 - **追記専用台帳**: 残高は `ledger` 行の SUM(to) - SUM(from)。直接 UPDATE しない。修正は `reversal` 仕訳
+- **新リソースは dispatch table に 1 行**: `public/api/index.php` の `$routes` に追加するだけで生える。複雑な権限 / 前処理は route_* 関数の中で済ませる
+- **PWA キャッシュは shell だけ**: `sw.js` は `/api/*` を絶対にキャッシュしない (台帳の鮮度)。バージョン bump は `CACHE_NAME` (`labpay-shell-vNNN`) と `index.html` の `brand-version` の 2 箇所
 
 ---
 
@@ -289,13 +366,13 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 ## 本番化前のセキュリティチェックリスト
 
 - [ ] `config/config.php`: `auth.dev_login_enabled = false`
-- [ ] Google OAuth `client_secret` を本番値に差し替え
+- [ ] Google OAuth `client_secret` を本番値に差し替え (Calendar API も有効化)
 - [ ] Rakuten `access_key`、Slack `webhook_url` / `bot_token` を本番値に差し替え
 - [ ] `app.cookie_secure = true` を確認
 - [ ] `bin/backup.sh` を cron 登録、復元手順を 1 回試す
 - [ ] DB と config のオフサイトバックアップを別途構築
 - [ ] `public/uploads/.htaccess` が反映されている (PHP 実行不可) ことを確認
-- [ ] `/etc/php.d/99-labpay.ini` が配置されている (upload_max_filesize=60M 等)
+- [ ] `/etc/php.d/99-labpay.ini` が配置されている (`upload_max_filesize=60M` 等)
 
 ### 既に実施済の堅牢化 (参考)
 
@@ -307,3 +384,4 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 - `public/uploads/.htaccess` で `.php` 等の実行・解釈を全て拒否
 - 取引の取消は admin の「最近の取引から選ぶ」UI 経由 (ID 入力ミスを排除)
 - scanner token は plaintext を返却するのは 1 回のみ、DB は sha256 ハッシュのみ保存
+- Google Calendar token は users テーブルに保存 / `calendar.readonly` の最小権限のみ取得 / refresh token は incremental authorization で OAuth 同意フロー再利用
