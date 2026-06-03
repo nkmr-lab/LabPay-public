@@ -548,7 +548,7 @@ async function renderCheckinArea() {
     root.innerHTML = `<div class="hint">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   } else {
-    root.innerHTML = `<div class="hint">今日はラボの稼働日ではないため、連続ラボインボーナスには影響しません。</div>
+    root.innerHTML = `<div class="hint">今日は稼働日ではないため、連続ボーナスには影響しません。</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
   }
 }
@@ -561,7 +561,6 @@ function bonusRuleHtml(rule) {
   const { base, max_total, days_to_max } = rule;
   return `<div class="muted" style="font-size:11px; margin-top:8px; line-height:1.5">
     💰 ラボインボーナス: ベース <b>${base}</b>pt + 連続日数で上乗せ、最大 <b>${max_total}</b>pt
-    (${days_to_max} 日連続で上限到達)
   </div>`;
 }
 
