@@ -287,17 +287,21 @@ function group_items_del(PDO $pdo, array $cfg, int $groupId, int $itemId): void 
 // 撮影だけして後で 「これを ワリカ に使う」 二段運用のためのストック。
 // taken_at / lat / lng はクライアントから送信、 GPS は許可された時だけ。
 
+// Receipt = is_draft=1 の adhoc_group_expenses 行として一元管理。撮影時は最低限の
+// メタ (image_url, taken_at, lat, lng) だけ入れて、 amount/payer/participants/memo
+// は空状態。 後で /expenses/{id} の PATCH で精緻化すると、 amount > 0 になった
+// 時点で backend が is_draft=0 に自動 flip 。
 function group_receipts_list(PDO $pdo, array $cfg, int $groupId): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $groupId, (int)$u['id']);
     $st = $pdo->prepare("
-        SELECT r.id, r.image_url, r.uploaded_by_user_id, r.created_at,
-               r.taken_at, r.lat, r.lng,
+        SELECT e.id, e.image_url, e.created_by_user_id AS uploaded_by_user_id,
+               e.created_at, e.taken_at, e.lat, e.lng,
                u.display_name AS uploaded_by_name, u.avatar_url AS uploaded_by_avatar_url
-          FROM adhoc_group_receipts r
-          JOIN users u ON u.id = r.uploaded_by_user_id
-         WHERE r.group_id = ?
-         ORDER BY r.id DESC LIMIT 100");
+          FROM adhoc_group_expenses e
+          JOIN users u ON u.id = e.created_by_user_id
+         WHERE e.group_id = ? AND e.is_draft = 1
+         ORDER BY e.id DESC LIMIT 100");
     $st->execute([$groupId]);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
@@ -308,26 +312,28 @@ function group_receipts_add(PDO $pdo, array $cfg, int $groupId): void {
     $body = read_json_body();
     $img = validate_product_image_url($body['image_url'] ?? null);
     if ($img === null) throw new ApiException('bad_request', 'image_url required', 400);
-    // taken_at: ISO-ish。 不正なら NULL に寄せる。
     $takenAt = null;
     if (!empty($body['taken_at'])) {
         $raw = str_replace('T', ' ', trim((string)$body['taken_at']));
-        // strip trailing Z or timezone (簡易)。
         $raw = preg_replace('/[Zz].*$/', '', $raw);
         $raw = preg_replace('/[\+\-]\d{2}:?\d{2}$/', '', $raw);
-        $raw = substr($raw, 0, 19); // YYYY-MM-DD HH:MM:SS
+        $raw = substr($raw, 0, 19);
         $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
         if ($dt) $takenAt = $dt->format('Y-m-d H:i:s');
     }
     $lat = isset($body['lat']) && is_numeric($body['lat']) ? (float)$body['lat'] : null;
     $lng = isset($body['lng']) && is_numeric($body['lng']) ? (float)$body['lng'] : null;
-    // 範囲チェック (GPS 噴飯対策)
     if ($lat !== null && ($lat < -90 || $lat > 90))   $lat = null;
     if ($lng !== null && ($lng < -180 || $lng > 180)) $lng = null;
 
-    $st = $pdo->prepare("INSERT INTO adhoc_group_receipts
-        (group_id, image_url, uploaded_by_user_id, taken_at, lat, lng)
-        VALUES (?,?,?,?,?,?)");
+    // draft state: payer_user_id NULL、amount_jpy 0、participants '[]' (空配列)
+    $st = $pdo->prepare("INSERT INTO adhoc_group_expenses
+        (group_id, payer_user_id, amount_jpy, amount_original, currency, rate_to_jpy,
+         memo, image_url, participants_json, created_by_user_id,
+         is_draft, taken_at, lat, lng)
+        VALUES (?, NULL, 0, NULL, 'JPY', NULL,
+                NULL, ?, '[]', ?,
+                1, ?, ?, ?)");
     $st->execute([$groupId, $img, $u['id'], $takenAt, $lat, $lng]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
@@ -335,8 +341,9 @@ function group_receipts_add(PDO $pdo, array $cfg, int $groupId): void {
 function group_receipts_delete(PDO $pdo, array $cfg, int $groupId, int $rid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $groupId, (int)$u['id']);
-    $pdo->prepare("DELETE FROM adhoc_group_receipts WHERE id=? AND group_id=?")
-        ->execute([$rid, $groupId]);
+    // 安全側: draft (is_draft=1) のみ削除可。 通常支出 は /expenses/{id} DELETE で。
+    $pdo->prepare("DELETE FROM adhoc_group_expenses
+        WHERE id=? AND group_id=? AND is_draft=1")->execute([$rid, $groupId]);
     json_response(['ok' => true]);
 }
 
@@ -376,11 +383,13 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
 
+    // draft (is_draft=1) は 「保存済みレシート」 で別管理。ワリカ集計には含めない。
+    // payer_user_id は draft で NULL になり得るので INNER JOIN ではなく LEFT JOIN。
     $st = $pdo->prepare("
         SELECT e.*, up.display_name AS payer_name, up.avatar_url AS payer_avatar_url
           FROM adhoc_group_expenses e
-          JOIN users up ON up.id = e.payer_user_id
-         WHERE e.group_id = ?
+          LEFT JOIN users up ON up.id = e.payer_user_id
+         WHERE e.group_id = ? AND e.is_draft = 0
          ORDER BY e.id DESC LIMIT 200");
     $st->execute([$id]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -591,16 +600,28 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
         if ($img === null) { $sets[] = 'image_url = NULL'; }
         else               { $sets[] = 'image_url = ?'; $args[] = $img; }
     }
+    $rowIsDraft = (int)($row['is_draft'] ?? 0) === 1;
     if (array_key_exists('payer_user_id', $body)) {
-        $pid = (int)$body['payer_user_id'];
-        if (!in_array($pid, $allMembers, true)) {
-            throw new ApiException('bad_request', 'payer must be a group member', 400);
+        $pidRaw = $body['payer_user_id'];
+        if ($pidRaw === null || $pidRaw === '') {
+            // draft が 「立替人未確定」 状態を許すため NULL も受ける。
+            $sets[] = 'payer_user_id = NULL';
+        } else {
+            $pid = (int)$pidRaw;
+            if (!in_array($pid, $allMembers, true)) {
+                throw new ApiException('bad_request', 'payer must be a group member', 400);
+            }
+            $sets[] = 'payer_user_id = ?'; $args[] = $pid;
         }
-        $sets[] = 'payer_user_id = ?'; $args[] = $pid;
     }
+    $amountJpyAfter = null; // auto-flip 判定用 (PATCH 後の amount_jpy)
     if (array_key_exists('amount', $body) || array_key_exists('currency', $body) || array_key_exists('rate_to_jpy', $body)) {
         $amountRaw = $body['amount'] ?? null;
-        if (!is_numeric($amountRaw) || (float)$amountRaw <= 0) {
+        if (!is_numeric($amountRaw)) {
+            throw new ApiException('bad_request', 'amount must be numeric', 400);
+        }
+        // draft は 0 を許容 (未確定状態を維持できる)。 通常支出は > 0 必須。
+        if (!$rowIsDraft && (float)$amountRaw <= 0) {
             throw new ApiException('bad_request', 'amount must be positive', 400);
         }
         $currency = strtoupper(trim((string)($body['currency'] ?? $row['currency'])));
@@ -609,7 +630,6 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
         }
         $rate = ($currency === 'JPY') ? null : (float)($body['rate_to_jpy'] ?? 0);
         if ($currency !== 'JPY' && (!$rate || $rate <= 0)) {
-            // フォールバック: server-side fx
             $live = fx_rate_to_jpy($currency);
             if ($live === null) {
                 throw new ApiException('bad_gateway',
@@ -625,6 +645,15 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
         $sets[] = 'amount_original = ?'; $args[] = $amountOriginal;
         $sets[] = 'currency = ?';        $args[] = $currency;
         $sets[] = 'rate_to_jpy = ?';     $args[] = $rate;
+        $amountJpyAfter = $amountJpy;
+    }
+    // draft の auto-complete: amount_jpy > 0 が入った時点で is_draft = 0 に。
+    // (今 patch で amount を触らない場合は元の amount_jpy をチェック)
+    if ($rowIsDraft) {
+        $effAmount = $amountJpyAfter ?? (int)$row['amount_jpy'];
+        if ($effAmount > 0) {
+            $sets[] = 'is_draft = 0';
+        }
     }
     if (array_key_exists('participant_ids', $body) && is_array($body['participant_ids'])) {
         $req = array_values(array_unique(array_map('intval', $body['participant_ids'])));

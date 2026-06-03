@@ -646,14 +646,14 @@ async function loadReceipts(gid) {
   root.hidden = false;
   root.innerHTML = `
     <div class="muted" style="font-size:12px; margin-bottom:6px">
-      📸 保存済みレシート (${cachedReceipts.length}枚) — タップしてワリカに使う
+      📸 保存済みレシート (${cachedReceipts.length}枚) — タップで金額や立替人を入力
     </div>
     <div class="row" style="gap:6px; flex-wrap:wrap">
       ${cachedReceipts.map(r => {
         const time = r.taken_at || r.created_at || '';
         const hasGps = r.lat !== null && r.lng !== null;
         return `
-          <div class="receipt-card" data-rid="${r.id}" data-url="${escapeHtml(r.image_url)}"
+          <div class="receipt-card" data-rid="${r.id}"
                style="position:relative; width:84px; cursor:pointer; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:white">
             <img src="${escapeHtml(r.image_url)}" alt="" style="width:84px; height:84px; object-fit:cover; display:block">
             <div class="muted" style="font-size:9px; padding:2px 4px; line-height:1.2">
@@ -666,13 +666,30 @@ async function loadReceipts(gid) {
       }).join('')}
     </div>
   `;
+  // レシート (draft expense) のタップ → 既存の openExpenseEdit modal を draft 用
+  // データで開く。 GET /receipts は image_url / taken_at / lat / lng しか返さない
+  // ので、 amount=0 / participants=[] / payer=null など他の draft default を補完。
   root.querySelectorAll('.receipt-card').forEach(el => {
     el.addEventListener('click', (ev) => {
-      // × ボタンや 地図リンクのクリックは別ハンドラで処理 (stopPropagation 済み)
       if (ev.target.closest('[data-rm-receipt]')) return;
       const rid = Number(el.dataset.rid);
-      const url = el.dataset.url;
-      useReceiptInWari(rid, url);
+      const r = cachedReceipts.find(x => Number(x.id) === rid);
+      if (!r) return;
+      openExpenseEdit(currentGroupId, {
+        id: rid,
+        amount_jpy: 0,
+        amount_original: null,
+        currency: 'JPY',
+        rate_to_jpy: null,
+        payer_user_id: null,
+        memo: '',
+        image_url: r.image_url,
+        taken_at: r.taken_at,
+        lat: r.lat,
+        lng: r.lng,
+        participants: wariMembers.map(m => m.id), // default: 全員
+        is_draft: 1,
+      });
     });
   });
   root.querySelectorAll('[data-rm-receipt]').forEach(b => {
@@ -685,21 +702,6 @@ async function loadReceipts(gid) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
-}
-
-// ワリカ form の image_url にセット + フォーム内に視認できるよう preview 表示。
-// この receipt の id を覚えておいて、 onAddExpense 成功時に削除する。
-let pendingReceiptId = null;
-function useReceiptInWari(rid, url) {
-  pendingReceiptId = rid;
-  document.getElementById('ex-image-url').value = url;
-  const prev = document.getElementById('ex-image-preview');
-  prev.src = url;
-  prev.hidden = false;
-  const status = document.getElementById('ex-image-status');
-  if (status) status.textContent = '✓ レシートを紐づけました';
-  // フォームへスクロール
-  document.getElementById('gd-wari-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Last-fetched rate for the preset dropdown path. Cleared on currency change.
@@ -810,13 +812,6 @@ async function onAddExpense() {
   }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
-    // 紐づけられたレシートがあれば消費 (ベストエフォート)。
-    if (pendingReceiptId) {
-      try { await del(`/api/groups/${gid}/receipts/${pendingReceiptId}`); }
-      catch (_) { /* swallow — 残ってても次回 UI から再使用/破棄可 */ }
-      pendingReceiptId = null;
-      await loadReceipts(gid);
-    }
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
     document.getElementById('ex-image-file').value = '';
@@ -918,16 +913,30 @@ function openExpenseEdit(gid, e) {
   const initSet = new Set((e.participants || []).map(Number));
   const initialAmount = e.currency === 'JPY' ? e.amount_jpy : (e.amount_original || e.amount_jpy);
 
+  // 画像 (レシート) があれば上部にプレビュー + 撮影時刻 + Google Maps リンク (GPS あり時)。
+  const hasGps = e.lat !== null && e.lat !== undefined && e.lng !== null && e.lng !== undefined;
+  const imageBlock = e.image_url ? `
+    <div style="margin-top:8px; padding:8px; background:var(--bg); border-radius:6px">
+      <a href="${escapeHtml(e.image_url)}" target="_blank" rel="noopener" style="display:block">
+        <img src="${escapeHtml(e.image_url)}" alt="" style="max-width:100%; max-height:220px; object-fit:contain; border-radius:4px; display:block; margin:0 auto">
+      </a>
+      <div class="muted" style="font-size:11px; margin-top:6px; text-align:center">
+        ${e.taken_at ? `📅 ${escapeHtml(e.taken_at)}` : ''}
+        ${hasGps ? ` · <a href="https://maps.google.com/?q=${e.lat},${e.lng}" target="_blank" rel="noopener" style="color:var(--primary)">📍 地図で見る</a>` : ''}
+      </div>
+    </div>` : '';
+
   overlay.innerHTML = `
     <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; max-height:85vh; display:flex; flex-direction:column; padding:20px; overflow:auto">
       <div class="row center">
-        <h3 class="row-title">支出を編集</h3>
+        <h3 class="row-title">${e.is_draft ? 'レシートを支出に' : '支出を編集'}</h3>
         <button id="ex-edit-close">×</button>
       </div>
+      ${imageBlock}
       <label class="field" style="margin-top:8px">
         <span class="lbl">金額</span>
         <div class="row" style="gap:6px">
-          <input type="number" id="ex-edit-amt" min="0" step="0.01" value="${initialAmount}" class="grow">
+          <input type="number" id="ex-edit-amt" min="0" step="0.01" value="${initialAmount || ''}" class="grow">
           <select id="ex-edit-ccy" style="width:90px">${ccyOpts}</select>
         </div>
       </label>
@@ -935,6 +944,7 @@ function openExpenseEdit(gid, e) {
       <label class="field">
         <span class="lbl">立替えた人</span>
         <select id="ex-edit-payer">
+          <option value="">— 未選択 —</option>
           ${wariMembers.map(m => `<option value="${m.id}" ${m.id === Number(e.payer_user_id) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`).join('')}
         </select>
       </label>
@@ -1001,18 +1011,21 @@ function openExpenseEdit(gid, e) {
   overlay.querySelector('#ex-edit-save')  .addEventListener('click', async () => {
     const amount = Number(overlay.querySelector('#ex-edit-amt').value);
     const currency = overlay.querySelector('#ex-edit-ccy').value;
-    const payer_user_id = Number(overlay.querySelector('#ex-edit-payer').value);
+    const payerRaw = overlay.querySelector('#ex-edit-payer').value;
+    const payer_user_id = payerRaw === '' ? null : Number(payerRaw);
     const memo = overlay.querySelector('#ex-edit-memo').value.trim() || null;
-    if (!(amount > 0)) { toast('金額を入れてください'); return; }
     if (currency === 'OTHER') { toast('「その他」通貨での編集は未対応'); return; }
-    if (!initSet.size) { toast('対象者を 1 人以上選んでください'); return; }
-    const body = { amount, currency, payer_user_id, memo, participant_ids: [...initSet] };
+    // draft は amount=0 でも保存可 (途中保存 OK)。 通常支出 は >0 必須。
+    if (!e.is_draft && !(amount > 0)) { toast('金額を入れてください'); return; }
+    if (!e.is_draft && !initSet.size) { toast('対象者を 1 人以上選んでください'); return; }
+    const body = { amount: isNaN(amount) ? 0 : amount, currency, payer_user_id, memo, participant_ids: [...initSet] };
     if (currency !== 'JPY' && liveRate) body.rate_to_jpy = liveRate;
     try {
       await patch(`/api/groups/${gid}/expenses/${e.id}`, body);
-      toast('保存しました');
+      toast(e.is_draft && amount > 0 ? '支出として登録しました' : '保存しました');
       close();
       await loadWari(gid);
+      await loadReceipts(gid).catch(() => {});
     } catch (err) { toast('失敗: ' + err.message); }
   });
 }
