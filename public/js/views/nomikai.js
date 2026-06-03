@@ -194,7 +194,7 @@ export async function renderNomikaiNew({ query }) {
         <input type="number" id="nm-total" min="0" placeholder="例: 28000">
       </label>
       <label class="field">
-        <span class="lbl">ソフトドリンク割引 (1人あたり、円・任意)</span>
+        <span class="lbl">ソフドリ対象者減額 (円・任意)</span>
         <input type="number" id="nm-sd-discount" min="0" step="100" placeholder="例: 1000">
         <div class="hint-sm">🥤 の人を 1 人につき N 円引きにし、 その差額を 🍺 の人で weight 按分して吸収します。</div>
       </label>
@@ -208,7 +208,7 @@ export async function renderNomikaiNew({ query }) {
       <h3>参加者</h3>
       <div class="muted" style="font-size:12px; margin-bottom:6px">
         🍺/🥤 はタップで切替。基本 ×1.0、[−][+] で 0.2 ずつ調整。
-        [固定] にすると金額直接指定 (他の人で割り直し)。
+        [額指定] にすると金額を直接入力 (他の人で割り直し)。
       </div>
       <div id="nm-people"></div>
       <div class="row" style="gap:4px; flex-wrap:wrap; margin-top:10px; align-items:center">
@@ -395,12 +395,12 @@ function renderRow(x) {
   // Compact 2-line layout: line1 = icon + name + amount + remove; line2 = weight/fixed controls.
   const controls = isFixed
     ? `<input type="number" min="0" step="100" value="${x.fixed_yen}" data-fixyen="${x.uid}" style="width:90px; text-align:right">
-       <span class="muted" style="font-size:11px">円 固定</span>
+       <span class="muted" style="font-size:11px">円 (額指定)</span>
        <button data-fix="${x.uid}" class="btn" style="padding:2px 6px; font-size:11px">解除</button>`
     : `<button data-dec="${x.uid}" class="btn" style="padding:2px 8px">−</button>
        <span class="bold" style="min-width:42px; text-align:center">×${x.weight.toFixed(1)}</span>
        <button data-inc="${x.uid}" class="btn" style="padding:2px 8px">+</button>
-       <button data-fix="${x.uid}" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">固定</button>`;
+       <button data-fix="${x.uid}" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">額指定</button>`;
   return `
     <div class="nm-row" style="display:grid; grid-template-columns: auto 1fr auto auto; gap:6px 8px; align-items:center; padding:6px 0; border-bottom:1px solid #eee">
       <button data-flag="${x.uid}" class="btn" style="grid-row:1/3; min-width:46px; font-size:18px">${x.alcohol ? '🍺' : '🥤'}</button>
