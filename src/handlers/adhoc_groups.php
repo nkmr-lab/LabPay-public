@@ -35,6 +35,13 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
             // より具体的な move ルートを先に判定する。
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
+            // 添付ファイル: /schedule/{itemId}/attachments  GET/POST、/attachments/{attId} DELETE
+            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'attachments') {
+                $itemId = (int)$seg[3];
+                if ($method === 'GET'  && !isset($seg[5])) { group_sched_att_list($pdo, $cfg, $id, $itemId);   return; }
+                if ($method === 'POST' && !isset($seg[5])) { group_sched_att_add($pdo, $cfg, $id, $itemId);    return; }
+                if ($method === 'DELETE' && isset($seg[5])) { group_sched_att_del($pdo, $cfg, $id, $itemId, (int)$seg[5]); return; }
+            }
             if ($next === 'schedule' && isset($seg[3]) && $method === 'PATCH')  { group_schedule_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && isset($seg[3]) && $method === 'DELETE') { group_schedule_del($pdo, $cfg, $id, (int)$seg[3]); return; }
         }
@@ -996,11 +1003,130 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
                   s.sort_order,
                   s.id");
     $st->execute([$id]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // 添付ファイル件数のみ同期取得 (本体は別 GET で詳細を取る) — UI のバッジ用。
+    if ($items) {
+        $ids = array_map(fn($r) => (int)$r['id'], $items);
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $stA = $pdo->prepare("SELECT schedule_item_id, COUNT(*) AS n
+                                FROM adhoc_group_schedule_attachments
+                               WHERE schedule_item_id IN ($in)
+                               GROUP BY schedule_item_id");
+        $stA->execute($ids);
+        $counts = [];
+        foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $r) $counts[(int)$r['schedule_item_id']] = (int)$r['n'];
+        foreach ($items as &$it) $it['attachment_count'] = $counts[(int)$it['id']] ?? 0;
+        unset($it);
+    }
     json_response([
         'start_date' => $g['schedule_start_date'],
         'end_date'   => $g['schedule_end_date'],
-        'items'      => $st->fetchAll(PDO::FETCH_ASSOC),
+        'items'      => $items,
     ]);
+}
+
+// ----- 予定アイテム添付ファイル -----
+// 画像/PDF/オフィス文書/プレーンテキストを許可。 サイズ上限 16MB。
+const SCHED_ATT_MAX_BYTES = 16 * 1024 * 1024;
+const SCHED_ATT_MIME = [
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/gif'  => 'gif',
+    'image/webp' => 'webp',
+    'image/heic' => 'heic',
+    'image/heif' => 'heif',
+    'application/pdf' => 'pdf',
+    'application/msword' => 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+    'application/vnd.ms-excel' => 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+    'application/vnd.ms-powerpoint' => 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+    'text/plain' => 'txt',
+    'text/calendar' => 'ics',
+    'application/zip' => 'zip',
+];
+
+function group_sched_att_assert_item(PDO $pdo, int $groupId, int $itemId): void {
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $st->execute([$itemId, $groupId]);
+    if ($st->fetchColumn() === false) {
+        throw new ApiException('not_found', 'schedule item not found', 404);
+    }
+}
+
+function group_sched_att_list(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    group_sched_att_assert_item($pdo, $id, $itemId);
+    $st = $pdo->prepare("SELECT a.id, a.filename, a.stored_path, a.thumb_path, a.mime, a.size,
+                                a.uploaded_by_user_id, a.created_at,
+                                u.display_name AS uploaded_by_name
+                           FROM adhoc_group_schedule_attachments a
+                           JOIN users u ON u.id = a.uploaded_by_user_id
+                          WHERE a.schedule_item_id = ?
+                          ORDER BY a.created_at, a.id");
+    $st->execute([$itemId]);
+    json_response(['attachments' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function group_sched_att_add(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    group_sched_att_assert_item($pdo, $id, $itemId);
+    if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+        throw new ApiException('no_file', 'multipart field "file" is required', 400);
+    }
+    $original = (string)($_FILES['file']['name'] ?? 'file');
+    $original = mb_substr(preg_replace('/[\x00-\x1F]/u', '', $original) ?? 'file', 0, 200);
+    $saved = save_uploaded_file($_FILES['file'], 'uploads/sched',
+        SCHED_ATT_MAX_BYTES, SCHED_ATT_MIME);
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_attachments
+        (schedule_item_id, filename, stored_path, thumb_path, mime, size, uploaded_by_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$itemId, $original, $saved['path'], $saved['thumb_path'] ?? null,
+        $saved['mime'], (int)$saved['size'], (int)$u['id']]);
+    $attId = (int)$pdo->lastInsertId();
+    json_response([
+        'ok' => true,
+        'attachment' => [
+            'id' => $attId,
+            'filename' => $original,
+            'stored_path' => $saved['path'],
+            'thumb_path' => $saved['thumb_path'] ?? null,
+            'mime' => $saved['mime'],
+            'size' => (int)$saved['size'],
+            'uploaded_by_user_id' => (int)$u['id'],
+            'uploaded_by_name' => $u['display_name'] ?? '',
+        ],
+    ]);
+}
+
+function group_sched_att_del(PDO $pdo, array $cfg, int $id, int $itemId, int $attId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    group_sched_att_assert_item($pdo, $id, $itemId);
+    // 添付した本人か、グループ作成者/admin だけ削除可。
+    $st = $pdo->prepare("SELECT a.uploaded_by_user_id, a.stored_path, a.thumb_path, g.creator_user_id
+                           FROM adhoc_group_schedule_attachments a
+                           JOIN adhoc_groups g ON g.id = ?
+                          WHERE a.id = ? AND a.schedule_item_id = ?");
+    $st->execute([$id, $attId, $itemId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'attachment not found', 404);
+    $isOwner = (int)$row['uploaded_by_user_id'] === (int)$u['id'];
+    $isCreator = (int)$row['creator_user_id'] === (int)$u['id'];
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if (!$isOwner && !$isCreator && !$isAdmin) {
+        throw new ApiException('forbidden', '添付者・グループ作成者・admin のみ削除可', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_schedule_attachments WHERE id=?")->execute([$attId]);
+    // 実ファイルも削除 (ベストエフォート)。
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    foreach ([$row['stored_path'], $row['thumb_path']] as $p) {
+        if ($p && is_file($publicDir . $p)) @unlink($publicDir . $p);
+    }
+    json_response(['ok' => true]);
 }
 
 function group_schedule_add(PDO $pdo, array $cfg, int $id): void {

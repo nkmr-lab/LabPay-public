@@ -1589,6 +1589,7 @@ function renderSchedItem(it) {
     line2bits.push(`<a href="${escapeHtml(mapUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary)">📍 地図</a>`);
   }
   if (it.memo)     line2bits.push(escapeHtml(it.memo).replace(/\n/g, ' '));
+  if (it.attachment_count > 0) line2bits.push(`📎 ${it.attachment_count}`);
   const line2 = line2bits.length
     ? `<div class="meta" style="font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${line2bits.join(' · ')}${urlIcon}</div>`
     : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
@@ -1779,6 +1780,16 @@ function openSchedItemModal(gid, it) {
           <textarea id="sim-memo" maxlength="2000" rows="3">${escapeHtml(it.memo || '')}</textarea>
         </label>
         ${renderSchedPairPickerHtml(it)}
+        ${isNew ? '' : `
+        <div class="field">
+          <span class="lbl">添付ファイル (PDF / 画像 / 文書 など)</span>
+          <div id="sim-att-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px"></div>
+          <div class="row" style="gap:6px; align-items:center">
+            <input type="file" id="sim-att-file" multiple style="font-size:12px">
+            <span id="sim-att-status" class="hint-sm"></span>
+          </div>
+          <div class="hint-sm">16MB まで。 タップでダウンロード / ブラウザ表示。</div>
+        </div>`}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap">
           ${!isNew ? `<button id="sim-copy" type="button" class="btn">📋 コピー</button>` : ''}
           <button id="sim-cancel">キャンセル</button>
@@ -1812,6 +1823,61 @@ function openSchedItemModal(gid, it) {
     document.getElementById('sim-img-file').value = '';
     document.getElementById('sim-img-clear').hidden = true;
   });
+  // 添付ファイル (既存アイテムのみ)。 一覧 + アップロード + 削除。
+  if (!isNew) {
+    const renderAttRow = (a) => {
+      const sz = a.size > 1024 * 1024
+        ? (a.size / 1024 / 1024).toFixed(1) + ' MB'
+        : Math.max(1, Math.round(a.size / 1024)) + ' KB';
+      const icon = a.mime?.startsWith('image/') ? '🖼' : (a.mime === 'application/pdf' ? '📕' : '📄');
+      return `<div class="list-item" style="gap:6px; padding:4px 6px; font-size:12px">
+        <a href="${escapeHtml(a.stored_path)}" target="_blank" rel="noopener" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--primary)">${icon} ${escapeHtml(a.filename)}</a>
+        <span class="muted" style="font-size:11px; flex-shrink:0">${sz}</span>
+        <button data-att-rm="${a.id}" class="btn" style="padding:0 6px; font-size:11px; color:var(--muted)">×</button>
+      </div>`;
+    };
+    const reloadAtts = async () => {
+      const listEl = document.getElementById('sim-att-list');
+      try {
+        const d = await get(`/api/groups/${gid}/schedule/${it.id}/attachments`);
+        listEl.innerHTML = d.attachments.length
+          ? d.attachments.map(renderAttRow).join('')
+          : '<div class="hint-sm" style="padding:2px 6px">添付ファイル無し</div>';
+        listEl.querySelectorAll('[data-att-rm]').forEach(b => {
+          b.addEventListener('click', async () => {
+            if (!confirm('この添付ファイルを削除しますか?')) return;
+            try { await del(`/api/groups/${gid}/schedule/${it.id}/attachments/${b.dataset.attRm}`); await reloadAtts(); }
+            catch (e) { toast('失敗: ' + e.message); }
+          });
+        });
+      } catch (e) {
+        listEl.innerHTML = `<div class="hint-sm" style="color:var(--danger)">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+      }
+    };
+    reloadAtts();
+    document.getElementById('sim-att-file').addEventListener('change', async (ev) => {
+      const files = Array.from(ev.target.files || []);
+      if (!files.length) return;
+      const st = document.getElementById('sim-att-status');
+      let okN = 0, errN = 0;
+      for (const f of files) {
+        st.textContent = `送信中… ${okN + errN + 1}/${files.length}`;
+        try {
+          const fd = new FormData();
+          fd.append('file', f);
+          const r = await fetch(`/api/groups/${gid}/schedule/${it.id}/attachments`, { method: 'POST', body: fd, credentials: 'same-origin' });
+          if (!r.ok) {
+            const j = await r.json().catch(() => ({}));
+            throw new Error(j.error?.message || ('HTTP ' + r.status));
+          }
+          okN++;
+        } catch (e) { errN++; toast('失敗 ' + f.name + ': ' + e.message); }
+      }
+      ev.target.value = '';
+      st.textContent = errN ? `${okN} 件 OK / ${errN} 件失敗` : `${okN} 件追加`;
+      await reloadAtts();
+    });
+  }
   document.getElementById('sim-save').addEventListener('click', async () => {
     const body = {
       day_date:        document.getElementById('sim-date').value || null,
