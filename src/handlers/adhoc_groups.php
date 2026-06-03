@@ -981,8 +981,10 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     $g = $st->fetch(PDO::FETCH_ASSOC);
     if (!$g) throw new ApiException('not_found', 'group not found', 404);
     $st = $pdo->prepare("
-        SELECT s.id, s.day_date, s.start_time, s.duration_minutes, s.kind, s.title,
-               s.location, s.memo, s.image_url, s.url, s.sort_order, s.created_by_user_id,
+        SELECT s.id, s.day_date, s.end_date, s.start_time, s.end_time,
+               s.duration_minutes, s.kind, s.title,
+               s.location, s.memo, s.image_url, s.url, s.link_pair_id,
+               s.sort_order, s.created_by_user_id,
                u.display_name AS created_by_name
           FROM adhoc_group_schedule_items s
           JOIN users u ON u.id = s.created_by_user_id
@@ -1038,15 +1040,42 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
         if (mb_strlen($raw) > 2000) throw new ApiException('bad_request', 'url 長すぎ', 400);
         $extraUrl = $raw;
     }
+    // 終了日 / 終了時刻 / ペア id (どれも任意)。
+    $endDate = null;
+    if (!empty($body['end_date'])) {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$body['end_date'])) {
+            throw new ApiException('bad_request', 'end_date は YYYY-MM-DD', 400);
+        }
+        $endDate = (string)$body['end_date'];
+        if ($endDate < $day) throw new ApiException('bad_request', 'end_date は day_date 以降', 400);
+    }
+    $endTime = null;
+    if (!empty($body['end_time'])) {
+        $et = (string)$body['end_time'];
+        if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $et)) {
+            throw new ApiException('bad_request', 'end_time は HH:MM', 400);
+        }
+        $endTime = strlen($et) === 5 ? $et . ':00' : $et;
+    }
+    $linkPair = null;
+    if (!empty($body['link_pair_id'])) {
+        $lp = trim((string)$body['link_pair_id']);
+        if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $lp)) {
+            throw new ApiException('bad_request', 'link_pair_id 形式不正', 400);
+        }
+        $linkPair = $lp;
+    }
     // 同日の末尾に積む。
     $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
         FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
     $stm->execute([$id, $day]);
     $sortOrder = ((int)$stm->fetchColumn()) + 1;
     $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
-        (group_id, day_date, start_time, duration_minutes, kind, title, location, memo, image_url, url, sort_order, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-    $ins->execute([$id, $day, $startTime, $duration, $kind, $title, $location, $memo, $imageUrl, $extraUrl, $sortOrder, $u['id']]);
+        (group_id, day_date, end_date, start_time, end_time, duration_minutes, kind, title,
+         location, memo, image_url, url, link_pair_id, sort_order, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$id, $day, $endDate, $startTime, $endTime, $duration, $kind, $title,
+        $location, $memo, $imageUrl, $extraUrl, $linkPair, $sortOrder, $u['id']]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -1120,6 +1149,38 @@ function group_schedule_patch(PDO $pdo, array $cfg, int $id, int $itemId): void 
             }
             if (mb_strlen($raw) > 2000) throw new ApiException('bad_request', 'url 長すぎ', 400);
             $sets[] = 'url = ?'; $args[] = $raw;
+        }
+    }
+    if (array_key_exists('end_date', $body)) {
+        $v = $body['end_date'];
+        if ($v === null || $v === '') { $sets[] = 'end_date = NULL'; }
+        else {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$v)) {
+                throw new ApiException('bad_request', 'end_date は YYYY-MM-DD', 400);
+            }
+            $sets[] = 'end_date = ?'; $args[] = (string)$v;
+        }
+    }
+    if (array_key_exists('end_time', $body)) {
+        $v = $body['end_time'];
+        if ($v === null || $v === '') { $sets[] = 'end_time = NULL'; }
+        else {
+            $et = (string)$v;
+            if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $et)) {
+                throw new ApiException('bad_request', 'end_time は HH:MM', 400);
+            }
+            $sets[] = 'end_time = ?'; $args[] = strlen($et) === 5 ? $et . ':00' : $et;
+        }
+    }
+    if (array_key_exists('link_pair_id', $body)) {
+        $v = $body['link_pair_id'];
+        if ($v === null || $v === '') { $sets[] = 'link_pair_id = NULL'; }
+        else {
+            $lp = trim((string)$v);
+            if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $lp)) {
+                throw new ApiException('bad_request', 'link_pair_id 形式不正', 400);
+            }
+            $sets[] = 'link_pair_id = ?'; $args[] = $lp;
         }
     }
     if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);

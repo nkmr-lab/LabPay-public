@@ -1419,10 +1419,44 @@ async function loadSchedule(gid) {
     days.push(cur);
     cur = addOneDay(cur);
   }
+  // end_date がある (= 複数日に渡る) アイテムは、 当日・終了日・(宿泊の中間日)
+  // に展開して each day に並べる。 元の id をそのまま保持し、 _occ で
+  // 「'start' / 'mid' / 'end'」 のロールを付ける (描画時に label を出し分け)。
   const byDay = {};
   for (const it of (d.items || [])) {
-    (byDay[it.day_date] ||= []).push(it);
+    const start = it.day_date;
+    const end   = it.end_date;
+    if (!end || end === start) {
+      (byDay[start] ||= []).push({ ...it, _occ: 'single' });
+      continue;
+    }
+    // 範囲展開
+    const addOne = (s) => {
+      const [y, m, dd] = s.split('-').map(Number);
+      const dt = new Date(y, m - 1, dd); dt.setDate(dt.getDate() + 1);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}`;
+    };
+    let cur = start;
+    while (cur <= end) {
+      const occ = cur === start ? 'start' : (cur === end ? 'end' : 'mid');
+      (byDay[cur] ||= []).push({ ...it, _occ: occ });
+      cur = addOne(cur);
+    }
   }
+  // ペア id ごとに 「上 / 下」 のタグを付ける (描画時に 🔗 + 相手の日付/時刻 を出す)。
+  const pairs = {};
+  for (const it of (d.items || [])) {
+    if (it.link_pair_id) (pairs[it.link_pair_id] ||= []).push(it);
+  }
+  const pairPartner = {};
+  Object.values(pairs).forEach(arr => {
+    if (arr.length !== 2) return; // 2 つペアでだけ機能 (3 つ以上は無視)
+    arr.sort((a, b) => (a.day_date + (a.start_time || '99:99')).localeCompare(
+                       b.day_date + (b.start_time || '99:99')));
+    pairPartner[arr[0].id] = { partner: arr[1], side: 'first' };
+    pairPartner[arr[1].id] = { partner: arr[0], side: 'second' };
+  });
   const dayLabels = ['日','月','火','水','木','金','土'];
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
@@ -1434,7 +1468,7 @@ async function loadSchedule(gid) {
         <details class="card collapsible-sub" data-day="${date}" open style="margin:6px 0; padding:8px 10px">
           <summary style="font-weight:700">${md} (${dow}) <span class="hint-sm">— ${items.length} 件</span></summary>
           <div class="schedule-items" style="margin-top:6px">
-            ${items.map(renderSchedItem).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
+            ${items.map(it => renderSchedItem(it, pairPartner[it.id])).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
           </div>
           <button class="btn primary" data-add-sched-day="${date}" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 追加</button>
         </details>`;
@@ -1472,20 +1506,47 @@ async function loadSchedule(gid) {
   });
 }
 
-function renderSchedItem(it) {
+function renderSchedItem(it, pairInfo) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
+  // 複数日展開: start / mid / end によって 時刻と接尾語を変える。
+  const isHotel = (it.kind === 'hotel');
   let timeStr = '';
-  if (it.start_time) {
-    const t = it.start_time.slice(0, 5);
-    if (it.duration_minutes) {
-      const startMs = Date.parse(`2000-01-01T${it.start_time}`);
-      const endDt = new Date(startMs + it.duration_minutes * 60000);
-      const eh = String(endDt.getHours()).padStart(2, '0');
-      const em = String(endDt.getMinutes()).padStart(2, '0');
-      timeStr = `${t}〜${eh}:${em}`;
-    } else {
-      timeStr = t;
+  let roleSuffix = '';
+  if (it._occ === 'start') {
+    if (it.start_time) timeStr = it.start_time.slice(0, 5);
+    if (it.end_date && it.end_date !== it.day_date) {
+      roleSuffix = isHotel ? ' チェックイン' : ' 出発';
     }
+  } else if (it._occ === 'end') {
+    if (it.end_time) timeStr = it.end_time.slice(0, 5);
+    roleSuffix = isHotel ? ' チェックアウト' : ' 到着';
+  } else if (it._occ === 'mid') {
+    roleSuffix = ' (滞在中)';
+  } else {
+    // single
+    if (it.start_time) {
+      const t = it.start_time.slice(0, 5);
+      if (it.end_time) {
+        timeStr = `${t}〜${it.end_time.slice(0, 5)}`;
+      } else if (it.duration_minutes) {
+        const startMs = Date.parse(`2000-01-01T${it.start_time}`);
+        const endDt = new Date(startMs + it.duration_minutes * 60000);
+        const eh = String(endDt.getHours()).padStart(2, '0');
+        const em = String(endDt.getMinutes()).padStart(2, '0');
+        timeStr = `${t}〜${eh}:${em}`;
+      } else {
+        timeStr = t;
+      }
+    }
+  }
+  const isMid = it._occ === 'mid';
+  // ペア表示: 🔗 アイコンと相手の 「日付・時刻」 を出す。
+  let pairBadge = '';
+  if (pairInfo && pairInfo.partner) {
+    const p = pairInfo.partner;
+    const pTime = (p.start_time || '').slice(0, 5);
+    const arrow = pairInfo.side === 'first' ? '→' : '←';
+    pairBadge = `<span class="muted" style="font-size:10px; margin-left:4px">🔗 ${arrow} ${escapeHtml(p.day_date.slice(5).replace('-', '/'))}${pTime ? ' ' + pTime : ''}</span>`;
   }
   // 画像があれば左に 60px 角でかっこよく出す。 タップは行全体に乗ってる
   // ので画像クリックも編集を開く (拡大表示したい時は edit modal から飛ぶ)。
@@ -1513,11 +1574,11 @@ function renderSchedItem(it) {
     </div>` : '';
   return `
     <div class="list-item" data-sched-item="${it.id}"
-         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer">
+         style="gap:8px; padding:6px 8px; align-items:center; cursor:pointer; ${isMid ? 'opacity:0.55' : ''}">
       ${thumb}
       <div class="grow" style="min-width:0; overflow:hidden">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-          ${escapeHtml(it.title)}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}
+          ${escapeHtml(it.title)}${roleSuffix ? `<span class="muted" style="font-weight:400">${roleSuffix}</span>` : ''}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}${pairBadge}
         </div>
         ${line2}
       </div>
@@ -1606,6 +1667,14 @@ function openSchedItemModal(gid, it) {
             <input type="number" id="sim-dur" min="0" step="15" value="${it.duration_minutes || ''}">
           </label>
         </div>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">終了日 (任意・宿泊や夜行便)</span>
+            <input type="date" id="sim-end-date" value="${escapeHtml(it.end_date || '')}">
+          </label>
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">終了時刻 (任意)</span>
+            <input type="time" id="sim-end-time" value="${escapeHtml((it.end_time || '').slice(0, 5))}">
+          </label>
+        </div>
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
@@ -1624,7 +1693,12 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">メモ (任意)</span>
           <textarea id="sim-memo" maxlength="2000" rows="3">${escapeHtml(it.memo || '')}</textarea>
         </label>
-        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+        <div class="hint-sm" style="margin:6px 0">
+          ${it.link_pair_id ? '🔗 別の予定とリンク済 (片方を消すとリンクが切れます)' : '保存後 「🔗 リンクペアを追加」 ボタンで 出発便 → 到着便 など 2 つの予定を連結できます。'}
+        </div>
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap">
+          ${!isNew ? `<button id="sim-pair-add" type="button" class="btn">🔗 リンクペアを追加</button>` : ''}
+          ${(!isNew && it.link_pair_id) ? `<button id="sim-pair-clear" type="button" class="btn">リンク解除</button>` : ''}
           <button id="sim-cancel">キャンセル</button>
           <button id="sim-save" class="primary">保存</button>
         </div>
@@ -1662,6 +1736,8 @@ function openSchedItemModal(gid, it) {
       title:           document.getElementById('sim-title').value.trim(),
       kind:            document.getElementById('sim-kind').value,
       start_time:      document.getElementById('sim-start').value || null,
+      end_time:        document.getElementById('sim-end-time').value || null,
+      end_date:        document.getElementById('sim-end-date').value || null,
       duration_minutes: document.getElementById('sim-dur').value || null,
       location:        document.getElementById('sim-loc').value.trim() || null,
       url:             document.getElementById('sim-url').value.trim() || null,
@@ -1674,6 +1750,37 @@ function openSchedItemModal(gid, it) {
       if (isNew) await post(`/api/groups/${gid}/schedule`, body);
       else       await patch(`/api/groups/${gid}/schedule/${it.id}`, body);
       toast('保存しました');
+      close();
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  // 🔗 リンクペアを追加: 既存アイテムに pair_id を割り振り (無ければ生成)、
+  // その pair_id を持つ 新規アイテムを 「もう片方」 として作成 → modal を
+  // その新規アイテム編集モードに切り替え。
+  document.getElementById('sim-pair-add')?.addEventListener('click', async () => {
+    let pid = it.link_pair_id;
+    try {
+      if (!pid) {
+        pid = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        await patch(`/api/groups/${gid}/schedule/${it.id}`, { link_pair_id: pid });
+      }
+      const newBody = {
+        day_date:   it.day_date,
+        title:      it.title,
+        kind:       it.kind,
+        link_pair_id: pid,
+      };
+      const r = await post(`/api/groups/${gid}/schedule`, newBody);
+      close();
+      await loadSchedule(gid);
+      // 新規アイテムを編集 modal で開く (時刻 / 日付などを埋めてもらう)。
+      openSchedItemModal(gid, { ...newBody, id: r.id });
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('sim-pair-clear')?.addEventListener('click', async () => {
+    if (!confirm('リンクを解除しますか? (アイテムは残ります)')) return;
+    try {
+      await patch(`/api/groups/${gid}/schedule/${it.id}`, { link_pair_id: null });
       close();
       await loadSchedule(gid);
     } catch (e) { toast('失敗: ' + e.message); }
