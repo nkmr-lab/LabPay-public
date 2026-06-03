@@ -325,11 +325,10 @@ export async function renderGroupDetail({ params }) {
     </div>
 
     <div class="card" id="gd-danger-card" hidden>
-      <h3 style="margin:0; color:var(--danger)">グループを閉じる</h3>
-      <p class="muted" style="font-size:13px; margin:6px 0">
+      <p class="muted" style="font-size:13px; margin:0 0 8px">
         閉じてもデータは残ります。新規投稿・ワリカ追加ができなくなるだけ。
       </p>
-      <button id="gd-close" class="danger">閉じる</button>
+      <button id="gd-close" class="danger">グループを閉じる</button>
     </div>
 
     <div id="gd-settle-modal" hidden></div>
@@ -426,9 +425,9 @@ async function loadDetail(id) {
           </span>`).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <a class="btn primary" href="#/roulette?members=${memberIds}">🎰 ルーレット</a>
-        <a class="btn" href="#/nomikai?members=${memberIds}">🍻 割り勘</a>
-        <button class="btn" id="gd-snap-receipt">📸 レシート</button>
+        <button class="btn primary" id="gd-snap-receipt">レシート</button>
+        <a class="btn" href="#/roulette?members=${memberIds}">ルーレット</a>
+        <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
     // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
