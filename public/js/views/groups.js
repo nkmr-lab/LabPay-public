@@ -322,6 +322,15 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-feed" class="list" style="margin-top:8px"></div>
     </div>
 
+    <div class="card" id="gd-sched-card" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h3 class="row-title" style="margin:0">スケジュール</h3>
+        <button id="gd-sched-range" class="btn">日程設定</button>
+      </div>
+      <div id="gd-sched-body" class="muted" style="font-size:13px">読み込み中…</div>
+    </div>
+    <div id="gd-sched-modal" hidden></div>
+
     <div class="card" id="gd-wari-card">
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">ワリカ</h3>
@@ -364,6 +373,9 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
+  // スケジュールの日程設定 + 一覧
+  document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
+  loadSchedule(id);
   await loadDetail(id);
   await loadWari(id);
 }
@@ -1344,4 +1356,236 @@ async function onPost(gid) {
     toast('投稿しました');
     await loadDetail(gid);
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// ─── スケジュール / 行程 ─────────────────────────────────────────────
+// 日程範囲 (開始日 〜 終了日) を持ち、 範囲内の各日に時刻付きアイテムを並べる。
+// 種類は ✈️ 移動 / 🏨 宿 / 🎓 学会 / 👥 会議 / 🍽 食事 / 🎢 観光 / 📝 その他。
+
+const SCHED_KINDS = {
+  move:    { label: '移動',    icon: '✈️' },
+  hotel:   { label: '宿',     icon: '🏨' },
+  conf:    { label: '学会',    icon: '🎓' },
+  meeting: { label: '会議',    icon: '👥' },
+  food:    { label: '食事',    icon: '🍽' },
+  fun:     { label: '観光',    icon: '🎢' },
+  other:   { label: 'その他',  icon: '📝' },
+};
+
+async function loadSchedule(gid) {
+  const card = document.getElementById('gd-sched-card');
+  const body = document.getElementById('gd-sched-body');
+  if (!card || !body) return;
+  let d;
+  try { d = await get(`/api/groups/${gid}/schedule`); }
+  catch (e) { card.hidden = false; body.textContent = '取得失敗: ' + e.message; return; }
+  card.hidden = false;
+  if (!d.start_date || !d.end_date) {
+    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「日程設定」 から 開始日〜終了日 を入れると 各日のカードが並びます。</div>`;
+    return;
+  }
+  // 日付範囲を 1 日ずつ展開。
+  const days = [];
+  let cur = new Date(d.start_date + 'T00:00:00');
+  const end = new Date(d.end_date   + 'T00:00:00');
+  while (cur <= end) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur = new Date(cur.getTime() + 86400000);
+  }
+  const byDay = {};
+  for (const it of (d.items || [])) {
+    (byDay[it.day_date] ||= []).push(it);
+  }
+  const dayLabels = ['日','月','火','水','木','金','土'];
+  body.innerHTML = `
+    <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
+    ${days.map(date => {
+      const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
+      const md  = date.slice(5).replace('-', '/');
+      const items = byDay[date] || [];
+      return `
+        <details class="card collapsible-sub" data-day="${date}" open style="margin:6px 0; padding:8px 10px">
+          <summary style="font-weight:700">${md} (${dow}) <span class="hint-sm">— ${items.length} 件</span></summary>
+          <div class="schedule-items" style="margin-top:6px">
+            ${items.map(renderSchedItem).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
+          </div>
+          <button class="btn primary" data-add-sched-day="${date}" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 追加</button>
+        </details>`;
+    }).join('')}
+  `;
+  // 「+ 追加」 ボタン
+  body.querySelectorAll('[data-add-sched-day]').forEach(b => {
+    b.addEventListener('click', () => openSchedItemModal(gid, { day_date: b.dataset.addSchedDay }));
+  });
+  // 編集 / 削除 / ↑ ↓
+  body.querySelectorAll('[data-sched-edit]').forEach(b => {
+    b.addEventListener('click', () => {
+      const id = Number(b.dataset.schedEdit);
+      const it = (d.items || []).find(x => Number(x.id) === id);
+      if (it) openSchedItemModal(gid, it);
+    });
+  });
+  body.querySelectorAll('[data-sched-rm]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('この予定を削除しますか?')) return;
+      try { await del(`/api/groups/${gid}/schedule/${b.dataset.schedRm}`); await loadSchedule(gid); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+  body.querySelectorAll('[data-sched-move]').forEach(b => {
+    b.addEventListener('click', async () => {
+      try {
+        await patch(`/api/groups/${gid}/schedule/${b.dataset.schedMove}/move`, { dir: b.dataset.dir });
+        await loadSchedule(gid);
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+}
+
+function renderSchedItem(it) {
+  const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
+  let timeStr = '';
+  if (it.start_time) {
+    const t = it.start_time.slice(0, 5); // HH:MM
+    if (it.duration_minutes) {
+      const startMs = Date.parse(`2000-01-01T${it.start_time}`);
+      const endDt = new Date(startMs + it.duration_minutes * 60000);
+      const eh = String(endDt.getHours()).padStart(2, '0');
+      const em = String(endDt.getMinutes()).padStart(2, '0');
+      timeStr = `${t}〜${eh}:${em}`;
+    } else {
+      timeStr = t;
+    }
+  }
+  const loc  = it.location ? `<div class="meta">📍 ${escapeHtml(it.location)}</div>` : '';
+  const memo = it.memo     ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(it.memo)}</div>` : '';
+  return `
+    <div class="list-item" style="gap:8px; align-items:flex-start">
+      <span style="font-size:18px; line-height:1.4">${k.icon}</span>
+      <div class="grow" style="min-width:0">
+        <div class="bold">${escapeHtml(it.title)}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}</div>
+        ${loc}${memo}
+      </div>
+      <div style="display:flex; flex-direction:column; gap:2px">
+        <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:1px 6px; font-size:11px">↑</button>
+        <button data-sched-edit="${it.id}"                 class="btn" style="padding:1px 6px; font-size:11px">編集</button>
+        <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:1px 6px; font-size:11px">↓</button>
+        <button data-sched-rm="${it.id}"                   class="btn" style="padding:1px 6px; font-size:11px; color:var(--muted)">×</button>
+      </div>
+    </div>`;
+}
+
+function openSchedRangeModal(gid) {
+  const root = document.getElementById('gd-sched-modal');
+  if (!root) return;
+  // 既存値は loadSchedule で表示済みだが、 modal を出す時もう一度取りに行く。
+  root.hidden = false;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" id="srm-overlay">
+      <div style="background:#fff; border-radius:14px; max-width:420px; width:100%; padding:20px">
+        <div class="row center">
+          <h3 class="row-title">日程設定</h3>
+          <button id="srm-close">×</button>
+        </div>
+        <label class="field"><span class="lbl">開始日</span><input type="date" id="srm-start"></label>
+        <label class="field"><span class="lbl">終了日</span><input type="date" id="srm-end"></label>
+        <div class="hint-sm" style="margin:4px 0 8px">空欄で保存すると日程をクリア (アイテムは残ります)</div>
+        <div class="row" style="gap:6px; justify-content:flex-end">
+          <button id="srm-cancel">キャンセル</button>
+          <button id="srm-save" class="primary">保存</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { root.hidden = true; root.innerHTML = ''; };
+  document.getElementById('srm-close') .addEventListener('click', close);
+  document.getElementById('srm-cancel').addEventListener('click', close);
+  document.getElementById('srm-overlay').addEventListener('click', e => { if (e.target.id === 'srm-overlay') close(); });
+  // 現在値を流し込む
+  (async () => {
+    try {
+      const d = await get(`/api/groups/${gid}/schedule`);
+      if (d.start_date) document.getElementById('srm-start').value = d.start_date;
+      if (d.end_date)   document.getElementById('srm-end')  .value = d.end_date;
+    } catch (_) {}
+  })();
+  document.getElementById('srm-save').addEventListener('click', async () => {
+    const s = document.getElementById('srm-start').value || null;
+    const e = document.getElementById('srm-end')  .value || null;
+    if (s && e && e < s) { toast('終了日が開始日より前です'); return; }
+    try {
+      await patch(`/api/groups/${gid}`, { schedule_start_date: s, schedule_end_date: e });
+      toast('保存しました');
+      close();
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
+function openSchedItemModal(gid, it) {
+  const root = document.getElementById('gd-sched-modal');
+  if (!root) return;
+  const isNew = !it.id;
+  const kindOpts = Object.entries(SCHED_KINDS)
+    .map(([k, v]) => `<option value="${k}" ${it.kind === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
+  root.hidden = false;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" id="sim-overlay">
+      <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px">
+        <div class="row center">
+          <h3 class="row-title">${isNew ? '予定を追加' : '予定を編集'}</h3>
+          <button id="sim-close">×</button>
+        </div>
+        <label class="field"><span class="lbl">日付</span>
+          <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
+        </label>
+        <label class="field"><span class="lbl">タイトル</span>
+          <input type="text" id="sim-title" maxlength="200" value="${escapeHtml(it.title || '')}" autofocus>
+        </label>
+        <label class="field"><span class="lbl">種類</span>
+          <select id="sim-kind">${kindOpts}</select>
+        </label>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">開始時刻 (任意)</span>
+            <input type="time" id="sim-start" value="${escapeHtml((it.start_time || '').slice(0, 5))}">
+          </label>
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">長さ (分・任意)</span>
+            <input type="number" id="sim-dur" min="0" step="15" value="${it.duration_minutes || ''}">
+          </label>
+        </div>
+        <label class="field"><span class="lbl">場所 (任意)</span>
+          <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
+        </label>
+        <label class="field"><span class="lbl">メモ (任意)</span>
+          <textarea id="sim-memo" maxlength="2000" rows="3">${escapeHtml(it.memo || '')}</textarea>
+        </label>
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+          <button id="sim-cancel">キャンセル</button>
+          <button id="sim-save" class="primary">保存</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { root.hidden = true; root.innerHTML = ''; };
+  document.getElementById('sim-close') .addEventListener('click', close);
+  document.getElementById('sim-cancel').addEventListener('click', close);
+  document.getElementById('sim-overlay').addEventListener('click', e => { if (e.target.id === 'sim-overlay') close(); });
+  document.getElementById('sim-save').addEventListener('click', async () => {
+    const body = {
+      day_date:        document.getElementById('sim-date').value,
+      title:           document.getElementById('sim-title').value.trim(),
+      kind:            document.getElementById('sim-kind').value,
+      start_time:      document.getElementById('sim-start').value || null,
+      duration_minutes: document.getElementById('sim-dur').value || null,
+      location:        document.getElementById('sim-loc').value.trim() || null,
+      memo:            document.getElementById('sim-memo').value.trim() || null,
+    };
+    if (!body.title)    { toast('タイトルを入れてください'); return; }
+    if (!body.day_date) { toast('日付を入れてください'); return; }
+    try {
+      if (isNew) await post(`/api/groups/${gid}/schedule`, body);
+      else       await patch(`/api/groups/${gid}/schedule/${it.id}`, body);
+      toast('保存しました');
+      close();
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }

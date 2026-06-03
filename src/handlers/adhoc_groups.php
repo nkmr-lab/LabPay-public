@@ -30,6 +30,11 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'receipts' && $method === 'GET')              { group_receipts_list($pdo, $cfg, $id);   return; }
             if ($next === 'receipts' && $method === 'POST')             { group_receipts_add($pdo, $cfg, $id);    return; }
             if ($next === 'receipts' && isset($seg[3]) && $method === 'DELETE') { group_receipts_delete($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
+            if ($next === 'schedule' && $method === 'POST')             { group_schedule_add($pdo, $cfg, $id);    return; }
+            if ($next === 'schedule' && isset($seg[3]) && $method === 'PATCH')  { group_schedule_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'schedule' && isset($seg[3]) && $method === 'DELETE') { group_schedule_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
         }
     }
     json_error('not_found', "no groups route for $method $sub", 404);
@@ -216,11 +221,33 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
     $body = read_json_body();
     $hasSlug  = array_key_exists('slug', $body);
     $hasImage = array_key_exists('image_url', $body);
-    if (!$hasSlug && !$hasImage) {
+    $hasStart = array_key_exists('schedule_start_date', $body);
+    $hasEnd   = array_key_exists('schedule_end_date', $body);
+    if (!$hasSlug && !$hasImage && !$hasStart && !$hasEnd) {
         throw new ApiException('bad_request', 'nothing to update', 400);
     }
     $sets = []; $args = [];
     $respSlug = null; $respImage = null;
+    if ($hasStart) {
+        $v = $body['schedule_start_date'];
+        if ($v === null || $v === '') { $sets[] = 'schedule_start_date = NULL'; }
+        else {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$v)) {
+                throw new ApiException('bad_request', 'schedule_start_date は YYYY-MM-DD', 400);
+            }
+            $sets[] = 'schedule_start_date = ?'; $args[] = (string)$v;
+        }
+    }
+    if ($hasEnd) {
+        $v = $body['schedule_end_date'];
+        if ($v === null || $v === '') { $sets[] = 'schedule_end_date = NULL'; }
+        else {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$v)) {
+                throw new ApiException('bad_request', 'schedule_end_date は YYYY-MM-DD', 400);
+            }
+            $sets[] = 'schedule_end_date = ?'; $args[] = (string)$v;
+        }
+    }
     if ($hasSlug) {
         $raw = $body['slug'];
         if ($raw === null || $raw === '') {
@@ -933,4 +960,179 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
         }
     }
     json_response(['ok' => true, 'sent' => $sent, 'plan_count' => count($plan), 'previews' => $previews, 'dry_run' => $dryRun, 'kind' => 'transfer']);
+}
+
+// ─── スケジュール / 行程 ──────────────────────────────────────────────
+// グループ (主に学会 / 旅行) の日程表。 schedule_start_date 〜 schedule_end_date
+// の範囲内の各日にアイテムを並べる。 並び順は start_time → sort_order → id。
+
+const GROUP_SCHEDULE_KINDS = ['move','hotel','conf','food','fun','meeting','other'];
+
+function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT schedule_start_date, schedule_end_date FROM adhoc_groups WHERE id=?");
+    $st->execute([$id]);
+    $g = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$g) throw new ApiException('not_found', 'group not found', 404);
+    $st = $pdo->prepare("
+        SELECT s.id, s.day_date, s.start_time, s.duration_minutes, s.kind, s.title,
+               s.location, s.memo, s.sort_order, s.created_by_user_id,
+               u.display_name AS created_by_name
+          FROM adhoc_group_schedule_items s
+          JOIN users u ON u.id = s.created_by_user_id
+         WHERE s.group_id = ?
+         ORDER BY s.day_date,
+                  (s.start_time IS NULL),
+                  s.start_time,
+                  s.sort_order,
+                  s.id");
+    $st->execute([$id]);
+    json_response([
+        'start_date' => $g['schedule_start_date'],
+        'end_date'   => $g['schedule_end_date'],
+        'items'      => $st->fetchAll(PDO::FETCH_ASSOC),
+    ]);
+}
+
+function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $body = read_json_body();
+    $day = (string)($body['day_date'] ?? '');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+        throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
+    }
+    $title = trim((string)($body['title'] ?? ''));
+    if ($title === '' || mb_strlen($title) > 200) {
+        throw new ApiException('bad_request', 'title 1..200', 400);
+    }
+    $kind = (string)($body['kind'] ?? 'other');
+    if (!in_array($kind, GROUP_SCHEDULE_KINDS, true)) $kind = 'other';
+    $startTime = null;
+    if (!empty($body['start_time'])) {
+        $st0 = (string)$body['start_time'];
+        if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $st0)) {
+            throw new ApiException('bad_request', 'start_time は HH:MM', 400);
+        }
+        $startTime = strlen($st0) === 5 ? $st0 . ':00' : $st0;
+    }
+    $duration = isset($body['duration_minutes']) && $body['duration_minutes'] !== ''
+        ? max(0, min(60 * 48, (int)$body['duration_minutes'])) : null;
+    $location = isset($body['location']) ? mb_substr((string)$body['location'], 0, 500) : null;
+    if ($location === '') $location = null;
+    $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 2000) : null;
+    if ($memo === '') $memo = null;
+    // 同日の末尾に積む。
+    $maxOrder = (int)$pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+            FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?")->fetchColumn();
+    $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+        FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
+    $stm->execute([$id, $day]);
+    $sortOrder = ((int)$stm->fetchColumn()) + 1;
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
+        (group_id, day_date, start_time, duration_minutes, kind, title, location, memo, sort_order, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$id, $day, $startTime, $duration, $kind, $title, $location, $memo, $sortOrder, $u['id']]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_schedule_patch(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $stE = $pdo->prepare("SELECT created_by_user_id FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $stE->execute([$itemId, $id]);
+    $row = $stE->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'item not found', 404);
+    // 編集は creator or group creator or admin (= 緩め)
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('day_date', $body)) {
+        $v = (string)$body['day_date'];
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+            throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
+        }
+        $sets[] = 'day_date = ?'; $args[] = $v;
+    }
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) {
+            throw new ApiException('bad_request', 'title 1..200', 400);
+        }
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('kind', $body)) {
+        $k = (string)$body['kind'];
+        if (!in_array($k, GROUP_SCHEDULE_KINDS, true)) $k = 'other';
+        $sets[] = 'kind = ?'; $args[] = $k;
+    }
+    if (array_key_exists('start_time', $body)) {
+        $v = $body['start_time'];
+        if ($v === null || $v === '') { $sets[] = 'start_time = NULL'; }
+        else {
+            $st0 = (string)$v;
+            if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $st0)) {
+                throw new ApiException('bad_request', 'start_time は HH:MM', 400);
+            }
+            $sets[] = 'start_time = ?'; $args[] = strlen($st0) === 5 ? $st0 . ':00' : $st0;
+        }
+    }
+    if (array_key_exists('duration_minutes', $body)) {
+        $v = $body['duration_minutes'];
+        if ($v === null || $v === '') { $sets[] = 'duration_minutes = NULL'; }
+        else { $sets[] = 'duration_minutes = ?'; $args[] = max(0, min(60 * 48, (int)$v)); }
+    }
+    if (array_key_exists('location', $body)) {
+        $v = $body['location'];
+        if ($v === null || $v === '') { $sets[] = 'location = NULL'; }
+        else { $sets[] = 'location = ?'; $args[] = mb_substr((string)$v, 0, 500); }
+    }
+    if (array_key_exists('memo', $body)) {
+        $v = $body['memo'];
+        if ($v === null || $v === '') { $sets[] = 'memo = NULL'; }
+        else { $sets[] = 'memo = ?'; $args[] = mb_substr((string)$v, 0, 2000); }
+    }
+    if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
+    $args[] = $itemId; $args[] = $id;
+    $pdo->prepare('UPDATE adhoc_group_schedule_items SET ' . implode(', ', $sets)
+        . ' WHERE id = ? AND group_id = ?')->execute($args);
+    json_response(['ok' => true]);
+}
+
+function group_schedule_del(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $pdo->prepare("DELETE FROM adhoc_group_schedule_items WHERE id=? AND group_id=?")->execute([$itemId, $id]);
+    json_response(['ok' => true]);
+}
+
+// PATCH /api/groups/{id}/schedule/{itemId}/move  body: {dir: 'up'|'down'}
+// 同日の隣の項目と sort_order を swap (時刻が同じ枠の中で並び替え)。
+function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $body = read_json_body();
+    $dir = (string)($body['dir'] ?? '');
+    if (!in_array($dir, ['up','down'], true)) {
+        throw new ApiException('bad_request', "dir must be 'up' or 'down'", 400);
+    }
+    $st = $pdo->prepare("SELECT day_date, sort_order FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $st->execute([$itemId, $id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'item not found', 404);
+    $cmp = $dir === 'up' ? '<' : '>';
+    $ord = $dir === 'up' ? 'DESC' : 'ASC';
+    $stN = $pdo->prepare("SELECT id, sort_order FROM adhoc_group_schedule_items
+            WHERE group_id=? AND day_date=? AND sort_order $cmp ?
+            ORDER BY sort_order $ord LIMIT 1");
+    $stN->execute([$id, $row['day_date'], (int)$row['sort_order']]);
+    $nei = $stN->fetch(PDO::FETCH_ASSOC);
+    if (!$nei) { json_response(['ok' => true, 'moved' => false]); return; }
+    db_tx($pdo, function () use ($pdo, $row, $nei, $itemId) {
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
+            ->execute([(int)$nei['sort_order'], $itemId]);
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
+            ->execute([(int)$row['sort_order'], (int)$nei['id']]);
+    });
+    json_response(['ok' => true, 'moved' => true]);
 }
