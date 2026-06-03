@@ -338,15 +338,19 @@ export async function renderGroupDetail({ params }) {
         <button id="gd-settle" class="primary">精算する</button>
       </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
-        立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
+        立替えた支出を積み上げて、 最後にまとめて精算 (貸し借り) します。
       </p>
-      <details id="gd-wari-form-card" class="collapsible-sub" style="margin-top:6px">
-        <summary>＋ 支払い登録</summary>
-        <div id="gd-wari-form" style="margin-top:8px"></div>
-      </details>
-      <h4 style="margin:10px 0 4px">支払いの記録</h4>
-      <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
-      <div id="gd-wari-list" class="list" style="margin-top:8px"></div>
+      <div class="row" style="gap:10px; align-items:flex-start; flex-wrap:wrap">
+        <div style="flex:1; min-width:260px">
+          <h4 style="margin:0 0 4px">支払い登録</h4>
+          <div id="gd-wari-form"></div>
+        </div>
+        <div style="flex:1; min-width:260px">
+          <h4 style="margin:0 0 4px">支払いの記録</h4>
+          <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
+          <div id="gd-wari-list" class="list" style="margin-top:4px"></div>
+        </div>
+      </div>
     </div>
 
     <div class="card" id="gd-spend-card" hidden>
@@ -808,8 +812,6 @@ async function tryFetchCustomRate() {
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
 // exclude that person from this expense.
-// 個別固定額。 uid → 円。 wariFor から外れた人は自動で消える。
-let wariFixed = new Map();
 function renderForPicker() {
   const root = document.getElementById('ex-for');
   if (!root) return;
@@ -819,46 +821,25 @@ function renderForPicker() {
     : (n === wariMembers.length
         ? `全員 (${n}人)`
         : `${n}人で割る`);
-  // 各メンバ行: チップ全体タップで in/out 切替、 右の input に円を入れると 固定額。
-  // 空欄 = 等分。 in/out は visually opacity & border で表す。
   root.innerHTML = `
     <label class="hint-sm">誰の分? <span style="margin-left:6px">${summary}</span></label>
-    <div class="hint-sm" style="margin:2px 0 4px">タップで in/out。 右に金額を入れると 「その人だけ固定」 (= 残りを等分)。</div>
-    <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px">
+    <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
       ${wariMembers.map(m => {
         const on = wariFor.has(m.id);
-        const fx = wariFixed.get(m.id);
         return `
-          <div class="row" data-for-uid="${m.id}" style="gap:6px; align-items:center; padding:4px 6px; border:1px solid ${on ? 'var(--primary)' : 'var(--line)'}; border-radius:6px; ${on ? '' : 'opacity:.4'}; background:${on ? 'var(--primary-soft, #efeafa)' : 'transparent'}">
-            <span class="wari-toggle" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; flex:1; min-width:0">
-              ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
-              <span class="bold" style="white-space:nowrap">${escapeHtml(m.display_name)}</span>
-            </span>
-            <input type="number" class="wari-fixed-input" data-fixed-uid="${m.id}"
-                   value="${fx != null ? fx : ''}"
-                   min="0" step="1" placeholder="等分"
-                   style="width:80px; text-align:right; font-size:13px"
-                   ${on ? '' : 'disabled'}>
-            <span class="muted" style="font-size:11px">円</span>
-          </div>`;
+        <span class="rl-chip" data-for-uid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}">
+          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+          <span>${escapeHtml(m.display_name)}</span>
+        </span>`;
       }).join('')}
     </div>
   `;
-  // チップ全体タップ (input 以外) で in/out 切替。 input は別途固定額入力。
-  root.querySelectorAll('[data-for-uid]').forEach(row => {
-    const uid = Number(row.dataset.forUid);
-    row.querySelector('.wari-toggle').addEventListener('click', () => {
-      if (wariFor.has(uid)) { wariFor.delete(uid); wariFixed.delete(uid); }
+  root.querySelectorAll('[data-for-uid]').forEach(c => {
+    c.addEventListener('click', () => {
+      const uid = Number(c.dataset.forUid);
+      if (wariFor.has(uid)) wariFor.delete(uid);
       else                  wariFor.add(uid);
       renderForPicker();
-    });
-  });
-  root.querySelectorAll('.wari-fixed-input').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const uid = Number(inp.dataset.fixedUid);
-      const v = Number(inp.value);
-      if (Number.isFinite(v) && v > 0) wariFixed.set(uid, Math.floor(v));
-      else wariFixed.delete(uid);
     });
   });
 }
@@ -885,21 +866,7 @@ async function onAddExpense() {
   }
   body.currency = currency;
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
-  // 固定額がある人がいれば rich format で送る。 無ければ legacy で。
-  const hasFixed = [...wariFor].some(uid => wariFixed.has(uid));
-  if (hasFixed) {
-    // 検算: 固定額合計が total を超えてないか、 全員固定で合計 != total など。
-    const fixedTotal = [...wariFor]
-      .filter(uid => wariFixed.has(uid))
-      .reduce((s, uid) => s + wariFixed.get(uid), 0);
-    if (currency === 'JPY' && fixedTotal > amount) {
-      toast('固定額の合計が支払金額を超えています'); return;
-    }
-    body.participants = [...wariFor].map(uid => {
-      const f = wariFixed.get(uid);
-      return f != null ? { user_id: uid, fixed: f } : { user_id: uid };
-    });
-  } else if (wariFor.size !== wariMembers.length) {
+  if (wariFor.size !== wariMembers.length) {
     body.participant_ids = [...wariFor];
   }
   try {
@@ -911,11 +878,7 @@ async function onAddExpense() {
     document.getElementById('ex-image-preview').hidden = true;
     document.getElementById('ex-image-status').textContent = '';
     wariFor = new Set(wariMembers.map(m => m.id));
-    wariFixed.clear();
     renderForPicker();
-    // 登録後は支払い登録フォームを畳む (記録画面に戻る感じ)。
-    const det = document.getElementById('gd-wari-form-card');
-    if (det) det.open = false;
     toast('記録しました');
     await loadWari(gid);
   } catch (e) { toast('失敗: ' + e.message); }
@@ -1525,13 +1488,30 @@ async function loadSchedule(gid) {
   });
 }
 
-// ペア id を hash 化して安定した色相を返す。 同じ pair_id = 同じ色 → 上下
-// 離れた日にあっても 「これは繋がってる」 と一目で分かる薄い帯。
-function schedPairColor(pid) {
-  let h = 0;
-  for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
-  const hue = Math.abs(h) % 360;
-  return `hsla(${hue}, 70%, 50%, 0.35)`;
+// 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
+const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk','move']);
+
+// ペア id を 2 つの独立 hash → 色相(360) + 位置 spread + 透明度を散らす。
+// 同じ pair_id = 同じ色・同じ位置に必ず落ちる (帯が縦に連続する)。
+function schedPairStyleFromId(pid, isTransport) {
+  let h1 = 0, h2 = 0;
+  for (let i = 0; i < pid.length; i++) {
+    h1 = (h1 * 31 + pid.charCodeAt(i)) | 0;
+    h2 = (h2 * 37 + pid.charCodeAt(i) * 13) | 0;
+  }
+  const hue   = Math.abs(h1) % 360;
+  const sat   = 55 + (Math.abs(h2) % 30);            // 55-85%
+  const light = 45 + (Math.abs(h1 >> 4) % 15);       // 45-60%
+  const color = `hsla(${hue}, ${sat}%, ${light}%, 0.45)`;
+  // 位置: 右端 〜 左 1/3 のレンジを 2 つに分ける。
+  //   右端側 (非移動): right 16 〜 80 px (画像/ボタン領域を避ける)
+  //   左半分 (移動系): right の min を半分くらいに → 100 〜 200 px ぐらい
+  // 同じハッシュ h2 で 0..1 に正規化してその範囲にマップ。
+  const r = (Math.abs(h2) % 1000) / 1000;
+  const rightPx = isTransport
+    ? Math.round(110 + r * 100)   // 移動: 110〜210 px (= 左半分)
+    : Math.round(16  + r * 70);   // 非移動: 16〜86 px (= 右半分)
+  return { color, rightPx };
 }
 
 function renderSchedItem(it) {
@@ -1593,23 +1573,22 @@ function renderSchedItem(it) {
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
-  // ペア帯: link_pair_id があれば 行の右端 30px 内側に 10px 幅の半透明縦
-  // ストリップを敷く。 ペアが複数ある時 (slot N) は 30 + N*14 px に
-  // ずらして 縦に並ぶ別ペアの帯と被らないように。
-  const pairSlot = it.link_pair_id ? (schedPairSlots[it.link_pair_id] ?? 0) : 0;
-  const pairRight = 30 + pairSlot * 14;
-  const pairStrip = it.link_pair_id
-    ? `<div aria-hidden="true" style="position:absolute; right:${pairRight}px; top:0; bottom:0; width:10px; background:${schedPairColor(it.link_pair_id)}; border-radius:5px; pointer-events:none"></div>`
+  // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
+  // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
+  // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
+  const isTransport = SCHED_TRANSPORT_KINDS.has(it.kind);
+  const stripStyle = it.link_pair_id
+    ? schedPairStyleFromId(it.link_pair_id, isTransport)
+    : null;
+  const pairStrip = stripStyle
+    ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; bottom:0; width:20px; background:${stripStyle.color}; border-radius:10px; pointer-events:none"></div>`
     : '';
   // 縦幅 2 行分で固定 (画像 56px + 上下 padding でだいたい 68px)。 1 行で
   // 済むアイテムも空きスペースに揃って並ぶので見た目がきれい。
   // 2 行目 (line2) は空でも HTML 上は存在させる。
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
-  // ペア帯のぶん右側に余白を確保。 ペアが無いアイテムも 帯がある列が
-  // 揃うよう、 同じグループの最大スロットぶんだけ余白を取る。
-  const rightPad = schedPairMaxSlot >= 0
-    ? `padding-right:${30 + (schedPairMaxSlot + 1) * 14 + 8}px;`
-    : '';
+  // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
+  const rightPad = 'padding-right:18px;';
   return `
     <div class="list-item" data-sched-item="${it.id}"
          style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${isMid ? 'opacity:0.55' : ''}">
@@ -1745,9 +1724,6 @@ function openSchedItemModal(gid, it) {
             <input type="number" id="sim-dur" min="0" step="15" value="${it.duration_minutes || ''}">
           </label>
         </div>
-        <label class="field"><span class="lbl">終了日 (任意・宿泊で複数日にまたぐ場合)</span>
-          <input type="date" id="sim-end-date" value="${escapeHtml(it.end_date || '')}">
-        </label>
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
@@ -1806,7 +1782,6 @@ function openSchedItemModal(gid, it) {
       title:           document.getElementById('sim-title').value.trim(),
       kind:            document.getElementById('sim-kind').value,
       start_time:      document.getElementById('sim-start').value || null,
-      end_date:        document.getElementById('sim-end-date').value || null,
       duration_minutes: document.getElementById('sim-dur').value || null,
       location:        document.getElementById('sim-loc').value.trim() || null,
       url:             document.getElementById('sim-url').value.trim() || null,

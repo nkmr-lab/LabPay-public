@@ -244,14 +244,13 @@ async function renderMedalsStrip() {
     const ach = await get('/api/me/achievements');
     const items = ach.items || [];
     if (!items.length) { root.innerHTML = ''; return; }
-    const earned = items.filter(a => a.earned_tier > 0).length;
-    const medals = items.map(a => {
-      const m = a.earned ? a.earned.medal : '⚪';
-      const lbl = a.earned ? a.earned.label : '未獲得';
-      const dim = a.earned ? '' : 'opacity:.3';
-      return `<span title="${escapeHtml(a.title)}: ${escapeHtml(lbl)}" style="font-size:20px; ${dim}">${m}</span>`;
-    }).join(' ');
-    root.innerHTML = `${medals} <span class="muted" style="font-size:11px">${earned}/${items.length}</span>`;
+    // 達成済みのメダルだけ並べる。 未達成の ⚪ は見栄えに貢献しないので隠す。
+    const earned = items.filter(a => a.earned);
+    if (!earned.length) { root.innerHTML = ''; return; }
+    const medals = earned.map(a =>
+      `<span title="${escapeHtml(a.title)}: ${escapeHtml(a.earned.label)}" style="font-size:20px">${a.earned.medal}</span>`
+    ).join(' ');
+    root.innerHTML = `${medals} <span class="muted" style="font-size:11px">${earned.length} 達成</span>`;
   } catch (e) { root.innerHTML = ''; }
 }
 
