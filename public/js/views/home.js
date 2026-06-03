@@ -10,8 +10,10 @@ export async function renderHome() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card balance-hero">
-      <div class="lbl">残高</div>
-      <div class="num" id="home-balance">— pt</div>
+      <div class="balance-line">
+        <span class="lbl">残高</span>
+        <span class="num" id="home-balance">— pt</span>
+      </div>
       <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
@@ -279,13 +281,17 @@ async function renderCalendarEvents() {
       const prefix = today ? '' : '明日 ';
       return `${prefix}${h}:${String(m).padStart(2,'0')}`;
     };
-    // 行全体を <a> でくくっていたが、右端の [参加] ボタンが「縦に区切り線」
-     // のように見えるという指摘を受けて構造変更:
-     // * 外側は <div class="list-item"> (タップ範囲全部 ≒ リンクは持たない)
-     // * タイトルは <a> でラップして Google Calendar の event detail へ
-     // * 参加ボタンはタイトル/場所の下に inline で並べる
-     // ネストした <a> が無くなって HTML 的にも妥当に。
-    root.innerHTML = items.map(ev => {
+    // 各予定について 「終わってる / 次にやって来る」 を判定して描画スタイルを
+    // 変える: 終わったやつは grayscale + 半透明、これから一番近い未来の予定は
+    // primary-soft 背景 + 左に primary バーで強調。
+    const nowMs = Date.now();
+    const withFlags = items.map(ev => {
+      const startMs = ev.start ? Date.parse(ev.start) : NaN;
+      const endMs   = ev.end   ? Date.parse(ev.end)   : (isNaN(startMs) ? NaN : startMs + 3600000);
+      return { ...ev, _isPast: !isNaN(endMs) && endMs < nowMs };
+    });
+    const nextIdx = withFlags.findIndex(e => !e._isPast);
+    root.innerHTML = withFlags.map((ev, idx) => {
       const locIsUrl = ev.location && /^https?:\/\//i.test(ev.location.trim());
       const loc = (ev.location && !locIsUrl) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
       const titleHtml = ev.html_url
@@ -294,8 +300,17 @@ async function renderCalendarEvents() {
       const zoomBtn = ev.url
         ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start">📹 参加する</a>`
         : '';
+      const isNext = idx === nextIdx;
+      // box-shadow:inset で左バーを描く (border-left を使うと content が右に
+      // ずれて他の行と縦が揃わなくなるので)。
+      const styles = [
+        'align-items:flex-start',
+        'gap:8px',
+      ];
+      if (ev._isPast)   styles.push('opacity:0.5', 'filter:grayscale(60%)');
+      if (isNext)       styles.push('background:var(--primary-soft)', 'box-shadow:inset 4px 0 0 var(--primary)');
       return `
-        <div class="list-item" style="align-items:flex-start; gap:8px">
+        <div class="list-item" style="${styles.join('; ')}">
           <div style="min-width:64px; font-weight:700; color:var(--primary); padding-top:1px">${fmtTime(ev.start, ev.all_day)}</div>
           <div class="grow" style="display:flex; flex-direction:column">
             ${titleHtml}

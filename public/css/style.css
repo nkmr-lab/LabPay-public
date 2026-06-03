@@ -380,8 +380,12 @@ textarea { min-height: 80px; resize: vertical; }
 
 /* Balance hero */
 .balance-hero { text-align: center; padding: 24px 12px; }
+/* 「残高 1,234 pt」 を 1 行で。残高は小さくサブ的に、数字は従来通り大きく。 */
+.balance-hero .balance-line {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+}
 .balance-hero .num { font-size: 44px; font-weight: 800; color: var(--primary); letter-spacing: 1px; white-space: nowrap; }
-.balance-hero .lbl { color: var(--muted); }
+.balance-hero .lbl { color: var(--muted); font-size: var(--text-md); }
 
 /* Medals strip inside balance-hero — compact one-line achievement summary */
 .home-medals {
