@@ -12,6 +12,7 @@ class Achievements {
             'title' => 'ラボイン マスター',
             'desc'  => '通算でラボインした日数',
             'unit'  => '日',
+            'icon'  => '📅',
             'tiers' => [
                 ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -23,6 +24,7 @@ class Achievements {
             'title' => '皆勤の鬼',
             'desc'  => '連続ラボインの最長記録',
             'unit'  => '日連続',
+            'icon'  => '🔥',
             'tiers' => [
                 ['count' => 5,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 10, 'label' => 'シルバー',   'medal' => '🥈'],
@@ -34,6 +36,7 @@ class Achievements {
             'title' => '品揃え自慢',
             'desc'  => '出品した異なる商品 (JAN) の種類',
             'unit'  => '種類',
+            'icon'  => '📦',
             'tiers' => [
                 ['count' => 3,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 10, 'label' => 'シルバー',   'medal' => '🥈'],
@@ -45,6 +48,7 @@ class Achievements {
             'title' => 'ショッピング常連',
             'desc'  => '購入した個数',
             'unit'  => '個',
+            'icon'  => '🛒',
             'tiers' => [
                 ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 25,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -56,6 +60,7 @@ class Achievements {
             'title' => '販売王',
             'desc'  => '売れた個数 (販売実績)',
             'unit'  => '個',
+            'icon'  => '💰',
             'tiers' => [
                 ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 25,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -67,6 +72,7 @@ class Achievements {
             'title' => '太っ腹',
             'desc'  => '累計購入額',
             'unit'  => 'pt',
+            'icon'  => '🎁',
             'tiers' => [
                 ['count' => 500,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 2000,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -78,6 +84,7 @@ class Achievements {
             'title' => '名物バイヤー',
             'desc'  => '累計販売額 (手数料前)',
             'unit'  => 'pt',
+            'icon'  => '🏪',
             'tiers' => [
                 ['count' => 500,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 2000,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -89,6 +96,7 @@ class Achievements {
             'title' => 'お助けマン',
             'desc'  => '承認されたタスクの数 (貢献度)',
             'unit'  => '件',
+            'icon'  => '🤝',
             'tiers' => [
                 ['count' => 3,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 15,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -100,6 +108,7 @@ class Achievements {
             'title' => 'メモ魔',
             'desc'  => 'Scrapbox を更新した累計日数',
             'unit'  => '日',
+            'icon'  => '📝',
             'tiers' => [
                 ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -111,6 +120,7 @@ class Achievements {
             'title' => 'ルーレット主催',
             'desc'  => 'あなたが回したルーレットの回数',
             'unit'  => '回',
+            'icon'  => '🎰',
             'tiers' => [
                 ['count' => 3,   'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 15,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -122,6 +132,7 @@ class Achievements {
             'title' => '運命の人',
             'desc'  => 'ルーレットで選ばれた回数',
             'unit'  => '回',
+            'icon'  => '🎯',
             'tiers' => [
                 ['count' => 1,  'label' => 'ブロンズ',   'medal' => '🥉'],
                 ['count' => 5,  'label' => 'シルバー',   'medal' => '🥈'],
@@ -220,6 +231,7 @@ class Achievements {
                 'title'       => $def['title'],
                 'desc'        => $def['desc'],
                 'unit'        => $def['unit'],
+                'icon'        => $def['icon'] ?? '🏅',
                 'value'       => $value,
                 'tiers'       => $def['tiers'],
                 'earned_tier' => $earnedIdx >= 0 ? $earnedIdx + 1 : 0,   // 1..N (0 = none)
