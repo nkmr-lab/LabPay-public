@@ -6,6 +6,7 @@ import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { fmtDateTime, participantPill } from '../format.js';
+import { isAppVisible } from './apps.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
@@ -27,6 +28,13 @@ function actionEnabled(g, id) {
   const list = g?.feat_actions;
   if (list === null || list === undefined) return true; // 後方互換
   return Array.isArray(list) && list.includes(id);
+}
+// v385 ユーザの アプリ表示設定 とも 重ね合わせる (apps id と groups action id が一致するもの)。
+// receipt / expense は アプリ メニューに無いので 常に true。
+function actionShownForUser(id) {
+  const APP_LINKED = ['roulette','nomikai','polls','rollcalls','timers','meetups'];
+  if (!APP_LINKED.includes(id)) return true;
+  return isAppVisible(id);
 }
 
 // ──────────────────────────── LIST + CREATE ────────────────────────────
@@ -687,12 +695,12 @@ async function loadDetail(id) {
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
         <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
-        <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
-        <a class="btn" data-gd-act="nomikai"   ${actionEnabled(g, 'nomikai')   ? '' : 'hidden'} href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
-        <a class="btn" data-gd-act="polls"     ${actionEnabled(g, 'polls')     ? '' : 'hidden'} href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📊 投票・アンケート</a>
-        <a class="btn" data-gd-act="rollcalls" ${actionEnabled(g, 'rollcalls') ? '' : 'hidden'} href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
-        <a class="btn" data-gd-act="timers"    ${actionEnabled(g, 'timers')    ? '' : 'hidden'} href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
-        <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
+        <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  && actionShownForUser('roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
+        <a class="btn" data-gd-act="nomikai"   ${actionEnabled(g, 'nomikai')   && actionShownForUser('nomikai')   ? '' : 'hidden'} href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
+        <a class="btn" data-gd-act="polls"     ${actionEnabled(g, 'polls')     && actionShownForUser('polls')     ? '' : 'hidden'} href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📊 投票・アンケート</a>
+        <a class="btn" data-gd-act="rollcalls" ${actionEnabled(g, 'rollcalls') && actionShownForUser('rollcalls') ? '' : 'hidden'} href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
+        <a class="btn" data-gd-act="timers"    ${actionEnabled(g, 'timers')    && actionShownForUser('timers')    ? '' : 'hidden'} href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
+        <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   && actionShownForUser('meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;

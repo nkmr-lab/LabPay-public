@@ -7,6 +7,7 @@ import { uploadImage } from '../upload.js';
 import { renderCoverEditor, wireCoverEditor } from './groups.js';
 import { fmtDate, fmtDateTime, tag } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { isAppVisible } from './apps.js';
 
 export async function renderInvitations() {
   const app = document.getElementById('app');
@@ -351,11 +352,13 @@ async function loadDetail(id) {
       muParams.set('title', '[' + (i.title || '') + ']');
       if (i.location) muParams.set('location', i.location);
       if (i.starts_at) muParams.set('when', String(i.starts_at).replace(' ', 'T').slice(0, 16));
+      // v385 ユーザの アプリ表示設定 で 隠れているものは ショートカットも 出さない。
+      const meetupBtn   = isAppVisible('meetups')  ? `<a class="btn primary" href="#/meetups/new?${muParams.toString()}">🤝 待ち合わせを作る</a>` : '';
+      const rouletteBtn = isAppVisible('roulette') ? `<a class="btn" href="#/roulette?members=${ids}">🎰 ルーレット</a>` : '';
+      const nomikaiBtn  = isAppVisible('nomikai')  ? `<a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>` : '';
       shortcuts.innerHTML = `
         <div class="muted" style="font-size:12px; width:100%; margin-bottom:4px">募集者 + 参加表明者 (${memberIds.length}人) で:</div>
-        <a class="btn primary" href="#/meetups/new?${muParams.toString()}">🤝 待ち合わせを作る</a>
-        <a class="btn" href="#/roulette?members=${ids}">🎰 ルーレット</a>
-        <a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>
+        ${meetupBtn}${rouletteBtn}${nomikaiBtn}
         <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
       `;
       document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
