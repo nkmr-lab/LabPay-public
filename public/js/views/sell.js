@@ -1,6 +1,6 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
-import { toast } from '../app.js';
+import { state, toast } from '../app.js';
 import { startScanner } from '../scan.js';
 import { uploadImage } from '../upload.js';
 
@@ -135,7 +135,10 @@ export async function renderSell() {
           <textarea id="completion_message" maxlength="2000" rows="2" placeholder="ご購入ありがとうございます!"></textarea>
           <div class="hint-sm">買ってくれた人に表示されます (note 風)。</div>
         </label>
-        <button class="primary" id="submit-listing">出品する</button>
+        <div class="row" style="gap:6px">
+          <button class="btn" id="preview-listing" type="button">👀 プレビュー</button>
+          <button class="primary grow" id="submit-listing">出品する</button>
+        </div>
         <div class="muted" style="margin-top:6px; font-size:13px">手数料は売れたときに価格×5%が差し引かれます。</div>
       </div>
       </details>
@@ -188,7 +191,10 @@ export async function renderSell() {
         <span class="lbl">購入時のメッセージ (任意)</span>
         <textarea id="nj-completion_message" maxlength="2000" rows="2" placeholder="ご購入ありがとうございます!"></textarea>
       </label>
-      <button class="primary" id="nj-submit">出品する</button>
+      <div class="row" style="gap:6px">
+        <button class="btn" id="nj-preview" type="button">👀 プレビュー</button>
+        <button class="primary grow" id="nj-submit">出品する</button>
+      </div>
       </details>
     </details>
 
@@ -211,6 +217,8 @@ export async function renderSell() {
 
   document.getElementById('submit-listing').addEventListener('click', () => submitListing('jan'));
   document.getElementById('nj-submit'    ).addEventListener('click', () => submitListing('no_jan'));
+  document.getElementById('preview-listing').addEventListener('click', () => openSellPreview('jan'));
+  document.getElementById('nj-preview'    ).addEventListener('click', () => openSellPreview('no_jan'));
 
   await loadMyListings();
   window.addEventListener('hashchange', stopCurrent, { once: true });
@@ -279,6 +287,92 @@ function showPreview(prefix, src) {
 // Unified submit for both JAN and no-JAN flows. `kind` is 'jan' or 'no_jan'.
 // JAN flow: register the product under the scanned JAN, then list it.
 // no-JAN flow: ask the server to mint a synthetic JAN, then list under it.
+// 出品プレビュー: 出品しないまま 「購入画面 一覧 / 詳細 で どう見えるか」 を
+// モーダルで表示。 buy.js の tile + product.js の購入カード を 寄せて作る。
+function openSellPreview(kind) {
+  const p = kind === 'jan' ? '' : 'nj-';
+  const name = document.getElementById(p + 'name')?.value?.trim() || '';
+  const displayName = document.getElementById(p + 'display_name')?.value?.trim() || '';
+  const imageUrl = document.getElementById(p + 'image_url')?.value?.trim() || '';
+  const isGift = document.getElementById(p + 'is_gift')?.checked || false;
+  const price = isGift ? 0 : Number(document.getElementById(p + 'price')?.value || 0);
+  const qty = Number(document.getElementById(p + 'qty')?.value || 0);
+  const location = readLocation(p);
+  const expiresAt = document.getElementById(p + 'expires_at')?.value || '';
+  const completionMsg = document.getElementById(p + 'completion_message')?.value?.trim() || '';
+  if (!name) { toast('商品名 を入れてください'); return; }
+  if (!isGift && !(price > 0)) { toast('価格 を入れてください'); return; }
+  if (!(qty > 0)) { toast('数量 を入れてください'); return; }
+  const titleForBuyer = displayName || name;
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
+  const sellerName = state.me?.display_name || '自分';
+  const sellerAvatar = state.me?.avatar_url || '';
+  const priceLabel = isGift
+    ? '🎁 これどうぞ'
+    : `${price.toLocaleString()} pt`;
+  const stockInline = qty > 1 ? `<span class="stock-pill">×${qty}</span>` : '';
+  const bg = imageUrl ? `style="background-image:url('${escapeHtml(imageUrl)}')"` : '';
+  const inner = imageUrl ? '' : `<div class="tile-noimg">${escapeHtml(initial)}</div>`;
+  const badge = isGift ? '<span class="tile-badge gift">🎁</span>' : '';
+  const locText = location ? '📍 ' + escapeHtml(location) : '';
+  // 一覧 tile (buy.js と同じ class 構成)
+  const tileHtml = `
+    <div class="tile" ${bg} style="pointer-events:none; max-width:200px; margin:0 auto">
+      ${inner}${badge}
+      <div class="tile-seller">${avatarSmall(sellerName, sellerAvatar)}</div>
+      <div class="tile-overlay">
+        <div class="name">${escapeHtml(name)}</div>
+        <div class="price-row"><span class="price">${priceLabel}</span>${stockInline}</div>
+        ${locText ? `<div class="meta">${locText}</div>` : ''}
+      </div>
+    </div>`;
+  // 詳細画面 (商品ページ) の見え方 - 簡易版
+  const expiresLine = expiresAt
+    ? `<div class="meta">📅 販売期限 ${escapeHtml(expiresAt.replace('T', ' '))}</div>` : '';
+  const msgLine = completionMsg
+    ? `<div class="muted" style="font-size:13px; white-space:pre-wrap; padding:8px; background:#fff8e6; border-radius:6px; margin-top:6px">💬 購入後表示: ${escapeHtml(completionMsg)}</div>` : '';
+  const detailHtml = `
+    <div style="border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff">
+      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" style="display:block; max-width:100%; max-height:200px; margin:0 auto 8px; border-radius:6px; object-fit:contain">` : ''}
+      <div class="bold" style="font-size:16px">${escapeHtml(titleForBuyer)}</div>
+      <div class="meta">${escapeHtml(name)}${displayName ? ` <span class="muted">(出品名: ${escapeHtml(displayName)})</span>` : ''}</div>
+      <div class="row center" style="margin-top:6px">
+        <div class="bold text-primary" style="font-size:18px">${priceLabel}</div>
+        <div class="muted">在庫 ${qty}</div>
+      </div>
+      ${locText ? `<div class="meta">${locText}</div>` : ''}
+      ${expiresLine}
+      <div class="meta" style="margin-top:4px">出品者: ${escapeHtml(sellerName)}</div>
+      <button class="primary" style="width:100%; margin-top:8px" disabled>${isGift ? 'もらう (プレビュー)' : '購入する (プレビュー)'}</button>
+      ${msgLine}
+    </div>`;
+  // モーダル
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:flex-start; padding:20px; overflow-y:auto; justify-content:center';
+  wrap.innerHTML = `
+    <div style="background:#fff; border-radius:12px; padding:14px; max-width:480px; width:100%; box-sizing:border-box">
+      <div class="row center" style="margin-bottom:8px">
+        <h3 style="margin:0">👀 プレビュー</h3>
+        <button class="btn" data-close>×</button>
+      </div>
+      <p class="hint" style="font-size:12px; margin:0 0 6px">出品はまだ実行されていません。 以下の見た目になります:</p>
+      <h4 style="margin:10px 0 6px; font-size:13px">購入 一覧 (タイル)</h4>
+      ${tileHtml}
+      <h4 style="margin:14px 0 6px; font-size:13px">購入 詳細</h4>
+      ${detailHtml}
+    </div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.querySelector('[data-close]').addEventListener('click', close);
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+}
+// avatarHtml は router.js export 済だが、 ここでは name only の小型版を直接組む。
+function avatarSmall(name, url) {
+  if (url) return `<img src="${escapeHtml(url)}" alt="" style="width:24px; height:24px; border-radius:50%; object-fit:cover; vertical-align:middle">`;
+  const ch = (name || '?').trim().charAt(0).toUpperCase();
+  return `<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; background:#ddd; align-items:center; justify-content:center; font-size:11px; vertical-align:middle">${escapeHtml(ch)}</span>`;
+}
+
 async function submitListing(kind) {
   const prefix = kind === 'jan' ? '' : 'nj-';
   const name = document.getElementById(prefix + 'name').value.trim();
