@@ -44,10 +44,12 @@ export async function renderContacts() {
     document.getElementById('contacts-list').innerHTML = users.map(u => {
       const phone = u.phone_number || '';
       const phoneRow = phone
-        ? `<a href="${escapeHtml(telHref(phone))}" class="bold" style="color:var(--primary)">📞 ${escapeHtml(phone)}</a>`
+        ? `<a href="${escapeHtml(telHref(phone))}" class="bold" style="color:var(--primary)" onclick="event.stopPropagation()">📞 ${escapeHtml(phone)}</a>`
         : `<span class="muted" style="font-size:12px">未登録</span>`;
+      // 行全体を 公開プロフィールへの link に。 電話タップだけは stopPropagation で
+      // tel: 直行 (プロフィールへは行かない)。
       return `
-        <div class="list-item" style="gap:10px; align-items:center">
+        <a class="list-item" href="#/users/${u.id}" style="gap:10px; align-items:center; text-decoration:none; color:inherit">
           ${avatarHtml(u.display_name, u.avatar_url, 'md')}
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
@@ -56,7 +58,8 @@ export async function renderContacts() {
             </div>
             <div class="meta">${phoneRow}</div>
           </div>
-        </div>`;
+          <span class="hint" style="font-size:11px">→</span>
+        </a>`;
     }).join('');
   } catch (e) {
     document.getElementById('contacts-list').innerHTML =

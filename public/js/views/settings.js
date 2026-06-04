@@ -33,9 +33,18 @@ export async function renderSettings() {
         <input type="file" id="profile-avatar-file" accept="image/*">
         <div id="profile-avatar-status" class="hint-sm"></div>
       </label>
+      <label class="field">
+        <span class="lbl">🎯 趣味 (任意・他のメンバーから見えます)</span>
+        <textarea id="profile-hobbies" rows="3" maxlength="1000" placeholder="例: ボードゲーム / 山登り / 料理"></textarea>
+      </label>
+      <label class="field">
+        <span class="lbl">❤️ 推し (任意・他のメンバーから見えます)</span>
+        <textarea id="profile-favorites" rows="3" maxlength="1000" placeholder="例: 〇〇 (アニメ) / △△ (バンド) / □□ (アイドル)"></textarea>
+      </label>
       <div class="row" style="gap:6px">
         <button id="profile-save" class="primary">保存</button>
         <button id="profile-clear-avatar">アバター削除</button>
+        <a id="profile-view" href="#" class="btn">👀 自分の公開プロフィールを見る</a>
       </div>
     </div>
 
@@ -488,6 +497,10 @@ async function loadProfile() {
     document.getElementById('profile-name').value = me.user.display_name || '';
     document.getElementById('profile-phone').value = me.user.phone_number || '';
     document.getElementById('profile-slack').value = me.user.slack_member_id || '';
+    document.getElementById('profile-hobbies').value = me.user.hobbies || '';
+    document.getElementById('profile-favorites').value = me.user.favorites || '';
+    const pv = document.getElementById('profile-view');
+    if (pv) pv.href = '#/users/' + me.user.id;
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
     pendingAvatarUrl = null;
   } catch (e) { toast('プロフィール取得失敗: ' + e.message); }
@@ -498,10 +511,14 @@ async function onProfileSave() {
   if (!display_name) { toast('表示名を入力してください'); return; }
   const phone_raw = document.getElementById('profile-phone').value.trim();
   const slack_raw = document.getElementById('profile-slack').value.trim();
+  const hobbies = document.getElementById('profile-hobbies').value.trim();
+  const favorites = document.getElementById('profile-favorites').value.trim();
   const body = {
     display_name,
     phone_number: phone_raw === '' ? null : phone_raw,
     slack_member_id: slack_raw === '' ? null : slack_raw,
+    hobbies:   hobbies   === '' ? null : hobbies,
+    favorites: favorites === '' ? null : favorites,
   };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {

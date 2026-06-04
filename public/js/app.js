@@ -29,6 +29,7 @@ import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meet
 import { renderAdminSounds } from './views/admin_sounds.js';
 import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/auctions.js';
 import { renderExercise } from './views/exercise.js';
+import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
@@ -441,6 +442,7 @@ route('/auctions',        renderAuctions);
 route('/auctions/new',    renderAuctionNew);
 route('/auctions/:id',    renderAuctionDetail);
 route('/exercise',        renderExercise);
+route('/users/:id',       renderUserProfile);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
 route('/requests-hub',   renderRequestsHub);

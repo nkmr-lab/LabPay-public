@@ -14,7 +14,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
@@ -22,6 +22,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['grade']             = $row['grade']             ?? null;
         $u['phone_number']      = $row['phone_number']      ?? null;
         $u['slack_member_id']   = $row['slack_member_id']   ?? null;
+        $u['hobbies']           = $row['hobbies']           ?? null;
+        $u['favorites']         = $row['favorites']         ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -102,6 +104,21 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sb = trim((string)$sb);
                 if (mb_strlen($sb) > 60) throw new ApiException('bad_request', 'scrapbox_username too long', 400);
                 $sets[] = 'scrapbox_username = ?'; $params[] = $sb;
+            }
+        }
+        // v360 趣味 / 推し (1000 文字まで、 空欄なら NULL)
+        foreach (['hobbies', 'favorites'] as $k) {
+            if (array_key_exists($k, $body)) {
+                $v = $body[$k];
+                if ($v === null || trim((string)$v) === '') {
+                    $sets[] = "{$k} = NULL";
+                } else {
+                    $v = trim((string)$v);
+                    if (mb_strlen($v) > 1000) {
+                        throw new ApiException('bad_request', "{$k} は 1000 文字まで", 400);
+                    }
+                    $sets[] = "{$k} = ?"; $params[] = $v;
+                }
             }
         }
         if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
@@ -1147,8 +1164,24 @@ function calendar_filter_rules_match(array $rules, string $title): bool {
 }
 
 // GET /api/users — lightweight list of all human users for recipient pickers.
+// GET /api/users/:id/profile — 公開プロフィール (display_name / avatar / grade /
+//                              hobbies / favorites / scrapbox_username)。 LabPay
+//                              にログインしている human user 全員から閲覧可。
 function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
     Auth::requireUser($pdo, $cfg);
+    // /api/users/:id/profile
+    if ($method === 'GET' && isset($seg[1]) && ctype_digit((string)$seg[1])
+        && ($seg[2] ?? '') === 'profile') {
+        $uid = (int)$seg[1];
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, scrapbox_username,
+                                    hobbies, favorites, created_at
+                               FROM users WHERE id=? AND kind='human'");
+        $st->execute([$uid]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) throw new ApiException('not_found', 'user not found', 404);
+        json_response(['profile' => $row]);
+        return;
+    }
     if ($method !== 'GET' || isset($seg[1])) {
         json_error('not_found', 'use GET /api/users', 404);
         return;
