@@ -319,8 +319,9 @@ export function coverListItem({ href, image_url, title, meta = '', rightExtra = 
     : '';
   const metaBlock = meta ? `<div class="meta">${meta}</div>` : '';
   if (image_url) {
+    // v372 グループ / 募集は hero 修飾を付けて 64% 表紙 + 斜めカット に。
     return `
-      <a class="list-item with-cover" href="${href}">
+      <a class="list-item with-cover hero" href="${href}">
         <div class="cover-img" style="background-image:url('${escapeHtml(image_url)}')"></div>
         <div class="grow">
           <div class="bold">${title}</div>

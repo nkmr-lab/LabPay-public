@@ -867,8 +867,9 @@ async function renderFreshInvitations() {
       const meta  = `${when}${where}${cap} · ${escapeHtml(i.creator_name)}`;
       const href  = '#/invitations/' + i.id;
       if (i.image_url) {
+        // 募集も 「ヒーロー風」 (groups と同じ)。
         return `
-          <a class="list-item with-cover" href="${href}">
+          <a class="list-item with-cover hero" href="${href}">
             <div class="cover-img" style="background-image:url('${escapeHtml(i.image_url)}')"></div>
             <div class="grow">
               <div class="bold">${title}</div>
