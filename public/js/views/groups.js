@@ -2365,6 +2365,78 @@ async function setupAirlineAutoComplete(numId, airlineId) {
   num.addEventListener('blur', refresh);
 }
 
+// 航空券 添付ファイル (PDF / 画像 / e-ticket 等) を 持ち主タグ付きで管理。
+// 持ち主はグループメンバーから選択。 同便の複数メンバーのチケットが整理可能。
+async function setupFlightAttachments(gid, fid) {
+  const listEl = document.getElementById('fm-att-list');
+  const ownerSel = document.getElementById('fm-att-owner');
+  const fileEl = document.getElementById('fm-att-file');
+  if (!listEl || !ownerSel || !fileEl) return;
+  // グループメンバーを owner プルダウンに入れる。 デフォルトは自分。
+  let members = [];
+  try {
+    const g = await get(`/api/groups/${gid}`);
+    members = (g.members || []).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
+  } catch (_) {}
+  ownerSel.innerHTML = members.map(m =>
+    `<option value="${m.id}" ${Number(m.id) === Number(state.me?.id) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`
+  ).join('');
+
+  const ICONS = { 'application/pdf': '📕' };
+  const renderRow = (a) => {
+    const sz = a.size > 1024 * 1024
+      ? (a.size / 1024 / 1024).toFixed(1) + ' MB'
+      : Math.max(1, Math.round(a.size / 1024)) + ' KB';
+    const icon = a.mime?.startsWith('image/') ? '🖼' : (ICONS[a.mime] || '📄');
+    return `<div class="list-item" style="gap:6px; padding:4px 6px; font-size:12px; align-items:center">
+      ${avatarHtml(a.owner_name, a.owner_avatar, 'sm')}
+      <span class="muted" style="font-size:11px; flex-shrink:0">${escapeHtml(a.owner_name)}</span>
+      <a href="${escapeHtml(a.stored_path)}" target="_blank" rel="noopener" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--primary)">${icon} ${escapeHtml(a.filename)}</a>
+      <span class="muted" style="font-size:11px; flex-shrink:0">${sz}</span>
+      <button data-fatt-rm="${a.id}" class="btn" style="padding:0 6px; font-size:11px; color:var(--muted)">×</button>
+    </div>`;
+  };
+  const reload = async () => {
+    try {
+      const d = await get(`/api/groups/${gid}/flights/${fid}/attachments`);
+      const arr = Array.isArray(d?.attachments) ? d.attachments : [];
+      listEl.innerHTML = arr.length
+        ? arr.map(renderRow).join('')
+        : '<div class="hint-sm" style="padding:2px 6px">添付なし</div>';
+      listEl.querySelectorAll('[data-fatt-rm]').forEach(b => {
+        b.addEventListener('click', async () => {
+          if (!confirm('この添付を削除しますか?')) return;
+          try { await del(`/api/groups/${gid}/flights/${fid}/attachments/${b.dataset.fattRm}`); await reload(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+      });
+    } catch (e) {
+      listEl.innerHTML = `<div class="hint-sm" style="color:var(--danger)">読み込み失敗</div>`;
+    }
+  };
+  reload();
+  fileEl.addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const ownerId = Number(ownerSel.value);
+    if (!ownerId) { toast('持ち主を選んでください'); return; }
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('owner_user_id', String(ownerId));
+    try {
+      const r = await fetch(`/api/groups/${gid}/flights/${fid}/attachments`, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error?.message || ('HTTP ' + r.status));
+      }
+      ev.target.value = '';
+      await reload();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
 function fmtDateTimeShort(s) {
   if (!s) return '';
   return String(s).slice(0, 16).replace(' ', ' '); // "YYYY-MM-DD HH:MM"
@@ -2598,6 +2670,17 @@ function openFlightModal(gid, it) {
         <label class="field"><span class="lbl">メモ</span>
           <textarea id="fm-memo" rows="3" maxlength="2000">${escapeHtml(it.memo || '')}</textarea></label>
         ${isNew ? '' : `
+        <div class="field">
+          <span class="lbl">チケット添付 (PDF / 画像 / QR スクショ 等)</span>
+          <div id="fm-att-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px"></div>
+          <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+            <label class="hint-sm">持ち主:</label>
+            <select id="fm-att-owner" style="flex:1; min-width:120px; font-size:13px"></select>
+            <input type="file" id="fm-att-file" style="font-size:12px; flex:2; min-width:140px">
+          </div>
+          <div class="hint-sm">16MB まで。 持ち主はグループメンバーから選択。</div>
+        </div>`}
+        ${isNew ? '' : `
         <div class="row" style="gap:6px; justify-content:flex-start; margin-top:8px">
           <button id="fm-sync" class="btn primary" style="padding:6px 12px">📅 保存してスケジュールに反映</button>
         </div>`}
@@ -2628,10 +2711,11 @@ function openFlightModal(gid, it) {
   setupAirportAutocomplete('fm-depap', 'fm-depap-info');
   setupAirportAutocomplete('fm-arrap', 'fm-arrap-info');
   setupAirlineAutoComplete('fm-num', 'fm-airline');
-  // 初期値で既に IATA コードが入ってる場合 一度発火させて hint を出す。
   document.getElementById('fm-depap').dispatchEvent(new Event('input'));
   document.getElementById('fm-arrap').dispatchEvent(new Event('input'));
   document.getElementById('fm-num').dispatchEvent(new Event('input'));
+  // 既存航空券のみ: 添付セクションを wire-up。
+  if (!isNew) setupFlightAttachments(gid, it.id);
   function collectFlightModal() {
     return {
       airline:       document.getElementById('fm-airline').value.trim() || null,

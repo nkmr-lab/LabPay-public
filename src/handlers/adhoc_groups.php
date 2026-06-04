@@ -38,6 +38,12 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'flights'  && $method === 'GET'  && !isset($seg[3])) { group_flights_list($pdo, $cfg, $id);  return; }
             if ($next === 'flights'  && $method === 'POST' && !isset($seg[3])) { group_flights_add($pdo, $cfg, $id);   return; }
             if ($next === 'flights'  && isset($seg[3]) && ($seg[4] ?? '') === 'sync' && $method === 'POST')  { group_flights_sync($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'flights'  && isset($seg[3]) && ($seg[4] ?? '') === 'attachments') {
+                $fid = (int)$seg[3];
+                if ($method === 'GET'  && !isset($seg[5])) { group_flight_att_list($pdo, $cfg, $id, $fid); return; }
+                if ($method === 'POST' && !isset($seg[5])) { group_flight_att_add($pdo, $cfg, $id, $fid); return; }
+                if ($method === 'DELETE' && isset($seg[5])) { group_flight_att_del($pdo, $cfg, $id, $fid, (int)$seg[5]); return; }
+            }
             if ($next === 'flights'  && isset($seg[3]) && $method === 'PATCH')  { group_flights_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'flights'  && isset($seg[3]) && $method === 'DELETE') { group_flights_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'chats'    && $method === 'GET'  && !isset($seg[3])) { group_chats_list($pdo, $cfg, $id); return; }
@@ -1266,6 +1272,95 @@ function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
         $insOne($F['arr_at'], $F['arr_airport'], ' 到着');
     });
     json_response(['ok' => true, 'created_ids' => $created, 'pair_id' => $pairId]);
+}
+
+// ──────── 航空券添付 (e-ticket PDF / QR / スクショ等、 持ち主タグ付き) ────────
+const FLIGHT_ATT_MAX_BYTES = 16 * 1024 * 1024;
+const FLIGHT_ATT_MIME = [
+    'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
+    'image/webp' => 'webp', 'image/heic' => 'heic', 'image/heif' => 'heif',
+    'application/pdf' => 'pdf',
+    'application/msword' => 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+    'text/plain' => 'txt',
+];
+
+function group_flight_assert(PDO $pdo, int $gid, int $fid): void {
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_flights WHERE id=? AND group_id=?");
+    $st->execute([$fid, $gid]);
+    if ($st->fetchColumn() === false) {
+        throw new ApiException('not_found', '航空券が見つかりません', 404);
+    }
+}
+
+function group_flight_att_list(PDO $pdo, array $cfg, int $gid, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    group_flight_assert($pdo, $gid, $fid);
+    $st = $pdo->prepare("SELECT a.id, a.filename, a.stored_path, a.thumb_path, a.mime, a.size,
+                                a.created_at, a.owner_user_id, a.uploaded_by_user_id,
+                                uo.display_name AS owner_name, uo.avatar_url AS owner_avatar,
+                                up.display_name AS uploaded_by_name
+                           FROM adhoc_group_flight_attachments a
+                           JOIN users uo ON uo.id = a.owner_user_id
+                           JOIN users up ON up.id = a.uploaded_by_user_id
+                          WHERE a.flight_id = ?
+                          ORDER BY uo.display_name, a.created_at, a.id");
+    $st->execute([$fid]);
+    json_response(['attachments' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function group_flight_att_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    group_flight_assert($pdo, $gid, $fid);
+    if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+        throw new ApiException('no_file', 'multipart field "file" 必要', 400);
+    }
+    $ownerId = (int)($_POST['owner_user_id'] ?? 0);
+    if ($ownerId <= 0) throw new ApiException('bad_request', 'owner_user_id 必要', 400);
+    // owner はグループメンバーであること。
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id=? AND user_id=?");
+    $st->execute([$gid, $ownerId]);
+    if ($st->fetchColumn() === false) {
+        throw new ApiException('bad_request', '持ち主はグループメンバーから選んでください', 400);
+    }
+    $original = (string)($_FILES['file']['name'] ?? 'file');
+    $original = mb_substr(preg_replace('/[\x00-\x1F]/u', '', $original) ?? 'file', 0, 200);
+    $saved = save_uploaded_file($_FILES['file'], 'uploads/flight_att',
+        FLIGHT_ATT_MAX_BYTES, FLIGHT_ATT_MIME);
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_flight_attachments
+        (flight_id, owner_user_id, uploaded_by_user_id, filename, stored_path, thumb_path, mime, size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$fid, $ownerId, (int)$u['id'], $original, $saved['path'],
+        $saved['thumb_path'] ?? null, $saved['mime'], (int)$saved['size']]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_flight_att_del(PDO $pdo, array $cfg, int $gid, int $fid, int $aid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    group_flight_assert($pdo, $gid, $fid);
+    $st = $pdo->prepare("SELECT a.uploaded_by_user_id, a.owner_user_id, a.stored_path, a.thumb_path, g.creator_user_id
+                           FROM adhoc_group_flight_attachments a
+                           JOIN adhoc_groups g ON g.id = ?
+                          WHERE a.id = ? AND a.flight_id = ?");
+    $st->execute([$gid, $aid, $fid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '添付が見つかりません', 404);
+    $isOwner    = (int)$row['owner_user_id'] === (int)$u['id'];
+    $isUploader = (int)$row['uploaded_by_user_id'] === (int)$u['id'];
+    $isCreator  = (int)$row['creator_user_id'] === (int)$u['id'];
+    $isAdmin    = (string)($u['role'] ?? '') === 'admin';
+    if (!$isOwner && !$isUploader && !$isCreator && !$isAdmin) {
+        throw new ApiException('forbidden', '本人・アップロード者・グループ作成者・admin のみ削除可', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_flight_attachments WHERE id=?")->execute([$aid]);
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    foreach ([$row['stored_path'], $row['thumb_path']] as $p) {
+        if ($p && is_file($publicDir . $p)) @unlink($publicDir . $p);
+    }
+    json_response(['ok' => true]);
 }
 
 // ──────── グループチャット (LINE 的) ─────────
