@@ -5,6 +5,7 @@
 import { get, post, patch } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { createMemberPicker } from '../member_picker.js';
 
 // 基本は全員 ×1.0 でスタート。アルコール/学年での自動補正は廃止
 // (UI から [−][+] で操作する方式に変更)。GRADE_ORDER はソートのみで使う。
@@ -57,84 +58,20 @@ export async function renderNomikai({ query } = {}) {
 }
 
 async function populatePicker() {
-  const u = await get('/api/users');
-  let pool = u.items;
-  if (stepOne.lockedIds) {
-    pool = pool.filter(x => stepOne.lockedIds.has(Number(x.id)));
-    pool.forEach(x => stepOne.selected.add(Number(x.id)));
-  }
-  // Sort: D → M2 → M1 → B4 → B3 → (no grade), 50音順.
-  stepOne.users = [...pool].sort((a, b) => {
-    const ga = GRADE_ORDER.indexOf(a.grade || '');
-    const gb = GRADE_ORDER.indexOf(b.grade || '');
-    return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
-      (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+  // v385 共有 member_picker。 lockedIds (グループから飛んできた時) は pool で制限 + 初期全選択。
+  const poolIds = stepOne.lockedIds ? [...stepOne.lockedIds] : null;
+  const initial = stepOne.lockedIds ? [...stepOne.lockedIds] : [];
+  stepOne.picker = await createMemberPicker({
+    bulkContainer: document.getElementById('nm-bulk'),
+    chipsContainer: document.getElementById('nm-picker'),
+    countLabel:    document.getElementById('nm-count'),
+    initial,
+    poolIds,
+    showGenderBulk: true,
+    onChange: (sel) => { stepOne.selected = sel; },
   });
-
-  // Bulk buttons. semantics: tap one → ensure all members of that group are
-  // ON (additive). Tap [全員] again when everyone is already selected → clear.
-  const grades = [...new Set(stepOne.users.map(u => u.grade).filter(Boolean))]
-    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
-  const bulkRow = document.getElementById('nm-bulk');
-  bulkRow.innerHTML = `
-    <button data-bulk="all"  class="btn">全員</button>
-    ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
-    <button data-bulk="gender:M" class="btn">男</button>
-    <button data-bulk="gender:F" class="btn">女</button>
-    <button data-bulk="clear" class="btn">クリア</button>
-  `;
-  bulkRow.querySelectorAll('[data-bulk]').forEach(btn => {
-    btn.addEventListener('click', () => applyBulk(btn.dataset.bulk));
-  });
-
-  const picker = document.getElementById('nm-picker');
-  picker.innerHTML = stepOne.users.map(x => `
-    <span class="rl-chip" data-uid="${x.id}">
-      ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-      <span>${escapeHtml(x.display_name)}</span>
-      ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
-    </span>`).join('');
-  picker.querySelectorAll('.rl-chip').forEach(c => {
-    c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
-  });
-  refreshChips();
-}
-
-function memberMatches(user, key) {
-  if (key === 'all') return true;
-  if (key.startsWith('grade:')) return (user.grade || '') === key.slice(6);
-  if (key.startsWith('gender:')) return (user.gender || '') === key.slice(7);
-  return false;
-}
-
-function applyBulk(key) {
-  if (key === 'clear') {
-    stepOne.selected.clear();
-    refreshChips();
-    return;
-  }
-  const targets = stepOne.users.filter(u => memberMatches(u, key));
-  // If every target is already selected → toggle them off (so you can quickly drop a group).
-  // Otherwise → add all to the selection.
-  const allOn = targets.every(u => stepOne.selected.has(u.id));
-  if (allOn) targets.forEach(u => stepOne.selected.delete(u.id));
-  else       targets.forEach(u => stepOne.selected.add(u.id));
-  refreshChips();
-}
-
-function togglePick(uid) {
-  if (stepOne.selected.has(uid)) stepOne.selected.delete(uid);
-  else stepOne.selected.add(uid);
-  refreshChips();
-}
-
-function refreshChips() {
-  document.querySelectorAll('#nm-picker .rl-chip').forEach(c => {
-    const on = stepOne.selected.has(Number(c.dataset.uid));
-    c.style.background = on ? 'var(--primary-soft, #efeafa)' : '';
-    c.style.borderColor = on ? 'var(--primary)' : '';
-  });
-  document.getElementById('nm-count').textContent = `${stepOne.selected.size} 人選択中`;
+  stepOne.users = stepOne.picker.users();
+  stepOne.selected = stepOne.picker.getSelected();
 }
 
 function goToStep2() {
