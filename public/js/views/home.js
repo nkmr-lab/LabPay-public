@@ -409,13 +409,13 @@ function renderPendingLikeItems(items, root) {
     }[it.kind] || '#555';
     const label = it.kind_label || it.kind;
     return `
-      <a class="list-item" href="${escapeHtml(it.url)}">
+      <a class="list-item" href="${escapeHtml(it.url)}" style="overflow:hidden">
         <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
-        <div class="grow" style="min-width:0">
+        <div class="grow" style="min-width:0; overflow:hidden">
           <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
             <span style="display:inline-block; background:${tagBg}; color:${tagFg}; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; margin-right:6px; vertical-align:1px">${escapeHtml(label)}</span>${escapeHtml(it.title)}
           </div>
-          <div class="meta">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
+          <div class="meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
         </div>
       </a>`;
   }).join('');
