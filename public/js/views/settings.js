@@ -1,6 +1,6 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
-import { state, toast, refreshMe, requestNotificationPermission } from '../app.js';
+import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readTabLayout, writeTabLayout, applyTabLayout } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
@@ -82,6 +82,15 @@ export async function renderSettings() {
         非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h3>タブのカスタマイズ</h3>
+      <p class="hint">
+        上部のナビゲーションに表示するタブと並び順を変えられます。
+        チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
+      </p>
+      <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
     </div>
 
     <div class="card">
@@ -179,6 +188,7 @@ export async function renderSettings() {
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
+  renderTabLayoutEditor();
   // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
   // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
   const hideInput = document.getElementById('cal-hide-after-min');
@@ -268,6 +278,67 @@ function moveCard(id, delta, currentOrder) {
   l.order = arr;
   writeHomeLayout(l);
   renderHomeLayoutEditor();
+}
+
+// ---------------- タブのカスタマイズ ----------------
+// 上部ナビ #tabs の表示/非表示 + 並び順を localStorage に保存。
+// 設定で編集 → app.js の applyTabLayout が反映 (即座に表示更新)。
+function renderTabLayoutEditor() {
+  const root = document.getElementById('tab-layout-list');
+  if (!root) return;
+  const layout = readTabLayout();
+  const knownIds = TAB_DEFS.map(t => t.id);
+  const orderedIds = [
+    ...layout.order.filter(id => knownIds.includes(id)),
+    ...knownIds.filter(id => !layout.order.includes(id)),
+  ];
+  const hiddenSet = new Set(layout.hidden);
+  root.innerHTML = orderedIds.map((id, idx) => {
+    const def = TAB_DEFS.find(t => t.id === id);
+    if (!def) return '';
+    const visible = !hiddenSet.has(id);
+    const isFirst = idx === 0;
+    const isLast  = idx === orderedIds.length - 1;
+    return `
+      <div class="list-item" data-tab-id="${escapeHtml(id)}" style="gap:6px; align-items:center">
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+          <input type="checkbox" class="tl-show" ${visible ? 'checked' : ''}>
+          <span class="bold">${escapeHtml(def.title)}</span>
+          ${def.note ? `<span class="hint-sm">${escapeHtml(def.note)}</span>` : ''}
+        </label>
+        <button class="tl-up"   ${isFirst ? 'disabled' : ''}>↑</button>
+        <button class="tl-down" ${isLast  ? 'disabled' : ''}>↓</button>
+      </div>`;
+  }).join('');
+  root.querySelectorAll('.list-item[data-tab-id]').forEach(row => {
+    const id = row.dataset.tabId;
+    row.querySelector('.tl-show').addEventListener('change', (ev) => {
+      const l = readTabLayout();
+      const set = new Set(l.hidden);
+      if (ev.target.checked) set.delete(id); else set.add(id);
+      l.hidden = [...set];
+      if (!l.order.length) l.order = orderedIds.slice();
+      writeTabLayout(l);
+      applyTabLayout();
+      renderTabLayoutEditor();
+    });
+    row.querySelector('.tl-up')  .addEventListener('click', () => moveTab(id, -1, orderedIds));
+    row.querySelector('.tl-down').addEventListener('click', () => moveTab(id, +1, orderedIds));
+  });
+}
+
+function moveTab(id, delta, currentOrder) {
+  const arr = currentOrder.slice();
+  const i = arr.indexOf(id);
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  const l = readTabLayout();
+  l.order = arr;
+  writeTabLayout(l);
+  applyTabLayout();
+  renderTabLayoutEditor();
 }
 
 // ---------------- Google Calendar ----------------

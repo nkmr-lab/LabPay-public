@@ -233,6 +233,56 @@ function renderChrome() {
   }
   const groupsTab = document.getElementById('tab-groups');
   if (groupsTab) groupsTab.hidden = !state.hasGroups;
+  applyTabLayout();
+}
+
+// ────────────── タブのカスタマイズ ──────────────────────────────────
+// 表示するタブと並び順を localStorage に保存。 設定の 「タブのカスタマイズ」 で編集。
+// nav#tabs 内の <a data-tab-id="..."> を 保存 order に従って並べ替え + hidden 適用。
+export const TAB_DEFS = [
+  { id: 'home',         title: 'ホーム' },
+  { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
+  { id: 'buy',          title: '購入' },
+  { id: 'sell',         title: '販売' },
+  { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
+  { id: 'apps',         title: 'アプリ' },
+  { id: 'achievements', title: '実績' },
+];
+const TAB_LAYOUT_KEY = 'labpay-tab-layout';
+export function readTabLayout() {
+  try {
+    const j = JSON.parse(localStorage.getItem(TAB_LAYOUT_KEY) || '{}');
+    return {
+      order:  Array.isArray(j.order)  ? j.order  : [],
+      hidden: Array.isArray(j.hidden) ? j.hidden : [],
+    };
+  } catch { return { order: [], hidden: [] }; }
+}
+export function writeTabLayout(layout) {
+  try {
+    localStorage.setItem(TAB_LAYOUT_KEY, JSON.stringify({
+      order:  Array.isArray(layout.order)  ? layout.order  : [],
+      hidden: Array.isArray(layout.hidden) ? layout.hidden : [],
+    }));
+  } catch {}
+}
+export function applyTabLayout() {
+  const nav = document.getElementById('tabs');
+  if (!nav) return;
+  const layout = readTabLayout();
+  const links = Array.from(nav.querySelectorAll(':scope > [data-tab-id]'));
+  const knownIds = links.map(l => l.dataset.tabId);
+  const orderedKnown = [
+    ...layout.order.filter(id => knownIds.includes(id)),
+    ...knownIds.filter(id => !layout.order.includes(id)),
+  ];
+  for (const id of orderedKnown) {
+    const el = links.find(l => l.dataset.tabId === id);
+    if (el) nav.appendChild(el);
+  }
+  for (const link of links) {
+    link.classList.toggle('tab-user-hidden', layout.hidden.includes(link.dataset.tabId));
+  }
 }
 
 // (Logout button moved to settings page)

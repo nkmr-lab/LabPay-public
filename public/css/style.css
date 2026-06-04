@@ -160,6 +160,7 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 /* ホームのカード非表示 — 設定 → ホームのカスタマイズ で外したカードに付く。
    [hidden] 属性より強制したいので !important。 */
 .home-card-user-hidden { display: none !important; }
+.tab-user-hidden { display: none !important; }
 
 /* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
