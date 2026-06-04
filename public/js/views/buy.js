@@ -136,7 +136,7 @@ async function loadListings() {
       const sale = g.listings.filter(x => !x.is_gift);
       let priceLabel;
       if (sale.length === 0) {
-        priceLabel = '🎁 これどうぞ';
+        priceLabel = '🎁';
       } else {
         const prices = sale.map(x => x.price);
         const min = Math.min(...prices);

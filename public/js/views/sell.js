@@ -308,7 +308,7 @@ function openSellPreview(kind) {
   const sellerName = state.me?.display_name || '自分';
   const sellerAvatar = state.me?.avatar_url || '';
   const priceLabel = isGift
-    ? '🎁 これどうぞ'
+    ? '🎁'
     : `${price.toLocaleString()} pt`;
   const stockInline = qty > 1 ? `<span class="stock-pill">×${qty}</span>` : '';
   const bg = imageUrl ? `style="background-image:url('${escapeHtml(imageUrl)}')"` : '';
@@ -523,7 +523,7 @@ function listingTags(l) {
     withdrawn: '<span class="tag muted">取り下げ</span>',
   })[l.status] || '';
   const locTag = l.location ? `<span class="tag muted" style="margin-left:4px">📍 ${escapeHtml(l.location)}</span>` : '';
-  const giftTag = l.is_gift ? `<span class="tag" style="margin-left:4px; background:#fce4ec; color:#b71c50">🎁 これどうぞ</span>` : '';
+  const giftTag = l.is_gift ? `<span class="tag" style="margin-left:4px; background:#fce4ec; color:#b71c50">🎁</span>` : '';
   return statusTag + giftTag + locTag;
 }
 
@@ -577,7 +577,7 @@ function renderEditRow(l) {
   const priceField = l.is_gift
     ? `<div class="sell-edit-row" style="align-items:center">
          <span class="sell-edit-label">価格</span>
-         <div class="sell-edit-input" style="color:#b71c50; font-weight:600">🎁 これどうぞ (0pt)</div>
+         <div class="sell-edit-input" style="color:#b71c50; font-weight:600">🎁 (0pt)</div>
        </div>
        <div class="sell-edit-row" style="align-items:center">
          <span class="sell-edit-label"></span>

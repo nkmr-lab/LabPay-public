@@ -908,7 +908,7 @@ async function renderFreshListings() {
     // 新規入荷も大きく見せる。 残数が分かるようメタ行に 「在庫 N」 を入れる。
     root.innerHTML = items.map(l => {
       const priceTag = l.is_gift
-        ? `<div class="bold" style="color:#b71c50; white-space:nowrap; padding:8px 12px 0 0">🎁 これどうぞ</div>`
+        ? `<div class="bold" style="color:#b71c50; white-space:nowrap; padding:8px 12px 0 0">🎁</div>`
         : `<div class="bold" style="color:var(--primary); white-space:nowrap; padding:8px 12px 0 0">${l.price.toLocaleString()} pt</div>`;
       // 在庫数: 2 個以上の時だけ表示。 1 個は 「言うまでもない」 のでノイズ削減。
       const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';

@@ -178,7 +178,7 @@ function renderListingRow(l) {
   const isGift = !!l.is_gift;
   const inLab = state.inLab === true;  // refreshed from /api/me
   const priceTag = isGift
-    ? `<span class="bold" style="color:#b71c50">🎁 これどうぞ</span>`
+    ? `<span class="bold" style="color:#b71c50">🎁</span>`
     : `<span class="bold" style="color:var(--primary); white-space:nowrap">${l.price.toLocaleString()} pt</span>`;
   // Three button states:
   //   - own listing: 'cannot buy'
