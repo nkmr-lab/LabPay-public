@@ -8,6 +8,26 @@ import { uploadImage } from '../upload.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
+// v340 グループ詳細ヘッダの アクションボタン 8 個の定義 (順番もここの並びを保持)。
+// feat_actions JSON 配列の値はこの id。 receipt / expense は wari に依存するので
+// feat_wari が OFF なら 強制的に hidden。
+const GROUP_ACTIONS = [
+  { id: 'receipt',   label: '📷 レシート',       wariDep: true  },
+  { id: 'expense',   label: '＋ 支出を記録',     wariDep: true  },
+  { id: 'roulette',  label: '🎰 ルーレット',     wariDep: false },
+  { id: 'nomikai',   label: '🍶 飲み会割り勘',   wariDep: false },
+  { id: 'polls',     label: '📊 投票・アンケート', wariDep: false },
+  { id: 'rollcalls', label: '📣 点呼',           wariDep: false },
+  { id: 'timers',    label: '⏱️ タイマー',       wariDep: false },
+  { id: 'meetups',   label: '🤝 待ち合わせ',     wariDep: false },
+];
+// アクションが有効か (g.feat_actions が null = 「全 ON」、 配列ならその中に含まれる物)
+function actionEnabled(g, id) {
+  const list = g?.feat_actions;
+  if (list === null || list === undefined) return true; // 後方互換
+  return Array.isArray(list) && list.includes(id);
+}
+
 // ──────────────────────────── LIST + CREATE ────────────────────────────
 
 export async function renderGroups() {
@@ -51,10 +71,10 @@ export async function renderGroups() {
       </div>
       <div class="field">
         <span class="lbl">使う機能 (後から ON/OFF 可)</span>
-        <div class="hint-sm" style="margin-bottom:4px">飲み会・連幹事には不要。 学会・出張だけ ON にしてください。</div>
+        <div class="hint-sm" style="margin-bottom:4px">必要なものだけ ON に。 OFF にしても 既に登録したデータは残ります。</div>
         <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
           <span class="switch"><input type="checkbox" id="gr-feat-sched"><span class="slider"></span></span>
-          <span>📅 スケジュール</span>
+          <span>📅 スケジュール (学会・出張など)</span>
         </label>
         <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
           <span class="switch"><input type="checkbox" id="gr-feat-lodging"><span class="slider"></span></span>
@@ -64,6 +84,14 @@ export async function renderGroups() {
           <span class="switch"><input type="checkbox" id="gr-feat-flight"><span class="slider"></span></span>
           <span>✈️ 航空券</span>
         </label>
+        <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+          <span class="switch"><input type="checkbox" id="gr-feat-wari" checked><span class="slider"></span></span>
+          <span>💴 ワリカ (立替を積み上げ → 精算)</span>
+        </label>
+        <details style="margin-top:6px">
+          <summary class="hint" style="cursor:pointer">▸ アクションボタンの 表示設定 (8 個)</summary>
+          <div id="gr-feat-actions" style="margin-top:6px"></div>
+        </details>
       </div>
       <button id="gr-submit" class="primary">作成</button>
     </details>
@@ -74,6 +102,15 @@ export async function renderGroups() {
     </div>
   `;
   await populatePicker();
+  // アクション 8 個のチェックボックスを並べる (デフォルト全 ON)
+  const actBox = document.getElementById('gr-feat-actions');
+  if (actBox) {
+    actBox.innerHTML = GROUP_ACTIONS.map(a => `
+      <label style="display:flex; align-items:center; gap:8px; margin:2px 0">
+        <span class="switch"><input type="checkbox" data-act="${a.id}" checked><span class="slider"></span></span>
+        <span>${a.label}</span>
+      </label>`).join('');
+  }
   document.getElementById('gr-submit').addEventListener('click', onCreate);
   document.getElementById('gr-image-file').addEventListener('change', onGroupImageFile);
   await loadList();
@@ -183,10 +220,13 @@ async function onCreate() {
   const feat_schedule = document.getElementById('gr-feat-sched').checked;
   const feat_lodging  = document.getElementById('gr-feat-lodging').checked;
   const feat_flight   = document.getElementById('gr-feat-flight').checked;
+  const feat_wari     = document.getElementById('gr-feat-wari').checked;
+  const feat_actions = [...document.querySelectorAll('#gr-feat-actions input[data-act]')]
+    .filter(cb => cb.checked).map(cb => cb.dataset.act);
   try {
     const r = await post('/api/groups', {
       title, description, slug, image_url, member_ids: [...picked],
-      feat_schedule, feat_lodging, feat_flight,
+      feat_schedule, feat_lodging, feat_flight, feat_wari, feat_actions,
     });
     toast('作成しました');
     refreshHasGroups();
@@ -408,8 +448,7 @@ export async function renderGroupDetail({ params }) {
     <details class="card" id="gd-feat-card" hidden>
       <summary style="font-weight:700; cursor:pointer">⚙ 使う機能の設定</summary>
       <p class="hint" style="margin:8px 0 8px">
-        飲み会・連幹事には不要。 学会・出張だけ ON にしてください。
-        既に登録した予定 / 宿泊地 / 航空券のデータは OFF にしても残ります。
+        必要なものだけ ON に。 OFF にしても 既に登録したデータは残ります。
       </p>
       <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
         <span class="switch"><input type="checkbox" id="gd-feat-sched"><span class="slider"></span></span>
@@ -423,6 +462,14 @@ export async function renderGroupDetail({ params }) {
         <span class="switch"><input type="checkbox" id="gd-feat-flight"><span class="slider"></span></span>
         <span>✈️ 航空券</span>
       </label>
+      <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+        <span class="switch"><input type="checkbox" id="gd-feat-wari"><span class="slider"></span></span>
+        <span>💴 ワリカ</span>
+      </label>
+      <details style="margin-top:10px">
+        <summary class="hint" style="cursor:pointer">▸ アクションボタンの 表示設定</summary>
+        <div id="gd-feat-actions" style="margin-top:6px"></div>
+      </details>
     </details>
 
     <div class="card" id="gd-danger-card" hidden>
@@ -463,15 +510,25 @@ function applyGroupFeatures(g) {
   const schedCard = document.getElementById('gd-sched-card');
   const lodCard = document.getElementById('gd-lodging-card');
   const fltCard = document.getElementById('gd-flight-card');
+  const wariCard = document.getElementById('gd-wari-card');
   if (schedCard) schedCard.hidden = !g.feat_schedule;
   if (lodCard)   lodCard.hidden   = !g.feat_lodging;
   if (fltCard)   fltCard.hidden   = !g.feat_flight;
+  if (wariCard)  wariCard.hidden  = !g.feat_wari;
   if (g.feat_schedule) loadSchedule(groupId);
   if (g.feat_lodging)  loadLodgings(groupId);
   if (g.feat_flight)   loadFlights(groupId);
   // ヘッダの 「地図」 ボタンも スケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
   const mapBtn = document.querySelector(`a[href="#/groups/${groupId}/map"]`);
   if (mapBtn) mapBtn.hidden = !g.feat_schedule;
+  // 8 個のアクションボタン: feat_actions の null/配列に従って表示制御。 receipt と
+  // expense は ワリカ依存なので feat_wari OFF なら強制 hidden。
+  for (const a of GROUP_ACTIONS) {
+    const el = document.querySelector(`[data-gd-act="${a.id}"]`);
+    if (!el) continue;
+    const allowed = actionEnabled(g, a.id) && (!a.wariDep || g.feat_wari);
+    el.hidden = !allowed;
+  }
   // 機能設定カード (作成者のみ表示)。 トグル変更で PATCH + 即時反映。
   const featCard = document.getElementById('gd-feat-card');
   const isCreator = state.me?.id === Number(g.creator_user_id);
@@ -481,6 +538,7 @@ function applyGroupFeatures(g) {
       document.getElementById('gd-feat-sched').checked   = !!g.feat_schedule;
       document.getElementById('gd-feat-lodging').checked = !!g.feat_lodging;
       document.getElementById('gd-feat-flight').checked  = !!g.feat_flight;
+      document.getElementById('gd-feat-wari').checked    = !!g.feat_wari;
       const wire = (id, key) => {
         const el = document.getElementById(id);
         if (!el || el.dataset.wired) return;
@@ -499,6 +557,37 @@ function applyGroupFeatures(g) {
       wire('gd-feat-sched', 'feat_schedule');
       wire('gd-feat-lodging', 'feat_lodging');
       wire('gd-feat-flight', 'feat_flight');
+      wire('gd-feat-wari', 'feat_wari');
+      // アクションボタンの設定 UI を作成 (初回のみ)、 トグル変更で feat_actions PATCH
+      const actBox = document.getElementById('gd-feat-actions');
+      if (actBox && !actBox.dataset.wired) {
+        actBox.dataset.wired = '1';
+        actBox.innerHTML = GROUP_ACTIONS.map(a => `
+          <label style="display:flex; align-items:center; gap:8px; margin:2px 0">
+            <span class="switch"><input type="checkbox" data-act="${a.id}"><span class="slider"></span></span>
+            <span>${a.label}${a.wariDep ? ' <span class="muted" style="font-size:11px">(ワリカ要)</span>' : ''}</span>
+          </label>`).join('');
+        actBox.querySelectorAll('input[data-act]').forEach(cb => {
+          cb.addEventListener('change', async () => {
+            const enabled = [...actBox.querySelectorAll('input[data-act]')]
+              .filter(x => x.checked).map(x => x.dataset.act);
+            try {
+              await patch('/api/groups/' + groupId, { feat_actions: enabled });
+              toast('アクションボタンの設定を更新しました');
+              await loadDetail(groupId);
+            } catch (e) {
+              toast('失敗: ' + e.message);
+              cb.checked = !cb.checked;
+            }
+          });
+        });
+      }
+      // 現在の有効状態を反映 (feat_actions=null は 全 ON)
+      if (actBox) {
+        actBox.querySelectorAll('input[data-act]').forEach(cb => {
+          cb.checked = actionEnabled(g, cb.dataset.act);
+        });
+      }
     }
   }
 }
@@ -585,14 +674,14 @@ async function loadDetail(id) {
           </span>`).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <button class="btn primary" id="gd-snap-receipt">📷 レシート</button>
-        <button class="btn primary" id="gd-snap-expense">＋ 支出を記録</button>
-        <a class="btn" href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">ルーレット</a>
-        <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
-        <a class="btn" href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">投票・アンケート</a>
-        <a class="btn" href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
-        <a class="btn" href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
-        <a class="btn" href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
+        <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt">📷 レシート</button>
+        <button class="btn primary" id="gd-snap-expense" data-gd-act="expense">＋ 支出を記録</button>
+        <a class="btn" data-gd-act="roulette"  href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
+        <a class="btn" data-gd-act="nomikai"   href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
+        <a class="btn" data-gd-act="polls"     href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📊 投票・アンケート</a>
+        <a class="btn" data-gd-act="rollcalls" href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
+        <a class="btn" data-gd-act="timers"    href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
+        <a class="btn" data-gd-act="meetups"   href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;

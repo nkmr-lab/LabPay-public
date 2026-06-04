@@ -192,14 +192,21 @@ function groups_create(PDO $pdo, array $cfg): void {
     $featSched   = !empty($body['feat_schedule']) ? 1 : 0;
     $featLodging = !empty($body['feat_lodging'])  ? 1 : 0;
     $featFlight  = !empty($body['feat_flight'])   ? 1 : 0;
+    // ワリカ は デフォ ON (連幹事の主目的)、 OFF にできるようトグル付与。
+    $featWari    = array_key_exists('feat_wari', $body) ? (!empty($body['feat_wari']) ? 1 : 0) : 1;
+    // アクションボタン群 (8 種)。 NULL なら 「全 ON」 (後方互換)。
+    $featActionsJson = null;
+    if (array_key_exists('feat_actions', $body) && is_array($body['feat_actions'])) {
+        $featActionsJson = normalize_feat_actions($body['feat_actions']);
+    }
 
-    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $imageUrl, $memberIds, $featSched, $featLodging, $featFlight) {
+    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $imageUrl, $memberIds, $featSched, $featLodging, $featFlight, $featWari, $featActionsJson) {
         $st = $pdo->prepare("INSERT INTO adhoc_groups
             (slug, creator_user_id, title, description, image_url,
-             feat_schedule, feat_lodging, feat_flight)
-            VALUES (?,?,?,?,?,?,?,?)");
+             feat_schedule, feat_lodging, feat_flight, feat_wari, feat_actions)
+            VALUES (?,?,?,?,?,?,?,?,?,?)");
         $st->execute([$slug, $u['id'], $title, $description, $imageUrl,
-            $featSched, $featLodging, $featFlight]);
+            $featSched, $featLodging, $featFlight, $featWari, $featActionsJson]);
         $gid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?,?)");
         foreach ($memberIds as $uid) $st->execute([$gid, $uid]);
@@ -246,6 +253,13 @@ function groups_detail(PDO $pdo, array $cfg, int $id): void {
     $stI->execute([$id]);
     $g['items'] = $stI->fetchAll(PDO::FETCH_ASSOC);
 
+    // feat_actions は JSON 文字列で保存しているので デコードして返す。 NULL なら
+    // 「全 ON」 のシグナルとして null を返し、 フロントで判断させる。
+    if (array_key_exists('feat_actions', $g)) {
+        $g['feat_actions'] = $g['feat_actions'] === null
+            ? null
+            : (json_decode((string)$g['feat_actions'], true) ?: []);
+    }
     json_response($g);
 }
 
@@ -262,7 +276,9 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
     $hasEnd   = array_key_exists('schedule_end_date', $body);
     $hasFeat  = array_key_exists('feat_schedule', $body)
              || array_key_exists('feat_lodging', $body)
-             || array_key_exists('feat_flight', $body);
+             || array_key_exists('feat_flight', $body)
+             || array_key_exists('feat_wari', $body)
+             || array_key_exists('feat_actions', $body);
     if (!$hasSlug && !$hasImage && !$hasStart && !$hasEnd && !$hasFeat) {
         throw new ApiException('bad_request', 'nothing to update', 400);
     }
@@ -313,9 +329,18 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
         if ($img === null) { $sets[] = 'image_url = NULL'; }
         else               { $sets[] = 'image_url = ?'; $args[] = $img; $respImage = $img; }
     }
-    foreach (['feat_schedule','feat_lodging','feat_flight'] as $k) {
+    foreach (['feat_schedule','feat_lodging','feat_flight','feat_wari'] as $k) {
         if (array_key_exists($k, $body)) {
             $sets[] = "$k = ?"; $args[] = !empty($body[$k]) ? 1 : 0;
+        }
+    }
+    if (array_key_exists('feat_actions', $body)) {
+        $v = $body['feat_actions'];
+        if ($v === null) { $sets[] = 'feat_actions = NULL'; }
+        elseif (is_array($v)) {
+            $sets[] = 'feat_actions = ?'; $args[] = normalize_feat_actions($v);
+        } else {
+            throw new ApiException('bad_request', 'feat_actions は配列か null', 400);
         }
     }
     $args[] = $id;
