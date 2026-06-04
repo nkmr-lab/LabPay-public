@@ -1689,10 +1689,13 @@ function renderSchedItem(it) {
     : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
   // 編集モード ON だけ ボタンを出す。 OFF 時は完全に隠す (アイテム自体が
   // タップ可能で edit modal が開く)。
-  // z-index:1 でペア帯より上に出す (帯は pointer-events:none だが、 当たり判定の
-  // 誤動作回避と視覚的にもボタンを前面に置きたい)。 帯の右端 16px 起点から
-  // ボタン領域とぶつかるので 編集時はボタン領域も 28px 外側に逃がす。
-  const editControls = schedEditMode ? `
+  // ↑↓× は 「DB 上の本拠地となる日」 = single / start の行にだけ出す。
+  // multi-day 展開の mid / end 行 (= 宿泊の 6/9, 6/10, 6/11 など) で押されても、
+  // DB の day_date は start 日なので 表示中の日 (6/9 等) の並び替えにはならない
+  // → 押しても無反応に見える、 という混乱を防ぐためボタンを出さない。
+  // z-index:2 + 半透明白背景でペア帯より前面に。
+  const canEdit = schedEditMode && (it._occ === 'single' || it._occ === 'start');
+  const editControls = canEdit ? `
     <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px; position:relative; z-index:2; background:rgba(255,255,255,0.85); border-radius:6px; padding:2px 0">
       <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:0 6px; font-size:11px">↑</button>
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
