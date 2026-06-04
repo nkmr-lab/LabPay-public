@@ -544,11 +544,17 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         //   * 化石デバイスがあるケース: 24h+ の行は除外されるので、その古い
         //     start_at は拾われない
         $openStart = null; $openEnd = null; $isFresh = false;
+        // v344 bug fix: presence_seen に 数日前の 化石行が残っていた場合 (= scanner
+        // が close し損ねた行)、 MIN(session_start_at) がそれを拾って 開セッション
+        // の start が 数日前にズレ、 今日の貢献が異常に大きく出ていた (中村のケース
+        // で 17.6h)。 last_seen_at が 6 時間以内の行のみ MIN/MAX 対象にすることで
+        // 化石を排除。 isFresh (10 分以内) はそのまま据え置き。
         $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
             FROM presence_seen ps
             JOIN presence_devices pd ON pd.mac = ps.mac
             WHERE pd.user_id = ?
               AND ps.session_start_at IS NOT NULL
+              AND ps.last_seen_at >= NOW() - INTERVAL 6 HOUR
               AND TIMESTAMPDIFF(MINUTE, ps.session_start_at, ps.last_seen_at) < ?");
         $stOpen->execute([$u['id'], 24 * 60]);
         if ($row = $stOpen->fetch()) {
