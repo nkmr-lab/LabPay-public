@@ -101,6 +101,15 @@ function group_assert_creator_or_admin(PDO $pdo, int $groupId, array $u): void {
     }
 }
 
+// v340 アクションボタンの有効 ID リストを 正規化 → JSON 文字列で返す (DB 保存用)。
+// 許可 ID 以外は捨て、 重複も除去。 PHP 8.3 では static 宣言は関数スコープで OK。
+function normalize_feat_actions(array $ids): string {
+    static $ALLOWED = ['receipt','expense','roulette','nomikai','polls','rollcalls','timers','meetups'];
+    $clean = array_values(array_unique(array_filter(array_map('strval', $ids),
+        fn($x) => in_array($x, $ALLOWED, true))));
+    return json_encode($clean, JSON_UNESCAPED_UNICODE);
+}
+
 // ─── LIST + CREATE ───────────────────────────────────────────
 
 function groups_list(PDO $pdo, array $cfg): void {

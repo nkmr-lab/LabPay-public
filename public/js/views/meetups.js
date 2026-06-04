@@ -4,6 +4,22 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { loadLeaflet } from './group_map.js';
+
+// 場所文字列から 緯度,経度 を拾う。
+//   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
+//   * "(35.6586, 139.7454) 駅前ホテル" / "lat:35.65 lng:139.74"
+// 範囲: 緯度 [-90, 90], 経度 [-180, 180]。 駅名や住所文字が混在しても
+// 最初の lat/lng ペアを返す。 該当無しなら null。
+function parseLatLng(s) {
+  if (!s) return null;
+  const m = String(s).match(/(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -75,6 +91,9 @@ export async function renderMeetupNew({ query } = {}) {
     .split(',').map(Number).filter(Boolean);
   const lockMembers = presetMembers.length > 0;
   const presetTitle = String(query?.title || '').trim();
+  const presetLoc = String(query?.location || '').trim();
+  // when は "2026-06-04T18:30" の ISO 文字列を受け取り、 24h を超えるなら無視。
+  const presetWhenRaw = String(query?.when || '').trim();
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -86,7 +105,8 @@ export async function renderMeetupNew({ query } = {}) {
         <input type="text" id="mun-title" maxlength="200" placeholder="例: ランチ集合" value="${escapeHtml(presetTitle)}">
       </label>
       <label class="field"><span class="lbl">場所 (任意)</span>
-        <input type="text" id="mun-loc" maxlength="500" placeholder="例: 14F ロビー / 駅前">
+        <input type="text" id="mun-loc" maxlength="500" placeholder="例: 14F ロビー / 駅前 / 35.6586,139.7454" value="${escapeHtml(presetLoc)}">
+        <span class="hint-sm" style="font-size:11px">緯度,経度 (例 35.6586,139.7454) を入れると地図表示されます</span>
       </label>
       <span class="lbl">集合時刻</span>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 6px">
@@ -131,7 +151,17 @@ export async function renderMeetupNew({ query } = {}) {
     b.addEventListener('click', () => setPreset(Number(b.dataset.muPreset)));
   });
   whenEl.addEventListener('input', syncRem);
-  setPreset(30); // デフォは 30 分後
+  // URL 経由の preset 時刻を 優先 (24h 以内かつ未来時刻なら採用)。
+  let usedPreset = false;
+  if (presetWhenRaw) {
+    const t = new Date(presetWhenRaw).getTime();
+    if (Number.isFinite(t) && t > Date.now() + 30_000 && t <= Date.now() + 24 * 3600_000) {
+      whenEl.value = presetWhenRaw.length >= 16 ? presetWhenRaw.slice(0, 16) : presetWhenRaw;
+      syncRem();
+      usedPreset = true;
+    }
+  }
+  if (!usedPreset) setPreset(30); // デフォは 30 分後
 
   let allUsers = [];
   const selected = new Set();
@@ -213,6 +243,7 @@ export async function renderMeetupDetail({ params }) {
       <div id="mud-when" style="font-size:48px; font-weight:700; font-variant-numeric:tabular-nums">--:--</div>
       <div id="mud-rem" class="muted" style="font-size:13px; margin-top:4px">--</div>
       <div id="mud-loc" style="margin-top:8px; font-size:14px"></div>
+      <div id="mud-map" style="margin-top:8px; border-radius:8px; overflow:hidden" hidden></div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 6px">参加者 (<span id="mud-pn">0</span>)</h3>
@@ -248,10 +279,37 @@ export async function renderMeetupDetail({ params }) {
     updateClock();
     muCountdownTimer = setInterval(updateClock, 1000);
     const locEl = document.getElementById('mud-loc');
+    const ll = parseLatLng(m.location);
     if (locEl) {
+      // 緯度/経度っぽい時は Google Maps を coord 形式に。 そうでなければ住所/施設名検索。
+      const href = ll
+        ? `https://maps.google.com/?q=${ll.lat},${ll.lng}`
+        : `https://maps.google.com/?q=${encodeURIComponent(m.location || '')}`;
       locEl.innerHTML = m.location
-        ? `📍 <a href="https://maps.google.com/?q=${encodeURIComponent(m.location)}" target="_blank" rel="noopener" style="color:var(--primary)">${escapeHtml(m.location)}</a>`
+        ? `📍 <a href="${href}" target="_blank" rel="noopener" style="color:var(--primary)">${escapeHtml(m.location)}</a>`
         : '<span class="muted">場所未指定</span>';
+    }
+    // 緯度/経度が入っていれば Leaflet で小マップを差し込む。
+    const mapBox = document.getElementById('mud-map');
+    if (mapBox) {
+      if (ll) {
+        mapBox.hidden = false;
+        try {
+          const L = await loadLeaflet();
+          if (mapBox._muMap) { mapBox._muMap.remove(); mapBox._muMap = null; }
+          mapBox.style.height = '200px';
+          const map = L.map(mapBox, { zoomControl: true }).setView([ll.lat, ll.lng], 16);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap', maxZoom: 19,
+          }).addTo(map);
+          L.marker([ll.lat, ll.lng]).addTo(map).bindPopup(escapeHtml(m.title || '集合場所'));
+          mapBox._muMap = map;
+        } catch (e) {
+          mapBox.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+        }
+      } else {
+        mapBox.hidden = true;
+      }
     }
     document.getElementById('mud-pn').textContent = d.participants.length;
     document.getElementById('mud-parts').innerHTML = d.participants.map(p => `
