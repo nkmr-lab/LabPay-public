@@ -45,6 +45,12 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
                 if ($method === 'POST' && !isset($seg[5])) { group_flight_att_add($pdo, $cfg, $id, $fid); return; }
                 if ($method === 'DELETE' && isset($seg[5])) { group_flight_att_del($pdo, $cfg, $id, $fid, (int)$seg[5]); return; }
             }
+            if ($next === 'flights'  && isset($seg[3]) && ($seg[4] ?? '') === 'etickets') {
+                $fid = (int)$seg[3];
+                if ($method === 'GET'  && !isset($seg[5])) { group_flight_eticket_list($pdo, $cfg, $id, $fid); return; }
+                if ($method === 'POST' && !isset($seg[5])) { group_flight_eticket_add($pdo, $cfg, $id, $fid); return; }
+                if ($method === 'DELETE' && isset($seg[5])) { group_flight_eticket_del($pdo, $cfg, $id, $fid, (int)$seg[5]); return; }
+            }
             if ($next === 'flights'  && isset($seg[3]) && $method === 'PATCH')  { group_flights_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'flights'  && isset($seg[3]) && $method === 'DELETE') { group_flights_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'chats'    && $method === 'GET'  && !isset($seg[3])) { group_chats_list($pdo, $cfg, $id); return; }
@@ -1443,6 +1449,71 @@ function group_flight_att_del(PDO $pdo, array $cfg, int $gid, int $fid, int $aid
     foreach ([$row['stored_path'], $row['thumb_path']] as $p) {
         if ($p && is_file($publicDir . $p)) @unlink($publicDir . $p);
     }
+    json_response(['ok' => true]);
+}
+
+// ─── 航空券 e-ticket (QR) per person (v354) ─────────────────────────
+function group_flight_eticket_list(PDO $pdo, array $cfg, int $gid, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_flights WHERE id=? AND group_id=?");
+    $st->execute([$fid, $gid]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'flight 無し', 404);
+    $st = $pdo->prepare("SELECT e.id, e.flight_id, e.owner_user_id, e.created_by_user_id,
+                                e.qr_payload, e.seat, e.booking_ref, e.note, e.created_at,
+                                uo.display_name AS owner_name, uo.avatar_url AS owner_avatar_url
+                           FROM adhoc_group_flight_etickets e
+                           JOIN users uo ON uo.id = e.owner_user_id
+                          WHERE e.flight_id = ?
+                          ORDER BY uo.display_name, e.id");
+    $st->execute([$fid]);
+    json_response(['etickets' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function group_flight_eticket_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_flights WHERE id=? AND group_id=?");
+    $st->execute([$fid, $gid]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'flight 無し', 404);
+    $body = read_json_body();
+    $ownerId = (int)($body['owner_user_id'] ?? 0);
+    if ($ownerId <= 0) throw new ApiException('bad_request', 'owner_user_id 必須', 400);
+    group_assert_member($pdo, $gid, $ownerId);
+    $qr = trim((string)($body['qr_payload'] ?? ''));
+    if ($qr === '') throw new ApiException('bad_request', 'qr_payload 必須', 400);
+    if (mb_strlen($qr) > 2048) throw new ApiException('bad_request', 'qr_payload は 2048 文字まで', 400);
+    $seat = isset($body['seat']) ? mb_substr(trim((string)$body['seat']), 0, 50) : null;
+    $ref  = isset($body['booking_ref']) ? mb_substr(trim((string)$body['booking_ref']), 0, 100) : null;
+    $note = isset($body['note']) ? mb_substr(trim((string)$body['note']), 0, 500) : null;
+    if ($seat === '') $seat = null;
+    if ($ref === '') $ref = null;
+    if ($note === '') $note = null;
+    $st = $pdo->prepare("INSERT INTO adhoc_group_flight_etickets
+        (flight_id, owner_user_id, created_by_user_id, qr_payload, seat, booking_ref, note, created_at)
+        VALUES (?,?,?,?,?,?,?, NOW())");
+    $st->execute([$fid, $ownerId, (int)$u['id'], $qr, $seat, $ref, $note]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_flight_eticket_del(PDO $pdo, array $cfg, int $gid, int $fid, int $eid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    $st = $pdo->prepare("SELECT e.owner_user_id, e.created_by_user_id, g.creator_user_id
+                           FROM adhoc_group_flight_etickets e
+                           JOIN adhoc_group_flights f ON f.id = e.flight_id
+                           JOIN adhoc_groups g ON g.id = ?
+                          WHERE e.id = ? AND e.flight_id = ?");
+    $st->execute([$gid, $eid, $fid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'e-ticket 無し', 404);
+    $myId = (int)$u['id'];
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['owner_user_id'] !== $myId && (int)$row['created_by_user_id'] !== $myId
+        && (int)$row['creator_user_id'] !== $myId && !$isAdmin) {
+        throw new ApiException('forbidden', '本人・作成者・グループ作成者・admin のみ削除可', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_flight_etickets WHERE id=?")->execute([$eid]);
     json_response(['ok' => true]);
 }
 

@@ -2664,6 +2664,117 @@ async function setupFlightAttachments(gid, fid) {
   });
 }
 
+// v354 航空券 e-ticket 一覧 + 追加 + QR 描画
+let qrcodeLibLoaded = null;
+function loadQrcodeLib() {
+  if (qrcodeLibLoaded) return qrcodeLibLoaded;
+  qrcodeLibLoaded = new Promise((resolve, reject) => {
+    if (window.QRCode) { resolve(window.QRCode); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+    s.onload = () => resolve(window.qrcode);
+    s.onerror = () => reject(new Error('QR ライブラリ 読み込み失敗'));
+    document.head.appendChild(s);
+  });
+  return qrcodeLibLoaded;
+}
+
+async function renderQrInto(el, payload) {
+  try {
+    const qrcode = await loadQrcodeLib();
+    const qr = qrcode(0, 'M');
+    qr.addData(payload);
+    qr.make();
+    el.innerHTML = qr.createImgTag(4, 4); // 4 cell size, 4 margin
+  } catch (e) {
+    el.innerHTML = `<div class="hint-sm" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function setupFlightEtickets(gid, fid) {
+  const listEl = document.getElementById('fm-et-list');
+  const ownerSel = document.getElementById('fm-et-owner');
+  if (!listEl || !ownerSel) return;
+  // owners は グループメンバー
+  try {
+    const g = await get('/api/groups/' + gid);
+    ownerSel.innerHTML = (g.members || []).map(m =>
+      `<option value="${m.id}">${escapeHtml(m.display_name)}</option>`).join('');
+    const meId = Number(state.me?.id);
+    if ([...ownerSel.options].some(o => Number(o.value) === meId)) ownerSel.value = String(meId);
+  } catch (_) {}
+  const reload = async () => {
+    try {
+      const d = await get(`/api/groups/${gid}/flights/${fid}/etickets`);
+      const arr = d.etickets || [];
+      if (!arr.length) { listEl.innerHTML = '<div class="hint-sm">登録なし</div>'; return; }
+      listEl.innerHTML = arr.map(e => `
+        <div style="border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff" data-et-id="${e.id}">
+          <div class="row center" style="margin-bottom:4px">
+            <span class="bold" style="font-size:13px; flex:1">${escapeHtml(e.owner_name)}</span>
+            <button class="btn" data-et-show="${e.id}" style="padding:2px 8px; font-size:11px">QR</button>
+            <button class="btn" data-et-rm="${e.id}" style="padding:2px 6px; font-size:11px; color:var(--muted)">×</button>
+          </div>
+          <div class="hint-sm" style="font-size:11px">
+            ${e.seat ? '座席: ' + escapeHtml(e.seat) + ' · ' : ''}
+            ${e.booking_ref ? '予約: ' + escapeHtml(e.booking_ref) : ''}
+          </div>
+          ${e.note ? `<div class="hint-sm" style="font-size:11px; white-space:pre-wrap; margin-top:2px">${escapeHtml(e.note)}</div>` : ''}
+          <div data-qr-box="${e.id}" style="margin-top:6px; text-align:center; display:none"></div>
+        </div>`).join('');
+      // 各 e-ticket の QR を 「表示」 ボタンで lazy 描画
+      listEl.querySelectorAll('[data-et-show]').forEach(b => {
+        b.addEventListener('click', async () => {
+          const eid = b.dataset.etShow;
+          const box = listEl.querySelector(`[data-qr-box="${eid}"]`);
+          if (!box) return;
+          if (box.style.display === 'none') {
+            box.style.display = 'block';
+            if (!box.dataset.rendered) {
+              const e = arr.find(x => Number(x.id) === Number(eid));
+              if (e) { await renderQrInto(box, e.qr_payload); box.dataset.rendered = '1'; }
+            }
+          } else {
+            box.style.display = 'none';
+          }
+        });
+      });
+      listEl.querySelectorAll('[data-et-rm]').forEach(b => {
+        b.addEventListener('click', async () => {
+          if (!confirm('この e-ticket を削除しますか?')) return;
+          try { await del(`/api/groups/${gid}/flights/${fid}/etickets/${b.dataset.etRm}`); toast('削除しました'); await reload(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+      });
+    } catch (e) {
+      listEl.innerHTML = `<div class="hint-sm" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
+    }
+  };
+  reload();
+  document.getElementById('fm-et-add').addEventListener('click', async () => {
+    const ownerId = Number(ownerSel.value);
+    const payload = document.getElementById('fm-et-payload').value.trim();
+    if (!ownerId) { toast('持ち主を選んでください'); return; }
+    if (!payload) { toast('QR の中身が空です'); return; }
+    const body = {
+      owner_user_id: ownerId,
+      qr_payload: payload,
+      seat: document.getElementById('fm-et-seat').value.trim() || null,
+      booking_ref: document.getElementById('fm-et-ref').value.trim() || null,
+      note: document.getElementById('fm-et-note').value.trim() || null,
+    };
+    try {
+      await post(`/api/groups/${gid}/flights/${fid}/etickets`, body);
+      document.getElementById('fm-et-payload').value = '';
+      document.getElementById('fm-et-seat').value = '';
+      document.getElementById('fm-et-ref').value = '';
+      document.getElementById('fm-et-note').value = '';
+      toast('追加しました');
+      await reload();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
 function fmtDateTimeShort(s) {
   if (!s) return '';
   return String(s).slice(0, 16).replace(' ', ' '); // "YYYY-MM-DD HH:MM"
@@ -2906,6 +3017,26 @@ function openFlightModal(gid, it) {
             <input type="file" id="fm-att-file" style="font-size:12px; flex:2; min-width:140px">
           </div>
           <div class="hint-sm">16MB まで。 持ち主はグループメンバーから選択。</div>
+        </div>
+        <div class="field">
+          <span class="lbl">e-ticket (QR コード) 人ごと</span>
+          <div id="fm-et-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px"></div>
+          <details>
+            <summary class="hint" style="cursor:pointer">＋ e-ticket を追加</summary>
+            <div style="margin-top:6px">
+              <div class="row" style="gap:6px; flex-wrap:wrap">
+                <label class="hint-sm">持ち主:</label>
+                <select id="fm-et-owner" style="flex:1; min-width:120px; font-size:13px"></select>
+              </div>
+              <textarea id="fm-et-payload" rows="2" maxlength="2048" placeholder="QR にする 文字列 (チェックイン URL / 予約番号 / Apple Wallet ID など)" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:12px"></textarea>
+              <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
+                <input type="text" id="fm-et-seat" placeholder="座席 (任意)" maxlength="50" style="flex:1; min-width:100px; font-size:12px">
+                <input type="text" id="fm-et-ref"  placeholder="予約番号 (任意)" maxlength="100" style="flex:1; min-width:100px; font-size:12px">
+              </div>
+              <input type="text" id="fm-et-note" placeholder="メモ (任意)" maxlength="500" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:12px">
+              <button id="fm-et-add" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">追加</button>
+            </div>
+          </details>
         </div>`}
         ${isNew ? '' : `
         <div class="row" style="gap:6px; justify-content:flex-start; margin-top:8px">
@@ -2941,8 +3072,11 @@ function openFlightModal(gid, it) {
   document.getElementById('fm-depap').dispatchEvent(new Event('input'));
   document.getElementById('fm-arrap').dispatchEvent(new Event('input'));
   document.getElementById('fm-num').dispatchEvent(new Event('input'));
-  // 既存航空券のみ: 添付セクションを wire-up。
-  if (!isNew) setupFlightAttachments(gid, it.id);
+  // 既存航空券のみ: 添付 + e-ticket セクションを wire-up。
+  if (!isNew) {
+    setupFlightAttachments(gid, it.id);
+    setupFlightEtickets(gid, it.id);
+  }
   function collectFlightModal() {
     return {
       airline:       document.getElementById('fm-airline').value.trim() || null,
