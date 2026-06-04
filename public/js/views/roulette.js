@@ -418,6 +418,15 @@ async function onSpin() {
     const total = 360 * 12 + target;
     const svg = document.getElementById('rl-wheel');
     svg.style.transition = 'transform 14s cubic-bezier(.22,.04,.08,1)';
+    // ホイール停止後 (transitionend) に発火するフラグ。 通知 POST はこれが立ってから。
+    let wheelStopped = false;
+    const onTransitionEnd = (ev) => {
+      // 子要素の transition イベントは無視 (rotate は svg 自体に効いてる)。
+      if (ev.target !== svg) return;
+      wheelStopped = true;
+      svg.removeEventListener('transitionend', onTransitionEnd);
+    };
+    svg.addEventListener('transitionend', onTransitionEnd);
     requestAnimationFrame(() => {
       svg.style.transform = `rotate(${total}deg)`;
     });
@@ -427,6 +436,8 @@ async function onSpin() {
     // this call lives inside the click handler.
     playSpinSounds(N, total);
     // Reveal result after animation completes (matches the CSS transition).
+    // 通知 POST は wheelStopped を待つ (転送・タブ切り替え等で setTimeout が遅延しても
+    // 「ホイール停止前に通知が飛ぶ」 を防ぐ)。
     setTimeout(() => {
       let prize = '';
       if (r.dry_run) {
@@ -458,8 +469,17 @@ async function onSpin() {
       spinning = false;
       if (!r.dry_run) {
         loadHistory();
-        // 「答えバレ」 防止のため 通知は ここで初めて送る (停止後)。 dry_run では送らない。
-        post(`/api/roulettes/${r.id}/notify`, {}).catch(() => {});
+        // 「答えバレ」 防止のため 通知は wheelStopped を待ってから。 transitionend が
+        // 既に来ていれば即時、 まだなら 待ってから 1 回だけ送る。 最大 4 秒で諦め。
+        const doNotify = () => post(`/api/roulettes/${r.id}/notify`, {}).catch(() => {});
+        if (wheelStopped) {
+          doNotify();
+        } else {
+          let sent = false;
+          const send = () => { if (!sent) { sent = true; doNotify(); } };
+          svg.addEventListener('transitionend', (ev) => { if (ev.target === svg) send(); }, { once: true });
+          setTimeout(send, 4000);  // 念のためのバックアップ
+        }
       }
     }, 14100);
   } catch (e) {

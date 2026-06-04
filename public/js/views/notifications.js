@@ -99,7 +99,10 @@ function refUrl(n) {
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';
-    case 'feedback':       return '#/admin';
+    // feedback の通知は 「ユーザへの管理者からの返信」 のみ。 admin ページに
+    // 飛ばすと 一般ユーザは権限無くて 何も出ない。 元の投稿フォームがある
+    // 設定ページに飛ばす (返信本文は notification body にすでに入っている)。
+    case 'feedback':       return '#/settings';
     default: return null;
   }
 }
