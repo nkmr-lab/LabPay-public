@@ -18,6 +18,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === '' && $method === 'GET')    { groups_detail($pdo, $cfg, $id); return; }
             if ($next === '' && $method === 'PATCH')  { groups_patch($pdo, $cfg, $id);  return; }
             if ($next === '' && $method === 'DELETE') { groups_close($pdo, $cfg, $id);  return; }
+            if ($next === 'hard_delete' && $method === 'DELETE') { groups_hard_delete($pdo, $cfg, $id); return; }
             if ($next === 'items' && $method === 'POST')                { group_items_add($pdo, $cfg, $id);    return; }
             if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
@@ -361,6 +362,37 @@ function groups_close(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_creator_or_admin($pdo, $id, $u);
     $pdo->prepare("UPDATE adhoc_groups SET closed_at = NOW() WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+// 完全削除: 閉鎖済グループの全データ (items / members / lodgings / flights /
+// schedules / receipts / expenses / chats) を 一括削除。 ほとんどの 子テーブルは
+// FK ON DELETE CASCADE が効くので 親 1 行 DELETE で済むが、 CASCADE 未指定の
+// テーブル (もしあれば) は 明示削除する。 ここでは adhoc_groups の DELETE 一発
+// で済ませる前提 (schema 上 全 子は CASCADE 設定 されている想定)。
+function groups_hard_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_creator_or_admin($pdo, $id, $u);
+    $st = $pdo->prepare("SELECT closed_at FROM adhoc_groups WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'group not found', 404);
+    // admin は 閉鎖前でも 完全削除を許可 (緊急用)。 一般 creator は 閉鎖後のみ。
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($row['closed_at'] === null && !$isAdmin) {
+        throw new ApiException('bad_request', '先にグループを閉鎖してください', 400);
+    }
+    // CASCADE が無い テーブルが将来増えた時に備えて 明示 DELETE を 並列で走らせる
+    // (失敗しても 続行)。 ただし大半は CASCADE 任せ。
+    try { $pdo->prepare("DELETE FROM adhoc_group_chat WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_items WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_members WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_lodgings WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_flights WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_schedule WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_receipts WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    try { $pdo->prepare("DELETE FROM adhoc_group_expenses WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
+    $pdo->prepare("DELETE FROM adhoc_groups WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }
 

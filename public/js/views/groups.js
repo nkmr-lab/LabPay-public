@@ -95,10 +95,22 @@ export async function renderGroups() {
     </details>
 
     <div class="card">
-      <h3>あなたのグループ</h3>
+      <div class="row center" style="margin-bottom:6px">
+        <h3 class="row-title" style="margin:0">あなたのグループ</h3>
+        <label class="hint-sm" style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
+          <input type="checkbox" id="gr-show-closed"> 終了も表示
+        </label>
+      </div>
       <div id="gr-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
+  // 終了表示トグル: localStorage に保存
+  const showClosedCb = document.getElementById('gr-show-closed');
+  showClosedCb.checked = localStorage.getItem('labpay-gr-show-closed') === '1';
+  showClosedCb.addEventListener('change', () => {
+    localStorage.setItem('labpay-gr-show-closed', showClosedCb.checked ? '1' : '0');
+    loadList();
+  });
   await populatePicker();
   // アクション 8 個のチェックボックスを並べる (デフォルト全 ON)
   const actBox = document.getElementById('gr-feat-actions');
@@ -334,11 +346,15 @@ async function loadList() {
   try {
     const d = await get('/api/groups');
     const root = document.getElementById('gr-list');
-    if (!d.items.length) {
-      root.innerHTML = `<div class="empty">まだ参加グループはありません</div>`;
+    const showClosed = localStorage.getItem('labpay-gr-show-closed') === '1';
+    const items = showClosed ? d.items : d.items.filter(g => !g.closed_at);
+    if (!items.length) {
+      root.innerHTML = showClosed
+        ? `<div class="empty">グループはありません</div>`
+        : `<div class="empty">進行中のグループはありません${d.items.length ? ' (終了したものは 「終了も表示」 で見られます)' : ''}</div>`;
       return;
     }
-    root.innerHTML = d.items.map(g => coverListItem({
+    root.innerHTML = items.map(g => coverListItem({
       href: '#/groups/' + escapeHtml(g.slug || g.id),
       image_url: g.image_url,
       title: escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
@@ -472,7 +488,10 @@ export async function renderGroupDetail({ params }) {
       <p class="muted" style="font-size:13px; margin:0 0 8px">
         閉鎖してもデータは残ります。 新規投稿・ワリカ追加ができなくなるだけ。
       </p>
-      <button id="gd-close" class="danger">グループを閉鎖する</button>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="gd-close" class="danger">グループを閉鎖する</button>
+        <button id="gd-hard-delete" class="danger" hidden>🗑 完全削除</button>
+      </div>
     </div>
 
     <div id="gd-settle-modal" hidden></div>
@@ -681,10 +700,18 @@ async function loadDetail(id) {
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
-    // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
-    // にぶら下げる。表示は creator かつ未 close の時だけ。
+    // 閉鎖 / 完全削除 カード:
+    //   * 「閉鎖する」 は 未閉鎖 かつ creator/admin
+    //   * 「完全削除」 は 閉鎖済 かつ creator/admin (admin は閉鎖前でも可)
     const dangerCard = document.getElementById('gd-danger-card');
-    if (dangerCard) dangerCard.hidden = !(isCreator && !g.closed_at);
+    const isAdmin = state.me?.role === 'admin';
+    const canClose = (isCreator || isAdmin) && !g.closed_at;
+    const canHardDel = (isCreator || isAdmin) && (g.closed_at || isAdmin);
+    if (dangerCard) dangerCard.hidden = !(canClose || canHardDel);
+    const closeBtn = document.getElementById('gd-close');
+    if (closeBtn) closeBtn.hidden = !canClose;
+    const hardBtn = document.getElementById('gd-hard-delete');
+    if (hardBtn) hardBtn.hidden = !canHardDel;
     wireCoverEditor({
       idPrefix: 'gd',
       onChange: async (url) => {
@@ -702,6 +729,15 @@ async function loadDetail(id) {
       try {
         await del('/api/groups/' + id);
         toast('閉じました');
+        location.hash = '#/groups';
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('gd-hard-delete')?.addEventListener('click', async () => {
+      if (!confirm('完全削除します。 投稿 / ワリカ / 宿泊 / 航空券 / スケジュール / チャット の全データが消えます。 元に戻せません。 良いですか?')) return;
+      if (!confirm('本当に削除しますか? (最終確認)')) return;
+      try {
+        await del('/api/groups/' + id + '/hard_delete');
+        toast('完全削除しました');
         location.hash = '#/groups';
       } catch (e) { toast('失敗: ' + e.message); }
     });
