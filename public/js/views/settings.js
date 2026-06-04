@@ -3,6 +3,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readTabLayout, writeTabLayout, applyTabLayout } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { previewSoundUrl, refreshSoundCache } from '../sounds.js';
+import { APPS, isAppVisible, setAppVisible } from './apps.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
 
@@ -104,6 +105,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>アプリ表示 (/#/apps メニュー)</h3>
+      <p class="hint">
+        「アプリ」 タブ + グループ / 募集 から呼び出せる ミニツール のうち、 自分が
+        使うものだけ ON に。 デフォルトでは よく使う 9 個だけ ON、 他は隠してあります。
+      </p>
+      <div id="apps-vis-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
       <h3>Google Calendar 連携</h3>
       <p class="hint">
         連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
@@ -198,6 +208,7 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
+  renderAppsVisEditor();
   // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
   // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
   const hideInput = document.getElementById('cal-hide-after-min');
@@ -338,6 +349,30 @@ function moveTab(id, delta, currentOrder) {
   writeTabLayout(l);
   applyTabLayout();
   renderTabLayoutEditor();
+}
+
+// ---------------- アプリ表示 (/#/apps) ----------------
+// 各 app id について 表示 / 非表示 を localStorage に保存。 設定値が無ければ defaultVisible。
+function renderAppsVisEditor() {
+  const root = document.getElementById('apps-vis-list');
+  if (!root) return;
+  root.innerHTML = APPS.map(a => {
+    const on = isAppVisible(a.id);
+    return `
+      <div class="list-item" data-app-id="${escapeHtml(a.id)}" style="gap:8px; align-items:center">
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+          <input type="checkbox" class="av-show" ${on ? 'checked' : ''}>
+          <span class="bold">${escapeHtml(a.title)}</span>
+        </label>
+        <span class="hint-sm" style="text-align:right; max-width:50%">${escapeHtml(a.desc)}</span>
+      </div>`;
+  }).join('');
+  root.querySelectorAll('.list-item[data-app-id]').forEach(row => {
+    const id = row.dataset.appId;
+    row.querySelector('.av-show').addEventListener('change', (ev) => {
+      setAppVisible(id, ev.target.checked);
+    });
+  });
 }
 
 // ---------------- Google Calendar ----------------
