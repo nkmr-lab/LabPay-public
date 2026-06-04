@@ -421,36 +421,64 @@ function renderPendingLikeItems(items, root) {
   }).join('');
 }
 
+// 「N 件未対応」 / 「N 件依頼中」 カード。 5 件ずつ + 「更に読み込み」 で展開。
+// 表示件数は module-level で保持 (polling で再描画されても状態が残る)。
+const HOME_PENDING_STEP = 5;
+let pendingShownN = HOME_PENDING_STEP;
+let askingShownN  = HOME_PENDING_STEP;
+
 async function renderPendingItems() {
-  const card = document.getElementById('home-pending-card');
-  const root = document.getElementById('home-pending');
-  const countEl = document.getElementById('home-pending-count');
-  if (!card || !root) return;
-  let items = [];
-  try {
-    const d = await get('/api/me/pending');
-    items = d.items || [];
-  } catch (_) { card.hidden = true; return; }
-  if (!items.length) { card.hidden = true; return; }
-  card.hidden = false;
-  if (countEl) countEl.textContent = `(${items.length})`;
-  renderPendingLikeItems(items, root);
+  await renderPendingKindCard({
+    endpoint: '/api/me/pending',
+    cardId: 'home-pending-card',
+    listId: 'home-pending',
+    countId: 'home-pending-count',
+    label: '未対応',
+    getShown: () => pendingShownN,
+    setShown: (n) => { pendingShownN = n; },
+  });
+}
+async function renderAskingItems() {
+  await renderPendingKindCard({
+    endpoint: '/api/me/asking',
+    cardId: 'home-asking-card',
+    listId: 'home-asking',
+    countId: 'home-asking-count',
+    label: '依頼中',
+    getShown: () => askingShownN,
+    setShown: (n) => { askingShownN = n; },
+  });
 }
 
-async function renderAskingItems() {
-  const card = document.getElementById('home-asking-card');
-  const root = document.getElementById('home-asking');
-  const countEl = document.getElementById('home-asking-count');
+async function renderPendingKindCard(opts) {
+  const card = document.getElementById(opts.cardId);
+  const root = document.getElementById(opts.listId);
+  const countEl = document.getElementById(opts.countId);
   if (!card || !root) return;
   let items = [];
   try {
-    const d = await get('/api/me/asking');
+    const d = await get(opts.endpoint);
     items = d.items || [];
   } catch (_) { card.hidden = true; return; }
   if (!items.length) { card.hidden = true; return; }
   card.hidden = false;
-  if (countEl) countEl.textContent = `(${items.length})`;
-  renderPendingLikeItems(items, root);
+  // ヘッダの 「N 件未対応」 を更新。
+  if (countEl) countEl.textContent = `${items.length} 件${opts.label}`;
+  // 5 件ずつ + 「更に読み込み」 で 全件表示まで。
+  const shown = Math.min(opts.getShown(), items.length);
+  const slice = items.slice(0, shown);
+  renderPendingLikeItems(slice, root);
+  if (items.length > shown) {
+    const moreRow = document.createElement('a');
+    moreRow.className = 'list-item add-row';
+    moreRow.style.cursor = 'pointer';
+    moreRow.innerHTML = `<div class="grow bold" style="color:var(--primary)">▼ 更に読み込み (残り ${items.length - shown} 件)</div>`;
+    moreRow.addEventListener('click', () => {
+      opts.setShown(shown + HOME_PENDING_STEP);
+      renderPendingKindCard(opts);
+    });
+    root.appendChild(moreRow);
+  }
 }
 
 // 「今日の予定」 カードを 全件 / 5 件 に切替えるトグル状態 (セッション内)。

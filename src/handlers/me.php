@@ -973,12 +973,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '👉',
             ];
         }
-        // 締切順 (締切無しは末尾)
+        // 新しい順 (= 直近に届いたものが上)。 kind + id を tiebreaker。
         usort($items, function ($a, $b) {
-            if (!$a['deadline_at'] && !$b['deadline_at']) return 0;
-            if (!$a['deadline_at']) return 1;
-            if (!$b['deadline_at']) return -1;
-            return strcmp($a['deadline_at'], $b['deadline_at']);
+            return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);
         });
         json_response(['items' => $items]);
         return;
@@ -1081,11 +1078,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '✅',
             ];
         }
+        // 新しい順 (id DESC)。
         usort($items, function ($a, $b) {
-            if (!$a['deadline_at'] && !$b['deadline_at']) return 0;
-            if (!$a['deadline_at']) return 1;
-            if (!$b['deadline_at']) return -1;
-            return strcmp($a['deadline_at'], $b['deadline_at']);
+            return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);
         });
         json_response(['items' => $items]);
         return;

@@ -335,14 +335,18 @@ export async function renderGroupDetail({ params }) {
     <div id="gd-lodging-modal" hidden></div>
     <div id="gd-flight-modal" hidden></div>
 
-    <div class="card" id="gd-sched-card" hidden>
-      <div class="row center" style="margin-bottom:6px">
-        <h3 class="row-title" style="margin:0">スケジュール</h3>
-        <button id="gd-sched-editmode" class="btn" style="padding:2px 10px; font-size:12px">編集モード</button>
-        <button id="gd-sched-range" class="btn" style="padding:2px 10px; font-size:12px">日程設定</button>
-      </div>
+    <details class="card" id="gd-sched-card" hidden open>
+      <summary style="cursor:pointer; list-style:none">
+        <div class="row center" style="margin-bottom:6px">
+          <h3 class="row-title" style="margin:0">📅 スケジュール</h3>
+          <div class="row" style="gap:6px">
+            <button id="gd-sched-editmode" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">編集モード</button>
+            <button id="gd-sched-range" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">日程設定</button>
+          </div>
+        </div>
+      </summary>
       <div id="gd-sched-body" class="muted" style="font-size:13px">読み込み中…</div>
-    </div>
+    </details>
     <div id="gd-sched-modal" hidden></div>
 
     <div class="card" id="gd-wari-card">
@@ -383,9 +387,9 @@ export async function renderGroupDetail({ params }) {
 
     <div class="card" id="gd-danger-card" hidden>
       <p class="muted" style="font-size:13px; margin:0 0 8px">
-        閉じてもデータは残ります。新規投稿・ワリカ追加ができなくなるだけ。
+        閉鎖してもデータは残ります。 新規投稿・ワリカ追加ができなくなるだけ。
       </p>
-      <button id="gd-close" class="danger">グループを閉じる</button>
+      <button id="gd-close" class="danger">グループを閉鎖する</button>
     </div>
 
     <div id="gd-settle-modal" hidden></div>
@@ -522,7 +526,7 @@ async function loadDetail(id) {
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
     // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
-      if (!confirm('このグループを閉じますか?')) return;
+      if (!confirm('このグループを閉鎖しますか?')) return;
       try {
         await del('/api/groups/' + id);
         toast('閉じました');
