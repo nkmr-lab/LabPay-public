@@ -49,6 +49,22 @@ export async function renderGroups() {
         <div id="gr-picker" class="row" style="gap:6px; flex-wrap:wrap"></div>
         <div id="gr-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
       </div>
+      <div class="field">
+        <span class="lbl">使う機能 (後から ON/OFF 可)</span>
+        <div class="hint-sm" style="margin-bottom:4px">飲み会・連幹事には不要。 学会・出張だけ ON にしてください。</div>
+        <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+          <span class="switch"><input type="checkbox" id="gr-feat-sched"><span class="slider"></span></span>
+          <span>📅 スケジュール</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+          <span class="switch"><input type="checkbox" id="gr-feat-lodging"><span class="slider"></span></span>
+          <span>🏨 宿泊地</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+          <span class="switch"><input type="checkbox" id="gr-feat-flight"><span class="slider"></span></span>
+          <span>✈️ 航空券</span>
+        </label>
+      </div>
       <button id="gr-submit" class="primary">作成</button>
     </details>
 
@@ -164,9 +180,13 @@ async function onCreate() {
     toast('URL 用の名前を数字だけにはできません'); return;
   }
   const image_url = document.getElementById('gr-image-url').value || null;
+  const feat_schedule = document.getElementById('gr-feat-sched').checked;
+  const feat_lodging  = document.getElementById('gr-feat-lodging').checked;
+  const feat_flight   = document.getElementById('gr-feat-flight').checked;
   try {
     const r = await post('/api/groups', {
       title, description, slug, image_url, member_ids: [...picked],
+      feat_schedule, feat_lodging, feat_flight,
     });
     toast('作成しました');
     refreshHasGroups();
@@ -322,12 +342,12 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-feed" class="list" style="margin-top:8px"></div>
     </div>
 
-    <details class="card" id="gd-lodging-card">
+    <details class="card" id="gd-lodging-card" hidden>
       <summary style="font-weight:700; cursor:pointer">🏨 宿泊地 <span id="gd-lodging-count" class="hint-sm"></span></summary>
       <div id="gd-lodging-list" style="margin-top:8px"></div>
       <button id="gd-lodging-add" class="btn primary" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 宿泊地を追加</button>
     </details>
-    <details class="card" id="gd-flight-card">
+    <details class="card" id="gd-flight-card" hidden>
       <summary style="font-weight:700; cursor:pointer">✈️ 航空券 <span id="gd-flight-count" class="hint-sm"></span></summary>
       <div id="gd-flight-list" style="margin-top:8px"></div>
       <button id="gd-flight-add" class="btn primary" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 航空券を追加</button>
@@ -385,6 +405,26 @@ export async function renderGroupDetail({ params }) {
       </div>
     </details>
 
+    <details class="card" id="gd-feat-card" hidden>
+      <summary style="font-weight:700; cursor:pointer">⚙ 使う機能の設定</summary>
+      <p class="hint" style="margin:8px 0 8px">
+        飲み会・連幹事には不要。 学会・出張だけ ON にしてください。
+        既に登録した予定 / 宿泊地 / 航空券のデータは OFF にしても残ります。
+      </p>
+      <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+        <span class="switch"><input type="checkbox" id="gd-feat-sched"><span class="slider"></span></span>
+        <span>📅 スケジュール</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+        <span class="switch"><input type="checkbox" id="gd-feat-lodging"><span class="slider"></span></span>
+        <span>🏨 宿泊地</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
+        <span class="switch"><input type="checkbox" id="gd-feat-flight"><span class="slider"></span></span>
+        <span>✈️ 航空券</span>
+      </label>
+    </details>
+
     <div class="card" id="gd-danger-card" hidden>
       <p class="muted" style="font-size:13px; margin:0 0 8px">
         閉鎖してもデータは残ります。 新規投稿・ワリカ追加ができなくなるだけ。
@@ -409,14 +449,58 @@ export async function renderGroupDetail({ params }) {
     schedEditMode = !schedEditMode;
     loadSchedule(id);
   });
-  loadSchedule(id);
-  await loadDetail(id);
+  await loadDetail(id);   // ← 機能フラグを取ってから 関連 loader を判断
   await loadWari(id);
-  await loadLodgings(id);
-  await loadFlights(id);
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
   document.getElementById('gd-flight-add')?.addEventListener('click', () => openFlightModal(id, {}));
   startChatLoop(id);
+}
+
+// グループの 「使う機能」 フラグに応じて 関連カードの表示 + データロードを制御。
+// loadDetail から呼ぶ。 後で feature を ON/OFF した時も呼び直せばよい。
+function applyGroupFeatures(g) {
+  const groupId = g.id;
+  const schedCard = document.getElementById('gd-sched-card');
+  const lodCard = document.getElementById('gd-lodging-card');
+  const fltCard = document.getElementById('gd-flight-card');
+  if (schedCard) schedCard.hidden = !g.feat_schedule;
+  if (lodCard)   lodCard.hidden   = !g.feat_lodging;
+  if (fltCard)   fltCard.hidden   = !g.feat_flight;
+  if (g.feat_schedule) loadSchedule(groupId);
+  if (g.feat_lodging)  loadLodgings(groupId);
+  if (g.feat_flight)   loadFlights(groupId);
+  // ヘッダの 「地図」 ボタンも スケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
+  const mapBtn = document.querySelector(`a[href="#/groups/${groupId}/map"]`);
+  if (mapBtn) mapBtn.hidden = !g.feat_schedule;
+  // 機能設定カード (作成者のみ表示)。 トグル変更で PATCH + 即時反映。
+  const featCard = document.getElementById('gd-feat-card');
+  const isCreator = state.me?.id === Number(g.creator_user_id);
+  if (featCard) {
+    featCard.hidden = !isCreator;
+    if (isCreator) {
+      document.getElementById('gd-feat-sched').checked   = !!g.feat_schedule;
+      document.getElementById('gd-feat-lodging').checked = !!g.feat_lodging;
+      document.getElementById('gd-feat-flight').checked  = !!g.feat_flight;
+      const wire = (id, key) => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.wired) return;
+        el.dataset.wired = '1';
+        el.addEventListener('change', async () => {
+          try {
+            await patch('/api/groups/' + groupId, { [key]: el.checked });
+            toast('設定を更新しました');
+            await loadDetail(groupId);
+          } catch (e) {
+            toast('失敗: ' + e.message);
+            el.checked = !el.checked;
+          }
+        });
+      };
+      wire('gd-feat-sched', 'feat_schedule');
+      wire('gd-feat-lodging', 'feat_lodging');
+      wire('gd-feat-flight', 'feat_flight');
+    }
+  }
 }
 
 let currentKind = 'memo';
@@ -469,6 +553,8 @@ async function onClearSlug(g) {
 async function loadDetail(id) {
   try {
     const g = await get('/api/groups/' + id);
+    // 機能の ON/OFF。 ここで関連カードを表示制御 + 関連 loader 呼び出し。
+    applyGroupFeatures(g);
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
     setWariMembers(g.members);

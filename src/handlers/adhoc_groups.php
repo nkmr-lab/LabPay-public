@@ -188,9 +188,18 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'one or more member_ids not found', 400);
     }
 
-    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $imageUrl, $memberIds) {
-        $st = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description, image_url) VALUES (?,?,?,?,?)");
-        $st->execute([$slug, $u['id'], $title, $description, $imageUrl]);
+    // オプション機能: スケジュール / 宿泊地 / 航空券。 基本は OFF、 学会・出張用に ON。
+    $featSched   = !empty($body['feat_schedule']) ? 1 : 0;
+    $featLodging = !empty($body['feat_lodging'])  ? 1 : 0;
+    $featFlight  = !empty($body['feat_flight'])   ? 1 : 0;
+
+    $gid = db_tx($pdo, function () use ($pdo, $slug, $u, $title, $description, $imageUrl, $memberIds, $featSched, $featLodging, $featFlight) {
+        $st = $pdo->prepare("INSERT INTO adhoc_groups
+            (slug, creator_user_id, title, description, image_url,
+             feat_schedule, feat_lodging, feat_flight)
+            VALUES (?,?,?,?,?,?,?,?)");
+        $st->execute([$slug, $u['id'], $title, $description, $imageUrl,
+            $featSched, $featLodging, $featFlight]);
         $gid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?,?)");
         foreach ($memberIds as $uid) $st->execute([$gid, $uid]);
@@ -251,7 +260,10 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
     $hasImage = array_key_exists('image_url', $body);
     $hasStart = array_key_exists('schedule_start_date', $body);
     $hasEnd   = array_key_exists('schedule_end_date', $body);
-    if (!$hasSlug && !$hasImage && !$hasStart && !$hasEnd) {
+    $hasFeat  = array_key_exists('feat_schedule', $body)
+             || array_key_exists('feat_lodging', $body)
+             || array_key_exists('feat_flight', $body);
+    if (!$hasSlug && !$hasImage && !$hasStart && !$hasEnd && !$hasFeat) {
         throw new ApiException('bad_request', 'nothing to update', 400);
     }
     $sets = []; $args = [];
@@ -300,6 +312,11 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
         $img = validate_product_image_url($body['image_url']);
         if ($img === null) { $sets[] = 'image_url = NULL'; }
         else               { $sets[] = 'image_url = ?'; $args[] = $img; $respImage = $img; }
+    }
+    foreach (['feat_schedule','feat_lodging','feat_flight'] as $k) {
+        if (array_key_exists($k, $body)) {
+            $sets[] = "$k = ?"; $args[] = !empty($body[$k]) ? 1 : 0;
+        }
     }
     $args[] = $id;
     $pdo->prepare('UPDATE adhoc_groups SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($args);
