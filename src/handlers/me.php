@@ -930,12 +930,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         // tasks: 自分が claim 中 (= 完了報告まだ) のもの
         $stT = $pdo->prepare("
-            SELECT t.id, t.title, t.deadline_at, t.reward, u.display_name AS requester_name
+            SELECT t.id, t.title, t.deadline AS deadline_at, t.reward, u.display_name AS requester_name
               FROM task_claims tc
               JOIN tasks t  ON t.id = tc.task_id
               JOIN users u  ON u.id = t.requester_user_id
              WHERE tc.user_id=? AND tc.status='claimed' AND t.status='open'
-             ORDER BY t.deadline_at ASC LIMIT 50");
+             ORDER BY t.deadline ASC LIMIT 50");
         $stT->execute([$uid]);
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
@@ -952,14 +952,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         // 指名タスクで まだ claim していないもの。
         // assigned_user_ids は CSV (例: "5,10,12") なので FIND_IN_SET で判定。
         $stD = $pdo->prepare("
-            SELECT t.id, t.title, t.deadline_at, t.reward, u.display_name AS requester_name
+            SELECT t.id, t.title, t.deadline AS deadline_at, t.reward, u.display_name AS requester_name
               FROM tasks t
               JOIN users u ON u.id = t.requester_user_id
              WHERE t.status='open'
                AND t.assigned_user_ids IS NOT NULL AND t.assigned_user_ids <> ''
                AND FIND_IN_SET(?, t.assigned_user_ids)
                AND NOT EXISTS (SELECT 1 FROM task_claims tc WHERE tc.task_id=t.id AND tc.user_id=? AND tc.status IN ('claimed','reported','approved'))
-             ORDER BY t.deadline_at ASC LIMIT 50");
+             ORDER BY t.deadline ASC LIMIT 50");
         $stD->execute([$uid, $uid]);
         foreach ($stD->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
@@ -1058,13 +1058,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         // tasks: 自分が依頼 (requester) で、 まだ approved 件数 < 必要数 のもの。
         // 承認待ち (reported) があれば 「承認まち」 を強調。
         $stT = $pdo->prepare("
-            SELECT t.id, t.title, t.deadline_at,
+            SELECT t.id, t.title, t.deadline AS deadline_at,
                    (SELECT COUNT(*) FROM task_claims tc1 WHERE tc1.task_id=t.id AND tc1.status='approved') AS approved_n,
                    (SELECT COUNT(*) FROM task_claims tc2 WHERE tc2.task_id=t.id AND tc2.status='reported') AS reported_n,
                    (SELECT COUNT(*) FROM task_claims tc3 WHERE tc3.task_id=t.id AND tc3.status='claimed') AS claimed_n
               FROM tasks t
              WHERE t.requester_user_id=? AND t.status='open'
-             ORDER BY t.deadline_at ASC LIMIT 50");
+             ORDER BY t.deadline ASC LIMIT 50");
         $stT->execute([$uid]);
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $reported = (int)$r['reported_n'];
