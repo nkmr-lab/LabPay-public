@@ -187,8 +187,7 @@ function renderRow(i) {
   const isClosed = !!i.closed_at;
   const iJoined = Number(i.i_joined) === 1;
   // 秒は表示しない。 starts_at_has_time=0 (日付だけ) なら YYYY-MM-DD で切る。
-  const trimSec = (s) => (s || '').toString().slice(0, 16);
-  const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? String(s || '').slice(0, 10) : trimSec(s);
+  const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? fmtDate(s) : fmtDateTime(s);
   // 場所 (集合時間) を 1 行にまとめる: あるものだけ繋ぐ。
   let placeLine = '';
   if (i.location && i.starts_at) {
@@ -300,8 +299,7 @@ export async function renderInvitationDetail({ params }) {
   await loadDetail(id);
 }
 
-// v369 秒なし表示: "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD HH:MM"
-const noSec = (s) => (s ? String(s).slice(0, 16) : '');
+// v381 fmtDateTime (= 16 文字) を共有ヘルパに統一
 
 async function loadDetail(id) {
   try {
@@ -311,7 +309,7 @@ async function loadDetail(id) {
     const isClosed = !!i.closed_at;
     const iJoined = (i.joins || []).some(j => Number(j.id) === Number(meId));
     // v370: starts_at_has_time=0 (日付だけ) のとき は YYYY-MM-DD で表示。
-    const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? String(s || '').slice(0, 10) : noSec(s);
+    const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? fmtDate(s) : fmtDateTime(s);
     const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(fmtStarts(i.starts_at))}${Number(i.starts_at_has_time)===0 ? ' <span class="hint-sm">(終日)</span>' : ''}</div>` : '';
     // v368 募集締切。 過ぎてれば 赤、 まだなら 残り時間 を 緑で。
     let deadlineLine = '';
@@ -327,7 +325,7 @@ async function loadDetail(id) {
                   : `あと ${Math.floor(min/(60*24))}日`;
         remStr = ' ' + tag('ok', lbl);
       }
-      deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(noSec(i.signup_closes_at))}${remStr}</div>`;
+      deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(fmtDateTime(i.signup_closes_at))}${remStr}</div>`;
     }
     const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
     const capLine = i.capacity
@@ -361,7 +359,7 @@ async function loadDetail(id) {
       ${i.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:6px">${escapeHtml(i.description)}</div>` : ''}
       <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:6px">
         ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
-        ${escapeHtml(i.creator_name)} · ${escapeHtml(noSec(i.created_at))}
+        ${escapeHtml(i.creator_name)} · ${escapeHtml(fmtDateTime(i.created_at))}
       </div>
       ${actions ? `<div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">${actions}</div>` : ''}
     `;

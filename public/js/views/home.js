@@ -3,6 +3,7 @@ import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
 import { coverListItem } from './groups.js';
+import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
@@ -860,24 +861,15 @@ async function renderFreshInvitations() {
     }
     root.innerHTML = open.slice(0, 5).map(i => {
       const when  = i.starts_at
-        ? `🕒 ${escapeHtml(Number(i.starts_at_has_time) === 0 ? String(i.starts_at).slice(0,10) : String(i.starts_at).slice(0,16))} ・`
+        ? `🕒 ${escapeHtml(Number(i.starts_at_has_time) === 0 ? fmtDate(i.starts_at) : fmtDateTime(i.starts_at))} ・`
         : '';
       const where = i.location  ? `📍 ${escapeHtml(i.location)} ・` : '';
       const cap   = i.capacity  ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       const title = `${escapeHtml(i.title)}${joined}`;
       const meta  = `${when}${where}${cap} · ${escapeHtml(i.creator_name)}`;
-      // v377 参加表明者を アイコンだけ並べる (グループと同じ avatar チップ列)。
-      const joins = Array.isArray(i.joins) ? i.joins : [];
-      const joinsRow = joins.length
-        ? `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">
-             ${joins.slice(0, 8).map(j =>
-               `<span title="${escapeHtml(j.display_name)}" style="display:inline-flex">
-                  ${avatarHtml(j.display_name, j.avatar_url, 'xs')}
-                </span>`).join('')}
-             ${joins.length > 8 ? `<span class="muted" style="font-size:11px">+${joins.length - 8}</span>` : ''}
-           </div>`
-        : '';
+      // v381 共有 helper で 参加者 chip 列を 描画。
+      const joinsRow = participantChipRow(i.joins || []);
       const href  = '#/invitations/' + i.id;
       if (i.image_url) {
         // 募集も 「ヒーロー風」 (groups と同じ)。
@@ -929,7 +921,7 @@ async function renderFreshListings() {
       // 在庫数: 2 個以上の時だけ表示。 1 個は 「言うまでもない」 のでノイズ削減。
       const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';
       // v378 created_at は YYYY-MM-DD だけ (時刻は不要)。
-      const when = (l.created_at || '').slice(0, 10);
+      const when = fmtDate(l.created_at);
       // v378 出品者は アイコンで (名前は title 属性に)。
       const sellerAvatar = `<span title="${escapeHtml(l.seller_name)}" style="display:inline-flex; vertical-align:middle">${avatarHtml(l.seller_name, l.seller_avatar_url, 'xs')}</span>`;
       const meta = `${sellerAvatar}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
