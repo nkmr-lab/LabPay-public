@@ -24,8 +24,12 @@ export async function renderInvitations() {
         <input type="text" id="inv-title" maxlength="200" placeholder="例: お昼ご飯食べに行こう">
       </label>
       <label class="field">
-        <span class="lbl">開催日時 (任意)</span>
-        <input type="datetime-local" id="inv-when">
+        <span class="lbl">開催日 (任意)</span>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <input type="date" id="inv-date" style="flex:1; min-width:130px">
+          <input type="time" id="inv-time" style="flex:1; min-width:90px">
+        </div>
+        <span class="hint-sm">時刻は任意。 日付だけなら 終日扱い (当日いっぱい募集)。</span>
       </label>
       <label class="field">
         <span class="lbl">募集締切 (任意・これ以降は参加表明を受け付けない)</span>
@@ -44,6 +48,14 @@ export async function renderInvitations() {
         <span class="lbl">詳細 (任意)</span>
         <textarea id="inv-desc" maxlength="5000" rows="3" placeholder="集合場所・予算・装備など"></textarea>
       </label>
+      <details class="field">
+        <summary class="hint" style="cursor:pointer">👥 事前参加者を登録 (任意)</summary>
+        <div style="margin-top:6px">
+          <div class="hint-sm" style="margin-bottom:4px">選んだ人を 作成時に 「参加表明済」 として登録 + 通知。 発起人 (自分) は 自動で +1 されます。</div>
+          <div id="inv-pre-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+          <div id="inv-pre-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        </div>
+      </details>
       <label class="field">
         <span class="lbl">表紙画像 (任意・タップで撮影 or アルバム選択)</span>
         <input type="file" id="inv-image-file" accept="image/*">
@@ -67,7 +79,65 @@ export async function renderInvitations() {
   document.getElementById('inv-add').addEventListener('click', onCreate);
   document.getElementById('inv-show-closed').addEventListener('change', loadList);
   document.getElementById('inv-image-file').addEventListener('change', onInvImageFile);
+  await populateInvPreMembers();
   await loadList();
+}
+
+// v370 事前参加者 picker (全員/学年 bulk + 個別 chip)。 発起人 (自分) は picker に出さず、
+// 作成時に backend 側で 自動 join される。
+const invPrePicked = new Set();
+async function populateInvPreMembers() {
+  const root = document.getElementById('inv-pre-members');
+  const bulk = document.getElementById('inv-pre-bulk');
+  if (!root || !bulk) return;
+  try {
+    const u = await get('/api/users');
+    const meId = Number(state.me?.id);
+    const pool = (u.items || []).filter(x => Number(x.id) !== meId);
+    const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
+    const sorted = [...pool].sort((a, b) => {
+      const ga = GRADE_ORDER.indexOf(a.grade || ''); const gb = GRADE_ORDER.indexOf(b.grade || '');
+      const d = (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb);
+      if (d !== 0) return d;
+      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+    });
+    const presentGrades = [...new Set(sorted.map(x => x.grade || ''))];
+    const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
+    bulk.innerHTML = `
+      <button class="btn" data-bulk="all">全員</button>
+      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+      <button class="btn" data-bulk="clear">クリア</button>
+    `;
+    bulk.querySelectorAll('[data-bulk]').forEach(b => {
+      b.addEventListener('click', () => {
+        if (b.dataset.bulk === 'clear') { invPrePicked.clear(); }
+        else if (b.dataset.bulk === 'grade') {
+          const target = sorted.filter(x => (x.grade || '') === b.dataset.grade);
+          const allOn = target.every(x => invPrePicked.has(x.id));
+          if (allOn) target.forEach(x => invPrePicked.delete(x.id));
+          else       target.forEach(x => invPrePicked.add(x.id));
+        } else {
+          const allOn = sorted.every(x => invPrePicked.has(x.id));
+          if (allOn) invPrePicked.clear();
+          else       sorted.forEach(x => invPrePicked.add(x.id));
+        }
+        root.querySelectorAll('input[data-uid]').forEach(cb => { cb.checked = invPrePicked.has(Number(cb.dataset.uid)); });
+      });
+    });
+    root.innerHTML = sorted.map(x => `
+      <label class="rl-chip">
+        <input type="checkbox" data-uid="${x.id}">
+        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+        <span>${escapeHtml(x.display_name)}</span>
+        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
+      </label>`).join('');
+    root.querySelectorAll('input[data-uid]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const uid = Number(cb.dataset.uid);
+        if (cb.checked) invPrePicked.add(uid); else invPrePicked.delete(uid);
+      });
+    });
+  } catch (_) { /* swallow */ }
 }
 
 async function onInvImageFile(ev) {
@@ -115,16 +185,17 @@ function renderRow(i) {
   const isMine = meId === Number(i.creator_user_id);
   const isClosed = !!i.closed_at;
   const iJoined = Number(i.i_joined) === 1;
-  // 秒は表示しない (YYYY-MM-DD HH:MM:SS → 16 文字で切る)。
+  // 秒は表示しない。 starts_at_has_time=0 (日付だけ) なら YYYY-MM-DD で切る。
   const trimSec = (s) => (s || '').toString().slice(0, 16);
+  const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? String(s || '').slice(0, 10) : trimSec(s);
   // 場所 (集合時間) を 1 行にまとめる: あるものだけ繋ぐ。
   let placeLine = '';
   if (i.location && i.starts_at) {
-    placeLine = `<div class="meta">📍 ${escapeHtml(i.location)} (🕒 ${escapeHtml(trimSec(i.starts_at))})</div>`;
+    placeLine = `<div class="meta">📍 ${escapeHtml(i.location)} (🕒 ${escapeHtml(fmtStarts(i.starts_at))})</div>`;
   } else if (i.location) {
     placeLine = `<div class="meta">📍 ${escapeHtml(i.location)}</div>`;
   } else if (i.starts_at) {
-    placeLine = `<div class="meta">🕒 ${escapeHtml(trimSec(i.starts_at))}</div>`;
+    placeLine = `<div class="meta">🕒 ${escapeHtml(fmtStarts(i.starts_at))}</div>`;
   }
   // v368 一覧でも 締切が近い時だけ tag で 強調
   let deadlineHint = '';
@@ -238,7 +309,9 @@ async function loadDetail(id) {
     const isMine = meId === Number(i.creator_user_id);
     const isClosed = !!i.closed_at;
     const iJoined = (i.joins || []).some(j => Number(j.id) === Number(meId));
-    const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(noSec(i.starts_at))}</div>` : '';
+    // v370: starts_at_has_time=0 (日付だけ) のとき は YYYY-MM-DD で表示。
+    const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? String(s || '').slice(0, 10) : noSec(s);
+    const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(fmtStarts(i.starts_at))}${Number(i.starts_at_has_time)===0 ? ' <span class="hint-sm">(終日)</span>' : ''}</div>` : '';
     // v368 募集締切。 過ぎてれば 赤、 まだなら 残り時間 を 緑で。
     let deadlineLine = '';
     if (i.signup_closes_at) {
@@ -350,8 +423,15 @@ async function loadDetail(id) {
 async function onCreate() {
   const title = document.getElementById('inv-title').value.trim();
   if (!title) { toast('タイトルを入れてください'); return; }
-  const starts_at = document.getElementById('inv-when').value || null;
+  // v370 開催日 (date) + 時刻 (time) を 別々に受け取る。
+  //   時刻あり → "YYYY-MM-DDTHH:MM" を送る (バックエンドが has_time=1 に)
+  //   時刻なし → "YYYY-MM-DD" を送る (バックエンドが has_time=0 に)
+  //   日付なし → null
+  const dateVal = document.getElementById('inv-date').value;
+  const timeVal = document.getElementById('inv-time').value;
+  const starts_at = dateVal ? (timeVal ? `${dateVal}T${timeVal}` : dateVal) : null;
   const signup_closes_at = document.getElementById('inv-signup-deadline').value || null;
+  const pre_join_user_ids = [...invPrePicked];
   const location = document.getElementById('inv-where').value.trim() || null;
   const capacity = document.getElementById('inv-cap').value;
   const description = document.getElementById('inv-desc').value.trim() || null;
@@ -360,13 +440,17 @@ async function onCreate() {
     await post('/api/invitations', {
       title, starts_at, signup_closes_at, location, description, image_url,
       capacity: capacity ? Number(capacity) : null,
+      pre_join_user_ids,
     });
     document.getElementById('inv-title').value = '';
-    document.getElementById('inv-when').value = '';
+    document.getElementById('inv-date').value = '';
+    document.getElementById('inv-time').value = '';
     document.getElementById('inv-signup-deadline').value = '';
     document.getElementById('inv-where').value = '';
     document.getElementById('inv-cap').value = '';
     document.getElementById('inv-desc').value = '';
+    invPrePicked.clear();
+    document.querySelectorAll('#inv-pre-members input[data-uid]').forEach(cb => cb.checked = false);
     document.getElementById('inv-image-url').value = '';
     document.getElementById('inv-image-preview').hidden = true;
     document.getElementById('inv-image-status').textContent = '';
@@ -434,6 +518,10 @@ async function onCancel(id) {
 function openInvEditModal(i) {
   const id = Number(i.id);
   const toLocal = (s) => (s ? String(s).replace(' ', 'T').slice(0, 16) : '');
+  // v370 開催日 / 時刻 を分割。 has_time=0 なら 時刻欄は空にしておく。
+  const startsDate = i.starts_at ? String(i.starts_at).slice(0, 10) : '';
+  const startsTime = (i.starts_at && Number(i.starts_at_has_time) !== 0)
+    ? String(i.starts_at).slice(11, 16) : '';
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:flex-start; padding:20px; overflow-y:auto; justify-content:center';
   wrap.innerHTML = `
@@ -445,8 +533,11 @@ function openInvEditModal(i) {
       <label class="field"><span class="lbl">タイトル</span>
         <input type="text" id="ied-title" maxlength="200" value="${escapeHtml(i.title || '')}">
       </label>
-      <label class="field"><span class="lbl">開催日時 (任意)</span>
-        <input type="datetime-local" id="ied-when" value="${escapeHtml(toLocal(i.starts_at))}">
+      <label class="field"><span class="lbl">開催日 (任意・時刻は空欄なら 終日)</span>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <input type="date" id="ied-date" value="${escapeHtml(startsDate)}" style="flex:1; min-width:130px">
+          <input type="time" id="ied-time" value="${escapeHtml(startsTime)}" style="flex:1; min-width:90px">
+        </div>
       </label>
       <label class="field"><span class="lbl">募集締切 (任意)</span>
         <input type="datetime-local" id="ied-deadline" value="${escapeHtml(toLocal(i.signup_closes_at))}">
@@ -471,9 +562,11 @@ function openInvEditModal(i) {
   wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
   document.getElementById('ied-save').addEventListener('click', async () => {
+    const dv = document.getElementById('ied-date').value;
+    const tv = document.getElementById('ied-time').value;
     const body = {
       title:            document.getElementById('ied-title').value.trim(),
-      starts_at:        document.getElementById('ied-when').value || null,
+      starts_at:        dv ? (tv ? `${dv}T${tv}` : dv) : null,
       signup_closes_at: document.getElementById('ied-deadline').value || null,
       location:         document.getElementById('ied-where').value.trim() || null,
       capacity:         document.getElementById('ied-cap').value
