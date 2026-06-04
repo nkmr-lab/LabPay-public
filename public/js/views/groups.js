@@ -1821,6 +1821,7 @@ async function loadSchedule(gid) {
 
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
+    ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ドラッグで並び替え (同じ日内のみ) · 🔒 は 多日またぎの中間/終了行で 動かせません</div>' : ''}
     ${stockCard}
     ${days.map(date => {
       const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
@@ -1869,6 +1870,61 @@ async function loadSchedule(gid) {
         await patch(`/api/groups/${gid}/schedule/${b.dataset.schedMove}/move`, { dir: b.dataset.dir });
         await loadSchedule(gid);
       } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+  // ── v361 ドラッグアンドドロップで並び替え ──
+  // - 並び替え可能 (canEdit) なアイテムのみ draggable。
+  // - 同日内 (data-sched-day 一致) のみ ドロップ可、 違う日にドロップしようとしても弾く。
+  // - 既存の /move エンドポイント (dir up/down で 1 個ずつ swap) を 距離分だけ連続呼び出し。
+  let dragSrcId = null, dragSrcDay = null;
+  const editableSameDay = (day) =>
+    [...body.querySelectorAll(`[data-sched-canedit="1"][data-sched-day="${CSS.escape(day)}"]`)];
+  body.querySelectorAll('[data-sched-canedit="1"]').forEach(el => {
+    el.addEventListener('dragstart', (ev) => {
+      dragSrcId = Number(el.dataset.schedItem);
+      dragSrcDay = el.dataset.schedDay || 'stock';
+      el.style.opacity = '0.4';
+      try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(dragSrcId)); }
+      catch (_) {}
+    });
+    el.addEventListener('dragend', () => {
+      el.style.opacity = '';
+      body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
+    });
+    el.addEventListener('dragover', (ev) => {
+      if (dragSrcId === null) return;
+      const targetDay = el.dataset.schedDay || 'stock';
+      if (targetDay !== dragSrcDay) return;
+      if (Number(el.dataset.schedItem) === dragSrcId) return;
+      ev.preventDefault();
+      try { ev.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      el.classList.add('gd-sched-drop-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('gd-sched-drop-over'));
+    el.addEventListener('drop', async (ev) => {
+      ev.preventDefault();
+      el.classList.remove('gd-sched-drop-over');
+      if (dragSrcId === null) return;
+      const tid = Number(el.dataset.schedItem);
+      const targetDay = el.dataset.schedDay || 'stock';
+      if (targetDay !== dragSrcDay || tid === dragSrcId) return;
+      const editable = editableSameDay(dragSrcDay);
+      const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === dragSrcId);
+      const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
+      if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
+      const steps = Math.abs(dstIdx - srcIdx);
+      const dir = srcIdx < dstIdx ? 'down' : 'up';
+      const savedSrc = dragSrcId; dragSrcId = null; dragSrcDay = null;
+      try {
+        for (let i = 0; i < steps; i++) {
+          const r = await patch(`/api/groups/${gid}/schedule/${savedSrc}/move`, { dir });
+          if (!r.moved) break;
+        }
+        await loadSchedule(gid);
+      } catch (e) {
+        toast('並び替え失敗: ' + e.message);
+        await loadSchedule(gid);
+      }
     });
   });
 }
@@ -1994,12 +2050,20 @@ function renderSchedItem(it) {
   // → 押しても無反応に見える、 という混乱を防ぐためボタンを出さない。
   // z-index:2 + 半透明白背景でペア帯より前面に。
   const canEdit = schedEditMode && (it._occ === 'single' || it._occ === 'start');
+  // v361 DnD: canEdit 行は draggable, 同日内で並び替え可能。
+  //          mid/end 行は 🔒 アイコンで 「動かせない」 ことを明示。
+  const isLocked = schedEditMode && !canEdit;
   const editControls = canEdit ? `
     <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px; position:relative; z-index:2; background:rgba(255,255,255,0.85); border-radius:6px; padding:2px 0">
       <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:0 6px; font-size:11px">↑</button>
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
+  const lockBadge = isLocked ? `
+    <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行は ここでは並び替えできません (本拠日でのみ可)"
+          style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.7; pointer-events:none; z-index:3">🔒</span>` : '';
+  const dragHandle = canEdit ? `
+    <span aria-hidden="true" title="ドラッグで並び替え" style="color:#999; font-size:14px; cursor:grab; user-select:none; padding:0 2px">⋮⋮</span>` : '';
   // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
   // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
@@ -2023,9 +2087,17 @@ function renderSchedItem(it) {
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
   // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
   const rightPad = 'padding-right:18px;';
+  // DnD 用属性: canEdit 行のみ draggable, data-sched-day で 同日縛り を可能に。
+  // day_date が NULL (= ストック) は 'stock' で代用。
+  const dndAttrs = canEdit
+    ? `draggable="true" data-sched-canedit="1" data-sched-day="${escapeHtml(String(it.day_date || 'stock'))}"`
+    : '';
+  const itemOpacity = isLocked ? 'opacity:0.7;' : '';
   return `
-    <div class="list-item" data-sched-item="${it.id}"
-         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative">
+    <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
+         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:${canEdit ? 'grab' : 'pointer'}; min-height:68px; position:relative; ${itemOpacity}">
+      ${lockBadge}
+      ${dragHandle}
       ${thumb}
       <div class="grow" style="min-width:0; overflow:hidden">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">

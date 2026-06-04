@@ -223,6 +223,13 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .list-item .meta { color: var(--muted); font-size: var(--text-sm); }
 
+/* v361 グループ予定 DnD: ドロップ候補の視覚 highlight */
+.list-item.gd-sched-drop-over {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  background: #faf6ff;
+}
+
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
 .avatar-xs   { width:18px; height:18px; }
