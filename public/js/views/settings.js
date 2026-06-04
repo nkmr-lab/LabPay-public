@@ -20,6 +20,10 @@ export async function renderSettings() {
         <input type="text" id="profile-name" maxlength="100">
       </label>
       <label class="field">
+        <span class="lbl">電話番号 (任意) <span class="hint-sm">— 緊急連絡用。 ログイン中のラボメンバーに見えます</span></span>
+        <input type="tel" id="profile-phone" maxlength="50" placeholder="例: 090-1234-5678" inputmode="tel">
+      </label>
+      <label class="field">
         <span class="lbl">アバター画像</span>
         <input type="file" id="profile-avatar-file" accept="image/*">
         <div id="profile-avatar-status" class="hint-sm"></div>
@@ -384,6 +388,7 @@ async function loadProfile() {
   try {
     const me = await get('/api/me');
     document.getElementById('profile-name').value = me.user.display_name || '';
+    document.getElementById('profile-phone').value = me.user.phone_number || '';
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
     pendingAvatarUrl = null;
   } catch (e) { toast('プロフィール取得失敗: ' + e.message); }
@@ -392,7 +397,8 @@ async function loadProfile() {
 async function onProfileSave() {
   const display_name = document.getElementById('profile-name').value.trim();
   if (!display_name) { toast('表示名を入力してください'); return; }
-  const body = { display_name };
+  const phone_raw = document.getElementById('profile-phone').value.trim();
+  const body = { display_name, phone_number: phone_raw === '' ? null : phone_raw };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {
     await patch('/api/me', body);

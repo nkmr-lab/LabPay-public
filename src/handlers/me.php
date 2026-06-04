@@ -14,12 +14,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
         $u['scrapbox_username'] = $row['scrapbox_username'] ?? null;
         $u['grade']             = $row['grade']             ?? null;
+        $u['phone_number']      = $row['phone_number']      ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -64,6 +65,19 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     throw new ApiException('bad_request', 'avatar_url must be /uploads/<file>.<ext> on this origin', 400);
                 }
                 $sets[] = 'avatar_url = ?'; $params[] = $url;
+            }
+        }
+        if (array_key_exists('phone_number', $body)) {
+            $ph = $body['phone_number'];
+            if ($ph === null || trim((string)$ph) === '') {
+                $sets[] = 'phone_number = NULL';
+            } else {
+                $ph = trim((string)$ph);
+                // 数字 / + / - / 半角スペース / 丸括弧 のみ許容。 長さ 5..50。
+                if (!preg_match('/^[0-9+\-\s()]{5,50}$/', $ph)) {
+                    throw new ApiException('bad_request', 'phone_number は数字 / + / - / 空白 / () のみ、 5〜50 文字', 400);
+                }
+                $sets[] = 'phone_number = ?'; $params[] = $ph;
             }
         }
         if (array_key_exists('scrapbox_username', $body)) {
@@ -889,13 +903,13 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
     $q = trim((string)($_GET['q'] ?? ''));
     if ($q !== '') {
-        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, gender
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, gender, phone_number
             FROM users WHERE kind='human'
               AND (display_name LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))
             ORDER BY display_name LIMIT 50");
         $st->execute([$q, $q]);
     } else {
-        $st = $pdo->query("SELECT id, display_name, avatar_url, grade, gender
+        $st = $pdo->query("SELECT id, display_name, avatar_url, grade, gender, phone_number
             FROM users WHERE kind='human' ORDER BY display_name");
     }
     json_response(['items' => $st->fetchAll()]);
