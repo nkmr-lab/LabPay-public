@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 class Achievements {
     // Each tier: ['count' => threshold, 'label' => display, 'medal' => icon].
+    // 各カテゴリで 段位名は 「軽い」 → 「極端」 に エスカレートする。 medal は 段位の
+    // 視覚的 強さを 統一 (🥉/🥈/🥇/💎) で 揃える。 ラベルだけ category 固有。
     public const DEFS = [
         'checkin_total' => [
             'title' => 'ラボイン マスター',
@@ -14,10 +16,10 @@ class Achievements {
             'unit'  => '日',
             'icon'  => '📅',
             'tiers' => [
-                ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 150, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 365, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 10,  'label' => 'お試し気分',     'medal' => '🥉'],
+                ['count' => 50,  'label' => 'ラボの常連',     'medal' => '🥈'],
+                ['count' => 150, 'label' => '住んでる人',     'medal' => '🥇'],
+                ['count' => 365, 'label' => 'ラボに生まれた説','medal' => '💎'],
             ],
         ],
         'streak_best' => [
@@ -26,10 +28,10 @@ class Achievements {
             'unit'  => '日連続',
             'icon'  => '🔥',
             'tiers' => [
-                ['count' => 5,  'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 10, 'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 20, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 50, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 5,  'label' => '三日坊主すれすれ', 'medal' => '🥉'],
+                ['count' => 10, 'label' => '習慣化フェーズ',   'medal' => '🥈'],
+                ['count' => 20, 'label' => 'もう体の一部',     'medal' => '🥇'],
+                ['count' => 50, 'label' => 'ラボに溶けた',     'medal' => '💎'],
             ],
         ],
         'unique_listings' => [
@@ -38,10 +40,10 @@ class Achievements {
             'unit'  => '種類',
             'icon'  => '📦',
             'tiers' => [
-                ['count' => 3,  'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 10, 'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 30, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 70, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 3,  'label' => 'コンビニ気取り', 'medal' => '🥉'],
+                ['count' => 10, 'label' => '謎の小売店',     'medal' => '🥈'],
+                ['count' => 30, 'label' => '百貨店オーナー', 'medal' => '🥇'],
+                ['count' => 70, 'label' => '商社マン',       'medal' => '💎'],
             ],
         ],
         'purchases_count' => [
@@ -50,10 +52,10 @@ class Achievements {
             'unit'  => '個',
             'icon'  => '🛒',
             'tiers' => [
-                ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 25,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 100, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 500, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 5,   'label' => '衝動買い癖',       'medal' => '🥉'],
+                ['count' => 25,  'label' => 'カゴ大量買い',     'medal' => '🥈'],
+                ['count' => 100, 'label' => '常連バイヤー',     'medal' => '🥇'],
+                ['count' => 500, 'label' => 'ラボ経済を回す者', 'medal' => '💎'],
             ],
         ],
         'sales_count' => [
@@ -62,10 +64,10 @@ class Achievements {
             'unit'  => '個',
             'icon'  => '💰',
             'tiers' => [
-                ['count' => 5,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 25,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 100, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 500, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 5,   'label' => 'フリマ初出店',   'medal' => '🥉'],
+                ['count' => 25,  'label' => '内職副業',       'medal' => '🥈'],
+                ['count' => 100, 'label' => '個人事業主',     'medal' => '🥇'],
+                ['count' => 500, 'label' => 'ラボの大商人',   'medal' => '💎'],
             ],
         ],
         'turnover_spent' => [
@@ -74,10 +76,10 @@ class Achievements {
             'unit'  => 'pt',
             'icon'  => '🎁',
             'tiers' => [
-                ['count' => 500,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 2000,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 10000, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 50000, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 500,   'label' => 'お金が逃げていく', 'medal' => '🥉'],
+                ['count' => 2000,  'label' => '貢ぎ癖',           'medal' => '🥈'],
+                ['count' => 10000, 'label' => 'ATM 人間',         'medal' => '🥇'],
+                ['count' => 50000, 'label' => 'ラボ経済の供血者', 'medal' => '💎'],
             ],
         ],
         'turnover_earned' => [
@@ -86,10 +88,10 @@ class Achievements {
             'unit'  => 'pt',
             'icon'  => '🏪',
             'tiers' => [
-                ['count' => 500,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 2000,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 10000, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 50000, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 500,   'label' => 'お小遣い稼ぎ',     'medal' => '🥉'],
+                ['count' => 2000,  'label' => '副収入族',         'medal' => '🥈'],
+                ['count' => 10000, 'label' => 'お金が舞い込む',   'medal' => '🥇'],
+                ['count' => 50000, 'label' => 'ラボの大富豪',     'medal' => '💎'],
             ],
         ],
         'tasks_completed' => [
@@ -98,10 +100,10 @@ class Achievements {
             'unit'  => '件',
             'icon'  => '🤝',
             'tiers' => [
-                ['count' => 3,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 15,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 50,  'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 150, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 3,   'label' => 'お手伝い見習い', 'medal' => '🥉'],
+                ['count' => 15,  'label' => '便利屋',         'medal' => '🥈'],
+                ['count' => 50,  'label' => '頼られる人',     'medal' => '🥇'],
+                ['count' => 150, 'label' => 'ラボの救世主',   'medal' => '💎'],
             ],
         ],
         'scrapbox_days' => [
@@ -110,10 +112,10 @@ class Achievements {
             'unit'  => '日',
             'icon'  => '📝',
             'tiers' => [
-                ['count' => 10,  'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 50,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 150, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 365, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 10,  'label' => '思いつきメモ魔', 'medal' => '🥉'],
+                ['count' => 50,  'label' => '日記マニア',     'medal' => '🥈'],
+                ['count' => 150, 'label' => '歴史家',         'medal' => '🥇'],
+                ['count' => 365, 'label' => 'ラボの語り部',   'medal' => '💎'],
             ],
         ],
         'roulettes_spun' => [
@@ -122,10 +124,10 @@ class Achievements {
             'unit'  => '回',
             'icon'  => '🎰',
             'tiers' => [
-                ['count' => 3,   'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 15,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 50,  'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 150, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 3,   'label' => '運試し趣味',     'medal' => '🥉'],
+                ['count' => 15,  'label' => '主催ジャンキー', 'medal' => '🥈'],
+                ['count' => 50,  'label' => 'カジノオーナー', 'medal' => '🥇'],
+                ['count' => 150, 'label' => '運命の主宰者',   'medal' => '💎'],
             ],
         ],
         'roulettes_won' => [
@@ -134,10 +136,59 @@ class Achievements {
             'unit'  => '回',
             'icon'  => '🎯',
             'tiers' => [
-                ['count' => 1,  'label' => 'ブロンズ',   'medal' => '🥉'],
-                ['count' => 5,  'label' => 'シルバー',   'medal' => '🥈'],
-                ['count' => 20, 'label' => 'ゴールド',   'medal' => '🥇'],
-                ['count' => 50, 'label' => 'プラチナ',   'medal' => '💎'],
+                ['count' => 1,  'label' => 'ビギナーズラック',     'medal' => '🥉'],
+                ['count' => 5,  'label' => '持ってる人',           'medal' => '🥈'],
+                ['count' => 20, 'label' => '強運の塊',             'medal' => '🥇'],
+                ['count' => 50, 'label' => '運命に愛された者',     'medal' => '💎'],
+            ],
+        ],
+        // ── v351 追加 ──
+        'night_use' => [
+            'title' => '夜間ラボ族',
+            'desc'  => '23:00〜25:00 に ラボにいた日数',
+            'unit'  => '日',
+            'icon'  => '🌙',
+            'tiers' => [
+                ['count' => 1,  'label' => 'たまの夜更かし',   'medal' => '🥉'],
+                ['count' => 5,  'label' => '夜のラボ住民',     'medal' => '🥈'],
+                ['count' => 20, 'label' => '闇属性',           'medal' => '🥇'],
+                ['count' => 50, 'label' => '夜の支配者',       'medal' => '💎'],
+            ],
+        ],
+        'early_bird' => [
+            'title' => '早起きラボイン',
+            'desc'  => '泊まりじゃなく 朝 7:00〜8:30 にラボにいた日数',
+            'unit'  => '日',
+            'icon'  => '🌅',
+            'tiers' => [
+                ['count' => 5,   'label' => 'ぼちぼち早起き',   'medal' => '🥉'],
+                ['count' => 10,  'label' => '朝活上手',         'medal' => '🥈'],
+                ['count' => 50,  'label' => '朝日と共に',       'medal' => '🥇'],
+                ['count' => 100, 'label' => '朝の支配者',       'medal' => '💎'],
+            ],
+        ],
+        'opener' => [
+            'title' => 'ラボのオープナー',
+            'desc'  => 'その日 最初にラボに入った日数 (前夜泊まりが居ない日に限る)',
+            'unit'  => '日',
+            'icon'  => '🔓',
+            'tiers' => [
+                ['count' => 2,  'label' => 'たまたま一番乗り',   'medal' => '🥉'],
+                ['count' => 5,  'label' => '鍵開け人',           'medal' => '🥈'],
+                ['count' => 20, 'label' => 'ラボの開門の番人',   'medal' => '🥇'],
+                ['count' => 50, 'label' => 'ラボに朝を持ち込む者', 'medal' => '💎'],
+            ],
+        ],
+        'closer' => [
+            'title' => 'ラボのクローザー',
+            'desc'  => 'その日 最後にラボを出た日数 (その夜の泊まりが居ない日に限る)',
+            'unit'  => '日',
+            'icon'  => '🌃',
+            'tiers' => [
+                ['count' => 2,  'label' => '最後にいた人',         'medal' => '🥉'],
+                ['count' => 5,  'label' => '閉門の番人',           'medal' => '🥈'],
+                ['count' => 20, 'label' => 'ラボに眠る者',         'medal' => '🥇'],
+                ['count' => 50, 'label' => '闇に消えた最終者',     'medal' => '💎'],
             ],
         ],
     ];
@@ -196,6 +247,85 @@ class Achievements {
         $st = $pdo->prepare('SELECT COUNT(*) FROM roulettes WHERE winner_user_id=?');
         $st->execute([$userId]);
         $out['roulettes_won'] = (int)$st->fetchColumn();
+
+        // ── v351 ──
+        // 夜間ラボ族: DATE(started_at) を 「起点夜」 として、 起点夜 23:00 〜 翌 01:00
+        // に セッションが overlap する DATE の数。 ある日 D に対して D 23:00〜 D+1
+        // 01:00 を考えると、 ユーザが その時間帯に lab にいた日数。
+        $st = $pdo->prepare("
+            SELECT COUNT(DISTINCT d) FROM (
+              SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
+              WHERE ps.user_id = ?
+                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 25 HOUR)
+                AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 23 HOUR)
+              UNION
+              SELECT DATE_SUB(DATE(ps.started_at), INTERVAL 1 DAY) AS d FROM presence_sessions ps
+              WHERE ps.user_id = ?
+                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 1 HOUR)
+                AND ps.ended_at   > DATE(ps.started_at)
+            ) AS x");
+        $st->execute([$userId, $userId]);
+        $out['night_use'] = (int)$st->fetchColumn();
+
+        // 早起き: D 07:00〜D 08:30 に presence あり AND D 02:00〜D 05:00 に presence なし
+        // (= 泊まりじゃなく 朝来た日)。
+        $st = $pdo->prepare("
+            SELECT COUNT(DISTINCT d) FROM (
+              SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
+              WHERE ps.user_id = ?
+                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 8 HOUR + INTERVAL 30 MINUTE)
+                AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 7 HOUR)
+                AND NOT EXISTS (
+                  SELECT 1 FROM presence_sessions ps2
+                  WHERE ps2.user_id = ?
+                    AND DATE(ps2.started_at) = DATE(ps.started_at)
+                    AND ps2.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 5 HOUR)
+                    AND ps2.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 2 HOUR)
+                )
+            ) AS x");
+        $st->execute([$userId, $userId]);
+        $out['early_bird'] = (int)$st->fetchColumn();
+
+        // オープナー: DATE(started_at) D について min(started_at) を取る user が
+        // 自分 AND その日 0:00 を またぐセッションが 誰も無い (= 誰も泊まってない)。
+        $st = $pdo->prepare("
+            SELECT COUNT(DISTINCT days.d) FROM (
+              SELECT DATE(started_at) AS d, MIN(started_at) AS m
+                FROM presence_sessions WHERE user_id IS NOT NULL
+                GROUP BY DATE(started_at)
+            ) days
+            JOIN presence_sessions me
+              ON DATE(me.started_at) = days.d
+             AND me.started_at = days.m
+             AND me.user_id = ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM presence_sessions overnight
+              WHERE overnight.started_at < days.d + INTERVAL 0 DAY
+                AND overnight.ended_at   > days.d + INTERVAL 0 DAY
+           )");
+        $st->execute([$userId]);
+        $out['opener'] = (int)$st->fetchColumn();
+
+        // クローザー: DATE(ended_at) D について max(ended_at) を 取る user が 自分
+        // AND その夜 (D 23:59:59 〜 D+1 00:00:01) を またぐセッションが 誰も無い
+        // (= 誰も泊まらず 帰った)。
+        $st = $pdo->prepare("
+            SELECT COUNT(DISTINCT days.d) FROM (
+              SELECT DATE(ended_at) AS d, MAX(ended_at) AS m
+                FROM presence_sessions WHERE user_id IS NOT NULL
+                GROUP BY DATE(ended_at)
+            ) days
+            JOIN presence_sessions me
+              ON DATE(me.ended_at) = days.d
+             AND me.ended_at = days.m
+             AND me.user_id = ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM presence_sessions overnight
+              WHERE overnight.started_at < (days.d + INTERVAL 1 DAY)
+                AND overnight.ended_at   > (days.d + INTERVAL 1 DAY)
+           )");
+        $st->execute([$userId]);
+        $out['closer'] = (int)$st->fetchColumn();
 
         return $out;
     }
