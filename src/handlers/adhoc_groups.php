@@ -384,9 +384,9 @@ function groups_hard_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'group not found', 404);
-    // admin は 閉鎖前でも 完全削除を許可 (緊急用)。 一般 creator は 閉鎖後のみ。
-    $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ($row['closed_at'] === null && !$isAdmin) {
+    // 「いきなり完全削除」 を防ぐワンクッション。 admin であっても 閉鎖済のみに制限。
+    // どうしても緊急で消したい場合は サーバ側で SQL を叩くか 一旦閉鎖してから削除。
+    if ($row['closed_at'] === null) {
         throw new ApiException('bad_request', '先にグループを閉鎖してください', 400);
     }
     // CASCADE が無い テーブルが将来増えた時に備えて 明示 DELETE を 並列で走らせる

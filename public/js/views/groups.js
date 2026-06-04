@@ -702,11 +702,12 @@ async function loadDetail(id) {
       </div>`;
     // 閉鎖 / 完全削除 カード:
     //   * 「閉鎖する」 は 未閉鎖 かつ creator/admin
-    //   * 「完全削除」 は 閉鎖済 かつ creator/admin (admin は閉鎖前でも可)
+    //   * 「完全削除」 は 閉鎖済 かつ creator/admin (admin であっても 閉鎖前は出さない)。
+    //     「いきなり完全削除」 にならないよう、 必ず 閉鎖 を 経由するワンクッション。
     const dangerCard = document.getElementById('gd-danger-card');
     const isAdmin = state.me?.role === 'admin';
     const canClose = (isCreator || isAdmin) && !g.closed_at;
-    const canHardDel = (isCreator || isAdmin) && (g.closed_at || isAdmin);
+    const canHardDel = (isCreator || isAdmin) && !!g.closed_at;
     if (dangerCard) dangerCard.hidden = !(canClose || canHardDel);
     const closeBtn = document.getElementById('gd-close');
     if (closeBtn) closeBtn.hidden = !canClose;
