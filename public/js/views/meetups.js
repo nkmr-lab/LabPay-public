@@ -5,7 +5,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
-import { tag, fmtDateTime } from '../format.js';
+import { tag, fmtDateTime, participantPill } from '../format.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -313,12 +313,7 @@ export async function renderMeetupDetail({ params }) {
       }
     }
     document.getElementById('mud-pn').textContent = d.participants.length;
-    document.getElementById('mud-parts').innerHTML = d.participants.map(p => `
-      <span class="presence-pill">
-        ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
-        <span class="presence-pill-name">${escapeHtml(p.display_name)}</span>
-        ${p.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(p.grade)}]</span>` : ''}
-      </span>`).join('');
+    document.getElementById('mud-parts').innerHTML = d.participants.map(participantPill).join('');
     if (d.is_creator) {
       const admin = document.getElementById('mud-admin');
       admin.hidden = false;

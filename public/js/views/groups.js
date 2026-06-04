@@ -5,6 +5,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
+import { fmtDateTime, participantPill } from '../format.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
@@ -677,15 +678,11 @@ async function loadDetail(id) {
     document.getElementById('gd-head').innerHTML = `
       ${imgBlock}
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
-      <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml((g.created_at || '').slice(0, 16))}</div>
+      <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(fmtDateTime(g.created_at))}</div>
       ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}
       <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center">
-        ${g.members.map(m => `
-          <span class="presence-pill">
-            ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
-            <span class="presence-pill-name">${escapeHtml(m.display_name)}</span>
-          </span>`).join('')}
+        ${g.members.map(participantPill).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>

@@ -8,7 +8,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
-import { tag } from '../format.js';
+import { tag, participantPill } from '../format.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -302,12 +302,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
         <div class="meta">起案 ${escapeHtml(t.creator_name)} · 合計 ${fmtDuration(t.duration_seconds)}</div>
       `;
       document.getElementById('tmd-pcount').textContent = d.participants.length;
-      document.getElementById('tmd-participants').innerHTML = d.participants.map(p => `
-        <span class="presence-pill">
-          ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
-          <span class="presence-pill-name">${escapeHtml(p.display_name)}</span>
-          ${p.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(p.grade)}]</span>` : ''}
-        </span>`).join('');
+      document.getElementById('tmd-participants').innerHTML = d.participants.map(participantPill).join('');
       if (d.is_creator) {
         document.getElementById('tmd-admin-card').hidden = false;
         document.getElementById('tmd-cancel').addEventListener('click', async () => {
