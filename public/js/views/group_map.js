@@ -7,7 +7,7 @@ import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 
 let leafletLoadedPromise = null;
-function loadLeaflet() {
+export function loadLeaflet() {
   if (leafletLoadedPromise) return leafletLoadedPromise;
   leafletLoadedPromise = new Promise((resolve, reject) => {
     if (window.L) return resolve(window.L);

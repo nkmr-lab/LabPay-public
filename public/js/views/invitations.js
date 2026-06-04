@@ -273,9 +273,17 @@ async function loadDetail(id) {
     const shortcuts = document.getElementById('inv-shortcuts');
     if (shortcuts) {
       const ids = memberIds.join(',');
+      // 待ち合わせの URL は 募集の starts_at + location をプリセット (どちらも任意)。
+      // starts_at は "YYYY-MM-DD HH:MM:SS" 想定 → datetime-local 用に T で接続。
+      const muParams = new URLSearchParams();
+      muParams.set('members', ids);
+      muParams.set('title', '[' + (i.title || '') + ']');
+      if (i.location) muParams.set('location', i.location);
+      if (i.starts_at) muParams.set('when', String(i.starts_at).replace(' ', 'T').slice(0, 16));
       shortcuts.innerHTML = `
         <div class="muted" style="font-size:12px; width:100%; margin-bottom:4px">募集者 + 参加表明者 (${memberIds.length}人) で:</div>
-        <a class="btn primary" href="#/roulette?members=${ids}">🎰 ルーレット</a>
+        <a class="btn primary" href="#/meetups/new?${muParams.toString()}">🤝 待ち合わせを作る</a>
+        <a class="btn" href="#/roulette?members=${ids}">🎰 ルーレット</a>
         <a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>
         <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
       `;
