@@ -155,6 +155,25 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   border-right: 1px solid var(--line);
 }
 
+/* v373 ホームのリスト 行高さを 統一 (内容で バラつくのを 抑える)。
+   data-card-id を持つカード (= ホーム専用カード) 配下の list-item 全部に適用。
+   通常行 80px、 with-cover 行 96px。 はみ出る分は overflow:hidden で クリップ。 */
+.card[data-card-id] .list-item {
+  height: 80px;
+  min-height: 80px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.card[data-card-id] .list-item.with-cover {
+  height: 96px;
+  min-height: 96px;
+}
+/* 「＋ 新しく〜」 動線は 1 行で 高さを 抑える (= ボタンに見せる)。 */
+.card[data-card-id] .list-item.add-row {
+  height: auto;
+  min-height: 44px;
+}
+
 /* v372 ヒーロー風 list-item: with-cover に .hero を併用すると、 画像が 左端から 64%
    を埋めて 右端 22px に斜めカット。 タイトル等は 画像の右 36% に寄せる。
    グループ / 募集 で使用。 */
