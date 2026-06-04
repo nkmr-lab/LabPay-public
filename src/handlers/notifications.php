@@ -46,5 +46,14 @@ function route_notifications(PDO $pdo, array $cfg, string $method, array $seg): 
         return;
     }
 
+    // 既読を未読に戻す。 通知を流し見してしまった時のセーフネット。
+    if (is_numeric($sub) && ($seg[2] ?? '') === 'unread' && $method === 'PATCH') {
+        $nid = (int)$sub;
+        $st = $pdo->prepare('UPDATE notifications SET read_at=NULL WHERE id=? AND user_id=?');
+        $st->execute([$nid, $uid]);
+        json_response(['ok' => true, 'updated' => $st->rowCount()]);
+        return;
+    }
+
     json_error('not_found', "no notifications route for $method $sub", 404);
 }

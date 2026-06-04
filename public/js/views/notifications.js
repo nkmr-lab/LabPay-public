@@ -42,6 +42,17 @@ async function load() {
         await load();
       });
     });
+    // 「未読に戻す」 ボタン (既読のものから未読に戻すセーフネット)。
+    root.querySelectorAll('[data-unread]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { await patch('/api/notifications/' + btn.dataset.unread + '/unread', {}); }
+        catch (e) { toast('失敗: ' + e.message); return; }
+        await refreshUnread();
+        await load();
+      });
+    });
     // 行 (<a>) タップ時: 未読なら裏で既読化してから遷移を許可
     root.querySelectorAll('[data-jump]').forEach(a => {
       a.addEventListener('click', () => {
@@ -95,17 +106,24 @@ function row(n) {
   const unread = !n.read_at;
   const lbl = TYPE_LABELS[n.type] || n.type;
   const url = refUrl(n);
-  // 行全体をリンク化: タップしたら関連ページに飛ぶ。未読ならタップで自動既読も。
-  // 「既読」ボタンと competing しないよう、ボタンには stopPropagation を効かせる。
-  const baseStyle = `display:block; text-decoration:none; color:inherit; ${unread ? 'border-left:4px solid var(--primary);' : ''}`;
+  // 未読は背景もろとも強く強調 (左バー 6px + soft 黄背景 + 左パディング):
+  //   border-left を厚く / 背景色を変える / 「●未読」 バッジを出す
+  const baseStyle = unread
+    ? 'display:block; text-decoration:none; color:inherit; border-left:6px solid #ffb300; background:#fffaeb;'
+    : 'display:block; text-decoration:none; color:inherit; opacity:0.85;';
   const tag = url ? 'a' : 'div';
   const href = url ? `href="${url}" data-jump="${n.id}"` : '';
+  const unreadBadge = unread
+    ? `<span style="display:inline-block; background:#ffb300; color:#fff; font-weight:700; font-size:11px; padding:1px 6px; border-radius:8px; margin-right:6px">●未読</span>`
+    : '';
   return `
     <${tag} class="list-item" style="${baseStyle}" ${href}>
       <div style="flex:1; min-width:0">
-        <div class="bold" style="white-space:pre-wrap">${escapeHtml(n.body)}</div>
+        <div class="bold" style="white-space:pre-wrap">${unreadBadge}${escapeHtml(n.body)}</div>
         <div class="meta">${escapeHtml(lbl)} · ${escapeHtml(n.created_at)}</div>
       </div>
-      <div>${unread ? `<button data-read="${n.id}">既読</button>` : '<span class="tag muted">既読</span>'}</div>
+      <div>${unread
+        ? `<button data-read="${n.id}">既読</button>`
+        : `<button data-unread="${n.id}" class="btn" style="font-size:11px; padding:2px 6px; color:var(--muted)">未読に戻す</button>`}</div>
     </${tag}>`;
 }
