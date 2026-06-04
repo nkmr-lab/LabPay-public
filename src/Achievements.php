@@ -248,46 +248,48 @@ class Achievements {
         $st->execute([$userId]);
         $out['roulettes_won'] = (int)$st->fetchColumn();
 
-        // ── v351 ──
-        // 夜間ラボ族: DATE(started_at) を 「起点夜」 として、 起点夜 23:00 〜 翌 01:00
-        // に セッションが overlap する DATE の数。 ある日 D に対して D 23:00〜 D+1
-        // 01:00 を考えると、 ユーザが その時間帯に lab にいた日数。
+        // ── v351 (v356 で SQL 修正) ──
+        // 夜間ラボ族: 夜 N (= 日付 N の 23:00 〜 N+1 の 01:00) に
+        // ユーザの session が overlap する 夜 N の数。
+        // MariaDB は INTERVAL の単位混合不可 (INTERVAL 8 HOUR + INTERVAL 30 MINUTE NG) →
+        // 全部 INTERVAL N MINUTE に統一。 23h=1380, 25h=1500, 08:30=510, 07h=420, 02h=120, 05h=300。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT d) FROM (
               SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
-              WHERE ps.user_id = ?
-                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 25 HOUR)
-                AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 23 HOUR)
+               WHERE ps.user_id = ?
+                 AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 1500 MINUTE)
+                 AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 1380 MINUTE)
               UNION
               SELECT DATE_SUB(DATE(ps.started_at), INTERVAL 1 DAY) AS d FROM presence_sessions ps
-              WHERE ps.user_id = ?
-                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 1 HOUR)
-                AND ps.ended_at   > DATE(ps.started_at)
+               WHERE ps.user_id = ?
+                 AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 60 MINUTE)
+                 AND ps.ended_at   > DATE(ps.started_at)
             ) AS x");
         $st->execute([$userId, $userId]);
         $out['night_use'] = (int)$st->fetchColumn();
 
         // 早起き: D 07:00〜D 08:30 に presence あり AND D 02:00〜D 05:00 に presence なし
-        // (= 泊まりじゃなく 朝来た日)。
+        // (= 泊まりじゃなく 朝来た日)。 全部 INTERVAL N MINUTE。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT d) FROM (
               SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
-              WHERE ps.user_id = ?
-                AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 8 HOUR + INTERVAL 30 MINUTE)
-                AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 7 HOUR)
-                AND NOT EXISTS (
-                  SELECT 1 FROM presence_sessions ps2
-                  WHERE ps2.user_id = ?
-                    AND DATE(ps2.started_at) = DATE(ps.started_at)
-                    AND ps2.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 5 HOUR)
-                    AND ps2.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 2 HOUR)
-                )
+               WHERE ps.user_id = ?
+                 AND ps.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 510 MINUTE)
+                 AND ps.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 420 MINUTE)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM presence_sessions ps2
+                    WHERE ps2.user_id = ?
+                      AND DATE(ps2.started_at) = DATE(ps.started_at)
+                      AND ps2.started_at < DATE_ADD(DATE(ps.started_at), INTERVAL 300 MINUTE)
+                      AND ps2.ended_at   > DATE_ADD(DATE(ps.started_at), INTERVAL 120 MINUTE)
+                 )
             ) AS x");
         $st->execute([$userId, $userId]);
         $out['early_bird'] = (int)$st->fetchColumn();
 
         // オープナー: DATE(started_at) D について min(started_at) を取る user が
         // 自分 AND その日 0:00 を またぐセッションが 誰も無い (= 誰も泊まってない)。
+        // days.d は DATE 型 = 00:00:00 として 比較される。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(started_at) AS d, MIN(started_at) AS m
@@ -300,15 +302,14 @@ class Achievements {
              AND me.user_id = ?
            WHERE NOT EXISTS (
              SELECT 1 FROM presence_sessions overnight
-              WHERE overnight.started_at < days.d + INTERVAL 0 DAY
-                AND overnight.ended_at   > days.d + INTERVAL 0 DAY
+              WHERE overnight.started_at < days.d
+                AND overnight.ended_at   > days.d
            )");
         $st->execute([$userId]);
         $out['opener'] = (int)$st->fetchColumn();
 
         // クローザー: DATE(ended_at) D について max(ended_at) を 取る user が 自分
-        // AND その夜 (D 23:59:59 〜 D+1 00:00:01) を またぐセッションが 誰も無い
-        // (= 誰も泊まらず 帰った)。
+        // AND その夜 (D+1 00:00:00) を またぐセッションが 誰も無い (= 誰も泊まらず 帰った)。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(ended_at) AS d, MAX(ended_at) AS m
@@ -321,8 +322,8 @@ class Achievements {
              AND me.user_id = ?
            WHERE NOT EXISTS (
              SELECT 1 FROM presence_sessions overnight
-              WHERE overnight.started_at < (days.d + INTERVAL 1 DAY)
-                AND overnight.ended_at   > (days.d + INTERVAL 1 DAY)
+              WHERE overnight.started_at < DATE_ADD(days.d, INTERVAL 1 DAY)
+                AND overnight.ended_at   > DATE_ADD(days.d, INTERVAL 1 DAY)
            )");
         $st->execute([$userId]);
         $out['closer'] = (int)$st->fetchColumn();
