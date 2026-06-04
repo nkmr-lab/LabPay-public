@@ -37,13 +37,23 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 
 | 領域 | 内容 |
 |---|---|
-| グループ (ad-hoc) | 学会・出張・イベント用の暫定メンバー枠。表紙画像 + slug URL (`#/groups/avi2026`) / 自由投稿のフィード (memo / URL / 時刻) / 中で「ワリカ」「ルーレット」「📸 レシート撮影」を呼び出せる |
+| グループ (ad-hoc) | 学会・出張・イベント用の暫定メンバー枠。表紙画像 + slug URL (`#/groups/avi2026`) / 自由投稿のフィード (memo / URL / 時刻) / 中で「ワリカ」「ルーレット」「点呼」「タイマー」「投票」「📸 レシート撮影」を呼び出せる (グループメンバーのみが選択対象) |
+| グループスケジュール | 日程 (開始〜終了日) を入れると 各日カードが並ぶ。 アイテム種別 (移動 / 宿泊 / 会議 / 食事 / 観光 / 他)、 時刻、 場所、 緯度経度 (📍 タップで Google Maps)、 メモ、 画像、 URL、 添付ファイル (PDF/画像/Office)、 ペアリンク (帯ストリップで連結表示)、 「行きたい場所ストック」 (日付未定の候補) |
+| 宿泊地 / 航空券エンティティ | スケジュールとは別管理。 場所 / 緯度経度 / チェックイン・アウト / 部屋番号 / 予約番号 / 座席 / 予約 URL を保持。 「📅 反映」 で schedule_items に展開 (宿泊は日付ごとに N 行、 航空券は出発 + 到着 のペア)。 同じエンティティから再 sync は冪等 |
+| グループ チャット | LINE 風吹き出し (自分=右 primary 色) で会話。 5 秒ポーリング (差分のみ)、 URL 自動リンク、 タブ裏なら停止 |
+| 行く場所マップ | グループのスケジュール lat/lng を時系列順に結ぶ線マップ (`#/groups/:id/map`)。 Leaflet + OpenStreetMap (API key 不要)、 ピンに順番ラベル、 ポリラインで線結び |
 | ワリカ (Splitwise 風) | グループ内で「誰が何を立て替えたか」を積み上げ、ネット残高と推奨送金を計算。各支出はメンバースナップショット保存 / 多通貨 + 自動 FX レート / レシート写真添付可 |
 | 📸 レシート撮影 | グループ内で `<input capture="environment">` + GPS で即撮影。 内部的には「下書き状態のワリカ支出 (`is_draft=1`)」として保存され、後で金額 / 立替人 / 対象を埋めると自動で本物の支出に昇格 (移動中の精緻化を想定) |
 | 飲み会割り勘 (nomikai) | 新歓・送別会用の一回精算。学年傾斜 + 飲酒 / ソフドリで割って通知 |
 | 請求 (集金 / money_requests) | メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金 / PayPay / 銀行 / 立替) のチェック付き / ワリカの精算結果から bulk 生成も可 |
-| ルーレット | タイトル + メンバー (学年 / 部屋単位 bulk select 可) + 任意の賞金、サーバ側 CSPRNG 抽選 → SVG 円盤 14s スピン → 当選者へ送金 + 全員通知。テストモード (dry-run) で空回し可 |
+| ルーレット | タイトル + メンバー (学年 / 部屋単位 bulk select 可) + 任意の賞金、サーバ側 CSPRNG 抽選 → SVG 円盤 14s スピン → 停止後に当選者へ送金 + 全員通知 (`notified_at` で多重防止)。テストモード (dry-run) で空回し可 |
+| どこ行くルーレット | 任意テキスト候補で回す軽量版 (`#/text-roulette`)。 サーバには何も保存しない 端末内ツール。 プリセット保存可 |
 | ランダムグループ生成 | 選んだメンバーを N チームにランダム分け。学年 / 性別を「できるだけ均等」にする配慮オプション付き。結果は「このメンバーでグループ作成」から ad-hoc グループに実体化可能 |
+| 投票・アンケート (polls) | 対象者 + 締切 + 選択肢を指定して投票を集める。 単複選択 / 自由記述 / 再投票可否 / 集計可視性 (creator / open / after_deadline) / 締切までのカウントダウン + 集計の自動更新 (60s, 残 10 分から 10s) / 未投票者催促 push / URL コピー |
+| 点呼 (roll call) | 「いる？」 「起きてる？」 をワンタップで集める。 プリセット 3 種 (10/5/60 分) / 任意メモ / 残り時間で sync 間隔可変 / 起案者の「🏁 終了」 + 未応答者催促 |
+| タイマー | 参加者全員に 同じカウントダウンを共有。 サーバが `started_at / ends_at` を持ち、 detail で `server_now` を返してクライアントがオフセット補正。 開始 30 秒 + 終了 30 秒前は 3 秒間隔再 sync、 中盤は 15 秒 |
+| 重要連絡 / 学会情報 (notices) | カテゴリ別 (`important` / `conference`) のピン留め可能リスト。 全員が投稿可、 投稿者 / admin が編集 / 削除。 シンプルに タイトル + 本文 + URL |
+| 連絡先 | ラボメンバーの緊急連絡用電話番号 (`#/contacts`)。 学年順一覧、 `tel:` リンクでタップ通話。 自分の番号は設定から登録 |
 | これ欲しい (Wishlist) | 商品名 + 任意 JAN + メモでリクエスト掲示、誰でも閲覧可・誰でも「出ました!」で達成扱い |
 | Scrapbox 履歴 | `#scrapbox` の研究ノート編集を「誰が・いつ・どの page を」読みやすくまとめて表示 (read-only feed) |
 | 関係グラフ | 売買 / タスク / 統合の 3 タブ。d3 v7 force-directed、アバター node + 件数 or 総額ベースのエッジ太さ切替 |
@@ -67,7 +77,8 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 |---|---|
 | バグ報告 / 機能要望 | 設定から送信、admin の通知 + Slack に転送。admin から返信を打てて、投稿者には通知が飛ぶ |
 | 利用ログ | 全 API リクエストを `activity_log` に記録 (user / method / path / status / duration / ip / UA) — 将来の論文用 |
-| 通知 | アプリ内通知 + (任意) メール + Slack incoming webhook。残高・履歴・通知数はホームで 30 秒間隔ポーリング |
+| 通知 | アプリ内通知 + (任意) メール + Slack incoming webhook。未読は太い橙ボーダー + 黄背景で強調、 「未読に戻す」 で取り消し可。 残高・履歴・通知数はホームで 30 秒間隔ポーリング |
+| ホームの 未対応 / 依頼中 カード | 自分が応答すべきもの (`#/api/me/pending`: 未投票 polls / 未応答 rollcalls / 未払い money_requests) と、 自分が起案して未完了のもの (`#/api/me/asking`) をホームに集約。 通知を既読にしても消えない、 締切色 (赤=10 分未満 / 橙=1 時間未満) |
 | 性別フラグ | 'M' / 'F' / 'X' / NULL。新歓ワリカン振り分けやランダムグループの「できるだけ均等」配慮で使用。プロフィール非表示可 |
 | 管理機能 | 取引一覧から取消 / ポイント発行 (全員配布 or 個人指定) / 流通量サマリ (Admin vs 一般保有) / カレンダー編集 / 部屋登録 (scanner_token 発行) / 配信 / 設定ノブ編集 / feedback 返信 |
 | PWA | オフライン shell / ホーム画面追加 / インストール可 / Service Worker は `/api/*` を絶対にキャッシュしない (台帳整合性) |
@@ -333,6 +344,24 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 048 | 2026‑06‑03 | adhoc_group_expenses.image_url (ワリカ支出にレシート添付) |
 | 049 | 2026‑06‑03 | adhoc_group_receipts (撮影だけしておくレシートストック / v225 限り) |
 | 050 | 2026‑06‑03 | adhoc_group_expenses を draft 対応 (`is_draft / taken_at / lat / lng` + `payer_user_id` NULL 許容)。レシートは draft 支出として一元化 |
+| 051 | 2026‑06‑03 | roulettes に tags 用 config row |
+| 052 | 2026‑06‑03 | app_open 報酬の config row |
+| 053 | 2026‑06‑03 | 飲み会割り勘 ソフドリ割引 |
+| 054 | 2026‑06‑03 | Zoom OAuth (`meeting:write`) — 「+ Zoom を追加」 機能 |
+| 055 | 2026‑06‑03 | adhoc_groups.schedule_start_date / schedule_end_date + adhoc_group_schedule_items (出張 / 旅行のスケジュール表) |
+| 056 | 2026‑06‑03 | adhoc_group_schedule_items 拡張: `image_url / url / end_date / end_time / duration_minutes` |
+| 057 | 2026‑06‑03 | adhoc_group_schedule_items.link_pair_id (連結ペア) |
+| 058 | 2026‑06‑02 | adhoc_group_schedule_items.lat / lng + day_date NULL 許容 (「行きたい場所ストック」) |
+| 059 | 2026‑06‑02 | adhoc_group_schedule_attachments (予定アイテムへのファイル添付) |
+| 060 | 2026‑06‑03 | polls + poll_options + poll_voters + poll_votes (投票・アンケート) |
+| 061 | 2026‑06‑04 | polls 拡張: `allow_revote / allow_free_text` + `poll_voters.free_text` (再投票可否 + 自由記述) |
+| 062 | 2026‑06‑03 | users.phone_number (緊急連絡先電話番号) |
+| 063 | 2026‑06‑03 | adhoc_group_chats (グループチャット / LINE 風) |
+| 064 | 2026‑06‑03 | adhoc_group_lodgings + adhoc_group_flights (宿泊地 / 航空券エンティティ。 反映でスケジュール展開) |
+| 065 | 2026‑06‑04 | roll_calls + roll_call_targets (点呼 / 「いる？」 「起きてる？」) |
+| 066 | 2026‑06‑04 | timers + timer_participants (共有タイマー) |
+| 067 | 2026‑06‑04 | roulettes.notified_at (ホイール停止後に通知遅延) |
+| 068 | 2026‑06‑04 | notices (重要連絡 / 学会情報リスト) |
 
 ---
 
