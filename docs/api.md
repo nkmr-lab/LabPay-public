@@ -35,7 +35,7 @@
 | PATCH | `/api/me`                | プロフィール更新: `{ display_name?, avatar_url?, scrapbox_username? }` |
 | GET   | `/api/me/transactions?limit=&offset=` | 取引履歴 (購入/販売/手数料/来室/送金/タスク報酬/取消 全部) |
 | GET   | `/api/me/listings?status=` | 自分の出品 |
-| GET   | `/api/me/achievements`   | 実績 9軸 × 4段階の獲得状況・進捗 |
+| GET   | `/api/me/achievements`   | 実績 15軸 × 4段階の獲得状況・進捗 |
 | GET   | `/api/me/presence_summary` | 自分のラボ滞在時間 (today/week/month/total minutes + 現在開いてるセッションの開始時刻) |
 | GET   | `/api/me/scrapbox_handles` | 自分が申告した Scrapbox 表示名一覧 + 直近30日の獲得 pt サマリー |
 | POST  | `/api/me/scrapbox_handles` | `{ handle: "..." }` を申告 (既に他人が持っていた場合は奪取される — 自己責任) |
@@ -355,6 +355,95 @@ Content-Type: multipart/form-data
 | Method | Path | 説明 |
 |---|---|---|
 | POST   | `/api/admin/scrapbox_slack/sync`     | `{ day?, dry_run? }` Slack の `#scrapbox` から指定日分を集計 (cron が日次自動実行) |
+| GET    | `/api/admin/slack_diag`              | Slack bot の `auth.test` → team / user_id を返す (scope 確認用) |
+| POST   | `/api/admin/slack_diag/test`         | 自分宛に test DM を送信。 `missing_scope` 等エラー時は対処 hint を返す |
+
+---
+
+## 小道具 (v270 以降に追加された各 API)
+
+### 募集 `/api/invitations`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/invitations?status=open|all`    | 一覧。 各 item に `joins[]` (参加者) も同梱 |
+| POST   | `/api/invitations`                    | `{title, starts_at?, signup_closes_at?, location?, capacity?, image_url?, description?, pre_join_user_ids?}` 作成時に 発起人が 自動 join。 `starts_at` は `Y-m-d` (時刻なし) も可 |
+| GET    | `/api/invitations/{id}`               | 詳細 |
+| PATCH  | `/api/invitations/{id}`               | 編集 (`reopen: true` で 終了済を再開) |
+| DELETE | `/api/invitations/{id}`               | 取消 |
+| POST   | `/api/invitations/{id}/joins`         | 参加表明 |
+| DELETE | `/api/invitations/{id}/joins`         | 取消 |
+
+### 投票 `/api/polls`, 点呼 `/api/rollcalls`, タイマー `/api/timers`
+
+各々 `GET 一覧 / POST 作成 / GET 詳細 / PATCH 編集 / DELETE / POST {id}/vote (or respond, or cancel)` の標準形。 詳細は `src/handlers/polls.php` 等。 タイマーは `{bell1_seconds?, bell2_seconds?, bell3_seconds?, repeat_max?}` で 中間ベル + リピート可。
+
+### 待ち合わせ `/api/meetups`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/meetups`                        | 自分関連の 一覧 |
+| POST   | `/api/meetups`                        | `{title, location, meetup_at, member_ids[]}` 集合時刻 24h 以内 |
+| GET    | `/api/meetups/{id}`                   | 詳細 + 参加者 |
+| PATCH  | `/api/meetups/{id}/cancel`            | 取消 (起案者または admin) |
+| DELETE | `/api/meetups/{id}`                   | 削除 |
+
+### オークション `/api/auctions`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/auctions`                       | 一覧 (lazy settle 込み)。 単位は **円** |
+| POST   | `/api/auctions`                       | `{title, description?, image_url?, min_price, closes_at}` 締切 1分〜14日先 |
+| GET    | `/api/auctions/{id}`                  | 詳細 + 入札履歴。 落札後は seller/winner に連絡先表示 |
+| POST   | `/api/auctions/{id}/bids`             | `{amount}` 現在最高 +1 以上必須。 自分の出品には不可 |
+| PATCH  | `/api/auctions/{id}/cancel`           | 取消 (seller / admin) |
+| DELETE | `/api/auctions/{id}`                  | 削除 |
+
+### 運動 (歩数) `/api/exercise`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/exercise`                       | 自分の sessions + today/this_week/this_month/lifetime |
+| POST   | `/api/exercise`                       | `{step_count, duration_seconds, started_at, ended_at}` (1 セッション 30 分まで、 6 歩/秒超は弾く) |
+| DELETE | `/api/exercise/{id}`                  | 削除 |
+| GET    | `/api/exercise/leaderboard`           | 今週合計 トップ 30 |
+
+### 効果音 `/api/sounds`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/sounds/clips`                   | 全 clip 一覧 |
+| POST   | `/api/sounds/clips`                   | audio upload (admin、 mp3/ogg/wav/m4a、 2MB まで) |
+| DELETE | `/api/sounds/clips/{id}`              | 削除 (admin) |
+| GET    | `/api/sounds/defaults`                | event 規定値一覧 |
+| PATCH  | `/api/sounds/defaults/{event_key}`    | 規定値変更 (admin) |
+| GET    | `/api/sounds/my`                      | 自分の上書き + 解決済 (再生に必要な file_url + volume) |
+| PATCH  | `/api/sounds/my/{event_key}`          | `{mode: default|custom|mute, clip_id?, volume?}` |
+
+### グループ `/api/groups` (ad-hoc + スケジュール + 宿泊 + 航空券 + e-ticket)
+
+詳細は `src/handlers/adhoc_groups.php` 内 dispatch を参照。 主要:
+
+- `GET / POST / GET :id / PATCH :id / DELETE :id (close)` 通常 CRUD
+- `DELETE :id/hard_delete` 完全削除 (closed_at セット済のみ)
+- `POST :id/items` フィード投稿、 `DELETE :id/items/:itemId`
+- `POST :id/members`, `DELETE :id/members/:uid`
+- `GET/POST :id/expenses`, `PATCH/DELETE :id/expenses/:eid` ワリカ
+- `POST :id/settle` 精算通知
+- `GET/POST :id/receipts`, `DELETE :id/receipts/:rid` レシート (draft 支出)
+- `GET/POST :id/lodgings`, `PATCH/DELETE :id/lodgings/:lid`, `POST :id/lodgings/:lid/sync` スケジュール反映
+- `GET/POST :id/flights`, `PATCH/DELETE :id/flights/:fid`, `POST :id/flights/:fid/sync`
+- `GET/POST/DELETE :id/flights/:fid/attachments` 添付 PDF / 画像
+- `GET/POST/DELETE :id/flights/:fid/etickets` 航空券 e-ticket (画像 + 座席 + 予約番号 + メモ)
+- `GET/POST :id/chats`, `DELETE :id/chats/:mid` チャット
+- `GET/POST :id/schedule`, `PATCH/DELETE :id/schedule/:itemId`, `PATCH :id/schedule/:itemId/move (up/down)`, `PATCH :id/schedule/:itemId/relocate (cross-day DnD)`
+- `GET/POST/DELETE :id/schedule/:itemId/attachments`
+
+### 公開プロフィール `/api/users/{id}/profile`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/users/{id}/profile` | 公開プロフィール (display_name / avatar / grade / hobbies / favorites / scrapbox_username) |
 
 ---
 

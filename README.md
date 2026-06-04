@@ -1,6 +1,6 @@
 # LabPay
 
-研究室ローカルポイントシステム。約 35 人規模のクローズドコミュニティ向けに「**買う・売る・タスク・送る・実績**」+ ラボ活動の可視化、さらに**ワリカ / 飲み会割り勘 / 請求 / ルーレット / 募集 / グループ**などの小道具をひとつにまとめた PWA + バックエンド。
+研究室ローカルポイントシステム。約 35 人規模のクローズドコミュニティ向けに「**買う・売る・タスク・送る・実績**」+ ラボ活動の可視化、さらに**ワリカ / 飲み会割り勘 / 請求 / ルーレット / 募集 / グループ / 投票 / 点呼 / タイマー / 待ち合わせ / オークション / 運動 (歩数) / 効果音 / 公開プロフィール**などの小道具をひとつにまとめた PWA + バックエンド。
 
 ```
 本番稼働: https://pay.nkmr.io  (中村研 内部)
@@ -25,21 +25,24 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | 購入 | ラボ Wi-Fi 接続中のみ許可 (オフラインからは閲覧のみ) / リピート購入は履歴一致のタイル上位表示 / バーコード読取 |
 | マーケット (販売) | バーコード読取 + 楽天 API で商品名・画像自動取得 / 置き場所 / 出品ごとに購入時お礼メッセージ / Slack 入荷通知 / 出品中はサマリ表示 → 編集モードでフィールド一括更新 |
 
-### タスク・依頼
+### タスク・依頼・募集
 
 | 領域 | 内容 |
 |---|---|
-| タスク | 依頼 → 引き受け → 承認、エスクロー預け / 時間枠分割 (`6/15 11:00-15:00 30分刻み`) / 締切自動取消 + 返金 / 完了報告フィードバック / **ファイル添付** (原稿チェック向け、最大 50MB) / 引き受け本人にも通知 / ホームに「あなたが引き受け中のタスク」カード |
-| 指名タスク | 特定メンバーに限定して送れるタスク (誰でも受諾できる通常タスクと別動線)。指名された人だけが受諾可能 / 0pt タスクも作れる (「お願いベース」用) |
-| 募集 | 「お昼ご飯」「ビアガーデン」「ポケモン GO」など pt の無いカジュアル招集。日時 / 場所 / 上限 / 詳細、参加表明、6h 経過で自動 close / 表紙画像対応 |
+| タスク | 報酬付きの 依頼 → 引き受け → 承認、エスクロー預け / 時間枠分割 (`6/15 11:00-15:00 30分刻み`) / 締切自動取消 + 返金 / 完了報告フィードバック / **ファイル添付** (原稿チェック向け、最大 50MB) / 引き受け本人にも通知 / ホームに「あなたが引き受け中のタスク」カード |
+| 指名タスク | 特定メンバーに限定して 報酬つきで送れるタスク (誰でも受諾できる通常タスクと別動線)。指名された人だけが受諾可能 |
+| 🙏 リクエスト (報酬なし) | 0pt の お願いベース。 タスクとは 別動線で 作成、 一覧では 🙏 タグで識別。 ESCROW なし、 善意 引き受け |
+| 募集 (invitations) | 「お昼ご飯」「ビアガーデン」「ポケモン GO」など pt の無いカジュアル招集。 表紙画像、 開催日 (任意・時刻 / 日付だけ も可) + **募集締切** (任意・参加表明はこの時刻まで)、 場所 / 上限 / 詳細 / 参加表明、 **発起人 自動 +1** + 事前参加者の登録 (作成時に 学年バルクで 選択), 終了済の 編集 (タイトル / 日時 / 場所 / 上限 / 詳細)、 再募集ボタン (発起人) |
 
 ### 小道具 (`#/apps` から)
 
+ユーザ毎に **アプリ表示** (`設定 → アプリ表示`) で ON/OFF + 並び替え可能 (`localStorage` 保存)。 デフォルト表示は 「グループ / ルーレット / どこ行く / 投票 / 点呼 / タイマー / 待ち合わせ / 連絡先 / 重要連絡」 の 9 個。 他は デフォ 非表示。
+
 | 領域 | 内容 |
 |---|---|
-| グループ (ad-hoc) | 学会・出張・イベント用の暫定メンバー枠。表紙画像 + slug URL (`#/groups/avi2026`) / 自由投稿のフィード (memo / URL / 時刻) / 中で「ワリカ」「ルーレット」「点呼」「タイマー」「投票」「📸 レシート撮影」を呼び出せる (グループメンバーのみが選択対象) |
-| グループスケジュール | 日程 (開始〜終了日) を入れると 各日カードが並ぶ。 アイテム種別 (移動 / 宿泊 / 会議 / 食事 / 観光 / 他)、 時刻、 場所、 緯度経度 (📍 タップで Google Maps)、 メモ、 画像、 URL、 添付ファイル (PDF/画像/Office)、 ペアリンク (帯ストリップで連結表示)、 「行きたい場所ストック」 (日付未定の候補) |
-| 宿泊地 / 航空券エンティティ | スケジュールとは別管理。 場所 / 緯度経度 / チェックイン・アウト / 部屋番号 / 予約番号 / 座席 / 予約 URL を保持。 「📅 反映」 で schedule_items に展開 (宿泊は日付ごとに N 行、 航空券は出発 + 到着 のペア)。 同じエンティティから再 sync は冪等 |
+| グループ (ad-hoc) | 学会・出張・イベント用の暫定メンバー枠。表紙画像 (ヒーロー風 64% 表示 + 斜めカット) + slug URL (`#/groups/avi2026`) / 自由投稿のフィード (memo / URL / 時刻) / 中で「ワリカ」「ルーレット」「点呼」「タイマー」「投票」「📸 レシート撮影」 「🤝 待ち合わせ」 を呼び出せる (グループメンバーのみが選択対象、 機能 ON/OFF も per-group 設定) / 終了グループは デフォ非表示 + 閉鎖後に 完全削除 |
+| グループスケジュール | 日程 (開始〜終了日) を入れると 各日カードが並ぶ。 アイテム種別 (移動 / 宿泊 / 会議 / 食事 / 観光 / 他)、 時刻、 場所、 緯度経度 (📍 タップで Google Maps)、 メモ、 画像、 URL、 添付ファイル (PDF/画像/Office)、 ペアリンク (帯ストリップで連結表示)、 「行きたい場所ストック」 (日付未定の候補)。 編集モードで **ドラッグアンドドロップ並び替え** (日またぎ可) + 動かせない多日項目は 🔒 マーク。 画像付きアイテムは ヒーロー風 (左 64% + 斜めカット + ドラッグハンドル オーバーレイ) |
+| 宿泊地 / 航空券エンティティ | スケジュールとは別管理。 場所 / 緯度経度 / チェックイン・アウト / 部屋番号 / 予約番号 / 座席 / 予約 URL を保持。 「📅 反映」 で schedule_items に展開 (宿泊は日付ごとに N 行、 航空券は出発 + 到着 のペア)。 同じエンティティから再 sync は冪等。 **航空券 e-ticket** は人ごとに QR 画像 (航空会社配布のもの) + 座席 + 予約番号 をアップロード保存 |
 | グループ チャット | LINE 風吹き出し (自分=右 primary 色) で会話。 5 秒ポーリング (差分のみ)、 URL 自動リンク、 タブ裏なら停止 |
 | 行く場所マップ | グループのスケジュール lat/lng を時系列順に結ぶ線マップ (`#/groups/:id/map`)。 Leaflet + OpenStreetMap (API key 不要)、 ピンに順番ラベル、 ポリラインで線結び |
 | ワリカ (Splitwise 風) | グループ内で「誰が何を立て替えたか」を積み上げ、ネット残高と推奨送金を計算。各支出はメンバースナップショット保存 / 多通貨 + 自動 FX レート / レシート写真添付可 |
@@ -51,9 +54,14 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | ランダムグループ生成 | 選んだメンバーを N チームにランダム分け。学年 / 性別を「できるだけ均等」にする配慮オプション付き。結果は「このメンバーでグループ作成」から ad-hoc グループに実体化可能 |
 | 投票・アンケート (polls) | 対象者 + 締切 + 選択肢を指定して投票を集める。 単複選択 / 自由記述 / 再投票可否 / 集計可視性 (creator / open / after_deadline) / 締切までのカウントダウン + 集計の自動更新 (60s, 残 10 分から 10s) / 未投票者催促 push / URL コピー |
 | 点呼 (roll call) | 「いる？」 「起きてる？」 をワンタップで集める。 プリセット 3 種 (10/5/60 分) / 任意メモ / 残り時間で sync 間隔可変 / 起案者の「🏁 終了」 + 未応答者催促 |
-| タイマー | 参加者全員に 同じカウントダウンを共有。 サーバが `started_at / ends_at` を持ち、 detail で `server_now` を返してクライアントがオフセット補正。 開始 30 秒 + 終了 30 秒前は 3 秒間隔再 sync、 中盤は 15 秒 |
+| タイマー | 参加者全員に 同じカウントダウンを共有。 サーバが `started_at / ends_at` を持ち、 detail で `server_now` を返してクライアントがオフセット補正。 開始 30 秒 + 終了 30 秒前は 3 秒間隔再 sync、 中盤は 15 秒。 **中間ベル 3 + リピート N 回** 対応 (各ベル時刻に効果音、 終了で 自動 N 回 繰返し) |
+| 🤝 待ち合わせ (meetups) | 集合時刻 + 場所 + メンバー で 24h 以内の 短期集合。 プリセット (30分後/1時間後/2時間後/3時間後) + datetime-local 任意。 詳細は 48px 大時計 + 1 秒刻みカウントダウン + 場所 Google Maps リンク。 場所に **緯度,経度** (例 `35.6586,139.7454`) を入れると Leaflet 小マップが表示される。 起案者が 取消・削除可。 募集の参加者から ワンクリック起動可能 |
+| 🏷 オークション (auctions) | 出品 + 入札 (現在最高+1 以上)、 締切時刻に 最高額入札者が落札。 単位は **円** (LabPay pt は動かない、 本人同士で 外で支払い)。 落札後は seller↔winner にだけ Slack / 電話の連絡先を表示。 取消 / 14 日以内の締切。 lazy settle (API アクセス時に自動確定) |
+| 🏃 運動 (exercise / 歩数) | ポケットに入れて「開始」 → 歩く / 階段、 DeviceMotion で歩数カウント (iOS 13+ は明示許可)。 加速度 magnitude → 9.8 (重力) 引いて純振動 → 閾値 2.0 m/s² + hysteresis + 250ms debounce。 1 セッション 30 分まで、 6 歩/秒超は弾く。 ラボ内ランキング (今週合計) 付き |
+| 🔊 効果音 (sounds) | 決済 (送金 / 購入) と ルーレット回転開始時 に効果音。 Admin が 音源 mp3/ogg/wav (2MB まで) を `#/admin/sounds` から upload、 各 event の規定値を設定。 ユーザは 設定で 「規定値を使う / 自分で選ぶ / 無音」 を上書き可能 |
 | 重要連絡 / 学会情報 (notices) | カテゴリ別 (`important` / `conference`) のピン留め可能リスト。 全員が投稿可、 投稿者 / admin が編集 / 削除。 シンプルに タイトル + 本文 + URL |
-| 連絡先 | ラボメンバーの緊急連絡用電話番号 (`#/contacts`)。 学年順一覧、 `tel:` リンクでタップ通話。 自分の番号は設定から登録 |
+| 連絡先 (contacts) | ラボメンバーの緊急連絡用電話番号 (`#/contacts`)。 学年順一覧、 `tel:` リンクでタップ通話。 自分の番号は設定から登録。 行タップで `/#/users/:id` 公開プロフィールへ遷移 |
+| 公開プロフィール (`/#/users/:id`) | アバター + 表示名 + 学年 + 趣味 + 推し + Scrapbox。 全 human user 同士で 閲覧可。 自分の設定は 設定 → プロフィール |
 | これ欲しい (Wishlist) | 商品名 + 任意 JAN + メモでリクエスト掲示、誰でも閲覧可・誰でも「出ました!」で達成扱い |
 | Scrapbox 履歴 | `#scrapbox` の研究ノート編集を「誰が・いつ・どの page を」読みやすくまとめて表示 (read-only feed) |
 | 関係グラフ | 売買 / タスク / 統合の 3 タブ。d3 v7 force-directed、アバター node + 件数 or 総額ベースのエッジ太さ切替 |
@@ -68,7 +76,7 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | ラボ活動マップ | 部屋 × 曜日 × 時間の在室人数ヒートマップ (`#/activity`)。ログが蓄積されるほど長期間のパターン (1週間 → 1年) が選べる |
 | 草 (GitHub 風) | ホームに本年度 (4/1 起点) の日次滞在時間グリッド |
 | 今日の予定 (Google Calendar) | 各ユーザの Google Calendar (`calendar.readonly`) と incremental authorization で連携。複数カレンダー選択可 / 個人ルール (正規表現含む) で非表示にできるイベントを設定可 / **ETag + localStorage 5 分 TTL** でクライアント側キャッシュし、Google API 呼出を抑制 |
-| 実績 | 11 カテゴリ × 4 段階のメダル (ラボイン日数・連続記録・販売・購入・取扱高・タスク完了・Scrapbox 寄稿日数・ルーレット主催 / 当選 など) |
+| 実績 | **15 カテゴリ × 4 段階** のメダル。 段位名は category 別の 極端化 された 名前 (例: `お試し気分` → `ラボの常連` → `住んでる人` → `ラボに生まれた説` / `たまの夜更かし` → `夜のラボ住民` → `闇属性` → `夜の支配者`)。 ラボイン日数 / 連続記録 / 販売 / 購入 / 取扱高 / タスク完了 / Scrapbox 寄稿日数 / ルーレット主催・当選 / **夜間ラボ族 (23:00-25:00)** / **早起き (7:00-8:30 で 泊まりでない)** / **オープナー (最初に入る)** / **クローザー (最後に出る)** |
 | Scrapbox 寄稿ボーナス | Slack の `#scrapbox` 通知を読んで `author_name` ごとに集計 → 申告 handle 経由で LabPay user に配布 (日次 23:59 JST cron)。任意編集 5pt + 自身の研究ノート編集で +5pt (= 最大 10pt/日) |
 
 ### 横断機能
@@ -97,24 +105,42 @@ LabPay/
 │   ├── img/                 ← PWA アイコン
 │   ├── privacy.html         ← Google OAuth 審査用プライバシーポリシー
 │   ├── js/
-│   │   ├── app.js           ← 起動 + ルータ + 認証
+│   │   ├── app.js              ← 起動 + ルータ + 認証
 │   │   ├── router.js, api.js, scan.js
-│   │   ├── labels.js        ← LEDGER_TYPE_LABEL の単一定義 (home/history/admin が共有)
-│   │   ├── upload.js        ← uploadImage / uploadTaskAttachment ヘルパ
-│   │   └── views/           ← ページ毎の renderer
+│   │   ├── labels.js           ← LEDGER_TYPE_LABEL の単一定義 (home/history/admin が共有)
+│   │   ├── upload.js           ← uploadImage / uploadTaskAttachment ヘルパ
+│   │   ├── format.js           ← 共有: fmtDate / fmtDateTime / fmtTime / fmtRelative / fmtLocalInput / tag(kind,label) / participantPill / participantChip / participantChipRow
+│   │   ├── member_picker.js    ← 共有: createMemberPicker() — 全員/学年/性別 bulk + 個別 chip + 選択数
+│   │   ├── modal.js            ← 共有: openModal({title,bodyHtml,buttons}) / confirmModal()
+│   │   ├── image_picker.js     ← 共有: setupImagePicker(prefix) — file + url + preview + status を自動配線
+│   │   ├── sounds.js           ← playSound(eventKey) / preloadSounds() — 決済 / ルーレット の効果音
+│   │   └── views/              ← ページ毎の renderer
 │   │       ├── home.js, buy.js, sell.js, product.js
 │   │       ├── tasks.js, transfer.js, history.js
 │   │       ├── achievements.js, network.js, activity.js
 │   │       ├── notifications.js, settings.js, admin.js, login.js
-│   │       ├── invitations.js, roulette.js, wishlist.js
-│   │       ├── apps.js            ← 小道具ハブ
-│   │       ├── groups.js          ← ad-hoc グループ
-│   │       ├── wari.js            ← ワリカ (Splitwise 風)
-│   │       ├── nomikai.js         ← 飲み会割り勘
-│   │       ├── money_requests.js  ← 請求 (集金)
-│   │       ├── random_groups.js   ← ランダム N チーム分け
-│   │       ├── scrapbox_feed.js   ← Scrapbox 履歴 read-only feed
-│   │       └── feedback_admin.js  ← 報告・要望 admin UI
+│   │       ├── invitations.js, roulette.js, text_roulette.js, wishlist.js
+│   │       ├── apps.js              ← 小道具ハブ + APPS export + isAppVisible
+│   │       ├── groups.js            ← ad-hoc グループ + スケジュール DnD + ヒーロー風 list
+│   │       ├── group_map.js         ← Leaflet で行く場所マップ
+│   │       ├── wari.js              ← ワリカ (Splitwise 風)
+│   │       ├── nomikai.js           ← 飲み会割り勘
+│   │       ├── money_requests.js    ← 請求 (集金)
+│   │       ├── random_groups.js     ← ランダム N チーム分け
+│   │       ├── scrapbox_feed.js     ← Scrapbox 履歴 read-only feed
+│   │       ├── feedback_admin.js    ← 報告・要望 admin UI
+│   │       ├── feedback_user.js     ← 機能要望 / バグ報告 単独ページ
+│   │       ├── polls.js             ← 投票・アンケート
+│   │       ├── rollcalls.js         ← 点呼
+│   │       ├── timers.js            ← 共有タイマー + ベル + リピート
+│   │       ├── meetups.js           ← 待ち合わせ (短期集合)
+│   │       ├── auctions.js          ← オークション (落札後は本人同士)
+│   │       ├── exercise.js          ← 運動 / 歩数 (DeviceMotion)
+│   │       ├── notices.js           ← 重要連絡 / 学会情報
+│   │       ├── contacts.js          ← 連絡先
+│   │       ├── profile.js           ← /#/users/:id 公開プロフィール
+│   │       ├── requests_hub.js      ← 依頼 (タスク + 募集 + 投票) ハブ
+│   │       └── admin_sounds.js      ← 効果音 規定値 (admin)
 │   ├── vendor/              ← ZXing (バーコード / QR) + d3 (関係グラフ)
 │   └── uploads/             ← ユーザアップロード (gitignore)
 │       ├── products/        ← 商品画像・アバター
@@ -137,10 +163,18 @@ LabPay/
 │       ├── feedback.php, wishlist.php
 │       ├── invitations.php, roulettes.php
 │       ├── nomikai.php, money_requests.php
-│       ├── adhoc_groups.php   ← グループ + ワリカ + レシート (draft 支出) + フィード
+│       ├── adhoc_groups.php    ← グループ + ワリカ + レシート (draft 支出) + フィード + スケジュール + 宿泊 + 航空券 + e-ticket
 │       ├── random_groups.php
 │       ├── scrapbox_feed.php
-│       ├── fx.php             ← 為替レート (ワリカ多通貨)
+│       ├── fx.php              ← 為替レート (ワリカ多通貨)
+│       ├── polls.php           ← 投票・アンケート
+│       ├── rollcalls.php       ← 点呼
+│       ├── timers.php          ← 共有タイマー (+ベル, リピート)
+│       ├── notices.php         ← 重要連絡 / 学会情報
+│       ├── meetups.php         ← 待ち合わせ
+│       ├── auctions.php        ← オークション (lazy settle)
+│       ├── exercise.php        ← 運動 / 歩数 セッション + ランキング
+│       └── sounds.php          ← 効果音 clips / defaults / 各ユーザ override
 ├── config/
 │   ├── config.sample.php    ← 設定テンプレ
 │   └── config.php           ← 実設定 (gitignore — シークレットを含む)
@@ -362,6 +396,20 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 066 | 2026‑06‑04 | timers + timer_participants (共有タイマー) |
 | 067 | 2026‑06‑04 | roulettes.notified_at (ホイール停止後に通知遅延) |
 | 068 | 2026‑06‑04 | notices (重要連絡 / 学会情報リスト) |
+| 069 | 2026‑06‑04 | adhoc_group_chats / 通知系 微調整 |
+| 070 | 2026‑06‑04 | adhoc_group_flight_attachments (e-ticket PDF / 画像 / QR スクショ per-owner) |
+| 071 | 2026‑06‑04 | adhoc_groups の feat_schedule / feat_lodging / feat_flight (機能 ON/OFF カラム) + 既存 row の backfill |
+| 072 | 2026‑06‑04 | meetups + meetup_participants (待ち合わせ 短期集合) |
+| 073 | 2026‑06‑04 | adhoc_groups.feat_wari + feat_actions (8 アクションボタン JSON で per-group 制御) |
+| 074 | 2026‑06‑04 | sound_clips / sound_event_defaults / sound_user_prefs (効果音システム) |
+| 075 | 2026‑06‑04 | auctions + auction_bids (オークション 単位は円) |
+| 076 | 2026‑06‑04 | exercise_sessions (歩数 / 階段) |
+| 077 | 2026‑06‑04 | timers にベル × 3 + リピート (`bell1/2/3_seconds`, `repeat_max`, `repeat_idx`) |
+| 078 | 2026‑06‑04 | adhoc_group_flight_etickets (e-ticket QR image / seat / booking_ref / note per-owner) |
+| 079 | 2026‑06‑04 | flight_etickets に qr_image_url / qr_thumb_url 追加、 qr_payload を NULL 許可 (画像 主体に) |
+| 080 | 2026‑06‑05 | users に hobbies / favorites (公開プロフィール) |
+| 081 | 2026‑06‑05 | invitations.signup_closes_at (募集締切 = 開催時刻と別。 過ぎたら 参加表明拒否) |
+| 082 | 2026‑06‑05 | invitations.starts_at_has_time (日付だけ / 時刻あり の区別) + 既存 invitation の発起人を 自動 join (backfill) |
 
 ---
 
@@ -385,6 +433,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 - **追記専用台帳**: 残高は `ledger` 行の SUM(to) - SUM(from)。直接 UPDATE しない。修正は `reversal` 仕訳
 - **新リソースは dispatch table に 1 行**: `public/api/index.php` の `$routes` に追加するだけで生える。複雑な権限 / 前処理は route_* 関数の中で済ませる
 - **PWA キャッシュは shell だけ**: `sw.js` は `/api/*` を絶対にキャッシュしない (台帳の鮮度)。バージョン bump は `CACHE_NAME` (`labpay-shell-vNNN`) と `index.html` の `brand-version` の 2 箇所
+- **共有 UI ヘルパ**: 各 view で重複していた パターンは `public/js/{format,member_picker,modal,image_picker,sounds}.js` に 集約。 新しい view を書くときは これらを 使う (status tag は `tag('ok'|'warn'|'danger'|'muted', label)`、 メンバー選択は `createMemberPicker({...})`、 モーダルは `openModal({title, bodyHtml, buttons})`、 画像 upload は `setupImagePicker(prefix)`、 時刻表示は `fmtDate / fmtDateTime / fmtRelative / fmtLocalInput`)。 新しい inline style を 書く前に 既存ヘルパで足りないか 一度確認
 
 ---
 

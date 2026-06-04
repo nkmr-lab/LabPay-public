@@ -417,12 +417,15 @@ sudo gunzip -c /var/backups/labpay/labpay-YYYY-MM-DD.sql.gz | \
 
 に貼って `sudo systemctl reload httpd`。
 
-### 14.2 入力 (Scrapbox-via-Slack 集計)
+### 14.2 入力 (Scrapbox-via-Slack 集計) + 通知 DM
 
-Scrapbox の `#scrapbox` 通知から寄稿者を読み取って pt 配布する機能を使うなら:
+Scrapbox の `#scrapbox` 通知から寄稿者を読み取って pt 配布、 さらに 各ユーザに 通知を Slack DM で 飛ばすなら:
 
 1. https://api.slack.com/apps → **Create New App** (From scratch)
-2. **OAuth & Permissions** → Bot Token Scopes に `channels:history` を追加 (private チャンネルなら `groups:history`)
+2. **OAuth & Permissions** → Bot Token Scopes に 以下を追加:
+   - `channels:history` (private チャンネルなら `groups:history`) — Scrapbox feed 読み取り
+   - `chat:write` — ユーザに DM 送信 (通知の Slack 連携)
+   - `im:write` — DM チャンネルを 自動オープン (推奨。 なくても user が bot の Home タブを 1 度開けば動く)
 3. **Install to Workspace** → `xoxb-…` トークンをコピー
 4. Slack で `/invite @<bot 名>` を `#scrapbox` チャンネルで実行
 5. `#scrapbox` のチャンネル ID (`Cxxxxxxx`) を確認 (Slack 詳細画面の下部)
@@ -435,6 +438,10 @@ Scrapbox の `#scrapbox` 通知から寄稿者を読み取って pt 配布する
     'scrapbox_channel_id' => 'Cxxxxxxx',
 ],
 ```
+
+7. 各ユーザは 設定 → プロフィール の 「Slack member ID」 (`U01ABCD2345`) を 埋める。 未設定なら DM はサイレント skip。
+
+8. admin から 動作確認: `/#/admin` → 「Slack 通知 診断」 → 「⚙ 接続確認 (auth.test)」 で OK か、 「✉ テスト DM 送信」 で 自分宛に届くか。 `missing_scope` などのエラー時は hint で 対処法を表示。
 
 7. cron 登録 (日次 23:59 JST):
 
