@@ -2304,6 +2304,67 @@ async function startChatLoop(gid) {
 // (部屋番号・確認コード等) を保持して、 必要に応じて 「スケジュールに反映」 で
 // schedule_items として 2 行 (チェックイン/アウト, 出発/到着) を 1 ペアで生成。
 
+// 空港 / 航空会社 自動補完。 静的 JSON を 1 度だけ fetch して module レベルで持つ。
+let airportsPromise = null;
+let airlinesPromise = null;
+function loadAirports() {
+  if (!airportsPromise) airportsPromise = fetch('/data/airports.json').then(r => r.json()).catch(() => ({}));
+  return airportsPromise;
+}
+function loadAirlines() {
+  if (!airlinesPromise) airlinesPromise = fetch('/data/airlines.json').then(r => r.json()).catch(() => ({}));
+  return airlinesPromise;
+}
+
+// 入力された IATA 3 文字を 大文字化して空港 DB から探す。 見つかれば 名前 + 市
+// をヒントとして表示。
+async function setupAirportAutocomplete(inputId, hintId) {
+  const input = document.getElementById(inputId);
+  const hint = document.getElementById(hintId);
+  if (!input || !hint) return;
+  const airports = await loadAirports();
+  const refresh = () => {
+    const code = input.value.trim().toUpperCase();
+    if (code.length === 3 && airports[code]) {
+      const a = airports[code];
+      hint.style.color = '';
+      hint.innerHTML = `✈ ${escapeHtml(a.name)} (${escapeHtml(a.city)})`;
+    } else if (code.length === 3) {
+      hint.style.color = 'var(--muted)';
+      hint.textContent = '(未登録の IATA コード)';
+    } else {
+      hint.textContent = '';
+    }
+  };
+  input.addEventListener('input', refresh);
+  refresh();
+}
+
+// 便名 (例 NH771, JL101, CX543) の先頭 1〜3 文字から 航空会社を推定して
+// airline input が空なら自動補完。 既に airline に値があれば上書きしない。
+async function setupAirlineAutoComplete(numId, airlineId) {
+  const num = document.getElementById(numId);
+  const air = document.getElementById(airlineId);
+  if (!num || !air) return;
+  const airlines = await loadAirlines();
+  const refresh = () => {
+    const v = num.value.trim().toUpperCase();
+    if (!v) return;
+    // 先頭の英字 (2〜3 文字) を抽出。
+    const m = v.match(/^([A-Z0-9]{2,3})/);
+    if (!m) return;
+    const prefix = m[1];
+    // IATA は 2 文字または 2 数字、 ICAO は 3 文字。 まず 2 文字、 次に 3 文字。
+    let label = airlines[prefix] || airlines[prefix.slice(0, 2)] || null;
+    if (label && !air.value.trim()) {
+      air.value = label;
+      air.dispatchEvent(new Event('input'));
+    }
+  };
+  num.addEventListener('input', refresh);
+  num.addEventListener('blur', refresh);
+}
+
 function fmtDateTimeShort(s) {
   if (!s) return '';
   return String(s).slice(0, 16).replace(' ', ' '); // "YYYY-MM-DD HH:MM"
@@ -2333,37 +2394,28 @@ async function loadLodgings(gid) {
       const url = l.url ? `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:12px">予約サイト 🔗</a>` : '';
       const memo = l.memo ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(l.memo)}</div>` : '';
       return `
-        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px">
-          <div style="min-width:0">
+        <div class="list-item" data-lod-edit="${l.id}" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px; cursor:pointer; position:relative">
+          <div style="min-width:0; padding-right:36px">
             <div class="bold" style="font-size:14px">${escapeHtml(l.name)}</div>
             <div class="meta" style="font-size:12px">${escapeHtml(inOut || '日程未設定')}${room}</div>
             ${loc}
             ${url}
             ${memo}
           </div>
-          <div class="row" style="gap:6px; justify-content:flex-end">
-            <button data-lod-sync="${l.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
-            <button data-lod-edit="${l.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
-            <button data-lod-rm="${l.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
-          </div>
+          <button data-lod-rm="${l.id}" class="btn"
+                  style="position:absolute; right:8px; top:8px; padding:2px 8px; font-size:11px; background:#fff; color:var(--muted); border:1px solid var(--line)">削除</button>
         </div>`;
     }).join('');
-    list.querySelectorAll('[data-lod-edit]').forEach(b => b.addEventListener('click', () => {
-      const it = items.find(x => Number(x.id) === Number(b.dataset.lodEdit));
+    list.querySelectorAll('[data-lod-edit]').forEach(el => el.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return;
+      const it = items.find(x => Number(x.id) === Number(el.dataset.lodEdit));
       if (it) openLodgingModal(gid, it);
     }));
-    list.querySelectorAll('[data-lod-rm]').forEach(b => b.addEventListener('click', async () => {
+    list.querySelectorAll('[data-lod-rm]').forEach(b => b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       if (!confirm('この宿泊地を削除しますか?')) return;
       try { await del(`/api/groups/${gid}/lodgings/${b.dataset.lodRm}`); await loadLodgings(gid); }
       catch (e) { toast('失敗: ' + e.message); }
-    }));
-    list.querySelectorAll('[data-lod-sync]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('チェックイン / アウトをスケジュールに反映しますか?')) return;
-      try {
-        const r = await post(`/api/groups/${gid}/lodgings/${b.dataset.lodSync}/sync`, {});
-        toast(`スケジュールに ${r.created_ids.length} 件追加`);
-        await loadSchedule(gid);
-      } catch (e) { toast('失敗: ' + e.message); }
     }));
   } catch (e) {
     list.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -2401,6 +2453,10 @@ function openLodgingModal(gid, it) {
           <input type="url" id="lm-url" maxlength="2000" value="${escapeHtml(it.url || '')}"></label>
         <label class="field"><span class="lbl">メモ (任意)</span>
           <textarea id="lm-memo" rows="3" maxlength="2000">${escapeHtml(it.memo || '')}</textarea></label>
+        ${isNew ? '' : `
+        <div class="row" style="gap:6px; justify-content:flex-start; margin-top:8px">
+          <button id="lm-sync" class="btn primary" style="padding:6px 12px">📅 保存してスケジュールに反映</button>
+        </div>`}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
           <button id="lm-cancel">キャンセル</button>
           <button id="lm-save" class="primary">${isNew ? '追加' : '保存'}</button>
@@ -2411,8 +2467,8 @@ function openLodgingModal(gid, it) {
   document.getElementById('lm-close').addEventListener('click', close);
   document.getElementById('lm-cancel').addEventListener('click', close);
   document.getElementById('lm-overlay').addEventListener('click', e => { if (e.target.id === 'lm-overlay') close(); });
-  document.getElementById('lm-save').addEventListener('click', async () => {
-    const body = {
+  function collectLodgingModal() {
+    return {
       name: document.getElementById('lm-name').value.trim(),
       location: document.getElementById('lm-loc').value.trim() || null,
       ...parseLatLng(document.getElementById('lm-latlng').value),
@@ -2422,6 +2478,9 @@ function openLodgingModal(gid, it) {
       url:  document.getElementById('lm-url').value.trim() || null,
       memo: document.getElementById('lm-memo').value.trim() || null,
     };
+  }
+  document.getElementById('lm-save').addEventListener('click', async () => {
+    const body = collectLodgingModal();
     if (!body.name) { toast('宿泊地名を入れてください'); return; }
     try {
       if (isNew) await post(`/api/groups/${gid}/lodgings`, body);
@@ -2429,6 +2488,18 @@ function openLodgingModal(gid, it) {
       toast('保存しました');
       close();
       await loadLodgings(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('lm-sync')?.addEventListener('click', async () => {
+    try {
+      const body = collectLodgingModal();
+      if (!body.name) { toast('宿泊地名を入れてください'); return; }
+      await patch(`/api/groups/${gid}/lodgings/${it.id}`, body);
+      const r = await post(`/api/groups/${gid}/lodgings/${it.id}/sync`, {});
+      toast(`保存 + スケジュールに ${r.created_ids.length} 件追加`);
+      close();
+      await loadLodgings(gid);
+      await loadSchedule(gid);
     } catch (e) { toast('失敗: ' + e.message); }
   });
 }
@@ -2453,37 +2524,29 @@ async function loadFlights(gid) {
       const url = f.url ? `<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:12px">予約サイト 🔗</a>` : '';
       const memo = f.memo ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(f.memo)}</div>` : '';
       return `
-        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px">
-          <div style="min-width:0">
+        <div class="list-item" data-flt-edit="${f.id}" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px; cursor:pointer; position:relative">
+          <div style="min-width:0; padding-right:36px">
             <div class="bold" style="font-size:14px">${escapeHtml(label || '便')}${seat}</div>
             <div class="meta">${dep}${dep && arr ? ' → ' : ''}${arr}</div>
             ${conf}
             ${url}
             ${memo}
           </div>
-          <div class="row" style="gap:6px; justify-content:flex-end">
-            <button data-flt-sync="${f.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
-            <button data-flt-edit="${f.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
-            <button data-flt-rm="${f.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
-          </div>
+          <button data-flt-rm="${f.id}" class="btn"
+                  style="position:absolute; right:8px; top:8px; padding:2px 8px; font-size:11px; background:#fff; color:var(--muted); border:1px solid var(--line)">削除</button>
         </div>`;
     }).join('');
-    list.querySelectorAll('[data-flt-edit]').forEach(b => b.addEventListener('click', () => {
-      const it = items.find(x => Number(x.id) === Number(b.dataset.fltEdit));
+    // 行タップで編集モーダル (削除ボタンは stopPropagation)。
+    list.querySelectorAll('[data-flt-edit]').forEach(el => el.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return;
+      const it = items.find(x => Number(x.id) === Number(el.dataset.fltEdit));
       if (it) openFlightModal(gid, it);
     }));
-    list.querySelectorAll('[data-flt-rm]').forEach(b => b.addEventListener('click', async () => {
+    list.querySelectorAll('[data-flt-rm]').forEach(b => b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       if (!confirm('この航空券を削除しますか?')) return;
       try { await del(`/api/groups/${gid}/flights/${b.dataset.fltRm}`); await loadFlights(gid); }
       catch (e) { toast('失敗: ' + e.message); }
-    }));
-    list.querySelectorAll('[data-flt-sync]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('出発 / 到着 をスケジュールに反映しますか?')) return;
-      try {
-        const r = await post(`/api/groups/${gid}/flights/${b.dataset.fltSync}/sync`, {});
-        toast(`スケジュールに ${r.created_ids.length} 件追加`);
-        await loadSchedule(gid);
-      } catch (e) { toast('失敗: ' + e.message); }
     }));
   } catch (e) {
     list.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -2504,19 +2567,23 @@ function openFlightModal(gid, it) {
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <label class="field" style="flex:2; min-width:160px"><span class="lbl">航空会社</span>
-            <input type="text" id="fm-airline" maxlength="120" placeholder="例: ANA" value="${escapeHtml(it.airline || '')}"></label>
-          <label class="field" style="flex:1; min-width:120px"><span class="lbl">便名</span>
-            <input type="text" id="fm-num" maxlength="40" placeholder="例: NH771" value="${escapeHtml(it.flight_number || '')}"></label>
+            <input type="text" id="fm-airline" maxlength="120" placeholder="例: ANA (便名から自動補完)" value="${escapeHtml(it.airline || '')}"></label>
+          <label class="field" style="flex:1; min-width:120px"><span class="lbl">便名 (IATA + 番号)</span>
+            <input type="text" id="fm-num" maxlength="40" placeholder="例: NH771" value="${escapeHtml(it.flight_number || '')}" autocapitalize="characters"></label>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
-          <label class="field" style="flex:1; min-width:160px"><span class="lbl">出発空港</span>
-            <input type="text" id="fm-depap" maxlength="80" placeholder="例: HND" value="${escapeHtml(it.dep_airport || '')}"></label>
+          <label class="field" style="flex:1; min-width:160px"><span class="lbl">出発空港 (IATA)</span>
+            <input type="text" id="fm-depap" maxlength="80" placeholder="例: HND" value="${escapeHtml(it.dep_airport || '')}" autocapitalize="characters">
+            <span class="hint-sm" id="fm-depap-info"></span>
+          </label>
           <label class="field" style="flex:1; min-width:200px"><span class="lbl">出発日時</span>
             <input type="datetime-local" id="fm-depat" value="${escapeHtml(toLocalInputValue(it.dep_at))}"></label>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
-          <label class="field" style="flex:1; min-width:160px"><span class="lbl">到着空港</span>
-            <input type="text" id="fm-arrap" maxlength="80" placeholder="例: ITM" value="${escapeHtml(it.arr_airport || '')}"></label>
+          <label class="field" style="flex:1; min-width:160px"><span class="lbl">到着空港 (IATA)</span>
+            <input type="text" id="fm-arrap" maxlength="80" placeholder="例: ITM" value="${escapeHtml(it.arr_airport || '')}" autocapitalize="characters">
+            <span class="hint-sm" id="fm-arrap-info"></span>
+          </label>
           <label class="field" style="flex:1; min-width:200px"><span class="lbl">到着日時</span>
             <input type="datetime-local" id="fm-arrat" value="${escapeHtml(toLocalInputValue(it.arr_at))}"></label>
         </div>
@@ -2530,6 +2597,10 @@ function openFlightModal(gid, it) {
           <input type="url" id="fm-url" maxlength="2000" value="${escapeHtml(it.url || '')}"></label>
         <label class="field"><span class="lbl">メモ</span>
           <textarea id="fm-memo" rows="3" maxlength="2000">${escapeHtml(it.memo || '')}</textarea></label>
+        ${isNew ? '' : `
+        <div class="row" style="gap:6px; justify-content:flex-start; margin-top:8px">
+          <button id="fm-sync" class="btn primary" style="padding:6px 12px">📅 保存してスケジュールに反映</button>
+        </div>`}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
           <button id="fm-cancel">キャンセル</button>
           <button id="fm-save" class="primary">${isNew ? '追加' : '保存'}</button>
@@ -2540,19 +2611,43 @@ function openFlightModal(gid, it) {
   document.getElementById('fm-close').addEventListener('click', close);
   document.getElementById('fm-cancel').addEventListener('click', close);
   document.getElementById('fm-overlay').addEventListener('click', e => { if (e.target.id === 'fm-overlay') close(); });
-  document.getElementById('fm-save').addEventListener('click', async () => {
-    const body = {
+  document.getElementById('fm-sync')?.addEventListener('click', async () => {
+    // まず通常 save、 続けて sync を呼ぶ。
+    try {
+      const body = collectFlightModal();
+      if (!body.airline && !body.flight_number) { toast('航空会社か便名を入れてください'); return; }
+      await patch(`/api/groups/${gid}/flights/${it.id}`, body);
+      const r = await post(`/api/groups/${gid}/flights/${it.id}/sync`, {});
+      toast(`保存 + スケジュールに ${r.created_ids.length} 件追加`);
+      close();
+      await loadFlights(gid);
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  // 空港 / 航空会社 自動補完。 入力直後に bundled JSON でルックアップ。
+  setupAirportAutocomplete('fm-depap', 'fm-depap-info');
+  setupAirportAutocomplete('fm-arrap', 'fm-arrap-info');
+  setupAirlineAutoComplete('fm-num', 'fm-airline');
+  // 初期値で既に IATA コードが入ってる場合 一度発火させて hint を出す。
+  document.getElementById('fm-depap').dispatchEvent(new Event('input'));
+  document.getElementById('fm-arrap').dispatchEvent(new Event('input'));
+  document.getElementById('fm-num').dispatchEvent(new Event('input'));
+  function collectFlightModal() {
+    return {
       airline:       document.getElementById('fm-airline').value.trim() || null,
-      flight_number: document.getElementById('fm-num').value.trim() || null,
-      dep_airport:   document.getElementById('fm-depap').value.trim() || null,
+      flight_number: document.getElementById('fm-num').value.trim().toUpperCase() || null,
+      dep_airport:   document.getElementById('fm-depap').value.trim().toUpperCase() || null,
       dep_at:        document.getElementById('fm-depat').value || null,
-      arr_airport:   document.getElementById('fm-arrap').value.trim() || null,
+      arr_airport:   document.getElementById('fm-arrap').value.trim().toUpperCase() || null,
       arr_at:        document.getElementById('fm-arrat').value || null,
       confirmation_code: document.getElementById('fm-conf').value.trim() || null,
       seat:          document.getElementById('fm-seat').value.trim() || null,
       url:           document.getElementById('fm-url').value.trim() || null,
       memo:          document.getElementById('fm-memo').value.trim() || null,
     };
+  }
+  document.getElementById('fm-save').addEventListener('click', async () => {
+    const body = collectFlightModal();
     if (!body.airline && !body.flight_number) { toast('航空会社か便名を入れてください'); return; }
     try {
       if (isNew) await post(`/api/groups/${gid}/flights`, body);

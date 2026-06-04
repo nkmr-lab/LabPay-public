@@ -1204,6 +1204,20 @@ function group_flights_del(PDO $pdo, array $cfg, int $id, int $fid): void {
 }
 
 // 航空券 → スケジュール展開: 出発 + 到着 の 2 アイテムを 1 ペアで作成。
+// IATA 3 文字を 緯度経度 + 正式名に解決。 public/data/airports.json から読む
+// (process 毎に 1 回読んでキャッシュ)。 見つからなければ null。
+function iata_lookup(string $code): ?array {
+    static $cache = null;
+    if ($cache === null) {
+        $path = realpath(__DIR__ . '/../../public/data/airports.json');
+        $cache = $path && is_file($path)
+            ? (json_decode((string)file_get_contents($path), true) ?: [])
+            : [];
+    }
+    $c = strtoupper(trim($code));
+    return $cache[$c] ?? null;
+}
+
 function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
@@ -1231,11 +1245,21 @@ function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
                 FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
             $stm->execute([$id, $day]);
             $sort = (int)$stm->fetchColumn() + 1;
+            // 空港名を解決して タイトルに反映、 lat/lng を schedule item に書く。
+            $info = $airport ? iata_lookup($airport) : null;
+            $locationText = $airport ?: null;
+            $lat = $lng = null;
+            if ($info) {
+                $locationText = $info['name'];
+                $lat = $info['lat'] ?? null;
+                $lng = $info['lng'] ?? null;
+            }
             $title = mb_substr($label . $suffix, 0, 200);
             $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
-                (group_id, day_date, start_time, kind, title, location, link_pair_id, sort_order, created_by_user_id, created_at)
-                VALUES (?, ?, ?, 'flight', ?, ?, ?, ?, ?, NOW())");
-            $ins->execute([$id, $day, $time, $title, $airport, $pairId, $sort, (int)$u['id']]);
+                (group_id, day_date, start_time, kind, title, location, lat, lng, link_pair_id, sort_order, created_by_user_id, created_at)
+                VALUES (?, ?, ?, 'flight', ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $ins->execute([$id, $day, $time, $title, $locationText, $lat, $lng,
+                $pairId, $sort, (int)$u['id']]);
             $created[] = (int)$pdo->lastInsertId();
         };
         $insOne($F['dep_at'], $F['dep_airport'], ' 出発');
