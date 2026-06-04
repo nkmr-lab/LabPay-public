@@ -859,12 +859,25 @@ async function renderFreshInvitations() {
       return;
     }
     root.innerHTML = open.slice(0, 5).map(i => {
-      const when  = i.starts_at ? `🕒 ${escapeHtml(i.starts_at)} ・` : '';
+      const when  = i.starts_at
+        ? `🕒 ${escapeHtml(Number(i.starts_at_has_time) === 0 ? String(i.starts_at).slice(0,10) : String(i.starts_at).slice(0,16))} ・`
+        : '';
       const where = i.location  ? `📍 ${escapeHtml(i.location)} ・` : '';
       const cap   = i.capacity  ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       const title = `${escapeHtml(i.title)}${joined}`;
       const meta  = `${when}${where}${cap} · ${escapeHtml(i.creator_name)}`;
+      // v377 参加表明者を アイコンだけ並べる (グループと同じ avatar チップ列)。
+      const joins = Array.isArray(i.joins) ? i.joins : [];
+      const joinsRow = joins.length
+        ? `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">
+             ${joins.slice(0, 8).map(j =>
+               `<span title="${escapeHtml(j.display_name)}" style="display:inline-flex">
+                  ${avatarHtml(j.display_name, j.avatar_url, 'xs')}
+                </span>`).join('')}
+             ${joins.length > 8 ? `<span class="muted" style="font-size:11px">+${joins.length - 8}</span>` : ''}
+           </div>`
+        : '';
       const href  = '#/invitations/' + i.id;
       if (i.image_url) {
         // 募集も 「ヒーロー風」 (groups と同じ)。
@@ -874,6 +887,7 @@ async function renderFreshInvitations() {
             <div class="grow">
               <div class="bold">${title}</div>
               <div class="meta">${meta}</div>
+              ${joinsRow}
             </div>
           </a>`;
       }
@@ -882,6 +896,7 @@ async function renderFreshInvitations() {
           <div class="grow">
             <div class="bold">${title}</div>
             <div class="meta">${meta}</div>
+            ${joinsRow}
           </div>
           <div class="hint">→</div>
         </a>`;

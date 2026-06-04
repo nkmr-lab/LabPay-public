@@ -188,6 +188,19 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   height: auto;
   min-height: 44px;
 }
+/* v377 ホームの ヒーロー画像幅は 50% に縮める (情報量が多いので テキスト幅を確保)。
+   斜めカットも やや浅め (18px) に。 */
+.card[data-card-id] .list-item.with-cover.hero > .cover-img {
+  width: 50%;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+}
+.card[data-card-id] .list-item.with-cover.hero > .grow {
+  padding-left: calc(28% + 8px);
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0) 22%,
+    rgba(255, 255, 255, 0.82) 50%,
+    rgba(255, 255, 255, 0.95) 100%);
+}
 
 /* v372 ヒーロー風 list-item: with-cover に .hero を併用すると、 画像が 左端から 64%
    を埋めて 右端 22px に斜めカット。 タイトル等は 画像の右 36% に寄せる。

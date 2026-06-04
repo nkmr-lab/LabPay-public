@@ -77,6 +77,32 @@ function invitations_list(PDO $pdo, array $cfg): void {
         }
         unset($it);
     }
+    // v377 一覧の各 invitation に joins (参加表明者) を 詰める。 ホームの アイコン表示用。
+    // N+1 を避けるため invitation_id IN (...) で 1 クエリ。
+    if ($items) {
+        $ids = array_map(fn($r) => (int)$r['id'], $items);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $stJ = $pdo->prepare("
+            SELECT j.invitation_id, u.id, u.display_name, u.avatar_url
+              FROM invitation_joins j
+              JOIN users u ON u.id = j.user_id
+             WHERE j.invitation_id IN ($place)
+             ORDER BY j.invitation_id, j.joined_at, u.id");
+        $stJ->execute($ids);
+        $byInv = [];
+        foreach ($stJ as $r) {
+            $iid = (int)$r['invitation_id'];
+            $byInv[$iid][] = [
+                'id'           => (int)$r['id'],
+                'display_name' => $r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+            ];
+        }
+        foreach ($items as &$it) {
+            $it['joins'] = $byInv[(int)$it['id']] ?? [];
+        }
+        unset($it);
+    }
     json_response(['items' => $items]);
 }
 
