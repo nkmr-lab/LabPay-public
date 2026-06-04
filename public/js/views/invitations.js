@@ -228,6 +228,9 @@ export async function renderInvitationDetail({ params }) {
   await loadDetail(id);
 }
 
+// v369 秒なし表示: "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD HH:MM"
+const noSec = (s) => (s ? String(s).slice(0, 16) : '');
+
 async function loadDetail(id) {
   try {
     const i = await get('/api/invitations/' + id);
@@ -235,7 +238,7 @@ async function loadDetail(id) {
     const isMine = meId === Number(i.creator_user_id);
     const isClosed = !!i.closed_at;
     const iJoined = (i.joins || []).some(j => Number(j.id) === Number(meId));
-    const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(i.starts_at)}</div>` : '';
+    const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(noSec(i.starts_at))}</div>` : '';
     // v368 募集締切。 過ぎてれば 赤、 まだなら 残り時間 を 緑で。
     let deadlineLine = '';
     if (i.signup_closes_at) {
@@ -249,7 +252,7 @@ async function loadDetail(id) {
         else if (min < 60 * 24) remStr = ` <span class="tag ok">あと ${Math.floor(min/60)}時間${min%60}分</span>`;
         else remStr = ` <span class="tag ok">あと ${Math.floor(min/(60*24))}日</span>`;
       }
-      deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(String(i.signup_closes_at).slice(0,16))}${remStr}</div>`;
+      deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(noSec(i.signup_closes_at))}${remStr}</div>`;
     }
     const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
     const capLine = i.capacity
@@ -264,6 +267,7 @@ async function loadDetail(id) {
     if (!isClosed) {
       if (iJoined) actions += `<button id="inv-detail-leave">参加表明を取消</button>`;
       else         actions += `<button id="inv-detail-join" class="primary">参加表明する</button>`;
+      if (isMine)  actions += ` <button id="inv-detail-edit" class="btn">✏️ 編集</button>`;
       if (isMine)  actions += ` <button id="inv-detail-cancel" class="danger">募集を取消</button>`;
     } else if (isMine) {
       // 終了済みなら発起人だけが「再募集」できる。新しい starts_at を入れて
@@ -282,7 +286,7 @@ async function loadDetail(id) {
       ${i.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:6px">${escapeHtml(i.description)}</div>` : ''}
       <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:6px">
         ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
-        ${escapeHtml(i.creator_name)} · ${escapeHtml(i.created_at)}
+        ${escapeHtml(i.creator_name)} · ${escapeHtml(noSec(i.created_at))}
       </div>
       ${actions ? `<div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">${actions}</div>` : ''}
     `;
@@ -296,6 +300,7 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
+    document.getElementById('inv-detail-edit')  ?.addEventListener('click', () => openInvEditModal(i));
     document.getElementById('inv-detail-reopen')?.addEventListener('click', async () => { await onReopen(id); await loadDetail(id); });
 
     // Shortcuts for using this set elsewhere. Creator is always included
@@ -410,7 +415,7 @@ async function onReopen(id) {
   if (!ans) return;
   const raw = ans.replace('T', ' ').trim();
   try {
-    await patch(`/api/invitations/${id}`, { starts_at: raw });
+    await patch(`/api/invitations/${id}`, { starts_at: raw, reopen: true });
     toast('再募集しました');
   } catch (e) { toast('失敗: ' + e.message); }
 }
@@ -422,4 +427,66 @@ async function onCancel(id) {
     toast('募集を取消しました');
     await loadList();
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// v369 編集モーダル: 発起人が タイトル / 説明 / 開催日時 / 募集締切 / 場所 / 上限を 編集。
+// 画像は 既存の renderCoverEditor で 別途編集可なので ここでは扱わない。
+function openInvEditModal(i) {
+  const id = Number(i.id);
+  const toLocal = (s) => (s ? String(s).replace(' ', 'T').slice(0, 16) : '');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:flex-start; padding:20px; overflow-y:auto; justify-content:center';
+  wrap.innerHTML = `
+    <div style="background:#fff; border-radius:12px; padding:14px; max-width:480px; width:100%; box-sizing:border-box">
+      <div class="row center" style="margin-bottom:8px">
+        <h3 style="margin:0">✏️ 募集を編集</h3>
+        <button class="btn" data-close>×</button>
+      </div>
+      <label class="field"><span class="lbl">タイトル</span>
+        <input type="text" id="ied-title" maxlength="200" value="${escapeHtml(i.title || '')}">
+      </label>
+      <label class="field"><span class="lbl">開催日時 (任意)</span>
+        <input type="datetime-local" id="ied-when" value="${escapeHtml(toLocal(i.starts_at))}">
+      </label>
+      <label class="field"><span class="lbl">募集締切 (任意)</span>
+        <input type="datetime-local" id="ied-deadline" value="${escapeHtml(toLocal(i.signup_closes_at))}">
+        <span class="hint-sm">これ以降は 参加表明を受け付けない時刻。</span>
+      </label>
+      <label class="field"><span class="lbl">場所 (任意)</span>
+        <input type="text" id="ied-where" maxlength="200" value="${escapeHtml(i.location || '')}">
+      </label>
+      <label class="field"><span class="lbl">上限人数 (任意・空欄なし)</span>
+        <input type="number" id="ied-cap" min="1" max="1000" value="${i.capacity != null ? i.capacity : ''}">
+      </label>
+      <label class="field"><span class="lbl">詳細 (任意)</span>
+        <textarea id="ied-desc" maxlength="5000" rows="3">${escapeHtml(i.description || '')}</textarea>
+      </label>
+      <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+        <button class="btn" data-close>キャンセル</button>
+        <button id="ied-save" class="primary">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  document.getElementById('ied-save').addEventListener('click', async () => {
+    const body = {
+      title:            document.getElementById('ied-title').value.trim(),
+      starts_at:        document.getElementById('ied-when').value || null,
+      signup_closes_at: document.getElementById('ied-deadline').value || null,
+      location:         document.getElementById('ied-where').value.trim() || null,
+      capacity:         document.getElementById('ied-cap').value
+                          ? Number(document.getElementById('ied-cap').value)
+                          : null,
+      description:      document.getElementById('ied-desc').value.trim() || null,
+    };
+    if (!body.title) { toast('タイトル必須'); return; }
+    try {
+      await patch('/api/invitations/' + id, body);
+      toast('保存しました');
+      close();
+      await loadDetail(id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }

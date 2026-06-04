@@ -230,8 +230,12 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
             $startsAt = $dt->format('Y-m-d H:i:s');
         }
         $sets[] = 'starts_at = ?'; $args[] = $startsAt;
-        $sets[] = 'closed_at = NULL';
-        $reopened = true;
+        // 「再募集」 とみなすのは 明示的な reopen 操作の時 (= reopen フラグ付与) のみ。
+        // 普通の編集中に start_at を変えただけで closed_at を消すのは オートマジック過ぎる。
+        if (!empty($body['reopen'])) {
+            $sets[] = 'closed_at = NULL';
+            $reopened = true;
+        }
     }
     if (array_key_exists('signup_closes_at', $body)) {
         $sca = null;
@@ -248,6 +252,42 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
         $img = validate_product_image_url($body['image_url']);
         if ($img === null) { $sets[] = 'image_url = NULL'; }
         else               { $sets[] = 'image_url = ?'; $args[] = $img; }
+    }
+    // v369 編集対応: title / description / location / capacity も 同時に更新可。
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) {
+            throw new ApiException('bad_request', 'title length 1..200', 400);
+        }
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('description', $body)) {
+        $d = $body['description'];
+        if ($d === null || trim((string)$d) === '') {
+            $sets[] = 'description = NULL';
+        } else {
+            $sets[] = 'description = ?'; $args[] = mb_substr((string)$d, 0, 5000);
+        }
+    }
+    if (array_key_exists('location', $body)) {
+        $l = $body['location'];
+        if ($l === null || trim((string)$l) === '') {
+            $sets[] = 'location = NULL';
+        } else {
+            $sets[] = 'location = ?'; $args[] = mb_substr((string)$l, 0, 200);
+        }
+    }
+    if (array_key_exists('capacity', $body)) {
+        $c = $body['capacity'];
+        if ($c === null || $c === '') {
+            $sets[] = 'capacity = NULL';
+        } else {
+            $iv = (int)$c;
+            if ($iv < 1 || $iv > 1000) {
+                throw new ApiException('bad_request', 'capacity は 1..1000', 400);
+            }
+            $sets[] = 'capacity = ?'; $args[] = $iv;
+        }
     }
     if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
     $args[] = $id;
