@@ -1452,12 +1452,20 @@ async function loadSchedule(gid) {
   // end_date がある (= 複数日に渡る) アイテムは、 当日・終了日・(宿泊の中間日)
   // に展開して each day に並べる。 元の id をそのまま保持し、 _occ で
   // 「'start' / 'mid' / 'end'」 のロールを付ける (描画時に label を出し分け)。
+  // multi-day item (end_date が day_date と違う) には link_pair_id が無くても
+  // 帯描画のための合成 pair_id を当てる (同じアイテムが byDay で N 個に展開される
+  // ので、 下の pair occurrence カウントで N>=2 になり band が引かれる)。
+  for (const it of dayItems) {
+    if (!it.link_pair_id && it.end_date && it.end_date !== it.day_date) {
+      it.link_pair_id = '__mdi_' + it.id;
+    }
+  }
   const byDay = {};
   for (const it of dayItems) {
     const start = it.day_date;
     const end   = it.end_date;
     if (!end || end === start) {
-      (byDay[start] ||= []).push({ ...it, _occ: 'single' });
+      (byDay[start] ||= []).push({ ...it, _occ: 'single', _dayKey: start });
       continue;
     }
     const addOne = (s) => {
@@ -1469,43 +1477,51 @@ async function loadSchedule(gid) {
     let cur = start;
     while (cur <= end) {
       const occ = cur === start ? 'start' : (cur === end ? 'end' : 'mid');
-      (byDay[cur] ||= []).push({ ...it, _occ: occ });
+      (byDay[cur] ||= []).push({ ...it, _occ: occ, _dayKey: cur });
       cur = addOne(cur);
     }
   }
-  // ペア id ごとに 「上 / 下」 のタグを付ける (描画時に 🔗 + 相手の日付/時刻 を出す)。
-  const pairs = {};
-  for (const it of (d.items || [])) {
-    if (it.link_pair_id) (pairs[it.link_pair_id] ||= []).push(it);
+  // 帯描画のためのペア出現カウント: byDay 全日にわたって同じ pair_id が
+  // 「何日」 出るかで判定。 multi-day item は 1 行が N 日に展開されるので
+  // この時点で N 回カウントされる。
+  const pairOccurrences = {};
+  for (const date of days) {
+    for (const it of (byDay[date] || [])) {
+      if (it.link_pair_id) {
+        (pairOccurrences[it.link_pair_id] ||= []).push({ date, it });
+      }
+    }
   }
-  // 連結グループ (N >= 2) を 「最初の日時」 順に slot 番号付け。 同 pair_id を
-  // 持つアイテムが 2 つ以上あれば帯を描く。 単独 (1 つだけ pair_id) は無視。
+  // 連結グループ (N >= 2) を 「最初の日時」 順に slot 番号付け。
   const pairSlots = {};
-  Object.entries(pairs)
+  Object.entries(pairOccurrences)
     .filter(([, arr]) => arr.length >= 2)
     .map(([pid, arr]) => {
-      arr.sort((a, b) => (a.day_date + (a.start_time || '99:99'))
-        .localeCompare(b.day_date + (b.start_time || '99:99')));
+      arr.sort((a, b) => (a.date + (a.it.start_time || '99:99'))
+        .localeCompare(b.date + (b.it.start_time || '99:99')));
       return [pid, arr];
     })
     .sort(([, a], [, b]) => {
-      const aKey = a[0].day_date + (a[0].start_time || '99:99');
-      const bKey = b[0].day_date + (b[0].start_time || '99:99');
+      const aKey = a[0].date + (a[0].it.start_time || '99:99');
+      const bKey = b[0].date + (b[0].it.start_time || '99:99');
       return aKey.localeCompare(bKey);
     })
     .forEach(([pid], idx) => { pairSlots[pid] = idx; });
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
-  // 連結グループの 「最初 / 最後」 を id 集合化。 描画時に端だけ濃く塗るのに使う。
+  // 「最初 / 最後」 は (id, day) のペアで判定 (multi-day item は同じ id が複数日に
+  // 跨るため、 id だけだと帯の端を上下とも 1 日に集中させてしまう)。
   schedPairFirstIds = new Set();
   schedPairLastIds  = new Set();
-  for (const [pid, arr] of Object.entries(pairs)) {
+  for (const [pid, arr] of Object.entries(pairOccurrences)) {
     if (arr.length < 2) continue;
     const sorted = [...arr].sort((a, b) =>
-      (a.day_date + (a.start_time || '99:99'))
-        .localeCompare(b.day_date + (b.start_time || '99:99')));
-    schedPairFirstIds.add(Number(sorted[0].id));
-    schedPairLastIds.add(Number(sorted[sorted.length - 1].id));
+      (a.date + (a.it.start_time || '99:99'))
+        .localeCompare(b.date + (b.it.start_time || '99:99')));
+    const first = sorted[0];
+    const last  = sorted[sorted.length - 1];
+    schedPairFirstIds.add(Number(first.it.id) + ':' + first.date);
+    schedPairLastIds.add(Number(last.it.id)   + ':' + last.date);
   }
   const dayLabels = ['日','月','火','水','木','金','土'];
   // ストック (日付未定) 領域。 行きたい場所候補をここに溜めて、 編集モードで
@@ -1604,19 +1620,14 @@ function schedPairStyleFromId(pid, isTransport) {
 function renderSchedItem(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   // 複数日展開: start / mid / end によって 時刻と接尾語を変える。
-  const isHotel = (it.kind === 'hotel');
   let timeStr = '';
-  let roleSuffix = '';
+  let roleSuffix = '';   // multi-day item でも 全日 同じ見た目 (タイトルのみ) で出す。
   if (it._occ === 'start') {
     if (it.start_time) timeStr = it.start_time.slice(0, 5);
-    if (it.end_date && it.end_date !== it.day_date) {
-      roleSuffix = isHotel ? ' チェックイン' : ' 出発';
-    }
   } else if (it._occ === 'end') {
     if (it.end_time) timeStr = it.end_time.slice(0, 5);
-    roleSuffix = isHotel ? ' チェックアウト' : ' 到着';
   } else if (it._occ === 'mid') {
-    roleSuffix = ' (滞在中)';
+    // 中間日は時刻なし、 接尾辞なし。
   } else {
     // single
     if (it.start_time) {
@@ -1634,7 +1645,7 @@ function renderSchedItem(it) {
       }
     }
   }
-  const isMid = it._occ === 'mid';
+  // 中間日も他の日と同じ濃さ (旧版は opacity 0.55 で薄めていたが、 「同じような予定で大丈夫」)。
   // ペアは 帯 (右側 縦ストリップ) だけで表現する方針。 タイトル横の 🔗 文字は出さない。
   // 画像があれば左に 60px 角でかっこよく出す。 タップは行全体に乗ってる
   // ので画像クリックも編集を開く (拡大表示したい時は edit modal から飛ぶ)。
@@ -1680,8 +1691,9 @@ function renderSchedItem(it) {
     : null;
   // 連結グループの 「最初」「最後」 のアイテムは帯の端 5px を濃い同系色で塗って、
   // チェーンの始点 / 終点が一目で分かるようにする (中間はフラット)。
-  const isFirst = stripStyle && schedPairFirstIds.has(Number(it.id));
-  const isLast  = stripStyle && schedPairLastIds.has(Number(it.id));
+  const occKey = Number(it.id) + ':' + (it._dayKey || it.day_date);
+  const isFirst = stripStyle && schedPairFirstIds.has(occKey);
+  const isLast  = stripStyle && schedPairLastIds.has(occKey);
   const topCap    = isFirst ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; top:0; width:20px; height:5px; background:${stripStyle.capColor}; pointer-events:none"></div>` : '';
   const bottomCap = isLast  ? `<div aria-hidden="true" style="position:absolute; right:${stripStyle.rightPx}px; bottom:0; width:20px; height:5px; background:${stripStyle.capColor}; pointer-events:none"></div>` : '';
   const pairStrip = stripStyle
@@ -1695,7 +1707,7 @@ function renderSchedItem(it) {
   const rightPad = 'padding-right:18px;';
   return `
     <div class="list-item" data-sched-item="${it.id}"
-         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${isMid ? 'opacity:0.55' : ''}">
+         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative">
       ${thumb}
       <div class="grow" style="min-width:0; overflow:hidden">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
