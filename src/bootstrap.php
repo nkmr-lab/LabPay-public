@@ -500,3 +500,4 @@ require_once __DIR__ . '/handlers/timers.php';
 require_once __DIR__ . '/handlers/notices.php';
 require_once __DIR__ . '/handlers/meetups.php';
 require_once __DIR__ . '/handlers/sounds.php';
+require_once __DIR__ . '/handlers/auctions.php';

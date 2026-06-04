@@ -27,6 +27,7 @@ import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.
 import { renderNotices, renderNoticeForm } from './views/notices.js';
 import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
 import { renderAdminSounds } from './views/admin_sounds.js';
+import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/auctions.js';
 import { preloadSounds } from './sounds.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
@@ -417,6 +418,9 @@ route('/meetups',         renderMeetups);
 route('/meetups/new',     renderMeetupNew);
 route('/meetups/:id',     renderMeetupDetail);
 route('/admin/sounds',    renderAdminSounds);
+route('/auctions',        renderAuctions);
+route('/auctions/new',    renderAuctionNew);
+route('/auctions/:id',    renderAuctionDetail);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
 route('/requests-hub',   renderRequestsHub);

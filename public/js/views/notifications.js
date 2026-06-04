@@ -96,6 +96,7 @@ function refUrl(n) {
     case 'rollcall':       return n.ref_id ? '#/rollcalls/' + n.ref_id : '#/rollcalls';
     case 'timer':          return n.ref_id ? '#/timers/' + n.ref_id : '#/timers';
     case 'meetup':         return n.ref_id ? '#/meetups/' + n.ref_id : '#/meetups';
+    case 'auction':        return n.ref_id ? '#/auctions/' + n.ref_id : '#/auctions';
     case 'random_groups':  return '#/random-groups';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
