@@ -30,6 +30,9 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'receipts' && $method === 'GET')              { group_receipts_list($pdo, $cfg, $id);   return; }
             if ($next === 'receipts' && $method === 'POST')             { group_receipts_add($pdo, $cfg, $id);    return; }
             if ($next === 'receipts' && isset($seg[3]) && $method === 'DELETE') { group_receipts_delete($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'chats'    && $method === 'GET'  && !isset($seg[3])) { group_chats_list($pdo, $cfg, $id); return; }
+            if ($next === 'chats'    && $method === 'POST' && !isset($seg[3])) { group_chats_post($pdo, $cfg, $id); return; }
+            if ($next === 'chats'    && isset($seg[3]) && $method === 'DELETE') { group_chats_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
             if ($next === 'schedule' && $method === 'POST')             { group_schedule_add($pdo, $cfg, $id);    return; }
             // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
@@ -979,6 +982,69 @@ const GROUP_SCHEDULE_KINDS = [
     'flight','train','bus','taxi','car','walk','move',
     'hotel','conf','meeting','food','fun','other',
 ];
+
+// ──────── グループチャット (LINE 的) ─────────
+// GET ?since_id=N  -> id > N の新着を時系列で。 since_id 無しなら直近 50 件。
+function group_chats_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $sinceId = isset($_GET['since_id']) ? max(0, (int)$_GET['since_id']) : 0;
+    if ($sinceId > 0) {
+        $st = $pdo->prepare("SELECT c.id, c.user_id, c.body, c.created_at,
+                                    u.display_name, u.avatar_url
+                               FROM adhoc_group_chats c
+                               JOIN users u ON u.id = c.user_id
+                              WHERE c.group_id = ? AND c.id > ?
+                              ORDER BY c.id ASC LIMIT 500");
+        $st->execute([$id, $sinceId]);
+    } else {
+        // 直近 50 件を ASC で返すには 子クエリ + ORDER BY ASC。
+        $st = $pdo->prepare("SELECT * FROM (
+                SELECT c.id, c.user_id, c.body, c.created_at,
+                       u.display_name, u.avatar_url
+                  FROM adhoc_group_chats c
+                  JOIN users u ON u.id = c.user_id
+                 WHERE c.group_id = ?
+                 ORDER BY c.id DESC LIMIT 50
+            ) t ORDER BY id ASC");
+        $st->execute([$id]);
+    }
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function group_chats_post(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $body = read_json_body();
+    $text = trim((string)($body['body'] ?? ''));
+    if ($text === '' || mb_strlen($text) > 2000) {
+        throw new ApiException('bad_request', 'body 1..2000', 400);
+    }
+    $pdo->prepare("INSERT INTO adhoc_group_chats (group_id, user_id, body, created_at)
+                   VALUES (?, ?, ?, NOW())")
+        ->execute([$id, (int)$u['id'], $text]);
+    json_response(['id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_chats_del(PDO $pdo, array $cfg, int $id, int $cid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT c.user_id, g.creator_user_id
+                           FROM adhoc_group_chats c
+                           JOIN adhoc_groups g ON g.id = c.group_id
+                          WHERE c.id = ? AND c.group_id = ?");
+    $st->execute([$cid, $id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'chat not found', 404);
+    $isOwner   = (int)$row['user_id'] === (int)$u['id'];
+    $isCreator = (int)$row['creator_user_id'] === (int)$u['id'];
+    $isAdmin   = (string)($u['role'] ?? '') === 'admin';
+    if (!$isOwner && !$isCreator && !$isAdmin) {
+        throw new ApiException('forbidden', '送信者・グループ作成者・admin のみ削除可', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_chats WHERE id=?")->execute([$cid]);
+    json_response(['ok' => true]);
+}
 
 function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);

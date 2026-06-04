@@ -322,6 +322,21 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-feed" class="list" style="margin-top:8px"></div>
     </div>
 
+    <div class="card" id="gd-chat-card">
+      <div class="row center" style="margin-bottom:6px">
+        <h3 class="row-title" style="margin:0">チャット</h3>
+        <span id="gd-chat-status" class="hint-sm"></span>
+      </div>
+      <div id="gd-chat-list" style="max-height:360px; min-height:160px; overflow-y:auto; padding:6px; background:#f6f6f9; border-radius:8px; display:flex; flex-direction:column; gap:6px">
+        <div class="muted" style="text-align:center; padding:20px 0">読み込み中…</div>
+      </div>
+      <div class="row" style="gap:6px; margin-top:6px; align-items:flex-end">
+        <textarea id="gd-chat-input" rows="1" maxlength="2000" placeholder="メッセージを送る (Enter で送信、 Shift+Enter で改行)"
+                  style="flex:1; resize:none; min-height:36px; max-height:120px; font-size:14px"></textarea>
+        <button id="gd-chat-send" class="primary" style="padding:6px 14px">送信</button>
+      </div>
+    </div>
+
     <div class="card" id="gd-sched-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">スケジュール</h3>
@@ -384,6 +399,7 @@ export async function renderGroupDetail({ params }) {
   loadSchedule(id);
   await loadDetail(id);
   await loadWari(id);
+  startChatLoop(id);
 }
 
 let currentKind = 'memo';
@@ -2021,4 +2037,141 @@ function openSchedItemModal(gid, it) {
       openSchedItemModal(gid, { ...copyBody, id: r.id });
     } catch (e) { toast('失敗: ' + e.message); }
   });
+}
+
+// ──────────────────────────── CHAT ─────────────────────────────────────
+// LINE 風のチャット。 5 秒ポーリング (since_id 差分のみ) + 自動スクロール。
+// グループ詳細画面から離れたら timer 停止 (#gd-chat-card 消失で検知)。
+
+let chatPollTimer = null;
+let chatVisHandler = null;
+let chatLastId = 0;
+let chatUserScrolled = false; // 上にスクロールして読んでる時は 末尾に勝手に飛ばさない
+
+function stopChatLoop() {
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  if (chatVisHandler) {
+    document.removeEventListener('visibilitychange', chatVisHandler);
+    chatVisHandler = null;
+  }
+}
+
+function renderChatBubble(msg, prevMsg) {
+  const meId = state.me?.id;
+  const isMe = Number(msg.user_id) === Number(meId);
+  // 同じ送信者の連続発言は アバター + 名前 を省略してくっつける。
+  const samePrev = prevMsg && Number(prevMsg.user_id) === Number(msg.user_id)
+    && (Date.parse((msg.created_at || '').replace(' ', 'T')) - Date.parse((prevMsg.created_at || '').replace(' ', 'T'))) < 5 * 60_000;
+  const t = (msg.created_at || '').slice(11, 16);   // HH:MM
+  const head = samePrev ? '' : `
+    <div style="display:flex; align-items:center; gap:6px; margin:2px 0 2px; ${isMe ? 'flex-direction:row-reverse' : ''}">
+      ${avatarHtml(msg.display_name, msg.avatar_url, 'sm')}
+      <span class="bold" style="font-size:12px">${escapeHtml(msg.display_name)}</span>
+    </div>`;
+  const bubbleStyle = isMe
+    ? 'background:var(--primary); color:white; align-self:flex-end; border-radius:14px 4px 14px 14px'
+    : 'background:white; color:#222; align-self:flex-start; border-radius:4px 14px 14px 14px; border:1px solid var(--line)';
+  // 行内の URL を自動リンク化 (rel=noopener)。
+  const escaped = escapeHtml(msg.body).replace(/(https?:\/\/[^\s<]+)/g,
+    (u) => `<a href="${u}" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">${u}</a>`);
+  return `
+    <div style="display:flex; flex-direction:column; ${isMe ? 'align-items:flex-end' : 'align-items:flex-start'}"
+         data-chat-id="${msg.id}">
+      ${head}
+      <div style="display:flex; align-items:flex-end; gap:4px; max-width:80%; ${isMe ? 'flex-direction:row-reverse' : ''}">
+        <div style="padding:6px 10px; ${bubbleStyle}; white-space:pre-wrap; word-break:break-word; font-size:14px">${escaped}</div>
+        <span class="muted" style="font-size:10px; padding-bottom:2px; flex-shrink:0">${t}</span>
+      </div>
+    </div>`;
+}
+
+function appendChatMessages(items) {
+  const list = document.getElementById('gd-chat-list');
+  if (!list || !items.length) return;
+  const nearBottom = !chatUserScrolled
+    || (list.scrollHeight - list.scrollTop - list.clientHeight < 80);
+  // 既存末尾の data-chat-id から prev を取って連続発言判定。
+  const lastEl = list.querySelector('[data-chat-id]:last-of-type');
+  let prev = null;
+  if (lastEl) {
+    const id = Number(lastEl.dataset.chatId);
+    // body は持って無いので最低限の prev を仮構築 (user / created_at を持つ要素は無い
+    // ので、 隣の bubble を見て display_name を読む程度。 大事なのは user_id 一致だけ。
+    // ここでは前回最後の msg を chatPrevMsg として module 持ち回す)。
+    prev = chatPrevMsg;
+  }
+  let html = '';
+  for (const m of items) {
+    html += renderChatBubble(m, prev);
+    prev = m;
+  }
+  chatPrevMsg = prev;
+  list.insertAdjacentHTML('beforeend', html);
+  if (nearBottom) {
+    list.scrollTop = list.scrollHeight;
+    chatUserScrolled = false;
+  }
+}
+let chatPrevMsg = null;
+
+async function refreshChat(gid) {
+  try {
+    const d = await get(`/api/groups/${gid}/chats`, chatLastId ? { since_id: chatLastId } : {});
+    const items = d.items || [];
+    if (!items.length) return;
+    appendChatMessages(items);
+    chatLastId = Math.max(chatLastId, ...items.map(m => Number(m.id)));
+  } catch (_) { /* ネットワーク失敗は黙って次回再試行 */ }
+}
+
+async function startChatLoop(gid) {
+  stopChatLoop();
+  chatLastId = 0;
+  chatPrevMsg = null;
+  chatUserScrolled = false;
+  const list = document.getElementById('gd-chat-list');
+  if (list) {
+    list.innerHTML = '';
+    list.addEventListener('scroll', () => {
+      // ユーザが上に戻ったら 自動末尾追従を無効化、 末尾近くに戻ったら再有効化。
+      const distFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      chatUserScrolled = distFromBottom > 80;
+    });
+  }
+  await refreshChat(gid);
+  // 入力欄: Enter で送信、 Shift+Enter で改行。 自動高さ調整。
+  const input = document.getElementById('gd-chat-input');
+  const send = document.getElementById('gd-chat-send');
+  if (input && send) {
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(120, input.scrollHeight) + 'px';
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send.click();
+      }
+    });
+    send.addEventListener('click', async () => {
+      const text = input.value.trim();
+      if (!text) return;
+      send.disabled = true;
+      try {
+        await post(`/api/groups/${gid}/chats`, { body: text });
+        input.value = '';
+        input.style.height = 'auto';
+        await refreshChat(gid);
+      } catch (e) { toast('送信失敗: ' + e.message); }
+      finally { send.disabled = false; input.focus(); }
+    });
+  }
+  // 5 秒ごとに poll。 タブ裏なら skip。 ページから離れたら stop。
+  chatPollTimer = setInterval(() => {
+    if (!document.getElementById('gd-chat-card')) { stopChatLoop(); return; }
+    if (document.hidden) return;
+    refreshChat(gid);
+  }, 5000);
+  chatVisHandler = () => { if (!document.hidden) refreshChat(gid); };
+  document.addEventListener('visibilitychange', chatVisHandler);
 }
