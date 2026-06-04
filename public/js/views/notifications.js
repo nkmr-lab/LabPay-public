@@ -80,6 +80,7 @@ function refUrl(n) {
     case 'money_request':  return n.ref_id ? '#/requests/' + n.ref_id : '#/requests';
     case 'nomikai':        return n.ref_id ? '#/nomikai/' + n.ref_id : '#/nomikai';
     case 'poll':           return n.ref_id ? '#/polls/' + n.ref_id : '#/polls';
+    case 'rollcall':       return n.ref_id ? '#/rollcalls/' + n.ref_id : '#/rollcalls';
     case 'random_groups':  return '#/random-groups';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';

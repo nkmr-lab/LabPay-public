@@ -22,6 +22,7 @@ import { renderInvitations, renderInvitationDetail } from './views/invitations.j
 import { renderRoulette, renderRouletteResult } from './views/roulette.js';
 import { renderTextRoulette } from './views/text_roulette.js';
 import { renderPolls, renderPollNew, renderPollDetail, renderPollEdit } from './views/polls.js';
+import { renderRollCalls, renderRollCallNew, renderRollCallDetail } from './views/rollcalls.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
 import { renderWari } from './views/wari.js';
@@ -257,6 +258,9 @@ route('/polls',          renderPolls);
 route('/polls/new',      renderPollNew);
 route('/polls/:id/edit', renderPollEdit);
 route('/polls/:id',      renderPollDetail);
+route('/rollcalls',      renderRollCalls);
+route('/rollcalls/new',  renderRollCallNew);
+route('/rollcalls/:id',  renderRollCallDetail);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
 route('/wari',           renderWari);

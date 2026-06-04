@@ -57,6 +57,7 @@ $routes = [
     'random-groups'  => 'route_random_groups',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
+    'rollcalls'      => 'route_rollcalls',
 ];
 
 try {
