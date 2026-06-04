@@ -63,6 +63,7 @@ $routes = [
     'meetups'        => 'route_meetups',
     'sounds'         => 'route_sounds',
     'auctions'       => 'route_auctions',
+    'exercise'       => 'route_exercise',
 ];
 
 try {
