@@ -2100,8 +2100,10 @@ function renderSchedItem(it) {
   // → 押しても無反応に見える、 という混乱を防ぐためボタンを出さない。
   // z-index:2 + 半透明白背景でペア帯より前面に。
   const canEdit = schedEditMode && (it._occ === 'single' || it._occ === 'start');
-  // v361 DnD: canEdit 行は draggable, 同日内で並び替え可能。
+  // v362 DnD: canEdit 行は draggable, 日またぎ並び替え可能。
   //          mid/end 行は 🔒 アイコンで 「動かせない」 ことを明示。
+  // ※ dayKey は dragHandle 内で参照するので 先に定義しておく (TDZ で死なないように)。
+  const dayKey = String(it.day_date || 'stock');
   const isLocked = schedEditMode && !canEdit;
   const editControls = canEdit ? `
     <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px; position:relative; z-index:2; background:rgba(255,255,255,0.85); border-radius:6px; padding:2px 0">
@@ -2142,7 +2144,6 @@ function renderSchedItem(it) {
   // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
   //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
-  const dayKey = String(it.day_date || 'stock');
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="${escapeHtml(dayKey)}"`
     : '';
