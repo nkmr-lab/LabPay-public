@@ -301,6 +301,7 @@ export async function renderPollEdit({ params }) {
 let countdownTimer = null;
 let tallyRefreshTimer = null;
 let lastDeadline = null;     // 直近 detail の締切。 refresh 間隔判定に使う。
+let lastVotersSnapshot = null; // 自動更新中の click ハンドラから 直近の voters を読むため。
 
 export async function renderPollDetail({ params }) {
   const id = Number(params.id);
@@ -463,28 +464,20 @@ async function loadPollDetail(id) {
 
     // 集計カード (本体描画は専用関数に切り出し、 自動更新でも再利用)。
     renderTallySection(d);
-    // 対象者 (server 側で 学年順 + 表示名で並べて返ってくる)。
-    document.getElementById('pd-voters').innerHTML = d.voters.map(v => `
-      <span class="presence-pill" style="${v.has_voted ? 'background:#e8f5e9; border:1px solid #66bb6a' : ''}">
-        ${avatarHtml(v.display_name, v.avatar_url, 'sm')}
-        <span class="presence-pill-name">${escapeHtml(v.display_name)}</span>
-        ${v.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(v.grade)}]</span>` : ''}
-        ${v.has_voted ? '<span style="color:#2e7d32; font-size:11px">✓</span>' : ''}
-      </span>`).join('');
-    // 締切と集計の自動更新スケジュール (締切までの距離で間隔を変える)。
+    // 対象者 (学年順)。 投票済の色付け + 「催促 (N)」 のカウントを 自動更新でも反映。
+    renderVotersSection(d);
+    // 締切と (集計 + 対象者) の自動更新スケジュール。
     lastDeadline = p.deadline_at;
-    scheduleTallyRefresh(id, isOpen);
+    schedulePollRefresh(id, isOpen);
 
     // 管理ボタン
     if (isCreator) {
       const adminCard = document.getElementById('pd-admin-card');
       adminCard.hidden = false;
-      const unvoted = d.voters.filter(v => !v.has_voted).length;
       const remindBtn = document.getElementById('pd-remind');
-      remindBtn.disabled = !isOpen || unvoted === 0;
-      remindBtn.textContent = `📣 未投票者に催促 (${unvoted})`;
       remindBtn.addEventListener('click', async () => {
-        if (!confirm(`未投票の ${unvoted} 人に通知を送りますか?`)) return;
+        const unvotedNow = (lastVotersSnapshot || d.voters).filter(v => !v.has_voted).length;
+        if (!confirm(`未投票の ${unvotedNow} 人に通知を送りますか?`)) return;
         try {
           const r = await post(`/api/polls/${id}/remind`, {});
           toast(`${r.sent} 人に送りました`);
@@ -549,8 +542,15 @@ function renderTallySection(d) {
   }).join('');
   if (Array.isArray(d.free_texts) && d.free_texts.length) {
     html += `<div style="margin-top:12px">
-      <div class="bold" style="font-size:13px; margin-bottom:4px">自由記述 (${d.free_texts.length} 件) <span class="hint-sm">— 誰が書いたかは匿名</span></div>
-      ${d.free_texts.map(t => `<div class="list-item" style="padding:6px 8px; white-space:pre-wrap; font-size:13px">${escapeHtml(t)}</div>`).join('')}
+      <div class="bold" style="font-size:13px; margin-bottom:4px">自由記述 (${d.free_texts.length} 件)</div>
+      ${d.free_texts.map(t => `
+        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px; padding:6px 8px; font-size:13px">
+          <div style="display:flex; align-items:center; gap:6px">
+            ${avatarHtml(t.display_name, t.avatar_url, 'sm')}
+            <span class="bold" style="font-size:12px">${escapeHtml(t.display_name)}</span>
+          </div>
+          <div style="white-space:pre-wrap; padding-left:28px">${escapeHtml(t.body)}</div>
+        </div>`).join('')}
     </div>`;
   }
   html += `<div class="hint-sm" style="margin-top:8px">棒グラフは対象者 ${totalPeople} 人に対する割合。</div>`;
@@ -560,6 +560,29 @@ function renderTallySection(d) {
   const updated = document.getElementById('pd-tally-updated');
   if (updated) updated.textContent =
     `${votedPeople}/${totalPeople} 人回答 · (${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} 更新)`;
+}
+
+// 対象者リスト + 「催促 (N)」 のカウントを描画。 自動更新でも投票済の色付けと
+// remind ボタンの数字を最新化したい。
+function renderVotersSection(d) {
+  lastVotersSnapshot = d.voters;
+  const root = document.getElementById('pd-voters');
+  if (root) {
+    root.innerHTML = d.voters.map(v => `
+      <span class="presence-pill" style="${v.has_voted ? 'background:#e8f5e9; border:1px solid #66bb6a' : ''}">
+        ${avatarHtml(v.display_name, v.avatar_url, 'sm')}
+        <span class="presence-pill-name">${escapeHtml(v.display_name)}</span>
+        ${v.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(v.grade)}]</span>` : ''}
+        ${v.has_voted ? '<span style="color:#2e7d32; font-size:11px">✓</span>' : ''}
+      </span>`).join('');
+  }
+  const remindBtn = document.getElementById('pd-remind');
+  if (remindBtn) {
+    const unvoted = d.voters.filter(v => !v.has_voted).length;
+    const isOpen = d.poll?.status === 'open';
+    remindBtn.disabled = !isOpen || unvoted === 0;
+    remindBtn.textContent = `📣 未投票者に催促 (${unvoted})`;
+  }
 }
 
 // 締切までの残り時間で更新間隔を決める。 締切過ぎ / 集計不可視 (詳細レスポンス
@@ -573,25 +596,27 @@ function pickRefreshIntervalMs() {
   return 60_000;
 }
 
-function scheduleTallyRefresh(id, isOpen) {
+function schedulePollRefresh(id, isOpen) {
   if (tallyRefreshTimer) { clearTimeout(tallyRefreshTimer); tallyRefreshTimer = null; }
   const ms = isOpen ? pickRefreshIntervalMs() : 0;
   if (!ms) return;
   tallyRefreshTimer = setTimeout(async () => {
     try {
       const d = await get('/api/polls/' + id);
+      // 集計 (起案者 or 締切後 or open visibility で my_votes ありで可視) + 対象者
+      // (常に表示) の両方を最新化。
       renderTallySection(d);
-      // 状態 (締切過ぎ → status=closed への遷移など) を踏まえて次回スケジューリング。
+      renderVotersSection(d);
       const stillOpen = d.poll?.status === 'open';
       if (!stillOpen) {
-        // 締切直後の集計は一度描画した時点で安定。 これ以上 polling しない。
+        // 締切直後で 1 度反映した時点で安定。 これ以上 polling しない。
         return;
       }
       lastDeadline = d.poll.deadline_at;
-      scheduleTallyRefresh(id, true);
+      schedulePollRefresh(id, true);
     } catch {
       // 失敗しても次回試みる。
-      scheduleTallyRefresh(id, isOpen);
+      schedulePollRefresh(id, isOpen);
     }
   }, ms);
 }

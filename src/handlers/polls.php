@@ -187,13 +187,22 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         $stT->execute([$id]);
         $tallies = [];
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) $tallies[(int)$r['option_id']] = (int)$r['n'];
-        // 自由記述は本文のみ。 user_id は晒さない (個人匿名集計の方針に合わせる)。
+        // 自由記述は本文 + 投稿者を返す (運用上 「誰が書いたかは見たい」 ため)。
+        // 票の中身 (どの選択肢に投票したか) は依然として匿名集計のみ。
         if (!empty($poll['allow_free_text'])) {
-            $stF = $pdo->prepare("SELECT free_text FROM poll_voters
-                                   WHERE poll_id=? AND free_text IS NOT NULL AND free_text <> ''
-                                   ORDER BY voted_at, user_id");
+            $stF = $pdo->prepare("SELECT pv.free_text, pv.user_id, pv.voted_at,
+                                         u.display_name, u.avatar_url
+                                    FROM poll_voters pv
+                                    JOIN users u ON u.id = pv.user_id
+                                   WHERE pv.poll_id=? AND pv.free_text IS NOT NULL AND pv.free_text <> ''
+                                   ORDER BY pv.voted_at, pv.user_id");
             $stF->execute([$id]);
-            $freeTexts = array_map('strval', array_column($stF->fetchAll(PDO::FETCH_ASSOC), 'free_text'));
+            $freeTexts = array_map(fn($r) => [
+                'body'         => (string)$r['free_text'],
+                'user_id'      => (int)$r['user_id'],
+                'display_name' => (string)$r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+            ], $stF->fetchAll(PDO::FETCH_ASSOC));
         }
     }
     json_response([
