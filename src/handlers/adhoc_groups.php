@@ -61,6 +61,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
             // より具体的な move ルートを先に判定する。
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'relocate' && $method === 'PATCH') { group_schedule_relocate($pdo, $cfg, $id, (int)$seg[3]); return; }
             // 添付ファイル: /schedule/{itemId}/attachments  GET/POST、/attachments/{attId} DELETE
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'attachments') {
                 $itemId = (int)$seg[3];
@@ -1980,6 +1981,74 @@ function group_schedule_del(PDO $pdo, array $cfg, int $id, int $itemId): void {
 // → 隣接アイテムを 「視覚順」 (= 同じ ORDER BY) で取得した上で、
 //    start_time / sort_order をまとめて swap する。 = ↑↓ で 時刻と並び順 が
 //    ペアでひっくり返る。 「14:00 を 9:00 の上に」 = 「14:00 だったやつが 9:00 になる」。
+// v362 cross-day DnD: 別の日 (or ストック) に 項目を 引っ越し + 目的位置に挿入。
+// body: { day_date: 'YYYY-MM-DD' | null, before_id?: int }
+//   * before_id 指定 → その項目の 直前に挿入 (= sort_order をそこに割り込む)。
+//                       day_date は before_id 行の day_date を 採用 (= 同日扱い)。
+//                       同日内で before_id を指定すると 1 swap 並びの再配置になる。
+//   * before_id なし → day_date の末尾に追加 (MAX(sort_order)+1)。
+function group_schedule_relocate(PDO $pdo, array $cfg, int $id, int $itemId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $body = read_json_body();
+    $beforeId = isset($body['before_id']) && (int)$body['before_id'] > 0 ? (int)$body['before_id'] : null;
+    $dayDateRaw = $body['day_date'] ?? null;
+    $dayDate = null;
+    if ($dayDateRaw !== null && $dayDateRaw !== '') {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$dayDateRaw)) {
+            throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
+        }
+        $dayDate = (string)$dayDateRaw;
+    }
+    // 対象 item 存在チェック
+    $st = $pdo->prepare("SELECT id FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $st->execute([$itemId, $id]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'item not found', 404);
+    if ($beforeId !== null) {
+        $stB = $pdo->prepare("SELECT day_date, sort_order FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+        $stB->execute([$beforeId, $id]);
+        $b = $stB->fetch(PDO::FETCH_ASSOC);
+        if (!$b) throw new ApiException('bad_request', 'before_id 不正', 400);
+        $dayDate = $b['day_date']; // before_id の日付に揃える
+        $targetSort = (int)$b['sort_order'];
+        db_tx($pdo, function () use ($pdo, $id, $dayDate, $itemId, $targetSort) {
+            // 目的日の sort_order >= targetSort の行を 全部 +1
+            if ($dayDate === null) {
+                $pdo->prepare("UPDATE adhoc_group_schedule_items
+                                  SET sort_order = sort_order + 1
+                                WHERE group_id=? AND day_date IS NULL AND sort_order >= ? AND id <> ?")
+                    ->execute([$id, $targetSort, $itemId]);
+            } else {
+                $pdo->prepare("UPDATE adhoc_group_schedule_items
+                                  SET sort_order = sort_order + 1
+                                WHERE group_id=? AND day_date=? AND sort_order >= ? AND id <> ?")
+                    ->execute([$id, $dayDate, $targetSort, $itemId]);
+            }
+            // 自分を day_date + sort_order に。 start_time は そのまま 保持 (引っ越し先で
+            // 時刻指定を尊重)。 ただし 並び順は sort_order が支配する場面で 効く。
+            $pdo->prepare("UPDATE adhoc_group_schedule_items SET day_date=?, sort_order=? WHERE id=?")
+                ->execute([$dayDate, $targetSort, $itemId]);
+        });
+    } else {
+        if ($dayDate === null && $dayDateRaw !== null) {
+            // 明示的に null 指定 → ストック行きを許容
+        } elseif ($dayDate === null) {
+            throw new ApiException('bad_request', 'day_date か before_id のどちらか必須', 400);
+        }
+        if ($dayDate === null) {
+            $stM = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)+1 FROM adhoc_group_schedule_items WHERE group_id=? AND day_date IS NULL");
+            $stM->execute([$id]);
+        } else {
+            $stM = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)+1 FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
+            $stM->execute([$id, $dayDate]);
+        }
+        $newSort = (int)$stM->fetchColumn();
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET day_date=?, sort_order=? WHERE id=?")
+            ->execute([$dayDate, $newSort, $itemId]);
+    }
+    json_response(['ok' => true]);
+}
+
 function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);

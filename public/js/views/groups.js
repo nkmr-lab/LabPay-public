@@ -1821,7 +1821,7 @@ async function loadSchedule(gid) {
 
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
-    ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ドラッグで並び替え (同じ日内のみ) · 🔒 は 多日またぎの中間/終了行で 動かせません</div>' : ''}
+    ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ハンドルをドラッグで 並び替え (日をまたいでも OK / 行全体タップは編集) · 🔒 は 多日またぎの中間/終了行で 動かせません</div>' : ''}
     ${stockCard}
     ${days.map(date => {
       const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
@@ -1872,29 +1872,38 @@ async function loadSchedule(gid) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
-  // ── v361 ドラッグアンドドロップで並び替え ──
-  // - 並び替え可能 (canEdit) なアイテムのみ draggable。
-  // - 同日内 (data-sched-day 一致) のみ ドロップ可、 違う日にドロップしようとしても弾く。
-  // - 既存の /move エンドポイント (dir up/down で 1 個ずつ swap) を 距離分だけ連続呼び出し。
+  // ── v362 ドラッグアンドドロップで 並び替え (日またぎ可) ──
+  // - 並び替え可能 (canEdit) なアイテムの「⋮⋮ハンドル」 だけ draggable。
+  //   ハンドル以外のクリックは そのまま編集 modal を開く。
+  // - 同日内ドロップ → 既存 /move を chain swap で距離分呼び出し (start_time 含め swap)。
+  // - 別日ドロップ → /relocate で day_date + sort_order を更新 (start_time は維持)。
+  // - 日の <details> ヘッダや 「+ 追加」 ボタン エリアに ドロップしたら その日の末尾に。
   let dragSrcId = null, dragSrcDay = null;
   const editableSameDay = (day) =>
     [...body.querySelectorAll(`[data-sched-canedit="1"][data-sched-day="${CSS.escape(day)}"]`)];
-  body.querySelectorAll('[data-sched-canedit="1"]').forEach(el => {
-    el.addEventListener('dragstart', (ev) => {
-      dragSrcId = Number(el.dataset.schedItem);
-      dragSrcDay = el.dataset.schedDay || 'stock';
-      el.style.opacity = '0.4';
-      try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(dragSrcId)); }
-      catch (_) {}
+
+  body.querySelectorAll('[data-drag-handle="1"]').forEach(h => {
+    h.addEventListener('dragstart', (ev) => {
+      dragSrcId = Number(h.dataset.schedSrc);
+      dragSrcDay = h.dataset.schedSrcday || 'stock';
+      const parentItem = h.closest('[data-sched-item]');
+      if (parentItem) parentItem.style.opacity = '0.4';
+      try {
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', String(dragSrcId));
+      } catch (_) {}
     });
-    el.addEventListener('dragend', () => {
-      el.style.opacity = '';
+    h.addEventListener('dragend', () => {
+      body.querySelectorAll('[data-sched-item]').forEach(x => x.style.opacity = '');
       body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
+      dragSrcId = null; dragSrcDay = null;
     });
+  });
+
+  // ドロップ先: canEdit な list-item (= before_id を指定して 直前に挿入)
+  body.querySelectorAll('[data-sched-canedit="1"]').forEach(el => {
     el.addEventListener('dragover', (ev) => {
       if (dragSrcId === null) return;
-      const targetDay = el.dataset.schedDay || 'stock';
-      if (targetDay !== dragSrcDay) return;
       if (Number(el.dataset.schedItem) === dragSrcId) return;
       ev.preventDefault();
       try { ev.dataTransfer.dropEffect = 'move'; } catch (_) {}
@@ -1907,19 +1916,59 @@ async function loadSchedule(gid) {
       if (dragSrcId === null) return;
       const tid = Number(el.dataset.schedItem);
       const targetDay = el.dataset.schedDay || 'stock';
-      if (targetDay !== dragSrcDay || tid === dragSrcId) return;
-      const editable = editableSameDay(dragSrcDay);
-      const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === dragSrcId);
-      const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
-      if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
-      const steps = Math.abs(dstIdx - srcIdx);
-      const dir = srcIdx < dstIdx ? 'down' : 'up';
-      const savedSrc = dragSrcId; dragSrcId = null; dragSrcDay = null;
+      if (tid === dragSrcId) return;
+      const savedSrc = dragSrcId, savedSrcDay = dragSrcDay;
+      dragSrcId = null; dragSrcDay = null;
       try {
-        for (let i = 0; i < steps; i++) {
-          const r = await patch(`/api/groups/${gid}/schedule/${savedSrc}/move`, { dir });
-          if (!r.moved) break;
+        if (targetDay === savedSrcDay) {
+          // 同日: 既存 /move で chain swap (start_time 含めて 入れ替わる挙動を維持)
+          const editable = editableSameDay(savedSrcDay);
+          const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === savedSrc);
+          const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
+          if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
+          const steps = Math.abs(dstIdx - srcIdx);
+          const dir = srcIdx < dstIdx ? 'down' : 'up';
+          for (let i = 0; i < steps; i++) {
+            const r = await patch(`/api/groups/${gid}/schedule/${savedSrc}/move`, { dir });
+            if (!r.moved) break;
+          }
+        } else {
+          // 別日: /relocate で 日 + sort_order を更新 (start_time は保持)
+          await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { before_id: tid });
         }
+        await loadSchedule(gid);
+      } catch (e) {
+        toast('並び替え失敗: ' + e.message);
+        await loadSchedule(gid);
+      }
+    });
+  });
+
+  // 日のコンテナ <details data-day="YYYY-MM-DD"> 自体を ドロップ先に
+  // (空の日や 末尾追加 用): その日の最後に relocate。
+  body.querySelectorAll('[data-day]').forEach(dayEl => {
+    dayEl.addEventListener('dragover', (ev) => {
+      if (dragSrcId === null) return;
+      const targetDay = dayEl.dataset.day;
+      if (targetDay === dragSrcDay) return; // 同日は item 単位で処理
+      ev.preventDefault();
+      try { ev.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      dayEl.classList.add('gd-sched-drop-over');
+    });
+    dayEl.addEventListener('dragleave', (ev) => {
+      // 子要素 経由の dragleave で 親 highlight が点滅するのを 抑える
+      if (!dayEl.contains(ev.relatedTarget)) dayEl.classList.remove('gd-sched-drop-over');
+    });
+    dayEl.addEventListener('drop', async (ev) => {
+      if (dragSrcId === null) return;
+      const targetDay = dayEl.dataset.day;
+      if (targetDay === dragSrcDay) return;
+      ev.preventDefault();
+      dayEl.classList.remove('gd-sched-drop-over');
+      const savedSrc = dragSrcId;
+      dragSrcId = null; dragSrcDay = null;
+      try {
+        await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { day_date: targetDay });
         await loadSchedule(gid);
       } catch (e) {
         toast('並び替え失敗: ' + e.message);
@@ -2063,7 +2112,9 @@ function renderSchedItem(it) {
     <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行は ここでは並び替えできません (本拠日でのみ可)"
           style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.7; pointer-events:none; z-index:3">🔒</span>` : '';
   const dragHandle = canEdit ? `
-    <span aria-hidden="true" title="ドラッグで並び替え" style="color:#999; font-size:14px; cursor:grab; user-select:none; padding:0 2px">⋮⋮</span>` : '';
+    <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="${escapeHtml(dayKey)}"
+          aria-label="ドラッグして並び替え" title="ドラッグで並び替え (日をまたいでも OK)"
+          style="color:#999; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
   // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
   // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
@@ -2087,15 +2138,17 @@ function renderSchedItem(it) {
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
   // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
   const rightPad = 'padding-right:18px;';
-  // DnD 用属性: canEdit 行のみ draggable, data-sched-day で 同日縛り を可能に。
-  // day_date が NULL (= ストック) は 'stock' で代用。
+  // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
+  //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
+  //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
+  const dayKey = String(it.day_date || 'stock');
   const dndAttrs = canEdit
-    ? `draggable="true" data-sched-canedit="1" data-sched-day="${escapeHtml(String(it.day_date || 'stock'))}"`
+    ? `data-sched-canedit="1" data-sched-day="${escapeHtml(dayKey)}"`
     : '';
   const itemOpacity = isLocked ? 'opacity:0.7;' : '';
   return `
     <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
-         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:${canEdit ? 'grab' : 'pointer'}; min-height:68px; position:relative; ${itemOpacity}">
+         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${itemOpacity}">
       ${lockBadge}
       ${dragHandle}
       ${thumb}
