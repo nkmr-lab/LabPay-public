@@ -2,7 +2,7 @@
 //   * 出品: タイトル + 説明 + 画像 + 最低価格 + 締切時刻
 //   * 入札: 現在の最高 + 1 以上
 //   * 締切: 自動で settle (lazy 集計、 lazy notify)
-//   * 落札後の pt 移動は無し。 落札者/出品者 同士で連絡先を見せて 本人同士 やり取り
+//   * 落札後の 円 移動は無し。 落札者/出品者 同士で連絡先を見せて 本人同士 やり取り
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -52,7 +52,7 @@ export async function renderAuctions() {
       const active = !settled && !cancelled;
       const meId = Number(state.me?.id);
       const isMine = Number(a.seller_user_id) === meId;
-      const wonBy = a.winner_user_id ? `落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}pt)` : '';
+      const wonBy = a.winner_user_id ? `落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)` : '';
       const wonByMe = Number(a.winner_user_id) === meId;
       const tag = cancelled
         ? '<span class="tag" style="background:#eee">取消</span>'
@@ -64,7 +64,7 @@ export async function renderAuctions() {
               : '<span class="tag" style="background:#eee">入札0で終了</span>')
           : `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(remainingText(a.closes_at, false, false))}</span>`;
       const topLine = active
-        ? (a.top_bid ? `現在 ${a.top_bid}pt (${a.bid_count}件)` : `入札なし (最低 ${a.min_price}pt)`)
+        ? (a.top_bid ? `現在 ${a.top_bid}円 (${a.bid_count}件)` : `入札なし (最低 ${a.min_price}円)`)
         : (settled && a.winning_bid ? `${wonBy}` : '');
       const myBidLine = Number(a.my_bid_count) > 0 ? ' <span class="muted">·自分も入札</span>' : '';
       const img = a.image_url
@@ -105,7 +105,7 @@ export async function renderAuctionNew() {
         <span id="aun-img-st" class="hint-sm"></span>
       </label>
       <div class="row" style="gap:6px">
-        <label class="field grow"><span class="lbl">最低価格 (pt)</span>
+        <label class="field grow"><span class="lbl">最低価格 (円)</span>
           <input type="number" id="aun-min" min="1" step="1" value="100">
         </label>
         <label class="field grow"><span class="lbl">締切時刻 (1分後〜14日以内)</span>
@@ -165,7 +165,7 @@ export async function renderAuctionDetail({ params }) {
       <h3 style="margin:0">入札</h3>
       <div id="aud-bid-hint" class="hint" style="margin:4px 0"></div>
       <div class="row" style="gap:6px; align-items:flex-end">
-        <label class="field grow"><span class="lbl">金額 (pt)</span>
+        <label class="field grow"><span class="lbl">金額 (円)</span>
           <input type="number" id="aud-amt" min="1" step="1">
         </label>
         <button id="aud-bid-go" class="primary">入札する</button>
@@ -192,7 +192,7 @@ export async function renderAuctionDetail({ params }) {
       ? '<span class="tag" style="background:#eee">取消</span>'
       : a.settled_at
         ? (a.winner_user_id
-            ? `<span class="tag ok">🎉 落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}pt)</span>`
+            ? `<span class="tag ok">🎉 落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)</span>`
             : '<span class="tag" style="background:#eee">入札 0 で終了</span>')
         : `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(remainingText(a.closes_at, false, false))}</span>`;
     const img = a.image_url
@@ -221,8 +221,8 @@ export async function renderAuctionDetail({ params }) {
       </div>
       ${a.description ? `<div style="white-space:pre-wrap; margin-top:8px">${escapeHtml(a.description)}</div>` : ''}
       <div class="row" style="margin-top:10px; gap:14px">
-        <div><span class="muted">最低</span> ${a.min_price}pt</div>
-        <div><span class="muted">現在最高</span> ${d.top_bid ?? '—'}pt</div>
+        <div><span class="muted">最低</span> ${a.min_price}円</div>
+        <div><span class="muted">現在最高</span> ${d.top_bid ?? '—'}円</div>
         <div><span class="muted">入札</span> ${d.bids.length}件</div>
       </div>
       ${contactBlock}
@@ -235,11 +235,11 @@ export async function renderAuctionDetail({ params }) {
       document.getElementById('aud-amt').min = min;
       document.getElementById('aud-amt').value = min;
       document.getElementById('aud-bid-hint').textContent =
-        `${min}pt 以上で入札可能。 入札後の取消はできません。`;
+        `${min}円 以上で入札可能。 入札後の取消はできません。`;
       document.getElementById('aud-bid-go').addEventListener('click', async () => {
         const amount = Number(document.getElementById('aud-amt').value);
         if (!(amount > 0)) { toast('金額を入れてください'); return; }
-        if (!confirm(`${amount}pt で入札しますか? (取消不可)`)) return;
+        if (!confirm(`${amount}円 で入札しますか? (取消不可)`)) return;
         try { await post(`/api/auctions/${id}/bids`, { amount }); toast('入札しました'); await renderAuctionDetail({ params: { id } }); }
         catch (e) { toast('失敗: ' + e.message); }
       });
@@ -260,7 +260,7 @@ export async function renderAuctionDetail({ params }) {
                 <div class="meta">${escapeHtml(fmtJP(b.created_at))}</div>
               </div>
             </div>
-            <div class="bold text-primary">${b.amount}pt</div>
+            <div class="bold text-primary">${b.amount}円</div>
           </div>`).join('')
       : '<div class="empty">まだ入札はありません</div>';
     // 管理操作
