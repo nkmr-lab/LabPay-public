@@ -2286,19 +2286,17 @@ async function loadLodgings(gid) {
       const memo = l.memo ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(l.memo)}</div>` : '';
       return `
         <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px">
-          <div class="row" style="gap:6px; align-items:flex-start">
-            <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:14px">${escapeHtml(l.name)}</div>
-              <div class="meta" style="font-size:12px">${escapeHtml(inOut || '日程未設定')}${room}</div>
-              ${loc}
-              ${url}
-              ${memo}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0">
-              <button data-lod-sync="${l.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
-              <button data-lod-edit="${l.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
-              <button data-lod-rm="${l.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
-            </div>
+          <div style="min-width:0">
+            <div class="bold" style="font-size:14px">${escapeHtml(l.name)}</div>
+            <div class="meta" style="font-size:12px">${escapeHtml(inOut || '日程未設定')}${room}</div>
+            ${loc}
+            ${url}
+            ${memo}
+          </div>
+          <div class="row" style="gap:6px; justify-content:flex-end">
+            <button data-lod-sync="${l.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
+            <button data-lod-edit="${l.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
+            <button data-lod-rm="${l.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
           </div>
         </div>`;
     }).join('');
@@ -2412,19 +2410,17 @@ async function loadFlights(gid) {
       const memo = f.memo ? `<div class="meta" style="white-space:pre-wrap">${escapeHtml(f.memo)}</div>` : '';
       return `
         <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px; padding:8px 10px">
-          <div class="row" style="gap:6px; align-items:flex-start">
-            <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:14px">${escapeHtml(label || '便')}${seat}</div>
-              <div class="meta">${dep}${dep && arr ? ' → ' : ''}${arr}</div>
-              ${conf}
-              ${url}
-              ${memo}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0">
-              <button data-flt-sync="${f.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
-              <button data-flt-edit="${f.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
-              <button data-flt-rm="${f.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
-            </div>
+          <div style="min-width:0">
+            <div class="bold" style="font-size:14px">${escapeHtml(label || '便')}${seat}</div>
+            <div class="meta">${dep}${dep && arr ? ' → ' : ''}${arr}</div>
+            ${conf}
+            ${url}
+            ${memo}
+          </div>
+          <div class="row" style="gap:6px; justify-content:flex-end">
+            <button data-flt-sync="${f.id}" class="btn primary" style="padding:2px 8px; font-size:11px">📅 反映</button>
+            <button data-flt-edit="${f.id}" class="btn" style="padding:2px 8px; font-size:11px">編集</button>
+            <button data-flt-rm="${f.id}" class="btn" style="padding:2px 8px; font-size:11px; color:var(--muted)">削除</button>
           </div>
         </div>`;
     }).join('');
