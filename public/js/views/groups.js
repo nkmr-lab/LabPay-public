@@ -500,6 +500,8 @@ async function loadDetail(id) {
         <a class="btn" href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
         <a class="btn" href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">投票・アンケート</a>
+        <a class="btn" href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
+        <a class="btn" href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
     // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部

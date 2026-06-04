@@ -135,7 +135,7 @@ function pollFormCardHtml(initial, isEdit) {
 }
 
 // フォームに 自由記述行 連動 + 締切デフォルト + メンバー チップ + save ハンドラを wire-up。
-async function wirePollForm(initial, isEdit, onSave) {
+async function wirePollForm(initial, isEdit, onSave, opts = {}) {
   const multiEl = document.getElementById('pn-multi');
   const ftRow = document.getElementById('pn-ft-row');
   const syncFtRow = () => {
@@ -155,9 +155,14 @@ async function wirePollForm(initial, isEdit, onSave) {
 
   let allUsers = [];
   const selected = new Set((initial.voterIds || []).map(Number));
+  // lockedIds: グループから飛んできた時は そのグループメンバーだけを
+  // 選択候補に出す (= 普段やりとりしない人を出さない)。
+  const lockedIds = opts.lockedToIds && opts.lockedToIds.length ? new Set(opts.lockedToIds.map(Number)) : null;
   try {
     const u = await get('/api/users');
-    allUsers = [...(u.items || [])].sort((a, b) => {
+    let pool = u.items || [];
+    if (lockedIds) pool = pool.filter(x => lockedIds.has(Number(x.id)));
+    allUsers = [...pool].sort((a, b) => {
       const d = gradeRank(a.grade) - gradeRank(b.grade);
       if (d !== 0) return d;
       return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
@@ -250,7 +255,7 @@ export async function renderPollNew({ query } = {}) {
     const r = await post('/api/polls', payload);
     toast('作成しました');
     navigate('#/polls/' + r.id);
-  });
+  }, { lockedToIds: presetVoters });
 }
 
 // /#/polls/:id/edit — 投票編集 (起案者のみ)。

@@ -70,6 +70,11 @@ export async function renderSell() {
         ・売れた時に <span class="bold">5%</span> が手数料として差し引かれるので、仕入れ値 + 手数料を考慮した値付けがオススメ<br>
         ・<span class="bold">20pt 未満</span> の出品は手数料がかかりません (端数切捨てで 0pt)
       </div>
+      <div style="background:#fdecea; border-left:4px solid #c62828; padding:10px 12px; border-radius:8px; margin-top:10px; font-size:13px; line-height:1.6">
+        🚫 <span class="bold">転売はやめてね</span><br>
+        ラボ内の在庫を 「安く買って高く転売」 は禁止です (在庫を回すことが目的ではなく、 共有を簡単にするための仕組み)。
+        購入直後の不自然な再出品は admin がチェックしています。
+      </div>
     </div>
 
     <!-- ============= 新規出品 (折りたたみ) ============= -->

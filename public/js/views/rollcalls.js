@@ -74,7 +74,11 @@ export async function renderRollCalls() {
   }
 }
 
-export async function renderRollCallNew() {
+export async function renderRollCallNew({ query } = {}) {
+  const rawMembers = String(query?.members || '').trim();
+  const presetMembers = rawMembers ? rawMembers.split(',').map(Number).filter(Boolean) : [];
+  const presetTitle = String(query?.title || '').trim();
+  const lockMembers = presetMembers.length > 0;
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -89,7 +93,7 @@ export async function renderRollCallNew() {
         `).join('')}
       </div>
       <label class="field"><span class="lbl">タイトル</span>
-        <input type="text" id="rcn-title" maxlength="200" placeholder="例: 起きてる？" autofocus>
+        <input type="text" id="rcn-title" maxlength="200" placeholder="例: 起きてる？" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
       <label class="field"><span class="lbl">本文 (任意)</span>
         <input type="text" id="rcn-body" maxlength="500" placeholder="補足 (例: 10:00 までに集合)">
@@ -98,8 +102,8 @@ export async function renderRollCallNew() {
         <input type="number" id="rcn-min" min="1" max="1440" value="10">
       </label>
       <div class="field">
-        <span class="lbl">対象者</span>
-        <div id="rcn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+        <span class="lbl">対象者${lockMembers ? ' (グループ内)' : ''}</span>
+        ${lockMembers ? '' : `<div id="rcn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>`}
         <div id="rcn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
@@ -118,35 +122,41 @@ export async function renderRollCallNew() {
 
   let allUsers = [];
   const selected = new Set();
+  presetMembers.forEach(uid => selected.add(uid));
   try {
     const u = await get('/api/users');
-    allUsers = [...(u.items || [])].sort((a, b) => {
+    let pool = u.items || [];
+    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
+    allUsers = [...pool].sort((a, b) => {
       const d = gradeRank(a.grade) - gradeRank(b.grade);
       if (d !== 0) return d;
       return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
     });
-    const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
-    const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-    document.getElementById('rcn-bulk').innerHTML = `
-      <button class="btn" data-bulk="all">全員</button>
-      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-    `;
-    document.querySelectorAll('#rcn-bulk [data-bulk]').forEach(b => {
-      b.addEventListener('click', () => {
-        const target = b.dataset.bulk === 'grade'
-          ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
-          : allUsers;
-        const allOn = target.every(x => selected.has(x.id));
-        if (allOn) target.forEach(x => selected.delete(x.id));
-        else       target.forEach(x => selected.add(x.id));
-        document.querySelectorAll('#rcn-members input[data-uid]').forEach(cb => {
-          cb.checked = selected.has(Number(cb.dataset.uid));
+    if (!lockMembers) {
+      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
+      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
+      const bulkEl = document.getElementById('rcn-bulk');
+      bulkEl.innerHTML = `
+        <button class="btn" data-bulk="all">全員</button>
+        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+      `;
+      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
+        b.addEventListener('click', () => {
+          const target = b.dataset.bulk === 'grade'
+            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
+            : allUsers;
+          const allOn = target.every(x => selected.has(x.id));
+          if (allOn) target.forEach(x => selected.delete(x.id));
+          else       target.forEach(x => selected.add(x.id));
+          document.querySelectorAll('#rcn-members input[data-uid]').forEach(cb => {
+            cb.checked = selected.has(Number(cb.dataset.uid));
+          });
         });
       });
-    });
+    }
     document.getElementById('rcn-members').innerHTML = allUsers.map(x => `
       <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}">
+        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
         ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
         <span>${escapeHtml(x.display_name)}</span>
         ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
@@ -211,7 +221,7 @@ export async function renderRollCallDetail({ params }) {
     <div class="card" id="rcd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
         <button id="rcd-remind" class="btn">📣 未応答者に催促</button>
-        <button id="rcd-close" class="btn">締切る</button>
+        <button id="rcd-close" class="btn primary">🏁 点呼を終了</button>
         <button id="rcd-del"   class="danger">削除</button>
       </div>
     </div>
@@ -288,10 +298,10 @@ async function loadRollCallDetail(id) {
       adminCard.hidden = false;
       document.getElementById('rcd-close').disabled = !isOpen;
       document.getElementById('rcd-close').addEventListener('click', async () => {
-        if (!confirm('この点呼を締切ますか?')) return;
+        if (!confirm('この点呼を終了しますか?')) return;
         try {
           await patch(`/api/rollcalls/${id}/close`, {});
-          toast('締切ました');
+          toast('終了しました');
           await loadRollCallDetail(id);
         } catch (e) { toast('失敗: ' + e.message); }
       });
