@@ -26,6 +26,7 @@ async function load() {
   try {
     const data = await get('/api/notifications', { limit: 100 });
     const root = document.getElementById('list');
+    if (!root) return; // await 中にページ離脱 → DOM 不在
     if (!data.items.length) {
       root.innerHTML = `<div class="empty">通知はありません</div>`;
       return;
@@ -63,7 +64,8 @@ async function load() {
       });
     });
   } catch (e) {
-    document.getElementById('list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    const root = document.getElementById('list');
+    if (root) root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
