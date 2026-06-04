@@ -1,0 +1,341 @@
+// /#/timers — 共有タイマー。 参加者全員に同じカウントダウンを見せる。
+// 同期戦略: server から server_now を毎回受け取って ローカル時計とのオフセットを
+// 計算 → 自前で 1 秒刻みでカウントダウン。 開始直後は頻繁 (3s) に再 sync して
+// ズレを早めに正す。 残りが少なくなるほど精度が大事なので 終盤も 3s。
+// 中盤は 15s に間引く。
+
+import { get, post, patch, del } from '../api.js';
+import { escapeHtml, avatarHtml, navigate } from '../router.js';
+import { state, toast } from '../app.js';
+
+const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
+const gradeRank = g => {
+  const i = GRADE_ORDER.indexOf(g || '');
+  return i < 0 ? GRADE_ORDER.length : i;
+};
+
+const PRESETS = [
+  { label: '5 分',  seconds: 300 },
+  { label: '10 分', seconds: 600 },
+  { label: '15 分', seconds: 900 },
+  { label: '25 分', seconds: 1500 },  // ポモドーロ
+  { label: '30 分', seconds: 1800 },
+  { label: '60 分', seconds: 3600 },
+];
+
+function fmtDuration(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  if (sec >= 3600) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+export async function renderTimers() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card page-header">
+      <div class="row center">
+        <h2 style="margin:0">⏱️ タイマー</h2>
+        <a class="btn primary" href="#/timers/new">＋ 新規</a>
+      </div>
+      <p class="card-subtitle" style="margin:6px 0 0">
+        参加者全員に 同じカウントダウンを共有。
+      </p>
+    </div>
+    <div id="tm-list" class="list"><div class="muted">読み込み中…</div></div>
+  `;
+  try {
+    const d = await get('/api/timers');
+    const items = d.items || [];
+    if (!items.length) {
+      document.getElementById('tm-list').innerHTML = '<div class="empty">タイマーはまだありません</div>';
+      return;
+    }
+    const serverOffset = Date.parse(String(d.server_now).replace(' ', 'T')) - Date.now();
+    document.getElementById('tm-list').innerHTML = items.map(t => {
+      const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
+      const remaining = Math.max(0, Math.floor((ends - (Date.now() + serverOffset)) / 1000));
+      const isMine = Number(t.creator_user_id) === Number(state.me?.id);
+      const tag = t.status === 'running'
+        ? `<span class="tag" style="background:#e3f2fd; color:#1565c0">${fmtDuration(remaining)} 残</span>`
+        : t.status === 'done'
+        ? `<span class="tag" style="background:#e8f5e9; color:#2e7d32">完了</span>`
+        : `<span class="tag" style="background:#eee">中止</span>`;
+      return `
+        <a class="list-item" href="#/timers/${t.id}">
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(t.title)}</div>
+            <div class="meta">${tag} · ${fmtDuration(t.duration_seconds)} · 起案 ${escapeHtml(t.creator_name)}${isMine ? ' (自分)' : ''}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('tm-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+export async function renderTimerNew({ query } = {}) {
+  const presetMembers = String(query?.members || '').trim()
+    .split(',').map(Number).filter(Boolean);
+  const presetTitle = String(query?.title || '').trim();
+  const lockMembers = presetMembers.length > 0;
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/timers" class="hint">← 一覧</a>
+      <h2 style="margin:6px 0 0">タイマーを始める</h2>
+    </div>
+    <div class="card">
+      <label class="field"><span class="lbl">タイトル</span>
+        <input type="text" id="tmn-title" maxlength="200" placeholder="例: ポモドーロ / 作業時間" value="${escapeHtml(presetTitle)}" autofocus>
+      </label>
+      <span class="lbl">長さ</span>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 6px">
+        ${PRESETS.map((p, i) => `
+          <button class="btn" data-preset-sec="${p.seconds}">${escapeHtml(p.label)}</button>
+        `).join('')}
+      </div>
+      <div class="row" style="gap:6px; align-items:center">
+        <input type="number" id="tmn-min" min="0" max="1440" placeholder="分" style="max-width:90px">
+        <span class="muted">分</span>
+        <input type="number" id="tmn-sec" min="0" max="59" placeholder="秒" style="max-width:90px">
+        <span class="muted">秒</span>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
+        ${lockMembers ? '' : `<div id="tmn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>`}
+        <div id="tmn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
+      <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+        <a href="#/timers" class="btn">キャンセル</a>
+        <button id="tmn-save" class="primary">⏱️ 開始</button>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('[data-preset-sec]').forEach(b => {
+    b.addEventListener('click', () => {
+      const sec = Number(b.dataset.presetSec);
+      document.getElementById('tmn-min').value = Math.floor(sec / 60);
+      document.getElementById('tmn-sec').value = sec % 60;
+    });
+  });
+
+  let allUsers = [];
+  const selected = new Set();
+  presetMembers.forEach(uid => selected.add(uid));
+  try {
+    const u = await get('/api/users');
+    let pool = u.items || [];
+    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
+    allUsers = [...pool].sort((a, b) => {
+      const d = gradeRank(a.grade) - gradeRank(b.grade);
+      if (d !== 0) return d;
+      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+    });
+    if (!lockMembers) {
+      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
+      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
+      const bulkEl = document.getElementById('tmn-bulk');
+      bulkEl.innerHTML = `
+        <button class="btn" data-bulk="all">全員</button>
+        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+      `;
+      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
+        b.addEventListener('click', () => {
+          const target = b.dataset.bulk === 'grade'
+            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
+            : allUsers;
+          const allOn = target.every(x => selected.has(x.id));
+          if (allOn) target.forEach(x => selected.delete(x.id));
+          else       target.forEach(x => selected.add(x.id));
+          document.querySelectorAll('#tmn-members input[data-uid]').forEach(cb => {
+            cb.checked = selected.has(Number(cb.dataset.uid));
+          });
+        });
+      });
+    }
+    document.getElementById('tmn-members').innerHTML = allUsers.map(x => `
+      <label class="rl-chip">
+        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
+        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+        <span>${escapeHtml(x.display_name)}</span>
+        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
+      </label>`).join('');
+    document.querySelectorAll('#tmn-members input[data-uid]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const uid = Number(cb.dataset.uid);
+        if (cb.checked) selected.add(uid); else selected.delete(uid);
+      });
+    });
+  } catch (e) {
+    document.getElementById('tmn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+
+  document.getElementById('tmn-save').addEventListener('click', async () => {
+    const title = document.getElementById('tmn-title').value.trim();
+    const min = Math.max(0, parseInt(document.getElementById('tmn-min').value, 10) || 0);
+    const sec = Math.max(0, Math.min(59, parseInt(document.getElementById('tmn-sec').value, 10) || 0));
+    const total = min * 60 + sec;
+    if (!title) { toast('タイトル必須'); return; }
+    if (total < 5) { toast('5 秒以上にしてください'); return; }
+    try {
+      const r = await post('/api/timers', {
+        title, duration_seconds: total, participant_ids: [...selected],
+      });
+      toast('タイマーを開始しました');
+      navigate('#/timers/' + r.id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
+let tmTickTimer = null;
+let tmSyncTimer = null;
+let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server からの遅延補正)
+let tmEndsMs = 0;
+let tmStartedMs = 0;
+let tmDurationSec = 0;
+let tmStatus = 'running';
+
+function stopTimerLoops() {
+  if (tmTickTimer) { clearInterval(tmTickTimer); tmTickTimer = null; }
+  if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
+}
+
+export async function renderTimerDetail({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/timers" class="hint">← 一覧</a>
+      <div id="tmd-head"><div class="muted">読み込み中…</div></div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div id="tmd-count" style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px">--:--</div>
+      <div id="tmd-elapsed" class="hint-sm">経過 -- / 合計 --</div>
+      <div style="background:#eee; height:10px; border-radius:5px; overflow:hidden; margin-top:14px">
+        <div id="tmd-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.4s linear"></div>
+      </div>
+      <div id="tmd-status" style="margin-top:14px; font-weight:700"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px">参加者 (<span id="tmd-pcount">0</span>)</h3>
+      <div id="tmd-participants" class="row" style="gap:6px; flex-wrap:wrap"></div>
+    </div>
+    <div class="card" id="tmd-admin-card" hidden>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="tmd-cancel" class="btn">⏹ 停止</button>
+        <button id="tmd-del" class="danger">削除</button>
+      </div>
+    </div>
+  `;
+  stopTimerLoops();
+  await loadTimerDetail(id);
+  // 1 秒刻みで表示更新 (offset とサーバの終了時刻から計算)
+  tmTickTimer = setInterval(() => tickTimer(), 1000);
+  tickTimer();
+}
+
+async function loadTimerDetail(id, { isResync = false } = {}) {
+  try {
+    const recvMs = Date.now();
+    const d = await get('/api/timers/' + id);
+    const t = d.timer;
+    tmOffsetMs    = Date.parse(String(d.server_now).replace(' ', 'T')) - recvMs;
+    tmEndsMs      = Date.parse(String(t.ends_at).replace(' ', 'T'));
+    tmStartedMs   = Date.parse(String(t.started_at).replace(' ', 'T'));
+    tmDurationSec = t.duration_seconds;
+    tmStatus      = t.status;
+    if (!isResync) {
+      document.getElementById('tmd-head').innerHTML = `
+        <h2 style="margin:6px 0 0">${escapeHtml(t.title)}</h2>
+        <div class="meta">起案 ${escapeHtml(t.creator_name)} · 合計 ${fmtDuration(t.duration_seconds)}</div>
+      `;
+      document.getElementById('tmd-pcount').textContent = d.participants.length;
+      document.getElementById('tmd-participants').innerHTML = d.participants.map(p => `
+        <span class="presence-pill">
+          ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
+          <span class="presence-pill-name">${escapeHtml(p.display_name)}</span>
+          ${p.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(p.grade)}]</span>` : ''}
+        </span>`).join('');
+      if (d.is_creator) {
+        document.getElementById('tmd-admin-card').hidden = false;
+        document.getElementById('tmd-cancel').addEventListener('click', async () => {
+          if (!confirm('タイマーを停止しますか?')) return;
+          try { await patch(`/api/timers/${id}/cancel`, {}); toast('停止しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+        document.getElementById('tmd-del').addEventListener('click', async () => {
+          if (!confirm('削除しますか?')) return;
+          try { await del('/api/timers/' + id); toast('削除しました'); navigate('#/timers'); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+      }
+    }
+    // 次の sync をスケジューリング。 残りが少ない時 + 開始直後は頻繁に。
+    scheduleSyncNext(id);
+  } catch (e) {
+    document.getElementById('tmd-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function pickSyncIntervalMs() {
+  const now = Date.now() + tmOffsetMs;
+  const since = (now - tmStartedMs) / 1000;
+  const remaining = (tmEndsMs - now) / 1000;
+  if (tmStatus !== 'running') return 0;
+  if (remaining <= 0) return 0;
+  if (since < 30) return 3_000;       // 開始直後 30 秒は 3 秒間隔 (ズレ補正)
+  if (remaining < 30) return 3_000;   // 終了直前 30 秒も 3 秒間隔 (精度大事)
+  return 15_000;                      // それ以外は 15 秒間隔
+}
+
+function scheduleSyncNext(id) {
+  if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
+  const ms = pickSyncIntervalMs();
+  if (!ms) return;
+  tmSyncTimer = setTimeout(async () => {
+    if (!document.getElementById('tmd-count')) { stopTimerLoops(); return; }
+    if (document.hidden) { scheduleSyncNext(id); return; }
+    await loadTimerDetail(id, { isResync: true });
+  }, ms);
+}
+
+function tickTimer() {
+  const countEl = document.getElementById('tmd-count');
+  const barEl   = document.getElementById('tmd-bar');
+  const elEl    = document.getElementById('tmd-elapsed');
+  const stEl    = document.getElementById('tmd-status');
+  if (!countEl) { stopTimerLoops(); return; }
+  const now = Date.now() + tmOffsetMs;
+  if (tmStatus === 'cancelled') {
+    countEl.textContent = '停止';
+    countEl.style.color = '#888';
+    barEl.style.width = '0%';
+    stEl.textContent = '⏹ 起案者により停止されました';
+    return;
+  }
+  const remainingSec = Math.max(0, Math.ceil((tmEndsMs - now) / 1000));
+  const elapsedSec   = Math.max(0, Math.min(tmDurationSec, Math.floor((now - tmStartedMs) / 1000)));
+  countEl.textContent = fmtDuration(remainingSec);
+  countEl.style.color = remainingSec === 0 ? 'var(--primary)'
+                      : remainingSec < 10 ? '#c62828'
+                      : '';
+  elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
+  const pct = tmDurationSec ? Math.min(100, (elapsedSec / tmDurationSec) * 100) : 0;
+  barEl.style.width = pct.toFixed(1) + '%';
+  if (remainingSec === 0 && tmStatus === 'running') {
+    stEl.textContent = '🎉 終了!';
+    tmStatus = 'done';
+    stopTimerLoops();
+  } else if (tmStatus === 'done') {
+    stEl.textContent = '🎉 終了';
+  } else {
+    stEl.textContent = '';
+  }
+}

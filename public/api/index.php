@@ -58,6 +58,7 @@ $routes = [
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
+    'timers'         => 'route_timers',
 ];
 
 try {

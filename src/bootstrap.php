@@ -469,3 +469,4 @@ require_once __DIR__ . '/handlers/random_groups.php';
 require_once __DIR__ . '/handlers/money_requests.php';
 require_once __DIR__ . '/handlers/polls.php';
 require_once __DIR__ . '/handlers/rollcalls.php';
+require_once __DIR__ . '/handlers/timers.php';
