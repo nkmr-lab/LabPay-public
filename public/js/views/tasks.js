@@ -16,9 +16,10 @@ export async function renderTasks() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <div class="row" style="justify-content:flex-end; gap:6px">
-        <button id="task-new"    class="primary">+ 依頼する</button>
-        <button id="task-assign" class="btn">+ 割り当てる</button>
+      <div class="row" style="justify-content:flex-end; gap:6px; flex-wrap:wrap">
+        <button id="task-new"     class="primary">+ タスク (報酬あり)</button>
+        <button id="task-assign"  class="btn">+ 割り当て</button>
+        <button id="task-request" class="btn">+ リクエスト (報酬なし)</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
         <span class="text-primary">●</span> 自分が依頼  ·
@@ -26,8 +27,8 @@ export async function renderTasks() {
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
       <p class="hint-sm" style="margin:6px 0 0">
-        <b>依頼する</b> = 募集型 (対象学年で公募 → 引き受けて完了報告) /
-        <b>割り当てる</b> = 指名型 (特定の人にアサイン、承諾不要で完了報告から)
+        <b>タスク</b> = 報酬付きの 募集型 / <b>割り当て</b> = 報酬付きの 指名型 /
+        <b>リクエスト</b> = 報酬なしで お願い (善意で 引き受けてもらう)
       </p>
       <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
         <input type="checkbox" id="task-show-history" ${showHistory ? 'checked' : ''}>
@@ -38,8 +39,9 @@ export async function renderTasks() {
     <div id="task-list"><div class="muted">読み込み中…</div></div>
   `;
 
-  document.getElementById('task-new')   .addEventListener('click', () => toggleCreateForm('request'));
-  document.getElementById('task-assign').addEventListener('click', () => toggleCreateForm('assign'));
+  document.getElementById('task-new')    .addEventListener('click', () => toggleCreateForm('request'));
+  document.getElementById('task-assign') .addEventListener('click', () => toggleCreateForm('assign'));
+  document.getElementById('task-request').addEventListener('click', () => toggleCreateForm('free'));
   document.getElementById('task-show-history').addEventListener('change', (ev) => {
     showHistory = ev.currentTarget.checked;
     loadList();
@@ -47,7 +49,7 @@ export async function renderTasks() {
   // ホームの「＋ 新しくタスクを設定する」 経由など、 #/tasks?new=request / ?new=assign
   // で来た場合は対応フォームを自動展開。query 部分はそのまま残しておくと再 render
   // で毎回開いて鬱陶しいので、 URL を綺麗にしてから開く。
-  const m = (location.hash || '').match(/[?&]new=(request|assign)/);
+  const m = (location.hash || '').match(/[?&]new=(request|assign|free)/);
   if (m) {
     history.replaceState(null, '', '#/tasks');
     toggleCreateForm(m[1]);
@@ -67,6 +69,7 @@ function toggleCreateForm(mode = null) {
   }
   createMode = mode;
   const isAssign = mode === 'assign';
+  const isFree   = mode === 'free';  // 報酬なし リクエスト
 
   // 共通フィールド
   const commonTop = `
@@ -158,10 +161,15 @@ function toggleCreateForm(mode = null) {
         <span class="hint-sm">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
       </label>`;
 
-  const heading = isAssign ? 'タスクを割り当てる' : 'タスクを依頼する';
+  const heading = isAssign ? 'タスクを割り当てる'
+                : isFree   ? 'リクエスト (報酬なし) を出す'
+                : 'タスクを依頼する';
   const intro = isAssign
     ? `<b>指定した人に直接アサイン</b>します。承諾不要で 「やる人」 として登録され、本人に通知が飛びます。完了報告→承認の流れは募集型と同じ。
        <br>・<b>報酬 × 指名人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`
+    : isFree
+    ? `<b>報酬なしで お願い</b>するモードです。 善意で 誰かが 引き受けてくれます。 ESCROW も発生しません。
+       <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて 表示されます。`
     : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
        <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」 と書くと枠ごとに 1 人ずつ申込形式に。
        <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
@@ -174,13 +182,13 @@ function toggleCreateForm(mode = null) {
         ${intro}
       </div>
       ${commonTop}
-      ${rewardRow}
+      ${isFree ? '' : rewardRow}
       ${deadline}
       ${requestOnly}
       ${pickerSection}
       ${files}
       <div class="row" style="margin-top:6px">
-        <button id="t-submit" class="primary">${isAssign ? '割り当てる' : '依頼する'}</button>
+        <button id="t-submit" class="primary">${isAssign ? '割り当てる' : isFree ? 'リクエストを出す' : '依頼する'}</button>
         <button id="t-cancel">キャンセル</button>
       </div>
     </div>`;
@@ -266,13 +274,15 @@ function refreshPickChips() {
 
 async function onCreate() {
   const isAssign = createMode === 'assign';
+  const isFree   = createMode === 'free';
   const title = document.getElementById('t-title').value.trim();
   const url = document.getElementById('t-url').value.trim();
   const description = document.getElementById('t-desc').value.trim();
   const completion_message = document.getElementById('t-cmsg').value.trim();
-  const reward   = Number(document.getElementById('t-reward').value);
+  // 報酬: リクエストモードは 強制 0、 そうでなければ フォームから。
+  const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
   const deadline = document.getElementById('t-deadline').value || null;
-  if (!title || !(reward >= 0)) { toast('タイトルと報酬を確認してください (0pt も OK)'); return; }
+  if (!title || !(reward >= 0)) { toast('タイトルを確認してください'); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
 
   // モード別ペイロード組み立て:
@@ -294,9 +304,12 @@ async function onCreate() {
     payload.capacity = assignedPicked.size; // backend 側でも上書きされるが明示。
   } else {
     const slots_spec = document.getElementById('t-slots').value.trim();
-    const capacity = Number(document.getElementById('t-capacity').value);
+    const capacityRaw = Number(document.getElementById('t-capacity').value);
+    // リクエストモードは reward フィールドが無いので 「報酬」 行も hidden、 capacity も
+    // 共用フォームの初期値 1 を そのまま使う (= 1 人募集)。
+    const capacity = isFree ? Math.max(1, capacityRaw || 1) : capacityRaw;
     const per_user_limit = Number(document.getElementById('t-perlimit').value);
-    if (!slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
+    if (!isFree && !slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
     payload.capacity = capacity;
     payload.per_user_limit = per_user_limit;
     payload.slots_spec = slots_spec || null;
@@ -318,9 +331,9 @@ async function onCreate() {
       try { await uploadTaskAttachment(created.id, f); }
       catch (e) { attachFails++; console.warn('attach failed:', f.name, e); }
     }
-    const verb = isAssign ? '割り当てました' : '依頼しました';
-    if (attachFails > 0) toast(`タスク作成 (添付 ${attachFails}件 失敗)`);
-    else toast(`タスクを${verb}` + (files.length ? ` (添付 ${files.length}件)` : ''));
+    const verb = isAssign ? '割り当てました' : isFree ? 'リクエストを出しました' : '依頼しました';
+    if (attachFails > 0) toast(`作成しました (添付 ${attachFails}件 失敗)`);
+    else toast(verb + (files.length ? ` (添付 ${files.length}件)` : ''));
     toggleCreateForm(null);
     await loadList();
     navigate('#/tasks');
@@ -428,9 +441,10 @@ function renderRow(t) {
       <div class="grow" style="min-width:0">
         <div style="font-size:14px">
           <span class="bold">${escapeHtml(t.title)}</span>
+          ${Number(t.reward) === 0 ? '<span class="tag" style="background:#e3f2fd; color:#0277bd">🙏 リクエスト</span>' : ''}
           ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
         </div>
-        <div class="meta">${escapeHtml(t.requester_name)} · ${t.reward}pt × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
+        <div class="meta">${escapeHtml(t.requester_name)} · ${Number(t.reward) === 0 ? '報酬なし' : t.reward + 'pt'} × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>
         ${assignedRow}
         ${progressLine}
         ${approvedRow}
