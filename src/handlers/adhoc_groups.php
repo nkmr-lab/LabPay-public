@@ -1460,7 +1460,8 @@ function group_flight_eticket_list(PDO $pdo, array $cfg, int $gid, int $fid): vo
     $st->execute([$fid, $gid]);
     if (!$st->fetchColumn()) throw new ApiException('not_found', 'flight 無し', 404);
     $st = $pdo->prepare("SELECT e.id, e.flight_id, e.owner_user_id, e.created_by_user_id,
-                                e.qr_payload, e.seat, e.booking_ref, e.note, e.created_at,
+                                e.qr_payload, e.qr_image_url, e.qr_thumb_url,
+                                e.seat, e.booking_ref, e.note, e.created_at,
                                 uo.display_name AS owner_name, uo.avatar_url AS owner_avatar_url
                            FROM adhoc_group_flight_etickets e
                            JOIN users uo ON uo.id = e.owner_user_id
@@ -1480,9 +1481,15 @@ function group_flight_eticket_add(PDO $pdo, array $cfg, int $gid, int $fid): voi
     $ownerId = (int)($body['owner_user_id'] ?? 0);
     if ($ownerId <= 0) throw new ApiException('bad_request', 'owner_user_id 必須', 400);
     group_assert_member($pdo, $gid, $ownerId);
-    $qr = trim((string)($body['qr_payload'] ?? ''));
-    if ($qr === '') throw new ApiException('bad_request', 'qr_payload 必須', 400);
-    if (mb_strlen($qr) > 2048) throw new ApiException('bad_request', 'qr_payload は 2048 文字まで', 400);
+    // v357: 航空会社配布の QR 画像 URL が 主、 旧 qr_payload (生成元テキスト) は 互換用。
+    $qrImage = trim((string)($body['qr_image_url'] ?? ''));
+    $qrThumb = trim((string)($body['qr_thumb_url'] ?? ''));
+    $qrText  = trim((string)($body['qr_payload'] ?? ''));
+    if ($qrImage === '' && $qrText === '') {
+        throw new ApiException('bad_request', 'qr_image_url か qr_payload のどちらか必須', 400);
+    }
+    if (mb_strlen($qrText) > 2048)   throw new ApiException('bad_request', 'qr_payload は 2048 文字まで', 400);
+    if (mb_strlen($qrImage) > 500)   throw new ApiException('bad_request', 'qr_image_url 長すぎ', 400);
     $seat = isset($body['seat']) ? mb_substr(trim((string)$body['seat']), 0, 50) : null;
     $ref  = isset($body['booking_ref']) ? mb_substr(trim((string)$body['booking_ref']), 0, 100) : null;
     $note = isset($body['note']) ? mb_substr(trim((string)$body['note']), 0, 500) : null;
@@ -1490,9 +1497,14 @@ function group_flight_eticket_add(PDO $pdo, array $cfg, int $gid, int $fid): voi
     if ($ref === '') $ref = null;
     if ($note === '') $note = null;
     $st = $pdo->prepare("INSERT INTO adhoc_group_flight_etickets
-        (flight_id, owner_user_id, created_by_user_id, qr_payload, seat, booking_ref, note, created_at)
-        VALUES (?,?,?,?,?,?,?, NOW())");
-    $st->execute([$fid, $ownerId, (int)$u['id'], $qr, $seat, $ref, $note]);
+        (flight_id, owner_user_id, created_by_user_id,
+         qr_payload, qr_image_url, qr_thumb_url, seat, booking_ref, note, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?, NOW())");
+    $st->execute([$fid, $ownerId, (int)$u['id'],
+        $qrText !== '' ? $qrText : null,
+        $qrImage !== '' ? $qrImage : null,
+        $qrThumb !== '' ? $qrThumb : null,
+        $seat, $ref, $note]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 

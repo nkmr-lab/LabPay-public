@@ -2664,33 +2664,8 @@ async function setupFlightAttachments(gid, fid) {
   });
 }
 
-// v354 航空券 e-ticket 一覧 + 追加 + QR 描画
-let qrcodeLibLoaded = null;
-function loadQrcodeLib() {
-  if (qrcodeLibLoaded) return qrcodeLibLoaded;
-  qrcodeLibLoaded = new Promise((resolve, reject) => {
-    if (window.QRCode) { resolve(window.QRCode); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
-    s.onload = () => resolve(window.qrcode);
-    s.onerror = () => reject(new Error('QR ライブラリ 読み込み失敗'));
-    document.head.appendChild(s);
-  });
-  return qrcodeLibLoaded;
-}
-
-async function renderQrInto(el, payload) {
-  try {
-    const qrcode = await loadQrcodeLib();
-    const qr = qrcode(0, 'M');
-    qr.addData(payload);
-    qr.make();
-    el.innerHTML = qr.createImgTag(4, 4); // 4 cell size, 4 margin
-  } catch (e) {
-    el.innerHTML = `<div class="hint-sm" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
-  }
-}
-
+// v354/v357 航空券 e-ticket: 航空会社配布の QR 画像を そのまま アップロード保存。
+// 1 行 = 1 人分。 表示は サムネ → タップで原寸 (新タブ)。
 async function setupFlightEtickets(gid, fid) {
   const listEl = document.getElementById('fm-et-list');
   const ownerSel = document.getElementById('fm-et-owner');
@@ -2708,11 +2683,17 @@ async function setupFlightEtickets(gid, fid) {
       const d = await get(`/api/groups/${gid}/flights/${fid}/etickets`);
       const arr = d.etickets || [];
       if (!arr.length) { listEl.innerHTML = '<div class="hint-sm">登録なし</div>'; return; }
-      listEl.innerHTML = arr.map(e => `
+      listEl.innerHTML = arr.map(e => {
+        const thumb = e.qr_thumb_url || e.qr_image_url;
+        const full = e.qr_image_url || e.qr_thumb_url;
+        // 画像があれば サムネタップで原寸 (新タブ)、 無ければ qr_payload 文字を表示。
+        const qrBlock = full
+          ? `<a href="${escapeHtml(full)}" target="_blank" rel="noopener" style="display:block; margin-top:6px; text-align:center"><img src="${escapeHtml(thumb)}" alt="QR" style="max-width:180px; max-height:180px; border:1px solid var(--line); border-radius:6px"></a>`
+          : (e.qr_payload ? `<div class="mono hint-sm" style="white-space:pre-wrap; word-break:break-all; margin-top:4px">${escapeHtml(e.qr_payload)}</div>` : '');
+        return `
         <div style="border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff" data-et-id="${e.id}">
           <div class="row center" style="margin-bottom:4px">
             <span class="bold" style="font-size:13px; flex:1">${escapeHtml(e.owner_name)}</span>
-            <button class="btn" data-et-show="${e.id}" style="padding:2px 8px; font-size:11px">QR</button>
             <button class="btn" data-et-rm="${e.id}" style="padding:2px 6px; font-size:11px; color:var(--muted)">×</button>
           </div>
           <div class="hint-sm" style="font-size:11px">
@@ -2720,25 +2701,9 @@ async function setupFlightEtickets(gid, fid) {
             ${e.booking_ref ? '予約: ' + escapeHtml(e.booking_ref) : ''}
           </div>
           ${e.note ? `<div class="hint-sm" style="font-size:11px; white-space:pre-wrap; margin-top:2px">${escapeHtml(e.note)}</div>` : ''}
-          <div data-qr-box="${e.id}" style="margin-top:6px; text-align:center; display:none"></div>
-        </div>`).join('');
-      // 各 e-ticket の QR を 「表示」 ボタンで lazy 描画
-      listEl.querySelectorAll('[data-et-show]').forEach(b => {
-        b.addEventListener('click', async () => {
-          const eid = b.dataset.etShow;
-          const box = listEl.querySelector(`[data-qr-box="${eid}"]`);
-          if (!box) return;
-          if (box.style.display === 'none') {
-            box.style.display = 'block';
-            if (!box.dataset.rendered) {
-              const e = arr.find(x => Number(x.id) === Number(eid));
-              if (e) { await renderQrInto(box, e.qr_payload); box.dataset.rendered = '1'; }
-            }
-          } else {
-            box.style.display = 'none';
-          }
-        });
-      });
+          ${qrBlock}
+        </div>`;
+      }).join('');
       listEl.querySelectorAll('[data-et-rm]').forEach(b => {
         b.addEventListener('click', async () => {
           if (!confirm('この e-ticket を削除しますか?')) return;
@@ -2751,21 +2716,44 @@ async function setupFlightEtickets(gid, fid) {
     }
   };
   reload();
+  // 画像ピッカー: 選択した瞬間に /api/uploads/image へ送る。
+  document.getElementById('fm-et-file').addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const st = document.getElementById('fm-et-upst');
+    st.textContent = 'アップロード中…';
+    try {
+      const data = await uploadImage(f);
+      document.getElementById('fm-et-imgurl').value = data.url || '';
+      document.getElementById('fm-et-thumburl').value = data.thumb_url || data.url || '';
+      const prev = document.getElementById('fm-et-preview');
+      prev.src = data.url; prev.hidden = false;
+      st.textContent = '✓ 完了';
+    } catch (e) { st.textContent = '失敗: ' + e.message; }
+  });
   document.getElementById('fm-et-add').addEventListener('click', async () => {
     const ownerId = Number(ownerSel.value);
-    const payload = document.getElementById('fm-et-payload').value.trim();
+    const imgUrl   = document.getElementById('fm-et-imgurl').value;
+    const thumbUrl = document.getElementById('fm-et-thumburl').value;
     if (!ownerId) { toast('持ち主を選んでください'); return; }
-    if (!payload) { toast('QR の中身が空です'); return; }
+    if (!imgUrl)  { toast('QR 画像を選んでください'); return; }
     const body = {
       owner_user_id: ownerId,
-      qr_payload: payload,
+      qr_image_url: imgUrl,
+      qr_thumb_url: thumbUrl,
       seat: document.getElementById('fm-et-seat').value.trim() || null,
       booking_ref: document.getElementById('fm-et-ref').value.trim() || null,
       note: document.getElementById('fm-et-note').value.trim() || null,
     };
     try {
       await post(`/api/groups/${gid}/flights/${fid}/etickets`, body);
-      document.getElementById('fm-et-payload').value = '';
+      // form リセット
+      document.getElementById('fm-et-file').value = '';
+      document.getElementById('fm-et-imgurl').value = '';
+      document.getElementById('fm-et-thumburl').value = '';
+      const prev = document.getElementById('fm-et-preview');
+      prev.hidden = true; prev.src = '';
+      document.getElementById('fm-et-upst').textContent = '';
       document.getElementById('fm-et-seat').value = '';
       document.getElementById('fm-et-ref').value = '';
       document.getElementById('fm-et-note').value = '';
@@ -3019,7 +3007,7 @@ function openFlightModal(gid, it) {
           <div class="hint-sm">16MB まで。 持ち主はグループメンバーから選択。</div>
         </div>
         <div class="field">
-          <span class="lbl">e-ticket (QR コード) 人ごと</span>
+          <span class="lbl">e-ticket (航空会社の QR 画像) 人ごと</span>
           <div id="fm-et-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px"></div>
           <details>
             <summary class="hint" style="cursor:pointer">＋ e-ticket を追加</summary>
@@ -3028,7 +3016,12 @@ function openFlightModal(gid, it) {
                 <label class="hint-sm">持ち主:</label>
                 <select id="fm-et-owner" style="flex:1; min-width:120px; font-size:13px"></select>
               </div>
-              <textarea id="fm-et-payload" rows="2" maxlength="2048" placeholder="QR にする 文字列 (チェックイン URL / 予約番号 / Apple Wallet ID など)" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:12px"></textarea>
+              <label class="hint-sm" style="margin-top:6px; display:block">QR 画像 (航空会社アプリやメールから 保存した画像 / スクショ)</label>
+              <input type="file" id="fm-et-file" accept="image/*" style="font-size:12px">
+              <input type="hidden" id="fm-et-imgurl" value="">
+              <input type="hidden" id="fm-et-thumburl" value="">
+              <img id="fm-et-preview" alt="" hidden style="max-width:140px; max-height:140px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
+              <span id="fm-et-upst" class="hint-sm"></span>
               <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
                 <input type="text" id="fm-et-seat" placeholder="座席 (任意)" maxlength="50" style="flex:1; min-width:100px; font-size:12px">
                 <input type="text" id="fm-et-ref"  placeholder="予約番号 (任意)" maxlength="100" style="flex:1; min-width:100px; font-size:12px">
