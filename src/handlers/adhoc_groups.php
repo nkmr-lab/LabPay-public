@@ -1685,6 +1685,11 @@ function group_schedule_del(PDO $pdo, array $cfg, int $id, int $itemId): void {
 
 // PATCH /api/groups/{id}/schedule/{itemId}/move  body: {dir: 'up'|'down'}
 // 同日の隣の項目と sort_order を swap (時刻が同じ枠の中で並び替え)。
+// 一覧 GET 側のソートが (start_time IS NULL), start_time, sort_order の順 なので、
+// 「sort_order だけ swap」 では 始時刻の違う 2 件は視覚順が変わらない。
+// → 隣接アイテムを 「視覚順」 (= 同じ ORDER BY) で取得した上で、
+//    start_time / sort_order をまとめて swap する。 = ↑↓ で 時刻と並び順 が
+//    ペアでひっくり返る。 「14:00 を 9:00 の上に」 = 「14:00 だったやつが 9:00 になる」。
 function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
@@ -1693,23 +1698,42 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     if (!in_array($dir, ['up','down'], true)) {
         throw new ApiException('bad_request', "dir must be 'up' or 'down'", 400);
     }
-    $st = $pdo->prepare("SELECT day_date, sort_order FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $st = $pdo->prepare("SELECT day_date, start_time, sort_order FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
     $st->execute([$itemId, $id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'item not found', 404);
-    $cmp = $dir === 'up' ? '<' : '>';
-    $ord = $dir === 'up' ? 'DESC' : 'ASC';
-    $stN = $pdo->prepare("SELECT id, sort_order FROM adhoc_group_schedule_items
-            WHERE group_id=? AND day_date=? AND sort_order $cmp ?
-            ORDER BY sort_order $ord LIMIT 1");
-    $stN->execute([$id, $row['day_date'], (int)$row['sort_order']]);
-    $nei = $stN->fetch(PDO::FETCH_ASSOC);
-    if (!$nei) { json_response(['ok' => true, 'moved' => false]); return; }
+    // 同じ day_date 内で 「視覚順」 に並べ、 自分の隣を取る。
+    // start_time NULL は最後扱い、 次点 sort_order で安定化。 day_date が NULL の
+    // ストック内移動も同様に動く。
+    if ($row['day_date'] === null) {
+        $stAll = $pdo->prepare("SELECT id, start_time, sort_order
+                                 FROM adhoc_group_schedule_items
+                                WHERE group_id=? AND day_date IS NULL
+                                ORDER BY (start_time IS NULL), start_time, sort_order, id");
+        $stAll->execute([$id]);
+    } else {
+        $stAll = $pdo->prepare("SELECT id, start_time, sort_order
+                                 FROM adhoc_group_schedule_items
+                                WHERE group_id=? AND day_date=?
+                                ORDER BY (start_time IS NULL), start_time, sort_order, id");
+        $stAll->execute([$id, $row['day_date']]);
+    }
+    $list = $stAll->fetchAll(PDO::FETCH_ASSOC);
+    $idx = -1;
+    foreach ($list as $i => $r) if ((int)$r['id'] === $itemId) { $idx = $i; break; }
+    if ($idx < 0) { json_response(['ok' => true, 'moved' => false]); return; }
+    $neiIdx = $dir === 'up' ? $idx - 1 : $idx + 1;
+    if ($neiIdx < 0 || $neiIdx >= count($list)) {
+        json_response(['ok' => true, 'moved' => false]); return;
+    }
+    $nei = $list[$neiIdx];
+    // start_time と sort_order を 2 件で入れ替え。 「14:00 の予定を ↑」 すると
+    // 隣だった 9:00 の予定が 14:00 になり、 自分が 9:00 になる感覚。
     db_tx($pdo, function () use ($pdo, $row, $nei, $itemId) {
-        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
-            ->execute([(int)$nei['sort_order'], $itemId]);
-        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
-            ->execute([(int)$row['sort_order'], (int)$nei['id']]);
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET start_time=?, sort_order=? WHERE id=?")
+            ->execute([$nei['start_time'], (int)$nei['sort_order'], $itemId]);
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET start_time=?, sort_order=? WHERE id=?")
+            ->execute([$row['start_time'], (int)$row['sort_order'], (int)$nei['id']]);
     });
     json_response(['ok' => true, 'moved' => true]);
 }

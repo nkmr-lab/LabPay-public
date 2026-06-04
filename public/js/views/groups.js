@@ -1592,17 +1592,30 @@ async function loadSchedule(gid) {
 // 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
 const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk','move']);
 
-// ペア id を 2 つの独立 hash → 色相(360) + 位置 spread + 透明度を散らす。
-// 同じ pair_id = 同じ色・同じ位置に必ず落ちる (帯が縦に連続する)。
-function schedPairStyleFromId(pid, isTransport) {
+// ペア id を 2 つの独立 hash → 色相 + 位置 spread に。 同じ pair_id = 同じ色 /
+// 同じ位置 に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
+// 色相レンジを区切って 「青系=移動」 「赤系=宿泊」 がぱっと見で分かるように。
+function schedPairStyleFromId(pid, isTransport, kind) {
   let h1 = 0, h2 = 0;
   for (let i = 0; i < pid.length; i++) {
     h1 = (h1 * 31 + pid.charCodeAt(i)) | 0;
     h2 = (h2 * 37 + pid.charCodeAt(i) * 13) | 0;
   }
-  const hue   = Math.abs(h1) % 360;
-  const sat   = 55 + (Math.abs(h2) % 30);            // 55-85%
-  const light = 45 + (Math.abs(h1 >> 4) % 15);       // 45-60%
+  // カテゴリ別 hue レンジ:
+  //   移動 (flight/train/bus/...) → 青〜紫 (190-280)
+  //   宿泊 (hotel)                  → 赤〜オレンジ (350-50 = 0-60 -10 オフセット)
+  //   それ以外                      → 緑〜黄〜ピンク (60-180)
+  let hueBase, hueSpan;
+  if (kind === 'hotel') {
+    hueBase = -10; hueSpan = 70;   // 結果 -10..60 → +360 で 350..60 (赤〜橙)
+  } else if (isTransport) {
+    hueBase = 190; hueSpan = 90;   // 190..280 (青〜紫)
+  } else {
+    hueBase = 60;  hueSpan = 120;  // 60..180 (黄〜緑)
+  }
+  const hue   = ((hueBase + (Math.abs(h1) % hueSpan)) + 360) % 360;
+  const sat   = 60 + (Math.abs(h2) % 25);            // 60-85%
+  const light = 45 + (Math.abs(h1 >> 4) % 12);       // 45-57%
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.45)`;
   // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
@@ -1690,7 +1703,7 @@ function renderSchedItem(it) {
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
   const isTransport = SCHED_TRANSPORT_KINDS.has(it.kind);
   const stripStyle = it.link_pair_id
-    ? schedPairStyleFromId(it.link_pair_id, isTransport)
+    ? schedPairStyleFromId(it.link_pair_id, isTransport, it.kind)
     : null;
   // 連結グループの 「最初」「最後」 のアイテムは帯の端 5px を濃い同系色で塗って、
   // チェーンの始点 / 終点が一目で分かるようにする (中間はフラット)。
