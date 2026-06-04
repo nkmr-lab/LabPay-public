@@ -1676,8 +1676,11 @@ function renderSchedItem(it) {
     : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
   // 編集モード ON だけ ボタンを出す。 OFF 時は完全に隠す (アイテム自体が
   // タップ可能で edit modal が開く)。
+  // z-index:1 でペア帯より上に出す (帯は pointer-events:none だが、 当たり判定の
+  // 誤動作回避と視覚的にもボタンを前面に置きたい)。 帯の右端 16px 起点から
+  // ボタン領域とぶつかるので 編集時はボタン領域も 28px 外側に逃がす。
   const editControls = schedEditMode ? `
-    <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px">
+    <div style="display:flex; flex-direction:column; gap:2px; align-items:center; margin-left:4px; position:relative; z-index:2; background:rgba(255,255,255,0.85); border-radius:6px; padding:2px 0">
       <button data-sched-move="${it.id}" data-dir="up"   class="btn" style="padding:0 6px; font-size:11px">↑</button>
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
