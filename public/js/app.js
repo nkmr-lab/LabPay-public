@@ -27,6 +27,7 @@ import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.
 import { renderNotices, renderNoticeForm } from './views/notices.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
+import { renderRequestsHub } from './views/requests_hub.js';
 import { renderWari } from './views/wari.js';
 import { renderNomikai, renderNomikaiNew, renderNomikaiDetail } from './views/nomikai.js';
 import { renderGroups, renderGroupDetail } from './views/groups.js';
@@ -352,6 +353,7 @@ route('/notices/new',    renderNoticeForm);
 route('/notices/:id/edit', renderNoticeForm);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
+route('/requests-hub',   renderRequestsHub);
 route('/wari',           renderWari);
 route('/nomikai',        renderNomikai);
 route('/nomikai/new',    renderNomikaiNew);
