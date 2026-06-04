@@ -1596,37 +1596,34 @@ const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk
 // 同じ位置 に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
 // 色相レンジを区切って 「青系=移動」 「赤系=宿泊」 がぱっと見で分かるように。
 function schedPairStyleFromId(pid, isTransport, kind) {
-  let h1 = 0, h2 = 0;
+  let h1 = 0, h2 = 0, h3 = 0;
   for (let i = 0; i < pid.length; i++) {
     h1 = (h1 * 31 + pid.charCodeAt(i)) | 0;
     h2 = (h2 * 37 + pid.charCodeAt(i) * 13) | 0;
+    h3 = (h3 * 41 + pid.charCodeAt(i) * 7)  | 0;
   }
-  // カテゴリ別 hue レンジ:
-  //   移動 (flight/train/bus/...) → 青〜紫 (190-280)
-  //   宿泊 (hotel)                  → 赤〜オレンジ (350-50 = 0-60 -10 オフセット)
-  //   それ以外                      → 緑〜黄〜ピンク (60-180)
+  // カテゴリ別 hue レンジ (互いに重ならない 3 帯):
+  //   宿泊 (hotel)                  → 赤〜ピンク〜橙 (340-50, 70 wide)
+  //   移動 (flight/train/...)        → シアン〜青〜紫 (190-290, 100 wide)
+  //   その他                         → 黄緑〜緑〜青緑 (70-170, 100 wide)
   let hueBase, hueSpan;
   if (kind === 'hotel') {
-    hueBase = -10; hueSpan = 70;   // 結果 -10..60 → +360 で 350..60 (赤〜橙)
+    hueBase = -20; hueSpan = 70;   // -20..50 → 340..50
   } else if (isTransport) {
-    hueBase = 190; hueSpan = 90;   // 190..280 (青〜紫)
+    hueBase = 190; hueSpan = 100;  // 190..290
   } else {
-    hueBase = 60;  hueSpan = 120;  // 60..180 (黄〜緑)
+    hueBase = 70;  hueSpan = 100;  // 70..170
   }
   const hue   = ((hueBase + (Math.abs(h1) % hueSpan)) + 360) % 360;
-  const sat   = 60 + (Math.abs(h2) % 25);            // 60-85%
-  const light = 45 + (Math.abs(h1 >> 4) % 12);       // 45-57%
-  const color = `hsla(${hue}, ${sat}%, ${light}%, 0.45)`;
+  const sat   = 58 + (Math.abs(h2) % 32);   // 58-90% (前は 60-85)
+  const light = 40 + (Math.abs(h3) % 22);   // 40-62% (前は 45-57)
+  const color = `hsla(${hue}, ${sat}%, ${light}%, 0.50)`;
   // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
-  // 位置: 右端 〜 左 1/3 のレンジを 2 つに分ける。
-  //   右端側 (非移動): right 16 〜 80 px (画像/ボタン領域を避ける)
-  //   左半分 (移動系): right の min を半分くらいに → 100 〜 200 px ぐらい
-  // 同じハッシュ h2 で 0..1 に正規化してその範囲にマップ。
+  // 位置: 左 1/4 〜 右端のレンジに カテゴリ無関係で散らす。 色で区別するので
+  // L/R 棲み分けは不要。 row 幅 360-600px 想定で right 16..280px をフルに使う。
   const r = (Math.abs(h2) % 1000) / 1000;
-  const rightPx = isTransport
-    ? Math.round(110 + r * 100)   // 移動: 110〜210 px (= 左半分)
-    : Math.round(16  + r * 70);   // 非移動: 16〜86 px (= 右半分)
+  const rightPx = Math.round(16 + r * 264);   // 16..280 px
   return { color, capColor, rightPx };
 }
 

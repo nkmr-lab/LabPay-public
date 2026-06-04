@@ -1072,12 +1072,10 @@ function group_lodgings_del(PDO $pdo, array $cfg, int $id, int $lid): void {
     json_response(['ok' => true]);
 }
 
-// 宿泊地 → スケジュール展開: 単一の 「multi-day item」 を 1 行作成。
-// day_date = チェックイン日, start_time = チェックイン時刻,
-// end_date = チェックアウト日, end_time = チェックアウト時刻。
-// クライアント側 (loadSchedule) が start / mid (滞在中) / end に自動展開してくれるので、
-// 中間日 (例 6/9, 6/10) にも 「(滞在中)」 として出る。
-// 片方しか日時が無い時は 1 日扱いで 2 行分割 (= フォールバック)。
+// 宿泊地 → スケジュール展開: 「各日 1 行」 で N 行作成 (= mid 日でも独立して
+// ↑↓ 並び替えできるように)。 全行は link_pair_id (= lod_<lid>_<rand>) で
+// 同じグループに紐づく → 帯が縦に通る。
+// 既存の 同じ宿泊地 由来の行 (link_pair_id LIKE 'lod_<lid>_%') は事前に削除 = 再 sync が冪等。
 function group_lodgings_sync(PDO $pdo, array $cfg, int $id, int $lid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
@@ -1092,44 +1090,47 @@ function group_lodgings_sync(PDO $pdo, array $cfg, int $id, int $lid): void {
     }
     $roomSuffix = $L['room_number'] ? ' (室 ' . $L['room_number'] . ')' : '';
     $title = mb_substr($L['name'] . $roomSuffix, 0, 200);
+    $pairId = 'lod_' . $lid . '_' . bin2hex(random_bytes(4));
     $created = [];
-    db_tx($pdo, function () use ($pdo, $id, $u, $L, $ci, $co, $title, &$created) {
-        if ($ci && $co) {
-            // 通常ケース: 両方ある → 1 行の multi-day item。 中間日も hotel kind の
-            // 「(滞在中)」 として 自動描画される。
-            $day1     = substr($ci, 0, 10);
-            $time1    = substr($ci, 11, 8);
-            $day2     = substr($co, 0, 10);
-            $time2    = substr($co, 11, 8);
-            $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
-                FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
-            $stm->execute([$id, $day1]);
-            $sort = (int)$stm->fetchColumn() + 1;
-            $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
-                (group_id, day_date, start_time, end_date, end_time, kind, title,
-                 location, lat, lng, sort_order, created_by_user_id, created_at)
-                VALUES (?, ?, ?, ?, ?, 'hotel', ?, ?, ?, ?, ?, ?, NOW())");
-            $ins->execute([$id, $day1, $time1, $day2, $time2, $title,
-                $L['location'], $L['lat'], $L['lng'], $sort, (int)$u['id']]);
-            $created[] = (int)$pdo->lastInsertId();
-        } else {
-            // 片方しか無いケース: 1 行だけ、 「チェックイン (or アウト)」 接尾辞付き。
-            $dt = $ci ?: $co;
-            $suffix = $ci ? ' チェックイン' : ' チェックアウト';
-            $day  = substr($dt, 0, 10);
-            $time = substr($dt, 11, 8);
+    db_tx($pdo, function () use ($pdo, $id, $u, $L, $ci, $co, $title, $pairId, $lid, &$created) {
+        // 再 sync: 同じ宿泊地から作った既存行を削除。
+        $pdo->prepare("DELETE FROM adhoc_group_schedule_items
+                        WHERE group_id=? AND link_pair_id LIKE ?")
+            ->execute([$id, 'lod_' . $lid . '_%']);
+
+        $insertRow = function (string $day, ?string $time) use ($pdo, $id, $u, $L, $title, $pairId, &$created) {
             $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
                 FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
             $stm->execute([$id, $day]);
             $sort = (int)$stm->fetchColumn() + 1;
-            $titleOne = mb_substr($title . $suffix, 0, 200);
             $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
                 (group_id, day_date, start_time, kind, title, location, lat, lng,
-                 sort_order, created_by_user_id, created_at)
-                VALUES (?, ?, ?, 'hotel', ?, ?, ?, ?, ?, ?, NOW())");
-            $ins->execute([$id, $day, $time, $titleOne, $L['location'], $L['lat'], $L['lng'],
-                $sort, (int)$u['id']]);
+                 link_pair_id, sort_order, created_by_user_id, created_at)
+                VALUES (?, ?, ?, 'hotel', ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $ins->execute([$id, $day, $time, $title, $L['location'], $L['lat'], $L['lng'],
+                $pairId, $sort, (int)$u['id']]);
             $created[] = (int)$pdo->lastInsertId();
+        };
+
+        if ($ci && $co) {
+            $startDay = substr($ci, 0, 10);
+            $endDay   = substr($co, 0, 10);
+            $ciTime   = substr($ci, 11, 8);
+            $coTime   = substr($co, 11, 8);
+            $cur = $startDay;
+            while ($cur <= $endDay) {
+                $time = null;
+                if ($cur === $startDay) $time = $ciTime;
+                if ($cur === $endDay)   $time = $coTime;  // 同日チェックインアウトなら ciTime のまま
+                $insertRow($cur, $time);
+                $dt = new DateTime($cur);
+                $dt->modify('+1 day');
+                $cur = $dt->format('Y-m-d');
+            }
+        } else {
+            // 片方しか無い → 1 行だけ。
+            $dt = $ci ?: $co;
+            $insertRow(substr($dt, 0, 10), substr($dt, 11, 8));
         }
     });
     json_response(['ok' => true, 'created_ids' => $created]);
@@ -1213,11 +1214,15 @@ function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
     if (!$F['dep_at'] && !$F['arr_at']) {
         throw new ApiException('bad_request', '出発 or 到着 日時が必要', 400);
     }
-    $pairId = 'flt_' . bin2hex(random_bytes(4));
+    $pairId = 'flt_' . $fid . '_' . bin2hex(random_bytes(4));
     $label = trim(($F['airline'] ?? '') . ' ' . ($F['flight_number'] ?? ''));
     if ($label === '') $label = '便';
     $created = [];
-    db_tx($pdo, function () use ($pdo, $id, $u, $F, $pairId, $label, &$created) {
+    db_tx($pdo, function () use ($pdo, $id, $u, $F, $pairId, $label, $fid, &$created) {
+        // 既存 sync 結果を削除 (= 再 sync 冪等)。
+        $pdo->prepare("DELETE FROM adhoc_group_schedule_items
+                        WHERE group_id=? AND link_pair_id LIKE ?")
+            ->execute([$id, 'flt_' . $fid . '_%']);
         $insOne = function (?string $dt, ?string $airport, string $suffix) use ($pdo, $id, $u, $F, $pairId, $label, &$created) {
             if ($dt === null) return;
             $day = substr($dt, 0, 10);
