@@ -928,9 +928,11 @@ async function renderFreshListings() {
       const priceBadge = `<div class="price-badge" style="color:${priceColor}">${priceLabel}</div>`;
       // 在庫数: 2 個以上の時だけ表示。 1 個は 「言うまでもない」 のでノイズ削減。
       const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';
-      // created_at は 'YYYY-MM-DD HH:MM:SS' 形式。 秒は要らないので 16 文字で切る。
-      const when = (l.created_at || '').slice(0, 16);
-      const meta = `${escapeHtml(l.seller_name)}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
+      // v378 created_at は YYYY-MM-DD だけ (時刻は不要)。
+      const when = (l.created_at || '').slice(0, 10);
+      // v378 出品者は アイコンで (名前は title 属性に)。
+      const sellerAvatar = `<span title="${escapeHtml(l.seller_name)}" style="display:inline-flex; vertical-align:middle">${avatarHtml(l.seller_name, l.seller_avatar_url, 'xs')}</span>`;
+      const meta = `${sellerAvatar}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
       const href = `#/product/${encodeURIComponent(l.jan)}`;
       if (l.image_url) {
         return `
@@ -938,7 +940,7 @@ async function renderFreshListings() {
             <div class="cover-img" style="background-image:url('${escapeHtml(l.image_url)}')">${priceBadge}</div>
             <div class="grow">
               <div class="bold">${escapeHtml(l.name)}</div>
-              <div class="meta">${meta}</div>
+              <div class="meta" style="display:flex; align-items:center; gap:4px">${meta}</div>
             </div>
           </a>`;
       }
@@ -949,7 +951,7 @@ async function renderFreshListings() {
           <div class="cover-img cover-img-fallback">${escapeHtml(initial)}${priceBadge}</div>
           <div class="grow">
             <div class="bold">${escapeHtml(l.name)}</div>
-            <div class="meta">${meta}</div>
+            <div class="meta" style="display:flex; align-items:center; gap:4px">${meta}</div>
           </div>
         </a>`;
     }).join('');
