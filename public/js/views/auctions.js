@@ -8,20 +8,13 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
-import { fmtDateTime, tag } from '../format.js';
+import { fmtDateTime, tag, fmtRelative } from '../format.js';
 
-// fmtDateTime を 共有ヘルパに移行 (削除: ローカル fmtJP)。
+// remainingText は 共有 fmtRelative に委譲 (取消 / 終了 ラベルは引数で指定)。
 function remainingText(closes_at, settled, cancelled) {
   if (cancelled) return '取消';
   if (settled)   return '終了';
-  const t = new Date(String(closes_at).replace(' ', 'T'));
-  const diff = t - new Date();
-  if (diff <= 0) return '締切超過';
-  const min = Math.floor(diff / 60000);
-  if (min < 60) return `あと ${min} 分`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `あと ${h}時間${min % 60}分`;
-  return `あと ${Math.floor(h / 24)} 日`;
+  return fmtRelative(closes_at, { expiredLabel: '締切超過' });
 }
 
 export async function renderAuctions() {

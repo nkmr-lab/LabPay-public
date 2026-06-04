@@ -28,6 +28,7 @@ const gradeRank = g => {
   return i < 0 ? GRADE_ORDER.length : i;
 };
 
+// 残り時間文字列 (集合済 / まもなく / あと N 分 ...)。 fmtRelative とは独自ラベルなので残置。
 function fmtRemaining(s) {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
