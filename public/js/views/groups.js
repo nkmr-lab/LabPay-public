@@ -88,10 +88,8 @@ export async function renderGroups() {
           <span class="switch"><input type="checkbox" id="gr-feat-wari" checked><span class="slider"></span></span>
           <span>💴 ワリカ (立替を積み上げ → 精算)</span>
         </label>
-        <details style="margin-top:6px">
-          <summary class="hint" style="cursor:pointer">▸ アクションボタンの 表示設定 (8 個)</summary>
-          <div id="gr-feat-actions" style="margin-top:6px"></div>
-        </details>
+        <div class="hint" style="margin-top:6px; margin-bottom:4px">アクションボタンの 表示</div>
+        <div id="gr-feat-actions"></div>
       </div>
       <button id="gr-submit" class="primary">作成</button>
     </details>
@@ -466,10 +464,8 @@ export async function renderGroupDetail({ params }) {
         <span class="switch"><input type="checkbox" id="gd-feat-wari"><span class="slider"></span></span>
         <span>💴 ワリカ</span>
       </label>
-      <details style="margin-top:10px">
-        <summary class="hint" style="cursor:pointer">▸ アクションボタンの 表示設定</summary>
-        <div id="gd-feat-actions" style="margin-top:6px"></div>
-      </details>
+      <div class="hint" style="margin-top:10px; margin-bottom:4px">アクションボタンの 表示</div>
+      <div id="gd-feat-actions"></div>
     </details>
 
     <div class="card" id="gd-danger-card" hidden>
@@ -674,15 +670,15 @@ async function loadDetail(id) {
           </span>`).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt">📷 レシート</button>
-        <button class="btn primary" id="gd-snap-expense" data-gd-act="expense">＋ 支出を記録</button>
-        <a class="btn" data-gd-act="roulette"  href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
-        <a class="btn" data-gd-act="nomikai"   href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
-        <a class="btn" data-gd-act="polls"     href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📊 投票・アンケート</a>
-        <a class="btn" data-gd-act="rollcalls" href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
-        <a class="btn" data-gd-act="timers"    href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
-        <a class="btn" data-gd-act="meetups"   href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
-        <a class="btn" href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
+        <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
+        <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
+        <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
+        <a class="btn" data-gd-act="nomikai"   ${actionEnabled(g, 'nomikai')   ? '' : 'hidden'} href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
+        <a class="btn" data-gd-act="polls"     ${actionEnabled(g, 'polls')     ? '' : 'hidden'} href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📊 投票・アンケート</a>
+        <a class="btn" data-gd-act="rollcalls" ${actionEnabled(g, 'rollcalls') ? '' : 'hidden'} href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
+        <a class="btn" data-gd-act="timers"    ${actionEnabled(g, 'timers')    ? '' : 'hidden'} href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
+        <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
+        <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
     // 閉じるボタンは滅多に使わないので 「グループ閉じる」 カードをページ最下部
