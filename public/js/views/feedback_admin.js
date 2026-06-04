@@ -27,16 +27,17 @@ export async function renderFeedbackAdmin() {
       <div id="fb-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
-  document.getElementById('fb-flt-open').addEventListener('click', () => setFilter('open'));
-  document.getElementById('fb-flt-all') .addEventListener('click', () => setFilter('all'));
+  // navigate 中の race で DOM が消えてる事があるので 防御的に。
+  document.getElementById('fb-flt-open')?.addEventListener('click', () => setFilter('open'));
+  document.getElementById('fb-flt-all') ?.addEventListener('click', () => setFilter('all'));
   await loadList();
 }
 
 let currentFilter = 'open';
 function setFilter(f) {
   currentFilter = f;
-  document.getElementById('fb-flt-open').classList.toggle('primary', f === 'open');
-  document.getElementById('fb-flt-all') .classList.toggle('primary', f === 'all');
+  document.getElementById('fb-flt-open')?.classList.toggle('primary', f === 'open');
+  document.getElementById('fb-flt-all') ?.classList.toggle('primary', f === 'all');
   loadList();
 }
 

@@ -124,19 +124,8 @@ export async function renderSettings() {
     <div class="card">
       <h3>バグ報告 / 機能要望</h3>
       <p class="muted" style="font-size:12px; margin:4px 0 8px">
-        気づいたバグや「こんな機能あったら」みたいなアイデアを管理者 (中村) に直接届けます。
+        上部メニューの <a href="#/feature-request">機能要望</a> / <a href="#/bug-report">バグ報告</a> から送れます。
       </p>
-      <div class="row" style="margin-bottom:6px">
-        <select id="fb-kind" style="max-width:140px">
-          <option value="bug">🐛 バグ報告</option>
-          <option value="feature">✨ 機能要望</option>
-          <option value="other">💬 その他</option>
-        </select>
-      </div>
-      <textarea id="fb-body" maxlength="4000" rows="4" placeholder="どんなバグか / どんな機能が欲しいか、具体的に書いてもらえると助かります"></textarea>
-      <div class="row" style="margin-top:6px; gap:6px">
-        <button id="fb-send" class="primary">送る</button>
-      </div>
     </div>
 
     <div class="card">
@@ -205,16 +194,6 @@ export async function renderSettings() {
   await loadCalendar();
   await loadCalendarFilterRules();
 
-  document.getElementById('fb-send').addEventListener('click', async () => {
-    const kind = document.getElementById('fb-kind').value;
-    const body = document.getElementById('fb-body').value.trim();
-    if (!body) { toast('内容を書いてください'); return; }
-    try {
-      await post('/api/feedback', { kind, body, url: location.hash });
-      toast('送信しました!');
-      document.getElementById('fb-body').value = '';
-    } catch (e) { toast('失敗: ' + e.message); }
-  });
 }
 
 // ---------------- ホームのカスタマイズ ----------------

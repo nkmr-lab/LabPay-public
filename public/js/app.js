@@ -36,6 +36,7 @@ import { renderScrapboxFeed } from './views/scrapbox_feed.js';
 import { renderRandomGroups } from './views/random_groups.js';
 import { renderMoneyRequests, renderMoneyRequestDetail } from './views/money_requests.js';
 import { renderFeedbackAdmin } from './views/feedback_admin.js';
+import { renderFeatureRequest, renderBugReport } from './views/feedback_user.js';
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -373,7 +374,9 @@ route('/sell',           renderSell);
 route('/history',        renderHistory);
 route('/notifications',  renderNotifications);
 route('/admin',          renderAdmin);
-route('/feedback-admin', renderFeedbackAdmin);
+route('/feedback-admin',  renderFeedbackAdmin);
+route('/feature-request', renderFeatureRequest);
+route('/bug-report',      renderBugReport);
 route('/settings',       renderSettings);
 route('/achievements',   renderAchievements);
 route('/tasks',          renderTasks);
