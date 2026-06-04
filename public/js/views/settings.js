@@ -1,6 +1,6 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
-import { state, toast, refreshMe } from '../app.js';
+import { state, toast, refreshMe, requestNotificationPermission } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
@@ -36,6 +36,15 @@ export async function renderSettings() {
         <button id="profile-save" class="primary">保存</button>
         <button id="profile-clear-avatar">アバター削除</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>通知</h3>
+      <p class="hint" style="margin:6px 0 8px">
+        ブラウザ通知を許可すると、 アプリを開いていない時でも新着通知がスマホの通知センターに出ます (タブを開きっぱなしの時のみ動作)。
+      </p>
+      <button id="notif-perm" class="primary">🔔 ブラウザ通知を有効にする</button>
+      <span id="notif-perm-status" class="hint-sm" style="margin-left:8px"></span>
     </div>
 
     <div class="card">
@@ -142,6 +151,30 @@ export async function renderSettings() {
     loadUnregistered();
   });
   document.getElementById('profile-save').addEventListener('click', onProfileSave);
+  // 通知許可ボタン
+  const npStatus = document.getElementById('notif-perm-status');
+  const npBtn = document.getElementById('notif-perm');
+  function syncPermLabel() {
+    if (typeof Notification === 'undefined') {
+      npStatus.textContent = '(このブラウザは未対応)';
+      npBtn.disabled = true;
+    } else if (Notification.permission === 'granted') {
+      npStatus.textContent = '(有効)';
+      npStatus.style.color = '#2e7d32';
+      npBtn.textContent = '🔔 通知有効';
+      npBtn.disabled = true;
+    } else if (Notification.permission === 'denied') {
+      npStatus.textContent = '(ブロック中。 ブラウザ設定から許可してください)';
+      npStatus.style.color = 'var(--danger)';
+    } else {
+      npStatus.textContent = '(未許可)';
+    }
+  }
+  syncPermLabel();
+  npBtn.addEventListener('click', async () => {
+    await requestNotificationPermission();
+    syncPermLabel();
+  });
   document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);

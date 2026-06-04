@@ -86,15 +86,95 @@ export async function refreshHasGroups() {
   } catch (_) { /* 取れなければ前回値を保持 */ }
 }
 
+// 直近に見た最大 notification id。 polling で 新着検知に使う。
+// undefined の間 (= 初回ロード前) は 新着 toast を出さない (=スタート時の溜まりを
+// 全部 toast に出してしまわないようにする)。
+let lastSeenNotifId;
+let lastUnread = 0;
+
 export async function refreshUnread() {
   if (!state.me) return;
   try {
     const d = await get('/api/notifications/unread_count');
-    state.unread = d.unread || 0;
+    const newCount = d.unread || 0;
+    // 増加分があれば 直近の未読を取りに行って 「新着通知トースト」 を出す。
+    // 初回ロード時 (lastSeenNotifId 未定) は 「これ以降の追加分だけ」 を toast 対象にしたいので
+    // 高水位を立てるだけで toast は鳴らさない。
+    if (lastSeenNotifId !== undefined && newCount > lastUnread) {
+      try {
+        const data = await get('/api/notifications', { unread: 1, limit: 20 });
+        const fresh = (data.items || []).filter(n => Number(n.id) > Number(lastSeenNotifId));
+        if (fresh.length) {
+          showNotificationToasts(fresh);
+          lastSeenNotifId = Math.max(...fresh.map(n => Number(n.id)), Number(lastSeenNotifId));
+        }
+      } catch (_) {}
+    } else if (lastSeenNotifId === undefined) {
+      // 初回: 既存の最大 id を baseline に。
+      try {
+        const data = await get('/api/notifications', { limit: 1 });
+        const top = (data.items || [])[0];
+        lastSeenNotifId = top ? Number(top.id) : 0;
+      } catch (_) { lastSeenNotifId = 0; }
+    }
+    lastUnread = newCount;
+    state.unread = newCount;
     renderChrome();
-    // 未読 0 になった瞬間にアプリ起動ボーナスを試す (1 日 1 回・サーバ側で冪等)。
     if (state.unread === 0) tryAppOpenReward();
   } catch (_) {}
+}
+
+// 新着通知 1 〜 N 件を 「アプリ内トースト」 + (許可があれば) 「OS 通知」 で見せる。
+// 行数が多い時はまとめて 1 つの toast にする。
+function showNotificationToasts(items) {
+  // OS 通知 (許可済みの時だけ)。
+  // タップで該当ページに飛ばす。 service worker 経由しない 「ページが開いてる時の通知」 なので
+  // タブがアクティブだと OS の通知センターに残らない端末もあるが、 トースト感は出る。
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    for (const n of items.slice(0, 3)) {
+      try {
+        const n2 = new Notification('LabPay', {
+          body: String(n.body || '').slice(0, 200),
+          tag: 'labpay-notif-' + n.id,        // 同 tag は上書き
+          icon: '/img/favicon-32.png',
+        });
+        n2.onclick = () => {
+          window.focus();
+          if (location.hash !== '#/notifications') {
+            window.location.hash = '#/notifications';
+          }
+          n2.close();
+        };
+      } catch (_) {}
+    }
+  }
+  // アプリ内トースト (画面下にスライドイン)。
+  if (items.length === 1) {
+    toast('🔔 ' + String(items[0].body).slice(0, 80), 4500);
+  } else {
+    toast(`🔔 新着通知 ${items.length} 件`, 4500);
+  }
+}
+
+// 通知許可をリクエスト (settings から手動呼び出し)。
+export async function requestNotificationPermission() {
+  if (typeof Notification === 'undefined') {
+    toast('このブラウザは通知に対応していません');
+    return 'unsupported';
+  }
+  if (Notification.permission === 'granted') return 'granted';
+  if (Notification.permission === 'denied') {
+    toast('ブラウザ設定で 「ブロック」 になっています。 ブラウザ設定から許可してください', 5000);
+    return 'denied';
+  }
+  const result = await Notification.requestPermission();
+  if (result === 'granted') {
+    toast('🔔 通知を有効にしました');
+    try { new Notification('LabPay', { body: '通知が届くようになりました!', icon: '/img/favicon-32.png' }); } catch (_) {}
+  } else {
+    toast('通知は許可されませんでした');
+  }
+  return result;
 }
 
 // 「今日のアプリ起動ボーナス」 すでに試した日を localStorage に持っておく。
