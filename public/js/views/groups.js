@@ -1395,6 +1395,10 @@ let schedPairSlots = {};
 let schedPairMaxSlot = -1;
 let schedPairFirstIds = new Set();
 let schedPairLastIds  = new Set();
+// 帯の左右位置 はカテゴリ別の slot で決めて 確実に重ならないようにする。
+// hash だけで決めると 「__mdi_31 と __mdi_32」 みたいな 1 文字差 で
+// rightPx がほぼ同じになり 帯が重なって見える。
+let schedPairCatSlots = { transport: {}, staying: {} };
 // modal の 「ペア相手」 dropdown で 同グループの他アイテムを出すために、
 // 最新の取得結果を持っておく。
 let lastSchedItems = [];
@@ -1539,6 +1543,29 @@ async function loadSchedule(gid) {
     .forEach(([pid], idx) => { pairSlots[pid] = idx; });
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
+  // カテゴリ別 slot index (左右の位置決め用)。 ペアの代表 kind で振り分け、
+  // 同カテゴリ内で 連番を振る → 帯が確実に重ならない。
+  const tSlots = {}, sSlots = {};
+  let ti = 0, si = 0;
+  Object.entries(pairOccurrences)
+    .filter(([, arr]) => arr.length >= 2)
+    .map(([pid, arr]) => {
+      const sorted = [...arr].sort((a, b) =>
+        (a.date + (a.it.start_time || '99:99'))
+          .localeCompare(b.date + (b.it.start_time || '99:99')));
+      return [pid, sorted];
+    })
+    .sort(([, a], [, b]) => {
+      const aKey = a[0].date + (a[0].it.start_time || '99:99');
+      const bKey = b[0].date + (b[0].it.start_time || '99:99');
+      return aKey.localeCompare(bKey);
+    })
+    .forEach(([pid, arr]) => {
+      const sampleKind = arr[0].it.kind;
+      if (SCHED_TRANSPORT_KINDS.has(sampleKind)) tSlots[pid] = ti++;
+      else                                       sSlots[pid] = si++;
+    });
+  schedPairCatSlots = { transport: tSlots, staying: sSlots };
   // 「最初 / 最後」 は (id, day) のペアで判定 (multi-day item は同じ id が複数日に
   // 跨るため、 id だけだと帯の端を上下とも 1 日に集中させてしまう)。
   schedPairFirstIds = new Set();
@@ -1663,14 +1690,15 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.50)`;
   // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
-  // 位置: 移動形 (flight/train/...) は 左、 滞在形 (hotel/その他) は 右、
-  // に住み分け。 ぱっと見でも 縦に何本も走る帯が 「移動」 と 「滞在」 を
-  // 視線で分けやすい。 row 幅 360-600px 想定で 帯 (20px 幅) が画面外に
-  // はみ出さないようにレンジを抑える。
-  const r = (Math.abs(h2) % 1000) / 1000;
-  const rightPx = isTransport
-    ? Math.round(140 + r * 140)   // 左側 140..280
-    : Math.round(16  + r * 110);  // 右側  16..126
+  // 位置: 移動形は 左、 滞在形は 右、 に住み分け + カテゴリ内 slot で確実に重ならない
+  // ように 30px ステップで離す。 ステップ数を超えたら 再循環 (= ペア数が多い時のみ衝突)。
+  const catSlots = isTransport ? schedPairCatSlots.transport : schedPairCatSlots.staying;
+  const slot = catSlots[pid] ?? 0;
+  const rangeStart = isTransport ? 140 : 16;
+  const rangeEnd   = isTransport ? 280 : 126;
+  const step = 28;  // 20px 幅の帯同士で 8px 隙間
+  const numPositions = Math.max(1, Math.floor((rangeEnd - rangeStart) / step) + 1);
+  const rightPx = rangeStart + (slot % numPositions) * step;
   return { color, capColor, rightPx };
 }
 
