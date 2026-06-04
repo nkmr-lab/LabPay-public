@@ -266,30 +266,22 @@ async function renderMedalsStrip() {
     const ach = await get('/api/me/achievements');
     const items = ach.items || [];
     if (!items.length) { root.innerHTML = ''; return; }
-    // 達成済みメダルのみ表示。 カテゴリアイコンを大きく出し、 tier メダルを
-    // 右下にバッジ風に乗せて 「どの実績の何 tier か」 を視覚的に区別する。
+    // 達成済みメダルのみ表示。 シンプルに カテゴリアイコン + tier メダル を
+    // 並べるだけ (背景は白、 件数表示なし)。
     const earned = items.filter(a => a.earned);
     if (!earned.length) { root.innerHTML = ''; return; }
-    // 高い tier から並べる (プラチナ → ゴールド → シルバー → ブロンズ)。
     earned.sort((a, b) => b.earned_tier - a.earned_tier);
-    const tierBg = (tier) => ({
-      4: 'linear-gradient(135deg, #b9f2ff, #6ed1ff)', // platinum
-      3: 'linear-gradient(135deg, #ffe082, #ffb300)', // gold
-      2: 'linear-gradient(135deg, #e0e0e0, #b0bec5)', // silver
-      1: 'linear-gradient(135deg, #ffccbc, #d7813a)', // bronze
-    })[tier] || '#ddd';
     const medals = earned.map(a => {
       const icon = a.icon || '🏅';
       const tierMedal = a.earned.medal;
-      const bg = tierBg(a.earned_tier);
       return `
         <span title="${escapeHtml(a.title)}: ${escapeHtml(a.earned.label)}"
-              style="position:relative; display:inline-block; width:32px; height:32px; line-height:32px; text-align:center; border-radius:50%; background:${bg}; font-size:18px; box-shadow:0 1px 2px rgba(0,0,0,0.15)">
+              style="position:relative; display:inline-block; width:32px; height:32px; line-height:32px; text-align:center; border-radius:50%; background:#fff; font-size:18px; border:1px solid var(--line)">
           ${icon}
           <span style="position:absolute; right:-4px; bottom:-4px; font-size:11px; background:#fff; border-radius:50%; padding:1px; line-height:1; box-shadow:0 1px 2px rgba(0,0,0,0.2)">${tierMedal}</span>
         </span>`;
     }).join(' ');
-    root.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px 6px; align-items:center">${medals}<span class="muted" style="font-size:11px; margin-left:4px">${earned.length} 達成</span></div>`;
+    root.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px 6px; align-items:center">${medals}</div>`;
   } catch (e) { root.innerHTML = ''; }
 }
 

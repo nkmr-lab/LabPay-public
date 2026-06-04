@@ -349,7 +349,6 @@ export async function renderGroupDetail({ params }) {
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">ワリカ</h3>
         <div class="row" style="gap:6px">
-          <button id="gd-wari-open-form" class="primary">＋ 支出を記録</button>
           <button id="gd-settle" class="primary">精算する</button>
         </div>
       </div>
@@ -399,7 +398,7 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
-  document.getElementById('gd-wari-open-form')?.addEventListener('click', () => openWariFormModal(id));
+  document.getElementById('gd-snap-expense')?.addEventListener('click', () => openWariFormModal(id));
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
   document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
@@ -496,7 +495,8 @@ async function loadDetail(id) {
           </span>`).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <button class="btn primary" id="gd-snap-receipt">レシート</button>
+        <button class="btn primary" id="gd-snap-receipt">📷 レシート</button>
+        <button class="btn primary" id="gd-snap-expense">＋ 支出を記録</button>
         <a class="btn" href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">ルーレット</a>
         <a class="btn" href="#/nomikai?members=${memberIds}">割り勘</a>
         <a class="btn" href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">投票・アンケート</a>
