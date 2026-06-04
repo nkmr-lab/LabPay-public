@@ -676,7 +676,7 @@ async function loadDetail(id) {
     });
     document.getElementById('gd-head').innerHTML = `
       ${imgBlock}
-      <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">close</span>' : ''}</div>
+      <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml((g.created_at || '').slice(0, 16))}</div>
       ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}

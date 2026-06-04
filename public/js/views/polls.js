@@ -8,6 +8,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { tag, fmtDateTime } from '../format.js';
 
 const VIS_LABEL = {
   creator: '主催者のみ集計可視',
@@ -63,10 +64,10 @@ export async function renderPolls() {
       const closed = p.status === 'closed';
       const youCreated = Number(p.creator_user_id) === Number(state.me?.id);
       const tags = [];
-      if (closed) tags.push('<span class="tag" style="background:#eee">締切済</span>');
+      if (closed) tags.push(tag('muted', '締切済'));
       else        tags.push('<span class="tag" style="background:#e3f2fd; color:#1565c0">受付中</span>');
       if (p.is_voter && !p.has_voted && !closed) tags.push('<span class="tag" style="background:#fff3e0; color:#e65100">未投票</span>');
-      if (p.is_voter && p.has_voted) tags.push('<span class="tag" style="background:#e8f5e9; color:#2e7d32">投票済</span>');
+      if (p.is_voter && p.has_voted) tags.push(tag('ok', '投票済'));
       if (youCreated) tags.push('<span class="tag">主催</span>');
       return `
         <a class="list-item" href="#/polls/${p.id}">

@@ -8,10 +8,9 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
+import { fmtDateTime, tag } from '../format.js';
 
-function fmtJP(s) {
-  return s ? String(s).replace(' ', ' ').slice(0, 16) : '';
-}
+// fmtDateTime を 共有ヘルパに移行 (削除: ローカル fmtJP)。
 function remainingText(closes_at, settled, cancelled) {
   if (cancelled) return '取消';
   if (settled)   return '終了';
@@ -55,14 +54,14 @@ export async function renderAuctions() {
       const wonBy = a.winner_user_id ? `落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)` : '';
       const wonByMe = Number(a.winner_user_id) === meId;
       const tag = cancelled
-        ? '<span class="tag" style="background:#eee">取消</span>'
+        ? tag('muted', '取消')
         : settled
           ? (a.winner_user_id
               ? (wonByMe
-                ? '<span class="tag ok">🎉 落札済</span>'
-                : '<span class="tag" style="background:#eee">終了</span>')
-              : '<span class="tag" style="background:#eee">入札0で終了</span>')
-          : `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(remainingText(a.closes_at, false, false))}</span>`;
+                ? tag('ok', '🎉 落札済')
+                : tag('muted', '終了'))
+              : tag('muted', '入札0で終了'))
+          : tag('ok', escapeHtml(remainingText(a.closes_at, false, false)));
       const topLine = active
         ? (a.top_bid ? `現在 ${a.top_bid}円 (${a.bid_count}件)` : `入札なし (最低 ${a.min_price}円)`)
         : (settled && a.winning_bid ? `${wonBy}` : '');
@@ -75,7 +74,7 @@ export async function renderAuctions() {
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.title)}</div>
             <div class="meta">${tag} · ${escapeHtml(topLine)}${myBidLine}${isMine ? ' <span class="muted">(自分の出品)</span>' : ''}</div>
-            <div class="meta">出品 ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtJP(a.closes_at))}</div>
+            <div class="meta">出品 ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtDateTime(a.closes_at))}</div>
           </div>
         </a>`;
     }).join('');
@@ -189,12 +188,12 @@ export async function renderAuctionDetail({ params }) {
     const meId = Number(state.me?.id);
     const isMine = Number(a.seller_user_id) === meId;
     const tag = a.cancelled_at
-      ? '<span class="tag" style="background:#eee">取消</span>'
+      ? tag('muted', '取消')
       : a.settled_at
         ? (a.winner_user_id
-            ? `<span class="tag ok">🎉 落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)</span>`
-            : '<span class="tag" style="background:#eee">入札 0 で終了</span>')
-        : `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(remainingText(a.closes_at, false, false))}</span>`;
+            ? tag('ok', `🎉 落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)`)
+            : tag('muted', '入札 0 で終了'))
+        : tag('ok', escapeHtml(remainingText(a.closes_at, false, false)));
     const img = a.image_url
       ? `<img src="${escapeHtml(a.image_url)}" alt="" style="display:block; max-width:100%; max-height:240px; border-radius:8px; object-fit:contain; margin:0 auto 8px">` : '';
     // 連絡先 (出品者 ↔ 落札者 のみ)
@@ -217,7 +216,7 @@ export async function renderAuctionDetail({ params }) {
       <h2 style="margin:6px 0 0">${escapeHtml(a.title)} ${tag}</h2>
       <div class="meta" style="display:flex; gap:6px; align-items:center; margin-top:6px">
         ${avatarHtml(a.seller_name, a.seller_avatar_url, 'sm')}
-        ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtJP(a.closes_at))}
+        ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtDateTime(a.closes_at))}
       </div>
       ${a.description ? `<div style="white-space:pre-wrap; margin-top:8px">${escapeHtml(a.description)}</div>` : ''}
       <div class="row" style="margin-top:10px; gap:14px">
@@ -256,8 +255,8 @@ export async function renderAuctionDetail({ params }) {
             <div class="grow" style="display:flex; gap:8px; align-items:center">
               ${avatarHtml(b.bidder_name, b.bidder_avatar_url, 'sm')}
               <div>
-                <div class="bold">${escapeHtml(b.bidder_name)}${i === 0 && active ? ' <span class="tag" style="background:#e8f5e9; color:#2e7d32">最高</span>' : ''}</div>
-                <div class="meta">${escapeHtml(fmtJP(b.created_at))}</div>
+                <div class="bold">${escapeHtml(b.bidder_name)}${i === 0 && active ? ' ' + tag('ok', '最高') : ''}</div>
+                <div class="meta">${escapeHtml(fmtDateTime(b.created_at))}</div>
               </div>
             </div>
             <div class="bold text-primary">${b.amount}円</div>

@@ -8,6 +8,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
+import { tag } from '../format.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -66,8 +67,8 @@ export async function renderTimers() {
       const tag = t.status === 'running'
         ? `<span class="tag" style="background:#e3f2fd; color:#1565c0">${fmtDuration(remaining)} 残</span>`
         : t.status === 'done'
-        ? `<span class="tag" style="background:#e8f5e9; color:#2e7d32">完了</span>`
-        : `<span class="tag" style="background:#eee">中止</span>`;
+        ? tag('ok', '完了')
+        : tag('muted', '中止');
       return `
         <a class="list-item" href="#/timers/${t.id}">
           <div class="grow" style="min-width:0">

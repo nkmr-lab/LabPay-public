@@ -5,6 +5,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
+import { tag, fmtDateTime } from '../format.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -66,18 +67,18 @@ export async function renderMeetups() {
     }
     document.getElementById('mu-list').innerHTML = items.map(m => {
       const active = !m.cancelled_at && new Date(String(m.meetup_at).replace(' ', 'T')) > new Date();
-      const tag = m.cancelled_at
-        ? '<span class="tag" style="background:#eee">取消</span>'
+      const statusTag = m.cancelled_at
+        ? tag('muted', '取消')
         : active
-          ? `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(fmtRemaining(m.meetup_at))}</span>`
-          : '<span class="tag" style="background:#eee">終了</span>';
+          ? tag('ok', escapeHtml(fmtRemaining(m.meetup_at)))
+          : tag('muted', '終了');
       const isMine = Number(m.creator_user_id) === Number(state.me?.id);
       const locPart = m.location ? ` @ ${escapeHtml(m.location)}` : '';
       return `
         <a class="list-item" href="#/meetups/${m.id}">
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(m.title || '待ち合わせ')}</div>
-            <div class="meta">${tag} · ${escapeHtml(fmtClock(m.meetup_at))}${locPart} · 起案 ${escapeHtml(m.creator_name)}${isMine ? ' (自分)' : ''}</div>
+            <div class="meta">${statusTag} · ${escapeHtml(fmtClock(m.meetup_at))}${locPart} · 起案 ${escapeHtml(m.creator_name)}${isMine ? ' (自分)' : ''}</div>
           </div>
         </a>`;
     }).join('');
@@ -262,7 +263,7 @@ export async function renderMeetupDetail({ params }) {
     const m = d.meetup;
     document.getElementById('mud-head').innerHTML = `
       <h2 style="margin:6px 0 0">${escapeHtml(m.title || '待ち合わせ')}</h2>
-      <div class="meta">起案 ${escapeHtml(m.creator_name)}${m.cancelled_at ? ' · <span class="tag" style="background:#eee">取消済</span>' : ''}</div>
+      <div class="meta">起案 ${escapeHtml(m.creator_name)}${m.cancelled_at ? ' · ' + tag('muted', '取消済') : ''}</div>
     `;
     const cardClock = document.getElementById('mud-clock-card');
     cardClock.hidden = false;

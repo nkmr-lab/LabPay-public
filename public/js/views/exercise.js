@@ -7,6 +7,7 @@
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { fmtDateTime } from '../format.js';
 
 let motionListener = null;
 let sessionStart = null;
@@ -178,7 +179,7 @@ async function reload() {
           <div class="list-item">
             <div class="grow">
               <div class="bold">${Number(s.step_count).toLocaleString()} 歩</div>
-              <div class="meta">${escapeHtml(String(s.started_at).slice(0,16))} · ${Math.round(s.duration_seconds/60*10)/10}分</div>
+              <div class="meta">${escapeHtml(fmtDateTime(s.started_at))} · ${Math.round(s.duration_seconds/60*10)/10}分</div>
             </div>
             <button class="btn" data-rm="${s.id}" style="font-size:11px">削除</button>
           </div>`).join('')

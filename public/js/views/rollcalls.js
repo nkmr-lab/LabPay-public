@@ -4,6 +4,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { tag, fmtDateTime } from '../format.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -55,9 +56,9 @@ export async function renderRollCalls() {
       const tags = [];
       tags.push(open
         ? `<span class="tag" style="background:#e3f2fd; color:#1565c0">受付中</span>`
-        : `<span class="tag" style="background:#eee">締切済</span>`);
+        : tag('muted', '締切済'));
       if (r.is_target && !r.has_responded && open) tags.push('<span class="tag" style="background:#fff3e0; color:#e65100">未応答</span>');
-      if (r.is_target && r.has_responded) tags.push('<span class="tag" style="background:#e8f5e9; color:#2e7d32">応答済</span>');
+      if (r.is_target && r.has_responded) tags.push(tag('ok', '応答済'));
       if (Number(r.creator_user_id) === Number(state.me?.id)) tags.push('<span class="tag">起案</span>');
       return `
         <a class="list-item" href="#/rollcalls/${r.id}">

@@ -6,6 +6,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { previewSoundUrl } from '../sounds.js';
+import { fmtDateTime } from '../format.js';
 
 async function fetchClips() { return (await get('/api/sounds/clips')).items || []; }
 async function fetchDefaults() { return (await get('/api/sounds/defaults')).items || []; }
@@ -64,7 +65,7 @@ export async function renderAdminSounds() {
       <div class="list-item" style="align-items:center">
         <div class="grow" style="min-width:0">
           <div class="bold">${escapeHtml(c.label)}</div>
-          <div class="meta">${escapeHtml(c.mime)} · ${Math.round((c.file_size||0)/1024)} KB · ${escapeHtml((c.created_at||'').slice(0,16))}</div>
+          <div class="meta">${escapeHtml(c.mime)} · ${Math.round((c.file_size||0)/1024)} KB · ${escapeHtml(fmtDateTime(c.created_at))}</div>
         </div>
         <button class="btn" data-preview="${escapeHtml(c.file_url)}">▶ 試聴</button>
         <button class="danger" data-rm="${c.id}" style="margin-left:6px">削除</button>

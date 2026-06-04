@@ -5,6 +5,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { renderCoverEditor, wireCoverEditor } from './groups.js';
+import { fmtDate, fmtDateTime, tag } from '../format.js';
 
 export async function renderInvitations() {
   const app = document.getElementById('app');
@@ -207,7 +208,7 @@ function renderRow(i) {
       const lbl = min < 60 ? `${min}分` : `${Math.floor(min/60)}時間${min%60}分`;
       deadlineHint = `<div class="meta"><span class="tag warn">⏰ 締切まで ${escapeHtml(lbl)}</span></div>`;
     } else if (diff <= 0) {
-      deadlineHint = `<div class="meta"><span class="tag" style="background:#fdecea; color:#c62828">⏰ 募集締切超過</span></div>`;
+      deadlineHint = `<div class="meta">${tag('danger', '⏰ 募集締切超過')}</div>`;
     }
   }
   // 参加者数 / 募集人数。 終了時は人数 をピープル行右端に出すので、 ここでは
@@ -318,12 +319,13 @@ async function loadDetail(id) {
       const t = new Date(String(i.signup_closes_at).replace(' ', 'T'));
       const diff = t - new Date();
       let remStr = '';
-      if (diff <= 0) { remStr = ' <span class="tag" style="background:#fdecea; color:#c62828">締切超過</span>'; }
+      if (diff <= 0) { remStr = ' ' + tag('danger', '締切超過'); }
       else {
         const min = Math.floor(diff / 60000);
-        if (min < 60) remStr = ` <span class="tag ok">あと ${min}分</span>`;
-        else if (min < 60 * 24) remStr = ` <span class="tag ok">あと ${Math.floor(min/60)}時間${min%60}分</span>`;
-        else remStr = ` <span class="tag ok">あと ${Math.floor(min/(60*24))}日</span>`;
+        const lbl = min < 60 ? `あと ${min}分`
+                  : min < 60 * 24 ? `あと ${Math.floor(min/60)}時間${min%60}分`
+                  : `あと ${Math.floor(min/(60*24))}日`;
+        remStr = ' ' + tag('ok', lbl);
       }
       deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(noSec(i.signup_closes_at))}${remStr}</div>`;
     }

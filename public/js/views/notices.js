@@ -4,6 +4,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { fmtDateTime } from '../format.js';
 
 const CATEGORIES = [
   { key: 'important',  label: '📢 重要連絡', icon: '📢' },
@@ -68,7 +69,7 @@ function renderNoticeRow(n) {
       <div class="bold" style="font-size:15px">${pinBadge} ${escapeHtml(n.title)}</div>
       ${bodyPart}
       ${urlPart}
-      <div class="meta">${escapeHtml(n.posted_by_name)} · ${escapeHtml(n.created_at.slice(0, 16))}${n.updated_at ? ` (更新 ${escapeHtml(n.updated_at.slice(0,16))})` : ''}</div>
+      <div class="meta">${escapeHtml(n.posted_by_name)} · ${escapeHtml(fmtDateTime(n.created_at))}${n.updated_at ? ` (更新 ${escapeHtml(fmtDateTime(n.updated_at))})` : ''}</div>
       ${actions}
     </div>`;
 }
