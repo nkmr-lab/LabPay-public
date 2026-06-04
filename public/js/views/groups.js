@@ -1647,10 +1647,14 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.50)`;
   // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
-  // 位置: 左 1/4 〜 右端のレンジに カテゴリ無関係で散らす。 色で区別するので
-  // L/R 棲み分けは不要。 row 幅 360-600px 想定で right 16..280px をフルに使う。
+  // 位置: 移動形 (flight/train/...) は 左、 滞在形 (hotel/その他) は 右、
+  // に住み分け。 ぱっと見でも 縦に何本も走る帯が 「移動」 と 「滞在」 を
+  // 視線で分けやすい。 row 幅 360-600px 想定で 帯 (20px 幅) が画面外に
+  // はみ出さないようにレンジを抑える。
   const r = (Math.abs(h2) % 1000) / 1000;
-  const rightPx = Math.round(16 + r * 264);   // 16..280 px
+  const rightPx = isTransport
+    ? Math.round(140 + r * 140)   // 左側 140..280
+    : Math.round(16  + r * 110);  // 右側  16..126
   return { color, capColor, rightPx };
 }
 
