@@ -1512,18 +1512,33 @@ async function loadSchedule(gid) {
   const card = document.getElementById('gd-sched-card');
   const body = document.getElementById('gd-sched-body');
   if (!card || !body) return;
-  // 編集モード ボタンの label を現在状態に同期。
-  const emBtn = document.getElementById('gd-sched-editmode');
-  if (emBtn) {
-    emBtn.textContent = schedEditMode ? '完了' : '編集モード';
-    emBtn.classList.toggle('primary', schedEditMode);
-  }
   let d;
   try { d = await get(`/api/groups/${gid}/schedule`); }
   catch (e) { card.hidden = false; body.textContent = '取得失敗: ' + e.message; return; }
   card.hidden = false;
-  if (!d.start_date || !d.end_date) {
-    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「日程設定」 から 開始日〜終了日 を入れると 各日のカードが並びます。</div>`;
+  // 日程が無いとき: 「スケジュール編集モード」 は隠して、 「📅 日程設定」 だけ primary 色で出す。
+  // 日程あり: 「スケジュール編集モード」 を primary で復活、 「日程設定」 は 「全体日程の修正」 に。
+  const emBtn = document.getElementById('gd-sched-editmode');
+  const rgBtn = document.getElementById('gd-sched-range');
+  const hasDates = d.start_date && d.end_date;
+  if (rgBtn) {
+    if (hasDates) {
+      rgBtn.textContent = '全体日程の修正';
+      rgBtn.classList.remove('primary');
+    } else {
+      rgBtn.textContent = '📅 日程設定';
+      rgBtn.classList.add('primary');
+    }
+  }
+  if (emBtn) {
+    emBtn.hidden = !hasDates;
+    if (hasDates) {
+      emBtn.textContent = schedEditMode ? '完了' : '✏️ スケジュール編集モード';
+      emBtn.classList.add('primary');
+    }
+  }
+  if (!hasDates) {
+    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「📅 日程設定」 から 開始日〜終了日 を入れると 各日のカードが並びます。</div>`;
     return;
   }
   // 日付範囲を 1 日ずつ展開。 toISOString は UTC に変換してしまい JST 環境で
