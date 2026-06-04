@@ -482,14 +482,14 @@ export async function renderRouletteResult({ params }) {
       <div id="rl-detail" class="muted" style="margin-top:8px">読み込み中…</div>
     </div>
     <div class="card" style="text-align:center" id="rl-detail-wheel-card" hidden>
-      <svg id="rl-detail-wheel" viewBox="-150 -150 300 300" width="280" height="280" style="display:block; margin:0 auto"></svg>
-      <div id="rl-detail-pointer" style="position:relative; margin-top:-280px; height:0">
-        <div style="position:relative; top:-12px; text-align:center; font-size:22px">▼</div>
+      <div style="position:relative; width:280px; height:280px; margin:0 auto">
+        <div style="position:absolute; top:-4px; left:50%; transform:translateX(-50%); font-size:24px; z-index:2; pointer-events:none">▼</div>
+        <svg id="rl-detail-wheel" viewBox="-150 -150 300 300" width="280" height="280" style="display:block"></svg>
       </div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 6px">候補メンバー</h3>
-      <div id="rl-detail-members" class="muted">—</div>
+      <div id="rl-detail-members" class="muted" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center">—</div>
     </div>
   `;
   try {
@@ -515,10 +515,10 @@ export async function renderRouletteResult({ params }) {
     wcard.hidden = false;
     drawStaticWheel(r);
     document.getElementById('rl-detail-members').innerHTML = r.members.map(m =>
-      `<span class="presence-pill" style="${Number(m.id) === Number(r.winner_user_id) ? 'background:var(--primary-soft); border:1px solid var(--primary)' : ''}">
+      `<span class="presence-pill" style="${Number(m.id) === Number(r.winner_user_id) ? 'background:var(--primary-soft); border:1px solid var(--primary); font-weight:700' : ''}">
         ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
         <span class="presence-pill-name">${escapeHtml(m.display_name)}</span>
-      </span>`).join(' ');
+      </span>`).join('');
   } catch (e) {
     document.getElementById('rl-detail').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
