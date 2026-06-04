@@ -15,12 +15,56 @@ function route_roulettes(PDO $pdo, array $cfg, string $method, array $seg): void
         roulettes_detail($pdo, $cfg, (int)$sub);
         return;
     }
+    if ((int)$sub > 0 && ($seg[2] ?? '') === 'notify' && $method === 'POST') {
+        roulettes_notify($pdo, $cfg, (int)$sub);
+        return;
+    }
     json_error('not_found', "no roulettes route for $method $sub", 404);
 }
 
 // GET /api/roulettes/tags — admin が config テーブルにカンマ区切りで持つ
 // 共通タグの list を返す。 ユーザはこれを localStorage の個人タグとマージして
 // 表示する (ハイブリッド方式)。
+// POST /api/roulettes/{id}/notify — client が ホイール停止後に呼ぶ。
+// 起案者 (= creator) のみ送信可。 多重防止のため notified_at が既にあれば no-op。
+function roulettes_notify(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT title, creator_user_id, winner_user_id, member_ids, reward, notified_at FROM roulettes WHERE id=?");
+    $st->execute([$id]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'roulette not found', 404);
+    if ((int)$r['creator_user_id'] !== (int)$u['id']) {
+        throw new ApiException('forbidden', '起案者のみ通知可', 403);
+    }
+    if ($r['notified_at'] !== null) {
+        json_response(['ok' => true, 'already' => true]);
+        return;
+    }
+    $ids = json_decode((string)$r['member_ids'], true) ?: [];
+    $winnerId = (int)$r['winner_user_id'];
+    $reward = (int)$r['reward'];
+    $title  = (string)$r['title'];
+    // 当選者名を引く
+    $idsIn = implode(',', array_fill(0, count($ids), '?'));
+    $idToName = [];
+    if ($ids) {
+        $stU = $pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($idsIn)");
+        $stU->execute($ids);
+        foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $u2) $idToName[(int)$u2['id']] = $u2['display_name'];
+    }
+    $winnerName = $idToName[$winnerId] ?? 'someone';
+    $rewardWinnerSuffix = $reward > 0 && $winnerId !== (int)$r['creator_user_id'] ? " (+{$reward}pt)" : '';
+    $rewardOthersSuffix = $reward > 0 ? " (賞金 {$reward}pt)" : '';
+    foreach ($ids as $uid) {
+        $body = ((int)$uid === $winnerId)
+            ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
+            : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
+        notify_safely($pdo, $cfg, (int)$uid, 'admin_notice', $body, 'roulette', $id);
+    }
+    $pdo->prepare("UPDATE roulettes SET notified_at=NOW() WHERE id=?")->execute([$id]);
+    json_response(['ok' => true, 'notified' => count($ids)]);
+}
+
 function roulettes_tags(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $raw = (string)($pdo->query("SELECT v FROM config WHERE k='roulette_tags'")->fetchColumn() ?: '');
@@ -197,19 +241,9 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
         return [$rouletteId, $ledgerId];
     });
 
-    // Notify every participant. Winner gets the punchy 'YOU' phrasing with
-    // the pt note; everyone else hears who won and how much.
+    // 通知は ホイール停止後 (= client が POST /announce する) に遅延。 ここでは送らない。
+    // (アニメーション中に通知が飛んで 「答えバレ」 を起こさないため。)
     $winnerName = $idToName[$winnerId] ?? 'someone';
-    $rewardWinnerSuffix = $reward > 0 && $winnerId !== (int)$u['id']
-        ? " (+{$reward}pt)" : '';
-    $rewardOthersSuffix = $reward > 0 ? " (賞金 {$reward}pt)" : '';
-    foreach ($ids as $uid) {
-        $body = ($uid === $winnerId)
-            ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
-            : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
-        notify_safely($pdo, $cfg, $uid, 'admin_notice', $body, 'roulette', $rouletteId);
-    }
-
     json_response([
         'ok' => true,
         'dry_run' => false,

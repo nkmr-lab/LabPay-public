@@ -488,12 +488,13 @@ async function renderCalendarEvents() {
     }
   } catch (e) {
     // 未連携 / fetch 失敗 / offline などはここに来る。
-    // cache が残ってればそれを使う、無ければカード非表示。
+    // cache が残ってればそれを使う、 無ければプレースホルダ表示で カードは出す。
     const cache = readCalCache();
     if (cache && cache.items && cache.items.length) {
       items = cache.items;
     } else {
-      card.hidden = true;
+      card.hidden = false;
+      root.innerHTML = `<div class="empty">予定を取得できませんでした。 <a href="#/settings" class="hint">設定 → Google Calendar 連携</a> を確認してください。</div>`;
       return;
     }
   }

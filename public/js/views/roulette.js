@@ -456,7 +456,11 @@ async function onSpin() {
       document.getElementById('rl-result').innerHTML = html;
       document.getElementById('rl-spin').disabled = false;
       spinning = false;
-      if (!r.dry_run) loadHistory();
+      if (!r.dry_run) {
+        loadHistory();
+        // 「答えバレ」 防止のため 通知は ここで初めて送る (停止後)。 dry_run では送らない。
+        post(`/api/roulettes/${r.id}/notify`, {}).catch(() => {});
+      }
     }, 14100);
   } catch (e) {
     toast('失敗: ' + e.message);
@@ -506,9 +510,10 @@ export async function renderRouletteResult({ params }) {
         ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag">あなた</span>' : ''}
       </div>
       <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
-    // Draw the wheel stopped at the winner's slice (no animation, just position).
-    drawStaticWheel(r);
+    // 描画前に wcard を 表示 にしておく (drawStaticWheel が万一 throw しても
+    // ホイールカードが 「たたまれて見えない」 状態にならないように)。
     wcard.hidden = false;
+    drawStaticWheel(r);
     document.getElementById('rl-detail-members').innerHTML = r.members.map(m =>
       `<span class="presence-pill" style="${Number(m.id) === Number(r.winner_user_id) ? 'background:var(--primary-soft); border:1px solid var(--primary)' : ''}">
         ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
