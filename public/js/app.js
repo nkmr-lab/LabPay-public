@@ -285,10 +285,27 @@ export function applyTabLayout() {
   const layout = readTabLayout();
   const links = Array.from(nav.querySelectorAll(':scope > [data-tab-id]'));
   const knownIds = links.map(l => l.dataset.tabId);
-  const orderedKnown = [
-    ...layout.order.filter(id => knownIds.includes(id)),
-    ...knownIds.filter(id => !layout.order.includes(id)),
-  ];
+  // TAB_DEFS の正規順 (今 DOM に居る ID のみ抽出)
+  const canonical = TAB_DEFS.map(t => t.id).filter(id => knownIds.includes(id));
+  const orderedKnown = [];
+  // 1) ユーザの保存 order を軸に並べる (= 過去のカスタマイズを尊重)。
+  for (const id of layout.order) {
+    if (knownIds.includes(id)) orderedKnown.push(id);
+  }
+  // 2) 保存 order に無い新規 ID を、 canonical で 「直前にあるはず」 の既知タブの
+  //    直後に差し込む。 末尾に放り込まないことで、 新タブの想定位置を維持。
+  const savedSet = new Set(orderedKnown);
+  for (const id of canonical) {
+    if (savedSet.has(id)) continue;
+    const idx = canonical.indexOf(id);
+    let insertAfter = -1;
+    for (let j = idx - 1; j >= 0; j--) {
+      const pos = orderedKnown.indexOf(canonical[j]);
+      if (pos >= 0) { insertAfter = pos; break; }
+    }
+    orderedKnown.splice(insertAfter + 1, 0, id);
+    savedSet.add(id);
+  }
   for (const id of orderedKnown) {
     const el = links.find(l => l.dataset.tabId === id);
     if (el) nav.appendChild(el);
