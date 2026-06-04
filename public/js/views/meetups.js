@@ -1,0 +1,281 @@
+// /#/meetups — 次の待ち合わせ。 集合時刻 + 場所 + メンバー を 全員に同期する軽量機能。
+// タイマー的に 「あと N 分で」 の表示はするが、 個別応答は無し (シンプル)。
+
+import { get, post, patch, del } from '../api.js';
+import { escapeHtml, avatarHtml, navigate } from '../router.js';
+import { state, toast } from '../app.js';
+
+const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
+const gradeRank = g => {
+  const i = GRADE_ORDER.indexOf(g || '');
+  return i < 0 ? GRADE_ORDER.length : i;
+};
+
+function fmtRemaining(s) {
+  if (!s) return '';
+  const dt = new Date(String(s).replace(' ', 'T'));
+  const diff = dt - new Date();
+  if (diff <= 0) return '集合済';
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'まもなく';
+  if (min < 60) return `あと ${min} 分`;
+  const h = Math.floor(min / 60);
+  return `あと ${h}時間${min % 60}分`;
+}
+function fmtClock(s) {
+  if (!s) return '';
+  return String(s).slice(11, 16);
+}
+
+export async function renderMeetups() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card page-header">
+      <div class="row center">
+        <h2 style="margin:0">🤝 待ち合わせ</h2>
+        <a class="btn primary" href="#/meetups/new">＋ 新規</a>
+      </div>
+      <p class="card-subtitle" style="margin:6px 0 0">
+        集合時刻 + 場所 + メンバー を 一発で全員に通知。
+      </p>
+    </div>
+    <div id="mu-list" class="list"><div class="muted">読み込み中…</div></div>
+  `;
+  try {
+    const d = await get('/api/meetups');
+    const items = d.items || [];
+    if (!items.length) {
+      document.getElementById('mu-list').innerHTML = '<div class="empty">待ち合わせはまだありません</div>';
+      return;
+    }
+    document.getElementById('mu-list').innerHTML = items.map(m => {
+      const active = !m.cancelled_at && new Date(String(m.meetup_at).replace(' ', 'T')) > new Date();
+      const tag = m.cancelled_at
+        ? '<span class="tag" style="background:#eee">取消</span>'
+        : active
+          ? `<span class="tag" style="background:#e8f5e9; color:#2e7d32">${escapeHtml(fmtRemaining(m.meetup_at))}</span>`
+          : '<span class="tag" style="background:#eee">終了</span>';
+      const isMine = Number(m.creator_user_id) === Number(state.me?.id);
+      const locPart = m.location ? ` @ ${escapeHtml(m.location)}` : '';
+      return `
+        <a class="list-item" href="#/meetups/${m.id}">
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(m.title || '待ち合わせ')}</div>
+            <div class="meta">${tag} · ${escapeHtml(fmtClock(m.meetup_at))}${locPart} · 起案 ${escapeHtml(m.creator_name)}${isMine ? ' (自分)' : ''}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('mu-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+export async function renderMeetupNew({ query } = {}) {
+  const presetMembers = String(query?.members || '').trim()
+    .split(',').map(Number).filter(Boolean);
+  const lockMembers = presetMembers.length > 0;
+  const presetTitle = String(query?.title || '').trim();
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/meetups" class="hint">← 一覧</a>
+      <h2 style="margin:6px 0 0">🤝 待ち合わせを作る</h2>
+    </div>
+    <div class="card">
+      <label class="field"><span class="lbl">タイトル (任意)</span>
+        <input type="text" id="mun-title" maxlength="200" placeholder="例: ランチ集合" value="${escapeHtml(presetTitle)}">
+      </label>
+      <label class="field"><span class="lbl">場所 (任意)</span>
+        <input type="text" id="mun-loc" maxlength="500" placeholder="例: 14F ロビー / 駅前">
+      </label>
+      <span class="lbl">集合時刻</span>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 6px">
+        <button class="btn" data-mu-preset="30">30 分後</button>
+        <button class="btn" data-mu-preset="60">1 時間後</button>
+        <button class="btn" data-mu-preset="120">2 時間後</button>
+        <button class="btn" data-mu-preset="180">3 時間後</button>
+      </div>
+      <div class="row" style="gap:6px; align-items:center">
+        <input type="datetime-local" id="mun-when" style="flex:1; min-width:180px">
+        <span class="hint-sm" id="mun-rem"></span>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
+        ${lockMembers ? '' : `<div id="mun-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>`}
+        <div id="mun-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
+      <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+        <a href="#/meetups" class="btn">キャンセル</a>
+        <button id="mun-save" class="primary">🤝 集合連絡</button>
+      </div>
+    </div>
+  `;
+  // プリセット時刻ボタン: 現在時刻 + N 分 に datetime-local を埋める。
+  const whenEl = document.getElementById('mun-when');
+  const remEl = document.getElementById('mun-rem');
+  const setPreset = (mins) => {
+    const dt = new Date(Date.now() + mins * 60_000);
+    const pad = n => String(n).padStart(2, '0');
+    whenEl.value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    syncRem();
+  };
+  const syncRem = () => {
+    if (!whenEl.value) { remEl.textContent = ''; return; }
+    const diff = new Date(whenEl.value) - new Date();
+    if (diff <= 0) remEl.textContent = '(過去です)';
+    else if (diff < 60_000) remEl.textContent = '(まもなく)';
+    else if (diff < 3600_000) remEl.textContent = `(あと ${Math.floor(diff/60000)} 分)`;
+    else remEl.textContent = `(あと ${Math.floor(diff/3600000)} 時間${Math.floor((diff%3600000)/60000)} 分)`;
+  };
+  document.querySelectorAll('[data-mu-preset]').forEach(b => {
+    b.addEventListener('click', () => setPreset(Number(b.dataset.muPreset)));
+  });
+  whenEl.addEventListener('input', syncRem);
+  setPreset(30); // デフォは 30 分後
+
+  let allUsers = [];
+  const selected = new Set();
+  presetMembers.forEach(uid => selected.add(uid));
+  try {
+    const u = await get('/api/users');
+    let pool = u.items || [];
+    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
+    allUsers = [...pool].sort((a, b) => {
+      const d = gradeRank(a.grade) - gradeRank(b.grade);
+      if (d !== 0) return d;
+      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+    });
+    if (!lockMembers) {
+      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
+      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
+      const bulkEl = document.getElementById('mun-bulk');
+      bulkEl.innerHTML = `
+        <button class="btn" data-bulk="all">全員</button>
+        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
+      `;
+      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
+        b.addEventListener('click', () => {
+          const target = b.dataset.bulk === 'grade'
+            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
+            : allUsers;
+          const allOn = target.every(x => selected.has(x.id));
+          if (allOn) target.forEach(x => selected.delete(x.id));
+          else       target.forEach(x => selected.add(x.id));
+          document.querySelectorAll('#mun-members input[data-uid]').forEach(cb => {
+            cb.checked = selected.has(Number(cb.dataset.uid));
+          });
+        });
+      });
+    }
+    document.getElementById('mun-members').innerHTML = allUsers.map(x => `
+      <label class="rl-chip">
+        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
+        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
+        <span>${escapeHtml(x.display_name)}</span>
+        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
+      </label>`).join('');
+    document.querySelectorAll('#mun-members input[data-uid]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const uid = Number(cb.dataset.uid);
+        if (cb.checked) selected.add(uid); else selected.delete(uid);
+      });
+    });
+  } catch (e) {
+    document.getElementById('mun-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+
+  document.getElementById('mun-save').addEventListener('click', async () => {
+    const title = document.getElementById('mun-title').value.trim();
+    const location = document.getElementById('mun-loc').value.trim();
+    const when = whenEl.value;
+    if (!when) { toast('集合時刻を入れてください'); return; }
+    if (!selected.size) { toast('参加者を 1 人以上'); return; }
+    try {
+      const r = await post('/api/meetups', {
+        title, location, meetup_at: when, member_ids: [...selected],
+      });
+      toast('待ち合わせを連絡しました');
+      navigate('#/meetups/' + r.id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
+let muCountdownTimer = null;
+export async function renderMeetupDetail({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/meetups" class="hint">← 一覧</a>
+      <div id="mud-head"><div class="muted">読み込み中…</div></div>
+    </div>
+    <div class="card" style="text-align:center" id="mud-clock-card" hidden>
+      <div id="mud-when" style="font-size:48px; font-weight:700; font-variant-numeric:tabular-nums">--:--</div>
+      <div id="mud-rem" class="muted" style="font-size:13px; margin-top:4px">--</div>
+      <div id="mud-loc" style="margin-top:8px; font-size:14px"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px">参加者 (<span id="mud-pn">0</span>)</h3>
+      <div id="mud-parts" class="row" style="gap:6px; flex-wrap:wrap"></div>
+    </div>
+    <div class="card" id="mud-admin" hidden>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="mud-cancel" class="btn">❌ 取消</button>
+        <button id="mud-del" class="danger">削除</button>
+      </div>
+    </div>
+  `;
+  if (muCountdownTimer) { clearInterval(muCountdownTimer); muCountdownTimer = null; }
+  try {
+    const d = await get('/api/meetups/' + id);
+    const m = d.meetup;
+    document.getElementById('mud-head').innerHTML = `
+      <h2 style="margin:6px 0 0">${escapeHtml(m.title || '待ち合わせ')}</h2>
+      <div class="meta">起案 ${escapeHtml(m.creator_name)}${m.cancelled_at ? ' · <span class="tag" style="background:#eee">取消済</span>' : ''}</div>
+    `;
+    const cardClock = document.getElementById('mud-clock-card');
+    cardClock.hidden = false;
+    const updateClock = () => {
+      const whenEl = document.getElementById('mud-when');
+      const remEl = document.getElementById('mud-rem');
+      const dt = new Date(String(m.meetup_at).replace(' ', 'T'));
+      const pad = n => String(n).padStart(2, '0');
+      if (whenEl) whenEl.textContent = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      const remStr = m.cancelled_at ? '❌ 取消されました' : fmtRemaining(m.meetup_at);
+      if (remEl) remEl.textContent = remStr;
+      if (m.cancelled_at) { clearInterval(muCountdownTimer); }
+    };
+    updateClock();
+    muCountdownTimer = setInterval(updateClock, 1000);
+    const locEl = document.getElementById('mud-loc');
+    if (locEl) {
+      locEl.innerHTML = m.location
+        ? `📍 <a href="https://maps.google.com/?q=${encodeURIComponent(m.location)}" target="_blank" rel="noopener" style="color:var(--primary)">${escapeHtml(m.location)}</a>`
+        : '<span class="muted">場所未指定</span>';
+    }
+    document.getElementById('mud-pn').textContent = d.participants.length;
+    document.getElementById('mud-parts').innerHTML = d.participants.map(p => `
+      <span class="presence-pill">
+        ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
+        <span class="presence-pill-name">${escapeHtml(p.display_name)}</span>
+        ${p.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(p.grade)}]</span>` : ''}
+      </span>`).join('');
+    if (d.is_creator) {
+      const admin = document.getElementById('mud-admin');
+      admin.hidden = false;
+      document.getElementById('mud-cancel').disabled = !!m.cancelled_at;
+      document.getElementById('mud-cancel').addEventListener('click', async () => {
+        if (!confirm('待ち合わせを取消しますか? (参加者全員に通知が飛びます)')) return;
+        try { await patch(`/api/meetups/${id}/cancel`, {}); toast('取消しました'); await renderMeetupDetail({ params: { id } }); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+      document.getElementById('mud-del').addEventListener('click', async () => {
+        if (!confirm('削除しますか?')) return;
+        try { await del('/api/meetups/' + id); toast('削除しました'); navigate('#/meetups'); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    }
+  } catch (e) {
+    document.getElementById('mud-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}

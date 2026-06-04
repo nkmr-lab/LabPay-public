@@ -25,6 +25,7 @@ import { renderPolls, renderPollNew, renderPollDetail, renderPollEdit } from './
 import { renderRollCalls, renderRollCallNew, renderRollCallDetail } from './views/rollcalls.js';
 import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.js';
 import { renderNotices, renderNoticeForm } from './views/notices.js';
+import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
 import { renderRequestsHub } from './views/requests_hub.js';
@@ -219,13 +220,17 @@ function renderChrome() {
   }
   top.hidden = false;
   tabs.hidden = false;
-  if (state.me.role === 'admin') {
-    adminLink.hidden = false;
-    if (feedbackAdminLink) feedbackAdminLink.hidden = false;
-  } else {
-    adminLink.hidden = true;
-    if (feedbackAdminLink) feedbackAdminLink.hidden = true;
-  }
+  const isAdmin = state.me.role === 'admin';
+  adminLink.hidden = !isAdmin;
+  if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
+  // admin は 報告・要望 ページを直接読めるので、 個別の 機能要望 / バグ報告
+  // メニューは出さない。 ついでにセパレータも隠す (一般ユーザ向けの区切り)。
+  const fReq  = document.getElementById('feature-request-link');
+  const bugRep = document.getElementById('bug-report-link');
+  const sep   = document.getElementById('topbar-sep');
+  if (fReq)  fReq.hidden  = isAdmin;
+  if (bugRep) bugRep.hidden = isAdmin;
+  if (sep)   sep.hidden   = isAdmin;
   if (state.unread > 0) {
     badge.hidden = false;
     badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
@@ -404,6 +409,9 @@ route('/timers/:id',     renderTimerDetail);
 route('/notices',        renderNotices);
 route('/notices/new',    renderNoticeForm);
 route('/notices/:id/edit', renderNoticeForm);
+route('/meetups',         renderMeetups);
+route('/meetups/new',     renderMeetupNew);
+route('/meetups/:id',     renderMeetupDetail);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
 route('/requests-hub',   renderRequestsHub);

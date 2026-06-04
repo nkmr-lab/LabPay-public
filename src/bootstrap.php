@@ -498,3 +498,4 @@ require_once __DIR__ . '/handlers/polls.php';
 require_once __DIR__ . '/handlers/rollcalls.php';
 require_once __DIR__ . '/handlers/timers.php';
 require_once __DIR__ . '/handlers/notices.php';
+require_once __DIR__ . '/handlers/meetups.php';

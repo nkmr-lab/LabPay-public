@@ -592,6 +592,7 @@ async function loadDetail(id) {
         <a class="btn" href="#/polls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">投票・アンケート</a>
         <a class="btn" href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
         <a class="btn" href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
+        <a class="btn" href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;

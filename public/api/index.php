@@ -60,6 +60,7 @@ $routes = [
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',
     'notices'        => 'route_notices',
+    'meetups'        => 'route_meetups',
 ];
 
 try {
