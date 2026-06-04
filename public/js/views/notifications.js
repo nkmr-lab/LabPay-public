@@ -1,6 +1,6 @@
 import { get, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
-import { refreshUnread, toast } from '../app.js';
+import { refreshUnread, toast, state } from '../app.js';
 
 export async function renderNotifications() {
   const app = document.getElementById('app');
@@ -99,10 +99,11 @@ function refUrl(n) {
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';
-    // feedback の通知は 「ユーザへの管理者からの返信」 のみ。 admin ページに
-    // 飛ばすと 一般ユーザは権限無くて 何も出ない。 元の投稿フォームがある
-    // 設定ページに飛ばす (返信本文は notification body にすでに入っている)。
-    case 'feedback':       return '#/settings';
+    // feedback の通知は 2 経路: (a) ユーザ投稿 → admin に通知, (b) admin 返信 → 投稿者に通知。
+    //   (a) admin 受信時は 管理ページ /#/feedback-admin が正しい遷移先
+    //   (b) 一般ユーザ受信時は admin ページに権限が無いので 投稿フォームのある設定ページへ。
+    //       返信本文は notification body にすでに入っているので そこで読める。
+    case 'feedback':       return state.me?.role === 'admin' ? '#/feedback-admin' : '#/settings';
     default: return null;
   }
 }
