@@ -1656,7 +1656,7 @@ async function loadSchedule(gid) {
   if (emBtn) {
     emBtn.hidden = !hasDates;
     if (hasDates) {
-      emBtn.textContent = schedEditMode ? '完了' : '✏️ スケジュール編集モード';
+      emBtn.textContent = schedEditMode ? '完了' : '✏️ 編集モード';
       emBtn.classList.add('primary');
     }
   }
