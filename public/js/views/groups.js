@@ -7,6 +7,7 @@ import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { fmtDateTime, participantPill } from '../format.js';
 import { isAppVisible } from './apps.js';
+import { createMemberPicker } from '../member_picker.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
@@ -150,78 +151,17 @@ async function onGroupImageFile(ev) {
   } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
-const picked = new Set();
-let allUsers = [];
+// v385 共有 member_picker。 createMemberPicker が selected を 内部で持つので、
+// onCreate から picker.getSelected() で吸い上げる形に。
+let grPicker = null;
 
 async function populatePicker() {
-  const u = await get('/api/users');
-  picked.clear();
-  // Sort: D → M2 → M1 → B4 → B3 → (no grade), 50音順
-  allUsers = [...u.items].sort((a, b) => {
-    const ga = GRADE_ORDER.indexOf(a.grade || '');
-    const gb = GRADE_ORDER.indexOf(b.grade || '');
-    return (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb) ||
-      (a.display_name || '').localeCompare(b.display_name || '', 'ja');
+  grPicker = await createMemberPicker({
+    bulkContainer: document.getElementById('gr-bulk'),
+    chipsContainer: document.getElementById('gr-picker'),
+    countLabel:    document.getElementById('gr-count'),
+    showGenderBulk: true,
   });
-
-  const grades = [...new Set(allUsers.map(u => u.grade).filter(Boolean))]
-    .sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
-  const bulk = document.getElementById('gr-bulk');
-  bulk.innerHTML = `
-    <button data-bulk="all"  class="btn">全員</button>
-    ${grades.map(g => `<button data-bulk="grade:${g}" class="btn">${g}</button>`).join('')}
-    <button data-bulk="gender:M" class="btn">男</button>
-    <button data-bulk="gender:F" class="btn">女</button>
-    <button data-bulk="clear" class="btn">クリア</button>
-  `;
-  bulk.querySelectorAll('[data-bulk]').forEach(b => {
-    b.addEventListener('click', () => applyBulk(b.dataset.bulk));
-  });
-
-  const picker = document.getElementById('gr-picker');
-  picker.innerHTML = allUsers.map(x => `
-    <span class="rl-chip" data-uid="${x.id}">
-      ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-      <span>${escapeHtml(x.display_name)}</span>
-      ${x.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(x.grade)}]</span>` : ''}
-    </span>`).join('');
-  picker.querySelectorAll('.rl-chip').forEach(c => {
-    c.addEventListener('click', () => togglePick(Number(c.dataset.uid)));
-  });
-  refreshChips();
-}
-
-function memberMatches(user, key) {
-  if (key === 'all') return true;
-  if (key.startsWith('grade:')) return (user.grade || '') === key.slice(6);
-  if (key.startsWith('gender:')) return (user.gender || '') === key.slice(7);
-  return false;
-}
-
-function applyBulk(key) {
-  if (key === 'clear') { picked.clear(); refreshChips(); return; }
-  const targets = allUsers.filter(u => memberMatches(u, key));
-  // Two-state toggle: if all targets are already on → turn them off; else add all.
-  const allOn = targets.every(u => picked.has(u.id));
-  if (allOn) targets.forEach(u => picked.delete(u.id));
-  else       targets.forEach(u => picked.add(u.id));
-  refreshChips();
-}
-
-function togglePick(uid) {
-  if (picked.has(uid)) picked.delete(uid);
-  else picked.add(uid);
-  refreshChips();
-}
-
-function refreshChips() {
-  document.querySelectorAll('#gr-picker .rl-chip').forEach(c => {
-    const on = picked.has(Number(c.dataset.uid));
-    c.style.background = on ? 'var(--primary-soft, #efeafa)' : '';
-    c.style.borderColor = on ? 'var(--primary)' : '';
-  });
-  const countEl = document.getElementById('gr-count');
-  if (countEl) countEl.textContent = `${picked.size} 人選択中`;
 }
 
 async function onCreate() {
@@ -244,7 +184,7 @@ async function onCreate() {
     .filter(cb => cb.checked).map(cb => cb.dataset.act);
   try {
     const r = await post('/api/groups', {
-      title, description, slug, image_url, member_ids: [...picked],
+      title, description, slug, image_url, member_ids: grPicker ? [...grPicker.getSelected()] : [],
       feat_schedule, feat_lodging, feat_flight, feat_wari, feat_actions,
     });
     toast('作成しました');
