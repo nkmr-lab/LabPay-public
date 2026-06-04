@@ -137,11 +137,26 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   overflow: hidden;
   align-items: stretch;
   min-height: 90px;
+  position: relative;       /* v376 price-badge の anchor */
 }
 .list-item.with-cover > .cover-img {
   width: 110px;
   background: var(--primary-soft) center/cover no-repeat;
   flex-shrink: 0;
+  position: relative;       /* v376 price-badge の anchor */
+}
+/* v376 商品ポイント / プレゼント表記 を 画像の左下に半透明バッジで オーバーレイ。 */
+.list-item.with-cover .price-badge {
+  position: absolute;
+  left: 6px; bottom: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  white-space: nowrap;
+  z-index: 3;
+  font-size: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 .list-item.with-cover > .grow {
   padding: var(--space-3);
@@ -197,6 +212,12 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   padding-left: calc(40% + 8px);
   position: relative;
   z-index: 2;
+  /* v376 ヒーロー画像と テキストが かぶる部分は 半透明白の グラデーションで 視認性を確保。
+     左側 (画像が見える部分) は 透明、 右側 (テキスト) は 不透明寄り に。 */
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.82) 58%,
+    rgba(255, 255, 255, 0.95) 100%);
 }
 .list-item.with-cover.hero > .cover-img.cover-img-fallback {
   background: var(--primary-soft);

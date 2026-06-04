@@ -907,9 +907,10 @@ async function renderFreshListings() {
     // グループ / 募集と同じ with-cover レイアウト (左 110px の表紙画像) で
     // 新規入荷も大きく見せる。 残数が分かるようメタ行に 「在庫 N」 を入れる。
     root.innerHTML = items.map(l => {
-      const priceTag = l.is_gift
-        ? `<div class="bold" style="color:#b71c50; white-space:nowrap; padding:8px 12px 0 0">🎁</div>`
-        : `<div class="bold" style="color:var(--primary); white-space:nowrap; padding:8px 12px 0 0">${l.price.toLocaleString()} pt</div>`;
+      // v376 価格 / プレゼントは 画像の左下に absolute オーバーレイ。
+      const priceColor = l.is_gift ? '#b71c50' : 'var(--primary)';
+      const priceLabel = l.is_gift ? '🎁' : `${l.price.toLocaleString()} pt`;
+      const priceBadge = `<div class="price-badge" style="color:${priceColor}">${priceLabel}</div>`;
       // 在庫数: 2 個以上の時だけ表示。 1 個は 「言うまでもない」 のでノイズ削減。
       const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';
       // created_at は 'YYYY-MM-DD HH:MM:SS' 形式。 秒は要らないので 16 文字で切る。
@@ -919,24 +920,22 @@ async function renderFreshListings() {
       if (l.image_url) {
         return `
           <a class="list-item with-cover" href="${href}">
-            <div class="cover-img" style="background-image:url('${escapeHtml(l.image_url)}')"></div>
+            <div class="cover-img" style="background-image:url('${escapeHtml(l.image_url)}')">${priceBadge}</div>
             <div class="grow">
               <div class="bold">${escapeHtml(l.name)}</div>
               <div class="meta">${meta}</div>
             </div>
-            ${priceTag}
           </a>`;
       }
       // 画像なし: 頭文字プレースホルダを cover サイズに引き伸ばす。
       const initial = (l.name || '?').trim().charAt(0).toUpperCase();
       return `
         <a class="list-item with-cover" href="${href}">
-          <div class="cover-img cover-img-fallback">${escapeHtml(initial)}</div>
+          <div class="cover-img cover-img-fallback">${escapeHtml(initial)}${priceBadge}</div>
           <div class="grow">
             <div class="bold">${escapeHtml(l.name)}</div>
             <div class="meta">${meta}</div>
           </div>
-          ${priceTag}
         </a>`;
     }).join('');
   } catch (e) {
