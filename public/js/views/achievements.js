@@ -5,7 +5,10 @@ export async function renderAchievements() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">11カテゴリ × 4段階。リアルタイムに集計しています。</p>
+      <p class="card-subtitle" style="margin:0">15 カテゴリ × 4 段階。 リアルタイムに集計しています。</p>
+      <p class="card-subtitle" style="margin:6px 0 0; font-size:12px">
+        ✨ 段位名 (「お試し気分」 「ラボに溶けた」 「闇属性」 など) は <b>LabPay が命名しました!</b>
+      </p>
     </div>
     <div id="ach-list"><div class="muted">読み込み中…</div></div>
   `;
