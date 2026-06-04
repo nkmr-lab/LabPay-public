@@ -1481,6 +1481,28 @@ async function loadSchedule(gid) {
       cur = addOne(cur);
     }
   }
+  // byDay 内を 「その日の視覚順」 に並べ直す。 サーバ側は ORDER BY で
+  // 「start_time あり → start_time 昇順 → NULL は末尾」 を保証してくれているが、
+  // 展開された multi-day item の mid 行は その日の文脈で時刻が無い (元アイテムの
+  // start_time は チェックイン日のもので、 mid 日の話ではない) ので 末尾に置きたい。
+  // end 行は end_time があれば その時刻位置に置く。
+  for (const date of Object.keys(byDay)) {
+    byDay[date].sort((a, b) => {
+      const effTime = (it) => it._occ === 'mid' ? null
+                          : it._occ === 'end' ? (it.end_time || null)
+                          : (it.start_time || null);
+      const aT = effTime(a), bT = effTime(b);
+      const aNull = aT ? 0 : 1, bNull = bT ? 0 : 1;
+      if (aNull !== bNull) return aNull - bNull;
+      if (aT && bT) {
+        const c = aT.localeCompare(bT);
+        if (c !== 0) return c;
+      }
+      const so = (a.sort_order || 0) - (b.sort_order || 0);
+      if (so !== 0) return so;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+  }
   // 帯描画のためのペア出現カウント: byDay 全日にわたって同じ pair_id が
   // 「何日」 出るかで判定。 multi-day item は 1 行が N 日に展開されるので
   // この時点で N 回カウントされる。
