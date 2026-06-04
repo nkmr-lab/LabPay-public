@@ -25,11 +25,15 @@ function invitations_list(PDO $pdo, array $cfg): void {
     $status = $_GET['status'] ?? 'open'; // open | all
     // 開始時刻を過ぎた募集は自動で終了に。発起人が「再募集」(PATCH) で
     // 復活させない限り、starts_at <= NOW() のものは募集中に出さない。
+    // v368: signup_closes_at <= NOW() も 募集締切として自動 close。
     $pdo->exec("UPDATE invitations
         SET closed_at = NOW()
         WHERE closed_at IS NULL
-          AND starts_at IS NOT NULL
-          AND starts_at <= NOW()");
+          AND (
+            (starts_at        IS NOT NULL AND starts_at        <= NOW())
+            OR
+            (signup_closes_at IS NOT NULL AND signup_closes_at <= NOW())
+          )");
 
     $where = $status === 'open' ? 'i.closed_at IS NULL' : '1=1';
     $st = $pdo->prepare("
@@ -79,7 +83,11 @@ function invitations_detail(PDO $pdo, array $cfg, int $id): void {
     $pdo->prepare("UPDATE invitations
         SET closed_at = NOW()
         WHERE id = ? AND closed_at IS NULL
-          AND starts_at IS NOT NULL AND starts_at <= NOW()")->execute([$id]);
+          AND (
+            (starts_at        IS NOT NULL AND starts_at        <= NOW())
+            OR
+            (signup_closes_at IS NOT NULL AND signup_closes_at <= NOW())
+          )")->execute([$id]);
     $st = $pdo->prepare("
         SELECT i.*, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url
           FROM invitations i JOIN users u ON u.id = i.creator_user_id
@@ -120,10 +128,25 @@ function invitations_create(PDO $pdo, array $cfg): void {
         $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
         if ($dt) $startsAt = $dt->format('Y-m-d H:i:s');
     }
+    // v368 募集締切 (signup_closes_at)
+    $signupClosesAt = null;
+    if (!empty($body['signup_closes_at'])) {
+        $raw = str_replace('T', ' ', trim((string)$body['signup_closes_at']));
+        if (strlen($raw) === 16) $raw .= ':00';
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) throw new ApiException('bad_request', 'signup_closes_at は Y-m-d H:i', 400);
+        if ($dt->getTimestamp() <= time()) {
+            throw new ApiException('bad_request', '募集締切は現在より未来にしてください', 400);
+        }
+        if ($startsAt !== null && $dt->getTimestamp() > strtotime($startsAt)) {
+            throw new ApiException('bad_request', '募集締切は 開催日時 より前にしてください', 400);
+        }
+        $signupClosesAt = $dt->format('Y-m-d H:i:s');
+    }
     $ins = $pdo->prepare("INSERT INTO invitations
-        (creator_user_id, title, description, starts_at, location, capacity, image_url)
-        VALUES (?,?,?,?,?,?,?)");
-    $ins->execute([$u['id'], $title, $desc, $startsAt, $location, $capacity, $imageUrl]);
+        (creator_user_id, title, description, starts_at, signup_closes_at, location, capacity, image_url)
+        VALUES (?,?,?,?,?,?,?,?)");
+    $ins->execute([$u['id'], $title, $desc, $startsAt, $signupClosesAt, $location, $capacity, $imageUrl]);
     $invId = (int)$pdo->lastInsertId();
 
     // Slack 通知: あれば
@@ -131,10 +154,11 @@ function invitations_create(PDO $pdo, array $cfg): void {
         $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
         $link = $baseUrl . '/#/invitations/' . $invId;
         $whenLine = $startsAt ? "\n🕒 " . $startsAt : '';
+        $signupLine = $signupClosesAt ? "\n⏰ 募集締切 " . $signupClosesAt : '';
         $whereLine = $location ? "\n📍 " . $location : '';
         $capLine = $capacity ? "\n👥 上限 {$capacity} 人" : '';
         slack_notify($cfg, "🎉 *新規募集*  <{$link}|{$title}>\n発起人: {$u['display_name']}"
-            . $whenLine . $whereLine . $capLine);
+            . $whenLine . $signupLine . $whereLine . $capLine);
     } catch (Throwable $e) { /* swallow */ }
 
     json_response(['ok' => true, 'id' => $invId]);
@@ -148,6 +172,10 @@ function invitations_join(PDO $pdo, array $cfg, int $id): void {
         $inv = $st->fetch();
         if (!$inv) throw new ApiException('not_found', "invitation $id not found", 404);
         if ($inv['closed_at']) throw new ApiException('closed', '募集は終了しています', 409);
+        // v368: signup_closes_at を 過ぎていれば 参加表明できない (closed_at の lazy update より早期 reject)
+        if (!empty($inv['signup_closes_at']) && strtotime((string)$inv['signup_closes_at']) <= time()) {
+            throw new ApiException('closed', '募集締切を過ぎています', 409);
+        }
         if ($inv['capacity']) {
             $stC = $pdo->prepare("SELECT COUNT(*) FROM invitation_joins WHERE invitation_id=?");
             $stC->execute([$id]);
@@ -204,6 +232,17 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
         $sets[] = 'starts_at = ?'; $args[] = $startsAt;
         $sets[] = 'closed_at = NULL';
         $reopened = true;
+    }
+    if (array_key_exists('signup_closes_at', $body)) {
+        $sca = null;
+        if (!empty($body['signup_closes_at'])) {
+            $raw = str_replace('T', ' ', trim((string)$body['signup_closes_at']));
+            if (strlen($raw) === 16) $raw .= ':00';
+            $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
+            if (!$dt) throw new ApiException('bad_request', 'signup_closes_at は Y-m-d H:i', 400);
+            $sca = $dt->format('Y-m-d H:i:s');
+        }
+        $sets[] = 'signup_closes_at = ?'; $args[] = $sca;
     }
     if (array_key_exists('image_url', $body)) {
         $img = validate_product_image_url($body['image_url']);

@@ -24,8 +24,13 @@ export async function renderInvitations() {
         <input type="text" id="inv-title" maxlength="200" placeholder="例: お昼ご飯食べに行こう">
       </label>
       <label class="field">
-        <span class="lbl">日時 (任意)</span>
+        <span class="lbl">開催日時 (任意)</span>
         <input type="datetime-local" id="inv-when">
+      </label>
+      <label class="field">
+        <span class="lbl">募集締切 (任意・これ以降は参加表明を受け付けない)</span>
+        <input type="datetime-local" id="inv-signup-deadline">
+        <span class="hint-sm">空欄 = 開催時刻まで募集。 例: 「19:00 開始だけど 17:00 まで」 → ここに 17:00 を入れる。</span>
       </label>
       <label class="field">
         <span class="lbl">場所 (任意)</span>
@@ -121,6 +126,19 @@ function renderRow(i) {
   } else if (i.starts_at) {
     placeLine = `<div class="meta">🕒 ${escapeHtml(trimSec(i.starts_at))}</div>`;
   }
+  // v368 一覧でも 締切が近い時だけ tag で 強調
+  let deadlineHint = '';
+  if (!isClosed && i.signup_closes_at) {
+    const t = new Date(String(i.signup_closes_at).replace(' ', 'T'));
+    const diff = t - new Date();
+    if (diff > 0 && diff < 6 * 3600 * 1000) {
+      const min = Math.floor(diff / 60000);
+      const lbl = min < 60 ? `${min}分` : `${Math.floor(min/60)}時間${min%60}分`;
+      deadlineHint = `<div class="meta"><span class="tag warn">⏰ 締切まで ${escapeHtml(lbl)}</span></div>`;
+    } else if (diff <= 0) {
+      deadlineHint = `<div class="meta"><span class="tag" style="background:#fdecea; color:#c62828">⏰ 募集締切超過</span></div>`;
+    }
+  }
   // 参加者数 / 募集人数。 終了時は人数 をピープル行右端に出すので、 ここでは
   // 募集中の時だけ出す。
   const capLine = !isClosed
@@ -178,7 +196,7 @@ function renderRow(i) {
     <a class="list-item" href="#/invitations/${i.id}">
       <div class="grow">
         <div class="bold">${escapeHtml(i.title)} ${statusTag}</div>
-        ${placeLine}${capLine}
+        ${placeLine}${capLine}${deadlineHint}
         ${descBlock}
         ${peopleRow}
       </div>
@@ -218,6 +236,21 @@ async function loadDetail(id) {
     const isClosed = !!i.closed_at;
     const iJoined = (i.joins || []).some(j => Number(j.id) === Number(meId));
     const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(i.starts_at)}</div>` : '';
+    // v368 募集締切。 過ぎてれば 赤、 まだなら 残り時間 を 緑で。
+    let deadlineLine = '';
+    if (i.signup_closes_at) {
+      const t = new Date(String(i.signup_closes_at).replace(' ', 'T'));
+      const diff = t - new Date();
+      let remStr = '';
+      if (diff <= 0) { remStr = ' <span class="tag" style="background:#fdecea; color:#c62828">締切超過</span>'; }
+      else {
+        const min = Math.floor(diff / 60000);
+        if (min < 60) remStr = ` <span class="tag ok">あと ${min}分</span>`;
+        else if (min < 60 * 24) remStr = ` <span class="tag ok">あと ${Math.floor(min/60)}時間${min%60}分</span>`;
+        else remStr = ` <span class="tag ok">あと ${Math.floor(min/(60*24))}日</span>`;
+      }
+      deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(String(i.signup_closes_at).slice(0,16))}${remStr}</div>`;
+    }
     const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
     const capLine = i.capacity
       ? `<div class="meta">参加 ${(i.joins || []).length} / 上限 ${i.capacity}</div>`
@@ -245,7 +278,7 @@ async function loadDetail(id) {
     document.getElementById('inv-head').innerHTML = `
       ${imgBlock}
       <div class="bold" style="font-size:18px">${escapeHtml(i.title)} ${statusTag}</div>
-      ${whenLine}${whereLine}${capLine}
+      ${whenLine}${deadlineLine}${whereLine}${capLine}
       ${i.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:6px">${escapeHtml(i.description)}</div>` : ''}
       <div class="meta" style="display:flex; align-items:center; gap:6px; margin-top:6px">
         ${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}
@@ -313,17 +346,19 @@ async function onCreate() {
   const title = document.getElementById('inv-title').value.trim();
   if (!title) { toast('タイトルを入れてください'); return; }
   const starts_at = document.getElementById('inv-when').value || null;
+  const signup_closes_at = document.getElementById('inv-signup-deadline').value || null;
   const location = document.getElementById('inv-where').value.trim() || null;
   const capacity = document.getElementById('inv-cap').value;
   const description = document.getElementById('inv-desc').value.trim() || null;
   const image_url = document.getElementById('inv-image-url').value || null;
   try {
     await post('/api/invitations', {
-      title, starts_at, location, description, image_url,
+      title, starts_at, signup_closes_at, location, description, image_url,
       capacity: capacity ? Number(capacity) : null,
     });
     document.getElementById('inv-title').value = '';
     document.getElementById('inv-when').value = '';
+    document.getElementById('inv-signup-deadline').value = '';
     document.getElementById('inv-where').value = '';
     document.getElementById('inv-cap').value = '';
     document.getElementById('inv-desc').value = '';
