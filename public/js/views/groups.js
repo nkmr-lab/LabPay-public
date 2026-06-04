@@ -335,21 +335,6 @@ export async function renderGroupDetail({ params }) {
     <div id="gd-lodging-modal" hidden></div>
     <div id="gd-flight-modal" hidden></div>
 
-    <div class="card" id="gd-chat-card">
-      <div class="row center" style="margin-bottom:6px">
-        <h3 class="row-title" style="margin:0">チャット</h3>
-        <span id="gd-chat-status" class="hint-sm"></span>
-      </div>
-      <div id="gd-chat-list" style="max-height:360px; min-height:160px; overflow-y:auto; padding:6px; background:#f6f6f9; border-radius:8px; display:flex; flex-direction:column; gap:6px">
-        <div class="muted" style="text-align:center; padding:20px 0">読み込み中…</div>
-      </div>
-      <div class="row" style="gap:6px; margin-top:6px; align-items:flex-end">
-        <textarea id="gd-chat-input" rows="1" maxlength="2000" placeholder="メッセージを送る (Enter で送信、 Shift+Enter で改行)"
-                  style="flex:1; resize:none; min-height:36px; max-height:120px; font-size:14px"></textarea>
-        <button id="gd-chat-send" class="primary" style="padding:6px 14px">送信</button>
-      </div>
-    </div>
-
     <div class="card" id="gd-sched-card" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">スケジュール</h3>
@@ -384,6 +369,18 @@ export async function renderGroupDetail({ params }) {
       </p>
       <div id="gd-spend-list" class="list"></div>
     </div>
+
+    <details class="card" id="gd-chat-card">
+      <summary style="font-weight:700; cursor:pointer">💬 チャット <span id="gd-chat-status" class="hint-sm"></span></summary>
+      <div id="gd-chat-list" style="max-height:280px; min-height:140px; overflow-y:auto; padding:6px; background:#f6f6f9; border-radius:8px; display:flex; flex-direction:column; gap:6px; margin-top:6px">
+        <div class="muted" style="text-align:center; padding:20px 0">読み込み中…</div>
+      </div>
+      <div class="row" style="gap:6px; margin-top:6px; align-items:flex-end">
+        <textarea id="gd-chat-input" rows="1" maxlength="2000" placeholder="メッセージを送る (Enter で送信、 Shift+Enter で改行)"
+                  style="flex:1; resize:none; min-height:36px; max-height:120px; font-size:14px"></textarea>
+        <button id="gd-chat-send" class="primary" style="padding:6px 14px">送信</button>
+      </div>
+    </details>
 
     <div class="card" id="gd-danger-card" hidden>
       <p class="muted" style="font-size:13px; margin:0 0 8px">
@@ -2156,6 +2153,17 @@ async function startChatLoop(gid) {
     });
   }
   await refreshChat(gid);
+  // <details> 開いた瞬間に末尾までスクロール (閉じた状態だと scrollHeight が
+  // ゼロなので 初回の auto-scroll が効かないため)。
+  const card = document.getElementById('gd-chat-card');
+  if (card && list) {
+    card.addEventListener('toggle', () => {
+      if (card.open) {
+        list.scrollTop = list.scrollHeight;
+        chatUserScrolled = false;
+      }
+    });
+  }
   // 入力欄: Enter で送信、 Shift+Enter で改行。 自動高さ調整。
   const input = document.getElementById('gd-chat-input');
   const send = document.getElementById('gd-chat-send');
