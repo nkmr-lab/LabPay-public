@@ -30,6 +30,16 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'receipts' && $method === 'GET')              { group_receipts_list($pdo, $cfg, $id);   return; }
             if ($next === 'receipts' && $method === 'POST')             { group_receipts_add($pdo, $cfg, $id);    return; }
             if ($next === 'receipts' && isset($seg[3]) && $method === 'DELETE') { group_receipts_delete($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'lodgings' && $method === 'GET'  && !isset($seg[3])) { group_lodgings_list($pdo, $cfg, $id); return; }
+            if ($next === 'lodgings' && $method === 'POST' && !isset($seg[3])) { group_lodgings_add($pdo, $cfg, $id); return; }
+            if ($next === 'lodgings' && isset($seg[3]) && ($seg[4] ?? '') === 'sync' && $method === 'POST')  { group_lodgings_sync($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'lodgings' && isset($seg[3]) && $method === 'PATCH')  { group_lodgings_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'lodgings' && isset($seg[3]) && $method === 'DELETE') { group_lodgings_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'flights'  && $method === 'GET'  && !isset($seg[3])) { group_flights_list($pdo, $cfg, $id);  return; }
+            if ($next === 'flights'  && $method === 'POST' && !isset($seg[3])) { group_flights_add($pdo, $cfg, $id);   return; }
+            if ($next === 'flights'  && isset($seg[3]) && ($seg[4] ?? '') === 'sync' && $method === 'POST')  { group_flights_sync($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'flights'  && isset($seg[3]) && $method === 'PATCH')  { group_flights_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'flights'  && isset($seg[3]) && $method === 'DELETE') { group_flights_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'chats'    && $method === 'GET'  && !isset($seg[3])) { group_chats_list($pdo, $cfg, $id); return; }
             if ($next === 'chats'    && $method === 'POST' && !isset($seg[3])) { group_chats_post($pdo, $cfg, $id); return; }
             if ($next === 'chats'    && isset($seg[3]) && $method === 'DELETE') { group_chats_del($pdo, $cfg, $id, (int)$seg[3]); return; }
@@ -982,6 +992,227 @@ const GROUP_SCHEDULE_KINDS = [
     'flight','train','bus','taxi','car','walk','move',
     'hotel','conf','meeting','food','fun','other',
 ];
+
+// ──────── 宿泊地 ────────
+function group_lodgings_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT l.*, u.display_name AS created_by_name
+                           FROM adhoc_group_lodgings l
+                           JOIN users u ON u.id = l.created_by_user_id
+                          WHERE l.group_id = ?
+                          ORDER BY (l.check_in_at IS NULL), l.check_in_at, l.id");
+    $st->execute([$id]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function lodging_validate(array $body): array {
+    $name = trim((string)($body['name'] ?? ''));
+    if ($name === '' || mb_strlen($name) > 200) throw new ApiException('bad_request', 'name 1..200', 400);
+    $loc = isset($body['location']) ? mb_substr((string)$body['location'], 0, 500) : null;
+    if ($loc === '') $loc = null;
+    $lat = (isset($body['lat']) && $body['lat'] !== '') ? (float)$body['lat'] : null;
+    $lng = (isset($body['lng']) && $body['lng'] !== '') ? (float)$body['lng'] : null;
+    if ($lat !== null && ($lat < -90 || $lat > 90))  throw new ApiException('bad_request', 'lat 範囲外', 400);
+    if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
+    $room = isset($body['room_number']) ? mb_substr(trim((string)$body['room_number']), 0, 60) : null;
+    if ($room === '') $room = null;
+    $url = isset($body['url']) ? trim((string)$body['url']) : '';
+    if ($url !== '' && !preg_match('#^https?://#i', $url)) throw new ApiException('bad_request', 'url は http(s)', 400);
+    if ($url === '') $url = null;
+    $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 2000) : null;
+    if ($memo === '') $memo = null;
+    // チェックイン/アウト は ISO datetime (空文字なら NULL)
+    $ci = parse_iso_datetime_nullable($body['check_in_at']  ?? null, 'check_in_at');
+    $co = parse_iso_datetime_nullable($body['check_out_at'] ?? null, 'check_out_at');
+    return compact('name','loc','lat','lng','ci','co','room','url','memo');
+}
+
+function parse_iso_datetime_nullable($v, string $field): ?string {
+    if ($v === null || $v === '') return null;
+    $s = (string)$v;
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $s)
+       ?: DateTime::createFromFormat('Y-m-d H:i', $s)
+       ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $s)
+       ?: DateTime::createFromFormat('Y-m-d H:i:s', $s);
+    if (!$dt) throw new ApiException('bad_request', "$field は ISO 日時", 400);
+    return $dt->format('Y-m-d H:i:s');
+}
+
+function group_lodgings_add(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $v = lodging_validate(read_json_body());
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_lodgings
+        (group_id, name, location, lat, lng, check_in_at, check_out_at, room_number, url, memo, created_by_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$id, $v['name'], $v['loc'], $v['lat'], $v['lng'],
+        $v['ci'], $v['co'], $v['room'], $v['url'], $v['memo'], (int)$u['id']]);
+    json_response(['id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_lodgings_patch(PDO $pdo, array $cfg, int $id, int $lid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_lodgings WHERE id=? AND group_id=?");
+    $st->execute([$lid, $id]);
+    if ($st->fetchColumn() === false) throw new ApiException('not_found', '宿泊地が見つかりません', 404);
+    $v = lodging_validate(read_json_body());
+    $pdo->prepare("UPDATE adhoc_group_lodgings SET
+        name=?, location=?, lat=?, lng=?, check_in_at=?, check_out_at=?, room_number=?, url=?, memo=? WHERE id=?")
+        ->execute([$v['name'], $v['loc'], $v['lat'], $v['lng'],
+                   $v['ci'], $v['co'], $v['room'], $v['url'], $v['memo'], $lid]);
+    json_response(['ok' => true]);
+}
+
+function group_lodgings_del(PDO $pdo, array $cfg, int $id, int $lid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $pdo->prepare("DELETE FROM adhoc_group_lodgings WHERE id=? AND group_id=?")->execute([$lid, $id]);
+    json_response(['ok' => true]);
+}
+
+// 宿泊地 → スケジュール展開: チェックイン + チェックアウト の 2 アイテムを 1 ペアで作成。
+// 部屋番号があれば タイトル末尾に付ける。
+function group_lodgings_sync(PDO $pdo, array $cfg, int $id, int $lid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT * FROM adhoc_group_lodgings WHERE id=? AND group_id=?");
+    $st->execute([$lid, $id]);
+    $L = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$L) throw new ApiException('not_found', '宿泊地が見つかりません', 404);
+    if (!$L['check_in_at'] && !$L['check_out_at']) {
+        throw new ApiException('bad_request', 'チェックイン or チェックアウト 日時が必要', 400);
+    }
+    $pairId = 'lod_' . bin2hex(random_bytes(4));
+    $roomSuffix = $L['room_number'] ? ' (室 ' . $L['room_number'] . ')' : '';
+    $created = [];
+    db_tx($pdo, function () use ($pdo, $id, $u, $L, $pairId, $roomSuffix, &$created) {
+        $insOne = function (?string $dt, string $titleSuffix) use ($pdo, $id, $u, $L, $pairId, $roomSuffix, &$created) {
+            if ($dt === null) return;
+            $day = substr($dt, 0, 10);
+            $time = substr($dt, 11, 8);
+            $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+                FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
+            $stm->execute([$id, $day]);
+            $sort = (int)$stm->fetchColumn() + 1;
+            $title = mb_substr($L['name'] . $titleSuffix . $roomSuffix, 0, 200);
+            $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
+                (group_id, day_date, start_time, kind, title, location, lat, lng, link_pair_id, sort_order, created_by_user_id, created_at)
+                VALUES (?, ?, ?, 'hotel', ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $ins->execute([$id, $day, $time, $title, $L['location'], $L['lat'], $L['lng'],
+                $pairId, $sort, (int)$u['id']]);
+            $created[] = (int)$pdo->lastInsertId();
+        };
+        $insOne($L['check_in_at'],  ' チェックイン');
+        $insOne($L['check_out_at'], ' チェックアウト');
+    });
+    json_response(['ok' => true, 'created_ids' => $created, 'pair_id' => $pairId]);
+}
+
+// ──────── 航空券 ────────
+function group_flights_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT f.*, u.display_name AS created_by_name
+                           FROM adhoc_group_flights f
+                           JOIN users u ON u.id = f.created_by_user_id
+                          WHERE f.group_id = ?
+                          ORDER BY (f.dep_at IS NULL), f.dep_at, f.id");
+    $st->execute([$id]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function flight_validate(array $body): array {
+    $airline   = isset($body['airline'])       ? mb_substr(trim((string)$body['airline']), 0, 120) : null;
+    $flightNum = isset($body['flight_number']) ? mb_substr(trim((string)$body['flight_number']), 0, 40)  : null;
+    $depAp     = isset($body['dep_airport'])   ? mb_substr(trim((string)$body['dep_airport']), 0, 80)  : null;
+    $arrAp     = isset($body['arr_airport'])   ? mb_substr(trim((string)$body['arr_airport']), 0, 80)  : null;
+    $conf      = isset($body['confirmation_code']) ? mb_substr(trim((string)$body['confirmation_code']), 0, 60) : null;
+    $seat      = isset($body['seat'])          ? mb_substr(trim((string)$body['seat']), 0, 60)  : null;
+    foreach (['airline','flightNum','depAp','arrAp','conf','seat'] as $vn) if ($$vn === '') $$vn = null;
+    $url = isset($body['url']) ? trim((string)$body['url']) : '';
+    if ($url !== '' && !preg_match('#^https?://#i', $url)) throw new ApiException('bad_request', 'url は http(s)', 400);
+    if ($url === '') $url = null;
+    $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 2000) : null;
+    if ($memo === '') $memo = null;
+    $dep = parse_iso_datetime_nullable($body['dep_at'] ?? null, 'dep_at');
+    $arr = parse_iso_datetime_nullable($body['arr_at'] ?? null, 'arr_at');
+    if (!$flightNum && !$airline) throw new ApiException('bad_request', 'airline または flight_number 必須', 400);
+    return compact('airline','flightNum','depAp','arrAp','conf','seat','url','memo','dep','arr');
+}
+
+function group_flights_add(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $v = flight_validate(read_json_body());
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_flights
+        (group_id, airline, flight_number, dep_airport, dep_at, arr_airport, arr_at,
+         confirmation_code, seat, url, memo, created_by_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$id, $v['airline'], $v['flightNum'], $v['depAp'], $v['dep'],
+        $v['arrAp'], $v['arr'], $v['conf'], $v['seat'], $v['url'], $v['memo'], (int)$u['id']]);
+    json_response(['id' => (int)$pdo->lastInsertId()]);
+}
+
+function group_flights_patch(PDO $pdo, array $cfg, int $id, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_flights WHERE id=? AND group_id=?");
+    $st->execute([$fid, $id]);
+    if ($st->fetchColumn() === false) throw new ApiException('not_found', '航空券が見つかりません', 404);
+    $v = flight_validate(read_json_body());
+    $pdo->prepare("UPDATE adhoc_group_flights SET
+        airline=?, flight_number=?, dep_airport=?, dep_at=?, arr_airport=?, arr_at=?,
+        confirmation_code=?, seat=?, url=?, memo=? WHERE id=?")
+        ->execute([$v['airline'], $v['flightNum'], $v['depAp'], $v['dep'],
+                   $v['arrAp'], $v['arr'], $v['conf'], $v['seat'], $v['url'], $v['memo'], $fid]);
+    json_response(['ok' => true]);
+}
+
+function group_flights_del(PDO $pdo, array $cfg, int $id, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $pdo->prepare("DELETE FROM adhoc_group_flights WHERE id=? AND group_id=?")->execute([$fid, $id]);
+    json_response(['ok' => true]);
+}
+
+// 航空券 → スケジュール展開: 出発 + 到着 の 2 アイテムを 1 ペアで作成。
+function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT * FROM adhoc_group_flights WHERE id=? AND group_id=?");
+    $st->execute([$fid, $id]);
+    $F = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$F) throw new ApiException('not_found', '航空券が見つかりません', 404);
+    if (!$F['dep_at'] && !$F['arr_at']) {
+        throw new ApiException('bad_request', '出発 or 到着 日時が必要', 400);
+    }
+    $pairId = 'flt_' . bin2hex(random_bytes(4));
+    $label = trim(($F['airline'] ?? '') . ' ' . ($F['flight_number'] ?? ''));
+    if ($label === '') $label = '便';
+    $created = [];
+    db_tx($pdo, function () use ($pdo, $id, $u, $F, $pairId, $label, &$created) {
+        $insOne = function (?string $dt, ?string $airport, string $suffix) use ($pdo, $id, $u, $F, $pairId, $label, &$created) {
+            if ($dt === null) return;
+            $day = substr($dt, 0, 10);
+            $time = substr($dt, 11, 8);
+            $stm = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)
+                FROM adhoc_group_schedule_items WHERE group_id=? AND day_date=?");
+            $stm->execute([$id, $day]);
+            $sort = (int)$stm->fetchColumn() + 1;
+            $title = mb_substr($label . $suffix, 0, 200);
+            $ins = $pdo->prepare("INSERT INTO adhoc_group_schedule_items
+                (group_id, day_date, start_time, kind, title, location, link_pair_id, sort_order, created_by_user_id, created_at)
+                VALUES (?, ?, ?, 'flight', ?, ?, ?, ?, ?, NOW())");
+            $ins->execute([$id, $day, $time, $title, $airport, $pairId, $sort, (int)$u['id']]);
+            $created[] = (int)$pdo->lastInsertId();
+        };
+        $insOne($F['dep_at'], $F['dep_airport'], ' 出発');
+        $insOne($F['arr_at'], $F['arr_airport'], ' 到着');
+    });
+    json_response(['ok' => true, 'created_ids' => $created, 'pair_id' => $pairId]);
+}
 
 // ──────── グループチャット (LINE 的) ─────────
 // GET ?since_id=N  -> id > N の新着を時系列で。 since_id 無しなら直近 50 件。
