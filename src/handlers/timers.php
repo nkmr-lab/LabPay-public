@@ -20,6 +20,14 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 function timers_autoclose(PDO $pdo): void {
+    // 1) 終了時刻 過ぎ かつ repeat 残あり → 次サイクルへスライド (started/ends + dur)
+    $pdo->exec("UPDATE timers
+                   SET started_at = ends_at,
+                       ends_at    = DATE_ADD(ends_at, INTERVAL duration_seconds SECOND),
+                       repeat_idx = repeat_idx + 1
+                 WHERE status='running' AND ends_at <= NOW()
+                   AND repeat_max > 0 AND repeat_idx < repeat_max");
+    // 2) 終了時刻 過ぎ かつ repeat 切れ / 無 → 完了に。
     $pdo->exec("UPDATE timers SET status='done', closed_at=NOW()
                  WHERE status='running' AND ends_at <= NOW()");
 }
@@ -57,6 +65,18 @@ function timers_create(PDO $pdo, array $cfg): void {
     if ($dur < 5 || $dur > 24 * 3600) {
         throw new ApiException('bad_request', 'duration_seconds 5..86400', 400);
     }
+    // ベル (1/2/3) と repeat_max を 任意で受け取る。 ベルは 1 <= sec < dur の範囲のみ受理。
+    $bells = [];
+    foreach (['bell1','bell2','bell3'] as $k) {
+        $v = $body[$k . '_seconds'] ?? null;
+        if ($v === null || $v === '') { $bells[] = null; continue; }
+        $iv = (int)$v;
+        if ($iv < 1 || $iv >= $dur) {
+            throw new ApiException('bad_request', "{$k}_seconds は 1 以上 duration 未満", 400);
+        }
+        $bells[] = $iv;
+    }
+    $repeatMax = max(0, min(100, (int)($body['repeat_max'] ?? 0)));
     $participantIds = $body['participant_ids'] ?? [];
     if (!is_array($participantIds)) {
         throw new ApiException('bad_request', 'participant_ids 配列', 400);
@@ -76,11 +96,15 @@ function timers_create(PDO $pdo, array $cfg): void {
     $started = date('Y-m-d H:i:s');
     $ends    = date('Y-m-d H:i:s', time() + $dur);
     $tid = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $started, $ends, $participantIds, &$tid) {
+    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $started, $ends, $participantIds, $bells, $repeatMax, &$tid) {
         $ins = $pdo->prepare("INSERT INTO timers
-            (title, creator_user_id, duration_seconds, started_at, ends_at, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'running', NOW())");
-        $ins->execute([$title, (int)$u['id'], $dur, $started, $ends]);
+            (title, creator_user_id, duration_seconds,
+             bell1_seconds, bell2_seconds, bell3_seconds, repeat_max, repeat_idx,
+             started_at, ends_at, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'running', NOW())");
+        $ins->execute([$title, (int)$u['id'], $dur,
+            $bells[0], $bells[1], $bells[2], $repeatMax,
+            $started, $ends]);
         $tid = (int)$pdo->lastInsertId();
         $stP = $pdo->prepare("INSERT INTO timer_participants (timer_id, user_id) VALUES (?, ?)");
         foreach ($participantIds as $uid) $stP->execute([$tid, $uid]);
@@ -137,6 +161,11 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
             'creator_user_id'  => (int)$t['creator_user_id'],
             'creator_name'     => $t['creator_name'],
             'duration_seconds' => (int)$t['duration_seconds'],
+            'bell1_seconds'    => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
+            'bell2_seconds'    => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
+            'bell3_seconds'    => isset($t['bell3_seconds']) ? (int)$t['bell3_seconds'] : null,
+            'repeat_max'       => (int)($t['repeat_max'] ?? 0),
+            'repeat_idx'       => (int)($t['repeat_idx'] ?? 0),
             'started_at'       => $t['started_at'],
             'ends_at'          => $t['ends_at'],
             'status'           => $t['status'],

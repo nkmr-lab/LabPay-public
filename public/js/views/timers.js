@@ -7,6 +7,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { playSound } from '../sounds.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -107,6 +108,21 @@ export async function renderTimerNew({ query } = {}) {
         <input type="number" id="tmn-sec" min="0" max="59" placeholder="秒" style="max-width:90px">
         <span class="muted">秒</span>
       </div>
+      <details style="margin-top:10px">
+        <summary class="hint" style="cursor:pointer">🔔 中間ベル + 🔁 リピート設定</summary>
+        <div style="margin-top:6px">
+          <div class="hint-sm" style="margin-bottom:4px">タイマー開始から N 秒後に 効果音 (設定 → 効果音 → ルーレット用のものが鳴ります)。 空欄 = ベル無し。</div>
+          <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
+            <label style="display:inline-flex; align-items:center; gap:4px">1ベル: <input type="number" id="tmn-bell1" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
+            <label style="display:inline-flex; align-items:center; gap:4px">2ベル: <input type="number" id="tmn-bell2" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
+            <label style="display:inline-flex; align-items:center; gap:4px">3ベル: <input type="number" id="tmn-bell3" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
+          </div>
+          <div class="row" style="gap:6px; align-items:center">
+            <label style="display:inline-flex; align-items:center; gap:4px">🔁 繰り返し: <input type="number" id="tmn-repeat" min="0" max="100" value="0" style="max-width:80px"> 回</label>
+            <span class="muted" style="font-size:11px">(0 = 1 回きり)</span>
+          </div>
+        </div>
+      </details>
       <div class="field" style="margin-top:10px">
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
         ${lockMembers ? '' : `<div id="tmn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>`}
@@ -184,9 +200,22 @@ export async function renderTimerNew({ query } = {}) {
     const total = min * 60 + sec;
     if (!title) { toast('タイトル必須'); return; }
     if (total < 5) { toast('5 秒以上にしてください'); return; }
+    const bell1 = parseInt(document.getElementById('tmn-bell1').value, 10);
+    const bell2 = parseInt(document.getElementById('tmn-bell2').value, 10);
+    const bell3 = parseInt(document.getElementById('tmn-bell3').value, 10);
+    const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
+    for (const b of [bell1, bell2, bell3]) {
+      if (Number.isFinite(b) && (b < 1 || b >= total)) {
+        toast(`ベル時刻は 1 秒以上 / 合計未満 (${total}秒) に`); return;
+      }
+    }
     try {
       const r = await post('/api/timers', {
         title, duration_seconds: total, participant_ids: [...selected],
+        bell1_seconds: Number.isFinite(bell1) ? bell1 : null,
+        bell2_seconds: Number.isFinite(bell2) ? bell2 : null,
+        bell3_seconds: Number.isFinite(bell3) ? bell3 : null,
+        repeat_max: repeatMax,
       });
       toast('タイマーを開始しました');
       navigate('#/timers/' + r.id);
@@ -200,6 +229,11 @@ let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server から�
 let tmEndsMs = 0;
 let tmStartedMs = 0;
 let tmDurationSec = 0;
+let tmBells = [];           // [秒, ...] 開始からの 秒数
+let tmBellsFired = new Set();
+let tmRepeatMax = 0;
+let tmRepeatIdx = 0;
+let tmLastCycleIdx = -1;
 let tmStatus = 'running';
 
 function stopTimerLoops() {
@@ -251,6 +285,16 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     tmStartedMs   = Date.parse(String(t.started_at).replace(' ', 'T'));
     tmDurationSec = t.duration_seconds;
     tmStatus      = t.status;
+    // ベル / リピート 情報 (resync 時も更新)
+    tmBells       = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(Number.isFinite);
+    tmRepeatMax   = t.repeat_max || 0;
+    tmRepeatIdx   = t.repeat_idx || 0;
+    if (!isResync) tmBellsFired = new Set();
+    // サイクルが進んだら fired をリセット (リピート 2 周目で 再度鳴らす)
+    if (tmLastCycleIdx !== tmRepeatIdx) {
+      tmBellsFired = new Set();
+      tmLastCycleIdx = tmRepeatIdx;
+    }
     if (!isResync) {
       document.getElementById('tmd-head').innerHTML = `
         <h2 style="margin:6px 0 0">${escapeHtml(t.title)}</h2>
@@ -313,6 +357,16 @@ function tickTimer() {
   const stEl    = document.getElementById('tmd-status');
   if (!countEl) { stopTimerLoops(); return; }
   const now = Date.now() + tmOffsetMs;
+  // ベル 発火: 開始からの 経過秒数が ベル 設定値を 越えたら 1 回鳴らす。
+  if (tmStatus === 'running' && tmBells.length) {
+    const elapsed = Math.floor((now - tmStartedMs) / 1000);
+    for (const b of tmBells) {
+      if (elapsed >= b && !tmBellsFired.has(b)) {
+        tmBellsFired.add(b);
+        playSound('roulette_spin');  // 共用 (まだ 専用 event_key を切ってない)
+      }
+    }
+  }
   if (tmStatus === 'cancelled') {
     countEl.textContent = '停止';
     countEl.style.color = '#888';
@@ -330,11 +384,20 @@ function tickTimer() {
   const pct = tmDurationSec ? Math.min(100, (elapsedSec / tmDurationSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (remainingSec === 0 && tmStatus === 'running') {
-    stEl.textContent = '🎉 終了!';
-    tmStatus = 'done';
-    stopTimerLoops();
+    // リピート残あり: サーバの autoclose が 次サイクルにスライドさせるので、
+    // ローカルでは status を done に変えず、 次の sync を待つ。
+    if (tmRepeatMax > 0 && tmRepeatIdx < tmRepeatMax) {
+      stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目 切替中…`;
+    } else {
+      stEl.textContent = '🎉 終了!';
+      playSound('roulette_spin');  // 終了音
+      tmStatus = 'done';
+      stopTimerLoops();
+    }
   } else if (tmStatus === 'done') {
     stEl.textContent = '🎉 終了';
+  } else if (tmRepeatMax > 0) {
+    stEl.textContent = `🔁 ${tmRepeatIdx + 1}/${tmRepeatMax + 1} 回目`;
   } else {
     stEl.textContent = '';
   }
