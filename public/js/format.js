@@ -41,6 +41,14 @@ export function fmtTime(s) {
   return x.length >= 16 ? x.slice(11, 16) : '';
 }
 
+// DATETIME 文字列 → datetime-local input value ("YYYY-MM-DDTHH:MM")
+// SQL は "YYYY-MM-DD HH:MM:SS" を返すが、 input[type=datetime-local] は T 区切り + 秒なし。
+export function fmtLocalInput(s) {
+  const x = asStr(s);
+  if (!x) return '';
+  return x.replace(' ', 'T').slice(0, 16);
+}
+
 // "YYYY-MM-DD HH:MM" → 「あと N 分」 / 「あと N 時間 M 分」 / 「あと N 日」 / 「終了」
 // closed が true なら 「終了」。 過去時刻なら 「超過」 (短い)。
 export function fmtRelative(s, opts = {}) {

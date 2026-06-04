@@ -5,7 +5,8 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { renderCoverEditor, wireCoverEditor } from './groups.js';
-import { fmtDate, fmtDateTime, tag } from '../format.js';
+import { fmtDate, fmtDateTime, fmtLocalInput, tag } from '../format.js';
+import { openModal } from '../modal.js';
 import { createMemberPicker } from '../member_picker.js';
 import { isAppVisible } from './apps.js';
 
@@ -351,7 +352,7 @@ async function loadDetail(id) {
       muParams.set('members', ids);
       muParams.set('title', '[' + (i.title || '') + ']');
       if (i.location) muParams.set('location', i.location);
-      if (i.starts_at) muParams.set('when', String(i.starts_at).replace(' ', 'T').slice(0, 16));
+      if (i.starts_at) muParams.set('when', fmtLocalInput(i.starts_at));
       // v385 ユーザの アプリ表示設定 で 隠れているものは ショートカットも 出さない。
       const meetupBtn   = isAppVisible('meetups')  ? `<a class="btn primary" href="#/meetups/new?${muParams.toString()}">🤝 待ち合わせを作る</a>` : '';
       const rouletteBtn = isAppVisible('roulette') ? `<a class="btn" href="#/roulette?members=${ids}">🎰 ルーレット</a>` : '';
@@ -476,73 +477,61 @@ async function onCancel(id) {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// v369 編集モーダル: 発起人が タイトル / 説明 / 開催日時 / 募集締切 / 場所 / 上限を 編集。
+// v388 modal.js + format.fmtLocalInput を 利用。 旧版の自作 overlay + close 配線を撤去。
 // 画像は 既存の renderCoverEditor で 別途編集可なので ここでは扱わない。
 function openInvEditModal(i) {
   const id = Number(i.id);
-  const toLocal = (s) => (s ? String(s).replace(' ', 'T').slice(0, 16) : '');
-  // v370 開催日 / 時刻 を分割。 has_time=0 なら 時刻欄は空にしておく。
   const startsDate = i.starts_at ? String(i.starts_at).slice(0, 10) : '';
   const startsTime = (i.starts_at && Number(i.starts_at_has_time) !== 0)
     ? String(i.starts_at).slice(11, 16) : '';
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:flex-start; padding:20px; overflow-y:auto; justify-content:center';
-  wrap.innerHTML = `
-    <div style="background:#fff; border-radius:12px; padding:14px; max-width:480px; width:100%; box-sizing:border-box">
-      <div class="row center" style="margin-bottom:8px">
-        <h3 style="margin:0">✏️ 募集を編集</h3>
-        <button class="btn" data-close>×</button>
+  const bodyHtml = `
+    <label class="field"><span class="lbl">タイトル</span>
+      <input type="text" id="ied-title" maxlength="200" value="${escapeHtml(i.title || '')}">
+    </label>
+    <label class="field"><span class="lbl">開催日 (任意・時刻は空欄なら 終日)</span>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <input type="date" id="ied-date" value="${escapeHtml(startsDate)}" style="flex:1; min-width:130px">
+        <input type="time" id="ied-time" value="${escapeHtml(startsTime)}" style="flex:1; min-width:90px">
       </div>
-      <label class="field"><span class="lbl">タイトル</span>
-        <input type="text" id="ied-title" maxlength="200" value="${escapeHtml(i.title || '')}">
-      </label>
-      <label class="field"><span class="lbl">開催日 (任意・時刻は空欄なら 終日)</span>
-        <div class="row" style="gap:6px; flex-wrap:wrap">
-          <input type="date" id="ied-date" value="${escapeHtml(startsDate)}" style="flex:1; min-width:130px">
-          <input type="time" id="ied-time" value="${escapeHtml(startsTime)}" style="flex:1; min-width:90px">
-        </div>
-      </label>
-      <label class="field"><span class="lbl">募集締切 (任意)</span>
-        <input type="datetime-local" id="ied-deadline" value="${escapeHtml(toLocal(i.signup_closes_at))}">
-        <span class="hint-sm">これ以降は 参加表明を受け付けない時刻。</span>
-      </label>
-      <label class="field"><span class="lbl">場所 (任意)</span>
-        <input type="text" id="ied-where" maxlength="200" value="${escapeHtml(i.location || '')}">
-      </label>
-      <label class="field"><span class="lbl">上限人数 (任意・空欄なし)</span>
-        <input type="number" id="ied-cap" min="1" max="1000" value="${i.capacity != null ? i.capacity : ''}">
-      </label>
-      <label class="field"><span class="lbl">詳細 (任意)</span>
-        <textarea id="ied-desc" maxlength="5000" rows="3">${escapeHtml(i.description || '')}</textarea>
-      </label>
-      <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
-        <button class="btn" data-close>キャンセル</button>
-        <button id="ied-save" class="primary">保存</button>
-      </div>
-    </div>`;
-  document.body.appendChild(wrap);
-  const close = () => wrap.remove();
-  wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
-  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
-  document.getElementById('ied-save').addEventListener('click', async () => {
-    const dv = document.getElementById('ied-date').value;
-    const tv = document.getElementById('ied-time').value;
-    const body = {
-      title:            document.getElementById('ied-title').value.trim(),
-      starts_at:        dv ? (tv ? `${dv}T${tv}` : dv) : null,
-      signup_closes_at: document.getElementById('ied-deadline').value || null,
-      location:         document.getElementById('ied-where').value.trim() || null,
-      capacity:         document.getElementById('ied-cap').value
-                          ? Number(document.getElementById('ied-cap').value)
-                          : null,
-      description:      document.getElementById('ied-desc').value.trim() || null,
-    };
-    if (!body.title) { toast('タイトル必須'); return; }
-    try {
-      await patch('/api/invitations/' + id, body);
-      toast('保存しました');
-      close();
-      await loadDetail(id);
-    } catch (e) { toast('失敗: ' + e.message); }
+    </label>
+    <label class="field"><span class="lbl">募集締切 (任意)</span>
+      <input type="datetime-local" id="ied-deadline" value="${escapeHtml(fmtLocalInput(i.signup_closes_at))}">
+      <span class="hint-sm">これ以降は 参加表明を受け付けない時刻。</span>
+    </label>
+    <label class="field"><span class="lbl">場所 (任意)</span>
+      <input type="text" id="ied-where" maxlength="200" value="${escapeHtml(i.location || '')}">
+    </label>
+    <label class="field"><span class="lbl">上限人数 (任意・空欄なし)</span>
+      <input type="number" id="ied-cap" min="1" max="1000" value="${i.capacity != null ? i.capacity : ''}">
+    </label>
+    <label class="field"><span class="lbl">詳細 (任意)</span>
+      <textarea id="ied-desc" maxlength="5000" rows="3">${escapeHtml(i.description || '')}</textarea>
+    </label>`;
+  const m = openModal({
+    title: '✏️ 募集を編集',
+    bodyHtml,
+    buttons: [
+      { label: 'キャンセル', kind: 'btn',     onClick: () => m.close() },
+      { label: '保存',       kind: 'primary', onClick: async () => {
+        const dv = document.getElementById('ied-date').value;
+        const tv = document.getElementById('ied-time').value;
+        const body = {
+          title:            document.getElementById('ied-title').value.trim(),
+          starts_at:        dv ? (tv ? `${dv}T${tv}` : dv) : null,
+          signup_closes_at: document.getElementById('ied-deadline').value || null,
+          location:         document.getElementById('ied-where').value.trim() || null,
+          capacity:         document.getElementById('ied-cap').value ? Number(document.getElementById('ied-cap').value) : null,
+          description:      document.getElementById('ied-desc').value.trim() || null,
+        };
+        if (!body.title) { toast('タイトル必須'); return; }
+        m.setBusy(true);
+        try {
+          await patch('/api/invitations/' + id, body);
+          toast('保存しました');
+          m.close();
+          await loadDetail(id);
+        } catch (e) { toast('失敗: ' + e.message); m.setBusy(false); }
+      }},
+    ],
   });
 }

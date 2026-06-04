@@ -2,6 +2,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate, safeHttpUrl } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadTaskAttachment } from '../upload.js';
+import { fmtLocalInput } from '../format.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 // 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
@@ -740,7 +741,7 @@ function renderEditForm(t) {
   wrap.hidden = false;
   const auds = (t.audience_grades || '').split(',').filter(Boolean);
   // datetime-local needs "YYYY-MM-DDTHH:MM"
-  const dlVal = t.deadline ? t.deadline.replace(' ', 'T').slice(0, 16) : '';
+  const dlVal = fmtLocalInput(t.deadline);
   wrap.innerHTML = `
     <div class="card">
       <h3>タスクを編集</h3>

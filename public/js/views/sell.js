@@ -3,6 +3,7 @@ import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { startScanner } from '../scan.js';
 import { uploadImage } from '../upload.js';
+import { openModal } from '../modal.js';
 
 let currentScanner = null;
 let currentJan = '';     // The JAN held internally for the active new-listing flow (set by scanner)
@@ -346,25 +347,16 @@ function openSellPreview(kind) {
       <button class="primary" style="width:100%; margin-top:8px" disabled>${isGift ? 'もらう (プレビュー)' : '購入する (プレビュー)'}</button>
       ${msgLine}
     </div>`;
-  // モーダル
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:flex-start; padding:20px; overflow-y:auto; justify-content:center';
-  wrap.innerHTML = `
-    <div style="background:#fff; border-radius:12px; padding:14px; max-width:480px; width:100%; box-sizing:border-box">
-      <div class="row center" style="margin-bottom:8px">
-        <h3 style="margin:0">👀 プレビュー</h3>
-        <button class="btn" data-close>×</button>
-      </div>
+  // v388 共有 modal.js
+  openModal({
+    title: '👀 プレビュー',
+    bodyHtml: `
       <p class="hint" style="font-size:12px; margin:0 0 6px">出品はまだ実行されていません。 以下の見た目になります:</p>
       <h4 style="margin:10px 0 6px; font-size:13px">購入 一覧 (タイル)</h4>
       ${tileHtml}
       <h4 style="margin:14px 0 6px; font-size:13px">購入 詳細</h4>
-      ${detailHtml}
-    </div>`;
-  document.body.appendChild(wrap);
-  const close = () => wrap.remove();
-  wrap.querySelector('[data-close]').addEventListener('click', close);
-  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+      ${detailHtml}`,
+  });
 }
 // avatarHtml は router.js export 済だが、 ここでは name only の小型版を直接組む。
 function avatarSmall(name, url) {
