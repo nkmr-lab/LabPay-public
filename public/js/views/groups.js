@@ -1622,6 +1622,19 @@ async function loadSchedule(gid) {
 // 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
 const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk','move']);
 
+// 「35.6586, 139.7454」 形式の文字列を {lat, lng} に。 解釈できなければ両方 null。
+// Google Maps の右クリック → 「緯度経度をコピー」 がこの形式で取れる。
+function parseLatLng(s) {
+  if (!s || typeof s !== 'string') return { lat: null, lng: null };
+  const parts = s.split(',').map(x => x.trim()).filter(x => x.length);
+  if (parts.length < 2) return { lat: null, lng: null };
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat: null, lng: null };
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return { lat: null, lng: null };
+  return { lat, lng };
+}
+
 // ペア id を 2 つの独立 hash → 色相 + 位置 spread に。 同じ pair_id = 同じ色 /
 // 同じ位置 に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
 // 色相レンジを区切って 「青系=移動」 「赤系=宿泊」 がぱっと見で分かるように。
@@ -1893,14 +1906,9 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
-        <div class="row" style="gap:6px; flex-wrap:wrap">
-          <label class="field" style="flex:1; min-width:120px"><span class="lbl">緯度 (任意)</span>
-            <input type="number" id="sim-lat" step="0.0000001" placeholder="例: 35.6586" value="${it.lat ?? ''}">
-          </label>
-          <label class="field" style="flex:1; min-width:120px"><span class="lbl">経度 (任意)</span>
-            <input type="number" id="sim-lng" step="0.0000001" placeholder="例: 139.7454" value="${it.lng ?? ''}">
-          </label>
-        </div>
+        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピー で貼れる形式)</span>
+          <input type="text" id="sim-latlng" placeholder="例: 35.6586, 139.7454" value="${it.lat != null && it.lng != null ? it.lat + ',' + it.lng : ''}">
+        </label>
         <div class="hint-sm">緯度経度が入っていれば 📍 タップで Google Maps の正確な位置へ。</div>
         <label class="field"><span class="lbl">URL (任意)</span>
           <input type="url" id="sim-url" maxlength="2000" placeholder="https://..." value="${escapeHtml(it.url || '')}">
@@ -1978,8 +1986,9 @@ function openSchedItemModal(gid, it) {
       const listEl = document.getElementById('sim-att-list');
       try {
         const d = await get(`/api/groups/${gid}/schedule/${it.id}/attachments`);
-        listEl.innerHTML = d.attachments.length
-          ? d.attachments.map(renderAttRow).join('')
+        const arr = Array.isArray(d?.attachments) ? d.attachments : [];
+        listEl.innerHTML = arr.length
+          ? arr.map(renderAttRow).join('')
           : '<div class="hint-sm" style="padding:2px 6px">添付ファイル無し</div>';
         listEl.querySelectorAll('[data-att-rm]').forEach(b => {
           b.addEventListener('click', async () => {
@@ -2024,8 +2033,7 @@ function openSchedItemModal(gid, it) {
       start_time:      document.getElementById('sim-start').value || null,
       duration_minutes: document.getElementById('sim-dur').value || null,
       location:        document.getElementById('sim-loc').value.trim() || null,
-      lat:             document.getElementById('sim-lat').value || null,
-      lng:             document.getElementById('sim-lng').value || null,
+      ...parseLatLng(document.getElementById('sim-latlng').value),
       url:             document.getElementById('sim-url').value.trim() || null,
       image_url:       stagedImage || null,
       memo:            document.getElementById('sim-memo').value.trim() || null,
@@ -2350,12 +2358,9 @@ function openLodgingModal(gid, it) {
           <input type="text" id="lm-name" maxlength="200" value="${escapeHtml(it.name || '')}" autofocus></label>
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="lm-loc" maxlength="500" value="${escapeHtml(it.location || '')}"></label>
-        <div class="row" style="gap:6px; flex-wrap:wrap">
-          <label class="field" style="flex:1; min-width:150px"><span class="lbl">緯度 (任意)</span>
-            <input type="number" id="lm-lat" step="0.0000001" value="${it.lat ?? ''}"></label>
-          <label class="field" style="flex:1; min-width:150px"><span class="lbl">経度 (任意)</span>
-            <input type="number" id="lm-lng" step="0.0000001" value="${it.lng ?? ''}"></label>
-        </div>
+        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピー で貼れる)</span>
+          <input type="text" id="lm-latlng" placeholder="例: 35.6586, 139.7454" value="${it.lat != null && it.lng != null ? it.lat + ',' + it.lng : ''}">
+        </label>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <label class="field" style="flex:1; min-width:180px"><span class="lbl">チェックイン</span>
             <input type="datetime-local" id="lm-ci" value="${escapeHtml(toLocalInputValue(it.check_in_at))}"></label>
@@ -2382,8 +2387,7 @@ function openLodgingModal(gid, it) {
     const body = {
       name: document.getElementById('lm-name').value.trim(),
       location: document.getElementById('lm-loc').value.trim() || null,
-      lat: document.getElementById('lm-lat').value || null,
-      lng: document.getElementById('lm-lng').value || null,
+      ...parseLatLng(document.getElementById('lm-latlng').value),
       check_in_at:  document.getElementById('lm-ci').value || null,
       check_out_at: document.getElementById('lm-co').value || null,
       room_number: document.getElementById('lm-room').value.trim() || null,
