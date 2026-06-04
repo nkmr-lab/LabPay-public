@@ -24,6 +24,10 @@ export async function renderSettings() {
         <input type="tel" id="profile-phone" maxlength="50" placeholder="例: 090-1234-5678" inputmode="tel">
       </label>
       <label class="field">
+        <span class="lbl">Slack member ID (任意) <span class="hint-sm">— 設定するとアプリ通知が Slack DM にも届きます。 取得方法: Slack プロフィール → 「⋯」 → 「メンバー ID をコピー」</span></span>
+        <input type="text" id="profile-slack" maxlength="40" placeholder="例: U01ABCD2345" autocapitalize="characters">
+      </label>
+      <label class="field">
         <span class="lbl">アバター画像</span>
         <input type="file" id="profile-avatar-file" accept="image/*">
         <div id="profile-avatar-status" class="hint-sm"></div>
@@ -389,6 +393,7 @@ async function loadProfile() {
     const me = await get('/api/me');
     document.getElementById('profile-name').value = me.user.display_name || '';
     document.getElementById('profile-phone').value = me.user.phone_number || '';
+    document.getElementById('profile-slack').value = me.user.slack_member_id || '';
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
     pendingAvatarUrl = null;
   } catch (e) { toast('プロフィール取得失敗: ' + e.message); }
@@ -398,7 +403,12 @@ async function onProfileSave() {
   const display_name = document.getElementById('profile-name').value.trim();
   if (!display_name) { toast('表示名を入力してください'); return; }
   const phone_raw = document.getElementById('profile-phone').value.trim();
-  const body = { display_name, phone_number: phone_raw === '' ? null : phone_raw };
+  const slack_raw = document.getElementById('profile-slack').value.trim();
+  const body = {
+    display_name,
+    phone_number: phone_raw === '' ? null : phone_raw,
+    slack_member_id: slack_raw === '' ? null : slack_raw,
+  };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {
     await patch('/api/me', body);

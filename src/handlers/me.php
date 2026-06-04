@@ -14,13 +14,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
         $u['scrapbox_username'] = $row['scrapbox_username'] ?? null;
         $u['grade']             = $row['grade']             ?? null;
         $u['phone_number']      = $row['phone_number']      ?? null;
+        $u['slack_member_id']   = $row['slack_member_id']   ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -65,6 +66,19 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     throw new ApiException('bad_request', 'avatar_url must be /uploads/<file>.<ext> on this origin', 400);
                 }
                 $sets[] = 'avatar_url = ?'; $params[] = $url;
+            }
+        }
+        if (array_key_exists('slack_member_id', $body)) {
+            $sid = $body['slack_member_id'];
+            if ($sid === null || trim((string)$sid) === '') {
+                $sets[] = 'slack_member_id = NULL';
+            } else {
+                $sid = trim((string)$sid);
+                // Slack member ID は U + 英数字。 W (Enterprise Grid) も許容。
+                if (!preg_match('/^[UW][A-Z0-9]{6,30}$/', $sid)) {
+                    throw new ApiException('bad_request', 'slack_member_id は U/W で始まる Slack member ID (例: U01ABCD2345)', 400);
+                }
+                $sets[] = 'slack_member_id = ?'; $params[] = $sid;
             }
         }
         if (array_key_exists('phone_number', $body)) {
@@ -861,11 +875,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
              ORDER BY p.deadline_at ASC LIMIT 50");
         $stP->execute([$uid, $uid]);
         foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            // 自由記述のみで応答済 (votes 無し + voted_at あり + free_text あり) は除外:
-            // votes と free_text の OR 条件 (`voted_at IS NULL OR free_text IS NULL OR ''`) で
-            // すでに弾いてる。
             $items[] = [
                 'kind' => 'poll',
+                'kind_label' => '投票',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => '起案 ' . $r['creator_name'],
@@ -886,6 +898,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
                 'kind' => 'rollcall',
+                'kind_label' => '点呼',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => '起案 ' . $r['creator_name'],
@@ -900,18 +913,62 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
               FROM money_request_recipients rr
               JOIN money_requests mr ON mr.id = rr.request_id
               JOIN users u           ON u.id  = mr.creator_user_id
-             WHERE rr.user_id=? AND rr.paid_at IS NULL AND mr.status='open'
+             WHERE rr.user_id=? AND rr.paid_at IS NULL AND mr.closed_at IS NULL
              ORDER BY mr.id DESC LIMIT 50");
         $stM->execute([$uid]);
         foreach ($stM->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
                 'kind' => 'money_request',
+                'kind_label' => '請求',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => '¥' . number_format((int)$r['amount_yen']) . ' · ' . $r['creator_name'] . ' へ',
                 'deadline_at' => null,
                 'url' => '#/requests/' . $r['id'],
                 'icon' => '💸',
+            ];
+        }
+        // tasks: 自分が claim 中 (= 完了報告まだ) のもの
+        $stT = $pdo->prepare("
+            SELECT t.id, t.title, t.deadline_at, t.reward, u.display_name AS requester_name
+              FROM task_claims tc
+              JOIN tasks t  ON t.id = tc.task_id
+              JOIN users u  ON u.id = t.requester_user_id
+             WHERE tc.user_id=? AND tc.status='claimed' AND t.status='open'
+             ORDER BY t.deadline_at ASC LIMIT 50");
+        $stT->execute([$uid]);
+        foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'task',
+                'kind_label' => 'タスク',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => '依頼 ' . $r['requester_name'] . ' · 完了報告まち' . ((int)$r['reward'] > 0 ? ' · ' . (int)$r['reward'] . 'pt' : ''),
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/tasks/' . $r['id'],
+                'icon' => '✅',
+            ];
+        }
+        // 指名タスクで まだ claim していないもの
+        $stD = $pdo->prepare("
+            SELECT t.id, t.title, t.deadline_at, t.reward, u.display_name AS requester_name
+              FROM task_assigned_users tau
+              JOIN tasks t ON t.id = tau.task_id
+              JOIN users u ON u.id = t.requester_user_id
+             WHERE tau.user_id=? AND t.status='open'
+               AND NOT EXISTS (SELECT 1 FROM task_claims tc WHERE tc.task_id=t.id AND tc.user_id=? AND tc.status IN ('claimed','reported','approved'))
+             ORDER BY t.deadline_at ASC LIMIT 50");
+        $stD->execute([$uid, $uid]);
+        foreach ($stD->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'task',
+                'kind_label' => '指名タスク',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => '依頼 ' . $r['requester_name'] . ' · 未受諾' . ((int)$r['reward'] > 0 ? ' · ' . (int)$r['reward'] . 'pt' : ''),
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/tasks/' . $r['id'],
+                'icon' => '👉',
             ];
         }
         // 締切順 (締切無しは末尾)
@@ -943,6 +1000,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
                 'kind' => 'poll',
+                'kind_label' => '投票',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が応答",
@@ -964,6 +1022,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
                 'kind' => 'rollcall',
+                'kind_label' => '点呼',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が応答",
@@ -978,19 +1037,46 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                    (SELECT COUNT(*) FROM money_request_recipients rr2 WHERE rr2.request_id=mr.id) AS total_n,
                    (SELECT COUNT(*) FROM money_request_recipients rr3 WHERE rr3.request_id=mr.id AND rr3.paid_at IS NOT NULL) AS done_n
               FROM money_requests mr
-             WHERE mr.creator_user_id=? AND mr.status='open'
+             WHERE mr.creator_user_id=? AND mr.closed_at IS NULL
             HAVING done_n < total_n
              ORDER BY mr.id DESC LIMIT 50");
         $stM->execute([$uid]);
         foreach ($stM->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $items[] = [
                 'kind' => 'money_request',
+                'kind_label' => '請求',
                 'id' => (int)$r['id'],
                 'title' => $r['title'],
                 'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が支払い済",
                 'deadline_at' => null,
                 'url' => '#/requests/' . $r['id'],
                 'icon' => '💸',
+            ];
+        }
+        // tasks: 自分が依頼 (requester) で、 まだ approved 件数 < 必要数 のもの。
+        // 承認待ち (reported) があれば 「承認まち」 を強調。
+        $stT = $pdo->prepare("
+            SELECT t.id, t.title, t.deadline_at,
+                   (SELECT COUNT(*) FROM task_claims tc1 WHERE tc1.task_id=t.id AND tc1.status='approved') AS approved_n,
+                   (SELECT COUNT(*) FROM task_claims tc2 WHERE tc2.task_id=t.id AND tc2.status='reported') AS reported_n,
+                   (SELECT COUNT(*) FROM task_claims tc3 WHERE tc3.task_id=t.id AND tc3.status='claimed') AS claimed_n
+              FROM tasks t
+             WHERE t.requester_user_id=? AND t.status='open'
+             ORDER BY t.deadline_at ASC LIMIT 50");
+        $stT->execute([$uid]);
+        foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $reported = (int)$r['reported_n'];
+            $claimed  = (int)$r['claimed_n'];
+            $sub = $reported > 0 ? "{$reported} 件 承認まち" : ($claimed > 0 ? "{$claimed} 件 進行中" : '受諾まち');
+            $items[] = [
+                'kind' => 'task',
+                'kind_label' => 'タスク',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => $sub,
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/tasks/' . $r['id'],
+                'icon' => '✅',
             ];
         }
         usort($items, function ($a, $b) {

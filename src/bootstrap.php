@@ -367,6 +367,33 @@ function slack_api_get(array $cfg, string $endpoint, array $params = []): array 
     return $data;
 }
 
+// Slack Web API POST (chat.postMessage 等)。 JSON body + Bearer。
+function slack_api_post(array $cfg, string $endpoint, array $body): array {
+    $tok = (string)($cfg['slack']['bot_token'] ?? '');
+    if ($tok === '') throw new RuntimeException('slack.bot_token is empty');
+    $url = 'https://slack.com/api/' . ltrim($endpoint, '/');
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $tok,
+            'Content-Type: application/json; charset=utf-8',
+        ],
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+    ]);
+    $resp = curl_exec($ch);
+    $err  = curl_error($ch);
+    curl_close($ch);
+    if ($resp === false) throw new RuntimeException("slack curl failed: $err");
+    $data = json_decode($resp, true);
+    if (!is_array($data)) throw new RuntimeException("slack response not JSON: " . substr($resp, 0, 200));
+    if (empty($data['ok'])) throw new RuntimeException("slack error: " . ($data['error'] ?? 'unknown'));
+    return $data;
+}
+
 // ---------------- Activity log ----------------
 // Cheap append-only log of every API request. user_id is best-effort: we look
 // up the session cookie without forcing auth (so anonymous requests still get

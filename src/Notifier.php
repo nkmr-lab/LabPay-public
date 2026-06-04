@@ -21,6 +21,7 @@ class Notifier {
         $ins->execute([$userId, $type, mb_substr($body, 0, 255), $refType, $refId]);
         $nid = (int)$pdo->lastInsertId();
 
+        // Mail (任意)
         if (!empty($cfg['mail']['enabled']) && in_array($type, self::EMAILABLE_TYPES, true)) {
             try {
                 $u = $pdo->prepare('SELECT email, display_name FROM users WHERE id=?');
@@ -37,6 +38,28 @@ class Notifier {
                     }
                 }
             } catch (Throwable $e) { /* swallow */ }
+        }
+
+        // Slack DM (本人が slack_member_id を登録している場合のみ)
+        // bot_token と member id がそろっていれば chat.postMessage で DM を 1 通。
+        try {
+            if (!empty($cfg['slack']['bot_token'])) {
+                $u = $pdo->prepare('SELECT slack_member_id FROM users WHERE id=?');
+                $u->execute([$userId]);
+                $sid = (string)($u->fetchColumn() ?: '');
+                if ($sid !== '') {
+                    @slack_api_post($cfg, 'chat.postMessage', [
+                        'channel' => $sid,        // U-prefix の member ID を直接 channel に渡せば DM
+                        'text'    => '[LabPay] ' . $body,
+                        // 通知音やバッジを Slack 側で鳴らすため unfurl は off。 LinkUnfurl は許可。
+                        'unfurl_links' => false,
+                        'unfurl_media' => false,
+                    ]);
+                }
+            }
+        } catch (Throwable $e) {
+            // Slack 失敗は notification 本体を壊さない (ログだけ)。
+            error_log('[Notifier slack DM failed] uid=' . $userId . ' err=' . $e->getMessage());
         }
         return $nid;
     }

@@ -393,14 +393,32 @@ function fmtDeadlineColored(s) {
 }
 
 function renderPendingLikeItems(items, root) {
-  root.innerHTML = items.map(it => `
-    <a class="list-item" href="${escapeHtml(it.url)}">
-      <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
-      <div class="grow" style="min-width:0">
-        <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title)}</div>
-        <div class="meta">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
-      </div>
-    </a>`).join('');
+  root.innerHTML = items.map(it => {
+    // kind 別の色付きタグで 「投票 / 点呼 / 請求 / タスク」 を 一目で区別。
+    const tagBg = {
+      poll:          '#e3f2fd',
+      rollcall:      '#fff3e0',
+      money_request: '#fce4ec',
+      task:          '#e8f5e9',
+    }[it.kind] || '#eee';
+    const tagFg = {
+      poll:          '#1565c0',
+      rollcall:      '#e65100',
+      money_request: '#ad1457',
+      task:          '#2e7d32',
+    }[it.kind] || '#555';
+    const label = it.kind_label || it.kind;
+    return `
+      <a class="list-item" href="${escapeHtml(it.url)}">
+        <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
+        <div class="grow" style="min-width:0">
+          <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+            <span style="display:inline-block; background:${tagBg}; color:${tagFg}; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; margin-right:6px; vertical-align:1px">${escapeHtml(label)}</span>${escapeHtml(it.title)}
+          </div>
+          <div class="meta">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
+        </div>
+      </a>`;
+  }).join('');
 }
 
 async function renderPendingItems() {
