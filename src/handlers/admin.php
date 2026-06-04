@@ -503,6 +503,67 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ----- slack 診断 (v352) -----
+    // GET  /api/admin/slack_diag         bot identity + 現在の scope 一覧
+    // POST /api/admin/slack_diag/test    自分宛に 1 通 テスト DM を送る (chat:write の確認用)
+    if ($sub === 'slack_diag') {
+        $next = $seg[2] ?? '';
+        if ($next === '' && $method === 'GET') {
+            $out = ['bot_token_present' => !empty($cfg['slack']['bot_token'] ?? '')];
+            try {
+                $r = slack_api_post($cfg, 'auth.test', new stdClass()); // {} body
+                $out['ok'] = true;
+                $out['team'] = $r['team'] ?? null;
+                $out['user'] = $r['user'] ?? null;
+                $out['user_id'] = $r['user_id'] ?? null;
+                $out['url'] = $r['url'] ?? null;
+            } catch (Throwable $e) {
+                $out['ok'] = false;
+                $out['error'] = $e->getMessage();
+            }
+            // scope は auth.test の response header に X-OAuth-Scopes として乗るが、 我々の
+            // slack_api_post は body しか返さないので 別途 取得。 ここでは body のみ。
+            // chat:write の有無は 下の test エンドポイントで 1 通送ってみるのが確実。
+            json_response($out);
+            return;
+        }
+        if ($next === 'test' && $method === 'POST') {
+            $body = read_json_body();
+            $u = Auth::requireAdmin($pdo, $cfg);
+            $st = $pdo->prepare("SELECT slack_member_id FROM users WHERE id=?");
+            $st->execute([(int)$u['id']]);
+            $slackId = (string)$st->fetchColumn();
+            if ($slackId === '') {
+                throw new ApiException('bad_request',
+                    '自分の slack_member_id が未設定。 設定 → プロフィール の Slack member ID を埋めてください。', 400);
+            }
+            try {
+                $r = slack_api_post($cfg, 'chat.postMessage', [
+                    'channel' => $slackId,
+                    'text'    => '🧪 LabPay 通知テスト (admin slack_diag)',
+                ]);
+                json_response(['ok' => true, 'channel' => $r['channel'] ?? null]);
+            } catch (Throwable $e) {
+                $msg = $e->getMessage();
+                $hint = '';
+                if (str_contains($msg, 'missing_scope')) {
+                    $hint = "bot token が chat:write スコープを持っていません。\n"
+                          . "1) https://api.slack.com/apps から アプリ設定を開く\n"
+                          . "2) OAuth & Permissions → Bot Token Scopes に chat:write を追加\n"
+                          . "3) Reinstall to Workspace してから 新しい xoxb トークンで config/config.php の slack.bot_token を更新\n"
+                          . "4) systemctl reload httpd";
+                } elseif (str_contains($msg, 'invalid_auth') || str_contains($msg, 'not_authed')) {
+                    $hint = 'bot_token が不正 / 期限切れ。 Slack 側で 新しいトークンを発行。';
+                } elseif (str_contains($msg, 'channel_not_found')) {
+                    $hint = "あなたの slack_member_id が 不正、 もしくは Bot が DM 開けない 状態。\n"
+                          . "Slack でアプリの 「ホーム」 タブを 1 回開いてから 再試行 してください。";
+                }
+                json_response(['ok' => false, 'error' => $msg, 'hint' => $hint]);
+            }
+            return;
+        }
+    }
+
     // ----- scrapbox-via-slack sync trigger -----
     // POST /api/admin/scrapbox_slack/sync {day?: "Y-m-d", dry_run?: bool}
     if ($sub === 'scrapbox_slack' && ($seg[2] ?? '') === 'sync' && $method === 'POST') {

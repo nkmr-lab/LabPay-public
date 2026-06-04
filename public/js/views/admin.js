@@ -121,6 +121,16 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
+      <h3 style="margin:0">Slack 通知 診断</h3>
+      <p class="hint">「Notifier slack DM failed」 が増えてる時の調査用。 bot token と スコープを確認。</p>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
+        <button id="sld-check" class="btn">⚙ 接続確認 (auth.test)</button>
+        <button id="sld-send"  class="btn primary">✉ テスト DM 送信</button>
+      </div>
+      <pre id="sld-out" class="mono" style="font-size:11px; white-space:pre-wrap; background:#f6f6f9; padding:8px; border-radius:6px; margin-top:8px; max-height:200px; overflow:auto"></pre>
+    </div>
+
+    <div class="card">
       <h3>カレンダー</h3>
       <div class="row center">
         <div id="hol-status" class="muted" style="font-size:13px; flex:1">読み込み中…</div>
@@ -368,6 +378,23 @@ export async function renderAdmin() {
   const calState = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
   await loadHolidays();
   await renderCalendarGrid(calState.year, calState.month);
+  // Slack 診断ボタン (v352)
+  document.getElementById('sld-check')?.addEventListener('click', async () => {
+    const out = document.getElementById('sld-out');
+    out.textContent = '確認中…';
+    try { const r = await get('/api/admin/slack_diag'); out.textContent = JSON.stringify(r, null, 2); }
+    catch (e) { out.textContent = 'エラー: ' + e.message; }
+  });
+  document.getElementById('sld-send')?.addEventListener('click', async () => {
+    const out = document.getElementById('sld-out');
+    out.textContent = '送信中…';
+    try {
+      const r = await post('/api/admin/slack_diag/test', {});
+      out.textContent = JSON.stringify(r, null, 2);
+      if (r.ok) toast('Slack DM を送信しました'); else toast('送信失敗 (ログ参照)');
+    } catch (e) { out.textContent = 'エラー: ' + e.message; }
+  });
+
   document.getElementById('hol-sync').addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     try {
