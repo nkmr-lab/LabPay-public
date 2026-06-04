@@ -949,13 +949,15 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '✅',
             ];
         }
-        // 指名タスクで まだ claim していないもの
+        // 指名タスクで まだ claim していないもの。
+        // assigned_user_ids は CSV (例: "5,10,12") なので FIND_IN_SET で判定。
         $stD = $pdo->prepare("
             SELECT t.id, t.title, t.deadline_at, t.reward, u.display_name AS requester_name
-              FROM task_assigned_users tau
-              JOIN tasks t ON t.id = tau.task_id
+              FROM tasks t
               JOIN users u ON u.id = t.requester_user_id
-             WHERE tau.user_id=? AND t.status='open'
+             WHERE t.status='open'
+               AND t.assigned_user_ids IS NOT NULL AND t.assigned_user_ids <> ''
+               AND FIND_IN_SET(?, t.assigned_user_ids)
                AND NOT EXISTS (SELECT 1 FROM task_claims tc WHERE tc.task_id=t.id AND tc.user_id=? AND tc.status IN ('claimed','reported','approved'))
              ORDER BY t.deadline_at ASC LIMIT 50");
         $stD->execute([$uid, $uid]);
