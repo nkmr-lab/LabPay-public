@@ -2065,10 +2065,19 @@ function renderSchedItem(it) {
   }
   // 中間日も他の日と同じ濃さ (旧版は opacity 0.55 で薄めていたが、 「同じような予定で大丈夫」)。
   // ペアは 帯 (右側 縦ストリップ) だけで表現する方針。 タイトル横の 🔗 文字は出さない。
-  // 画像があれば左に 60px 角でかっこよく出す。 タップは行全体に乗ってる
-  // ので画像クリックも編集を開く (拡大表示したい時は edit modal から飛ぶ)。
-  const thumb = it.image_url
-    ? `<div style="width:60px; height:60px; flex-shrink:0; background:#f1f1f4 center/cover no-repeat url('${escapeHtml(it.image_url)}'); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08)"></div>`
+  // v366: 画像つきはヒーロー風: 左端から 約 2/3 まで埋め尽くし、 右端に 斜め切れ目。
+  //       clip-path で 右下が 22px 内側に切れ、 そこから 斜めに 右上 100% へ。
+  //       画像なしは 従来通り 32px 絵文字アイコン。
+  const HERO_PCT = 64;        // 画像幅 (行幅に対する %)
+  const HERO_SLANT = 22;      // 斜めの傾き量 (px)
+  const hasImage = !!it.image_url;
+  const heroImage = hasImage ? `
+    <div aria-hidden="true" style="position:absolute; left:0; top:0; bottom:0; width:${HERO_PCT}%;
+         background:#f1f1f4 center/cover no-repeat url('${escapeHtml(it.image_url)}');
+         clip-path:polygon(0 0, 100% 0, calc(100% - ${HERO_SLANT}px) 100%, 0 100%);
+         pointer-events:none; z-index:1; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)"></div>` : '';
+  const thumb = hasImage
+    ? '' // ヒーロー が代替
     : `<span style="font-size:22px; line-height:1; width:32px; text-align:center; flex-shrink:0">${k.icon}</span>`;
   const urlIcon = it.url
     ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary); margin-left:4px">🔗</a>`
@@ -2111,13 +2120,16 @@ function renderSchedItem(it) {
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
+  // 画像ありの場合は ロック/ハンドル を 画像の左上に 半透明バッジで オーバーレイ。
+  // 画像なし時は 従来通り (lock は absolute、 handle は flex 内)。
+  const overlayBg = hasImage ? 'background:rgba(255,255,255,0.88); padding:2px 4px; border-radius:6px;' : '';
   const lockBadge = isLocked ? `
     <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行は ここでは並び替えできません (本拠日でのみ可)"
-          style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.7; pointer-events:none; z-index:3">🔒</span>` : '';
+          style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.85; pointer-events:none; z-index:3; ${overlayBg}">🔒</span>` : '';
   const dragHandle = canEdit ? `
     <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="${escapeHtml(dayKey)}"
           aria-label="ドラッグして並び替え" title="ドラッグで並び替え (日をまたいでも OK)"
-          style="color:#999; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
+          style="${hasImage ? 'position:absolute; top:4px; left:4px; z-index:3;' : ''} ${overlayBg} color:#666; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
   // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
   // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
@@ -2140,7 +2152,9 @@ function renderSchedItem(it) {
   // 2 行目 (line2) は空でも HTML 上は存在させる。
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
   // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
+  // 画像つきは 左 2/3 がヒーロー → コンテンツ (タイトル + メタ) を 右側に逃がす。
   const rightPad = 'padding-right:18px;';
+  const leftPad = hasImage ? `padding-left:calc(${HERO_PCT}% + 10px);` : '';
   // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
   //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
@@ -2150,11 +2164,12 @@ function renderSchedItem(it) {
   const itemOpacity = isLocked ? 'opacity:0.7;' : '';
   return `
     <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
-         style="gap:8px; padding:6px 8px; ${rightPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${itemOpacity}">
+         style="gap:8px; padding:6px 8px; ${rightPad} ${leftPad} align-items:center; cursor:pointer; min-height:68px; position:relative; ${itemOpacity}; overflow:hidden">
+      ${heroImage}
       ${lockBadge}
       ${dragHandle}
       ${thumb}
-      <div class="grow" style="min-width:0; overflow:hidden">
+      <div class="grow" style="min-width:0; overflow:hidden; position:relative; z-index:2">
         <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
           ${escapeHtml(it.title)}${roleSuffix ? `<span class="muted" style="font-weight:400">${roleSuffix}</span>` : ''}${timeStr ? ` <span class="muted" style="font-weight:400">${timeStr}</span>` : ''}
         </div>
