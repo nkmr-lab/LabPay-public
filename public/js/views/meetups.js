@@ -6,6 +6,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { tag, fmtDateTime, participantPill } from '../format.js';
+import { createMemberPicker } from '../member_picker.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -165,52 +166,16 @@ export async function renderMeetupNew({ query } = {}) {
   }
   if (!usedPreset) setPreset(30); // デフォは 30 分後
 
-  let allUsers = [];
-  const selected = new Set();
-  presetMembers.forEach(uid => selected.add(uid));
+  // v383 共有 member_picker を 使用。 lockMembers の時は poolIds で 表示を制限、
+  //       bulk ボタンは 出さない (= グループ内 メンバーから選ぶだけ)。
+  let picker = null;
   try {
-    const u = await get('/api/users');
-    let pool = u.items || [];
-    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
-    allUsers = [...pool].sort((a, b) => {
-      const d = gradeRank(a.grade) - gradeRank(b.grade);
-      if (d !== 0) return d;
-      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
-    });
-    if (!lockMembers) {
-      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
-      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-      const bulkEl = document.getElementById('mun-bulk');
-      bulkEl.innerHTML = `
-        <button class="btn" data-bulk="all">全員</button>
-        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-      `;
-      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
-        b.addEventListener('click', () => {
-          const target = b.dataset.bulk === 'grade'
-            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
-            : allUsers;
-          const allOn = target.every(x => selected.has(x.id));
-          if (allOn) target.forEach(x => selected.delete(x.id));
-          else       target.forEach(x => selected.add(x.id));
-          document.querySelectorAll('#mun-members input[data-uid]').forEach(cb => {
-            cb.checked = selected.has(Number(cb.dataset.uid));
-          });
-        });
-      });
-    }
-    document.getElementById('mun-members').innerHTML = allUsers.map(x => `
-      <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <span>${escapeHtml(x.display_name)}</span>
-        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
-      </label>`).join('');
-    document.querySelectorAll('#mun-members input[data-uid]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const uid = Number(cb.dataset.uid);
-        if (cb.checked) selected.add(uid); else selected.delete(uid);
-      });
+    picker = await createMemberPicker({
+      bulkContainer: lockMembers ? null : document.getElementById('mun-bulk'),
+      chipsContainer: document.getElementById('mun-members'),
+      initial: presetMembers,
+      poolIds: lockMembers ? presetMembers : null,
+      showGenderBulk: false,
     });
   } catch (e) {
     document.getElementById('mun-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -221,10 +186,11 @@ export async function renderMeetupNew({ query } = {}) {
     const location = document.getElementById('mun-loc').value.trim();
     const when = whenEl.value;
     if (!when) { toast('集合時刻を入れてください'); return; }
-    if (!selected.size) { toast('参加者を 1 人以上'); return; }
+    const memberIds = picker ? [...picker.getSelected()] : [];
+    if (!memberIds.length) { toast('参加者を 1 人以上'); return; }
     try {
       const r = await post('/api/meetups', {
-        title, location, meetup_at: when, member_ids: [...selected],
+        title, location, meetup_at: when, member_ids: memberIds,
       });
       toast('待ち合わせを連絡しました');
       navigate('#/meetups/' + r.id);

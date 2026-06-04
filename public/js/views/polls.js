@@ -9,6 +9,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { tag, fmtDateTime } from '../format.js';
+import { createMemberPicker } from '../member_picker.js';
 
 const VIS_LABEL = {
   creator: '主催者のみ集計可視',
@@ -154,52 +155,18 @@ async function wirePollForm(initial, isEdit, onSave, opts = {}) {
       `${def.getFullYear()}-${p(def.getMonth()+1)}-${p(def.getDate())}T${p(def.getHours())}:${p(def.getMinutes())}`;
   }
 
-  let allUsers = [];
-  const selected = new Set((initial.voterIds || []).map(Number));
-  // lockedIds: グループから飛んできた時は そのグループメンバーだけを
-  // 選択候補に出す (= 普段やりとりしない人を出さない)。
-  const lockedIds = opts.lockedToIds && opts.lockedToIds.length ? new Set(opts.lockedToIds.map(Number)) : null;
+  // v383 共有 member_picker。 編集モード時 (isEdit) は voterIds 初期化、 新規は 自分をデフォ ON。
+  const initialIds = new Set((initial.voterIds || []).map(Number));
+  if (!isEdit && state.me?.id) initialIds.add(Number(state.me.id));
+  const lockedIds = opts.lockedToIds && opts.lockedToIds.length ? opts.lockedToIds.map(Number) : null;
+  let picker = null;
   try {
-    const u = await get('/api/users');
-    let pool = u.items || [];
-    if (lockedIds) pool = pool.filter(x => lockedIds.has(Number(x.id)));
-    allUsers = [...pool].sort((a, b) => {
-      const d = gradeRank(a.grade) - gradeRank(b.grade);
-      if (d !== 0) return d;
-      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
-    });
-    if (!isEdit && state.me?.id) selected.add(Number(state.me.id));   // 作成時は自分をデフォ ON
-    const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
-    const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-    document.getElementById('pn-bulk').innerHTML = `
-      <button class="btn" data-bulk="all">全員</button>
-      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-    `;
-    document.querySelectorAll('#pn-bulk [data-bulk]').forEach(b => {
-      b.addEventListener('click', () => {
-        const target = b.dataset.bulk === 'grade'
-          ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
-          : allUsers;
-        const allOn = target.every(x => selected.has(x.id));
-        if (allOn) target.forEach(x => selected.delete(x.id));
-        else       target.forEach(x => selected.add(x.id));
-        document.querySelectorAll('#pn-members input[data-uid]').forEach(cb => {
-          cb.checked = selected.has(Number(cb.dataset.uid));
-        });
-      });
-    });
-    document.getElementById('pn-members').innerHTML = allUsers.map(x => `
-      <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <span>${escapeHtml(x.display_name)}</span>
-        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
-      </label>`).join('');
-    document.querySelectorAll('#pn-members input[data-uid]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const uid = Number(cb.dataset.uid);
-        if (cb.checked) selected.add(uid); else selected.delete(uid);
-      });
+    picker = await createMemberPicker({
+      bulkContainer: document.getElementById('pn-bulk'),
+      chipsContainer: document.getElementById('pn-members'),
+      initial: [...initialIds],
+      poolIds: lockedIds,
+      showGenderBulk: false,
     });
   } catch (e) {
     document.getElementById('pn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -218,12 +185,13 @@ async function wirePollForm(initial, isEdit, onSave, opts = {}) {
     if (!title) { toast('タイトル必須'); return; }
     if (!deadline) { toast('締切必須'); return; }
     if (opts.length < 2) { toast('選択肢を 2 つ以上'); return; }
-    if (!selected.size) { toast('対象者を 1 人以上'); return; }
+    const voterIds = picker ? [...picker.getSelected()] : [];
+    if (!voterIds.length) { toast('対象者を 1 人以上'); return; }
     try {
       await onSave({
         title, body, deadline_at: deadline, multi_select: multi,
         allow_revote: allowRevote, allow_free_text: allowFreeText,
-        visibility: vis, options: opts, voter_ids: [...selected],
+        visibility: vis, options: opts, voter_ids: voterIds,
       });
     } catch (e) { toast('失敗: ' + e.message); }
   });

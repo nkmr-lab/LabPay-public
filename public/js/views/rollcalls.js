@@ -5,6 +5,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { tag, fmtDateTime } from '../format.js';
+import { createMemberPicker } from '../member_picker.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -121,52 +122,15 @@ export async function renderRollCallNew({ query } = {}) {
     });
   });
 
-  let allUsers = [];
-  const selected = new Set();
-  presetMembers.forEach(uid => selected.add(uid));
+  // v383 共有 member_picker。 lockMembers の時は pool を制限し bulk を出さない。
+  let picker = null;
   try {
-    const u = await get('/api/users');
-    let pool = u.items || [];
-    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
-    allUsers = [...pool].sort((a, b) => {
-      const d = gradeRank(a.grade) - gradeRank(b.grade);
-      if (d !== 0) return d;
-      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
-    });
-    if (!lockMembers) {
-      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
-      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-      const bulkEl = document.getElementById('rcn-bulk');
-      bulkEl.innerHTML = `
-        <button class="btn" data-bulk="all">全員</button>
-        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-      `;
-      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
-        b.addEventListener('click', () => {
-          const target = b.dataset.bulk === 'grade'
-            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
-            : allUsers;
-          const allOn = target.every(x => selected.has(x.id));
-          if (allOn) target.forEach(x => selected.delete(x.id));
-          else       target.forEach(x => selected.add(x.id));
-          document.querySelectorAll('#rcn-members input[data-uid]').forEach(cb => {
-            cb.checked = selected.has(Number(cb.dataset.uid));
-          });
-        });
-      });
-    }
-    document.getElementById('rcn-members').innerHTML = allUsers.map(x => `
-      <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <span>${escapeHtml(x.display_name)}</span>
-        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
-      </label>`).join('');
-    document.querySelectorAll('#rcn-members input[data-uid]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const uid = Number(cb.dataset.uid);
-        if (cb.checked) selected.add(uid); else selected.delete(uid);
-      });
+    picker = await createMemberPicker({
+      bulkContainer: lockMembers ? null : document.getElementById('rcn-bulk'),
+      chipsContainer: document.getElementById('rcn-members'),
+      initial: presetMembers,
+      poolIds: lockMembers ? presetMembers : null,
+      showGenderBulk: false,
     });
   } catch (e) {
     document.getElementById('rcn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -177,14 +141,15 @@ export async function renderRollCallNew({ query } = {}) {
     const body  = document.getElementById('rcn-body').value.trim();
     const min   = Math.max(1, Math.min(1440, parseInt(document.getElementById('rcn-min').value, 10) || 0));
     if (!title) { toast('タイトル必須'); return; }
-    if (!selected.size) { toast('対象者を 1 人以上'); return; }
+    const targetIds = picker ? [...picker.getSelected()] : [];
+    if (!targetIds.length) { toast('対象者を 1 人以上'); return; }
     // 現在時刻 + min 分 を ISO datetime-local 形式へ。
     const dl = new Date(Date.now() + min * 60_000);
     const pad = n => String(n).padStart(2, '0');
     const deadline = `${dl.getFullYear()}-${pad(dl.getMonth()+1)}-${pad(dl.getDate())}T${pad(dl.getHours())}:${pad(dl.getMinutes())}`;
     try {
       const r = await post('/api/rollcalls', {
-        title, body, deadline_at: deadline, target_ids: [...selected],
+        title, body, deadline_at: deadline, target_ids: targetIds,
       });
       toast('点呼を開始しました');
       navigate('#/rollcalls/' + r.id);

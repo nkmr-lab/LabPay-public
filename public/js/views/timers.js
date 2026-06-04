@@ -9,6 +9,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
 import { tag, participantPill } from '../format.js';
+import { createMemberPicker } from '../member_picker.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -143,52 +144,16 @@ export async function renderTimerNew({ query } = {}) {
     });
   });
 
-  let allUsers = [];
-  const selected = new Set();
-  presetMembers.forEach(uid => selected.add(uid));
+  // v383 picker が allUsers + selected を 内部で管理。 ここは preset の seed 用のみ。
+  // v383 共有 member_picker
+  let picker = null;
   try {
-    const u = await get('/api/users');
-    let pool = u.items || [];
-    if (lockMembers) pool = pool.filter(x => presetMembers.includes(Number(x.id)));
-    allUsers = [...pool].sort((a, b) => {
-      const d = gradeRank(a.grade) - gradeRank(b.grade);
-      if (d !== 0) return d;
-      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
-    });
-    if (!lockMembers) {
-      const presentGrades = [...new Set(allUsers.map(x => x.grade || ''))];
-      const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-      const bulkEl = document.getElementById('tmn-bulk');
-      bulkEl.innerHTML = `
-        <button class="btn" data-bulk="all">全員</button>
-        ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-      `;
-      bulkEl.querySelectorAll('[data-bulk]').forEach(b => {
-        b.addEventListener('click', () => {
-          const target = b.dataset.bulk === 'grade'
-            ? allUsers.filter(x => (x.grade || '') === b.dataset.grade)
-            : allUsers;
-          const allOn = target.every(x => selected.has(x.id));
-          if (allOn) target.forEach(x => selected.delete(x.id));
-          else       target.forEach(x => selected.add(x.id));
-          document.querySelectorAll('#tmn-members input[data-uid]').forEach(cb => {
-            cb.checked = selected.has(Number(cb.dataset.uid));
-          });
-        });
-      });
-    }
-    document.getElementById('tmn-members').innerHTML = allUsers.map(x => `
-      <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}" ${selected.has(x.id) ? 'checked' : ''}>
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <span>${escapeHtml(x.display_name)}</span>
-        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
-      </label>`).join('');
-    document.querySelectorAll('#tmn-members input[data-uid]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const uid = Number(cb.dataset.uid);
-        if (cb.checked) selected.add(uid); else selected.delete(uid);
-      });
+    picker = await createMemberPicker({
+      bulkContainer: lockMembers ? null : document.getElementById('tmn-bulk'),
+      chipsContainer: document.getElementById('tmn-members'),
+      initial: presetMembers,
+      poolIds: lockMembers ? presetMembers : null,
+      showGenderBulk: false,
     });
   } catch (e) {
     document.getElementById('tmn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -212,7 +177,7 @@ export async function renderTimerNew({ query } = {}) {
     }
     try {
       const r = await post('/api/timers', {
-        title, duration_seconds: total, participant_ids: [...selected],
+        title, duration_seconds: total, participant_ids: picker ? [...picker.getSelected()] : [],
         bell1_seconds: Number.isFinite(bell1) ? bell1 : null,
         bell2_seconds: Number.isFinite(bell2) ? bell2 : null,
         bell3_seconds: Number.isFinite(bell3) ? bell3 : null,

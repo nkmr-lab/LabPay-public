@@ -6,6 +6,7 @@ import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { renderCoverEditor, wireCoverEditor } from './groups.js';
 import { fmtDate, fmtDateTime, tag } from '../format.js';
+import { createMemberPicker } from '../member_picker.js';
 
 export async function renderInvitations() {
   const app = document.getElementById('app');
@@ -84,59 +85,18 @@ export async function renderInvitations() {
   await loadList();
 }
 
-// v370 事前参加者 picker (全員/学年 bulk + 個別 chip)。 発起人 (自分) は picker に出さず、
-// 作成時に backend 側で 自動 join される。
-const invPrePicked = new Set();
+// v383 共有 member_picker。 発起人 (自分) は picker から除外、 作成時 backend が 自動 join。
+let invPrePicker = null;
 async function populateInvPreMembers() {
   const root = document.getElementById('inv-pre-members');
   const bulk = document.getElementById('inv-pre-bulk');
   if (!root || !bulk) return;
   try {
-    const u = await get('/api/users');
-    const meId = Number(state.me?.id);
-    const pool = (u.items || []).filter(x => Number(x.id) !== meId);
-    const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
-    const sorted = [...pool].sort((a, b) => {
-      const ga = GRADE_ORDER.indexOf(a.grade || ''); const gb = GRADE_ORDER.indexOf(b.grade || '');
-      const d = (ga < 0 ? 99 : ga) - (gb < 0 ? 99 : gb);
-      if (d !== 0) return d;
-      return (a.display_name || '').localeCompare(b.display_name || '', 'ja');
-    });
-    const presentGrades = [...new Set(sorted.map(x => x.grade || ''))];
-    const sortedGrades = GRADE_ORDER.filter(g => g !== '' && presentGrades.includes(g));
-    bulk.innerHTML = `
-      <button class="btn" data-bulk="all">全員</button>
-      ${sortedGrades.map(g => `<button class="btn" data-bulk="grade" data-grade="${g}">${g}</button>`).join('')}
-      <button class="btn" data-bulk="clear">クリア</button>
-    `;
-    bulk.querySelectorAll('[data-bulk]').forEach(b => {
-      b.addEventListener('click', () => {
-        if (b.dataset.bulk === 'clear') { invPrePicked.clear(); }
-        else if (b.dataset.bulk === 'grade') {
-          const target = sorted.filter(x => (x.grade || '') === b.dataset.grade);
-          const allOn = target.every(x => invPrePicked.has(x.id));
-          if (allOn) target.forEach(x => invPrePicked.delete(x.id));
-          else       target.forEach(x => invPrePicked.add(x.id));
-        } else {
-          const allOn = sorted.every(x => invPrePicked.has(x.id));
-          if (allOn) invPrePicked.clear();
-          else       sorted.forEach(x => invPrePicked.add(x.id));
-        }
-        root.querySelectorAll('input[data-uid]').forEach(cb => { cb.checked = invPrePicked.has(Number(cb.dataset.uid)); });
-      });
-    });
-    root.innerHTML = sorted.map(x => `
-      <label class="rl-chip">
-        <input type="checkbox" data-uid="${x.id}">
-        ${avatarHtml(x.display_name, x.avatar_url, 'sm')}
-        <span>${escapeHtml(x.display_name)}</span>
-        ${x.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(x.grade)}]</span>` : ''}
-      </label>`).join('');
-    root.querySelectorAll('input[data-uid]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const uid = Number(cb.dataset.uid);
-        if (cb.checked) invPrePicked.add(uid); else invPrePicked.delete(uid);
-      });
+    invPrePicker = await createMemberPicker({
+      bulkContainer: bulk,
+      chipsContainer: root,
+      excludeIds: state.me?.id ? [Number(state.me.id)] : [],
+      showGenderBulk: false,
     });
   } catch (_) { /* swallow */ }
 }
@@ -431,7 +391,7 @@ async function onCreate() {
   const timeVal = document.getElementById('inv-time').value;
   const starts_at = dateVal ? (timeVal ? `${dateVal}T${timeVal}` : dateVal) : null;
   const signup_closes_at = document.getElementById('inv-signup-deadline').value || null;
-  const pre_join_user_ids = [...invPrePicked];
+  const pre_join_user_ids = invPrePicker ? [...invPrePicker.getSelected()] : [];
   const location = document.getElementById('inv-where').value.trim() || null;
   const capacity = document.getElementById('inv-cap').value;
   const description = document.getElementById('inv-desc').value.trim() || null;
@@ -449,8 +409,8 @@ async function onCreate() {
     document.getElementById('inv-where').value = '';
     document.getElementById('inv-cap').value = '';
     document.getElementById('inv-desc').value = '';
-    invPrePicked.clear();
-    document.querySelectorAll('#inv-pre-members input[data-uid]').forEach(cb => cb.checked = false);
+    if (invPrePicker) invPrePicker.setSelected([]);
+    // picker.setSelected([]) で reset 済
     document.getElementById('inv-image-url').value = '';
     document.getElementById('inv-image-preview').hidden = true;
     document.getElementById('inv-image-status').textContent = '';
