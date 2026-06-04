@@ -1,6 +1,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { playSound } from '../sounds.js';
 
 export async function renderTransfer() {
   const app = document.getElementById('app');
@@ -54,6 +55,7 @@ async function onSend() {
   if (!confirm(`${amount}pt を送金しますか?`)) return;
   try {
     const r = await post('/api/transfers', { to_user_id: toUserId, amount, memo }, { withIdempotency: true });
+    playSound('payment');
     toast(`${r.to_name} に ${amount}pt を送金しました (残高 ${r.new_balance.toLocaleString()}pt)`);
     document.getElementById('xfer-amt').value = '';
     document.getElementById('xfer-memo').value = '';

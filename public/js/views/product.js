@@ -1,6 +1,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
+import { playSound } from '../sounds.js';
 
 export async function renderProduct({ params }) {
   const jan = params.jan;
@@ -68,6 +69,7 @@ export async function renderProduct({ params }) {
         btn.disabled = true;
         try {
           const res = await post('/api/purchases', { listing_id: lid }, { withIdempotency: true });
+          playSound('payment');
           const took = isGift ? 'ありがたく頂きました' : `購入しました (-${res.unit_price}pt)`;
           toast(`${took}: ${res.product_name} / 残高 ${res.new_balance.toLocaleString()}pt`);
           state.balance = res.new_balance;

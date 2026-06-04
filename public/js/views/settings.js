@@ -2,6 +2,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readTabLayout, writeTabLayout, applyTabLayout } from '../app.js';
 import { uploadImage } from '../upload.js';
+import { previewSoundUrl, refreshSoundCache } from '../sounds.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
 
@@ -122,6 +123,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>効果音</h3>
+      <p class="hint">
+        決済 / ルーレット などで鳴らす音。 admin 規定値を使う / 自分で選ぶ / 無音 から選べます。
+        音源そのものは admin が登録します。
+      </p>
+      <div id="sound-prefs"><div class="muted">読み込み中…</div></div>
+    </div>
+
+    <div class="card">
       <h3>バグ報告 / 機能要望</h3>
       <p class="muted" style="font-size:12px; margin:4px 0 8px">
         上部メニューの <a href="#/feature-request">機能要望</a> / <a href="#/bug-report">バグ報告</a> から送れます。
@@ -136,6 +146,7 @@ export async function renderSettings() {
 
   await loadProfile();
   await load();
+  loadSoundPrefs(); // fire-and-forget; 失敗してもページ全体は崩れない
   // Pre-fill saved "my IP" if any so the user doesn't re-type each visit.
   const savedIp = localStorage.getItem('labpay-my-ip');
   if (savedIp) document.getElementById('my-ip-input').value = savedIp;
@@ -532,6 +543,116 @@ async function onLogoutFromSettings() {
   state.balance = null;
   state.unread = 0;
   navigate('#/login');
+}
+
+// 効果音 設定 セクション: イベントごとに 規定 / 自分で選ぶ / 無音 の 3 モード切替。
+// custom の時だけ clip dropdown + 音量 slider を露出。 変更は その場で PATCH。
+async function loadSoundPrefs() {
+  const root = document.getElementById('sound-prefs');
+  if (!root) return;
+  try {
+    const [my, clipsResp] = await Promise.all([
+      get('/api/sounds/my'),
+      get('/api/sounds/clips'),
+    ]);
+    const items = my.items || [];
+    const clips = clipsResp.items || [];
+    if (!items.length) { root.innerHTML = '<div class="muted">イベント定義がありません</div>'; return; }
+    const clipOpts = clips.map(c =>
+      `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join('');
+    root.innerHTML = items.map(it => {
+      const defLabel = it.default_clip_id
+        ? (clips.find(c => Number(c.id) === Number(it.default_clip_id))?.label || '未取得')
+        : '無音';
+      return `
+      <div class="list-item" style="flex-wrap:wrap; gap:8px; align-items:center">
+        <div style="min-width:180px; flex:1">
+          <div class="bold">${escapeHtml(it.label)}</div>
+          <div class="meta">規定: ${escapeHtml(defLabel)} · 音量 ${it.default_volume}</div>
+        </div>
+        <select data-sp-mode="${it.event_key}" style="min-width:130px">
+          <option value="default" ${it.mode === 'default' ? 'selected' : ''}>規定値を使う</option>
+          <option value="custom"  ${it.mode === 'custom'  ? 'selected' : ''}>自分で選ぶ</option>
+          <option value="mute"    ${it.mode === 'mute'    ? 'selected' : ''}>無音</option>
+        </select>
+        <span data-sp-custom="${it.event_key}" ${it.mode === 'custom' ? '' : 'hidden'} style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap">
+          <select data-sp-clip="${it.event_key}" style="min-width:140px">
+            <option value="">— 音源を選択 —</option>
+            ${clipOpts}
+          </select>
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
+            音量
+            <input type="range" min="0" max="100" step="5" value="${it.pref_volume ?? 70}" data-sp-vol="${it.event_key}" style="width:100px">
+            <span data-sp-volnum="${it.event_key}" style="min-width:30px">${it.pref_volume ?? 70}</span>
+          </label>
+        </span>
+        <button class="btn" data-sp-preview="${it.event_key}">▶ 試聴</button>
+      </div>`;
+    }).join('');
+    // 現在の pref_clip_id を 反映
+    items.forEach(it => {
+      if (it.mode === 'custom' && it.pref_clip_id) {
+        const sel = root.querySelector(`[data-sp-clip="${it.event_key}"]`);
+        if (sel) sel.value = String(it.pref_clip_id);
+      }
+    });
+    const sendPatch = async (key) => {
+      const mode = root.querySelector(`[data-sp-mode="${key}"]`).value;
+      const body = { mode };
+      if (mode === 'custom') {
+        const clipId = Number(root.querySelector(`[data-sp-clip="${key}"]`).value);
+        if (!clipId) { toast('音源を選んでください'); return; }
+        body.clip_id = clipId;
+        body.volume = Number(root.querySelector(`[data-sp-vol="${key}"]`).value);
+      }
+      try {
+        await patch('/api/sounds/my/' + key, body);
+        await refreshSoundCache();
+      } catch (e) { toast('失敗: ' + e.message); }
+    };
+    root.querySelectorAll('[data-sp-mode]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const key = sel.dataset.spMode;
+        // custom セクションの表示切替
+        const cust = root.querySelector(`[data-sp-custom="${key}"]`);
+        if (cust) cust.hidden = sel.value !== 'custom';
+        if (sel.value !== 'custom') await sendPatch(key);
+      });
+    });
+    root.querySelectorAll('[data-sp-clip]').forEach(sel => {
+      sel.addEventListener('change', () => sendPatch(sel.dataset.spClip));
+    });
+    root.querySelectorAll('[data-sp-vol]').forEach(rng => {
+      rng.addEventListener('input', () => {
+        root.querySelector(`[data-sp-volnum="${rng.dataset.spVol}"]`).textContent = rng.value;
+      });
+      rng.addEventListener('change', () => sendPatch(rng.dataset.spVol));
+    });
+    root.querySelectorAll('[data-sp-preview]').forEach(b => {
+      b.addEventListener('click', () => {
+        const key = b.dataset.spPreview;
+        const it = items.find(x => x.event_key === key);
+        if (!it) return;
+        const mode = root.querySelector(`[data-sp-mode="${key}"]`).value;
+        if (mode === 'mute') { toast('無音設定です'); return; }
+        let url = null, vol = 0.7;
+        if (mode === 'custom') {
+          const cid = Number(root.querySelector(`[data-sp-clip="${key}"]`).value);
+          const clip = clips.find(c => Number(c.id) === cid);
+          if (!clip) { toast('音源を選んでください'); return; }
+          url = clip.file_url;
+          vol = Number(root.querySelector(`[data-sp-vol="${key}"]`).value) / 100;
+        } else {
+          if (!it.default_clip_id) { toast('規定値が未設定 (無音) です'); return; }
+          const clip = clips.find(c => Number(c.id) === Number(it.default_clip_id));
+          if (clip) { url = clip.file_url; vol = (it.default_volume || 70) / 100; }
+        }
+        if (url) previewSoundUrl(url, vol);
+      });
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function load() {

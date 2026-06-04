@@ -26,6 +26,8 @@ import { renderRollCalls, renderRollCallNew, renderRollCallDetail } from './view
 import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.js';
 import { renderNotices, renderNoticeForm } from './views/notices.js';
 import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
+import { renderAdminSounds } from './views/admin_sounds.js';
+import { preloadSounds } from './sounds.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
 import { renderRequestsHub } from './views/requests_hub.js';
@@ -70,6 +72,8 @@ export async function refreshMe() {
     // タブの 「グループ」 表示判定。 失敗・遅延しても他の処理を止めないよう
     // fire-and-forget。 結果が遅れて来てもタブが追加で出るだけなので無害。
     refreshHasGroups();
+    // 効果音の解決済み 設定を 1 回だけ pull。 失敗しても他に影響しないよう fire-and-forget。
+    preloadSounds();
     return data;
   } catch (e) {
     state.me = null;
@@ -412,6 +416,7 @@ route('/notices/:id/edit', renderNoticeForm);
 route('/meetups',         renderMeetups);
 route('/meetups/new',     renderMeetupNew);
 route('/meetups/:id',     renderMeetupDetail);
+route('/admin/sounds',    renderAdminSounds);
 route('/apps',           renderApps);
 route('/contacts',       renderContacts);
 route('/requests-hub',   renderRequestsHub);

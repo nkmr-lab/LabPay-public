@@ -4,6 +4,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { playSound } from '../sounds.js';
 
 // Equally-spaced color palette so adjacent slices read as distinct.
 const SLICE_COLORS = [
@@ -397,6 +398,8 @@ async function onSpin() {
   spinning = true;
   document.getElementById('rl-spin').disabled = true;
   document.getElementById('rl-result').textContent = '';
+  // 効果音 (各自が 設定 で 上書き可)。 click 直後なので autoplay 制限に引っかからない。
+  playSound('roulette_spin');
 
   try {
     const r = await post('/api/roulettes', { title, member_ids: ids, reward, dry_run: dryRun });

@@ -114,6 +114,13 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
+      <h3 style="margin:0">設定ページ</h3>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
+        <a href="#/admin/sounds" class="btn">🔊 効果音の規定値</a>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>カレンダー</h3>
       <div class="row center">
         <div id="hol-status" class="muted" style="font-size:13px; flex:1">読み込み中…</div>
