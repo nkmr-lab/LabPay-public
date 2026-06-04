@@ -925,6 +925,84 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // 「自分が依頼している (起案している) もの」 一覧。 起案者として 締切前 + まだ
+    // 全員が応答していない polls / rollcalls / money_requests を返す。
+    if ($sub === 'asking' && $method === 'GET') {
+        $items = [];
+        $uid = (int)$u['id'];
+        // polls (creator + open + 未応答が残ってる)
+        $stP = $pdo->prepare("
+            SELECT p.id, p.title, p.deadline_at,
+                   (SELECT COUNT(*) FROM poll_voters pv2 WHERE pv2.poll_id=p.id) AS total_n,
+                   (SELECT COUNT(*) FROM poll_voters pv3 WHERE pv3.poll_id=p.id AND pv3.voted_at IS NOT NULL) AS done_n
+              FROM polls p
+             WHERE p.creator_user_id=? AND p.status='open'
+            HAVING done_n < total_n
+             ORDER BY p.deadline_at ASC LIMIT 50");
+        $stP->execute([$uid]);
+        foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'poll',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が応答",
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/polls/' . $r['id'],
+                'icon' => '📊',
+            ];
+        }
+        // rollcalls
+        $stR = $pdo->prepare("
+            SELECT r.id, r.title, r.deadline_at,
+                   (SELECT COUNT(*) FROM roll_call_targets t2 WHERE t2.roll_call_id=r.id) AS total_n,
+                   (SELECT COUNT(*) FROM roll_call_targets t3 WHERE t3.roll_call_id=r.id AND t3.responded_at IS NOT NULL) AS done_n
+              FROM roll_calls r
+             WHERE r.creator_user_id=? AND r.status='open'
+            HAVING done_n < total_n
+             ORDER BY r.deadline_at ASC LIMIT 50");
+        $stR->execute([$uid]);
+        foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'rollcall',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が応答",
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/rollcalls/' . $r['id'],
+                'icon' => '📣',
+            ];
+        }
+        // money requests (creator + open + 未払いが残ってる)
+        $stM = $pdo->prepare("
+            SELECT mr.id, mr.title,
+                   (SELECT COUNT(*) FROM money_request_recipients rr2 WHERE rr2.request_id=mr.id) AS total_n,
+                   (SELECT COUNT(*) FROM money_request_recipients rr3 WHERE rr3.request_id=mr.id AND rr3.paid_at IS NOT NULL) AS done_n
+              FROM money_requests mr
+             WHERE mr.creator_user_id=? AND mr.status='open'
+            HAVING done_n < total_n
+             ORDER BY mr.id DESC LIMIT 50");
+        $stM->execute([$uid]);
+        foreach ($stM->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'money_request',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => "{$r['done_n']}/{$r['total_n']} 人が支払い済",
+                'deadline_at' => null,
+                'url' => '#/requests/' . $r['id'],
+                'icon' => '💸',
+            ];
+        }
+        usort($items, function ($a, $b) {
+            if (!$a['deadline_at'] && !$b['deadline_at']) return 0;
+            if (!$a['deadline_at']) return 1;
+            if (!$b['deadline_at']) return -1;
+            return strcmp($a['deadline_at'], $b['deadline_at']);
+        });
+        json_response(['items' => $items]);
+        return;
+    }
+
     json_error('not_found', "no me route for $method $sub", 404);
 }
 
