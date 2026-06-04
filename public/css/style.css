@@ -408,7 +408,7 @@ textarea { min-height: 80px; resize: vertical; }
   display: inline-flex; align-items: center; gap: 4px;
   margin-top: 8px; padding: 4px 12px;
   text-decoration: none; color: inherit;
-  background: var(--primary-soft); border-radius: 999px;
+  background: #fff; border-radius: 999px;
   max-width: 100%; flex-wrap: nowrap; overflow-x: auto;
 }
 .home-medals:empty { display: none; }
