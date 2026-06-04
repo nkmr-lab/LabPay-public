@@ -59,6 +59,7 @@ $routes = [
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',
+    'notices'        => 'route_notices',
 ];
 
 try {
