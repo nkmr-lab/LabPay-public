@@ -1498,6 +1498,11 @@ async function loadSchedule(gid) {
         const c = aT.localeCompare(bT);
         if (c !== 0) return c;
       }
+      // 同じ NULL 時刻組内では mid を末尾に。 元アイテムの sort_order が低くても
+      // (= push 順で先頭) その日のコンテキストでは 「滞在中なだけ」 なので下に。
+      const aMid = a._occ === 'mid' ? 1 : 0;
+      const bMid = b._occ === 'mid' ? 1 : 0;
+      if (aMid !== bMid) return aMid - bMid;
       const so = (a.sort_order || 0) - (b.sort_order || 0);
       if (so !== 0) return so;
       return (Number(a.id) || 0) - (Number(b.id) || 0);
