@@ -9,6 +9,7 @@ import { coverListItem } from './groups.js';
 // データは localStorage に保存し、サーバ側には送らない。
 export const HOME_CARDS = [
   { id: 'presence',       title: '今ラボにいる人' },
+  { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
   { id: 'calendar',       title: '今日の予定' },
   { id: 'groups',         title: 'あなたのグループ' },
   { id: 'fresh-listings', title: '新規入荷' },
@@ -100,6 +101,14 @@ export async function renderHome() {
       </div>
     </div>
 
+    <div class="card" id="home-pending-card" data-card-id="pending" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">未対応</h2>
+        <span id="home-pending-count" class="hint-sm"></span>
+      </div>
+      <div id="home-pending" class="list"></div>
+    </div>
+
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
@@ -161,6 +170,7 @@ export async function renderHome() {
   await renderCheckinArea();
   await renderMedalsStrip();
   await renderPresence();
+  await renderPendingItems();
   await renderCalendarEvents();
   await renderMyGroups();
   await renderFreshInvitations();
@@ -202,6 +212,7 @@ async function doHomePoll() {
   await Promise.allSettled([
     refreshFinancials({ silent: true }),
     fetchAndRenderPresence(),     // 「今ラボにいる人」 (renderPresence の内部関数)
+    renderPendingItems(),
     renderCalendarEvents(),
     renderMyGroups(),
     renderFreshInvitations(),
@@ -359,6 +370,49 @@ function writeCalCache(items, etags) {
       items, etags: etags || {}, timestamp: Date.now(), tz: localTzInfo().iana
     }));
   } catch {}
+}
+
+// 「未対応」 カード: 投票 / 点呼 / 未払請求 など 自分が応答すべきものを集約。
+// 通知を既読にしても消えないよう、 ソースの状態をそのまま見る。 1 分ごとの
+// home polling で再 fetch。
+async function renderPendingItems() {
+  const card = document.getElementById('home-pending-card');
+  const root = document.getElementById('home-pending');
+  const countEl = document.getElementById('home-pending-count');
+  if (!card || !root) return;
+  let items = [];
+  try {
+    const d = await get('/api/me/pending');
+    items = d.items || [];
+  } catch (_) { card.hidden = true; return; }
+  if (!items.length) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  if (countEl) countEl.textContent = `(${items.length})`;
+  // 締切までの残り (赤=10 分未満 / 橙=1 時間未満 / 通常)
+  const fmtDeadline = (s) => {
+    if (!s) return '';
+    const dt = new Date(String(s).replace(' ', 'T'));
+    const diff = dt - new Date();
+    if (diff <= 0) return '<span style="color:#888">締切</span>';
+    const min = Math.floor(diff / 60000);
+    if (min < 10) return `<span style="color:#c62828">あと ${min} 分</span>`;
+    if (min < 60) return `<span style="color:#e65100">あと ${min} 分</span>`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `あと ${hr} 時間`;
+    const day = Math.floor(hr / 24);
+    return `あと ${day} 日`;
+  };
+  root.innerHTML = items.map(it => `
+    <a class="list-item" href="${escapeHtml(it.url)}">
+      <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
+      <div class="grow" style="min-width:0">
+        <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title)}</div>
+        <div class="meta">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadline(it.deadline_at) : ''}</div>
+      </div>
+    </a>`).join('');
 }
 
 // 「今日の予定」 カードを 全件 / 5 件 に切替えるトグル状態 (セッション内)。

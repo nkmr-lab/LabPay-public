@@ -840,6 +840,91 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // 「自分がまだ回答していないもの」 一覧。 通知を既読にしても消えないよう、
+    // 状態をソースに見てそのまま並べる。
+    //   - polls: 自分が対象 (poll_voters) + status=open + 自分の poll_votes 無し
+    //   - rollcalls: 自分が対象 + status=open + 自分が responded_at NULL
+    //   - money_requests: 自分が受取人 + status=open + 自分の paid_at NULL
+    if ($sub === 'pending' && $method === 'GET') {
+        $items = [];
+        $uid = (int)$u['id'];
+        // polls
+        $stP = $pdo->prepare("
+            SELECT p.id, p.title, p.deadline_at, u.display_name AS creator_name,
+                   p.multi_select, p.allow_free_text
+              FROM polls p
+              JOIN poll_voters pv ON pv.poll_id=p.id AND pv.user_id=?
+              JOIN users u        ON u.id = p.creator_user_id
+             WHERE p.status='open'
+               AND NOT EXISTS (SELECT 1 FROM poll_votes pvt WHERE pvt.poll_id=p.id AND pvt.user_id=?)
+               AND (pv.voted_at IS NULL OR pv.free_text IS NULL OR pv.free_text='')
+             ORDER BY p.deadline_at ASC LIMIT 50");
+        $stP->execute([$uid, $uid]);
+        foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            // 自由記述のみで応答済 (votes 無し + voted_at あり + free_text あり) は除外:
+            // votes と free_text の OR 条件 (`voted_at IS NULL OR free_text IS NULL OR ''`) で
+            // すでに弾いてる。
+            $items[] = [
+                'kind' => 'poll',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => '起案 ' . $r['creator_name'],
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/polls/' . $r['id'],
+                'icon' => '📊',
+            ];
+        }
+        // rollcalls
+        $stR = $pdo->prepare("
+            SELECT r.id, r.title, r.deadline_at, u.display_name AS creator_name
+              FROM roll_calls r
+              JOIN roll_call_targets t ON t.roll_call_id=r.id AND t.user_id=?
+              JOIN users u             ON u.id = r.creator_user_id
+             WHERE r.status='open' AND t.responded_at IS NULL
+             ORDER BY r.deadline_at ASC LIMIT 50");
+        $stR->execute([$uid]);
+        foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'rollcall',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => '起案 ' . $r['creator_name'],
+                'deadline_at' => $r['deadline_at'],
+                'url' => '#/rollcalls/' . $r['id'],
+                'icon' => '📣',
+            ];
+        }
+        // money requests (未払い)
+        $stM = $pdo->prepare("
+            SELECT mr.id, mr.title, rr.amount_yen, u.display_name AS creator_name
+              FROM money_request_recipients rr
+              JOIN money_requests mr ON mr.id = rr.request_id
+              JOIN users u           ON u.id  = mr.creator_user_id
+             WHERE rr.user_id=? AND rr.paid_at IS NULL AND mr.status='open'
+             ORDER BY mr.id DESC LIMIT 50");
+        $stM->execute([$uid]);
+        foreach ($stM->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'money_request',
+                'id' => (int)$r['id'],
+                'title' => $r['title'],
+                'subtitle' => '¥' . number_format((int)$r['amount_yen']) . ' · ' . $r['creator_name'] . ' へ',
+                'deadline_at' => null,
+                'url' => '#/requests/' . $r['id'],
+                'icon' => '💸',
+            ];
+        }
+        // 締切順 (締切無しは末尾)
+        usort($items, function ($a, $b) {
+            if (!$a['deadline_at'] && !$b['deadline_at']) return 0;
+            if (!$a['deadline_at']) return 1;
+            if (!$b['deadline_at']) return -1;
+            return strcmp($a['deadline_at'], $b['deadline_at']);
+        });
+        json_response(['items' => $items]);
+        return;
+    }
+
     json_error('not_found', "no me route for $method $sub", 404);
 }
 
