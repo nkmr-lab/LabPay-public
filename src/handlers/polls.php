@@ -187,9 +187,10 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         $stT->execute([$id]);
         $tallies = [];
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) $tallies[(int)$r['option_id']] = (int)$r['n'];
-        // 自由記述は本文 + 投稿者を返す (運用上 「誰が書いたかは見たい」 ため)。
-        // 票の中身 (どの選択肢に投票したか) は依然として匿名集計のみ。
-        if (!empty($poll['allow_free_text'])) {
+        // 自由記述本文は 起案者だけに渡す (誰が書いたかも含めて参照したいのは起案者のみ)。
+        // 一般の対象者には 「他人の自由記述」 を出さない方針。 自分自身の自由記述は
+        // my_free_text 経由で別途返している。
+        if (!empty($poll['allow_free_text']) && $isCreator) {
             $stF = $pdo->prepare("SELECT pv.free_text, pv.user_id, pv.voted_at,
                                          u.display_name, u.avatar_url
                                     FROM poll_voters pv
