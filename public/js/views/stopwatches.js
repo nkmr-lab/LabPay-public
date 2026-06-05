@@ -19,6 +19,20 @@ function fmtElapsed(sec) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+// v447 ms 精度 (詳細画面 表示用)。 ホーム / 一覧 は 秒精度の fmtElapsed を 継続使用。
+function fmtElapsedMs(ms) {
+  ms = Math.max(0, Math.floor(ms));
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const mss = ms % 1000;
+  const pad = (n, w=2) => String(n).padStart(w, '0');
+  const millis = pad(mss, 3);
+  return h > 0
+    ? `${h}:${pad(m)}:${pad(s)}.${millis}`
+    : `${pad(m)}:${pad(s)}.${millis}`;
+}
+
 // ─── List ───
 export async function renderStopwatches() {
   const app = document.getElementById('app');
@@ -154,13 +168,19 @@ export async function renderStopwatchDetail({ params }) {
       <div id="swd-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card" id="swd-display-card" hidden>
-      <div id="swd-display" style="font-family:monospace; font-size:56px; text-align:center; font-weight:700; letter-spacing:2px; padding:18px 0; color:var(--primary)">--:--</div>
+      <div id="swd-display" style="font-family:monospace; font-size:56px; text-align:center; font-weight:700; letter-spacing:1px; padding:18px 0; color:var(--primary); font-variant-numeric:tabular-nums">--:--.---</div>
+      <div id="swd-last-lap" class="meta" style="text-align:center; margin:-6px 0 8px; min-height:16px; font-family:monospace"></div>
       <div class="row" style="gap:6px; justify-content:center; flex-wrap:wrap">
         <button id="swd-start" class="primary" style="min-width:90px">▶ 開始</button>
-        <button id="swd-pause" class="btn" style="min-width:90px" hidden>⏸ 一時停止</button>
-        <button id="swd-reset" class="btn" style="min-width:90px">⏹ リセット</button>
+        <button id="swd-pause" class="btn"     style="min-width:90px" hidden>⏸ 一時停止</button>
+        <button id="swd-lap"   class="btn"     style="min-width:90px" hidden>🏁 ラップ</button>
+        <button id="swd-reset" class="btn"     style="min-width:90px">⏹ リセット</button>
       </div>
       <div class="meta" style="text-align:center; margin-top:8px" id="swd-status-line"></div>
+    </div>
+    <div class="card" id="swd-laps-card" hidden>
+      <h3 style="margin:0 0 6px">🏁 ラップ (<span id="swd-laps-count">0</span>)</h3>
+      <div id="swd-laps-list" class="list"></div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 6px">参加者 (<span id="swd-pcnt">0</span>)</h3>
@@ -184,9 +204,10 @@ function stopTickers() {
 }
 
 function startTickers(id) {
-  // 1 秒 tick で 表示更新
-  swState.displayTimer = setInterval(() => updateDisplay(), 1000);
-  // 5 秒 (running) or 30 秒 (それ以外) で サーバ同期
+  // v447 50ms tick で ms 表示。 60Hz 完全 同期 までは いらないが、
+  // 20Hz あれば 数字が 滑らかに 進む。
+  swState.displayTimer = setInterval(() => updateDisplay(), 50);
+  // 5 秒 (running) or 30 秒 (それ以外) で サーバ同期 (ms 列の 再取得 + ラップ反映)
   const schedule = () => {
     if (swState?.syncTimer) clearInterval(swState.syncTimer);
     if (!swState) return;
@@ -210,17 +231,23 @@ function startTickers(id) {
 
 async function loadDetail(id) {
   try {
+    const clientNowAtSend = Date.now();
     const sw = await get('/api/stopwatches/' + id);
-    const serverNowMs = Date.parse(sw.server_now);
-    const clientNowMs = Date.now();
+    const clientNowAtRecv = Date.now();
+    // server_now_ms - client_now_at_recv = サーバが クライアント時計より 進んでいる ms 数
+    const serverNowMs = Number(sw.server_now_ms) || Date.parse(sw.server_now);
     swState = swState || {};
     swState.sw = sw;
-    swState.clientServerOffsetMs = clientNowMs - serverNowMs;
+    swState.clientServerOffsetMs = clientNowAtRecv - serverNowMs;
+    // v447 baseElapsedMs / clientAnchorMs を 持って tick 中は サーバを 叩かず 進める。
+    swState.baseElapsedMs = Number(sw.elapsed_ms) || 0;
+    swState.clientAnchorMs = clientNowAtRecv;
+    swState.networkRttHalfMs = Math.max(0, Math.floor((clientNowAtRecv - clientNowAtSend) / 2));
     renderHead(sw);
     renderControls(sw, id);
     renderParts(sw);
+    renderLaps(sw);
     updateDisplay();
-    // v405 動いている間は スリープしない。 paused/stopped で 解放。
     if (sw.status === 'running') {
       acquireWakeLock('stopwatch-' + id);
     } else {
@@ -229,6 +256,17 @@ async function loadDetail(id) {
   } catch (e) {
     document.getElementById('swd-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// 現在 表示すべき 経過 ms を 計算 (client 時計 ベース)。 running なら
+// recv 後の 経過分を 足す、 paused/stopped なら baseElapsedMs そのまま。
+function currentElapsedMs() {
+  const st = swState;
+  if (!st || !st.sw) return 0;
+  if (st.sw.status === 'running') {
+    return st.baseElapsedMs + Math.max(0, Date.now() - st.clientAnchorMs);
+  }
+  return st.baseElapsedMs;
 }
 
 function renderHead(sw) {
@@ -256,12 +294,15 @@ function renderControls(sw, id) {
   const startBtn = document.getElementById('swd-start');
   const pauseBtn = document.getElementById('swd-pause');
   const resetBtn = document.getElementById('swd-reset');
+  const lapBtn   = document.getElementById('swd-lap');
   if (sw.status === 'running') {
     startBtn.hidden = true;
     pauseBtn.hidden = false;
+    lapBtn.hidden = false;
   } else {
     startBtn.hidden = false;
     pauseBtn.hidden = true;
+    lapBtn.hidden = true;
     startBtn.textContent = sw.status === 'paused' ? '▶ 再開' : '▶ 開始';
   }
   startBtn.onclick = async () => {
@@ -273,10 +314,76 @@ function renderControls(sw, id) {
     catch (e) { toast('失敗: ' + e.message); }
   };
   resetBtn.onclick = async () => {
-    if (!confirm('経過時間を 0 に リセットしますか?')) return;
+    const msg = (sw.laps && sw.laps.length)
+      ? `経過時間を 0 に リセットしますか?\n(ラップ ${sw.laps.length} 件 も 全削除されます)`
+      : '経過時間を 0 に リセットしますか?';
+    if (!confirm(msg)) return;
     try { await post('/api/stopwatches/' + id + '/reset', {}); await loadDetail(id); }
     catch (e) { toast('失敗: ' + e.message); }
   };
+  // v447 ラップ。 client_elapsed_ms を 送って 「タップ瞬間」 を 正確に 反映。
+  lapBtn.onclick = async () => {
+    if (!swState?.sw || swState.sw.status !== 'running') return;
+    const clientMs = currentElapsedMs();
+    lapBtn.disabled = true;
+    try {
+      const r = await post('/api/stopwatches/' + id + '/lap', { client_elapsed_ms: clientMs });
+      // 楽観反映: 直近ラップを 即追加して 体感ラグ ゼロに。 5s 後の sync で 整合。
+      if (swState.sw) {
+        swState.sw.laps = swState.sw.laps || [];
+        swState.sw.laps.unshift({
+          id: r.id || 0, lap_index: r.lap_index,
+          elapsed_ms: r.elapsed_ms, split_ms: r.split_ms,
+          recorded_by_user_id: 0, recorded_by_name: '自分',
+          recorded_at: new Date().toISOString(),
+        });
+        renderLaps(swState.sw);
+      }
+    } catch (e) { toast('失敗: ' + e.message); }
+    lapBtn.disabled = false;
+  };
+}
+
+function renderLaps(sw) {
+  const card = document.getElementById('swd-laps-card');
+  const list = document.getElementById('swd-laps-list');
+  const cnt  = document.getElementById('swd-laps-count');
+  const lastEl = document.getElementById('swd-last-lap');
+  if (!card || !list || !cnt) return;
+  const laps = sw.laps || [];
+  cnt.textContent = laps.length;
+  card.hidden = laps.length === 0;
+  if (!laps.length) {
+    list.innerHTML = '';
+    if (lastEl) lastEl.textContent = '';
+    return;
+  }
+  // 最新ラップ を ヘッダ 下に 大きめ で 表示。
+  if (lastEl) {
+    const last = laps[0];
+    lastEl.textContent = `🏁 ラップ ${last.lap_index}  ${fmtElapsedMs(last.split_ms)}  /  累計 ${fmtElapsedMs(last.elapsed_ms)}`;
+  }
+  // 最小 split / 最大 split を ハイライト (ラップ 2 件以上で 意味あり)
+  let minSplit = Infinity, maxSplit = -Infinity;
+  for (const l of laps) {
+    if (l.split_ms < minSplit) minSplit = l.split_ms;
+    if (l.split_ms > maxSplit) maxSplit = l.split_ms;
+  }
+  list.innerHTML = laps.map(l => {
+    const tag = l.split_ms === minSplit && laps.length > 1
+      ? ' <span class="tag" style="background:#e0f7f1; color:#0e7c63">最速</span>'
+      : l.split_ms === maxSplit && laps.length > 1
+      ? ' <span class="tag" style="background:#fff3e0; color:#e65100">最遅</span>'
+      : '';
+    return `
+      <div class="list-item" style="gap:8px">
+        <div style="min-width:40px; font-weight:700; color:var(--primary)">${l.lap_index}</div>
+        <div class="grow" style="min-width:0">
+          <div class="bold" style="font-family:monospace; font-size:16px">${fmtElapsedMs(l.split_ms)}${tag}</div>
+          <div class="meta" style="font-family:monospace">累計 ${fmtElapsedMs(l.elapsed_ms)}</div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderParts(sw) {
@@ -296,17 +403,11 @@ function updateDisplay() {
   const display = document.getElementById('swd-display');
   const statusLine = document.getElementById('swd-status-line');
   if (!sw || !display) return;
-  let elapsed = sw.elapsed_offset_seconds;
-  if (sw.status === 'running' && sw.started_at) {
-    // server's started_at + client time - server time = effective elapsed
-    const startedAtMs = Date.parse(sw.started_at.replace(' ', 'T'));
-    const effectiveServerNow = Date.now() - (swState.clientServerOffsetMs || 0);
-    elapsed += Math.max(0, Math.floor((effectiveServerNow - startedAtMs) / 1000));
-  }
-  display.textContent = fmtElapsed(elapsed);
+  const elapsedMs = currentElapsedMs();
+  display.textContent = fmtElapsedMs(elapsedMs);
   if (statusLine) {
     statusLine.textContent = sw.status === 'running' ? '計測中…'
-      : sw.status === 'paused' ? `一時停止中 (経過 ${fmtElapsed(elapsed)})`
-      : '停止中';
+      : sw.status === 'paused' ? `一時停止中 (経過 ${fmtElapsedMs(elapsedMs)})`
+      : '⏹ リセット済 (経過 0)';
   }
 }
