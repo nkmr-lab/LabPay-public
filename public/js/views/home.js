@@ -43,6 +43,9 @@ export const HOME_ACTIONS = [
   { id: 'scrapbox',     url: '#/scrapbox',           title: 'Scrapbox',    icon: '📚', defaultVisible: false },
   { id: 'exercise',     url: '#/exercise',           title: '運動 (歩数)',   icon: '🏃', defaultVisible: false },
   { id: 'activity',     url: '#/activity',           title: 'ラボ滞在マップ', icon: '🗓', defaultVisible: false },
+  // 設定 ボタン自身も HOME_ACTIONS 経由で 表示制御。 これを 隠したら 上部ナビの
+  // 「設定」 から 同じ 場所に 辿れる ので 詰まらない。
+  { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },
 ];
 const HOME_ACTIONS_KEY = 'labpay-home-actions';
 export function isHomeActionVisible(id) {
@@ -137,7 +140,6 @@ export async function renderHome() {
           <a class="btn home-quick" href="${escapeHtml(a.url)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
              style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center">${escapeHtml(a.icon || a.title)}</a>
         `).join('')}
-        <a href="#/settings?focus=home-actions" class="hint" style="align-self:center; font-size:14px; text-decoration:none; padding:0 4px" title="クイック ボタンを 設定">⚙</a>
       </div>
     </div>
 
