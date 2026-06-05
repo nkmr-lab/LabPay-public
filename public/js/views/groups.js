@@ -2464,6 +2464,15 @@ function openSchedItemModal(gid, it) {
           <h3 class="row-title">${isNew ? '予定を追加' : '予定を編集'}</h3>
           <button id="sim-close">×</button>
         </div>
+        ${isNew ? `
+        <details class="field" style="margin-top:6px; background:#fffbf0; border-left:3px solid #fcd34d; padding:8px 10px; border-radius:6px">
+          <summary class="bold" style="font-size:13px; cursor:pointer">✨ フリーテキストから AI で 自動入力</summary>
+          <textarea id="sim-ai-text" rows="2" maxlength="2000" placeholder="例: 6/15 12 時から ヤキニク 飲み会、 渋谷駅前 で 2 時間半 / https://example.com" style="width:100%; box-sizing:border-box; margin-top:6px"></textarea>
+          <div class="row" style="gap:6px; align-items:center; margin-top:4px">
+            <button id="sim-ai-go" class="btn primary" style="padding:2px 12px; font-size:12px">📝 展開して 流し込む</button>
+            <span id="sim-ai-status" class="hint-sm"></span>
+          </div>
+        </details>` : ''}
         <label class="field"><span class="lbl">日付 (空欄 = ストックに保存)</span>
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
@@ -2525,6 +2534,35 @@ function openSchedItemModal(gid, it) {
   document.getElementById('sim-close') .addEventListener('click', close);
   document.getElementById('sim-cancel').addEventListener('click', close);
   document.getElementById('sim-overlay').addEventListener('click', e => { if (e.target.id === 'sim-overlay') close(); });
+  // v416 ✨ AI でフリーテキスト → 各入力欄に展開
+  document.getElementById('sim-ai-go')?.addEventListener('click', async () => {
+    const txt = document.getElementById('sim-ai-text').value.trim();
+    const st  = document.getElementById('sim-ai-status');
+    const btn = document.getElementById('sim-ai-go');
+    if (!txt) { st.textContent = 'テキストを入れてください'; return; }
+    btn.disabled = true; st.textContent = '展開中…';
+    try {
+      const r = await post('/api/ai/expand_schedule', { text: txt });
+      const f = r.fields || {};
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v !== null && v !== undefined && v !== '') el.value = v; };
+      set('sim-title', f.title);
+      set('sim-date', f.day_date);
+      set('sim-start', f.start_time);
+      set('sim-dur', f.duration_minutes);
+      set('sim-loc', f.location);
+      set('sim-url', f.url);
+      set('sim-memo', f.memo);
+      if (f.kind) {
+        const sel = document.getElementById('sim-kind');
+        if (sel && [...sel.options].some(o => o.value === f.kind)) sel.value = f.kind;
+      }
+      st.textContent = '✓ 流し込み 完了 (内容を 確認して 保存してください)';
+    } catch (e) {
+      st.textContent = '失敗: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
   // 画像アップロード / クリア
   document.getElementById('sim-img-file').addEventListener('change', async (ev) => {
     const f = ev.target.files?.[0];

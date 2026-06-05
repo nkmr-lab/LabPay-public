@@ -504,3 +504,4 @@ require_once __DIR__ . '/handlers/auctions.php';
 require_once __DIR__ . '/handlers/exercise.php';
 require_once __DIR__ . '/handlers/playlists.php';
 require_once __DIR__ . '/handlers/stopwatches.php';
+require_once __DIR__ . '/handlers/ai.php';

@@ -66,6 +66,7 @@ $routes = [
     'exercise'       => 'route_exercise',
     'playlists'      => 'route_playlists',
     'stopwatches'    => 'route_stopwatches',
+    'ai'             => 'route_ai',
 ];
 
 try {

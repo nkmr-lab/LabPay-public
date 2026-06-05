@@ -58,6 +58,13 @@ return [
     'scrapbox_channel_id' => '',
   ],
 
+  // OpenAI (used by /api/ai/* — フリーフォームの 予定テキスト 展開 など)。
+  // 空文字 で 機能ごと 無効。
+  'openai' => [
+    'api_key' => '',
+    'model'   => 'gpt-4o-mini',
+  ],
+
   // Feature flags (used by require_exposure() guards in handlers).
   'exposure' => [
     'public_read'    => true,
