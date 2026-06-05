@@ -166,11 +166,27 @@ export async function renderTimerNew({ query } = {}) {
   }
 
   document.getElementById('tmn-save').addEventListener('click', async () => {
-    const title = document.getElementById('tmn-title').value.trim() || 'タイマー';
+    const btn = document.getElementById('tmn-save');
+    let title = document.getElementById('tmn-title').value.trim();
     const min = Math.max(0, parseInt(document.getElementById('tmn-min').value, 10) || 0);
     const sec = Math.max(0, Math.min(59, parseInt(document.getElementById('tmn-sec').value, 10) || 0));
     const total = min * 60 + sec;
     if (total < 5) { toast('5 秒以上にしてください'); return; }
+    btn.disabled = true;
+    // v442 タイトル空欄なら AI に 短いタイトル を 生成 させる
+    if (!title) {
+      btn.textContent = '🤖 タイトル生成中…';
+      const part = picker ? [...picker.getSelected()].length : 1;
+      const totalMin = Math.round(total / 60 * 10) / 10;
+      const ctx = `共有 タイマー (カウントダウン) を 今 ${part} 人で 開始します。 長さは ${totalMin} 分。 用途は たぶん ポモドーロ・作業セット・休憩・会議 など。 ピッタリな 短いタイトルを 1 つ。`;
+      try {
+        const r = await post('/api/ai/short_title', { context: ctx });
+        title = r.title || 'タイマー';
+      } catch (_) {
+        title = 'タイマー';
+      }
+    }
+    btn.textContent = '⏱️ 開始中…';
     // v404 ベル入力は 分単位 (小数可) に。 backend は秒で 保持するので *60 して送る。
     const toSec = (id) => {
       const v = parseFloat(document.getElementById(id).value);
@@ -196,7 +212,10 @@ export async function renderTimerNew({ query } = {}) {
       });
       toast('タイマーを開始しました');
       navigate('#/timers/' + r.id);
-    } catch (e) { toast('失敗: ' + e.message); }
+    } catch (e) {
+      toast('失敗: ' + e.message);
+      btn.disabled = false; btn.textContent = '⏱️ 開始';
+    }
   });
 }
 

@@ -34,7 +34,64 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_chat($pdo, $cfg);
         return;
     }
+    if ($sub === 'short_title' && $method === 'POST') {
+        ai_short_title($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// POST /api/ai/short_title { context: "...説明..." }
+//   → { title: "..." }
+// 1 行 5-15 字 の 楽しい 日本語 タイトル を 1 つだけ 返す。 タイマーや ストップウォッチ
+// 作成時の 「タイトル空欄 → 自動生成」 用。 軽い call なので キャッシュなし / 履歴なし。
+function ai_short_title(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $context = trim((string)($body['context'] ?? ''));
+    if ($context === '') throw new ApiException('bad_request', 'context required', 400);
+    if (mb_strlen($context) > 500) $context = mb_substr($context, 0, 500);
+
+    $sys = "短い 楽しい 日本語 タイトル を 1 つだけ 返してください。 5-15 文字。 絵文字 1 個 まで 添えても OK。 余計な 前置き や 解説は 不要、 タイトル 1 行のみ。 引用符 (「」 等) で 囲まない。";
+
+    $payload = json_encode([
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user',   'content' => $context],
+        ],
+        'temperature' => 0.9,
+        'max_tokens' => 30,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) {
+        throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status, 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $text = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($text) || $text === '') {
+        throw new ApiException('upstream_error', 'empty', 502);
+    }
+    // 整形: 引用符 除去 / 1 行に / 最大 30 文字
+    $title = trim(preg_replace('/[\r\n]+/', ' ', $text));
+    $title = preg_replace('/^[「『"\']+|[」』"\']+$/u', '', $title);
+    $title = mb_substr($title, 0, 30);
+    json_response(['ok' => true, 'title' => $title]);
 }
 
 // POST /api/ai/chat { message, history?: [{role,content},...] }

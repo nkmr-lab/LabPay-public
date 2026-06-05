@@ -1044,12 +1044,33 @@ async function renderMyActiveTimers() {
     const meId = Number(state.me?.id);
     // v406 点呼 (rollcall) も 「時間制限あり」 なので 合流。 pending API 経由で
     // 自分が 対応していない 締切付き 点呼を 拾う。
-    const [tm, sw, pend] = await Promise.allSettled([
+    const [tm, sw, pend, mu] = await Promise.allSettled([
       get('/api/timers'),
       get('/api/stopwatches'),
       get('/api/me/pending'),
+      get('/api/meetups'),
     ]);
     const rows = [];
+    // v442 待ち合わせ も 「時間制限あり」 に 合流。 cancelled なし + 未来 (meetup_at > now)
+    // のもの だけ。
+    if (mu.status === 'fulfilled') {
+      const nowMs = Date.now();
+      for (const m of (mu.value.items || [])) {
+        if (m.cancelled_at) continue;
+        const ts = Date.parse(String(m.meetup_at).replace(' ', 'T'));
+        if (!ts || ts <= nowMs) continue;
+        const remaining = Math.max(0, Math.floor((ts - nowMs) / 1000));
+        rows.push({
+          href: '#/meetups/' + m.id,
+          kind: '🤝 待ち合わせ',
+          title: m.title || '待ち合わせ',
+          time: `${fmtTmDur(remaining)} 後`,
+          sort: remaining,
+          color: remaining < 600 ? '#c62828' : '#7c3aed',
+          bg: '#ede9fe',
+        });
+      }
+    }
     // 点呼 (締切が 近い順に 先頭)
     if (pend.status === 'fulfilled') {
       const nowMs = Date.now();
@@ -1106,7 +1127,7 @@ async function renderMyActiveTimers() {
     // 「表示されない = 壊れた?」 と 誤認 されやすかった。
     card.hidden = false;
     if (!rows.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">進行中の タイマー / SW / 点呼 なし</div>';
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">進行中の タイマー / SW / 点呼 / 待ち合わせ なし</div>';
       return;
     }
     rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順

@@ -112,14 +112,32 @@ export async function renderStopwatchNew() {
     document.getElementById('swn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
   document.getElementById('swn-save').addEventListener('click', async () => {
-    const title = document.getElementById('swn-title').value.trim() || 'ストップウォッチ';
+    const btn = document.getElementById('swn-save');
+    btn.disabled = true;
+    let title = document.getElementById('swn-title').value.trim();
     try {
+      // v442 タイトル空欄なら AI に 適当に 付けてもらう
+      if (!title) {
+        btn.textContent = '🤖 タイトル生成中…';
+        const part = picker ? [...picker.getSelected()].length : 1;
+        const ctx = `共有 ストップウォッチ (カウントアップ計測器) を 今 ${part} 人で 作成します。 用途は たぶん 発表時間・雑談計測・作業セット・実験 など。 ピッタリ な 短いタイトルを 1 つ。`;
+        try {
+          const r = await post('/api/ai/short_title', { context: ctx });
+          title = r.title || 'ストップウォッチ';
+        } catch (_) {
+          title = 'ストップウォッチ';
+        }
+      }
+      btn.textContent = '作成中…';
       const r = await post('/api/stopwatches', {
         title, participant_ids: picker ? [...picker.getSelected()] : [],
       });
       toast('作成しました');
       navigate('#/stopwatches/' + r.id);
-    } catch (e) { toast('失敗: ' + e.message); }
+    } catch (e) {
+      toast('失敗: ' + e.message);
+      btn.disabled = false; btn.textContent = '作成';
+    }
   });
 }
 
