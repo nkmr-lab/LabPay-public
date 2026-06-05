@@ -32,6 +32,7 @@ import { renderPlaylists, renderPlaylistNew, renderPlaylistDetail, renderPlaylis
 import { renderStopwatches, renderStopwatchNew, renderStopwatchDetail } from './views/stopwatches.js';
 import { renderTranslate } from './views/translate.js';
 import { renderHelp } from './views/help.js';
+import { renderChat } from './views/chat.js';
 import { renderExercise } from './views/exercise.js';
 import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
@@ -454,6 +455,7 @@ route('/stopwatches/new',   renderStopwatchNew);
 route('/stopwatches/:id',   renderStopwatchDetail);
 route('/translate',         renderTranslate);
 route('/help',              renderHelp);
+route('/chat',              renderChat);
 route('/exercise',        renderExercise);
 route('/users/:id',       renderUserProfile);
 route('/apps',           renderApps);

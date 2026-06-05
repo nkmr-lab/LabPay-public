@@ -30,7 +30,98 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_assistant($pdo, $cfg);
         return;
     }
+    if ($sub === 'chat' && $method === 'POST') {
+        ai_chat($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// POST /api/ai/chat { message, history?: [{role,content},...] }
+//   → { text }
+// 汎用 多言語 対話 (主に 翻訳 用途)。 LabPay 操作には 言及せず、 ユーザーの
+// 入力を そのまま 翻訳 / 解説。
+function ai_chat(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $msg = trim((string)($body['message'] ?? ''));
+    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
+    if (mb_strlen($msg) > 4000) throw new ApiException('bad_request', 'message too long', 400);
+    $history = is_array($body['history'] ?? null) ? $body['history'] : [];
+    $history = array_slice($history, -20);
+
+    $sys = <<<SYS
+あなたは 中村さん (日本語話者) のための 多言語 対話・翻訳 アシスタント です。 主な
+用途は 海外出張 (中国、 イタリア など) での 翻訳・コミュニケーション 支援。
+
+挙動 ルール:
+- 入力テキストの 言語を 自動判定
+- 日本語で 「○○ を 中国語で」 「これを イタリア語に」 と 言われたら 該当言語へ 翻訳
+- 「翻訳して」 だけ なら 文脈から 最も 妥当な 訳先 (= 日本語 ↔ 外国語) に
+- 外国語が 直接 入力されたら 日本語訳 を 返す + 短い 解説 (発音 / 文化的 ニュアンス / 食べ物なら 何か / 注意事項 など)
+- 一般的な 質問にも 答える (相手先国 の マナー、 注文 の しかた、 通貨 計算 など)
+- 余計な 前置き は 不要、 結果を 直接
+
+書式:
+- 翻訳 結果は **太字**
+- 発音 / カナ表記 が 有用 なら 括弧で 添える
+- 補足は その下に 1-2 行
+- 長文は 箇条書き で 整理
+
+例:
+ユーザー: 「『お会計お願いします』をイタリア語で」
+返答:
+**Il conto, per favore.**
+(イル・コント・ペル・ファヴォーレ / 直訳「勘定書を お願いします」)
+└ レストランで 一般的。 カフェなら "Quanto le devo?" (クアント・レ・デヴォ / いくらですか) も 自然。
+SYS;
+
+    $messages = [['role' => 'system', 'content' => $sys]];
+    foreach ($history as $h) {
+        $role = (string)($h['role'] ?? '');
+        $role = ($role === 'assistant') ? 'assistant' : 'user';
+        $content = mb_substr((string)($h['content'] ?? ''), 0, 4000);
+        if ($content === '') continue;
+        $messages[] = ['role' => $role, 'content' => $content];
+    }
+    $messages[] = ['role' => 'user', 'content' => $msg];
+
+    $payload = json_encode([
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'messages' => $messages,
+        'temperature' => 0.3,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($resp === false || $status >= 500) {
+        throw new ApiException('upstream_error', 'OpenAI: ' . ($err ?: 'HTTP ' . $status), 502);
+    }
+    if ($status >= 400) {
+        $j = json_decode((string)$resp, true);
+        $msg2 = $j['error']['message'] ?? ('HTTP ' . $status);
+        throw new ApiException('upstream_error', 'OpenAI: ' . $msg2, 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $text = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($text) || $text === '') {
+        throw new ApiException('upstream_error', 'empty response', 502);
+    }
+    json_response(['ok' => true, 'text' => trim($text)]);
 }
 
 // POST /api/ai/assistant { message: "...", history?: [{role,content},...] }
