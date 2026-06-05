@@ -89,15 +89,16 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
 
     if (!$userSet || !$edges) { json_response(['nodes' => [], 'edges' => [], 'threshold' => 0]); return; }
 
-    // v410 共起頻度の 中央値 を 閾値に。 弱い共起 (ラボに たまたま 居合わせた)
-    // を 落として、 「よく一緒に いる」 ペア だけ 残す。 中央値以上 を 採用。
+    // v436 中央値だと 弱い ペアまで 残りすぎ → 75 パーセンタイル (Q3) に 引上げ。
+    // 上位 25% の 「よく 一緒に いる」 ペア だけ 残す。 全エッジ平均が 低い ラボ
+    // データ でも 確実に 強い エッジ だけ 残す。 最低 2 で 弾く (1回 きりは 確定除外)。
     $counts = array_values($edges);
     sort($counts, SORT_NUMERIC);
     $n = count($counts);
-    $median = $n % 2 === 1
-        ? $counts[(int)floor($n / 2)]
-        : (int)floor(($counts[(int)($n / 2) - 1] + $counts[(int)($n / 2)]) / 2);
-    $threshold = max(1, (int)$median);  // 中央値 0 でも 最低 1 で 弾く
+    // 75 パーセンタイル: index = floor(0.75 * (n - 1))
+    $p75Idx = (int)floor(0.75 * ($n - 1));
+    $p75 = $counts[$p75Idx];
+    $threshold = max(2, (int)$p75);  // 最低 2 回 共起 を 要求 (1 回きりは 確定で 除外)
 
     // 閾値 以上 の エッジだけ 残す + 関与する ノード を 再収集。
     $keptEdges = [];

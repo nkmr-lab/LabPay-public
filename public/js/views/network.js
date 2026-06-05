@@ -121,7 +121,7 @@ async function loadAndRender(tab, layoutMode, weightMode) {
   const desc = document.getElementById('net-arrow-desc');
   if (tab === 'tasks')               desc.textContent = '依頼者 → 引き受けた人';
   else if (tab === 'combined')       desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
-  else if (tab === 'presence_cooc')  desc.textContent = '同じ 1 時間 に 同じ 部屋 で 共起した人 (無向 / 矢印は便宜上 / 閾値=共起頻度の中央値以上のみ表示)';
+  else if (tab === 'presence_cooc')  desc.textContent = '同じ 1 時間 に 同じ 部屋 で 共起した人 (無向 / 閾値=共起頻度の 75 パーセンタイル 以上 / 弱い共起は 落とす)';
   else                               desc.textContent = '売り手 → 買い手';
   try {
     // d3 is needed for the force simulation; circle mode could skip it but a
@@ -136,7 +136,7 @@ async function loadAndRender(tab, layoutMode, weightMode) {
     // v410 cooc は 閾値情報 を 説明文に 追記。
     if (tab === 'presence_cooc' && d.threshold !== undefined) {
       const desc = document.getElementById('net-arrow-desc');
-      desc.textContent = `同部屋 同 1 時間 で 共起した人 (閾値 ${d.threshold} 回以上 / 中央値 で フィルタ / 表示 ${d.edge_total_after_filter}/${d.edge_total_before_filter} エッジ)`;
+      desc.textContent = `同部屋 同 1 時間 で 共起した人 (閾値 ${d.threshold} 回以上 / 75 パーセンタイル で フィルタ / 表示 ${d.edge_total_after_filter}/${d.edge_total_before_filter} エッジ)`;
     }
     if (!nodes.length) {
       document.getElementById('net-loading').textContent = 'データがまだありません';
