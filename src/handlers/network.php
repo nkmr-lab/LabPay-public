@@ -87,10 +87,33 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         }
     }
 
-    if (!$userSet) { json_response(['nodes' => [], 'edges' => []]); return; }
+    if (!$userSet || !$edges) { json_response(['nodes' => [], 'edges' => [], 'threshold' => 0]); return; }
 
-    // ノード解決
-    $uidList = array_keys($userSet);
+    // v410 共起頻度の 中央値 を 閾値に。 弱い共起 (ラボに たまたま 居合わせた)
+    // を 落として、 「よく一緒に いる」 ペア だけ 残す。 中央値以上 を 採用。
+    $counts = array_values($edges);
+    sort($counts, SORT_NUMERIC);
+    $n = count($counts);
+    $median = $n % 2 === 1
+        ? $counts[(int)floor($n / 2)]
+        : (int)floor(($counts[(int)($n / 2) - 1] + $counts[(int)($n / 2)]) / 2);
+    $threshold = max(1, (int)$median);  // 中央値 0 でも 最低 1 で 弾く
+
+    // 閾値 以上 の エッジだけ 残す + 関与する ノード を 再収集。
+    $keptEdges = [];
+    $keptNodes = [];
+    foreach ($edges as $k => $cnt) {
+        if ($cnt < $threshold) continue;
+        [$a, $b] = explode('-', $k, 2);
+        $a = (int)$a; $b = (int)$b;
+        $keptEdges[] = ['from' => $a, 'to' => $b, 'count' => $cnt, 'total' => $cnt];
+        $keptNodes[$a] = true;
+        $keptNodes[$b] = true;
+    }
+    if (!$keptNodes) { json_response(['nodes' => [], 'edges' => [], 'threshold' => $threshold]); return; }
+
+    // ノード 解決 (残ったものだけ)
+    $uidList = array_keys($keptNodes);
     $place = implode(',', array_fill(0, count($uidList), '?'));
     $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
     $stU->execute($uidList);
@@ -100,19 +123,13 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         'avatar' => $r['avatar_url'] ?? null,
     ], $stU->fetchAll(PDO::FETCH_ASSOC));
 
-    // edges を 配列形式に。 無向 ですが フロントの 既存 (count, total)
-    // インタフェース に そろえて total = count を 入れる。
-    $edgeOut = [];
-    foreach ($edges as $k => $cnt) {
-        [$a, $b] = explode('-', $k, 2);
-        $edgeOut[] = [
-            'from'  => (int)$a,
-            'to'    => (int)$b,
-            'count' => $cnt,
-            'total' => $cnt,
-        ];
-    }
-    json_response(['nodes' => $nodes, 'edges' => $edgeOut]);
+    json_response([
+        'nodes' => $nodes,
+        'edges' => $keptEdges,
+        'threshold' => $threshold,
+        'edge_total_before_filter' => $n,
+        'edge_total_after_filter' => count($keptEdges),
+    ]);
 }
 
 // 売買 + タスクを 1 グラフに重ねる。エッジに type を付けてクライアントが
