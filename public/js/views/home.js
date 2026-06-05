@@ -1069,6 +1069,7 @@ async function renderFreshPlaylists() {
 // v405 自分が 参加中 (作成 or 招待) の タイマー + ストップウォッチ で 進行中 or
 // 一時停止中 のものを ホームに 強調表示。 ベルが鳴る前に スクリーン off してて
 // 「気づかなかった」 を防ぐ + 共有 ストップウォッチに 戻りやすく。
+// fmtTmDur: タイマー/SW/点呼 用 (秒精度 MM:SS)。
 function fmtTmDur(sec) {
   sec = Math.max(0, Math.floor(sec));
   const h = Math.floor(sec / 3600);
@@ -1076,6 +1077,23 @@ function fmtTmDur(sec) {
   const s = sec % 60;
   const pad = (n) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+// v451 待ち合わせ / 〆切 用 (秒は 表示 しない、 分単位 で 切り上げ ぽく扱う)。
+//  < 60 秒  → 「まもなく」
+//  < 60 分  → 「N 分」
+//  < 24 時間 → 「H 時間 M 分」 (分が 0 なら 省略)
+//  >= 24 時間 → 「D 日 H 時間」
+function fmtHumanLong(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  if (sec < 60) return 'まもなく';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分`;
+  const h = Math.floor(min / 60);
+  const mRem = min % 60;
+  if (h < 24) return mRem ? `${h} 時間 ${mRem} 分` : `${h} 時間`;
+  const d = Math.floor(h / 24);
+  const hRem = h % 24;
+  return hRem ? `${d} 日 ${hRem} 時間` : `${d} 日`;
 }
 
 // v445 進行中 カード を 1 秒 ごと に ローカル で 進める。 API 再フェッチ せず
@@ -1101,7 +1119,8 @@ function updateMyActiveTimersTicks(root) {
     } else {
       return;
     }
-    el.textContent = fmtTmDur(secs) + (el.dataset.tickSuffix || '');
+    const fmt = el.dataset.tickFmt === 'human' ? fmtHumanLong : fmtTmDur;
+    el.textContent = fmt(secs) + (el.dataset.tickSuffix || '');
     const red = el.dataset.tickRedBelow;
     if (red) {
       const threshold = Number(red);
@@ -1142,9 +1161,11 @@ async function renderMyActiveTimers() {
           href: '#/meetups/' + m.id,
           kind: isDeadline ? '📌 〆切' : '🤝 待ち合わせ',
           title: m.title || (isDeadline ? '〆切' : '待ち合わせ'),
-          time: `${fmtTmDur(remaining)} ${isDeadline ? '残' : '後'}`,
+          // v451 ホーム の 待ち合わせ / 〆切 は 「X 時間 Y 分」 表示 (秒なし)。
+          time: `${fmtHumanLong(remaining)} ${isDeadline ? '残' : '後'}`,
           tick: { mode: 'countdown', targetMs: ts,
                   suffix: isDeadline ? ' 残' : ' 後',
+                  fmt: 'human',
                   redBelow: 600,
                   colorRed: '#c62828',
                   colorNorm: isDeadline ? '#b91c1c' : '#7c3aed' },
@@ -1242,7 +1263,7 @@ async function renderMyActiveTimers() {
       const t = r.tick;
       const tickAttrs = t ? (
         t.mode === 'countdown'
-          ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}" data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
+          ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}"${t.fmt ? ` data-tick-fmt="${escapeHtml(t.fmt)}"` : ''} data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
           : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"`
       ) : '';
       return `
