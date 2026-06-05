@@ -21,7 +21,42 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
         feedback_reply($pdo, $cfg, $id);
         return;
     }
+    // v407 Claude 自動対応 ワークフロー
+    if ($id > 0 && ($seg[2] ?? '') === 'claude_status' && $method === 'PATCH') {
+        feedback_claude_set_status($pdo, $cfg, $id);
+        return;
+    }
     json_error('not_found', "no feedback route for $method $sub", 404);
+}
+
+// admin が 「Claude に 任せる」 / 「取り消す」 を トグル。
+// body: { status: 'none' | 'approved' | 'blocked' }
+// approved の とき claude_assigned_at を セット。 cron が 'approved' を 拾って
+// 'working' → 'done' に 進める。 'blocked' は 巡回除外 (admin が none に戻して 再投入)。
+function feedback_claude_set_status(PDO $pdo, array $cfg, int $id): void {
+    Auth::requireAdmin($pdo, $cfg);
+    $body = read_json_body();
+    $status = (string)($body['status'] ?? '');
+    $allowed = ['none', 'approved', 'blocked'];
+    if (!in_array($status, $allowed, true)) {
+        throw new ApiException('bad_request', "status must be one of: " . implode(',', $allowed), 400);
+    }
+    $st = $pdo->prepare("SELECT claude_status FROM feedback WHERE id = ?");
+    $st->execute([$id]);
+    $cur = $st->fetchColumn();
+    if ($cur === false) throw new ApiException('not_found', 'feedback not found', 404);
+    // working / done からの 上書きは 安全のため admin が none で 一旦 戻す 必要あり
+    if (in_array($cur, ['working','done'], true) && $status === 'approved') {
+        throw new ApiException('bad_request', "working / done からは 直接 approved に 戻せません (一度 none に)", 400);
+    }
+    if ($status === 'approved') {
+        $pdo->prepare("UPDATE feedback SET claude_status='approved', claude_assigned_at=NOW()
+            WHERE id = ?")->execute([$id]);
+    } else {
+        $pdo->prepare("UPDATE feedback SET claude_status=? WHERE id = ?")
+            ->execute([$status, $id]);
+    }
+    json_response(['ok' => true, 'status' => $status]);
 }
 
 // admin 専用: 最近の feedback 一覧 (返信状態付き)
@@ -30,6 +65,8 @@ function feedback_list(PDO $pdo, array $cfg): void {
     $st = $pdo->query("
         SELECT f.id, f.kind, f.body, f.url, f.user_agent, f.created_at,
                f.replied_at, f.reply_body, f.replied_by_user_id,
+               f.claude_status, f.claude_assigned_at, f.claude_started_at,
+               f.claude_finished_at, f.claude_summary,
                u.display_name AS user_name, u.avatar_url AS user_avatar_url,
                ub.display_name AS replied_by_name
           FROM feedback f
