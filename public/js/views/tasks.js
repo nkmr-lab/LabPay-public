@@ -54,6 +54,10 @@ export async function renderTasks() {
   if (m) {
     history.replaceState(null, '', '#/tasks');
     toggleCreateForm(m[1]);
+    // ホームからの 遷移で 前画面の スクロール位置 が 引き継がれて 「フォーム途中
+    // からになる」 不具合の 対処 (feedback#11)。 ページ先頭に 戻してから 開いた
+    // フォームの 先頭が 自然に 見える 状態 にする。
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }
   await loadList();
 }
