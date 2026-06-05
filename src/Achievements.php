@@ -287,49 +287,50 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['early_bird'] = (int)$st->fetchColumn();
 
-        // オープナー: DATE(started_at) D について min(started_at) を取る user が
-        // 自分 AND 自分が その日 0:00 を またぐセッションを 持っていない (= 自分が
-        // 泊まりでなく 朝来た)。
-        // v389: 旧版は 「誰か (全体) が 泊まっていたら その日無効」 だったため、
-        //       一晩泊まる人がいる日が 全員オープナー対象外になり 誤動作。
-        //       「自分が 泊まっていなければ オープナー」 に修正。
+        // オープナー: DATE(start) D について min(start) を取る user が 自分 AND 自分が
+        // その日 0:00 を またぐセッションを 持っていない (= 自分が泊まりでなく 朝来た)。
+        // v390 旧版は presence_sessions (閉じた) だけ見ていたが、 まだラボに居る人
+        //      (今朝来て まだ session が閉じてない人) は presence_seen に open で
+        //      残っていて 拾えなかった → UNION で 両方見るように。
+        //      presence_seen の session_start_at を s、 last_seen_at を e として 扱う。
+        $allSessionsSql = "
+            SELECT user_id, started_at AS s, ended_at AS e
+              FROM presence_sessions WHERE user_id IS NOT NULL
+            UNION ALL
+            SELECT pd.user_id, ps.session_start_at AS s, ps.last_seen_at AS e
+              FROM presence_seen ps
+              JOIN presence_devices pd ON pd.mac = ps.mac
+             WHERE ps.session_start_at IS NOT NULL";
+
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
-              SELECT DATE(started_at) AS d, MIN(started_at) AS m
-                FROM presence_sessions WHERE user_id IS NOT NULL
-                GROUP BY DATE(started_at)
+              SELECT DATE(s) AS d, MIN(s) AS m FROM ({$allSessionsSql}) AS a1
+              GROUP BY DATE(s)
             ) days
-            JOIN presence_sessions me
-              ON DATE(me.started_at) = days.d
-             AND me.started_at = days.m
-             AND me.user_id = ?
+            JOIN ({$allSessionsSql}) AS me
+              ON DATE(me.s) = days.d AND me.s = days.m AND me.user_id = ?
            WHERE NOT EXISTS (
-             SELECT 1 FROM presence_sessions own
-              WHERE own.user_id = ?
-                AND own.started_at < days.d
-                AND own.ended_at   > days.d
+             SELECT 1 FROM ({$allSessionsSql}) AS own
+              WHERE own.user_id = ? AND own.s < days.d AND own.e > days.d
            )");
         $st->execute([$userId, $userId]);
         $out['opener'] = (int)$st->fetchColumn();
 
-        // クローザー: DATE(ended_at) D について max(ended_at) を 取る user が 自分
-        // AND 自分が その夜 (D+1 00:00:00) を またぐセッションを 持っていない
-        // (= 自分が 泊まりでなく 退社した)。 同上の修正。
+        // クローザー: DATE(end) D について max(end) を 取る user が 自分 AND 自分が
+        // その夜 (D+1 00:00:00) を またぐセッションを 持っていない (= 自分が
+        // 泊まりでなく 退社した)。 max(end) は 「閉じた end / 開きの last_seen」 を 両方 見る。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
-              SELECT DATE(ended_at) AS d, MAX(ended_at) AS m
-                FROM presence_sessions WHERE user_id IS NOT NULL
-                GROUP BY DATE(ended_at)
+              SELECT DATE(e) AS d, MAX(e) AS m FROM ({$allSessionsSql}) AS a2
+              GROUP BY DATE(e)
             ) days
-            JOIN presence_sessions me
-              ON DATE(me.ended_at) = days.d
-             AND me.ended_at = days.m
-             AND me.user_id = ?
+            JOIN ({$allSessionsSql}) AS me
+              ON DATE(me.e) = days.d AND me.e = days.m AND me.user_id = ?
            WHERE NOT EXISTS (
-             SELECT 1 FROM presence_sessions own
+             SELECT 1 FROM ({$allSessionsSql}) AS own
               WHERE own.user_id = ?
-                AND own.started_at < DATE_ADD(days.d, INTERVAL 1 DAY)
-                AND own.ended_at   > DATE_ADD(days.d, INTERVAL 1 DAY)
+                AND own.s < DATE_ADD(days.d, INTERVAL 1 DAY)
+                AND own.e > DATE_ADD(days.d, INTERVAL 1 DAY)
            )");
         $st->execute([$userId, $userId]);
         $out['closer'] = (int)$st->fetchColumn();
