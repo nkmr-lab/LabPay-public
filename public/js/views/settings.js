@@ -4,6 +4,7 @@ import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readT
 import { uploadImage } from '../upload.js';
 import { previewSoundUrl, refreshSoundCache } from '../sounds.js';
 import { APPS, isAppVisible, setAppVisible } from './apps.js';
+import { HOME_ACTIONS, isHomeActionVisible, setHomeActionVisible } from './home.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
 
@@ -102,6 +103,15 @@ export async function renderSettings() {
         チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card" id="home-actions">
+      <h3>ホーム上部の クイック ボタン</h3>
+      <p class="hint">
+        ホーム画面の 残高 直下に 並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
+        必要なものだけ ON に。 設定は このブラウザ にのみ 保存されます。
+      </p>
+      <div id="home-actions-list" class="list" style="margin-top:6px"></div>
     </div>
 
     <div class="card">
@@ -208,6 +218,7 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
+  renderHomeActionsEditor();
   renderAppsVisEditor();
   // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
   // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
@@ -349,6 +360,29 @@ function moveTab(id, delta, currentOrder) {
   writeTabLayout(l);
   applyTabLayout();
   renderTabLayoutEditor();
+}
+
+// v419 ホーム クイック ボタン 表示 設定
+function renderHomeActionsEditor() {
+  const root = document.getElementById('home-actions-list');
+  if (!root) return;
+  root.innerHTML = HOME_ACTIONS.map(a => {
+    const on = isHomeActionVisible(a.id);
+    return `
+      <div class="list-item" data-ha-id="${escapeHtml(a.id)}" style="gap:8px; align-items:center">
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+          <input type="checkbox" class="ha-show" ${on ? 'checked' : ''}>
+          <span class="bold">${escapeHtml(a.label)}</span>
+        </label>
+        <a href="${escapeHtml(a.url)}" class="hint-sm" style="text-decoration:none">${escapeHtml(a.url)}</a>
+      </div>`;
+  }).join('');
+  root.querySelectorAll('.list-item[data-ha-id]').forEach(row => {
+    const id = row.dataset.haId;
+    row.querySelector('.ha-show').addEventListener('change', (ev) => {
+      setHomeActionVisible(id, ev.target.checked);
+    });
+  });
 }
 
 // ---------------- アプリ表示 (/#/apps) ----------------

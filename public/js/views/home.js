@@ -8,6 +8,35 @@ import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
 // データは localStorage に保存し、サーバ側には送らない。
+// v419 ホーム上部 残高 直下の クイック アクション 列 (買う / 売る / 頼む / 送る / 翻訳 / …)。
+// 表示 ON/OFF は ユーザ毎に localStorage 保存。 既存ユーザ は デフォ 4 つ (買売頼送) ON。
+export const HOME_ACTIONS = [
+  { id: 'buy',       url: '#/buy',              label: '買う',      defaultVisible: true },
+  { id: 'sell',      url: '#/sell',             label: '売る',      defaultVisible: true },
+  { id: 'request',   url: '#/tasks?new=request', label: '頼む',     defaultVisible: true },
+  { id: 'send',      url: '#/send',             label: '送る',      defaultVisible: true },
+  { id: 'translate', url: '#/translate',        label: '🌐 翻訳',   defaultVisible: false },
+  { id: 'rollcalls', url: '#/rollcalls',        label: '📣 点呼',    defaultVisible: false },
+  { id: 'timers',    url: '#/timers',           label: '⏱ タイマー', defaultVisible: false },
+  { id: 'meetups',   url: '#/meetups',          label: '🤝 待ち合わせ', defaultVisible: false },
+  { id: 'wishlist',  url: '#/wishlist',         label: '✨ 欲しい',  defaultVisible: false },
+];
+const HOME_ACTIONS_KEY = 'labpay-home-actions';
+export function isHomeActionVisible(id) {
+  try {
+    const j = JSON.parse(localStorage.getItem(HOME_ACTIONS_KEY) || '{}');
+    if (id in j) return !!j[id];
+  } catch (_) {}
+  const a = HOME_ACTIONS.find(x => x.id === id);
+  return a ? !!a.defaultVisible : false;
+}
+export function setHomeActionVisible(id, v) {
+  let j = {};
+  try { j = JSON.parse(localStorage.getItem(HOME_ACTIONS_KEY) || '{}'); } catch (_) {}
+  j[id] = !!v;
+  try { localStorage.setItem(HOME_ACTIONS_KEY, JSON.stringify(j)); } catch (_) {}
+}
+
 export const HOME_CARDS = [
   // v406 時間制限ありの 「いま 動いている / 対応待ち」 は 残高 直下に。
   { id: 'my-timers',      title: '⏱ 進行中 / 時間制限あり (タイマー・SW・点呼)' },
@@ -81,10 +110,10 @@ export async function renderHome() {
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
       <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
-        <a class="btn" href="#/buy">買う</a>
-        <a class="btn" href="#/sell">売る</a>
-        <a class="btn" href="#/tasks?new=request">頼む</a>
-        <a class="btn" href="#/send">送る</a>
+        ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
+          <a class="btn" href="${escapeHtml(a.url)}">${escapeHtml(a.label)}</a>
+        `).join('')}
+        <a href="#/settings#home-actions" class="hint" style="align-self:center; font-size:11px; text-decoration:none">⚙</a>
       </div>
     </div>
 
