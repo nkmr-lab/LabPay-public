@@ -22,25 +22,37 @@ function route_meetups(PDO $pdo, array $cfg, string $method, array $seg): void {
 function meetups_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
+    // v450 ?kind=meetup|deadline で 絞り込み。 未指定 = 両方。
+    $kindFilter = (string)($_GET['kind'] ?? '');
+    $where = "(m.creator_user_id = ? OR EXISTS(SELECT 1 FROM meetup_participants p WHERE p.meetup_id=m.id AND p.user_id=?))";
+    $args = [$uid, $uid];
+    if ($kindFilter === 'meetup' || $kindFilter === 'deadline') {
+        $where .= " AND m.kind = ?";
+        $args[] = $kindFilter;
+    }
     $st = $pdo->prepare("
-        SELECT m.id, m.title, m.location, m.meetup_at, m.creator_user_id, m.cancelled_at, m.created_at,
+        SELECT m.id, m.title, m.kind, m.location, m.meetup_at, m.creator_user_id, m.cancelled_at, m.created_at,
                u.display_name AS creator_name,
                (SELECT COUNT(*) FROM meetup_participants p WHERE p.meetup_id=m.id) AS member_count
           FROM meetups m
           JOIN users u ON u.id = m.creator_user_id
-         WHERE m.creator_user_id = ?
-            OR EXISTS(SELECT 1 FROM meetup_participants p WHERE p.meetup_id=m.id AND p.user_id=?)
+         WHERE $where
          ORDER BY (m.meetup_at > NOW() AND m.cancelled_at IS NULL) DESC, m.meetup_at DESC, m.id DESC
          LIMIT 100");
-    $st->execute([$uid, $uid]);
+    $st->execute($args);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
 
 function meetups_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
+    // v450 kind = 'meetup' (default) or 'deadline'
+    $kind = (string)($body['kind'] ?? 'meetup');
+    if ($kind !== 'meetup' && $kind !== 'deadline') $kind = 'meetup';
+    $isDeadline = ($kind === 'deadline');
+    $defaultTitle = $isDeadline ? '〆切' : '待ち合わせ';
     $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : '';
-    if ($title === '') $title = '待ち合わせ';
+    if ($title === '') $title = $defaultTitle;
     $location = isset($body['location']) ? mb_substr(trim((string)$body['location']), 0, 500) : null;
     if ($location === '') $location = null;
     $raw = (string)($body['meetup_at'] ?? '');
@@ -52,10 +64,13 @@ function meetups_create(PDO $pdo, array $cfg): void {
     $when = $dt->format('Y-m-d H:i:s');
     $whenTs = strtotime($when);
     if ($whenTs <= time() + 30) {
-        throw new ApiException('bad_request', '集合時刻は今より先に', 400);
+        throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . 'は今より先に', 400);
     }
-    if ($whenTs > time() + 31 * 86400) {
-        throw new ApiException('bad_request', '集合時刻は 31 日以内に', 400);
+    // v450 〆切は 365 日まで、 待ち合わせは 従来の 31 日まで。
+    $maxAhead = $isDeadline ? 365 * 86400 : 31 * 86400;
+    $maxLabel = $isDeadline ? '365 日' : '31 日';
+    if ($whenTs > time() + $maxAhead) {
+        throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . "は {$maxLabel} 以内に", 400);
     }
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) throw new ApiException('bad_request', 'member_ids 配列', 400);
@@ -72,22 +87,24 @@ function meetups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '存在しない user_id', 400);
     }
     $mid = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $location, $when, $memberIds, &$mid) {
-        $ins = $pdo->prepare("INSERT INTO meetups (title, location, meetup_at, creator_user_id, created_at)
-            VALUES (?, ?, ?, ?, NOW())");
-        $ins->execute([$title, $location, $when, (int)$u['id']]);
+    db_tx($pdo, function () use ($pdo, $u, $title, $kind, $location, $when, $memberIds, &$mid) {
+        $ins = $pdo->prepare("INSERT INTO meetups (title, kind, location, meetup_at, creator_user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())");
+        $ins->execute([$title, $kind, $location, $when, (int)$u['id']]);
         $mid = (int)$pdo->lastInsertId();
         $stP = $pdo->prepare("INSERT INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)");
         foreach ($memberIds as $uid) $stP->execute([$mid, $uid]);
     });
-    // 通知 「🤝 待ち合わせ: タイトル」 集合時刻 + 場所
-    $whenShort = substr($when, 11, 5);
+    // 通知 文言 を kind で 切り替え。 〆切 は 月日 + 時刻 まで 載せた 方が 一目で分かる。
+    $icon  = $isDeadline ? '📌' : '🤝';
+    $label = $isDeadline ? '〆切' : '待ち合わせ';
+    $whenShort = $isDeadline ? date('n/j H:i', strtotime($when)) : substr($when, 11, 5);
     $locPart = $location ? " @ {$location}" : '';
     foreach ($memberIds as $uid) {
         if ((int)$uid === (int)$u['id']) continue;
         try {
             Notifier::notify($pdo, $cfg, (int)$uid, 'meetup',
-                "🤝 待ち合わせ: 「{$title}」 {$whenShort}{$locPart}",
+                "{$icon} {$label}: 「{$title}」 {$whenShort}{$locPart}",
                 'meetup', $mid);
         } catch (Throwable $_) { /* swallow */ }
     }
@@ -124,6 +141,7 @@ function meetups_detail(PDO $pdo, array $cfg, int $id): void {
         'meetup' => [
             'id' => (int)$m['id'],
             'title' => $m['title'],
+            'kind' => (string)($m['kind'] ?? 'meetup'),
             'location' => $m['location'],
             'meetup_at' => $m['meetup_at'],
             'creator_user_id' => (int)$m['creator_user_id'],
@@ -145,10 +163,10 @@ function meetups_detail(PDO $pdo, array $cfg, int $id): void {
 
 function meetups_cancel(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT creator_user_id, cancelled_at, title FROM meetups WHERE id=?");
+    $st = $pdo->prepare("SELECT creator_user_id, cancelled_at, title, kind FROM meetups WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '待ち合わせが見つかりません', 404);
+    if (!$row) throw new ApiException('not_found', '見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ取消可', 403);
@@ -157,6 +175,7 @@ function meetups_cancel(PDO $pdo, array $cfg, int $id): void {
         json_response(['ok' => true, 'already' => true]); return;
     }
     $pdo->prepare("UPDATE meetups SET cancelled_at=NOW() WHERE id=?")->execute([$id]);
+    $label = ((string)($row['kind'] ?? 'meetup') === 'deadline') ? '〆切' : '待ち合わせ';
     // 参加者に取消通知。
     $stP = $pdo->prepare("SELECT user_id FROM meetup_participants WHERE meetup_id=?");
     $stP->execute([$id]);
@@ -164,7 +183,7 @@ function meetups_cancel(PDO $pdo, array $cfg, int $id): void {
         if ((int)$p['user_id'] === (int)$u['id']) continue;
         try {
             Notifier::notify($pdo, $cfg, (int)$p['user_id'], 'meetup',
-                "❌ 待ち合わせ取消: 「{$row['title']}」", 'meetup', $id);
+                "❌ {$label}取消: 「{$row['title']}」", 'meetup', $id);
         } catch (Throwable $_) { /* swallow */ }
     }
     json_response(['ok' => true]);

@@ -1129,6 +1129,7 @@ async function renderMyActiveTimers() {
     const rows = [];
     // v442 待ち合わせ も 「時間制限あり」 に 合流。 cancelled なし + 未来 (meetup_at > now)
     // のもの だけ。 v445 tick: countdown、 10 分 切ったら 赤。
+    // v450 kind = 'deadline' は 📌 〆切、 'meetup' は 🤝 待ち合わせ。
     if (mu.status === 'fulfilled') {
       const nowMs = Date.now();
       for (const m of (mu.value.items || [])) {
@@ -1136,15 +1137,20 @@ async function renderMyActiveTimers() {
         const ts = Date.parse(String(m.meetup_at).replace(' ', 'T'));
         if (!ts || ts <= nowMs) continue;
         const remaining = Math.max(0, Math.floor((ts - nowMs) / 1000));
+        const isDeadline = m.kind === 'deadline';
         rows.push({
           href: '#/meetups/' + m.id,
-          kind: '🤝 待ち合わせ',
-          title: m.title || '待ち合わせ',
-          time: `${fmtTmDur(remaining)} 後`,
-          tick: { mode: 'countdown', targetMs: ts, suffix: ' 後', redBelow: 600, colorRed: '#c62828', colorNorm: '#7c3aed' },
+          kind: isDeadline ? '📌 〆切' : '🤝 待ち合わせ',
+          title: m.title || (isDeadline ? '〆切' : '待ち合わせ'),
+          time: `${fmtTmDur(remaining)} ${isDeadline ? '残' : '後'}`,
+          tick: { mode: 'countdown', targetMs: ts,
+                  suffix: isDeadline ? ' 残' : ' 後',
+                  redBelow: 600,
+                  colorRed: '#c62828',
+                  colorNorm: isDeadline ? '#b91c1c' : '#7c3aed' },
           sort: remaining,
-          color: remaining < 600 ? '#c62828' : '#7c3aed',
-          bg: '#ede9fe',
+          color: remaining < 600 ? '#c62828' : (isDeadline ? '#b91c1c' : '#7c3aed'),
+          bg: isDeadline ? '#fee2e2' : '#ede9fe',
         });
       }
     }

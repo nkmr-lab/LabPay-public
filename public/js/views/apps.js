@@ -24,6 +24,7 @@ export const APPS = [
   { id: 'polls',         cat: 'urgent', url: '#/polls',         title: '投票・アンケート',   desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
   { id: 'requests',      cat: 'urgent', url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'meetups',       cat: 'urgent', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
+  { id: 'deadlines',     cat: 'urgent', url: '#/meetups?kind=deadline', title: '📌 〆切',            desc: '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで。 待ち合わせ と 同じ 仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'urgent', url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
   { id: 'auctions',      cat: 'urgent', url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
   { id: 'nomikai',       cat: 'urgent', url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
