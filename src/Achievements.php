@@ -288,8 +288,11 @@ class Achievements {
         $out['early_bird'] = (int)$st->fetchColumn();
 
         // オープナー: DATE(started_at) D について min(started_at) を取る user が
-        // 自分 AND その日 0:00 を またぐセッションが 誰も無い (= 誰も泊まってない)。
-        // days.d は DATE 型 = 00:00:00 として 比較される。
+        // 自分 AND 自分が その日 0:00 を またぐセッションを 持っていない (= 自分が
+        // 泊まりでなく 朝来た)。
+        // v389: 旧版は 「誰か (全体) が 泊まっていたら その日無効」 だったため、
+        //       一晩泊まる人がいる日が 全員オープナー対象外になり 誤動作。
+        //       「自分が 泊まっていなければ オープナー」 に修正。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(started_at) AS d, MIN(started_at) AS m
@@ -301,15 +304,17 @@ class Achievements {
              AND me.started_at = days.m
              AND me.user_id = ?
            WHERE NOT EXISTS (
-             SELECT 1 FROM presence_sessions overnight
-              WHERE overnight.started_at < days.d
-                AND overnight.ended_at   > days.d
+             SELECT 1 FROM presence_sessions own
+              WHERE own.user_id = ?
+                AND own.started_at < days.d
+                AND own.ended_at   > days.d
            )");
-        $st->execute([$userId]);
+        $st->execute([$userId, $userId]);
         $out['opener'] = (int)$st->fetchColumn();
 
         // クローザー: DATE(ended_at) D について max(ended_at) を 取る user が 自分
-        // AND その夜 (D+1 00:00:00) を またぐセッションが 誰も無い (= 誰も泊まらず 帰った)。
+        // AND 自分が その夜 (D+1 00:00:00) を またぐセッションを 持っていない
+        // (= 自分が 泊まりでなく 退社した)。 同上の修正。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(ended_at) AS d, MAX(ended_at) AS m
@@ -321,11 +326,12 @@ class Achievements {
              AND me.ended_at = days.m
              AND me.user_id = ?
            WHERE NOT EXISTS (
-             SELECT 1 FROM presence_sessions overnight
-              WHERE overnight.started_at < DATE_ADD(days.d, INTERVAL 1 DAY)
-                AND overnight.ended_at   > DATE_ADD(days.d, INTERVAL 1 DAY)
+             SELECT 1 FROM presence_sessions own
+              WHERE own.user_id = ?
+                AND own.started_at < DATE_ADD(days.d, INTERVAL 1 DAY)
+                AND own.ended_at   > DATE_ADD(days.d, INTERVAL 1 DAY)
            )");
-        $st->execute([$userId]);
+        $st->execute([$userId, $userId]);
         $out['closer'] = (int)$st->fetchColumn();
 
         return $out;

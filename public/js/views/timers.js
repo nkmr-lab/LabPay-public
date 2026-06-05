@@ -65,7 +65,9 @@ export async function renderTimers() {
       const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
       const remaining = Math.max(0, Math.floor((ends - (Date.now() + serverOffset)) / 1000));
       const isMine = Number(t.creator_user_id) === Number(state.me?.id);
-      const tag = t.status === 'running'
+      // v389 hotfix: ローカル名を `statusTag` に変更。 旧コードは `const tag` が import の
+      //              `tag()` をシャドウし、 右辺で `tag()` 呼び出しが TDZ エラーになっていた。
+      const statusTag = t.status === 'running'
         ? `<span class="tag" style="background:#e3f2fd; color:#1565c0">${fmtDuration(remaining)} 残</span>`
         : t.status === 'done'
         ? tag('ok', '完了')
@@ -74,7 +76,7 @@ export async function renderTimers() {
         <a class="list-item" href="#/timers/${t.id}">
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(t.title)}</div>
-            <div class="meta">${tag} · ${fmtDuration(t.duration_seconds)} · 起案 ${escapeHtml(t.creator_name)}${isMine ? ' (自分)' : ''}</div>
+            <div class="meta">${statusTag} · ${fmtDuration(t.duration_seconds)} · 起案 ${escapeHtml(t.creator_name)}${isMine ? ' (自分)' : ''}</div>
           </div>
         </a>`;
     }).join('');
