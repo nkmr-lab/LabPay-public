@@ -50,8 +50,11 @@ function feedback_claude_set_status(PDO $pdo, array $cfg, int $id): void {
         throw new ApiException('bad_request', "working / done からは 直接 approved に 戻せません (一度 none に)", 400);
     }
     if ($status === 'approved') {
-        $pdo->prepare("UPDATE feedback SET claude_status='approved', claude_assigned_at=NOW()
-            WHERE id = ?")->execute([$id]);
+        // v431 「Claude に 任せる」 を 押した admin id を 記録 → 完了時に reply の
+        // replied_by_user_id に 使う。
+        $admin = Auth::requireAdmin($pdo, $cfg);
+        $pdo->prepare("UPDATE feedback SET claude_status='approved', claude_assigned_at=NOW(),
+            claude_assigned_by_user_id=? WHERE id = ?")->execute([(int)$admin['id'], $id]);
     } else {
         $pdo->prepare("UPDATE feedback SET claude_status=? WHERE id = ?")
             ->execute([$status, $id]);
