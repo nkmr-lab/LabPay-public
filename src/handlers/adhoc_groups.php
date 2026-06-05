@@ -656,15 +656,41 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     // Settlement plan: greedy match of creditors and debtors.
     $settlements = compute_settlements($balances);
 
+    // このグループから「請求一括生成」で 作成された money_request 群を
+    // 集計し、 (creditor, debtor) ペア -> 支払い状況 を返す。 フロントは
+    // 推奨送金プラン 行に この情報を 上乗せして 「支払い済」 グレーアウトを 表示。
+    $stC = $pdo->prepare("
+        SELECT mr.id AS request_id,
+               mr.creator_user_id AS to_user_id,
+               rr.user_id          AS from_user_id,
+               rr.amount_yen,
+               rr.paid_at,
+               rr.paid_method
+          FROM money_requests mr
+          JOIN money_request_recipients rr ON rr.request_id = mr.id
+         WHERE mr.source_group_id = ?
+         ORDER BY mr.id");
+    $stC->execute([$id]);
+    $charges = $stC->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($charges as &$c) {
+        $c['request_id']   = (int)$c['request_id'];
+        $c['to_user_id']   = (int)$c['to_user_id'];
+        $c['from_user_id'] = (int)$c['from_user_id'];
+        $c['amount_yen']   = (int)$c['amount_yen'];
+        $c['is_paid']      = $c['paid_at'] !== null;
+    }
+    unset($c);
+
     $total = 0;
     foreach ($rows as $r) $total += (int)$r['amount_jpy'];
 
     json_response([
-        'expenses'    => $rows,
-        'balances'    => $balances,
-        'settlements' => $settlements,
-        'total_jpy'   => $total,
-        'count'       => count($rows),
+        'expenses'           => $rows,
+        'balances'           => $balances,
+        'settlements'        => $settlements,
+        'settlement_charges' => $charges,
+        'total_jpy'          => $total,
+        'count'              => count($rows),
     ]);
 }
 

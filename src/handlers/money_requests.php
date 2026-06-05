@@ -62,6 +62,13 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
     $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
+    // 任意: adhoc_groups の 精算サマリ 「請求一括生成」 から呼ばれた場合に
+    // どのグループ由来かを 記録する。 これがあると groups.js の 精算モーダル
+    // で 「この送金プランは もう支払い済」 を 表示できる。 FK は ON DELETE
+    // SET NULL なので、 後でグループを消しても 請求は残る。 不正な ID を
+    // 渡されたら FK 違反で 落ちるので 別途 存在 check はしない。
+    $sourceGroupId = isset($body['source_group_id']) && (int)$body['source_group_id'] > 0
+        ? (int)$body['source_group_id'] : null;
 
     // creator_user_id を任意で指定可能 (ワリカ精算で各 creditor を creator
     // として一斉に作るとき用)。指定がなければ呼び出し元自身。指定された
@@ -145,10 +152,10 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         return;
     }
 
-    $rid = db_tx($pdo, function () use ($pdo, $creatorId, $u, $title, $memo, $rows) {
+    $rid = db_tx($pdo, function () use ($pdo, $creatorId, $u, $title, $memo, $rows, $sourceGroupId) {
         $st = $pdo->prepare("INSERT INTO money_requests
-            (creator_user_id, created_by_user_id, title, memo) VALUES (?,?,?,?)");
-        $st->execute([$creatorId, (int)$u['id'], $title, $memo]);
+            (creator_user_id, created_by_user_id, source_group_id, title, memo) VALUES (?,?,?,?,?)");
+        $st->execute([$creatorId, (int)$u['id'], $sourceGroupId, $title, $memo]);
         $rid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO money_request_recipients (request_id, user_id, amount_yen) VALUES (?,?,?)");
         foreach ($rows as $r) $st->execute([$rid, $r['user_id'], $r['amount_yen']]);

@@ -1407,16 +1407,38 @@ function openSettleModal(gid) {
   const meId = Number(state.me?.id) || 0;
   const mineStyle = 'background:#fff8e6; border-left:3px solid var(--primary)';
 
-  // 推奨送金プラン。自分が from/to のどちらかなら黄色背景でハイライト。
+  // v394: source_group_id 経由で この グループに 紐づく money_request 群が
+  // settlement_charges に入っているので、 (from_user_id, to_user_id) で
+  // マッチングして 各プラン行に 「✅ 支払い済」 / 「💸 請求済 (未払い)」 を
+  // 上乗せ表示。 同じ ペアの 請求が 複数あったら 最新の paid 状態を 採用。
+  const chargesByPair = new Map();
+  for (const c of (d.settlement_charges || [])) {
+    const key = `${c.from_user_id}-${c.to_user_id}`;
+    // 後勝ち = 同 (from, to) で 新しい請求 ほど 優先 (settlement_charges は
+    // mr.id ASC で 来るので 最後が 最新)
+    chargesByPair.set(key, c);
+  }
   const planRows = d.settlements.length
     ? d.settlements.map(s => {
         const mine = Number(s.from_user_id) === meId || Number(s.to_user_id) === meId;
+        const charge = chargesByPair.get(`${Number(s.from_user_id)}-${Number(s.to_user_id)}`);
+        const paid = charge?.is_paid === true;
+        const reqStatus = paid
+          ? `<span class="tag ok" style="font-size:10px; margin-left:6px">✅ 支払い済</span>`
+          : charge
+            ? `<a class="tag warn" style="font-size:10px; margin-left:6px; text-decoration:none" href="#/requests/${charge.request_id}">💸 請求済 (未払い)</a>`
+            : '';
+        const rowStyle = [
+          mine ? mineStyle : '',
+          paid ? 'opacity:.5; filter:grayscale(50%)' : '',
+        ].filter(Boolean).join(';');
         return `
-          <div class="list-item" style="${mine ? mineStyle : ''}">
+          <div class="list-item" style="${rowStyle}">
             <div class="grow">
               <span class="bold">${escapeHtml(s.from_name)}</span> →
               <span class="bold">${escapeHtml(s.to_name)}</span>
               ${mine ? '<span class="muted" style="font-size:10px; margin-left:4px">(あなた)</span>' : ''}
+              ${reqStatus}
             </div>
             <div class="bold" style="color:var(--primary); font-size:16px">¥${s.amount_jpy.toLocaleString()}</div>
           </div>`;
@@ -1486,6 +1508,9 @@ function openSettleModal(gid) {
             memo: null,
             creator_user_id: creatorId,
             recipients,
+            // v394: source_group_id を 渡すと、 精算サマリ モーダルが 「この
+            // プランは もう 支払い済」 を 後で 反映できるようになる。
+            source_group_id: Number(currentGroupId),
           });
           if (firstId === null) firstId = created.id;
           ok++;
