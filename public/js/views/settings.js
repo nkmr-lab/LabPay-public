@@ -3,7 +3,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readTabLayout, writeTabLayout, applyTabLayout } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { previewSoundUrl, refreshSoundCache } from '../sounds.js';
-import { APPS, isAppVisible, setAppVisible } from './apps.js';
+import { APPS, APP_CATEGORIES, isAppVisible, setAppVisible } from './apps.js';
 import { HOME_ACTIONS, isHomeActionVisible, setHomeActionVisible } from './home.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
@@ -405,20 +405,32 @@ function renderHomeActionsEditor() {
 
 // ---------------- アプリ表示 (/#/apps) ----------------
 // 各 app id について 表示 / 非表示 を localStorage に保存。 設定値が無ければ defaultVisible。
+// v444: 通知 軸 カテゴリ ごと に セクション 見出し付き で 並べる。
 function renderAppsVisEditor() {
   const root = document.getElementById('apps-vis-list');
   if (!root) return;
-  root.innerHTML = APPS.map(a => {
-    const on = isAppVisible(a.id);
+  const sections = APP_CATEGORIES.map(c => {
+    const items = APPS.filter(a => a.cat === c.id);
+    if (!items.length) return '';
+    const rows = items.map(a => {
+      const on = isAppVisible(a.id);
+      return `
+        <div class="list-item" data-app-id="${escapeHtml(a.id)}" style="gap:8px; align-items:center">
+          <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+            <input type="checkbox" class="av-show" ${on ? 'checked' : ''}>
+            <span class="bold">${escapeHtml(a.title)}</span>
+          </label>
+          <span class="hint-sm" style="text-align:right; max-width:50%">${escapeHtml(a.desc)}</span>
+        </div>`;
+    }).join('');
     return `
-      <div class="list-item" data-app-id="${escapeHtml(a.id)}" style="gap:8px; align-items:center">
-        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
-          <input type="checkbox" class="av-show" ${on ? 'checked' : ''}>
-          <span class="bold">${escapeHtml(a.title)}</span>
-        </label>
-        <span class="hint-sm" style="text-align:right; max-width:50%">${escapeHtml(a.desc)}</span>
+      <div style="margin-top:10px">
+        <div class="bold" style="margin:6px 0 2px">${escapeHtml(c.label)}</div>
+        <div class="hint" style="margin:0 0 4px">${escapeHtml(c.hint)}</div>
+        ${rows}
       </div>`;
   }).join('');
+  root.innerHTML = sections;
   root.querySelectorAll('.list-item[data-app-id]').forEach(row => {
     const id = row.dataset.appId;
     row.querySelector('.av-show').addEventListener('change', (ev) => {

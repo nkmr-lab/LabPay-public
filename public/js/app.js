@@ -235,14 +235,16 @@ function renderChrome() {
   const isAdmin = state.me.role === 'admin';
   adminLink.hidden = !isAdmin;
   if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
-  // admin は 報告・要望 ページを直接読めるので、 個別の 機能要望 / バグ報告
-  // メニューは出さない。 ついでにセパレータも隠す (一般ユーザ向けの区切り)。
+  // v445: admin にも 機能要望 / バグ報告 リンク を 出す。
+  // 中村 (admin) は これを Claude への 指示 チャネル として 使う:
+  //   admin が 投稿 → 報告・要望 で 「Claude に 任せる」 → cron 巡回 →
+  //   実装 + push + done + 自動 返信。 自分のメモも 履歴に残る。
   const fReq  = document.getElementById('feature-request-link');
   const bugRep = document.getElementById('bug-report-link');
   const sep   = document.getElementById('topbar-sep');
-  if (fReq)  fReq.hidden  = isAdmin;
-  if (bugRep) bugRep.hidden = isAdmin;
-  if (sep)   sep.hidden   = isAdmin;
+  if (fReq)  fReq.hidden  = false;
+  if (bugRep) bugRep.hidden = false;
+  if (sep)   sep.hidden   = false;
   if (state.unread > 0) {
     badge.hidden = false;
     badge.textContent = state.unread > 99 ? '99+' : String(state.unread);

@@ -63,16 +63,22 @@ export async function renderTimers() {
     }
     const serverOffset = Date.parse(String(d.server_now).replace(' ', 'T')) - Date.now();
     document.getElementById('tm-list').innerHTML = items.map(t => {
-      const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
-      const remaining = Math.max(0, Math.floor((ends - (Date.now() + serverOffset)) / 1000));
       const isMine = Number(t.creator_user_id) === Number(state.me?.id);
-      // v389 hotfix: ローカル名を `statusTag` に変更。 旧コードは `const tag` が import の
-      //              `tag()` をシャドウし、 右辺で `tag()` 呼び出しが TDZ エラーになっていた。
-      const statusTag = t.status === 'running'
-        ? `<span class="tag" style="background:#e3f2fd; color:#1565c0">${fmtDuration(remaining)} 残</span>`
-        : t.status === 'done'
-        ? tag('ok', '完了')
-        : tag('muted', '中止');
+      // v446 paused を 追加。 running は ends_at から 残りを 計算、 paused は
+      // remaining_seconds を そのまま 表示。
+      let statusTag;
+      if (t.status === 'running') {
+        const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
+        const remaining = Math.max(0, Math.floor((ends - (Date.now() + serverOffset)) / 1000));
+        statusTag = `<span class="tag" style="background:#e3f2fd; color:#1565c0">▶ ${fmtDuration(remaining)} 残</span>`;
+      } else if (t.status === 'paused') {
+        const rem = Math.max(0, Number(t.remaining_seconds) || 0);
+        statusTag = `<span class="tag" style="background:#fff3e0; color:#e65100">⏸ ${fmtDuration(rem)} 残</span>`;
+      } else if (t.status === 'done') {
+        statusTag = tag('ok', '完了');
+      } else {
+        statusTag = tag('muted', '中止');
+      }
       return `
         <a class="list-item" href="#/timers/${t.id}">
           <div class="grow" style="min-width:0">
@@ -98,7 +104,8 @@ export async function renderTimerNew({ query } = {}) {
   app.innerHTML = `
     <div class="card">
       <a href="#/timers" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">タイマーを始める</h2>
+      <h2 style="margin:6px 0 0">タイマーを作成</h2>
+      <p class="hint-sm" style="margin:4px 0 0">作成後 ▶ 開始 を 押す まで カウントダウン は 始まりません。</p>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「タイマー」)</span>
@@ -138,7 +145,7 @@ export async function renderTimerNew({ query } = {}) {
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/timers" class="btn">キャンセル</a>
-        <button id="tmn-save" class="primary">⏱️ 開始</button>
+        <button id="tmn-save" class="primary">＋ 作成</button>
       </div>
     </div>
   `;
@@ -186,7 +193,7 @@ export async function renderTimerNew({ query } = {}) {
         title = 'タイマー';
       }
     }
-    btn.textContent = '⏱️ 開始中…';
+    btn.textContent = '＋ 作成中…';
     // v404 ベル入力は 分単位 (小数可) に。 backend は秒で 保持するので *60 して送る。
     const toSec = (id) => {
       const v = parseFloat(document.getElementById(id).value);
@@ -210,11 +217,11 @@ export async function renderTimerNew({ query } = {}) {
         bell3_seconds: bell3,
         repeat_max: repeatMax,
       });
-      toast('タイマーを開始しました');
+      toast('タイマーを作成しました — ▶ 開始 を 押して カウントダウン');
       navigate('#/timers/' + r.id);
     } catch (e) {
       toast('失敗: ' + e.message);
-      btn.disabled = false; btn.textContent = '⏱️ 開始';
+      btn.disabled = false; btn.textContent = '＋ 作成';
     }
   });
 }
@@ -234,6 +241,7 @@ let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server から�
 let tmEndsMs = 0;
 let tmStartedMs = 0;
 let tmDurationSec = 0;
+let tmRemainingSec = 0;     // v446 paused 時の 残り秒数 (running/done では未使用)
 let tmBells = [];           // [秒, ...] 開始からの 秒数
 let tmBellsFired = new Set();
 let tmRepeatMax = 0;
@@ -270,11 +278,20 @@ export async function renderTimerDetail({ params }) {
       <h3 style="margin:0 0 6px">参加者 (<span id="tmd-pcount">0</span>)</h3>
       <div id="tmd-participants" class="row" style="gap:6px; flex-wrap:wrap"></div>
     </div>
+    <div class="card" id="tmd-ctrl-card">
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="tmd-start" class="primary" hidden>▶ 開始</button>
+        <button id="tmd-pause" class="btn"     hidden>⏸ 一時停止</button>
+        <button id="tmd-reset" class="btn"     hidden>↻ リセット</button>
+      </div>
+      <p class="hint-sm" style="margin:6px 0 0">操作は 参加者 全員 (起案者 含む) が 可能。</p>
+    </div>
     <div class="card" id="tmd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
         <button id="tmd-cancel" class="btn">⏹ 停止</button>
         <button id="tmd-del" class="danger">削除</button>
       </div>
+      <p class="hint-sm" style="margin:6px 0 0">起案者 のみ 表示 (停止 = 中止状態 / 削除 = 完全削除)。</p>
     </div>
   `;
   stopTimerLoops();
@@ -296,9 +313,11 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     const d = await get('/api/timers/' + id);
     const t = d.timer;
     tmOffsetMs    = Date.parse(String(d.server_now).replace(' ', 'T')) - recvMs;
-    tmEndsMs      = Date.parse(String(t.ends_at).replace(' ', 'T'));
-    tmStartedMs   = Date.parse(String(t.started_at).replace(' ', 'T'));
+    // v446 paused は started_at/ends_at が NULL。 NaN を 避けるため 三項で 0 に。
+    tmEndsMs      = t.ends_at    ? Date.parse(String(t.ends_at).replace(' ', 'T'))    : 0;
+    tmStartedMs   = t.started_at ? Date.parse(String(t.started_at).replace(' ', 'T')) : 0;
     tmDurationSec = t.duration_seconds;
+    tmRemainingSec = Math.max(0, Number(t.remaining_seconds) || 0);
     tmStatus      = t.status;
     // ベル / リピート 情報 (resync 時も更新)
     tmBells       = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(Number.isFinite);
@@ -321,6 +340,22 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       `;
       document.getElementById('tmd-pcount').textContent = d.participants.length;
       document.getElementById('tmd-participants').innerHTML = d.participants.map(participantPill).join('');
+      // v446 start/pause/reset は 参加者 (含 起案者) なら 押せる。
+      if (d.is_participant || d.is_creator) {
+        document.getElementById('tmd-start').addEventListener('click', async () => {
+          try { await patch(`/api/timers/${id}/start`, {}); toast('開始しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+        document.getElementById('tmd-pause').addEventListener('click', async () => {
+          try { await patch(`/api/timers/${id}/pause`, {}); toast('一時停止しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+        document.getElementById('tmd-reset').addEventListener('click', async () => {
+          if (!confirm('タイマーを 元の長さ に 戻しますか?')) return;
+          try { await patch(`/api/timers/${id}/reset`, {}); toast('リセットしました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+      }
       if (d.is_creator) {
         document.getElementById('tmd-admin-card').hidden = false;
         document.getElementById('tmd-cancel').addEventListener('click', async () => {
@@ -334,6 +369,16 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
           catch (e) { toast('失敗: ' + e.message); }
         });
       }
+    }
+    // v446 ボタン 表示の 出し分けは resync でも 走らせる (status 変化を 反映)。
+    const btnStart = document.getElementById('tmd-start');
+    const btnPause = document.getElementById('tmd-pause');
+    const btnReset = document.getElementById('tmd-reset');
+    if (btnStart && btnPause && btnReset) {
+      btnStart.hidden = !(tmStatus === 'paused');
+      btnPause.hidden = !(tmStatus === 'running');
+      // リセット は 削除以外 全状態 で 押せる (running / paused / done / cancelled)。
+      btnReset.hidden = false;
     }
     // 次の sync をスケジューリング。 残りが少ない時 + 開始直後は頻繁に。
     scheduleSyncNext(id);
@@ -385,7 +430,21 @@ function tickTimer() {
     countEl.textContent = '停止';
     countEl.style.color = '#888';
     barEl.style.width = '0%';
-    stEl.textContent = '⏹ 起案者により停止されました';
+    stEl.textContent = '⏹ 起案者により停止されました — ↻ リセット で 戻せます';
+    return;
+  }
+  // v446 paused: 残り を 固定表示。 tick で 減らさない。
+  if (tmStatus === 'paused') {
+    const modeEl = document.getElementById('tmd-mode');
+    countEl.textContent = fmtDuration(tmRemainingSec);
+    countEl.style.color = '#e65100';
+    if (modeEl) modeEl.textContent = '⏸ 一時停止中 — ▶ 開始 を 押すと カウントダウン';
+    elEl.textContent = `残り ${fmtDuration(tmRemainingSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
+    const usedSec = Math.max(0, tmDurationSec - tmRemainingSec);
+    const pct = tmDurationSec ? Math.min(100, (usedSec / tmDurationSec) * 100) : 0;
+    barEl.style.width = pct.toFixed(1) + '%';
+    barEl.style.background = 'var(--primary)';
+    stEl.textContent = '';
     return;
   }
   // v408 超過 表示。 remainingSec は 0 で 止めず、 マイナスに 突入させて

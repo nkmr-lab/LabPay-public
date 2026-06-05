@@ -2,34 +2,53 @@
 //
 // v384: 各ユーザが 「メニューに出すアプリ」 を選べるように。 デフォルト表示は
 // id を defaultVisible=true で 指定。 設定 → 「アプリ表示」 で個別 ON/OFF。
-// 表示順は 一旦 APPS の宣言順 (= 重要なものほど 上)。
+//
+// v444: 通知 軸 で 5 カテゴリ に 分割 (cat フィールド)。 一覧画面 / 設定 とも
+// セクション 見出し付き で 並べる。 並び順 = 締切系 → お知らせ系 → 道具 →
+// AI → 受動。 「届く タイプ」 と 「黙って 使う タイプ」 が 一目で 分かる ように。
 
 import { escapeHtml } from '../router.js';
 
+// 通知 軸 カテゴリ。 並び順 = 表示順。
+export const APP_CATEGORIES = [
+  { id: 'urgent',  label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知 を 出す ジャンル。' },
+  { id: 'inform',  label: '🟡 全員に届くお知らせ',       hint: '投稿 や 参加で 全員に 情報通知。 締切は ない / 緩い。' },
+  { id: 'tool',    label: '🟢 その場で結論が出る道具',   hint: '結果は 画面内で 完結。 通知は 出さない。' },
+  { id: 'ai',      label: '🤖 個人ツール (AI / 計算)',   hint: '自分用 の 会話 / 翻訳 / 計算。 通知は 出さない。' },
+  { id: 'archive', label: '📚 ラボの情報・蓄積',         hint: '受動的に 参照する 静的・蓄積系。 通知は 出さない。' },
+];
+
 export const APPS = [
-  { id: 'groups',        url: '#/groups',        title: 'イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
-  { id: 'roulette',      url: '#/roulette',      title: 'ルーレット',         desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
-  { id: 'text-roulette', url: '#/text-roulette', title: 'どこ行くルーレット', desc: '昼飯どこ行く / 何食べる など、 任意のテキスト候補から 1 つを選ぶシンプル版。', defaultVisible: true },
-  { id: 'polls',         url: '#/polls',         title: '投票・アンケート',   desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
-  { id: 'rollcalls',     url: '#/rollcalls',     title: '点呼',               desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
-  { id: 'timers',        url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
-  { id: 'stopwatches',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
-  { id: 'translate',     url: '#/translate',     title: '🌐 画像 和訳',       desc: '写真 (メニュー / 看板 / 説明文 など) を アップロード → AI で 日本語に 翻訳。 出張 / 旅行 で 便利。', defaultVisible: true },
-  { id: 'help',          url: '#/help',          title: '🤖 操作ガイド AI',   desc: 'LabPay の 使い方 を AI に 聞ける チャット。 「○○ ってどこから?」 「△△ したいんだけど」 に 操作手順 で 答えます。', defaultVisible: true },
-  { id: 'chat',          url: '#/chat',          title: '💬 AI 対話 / 翻訳',  desc: '汎用 多言語 チャット (中国語・イタリア語・英語など)。 海外出張での 翻訳・会話 補助に。 クイック ボタンで 「〇〇 に 翻訳」 を 即発射。', defaultVisible: true },
-  { id: 'meetups',       url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
-  { id: 'contacts',      url: '#/contacts',      title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
-  { id: 'notices',       url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
-  // v396: 以降も デフォ ON (旧 false 群は ユーザー要望で 全部 ON に変更)。
-  // 使わないものは 設定 → アプリ表示 から 個別に OFF にする方針。
-  { id: 'random-groups', url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
-  { id: 'auctions',      url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
-  { id: 'exercise',      url: '#/exercise',      title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
-  { id: 'nomikai',       url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
-  { id: 'requests',      url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
-  { id: 'scrapbox',      url: '#/scrapbox',      title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
-  { id: 'network',       url: '#/network',       title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
-  { id: 'playlists',     url: '#/playlists',     title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
+  // 🔴 urgent — 締切・応答が要る (通知 出す)
+  { id: 'rollcalls',     cat: 'urgent', url: '#/rollcalls',     title: '点呼',               desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
+  { id: 'polls',         cat: 'urgent', url: '#/polls',         title: '投票・アンケート',   desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
+  { id: 'requests',      cat: 'urgent', url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
+  { id: 'meetups',       cat: 'urgent', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
+  { id: 'timers',        cat: 'urgent', url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
+  { id: 'auctions',      cat: 'urgent', url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
+  { id: 'nomikai',       cat: 'urgent', url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
+
+  // 🟡 inform — 全員に届くお知らせ
+  { id: 'notices',       cat: 'inform', url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
+  { id: 'groups',        cat: 'inform', url: '#/groups',        title: 'イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
+
+  // 🟢 tool — その場で結論が出る道具 (通知なし)
+  { id: 'roulette',      cat: 'tool',   url: '#/roulette',      title: 'ルーレット',         desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
+  { id: 'text-roulette', cat: 'tool',   url: '#/text-roulette', title: 'どこ行くルーレット', desc: '昼飯どこ行く / 何食べる など、 任意のテキスト候補から 1 つを選ぶシンプル版。', defaultVisible: true },
+  { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
+  { id: 'stopwatches',   cat: 'tool',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
+
+  // 🤖 ai — 個人ツール (AI / 計算、 通知なし)
+  { id: 'chat',          cat: 'ai',     url: '#/chat',          title: '💬 AI 対話 / 翻訳',  desc: '汎用 多言語 チャット (中国語・イタリア語・英語など)。 海外出張での 翻訳・会話 補助に。 クイック ボタンで 「〇〇 に 翻訳」 を 即発射。', defaultVisible: true },
+  { id: 'help',          cat: 'ai',     url: '#/help',          title: '🤖 操作ガイド AI',   desc: 'LabPay の 使い方 を AI に 聞ける チャット。 「○○ ってどこから?」 「△△ したいんだけど」 に 操作手順 で 答えます。', defaultVisible: true },
+  { id: 'translate',     cat: 'ai',     url: '#/translate',     title: '🌐 画像 和訳',       desc: '写真 (メニュー / 看板 / 説明文 など) を アップロード → AI で 日本語に 翻訳。 出張 / 旅行 で 便利。', defaultVisible: true },
+
+  // 📚 archive — ラボの情報・蓄積 (受動、 通知なし)
+  { id: 'contacts',      cat: 'archive', url: '#/contacts',     title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
+  { id: 'scrapbox',      cat: 'archive', url: '#/scrapbox',     title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
+  { id: 'network',       cat: 'archive', url: '#/network',      title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
+  { id: 'exercise',      cat: 'archive', url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
+  { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
@@ -54,24 +73,38 @@ export function setAppVisible(id, visible) {
 export async function renderApps() {
   const app = document.getElementById('app');
   const visible = APPS.filter(a => isAppVisible(a.id));
+  const hiddenCount = APPS.length - visible.length;
+
+  // カテゴリ毎 に セクション化。 空セクション は 出さない。
+  const sectionsHtml = APP_CATEGORIES.map(c => {
+    const items = visible.filter(a => a.cat === c.id);
+    if (!items.length) return '';
+    return `
+      <div class="card" style="margin-top:10px">
+        <h3 style="margin:0 0 4px">${escapeHtml(c.label)}</h3>
+        <p class="hint" style="margin:0 0 8px">${escapeHtml(c.hint)}</p>
+        <div class="list">
+          ${items.map(a => `
+            <a class="list-item" href="${a.url}">
+              <div class="grow">
+                <div class="bold">${escapeHtml(a.title)} →</div>
+                <div class="meta">${escapeHtml(a.desc)}</div>
+              </div>
+            </a>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
   app.innerHTML = `
     <div class="card page-header">
       <p class="card-subtitle" style="margin:0">
-        ラボ内・出張中で使える小道具集です。 並び順 / 表示する物は
-        <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から変えられます。
+        ラボ内・出張中で使える小道具集です。 通知の出方 で 並べてあります。
+        並び順 / 表示する物は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から変えられます。
       </p>
     </div>
-    <div class="list">
-      ${visible.map(a => `
-        <a class="list-item" href="${a.url}">
-          <div class="grow">
-            <div class="bold">${escapeHtml(a.title)} →</div>
-            <div class="meta">${escapeHtml(a.desc)}</div>
-          </div>
-        </a>`).join('')}
-      ${visible.length < APPS.length
-        ? `<div class="hint" style="text-align:center; padding:8px">…他 ${APPS.length - visible.length} 個は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から ON にできます</div>`
-        : ''}
-    </div>
+    ${sectionsHtml}
+    ${hiddenCount > 0
+      ? `<div class="hint" style="text-align:center; padding:10px">…他 ${hiddenCount} 個は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から ON にできます</div>`
+      : ''}
   `;
 }

@@ -15,8 +15,23 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''       && $method === 'GET')    { timers_detail($pdo, $cfg, $id); return; }
         if ($next === ''       && $method === 'DELETE') { timers_delete($pdo, $cfg, $id); return; }
         if ($next === 'cancel' && $method === 'PATCH')  { timers_cancel($pdo, $cfg, $id); return; }
+        // v446 paused-default model: ▶ 開始 / ⏸ 一時停止 / ↻ リセット を 追加。
+        // 参加者 (含 起案者) なら 押せる。 共有 タイマー だから 全員が 操作可。
+        if ($next === 'start'  && $method === 'PATCH')  { timers_start($pdo, $cfg, $id); return; }
+        if ($next === 'pause'  && $method === 'PATCH')  { timers_pause($pdo, $cfg, $id); return; }
+        if ($next === 'reset'  && $method === 'PATCH')  { timers_reset($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no timers route for $method $sub", 404);
+}
+
+// v446 参加者 (含 起案者) 判定 ヘルパ。 start/pause/reset は 全員 押せる。
+function timers_assert_member(PDO $pdo, array $u, int $id, array $row): void {
+    if ((int)$row['creator_user_id'] === (int)$u['id']) return;
+    $st = $pdo->prepare("SELECT 1 FROM timer_participants WHERE timer_id=? AND user_id=?");
+    $st->execute([$id, (int)$u['id']]);
+    if (!$st->fetchColumn()) {
+        throw new ApiException('forbidden', '参加者または起案者のみ操作可', 403);
+    }
 }
 
 function timers_autoclose(PDO $pdo): void {
@@ -36,15 +51,19 @@ function timers_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     timers_autoclose($pdo);
     $uid = (int)$u['id'];
+    // v446 remaining_seconds (paused 用) を 含めて 返す。 並び順は
+    // running → paused → done → cancelled で、 同 status 内は created_at 新しい順。
     $st = $pdo->prepare("
-        SELECT t.id, t.title, t.duration_seconds, t.started_at, t.ends_at, t.status,
+        SELECT t.id, t.title, t.duration_seconds, t.remaining_seconds,
+               t.started_at, t.ends_at, t.status,
                t.creator_user_id, u.display_name AS creator_name,
                EXISTS(SELECT 1 FROM timer_participants tp WHERE tp.timer_id=t.id AND tp.user_id=?) AS is_participant
           FROM timers t
           JOIN users u ON u.id = t.creator_user_id
          WHERE t.creator_user_id = ?
             OR EXISTS(SELECT 1 FROM timer_participants tp2 WHERE tp2.timer_id=t.id AND tp2.user_id=?)
-         ORDER BY (t.status='running') DESC, t.ends_at DESC, t.id DESC
+         ORDER BY FIELD(t.status,'running','paused','done','cancelled'),
+                  t.created_at DESC, t.id DESC
          LIMIT 100");
     $st->execute([$uid, $uid, $uid]);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -93,32 +112,90 @@ function timers_create(PDO $pdo, array $cfg): void {
     if ((int)$stU->fetchColumn() !== count($participantIds)) {
         throw new ApiException('bad_request', '存在しない user_id が含まれます', 400);
     }
-    $started = date('Y-m-d H:i:s');
-    $ends    = date('Y-m-d H:i:s', time() + $dur);
+    // v446 paused-default model: 作成時は paused から 始まる。 started_at / ends_at
+    // は NULL、 remaining_seconds = duration_seconds。 ▶ 開始 で running に。
     $tid = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $started, $ends, $participantIds, $bells, $repeatMax, &$tid) {
+    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $participantIds, $bells, $repeatMax, &$tid) {
         $ins = $pdo->prepare("INSERT INTO timers
-            (title, creator_user_id, duration_seconds,
+            (title, creator_user_id, duration_seconds, remaining_seconds,
              bell1_seconds, bell2_seconds, bell3_seconds, repeat_max, repeat_idx,
              started_at, ends_at, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'running', NOW())");
-        $ins->execute([$title, (int)$u['id'], $dur,
-            $bells[0], $bells[1], $bells[2], $repeatMax,
-            $started, $ends]);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, 'paused', NOW())");
+        $ins->execute([$title, (int)$u['id'], $dur, $dur,
+            $bells[0], $bells[1], $bells[2], $repeatMax]);
         $tid = (int)$pdo->lastInsertId();
         $stP = $pdo->prepare("INSERT INTO timer_participants (timer_id, user_id) VALUES (?, ?)");
         foreach ($participantIds as $uid) $stP->execute([$tid, $uid]);
     });
-    // 通知 (自分以外の参加者へ)
+    // 通知 (自分以外の参加者へ)。 paused で 作成 した と 伝わる ように 文言調整。
     foreach ($participantIds as $uid) {
         if ((int)$uid === (int)$u['id']) continue;
         try {
             Notifier::notify($pdo, $cfg, (int)$uid, 'timer',
-                "⏱️ タイマー: 「{$title}」 (" . timer_fmt_short($dur) . ")",
+                "⏱️ タイマー作成: 「{$title}」 (" . timer_fmt_short($dur) . ") — ▶ 開始 待ち",
                 'timer', $tid);
         } catch (Throwable $_) { /* swallow */ }
     }
     json_response(['id' => $tid]);
+}
+
+// v446 ▶ 開始 — paused → running。 remaining_seconds から ends_at を 計算。
+function timers_start(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, status, duration_seconds, remaining_seconds FROM timers WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    timers_assert_member($pdo, $u, $id, $row);
+    if ((string)$row['status'] === 'running') { json_response(['ok' => true, 'already' => 'running']); return; }
+    if ((string)$row['status'] !== 'paused') {
+        throw new ApiException('bad_state', "status={$row['status']} からは開始できません (リセット 後に 開始)", 400);
+    }
+    $remain = (int)($row['remaining_seconds'] ?? 0);
+    if ($remain <= 0) $remain = (int)$row['duration_seconds'];
+    $started = date('Y-m-d H:i:s');
+    $ends    = date('Y-m-d H:i:s', time() + $remain);
+    $pdo->prepare("UPDATE timers
+                      SET status='running', started_at=?, ends_at=?, remaining_seconds=NULL
+                    WHERE id=?")->execute([$started, $ends, $id]);
+    json_response(['ok' => true]);
+}
+
+// v446 ⏸ 一時停止 — running → paused。 残り秒数 を 保存。
+function timers_pause(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, status, ends_at FROM timers WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    timers_assert_member($pdo, $u, $id, $row);
+    if ((string)$row['status'] === 'paused') { json_response(['ok' => true, 'already' => 'paused']); return; }
+    if ((string)$row['status'] !== 'running') {
+        throw new ApiException('bad_state', "status={$row['status']} からは 一時停止 できません", 400);
+    }
+    $endsTs = $row['ends_at'] ? strtotime((string)$row['ends_at']) : time();
+    $remain = max(0, $endsTs - time());
+    $pdo->prepare("UPDATE timers
+                      SET status='paused', started_at=NULL, ends_at=NULL, remaining_seconds=?
+                    WHERE id=?")->execute([$remain, $id]);
+    json_response(['ok' => true, 'remaining_seconds' => $remain]);
+}
+
+// v446 ↻ リセット — どの状態 (running / paused / done / cancelled) からでも
+// remaining_seconds を duration_seconds に 戻して paused に。 repeat_idx も 0 に戻す。
+function timers_reset(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, duration_seconds, status FROM timers WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    timers_assert_member($pdo, $u, $id, $row);
+    $dur = (int)$row['duration_seconds'];
+    $pdo->prepare("UPDATE timers
+                      SET status='paused', started_at=NULL, ends_at=NULL, closed_at=NULL,
+                          repeat_idx=0, remaining_seconds=?
+                    WHERE id=?")->execute([$dur, $id]);
+    json_response(['ok' => true, 'remaining_seconds' => $dur]);
 }
 
 function timer_fmt_short(int $sec): string {
@@ -156,21 +233,23 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
     }
     json_response([
         'timer' => [
-            'id'               => (int)$t['id'],
-            'title'            => $t['title'],
-            'creator_user_id'  => (int)$t['creator_user_id'],
-            'creator_name'     => $t['creator_name'],
-            'duration_seconds' => (int)$t['duration_seconds'],
-            'bell1_seconds'    => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
-            'bell2_seconds'    => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
-            'bell3_seconds'    => isset($t['bell3_seconds']) ? (int)$t['bell3_seconds'] : null,
-            'repeat_max'       => (int)($t['repeat_max'] ?? 0),
-            'repeat_idx'       => (int)($t['repeat_idx'] ?? 0),
-            'started_at'       => $t['started_at'],
-            'ends_at'          => $t['ends_at'],
-            'status'           => $t['status'],
-            'created_at'       => $t['created_at'],
-            'closed_at'        => $t['closed_at'],
+            'id'                => (int)$t['id'],
+            'title'             => $t['title'],
+            'creator_user_id'   => (int)$t['creator_user_id'],
+            'creator_name'      => $t['creator_name'],
+            'duration_seconds'  => (int)$t['duration_seconds'],
+            // v446 paused 時に 残り を 持ち越す。 running/done/cancelled では NULL のまま。
+            'remaining_seconds' => isset($t['remaining_seconds']) ? (int)$t['remaining_seconds'] : null,
+            'bell1_seconds'     => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
+            'bell2_seconds'     => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
+            'bell3_seconds'     => isset($t['bell3_seconds']) ? (int)$t['bell3_seconds'] : null,
+            'repeat_max'        => (int)($t['repeat_max'] ?? 0),
+            'repeat_idx'        => (int)($t['repeat_idx'] ?? 0),
+            'started_at'        => $t['started_at'],
+            'ends_at'           => $t['ends_at'],
+            'status'            => $t['status'],
+            'created_at'        => $t['created_at'],
+            'closed_at'         => $t['closed_at'],
         ],
         'is_creator'     => $isCreator,
         'is_participant' => $isParticipant,

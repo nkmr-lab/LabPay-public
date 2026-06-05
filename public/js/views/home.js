@@ -5,6 +5,24 @@ import { ledgerTypeLabel } from '../labels.js';
 import { coverListItem } from './groups.js';
 import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 
+// v445 復活: 端末の今いる場所 (実 OS タイムゾーン) を取り出す ヘルパ。
+// iana   = "Asia/Tokyo" 等。 サーバ に 「自分の今日」 を計算してもらう用。
+// suffix = "+09:00" 等。 datetime-local の文字列に 付けて 正しい ISO に する用。
+// 海外滞在中も そのまま動く (端末 OS の TZ を 拾う)。
+function localTzInfo() {
+  let iana = 'Asia/Tokyo';
+  try {
+    const t = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (t) iana = t;
+  } catch (_) {}
+  const off = -new Date().getTimezoneOffset(); // minutes east of UTC
+  const sign = off >= 0 ? '+' : '-';
+  const abs = Math.abs(off);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return { iana, suffix: `${sign}${hh}:${mm}` };
+}
+
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
 // データは localStorage に保存し、サーバ側には送らない。
@@ -1037,6 +1055,40 @@ function fmtTmDur(sec) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+// v445 進行中 カード を 1 秒 ごと に ローカル で 進める。 API 再フェッチ せず
+// data-tick-* 属性 から 残り / 経過 を 計算。 ナビ で カードが DOM から
+// 消えたら interval を 解除 (root.isConnected を 監視)。
+let myActiveTimersTickId = null;
+function updateMyActiveTimersTicks(root) {
+  if (!root || !root.isConnected) {
+    if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
+    return;
+  }
+  const now = Date.now();
+  root.querySelectorAll('[data-tick-mode]').forEach(el => {
+    const mode = el.dataset.tickMode;
+    let secs;
+    if (mode === 'countdown') {
+      const target = Number(el.dataset.tickTargetMs);
+      secs = Math.max(0, Math.floor((target - now) / 1000));
+    } else if (mode === 'countup') {
+      const base = Number(el.dataset.tickBaseSec) || 0;
+      const anchor = Number(el.dataset.tickAnchorMs) || now;
+      secs = Math.max(0, base + Math.floor((now - anchor) / 1000));
+    } else {
+      return;
+    }
+    el.textContent = fmtTmDur(secs) + (el.dataset.tickSuffix || '');
+    const red = el.dataset.tickRedBelow;
+    if (red) {
+      const threshold = Number(red);
+      el.style.color = secs < threshold
+        ? (el.dataset.tickColorRed  || '#c62828')
+        : (el.dataset.tickColorNorm || '#1565c0');
+    }
+  });
+}
+
 async function renderMyActiveTimers() {
   const card = document.getElementById('home-mytm-card');
   const root = document.getElementById('home-mytm');
@@ -1053,7 +1105,7 @@ async function renderMyActiveTimers() {
     ]);
     const rows = [];
     // v442 待ち合わせ も 「時間制限あり」 に 合流。 cancelled なし + 未来 (meetup_at > now)
-    // のもの だけ。
+    // のもの だけ。 v445 tick: countdown、 10 分 切ったら 赤。
     if (mu.status === 'fulfilled') {
       const nowMs = Date.now();
       for (const m of (mu.value.items || [])) {
@@ -1066,13 +1118,14 @@ async function renderMyActiveTimers() {
           kind: '🤝 待ち合わせ',
           title: m.title || '待ち合わせ',
           time: `${fmtTmDur(remaining)} 後`,
+          tick: { mode: 'countdown', targetMs: ts, suffix: ' 後', redBelow: 600, colorRed: '#c62828', colorNorm: '#7c3aed' },
           sort: remaining,
           color: remaining < 600 ? '#c62828' : '#7c3aed',
           bg: '#ede9fe',
         });
       }
     }
-    // 点呼 (締切が 近い順に 先頭)
+    // 点呼 (締切が 近い順に 先頭)。 v445 tick: countdown、 10 分 切ったら 赤。
     if (pend.status === 'fulfilled') {
       const nowMs = Date.now();
       for (const it of (pend.value.items || [])) {
@@ -1084,65 +1137,100 @@ async function renderMyActiveTimers() {
           kind: '📣 点呼',
           title: it.title,
           time: remaining !== null ? `${fmtTmDur(remaining)} 残` : '—',
+          tick: deadlineMs ? { mode: 'countdown', targetMs: deadlineMs, suffix: ' 残', redBelow: 600, colorRed: '#c62828', colorNorm: '#e65100' } : null,
           sort: remaining ?? 0,
           color: remaining !== null && remaining < 600 ? '#c62828' : '#e65100',
           bg: '#fff3e0',
         });
       }
     }
+    // タイマー。 v445 running は tick countdown (target は サーバ-クライアント 時刻差を
+    // 引いた client 時間 軸)、 60 秒 切ったら 赤。 v446 paused は tick なし で
+    // 「⏸ 残り MM:SS」 を 静的 表示。
     if (tm.status === 'fulfilled') {
       const tNow = Date.parse(String(tm.value.server_now).replace(' ', 'T'));
       const tOff = tNow - Date.now();
       for (const t of (tm.value.items || [])) {
-        if (t.status !== 'running') continue;
         const isPart = Number(t.is_participant) === 1 || Number(t.creator_user_id) === meId;
         if (!isPart) continue;
-        const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
-        const remaining = Math.max(0, Math.floor((ends - (Date.now() + tOff)) / 1000));
-        rows.push({
-          href: '#/timers/' + t.id,
-          kind: '⏱ タイマー',
-          title: t.title,
-          time: `${fmtTmDur(remaining)} 残`,
-          sort: remaining,
-          color: remaining < 60 ? '#c62828' : '#1565c0',
-          bg: '#e3f2fd',
-        });
+        if (t.status === 'running') {
+          const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
+          const targetClient = ends - tOff;
+          const remaining = Math.max(0, Math.floor((targetClient - Date.now()) / 1000));
+          rows.push({
+            href: '#/timers/' + t.id,
+            kind: '⏱ タイマー',
+            title: t.title,
+            time: `${fmtTmDur(remaining)} 残`,
+            tick: { mode: 'countdown', targetMs: targetClient, suffix: ' 残', redBelow: 60, colorRed: '#c62828', colorNorm: '#1565c0' },
+            sort: remaining,
+            color: remaining < 60 ? '#c62828' : '#1565c0',
+            bg: '#e3f2fd',
+          });
+        } else if (t.status === 'paused') {
+          const remaining = Math.max(0, Number(t.remaining_seconds) || 0);
+          rows.push({
+            href: '#/timers/' + t.id,
+            kind: '⏸ タイマー 一時停止',
+            title: t.title,
+            time: `${fmtTmDur(remaining)} 残`,
+            tick: null,
+            sort: 888888 + remaining,  // paused は running の 後 / SW 一時停止 の 前
+            color: '#e65100',
+            bg: '#fff3e0',
+          });
+        }
       }
     }
+    // ストップウォッチ。 running は 1 秒 ごと 経過秒 +1、 paused は 固定表示。
     if (sw.status === 'fulfilled') {
       for (const s of (sw.value.items || [])) {
         if (s.status === 'stopped') continue;  // リセット済は出さない
+        const running = s.status === 'running';
         rows.push({
           href: '#/stopwatches/' + s.id,
-          kind: s.status === 'running' ? '🟢 SW 計測中' : '⏸ SW 一時停止',
+          kind: running ? '🟢 SW 計測中' : '⏸ SW 一時停止',
           title: s.title,
           time: fmtTmDur(s.elapsed_seconds),
-          sort: 999999,  // ストップウォッチは 末尾
-          color: s.status === 'running' ? '#0e7c63' : '#e65100',
-          bg: s.status === 'running' ? '#e0f7f1' : '#fff3e0',
+          tick: running ? { mode: 'countup', baseSec: Number(s.elapsed_seconds) || 0, anchorMs: Date.now() } : null,
+          sort: 999999,
+          color: running ? '#0e7c63' : '#e65100',
+          bg: running ? '#e0f7f1' : '#fff3e0',
         });
       }
     }
     // v440 空でも カード自体は 表示 (「進行中なし」 placeholder)。 旧仕様 だと
     // 「表示されない = 壊れた?」 と 誤認 されやすかった。
     card.hidden = false;
+    // 前回 の tick interval は 解除。 空でも 解除する。
+    if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
     if (!rows.length) {
       root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">進行中の タイマー / SW / 点呼 / 待ち合わせ なし</div>';
       return;
     }
     rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
-    root.innerHTML = rows.map(r => `
-      <a class="list-item" href="${r.href}">
-        <div style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
-        <div class="grow" style="min-width:0">
-          <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
-          <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
-        </div>
-        <div class="hint">→</div>
-      </a>`).join('');
+    root.innerHTML = rows.map(r => {
+      const t = r.tick;
+      const tickAttrs = t ? (
+        t.mode === 'countdown'
+          ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}" data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
+          : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"`
+      ) : '';
+      return `
+        <a class="list-item" href="${r.href}">
+          <div${tickAttrs} style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
+            <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
+          </div>
+          <div class="hint">→</div>
+        </a>`;
+    }).join('');
+    // ローカル 秒 tick 開始。 root が DOM から 外れたら 自動 停止。
+    myActiveTimersTickId = setInterval(() => updateMyActiveTimersTicks(root), 1000);
   } catch (_) {
     card.hidden = true;
+    if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
   }
 }
 
