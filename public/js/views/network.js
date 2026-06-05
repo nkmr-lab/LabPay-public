@@ -34,6 +34,13 @@ function loadD3() {
 // Module-scope reference to the active graph data + render handle so drag /
 // highlight handlers can mutate positions and re-render without re-fetching.
 let GRAPH = null;
+// v452 ライブ シミュレーション ハンドル。 ノードを ふわふわ させる。
+// ティック 毎 に updateLivePositions() で SVG 既存要素 の cx/cy/d だけ 書き換え
+// (innerHTML 再構築 を 走らせない → ドラッグ中の svg ref が 切れない)。
+let SIM = null;
+function stopSim() {
+  if (SIM) { SIM.stop(); SIM = null; }
+}
 
 export async function renderNetwork() {
   const app = document.getElementById('app');
@@ -61,6 +68,7 @@ export async function renderNetwork() {
         </select>
         <span class="muted" style="font-size:11px; align-self:center">同部屋 同 1 時間 で 在室 を 共起カウント</span>
       </div>
+      <div id="net-cooc-threshold-row" class="row" style="gap:6px; margin-top:6px; flex-wrap:nowrap; align-items:center" hidden></div>
       <div style="display:flex; gap:6px; margin-top:6px; align-items:center; flex-wrap:nowrap">
         <select id="net-weight-mode" style="font-size:13px; flex:1; min-width:0" title="線の重み">
           <option value="count" ${weightMode==='count'?'selected':''}>件数</option>
@@ -109,6 +117,12 @@ export async function renderNetwork() {
   }
   document.getElementById('net-relayout').addEventListener('click', () => {
     if (!GRAPH) return;
+    // v452 全ノード を 中央 付近に 戻して 新しい ふわふわ で 再収束 させる。
+    GRAPH.nodes.forEach(n => {
+      n.x = W / 2 + (Math.random() - 0.5) * W * 0.2;
+      n.y = H / 2 + (Math.random() - 0.5) * H * 0.2;
+      n.fx = null; n.fy = null;
+    });
     if (GRAPH.layoutMode === 'circle') circleLayout(GRAPH.nodes);
     else d3Layout(GRAPH.nodes, GRAPH.edges);
     drawSvg();
@@ -121,80 +135,153 @@ async function loadAndRender(tab, layoutMode, weightMode) {
   const desc = document.getElementById('net-arrow-desc');
   if (tab === 'tasks')               desc.textContent = '依頼者 → 引き受けた人';
   else if (tab === 'combined')       desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
-  else if (tab === 'presence_cooc')  desc.textContent = '同じ 1 時間 に 同じ 部屋 で 共起した人 (無向 / 閾値=共起頻度の 75 パーセンタイル 以上 / 弱い共起は 落とす)';
+  else if (tab === 'presence_cooc')  desc.textContent = '同じ 1 時間 に 同じ 部屋 で 共起した人 (無向 / 閾値スライダ で 動的フィルタ)';
   else                               desc.textContent = '売り手 → 買い手';
+  // v452 cooc 以外 は 閾値 行 を 隠す
+  hideThresholdSlider();
   try {
-    // d3 is needed for the force simulation; circle mode could skip it but a
-    // single load on first open is fine and keeps the code path simple.
     await loadD3();
     const url = tab === 'presence_cooc'
       ? '/api/network/presence_cooc?days=' + Number(localStorage.getItem('labpay-net-cooc-days') || 7)
       : '/api/network/' + tab;
     const d = await get(url);
-    const nodes = d.nodes || [];
-    const edges = d.edges || [];
-    // v410 cooc は 閾値情報 を 説明文に 追記。
-    if (tab === 'presence_cooc' && d.threshold !== undefined) {
-      const desc = document.getElementById('net-arrow-desc');
-      desc.textContent = `同部屋 同 1 時間 で 共起した人 (閾値 ${d.threshold} 回以上 / 75 パーセンタイル で フィルタ / 表示 ${d.edge_total_after_filter}/${d.edge_total_before_filter} エッジ)`;
-    }
-    if (!nodes.length) {
+    const rawNodes = d.nodes || [];
+    const rawEdges = d.edges || [];
+    if (!rawNodes.length) {
       document.getElementById('net-loading').textContent = 'データがまだありません';
       return;
     }
-    const inDeg = new Map(), outDeg = new Map();
-    edges.forEach(e => {
-      inDeg.set(e.to,   (inDeg.get(e.to)   || 0) + e.count);
-      outDeg.set(e.from,(outDeg.get(e.from)|| 0) + e.count);
-    });
-    const maxDeg = Math.max(1, ...nodes.map(n => (inDeg.get(n.id)||0)+(outDeg.get(n.id)||0)));
-    nodes.forEach(n => {
-      const deg = (inDeg.get(n.id)||0) + (outDeg.get(n.id)||0);
-      n.deg = deg;
-      n.r   = 22 + 26 * (deg / maxDeg);
-    });
-    // Curve bidirectional pairs in opposite directions so A<->B reads as two arcs.
-    const pairKey = (a, b) => a < b ? `${a}_${b}` : `${b}_${a}`;
-    const groups = new Map();
-    edges.forEach(e => {
-      const k = pairKey(e.from, e.to);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(e);
-    });
-    edges.forEach(e => {
-      const g = groups.get(pairKey(e.from, e.to));
-      e.curveSign = g.length > 1 ? (g[0] === e ? 1 : -1) : 0;
-    });
-    // Pre-compute neighbor sets so the label/highlight logic is O(1) per draw.
-    const neighbors = new Map(nodes.map(n => [n.id, new Set([n.id])]));
-    edges.forEach(e => { neighbors.get(e.from)?.add(e.to); neighbors.get(e.to)?.add(e.from); });
-
-    // Pre-compute the weight per edge based on the chosen metric so the layout and
-    // the renderer both honor the same scale ('count' = number of transactions,
-    // 'total' = sum of pt amounts).
-    const wKey = weightMode === 'total' ? 'total' : 'count';
-    edges.forEach(e => { e.weight = Math.max(0, e[wKey] || 0); });
-
-    GRAPH = { nodes, edges, tab, layoutMode, weightMode, selectedId: null, inDeg, outDeg, neighbors };
-
-    if (layoutMode === 'circle') circleLayout(nodes);
-    else d3Layout(nodes, edges);
-    drawSvg();
+    // v452 cooc は 閾値 を スライダ で 動的 制御。 その他 タブ は しきい値=0 で 全件。
+    const directed = tab !== 'presence_cooc';
+    let threshold = 0, suggested = 0, maxCount = 1;
+    if (tab === 'presence_cooc') {
+      suggested = Number(d.suggested_threshold || 2);
+      maxCount  = Math.max(1, Number(d.max_count || 1));
+      const days = Number(localStorage.getItem('labpay-net-cooc-days') || 7);
+      const savedKey = `labpay-net-cooc-threshold-${days}`;
+      const savedVal = Number(localStorage.getItem(savedKey));
+      threshold = (Number.isFinite(savedVal) && savedVal >= 1 && savedVal <= maxCount)
+        ? savedVal : suggested;
+      setupThresholdSlider(threshold, 1, maxCount, suggested, days);
+    }
+    GRAPH = {
+      rawNodes, rawEdges, tab, layoutMode, weightMode,
+      threshold, suggested, maxCount, directed,
+      nodes: [], edges: [],
+      selectedId: null,
+    };
+    applyThreshold();
   } catch (e) {
     document.getElementById('net-loading').textContent = '失敗: ' + e.message;
   }
 }
 
-// d3.forceSimulation tuned for ~30-node lab graphs. We tick synchronously
-// (no animation) and let the renderer take over; manual drag still updates
-// node coordinates directly afterwards.
+// v452 閾値 / weight / layout を 反映 して GRAPH.nodes/edges を 計算 → re-layout → 描画。
+function applyThreshold() {
+  if (!GRAPH) return;
+  const { rawNodes, rawEdges, tab, layoutMode, weightMode, threshold } = GRAPH;
+  // cooc は count >= threshold のみ。 他タブ は 全件。
+  const edges = (tab === 'presence_cooc')
+    ? rawEdges.filter(e => (e.count || 0) >= threshold)
+    : rawEdges.slice();
+  const nodeIds = new Set();
+  edges.forEach(e => { nodeIds.add(e.from); nodeIds.add(e.to); });
+  // cooc は 孤立ノード は 落とす (グラフが すっきり)。 他タブ は 全員出す。
+  const nodes = (tab === 'presence_cooc')
+    ? rawNodes.filter(n => nodeIds.has(n.id))
+    : rawNodes.slice();
+  // 度数 + 半径
+  const inDeg = new Map(), outDeg = new Map();
+  edges.forEach(e => {
+    inDeg.set(e.to,   (inDeg.get(e.to)   || 0) + e.count);
+    outDeg.set(e.from,(outDeg.get(e.from)|| 0) + e.count);
+  });
+  const maxDeg = Math.max(1, ...nodes.map(n => (inDeg.get(n.id)||0)+(outDeg.get(n.id)||0)));
+  nodes.forEach(n => {
+    const deg = (inDeg.get(n.id)||0) + (outDeg.get(n.id)||0);
+    n.deg = deg;
+    n.r   = 22 + 26 * (deg / maxDeg);
+  });
+  // 双方向 ペア の カーブ (cooc は ペア 1 本なので 常に 0)。
+  const pairKey = (a, b) => a < b ? `${a}_${b}` : `${b}_${a}`;
+  const groups = new Map();
+  edges.forEach(e => {
+    const k = pairKey(e.from, e.to);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(e);
+  });
+  edges.forEach(e => {
+    const g = groups.get(pairKey(e.from, e.to));
+    e.curveSign = g.length > 1 ? (g[0] === e ? 1 : -1) : 0;
+  });
+  // 隣接
+  const neighbors = new Map(nodes.map(n => [n.id, new Set([n.id])]));
+  edges.forEach(e => { neighbors.get(e.from)?.add(e.to); neighbors.get(e.to)?.add(e.from); });
+  // weight (count or total)
+  const wKey = weightMode === 'total' ? 'total' : 'count';
+  edges.forEach(e => { e.weight = Math.max(0, e[wKey] || 0); });
+
+  GRAPH.nodes = nodes;
+  GRAPH.edges = edges;
+  GRAPH.neighbors = neighbors;
+  GRAPH.inDeg = inDeg;
+  GRAPH.outDeg = outDeg;
+
+  // 再 layout + 描画 (ライブ sim 起動)
+  if (layoutMode === 'circle') circleLayout(nodes);
+  else d3Layout(nodes, edges);
+  drawSvg();
+}
+
+// v452 cooc 用 閾値 スライダ の セットアップ / 隠匿。
+function setupThresholdSlider(value, min, max, suggested, days) {
+  const row = document.getElementById('net-cooc-threshold-row');
+  if (!row) return;
+  row.hidden = false;
+  row.innerHTML = `
+    <span class="muted" style="font-size:11px; white-space:nowrap">閾値:</span>
+    <input type="range" id="net-cooc-threshold" min="${min}" max="${max}" value="${value}" style="flex:1; min-width:0">
+    <span id="net-cooc-threshold-val" class="muted" style="font-size:12px; min-width:64px; text-align:right">${value} 回 以上</span>
+    <button class="btn" id="net-cooc-threshold-reset" style="font-size:11px; padding:2px 8px" title="75%ile の 提案閾値 に 戻す">提案 ${suggested}</button>
+  `;
+  const slider = document.getElementById('net-cooc-threshold');
+  const valEl  = document.getElementById('net-cooc-threshold-val');
+  slider.addEventListener('input', () => {
+    const v = Number(slider.value);
+    valEl.textContent = `${v} 回 以上`;
+    if (!GRAPH) return;
+    GRAPH.threshold = v;
+    GRAPH.selectedId = null;  // 選択 は フィルタ で 消える 可能性 — クリア
+    try { localStorage.setItem(`labpay-net-cooc-threshold-${days}`, String(v)); } catch (_) {}
+    document.getElementById('net-detail').hidden = true;
+    applyThreshold();
+  });
+  document.getElementById('net-cooc-threshold-reset').addEventListener('click', () => {
+    slider.value = String(suggested);
+    slider.dispatchEvent(new Event('input'));
+  });
+}
+function hideThresholdSlider() {
+  const row = document.getElementById('net-cooc-threshold-row');
+  if (row) { row.hidden = true; row.innerHTML = ''; }
+}
+
+// v452 ライブ シミュレーション: d3-force を そのまま 動かして 毎ティック
+// SVG の 位置だけ 更新。 ふわふわ 動く + 閾値 / ドラッグ で 動的 に 再収束。
 function d3Layout(nodes, edges) {
   const d3 = window.d3;
   if (!d3) return;
-  // Clear stale fixed positions from a previous run.
-  nodes.forEach(n => { n.fx = null; n.fy = null; n.x = W/2; n.y = H/2; });
+  stopSim();
+  // 初回 のみ ランダム ばらまき (再 layout 時は 直前の 位置から 緩やかに 再整理)。
+  nodes.forEach(n => {
+    n.fx = null; n.fy = null;
+    if (typeof n.x !== 'number' || typeof n.y !== 'number') {
+      n.x = W / 2 + (Math.random() - 0.5) * W * 0.2;
+      n.y = H / 2 + (Math.random() - 0.5) * H * 0.2;
+    }
+  });
   const links = edges.map(e => ({ source: e.from, target: e.to, value: e.weight || e.count }));
-  const sim = d3.forceSimulation(nodes)
+  SIM = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id)
         .distance(d => 110 + 30 / Math.log(2 + d.value))
         .strength(d => Math.min(1, 0.15 + Math.log(1 + d.value) / 4)))
@@ -203,20 +290,26 @@ function d3Layout(nodes, edges) {
     .force('collide', d3.forceCollide().radius(d => d.r + 6).iterations(2))
     .force('x', d3.forceX(W / 2).strength(0.04))
     .force('y', d3.forceY(H / 2).strength(0.04))
-    .stop();
-  // Run enough iterations to settle. d3 docs recommend log(alphaMin)/log(1-alphaDecay)
-  // ≈ 300 by default; we use 350 for a bit more polish on noisy small graphs.
-  for (let i = 0; i < 350; i++) sim.tick();
-  // Clamp inside canvas so nothing drifts past the frame.
-  nodes.forEach(n => {
-    n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
-    n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
-  });
+    // alphaDecay 標準 0.0228 → 0.012 で 倍ぐらい 長く ふわふわ。 アイドルでも
+    // alphaMin に達したら d3 が 自動で 止まるので 無限ループ にはならない。
+    .alphaDecay(0.012)
+    .velocityDecay(0.5)
+    .on('tick', () => {
+      // Clamp inside canvas を 毎フレーム 走らせる。
+      for (const n of nodes) {
+        if (n.fx == null) {
+          n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
+          n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
+        }
+      }
+      updateLivePositions();
+    });
 }
 
 // Pure circular layout: sort nodes by degree DESC, place evenly on a perimeter
-// circle. Doesn't need d3.
+// circle. Doesn't need d3. v452 ライブ sim は 止める。
 function circleLayout(nodes) {
+  stopSim();
   const sorted = nodes.slice().sort((a, b) => (b.deg||0) - (a.deg||0));
   const N = sorted.length;
   const R = Math.min(W, H) * 0.40;
@@ -224,11 +317,49 @@ function circleLayout(nodes) {
     const a = (i / N) * Math.PI * 2 - Math.PI / 2;
     n.x = W / 2 + R * Math.cos(a);
     n.y = H / 2 + R * Math.sin(a);
+    n.fx = null; n.fy = null;
   });
 }
 
+// v452 計算ヘルパ: a → b の Quadratic Bezier の d 属性を 返す。
+// directed=false の 時 は ノード 端 ぴったり (矢印分の 4px gap なし)。
+function computeEdgePath(a, b, e, directed) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const sx = a.x + (dx / len) * a.r;
+  const sy = a.y + (dy / len) * a.r;
+  const gap = directed === false ? b.r : (b.r + 4);
+  const ex = b.x - (dx / len) * gap;
+  const ey = b.y - (dy / len) * gap;
+  const bend = (e.curveSign || 0) * 0.18 * len;
+  const mx = (sx + ex) / 2 - (dy / len) * bend;
+  const my = (sy + ey) / 2 + (dx / len) * bend;
+  return `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
+}
+
+// v452 ライブ ティック で 位置だけ 更新 (innerHTML 再構築 しない)。 ノードの
+// <g> は transform="translate(x,y)" で 動かす。 エッジ の <path> は d 属性 を 差替。
+function updateLivePositions() {
+  if (!GRAPH) return;
+  const { nodes, edges, directed } = GRAPH;
+  const wrap = document.getElementById('net-canvas-wrap');
+  const svg = wrap?.querySelector('svg');
+  if (!svg) return;
+  for (const n of nodes) {
+    const g = svg.querySelector(`[data-node="${n.id}"]`);
+    if (g) g.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+  }
+  for (let i = 0; i < edges.length; i++) {
+    const path = svg.querySelector(`[data-edge="${i}"]`);
+    if (!path) continue;
+    const a = nodes.find(n => n.id === edges[i].from);
+    const b = nodes.find(n => n.id === edges[i].to);
+    if (a && b) path.setAttribute('d', computeEdgePath(a, b, edges[i], directed));
+  }
+}
+
 function drawSvg() {
-  const { nodes, edges, selectedId, neighbors } = GRAPH;
+  const { nodes, edges, selectedId, neighbors, directed } = GRAPH;
   const wrap = document.getElementById('net-canvas-wrap');
   document.getElementById('net-loading')?.remove();
   // Use the active weight metric (count or total pt) for stroke thickness.
@@ -246,39 +377,32 @@ function drawSvg() {
 
   // In combined mode, edges have a `type` field (purchase / task). Color accordingly
   // so purple+green strands are visually distinguishable when they overlap a pair.
-  const colorFor = (e) => e.type === 'task' ? '#0e7c63' : '#4a106d';
-  const edgesHtml = edges.map(e => {
+  // v452 cooc は 在室 共起 (グレー寄り)。
+  const colorFor = (e) => directed === false ? '#5e6b7a' : (e.type === 'task' ? '#0e7c63' : '#4a106d');
+  // v452 edge に index 付与。 直径方向 で 1 本 描く。 directed=false (cooc) は 矢印なし。
+  const edgesHtml = edges.map((e, i) => {
     const a = nodes.find(n => n.id === e.from);
     const b = nodes.find(n => n.id === e.to);
     if (!a || !b) return '';
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len = Math.sqrt(dx*dx + dy*dy) || 1;
-    const sx = a.x + (dx / len) * a.r;
-    const sy = a.y + (dy / len) * a.r;
-    const ex = b.x - (dx / len) * (b.r + 4);
-    const ey = b.y - (dy / len) * (b.r + 4);
-    const bend = e.curveSign * 0.18 * len;
-    const mx = (sx + ex) / 2 - (dy / len) * bend;
-    const my = (sy + ey) / 2 + (dx / len) * bend;
+    const d = computeEdgePath(a, b, e, directed);
     const w = e.weight || 0;
     const sw = 0.6 + 4 * (w / maxWeight);
     const baseOp = 0.10 + 0.35 * (w / maxWeight);
     const op = edgeHi(e) ? baseOp + 0.4 : baseOp * 0.35;
     const color = colorFor(e);
-    // In combined mode, the arrowhead also needs to be colored; we have a per-type
-    // marker for that. Single-mode tabs reuse the default purple marker.
-    const marker = e.type === 'task' ? 'url(#net-arrow-task)' : 'url(#net-arrow)';
-    return `<path d="M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}"
+    const marker = directed === false
+      ? ''
+      : ` marker-end="${e.type === 'task' ? 'url(#net-arrow-task)' : 'url(#net-arrow)'}"`;
+    return `<path data-edge="${i}" d="${d}"
                    fill="none" stroke="${color}" stroke-opacity="${op.toFixed(2)}"
-                   stroke-width="${sw.toFixed(2)}" marker-end="${marker}"/>`;
+                   stroke-width="${sw.toFixed(2)}"${marker}/>`;
   }).join('');
 
-  // Build a <clipPath> per node that has an avatar so the image is clipped to a circle.
-  // Using the SVG element form (vs. the CSS basic-shape attribute form) is bullet-
-  // proof across browsers.
+  // v452 各 ノード の clipPath は ローカル座標 (0,0 + r) に。 <g transform> で
+  // 動かすと clipPath も 一緒に 動く (clipPathUnits=userSpaceOnUse の 仕様)。
   const clipDefs = nodes.filter(n => n.avatar).map(n =>
     `<clipPath id="net-clip-${n.id}">
-       <circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r.toFixed(1)}"/>
+       <circle cx="0" cy="0" r="${n.r.toFixed(1)}"/>
      </clipPath>`
   ).join('');
 
@@ -286,13 +410,10 @@ function drawSvg() {
     const hi = isHi(n.id);
     const op = hi ? 1 : 0.22;
     const r = n.r;
-    const cx = n.x, cy = n.y;
-    // SVG 2 uses href, SVG 1.1 used xlink:href. Some older renderers and a few
-    // PWA/in-app browsers still need xlink:href, so include both.
     const url = escapeHtml(n.avatar || '');
     const img = n.avatar
       ? `<image href="${url}" xlink:href="${url}"
-                x="${(cx-r).toFixed(1)}" y="${(cy-r).toFixed(1)}"
+                x="${(-r).toFixed(1)}" y="${(-r).toFixed(1)}"
                 width="${(r*2).toFixed(1)}" height="${(r*2).toFixed(1)}"
                 clip-path="url(#net-clip-${n.id})"
                 preserveAspectRatio="xMidYMid slice"/>`
@@ -300,26 +421,23 @@ function drawSvg() {
     const initial = (n.name || '?').trim().charAt(0).toUpperCase();
     const sel = n.id === selectedId;
     const label = showLbl(n.id)
-      ? `<text x="${cx.toFixed(1)}" y="${(cy + r + 16).toFixed(1)}"
+      ? `<text x="0" y="${(r + 16).toFixed(1)}"
                text-anchor="middle" font-size="13" font-weight="700"
                fill="#1b1820" paint-order="stroke" stroke="#fbfafd" stroke-width="4"
               >${escapeHtml(n.name || '')}</text>`
       : '';
-    // For avatar nodes we draw the image and then a stroked-only ring on top so the
-    // border sits cleanly over the photo. No-avatar nodes get the filled circle +
-    // initial as before.
     return `
-      <g data-node="${n.id}" style="cursor:pointer; opacity:${op.toFixed(2)}">
+      <g data-node="${n.id}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})" style="cursor:pointer; opacity:${op.toFixed(2)}">
         ${n.avatar
-          ? `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+          ? `<circle cx="0" cy="0" r="${r.toFixed(1)}"
                      fill="#ede4f3" filter="url(#net-shadow)"/>
              ${img}
-             <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+             <circle cx="0" cy="0" r="${r.toFixed(1)}"
                      fill="none" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"/>`
-          : `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+          : `<circle cx="0" cy="0" r="${r.toFixed(1)}"
                      fill="#ede4f3" stroke="${sel?'#f2c700':'#4a106d'}" stroke-width="${sel?4:2}"
                      filter="url(#net-shadow)"/>
-             <text x="${cx.toFixed(1)}" y="${(cy+r*0.18).toFixed(1)}"
+             <text x="0" y="${(r*0.18).toFixed(1)}"
                    text-anchor="middle" font-size="${(r*0.85).toFixed(1)}" font-weight="700"
                    fill="#4a106d">${escapeHtml(initial)}</text>`}
         ${label}
@@ -365,27 +483,33 @@ function drawSvg() {
 }
 
 // Drag a node by pointer; tiny moves are treated as a click (selection).
+// v452 ライブ sim 中 は fx/fy を 操作。 シミュレーションが この ノード を
+// 「ピン留め」 状態として 扱い、 周囲の ノード が ふわふわ 反応 する。
 function startDrag(ev, id, svg) {
   ev.preventDefault();
   const n = GRAPH.nodes.find(x => x.id === id);
   if (!n) return;
-  const startX = ev.clientX, startY = ev.clientY;
-  const origX = n.x, origY = n.y;
+  if (SIM) SIM.alphaTarget(0.3).restart();
+  n.fx = n.x; n.fy = n.y;
   let moved = false;
+  const startX = ev.clientX, startY = ev.clientY;
   const move = (e) => {
-    const dx = e.clientX - startX, dy = e.clientY - startY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+    if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 4) moved = true;
     const pt = svgPoint(svg, e);
-    const pt0 = svgPoint(svg, { clientX: startX, clientY: startY });
-    n.x = origX + (pt.x - pt0.x);
-    n.y = origY + (pt.y - pt0.y);
-    n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
-    n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
-    drawSvg();
+    n.fx = Math.max(n.r + 4, Math.min(W - n.r - 4, pt.x));
+    n.fy = Math.max(n.r + 4, Math.min(H - n.r - 4, pt.y));
+    if (!SIM) {
+      // 円形配置 など 静的レイアウト 時は SIM が 無いので 即時 反映。
+      n.x = n.fx; n.y = n.fy;
+      updateLivePositions();
+    }
   };
   const up = () => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    if (SIM) SIM.alphaTarget(0);
+    // ノード を 離す → ふわふわ する。 (ピン留めしたい人は 長押し UI 要望 次第)
+    n.fx = null; n.fy = null;
     if (!moved) {
       GRAPH.selectedId = (GRAPH.selectedId === id) ? null : id;
       drawSvg();
@@ -406,6 +530,32 @@ function svgPoint(svg, ev) {
 function showNodeDetail(userId) {
   const { nodes, edges, tab } = GRAPH;
   const me = nodes.find(n => n.id === userId);
+  const card = document.getElementById('net-detail');
+  card.hidden = false;
+
+  // v452 cooc は 無向 なので 1 セクション 「よく 一緒にいる 相手」 で 完結。
+  if (tab === 'presence_cooc') {
+    const involved = edges
+      .filter(e => e.from === userId || e.to === userId)
+      .map(e => ({
+        other: nodes.find(n => n.id === (e.from === userId ? e.to : e.from)),
+        count: e.count,
+      }))
+      .sort((a, b) => b.count - a.count);
+    const lineFor = (it) => `
+      <div class="list-item">
+        <div>${escapeHtml(it.other?.name || '?')}</div>
+        <div class="meta">${it.count} 回 共起</div>
+      </div>`;
+    card.innerHTML = `
+      <h3 style="margin:0 0 6px">${escapeHtml(me.name)}</h3>
+      <div class="meta" style="margin-bottom:8px">よく 一緒にいる 相手 ${involved.length} 人 (閾値 ${GRAPH.threshold} 回以上)</div>
+      ${involved.length ? `<div class="list">${involved.map(lineFor).join('')}</div>` : '<div class="muted">なし</div>'}
+    `;
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
   const out = edges.filter(e => e.from === userId);
   const inn = edges.filter(e => e.to === userId);
   const dir = tab === 'tasks'
@@ -425,8 +575,6 @@ function showNodeDetail(userId) {
       <div class="meta">${e.count}回 / ${e.total.toLocaleString()} pt</div>
     </div>`;
   };
-  const card = document.getElementById('net-detail');
-  card.hidden = false;
   card.innerHTML = `
     <h3 style="margin:0 0 6px">${escapeHtml(me.name)}</h3>
     <div class="meta" style="margin-bottom:8px">送り出し ${out.length}人 / 受け入れ ${inn.length}人</div>

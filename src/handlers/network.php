@@ -87,34 +87,35 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         }
     }
 
-    if (!$userSet || !$edges) { json_response(['nodes' => [], 'edges' => [], 'threshold' => 0]); return; }
+    if (!$userSet || !$edges) {
+        json_response(['nodes' => [], 'edges' => [],
+            'suggested_threshold' => 1, 'min_count' => 1, 'max_count' => 1,
+            'directed' => false]);
+        return;
+    }
 
-    // v436 中央値だと 弱い ペアまで 残りすぎ → 75 パーセンタイル (Q3) に 引上げ。
-    // 上位 25% の 「よく 一緒に いる」 ペア だけ 残す。 全エッジ平均が 低い ラボ
-    // データ でも 確実に 強い エッジ だけ 残す。 最低 2 で 弾く (1回 きりは 確定除外)。
+    // v452 サーバ側 で 閾値 を 適用 せず、 全エッジ + 提案閾値 (75 パーセンタイル)
+    // を 返す。 クライアント が スライダ で 動的 に フィルタ。
+    // (最大 30 ユーザ で 30*29/2 = 435 エッジ ≈ 数 KB、 ペイロード問題なし)。
     $counts = array_values($edges);
     sort($counts, SORT_NUMERIC);
     $n = count($counts);
-    // 75 パーセンタイル: index = floor(0.75 * (n - 1))
     $p75Idx = (int)floor(0.75 * ($n - 1));
-    $p75 = $counts[$p75Idx];
-    $threshold = max(2, (int)$p75);  // 最低 2 回 共起 を 要求 (1 回きりは 確定で 除外)
+    $suggested = max(2, (int)$counts[$p75Idx]);
+    $maxCnt = (int)max($counts);
 
-    // 閾値 以上 の エッジだけ 残す + 関与する ノード を 再収集。
-    $keptEdges = [];
-    $keptNodes = [];
+    $allEdges = [];
+    $nodeIds = [];
     foreach ($edges as $k => $cnt) {
-        if ($cnt < $threshold) continue;
         [$a, $b] = explode('-', $k, 2);
         $a = (int)$a; $b = (int)$b;
-        $keptEdges[] = ['from' => $a, 'to' => $b, 'count' => $cnt, 'total' => $cnt];
-        $keptNodes[$a] = true;
-        $keptNodes[$b] = true;
+        $allEdges[] = ['from' => $a, 'to' => $b, 'count' => $cnt, 'total' => $cnt];
+        $nodeIds[$a] = true;
+        $nodeIds[$b] = true;
     }
-    if (!$keptNodes) { json_response(['nodes' => [], 'edges' => [], 'threshold' => $threshold]); return; }
 
-    // ノード 解決 (残ったものだけ)
-    $uidList = array_keys($keptNodes);
+    // ノード 解決 (出現する 全ユーザ)
+    $uidList = array_keys($nodeIds);
     $place = implode(',', array_fill(0, count($uidList), '?'));
     $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
     $stU->execute($uidList);
@@ -126,10 +127,11 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
 
     json_response([
         'nodes' => $nodes,
-        'edges' => $keptEdges,
-        'threshold' => $threshold,
-        'edge_total_before_filter' => $n,
-        'edge_total_after_filter' => count($keptEdges),
+        'edges' => $allEdges,
+        'suggested_threshold' => $suggested,
+        'min_count' => 1,
+        'max_count' => $maxCnt,
+        'directed' => false,  // 無向
     ]);
 }
 
