@@ -836,7 +836,7 @@ async function renderMyGroups() {
       image_url: g.image_url,
       title:     escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
       members:   g.members || [],
-      chipSize:  'sm',  // v396 ホームの アイコン専用列だけ つぶれ防止で sm
+      chipSize:  'md',  // v398 sm でも まだ つぶれ報告 → md (36px) に 引き上げ
     })).join('');
   } catch (_) {
     card.hidden = true;
@@ -871,12 +871,12 @@ async function renderFreshInvitations() {
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       const title = `${escapeHtml(i.title)}${joined}`;
       // 発起人アイコン | 参加者アイコン (発起人除く)
-      // v396 ホームの アイコン専用列は つぶれ防止で sm を 使う。
-      const creatorChip = `<span title="${escapeHtml(i.creator_name)} (発起人)" style="display:inline-flex">${avatarHtml(i.creator_name, i.creator_avatar_url, 'sm')}</span>`;
+      // v398 sm (24) でも 小さい 報告。 md (36px) に 引き上げ。
+      const creatorChip = `<span title="${escapeHtml(i.creator_name)} (発起人)" style="display:inline-flex">${avatarHtml(i.creator_name, i.creator_avatar_url, 'md')}</span>`;
       const others = (Array.isArray(i.joins) ? i.joins : [])
         .filter(j => Number(j.id) !== Number(i.creator_user_id));
       const othersHtml = others.slice(0, 7).map(j =>
-        `<span title="${escapeHtml(j.display_name)}" style="display:inline-flex">${avatarHtml(j.display_name, j.avatar_url, 'sm')}</span>`
+        `<span title="${escapeHtml(j.display_name)}" style="display:inline-flex">${avatarHtml(j.display_name, j.avatar_url, 'md')}</span>`
       ).join('');
       const moreNum = others.length > 7 ? `<span class="muted" style="font-size:11px">+${others.length - 7}</span>` : '';
       const sep = others.length ? `<span class="muted" style="font-size:14px; line-height:1; padding:0 2px">｜</span>` : '';
