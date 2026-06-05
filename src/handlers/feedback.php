@@ -26,7 +26,39 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
         feedback_claude_set_status($pdo, $cfg, $id);
         return;
     }
+    // v438 外部 ポーラ用 queue 状態 endpoint (認証なし / count + 最古 age のみ 露出 / 個人情報なし)
+    if ($sub === 'claude_queue' && $method === 'GET') {
+        feedback_claude_queue_status($pdo);
+        return;
+    }
     json_error('not_found', "no feedback route for $method $sub", 404);
+}
+
+// GET /api/feedback/claude_queue
+//   無認証。 「Claude に approved 状態の feedback が ある か」 を 外部から polling
+//   する 用。 個人情報を 露出しない (個数 + working/approved の 最古 age のみ)。
+//   外部 アプリ (GitHub Actions / 自前 lambda / ...) で polling し、 状態変化 を
+//   検出して 端末側 オートメーション を キックする 設計。
+function feedback_claude_queue_status(PDO $pdo): void {
+    $st = $pdo->query("
+        SELECT
+          (SELECT COUNT(*) FROM feedback WHERE claude_status='approved') AS approved_count,
+          (SELECT COUNT(*) FROM feedback WHERE claude_status='working')  AS working_count,
+          (SELECT TIMESTAMPDIFF(SECOND, MIN(claude_assigned_at), NOW())
+             FROM feedback WHERE claude_status='approved')                AS oldest_approved_age_s,
+          (SELECT TIMESTAMPDIFF(SECOND, MIN(claude_started_at), NOW())
+             FROM feedback WHERE claude_status='working')                 AS oldest_working_age_s");
+    $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    $approved = (int)($r['approved_count'] ?? 0);
+    $working  = (int)($r['working_count']  ?? 0);
+    json_response([
+        'has_work'                  => ($approved > 0 || $working > 0),
+        'approved_count'            => $approved,
+        'working_count'             => $working,
+        'oldest_approved_age_seconds' => $r['oldest_approved_age_s'] !== null ? (int)$r['oldest_approved_age_s'] : null,
+        'oldest_working_age_seconds'  => $r['oldest_working_age_s']  !== null ? (int)$r['oldest_working_age_s']  : null,
+        'server_now'                => date('c'),
+    ]);
 }
 
 // admin が 「Claude に 任せる」 / 「取り消す」 を トグル。
@@ -55,7 +87,21 @@ function feedback_claude_set_status(PDO $pdo, array $cfg, int $id): void {
         $admin = Auth::requireAdmin($pdo, $cfg);
         $pdo->prepare("UPDATE feedback SET claude_status='approved', claude_assigned_at=NOW(),
             claude_assigned_by_user_id=? WHERE id = ?")->execute([(int)$admin['id'], $id]);
+        // v438 出張中でも 「approved 入った」 のを 即知るために Slack 通知。
+        try {
+            $stF = $pdo->prepare("SELECT f.kind, f.body, u.display_name AS user_name
+                                    FROM feedback f JOIN users u ON u.id = f.user_id
+                                   WHERE f.id = ?");
+            $stF->execute([$id]);
+            $f = $stF->fetch(PDO::FETCH_ASSOC);
+            if ($f) {
+                $kindLbl = Labels::feedbackKind((string)$f['kind']);
+                $snip = mb_substr((string)$f['body'], 0, 100) . (mb_strlen((string)$f['body']) > 100 ? '…' : '');
+                slack_notify($cfg, "✅ Claude に 任せました: {$kindLbl} #{$id} ({$f['user_name']})\n>>> {$snip}\n\n→ 次の cron tick (最大 10 分) で 着手 します");
+            }
+        } catch (Throwable $_) { /* swallow */ }
     } else {
+        Auth::requireAdmin($pdo, $cfg);
         $pdo->prepare("UPDATE feedback SET claude_status=? WHERE id = ?")
             ->execute([$status, $id]);
     }
