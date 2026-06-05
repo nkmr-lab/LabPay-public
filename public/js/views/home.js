@@ -8,18 +8,41 @@ import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
 // データは localStorage に保存し、サーバ側には送らない。
-// v419 ホーム上部 残高 直下の クイック アクション 列 (買う / 売る / 頼む / 送る / 翻訳 / …)。
-// 表示 ON/OFF は ユーザ毎に localStorage 保存。 既存ユーザ は デフォ 4 つ (買売頼送) ON。
+// v419 ホーム上部 残高 直下の クイック アクション 列。 v421 アイコン主体に。
+// 表示 ON/OFF は localStorage に 保存。 デフォルト ON は 「お金 回り」 4 つ。
+// (icon, label) は 設定で 区別表示。 ホーム は icon のみ、 設定では 両方。
 export const HOME_ACTIONS = [
-  { id: 'buy',       url: '#/buy',              label: '買う',      defaultVisible: true },
-  { id: 'sell',      url: '#/sell',             label: '売る',      defaultVisible: true },
-  { id: 'request',   url: '#/tasks?new=request', label: '頼む',     defaultVisible: true },
-  { id: 'send',      url: '#/send',             label: '送る',      defaultVisible: true },
-  { id: 'translate', url: '#/translate',        label: '🌐 翻訳',   defaultVisible: false },
-  { id: 'rollcalls', url: '#/rollcalls',        label: '📣 点呼',    defaultVisible: false },
-  { id: 'timers',    url: '#/timers',           label: '⏱ タイマー', defaultVisible: false },
-  { id: 'meetups',   url: '#/meetups',          label: '🤝 待ち合わせ', defaultVisible: false },
-  { id: 'wishlist',  url: '#/wishlist',         label: '✨ 欲しい',  defaultVisible: false },
+  // 経済 系 (デフォ ON)
+  { id: 'buy',          url: '#/buy',                title: '買う',         icon: '🛒', defaultVisible: true },
+  { id: 'sell',         url: '#/sell',               title: '売る',         icon: '🏷', defaultVisible: true },
+  { id: 'request',      url: '#/tasks?new=request',  title: '頼む',         icon: '🙋', defaultVisible: true },
+  { id: 'send',         url: '#/send',               title: '送る',         icon: '💸', defaultVisible: true },
+  // アプリ 系 (デフォ OFF)
+  { id: 'translate',    url: '#/translate',          title: '画像 翻訳',     icon: '🌐', defaultVisible: false },
+  { id: 'rollcalls',    url: '#/rollcalls',          title: '点呼',         icon: '📣', defaultVisible: false },
+  { id: 'timers',       url: '#/timers',             title: 'タイマー',     icon: '⏱',  defaultVisible: false },
+  { id: 'stopwatches',  url: '#/stopwatches',        title: 'ストップウォッチ', icon: '🕒', defaultVisible: false },
+  { id: 'meetups',      url: '#/meetups',            title: '待ち合わせ',    icon: '🤝', defaultVisible: false },
+  { id: 'wishlist',     url: '#/wishlist',           title: '欲しい',       icon: '✨', defaultVisible: false },
+  { id: 'roulette',     url: '#/roulette',           title: 'ルーレット',    icon: '🎰', defaultVisible: false },
+  { id: 'text-roulette', url: '#/text-roulette',     title: 'どこ行く',      icon: '🍜', defaultVisible: false },
+  { id: 'polls',        url: '#/polls',              title: '投票',         icon: '📊', defaultVisible: false },
+  { id: 'nomikai',      url: '#/nomikai',            title: '飲み会割り勘',  icon: '🍶', defaultVisible: false },
+  { id: 'wari',         url: '#/wari',               title: 'ワリカ電卓',    icon: '🧮', defaultVisible: false },
+  { id: 'requests',     url: '#/requests',           title: '請求 (集金)',   icon: '💴', defaultVisible: false },
+  { id: 'random-groups', url: '#/random-groups',     title: 'ランダム分け',  icon: '🎲', defaultVisible: false },
+  { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
+  { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
+  { id: 'groups',       url: '#/groups',             title: 'グループ',      icon: '👥', defaultVisible: false },
+  { id: 'invitations',  url: '#/invitations',        title: '募集',         icon: '🍻', defaultVisible: false },
+  { id: 'tasks',        url: '#/tasks',              title: 'タスク',       icon: '📋', defaultVisible: false },
+  { id: 'achievements', url: '#/achievements',       title: '実績',         icon: '🏅', defaultVisible: false },
+  { id: 'network',      url: '#/network',            title: '関係性グラフ',  icon: '🕸', defaultVisible: false },
+  { id: 'contacts',     url: '#/contacts',           title: '連絡先',       icon: '📞', defaultVisible: false },
+  { id: 'notices',      url: '#/notices',            title: '重要連絡',     icon: '📌', defaultVisible: false },
+  { id: 'scrapbox',     url: '#/scrapbox',           title: 'Scrapbox',    icon: '📚', defaultVisible: false },
+  { id: 'exercise',     url: '#/exercise',           title: '運動 (歩数)',   icon: '🏃', defaultVisible: false },
+  { id: 'activity',     url: '#/activity',           title: 'ラボ滞在マップ', icon: '🗓', defaultVisible: false },
 ];
 const HOME_ACTIONS_KEY = 'labpay-home-actions';
 export function isHomeActionVisible(id) {
@@ -109,11 +132,12 @@ export async function renderHome() {
       <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
       <div id="checkin-area" style="margin-top:10px"></div>
-      <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
+      <div style="margin-top:14px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
         ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
-          <a class="btn" href="${escapeHtml(a.url)}">${escapeHtml(a.label)}</a>
+          <a class="btn home-quick" href="${escapeHtml(a.url)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
+             style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center">${escapeHtml(a.icon || a.title)}</a>
         `).join('')}
-        <a href="#/settings?focus=home-actions" class="hint" style="align-self:center; font-size:11px; text-decoration:none" title="ホーム上部の クイック ボタンを 設定">⚙</a>
+        <a href="#/settings?focus=home-actions" class="hint" style="align-self:center; font-size:14px; text-decoration:none; padding:0 4px" title="クイック ボタンを 設定">⚙</a>
       </div>
     </div>
 

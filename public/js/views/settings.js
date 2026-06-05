@@ -389,7 +389,8 @@ function renderHomeActionsEditor() {
       <div class="list-item" data-ha-id="${escapeHtml(a.id)}" style="gap:8px; align-items:center">
         <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
           <input type="checkbox" class="ha-show" ${on ? 'checked' : ''}>
-          <span class="bold">${escapeHtml(a.label)}</span>
+          <span style="font-size:18px; width:24px; text-align:center">${escapeHtml(a.icon || '')}</span>
+          <span class="bold">${escapeHtml(a.title)}</span>
         </label>
         <a href="${escapeHtml(a.url)}" class="hint-sm" style="text-decoration:none">${escapeHtml(a.url)}</a>
       </div>`;
