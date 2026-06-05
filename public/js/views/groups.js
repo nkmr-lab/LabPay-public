@@ -23,6 +23,7 @@ const GROUP_ACTIONS = [
   { id: 'rollcalls', label: '📣 点呼',           wariDep: false },
   { id: 'timers',    label: '⏱️ タイマー',       wariDep: false },
   { id: 'meetups',   label: '🤝 待ち合わせ',     wariDep: false },
+  { id: 'translate', label: '🌐 画像翻訳',       wariDep: false },
 ];
 // アクションが有効か (g.feat_actions が null = 「全 ON」、 配列ならその中に含まれる物)
 function actionEnabled(g, id) {
@@ -33,7 +34,7 @@ function actionEnabled(g, id) {
 // v385 ユーザの アプリ表示設定 とも 重ね合わせる (apps id と groups action id が一致するもの)。
 // receipt / expense は アプリ メニューに無いので 常に true。
 function actionShownForUser(id) {
-  const APP_LINKED = ['roulette','nomikai','polls','rollcalls','timers','meetups'];
+  const APP_LINKED = ['roulette','nomikai','polls','rollcalls','timers','meetups','translate'];
   if (!APP_LINKED.includes(id)) return true;
   return isAppVisible(id);
 }
@@ -396,8 +397,9 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-spend-list" class="list"></div>
     </div>
 
-    <details class="card" id="gd-tr-card" hidden>
+    <details class="card" id="gd-tr-card">
       <summary style="font-weight:700; cursor:pointer">📚 翻訳ログ <span id="gd-tr-count" class="hint-sm"></span></summary>
+      <p class="hint-sm" style="margin:6px 0 4px">出張先などで メニュー / 看板を 撮って 全員で 共有。</p>
       <div class="row" style="gap:6px; margin:6px 0; flex-wrap:wrap">
         <a id="gd-tr-add" class="btn primary" style="padding:2px 10px; font-size:12px">🌐 このグループで 新規 翻訳</a>
       </div>
@@ -486,9 +488,11 @@ async function loadGroupTranslations(gid) {
   try {
     const d = await get('/api/ai/translations', { group_id: gid });
     const items = d.items || [];
-    if (!items.length) { card.hidden = true; return; }
-    card.hidden = false;
     if (cnt) cnt.textContent = '(' + items.length + ')';
+    if (!items.length) {
+      root.innerHTML = '<div class="empty" style="padding:6px">まだ 翻訳は ありません</div>';
+      return;
+    }
     root.innerHTML = items.map(t => {
       const snippet = (t.result_text || '').slice(0, 120) + (t.result_text.length > 120 ? '…' : '');
       return `
@@ -501,7 +505,9 @@ async function loadGroupTranslations(gid) {
           </div>
         </div>`;
     }).join('');
-  } catch (_) { card.hidden = true; }
+  } catch (_) {
+    root.innerHTML = '<div class="muted" style="padding:6px; font-size:12px">取得 失敗</div>';
+  }
 }
 
 // グループの 「使う機能」 フラグに応じて 関連カードの表示 + データロードを制御。
@@ -679,6 +685,7 @@ async function loadDetail(id) {
         <a class="btn" data-gd-act="rollcalls" ${actionEnabled(g, 'rollcalls') && actionShownForUser('rollcalls') ? '' : 'hidden'} href="#/rollcalls/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">📣 点呼</a>
         <a class="btn" data-gd-act="timers"    ${actionEnabled(g, 'timers')    && actionShownForUser('timers')    ? '' : 'hidden'} href="#/timers/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">⏱️ タイマー</a>
         <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   && actionShownForUser('meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
+        <a class="btn" data-gd-act="translate" ${actionEnabled(g, 'translate') && actionShownForUser('translate') ? '' : 'hidden'} href="#/translate?group_id=${id}">🌐 画像翻訳</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
