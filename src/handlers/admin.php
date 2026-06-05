@@ -10,6 +10,7 @@
 //   config                      GET / PATCH          — runtime knobs (fees, streak shape, ...)
 //   dashboard                   GET                  — supply totals, counts
 //   broadcast                   POST                 — push a notification to everyone
+//   users_without_mac           GET / POST notify    — MAC 未登録 user 一覧 + 督促 一斉通知
 //   rooms                       GET / POST / PATCH / DELETE / rotate_token  — Wi-Fi scanner rooms
 //   holidays                    GET / sync           — national holidays import
 //   calendar_overrides          GET / POST / DELETE  — lab_open / lab_closed flags
@@ -313,6 +314,58 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         json_response(['ok' => true, 'recipients' => $count]);
         return;
+    }
+
+    // ----- users_without_mac -----
+    // GET  /api/admin/users_without_mac          : MAC 未登録 (presence_devices 0 件) の human user 一覧
+    // POST /api/admin/users_without_mac/notify   : {body, user_ids?} で 一斉通知 (user_ids 省略時は 全員)
+    //   admin が 「Mac 登録 してください」 と 督促するための 簡易 一斉送信。
+    if ($sub === 'users_without_mac') {
+        if ($method === 'GET' && !isset($seg[2])) {
+            $st = $pdo->query("
+                SELECT u.id, u.display_name, u.email, u.grade
+                  FROM users u
+                  JOIN allowlist a ON a.email = u.email AND a.active = 1
+                 WHERE u.kind = 'human'
+                   AND NOT EXISTS (SELECT 1 FROM presence_devices pd WHERE pd.user_id = u.id)
+                 ORDER BY FIELD(u.grade, 'D','M2','M1','B4','B3',''), u.display_name");
+            json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+            return;
+        }
+        if ($method === 'POST' && ($seg[2] ?? '') === 'notify') {
+            $body = read_json_body();
+            $msg = trim((string)require_field($body, 'body'));
+            if ($msg === '' || mb_strlen($msg) > 1000) {
+                throw new ApiException('bad_request', 'body length 1..1000', 400);
+            }
+            // user_ids が無ければ MAC 未登録全員 を 解決。 ある場合は 指定された
+            // ID のうち 「MAC 未登録 かつ 在籍中の human」 のみに 絞る (悪用防止)。
+            $candidates = [];
+            $stC = $pdo->query("
+                SELECT u.id FROM users u
+                  JOIN allowlist a ON a.email = u.email AND a.active = 1
+                 WHERE u.kind = 'human'
+                   AND NOT EXISTS (SELECT 1 FROM presence_devices pd WHERE pd.user_id = u.id)");
+            foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $r) $candidates[(int)$r['id']] = true;
+            $targets = [];
+            if (isset($body['user_ids']) && is_array($body['user_ids'])) {
+                foreach ($body['user_ids'] as $uid) {
+                    $uid = (int)$uid;
+                    if (isset($candidates[$uid])) $targets[] = $uid;
+                }
+            } else {
+                $targets = array_keys($candidates);
+            }
+            $count = 0;
+            foreach ($targets as $uid) {
+                try {
+                    Notifier::notify($pdo, $cfg, $uid, 'admin_notice', $msg, 'mac_reminder', null);
+                    $count++;
+                } catch (Throwable $e) { /* continue */ }
+            }
+            json_response(['ok' => true, 'recipients' => $count]);
+            return;
+        }
     }
 
     // ----- rooms (presence scanner) -----

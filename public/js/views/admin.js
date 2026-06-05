@@ -43,6 +43,65 @@ async function loadAdminZoom() {
   }
 }
 
+// ---------------- Admin: MAC 未登録ユーザー督促 ----------------
+// presence_devices に 1 件も無い human user を一覧化し、 デフォ 全員選択で
+// 「MAC 登録 してね」 DM を 一斉送信。 チェックを 外せば 個別 除外可能。
+async function loadMacReminder() {
+  const root = document.getElementById('mac-rem-list');
+  if (!root) return;
+  root.textContent = '読み込み中…';
+  try {
+    const r = await get('/api/admin/users_without_mac');
+    const items = r.items || [];
+    if (!items.length) {
+      root.innerHTML = `<div class="empty">✨ MAC 未登録 user は 0 人 (全員 登録済み)</div>`;
+      const cntEl = document.getElementById('mac-rem-count');
+      if (cntEl) cntEl.textContent = '0';
+      return;
+    }
+    root.innerHTML = items.map(u => `
+      <label class="row center" data-mac-rem-uid="${u.id}"
+             style="gap:8px; padding:4px 6px; border-radius:6px; cursor:pointer">
+        <input type="checkbox" class="mac-rem-chk" data-uid="${u.id}" checked>
+        <span class="bold">${escapeHtml(u.display_name)}</span>
+        ${u.grade ? `<span class="muted" style="font-size:11px">[${escapeHtml(u.grade)}]</span>` : ''}
+        <span class="muted mono" style="font-size:11px; margin-left:auto">${escapeHtml(u.email)}</span>
+      </label>`).join('');
+    root.querySelectorAll('.mac-rem-chk').forEach(cb => {
+      cb.addEventListener('change', refreshMacRemCount);
+    });
+    refreshMacRemCount();
+  } catch (e) {
+    root.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function refreshMacRemCount() {
+  const checked = document.querySelectorAll('.mac-rem-chk:checked').length;
+  const el = document.getElementById('mac-rem-count');
+  if (el) el.textContent = String(checked);
+}
+
+async function onMacReminderSend() {
+  const body = document.getElementById('mac-rem-body').value.trim();
+  if (!body) { toast('メッセージ本文を入れてください'); return; }
+  const uids = [...document.querySelectorAll('.mac-rem-chk:checked')]
+    .map(cb => Number(cb.dataset.uid));
+  if (!uids.length) { toast('送信先が 0 人です'); return; }
+  if (!confirm(`${uids.length} 人に MAC 登録 督促 DM を送信します。 よろしいですか?`)) return;
+  const btn = document.getElementById('mac-rem-send');
+  btn.disabled = true;
+  try {
+    const r = await post('/api/admin/users_without_mac/notify', { body, user_ids: uids });
+    toast(`${r.recipients} 人に 送信しました`);
+    await loadMacReminder();
+  } catch (e) {
+    toast('失敗: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------------- Admin: Scrapbox 名簿 ----------------
 // 各 user の 「Slack #scrapbox で使う表示名」 を 1 つだけ管理。
 // レガシー (1 user に複数 handle 行) は同 user_id でグループ化して
@@ -185,6 +244,25 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
+      <h3 style="margin-top:0">MAC 未登録ユーザー督促</h3>
+      <p class="hint">
+        在室判定 (presence) 用の MAC アドレスを 1 件も登録していない人に、 まとめて
+        「登録してね」 と Slack DM (notification) を送ります。 デフォは MAC 未登録 全員、
+        チェックを外せば 個別 除外 もできます。
+      </p>
+      <div id="mac-rem-list" class="muted" style="margin-top:6px">読み込み中…</div>
+      <label class="field" style="margin-top:8px">
+        <span class="lbl">メッセージ本文</span>
+        <textarea id="mac-rem-body" maxlength="1000" rows="4"
+          placeholder="例: 在室判定の精度向上のため、設定 → 端末 から PC / スマホ の MAC アドレス登録をお願いします (5 秒で終わります)。"></textarea>
+      </label>
+      <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
+        <button id="mac-rem-send" class="primary">選択中の <span id="mac-rem-count">0</span> 人に送る</button>
+        <button id="mac-rem-reload" class="btn">一覧 再読込</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>外部サービス連携</h3>
       <p class="hint">
         ラボ全体で 1 つ持つ連携。 Zoom は管理者の Zoom アカウントで MTG を立てる権限、
@@ -266,6 +344,11 @@ export async function renderAdmin() {
   // --- Zoom 連携 + Scrapbox 名簿 ---
   await loadAdminZoom();
   await loadScrapboxRoster();
+
+  // --- MAC 未登録ユーザー督促 ---
+  await loadMacReminder();
+  document.getElementById('mac-rem-reload')?.addEventListener('click', () => loadMacReminder());
+  document.getElementById('mac-rem-send')?.addEventListener('click', onMacReminderSend);
 
   // --- Allowlist ---
   await loadAllow();
