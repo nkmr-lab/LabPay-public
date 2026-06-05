@@ -64,6 +64,7 @@ $routes = [
     'sounds'         => 'route_sounds',
     'auctions'       => 'route_auctions',
     'exercise'       => 'route_exercise',
+    'playlists'      => 'route_playlists',
 ];
 
 try {

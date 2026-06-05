@@ -18,6 +18,7 @@ export const HOME_CARDS = [
   { id: 'my-claims',      title: 'あなたが引き受け中のタスク' },
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
+  { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -166,6 +167,14 @@ export async function renderHome() {
       <div id="home-invs" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-pl-card" data-card-id="playlists" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎵 新着 プレイリスト</h2>
+        <a href="#/playlists" class="hint">一覧 →</a>
+      </div>
+      <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <details class="card" data-card-id="history">
       <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
         履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
@@ -185,6 +194,7 @@ export async function renderHome() {
   await renderCalendarEvents();
   await renderMyGroups();
   await renderFreshInvitations();
+  await renderFreshPlaylists();
   await renderFreshListings();
   await renderFreshTasks();
   await renderRecentTx();
@@ -228,6 +238,7 @@ async function doHomePoll() {
     renderCalendarEvents(),
     renderMyGroups(),
     renderFreshInvitations(),
+    renderFreshPlaylists(),
     renderFreshListings(),
     renderFreshTasks(),
     renderRecentTx(),
@@ -905,6 +916,40 @@ async function renderFreshInvitations() {
     }).join('') + addLink;
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
+// + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
+async function renderFreshPlaylists() {
+  const card = document.getElementById('home-pl-card');
+  const root = document.getElementById('home-pl');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/playlists', { limit: 5 });
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.slice(0, 5).map(p => {
+      const cover = p.cover_image_url
+        ? `<div class="cover-img" style="background-image:url('${escapeHtml(p.cover_image_url)}')"></div>`
+        : `<div class="cover-img" style="background:linear-gradient(135deg, #fce4ec, #e1bee7); display:flex; align-items:center; justify-content:center; font-size:24px">🎵</div>`;
+      const heart = p.i_liked ? '❤️' : '🤍';
+      const genre = p.genre_tag ? ` · 🏷 ${escapeHtml(p.genre_tag)}` : '';
+      return `
+        <a class="list-item with-cover" href="#/playlists/${p.id}">
+          ${cover}
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title)}</div>
+            <div class="meta" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+              ${avatarHtml(p.creator_name, p.creator_avatar_url, 'xs')}
+              ${escapeHtml(p.creator_name)} · 🎵 ${p.item_count} · 👁 ${p.view_count} · ${heart} ${p.like_count}${genre}
+            </div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (_) {
+    card.hidden = true;
   }
 }
 

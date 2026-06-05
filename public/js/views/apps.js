@@ -25,6 +25,7 @@ export const APPS = [
   { id: 'requests',      url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'scrapbox',      url: '#/scrapbox',      title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
   { id: 'network',       url: '#/network',       title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
+  { id: 'playlists',     url: '#/playlists',     title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
