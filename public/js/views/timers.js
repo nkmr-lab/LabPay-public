@@ -91,6 +91,9 @@ export async function renderTimerNew({ query } = {}) {
     .split(',').map(Number).filter(Boolean);
   const presetTitle = String(query?.title || '').trim();
   const lockMembers = presetMembers.length > 0;
+  // v441 自分を デフォで 追加 (?members= 指定があれば そちら 優先)
+  const meId = Number(state.me?.id) || 0;
+  const initialMembers = lockMembers ? presetMembers : (meId ? [meId] : []);
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -98,7 +101,7 @@ export async function renderTimerNew({ query } = {}) {
       <h2 style="margin:6px 0 0">タイマーを始める</h2>
     </div>
     <div class="card">
-      <label class="field"><span class="lbl">タイトル</span>
+      <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「タイマー」)</span>
         <input type="text" id="tmn-title" maxlength="200" placeholder="例: ポモドーロ / 作業時間" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
       <span class="lbl">長さ</span>
@@ -154,7 +157,7 @@ export async function renderTimerNew({ query } = {}) {
     picker = await createMemberPicker({
       bulkContainer: lockMembers ? null : document.getElementById('tmn-bulk'),
       chipsContainer: document.getElementById('tmn-members'),
-      initial: presetMembers,
+      initial: initialMembers,
       poolIds: lockMembers ? presetMembers : null,
       showGenderBulk: false,
     });
@@ -163,11 +166,10 @@ export async function renderTimerNew({ query } = {}) {
   }
 
   document.getElementById('tmn-save').addEventListener('click', async () => {
-    const title = document.getElementById('tmn-title').value.trim();
+    const title = document.getElementById('tmn-title').value.trim() || 'タイマー';
     const min = Math.max(0, parseInt(document.getElementById('tmn-min').value, 10) || 0);
     const sec = Math.max(0, Math.min(59, parseInt(document.getElementById('tmn-sec').value, 10) || 0));
     const total = min * 60 + sec;
-    if (!title) { toast('タイトル必須'); return; }
     if (total < 5) { toast('5 秒以上にしてください'); return; }
     // v404 ベル入力は 分単位 (小数可) に。 backend は秒で 保持するので *60 して送る。
     const toSec = (id) => {

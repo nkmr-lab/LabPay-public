@@ -76,13 +76,16 @@ export async function renderStopwatchNew() {
   const presetMembers = (url.searchParams.get('members') || '')
     .split(',').map(s => Number(s)).filter(Boolean);
   const presetTitle = url.searchParams.get('title') || '';
+  // v441 自分は デフォで 追加。 ?members= で 指定があれば そっち優先 (重複は picker 側で 排除)。
+  const meId = Number(state.me?.id) || 0;
+  const initial = presetMembers.length ? presetMembers : (meId ? [meId] : []);
   app.innerHTML = `
     <div class="card">
       <a href="#/stopwatches" class="hint">← 一覧</a>
       <h2 style="margin:6px 0 0">＋ 新規 ストップウォッチ</h2>
     </div>
     <div class="card">
-      <label class="field"><span class="lbl">タイトル</span>
+      <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「ストップウォッチ」)</span>
         <input type="text" id="swn-title" maxlength="200"
                placeholder="例: 発表時間 / 雑談タイム" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
@@ -102,15 +105,14 @@ export async function renderStopwatchNew() {
     picker = await createMemberPicker({
       bulkContainer: document.getElementById('swn-bulk'),
       chipsContainer: document.getElementById('swn-members'),
-      initial: presetMembers,
+      initial,
       showGenderBulk: false,
     });
   } catch (e) {
     document.getElementById('swn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
   document.getElementById('swn-save').addEventListener('click', async () => {
-    const title = document.getElementById('swn-title').value.trim();
-    if (!title) { toast('タイトル必須'); return; }
+    const title = document.getElementById('swn-title').value.trim() || 'ストップウォッチ';
     try {
       const r = await post('/api/stopwatches', {
         title, participant_ids: picker ? [...picker.getSelected()] : [],
