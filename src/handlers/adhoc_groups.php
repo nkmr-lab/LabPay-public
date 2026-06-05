@@ -1637,14 +1637,16 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
          WHERE s.group_id = ?
          ORDER BY (s.day_date IS NULL),
                   s.day_date,
-                  s.sort_order,
                   (s.start_time IS NULL),
                   s.start_time,
+                  s.sort_order,
                   s.id");
-    // v399 sort_order を 第一キー に。 旧 ORDER は start_time 優先 だったので
-    // 「↑↓ 押しても 視覚位置が 変わらない」 (時刻と sort_order が両方 swap される
-    // ので 結果として 同じ位置に 戻る) 系の 不具合が起きていた。 DnD は /relocate
-    // で sort_order だけ 更新する 設計に合わせ、 sort_order を 視覚順 そのものに。
+    // v402 v398 ORDER に再復帰 (start_time 優先 / sort_order は タイブレーク)。
+    // v399 で sort_order 主導に 切り替えたが、 時刻付きアイテムが ↑↓ や DnD で
+    // 「視覚位置が 動かない」 (フロント側も byDay 内で start_time 主導で 再ソート
+    // しているため) という 問題が 出たので 戻す。 ↑↓ は start_time も swap する
+    // 旧仕様に 戻し、 stock (時刻なし) アイテムは sort_order のみで 並ぶ ため
+    // /relocate (DnD) も 通常通り効く。
     $st->execute([$id]);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
     // 添付ファイル件数のみ同期取得 (本体は別 GET で詳細を取る) — UI のバッジ用。
@@ -2094,18 +2096,19 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     // 同じ day_date 内で 「視覚順」 に並べ、 自分の隣を取る。
     // start_time NULL は最後扱い、 次点 sort_order で安定化。 day_date が NULL の
     // ストック内移動も同様に動く。
-    // v399 GET ORDER と 揃え、 視覚順 = sort_order に 統一。
+    // v402 GET ORDER (start_time 主導) に 揃える。 同日内を 視覚順に 列挙し、
+    // 隣の項目を 取って、 start_time と sort_order を まとめて swap。
     if ($row['day_date'] === null) {
-        $stAll = $pdo->prepare("SELECT id, sort_order
+        $stAll = $pdo->prepare("SELECT id, start_time, sort_order
                                  FROM adhoc_group_schedule_items
                                 WHERE group_id=? AND day_date IS NULL
-                                ORDER BY sort_order, id");
+                                ORDER BY (start_time IS NULL), start_time, sort_order, id");
         $stAll->execute([$id]);
     } else {
-        $stAll = $pdo->prepare("SELECT id, sort_order
+        $stAll = $pdo->prepare("SELECT id, start_time, sort_order
                                  FROM adhoc_group_schedule_items
                                 WHERE group_id=? AND day_date=?
-                                ORDER BY sort_order, id");
+                                ORDER BY (start_time IS NULL), start_time, sort_order, id");
         $stAll->execute([$id, $row['day_date']]);
     }
     $list = $stAll->fetchAll(PDO::FETCH_ASSOC);
@@ -2117,14 +2120,14 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
         json_response(['ok' => true, 'moved' => false]); return;
     }
     $nei = $list[$neiIdx];
-    // v399 sort_order だけ swap。 start_time は そのまま (時刻は 表示のためだけ)。
-    // 旧仕様は start_time も swap して 「↑↓ で 時刻が 入れ替わる」 振る舞いだったが
-    // ORDER 主キーが start_time だったので 「視覚位置が 変わってない」 ように見えていた。
+    // start_time と sort_order を ペアで swap (v398 仕様)。
+    // 時刻つき アイテムなら 「14:00 を ↑ → 9:00 と 入れ替わる」 ように 時刻も 動く。
+    // 時刻なし は 両方とも NULL なので sort_order だけ 実質 swap される。
     db_tx($pdo, function () use ($pdo, $row, $nei, $itemId) {
-        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
-            ->execute([(int)$nei['sort_order'], $itemId]);
-        $pdo->prepare("UPDATE adhoc_group_schedule_items SET sort_order=? WHERE id=?")
-            ->execute([(int)$row['sort_order'], (int)$nei['id']]);
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET start_time=?, sort_order=? WHERE id=?")
+            ->execute([$nei['start_time'], (int)$nei['sort_order'], $itemId]);
+        $pdo->prepare("UPDATE adhoc_group_schedule_items SET start_time=?, sort_order=? WHERE id=?")
+            ->execute([$row['start_time'], (int)$row['sort_order'], (int)$nei['id']]);
     });
     json_response(['ok' => true, 'moved' => true]);
 }

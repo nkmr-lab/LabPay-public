@@ -1891,11 +1891,24 @@ async function loadSchedule(gid) {
       const savedSrc = dragSrcId, savedSrcDay = dragSrcDay;
       dragSrcId = null; dragSrcDay = null;
       try {
-        // v399 同日 DnD も /relocate (sort_order だけ 更新 / start_time は 保持)
-        // に 統一。 旧 chain swap は ↑↓ ボタンの 単発 swap (時刻も入れ替わる) を
-        // N 回繰り返して 多日間 移動を 装っており、 N>=2 で 中間アイテムの 時刻が
-        // 連鎖 して ズレる 問題があった。 ↑↓ 単発 swap は /move 経由 で 残す。
-        await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { before_id: tid });
+        // v402: バックエンド ORDER は start_time 主導に 戻したので、 同日 DnD は
+        // 隣接 N ステップ 分 ↑↓ swap (時刻 + sort_order を 連鎖 swap) で 並びを
+        // 変える。 これにより 時刻つき アイテム も 視覚的に 並び替えできる。
+        // 別日 DnD は そのまま /relocate (day_date 移動)。
+        if (targetDay === savedSrcDay) {
+          const editable = editableSameDay(savedSrcDay);
+          const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === savedSrc);
+          const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
+          if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
+          const steps = Math.abs(dstIdx - srcIdx);
+          const dir = srcIdx < dstIdx ? 'down' : 'up';
+          for (let i = 0; i < steps; i++) {
+            const r = await patch(`/api/groups/${gid}/schedule/${savedSrc}/move`, { dir });
+            if (!r.moved) break;
+          }
+        } else {
+          await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { before_id: tid });
+        }
         await loadSchedule(gid);
       } catch (e) {
         toast('並び替え失敗: ' + e.message);
