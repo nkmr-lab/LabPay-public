@@ -1113,7 +1113,7 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
 
 const GROUP_SCHEDULE_KINDS = [
     'flight','train','bus','taxi','car','walk','move',
-    'hotel','conf','meeting','food','fun','other',
+    'hotel','conf','meeting','meetup','food','fun','other',
 ];
 
 // ──────── 宿泊地 ────────

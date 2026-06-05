@@ -1595,6 +1595,7 @@ const SCHED_KINDS = {
   hotel:   { label: '宿',     icon: '🏨' },
   conf:    { label: '学会',   icon: '🎓' },
   meeting: { label: '会議',   icon: '👥' },
+  meetup:  { label: '待ち合わせ', icon: '🤝' },
   food:    { label: '食事',   icon: '🍽' },
   fun:     { label: '観光',   icon: '🎢' },
   other:   { label: 'その他', icon: '📝' },
