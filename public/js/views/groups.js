@@ -1864,8 +1864,9 @@ async function loadSchedule(gid) {
   // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
-      // 内部 button / a / select 等 のクリックは編集 modal を開かない (個別 handler 用)。
-      if (ev.target.closest('button,a,input,select')) return;
+      // v414 内部 button/a/select + ドラッグハンドル + ロックバッジ は 編集 modal
+      // を開かない (それぞれ 個別 handler 用 / ハンドルは DnD 用)。
+      if (ev.target.closest('button,a,input,select,[data-drag-handle],[aria-label*="多日"]')) return;
       const id = Number(el.dataset.schedItem);
       const it = (d.items || []).find(x => Number(x.id) === id);
       if (it) openSchedItemModal(gid, it);
@@ -1987,8 +1988,6 @@ async function loadSchedule(gid) {
       const savedSrc = dragSrcId;
       dragSrcId = null; dragSrcDay = null;
       try {
-        // v403 ストック領域 (data-day="stock") にも 投げ込める。 backend は
-        // 「day_date が 空文字 or null で 明示的に key 付き」 を ストック行き シグナルに 扱う。
         const payload = targetDay === 'stock' ? { day_date: '' } : { day_date: targetDay };
         await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, payload);
         await loadSchedule(gid);
@@ -1996,6 +1995,112 @@ async function loadSchedule(gid) {
         toast('並び替え失敗: ' + e.message);
         await loadSchedule(gid);
       }
+    });
+  });
+
+  // ─── v414 タッチ / ポインター ベース DnD ───
+  // モバイル の Safari/Chrome は ネイティブ HTML5 DnD が 効きにくく、 ハンドルを
+  // タップすると 編集 modal が 開く 不具合の 報告。 350ms 長押し → 移動可能 を
+  // ポインター イベントで 実装。 desktop の マウスでも 動く (両方 ON だが、 ネイティブ
+  // DnD が 先に dragstart を 取れば そのまま、 そうでなければ pointerdown → 350ms
+  // ホールド で 切替)。
+  let pointerDrag = null;
+  body.querySelectorAll('[data-drag-handle="1"]').forEach(h => {
+    h.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      const srcId = Number(h.dataset.schedSrc);
+      const srcDay = h.dataset.schedSrcday || 'stock';
+      const parentItem = h.closest('[data-sched-item]');
+      const startX = ev.clientX, startY = ev.clientY;
+      const state = {
+        srcId, srcDay, parentItem, startX, startY,
+        active: false, pointerId: ev.pointerId,
+        timer: null,
+      };
+      state.timer = setTimeout(() => {
+        if (!pointerDrag) return;
+        pointerDrag.active = true;
+        if (parentItem) parentItem.style.opacity = '0.4';
+        h.style.cursor = 'grabbing';
+        try { h.setPointerCapture(ev.pointerId); } catch (_) {}
+      }, 350);
+      pointerDrag = state;
+    });
+    h.addEventListener('pointermove', (ev) => {
+      if (!pointerDrag) return;
+      // 長押し 未満で 大きく 動いたら キャンセル (スクロール扱い)
+      if (!pointerDrag.active) {
+        if (Math.hypot(ev.clientX - pointerDrag.startX, ev.clientY - pointerDrag.startY) > 8) {
+          clearTimeout(pointerDrag.timer);
+          pointerDrag = null;
+        }
+        return;
+      }
+      ev.preventDefault();
+      body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      if (!el) return;
+      const itemT = el.closest('[data-sched-canedit="1"]');
+      const dayT = itemT ? null : (el.closest('[data-day]') || el.closest('.sched-stock-grid'));
+      if (itemT && Number(itemT.dataset.schedItem) !== pointerDrag.srcId) {
+        itemT.classList.add('gd-sched-drop-over');
+      } else if (dayT) {
+        dayT.classList.add('gd-sched-drop-over');
+      }
+    });
+    const finishPointer = async (ev) => {
+      if (!pointerDrag) return;
+      const pd = pointerDrag;
+      pointerDrag = null;
+      clearTimeout(pd.timer);
+      h.style.cursor = 'grab';
+      if (pd.parentItem) pd.parentItem.style.opacity = '';
+      body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
+      if (!pd.active) return;
+      ev.preventDefault();
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      if (!el) return;
+      const itemT = el.closest('[data-sched-canedit="1"]');
+      const dayT = itemT ? null : (el.closest('[data-day]') || el.closest('.sched-stock-grid'));
+      try {
+        if (itemT) {
+          const tid = Number(itemT.dataset.schedItem);
+          if (tid === pd.srcId) return;
+          const targetDay = itemT.dataset.schedDay || 'stock';
+          if (targetDay === pd.srcDay) {
+            const editable = editableSameDay(pd.srcDay);
+            const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === pd.srcId);
+            const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
+            if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
+            const steps = Math.abs(dstIdx - srcIdx);
+            const dir = srcIdx < dstIdx ? 'down' : 'up';
+            for (let i = 0; i < steps; i++) {
+              const r = await patch(`/api/groups/${gid}/schedule/${pd.srcId}/move`, { dir });
+              if (!r.moved) break;
+            }
+          } else {
+            await patch(`/api/groups/${gid}/schedule/${pd.srcId}/relocate`, { before_id: tid });
+          }
+        } else if (dayT) {
+          const targetDay = dayT.dataset.day || 'stock';
+          if (targetDay === pd.srcDay) return;
+          const payload = targetDay === 'stock' ? { day_date: '' } : { day_date: targetDay };
+          await patch(`/api/groups/${gid}/schedule/${pd.srcId}/relocate`, payload);
+        }
+        await loadSchedule(gid);
+      } catch (e) {
+        toast('並び替え失敗: ' + e.message);
+        await loadSchedule(gid);
+      }
+    };
+    h.addEventListener('pointerup', finishPointer);
+    h.addEventListener('pointercancel', () => {
+      if (!pointerDrag) return;
+      clearTimeout(pointerDrag.timer);
+      if (pointerDrag.parentItem) pointerDrag.parentItem.style.opacity = '';
+      body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
+      pointerDrag = null;
+      h.style.cursor = 'grab';
     });
   });
 }
