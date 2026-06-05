@@ -320,6 +320,11 @@ details.gd-sched-drop-over {
   background: #faf6ff;
 }
 
+/* v437 グループ 地図モード は トップ バー + タブ列 を 隠して 広く 取る */
+body.group-map-fullscreen #topbar,
+body.group-map-fullscreen #tabs { display: none !important; }
+body.group-map-fullscreen #app { padding-top: 4px; }
+
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
 /* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js */

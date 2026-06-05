@@ -57,6 +57,8 @@ function userColor(uid) {
 // グループマップ用 内部 state (1 ページ生存期間)。
 let mapState = null;
 function teardownMap() {
+  // v437 トップ バー/タブ の 復活
+  try { document.body.classList.remove('group-map-fullscreen'); } catch (_) {}
   if (!mapState) return;
   if (mapState.watchId !== null) navigator.geolocation.clearWatch(mapState.watchId);
   if (mapState.pingTimer) clearInterval(mapState.pingTimer);
@@ -69,38 +71,35 @@ export async function renderGroupMap({ params }) {
   teardownMap();
   const id = String(params.id);
   const app = document.getElementById('app');
+  // v437 地図モードは 上の トップバー + タブ列 を 隠して 広く 取る。
+  document.body.classList.add('group-map-fullscreen');
   app.innerHTML = `
-    <div class="card">
-      <a href="#/groups/${escapeHtml(id)}" class="hint">← グループ詳細</a>
-      <h2 style="margin:6px 0 0">🗺️ 行く場所マップ</h2>
-      <div id="gm-info" class="muted" style="font-size:13px; margin-top:4px">読み込み中…</div>
-      <div class="row" style="gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap">
-        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer">
-          <input type="checkbox" id="gm-line-toggle">
-          <span>線で結ぶ</span>
-        </label>
-        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer">
+    <div class="card" style="padding:6px 10px; margin:0">
+      <div class="row center" style="gap:8px; flex-wrap:wrap">
+        <a href="#/groups/${escapeHtml(id)}" class="btn" style="padding:2px 10px; font-size:12px; flex-shrink:0">← グループに戻る</a>
+        <button id="gm-locate"        class="btn primary" style="padding:2px 10px; font-size:12px">📍 自分の位置へ</button>
+        <button id="gm-share-once"    class="btn"         style="padding:2px 10px; font-size:12px">📌 位置を共有 (単発)</button>
+        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:12px">
           <input type="checkbox" id="gm-share-toggle">
-          <span>📡 位置共有</span>
+          <span>📡 連続</span>
         </label>
-        <button id="gm-locate" class="btn primary" style="padding:2px 10px; font-size:12px">📍 自分の位置へ</button>
-        <button id="gm-reset-order" class="btn" style="padding:2px 10px; font-size:12px">↻ 並び順</button>
+        <span id="gm-share-st" class="hint-sm" style="margin-left:auto"></span>
       </div>
-      <div id="gm-share-st" class="hint-sm" style="margin-top:4px"></div>
     </div>
-    <div class="card" style="padding:0; overflow:hidden">
-      <div id="gm-map" style="height:46vh; min-height:300px; width:100%; background:#eef"></div>
+    <div class="card" style="padding:0; overflow:hidden; margin:6px 0">
+      <div id="gm-map" style="height:58vh; min-height:340px; width:100%; background:#eef"></div>
     </div>
-    <div class="card">
-      <div class="row center" style="margin-bottom:6px">
-        <h3 class="row-title" style="margin:0">地点リスト <span id="gm-list-count" class="hint-sm" style="font-weight:400"></span></h3>
+    <div class="card" style="padding:6px 10px; margin:0">
+      <div class="row center" style="margin-bottom:4px">
+        <span class="bold" style="font-size:13px">地点リスト <span id="gm-list-count" class="hint-sm" style="font-weight:400"></span></span>
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer">
           <input type="checkbox" id="gm-bounds-only" checked>
           <span>表示中エリアのみ</span>
         </label>
       </div>
-      <div id="gm-list" class="list" style="max-height:38vh; overflow-y:auto"></div>
+      <div id="gm-list" class="list" style="max-height:28vh; overflow-y:auto"></div>
     </div>
+    <span id="gm-info" hidden></span>
   `;
 
   let L;
@@ -135,8 +134,8 @@ export async function renderGroupMap({ params }) {
     orderedIds = naturalOrder.map(it => Number(it.id));
   }
 
-  let lineOn = loadLinePref();
-  document.getElementById('gm-line-toggle').checked = lineOn;
+  // v437 線で結ぶ / 並び順リセット は 撤去。 lineOn は 常に false 固定。
+  const lineOn = false;
 
   // 地図 init (1 回だけ)。 保存された view を 優先、 無ければ 地点に fitBounds。
   const savedView = loadJSON(VIEW_KEY(id), null);
@@ -337,19 +336,7 @@ export async function renderGroupMap({ params }) {
   map.on('moveend zoomend', () => renderList());
   document.getElementById('gm-bounds-only')?.addEventListener('change', renderList);
 
-  document.getElementById('gm-line-toggle').addEventListener('change', (e) => {
-    lineOn = e.target.checked;
-    saveLinePref(lineOn);
-    redraw();
-  });
-  document.getElementById('gm-reset-order').addEventListener('click', () => {
-    if (!confirm('並び順を時系列にリセットしますか?')) return;
-    clearCustomOrder(id);
-    orderedIds = naturalOrder.map(it => Number(it.id));
-    redraw();
-  });
-
-  // 「自分の位置へ」 ボタン
+  // v437 「自分の位置へ」 (flyTo のみ / 共有はしない)
   document.getElementById('gm-locate').addEventListener('click', () => {
     if (!navigator.geolocation) { toast('この端末は 位置情報 に 対応していません'); return; }
     navigator.geolocation.getCurrentPosition(
@@ -359,6 +346,38 @@ export async function renderGroupMap({ params }) {
       },
       (err) => toast('位置取得 失敗: ' + (err.message || err.code)),
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  });
+
+  // v437 「📌 位置を共有 (単発)」 — 現在地を 1 回だけ POST → メンバー表示に反映
+  document.getElementById('gm-share-once')?.addEventListener('click', () => {
+    if (!navigator.geolocation) { toast('位置情報 未対応'); return; }
+    const btn = document.getElementById('gm-share-once');
+    btn.disabled = true;
+    const st = document.getElementById('gm-share-st');
+    if (st) st.textContent = '📌 取得中…';
+    navigator.geolocation.getCurrentPosition(
+      async (p) => {
+        try {
+          await post(`/api/groups/${id}/locations`, {
+            lat: p.coords.latitude,
+            lng: p.coords.longitude,
+            accuracy: p.coords.accuracy,
+          });
+          if (st) st.textContent = `📌 共有しました (±${Math.round(p.coords.accuracy)}m)`;
+          map.flyTo([p.coords.latitude, p.coords.longitude], 16, { duration: 0.6 });
+          await pollMembers();  // 即 反映
+        } catch (e) {
+          toast('送信失敗: ' + e.message);
+          if (st) st.textContent = '送信失敗';
+        } finally { btn.disabled = false; }
+      },
+      (err) => {
+        toast('位置取得 失敗: ' + (err.message || err.code));
+        if (st) st.textContent = '位置取得 失敗';
+        btn.disabled = false;
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
   });
 
@@ -447,12 +466,26 @@ function drawMemberMarkers(L, layer, items) {
       ? `background:#fff center/cover no-repeat url('${cssUrl(it.avatar_url)}')`
       : `background:${color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px`;
     const dotClass = it.is_me ? 'border:3px solid #0e7c63' : `border:3px solid ${color}`;
-    const html = `<div style="width:32px; height:32px; border-radius:50%; ${avatarBg}; ${dotClass}; box-shadow:0 1px 4px rgba(0,0,0,0.4)">${it.avatar_url ? '' : initial}</div>`;
-    const icon = L.divIcon({ html, className: 'gm-member-marker', iconSize: [32, 32], iconAnchor: [16, 16] });
     const since = Math.floor((Date.now() - Date.parse(String(it.updated_at).replace(' ', 'T'))) / 1000);
-    const ago = since < 60 ? `${since} 秒前` : since < 3600 ? `${Math.floor(since/60)} 分前` : `${Math.floor(since/3600)} 時間前`;
-    const popup = `<div><div style="font-weight:700">${escapeHtml(it.display_name)}${it.is_me ? ' (あなた)' : ''}</div>
-                   <div style="font-size:11px; color:#666">${ago}${it.accuracy_m ? ' · 精度 ±' + it.accuracy_m + 'm' : ''}</div></div>`;
+    const ago = since < 60 ? `${since}秒前`
+              : since < 3600 ? `${Math.floor(since/60)}分前`
+              : since < 86400 ? `${Math.floor(since/3600)}時間前`
+              : `${Math.floor(since/86400)}日前`;
+    // v437 マーカー の 下に 名前 + 観測時刻 を 常時表示
+    const labelBg = it.is_me ? '#0e7c63' : color;
+    const html = `
+      <div style="display:flex; flex-direction:column; align-items:center">
+        <div style="width:32px; height:32px; border-radius:50%; ${avatarBg}; ${dotClass}; box-shadow:0 1px 4px rgba(0,0,0,0.4)">${it.avatar_url ? '' : initial}</div>
+        <div style="margin-top:2px; padding:1px 6px; background:${labelBg}; color:#fff; border-radius:8px; font-size:10px; font-weight:700; line-height:1.2; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.3)">
+          ${escapeHtml(it.display_name)}<span style="opacity:0.85; font-weight:400"> · ${ago}</span>
+        </div>
+      </div>`;
+    const icon = L.divIcon({ html, className: 'gm-member-marker', iconSize: [120, 56], iconAnchor: [60, 16] });
+    const popup = `<div>
+      <div style="font-weight:700">${escapeHtml(it.display_name)}${it.is_me ? ' (あなた)' : ''}</div>
+      <div style="font-size:11px; color:#666">最後の位置 ${ago}${it.accuracy_m ? ' · 精度 ±' + it.accuracy_m + 'm' : ''}</div>
+      <div style="font-size:11px; color:#888">${escapeHtml(String(it.updated_at || ''))}</div>
+    </div>`;
     L.marker([it.lat, it.lng], { icon }).addTo(layer).bindPopup(popup);
   });
 }
