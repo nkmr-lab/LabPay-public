@@ -80,20 +80,44 @@ function timers_create(PDO $pdo, array $cfg): void {
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title 1..200', 400);
     }
-    $dur = (int)($body['duration_seconds'] ?? 0);
-    if ($dur < 5 || $dur > 24 * 3600) {
-        throw new ApiException('bad_request', 'duration_seconds 5..86400', 400);
-    }
-    // ベル (1/2/3) と repeat_max を 任意で受け取る。 ベルは 1 <= sec < dur の範囲のみ受理。
+    // v449 ベル (1/2/3) — 各 1..86400 秒、 順不同。 端数 NULL OK。
     $bells = [];
     foreach (['bell1','bell2','bell3'] as $k) {
         $v = $body[$k . '_seconds'] ?? null;
         if ($v === null || $v === '') { $bells[] = null; continue; }
         $iv = (int)$v;
-        if ($iv < 1 || $iv >= $dur) {
-            throw new ApiException('bad_request', "{$k}_seconds は 1 以上 duration 未満", 400);
+        if ($iv < 1 || $iv > 86400) {
+            throw new ApiException('bad_request', "{$k}_seconds 1..86400", 400);
         }
         $bells[] = $iv;
+    }
+    // v449 end_bell_index = 1/2/3 で 「発表終了 タイミング」 を 指定。
+    // 採用 されると duration_seconds は その ベル 値 になり、 他の ベル は
+    // 前 (= 中間警告) でも 後 (= 質疑時間 通知) でも OK。
+    // 旧 client (end_bell_index 無し) は duration_seconds を 自分で 送る legacy 経路。
+    $endBellIdx = null;
+    if (isset($body['end_bell_index']) && $body['end_bell_index'] !== '' && $body['end_bell_index'] !== null) {
+        $endBellIdx = (int)$body['end_bell_index'];
+        if (!in_array($endBellIdx, [1, 2, 3], true)) {
+            throw new ApiException('bad_request', 'end_bell_index は 1/2/3', 400);
+        }
+        $endVal = $bells[$endBellIdx - 1];
+        if ($endVal === null || $endVal < 5) {
+            throw new ApiException('bad_request', "{$endBellIdx}鈴 を 5 秒 以上 で 設定して ください (発表終了 として 選択中)", 400);
+        }
+        $dur = $endVal;
+    } else {
+        $dur = (int)($body['duration_seconds'] ?? 0);
+        if ($dur < 5 || $dur > 86400) {
+            throw new ApiException('bad_request', 'duration_seconds 5..86400', 400);
+        }
+        // legacy: ベル は duration 未満 のみ
+        foreach (['bell1','bell2','bell3'] as $idx => $k) {
+            $iv = $bells[$idx];
+            if ($iv !== null && $iv >= $dur) {
+                throw new ApiException('bad_request', "{$k}_seconds は duration 未満 (end_bell_index で 終了ベル を 選ぶと 制限なし)", 400);
+            }
+        }
     }
     $repeatMax = max(0, min(100, (int)($body['repeat_max'] ?? 0)));
     $participantIds = $body['participant_ids'] ?? [];
@@ -115,14 +139,15 @@ function timers_create(PDO $pdo, array $cfg): void {
     // v446 paused-default model: 作成時は paused から 始まる。 started_at / ends_at
     // は NULL、 remaining_seconds = duration_seconds。 ▶ 開始 で running に。
     $tid = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $participantIds, $bells, $repeatMax, &$tid) {
+    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $participantIds, $bells, $endBellIdx, $repeatMax, &$tid) {
         $ins = $pdo->prepare("INSERT INTO timers
             (title, creator_user_id, duration_seconds, remaining_seconds,
-             bell1_seconds, bell2_seconds, bell3_seconds, repeat_max, repeat_idx,
+             bell1_seconds, bell2_seconds, bell3_seconds, end_bell_index,
+             repeat_max, repeat_idx,
              started_at, ends_at, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, 'paused', NOW())");
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, 'paused', NOW())");
         $ins->execute([$title, (int)$u['id'], $dur, $dur,
-            $bells[0], $bells[1], $bells[2], $repeatMax]);
+            $bells[0], $bells[1], $bells[2], $endBellIdx, $repeatMax]);
         $tid = (int)$pdo->lastInsertId();
         $stP = $pdo->prepare("INSERT INTO timer_participants (timer_id, user_id) VALUES (?, ?)");
         foreach ($participantIds as $uid) $stP->execute([$tid, $uid]);
@@ -243,6 +268,7 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
             'bell1_seconds'     => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
             'bell2_seconds'     => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
             'bell3_seconds'     => isset($t['bell3_seconds']) ? (int)$t['bell3_seconds'] : null,
+            'end_bell_index'    => isset($t['end_bell_index']) ? (int)$t['end_bell_index'] : null,
             'repeat_max'        => (int)($t['repeat_max'] ?? 0),
             'repeat_idx'        => (int)($t['repeat_idx'] ?? 0),
             'started_at'        => $t['started_at'],

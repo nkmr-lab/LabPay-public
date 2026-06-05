@@ -22,13 +22,14 @@ const gradeRank = g => {
   return i < 0 ? GRADE_ORDER.length : i;
 };
 
-const PRESETS = [
-  { label: '5 分',  seconds: 300 },
-  { label: '10 分', seconds: 600 },
-  { label: '15 分', seconds: 900 },
-  { label: '25 分', seconds: 1500 },  // ポモドーロ
-  { label: '30 分', seconds: 1800 },
-  { label: '60 分', seconds: 3600 },
+// v449 学会タイマー プリセット。 「1鈴 / 2鈴 / 3鈴 / 終了」 を 一括 埋め。
+// 終了 = end_bell_index (1/2/3)。 単位は 分。
+const ACADEMIC_PRESETS = [
+  { label: '一般 (12/14/15、 3鈴=終了)',  bells: [12, 14, 15], end: 3 },
+  { label: '招待 (20/24/25、 3鈴=終了)',  bells: [20, 24, 25], end: 3 },
+  { label: 'ライトニング (4/4.5/5、 3鈴=終了)', bells: [4, 4.5, 5], end: 3 },
+  { label: 'ポモドーロ (25 分、 1鈴=終了)', bells: [25, null, null], end: 1 },
+  { label: '休憩 (5 分、 1鈴=終了)',       bells: [5, null, null], end: 1 },
 ];
 
 function fmtDuration(sec) {
@@ -108,38 +109,46 @@ export async function renderTimerNew({ query } = {}) {
   app.innerHTML = `
     <div class="card">
       <a href="#/timers" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">タイマーを作成</h2>
-      <p class="hint-sm" style="margin:4px 0 0">作成後 ▶ 開始 を 押す まで カウントダウン は 始まりません。</p>
+      <h2 style="margin:6px 0 0">学会タイマー を 作成</h2>
+      <p class="hint-sm" style="margin:4px 0 0">
+        1鈴 / 2鈴 / 3鈴 の 時刻 を 分単位 (小数可) で 指定し、 そのうち どれを 「発表終了」
+        とするか 選んで ください。 終了 = 終了音 (チーン)、 他は 中間 ベル (キン)。 終了の
+        後 ろ に 置いた ベル は 質疑時間 終了 などの 案内 に 使えます。
+      </p>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「タイマー」)</span>
-        <input type="text" id="tmn-title" maxlength="200" placeholder="例: ポモドーロ / 作業時間" value="${escapeHtml(presetTitle)}" autofocus>
+        <input type="text" id="tmn-title" maxlength="200" placeholder="例: 一般発表 / ポモドーロ" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
-      <span class="lbl">長さ</span>
-      <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 6px">
-        ${PRESETS.map((p, i) => `
-          <button class="btn" data-preset-sec="${p.seconds}">${escapeHtml(p.label)}</button>
+      <span class="lbl">プリセット (タップで 一括 埋め)</span>
+      <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 10px">
+        ${ACADEMIC_PRESETS.map((p, i) => `
+          <button class="btn" data-preset-idx="${i}">${escapeHtml(p.label)}</button>
         `).join('')}
       </div>
-      <div class="row" style="gap:6px; align-items:center">
-        <input type="number" id="tmn-min" min="0" max="1440" placeholder="分" style="max-width:90px">
-        <span class="muted">分</span>
-        <input type="number" id="tmn-sec" min="0" max="59" placeholder="秒" style="max-width:90px">
-        <span class="muted">秒</span>
+      <span class="lbl">ベル 設定 (空欄 = ベル なし)</span>
+      <div style="display:grid; grid-template-columns:auto auto 1fr auto auto; gap:6px 8px; align-items:center; margin:6px 0">
+        <label style="white-space:nowrap"><input type="radio" name="tmn-end" value="1"> 終了</label>
+        <span class="bold">1鈴</span>
+        <input type="number" id="tmn-bell1" min="0" step="0.5" placeholder="分" style="max-width:120px">
+        <span class="muted">分後</span>
+        <span></span>
+        <label style="white-space:nowrap"><input type="radio" name="tmn-end" value="2"> 終了</label>
+        <span class="bold">2鈴</span>
+        <input type="number" id="tmn-bell2" min="0" step="0.5" placeholder="分" style="max-width:120px">
+        <span class="muted">分後</span>
+        <span></span>
+        <label style="white-space:nowrap"><input type="radio" name="tmn-end" value="3" checked> 終了</label>
+        <span class="bold">3鈴</span>
+        <input type="number" id="tmn-bell3" min="0" step="0.5" placeholder="分" style="max-width:120px">
+        <span class="muted">分後</span>
+        <span></span>
       </div>
-      <details style="margin-top:10px">
-        <summary class="hint" style="cursor:pointer">🔔 中間ベル + 🔁 リピート設定</summary>
-        <div style="margin-top:6px">
-          <div class="hint-sm" style="margin-bottom:4px">タイマー開始から N 分後に 効果音 (設定 → 効果音 → ルーレット用のものが鳴ります)。 空欄 = ベル無し。 小数 (例 1.5 = 1 分 30 秒) も 可。</div>
-          <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
-            <label style="display:inline-flex; align-items:center; gap:4px">1ベル: <input type="number" id="tmn-bell1" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
-            <label style="display:inline-flex; align-items:center; gap:4px">2ベル: <input type="number" id="tmn-bell2" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
-            <label style="display:inline-flex; align-items:center; gap:4px">3ベル: <input type="number" id="tmn-bell3" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
-          </div>
-          <div class="row" style="gap:6px; align-items:center">
-            <label style="display:inline-flex; align-items:center; gap:4px">🔁 繰り返し: <input type="number" id="tmn-repeat" min="0" max="100" value="0" style="max-width:80px"> 回</label>
-            <span class="muted" style="font-size:11px">(0 = 1 回きり)</span>
-          </div>
+      <details style="margin-top:8px">
+        <summary class="hint" style="cursor:pointer">🔁 リピート設定 (繰り返し)</summary>
+        <div class="row" style="gap:6px; align-items:center; margin-top:6px">
+          <label style="display:inline-flex; align-items:center; gap:4px">🔁 繰り返し: <input type="number" id="tmn-repeat" min="0" max="100" value="0" style="max-width:80px"> 回</label>
+          <span class="muted" style="font-size:11px">(0 = 1 回きり)</span>
         </div>
       </details>
       <div class="field" style="margin-top:10px">
@@ -153,11 +162,18 @@ export async function renderTimerNew({ query } = {}) {
       </div>
     </div>
   `;
-  document.querySelectorAll('[data-preset-sec]').forEach(b => {
-    b.addEventListener('click', () => {
-      const sec = Number(b.dataset.presetSec);
-      document.getElementById('tmn-min').value = Math.floor(sec / 60);
-      document.getElementById('tmn-sec').value = sec % 60;
+  // v449 プリセット を 押すと 3 つの ベル時刻 + end radio が 一括 埋まる。
+  document.querySelectorAll('[data-preset-idx]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const p = ACADEMIC_PRESETS[Number(b.dataset.presetIdx)];
+      if (!p) return;
+      ['tmn-bell1','tmn-bell2','tmn-bell3'].forEach((id, i) => {
+        const v = p.bells[i];
+        document.getElementById(id).value = (v == null) ? '' : String(v);
+      });
+      const radio = document.querySelector(`input[name="tmn-end"][value="${p.end}"]`);
+      if (radio) radio.checked = true;
     });
   });
 
@@ -179,26 +195,8 @@ export async function renderTimerNew({ query } = {}) {
   document.getElementById('tmn-save').addEventListener('click', async () => {
     const btn = document.getElementById('tmn-save');
     let title = document.getElementById('tmn-title').value.trim();
-    const min = Math.max(0, parseInt(document.getElementById('tmn-min').value, 10) || 0);
-    const sec = Math.max(0, Math.min(59, parseInt(document.getElementById('tmn-sec').value, 10) || 0));
-    const total = min * 60 + sec;
-    if (total < 5) { toast('5 秒以上にしてください'); return; }
-    btn.disabled = true;
-    // v442 タイトル空欄なら AI に 短いタイトル を 生成 させる
-    if (!title) {
-      btn.textContent = '🤖 タイトル生成中…';
-      const part = picker ? [...picker.getSelected()].length : 1;
-      const totalMin = Math.round(total / 60 * 10) / 10;
-      const ctx = `共有 タイマー (カウントダウン) を 今 ${part} 人で 開始します。 長さは ${totalMin} 分。 用途は たぶん ポモドーロ・作業セット・休憩・会議 など。 ピッタリな 短いタイトルを 1 つ。`;
-      try {
-        const r = await post('/api/ai/short_title', { context: ctx });
-        title = r.title || 'タイマー';
-      } catch (_) {
-        title = 'タイマー';
-      }
-    }
-    btn.textContent = '＋ 作成中…';
-    // v404 ベル入力は 分単位 (小数可) に。 backend は秒で 保持するので *60 して送る。
+    // v449 学会タイマー モデル: ベル時刻 を 分単位 (小数可) で 受け、 end_bell_index で
+    // 「発表終了」 を 指定。 duration_seconds は サーバ側で end_bell の 値 から 自動 算出。
     const toSec = (id) => {
       const v = parseFloat(document.getElementById(id).value);
       if (!Number.isFinite(v) || v <= 0) return null;
@@ -207,18 +205,40 @@ export async function renderTimerNew({ query } = {}) {
     const bell1 = toSec('tmn-bell1');
     const bell2 = toSec('tmn-bell2');
     const bell3 = toSec('tmn-bell3');
-    const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
-    for (const b of [bell1, bell2, bell3]) {
-      if (b !== null && (b < 1 || b >= total)) {
-        toast(`ベル時刻は 0 分超 / 合計未満 (${(total/60).toFixed(1)}分) に`); return;
+    const endRadio = document.querySelector('input[name="tmn-end"]:checked');
+    const endBellIdx = endRadio ? Number(endRadio.value) : 3;
+    const endBellVal = [bell1, bell2, bell3][endBellIdx - 1];
+    if (endBellVal === null) {
+      toast(`「終了」 に 選んだ ${endBellIdx}鈴 の 時刻 を 入れて ください`);
+      return;
+    }
+    if (endBellVal < 5) {
+      toast(`${endBellIdx}鈴 (= 終了) は 5 秒 以上 に して ください`);
+      return;
+    }
+    btn.disabled = true;
+    if (!title) {
+      btn.textContent = '🤖 タイトル生成中…';
+      const part = picker ? [...picker.getSelected()].length : 1;
+      const endMin = Math.round(endBellVal / 60 * 10) / 10;
+      const ctx = `共有 学会タイマー を 今 ${part} 人で 開始します。 発表終了 は ${endMin} 分後。 用途は たぶん 学会発表・ゼミ・ライトニングトーク・ポモドーロ など。 ピッタリな 短いタイトルを 1 つ。`;
+      try {
+        const r = await post('/api/ai/short_title', { context: ctx });
+        title = r.title || 'タイマー';
+      } catch (_) {
+        title = 'タイマー';
       }
     }
+    btn.textContent = '＋ 作成中…';
+    const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
     try {
       const r = await post('/api/timers', {
-        title, duration_seconds: total, participant_ids: picker ? [...picker.getSelected()] : [],
+        title,
+        participant_ids: picker ? [...picker.getSelected()] : [],
         bell1_seconds: bell1,
         bell2_seconds: bell2,
         bell3_seconds: bell3,
+        end_bell_index: endBellIdx,
         repeat_max: repeatMax,
       });
       toast('タイマーを作成しました — ▶ 開始 を 押して カウントダウン');
@@ -246,7 +266,8 @@ let tmEndsMs = 0;
 let tmStartedMs = 0;
 let tmDurationSec = 0;
 let tmRemainingSec = 0;     // v446 paused 時の 残り秒数 (running/done では未使用)
-let tmBells = [];           // [秒, ...] 開始からの 秒数
+let tmBells = [];           // [秒, ...] 開始からの 秒数 (非 null だけ、 終了ベル含む)
+let tmEndBellSec = null;    // v449 終了ベル の 秒数 (= duration)。 これは ding 専用なので tick loop からは 除外。
 let tmBellsFired = new Set();
 let tmRepeatMax = 0;
 let tmRepeatIdx = 0;
@@ -323,8 +344,12 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     tmDurationSec = t.duration_seconds;
     tmRemainingSec = Math.max(0, Number(t.remaining_seconds) || 0);
     tmStatus      = t.status;
-    // ベル / リピート 情報 (resync 時も更新)
-    tmBells       = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(Number.isFinite);
+    // ベル / リピート 情報 (resync 時も更新)。 v449 end_bell_index で 指定された
+    // ベル は ding 専用 として 別途 持ち、 tick loop からは 除外。
+    const bellArr = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
+    tmBells       = bellArr.filter(Number.isFinite);
+    tmEndBellSec  = (t.end_bell_index && bellArr[t.end_bell_index - 1])
+                      ? Number(bellArr[t.end_bell_index - 1]) : null;
     tmRepeatMax   = t.repeat_max || 0;
     tmRepeatIdx   = t.repeat_idx || 0;
     if (!isResync) tmBellsFired = new Set();
@@ -338,9 +363,15 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       tmEndFiredOnce = false;  // v408 サイクル切替で 終了音も 再有効化
     }
     if (!isResync) {
+      // v449 ベル の 一覧 (1鈴/2鈴/3鈴 + 終了印) を ヘッダに 表示。
+      const bellArrForDisplay = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
+      const bellLine = bellArrForDisplay
+        .map((sec, i) => sec ? `${i + 1}鈴 ${fmtDuration(sec)}${t.end_bell_index === (i + 1) ? ' 🏁終了' : ''}` : null)
+        .filter(Boolean).join(' · ');
       document.getElementById('tmd-head').innerHTML = `
         <h2 style="margin:6px 0 0">${escapeHtml(t.title)}</h2>
         <div class="meta">起案 ${escapeHtml(t.creator_name)} · 合計 ${fmtDuration(t.duration_seconds)}</div>
+        ${bellLine ? `<div class="meta" style="margin-top:2px">🔔 ${escapeHtml(bellLine)}</div>` : ''}
       `;
       document.getElementById('tmd-pcount').textContent = d.participants.length;
       document.getElementById('tmd-participants').innerHTML = d.participants.map(participantPill).join('');
@@ -420,13 +451,18 @@ function tickTimer() {
   const stEl    = document.getElementById('tmd-status');
   if (!countEl) { stopTimerLoops(); return; }
   const now = Date.now() + tmOffsetMs;
-  // ベル 発火: 開始からの 経過秒数が ベル 設定値を 越えたら 1 回鳴らす。
-  if (tmStatus === 'running' && tmBells.length) {
+  // ベル 発火: 経過秒 が ベル設定値 を 越えたら 1 回 鳴らす。
+  // v449 終了ベル (= duration と 同一) は ding 専用 なので tick loop から 除外。
+  // running / done どちら でも 鳴らす (= 終了 後 の 質疑時間 ベル も 通る)。
+  // paused 中 は started_at が null なので tmStartedMs=0、 elapsed が 巨大 になる
+  // → status guard で skip。
+  if ((tmStatus === 'running' || tmStatus === 'done') && tmBells.length && tmStartedMs) {
     const elapsed = Math.floor((now - tmStartedMs) / 1000);
     for (const b of tmBells) {
+      if (b === tmEndBellSec) continue;            // 終了ベル は ding 側で 鳴る
       if (elapsed >= b && !tmBellsFired.has(b)) {
         tmBellsFired.add(b);
-        playBoundaryTick();  // 学会タイマー ベル = ルーレット 境界通過音 と 同じ
+        playBoundaryTick();
       }
     }
   }

@@ -209,6 +209,7 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
+        <a href="#" id="home-cal-refresh" class="hint" style="margin-left:auto" title="cache を 捨てて GCal を 強制再取得">🔄 再取得</a>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>
@@ -599,21 +600,31 @@ export function writeCalHideAfterMin(min) {
   try { localStorage.setItem(CAL_HIDE_KEY, String(v)); } catch {}
 }
 
-async function renderCalendarEvents() {
+async function renderCalendarEvents({ force = false } = {}) {
   const card = document.getElementById('home-calendar-card');
   const root = document.getElementById('home-calendar');
   if (!card || !root) return;
   // v440 カード自体は 必ず 表示 (上位 try/catch で 想定外の throw でも 隠さない)。
   // 旧仕様だと 早期 throw で 「カレンダーが 消える」 ように 見える 不具合があった。
   card.hidden = false;
+  // v449 🔄 再取得 ボタン (1 回 だけ bind)。 cache を 捨てて etag なし で 再 fetch。
+  const refreshBtn = document.getElementById('home-cal-refresh');
+  if (refreshBtn && !refreshBtn.dataset.bound) {
+    refreshBtn.dataset.bound = '1';
+    refreshBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      try { localStorage.removeItem(CAL_CACHE_KEY); } catch {}
+      renderCalendarEvents({ force: true });
+    });
+  }
   let items = null;
   try {
-    const cache = readCalCache();
+    const cache = force ? null : readCalCache();
     const fresh = cache && (Date.now() - cache.timestamp < CAL_CACHE_TTL_MS);
     if (fresh) {
       items = cache.items;
     } else {
-      const etagsQuery = (cache && cache.etags && Object.keys(cache.etags).length)
+      const etagsQuery = (!force && cache && cache.etags && Object.keys(cache.etags).length)
         ? JSON.stringify(cache.etags) : undefined;
       // 滞在 TZ をサーバに伝え、 「今日」 をその TZ で計算してもらう。
       const params = { tz: localTzInfo().iana };
@@ -623,8 +634,20 @@ async function renderCalendarEvents() {
         writeCalCache(cache.items, cache.etags); // bump timestamp
         items = cache.items;
       } else {
-        items = (data && data.items) || [];
-        writeCalCache(items, (data && data.etags) || {});
+        const fresh_items = (data && data.items) || [];
+        // v449 「予定が 消える」 対策: cache に あった id が 新応答に 1 件も 居ない
+        // 場合 だけ かなり怪しい (= GCal 側 1 カレンダー の re-fetch 失敗 で 落ちた
+        // 可能性)。 件数が "0 になった" 時 限定で 旧 cache を 維持 (5 分 後 に
+        // もう一度 試す)。 本当に 全部 消えた (= GCal 側 で 削除) ケースは
+        // 🔄 再取得 を 押せば cache を 飛ばして 反映。
+        if (cache && Array.isArray(cache.items) && cache.items.length > 0 && fresh_items.length === 0) {
+          // keep old items, bump timestamp to avoid hammering
+          items = cache.items;
+          writeCalCache(items, cache.etags || {});
+        } else {
+          items = fresh_items;
+          writeCalCache(items, (data && data.etags) || {});
+        }
       }
     }
   } catch (e) {
