@@ -396,6 +396,14 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-spend-list" class="list"></div>
     </div>
 
+    <details class="card" id="gd-tr-card" hidden>
+      <summary style="font-weight:700; cursor:pointer">📚 翻訳ログ <span id="gd-tr-count" class="hint-sm"></span></summary>
+      <div class="row" style="gap:6px; margin:6px 0; flex-wrap:wrap">
+        <a id="gd-tr-add" class="btn primary" style="padding:2px 10px; font-size:12px">🌐 このグループで 新規 翻訳</a>
+      </div>
+      <div id="gd-tr-list" class="list"></div>
+    </details>
+
     <details class="card" id="gd-chat-card">
       <summary style="font-weight:700; cursor:pointer">💬 チャット <span id="gd-chat-status" class="hint-sm"></span></summary>
       <div id="gd-chat-list" style="max-height:280px; min-height:140px; overflow-y:auto; padding:6px; background:#f6f6f9; border-radius:8px; display:flex; flex-direction:column; gap:6px; margin-top:6px">
@@ -464,7 +472,36 @@ export async function renderGroupDetail({ params }) {
   await loadWari(id);
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
   document.getElementById('gd-flight-add')?.addEventListener('click', () => openFlightModal(id, {}));
+  // v426 グループ 翻訳ログ
+  document.getElementById('gd-tr-add')?.setAttribute('href', '#/translate?group_id=' + id);
+  await loadGroupTranslations(id);
   startChatLoop(id);
+}
+
+async function loadGroupTranslations(gid) {
+  const card = document.getElementById('gd-tr-card');
+  const root = document.getElementById('gd-tr-list');
+  const cnt  = document.getElementById('gd-tr-count');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/ai/translations', { group_id: gid });
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    if (cnt) cnt.textContent = '(' + items.length + ')';
+    root.innerHTML = items.map(t => {
+      const snippet = (t.result_text || '').slice(0, 120) + (t.result_text.length > 120 ? '…' : '');
+      return `
+        <div class="list-item" style="align-items:flex-start; gap:8px">
+          <img src="${escapeHtml(t.image_url)}" alt="" style="width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0">
+          <div class="grow" style="min-width:0">
+            <div class="meta" style="font-size:11px">${escapeHtml(t.user_name || '')} · ${escapeHtml(String(t.created_at || '').slice(5, 16).replace(' ', ' '))}</div>
+            ${t.hint ? `<div class="meta" style="font-size:11px">💭 ${escapeHtml(t.hint)}</div>` : ''}
+            <div style="font-size:12px; white-space:pre-wrap; line-height:1.4; margin-top:2px">${escapeHtml(snippet)}</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (_) { card.hidden = true; }
 }
 
 // グループの 「使う機能」 フラグに応じて 関連カードの表示 + データロードを制御。

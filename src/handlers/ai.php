@@ -18,6 +18,14 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_place_lookup($pdo, $cfg);
         return;
     }
+    if ($sub === 'translations' && $method === 'GET' && !isset($seg[2])) {
+        ai_translations_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'translations' && $method === 'DELETE' && isset($seg[2])) {
+        ai_translation_delete($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -227,13 +235,18 @@ SYS;
 // /uploads/ に 限定 (外部 URL は 弾く) → 漏洩リスク最小化。 サーバ側で 一旦 ファイル を
 // 読んで base64 data URL に変換して 送る (OpenAI から 外部 URL fetch を 要求しない)。
 function ai_translate_image(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
     $body = read_json_body();
     $imageUrl = trim((string)($body['image_url'] ?? ''));
     if ($imageUrl === '') throw new ApiException('bad_request', 'image_url required', 400);
     $hint = trim((string)($body['hint'] ?? ''));
     if (mb_strlen($hint) > 500) $hint = mb_substr($hint, 0, 500);
+    // v426 グループ 共有 (任意)。 指定時は その グループの メンバー である 必要あり。
+    $groupId = isset($body['group_id']) && (int)$body['group_id'] > 0 ? (int)$body['group_id'] : null;
+    if ($groupId !== null) {
+        group_assert_member($pdo, $groupId, (int)$u['id']);
+    }
 
     // 自前 アップロード パス に 限定。 base_url + /uploads/ で 始まる か、 同じ ホスト の
     // /uploads/ 絶対 path か。
@@ -338,7 +351,83 @@ SYS;
     if (!is_string($text) || $text === '') {
         throw new ApiException('upstream_error', 'OpenAI: empty response', 502);
     }
-    json_response(['ok' => true, 'text' => trim($text)]);
+    $text = trim($text);
+    // v426 DB に 保存。 失敗 (例: 容量不足) しても 結果は 返す。
+    $tid = null;
+    try {
+        $ins = $pdo->prepare("INSERT INTO translations (user_id, group_id, image_url, hint, result_text)
+            VALUES (?, ?, ?, ?, ?)");
+        $ins->execute([
+            (int)$u['id'], $groupId, $imageUrl,
+            $hint === '' ? null : $hint,
+            $text,
+        ]);
+        $tid = (int)$pdo->lastInsertId();
+    } catch (Throwable $_) { /* swallow */ }
+    json_response(['ok' => true, 'text' => $text, 'id' => $tid, 'group_id' => $groupId]);
+}
+
+// GET /api/ai/translations
+//   - mine=1 : 自分の (group_id IS NULL) ログ のみ
+//   - group_id=N: その グループ の ログ (メンバー 必須)
+//   - 引数なし: 自分の + 自分が 所属する グループの 全部 (id DESC 50 件)
+function ai_translations_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $mine    = !empty($_GET['mine']);
+    $groupId = isset($_GET['group_id']) && (int)$_GET['group_id'] > 0 ? (int)$_GET['group_id'] : null;
+    $limit   = max(1, min(200, (int)($_GET['limit'] ?? 50)));
+
+    if ($groupId !== null) {
+        group_assert_member($pdo, $groupId, $uid);
+        $sql = "SELECT t.*, u.display_name AS user_name, u.avatar_url AS user_avatar_url
+                  FROM translations t JOIN users u ON u.id = t.user_id
+                 WHERE t.group_id = ? ORDER BY t.id DESC LIMIT {$limit}";
+        $st = $pdo->prepare($sql);
+        $st->execute([$groupId]);
+    } elseif ($mine) {
+        $sql = "SELECT t.*, u.display_name AS user_name, u.avatar_url AS user_avatar_url
+                  FROM translations t JOIN users u ON u.id = t.user_id
+                 WHERE t.user_id = ? AND t.group_id IS NULL
+                 ORDER BY t.id DESC LIMIT {$limit}";
+        $st = $pdo->prepare($sql);
+        $st->execute([$uid]);
+    } else {
+        // 自分の (group_id NULL) + 自分が member の グループの 全部
+        $sql = "SELECT t.*, u.display_name AS user_name, u.avatar_url AS user_avatar_url,
+                       g.title AS group_title
+                  FROM translations t
+                  JOIN users u ON u.id = t.user_id
+             LEFT JOIN adhoc_groups g ON g.id = t.group_id
+                 WHERE (t.user_id = ? AND t.group_id IS NULL)
+                    OR (t.group_id IS NOT NULL
+                        AND EXISTS (SELECT 1 FROM adhoc_group_members m
+                                     WHERE m.group_id = t.group_id AND m.user_id = ?))
+                 ORDER BY t.id DESC LIMIT {$limit}";
+        $st = $pdo->prepare($sql);
+        $st->execute([$uid, $uid]);
+    }
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['id']       = (int)$r['id'];
+        $r['user_id']  = (int)$r['user_id'];
+        $r['group_id'] = $r['group_id'] !== null ? (int)$r['group_id'] : null;
+        $r['is_mine']  = (int)$r['user_id'] === $uid;
+    }
+    json_response(['items' => $rows]);
+}
+
+function ai_translation_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT user_id FROM translations WHERE id = ?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== (int)$u['id'] && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '作成者のみ削除可', 403);
+    }
+    $pdo->prepare("DELETE FROM translations WHERE id = ?")->execute([$id]);
+    json_response(['ok' => true]);
 }
 
 function ai_norm_date($v): ?string {
