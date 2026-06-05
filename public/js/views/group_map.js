@@ -186,15 +186,31 @@ export async function renderGroupMap({ params }) {
 
   const popupFor = (it, idx) => {
     const img = it.image_url
-      ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:100%; max-width:200px; max-height:140px; object-fit:cover; border-radius:6px; margin-bottom:4px">`
+      ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:100%; max-width:240px; max-height:170px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
       : '';
+    // v432 popup の 情報量 を 増やす。 時刻範囲 (start-end) / URL リンク / 追加者名 / メモ 300 字。
+    const time = (() => {
+      const s = (it.start_time || '').slice(0, 5);
+      const e = (it.end_time || '').slice(0, 5);
+      if (s && e) return `${s}〜${e}`;
+      if (s) return s;
+      return '';
+    })();
+    const url = it.url
+      ? `<div style="font-size:12px; margin-top:4px"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 リンクを開く</a></div>` : '';
+    const by = it.created_by_name
+      ? `<div style="font-size:11px; color:#888; margin-top:4px">追加: ${escapeHtml(it.created_by_name)}</div>` : '';
+    const memo = it.memo
+      ? `<div style="font-size:12px; color:#333; margin-top:6px; padding-top:6px; border-top:1px dashed #ddd; white-space:pre-wrap; line-height:1.4">${escapeHtml(it.memo.slice(0, 300))}${it.memo.length > 300 ? '…' : ''}</div>` : '';
     return `
-      <div style="min-width:180px; max-width:220px">
+      <div style="min-width:200px; max-width:260px">
         ${img}
-        <div style="font-weight:700; font-size:13px">${idx + 1}. ${escapeHtml(it.title)}</div>
-        <div style="font-size:12px; color:#666">${escapeHtml(it.day_date || '')} ${escapeHtml((it.start_time || '').slice(0, 5))}</div>
+        <div style="font-weight:700; font-size:14px">${idx + 1}. ${escapeHtml(it.title)}</div>
+        <div style="font-size:12px; color:#666; margin-top:2px">${escapeHtml(it.day_date || '')}${time ? ' · ' + escapeHtml(time) : ''}</div>
         ${it.location ? `<div style="font-size:12px; margin-top:4px">📍 ${escapeHtml(it.location)}</div>` : ''}
-        ${it.memo ? `<div style="font-size:11px; color:#555; margin-top:4px; white-space:pre-wrap">${escapeHtml(it.memo.slice(0, 120))}${it.memo.length > 120 ? '…' : ''}</div>` : ''}
+        ${url}
+        ${memo}
+        ${by}
       </div>`;
   };
 
