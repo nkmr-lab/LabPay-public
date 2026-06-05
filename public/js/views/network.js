@@ -50,6 +50,16 @@ export async function renderNetwork() {
         <button class="btn ${activeTab==='purchases'?'primary':''}" data-tab="purchases">売買</button>
         <button class="btn ${activeTab==='tasks'?'primary':''}" data-tab="tasks">タスク</button>
         <button class="btn ${activeTab==='combined'?'primary':''}" data-tab="combined">統合</button>
+        <button class="btn ${activeTab==='presence_cooc'?'primary':''}" data-tab="presence_cooc">在室共起</button>
+      </div>
+      <div id="net-presence-window-row" class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap" ${activeTab === 'presence_cooc' ? '' : 'hidden'}>
+        <select id="net-presence-window" style="font-size:13px; flex:1; min-width:120px">
+          <option value="7">直近 1 週間</option>
+          <option value="30">直近 1 ヶ月</option>
+          <option value="365">直近 1 年</option>
+          <option value="0">全期間</option>
+        </select>
+        <span class="muted" style="font-size:11px; align-self:center">同部屋 同 1 時間 で 在室 を 共起カウント</span>
       </div>
       <div style="display:flex; gap:6px; margin-top:6px; align-items:center; flex-wrap:nowrap">
         <select id="net-weight-mode" style="font-size:13px; flex:1; min-width:0" title="線の重み">
@@ -89,6 +99,14 @@ export async function renderNetwork() {
     localStorage.setItem(WEIGHT_KEY, ev.target.value);
     renderNetwork();
   });
+  const presenceSel = document.getElementById('net-presence-window');
+  if (presenceSel) {
+    presenceSel.value = String(Number(localStorage.getItem('labpay-net-cooc-days') || 7));
+    presenceSel.addEventListener('change', () => {
+      localStorage.setItem('labpay-net-cooc-days', presenceSel.value);
+      renderNetwork();
+    });
+  }
   document.getElementById('net-relayout').addEventListener('click', () => {
     if (!GRAPH) return;
     if (GRAPH.layoutMode === 'circle') circleLayout(GRAPH.nodes);
@@ -101,14 +119,18 @@ export async function renderNetwork() {
 
 async function loadAndRender(tab, layoutMode, weightMode) {
   const desc = document.getElementById('net-arrow-desc');
-  if (tab === 'tasks')          desc.textContent = '依頼者 → 引き受けた人';
-  else if (tab === 'combined')  desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
-  else                          desc.textContent = '売り手 → 買い手';
+  if (tab === 'tasks')               desc.textContent = '依頼者 → 引き受けた人';
+  else if (tab === 'combined')       desc.innerHTML = '<span style="color:#4a106d">紫=売り手→買い手</span> / <span style="color:#0e7c63">緑=依頼者→引き受けた人</span>';
+  else if (tab === 'presence_cooc')  desc.textContent = '同じ 1 時間 に 同じ 部屋 で 共起した人 (無向 / 矢印は便宜上)';
+  else                               desc.textContent = '売り手 → 買い手';
   try {
     // d3 is needed for the force simulation; circle mode could skip it but a
     // single load on first open is fine and keeps the code path simple.
     await loadD3();
-    const d = await get('/api/network/' + tab);
+    const url = tab === 'presence_cooc'
+      ? '/api/network/presence_cooc?days=' + Number(localStorage.getItem('labpay-net-cooc-days') || 7)
+      : '/api/network/' + tab;
+    const d = await get(url);
     const nodes = d.nodes || [];
     const edges = d.edges || [];
     if (!nodes.length) {

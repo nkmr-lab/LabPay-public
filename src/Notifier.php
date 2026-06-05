@@ -64,6 +64,22 @@ class Notifier {
         return $nid;
     }
 
+    // notifications 行だけ作る (Slack DM / メールを 送らない)。 督促のように
+    // 「LabPay の 通知タブ に だけ 出したい」 系の 用途で 使う。
+    public static function notifyInApp(
+        PDO $pdo,
+        int $userId,
+        string $type,
+        string $body,
+        ?string $refType = null,
+        ?int $refId = null
+    ): int {
+        $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id)
+            VALUES (?,?,?,?,?)');
+        $ins->execute([$userId, $type, mb_substr($body, 0, 255), $refType, $refId]);
+        return (int)$pdo->lastInsertId();
+    }
+
     private static function subjectFor(string $type): string {
         return match ($type) {
             'sale'              => '出品が売れました',

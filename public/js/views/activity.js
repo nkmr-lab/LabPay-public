@@ -41,6 +41,20 @@ export async function renderActivity() {
       <div id="presence-summary" class="hint">読み込み中…</div>
     </div>
 
+    <!-- ===== v397 1 週間 10 分単位 在室帯 ===== -->
+    <div class="card">
+      <div class="row center" style="margin-bottom:6px">
+        <h3 class="row-title">直近 1 週間 / 10 分単位</h3>
+        <select id="band-days" style="max-width:120px">
+          <option value="7">7 日</option>
+          <option value="14">14 日</option>
+          <option value="31">31 日</option>
+        </select>
+      </div>
+      <p class="card-subtitle">日 × 10 分。 色は 検出された 部屋。 hover で 時刻と部屋。</p>
+      <div id="presence-band"><div class="muted" style="font-size:12px">読み込み中…</div></div>
+    </div>
+
     <!-- ===== 下半分: ラボ活動マップ ===== -->
     <div class="card">
       <div class="row center">
@@ -65,8 +79,118 @@ export async function renderActivity() {
     localStorage.setItem('labpay-activity-days', e.target.value);
     loadHeatmap();
   });
+  // v397 1 週間 10 分 帯 (個人)
+  const bandDays = Number(localStorage.getItem('labpay-band-days') || 7);
+  const bandSel = document.getElementById('band-days');
+  if (bandSel) {
+    bandSel.value = String(bandDays);
+    bandSel.addEventListener('change', e => {
+      localStorage.setItem('labpay-band-days', e.target.value);
+      renderPresenceBand();
+    });
+  }
   await renderMyPresenceSummary();
+  await renderPresenceBand();
   await loadHeatmap();
+}
+
+// v397 個人の 「いつ どこにいたか」 10 分 帯。 days 行 × 144 セル/日。
+// 部屋ごとに 色付け (順番で palette を 割り当て)。
+const BAND_ROOM_PALETTE = [
+  ['#bfdbfe', '#3b82f6', '#1d4ed8'],   // blue
+  ['#fed7aa', '#f97316', '#c2410c'],   // orange
+  ['#bbf7d0', '#22c55e', '#15803d'],   // green
+  ['#fbcfe8', '#ec4899', '#a21caf'],   // pink
+  ['#e9d5ff', '#a855f7', '#6d28d9'],   // purple
+];
+function bandColor(roomIdx, minutes) {
+  const pal = BAND_ROOM_PALETTE[roomIdx % BAND_ROOM_PALETTE.length];
+  // 0..10 分 → 薄→濃
+  const t = Math.min(1, Math.max(0, minutes / 10));
+  if (t < 0.33) return pal[0];
+  if (t < 0.66) return pal[1];
+  return pal[2];
+}
+
+async function renderPresenceBand() {
+  const root = document.getElementById('presence-band');
+  if (!root) return;
+  const days = Number(document.getElementById('band-days')?.value || 7);
+  root.innerHTML = `<div class="muted" style="font-size:12px">読み込み中…</div>`;
+  try {
+    const d = await get('/api/me/presence_band', { days });
+    const rooms = d.rooms || [];
+    const cells = d.cells || [];
+    // 日付配列 (新→旧)
+    const startD = new Date(d.from + 'T00:00:00');
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const dt = new Date(startD); dt.setDate(dt.getDate() + i);
+      dates.push(dt.toISOString().slice(0, 10));
+    }
+    // 部屋 id → 色 idx
+    const roomIdx = new Map(rooms.map((r, i) => [r.id, i]));
+    const roomName = new Map(rooms.map(r => [r.id, r.display_name]));
+    // (date, slot) で 主の room を 決める (一番 分が 長い 部屋を 採用)
+    const byCell = new Map(); // "date|slot" => {roomId, minutes}
+    for (const c of cells) {
+      const k = `${c.date}|${c.slot}`;
+      const prev = byCell.get(k);
+      if (!prev || c.minutes > prev.minutes) byCell.set(k, { roomId: c.room_id, minutes: c.minutes });
+    }
+    // 24h x 6 = 144 slots
+    const N = 144;
+    const dayLabel = (s) => {
+      const dt = new Date(s + 'T00:00:00');
+      const wk = ['日','月','火','水','木','金','土'][dt.getDay()];
+      return `${(dt.getMonth()+1)}/${dt.getDate()}(${wk})`;
+    };
+    const hourMarks = Array.from({ length: 24 }, (_, h) =>
+      `<div style="width:18px; text-align:left; font-size:9px; color:var(--muted)">${h % 6 === 0 ? h : ''}</div>`
+    ).join('');
+    const rowsHtml = dates.map(date => {
+      const cellsHtml = Array.from({ length: N }, (_, slot) => {
+        const v = byCell.get(`${date}|${slot}`);
+        if (!v) return `<div class="pb-cell" style="background:#f1f1f4"></div>`;
+        const idx = roomIdx.get(v.roomId) ?? 0;
+        const bg = bandColor(idx, v.minutes);
+        const h = Math.floor(slot / 6);
+        const mm = (slot % 6) * 10;
+        const hh = String(h).padStart(2, '0');
+        const mmS = String(mm).padStart(2, '0');
+        const room = roomName.get(v.roomId) || v.roomId;
+        return `<div class="pb-cell" style="background:${bg}" title="${date} ${hh}:${mmS} · ${room} · ${v.minutes.toFixed(1)}分"></div>`;
+      }).join('');
+      return `<div class="pb-row">
+        <div class="pb-d-label">${dayLabel(date)}</div>
+        <div class="pb-cells">${cellsHtml}</div>
+      </div>`;
+    }).join('');
+    const roomLegend = rooms.map((r, i) => {
+      const pal = BAND_ROOM_PALETTE[i % BAND_ROOM_PALETTE.length];
+      return `<span style="display:inline-flex; align-items:center; gap:4px; font-size:11px">
+        <span style="display:inline-block; width:10px; height:10px; background:${pal[1]}; border-radius:2px"></span>
+        ${escapeHtml(r.display_name)}
+      </span>`;
+    }).join('');
+    root.innerHTML = `
+      <div style="overflow-x:auto">
+        <div class="pb-grid">
+          <div class="pb-row pb-head">
+            <div class="pb-d-label"></div>
+            <div class="pb-cells pb-cells-head" style="display:flex; gap:0">${hourMarks}</div>
+          </div>
+          ${rowsHtml}
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; align-items:center">
+        ${roomLegend}
+        <span class="muted" style="font-size:11px; margin-left:auto">薄 → 濃 = その 10 分 のうち 1～10 分</span>
+      </div>
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="muted" style="font-size:12px">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // 自分の今日の滞在 + 年度の草グリッド (旧 home.js の renderPresenceSummary

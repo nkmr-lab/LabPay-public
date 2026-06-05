@@ -88,7 +88,7 @@ async function onMacReminderSend() {
   const uids = [...document.querySelectorAll('.mac-rem-chk:checked')]
     .map(cb => Number(cb.dataset.uid));
   if (!uids.length) { toast('送信先が 0 人です'); return; }
-  if (!confirm(`${uids.length} 人に MAC 登録 督促 DM を送信します。 よろしいですか?`)) return;
+  if (!confirm(`${uids.length} 人に MAC 登録 督促 通知 (アプリ内) を送信します。 よろしいですか?`)) return;
   const btn = document.getElementById('mac-rem-send');
   btn.disabled = true;
   try {
@@ -247,8 +247,8 @@ export async function renderAdmin() {
       <h3 style="margin-top:0">MAC 未登録ユーザー督促</h3>
       <p class="hint">
         在室判定 (presence) 用の MAC アドレスを 1 件も登録していない人に、 まとめて
-        「登録してね」 と Slack DM (notification) を送ります。 デフォは MAC 未登録 全員、
-        チェックを外せば 個別 除外 もできます。
+        「登録してね」 と **アプリ内通知 (LabPay の 🔔 通知タブ)** を送ります (Slack DM
+        は 送りません)。 デフォは MAC 未登録 全員、 チェックを外せば 個別 除外 もできます。
       </p>
       <div id="mac-rem-list" class="muted" style="margin-top:6px">読み込み中…</div>
       <label class="field" style="margin-top:8px">

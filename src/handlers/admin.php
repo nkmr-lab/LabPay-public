@@ -356,10 +356,11 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
             } else {
                 $targets = array_keys($candidates);
             }
+            // v396 ユーザー指示で Slack DM は 不要 (App 内 通知のみ)。
             $count = 0;
             foreach ($targets as $uid) {
                 try {
-                    Notifier::notify($pdo, $cfg, $uid, 'admin_notice', $msg, 'mac_reminder', null);
+                    Notifier::notifyInApp($pdo, $uid, 'admin_notice', $msg, 'mac_reminder', null);
                     $count++;
                 } catch (Throwable $e) { /* continue */ }
             }

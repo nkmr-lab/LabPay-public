@@ -322,6 +322,15 @@ details.gd-sched-drop-over {
 
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
+/* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js */
+.pb-grid { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
+.pb-row  { display: flex; align-items: center; gap: 4px; }
+.pb-row.pb-head .pb-cells { padding-left: 0; }
+.pb-d-label { width: 56px; font-size: 11px; color: var(--muted); text-align: right; padding-right: 4px; flex-shrink: 0; }
+.pb-cells { display: grid; grid-template-columns: repeat(144, 3px); gap: 1px; flex-shrink: 0; }
+.pb-cells-head { grid-template-columns: repeat(24, 18px) !important; }
+.pb-cell { width: 3px; height: 14px; border-radius: 1px; }
+
 .avatar-xs   { width:18px; height:18px; }
 .avatar-sm   { width:24px; height:24px; }
 .avatar-md   { width:36px; height:36px; }

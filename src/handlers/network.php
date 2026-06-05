@@ -19,7 +19,100 @@ function route_network(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'purchases') { network_purchases($pdo); return; }
     if ($sub === 'tasks')     { network_tasks($pdo); return; }
     if ($sub === 'combined')  { network_combined($pdo); return; }
+    if ($sub === 'presence_cooc') { network_presence_cooc($pdo, $cfg); return; }
     json_error('not_found', "unknown network kind: $sub", 404);
+}
+
+// 在室共起ネットワーク: 同じ部屋 (room_id) で 同じ 1 時間スロット に 在室が
+// 検出された ユーザー同士に 共起カウントを +1。 ペア (a < b) で 集計し
+// 「件数」 として エッジ重み に。 days で 集計幅 切替 (7 / 30 / 365 / 0=全期間)。
+function network_presence_cooc(PDO $pdo, array $cfg): void {
+    $days = max(0, min(3650, (int)($_GET['days'] ?? 7)));
+    $params = [];
+    $where = "user_id IS NOT NULL";
+    if ($days > 0) {
+        $where .= " AND ended_at >= ?";
+        $params[] = (new DateTimeImmutable("-{$days} days"))->format('Y-m-d H:i:s');
+    }
+    $sqlClosed = "SELECT user_id, room_id, started_at AS s, ended_at AS e
+                    FROM presence_sessions WHERE $where";
+    $stC = $pdo->prepare($sqlClosed);
+    $stC->execute($params);
+
+    $whereO = "pd.user_id IS NOT NULL AND ps.session_start_at IS NOT NULL";
+    $paramsO = [];
+    if ($days > 0) {
+        $whereO .= " AND ps.last_seen_at >= ?";
+        $paramsO[] = (new DateTimeImmutable("-{$days} days"))->format('Y-m-d H:i:s');
+    }
+    $sqlOpen = "SELECT pd.user_id, ps.room_id,
+                       ps.session_start_at AS s, ps.last_seen_at AS e
+                  FROM presence_seen ps
+                  JOIN presence_devices pd ON pd.mac = ps.mac
+                 WHERE $whereO";
+    $stO = $pdo->prepare($sqlOpen);
+    $stO->execute($paramsO);
+
+    $sessions = array_merge($stC->fetchAll(PDO::FETCH_ASSOC), $stO->fetchAll(PDO::FETCH_ASSOC));
+
+    // (room_id, hour_bucket) => set<user_id>
+    $bucket = [];
+    foreach ($sessions as $r) {
+        $uid = (int)$r['user_id'];
+        if ($uid <= 0) continue;
+        $sTs = strtotime((string)$r['s']);
+        $eTs = strtotime((string)$r['e']);
+        if (!$sTs || !$eTs || $eTs <= $sTs) continue;
+        $room = (string)$r['room_id'];
+        $startHour = (int)(floor($sTs / 3600) * 3600);
+        for ($h = $startHour; $h < $eTs; $h += 3600) {
+            $bucket["$room|$h"][$uid] = true;
+        }
+    }
+
+    // ペア毎の カウント (無向、 a < b)
+    $edges = [];      // "a-b" => count
+    $userSet = [];
+    foreach ($bucket as $users) {
+        if (count($users) < 2) continue;
+        $uids = array_keys($users);
+        sort($uids, SORT_NUMERIC);
+        $n = count($uids);
+        for ($i = 0; $i < $n; $i++) {
+            $userSet[$uids[$i]] = true;
+            for ($j = $i + 1; $j < $n; $j++) {
+                $key = $uids[$i] . '-' . $uids[$j];
+                $edges[$key] = ($edges[$key] ?? 0) + 1;
+            }
+        }
+    }
+
+    if (!$userSet) { json_response(['nodes' => [], 'edges' => []]); return; }
+
+    // ノード解決
+    $uidList = array_keys($userSet);
+    $place = implode(',', array_fill(0, count($uidList), '?'));
+    $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
+    $stU->execute($uidList);
+    $nodes = array_map(fn($r) => [
+        'id'     => (int)$r['id'],
+        'name'   => $r['display_name'],
+        'avatar' => $r['avatar_url'] ?? null,
+    ], $stU->fetchAll(PDO::FETCH_ASSOC));
+
+    // edges を 配列形式に。 無向 ですが フロントの 既存 (count, total)
+    // インタフェース に そろえて total = count を 入れる。
+    $edgeOut = [];
+    foreach ($edges as $k => $cnt) {
+        [$a, $b] = explode('-', $k, 2);
+        $edgeOut[] = [
+            'from'  => (int)$a,
+            'to'    => (int)$b,
+            'count' => $cnt,
+            'total' => $cnt,
+        ];
+    }
+    json_response(['nodes' => $nodes, 'edges' => $edgeOut]);
 }
 
 // 売買 + タスクを 1 グラフに重ねる。エッジに type を付けてクライアントが

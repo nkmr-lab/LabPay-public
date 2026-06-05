@@ -663,6 +663,85 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // GET /api/me/presence_band?days=7
+    // 自分の 過去 N 日 (デフォ 7) の 10 分単位 在室記録。 cells は 「ある 10 分
+    // スロット で 何分 / どの部屋」 を sparse に 返す。 草グリッドが 1 日単位
+    // なのに対し、 これは 「いつ どこにいたか」 を 細かく見るための 帯グラフ用。
+    if ($sub === 'presence_band' && $method === 'GET') {
+        $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
+        $days = max(1, min(31, (int)($_GET['days'] ?? 7)));
+        $end   = new DateTimeImmutable('tomorrow midnight', $tz);
+        $start = $end->modify("-{$days} days");
+
+        // closed sessions + currently-open (presence_seen) を 統一して 列挙。
+        $sessions = [];
+        $stS = $pdo->prepare("
+            SELECT room_id, started_at AS s, ended_at AS e
+              FROM presence_sessions
+             WHERE user_id = ? AND ended_at >= ? AND started_at <= ?");
+        $stS->execute([$u['id'],
+            $start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')]);
+        foreach ($stS->fetchAll(PDO::FETCH_ASSOC) as $r) $sessions[] = $r;
+        $stO = $pdo->prepare("
+            SELECT ps.room_id,
+                   COALESCE(ps.session_start_at, ps.first_seen_at) AS s,
+                   ps.last_seen_at AS e
+              FROM presence_seen ps
+              JOIN presence_devices pd ON pd.mac = ps.mac
+             WHERE pd.user_id = ?
+               AND ps.last_seen_at >= ?
+               AND COALESCE(ps.session_start_at, ps.first_seen_at) <= ?");
+        $stO->execute([$u['id'],
+            $start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')]);
+        foreach ($stO->fetchAll(PDO::FETCH_ASSOC) as $r) $sessions[] = $r;
+
+        // 部屋情報
+        $stR = $pdo->query("SELECT id, display_name FROM rooms ORDER BY id");
+        $rooms = $stR->fetchAll(PDO::FETCH_ASSOC);
+
+        // 各 セッションを 10 分単位で 加算。 同じ slot に 複数部屋が 混じれば
+        // 各 (slot, room) ペアを 出す (フロントが 「主な部屋」 を選ぶ)。
+        $startTs = $start->getTimestamp();
+        $endTs   = $end->getTimestamp();
+        $cells = []; // "YYYY-MM-DD|slot|room_id" => minutes_in_slot
+        foreach ($sessions as $sess) {
+            $sTs = max(strtotime((string)$sess['s']), $startTs);
+            $eTs = min(strtotime((string)$sess['e']), $endTs);
+            if ($eTs <= $sTs) continue;
+            $rid = (string)$sess['room_id'];
+            // 10 分 (600 秒) 単位で 走査
+            $bucketStart = (int)floor($sTs / 600) * 600;
+            for ($t = $bucketStart; $t < $eTs; $t += 600) {
+                $slotS = $t;
+                $slotE = $t + 600;
+                $overlap = (min($slotE, $eTs) - max($slotS, $sTs)) / 60.0;
+                if ($overlap <= 0) continue;
+                $dateStr = date('Y-m-d', $slotS);
+                $slotIdx = (int)((date('H', $slotS) * 60 + date('i', $slotS)) / 10);
+                $key = "$dateStr|$slotIdx|$rid";
+                $cells[$key] = ($cells[$key] ?? 0) + $overlap;
+            }
+        }
+        $out = [];
+        foreach ($cells as $key => $min) {
+            [$date, $slot, $rid] = explode('|', $key, 3);
+            $out[] = [
+                'date'    => $date,
+                'slot'    => (int)$slot,
+                'room_id' => $rid,
+                'minutes' => round($min, 1),
+            ];
+        }
+        json_response([
+            'from'  => $start->format('Y-m-d'),
+            'to'    => $end->modify('-1 day')->format('Y-m-d'),
+            'days'  => $days,
+            'rooms' => $rooms,
+            'cells' => $out,
+        ]);
+        return;
+    }
+
     if ($sub === 'listings' && $method === 'GET') {
         require_exposure($cfg, 'listings_write');
         $status = $_GET['status'] ?? '';
