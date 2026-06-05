@@ -204,6 +204,11 @@ let tmSyncTimer = null;
 // resync で 復活して しまうので 必要。 リピート で サーバが 次サイクル に
 // 切替えたら tmLastCycleIdx 変化で 再 false 化 (下の loadTimerDetail で 処理)。
 let tmEndFiredOnce = false;
+// v411 表示モード: 'remain' (カウントダウン / 超過は +N) or 'elapsed' (カウントアップ)
+let tmDisplayMode = (() => {
+  try { return localStorage.getItem('labpay-tm-display') || 'remain'; }
+  catch (_) { return 'remain'; }
+})();
 let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server からの遅延補正)
 let tmEndsMs = 0;
 let tmStartedMs = 0;
@@ -231,7 +236,9 @@ export async function renderTimerDetail({ params }) {
       <div id="tmd-head"><div class="muted">読み込み中…</div></div>
     </div>
     <div class="card" style="text-align:center">
-      <div id="tmd-count" style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px">--:--</div>
+      <div id="tmd-count" title="タップで カウントダウン ⇄ カウントアップ"
+           style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px; cursor:pointer; user-select:none">--:--</div>
+      <div id="tmd-mode" class="hint-sm" style="margin-top:-4px; margin-bottom:4px">残り時間</div>
       <div id="tmd-elapsed" class="hint-sm">経過 -- / 合計 --</div>
       <div style="background:#eee; height:10px; border-radius:5px; overflow:hidden; margin-top:14px">
         <div id="tmd-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.4s linear"></div>
@@ -254,6 +261,12 @@ export async function renderTimerDetail({ params }) {
   // 1 秒刻みで表示更新 (offset とサーバの終了時刻から計算)
   tmTickTimer = setInterval(() => tickTimer(), 1000);
   tickTimer();
+  // v411 タップで 残り ⇄ 経過 切替
+  document.getElementById('tmd-count')?.addEventListener('click', () => {
+    tmDisplayMode = tmDisplayMode === 'remain' ? 'elapsed' : 'remain';
+    try { localStorage.setItem('labpay-tm-display', tmDisplayMode); } catch (_) {}
+    tickTimer();
+  });
 }
 
 async function loadTimerDetail(id, { isResync = false } = {}) {
@@ -356,17 +369,25 @@ function tickTimer() {
   }
   // v408 超過 表示。 remainingSec は 0 で 止めず、 マイナスに 突入させて
   // 「+MM:SS 超過」 を 出す。 elapsed も そのまま 加算 (合計超え可)。
+  // v411 tmDisplayMode で カウントダウン (残り) ⇄ カウントアップ (経過) を 切替。
   const signedRemain = Math.ceil((tmEndsMs - now) / 1000);
   const elapsedSec   = Math.max(0, Math.floor((now - tmStartedMs) / 1000));
   const isOver = signedRemain < 0;
-  if (isOver) {
+  const modeEl = document.getElementById('tmd-mode');
+  if (tmDisplayMode === 'elapsed') {
+    countEl.textContent = fmtDuration(elapsedSec);
+    countEl.style.color = isOver ? '#c62828' : '';
+    if (modeEl) modeEl.textContent = '↑ 経過時間 (タップで 残り時間)';
+  } else if (isOver) {
     countEl.textContent = '+' + fmtDuration(-signedRemain) + ' 超過';
     countEl.style.color = '#c62828';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   } else {
     countEl.textContent = fmtDuration(signedRemain);
     countEl.style.color = signedRemain === 0 ? 'var(--primary)'
                         : signedRemain < 10 ? '#c62828'
                         : '';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   }
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
   const pct = tmDurationSec ? Math.min(100, (elapsedSec / tmDurationSec) * 100) : 0;
