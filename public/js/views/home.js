@@ -860,26 +860,34 @@ async function renderFreshInvitations() {
       return;
     }
     root.innerHTML = open.slice(0, 5).map(i => {
-      const when  = i.starts_at
-        ? `🕒 ${escapeHtml(Number(i.starts_at_has_time) === 0 ? fmtDate(i.starts_at) : fmtDateTime(i.starts_at))} ・`
+      // v391 ホーム募集リスト: 写真 + タイトル + 🕒実施日時 + ⏰締切 + 📍場所 + 発起人｜参加者
+      const when = i.starts_at
+        ? `🕒 ${escapeHtml(Number(i.starts_at_has_time) === 0 ? fmtDate(i.starts_at) : fmtDateTime(i.starts_at))}`
         : '';
-      const where = i.location  ? `📍 ${escapeHtml(i.location)} ・` : '';
-      const cap   = i.capacity  ? `${i.join_count}/${i.capacity}人` : `${i.join_count}人`;
+      const deadline = i.signup_closes_at ? `⏰ 締切 ${escapeHtml(fmtDateTime(i.signup_closes_at))}` : '';
+      const where = i.location ? `📍 ${escapeHtml(i.location)}` : '';
+      const meta = [when, deadline, where].filter(Boolean).join(' ・ ');
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       const title = `${escapeHtml(i.title)}${joined}`;
-      const meta  = `${when}${where}${cap} · ${escapeHtml(i.creator_name)}`;
-      // v381 共有 helper で 参加者 chip 列を 描画。
-      const joinsRow = participantChipRow(i.joins || []);
-      const href  = '#/invitations/' + i.id;
+      // 発起人アイコン | 参加者アイコン (発起人除く)
+      const creatorChip = `<span title="${escapeHtml(i.creator_name)} (発起人)" style="display:inline-flex">${avatarHtml(i.creator_name, i.creator_avatar_url, 'xs')}</span>`;
+      const others = (Array.isArray(i.joins) ? i.joins : [])
+        .filter(j => Number(j.id) !== Number(i.creator_user_id));
+      const othersHtml = others.slice(0, 7).map(j =>
+        `<span title="${escapeHtml(j.display_name)}" style="display:inline-flex">${avatarHtml(j.display_name, j.avatar_url, 'xs')}</span>`
+      ).join('');
+      const moreNum = others.length > 7 ? `<span class="muted" style="font-size:11px">+${others.length - 7}</span>` : '';
+      const sep = others.length ? `<span class="muted" style="font-size:14px; line-height:1; padding:0 2px">｜</span>` : '';
+      const peopleRow = `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">${creatorChip}${sep}${othersHtml}${moreNum}</div>`;
+      const href = '#/invitations/' + i.id;
       if (i.image_url) {
-        // 募集も 「ヒーロー風」 (groups と同じ)。
         return `
           <a class="list-item with-cover hero" href="${href}">
             <div class="cover-img" style="background-image:url('${escapeHtml(i.image_url)}')"></div>
             <div class="grow">
               <div class="bold">${title}</div>
               <div class="meta">${meta}</div>
-              ${joinsRow}
+              ${peopleRow}
             </div>
           </a>`;
       }
@@ -888,7 +896,7 @@ async function renderFreshInvitations() {
           <div class="grow">
             <div class="bold">${title}</div>
             <div class="meta">${meta}</div>
-            ${joinsRow}
+            ${peopleRow}
           </div>
           <div class="hint">→</div>
         </a>`;
