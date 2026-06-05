@@ -67,7 +67,8 @@ export function setHomeActionVisible(id, v) {
 
 export const HOME_CARDS = [
   // v406 時間制限ありの 「いま 動いている / 対応待ち」 は 残高 直下に。
-  { id: 'my-timers',      title: '⏱ 進行中 / 時間制限あり (タイマー・SW・点呼)' },
+  // v443 表記簡略化 「進行中」。 並び順は 設定 → ホーム カード並び で 変更可能。
+  { id: 'my-timers',      title: '⏱ 進行中' },
   { id: 'presence',       title: '今ラボにいる人' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
   { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
@@ -148,7 +149,7 @@ export async function renderHome() {
     <div id="home-cards-region">
     <div class="card" id="home-mytm-card" data-card-id="my-timers" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">⏱ 進行中 / 時間制限あり</h2>
+        <h2 class="row-title">⏱ 進行中</h2>
         <a href="#/timers" class="hint">タイマー →</a>
       </div>
       <div id="home-mytm" class="list"><div class="muted">読み込み中…</div></div>
