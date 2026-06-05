@@ -1891,22 +1891,11 @@ async function loadSchedule(gid) {
       const savedSrc = dragSrcId, savedSrcDay = dragSrcDay;
       dragSrcId = null; dragSrcDay = null;
       try {
-        if (targetDay === savedSrcDay) {
-          // 同日: 既存 /move で chain swap (start_time 含めて 入れ替わる挙動を維持)
-          const editable = editableSameDay(savedSrcDay);
-          const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === savedSrc);
-          const dstIdx = editable.findIndex(e => Number(e.dataset.schedItem) === tid);
-          if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return;
-          const steps = Math.abs(dstIdx - srcIdx);
-          const dir = srcIdx < dstIdx ? 'down' : 'up';
-          for (let i = 0; i < steps; i++) {
-            const r = await patch(`/api/groups/${gid}/schedule/${savedSrc}/move`, { dir });
-            if (!r.moved) break;
-          }
-        } else {
-          // 別日: /relocate で 日 + sort_order を更新 (start_time は保持)
-          await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { before_id: tid });
-        }
+        // v399 同日 DnD も /relocate (sort_order だけ 更新 / start_time は 保持)
+        // に 統一。 旧 chain swap は ↑↓ ボタンの 単発 swap (時刻も入れ替わる) を
+        // N 回繰り返して 多日間 移動を 装っており、 N>=2 で 中間アイテムの 時刻が
+        // 連鎖 して ズレる 問題があった。 ↑↓ 単発 swap は /move 経由 で 残す。
+        await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { before_id: tid });
         await loadSchedule(gid);
       } catch (e) {
         toast('並び替え失敗: ' + e.message);
@@ -2200,7 +2189,11 @@ function openSchedRangeModal(gid) {
 // 並べる。 複数選択可。 同じ link_pair_id を持つ予定 (= 既に同じグループに
 // 居る) はプリセットでチェック済み。
 function renderSchedPairPickerHtml(it) {
-  const others = lastSchedItems.filter(x => Number(x.id) !== Number(it.id));
+  // v399 BUGFIX: day_date=null (ストック item) を 「連結対象」 に出すと
+  // o.day_date.slice(5) が TypeError → モーダルが壊れて 「2 個目以降が 追加できない」
+  // 症状に。 ストック同士を 連結帯で繋ぐ用途は 無いので 候補から 除外。
+  const others = lastSchedItems.filter(x =>
+    Number(x.id) !== Number(it.id) && x.day_date !== null);
   if (!others.length) return '';
   const linkedIds = it.link_pair_id
     ? new Set(lastSchedItems
