@@ -243,11 +243,15 @@ export async function renderGroupMap({ params }) {
     const boundsOnly = document.getElementById('gm-bounds-only')?.checked;
     const visIdxs = items.map((_, i) => i);  // 全 index (絶対番号 = 元の 並び順)
     const filteredIdxs = boundsOnly
-      ? visIdxs.filter(i => {
-          const it = items[i];
-          try { return map.getBounds().contains([Number(it.lat), Number(it.lng)]); }
-          catch { return true; }
-        })
+      ? (() => {
+          let b;
+          try { b = map.getBounds(); } catch { return visIdxs; }
+          return visIdxs.filter(i => {
+            const it = items[i];
+            const ll = L.latLng(Number(it.lat), Number(it.lng));
+            return b.contains(ll);
+          });
+        })()
       : visIdxs;
     const info = document.getElementById('gm-info');
     if (info) {
@@ -328,9 +332,9 @@ export async function renderGroupMap({ params }) {
   };
 
   // 地図の 移動 / ズーム で 「表示中エリアのみ」 ON の 時 list を 再描画。
-  map.on('moveend zoomend', () => {
-    if (document.getElementById('gm-bounds-only')?.checked) renderList();
-  });
+  // v435 toggle 状態 に かかわらず moveend/zoomend で 必ず renderList (内部で
+  // checkbox を 読んで 分岐するので 二重判定 不要 / 早期 return を 避ける)。
+  map.on('moveend zoomend', () => renderList());
   document.getElementById('gm-bounds-only')?.addEventListener('change', renderList);
 
   document.getElementById('gm-line-toggle').addEventListener('change', (e) => {
