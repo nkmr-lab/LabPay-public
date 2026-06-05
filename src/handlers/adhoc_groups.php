@@ -57,6 +57,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'chats'    && $method === 'POST' && !isset($seg[3])) { group_chats_post($pdo, $cfg, $id); return; }
             if ($next === 'chats'    && isset($seg[3]) && $method === 'DELETE') { group_chats_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
+            if ($next === 'day_memos' && $method === 'PATCH' && isset($seg[3])) { group_day_memo_upsert($pdo, $cfg, $id, (string)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'POST')             { group_schedule_add($pdo, $cfg, $id);    return; }
             // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
             // より具体的な move ルートを先に判定する。
@@ -1663,11 +1664,41 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
         foreach ($items as &$it) $it['attachment_count'] = $counts[(int)$it['id']] ?? 0;
         unset($it);
     }
+    // v403 1 日毎の メモ も 同時に 返す ({date => memo} の dict)。
+    $stM = $pdo->prepare("SELECT day_date, memo FROM adhoc_group_day_memos WHERE group_id=?");
+    $stM->execute([$id]);
+    $dayMemos = [];
+    foreach ($stM->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $dayMemos[(string)$r['day_date']] = $r['memo'];
+    }
     json_response([
         'start_date' => $g['schedule_start_date'],
         'end_date'   => $g['schedule_end_date'],
         'items'      => $items,
+        'day_memos'  => $dayMemos,
     ]);
+}
+
+// v403 1 日メモ upsert。 空文字 / null で 行を 消す。
+function group_day_memo_upsert(PDO $pdo, array $cfg, int $gid, string $date): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        throw new ApiException('bad_request', 'date は YYYY-MM-DD', 400);
+    }
+    $body = read_json_body();
+    $memo = isset($body['memo']) ? (string)$body['memo'] : '';
+    $memo = mb_substr(trim($memo), 0, 5000);
+    if ($memo === '') {
+        $pdo->prepare("DELETE FROM adhoc_group_day_memos WHERE group_id=? AND day_date=?")
+            ->execute([$gid, $date]);
+    } else {
+        $pdo->prepare("INSERT INTO adhoc_group_day_memos (group_id, day_date, memo, updated_by_user_id)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE memo = VALUES(memo), updated_by_user_id = VALUES(updated_by_user_id), updated_at = NOW()")
+            ->execute([$gid, $date, $memo, (int)$u['id']]);
+    }
+    json_response(['ok' => true]);
 }
 
 // ----- 予定アイテム添付ファイル -----

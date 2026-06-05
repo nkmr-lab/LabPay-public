@@ -1779,28 +1779,47 @@ async function loadSchedule(gid) {
     schedPairLastIds.add(Number(last.it.id)   + ':' + last.date);
   }
   const dayLabels = ['日','月','火','水','木','金','土'];
-  // ストック (日付未定) 領域。 行きたい場所候補をここに溜めて、 編集モードで
-  // 「日付を割り当てて投入」 する。
+  // v403 ストック (日付未定) は タイル 並び。 件数が多くなりがちな 「行きたい場所
+  // 候補」 を 圧縮して 一覧 しやすく。 1 枚あたり 約 140px、 grid auto-fill。
   const stockCard = stockItems.length || schedEditMode ? `
-    <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0">
+    <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0; border-left:4px solid #fcd34d">
       <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
-      <div class="schedule-items" style="margin-top:6px">
-        ${stockItems.map(it => renderSchedItem({ ...it, _occ: 'single' })).join('') || '<div class="empty" style="padding:6px">候補なし。 編集モードで 「＋ 候補を追加」。</div>'}
+      <div class="sched-stock-grid" data-day="stock"
+           style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px; margin-top:6px">
+        ${stockItems.map(it => renderSchedStockTile({ ...it, _occ: 'single' })).join('')
+          || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。 編集モードで 「＋ 候補を追加」。</div>'}
       </div>
       ${schedEditMode ? `<button class="btn primary" id="gd-sched-add-stock" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 候補を追加</button>` : ''}
     </details>` : '';
+
+  // v403 1 日 ごとに 背景色 を 周期で振る。 日数 が 多くても 視覚的に 区切れる。
+  const DAY_BG_PALETTE = ['#f0f9ff', '#fdf4ff', '#f0fdf4', '#fef3c7', '#fce4ec', '#f1f5f9', '#fff7ed'];
+  const DAY_BORDER_PALETTE = ['#7dd3fc', '#e879f9', '#86efac', '#fcd34d', '#f9a8d4', '#94a3b8', '#fdba74'];
+  const dayMemos = d.day_memos || {};
 
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
     ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ハンドルをドラッグで 並び替え (日をまたいでも OK / 行全体タップは編集) · 🔒 は 多日またぎの中間/終了行で 動かせません</div>' : ''}
     ${stockCard}
-    ${days.map(date => {
+    ${days.map((date, idx) => {
       const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
       const md  = date.slice(5).replace('-', '/');
       const items = byDay[date] || [];
+      const bg = DAY_BG_PALETTE[idx % DAY_BG_PALETTE.length];
+      const bd = DAY_BORDER_PALETTE[idx % DAY_BORDER_PALETTE.length];
+      const memo = dayMemos[date] || '';
+      // 日 メモ 表示部 (常に show、 タップで 編集に 切替)
+      const memoBlock = `
+        <div class="gd-day-memo" data-memo-date="${date}" style="margin:6px 0; padding:6px 8px; background:rgba(255,255,255,0.7); border-radius:6px; border:1px dashed ${bd}">
+          ${memo
+            ? `<div class="gd-day-memo-view" style="white-space:pre-wrap; font-size:13px; cursor:pointer">${escapeHtml(memo)}</div>`
+            : `<div class="gd-day-memo-view muted" style="font-size:12px; cursor:pointer">📝 この日のメモを 追加…</div>`}
+        </div>`;
       return `
-        <details class="card collapsible-sub" data-day="${date}" open style="margin:6px 0; padding:8px 10px">
+        <details class="card collapsible-sub" data-day="${date}" open
+                 style="margin:6px 0; padding:8px 10px; background:${bg}; border-left:4px solid ${bd}">
           <summary style="font-weight:700">${md} (${dow}) <span class="hint-sm">— ${items.length} 件</span></summary>
+          ${memoBlock}
           <div class="schedule-items" style="margin-top:6px">
             ${items.map(it => renderSchedItem(it)).join('') || '<div class="empty" style="padding:6px">アイテム無し</div>'}
           </div>
@@ -1808,6 +1827,32 @@ async function loadSchedule(gid) {
         </details>`;
     }).join('')}
   `;
+  // v403 日メモ: タップ → textarea で 編集 → blur or ✓ で 保存
+  body.querySelectorAll('.gd-day-memo-view').forEach(el => {
+    el.addEventListener('click', () => {
+      const wrap = el.closest('.gd-day-memo');
+      const date = wrap.dataset.memoDate;
+      const current = (dayMemos[date] || '');
+      wrap.innerHTML = `
+        <textarea class="gd-day-memo-edit" maxlength="5000" rows="3"
+          style="width:100%; box-sizing:border-box; font-size:13px; padding:6px; border-radius:4px; border:1px solid #ccc">${escapeHtml(current)}</textarea>
+        <div class="row" style="gap:4px; margin-top:4px; justify-content:flex-end">
+          <button class="btn gd-day-memo-cancel" style="padding:2px 8px; font-size:11px">キャンセル</button>
+          <button class="btn primary gd-day-memo-save" style="padding:2px 8px; font-size:11px">保存</button>
+        </div>`;
+      const ta = wrap.querySelector('.gd-day-memo-edit');
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      wrap.querySelector('.gd-day-memo-cancel').addEventListener('click', () => loadSchedule(gid));
+      wrap.querySelector('.gd-day-memo-save').addEventListener('click', async () => {
+        const newMemo = ta.value;
+        try {
+          await patch(`/api/groups/${gid}/schedule/day_memos/${date}`, { memo: newMemo });
+          await loadSchedule(gid);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  });
   // 「+ 追加」 ボタン
   body.querySelectorAll('[data-add-sched-day]').forEach(b => {
     b.addEventListener('click', () => openSchedItemModal(gid, { day_date: b.dataset.addSchedDay }));
@@ -1941,7 +1986,10 @@ async function loadSchedule(gid) {
       const savedSrc = dragSrcId;
       dragSrcId = null; dragSrcDay = null;
       try {
-        await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, { day_date: targetDay });
+        // v403 ストック領域 (data-day="stock") にも 投げ込める。 backend は
+        // 「day_date が 空文字 or null で 明示的に key 付き」 を ストック行き シグナルに 扱う。
+        const payload = targetDay === 'stock' ? { day_date: '' } : { day_date: targetDay };
+        await patch(`/api/groups/${gid}/schedule/${savedSrc}/relocate`, payload);
         await loadSchedule(gid);
       } catch (e) {
         toast('並び替え失敗: ' + e.message);
@@ -2005,6 +2053,36 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   const numPositions = Math.max(1, Math.floor((rangeEnd - rangeStart) / step) + 1);
   const rightPx = rangeStart + (slot % numPositions) * step;
   return { color, capColor, rightPx };
+}
+
+// v403 ストック専用 タイル レンダラ。 候補が 多くても 一覧で 見えるよう コンパクト。
+// 画像 (or 絵文字) + タイトル を 縦に積む。 編集モードなら ⋮⋮ ハンドル + × 付き。
+function renderSchedStockTile(it) {
+  const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
+  const hasImage = !!it.image_url;
+  const cover = hasImage
+    ? `<div style="width:100%; aspect-ratio:4/3; background:#eee center/cover no-repeat url('${escapeHtml(it.image_url)}'); border-radius:6px"></div>`
+    : `<div style="width:100%; aspect-ratio:4/3; background:linear-gradient(135deg, #fef3c7, #fde68a); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:28px">${k.icon}</div>`;
+  const canEdit = schedEditMode;  // ストックは すべて canEdit (mid/end は ストックには 来ない)
+  const dragHandle = canEdit ? `
+    <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="stock"
+          aria-label="ドラッグして 日付に 移動" title="ドラッグで 日に 投入"
+          style="position:absolute; top:4px; left:4px; z-index:2; background:rgba(255,255,255,0.9); color:#666; font-size:13px; cursor:grab; user-select:none; padding:1px 4px; border-radius:4px; touch-action:none">⋮⋮</span>` : '';
+  const rmBtn = canEdit ? `
+    <button data-sched-rm="${it.id}" class="btn"
+            style="position:absolute; top:4px; right:4px; z-index:2; padding:0 5px; font-size:11px; background:rgba(255,255,255,0.9); color:var(--muted); border-radius:4px">×</button>` : '';
+  const dndAttrs = canEdit
+    ? `data-sched-canedit="1" data-sched-day="stock"`
+    : '';
+  return `
+    <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
+         style="position:relative; display:flex; flex-direction:column; gap:4px; padding:4px; cursor:pointer; background:#fff; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.06); min-height:0">
+      ${cover}
+      ${dragHandle}
+      ${rmBtn}
+      <div class="bold" style="font-size:12px; line-height:1.2; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; padding:0 2px">${escapeHtml(it.title)}</div>
+      ${it.memo ? `<div class="muted" style="font-size:11px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 2px">${escapeHtml(it.memo)}</div>` : ''}
+    </div>`;
 }
 
 function renderSchedItem(it) {
