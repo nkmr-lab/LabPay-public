@@ -2,7 +2,9 @@
 //   * 出品: タイトル + 説明 + 画像 + 最低価格 + 締切時刻
 //   * 入札: 現在の最高 + 1 以上
 //   * 締切: 自動で settle (lazy 集計、 lazy notify)
-//   * 落札後の 円 移動は無し。 落札者/出品者 同士で連絡先を見せて 本人同士 やり取り
+//   * 落札後の 円 移動は無し (LabPay pt は動かない)。 ラボ内 既知 前提で
+//     連絡先は出さず、 出品者が 「請求を飛ばす」 ボタンで money_requests
+//     を生成 → 落札者に通知 → 落札者は 普通の 請求 UI で 支払い済 をチェック。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -26,7 +28,7 @@ export async function renderAuctions() {
         <a class="btn primary" href="#/auctions/new">＋ 出品</a>
       </div>
       <p class="card-subtitle" style="margin:6px 0 0">
-        ラボ内 オークション。 最高額入札者が落札。 落札後は連絡先を交換して 本人同士でやり取り。
+        ラボ内 オークション。 最高額入札者が落札。 落札後は 出品者の詳細画面から 「請求を飛ばす」 ボタンで 集金 (連絡先は 既知前提で 表示しません)。
       </p>
     </div>
     <div id="au-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -46,7 +48,10 @@ export async function renderAuctions() {
       const isMine = Number(a.seller_user_id) === meId;
       const wonBy = a.winner_user_id ? `落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)` : '';
       const wonByMe = Number(a.winner_user_id) === meId;
-      const tag = cancelled
+      // v392: 旧コードは const tag = ... tag(...) で TDZ エラー (timers.js と
+      // 同じ パターン)。 import の tag() ヘルパを呼べるよう ローカル名は
+      // statusTag に rename。
+      const statusTag = cancelled
         ? tag('muted', '取消')
         : settled
           ? (a.winner_user_id
@@ -66,7 +71,7 @@ export async function renderAuctions() {
           ${img}
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.title)}</div>
-            <div class="meta">${tag} · ${escapeHtml(topLine)}${myBidLine}${isMine ? ' <span class="muted">(自分の出品)</span>' : ''}</div>
+            <div class="meta">${statusTag} · ${escapeHtml(topLine)}${myBidLine}${isMine ? ' <span class="muted">(自分の出品)</span>' : ''}</div>
             <div class="meta">出品 ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtDateTime(a.closes_at))}</div>
           </div>
         </a>`;
@@ -180,7 +185,10 @@ export async function renderAuctionDetail({ params }) {
     const active = !a.settled_at && !a.cancelled_at;
     const meId = Number(state.me?.id);
     const isMine = Number(a.seller_user_id) === meId;
-    const tag = a.cancelled_at
+    // v392: TDZ 回避 (旧名 tag を statusTag に rename。 import 済の tag() を
+    // 同名 const がシャドウして 「Cannot access 'tag' before initialization」 を
+    // 起こしていた)
+    const statusTag = a.cancelled_at
       ? tag('muted', '取消')
       : a.settled_at
         ? (a.winner_user_id
@@ -189,24 +197,30 @@ export async function renderAuctionDetail({ params }) {
         : tag('ok', escapeHtml(remainingText(a.closes_at, false, false)));
     const img = a.image_url
       ? `<img src="${escapeHtml(a.image_url)}" alt="" style="display:block; max-width:100%; max-height:240px; border-radius:8px; object-fit:contain; margin:0 auto 8px">` : '';
-    // 連絡先 (出品者 ↔ 落札者 のみ)
-    let contactBlock = '';
+    // v392: 連絡先表示は廃止 (ラボ内 既知前提)。 代わりに 落札後に
+    //   - 出品者には 「💸 請求を飛ばす」 ボタン (落札者宛 money_request を生成)
+    //   - 落札者には 「請求が届きしだい [請求] から 支払済 をマーク」 ヒント
+    // を出す。
+    let chargeBlock = '';
     if (a.settled_at && a.winner_user_id) {
-      const sl = a.winner_slack ? `Slack: <span class="mono">${escapeHtml(a.winner_slack)}</span>` : '';
-      const ph = a.winner_phone ? `📞 <a href="tel:${escapeHtml(a.winner_phone)}">${escapeHtml(a.winner_phone)}</a>` : '';
-      const sl2 = a.seller_slack ? `Slack: <span class="mono">${escapeHtml(a.seller_slack)}</span>` : '';
-      const ph2 = a.seller_phone ? `📞 <a href="tel:${escapeHtml(a.seller_phone)}">${escapeHtml(a.seller_phone)}</a>` : '';
-      if (d.is_seller && (sl || ph)) {
-        contactBlock = `<div class="card" style="background:#fff8e6; margin-top:8px"><h4 style="margin:0">落札者 連絡先</h4><div>${escapeHtml(a.winner_name)} ${[sl, ph].filter(Boolean).join(' / ')}</div></div>`;
-      } else if (d.is_winner && (sl2 || ph2)) {
-        contactBlock = `<div class="card" style="background:#fff8e6; margin-top:8px"><h4 style="margin:0">出品者 連絡先</h4><div>${escapeHtml(a.seller_name)} ${[sl2, ph2].filter(Boolean).join(' / ')}</div></div>`;
-      } else if (d.is_seller || d.is_winner) {
-        contactBlock = `<div class="hint" style="margin-top:6px">相手の連絡先 (Slack / 電話) は 「設定」 → プロフィール 欄に登録があれば自動表示されます。</div>`;
+      if (d.is_seller) {
+        chargeBlock = `
+          <div class="card" style="background:#fff8e6; margin-top:8px">
+            <h4 style="margin:0 0 4px">💸 落札者に請求を飛ばす</h4>
+            <div class="meta">${escapeHtml(a.winner_name)} さん宛に ¥${Number(a.winning_bid).toLocaleString()} 円の請求を作成 + 通知します。</div>
+            <button id="aud-charge" class="primary" style="margin-top:6px">💸 ${escapeHtml(a.winner_name)} に ¥${Number(a.winning_bid).toLocaleString()} 円 請求</button>
+          </div>`;
+      } else if (d.is_winner) {
+        chargeBlock = `
+          <div class="card" style="background:#fff8e6; margin-top:8px">
+            <h4 style="margin:0 0 4px">🎉 落札しました</h4>
+            <div class="meta">出品者 ${escapeHtml(a.seller_name)} さんから ¥${Number(a.winning_bid).toLocaleString()} 円の請求が届きます。 届きしだい <a href="#/requests">[請求]</a> から 支払い済 をマークしてください。</div>
+          </div>`;
       }
     }
     document.getElementById('aud-head').innerHTML = `
       ${img}
-      <h2 style="margin:6px 0 0">${escapeHtml(a.title)} ${tag}</h2>
+      <h2 style="margin:6px 0 0">${escapeHtml(a.title)} ${statusTag}</h2>
       <div class="meta" style="display:flex; gap:6px; align-items:center; margin-top:6px">
         ${avatarHtml(a.seller_name, a.seller_avatar_url, 'sm')}
         ${escapeHtml(a.seller_name)} · 締切 ${escapeHtml(fmtDateTime(a.closes_at))}
@@ -217,8 +231,24 @@ export async function renderAuctionDetail({ params }) {
         <div><span class="muted">現在最高</span> ${d.top_bid ?? '—'}円</div>
         <div><span class="muted">入札</span> ${d.bids.length}件</div>
       </div>
-      ${contactBlock}
+      ${chargeBlock}
     `;
+    // 落札者宛 請求 を生成。 creator は呼び出し元 (= 出品者本人) なので
+    // creator_user_id は省略。
+    document.getElementById('aud-charge')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget;
+      if (!confirm(`${a.winner_name} さんに ¥${Number(a.winning_bid).toLocaleString()} 円の請求を作成 + 通知しますか?`)) return;
+      btn.disabled = true;
+      try {
+        const created = await post('/api/money-requests', {
+          title: `🏷 落札: ${a.title}`,
+          memo: `オークション「${a.title}」の 落札 (¥${Number(a.winning_bid).toLocaleString()} 円) の集金です。`,
+          recipients: [{ user_id: Number(a.winner_user_id), amount_yen: Number(a.winning_bid) }],
+        });
+        toast('請求を作成しました');
+        navigate('#/requests/' + created.id);
+      } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; }
+    });
     // 入札 UI
     const bidCard = document.getElementById('aud-bid-card');
     if (active && !isMine) {
