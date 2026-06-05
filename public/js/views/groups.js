@@ -1936,6 +1936,16 @@ async function loadSchedule(gid) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
+  // v428 ❤️ 「行った」 トグル
+  body.querySelectorAll('[data-heart-it]').forEach(b => {
+    b.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      try {
+        const r = await post(`/api/groups/${gid}/schedule/${b.dataset.heartIt}/heart`, {});
+        b.innerHTML = `${r.hearted ? '❤️' : '🤍'}${r.count > 0 ? ' ' + r.count : ''}`;
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
   // ── v362 ドラッグアンドドロップで 並び替え (日またぎ可) ──
   // - 並び替え可能 (canEdit) なアイテムの「⋮⋮ハンドル」 だけ draggable。
   //   ハンドル以外のクリックは そのまま編集 modal を開く。
@@ -2234,7 +2244,7 @@ function renderSchedStockTile(it) {
   const cover = hasImage
     ? `<div style="width:100%; aspect-ratio:4/3; background:#eee center/cover no-repeat url('${escapeHtml(it.image_url)}'); border-radius:6px"></div>`
     : `<div style="width:100%; aspect-ratio:4/3; background:linear-gradient(135deg, #fef3c7, #fde68a); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:28px">${k.icon}</div>`;
-  const canEdit = schedEditMode;  // ストックは すべて canEdit (mid/end は ストックには 来ない)
+  const canEdit = schedEditMode;
   const dragHandle = canEdit ? `
     <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="stock"
           aria-label="ドラッグして 日付に 移動" title="ドラッグで 日に 投入"
@@ -2245,12 +2255,21 @@ function renderSchedStockTile(it) {
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="stock"`
     : '';
+  // v428 ❤️ 「行った / 良いね」 トグル (ダブルタップ or タップ)
+  const heartCount = Number(it.hearts_count || 0);
+  const myHearted = !!it.my_hearted;
+  const heartBtn = `
+    <button data-heart-it="${it.id}" title="行った / 良いね (ダブルタップ で トグル)"
+            style="position:absolute; bottom:4px; right:4px; z-index:2; padding:1px 6px; font-size:11px; background:rgba(255,255,255,0.92); border-radius:10px; border:1px solid rgba(0,0,0,0.08); cursor:pointer; user-select:none">
+      ${myHearted ? '❤️' : '🤍'}${heartCount > 0 ? ' ' + heartCount : ''}
+    </button>`;
   return `
     <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
          style="position:relative; display:flex; flex-direction:column; gap:4px; padding:4px; cursor:pointer; background:#fff; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.06); min-height:0">
       ${cover}
       ${dragHandle}
       ${rmBtn}
+      ${heartBtn}
       <div class="bold" style="font-size:12px; line-height:1.2; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; padding:0 2px">${escapeHtml(it.title)}</div>
       ${it.memo ? `<div class="muted" style="font-size:11px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 2px">${escapeHtml(it.memo)}</div>` : ''}
     </div>`;

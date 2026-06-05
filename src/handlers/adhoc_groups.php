@@ -63,6 +63,11 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             // より具体的な move ルートを先に判定する。
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'relocate' && $method === 'PATCH') { group_schedule_relocate($pdo, $cfg, $id, (int)$seg[3]); return; }
+            if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'heart' && $method === 'POST') { group_schedule_heart_toggle($pdo, $cfg, $id, (int)$seg[3]); return; }
+            // v428 グループ位置共有: /locations  GET/POST/DELETE
+            if ($next === 'locations' && $method === 'GET')    { group_locations_list($pdo, $cfg, $id);    return; }
+            if ($next === 'locations' && $method === 'POST')   { group_locations_upsert($pdo, $cfg, $id);  return; }
+            if ($next === 'locations' && $method === 'DELETE') { group_locations_delete($pdo, $cfg, $id);  return; }
             // 添付ファイル: /schedule/{itemId}/attachments  GET/POST、/attachments/{attId} DELETE
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'attachments') {
                 $itemId = (int)$seg[3];
@@ -1663,6 +1668,25 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
         foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $r) $counts[(int)$r['schedule_item_id']] = (int)$r['n'];
         foreach ($items as &$it) $it['attachment_count'] = $counts[(int)$it['id']] ?? 0;
         unset($it);
+
+        // v428 ❤️ 行きたい場所 / 予定 への 「行った / 良いね」 件数 + 自分が マーク済か
+        $stH = $pdo->prepare("SELECT item_id, COUNT(*) AS n,
+                                     SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS mine
+                                FROM adhoc_group_schedule_item_hearts
+                               WHERE item_id IN ($in)
+                               GROUP BY item_id");
+        $stH->execute(array_merge([(int)$u['id']], $ids));
+        $hCounts = [];
+        $hMine = [];
+        foreach ($stH->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $hCounts[(int)$r['item_id']] = (int)$r['n'];
+            $hMine[(int)$r['item_id']] = (int)$r['mine'] > 0;
+        }
+        foreach ($items as &$it) {
+            $it['hearts_count'] = $hCounts[(int)$it['id']] ?? 0;
+            $it['my_hearted']   = $hMine[(int)$it['id']] ?? false;
+        }
+        unset($it);
     }
     // v403 1 日毎の メモ も 同時に 返す ({date => memo} の dict)。
     $stM = $pdo->prepare("SELECT day_date, memo FROM adhoc_group_day_memos WHERE group_id=?");
@@ -2161,4 +2185,80 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
             ->execute([$row['start_time'], (int)$row['sort_order'], (int)$nei['id']]);
     });
     json_response(['ok' => true, 'moved' => true]);
+}
+
+// v428 ❤️ 「行った / 良いね」 トグル。 メンバー全員 ON/OFF 可能 (各人 1 個)。
+function group_schedule_heart_toggle(PDO $pdo, array $cfg, int $gid, int $iid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    // 当該 item が このグループに 属しているか チェック
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
+    $st->execute([$iid, $gid]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'item not found', 404);
+    // 既存 ハート あれば 削除、 無ければ INSERT
+    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_schedule_item_hearts WHERE item_id=? AND user_id=?");
+    $st->execute([$iid, (int)$u['id']]);
+    if ($st->fetchColumn()) {
+        $pdo->prepare("DELETE FROM adhoc_group_schedule_item_hearts WHERE item_id=? AND user_id=?")
+            ->execute([$iid, (int)$u['id']]);
+        $hearted = false;
+    } else {
+        $pdo->prepare("INSERT INTO adhoc_group_schedule_item_hearts (item_id, user_id) VALUES (?, ?)")
+            ->execute([$iid, (int)$u['id']]);
+        $hearted = true;
+    }
+    $st = $pdo->prepare("SELECT COUNT(*) FROM adhoc_group_schedule_item_hearts WHERE item_id=?");
+    $st->execute([$iid]);
+    json_response(['ok' => true, 'hearted' => $hearted, 'count' => (int)$st->fetchColumn()]);
+}
+
+// v428 グループ 位置共有: 自分の 現在地を upsert。
+function group_locations_upsert(PDO $pdo, array $cfg, int $gid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    $body = read_json_body();
+    $lat = isset($body['lat']) ? (float)$body['lat'] : null;
+    $lng = isset($body['lng']) ? (float)$body['lng'] : null;
+    $accuracy = isset($body['accuracy']) && $body['accuracy'] !== ''
+        ? max(0, min(100000, (int)$body['accuracy'])) : null;
+    if ($lat === null || $lng === null || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        throw new ApiException('bad_request', 'lat / lng が 範囲外', 400);
+    }
+    $pdo->prepare("INSERT INTO adhoc_group_locations (group_id, user_id, lat, lng, accuracy_m)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE lat=VALUES(lat), lng=VALUES(lng), accuracy_m=VALUES(accuracy_m), updated_at=NOW()")
+        ->execute([$gid, (int)$u['id'], $lat, $lng, $accuracy]);
+    json_response(['ok' => true]);
+}
+
+// v428 グループ 位置共有: 直近 1 時間以内の メンバー位置を 取得。
+function group_locations_list(PDO $pdo, array $cfg, int $gid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    $st = $pdo->prepare("
+        SELECT al.user_id, al.lat, al.lng, al.accuracy_m, al.updated_at,
+               u.display_name, u.avatar_url
+          FROM adhoc_group_locations al
+          JOIN users u ON u.id = al.user_id
+         WHERE al.group_id = ?
+           AND al.updated_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
+         ORDER BY al.updated_at DESC");
+    $st->execute([$gid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['user_id']    = (int)$r['user_id'];
+        $r['lat']        = (float)$r['lat'];
+        $r['lng']        = (float)$r['lng'];
+        $r['accuracy_m'] = $r['accuracy_m'] !== null ? (int)$r['accuracy_m'] : null;
+        $r['is_me']      = (int)$r['user_id'] === (int)$u['id'];
+    }
+    json_response(['items' => $rows, 'server_now' => date('c')]);
+}
+
+// v428 グループ 位置共有: 自分の 位置を 取り下げ (DELETE)。
+function group_locations_delete(PDO $pdo, array $cfg, int $gid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $pdo->prepare("DELETE FROM adhoc_group_locations WHERE group_id=? AND user_id=?")
+        ->execute([$gid, (int)$u['id']]);
+    json_response(['ok' => true]);
 }
