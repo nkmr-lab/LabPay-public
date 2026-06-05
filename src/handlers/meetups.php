@@ -1,5 +1,5 @@
 <?php
-// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 短時間 (24h まで)。
+// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 31 日 以内 (v434)。
 // 起案時に 自分以外の参加者へ push 通知。 タイマーや点呼と違って 応答ボタンは無く、
 // 「集合する場所を 1 つ決めて 全員に同期する」 のが目的。
 
@@ -54,8 +54,8 @@ function meetups_create(PDO $pdo, array $cfg): void {
     if ($whenTs <= time() + 30) {
         throw new ApiException('bad_request', '集合時刻は今より先に', 400);
     }
-    if ($whenTs > time() + 24 * 3600) {
-        throw new ApiException('bad_request', '集合時刻は 24 時間以内に', 400);
+    if ($whenTs > time() + 31 * 86400) {
+        throw new ApiException('bad_request', '集合時刻は 31 日以内に', 400);
     }
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) throw new ApiException('bad_request', 'member_ids 配列', 400);

@@ -117,6 +117,8 @@ export async function renderMeetupNew({ query } = {}) {
         <button class="btn" data-mu-preset="60">1 時間後</button>
         <button class="btn" data-mu-preset="120">2 時間後</button>
         <button class="btn" data-mu-preset="180">3 時間後</button>
+        <button class="btn" data-mu-preset="1440">明日 (24h)</button>
+        <button class="btn" data-mu-preset="10080">1 週間後</button>
       </div>
       <div class="row" style="gap:6px; align-items:center">
         <input type="datetime-local" id="mun-when" style="flex:1; min-width:180px">
@@ -154,11 +156,11 @@ export async function renderMeetupNew({ query } = {}) {
     b.addEventListener('click', () => setPreset(Number(b.dataset.muPreset)));
   });
   whenEl.addEventListener('input', syncRem);
-  // URL 経由の preset 時刻を 優先 (24h 以内かつ未来時刻なら採用)。
+  // URL 経由の preset 時刻を 優先 (31 日 以内かつ未来時刻なら採用)。
   let usedPreset = false;
   if (presetWhenRaw) {
     const t = new Date(presetWhenRaw).getTime();
-    if (Number.isFinite(t) && t > Date.now() + 30_000 && t <= Date.now() + 24 * 3600_000) {
+    if (Number.isFinite(t) && t > Date.now() + 30_000 && t <= Date.now() + 31 * 86400_000) {
       whenEl.value = presetWhenRaw.length >= 16 ? presetWhenRaw.slice(0, 16) : presetWhenRaw;
       syncRem();
       usedPreset = true;
