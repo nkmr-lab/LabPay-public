@@ -20,7 +20,7 @@ export const HOME_ACTIONS = [
   // アプリ 系 (デフォ OFF)
   { id: 'translate',    url: '#/translate',          title: '画像 翻訳',     icon: '🌐', defaultVisible: false },
   { id: 'rollcalls',    url: '#/rollcalls',          title: '点呼',         icon: '📣', defaultVisible: false },
-  { id: 'timers',       url: '#/timers',             title: 'タイマー',     icon: '🔔',  defaultVisible: false },
+  { id: 'timers',       url: '#/timers',             title: 'タイマー',     icon: '🛎',  defaultVisible: false },
   { id: 'stopwatches',  url: '#/stopwatches',        title: 'ストップウォッチ', icon: '🕒', defaultVisible: false },
   { id: 'meetups',      url: '#/meetups',            title: '待ち合わせ',    icon: '🤝', defaultVisible: false },
   { id: 'wishlist',     url: '#/wishlist',           title: '欲しい',       icon: '✨', defaultVisible: false },
