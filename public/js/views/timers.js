@@ -200,6 +200,10 @@ export async function renderTimerNew({ query } = {}) {
 
 let tmTickTimer = null;
 let tmSyncTimer = null;
+// v408 「ちょうど 0 になった 瞬間」 を 1 回 だけ 鳴らす ための フラグ。
+// resync で 復活して しまうので 必要。 リピート で サーバが 次サイクル に
+// 切替えたら tmLastCycleIdx 変化で 再 false 化 (下の loadTimerDetail で 処理)。
+let tmEndFiredOnce = false;
 let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server からの遅延補正)
 let tmEndsMs = 0;
 let tmStartedMs = 0;
@@ -274,6 +278,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     if (tmLastCycleIdx !== tmRepeatIdx) {
       tmBellsFired = new Set();
       tmLastCycleIdx = tmRepeatIdx;
+      tmEndFiredOnce = false;  // v408 サイクル切替で 終了音も 再有効化
     }
     if (!isResync) {
       document.getElementById('tmd-head').innerHTML = `
@@ -349,28 +354,39 @@ function tickTimer() {
     stEl.textContent = '⏹ 起案者により停止されました';
     return;
   }
-  const remainingSec = Math.max(0, Math.ceil((tmEndsMs - now) / 1000));
-  const elapsedSec   = Math.max(0, Math.min(tmDurationSec, Math.floor((now - tmStartedMs) / 1000)));
-  countEl.textContent = fmtDuration(remainingSec);
-  countEl.style.color = remainingSec === 0 ? 'var(--primary)'
-                      : remainingSec < 10 ? '#c62828'
-                      : '';
+  // v408 超過 表示。 remainingSec は 0 で 止めず、 マイナスに 突入させて
+  // 「+MM:SS 超過」 を 出す。 elapsed も そのまま 加算 (合計超え可)。
+  const signedRemain = Math.ceil((tmEndsMs - now) / 1000);
+  const elapsedSec   = Math.max(0, Math.floor((now - tmStartedMs) / 1000));
+  const isOver = signedRemain < 0;
+  if (isOver) {
+    countEl.textContent = '+' + fmtDuration(-signedRemain) + ' 超過';
+    countEl.style.color = '#c62828';
+  } else {
+    countEl.textContent = fmtDuration(signedRemain);
+    countEl.style.color = signedRemain === 0 ? 'var(--primary)'
+                        : signedRemain < 10 ? '#c62828'
+                        : '';
+  }
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
   const pct = tmDurationSec ? Math.min(100, (elapsedSec / tmDurationSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
-  if (remainingSec === 0 && tmStatus === 'running') {
-    // リピート残あり: サーバの autoclose が 次サイクルにスライドさせるので、
-    // ローカルでは status を done に変えず、 次の sync を待つ。
+  if (isOver) barEl.style.background = '#c62828';
+  // 終了 瞬間 (= signedRemain が 0 を 跨いだ 直後 1 tick) で 一度だけ
+  // 終了音 + ローカル fired フラグ。 以後 サーバ done が 来るまで 超過表示。
+  if (signedRemain === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
+    tmEndFiredOnce = true;
     if (tmRepeatMax > 0 && tmRepeatIdx < tmRepeatMax) {
       stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目 切替中…`;
     } else {
       stEl.textContent = '🎉 終了!';
-      playSound('roulette_spin');  // 終了音
-      tmStatus = 'done';
-      stopTimerLoops();
+      playSound('roulette_spin');
+      releaseWakeLock('timer');
     }
   } else if (tmStatus === 'done') {
-    stEl.textContent = '🎉 終了';
+    stEl.textContent = isOver ? `🎉 終了 (+${fmtDuration(-signedRemain)} 超過)` : '🎉 終了';
+  } else if (isOver) {
+    stEl.textContent = '⚠ 超過中 — 必要なら ⏹ 停止';
   } else if (tmRepeatMax > 0) {
     stEl.textContent = `🔁 ${tmRepeatIdx + 1}/${tmRepeatMax + 1} 回目`;
   } else {
