@@ -8,6 +8,7 @@ import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
+import { acquireWakeLock, releaseWakeLock, isWakeLockSupported } from '../wakelock.js';
 
 function fmtElapsed(sec) {
   sec = Math.max(0, Math.floor(sec));
@@ -158,6 +159,8 @@ function stopTickers() {
   if (swState?.displayTimer) clearInterval(swState.displayTimer);
   if (swState?.syncTimer)    clearInterval(swState.syncTimer);
   if (swState) { swState.displayTimer = null; swState.syncTimer = null; }
+  // v405 wake lock release
+  releaseWakeLock('stopwatch-' + (swState?.sw?.id || ''));
 }
 
 function startTickers(id) {
@@ -197,6 +200,12 @@ async function loadDetail(id) {
     renderControls(sw, id);
     renderParts(sw);
     updateDisplay();
+    // v405 動いている間は スリープしない。 paused/stopped で 解放。
+    if (sw.status === 'running') {
+      acquireWakeLock('stopwatch-' + id);
+    } else {
+      releaseWakeLock('stopwatch-' + id);
+    }
   } catch (e) {
     document.getElementById('swd-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

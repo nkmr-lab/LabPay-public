@@ -10,6 +10,7 @@ import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
 import { tag, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -213,6 +214,8 @@ let tmStatus = 'running';
 function stopTimerLoops() {
   if (tmTickTimer) { clearInterval(tmTickTimer); tmTickTimer = null; }
   if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
+  // v405 wake lock release
+  releaseWakeLock('timer');
 }
 
 export async function renderTimerDetail({ params }) {
@@ -264,6 +267,9 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     tmRepeatMax   = t.repeat_max || 0;
     tmRepeatIdx   = t.repeat_idx || 0;
     if (!isResync) tmBellsFired = new Set();
+    // v405 running 中は スクリーンを 起こし続ける
+    if (tmStatus === 'running') acquireWakeLock('timer');
+    else releaseWakeLock('timer');
     // サイクルが進んだら fired をリセット (リピート 2 周目で 再度鳴らす)
     if (tmLastCycleIdx !== tmRepeatIdx) {
       tmBellsFired = new Set();

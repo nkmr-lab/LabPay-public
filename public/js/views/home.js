@@ -19,6 +19,7 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
+  { id: 'my-timers',      title: '参加中タイマー / ストップウォッチ' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -175,6 +176,14 @@ export async function renderHome() {
       <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-mytm-card" data-card-id="my-timers" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">⏱ 参加中のタイマー / ストップウォッチ</h2>
+        <a href="#/timers" class="hint">タイマー一覧 →</a>
+      </div>
+      <div id="home-mytm" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <details class="card" data-card-id="history">
       <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
         履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
@@ -195,6 +204,7 @@ export async function renderHome() {
   await renderMyGroups();
   await renderFreshInvitations();
   await renderFreshPlaylists();
+  await renderMyActiveTimers();
   await renderFreshListings();
   await renderFreshTasks();
   await renderRecentTx();
@@ -239,6 +249,7 @@ async function doHomePoll() {
     renderMyGroups(),
     renderFreshInvitations(),
     renderFreshPlaylists(),
+    renderMyActiveTimers(),
     renderFreshListings(),
     renderFreshTasks(),
     renderRecentTx(),
@@ -948,6 +959,77 @@ async function renderFreshPlaylists() {
           </div>
         </a>`;
     }).join('');
+  } catch (_) {
+    card.hidden = true;
+  }
+}
+
+// v405 自分が 参加中 (作成 or 招待) の タイマー + ストップウォッチ で 進行中 or
+// 一時停止中 のものを ホームに 強調表示。 ベルが鳴る前に スクリーン off してて
+// 「気づかなかった」 を防ぐ + 共有 ストップウォッチに 戻りやすく。
+function fmtTmDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+async function renderMyActiveTimers() {
+  const card = document.getElementById('home-mytm-card');
+  const root = document.getElementById('home-mytm');
+  if (!card || !root) return;
+  try {
+    const meId = Number(state.me?.id);
+    const [tm, sw] = await Promise.allSettled([
+      get('/api/timers'),
+      get('/api/stopwatches'),
+    ]);
+    const rows = [];
+    if (tm.status === 'fulfilled') {
+      const tNow = Date.parse(String(tm.value.server_now).replace(' ', 'T'));
+      const tOff = tNow - Date.now();
+      for (const t of (tm.value.items || [])) {
+        if (t.status !== 'running') continue;
+        const isPart = Number(t.is_participant) === 1 || Number(t.creator_user_id) === meId;
+        if (!isPart) continue;
+        const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
+        const remaining = Math.max(0, Math.floor((ends - (Date.now() + tOff)) / 1000));
+        rows.push({
+          href: '#/timers/' + t.id,
+          kind: '⏱ タイマー',
+          title: t.title,
+          time: `${fmtTmDur(remaining)} 残`,
+          color: '#1565c0',
+          bg: '#e3f2fd',
+        });
+      }
+    }
+    if (sw.status === 'fulfilled') {
+      for (const s of (sw.value.items || [])) {
+        if (s.status === 'stopped') continue;  // リセット済は出さない
+        rows.push({
+          href: '#/stopwatches/' + s.id,
+          kind: s.status === 'running' ? '🟢 計測中' : '⏸ 一時停止',
+          title: s.title,
+          time: fmtTmDur(s.elapsed_seconds),
+          color: s.status === 'running' ? '#0e7c63' : '#e65100',
+          bg: s.status === 'running' ? '#e0f7f1' : '#fff3e0',
+        });
+      }
+    }
+    if (!rows.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = rows.map(r => `
+      <a class="list-item" href="${r.href}">
+        <div style="min-width:80px; font-family:monospace; font-size:18px; font-weight:700; color:${r.color}">${r.time}</div>
+        <div class="grow" style="min-width:0">
+          <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
+          <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
+        </div>
+        <div class="hint">→</div>
+      </a>`).join('');
   } catch (_) {
     card.hidden = true;
   }
