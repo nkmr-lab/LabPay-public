@@ -43,6 +43,7 @@ export const HOME_ACTIONS = [
   { id: 'scrapbox',     url: '#/scrapbox',           title: 'Scrapbox',    icon: '📚', defaultVisible: false },
   { id: 'exercise',     url: '#/exercise',           title: '運動 (歩数)',   icon: '🏃', defaultVisible: false },
   { id: 'activity',     url: '#/activity',           title: 'ラボ滞在マップ', icon: '🗓', defaultVisible: false },
+  { id: 'help',         url: '#/help',               title: '操作ガイド AI', icon: '🤖', defaultVisible: true },
   // 設定 ボタン自身も HOME_ACTIONS 経由で 表示制御。 これを 隠したら 上部ナビの
   // 「設定」 から 同じ 場所に 辿れる ので 詰まらない。
   { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },

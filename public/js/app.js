@@ -31,6 +31,7 @@ import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/a
 import { renderPlaylists, renderPlaylistNew, renderPlaylistDetail, renderPlaylistEdit } from './views/playlists.js';
 import { renderStopwatches, renderStopwatchNew, renderStopwatchDetail } from './views/stopwatches.js';
 import { renderTranslate } from './views/translate.js';
+import { renderHelp } from './views/help.js';
 import { renderExercise } from './views/exercise.js';
 import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
@@ -452,6 +453,7 @@ route('/stopwatches',       renderStopwatches);
 route('/stopwatches/new',   renderStopwatchNew);
 route('/stopwatches/:id',   renderStopwatchDetail);
 route('/translate',         renderTranslate);
+route('/help',              renderHelp);
 route('/exercise',        renderExercise);
 route('/users/:id',       renderUserProfile);
 route('/apps',           renderApps);

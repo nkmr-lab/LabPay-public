@@ -26,7 +26,107 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_translation_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    if ($sub === 'assistant' && $method === 'POST') {
+        ai_assistant($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// POST /api/ai/assistant { message: "...", history?: [{role,content},...] }
+//   → { text: "...操作手順..." }
+// LabPay の 使い方 を 案内する Q&A エージェント (UI ナビゲーション特化)。
+// ユーザー データ (残高 / 履歴 等) には アクセスしない — そこを 答える時は 「設定 →
+// ...」 と 操作手順を 案内するだけ。
+function ai_assistant(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $msg = trim((string)($body['message'] ?? ''));
+    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
+    if (mb_strlen($msg) > 2000) throw new ApiException('bad_request', 'message too long', 400);
+    $history = is_array($body['history'] ?? null) ? $body['history'] : [];
+    $history = array_slice($history, -10); // 直近 10 ターン だけ 持ち回す
+
+    $sys = <<<SYS
+あなたは LabPay の 使い方 ガイド アシスタント です。 ユーザーの 「○○ したいけど どこ から?」
+「△△ の 情報 見たい」 に、 簡潔な 操作手順 で 答えてください。 ユーザー本人の データ
+(残高 / 履歴 / 通知 等) は 見えない ので、 個別データを 聞かれた場合は 「○○ メニュー
+で 確認 できます」 と 場所を 案内するに 留めること。
+
+回答 ルール:
+- 太字 (**○○**) で 重要 ボタン名 や メニュー名 を 強調
+- 番号付き リスト で 手順を 並べる
+- 関連 機能 が あれば 末尾に 「関連: ...」 で 1 行 紹介
+- 不明な機能 を 聞かれたら 「LabPay には その機能は ありません」 と 正直に
+- 過度な 前置きや 「お問い合わせ ありがとうございます」 等 は 不要、 答えだけ
+
+LabPay の 主な ナビゲーション:
+- **ホーム** (#/): 残高、 クイック ボタン (買う/売る/頼む/送る/翻訳…)、 未対応カード、 今日の予定、 グループ、 募集、 新着 プレイリスト、 参加中タイマー
+- **買う** (#/buy): 商品 一覧 + JAN コード スキャン
+- **売る** (#/sell): 出品
+- **頼む** (#/tasks): タスク作成 (報酬付き 募集 / 指名 / リクエスト) — ホームの 「頼む」 でも
+- **送る** (#/send): 個人間 ポイント 送金
+- **アプリ** (#/apps): ルーレット / 投票 / 点呼 / タイマー / ストップウォッチ / 翻訳 / 待ち合わせ / 飲み会割り勘 / ワリカ電卓 / 請求 / オークション / プレイリスト / ランダム分け / 連絡先 / 重要連絡 / Scrapbox / 関係性グラフ / 運動 / ラボ滞在マップ
+- **グループ** (#/groups): 出張 / 旅行 向け 一時 メンバー枠 + スケジュール + ワリカ + 地図 + 翻訳ログ + チャット
+- **募集** (#/invitations): お昼ご飯 / 飲み会 等 カジュアル集合
+- **実績** (#/achievements): 学業 / 売買 / 滞在 / ラボ運営 など 15 カテゴリ
+- **設定** (#/settings): プロフィール / アバター / タブ並び替え / ホーム上部 クイック ボタン / アプリ表示 / Google Calendar / Zoom 連携 / 端末 (MAC) 登録 / プロフィール (Slack / 電話) / 効果音 / ホーム カード 並び
+- **報告・要望** (#/feedback-admin or トップ ナビ): バグ報告 / 機能要望
+- **通知** (#/notifications): 通知ベル から
+
+特殊 機能 ヒント:
+- **AI 機能**: スケジュール フリーテキスト 展開 (グループ予定追加 modal 上部 「✨」)、 場所名 → 緯度経度+説明+画像 自動入力 (タイトル横 「🔍 場所を検索」)、 画像 翻訳 (#/translate)、 翻訳ログ (グループに 紐づけ可能)
+- **位置共有**: グループ 地図ページ (#/groups/{id}/map) の 「📡 位置共有」 トグル で メンバー全員に 位置を 共有
+- **❤️ 行きたい場所**: グループ スケジュール の 行きたい場所ストック の タイル 右下
+- **ベル / 中間音**: タイマー作成時に 1ベル/2ベル/3ベル 分単位 で 指定
+SYS;
+
+    $messages = [['role' => 'system', 'content' => $sys]];
+    foreach ($history as $h) {
+        $role = (string)($h['role'] ?? '');
+        $role = ($role === 'assistant') ? 'assistant' : 'user';
+        $content = mb_substr((string)($h['content'] ?? ''), 0, 2000);
+        if ($content === '') continue;
+        $messages[] = ['role' => $role, 'content' => $content];
+    }
+    $messages[] = ['role' => 'user', 'content' => $msg];
+
+    $payload = json_encode([
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'messages' => $messages,
+        'temperature' => 0.3,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($resp === false || $status >= 500) {
+        throw new ApiException('upstream_error', 'OpenAI: ' . ($err ?: 'HTTP ' . $status), 502);
+    }
+    if ($status >= 400) {
+        $j = json_decode((string)$resp, true);
+        $msg2 = $j['error']['message'] ?? ('HTTP ' . $status);
+        throw new ApiException('upstream_error', 'OpenAI: ' . $msg2, 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $text = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($text) || $text === '') {
+        throw new ApiException('upstream_error', 'empty response', 502);
+    }
+    json_response(['ok' => true, 'text' => trim($text)]);
 }
 
 // POST /api/ai/place_lookup { name: "東京タワー" }

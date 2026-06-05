@@ -15,6 +15,7 @@ export const APPS = [
   { id: 'timers',        url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
   { id: 'stopwatches',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
   { id: 'translate',     url: '#/translate',     title: '🌐 画像 和訳',       desc: '写真 (メニュー / 看板 / 説明文 など) を アップロード → AI で 日本語に 翻訳。 出張 / 旅行 で 便利。', defaultVisible: true },
+  { id: 'help',          url: '#/help',          title: '🤖 操作ガイド AI',   desc: 'LabPay の 使い方 を AI に 聞ける チャット。 「○○ ってどこから?」 「△△ したいんだけど」 に 操作手順 で 答えます。', defaultVisible: true },
   { id: 'meetups',       url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
   { id: 'contacts',      url: '#/contacts',      title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
   { id: 'notices',       url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
