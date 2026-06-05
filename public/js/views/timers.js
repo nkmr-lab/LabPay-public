@@ -115,11 +115,11 @@ export async function renderTimerNew({ query } = {}) {
       <details style="margin-top:10px">
         <summary class="hint" style="cursor:pointer">🔔 中間ベル + 🔁 リピート設定</summary>
         <div style="margin-top:6px">
-          <div class="hint-sm" style="margin-bottom:4px">タイマー開始から N 秒後に 効果音 (設定 → 効果音 → ルーレット用のものが鳴ります)。 空欄 = ベル無し。</div>
+          <div class="hint-sm" style="margin-bottom:4px">タイマー開始から N 分後に 効果音 (設定 → 効果音 → ルーレット用のものが鳴ります)。 空欄 = ベル無し。 小数 (例 1.5 = 1 分 30 秒) も 可。</div>
           <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
-            <label style="display:inline-flex; align-items:center; gap:4px">1ベル: <input type="number" id="tmn-bell1" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
-            <label style="display:inline-flex; align-items:center; gap:4px">2ベル: <input type="number" id="tmn-bell2" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
-            <label style="display:inline-flex; align-items:center; gap:4px">3ベル: <input type="number" id="tmn-bell3" min="0" placeholder="秒" style="max-width:90px"> 秒後</label>
+            <label style="display:inline-flex; align-items:center; gap:4px">1ベル: <input type="number" id="tmn-bell1" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
+            <label style="display:inline-flex; align-items:center; gap:4px">2ベル: <input type="number" id="tmn-bell2" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
+            <label style="display:inline-flex; align-items:center; gap:4px">3ベル: <input type="number" id="tmn-bell3" min="0" step="0.5" placeholder="分" style="max-width:90px"> 分後</label>
           </div>
           <div class="row" style="gap:6px; align-items:center">
             <label style="display:inline-flex; align-items:center; gap:4px">🔁 繰り返し: <input type="number" id="tmn-repeat" min="0" max="100" value="0" style="max-width:80px"> 回</label>
@@ -168,21 +168,27 @@ export async function renderTimerNew({ query } = {}) {
     const total = min * 60 + sec;
     if (!title) { toast('タイトル必須'); return; }
     if (total < 5) { toast('5 秒以上にしてください'); return; }
-    const bell1 = parseInt(document.getElementById('tmn-bell1').value, 10);
-    const bell2 = parseInt(document.getElementById('tmn-bell2').value, 10);
-    const bell3 = parseInt(document.getElementById('tmn-bell3').value, 10);
+    // v404 ベル入力は 分単位 (小数可) に。 backend は秒で 保持するので *60 して送る。
+    const toSec = (id) => {
+      const v = parseFloat(document.getElementById(id).value);
+      if (!Number.isFinite(v) || v <= 0) return null;
+      return Math.round(v * 60);
+    };
+    const bell1 = toSec('tmn-bell1');
+    const bell2 = toSec('tmn-bell2');
+    const bell3 = toSec('tmn-bell3');
     const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
     for (const b of [bell1, bell2, bell3]) {
-      if (Number.isFinite(b) && (b < 1 || b >= total)) {
-        toast(`ベル時刻は 1 秒以上 / 合計未満 (${total}秒) に`); return;
+      if (b !== null && (b < 1 || b >= total)) {
+        toast(`ベル時刻は 0 分超 / 合計未満 (${(total/60).toFixed(1)}分) に`); return;
       }
     }
     try {
       const r = await post('/api/timers', {
         title, duration_seconds: total, participant_ids: picker ? [...picker.getSelected()] : [],
-        bell1_seconds: Number.isFinite(bell1) ? bell1 : null,
-        bell2_seconds: Number.isFinite(bell2) ? bell2 : null,
-        bell3_seconds: Number.isFinite(bell3) ? bell3 : null,
+        bell1_seconds: bell1,
+        bell2_seconds: bell2,
+        bell3_seconds: bell3,
         repeat_max: repeatMax,
       });
       toast('タイマーを開始しました');

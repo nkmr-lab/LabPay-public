@@ -13,6 +13,7 @@ export const APPS = [
   { id: 'polls',         url: '#/polls',         title: '投票・アンケート',   desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
   { id: 'rollcalls',     url: '#/rollcalls',     title: '点呼',               desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
   { id: 'timers',        url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
+  { id: 'stopwatches',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
   { id: 'meetups',       url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
   { id: 'contacts',      url: '#/contacts',      title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
   { id: 'notices',       url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
