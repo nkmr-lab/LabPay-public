@@ -10,6 +10,10 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_expand_schedule($pdo, $cfg);
         return;
     }
+    if ($sub === 'translate_image' && $method === 'POST') {
+        ai_translate_image($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -118,6 +122,111 @@ SYS;
                                 ? $fields['kind'] : 'other',
     ];
     json_response(['ok' => true, 'fields' => $out]);
+}
+
+// POST /api/ai/translate_image
+//   body: { image_url: "https://labpay/uploads/...", hint?: "メニューです" }
+//   返値: { text: "...日本語訳..." }
+// OpenAI Vision (gpt-4o-mini) に 画像を 直接 投げる。 image_url は LabPay 自身の
+// /uploads/ に 限定 (外部 URL は 弾く) → 漏洩リスク最小化。 サーバ側で 一旦 ファイル を
+// 読んで base64 data URL に変換して 送る (OpenAI から 外部 URL fetch を 要求しない)。
+function ai_translate_image(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $imageUrl = trim((string)($body['image_url'] ?? ''));
+    if ($imageUrl === '') throw new ApiException('bad_request', 'image_url required', 400);
+    $hint = trim((string)($body['hint'] ?? ''));
+    if (mb_strlen($hint) > 500) $hint = mb_substr($hint, 0, 500);
+
+    // 自前 アップロード パス に 限定。 base_url + /uploads/ で 始まる か、 同じ ホスト の
+    // /uploads/ 絶対 path か。
+    $base = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+    $rel = null;
+    if ($base !== '' && strpos($imageUrl, $base . '/uploads/') === 0) {
+        $rel = substr($imageUrl, strlen($base));
+    } elseif (strpos($imageUrl, '/uploads/') === 0) {
+        $rel = $imageUrl;
+    }
+    if ($rel === null) {
+        throw new ApiException('bad_request', 'image_url は LabPay の /uploads/ を 指してください', 400);
+    }
+    $docRoot = realpath(__DIR__ . '/../../public');
+    if ($docRoot === false) throw new ApiException('server_error', 'public path resolution failed', 500);
+    $fsPath = realpath($docRoot . $rel);
+    if ($fsPath === false || strpos($fsPath, $docRoot . DIRECTORY_SEPARATOR . 'uploads') !== 0) {
+        throw new ApiException('bad_request', '画像が見つかりません', 400);
+    }
+    if (filesize($fsPath) > 8 * 1024 * 1024) {
+        throw new ApiException('bad_request', '8MB を 超える 画像は 受け付けません', 400);
+    }
+    $data = file_get_contents($fsPath);
+    if ($data === false) throw new ApiException('server_error', 'image read failed', 500);
+    $mime = mime_content_type($fsPath) ?: 'image/jpeg';
+    if (!preg_match('#^image/#', $mime)) {
+        throw new ApiException('bad_request', '画像 ファイルのみ 受け付けます', 400);
+    }
+    $dataUrl = 'data:' . $mime . ';base64,' . base64_encode($data);
+
+    $sysPrompt = <<<SYS
+画像内の 外国語 テキスト (メニュー、 看板、 説明文 など) を 日本語に 翻訳してください。
+
+ルール:
+- 元の 構造を できるだけ 保つ (リスト → リスト、 セクション → セクション)
+- メニューなら 各 料理名 + 価格 + (あれば) 簡単な説明 を 整理 して 1 品 1 行
+- 価格 や 数字 は そのまま 保持 (通貨記号 含めて)
+- 不明瞭 な 部分は (?) を 付ける
+- 余計な前置き や 「これは...」 等の 説明は 入れない、 翻訳結果のみ
+
+出力 形式: Markdown (見出し / リスト / 太字 OK)。
+SYS;
+
+    if ($hint !== '') {
+        $sysPrompt .= "\n\nユーザーからの 補足情報: " . $hint;
+    }
+
+    $payload = json_encode([
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'messages' => [
+            ['role' => 'system', 'content' => $sysPrompt],
+            ['role' => 'user', 'content' => [
+                ['type' => 'text', 'text' => '画像を 和訳して ください。'],
+                ['type' => 'image_url', 'image_url' => ['url' => $dataUrl]],
+            ]],
+        ],
+        'temperature' => 0.2,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $resp   = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err    = curl_error($ch);
+    curl_close($ch);
+
+    if ($resp === false || $status >= 500) {
+        throw new ApiException('upstream_error', 'OpenAI: ' . ($err ?: 'HTTP ' . $status), 502);
+    }
+    if ($status >= 400) {
+        $j = json_decode((string)$resp, true);
+        $msg = $j['error']['message'] ?? ('HTTP ' . $status);
+        throw new ApiException('upstream_error', 'OpenAI: ' . $msg, 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $text = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($text) || $text === '') {
+        throw new ApiException('upstream_error', 'OpenAI: empty response', 502);
+    }
+    json_response(['ok' => true, 'text' => trim($text)]);
 }
 
 function ai_norm_date($v): ?string {
