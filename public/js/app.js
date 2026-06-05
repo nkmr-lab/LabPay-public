@@ -36,6 +36,7 @@ import { renderChat } from './views/chat.js';
 import { renderExercise } from './views/exercise.js';
 import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
+import { installGlobalAudioUnlock } from './audio_unlock.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
 import { renderRequestsHub } from './views/requests_hub.js';
@@ -82,6 +83,10 @@ export async function refreshMe() {
     refreshHasGroups();
     // 効果音の解決済み 設定を 1 回だけ pull。 失敗しても他に影響しないよう fire-and-forget。
     preloadSounds();
+    // v448 ページ上の どこか で 最初に 起きた pointerdown / touchstart / keydown
+    // 1 回 で 共有 AudioContext + HTMLAudio を unlock。 以降 setInterval から の
+    // タイマーベル / 効果音 が iOS Safari でも 通る。
+    installGlobalAudioUnlock();
     return data;
   } catch (e) {
     state.me = null;

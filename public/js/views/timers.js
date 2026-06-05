@@ -7,10 +7,14 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
-import { playSound } from '../sounds.js';
 import { tag, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
+
+// v448 学会タイマー の ベル は ルーレット の 境界通過音 / 終了音 と 同じ
+// オシレータ生成 を 共有モジュール 経由で 使用。 MP3 不要、 設定 不要、 ユーザ
+// クリップ 割当 不要。 audio_unlock の install で 任意の タップ 直後 から 通る。
+import { playBoundaryTick, playEndDing, unlockAudio } from '../audio_unlock.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -422,7 +426,7 @@ function tickTimer() {
     for (const b of tmBells) {
       if (elapsed >= b && !tmBellsFired.has(b)) {
         tmBellsFired.add(b);
-        playSound('roulette_spin');  // 共用 (まだ 専用 event_key を切ってない)
+        playBoundaryTick();  // 学会タイマー ベル = ルーレット 境界通過音 と 同じ
       }
     }
   }
@@ -481,7 +485,7 @@ function tickTimer() {
       stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目 切替中…`;
     } else {
       stEl.textContent = '🎉 終了!';
-      playSound('roulette_spin');
+      playEndDing();
       releaseWakeLock('timer');
     }
   } else if (tmStatus === 'done') {
