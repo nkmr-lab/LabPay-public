@@ -194,7 +194,10 @@ function timers_cancel(PDO $pdo, array $cfg, int $id): void {
     if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ停止可', 403);
     }
-    if ((string)$row['status'] !== 'running') {
+    // v413 done 状態 (自動 autoclose / 終了 跨いだ) でも 停止 を 受理。
+    // 「超過カウントを ローカル表示で 止めたい」 場合に 起案者が 押して
+    // cancelled に 倒せるように。 cancelled に 既になっている時のみ no-op。
+    if ((string)$row['status'] === 'cancelled') {
         json_response(['ok' => true, 'already' => true]); return;
     }
     $pdo->prepare("UPDATE timers SET status='cancelled', closed_at=NOW() WHERE id=?")->execute([$id]);
