@@ -61,6 +61,7 @@ $routes = [
     'timers'         => 'route_timers',
     'notices'        => 'route_notices',
     'meetups'        => 'route_meetups',
+    'places'         => 'route_places',
     'sounds'         => 'route_sounds',
     'auctions'       => 'route_auctions',
     'exercise'       => 'route_exercise',

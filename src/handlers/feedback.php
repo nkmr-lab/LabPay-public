@@ -31,7 +31,57 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
         feedback_claude_queue_status($pdo);
         return;
     }
+    // v453 管理画面 用 Claude ダッシュボード — 最終巡回時刻 / 直近完了 / approved 一覧 (body 含む)
+    if ($sub === 'claude_dashboard' && $method === 'GET') {
+        feedback_claude_dashboard($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no feedback route for $method $sub", 404);
+}
+
+// v453 管理画面 用 ダッシュボード。 admin のみ。 内容:
+//  - last_polled_at: /api/feedback/claude_queue が 最後に 叩かれた 時刻
+//  - last_done:      直近 done の id + summary + finished_at
+//  - approved / working 一覧 (id, kind, age, body 抜粋)
+function feedback_claude_dashboard(PDO $pdo, array $cfg): void {
+    Auth::requireAdmin($pdo, $cfg);
+    $pollFile = '/var/www/labpay/var/claude_last_poll.txt';
+    $lastPoll = is_readable($pollFile) ? (string) trim((string)@file_get_contents($pollFile)) : null;
+    $stD = $pdo->query("SELECT id, claude_summary, claude_finished_at
+                          FROM feedback
+                         WHERE claude_status='done' AND claude_finished_at IS NOT NULL
+                         ORDER BY claude_finished_at DESC LIMIT 1");
+    $lastDone = $stD->fetch(PDO::FETCH_ASSOC) ?: null;
+    if ($lastDone) $lastDone['id'] = (int)$lastDone['id'];
+
+    $stQ = $pdo->prepare("
+        SELECT id, kind, user_id, claude_status, claude_assigned_at, claude_started_at,
+               LEFT(body, 200) AS body_preview,
+               TIMESTAMPDIFF(SECOND,
+                 COALESCE(claude_started_at, claude_assigned_at),
+                 NOW()) AS age_sec
+          FROM feedback
+         WHERE claude_status IN ('approved','working')
+         ORDER BY COALESCE(claude_started_at, claude_assigned_at) ASC
+         LIMIT 50");
+    $stQ->execute();
+    $items = array_map(fn($r) => [
+        'id'              => (int)$r['id'],
+        'kind'            => (string)$r['kind'],
+        'user_id'         => (int)$r['user_id'],
+        'claude_status'   => (string)$r['claude_status'],
+        'assigned_at'     => $r['claude_assigned_at'],
+        'started_at'      => $r['claude_started_at'],
+        'age_seconds'     => (int)$r['age_sec'],
+        'body_preview'    => (string)$r['body_preview'],
+    ], $stQ->fetchAll(PDO::FETCH_ASSOC));
+
+    json_response([
+        'last_polled_at' => $lastPoll,
+        'last_done'      => $lastDone,
+        'queue_items'    => $items,
+        'server_now'     => date('c'),
+    ]);
 }
 
 // GET /api/feedback/claude_queue
@@ -40,6 +90,9 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
 //   外部 アプリ (GitHub Actions / 自前 lambda / ...) で polling し、 状態変化 を
 //   検出して 端末側 オートメーション を キックする 設計。
 function feedback_claude_queue_status(PDO $pdo): void {
+    // v453 巡回した 瞬間 を 記録 (= 「最後に Claude が 来た 時刻」)。 ファイル書き込み
+    // 失敗 は 黙殺 (= ダッシュボード が 古いまま でも 機能 を 止めない)。
+    @file_put_contents('/var/www/labpay/var/claude_last_poll.txt', date('c'));
     $st = $pdo->query("
         SELECT
           (SELECT COUNT(*) FROM feedback WHERE claude_status='approved') AS approved_count,

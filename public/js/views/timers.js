@@ -264,6 +264,7 @@ let tmDisplayMode = (() => {
 let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server からの遅延補正)
 let tmEndsMs = 0;
 let tmStartedMs = 0;
+let tmClosedMs = 0;         // v453 cancelled/done 時の closed_at (停止時 経過 計算 用)
 let tmDurationSec = 0;
 let tmRemainingSec = 0;     // v446 paused 時の 残り秒数 (running/done では未使用)
 let tmBells = [];           // [秒, ...] 開始からの 秒数 (非 null だけ、 終了ベル含む)
@@ -289,7 +290,12 @@ export async function renderTimerDetail({ params }) {
       <a href="#/timers" class="hint">← 一覧</a>
       <div id="tmd-head"><div class="muted">読み込み中…</div></div>
     </div>
-    <div class="card" style="text-align:center">
+    <div class="card" id="tmd-display-card" style="text-align:center; position:relative">
+      <div class="row" style="gap:6px; justify-content:flex-end; position:absolute; top:6px; right:6px">
+        <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で 鳴る か 確認)">🔊 試聴</button>
+        <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に 時間を 見せる)">🖥 フル</button>
+      </div>
+      <div id="tmd-title-fs" class="hint-sm" hidden></div>
       <div id="tmd-count" title="タップで カウントダウン ⇄ カウントアップ"
            style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px; cursor:pointer; user-select:none">--:--</div>
       <div id="tmd-mode" class="hint-sm" style="margin-top:-4px; margin-bottom:4px">残り時間</div>
@@ -330,6 +336,41 @@ export async function renderTimerDetail({ params }) {
     try { localStorage.setItem('labpay-tm-display', tmDisplayMode); } catch (_) {}
     tickTimer();
   });
+  // v453 試聴 — 「鳴らない」 訴え の 1 次切り分け 用。 click 内 で 鳴らす ので
+  // 必ず unlock 済み の 状態で 走る。 鳴らない なら 端末側 (silent / volume / etc) 問題。
+  document.getElementById('tmd-test-bell')?.addEventListener('click', () => {
+    unlockAudio();
+    playBoundaryTick();
+    setTimeout(() => playEndDing(), 600);
+  });
+  // v453 フルスクリーン — 学会タイマー で 発表者 に 時間 を 見せる。 ESC / 再タップ で 解除。
+  document.getElementById('tmd-fs')?.addEventListener('click', () => {
+    toggleTimerFullscreen();
+  });
+}
+
+// v453 タイマー表示 を フルスクリーン に。 #tmd-display-card を 全画面化 し、
+// CSS で 中央に 巨大な カウントダウン を 配置。 Fullscreen API + CSS class 切替。
+function toggleTimerFullscreen() {
+  const card = document.getElementById('tmd-display-card');
+  if (!card) return;
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    card.classList.remove('tmd-fs-on');
+    return;
+  }
+  card.classList.add('tmd-fs-on');
+  const req = card.requestFullscreen || card.webkitRequestFullscreen;
+  if (req) req.call(card).catch(() => {});
+  const handler = () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      card.classList.remove('tmd-fs-on');
+      document.removeEventListener('fullscreenchange', handler);
+      document.removeEventListener('webkitfullscreenchange', handler);
+    }
+  };
+  document.addEventListener('fullscreenchange', handler);
+  document.addEventListener('webkitfullscreenchange', handler);
 }
 
 async function loadTimerDetail(id, { isResync = false } = {}) {
@@ -341,6 +382,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     // v446 paused は started_at/ends_at が NULL。 NaN を 避けるため 三項で 0 に。
     tmEndsMs      = t.ends_at    ? Date.parse(String(t.ends_at).replace(' ', 'T'))    : 0;
     tmStartedMs   = t.started_at ? Date.parse(String(t.started_at).replace(' ', 'T')) : 0;
+    tmClosedMs    = t.closed_at  ? Date.parse(String(t.closed_at).replace(' ', 'T'))  : 0;
     tmDurationSec = t.duration_seconds;
     tmRemainingSec = Math.max(0, Number(t.remaining_seconds) || 0);
     tmStatus      = t.status;
@@ -378,6 +420,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       // v446 start/pause/reset は 参加者 (含 起案者) なら 押せる。
       if (d.is_participant || d.is_creator) {
         document.getElementById('tmd-start').addEventListener('click', async () => {
+          unlockAudio();  // v453 明示 unlock 「鳴らない」 対策 (グローバル unlock の バックアップ)
           try { await patch(`/api/timers/${id}/start`, {}); toast('開始しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
           catch (e) { toast('失敗: ' + e.message); }
         });
@@ -467,10 +510,19 @@ function tickTimer() {
     }
   }
   if (tmStatus === 'cancelled') {
-    countEl.textContent = '停止';
+    // v453 停止時 の 経過秒 を 残す — 「何分何秒 で 止めたか」 が 重要な 記録 になる。
+    // closed_at - started_at で 復元。 progress バー も そのまま 残す。
+    let stoppedSec = 0;
+    if (tmStartedMs && tmClosedMs) {
+      stoppedSec = Math.max(0, Math.floor((tmClosedMs - tmStartedMs) / 1000));
+    }
+    countEl.textContent = fmtDuration(stoppedSec);
     countEl.style.color = '#888';
-    barEl.style.width = '0%';
-    stEl.textContent = '⏹ 起案者により停止されました — ↻ リセット で 戻せます';
+    const pct = tmDurationSec ? Math.min(100, (stoppedSec / tmDurationSec) * 100) : 0;
+    barEl.style.width = pct.toFixed(1) + '%';
+    barEl.style.background = '#888';
+    elEl.textContent = `停止時 経過 ${fmtDuration(stoppedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
+    stEl.textContent = `⏹ ${fmtDuration(stoppedSec)} で 停止 — ↻ リセット で 戻せます`;
     return;
   }
   // v446 paused: 残り を 固定表示。 tick で 減らさない。

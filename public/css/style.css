@@ -754,3 +754,30 @@ a.list-item { text-decoration: none; color: inherit; }
   border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px;
   text-align: center; background: white;
 }
+
+/* v453 タイマー フルスクリーン (学会タイマー で 発表者 に 見せる モード) */
+.tmd-fs-on {
+  background: #0c0c10 !important;
+  color: #fff !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px !important;
+}
+.tmd-fs-on #tmd-count {
+  font-size: clamp(120px, 30vw, 480px) !important;
+  color: #fff !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+.tmd-fs-on #tmd-mode,
+.tmd-fs-on #tmd-elapsed,
+.tmd-fs-on #tmd-status {
+  color: #aaa !important;
+  font-size: clamp(14px, 2.2vw, 28px) !important;
+  margin-top: 14px !important;
+}
+.tmd-fs-on #tmd-bar {
+  background: #fff !important;
+}

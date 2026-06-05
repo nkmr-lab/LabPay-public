@@ -15,6 +15,10 @@ export async function renderFeedbackAdmin() {
     return;
   }
   document.getElementById('app').innerHTML = `
+    <div class="card" id="fb-claude-dash">
+      <h3 style="margin:0 0 6px">🤖 Claude 巡回 状況</h3>
+      <div id="fb-claude-dash-body" class="hint-sm">読み込み中…</div>
+    </div>
     <div class="card">
       <h2 style="margin-top:0">報告・要望</h2>
       <p class="muted" style="font-size:13px; margin:4px 0 8px">
@@ -30,7 +34,91 @@ export async function renderFeedbackAdmin() {
   // navigate 中の race で DOM が消えてる事があるので 防御的に。
   document.getElementById('fb-flt-open')?.addEventListener('click', () => setFilter('open'));
   document.getElementById('fb-flt-all') ?.addEventListener('click', () => setFilter('all'));
+  await renderClaudeDashboard();
   await loadList();
+}
+
+// v453 Claude 巡回 状況 を 上部に 表示。 最終巡回時刻 / approved・working 一覧 +
+// 各行 に [Claude に任せる] / [取り消す] / [対象外 (blocked)] ボタン。
+async function renderClaudeDashboard() {
+  const root = document.getElementById('fb-claude-dash-body');
+  if (!root) return;
+  try {
+    const d = await get('/api/feedback/claude_dashboard');
+    const lastPoll = d.last_polled_at ? new Date(d.last_polled_at) : null;
+    const lastDone = d.last_done;
+    const items = d.queue_items || [];
+    const ago = (sec) => {
+      if (sec < 60) return `${sec} 秒前`;
+      if (sec < 3600) return `${Math.floor(sec/60)} 分前`;
+      if (sec < 86400) return `${Math.floor(sec/3600)} 時間前`;
+      return `${Math.floor(sec/86400)} 日前`;
+    };
+    const pollAgo = lastPoll
+      ? ago(Math.floor((Date.now() - lastPoll.getTime()) / 1000))
+      : '(まだ 巡回なし)';
+    const pollWarn = lastPoll && (Date.now() - lastPoll.getTime() > 90 * 60 * 1000)
+      ? ` <span class="tag" style="background:#ffe9c2; color:#9a4400">⚠ 1.5 時間以上 前</span>`
+      : '';
+    const stuckCount = items.filter(it => it.age_seconds > 3600).length;
+    const stuckTag = stuckCount > 0
+      ? ` <span class="tag" style="background:#fee2e2; color:#b91c1c">⏸ ${stuckCount} 件 滞留</span>`
+      : '';
+    const lastDoneLine = lastDone
+      ? `<div>直近 完了: #${lastDone.id} — ${escapeHtml(lastDone.claude_summary || '(無題)')} <span class="muted">${escapeHtml(lastDone.claude_finished_at || '')}</span></div>`
+      : '<div class="muted">直近 完了: なし</div>';
+    const itemsHtml = items.length ? `
+      <div class="list" style="margin-top:6px">
+        ${items.map(it => {
+          const statusBadge = it.claude_status === 'working'
+            ? '<span class="tag" style="background:#e3f2fd; color:#1565c0">🛠 working</span>'
+            : '<span class="tag" style="background:#fef3c7; color:#92400e">⏳ approved</span>';
+          const stuck = it.age_seconds > 3600
+            ? ` <span class="tag" style="background:#fee2e2; color:#b91c1c">⚠ 滞留 ${ago(it.age_seconds)}</span>`
+            : ` <span class="hint">${ago(it.age_seconds)}</span>`;
+          return `
+          <div class="list-item">
+            <div class="grow" style="min-width:0">
+              <div class="bold">#${it.id} ${escapeHtml(KIND_LBL[it.kind] || it.kind)} ${statusBadge}${stuck}</div>
+              <div class="meta" style="white-space:pre-wrap; overflow:hidden">${escapeHtml(it.body_preview)}${it.body_preview.length >= 200 ? '…' : ''}</div>
+            </div>
+            <div class="row" style="gap:4px; flex-direction:column">
+              <button class="btn" data-dash-block-fb="${it.id}" style="font-size:11px; padding:2px 6px" title="一旦 退避 (none に 戻す)">退避</button>
+              <button class="btn danger" data-dash-blocked-fb="${it.id}" style="font-size:11px; padding:2px 6px" title="Claude 対象 から 外す (blocked)">対象外</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : '<div class="muted" style="margin-top:6px">approved / working なし</div>';
+    root.innerHTML = `
+      <div>最終 巡回: <b>${escapeHtml(lastPoll ? lastPoll.toLocaleString() : '—')}</b> (${pollAgo})${pollWarn}${stuckTag}</div>
+      ${lastDoneLine}
+      ${itemsHtml}
+    `;
+    // 退避: approved/working → none に 戻す (再度 「Claude に任せる」 で 再投入)
+    root.querySelectorAll('[data-dash-block-fb]').forEach(b => {
+      b.addEventListener('click', async () => {
+        try {
+          await patch(`/api/feedback/${b.dataset.dashBlockFb}/claude_status`, { status: 'none' });
+          toast('退避しました');
+          await renderClaudeDashboard();
+          await loadList();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    root.querySelectorAll('[data-dash-blocked-fb]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Claude 対象 から 外しますか? (blocked)')) return;
+        try {
+          await patch(`/api/feedback/${b.dataset.dashBlockedFb}/claude_status`, { status: 'blocked' });
+          toast('対象外にしました');
+          await renderClaudeDashboard();
+          await loadList();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 let currentFilter = 'open';

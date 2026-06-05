@@ -26,6 +26,7 @@ import { renderRollCalls, renderRollCallNew, renderRollCallDetail } from './view
 import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.js';
 import { renderNotices, renderNoticeForm } from './views/notices.js';
 import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
+import { renderPlaces, renderPlaceNew, renderPlaceDetail } from './views/places.js';
 import { renderAdminSounds } from './views/admin_sounds.js';
 import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/auctions.js';
 import { renderPlaylists, renderPlaylistNew, renderPlaylistDetail, renderPlaylistEdit } from './views/playlists.js';
@@ -449,6 +450,9 @@ route('/notices/:id/edit', renderNoticeForm);
 route('/meetups',         renderMeetups);
 route('/meetups/new',     renderMeetupNew);
 route('/meetups/:id',     renderMeetupDetail);
+route('/places',          renderPlaces);
+route('/places/new',      renderPlaceNew);
+route('/places/:id',      renderPlaceDetail);
 route('/admin/sounds',    renderAdminSounds);
 route('/auctions',        renderAuctions);
 route('/auctions/new',    renderAuctionNew);
