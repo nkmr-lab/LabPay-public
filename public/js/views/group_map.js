@@ -89,14 +89,17 @@ export async function renderGroupMap({ params }) {
       <div id="gm-share-st" class="hint-sm" style="margin-top:4px"></div>
     </div>
     <div class="card" style="padding:0; overflow:hidden">
-      <div id="gm-map" style="height:60vh; min-height:360px; width:100%; background:#eef"></div>
+      <div id="gm-map" style="height:46vh; min-height:300px; width:100%; background:#eef"></div>
     </div>
     <div class="card">
       <div class="row center" style="margin-bottom:6px">
-        <h3 class="row-title" style="margin:0">地点リスト</h3>
-        <span class="hint-sm">↑↓ で並び替え</span>
+        <h3 class="row-title" style="margin:0">地点リスト <span id="gm-list-count" class="hint-sm" style="font-weight:400"></span></h3>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer">
+          <input type="checkbox" id="gm-bounds-only" checked>
+          <span>表示中エリアのみ</span>
+        </label>
       </div>
-      <div id="gm-list" class="list"></div>
+      <div id="gm-list" class="list" style="max-height:38vh; overflow-y:auto"></div>
     </div>
   `;
 
@@ -214,12 +217,13 @@ export async function renderGroupMap({ params }) {
       </div>`;
   };
 
-  const redraw = () => {
+  // v433 markers / lines は 全件、 list は 「表示中エリアのみ」 toggle で
+  // map.getBounds() フィルタ → moveend/zoomend で 即 再描画。 1 画面で
+  // 地図と 連動する 検索 UI。
+  const drawMarkersAndLines = () => {
     markerLayer.clearLayers();
     lineLayer.clearLayers();
     const items = orderedIds.map(x => byId.get(x)).filter(Boolean);
-    document.getElementById('gm-info').textContent =
-      `${items.length} 地点 / ${lineOn ? '時系列で線で結んでいます' : '線は非表示'}`;
     const latlngs = items.map(it => [Number(it.lat), Number(it.lng)]);
     items.forEach((it, idx) => {
       L.marker(latlngs[idx], { icon: buildItemIcon(it, idx) })
@@ -229,34 +233,83 @@ export async function renderGroupMap({ params }) {
     if (lineOn && latlngs.length >= 2) {
       L.polyline(latlngs, { color: '#4a106d', weight: 3, opacity: 0.65, dashArray: '6 4' }).addTo(lineLayer);
     }
-    // 初回 (savedView 無し時) は 地点群 に fitBounds
     if (!savedView && latlngs.length) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
     }
+  };
 
-    document.getElementById('gm-list').innerHTML = items.map((it, idx) => {
-      const upDisabled = idx === 0 ? 'disabled' : '';
-      const downDisabled = idx === items.length - 1 ? 'disabled' : '';
+  const renderList = () => {
+    const items = orderedIds.map(x => byId.get(x)).filter(Boolean);
+    const boundsOnly = document.getElementById('gm-bounds-only')?.checked;
+    const visIdxs = items.map((_, i) => i);  // 全 index (絶対番号 = 元の 並び順)
+    const filteredIdxs = boundsOnly
+      ? visIdxs.filter(i => {
+          const it = items[i];
+          try { return map.getBounds().contains([Number(it.lat), Number(it.lng)]); }
+          catch { return true; }
+        })
+      : visIdxs;
+    const info = document.getElementById('gm-info');
+    if (info) {
+      info.textContent = `${items.length} 地点 (表示中 ${filteredIdxs.length}) / ${lineOn ? '時系列で線で結んでいます' : '線は非表示'}`;
+    }
+    const cntEl = document.getElementById('gm-list-count');
+    if (cntEl) {
+      cntEl.textContent = boundsOnly
+        ? `(${filteredIdxs.length} / ${items.length})`
+        : `(${items.length})`;
+    }
+    const listEl = document.getElementById('gm-list');
+    if (!listEl) return;
+    if (!filteredIdxs.length) {
+      listEl.innerHTML = boundsOnly
+        ? '<div class="empty" style="padding:6px">表示中エリアに 地点なし。 地図を 動かしてください。</div>'
+        : '<div class="empty" style="padding:6px">地点なし</div>';
+      return;
+    }
+    listEl.innerHTML = filteredIdxs.map((absIdx) => {
+      const it = items[absIdx];
+      const upDisabled   = absIdx === 0 ? 'disabled' : '';
+      const downDisabled = absIdx === items.length - 1 ? 'disabled' : '';
       const thumb = it.image_url
         ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:40px; height:40px; object-fit:cover; border-radius:6px; flex-shrink:0">`
         : '';
       return `
-        <div class="list-item" style="gap:8px; align-items:center">
-          <div style="background:var(--primary); color:#fff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0">${idx + 1}</div>
+        <div class="list-item" data-pin-id="${it.id}" style="gap:8px; align-items:center; cursor:pointer">
+          <div style="background:var(--primary); color:#fff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0">${absIdx + 1}</div>
           ${thumb}
           <div class="grow" style="min-width:0">
             <div class="bold" style="font-size:13px">${escapeHtml(it.title)}</div>
             <div class="meta">${escapeHtml(it.day_date || '')} ${escapeHtml((it.start_time || '').slice(0, 5))}${it.location ? ' · ' + escapeHtml(it.location) : ''}</div>
           </div>
           <div style="display:flex; flex-direction:column; gap:2px; flex-shrink:0">
-            <button data-mv="up" data-id="${it.id}" class="btn" style="padding:0 6px; font-size:11px" ${upDisabled}>↑</button>
+            <button data-mv="up"   data-id="${it.id}" class="btn" style="padding:0 6px; font-size:11px" ${upDisabled}>↑</button>
             <button data-mv="down" data-id="${it.id}" class="btn" style="padding:0 6px; font-size:11px" ${downDisabled}>↓</button>
           </div>
-          <a href="https://maps.google.com/?q=${Number(it.lat)},${Number(it.lng)}" target="_blank" rel="noopener" class="btn" style="padding:2px 8px; font-size:11px; color:var(--primary)">Maps</a>
+          <a href="https://maps.google.com/?q=${Number(it.lat)},${Number(it.lng)}" target="_blank" rel="noopener" class="btn" style="padding:2px 8px; font-size:11px; color:var(--primary)" onclick="event.stopPropagation()">Maps</a>
         </div>`;
     }).join('');
-    document.querySelectorAll('[data-mv]').forEach(b => {
-      b.addEventListener('click', () => {
+    // 行 タップで 該当 マーカー の popup を 開く + 中心へ flyTo
+    listEl.querySelectorAll('[data-pin-id]').forEach(row => {
+      row.addEventListener('click', (ev) => {
+        if (ev.target.closest('button,a')) return;
+        const tid = Number(row.dataset.pinId);
+        const it = byId.get(tid);
+        if (!it) return;
+        const latlng = [Number(it.lat), Number(it.lng)];
+        map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.5 });
+        // popup を 開く: marker レイヤから 同 latlng の マーカーを 探す
+        markerLayer.eachLayer(m => {
+          const ll = m.getLatLng?.();
+          if (ll && Math.abs(ll.lat - latlng[0]) < 1e-6 && Math.abs(ll.lng - latlng[1]) < 1e-6) {
+            m.openPopup();
+          }
+        });
+      });
+    });
+    listEl.querySelectorAll('[data-mv]').forEach(b => {
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
         const targetId = Number(b.dataset.id);
         const i = orderedIds.indexOf(targetId);
         if (i < 0) return;
@@ -268,6 +321,17 @@ export async function renderGroupMap({ params }) {
       });
     });
   };
+
+  const redraw = () => {
+    drawMarkersAndLines();
+    renderList();
+  };
+
+  // 地図の 移動 / ズーム で 「表示中エリアのみ」 ON の 時 list を 再描画。
+  map.on('moveend zoomend', () => {
+    if (document.getElementById('gm-bounds-only')?.checked) renderList();
+  });
+  document.getElementById('gm-bounds-only')?.addEventListener('change', renderList);
 
   document.getElementById('gm-line-toggle').addEventListener('change', (e) => {
     lineOn = e.target.checked;
