@@ -9,6 +9,8 @@ import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
 // データは localStorage に保存し、サーバ側には送らない。
 export const HOME_CARDS = [
+  // v406 時間制限ありの 「いま 動いている / 対応待ち」 は 残高 直下に。
+  { id: 'my-timers',      title: '⏱ 進行中 / 時間制限あり (タイマー・SW・点呼)' },
   { id: 'presence',       title: '今ラボにいる人' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
   { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
@@ -19,7 +21,6 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
-  { id: 'my-timers',      title: '参加中タイマー / ストップウォッチ' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -88,6 +89,14 @@ export async function renderHome() {
     </div>
 
     <div id="home-cards-region">
+    <div class="card" id="home-mytm-card" data-card-id="my-timers" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">⏱ 進行中 / 時間制限あり</h2>
+        <a href="#/timers" class="hint">タイマー →</a>
+      </div>
+      <div id="home-mytm" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <div class="card" data-card-id="presence">
       <div class="row center">
         <h2 class="row-title">今ラボにいる人</h2>
@@ -174,14 +183,6 @@ export async function renderHome() {
         <a href="#/playlists" class="hint">一覧 →</a>
       </div>
       <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
-    </div>
-
-    <div class="card" id="home-mytm-card" data-card-id="my-timers" hidden>
-      <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">⏱ 参加中のタイマー / ストップウォッチ</h2>
-        <a href="#/timers" class="hint">タイマー一覧 →</a>
-      </div>
-      <div id="home-mytm" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
     <details class="card" data-card-id="history">
@@ -982,11 +983,32 @@ async function renderMyActiveTimers() {
   if (!card || !root) return;
   try {
     const meId = Number(state.me?.id);
-    const [tm, sw] = await Promise.allSettled([
+    // v406 点呼 (rollcall) も 「時間制限あり」 なので 合流。 pending API 経由で
+    // 自分が 対応していない 締切付き 点呼を 拾う。
+    const [tm, sw, pend] = await Promise.allSettled([
       get('/api/timers'),
       get('/api/stopwatches'),
+      get('/api/me/pending'),
     ]);
     const rows = [];
+    // 点呼 (締切が 近い順に 先頭)
+    if (pend.status === 'fulfilled') {
+      const nowMs = Date.now();
+      for (const it of (pend.value.items || [])) {
+        if (it.kind !== 'rollcall') continue;
+        const deadlineMs = it.deadline_at ? Date.parse(String(it.deadline_at).replace(' ', 'T')) : null;
+        const remaining = deadlineMs ? Math.max(0, Math.floor((deadlineMs - nowMs) / 1000)) : null;
+        rows.push({
+          href: it.url,
+          kind: '📣 点呼',
+          title: it.title,
+          time: remaining !== null ? `${fmtTmDur(remaining)} 残` : '—',
+          sort: remaining ?? 0,
+          color: remaining !== null && remaining < 600 ? '#c62828' : '#e65100',
+          bg: '#fff3e0',
+        });
+      }
+    }
     if (tm.status === 'fulfilled') {
       const tNow = Date.parse(String(tm.value.server_now).replace(' ', 'T'));
       const tOff = tNow - Date.now();
@@ -1001,7 +1023,8 @@ async function renderMyActiveTimers() {
           kind: '⏱ タイマー',
           title: t.title,
           time: `${fmtTmDur(remaining)} 残`,
-          color: '#1565c0',
+          sort: remaining,
+          color: remaining < 60 ? '#c62828' : '#1565c0',
           bg: '#e3f2fd',
         });
       }
@@ -1011,19 +1034,21 @@ async function renderMyActiveTimers() {
         if (s.status === 'stopped') continue;  // リセット済は出さない
         rows.push({
           href: '#/stopwatches/' + s.id,
-          kind: s.status === 'running' ? '🟢 計測中' : '⏸ 一時停止',
+          kind: s.status === 'running' ? '🟢 SW 計測中' : '⏸ SW 一時停止',
           title: s.title,
           time: fmtTmDur(s.elapsed_seconds),
+          sort: 999999,  // ストップウォッチは 末尾
           color: s.status === 'running' ? '#0e7c63' : '#e65100',
           bg: s.status === 'running' ? '#e0f7f1' : '#fff3e0',
         });
       }
     }
     if (!rows.length) { card.hidden = true; return; }
+    rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
     card.hidden = false;
     root.innerHTML = rows.map(r => `
       <a class="list-item" href="${r.href}">
-        <div style="min-width:80px; font-family:monospace; font-size:18px; font-weight:700; color:${r.color}">${r.time}</div>
+        <div style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
         <div class="grow" style="min-width:0">
           <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
           <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
