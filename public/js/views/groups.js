@@ -251,14 +251,15 @@ export function wireCoverEditor({ idPrefix, onChange }) {
 
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
-export function coverListItem({ href, image_url, title, meta = '', rightExtra = '', members = null }) {
+export function coverListItem({ href, image_url, title, meta = '', rightExtra = '', members = null, chipSize = 'xs' }) {
   // v374 メンバ行: 名前は出さず avatar のみ 並べる (狭いリスト幅を 圧迫しない)。
   // 8 人まで並べて、 9 人以上は 「+N」 / 末尾に (N人)。
+  // v396 ホーム用に chipSize='sm' を 受けられるよう 引数化 (デフォは 従来の xs)。
   const memberRow = (Array.isArray(members) && members.length)
     ? `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">
          ${members.slice(0, 8).map(m =>
            `<span title="${escapeHtml(m.display_name)}" style="display:inline-flex">
-              ${avatarHtml(m.display_name, m.avatar_url, 'xs')}
+              ${avatarHtml(m.display_name, m.avatar_url, chipSize)}
             </span>`).join('')}
          ${members.length > 8 ? `<span class="muted" style="font-size:11px">+${members.length - 8}</span>` : ''}
          <span class="muted" style="font-size:11px; margin-left:auto">(${members.length}人)</span>

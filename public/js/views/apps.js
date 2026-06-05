@@ -16,14 +16,15 @@ export const APPS = [
   { id: 'meetups',       url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
   { id: 'contacts',      url: '#/contacts',      title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
   { id: 'notices',       url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
-  // ↓ ここから デフォは 隠す (設定 で ON にできる)。 使う人が限られるもの。
-  { id: 'random-groups', url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: false },
-  { id: 'auctions',      url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: false },
-  { id: 'exercise',      url: '#/exercise',      title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: false },
-  { id: 'nomikai',       url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: false },
-  { id: 'requests',      url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: false },
-  { id: 'scrapbox',      url: '#/scrapbox',      title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: false },
-  { id: 'network',       url: '#/network',       title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: false },
+  // v396: 以降も デフォ ON (旧 false 群は ユーザー要望で 全部 ON に変更)。
+  // 使わないものは 設定 → アプリ表示 から 個別に OFF にする方針。
+  { id: 'random-groups', url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
+  { id: 'auctions',      url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
+  { id: 'exercise',      url: '#/exercise',      title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
+  { id: 'nomikai',       url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
+  { id: 'requests',      url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
+  { id: 'scrapbox',      url: '#/scrapbox',      title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
+  { id: 'network',       url: '#/network',       title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';

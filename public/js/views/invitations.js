@@ -10,6 +10,23 @@ import { openModal } from '../modal.js';
 import { createMemberPicker } from '../member_picker.js';
 import { isAppVisible } from './apps.js';
 
+// v396 募集 詳細の 「ショートカット」 アプリ群。 groups の GROUP_ACTIONS と
+// 同じ規約。 i.feat_actions が null/undefined なら 「全 ON」、 配列なら その中
+// の ID のみ ON。
+const INV_ACTIONS = [
+  { id: 'meetups',   label: '🤝 待ち合わせを作る', primary: true },
+  { id: 'roulette',  label: '🎰 ルーレット' },
+  { id: 'nomikai',   label: '🍻 割り勘' },
+  { id: 'polls',     label: '📊 投票・アンケート' },
+  { id: 'rollcalls', label: '📣 点呼' },
+  { id: 'timers',    label: '⏱️ タイマー' },
+];
+function invActionEnabled(inv, id) {
+  const list = inv?.feat_actions;
+  if (list === null || list === undefined) return true; // 後方互換 (= 全 ON)
+  return Array.isArray(list) && list.includes(id);
+}
+
 export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -354,12 +371,25 @@ async function loadDetail(id) {
       if (i.location) muParams.set('location', i.location);
       if (i.starts_at) muParams.set('when', fmtLocalInput(i.starts_at));
       // v385 ユーザの アプリ表示設定 で 隠れているものは ショートカットも 出さない。
-      const meetupBtn   = isAppVisible('meetups')  ? `<a class="btn primary" href="#/meetups/new?${muParams.toString()}">🤝 待ち合わせを作る</a>` : '';
-      const rouletteBtn = isAppVisible('roulette') ? `<a class="btn" href="#/roulette?members=${ids}">🎰 ルーレット</a>` : '';
-      const nomikaiBtn  = isAppVisible('nomikai')  ? `<a class="btn" href="#/nomikai?members=${ids}">🍻 割り勘</a>` : '';
+      // v396 募集側 (i.feat_actions) と ユーザー側 両方 ON のものだけ 表示。
+      const hrefFor = (id) => {
+        switch (id) {
+          case 'meetups':   return `#/meetups/new?${muParams.toString()}`;
+          case 'roulette':  return `#/roulette?members=${ids}`;
+          case 'nomikai':   return `#/nomikai?members=${ids}`;
+          case 'polls':     return `#/polls/new?members=${ids}&title=${encodeURIComponent('[' + (i.title || '') + '] ')}`;
+          case 'rollcalls': return `#/rollcalls/new?members=${ids}&title=${encodeURIComponent('[' + (i.title || '') + '] ')}`;
+          case 'timers':    return `#/timers/new?members=${ids}&title=${encodeURIComponent('[' + (i.title || '') + '] ')}`;
+          default: return '#/apps';
+        }
+      };
+      const btnsHtml = INV_ACTIONS
+        .filter(a => invActionEnabled(i, a.id) && isAppVisible(a.id))
+        .map(a => `<a class="btn${a.primary ? ' primary' : ''}" href="${hrefFor(a.id)}">${escapeHtml(a.label)}</a>`)
+        .join('');
       shortcuts.innerHTML = `
         <div class="muted" style="font-size:12px; width:100%; margin-bottom:4px">募集者 + 参加表明者 (${memberIds.length}人) で:</div>
-        ${meetupBtn}${rouletteBtn}${nomikaiBtn}
+        ${btnsHtml}
         <button id="inv-mkgroup" class="btn">👥 グループ作成</button>
       `;
       document.getElementById('inv-mkgroup').addEventListener('click', () => onCreateGroupFromInv(i, memberIds));
@@ -506,7 +536,20 @@ function openInvEditModal(i) {
     </label>
     <label class="field"><span class="lbl">詳細 (任意)</span>
       <textarea id="ied-desc" maxlength="5000" rows="3">${escapeHtml(i.description || '')}</textarea>
-    </label>`;
+    </label>
+    <div class="field">
+      <span class="lbl">アプリ ショートカット</span>
+      <div class="hint-sm" style="margin-bottom:6px">この募集ページに出す アプリ ボタン。 全 OFF も可。</div>
+      <div id="ied-feat-actions" class="row" style="gap:4px 12px; flex-wrap:wrap">
+        ${INV_ACTIONS.map(a => {
+          const on = invActionEnabled(i, a.id);
+          return `<label style="display:inline-flex; align-items:center; gap:4px; min-width:140px">
+            <input type="checkbox" data-act="${a.id}" ${on ? 'checked' : ''}>
+            <span>${escapeHtml(a.label.replace(/^[^\s]+\s/, ''))}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
   const m = openModal({
     title: '✏️ 募集を編集',
     bodyHtml,
@@ -515,6 +558,8 @@ function openInvEditModal(i) {
       { label: '保存',       kind: 'primary', onClick: async () => {
         const dv = document.getElementById('ied-date').value;
         const tv = document.getElementById('ied-time').value;
+        const feat_actions = [...document.querySelectorAll('#ied-feat-actions input[data-act]')]
+          .filter(cb => cb.checked).map(cb => cb.dataset.act);
         const body = {
           title:            document.getElementById('ied-title').value.trim(),
           starts_at:        dv ? (tv ? `${dv}T${tv}` : dv) : null,
@@ -522,6 +567,7 @@ function openInvEditModal(i) {
           location:         document.getElementById('ied-where').value.trim() || null,
           capacity:         document.getElementById('ied-cap').value ? Number(document.getElementById('ied-cap').value) : null,
           description:      document.getElementById('ied-desc').value.trim() || null,
+          feat_actions,
         };
         if (!body.title) { toast('タイトル必須'); return; }
         m.setBusy(true);

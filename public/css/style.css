@@ -322,13 +322,10 @@ details.gd-sched-drop-over {
 
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
-/* v395: list 表示で 「つぶれる」 と 報告。 全段階 1 ステップ 大きく:
-   xs 18→24, sm 24→32, md 36→44, lg 72→84。 fallback の font-size も
-   router.js avatarHtml で 追随。 */
-.avatar-xs   { width:24px; height:24px; }
-.avatar-sm   { width:32px; height:32px; }
-.avatar-md   { width:44px; height:44px; }
-.avatar-lg   { width:84px; height:84px; }
+.avatar-xs   { width:18px; height:18px; }
+.avatar-sm   { width:24px; height:24px; }
+.avatar-md   { width:36px; height:36px; }
+.avatar-lg   { width:72px; height:72px; }
 .avatar-fallback {
   display:inline-flex; align-items:center; justify-content:center;
   border-radius:50%; background:var(--primary-soft); color:var(--primary);
@@ -436,7 +433,7 @@ details.gd-sched-drop-over {
   box-shadow: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 2px white;
 }
 .tile-seller .avatar,
-.tile-seller .avatar-fallback { width: 32px; height: 32px; }
+.tile-seller .avatar-fallback { width: 26px; height: 26px; }
 .tile-seller .avatar-fallback { font-size: var(--text-sm); }
 
 /* Presence pill: one chip per person in the "今ラボにいる人" list */

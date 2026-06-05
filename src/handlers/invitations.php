@@ -106,6 +106,15 @@ function invitations_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
+// v396 募集の 「アプリ ショートカット」 用 feat_actions の許可リスト。
+// groups の normalize_feat_actions と 同じ規約 (ID と意味)。
+function invitations_normalize_feat_actions(array $ids): string {
+    static $ALLOWED = ['roulette','nomikai','polls','rollcalls','timers','meetups'];
+    $clean = array_values(array_unique(array_filter(array_map('strval', $ids),
+        fn($x) => in_array($x, $ALLOWED, true))));
+    return json_encode($clean, JSON_UNESCAPED_UNICODE);
+}
+
 function invitations_detail(PDO $pdo, array $cfg, int $id): void {
     Auth::requireUser($pdo, $cfg);
     // 開始時刻を過ぎていれば list と同じく自動終了
@@ -136,6 +145,12 @@ function invitations_detail(PDO $pdo, array $cfg, int $id): void {
          ORDER BY j.joined_at");
     $stJ->execute([$id]);
     $row['joins'] = $stJ->fetchAll();
+    // v396 feat_actions は JSON 文字列で保存。 NULL = 「全 ON」 シグナル。
+    if (array_key_exists('feat_actions', $row)) {
+        $row['feat_actions'] = $row['feat_actions'] === null
+            ? null
+            : (json_decode((string)$row['feat_actions'], true) ?: []);
+    }
     json_response($row);
 }
 
@@ -205,10 +220,15 @@ function invitations_create(PDO $pdo, array $cfg): void {
             throw new ApiException('bad_request', '事前参加者の人数が上限を超えています', 400);
         }
     }
+    // v396 アプリ ショートカット の ON/OFF (NULL = 全 ON)。
+    $featActionsJson = null;
+    if (array_key_exists('feat_actions', $body) && is_array($body['feat_actions'])) {
+        $featActionsJson = invitations_normalize_feat_actions($body['feat_actions']);
+    }
     $ins = $pdo->prepare("INSERT INTO invitations
-        (creator_user_id, title, description, starts_at, starts_at_has_time, signup_closes_at, location, capacity, image_url)
-        VALUES (?,?,?,?,?,?,?,?,?)");
-    $ins->execute([$u['id'], $title, $desc, $startsAt, $startsHasTime, $signupClosesAt, $location, $capacity, $imageUrl]);
+        (creator_user_id, title, description, starts_at, starts_at_has_time, signup_closes_at, location, capacity, feat_actions, image_url)
+        VALUES (?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$u['id'], $title, $desc, $startsAt, $startsHasTime, $signupClosesAt, $location, $capacity, $featActionsJson, $imageUrl]);
     $invId = (int)$pdo->lastInsertId();
 
     // v370 発起人を 自動で 参加表明済 に + 事前参加者も 同時 join。
@@ -359,6 +379,16 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
                 throw new ApiException('bad_request', 'capacity は 1..1000', 400);
             }
             $sets[] = 'capacity = ?'; $args[] = $iv;
+        }
+    }
+    // v396 アプリ ショートカット の ON/OFF 編集。 feat_actions: null/array。
+    // null/省略 = 「全 ON」 (= DB は NULL), 配列 = 指定 ID のみ ON。
+    if (array_key_exists('feat_actions', $body)) {
+        if ($body['feat_actions'] === null) {
+            $sets[] = 'feat_actions = NULL';
+        } elseif (is_array($body['feat_actions'])) {
+            $sets[] = 'feat_actions = ?';
+            $args[] = invitations_normalize_feat_actions($body['feat_actions']);
         }
     }
     if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
