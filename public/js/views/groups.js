@@ -1864,6 +1864,8 @@ async function loadSchedule(gid) {
   // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
+      // v415 ドラッグ完了直後の click は 1 回だけ無視 (modal 誤起動防止)
+      if (suppressNextClick) { suppressNextClick = false; return; }
       // v414 内部 button/a/select + ドラッグハンドル + ロックバッジ は 編集 modal
       // を開かない (それぞれ 個別 handler 用 / ハンドルは DnD 用)。
       if (ev.target.closest('button,a,input,select,[data-drag-handle],[aria-label*="多日"]')) return;
@@ -1998,37 +2000,51 @@ async function loadSchedule(gid) {
     });
   });
 
-  // ─── v414 タッチ / ポインター ベース DnD ───
-  // モバイル の Safari/Chrome は ネイティブ HTML5 DnD が 効きにくく、 ハンドルを
-  // タップすると 編集 modal が 開く 不具合の 報告。 350ms 長押し → 移動可能 を
-  // ポインター イベントで 実装。 desktop の マウスでも 動く (両方 ON だが、 ネイティブ
-  // DnD が 先に dragstart を 取れば そのまま、 そうでなければ pointerdown → 350ms
-  // ホールド で 切替)。
+  // ─── v415 タッチ / ポインター ベース DnD ───
+  // 左端の ⋮⋮ ハンドル を 掴んだら 即 ドラッグ開始 (待ち無し)。
+  // それ以外の 行 内側 を 掴んだら 350ms 長押しで ドラッグ開始 (誤爆 / スクロール
+  // 妨害 を 避ける)。 8px 以上 動いたら 長押し 判定 キャンセル (スクロール扱い)。
+  // タッチ端末で ネイティブ HTML5 DnD が 効かない 問題 への 対処も 兼ねる。
   let pointerDrag = null;
-  body.querySelectorAll('[data-drag-handle="1"]').forEach(h => {
-    h.addEventListener('pointerdown', (ev) => {
+  const startDrag = (state, parentItem, handleEl) => {
+    state.active = true;
+    if (parentItem) parentItem.style.opacity = '0.4';
+    if (handleEl) handleEl.style.cursor = 'grabbing';
+    try { handleEl?.setPointerCapture(state.pointerId); } catch (_) {}
+  };
+  body.querySelectorAll('[data-sched-canedit="1"]').forEach(rowEl => {
+    rowEl.addEventListener('pointerdown', (ev) => {
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-      const srcId = Number(h.dataset.schedSrc);
-      const srcDay = h.dataset.schedSrcday || 'stock';
-      const parentItem = h.closest('[data-sched-item]');
-      const startX = ev.clientX, startY = ev.clientY;
+      const handleEl = ev.target.closest('[data-drag-handle="1"]');
+      // ハンドル以外 を 掴んだ時、 button/a/select 等の上 なら ドラッグも しない
+      // (各自の click handler に 渡す)
+      if (!handleEl && ev.target.closest('button,a,input,select,textarea')) return;
+      const handleFromRow = rowEl.querySelector('[data-drag-handle="1"]');
+      const srcEl = handleEl || handleFromRow;
+      if (!srcEl) return;
+      const srcId = Number(srcEl.dataset.schedSrc);
+      const srcDay = srcEl.dataset.schedSrcday || 'stock';
+      const parentItem = rowEl;
       const state = {
-        srcId, srcDay, parentItem, startX, startY,
+        srcId, srcDay, parentItem,
+        startX: ev.clientX, startY: ev.clientY,
         active: false, pointerId: ev.pointerId,
-        timer: null,
+        timer: null, handleEl: srcEl,
       };
-      state.timer = setTimeout(() => {
-        if (!pointerDrag) return;
-        pointerDrag.active = true;
-        if (parentItem) parentItem.style.opacity = '0.4';
-        h.style.cursor = 'grabbing';
-        try { h.setPointerCapture(ev.pointerId); } catch (_) {}
-      }, 350);
       pointerDrag = state;
+      if (handleEl) {
+        // ハンドル直撃 → 即 開始
+        startDrag(state, parentItem, srcEl);
+        ev.preventDefault();
+      } else {
+        // 行 中央 など → 350ms 長押し
+        state.timer = setTimeout(() => {
+          if (pointerDrag === state) startDrag(state, parentItem, srcEl);
+        }, 350);
+      }
     });
-    h.addEventListener('pointermove', (ev) => {
-      if (!pointerDrag) return;
-      // 長押し 未満で 大きく 動いたら キャンセル (スクロール扱い)
+    rowEl.addEventListener('pointermove', (ev) => {
+      if (!pointerDrag || pointerDrag.parentItem !== rowEl) return;
       if (!pointerDrag.active) {
         if (Math.hypot(ev.clientX - pointerDrag.startX, ev.clientY - pointerDrag.startY) > 8) {
           clearTimeout(pointerDrag.timer);
@@ -2049,15 +2065,17 @@ async function loadSchedule(gid) {
       }
     });
     const finishPointer = async (ev) => {
-      if (!pointerDrag) return;
+      if (!pointerDrag || pointerDrag.parentItem !== rowEl) return;
       const pd = pointerDrag;
       pointerDrag = null;
       clearTimeout(pd.timer);
-      h.style.cursor = 'grab';
+      if (pd.handleEl) pd.handleEl.style.cursor = 'grab';
       if (pd.parentItem) pd.parentItem.style.opacity = '';
       body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
       if (!pd.active) return;
       ev.preventDefault();
+      // ドラッグ後の click は 編集 modal を 開きたくない → suppressClick で 1 回 だけ ガード
+      suppressNextClick = true;
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
       if (!el) return;
       const itemT = el.closest('[data-sched-canedit="1"]');
@@ -2093,17 +2111,20 @@ async function loadSchedule(gid) {
         await loadSchedule(gid);
       }
     };
-    h.addEventListener('pointerup', finishPointer);
-    h.addEventListener('pointercancel', () => {
-      if (!pointerDrag) return;
+    rowEl.addEventListener('pointerup', finishPointer);
+    rowEl.addEventListener('pointercancel', () => {
+      if (!pointerDrag || pointerDrag.parentItem !== rowEl) return;
       clearTimeout(pointerDrag.timer);
+      if (pointerDrag.handleEl) pointerDrag.handleEl.style.cursor = 'grab';
       if (pointerDrag.parentItem) pointerDrag.parentItem.style.opacity = '';
       body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
       pointerDrag = null;
-      h.style.cursor = 'grab';
     });
   });
 }
+
+// v415 ドラッグ完了直後の 余計な click を 1 回だけ 消す
+let suppressNextClick = false;
 
 // 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
 const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk','move']);
