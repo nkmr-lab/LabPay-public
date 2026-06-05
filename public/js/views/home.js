@@ -584,6 +584,9 @@ async function renderCalendarEvents() {
   const card = document.getElementById('home-calendar-card');
   const root = document.getElementById('home-calendar');
   if (!card || !root) return;
+  // v440 カード自体は 必ず 表示 (上位 try/catch で 想定外の throw でも 隠さない)。
+  // 旧仕様だと 早期 throw で 「カレンダーが 消える」 ように 見える 不具合があった。
+  card.hidden = false;
   let items = null;
   try {
     const cache = readCalCache();
@@ -612,8 +615,7 @@ async function renderCalendarEvents() {
     if (cache && cache.items && cache.items.length) {
       items = cache.items;
     } else {
-      card.hidden = false;
-      root.innerHTML = `<div class="empty">予定を取得できませんでした。 <a href="#/settings" class="hint">設定 → Google Calendar 連携</a> を確認してください。</div>`;
+      root.innerHTML = `<div class="empty">予定を取得できませんでした (${escapeHtml(e.message || String(e))})。 <a href="#/settings" class="hint">設定 → Google Calendar 連携</a> を 確認するか、 一度 解除して 連携 し直してみてください。</div>`;
       return;
     }
   }
@@ -1100,9 +1102,14 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    if (!rows.length) { card.hidden = true; return; }
-    rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
+    // v440 空でも カード自体は 表示 (「進行中なし」 placeholder)。 旧仕様 だと
+    // 「表示されない = 壊れた?」 と 誤認 されやすかった。
     card.hidden = false;
+    if (!rows.length) {
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">進行中の タイマー / SW / 点呼 なし</div>';
+      return;
+    }
+    rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
     root.innerHTML = rows.map(r => `
       <a class="list-item" href="${r.href}">
         <div style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
