@@ -2476,8 +2476,9 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">日付 (空欄 = ストックに保存)</span>
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
-        <label class="field"><span class="lbl">タイトル</span>
+        <label class="field"><span class="lbl">タイトル <button id="sim-place-go" type="button" class="btn" style="padding:1px 8px; font-size:11px; margin-left:6px" title="入力した 場所名で Wikipedia + OSM を 検索して 緯度経度 / 説明 / 画像 を 自動入力">🔍 場所を検索</button></span>
           <input type="text" id="sim-title" maxlength="200" value="${escapeHtml(it.title || '')}" autofocus>
+          <span id="sim-place-st" class="hint-sm"></span>
         </label>
         <label class="field"><span class="lbl">種類</span>
           <select id="sim-kind">${kindOpts}</select>
@@ -2534,6 +2535,60 @@ function openSchedItemModal(gid, it) {
   document.getElementById('sim-close') .addEventListener('click', close);
   document.getElementById('sim-cancel').addEventListener('click', close);
   document.getElementById('sim-overlay').addEventListener('click', e => { if (e.target.id === 'sim-overlay') close(); });
+  // v418 🔍 場所名 から 緯度経度 / 説明 / 画像 を 引っ張る (Wikipedia + Nominatim)
+  document.getElementById('sim-place-go')?.addEventListener('click', async () => {
+    const titleEl = document.getElementById('sim-title');
+    const name = titleEl.value.trim();
+    const st = document.getElementById('sim-place-st');
+    const btn = document.getElementById('sim-place-go');
+    if (!name) { st.textContent = '先に タイトルを 入れてください'; return; }
+    btn.disabled = true; st.textContent = '検索中…';
+    try {
+      const r = await post('/api/ai/place_lookup', { name });
+      const parts = [];
+      // 緯度経度
+      if (r.lat !== null && r.lng !== null) {
+        const latlngEl = document.getElementById('sim-latlng');
+        if (latlngEl && !latlngEl.value) {
+          latlngEl.value = `${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}`;
+          parts.push('緯度経度');
+        }
+      }
+      // 場所 (display_name)
+      if (r.display_name) {
+        const locEl = document.getElementById('sim-loc');
+        if (locEl && !locEl.value) {
+          locEl.value = r.display_name;
+          parts.push('場所名');
+        }
+      }
+      // 説明 → メモ (既存に 追記しない、 空のときだけ 入れる)
+      if (r.description) {
+        const memoEl = document.getElementById('sim-memo');
+        if (memoEl && !memoEl.value) {
+          memoEl.value = r.description;
+          parts.push('説明');
+        }
+      }
+      // 画像 (既存 image が無い ときだけ プレビュー + URL セット)
+      if (r.image_url && !stagedImage) {
+        stagedImage = r.image_url;
+        const pv = document.getElementById('sim-img-preview');
+        if (pv) { pv.src = r.image_url; pv.hidden = false; pv.style.display = 'block'; }
+        const clrBtn = document.getElementById('sim-img-clear');
+        if (clrBtn) clrBtn.hidden = false;
+        parts.push('画像');
+      }
+      const src = (r.sources || []).join(' + ');
+      st.textContent = parts.length
+        ? `✓ ${parts.join(' / ')} を 流し込みました (${src})`
+        : `(該当 情報なし 〜 ${src})`;
+    } catch (e) {
+      st.textContent = '失敗: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
   // v416 ✨ AI でフリーテキスト → 各入力欄に展開
   document.getElementById('sim-ai-go')?.addEventListener('click', async () => {
     const txt = document.getElementById('sim-ai-text').value.trim();

@@ -14,7 +14,103 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_translate_image($pdo, $cfg);
         return;
     }
+    if ($sub === 'place_lookup' && $method === 'POST') {
+        ai_place_lookup($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// POST /api/ai/place_lookup { name: "東京タワー" }
+//   → { name, lat, lng, display_name, description, image_url, source }
+// 段取り: Nominatim (lat/lng + 表示名) + Wikipedia ja (説明 + 画像 + 補完 coord)。
+// 両方 best-effort。 OpenAI 鍵 不要 (Wiki + OSM のみ)。
+function ai_place_lookup(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $name = trim((string)($body['name'] ?? ''));
+    if ($name === '' || mb_strlen($name) > 200) {
+        throw new ApiException('bad_request', 'name length 1..200', 400);
+    }
+    $ua = 'LabPay/1.0 (https://pay.nkmr.io)';
+    $sources = [];
+    $lat = null; $lng = null; $displayName = null; $description = null; $imageUrl = null;
+
+    // 1. Nominatim
+    $nUrl = 'https://nominatim.openstreetmap.org/search?'
+          . http_build_query(['q' => $name, 'format' => 'json', 'accept-language' => 'ja', 'limit' => 1]);
+    $resp = ai_http_get($nUrl, $ua, 10);
+    if ($resp !== null) {
+        $j = json_decode($resp, true);
+        if (!empty($j[0])) {
+            $lat = isset($j[0]['lat']) ? (float)$j[0]['lat'] : null;
+            $lng = isset($j[0]['lon']) ? (float)$j[0]['lon'] : null;
+            $displayName = (string)($j[0]['display_name'] ?? '');
+            $sources[] = 'nominatim';
+        }
+    }
+
+    // 2. Wikipedia ja 検索 → page summary
+    $searchUrl = 'https://ja.wikipedia.org/w/api.php?'
+        . http_build_query(['action' => 'query', 'list' => 'search', 'srsearch' => $name, 'format' => 'json', 'srlimit' => 1]);
+    $resp = ai_http_get($searchUrl, $ua, 10);
+    if ($resp !== null) {
+        $j = json_decode($resp, true);
+        $title = $j['query']['search'][0]['title'] ?? null;
+        if ($title) {
+            $sumUrl = 'https://ja.wikipedia.org/api/rest_v1/page/summary/' . rawurlencode($title);
+            $resp = ai_http_get($sumUrl, $ua, 10);
+            if ($resp !== null) {
+                $sj = json_decode($resp, true);
+                if (is_array($sj)) {
+                    $description = isset($sj['extract']) ? mb_substr((string)$sj['extract'], 0, 1000) : $description;
+                    if (isset($sj['thumbnail']['source'])) {
+                        $imageUrl = (string)$sj['thumbnail']['source'];
+                    } elseif (isset($sj['originalimage']['source'])) {
+                        $imageUrl = (string)$sj['originalimage']['source'];
+                    }
+                    if ($lat === null && isset($sj['coordinates']['lat'])) {
+                        $lat = (float)$sj['coordinates']['lat'];
+                        $lng = (float)$sj['coordinates']['lon'];
+                    }
+                    if (!$displayName && isset($sj['title'])) {
+                        $displayName = (string)$sj['title'];
+                    }
+                    $sources[] = 'wikipedia';
+                }
+            }
+        }
+    }
+
+    if (!$sources) {
+        throw new ApiException('not_found', '見つかりませんでした (Nominatim / Wikipedia いずれも 0 件)', 404);
+    }
+    json_response([
+        'ok'           => true,
+        'name'         => $name,
+        'lat'          => $lat,
+        'lng'          => $lng,
+        'display_name' => $displayName,
+        'description'  => $description,
+        'image_url'    => $imageUrl,
+        'sources'      => $sources,
+    ]);
+}
+
+function ai_http_get(string $url, string $ua, int $timeout): ?string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['User-Agent: ' . $ua, 'Accept: application/json'],
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 3,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) return null;
+    return (string)$resp;
 }
 
 function ai_assert_configured(array $cfg): void {
