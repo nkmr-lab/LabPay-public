@@ -220,6 +220,23 @@ export async function renderSettings() {
   renderTabLayoutEditor();
   renderHomeActionsEditor();
   renderAppsVisEditor();
+  // v419b URL ?focus=home-actions の 場合は 該当 カードへ スクロール + 短時間 強調
+  try {
+    const q = new URLSearchParams(location.hash.split('?')[1] || '');
+    const focus = q.get('focus');
+    if (focus) {
+      const el = document.getElementById(focus);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.style.transition = 'background 0.4s';
+          const orig = el.style.background;
+          el.style.background = '#fff7d6';
+          setTimeout(() => { el.style.background = orig; }, 1500);
+        }, 50);
+      }
+    }
+  } catch (_) {}
   // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
   // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
   const hideInput = document.getElementById('cal-hide-after-min');

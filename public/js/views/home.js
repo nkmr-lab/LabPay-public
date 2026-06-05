@@ -113,7 +113,7 @@ export async function renderHome() {
         ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
           <a class="btn" href="${escapeHtml(a.url)}">${escapeHtml(a.label)}</a>
         `).join('')}
-        <a href="#/settings#home-actions" class="hint" style="align-self:center; font-size:11px; text-decoration:none">⚙</a>
+        <a href="#/settings?focus=home-actions" class="hint" style="align-self:center; font-size:11px; text-decoration:none" title="ホーム上部の クイック ボタンを 設定">⚙</a>
       </div>
     </div>
 
