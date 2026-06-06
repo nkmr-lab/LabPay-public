@@ -1045,7 +1045,8 @@ async function renderFreshInvitations() {
 
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
 // + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
-// v459 SNS 最新 (ホーム カード)。 最新 5 投稿 を 簡易 表示。
+// v459 → v462 SNS 最新 (ホーム カード)。 画像付き 投稿 は ヒーロー風 に カード化。
+// 投稿の image_url が あれば 上に 大きく 表示 (16:9 cover)、 本文 + メタ は 下。
 async function renderFreshSns() {
   const card = document.getElementById('home-sns-card');
   const root = document.getElementById('home-sns');
@@ -1059,9 +1060,25 @@ async function renderFreshSns() {
       return;
     }
     root.innerHTML = items.map(p => {
-      const snipBase = p.body || (p.image_url ? '(画像のみ)' : '(無題)');
-      const snip = snipBase.length > 80 ? snipBase.slice(0, 80) + '…' : snipBase;
+      const snipBase = p.body || (p.image_url ? '' : '(無題)');
+      const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
       const heart = p.liked_by_me ? '❤️' : '🤍';
+      const meta = `${escapeHtml(p.display_name)} · ${heart} ${p.like_count} · 💬 ${p.reply_count}`;
+      // ヒーロー: image_url あり → 横長 cover (高さ 160px、 object-fit:cover) を 先頭 に。
+      if (p.image_url) {
+        return `
+          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fafafa; box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="position:relative; height:160px; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}')">
+              <div style="position:absolute; inset:auto 0 0 0; padding:6px 10px; background:linear-gradient(transparent, rgba(0,0,0,0.65)); color:#fff; font-size:12px; display:flex; align-items:center; gap:6px">
+                ${avatarHtml(p.display_name, p.avatar_url, 'xs')}
+                <span style="font-weight:600">${escapeHtml(p.display_name)}</span>
+                <span style="margin-left:auto">${heart} ${p.like_count} · 💬 ${p.reply_count}</span>
+              </div>
+            </div>
+            ${snip ? `<div style="padding:6px 10px; font-size:13px; white-space:pre-wrap">${escapeHtml(snip)}</div>` : ''}
+          </a>`;
+      }
+      // 文字 のみ: 既存 の コンパクト 表示。
       return `
         <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px">
           ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
