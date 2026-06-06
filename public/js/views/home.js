@@ -97,6 +97,7 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
+  { id: 'sns',            title: '💬 SNS 最新' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -262,6 +263,14 @@ export async function renderHome() {
       <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-sns-card" data-card-id="sns" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">💬 SNS 最新</h2>
+        <a href="#/sns" class="hint">タイムライン →</a>
+      </div>
+      <div id="home-sns" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <details class="card" data-card-id="history">
       <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
         履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
@@ -285,6 +294,7 @@ export async function renderHome() {
   await renderMyActiveTimers();
   await renderFreshListings();
   await renderFreshTasks();
+  await renderFreshSns();
   await renderRecentTx();
 
   // Home polling: 1 分ごとに各カードを 「静かに」 リロード。
@@ -330,6 +340,7 @@ async function doHomePoll() {
     renderMyActiveTimers(),
     renderFreshListings(),
     renderFreshTasks(),
+    renderFreshSns(),
     renderRecentTx(),
   ]);
 }
@@ -1034,6 +1045,36 @@ async function renderFreshInvitations() {
 
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
 // + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
+// v459 SNS 最新 (ホーム カード)。 最新 5 投稿 を 簡易 表示。
+async function renderFreshSns() {
+  const card = document.getElementById('home-sns-card');
+  const root = document.getElementById('home-sns');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/posts', { limit: 5 });
+    const items = d.items || [];
+    card.hidden = false;
+    if (!items.length) {
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ 投稿 なし</div>';
+      return;
+    }
+    root.innerHTML = items.map(p => {
+      const snipBase = p.body || (p.image_url ? '(画像のみ)' : '(無題)');
+      const snip = snipBase.length > 80 ? snipBase.slice(0, 80) + '…' : snipBase;
+      const heart = p.liked_by_me ? '❤️' : '🤍';
+      return `
+        <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px">
+          ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:13px">${escapeHtml(p.display_name)}</div>
+            <div class="meta" style="white-space:pre-wrap; font-size:13px">${escapeHtml(snip)}</div>
+            <div class="hint" style="font-size:11px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (_) { card.hidden = true; }
+}
+
 async function renderFreshPlaylists() {
   const card = document.getElementById('home-pl-card');
   const root = document.getElementById('home-pl');

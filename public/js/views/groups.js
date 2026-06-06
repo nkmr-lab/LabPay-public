@@ -3084,9 +3084,14 @@ async function setupFlightAttachments(gid, fid) {
     const g = await get(`/api/groups/${gid}`);
     members = (g.members || []).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
   } catch (_) {}
-  ownerSel.innerHTML = members.map(m =>
-    `<option value="${m.id}" ${Number(m.id) === Number(state.me?.id) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`
-  ).join('');
+  // v459 owner は 「未割当 (後で 紐付け)」 を デフォ + 各 行 で 後付け 紐付け 可能 に。
+  const ownerOptions = (selectedId, includeBlank = true) => {
+    const blank = includeBlank ? `<option value="">— 未割当 —</option>` : '';
+    return blank + members.map(m =>
+      `<option value="${m.id}" ${Number(m.id) === Number(selectedId) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`
+    ).join('');
+  };
+  ownerSel.innerHTML = ownerOptions('');  // アップロード時の デフォ = 未割当
 
   const ICONS = { 'application/pdf': '📕' };
   const renderRow = (a) => {
@@ -3094,9 +3099,11 @@ async function setupFlightAttachments(gid, fid) {
       ? (a.size / 1024 / 1024).toFixed(1) + ' MB'
       : Math.max(1, Math.round(a.size / 1024)) + ' KB';
     const icon = a.mime?.startsWith('image/') ? '🖼' : (ICONS[a.mime] || '📄');
+    const ownerLabel = a.owner_user_id
+      ? `${avatarHtml(a.owner_name, a.owner_avatar, 'sm')}<span class="muted" style="font-size:11px; flex-shrink:0">${escapeHtml(a.owner_name || '')}</span>`
+      : `<select data-fatt-owner="${a.id}" style="font-size:11px; max-width:140px"><option value="">— 未割当 —</option>${ownerOptions('', false)}</select>`;
     return `<div class="list-item" style="gap:6px; padding:4px 6px; font-size:12px; align-items:center">
-      ${avatarHtml(a.owner_name, a.owner_avatar, 'sm')}
-      <span class="muted" style="font-size:11px; flex-shrink:0">${escapeHtml(a.owner_name)}</span>
+      ${ownerLabel}
       <a href="${escapeHtml(a.stored_path)}" target="_blank" rel="noopener" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--primary)">${icon} ${escapeHtml(a.filename)}</a>
       <span class="muted" style="font-size:11px; flex-shrink:0">${sz}</span>
       <button data-fatt-rm="${a.id}" class="btn" style="padding:0 6px; font-size:11px; color:var(--muted)">×</button>
@@ -3106,6 +3113,12 @@ async function setupFlightAttachments(gid, fid) {
     try {
       const d = await get(`/api/groups/${gid}/flights/${fid}/attachments`);
       const arr = Array.isArray(d?.attachments) ? d.attachments : [];
+      // 未割当 を 上 に。 一目で 「誰か 紐付け してね」 と わかる ように。
+      arr.sort((a, b) => {
+        if (!a.owner_user_id && b.owner_user_id) return -1;
+        if (a.owner_user_id && !b.owner_user_id) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
       listEl.innerHTML = arr.length
         ? arr.map(renderRow).join('')
         : '<div class="hint-sm" style="padding:2px 6px">添付なし</div>';
@@ -3116,30 +3129,53 @@ async function setupFlightAttachments(gid, fid) {
           catch (e) { toast('失敗: ' + e.message); }
         });
       });
+      // v459 未割当 行 の owner ドロップダウン → 選択時 に PATCH で 紐付け
+      listEl.querySelectorAll('[data-fatt-owner]').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const v = sel.value;
+          try {
+            await patch(`/api/groups/${gid}/flights/${fid}/attachments/${sel.dataset.fattOwner}`,
+              { owner_user_id: v === '' ? null : Number(v) });
+            await reload();
+          } catch (e) { toast('失敗: ' + e.message); }
+        });
+      });
     } catch (e) {
       listEl.innerHTML = `<div class="hint-sm" style="color:var(--danger)">読み込み失敗</div>`;
     }
   };
   reload();
+  // v459 multi-file upload (D&D 含む). HTMLInputElement.multiple を 有効化、
+  // 選択 された 全ファイル を 順次 アップロード。 owner は 共通 (= ドロップダウン 値)。
+  // 未割当 (空欄) でも 投げる。
+  fileEl.setAttribute('multiple', 'multiple');
+  fileEl.setAttribute('accept', 'application/pdf,image/*');
   fileEl.addEventListener('change', async (ev) => {
-    const f = ev.target.files?.[0];
-    if (!f) return;
-    const ownerId = Number(ownerSel.value);
-    if (!ownerId) { toast('持ち主を選んでください'); return; }
-    const fd = new FormData();
-    fd.append('file', f);
-    fd.append('owner_user_id', String(ownerId));
-    try {
-      const r = await fetch(`/api/groups/${gid}/flights/${fid}/attachments`, {
-        method: 'POST', body: fd, credentials: 'same-origin',
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error?.message || ('HTTP ' + r.status));
-      }
-      ev.target.value = '';
-      await reload();
-    } catch (e) { toast('失敗: ' + e.message); }
+    const files = Array.from(ev.target.files || []);
+    if (!files.length) return;
+    const ownerVal = ownerSel.value;  // '' = 未割当
+    const ownerId = ownerVal === '' ? null : Number(ownerVal);
+    fileEl.disabled = true;
+    let ok = 0, fail = 0;
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('file', f);
+      if (ownerId !== null) fd.append('owner_user_id', String(ownerId));
+      try {
+        const r = await fetch(`/api/groups/${gid}/flights/${fid}/attachments`, {
+          method: 'POST', body: fd, credentials: 'same-origin',
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j.error?.message || ('HTTP ' + r.status));
+        }
+        ok++;
+      } catch (e) { fail++; }
+    }
+    fileEl.value = '';
+    fileEl.disabled = false;
+    toast(`${ok} 件 アップロード${fail ? ` (失敗 ${fail})` : ''}`);
+    await reload();
   });
 }
 

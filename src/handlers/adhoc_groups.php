@@ -44,6 +44,8 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
                 if ($method === 'GET'  && !isset($seg[5])) { group_flight_att_list($pdo, $cfg, $id, $fid); return; }
                 if ($method === 'POST' && !isset($seg[5])) { group_flight_att_add($pdo, $cfg, $id, $fid); return; }
                 if ($method === 'DELETE' && isset($seg[5])) { group_flight_att_del($pdo, $cfg, $id, $fid, (int)$seg[5]); return; }
+                // v459 owner 後付け / 変更 用 PATCH
+                if ($method === 'PATCH'  && isset($seg[5])) { group_flight_att_set_owner($pdo, $cfg, $id, $fid, (int)$seg[5]); return; }
             }
             if ($next === 'flights'  && isset($seg[3]) && ($seg[4] ?? '') === 'etickets') {
                 $fid = (int)$seg[3];
@@ -1439,13 +1441,19 @@ function group_flight_att_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
     if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
         throw new ApiException('no_file', 'multipart field "file" 必要', 400);
     }
-    $ownerId = (int)($_POST['owner_user_id'] ?? 0);
-    if ($ownerId <= 0) throw new ApiException('bad_request', 'owner_user_id 必要', 400);
-    // owner はグループメンバーであること。
-    $st = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id=? AND user_id=?");
-    $st->execute([$gid, $ownerId]);
-    if ($st->fetchColumn() === false) {
-        throw new ApiException('bad_request', '持ち主はグループメンバーから選んでください', 400);
+    // v459 owner_user_id は 省略可 (NULL = 未割当)。 後 で PATCH で 紐付け。
+    $ownerRaw = $_POST['owner_user_id'] ?? '';
+    $ownerId = null;
+    if ($ownerRaw !== '' && $ownerRaw !== '0' && $ownerRaw !== null) {
+        $ownerId = (int)$ownerRaw;
+        if ($ownerId <= 0) $ownerId = null;
+        if ($ownerId !== null) {
+            $st = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id=? AND user_id=?");
+            $st->execute([$gid, $ownerId]);
+            if ($st->fetchColumn() === false) {
+                throw new ApiException('bad_request', '持ち主はグループメンバーから選んでください', 400);
+            }
+        }
     }
     $original = (string)($_FILES['file']['name'] ?? 'file');
     $original = mb_substr(preg_replace('/[\x00-\x1F]/u', '', $original) ?? 'file', 0, 200);
@@ -1457,6 +1465,29 @@ function group_flight_att_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
     $ins->execute([$fid, $ownerId, (int)$u['id'], $original, $saved['path'],
         $saved['thumb_path'] ?? null, $saved['mime'], (int)$saved['size']]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+// v459 owner 後付け / 変更。 アップ済み 添付 の owner_user_id を 更新。 NULL も 許可 (= 未割当 に 戻す)。
+function group_flight_att_set_owner(PDO $pdo, array $cfg, int $gid, int $fid, int $aid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $gid, (int)$u['id']);
+    group_flight_assert($pdo, $gid, $fid);
+    $body = read_json_body();
+    $ownerId = null;
+    if (array_key_exists('owner_user_id', $body) && $body['owner_user_id'] !== null && $body['owner_user_id'] !== '') {
+        $ownerId = (int)$body['owner_user_id'];
+        if ($ownerId <= 0) $ownerId = null;
+    }
+    if ($ownerId !== null) {
+        $st = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id=? AND user_id=?");
+        $st->execute([$gid, $ownerId]);
+        if ($st->fetchColumn() === false) {
+            throw new ApiException('bad_request', '持ち主はグループメンバーから選んでください', 400);
+        }
+    }
+    $pdo->prepare("UPDATE adhoc_group_flight_attachments SET owner_user_id=? WHERE id=? AND flight_id=?")
+        ->execute([$ownerId, $aid, $fid]);
+    json_response(['ok' => true, 'owner_user_id' => $ownerId]);
 }
 
 function group_flight_att_del(PDO $pdo, array $cfg, int $gid, int $fid, int $aid): void {
