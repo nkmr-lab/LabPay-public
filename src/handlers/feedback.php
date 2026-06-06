@@ -39,13 +39,15 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no feedback route for $method $sub", 404);
 }
 
-// v465 → v467 feedback 完了 を SNS の LabPay 公式 アカウント として 投稿する。
-// 元 SNS 投稿 が ある (= ユーザ が @LabPay で 起票 した) 場合 は その 返信 として、
-// なければ 独立 投稿 として 投げる。 失敗 は 黙殺。
-// v467: 文面 を ソフト 化 (固い 「対応 完了」 → 「やってみた」 「直したよ」 系)、
-//        起票者 へ @display_name 呼びかけ、 起票者 が admin (= 中村さん) なら
-//        「新機能 を ラボに 追加した」 アナウンス トーン に。
-function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $summary): void {
+// v465 → v470 feedback 完了 を SNS の LabPay 公式 アカウント として 投稿。
+// v470: $shortMessage は 「〇〇 を 〇〇 したよ!」 的に 完結 した 1 文。 全文 サマリ
+// (feedback テーブル の reply_body) と は 別物。 SNS は 流し読み される ので
+//   🐛 タイマー音 直したよ!
+//   ✨ 〆切 編集 + 参加者追加 できる ように したよ!
+//   🛠 @abe さん、 バグ 直したよ!
+//   🎁 @abe さん、 リクエスト やってみた!
+// の 1 行 で 出す。 (feedback #N) などの 機械っぽい 余白は 入れない。
+function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $shortMessage): void {
     try {
         $st = $pdo->query("SELECT id FROM users WHERE display_name='LabPay' AND kind='system' LIMIT 1");
         $labpayUid = (int)$st->fetchColumn();
@@ -54,7 +56,6 @@ function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $summary): voi
                 ->execute();
             $labpayUid = (int)$pdo->lastInsertId();
         }
-        // feedback 本体 を 引いて 起票者 + 種別 を 取得
         $stF = $pdo->prepare("SELECT f.user_id, f.kind, u.display_name, u.role
                                 FROM feedback f JOIN users u ON u.id = f.user_id
                                WHERE f.id = ?");
@@ -63,20 +64,20 @@ function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $summary): voi
         $authorName = (string)($fb['display_name'] ?? '');
         $isAdminAuthor = ((string)($fb['role'] ?? '')) === 'admin';
         $isBug = ((string)($fb['kind'] ?? '')) === 'bug';
-        // 起票 元 投稿 (もし @LabPay で 起票 された) を 探す
         $stP = $pdo->prepare("SELECT id FROM posts WHERE feedback_id=? AND user_id <> ? ORDER BY id ASC LIMIT 1");
         $stP->execute([$fbId, $labpayUid]);
         $src = $stP->fetch(PDO::FETCH_ASSOC);
         $parentId = $src ? (int)$src['id'] : null;
-        // 文面 組み立て
+        // 1 行 文面
+        $msg = mb_substr(trim($shortMessage), 0, 280);
         if ($isAdminAuthor) {
-            $head = $isBug ? '🐛 直したよ!' : '✨ 新機能 を ラボ に 追加 したよ!';
+            $emoji = $isBug ? '🐛' : '✨';
+            $bodyTxt = "{$emoji} {$msg}";
         } else {
-            $mentionMark = $authorName !== '' ? '@' . $authorName . ' さん、 ' : '';
-            $head = $isBug ? "🛠 {$mentionMark}バグ 直したよ!" : "🎁 {$mentionMark}リクエスト やってみた!";
+            $mention = $authorName !== '' ? "@{$authorName} さん、 " : '';
+            $emoji = $isBug ? '🛠' : '🎁';
+            $bodyTxt = "{$emoji} {$mention}{$msg}";
         }
-        $bodyTxt = $head . "\n\n" . mb_substr($summary, 0, 1500)
-                 . "\n\n(feedback #" . $fbId . ")";
         $ins = $pdo->prepare("INSERT INTO posts (user_id, body, parent_id, feedback_id, created_at)
                               VALUES (?, ?, ?, ?, NOW())");
         $ins->execute([$labpayUid, $bodyTxt, $parentId, $fbId]);
