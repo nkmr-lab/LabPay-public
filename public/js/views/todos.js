@@ -99,14 +99,27 @@ function rowHtml(t) {
   const dueLabel = t.due_at && !isDone
     ? `<span style="color:${dueColor(t.due_at)}; font-weight:600">⏰ ${escapeHtml(fmtDue(t.due_at))}</span> · `
     : '';
+  // v483 #75 url / 相手 / 詳細 を 表示。
+  const urlLine = t.url
+    ? `<div class="meta" style="font-size:12px"><a href="${escapeHtml(t.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 ${escapeHtml(t.url.length > 60 ? t.url.slice(0, 60) + '…' : t.url)}</a></div>`
+    : '';
+  const partner = t.partner_name || t.partner_label;
+  const partnerLine = partner
+    ? `<div class="meta" style="font-size:12px">👤 ${escapeHtml(partner)}</div>`
+    : '';
+  const notesLine = t.notes
+    ? `<div class="meta" style="font-size:12px; white-space:pre-wrap; margin-top:2px">📝 ${escapeHtml(t.notes.length > 200 ? t.notes.slice(0, 200) + '…' : t.notes)}</div>`
+    : '';
   return `
     <div class="list-item" data-td-id="${t.id}" style="align-items:flex-start; gap:8px">
       <input type="checkbox" data-td-check ${isDone ? 'checked' : ''}
              style="flex:none; margin-top:4px; width:18px; height:18px; cursor:pointer">
       <div class="grow" style="min-width:0">
         <div data-td-body class="${isDone ? 'muted' : 'bold'}" style="white-space:pre-wrap; ${isDone ? 'text-decoration:line-through' : ''}">${escapeHtml(t.body)}</div>
+        ${urlLine}${partnerLine}${notesLine}
         <div class="meta" style="font-size:11px">${dueLabel}${escapeHtml(t.created_at || '')}${t.done_at ? ' · 完了 ' + escapeHtml(t.done_at) : ''}</div>
       </div>
+      <button data-td-detail class="btn" style="flex:none; font-size:11px; padding:2px 6px" title="詳細 (URL / 相手 / メモ)">📋</button>
       <button data-td-due class="btn" style="flex:none; font-size:11px; padding:2px 6px" title="締切 設定">⏰</button>
       <button data-td-edit class="btn" style="flex:none; font-size:11px; padding:2px 6px">✏</button>
       <button data-td-del class="btn danger" style="flex:none; font-size:11px; padding:2px 6px">×</button>
@@ -145,5 +158,69 @@ function bindRows() {
         .then(reload)
         .catch(e => toast('失敗: ' + e.message));
     });
+    row.querySelector('[data-td-detail]')?.addEventListener('click', () => openDetailPanel(id));
+  });
+}
+
+// v483 #75 詳細 編集 パネル (url / 相手 / 詳細 / 締切)。 行 の 下 に 差し込む。
+let openDetailFor = null;
+async function openDetailPanel(id) {
+  // 既に 同じ ID で 開いて たら 閉じる トグル
+  document.querySelectorAll('[data-td-detail-panel]').forEach(p => p.remove());
+  if (openDetailFor === id) { openDetailFor = null; return; }
+  openDetailFor = id;
+  // 現在 値 を 取得 (再 GET より row dataset 使う方が ラク だが ここは シンプル に 再取得)
+  let cur = {};
+  try {
+    const d = await get('/api/todos');
+    cur = (d.items || []).find(x => Number(x.id) === Number(id)) || {};
+  } catch (_) {}
+  const row = document.querySelector(`[data-td-id="${id}"]`);
+  if (!row) return;
+  // ラボ メンバー 一覧 (相手 選択 用)
+  let users = [];
+  try { const r = await get('/api/users'); users = (r.items || r || []).filter(u => u.display_name); } catch (_) {}
+  const opts = ['<option value="">- ラボ メンバー から 選ぶ -</option>',
+    ...users.map(u => `<option value="${u.id}" ${Number(cur.partner_user_id) === Number(u.id) ? 'selected' : ''}>${escapeHtml(u.display_name)}</option>`)].join('');
+  const dueLocal = cur.due_at ? String(cur.due_at).replace(' ', 'T').slice(0,16) : '';
+  const panel = document.createElement('div');
+  panel.dataset.tdDetailPanel = id;
+  panel.className = 'list-item';
+  panel.style.cssText = 'flex-direction:column; align-items:stretch; gap:8px; background:#f7f5fa; padding:10px; border-radius:6px';
+  panel.innerHTML = `
+    <label class="field"><span class="lbl">🔗 URL</span>
+      <input type="url" data-d-url maxlength="500" placeholder="https://…" value="${escapeHtml(cur.url || '')}">
+    </label>
+    <label class="field"><span class="lbl">👤 相手 (ラボ メンバー)</span>
+      <select data-d-partner>${opts}</select>
+    </label>
+    <label class="field"><span class="lbl">👤 相手 (ラボ 外 / 自由 入力)</span>
+      <input type="text" data-d-partner-label maxlength="120" placeholder="例: 田中 先生、 〇〇社 ○○ 様" value="${escapeHtml(cur.partner_label || '')}">
+    </label>
+    <label class="field"><span class="lbl">⏰ 締切</span>
+      <input type="datetime-local" data-d-due value="${escapeHtml(dueLocal)}">
+    </label>
+    <label class="field"><span class="lbl">📝 詳細 / メモ</span>
+      <textarea data-d-notes maxlength="5000" rows="4" placeholder="補足、 メモ、 リンク 詳細 等">${escapeHtml(cur.notes || '')}</textarea>
+    </label>
+    <div class="row" style="gap:6px; justify-content:flex-end">
+      <button data-d-cancel class="btn">閉じる</button>
+      <button data-d-save class="primary">保存</button>
+    </div>`;
+  row.after(panel);
+  panel.querySelector('[data-d-cancel]').addEventListener('click', () => { panel.remove(); openDetailFor = null; });
+  panel.querySelector('[data-d-save]').addEventListener('click', async () => {
+    const payload = {
+      url:             panel.querySelector('[data-d-url]').value.trim(),
+      partner_user_id: panel.querySelector('[data-d-partner]').value || null,
+      partner_label:   panel.querySelector('[data-d-partner-label]').value.trim(),
+      due_at:          panel.querySelector('[data-d-due]').value || null,
+      notes:           panel.querySelector('[data-d-notes]').value,
+    };
+    try {
+      await patch(`/api/todos/${id}`, payload);
+      openDetailFor = null;
+      await reload();
+    } catch (e) { toast('失敗: ' + e.message); }
   });
 }

@@ -519,4 +519,26 @@ class Achievements {
         }
         return $out;
     }
+
+    // v483 #76 AI 称号 生成 用。 現在 獲得 中 の tier ラベル を 1 行 ずつ 並べ
+    //   ハッシュ + プロンプト 用 テキスト を 返す。
+    public static function earnedSummary(PDO $pdo, int $userId): array {
+        $report = self::reportFor($pdo, $userId);
+        $lines = [];
+        $hashItems = [];
+        foreach ($report as $r) {
+            if (!$r['earned']) continue;
+            $cat = $r['title'];
+            $tierLabel = $r['earned']['label'] ?? '';
+            $medal = $r['earned']['medal'] ?? '';
+            $lines[] = "- {$medal} 「{$tierLabel}」 ({$cat}, 通算 {$r['value']} {$r['unit']})";
+            $hashItems[] = $r['key'] . ':' . $r['earned_tier'];
+        }
+        sort($hashItems);
+        return [
+            'lines' => $lines,
+            'count' => count($lines),
+            'hash'  => hash('sha1', implode('|', $hashItems)),
+        ];
+    }
 }

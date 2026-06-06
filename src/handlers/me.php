@@ -477,6 +477,83 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v483 #76 AI 称号。 GET = キャッシュ + 新鮮さ チェック、 POST = 生成 & 保存。
+    if ($sub === 'achievements_title' && $method === 'GET') {
+        $sum = Achievements::earnedSummary($pdo, (int)$u['id']);
+        $stT = $pdo->prepare("SELECT achievements_title, achievements_title_hash, achievements_title_at FROM users WHERE id=?");
+        $stT->execute([(int)$u['id']]);
+        $row = $stT->fetch(PDO::FETCH_ASSOC) ?: [];
+        json_response([
+            'title'        => $row['achievements_title'] ?? null,
+            'generated_at' => $row['achievements_title_at'] ?? null,
+            'cached_hash'  => $row['achievements_title_hash'] ?? null,
+            'current_hash' => $sum['hash'],
+            'is_stale'     => ($row['achievements_title_hash'] ?? null) !== $sum['hash'],
+            'has_achievements' => $sum['count'] > 0,
+        ]);
+        return;
+    }
+    if ($sub === 'achievements_title' && $method === 'POST') {
+        // AI 生成。 OpenAI が 未設定 なら 503。
+        if (empty($cfg['openai']['api_key'] ?? null)) {
+            throw new ApiException('not_configured', 'AI 称号 生成 は OpenAI 未設定 で 利用 不可', 503);
+        }
+        $sum = Achievements::earnedSummary($pdo, (int)$u['id']);
+        if ($sum['count'] === 0) {
+            throw new ApiException('no_achievements', 'まだ 実績 が ない ので 称号 を 付けられません', 400);
+        }
+        $name = (string)($u['display_name'] ?? 'この人');
+        $achievementsText = implode("\n", $sum['lines']);
+        $sys = "ラボ内 ツール の 実績 一覧 から、 その人 を 形容 する 「カッコイイ 称号」 を 1 つ だけ 生成 して ください。 8-22 文字、 漢字 / カタカナ / 英語 混在 OK、 絵文字 1-2 個 添えて OK。 ラノベ や 二つ名 風 に カッコ良く。 例: 「黄昏 の 点呼マスター 🌅」 「ラボ DJ の 不眠 王 🎧」 「現場 を 統べる オークションキング 👑」。 称号 だけ 1 行、 引用符 や 前置き は 不要。";
+        $userPrompt = "対象: {$name}\n獲得 実績:\n{$achievementsText}\n\nこの人 に カッコイイ 称号 を 1 つ。";
+
+        $payload = json_encode([
+            'model'    => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+            'messages' => [
+                ['role' => 'system', 'content' => $sys],
+                ['role' => 'user',   'content' => $userPrompt],
+            ],
+            'temperature' => 0.95,
+            'max_tokens' => 60,
+        ], JSON_UNESCAPED_UNICODE);
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+            ],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 20,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($resp === false || $status >= 400) {
+            throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status, 502);
+        }
+        $j = json_decode((string)$resp, true);
+        $text = $j['choices'][0]['message']['content'] ?? '';
+        $title = trim(preg_replace('/[\r\n]+/', ' ', (string)$text));
+        $title = preg_replace('/^[「『"\']+|[」』"\']+$/u', '', $title);
+        $title = mb_substr($title, 0, 100);
+        if ($title === '') throw new ApiException('upstream_error', 'empty', 502);
+        $pdo->prepare("UPDATE users SET
+                        achievements_title = ?,
+                        achievements_title_hash = ?,
+                        achievements_title_at = NOW()
+                       WHERE id = ?")
+            ->execute([$title, $sum['hash'], (int)$u['id']]);
+        json_response([
+            'title' => $title,
+            'cached_hash' => $sum['hash'],
+            'current_hash' => $sum['hash'],
+            'is_stale' => false,
+        ]);
+        return;
+    }
+
     // ----- scrapbox handles (self-claim list) -----
     // GET    /api/me/scrapbox_handles                → list my handles + recent pt earned
     // POST   /api/me/scrapbox_handles  {handle: "x"} → claim a handle (or steal if already owned)
