@@ -115,7 +115,8 @@ export async function renderHelp() {
 
   sendBtn.addEventListener('click', onSend);
   input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
+    // v463 IME 変換確定 の Enter (keyCode=229 / isComposing=true) を 除外。
+    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
       ev.preventDefault();
       onSend();
     }

@@ -128,7 +128,9 @@ export async function renderChat() {
 
   sendBtn.addEventListener('click', onSend);
   input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
+    // v463 IME 変換確定 の Enter は keyCode=229 / isComposing=true。 これらを 除外
+    // しないと 日本語 入力 で 変換確定 する たびに 送信 されてしまう。
+    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
       ev.preventDefault();
       onSend();
     }
