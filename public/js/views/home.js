@@ -1070,9 +1070,10 @@ async function renderFreshSns() {
       // アバター は 別途 <img> で 正方形 固定 (avatarHtml が flexbox 内で 横長化
       // していた のを 回避)。
       if (p.image_url) {
+        // v468 .row > * の flex:1 1 auto を 上書き しないと 横長 に 引き伸ばされる
         const avatar = p.avatar_url
-          ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="width:22px; height:22px; border-radius:50%; object-fit:cover; flex-shrink:0">`
-          : `<div style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
+          ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
+          : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:84px">
             <div style="position:absolute; right:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(20% 0, 100% 0, 100% 100%, 0 100%)"></div>

@@ -14,9 +14,96 @@ function route_meetups(PDO $pdo, array $cfg, string $method, array $seg): void {
         $next = $seg[2] ?? '';
         if ($next === ''        && $method === 'GET')    { meetups_detail($pdo, $cfg, $id); return; }
         if ($next === ''        && $method === 'DELETE') { meetups_delete($pdo, $cfg, $id); return; }
+        if ($next === ''        && $method === 'PATCH')  { meetups_edit($pdo, $cfg, $id);   return; }
         if ($next === 'cancel'  && $method === 'PATCH')  { meetups_cancel($pdo, $cfg, $id); return; }
+        if ($next === 'participants' && $method === 'POST') { meetups_add_participants($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no meetups route for $method $sub", 404);
+}
+
+// v468 編集 (起案者 + admin) — title / location / meetup_at / kind を 部分更新。
+function meetups_edit(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ編集可', 403);
+    }
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('title', $body)) {
+        $t = mb_substr(trim((string)$body['title']), 0, 200);
+        if ($t === '') $t = ($row['kind'] === 'deadline') ? '〆切' : '待ち合わせ';
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('location', $body)) {
+        $loc = mb_substr(trim((string)$body['location']), 0, 500);
+        $sets[] = 'location = ?'; $args[] = $loc !== '' ? $loc : null;
+    }
+    if (array_key_exists('meetup_at', $body)) {
+        $raw = (string)$body['meetup_at'];
+        $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) throw new ApiException('bad_request', 'meetup_at は ISO 日時', 400);
+        $when = $dt->format('Y-m-d H:i:s');
+        $sets[] = 'meetup_at = ?'; $args[] = $when;
+    }
+    if (!$sets) { json_response(['ok' => true, 'noop' => true]); return; }
+    $args[] = $id;
+    $pdo->prepare("UPDATE meetups SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+    json_response(['ok' => true]);
+}
+
+// v468 参加者 追加。 既存 メンバー は INSERT IGNORE で 重複 排除。
+function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    // 起案者 / admin / 既参加 のいずれか は 追加 可能。
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        $stChk = $pdo->prepare("SELECT 1 FROM meetup_participants WHERE meetup_id=? AND user_id=?");
+        $stChk->execute([$id, (int)$u['id']]);
+        if (!$stChk->fetchColumn()) throw new ApiException('forbidden', '関係者 のみ 参加者を追加できます', 403);
+    }
+    $body = read_json_body();
+    $newIds = $body['member_ids'] ?? [];
+    if (!is_array($newIds)) throw new ApiException('bad_request', 'member_ids 配列', 400);
+    $newIds = array_values(array_unique(array_filter(array_map('intval', $newIds))));
+    if (!$newIds) { json_response(['ok' => true, 'added' => 0]); return; }
+    // ユーザ存在確認
+    $place = implode(',', array_fill(0, count($newIds), '?'));
+    $stU = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id IN ($place)");
+    $stU->execute($newIds);
+    if ((int)$stU->fetchColumn() !== count($newIds)) {
+        throw new ApiException('bad_request', '存在しない user_id', 400);
+    }
+    $stIns = $pdo->prepare("INSERT IGNORE INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)");
+    $added = 0;
+    foreach ($newIds as $uid) {
+        $stIns->execute([$id, $uid]);
+        if ($stIns->rowCount() > 0) $added++;
+    }
+    // 通知 (追加 された 人 だけ)
+    $isDeadline = ((string)($row['kind'] ?? 'meetup')) === 'deadline';
+    $icon = $isDeadline ? '📌' : '🤝';
+    $label = $isDeadline ? '〆切' : '待ち合わせ';
+    foreach ($newIds as $uid) {
+        if ((int)$uid === (int)$u['id']) continue;
+        try {
+            Notifier::notify($pdo, $cfg, (int)$uid, 'meetup',
+                "{$icon} {$label} に 追加 されました: 「{$row['title']}」",
+                'meetup', $id);
+        } catch (Throwable $_) { /* swallow */ }
+    }
+    json_response(['ok' => true, 'added' => $added]);
 }
 
 function meetups_list(PDO $pdo, array $cfg): void {

@@ -7,6 +7,7 @@ import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { tag, fmtDateTime, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { createMemberPicker } from '../member_picker.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -298,14 +299,20 @@ export async function renderMeetupDetail({ params }) {
       <div id="mud-map" style="margin-top:8px; border-radius:8px; overflow:hidden" hidden></div>
     </div>
     <div class="card">
-      <h3 style="margin:0 0 6px">参加者 (<span id="mud-pn">0</span>)</h3>
+      <div class="row center" style="margin-bottom:6px">
+        <h3 style="margin:0">参加者 (<span id="mud-pn">0</span>)</h3>
+        <button id="mud-add-mem" class="btn" style="margin-left:auto; font-size:11px; padding:2px 8px">＋ 追加</button>
+      </div>
       <div id="mud-parts" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      <div id="mud-add-mem-form" hidden style="margin-top:8px"></div>
     </div>
     <div class="card" id="mud-admin" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="mud-edit"   class="btn primary">✏ 編集</button>
         <button id="mud-cancel" class="btn">❌ 取消</button>
-        <button id="mud-del" class="danger">削除</button>
+        <button id="mud-del"    class="danger">削除</button>
       </div>
+      <div id="mud-edit-form" hidden style="margin-top:8px"></div>
     </div>
   `;
   if (muCountdownTimer) { clearInterval(muCountdownTimer); muCountdownTimer = null; }
@@ -373,9 +380,93 @@ export async function renderMeetupDetail({ params }) {
     }
     document.getElementById('mud-pn').textContent = d.participants.length;
     document.getElementById('mud-parts').innerHTML = d.participants.map(participantPill).join('');
+    // v468 ＋追加 ボタン (関係者 全員 が 押せる — 起案者 + 既参加メンバー + admin)
+    const meId = Number(state.me?.id);
+    const isParticipant = (d.participants || []).some(p => Number(p.user_id) === meId);
+    const canAddMember = d.is_creator || isParticipant || state.me?.role === 'admin';
+    const addBtn = document.getElementById('mud-add-mem');
+    if (addBtn) addBtn.style.display = canAddMember ? '' : 'none';
+    if (canAddMember) {
+      addBtn.addEventListener('click', async () => {
+        const form = document.getElementById('mud-add-mem-form');
+        if (!form.hidden) { form.hidden = true; return; }
+        form.hidden = false;
+        form.innerHTML = `
+          <div id="mud-add-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+          <div id="mud-add-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+          <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+            <button id="mud-add-cancel" class="btn">キャンセル</button>
+            <button id="mud-add-save" class="primary">追加</button>
+          </div>`;
+        const existingIds = (d.participants || []).map(p => Number(p.user_id));
+        let picker = null;
+        try {
+          picker = await createMemberPicker({
+            bulkContainer: document.getElementById('mud-add-bulk'),
+            chipsContainer: document.getElementById('mud-add-members'),
+            initial: [],
+            excludeIds: existingIds,   // 既参加 は 候補 から 除外
+            showGenderBulk: false,
+          });
+        } catch (e) {
+          document.getElementById('mud-add-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+        }
+        document.getElementById('mud-add-cancel').onclick = () => { form.hidden = true; };
+        document.getElementById('mud-add-save').onclick = async () => {
+          const ids = picker ? [...picker.getSelected()] : [];
+          if (!ids.length) { toast('追加する メンバー を 選んでください'); return; }
+          try {
+            const r = await post(`/api/meetups/${id}/participants`, { member_ids: ids });
+            toast(`${r.added} 人 追加しました`);
+            form.hidden = true;
+            await renderMeetupDetail({ params: { id } });
+          } catch (e) { toast('失敗: ' + e.message); }
+        };
+      });
+    }
     if (d.is_creator) {
       const admin = document.getElementById('mud-admin');
       admin.hidden = false;
+      // v468 ✏ 編集
+      document.getElementById('mud-edit').addEventListener('click', () => {
+        const form = document.getElementById('mud-edit-form');
+        if (!form.hidden) { form.hidden = true; return; }
+        form.hidden = false;
+        const meetupLocal = (() => {
+          if (!m.meetup_at) return '';
+          const dt = new Date(String(m.meetup_at).replace(' ', 'T'));
+          const pad = n => String(n).padStart(2, '0');
+          return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+        })();
+        const isDeadline = m.kind === 'deadline';
+        const km = KIND_META[isDeadline ? 'deadline' : 'meetup'];
+        form.innerHTML = `
+          <label class="field"><span class="lbl">タイトル</span>
+            <input type="text" id="mud-edit-title" maxlength="200" value="${escapeHtml(m.title || '')}">
+          </label>
+          <label class="field"><span class="lbl">${escapeHtml(isDeadline ? '場所 / メモ (任意)' : '場所 (任意)')}</span>
+            <input type="text" id="mud-edit-loc" maxlength="500" value="${escapeHtml(m.location || '')}">
+          </label>
+          <label class="field"><span class="lbl">${escapeHtml(km.timeLabel)}</span>
+            <input type="datetime-local" id="mud-edit-when" value="${escapeHtml(meetupLocal)}">
+          </label>
+          <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+            <button id="mud-edit-cancel" class="btn">キャンセル</button>
+            <button id="mud-edit-save" class="primary">保存</button>
+          </div>`;
+        document.getElementById('mud-edit-cancel').onclick = () => { form.hidden = true; };
+        document.getElementById('mud-edit-save').onclick = async () => {
+          const title = document.getElementById('mud-edit-title').value.trim();
+          const loc   = document.getElementById('mud-edit-loc').value.trim();
+          const when  = document.getElementById('mud-edit-when').value;
+          if (!when) { toast(`${km.timeLabel}を 入れて ください`); return; }
+          try {
+            await patch(`/api/meetups/${id}`, { title, location: loc, meetup_at: when });
+            toast('保存しました');
+            await renderMeetupDetail({ params: { id } });
+          } catch (e) { toast('失敗: ' + e.message); }
+        };
+      });
       document.getElementById('mud-cancel').disabled = !!m.cancelled_at;
       document.getElementById('mud-cancel').addEventListener('click', async () => {
         if (!confirm('待ち合わせを取消しますか? (参加者全員に通知が飛びます)')) return;

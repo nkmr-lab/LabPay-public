@@ -19,9 +19,10 @@ function fmtRelative(s) {
 }
 
 function renderBodyHtml(body) {
-  // @mention は 色付け、 URL は リンク化
+  // v467→v468 @mention は SNS 検索 / @LabPay 案内 へ リンク 化。 URL は 新タブ。
   let s = escapeHtml(body || '');
-  s = s.replace(/@([\p{L}\p{N}_\-\.]{1,40})/gu, '<span style="color:var(--primary); font-weight:600">@$1</span>');
+  s = s.replace(/@([\p{L}\p{N}_\-\.]{1,40})/gu, (_, name) =>
+    `<a href="#/sns" class="hint" style="color:var(--primary); font-weight:600; text-decoration:none">@${escapeHtml(name)}</a>`);
   s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   return s.replace(/\n/g, '<br>');
 }
@@ -110,7 +111,7 @@ function composerHtml(parentId) {
   return `
     <div class="card" style="position:relative">
       <textarea id="po-body" maxlength="2000" rows="3" placeholder="${escapeHtml(placeholder)}"></textarea>
-      <div id="po-mention-pop" style="display:none; position:absolute; left:14px; top:auto; z-index:50; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:200px; overflow:auto; min-width:180px"></div>
+      <div id="po-mention-pop" style="display:none; position:absolute; left:14px; right:14px; top:auto; z-index:50; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:240px; overflow:auto"></div>
       <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
         <input type="file" id="po-img" accept="image/*" style="flex:1; min-width:140px">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
@@ -155,17 +156,20 @@ function bindMentionAutocomplete() {
     const head = v.slice(0, pos);
     const m = head.match(/(?:^|\s)@([\p{L}\p{N}_\-\.]{0,40})$/u);
     if (!m) { close(); return; }
+    if (!candidates.length) { close(); return; }
     const q = m[1].toLowerCase();
     matched = candidates.filter(c => c.name.toLowerCase().includes(q)).slice(0, 6);
     if (!matched.length) { close(); return; }
     selected = Math.min(selected, matched.length - 1);
     pop.innerHTML = matched.map((c, i) => `
-      <div data-mi="${i}" style="padding:6px 10px; cursor:pointer; ${i === selected ? 'background:#f5f3f7' : ''}; display:flex; align-items:center; gap:6px">
+      <div data-mi="${i}" style="padding:8px 10px; cursor:pointer; ${i === selected ? 'background:#f5f3f7' : ''}; display:flex; align-items:center; gap:8px">
         ${c.avatar
-          ? `<img src="${escapeHtml(c.avatar)}" alt="" style="width:18px; height:18px; border-radius:50%; object-fit:cover">`
-          : `<div style="width:18px; height:18px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:10px">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>`}
-        <span style="font-size:13px">${escapeHtml(c.name)}</span>
+          ? `<img src="${escapeHtml(c.avatar)}" alt="" style="flex:none; width:20px; height:20px; border-radius:50%; object-fit:cover">`
+          : `<div style="flex:none; width:20px; height:20px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>`}
+        <span style="font-size:13px">@${escapeHtml(c.name)}</span>
       </div>`).join('');
+    // v468 textarea の 直下 に 出す。 height を 動的 に。
+    pop.style.top = (ta.offsetTop + ta.offsetHeight + 2) + 'px';
     pop.style.display = 'block';
     pop.querySelectorAll('[data-mi]').forEach(el => {
       el.addEventListener('mousedown', (ev) => { ev.preventDefault(); commit(Number(el.dataset.mi)); });
