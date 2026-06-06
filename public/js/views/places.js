@@ -245,12 +245,15 @@ async function loadPlace(id) {
       const fd = new FormData();
       fd.append('file', f);
       try {
-        const resp = await fetch('/api/uploads/image', { method: 'POST', body: fd });
-        const j = await resp.json();
-        if (!resp.ok) throw new Error(j.error || 'upload failed');
+        const resp = await fetch('/api/uploads/image', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
         pldImageUrl = j.url || j.path;
         imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
-      } catch (e) { imgStatus.textContent = '失敗: ' + e.message; }
+      } catch (e) { imgStatus.textContent = '失敗: ' + (e?.message || e); }
     });
     // 投稿
     document.getElementById('pld-submit').onclick = async () => {
