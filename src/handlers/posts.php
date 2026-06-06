@@ -131,12 +131,13 @@ function posts_create(PDO $pdo, array $cfg): void {
         $st->execute([$parentId]);
         if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先 投稿 が ありません', 404);
     }
-    // v465 @LabPay メンション 検出 → 自動的に feedback 起票。 admin 投稿なら 即 approved。
+    // v465 → v467 @LabPay メンション 検出 → 自動的に feedback 起票。 admin 投稿 なら 即 approved。
     // 「#バグ」 ハッシュタグ で kind='bug'、 それ以外 (default) は 'feature'。
+    // i フラグ で 大文字小文字 を 無視 (@labpay も 拾う)。
     $linkedFeedbackId = null;
-    if ($text !== '' && preg_match('/@LabPay\b/u', $text)) {
-        $fbKind = preg_match('/#バグ|#bug/u', $text) ? 'bug' : 'feature';
-        $fbBody = mb_substr(trim(preg_replace('/@LabPay\s*/u', '', $text)), 0, 4000);
+    if ($text !== '' && preg_match('/@LabPay\b/iu', $text)) {
+        $fbKind = preg_match('/#バグ|#bug/iu', $text) ? 'bug' : 'feature';
+        $fbBody = mb_substr(trim(preg_replace('/@LabPay\s*/iu', '', $text)), 0, 4000);
         if ($fbBody !== '') {
             $isAdmin = (string)($u['role'] ?? '') === 'admin';
             if ($isAdmin) {

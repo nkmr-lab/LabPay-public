@@ -106,10 +106,11 @@ export async function renderPostDetail({ params }) {
 }
 
 function composerHtml(parentId) {
-  const placeholder = parentId ? '返信を 書く…' : 'いま どうしてる?  @display_name で メンション、 自由に投稿。';
+  const placeholder = parentId ? '返信を 書く…' : 'いま どうしてる?  @ で メンション (補完あり)。 LabPay へ 機能要望 / バグ報告 する 時は @LabPay 付けてね';
   return `
-    <div class="card">
+    <div class="card" style="position:relative">
       <textarea id="po-body" maxlength="2000" rows="3" placeholder="${escapeHtml(placeholder)}"></textarea>
+      <div id="po-mention-pop" style="display:none; position:absolute; left:14px; top:auto; z-index:50; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:200px; overflow:auto; min-width:180px"></div>
       <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
         <input type="file" id="po-img" accept="image/*" style="flex:1; min-width:140px">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
@@ -121,11 +122,91 @@ function composerHtml(parentId) {
     </div>`;
 }
 
+// v467 @ 補完 用 メンバー キャッシュ (タブ ライフタイム)。
+let mentionCandidates = null;
+async function loadMentionCandidates() {
+  if (mentionCandidates) return mentionCandidates;
+  try {
+    const d = await get('/api/users');
+    const users = (d.items || d) || [];
+    mentionCandidates = users
+      .filter(u => u.display_name)
+      .map(u => ({ id: u.id, name: u.display_name, avatar: u.avatar_url }));
+    // LabPay 公式 アカウント が API 上に いない 場合 でも 候補 に 出す
+    if (!mentionCandidates.some(u => u.name === 'LabPay')) {
+      mentionCandidates.unshift({ id: 0, name: 'LabPay', avatar: null });
+    }
+  } catch (_) { mentionCandidates = [{ id: 0, name: 'LabPay', avatar: null }]; }
+  return mentionCandidates;
+}
+
+function bindMentionAutocomplete() {
+  const ta  = document.getElementById('po-body');
+  const pop = document.getElementById('po-mention-pop');
+  if (!ta || !pop) return;
+  let candidates = [];
+  loadMentionCandidates().then(c => candidates = c);
+  let selected = 0, matched = [];
+  const close = () => { pop.style.display = 'none'; matched = []; };
+  const refresh = () => {
+    const v = ta.value;
+    const pos = ta.selectionStart;
+    // カーソル 前 の 直近 「@xxx」 を 拾う (空白 で 区切られる)
+    const head = v.slice(0, pos);
+    const m = head.match(/(?:^|\s)@([\p{L}\p{N}_\-\.]{0,40})$/u);
+    if (!m) { close(); return; }
+    const q = m[1].toLowerCase();
+    matched = candidates.filter(c => c.name.toLowerCase().includes(q)).slice(0, 6);
+    if (!matched.length) { close(); return; }
+    selected = Math.min(selected, matched.length - 1);
+    pop.innerHTML = matched.map((c, i) => `
+      <div data-mi="${i}" style="padding:6px 10px; cursor:pointer; ${i === selected ? 'background:#f5f3f7' : ''}; display:flex; align-items:center; gap:6px">
+        ${c.avatar
+          ? `<img src="${escapeHtml(c.avatar)}" alt="" style="width:18px; height:18px; border-radius:50%; object-fit:cover">`
+          : `<div style="width:18px; height:18px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:10px">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>`}
+        <span style="font-size:13px">${escapeHtml(c.name)}</span>
+      </div>`).join('');
+    pop.style.display = 'block';
+    pop.querySelectorAll('[data-mi]').forEach(el => {
+      el.addEventListener('mousedown', (ev) => { ev.preventDefault(); commit(Number(el.dataset.mi)); });
+    });
+  };
+  const commit = (idx) => {
+    const c = matched[idx];
+    if (!c) return;
+    const v = ta.value;
+    const pos = ta.selectionStart;
+    const head = v.slice(0, pos);
+    const tail = v.slice(pos);
+    const newHead = head.replace(/(^|\s)@[\p{L}\p{N}_\-\.]*$/u, (_, pre) => `${pre}@${c.name} `);
+    ta.value = newHead + tail;
+    const newPos = newHead.length;
+    ta.setSelectionRange(newPos, newPos);
+    close();
+    ta.focus();
+  };
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('keydown', (ev) => {
+    if (pop.style.display !== 'block' || !matched.length) return;
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); selected = (selected + 1) % matched.length; refresh(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); selected = (selected - 1 + matched.length) % matched.length; refresh(); }
+    else if (ev.key === 'Enter' || ev.key === 'Tab') {
+      if (ev.isComposing || ev.keyCode === 229) return;
+      ev.preventDefault();
+      commit(selected);
+    } else if (ev.key === 'Escape') { close(); }
+  });
+  document.addEventListener('click', (ev) => {
+    if (!pop.contains(ev.target) && ev.target !== ta) close();
+  }, { capture: true });
+}
+
 let composerImageUrl = null;
 let composerCoords = null;
 function bindComposer(parentId) {
   composerImageUrl = null;
   composerCoords = null;
+  bindMentionAutocomplete();  // v467 @ 補完
   const imgInput = document.getElementById('po-img');
   const imgStatus = document.getElementById('po-img-status');
   imgInput?.addEventListener('change', async () => {
