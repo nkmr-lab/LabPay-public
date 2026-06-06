@@ -7,7 +7,6 @@ import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { tag, fmtDateTime, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
-import { createMemberPicker } from '../member_picker.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
