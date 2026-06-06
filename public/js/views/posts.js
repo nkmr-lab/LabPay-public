@@ -135,7 +135,10 @@ function bindComposer(parentId) {
     const fd = new FormData();
     fd.append('file', f);
     try {
-      const resp = await fetch('/api/uploads/image', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const resp = await fetch('/api/uploads/image', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
       const j = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         // server's error 形式 = {error:{code, message}}。 message を 取り出す。

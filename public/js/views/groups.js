@@ -2746,7 +2746,7 @@ function openSchedItemModal(gid, it) {
         try {
           const fd = new FormData();
           fd.append('file', f);
-          const r = await fetch(`/api/groups/${gid}/schedule/${it.id}/attachments`, { method: 'POST', body: fd, credentials: 'same-origin' });
+          const r = await fetch(`/api/groups/${gid}/schedule/${it.id}/attachments`, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' } });
           if (!r.ok) {
             const j = await r.json().catch(() => ({}));
             throw new Error(j.error?.message || ('HTTP ' + r.status));
@@ -3164,6 +3164,7 @@ async function setupFlightAttachments(gid, fid) {
       try {
         const r = await fetch(`/api/groups/${gid}/flights/${fid}/attachments`, {
           method: 'POST', body: fd, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
         });
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
