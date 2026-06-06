@@ -131,27 +131,41 @@ function posts_create(PDO $pdo, array $cfg): void {
         $st->execute([$parentId]);
         if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先 投稿 が ありません', 404);
     }
-    // v465 → v467 @LabPay メンション 検出 → 自動的に feedback 起票。 admin 投稿 なら 即 approved。
-    // 「#バグ」 ハッシュタグ で kind='bug'、 それ以外 (default) は 'feature'。
+    // v465 → v477 @LabPay メンション or LabPay 投稿 への 返信 → 自動的に feedback 起票。
+    // admin 投稿 なら 即 approved。 「#バグ」 ハッシュタグ で kind='bug'、 それ以外 (default) は 'feature'。
     // i フラグ で 大文字小文字 を 無視 (@labpay も 拾う)。
     $linkedFeedbackId = null;
+    $shouldCreateFb = false;
+    $fbBody = '';
     if ($text !== '' && preg_match('/@LabPay\b/iu', $text)) {
-        $fbKind = preg_match('/#バグ|#bug/iu', $text) ? 'bug' : 'feature';
         $fbBody = mb_substr(trim(preg_replace('/@LabPay\s*/iu', '', $text)), 0, 4000);
-        if ($fbBody !== '') {
-            $isAdmin = (string)($u['role'] ?? '') === 'admin';
-            if ($isAdmin) {
-                $stFb = $pdo->prepare("INSERT INTO feedback
-                    (user_id, kind, body, url, claude_status, claude_assigned_at, claude_assigned_by_user_id)
-                    VALUES (?, ?, ?, '#/sns', 'approved', NOW(), ?)");
-                $stFb->execute([(int)$u['id'], $fbKind, $fbBody, (int)$u['id']]);
-            } else {
-                $stFb = $pdo->prepare("INSERT INTO feedback (user_id, kind, body, url)
-                    VALUES (?, ?, ?, '#/sns')");
-                $stFb->execute([(int)$u['id'], $fbKind, $fbBody]);
-            }
-            $linkedFeedbackId = (int)$pdo->lastInsertId();
+        if ($fbBody !== '') $shouldCreateFb = true;
+    }
+    // v477 LabPay 投稿 への 返信 も feedback 扱い (本文 から @LabPay が なくても)。
+    if (!$shouldCreateFb && $parentId !== null && $text !== '') {
+        $stChk = $pdo->prepare("SELECT u.id FROM posts p
+                                  JOIN users u ON u.id = p.user_id
+                                 WHERE p.id = ? AND u.display_name='LabPay' AND u.kind='system'");
+        $stChk->execute([$parentId]);
+        if ((int)$stChk->fetchColumn() > 0) {
+            $fbBody = mb_substr(trim($text), 0, 4000);
+            $shouldCreateFb = true;
         }
+    }
+    if ($shouldCreateFb && $fbBody !== '') {
+        $fbKind = preg_match('/#バグ|#bug/iu', $text) ? 'bug' : 'feature';
+        $isAdmin = (string)($u['role'] ?? '') === 'admin';
+        if ($isAdmin) {
+            $stFb = $pdo->prepare("INSERT INTO feedback
+                (user_id, kind, body, url, claude_status, claude_assigned_at, claude_assigned_by_user_id)
+                VALUES (?, ?, ?, '#/sns', 'approved', NOW(), ?)");
+            $stFb->execute([(int)$u['id'], $fbKind, $fbBody, (int)$u['id']]);
+        } else {
+            $stFb = $pdo->prepare("INSERT INTO feedback (user_id, kind, body, url)
+                VALUES (?, ?, ?, '#/sns')");
+            $stFb->execute([(int)$u['id'], $fbKind, $fbBody]);
+        }
+        $linkedFeedbackId = (int)$pdo->lastInsertId();
     }
     $pid = 0;
     $mentioned = [];

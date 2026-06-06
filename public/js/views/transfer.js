@@ -3,7 +3,9 @@ import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
 
-export async function renderTransfer() {
+export async function renderTransfer({ query } = {}) {
+  // v477 ?to=:user_id で 受取人 を 自動 選択 (プロフィール → 「💸 LabPay で 送金」 経由)
+  const presetTo = query?.to ? Number(query.to) : null;
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card balance-strip">
@@ -32,6 +34,13 @@ export async function renderTransfer() {
   }).catch(() => {});
 
   await loadRecipients();
+  if (presetTo) {
+    const sel = document.getElementById('xfer-to');
+    if (sel && [...sel.options].some(o => Number(o.value) === presetTo)) {
+      sel.value = String(presetTo);
+      document.getElementById('xfer-amt')?.focus();
+    }
+  }
 
   document.getElementById('xfer-send').addEventListener('click', onSend);
 }

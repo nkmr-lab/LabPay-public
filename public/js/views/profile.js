@@ -4,7 +4,7 @@
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { state } from '../app.js';
+import { state, toast } from '../app.js';
 
 export async function renderUserProfile({ params }) {
   const id = Number(params.id);
@@ -39,13 +39,54 @@ export async function renderUserProfile({ params }) {
       </div>
       ${section('🎯 趣味', p.hobbies)}
       ${section('❤️ 推し', p.favorites)}
-      ${(!p.hobbies && !p.favorites)
-        ? '<div class="hint" style="margin-top:14px; text-align:center">まだ 趣味 / 推し は登録されていません</div>'
+      ${(p.paypay_id || p.bank_info) ? `
+        <div style="margin-top:14px">
+          <div class="bold" style="margin-bottom:4px">💴 外部 送金 先</div>
+          <div style="background:#faf7fd; padding:10px; border-radius:8px; font-size:14px">
+            ${p.paypay_id ? `
+              <div class="row" style="gap:6px; align-items:center; margin-bottom:6px">
+                <span class="muted" style="font-size:12px; flex-shrink:0">💴 PayPay ID:</span>
+                <code style="flex:1; word-break:break-all" id="up-paypay">${escapeHtml(p.paypay_id)}</code>
+                <button class="btn" data-copy-target="up-paypay" style="font-size:11px; padding:2px 8px">📋</button>
+              </div>` : ''}
+            ${p.bank_info ? `
+              <div style="margin-bottom:6px">
+                <div class="row" style="gap:6px; align-items:center">
+                  <span class="muted" style="font-size:12px">🏦 口座:</span>
+                  <button class="btn" data-copy-target="up-bank" style="font-size:11px; padding:2px 8px; margin-left:auto">📋</button>
+                </div>
+                <code id="up-bank" style="display:block; white-space:pre-wrap; word-break:break-all; font-size:12.5px; margin-top:4px">${escapeHtml(p.bank_info)}</code>
+              </div>` : ''}
+            ${!isMe ? `
+              <div class="row" style="gap:6px; margin-top:6px; justify-content:flex-end">
+                <a href="#/send?to=${p.id}" class="btn primary" style="font-size:13px">💸 LabPay で 送金</a>
+              </div>` : ''}
+          </div>
+        </div>
+      ` : ''}
+      ${(!p.hobbies && !p.favorites && !p.paypay_id && !p.bank_info)
+        ? '<div class="hint" style="margin-top:14px; text-align:center">まだ 何も 登録されていません</div>'
         : ''}
       ${isMe
         ? '<div class="row" style="margin-top:14px; justify-content:center"><a href="#/settings" class="btn primary">設定で編集</a></div>'
         : ''}
     `;
+    // 📋 コピー
+    document.querySelectorAll('[data-copy-target]').forEach(b => {
+      b.addEventListener('click', () => {
+        const t = document.getElementById(b.dataset.copyTarget);
+        if (!t) return;
+        const text = t.textContent;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(() => toast('コピーしました')).catch(() => toast('コピー失敗'));
+        } else {
+          const r = document.createRange(); r.selectNode(t);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          try { document.execCommand('copy'); toast('コピーしました'); }
+          catch (_) { toast('コピー失敗'); }
+        }
+      });
+    });
   } catch (e) {
     document.getElementById('up-body').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

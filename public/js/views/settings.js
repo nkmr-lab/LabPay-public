@@ -43,6 +43,14 @@ export async function renderSettings() {
         <span class="lbl">❤️ 推し (任意・他のメンバーから見えます)</span>
         <textarea id="profile-favorites" rows="3" maxlength="1000" placeholder="例: 〇〇 (アニメ) / △△ (バンド) / □□ (アイドル)"></textarea>
       </label>
+      <label class="field">
+        <span class="lbl">💴 PayPay ID (送金 用、 他のメンバーから 見えます)</span>
+        <input type="text" id="profile-paypay" maxlength="100" placeholder="例: yourid1234 (PayPay 内 で 検索 できる ID)">
+      </label>
+      <label class="field">
+        <span class="lbl">🏦 銀行口座 メモ (送金 用、 他のメンバーから 見えます)</span>
+        <textarea id="profile-bank" rows="3" maxlength="500" placeholder="例: ○○銀行 ○○支店 普通 1234567 ヤマダ タロウ"></textarea>
+      </label>
       <div class="row" style="gap:6px">
         <button id="profile-save" class="primary">保存</button>
         <button id="profile-clear-avatar">アバター削除</button>
@@ -598,6 +606,8 @@ async function loadProfile() {
     document.getElementById('profile-slack').value = me.user.slack_member_id || '';
     document.getElementById('profile-hobbies').value = me.user.hobbies || '';
     document.getElementById('profile-favorites').value = me.user.favorites || '';
+    document.getElementById('profile-paypay').value = me.user.paypay_id || '';
+    document.getElementById('profile-bank').value   = me.user.bank_info || '';
     const pv = document.getElementById('profile-view');
     if (pv) pv.href = '#/users/' + me.user.id;
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
@@ -612,12 +622,16 @@ async function onProfileSave() {
   const slack_raw = document.getElementById('profile-slack').value.trim();
   const hobbies = document.getElementById('profile-hobbies').value.trim();
   const favorites = document.getElementById('profile-favorites').value.trim();
+  const paypay = document.getElementById('profile-paypay').value.trim();
+  const bank   = document.getElementById('profile-bank').value.trim();
   const body = {
     display_name,
     phone_number: phone_raw === '' ? null : phone_raw,
     slack_member_id: slack_raw === '' ? null : slack_raw,
     hobbies:   hobbies   === '' ? null : hobbies,
     favorites: favorites === '' ? null : favorites,
+    paypay_id: paypay    === '' ? null : paypay,
+    bank_info: bank      === '' ? null : bank,
   };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {

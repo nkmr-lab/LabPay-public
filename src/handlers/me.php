@@ -14,7 +14,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
@@ -24,6 +24,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['slack_member_id']   = $row['slack_member_id']   ?? null;
         $u['hobbies']           = $row['hobbies']           ?? null;
         $u['favorites']         = $row['favorites']         ?? null;
+        $u['paypay_id']         = $row['paypay_id']         ?? null;
+        $u['bank_info']         = $row['bank_info']         ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -119,6 +121,25 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     }
                     $sets[] = "{$k} = ?"; $params[] = $v;
                 }
+            }
+        }
+        // v477 PayPay ID (100 字) + 振り込み 口座 メモ (500 字)
+        if (array_key_exists('paypay_id', $body)) {
+            $pp = $body['paypay_id'];
+            if ($pp === null || trim((string)$pp) === '') $sets[] = 'paypay_id = NULL';
+            else {
+                $pp = trim((string)$pp);
+                if (mb_strlen($pp) > 100) throw new ApiException('bad_request', 'paypay_id は 100 文字 まで', 400);
+                $sets[] = 'paypay_id = ?'; $params[] = $pp;
+            }
+        }
+        if (array_key_exists('bank_info', $body)) {
+            $bi = $body['bank_info'];
+            if ($bi === null || trim((string)$bi) === '') $sets[] = 'bank_info = NULL';
+            else {
+                $bi = trim((string)$bi);
+                if (mb_strlen($bi) > 500) throw new ApiException('bad_request', 'bank_info は 500 文字 まで', 400);
+                $sets[] = 'bank_info = ?'; $params[] = $bi;
             }
         }
         if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
@@ -1292,7 +1313,7 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
         && ($seg[2] ?? '') === 'profile') {
         $uid = (int)$seg[1];
         $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, scrapbox_username,
-                                    hobbies, favorites, created_at
+                                    hobbies, favorites, paypay_id, bank_info, created_at
                                FROM users WHERE id=? AND kind='human'");
         $st->execute([$uid]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
