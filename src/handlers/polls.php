@@ -45,8 +45,9 @@ function polls_list(PDO $pdo, array $cfg): void {
                (SELECT COUNT(*) FROM poll_voters pv5 WHERE pv5.poll_id=p.id AND pv5.voted_at IS NOT NULL) AS voted_count
           FROM polls p
           JOIN users u ON u.id = p.creator_user_id
-         WHERE p.creator_user_id = ?
-            OR EXISTS(SELECT 1 FROM poll_voters pv WHERE pv.poll_id=p.id AND pv.user_id=?)
+         WHERE p.deleted_at IS NULL
+           AND (p.creator_user_id = ?
+            OR EXISTS(SELECT 1 FROM poll_voters pv WHERE pv.poll_id=p.id AND pv.user_id=?))
          ORDER BY (p.status='open') DESC, p.deadline_at DESC, p.id DESC
          LIMIT 200");
     $st->execute([(int)$u['id'], (int)$u['id'], (int)$u['id'], (int)$u['id']]);
@@ -140,7 +141,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT p.*, u.display_name AS creator_name
                            FROM polls p
                            JOIN users u ON u.id = p.creator_user_id
-                          WHERE p.id = ?");
+                          WHERE p.id = ? AND p.deleted_at IS NULL");
     $st->execute([$id]);
     $poll = $st->fetch(PDO::FETCH_ASSOC);
     if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
@@ -486,6 +487,7 @@ function polls_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    $pdo->prepare("DELETE FROM polls WHERE id=?")->execute([$id]);
+    // v458 soft-delete
+    $pdo->prepare("UPDATE polls SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }

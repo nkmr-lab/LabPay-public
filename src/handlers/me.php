@@ -971,7 +971,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
               FROM polls p
               JOIN poll_voters pv ON pv.poll_id=p.id AND pv.user_id=?
               JOIN users u        ON u.id = p.creator_user_id
-             WHERE p.status='open'
+             WHERE p.status='open' AND p.deleted_at IS NULL
                AND NOT EXISTS (SELECT 1 FROM poll_votes pvt WHERE pvt.poll_id=p.id AND pvt.user_id=?)
                AND (pv.voted_at IS NULL OR pv.free_text IS NULL OR pv.free_text='')
              ORDER BY p.deadline_at ASC LIMIT 50");
@@ -994,7 +994,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
               FROM roll_calls r
               JOIN roll_call_targets t ON t.roll_call_id=r.id AND t.user_id=?
               JOIN users u             ON u.id = r.creator_user_id
-             WHERE r.status='open' AND t.responded_at IS NULL
+             WHERE r.status='open' AND r.deleted_at IS NULL AND t.responded_at IS NULL
              ORDER BY r.deadline_at ASC LIMIT 50");
         $stR->execute([$uid]);
         foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -1094,7 +1094,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                    (SELECT COUNT(*) FROM poll_voters pv2 WHERE pv2.poll_id=p.id) AS total_n,
                    (SELECT COUNT(*) FROM poll_voters pv3 WHERE pv3.poll_id=p.id AND pv3.voted_at IS NOT NULL) AS done_n
               FROM polls p
-             WHERE p.creator_user_id=? AND p.status='open'
+             WHERE p.creator_user_id=? AND p.status='open' AND p.deleted_at IS NULL
             HAVING done_n < total_n
              ORDER BY p.deadline_at ASC LIMIT 50");
         $stP->execute([$uid]);
@@ -1116,7 +1116,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                    (SELECT COUNT(*) FROM roll_call_targets t2 WHERE t2.roll_call_id=r.id) AS total_n,
                    (SELECT COUNT(*) FROM roll_call_targets t3 WHERE t3.roll_call_id=r.id AND t3.responded_at IS NOT NULL) AS done_n
               FROM roll_calls r
-             WHERE r.creator_user_id=? AND r.status='open'
+             WHERE r.creator_user_id=? AND r.status='open' AND r.deleted_at IS NULL
             HAVING done_n < total_n
              ORDER BY r.deadline_at ASC LIMIT 50");
         $stR->execute([$uid]);

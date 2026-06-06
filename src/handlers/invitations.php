@@ -46,7 +46,7 @@ function invitations_list(PDO $pdo, array $cfg): void {
                   WHERE j.invitation_id = i.id AND j.user_id = ?) AS i_joined
           FROM invitations i
           JOIN users u ON u.id = i.creator_user_id
-         WHERE $where
+         WHERE i.deleted_at IS NULL AND $where
          ORDER BY (i.closed_at IS NULL) DESC,
                   COALESCE(i.starts_at, i.created_at) ASC,
                   i.id DESC");
@@ -131,7 +131,7 @@ function invitations_detail(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("
         SELECT i.*, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url
           FROM invitations i JOIN users u ON u.id = i.creator_user_id
-         WHERE i.id = ?");
+         WHERE i.id = ? AND i.deleted_at IS NULL");
     $st->execute([$id]);
     $row = $st->fetch();
     if (!$row) throw new ApiException('not_found', "invitation $id not found", 404);

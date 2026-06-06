@@ -60,8 +60,9 @@ function timers_list(PDO $pdo, array $cfg): void {
                EXISTS(SELECT 1 FROM timer_participants tp WHERE tp.timer_id=t.id AND tp.user_id=?) AS is_participant
           FROM timers t
           JOIN users u ON u.id = t.creator_user_id
-         WHERE t.creator_user_id = ?
-            OR EXISTS(SELECT 1 FROM timer_participants tp2 WHERE tp2.timer_id=t.id AND tp2.user_id=?)
+         WHERE t.deleted_at IS NULL
+           AND (t.creator_user_id = ?
+            OR EXISTS(SELECT 1 FROM timer_participants tp2 WHERE tp2.timer_id=t.id AND tp2.user_id=?))
          ORDER BY FIELD(t.status,'running','paused','done','cancelled'),
                   t.created_at DESC, t.id DESC
          LIMIT 100");
@@ -235,7 +236,7 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT t.*, u.display_name AS creator_name
                            FROM timers t
                            JOIN users u ON u.id = t.creator_user_id
-                          WHERE t.id = ?");
+                          WHERE t.id = ? AND t.deleted_at IS NULL");
     $st->execute([$id]);
     $t = $st->fetch(PDO::FETCH_ASSOC);
     if (!$t) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
@@ -319,6 +320,7 @@ function timers_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    $pdo->prepare("DELETE FROM timers WHERE id=?")->execute([$id]);
+    // v458 soft-delete: サーバ側 は 残し UI から だけ 消す (分析用)
+    $pdo->prepare("UPDATE timers SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }

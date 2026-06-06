@@ -36,7 +36,7 @@ function meetups_list(PDO $pdo, array $cfg): void {
                (SELECT COUNT(*) FROM meetup_participants p WHERE p.meetup_id=m.id) AS member_count
           FROM meetups m
           JOIN users u ON u.id = m.creator_user_id
-         WHERE $where
+         WHERE m.deleted_at IS NULL AND $where
          ORDER BY (m.meetup_at > NOW() AND m.cancelled_at IS NULL) DESC, m.meetup_at DESC, m.id DESC
          LIMIT 100");
     $st->execute($args);
@@ -116,7 +116,7 @@ function meetups_detail(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT m.*, u.display_name AS creator_name
                            FROM meetups m
                            JOIN users u ON u.id = m.creator_user_id
-                          WHERE m.id = ?");
+                          WHERE m.id = ? AND m.deleted_at IS NULL");
     $st->execute([$id]);
     $m = $st->fetch(PDO::FETCH_ASSOC);
     if (!$m) throw new ApiException('not_found', '待ち合わせが見つかりません', 404);
@@ -199,6 +199,7 @@ function meetups_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    $pdo->prepare("DELETE FROM meetups WHERE id=?")->execute([$id]);
+    // v458 soft-delete: 分析用 に サーバ側 残す
+    $pdo->prepare("UPDATE meetups SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }

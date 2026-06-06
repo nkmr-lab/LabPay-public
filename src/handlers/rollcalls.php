@@ -38,8 +38,9 @@ function rollcalls_list(PDO $pdo, array $cfg): void {
                (SELECT COUNT(*) FROM roll_call_targets t5 WHERE t5.roll_call_id=r.id AND t5.responded_at IS NOT NULL) AS responded_count
           FROM roll_calls r
           JOIN users u ON u.id = r.creator_user_id
-         WHERE r.creator_user_id = ?
-            OR EXISTS(SELECT 1 FROM roll_call_targets t WHERE t.roll_call_id=r.id AND t.user_id=?)
+         WHERE r.deleted_at IS NULL
+           AND (r.creator_user_id = ?
+            OR EXISTS(SELECT 1 FROM roll_call_targets t WHERE t.roll_call_id=r.id AND t.user_id=?))
          ORDER BY (r.status='open') DESC, r.deadline_at DESC, r.id DESC
          LIMIT 200");
     $st->execute([(int)$u['id'], (int)$u['id'], (int)$u['id'], (int)$u['id']]);
@@ -111,7 +112,7 @@ function rollcalls_detail(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT r.*, u.display_name AS creator_name
                            FROM roll_calls r
                            JOIN users u ON u.id = r.creator_user_id
-                          WHERE r.id = ?");
+                          WHERE r.id = ? AND r.deleted_at IS NULL");
     $st->execute([$id]);
     $rc = $st->fetch(PDO::FETCH_ASSOC);
     if (!$rc) throw new ApiException('not_found', '点呼が見つかりません', 404);
@@ -253,6 +254,7 @@ function rollcalls_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    $pdo->prepare("DELETE FROM roll_calls WHERE id=?")->execute([$id]);
+    // v458 soft-delete (分析用 残す)
+    $pdo->prepare("UPDATE roll_calls SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }
