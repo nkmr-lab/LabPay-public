@@ -97,6 +97,7 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
+  { id: 'places',         title: '🍴 新着のお店' },
   { id: 'sns',            title: '💬 SNS 最新' },
   { id: 'history',        title: '履歴' },
 ];
@@ -263,6 +264,14 @@ export async function renderHome() {
       <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-places-card" data-card-id="places" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🍴 新着のお店</h2>
+        <a href="#/places" class="hint">一覧 →</a>
+      </div>
+      <div id="home-places" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">💬 SNS 最新</h2>
@@ -294,6 +303,7 @@ export async function renderHome() {
   await renderMyActiveTimers();
   await renderFreshListings();
   await renderFreshTasks();
+  await renderFreshPlaces();
   await renderFreshSns();
   await renderRecentTx();
 
@@ -340,6 +350,7 @@ async function doHomePoll() {
     renderMyActiveTimers(),
     renderFreshListings(),
     renderFreshTasks(),
+    renderFreshPlaces(),
     renderFreshSns(),
     renderRecentTx(),
   ]);
@@ -1043,10 +1054,39 @@ async function renderFreshInvitations() {
   }
 }
 
+// v471 新着 のお店 (ホーム カード)。 最近 登録 された 5 件 を サムネ + 評価 で。
+async function renderFreshPlaces() {
+  const card = document.getElementById('home-places-card');
+  const root = document.getElementById('home-places');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/places');
+    const items = (d.items || []).slice(0, 5);
+    card.hidden = false;
+    if (!items.length) {
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ お店 なし</div>';
+      return;
+    }
+    root.innerHTML = items.map(p => {
+      const img = p.latest_image
+        ? `<img src="${escapeHtml(p.latest_image)}" alt="" style="flex:none !important; width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px">`
+        : `<div style="flex:none; width:48px; height:48px; border-radius:6px; background:#f5e9d6; display:flex; align-items:center; justify-content:center; font-size:22px; margin-right:8px">🍴</div>`;
+      const rating = p.avg_rating !== null
+        ? ` · ⭐${p.avg_rating.toFixed(1)}` : '';
+      return `
+        <a class="list-item" href="#/places/${p.id}" style="align-items:center; padding:6px 4px">
+          ${img}
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px">${escapeHtml(p.title)}</div>
+            <div class="meta" style="font-size:11px">💬 ${p.comment_count}${rating}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (_) { card.hidden = true; }
+}
+
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
 // + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
-// v459 → v462 SNS 最新 (ホーム カード)。 画像付き 投稿 は ヒーロー風 に カード化。
-// 投稿の image_url が あれば 上に 大きく 表示 (16:9 cover)、 本文 + メタ は 下。
 async function renderFreshSns() {
   const card = document.getElementById('home-sns-card');
   const root = document.getElementById('home-sns');

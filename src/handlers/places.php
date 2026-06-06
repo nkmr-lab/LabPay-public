@@ -9,6 +9,8 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { places_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { places_create($pdo, $cfg); return; }
+    // v471 URL (tabelog / Retty) から JSON-LD で 店名 / 住所 / 緯度経度 を 取得
+    if ($sub === 'import_url' && $method === 'POST') { places_import_url($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
@@ -180,4 +182,88 @@ function places_comment_delete(PDO $pdo, array $cfg, int $placeId, int $commentI
     }
     $pdo->prepare("DELETE FROM place_comments WHERE id=?")->execute([$commentId]);
     json_response(['ok' => true]);
+}
+
+// v471 URL (tabelog.com / retty.me) → 店名 / 住所 / 緯度経度 を 抽出。
+// JSON-LD の Restaurant / FoodEstablishment / LocalBusiness ノード が
+// あれば 採用 (両サイト とも schema.org の geo を 持っている)。
+// fallback: og:title / og:description のみ。
+function places_import_url(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $url = trim((string)($body['url'] ?? ''));
+    if ($url === '') throw new ApiException('bad_request', 'url 必要', 400);
+    if (!preg_match('#^https?://#', $url)) throw new ApiException('bad_request', 'http(s) URL のみ', 400);
+    // ホワイトリスト: tabelog / Retty / hotpepper / Google Maps (短縮)
+    $host = parse_url($url, PHP_URL_HOST) ?? '';
+    $allowed = ['tabelog.com', 'retty.me', 'hotpepper.jp', 'goo.gl', 'maps.google.com',
+                'maps.app.goo.gl', 'g.co'];
+    $ok = false;
+    foreach ($allowed as $h) {
+        if ($host === $h || str_ends_with($host, '.' . $h)) { $ok = true; break; }
+    }
+    if (!$ok) throw new ApiException('bad_request', 'tabelog / Retty / hotpepper のみ 対応', 400);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+        CURLOPT_ENCODING => '',
+    ]);
+    $html = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$html || $code !== 200) {
+        throw new ApiException('fetch_failed', "ページ取得 失敗 (HTTP {$code})", 502);
+    }
+
+    $title = ''; $address = ''; $lat = null; $lng = null; $desc = '';
+
+    // 1) JSON-LD
+    if (preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
+        foreach ($m[1] as $raw) {
+            $j = json_decode(html_entity_decode($raw, ENT_QUOTES|ENT_HTML5, 'UTF-8'), true);
+            if (!is_array($j)) continue;
+            $list = isset($j[0]) ? $j : [$j];
+            foreach ($list as $node) {
+                $type = $node['@type'] ?? '';
+                if (is_array($type)) $type = implode(',', $type);
+                if (!preg_match('/Restaurant|FoodEstablishment|LocalBusiness/i', (string)$type)) continue;
+                $title = (string)($node['name'] ?? $title);
+                $desc  = (string)($node['description'] ?? $desc);
+                $addrRaw = $node['address'] ?? null;
+                if (is_string($addrRaw)) $address = $addrRaw;
+                elseif (is_array($addrRaw)) {
+                    $address = trim(
+                        ((string)($addrRaw['addressRegion']   ?? '')) .
+                        ((string)($addrRaw['addressLocality'] ?? '')) .
+                        ((string)($addrRaw['streetAddress']   ?? ''))
+                    );
+                }
+                if (isset($node['geo']) && is_array($node['geo'])) {
+                    if (isset($node['geo']['latitude']))  $lat = (float)$node['geo']['latitude'];
+                    if (isset($node['geo']['longitude'])) $lng = (float)$node['geo']['longitude'];
+                }
+                if ($title !== '' && $lat !== null) break 2;  // 取れたら 抜ける
+            }
+        }
+    }
+    // 2) og:* フォールバック
+    if ($title === '' && preg_match('#<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']+)["\']#i', $html, $mm)) {
+        $title = trim($mm[1]);
+    }
+    if ($desc === '' && preg_match('#<meta\s+(?:property|name)=["\']og:description["\']\s+content=["\']([^"\']+)["\']#i', $html, $mm)) {
+        $desc = trim($mm[1]);
+    }
+
+    json_response([
+        'title'       => $title,
+        'address'     => $address,
+        'lat'         => $lat,
+        'lng'         => $lng,
+        'description' => $desc,
+        'source_url'  => $url,
+    ]);
 }
