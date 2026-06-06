@@ -2,7 +2,7 @@
 // 一覧 → 詳細 → 口コミ投稿 + 削除。 lat/lng があれば Leaflet で 地図表示。
 // 画像 は /api/uploads/image で 先 に 上げ、 返り の URL を image_url に。
 
-import { get, post, del } from '../api.js';
+import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
@@ -337,7 +337,11 @@ export async function renderPlaceDetail({ params }) {
       </div>
     </div>
     <div class="card" id="pld-admin" hidden>
-      <button id="pld-del" class="danger">この お店 を 削除</button>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="pld-edit" class="btn primary">✏ 編集</button>
+        <button id="pld-del" class="danger">この お店 を 削除</button>
+      </div>
+      <div id="pld-edit-form" hidden style="margin-top:10px"></div>
     </div>
   `;
   await loadPlace(id);
@@ -401,7 +405,7 @@ async function loadPlace(id) {
         catch (e) { toast('失敗: ' + e.message); }
       });
     });
-    // 削除 (起案者 or admin)
+    // 編集 / 削除 (起案者 or admin)
     if (me && (me.id === p.creator_user_id || me.role === 'admin')) {
       const admin = document.getElementById('pld-admin');
       admin.hidden = false;
@@ -409,6 +413,54 @@ async function loadPlace(id) {
         if (!confirm('この お店 を 削除しますか? (口コミ も 全部 消えます)')) return;
         try { await del('/api/places/' + id); navigate('#/places'); }
         catch (e) { toast('失敗: ' + e.message); }
+      };
+      // v472 ✏ 編集 — title / category / address / lat / lng / description を 部分更新
+      document.getElementById('pld-edit').onclick = () => {
+        const form = document.getElementById('pld-edit-form');
+        if (!form.hidden) { form.hidden = true; return; }
+        form.hidden = false;
+        form.innerHTML = `
+          <label class="field"><span class="lbl">お店の 名前</span>
+            <input type="text" id="pld-edit-title" maxlength="200" value="${escapeHtml(p.title || '')}">
+          </label>
+          <label class="field"><span class="lbl">カテゴリ</span>
+            <select id="pld-edit-cat">
+              ${CATEGORIES.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === (p.category || '') ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field"><span class="lbl">住所</span>
+            <input type="text" id="pld-edit-addr" maxlength="500" value="${escapeHtml(p.address || '')}">
+          </label>
+          <label class="field"><span class="lbl">緯度 / 経度</span>
+            <div class="row" style="gap:6px">
+              <input type="number" id="pld-edit-lat" step="0.000001" value="${p.lat !== null ? p.lat : ''}" placeholder="緯度" style="flex:1">
+              <input type="number" id="pld-edit-lng" step="0.000001" value="${p.lng !== null ? p.lng : ''}" placeholder="経度" style="flex:1">
+            </div>
+          </label>
+          <label class="field"><span class="lbl">紹介文 / メモ</span>
+            <textarea id="pld-edit-desc" maxlength="4000" rows="5">${escapeHtml(p.description || '')}</textarea>
+          </label>
+          <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+            <button id="pld-edit-cancel" class="btn">キャンセル</button>
+            <button id="pld-edit-save" class="primary">保存</button>
+          </div>`;
+        document.getElementById('pld-edit-cancel').onclick = () => { form.hidden = true; };
+        document.getElementById('pld-edit-save').onclick = async () => {
+          const lat = document.getElementById('pld-edit-lat').value;
+          const lng = document.getElementById('pld-edit-lng').value;
+          try {
+            await patch(`/api/places/${id}`, {
+              title:       document.getElementById('pld-edit-title').value.trim(),
+              category:    document.getElementById('pld-edit-cat').value,
+              address:     document.getElementById('pld-edit-addr').value.trim(),
+              description: document.getElementById('pld-edit-desc').value.trim(),
+              lat: lat !== '' ? Number(lat) : null,
+              lng: lng !== '' ? Number(lng) : null,
+            });
+            toast('保存しました');
+            await loadPlace(id);
+          } catch (e) { toast('失敗: ' + e.message); }
+        };
       };
     }
     // 画像 upload

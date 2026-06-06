@@ -16,6 +16,7 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
         $next = $seg[2] ?? '';
         if ($next === ''         && $method === 'GET')    { places_detail($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'DELETE') { places_delete($pdo, $cfg, $id); return; }
+        if ($next === ''         && $method === 'PATCH')  { places_edit($pdo, $cfg, $id);   return; }
         if ($next === 'comments' && $method === 'POST')   { places_comment_create($pdo, $cfg, $id); return; }
         if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
             places_comment_delete($pdo, $cfg, $id, (int)$seg[3]);
@@ -126,6 +127,54 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
         ],
         'comments' => $comments,
     ]);
+}
+
+// v472 編集 (起案者 + admin)。 title / category / address / lat / lng / description を 部分更新。
+function places_edit(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id FROM places WHERE id=?");
+    $st->execute([$id]);
+    $cid = (int)$st->fetchColumn();
+    if (!$cid) throw new ApiException('not_found', '見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($cid !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ編集可', 403);
+    }
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('title', $body)) {
+        $t = mb_substr(trim((string)$body['title']), 0, 200);
+        if ($t === '') throw new ApiException('bad_request', 'title 1..200', 400);
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
+    if (array_key_exists('category', $body)) {
+        $c = mb_substr(trim((string)$body['category']), 0, 50);
+        $sets[] = 'category = ?'; $args[] = $c;
+    }
+    if (array_key_exists('address', $body)) {
+        $a = mb_substr(trim((string)$body['address']), 0, 500);
+        $sets[] = 'address = ?'; $args[] = $a !== '' ? $a : null;
+    }
+    if (array_key_exists('description', $body)) {
+        $d = mb_substr(trim((string)$body['description']), 0, 4000);
+        $sets[] = 'description = ?'; $args[] = $d !== '' ? $d : null;
+    }
+    if (array_key_exists('lat', $body)) {
+        $v = $body['lat'];
+        $lat = ($v === '' || $v === null) ? null : (float)$v;
+        if ($lat !== null && ($lat < -90 || $lat > 90))   throw new ApiException('bad_request', 'lat 範囲外', 400);
+        $sets[] = 'lat = ?'; $args[] = $lat;
+    }
+    if (array_key_exists('lng', $body)) {
+        $v = $body['lng'];
+        $lng = ($v === '' || $v === null) ? null : (float)$v;
+        if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
+        $sets[] = 'lng = ?'; $args[] = $lng;
+    }
+    if (!$sets) { json_response(['ok' => true, 'noop' => true]); return; }
+    $args[] = $id;
+    $pdo->prepare("UPDATE places SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+    json_response(['ok' => true]);
 }
 
 function places_delete(PDO $pdo, array $cfg, int $id): void {
