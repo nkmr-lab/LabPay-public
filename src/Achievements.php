@@ -191,17 +191,17 @@ class Achievements {
                 ['count' => 50, 'label' => '闇に消えた最終者',     'medal' => '💎'],
             ],
         ],
-        // v473 食べある記 (places アプリ) 関連 実績
+        // v473 → v474 食べある記 (places アプリ) 関連 実績。 閾値 を 5/10/50/200 に。
         'places_added' => [
             'title' => '食べある記 投稿者',
             'desc'  => '食べある記 に 登録 した 店 の 数',
             'unit'  => '店',
             'icon'  => '🍴',
             'tiers' => [
-                ['count' => 1,  'label' => '食べある記 デビュー', 'medal' => '🥉'],
-                ['count' => 5,  'label' => 'グルメ リポーター',   'medal' => '🥈'],
-                ['count' => 15, 'label' => '食通',                 'medal' => '🥇'],
-                ['count' => 30, 'label' => '中野 食べ尽くし',     'medal' => '💎'],
+                ['count' => 5,   'label' => '食べある記 デビュー', 'medal' => '🥉'],
+                ['count' => 10,  'label' => 'グルメ リポーター',   'medal' => '🥈'],
+                ['count' => 50,  'label' => '食通',                 'medal' => '🥇'],
+                ['count' => 200, 'label' => '中野 食べ尽くし',     'medal' => '💎'],
             ],
         ],
         'places_reviewed' => [
@@ -210,10 +210,10 @@ class Achievements {
             'unit'  => '件',
             'icon'  => '💬',
             'tiers' => [
-                ['count' => 1,  'label' => '初 口コミ',           'medal' => '🥉'],
-                ['count' => 10, 'label' => 'マメな レビュアー',   'medal' => '🥈'],
-                ['count' => 30, 'label' => 'グルメ評論家',         'medal' => '🥇'],
-                ['count' => 75, 'label' => '食 の 賢者',           'medal' => '💎'],
+                ['count' => 5,   'label' => '口コミ 初心者',       'medal' => '🥉'],
+                ['count' => 10,  'label' => 'マメな レビュアー',   'medal' => '🥈'],
+                ['count' => 50,  'label' => 'グルメ評論家',         'medal' => '🥇'],
+                ['count' => 200, 'label' => '食 の 賢者',           'medal' => '💎'],
             ],
         ],
     ];
