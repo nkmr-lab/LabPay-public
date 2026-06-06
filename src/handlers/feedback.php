@@ -150,7 +150,7 @@ function feedback_claude_set_status(PDO $pdo, array $cfg, int $id): void {
             if ($f) {
                 $kindLbl = Labels::feedbackKind((string)$f['kind']);
                 $snip = mb_substr((string)$f['body'], 0, 100) . (mb_strlen((string)$f['body']) > 100 ? '…' : '');
-                slack_notify($cfg, "✅ Claude に 任せました: {$kindLbl} #{$id} ({$f['user_name']})\n>>> {$snip}\n\n→ 次の cron tick (最大 10 分) で 着手 します");
+                slack_notify($cfg, "✅ Claude に 任せました: {$kindLbl} #{$id} ({$f['user_name']})\n>>> {$snip}\n\n→ 次の cron tick (最大 10 分) で 着手 します", null, '#/feedback-admin');
             }
         } catch (Throwable $_) { /* swallow */ }
     } else {
@@ -227,7 +227,7 @@ function feedback_create(PDO $pdo, array $cfg): void {
 
     // And blast to Slack so admin sees it on their phone immediately.
     try {
-        slack_notify($cfg, "{$kindLabel} from *{$u['display_name']}*\n>>> " . $text);
+        slack_notify($cfg, "{$kindLabel} from *{$u['display_name']}*\n>>> " . $text, null, '#/feedback-admin');
     } catch (Throwable $e) { /* swallow */ }
 
     json_response(['ok' => true, 'id' => $fbId]);

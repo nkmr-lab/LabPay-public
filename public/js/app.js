@@ -27,6 +27,7 @@ import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.
 import { renderNotices, renderNoticeForm } from './views/notices.js';
 import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
 import { renderPlaces, renderPlaceNew, renderPlaceDetail } from './views/places.js';
+import { renderPosts, renderPostDetail } from './views/posts.js';
 import { renderAdminSounds } from './views/admin_sounds.js';
 import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/auctions.js';
 import { renderPlaylists, renderPlaylistNew, renderPlaylistDetail, renderPlaylistEdit } from './views/playlists.js';
@@ -38,6 +39,7 @@ import { renderExercise } from './views/exercise.js';
 import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
 import { installGlobalAudioUnlock } from './audio_unlock.js';
+import { bootSettingsSync } from './settings_sync.js';
 import { renderApps } from './views/apps.js';
 import { renderContacts } from './views/contacts.js';
 import { renderRequestsHub } from './views/requests_hub.js';
@@ -88,6 +90,10 @@ export async function refreshMe() {
     // 1 回 で 共有 AudioContext + HTMLAudio を unlock。 以降 setInterval から の
     // タイマーベル / 効果音 が iOS Safari でも 通る。
     installGlobalAudioUnlock();
+    // v456 設定 を サーバ から 引いて localStorage に 反映 (デバイス間 同期)。
+    // 直後 に localStorage を 読み込む view が ある ので await。 失敗 しても 黙殺
+    // (オフライン や 未ログイン の フォールバック が きく)。
+    await bootSettingsSync();
     return data;
   } catch (e) {
     state.me = null;
@@ -241,16 +247,15 @@ function renderChrome() {
   const isAdmin = state.me.role === 'admin';
   adminLink.hidden = !isAdmin;
   if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
-  // v445: admin にも 機能要望 / バグ報告 リンク を 出す。
+  // v445 → v456: admin にも 機能要望 / バグ報告 リンク を 出す。
   // 中村 (admin) は これを Claude への 指示 チャネル として 使う:
   //   admin が 投稿 → 報告・要望 で 「Claude に 任せる」 → cron 巡回 →
   //   実装 + push + done + 自動 返信。 自分のメモも 履歴に残る。
+  // 順序: 通知 / 設定 / 管理 / 報告・要望 / 機能要望 / バグ報告 (セパレータ廃止)。
   const fReq  = document.getElementById('feature-request-link');
   const bugRep = document.getElementById('bug-report-link');
-  const sep   = document.getElementById('topbar-sep');
   if (fReq)  fReq.hidden  = false;
   if (bugRep) bugRep.hidden = false;
-  if (sep)   sep.hidden   = false;
   if (state.unread > 0) {
     badge.hidden = false;
     badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
@@ -453,6 +458,8 @@ route('/meetups/:id',     renderMeetupDetail);
 route('/places',          renderPlaces);
 route('/places/new',      renderPlaceNew);
 route('/places/:id',      renderPlaceDetail);
+route('/sns',             renderPosts);
+route('/sns/:id',         renderPostDetail);
 route('/admin/sounds',    renderAdminSounds);
 route('/auctions',        renderAuctions);
 route('/auctions/new',    renderAuctionNew);

@@ -51,6 +51,7 @@ export const APPS = [
   { id: 'exercise',      cat: 'archive', url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '📍 行きたい店',      desc: '店情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 を 添えて 投稿可。 食べログ的。', defaultVisible: true },
+  { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 ラボSNS',         desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + ❤いいね)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';

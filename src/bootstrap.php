@@ -444,9 +444,20 @@ function notify_admins(PDO $pdo, array $cfg, string $type, string $body,
 // ---------------- Slack notifications (incoming webhook) ----------------
 // Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
 // and swallows all errors — Slack being down must never break a listing/scan/etc.
-function slack_notify(array $cfg, string $text, ?array $blocks = null): void {
+// v456 link 引数 を 追加。 渡すと 本文末尾に LabPay の 該当 URL を 追記する
+// (Slack 上 で 「どこ に 行けば 良い か」 が 一目で 分かる ように)。
+//   $link は フラグメント (例: "#/feedback-admin") か、 もしくは 完全URL。
+function slack_notify(array $cfg, string $text, ?array $blocks = null, ?string $link = null): void {
     $url = (string)($cfg['slack']['webhook_url'] ?? '');
     if ($url === '') return;
+    if ($link !== null && $link !== '') {
+        $fullUrl = $link;
+        if (strpos($link, 'http') !== 0) {
+            $base = rtrim((string)($cfg['app']['base_url'] ?? 'https://pay.nkmr.io'), '/');
+            $fullUrl = $base . '/' . ltrim($link, '/');
+        }
+        $text = $text . "\n→ " . $fullUrl;
+    }
     $payload = ['text' => $text];
     if ($blocks !== null) $payload['blocks'] = $blocks;
     $ch = curl_init($url);
@@ -500,6 +511,7 @@ require_once __DIR__ . '/handlers/timers.php';
 require_once __DIR__ . '/handlers/notices.php';
 require_once __DIR__ . '/handlers/meetups.php';
 require_once __DIR__ . '/handlers/places.php';
+require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/sounds.php';
 require_once __DIR__ . '/handlers/auctions.php';
 require_once __DIR__ . '/handlers/exercise.php';

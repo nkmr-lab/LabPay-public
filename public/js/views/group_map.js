@@ -77,11 +77,10 @@ export async function renderGroupMap({ params }) {
     <div class="card" style="padding:6px 10px; margin:0">
       <div class="row center" style="gap:8px; flex-wrap:wrap">
         <a href="#/groups/${escapeHtml(id)}" class="btn" style="padding:2px 10px; font-size:12px; flex-shrink:0">← グループに戻る</a>
-        <button id="gm-locate"        class="btn primary" style="padding:2px 10px; font-size:12px">📍 自分の位置へ</button>
-        <button id="gm-share-once"    class="btn"         style="padding:2px 10px; font-size:12px">📌 位置を共有 (単発)</button>
+        <button id="gm-locate" class="btn primary" style="padding:2px 10px; font-size:12px">📍 自分の位置へ</button>
         <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:12px">
           <input type="checkbox" id="gm-share-toggle">
-          <span>📡 連続</span>
+          <span>📡 位置を共有</span>
         </label>
         <span id="gm-share-st" class="hint-sm" style="margin-left:auto"></span>
       </div>
@@ -349,37 +348,7 @@ export async function renderGroupMap({ params }) {
     );
   });
 
-  // v437 「📌 位置を共有 (単発)」 — 現在地を 1 回だけ POST → メンバー表示に反映
-  document.getElementById('gm-share-once')?.addEventListener('click', () => {
-    if (!navigator.geolocation) { toast('位置情報 未対応'); return; }
-    const btn = document.getElementById('gm-share-once');
-    btn.disabled = true;
-    const st = document.getElementById('gm-share-st');
-    if (st) st.textContent = '📌 取得中…';
-    navigator.geolocation.getCurrentPosition(
-      async (p) => {
-        try {
-          await post(`/api/groups/${id}/locations`, {
-            lat: p.coords.latitude,
-            lng: p.coords.longitude,
-            accuracy: p.coords.accuracy,
-          });
-          if (st) st.textContent = `📌 共有しました (±${Math.round(p.coords.accuracy)}m)`;
-          map.flyTo([p.coords.latitude, p.coords.longitude], 16, { duration: 0.6 });
-          await pollMembers();  // 即 反映
-        } catch (e) {
-          toast('送信失敗: ' + e.message);
-          if (st) st.textContent = '送信失敗';
-        } finally { btn.disabled = false; }
-      },
-      (err) => {
-        toast('位置取得 失敗: ' + (err.message || err.code));
-        if (st) st.textContent = '位置取得 失敗';
-        btn.disabled = false;
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-  });
+  // v456: 単発 共有 ボタン (📌) を 廃止。 ON/OFF トグル のみ で 統一 (要望#22)。
 
   // 位置共有 トグル
   const shareToggle = document.getElementById('gm-share-toggle');

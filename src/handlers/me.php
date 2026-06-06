@@ -1188,6 +1188,45 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v456 ユーザ設定 サーバ同期 (デバイス間 共有 用)。
+    //  GET    /api/me/settings           → 全件 { key: parsedValue, ... }
+    //  PUT    /api/me/settings           body: { key: value, ... } 一括 upsert
+    //  DELETE /api/me/settings/{key}     1 件 削除
+    if ($sub === 'settings' && ($seg[2] ?? '') === '' && $method === 'GET') {
+        $st = $pdo->prepare("SELECT k, v FROM user_settings WHERE user_id=?");
+        $st->execute([(int)$u['id']]);
+        $out = new stdClass();
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $decoded = json_decode((string)$r['v'], true);
+            $out->{$r['k']} = $decoded === null && $r['v'] !== 'null' ? $r['v'] : $decoded;
+        }
+        json_response(['items' => $out]);
+        return;
+    }
+    if ($sub === 'settings' && ($seg[2] ?? '') === '' && $method === 'PUT') {
+        $body = read_json_body();
+        if (!is_array($body)) throw new ApiException('bad_request', 'body は object', 400);
+        $up = $pdo->prepare("INSERT INTO user_settings (user_id, k, v) VALUES (?, ?, ?)
+                              ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = NOW()");
+        $n = 0;
+        foreach ($body as $k => $v) {
+            if (!is_string($k) || $k === '' || mb_strlen($k) > 100) continue;
+            $json = json_encode($v, JSON_UNESCAPED_UNICODE);
+            if ($json === false) continue;
+            if (strlen($json) > 65000) continue;
+            $up->execute([(int)$u['id'], $k, $json]);
+            $n++;
+        }
+        json_response(['ok' => true, 'updated' => $n]);
+        return;
+    }
+    if ($sub === 'settings' && ($seg[2] ?? '') !== '' && $method === 'DELETE') {
+        $key = (string)$seg[2];
+        $pdo->prepare("DELETE FROM user_settings WHERE user_id=? AND k=?")
+            ->execute([(int)$u['id'], $key]);
+        json_response(['ok' => true]);
+        return;
+    }
     json_error('not_found', "no me route for $method $sub", 404);
 }
 
