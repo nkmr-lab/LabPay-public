@@ -512,6 +512,7 @@ require_once __DIR__ . '/handlers/notices.php';
 require_once __DIR__ . '/handlers/meetups.php';
 require_once __DIR__ . '/handlers/places.php';
 require_once __DIR__ . '/handlers/posts.php';
+require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';
 require_once __DIR__ . '/handlers/auctions.php';
 require_once __DIR__ . '/handlers/exercise.php';

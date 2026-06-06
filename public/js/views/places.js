@@ -61,9 +61,9 @@ export async function renderPlaces() {
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
-      if (p.latest_image) {
+      if (p.cover_image) {
         return `
-          <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(p.latest_image)}')">
+          <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(p.cover_image)}')">
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
               <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}</div>
@@ -181,8 +181,8 @@ export async function renderPlacesMap() {
     root.innerHTML = filtered.map(p => {
       const cat2 = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null ? ` · ${ratingStars(p.avg_rating)} (${p.avg_rating.toFixed(1)})` : '';
-      const img = p.latest_image
-        ? `<img src="${escapeHtml(p.latest_image)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px; flex:none">`
+      const img = p.cover_image
+        ? `<img src="${escapeHtml(p.cover_image)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px; flex:none">`
         : '';
       return `
         <a class="list-item" href="#/places/${p.id}" data-pm-pid="${p.id}" style="align-items:center; padding:6px 4px">
@@ -244,12 +244,43 @@ export async function renderPlaceNew() {
       <label class="field"><span class="lbl">紹介文 / なぜ 行きたい か (任意)</span>
         <textarea id="pln-desc" maxlength="4000" rows="4" placeholder="例: 〇〇さん の おすすめ。 □□が 美味しい らしい"></textarea>
       </label>
+      <label class="field"><span class="lbl">📷 メイン 写真 (任意)</span>
+        <div class="row" style="gap:6px; align-items:center">
+          <input type="file" id="pln-img" accept="image/*" style="flex:1">
+          <span class="hint-sm" id="pln-img-status"></span>
+        </div>
+        <span class="hint-sm" style="font-size:11px">タイル / 地図 で 背景画像 に なります。 未設定 なら 最新 レビュー 画像 が 代替で 使われます。</span>
+      </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/places" class="btn">キャンセル</a>
         <button id="pln-save" class="primary">＋ 登録</button>
       </div>
     </div>
   `;
+  // v478 メイン写真 アップロード
+  let plnImageUrl = null;
+  const plnImgInput = document.getElementById('pln-img');
+  const plnImgStatus = document.getElementById('pln-img-status');
+  plnImgInput?.addEventListener('change', async () => {
+    const f = plnImgInput.files[0];
+    if (!f) { plnImageUrl = null; plnImgStatus.textContent = ''; return; }
+    plnImgStatus.textContent = '送信中…';
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const resp = await fetch('/api/uploads/image', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      }
+      plnImageUrl = j.url || j.path;
+      plnImgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
+    } catch (e) { plnImgStatus.textContent = '失敗: ' + (e?.message || e); }
+  });
   // v471 URL から 自動 取得 (tabelog / Retty / hotpepper)
   const importBtn = document.getElementById('pln-import-btn');
   if (importBtn) {
@@ -292,6 +323,7 @@ export async function renderPlaceNew() {
         lat: lat !== '' ? Number(lat) : null,
         lng: lng !== '' ? Number(lng) : null,
         description: desc,
+        image_url: plnImageUrl || '',
       });
       toast('登録しました');
       navigate('#/places/' + r.id);
@@ -356,7 +388,12 @@ async function loadPlace(id) {
     const ratingLine = p.avg_rating !== null
       ? `<div class="meta">${ratingStars(p.avg_rating)} <b>${p.avg_rating.toFixed(1)}</b> (${p.comment_count} 件 の 口コミ)</div>`
       : `<div class="meta">${p.comment_count} 件 の 口コミ</div>`;
+    // v478 メイン写真 が あれば 上に 大きく
+    const heroImg = p.image_url
+      ? `<img src="${escapeHtml(p.image_url)}" alt="" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
+      : '';
     document.getElementById('pld-head').innerHTML = `
+      ${heroImg}
       <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
       ${cat ? `<div class="meta">${escapeHtml(cat)}</div>` : ''}
       ${p.address ? `<div class="meta">📍 ${escapeHtml(p.address)}</div>` : ''}

@@ -1068,8 +1068,8 @@ async function renderFreshPlaces() {
       return;
     }
     root.innerHTML = items.map(p => {
-      const img = p.latest_image
-        ? `<img src="${escapeHtml(p.latest_image)}" alt="" style="flex:none !important; width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px">`
+      const img = p.cover_image
+        ? `<img src="${escapeHtml(p.cover_image)}" alt="" style="flex:none !important; width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px">`
         : `<div style="flex:none; width:48px; height:48px; border-radius:6px; background:#f5e9d6; display:flex; align-items:center; justify-content:center; font-size:22px; margin-right:8px">🍴</div>`;
       const rating = p.avg_rating !== null
         ? ` · ⭐${p.avg_rating.toFixed(1)}` : '';
@@ -1388,12 +1388,16 @@ async function renderMyActiveTimers() {
               : `<div title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
           }).join('')}
         </div>` : '';
+      // v478 タグ を 時間 の 下 に 配置 し、 タイトル に 横幅 を 渡す (タイトル が
+      // 改行 されない ように)。 左カラム = [時間 + タグ] スタック、 中 = タイトル、 右 = アバター + →。
       return `
         <a class="list-item" href="${r.href}">
-          <div${tickAttrs} style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
+          <div style="display:flex; flex-direction:column; align-items:center; flex:none; min-width:80px; gap:2px">
+            <div${tickAttrs} style="font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
+            <span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px; white-space:nowrap">${escapeHtml(r.kind)}</span>
+          </div>
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
-            <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
           </div>
           ${partsHtml}
           <div class="hint">→</div>

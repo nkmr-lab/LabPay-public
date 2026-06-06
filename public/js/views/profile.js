@@ -44,18 +44,15 @@ export async function renderUserProfile({ params }) {
           <div class="bold" style="margin-bottom:4px">💴 外部 送金 先</div>
           <div style="background:#faf7fd; padding:10px; border-radius:8px; font-size:14px">
             ${p.paypay_id ? `
-              <div class="row" style="gap:6px; align-items:center; margin-bottom:6px">
-                <span class="muted" style="font-size:12px; flex-shrink:0">💴 PayPay ID:</span>
-                <code style="flex:1; word-break:break-all" id="up-paypay">${escapeHtml(p.paypay_id)}</code>
-                <button class="btn" data-copy-target="up-paypay" style="font-size:11px; padding:2px 8px">📋</button>
+              <div style="margin-bottom:6px; font-size:13px">
+                <span class="muted">💴 PayPay:</span>
+                <code id="up-paypay" style="word-break:break-all">${escapeHtml(p.paypay_id)}</code>
+                <button class="btn" data-copy-target="up-paypay" style="font-size:11px; padding:1px 6px; margin-left:4px" title="コピー">📋</button>
               </div>` : ''}
             ${p.bank_info ? `
-              <div style="margin-bottom:6px">
-                <div class="row" style="gap:6px; align-items:center">
-                  <span class="muted" style="font-size:12px">🏦 口座:</span>
-                  <button class="btn" data-copy-target="up-bank" style="font-size:11px; padding:2px 8px; margin-left:auto">📋</button>
-                </div>
-                <code id="up-bank" style="display:block; white-space:pre-wrap; word-break:break-all; font-size:12.5px; margin-top:4px">${escapeHtml(p.bank_info)}</code>
+              <div style="margin-bottom:6px; font-size:13px">
+                <span class="muted">🏦 口座:</span>
+                <span style="white-space:pre-wrap; word-break:break-all">${escapeHtml(p.bank_info)}</span>
               </div>` : ''}
             ${!isMe ? `
               <div class="row" style="gap:6px; margin-top:6px; justify-content:flex-end">

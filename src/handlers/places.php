@@ -28,8 +28,9 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
 
 function places_list(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
+    // v478 image_url (メイン写真) を 追加。 cover_image は image_url 優先 → 最新 review。
     $st = $pdo->query("
-        SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description,
+        SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
                p.created_at,
                (SELECT COUNT(*) FROM place_comments c WHERE c.place_id=p.id) AS comment_count,
@@ -48,6 +49,8 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['avg_rating']      = $r['avg_rating'] !== null ? (float)$r['avg_rating'] : null;
         $r['lat']             = $r['lat'] !== null ? (float)$r['lat'] : null;
         $r['lng']             = $r['lng'] !== null ? (float)$r['lng'] : null;
+        // v478 cover_image: 店のメイン画像 を 優先、 なければ 最新の レビュー画像
+        $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
     }
     unset($r);
     json_response(['items' => $rows]);
@@ -70,11 +73,13 @@ function places_create(PDO $pdo, array $cfg): void {
     $lng = isset($body['lng']) && $body['lng'] !== '' ? (float)$body['lng'] : null;
     if ($lat !== null && ($lat < -90 || $lat > 90))   throw new ApiException('bad_request', 'lat 範囲外', 400);
     if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
+    $imageUrl = isset($body['image_url']) ? trim((string)$body['image_url']) : '';
+    if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
     $ins = $pdo->prepare("INSERT INTO places
-        (title, category, address, lat, lng, description, creator_user_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+        (title, category, address, lat, lng, description, image_url, creator_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
     $ins->execute([$title, $category, $address ?: null, $lat, $lng,
-                   $description ?: null, (int)$u['id']]);
+                   $description ?: null, $imageUrl !== '' ? $imageUrl : null, (int)$u['id']]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -118,6 +123,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'lat'                => $p['lat'] !== null ? (float)$p['lat'] : null,
             'lng'                => $p['lng'] !== null ? (float)$p['lng'] : null,
             'description'        => $p['description'],
+            'image_url'          => $p['image_url'] ?? null,
             'creator_user_id'    => (int)$p['creator_user_id'],
             'creator_name'       => $p['creator_name'],
             'creator_avatar_url' => $p['creator_avatar_url'],
@@ -170,6 +176,10 @@ function places_edit(PDO $pdo, array $cfg, int $id): void {
         $lng = ($v === '' || $v === null) ? null : (float)$v;
         if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
         $sets[] = 'lng = ?'; $args[] = $lng;
+    }
+    if (array_key_exists('image_url', $body)) {
+        $i = mb_substr(trim((string)$body['image_url']), 0, 500);
+        $sets[] = 'image_url = ?'; $args[] = $i !== '' ? $i : null;
     }
     if (!$sets) { json_response(['ok' => true, 'noop' => true]); return; }
     $args[] = $id;

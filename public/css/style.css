@@ -596,9 +596,21 @@ table.table th { color: var(--muted); font-weight: 600; }
 .grow { flex: 1; }
 /* 行内タイトル: .row 内の h2/h3 が伸びる + デフォルト margin を消す。
    .card h2/h3 が持つ縦 margin と衝突するのを避けるための定型。 */
-.row-title { flex: 1; margin: 0; }
+.row-title { flex: 1 1 0; margin: 0; min-width: 0; }
+/* v478 セクションヘッダの 末尾コントロール (一覧→ / 🔄 再取得 等) は 右端 で 折り返しなし。
+   `.row > * { flex: 1 1 auto }` で 補助リンク も 伸びてしまい、 タイトル が 改行
+   される 不具合 を 防止。 */
+.row.center > .row-title ~ * {
+  flex: 0 0 auto;
+}
+.row.center > .row-title + a,
+.row.center > .row-title + .hint,
+.row.center > .row-title ~ a,
+.row.center > .row-title ~ .hint {
+  margin-left: auto;
+}
 /* .row のクロス軸を中央寄せに上書きする modifier (デフォは align-items: stretch)。 */
-.row.center { align-items: center; }
+.row.center { align-items: center; flex-wrap: nowrap; }
 /* color: var(--primary) を直書きしてた箇所が散らかってたので集約。 */
 .text-primary { color: var(--primary); }
 

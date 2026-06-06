@@ -39,6 +39,8 @@ export const APPS = [
   { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
   { id: 'stopwatches',   cat: 'tool',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
 
+  { id: 'todos',         cat: 'ai',     url: '#/todos',         title: '📝 自分の TODO',     desc: 'やる こと メモ。 サーバ 保存 で 端末間 共有。 完了 と 未完了 を 分けて 表示。', defaultVisible: true },
+
   // 🤖 ai — 個人ツール (AI / 計算、 通知なし)
   { id: 'chat',          cat: 'ai',     url: '#/chat',          title: '💬 AI 対話 / 翻訳',  desc: '汎用 多言語 チャット (中国語・イタリア語・英語など)。 海外出張での 翻訳・会話 補助に。 クイック ボタンで 「〇〇 に 翻訳」 を 即発射。', defaultVisible: true },
   { id: 'help',          cat: 'ai',     url: '#/help',          title: '🤖 操作ガイド AI',   desc: 'LabPay の 使い方 を AI に 聞ける チャット。 「○○ ってどこから?」 「△△ したいんだけど」 に 操作手順 で 答えます。', defaultVisible: true },
