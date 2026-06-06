@@ -37,13 +37,13 @@ export async function renderPlaces() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center" style="gap:6px; flex-wrap:wrap">
-        <h2 style="margin:0">📍 行きたい店 / 行ったお店</h2>
+        <h2 style="margin:0">🍴 食べある記</h2>
         <span style="flex:1"></span>
         <a class="btn" href="#/places/map">🗺 地図</a>
         <a class="btn primary" href="#/places/new">＋ 新規</a>
       </div>
       <p class="card-subtitle" style="margin:6px 0 0">
-        ラボメンバー で 店情報 を 共有。 口コミ・写真・⭐評価 を 添えて 投稿可。
+        ラボメンバー の グルメ 共有 帳。 口コミ・写真・⭐評価 を 添えて 投稿可。
       </p>
     </div>
     <div id="pl-list"><div class="muted">読み込み中…</div></div>

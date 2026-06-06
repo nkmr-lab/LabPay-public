@@ -97,7 +97,7 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
-  { id: 'places',         title: '🍴 新着のお店' },
+  { id: 'places',         title: '🍴 食べある記 (新着)' },
   { id: 'sns',            title: '💬 SNS 最新' },
   { id: 'history',        title: '履歴' },
 ];
@@ -266,7 +266,7 @@ export async function renderHome() {
 
     <div class="card" id="home-places-card" data-card-id="places" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">🍴 新着のお店</h2>
+        <h2 class="row-title">🍴 食べある記 (新着)</h2>
         <a href="#/places" class="hint">一覧 →</a>
       </div>
       <div id="home-places" class="list"><div class="muted">読み込み中…</div></div>

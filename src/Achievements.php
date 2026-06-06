@@ -191,6 +191,31 @@ class Achievements {
                 ['count' => 50, 'label' => '闇に消えた最終者',     'medal' => '💎'],
             ],
         ],
+        // v473 食べある記 (places アプリ) 関連 実績
+        'places_added' => [
+            'title' => '食べある記 投稿者',
+            'desc'  => '食べある記 に 登録 した 店 の 数',
+            'unit'  => '店',
+            'icon'  => '🍴',
+            'tiers' => [
+                ['count' => 1,  'label' => '食べある記 デビュー', 'medal' => '🥉'],
+                ['count' => 5,  'label' => 'グルメ リポーター',   'medal' => '🥈'],
+                ['count' => 15, 'label' => '食通',                 'medal' => '🥇'],
+                ['count' => 30, 'label' => '中野 食べ尽くし',     'medal' => '💎'],
+            ],
+        ],
+        'places_reviewed' => [
+            'title' => '口コミの 達人',
+            'desc'  => '食べある記 で 書いた 口コミ の 数',
+            'unit'  => '件',
+            'icon'  => '💬',
+            'tiers' => [
+                ['count' => 1,  'label' => '初 口コミ',           'medal' => '🥉'],
+                ['count' => 10, 'label' => 'マメな レビュアー',   'medal' => '🥈'],
+                ['count' => 30, 'label' => 'グルメ評論家',         'medal' => '🥇'],
+                ['count' => 75, 'label' => '食 の 賢者',           'medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -334,6 +359,15 @@ class Achievements {
            )");
         $st->execute([$userId, $userId]);
         $out['closer'] = (int)$st->fetchColumn();
+
+        // v473 食べある記 関連
+        $st = $pdo->prepare('SELECT COUNT(*) FROM places WHERE creator_user_id = ?');
+        $st->execute([$userId]);
+        $out['places_added'] = (int)$st->fetchColumn();
+
+        $st = $pdo->prepare('SELECT COUNT(*) FROM place_comments WHERE user_id = ?');
+        $st->execute([$userId]);
+        $out['places_reviewed'] = (int)$st->fetchColumn();
 
         return $out;
     }
