@@ -295,6 +295,7 @@ export async function renderTimerDetail({ params }) {
         <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で 鳴る か 確認)">🔊 試聴</button>
         <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に 時間を 見せる)">🖥 フル</button>
       </div>
+      <button id="tmd-fs-exit" type="button">✕ 終了</button>
       <div id="tmd-title-fs" class="hint-sm" hidden></div>
       <div id="tmd-count" title="タップで カウントダウン ⇄ カウントアップ"
            style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px; cursor:pointer; user-select:none">--:--</div>
@@ -343,27 +344,36 @@ export async function renderTimerDetail({ params }) {
     playBoundaryTick();
     setTimeout(() => playEndDing(), 600);
   });
-  // v453 フルスクリーン — 学会タイマー で 発表者 に 時間 を 見せる。 ESC / 再タップ で 解除。
+  // v453 → v455 フルスクリーン — 学会タイマー で 発表者 に 時間 を 見せる。
+  // 「🖥 フル」 → 全画面化、 「✕ 終了」 / ESC で 解除。
   document.getElementById('tmd-fs')?.addEventListener('click', () => {
-    toggleTimerFullscreen();
+    enterTimerFullscreen();
+  });
+  document.getElementById('tmd-fs-exit')?.addEventListener('click', () => {
+    exitTimerFullscreen();
   });
 }
 
-// v453 タイマー表示 を フルスクリーン に。 #tmd-display-card を 全画面化 し、
-// CSS で 中央に 巨大な カウントダウン を 配置。 Fullscreen API + CSS class 切替。
-function toggleTimerFullscreen() {
+// v455 真の フルスクリーン (Fullscreen API + CSS フォールバック)。
+// iOS Safari は 通常 要素 に は Fullscreen API を 認め ない ので 黒くなる だけに
+// なる 問題 が あった → CSS で position:fixed + inset:0 + z-index で 全画面 を
+// 模す ように。 Fullscreen API が 通る Chrome / Edge では 両方 適用 (害なし)。
+function enterTimerFullscreen() {
   const card = document.getElementById('tmd-display-card');
   if (!card) return;
-  if (document.fullscreenElement || document.webkitFullscreenElement) {
-    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
-    card.classList.remove('tmd-fs-on');
-    return;
-  }
   card.classList.add('tmd-fs-on');
+  // ブラウザネイティブ の Fullscreen が 使えるなら 使う (chrome 等)。 iOS は 拒否 で
+  // 黙って 通る (CSS フォールバック だけ で 機能 する)。
   const req = card.requestFullscreen || card.webkitRequestFullscreen;
-  if (req) req.call(card).catch(() => {});
+  if (req) {
+    try { req.call(card).catch(() => {}); } catch (_) {}
+  }
+  // 外側 から ESC や OS の フルスクリーン解除 が 走ったら CSS の class も 外す。
   const handler = () => {
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      // CSS class は そのまま 残す? — ユーザ が 終了 ボタン を 押した と 同義
+      // に 扱う のが 自然。 残すと iOS の "黒い まま" になる。
+      // ここでは class も 外して 通常 表示 に 戻す。
       card.classList.remove('tmd-fs-on');
       document.removeEventListener('fullscreenchange', handler);
       document.removeEventListener('webkitfullscreenchange', handler);
@@ -371,6 +381,14 @@ function toggleTimerFullscreen() {
   };
   document.addEventListener('fullscreenchange', handler);
   document.addEventListener('webkitfullscreenchange', handler);
+}
+function exitTimerFullscreen() {
+  const card = document.getElementById('tmd-display-card');
+  if (!card) return;
+  card.classList.remove('tmd-fs-on');
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    try { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); } catch (_) {}
+  }
 }
 
 async function loadTimerDetail(id, { isResync = false } = {}) {

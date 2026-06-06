@@ -87,12 +87,26 @@ export function installGlobalAudioUnlock() {
 // ルーレット の 境界通過音 / 終了音 と 同じ。 「学会タイマー の ベル」 や
 // 「タップ フィードバック」 など 短い 合図 に そのまま 使える。
 
+// v455 境界通過音 / 終了音 は 毎回 new AudioContext を 作って 鳴らす
+// (= ルーレット の playSpinSounds と 同じ パターン)。 共有 ctx を 使う 方式は
+// iOS Safari が バックグラウンド ⇄ フォアグラウンド で ctx を suspended に
+// 戻し、 setInterval から の resume() が 効か ず 無音化 する 事故 が ある。
+// 新 ctx は 「ページに ユーザ操作 が 1 回でも 起きていた 状態」 を 引き継いで
+// 直ちに running で 立ち上がる ので 音が 出る。 鳴り終わったら close する。
+
+function makeCtx() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    return new Ctx();
+  } catch (_) { return null; }
+}
+
 // 境界通過 (= 1 鈴 / 2 鈴 / 3 鈴 / ストップウォッチ ラップ など)。
 // 880 Hz / square / 50 ms。 短い 「カチッ」 〜 「キン」。
 export function playBoundaryTick() {
-  const ctx = getAudioCtx();
+  const ctx = makeCtx();
   if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   try {
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
@@ -105,16 +119,16 @@ export function playBoundaryTick() {
     osc.start(now);
     osc.stop(now + 0.05);
   } catch (_) { /* swallow */ }
+  setTimeout(() => { try { ctx.close(); } catch (_) {} }, 200);
 }
 
 // 終了 「ターン・ダ」 (= ~B5 + 完全5度上)。 2 音 を 180ms ずらして 鳴らす。
 export function playEndDing() {
-  const ctx = getAudioCtx();
+  const ctx = makeCtx();
   if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   const root = 988; // ~B5
-  [root, root * 1.5].forEach((freq, i) => {
-    try {
+  try {
+    [root, root * 1.5].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.connect(g).connect(ctx.destination);
@@ -126,6 +140,7 @@ export function playEndDing() {
       g.gain.exponentialRampToValueAtTime(0.0001, start + 0.7);
       osc.start(start);
       osc.stop(start + 0.75);
-    } catch (_) { /* swallow */ }
-  });
+    });
+  } catch (_) { /* swallow */ }
+  setTimeout(() => { try { ctx.close(); } catch (_) {} }, 1500);
 }

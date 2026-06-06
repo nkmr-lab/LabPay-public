@@ -755,8 +755,16 @@ a.list-item { text-decoration: none; color: inherit; }
   text-align: center; background: white;
 }
 
-/* v453 タイマー フルスクリーン (学会タイマー で 発表者 に 見せる モード) */
+/* v453 → v455 タイマー フルスクリーン (学会タイマー で 発表者 に 見せる モード)。
+   iOS Safari は Fullscreen API を 通常 要素 で 拒否 する ので、 position:fixed
+   + inset:0 + z-index で CSS だけ で 全画面 を 模す。 Fullscreen API が 通る
+   環境 (Chrome / Edge) では それと 重ねて 適用 (二重で 害なし)。 */
 .tmd-fs-on {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
   background: #0c0c10 !important;
   color: #fff !important;
   display: flex !important;
@@ -764,6 +772,9 @@ a.list-item { text-decoration: none; color: inherit; }
   align-items: center !important;
   justify-content: center !important;
   padding: 20px !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
 }
 .tmd-fs-on #tmd-count {
   font-size: clamp(120px, 30vw, 480px) !important;
@@ -780,4 +791,20 @@ a.list-item { text-decoration: none; color: inherit; }
 }
 .tmd-fs-on #tmd-bar {
   background: #fff !important;
+}
+/* 退出ボタン: 通常時は 隠す、 全画面化 中 だけ 出す (iOS の ESC 代わり) */
+#tmd-fs-exit { display: none; }
+.tmd-fs-on #tmd-fs-exit {
+  display: inline-block !important;
+  position: fixed !important;
+  top: max(12px, env(safe-area-inset-top, 12px)) !important;
+  right: max(12px, env(safe-area-inset-right, 12px)) !important;
+  z-index: 10000 !important;
+  background: rgba(255,255,255,0.15) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+  padding: 6px 14px !important;
+  border-radius: 20px !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
 }
