@@ -534,7 +534,8 @@ body.group-map-fullscreen #app { padding-top: 4px; }
 /* Toast */
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-  background: rgba(20,28,24,.92); color: white; padding: 10px 16px; border-radius: 999px;
+  background: rgba(20,28,24,.92); color: white; padding: 10px 16px;
+  border-radius: 10px; /* v465 ピル形 (999px) だと 短文 で 丸く 見えるので 角丸 控え目 に */
   z-index: 100; max-width: 90%;
 }
 

@@ -39,6 +39,30 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no feedback route for $method $sub", 404);
 }
 
+// v465 feedback 完了 を SNS の LabPay 公式 アカウント として 投稿する。
+// 元 SNS 投稿 が ある (= ユーザ が @LabPay で 起票 した) 場合 は その 返信 として、
+// なければ 独立 投稿 として 投げる。 失敗 は 黙殺 (= cron の done 処理 を 邪魔しない)。
+function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $summary): void {
+    try {
+        $st = $pdo->query("SELECT id FROM users WHERE display_name='LabPay' AND kind='system' LIMIT 1");
+        $labpayUid = (int)$st->fetchColumn();
+        if ($labpayUid <= 0) {
+            $pdo->prepare("INSERT INTO users (display_name, role, kind, created_at) VALUES ('LabPay','member','system',NOW())")
+                ->execute();
+            $labpayUid = (int)$pdo->lastInsertId();
+        }
+        // 起票 元 投稿 (もし @LabPay で 起票 された) を 探す
+        $stP = $pdo->prepare("SELECT id, user_id FROM posts WHERE feedback_id=? AND user_id <> ? ORDER BY id ASC LIMIT 1");
+        $stP->execute([$fbId, $labpayUid]);
+        $src = $stP->fetch(PDO::FETCH_ASSOC);
+        $parentId = $src ? (int)$src['id'] : null;
+        $bodyTxt = "✅ 対応 完了 (#{$fbId}):\n" . mb_substr($summary, 0, 1500);
+        $ins = $pdo->prepare("INSERT INTO posts (user_id, body, parent_id, feedback_id, created_at)
+                              VALUES (?, ?, ?, ?, NOW())");
+        $ins->execute([$labpayUid, $bodyTxt, $parentId, $fbId]);
+    } catch (Throwable $_) { /* swallow */ }
+}
+
 // v453 管理画面 用 ダッシュボード。 admin のみ。 内容:
 //  - last_polled_at: /api/feedback/claude_queue が 最後に 叩かれた 時刻
 //  - last_done:      直近 done の id + summary + finished_at
@@ -214,9 +238,20 @@ function feedback_create(PDO $pdo, array $cfg): void {
     $url = isset($body['url']) ? mb_substr((string)$body['url'], 0, 500) : null;
     $ua  = mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
 
-    $ins = $pdo->prepare("INSERT INTO feedback (user_id, kind, body, user_agent, url)
-        VALUES (?,?,?,?,?)");
-    $ins->execute([$u['id'], $kind, $text, $ua ?: null, $url]);
+    // v465 admin が 自分 で 機能要望 / バグ報告 を 投稿 した 場合 は 承認手順 を
+    // 省いて 即 claude_status='approved' に。 cron 巡回 で すぐ 着手 されるよう に。
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($isAdmin) {
+        $ins = $pdo->prepare("INSERT INTO feedback
+            (user_id, kind, body, user_agent, url,
+             claude_status, claude_assigned_at, claude_assigned_by_user_id)
+            VALUES (?, ?, ?, ?, ?, 'approved', NOW(), ?)");
+        $ins->execute([$u['id'], $kind, $text, $ua ?: null, $url, (int)$u['id']]);
+    } else {
+        $ins = $pdo->prepare("INSERT INTO feedback (user_id, kind, body, user_agent, url)
+            VALUES (?,?,?,?,?)");
+        $ins->execute([$u['id'], $kind, $text, $ua ?: null, $url]);
+    }
     $fbId = (int)$pdo->lastInsertId();
 
     // Notify every admin so it's not solo-dependent on one person being awake.

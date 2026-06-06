@@ -36,11 +36,21 @@ function renderForm(kind) {
     sendBtn.addEventListener('click', async () => {
       const body = document.getElementById('fu-body').value.trim();
       if (!body) { toast('内容を書いてください'); return; }
+      // v465 二度押し 防止: ボタン を 即 disable + 送信中 ラベル に。
+      if (sendBtn.disabled) return;
+      sendBtn.disabled = true;
+      const orig = sendBtn.textContent;
+      sendBtn.textContent = '送信中…';
       try {
         await post('/api/feedback', { kind, body, url: location.hash });
         toast('送信しました!');
         document.getElementById('fu-body').value = '';
-      } catch (e) { toast('失敗: ' + e.message); }
+      } catch (e) {
+        toast('失敗: ' + e.message);
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = orig;
+      }
     });
   }
 }

@@ -95,6 +95,21 @@ function posts_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
+// v465 LabPay 公式 アカウント (system user) を 取得 / 作成。
+function labpay_account_id(PDO $pdo): int {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+    $st = $pdo->query("SELECT id FROM users WHERE display_name='LabPay' AND kind='system' LIMIT 1");
+    $uid = (int)$st->fetchColumn();
+    if ($uid <= 0) {
+        $pdo->prepare("INSERT INTO users (display_name, role, kind, created_at) VALUES ('LabPay','member','system',NOW())")
+            ->execute();
+        $uid = (int)$pdo->lastInsertId();
+    }
+    $cached = $uid;
+    return $uid;
+}
+
 function posts_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -116,22 +131,44 @@ function posts_create(PDO $pdo, array $cfg): void {
         $st->execute([$parentId]);
         if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先 投稿 が ありません', 404);
     }
+    // v465 @LabPay メンション 検出 → 自動的に feedback 起票。 admin 投稿なら 即 approved。
+    // 「#バグ」 ハッシュタグ で kind='bug'、 それ以外 (default) は 'feature'。
+    $linkedFeedbackId = null;
+    if ($text !== '' && preg_match('/@LabPay\b/u', $text)) {
+        $fbKind = preg_match('/#バグ|#bug/u', $text) ? 'bug' : 'feature';
+        $fbBody = mb_substr(trim(preg_replace('/@LabPay\s*/u', '', $text)), 0, 4000);
+        if ($fbBody !== '') {
+            $isAdmin = (string)($u['role'] ?? '') === 'admin';
+            if ($isAdmin) {
+                $stFb = $pdo->prepare("INSERT INTO feedback
+                    (user_id, kind, body, url, claude_status, claude_assigned_at, claude_assigned_by_user_id)
+                    VALUES (?, ?, ?, '#/sns', 'approved', NOW(), ?)");
+                $stFb->execute([(int)$u['id'], $fbKind, $fbBody, (int)$u['id']]);
+            } else {
+                $stFb = $pdo->prepare("INSERT INTO feedback (user_id, kind, body, url)
+                    VALUES (?, ?, ?, '#/sns')");
+                $stFb->execute([(int)$u['id'], $fbKind, $fbBody]);
+            }
+            $linkedFeedbackId = (int)$pdo->lastInsertId();
+        }
+    }
     $pid = 0;
     $mentioned = [];
-    db_tx($pdo, function () use ($pdo, $u, $text, $imageUrl, $lat, $lng, $parentId, &$pid, &$mentioned) {
-        $ins = $pdo->prepare("INSERT INTO posts (user_id, body, image_url, lat, lng, parent_id, created_at)
-                              VALUES (?, ?, ?, ?, ?, ?, NOW())");
+    db_tx($pdo, function () use ($pdo, $u, $text, $imageUrl, $lat, $lng, $parentId, $linkedFeedbackId, &$pid, &$mentioned) {
+        $ins = $pdo->prepare("INSERT INTO posts (user_id, body, image_url, lat, lng, parent_id, feedback_id, created_at)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
         $ins->execute([(int)$u['id'], $text !== '' ? $text : null,
                        $imageUrl !== '' ? $imageUrl : null,
-                       $lat, $lng, $parentId]);
+                       $lat, $lng, $parentId, $linkedFeedbackId]);
         $pid = (int)$pdo->lastInsertId();
         // @メンション 抽出 (display_name の 前方一致 で 簡易)
         if ($text !== '' && preg_match_all('/@([\p{L}\p{N}_\-\.]{1,40})/u', $text, $m)) {
             $names = array_unique($m[1]);
             if ($names) {
                 $place = implode(',', array_fill(0, count($names), '?'));
+                // v465 system (=LabPay) も 含めて メンション 解決
                 $stU = $pdo->prepare("SELECT id, display_name FROM users
-                                       WHERE display_name IN ($place) AND kind='human' LIMIT 50");
+                                       WHERE display_name IN ($place) AND kind IN ('human','system') LIMIT 50");
                 $stU->execute($names);
                 $stM = $pdo->prepare("INSERT IGNORE INTO post_mentions (post_id, user_id) VALUES (?, ?)");
                 foreach ($stU->fetchAll(PDO::FETCH_ASSOC) as $row) {

@@ -1064,21 +1064,25 @@ async function renderFreshSns() {
       const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
       const heart = p.liked_by_me ? '❤️' : '🤍';
       const meta = `${escapeHtml(p.display_name)} · ${heart} ${p.like_count} · 💬 ${p.reply_count}`;
-      // v464 ヒーロー: image_url あり → 左に 画像、 右に 本文。 画像の 右端 を
-      // 斜め に カット して 「滑る」 印象 に (clip-path polygon)。 高さ 160px。
+      // v465 ヒーロー: テキスト が メイン (左) + 画像 が 右端 から 中央 まで
+      // 斜めに 浮き出す。 画像 の 左端 を polygon で 斜め カット (右肩上がり)。
+      // 縦幅 は 通常 行 と 同じ ぐらい (= text-content の 高さ で 決まる、 minHeight)。
+      // アバター は 別途 <img> で 正方形 固定 (avatarHtml が flexbox 内で 横長化
+      // していた のを 回避)。
       if (p.image_url) {
+        const avatar = p.avatar_url
+          ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="width:22px; height:22px; border-radius:50%; object-fit:cover; flex-shrink:0">`
+          : `<div style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
-          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fafafa; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; height:160px">
-            <div style="position:absolute; inset:0; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 70% 0, 50% 100%, 0 100%)"></div>
-            <div style="position:absolute; right:0; top:0; bottom:0; width:55%; padding:10px 12px 10px 28px; display:flex; flex-direction:column; justify-content:space-between; background:#fff">
-              <div>
-                <div class="row" style="gap:6px; align-items:center">
-                  ${avatarHtml(p.display_name, p.avatar_url, 'xs')}
-                  <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
-                </div>
-                ${snip ? `<div style="font-size:12.5px; line-height:1.45; margin-top:6px; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
+          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:84px">
+            <div style="position:absolute; right:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(20% 0, 100% 0, 100% 100%, 0 100%)"></div>
+            <div style="position:relative; padding:8px 10px; width:60%; box-sizing:border-box">
+              <div class="row" style="gap:6px; align-items:center">
+                ${avatar}
+                <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
               </div>
-              <div class="hint" style="font-size:11px; margin-top:6px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
+              ${snip ? `<div style="font-size:12.5px; line-height:1.45; margin-top:4px; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
+              <div class="hint" style="font-size:11px; margin-top:4px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
             </div>
           </a>`;
       }
