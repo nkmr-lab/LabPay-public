@@ -247,15 +247,16 @@ function renderChrome() {
   const isAdmin = state.me.role === 'admin';
   adminLink.hidden = !isAdmin;
   if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
-  // v445 → v456: admin にも 機能要望 / バグ報告 リンク を 出す。
-  // 中村 (admin) は これを Claude への 指示 チャネル として 使う:
-  //   admin が 投稿 → 報告・要望 で 「Claude に 任せる」 → cron 巡回 →
-  //   実装 + push + done + 自動 返信。 自分のメモも 履歴に残る。
-  // 順序: 通知 / 設定 / 管理 / 報告・要望 / 機能要望 / バグ報告 (セパレータ廃止)。
+  // v445 → v464: admin の トップバー は 「通知 / 設定 / 管理 / FB | 機能要望 / バグ報告」。
+  // FB (= 報告・要望、 admin 専用 受信箱) と 機能要望 / バグ報告 (投稿 入口) を
+  // セパレータで 分ける。 機能要望 / バグ報告 は admin にも 表示 (Claude への 指示
+  // チャネル として 使う ため)。
   const fReq  = document.getElementById('feature-request-link');
   const bugRep = document.getElementById('bug-report-link');
+  const sep   = document.getElementById('topbar-sep');
   if (fReq)  fReq.hidden  = false;
   if (bugRep) bugRep.hidden = false;
+  if (sep)   sep.hidden   = !isAdmin;
   if (state.unread > 0) {
     badge.hidden = false;
     badge.textContent = state.unread > 99 ? '99+' : String(state.unread);

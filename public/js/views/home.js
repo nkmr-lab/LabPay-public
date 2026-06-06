@@ -1064,18 +1064,22 @@ async function renderFreshSns() {
       const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
       const heart = p.liked_by_me ? '❤️' : '🤍';
       const meta = `${escapeHtml(p.display_name)} · ${heart} ${p.like_count} · 💬 ${p.reply_count}`;
-      // ヒーロー: image_url あり → 横長 cover (高さ 160px、 object-fit:cover) を 先頭 に。
+      // v464 ヒーロー: image_url あり → 左に 画像、 右に 本文。 画像の 右端 を
+      // 斜め に カット して 「滑る」 印象 に (clip-path polygon)。 高さ 160px。
       if (p.image_url) {
         return `
-          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fafafa; box-shadow:0 1px 3px rgba(0,0,0,0.06)">
-            <div style="position:relative; height:160px; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}')">
-              <div style="position:absolute; inset:auto 0 0 0; padding:6px 10px; background:linear-gradient(transparent, rgba(0,0,0,0.65)); color:#fff; font-size:12px; display:flex; align-items:center; gap:6px">
-                ${avatarHtml(p.display_name, p.avatar_url, 'xs')}
-                <span style="font-weight:600">${escapeHtml(p.display_name)}</span>
-                <span style="margin-left:auto">${heart} ${p.like_count} · 💬 ${p.reply_count}</span>
+          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fafafa; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; height:160px">
+            <div style="position:absolute; inset:0; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 70% 0, 50% 100%, 0 100%)"></div>
+            <div style="position:absolute; right:0; top:0; bottom:0; width:55%; padding:10px 12px 10px 28px; display:flex; flex-direction:column; justify-content:space-between; background:#fff">
+              <div>
+                <div class="row" style="gap:6px; align-items:center">
+                  ${avatarHtml(p.display_name, p.avatar_url, 'xs')}
+                  <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
+                </div>
+                ${snip ? `<div style="font-size:12.5px; line-height:1.45; margin-top:6px; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
               </div>
+              <div class="hint" style="font-size:11px; margin-top:6px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
             </div>
-            ${snip ? `<div style="padding:6px 10px; font-size:13px; white-space:pre-wrap">${escapeHtml(snip)}</div>` : ''}
           </a>`;
       }
       // 文字 のみ: 既存 の コンパクト 表示。
