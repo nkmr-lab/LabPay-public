@@ -216,6 +216,79 @@ class Achievements {
                 ['count' => 200, 'label' => '食 の 賢者',           'medal' => '💎'],
             ],
         ],
+        // v480 アクティビティ系 実績
+        'rollcalls_created' => [
+            'title' => '点呼隊長',
+            'desc'  => '点呼 を 起案 した 回数',
+            'unit'  => '回',
+            'icon'  => '📣',
+            'tiers' => [
+                ['count' => 1,   'label' => 'みんな いる？',         'medal' => '🥉'],
+                ['count' => 10,  'label' => '出席係',                 'medal' => '🥈'],
+                ['count' => 50,  'label' => '点呼マスター',           'medal' => '🥇'],
+                ['count' => 200, 'label' => 'ラボの 総監督',         'medal' => '💎'],
+            ],
+        ],
+        'sns_posts' => [
+            'title' => 'つぶやき魔',
+            'desc'  => 'ラボ SNS に 投稿 した 数',
+            'unit'  => '投稿',
+            'icon'  => '💬',
+            'tiers' => [
+                ['count' => 5,   'label' => 'たまの 一言',           'medal' => '🥉'],
+                ['count' => 30,  'label' => 'おしゃべり',             'medal' => '🥈'],
+                ['count' => 100, 'label' => 'タイムライン の 主',     'medal' => '🥇'],
+                ['count' => 500, 'label' => 'つぶやき 教祖',         'medal' => '💎'],
+            ],
+        ],
+        'sns_reactions_received' => [
+            'title' => 'ラボの 人気者',
+            'desc'  => '自分の SNS 投稿 に つけられた リアクション 数',
+            'unit'  => '個',
+            'icon'  => '❤️',
+            'tiers' => [
+                ['count' => 5,   'label' => 'チラ見せ',               'medal' => '🥉'],
+                ['count' => 30,  'label' => 'みんなの 注目',           'medal' => '🥈'],
+                ['count' => 100, 'label' => 'ラボの 推し',             'medal' => '🥇'],
+                ['count' => 500, 'label' => 'バズり師',                'medal' => '💎'],
+            ],
+        ],
+        'auctions_won' => [
+            'title' => '落札王',
+            'desc'  => 'オークション で 落札 した 回数',
+            'unit'  => '回',
+            'icon'  => '🏷',
+            'tiers' => [
+                ['count' => 1,   'label' => '初 落札',                'medal' => '🥉'],
+                ['count' => 5,   'label' => '入札 中毒',              'medal' => '🥈'],
+                ['count' => 20,  'label' => '落札王',                 'medal' => '🥇'],
+                ['count' => 50,  'label' => '競売 のドン',            'medal' => '💎'],
+            ],
+        ],
+        'timers_created' => [
+            'title' => '時間 管理人',
+            'desc'  => 'タイマー を 起案 した 数 (= 学会発表 タイマー / ポモドーロ など)',
+            'unit'  => '本',
+            'icon'  => '⏱',
+            'tiers' => [
+                ['count' => 3,   'label' => 'たまの ポモドーロ',     'medal' => '🥉'],
+                ['count' => 20,  'label' => 'タイム キーパー',       'medal' => '🥈'],
+                ['count' => 80,  'label' => '時間 管理人',           'medal' => '🥇'],
+                ['count' => 300, 'label' => '時を 操る 者',           'medal' => '💎'],
+            ],
+        ],
+        'playlists_created' => [
+            'title' => 'ラボ DJ',
+            'desc'  => 'プレイリスト を 作成 した 数',
+            'unit'  => '枚',
+            'icon'  => '🎵',
+            'tiers' => [
+                ['count' => 1,   'label' => '初 プレイリスト',       'medal' => '🥉'],
+                ['count' => 5,   'label' => '選曲家',                 'medal' => '🥈'],
+                ['count' => 20,  'label' => 'ラボ DJ',                'medal' => '🥇'],
+                ['count' => 50,  'label' => 'ヘッドホン 教祖',       'medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -368,6 +441,37 @@ class Achievements {
         $st = $pdo->prepare('SELECT COUNT(*) FROM place_comments WHERE user_id = ?');
         $st->execute([$userId]);
         $out['places_reviewed'] = (int)$st->fetchColumn();
+
+        // v480 アクティビティ系
+        $st = $pdo->prepare('SELECT COUNT(*) FROM roll_calls WHERE creator_user_id = ? AND deleted_at IS NULL');
+        $st->execute([$userId]);
+        $out['rollcalls_created'] = (int)$st->fetchColumn();
+
+        $st = $pdo->prepare("SELECT COUNT(*) FROM posts p JOIN users u ON u.id = p.user_id
+                              WHERE p.user_id = ? AND u.kind = 'human'");
+        $st->execute([$userId]);
+        $out['sns_posts'] = (int)$st->fetchColumn();
+
+        $st = $pdo->prepare("SELECT COUNT(*) FROM post_likes l
+                              JOIN posts p ON p.id = l.post_id
+                             WHERE p.user_id = ? AND l.user_id <> ?");
+        $st->execute([$userId, $userId]);
+        $out['sns_reactions_received'] = (int)$st->fetchColumn();
+
+        // 落札 — auctions テーブル に winner_user_id 列 が ある と 仮定。 列が 無い 場合 は 0。
+        try {
+            $st = $pdo->prepare('SELECT COUNT(*) FROM auctions WHERE winner_user_id = ?');
+            $st->execute([$userId]);
+            $out['auctions_won'] = (int)$st->fetchColumn();
+        } catch (Throwable $_) { $out['auctions_won'] = 0; }
+
+        $st = $pdo->prepare('SELECT COUNT(*) FROM timers WHERE creator_user_id = ? AND deleted_at IS NULL');
+        $st->execute([$userId]);
+        $out['timers_created'] = (int)$st->fetchColumn();
+
+        $st = $pdo->prepare('SELECT COUNT(*) FROM playlists WHERE creator_user_id = ?');
+        $st->execute([$userId]);
+        $out['playlists_created'] = (int)$st->fetchColumn();
 
         return $out;
     }

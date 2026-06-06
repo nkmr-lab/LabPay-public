@@ -27,11 +27,27 @@ function renderBodyHtml(body) {
   return s.replace(/\n/g, '<br>');
 }
 
+// v480 リアクション 3 種。 押し てる / 押し てない の 配色 だけ 変える。
+const REACTIONS = [
+  { kind: 'thumb', icon: '👍', activeColor: '#2563eb' },
+  { kind: 'heart', icon: '❤️', activeColor: '#e11d48' },
+  { kind: 'star',  icon: '⭐', activeColor: '#f59e0b' },
+];
+
+function reactionsHtml(p) {
+  const mine = new Set(p.my_reactions || (p.liked_by_me ? ['heart'] : []));
+  const counts = p.reaction_counts || { thumb: 0, heart: p.like_count || 0, star: 0 };
+  return REACTIONS.map(r => {
+    const on = mine.has(r.kind);
+    const n = counts[r.kind] || 0;
+    return `<a class="hint" data-react-post="${p.id}" data-react-kind="${r.kind}" style="cursor:pointer; ${on ? 'color:' + r.activeColor + '; font-weight:600' : 'opacity:0.7'}">${r.icon} ${n}</a>`;
+  }).join('');
+}
+
 function postCard(p, opts = {}) {
   const meId = Number(state.me?.id);
   const isMine = p.user_id === meId;
   const canDelete = isMine || state.me?.role === 'admin';
-  const liked = p.liked_by_me;
   const replyHash = opts.skipReplyHash ? '' : `#/sns/${p.id}`;
   const loc = (p.lat !== null && p.lng !== null)
     ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>`
@@ -49,7 +65,7 @@ function postCard(p, opts = {}) {
         ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px">${renderBodyHtml(p.body)}</div>` : ''}
         ${p.image_url ? `<a href="${escapeHtml(p.image_url)}" target="_blank"><img src="${escapeHtml(p.image_url)}" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px"></a>` : ''}
         <div class="row" style="gap:14px; margin-top:6px; font-size:12px">
-          <a class="hint" data-like-post="${p.id}" style="cursor:pointer; ${liked ? 'color:#e11d48' : ''}">${liked ? '❤️' : '🤍'} ${p.like_count}</a>
+          ${reactionsHtml(p)}
           ${replyHash ? `<a class="hint" href="${replyHash}">💬 ${p.reply_count}</a>` : ''}
         </div>
       </div>
@@ -57,6 +73,49 @@ function postCard(p, opts = {}) {
 }
 
 let postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
+let postsPollTimer = null;
+let postsKnownLatestId = 0;
+
+// v480 SW の SWR 用 content キャッシュ から /api/posts* を 全部 抜く。
+//   投稿直後 / リアクション 直後 に 呼ぶ。
+async function invalidatePostsCache() {
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('labpay-content-v1');
+    const keys = await cache.keys();
+    await Promise.all(keys
+      .filter(req => new URL(req.url).pathname.startsWith('/api/posts'))
+      .map(req => cache.delete(req)));
+  } catch (_) {}
+}
+
+// v480 自動 更新: 10 秒 ごと に /api/posts/latest_id だけ 叩いて、 値 が
+//   大きくなって たら 一覧 を 取り直す。 タブ 非アクティブ 時 は 停止。
+function startPostsPolling() {
+  stopPostsPolling();
+  postsPollTimer = setInterval(async () => {
+    if (document.hidden) return;
+    if (!document.getElementById('po-list')) { stopPostsPolling(); return; }
+    try {
+      const r = await get('/api/posts/latest_id');
+      const lid = Number(r.latest_id || 0);
+      if (lid > postsKnownLatestId && postsKnownLatestId > 0) {
+        postsKnownLatestId = lid;
+        await invalidatePostsCache();
+        postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
+        await loadMore(true);
+      } else if (postsKnownLatestId === 0) {
+        postsKnownLatestId = lid;
+      }
+    } catch (_) {}
+  }, 10000);
+}
+function stopPostsPolling() {
+  if (postsPollTimer) { clearInterval(postsPollTimer); postsPollTimer = null; }
+}
+window.addEventListener('hashchange', () => {
+  if (!location.hash.startsWith('#/sns')) stopPostsPolling();
+});
 
 export async function renderPosts() {
   postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
@@ -76,6 +135,9 @@ export async function renderPosts() {
   bindComposer(null);
   await loadMore();
   document.getElementById('po-more').addEventListener('click', loadMore);
+  // v480 ポーリング 開始 (タイムライン に いる 間 だけ)。
+  postsKnownLatestId = postsState.items[0]?.id || 0;
+  startPostsPolling();
 }
 
 export async function renderPostDetail({ params }) {
@@ -257,6 +319,9 @@ function bindComposer(parentId) {
     try {
       const r = await post('/api/posts', payload);
       toast('投稿しました');
+      // v480 SW の SWR キャッシュ に 古い /api/posts が 残ってる と 次回 ホーム 等で
+      //   1 拍 遅れる ので、 自分 が 投稿した タイミング で 強制 削除。
+      await invalidatePostsCache();
       document.getElementById('po-body').value = '';
       document.getElementById('po-img').value = '';
       const locChk = document.getElementById('po-loc');
@@ -298,20 +363,31 @@ async function loadMore(reset = false) {
 }
 
 function bindRowHandlers() {
-  document.querySelectorAll('[data-like-post]').forEach(el => {
+  document.querySelectorAll('[data-react-post]').forEach(el => {
     if (el.dataset.bound) return;
     el.dataset.bound = '1';
     el.addEventListener('click', async () => {
-      const id = el.dataset.likePost;
-      const currentlyLiked = el.textContent.includes('❤');
-      const method = currentlyLiked ? 'del' : 'post';
+      const id = el.dataset.reactPost;
+      const kind = el.dataset.reactKind;
+      const on = parseFloat(el.style.fontWeight || '0') >= 600;
+      const method = on ? 'del' : 'post';
       try {
         const r = method === 'post'
-          ? await post(`/api/posts/${id}/like`, {})
-          : await del(`/api/posts/${id}/like`);
-        const newLiked = !currentlyLiked;
-        el.textContent = `${newLiked ? '❤️' : '🤍'} ${r.like_count}`;
-        el.style.color = newLiked ? '#e11d48' : '';
+          ? await post(`/api/posts/${id}/reaction?kind=${kind}`, {})
+          : await del(`/api/posts/${id}/reaction?kind=${kind}`);
+        // 押し てる kind の セット を 受け取って 該当 行 の 3 ボタン を 全部 再描画。
+        const row = el.closest('[data-post-id]');
+        if (!row) return;
+        const mine = new Set(r.my_reactions || []);
+        const counts = r.reaction_counts || {};
+        row.querySelectorAll('[data-react-post="' + id + '"]').forEach(b => {
+          const k = b.dataset.reactKind;
+          const def = REACTIONS.find(x => x.kind === k);
+          const isOn = mine.has(k);
+          const n = counts[k] || 0;
+          b.textContent = `${def.icon} ${n}`;
+          b.style.cssText = `cursor:pointer; ${isOn ? 'color:' + def.activeColor + '; font-weight:600' : 'opacity:0.7'}`;
+        });
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });

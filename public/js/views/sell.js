@@ -72,7 +72,7 @@ export async function renderSell() {
         ・<span class="bold">20pt 未満</span> の出品は手数料がかかりません (端数切捨てで 0pt)
       </div>
       <div style="margin-top:10px; padding:8px 12px; font-size:13px; color:#c62828; font-weight:700">
-        🚫 転売はやめてね！
+        🚫 研究室の 商品の 転売は やめてね！
       </div>
     </div>
 

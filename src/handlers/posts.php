@@ -11,29 +11,55 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { posts_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { posts_create($pdo, $cfg); return; }
+    // v480 軽量 ポーリング: 最新 投稿 id だけ 返す。 これより 大きい id を 持つ
+    //   投稿 が ある なら クライアント が 一覧 を 取り直す。 DB 1 クエリ で 終わる。
+    if ($sub === 'latest_id' && $method === 'GET') { posts_latest_id($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
         if ($next === ''       && $method === 'GET')    { posts_detail($pdo, $cfg, $id); return; }
         if ($next === ''       && $method === 'DELETE') { posts_delete($pdo, $cfg, $id); return; }
-        if ($next === 'like'   && $method === 'POST')   { posts_like_toggle($pdo, $cfg, $id, true);  return; }
-        if ($next === 'like'   && $method === 'DELETE') { posts_like_toggle($pdo, $cfg, $id, false); return; }
+        // v480 旧 /like (引数 なし = ❤️ 単一) → /reaction?kind=thumb|heart|star に 統一。
+        //   後方互換: /like POST/DELETE は kind='heart' として 扱う。
+        if ($next === 'like'     && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, 'heart', true);  return; }
+        if ($next === 'like'     && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, 'heart', false); return; }
+        if ($next === 'reaction' && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), true);  return; }
+        if ($next === 'reaction' && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), false); return; }
     }
     json_error('not_found', "no posts route for $method $sub", 404);
+}
+
+function posts_kind_param(): string {
+    $k = isset($_GET['kind']) ? (string)$_GET['kind'] : 'heart';
+    if (!in_array($k, ['thumb','heart','star'], true)) {
+        throw new ApiException('bad_request', 'kind は thumb / heart / star のみ', 400);
+    }
+    return $k;
+}
+
+function posts_latest_id(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $id = (int)$pdo->query("SELECT COALESCE(MAX(id),0) FROM posts WHERE parent_id IS NULL")->fetchColumn();
+    json_response(['latest_id' => $id]);
 }
 
 function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
     if (!$rows) return [];
     $ids = array_map(fn($r) => (int)$r['id'], $rows);
     $place = implode(',', array_fill(0, count($ids), '?'));
-    // いいね 集計
-    $stL = $pdo->prepare("SELECT post_id, COUNT(*) AS n,
+    // v480 リアクション 集計: kind 別 count + 自分が押した kind の セット。
+    //   like_count / liked_by_me は ❤ ハート の 件数 / 自分 状態 として 後方互換 を 残す。
+    $stL = $pdo->prepare("SELECT post_id, kind, COUNT(*) AS n,
                               SUM(user_id=?) AS mine
-                         FROM post_likes WHERE post_id IN ($place) GROUP BY post_id");
+                         FROM post_likes WHERE post_id IN ($place) GROUP BY post_id, kind");
     $stL->execute(array_merge([$meId], $ids));
-    $likes = [];
+    $reactions = [];
     foreach ($stL->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $likes[(int)$r['post_id']] = ['n' => (int)$r['n'], 'mine' => (int)$r['mine'] > 0];
+        $pid = (int)$r['post_id'];
+        $k = (string)$r['kind'];
+        if (!isset($reactions[$pid])) $reactions[$pid] = ['counts' => [], 'mine' => []];
+        $reactions[$pid]['counts'][$k] = (int)$r['n'];
+        if ((int)$r['mine'] > 0) $reactions[$pid]['mine'][] = $k;
     }
     // 返信数 集計
     $stR = $pdo->prepare("SELECT parent_id, COUNT(*) AS n FROM posts WHERE parent_id IN ($place) GROUP BY parent_id");
@@ -45,20 +71,31 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
     $out = [];
     foreach ($rows as $r) {
         $id = (int)$r['id'];
+        $counts = $reactions[$id]['counts'] ?? [];
+        $mine = $reactions[$id]['mine'] ?? [];
+        $heartN = $counts['heart'] ?? 0;
         $out[] = [
-            'id'           => $id,
-            'user_id'      => (int)$r['user_id'],
-            'display_name' => $r['display_name'],
-            'avatar_url'   => $r['avatar_url'],
-            'body'         => $r['body'],
-            'image_url'    => $r['image_url'],
-            'lat'          => $r['lat'] !== null ? (float)$r['lat'] : null,
-            'lng'          => $r['lng'] !== null ? (float)$r['lng'] : null,
-            'parent_id'    => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,
-            'created_at'   => $r['created_at'],
-            'like_count'   => $likes[$id]['n']    ?? 0,
-            'liked_by_me'  => $likes[$id]['mine'] ?? false,
-            'reply_count'  => $replies[$id]       ?? 0,
+            'id'              => $id,
+            'user_id'         => (int)$r['user_id'],
+            'display_name'    => $r['display_name'],
+            'avatar_url'      => $r['avatar_url'],
+            'body'            => $r['body'],
+            'image_url'       => $r['image_url'],
+            'lat'             => $r['lat'] !== null ? (float)$r['lat'] : null,
+            'lng'             => $r['lng'] !== null ? (float)$r['lng'] : null,
+            'parent_id'       => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,
+            'created_at'      => $r['created_at'],
+            // 後方互換: like = heart。
+            'like_count'      => $heartN,
+            'liked_by_me'     => in_array('heart', $mine, true),
+            // 新 v480
+            'reaction_counts' => [
+                'thumb' => $counts['thumb'] ?? 0,
+                'heart' => $heartN,
+                'star'  => $counts['star']  ?? 0,
+            ],
+            'my_reactions'    => array_values(array_intersect(['thumb','heart','star'], $mine)),
+            'reply_count'     => $replies[$id] ?? 0,
         ];
     }
     return $out;
@@ -251,23 +288,37 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-function posts_like_toggle(PDO $pdo, array $cfg, int $id, bool $like): void {
+function posts_reaction_toggle(PDO $pdo, array $cfg, int $id, string $kind, bool $on): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT 1 FROM posts WHERE id=?");
     $st->execute([$id]);
     if (!$st->fetchColumn()) throw new ApiException('not_found', '投稿 が ありません', 404);
-    if ($like) {
-        $pdo->prepare("INSERT IGNORE INTO post_likes (post_id, user_id, created_at)
-                       VALUES (?, ?, NOW())")
-            ->execute([$id, (int)$u['id']]);
+    if ($on) {
+        $pdo->prepare("INSERT IGNORE INTO post_likes (post_id, user_id, kind, created_at)
+                       VALUES (?, ?, ?, NOW())")
+            ->execute([$id, (int)$u['id'], $kind]);
     } else {
-        $pdo->prepare("DELETE FROM post_likes WHERE post_id=? AND user_id=?")
-            ->execute([$id, (int)$u['id']]);
+        $pdo->prepare("DELETE FROM post_likes WHERE post_id=? AND user_id=? AND kind=?")
+            ->execute([$id, (int)$u['id'], $kind]);
     }
-    $cn = (int)$pdo->prepare("SELECT COUNT(*) FROM post_likes WHERE post_id=?")
-                   ->execute([$id]) ? null : null;
-    // 件数 取得
-    $stC = $pdo->prepare("SELECT COUNT(*) FROM post_likes WHERE post_id=?");
-    $stC->execute([$id]);
-    json_response(['ok' => true, 'like_count' => (int)$stC->fetchColumn(), 'liked_by_me' => $like]);
+    // 全 kind 件数 + 自分 が 押した kind を 返す。
+    $stC = $pdo->prepare("SELECT kind, COUNT(*) AS n,
+                              SUM(user_id=?) AS mine
+                         FROM post_likes WHERE post_id=? GROUP BY kind");
+    $stC->execute([(int)$u['id'], $id]);
+    $counts = ['thumb' => 0, 'heart' => 0, 'star' => 0];
+    $mine = [];
+    foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $k = (string)$r['kind'];
+        if (isset($counts[$k])) $counts[$k] = (int)$r['n'];
+        if ((int)$r['mine'] > 0) $mine[] = $k;
+    }
+    json_response([
+        'ok' => true,
+        'reaction_counts' => $counts,
+        'my_reactions'    => array_values(array_intersect(['thumb','heart','star'], $mine)),
+        // 後方互換
+        'like_count'      => $counts['heart'],
+        'liked_by_me'     => in_array('heart', $mine, true),
+    ]);
 }

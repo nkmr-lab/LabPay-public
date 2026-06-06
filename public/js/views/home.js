@@ -328,6 +328,7 @@ function stopHomePolling() {
     document.removeEventListener('visibilitychange', homeVisHandler);
     homeVisHandler = null;
   }
+  if (typeof stopHomeSnsFastPoll === 'function') stopHomeSnsFastPoll();
 }
 
 async function doHomePoll() {
@@ -361,6 +362,40 @@ function startHomePolling() {
   homePollTimer = setInterval(doHomePoll, 60_000);
   homeVisHandler = () => { if (!document.hidden) doHomePoll(); };
   document.addEventListener('visibilitychange', homeVisHandler);
+  // v480 SNS ヒーロー だけ 10 秒 ごと に latest_id で 差分 確認 → 変更時 のみ 取り直す。
+  startHomeSnsFastPoll();
+}
+
+let homeSnsFastTimer = null;
+let homeSnsKnownLatestId = 0;
+function stopHomeSnsFastPoll() {
+  if (homeSnsFastTimer) { clearInterval(homeSnsFastTimer); homeSnsFastTimer = null; }
+}
+function startHomeSnsFastPoll() {
+  stopHomeSnsFastPoll();
+  homeSnsKnownLatestId = 0;
+  homeSnsFastTimer = setInterval(async () => {
+    if (document.hidden) return;
+    if (!document.getElementById('home-sns-card')) { stopHomeSnsFastPoll(); return; }
+    try {
+      const r = await get('/api/posts/latest_id');
+      const lid = Number(r.latest_id || 0);
+      if (homeSnsKnownLatestId === 0) { homeSnsKnownLatestId = lid; return; }
+      if (lid > homeSnsKnownLatestId) {
+        homeSnsKnownLatestId = lid;
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open('labpay-content-v1');
+            const keys = await cache.keys();
+            await Promise.all(keys
+              .filter(req => new URL(req.url).pathname.startsWith('/api/posts'))
+              .map(req => cache.delete(req)));
+          } catch (_) {}
+        }
+        await renderFreshSns();
+      }
+    } catch (_) {}
+  }, 10_000);
 }
 
 async function refreshFinancials({ silent }) {
@@ -1054,35 +1089,57 @@ async function renderFreshInvitations() {
   }
 }
 
-// v471 新着 のお店 (ホーム カード)。 最近 登録 された 5 件 を サムネ + 評価 で。
+// v471 → v480 新着 食べある記 (ホーム カード)。 新規入荷 と 同じ with-cover
+// レイアウト (左 110px の カバー画像 + バッジ) で 3 件 を 大きく 表示。
 async function renderFreshPlaces() {
   const card = document.getElementById('home-places-card');
   const root = document.getElementById('home-places');
   if (!card || !root) return;
   try {
     const d = await get('/api/places');
-    const items = (d.items || []).slice(0, 5);
+    const items = (d.items || []).slice(0, 3);
     card.hidden = false;
     if (!items.length) {
       root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ お店 なし</div>';
       return;
     }
     root.innerHTML = items.map(p => {
-      const img = p.cover_image
-        ? `<img src="${escapeHtml(p.cover_image)}" alt="" style="flex:none !important; width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px">`
-        : `<div style="flex:none; width:48px; height:48px; border-radius:6px; background:#f5e9d6; display:flex; align-items:center; justify-content:center; font-size:22px; margin-right:8px">🍴</div>`;
+      const cat = p.category ? (CAT_LBL_HOME[p.category] || p.category) : '';
       const rating = p.avg_rating !== null
-        ? ` · ⭐${p.avg_rating.toFixed(1)}` : '';
+        ? `⭐${p.avg_rating.toFixed(1)}`
+        : '';
+      const ratingBadge = rating
+        ? `<div class="price-badge" style="color:#f59e0b">${rating}</div>`
+        : '';
+      const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}`;
+      const href = `#/places/${p.id}`;
+      if (p.cover_image) {
+        return `
+          <a class="list-item with-cover" href="${href}">
+            <div class="cover-img" style="background-image:url('${escapeHtml(p.cover_image)}')">${ratingBadge}</div>
+            <div class="grow">
+              <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title)}</div>
+              <div class="meta">${meta}</div>
+            </div>
+          </a>`;
+      }
       return `
-        <a class="list-item" href="#/places/${p.id}" style="align-items:center; padding:6px 4px">
-          ${img}
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px">${escapeHtml(p.title)}</div>
-            <div class="meta" style="font-size:11px">💬 ${p.comment_count}${rating}</div>
+        <a class="list-item with-cover" href="${href}">
+          <div class="cover-img cover-img-fallback" style="background:linear-gradient(135deg, #f5e9d6, #fff); font-size:42px">🍴${ratingBadge}</div>
+          <div class="grow">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title)}</div>
+            <div class="meta">${meta}</div>
           </div>
         </a>`;
     }).join('');
   } catch (_) { card.hidden = true; }
+}
+// places カテゴリ ラベル (renderFreshPlaces で使う 短縮版)
+const CAT_LBL_HOME = { cafe:'☕', lunch:'🍱', dinner:'🍣', bar:'🍺', sweets:'🍰', other:'🍴' };
+function ratingStars(r) {
+  if (r === null || r === undefined) return '';
+  const full = Math.round(r);
+  return '⭐'.repeat(full);
 }
 
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
@@ -1117,13 +1174,13 @@ async function renderFreshSns() {
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:96px">
             <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
-            <div style="position:relative; margin-left:50%; padding:8px 10px; box-sizing:border-box">
-              <div class="row" style="gap:6px; align-items:center">
+            <div style="position:relative; margin-left:50%; padding:6px 10px 6px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:3px; justify-content:flex-start">
+              <div class="row" style="gap:6px; align-items:center; margin:0">
                 ${avatar}
                 <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
               </div>
-              ${snip ? `<div style="font-size:12.5px; line-height:1.45; margin-top:4px; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
-              <div class="hint" style="font-size:11px; margin-top:4px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
+              ${snip ? `<div style="font-size:12.5px; line-height:1.35; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
+              <div class="hint" style="font-size:11px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
             </div>
           </a>`;
       }

@@ -5,22 +5,29 @@
 //   * NEVER cache /api/* — ledger consistency requires fresh reads.
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v479';
+const CACHE_NAME = 'labpay-shell-v480';
 // v465 アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
 // v479 グループ / 食べある記 / SNS / 重要連絡 / Scrapbox の GET を stale-while-revalidate
 // 別キャッシュ で 保持。 オフライン や 通信 遅延 時 でも 直前 の 内容 を 即 表示、
 // 裏で 新鮮版 を 取得。 ledger 系 (送金 / 残高) は 含めない。
+// v480 /api/me / /api/users も オフライン 表示 用 に SWR。 グループ 一覧 を
+//   出す のに ログイン ユーザ 情報 と メンバー 名 が 要る ため。
 const CONTENT_CACHE_NAME = 'labpay-content-v1';
 function isSwrContentPath(pathname) {
   if (!pathname.startsWith('/api/')) return false;
+  // posts/latest_id は ポーリング 用 軽量 endpoint なので 必ず ネット 行く (キャッシュ
+  // 不要 だし、 古い id を 返すと 更新検出 が 遅れる)。
+  if (pathname === '/api/posts/latest_id') return false;
   return (
     pathname === '/api/groups'  || pathname.startsWith('/api/groups/') ||
     pathname === '/api/places'  || pathname.startsWith('/api/places/') ||
     pathname === '/api/posts'   || pathname.startsWith('/api/posts/')  ||
     pathname === '/api/notices' || pathname.startsWith('/api/notices/')||
-    pathname === '/api/scrapbox'|| pathname.startsWith('/api/scrapbox/')
+    pathname === '/api/scrapbox'|| pathname.startsWith('/api/scrapbox/')||
+    pathname === '/api/me'      ||
+    pathname === '/api/users'
   );
 }
 
