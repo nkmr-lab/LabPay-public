@@ -99,6 +99,7 @@ export const HOME_CARDS = [
   { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'places',         title: '🍴 食べある記 (新着)' },
   { id: 'sns',            title: '💬 らぼったー 最新' },
+  { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -272,6 +273,14 @@ export async function renderHome() {
       <div id="home-places" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
+    <div class="card" id="home-todos-card" data-card-id="todos" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">📝 自分の TODO</h2>
+        <a href="#/todos" class="hint">TODO →</a>
+      </div>
+      <div id="home-todos" class="list"><div class="muted">読み込み中…</div></div>
+    </div>
+
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">💬 らぼったー 最新</h2>
@@ -305,6 +314,7 @@ export async function renderHome() {
   await renderFreshTasks();
   await renderFreshPlaces();
   await renderFreshSns();
+  await renderHomeTodos();
   await renderRecentTx();
 
   // Home polling: 1 分ごとに各カードを 「静かに」 リロード。
@@ -353,6 +363,7 @@ async function doHomePoll() {
     renderFreshTasks(),
     renderFreshPlaces(),
     renderFreshSns(),
+    renderHomeTodos(),
     renderRecentTx(),
   ]);
 }
@@ -1161,6 +1172,8 @@ async function renderFreshSns() {
       const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
       // v481 #68 ホーム でも 👍 ❤ ⭐ 3 種 表示 + 縦幅 1.2x。 1.35→1.5 行高、
       //   min-height 96→116、 padding を 少し 増やし リアクション 見切れ 防止。
+      // v482 #69 画像 有 / 無 で 同じ 高さ (116px) + 上 マージン を 詰める + 時刻 を
+      //   投稿者名 の 横 に。
       const counts = p.reaction_counts || { thumb: 0, heart: p.like_count || 0, star: 0 };
       const mine = new Set(p.my_reactions || (p.liked_by_me ? ['heart'] : []));
       const reactBadges = [
@@ -1172,6 +1185,17 @@ async function renderFreshSns() {
         return `<span style="${on ? 'color:' + r.color + '; font-weight:600' : 'opacity:0.6'}">${r.icon} ${counts[r.k] || 0}</span>`;
       }).join(' · ');
       const reactionsLine = `${reactBadges} · 💬 ${p.reply_count}`;
+      const timeAgo = (s) => {
+        if (!s) return '';
+        const dt = new Date(String(s).replace(' ', 'T'));
+        const diff = Date.now() - dt.getTime();
+        if (diff < 60_000) return 'たった今';
+        if (diff < 3600_000) return `${Math.floor(diff/60000)}分前`;
+        if (diff < 86400_000) return `${Math.floor(diff/3600000)}時間前`;
+        if (diff < 7 * 86400_000) return `${Math.floor(diff/86400_000)}日前`;
+        return `${dt.getMonth()+1}/${dt.getDate()}`;
+      };
+      const tAgo = timeAgo(p.created_at);
       // v465 ヒーロー: テキスト が メイン (左) + 画像 が 右端 から 中央 まで
       // 斜めに 浮き出す。 画像 の 左端 を polygon で 斜め カット (右肩上がり)。
       // 縦幅 は 通常 行 と 同じ ぐらい (= text-content の 高さ で 決まる、 minHeight)。
@@ -1183,27 +1207,76 @@ async function renderFreshSns() {
           ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
-          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:116px">
+          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:4px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:116px">
             <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
-            <div style="position:relative; margin-left:50%; padding:8px 10px 8px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:5px; justify-content:flex-start">
-              <div class="row" style="gap:6px; align-items:center; margin:0">
+            <div style="position:relative; margin-left:50%; padding:4px 10px 6px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:4px; justify-content:flex-start">
+              <div class="row" style="gap:6px; align-items:baseline; margin:0">
                 ${avatar}
                 <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
+                <span class="hint" style="font-size:10px; flex:none">${escapeHtml(tAgo)}</span>
               </div>
               ${snip ? `<div style="font-size:12.5px; line-height:1.4; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
               <div class="hint" style="font-size:11px">${reactionsLine}</div>
             </div>
           </a>`;
       }
-      // 文字 のみ: 1.2x 高さ + 2 行 clamp。 リアクション 3 種 表示。
+      // v482 #69 文字 のみ も 画像 あり と 同じ 116px 高さ + 投稿者 右横 に 時刻。
       return `
-        <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px; min-height:88px; padding:8px 6px">
+        <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px; min-height:116px; padding:6px 6px">
           ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
           <div class="grow" style="min-width:0; display:flex; flex-direction:column; gap:4px">
-            <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</div>
+            <div class="row" style="gap:6px; align-items:baseline; margin:0">
+              <span class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
+              <span class="hint" style="font-size:10px; flex:none">${escapeHtml(tAgo)}</span>
+            </div>
             <div class="meta" style="font-size:13px; line-height:1.4; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>
             <div class="hint" style="font-size:11px">${reactionsLine}</div>
           </div>
+        </a>`;
+    }).join('');
+  } catch (_) { card.hidden = true; }
+}
+
+// v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。
+//   最大 5 件。
+async function renderHomeTodos() {
+  const card = document.getElementById('home-todos-card');
+  const root = document.getElementById('home-todos');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/todos');
+    const all = d.items || [];
+    const open = all.filter(t => !t.done).slice(0, 5);
+    if (!open.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const fmt = (s) => {
+      if (!s) return '';
+      const dt = new Date(String(s).replace(' ', 'T'));
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const time = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      if (now.toDateString() === dt.toDateString()) return `今日 ${time}`;
+      const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+      if (tomorrow.toDateString() === dt.toDateString()) return `明日 ${time}`;
+      return `${dt.getMonth()+1}/${dt.getDate()} ${time}`;
+    };
+    const dueColor = (s) => {
+      if (!s) return '#6b6b6b';
+      const ms = new Date(String(s).replace(' ', 'T')) - new Date();
+      if (ms < 0) return '#c62828';
+      if (ms < 3600_000) return '#c62828';
+      if (ms < 24 * 3600_000) return '#e65100';
+      return '#6b6b6b';
+    };
+    root.innerHTML = open.map(t => {
+      const dueBadge = t.due_at
+        ? `<span style="font-size:11px; color:${dueColor(t.due_at)}; font-weight:600; flex:none">⏰ ${escapeHtml(fmt(t.due_at))}</span>`
+        : '';
+      return `
+        <a class="list-item" href="#/todos" style="gap:8px; align-items:center">
+          <span style="flex:none; font-size:14px">▫</span>
+          <span class="grow" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(t.body)}</span>
+          ${dueBadge}
         </a>`;
     }).join('');
   } catch (_) { card.hidden = true; }
@@ -1314,10 +1387,13 @@ async function renderMyActiveTimers() {
     const meId = Number(state.me?.id);
     // v406 点呼 (rollcall) も 「時間制限あり」 なので 合流。 pending API 経由で
     // 自分が 対応していない 締切付き 点呼を 拾う。
-    const [tm, sw, pend, mu] = await Promise.allSettled([
+    // v482 #73 点呼 は /api/me/pending では 「未応答」 だけ なので、 自分 が
+    //   起案者 / 既に 応答済 の 点呼 も ホーム の 進行中 に 出す ため /api/rollcalls
+    //   を 別途 取得。
+    const [tm, sw, rc, mu] = await Promise.allSettled([
       get('/api/timers'),
       get('/api/stopwatches'),
-      get('/api/me/pending'),
+      get('/api/rollcalls'),
       get('/api/meetups'),
     ]);
     const rows = [];
@@ -1351,22 +1427,31 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    // 点呼 (締切が 近い順に 先頭)。 v445 tick: countdown、 10 分 切ったら 赤。
-    if (pend.status === 'fulfilled') {
+    // v482 #70 #73 点呼: 自分 が 起案 した もの + 自分 が 対象 (応答済 含む) の
+    //   open な もの を 表示。 起算点 = 「点呼 を 押した 時刻」 (created_at) で
+    //   countup。 応答済 は 「✅」 マーク付き で 区別。
+    if (rc.status === 'fulfilled') {
       const nowMs = Date.now();
-      for (const it of (pend.value.items || [])) {
-        if (it.kind !== 'rollcall') continue;
-        const deadlineMs = it.deadline_at ? Date.parse(String(it.deadline_at).replace(' ', 'T')) : null;
-        const remaining = deadlineMs ? Math.max(0, Math.floor((deadlineMs - nowMs) / 1000)) : null;
+      for (const r of (rc.value.items || [])) {
+        if (r.status !== 'open') continue;
+        const isCreator = Number(r.creator_user_id) === meId;
+        const isTarget = Number(r.is_target) === 1 || r.is_target === true;
+        if (!isCreator && !isTarget) continue;
+        const hasResponded = Number(r.has_responded) === 1 || r.has_responded === true;
+        const startedMs = r.created_at ? Date.parse(String(r.created_at).replace(' ', 'T')) : null;
+        const elapsed = startedMs ? Math.max(0, Math.floor((nowMs - startedMs) / 1000)) : 0;
+        const dlShort = r.deadline_at ? String(r.deadline_at).slice(11, 16) : '';
+        const suffix = dlShort ? ` 経過 (締切 ${dlShort})` : ' 経過';
+        const kind = hasResponded ? '✅ 点呼 (応答済)' : '📣 点呼';
         rows.push({
-          href: it.url,
-          kind: '📣 点呼',
-          title: it.title,
-          time: remaining !== null ? `${fmtTmDur(remaining)} 残` : '—',
-          tick: deadlineMs ? { mode: 'countdown', targetMs: deadlineMs, suffix: ' 残', redBelow: 600, colorRed: '#c62828', colorNorm: '#e65100' } : null,
-          sort: remaining ?? 0,
-          color: remaining !== null && remaining < 600 ? '#c62828' : '#e65100',
-          bg: '#fff3e0',
+          href: '#/rollcalls/' + r.id,
+          kind,
+          title: r.title + (isCreator ? ' [起案]' : ''),
+          time: `${fmtTmDur(elapsed)}${suffix}`,
+          tick: startedMs ? { mode: 'countup', baseSec: elapsed, anchorMs: nowMs, suffix } : null,
+          sort: -elapsed,
+          color: hasResponded ? '#0e7c63' : '#e65100',
+          bg: hasResponded ? '#e0f7f1' : '#fff3e0',
         });
       }
     }
@@ -1442,7 +1527,7 @@ async function renderMyActiveTimers() {
       const tickAttrs = t ? (
         t.mode === 'countdown'
           ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}"${t.fmt ? ` data-tick-fmt="${escapeHtml(t.fmt)}"` : ''} data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
-          : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"`
+          : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"${t.suffix ? ` data-tick-suffix="${escapeHtml(t.suffix)}"` : ''}`
       ) : '';
       // v466 関係者 アバター を 重ねて (overlap) 横並び 表示。 最大 5 名。
       const parts = Array.isArray(r.participants) ? r.participants : [];

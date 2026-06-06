@@ -17,8 +17,80 @@ function route_meetups(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''        && $method === 'PATCH')  { meetups_edit($pdo, $cfg, $id);   return; }
         if ($next === 'cancel'  && $method === 'PATCH')  { meetups_cancel($pdo, $cfg, $id); return; }
         if ($next === 'participants' && $method === 'POST') { meetups_add_participants($pdo, $cfg, $id); return; }
+        // v482 #71 メッセージ シェア
+        if ($next === 'messages' && $method === 'GET')   { meetups_messages_list($pdo, $cfg, $id);   return; }
+        if ($next === 'messages' && $method === 'POST')  { meetups_messages_create($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no meetups route for $method $sub", 404);
+}
+
+// v482 #71 待ち合わせ への シェア メッセージ (例: 「5 分 遅れます」 「先 に 中 に
+//   入って ます」)。 参加者 と 起案者 のみ 閲覧 / 投稿 可。
+function meetups_messages_assert_visible(PDO $pdo, int $meetupId, int $userId): array {
+    $st = $pdo->prepare("SELECT id, creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$meetupId]);
+    $m = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$m) throw new ApiException('not_found', '見つかりません', 404);
+    if ((int)$m['creator_user_id'] !== $userId) {
+        $stP = $pdo->prepare("SELECT 1 FROM meetup_participants WHERE meetup_id=? AND user_id=?");
+        $stP->execute([$meetupId, $userId]);
+        if (!$stP->fetchColumn()) {
+            throw new ApiException('forbidden', '参加者 のみ 閲覧 / 投稿 可', 403);
+        }
+    }
+    return $m;
+}
+
+function meetups_messages_list(PDO $pdo, array $cfg, int $meetupId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    meetups_messages_assert_visible($pdo, $meetupId, (int)$u['id']);
+    $st = $pdo->prepare("SELECT m.id, m.user_id, m.body, m.created_at,
+                                u.display_name, u.avatar_url
+                           FROM meetup_messages m
+                           JOIN users u ON u.id = m.user_id
+                          WHERE m.meetup_id = ?
+                          ORDER BY m.id ASC LIMIT 500");
+    $st->execute([$meetupId]);
+    $items = array_map(fn($r) => [
+        'id'           => (int)$r['id'],
+        'user_id'      => (int)$r['user_id'],
+        'display_name' => $r['display_name'],
+        'avatar_url'   => $r['avatar_url'],
+        'body'         => $r['body'],
+        'created_at'   => $r['created_at'],
+    ], $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response(['items' => $items]);
+}
+
+function meetups_messages_create(PDO $pdo, array $cfg, int $meetupId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $m = meetups_messages_assert_visible($pdo, $meetupId, (int)$u['id']);
+    $body = read_json_body();
+    $text = trim((string)($body['body'] ?? ''));
+    if ($text === '') throw new ApiException('bad_request', '本文 が 必要', 400);
+    if (mb_strlen($text) > 1000) $text = mb_substr($text, 0, 1000);
+    $pdo->prepare("INSERT INTO meetup_messages (meetup_id, user_id, body, created_at)
+                   VALUES (?, ?, ?, NOW())")
+        ->execute([$meetupId, (int)$u['id'], $text]);
+    $msgId = (int)$pdo->lastInsertId();
+    // 通知: 起案者 + 全 参加者 (自分 除く)
+    $isDeadline = ((string)($m['kind'] ?? 'meetup')) === 'deadline';
+    $icon = $isDeadline ? '📌' : '🤝';
+    $stN = $pdo->prepare("SELECT DISTINCT user_id FROM (
+        SELECT creator_user_id AS user_id FROM meetups WHERE id = ?
+        UNION
+        SELECT user_id FROM meetup_participants WHERE meetup_id = ?) x");
+    $stN->execute([$meetupId, $meetupId]);
+    $snip = mb_substr($text, 0, 80);
+    foreach ($stN->fetchAll(PDO::FETCH_COLUMN) as $uid) {
+        if ((int)$uid === (int)$u['id']) continue;
+        try {
+            Notifier::notify($pdo, $cfg, (int)$uid, 'meetup',
+                "{$icon} {$u['display_name']}: {$snip}",
+                'meetup', $meetupId);
+        } catch (Throwable $_) {}
+    }
+    json_response(['id' => $msgId, 'ok' => true]);
 }
 
 // v468 編集 (起案者 + admin) — title / location / meetup_at / kind を 部分更新。

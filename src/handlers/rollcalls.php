@@ -90,8 +90,19 @@ function rollcalls_create(PDO $pdo, array $cfg): void {
             VALUES (?, ?, ?, ?, 'open', NOW())");
         $ins->execute([$title, $bodyText, (int)$u['id'], $deadline]);
         $rcId = (int)$pdo->lastInsertId();
-        $stT = $pdo->prepare("INSERT INTO roll_call_targets (roll_call_id, user_id) VALUES (?, ?)");
-        foreach ($targetIds as $uid) $stT->execute([$rcId, $uid]);
+        // v482 #73 起案者 が 対象 に 含まれて いる 場合、 既に 「答えてる」 状態 で
+        //   挿入。 起案 した 人 = 「いる」 の が 自明 なので、 自分 への 「答えてね」 通知 を
+        //   出さない ため。
+        $creatorUid = (int)$u['id'];
+        $stT = $pdo->prepare("INSERT INTO roll_call_targets (roll_call_id, user_id, responded_at, note)
+                               VALUES (?, ?, ?, ?)");
+        foreach ($targetIds as $uid) {
+            if ((int)$uid === $creatorUid) {
+                $stT->execute([$rcId, $uid, date('Y-m-d H:i:s'), '起案']);
+            } else {
+                $stT->execute([$rcId, $uid, null, null]);
+            }
+        }
     });
     // 通知。 「📣 点呼: 起きてる？ (締切 22:30)」 のような body で受信側が分かりやすく。
     $deadlineShort = substr($deadline, 11, 5);   // HH:MM

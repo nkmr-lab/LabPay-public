@@ -22,10 +22,14 @@ function route_todos(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 function todos_list(PDO $pdo, int $uid): void {
-    $st = $pdo->prepare("SELECT id, body, done_at, created_at, sort_order
+    // v482 #72 due_at 付き。 未完了 は 締切 が 近い 順 (NULL は 後)、 完了 は 末尾。
+    $st = $pdo->prepare("SELECT id, body, done_at, created_at, sort_order, due_at
                            FROM user_todos
                           WHERE user_id = ?
-                          ORDER BY (done_at IS NOT NULL), sort_order ASC, id DESC");
+                          ORDER BY (done_at IS NOT NULL),
+                                   (due_at IS NULL),
+                                   due_at ASC,
+                                   sort_order ASC, id DESC");
     $st->execute([$uid]);
     $rows = array_map(fn($r) => [
         'id' => (int)$r['id'],
@@ -33,9 +37,22 @@ function todos_list(PDO $pdo, int $uid): void {
         'done' => $r['done_at'] !== null,
         'done_at' => $r['done_at'],
         'created_at' => $r['created_at'],
+        'due_at' => $r['due_at'] ?? null,
         'sort_order' => (int)$r['sort_order'],
     ], $st->fetchAll(PDO::FETCH_ASSOC));
     json_response(['items' => $rows]);
+}
+
+function todos_normalize_due_at($raw): ?string {
+    if ($raw === null || $raw === '') return null;
+    $raw = (string)$raw;
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+       ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+       ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+       ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw)
+       ?: DateTime::createFromFormat('Y-m-d', $raw);
+    if (!$dt) throw new ApiException('bad_request', 'due_at は ISO 日時 か YYYY-MM-DD', 400);
+    return $dt->format('Y-m-d H:i:s');
 }
 
 function todos_create(PDO $pdo, int $uid): void {
@@ -44,8 +61,9 @@ function todos_create(PDO $pdo, int $uid): void {
     if ($text === '' || mb_strlen($text) > 1000) {
         throw new ApiException('bad_request', 'body 1..1000', 400);
     }
-    $pdo->prepare("INSERT INTO user_todos (user_id, body, sort_order) VALUES (?, ?, 0)")
-        ->execute([$uid, $text]);
+    $due = array_key_exists('due_at', $body) ? todos_normalize_due_at($body['due_at']) : null;
+    $pdo->prepare("INSERT INTO user_todos (user_id, body, sort_order, due_at) VALUES (?, ?, 0, ?)")
+        ->execute([$uid, $text, $due]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -62,6 +80,10 @@ function todos_patch(PDO $pdo, int $uid, int $id): void {
         $t = mb_substr(trim((string)$body['body']), 0, 1000);
         if ($t === '') throw new ApiException('bad_request', 'body は 1..1000', 400);
         $sets[] = 'body = ?'; $args[] = $t;
+    }
+    if (array_key_exists('due_at', $body)) {
+        $due = todos_normalize_due_at($body['due_at']);
+        $sets[] = 'due_at = ?'; $args[] = $due;
     }
     if (!$sets) { json_response(['ok' => true, 'noop' => true]); return; }
     $args[] = $id;

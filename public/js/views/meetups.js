@@ -313,6 +313,15 @@ export async function renderMeetupDetail({ params }) {
       </div>
       <div id="mud-edit-form" hidden style="margin-top:8px"></div>
     </div>
+    <!-- v482 #71 シェア メッセージ。 「少し 遅れます」 「もう 入って ます」 等 -->
+    <div class="card" id="mud-msg-card">
+      <h3 style="margin:0 0 6px">💬 メッセージ (<span id="mud-mn">0</span>)</h3>
+      <div id="mud-msgs" class="list" style="margin-bottom:8px"><div class="muted">読み込み中…</div></div>
+      <div class="row" style="gap:6px">
+        <input type="text" id="mud-msg-body" maxlength="1000" placeholder="少し 遅れます / 先 に 中 に 入って ます 等" style="flex:1">
+        <button id="mud-msg-send" class="primary">送信</button>
+      </div>
+    </div>
   `;
   if (muCountdownTimer) { clearInterval(muCountdownTimer); muCountdownTimer = null; }
   try {
@@ -478,7 +487,59 @@ export async function renderMeetupDetail({ params }) {
         catch (e) { toast('失敗: ' + e.message); }
       });
     }
+    // v482 #71 シェア メッセージ
+    await loadMeetupMessages(id);
+    document.getElementById('mud-msg-send').addEventListener('click', async () => {
+      const input = document.getElementById('mud-msg-body');
+      const text = input.value.trim();
+      if (!text) { toast('本文 を 入れて ください'); return; }
+      try {
+        await post(`/api/meetups/${id}/messages`, { body: text });
+        input.value = '';
+        await loadMeetupMessages(id);
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('mud-msg-body').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
+        ev.preventDefault();
+        document.getElementById('mud-msg-send').click();
+      }
+    });
   } catch (e) {
     document.getElementById('mud-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadMeetupMessages(meetupId) {
+  const root = document.getElementById('mud-msgs');
+  if (!root) return;
+  try {
+    const d = await get(`/api/meetups/${meetupId}/messages`);
+    const items = d.items || [];
+    document.getElementById('mud-mn').textContent = items.length;
+    if (!items.length) {
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ メッセージ なし</div>';
+      return;
+    }
+    root.innerHTML = items.map(m => {
+      const dt = new Date(String(m.created_at).replace(' ', 'T'));
+      const pad = n => String(n).padStart(2, '0');
+      const t = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      return `
+        <div class="list-item" style="align-items:flex-start; gap:6px; padding:6px 4px">
+          ${m.avatar_url
+            ? `<img src="${escapeHtml(m.avatar_url)}" alt="" style="flex:none; width:22px; height:22px; border-radius:50%; object-fit:cover">`
+            : `<div style="flex:none; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px">${escapeHtml((m.display_name || '?').trim().charAt(0).toUpperCase())}</div>`}
+          <div class="grow" style="min-width:0">
+            <div class="row" style="gap:6px; align-items:baseline">
+              <span class="bold" style="font-size:13px">${escapeHtml(m.display_name)}</span>
+              <span class="hint" style="font-size:11px">${t}</span>
+            </div>
+            <div style="font-size:13.5px; line-height:1.45; white-space:pre-wrap">${escapeHtml(m.body)}</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }

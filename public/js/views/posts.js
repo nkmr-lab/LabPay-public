@@ -269,6 +269,14 @@ function bindMentionAutocomplete() {
 
 let composerImageUrl = null;
 let composerCoords = null;
+// v482 #69 位置情報 ON/OFF を 永続化 (一度 ON にしたら 以降 ON、 OFF にしたら 以降 OFF)。
+const PO_LOC_PREF_KEY = 'labpay-sns-loc-pref';
+function readLocPref() {
+  try { return localStorage.getItem(PO_LOC_PREF_KEY) === 'on'; } catch { return false; }
+}
+function writeLocPref(on) {
+  try { localStorage.setItem(PO_LOC_PREF_KEY, on ? 'on' : 'off'); } catch {}
+}
 function bindComposer(parentId) {
   composerImageUrl = null;
   composerCoords = null;
@@ -296,7 +304,20 @@ function bindComposer(parentId) {
       imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード 完了</span>`;
     } catch (e) { imgStatus.textContent = '失敗: ' + (e?.message || e); }
   });
+  // v482 #69 起動時 に 前回 の 設定 を 復元。 ON だった なら 自動 で 位置 取得。
+  const locChk = document.getElementById('po-loc');
+  if (locChk && readLocPref()) {
+    locChk.checked = true;
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => { composerCoords = { lat: p.coords.latitude, lng: p.coords.longitude }; },
+        () => { composerCoords = null; },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    }
+  }
   document.getElementById('po-loc')?.addEventListener('change', (ev) => {
+    writeLocPref(ev.target.checked);
     if (!ev.target.checked) { composerCoords = null; return; }
     if (!navigator.geolocation) { toast('位置情報 未対応'); ev.target.checked = false; return; }
     navigator.geolocation.getCurrentPosition(
@@ -324,9 +345,18 @@ function bindComposer(parentId) {
       await invalidatePostsCache();
       document.getElementById('po-body').value = '';
       document.getElementById('po-img').value = '';
-      const locChk = document.getElementById('po-loc');
-      if (locChk) locChk.checked = false;
+      // v482 #69 位置情報 ON/OFF は 永続 設定 なので、 投稿後 も リセット しない。
+      //   ただし 添付 された 座標 は 新しい 投稿 では 取り直し たい ので、 ON なら
+      //   再 取得 する。
       composerImageUrl = null; composerCoords = null;
+      const locChk = document.getElementById('po-loc');
+      if (locChk && locChk.checked && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (p) => { composerCoords = { lat: p.coords.latitude, lng: p.coords.longitude }; },
+          () => {},
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        );
+      }
       if (parentId) navigate(`#/sns/${parentId}`);
       else { postsState = { items: [], beforeId: 0, loading: false, atEnd: false }; await loadMore(true); }
     } catch (e) { toast('失敗: ' + e.message); }

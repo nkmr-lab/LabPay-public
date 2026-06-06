@@ -29,6 +29,21 @@ function fmtRemaining(s) {
   if (min >= 60) return `あと ${Math.floor(min/60)}時間${min%60}分`;
   return `あと ${min}:${String(sec).padStart(2,'0')}`;
 }
+// v482 #70 「点呼 を 押して から の 経過 時間」 (起案 = 開始 = 押し時刻)。
+function fmtElapsed(s) {
+  if (!s) return '';
+  const dt = new Date(String(s).replace(' ', 'T'));
+  const diff = new Date() - dt;
+  if (diff < 0) return '0:00 経過';
+  const sec = Math.floor(diff / 1000);
+  const min = Math.floor(sec / 60);
+  if (min >= 60) return `${Math.floor(min/60)}時間${min%60}分 経過`;
+  return `${min}:${String(sec%60).padStart(2,'0')} 経過`;
+}
+function deadlineShort(s) {
+  if (!s) return '';
+  return String(s).slice(11, 16);
+}
 
 export async function renderRollCalls() {
   const app = document.getElementById('app');
@@ -65,7 +80,7 @@ export async function renderRollCalls() {
         <a class="list-item" href="#/rollcalls/${r.id}">
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
-            <div class="meta">${tags.join(' ')} · ${escapeHtml(fmtRemaining(r.deadline_at))} · 起案 ${escapeHtml(r.creator_name)}</div>
+            <div class="meta">${tags.join(' ')} · ${escapeHtml(open ? fmtElapsed(r.created_at) : '締切')} · 起案 ${escapeHtml(r.creator_name)}${r.deadline_at ? ' · 締切 ' + escapeHtml(deadlineShort(r.deadline_at)) : ''}</div>
             <div class="meta">${r.responded_count}/${r.target_count} 人が応答</div>
           </div>
         </a>`;
@@ -203,30 +218,33 @@ async function loadRollCallDetail(id) {
     const r = d.rollcall;
     const isOpen = r.status === 'open';
     const head = document.getElementById('rcd-head');
+    // v482 #70 「点呼 を 押して から の 経過 時間」 を 主表示 に。 締切 は
+    //   横 に 「(締切 HH:MM)」 として 副表示。
     head.innerHTML = `
       <h2 style="margin:6px 0 0">${escapeHtml(r.title)}</h2>
       <div class="meta">
         起案 ${escapeHtml(r.creator_name)} · ${isOpen ? '受付中' : '締切済'}
       </div>
-      <div id="rcd-deadline" class="meta" data-deadline="${escapeHtml(r.deadline_at)}">
-        締切 ${escapeHtml(fmtRemaining(r.deadline_at))}
+      <div id="rcd-deadline" class="meta" data-started="${escapeHtml(r.created_at || '')}" data-deadline="${escapeHtml(r.deadline_at)}">
+        ${isOpen ? escapeHtml(fmtElapsed(r.created_at)) + (r.deadline_at ? ' (締切 ' + escapeHtml(deadlineShort(r.deadline_at)) + ')' : '')
+                 : '締切済'}
       </div>
       ${r.body ? `<div style="margin-top:6px; white-space:pre-wrap">${escapeHtml(r.body)}</div>` : ''}
     `;
     rcLastDeadline = r.deadline_at;
-    // 締切までのカウントダウン (秒刻み)
     if (isOpen) {
       const updateCountdown = () => {
         const el = document.getElementById('rcd-deadline');
         if (!el) return;
-        const txt = fmtRemaining(el.dataset.deadline);
-        if (txt === '締切') {
+        // 締切 まで 来た ら 自動 で 再 読込 (server 側 で autoclose)。
+        const dlMs = new Date(String(el.dataset.deadline).replace(' ', 'T')) - new Date();
+        if (dlMs <= 0) {
           el.textContent = '締切';
           clearInterval(rcCountdownTimer);
           loadRollCallDetail(id);
           return;
         }
-        el.textContent = `締切まで ${txt.replace('あと ', '')}`;
+        el.textContent = `${fmtElapsed(el.dataset.started)} (締切 ${deadlineShort(el.dataset.deadline)})`;
       };
       updateCountdown();
       rcCountdownTimer = setInterval(updateCountdown, 1000);

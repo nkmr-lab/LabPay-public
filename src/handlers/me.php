@@ -1009,9 +1009,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '📊',
             ];
         }
-        // rollcalls
+        // rollcalls (v482 #70 created_at = 「点呼 を 押した 時刻」 を 返す)
         $stR = $pdo->prepare("
-            SELECT r.id, r.title, r.deadline_at, u.display_name AS creator_name
+            SELECT r.id, r.title, r.deadline_at, r.created_at, u.display_name AS creator_name
               FROM roll_calls r
               JOIN roll_call_targets t ON t.roll_call_id=r.id AND t.user_id=?
               JOIN users u             ON u.id = r.creator_user_id
@@ -1026,6 +1026,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'title' => $r['title'],
                 'subtitle' => '起案 ' . $r['creator_name'],
                 'deadline_at' => $r['deadline_at'],
+                'started_at'  => $r['created_at'],
                 'url' => '#/rollcalls/' . $r['id'],
                 'icon' => '📣',
             ];
