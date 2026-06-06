@@ -68,6 +68,34 @@ function timers_list(PDO $pdo, array $cfg): void {
          LIMIT 100");
     $st->execute([$uid, $uid, $uid]);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v466 関係者 アバター を 同梱 (各 timer の 参加者 最大 5 名)。 ホームカード で
+    // 「誰の タイマー か」 を 一目で 分かる ように。
+    $ids = array_map(fn($r) => (int)$r['id'], $items);
+    $partsByTimer = [];
+    if ($ids) {
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $stP = $pdo->prepare("SELECT tp.timer_id, u.id AS uid, u.display_name, u.avatar_url
+                                FROM timer_participants tp
+                                JOIN users u ON u.id = tp.user_id
+                               WHERE tp.timer_id IN ($place)
+                               ORDER BY u.id");
+        $stP->execute($ids);
+        foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $tid = (int)$row['timer_id'];
+            if (!isset($partsByTimer[$tid])) $partsByTimer[$tid] = [];
+            $partsByTimer[$tid][] = [
+                'user_id' => (int)$row['uid'],
+                'display_name' => $row['display_name'],
+                'avatar_url' => $row['avatar_url'],
+            ];
+        }
+    }
+    foreach ($items as &$it) {
+        $tid = (int)$it['id'];
+        $it['participants'] = array_slice($partsByTimer[$tid] ?? [], 0, 5);
+        $it['participant_count'] = count($partsByTimer[$tid] ?? []);
+    }
+    unset($it);
     json_response([
         'items' => $items,
         'server_now' => date('Y-m-d H:i:s'),

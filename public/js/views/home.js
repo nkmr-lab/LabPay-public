@@ -1238,6 +1238,7 @@ async function renderMyActiveTimers() {
           sort: remaining,
           color: remaining < 600 ? '#c62828' : (isDeadline ? '#b91c1c' : '#7c3aed'),
           bg: isDeadline ? '#fee2e2' : '#ede9fe',
+          participants: m.participants || [],   // v466
         });
       }
     }
@@ -1282,6 +1283,7 @@ async function renderMyActiveTimers() {
             sort: remaining,
             color: remaining < 60 ? '#c62828' : '#1565c0',
             bg: '#e3f2fd',
+            participants: t.participants || [],  // v466
           });
         } else if (t.status === 'paused') {
           const remaining = Math.max(0, Number(t.remaining_seconds) || 0);
@@ -1294,6 +1296,7 @@ async function renderMyActiveTimers() {
             sort: 888888 + remaining,  // paused は running の 後 / SW 一時停止 の 前
             color: '#e65100',
             bg: '#fff3e0',
+            participants: t.participants || [],  // v466
           });
         }
       }
@@ -1332,6 +1335,18 @@ async function renderMyActiveTimers() {
           ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}"${t.fmt ? ` data-tick-fmt="${escapeHtml(t.fmt)}"` : ''} data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
           : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"`
       ) : '';
+      // v466 関係者 アバター を 重ねて (overlap) 横並び 表示。 最大 5 名。
+      const parts = Array.isArray(r.participants) ? r.participants : [];
+      const partsHtml = parts.length ? `
+        <div style="display:flex; margin-right:6px; flex-shrink:0">
+          ${parts.slice(0, 5).map((p, i) => {
+            const ml = i === 0 ? '' : 'margin-left:-6px';
+            const initial = (p.display_name || '?').trim().charAt(0).toUpperCase();
+            return p.avatar_url
+              ? `<img src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.display_name)}" title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`
+              : `<div title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
+          }).join('')}
+        </div>` : '';
       return `
         <a class="list-item" href="${r.href}">
           <div${tickAttrs} style="min-width:80px; font-family:monospace; font-size:16px; font-weight:700; color:${r.color}">${r.time}</div>
@@ -1339,6 +1354,7 @@ async function renderMyActiveTimers() {
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
             <div class="meta"><span class="tag" style="background:${r.bg}; color:${r.color}; font-size:10px">${escapeHtml(r.kind)}</span></div>
           </div>
+          ${partsHtml}
           <div class="hint">→</div>
         </a>`;
     }).join('');

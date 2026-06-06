@@ -60,7 +60,9 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'chats'    && isset($seg[3]) && $method === 'DELETE') { group_chats_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
             if ($next === 'day_memos' && $method === 'PATCH' && isset($seg[3])) { group_day_memo_upsert($pdo, $cfg, $id, (string)$seg[3]); return; }
-            if ($next === 'schedule' && $method === 'POST')             { group_schedule_add($pdo, $cfg, $id);    return; }
+            // v466 「/schedule POST」 (= 追加) は seg[3] が ない 場合 のみ。 さもないと
+            // 後段 の /schedule/{id}/heart POST が ここに 先取り されて 「title 1..200」 エラー に なる。
+            if ($next === 'schedule' && $method === 'POST' && !isset($seg[3])) { group_schedule_add($pdo, $cfg, $id); return; }
             // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
             // より具体的な move ルートを先に判定する。
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }

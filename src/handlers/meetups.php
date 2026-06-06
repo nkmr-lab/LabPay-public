@@ -40,7 +40,35 @@ function meetups_list(PDO $pdo, array $cfg): void {
          ORDER BY (m.meetup_at > NOW() AND m.cancelled_at IS NULL) DESC, m.meetup_at DESC, m.id DESC
          LIMIT 100");
     $st->execute($args);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v466 関係者 アバター を 同梱 (最大 5 名)。 ホーム の 進行中 カード で 「誰の
+    // 待ち合わせ / 〆切 か」 を 顔で 把握 する 用。
+    $ids = array_map(fn($r) => (int)$r['id'], $items);
+    $parts = [];
+    if ($ids) {
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $stP = $pdo->prepare("SELECT p.meetup_id, u.id AS uid, u.display_name, u.avatar_url
+                                FROM meetup_participants p
+                                JOIN users u ON u.id = p.user_id
+                               WHERE p.meetup_id IN ($place)
+                               ORDER BY u.id");
+        $stP->execute($ids);
+        foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $mid = (int)$row['meetup_id'];
+            if (!isset($parts[$mid])) $parts[$mid] = [];
+            $parts[$mid][] = [
+                'user_id' => (int)$row['uid'],
+                'display_name' => $row['display_name'],
+                'avatar_url' => $row['avatar_url'],
+            ];
+        }
+    }
+    foreach ($items as &$it) {
+        $mid = (int)$it['id'];
+        $it['participants'] = array_slice($parts[$mid] ?? [], 0, 5);
+    }
+    unset($it);
+    json_response(['items' => $items]);
 }
 
 function meetups_create(PDO $pdo, array $cfg): void {
