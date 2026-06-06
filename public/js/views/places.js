@@ -334,9 +334,13 @@ export async function renderPlaceNew() {
 export async function renderPlaceDetail({ params }) {
   const id = Number(params.id);
   const app = document.getElementById('app');
+  // v481 #67 カバー 画像 (negative margin で 上に 12px はみ出る) が 「← 一覧」 ボタン
+  //   を 被って 戻り にくい 問題 → 戻り ボタン を 別 カード に 分離。
   app.innerHTML = `
-    <div class="card">
+    <div class="card" style="padding:6px 10px">
       <a href="#/places" class="hint">← 一覧</a>
+    </div>
+    <div class="card">
       <div id="pld-head"><div class="muted">読み込み中…</div></div>
     </div>
     <div class="card" id="pld-map-card" hidden>

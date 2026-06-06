@@ -98,7 +98,7 @@ export const HOME_CARDS = [
   { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'places',         title: '🍴 食べある記 (新着)' },
-  { id: 'sns',            title: '💬 SNS 最新' },
+  { id: 'sns',            title: '💬 らぼったー 最新' },
   { id: 'history',        title: '履歴' },
 ];
 
@@ -274,7 +274,7 @@ export async function renderHome() {
 
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">💬 SNS 最新</h2>
+        <h2 class="row-title">💬 らぼったー 最新</h2>
         <a href="#/sns" class="hint">タイムライン →</a>
       </div>
       <div id="home-sns" class="list"><div class="muted">読み込み中…</div></div>
@@ -1159,8 +1159,19 @@ async function renderFreshSns() {
     root.innerHTML = items.map(p => {
       const snipBase = p.body || (p.image_url ? '' : '(無題)');
       const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
-      const heart = p.liked_by_me ? '❤️' : '🤍';
-      const meta = `${escapeHtml(p.display_name)} · ${heart} ${p.like_count} · 💬 ${p.reply_count}`;
+      // v481 #68 ホーム でも 👍 ❤ ⭐ 3 種 表示 + 縦幅 1.2x。 1.35→1.5 行高、
+      //   min-height 96→116、 padding を 少し 増やし リアクション 見切れ 防止。
+      const counts = p.reaction_counts || { thumb: 0, heart: p.like_count || 0, star: 0 };
+      const mine = new Set(p.my_reactions || (p.liked_by_me ? ['heart'] : []));
+      const reactBadges = [
+        { k: 'thumb', icon: '👍', color: '#2563eb' },
+        { k: 'heart', icon: '❤️', color: '#e11d48' },
+        { k: 'star',  icon: '⭐', color: '#f59e0b' },
+      ].map(r => {
+        const on = mine.has(r.k);
+        return `<span style="${on ? 'color:' + r.color + '; font-weight:600' : 'opacity:0.6'}">${r.icon} ${counts[r.k] || 0}</span>`;
+      }).join(' · ');
+      const reactionsLine = `${reactBadges} · 💬 ${p.reply_count}`;
       // v465 ヒーロー: テキスト が メイン (左) + 画像 が 右端 から 中央 まで
       // 斜めに 浮き出す。 画像 の 左端 を polygon で 斜め カット (右肩上がり)。
       // 縦幅 は 通常 行 と 同じ ぐらい (= text-content の 高さ で 決まる、 minHeight)。
@@ -1172,26 +1183,26 @@ async function renderFreshSns() {
           ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
-          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:96px">
+          <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:6px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:116px">
             <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
-            <div style="position:relative; margin-left:50%; padding:6px 10px 6px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:3px; justify-content:flex-start">
+            <div style="position:relative; margin-left:50%; padding:8px 10px 8px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:5px; justify-content:flex-start">
               <div class="row" style="gap:6px; align-items:center; margin:0">
                 ${avatar}
                 <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>
               </div>
-              ${snip ? `<div style="font-size:12.5px; line-height:1.35; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
-              <div class="hint" style="font-size:11px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
+              ${snip ? `<div style="font-size:12.5px; line-height:1.4; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>` : ''}
+              <div class="hint" style="font-size:11px">${reactionsLine}</div>
             </div>
           </a>`;
       }
-      // 文字 のみ: 既存 の コンパクト 表示。
+      // 文字 のみ: 1.2x 高さ + 2 行 clamp。 リアクション 3 種 表示。
       return `
-        <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px">
+        <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px; min-height:88px; padding:8px 6px">
           ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="font-size:13px">${escapeHtml(p.display_name)}</div>
-            <div class="meta" style="white-space:pre-wrap; font-size:13px">${escapeHtml(snip)}</div>
-            <div class="hint" style="font-size:11px">${heart} ${p.like_count} · 💬 ${p.reply_count}</div>
+          <div class="grow" style="min-width:0; display:flex; flex-direction:column; gap:4px">
+            <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</div>
+            <div class="meta" style="font-size:13px; line-height:1.4; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(snip)}</div>
+            <div class="hint" style="font-size:11px">${reactionsLine}</div>
           </div>
         </a>`;
     }).join('');

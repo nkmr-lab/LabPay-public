@@ -122,9 +122,9 @@ export async function renderPosts() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">💬 ラボSNS</h2>
+      <h2 style="margin:0">💬 らぼったー</h2>
       <p class="card-subtitle" style="margin:6px 0 0">
-        ラボメンバー の つぶやき。 テキスト + 画像 + 位置 + @メンション + ❤ いいね + 返信。
+        ラボメンバー の つぶやき。 テキスト + 画像 + 位置 + @メンション + 👍 ❤ ⭐ リアクション + 返信。
         フォロー なし — 全員 の 投稿 が 見える。
       </p>
     </div>
