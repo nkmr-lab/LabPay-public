@@ -10,6 +10,12 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { groups_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { groups_create($pdo, $cfg); return; }
+    // v475 招待URL 経由 の 参加。 /api/groups/join/{token} POST。 ログイン要。
+    if ($sub === 'join' && $method === 'POST') {
+        $token = (string)($seg[2] ?? '');
+        group_invite_join($pdo, $cfg, $token);
+        return;
+    }
 
     if ($sub !== '') {
         $id = resolve_group_id($pdo, $sub);
@@ -23,6 +29,9 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
             if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
+            // v475 招待URL: 起案者 が トークン を 発行 / 失効、 誰でも (ログイン要) /api/groups/join/{token} で 参加
+            if ($next === 'invite' && $method === 'POST')   { group_invite_create($pdo, $cfg, $id); return; }
+            if ($next === 'invite' && $method === 'DELETE') { group_invite_revoke($pdo, $cfg, $id); return; }
             if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
             if ($next === 'expenses' && $method === 'POST')             { group_expenses_add($pdo, $cfg, $id);  return; }
             if ($next === 'expenses' && isset($seg[3]) && $method === 'PATCH')  { group_expenses_patch($pdo, $cfg, $id, (int)$seg[3]); return; }
@@ -554,6 +563,57 @@ function group_members_del(PDO $pdo, array $cfg, int $groupId, int $uid): void {
     $pdo->prepare("DELETE FROM adhoc_group_members WHERE group_id=? AND user_id=?")
         ->execute([$groupId, $uid]);
     json_response(['ok' => true]);
+}
+
+// v475 招待URL: 起案者/admin が トークン を 発行。 既存トークン が あれば 再利用、
+// なければ ランダム 32 字 を 生成。 期限 (days) は 任意、 デフォルト 30 日。
+function group_invite_create(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_creator_or_admin($pdo, $id, $u);
+    $body = read_json_body();
+    $days = (int)($body['days'] ?? 30);
+    if ($days < 1) $days = 30;
+    if ($days > 365) $days = 365;
+    $st = $pdo->prepare("SELECT invite_token, invite_expires_at FROM adhoc_groups WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    $token = (string)($row['invite_token'] ?? '');
+    if ($token === '') {
+        // 32 字 base32-ish (URL セーフ)
+        $token = strtolower(rtrim(strtr(base64_encode(random_bytes(20)), '+/', '-_'), '='));
+    }
+    $expires = (new DateTimeImmutable("+{$days} days"))->format('Y-m-d H:i:s');
+    $pdo->prepare("UPDATE adhoc_groups SET invite_token=?, invite_expires_at=? WHERE id=?")
+        ->execute([$token, $expires, $id]);
+    json_response(['ok' => true, 'token' => $token, 'expires_at' => $expires]);
+}
+
+// v475 招待URL 失効。 起案者/admin。
+function group_invite_revoke(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_creator_or_admin($pdo, $id, $u);
+    $pdo->prepare("UPDATE adhoc_groups SET invite_token=NULL, invite_expires_at=NULL WHERE id=?")
+        ->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+// v475 招待URL 経由 で 参加。 token は ランダム 文字列。 期限 切れ / 不在 で 410/404。
+function group_invite_join(PDO $pdo, array $cfg, string $token): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    if ($token === '') throw new ApiException('bad_request', 'token 必要', 400);
+    $st = $pdo->prepare("SELECT id, title, invite_expires_at FROM adhoc_groups
+                          WHERE invite_token = ? AND closed_at IS NULL LIMIT 1");
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '招待リンク が 無効 です', 404);
+    $exp = $row['invite_expires_at'];
+    if ($exp !== null && strtotime((string)$exp) < time()) {
+        throw new ApiException('expired', '招待リンク の 有効期限 が 切れています', 410);
+    }
+    $gid = (int)$row['id'];
+    $pdo->prepare("INSERT IGNORE INTO adhoc_group_members (group_id, user_id) VALUES (?, ?)")
+        ->execute([$gid, (int)$u['id']]);
+    json_response(['ok' => true, 'group_id' => $gid, 'title' => $row['title']]);
 }
 
 // ─── EXPENSES (ワリカ) ──────────────────────────────────────────

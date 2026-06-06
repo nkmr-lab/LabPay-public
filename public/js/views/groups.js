@@ -39,6 +39,26 @@ function actionShownForUser(id) {
   return isAppVisible(id);
 }
 
+// v475 招待URL 経由 で 参加 (= /#/groups/join/{token})。 POST 一発 で 参加 して
+// グループ詳細 に 遷移。 失効済 / 404 は エラー カード を 表示。
+export async function renderGroupJoin({ params }) {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">🔗 グループ に 参加</h2>
+      <div id="gj-body" class="hint">参加処理中…</div>
+    </div>`;
+  try {
+    const r = await post(`/api/groups/join/${encodeURIComponent(params.token)}`, {});
+    toast(`グループ「${r.title || ''}」 に 参加しました`);
+    navigate('#/groups/' + r.group_id);
+  } catch (e) {
+    document.getElementById('gj-body').innerHTML =
+      `<div class="muted">${escapeHtml(e.message || '失敗')}</div>` +
+      `<div style="margin-top:10px"><a href="#/groups" class="btn">← グループ 一覧 へ</a></div>`;
+  }
+}
+
 // ──────────────────────────── LIST + CREATE ────────────────────────────
 
 export async function renderGroups() {
@@ -673,9 +693,13 @@ async function loadDetail(id) {
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(fmtDateTime(g.created_at))}</div>
       ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}
-      <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center">
-        ${g.members.map(participantPill).join('')}
+      <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center" id="gd-members-list">
+        ${g.members.map(m => `<span data-gd-mem="${m.id}" style="position:relative">${participantPill(m)}</span>`).join('')}
+        <button class="btn" id="gd-add-mem-btn" style="font-size:11px; padding:2px 8px">＋ メンバー追加</button>
+        <button class="btn" id="gd-invite-btn"  style="font-size:11px; padding:2px 8px">🔗 招待リンク</button>
       </div>
+      <div id="gd-mem-form" hidden style="margin-top:8px"></div>
+      <div id="gd-invite-form" hidden style="margin-top:8px"></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
         <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
@@ -689,12 +713,127 @@ async function loadDetail(id) {
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
       </div>`;
+    // v475 メンバー 追加 / 削除 / 招待リンク (起案者 + admin)
+    const isAdmin = state.me?.role === 'admin';
+    const canManageMembers = (isCreator || isAdmin) && !g.closed_at;
+    const addMemBtn = document.getElementById('gd-add-mem-btn');
+    const invBtn = document.getElementById('gd-invite-btn');
+    if (addMemBtn) addMemBtn.style.display = canManageMembers ? '' : 'none';
+    if (invBtn)    invBtn.style.display    = canManageMembers ? '' : 'none';
+    if (canManageMembers) {
+      // 既存メンバー pill に × ボタン を 重ねて 起案者以外 を 削除可能 に
+      const memList = document.getElementById('gd-members-list');
+      if (memList) {
+        memList.querySelectorAll('[data-gd-mem]').forEach(span => {
+          const uid = Number(span.dataset.gdMem);
+          if (uid === Number(g.creator_user_id)) return;  // 起案者 は 削除 不可
+          const x = document.createElement('button');
+          x.textContent = '×';
+          x.title = '外す';
+          x.className = 'btn';
+          x.style.cssText = 'position:absolute; right:-4px; top:-4px; min-width:0; padding:0 4px; font-size:10px; line-height:1; background:#fff; border:1px solid #c62828; color:#c62828; border-radius:50%';
+          x.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (!confirm('このメンバー を 外しますか?')) return;
+            try { await del(`/api/groups/${id}/members/${uid}`); await loadDetail(id); }
+            catch (e) { toast('失敗: ' + e.message); }
+          });
+          span.appendChild(x);
+        });
+      }
+      // 追加 ボタン
+      addMemBtn?.addEventListener('click', async () => {
+        const form = document.getElementById('gd-mem-form');
+        if (!form.hidden) { form.hidden = true; return; }
+        form.hidden = false;
+        form.innerHTML = `
+          <div id="gd-mem-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+          <div id="gd-mem-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+          <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+            <button id="gd-mem-cancel" class="btn">キャンセル</button>
+            <button id="gd-mem-save" class="primary">追加</button>
+          </div>`;
+        const existing = g.members.map(m => Number(m.id));
+        let picker = null;
+        try {
+          picker = await createMemberPicker({
+            bulkContainer: document.getElementById('gd-mem-bulk'),
+            chipsContainer: document.getElementById('gd-mem-chips'),
+            initial: [],
+            excludeIds: existing,
+            showGenderBulk: false,
+          });
+        } catch (e) {
+          document.getElementById('gd-mem-chips').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+        }
+        document.getElementById('gd-mem-cancel').onclick = () => { form.hidden = true; };
+        document.getElementById('gd-mem-save').onclick = async () => {
+          const ids = picker ? [...picker.getSelected()] : [];
+          if (!ids.length) { toast('追加 する メンバー を 選んで ください'); return; }
+          let added = 0;
+          for (const uid of ids) {
+            try { await post(`/api/groups/${id}/members`, { user_id: uid }); added++; }
+            catch (e) { toast(`#${uid}: ${e.message}`); }
+          }
+          toast(`${added} 人 追加しました`);
+          await loadDetail(id);
+        };
+      });
+      // 招待 リンク
+      invBtn?.addEventListener('click', () => {
+        const form = document.getElementById('gd-invite-form');
+        if (!form.hidden) { form.hidden = true; return; }
+        form.hidden = false;
+        const base = location.origin;
+        const cur = g.invite_token
+          ? `${base}/#/groups/join/${g.invite_token}`
+          : '';
+        const exp = g.invite_expires_at
+          ? new Date(String(g.invite_expires_at).replace(' ', 'T')).toLocaleDateString()
+          : '';
+        form.innerHTML = `
+          ${cur
+            ? `<div class="hint-sm" style="margin-bottom:4px">有効期限: ${escapeHtml(exp)}</div>
+               <div class="row" style="gap:6px">
+                 <input type="text" id="gd-invite-url" value="${escapeHtml(cur)}" readonly style="flex:1; font-size:12px">
+                 <button id="gd-invite-copy" class="btn">📋 コピー</button>
+                 <button id="gd-invite-revoke" class="btn danger">失効</button>
+               </div>`
+            : `<div class="hint-sm" style="margin-bottom:4px">まだ 発行 されて いません</div>`
+          }
+          <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+            <button id="gd-invite-issue" class="primary">${cur ? '更新' : '発行'} (有効期限 30 日)</button>
+          </div>`;
+        document.getElementById('gd-invite-issue').onclick = async () => {
+          try {
+            const r = await post(`/api/groups/${id}/invite`, { days: 30 });
+            toast('招待リンク を 発行しました');
+            await loadDetail(id);
+            // 再 描画 後 に もう一度 開く
+            document.getElementById('gd-invite-btn')?.click();
+          } catch (e) { toast('失敗: ' + e.message); }
+        };
+        document.getElementById('gd-invite-copy')?.addEventListener('click', () => {
+          const inp = document.getElementById('gd-invite-url');
+          if (!inp) return;
+          inp.select();
+          try { document.execCommand('copy'); toast('コピーしました'); }
+          catch (_) { navigator.clipboard?.writeText(inp.value).then(() => toast('コピーしました')); }
+        });
+        document.getElementById('gd-invite-revoke')?.addEventListener('click', async () => {
+          if (!confirm('招待リンク を 失効 します。 既存 メンバー は そのまま です。 OK?')) return;
+          try { await del(`/api/groups/${id}/invite`); toast('失効しました'); await loadDetail(id); }
+          catch (e) { toast('失敗: ' + e.message); }
+        });
+      });
+    }
+
     // 閉鎖 / 完全削除 カード:
     //   * 「閉鎖する」 は 未閉鎖 かつ creator/admin
     //   * 「完全削除」 は 閉鎖済 かつ creator/admin (admin であっても 閉鎖前は出さない)。
     //     「いきなり完全削除」 にならないよう、 必ず 閉鎖 を 経由するワンクッション。
     const dangerCard = document.getElementById('gd-danger-card');
-    const isAdmin = state.me?.role === 'admin';
     const canClose = (isCreator || isAdmin) && !g.closed_at;
     const canHardDel = (isCreator || isAdmin) && !!g.closed_at;
     if (dangerCard) dangerCard.hidden = !(canClose || canHardDel);
