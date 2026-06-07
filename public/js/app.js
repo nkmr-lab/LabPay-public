@@ -279,6 +279,8 @@ export const TAB_DEFS = [
   { id: 'sell',         title: '販売' },
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
+  // v489 #86 らぼったー を タブ に 追加。
+  { id: 'sns',          title: 'らぼったー (SNS)' },
   { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];

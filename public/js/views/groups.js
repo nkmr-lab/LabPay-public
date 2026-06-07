@@ -2109,17 +2109,16 @@ async function loadSchedule(gid) {
   // ストックに候補を追加 (day_date = null で作成)
   document.getElementById('gd-sched-add-stock')?.addEventListener('click', () =>
     openSchedItemModal(gid, { day_date: null }));
-  // タップ全体で編集 (リンクや内蔵ボタンは別途 stopPropagation)
+  // v489 #85 タップ で まず 「内容 確認」 を 表示 → 編集 ボタン で 編集 モーダル へ。
+  //   (旧: タップ で 即 編集 モーダル)。 編集 モード では 行 内 の ↑↓× ボタン が
+  //   出る ので、 タップ → 内容 確認 で 妥当 な UX。
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
-      // v415 ドラッグ完了直後の click は 1 回だけ無視 (modal 誤起動防止)
       if (suppressNextClick) { suppressNextClick = false; return; }
-      // v414 内部 button/a/select + ドラッグハンドル + ロックバッジ は 編集 modal
-      // を開かない (それぞれ 個別 handler 用 / ハンドルは DnD 用)。
       if (ev.target.closest('button,a,input,select,[data-drag-handle],[aria-label*="多日"]')) return;
       const id = Number(el.dataset.schedItem);
       const it = (d.items || []).find(x => Number(x.id) === id);
-      if (it) openSchedItemModal(gid, it);
+      if (it) openSchedItemViewModal(gid, it);
     });
   });
   // 編集モード ON の時だけ ↑ ↓ × ボタンが出る。
@@ -2724,6 +2723,103 @@ function renderSchedPairPickerHtml(it) {
       </div>
       <div class="hint-sm">選んだ予定とは同じ色の帯で連結表示されます。 3 つ以上の連結も可。</div>
     </details>`;
+}
+
+// v489 #85 タップ で まず 「内容 確認」 を 開く 読み取り 専用 ビュー。 そこから
+//   ✏ 編集 で 既存 の 編集 モーダル へ。 新規 追加 や 編集 モード での 内部 ボタン
+//   は そのまま 編集 モーダル を 直接 開く。
+function openSchedItemViewModal(gid, it) {
+  const root = document.getElementById('gd-sched-modal');
+  if (!root) return;
+  const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
+  const timeRow = [];
+  if (it.day_date) timeRow.push(`📅 ${it.day_date}${it.end_date && it.end_date !== it.day_date ? ' 〜 ' + it.end_date : ''}`);
+  if (it.start_time) {
+    let t = it.start_time.slice(0, 5);
+    if (it.end_time) t += ` 〜 ${it.end_time.slice(0, 5)}`;
+    else if (it.duration_minutes) {
+      const [sh, sm] = it.start_time.slice(0, 5).split(':').map(Number);
+      const total = (sh * 60 + sm + Number(it.duration_minutes)) % (24 * 60);
+      const eh = String(Math.floor(total / 60)).padStart(2, '0');
+      const em = String(total % 60).padStart(2, '0');
+      t += ` 〜 ${eh}:${em}`;
+    }
+    timeRow.push(`🕒 ${t}`);
+  }
+  if (it.duration_minutes) timeRow.push(`⏱ ${it.duration_minutes} 分`);
+  const mapLink = (it.lat != null && it.lng != null)
+    ? ` <a href="https://maps.google.com/?q=${it.lat},${it.lng}" target="_blank" rel="noopener" style="color:var(--primary)">🗺 地図</a>`
+    : '';
+  const locRow = it.location
+    ? `<div class="meta">📍 ${escapeHtml(it.location)}${mapLink}</div>`
+    : (mapLink ? `<div class="meta">${mapLink}</div>` : '');
+  const urlRow = it.url
+    ? `<div class="meta">🔗 <a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:var(--primary); word-break:break-all">${escapeHtml(it.url)}</a></div>`
+    : '';
+  const memoRow = it.memo
+    ? `<div style="font-size:13px; white-space:pre-wrap; margin-top:6px; padding:6px 8px; background:#f7f5fa; border-radius:6px">${escapeHtml(it.memo)}</div>`
+    : '';
+  const heroImg = it.image_url
+    ? `<a href="${escapeHtml(it.image_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(it.image_url)}" alt="" style="display:block; width:100%; max-height:240px; object-fit:cover; border-radius:8px; margin:6px 0"></a>`
+    : '';
+  root.hidden = false;
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" id="siv-overlay">
+      <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px">
+        <div class="row center">
+          <h3 class="row-title" style="margin:0">${k.icon} ${escapeHtml(it.title || '(無題)')}</h3>
+          <button id="siv-close">×</button>
+        </div>
+        <div class="meta" style="font-size:11px; margin-top:2px">${escapeHtml(k.label)}</div>
+        ${timeRow.length ? `<div class="meta" style="margin-top:6px">${timeRow.map(t => escapeHtml(t)).join(' · ')}</div>` : ''}
+        ${locRow}
+        ${urlRow}
+        ${heroImg}
+        ${memoRow}
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px; flex-wrap:wrap">
+          <button id="siv-delete" class="btn" style="color:var(--warn); border-color:var(--warn)">× 削除</button>
+          <button id="siv-copy" class="btn">📋 コピー</button>
+          <button id="siv-edit" class="primary">✏ 編集</button>
+        </div>
+      </div>
+    </div>`;
+  const close = () => { root.hidden = true; root.innerHTML = ''; };
+  document.getElementById('siv-close').addEventListener('click', close);
+  document.getElementById('siv-overlay').addEventListener('click', e => { if (e.target.id === 'siv-overlay') close(); });
+  document.getElementById('siv-edit').addEventListener('click', () => {
+    close();
+    openSchedItemModal(gid, it);
+  });
+  document.getElementById('siv-copy').addEventListener('click', async () => {
+    const copyBody = {
+      title:      (it.title || '') + ' (コピー)',
+      day_date:   it.day_date || null,
+      kind:       it.kind,
+      start_time: it.start_time || null,
+      end_date:   null,
+      duration_minutes: it.duration_minutes || null,
+      location:   it.location || null,
+      url:        it.url || null,
+      image_url:  it.image_url || null,
+      memo:       it.memo || null,
+    };
+    try {
+      const r = await post(`/api/groups/${gid}/schedule`, copyBody);
+      toast('コピーしました');
+      close();
+      await loadSchedule(gid);
+      openSchedItemModal(gid, { ...copyBody, id: r.id });
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('siv-delete').addEventListener('click', async () => {
+    if (!confirm('この予定 を 削除 します か?')) return;
+    try {
+      await del(`/api/groups/${gid}/schedule/${it.id}`);
+      toast('削除しました');
+      close();
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }
 
 function openSchedItemModal(gid, it) {
