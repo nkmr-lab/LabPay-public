@@ -513,15 +513,26 @@ async function loadGroupTranslations(gid) {
       root.innerHTML = '<div class="empty" style="padding:6px">まだ 翻訳は ありません</div>';
       return;
     }
+    // v488 #83 翻訳結果 が 切れて 全文 見えない 問題 → <details> で 折り畳み、
+    //   タップ で 全文 展開。 画像 も タップ で 拡大 (新タブ で 原寸)。
     root.innerHTML = items.map(t => {
-      const snippet = (t.result_text || '').slice(0, 120) + (t.result_text.length > 120 ? '…' : '');
+      const full = String(t.result_text || '');
+      const isLong = full.length > 120;
+      const snippet = isLong ? full.slice(0, 120) + '…' : full;
       return `
         <div class="list-item" style="align-items:flex-start; gap:8px">
-          <img src="${escapeHtml(t.image_url)}" alt="" style="width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0">
+          <a href="${escapeHtml(t.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0">
+            <img src="${escapeHtml(t.image_url)}" alt="" style="width:56px; height:56px; object-fit:cover; border-radius:6px">
+          </a>
           <div class="grow" style="min-width:0">
             <div class="meta" style="font-size:11px">${escapeHtml(t.user_name || '')} · ${escapeHtml(String(t.created_at || '').slice(5, 16).replace(' ', ' '))}</div>
             ${t.hint ? `<div class="meta" style="font-size:11px">💭 ${escapeHtml(t.hint)}</div>` : ''}
-            <div style="font-size:12px; white-space:pre-wrap; line-height:1.4; margin-top:2px">${escapeHtml(snippet)}</div>
+            ${isLong
+              ? `<details style="margin-top:2px">
+                   <summary style="font-size:12px; white-space:pre-wrap; line-height:1.4; cursor:pointer; list-style:revert">${escapeHtml(snippet)}</summary>
+                   <div style="font-size:12px; white-space:pre-wrap; line-height:1.4; margin-top:4px; padding-top:4px; border-top:1px dashed var(--line)">${escapeHtml(full)}</div>
+                 </details>`
+              : `<div style="font-size:12px; white-space:pre-wrap; line-height:1.4; margin-top:2px">${escapeHtml(full)}</div>`}
           </div>
         </div>`;
     }).join('');
@@ -702,6 +713,8 @@ async function loadDetail(id) {
       <div id="gd-invite-form" hidden style="margin-top:8px"></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
+        <!-- v488 #84 ファイル から の レシート 取り込み (カメラ を 通さない 経路) -->
+        <button class="btn" id="gd-pick-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📂 ファイル から</button>
         <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
         <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  && actionShownForUser('roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
         <a class="btn" data-gd-act="nomikai"   ${actionEnabled(g, 'nomikai')   && actionShownForUser('nomikai')   ? '' : 'hidden'} href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
@@ -711,7 +724,10 @@ async function loadDetail(id) {
         <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   && actionShownForUser('meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" data-gd-act="translate" ${actionEnabled(g, 'translate') && actionShownForUser('translate') ? '' : 'hidden'} href="#/translate?group_id=${id}">🌐 画像翻訳</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
+        <!-- v488 #84 カメラ 直行 用 input -->
         <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
+        <!-- v488 #84 ファイル ピッカー (capture 無し で フォト ライブラリ や ダウンロード から も 選べる) -->
+        <input type="file" id="gd-receipt-pick" accept="image/*" hidden>
       </div>`;
     // v475 メンバー 追加 / 削除 / 招待リンク (起案者 + admin)
     const isAdmin = state.me?.role === 'admin';
@@ -851,7 +867,11 @@ async function loadDetail(id) {
     document.getElementById('gd-snap-receipt')?.addEventListener('click', () => {
       document.getElementById('gd-receipt-file').click();
     });
+    document.getElementById('gd-pick-receipt')?.addEventListener('click', () => {
+      document.getElementById('gd-receipt-pick').click();
+    });
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
+    document.getElementById('gd-receipt-pick')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
     // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉鎖しますか?')) return;
@@ -944,6 +964,9 @@ async function fetchFxRate(ccy) {
 // Set of user_ids the next expense applies to. Initialized to all current
 // members when setWariMembers() runs; user deselects chips to exclude people.
 let wariFor = new Set();
+// v488 #84 個別 金額 (user_id → number)。 空 / 0 は 「均等 割」 扱い、 number > 0 は
+//   その人 の 固定 金額。 入力 ある と チップ の 横 に 数字 を 表示。
+let wariFixed = new Map();
 let wariFormOnSubmitted = null;
 
 function openWariFormModal(gid) {
@@ -1015,6 +1038,7 @@ function renderWariForm(opts = {}) {
     sel.value = String(state.me.id);
   }
   wariFor = new Set(wariMembers.map(m => m.id));
+  wariFixed = new Map();
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
   document.getElementById('ex-image-file').addEventListener('change', onExImageFile);
@@ -1207,24 +1231,43 @@ async function tryFetchCustomRate() {
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
 // exclude that person from this expense.
+// v488 #84 「個別 金額」 モード: トグル を ON に する と 各 メンバー の 横 に 数値
+//   入力 が 出る。 入れた 人 は その 額 が 固定、 残り を 入って いる 他 メンバー で
+//   均等 割り。 空 / 0 は 均等 割 (今 まで と 同じ)。
+let wariCustomMode = false;
 function renderForPicker() {
   const root = document.getElementById('ex-for');
   if (!root) return;
   const n = wariFor.size;
+  const fixedSum = [...wariFor].reduce((s, uid) => s + (wariFixed.get(uid) || 0), 0);
   const summary = n === 0
     ? `<span style="color:var(--warn)">対象者を 1 人以上選んでください</span>`
-    : (n === wariMembers.length
-        ? `全員 (${n}人)`
-        : `${n}人で割る`);
+    : (wariCustomMode && fixedSum > 0
+        ? `${n}人 中 固定 額 合計 ${fixedSum.toLocaleString()} (残額 は 等分)`
+        : (n === wariMembers.length ? `全員 (${n}人)` : `${n}人で割る`));
   root.innerHTML = `
-    <label class="hint-sm">誰の分? <span style="margin-left:6px">${summary}</span></label>
+    <label class="hint-sm">
+      誰の分? <span style="margin-left:6px">${summary}</span>
+      <label style="margin-left:auto; display:inline-flex; align-items:center; gap:4px; font-size:11px; float:right">
+        <input type="checkbox" id="ex-custom-toggle" ${wariCustomMode ? 'checked' : ''}>
+        🔢 個別 金額
+      </label>
+    </label>
     <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
       ${wariMembers.map(m => {
         const on = wariFor.has(m.id);
+        const fx = wariFixed.get(m.id) || '';
         return `
-        <span class="rl-chip" data-for-uid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}">
-          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
-          <span>${escapeHtml(m.display_name)}</span>
+        <span class="rl-chip" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}; gap:4px; display:inline-flex; align-items:center">
+          <span data-for-uid="${m.id}" style="display:inline-flex; align-items:center; gap:4px; cursor:pointer">
+            ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+            <span>${escapeHtml(m.display_name)}</span>
+          </span>
+          ${wariCustomMode && on
+            ? `<input type="number" data-fixed-uid="${m.id}" min="0" step="1" inputmode="numeric"
+                      value="${fx}" placeholder="均等"
+                      style="width:64px; padding:1px 4px; font-size:11px; margin-left:2px">`
+            : ''}
         </span>`;
       }).join('')}
     </div>
@@ -1232,10 +1275,24 @@ function renderForPicker() {
   root.querySelectorAll('[data-for-uid]').forEach(c => {
     c.addEventListener('click', () => {
       const uid = Number(c.dataset.forUid);
-      if (wariFor.has(uid)) wariFor.delete(uid);
+      if (wariFor.has(uid)) { wariFor.delete(uid); wariFixed.delete(uid); }
       else                  wariFor.add(uid);
       renderForPicker();
     });
+  });
+  root.querySelectorAll('[data-fixed-uid]').forEach(inp => {
+    inp.addEventListener('input', (ev) => {
+      const uid = Number(inp.dataset.fixedUid);
+      const v = parseInt(ev.target.value, 10);
+      if (isFinite(v) && v > 0) wariFixed.set(uid, v);
+      else                       wariFixed.delete(uid);
+    });
+  });
+  const toggle = document.getElementById('ex-custom-toggle');
+  if (toggle) toggle.addEventListener('change', (ev) => {
+    wariCustomMode = ev.target.checked;
+    if (!wariCustomMode) wariFixed = new Map();
+    renderForPicker();
   });
 }
 
@@ -1261,7 +1318,15 @@ async function onAddExpense() {
   }
   body.currency = currency;
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
-  if (wariFor.size !== wariMembers.length) {
+  // v488 #84 個別 金額 が 1 件 でも あれば rich 形式 で 送る (backend は
+  //   participants: [{user_id, fixed}] を 受け取る)。
+  const anyFixed = [...wariFor].some(uid => (wariFixed.get(uid) || 0) > 0);
+  if (anyFixed) {
+    body.participants = [...wariFor].map(uid => {
+      const fx = wariFixed.get(uid) || 0;
+      return fx > 0 ? { user_id: uid, fixed: fx } : { user_id: uid };
+    });
+  } else if (wariFor.size !== wariMembers.length) {
     body.participant_ids = [...wariFor];
   }
   try {
