@@ -2092,8 +2092,13 @@ async function loadSchedule(gid) {
   // - 別日ドロップ → /relocate で day_date + sort_order を更新 (start_time は維持)。
   // - 日の <details> ヘッダや 「+ 追加」 ボタン エリアに ドロップしたら その日の末尾に。
   let dragSrcId = null, dragSrcDay = null;
-  const editableSameDay = (day) =>
-    [...body.querySelectorAll(`[data-sched-canedit="1"][data-sched-day="${CSS.escape(day)}"]`)];
+  // v484 #77 ステップ 計算 用: 同日 の 全行 (canedit + ロック)。 サーバ の swap は
+  //   ロック 行 も 含めた 並び で 1 ステップ 進む ので、 DOM の DnD index も
+  //   全行 で 数える 必要 が ある。
+  const itemsSameDay = (day) =>
+    [...body.querySelectorAll(`[data-sched-item][data-sched-day="${CSS.escape(day)}"]`)];
+  // 後方互換: 同名 を 残しつつ ステップ 計算 は 全行 ベース に。
+  const editableSameDay = itemsSameDay;
 
   body.querySelectorAll('[data-drag-handle="1"]').forEach(h => {
     h.addEventListener('dragstart', (ev) => {
@@ -2537,9 +2542,14 @@ function renderSchedItem(it) {
   // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
   //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
+  // v484 #77 data-sched-day は ロック 行 (🔒 多日 中間 / 終了) にも 必ず 付ける。
+  //   同日 swap の ステップ 数 計算 で 「サーバ の 全行 並び」 と DOM の 同日 並び を
+  //   一致 させる ため。 ロック 行 を スキップ すると step count が ずれて 別の 場所 に
+  //   item が 移動 して しまう ( = 「変な ところ に 移動」 バグ)。 data-sched-canedit
+  //   は 引き続き 「ドラッグ 開始 / ドロップ 受け 可」 の フラグ。
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="${escapeHtml(dayKey)}"`
-    : '';
+    : `data-sched-day="${escapeHtml(dayKey)}"`;
   const itemOpacity = isLocked ? 'opacity:0.7;' : '';
   return `
     <div class="list-item" data-sched-item="${it.id}" ${dndAttrs}
