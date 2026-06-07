@@ -63,7 +63,7 @@ function postCard(p, opts = {}) {
           ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
         </div>
         ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px">${renderBodyHtml(p.body)}</div>` : ''}
-        ${p.image_url ? `<a href="${escapeHtml(p.image_url)}" target="_blank"><img src="${escapeHtml(p.image_url)}" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px"></a>` : ''}
+        ${p.image_url ? `<img data-zoom-src="${escapeHtml(p.image_url)}" src="${escapeHtml(p.image_url)}" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px; cursor:zoom-in">` : ''}
         <div class="row" style="gap:14px; margin-top:6px; font-size:12px">
           ${reactionsHtml(p)}
           ${replyHash ? `<a class="hint" href="${replyHash}">💬 ${p.reply_count}</a>` : ''}
@@ -393,7 +393,47 @@ async function loadMore(reset = false) {
   postsState.loading = false;
 }
 
+// v492 #92 画像 タップ で 全画面 ライトボックス を 開く。 別タブ で 開いて 戻れない
+//   問題 を 回避。 × ボタン / 背景 タップ / Esc で 閉じる。 body スクロール ロック。
+function openImageLightbox(src) {
+  const old = document.getElementById('po-lightbox');
+  if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'po-lightbox';
+  box.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; cursor:zoom-out';
+  box.innerHTML = `
+    <button id="po-lb-close" aria-label="閉じる"
+            style="position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.92); border:none; font-size:22px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center">×</button>
+    <img src="${src}" alt="" style="max-width:100%; max-height:100%; object-fit:contain; border-radius:6px">`;
+  document.body.appendChild(box);
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  const close = () => {
+    box.remove();
+    document.body.style.overflow = prevOverflow;
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  document.getElementById('po-lb-close').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    close();
+  });
+  box.addEventListener('click', (ev) => {
+    // 画像 自体 を タップ し ても 閉じる (拡大 オーバーレイ の 通例)。
+    if (ev.target.id !== 'po-lb-close') close();
+  });
+}
+
 function bindRowHandlers() {
+  document.querySelectorAll('[data-zoom-src]').forEach(el => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      openImageLightbox(el.dataset.zoomSrc);
+    });
+  });
   document.querySelectorAll('[data-react-post]').forEach(el => {
     if (el.dataset.bound) return;
     el.dataset.bound = '1';
