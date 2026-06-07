@@ -712,9 +712,9 @@ async function loadDetail(id) {
       <div id="gd-mem-form" hidden style="margin-top:8px"></div>
       <div id="gd-invite-form" hidden style="margin-top:8px"></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+        <!-- v490 #90 レシート ボタン は 1 つ に 統合。 capture 属性 を 外して
+             カメラ / フォト ライブラリ / ファイル の どれ から も 選べる ように -->
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
-        <!-- v488 #84 ファイル から の レシート 取り込み (カメラ を 通さない 経路) -->
-        <button class="btn" id="gd-pick-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📂 ファイル から</button>
         <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
         <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  && actionShownForUser('roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
         <a class="btn" data-gd-act="nomikai"   ${actionEnabled(g, 'nomikai')   && actionShownForUser('nomikai')   ? '' : 'hidden'} href="#/nomikai?members=${memberIds}">🍶 割り勘</a>
@@ -724,10 +724,10 @@ async function loadDetail(id) {
         <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   && actionShownForUser('meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" data-gd-act="translate" ${actionEnabled(g, 'translate') && actionShownForUser('translate') ? '' : 'hidden'} href="#/translate?group_id=${id}">🌐 画像翻訳</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
-        <!-- v488 #84 カメラ 直行 用 input -->
-        <input type="file" id="gd-receipt-file" accept="image/*" capture="environment" hidden>
-        <!-- v488 #84 ファイル ピッカー (capture 無し で フォト ライブラリ や ダウンロード から も 選べる) -->
-        <input type="file" id="gd-receipt-pick" accept="image/*" hidden>
+        <!-- v490 #90 単一 input、 capture 属性 なし → カメラ / フォト / ファイル
+             の どれ から でも 選べる (端末 が 標準 で 「撮影 する」 「ライブラリ から
+             選ぶ」 「ファイル から 選ぶ」 を 出す)。 -->
+        <input type="file" id="gd-receipt-file" accept="image/*" hidden>
       </div>`;
     // v475 メンバー 追加 / 削除 / 招待リンク (起案者 + admin)
     const isAdmin = state.me?.role === 'admin';
@@ -867,11 +867,7 @@ async function loadDetail(id) {
     document.getElementById('gd-snap-receipt')?.addEventListener('click', () => {
       document.getElementById('gd-receipt-file').click();
     });
-    document.getElementById('gd-pick-receipt')?.addEventListener('click', () => {
-      document.getElementById('gd-receipt-pick').click();
-    });
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
-    document.getElementById('gd-receipt-pick')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
     // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉鎖しますか?')) return;
@@ -1039,6 +1035,7 @@ function renderWariForm(opts = {}) {
   }
   wariFor = new Set(wariMembers.map(m => m.id));
   wariFixed = new Map();
+  wariCustomMode = false;
   renderForPicker();
   document.getElementById('ex-submit').addEventListener('click', () => onAddExpense());
   document.getElementById('ex-image-file').addEventListener('change', onExImageFile);
@@ -1234,6 +1231,8 @@ async function tryFetchCustomRate() {
 // v488 #84 「個別 金額」 モード: トグル を ON に する と 各 メンバー の 横 に 数値
 //   入力 が 出る。 入れた 人 は その 額 が 固定、 残り を 入って いる 他 メンバー で
 //   均等 割り。 空 / 0 は 均等 割 (今 まで と 同じ)。
+// v490 #87 chip 全体 を クリック ターゲット に 戻し (data-for-uid を 外側 に)、
+//   個別 額 input は stopPropagation で chip トグル を 抑止。
 let wariCustomMode = false;
 function renderForPicker() {
   const root = document.getElementById('ex-for');
@@ -1246,23 +1245,21 @@ function renderForPicker() {
         ? `${n}人 中 固定 額 合計 ${fixedSum.toLocaleString()} (残額 は 等分)`
         : (n === wariMembers.length ? `全員 (${n}人)` : `${n}人で割る`));
   root.innerHTML = `
-    <label class="hint-sm">
-      誰の分? <span style="margin-left:6px">${summary}</span>
-      <label style="margin-left:auto; display:inline-flex; align-items:center; gap:4px; font-size:11px; float:right">
+    <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+      <span class="hint-sm" style="flex:1">誰の分? <span style="margin-left:6px">${summary}</span></span>
+      <label style="display:inline-flex; align-items:center; gap:4px; font-size:11px; cursor:pointer; flex:none">
         <input type="checkbox" id="ex-custom-toggle" ${wariCustomMode ? 'checked' : ''}>
         🔢 個別 金額
       </label>
-    </label>
+    </div>
     <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
       ${wariMembers.map(m => {
         const on = wariFor.has(m.id);
         const fx = wariFixed.get(m.id) || '';
         return `
-        <span class="rl-chip" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}; gap:4px; display:inline-flex; align-items:center">
-          <span data-for-uid="${m.id}" style="display:inline-flex; align-items:center; gap:4px; cursor:pointer">
-            ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
-            <span>${escapeHtml(m.display_name)}</span>
-          </span>
+        <span class="rl-chip" data-for-uid="${m.id}" style="${on ? 'background:var(--primary-soft,#efeafa); border-color:var(--primary)' : 'opacity:.5'}; gap:4px; cursor:pointer">
+          ${avatarHtml(m.display_name, m.avatar_url, 'sm')}
+          <span>${escapeHtml(m.display_name)}</span>
           ${wariCustomMode && on
             ? `<input type="number" data-fixed-uid="${m.id}" min="0" step="1" inputmode="numeric"
                       value="${fx}" placeholder="均等"
@@ -1273,7 +1270,9 @@ function renderForPicker() {
     </div>
   `;
   root.querySelectorAll('[data-for-uid]').forEach(c => {
-    c.addEventListener('click', () => {
+    c.addEventListener('click', (ev) => {
+      // 個別 額 input への クリック / フォーカス は chip トグル を 抑止。
+      if (ev.target.closest('[data-fixed-uid]')) return;
       const uid = Number(c.dataset.forUid);
       if (wariFor.has(uid)) { wariFor.delete(uid); wariFixed.delete(uid); }
       else                  wariFor.add(uid);
@@ -1281,7 +1280,9 @@ function renderForPicker() {
     });
   });
   root.querySelectorAll('[data-fixed-uid]').forEach(inp => {
+    inp.addEventListener('click', (ev) => ev.stopPropagation());
     inp.addEventListener('input', (ev) => {
+      ev.stopPropagation();
       const uid = Number(inp.dataset.fixedUid);
       const v = parseInt(ev.target.value, 10);
       if (isFinite(v) && v > 0) wariFixed.set(uid, v);

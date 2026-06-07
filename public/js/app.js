@@ -1,58 +1,24 @@
 // App entry: wires router, loads views, manages global chrome (balance pill, unread badge, logout).
+// v490 #88 起動 速度 改善: 50+ の view モジュール を eager import して いた の を
+//   route 時 の dynamic import() に 変更。 初回 起動 で 必要 な のは shell + login と
+//   home のみ。 これら 2 つ だけ eager、 他 は タップ 時 に 初回 ロード + キャッシュ。
 
 import { route, start, navigate, escapeHtml } from './router.js';
 import { get, post } from './api.js';
 
+// ホット パス 2 つ (起動 直後 必ず 通る) は eager。
 import { renderLogin } from './views/login.js';
 import { renderHome } from './views/home.js';
-import { renderBuy } from './views/buy.js';
-import { renderSell } from './views/sell.js';
-import { renderHistory } from './views/history.js';
-import { renderNotifications } from './views/notifications.js';
-import { renderAdmin } from './views/admin.js';
-import { renderProduct } from './views/product.js';
-import { renderSettings } from './views/settings.js';
-import { renderAchievements } from './views/achievements.js';
-import { renderTasks, renderTaskDetail } from './views/tasks.js';
-import { renderTransfer } from './views/transfer.js';
-import { renderNetwork } from './views/network.js';
-import { renderActivity } from './views/activity.js';
-import { renderWishlist } from './views/wishlist.js';
-import { renderInvitations, renderInvitationDetail } from './views/invitations.js';
-import { renderRoulette, renderRouletteResult } from './views/roulette.js';
-import { renderTextRoulette } from './views/text_roulette.js';
-import { renderPolls, renderPollNew, renderPollDetail, renderPollEdit } from './views/polls.js';
-import { renderRollCalls, renderRollCallNew, renderRollCallDetail } from './views/rollcalls.js';
-import { renderTimers, renderTimerNew, renderTimerDetail } from './views/timers.js';
-import { renderNotices, renderNoticeForm } from './views/notices.js';
-import { renderMeetups, renderMeetupNew, renderMeetupDetail } from './views/meetups.js';
-import { renderPlaces, renderPlaceNew, renderPlaceDetail, renderPlacesMap } from './views/places.js';
-import { renderPosts, renderPostDetail } from './views/posts.js';
-import { renderTodos } from './views/todos.js';
-import { renderAdminSounds } from './views/admin_sounds.js';
-import { renderAuctions, renderAuctionNew, renderAuctionDetail } from './views/auctions.js';
-import { renderPlaylists, renderPlaylistNew, renderPlaylistDetail, renderPlaylistEdit } from './views/playlists.js';
-import { renderStopwatches, renderStopwatchNew, renderStopwatchDetail } from './views/stopwatches.js';
-import { renderTranslate } from './views/translate.js';
-import { renderHelp } from './views/help.js';
-import { renderChat } from './views/chat.js';
-import { renderExercise } from './views/exercise.js';
-import { renderUserProfile } from './views/profile.js';
 import { preloadSounds } from './sounds.js';
 import { installGlobalAudioUnlock } from './audio_unlock.js';
 import { bootSettingsSync } from './settings_sync.js';
-import { renderApps } from './views/apps.js';
-import { renderContacts } from './views/contacts.js';
-import { renderRequestsHub } from './views/requests_hub.js';
-import { renderWari } from './views/wari.js';
-import { renderNomikai, renderNomikaiNew, renderNomikaiDetail } from './views/nomikai.js';
-import { renderGroups, renderGroupDetail, renderGroupJoin } from './views/groups.js';
-import { renderGroupMap } from './views/group_map.js';
-import { renderScrapboxFeed } from './views/scrapbox_feed.js';
-import { renderRandomGroups } from './views/random_groups.js';
-import { renderMoneyRequests, renderMoneyRequestDetail } from './views/money_requests.js';
-import { renderFeedbackAdmin } from './views/feedback_admin.js';
-import { renderFeatureRequest, renderBugReport } from './views/feedback_user.js';
+
+// 遅延 ロード ヘルパー: route 時 に 初回 だけ import する。 import() が 返す
+//   Promise は ブラウザ が キャッシュ する ので、 同じ ページ を 2 回目 開く と
+//   即時 解決。
+function lazy(loader, name) {
+  return (ctx) => loader().then(m => m[name](ctx));
+}
 
 // ---------- Toast ----------
 export function toast(message, ms = 2200) {
@@ -419,84 +385,87 @@ document.getElementById('install-close').addEventListener('click', (ev) => {
 });
 
 // ---------- Routes ----------
+// 起動 ホット パス: ログイン / ホーム は eager-import 済み。 残り の view は
+//   lazy() で 初回 アクセス 時 だけ ロード。 module は ブラウザ が キャッシュ する
+//   ので 2 回目 以降 は 即時。
 route('/login',          renderLogin);
 route('',                renderHome);          // #/
-route('/buy',            renderBuy);
-route('/sell',           renderSell);
-route('/history',        renderHistory);
-route('/notifications',  renderNotifications);
-route('/admin',          renderAdmin);
-route('/feedback-admin',  renderFeedbackAdmin);
-route('/feature-request', renderFeatureRequest);
-route('/bug-report',      renderBugReport);
-route('/settings',       renderSettings);
-route('/achievements',   renderAchievements);
-route('/tasks',          renderTasks);
-route('/tasks/:id',      renderTaskDetail);
-route('/send',           renderTransfer);
-route('/product/:jan',   renderProduct);
-route('/network',        renderNetwork);
-route('/activity',       renderActivity);
-route('/wishlist',       renderWishlist);
-route('/invitations',    renderInvitations);
-route('/invitations/:id', renderInvitationDetail);
-route('/roulette',       renderRoulette);
-route('/roulette/:id',   renderRouletteResult);
-route('/text-roulette',  renderTextRoulette);
-route('/polls',          renderPolls);
-route('/polls/new',      renderPollNew);
-route('/polls/:id/edit', renderPollEdit);
-route('/polls/:id',      renderPollDetail);
-route('/rollcalls',      renderRollCalls);
-route('/rollcalls/new',  renderRollCallNew);
-route('/rollcalls/:id',  renderRollCallDetail);
-route('/timers',         renderTimers);
-route('/timers/new',     renderTimerNew);
-route('/timers/:id',     renderTimerDetail);
-route('/notices',        renderNotices);
-route('/notices/new',    renderNoticeForm);
-route('/notices/:id/edit', renderNoticeForm);
-route('/meetups',         renderMeetups);
-route('/meetups/new',     renderMeetupNew);
-route('/meetups/:id',     renderMeetupDetail);
-route('/places',          renderPlaces);
-route('/places/new',      renderPlaceNew);
-route('/places/map',      renderPlacesMap);
-route('/places/:id',      renderPlaceDetail);
-route('/sns',             renderPosts);
-route('/sns/:id',         renderPostDetail);
-route('/todos',           renderTodos);
-route('/admin/sounds',    renderAdminSounds);
-route('/auctions',        renderAuctions);
-route('/auctions/new',    renderAuctionNew);
-route('/auctions/:id',    renderAuctionDetail);
-route('/playlists',         renderPlaylists);
-route('/playlists/new',     renderPlaylistNew);
-route('/playlists/:id',     renderPlaylistDetail);
-route('/playlists/:id/edit', renderPlaylistEdit);
-route('/stopwatches',       renderStopwatches);
-route('/stopwatches/new',   renderStopwatchNew);
-route('/stopwatches/:id',   renderStopwatchDetail);
-route('/translate',         renderTranslate);
-route('/help',              renderHelp);
-route('/chat',              renderChat);
-route('/exercise',        renderExercise);
-route('/users/:id',       renderUserProfile);
-route('/apps',           renderApps);
-route('/contacts',       renderContacts);
-route('/requests-hub',   renderRequestsHub);
-route('/wari',           renderWari);
-route('/nomikai',        renderNomikai);
-route('/nomikai/new',    renderNomikaiNew);
-route('/nomikai/:id',    renderNomikaiDetail);
-route('/groups',         renderGroups);
-route('/groups/join/:token', renderGroupJoin);
-route('/groups/:id/map', renderGroupMap);
-route('/groups/:id',     renderGroupDetail);
-route('/scrapbox',       renderScrapboxFeed);
-route('/random-groups',  renderRandomGroups);
-route('/requests',       renderMoneyRequests);
-route('/requests/:id',   renderMoneyRequestDetail);
+route('/buy',            lazy(() => import('./views/buy.js'), 'renderBuy'));
+route('/sell',           lazy(() => import('./views/sell.js'), 'renderSell'));
+route('/history',        lazy(() => import('./views/history.js'), 'renderHistory'));
+route('/notifications',  lazy(() => import('./views/notifications.js'), 'renderNotifications'));
+route('/admin',          lazy(() => import('./views/admin.js'), 'renderAdmin'));
+route('/feedback-admin',  lazy(() => import('./views/feedback_admin.js'), 'renderFeedbackAdmin'));
+route('/feature-request', lazy(() => import('./views/feedback_user.js'), 'renderFeatureRequest'));
+route('/bug-report',      lazy(() => import('./views/feedback_user.js'), 'renderBugReport'));
+route('/settings',       lazy(() => import('./views/settings.js'), 'renderSettings'));
+route('/achievements',   lazy(() => import('./views/achievements.js'), 'renderAchievements'));
+route('/tasks',          lazy(() => import('./views/tasks.js'), 'renderTasks'));
+route('/tasks/:id',      lazy(() => import('./views/tasks.js'), 'renderTaskDetail'));
+route('/send',           lazy(() => import('./views/transfer.js'), 'renderTransfer'));
+route('/product/:jan',   lazy(() => import('./views/product.js'), 'renderProduct'));
+route('/network',        lazy(() => import('./views/network.js'), 'renderNetwork'));
+route('/activity',       lazy(() => import('./views/activity.js'), 'renderActivity'));
+route('/wishlist',       lazy(() => import('./views/wishlist.js'), 'renderWishlist'));
+route('/invitations',    lazy(() => import('./views/invitations.js'), 'renderInvitations'));
+route('/invitations/:id', lazy(() => import('./views/invitations.js'), 'renderInvitationDetail'));
+route('/roulette',       lazy(() => import('./views/roulette.js'), 'renderRoulette'));
+route('/roulette/:id',   lazy(() => import('./views/roulette.js'), 'renderRouletteResult'));
+route('/text-roulette',  lazy(() => import('./views/text_roulette.js'), 'renderTextRoulette'));
+route('/polls',          lazy(() => import('./views/polls.js'), 'renderPolls'));
+route('/polls/new',      lazy(() => import('./views/polls.js'), 'renderPollNew'));
+route('/polls/:id/edit', lazy(() => import('./views/polls.js'), 'renderPollEdit'));
+route('/polls/:id',      lazy(() => import('./views/polls.js'), 'renderPollDetail'));
+route('/rollcalls',      lazy(() => import('./views/rollcalls.js'), 'renderRollCalls'));
+route('/rollcalls/new',  lazy(() => import('./views/rollcalls.js'), 'renderRollCallNew'));
+route('/rollcalls/:id',  lazy(() => import('./views/rollcalls.js'), 'renderRollCallDetail'));
+route('/timers',         lazy(() => import('./views/timers.js'), 'renderTimers'));
+route('/timers/new',     lazy(() => import('./views/timers.js'), 'renderTimerNew'));
+route('/timers/:id',     lazy(() => import('./views/timers.js'), 'renderTimerDetail'));
+route('/notices',        lazy(() => import('./views/notices.js'), 'renderNotices'));
+route('/notices/new',    lazy(() => import('./views/notices.js'), 'renderNoticeForm'));
+route('/notices/:id/edit', lazy(() => import('./views/notices.js'), 'renderNoticeForm'));
+route('/meetups',         lazy(() => import('./views/meetups.js'), 'renderMeetups'));
+route('/meetups/new',     lazy(() => import('./views/meetups.js'), 'renderMeetupNew'));
+route('/meetups/:id',     lazy(() => import('./views/meetups.js'), 'renderMeetupDetail'));
+route('/places',          lazy(() => import('./views/places.js'), 'renderPlaces'));
+route('/places/new',      lazy(() => import('./views/places.js'), 'renderPlaceNew'));
+route('/places/map',      lazy(() => import('./views/places.js'), 'renderPlacesMap'));
+route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDetail'));
+route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
+route('/sns/:id',         lazy(() => import('./views/posts.js'), 'renderPostDetail'));
+route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
+route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
+route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));
+route('/auctions/new',    lazy(() => import('./views/auctions.js'), 'renderAuctionNew'));
+route('/auctions/:id',    lazy(() => import('./views/auctions.js'), 'renderAuctionDetail'));
+route('/playlists',         lazy(() => import('./views/playlists.js'), 'renderPlaylists'));
+route('/playlists/new',     lazy(() => import('./views/playlists.js'), 'renderPlaylistNew'));
+route('/playlists/:id',     lazy(() => import('./views/playlists.js'), 'renderPlaylistDetail'));
+route('/playlists/:id/edit', lazy(() => import('./views/playlists.js'), 'renderPlaylistEdit'));
+route('/stopwatches',       lazy(() => import('./views/stopwatches.js'), 'renderStopwatches'));
+route('/stopwatches/new',   lazy(() => import('./views/stopwatches.js'), 'renderStopwatchNew'));
+route('/stopwatches/:id',   lazy(() => import('./views/stopwatches.js'), 'renderStopwatchDetail'));
+route('/translate',         lazy(() => import('./views/translate.js'), 'renderTranslate'));
+route('/help',              lazy(() => import('./views/help.js'), 'renderHelp'));
+route('/chat',              lazy(() => import('./views/chat.js'), 'renderChat'));
+route('/exercise',        lazy(() => import('./views/exercise.js'), 'renderExercise'));
+route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
+route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
+route('/contacts',       lazy(() => import('./views/contacts.js'), 'renderContacts'));
+route('/requests-hub',   lazy(() => import('./views/requests_hub.js'), 'renderRequestsHub'));
+route('/wari',           lazy(() => import('./views/wari.js'), 'renderWari'));
+route('/nomikai',        lazy(() => import('./views/nomikai.js'), 'renderNomikai'));
+route('/nomikai/new',    lazy(() => import('./views/nomikai.js'), 'renderNomikaiNew'));
+route('/nomikai/:id',    lazy(() => import('./views/nomikai.js'), 'renderNomikaiDetail'));
+route('/groups',         lazy(() => import('./views/groups.js'), 'renderGroups'));
+route('/groups/join/:token', lazy(() => import('./views/groups.js'), 'renderGroupJoin'));
+route('/groups/:id/map', lazy(() => import('./views/group_map.js'), 'renderGroupMap'));
+route('/groups/:id',     lazy(() => import('./views/groups.js'), 'renderGroupDetail'));
+route('/scrapbox',       lazy(() => import('./views/scrapbox_feed.js'), 'renderScrapboxFeed'));
+route('/random-groups',  lazy(() => import('./views/random_groups.js'), 'renderRandomGroups'));
+route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
+route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
 // ---------- Boot ----------
 (async function boot() {
