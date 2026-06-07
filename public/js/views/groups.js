@@ -483,7 +483,9 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
-  document.getElementById('gd-snap-expense')?.addEventListener('click', () => openWariFormModal(id));
+  // v491 #91 gd-snap-expense は loadDetail で gd-head に注入 される ので、 ここで
+  //   bind すると 要素 が まだ 無く no-op に なる (= 「支出を 記録 で 入力 画面 が
+  //   出ない」 バグ)。 bind は loadDetail 内 (receipt と 同じ 場所) で 行う。
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
   document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
@@ -868,6 +870,8 @@ async function loadDetail(id) {
       document.getElementById('gd-receipt-file').click();
     });
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
+    // v491 #91 支出 ボタン も loadDetail で 注入 さ れる ので ここ で bind。
+    document.getElementById('gd-snap-expense')?.addEventListener('click', () => openWariFormModal(id));
     // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
       if (!confirm('このグループを閉鎖しますか?')) return;
