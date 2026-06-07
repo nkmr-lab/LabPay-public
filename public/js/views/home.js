@@ -3,6 +3,7 @@ import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
 import { coverListItem } from './groups.js';
+import { thumbUrlFor } from '../upload.js';
 import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 
 // v445 復活: 端末の今いる場所 (実 OS タイムゾーン) を取り出す ヘルパ。
@@ -1176,6 +1177,8 @@ async function renderFreshSns() {
       //   min-height 96→116、 padding を 少し 増やし リアクション 見切れ 防止。
       // v482 #69 画像 有 / 無 で 同じ 高さ (116px) + 上 マージン を 詰める + 時刻 を
       //   投稿者名 の 横 に。
+      // v493 #94 ホームから直接押せるリアクション。 ボタンに data-home-react-* を持たせて、
+      //   bindHomeSnsReactions で クリックハンドラを後から付ける。
       const counts = p.reaction_counts || { thumb: 0, heart: p.like_count || 0, star: 0 };
       const mine = new Set(p.my_reactions || (p.liked_by_me ? ['heart'] : []));
       const reactBadges = [
@@ -1184,7 +1187,7 @@ async function renderFreshSns() {
         { k: 'star',  icon: '⭐', color: '#f59e0b' },
       ].map(r => {
         const on = mine.has(r.k);
-        return `<span style="${on ? 'color:' + r.color + '; font-weight:600' : 'opacity:0.6'}">${r.icon} ${counts[r.k] || 0}</span>`;
+        return `<span data-home-react-post="${p.id}" data-home-react-kind="${r.k}" style="cursor:pointer; padding:1px 4px; border-radius:6px; ${on ? 'color:' + r.color + '; font-weight:600' : 'opacity:0.6'}">${r.icon} <span data-home-react-n>${counts[r.k] || 0}</span></span>`;
       }).join(' · ');
       const reactionsLine = `${reactBadges} · 💬 ${p.reply_count}`;
       const timeAgo = (s) => {
@@ -1210,7 +1213,7 @@ async function renderFreshSns() {
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:4px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:100px">
-            <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
+            <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(thumbUrlFor(p.image_url))}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
             <div style="position:relative; margin-left:50%; padding:3px 10px 4px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; justify-content:flex-start">
               <div class="row" style="gap:6px; align-items:baseline; margin:0">
                 ${avatar}
@@ -1236,7 +1239,40 @@ async function renderFreshSns() {
           </div>
         </a>`;
     }).join('');
+    bindHomeSnsReactions();
   } catch (_) { card.hidden = true; }
+}
+
+// v493 #94 ホーム らぼったー の リアクション ボタン を 押した 瞬間 サーバに 反映し、
+//   その場で カウントと 色を 更新。 リンク (a 要素) 内の <span> なので
+//   stopPropagation で 親 a のクリック (詳細遷移) を 抑止。
+function bindHomeSnsReactions() {
+  document.querySelectorAll('[data-home-react-post]').forEach(el => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = el.dataset.homeReactPost;
+      const kind = el.dataset.homeReactKind;
+      const on = parseFloat(el.style.fontWeight || '0') >= 600;
+      try {
+        const r = on
+          ? await fetch(`/api/posts/${id}/reaction?kind=${kind}`, { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' } }).then(x => x.json())
+          : await post(`/api/posts/${id}/reaction?kind=${kind}`, {});
+        const mine = new Set(r.my_reactions || []);
+        const counts = r.reaction_counts || {};
+        const colors = { thumb: '#2563eb', heart: '#e11d48', star: '#f59e0b' };
+        document.querySelectorAll(`[data-home-react-post="${id}"]`).forEach(b => {
+          const k = b.dataset.homeReactKind;
+          const isOn = mine.has(k);
+          b.style.cssText = `cursor:pointer; padding:1px 4px; border-radius:6px; ${isOn ? 'color:' + colors[k] + '; font-weight:600' : 'opacity:0.6'}`;
+          const nEl = b.querySelector('[data-home-react-n]');
+          if (nEl) nEl.textContent = counts[k] || 0;
+        });
+      } catch (e) { toast('失敗: ' + (e?.message || e)); }
+    });
+  });
 }
 
 // v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。
@@ -1745,7 +1781,7 @@ function bonusRuleHtml(rule) {
 // Apply the icon/name display mode to the presence container.
 // On = names visible (default), Off = icons only. Toggled by adding a class on the parent
 // so the same DOM serves both modes — no re-render needed.
-function applyPresenceMode(showNames) {
+export function applyPresenceMode(showNames) {
   const root = document.getElementById('presence');
   if (!root) return;
   root.classList.toggle('presence-icons-only', !showNames);
@@ -1770,7 +1806,7 @@ function formatStayDuration(sessionStartAt) {
   return rem === 0 ? `${hours}時間` : `${hours}時間${rem}分`;
 }
 
-function renderRoom(r, windowMin) {
+export function renderRoom(r, windowMin) {
   // Fade-by-age: pills are fully opaque when last seen <30s ago, then ramp
   // linearly to 0.35 by the window edge (after which the API drops them).
   // This makes brief detection gaps visible without yanking the avatar out

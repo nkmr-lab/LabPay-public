@@ -247,6 +247,8 @@ export const TAB_DEFS = [
   { id: 'auctions',     title: '競売 (オークション)' },
   // v489 #86 らぼったー を タブ に 追加。
   { id: 'sns',          title: 'らぼったー (SNS)' },
+  // v493 #95 ラボにいる人 を タブ に。
+  { id: 'presence',     title: '今ラボにいる人' },
   { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];
@@ -434,6 +436,7 @@ route('/places/map',      lazy(() => import('./views/places.js'), 'renderPlacesM
 route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDetail'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 route('/sns/:id',         lazy(() => import('./views/posts.js'), 'renderPostDetail'));
+route('/presence',        lazy(() => import('./views/presence.js'), 'renderPresencePage'));
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
 route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
 route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));

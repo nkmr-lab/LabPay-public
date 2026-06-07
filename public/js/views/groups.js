@@ -2783,6 +2783,7 @@ function openSchedItemViewModal(gid, it) {
         ${memoRow}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px; flex-wrap:wrap">
           <button id="siv-delete" class="btn" style="color:var(--warn); border-color:var(--warn)">× 削除</button>
+          ${it.day_date ? `<button id="siv-tostock" class="btn">📦 ストックに戻す</button>` : ''}
           <button id="siv-copy" class="btn">📋 コピー</button>
           <button id="siv-edit" class="primary">✏ 編集</button>
         </div>
@@ -2794,6 +2795,15 @@ function openSchedItemViewModal(gid, it) {
   document.getElementById('siv-edit').addEventListener('click', () => {
     close();
     openSchedItemModal(gid, it);
+  });
+  // v493 #97 日付を外して 「行きたい場所」 ストックに 戻す。
+  document.getElementById('siv-tostock')?.addEventListener('click', async () => {
+    try {
+      await patch(`/api/groups/${gid}/schedule/${it.id}/relocate`, { day_date: '' });
+      toast('ストックに 戻し ました');
+      close();
+      await loadSchedule(gid);
+    } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('siv-copy').addEventListener('click', async () => {
     const copyBody = {
