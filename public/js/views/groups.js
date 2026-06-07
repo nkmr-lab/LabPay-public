@@ -2437,10 +2437,13 @@ function renderSchedItem(it) {
       if (it.end_time) {
         timeStr = `${t}〜${it.end_time.slice(0, 5)}`;
       } else if (it.duration_minutes) {
-        const startMs = Date.parse(`2000-01-01T${it.start_time}`);
-        const endDt = new Date(startMs + it.duration_minutes * 60000);
-        const eh = String(endDt.getHours()).padStart(2, '0');
-        const em = String(endDt.getMinutes()).padStart(2, '0');
+        // v485 #78 旅行 中 (時差 異なる 地域) で Date.parse が 端末 ローカル TZ
+        //   解釈 → 別 TZ で 開いた とき に 端 時刻 が ずれる 可能性 が ある ため、
+        //   純粋 な 分 計算 に 変更。 HH:MM → 分 → +duration → HH:MM。
+        const [sh, sm] = it.start_time.slice(0, 5).split(':').map(Number);
+        const total = (sh * 60 + sm + Number(it.duration_minutes)) % (24 * 60);
+        const eh = String(Math.floor(total / 60)).padStart(2, '0');
+        const em = String(total % 60).padStart(2, '0');
         timeStr = `${t}〜${eh}:${em}`;
       } else {
         timeStr = t;
@@ -2688,10 +2691,17 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">日付 (空欄 = ストックに保存)</span>
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
-        <label class="field"><span class="lbl">タイトル <button id="sim-place-go" type="button" class="btn" style="padding:1px 8px; font-size:11px; margin-left:6px" title="入力した 場所名で Wikipedia + OSM を 検索して 緯度経度 / 説明 / 画像 を 自動入力">🔍 場所を検索</button></span>
+        <!-- v485 #78 タイトル ラベル 内 の button が input の フォーカス/カーソル
+             を 引っ張って 「カーソル 位置 が ずれる」 と 報告 され た。 button を
+             label 外 に 出し、 row レイアウト で 並べる ことで 解消。 -->
+        <div class="field">
+          <div class="row" style="gap:6px; align-items:center; margin:0 0 4px">
+            <span class="lbl" style="margin:0; flex:1">タイトル</span>
+            <button id="sim-place-go" type="button" class="btn" style="padding:1px 8px; font-size:11px; flex:none" title="入力した 場所名で Wikipedia + OSM を 検索して 緯度経度 / 説明 / 画像 を 自動入力">🔍 場所を検索</button>
+          </div>
           <input type="text" id="sim-title" maxlength="200" value="${escapeHtml(it.title || '')}" autofocus>
           <span id="sim-place-st" class="hint-sm"></span>
-        </label>
+        </div>
         <label class="field"><span class="lbl">種類</span>
           <select id="sim-kind">${kindOpts}</select>
         </label>

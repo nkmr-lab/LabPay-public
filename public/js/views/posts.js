@@ -283,10 +283,14 @@ function bindComposer(parentId) {
   bindMentionAutocomplete();  // v467 @ 補完
   const imgInput = document.getElementById('po-img');
   const imgStatus = document.getElementById('po-img-status');
+  // v485 #79 アップロード 中 は 投稿 ボタン を disable する (待たず 押すと 画像 が
+  //   付与 されない 問題 を 防ぐ)。 完了 か 失敗 で 元に 戻す。
+  const submitBtn = document.getElementById('po-submit');
   imgInput?.addEventListener('change', async () => {
     const f = imgInput.files[0];
     if (!f) { composerImageUrl = null; imgStatus.textContent = ''; return; }
-    imgStatus.textContent = 'アップロード中…';
+    imgStatus.textContent = '⏳ アップロード 中…';
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
     const fd = new FormData();
     fd.append('file', f);
     try {
@@ -302,7 +306,11 @@ function bindComposer(parentId) {
       }
       composerImageUrl = j.url || j.path;
       imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード 完了</span>`;
-    } catch (e) { imgStatus.textContent = '失敗: ' + (e?.message || e); }
+    } catch (e) {
+      imgStatus.textContent = '失敗: ' + (e?.message || e);
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
+    }
   });
   // v482 #69 起動時 に 前回 の 設定 を 復元。 ON だった なら 自動 で 位置 取得。
   const locChk = document.getElementById('po-loc');
