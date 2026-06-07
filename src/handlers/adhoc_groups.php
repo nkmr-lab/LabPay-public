@@ -2338,12 +2338,24 @@ function group_locations_list(PDO $pdo, array $cfg, int $gid): void {
          ORDER BY al.updated_at DESC");
     $st->execute([$gid]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v486 #81 旅行 中 (端末 TZ ≠ JST) で クライアント の Date.parse が ローカル TZ
+    //   解釈 → 「-3500 秒前」 等 の 表示 バグ。 サーバ で 経過秒 を 計算 して 返す。
+    $nowTs = time();
     foreach ($rows as &$r) {
         $r['user_id']    = (int)$r['user_id'];
         $r['lat']        = (float)$r['lat'];
         $r['lng']        = (float)$r['lng'];
         $r['accuracy_m'] = $r['accuracy_m'] !== null ? (int)$r['accuracy_m'] : null;
         $r['is_me']      = (int)$r['user_id'] === (int)$u['id'];
+        // 既存 DATETIME (Tokyo 解釈) を タイムゾーン 付き ISO に。
+        try {
+            $dt = new DateTimeImmutable((string)$r['updated_at']);
+            $r['updated_at_iso'] = $dt->format('c');
+            $r['seconds_ago']    = max(0, $nowTs - $dt->getTimestamp());
+        } catch (Throwable $_) {
+            $r['updated_at_iso'] = null;
+            $r['seconds_ago']    = 0;
+        }
     }
     json_response(['items' => $rows, 'server_now' => date('c')]);
 }

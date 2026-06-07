@@ -1122,7 +1122,9 @@ async function renderFreshPlaces() {
       const ratingBadge = rating
         ? `<div class="price-badge" style="color:#f59e0b">${rating}</div>`
         : '';
-      const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}`;
+      // v486 #80 いいね 数 も 表示。
+      const likeBit = p.like_count > 0 ? ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count}` : '';
+      const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}`;
       const href = `#/places/${p.id}`;
       if (p.cover_image) {
         return `

@@ -22,25 +22,51 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
             places_comment_delete($pdo, $cfg, $id, (int)$seg[3]);
             return;
         }
+        // v486 #80 いいね トグル
+        if ($next === 'like' && $method === 'POST')   { places_like_toggle($pdo, $cfg, $id, true);  return; }
+        if ($next === 'like' && $method === 'DELETE') { places_like_toggle($pdo, $cfg, $id, false); return; }
     }
     json_error('not_found', "no places route for $method $sub", 404);
 }
 
+function places_like_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
+    $st->execute([$id]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店 が ありません', 404);
+    if ($on) {
+        $pdo->prepare("INSERT IGNORE INTO place_likes (place_id, user_id, created_at)
+                       VALUES (?, ?, NOW())")
+            ->execute([$id, (int)$u['id']]);
+    } else {
+        $pdo->prepare("DELETE FROM place_likes WHERE place_id=? AND user_id=?")
+            ->execute([$id, (int)$u['id']]);
+    }
+    $stC = $pdo->prepare("SELECT COUNT(*) FROM place_likes WHERE place_id=?");
+    $stC->execute([$id]);
+    json_response(['ok' => true, 'like_count' => (int)$stC->fetchColumn(), 'liked_by_me' => $on]);
+}
+
 function places_list(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $meId = (int)$u['id'];
     // v478 image_url (メイン写真) を 追加。 cover_image は image_url 優先 → 最新 review。
-    $st = $pdo->query("
+    // v486 #80 いいね カウント + 自分 が 押したか。
+    $st = $pdo->prepare("
         SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
                p.created_at,
                (SELECT COUNT(*) FROM place_comments c WHERE c.place_id=p.id) AS comment_count,
                (SELECT AVG(c.rating) FROM place_comments c WHERE c.place_id=p.id AND c.rating IS NOT NULL) AS avg_rating,
                (SELECT c.image_url FROM place_comments c WHERE c.place_id=p.id AND c.image_url IS NOT NULL
-                 ORDER BY c.created_at DESC LIMIT 1) AS latest_image
+                 ORDER BY c.created_at DESC LIMIT 1) AS latest_image,
+               (SELECT COUNT(*) FROM place_likes l WHERE l.place_id=p.id) AS like_count,
+               EXISTS(SELECT 1 FROM place_likes l WHERE l.place_id=p.id AND l.user_id=?) AS liked_by_me
           FROM places p
           JOIN users u ON u.id = p.creator_user_id
          ORDER BY p.created_at DESC
          LIMIT 200");
+    $st->execute([$meId]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         $r['id']              = (int)$r['id'];
@@ -49,6 +75,8 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['avg_rating']      = $r['avg_rating'] !== null ? (float)$r['avg_rating'] : null;
         $r['lat']             = $r['lat'] !== null ? (float)$r['lat'] : null;
         $r['lng']             = $r['lng'] !== null ? (float)$r['lng'] : null;
+        $r['like_count']      = (int)$r['like_count'];
+        $r['liked_by_me']     = (bool)$r['liked_by_me'];
         // v478 cover_image: 店のメイン画像 を 優先、 なければ 最新の レビュー画像
         $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
     }
@@ -84,7 +112,8 @@ function places_create(PDO $pdo, array $cfg): void {
 }
 
 function places_detail(PDO $pdo, array $cfg, int $id): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $meId = (int)$u['id'];
     $st = $pdo->prepare("
         SELECT p.*, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url
           FROM places p
@@ -93,6 +122,13 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $p = $st->fetch(PDO::FETCH_ASSOC);
     if (!$p) throw new ApiException('not_found', '見つかりません', 404);
+    // v486 #80 いいね 集計
+    $stL = $pdo->prepare("SELECT COUNT(*) FROM place_likes WHERE place_id=?");
+    $stL->execute([$id]);
+    $likeCount = (int)$stL->fetchColumn();
+    $stM = $pdo->prepare("SELECT 1 FROM place_likes WHERE place_id=? AND user_id=?");
+    $stM->execute([$id, $meId]);
+    $likedByMe = (bool)$stM->fetchColumn();
     $stC = $pdo->prepare("
         SELECT c.id, c.body, c.image_url, c.rating, c.user_id, c.created_at,
                u.display_name, u.avatar_url
@@ -130,6 +166,8 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'created_at'         => $p['created_at'],
             'avg_rating'         => $avgRating,
             'comment_count'      => count($comments),
+            'like_count'         => $likeCount,
+            'liked_by_me'        => $likedByMe,
         ],
         'comments' => $comments,
     ]);

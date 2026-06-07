@@ -56,17 +56,21 @@ export async function renderPlaces() {
       return;
     }
     // v471 タイル状 (購入ページ と 同じ .tile-grid / .tile を 流用)。
+    // v486 #80 タイル に いいね 表示 (押せる ようには せず、 数 のみ。 詳細 画面 で 押す)。
     document.getElementById('pl-list').innerHTML = `<div class="tile-grid">${items.map(p => {
       const cat = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
+      const likeBadge = p.like_count > 0
+        ? ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count}`
+        : '';
       if (p.cover_image) {
         return `
           <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(p.cover_image)}')">
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
-              <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}</div>
+              <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}</div>
             </div>
           </a>`;
       }
@@ -76,7 +80,7 @@ export async function renderPlaces() {
           <span style="position:absolute; top:50%; left:50%; transform:translate(-50%,-65%); font-size:42px">🍴</span>
           <div class="tile-overlay">
             <div class="name">${escapeHtml(p.title)}</div>
-            <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}</div>
+            <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}</div>
           </div>
         </a>`;
     }).join('')}</div>`;
@@ -396,6 +400,13 @@ async function loadPlace(id) {
     const heroImg = p.image_url
       ? `<img src="${escapeHtml(p.image_url)}" alt="" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
       : '';
+    // v486 #80 いいね ボタン
+    const likeBtn = `
+      <button id="pld-like" class="btn"
+              data-liked="${p.liked_by_me ? '1' : '0'}"
+              style="margin-top:6px; font-size:13px; padding:4px 12px; ${p.liked_by_me ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}">
+        ${p.liked_by_me ? '❤️' : '🤍'} <span id="pld-like-n">${p.like_count}</span>
+      </button>`;
     document.getElementById('pld-head').innerHTML = `
       ${heroImg}
       <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
@@ -404,7 +415,22 @@ async function loadPlace(id) {
       ${ratingLine}
       ${p.description ? `<div style="margin-top:8px; font-size:14px">${linkifyText(p.description)}</div>` : ''}
       <div class="meta" style="margin-top:6px">起案 ${escapeHtml(p.creator_name)} · ${escapeHtml(p.created_at || '')}</div>
+      ${likeBtn}
     `;
+    document.getElementById('pld-like')?.addEventListener('click', async () => {
+      const btn = document.getElementById('pld-like');
+      const wasLiked = btn.dataset.liked === '1';
+      try {
+        const r = wasLiked
+          ? await del(`/api/places/${id}/like`)
+          : await post(`/api/places/${id}/like`, {});
+        const nowLiked = !wasLiked;
+        btn.dataset.liked = nowLiked ? '1' : '0';
+        document.getElementById('pld-like-n').textContent = r.like_count;
+        btn.innerHTML = `${nowLiked ? '❤️' : '🤍'} <span id="pld-like-n">${r.like_count}</span>`;
+        btn.style.cssText = `margin-top:6px; font-size:13px; padding:4px 12px; ${nowLiked ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}`;
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
     // 地図
     const mapCard = document.getElementById('pld-map-card');
     if (p.lat !== null && p.lng !== null && mapCard) {

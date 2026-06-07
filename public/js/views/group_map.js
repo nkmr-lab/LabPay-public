@@ -435,7 +435,18 @@ function drawMemberMarkers(L, layer, items) {
       ? `background:#fff center/cover no-repeat url('${cssUrl(it.avatar_url)}')`
       : `background:${color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px`;
     const dotClass = it.is_me ? 'border:3px solid #0e7c63' : `border:3px solid ${color}`;
-    const since = Math.floor((Date.now() - Date.parse(String(it.updated_at).replace(' ', 'T'))) / 1000);
+    // v486 #81 サーバ で 計算 した seconds_ago を 優先。 旅行 中 (端末 TZ ≠ JST) で
+    //   Date.parse が ローカル 解釈 して しまう 「-3500 秒前」 等 の バグ を 回避。
+    //   updated_at_iso (タイムゾーン 付き ISO) を 2 番手 fallback、 旧 updated_at は
+    //   最終 fallback として 残す。
+    let since;
+    if (typeof it.seconds_ago === 'number') {
+      since = Math.max(0, Math.floor(it.seconds_ago));
+    } else if (it.updated_at_iso) {
+      since = Math.max(0, Math.floor((Date.now() - Date.parse(it.updated_at_iso)) / 1000));
+    } else {
+      since = Math.max(0, Math.floor((Date.now() - Date.parse(String(it.updated_at).replace(' ', 'T'))) / 1000));
+    }
     const ago = since < 60 ? `${since}秒前`
               : since < 3600 ? `${Math.floor(since/60)}分前`
               : since < 86400 ? `${Math.floor(since/3600)}時間前`
