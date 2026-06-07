@@ -62,9 +62,8 @@ export async function renderPlaces() {
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
-      const likeBadge = p.like_count > 0
-        ? ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count}`
-        : '';
+      // v487 #82 いいね は 0 件 でも 常時 表示 (押せる 場所 を 認識 して もらう)。
+      const likeBadge = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
       if (p.cover_image) {
         return `
           <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(p.cover_image)}')">
@@ -185,6 +184,7 @@ export async function renderPlacesMap() {
     root.innerHTML = filtered.map(p => {
       const cat2 = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null ? ` · ${ratingStars(p.avg_rating)} (${p.avg_rating.toFixed(1)})` : '';
+      const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
       const img = p.cover_image
         ? `<img src="${escapeHtml(p.cover_image)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px; flex:none">`
         : '';
@@ -193,7 +193,7 @@ export async function renderPlacesMap() {
           ${img}
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px">${escapeHtml(p.title)}</div>
-            <div class="meta" style="font-size:11px">${escapeHtml(cat2)}${rating} · 💬 ${p.comment_count}</div>
+            <div class="meta" style="font-size:11px">${escapeHtml(cat2)}${rating} · 💬 ${p.comment_count}${likeBit}</div>
           </div>
         </a>`;
     }).join('');

@@ -1122,8 +1122,8 @@ async function renderFreshPlaces() {
       const ratingBadge = rating
         ? `<div class="price-badge" style="color:#f59e0b">${rating}</div>`
         : '';
-      // v486 #80 いいね 数 も 表示。
-      const likeBit = p.like_count > 0 ? ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count}` : '';
+      // v486 #80 / v487 #82 いいね 数 を 0 件 でも 常時 表示。
+      const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
       const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}`;
       const href = `#/places/${p.id}`;
       if (p.cover_image) {
