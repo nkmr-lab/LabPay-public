@@ -88,6 +88,10 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             'lng'             => $r['lng'] !== null ? (float)$r['lng'] : null,
             'parent_id'       => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,
             'created_at'      => $r['created_at'],
+            // v497 #104 旅行中などタイムゾーンが端末≠サーバ (JST) の時、 クライアントの
+            //   new Date('YYYY-MM-DD HH:MM:SS') は端末ローカルとして解釈してしまい
+            //   「結構前の投稿が たった今」 になる。 TZ付きISOで返して曖昧さをなくす。
+            'created_at_iso'  => $r['created_at'] ? (new DateTimeImmutable((string)$r['created_at']))->format('c') : null,
             // 後方互換: like = heart。
             'like_count'      => $heartN,
             'liked_by_me'     => in_array('heart', $mine, true),

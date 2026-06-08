@@ -58,7 +58,7 @@ function postCard(p, opts = {}) {
       <div class="grow" style="min-width:0">
         <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
           <span class="bold">${escapeHtml(p.display_name)}</span>
-          <span class="hint" style="font-size:11px">${fmtRelative(p.created_at)}</span>
+          <span class="hint" style="font-size:11px">${fmtRelative(p.created_at_iso || p.created_at)}</span>
           ${loc}
           ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
         </div>

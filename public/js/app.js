@@ -238,29 +238,40 @@ function renderChrome() {
 // ────────────── タブのカスタマイズ ──────────────────────────────────
 // 表示するタブと並び順を localStorage に保存。 設定の 「タブのカスタマイズ」 で編集。
 // nav#tabs 内の <a data-tab-id="..."> を 保存 order に従って並べ替え + hidden 適用。
+// v497 #103 タブ整理:
+//   - 「購入」 を 「売買」 にrename (販売との合算入口的位置づけ)
+//   - 「食べある記」 (places) をタブとして追加
+//   - DEFAULT_HIDDEN_TABS: 販売 / 競売 / ラボにいる人 を初期非表示
+//     (販売・競売は能動操作型なのでメニュー深掘りで足りる、 「ラボにいる人」 は
+//      ホームに常設するため重複を避ける)。 ユーザが localStorage で明示設定済み
+//      なら尊重。
 export const TAB_DEFS = [
   { id: 'home',         title: 'ホーム' },
   { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
-  { id: 'buy',          title: '購入' },
+  { id: 'buy',          title: '売買 (購入)' },
   { id: 'sell',         title: '販売' },
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
-  // v489 #86 らぼったー を タブ に 追加。
   { id: 'sns',          title: 'らぼったー (SNS)' },
-  // v493 #95 ラボにいる人 を タブ に。
+  { id: 'places',       title: '食べある記' },
   { id: 'presence',     title: '今ラボにいる人' },
   { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];
+export const DEFAULT_HIDDEN_TABS = ['sell', 'auctions', 'presence'];
 const TAB_LAYOUT_KEY = 'labpay-tab-layout';
 export function readTabLayout() {
   try {
-    const j = JSON.parse(localStorage.getItem(TAB_LAYOUT_KEY) || '{}');
+    const raw = localStorage.getItem(TAB_LAYOUT_KEY);
+    // v497 #103 ユーザがまだ何も設定していない場合は DEFAULT_HIDDEN_TABS を初期値に。
+    //   既に保存している人は その内容を尊重 (再上書きしない)。
+    if (raw === null) return { order: [], hidden: [...DEFAULT_HIDDEN_TABS] };
+    const j = JSON.parse(raw || '{}');
     return {
       order:  Array.isArray(j.order)  ? j.order  : [],
-      hidden: Array.isArray(j.hidden) ? j.hidden : [],
+      hidden: Array.isArray(j.hidden) ? j.hidden : [...DEFAULT_HIDDEN_TABS],
     };
-  } catch { return { order: [], hidden: [] }; }
+  } catch { return { order: [], hidden: [...DEFAULT_HIDDEN_TABS] }; }
 }
 export function writeTabLayout(layout) {
   try {

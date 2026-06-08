@@ -83,9 +83,10 @@ export function setHomeActionVisible(id, v) {
   try { localStorage.setItem(HOME_ACTIONS_KEY, JSON.stringify(j)); } catch (_) {}
 }
 
+// v497 #103 ホームに置く要素は 「ウィジェット」 と呼ぶ。 設定画面の表示名も変更。
+//   初期表示は 「進行中 / タスク / いる人 + 残高ヒーロー (常時)」 に絞る。
+//   他は 設定 → ホーム ウィジェット から個別ON可能。
 export const HOME_CARDS = [
-  // v406 時間制限ありの 「いま 動いている / 対応待ち」 は 残高 直下に。
-  // v443 表記簡略化 「進行中」。 並び順は 設定 → ホーム カード並び で 変更可能。
   { id: 'my-timers',      title: '⏱ 進行中' },
   { id: 'presence',       title: '今ラボにいる人' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
@@ -103,15 +104,26 @@ export const HOME_CARDS = [
   { id: 'history',        title: '履歴' },
 ];
 
+// v497 #103 初期表示する4枚 (進行中 / 引き受けタスク / いる人 / TODO)。 残高ヒーローは
+//   ホーム冒頭で常時表示なのでカード扱いではない。 「ポイント情報・進行中・タスク・
+//   いる人」 の要望にあわせ、 「タスク」 は my-claims を 「TODO は + my-claims =
+//   両方タスク扱い」 と幅広に解釈。 これ以外はデフォルト非表示。
+export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
+  .map(c => c.id)
+  .filter(id => !['my-timers', 'my-claims', 'presence', 'todos'].includes(id));
+
 const HOME_LAYOUT_KEY = 'labpay-home-layout';
 export function readHomeLayout() {
   try {
-    const j = JSON.parse(localStorage.getItem(HOME_LAYOUT_KEY) || '{}');
+    const raw = localStorage.getItem(HOME_LAYOUT_KEY);
+    // v497 #103 未設定の人には初期 hidden を提案。 既存ユーザの設定は触らない。
+    if (raw === null) return { order: [], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] };
+    const j = JSON.parse(raw || '{}');
     return {
       order:  Array.isArray(j.order)  ? j.order  : [],
-      hidden: Array.isArray(j.hidden) ? j.hidden : [],
+      hidden: Array.isArray(j.hidden) ? j.hidden : [...DEFAULT_HIDDEN_HOME_CARDS],
     };
-  } catch { return { order: [], hidden: [] }; }
+  } catch { return { order: [], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] }; }
 }
 export function writeHomeLayout(layout) {
   try {
@@ -1189,6 +1201,9 @@ async function renderFreshSns() {
         return `<span data-home-react-post="${p.id}" data-home-react-kind="${r.k}" style="cursor:pointer; padding:1px 4px; border-radius:6px; ${on ? 'color:' + r.color + '; font-weight:600' : 'opacity:0.6'}">${r.icon} <span data-home-react-n>${counts[r.k] || 0}</span></span>`;
       }).join(' · ');
       const reactionsLine = `${reactBadges} · 💬 ${p.reply_count}`;
+      // v497 #104 端末がJST以外 (旅行中など) でも正しい時刻差が出るように、
+      //   サーバ側で TZ付きISO (created_at_iso) を返している。 旧キャッシュからの
+      //   フォールバック として created_at もそのまま見る。
       const timeAgo = (s) => {
         if (!s) return '';
         const dt = new Date(String(s).replace(' ', 'T'));
@@ -1199,7 +1214,7 @@ async function renderFreshSns() {
         if (diff < 7 * 86400_000) return `${Math.floor(diff/86400_000)}日前`;
         return `${dt.getMonth()+1}/${dt.getDate()}`;
       };
-      const tAgo = timeAgo(p.created_at);
+      const tAgo = timeAgo(p.created_at_iso || p.created_at);
       // v465 ヒーロー: テキスト が メイン (左) + 画像 が 右端 から 中央 まで
       // 斜めに 浮き出す。 画像 の 左端 を polygon で 斜め カット (右肩上がり)。
       // 縦幅 は 通常 行 と 同じ ぐらい (= text-content の 高さ で 決まる、 minHeight)。

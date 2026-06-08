@@ -96,10 +96,10 @@ export async function renderSettings() {
     </details>
 
     <div class="card">
-      <h3>ホームのカスタマイズ</h3>
+      <h3>ホーム ウィジェット</h3>
       <p class="hint">
-        ホームに表示するカードと、その並び順を変えられます。チェックを外すと
-        非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
+        ホームに置く ウィジェット (進行中・タスク・いる人 など) と並び順を変えられます。
+        チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-layout-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -122,14 +122,9 @@ export async function renderSettings() {
       <div id="home-actions-list" class="list" style="margin-top:6px"></div>
     </div>
 
-    <div class="card">
-      <h3>アプリ表示 (/#/apps メニュー)</h3>
-      <p class="hint">
-        「アプリ」 タブ + グループ / 募集 から呼び出せる ミニツール のうち、 自分が
-        使うものだけ ON に。 デフォルトでは よく使う 9 個だけ ON、 他は隠してあります。
-      </p>
-      <div id="apps-vis-list" class="list" style="margin-top:6px"></div>
-    </div>
+    <!-- v497 #103 アプリ表示設定は撤去。 アプリは全部表示する方針 (apps.js 側で
+         isAppVisible を常時 true 化済み)。 -->
+
 
     <div class="card">
       <h3>Google Calendar 連携</h3>
@@ -226,8 +221,8 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
+  // v497 #103 アプリ表示設定撤去 (全部表示する方針)。 関数呼び出しも削除。
   renderHomeActionsEditor();
-  renderAppsVisEditor();
   // v419b URL ?focus=home-actions の 場合は 該当 カードへ スクロール + 短時間 強調
   try {
     const q = new URLSearchParams(location.hash.split('?')[1] || '');

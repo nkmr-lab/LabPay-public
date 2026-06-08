@@ -58,22 +58,10 @@ export const APPS = [
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
 
-// 各 app id について 「表示する」 か。 ユーザ設定 が無ければ defaultVisible に従う。
-export function isAppVisible(id) {
-  try {
-    const j = JSON.parse(localStorage.getItem(APP_VIS_KEY) || '{}');
-    if (id in j) return !!j[id];
-  } catch (_) {}
-  const a = APPS.find(x => x.id === id);
-  return a ? !!a.defaultVisible : false;
-}
-
-export function setAppVisible(id, visible) {
-  let j = {};
-  try { j = JSON.parse(localStorage.getItem(APP_VIS_KEY) || '{}'); } catch (_) {}
-  j[id] = !!visible;
-  localStorage.setItem(APP_VIS_KEY, JSON.stringify(j));
-}
+// v497 #103 アプリ表示の個別設定は撤去 (全部 表示する方針)。 isAppVisible は
+//   後方互換のため残し、 常に true を返す。 setAppVisible はno-op。
+export function isAppVisible(_id) { return true; }
+export function setAppVisible(_id, _visible) {}
 
 export async function renderApps() {
   const app = document.getElementById('app');
