@@ -5,7 +5,7 @@
 //   * NEVER cache /api/* — ledger consistency requires fresh reads.
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v495';
+const CACHE_NAME = 'labpay-shell-v496';
 // v465 アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
@@ -14,7 +14,10 @@ const IMG_CACHE_NAME = 'labpay-images-v1';
 // 裏で 新鮮版 を 取得。 ledger 系 (送金 / 残高) は 含めない。
 // v480 /api/me / /api/users も オフライン 表示 用 に SWR。 グループ 一覧 を
 //   出す のに ログイン ユーザ 情報 と メンバー 名 が 要る ため。
-const CONTENT_CACHE_NAME = 'labpay-content-v1';
+// v496 #102 ホームの古い投稿サムネが黒い件の対処の一環として content cache を
+//   bump し、 古い /api/posts キャッシュ (image_thumb_url が欠けた / pre-backfill の
+//   ものなど) を一括破棄。 これで全ポストが新鮮な image_thumb_url を持つ。
+const CONTENT_CACHE_NAME = 'labpay-content-v2';
 function isSwrContentPath(pathname) {
   if (!pathname.startsWith('/api/')) return false;
   // posts/latest_id は ポーリング 用 軽量 endpoint なので 必ず ネット 行く (キャッシュ
