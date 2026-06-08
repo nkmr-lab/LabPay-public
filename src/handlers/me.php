@@ -1384,8 +1384,10 @@ function calendar_filter_rules_match(array $rules, string $title): bool {
 // GET /api/users/:id/profile — 公開プロフィール (display_name / avatar / grade /
 //                              hobbies / favorites / scrapbox_username)。 LabPay
 //                              にログインしている human user 全員から閲覧可。
+// GET /api/users/contacts — 連絡先 (電話番号付き)。 同じグループのメンバー / admin / 自分
+//                            だけが閲覧できる人の番号のみを返す (v494 #99 #100)。
 function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
     // /api/users/:id/profile
     if ($method === 'GET' && isset($seg[1]) && ctype_digit((string)$seg[1])
         && ($seg[2] ?? '') === 'profile') {
@@ -1399,19 +1401,48 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['profile' => $row]);
         return;
     }
+    // v494 #99 #100 連絡先専用エンドポイント。 電話番号は 「自分」 「admin」 「同じグループ
+    //   のメンバー」 にだけ見せる。 デフォルトの /api/users からは phone_number を除外。
+    if ($method === 'GET' && ($seg[1] ?? '') === 'contacts' && !isset($seg[2])) {
+        $meId = (int)$u['id'];
+        $isAdmin = (string)($u['role'] ?? '') === 'admin';
+        // 同じグループに同居している user_id の集合
+        $stG = $pdo->prepare("SELECT DISTINCT m2.user_id
+                                FROM adhoc_group_members m1
+                                JOIN adhoc_group_members m2 ON m2.group_id = m1.group_id
+                               WHERE m1.user_id = ?");
+        $stG->execute([$meId]);
+        $sameGroupIds = array_map('intval', array_column($stG->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+        $sameGroupSet = array_flip($sameGroupIds);
+        $sameGroupSet[$meId] = true;
+        $stU = $pdo->query("SELECT id, display_name, avatar_url, grade, phone_number
+                              FROM users WHERE kind='human' ORDER BY display_name");
+        $rows = $stU->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $uid = (int)$r['id'];
+            // 番号は admin / 自分 / 同グループメンバー だけ参照可
+            if (!($isAdmin || isset($sameGroupSet[$uid]))) {
+                $r['phone_number'] = null;
+            }
+        }
+        unset($r);
+        json_response(['items' => $rows]);
+        return;
+    }
     if ($method !== 'GET' || isset($seg[1])) {
         json_error('not_found', 'use GET /api/users', 404);
         return;
     }
+    // v494 #99 #100 一般リストからは phone_number を必ず除外。
     $q = trim((string)($_GET['q'] ?? ''));
     if ($q !== '') {
-        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, gender, phone_number
+        $st = $pdo->prepare("SELECT id, display_name, avatar_url, grade, gender
             FROM users WHERE kind='human'
               AND (display_name LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))
             ORDER BY display_name LIMIT 50");
         $st->execute([$q, $q]);
     } else {
-        $st = $pdo->query("SELECT id, display_name, avatar_url, grade, gender, phone_number
+        $st = $pdo->query("SELECT id, display_name, avatar_url, grade, gender
             FROM users WHERE kind='human' ORDER BY display_name");
     }
     json_response(['items' => $st->fetchAll()]);

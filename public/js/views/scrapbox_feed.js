@@ -47,6 +47,17 @@ async function load() {
   root.innerHTML = `<div class="muted">読み込み中…</div>`;
   try {
     const d = await get('/api/scrapbox/feed', { range });
+    // v494 #98 Slack連携が止まっている場合は note が入る。 空の groups でも
+    //   internal error にせず、 管理者向けの案内を出す。
+    if (d.note) {
+      root.innerHTML = `
+        <div class="card" style="background:#fff8e6; border-left:3px solid #f5d089">
+          <div class="bold" style="color:#b54708">📡 Slack連携が止まっています</div>
+          <div class="meta" style="margin-top:6px">${escapeHtml(d.note)}</div>
+          <div class="hint-sm" style="margin-top:6px">管理者にSlack Botのscope (channels:history など) を確認してもらってください。</div>
+        </div>`;
+      return;
+    }
     if (!d.groups.length) {
       root.innerHTML = `<div class="empty">期間中に該当する編集はありません</div>`;
       return;

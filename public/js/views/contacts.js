@@ -31,7 +31,9 @@ export async function renderContacts() {
     <div id="contacts-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
   try {
-    const d = await get('/api/users');
+    // v494 #99 #100 一般の /api/users からは phone_number を除外。 専用エンドポイント
+    //   /api/users/contacts なら admin/自分/同グループメンバー のみ phone を含む。
+    const d = await get('/api/users/contacts');
     const users = [...(d.items || [])].sort((a, b) => {
       const gd = gradeRank(a.grade) - gradeRank(b.grade);
       if (gd !== 0) return gd;

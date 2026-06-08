@@ -31,6 +31,9 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     $todayStart = $now->setTime(0, 0, 0);
     $range = (string)($_GET['range'] ?? '');
     $latest = null;
+    // v494 #98 $days は legacy 経路 でしか 定義 されて いない と response 出力時 に
+    //   undefined variable で 警告 が 出る。 全 経路 で 既定値 を 持つ ように。
+    $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
     if ($range === 'today') {
         $oldest = $todayStart->getTimestamp();
     } elseif ($range === 'yesterday') {
@@ -40,21 +43,33 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
         $dow = (int)$now->format('N');
         $oldest = $todayStart->modify('-' . ($dow - 1) . ' days')->getTimestamp();
     } else {
-        $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
         $oldest = (new DateTimeImmutable("-{$days} days", $tz))->getTimestamp();
     }
 
     // Paginated fetch — same shape as bin/scrapbox_slack_sync.php.
+    // v494 #98 Slack の scope 不足 (missing_scope) などで slack_api_get が throw すると
+    //   500 になっていた → 200 + note で穏便に返し、 UI に 「Slack 連携が止まっている」
+    //   と表示できるように。
     $messages = [];
     $cursor = null;
-    for ($i = 0; $i < 10; $i++) {
-        $params = ['channel' => $channel, 'oldest' => $oldest, 'limit' => 200, 'inclusive' => 'true'];
-        if ($latest !== null) $params['latest'] = $latest;
-        if ($cursor) $params['cursor'] = $cursor;
-        $r = slack_api_get($cfg, 'conversations.history', $params);
-        $messages = array_merge($messages, $r['messages'] ?? []);
-        $cursor = $r['response_metadata']['next_cursor'] ?? '';
-        if (!$cursor) break;
+    try {
+        for ($i = 0; $i < 10; $i++) {
+            $params = ['channel' => $channel, 'oldest' => $oldest, 'limit' => 200, 'inclusive' => 'true'];
+            if ($latest !== null) $params['latest'] = $latest;
+            if ($cursor) $params['cursor'] = $cursor;
+            $r = slack_api_get($cfg, 'conversations.history', $params);
+            $messages = array_merge($messages, $r['messages'] ?? []);
+            $cursor = $r['response_metadata']['next_cursor'] ?? '';
+            if (!$cursor) break;
+        }
+    } catch (Throwable $e) {
+        json_response([
+            'days'   => $days,
+            'count'  => 0,
+            'groups' => [],
+            'note'   => 'Slack API: ' . $e->getMessage(),
+        ]);
+        return;
     }
 
     // Flatten attachments → edits. Each attachment is one notification line.
