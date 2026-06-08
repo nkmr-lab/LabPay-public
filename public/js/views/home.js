@@ -3,7 +3,6 @@ import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
 import { coverListItem } from './groups.js';
-import { thumbUrlFor } from '../upload.js';
 import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 
 // v445 復活: 端末の今いる場所 (実 OS タイムゾーン) を取り出す ヘルパ。
@@ -1213,7 +1212,7 @@ async function renderFreshSns() {
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:4px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:100px">
-            <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(thumbUrlFor(p.image_url))}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
+            <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_thumb_url || p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
             <div style="position:relative; margin-left:50%; padding:3px 10px 4px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; justify-content:flex-start">
               <div class="row" style="gap:6px; align-items:baseline; margin:0">
                 ${avatar}

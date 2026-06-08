@@ -81,6 +81,9 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             'avatar_url'      => $r['avatar_url'],
             'body'            => $r['body'],
             'image_url'       => $r['image_url'],
+            // v494 #101 サムネが実在する時だけそのURLを返す。 存在しなければ null。
+            //   クライアントは image_thumb_url ?? image_url を使う。
+            'image_thumb_url' => $r['image_url'] ? thumb_url_for((string)$r['image_url']) : null,
             'lat'             => $r['lat'] !== null ? (float)$r['lat'] : null,
             'lng'             => $r['lng'] !== null ? (float)$r['lng'] : null,
             'parent_id'       => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,

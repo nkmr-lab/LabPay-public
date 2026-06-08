@@ -329,12 +329,19 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
     ];
 }
 
-// 既存画像 URL から サムネ URL を推定するヘルパ (uploads/<name>.<ext> →
-// uploads/<name>.thumb.jpg)。 サムネが存在しない場合はオリジナルを返す。
+// 既存画像 URL から サムネ URL を推定するヘルパ。 サムネが実在すればそのURL、
+// 存在しなければ オリジナル URL を返す。 v494 サブディレクトリ
+// (/uploads/products/<hash>.jpg) と 絶対 URL (https://.../uploads/...) の両方に対応。
 function thumb_url_for(string $imageUrl): string {
-    if (!preg_match('#^/uploads/([^.]+)\.([A-Za-z0-9]+)$#', $imageUrl, $m)) return $imageUrl;
-    $base = $m[1];
-    $thumbRel = '/uploads/' . $base . '.thumb.jpg';
+    // 絶対 URL なら パス成分だけ取り出す。 同一ホスト前提。
+    $path = $imageUrl;
+    if (preg_match('#^https?://[^/]+(/.*)$#', $imageUrl, $m)) {
+        $path = $m[1];
+    }
+    if (!preg_match('#^(/uploads/(?:[^/]+/)*)([^/.]+)\.([A-Za-z0-9]+)$#', $path, $m)) {
+        return $imageUrl;
+    }
+    $thumbRel = $m[1] . $m[2] . '.thumb.jpg';
     $publicDir = realpath(__DIR__ . '/../public') ?: (__DIR__ . '/../public');
     if (is_file($publicDir . $thumbRel)) return $thumbRel;
     return $imageUrl;
