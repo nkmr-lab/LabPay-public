@@ -30,8 +30,6 @@ function invActionEnabled(inv, id) {
 export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card page-header">
-    </div>
 
     <details class="card collapsible-form">
       <summary>＋ 新しく募集</summary>

@@ -79,9 +79,6 @@ export async function renderGroupJoin({ params }) {
 export async function renderGroups() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card page-header">
-    </div>
-
     <details class="card collapsible-form">
       <summary>＋ 新規グループ</summary>
       <div style="margin-top:10px"></div>
@@ -1460,6 +1457,9 @@ async function loadWari(id) {
         if (!confirm('このレシートを破棄しますか? (元には戻せません)')) return;
         try {
           await del(`/api/groups/${id}/receipts/${b.dataset.rmReceipt}`);
+          // v513 #138 SW content キャッシュを潰してから loadWari しないと
+          //   削除前のレシートが SWR 経由で再表示されてしまう (リロード必要だった件)
+          await invalidateGroupCache(id);
           await loadWari(id);
         } catch (e) { toast('失敗: ' + e.message); }
       });

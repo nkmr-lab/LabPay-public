@@ -72,8 +72,13 @@ export async function renderPlaces() {
         <h2 style="margin:0">🍴 食べある記</h2>
         <span style="flex:1"></span>
         <a class="btn" href="#/places/map">🗺 地図</a>
-        <button class="btn" id="pl-gmap-import">📥 Google Map</button>
-        <a class="btn primary" href="#/places/new">＋ 新規</a>
+        <details style="position:relative">
+          <summary class="btn primary" style="list-style:none; cursor:pointer">＋ 新規 ▾</summary>
+          <div style="position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.12); padding:6px; min-width:220px; z-index:10">
+            <a class="list-item" href="#/places/new" style="display:block; padding:8px 10px; text-decoration:none; color:inherit">📝 1 件 ずつ 追加</a>
+            <button class="list-item" id="pl-gmap-import" style="display:block; width:100%; padding:8px 10px; background:none; border:0; text-align:left; cursor:pointer">📥 Google Map から (KML/GeoJSON)</button>
+          </div>
+        </details>
       </div>
       <input type="file" id="pl-gmap-file" accept=".kml,.json,.geojson,.kmz" hidden>
     </div>

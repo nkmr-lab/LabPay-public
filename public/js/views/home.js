@@ -1158,16 +1158,13 @@ async function renderFreshInvitations() {
   try {
     const d = await get('/api/invitations', { status: 'open' });
     const open = d.items || [];
-    // ゼロでもカードは消さない (「＋ 新しく募集する」 動線を残すため)。
-    const addLink = `
-      <a class="list-item add-row" href="#/invitations">
-        <div class="grow bold" style="color:var(--primary)">＋ 新しく募集する</div>
-        <div class="hint">→</div>
-      </a>`;
+    // v513 #135 「＋ 新しく募集する」 はあまり使われないので削除。 ゼロ件ならカードごと
+    //   隠す (募集機能は #/invitations や #/apps から行ける)。
     if (!open.length) {
-      root.innerHTML = addLink;
+      if (card) card.hidden = true;
       return;
     }
+    if (card) card.hidden = false;
     root.innerHTML = open.slice(0, 5).map(i => {
       // v391 ホーム募集リスト: 写真 + タイトル + 🕒実施日時 + ⏰締切 + 📍場所 + 発起人｜参加者
       const when = i.starts_at

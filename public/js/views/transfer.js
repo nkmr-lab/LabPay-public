@@ -13,9 +13,6 @@ export async function renderTransfer({ query } = {}) {
       <span class="bold text-primary" id="send-balance">— pt</span>
     </div>
 
-    <div class="card page-header">
-    </div>
-
     <div class="card">
       <div class="row">
         <select id="xfer-to" class="grow"><option value="">— 受取人 —</option></select>

@@ -34,9 +34,11 @@ function renderForm(kind) {
   const sendBtn = document.getElementById('fu-send');
   if (sendBtn) {
     sendBtn.addEventListener('click', async () => {
-      const body = document.getElementById('fu-body').value.trim();
+      // v513 #137 ページ遷移中に発火するレースで textarea が null になり
+      //   「Cannot read properties of null (reading 'value')」が出ていたケース対応。
+      const ta = document.getElementById('fu-body');
+      const body = (ta?.value || '').trim();
       if (!body) { toast('内容を書いてください'); return; }
-      // v465 二度押し 防止: ボタン を 即 disable + 送信中 ラベル に。
       if (sendBtn.disabled) return;
       sendBtn.disabled = true;
       const orig = sendBtn.textContent;
@@ -44,7 +46,8 @@ function renderForm(kind) {
       try {
         await post('/api/feedback', { kind, body, url: location.hash });
         toast('送信しました!');
-        document.getElementById('fu-body').value = '';
+        const ta2 = document.getElementById('fu-body');
+        if (ta2) ta2.value = '';
       } catch (e) {
         toast('失敗: ' + e.message);
       } finally {
