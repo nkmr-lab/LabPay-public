@@ -278,7 +278,22 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
                            ORDER BY p.id ASC LIMIT 200");
     $stR->execute([$id]);
     $replies = posts_serialize_rows($pdo, $stR->fetchAll(PDO::FETCH_ASSOC), (int)$u['id']);
-    json_response(['post' => $post, 'replies' => $replies]);
+    // v498 #106 詳細では誰がどの kind を押したかも返す。
+    $stReact = $pdo->prepare("SELECT pl.kind, pl.user_id, pl.created_at,
+                                     u.display_name, u.avatar_url
+                                FROM post_likes pl
+                                JOIN users u ON u.id = pl.user_id
+                               WHERE pl.post_id = ?
+                               ORDER BY pl.created_at DESC");
+    $stReact->execute([$id]);
+    $reactors = array_map(fn($r) => [
+        'kind'         => $r['kind'],
+        'user_id'      => (int)$r['user_id'],
+        'display_name' => $r['display_name'],
+        'avatar_url'   => $r['avatar_url'],
+        'created_at'   => $r['created_at'],
+    ], $stReact->fetchAll(PDO::FETCH_ASSOC));
+    json_response(['post' => $post, 'replies' => $replies, 'reactors' => $reactors]);
 }
 
 function posts_delete(PDO $pdo, array $cfg, int $id): void {
@@ -297,13 +312,24 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
 
 function posts_reaction_toggle(PDO $pdo, array $cfg, int $id, string $kind, bool $on): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT 1 FROM posts WHERE id=?");
+    $st = $pdo->prepare("SELECT user_id, body FROM posts WHERE id=?");
     $st->execute([$id]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', '投稿 が ありません', 404);
+    $post = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$post) throw new ApiException('not_found', '投稿 が ありません', 404);
     if ($on) {
-        $pdo->prepare("INSERT IGNORE INTO post_likes (post_id, user_id, kind, created_at)
-                       VALUES (?, ?, ?, NOW())")
-            ->execute([$id, (int)$u['id'], $kind]);
+        $stIns = $pdo->prepare("INSERT IGNORE INTO post_likes (post_id, user_id, kind, created_at)
+                                 VALUES (?, ?, ?, NOW())");
+        $stIns->execute([$id, (int)$u['id'], $kind]);
+        // v498 #106 新規 INSERT (IGNORE で重複除外) かつ自分以外の投稿なら通知。
+        if ($stIns->rowCount() > 0 && (int)$post['user_id'] !== (int)$u['id']) {
+            $icon = ['thumb' => '👍', 'heart' => '❤️', 'star' => '⭐'][$kind] ?? '👍';
+            $snip = mb_substr((string)($post['body'] ?? ''), 0, 40);
+            try {
+                Notifier::notify($pdo, $cfg, (int)$post['user_id'], 'post',
+                    "{$icon} {$u['display_name']} が反応: 「{$snip}」",
+                    'post', $id);
+            } catch (Throwable $_) {}
+        }
     } else {
         $pdo->prepare("DELETE FROM post_likes WHERE post_id=? AND user_id=? AND kind=?")
             ->execute([$id, (int)$u['id'], $kind]);

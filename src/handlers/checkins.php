@@ -21,9 +21,11 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 //   ['already' => bool, 'points' => int, 'awarded_today' => int,
 //    'current_streak' => int, 'longest_streak' => int, 'new_balance' => int]
 //
-// Streak rule (simplified 2026-06): the streak advances every day the user shows up,
-// weekends and holidays included. Missing workdays still breaks the chain (only workdays
-// are "owed"); missing weekends/holidays does NOT — "no minus, only plus."
+// Streak rule (2026-06 v498 #109): 「来なかった日があったら連続記録は切れる」 という
+// 直感的な定義に統一。 前回からの間に 1 日でも空きがあれば missed としてカウントし、
+// decay (=5 ポイント) のペナルティで一気に 1 にリセットされる。
+// 旧仕様 (workday only) は 「土日は来なくても許される」 だったが、 ユーザに
+// 「昨日来てないのに3日連続になった」 と混乱を生んだので廃止。
 function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): array {
     $today = (new DateTimeImmutable('now'))->format('Y-m-d');
     $base    = (int)cfg_get($pdo, 'checkin_base', '5');
@@ -69,19 +71,18 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
         if ($prev === null) {
             $newStreak = 1;
         } else {
+            // v498 #109 prev と today の間に 1 日でも空きがあれば streak は 1 にリセット。
+            //   旧仕様は workday のみカウント + decay で減らす方式だったが、 「昨日来てない
+            //   のに 3 日連続」 とユーザを混乱させたので 「missed > 0 なら問答無用で 1」 に。
             $missed = 0;
             $cursor = new DateTimeImmutable($prev);
             $end    = new DateTimeImmutable($today);
             while (true) {
                 $cursor = $cursor->modify('+1 day');
                 if ($cursor >= $end) break;
-                if (Calendar::isWorkday($pdo, $cursor->format('Y-m-d'))) $missed++;
+                $missed++;
             }
-            if ($missed === 0) {
-                $newStreak = $curStreak + 1;
-            } else {
-                $newStreak = max(1, $curStreak - $missed * $decay + 1);
-            }
+            $newStreak = $missed === 0 ? $curStreak + 1 : 1;
         }
         $newLongest = max((int)($streak['longest_streak'] ?? 0), $newStreak);
 

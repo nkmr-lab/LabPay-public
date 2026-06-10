@@ -18,6 +18,78 @@ function fmtRelative(s) {
   return dt.toLocaleDateString();
 }
 
+// v498 #107 JPEG の EXIF から GPS (緯度/経度) を読む小型パーサ。 ライブラリ不要。
+//   返り値: {lat, lng} (10 進度) または null。 HEIC/PNG/解析失敗で null。
+//   EXIF: JPEG → APP1 (FFE1) + "Exif\0\0" + TIFF → IFD0 → GPS IFD (tag 0x8825) →
+//     0x0001 LatitudeRef ('N'/'S'), 0x0002 Latitude (3 rational = 度分秒),
+//     0x0003 LongitudeRef ('E'/'W'), 0x0004 Longitude (3 rational)。
+async function readExifGps(file) {
+  if (!file || !/^image\/jpe?g$/i.test(file.type)) return null;
+  try {
+    const buf = await file.slice(0, 256 * 1024).arrayBuffer();
+    const dv = new DataView(buf);
+    if (dv.getUint16(0) !== 0xFFD8) return null;
+    let off = 2;
+    while (off + 4 < dv.byteLength) {
+      const marker = dv.getUint16(off);
+      if ((marker & 0xFF00) !== 0xFF00) return null;
+      const segLen = dv.getUint16(off + 2);
+      if (marker === 0xFFE1
+          && off + 10 < dv.byteLength
+          && dv.getUint32(off + 4) === 0x45786966
+          && dv.getUint16(off + 8) === 0x0000) {
+        const tiff = off + 10;
+        const le = dv.getUint16(tiff) === 0x4949;
+        const u16 = o => dv.getUint16(o, le);
+        const u32 = o => dv.getUint32(o, le);
+        if (u16(tiff + 2) !== 0x002A) return null;
+        const ifd0 = tiff + u32(tiff + 4);
+        const n0 = u16(ifd0);
+        let gpsIfd = 0;
+        for (let i = 0; i < n0; i++) {
+          const e = ifd0 + 2 + i * 12;
+          if (u16(e) === 0x8825) { gpsIfd = tiff + u32(e + 8); break; }
+        }
+        if (!gpsIfd) return null;
+        let latRef = null, lat = null, lngRef = null, lng = null;
+        const readRationalTriple = (dataOff) => {
+          // 各 rational = 2 uint32 (numerator, denominator)
+          const triple = [];
+          for (let k = 0; k < 3; k++) {
+            const o = dataOff + k * 8;
+            const num = u32(o), den = u32(o + 4);
+            triple.push(den ? num / den : 0);
+          }
+          return triple;
+        };
+        const dmsToDeg = ([d, m, s]) => d + m / 60 + s / 3600;
+        const nG = u16(gpsIfd);
+        for (let i = 0; i < nG; i++) {
+          const e = gpsIfd + 2 + i * 12;
+          const tag = u16(e);
+          if (tag === 0x0001) latRef = String.fromCharCode(dv.getUint8(e + 8));
+          else if (tag === 0x0003) lngRef = String.fromCharCode(dv.getUint8(e + 8));
+          else if (tag === 0x0002) {
+            const dataOff = tiff + u32(e + 8);
+            if (dataOff + 24 <= dv.byteLength) lat = dmsToDeg(readRationalTriple(dataOff));
+          } else if (tag === 0x0004) {
+            const dataOff = tiff + u32(e + 8);
+            if (dataOff + 24 <= dv.byteLength) lng = dmsToDeg(readRationalTriple(dataOff));
+          }
+        }
+        if (lat == null || lng == null) return null;
+        if (latRef === 'S') lat = -lat;
+        if (lngRef === 'W') lng = -lng;
+        if (!isFinite(lat) || !isFinite(lng)) return null;
+        if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+        return { lat, lng };
+      }
+      off += 2 + segLen;
+    }
+    return null;
+  } catch { return null; }
+}
+
 function renderBodyHtml(body) {
   // v467→v468 @mention は SNS 検索 / @LabPay 案内 へ リンク 化。 URL は 新タブ。
   let s = escapeHtml(body || '');
@@ -141,6 +213,7 @@ export async function renderPostDetail({ params }) {
       <a href="#/sns" class="hint">← タイムライン</a>
     </div>
     <div id="po-parent"><div class="muted">読み込み中…</div></div>
+    <div id="po-reactors" class="card" style="margin-top:8px" hidden></div>
     ${composerHtml(id)}
     <div class="card" style="margin-top:12px">
       <h3 style="margin:0 0 6px">💬 返信 (<span id="po-reply-count">0</span>)</h3>
@@ -153,12 +226,40 @@ export async function renderPostDetail({ params }) {
     const parent = d.post;
     document.getElementById('po-parent').innerHTML = `
       <div class="card">${postCard(parent, { skipReplyHash: true })}</div>`;
+    // v498 #106 リアクションした人一覧 (kind ごとに固める)
+    renderReactors(d.reactors || []);
     document.getElementById('po-reply-count').textContent = d.replies.length;
     document.getElementById('po-replies').innerHTML = d.replies.map(r => postCard(r, { skipReplyHash: true })).join('') || '<div class="empty">まだ 返信 なし</div>';
     bindRowHandlers();
   } catch (e) {
     document.getElementById('po-parent').innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
   }
+}
+
+function renderReactors(reactors) {
+  const box = document.getElementById('po-reactors');
+  if (!box) return;
+  if (!reactors.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const order = ['thumb', 'heart', 'star'];
+  const meta = { thumb: { icon: '👍', label: 'いいね' }, heart: { icon: '❤️', label: 'ハート' }, star: { icon: '⭐', label: '星' } };
+  const byKind = {};
+  for (const r of reactors) (byKind[r.kind] ||= []).push(r);
+  const sections = order.filter(k => byKind[k]?.length).map(k => {
+    const m = meta[k];
+    const rows = byKind[k].map(r => `
+      <a href="#/users/${r.user_id}" class="rl-chip" style="text-decoration:none; color:inherit; gap:4px">
+        ${r.avatar_url
+          ? `<img src="${escapeHtml(r.avatar_url)}" alt="" style="width:18px; height:18px; border-radius:50%; object-fit:cover">`
+          : `<div style="width:18px; height:18px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:10px">${escapeHtml((r.display_name || '?').trim().charAt(0).toUpperCase())}</div>`}
+        <span style="font-size:12px">${escapeHtml(r.display_name)}</span>
+      </a>`).join('');
+    return `<div style="margin:6px 0">
+      <div class="bold" style="font-size:12px; margin-bottom:4px">${m.icon} ${m.label} (${byKind[k].length})</div>
+      <div class="row" style="gap:4px; flex-wrap:wrap">${rows}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div class="meta" style="font-size:11px">リアクションしてくれた人</div>${sections}`;
 }
 
 function composerHtml(parentId) {
@@ -284,6 +385,14 @@ function bindComposer(parentId) {
     if (!f) { composerImageUrl = null; imgStatus.textContent = ''; return; }
     imgStatus.textContent = '⏳ アップロード 中…';
     if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
+    // v498 #107 EXIF GPS が画像に乗っていれば、 navigator.geolocation より優先して使う。
+    //   アップロードと並行で読み取り。 失敗は黙殺。
+    readExifGps(f).then(gps => {
+      if (gps) {
+        composerCoords = { lat: gps.lat, lng: gps.lng };
+        toast(`📍 写真のEXIFから位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
+      }
+    }).catch(() => {});
     const fd = new FormData();
     fd.append('file', f);
     try {

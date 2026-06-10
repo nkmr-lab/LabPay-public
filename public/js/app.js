@@ -40,6 +40,31 @@ export const state = {
   hasGroups: false, // 自分が入ってるグループが 1 つ以上あるか (タブの 「グループ」 表示制御)
 };
 
+// v498 #108 起動高速化: /api/auth/me の結果を localStorage にキャッシュして、 起動時の
+//   白画面を縮める。 ここに前回のレスポンスを優しくスナップショットしておき、 boot 時に
+//   即座に hydrate → chrome を出す → 裏で再検証 (SWR 風)。
+const ME_CACHE_KEY = 'labpay-me-cache';
+function readMeCache() {
+  try {
+    const raw = localStorage.getItem(ME_CACHE_KEY);
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    if (!j || !j.user) return null;
+    return j;
+  } catch { return null; }
+}
+function writeMeCache(data) {
+  try {
+    localStorage.setItem(ME_CACHE_KEY, JSON.stringify({
+      user: data.user, balance: data.balance,
+      in_lab: !!data.in_lab, has_registered_mac: !!data.has_registered_mac,
+    }));
+  } catch {}
+}
+function clearMeCache() {
+  try { localStorage.removeItem(ME_CACHE_KEY); } catch {}
+}
+
 export async function refreshMe() {
   try {
     const data = await get('/api/auth/me');
@@ -47,6 +72,7 @@ export async function refreshMe() {
     state.balance = data.balance;
     state.inLab = !!data.in_lab;
     state.hasMac = !!data.has_registered_mac;
+    writeMeCache(data);
     renderChrome();
     // タブの 「グループ」 表示判定。 失敗・遅延しても他の処理を止めないよう
     // fire-and-forget。 結果が遅れて来てもタブが追加で出るだけなので無害。
@@ -63,7 +89,9 @@ export async function refreshMe() {
     await bootSettingsSync();
     return data;
   } catch (e) {
+    // v498 #108 401 等で me を取り直せなかった場合はキャッシュも捨てて未ログイン扱いに。
     state.me = null;
+    clearMeCache();
     renderChrome();
     return null;
   }
@@ -482,14 +510,30 @@ route('/requests',       lazy(() => import('./views/money_requests.js'), 'render
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
 // ---------- Boot ----------
+// v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と
+//   ルートを並行で立ち上げる。 サーバ再検証は裏で。 失敗 (401など) すれば clearMeCache +
+//   /#/login へ。 オンライン時の体感が劇的に縮む。
 (async function boot() {
-  await refreshMe();
-  if (!state.me && location.hash !== '#/login') {
-    navigate('#/login');
-  } else if (state.me && location.hash === '#/login') {
-    navigate('#/');
+  const cached = readMeCache();
+  if (cached) {
+    state.me = cached.user;
+    state.balance = cached.balance;
+    state.inLab = !!cached.in_lab;
+    state.hasMac = !!cached.has_registered_mac;
+    renderChrome();
+    start();                          // ルート即時 dispatch
+    refreshMe().then(() => {          // 裏で再検証
+      if (!state.me && location.hash !== '#/login') navigate('#/login');
+    });
+  } else {
+    await refreshMe();
+    if (!state.me && location.hash !== '#/login') {
+      navigate('#/login');
+    } else if (state.me && location.hash === '#/login') {
+      navigate('#/');
+    }
+    start();
   }
-  start();
   // Periodic unread refresh — 1 分間隔。タブが裏 (visibility hidden) の時は
   // スキップして、表に戻った瞬間に即 1 回叩く。これでスマホをロックしてた
   // 間にバッテリーを使わず、戻ってきた直後にバッジが正しく出る。
