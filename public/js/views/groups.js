@@ -698,21 +698,29 @@ async function loadDetail(id) {
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
     setWariMembers(g.members);
+    // v518 #153 「解除」 ボタンは廃止 (「変更」 → 空欄で保存 で解除できる)。 また 編集
+    //   モード時のみ 「変更/設定」 を出す (普段は ただの表示)。
     const slugRow = isCreator
       ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">${g.slug ? '/#/groups/' + escapeHtml(g.slug) : '(未設定)'}</span>
-           <button id="gd-edit-slug" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">${g.slug ? '変更' : '設定'}</button>
-           ${g.slug ? `<button id="gd-clear-slug" class="btn" style="padding:2px 6px; font-size:11px">解除</button>` : ''}
+           ${gdEditMode ? `<button id="gd-edit-slug" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">${g.slug ? '変更' : '設定'}</button>` : ''}
          </div>`
       : (g.slug ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">/#/groups/${escapeHtml(g.slug)}</span></div>` : '');
     // 表紙画像: 設定済みなら 16:9 ヒーロー、creator なら 「変更/削除」 ボタン付き。
     // 未設定 + creator なら 「📷 表紙画像を追加」 ボタンだけ表示。
+    // v518 #153 編集モード時のみ canEdit を有効に。
     const imgBlock = renderCoverEditor({
       imageUrl: g.image_url,
-      canEdit:  isCreator,
+      canEdit:  isCreator && gdEditMode,
       idPrefix: 'gd',
     });
+    // v518 #153 ヘッダ右上に ✏ 編集モード トグル (isCreator || isAdmin のみ)。
+    const canEditGroup = (isCreator || (state.me?.role === 'admin')) && !g.closed_at;
+    const editToggleBtn = canEditGroup
+      ? `<button id="gd-edit-toggle" class="btn" style="float:right; padding:2px 10px; font-size:12px; ${gdEditMode ? 'background:#fef3c7' : ''}">${gdEditMode ? '✏ 編集モード ON' : '✏ 編集モード'}</button>`
+      : '';
     document.getElementById('gd-head').innerHTML = `
       ${imgBlock}
+      ${editToggleBtn}
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(fmtDateTime(g.created_at))}</div>
       ${slugRow}
@@ -750,26 +758,28 @@ async function loadDetail(id) {
     if (addMemBtn) addMemBtn.style.display = canManageMembers ? '' : 'none';
     if (invBtn)    invBtn.style.display    = canManageMembers ? '' : 'none';
     if (canManageMembers) {
-      // 既存メンバー pill に × ボタン を 重ねて 起案者以外 を 削除可能 に
-      const memList = document.getElementById('gd-members-list');
-      if (memList) {
-        memList.querySelectorAll('[data-gd-mem]').forEach(span => {
-          const uid = Number(span.dataset.gdMem);
-          if (uid === Number(g.creator_user_id)) return;  // 起案者 は 削除 不可
-          const x = document.createElement('button');
-          x.textContent = '×';
-          x.title = '外す';
-          x.className = 'btn';
-          x.style.cssText = 'position:absolute; right:-4px; top:-4px; min-width:0; padding:0 4px; font-size:10px; line-height:1; background:#fff; border:1px solid #c62828; color:#c62828; border-radius:50%';
-          x.addEventListener('click', async (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            if (!confirm('このメンバー を 外しますか?')) return;
-            try { await del(`/api/groups/${id}/members/${uid}`); await loadDetail(id); }
-            catch (e) { toast('失敗: ' + e.message); }
+      // v518 #153 メンバー × ボタンは 編集モード ON 時のみ表示。 普段は誤タップ防止。
+      if (gdEditMode) {
+        const memList = document.getElementById('gd-members-list');
+        if (memList) {
+          memList.querySelectorAll('[data-gd-mem]').forEach(span => {
+            const uid = Number(span.dataset.gdMem);
+            if (uid === Number(g.creator_user_id)) return;  // 起案者 は 削除 不可
+            const x = document.createElement('button');
+            x.textContent = '×';
+            x.title = '外す';
+            x.className = 'btn';
+            x.style.cssText = 'position:absolute; right:-4px; top:-4px; min-width:0; padding:0 4px; font-size:10px; line-height:1; background:#fff; border:1px solid #c62828; color:#c62828; border-radius:50%';
+            x.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (!confirm('このメンバー を 外しますか?')) return;
+              try { await del(`/api/groups/${id}/members/${uid}`); await loadDetail(id); }
+              catch (e) { toast('失敗: ' + e.message); }
+            });
+            span.appendChild(x);
           });
-          span.appendChild(x);
-        });
+        }
       }
       // 追加 ボタン
       addMemBtn?.addEventListener('click', async () => {
@@ -902,7 +912,11 @@ async function loadDetail(id) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('gd-edit-slug')?.addEventListener('click', () => onEditSlug(g));
-    document.getElementById('gd-clear-slug')?.addEventListener('click', () => onClearSlug(g));
+    // v518 #153 編集モードトグル: クリックで gdEditMode を反転 → loadDetail で再描画。
+    document.getElementById('gd-edit-toggle')?.addEventListener('click', () => {
+      gdEditMode = !gdEditMode;
+      loadDetail(id);
+    });
 
     const root = document.getElementById('gd-feed');
     if (!g.items.length) {
@@ -1887,6 +1901,10 @@ async function onSchedGmapImport(ev, gid) {
 // 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
 // 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
 let schedEditMode = false;
+// v518 #153 グループの編集モード。 OFF (default) では 表紙画像 変更ボタン / メンバー
+//   削除 × ボタンを 隠して、 「閲覧用」 として 軽い見た目に。 ヘッダの ✏ 編集モード
+//   トグルで ON。 isCreator / isAdmin のみ アクセス可能。
+let gdEditMode = false;
 let schedPairSlots = {};
 let schedPairMaxSlot = -1;
 let schedPairFirstIds = new Set();
