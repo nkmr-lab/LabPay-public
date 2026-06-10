@@ -273,21 +273,22 @@ function renderChrome() {
 //     (販売・競売は能動操作型なのでメニュー深掘りで足りる、 「ラボにいる人」 は
 //      ホームに常設するため重複を避ける)。 ユーザが localStorage で明示設定済み
 //      なら尊重。
+// v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
+//   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。 食べある記・ラボにいる人 は タブから外し
+//   #/apps からアクセスする形に。 全員 デフォルトに戻すため、 layout key を v2 に上げる。
 export const TAB_DEFS = [
   { id: 'home',         title: 'ホーム' },
   { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
-  { id: 'buy',          title: '売買 (購入)' },
+  { id: 'sns',          title: 'らぼったー (SNS)' },
+  { id: 'buy',          title: '購入' },
   { id: 'sell',         title: '販売' },
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
-  { id: 'sns',          title: 'らぼったー (SNS)' },
-  { id: 'places',       title: '食べある記' },
-  { id: 'presence',     title: '今ラボにいる人' },
   { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];
-export const DEFAULT_HIDDEN_TABS = ['sell', 'auctions', 'presence'];
-const TAB_LAYOUT_KEY = 'labpay-tab-layout';
+export const DEFAULT_HIDDEN_TABS = []; // v514 デフォルトでは全部表示 (タブ自体を少数厳選)
+const TAB_LAYOUT_KEY = 'labpay-tab-layout-v2';
 export function readTabLayout() {
   try {
     const raw = localStorage.getItem(TAB_LAYOUT_KEY);

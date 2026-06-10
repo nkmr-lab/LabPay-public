@@ -88,42 +88,53 @@ export function setHomeActionVisible(id, v) {
 //   他は 設定 → ホーム ウィジェット から個別ON可能。
 export const HOME_CARDS = [
   { id: 'my-timers',      title: '⏱ 進行中' },
-  { id: 'presence',       title: '今ラボにいる人' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
-  { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
-  { id: 'calendar',       title: '今日の予定' },
   { id: 'groups',         title: 'あなたのグループ' },
+  { id: 'sns',            title: '💬 らぼったー 最新' },
+  { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
   { id: 'fresh-listings', title: '新規入荷' },
+  { id: 'invitations',    title: '募集' },
+  { id: 'places',         title: '🍴 食べある記 (新着)' },
+  { id: 'notices',        title: '📢 重要連絡 / 学会情報' }, // v514 #139 新規
+  { id: 'presence',       title: '今ラボにいる人' },
+  { id: 'calendar',       title: '今日の予定' },
   { id: 'my-claims',      title: 'あなたが引き受け中のタスク' },
   { id: 'fresh-tasks',    title: '新規タスク' },
-  { id: 'invitations',    title: '募集' },
   { id: 'playlists',      title: '新着 プレイリスト' },
-  { id: 'places',         title: '🍴 食べある記 (新着)' },
-  { id: 'sns',            title: '💬 らぼったー 最新' },
   { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
 ];
 
-// v497 #103 初期表示する4枚 (進行中 / 引き受けタスク / いる人 / TODO)。 残高ヒーローは
-//   ホーム冒頭で常時表示なのでカード扱いではない。 「ポイント情報・進行中・タスク・
-//   いる人」 の要望にあわせ、 「タスク」 は my-claims を 「TODO は + my-claims =
-//   両方タスク扱い」 と幅広に解釈。 これ以外はデフォルト非表示。
+// v514 #131 デフォルト表示 (ユーザ要望に基づく):
+//   進行中 / 未対応 / [ヒーロー = balance, 常時表示] / あなたのグループ / らぼったー /
+//   依頼中 / 新規入荷 / 募集 / 食べある記 (新着) / 重要連絡 (新規 #139)。
+//   他は デフォルト hidden、 設定 → ホーム から個別 ON 可能。
+const DEFAULT_VISIBLE_HOME_CARDS = [
+  'my-timers', 'pending', 'groups', 'sns', 'asking',
+  'fresh-listings', 'invitations', 'places', 'notices',
+];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
-  .filter(id => !['my-timers', 'my-claims', 'presence', 'todos'].includes(id));
+  .filter(id => !DEFAULT_VISIBLE_HOME_CARDS.includes(id));
 
-const HOME_LAYOUT_KEY = 'labpay-home-layout';
+// v514 #131 全員のホーム設定を新デフォルトに戻すため key を v2 に上げる。
+const HOME_LAYOUT_KEY = 'labpay-home-layout-v2';
+// v514 デフォルト並び順 (DOM 順ではなく applyHomeLayout が後付けで揃える)。 残りの
+//   hidden カードは末尾に。
+const DEFAULT_ORDER = [
+  'my-timers', 'pending', 'balance', 'groups', 'sns', 'asking',
+  'fresh-listings', 'invitations', 'places', 'notices',
+];
 export function readHomeLayout() {
   try {
     const raw = localStorage.getItem(HOME_LAYOUT_KEY);
-    // v497 #103 未設定の人には初期 hidden を提案。 既存ユーザの設定は触らない。
-    if (raw === null) return { order: [], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] };
+    if (raw === null) return { order: [...DEFAULT_ORDER], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] };
     const j = JSON.parse(raw || '{}');
     return {
-      order:  Array.isArray(j.order)  ? j.order  : [],
+      order:  Array.isArray(j.order)  ? j.order  : [...DEFAULT_ORDER],
       hidden: Array.isArray(j.hidden) ? j.hidden : [...DEFAULT_HIDDEN_HOME_CARDS],
     };
-  } catch { return { order: [], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] }; }
+  } catch { return { order: [...DEFAULT_ORDER], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] }; }
 }
 export function writeHomeLayout(layout) {
   try {
@@ -161,24 +172,12 @@ export async function renderHome() {
   if (!state.me) { navigate('#/login'); return; }
 
   const app = document.getElementById('app');
+  // v514 #131 ホームの並びを再編。 my-timers / pending を balance hero より上に出すため
+  //   balance hero を #home-cards-region 内の data-card-id="balance" カードに昇格。
+  //   並び順 = my-timers → pending → balance → groups → sns → asking → fresh-listings →
+  //   invitations → places → notices → (デフォルト hidden: presence / calendar /
+  //   my-claims / fresh-tasks / playlists / todos / history)
   app.innerHTML = `
-    <div class="card balance-hero">
-      <a href="#/history" class="balance-line" id="home-balance-link"
-         style="display:block; text-decoration:none; color:inherit; cursor:pointer">
-        <span class="lbl">残高</span>
-        <span class="num" id="home-balance">— pt</span>
-      </a>
-      <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
-      <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
-      <div id="checkin-area" style="margin-top:10px"></div>
-      <div style="margin-top:14px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
-        ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
-          <a class="btn home-quick" href="${escapeHtml(a.url)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
-             style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center">${escapeHtml(a.icon || a.title)}</a>
-        `).join('')}
-      </div>
-    </div>
-
     <div id="home-cards-region">
     <div class="card" id="home-mytm-card" data-card-id="my-timers" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -211,6 +210,23 @@ export async function renderHome() {
         <span id="home-pending-count" class="hint-sm"></span>
       </div>
       <div id="home-pending" class="list"></div>
+    </div>
+
+    <div class="card balance-hero" data-card-id="balance">
+      <a href="#/history" class="balance-line" id="home-balance-link"
+         style="display:block; text-decoration:none; color:inherit; cursor:pointer">
+        <span class="lbl">残高</span>
+        <span class="num" id="home-balance">— pt</span>
+      </a>
+      <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
+      <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
+      <div id="checkin-area" style="margin-top:10px"></div>
+      <div style="margin-top:14px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
+        ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
+          <a class="btn home-quick" href="${escapeHtml(a.url)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
+             style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center">${escapeHtml(a.icon || a.title)}</a>
+        `).join('')}
+      </div>
     </div>
 
     <div class="card" id="home-asking-card" data-card-id="asking" hidden>
@@ -277,6 +293,14 @@ export async function renderHome() {
       <div id="home-pl" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
+    <div class="card" id="home-notices-card" data-card-id="notices" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">📢 重要連絡 / 学会情報</h2>
+        <a href="#/notices" class="hint">一覧 →</a>
+      </div>
+      <div id="home-notices" class="list"><div class="home-skel-bars"></div></div>
+    </div>
+
     <div class="card" id="home-places-card" data-card-id="places" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🍴 食べある記 (新着)</h2>
@@ -330,6 +354,7 @@ export async function renderHome() {
     { cardId: 'fresh-tasks',    fn: renderFreshTasks,      label: 'freshtasks' },
     { cardId: 'places',         fn: renderFreshPlaces,     label: 'freshplaces' },
     { cardId: 'sns',            fn: renderFreshSns,        label: 'freshsns' },
+    { cardId: 'notices',        fn: renderHomeNotices,     label: 'notices' }, // v514 #139
     { cardId: 'todos',          fn: renderHomeTodos,       label: 'hometodos' },
     { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
   ];
@@ -452,6 +477,7 @@ async function doHomePoll() {
     skip('fresh-tasks')    ? null : renderFreshTasks(),
     skip('places')         ? null : renderFreshPlaces(),
     skip('sns')            ? null : renderFreshSns(),
+    skip('notices')        ? null : renderHomeNotices(), // v514 #139
     skip('todos')          ? null : renderHomeTodos(),
     skip('history')        ? null : renderRecentTx(),
   ].filter(Boolean);
@@ -1208,7 +1234,7 @@ async function renderFreshInvitations() {
           </div>
           <div class="hint">→</div>
         </a>`;
-    }).join('') + addLink;
+    }).join(''); // v513 #135 「＋ 新しく募集する」 撤去に伴い addLink 連結も削除
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -1395,6 +1421,31 @@ function bindHomeSnsReactions() {
 
 // v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。
 //   最大 5 件。
+// v514 #139 重要連絡 / 学会情報 をホームウィジェットとして表示。 デフォルトは ON。
+async function renderHomeNotices() {
+  const card = document.getElementById('home-notices-card');
+  const root = document.getElementById('home-notices');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/notices');
+    const items = (d.items || []).slice(0, 5);
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.map(n => {
+      const cat = n.category === 'conference' ? '📚 学会' : '📌 連絡';
+      const url = n.url ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener" class="hint" onclick="event.stopPropagation()">🔗</a>` : '';
+      return `
+        <a class="list-item" href="#/notices" style="gap:8px; align-items:flex-start">
+          <div style="flex:1; min-width:0">
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(n.title)}</div>
+            <div class="meta">${cat} · ${escapeHtml(n.creator_name || '')} · ${escapeHtml(n.created_at || '')}</div>
+          </div>
+          ${url}
+        </a>`;
+    }).join('');
+  } catch (_) { card.hidden = true; }
+}
+
 async function renderHomeTodos() {
   const card = document.getElementById('home-todos-card');
   const root = document.getElementById('home-todos');
@@ -1673,10 +1724,10 @@ async function renderMyActiveTimers() {
     card.hidden = false;
     // 前回 の tick interval は 解除。 空でも 解除する。
     if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
-    if (!rows.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">進行中の タイマー / SW / 点呼 / 待ち合わせ なし</div>';
-      return;
-    }
+    // v514 #132 中身が無いときはカードごと非表示 (ユーザがチェック ON にしていても、
+    //   空ならホームに領域を取らない。 polling で 1 件でも出てきたら card.hidden=false)。
+    if (!rows.length) { card.hidden = true; root.innerHTML = ''; return; }
+    card.hidden = false;
     rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
     root.innerHTML = rows.map(r => {
       const t = r.tick;

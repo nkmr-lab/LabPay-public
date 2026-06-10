@@ -5,7 +5,7 @@ import { refreshUnread, toast, state } from '../app.js';
 // v512 ユーザ報告: 「通知のロードが重い。 全件ロードしてる」 → 20 件ずつカーソル
 //   ベース pagination に変更。 サーバ側 /api/notifications は ?before_id= の
 //   カーソルと has_more フラグを返す (= 1 ページずつ append)。
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10; // v514 #133 デフォルト 10 件に変更
 let loadedItems = [];
 let hasMore = false;
 
