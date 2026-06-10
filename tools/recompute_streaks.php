@@ -1,12 +1,17 @@
 <?php
-// v498 #109 全ユーザの current_streak を新ルール (どんな1日でもギャップがあればリセット) で再計算。
-// longest_streak も新ルールで合わせて再計算する。
+// v499 全ユーザの current_streak を do_checkin_for_user と同じルールで再計算。
+// streak_weekday_only=1 (default) なら workday-only judging + decay、 そうでなければ
+// 「1日でも空けば streak=1 にリセット」 ルール。
 declare(strict_types=1);
 chdir(__DIR__ . '/..');
 $_SERVER['REQUEST_METHOD'] = 'CLI';
 require __DIR__ . '/../src/bootstrap.php';
 /** @var PDO $PDO */
 $pdo = $PDO;
+
+$weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
+$decay = (int)cfg_get($pdo, 'streak_decay_per_missed_workday', '5');
+fwrite(STDOUT, "mode=" . ($weekdayOnly ? 'weekday_only' : 'any_gap') . " decay=$decay\n");
 
 $users = $pdo->query("SELECT DISTINCT user_id FROM checkins")->fetchAll(PDO::FETCH_COLUMN);
 $updated = 0;
@@ -29,9 +34,19 @@ foreach ($users as $uid) {
             while (true) {
                 $cursor = $cursor->modify('+1 day');
                 if ($cursor >= $end) break;
-                $missed++;
+                if ($weekdayOnly) {
+                    if (Calendar::isWorkday($pdo, $cursor->format('Y-m-d'))) $missed++;
+                } else {
+                    $missed++;
+                }
             }
-            $curStreak = $missed === 0 ? $curStreak + 1 : 1;
+            if ($missed === 0) {
+                $curStreak = $curStreak + 1;
+            } else if ($weekdayOnly) {
+                $curStreak = max(1, $curStreak - $missed * $decay + 1);
+            } else {
+                $curStreak = 1;
+            }
         }
         if ($curStreak > $longest) $longest = $curStreak;
         $prev = $d;

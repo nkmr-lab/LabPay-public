@@ -21,11 +21,12 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 //   ['already' => bool, 'points' => int, 'awarded_today' => int,
 //    'current_streak' => int, 'longest_streak' => int, 'new_balance' => int]
 //
-// Streak rule (2026-06 v498 #109): 「来なかった日があったら連続記録は切れる」 という
-// 直感的な定義に統一。 前回からの間に 1 日でも空きがあれば missed としてカウントし、
-// decay (=5 ポイント) のペナルティで一気に 1 にリセットされる。
-// 旧仕様 (workday only) は 「土日は来なくても許される」 だったが、 ユーザに
-// 「昨日来てないのに3日連続になった」 と混乱を生んだので廃止。
+// Streak rule (2026-06 v499 #117): admin config の streak_weekday_only で 2 つのモード
+// を切り替え。 デフォルトは true (workday-only) = 土日祝は休んでも streak 維持、
+// 平日 (workday) を欠かすと decay でリセット気味に。 平日勤務型の人にやさしい挙動。
+// false にすると 「1 日でも空けば streak=1 にリセット」 のシンプルルール。
+// (v498 #109 で 「workday判定撤廃」 に倒したら 「平日毎日来てるのに 3 連続止まり」 と
+//  逆方向の混乱が起きたため、 旧挙動を default に戻し設定で切り替え可能にした)
 function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): array {
     $today = (new DateTimeImmutable('now'))->format('Y-m-d');
     $base    = (int)cfg_get($pdo, 'checkin_base', '5');
@@ -71,18 +72,27 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
         if ($prev === null) {
             $newStreak = 1;
         } else {
-            // v498 #109 prev と today の間に 1 日でも空きがあれば streak は 1 にリセット。
-            //   旧仕様は workday のみカウント + decay で減らす方式だったが、 「昨日来てない
-            //   のに 3 日連続」 とユーザを混乱させたので 「missed > 0 なら問答無用で 1」 に。
+            // v499 #117 streak_weekday_only で 2 モード切替。 default=true=旧挙動。
+            $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
             $missed = 0;
             $cursor = new DateTimeImmutable($prev);
             $end    = new DateTimeImmutable($today);
             while (true) {
                 $cursor = $cursor->modify('+1 day');
                 if ($cursor >= $end) break;
-                $missed++;
+                if ($weekdayOnly) {
+                    if (Calendar::isWorkday($pdo, $cursor->format('Y-m-d'))) $missed++;
+                } else {
+                    $missed++;
+                }
             }
-            $newStreak = $missed === 0 ? $curStreak + 1 : 1;
+            if ($missed === 0) {
+                $newStreak = $curStreak + 1;
+            } else if ($weekdayOnly) {
+                $newStreak = max(1, $curStreak - $missed * $decay + 1);
+            } else {
+                $newStreak = 1;
+            }
         }
         $newLongest = max((int)($streak['longest_streak'] ?? 0), $newStreak);
 

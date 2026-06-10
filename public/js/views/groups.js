@@ -11,6 +11,21 @@ import { createMemberPicker } from '../member_picker.js';
 
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
+// v499 #112 グループ系 API (/api/groups, /api/groups/:id/*) は SW で SWR キャッシュ
+//   される。 支出登録/削除/編集の直後に古いキャッシュが返って 「ワリカに反映されない」
+//   ように見える問題を防ぐため、 操作直後にここで content cache から /api/groups* を
+//   消す。 失敗は黙殺 (キャッシュなしブラウザ等)。
+async function invalidateGroupCache(_gid) {
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('labpay-content-v2');
+    const keys = await cache.keys();
+    await Promise.all(keys
+      .filter(req => new URL(req.url).pathname.startsWith('/api/groups'))
+      .map(req => cache.delete(req)));
+  } catch (_) {}
+}
+
 // v340 グループ詳細ヘッダの アクションボタン 8 個の定義 (順番もここの並びを保持)。
 // feat_actions JSON 配列の値はこの id。 receipt / expense は wari に依存するので
 // feat_wari が OFF なら 強制的に hidden。
@@ -1336,6 +1351,10 @@ async function onAddExpense() {
   }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
+    // v499 #112 /api/groups/* は SW で SWR キャッシュされているので、 古いキャッシュが
+    //   そのまま返って 「登録したのに ワリカ に出ない」 を引き起こす。 自分の操作
+    //   直後はキャッシュを消して新鮮取り直し。
+    await invalidateGroupCache(gid);
     document.getElementById('ex-amt').value = '';
     document.getElementById('ex-memo').value = '';
     document.getElementById('ex-image-file').value = '';
@@ -1404,6 +1423,7 @@ async function loadWari(id) {
         if (!confirm('この支出を削除しますか?')) return;
         try {
           await del(`/api/groups/${id}/expenses/${b.dataset.rmEx}`);
+          await invalidateGroupCache(id); // v499 #112
           toast('削除しました');
           await loadWari(id);
         } catch (e) { toast('失敗: ' + e.message); }
@@ -1606,6 +1626,7 @@ function openExpenseEdit(gid, e) {
     if (currency !== 'JPY' && liveRate) body.rate_to_jpy = liveRate;
     try {
       await patch(`/api/groups/${gid}/expenses/${e.id}`, body);
+      await invalidateGroupCache(gid); // v499 #112
       toast(e.is_draft && amount > 0 ? '支出として登録しました' : '保存しました');
       close();
       await loadWari(gid);

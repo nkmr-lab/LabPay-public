@@ -279,20 +279,27 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
     $stR->execute([$id]);
     $replies = posts_serialize_rows($pdo, $stR->fetchAll(PDO::FETCH_ASSOC), (int)$u['id']);
     // v498 #106 詳細では誰がどの kind を押したかも返す。
-    $stReact = $pdo->prepare("SELECT pl.kind, pl.user_id, pl.created_at,
-                                     u.display_name, u.avatar_url
-                                FROM post_likes pl
-                                JOIN users u ON u.id = pl.user_id
-                               WHERE pl.post_id = ?
-                               ORDER BY pl.created_at DESC");
-    $stReact->execute([$id]);
-    $reactors = array_map(fn($r) => [
-        'kind'         => $r['kind'],
-        'user_id'      => (int)$r['user_id'],
-        'display_name' => $r['display_name'],
-        'avatar_url'   => $r['avatar_url'],
-        'created_at'   => $r['created_at'],
-    ], $stReact->fetchAll(PDO::FETCH_ASSOC));
+    // v499 #117 reactors は投稿者本人と admin のみ閲覧可。 他人が見るとプライバシー
+    //   懸念があるので空配列で隠す。
+    $reactors = [];
+    $isOwner = (int)$post['user_id'] === (int)$u['id'];
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($isOwner || $isAdmin) {
+        $stReact = $pdo->prepare("SELECT pl.kind, pl.user_id, pl.created_at,
+                                         u.display_name, u.avatar_url
+                                    FROM post_likes pl
+                                    JOIN users u ON u.id = pl.user_id
+                                   WHERE pl.post_id = ?
+                                   ORDER BY pl.created_at DESC");
+        $stReact->execute([$id]);
+        $reactors = array_map(fn($r) => [
+            'kind'         => $r['kind'],
+            'user_id'      => (int)$r['user_id'],
+            'display_name' => $r['display_name'],
+            'avatar_url'   => $r['avatar_url'],
+            'created_at'   => $r['created_at'],
+        ], $stReact->fetchAll(PDO::FETCH_ASSOC));
+    }
     json_response(['post' => $post, 'replies' => $replies, 'reactors' => $reactors]);
 }
 

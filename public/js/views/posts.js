@@ -578,6 +578,9 @@ function bindRowHandlers() {
       if (!confirm('この 投稿 を 削除 しますか?')) return;
       try {
         await del(`/api/posts/${el.dataset.delPost}`);
+        // v499 #110 SW の content cache (/api/posts*) に消したはずの行が残ると
+        //   再来訪時に復活して見えるので、 削除直後に invalidate しておく。
+        await invalidatePostsCache();
         toast('削除しました');
         const row = el.closest('[data-post-id]');
         if (row) row.remove();
