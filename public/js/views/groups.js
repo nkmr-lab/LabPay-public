@@ -393,14 +393,12 @@ export async function renderGroupDetail({ params }) {
         <div class="row center" style="margin-bottom:6px">
           <h3 class="row-title" style="margin:0">📅 スケジュール</h3>
           <div class="row" style="gap:6px">
-            <button id="gd-sched-gmap" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()" title="Google Maps の保存リスト (KML/GeoJSON) からまとめて取り込み (ストックに追加、 既存タイトルと重複しないもののみ)">📥 Google Map</button>
             <button id="gd-sched-editmode" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">編集モード</button>
             <button id="gd-sched-range" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">日程設定</button>
           </div>
         </div>
       </summary>
       <div id="gd-sched-body" class="muted" style="font-size:13px">読み込み中…</div>
-      <input type="file" id="gd-sched-gmap-file" accept=".kml,.json,.geojson" hidden>
     </details>
     <div id="gd-sched-modal" hidden></div>
 
@@ -499,11 +497,8 @@ export async function renderGroupDetail({ params }) {
   //   出ない」 バグ)。 bind は loadDetail 内 (receipt と 同じ 場所) で 行う。
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
-  // v504 #122 Google Maps からスケジュールストックに一括取り込み
-  document.getElementById('gd-sched-gmap')?.addEventListener('click', () => {
-    document.getElementById('gd-sched-gmap-file').click();
-  });
-  document.getElementById('gd-sched-gmap-file')?.addEventListener('change', (ev) => onSchedGmapImport(ev, id));
+  // v516 #144 Google Map インポートのボタン/file input は loadSchedule の stock card 内
+  //   に移動 (= 行きたい場所ストックの中)。 binding も loadSchedule の末尾で行う。
   document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
     schedEditMode = !schedEditMode;
     loadSchedule(id);
@@ -2100,15 +2095,21 @@ async function loadSchedule(gid) {
   const dayLabels = ['日','月','火','水','木','金','土'];
   // v403 ストック (日付未定) は タイル 並び。 件数が多くなりがちな 「行きたい場所
   // 候補」 を 圧縮して 一覧 しやすく。 1 枚あたり 約 140px、 grid auto-fill。
+  // v516 #144 Google Map インポート は 「行きたい場所ストック」 の中 (＋ 候補を追加 の隣)
+  //   に移動。 スケジュールヘッダから外して 普段邪魔にならない位置に。
   const stockCard = stockItems.length || schedEditMode ? `
     <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0; border-left:4px solid #fcd34d">
       <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
       <div class="sched-stock-grid" data-day="stock"
            style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px; margin-top:6px">
         ${stockItems.map(it => renderSchedStockTile({ ...it, _occ: 'single' })).join('')
-          || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。 編集モードで 「＋ 候補を追加」。</div>'}
+          || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。 編集モードで 「＋ 候補を追加」 か 「📥 Google Map」 から取り込み。</div>'}
       </div>
-      ${schedEditMode ? `<button class="btn primary" id="gd-sched-add-stock" style="margin-top:6px; padding:4px 10px; font-size:12px">＋ 候補を追加</button>` : ''}
+      <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap">
+        ${schedEditMode ? `<button class="btn primary" id="gd-sched-add-stock" style="padding:4px 10px; font-size:12px">＋ 候補を追加</button>` : ''}
+        <button class="btn" id="gd-sched-gmap" style="padding:4px 10px; font-size:12px" title="Google Maps の保存リスト (KML/GeoJSON) からまとめて取り込み (既存と重複しないもののみストックに追加)">📥 Google Map から取り込み</button>
+        <input type="file" id="gd-sched-gmap-file" accept=".kml,.json,.geojson" hidden>
+      </div>
     </details>` : '';
 
   // v403 1 日 ごとに 背景色 を 周期で振る。 日数 が 多くても 視覚的に 区切れる。
@@ -2179,6 +2180,12 @@ async function loadSchedule(gid) {
   // ストックに候補を追加 (day_date = null で作成)
   document.getElementById('gd-sched-add-stock')?.addEventListener('click', () =>
     openSchedItemModal(gid, { day_date: null }));
+  // v516 #144 ストック内に Google Maps インポートボタン。 loadSchedule 内で bindings
+  //   (innerHTML 直後) しないと #gd-sched-gmap が dom に無くて click が拾えない。
+  document.getElementById('gd-sched-gmap')?.addEventListener('click', () => {
+    document.getElementById('gd-sched-gmap-file')?.click();
+  });
+  document.getElementById('gd-sched-gmap-file')?.addEventListener('change', (ev) => onSchedGmapImport(ev, gid));
   // v489 #85 タップ で まず 「内容 確認」 を 表示 → 編集 ボタン で 編集 モーダル へ。
   //   (旧: タップ で 即 編集 モーダル)。 編集 モード では 行 内 の ↑↓× ボタン が
   //   出る ので、 タップ → 内容 確認 で 妥当 な UX。
