@@ -32,6 +32,109 @@ function linkifyText(s) {
   return h.replace(/\n/g, '<br>');
 }
 
+// v502 #119 Google Maps の保存リスト (KML / GeoJSON) を取り込み、 既存と重複しない
+//   場所だけを /api/places に登録。 大量の Placemark でもひとつずつ POST する
+//   (await 直列) ので 連投 race / ledger 競合を避けやすい。
+//
+// 重複判定: タイトル (大小無視, 前後空白除去) が同じ + 緯度経度 50m 以内なら同じ場所
+//   とみなす。 50m は屋台が並んでる横丁などで誤判定が出ないバランス値。
+async function onGmapImport(ev) {
+  const f = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!f) return;
+  const text = await f.text();
+  let parsed;
+  try {
+    parsed = f.name.toLowerCase().endsWith('.kml') ? parseKml(text) : parseGeoJson(text);
+  } catch (e) {
+    toast('読み取り失敗: ' + (e?.message || e));
+    return;
+  }
+  if (!parsed.length) { toast('リストに場所が見つかりませんでした'); return; }
+  // 既存リストを 1 度取得して 重複チェック
+  let existing = [];
+  try { const r = await get('/api/places'); existing = r.items || []; } catch (_) {}
+  const isDup = (p) => existing.some(e => {
+    if (!e.title || !p.title) return false;
+    if (e.title.trim().toLowerCase() !== p.title.trim().toLowerCase()) return false;
+    if (e.lat == null || e.lng == null || p.lat == null || p.lng == null) return true; // 名前一致のみで重複扱い
+    return haversineMeters(e.lat, e.lng, p.lat, p.lng) < 50;
+  });
+  const toImport = parsed.filter(p => !isDup(p));
+  const dups = parsed.length - toImport.length;
+  if (!toImport.length) {
+    toast(`全 ${parsed.length} 件は既に登録済みでした`);
+    return;
+  }
+  if (!confirm(`Google Map から ${parsed.length} 件読み込みました。\n重複 ${dups} 件をスキップして ${toImport.length} 件を新規登録します。よろしいですか？`)) return;
+  let ok = 0, ng = 0;
+  for (const p of toImport) {
+    try {
+      await post('/api/places', {
+        title: p.title, address: p.address || '', description: p.description || '',
+        lat: p.lat, lng: p.lng,
+      });
+      ok++;
+    } catch (_) { ng++; }
+  }
+  toast(`登録: ${ok} 件 / 失敗: ${ng} 件 / 重複スキップ: ${dups} 件`);
+  // リストを再描画
+  renderPlaces();
+}
+
+function parseKml(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const placemarks = doc.getElementsByTagName('Placemark');
+  const out = [];
+  for (const pm of placemarks) {
+    const name = pm.getElementsByTagName('name')[0]?.textContent?.trim() || '';
+    if (!name) continue;
+    const desc = pm.getElementsByTagName('description')[0]?.textContent?.trim() || '';
+    const addr = pm.getElementsByTagName('address')[0]?.textContent?.trim() || '';
+    const coords = pm.getElementsByTagName('coordinates')[0]?.textContent?.trim() || '';
+    let lat = null, lng = null;
+    if (coords) {
+      const parts = coords.split(',').map(s => Number(s.trim()));
+      if (parts.length >= 2 && isFinite(parts[0]) && isFinite(parts[1])) {
+        // KML は lng, lat, [alt]
+        lng = parts[0]; lat = parts[1];
+      }
+    }
+    out.push({ title: name, description: desc, address: addr, lat, lng });
+  }
+  return out;
+}
+
+function parseGeoJson(text) {
+  const j = JSON.parse(text);
+  const features = j.type === 'FeatureCollection' ? (j.features || [])
+                  : j.type === 'Feature' ? [j] : [];
+  const out = [];
+  for (const f of features) {
+    const p = f.properties || {};
+    const name = (p.name || p.Title || p.title || '').toString().trim();
+    if (!name) continue;
+    const desc = (p.description || p.Description || '').toString().trim();
+    const addr = (p.address || p.Address || '').toString().trim();
+    let lat = null, lng = null;
+    if (f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates)) {
+      lng = Number(f.geometry.coordinates[0]);
+      lat = Number(f.geometry.coordinates[1]);
+      if (!isFinite(lat) || !isFinite(lng)) { lat = null; lng = null; }
+    }
+    out.push({ title: name, description: desc, address: addr, lat, lng });
+  }
+  return out;
+}
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 export async function renderPlaces() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -40,14 +143,22 @@ export async function renderPlaces() {
         <h2 style="margin:0">🍴 食べある記</h2>
         <span style="flex:1"></span>
         <a class="btn" href="#/places/map">🗺 地図</a>
+        <button class="btn" id="pl-gmap-import">📥 Google Map</button>
         <a class="btn primary" href="#/places/new">＋ 新規</a>
       </div>
       <p class="card-subtitle" style="margin:6px 0 0">
         ラボメンバー の グルメ 共有 帳。 口コミ・写真・⭐評価 を 添えて 投稿可。
       </p>
+      <input type="file" id="pl-gmap-file" accept=".kml,.json,.geojson,.kmz" hidden>
     </div>
     <div id="pl-list"><div class="muted">読み込み中…</div></div>
   `;
+  // v502 #119 Google Maps エクスポート (KML / GeoJSON) を読み込んで重複しないものを
+  //   一括登録。 重複判定は (title 大小無視) + 緯度経度 50m 以内。
+  document.getElementById('pl-gmap-import')?.addEventListener('click', () => {
+    document.getElementById('pl-gmap-file').click();
+  });
+  document.getElementById('pl-gmap-file')?.addEventListener('change', (ev) => onGmapImport(ev));
   try {
     const d = await get('/api/places');
     const items = d.items || [];
