@@ -346,15 +346,20 @@ export async function renderHome() {
       perfEntries.push({ name, ms: Math.round(dt) });
     }
   };
-  // 残高/チェックイン/メダルは hero ヒーローに常時出すので hidden に関わらず必ずロード。
-  await timed('balance', () => refreshFinancials({ silent: false }));
-  await timed('checkin', () => renderCheckinArea());
-  await timed('medals',  () => renderMedalsStrip());
-  // ユーザが hidden にしたカードはレンダー (fetch) しない
-  for (const c of cardsToRender) {
-    if (hiddenSet.has(c.cardId)) continue;
-    await timed(c.label, c.fn);
-  }
+  // v509 ユーザ報告: 「実績が表示されるまで グループ / らぼったー が表示されない」
+  //   原因は 残高 → チェックイン → 実績 を直列 await した後でカードを順番に
+  //   呼んでいたため。 ヒーロー 3 つは fire-and-forget (キャッシュから即出るので
+  //   ブロック不要)、 各カードは Promise.all で 並列実行する。 計測のため timed は
+  //   そのまま噛ませる (resolved 順に perfEntries に追加される)。
+  const heroPromise = Promise.all([
+    timed('balance', () => refreshFinancials({ silent: false })),
+    timed('checkin', () => renderCheckinArea()),
+    timed('medals',  () => renderMedalsStrip()),
+  ]);
+  const cardPromises = cardsToRender
+    .filter(c => !hiddenSet.has(c.cardId))
+    .map(c => timed(c.label, c.fn));
+  await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
 
   // console.group 化 (admin/dev だけが普段見る場所、 邪魔にならない)
