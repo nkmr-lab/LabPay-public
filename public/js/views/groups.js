@@ -399,12 +399,14 @@ export async function renderGroupDetail({ params }) {
         <div class="row center" style="margin-bottom:6px">
           <h3 class="row-title" style="margin:0">📅 スケジュール</h3>
           <div class="row" style="gap:6px">
+            <button id="gd-sched-gmap" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()" title="Google Maps の保存リスト (KML/GeoJSON) からまとめて取り込み (ストックに追加、 既存タイトルと重複しないもののみ)">📥 Google Map</button>
             <button id="gd-sched-editmode" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">編集モード</button>
             <button id="gd-sched-range" class="btn" style="padding:2px 10px; font-size:12px" onclick="event.stopPropagation()">日程設定</button>
           </div>
         </div>
       </summary>
       <div id="gd-sched-body" class="muted" style="font-size:13px">読み込み中…</div>
+      <input type="file" id="gd-sched-gmap-file" accept=".kml,.json,.geojson" hidden>
     </details>
     <div id="gd-sched-modal" hidden></div>
 
@@ -503,6 +505,11 @@ export async function renderGroupDetail({ params }) {
   //   出ない」 バグ)。 bind は loadDetail 内 (receipt と 同じ 場所) で 行う。
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
+  // v504 #122 Google Maps からスケジュールストックに一括取り込み
+  document.getElementById('gd-sched-gmap')?.addEventListener('click', () => {
+    document.getElementById('gd-sched-gmap-file').click();
+  });
+  document.getElementById('gd-sched-gmap-file')?.addEventListener('change', (ev) => onSchedGmapImport(ev, id));
   document.getElementById('gd-sched-editmode')?.addEventListener('click', () => {
     schedEditMode = !schedEditMode;
     loadSchedule(id);
@@ -1839,6 +1846,47 @@ async function onPost(gid) {
     toast('投稿しました');
     await loadDetail(gid);
   } catch (e) { toast('失敗: ' + e.message); }
+}
+
+// v504 #122 グループの行きたい場所ストックに Google Maps の保存リストから一括取り込み。
+//   /api/groups/:gid/schedule に day_date=null (= ストック) で POST。 既存スケジュール
+//   アイテムとタイトル重複 (大小無視) + 緯度経度 50m 以内は spkip。
+async function onSchedGmapImport(ev, gid) {
+  const f = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!f) return;
+  const { parseGmapFile, isDupOf } = await import('../gmap_import.js');
+  const text = await f.text();
+  let parsed;
+  try { parsed = parseGmapFile(f.name, text); }
+  catch (e) { toast('読み取り失敗: ' + (e?.message || e)); return; }
+  if (!parsed.length) { toast('リストに場所が見つかりませんでした'); return; }
+  // 既存スケジュールを 1 度取得 (ストック + 日付ありの両方) して重複判定
+  let existing = [];
+  try {
+    const d = await get(`/api/groups/${gid}/schedule`);
+    existing = (d.items || []).map(it => ({ title: it.title, lat: it.lat, lng: it.lng }));
+  } catch (_) {}
+  const toImport = parsed.filter(p => !isDupOf(existing, p));
+  const dups = parsed.length - toImport.length;
+  if (!toImport.length) { toast(`全 ${parsed.length} 件はすでにスケジュールに含まれていました`); return; }
+  if (!confirm(`Google Map から ${parsed.length} 件読み込みました。\n重複 ${dups} 件をスキップして ${toImport.length} 件をストックに追加します。よろしいですか？`)) return;
+  let ok = 0, ng = 0;
+  for (const p of toImport) {
+    try {
+      await post(`/api/groups/${gid}/schedule`, {
+        title: p.title,
+        kind: 'other',
+        day_date: null,    // ストック
+        location: p.address || null,
+        memo: p.description || null,
+        lat: p.lat, lng: p.lng,
+      });
+      ok++;
+    } catch (_) { ng++; }
+  }
+  toast(`登録: ${ok} 件 / 失敗: ${ng} 件 / 重複スキップ: ${dups} 件`);
+  await loadSchedule(gid);
 }
 
 // ─── スケジュール / 行程 ─────────────────────────────────────────────

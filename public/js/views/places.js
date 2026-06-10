@@ -33,39 +33,22 @@ function linkifyText(s) {
 }
 
 // v502 #119 Google Maps の保存リスト (KML / GeoJSON) を取り込み、 既存と重複しない
-//   場所だけを /api/places に登録。 大量の Placemark でもひとつずつ POST する
-//   (await 直列) ので 連投 race / ledger 競合を避けやすい。
-//
-// 重複判定: タイトル (大小無視, 前後空白除去) が同じ + 緯度経度 50m 以内なら同じ場所
-//   とみなす。 50m は屋台が並んでる横丁などで誤判定が出ないバランス値。
+//   場所だけを /api/places に登録。 共通パーサは ../gmap_import.js に切り出し済み。
 async function onGmapImport(ev) {
   const f = ev.target.files?.[0];
   ev.target.value = '';
   if (!f) return;
+  const { parseGmapFile, isDupOf } = await import('../gmap_import.js');
   const text = await f.text();
   let parsed;
-  try {
-    parsed = f.name.toLowerCase().endsWith('.kml') ? parseKml(text) : parseGeoJson(text);
-  } catch (e) {
-    toast('読み取り失敗: ' + (e?.message || e));
-    return;
-  }
+  try { parsed = parseGmapFile(f.name, text); }
+  catch (e) { toast('読み取り失敗: ' + (e?.message || e)); return; }
   if (!parsed.length) { toast('リストに場所が見つかりませんでした'); return; }
-  // 既存リストを 1 度取得して 重複チェック
   let existing = [];
   try { const r = await get('/api/places'); existing = r.items || []; } catch (_) {}
-  const isDup = (p) => existing.some(e => {
-    if (!e.title || !p.title) return false;
-    if (e.title.trim().toLowerCase() !== p.title.trim().toLowerCase()) return false;
-    if (e.lat == null || e.lng == null || p.lat == null || p.lng == null) return true; // 名前一致のみで重複扱い
-    return haversineMeters(e.lat, e.lng, p.lat, p.lng) < 50;
-  });
-  const toImport = parsed.filter(p => !isDup(p));
+  const toImport = parsed.filter(p => !isDupOf(existing, p));
   const dups = parsed.length - toImport.length;
-  if (!toImport.length) {
-    toast(`全 ${parsed.length} 件は既に登録済みでした`);
-    return;
-  }
+  if (!toImport.length) { toast(`全 ${parsed.length} 件は既に登録済みでした`); return; }
   if (!confirm(`Google Map から ${parsed.length} 件読み込みました。\n重複 ${dups} 件をスキップして ${toImport.length} 件を新規登録します。よろしいですか？`)) return;
   let ok = 0, ng = 0;
   for (const p of toImport) {
@@ -78,61 +61,7 @@ async function onGmapImport(ev) {
     } catch (_) { ng++; }
   }
   toast(`登録: ${ok} 件 / 失敗: ${ng} 件 / 重複スキップ: ${dups} 件`);
-  // リストを再描画
   renderPlaces();
-}
-
-function parseKml(text) {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  const placemarks = doc.getElementsByTagName('Placemark');
-  const out = [];
-  for (const pm of placemarks) {
-    const name = pm.getElementsByTagName('name')[0]?.textContent?.trim() || '';
-    if (!name) continue;
-    const desc = pm.getElementsByTagName('description')[0]?.textContent?.trim() || '';
-    const addr = pm.getElementsByTagName('address')[0]?.textContent?.trim() || '';
-    const coords = pm.getElementsByTagName('coordinates')[0]?.textContent?.trim() || '';
-    let lat = null, lng = null;
-    if (coords) {
-      const parts = coords.split(',').map(s => Number(s.trim()));
-      if (parts.length >= 2 && isFinite(parts[0]) && isFinite(parts[1])) {
-        // KML は lng, lat, [alt]
-        lng = parts[0]; lat = parts[1];
-      }
-    }
-    out.push({ title: name, description: desc, address: addr, lat, lng });
-  }
-  return out;
-}
-
-function parseGeoJson(text) {
-  const j = JSON.parse(text);
-  const features = j.type === 'FeatureCollection' ? (j.features || [])
-                  : j.type === 'Feature' ? [j] : [];
-  const out = [];
-  for (const f of features) {
-    const p = f.properties || {};
-    const name = (p.name || p.Title || p.title || '').toString().trim();
-    if (!name) continue;
-    const desc = (p.description || p.Description || '').toString().trim();
-    const addr = (p.address || p.Address || '').toString().trim();
-    let lat = null, lng = null;
-    if (f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates)) {
-      lng = Number(f.geometry.coordinates[0]);
-      lat = Number(f.geometry.coordinates[1]);
-      if (!isFinite(lat) || !isFinite(lng)) { lat = null; lng = null; }
-    }
-    out.push({ title: name, description: desc, address: addr, lat, lng });
-  }
-  return out;
-}
-
-function haversineMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const toRad = d => d * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
-  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 export async function renderPlaces() {
