@@ -439,8 +439,10 @@ async function loadPlace(id) {
       ? `<div class="meta">${ratingStars(p.avg_rating)} <b>${p.avg_rating.toFixed(1)}</b> (${p.comment_count} 件 の 口コミ)</div>`
       : `<div class="meta">${p.comment_count} 件 の 口コミ</div>`;
     // v478 メイン写真 が あれば 上に 大きく
-    const heroImg = p.image_url
-      ? `<img src="${escapeHtml(p.image_url)}" alt="" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
+    // v512 サムネ優先 (220px 表示で原画像は重い、 サーバが返す image_thumb_url を使う)
+    const heroSrc = p.image_thumb_url || p.image_url;
+    const heroImg = heroSrc
+      ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
       : '';
     // v486 #80 いいね ボタン
     const likeBtn = `

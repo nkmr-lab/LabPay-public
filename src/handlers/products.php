@@ -29,7 +29,13 @@ function route_products(PDO $pdo, array $cfg, string $method, array $seg): void 
             $st->bindValue(1, $limit, PDO::PARAM_INT);
             $st->execute();
         }
-        json_response(['items' => $st->fetchAll()]);
+        // v512 サムネ実在チェック済み URL を併せて返す
+        $items = $st->fetchAll();
+        foreach ($items as &$it) {
+            $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
+        }
+        unset($it);
+        json_response(['items' => $items]);
         return;
     }
 

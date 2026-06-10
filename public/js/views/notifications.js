@@ -2,6 +2,13 @@ import { get, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { refreshUnread, toast, state } from '../app.js';
 
+// v512 ユーザ報告: 「通知のロードが重い。 全件ロードしてる」 → 20 件ずつカーソル
+//   ベース pagination に変更。 サーバ側 /api/notifications は ?before_id= の
+//   カーソルと has_more フラグを返す (= 1 ページずつ append)。
+const PAGE_SIZE = 20;
+let loadedItems = [];
+let hasMore = false;
+
 export async function renderNotifications() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -12,6 +19,9 @@ export async function renderNotifications() {
       </div>
     </div>
     <div id="list" class="list"><div class="muted">読み込み中…</div></div>
+    <div id="more-wrap" style="text-align:center; padding:12px 0" hidden>
+      <button id="more-btn" class="btn">▼ さらに読み込み</button>
+    </div>
   `;
   document.getElementById('mark-all').addEventListener('click', async () => {
     try { await patch('/api/notifications/read_all', {}); }
@@ -19,54 +29,89 @@ export async function renderNotifications() {
     await refreshUnread();
     await renderNotifications();
   });
-  await load();
+  document.getElementById('more-btn').addEventListener('click', () => loadMore());
+  loadedItems = [];
+  hasMore = false;
+  await loadFirst();
 }
 
-async function load() {
+async function loadFirst() {
   try {
-    const data = await get('/api/notifications', { limit: 100 });
-    const root = document.getElementById('list');
-    if (!root) return; // await 中にページ離脱 → DOM 不在
-    if (!data.items.length) {
-      root.innerHTML = `<div class="empty">通知はありません</div>`;
-      return;
-    }
-    root.innerHTML = data.items.map(row).join('');
-    // 既読ボタン (行リンクの click を奪う)
-    root.querySelectorAll('[data-read]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try { await patch('/api/notifications/' + btn.dataset.read + '/read', {}); }
-        catch (e) { toast('失敗: ' + e.message); return; }
-        await refreshUnread();
-        await load();
-      });
-    });
-    // 「未読に戻す」 ボタン (既読のものから未読に戻すセーフネット)。
-    root.querySelectorAll('[data-unread]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try { await patch('/api/notifications/' + btn.dataset.unread + '/unread', {}); }
-        catch (e) { toast('失敗: ' + e.message); return; }
-        await refreshUnread();
-        await load();
-      });
-    });
-    // 行 (<a>) タップ時: 未読なら裏で既読化してから遷移を許可
-    root.querySelectorAll('[data-jump]').forEach(a => {
-      a.addEventListener('click', () => {
-        // fire-and-forget: バッジ消すための裏処理。遷移は通常通り進む。
-        patch('/api/notifications/' + a.dataset.jump + '/read', {})
-          .then(() => refreshUnread())
-          .catch(() => { /* ignore */ });
-      });
-    });
+    const data = await get('/api/notifications', { limit: PAGE_SIZE });
+    loadedItems = data.items || [];
+    hasMore = !!data.has_more;
+    paint();
   } catch (e) {
     const root = document.getElementById('list');
     if (root) root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function loadMore() {
+  if (!loadedItems.length) return;
+  const beforeId = loadedItems[loadedItems.length - 1].id;
+  const btn = document.getElementById('more-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '読み込み中…'; }
+  try {
+    const data = await get('/api/notifications', { limit: PAGE_SIZE, before_id: beforeId });
+    loadedItems = loadedItems.concat(data.items || []);
+    hasMore = !!data.has_more;
+    paint();
+  } catch (e) {
+    toast('失敗: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▼ さらに読み込み'; }
+  }
+}
+
+function paint() {
+  const root = document.getElementById('list');
+  const more = document.getElementById('more-wrap');
+  if (!root) return;
+  if (!loadedItems.length) {
+    root.innerHTML = `<div class="empty">通知はありません</div>`;
+    if (more) more.hidden = true;
+    return;
+  }
+  root.innerHTML = loadedItems.map(row).join('');
+  if (more) more.hidden = !hasMore;
+  // 既読ボタン
+  root.querySelectorAll('[data-read]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { await patch('/api/notifications/' + btn.dataset.read + '/read', {}); }
+      catch (e) { toast('失敗: ' + e.message); return; }
+      await refreshUnread();
+      // v512 該当だけ ローカル更新して再描画 (全件 reload しない)
+      const id = Number(btn.dataset.read);
+      const it = loadedItems.find(x => Number(x.id) === id);
+      if (it) it.read_at = new Date().toISOString();
+      paint();
+    });
+  });
+  // 未読に戻す
+  root.querySelectorAll('[data-unread]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { await patch('/api/notifications/' + btn.dataset.unread + '/unread', {}); }
+      catch (e) { toast('失敗: ' + e.message); return; }
+      await refreshUnread();
+      const id = Number(btn.dataset.unread);
+      const it = loadedItems.find(x => Number(x.id) === id);
+      if (it) it.read_at = null;
+      paint();
+    });
+  });
+  // 行 (<a>) タップ時: 未読なら裏で既読化してから遷移
+  root.querySelectorAll('[data-jump]').forEach(a => {
+    a.addEventListener('click', () => {
+      patch('/api/notifications/' + a.dataset.jump + '/read', {})
+        .then(() => refreshUnread())
+        .catch(() => { /* ignore */ });
+    });
+  });
 }
 
 const TYPE_LABELS = {
@@ -80,9 +125,6 @@ const TYPE_LABELS = {
   task_expired:      'タスク期限切れ',
   admin_notice:      'お知らせ',
 };
-// Map (ref_type, ref_id) → the SPA URL the notification points at. Tapping
-// the body wraps to a real link so users can jump straight to the relevant
-// page from the bell.
 function refUrl(n) {
   if (!n.ref_type) return null;
   switch (n.ref_type) {
@@ -101,10 +143,6 @@ function refUrl(n) {
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';
-    // feedback の通知は 2 経路: (a) ユーザ投稿 → admin に通知, (b) admin 返信 → 投稿者に通知。
-    //   (a) admin 受信時は 管理ページ /#/feedback-admin が正しい遷移先
-    //   (b) 一般ユーザ受信時は admin ページに権限が無いので 投稿フォームのある設定ページへ。
-    //       返信本文は notification body にすでに入っているので そこで読める。
     case 'feedback':       return state.me?.role === 'admin' ? '#/feedback-admin' : '#/settings';
     default: return null;
   }
@@ -114,8 +152,6 @@ function row(n) {
   const unread = !n.read_at;
   const lbl = TYPE_LABELS[n.type] || n.type;
   const url = refUrl(n);
-  // 未読は背景もろとも強く強調 (左バー 6px + soft 黄背景 + 左パディング):
-  //   border-left を厚く / 背景色を変える / 「●未読」 バッジを出す
   const baseStyle = unread
     ? 'display:block; text-decoration:none; color:inherit; border-left:6px solid #ffb300; background:#fffaeb;'
     : 'display:block; text-decoration:none; color:inherit; opacity:0.85;';

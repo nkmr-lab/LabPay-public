@@ -94,6 +94,7 @@ async function loadListings() {
         jan: l.jan,
         name: l.product_name ?? l.name,
         image_url: l.image_url,
+        image_thumb_url: l.image_thumb_url, // v512 サムネを grouped view にも持ち越し
         listings: [],
       });
       groups.get(l.jan).listings.push(l);
@@ -151,10 +152,12 @@ async function loadListings() {
       const locs = [...new Set(g.listings.map(x => x.location).filter(Boolean))];
       const giftOnly = sale.length === 0;
       const initial = (g.name || '?').trim().charAt(0).toUpperCase();
-      const bg = g.image_url
-        ? `style="background-image:url('${escapeHtml(g.image_url)}')"`
+      // v512 サムネ優先 (なければ原画像)
+      const gCover = g.image_thumb_url || g.image_url;
+      const bg = gCover
+        ? `style="background-image:url('${escapeHtml(gCover)}')"`
         : '';
-      const inner = g.image_url ? '' : `<div class="tile-noimg">${escapeHtml(initial)}</div>`;
+      const inner = gCover ? '' : `<div class="tile-noimg">${escapeHtml(initial)}</div>`;
       const badge = giftOnly
         ? '<span class="tile-badge gift">🎁</span>'
         : (giftCount > 0 ? '<span class="tile-badge">🎁あり</span>' : '');

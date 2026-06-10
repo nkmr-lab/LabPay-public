@@ -93,7 +93,13 @@ function auctions_list(PDO $pdo, array $cfg): void {
          ORDER BY (a.cancelled_at IS NULL AND a.settled_at IS NULL) DESC,
                   a.closes_at DESC, a.id DESC LIMIT 100");
     $st->execute([$uid]);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v512 サムネ実在チェック済み URL を返す (なければ原画像 fallback)
+    foreach ($items as &$it) {
+        $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
+    }
+    unset($it);
+    json_response(['items' => $items]);
 }
 
 function auctions_create(PDO $pdo, array $cfg): void {

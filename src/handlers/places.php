@@ -163,6 +163,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'lng'                => $p['lng'] !== null ? (float)$p['lng'] : null,
             'description'        => $p['description'],
             'image_url'          => $p['image_url'] ?? null,
+            'image_thumb_url'    => !empty($p['image_url']) ? thumb_url_for((string)$p['image_url']) : null, // v512 詳細ヒーロー用
             'creator_user_id'    => (int)$p['creator_user_id'],
             'creator_name'       => $p['creator_name'],
             'creator_avatar_url' => $p['creator_avatar_url'],

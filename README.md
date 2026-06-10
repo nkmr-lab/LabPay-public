@@ -65,6 +65,13 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | これ欲しい (Wishlist) | 商品名 + 任意 JAN + メモでリクエスト掲示、誰でも閲覧可・誰でも「出ました!」で達成扱い |
 | Scrapbox 履歴 | `#scrapbox` の研究ノート編集を「誰が・いつ・どの page を」読みやすくまとめて表示 (read-only feed) |
 | 関係グラフ | 売買 / タスク / 統合の 3 タブ。d3 v7 force-directed、アバター node + 件数 or 総額ベースのエッジ太さ切替 |
+| 💬 らぼったー (posts / SNS) | シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤️ ⭐ リアクション 3 種)。 フォロー なし — 全員 の 投稿 が 見える。 画像 EXIF GPS から 位置 を 自動取得、 返信スレッド、 投稿者 / admin のみ削除可、 検索 (本文 / 投稿者) |
+| 🍴 食べある記 (places) | お店 (住所 / 緯度経度 / 紹介文 / カテゴリ) を ラボメンバー で 共有。 タイル一覧 + Leaflet 地図ビュー (表示中エリア絞り込み + カテゴリフィルタ) + ⭐評価 / ❤️ いいね / 口コミ + 写真 + tabelog URL 自動取得 + **Google Maps の保存リスト KML / GeoJSON インポート** (重複スキップ) |
+| 🎵 プレイリスト (playlists) | YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生 + 公開 / 限定公開 |
+| 🤖 AI 対話 / 翻訳 / 操作ガイド (chat) | 汎用 多言語 チャット (中国語・イタリア語・英語など)。 海外出張での 翻訳・会話 補助。 「操作ガイド AI」 は LabPay の使い方を聞ける チャット (操作手順 で 答える) |
+| 🌐 画像 和訳 (translate) | 写真 (メニュー / 看板 / 説明文) を アップロード → AI で 日本語に 翻訳。 出張 / 旅行 で 便利。 履歴あり |
+| 📝 自分の TODO (todos) | やる こと メモ。 サーバ 保存 で 端末間 共有。 締切 (color-coded で 残時間表示) + URL + 相手 + 詳細メモ。 完了 と 未完了 を 分けて 表示。 ホームに 直近 締切 ハイライト |
+| ⏱ ストップウォッチ (stopwatches) | メンバー共有の カウントアップ計測器 (ms 精度)。 開始 / 一時停止 / リセット / ラップ 全員操作可。 発表時間 や 雑談計測 用 |
 
 ### ラボ活動の可視化
 
@@ -90,6 +97,7 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | 性別フラグ | 'M' / 'F' / 'X' / NULL。新歓ワリカン振り分けやランダムグループの「できるだけ均等」配慮で使用。プロフィール非表示可 |
 | 管理機能 | 取引一覧から取消 / ポイント発行 (全員配布 or 個人指定) / 流通量サマリ (Admin vs 一般保有) / カレンダー編集 / 部屋登録 (scanner_token 発行) / 配信 / 設定ノブ編集 / feedback 返信 |
 | PWA | オフライン shell / ホーム画面追加 / インストール可 / Service Worker は `/api/*` を絶対にキャッシュしない (台帳整合性) |
+| 体感速度の最適化 | (a) HTTP/2 + Brotli/gzip 圧縮で 並列 fetch 上限解除 + JS / CSS を 1/4 程度に圧縮、 (b) Service Worker shell SWR で 起動時の白画面を最小化、 (c) ホームウィジェットを Promise.all で並列実行 + 残高 / 連続 / 実績 / チェックイン を localStorage SWR キャッシュ、 (d) hidden カードはレンダー + polling を skip、 (e) `<img loading="lazy"> + content-visibility:auto` で 折り畳まれたカードの画像を遅延ロード、 (f) サーバ側で `image_thumb_url` (320px 実在チェック済み) を返してクライアントは サムネ優先 fallback、 (g) router dispatch debounce で renderHome 二重実行抑止、 (h) 通知一覧は 20 件ずつカーソル pagination + 「さらに読み込み」 |
 
 ---
 
@@ -114,6 +122,9 @@ LabPay/
 │   │   ├── modal.js            ← 共有: openModal({title,bodyHtml,buttons}) / confirmModal()
 │   │   ├── image_picker.js     ← 共有: setupImagePicker(prefix) — file + url + preview + status を自動配線
 │   │   ├── sounds.js           ← playSound(eventKey) / preloadSounds() — 決済 / ルーレット の効果音
+│   │   ├── audio_unlock.js     ← iOS Safari の AudioContext を 初回タップで unlock (sounds に必要)
+│   │   ├── settings_sync.js    ← 個人設定 (user_settings KV) を サーバと同期
+│   │   ├── gmap_import.js      ← 共有: Google Maps の保存リスト (KML / GeoJSON) パーサ + 重複判定 (places と groups schedule の両方で使う)
 │   │   └── views/              ← ページ毎の renderer
 │   │       ├── home.js, buy.js, sell.js, product.js
 │   │       ├── tasks.js, transfer.js, history.js
@@ -140,7 +151,15 @@ LabPay/
 │   │       ├── contacts.js          ← 連絡先
 │   │       ├── profile.js           ← /#/users/:id 公開プロフィール
 │   │       ├── requests_hub.js      ← 依頼 (タスク + 募集 + 投票) ハブ
-│   │       └── admin_sounds.js      ← 効果音 規定値 (admin)
+│   │       ├── admin_sounds.js      ← 効果音 規定値 (admin)
+│   │       ├── posts.js             ← 💬 らぼったー (シンプル SNS: テキスト + 画像 + 位置 + @ + リアクション)
+│   │       ├── places.js            ← 🍴 食べある記 (お店 + 口コミ + Leaflet 地図 + Google Maps インポート)
+│   │       ├── playlists.js         ← 🎵 プレイリスト (YouTube/Spotify + ⭐ 評価)
+│   │       ├── stopwatches.js       ← ⏱ ストップウォッチ (ms 精度 + ラップ)
+│   │       ├── todos.js             ← 📝 個人 TODO (締切 + URL + 相手 + 詳細)
+│   │       ├── translate.js         ← 🌐 画像 和訳 (AI)
+│   │       ├── chat.js              ← 💬 AI 対話 / 翻訳
+│   │       └── help.js              ← 🤖 操作ガイド AI
 │   ├── vendor/              ← ZXing (バーコード / QR) + d3 (関係グラフ)
 │   └── uploads/             ← ユーザアップロード (gitignore)
 │       ├── products/        ← 商品画像・アバター
@@ -199,14 +218,15 @@ LabPay/
 技術スタック:
 
 - **OS**: Rocky Linux 10 (本番想定)
-- **HTTP**: Apache 2.4 + mod_rewrite + PHP-FPM
+- **HTTP**: Apache 2.4 + mod_rewrite + PHP-FPM、 **HTTP/2 (h2 via ALPN)** + **mod_brotli / mod_deflate 圧縮** 有効
 - **DB**: MariaDB 10.11 (InnoDB)
 - **言語**: PHP 8.3 + PDO
-- **フロント**: ES Modules + 素 CSS、ベンダはローカル配置の ZXing と d3 v7
+- **フロント**: ES Modules + 素 CSS、ベンダはローカル配置の ZXing と d3 v7 + Leaflet
 - **認証**: Google OAuth + dev login (Cookie session) / Google Calendar も incremental authorization で同じ OAuth を再利用
 - **HTTPS**: Let's Encrypt (certbot)
 - **Slack**: incoming webhook (送信) + Bot Token (`conversations.history` 取得)
 - **HTTP cache**: Google Calendar 連携は ETag + localStorage 5 分 TTL でクライアント側 revalidate
+- **PWA / SW**: shell は stale-while-revalidate (前回キャッシュ即返し + 裏で再取得)、 `/api/*` の content cache は groups / places / posts / notices / scrapbox / me / users だけ SWR、 ledger 系 (送金 / 残高) は毎回ネット。 install 時に index.html / css / app.js / router.js / login.js / home.js を precache
 
 ---
 
@@ -410,6 +430,36 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 080 | 2026‑06‑05 | users に hobbies / favorites (公開プロフィール) |
 | 081 | 2026‑06‑05 | invitations.signup_closes_at (募集締切 = 開催時刻と別。 過ぎたら 参加表明拒否) |
 | 082 | 2026‑06‑05 | invitations.starts_at_has_time (日付だけ / 時刻あり の区別) + 既存 invitation の発起人を 自動 join (backfill) |
+| 083 | 2026‑06‑05 | money_requests.source_group_id (グループのワリカ精算から bulk 生成された請求を逆引き) |
+| 084 | 2026‑06‑05 | invitations.feat_actions (募集内ボタンの ON/OFF を JSON 制御) |
+| 085 | 2026‑06‑05 | schedule_items.sort_order の rebase (DnD 並び替え用に隙間を空ける) |
+| 086 | 2026‑06‑05 | playlists + playlist_items + playlist_ratings (🎵 プレイリスト共有) |
+| 087 | 2026‑06‑05 | adhoc_group_day_memos (グループスケジュールの日ごとメモ) |
+| 088 | 2026‑06‑05 | stopwatches + stopwatch_participants (⏱ ストップウォッチ) |
+| 089 | 2026‑06‑05 | feedback の Claude 自動対応ワークフロー (claude_status / claude_summary / replied_by_user_id / finished_at) |
+| 090 | 2026‑06‑06 | translations + 履歴 (🌐 画像 和訳) |
+| 091 | 2026‑06‑06 | adhoc_group_schedule_items.hearts と location_text 拡張 |
+| 092 | 2026‑06‑06 | feedback.assigned_by_user_id (誰が approve した feedback か) |
+| 093 | 2026‑06‑06 | timers に paused 状態 + paused_at |
+| 094 | 2026‑06‑06 | stopwatches.elapsed_ms / laps (ミリ秒精度 + ラップ) |
+| 095 | 2026‑06‑06 | timers.end_bell_index (終了ベルの曲選択) |
+| 096 | 2026‑06‑06 | meetups.kind = 'meetup' \| 'deadline' (待ち合わせ / 〆切 を 同一実装で) |
+| 097 | 2026‑06‑06 | places + place_comments + place_comment_images (🍴 食べある記) |
+| 098 | 2026‑06‑06 | user_settings (個人設定 KV) |
+| 099 | 2026‑06‑06 | posts + post_images + post_replies + post_mentions (💬 らぼったー) |
+| 100 | 2026‑06‑07 | soft_delete: 各リソースに deleted_at + 関連 cascade ヘルパ |
+| 101 | 2026‑06‑07 | adhoc_group_flight_attachments.owner_user_id NULL 許可 (共有) |
+| 102 | 2026‑06‑07 | LabPay system account (お知らせ・自動投稿用 bot user) |
+| 103 | 2026‑06‑07 | adhoc_groups.invite_token (招待リンク + 期限) |
+| 104 | 2026‑06‑08 | users.paypay_id / users.bank_info (支払い ID) |
+| 105 | 2026‑06‑08 | places.image_url (メイン写真) + image_thumb_url 派生 |
+| 106 | 2026‑06‑08 | user_todos (📝 自分の TODO) |
+| 107 | 2026‑06‑08 | post_likes (👍 ❤️ ⭐ リアクション 3 種、PK = (post_id, user_id, kind)) |
+| 108 | 2026‑06‑09 | meetup_messages (待ち合わせのシェアメッセージ) |
+| 109 | 2026‑06‑09 | user_todos.due_at + url + partner + notes |
+| 110 | 2026‑06‑09 | user_todos の詳細フィールド一式 (タイトル / カテゴリ / 完了履歴) |
+| 111 | 2026‑06‑10 | users.achievements_title (AI 命名の称号 + generated_at + is_stale フラグ) |
+| 112 | 2026‑06‑10 | place_likes (食べある記 ❤️ いいね、 PK = (place_id, user_id)) |
 
 ---
 

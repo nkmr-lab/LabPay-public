@@ -61,8 +61,10 @@ export async function renderAuctions() {
         ? (a.top_bid ? `現在 ${a.top_bid}円 (${a.bid_count}件)` : `入札なし (最低 ${a.min_price}円)`)
         : (settled && a.winning_bid ? `${wonBy}` : '');
       const myBidLine = Number(a.my_bid_count) > 0 ? ' <span class="muted">·自分も入札</span>' : '';
-      const img = a.image_url
-        ? `<div class="cover-img" style="background-image:url('${escapeHtml(a.image_url)}')"></div>` : '';
+      // v512 サムネ優先 (なければ原画像)
+      const aCover = a.image_thumb_url || a.image_url;
+      const img = aCover
+        ? `<div class="cover-img" style="background-image:url('${escapeHtml(aCover)}')"></div>` : '';
       return `
         <a class="list-item with-cover" href="#/auctions/${a.id}">
           ${img}
