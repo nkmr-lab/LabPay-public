@@ -1772,13 +1772,18 @@ async function renderCheckinArea() {
       ${bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
-  if (status.today_is_workday) {
-    root.innerHTML = `<div class="hint">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>
-      ${bonusRuleHtml(status.bonus_rule)}`;
-  } else {
-    root.innerHTML = `<div class="hint">今日は稼働日ではないため、連続ボーナスには影響しません。</div>
-      ${bonusRuleHtml(status.bonus_rule)}`;
-  }
+  // v500 #116 一度でもラボインしたことのある人 (longest_streak > 0) には Wi-Fi 自動
+  //   チェックインの案内は省く。 さらに 5 日以上連続したことがあれば ラボインボーナス
+  //   の説明も省く (もう知ってる)。
+  const seenLabin = (status.longest_streak || 0) >= 1;
+  const veteran = (status.longest_streak || 0) >= 5;
+  const intro = seenLabin
+    ? ''
+    : (status.today_is_workday
+        ? `<div class="hint">ラボの Wi-Fi に繋ぐと自動でチェックインされます。</div>`
+        : `<div class="hint">今日は稼働日ではないため、連続ボーナスには影響しません。</div>`);
+  const rule = veteran ? '' : bonusRuleHtml(status.bonus_rule);
+  root.innerHTML = intro + rule;
 }
 
 // Tiny inline explainer of the checkin bonus formula. Values come from /api/checkins/status

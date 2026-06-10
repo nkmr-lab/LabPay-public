@@ -20,7 +20,7 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <a href="#/" class="brand">LabPay <span class="brand-version">v499</span></a>
+    <a href="#/" class="brand">LabPay <span class="brand-version">v500</span></a>
     <div class="topbar-right">
       <a href="#/notifications" class="bell" id="bell-link">
         通知<span id="unread-badge" class="badge" hidden>0</span>
@@ -48,7 +48,20 @@
     <a href="#/achievements" data-tab-id="achievements">実績</a>
   </nav>
 
-  <main id="app"></main>
+  <!-- v500 #113 #114 起動中は中身が空なので、 最初に大きくバージョンを出して
+       「ちゃんと起動してるよ」 を伝える。 app.js が hydrate したら自動で上書きされる。
+       (app.innerHTML = ... が走ると消える) -->
+  <main id="app">
+    <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0">v500</span></div>
+      <div style="font-size:12px; color:#666; margin-top:8px">最終更新: 2026-06-10 19:30 JST</div>
+      <div style="margin-top:30px">
+        <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>
+      </div>
+      <div style="font-size:11px; color:#999; margin-top:14px">読み込み中...</div>
+    </div>
+    <style>@keyframes splash-spin { to { transform: rotate(360deg); } }</style>
+  </main>
 
   <div id="install-banner" hidden>
     <span class="install-text">アプリとしてホーム画面に追加できます</span>
