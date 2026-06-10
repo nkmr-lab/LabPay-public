@@ -153,17 +153,31 @@ function applyHomeLayout() {
   const layout = readHomeLayout();
   const cards = Array.from(region.querySelectorAll(':scope > [data-card-id]'));
   const knownIds = cards.map(c => c.dataset.cardId);
-  // 保存 order に無いカード (新規追加された機能など) は既定順のまま末尾に。
+  // v520 #155 balance はユーザの 設定 UI で 並び替え対象に出していないため、 ユーザが
+  //   並びをいじると order に含まれず 末尾に行ってしまう問題があった。 balance が
+  //   order に含まれない場合は、 必ず 'pending' or 'my-timers' の直後 (= 上位) に強制
+  //   挿入する。 また balance は隠せない (= hidden 指定があっても無視) ようにする。
+  const fixedOrder = [...layout.order];
+  if (knownIds.includes('balance') && !fixedOrder.includes('balance')) {
+    const pendingIdx = fixedOrder.indexOf('pending');
+    const myTimersIdx = fixedOrder.indexOf('my-timers');
+    const insertAt = pendingIdx >= 0 ? pendingIdx + 1
+                   : myTimersIdx >= 0 ? myTimersIdx + 1
+                   : 0;
+    fixedOrder.splice(insertAt, 0, 'balance');
+  }
   const orderedKnown = [
-    ...layout.order.filter(id => knownIds.includes(id)),
-    ...knownIds.filter(id => !layout.order.includes(id)),
+    ...fixedOrder.filter(id => knownIds.includes(id)),
+    ...knownIds.filter(id => !fixedOrder.includes(id)),
   ];
   for (const id of orderedKnown) {
     const el = cards.find(c => c.dataset.cardId === id);
     if (el) region.appendChild(el);
   }
   for (const card of cards) {
-    card.classList.toggle('home-card-user-hidden', layout.hidden.includes(card.dataset.cardId));
+    // balance は 常時 表示 (hidden 指定があっても無視)
+    const isHidden = card.dataset.cardId !== 'balance' && layout.hidden.includes(card.dataset.cardId);
+    card.classList.toggle('home-card-user-hidden', isHidden);
   }
 }
 
