@@ -185,7 +185,7 @@ export async function renderHome() {
         <h2 class="row-title">⏱ 進行中</h2>
         <a href="#/timers" class="hint">タイマー →</a>
       </div>
-      <div id="home-mytm" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-mytm" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" data-card-id="presence">
@@ -199,7 +199,7 @@ export async function renderHome() {
           </span>
         </label>
       </div>
-      <div id="presence" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+      <div id="presence" style="margin-top:8px"><div class="home-skel-bars"></div></div>
       <div style="text-align:right; margin-top:8px">
         <a href="#/activity" class="hint">ラボ滞在・活動マップ →</a>
       </div>
@@ -243,7 +243,7 @@ export async function renderHome() {
         <h2 class="row-title">新規入荷</h2>
         <a href="#/buy" class="hint">商品一覧 →</a>
       </div>
-      <div id="home-fresh-listings" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-fresh-listings" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-my-claims-card" data-card-id="my-claims" hidden>
@@ -258,7 +258,7 @@ export async function renderHome() {
         <h2 class="row-title">新規タスク</h2>
         <a href="#/tasks" class="hint">一覧 →</a>
       </div>
-      <div id="home-fresh-tasks" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-fresh-tasks" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-invs-card" data-card-id="invitations">
@@ -266,7 +266,7 @@ export async function renderHome() {
         <h2 class="row-title">募集</h2>
         <a href="#/invitations" class="hint">一覧 →</a>
       </div>
-      <div id="home-invs" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-invs" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-pl-card" data-card-id="playlists" hidden>
@@ -274,7 +274,7 @@ export async function renderHome() {
         <h2 class="row-title">🎵 新着 プレイリスト</h2>
         <a href="#/playlists" class="hint">一覧 →</a>
       </div>
-      <div id="home-pl" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-pl" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-places-card" data-card-id="places" hidden>
@@ -282,7 +282,7 @@ export async function renderHome() {
         <h2 class="row-title">🍴 食べある記 (新着)</h2>
         <a href="#/places" class="hint">一覧 →</a>
       </div>
-      <div id="home-places" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-places" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-todos-card" data-card-id="todos" hidden>
@@ -290,7 +290,7 @@ export async function renderHome() {
         <h2 class="row-title">📝 自分の TODO</h2>
         <a href="#/todos" class="hint">TODO →</a>
       </div>
-      <div id="home-todos" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-todos" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
@@ -298,36 +298,61 @@ export async function renderHome() {
         <h2 class="row-title">💬 らぼったー 最新</h2>
         <a href="#/sns" class="hint">タイムライン →</a>
       </div>
-      <div id="home-sns" class="list"><div class="muted">読み込み中…</div></div>
+      <div id="home-sns" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
     <details class="card" data-card-id="history">
       <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
         履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
       </summary>
-      <div id="recent" class="list" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+      <div id="recent" class="list" style="margin-top:8px"><div class="home-skel-bars"></div></div>
     </details>
     </div>
   `;
   applyHomeLayout();
 
-  await refreshFinancials({ silent: false });
-  await renderCheckinArea();
-  await renderMedalsStrip();
-  await renderPresence();
-  await renderPendingItems();
-  await renderAskingItems();
-  await renderCalendarEvents();
-  await renderMyGroups();
-  await renderFreshInvitations();
-  await renderFreshPlaylists();
-  await renderMyActiveTimers();
-  await renderFreshListings();
-  await renderFreshTasks();
-  await renderFreshPlaces();
-  await renderFreshSns();
-  await renderHomeTodos();
-  await renderRecentTx();
+  // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
+  //   右下に小さく出す。
+  const perfStart = performance.now();
+  const perfEntries = [];
+  const timed = async (name, fn) => {
+    const t0 = performance.now();
+    try { await fn(); }
+    finally {
+      const dt = performance.now() - t0;
+      perfEntries.push({ name, ms: Math.round(dt) });
+    }
+  };
+  // 各セクションを順次実行 (= 既存の挙動を維持。 並列化はあえてしない:
+  //   サーバ負荷バランスのため)
+  await timed('balance',       () => refreshFinancials({ silent: false }));
+  await timed('checkin',       () => renderCheckinArea());
+  await timed('medals',        () => renderMedalsStrip());
+  await timed('presence',      () => renderPresence());
+  await timed('pending',       () => renderPendingItems());
+  await timed('asking',        () => renderAskingItems());
+  await timed('calendar',      () => renderCalendarEvents());
+  await timed('mygroups',      () => renderMyGroups());
+  await timed('invitations',   () => renderFreshInvitations());
+  await timed('playlists',     () => renderFreshPlaylists());
+  await timed('mytimers',      () => renderMyActiveTimers());
+  await timed('freshlistings', () => renderFreshListings());
+  await timed('freshtasks',    () => renderFreshTasks());
+  await timed('freshplaces',   () => renderFreshPlaces());
+  await timed('freshsns',      () => renderFreshSns());
+  await timed('hometodos',     () => renderHomeTodos());
+  await timed('recenttx',      () => renderRecentTx());
+  const totalMs = Math.round(performance.now() - perfStart);
+
+  // console.group 化 (admin/dev だけが普段見る場所、 邪魔にならない)
+  perfEntries.sort((a, b) => b.ms - a.ms);
+  try {
+    console.groupCollapsed(`🏠 Home load ${totalMs} ms`);
+    for (const e of perfEntries) console.log(`${e.name.padEnd(14)} ${e.ms} ms`);
+    console.groupEnd();
+  } catch (_) {}
+  // 画面下に admin だけ見える 簡易タイマー (タップで詳細トグル)
+  if (state.me?.role === 'admin') renderHomePerfPill(totalMs, perfEntries);
 
   // Home polling: 1 分ごとに各カードを 「静かに」 リロード。
   // - 「読み込み中…」 placeholder は出さない (各 render は初期 HTML を持つ
@@ -336,6 +361,38 @@ export async function renderHome() {
   // - 戻ってきた瞬間 (visibilitychange → visible) に即 1 回ポーリング
   // - home から離れたら timer 停止 (#home-balance 消失で検知)
   startHomePolling();
+}
+
+// v501 #115 admin だけが画面右下で見られる Home パフォーマンスピル。 タップで
+//   セクション別の所要時間を展開表示。 navigation 等でホームから離れたら消す。
+function renderHomePerfPill(totalMs, entries) {
+  document.getElementById('home-perf-pill')?.remove();
+  const box = document.createElement('div');
+  box.id = 'home-perf-pill';
+  box.style.cssText = 'position:fixed; bottom:12px; right:12px; z-index:9999; background:#222; color:#fff; padding:4px 10px; border-radius:14px; font-size:11px; font-family:ui-monospace, monospace; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3); user-select:none';
+  box.title = 'admin: ホームのロード所要時間';
+  const sum = `🏠 ${totalMs} ms`;
+  box.innerHTML = `<span>${sum}</span>`;
+  let expanded = false;
+  box.addEventListener('click', () => {
+    expanded = !expanded;
+    if (expanded) {
+      const list = entries.map(e => `<div>${e.name.padEnd(14)} ${e.ms} ms</div>`).join('');
+      box.innerHTML = `<div><b>${sum}</b><br><span class="muted" style="opacity:0.7">タップで閉じる</span></div><pre style="margin:6px 0 0; font-size:10px; line-height:1.3; max-height:240px; overflow:auto">${list}</pre>`;
+      box.style.cssText += '; max-width:260px';
+    } else {
+      box.innerHTML = `<span>${sum}</span>`;
+    }
+  });
+  document.body.appendChild(box);
+  // ホームから離れたら自動削除
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById('home-balance')) {
+      box.remove();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.getElementById('app'), { childList: true, subtree: false });
 }
 
 // Module-scoped: 単一の home polling 用 timer + visibilitychange handler。

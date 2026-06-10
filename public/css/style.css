@@ -269,6 +269,24 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 .hint { color: var(--muted); font-size: var(--text-md); }
 .hint-sm { color: var(--muted); font-size: var(--text-sm); }
 
+/* v501 #111 ホームのウィジェットが読み込み中であることを skeleton shimmer で示す。
+   既存の 「読み込み中…」 テキスト placeholder の代替として使用。 */
+.home-skel-bars {
+  display: flex; flex-direction: column; gap: 8px; padding: 6px 0;
+}
+.home-skel-bars::before, .home-skel-bars::after {
+  content: ""; display: block; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, #ece9f0 0%, #f7f4fa 50%, #ece9f0 100%);
+  background-size: 200% 100%;
+  animation: home-skel-shimmer 1.4s linear infinite;
+}
+.home-skel-bars::before { width: 65%; }
+.home-skel-bars::after  { width: 45%; }
+@keyframes home-skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* Buttons */
 button, .btn {
   display: inline-flex; align-items: center; justify-content: center;
