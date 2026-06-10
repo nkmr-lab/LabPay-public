@@ -69,6 +69,24 @@ async function dispatch() {
   // Expose the active view as a body data attribute so per-view CSS
   // (e.g. body[data-view="home"] for the fill-bottom layout) can target it.
   document.body.dataset.view = (target.filter(Boolean).join('-') || 'home');
+  // v515 #142 タブ切替直後に「読み込み中」 プレースホルダ + nav ハイライトを即更新
+  //   する (= ユーザがタップした瞬間に画面が反応する)。 各 view の renderer が
+  //   app.innerHTML を上書きすれば プレースホルダは消える。 dynamic import の
+  //   完了を待たずに 画面が動くので 「反応が遅い」 感覚が大幅に減る。
+  highlightTab();
+  const appPlaceholder = document.getElementById('app');
+  if (appPlaceholder) {
+    appPlaceholder.innerHTML = `
+      <div class="card" style="margin-top:12px">
+        <div class="home-skel-bars"></div>
+      </div>
+      <div class="card">
+        <div class="home-skel-bars"></div>
+      </div>`;
+  }
+  // 直近 hash を保存 (個別 view の renderer から 「自分が古い hash の render か」 を
+  //   判定したい場合に使える)。
+  window.__labpay_dispatch_hash = hashKey;
   for (const r of routes) {
     const params = match(r.parts.length === 0 ? [''] : r.parts, target);
     if (params) {

@@ -91,13 +91,23 @@ function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $shortMessage)
 function feedback_claude_dashboard(PDO $pdo, array $cfg): void {
     Auth::requireAdmin($pdo, $cfg);
     $pollFile = '/var/www/labpay/var/claude_last_poll.txt';
-    $lastPoll = is_readable($pollFile) ? (string) trim((string)@file_get_contents($pollFile)) : null;
+    $lastPollFile = is_readable($pollFile) ? (string) trim((string)@file_get_contents($pollFile)) : null;
     $stD = $pdo->query("SELECT id, claude_summary, claude_finished_at
                           FROM feedback
                          WHERE claude_status='done' AND claude_finished_at IS NOT NULL
                          ORDER BY claude_finished_at DESC LIMIT 1");
     $lastDone = $stD->fetch(PDO::FETCH_ASSOC) ?: null;
     if ($lastDone) $lastDone['id'] = (int)$lastDone['id'];
+    // v515 #141 「最終 巡回」 = MAX(claude_last_poll.txt, MAX(claude_finished_at))
+    //   ファイル経由のヘルスチェックを実装してない巡回方法 (= 私が SQL を直接読みに行く形)
+    //   でも 完了タイムスタンプが入っていれば 「Claude は生きてる」 とみなす。
+    $lastPoll = $lastPollFile;
+    if ($lastDone && !empty($lastDone['claude_finished_at'])) {
+        $finishedIso = date('c', strtotime((string)$lastDone['claude_finished_at']));
+        if ($lastPoll === null || strtotime($finishedIso) > strtotime($lastPoll)) {
+            $lastPoll = $finishedIso;
+        }
+    }
 
     $stQ = $pdo->prepare("
         SELECT id, kind, user_id, claude_status, claude_assigned_at, claude_started_at,
