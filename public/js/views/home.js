@@ -1298,7 +1298,7 @@ async function renderFreshSns() {
       if (p.image_url) {
         // v468 .row > * の flex:1 1 auto を 上書き しないと 横長 に 引き伸ばされる
         const avatar = p.avatar_url
-          ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
+          ? `<img src="${escapeHtml(p.avatar_url)}" alt="" loading="lazy" decoding="async" fetchpriority="low" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:4px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:100px">
@@ -1664,7 +1664,7 @@ async function renderMyActiveTimers() {
             const ml = i === 0 ? '' : 'margin-left:-6px';
             const initial = (p.display_name || '?').trim().charAt(0).toUpperCase();
             return p.avatar_url
-              ? `<img src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.display_name)}" title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`
+              ? `<img src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.display_name)}" title="${escapeHtml(p.display_name)}" loading="lazy" decoding="async" fetchpriority="low" style="width:22px; height:22px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`
               : `<div title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
           }).join('')}
         </div>` : '';

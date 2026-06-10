@@ -109,9 +109,12 @@ export function safeHttpUrl(raw) {
 
 // Render either an <img class="avatar"> when avatar_url is set, or a colored
 // circle with the first character of display_name as a fallback.
+// v507 loading=lazy + decoding=async + fetchpriority=low をデフォルトで付ける。
+//   アバターは大量に並ぶがどれもクリティカルではないので、 ビューポート到達まで
+//   遅延ロードして OK。 ホームの 5 秒スタートアップが大幅に減る。
 export function avatarHtml(displayName, avatarUrl, size = 'sm') {
   const cls = 'avatar-' + size;
-  if (avatarUrl) return `<img class="avatar ${cls}" src="${escapeHtml(avatarUrl)}" alt="">`;
+  if (avatarUrl) return `<img class="avatar ${cls}" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" decoding="async" fetchpriority="low">`;
   const ch = (displayName || '?').trim().charAt(0).toUpperCase();
   const fontSize = size === 'lg' ? '28px' : size === 'md' ? '16px' : size === 'xs' ? '10px' : '12px';
   return `<span class="avatar-fallback ${cls}" style="font-size:${fontSize}">${escapeHtml(ch)}</span>`;

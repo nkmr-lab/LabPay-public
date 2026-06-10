@@ -269,6 +269,13 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 .hint { color: var(--muted); font-size: var(--text-md); }
 .hint-sm { color: var(--muted); font-size: var(--text-sm); }
 
+/* v507 ホームの折り畳まれたカード (画面下のもの) を content-visibility:auto で描画
+   遅延。 これにより、 そのカード内の background-image cover や img もスクロール到達
+   まで fetch されない。 起動直後の並列画像 fetch の渋滞 (Network タブで 5 秒の
+   waterfall を作っていた) が劇的に減る。 Chrome 85+/Safari 18+/Edge で有効、 古い
+   ブラウザでは no-op (劣化しない)。 */
+#home-cards-region > .card { content-visibility: auto; contain-intrinsic-size: auto 220px; }
+
 /* v501 #111 ホームのウィジェットが読み込み中であることを skeleton shimmer で示す。
    既存の 「読み込み中…」 テキスト placeholder の代替として使用。 */
 .home-skel-bars {
