@@ -494,18 +494,31 @@ function startHomeSnsFastPoll() {
   }, 10_000);
 }
 
+// v508 残高 / 連続ラボイン も localStorage 経由の SWR キャッシュ。 1) 既に持ってる値で
+//   即描画 (state.balance や前回保存の streak)、 2) 裏で /api/me を取り直して更新。
+const FIN_CACHE_KEY = 'labpay-fin-cache';
+function paintFinancials(me) {
+  const bal = document.getElementById('home-balance');
+  if (bal) bal.innerHTML = `${(me.balance ?? 0).toLocaleString()}<span class="num-unit">pt</span>`;
+  const sl = document.getElementById('streak-line');
+  if (sl) {
+    const s = me.streak || {};
+    sl.textContent = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
+  }
+}
 async function refreshFinancials({ silent }) {
+  // 1) キャッシュから即描画 (state.balance が hydrate されてればそれも併用)
+  try {
+    const cached = localStorage.getItem(FIN_CACHE_KEY);
+    if (cached) paintFinancials(JSON.parse(cached));
+    else if (state.balance != null) paintFinancials({ balance: state.balance });
+  } catch (_) {}
+  // 2) 裏で最新を取って差し替え + キャッシュ更新
   try {
     const me = await get('/api/me');
-    const bal = document.getElementById('home-balance');
-    // 数字は大きく、単位 pt は小さくサブ的に。CSS .balance-hero .num .num-unit。
-    if (bal) bal.innerHTML = `${(me.balance ?? 0).toLocaleString()}<span class="num-unit">pt</span>`;
-    const sl = document.getElementById('streak-line');
-    if (sl) {
-      const s = me.streak || {};
-      sl.textContent = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
-    }
+    paintFinancials(me);
     state.balance = me.balance;
+    try { localStorage.setItem(FIN_CACHE_KEY, JSON.stringify({ balance: me.balance, streak: me.streak })); } catch (_) {}
   } catch (e) {
     if (!silent) toast('情報の取得に失敗: ' + e.message);
   }
@@ -513,30 +526,42 @@ async function refreshFinancials({ silent }) {
 
 // Compact medals strip rendered inside the balance-hero. Each earned achievement is a
 // solid emoji, unearned ones are dimmed. Tapping the strip opens /achievements.
+// v508 ヒーロー部分 (実績・チェックイン) も me と同じく localStorage 経由の SWR
+//   キャッシュ化。 前回のメダル列を即出して、 裏で /api/me/achievements を取り直す。
+const ACH_CACHE_KEY = 'labpay-ach-cache';
+function paintMedals(items) {
+  const root = document.getElementById('home-medals');
+  if (!root) return;
+  const earned = (items || []).filter(a => a.earned);
+  if (!earned.length) { root.innerHTML = ''; return; }
+  earned.sort((a, b) => b.earned_tier - a.earned_tier);
+  const medals = earned.map(a => {
+    const icon = a.icon || '🏅';
+    const tierMedal = a.earned.medal;
+    return `
+      <span title="${escapeHtml(a.title)}: ${escapeHtml(a.earned.label)}"
+            style="position:relative; display:inline-block; width:32px; height:32px; line-height:32px; text-align:center; border-radius:50%; background:#fff; font-size:18px; border:1px solid var(--line)">
+        ${icon}
+        <span style="position:absolute; right:-4px; bottom:-4px; font-size:11px; background:#fff; border-radius:50%; padding:1px; line-height:1; box-shadow:0 1px 2px rgba(0,0,0,0.2)">${tierMedal}</span>
+      </span>`;
+  }).join(' ');
+  root.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px 6px; align-items:center">${medals}</div>`;
+}
 async function renderMedalsStrip() {
   const root = document.getElementById('home-medals');
   if (!root) return;
+  // 1) キャッシュがあれば即描画
+  try {
+    const cached = localStorage.getItem(ACH_CACHE_KEY);
+    if (cached) paintMedals(JSON.parse(cached));
+  } catch (_) {}
+  // 2) 裏で最新を取って差し替え + キャッシュ更新
   try {
     const ach = await get('/api/me/achievements');
     const items = ach.items || [];
-    if (!items.length) { root.innerHTML = ''; return; }
-    // 達成済みメダルのみ表示。 シンプルに カテゴリアイコン + tier メダル を
-    // 並べるだけ (背景は白、 件数表示なし)。
-    const earned = items.filter(a => a.earned);
-    if (!earned.length) { root.innerHTML = ''; return; }
-    earned.sort((a, b) => b.earned_tier - a.earned_tier);
-    const medals = earned.map(a => {
-      const icon = a.icon || '🏅';
-      const tierMedal = a.earned.medal;
-      return `
-        <span title="${escapeHtml(a.title)}: ${escapeHtml(a.earned.label)}"
-              style="position:relative; display:inline-block; width:32px; height:32px; line-height:32px; text-align:center; border-radius:50%; background:#fff; font-size:18px; border:1px solid var(--line)">
-          ${icon}
-          <span style="position:absolute; right:-4px; bottom:-4px; font-size:11px; background:#fff; border-radius:50%; padding:1px; line-height:1; box-shadow:0 1px 2px rgba(0,0,0,0.2)">${tierMedal}</span>
-        </span>`;
-    }).join(' ');
-    root.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px 6px; align-items:center">${medals}</div>`;
-  } catch (e) { root.innerHTML = ''; }
+    paintMedals(items);
+    try { localStorage.setItem(ACH_CACHE_KEY, JSON.stringify(items)); } catch (_) {}
+  } catch (_) { /* キャッシュ表示のままにしておく */ }
 }
 
 async function fetchAndRenderPresence() {
@@ -1831,25 +1856,17 @@ async function renderRecentTx() {
 //  - Already checked in:     subtle ✓ message
 //  - Not yet, today is workday: passive message (Wi-Fi scanner handles it)
 //  - Not yet, not workday:   inert message, but still allow optional checkin
-async function renderCheckinArea() {
+// v508 ヒーロー チェックイン 表示も SWR キャッシュ化。 同じく前回のステータスを
+//   即出して、 裏で /api/checkins/status を取り直す。
+const CHECKIN_CACHE_KEY = 'labpay-checkin-status-cache';
+function paintCheckin(status) {
   const root = document.getElementById('checkin-area');
-  if (!root) return;
-  let status;
-  try { status = await get('/api/checkins/status'); }
-  catch (e) {
-    root.innerHTML = `<div class="hint">${escapeHtml(e.message)}</div>`;
-    return;
-  }
-  // Check-in happens entirely via the lab Wi-Fi scanner — no manual UI here.
-  // Show today's state + the bonus rule explainer, nothing actionable.
+  if (!root || !status) return;
   if (status.checked_in_today) {
     root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日ラボイン済み (+${status.points_today}pt / 連続ラボイン ${status.current_streak} 日)</div>
       ${bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
-  // v500 #116 一度でもラボインしたことのある人 (longest_streak > 0) には Wi-Fi 自動
-  //   チェックインの案内は省く。 さらに 5 日以上連続したことがあれば ラボインボーナス
-  //   の説明も省く (もう知ってる)。
   const seenLabin = (status.longest_streak || 0) >= 1;
   const veteran = (status.longest_streak || 0) >= 5;
   const intro = seenLabin
@@ -1859,6 +1876,22 @@ async function renderCheckinArea() {
         : `<div class="hint">今日は稼働日ではないため、連続ボーナスには影響しません。</div>`);
   const rule = veteran ? '' : bonusRuleHtml(status.bonus_rule);
   root.innerHTML = intro + rule;
+}
+async function renderCheckinArea() {
+  const root = document.getElementById('checkin-area');
+  if (!root) return;
+  try {
+    const cached = localStorage.getItem(CHECKIN_CACHE_KEY);
+    if (cached) paintCheckin(JSON.parse(cached));
+  } catch (_) {}
+  try {
+    const status = await get('/api/checkins/status');
+    paintCheckin(status);
+    try { localStorage.setItem(CHECKIN_CACHE_KEY, JSON.stringify(status)); } catch (_) {}
+  } catch (e) {
+    // 既にキャッシュ描画済みならそのまま。 キャッシュも無い場合のみエラー表示。
+    if (!root.innerHTML) root.innerHTML = `<div class="hint">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // Tiny inline explainer of the checkin bonus formula. Values come from /api/checkins/status
