@@ -27,6 +27,14 @@ foreach ($files as $path) {
         if (!$raw) { $err++; echo "skip read fail: $base\n"; continue; }
         $src = @imagecreatefromstring($raw);
         if (!$src) { $err++; echo "skip decode fail: $base\n"; continue; }
+        // v505 EXIF orientation 補正 (JPEG)。 iPhone 等の縦写真サムネが横倒しになるのを防ぐ。
+        if (preg_match('/\.jpe?g$/i', $base) && function_exists('exif_read_data')) {
+            $exif = @exif_read_data($path);
+            $ori = isset($exif['Orientation']) ? (int)$exif['Orientation'] : 1;
+            if ($ori === 3) $src = imagerotate($src, 180, 0);
+            else if ($ori === 6) $src = imagerotate($src, -90, 0);
+            else if ($ori === 8) $src = imagerotate($src, 90, 0);
+        }
         $sw = imagesx($src); $sh = imagesy($src);
         $maxDim = 320;
         $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);

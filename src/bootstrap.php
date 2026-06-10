@@ -297,12 +297,26 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
 
     // 画像ならサムネ (一辺最大 320px) を作って横に置く: <stored>.thumb.jpg
     // GD が無い / 失敗しても本体は成功扱い (サムネはオプション)。
+    // v505 #131 (ユーザ報告) EXIF の Orientation を無視していたため iPhone の縦写真等が
+    //   サムネで横倒しになっていた。 JPEG なら exif_read_data で orientation を読み、
+    //   imagerotate で正しい向きに直してからリサイズする。
     $thumbPath = null;
     if (in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true) && function_exists('imagecreatefromstring')) {
         try {
             $raw = @file_get_contents($dest);
             $src = $raw ? @imagecreatefromstring($raw) : false;
             if ($src) {
+                // EXIF orientation 補正 (JPEG のみ)
+                if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+                    $exif = @exif_read_data($dest);
+                    $ori = isset($exif['Orientation']) ? (int)$exif['Orientation'] : 1;
+                    if ($ori >= 2 && $ori <= 8) {
+                        // 1=normal, 3=180, 6=CW90, 8=CCW90, その他は鏡像なので簡略
+                        if ($ori === 3) $src = imagerotate($src, 180, 0);
+                        else if ($ori === 6) $src = imagerotate($src, -90, 0);
+                        else if ($ori === 8) $src = imagerotate($src, 90, 0);
+                    }
+                }
                 $sw = imagesx($src); $sh = imagesy($src);
                 $maxDim = 320;
                 $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
