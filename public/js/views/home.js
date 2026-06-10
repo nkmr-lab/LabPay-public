@@ -311,6 +311,29 @@ export async function renderHome() {
   `;
   applyHomeLayout();
 
+  // v503 #121 #129 hidden なカードのレンダー処理はそもそも動かさない (表示しないものを
+  //   API で叩いて時間を浪費しない)。 cardId → render 関数の対応表で hidden だけ skip。
+  //   無料サブセット (balance / checkin / medals) はホーム冒頭の hero に直接出るので
+  //   常に動かす。
+  const layout = readHomeLayout();
+  const hiddenSet = new Set(layout.hidden || []);
+  const cardsToRender = [
+    { cardId: 'my-timers',      fn: renderMyActiveTimers,  label: 'mytimers' },
+    { cardId: 'presence',       fn: renderPresence,        label: 'presence' },
+    { cardId: 'pending',        fn: renderPendingItems,    label: 'pending' },
+    { cardId: 'asking',         fn: renderAskingItems,     label: 'asking' },
+    { cardId: 'calendar',       fn: renderCalendarEvents,  label: 'calendar' },
+    { cardId: 'groups',         fn: renderMyGroups,        label: 'mygroups' },
+    { cardId: 'invitations',    fn: renderFreshInvitations, label: 'invitations' },
+    { cardId: 'playlists',      fn: renderFreshPlaylists,  label: 'playlists' },
+    { cardId: 'fresh-listings', fn: renderFreshListings,   label: 'freshlistings' },
+    { cardId: 'fresh-tasks',    fn: renderFreshTasks,      label: 'freshtasks' },
+    { cardId: 'places',         fn: renderFreshPlaces,     label: 'freshplaces' },
+    { cardId: 'sns',            fn: renderFreshSns,        label: 'freshsns' },
+    { cardId: 'todos',          fn: renderHomeTodos,       label: 'hometodos' },
+    { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
+  ];
+
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
   //   右下に小さく出す。
   const perfStart = performance.now();
@@ -323,25 +346,15 @@ export async function renderHome() {
       perfEntries.push({ name, ms: Math.round(dt) });
     }
   };
-  // 各セクションを順次実行 (= 既存の挙動を維持。 並列化はあえてしない:
-  //   サーバ負荷バランスのため)
-  await timed('balance',       () => refreshFinancials({ silent: false }));
-  await timed('checkin',       () => renderCheckinArea());
-  await timed('medals',        () => renderMedalsStrip());
-  await timed('presence',      () => renderPresence());
-  await timed('pending',       () => renderPendingItems());
-  await timed('asking',        () => renderAskingItems());
-  await timed('calendar',      () => renderCalendarEvents());
-  await timed('mygroups',      () => renderMyGroups());
-  await timed('invitations',   () => renderFreshInvitations());
-  await timed('playlists',     () => renderFreshPlaylists());
-  await timed('mytimers',      () => renderMyActiveTimers());
-  await timed('freshlistings', () => renderFreshListings());
-  await timed('freshtasks',    () => renderFreshTasks());
-  await timed('freshplaces',   () => renderFreshPlaces());
-  await timed('freshsns',      () => renderFreshSns());
-  await timed('hometodos',     () => renderHomeTodos());
-  await timed('recenttx',      () => renderRecentTx());
+  // 残高/チェックイン/メダルは hero ヒーローに常時出すので hidden に関わらず必ずロード。
+  await timed('balance', () => refreshFinancials({ silent: false }));
+  await timed('checkin', () => renderCheckinArea());
+  await timed('medals',  () => renderMedalsStrip());
+  // ユーザが hidden にしたカードはレンダー (fetch) しない
+  for (const c of cardsToRender) {
+    if (hiddenSet.has(c.cardId)) continue;
+    await timed(c.label, c.fn);
+  }
   const totalMs = Math.round(performance.now() - perfStart);
 
   // console.group 化 (admin/dev だけが普段見る場所、 邪魔にならない)
@@ -417,24 +430,27 @@ async function doHomePoll() {
     return;
   }
   if (document.hidden) return;
-  // Promise.allSettled: 1 つのカードが失敗しても残りは更新される。
-  await Promise.allSettled([
+  // v503 #130 hidden なカードは polling 対象からも外す (どうせ見えない)。
+  const hiddenSet = new Set((readHomeLayout().hidden) || []);
+  const skip = id => hiddenSet.has(id);
+  const tasks = [
     refreshFinancials({ silent: true }),
-    fetchAndRenderPresence(),     // 「今ラボにいる人」 (renderPresence の内部関数)
-    renderPendingItems(),
-    renderAskingItems(),
-    renderCalendarEvents(),
-    renderMyGroups(),
-    renderFreshInvitations(),
-    renderFreshPlaylists(),
-    renderMyActiveTimers(),
-    renderFreshListings(),
-    renderFreshTasks(),
-    renderFreshPlaces(),
-    renderFreshSns(),
-    renderHomeTodos(),
-    renderRecentTx(),
-  ]);
+    skip('presence')       ? null : fetchAndRenderPresence(),
+    skip('pending')        ? null : renderPendingItems(),
+    skip('asking')         ? null : renderAskingItems(),
+    skip('calendar')       ? null : renderCalendarEvents(),
+    skip('groups')         ? null : renderMyGroups(),
+    skip('invitations')    ? null : renderFreshInvitations(),
+    skip('playlists')      ? null : renderFreshPlaylists(),
+    skip('my-timers')      ? null : renderMyActiveTimers(),
+    skip('fresh-listings') ? null : renderFreshListings(),
+    skip('fresh-tasks')    ? null : renderFreshTasks(),
+    skip('places')         ? null : renderFreshPlaces(),
+    skip('sns')            ? null : renderFreshSns(),
+    skip('todos')          ? null : renderHomeTodos(),
+    skip('history')        ? null : renderRecentTx(),
+  ].filter(Boolean);
+  await Promise.allSettled(tasks);
 }
 
 function startHomePolling() {
@@ -1195,10 +1211,12 @@ async function renderFreshPlaces() {
       const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
       const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}`;
       const href = `#/places/${p.id}`;
-      if (p.cover_image) {
+      // v503 #127 サムネを優先
+      const coverBg = p.cover_image_thumb || p.cover_image;
+      if (coverBg) {
         return `
           <a class="list-item with-cover" href="${href}">
-            <div class="cover-img" style="background-image:url('${escapeHtml(p.cover_image)}')">${ratingBadge}</div>
+            <div class="cover-img" style="background-image:url('${escapeHtml(coverBg)}')">${ratingBadge}</div>
             <div class="grow">
               <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title)}</div>
               <div class="meta">${meta}</div>

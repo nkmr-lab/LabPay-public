@@ -175,9 +175,12 @@ export async function renderPlaces() {
         : `💬${p.comment_count}`;
       // v487 #82 いいね は 0 件 でも 常時 表示 (押せる 場所 を 認識 して もらう)。
       const likeBadge = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
-      if (p.cover_image) {
+      // v503 #127 タイル背景は重いオリジナル画像ではなくサムネを使う (サーバ thumb_url_for で
+      //   実在チェック済み、 無ければ原画像 fallback)。
+      const tileBg = p.cover_image_thumb || p.cover_image;
+      if (tileBg) {
         return `
-          <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(p.cover_image)}')">
+          <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(tileBg)}')">
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
               <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}</div>
@@ -296,8 +299,10 @@ export async function renderPlacesMap() {
       const cat2 = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null ? ` · ${ratingStars(p.avg_rating)} (${p.avg_rating.toFixed(1)})` : '';
       const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
-      const img = p.cover_image
-        ? `<img src="${escapeHtml(p.cover_image)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px; flex:none">`
+      // v503 #127 マップ一覧でもサムネを使う
+      const thumb = p.cover_image_thumb || p.cover_image;
+      const img = thumb
+        ? `<img src="${escapeHtml(thumb)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; margin-right:8px; flex:none">`
         : '';
       return `
         <a class="list-item" href="#/places/${p.id}" data-pm-pid="${p.id}" style="align-items:center; padding:6px 4px">

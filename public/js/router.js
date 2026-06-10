@@ -53,7 +53,17 @@ function highlightTab() {
   });
 }
 
+// v503 #125 #126 同一 hash の dispatch を 800ms 以内なら重複として skip。 boot 直後の
+//   start() で DOMContentLoaded + 即時 dispatch が両方走るレースで renderHome が
+//   2回走り 「Home load レポートが2回出る」 のを抑止。
+let lastDispatchHash = null;
+let lastDispatchAt = 0;
 async function dispatch() {
+  const now = performance.now();
+  const hashKey = location.hash || '';
+  if (hashKey === lastDispatchHash && (now - lastDispatchAt) < 800) return;
+  lastDispatchHash = hashKey;
+  lastDispatchAt = now;
   const { parts, query } = parse(location.hash);
   const target = parts.length === 0 ? [''] : parts;
   // Expose the active view as a body data attribute so per-view CSS

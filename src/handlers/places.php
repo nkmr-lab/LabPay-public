@@ -79,6 +79,9 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['liked_by_me']     = (bool)$r['liked_by_me'];
         // v478 cover_image: 店のメイン画像 を 優先、 なければ 最新の レビュー画像
         $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
+        // v503 #127 タイル表示は重いオリジナル画像を使っていたので、 サムネ URL を
+        //   別フィールドで返す (実在しなければ原画像 fallback)。
+        $r['cover_image_thumb'] = $r['cover_image'] ? thumb_url_for((string)$r['cover_image']) : null;
     }
     unset($r);
     json_response(['items' => $rows]);
