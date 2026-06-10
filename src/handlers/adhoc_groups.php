@@ -175,6 +175,8 @@ function groups_list(PDO $pdo, array $cfg): void {
         }
         foreach ($items as &$it) {
             $it['members'] = $byGroup[(int)$it['id']] ?? [];
+            // v511 サムネ実在チェック済み URL を別フィールドで返す (なければ原画像)。
+            $it['image_thumb_url'] = $it['image_url'] ? thumb_url_for((string)$it['image_url']) : null;
         }
         unset($it);
     }

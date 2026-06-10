@@ -74,6 +74,8 @@ function invitations_list(PDO $pdo, array $cfg): void {
         }
         foreach ($items as &$it) {
             $it['joins'] = $byInv[(int)$it['id']] ?? [];
+            // v511 サムネ実在チェック済み URL を別フィールドで返す (無ければ原画像)。
+            $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
         }
         unset($it);
     }

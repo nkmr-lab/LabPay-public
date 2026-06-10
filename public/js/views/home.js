@@ -1139,11 +1139,12 @@ async function renderMyGroups() {
     // groups.js の coverListItem を共有 (avatar 行 + 表紙画像のオン/オフが
     // 同じロジックでまとまる)。 closed は [終了] バッジ付きで同じカードに混ぜる。
     root.innerHTML = items.slice(0, 5).map(g => coverListItem({
-      href:      '#/groups/' + escapeHtml(g.slug || g.id),
-      image_url: g.image_url,
-      title:     escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
-      members:   g.members || [],
-      chipSize:  'xs',  // v412 上下が あふれる 報告 → 元の xs (18px) に 戻し
+      href:            '#/groups/' + escapeHtml(g.slug || g.id),
+      image_url:       g.image_url,
+      image_thumb_url: g.image_thumb_url, // v511 サーバ側サムネ実在チェック済み
+      title:           escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
+      members:         g.members || [],
+      chipSize:        'xs',  // v412 上下が あふれる 報告 → 元の xs (18px) に 戻し
     })).join('');
   } catch (_) {
     card.hidden = true;
@@ -1189,10 +1190,11 @@ async function renderFreshInvitations() {
       const sep = others.length ? `<span class="muted" style="font-size:14px; line-height:1; padding:0 2px">｜</span>` : '';
       const peopleRow = `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">${creatorChip}${sep}${othersHtml}${moreNum}</div>`;
       const href = '#/invitations/' + i.id;
-      if (i.image_url) {
+      const iCover = i.image_thumb_url || i.image_url; // v511 サムネ優先
+      if (iCover) {
         return `
           <a class="list-item with-cover hero" href="${href}">
-            <div class="cover-img" style="background-image:url('${escapeHtml(i.image_url)}')"></div>
+            <div class="cover-img" style="background-image:url('${escapeHtml(iCover)}')"></div>
             <div class="grow">
               <div class="bold">${title}</div>
               <div class="meta">${meta}</div>
@@ -1749,10 +1751,11 @@ async function renderFreshListings() {
       const sellerAvatar = `<span title="${escapeHtml(l.seller_name)}" style="display:inline-flex; vertical-align:middle">${avatarHtml(l.seller_name, l.seller_avatar_url, 'xs')}</span>`;
       const meta = `${sellerAvatar}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
       const href = `#/product/${encodeURIComponent(l.jan)}`;
-      if (l.image_url) {
+      const lCover = l.image_thumb_url || l.image_url; // v511 サムネ優先
+      if (lCover) {
         return `
           <a class="list-item with-cover" href="${href}">
-            <div class="cover-img" style="background-image:url('${escapeHtml(l.image_url)}')">${priceBadge}</div>
+            <div class="cover-img" style="background-image:url('${escapeHtml(lCover)}')">${priceBadge}</div>
             <div class="grow">
               <div class="bold">${escapeHtml(l.name)}</div>
               <div class="meta" style="display:flex; align-items:center; gap:4px">${meta}</div>

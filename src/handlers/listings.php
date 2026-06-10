@@ -72,6 +72,8 @@ function listings_attach_chain(PDO $pdo, array $rows): array {
             $r['resale_chain'] = [];
             $r['is_resale'] = false;
         }
+        // v511 サムネ実在チェック済み URL を別フィールドで返す (なければ原画像)。
+        $r['image_thumb_url'] = !empty($r['image_url']) ? thumb_url_for((string)$r['image_url']) : null;
     }
     return $rows;
 }

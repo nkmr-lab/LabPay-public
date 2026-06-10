@@ -282,7 +282,9 @@ export function wireCoverEditor({ idPrefix, onChange }) {
 
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
-export function coverListItem({ href, image_url, title, meta = '', rightExtra = '', members = null, chipSize = 'xs' }) {
+export function coverListItem({ href, image_url, image_thumb_url, title, meta = '', rightExtra = '', members = null, chipSize = 'xs' }) {
+  // v511 サムネが渡されていれば 原画像 より優先 (ホームのウィジェットで効く)。
+  const bg = image_thumb_url || image_url;
   // v374 メンバ行: 名前は出さず avatar のみ 並べる (狭いリスト幅を 圧迫しない)。
   // 8 人まで並べて、 9 人以上は 「+N」 / 末尾に (N人)。
   // v396 ホーム用に chipSize='sm' を 受けられるよう 引数化 (デフォは 従来の xs)。
@@ -297,11 +299,11 @@ export function coverListItem({ href, image_url, title, meta = '', rightExtra = 
        </div>`
     : '';
   const metaBlock = meta ? `<div class="meta">${meta}</div>` : '';
-  if (image_url) {
+  if (bg) {
     // v372 グループ / 募集は hero 修飾を付けて 64% 表紙 + 斜めカット に。
     return `
       <a class="list-item with-cover hero" href="${href}">
-        <div class="cover-img" style="background-image:url('${escapeHtml(image_url)}')"></div>
+        <div class="cover-img" style="background-image:url('${escapeHtml(bg)}')"></div>
         <div class="grow">
           <div class="bold">${title}</div>
           ${metaBlock}
