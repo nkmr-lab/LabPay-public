@@ -442,7 +442,7 @@ function renderRow(t) {
 
   return `
     <a href="#/tasks/${t.id}" class="list-item" style="align-items:flex-start; gap:10px; border-left:5px solid ${borderColor}; text-decoration:none; color:inherit">
-      ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
+      <span style="display:inline-flex; flex:none">${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}</span>
       <div class="grow" style="min-width:0">
         <div style="font-size:14px">
           <span class="bold">${escapeHtml(t.title)}</span>

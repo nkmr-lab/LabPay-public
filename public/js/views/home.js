@@ -1358,7 +1358,7 @@ async function renderFreshSns() {
         return `
           <a href="#/sns/${p.id}" style="display:block; text-decoration:none; color:inherit; margin:4px 0; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); position:relative; min-height:100px">
             <div style="position:absolute; left:0; top:0; bottom:0; width:50%; background:#222 center/cover no-repeat; background-image:url('${escapeHtml(p.image_thumb_url || p.image_url)}'); clip-path:polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)"></div>
-            <div style="position:relative; margin-left:50%; padding:3px 10px 4px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; justify-content:flex-start">
+            <div style="position:relative; margin-left:45%; padding:3px 10px 4px 12px; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; justify-content:flex-start">
               <div class="row" style="gap:6px; align-items:baseline; margin:0">
                 ${avatar}
                 <span style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.display_name)}</span>

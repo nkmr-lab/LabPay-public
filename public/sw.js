@@ -8,7 +8,7 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v516';
+const CACHE_NAME = 'labpay-shell-v517';
 // アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
@@ -104,11 +104,43 @@ async function swrShell(req) {
   throw new Error('offline');
 }
 
+// v517 #147 #148 #149 #150 mutation (POST/PATCH/DELETE) の成功後に、 関連リソースの
+//   SWR キャッシュを一括破棄。 これにより クライアント側で個別に invalidate を呼ばず
+//   とも、 「投稿 → 一覧で反映されない」 「フィード追加 → 反映されない」 「らぼったー
+//   削除 → 残ってる」 などのリロード必要問題を SW レベルで根治する。
+//   破棄ロジック: mutation のパス第一セグメント (e.g. /api/posts/123/likes → 'posts')
+//   をプレフィックスにして CONTENT_CACHE の同プレフィックスエントリ全削除。
+async function invalidateContentByPrefix(prefix) {
+  try {
+    const cache = await caches.open(CONTENT_CACHE_NAME);
+    const keys = await cache.keys();
+    await Promise.all(keys
+      .filter(req => new URL(req.url).pathname.startsWith(prefix))
+      .map(req => cache.delete(req)));
+  } catch (_) {}
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') return;
-
   const url = new URL(req.url);
+
+  // v517 mutation API 成功後にキャッシュ破棄。 GET 以外の /api/* リクエストを
+  //   ハイジャックして、 サーバ応答が 2xx なら 同じトップセグメントの SWR キャッシュ
+  //   をパージする。 ledger 系 (送金 / 残高) は SWR 対象外なので影響なし。
+  if (req.method !== 'GET' && url.pathname.startsWith('/api/')) {
+    event.respondWith((async () => {
+      const resp = await fetch(req);
+      if (resp && resp.ok) {
+        const m = url.pathname.match(/^\/api\/([^/]+)/);
+        if (m) {
+          await invalidateContentByPrefix('/api/' + m[1]);
+        }
+      }
+      return resp;
+    })());
+    return;
+  }
+  if (req.method !== 'GET') return;
 
   // API: SWR 対象ものだけキャッシュ。 ledger 系は毎回ネット。
   if (url.pathname.startsWith('/api/') && isSwrContentPath(url.pathname)) {
