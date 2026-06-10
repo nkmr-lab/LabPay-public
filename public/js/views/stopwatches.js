@@ -42,9 +42,6 @@ export async function renderStopwatches() {
         <h2 style="margin:0">⏱ ストップウォッチ</h2>
         <a class="btn primary" href="#/stopwatches/new">＋ 新規</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        メンバーで 共有する カウントアップ 計測器。 開始 / 一時停止 / リセット 全員 操作可。
-      </p>
     </div>
     <div id="sw-list" class="list"><div class="muted">読み込み中…</div></div>
   `;

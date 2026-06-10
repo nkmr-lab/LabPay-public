@@ -11,10 +11,6 @@ export async function renderWishlist() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">これ欲しい!</h2>
-      <p class="card-subtitle">
-        欲しい商品を書いておくと、誰かが買って出品してくれるかも。
-        JAN がわかれば一緒に書いておくと正確です。
-      </p>
     </div>
 
     <div class="card">

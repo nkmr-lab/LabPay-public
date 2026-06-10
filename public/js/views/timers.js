@@ -53,9 +53,6 @@ export async function renderTimers() {
         <h2 style="margin:0">⏱️ タイマー</h2>
         <a class="btn primary" href="#/timers/new">＋ 新規</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        参加者全員に 同じカウントダウンを共有。
-      </p>
     </div>
     <div id="tm-list" class="list"><div class="muted">読み込み中…</div></div>
   `;

@@ -14,7 +14,6 @@ export async function renderTransfer({ query } = {}) {
     </div>
 
     <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">他のメンバーにポイントを渡します。</p>
     </div>
 
     <div class="card">

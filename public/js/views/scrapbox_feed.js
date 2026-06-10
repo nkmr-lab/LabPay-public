@@ -28,9 +28,6 @@ export async function renderScrapboxFeed() {
           ${RANGES.map(r => `<option value="${r.key}" ${r.key === saved ? 'selected' : ''}>${r.label}</option>`).join('')}
         </select>
       </div>
-      <p class="card-subtitle">
-        #scrapbox の通知のうち「研究ノート」を含むものだけ表示。同じ人の連続編集はまとめて、最新が上です。タイトルをタップで Scrapbox のページへ。
-      </p>
     </div>
     <div id="sb-feed-body" class="list"><div class="muted">読み込み中…</div></div>
   `;

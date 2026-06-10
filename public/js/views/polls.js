@@ -46,10 +46,6 @@ export async function renderPolls() {
         <h2 style="margin:0">投票・アンケート</h2>
         <a class="btn primary" href="#/polls/new">＋ 新規</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        メンバーに 「これどっちにする?」 を投げて締切までに集める用。
-        個人の票は誰が何に入れたか公開されない。
-      </p>
     </div>
     <div id="polls-list" class="list"><div class="muted">読み込み中…</div></div>
   `;

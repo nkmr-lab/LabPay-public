@@ -19,10 +19,6 @@ export async function renderRandomGroups() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">ランダムグループ生成</h2>
-      <p class="card-subtitle">
-        選んだメンバーをランダムに N チームに分けます。学年や性別を
-        「できるだけ均等」にしたい場合は配慮 ON にしてください。
-      </p>
     </div>
 
     <div class="card">

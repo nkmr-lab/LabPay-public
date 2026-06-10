@@ -10,10 +10,6 @@ export async function renderTodos() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">📝 自分の TODO</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        やる こと を どんどん 登録 → 順に 処理。 サーバ に 保存 する ので 端末間 共有 される。
-        締切 を 入れる と ホーム の 上 に 出ます。
-      </p>
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:flex-start; flex-wrap:wrap">

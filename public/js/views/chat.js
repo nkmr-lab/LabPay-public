@@ -45,10 +45,6 @@ export async function renderChat() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">💬 AI 対話 / 翻訳</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        汎用 多言語 チャット。 海外出張 (中国・イタリア・英語圏 など) での 翻訳・
-        会話 補助に。 履歴は この端末にのみ 保存 (サーバには 都度 送信)。
-      </p>
     </div>
     <div class="card" style="padding:6px 8px; margin:6px 0">
       <div class="row" style="gap:4px; flex-wrap:wrap">

@@ -80,11 +80,6 @@ export async function renderGroups() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">
-        出張・旅行・連幹事など、短期間だけ使うメンバー枠。フィード (メモ・URL・
-        時間) + ワリカ (立替を積み上げ → 精算) を共有しつつ、ルーレットや
-        飲み会割り勘をそのメンバーで即起動できます。
-      </p>
     </div>
 
     <details class="card collapsible-form">
@@ -515,12 +510,12 @@ export async function renderGroupDetail({ params }) {
     loadSchedule(id);
   });
   await loadDetail(id);   // ← 機能フラグを取ってから 関連 loader を判断
-  await loadWari(id);
+  // v510 loadWari と loadGroupTranslations は互いに依存しないので並列化。
+  //   各カードの DOM は loadDetail 時点で出来ているので片方の遅延でブロック不要。
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
   document.getElementById('gd-flight-add')?.addEventListener('click', () => openFlightModal(id, {}));
-  // v426 グループ 翻訳ログ
   document.getElementById('gd-tr-add')?.setAttribute('href', '#/translate?group_id=' + id);
-  await loadGroupTranslations(id);
+  Promise.all([loadWari(id), loadGroupTranslations(id)]).catch(() => {});
   startChatLoop(id);
 }
 
@@ -1734,7 +1729,6 @@ function openSettleModal(gid) {
           <h3 class="row-title">精算サマリ</h3>
           <button id="gd-settle-close">×</button>
         </div>
-        <p class="card-subtitle">合計 ¥${d.total_jpy.toLocaleString()} / ${d.expenses.length} 件</p>
         <div style="margin-top:10px; overflow:auto; flex:1; min-height:0">
           <h4 style="margin:0 0 6px">推奨送金プラン</h4>
           <div class="list">${planRows}</div>

@@ -17,9 +17,6 @@ export async function renderNotices({ query } = {}) {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">情報リスト</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        重要連絡や学会情報をピン留めして共有。
-      </p>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:8px">
         ${CATEGORIES.map(c => `
           <a class="btn ${c.key === currentCat ? 'primary' : ''}" href="#/notices?category=${c.key}">${escapeHtml(c.label)}</a>

@@ -27,9 +27,6 @@ export async function renderAuctions() {
         <h2 style="margin:0">🏷 オークション</h2>
         <a class="btn primary" href="#/auctions/new">＋ 出品</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        ラボ内 オークション。 最高額入札者が落札。 落札後は 出品者の詳細画面から 「請求を飛ばす」 ボタンで 集金 (連絡先は 既知前提で 表示しません)。
-      </p>
     </div>
     <div id="au-list" class="list"><div class="muted">読み込み中…</div></div>
   `;

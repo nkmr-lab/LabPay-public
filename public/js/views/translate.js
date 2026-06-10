@@ -23,10 +23,6 @@ export async function renderTranslate({ query } = {}) {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🌐 画像 和訳</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        メニュー、 看板、 説明文 などの 写真 を アップ → 日本語に 翻訳します。
-        グループ を 選ぶと そのグループ メンバー 全員 で 共有 (出張先での メニュー 共有 など)。
-      </p>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">写真 (8MB まで)</span>

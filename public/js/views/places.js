@@ -75,9 +75,6 @@ export async function renderPlaces() {
         <button class="btn" id="pl-gmap-import">📥 Google Map</button>
         <a class="btn primary" href="#/places/new">＋ 新規</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        ラボメンバー の グルメ 共有 帳。 口コミ・写真・⭐評価 を 添えて 投稿可。
-      </p>
       <input type="file" id="pl-gmap-file" accept=".kml,.json,.geojson,.kmz" hidden>
     </div>
     <div id="pl-list"><div class="muted">読み込み中…</div></div>

@@ -31,10 +31,6 @@ export async function renderInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">
-        「お昼ご飯食べに行こう」「ビアガーデン」「ポケモン GO」「スキー」など、
-        誰でも参加表明できるカジュアルな募集です。pt のやり取りはありません。
-      </p>
     </div>
 
     <details class="card collapsible-form">

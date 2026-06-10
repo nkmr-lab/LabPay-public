@@ -32,9 +32,6 @@ export async function renderNomikai({ query } = {}) {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">飲み会割り勘</h2>
-      <p class="card-subtitle">
-        新歓・追いコン等の幹事用。まずはメンバーを絞り込み → 次の画面で各人の飲酒/ソフドリと重み付けを調整して計算します。
-      </p>
     </div>
 
     <div class="card">
@@ -116,9 +113,6 @@ export async function renderNomikaiNew({ query }) {
     <div class="card">
       <a href="#/nomikai" class="hint">← メンバー選択</a>
       <h2 style="margin:6px 0 0">2. 詳細を入力</h2>
-      <p class="card-subtitle">
-        各人の飲酒/ソフドリ、必要なら weight を調整。総額と分配が一致するように rounding は主催者に寄せます。
-      </p>
     </div>
 
     <div class="card">

@@ -45,10 +45,6 @@ export async function renderTextRoulette() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">どこ行くルーレット</h2>
-      <p class="card-subtitle">
-        昼飯どこ行く / 何食べる / どの店行く みたいなのを一発で決めるためのやつ。
-        候補を 1 行ずつ書いて、 回すボタン。 メンバー連動の <a href="#/roulette">通常ルーレット</a> とは別物 — サーバには何も残らない。
-      </p>
     </div>
 
     <div class="card">

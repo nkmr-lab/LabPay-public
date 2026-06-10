@@ -28,9 +28,6 @@ export async function renderActivity() {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">ラボ滞在・ラボ活動マップ</h2>
-      <p class="card-subtitle">
-        上: あなた個人のラボ滞在。下: 全員のラボ在室パターン (曜日 × 時間)。
-      </p>
     </div>
 
     <!-- ===== 上半分: 自分のラボ滞在 ===== -->
@@ -51,7 +48,6 @@ export async function renderActivity() {
           <option value="31">31 日</option>
         </select>
       </div>
-      <p class="card-subtitle">日 × 10 分。 色は 検出された 部屋。 hover で 時刻と部屋。</p>
       <div id="presence-band"><div class="muted" style="font-size:12px">読み込み中…</div></div>
     </div>
 
@@ -65,9 +61,6 @@ export async function renderActivity() {
           `).join('')}
         </select>
       </div>
-      <p class="card-subtitle">
-        曜日 × 時間あたりの平均在室人数。色が濃いほど人が多いです。
-      </p>
     </div>
     <div id="act-rooms"><div class="card muted">読み込み中…</div></div>
     <div class="card muted" style="font-size:12px">

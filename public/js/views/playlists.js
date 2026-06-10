@@ -54,9 +54,6 @@ export async function renderPlaylists() {
         <h2 style="margin:0">🎵 プレイリスト</h2>
         <a class="btn primary" href="#/playlists/new">＋ 作成</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        YouTube / Spotify / 動画 URL を まとめて 紹介。 ⭐ 評価 + ❤️ お気に入り。
-      </p>
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">

@@ -21,7 +21,6 @@ export async function renderAdminSounds() {
     <div class="card">
       <a href="#/admin" class="hint">← 管理</a>
       <h2 style="margin:6px 0 0">🔊 効果音の規定値</h2>
-      <p class="card-subtitle">決済 / ルーレット などで鳴らす 音源を upload + 規定値を設定。 各自 「設定」 → 「効果音」 で個別に上書き可。</p>
     </div>
 
     <div class="card">

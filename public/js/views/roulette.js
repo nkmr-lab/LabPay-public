@@ -40,10 +40,6 @@ export async function renderRoulette({ query } = {}) {
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">ルーレット</h2>
-      <p class="card-subtitle">
-        誰かを決めたいときに。タイトルとメンバーを選んで、回すボタンで決まり。
-        参加メンバーには通知で結果が届きます。
-      </p>
     </div>
 
     <div class="card">

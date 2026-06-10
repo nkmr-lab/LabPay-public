@@ -26,11 +26,6 @@ export async function renderMoneyRequests() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <h2 style="margin:6px 0 0">請求 (集金)</h2>
-      <p class="card-subtitle">
-        メンバーを選んでお金を集めるための機能です。全員同額または指定額で
-        請求 → 各人が「支払い済」を方法 (現金/PayPay/銀行/立替) 付きで
-        チェックします。実際の送金は外で。
-      </p>
     </div>
 
     <details class="card collapsible-form">

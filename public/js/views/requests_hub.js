@@ -16,9 +16,6 @@ export async function renderRequestsHub() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">依頼</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        誰かに 「頼みたい」 をまとめる場所。
-      </p>
     </div>
     <div class="list">
       ${ITEMS.map(a => `

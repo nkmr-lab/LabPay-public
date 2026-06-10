@@ -85,7 +85,6 @@ export async function renderMeetups({ query } = {}) {
       <div class="row center">
         <h2 style="margin:0">${headerTitle}</h2>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">${escapeHtml(headerSub)}</p>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:8px">
         ${tabBtn('',         '全部')}
         ${tabBtn('meetup',   '🤝 待ち合わせ')}

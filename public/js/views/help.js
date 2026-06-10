@@ -21,10 +21,6 @@ export async function renderHelp() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🤖 操作ガイド AI</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        「○○ したいんだけど どこから?」 等 LabPay の 使い方 を 聞いてください。
-        ユーザー本人の データ (残高 / 履歴 等) は 見えない ので、 操作手順 案内のみ。
-      </p>
     </div>
     <div class="card" style="padding:0; overflow:hidden">
       <div id="help-log" style="padding:10px; max-height:60vh; min-height:240px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; background:#f6f6f9">

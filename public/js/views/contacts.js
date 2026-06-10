@@ -23,10 +23,6 @@ export async function renderContacts() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">連絡先</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        ラボメンバーの緊急連絡用電話番号。 自分の番号は
-        <a href="#/settings">設定</a> から登録できます。
-      </p>
     </div>
     <div id="contacts-list" class="list"><div class="muted">読み込み中…</div></div>
   `;

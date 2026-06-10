@@ -80,10 +80,6 @@ export async function renderExercise() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🏃 運動 (歩数 / 階段)</h2>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        スマホをポケットに入れて 「開始」 → 歩く / 階段を登る → 「終了」 で 1 セッション記録。
-        端末の センサーで 歩数を カウント (精度はおおまか)。 1 セッション 30 分まで。
-      </p>
     </div>
     <div class="card" style="text-align:center" id="ex-runner">
       <div id="ex-count" style="font-size:60px; font-weight:700; font-variant-numeric:tabular-nums">0</div>

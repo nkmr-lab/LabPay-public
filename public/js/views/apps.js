@@ -89,12 +89,6 @@ export async function renderApps() {
   }).join('');
 
   app.innerHTML = `
-    <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">
-        ラボ内・出張中で使える小道具集です。 通知の出方 で 並べてあります。
-        並び順 / 表示する物は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から変えられます。
-      </p>
-    </div>
     ${sectionsHtml}
     ${hiddenCount > 0
       ? `<div class="hint" style="text-align:center; padding:10px">…他 ${hiddenCount} 個は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から ON にできます</div>`

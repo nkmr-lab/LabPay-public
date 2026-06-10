@@ -5,12 +5,6 @@ import { toast } from '../app.js';
 export async function renderAchievements() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card page-header">
-      <p class="card-subtitle" style="margin:0">15 カテゴリ × 4 段階。 リアルタイムに集計しています。</p>
-      <p class="card-subtitle" style="margin:6px 0 0; font-size:12px">
-        ✨ 段位名 (「お試し気分」 「ラボに溶けた」 「闇属性」 など) は <b>LabPay が命名しました!</b>
-      </p>
-    </div>
     <!-- v483 #76 AI 称号 (実績 の 組み合わせ から AI が 命名) -->
     <div class="card" id="ach-title-card" style="text-align:center" hidden>
       <div class="muted" style="font-size:11px; margin-bottom:4px">✨ あなた の 称号 (AI 命名)</div>

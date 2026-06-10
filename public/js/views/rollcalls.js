@@ -53,9 +53,6 @@ export async function renderRollCalls() {
         <h2 style="margin:0">点呼</h2>
         <a class="btn primary" href="#/rollcalls/new">＋ 新規</a>
       </div>
-      <p class="card-subtitle" style="margin:6px 0 0">
-        「いる？」 「起きてる？」 をワンタップで集めるための仕組み。
-      </p>
     </div>
     <div id="rc-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
