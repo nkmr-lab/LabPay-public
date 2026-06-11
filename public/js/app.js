@@ -517,6 +517,9 @@ route('/orderings/:id',   lazy(() => import('./views/orderings.js'), 'renderOrde
 route('/regions',         lazy(() => import('./views/regions.js'), 'renderRegions'));
 // v532 #161 体重 / BMI 記録
 route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'));
+// v533 #162 筋トレ記録 + 仲間
+route('/workouts/friends', lazy(() => import('./views/workouts.js'), 'renderWorkoutsFriends'));
+route('/workouts',         lazy(() => import('./views/workouts.js'), 'renderWorkouts'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
