@@ -8,7 +8,7 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v538';
+const CACHE_NAME = 'labpay-shell-v539';
 // アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';

@@ -296,17 +296,19 @@ function setupPullToRefresh() {
 export async function renderPostDetail({ params }) {
   const id = Number(params.id);
   const app = document.getElementById('app');
+  // v539 #196 返信 0 件時は 「💬 返信 (0)」 ヘッダごと隠す + 返信入力 UI (composer)
+  //   を 返信一覧の下 に配置 (= 返信を読んでから返事を書く 自然な順序)。
   app.innerHTML = `
     <div class="card">
       <a href="#/sns" class="hint">← タイムライン</a>
     </div>
     <div id="po-parent"><div class="muted">読み込み中…</div></div>
     <div id="po-reactors" class="card" style="margin-top:8px" hidden></div>
-    ${composerHtml(id)}
-    <div class="card" style="margin-top:12px">
+    <div id="po-replies-card" class="card" style="margin-top:12px" hidden>
       <h3 style="margin:0 0 6px">💬 返信 (<span id="po-reply-count">0</span>)</h3>
       <div id="po-replies" class="list"></div>
     </div>
+    <div id="po-composer-wrap" style="margin-top:8px">${composerHtml(id)}</div>
   `;
   bindComposer(id);
   try {
@@ -314,10 +316,16 @@ export async function renderPostDetail({ params }) {
     const parent = d.post;
     document.getElementById('po-parent').innerHTML = `
       <div class="card">${postCard(parent, { skipReplyHash: true })}</div>`;
-    // v498 #106 リアクションした人一覧 (kind ごとに固める)
     renderReactors(d.reactors || []);
-    document.getElementById('po-reply-count').textContent = d.replies.length;
-    document.getElementById('po-replies').innerHTML = d.replies.map(r => postCard(r, { skipReplyHash: true })).join('') || '<div class="empty">まだ 返信 なし</div>';
+    const replyCount = d.replies.length;
+    const card = document.getElementById('po-replies-card');
+    if (replyCount > 0) {
+      card.hidden = false;
+      document.getElementById('po-reply-count').textContent = replyCount;
+      document.getElementById('po-replies').innerHTML = d.replies.map(r => postCard(r, { skipReplyHash: true })).join('');
+    } else {
+      card.hidden = true; // 「💬 返信 (0)」 + 「まだ 返信 なし」 は出さない
+    }
     bindRowHandlers();
   } catch (e) {
     document.getElementById('po-parent').innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
