@@ -6,7 +6,7 @@
 import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
-import { PREFECTURES, COUNTRIES } from '../data/regions_data.js';
+import { PREFECTURES, COUNTRIES, JP_MAP_LAYOUT } from '../data/regions_data.js';
 
 let visitedSet = null;  // 'kind:code' Set
 let labStats   = { country: {}, prefecture: {} };
@@ -65,11 +65,15 @@ function paint() {
     if (visitedSet.has(`${activeTab}:${it.code}`)) visitedN++;
   }
   const pct = total ? Math.round(visitedN * 100 / total) : 0;
+  // v536 #192 都道府県タブ では 進捗バー の下に スタイライズ Japan マップ を表示。
+  //   行った場所は塗りつぶし、 未訪は薄色。 タップでトグル。
+  const mapBlock = activeTab === 'prefecture' ? renderJpMap() : '';
   document.getElementById('rg-progress').innerHTML = `
     <div class="bold" style="font-size:16px; color:var(--primary)">${visitedN} / ${total} 制覇 (${pct}%)</div>
     <div style="height:8px; background:#ede4f3; border-radius:99px; overflow:hidden; margin-top:6px">
       <div style="height:100%; width:${pct}%; background:linear-gradient(90deg, var(--primary), #b3a0e0)"></div>
-    </div>`;
+    </div>
+    ${mapBlock}`;
 
   // セルを 地方 (region) ごとに セクション分けして 表示
   const byRegion = {};
@@ -102,7 +106,7 @@ function paint() {
   }).join('');
   document.getElementById('rg-grid').innerHTML = html;
 
-  document.querySelectorAll('.rg-cell').forEach(el => {
+  document.querySelectorAll('.rg-cell, .rg-map-cell').forEach(el => {
     el.addEventListener('click', async () => {
       const code = el.dataset.code;
       const key = `${activeTab}:${code}`;
@@ -121,4 +125,32 @@ function paint() {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
+}
+
+// v536 #192 都道府県を地理位置っぽい配置で並べた 「日本地図風」 表示。
+//   visited は塗り、 未訪は薄色。 タップでトグル。
+function renderJpMap() {
+  // 14 cols × 16 rows
+  const COLS = 14;
+  const ROWS = 16;
+  const prefMap = Object.fromEntries(PREFECTURES.map(p => [p.code, p]));
+  // 名前→short label (2 文字目までで認識しやすく)
+  const shortLabel = (name) => name.replace(/[都道府県]$/, '');
+  const cells = JP_MAP_LAYOUT.map(([col, row, code]) => {
+    const p = prefMap[code];
+    if (!p) return '';
+    const visited = visitedSet.has(`prefecture:${code}`);
+    const bg = visited ? 'var(--primary, #4a106d)' : '#fafafa';
+    const fg = visited ? '#fff' : '#888';
+    const border = visited ? 'var(--primary, #4a106d)' : '#ddd';
+    return `<button class="rg-map-cell" data-code="${code}" title="${escapeHtml(p.name)}"
+              style="grid-column:${col + 1}; grid-row:${row + 1}; padding:0; border:1.5px solid ${border}; background:${bg}; color:${fg}; border-radius:4px; font-size:9px; font-weight:${visited ? '700' : '500'}; cursor:pointer; overflow:hidden; line-height:1; text-align:center; min-height:0; transition:transform 0.1s">${escapeHtml(shortLabel(p.name))}</button>`;
+  }).join('');
+  return `
+    <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #e0f2fe, #f0f9ff); border-radius:10px">
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (スタイライズ — タップで トグル)</div>
+      <div style="display:grid; grid-template-columns:repeat(${COLS}, minmax(0, 1fr)); grid-template-rows:repeat(${ROWS}, 26px); gap:2px; max-width:420px; margin:0 auto">
+        ${cells}
+      </div>
+    </div>`;
 }
