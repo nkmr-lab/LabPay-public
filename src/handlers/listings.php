@@ -93,6 +93,9 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             $me = Auth::currentUser($pdo, $cfg);
             if ($me) $meId = (int)$me['id'];
         } catch (Throwable $e) { /* anonymous OK */ }
+        // v526 #172 旧クエリは 行ごとに per-seller の SUM(qty) と per-jan の EXISTS の
+        //   2 つの相関サブクエリがあり、 200 件 × N seller の N+1 問題になっていた。
+        //   per-seller / per-jan の集計を 派生テーブルで先に出してから JOIN で参照。
         $sql = "
             SELECT l.id, l.jan, l.seller_user_id, l.price, l.is_gift, l.qty, l.status,
                    l.location, l.display_name, l.created_at, l.updated_at,
@@ -101,13 +104,18 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                    p.image_url,
                    u.display_name AS seller_name,
                    u.avatar_url   AS seller_avatar_url,
-                   (SELECT COALESCE(SUM(qty),0) FROM purchases pu
-                     WHERE pu.seller_user_id = l.seller_user_id) AS seller_sales,
-                   EXISTS(SELECT 1 FROM purchases pb
-                            WHERE pb.buyer_user_id = ? AND pb.jan = l.jan) AS i_bought_before
+                   COALESCE(ss.seller_sales, 0) AS seller_sales,
+                   COALESCE(ib.i_bought_before, 0) AS i_bought_before
               FROM listings l
               JOIN products p ON p.jan = l.jan
               JOIN users u    ON u.id  = l.seller_user_id
+         LEFT JOIN (
+                SELECT seller_user_id, COALESCE(SUM(qty),0) AS seller_sales
+                  FROM purchases GROUP BY seller_user_id
+              ) ss ON ss.seller_user_id = l.seller_user_id
+         LEFT JOIN (
+                SELECT DISTINCT jan, 1 AS i_bought_before FROM purchases WHERE buyer_user_id = ?
+              ) ib ON ib.jan = l.jan
              WHERE l.status='on_sale' AND l.qty > 0";
         $params = [$meId];
         if ($jan !== '') { $sql .= ' AND l.jan = ?'; $params[] = $jan; }
