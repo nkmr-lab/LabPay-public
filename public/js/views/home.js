@@ -465,12 +465,19 @@ function renderHomePerfPill(totalMs, entries) {
 let homePollTimer = null;
 let homeVisHandler = null;
 
-// v527 #168 ホームの 現地時刻表示 (1 秒更新 + 5 秒ごとに 日/時/分/秒 の どれかを
-//   2 倍フォントサイズに切替) 。
+// v527 #168 → v528 #185 ホームの 現地時刻表示。 1 秒更新は そのまま。
+//   ただし 「大きく見せる演出」 は 10 分ごとに 1 分間だけ ON にする (= 普段は静か)。
+//   ON 期間中だけ 5 秒ごとに 時 / 分 / 秒 のどれか 1 つを 1.6em に切替。
 let homeClockTimer = null;
-let homeClockBigIdx = 0; // 0:day 1:hour 2:min 3:sec
+let homeClockBigIdx = 0; // 0:hour 1:min 2:sec
 let homeClockBigSwitchAt = 0;
 const HOME_CLOCK_WEEK = ['日','月','火','水','木','金','土'];
+function isHomeClockPerformanceOn() {
+  // 10 分ごと (= each :00, :10, :20, :30, :40, :50) の 直後 1 分間だけ ON
+  const now = new Date();
+  const min = now.getMinutes();
+  return (min % 10) === 0;
+}
 function paintHomeClock() {
   const el = document.getElementById('home-clock');
   if (!el) { if (homeClockTimer) { clearInterval(homeClockTimer); homeClockTimer = null; } return; }
@@ -480,19 +487,25 @@ function paintHomeClock() {
   const hh = String(now.getHours()).padStart(2,'0');
   const mm = String(now.getMinutes()).padStart(2,'0');
   const ss = String(now.getSeconds()).padStart(2,'0');
-  // 5 秒ごとに big highlight をローテ
-  if (Date.now() - homeClockBigSwitchAt > 5000) {
-    homeClockBigIdx = (homeClockBigIdx + 1) % 4;
-    homeClockBigSwitchAt = Date.now();
+  // 演出 ON 期間中だけ big highlight をローテ
+  const performing = isHomeClockPerformanceOn();
+  let szH = '1em', szM = '1em', szS = '1em';
+  if (performing) {
+    if (Date.now() - homeClockBigSwitchAt > 5000) {
+      homeClockBigIdx = (homeClockBigIdx + 1) % 3;
+      homeClockBigSwitchAt = Date.now();
+    }
+    if (homeClockBigIdx === 0) szH = '1.6em';
+    if (homeClockBigIdx === 1) szM = '1.6em';
+    if (homeClockBigIdx === 2) szS = '1.6em';
   }
-  const sz = (i) => homeClockBigIdx === i ? '1.6em' : '1em';
   el.innerHTML =
     `<span style="font-size:13px">${ymd} <span style="font-weight:600">(${dayName})</span></span>` +
     `<br>` +
     `<span style="font-size:20px; font-weight:700; letter-spacing:0.04em">` +
-    `<span style="font-size:${sz(1)}; transition:font-size 0.3s">${hh}</span>:` +
-    `<span style="font-size:${sz(2)}; transition:font-size 0.3s">${mm}</span>:` +
-    `<span style="font-size:${sz(3)}; transition:font-size 0.3s">${ss}</span>` +
+    `<span style="font-size:${szH}; transition:font-size 0.3s">${hh}</span>:` +
+    `<span style="font-size:${szM}; transition:font-size 0.3s">${mm}</span>:` +
+    `<span style="font-size:${szS}; transition:font-size 0.3s">${ss}</span>` +
     `</span>`;
 }
 function startHomeClock() {

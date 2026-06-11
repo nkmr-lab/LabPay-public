@@ -1938,12 +1938,21 @@ const SCHED_KINDS = {
 };
 
 async function loadSchedule(gid) {
+  // v528 #184 #186 await 中に loadDetail が再走すると DOM が差し替わって 古い body
+  //   参照は orphan になる。 fetch 後に再取得する形で 「読み込み中…」 が残るバグを防ぐ。
+  if (!document.getElementById('gd-sched-card')) return;
+  let d;
+  try { d = await get(`/api/groups/${gid}/schedule`); }
+  catch (e) {
+    const card2 = document.getElementById('gd-sched-card');
+    const body2 = document.getElementById('gd-sched-body');
+    if (card2) card2.hidden = false;
+    if (body2) body2.textContent = '取得失敗: ' + e.message;
+    return;
+  }
   const card = document.getElementById('gd-sched-card');
   const body = document.getElementById('gd-sched-body');
   if (!card || !body) return;
-  let d;
-  try { d = await get(`/api/groups/${gid}/schedule`); }
-  catch (e) { card.hidden = false; body.textContent = '取得失敗: ' + e.message; return; }
   card.hidden = false;
   // 日程が無いとき: 「スケジュール編集モード」 は隠して、 「📅 日程設定」 だけ primary 色で出す。
   // 日程あり: 「スケジュール編集モード」 を primary で復活、 「日程設定」 は 「全体日程の修正」 に。

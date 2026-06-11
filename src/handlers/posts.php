@@ -79,6 +79,9 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             'user_id'         => (int)$r['user_id'],
             'display_name'    => $r['display_name'],
             'avatar_url'      => $r['avatar_url'],
+            // v528 #187 admin が LabPay 投稿だけ削除可能にするためのフラグ。
+            //   クライアント posts.js が `author_kind === 'system'` で判定する。
+            'author_kind'     => $r['author_kind'] ?? null,
             'body'            => $r['body'],
             'image_url'       => $r['image_url'],
             // v494 #101 サムネが実在する時だけそのURLを返す。 存在しなければ null。
