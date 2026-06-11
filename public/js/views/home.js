@@ -54,6 +54,7 @@ export const HOME_ACTIONS = [
   { id: 'health',       url: '#/health',             title: '体重/BMI',      icon: '⚖️', defaultVisible: false }, // v532 #161
   { id: 'workouts',     url: '#/workouts',           title: '筋トレ',        icon: '💪', defaultVisible: false }, // v533 #162
   { id: 'walk',         url: '#/walk',               title: '散歩',          icon: '🚶', defaultVisible: false }, // v538 #169
+  { id: 'shiritori',    url: '#/shiritori',          title: '絵しりとり',    icon: '🎨', defaultVisible: false }, // v540 #171
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
   { id: 'groups',       url: '#/groups',             title: 'グループ',      icon: '👥', defaultVisible: false },

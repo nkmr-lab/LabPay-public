@@ -522,6 +522,10 @@ route('/workouts/friends', lazy(() => import('./views/workouts.js'), 'renderWork
 route('/workouts',         lazy(() => import('./views/workouts.js'), 'renderWorkouts'));
 // v538 #169 散歩に行きたくなるアプリ
 route('/walk',             lazy(() => import('./views/walk.js'), 'renderWalk'));
+// v540 #171 絵しりとり (Phase 1)
+route('/shiritori',         lazy(() => import('./views/shiritori.js'), 'renderShiritori'));
+route('/shiritori/new',     lazy(() => import('./views/shiritori.js'), 'renderShiritoriNew'));
+route('/shiritori/:id',     lazy(() => import('./views/shiritori.js'), 'renderShiritoriDetail'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
