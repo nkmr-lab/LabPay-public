@@ -451,6 +451,10 @@ function bindMentionAutocomplete() {
 
 let composerImageUrl = null;
 let composerCoords = null;
+// v537 #195 画像 EXIF GPS は 「現在地」 (geolocation) より優先。 画像から取得した GPS は
+//   別変数で保持し、 submit 時に EXIF があれば そちらを採用 (= 後から locChk を ON にして
+//   geolocation で composerCoords が入っても 上書きされない)。
+let composerImageExifCoords = null;
 // v482 #69 位置情報 ON/OFF を 永続化 (一度 ON にしたら 以降 ON、 OFF にしたら 以降 OFF)。
 const PO_LOC_PREF_KEY = 'labpay-sns-loc-pref';
 function readLocPref() {
@@ -462,6 +466,7 @@ function writeLocPref(on) {
 function bindComposer(parentId) {
   composerImageUrl = null;
   composerCoords = null;
+  composerImageExifCoords = null;
   bindMentionAutocomplete();  // v467 @ 補完
   const imgInput = document.getElementById('po-img');
   const imgStatus = document.getElementById('po-img-status');
@@ -475,9 +480,10 @@ function bindComposer(parentId) {
     if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
     // v498 #107 EXIF GPS が画像に乗っていれば、 navigator.geolocation より優先して使う。
     //   アップロードと並行で読み取り。 失敗は黙殺。
+    composerImageExifCoords = null; // 新しい画像 = 古い EXIF はクリア
     readExifGps(f).then(gps => {
       if (gps) {
-        composerCoords = { lat: gps.lat, lng: gps.lng };
+        composerImageExifCoords = { lat: gps.lat, lng: gps.lng };
         toast(`📍 写真のEXIFから位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
       }
     }).catch(() => {});
@@ -528,12 +534,15 @@ function bindComposer(parentId) {
   document.getElementById('po-submit')?.addEventListener('click', async () => {
     const body = document.getElementById('po-body').value.trim();
     if (!body && !composerImageUrl) { toast('本文 か 画像 が 必要 です'); return; }
+    // v537 #195 EXIF GPS が画像にあれば 必ず優先 (geolocation で composerCoords が
+    //   設定されていても上書き)。 写真の位置 = 撮影地 を 投稿位置として正確に。
+    const finalCoords = composerImageExifCoords || composerCoords;
     const payload = {
       body,
       image_url: composerImageUrl || '',
       parent_id: parentId || null,
-      lat: composerCoords?.lat ?? null,
-      lng: composerCoords?.lng ?? null,
+      lat: finalCoords?.lat ?? null,
+      lng: finalCoords?.lng ?? null,
     };
     try {
       const r = await post('/api/posts', payload);
