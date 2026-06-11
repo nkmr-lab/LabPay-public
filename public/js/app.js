@@ -475,6 +475,8 @@ route('/places/new',      lazy(() => import('./views/places.js'), 'renderPlaceNe
 route('/places/map',      lazy(() => import('./views/places.js'), 'renderPlacesMap'));
 route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDetail'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
+// v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
+route('/sns/map',         lazy(() => import('./views/posts_map.js'), 'renderPostsMap'));
 route('/sns/:id',         lazy(() => import('./views/posts.js'), 'renderPostDetail'));
 route('/presence',        lazy(() => import('./views/presence.js'), 'renderPresencePage'));
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));

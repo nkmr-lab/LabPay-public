@@ -216,6 +216,10 @@ export async function renderPosts({ query } = {}) {
   } else {
     app.innerHTML = `
       ${composerHtml(null)}
+      <div class="row center" style="margin:6px 0; font-size:12px">
+        <span style="flex:1"></span>
+        <a href="#/sns/map" class="hint">📍 自分の投稿マップ →</a>
+      </div>
       <div id="po-list" class="list"></div>
       <div id="po-more" class="row center" style="gap:6px; margin-top:12px"></div>
     `;
