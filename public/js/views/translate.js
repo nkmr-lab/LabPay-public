@@ -153,7 +153,7 @@ async function loadHistory() {
         : '';
       return `
         <div class="list-item" data-tr-id="${t.id}" style="align-items:flex-start; gap:8px">
-          <img src="${escapeHtml(t.image_url)}" alt="" style="width:60px; height:60px; object-fit:cover; border-radius:6px; flex-shrink:0; cursor:pointer" data-open-tr="${t.id}">
+          <img src="${escapeHtml(t.image_thumb_url || t.image_url)}" alt="" loading="lazy" decoding="async" style="width:60px; height:60px; object-fit:cover; border-radius:6px; flex-shrink:0; cursor:pointer" data-open-tr="${t.id}">
           <div class="grow" style="min-width:0; cursor:pointer" data-open-tr="${t.id}">
             <div class="bold" style="font-size:13px">${tag} <span class="muted" style="font-weight:400; font-size:11px">${fmtTime(t.created_at)} · ${escapeHtml(t.user_name || '')}</span></div>
             ${t.hint ? `<div class="meta" style="font-size:11px">💭 ${escapeHtml(t.hint)}</div>` : ''}

@@ -135,6 +135,8 @@ function playlists_list(PDO $pdo, array $cfg): void {
         $r['item_count'] = (int)$r['item_count'];
         $r['like_count'] = (int)$r['like_count'];
         $r['i_liked']    = (int)$r['i_liked'] === 1;
+        // v521 #157 サムネ URL を併せて返す
+        $r['cover_image_thumb'] = !empty($r['cover_image_url']) ? thumb_url_for((string)$r['cover_image_url']) : null;
     }
     json_response(['items' => $items]);
 }
@@ -186,6 +188,8 @@ function playlists_detail(PDO $pdo, array $cfg, int $pid): void {
     $row['like_count'] = (int)$row['like_count'];
     $row['i_liked']    = (int)$row['i_liked'] === 1;
     $row['is_mine']    = (int)$row['creator_user_id'] === (int)$u['id'];
+    // v521 #157 サムネ URL を併せて返す (詳細ヒーロー用)
+    $row['cover_image_thumb'] = !empty($row['cover_image_url']) ? thumb_url_for((string)$row['cover_image_url']) : null;
 
     // items + 自分の評価 + 平均 + 評価件数
     $st = $pdo->prepare("

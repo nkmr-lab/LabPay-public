@@ -62,6 +62,8 @@ function route_products(PDO $pdo, array $cfg, string $method, array $seg): void 
                 ['jan' => $jan]);
             return;
         }
+        // v521 #157 サムネ URL を併せて返す (個別 GET でも list と同じ形)。
+        $row['image_thumb_url'] = !empty($row['image_url']) ? thumb_url_for((string)$row['image_url']) : null;
         json_response($row);
         return;
     }

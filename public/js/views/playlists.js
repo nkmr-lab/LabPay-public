@@ -103,8 +103,10 @@ async function loadPlList() {
       return;
     }
     root.innerHTML = items.map(p => {
-      const cover = p.cover_image_url
-        ? `<div class="cover-img" style="background-image:url('${escapeHtml(p.cover_image_url)}')"></div>`
+      // v521 #157 サムネ優先
+      const cBg = p.cover_image_thumb || p.cover_image_url;
+      const cover = cBg
+        ? `<div class="cover-img" style="background-image:url('${escapeHtml(cBg)}')"></div>`
         : `<div class="cover-img" style="background:linear-gradient(135deg, #fce4ec, #e1bee7); display:flex; align-items:center; justify-content:center; font-size:24px">🎵</div>`;
       const visTag = p.visibility === 'private' ? `<span class="tag muted" style="font-size:10px">🔒 非公開</span>` : '';
       const genreTag = p.genre_tag ? `<span class="tag" style="font-size:10px; background:#e1bee7; color:#4a106d">${escapeHtml(p.genre_tag)}</span>` : '';
@@ -313,8 +315,10 @@ async function loadPlDetail(id) {
 }
 
 function renderDetailHead(p) {
-  const cover = p.cover_image_url
-    ? `<img src="${escapeHtml(p.cover_image_url)}" alt=""
+  // v521 #157 詳細ヒーローもサムネ優先
+  const heroSrc = p.cover_image_thumb || p.cover_image_url;
+  const cover = heroSrc
+    ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async"
             style="display:block; max-width:280px; max-height:200px; margin:0 auto 8px; border-radius:10px; object-fit:cover">`
     : '';
   const heart = p.i_liked ? '❤️' : '🤍';

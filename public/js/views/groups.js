@@ -1532,10 +1532,12 @@ function openExpenseEdit(gid, e) {
 
   // 画像 (レシート) があれば上部にプレビュー + 撮影時刻 + Google Maps リンク (GPS あり時)。
   const hasGps = e.lat !== null && e.lat !== undefined && e.lng !== null && e.lng !== undefined;
-  const imageBlock = e.image_url ? `
+  // v521 #157 サムネ URL を優先 (なければ原画像)
+  const eThumb = e.image_thumb_url || e.image_url;
+  const imageBlock = eThumb ? `
     <div style="margin-top:8px; padding:8px; background:var(--bg); border-radius:6px">
       <a href="${escapeHtml(e.image_url)}" target="_blank" rel="noopener" style="display:block">
-        <img src="${escapeHtml(e.image_url)}" alt="" style="max-width:100%; max-height:220px; object-fit:contain; border-radius:4px; display:block; margin:0 auto">
+        <img src="${escapeHtml(eThumb)}" alt="" loading="lazy" decoding="async" style="max-width:100%; max-height:220px; object-fit:contain; border-radius:4px; display:block; margin:0 auto">
       </a>
       <div class="muted" style="font-size:11px; margin-top:6px; text-align:center">
         ${e.taken_at ? `📅 ${escapeHtml(e.taken_at)}` : ''}
@@ -1670,9 +1672,11 @@ function renderExpense(e, gid) {
       <button data-rm-ex="${e.id}" class="btn" style="padding:2px 6px; font-size:14px; color:var(--muted); border-color:var(--line)">×</button>
     </div>` : '';
   // レシート写真があれば左にサムネイル (タップで拡大表示は OS に任せる)。
-  const thumb = e.image_url
+  // v521 #157 リスト 54px サムネはサムネ URL を優先
+  const eListThumb = e.image_thumb_url || e.image_url;
+  const thumb = eListThumb
     ? `<a href="${escapeHtml(e.image_url)}" target="_blank" rel="noopener" style="flex-shrink:0">
-         <img src="${escapeHtml(e.image_url)}" alt="" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
+         <img src="${escapeHtml(eListThumb)}" alt="" loading="lazy" decoding="async" style="width:54px; height:54px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block">
        </a>`
     : '';
   return `
@@ -2543,9 +2547,10 @@ function schedPairStyleFromId(pid, isTransport, kind) {
 // 画像 (or 絵文字) + タイトル を 縦に積む。 編集モードなら ⋮⋮ ハンドル + × 付き。
 function renderSchedStockTile(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
-  const hasImage = !!it.image_url;
-  const cover = hasImage
-    ? `<div style="width:100%; aspect-ratio:4/3; background:#eee center/cover no-repeat url('${escapeHtml(it.image_url)}'); border-radius:6px"></div>`
+  // v521 #157 サムネ URL を優先 (なければ原画像)
+  const tileBg = it.image_thumb_url || it.image_url;
+  const cover = tileBg
+    ? `<div style="width:100%; aspect-ratio:4/3; background:#eee center/cover no-repeat url('${escapeHtml(tileBg)}'); border-radius:6px"></div>`
     : `<div style="width:100%; aspect-ratio:4/3; background:linear-gradient(135deg, #fef3c7, #fde68a); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:28px">${k.icon}</div>`;
   const canEdit = schedEditMode;
   const dragHandle = canEdit ? `
@@ -2616,10 +2621,11 @@ function renderSchedItem(it) {
   //       画像なしは 従来通り 32px 絵文字アイコン。
   const HERO_PCT = 64;        // 画像幅 (行幅に対する %)
   const HERO_SLANT = 22;      // 斜めの傾き量 (px)
-  const hasImage = !!it.image_url;
-  const heroImage = hasImage ? `
+  // v521 #157 ヒーロー背景もサムネ優先
+  const heroBg = it.image_thumb_url || it.image_url;
+  const heroImage = heroBg ? `
     <div aria-hidden="true" style="position:absolute; left:0; top:0; bottom:0; width:${HERO_PCT}%;
-         background:#f1f1f4 center/cover no-repeat url('${escapeHtml(it.image_url)}');
+         background:#f1f1f4 center/cover no-repeat url('${escapeHtml(heroBg)}');
          clip-path:polygon(0 0, 100% 0, calc(100% - ${HERO_SLANT}px) 100%, 0 100%);
          pointer-events:none; z-index:1; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)"></div>` : '';
   const thumb = hasImage
@@ -2854,8 +2860,10 @@ function openSchedItemViewModal(gid, it) {
   const memoRow = it.memo
     ? `<div style="font-size:13px; white-space:pre-wrap; margin-top:6px; padding:6px 8px; background:#f7f5fa; border-radius:6px">${escapeHtml(it.memo)}</div>`
     : '';
-  const heroImg = it.image_url
-    ? `<a href="${escapeHtml(it.image_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(it.image_url)}" alt="" style="display:block; width:100%; max-height:240px; object-fit:cover; border-radius:8px; margin:6px 0"></a>`
+  // v521 #157 モーダルヒーローもサムネ優先 (240px 表示なので)
+  const heroSrc = it.image_thumb_url || it.image_url;
+  const heroImg = heroSrc
+    ? `<a href="${escapeHtml(it.image_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:100%; max-height:240px; object-fit:cover; border-radius:8px; margin:6px 0"></a>`
     : '';
   root.hidden = false;
   root.innerHTML = `

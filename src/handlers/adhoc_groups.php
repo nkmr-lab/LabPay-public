@@ -496,7 +496,13 @@ function group_receipts_list(PDO $pdo, array $cfg, int $groupId): void {
          WHERE e.group_id = ? AND e.is_draft = 1
          ORDER BY e.id DESC LIMIT 100");
     $st->execute([$groupId]);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v521 #157 サムネ URL を併せて返す
+    foreach ($items as &$it) {
+        $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
+    }
+    unset($it);
+    json_response(['items' => $items]);
 }
 
 function group_receipts_add(PDO $pdo, array $cfg, int $groupId): void {
@@ -692,6 +698,8 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
         foreach ($ids as $pid) {
             $r['shares'][] = ['user_id' => $pid] + $sharesByUid[$pid];
         }
+        // v521 #157 レシート画像のサムネ URL を併せて返す (220px 詳細表示用)
+        $r['image_thumb_url'] = !empty($r['image_url']) ? thumb_url_for((string)$r['image_url']) : null;
     }
     unset($r);
 
@@ -1197,7 +1205,13 @@ function group_lodgings_list(PDO $pdo, array $cfg, int $id): void {
                           WHERE l.group_id = ?
                           ORDER BY (l.check_in_at IS NULL), l.check_in_at, l.id");
     $st->execute([$id]);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v521 #157 サムネ URL
+    foreach ($items as &$it) {
+        $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
+    }
+    unset($it);
+    json_response(['items' => $items]);
 }
 
 function lodging_validate(array $body): array {
@@ -1340,7 +1354,13 @@ function group_flights_list(PDO $pdo, array $cfg, int $id): void {
                           WHERE f.group_id = ?
                           ORDER BY (f.dep_at IS NULL), f.dep_at, f.id");
     $st->execute([$id]);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $items = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v521 #157 サムネ URL
+    foreach ($items as &$it) {
+        $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
+    }
+    unset($it);
+    json_response(['items' => $items]);
 }
 
 function flight_validate(array $body): array {
@@ -1780,6 +1800,8 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
         foreach ($items as &$it) {
             $it['hearts_count'] = $hCounts[(int)$it['id']] ?? 0;
             $it['my_hearted']   = $hMine[(int)$it['id']] ?? false;
+            // v521 #157 schedule item の画像サムネ URL を併せて返す
+            $it['image_thumb_url'] = !empty($it['image_url']) ? thumb_url_for((string)$it['image_url']) : null;
         }
         unset($it);
     }

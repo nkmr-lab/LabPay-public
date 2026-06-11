@@ -661,6 +661,8 @@ function ai_translations_list(PDO $pdo, array $cfg): void {
         $r['user_id']  = (int)$r['user_id'];
         $r['group_id'] = $r['group_id'] !== null ? (int)$r['group_id'] : null;
         $r['is_mine']  = (int)$r['user_id'] === $uid;
+        // v521 #157 履歴 60px サムネ用
+        $r['image_thumb_url'] = !empty($r['image_url']) ? thumb_url_for((string)$r['image_url']) : null;
     }
     json_response(['items' => $rows]);
 }

@@ -591,7 +591,7 @@ async function loadDetail(id) {
 
       <div class="card">
         <div class="row center" style="gap:10px">
-          ${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}
+          <span style="display:inline-flex; flex:none">${avatarHtml(t.requester_name, t.requester_avatar_url, 'md')}</span>
           <div class="grow">
             <div class="bold" style="font-size:18px">${escapeHtml(t.title)}</div>
             <div class="meta">${escapeHtml(t.requester_name)} · ${t.created_at}</div>
@@ -673,7 +673,7 @@ function renderReportedClaimCard(c, reward) {
   return `
     <div class="list-item" style="background:#fff; align-items:flex-start; margin-top:6px">
       <div style="display:flex; gap:8px; align-items:flex-start; flex:1">
-        ${avatarHtml(c.display_name, c.avatar_url, 'md')}
+        <span style="display:inline-flex; flex:none">${avatarHtml(c.display_name, c.avatar_url, 'md')}</span>
         <div class="grow">
           <div class="bold">${escapeHtml(c.display_name)}</div>
           ${c.notes ? `<div style="margin-top:4px; padding:8px 10px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : '<div class="meta" style="margin-top:4px">(完了メモなし)</div>'}
@@ -693,7 +693,7 @@ function renderClaimsAdmin(t) {
   const rows = t.claims.map(c => `
     <div class="list-item" style="align-items:flex-start">
       <div style="flex:1; display:flex; align-items:flex-start; gap:8px">
-        ${avatarHtml(c.display_name, c.avatar_url, 'sm')}
+        <span style="display:inline-flex; flex:none">${avatarHtml(c.display_name, c.avatar_url, 'sm')}</span>
         <div class="grow">
           <div class="bold">${escapeHtml(c.display_name)} <span class="tag muted">${escapeHtml(c.status)}</span></div>
           ${c.notes ? `<div style="margin-top:4px; padding:6px 8px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : ''}

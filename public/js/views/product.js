@@ -23,7 +23,9 @@ export async function renderProduct({ params }) {
     document.getElementById('product-title').textContent = prod.name || jan;
     const imgEl = document.getElementById('product-image');
     if (prod.image_url) {
-      imgEl.innerHTML = `<img src="${escapeHtml(prod.image_url)}" alt="${escapeHtml(prod.name || '')}">`;
+      // v521 #157 サムネ優先 (なければ原画像 fallback)
+      const src = prod.image_thumb_url || prod.image_url;
+      imgEl.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(prod.name || '')}" loading="lazy" decoding="async">`;
     } else {
       const initial = (prod.name || jan).trim().charAt(0).toUpperCase();
       imgEl.innerHTML = `<div class="product-image-fallback">${escapeHtml(initial)}</div>`;
