@@ -140,6 +140,7 @@ function refUrl(n) {
     case 'meetup':         return n.ref_id ? '#/meetups/' + n.ref_id : '#/meetups';
     case 'auction':        return n.ref_id ? '#/auctions/' + n.ref_id : '#/auctions';
     case 'random_groups':  return '#/random-groups';
+    case 'ordering':       return n.ref_id ? '#/orderings/' + n.ref_id : '#/orderings';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';

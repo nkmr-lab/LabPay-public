@@ -507,6 +507,10 @@ route('/groups/:id/map', lazy(() => import('./views/group_map.js'), 'renderGroup
 route('/groups/:id',     lazy(() => import('./views/groups.js'), 'renderGroupDetail'));
 route('/scrapbox',       lazy(() => import('./views/scrapbox_feed.js'), 'renderScrapboxFeed'));
 route('/random-groups',  lazy(() => import('./views/random_groups.js'), 'renderRandomGroups'));
+// v523 #160 順番決め (発表順 / 当番 など)
+route('/orderings',       lazy(() => import('./views/orderings.js'), 'renderOrderings'));
+route('/orderings/new',   lazy(() => import('./views/orderings.js'), 'renderOrderingNew'));
+route('/orderings/:id',   lazy(() => import('./views/orderings.js'), 'renderOrderingDetail'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 

@@ -55,6 +55,7 @@ $routes = [
     'scrapbox'       => 'route_scrapbox',
     'fx'             => 'route_fx',
     'random-groups'  => 'route_random_groups',
+    'orderings'      => 'route_orderings',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
