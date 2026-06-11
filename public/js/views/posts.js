@@ -128,12 +128,13 @@ function postCard(p, opts = {}) {
   const loc = (p.lat !== null && p.lng !== null)
     ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>`
     : '';
+  // v525 #180 アバター + 投稿者名を タップ で その人のだけに絞り込み (?user=ID)
   return `
     <div class="list-item" style="align-items:flex-start; gap:8px" data-post-id="${p.id}">
-      ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
+      <a href="#/sns?user=${p.user_id}" style="text-decoration:none; flex:none">${avatarHtml(p.display_name, p.avatar_url, 'sm')}</a>
       <div class="grow" style="min-width:0">
         <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
-          <span class="bold">${escapeHtml(p.display_name)}</span>
+          <a href="#/sns?user=${p.user_id}" class="bold" style="text-decoration:none; color:inherit">${escapeHtml(p.display_name)}</a>
           <span class="hint" style="font-size:11px">${fmtRelative(p.created_at_iso || p.created_at)}</span>
           ${loc}
           ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
@@ -193,20 +194,99 @@ window.addEventListener('hashchange', () => {
   if (!location.hash.startsWith('#/sns')) stopPostsPolling();
 });
 
-export async function renderPosts() {
-  postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
+export async function renderPosts({ query } = {}) {
+  // v525 #180 user パラメータで投稿者絞り込み (?user=ID)。 絞り込み中は composer 非表示
+  //   + 解除ボタン + 「@name の投稿のみ」 ヘッダ。
+  const filterUserId = (query?.user && /^\d+$/.test(query.user)) ? Number(query.user) : null;
+  postsState = { items: [], beforeId: 0, loading: false, atEnd: false, filterUserId };
   const app = document.getElementById('app');
-  app.innerHTML = `
-    ${composerHtml(null)}
-    <div id="po-list" class="list"></div>
-    <div id="po-more" class="row center" style="gap:6px; margin-top:12px"></div>
-  `;
-  bindComposer(null);
+  if (filterUserId) {
+    app.innerHTML = `
+      <div class="card">
+        <div class="row center" style="gap:6px">
+          <a href="#/sns" class="hint">← タイムライン全体</a>
+          <span style="flex:1"></span>
+          <span class="muted" id="po-filter-label" style="font-size:13px">読み込み中…</span>
+          <a href="#/sns" class="btn" style="font-size:11px; padding:2px 8px">解除</a>
+        </div>
+      </div>
+      <div id="po-list" class="list"></div>
+      <div id="po-more" class="row center" style="gap:6px; margin-top:12px"></div>
+    `;
+  } else {
+    app.innerHTML = `
+      ${composerHtml(null)}
+      <div id="po-list" class="list"></div>
+      <div id="po-more" class="row center" style="gap:6px; margin-top:12px"></div>
+    `;
+    bindComposer(null);
+  }
   await loadMore();
+  // ラベル更新 (絞り込み時の表示名)
+  if (filterUserId) {
+    const first = postsState.items[0];
+    const label = document.getElementById('po-filter-label');
+    if (label) label.textContent = first ? `@${first.display_name} の投稿のみ` : `(投稿なし)`;
+  }
   document.getElementById('po-more').addEventListener('click', loadMore);
-  // v480 ポーリング 開始 (タイムライン に いる 間 だけ)。
-  postsKnownLatestId = postsState.items[0]?.id || 0;
-  startPostsPolling();
+  // v525 #167 下スワイプで明示リロード (pull-to-refresh)
+  setupPullToRefresh();
+  // ポーリングは全体タイムライン時のみ (絞り込みは静的表示)
+  if (!filterUserId) {
+    postsKnownLatestId = postsState.items[0]?.id || 0;
+    startPostsPolling();
+  }
+}
+
+// v525 #167 タイムラインで下方向スワイプ (touchstart→touchmove) で 明示再読込。
+//   ページ上部 (scrollTop === 0) からの 60px 以上の下スワイプで トリガ。
+function setupPullToRefresh() {
+  const list = document.getElementById('po-list');
+  if (!list) return;
+  let startY = null;
+  let triggered = false;
+  let indicator = null;
+  const showIndicator = (pct) => {
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.style.cssText = 'text-align:center; font-size:13px; padding:8px; color:var(--primary); transition:opacity 0.2s';
+      indicator.textContent = '↓ 引っ張って 更新';
+      list.parentNode.insertBefore(indicator, list);
+    }
+    indicator.style.opacity = Math.min(1, pct);
+    indicator.textContent = pct >= 1 ? '↻ 離して 更新' : '↓ 引っ張って 更新';
+  };
+  const hideIndicator = () => { if (indicator) { indicator.remove(); indicator = null; } };
+  list.addEventListener('touchstart', (ev) => {
+    if (window.scrollY > 0) { startY = null; return; }
+    startY = ev.touches[0].clientY;
+    triggered = false;
+  }, { passive: true });
+  list.addEventListener('touchmove', (ev) => {
+    if (startY === null) return;
+    const dy = ev.touches[0].clientY - startY;
+    if (dy > 0 && window.scrollY === 0) {
+      showIndicator(dy / 60);
+      if (dy >= 60) triggered = true;
+    }
+  }, { passive: true });
+  list.addEventListener('touchend', async () => {
+    if (triggered) {
+      hideIndicator();
+      // ヘッダの 「読み込み中…」 を 表示してから 全件 reset
+      const tmp = document.createElement('div');
+      tmp.className = 'muted';
+      tmp.style.cssText = 'text-align:center; padding:8px';
+      tmp.textContent = '↻ 更新中…';
+      list.parentNode.insertBefore(tmp, list);
+      await loadMore(true);
+      tmp.remove();
+    } else {
+      hideIndicator();
+    }
+    startY = null;
+    triggered = false;
+  });
 }
 
 export async function renderPostDetail({ params }) {
@@ -483,6 +563,8 @@ async function loadMore(reset = false) {
   if (reset) postsState.beforeId = 0;
   try {
     const q = postsState.beforeId > 0 ? { before_id: postsState.beforeId, limit: 30 } : { limit: 30 };
+    // v525 #180 投稿者フィルタ
+    if (postsState.filterUserId) q.user_id = postsState.filterUserId;
     const d = await get('/api/posts', q);
     const items = d.items || [];
     if (reset) {

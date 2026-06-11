@@ -176,6 +176,34 @@ export async function renderSettings() {
     </div>
   `;
 
+  // v525 #175 各カテゴリ (h2 が無い card) を デフォルト折りたたみに変換。
+  //   先頭の h2「設定」 カードはそのまま、 各 .card で 「:scope > h3」 を持つものを
+  //   <details>/<summary> に変換 して default closed に。
+  for (const card of document.querySelectorAll('#app > .card')) {
+    const h3 = card.querySelector(':scope > h3');
+    if (!h3) continue;
+    const details = document.createElement('details');
+    details.className = 'card';
+    const summary = document.createElement('summary');
+    summary.style.cssText = 'cursor:pointer; list-style:none; padding:4px 0; user-select:none';
+    summary.innerHTML = `<span style="font-size:14px; color:var(--muted)">▶ </span>`;
+    summary.appendChild(h3.cloneNode(true));
+    summary.querySelector('h3').style.display = 'inline';
+    summary.querySelector('h3').style.margin = '0';
+    summary.querySelector('h3').style.fontSize = '15px';
+    details.appendChild(summary);
+    Array.from(card.childNodes).forEach(n => {
+      if (n === h3) return;
+      details.appendChild(n);
+    });
+    // 矢印を回転
+    details.addEventListener('toggle', () => {
+      const arrow = summary.querySelector('span');
+      if (arrow) arrow.textContent = details.open ? '▼ ' : '▶ ';
+    });
+    card.replaceWith(details);
+  }
+
   await loadProfile();
   await load();
   loadSoundPrefs(); // fire-and-forget; 失敗してもページ全体は崩れない

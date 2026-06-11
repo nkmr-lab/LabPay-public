@@ -126,6 +126,11 @@ function posts_list(PDO $pdo, array $cfg): void {
         $where .= " AND p.id < ?";
         $args[] = $beforeId;
     }
+    // v525 #180 投稿者で絞り込み (?user_id=N)
+    if (isset($_GET['user_id']) && (int)$_GET['user_id'] > 0) {
+        $where .= " AND p.user_id = ?";
+        $args[] = (int)$_GET['user_id'];
+    }
     $sql = "SELECT p.id, p.user_id, p.body, p.image_url, p.lat, p.lng, p.parent_id, p.created_at,
                    u.display_name, u.avatar_url, u.kind AS author_kind
               FROM posts p

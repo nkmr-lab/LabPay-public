@@ -24,10 +24,12 @@ export async function renderNotifications() {
     </div>
   `;
   document.getElementById('mark-all').addEventListener('click', async () => {
-    try { await patch('/api/notifications/read_all', {}); }
-    catch (e) { toast('失敗: ' + e.message); return; }
-    await refreshUnread();
-    await renderNotifications();
+    // v525 #178 表示先行 (= UI 即時更新) + DB 更新は裏で。 全件 re-fetch しない。
+    const now = new Date().toISOString();
+    for (const it of loadedItems) { if (!it.read_at) it.read_at = now; }
+    paint();
+    try { await patch('/api/notifications/read_all', {}); await refreshUnread(); }
+    catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('more-btn').addEventListener('click', () => loadMore());
   loadedItems = [];
