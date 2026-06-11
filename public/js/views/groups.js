@@ -2128,7 +2128,7 @@ async function loadSchedule(gid) {
           || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。 編集モードで 「＋ 候補を追加」 か 「📥 Google Map」 から取り込み。</div>'}
       </div>
       <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap">
-        ${schedEditMode ? `<button class="btn primary" id="gd-sched-add-stock" style="padding:4px 10px; font-size:12px">＋ 候補を追加</button>` : ''}
+        <button class="btn primary" id="gd-sched-add-stock" style="padding:4px 10px; font-size:12px">＋ 候補を追加</button>
         <button class="btn" id="gd-sched-gmap" style="padding:4px 10px; font-size:12px" title="Google Maps の保存リスト (KML/GeoJSON) からまとめて取り込み (既存と重複しないもののみストックに追加)">📥 Google Map から取り込み</button>
         <input type="file" id="gd-sched-gmap-file" accept=".kml,.json,.geojson" hidden>
       </div>

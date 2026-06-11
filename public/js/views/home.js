@@ -109,9 +109,10 @@ export const HOME_CARDS = [
 //   進行中 / 未対応 / [ヒーロー = balance, 常時表示] / あなたのグループ / らぼったー /
 //   依頼中 / 新規入荷 / 募集 / 食べある記 (新着) / 重要連絡 (新規 #139)。
 //   他は デフォルト hidden、 設定 → ホーム から個別 ON 可能。
+// v522 #159 「今ラボにいる人」 (presence) を デフォルト表示に追加
 const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
-  'fresh-listings', 'invitations', 'places', 'notices',
+  'fresh-listings', 'invitations', 'places', 'notices', 'presence',
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -123,7 +124,7 @@ const HOME_LAYOUT_KEY = 'labpay-home-layout-v2';
 //   hidden カードは末尾に。
 const DEFAULT_ORDER = [
   'my-timers', 'pending', 'balance', 'groups', 'sns', 'asking',
-  'fresh-listings', 'invitations', 'places', 'notices',
+  'fresh-listings', 'invitations', 'places', 'notices', 'presence',
 ];
 export function readHomeLayout() {
   try {
