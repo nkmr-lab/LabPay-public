@@ -119,7 +119,11 @@ function reactionsHtml(p) {
 function postCard(p, opts = {}) {
   const meId = Number(state.me?.id);
   const isMine = p.user_id === meId;
-  const canDelete = isMine || state.me?.role === 'admin';
+  // v524 #182 削除権限: 投稿者本人は常に OK / admin は LabPay (system) 投稿のみ削除可。
+  //   他人の人間投稿は admin でも削除不可 (= 個人の発言は本人だけ消せる)。
+  const isAdmin = state.me?.role === 'admin';
+  const authorIsSystem = p.author_kind === 'system';
+  const canDelete = isMine || (isAdmin && authorIsSystem);
   const replyHash = opts.skipReplyHash ? '' : `#/sns/${p.id}`;
   const loc = (p.lat !== null && p.lng !== null)
     ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>`

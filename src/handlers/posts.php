@@ -127,7 +127,7 @@ function posts_list(PDO $pdo, array $cfg): void {
         $args[] = $beforeId;
     }
     $sql = "SELECT p.id, p.user_id, p.body, p.image_url, p.lat, p.lng, p.parent_id, p.created_at,
-                   u.display_name, u.avatar_url
+                   u.display_name, u.avatar_url, u.kind AS author_kind
               FROM posts p
               JOIN users u ON u.id = p.user_id
              WHERE $where
@@ -262,7 +262,7 @@ function posts_create(PDO $pdo, array $cfg): void {
 function posts_detail(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT p.id, p.user_id, p.body, p.image_url, p.lat, p.lng, p.parent_id, p.created_at,
-                                u.display_name, u.avatar_url
+                                u.display_name, u.avatar_url, u.kind AS author_kind
                            FROM posts p
                            JOIN users u ON u.id = p.user_id
                           WHERE p.id = ?");
@@ -305,13 +305,21 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
 
 function posts_delete(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT user_id FROM posts WHERE id=?");
+    $st = $pdo->prepare("SELECT p.user_id, u.kind FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id=?");
     $st->execute([$id]);
-    $cuid = (int)$st->fetchColumn();
-    if (!$cuid) throw new ApiException('not_found', '投稿が ありません', 404);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '投稿が ありません', 404);
+    $cuid = (int)$row['user_id'];
+    $authorIsSystem = (string)($row['kind'] ?? '') === 'system';
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ($cuid !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '投稿者 または admin のみ削除可', 403);
+    // v524 #182 削除権限を絞る:
+    //   - 投稿者本人: 常に OK
+    //   - admin: 自分の投稿 + system (LabPay 自動投稿) のみ。 他人の人間投稿は削除不可
+    //   - その他: 自分のみ
+    $isAuthor = $cuid === (int)$u['id'];
+    $canDelete = $isAuthor || ($isAdmin && $authorIsSystem);
+    if (!$canDelete) {
+        throw new ApiException('forbidden', '投稿者本人 または admin (system 投稿のみ) しか削除できません', 403);
     }
     $pdo->prepare("DELETE FROM posts WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);

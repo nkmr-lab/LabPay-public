@@ -784,6 +784,9 @@ async function load() {
   try {
     const data = await get('/api/presence/devices');
     const root = document.getElementById('dev-list');
+    // v524 #173 #177 ページ遷移中に async が解決すると root が null になることがある
+    //   ので 防御。 古い render の async 処理を捨てる形。
+    if (!root) return;
     if (!data.items.length) {
       root.innerHTML = `<div class="empty">まだ登録されていません</div>`;
       return;
@@ -807,7 +810,8 @@ async function load() {
       });
     });
   } catch (e) {
-    document.getElementById('dev-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    const root = document.getElementById('dev-list');
+    if (root) root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 

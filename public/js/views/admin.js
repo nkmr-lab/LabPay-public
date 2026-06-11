@@ -478,7 +478,8 @@ export async function renderAdmin() {
     } catch (e) { out.textContent = 'エラー: ' + e.message; }
   });
 
-  document.getElementById('hol-sync').addEventListener('click', async (ev) => {
+  // v524 #174 #176 ページ遷移などで admin DOM が消えている可能性 → 防御
+  document.getElementById('hol-sync')?.addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     try {
       const r = await post('/api/admin/holidays/sync', {});
@@ -488,12 +489,12 @@ export async function renderAdmin() {
     } catch (e) { toast('同期失敗: ' + e.message); }
     ev.currentTarget.disabled = false;
   });
-  document.getElementById('cal-prev').addEventListener('click', async () => {
+  document.getElementById('cal-prev')?.addEventListener('click', async () => {
     calState.month -= 1;
     if (calState.month < 1) { calState.month = 12; calState.year -= 1; }
     await renderCalendarGrid(calState.year, calState.month);
   });
-  document.getElementById('cal-next').addEventListener('click', async () => {
+  document.getElementById('cal-next')?.addEventListener('click', async () => {
     calState.month += 1;
     if (calState.month > 12) { calState.month = 1; calState.year += 1; }
     await renderCalendarGrid(calState.year, calState.month);
@@ -752,6 +753,9 @@ async function loadHolidays() {
 async function renderCalendarGrid(year, month) {
   const grid = document.getElementById('cal-grid');
   const title = document.getElementById('cal-title');
+  // v524 #176 ページ遷移中で grid/title が null になることがある (async がページ
+  //   切替後に解決するケース)。 防御してから操作。
+  if (!grid || !title) return;
   title.textContent = `${year} 年 ${month} 月`;
   grid.innerHTML = `<div class="muted">読み込み中…</div>`;
 
