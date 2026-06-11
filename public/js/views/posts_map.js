@@ -38,10 +38,44 @@ export async function renderPostsMap() {
   }
 
   const mapBox = document.getElementById('pm-map');
-  const map = L.map(mapBox, { zoomControl: true }).setView([35.7, 139.66], 12);
+  // v535 #191 前回 (= 直前にこのページを閉じた時) の中心 + ズームを localStorage に
+  //   保存しておき、 復元する。 ない場合は東京デフォルト。
+  let initView = { lat: 35.7, lng: 139.66, zoom: 12 };
+  try {
+    const j = JSON.parse(localStorage.getItem('labpay-postsmap-view') || 'null');
+    if (j && isFinite(j.lat) && isFinite(j.lng) && isFinite(j.zoom)) initView = j;
+  } catch (_) {}
+  const map = L.map(mapBox, { zoomControl: true }).setView([initView.lat, initView.lng], initView.zoom);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap', maxZoom: 19,
   }).addTo(map);
+
+  // v535 #191 「📍 現在地」 ボタン (地図右上)。 geolocation で 現在地に setView。
+  //   サイズ/ズームは変えず 位置だけ移す。
+  const locCtl = L.control({ position: 'topright' });
+  locCtl.onAdd = () => {
+    const div = L.DomUtil.create('div', 'leaflet-bar');
+    div.innerHTML = `<a href="#" title="現在地に移動" style="width:30px; height:30px; line-height:30px; text-align:center; display:block; font-size:16px; background:#fff">📍</a>`;
+    L.DomEvent.disableClickPropagation(div);
+    div.querySelector('a').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!navigator.geolocation) { toast('現在地を取得できません (Geolocation 未対応)'); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          map.setView([pos.coords.latitude, pos.coords.longitude], map.getZoom());
+          toast('現在地に移動しました');
+        },
+        () => { toast('現在地の取得に失敗しました'); },
+        { enableHighAccuracy: false, timeout: 8000 },
+      );
+    });
+    return div;
+  };
+  locCtl.addTo(map);
+
+  // 前回 view が無い (= 初回) の時だけ 全マーカーが収まるよう fitBounds する。 ある時は
+  //   保存した位置を尊重する (= ユーザ意図を維持)。
+  const hadSavedView = localStorage.getItem('labpay-postsmap-view') !== null;
 
   // 自分の投稿で lat/lng が入ってるものだけ集める。 多数を期待していい (200 件まで)。
   const meId = Number(state.me?.id);
@@ -64,7 +98,22 @@ export async function renderPostsMap() {
   for (const p of items) {
     const lat = Number(p.lat), lng = Number(p.lng);
     if (!isFinite(lat) || !isFinite(lng)) continue;
-    const m = L.marker([lat, lng]).addTo(map);
+    // v535 #194 写真がある場合は サムネ画像を マーカーアイコンとして表示
+    //   (グループ地図 / 食べある記 と同様の見せ方)
+    const imgSrc = p.image_thumb_url || p.image_url;
+    let marker;
+    if (imgSrc) {
+      const icon = L.divIcon({
+        className: 'pm-img-marker',
+        html: `<div style="width:42px; height:42px; border-radius:8px; overflow:hidden; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4); background:#fff"><img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover"></div>`,
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+      });
+      marker = L.marker([lat, lng], { icon }).addTo(map);
+    } else {
+      marker = L.marker([lat, lng]).addTo(map);
+    }
+    const m = marker;
     m.bindPopup(() => {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'min-width:200px; max-width:260px; font-size:13px';
@@ -83,9 +132,20 @@ export async function renderPostsMap() {
     markersByPid.set(p.id, m);
   }
 
-  // 全マーカーが収まるようズーム調整
-  const group = L.featureGroup([...markersByPid.values()]);
-  if (group.getLayers().length) map.fitBounds(group.getBounds().pad(0.2));
+  // v535 #191 初回 (= 保存 view 無し) のみ 全マーカー fitBounds、 保存 view 有りなら
+  //   ユーザ意図を維持。
+  if (!hadSavedView) {
+    const group = L.featureGroup([...markersByPid.values()]);
+    if (group.getLayers().length) map.fitBounds(group.getBounds().pad(0.2));
+  }
+  // 移動・ズーム変更時に view を localStorage 保存 (次回 復元用)
+  const saveView = () => {
+    try {
+      const c = map.getCenter();
+      localStorage.setItem('labpay-postsmap-view', JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
+    } catch (_) {}
+  };
+  map.on('moveend zoomend', saveView);
 
   const boundsCheckbox = document.getElementById('pm-bounds-only');
   function refreshList() {

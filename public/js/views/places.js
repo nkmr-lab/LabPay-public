@@ -187,13 +187,30 @@ export async function renderPlacesMap() {
     const ratingTxt = p.avg_rating !== null
       ? `${ratingStars(p.avg_rating)} ${p.avg_rating.toFixed(1)}`
       : '';
+    // v535 #194 写真があれば サムネをマーカーアイコンに (ポップアップにも 上に出す)
+    const imgSrc = p.cover_image_thumb || p.cover_image;
+    const popupImgBlock = imgSrc
+      ? `<img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:100%; max-height:120px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
+      : '';
     const popupHtml = `
-      <div style="min-width:160px">
+      <div style="min-width:180px; max-width:220px">
+        ${popupImgBlock}
         <div class="bold"><a href="#/places/${p.id}" style="color:var(--primary); text-decoration:none">${escapeHtml(p.title)}</a></div>
         <div class="meta" style="font-size:11px">${escapeHtml(CAT_LBL[p.category] || '')}</div>
         ${ratingTxt ? `<div class="meta" style="font-size:11px">${ratingTxt} (${p.comment_count})</div>` : ''}
       </div>`;
-    const marker = L.marker([p.lat, p.lng]).bindPopup(popupHtml).addTo(map);
+    let marker;
+    if (imgSrc) {
+      const icon = L.divIcon({
+        className: 'pl-img-marker',
+        html: `<div style="width:42px; height:42px; border-radius:8px; overflow:hidden; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4); background:#fff"><img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover"></div>`,
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+      });
+      marker = L.marker([p.lat, p.lng], { icon }).bindPopup(popupHtml).addTo(map);
+    } else {
+      marker = L.marker([p.lat, p.lng]).bindPopup(popupHtml).addTo(map);
+    }
     markersByPid.set(p.id, marker);
   }
   // 全件 が 入る ように auto-fit。 1 件 なら 適当に zoom-in。

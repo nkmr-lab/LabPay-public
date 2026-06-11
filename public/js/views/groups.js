@@ -2647,7 +2647,7 @@ function renderSchedItem(it) {
          background:#f1f1f4 center/cover no-repeat url('${escapeHtml(heroBg)}');
          clip-path:polygon(0 0, 100% 0, calc(100% - ${HERO_SLANT}px) 100%, 0 100%);
          pointer-events:none; z-index:1; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)"></div>` : '';
-  const thumb = hasImage
+  const thumb = heroBg
     ? '' // ヒーロー が代替
     : `<span style="font-size:22px; line-height:1; width:32px; text-align:center; flex-shrink:0">${k.icon}</span>`;
   const urlIcon = it.url
@@ -2693,14 +2693,14 @@ function renderSchedItem(it) {
     </div>` : '';
   // 画像ありの場合は ロック/ハンドル を 画像の左上に 半透明バッジで オーバーレイ。
   // 画像なし時は 従来通り (lock は absolute、 handle は flex 内)。
-  const overlayBg = hasImage ? 'background:rgba(255,255,255,0.88); padding:2px 4px; border-radius:6px;' : '';
+  const overlayBg = heroBg ? 'background:rgba(255,255,255,0.88); padding:2px 4px; border-radius:6px;' : '';
   const lockBadge = isLocked ? `
     <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行は ここでは並び替えできません (本拠日でのみ可)"
           style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.85; pointer-events:none; z-index:3; ${overlayBg}">🔒</span>` : '';
   const dragHandle = canEdit ? `
     <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="${escapeHtml(dayKey)}"
           aria-label="ドラッグして並び替え" title="ドラッグで並び替え (日をまたいでも OK)"
-          style="${hasImage ? 'position:absolute; top:4px; left:4px; z-index:3;' : ''} ${overlayBg} color:#666; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
+          style="${heroBg ? 'position:absolute; top:4px; left:4px; z-index:3;' : ''} ${overlayBg} color:#666; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
   // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
   // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
@@ -2725,7 +2725,7 @@ function renderSchedItem(it) {
   // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
   // 画像つきは 左 2/3 がヒーロー → コンテンツ (タイトル + メタ) を 右側に逃がす。
   const rightPad = 'padding-right:18px;';
-  const leftPad = hasImage ? `padding-left:calc(${HERO_PCT}% + 10px);` : '';
+  const leftPad = heroBg ? `padding-left:calc(${HERO_PCT}% + 10px);` : '';
   // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
   //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
