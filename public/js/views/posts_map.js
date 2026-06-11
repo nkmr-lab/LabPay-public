@@ -111,7 +111,22 @@ export async function renderPostsMap() {
       });
       marker = L.marker([lat, lng], { icon }).addTo(map);
     } else {
-      marker = L.marker([lat, lng]).addTo(map);
+      // v542 #198 画像なしのマーカーが真っ白で寂しいので、 アバター画像 or
+      //   本文先頭の絵文字を 入れた divIcon で描画。 ユーザ色 (display_name hash で
+      //   背景色を決定) で 「誰の投稿か」 も一目で分かる。
+      const firstEmoji = extractFirstEmoji(p.body || '');
+      const userColor  = colorFromName(p.display_name || '');
+      const avatarSrc  = p.avatar_url || '';
+      const inner = avatarSrc
+        ? `<img src="${escapeHtml(avatarSrc)}" alt="" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover">`
+        : `<div style="width:100%; height:100%; background:${userColor}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:${firstEmoji ? 18 : 14}px; font-weight:700">${firstEmoji ? firstEmoji : escapeHtml((p.display_name || '?').slice(0, 1))}</div>`;
+      const icon = L.divIcon({
+        className: 'pm-noimg-marker',
+        html: `<div style="width:38px; height:38px; border-radius:50%; overflow:hidden; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4); background:${userColor}">${inner}</div>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+      });
+      marker = L.marker([lat, lng], { icon }).addTo(map);
     }
     const m = marker;
     m.bindPopup(() => {
@@ -179,4 +194,19 @@ export async function renderPostsMap() {
   refreshList();
   map.on('moveend zoomend', refreshList);
   boundsCheckbox.addEventListener('change', refreshList);
+}
+
+// v542 #198 本文の先頭から 絵文字 (Unicode Emoji_Presentation 範囲) を 1 つ抽出。
+//   なければ '' を返す。 シンプルなヒューリスティック (完璧網羅は不要)。
+function extractFirstEmoji(s) {
+  if (!s) return '';
+  // 絵文字っぽい範囲を緩く拾う (記号+変体セレクタ含む)
+  const m = s.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}](\u{FE0F})?/u);
+  return m ? m[0] : '';
+}
+// 文字列を 簡易 hash → HSL カラー (パステル系) に。 同じ名前は同じ色。
+function colorFromName(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360}, 55%, 55%)`;
 }
