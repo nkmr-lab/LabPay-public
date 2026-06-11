@@ -8,14 +8,17 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v533';
+const CACHE_NAME = 'labpay-shell-v534';
 // アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
 // グループ / 食べある記 / SNS / 重要連絡 / Scrapbox の GET を stale-while-revalidate
 // 別キャッシュ で 保持。 オフライン や 通信 遅延 時 でも 直前 の 内容 を 即 表示、
 // 裏で 新鮮版 を 取得。 ledger 系 (送金 / 残高) は 含めない。
-const CONTENT_CACHE_NAME = 'labpay-content-v2';
+// v534 #189 古い stale な /api/groups* キャッシュが renderer を壊している可能性があるので
+//   コンテンツキャッシュを v3 に bump (activate で v2 が削除される → 次回 fetch が全部
+//   ネット直行)。
+const CONTENT_CACHE_NAME = 'labpay-content-v3';
 
 // v506 #131 install 時にこれだけは確実に precache (起動の最重要パス)。
 //   足りない場合は実行時に追加でキャッシュされる (shell SWR で網羅)。

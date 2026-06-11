@@ -1940,6 +1940,16 @@ const SCHED_KINDS = {
 async function loadSchedule(gid) {
   // v528 #184 #186 await 中に loadDetail が再走すると DOM が差し替わって 古い body
   //   参照は orphan になる。 fetch 後に再取得する形で 「読み込み中…」 が残るバグを防ぐ。
+  // v534 #189 描画コード内の JS エラーで body が 「読み込み中…」 のまま残るのを防ぐ
+  //   ため、 関数全体を try/catch で包む。 catch 時はエラーメッセージを body に出す。
+  try { return await loadScheduleInner(gid); }
+  catch (e) {
+    console.error('[loadSchedule]', e);
+    const body = document.getElementById('gd-sched-body');
+    if (body) body.textContent = '描画エラー: ' + (e?.message || String(e));
+  }
+}
+async function loadScheduleInner(gid) {
   if (!document.getElementById('gd-sched-card')) return;
   let d;
   try { d = await get(`/api/groups/${gid}/schedule`); }

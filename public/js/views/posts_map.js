@@ -67,9 +67,15 @@ export async function renderPostsMap() {
     const m = L.marker([lat, lng]).addTo(map);
     m.bindPopup(() => {
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'min-width:200px; max-width:240px; font-size:13px';
+      wrap.style.cssText = 'min-width:200px; max-width:260px; font-size:13px';
+      // v534 #190 写真があれば サムネで表示 (タップで詳細へ)
+      const imgSrc = p.image_thumb_url || p.image_url;
+      const imgBlock = imgSrc
+        ? `<img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:100%; max-height:160px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
+        : '';
       wrap.innerHTML = `
-        <div class="bold">${escapeHtml((p.body || '').slice(0, 80))}</div>
+        ${imgBlock}
+        <div class="bold" style="font-size:13px">${escapeHtml((p.body || '').slice(0, 80))}</div>
         <div class="meta" style="font-size:11px">${escapeHtml(p.created_at || '')}</div>
         <a href="#/sns/${p.id}" style="color:var(--primary); font-size:12px">詳細 →</a>`;
       return wrap;
@@ -94,14 +100,21 @@ export async function renderPostsMap() {
         '<div class="empty" style="padding:6px; font-size:12px">表示中エリアに投稿はありません</div>';
       return;
     }
-    document.getElementById('pm-list').innerHTML = filtered.map(p => `
-      <a class="list-item" href="#/sns/${p.id}" style="gap:8px; align-items:flex-start">
-        <span style="display:inline-flex; flex:none">${avatarHtml(p.display_name, p.avatar_url, 'sm')}</span>
-        <div class="grow" style="min-width:0">
-          <div style="font-size:13px; line-height:1.4; overflow:hidden; text-overflow:ellipsis">${escapeHtml((p.body || '').slice(0, 100))}</div>
-          <div class="meta" style="font-size:11px">${escapeHtml(p.created_at || '')}</div>
-        </div>
-      </a>`).join('');
+    document.getElementById('pm-list').innerHTML = filtered.map(p => {
+      // v534 #190 写真がある投稿は 48px サムネを左に出す
+      const imgSrc = p.image_thumb_url || p.image_url;
+      const thumb = imgSrc
+        ? `<img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex:none">`
+        : `<span style="display:inline-flex; flex:none">${avatarHtml(p.display_name, p.avatar_url, 'sm')}</span>`;
+      return `
+        <a class="list-item" href="#/sns/${p.id}" style="gap:8px; align-items:flex-start">
+          ${thumb}
+          <div class="grow" style="min-width:0">
+            <div style="font-size:13px; line-height:1.4; overflow:hidden; text-overflow:ellipsis">${escapeHtml((p.body || '').slice(0, 100))}</div>
+            <div class="meta" style="font-size:11px">${escapeHtml(p.created_at || '')}</div>
+          </div>
+        </a>`;
+    }).join('');
   }
   refreshList();
   map.on('moveend zoomend', refreshList);
