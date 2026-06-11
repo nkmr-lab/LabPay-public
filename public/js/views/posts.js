@@ -680,11 +680,25 @@ function openImageLightbox(src) {
 }
 
 function bindRowHandlers() {
+  // v541 #197 投稿カードの「余白」をタップしたら 返信モード (= 詳細ページへ遷移)
+  //   インタラクティブな要素 (a / button / data-zoom-src / data-react-post) は除外。
+  document.querySelectorAll('[data-post-id]').forEach(row => {
+    if (row.dataset.boundReply) return;
+    row.dataset.boundReply = '1';
+    row.addEventListener('click', (ev) => {
+      // a / button / 既にハンドラを持つ要素は素通し
+      if (ev.target.closest('a, button, [data-zoom-src], [data-react-post]')) return;
+      const id = row.dataset.postId;
+      if (id) location.hash = '#/sns/' + id;
+    });
+    row.style.cursor = 'pointer';
+  });
   document.querySelectorAll('[data-zoom-src]').forEach(el => {
     if (el.dataset.bound) return;
     el.dataset.bound = '1';
     el.addEventListener('click', (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       openImageLightbox(el.dataset.zoomSrc);
     });
   });
