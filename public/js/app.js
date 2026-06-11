@@ -520,6 +520,8 @@ route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'
 // v533 #162 筋トレ記録 + 仲間
 route('/workouts/friends', lazy(() => import('./views/workouts.js'), 'renderWorkoutsFriends'));
 route('/workouts',         lazy(() => import('./views/workouts.js'), 'renderWorkouts'));
+// v538 #169 散歩に行きたくなるアプリ
+route('/walk',             lazy(() => import('./views/walk.js'), 'renderWalk'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 

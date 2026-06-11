@@ -529,6 +529,7 @@ require_once __DIR__ . '/handlers/orderings.php';
 require_once __DIR__ . '/handlers/regions.php';
 require_once __DIR__ . '/handlers/health.php';
 require_once __DIR__ . '/handlers/workouts.php';
+require_once __DIR__ . '/handlers/walk.php';
 require_once __DIR__ . '/handlers/money_requests.php';
 require_once __DIR__ . '/handlers/polls.php';
 require_once __DIR__ . '/handlers/rollcalls.php';

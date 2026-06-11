@@ -59,6 +59,7 @@ $routes = [
     'regions'        => 'route_regions',
     'health'         => 'route_health',
     'workouts'       => 'route_workouts',
+    'walk'           => 'route_walk',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
