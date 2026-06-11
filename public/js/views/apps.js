@@ -54,6 +54,8 @@ export const APPS = [
   { id: 'scrapbox',      cat: 'archive', url: '#/scrapbox',     title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
   { id: 'network',       cat: 'archive', url: '#/network',      title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
   { id: 'exercise',      cat: 'archive', url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
+  // v531 #163 行った国 / 都道府県 制覇マップ
+  { id: 'regions',       cat: 'archive', url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県 を タップで 登録。 進捗バー (47/47 都道府県 や 100/X 国) + ラボ メンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },

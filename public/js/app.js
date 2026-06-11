@@ -513,6 +513,8 @@ route('/random-groups',  lazy(() => import('./views/random_groups.js'), 'renderR
 route('/orderings',       lazy(() => import('./views/orderings.js'), 'renderOrderings'));
 route('/orderings/new',   lazy(() => import('./views/orderings.js'), 'renderOrderingNew'));
 route('/orderings/:id',   lazy(() => import('./views/orderings.js'), 'renderOrderingDetail'));
+// v531 #163 行った国 / 都道府県 制覇マップ
+route('/regions',         lazy(() => import('./views/regions.js'), 'renderRegions'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
