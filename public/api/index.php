@@ -57,6 +57,7 @@ $routes = [
     'random-groups'  => 'route_random_groups',
     'orderings'      => 'route_orderings',
     'regions'        => 'route_regions',
+    'health'         => 'route_health',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',

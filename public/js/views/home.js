@@ -51,6 +51,7 @@ export const HOME_ACTIONS = [
   { id: 'random-groups', url: '#/random-groups',     title: 'ランダム分け',  icon: '🎲', defaultVisible: false },
   { id: 'orderings',    url: '#/orderings',          title: '順番決め',      icon: '📋', defaultVisible: false }, // v526 #170 v523 で追加した新アプリも アイコン候補に
   { id: 'regions',      url: '#/regions',            title: '制覇マップ',    icon: '🗺', defaultVisible: false }, // v531 #163
+  { id: 'health',       url: '#/health',             title: '体重/BMI',      icon: '⚖️', defaultVisible: false }, // v532 #161
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
   { id: 'groups',       url: '#/groups',             title: 'グループ',      icon: '👥', defaultVisible: false },
