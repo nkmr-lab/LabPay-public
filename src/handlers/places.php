@@ -25,8 +25,28 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
         // v486 #80 いいね トグル
         if ($next === 'like' && $method === 'POST')   { places_like_toggle($pdo, $cfg, $id, true);  return; }
         if ($next === 'like' && $method === 'DELETE') { places_like_toggle($pdo, $cfg, $id, false); return; }
+        // v529 #164 行った (足跡) トグル
+        if ($next === 'visit' && $method === 'POST')   { places_visit_toggle($pdo, $cfg, $id, true);  return; }
+        if ($next === 'visit' && $method === 'DELETE') { places_visit_toggle($pdo, $cfg, $id, false); return; }
     }
     json_error('not_found', "no places route for $method $sub", 404);
+}
+
+function places_visit_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
+    $st->execute([$id]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店 が ありません', 404);
+    if ($on) {
+        $pdo->prepare("INSERT IGNORE INTO place_visits (place_id, user_id, visited_at) VALUES (?, ?, NOW())")
+            ->execute([$id, (int)$u['id']]);
+    } else {
+        $pdo->prepare("DELETE FROM place_visits WHERE place_id=? AND user_id=?")
+            ->execute([$id, (int)$u['id']]);
+    }
+    $stC = $pdo->prepare("SELECT COUNT(*) FROM place_visits WHERE place_id=?");
+    $stC->execute([$id]);
+    json_response(['ok' => true, 'visit_count' => (int)$stC->fetchColumn(), 'visited_by_me' => $on]);
 }
 
 function places_like_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
@@ -61,12 +81,15 @@ function places_list(PDO $pdo, array $cfg): void {
                (SELECT c.image_url FROM place_comments c WHERE c.place_id=p.id AND c.image_url IS NOT NULL
                  ORDER BY c.created_at DESC LIMIT 1) AS latest_image,
                (SELECT COUNT(*) FROM place_likes l WHERE l.place_id=p.id) AS like_count,
-               EXISTS(SELECT 1 FROM place_likes l WHERE l.place_id=p.id AND l.user_id=?) AS liked_by_me
+               EXISTS(SELECT 1 FROM place_likes l WHERE l.place_id=p.id AND l.user_id=?) AS liked_by_me,
+               -- v529 #164 行った (足跡) count + 自分が行ったか
+               (SELECT COUNT(*) FROM place_visits v WHERE v.place_id=p.id) AS visit_count,
+               EXISTS(SELECT 1 FROM place_visits v WHERE v.place_id=p.id AND v.user_id=?) AS visited_by_me
           FROM places p
           JOIN users u ON u.id = p.creator_user_id
          ORDER BY p.created_at DESC
          LIMIT 200");
-    $st->execute([$meId]);
+    $st->execute([$meId, $meId]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         $r['id']              = (int)$r['id'];
@@ -77,6 +100,8 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['lng']             = $r['lng'] !== null ? (float)$r['lng'] : null;
         $r['like_count']      = (int)$r['like_count'];
         $r['liked_by_me']     = (bool)$r['liked_by_me'];
+        $r['visit_count']     = (int)$r['visit_count'];
+        $r['visited_by_me']   = (bool)$r['visited_by_me'];
         // v478 cover_image: 店のメイン画像 を 優先、 なければ 最新の レビュー画像
         $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
         // v503 #127 タイル表示は重いオリジナル画像を使っていたので、 サムネ URL を
@@ -132,6 +157,13 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
     $stM = $pdo->prepare("SELECT 1 FROM place_likes WHERE place_id=? AND user_id=?");
     $stM->execute([$id, $meId]);
     $likedByMe = (bool)$stM->fetchColumn();
+    // v529 #164 訪問 (足跡)
+    $stV = $pdo->prepare("SELECT COUNT(*) FROM place_visits WHERE place_id=?");
+    $stV->execute([$id]);
+    $visitCount = (int)$stV->fetchColumn();
+    $stMV = $pdo->prepare("SELECT 1 FROM place_visits WHERE place_id=? AND user_id=?");
+    $stMV->execute([$id, $meId]);
+    $visitedByMe = (bool)$stMV->fetchColumn();
     $stC = $pdo->prepare("
         SELECT c.id, c.body, c.image_url, c.rating, c.user_id, c.created_at,
                u.display_name, u.avatar_url
@@ -172,6 +204,8 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'comment_count'      => count($comments),
             'like_count'         => $likeCount,
             'liked_by_me'        => $likedByMe,
+            'visit_count'        => $visitCount,   // v529 #164
+            'visited_by_me'      => $visitedByMe,  // v529 #164
         ],
         'comments' => $comments,
     ]);

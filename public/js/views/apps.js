@@ -39,7 +39,8 @@ export const APPS = [
   { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
   // v523 #160 順番決め (発表順 / 当番 など)。 メンバーを 1 列に並び替えて 結果を全員に通知。
   { id: 'orderings',     cat: 'tool',   url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを 1 列に並び替え (発表順 / 当番割 など)。 結果は 各メンバーに通知される。 1 人ずつめくる演出 付き。', defaultVisible: true },
-  { id: 'stopwatches',   cat: 'tool',   url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
+  // v529 #165 ストップウォッチを 締切系 (urgent) カテゴリに移動 (発表時間など 「時間で動く」 性質)
+  { id: 'stopwatches',   cat: 'urgent', url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
 
   { id: 'todos',         cat: 'ai',     url: '#/todos',         title: '📝 自分の TODO',     desc: 'やる こと メモ。 サーバ 保存 で 端末間 共有。 完了 と 未完了 を 分けて 表示。', defaultVisible: true },
 

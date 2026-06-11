@@ -106,6 +106,8 @@ export async function renderPlaces() {
         : `💬${p.comment_count}`;
       // v487 #82 いいね は 0 件 でも 常時 表示 (押せる 場所 を 認識 して もらう)。
       const likeBadge = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
+      // v529 #164 行った (足跡) バッジも常時表示
+      const visitBadge = ` · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
       // v503 #127 タイル背景は重いオリジナル画像ではなくサムネを使う (サーバ thumb_url_for で
       //   実在チェック済み、 無ければ原画像 fallback)。
       const tileBg = p.cover_image_thumb || p.cover_image;
@@ -114,7 +116,7 @@ export async function renderPlaces() {
           <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(tileBg)}')">
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
-              <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}</div>
+              <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}${visitBadge}</div>
             </div>
           </a>`;
       }
@@ -124,7 +126,7 @@ export async function renderPlaces() {
           <span style="position:absolute; top:50%; left:50%; transform:translate(-50%,-65%); font-size:42px">🍴</span>
           <div class="tile-overlay">
             <div class="name">${escapeHtml(p.title)}</div>
-            <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}</div>
+            <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}${visitBadge}</div>
           </div>
         </a>`;
     }).join('')}</div>`;
@@ -229,7 +231,7 @@ export async function renderPlacesMap() {
     root.innerHTML = filtered.map(p => {
       const cat2 = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null ? ` · ${ratingStars(p.avg_rating)} (${p.avg_rating.toFixed(1)})` : '';
-      const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
+      const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0} · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
       // v503 #127 マップ一覧でもサムネを使う
       const thumb = p.cover_image_thumb || p.cover_image;
       const img = thumb
@@ -449,12 +451,19 @@ async function loadPlace(id) {
     const heroImg = heroSrc
       ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
       : '';
-    // v486 #80 いいね ボタン
+    // v486 #80 いいね ボタン + v529 #164 行った (足跡) ボタン (2 軸)
     const likeBtn = `
       <button id="pld-like" class="btn"
               data-liked="${p.liked_by_me ? '1' : '0'}"
-              style="margin-top:6px; font-size:13px; padding:4px 12px; ${p.liked_by_me ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}">
+              style="font-size:13px; padding:4px 12px; ${p.liked_by_me ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}">
         ${p.liked_by_me ? '❤️' : '🤍'} <span id="pld-like-n">${p.like_count}</span>
+      </button>`;
+    const visitBtn = `
+      <button id="pld-visit" class="btn"
+              data-visited="${p.visited_by_me ? '1' : '0'}"
+              title="ここに行った (足跡)"
+              style="font-size:13px; padding:4px 12px; ${p.visited_by_me ? 'background:#dcfce7; color:#15803d; border-color:#15803d' : ''}">
+        ${p.visited_by_me ? '👣' : '🐾'} <span id="pld-visit-n">${p.visit_count || 0}</span>
       </button>`;
     document.getElementById('pld-head').innerHTML = `
       ${heroImg}
@@ -464,7 +473,7 @@ async function loadPlace(id) {
       ${ratingLine}
       ${p.description ? `<div style="margin-top:8px; font-size:14px">${linkifyText(p.description)}</div>` : ''}
       <div class="meta" style="margin-top:6px">起案 ${escapeHtml(p.creator_name)} · ${escapeHtml(p.created_at || '')}</div>
-      ${likeBtn}
+      <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap">${likeBtn}${visitBtn}</div>
     `;
     document.getElementById('pld-like')?.addEventListener('click', async () => {
       const btn = document.getElementById('pld-like');
@@ -477,7 +486,21 @@ async function loadPlace(id) {
         btn.dataset.liked = nowLiked ? '1' : '0';
         document.getElementById('pld-like-n').textContent = r.like_count;
         btn.innerHTML = `${nowLiked ? '❤️' : '🤍'} <span id="pld-like-n">${r.like_count}</span>`;
-        btn.style.cssText = `margin-top:6px; font-size:13px; padding:4px 12px; ${nowLiked ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}`;
+        btn.style.cssText = `font-size:13px; padding:4px 12px; ${nowLiked ? 'background:#fee2e2; color:#e11d48; border-color:#e11d48' : ''}`;
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('pld-visit')?.addEventListener('click', async () => {
+      const btn = document.getElementById('pld-visit');
+      const wasVisited = btn.dataset.visited === '1';
+      try {
+        const r = wasVisited
+          ? await del(`/api/places/${id}/visit`)
+          : await post(`/api/places/${id}/visit`, {});
+        const nowVisited = !wasVisited;
+        btn.dataset.visited = nowVisited ? '1' : '0';
+        document.getElementById('pld-visit-n').textContent = r.visit_count;
+        btn.innerHTML = `${nowVisited ? '👣' : '🐾'} <span id="pld-visit-n">${r.visit_count}</span>`;
+        btn.style.cssText = `font-size:13px; padding:4px 12px; ${nowVisited ? 'background:#dcfce7; color:#15803d; border-color:#15803d' : ''}`;
       } catch (e) { toast('失敗: ' + e.message); }
     });
     // 地図
