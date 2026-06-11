@@ -229,6 +229,9 @@ export async function renderHome() {
     </div>
 
     <div class="card balance-hero" data-card-id="balance">
+      <!-- v527 #168 ポイントの上に 現地時刻 (年月日 + 曜日 + 時分秒)。 定期的に
+           日 / 時 / 分 / 秒 のどれか 1 つが 2 倍フォントサイズに切り替わる演出。 -->
+      <div id="home-clock" style="text-align:center; font-variant-numeric:tabular-nums; font-family:system-ui, -apple-system, sans-serif; margin-bottom:6px; line-height:1.2; color:#4a106d"></div>
       <a href="#/history" class="balance-line" id="home-balance-link"
          style="display:block; text-decoration:none; color:inherit; cursor:pointer">
         <span class="lbl">残高</span>
@@ -350,6 +353,8 @@ export async function renderHome() {
     </div>
   `;
   applyHomeLayout();
+  // v527 #168 現地時刻表示を始動 (1 秒更新 + 5 秒ごとに big highlight をローテ)
+  startHomeClock();
 
   // v503 #121 #129 hidden なカードのレンダー処理はそもそも動かさない (表示しないものを
   //   API で叩いて時間を浪費しない)。 cardId → render 関数の対応表で hidden だけ skip。
@@ -459,6 +464,43 @@ function renderHomePerfPill(totalMs, entries) {
 // stop する。
 let homePollTimer = null;
 let homeVisHandler = null;
+
+// v527 #168 ホームの 現地時刻表示 (1 秒更新 + 5 秒ごとに 日/時/分/秒 の どれかを
+//   2 倍フォントサイズに切替) 。
+let homeClockTimer = null;
+let homeClockBigIdx = 0; // 0:day 1:hour 2:min 3:sec
+let homeClockBigSwitchAt = 0;
+const HOME_CLOCK_WEEK = ['日','月','火','水','木','金','土'];
+function paintHomeClock() {
+  const el = document.getElementById('home-clock');
+  if (!el) { if (homeClockTimer) { clearInterval(homeClockTimer); homeClockTimer = null; } return; }
+  const now = new Date();
+  const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const dayName = HOME_CLOCK_WEEK[now.getDay()];
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  // 5 秒ごとに big highlight をローテ
+  if (Date.now() - homeClockBigSwitchAt > 5000) {
+    homeClockBigIdx = (homeClockBigIdx + 1) % 4;
+    homeClockBigSwitchAt = Date.now();
+  }
+  const sz = (i) => homeClockBigIdx === i ? '1.6em' : '1em';
+  el.innerHTML =
+    `<span style="font-size:13px">${ymd} <span style="font-weight:600">(${dayName})</span></span>` +
+    `<br>` +
+    `<span style="font-size:20px; font-weight:700; letter-spacing:0.04em">` +
+    `<span style="font-size:${sz(1)}; transition:font-size 0.3s">${hh}</span>:` +
+    `<span style="font-size:${sz(2)}; transition:font-size 0.3s">${mm}</span>:` +
+    `<span style="font-size:${sz(3)}; transition:font-size 0.3s">${ss}</span>` +
+    `</span>`;
+}
+function startHomeClock() {
+  if (homeClockTimer) clearInterval(homeClockTimer);
+  homeClockBigIdx = 0; homeClockBigSwitchAt = Date.now();
+  paintHomeClock();
+  homeClockTimer = setInterval(paintHomeClock, 1000);
+}
 
 function stopHomePolling() {
   if (homePollTimer) { clearInterval(homePollTimer); homePollTimer = null; }

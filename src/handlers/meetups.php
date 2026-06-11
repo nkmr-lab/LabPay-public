@@ -121,7 +121,12 @@ function meetups_edit(PDO $pdo, array $cfg, int $id): void {
            ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
            ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
            ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) {
+            // v527 #166 ISO 8601 UTC (Z 付き) も受ける
+            try { $dt = new DateTime($raw); } catch (Throwable $_) { $dt = null; }
+        }
         if (!$dt) throw new ApiException('bad_request', 'meetup_at は ISO 日時', 400);
+        $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
         $when = $dt->format('Y-m-d H:i:s');
         $sets[] = 'meetup_at = ?'; $args[] = $when;
     }
@@ -243,11 +248,20 @@ function meetups_create(PDO $pdo, array $cfg): void {
     $location = isset($body['location']) ? mb_substr(trim((string)$body['location']), 0, 500) : null;
     if ($location === '') $location = null;
     $raw = (string)($body['meetup_at'] ?? '');
+    // v527 #166 クライアントが ISO 8601 UTC (e.g. 2026-06-11T11:30:00.000Z) を送って
+    //   くる場合がある (海外滞在中のユーザがローカル時間で意図した時刻を渡す)。
+    //   既存の Y-m-d\TH:i 形式も そのまま受ける。
     $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
        ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
        ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
        ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+    if (!$dt) {
+        // ISO 8601 with TZ (e.g. "2026-06-11T11:30:00.000Z")
+        try { $dt = new DateTime($raw); } catch (Throwable $_) { $dt = null; }
+    }
     if (!$dt) throw new ApiException('bad_request', 'meetup_at は ISO 日時', 400);
+    // サーバ TZ (Asia/Tokyo) に正規化して DATETIME 文字列に
+    $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
     $when = $dt->format('Y-m-d H:i:s');
     $whenTs = strtotime($when);
     if ($whenTs <= time() + 30) {

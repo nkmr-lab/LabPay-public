@@ -267,13 +267,18 @@ export async function renderMeetupNew({ query } = {}) {
     const title = document.getElementById('mun-title').value.trim();
     const locEl = document.getElementById('mun-loc');
     const location = locEl ? locEl.value.trim() : '';
-    const when = whenEl.value;
-    if (!when) { toast(`${km.timeLabel}を入れてください`); return; }
+    const whenLocal = whenEl.value;
+    if (!whenLocal) { toast(`${km.timeLabel}を入れてください`); return; }
+    // v527 #166 datetime-local は ローカルタイム文字列 (TZ なし) なので、 端末の
+    //   ローカルタイムゾーンを尊重する形で ISO UTC に変換して送信。 サーバ側 (Tokyo
+    //   タイムゾーン) で比較しても 正しく 「未来 / 過去」 が判定される。 海外滞在中の
+    //   ユーザが現地時刻で集合時間を設定しても 「今より前」 エラーが出なくなる。
+    const whenUtc = new Date(whenLocal).toISOString();
     const memberIds = picker ? [...picker.getSelected()] : [];
     if (!memberIds.length) { toast(`${isDeadline ? '対象者' : '参加者'}を 1 人以上`); return; }
     try {
       const r = await post('/api/meetups', {
-        kind, title, location, meetup_at: when, member_ids: memberIds,
+        kind, title, location, meetup_at: whenUtc, member_ids: memberIds,
       });
       toast(isDeadline ? '〆切を 通知しました' : '待ち合わせを連絡しました');
       navigate('#/meetups/' + r.id);
@@ -465,8 +470,10 @@ export async function renderMeetupDetail({ params }) {
         document.getElementById('mud-edit-save').onclick = async () => {
           const title = document.getElementById('mud-edit-title').value.trim();
           const loc   = document.getElementById('mud-edit-loc').value.trim();
-          const when  = document.getElementById('mud-edit-when').value;
-          if (!when) { toast(`${km.timeLabel}を 入れて ください`); return; }
+          const whenLocal = document.getElementById('mud-edit-when').value;
+          if (!whenLocal) { toast(`${km.timeLabel}を 入れて ください`); return; }
+          // v527 #166 編集時も ローカル → UTC ISO に変換して送る
+          const when = new Date(whenLocal).toISOString();
           try {
             await patch(`/api/meetups/${id}`, { title, location: loc, meetup_at: when });
             toast('保存しました');
