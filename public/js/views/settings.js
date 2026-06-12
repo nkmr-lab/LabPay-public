@@ -164,13 +164,6 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
-      <h3>バグ報告 / 機能要望</h3>
-      <p class="muted" style="font-size:12px; margin:4px 0 8px">
-        上部メニューの <a href="#/feature-request">機能要望</a> / <a href="#/bug-report">バグ報告</a> から送れます。
-      </p>
-    </div>
-
-    <div class="card">
       <h3>その他</h3>
       <button id="logout-from-settings" class="danger">ログアウト</button>
     </div>
