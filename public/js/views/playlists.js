@@ -10,7 +10,8 @@ import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { fmtRelative, tag } from '../format.js';
 
-const GENRES = ['J-POP','洋楽','K-POP','アニメ','ジャズ','クラシック','ロック',
+// v543 #200 「ボカロ」 を 追加
+const GENRES = ['J-POP','洋楽','K-POP','アニメ','ボカロ','ジャズ','クラシック','ロック',
   'EDM','ヒップホップ','VTuber','作業用 BGM','その他'];
 
 // ─────────────── URL → embed src 解決 ───────────────
