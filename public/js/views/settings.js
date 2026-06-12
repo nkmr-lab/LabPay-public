@@ -200,23 +200,26 @@ export async function renderSettings() {
   await loadProfile();
   await load();
   loadSoundPrefs(); // fire-and-forget; 失敗してもページ全体は崩れない
-  // Pre-fill saved "my IP" if any so the user doesn't re-type each visit.
+  // v545 #203 全 getElementById に optional chaining + null ガードを入れる。 hash 変化等で
+  //   非同期に DOM が差し替わったり、 条件付きレンダリングで要素が無い場合でも 「null is
+  //   not an object」 で settings 全体が落ちないように。
   const savedIp = localStorage.getItem('labpay-my-ip');
-  if (savedIp) document.getElementById('my-ip-input').value = savedIp;
+  const myIpInput = document.getElementById('my-ip-input');
+  if (savedIp && myIpInput) myIpInput.value = savedIp;
   await loadUnregistered();
-  document.getElementById('reload-unreg').addEventListener('click', loadUnregistered);
-  // Re-render on every IP change so highlight updates live.
-  document.getElementById('my-ip-input').addEventListener('input', (ev) => {
+  document.getElementById('reload-unreg')?.addEventListener('click', loadUnregistered);
+  myIpInput?.addEventListener('input', (ev) => {
     const v = ev.target.value.trim();
     if (v === '') localStorage.removeItem('labpay-my-ip');
     else          localStorage.setItem('labpay-my-ip', v);
     loadUnregistered();
   });
-  document.getElementById('profile-save').addEventListener('click', onProfileSave);
+  document.getElementById('profile-save')?.addEventListener('click', onProfileSave);
   // 通知許可ボタン
   const npStatus = document.getElementById('notif-perm-status');
   const npBtn = document.getElementById('notif-perm');
   function syncPermLabel() {
+    if (!npStatus || !npBtn) return;
     if (typeof Notification === 'undefined') {
       npStatus.textContent = '(このブラウザは未対応)';
       npBtn.disabled = true;
@@ -233,12 +236,12 @@ export async function renderSettings() {
     }
   }
   syncPermLabel();
-  npBtn.addEventListener('click', async () => {
+  npBtn?.addEventListener('click', async () => {
     await requestNotificationPermission();
     syncPermLabel();
   });
-  document.getElementById('profile-clear-avatar').addEventListener('click', onProfileClearAvatar);
-  document.getElementById('profile-avatar-file').addEventListener('change', onAvatarFile);
+  document.getElementById('profile-clear-avatar')?.addEventListener('click', onProfileClearAvatar);
+  document.getElementById('profile-avatar-file')?.addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
@@ -266,7 +269,7 @@ export async function renderSettings() {
   const hideInput = document.getElementById('cal-hide-after-min');
   if (hideInput) {
     hideInput.value = String(readCalHideAfterMin());
-    document.getElementById('cal-hide-save').addEventListener('click', () => {
+    document.getElementById('cal-hide-save')?.addEventListener('click', () => {
       writeCalHideAfterMin(hideInput.value);
       hideInput.value = String(readCalHideAfterMin());
       // 反映を早めるためカレンダーキャッシュも捨てる。
@@ -489,8 +492,8 @@ async function loadCalendar() {
       <div class="hint-sm" style="margin-top:6px">
         書き込み権限 (Zoom MTG 作成など) を追加で要求する時は 「再連携」 でもう一度 Google の同意画面を通してください。
       </div>`;
-    document.getElementById('cal-refresh').addEventListener('click', loadCalendar);
-    document.getElementById('cal-disconnect').addEventListener('click', async () => {
+    document.getElementById('cal-refresh')?.addEventListener('click', loadCalendar);
+    document.getElementById('cal-disconnect')?.addEventListener('click', async () => {
       if (!confirm('Google Calendar の連携を解除しますか?')) return;
       try { await del('/api/me/calendar'); toast('解除しました'); await loadCalendar(); }
       catch (e) { toast('失敗: ' + e.message); }
