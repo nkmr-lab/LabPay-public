@@ -55,6 +55,8 @@ export const HOME_ACTIONS = [
   { id: 'workouts',     url: '#/workouts',           title: '筋トレ',        icon: '💪', defaultVisible: false }, // v533 #162
   { id: 'walk',         url: '#/walk',               title: '散歩',          icon: '🚶', defaultVisible: false }, // v538 #169
   { id: 'shiritori',    url: '#/shiritori',          title: '絵しりとり',    icon: '🎨', defaultVisible: false }, // v540 #171
+  { id: 'tierlists',    url: '#/tierlists',          title: 'ティア表',      icon: '🎯', defaultVisible: false }, // v549 #210
+  { id: 'paper-review', url: '#/paper-review',       title: '論文査読',      icon: '📄', defaultVisible: false }, // v550 #206
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
   { id: 'groups',       url: '#/groups',             title: 'グループ',      icon: '👥', defaultVisible: false },

@@ -90,6 +90,77 @@ async function readExifGps(file) {
   } catch { return null; }
 }
 
+// v548 #207 JPEG クライアント縮小 + EXIF 保持。 ファイルが閾値超えなら canvas で
+//   リサイズ → toBlob (JPEG q=0.85) → 元の APP1 EXIF ブロックを 再注入。 オリジナル
+//   EXIF (Orientation / GPS / 撮影日時 等) を全部保持しつつ サイズだけ落とす。
+//   閾値: 3 MB 超 OR 長辺 3000px 超。 縮小後の長辺は 2400px。
+//   非 JPEG (PNG/WebP/HEIC) はそのまま (resize する場合 EXIF は元から無い or 失われる
+//   ので 不可逆になりリスク)、 ユーザーのオリジナルを尊重して passthrough。
+const RESIZE_BYTE_THRESHOLD = 3 * 1024 * 1024;
+const RESIZE_MAX_DIM = 2400;
+async function maybeResizeJpegPreserveExif(file) {
+  if (!file || !/^image\/jpe?g$/i.test(file.type)) return file;
+  if (file.size < RESIZE_BYTE_THRESHOLD) return file;
+  // 寸法を実際に読まないと判断できないので image を作る
+  const blobUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error('image decode failed'));
+      im.src = blobUrl;
+    });
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const maxDim = Math.max(w, h);
+    // サイズも寸法も小さければそのまま
+    if (file.size < RESIZE_BYTE_THRESHOLD && maxDim <= 3000) return file;
+    const ratio = maxDim > RESIZE_MAX_DIM ? RESIZE_MAX_DIM / maxDim : 1;
+    const nw = Math.max(1, Math.round(w * ratio));
+    const nh = Math.max(1, Math.round(h * ratio));
+    const canvas = document.createElement('canvas');
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, nw, nh);
+    const resizedBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
+    if (!resizedBlob) return file;
+    // EXIF (APP1) を抽出して 縮小 JPEG の SOI 直後に注入
+    const merged = await injectExifAppBlock(file, resizedBlob);
+    return new File([merged || resizedBlob], file.name.replace(/(\.[^.]*)?$/, '_resized.jpg'), { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+async function injectExifAppBlock(originalFile, resizedBlob) {
+  try {
+    const orig = new Uint8Array(await originalFile.arrayBuffer());
+    if (orig.length < 4 || orig[0] !== 0xFF || orig[1] !== 0xD8) return null;
+    let i = 2;
+    let app1 = null;
+    while (i + 4 < orig.length) {
+      if (orig[i] !== 0xFF) break;
+      const marker = orig[i + 1];
+      if (marker === 0xDA || marker === 0xD9) break; // SOS / EOI に到達
+      const segLen = (orig[i + 2] << 8) | orig[i + 3];
+      if (marker === 0xE1 && i + 10 < orig.length
+          && orig[i + 4] === 0x45 && orig[i + 5] === 0x78
+          && orig[i + 6] === 0x69 && orig[i + 7] === 0x66
+          && orig[i + 8] === 0x00 && orig[i + 9] === 0x00) {
+        app1 = orig.slice(i, i + 2 + segLen); break;
+      }
+      i += 2 + segLen;
+    }
+    if (!app1) return null;
+    const res = new Uint8Array(await resizedBlob.arrayBuffer());
+    if (res.length < 2 || res[0] !== 0xFF || res[1] !== 0xD8) return null;
+    const out = new Uint8Array(2 + app1.length + (res.length - 2));
+    out[0] = 0xFF; out[1] = 0xD8;
+    out.set(app1, 2);
+    out.set(res.slice(2), 2 + app1.length);
+    return new Blob([out], { type: 'image/jpeg' });
+  } catch { return null; }
+}
+
 function renderBodyHtml(body) {
   // v467→v468 @mention は SNS 検索 / @LabPay 案内 へ リンク 化。 URL は 新タブ。
   let s = escapeHtml(body || '');
@@ -495,8 +566,17 @@ function bindComposer(parentId) {
         toast(`📍 写真のEXIFから位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
       }
     }).catch(() => {});
+    // v548 #207 大きい JPEG は クライアント側で 縮小して EXIF を再注入。
+    let uploadFile = f;
+    try {
+      const resized = await maybeResizeJpegPreserveExif(f);
+      if (resized !== f) {
+        uploadFile = resized;
+        imgStatus.textContent = `⏳ 縮小して アップロード中… (${(f.size / 1024 / 1024).toFixed(1)} MB → ${(resized.size / 1024 / 1024).toFixed(1)} MB)`;
+      }
+    } catch (_) { /* 縮小失敗時は そのまま元ファイルで続行 */ }
     const fd = new FormData();
-    fd.append('file', f);
+    fd.append('file', uploadFile);
     try {
       const resp = await fetch('/api/uploads/image', {
         method: 'POST', body: fd, credentials: 'same-origin',

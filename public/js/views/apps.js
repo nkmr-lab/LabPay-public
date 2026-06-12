@@ -64,6 +64,10 @@ export const APPS = [
   { id: 'walk',          cat: 'tool',   url: '#/walk',           title: '🚶 散歩',           desc: '現在地周辺の 食べある記 から 散歩先を ランダムにおすすめ。 距離 + 徒歩何分 + 方位矢印 + Google Maps 経路。 未訪を優先 + 半径切替 (500m〜5km)。', defaultVisible: true },
   // v540 #171 絵しりとり (Phase 1)
   { id: 'shiritori',     cat: 'urgent', url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く 絵しりとり。 タイムリミット付きキャンバス + ストローク記録。 自分が何を描いたか + 前の人を何と予想したかを登録。 周回数 + ギブアップ。 AI 予想 + 最終当ては Phase 2 で。', defaultVisible: true },
+  // v549 #210 ティア表
+  { id: 'tierlists',     cat: 'tool',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け。 自分の回答を保存すると 他人の回答 + 全員集計 が見れる。', defaultVisible: true },
+  // v550 #206 論文査読
+  { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },

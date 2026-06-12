@@ -526,6 +526,12 @@ route('/walk',             lazy(() => import('./views/walk.js'), 'renderWalk'));
 route('/shiritori',         lazy(() => import('./views/shiritori.js'), 'renderShiritori'));
 route('/shiritori/new',     lazy(() => import('./views/shiritori.js'), 'renderShiritoriNew'));
 route('/shiritori/:id',     lazy(() => import('./views/shiritori.js'), 'renderShiritoriDetail'));
+// v549 #210 ティア表
+route('/tierlists/new',     lazy(() => import('./views/tierlists.js'), 'renderTierlistNew'));
+route('/tierlists/:id',     lazy(() => import('./views/tierlists.js'), 'renderTierlistDetail'));
+route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTierlists'));
+// v550 #206 論文 査読
+route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 

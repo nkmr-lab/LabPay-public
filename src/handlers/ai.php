@@ -38,7 +38,91 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_short_title($pdo, $cfg);
         return;
     }
+    if ($sub === 'paper_review' && $method === 'POST') {
+        ai_paper_review($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// v550 #206 論文章立て和訳要約 + 査読アプリ。
+//   POST /api/ai/paper_review { text, target_venue?, strictness? }
+//   text: 論文の本文 (英語 or 日本語、 〜 30000 文字)
+//   target_venue: 「CHI」 等。 空なら HCI 系全般
+//   strictness: 「緩め」「やや厳しめ」(default)「厳しめ」
+//   返値: { sections: [{title, summary_ja}, ...], review: {decision, score, strengths,
+//          weaknesses, comments_to_authors} }
+function ai_paper_review(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $text = trim((string)($body['text'] ?? ''));
+    if ($text === '') throw new ApiException('bad_request', 'text required', 400);
+    if (mb_strlen($text) > 60000) $text = mb_substr($text, 0, 60000);
+    $venue = trim((string)($body['target_venue'] ?? ''));
+    if ($venue === '') $venue = 'HCI 系の国際会議 (CHI / UIST / IUI / DIS / CSCW など)';
+    $strictness = (string)($body['strictness'] ?? 'やや厳しめ');
+    if (!in_array($strictness, ['緩め', 'やや厳しめ', '厳しめ'], true)) $strictness = 'やや厳しめ';
+
+    $sys = "あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。" .
+           " 与えられた論文を 章立てを意識しつつ 日本語で要約し、 続けて指定された会議基準で 査読コメントを作ってください。" .
+           " 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。" .
+           " 査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
+    $userPrompt = "次の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 査読コメントを作ってください。\n\n"
+        . "出力 JSON スキーマ:\n"
+        . "{ \"sections\": [{\"title\": \"章タイトル\", \"summary_ja\": \"要約\"}, ...],\n"
+        . "  \"review\": {\n"
+        . "    \"decision\": \"Strong Accept / Accept / Weak Accept / Borderline / Weak Reject / Reject / Strong Reject\",\n"
+        . "    \"score\": 1-5 の整数,\n"
+        . "    \"summary_one_line\": \"査読要約 1 行\",\n"
+        . "    \"strengths\": [\"...\", \"...\"],\n"
+        . "    \"weaknesses\": [\"...\", \"...\"],\n"
+        . "    \"comments_to_authors\": \"著者への詳細コメント (200〜600 文字)\",\n"
+        . "    \"confidence\": 1-5 の整数 (査読者の自信)\n"
+        . "  }\n"
+        . "}\n\n"
+        . "論文本文:\n```\n" . $text . "\n```";
+
+    $payload = json_encode([
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user',   'content' => $userPrompt],
+        ],
+        'temperature' => 0.4,
+        'response_format' => ['type' => 'json_object'],
+        'max_tokens' => 4000,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 180,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) {
+        throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status, 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $content = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($content) || $content === '') throw new ApiException('upstream_error', 'empty', 502);
+    $parsed = json_decode($content, true);
+    if (!is_array($parsed)) throw new ApiException('upstream_error', 'invalid JSON from upstream', 502);
+    json_response([
+        'ok'         => true,
+        'venue'      => $venue,
+        'strictness' => $strictness,
+        'sections'   => $parsed['sections'] ?? [],
+        'review'     => $parsed['review']   ?? null,
+    ]);
 }
 
 // POST /api/ai/short_title { context: "...説明..." }

@@ -291,10 +291,15 @@ function feedback_create(PDO $pdo, array $cfg): void {
     $msg = "{$kindLabel} ({$u['display_name']}): {$snippet}";
     notify_admins($pdo, $cfg, 'admin_notice', $msg, 'feedback', $fbId);
 
-    // And blast to Slack so admin sees it on their phone immediately.
-    try {
-        slack_notify($cfg, "{$kindLabel} from *{$u['display_name']}*\n>>> " . $text, null, '#/feedback-admin');
-    } catch (Throwable $e) { /* swallow */ }
+    // v547 #208 投稿者が中村聡史 (= 自分) の場合、 Slack 通知は不要 (自分で投稿 →
+    //   自分の Slack に通知されると 二度手間)。 表示名を 部分一致でガード。
+    $authorName = (string)$u['display_name'];
+    $isSelfAuthor = (strpos($authorName, '中村聡史') !== false);
+    if (!$isSelfAuthor) {
+        try {
+            slack_notify($cfg, "{$kindLabel} from *{$authorName}*\n>>> " . $text, null, '#/feedback-admin');
+        } catch (Throwable $e) { /* swallow */ }
+    }
 
     json_response(['ok' => true, 'id' => $fbId]);
 }
