@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#4a106d">
+  <meta name="description" content="LabPay は 中村研究室 (明治大学先端メディアサイエンス学科) メンバー専用の研究室内 PWA。 ポイント送金 / 在室検知 / SNS / カレンダー連携 などを統合した招待制システムです。">
+  <title>LabPay — 中村研究室 内向け PWA</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <style>
+    :root {
+      --primary: #4a106d;
+      --accent:  #7b3fa0;
+      --bg:      #fff;
+      --fg:      #1a1a1a;
+      --muted:   #555;
+      --line:    #e3dceb;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+      font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      line-height: 1.7; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 20px 80px; }
+    header.brand { text-align: center; padding: 32px 0 12px; }
+    header.brand .logo {
+      font-size: 44px; font-weight: 800; letter-spacing: 0.04em;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    header.brand .tagline { color: var(--muted); font-size: 14px; margin-top: 4px; }
+    h2 { font-size: 22px; margin-top: 36px; border-left: 5px solid var(--primary);
+      padding-left: 10px; }
+    h3 { font-size: 16px; margin-top: 16px; color: var(--accent); }
+    .lead { font-size: 17px; line-height: 1.8; margin-top: 20px; }
+    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px; margin-top: 14px; padding: 0; list-style: none; }
+    .features li { background: #f9f6fb; border: 1px solid var(--line);
+      border-radius: 10px; padding: 14px; font-size: 14px; }
+    .features .ttl { font-weight: 700; color: var(--primary); display: block; margin-bottom: 4px; font-size: 15px; }
+    .cta { text-align: center; margin: 32px 0 12px; }
+    .cta a.btn { display: inline-block; background: var(--primary); color: #fff;
+      padding: 12px 32px; border-radius: 999px; text-decoration: none;
+      font-weight: 700; font-size: 15px; box-shadow: 0 2px 10px rgba(74,16,109,0.25); }
+    .cta a.btn:hover { background: var(--accent); }
+    .notice { background: #fff8e7; border: 1px solid #f0d791; border-radius: 8px;
+      padding: 12px 16px; font-size: 13px; color: #6b4d00; margin-top: 16px; }
+    .footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
+      font-size: 12px; color: var(--muted); text-align: center; }
+    .footer a { color: var(--accent); margin: 0 8px; }
+    table.scopes { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 13px; }
+    table.scopes th, table.scopes td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    table.scopes th { background: #f3eef8; }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div class="logo">LabPay</div>
+      <div class="tagline">中村研究室 (明治大学先端メディアサイエンス学科) メンバー専用 PWA</div>
+    </header>
+
+    <p class="lead">
+      <strong>LabPay</strong> は、 明治大学先端メディアサイエンス学科 中村研究室 (中村聡史 教授) の メンバー向けに作られた、
+      研究室内の活動を 1 つにまとめる Web アプリです。 ポイントによる物販 / タスク依頼、 在室検知、 研究室内 SNS、 メンバー間の予定共有 など、
+      日々の研究室生活で発生する小さな手間を まとめて電子化することを目指しています。
+    </p>
+
+    <h2>主な機能</h2>
+    <ul class="features">
+      <li><span class="ttl">💴 ポイント送金 / 物販</span>研究室内の独自ポイントを送金・販売・競売・依頼タスクで流通させ、 雑費精算や成果連動の報酬付与を電子化します。</li>
+      <li><span class="ttl">📍 在室検知</span>各部屋に設置したスキャナが Wi-Fi MAC を観測し、 「今ラボにいる人」 を リアルタイムで可視化します。</li>
+      <li><span class="ttl">💬 らぼったー</span>研究室内向けの ミニ SNS。 写真 + 位置情報付きの投稿や 返信、 リアクションで メンバー同士の交流を促進。</li>
+      <li><span class="ttl">📅 Google Calendar 連携</span>個人の Google Calendar の予定を ホーム画面に集約。 Zoom MTG リンクの自動作成にも対応。</li>
+      <li><span class="ttl">🍴 食べある記 / 制覇マップ</span>近くの食事処の口コミ共有、 行った国・都道府県の制覇進捗の可視化など 研究室内ライフログ機能。</li>
+      <li><span class="ttl">🎨 各種ミニアプリ</span>絵しりとり、 散歩おすすめ、 順番決め、 筋トレ / 体重記録 など 研究室内コミュニケーションを盛り上げる軽量アプリ群。</li>
+    </ul>
+
+    <div class="cta">
+      <a class="btn" href="/">→ ログイン (招待制)</a>
+    </div>
+
+    <h2>対象ユーザーと提供範囲</h2>
+    <p>
+      本サービスは、 中村研究室の 在籍メンバー (教員・学生・卒業生・関連研究者) のみを対象とした招待制システムであり、 一般公開はしていません。
+      新規アカウントは管理者 (中村聡史) からの招待が必要です。
+    </p>
+
+    <h2>Google アカウント連携で利用する権限</h2>
+    <p>
+      LabPay は Google Calendar との連携機能で、 利用者ご本人の同意のもとに以下のスコープを利用します。
+      連携は任意で、 利用しなくても LabPay の他の機能は使えます。
+    </p>
+    <table class="scopes">
+      <thead>
+        <tr><th>スコープ</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>https://www.googleapis.com/auth/calendar.readonly</code></td>
+          <td>ホーム画面に直近の予定を表示するため、 ユーザーのカレンダー予定を読み取ります。</td>
+        </tr>
+        <tr>
+          <td><code>https://www.googleapis.com/auth/calendar.events</code></td>
+          <td>研究ミーティングなどの予定を LabPay 上から作成・編集する場合に書き込みます (Zoom MTG リンクの自動付与含む)。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 13px; color: var(--muted)">
+      取得した情報は LabPay のサーバ (pay.nkmr.io、 国内に設置) でのみ参照し、 第三者への提供・広告利用は行いません。
+      詳細は <a href="/privacy.html">プライバシーポリシー</a> をご覧ください。
+    </p>
+
+    <h2>運営者・連絡先</h2>
+    <p>
+      <strong>運営者</strong>: 中村聡史 (明治大学 先端メディアサイエンス学科 教授)<br>
+      <strong>所在地</strong>: 〒214-8571 神奈川県川崎市多摩区東三田 1-1-1 明治大学 中野キャンパス<br>
+      <strong>連絡先</strong>: <a href="mailto:nakamura.satoshi@gmail.com">nakamura.satoshi@gmail.com</a><br>
+      <strong>研究室ウェブサイト</strong>: <a href="https://nkmr-lab.org/" target="_blank" rel="noopener">https://nkmr-lab.org/</a>
+    </p>
+
+    <div class="notice">
+      ご利用には 中村研究室メンバーへの招待が必要です。 招待コードをお持ちの方は 上の 「ログイン」 ボタンから ご利用ください。
+    </div>
+
+    <div class="footer">
+      <a href="/privacy.html">プライバシーポリシー</a> ·
+      <a href="/">ログイン</a> ·
+      <a href="mailto:nakamura.satoshi@gmail.com">お問い合わせ</a>
+      <div style="margin-top: 6px">© 中村研究室 (明治大学)</div>
+    </div>
+  </main>
+</body>
+</html>
