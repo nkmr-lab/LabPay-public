@@ -139,7 +139,7 @@ function postCard(p, opts = {}) {
           ${loc}
           ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
         </div>
-        ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px">${renderBodyHtml(p.body)}</div>` : ''}
+        ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px; overflow-wrap:anywhere; word-break:break-word; min-width:0">${renderBodyHtml(p.body)}</div>` : ''}
         ${p.image_url ? `<img data-zoom-src="${escapeHtml(p.image_url)}" src="${escapeHtml(p.image_thumb_url || p.image_url)}" loading="lazy" decoding="async" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px; cursor:zoom-in">` : ''}
         <div class="row" style="gap:14px; margin-top:6px; font-size:12px">
           ${reactionsHtml(p)}
