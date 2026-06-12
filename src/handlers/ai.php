@@ -55,20 +55,39 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
 function ai_paper_review(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
-    $body = read_json_body();
-    $text = trim((string)($body['text'] ?? ''));
-    if ($text === '') throw new ApiException('bad_request', 'text required', 400);
-    if (mb_strlen($text) > 60000) $text = mb_substr($text, 0, 60000);
-    $venue = trim((string)($body['target_venue'] ?? ''));
+    // v551 #206 OpenAI Files API + Chat Completions で PDF を直接読ませる方式。
+    //   1. multipart/form-data の file を OpenAI Files API に upload (purpose=user_data)
+    //   2. 返ってきた file_id を chat.completions の messages.content に
+    //      {type:'file', file:{file_id}} で添付して GPT-4o に読ませる
+    //   3. 査読 JSON を取得して返す
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    if (!str_starts_with($contentType, 'multipart/form-data')) {
+        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロードしてください', 400);
+    }
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file (PDF) が必要です', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
+    $tmpPdf = $f['tmp_name'];
+    $head = @file_get_contents($tmpPdf, false, null, 0, 5);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイルではありません', 400);
+
+    $venue = trim((string)($_POST['target_venue'] ?? ''));
     if ($venue === '') $venue = 'HCI 系の国際会議 (CHI / UIST / IUI / DIS / CSCW など)';
-    $strictness = (string)($body['strictness'] ?? 'やや厳しめ');
+    $strictness = (string)($_POST['strictness'] ?? 'やや厳しめ');
     if (!in_array($strictness, ['緩め', 'やや厳しめ', '厳しめ'], true)) $strictness = 'やや厳しめ';
+
+    // Step 1: OpenAI Files API に upload
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
     $sys = "あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。" .
            " 与えられた論文を 章立てを意識しつつ 日本語で要約し、 続けて指定された会議基準で 査読コメントを作ってください。" .
            " 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。" .
            " 査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
-    $userPrompt = "次の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 査読コメントを作ってください。\n\n"
+    $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 査読コメントを作ってください。\n\n"
         . "出力 JSON スキーマ:\n"
         . "{ \"sections\": [{\"title\": \"章タイトル\", \"summary_ja\": \"要約\"}, ...],\n"
         . "  \"review\": {\n"
@@ -80,14 +99,18 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"comments_to_authors\": \"著者への詳細コメント (200〜600 文字)\",\n"
         . "    \"confidence\": 1-5 の整数 (査読者の自信)\n"
         . "  }\n"
-        . "}\n\n"
-        . "論文本文:\n```\n" . $text . "\n```";
+        . "}";
 
+    // Step 2: chat.completions に file 添付 (gpt-4o 系で対応)
+    $model = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => $model,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
-            ['role' => 'user',   'content' => $userPrompt],
+            ['role' => 'user', 'content' => [
+                ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                ['type' => 'text', 'text' => $userPrompt],
+            ]],
         ],
         'temperature' => 0.4,
         'response_format' => ['type' => 'json_object'],
@@ -100,16 +123,25 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         CURLOPT_POST => true,
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . (string)$cfg['openai']['api_key'],
+            'Authorization: Bearer ' . $apiKey,
         ],
         CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_TIMEOUT => 180,
+        CURLOPT_TIMEOUT => 240,
     ]);
     $resp = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+
+    // Step 3: ファイル削除 (best effort、 失敗無視)
+    ai_openai_delete_file($fileId, $apiKey);
+
     if ($resp === false || $status >= 400) {
-        throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status, 502);
+        $errMsg = '';
+        if ($resp !== false) {
+            $errJ = json_decode((string)$resp, true);
+            $errMsg = $errJ['error']['message'] ?? '';
+        }
+        throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''), 502);
     }
     $j = json_decode((string)$resp, true);
     $content = $j['choices'][0]['message']['content'] ?? null;
@@ -123,6 +155,47 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         'sections'   => $parsed['sections'] ?? [],
         'review'     => $parsed['review']   ?? null,
     ]);
+}
+
+// PDF を OpenAI Files API にアップロード。 purpose=user_data (chat.completions の
+//   file content 用)。 file_id を返す。
+function ai_openai_upload_pdf(string $tmpPath, string $filename, string $apiKey): string {
+    $ch = curl_init('https://api.openai.com/v1/files');
+    $cfile = new CURLFile($tmpPath, 'application/pdf', $filename);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_POSTFIELDS => ['purpose' => 'user_data', 'file' => $cfile],
+        CURLOPT_TIMEOUT => 90,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) {
+        $errMsg = '';
+        if ($resp !== false) {
+            $errJ = json_decode((string)$resp, true);
+            $errMsg = $errJ['error']['message'] ?? '';
+        }
+        throw new ApiException('upstream_error', 'OpenAI files upload: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''), 502);
+    }
+    $j = json_decode((string)$resp, true);
+    $id = $j['id'] ?? '';
+    if (!is_string($id) || $id === '') throw new ApiException('upstream_error', 'file_id 取得失敗', 502);
+    return $id;
+}
+
+function ai_openai_delete_file(string $fileId, string $apiKey): void {
+    $ch = curl_init('https://api.openai.com/v1/files/' . urlencode($fileId));
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    @curl_exec($ch);
+    curl_close($ch);
 }
 
 // POST /api/ai/short_title { context: "...説明..." }
