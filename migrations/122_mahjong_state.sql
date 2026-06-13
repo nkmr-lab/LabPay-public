@@ -1,0 +1,4 @@
+-- v554 #209 Phase 2 — 実ゲームの状態を保持
+ALTER TABLE mahjong_games
+  ADD COLUMN IF NOT EXISTS state_json MEDIUMTEXT NULL,
+  ADD COLUMN IF NOT EXISTS state_ver  INT UNSIGNED NOT NULL DEFAULT 0;

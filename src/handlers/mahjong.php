@@ -34,6 +34,8 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($action === 'start'  && $method === 'POST') { mahjong_start($pdo, $cfg, $uid, $gid); return; }
         if ($action === 'report' && $method === 'POST') { mahjong_report($pdo, $cfg, $uid, $gid); return; }
         if ($action === 'cancel' && $method === 'POST') { mahjong_cancel($pdo, $uid, $gid); return; }
+        if ($action === 'state'  && $method === 'GET')  { mahjong_state($pdo, $uid, $gid); return; }
+        if ($action === 'action' && $method === 'POST') { mahjong_action($pdo, $cfg, $uid, $gid); return; }
     }
     json_error('not_found', "no mahjong route for $method", 404);
 }
@@ -173,23 +175,252 @@ function mahjong_leave(PDO $pdo, int $uid, int $gid): void {
 }
 
 function mahjong_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
-    db_tx($pdo, function () use ($pdo, $cfg, $uid, $gid) {
+    db_tx($pdo, function () use ($pdo, $uid, $gid) {
         $g = mahjong_lock_game($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ開始可', 403);
         if ($g['status'] !== 'lobby') throw new ApiException('bad_request', '募集中ではありません', 400);
-        $stC = $pdo->prepare("SELECT COUNT(*) FROM mahjong_players WHERE game_id = ?");
-        $stC->execute([$gid]);
-        $cnt = (int)$stC->fetchColumn();
-        if ($cnt !== MAHJONG_SEATS) throw new ApiException('bad_request', '4人揃ってから開始してください', 400);
-        $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW() WHERE id = ?")->execute([$gid]);
+        $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ? ORDER BY seat_order");
+        $stP->execute([$gid]);
+        $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
+        if (count($playerUids) !== MAHJONG_SEATS) throw new ApiException('bad_request', '4人揃ってから開始してください', 400);
+        // v554 Phase 2: 実ゲーム状態を初期化
+        $state = MahjongEngine::newGame($playerUids);
+        // 親 (turn=0) に最初のツモ
+        MahjongEngine::drawForTurn($state);
+        $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id = ?")
+            ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gid]);
     });
-    // 全参加者に通知
     $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ?");
     $stP->execute([$gid]);
     foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
-        try { notify_safely($pdo, $cfg, (int)$pid, 'admin_notice', "🀄 麻雀卓 #{$gid} 開始! 結果が出たら 起案者が報告します", 'mahjong', $gid); } catch (Throwable $_) {}
+        try { notify_safely($pdo, $cfg, (int)$pid, 'admin_notice', "🀄 麻雀卓 #{$gid} 開始!", 'mahjong', $gid); } catch (Throwable $_) {}
     }
     json_response(['ok' => true]);
+}
+
+// v554 GET /api/mahjong/games/:id/state — 現在の状態を返す (相手の hand は隠す)
+function mahjong_state(PDO $pdo, int $uid, int $gid): void {
+    $st = $pdo->prepare("SELECT g.*, (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id = g.id) AS player_count FROM mahjong_games g WHERE g.id = ?");
+    $st->execute([$gid]);
+    $g = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$g) throw new ApiException('not_found', 'game not found', 404);
+    // 自分の seat_order を特定
+    $stP = $pdo->prepare("SELECT seat_order FROM mahjong_players WHERE game_id = ? AND user_id = ?");
+    $stP->execute([$gid, $uid]);
+    $mySeat = $stP->fetchColumn();
+    $mySeat = $mySeat === false ? null : (int)$mySeat;
+    $stPa = $pdo->prepare("SELECT p.user_id, p.seat_order, u.display_name, u.avatar_url
+                            FROM mahjong_players p JOIN users u ON u.id = p.user_id
+                           WHERE p.game_id = ? ORDER BY p.seat_order");
+    $stPa->execute([$gid]);
+    $players = $stPa->fetchAll(PDO::FETCH_ASSOC);
+
+    $state = $g['state_json'] ? json_decode($g['state_json'], true) : null;
+    // 公開可能な状態を構成 (deck は完全に隠す、 他人の hand は サイズだけ)
+    $pub = null;
+    if ($state) {
+        $pubPlayers = [];
+        foreach ($state['players'] as $idx => $p) {
+            $isMe = ($idx === $mySeat);
+            $pubPlayers[] = [
+                'user_id'    => (int)$p['user_id'],
+                'hand'       => $isMe ? $p['hand'] : null,
+                'hand_size'  => count($p['hand']),
+                'discards'   => $p['discards'],
+                'riichi'     => $p['riichi'],
+                'score'      => $p['score'],
+            ];
+        }
+        $pub = [
+            'phase'           => $state['phase'],
+            'round_wind'      => $state['round_wind'],
+            'round_index'     => $state['round_index'],
+            'oya'             => $state['oya'],
+            'honba'           => $state['honba'],
+            'turn'            => $state['turn'],
+            'wall_remaining'  => MahjongEngine::wallRemaining($state),
+            'dora_indicators' => $state['dora_indicators'],
+            'players'         => $pubPlayers,
+            'last_discarded'  => $state['last_discarded'],
+            'awaiting'        => $state['awaiting'],
+            'log'             => array_slice($state['log'], -30),
+            'game_winners'    => $state['game_winners'],
+        ];
+    }
+    json_response([
+        'id'         => (int)$g['id'],
+        'status'     => $g['status'],
+        'state_ver'  => (int)$g['state_ver'],
+        'state'      => $pub,
+        'my_seat'    => $mySeat,
+        'players'    => array_map(fn($r) => [
+            'user_id'      => (int)$r['user_id'],
+            'seat_order'   => (int)$r['seat_order'],
+            'display_name' => $r['display_name'],
+            'avatar_url'   => $r['avatar_url'],
+        ], $players),
+    ]);
+}
+
+// v554 POST /api/mahjong/games/:id/action { type: discard|tsumo|ron|riichi|pass, tile? }
+function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
+    $body = read_json_body();
+    $type = (string)($body['type'] ?? '');
+    $tile = isset($body['tile']) ? (int)$body['tile'] : null;
+    $result = null;
+    db_tx($pdo, function () use ($pdo, $uid, $gid, $type, $tile, &$result) {
+        $stG = $pdo->prepare("SELECT * FROM mahjong_games WHERE id = ? FOR UPDATE");
+        $stG->execute([$gid]);
+        $g = $stG->fetch(PDO::FETCH_ASSOC);
+        if (!$g) throw new ApiException('not_found', 'game not found', 404);
+        if ($g['status'] !== 'playing') throw new ApiException('bad_request', '対局中ではありません', 400);
+        $state = json_decode($g['state_json'], true);
+        if (!$state) throw new ApiException('bad_request', 'state 未初期化', 400);
+        // 自分の seat
+        $stP = $pdo->prepare("SELECT seat_order FROM mahjong_players WHERE game_id = ? AND user_id = ?");
+        $stP->execute([$gid, $uid]);
+        $seat = $stP->fetchColumn();
+        if ($seat === false) throw new ApiException('forbidden', 'この卓の参加者ではありません', 403);
+        $seat = (int)$seat;
+
+        if ($type === 'discard') {
+            if ($tile === null) throw new ApiException('bad_request', 'tile が必要', 400);
+            $r = MahjongEngine::discard($state, $seat, $tile);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else if ($type === 'pass') {
+            // ロン受付フェーズで誰も宣言しないなら turn 進める。 簡略: 1 人 pass で即進行
+            if ($state['awaiting'] !== 'ron_chance') throw new ApiException('bad_request', '今は pass できません', 400);
+            $advanced = MahjongEngine::advanceTurn($state);
+            if (!$advanced) {
+                // 流局
+                $result = mahjong_handle_draw($state);
+            } else { $result = ['ok' => true]; }
+        } else if ($type === 'tsumo') {
+            $r = MahjongEngine::tryTsumo($state, $seat);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $isOya = ($seat === $state['oya']);
+            $score = MahjongEngine::calcScore($r['yaku'], $isOya, true);
+            mahjong_apply_win($state, $seat, null, $score, $r['yaku'], true);
+            $result = ['ok' => true, 'yaku' => $r['yaku'], 'score' => $score];
+        } else if ($type === 'ron') {
+            $r = MahjongEngine::tryRon($state, $seat);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $isOya = ($seat === $state['oya']);
+            $score = MahjongEngine::calcScore($r['yaku'], $isOya, false);
+            mahjong_apply_win($state, $seat, $r['from'], $score, $r['yaku'], false);
+            $result = ['ok' => true, 'yaku' => $r['yaku'], 'score' => $score];
+        } else if ($type === 'riichi') {
+            $r = MahjongEngine::declareRiichi($state, $seat);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else {
+            throw new ApiException('bad_request', '不明な type', 400);
+        }
+        // 終局判定 / 局更新
+        mahjong_maybe_advance_round($pdo, $state, $g);
+        $pdo->prepare("UPDATE mahjong_games SET state_json = ?, state_ver = state_ver + 1, status = ? WHERE id = ?")
+            ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $state['phase'] === 'finished_all' ? 'finished' : 'playing', $gid]);
+        if ($state['phase'] === 'finished_all') {
+            mahjong_finalize_payout($pdo, (int)$g['id'], $state, (int)$g['buy_in'], (int)$g['rake_pct']);
+        }
+    });
+    json_response($result ?: ['ok' => true]);
+}
+
+// 流局 (ライブ山切れ): リーチ棒 そのまま (誰も取らない、 簡略)、 次局へ
+function mahjong_handle_draw(array &$state): array {
+    $state['log'][] = ['type' => 'ryukyoku'];
+    $state['phase'] = 'kyoku_end';
+    return ['ok' => true, 'event' => 'ryukyoku'];
+}
+
+// 和了適用: 点数移動 + 局終了マーク
+function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array $score, array $yaku, bool $isTsumo): void {
+    $state['log'][] = ['type' => $isTsumo ? 'tsumo' : 'ron', 'by' => $winnerIdx, 'yaku' => $yaku, 'score' => $score];
+    $state['game_winners'][] = ['by' => $winnerIdx, 'yaku' => $yaku, 'score' => $score, 'tsumo' => $isTsumo, 'round_index' => $state['round_index']];
+    if ($isTsumo) {
+        if ($winnerIdx === $state['oya']) {
+            // 親ツモ: 全員から from_all
+            $each = (int)$score['from_all'];
+            $each = (int)(ceil($each / 100) * 100);
+            foreach ($state['players'] as $i => &$p) {
+                if ($i !== $winnerIdx) { $p['score'] -= $each; $state['players'][$winnerIdx]['score'] += $each; }
+            }
+            unset($p);
+        } else {
+            // 子ツモ: 子 から from_others, 親 から from_oya
+            $oneOther = (int)$score['from_others']; $oneOther = (int)(ceil($oneOther / 100) * 100);
+            $fromOya  = (int)$score['from_oya'];     $fromOya  = (int)(ceil($fromOya / 100) * 100);
+            foreach ($state['players'] as $i => &$p) {
+                if ($i === $winnerIdx) continue;
+                $pay = ($i === $state['oya']) ? $fromOya : $oneOther;
+                $p['score'] -= $pay;
+                $state['players'][$winnerIdx]['score'] += $pay;
+            }
+            unset($p);
+        }
+    } else {
+        // ロン: loser のみ from_loser
+        $pay = (int)$score['from_loser']; $pay = (int)(ceil($pay / 100) * 100);
+        $state['players'][$loserIdx]['score'] -= $pay;
+        $state['players'][$winnerIdx]['score'] += $pay;
+    }
+    $state['phase'] = 'kyoku_end';
+}
+
+// 局終了後に次局へ進める or 終了
+function mahjong_maybe_advance_round(PDO $pdo, array &$state, array $g): void {
+    if ($state['phase'] !== 'kyoku_end') return;
+    $state['round_index']++;
+    if ($state['round_index'] >= 4) {
+        // 東風戦終了
+        $state['phase'] = 'finished_all';
+        return;
+    }
+    $state['oya'] = $state['round_index'];
+    $state['honba'] = 0;
+    // リーチ宣言 / 河 をリセット、 山 / 配牌 やり直し
+    $playerUids = array_map(fn($p) => $p['user_id'], $state['players']);
+    $newSt = MahjongEngine::newGame($playerUids);
+    // スコアは持ち越し
+    foreach ($newSt['players'] as $i => &$p) { $p['score'] = $state['players'][$i]['score']; }
+    unset($p);
+    $newSt['round_index'] = $state['round_index'];
+    $newSt['oya'] = $state['oya'];
+    $newSt['game_winners'] = $state['game_winners'];
+    MahjongEngine::drawForTurn($newSt);
+    $newSt['turn'] = $state['oya'];
+    $state = $newSt;
+}
+
+// 終局: 最終スコアで rank を決定 → pot 分配 (buy_in × 4 - 場代)
+function mahjong_finalize_payout(PDO $pdo, int $gid, array $state, int $buyIn, int $rakePct): void {
+    // 最終 score 順位
+    $scores = [];
+    foreach ($state['players'] as $i => $p) {
+        $scores[] = ['user_id' => (int)$p['user_id'], 'score' => (int)$p['score'], 'idx' => $i];
+    }
+    usort($scores, fn($a, $b) => $b['score'] - $a['score']);
+    $pot = $buyIn * MAHJONG_SEATS;
+    $rake = (int)floor($pot * $rakePct / 100);
+    $payouts = [];
+    $alloc = 0;
+    foreach ([2,3,4] as $rank) {
+        $share = (int)floor($pot * MAHJONG_RANK_PCT[$rank] / 100);
+        $payouts[$rank] = $share; $alloc += $share;
+    }
+    $payouts[1] = $pot - $rake - $alloc;
+    foreach ($scores as $rankIdx => $row) {
+        $rank = $rankIdx + 1;
+        $pay = $payouts[$rank];
+        if ($pay > 0) {
+            Ledger::transfer($pdo, 1, (int)$row['user_id'], $pay, 'mahjong_payout', 'mahjong', $gid, "麻雀卓 #{$gid} {$rank}位 (P2)");
+        }
+        $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = ? WHERE game_id = ? AND user_id = ?")
+            ->execute([$rank, $pay, $gid, (int)$row['user_id']]);
+    }
+    $pdo->prepare("UPDATE mahjong_games SET finished_at = NOW() WHERE id = ?")->execute([$gid]);
 }
 
 function mahjong_report(PDO $pdo, array $cfg, int $uid, int $gid): void {

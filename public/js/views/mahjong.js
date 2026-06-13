@@ -96,6 +96,11 @@ export async function renderMahjongDetail({ params }) {
   let g;
   try { g = await get('/api/mahjong/games/' + gid); }
   catch (e) { app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`; return; }
+  // v554 Phase 2: 対局中なら play view へ
+  if (g.status === 'playing') {
+    const mod = await import('./mahjong_play.js');
+    return mod.renderMahjongPlay({ params });
+  }
   paintDetail(g);
 }
 
