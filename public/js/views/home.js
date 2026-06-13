@@ -57,6 +57,7 @@ export const HOME_ACTIONS = [
   { id: 'shiritori',    url: '#/shiritori',          title: '絵しりとり',    icon: '🎨', defaultVisible: false }, // v540 #171
   { id: 'tierlists',    url: '#/tierlists',          title: 'ティア表',      icon: '🎯', defaultVisible: false }, // v549 #210
   { id: 'paper-review', url: '#/paper-review',       title: '論文査読',      icon: '📄', defaultVisible: false }, // v550 #206
+  { id: 'mahjong',      url: '#/mahjong',            title: '麻雀',          icon: '🀄', defaultVisible: false }, // v553 #209
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
   { id: 'groups',       url: '#/groups',             title: 'グループ',      icon: '👥', defaultVisible: false },

@@ -62,6 +62,7 @@ $routes = [
     'walk'           => 'route_walk',
     'shiritori'      => 'route_shiritori',
     'tierlists'      => 'route_tierlists',
+    'mahjong'        => 'route_mahjong',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',

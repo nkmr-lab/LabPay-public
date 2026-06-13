@@ -146,6 +146,7 @@ function refUrl(n) {
     case 'shiritori':      return n.ref_id ? '#/shiritori/' + n.ref_id : '#/shiritori';
     case 'tierlist':       return n.ref_id ? '#/tierlists/' + n.ref_id : '#/tierlists';
     case 'paper_review':   return '#/paper-review';
+    case 'mahjong':        return n.ref_id ? '#/mahjong/' + n.ref_id : '#/mahjong';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';

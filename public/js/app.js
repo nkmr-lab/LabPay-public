@@ -534,6 +534,10 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
+// v553 #209 麻雀 Phase 1 (lazy import で 普段は未読み込み、 Phase 2 で重くなる予定)
+route('/mahjong/new',       lazy(() => import('./views/mahjong.js'), 'renderMahjongNew'));
+route('/mahjong/:id',       lazy(() => import('./views/mahjong.js'), 'renderMahjongDetail'));
+route('/mahjong',           lazy(() => import('./views/mahjong.js'), 'renderMahjong'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
 
