@@ -11,6 +11,9 @@ let curGid = null;
 let curState = null;
 
 // 牌コード → Unicode 麻雀牌
+// v564 中 (🀄 U+1F004) は default が emoji presentation (カラー絵文字) なので
+//   Variation Selector-15 (U+FE0E) を付けて text presentation (モノクロ) に強制
+const VS15 = '\u{FE0E}';
 function tileChar(t) {
   if (t == null) return '?';
   if (t < 9)   return String.fromCodePoint(0x1F007 + t);          // 萬子 1-9
@@ -19,7 +22,7 @@ function tileChar(t) {
   if (t < 31)  return String.fromCodePoint(0x1F000 + (t - 27));   // 東南西北
   if (t === 31) return String.fromCodePoint(0x1F006);             // 白
   if (t === 32) return String.fromCodePoint(0x1F005);             // 發
-  if (t === 33) return String.fromCodePoint(0x1F004);             // 中
+  if (t === 33) return String.fromCodePoint(0x1F004) + VS15;      // 中 (VS15 でモノクロ)
   return '?';
 }
 
@@ -182,7 +185,12 @@ function paint() {
         ${nakiBtns}
         ${ankanBtns}
         ${kakanBtns}
-        ${canPass ? `<button id="mj-pass" class="btn" style="font-size:12px">パス (次へ)</button>` : ''}
+        ${canPass ? `<button id="mj-pass" class="btn" style="font-size:12px">${
+          canRon && myNakiChances.length > 0 ? '鳴かない / ロンしない' :
+          canRon ? 'ロンしない' :
+          myNakiChances.length > 0 ? '鳴かない' :
+          '見送る'
+        }</button>` : ''}
       </div>
       <div class="hint-sm" style="font-size:12px; margin-top:6px">
         ${isMyTurn && inDiscardPhase ? '✏️ 牌をタップで打牌' :
@@ -198,7 +206,10 @@ function paint() {
         try {
           await post(`/api/mahjong/games/${curGid}/action`, { type: 'discard', tile: t });
           await refresh();
-        } catch (e) { toast('失敗: ' + e.message); }
+        } catch (e) {
+          if (/番ではありません|今は.*できません/.test(e.message)) { await refresh(); return; }
+          toast('失敗: ' + e.message);
+        }
       });
     });
     document.getElementById('mj-tsumo')?.addEventListener('click', () => doAction('tsumo'));
@@ -215,7 +226,10 @@ function paint() {
         try {
           await post(`/api/mahjong/games/${curGid}/action`, body);
           await refresh();
-        } catch (e) { toast('失敗: ' + e.message); }
+        } catch (e) {
+          if (/番ではありません|今は.*できません/.test(e.message)) { await refresh(); return; }
+          toast('失敗: ' + e.message);
+        }
       });
     });
     handBox.querySelectorAll('button[data-ankan]').forEach(b => {
@@ -223,7 +237,10 @@ function paint() {
         try {
           await post(`/api/mahjong/games/${curGid}/action`, { type: 'ankan', tile: Number(b.dataset.ankan) });
           await refresh();
-        } catch (e) { toast('失敗: ' + e.message); }
+        } catch (e) {
+          if (/番ではありません|今は.*できません/.test(e.message)) { await refresh(); return; }
+          toast('失敗: ' + e.message);
+        }
       });
     });
     handBox.querySelectorAll('button[data-kakan]').forEach(b => {
@@ -231,7 +248,10 @@ function paint() {
         try {
           await post(`/api/mahjong/games/${curGid}/action`, { type: 'kakan', tile: Number(b.dataset.kakan) });
           await refresh();
-        } catch (e) { toast('失敗: ' + e.message); }
+        } catch (e) {
+          if (/番ではありません|今は.*できません/.test(e.message)) { await refresh(); return; }
+          toast('失敗: ' + e.message);
+        }
       });
     });
   }
@@ -253,5 +273,13 @@ async function doAction(type) {
     const r = await post(`/api/mahjong/games/${curGid}/action`, { type });
     if (r.yaku) toast(`和了! 役: ${(r.yaku.list || []).join(', ')} ${r.yaku.han}翻 / ${r.score.total}点`);
     await refresh();
-  } catch (e) { toast('失敗: ' + e.message); }
+  } catch (e) {
+    // v564 polling と AI 自動進行のレースで 「あなたの番ではありません」 が出るが、
+    //   ユーザーには表示せず 黙って state を再取得する (UI が古かっただけ)
+    if (/番ではありません|今は.*できません/.test(e.message)) {
+      await refresh();
+      return;
+    }
+    toast('失敗: ' + e.message);
+  }
 }
