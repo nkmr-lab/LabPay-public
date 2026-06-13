@@ -89,11 +89,19 @@ export async function refreshMe() {
     await bootSettingsSync();
     return data;
   } catch (e) {
-    // v498 #108 401 等で me を取り直せなかった場合はキャッシュも捨てて未ログイン扱いに。
-    state.me = null;
-    clearMeCache();
-    renderChrome();
-    return null;
+    // v559 #217 ネットワーク障害 (= ステータスコードが取れない / 0) と認証失敗 (401/403) を区別:
+    //   - 認証失敗: clearMeCache + 未ログインへ
+    //   - ネットエラー: キャッシュ温存 (オフラインでも閲覧継続)
+    const isAuthError = e?.status === 401 || e?.status === 403;
+    if (isAuthError) {
+      state.me = null;
+      clearMeCache();
+      renderChrome();
+      return null;
+    }
+    // オフライン: キャッシュをそのまま使い続ける
+    console.warn('[refreshMe] network error, keeping cache', e);
+    return state.me;
   }
 }
 

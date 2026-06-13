@@ -7,6 +7,7 @@ import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { tag, fmtDateTime, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { localDtToIso, isoToLocalDt, tzToggleHtml, bindTzToggle } from '../tz_helper.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -187,6 +188,7 @@ export async function renderMeetupNew({ query } = {}) {
       <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 6px">
         ${presets.map((p, i) => `<button class="btn" data-mu-preset-idx="${i}">${escapeHtml(p.label)}</button>`).join('')}
       </div>
+      ${tzToggleHtml('mun-tz')}
       <div class="row" style="gap:6px; align-items:center">
         <input type="datetime-local" id="mun-when" style="flex:1; min-width:180px">
         <span class="hint-sm" id="mun-rem"></span>
@@ -235,6 +237,13 @@ export async function renderMeetupNew({ query } = {}) {
     b.addEventListener('click', () => applyPreset(presets[Number(b.dataset.muPresetIdx)]));
   });
   whenEl.addEventListener('input', syncRem);
+  // v560 #213 TZ toggle: 切替時に preset / 既存値の表示を再計算するため reload-relative
+  //   な計算をするより、 ボタンを再 click して埋め直す方が確実なので 簡略実装
+  bindTzToggle('mun-tz', () => {
+    // 切替後は フォームの値が JST/ローカル どちらの解釈に変わるので、 ユーザーが手動で
+    //   合わせ直す前提 (ヒント文だけ更新)
+    syncRem();
+  });
   // URL 経由の preset 時刻を 優先 (期限内かつ 未来 なら 採用)。
   let usedPreset = false;
   const maxAheadMs = (isDeadline ? 365 : 31) * 86400_000;
@@ -269,11 +278,8 @@ export async function renderMeetupNew({ query } = {}) {
     const location = locEl ? locEl.value.trim() : '';
     const whenLocal = whenEl.value;
     if (!whenLocal) { toast(`${km.timeLabel}を入れてください`); return; }
-    // v527 #166 datetime-local は ローカルタイム文字列 (TZ なし) なので、 端末の
-    //   ローカルタイムゾーンを尊重する形で ISO UTC に変換して送信。 サーバ側 (Tokyo
-    //   タイムゾーン) で比較しても 正しく 「未来 / 過去」 が判定される。 海外滞在中の
-    //   ユーザが現地時刻で集合時間を設定しても 「今より前」 エラーが出なくなる。
-    const whenUtc = new Date(whenLocal).toISOString();
+    // v560 #213 タイムゾーン helper で 「JST / ローカル」 切替可能化
+    const whenUtc = localDtToIso(whenLocal);
     const memberIds = picker ? [...picker.getSelected()] : [];
     if (!memberIds.length) { toast(`${isDeadline ? '対象者' : '参加者'}を 1 人以上`); return; }
     try {
@@ -472,8 +478,8 @@ export async function renderMeetupDetail({ params }) {
           const loc   = document.getElementById('mud-edit-loc').value.trim();
           const whenLocal = document.getElementById('mud-edit-when').value;
           if (!whenLocal) { toast(`${km.timeLabel}を 入れて ください`); return; }
-          // v527 #166 編集時も ローカル → UTC ISO に変換して送る
-          const when = new Date(whenLocal).toISOString();
+          // v560 #213 TZ helper 経由
+          const when = localDtToIso(whenLocal);
           try {
             await patch(`/api/meetups/${id}`, { title, location: loc, meetup_at: when });
             toast('保存しました');

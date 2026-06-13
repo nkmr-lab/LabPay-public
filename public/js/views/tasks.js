@@ -3,6 +3,7 @@ import { escapeHtml, avatarHtml, navigate, safeHttpUrl } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadTaskAttachment } from '../upload.js';
 import { fmtLocalInput } from '../format.js';
+import { localDtToIso, isoToLocalDt, tzToggleHtml, bindTzToggle, getTzMode } from '../tz_helper.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 // 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
@@ -155,6 +156,7 @@ function toggleCreateForm(mode = null) {
   const deadline = `
       <label class="field">
         <span class="lbl">締切 (任意・無指定なら無期限)</span>
+        ${tzToggleHtml('t-deadline-tz')}
         <input type="datetime-local" id="t-deadline">
       </label>`;
 
@@ -286,7 +288,9 @@ async function onCreate() {
   const completion_message = document.getElementById('t-cmsg').value.trim();
   // 報酬: リクエストモードは 強制 0、 そうでなければ フォームから。
   const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
-  const deadline = document.getElementById('t-deadline').value || null;
+  // v560 #215 deadline は TZ helper 経由で JST or ローカル を選択可能に
+  const deadlineRaw = document.getElementById('t-deadline').value || null;
+  const deadline = deadlineRaw ? localDtToIso(deadlineRaw) : null;
   if (!title || !(reward >= 0)) { toast('タイトルを確認してください'); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
 
@@ -744,8 +748,8 @@ function renderEditForm(t) {
   const wrap = document.getElementById('edit-form-wrap');
   wrap.hidden = false;
   const auds = (t.audience_grades || '').split(',').filter(Boolean);
-  // datetime-local needs "YYYY-MM-DDTHH:MM"
-  const dlVal = fmtLocalInput(t.deadline);
+  // v560 #215 datetime-local needs "YYYY-MM-DDTHH:MM" — TZ mode 考慮で生成
+  const dlVal = t.deadline ? isoToLocalDt(t.deadline) : '';
   wrap.innerHTML = `
     <div class="card">
       <h3>タスクを編集</h3>
@@ -786,6 +790,7 @@ function renderEditForm(t) {
       </label>
       <label class="field">
         <span class="lbl">締切 (空欄で無期限)</span>
+        ${tzToggleHtml('e-deadline-tz')}
         <input type="datetime-local" id="e-deadline" value="${escapeHtml(dlVal)}">
       </label>
       <div class="field">
@@ -818,7 +823,8 @@ async function onSaveEdit(taskId) {
   const reward   = Number(document.getElementById('e-reward').value);
   const capacity = Number(document.getElementById('e-capacity').value);
   const per_user_limit = Number(document.getElementById('e-perlimit').value);
-  const deadline = document.getElementById('e-deadline').value || null;
+  const deadlineRaw = document.getElementById('e-deadline').value || null;
+  const deadline = deadlineRaw ? localDtToIso(deadlineRaw) : null;
   const aud = Array.from(document.querySelectorAll('.e-aud:checked')).map(el => el.value);
   if (!title || !(reward > 0) || !(capacity > 0)) { toast('入力を確認してください'); return; }
   try {

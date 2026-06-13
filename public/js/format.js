@@ -33,7 +33,20 @@ export function fmtDate(s) {
 
 export function fmtDateTime(s) {
   const x = asStr(s);
-  return x ? x.slice(0, 16) : '';
+  if (!x) return '';
+  // v560 #218 サーバは JST の "YYYY-MM-DD HH:MM:SS" を返す。 TZ mode が 'local'
+  //   なら ブラウザのローカル TZ に変換して表示。 'jst' なら そのまま (default)。
+  try {
+    const mode = localStorage.getItem('labpay-tz-mode') || 'jst';
+    if (mode === 'jst') return x.slice(0, 16);
+    // JST → UTC → ローカル
+    const d = new Date(x.replace(' ', 'T') + '+09:00');
+    if (!Number.isFinite(d.getTime())) return x.slice(0, 16);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return x.slice(0, 16);
+  }
 }
 
 export function fmtTime(s) {
