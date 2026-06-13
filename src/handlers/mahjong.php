@@ -609,9 +609,7 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
             $r = MahjongEngine::discard($state, $seat, $tile);
             if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
             if (!$state['naki_chances']) {
-                // 鳴き候補無し → 即 turn 進める
-                $advanced = MahjongEngine::advanceTurn($state) ?? null;
-                // advanceTurn を呼べる helper として 別 PHP 関数化
+                // 鳴き候補無し → 即 turn 進める (v555 で advanceTurn は廃止、 helper で対応)
                 mahjong_advance_after_discard($state);
             }
             $result = ['ok' => true];

@@ -25,10 +25,11 @@ function tileChar(t) {
 
 function tileBtn(t, opts = {}) {
   const dis = opts.disabled ? ' disabled' : '';
-  const sel = opts.selectable ? '' : ' style="cursor:default"';
   const click = opts.onclick ? ` data-tile="${t}"` : '';
-  const style = `font-size:${opts.size || 32}px; padding:2px 4px; border:1px solid #888; border-radius:4px; background:#fff; line-height:1`;
-  return `<button class="mj-tile"${click} style="${style}"${sel}${dis}>${tileChar(t)}</button>`;
+  // v561 牌 Unicode 自体に枠が内蔵されているので button の border は不要
+  const cur = opts.selectable ? 'pointer' : 'default';
+  const style = `font-size:${opts.size || 36}px; padding:0; border:none; background:transparent; line-height:1; cursor:${cur}`;
+  return `<button class="mj-tile"${click} style="${style}"${dis}>${tileChar(t)}</button>`;
 }
 
 function windName(t) { return ['東','南','西','北'][t - 27] ?? '?'; }

@@ -287,6 +287,28 @@ function paint(d, shareToken, isShared) {
         </div>
       </div>` : ''}
 
+      ${r.hypothesis_vs_results ? `
+      <div style="margin-top:8px">
+        <div class="bold" style="color:#9333ea">❓ 仮説/問い ⇔ 結果 の対応</div>
+        <div style="font-size:13px; padding:6px 10px; background:#faf5ff; border-radius:6px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.hypothesis_vs_results)}</div>
+      </div>` : ''}
+
+      ${r.editorial_check ? `
+      <div style="margin-top:8px">
+        <div class="bold" style="color:#0891b2">📝 編集面のチェック</div>
+        <div style="font-size:12px; margin-top:4px">
+          ${[
+            ['用語の一貫性', r.editorial_check.terminology_consistency],
+            ['専門用語の説明', r.editorial_check.jargon_explanation],
+            ['図表の参照', r.editorial_check.figure_table_references],
+            ['参考文献の妥当性', r.editorial_check.references_validity],
+          ].filter(([k, v]) => v).map(([k, v]) => `
+            <div style="padding:6px 10px; background:#ecfeff; border-left:3px solid #0891b2; border-radius:0 4px 4px 0; margin-bottom:4px">
+              <span class="bold">${k}:</span> ${escapeHtml(v)}
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+
       ${r.strengths && r.strengths.length ? `
       <div style="margin-top:12px">
         <div class="bold" style="color:#15803d">✅ Strengths</div>
@@ -303,9 +325,38 @@ function paint(d, shareToken, isShared) {
         </ul>
       </div>` : ''}
 
+      ${r.rewrite_suggestions && r.rewrite_suggestions.length ? `
+      <div style="margin-top:10px">
+        <div class="bold" style="color:#b91c1c">✍️ 主張が強すぎる / 記述がおかしい箇所のリライト案</div>
+        <div style="font-size:13px; margin-top:4px">
+          ${r.rewrite_suggestions.map(s => `
+            <div style="padding:8px 12px; background:#fef2f2; border-left:3px solid #b91c1c; border-radius:0 6px 6px 0; margin-bottom:8px">
+              <div style="margin-bottom:4px"><span class="bold" style="color:#b91c1c">原文:</span> 「${escapeHtml(s.original || '')}」</div>
+              ${s.reason ? `<div style="margin-bottom:4px; font-size:12px"><span class="bold">理由:</span> ${escapeHtml(s.reason)}</div>` : ''}
+              ${s.suggested_rewrite ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px"><span class="bold" style="color:#15803d">提案:</span> ${escapeHtml(s.suggested_rewrite)}</div>` : ''}
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+
+      ${r.strengthening_analyses && r.strengthening_analyses.length ? `
+      <div style="margin-top:10px; padding:8px 12px; background:#eff6ff; border-left:4px solid #2563eb; border-radius:0 6px 6px 0">
+        <div class="bold" style="color:#2563eb">💪 こうすると論文が強くなる (追加分析の提案)</div>
+        <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+          ${r.strengthening_analyses.map(s => `<li style="margin-bottom:4px">${escapeHtml(s)}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+      ${r.alternatives_when_no_reexp && r.alternatives_when_no_reexp.length ? `
+      <div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-left:4px solid #a16207; border-radius:0 6px 6px 0">
+        <div class="bold" style="color:#a16207">🧭 追加実験ができない場合の代替案</div>
+        <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+          ${r.alternatives_when_no_reexp.map(s => `<li style="margin-bottom:4px">${escapeHtml(s)}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
       ${r.revision_to_accept && r.revision_to_accept.length ? `
       <div style="margin-top:10px; padding:8px 12px; background:#dcfce7; border-left:4px solid #15803d; border-radius:0 6px 6px 0">
-        <div class="bold" style="color:#15803d">🛠 採録に導く修正案 (優先度順)</div>
+        <div class="bold" style="color:#15803d">🛠 採録に導く修正案 (優先度順、 N増の安易な提案は p-hacking リスクを添えて)</div>
         <ol style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
           ${r.revision_to_accept.map(s => `<li style="margin-bottom:4px">${escapeHtml(s)}</li>`).join('')}
         </ol>
