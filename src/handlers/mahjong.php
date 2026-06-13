@@ -37,7 +37,130 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($action === 'state'  && $method === 'GET')  { mahjong_state($pdo, $uid, $gid); return; }
         if ($action === 'action' && $method === 'POST') { mahjong_action($pdo, $cfg, $uid, $gid); return; }
     }
+    if ($seg[1] === 'sim' && $method === 'POST') {
+        mahjong_sim($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no mahjong route for $method", 404);
+}
+
+// v556 POST /api/mahjong/sim { n: 1〜30 } — 内部 AI で N 半荘を走らせて結果を返す
+function mahjong_sim(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $n = max(1, min(30, (int)($body['n'] ?? 3)));
+    @set_time_limit(120);
+    @ini_set('memory_limit', '512M');
+
+    $results = [];
+    $startedAt = microtime(true);
+    for ($i = 0; $i < $n; $i++) {
+        try {
+            $r = mahjong_sim_one_hanchan();
+            $results[] = $r;
+        } catch (Throwable $e) {
+            $results[] = ['error' => $e->getMessage()];
+        }
+    }
+    $elapsed = microtime(true) - $startedAt;
+    json_response([
+        'ok'         => true,
+        'count'      => $n,
+        'elapsed_s'  => round($elapsed, 2),
+        'results'    => $results,
+    ]);
+}
+
+// AI で 1 半荘 走らせる (簡易、 sim_mahjong.php と同等)
+function mahjong_sim_one_hanchan(): array {
+    $playerUids = [101, 102, 103, 104];
+    $state = MahjongEngine::newGame($playerUids);
+    MahjongEngine::drawForTurn($state);
+    $events = ['tsumo' => 0, 'ron' => 0, 'ryukyoku' => 0, 'kyoku' => 0, 'naki' => 0, 'riichi' => 0, 'steps' => 0];
+    $maxSteps = 8000;
+
+    while ($state['phase'] !== 'finished_all' && $events['steps'] < $maxSteps) {
+        $events['steps']++;
+        if ($state['phase'] === 'kyoku_end') {
+            $events['kyoku']++;
+            mahjong_maybe_advance_round(null, $state, ['id' => 0, 'buy_in' => 50, 'rake_pct' => 5]);
+            continue;
+        }
+        if ($state['phase'] === 'draw') {
+            $events['ryukyoku']++;
+            MahjongEngine::ryukyokuPayout($state);
+            continue;
+        }
+        if ($state['awaiting'] === 'discard') {
+            $curSeat = $state['turn'];
+            $tCheck = MahjongEngine::tryTsumo($state, $curSeat);
+            if ($tCheck['ok']) {
+                $isOya = ($curSeat === $state['oya']);
+                $score = MahjongEngine::calcScore($tCheck['yaku'], $isOya, true, (int)$state['honba']);
+                mahjong_apply_win($state, $curSeat, null, $score, $tCheck['yaku'], true);
+                $events['tsumo']++;
+                continue;
+            }
+            $tile = mahjong_sim_choose_discard($state['players'][$curSeat]['hand']);
+            $r = MahjongEngine::discard($state, $curSeat, $tile);
+            if (!$r['ok']) throw new RuntimeException("discard fail: {$r['msg']}");
+            if (!$state['naki_chances']) {
+                mahjong_advance_after_discard($state);
+                if ($state['phase'] === 'kyoku_end') continue;
+            }
+            continue;
+        }
+        if ($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance') {
+            $discarder = $state['last_discarded']['by'] ?? null;
+            $done = false;
+            for ($s = 0; $s < 4 && !$done; $s++) {
+                if ($s === $discarder) continue;
+                if (in_array($s, $state['naki_passed'], true)) continue;
+                $ronCheck = MahjongEngine::tryRon($state, $s);
+                if ($ronCheck['ok']) {
+                    $isOya = ($s === $state['oya']);
+                    $score = MahjongEngine::calcScore($ronCheck['yaku'], $isOya, false, (int)$state['honba']);
+                    mahjong_apply_win($state, $s, $discarder, $score, $ronCheck['yaku'], false);
+                    $events['ron']++;
+                    $done = true; break;
+                }
+                $myChances = array_filter($state['naki_chances'], fn($c) => $c['seat'] === $s);
+                if ($myChances && mt_rand(0, 100) < 50) {
+                    $c = reset($myChances);
+                    $extra = ['tile' => $c['tile']];
+                    if ($c['type'] === 'chi') $extra['with'] = $c['with'];
+                    $r = MahjongEngine::declareNaki($state, $s, $c['type'], $extra);
+                    if ($r['ok']) { $events['naki']++; $done = true; break; }
+                }
+                MahjongEngine::nakiPass($state, $s);
+            }
+            if ($done) continue;
+            if ($state['phase'] === 'draw') MahjongEngine::ryukyokuPayout($state);
+            continue;
+        }
+        break;
+    }
+    $finalScores = array_map(fn($p) => $p['score'], $state['players']);
+    return [
+        'events'        => $events,
+        'phase'         => $state['phase'],
+        'round_index'   => $state['round_index'],
+        'final_scores'  => $finalScores,
+        'sum_invariant' => array_sum($finalScores) + $state['riichi_pot'],
+        'riichi_pot'    => $state['riichi_pot'],
+    ];
+}
+
+function mahjong_sim_choose_discard(array $hand): int {
+    $cnt = array_fill(0, 34, 0);
+    foreach ($hand as $t) $cnt[$t]++;
+    $best = null; $bestVal = 999;
+    foreach ($hand as $t) {
+        $v = ($t >= 27) ? 0 : (($t % 9 === 0 || $t % 9 === 8) ? 1 : (($t % 9 === 1 || $t % 9 === 7) ? 2 : 4));
+        if ($cnt[$t] >= 2) $v += 10;
+        if ($v < $bestVal) { $bestVal = $v; $best = $t; }
+    }
+    return $best;
 }
 
 function mahjong_games_list(PDO $pdo, int $uid): void {

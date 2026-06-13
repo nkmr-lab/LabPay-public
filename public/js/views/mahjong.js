@@ -12,6 +12,7 @@ export async function renderMahjong() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🀄 麻雀</h2>
         <span style="flex:1"></span>
+        <a class="btn" href="#/mahjong/sim" style="font-size:12px">🧪 sim</a>
         <a class="btn primary" href="#/mahjong/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
