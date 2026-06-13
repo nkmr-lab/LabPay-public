@@ -84,12 +84,19 @@ function paint() {
   }
   const isMyTurn = (d.my_seat !== null) && (s.turn === d.my_seat);
   const inDiscardPhase = s.awaiting === 'discard';
-  const inRonChance = s.awaiting === 'ron_chance';
-  const canRon = inRonChance && d.my_seat !== null && s.last_discarded && s.last_discarded.by !== d.my_seat;
-  const canPass = inRonChance && d.my_seat !== null;
+  const inNakiPhase = s.awaiting === 'naki_window' || s.awaiting === 'ron_chance';
+  const canRon = inNakiPhase && d.my_seat !== null && s.last_discarded && s.last_discarded.by !== d.my_seat;
+  const canPass = inNakiPhase && d.my_seat !== null && s.last_discarded && s.last_discarded.by !== d.my_seat;
+  const myNakiChances = (s.naki_chances || []).filter(c => c.seat === d.my_seat);
 
+  // 場風と局番号: 東1-4 (round_index 0-3) / 南1-4 (round_index 4-7)
+  const kyokuNo = (s.round_index % 4) + 1;
   document.getElementById('mj-meta').innerHTML = `
-    場: <span class="bold">${windName(s.round_wind)} ${s.round_index + 1}局</span> · 親: ${escapeHtml(d.players[s.oya]?.display_name || '?')} · 山残り ${s.wall_remaining} · ドラ表示 ${tileChar(s.dora_indicators[0])}
+    場: <span class="bold">${windName(s.round_wind)}${kyokuNo}局 ${s.honba}本場</span> ·
+    親: ${escapeHtml(d.players[s.oya]?.display_name || '?')} ·
+    山残り ${s.wall_remaining} ·
+    ドラ表示 ${(s.dora_indicators || []).map(t => tileChar(t)).join(' ')} ·
+    リーチ棒 ${s.riichi_pot || 0}
   `;
 
   // 4 卓の表示 (自分は下、 上家/対面/下家を画面上/右/左)
@@ -100,6 +107,12 @@ function paint() {
     const sp = s.players[seatIdx];
     const isTurn = seatIdx === s.turn;
     const isOya = seatIdx === s.oya;
+    // 副露表示
+    const meldsHtml = (sp.melds || []).map(m => {
+      const tag = m.type === 'pon' ? 'ポン' : m.type === 'chi' ? 'チー' : m.type === 'minkan' ? '明カン' : m.type === 'ankan' ? '暗カン' : m.type === 'kakan' ? '加カン' : '';
+      const tilesStr = m.tiles.map(t => m.type === 'ankan' ? '🀫' : tileChar(t)).join(' ');
+      return `<span style="display:inline-block; padding:2px 6px; background:#fef3c7; border-radius:4px; margin-right:4px; font-size:14px"><span style="font-size:10px; color:#a16207">${tag}</span> ${tilesStr}</span>`;
+    }).join('');
     return `
       <div style="padding:4px 8px; border:1px solid ${isTurn ? 'var(--primary, #4a106d)' : 'var(--line)'}; border-radius:6px; background:${isTurn ? '#f7eefa' : '#fff'}; margin-bottom:6px">
         <div class="row" style="gap:6px; align-items:center">
@@ -109,6 +122,7 @@ function paint() {
             <div class="meta" style="font-size:11px">${sp.score.toLocaleString()} 点 · 手 ${sp.hand_size} 枚 · 河 ${sp.discards.length} 枚</div>
           </div>
         </div>
+        ${meldsHtml ? `<div style="margin-top:4px">${meldsHtml}</div>` : ''}
         <div style="margin-top:4px; word-break:break-all; line-height:1.4; font-size:18px">
           ${sp.discards.map(t => tileChar(t)).join(' ')}
         </div>
@@ -133,8 +147,30 @@ function paint() {
     const sortedTiles = [...myHand].sort((a, b) => a - b);
     // 自摸牌 (もし 14 枚あれば 最後 = 自摸)
     const tsumoTile = (sortedTiles.length === 14 && isMyTurn && inDiscardPhase) ? sortedTiles[sortedTiles.length - 1] : null;
+    // 自分の副露
+    const myMeldsHtml = (myP.melds || []).map(m => {
+      const tag = m.type === 'pon' ? 'ポン' : m.type === 'chi' ? 'チー' : m.type === 'minkan' ? '明カン' : m.type === 'ankan' ? '暗カン' : m.type === 'kakan' ? '加カン' : '';
+      const tilesStr = m.tiles.map(t => tileChar(t)).join(' ');
+      return `<span style="display:inline-block; padding:2px 6px; background:#fef3c7; border-radius:4px; margin-right:4px; font-size:14px"><span style="font-size:10px; color:#a16207">${tag}</span> ${tilesStr}</span>`;
+    }).join('');
+    // 鳴き可能候補ボタン
+    const nakiBtns = myNakiChances.map((c, i) => {
+      if (c.type === 'pon') return `<button data-naki="pon" data-tile="${c.tile}" class="primary" style="font-size:12px">ポン ${tileChar(c.tile)}</button>`;
+      if (c.type === 'minkan') return `<button data-naki="minkan" data-tile="${c.tile}" class="primary" style="font-size:12px">明カン ${tileChar(c.tile)}</button>`;
+      if (c.type === 'chi') return `<button data-naki="chi" data-tile="${c.tile}" data-with="${c.with.join(',')}" class="primary" style="font-size:12px">チー ${tileChar(c.with[0])}${tileChar(c.with[1])}${tileChar(c.tile)}</button>`;
+      return '';
+    }).join('');
+    // 自分の手で 4 枚揃ってる暗カン候補
+    const handCounts = {};
+    for (const t of sortedTiles) handCounts[t] = (handCounts[t] || 0) + 1;
+    const ankanBtns = isMyTurn && inDiscardPhase ?
+      Object.entries(handCounts).filter(([t, c]) => c === 4).map(([t]) => `<button data-ankan="${t}" class="btn" style="font-size:12px">暗カン ${tileChar(Number(t))}</button>`).join('') : '';
+    // 加カン候補 (既存ポンと同種の牌が手にある)
+    const kakanBtns = isMyTurn && inDiscardPhase ?
+      (myP.melds || []).filter(m => m.type === 'pon').map(m => sortedTiles.includes(m.tile) ? `<button data-kakan="${m.tile}" class="btn" style="font-size:12px">加カン ${tileChar(m.tile)}</button>` : '').join('') : '';
     handBox.innerHTML = `
       <div class="bold" style="margin-bottom:4px">${seats[me].display_name} ${myP.riichi ? '(リーチ)' : ''} — 点数 ${myP.score.toLocaleString()}</div>
+      ${myMeldsHtml ? `<div style="margin-bottom:6px">${myMeldsHtml}</div>` : ''}
       <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px">
         ${sortedTiles.map((t, i) => tileBtn(t, { selectable: isMyTurn && inDiscardPhase, onclick: true, size: 28 })).join('')}
       </div>
@@ -142,11 +178,14 @@ function paint() {
         ${isMyTurn && inDiscardPhase ? `<button id="mj-tsumo" class="primary" style="font-size:12px">ツモ宣言</button>` : ''}
         ${isMyTurn && inDiscardPhase && !myP.riichi ? `<button id="mj-riichi" class="btn" style="font-size:12px">リーチ宣言</button>` : ''}
         ${canRon ? `<button id="mj-ron" class="primary" style="font-size:12px">ロン!</button>` : ''}
+        ${nakiBtns}
+        ${ankanBtns}
+        ${kakanBtns}
         ${canPass ? `<button id="mj-pass" class="btn" style="font-size:12px">パス (次へ)</button>` : ''}
       </div>
       <div class="hint-sm" style="font-size:12px; margin-top:6px">
         ${isMyTurn && inDiscardPhase ? '✏️ 牌をタップで打牌' :
-          inRonChance ? `⚠️ ${seats[s.last_discarded.by]?.display_name} の打牌 ${tileChar(s.last_discarded.tile)} 待ち` :
+          inNakiPhase ? `⚠️ ${seats[s.last_discarded.by]?.display_name} の打牌 ${tileChar(s.last_discarded.tile)} — 鳴き / ロン / パスを選択` :
           '⌛ ' + (seats[s.turn]?.display_name || '?') + ' の手番'}
       </div>
     `;
@@ -165,6 +204,35 @@ function paint() {
     document.getElementById('mj-riichi')?.addEventListener('click', () => doAction('riichi'));
     document.getElementById('mj-ron')?.addEventListener('click', () => doAction('ron'));
     document.getElementById('mj-pass')?.addEventListener('click', () => doAction('pass'));
+    // 鳴きボタン
+    handBox.querySelectorAll('button[data-naki]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const type = b.dataset.naki;
+        const tile = Number(b.dataset.tile);
+        const body = { type, tile };
+        if (type === 'chi') body.with = b.dataset.with.split(',').map(Number);
+        try {
+          await post(`/api/mahjong/games/${curGid}/action`, body);
+          await refresh();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    handBox.querySelectorAll('button[data-ankan]').forEach(b => {
+      b.addEventListener('click', async () => {
+        try {
+          await post(`/api/mahjong/games/${curGid}/action`, { type: 'ankan', tile: Number(b.dataset.ankan) });
+          await refresh();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+    handBox.querySelectorAll('button[data-kakan]').forEach(b => {
+      b.addEventListener('click', async () => {
+        try {
+          await post(`/api/mahjong/games/${curGid}/action`, { type: 'kakan', tile: Number(b.dataset.kakan) });
+          await refresh();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
   }
 
   // ログ

@@ -287,27 +287,57 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
             if ($tile === null) throw new ApiException('bad_request', 'tile が必要', 400);
             $r = MahjongEngine::discard($state, $seat, $tile);
             if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            if (!$state['naki_chances']) {
+                // 鳴き候補無し → 即 turn 進める
+                $advanced = MahjongEngine::advanceTurn($state) ?? null;
+                // advanceTurn を呼べる helper として 別 PHP 関数化
+                mahjong_advance_after_discard($state);
+            }
             $result = ['ok' => true];
         } else if ($type === 'pass') {
-            // ロン受付フェーズで誰も宣言しないなら turn 進める。 簡略: 1 人 pass で即進行
-            if ($state['awaiting'] !== 'ron_chance') throw new ApiException('bad_request', '今は pass できません', 400);
-            $advanced = MahjongEngine::advanceTurn($state);
-            if (!$advanced) {
+            $r = MahjongEngine::nakiPass($state, $seat);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            if (!empty($r['advanced']) && empty($r['in_play'])) {
                 // 流局
-                $result = mahjong_handle_draw($state);
-            } else { $result = ['ok' => true]; }
+                MahjongEngine::ryukyokuPayout($state);
+            }
+            $result = ['ok' => true];
+        } else if ($type === 'pon') {
+            $r = MahjongEngine::declareNaki($state, $seat, 'pon', ['tile' => $tile]);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else if ($type === 'chi') {
+            $with = $body['with'] ?? null;
+            if (!is_array($with) || count($with) !== 2) throw new ApiException('bad_request', 'with [t1,t2] 必須', 400);
+            $r = MahjongEngine::declareNaki($state, $seat, 'chi', ['with' => array_map('intval', $with)]);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else if ($type === 'minkan') {
+            $r = MahjongEngine::declareNaki($state, $seat, 'minkan', ['tile' => $tile]);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else if ($type === 'ankan') {
+            if ($tile === null) throw new ApiException('bad_request', 'tile が必要', 400);
+            $r = MahjongEngine::declareAnkan($state, $seat, $tile);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
+        } else if ($type === 'kakan') {
+            if ($tile === null) throw new ApiException('bad_request', 'tile が必要', 400);
+            $r = MahjongEngine::declareKakan($state, $seat, $tile);
+            if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
+            $result = ['ok' => true];
         } else if ($type === 'tsumo') {
             $r = MahjongEngine::tryTsumo($state, $seat);
             if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
             $isOya = ($seat === $state['oya']);
-            $score = MahjongEngine::calcScore($r['yaku'], $isOya, true);
+            $score = MahjongEngine::calcScore($r['yaku'], $isOya, true, (int)$state['honba']);
             mahjong_apply_win($state, $seat, null, $score, $r['yaku'], true);
             $result = ['ok' => true, 'yaku' => $r['yaku'], 'score' => $score];
         } else if ($type === 'ron') {
             $r = MahjongEngine::tryRon($state, $seat);
             if (!$r['ok']) throw new ApiException('bad_request', $r['msg'], 400);
             $isOya = ($seat === $state['oya']);
-            $score = MahjongEngine::calcScore($r['yaku'], $isOya, false);
+            $score = MahjongEngine::calcScore($r['yaku'], $isOya, false, (int)$state['honba']);
             mahjong_apply_win($state, $seat, $r['from'], $score, $r['yaku'], false);
             $result = ['ok' => true, 'yaku' => $r['yaku'], 'score' => $score];
         } else if ($type === 'riichi') {
@@ -328,11 +358,19 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
     json_response($result ?: ['ok' => true]);
 }
 
-// 流局 (ライブ山切れ): リーチ棒 そのまま (誰も取らない、 簡略)、 次局へ
-function mahjong_handle_draw(array &$state): array {
-    $state['log'][] = ['type' => 'ryukyoku'];
-    $state['phase'] = 'kyoku_end';
-    return ['ok' => true, 'event' => 'ryukyoku'];
+// 打牌後、 鳴き候補が無い場合に turn を進める helper
+function mahjong_advance_after_discard(array &$state): void {
+    if ($state['awaiting'] !== 'ron_chance') return;
+    $discarder = $state['last_discarded']['by'] ?? null;
+    if ($discarder === null) return;
+    $next = ($discarder + 1) % MahjongEngine::SEATS;
+    $state['turn'] = $next;
+    $state['last_discarded'] = null;
+    $ok = MahjongEngine::drawForTurn($state);
+    if (!$ok) {
+        // 山切れ → 流局
+        MahjongEngine::ryukyokuPayout($state);
+    }
 }
 
 // 和了適用: 点数移動 + 局終了マーク
@@ -341,17 +379,14 @@ function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array 
     $state['game_winners'][] = ['by' => $winnerIdx, 'yaku' => $yaku, 'score' => $score, 'tsumo' => $isTsumo, 'round_index' => $state['round_index']];
     if ($isTsumo) {
         if ($winnerIdx === $state['oya']) {
-            // 親ツモ: 全員から from_all
             $each = (int)$score['from_all'];
-            $each = (int)(ceil($each / 100) * 100);
             foreach ($state['players'] as $i => &$p) {
                 if ($i !== $winnerIdx) { $p['score'] -= $each; $state['players'][$winnerIdx]['score'] += $each; }
             }
             unset($p);
         } else {
-            // 子ツモ: 子 から from_others, 親 から from_oya
-            $oneOther = (int)$score['from_others']; $oneOther = (int)(ceil($oneOther / 100) * 100);
-            $fromOya  = (int)$score['from_oya'];     $fromOya  = (int)(ceil($fromOya / 100) * 100);
+            $oneOther = (int)$score['from_others'];
+            $fromOya  = (int)$score['from_oya'];
             foreach ($state['players'] as $i => &$p) {
                 if ($i === $winnerIdx) continue;
                 $pay = ($i === $state['oya']) ? $fromOya : $oneOther;
@@ -361,36 +396,44 @@ function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array 
             unset($p);
         }
     } else {
-        // ロン: loser のみ from_loser
-        $pay = (int)$score['from_loser']; $pay = (int)(ceil($pay / 100) * 100);
+        $pay = (int)$score['from_loser'];
         $state['players'][$loserIdx]['score'] -= $pay;
         $state['players'][$winnerIdx]['score'] += $pay;
     }
+    // リーチ棒を 和了者へ
+    $state['players'][$winnerIdx]['score'] += $state['riichi_pot'];
+    $state['riichi_pot'] = 0;
     $state['phase'] = 'kyoku_end';
+    $state['last_winner'] = $winnerIdx;
 }
 
 // 局終了後に次局へ進める or 終了
+//   v555: 連荘 + 半荘 (東1-4 + 南1-4 = round_index 0..7) 対応
+//   親和了 or 流局時テンパイ親 → 親継続 (honba+1)。 それ以外 → oya 進行 + round_index++
 function mahjong_maybe_advance_round(PDO $pdo, array &$state, array $g): void {
     if ($state['phase'] !== 'kyoku_end') return;
-    $state['round_index']++;
-    if ($state['round_index'] >= 4) {
-        // 東風戦終了
+    $oyaContinue = false;
+    if (isset($state['last_winner']) && $state['last_winner'] === $state['oya']) $oyaContinue = true;
+    if (!isset($state['last_winner']) && !empty($state['ryukyoku_tenpai_oya'])) $oyaContinue = true;
+    if ($oyaContinue) {
+        $state['honba']++;
+    } else {
+        $state['round_index']++;
+        $state['oya'] = $state['round_index'] % MahjongEngine::SEATS;
+        $state['honba'] = 0;
+    }
+    // 半荘終了判定
+    if ($state['round_index'] >= 8) {
         $state['phase'] = 'finished_all';
         return;
     }
-    $state['oya'] = $state['round_index'];
-    $state['honba'] = 0;
-    // リーチ宣言 / 河 をリセット、 山 / 配牌 やり直し
+    // 場風: 東 0..3 → 南 4..7
+    $newRoundWind = $state['round_index'] >= 4 ? MahjongEngine::T_S : MahjongEngine::T_E;
     $playerUids = array_map(fn($p) => $p['user_id'], $state['players']);
-    $newSt = MahjongEngine::newGame($playerUids);
-    // スコアは持ち越し
-    foreach ($newSt['players'] as $i => &$p) { $p['score'] = $state['players'][$i]['score']; }
-    unset($p);
-    $newSt['round_index'] = $state['round_index'];
-    $newSt['oya'] = $state['oya'];
+    $carry = array_map(fn($p) => $p['score'], $state['players']);
+    $newSt = MahjongEngine::newGame($playerUids, $carry, $state['oya'], $newRoundWind, $state['round_index'], $state['honba'], $state['riichi_pot']);
     $newSt['game_winners'] = $state['game_winners'];
     MahjongEngine::drawForTurn($newSt);
-    $newSt['turn'] = $state['oya'];
     $state = $newSt;
 }
 
