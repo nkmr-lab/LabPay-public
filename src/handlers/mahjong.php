@@ -41,7 +41,203 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
         mahjong_sim($pdo, $cfg);
         return;
     }
+    if ($seg[1] === 'ai' && $method === 'POST' && ($seg[2] ?? '') === 'new') {
+        mahjong_ai_new($pdo, $cfg, $uid);
+        return;
+    }
     json_error('not_found', "no mahjong route for $method", 404);
+}
+
+const MAHJONG_AI_BUYIN = 5;
+
+// v557 POST /api/mahjong/ai/new — 5pt で AI 3 体相手の対戦卓を作成 + 即開始
+function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
+    // bot user_ids を取得
+    $stB = $pdo->query("SELECT id FROM users WHERE kind='bot' AND email LIKE 'ai-%@labpay.local' ORDER BY id LIMIT 3");
+    $botIds = array_map('intval', $stB->fetchAll(PDO::FETCH_COLUMN));
+    if (count($botIds) < 3) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
+    $gameId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $botIds, &$gameId) {
+        mahjong_assert_balance($pdo, $uid, MAHJONG_AI_BUYIN);
+        $pdo->prepare("INSERT INTO mahjong_games (creator_user_id, title, buy_in, status, pot_total) VALUES (?,?,?,?,?)")
+            ->execute([$uid, '🤖 AI 対戦', MAHJONG_AI_BUYIN, 'lobby', 0]);
+        $gameId = (int)$pdo->lastInsertId();
+        // 起案者 (人間) を seat 0、 AI を 1/2/3
+        mahjong_insert_player($pdo, $gameId, $uid, 0);
+        mahjong_deposit($pdo, $gameId, $uid, MAHJONG_AI_BUYIN);
+        foreach ($botIds as $i => $bid) {
+            mahjong_insert_player($pdo, $gameId, $bid, $i + 1);
+            // bot の buy-in は 0 (システムが負担、 pot は人間の 5pt のみ。 結果 1位 = 4pt, 2位 1.4pt etc.)
+        }
+        // ゲーム開始 (Phase 2 engine init)
+        $stPL = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ? ORDER BY seat_order");
+        $stPL->execute([$gameId]);
+        $playerUids = array_map('intval', $stPL->fetchAll(PDO::FETCH_COLUMN));
+        $state = MahjongEngine::newGame($playerUids);
+        MahjongEngine::drawForTurn($state);
+        $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
+            ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gameId]);
+    });
+    // AI 自動進行 (state 更新)
+    mahjong_autoplay_ai($pdo, $gameId);
+    json_response(['ok' => true, 'id' => $gameId]);
+}
+
+// AI 自動進行: turn が bot のときに AI ロジックで進める。 人間の番 or 終局で停止。
+function mahjong_autoplay_ai(PDO $pdo, int $gid): void {
+    $maxIter = 200;
+    for ($i = 0; $i < $maxIter; $i++) {
+        $stG = $pdo->prepare("SELECT * FROM mahjong_games WHERE id = ? FOR UPDATE");
+        $pdo->beginTransaction();
+        $stG->execute([$gid]);
+        $g = $stG->fetch(PDO::FETCH_ASSOC);
+        if (!$g || $g['status'] !== 'playing' || !$g['state_json']) { $pdo->rollBack(); return; }
+        $state = json_decode($g['state_json'], true);
+        if (!$state) { $pdo->rollBack(); return; }
+        // 人間 (kind=human) の番なら停止
+        $stPM = $pdo->prepare("SELECT p.user_id, p.seat_order, u.kind
+                                FROM mahjong_players p JOIN users u ON u.id = p.user_id
+                               WHERE p.game_id = ? ORDER BY p.seat_order");
+        $stPM->execute([$gid]);
+        $playerKinds = [];
+        foreach ($stPM->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $playerKinds[(int)$r['seat_order']] = $r['kind'];
+        }
+        $progressed = false;
+        // 局終了処理
+        if ($state['phase'] === 'kyoku_end') {
+            mahjong_maybe_advance_round($pdo, $state, $g);
+            $progressed = true;
+        }
+        else if ($state['phase'] === 'draw') {
+            MahjongEngine::ryukyokuPayout($state);
+            $progressed = true;
+        }
+        else if ($state['awaiting'] === 'discard') {
+            $curSeat = (int)$state['turn'];
+            if ($playerKinds[$curSeat] !== 'bot') {
+                // 人間の番 → 停止
+                $pdo->rollBack();
+                return;
+            }
+            // AI: ツモ判定 → 打牌
+            $tCheck = MahjongEngine::tryTsumo($state, $curSeat);
+            if ($tCheck['ok']) {
+                $isOya = ($curSeat === $state['oya']);
+                $score = MahjongEngine::calcScore($tCheck['yaku'], $isOya, true, (int)$state['honba']);
+                mahjong_apply_win($state, $curSeat, null, $score, $tCheck['yaku'], true);
+            } else {
+                $tile = mahjong_sim_choose_discard($state['players'][$curSeat]['hand']);
+                $r = MahjongEngine::discard($state, $curSeat, $tile);
+                if (!$r['ok']) { $pdo->rollBack(); return; }
+                if (!$state['naki_chances']) mahjong_advance_after_discard($state);
+            }
+            $progressed = true;
+        }
+        else if ($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance') {
+            // 鳴き/ロン候補をループ。 人間が候補に居れば 人間のアクション待ちで停止
+            $discarder = $state['last_discarded']['by'] ?? null;
+            $allHandled = true;
+            for ($s = 0; $s < 4; $s++) {
+                if ($s === $discarder) continue;
+                if (in_array($s, $state['naki_passed'], true)) continue;
+                if ($playerKinds[$s] !== 'bot') {
+                    // 人間に決定権あり → 停止
+                    $allHandled = false;
+                    break;
+                }
+                // bot: ロン可能ならする、 鳴きは確率
+                $ronCheck = MahjongEngine::tryRon($state, $s);
+                if ($ronCheck['ok']) {
+                    $isOya = ($s === $state['oya']);
+                    $score = MahjongEngine::calcScore($ronCheck['yaku'], $isOya, false, (int)$state['honba']);
+                    mahjong_apply_win($state, $s, $discarder, $score, $ronCheck['yaku'], false);
+                    $progressed = true;
+                    break;
+                }
+                $myChances = array_filter($state['naki_chances'], fn($c) => $c['seat'] === $s);
+                if ($myChances && mt_rand(0, 100) < 30) {
+                    $c = reset($myChances);
+                    $extra = ['tile' => $c['tile']];
+                    if ($c['type'] === 'chi') $extra['with'] = $c['with'];
+                    $r = MahjongEngine::declareNaki($state, $s, $c['type'], $extra);
+                    if ($r['ok']) { $progressed = true; break; }
+                }
+                MahjongEngine::nakiPass($state, $s);
+                $progressed = true;
+                if ($state['phase'] === 'draw') { MahjongEngine::ryukyokuPayout($state); break; }
+            }
+            if (!$allHandled) {
+                $pdo->rollBack();
+                return;
+            }
+        } else {
+            $pdo->rollBack();
+            return;
+        }
+        if (!$progressed) { $pdo->rollBack(); return; }
+        // 保存
+        $newStatus = $state['phase'] === 'finished_all' ? 'finished' : 'playing';
+        $pdo->prepare("UPDATE mahjong_games SET state_json=?, state_ver=state_ver+1, status=? WHERE id=?")
+            ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $newStatus, $gid]);
+        if ($newStatus === 'finished') {
+            mahjong_finalize_payout_ai($pdo, $gid, $state, (int)$g['buy_in']);
+        }
+        $pdo->commit();
+        if ($newStatus === 'finished') return;
+    }
+}
+
+// AI 卓の終局: pot は人間が払った 5pt のみ。 配分は 順位ベースで:
+//   1位: 5pt × 4 = 20pt (= pot × 4 倍) — 簡略のため 5pt 出した相手の AI 3 体は仮想 pot を出した扱いで、 結果分配。
+//   実際は: 人間が 1位 → +15pt (= 4回分の戻り) / 2位 → +0pt / 3位 → -2pt / 4位 → -5pt 等
+// 簡略: 人間の最終 vs 25000 点 の差分を pt 換算 (4000点 = 1pt) で 直接 ledger 動かす
+function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn): void {
+    // 人間 (seat 0) の最終スコア
+    $humanSeat = 0;
+    $stP = $pdo->prepare("SELECT p.user_id, u.kind FROM mahjong_players p JOIN users u ON u.id = p.user_id WHERE p.game_id = ? ORDER BY p.seat_order");
+    $stP->execute([$gid]);
+    $players = $stP->fetchAll(PDO::FETCH_ASSOC);
+    $humanUid = null;
+    foreach ($players as $i => $r) {
+        if ($r['kind'] !== 'bot') { $humanUid = (int)$r['user_id']; $humanSeat = $i; break; }
+    }
+    if ($humanUid === null) return;
+    $finalScore = (int)$state['players'][$humanSeat]['score'];
+    // 25000 → buy_in 充当済。 順位を出す
+    $scores = [];
+    foreach ($state['players'] as $i => $p) $scores[] = ['idx' => $i, 'score' => (int)$p['score']];
+    usort($scores, fn($a, $b) => $b['score'] - $a['score']);
+    $rank = 1;
+    foreach ($scores as $j => $sc) if ($sc['idx'] === $humanSeat) { $rank = $j + 1; break; }
+    // 配分: 1位 +15pt (元の 5 戻し + 10pt 増し)、 2位 +0pt (戻し のみ)、 3位 -3pt (戻し のみ、 -3 損)、 4位 -5pt (戻しなし)
+    // 簡略: pot は 5pt (人間分のみ)、 残り 3 席は AI = システム所有
+    //   1位: 5pt 戻し + システムから 10pt = +10pt 増加
+    //   2位: 5pt 戻し + 0
+    //   3位: 戻しなし (-5pt)
+    //   4位: 戻しなし (-5pt)
+    // ↑ これだと 期待値 マイナス、 ややハードモード。 もう少し甘く:
+    //   1位: +15pt 純益 (戻し 5 + ボーナス 10)
+    //   2位: +5pt 純益 (戻し 5 + 0、 ただし振り替え無し)
+    //   3位: -3pt 損 (戻し 2)
+    //   4位: -5pt 損 (戻しなし)
+    $payouts = [1 => 20, 2 => 10, 3 => 2, 4 => 0]; // pot から人間に戻る pt (元 buy_in 5pt が pot に入ってる)
+    $payout = $payouts[$rank] ?? 0;
+    // pot total = 5pt (人間 buy_in)。 配分は実際にはシステムから 上乗せ で 支払う
+    // 簡略実装: human の buy_in は既に 預託済 → payout pt を ledger 経由で system → human に送金
+    if ($payout > 0) {
+        Ledger::transfer($pdo, 1, $humanUid, $payout, 'mahjong_ai_payout', 'mahjong', $gid, "AI麻雀 {$rank}位 (P2)");
+    }
+    $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = ? WHERE game_id = ? AND user_id = ?")
+        ->execute([$rank, $payout, $gid, $humanUid]);
+    // bot 用は rank だけ記録
+    foreach ($scores as $j => $sc) {
+        if ($sc['idx'] === $humanSeat) continue;
+        $botUid = (int)$state['players'][$sc['idx']]['user_id'];
+        $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = 0 WHERE game_id = ? AND user_id = ?")
+            ->execute([$j + 1, $gid, $botUid]);
+    }
+    $pdo->prepare("UPDATE mahjong_games SET finished_at = NOW() WHERE id = ?")->execute([$gid]);
 }
 
 // v556 POST /api/mahjong/sim { n: 1〜30 } — 内部 AI で N 半荘を走らせて結果を返す
@@ -323,6 +519,8 @@ function mahjong_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
 
 // v554 GET /api/mahjong/games/:id/state — 現在の状態を返す (相手の hand は隠す)
 function mahjong_state(PDO $pdo, int $uid, int $gid): void {
+    // v557 polling 時に AI ターンが残っていれば 進める
+    mahjong_autoplay_ai($pdo, $gid);
     $st = $pdo->prepare("SELECT g.*, (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id = g.id) AS player_count FROM mahjong_games g WHERE g.id = ?");
     $st->execute([$gid]);
     $g = $st->fetch(PDO::FETCH_ASSOC);
@@ -475,9 +673,19 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $pdo->prepare("UPDATE mahjong_games SET state_json = ?, state_ver = state_ver + 1, status = ? WHERE id = ?")
             ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $state['phase'] === 'finished_all' ? 'finished' : 'playing', $gid]);
         if ($state['phase'] === 'finished_all') {
-            mahjong_finalize_payout($pdo, (int)$g['id'], $state, (int)$g['buy_in'], (int)$g['rake_pct']);
+            // AI 卓なら専用 payout 関数を使う
+            $stB = $pdo->prepare("SELECT COUNT(*) FROM mahjong_players p JOIN users u ON u.id = p.user_id WHERE p.game_id = ? AND u.kind='bot'");
+            $stB->execute([$gid]);
+            $botCount = (int)$stB->fetchColumn();
+            if ($botCount > 0) {
+                mahjong_finalize_payout_ai($pdo, (int)$g['id'], $state, (int)$g['buy_in']);
+            } else {
+                mahjong_finalize_payout($pdo, (int)$g['id'], $state, (int)$g['buy_in'], (int)$g['rake_pct']);
+            }
         }
     });
+    // v557 AI 卓なら 人間の番までボットを 自動進行
+    mahjong_autoplay_ai($pdo, $gid);
     json_response($result ?: ['ok' => true]);
 }
 
@@ -690,9 +898,7 @@ function mahjong_lock_game(PDO $pdo, int $gid): array {
     return $g;
 }
 function mahjong_assert_balance(PDO $pdo, int $uid, int $need): void {
-    $st = $pdo->prepare("SELECT balance FROM users WHERE id = ?");
-    $st->execute([$uid]);
-    $bal = (int)$st->fetchColumn();
+    $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $need) {
         throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %d、 現在 %d)', $need, $bal), 400);
     }

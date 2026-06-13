@@ -205,6 +205,42 @@ function paint(d, shareToken, isShared) {
       ${r.decision ? `<div style="font-size:18px; font-weight:700; padding:6px 12px; background:${decColor}22; color:${decColor}; border-left:5px solid ${decColor}; border-radius:6px; display:inline-block">${escapeHtml(r.decision)}${r.score ? ` (Score ${r.score}/5)` : ''}${r.confidence ? ` (Confidence ${r.confidence}/5)` : ''}</div>` : ''}
       ${r.summary_one_line ? `<div class="meta" style="font-size:13px; margin-top:6px">${escapeHtml(r.summary_one_line)}</div>` : ''}
 
+      ${r.contribution_validity ? `
+      <div style="margin-top:10px">
+        <div class="bold" style="color:var(--primary)">🎯 貢献の妥当性</div>
+        <div style="font-size:13px; padding:6px 10px; background:#f8f5fb; border-radius:6px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.contribution_validity)}</div>
+      </div>` : ''}
+
+      ${r.missing_descriptions && r.missing_descriptions.length ? `
+      <div style="margin-top:8px">
+        <div class="bold" style="color:#a16207">📋 記述漏れ (実験 / 統計など)</div>
+        <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+          ${r.missing_descriptions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+      ${r.logical_flow ? `
+      <div style="margin-top:8px">
+        <div class="bold" style="color:#2563eb">🔗 論理のつながり</div>
+        <div style="font-size:13px; padding:6px 10px; background:#eff6ff; border-radius:6px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.logical_flow)}</div>
+      </div>` : ''}
+
+      ${r.consistency_check ? `
+      <div style="margin-top:8px">
+        <div class="bold" style="color:#7c3aed">🪡 章間の一気通貫性</div>
+        <div style="font-size:12px; margin-top:4px">
+          ${[
+            ['背景→手法', r.consistency_check.background_to_method],
+            ['手法→実験', r.consistency_check.method_to_experiment],
+            ['実験→結果', r.consistency_check.experiment_to_result],
+            ['結果→議論→結論', r.consistency_check.result_to_discussion],
+          ].filter(([k, v]) => v).map(([k, v]) => `
+            <div style="padding:6px 10px; background:#faf5ff; border-left:3px solid #7c3aed; border-radius:0 4px 4px 0; margin-bottom:4px">
+              <span class="bold">${k}:</span> ${escapeHtml(v)}
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+
       ${r.strengths && r.strengths.length ? `
       <div style="margin-top:12px">
         <div class="bold" style="color:#15803d">✅ Strengths</div>
@@ -215,10 +251,18 @@ function paint(d, shareToken, isShared) {
 
       ${r.weaknesses && r.weaknesses.length ? `
       <div style="margin-top:8px">
-        <div class="bold" style="color:#dc2626">⚠️ Weaknesses</div>
+        <div class="bold" style="color:#dc2626">⚠️ Weaknesses (+ 改稿案)</div>
         <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
           ${r.weaknesses.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
         </ul>
+      </div>` : ''}
+
+      ${r.revision_to_accept && r.revision_to_accept.length ? `
+      <div style="margin-top:10px; padding:8px 12px; background:#dcfce7; border-left:4px solid #15803d; border-radius:0 6px 6px 0">
+        <div class="bold" style="color:#15803d">🛠 採録に導く修正案 (優先度順)</div>
+        <ol style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+          ${r.revision_to_accept.map(s => `<li style="margin-bottom:4px">${escapeHtml(s)}</li>`).join('')}
+        </ol>
       </div>` : ''}
 
       ${r.comments_to_authors ? `

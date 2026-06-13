@@ -62,7 +62,25 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 const PAPER_REVIEW_COST = 10;
-const PAPER_REVIEW_DEFAULT_PROMPT = "あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。 与えられた論文を 章立てを意識しつつ 日本語で要約し、 続けて指定された会議基準で 査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。";
+// v557 #211 拡張: 査読の評価軸を 明示。 貢献の妥当性 / 統計記述の漏れ / 論理の流れ / 章間の一気通貫性 を 徹底チェック。
+const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
+あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。 与えられた PDF の論文を 入念に読み、 章立てを意識して 日本語で要約し、 続けて指定された会議基準で 厳密な査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。
+
+【特に丁寧に検査するチェックリスト】
+1. **貢献の妥当性**: 主張する貢献 (research contribution) が 文献的に新規性があるか、 関連研究との差分が明示されているか、 「これまで誰も解決していなかった」 と言える根拠があるか。 過大な主張・水増しがないか。
+2. **実験/統計の記述漏れ**: 参加者数 N / 被験者属性 / 倫理審査 / インフォームドコンセント / 報酬 / 環境 (機材・実験室・オンライン) / プレテスト / 統計手法 (検定の選択理由 / 効果量 / 多重比較補正 / 仮定検証) / 有意水準 / 信頼区間 / サンプルサイズ計算 / 欠損データ処理 が漏れなく書かれているか。
+3. **論理的なつながり**: 段落間 / 章間で 「だから何?」 が読者に伝わる接続詞・主張展開になっているか。 唐突に新概念が出る箇所、 結論が飛躍してる箇所がないか。
+4. **背景 → 手法 → 実験 → 結果 → 議論 の一気通貫性**:
+   - 背景で挙げた問題が、 手法で解決される設計になっているか
+   - 手法で導入した要素が、 実験で正しく評価されているか (条件設計 / 比較対象が適切か)
+   - 実験結果が、 議論・結論で 元の問題に対する回答として 一貫して整理されているか
+   - もし途中で 目的・手段・評価の軸がずれていたら 明示すること
+
+【strengths / weaknesses に書くべき粒度】
+- 抽象的な感想 (「面白い」「意義深い」 等) は避け、 具体的な節 / 図 / 数値 / 主張 を引用して指摘する
+- weaknesses は 「どう直せば accept に近づくか」 の具体的な改稿案を 1 つずつ添える
+- 漏れの指摘は 「何が書かれていないか」 を 章名 + 段落付近で明示
+PROMPT;
 
 function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -197,9 +215,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $shareIds = array_filter($shareIds, fn($x) => $x > 0 && $x !== $uid);
 
     // v552 #211 課金 10pt (システム宛て)。 残高不足は 400
-    $balRow = $pdo->prepare("SELECT balance FROM users WHERE id = ?");
-    $balRow->execute([$uid]);
-    $bal = (int)$balRow->fetchColumn();
+    $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < PAPER_REVIEW_COST) {
         throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', PAPER_REVIEW_COST, $bal), 400);
     }
@@ -211,16 +227,27 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
     $sys = $basePrompt .
            " 査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
-    $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 査読コメントを作ってください。\n\n"
+    $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 続けて査読コメントを作ってください。\n\n"
+        . "system prompt のチェックリスト 4 項目 (貢献の妥当性 / 実験統計記述漏れ / 論理的つながり / 背景〜結論 一気通貫性) を 必ず網羅し、 整合性チェック の結果は consistency_check に 4 項目別で残してください。\n\n"
         . "出力 JSON スキーマ:\n"
-        . "{ \"sections\": [{\"title\": \"章タイトル\", \"summary_ja\": \"要約\"}, ...],\n"
+        . "{ \"sections\": [{\"title\": \"章タイトル\", \"summary_ja\": \"1〜2 段落の和訳要約\"}, ...],\n"
         . "  \"review\": {\n"
         . "    \"decision\": \"Strong Accept / Accept / Weak Accept / Borderline / Weak Reject / Reject / Strong Reject\",\n"
         . "    \"score\": 1-5 の整数,\n"
         . "    \"summary_one_line\": \"査読要約 1 行\",\n"
-        . "    \"strengths\": [\"...\", \"...\"],\n"
-        . "    \"weaknesses\": [\"...\", \"...\"],\n"
-        . "    \"comments_to_authors\": \"著者への詳細コメント (200〜600 文字)\",\n"
+        . "    \"contribution_validity\": \"貢献の妥当性に関する評価 (100-300 字)\",\n"
+        . "    \"missing_descriptions\": [\"漏れている記述項目 (章名 + 該当箇所込み)\", ...],\n"
+        . "    \"logical_flow\": \"論理的なつながりの評価、 飛躍箇所の指摘 (100-300 字)\",\n"
+        . "    \"consistency_check\": {\n"
+        . "       \"background_to_method\": \"背景→手法 が繋がっているか\",\n"
+        . "       \"method_to_experiment\": \"手法→実験 が繋がっているか\",\n"
+        . "       \"experiment_to_result\": \"実験→結果 が繋がっているか\",\n"
+        . "       \"result_to_discussion\": \"結果→議論→結論 が繋がっているか\"\n"
+        . "    },\n"
+        . "    \"strengths\": [\"具体的な強み (節/数値/主張を引用)\", ...],\n"
+        . "    \"weaknesses\": [\"具体的な弱み + 直すべき改稿案\", ...],\n"
+        . "    \"revision_to_accept\": [\"採録に導くために 必要な修正を 優先度順に アイテマイズ (具体的 / 実行可能)\", ...],\n"
+        . "    \"comments_to_authors\": \"著者への総合コメント (400〜800 文字)\",\n"
         . "    \"confidence\": 1-5 の整数 (査読者の自信)\n"
         . "  }\n"
         . "}";
