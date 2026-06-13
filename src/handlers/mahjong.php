@@ -410,7 +410,7 @@ function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array 
 // 局終了後に次局へ進める or 終了
 //   v555: 連荘 + 半荘 (東1-4 + 南1-4 = round_index 0..7) 対応
 //   親和了 or 流局時テンパイ親 → 親継続 (honba+1)。 それ以外 → oya 進行 + round_index++
-function mahjong_maybe_advance_round(PDO $pdo, array &$state, array $g): void {
+function mahjong_maybe_advance_round(?PDO $pdo, array &$state, array $g): void {
     if ($state['phase'] !== 'kyoku_end') return;
     $oyaContinue = false;
     if (isset($state['last_winner']) && $state['last_winner'] === $state['oya']) $oyaContinue = true;
