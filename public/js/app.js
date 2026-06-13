@@ -531,6 +531,8 @@ route('/tierlists/new',     lazy(() => import('./views/tierlists.js'), 'renderTi
 route('/tierlists/:id',     lazy(() => import('./views/tierlists.js'), 'renderTierlistDetail'));
 route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTierlists'));
 // v550 #206 論文 査読
+// v552 #211 #212 共有 URL ベース閲覧
+route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));

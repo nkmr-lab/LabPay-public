@@ -1,19 +1,30 @@
-// /#/paper-review — 論文 章立て和訳要約 + 査読 (v550 #206)。
-//   論文の本文を貼って、 ターゲット会議と査読の厳しさを指定 → AI が章立て要約 + 査読。
+// /#/paper-review — 論文 PDF を OpenAI Files API に直接渡して 章別和訳要約 + 査読 (v552 #206 #211 #212)。
+//   - 査読 1 回ごとに 10pt (システム宛て)
+//   - 結果は DB 保存 → share_token で URL 共有
+//   - 起案者が事前設定した system prompt と 共有対象 user (= 主著/共著等) を尊重
 
-import { escapeHtml } from '../router.js';
-import { toast } from '../app.js';
+import { get, put } from '../api.js';
+import { escapeHtml, avatarHtml } from '../router.js';
+import { state, toast } from '../app.js';
+import { createMemberPicker } from '../member_picker.js';
 
-export function renderPaperReview() {
+let cachedSettings = null;
+
+export async function renderPaperReview() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">📄 論文 査読</h2>
     </div>
+    <details class="card">
+      <summary style="cursor:pointer; font-weight:700">⚙️ 査読プロンプト + 共有対象を設定</summary>
+      <div id="pr-settings-wrap" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+    </details>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
         論文の PDF をアップロードすると、 OpenAI に直接読ませて 章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
-        ターゲット会議が空欄なら 「HCI 系国際会議 (CHI / UIST / IUI / DIS / CSCW など) 」 想定。
+        ターゲット会議が空欄なら 「HCI 系国際会議」 想定。
+        <strong>1 回につき 10pt がシステムに支払われます</strong>。
       </p>
       <label class="field">
         <span class="lbl">ターゲット会議 (任意)</span>
@@ -33,10 +44,11 @@ export function renderPaperReview() {
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="pr-go" class="primary" disabled>📄 査読開始</button>
+        <button id="pr-go" class="primary" disabled>📄 査読開始 (10pt)</button>
       </div>
     </div>
     <div id="pr-result"></div>
+    <div id="pr-history" class="card" style="margin-top:8px"><div class="muted">過去の査読履歴…</div></div>
   `;
   const fileInput = document.getElementById('pr-file');
   const fileStatus = document.getElementById('pr-file-status');
@@ -56,6 +68,74 @@ export function renderPaperReview() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
+  await loadSettings();
+  await loadHistory();
+}
+
+async function loadSettings() {
+  try { cachedSettings = await get('/api/ai/paper_review/settings'); }
+  catch (e) { document.getElementById('pr-settings-wrap').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`; return; }
+  const wrap = document.getElementById('pr-settings-wrap');
+  const cur = cachedSettings.custom_prompt || '';
+  wrap.innerHTML = `
+    <label class="field">
+      <span class="lbl">査読 system prompt (空ならデフォルト)</span>
+      <textarea id="pr-prompt" rows="5" maxlength="4000" placeholder="${escapeHtml(cachedSettings.default_prompt)}">${escapeHtml(cur)}</textarea>
+      <div class="hint-sm">空欄ならデフォルト (HCI 査読者 10 年キャリア) が使われます。</div>
+    </label>
+    <div style="margin-top:8px">
+      <div class="lbl">共有対象 (査読完了時に通知 + 結果 URL を共有)</div>
+      <div id="pr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+      <div id="pr-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+    </div>
+    <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
+      <button id="pr-save-settings" class="primary">設定を保存</button>
+    </div>
+  `;
+  let picker = null;
+  try {
+    picker = await createMemberPicker({
+      bulkContainer:  document.getElementById('pr-bulk'),
+      chipsContainer: document.getElementById('pr-chips'),
+      initial: cachedSettings.share_target_ids || [],
+      excludeIds: [Number(state.me?.id)],
+      showGenderBulk: false,
+    });
+  } catch (e) {
+    document.getElementById('pr-chips').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+  document.getElementById('pr-save-settings').addEventListener('click', async () => {
+    const customPrompt = document.getElementById('pr-prompt').value;
+    const shareIds = picker ? [...picker.getSelected()] : [];
+    try {
+      await put('/api/ai/paper_review/settings', {
+        custom_prompt: customPrompt,
+        share_target_ids: shareIds,
+      });
+      toast('保存しました');
+      await loadSettings();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
+async function loadHistory() {
+  const root = document.getElementById('pr-history');
+  if (!root) return;
+  try {
+    const d = await get('/api/ai/paper_review');
+    const items = d.items || [];
+    if (!items.length) { root.innerHTML = ''; return; }
+    root.innerHTML = `
+      <div class="bold" style="margin-bottom:6px">📜 過去の査読</div>
+      <div class="list">${items.map(r => `
+        <a class="list-item" href="#/paper-review/r/${escapeHtml(r.share_token)}" style="gap:6px">
+          <div class="grow">
+            <div class="bold" style="font-size:13px">${escapeHtml(r.pdf_name || '(no name)')}</div>
+            <div class="meta" style="font-size:11px">${escapeHtml(r.target_venue || '')} · ${escapeHtml(r.strictness || '')} · ${escapeHtml(r.created_at)}</div>
+          </div>
+        </a>
+      `).join('')}</div>`;
+  } catch (e) { root.innerHTML = ''; }
 }
 
 async function go() {
@@ -64,7 +144,7 @@ async function go() {
   const venue = document.getElementById('pr-venue').value.trim();
   const strictness = document.getElementById('pr-strict').value;
   const btn = document.getElementById('pr-go');
-  btn.disabled = true; btn.textContent = '🤖 査読中… (2-4 分かかります)';
+  btn.disabled = true; btn.textContent = '🤖 査読中… (2-4 分)';
   const root = document.getElementById('pr-result');
   root.innerHTML = '<div class="card"><div class="muted">⏳ PDF を OpenAI にアップロード → 査読中…</div></div>';
   try {
@@ -81,17 +161,43 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    paint(j);
+    paint(j, j.share_token);
+    await loadHistory();
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
   } finally {
-    btn.disabled = false; btn.textContent = '📄 査読開始';
+    btn.disabled = false; btn.textContent = '📄 査読開始 (10pt)';
   }
 }
 
-function paint(d) {
+export async function renderPaperReviewShared({ params }) {
+  const token = params.token;
+  const app = document.getElementById('app');
+  app.innerHTML = `<div class="card"><div class="muted">読み込み中…</div></div>`;
+  try {
+    const d = await get('/api/ai/paper_review/r/' + encodeURIComponent(token));
+    const header = `
+      <div class="card">
+        <a href="#/paper-review" class="hint">← 査読</a>
+        <h2 style="margin:6px 0">📄 ${escapeHtml(d.pdf_name || '論文査読')}</h2>
+        <div class="meta">
+          ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の査読 · ${escapeHtml(d.created_at)}
+        </div>
+        <div class="meta" style="font-size:12px">対象会議: ${escapeHtml(d.target_venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
+      </div>
+      <div id="pr-result"></div>
+    `;
+    app.innerHTML = header;
+    paint({ venue: d.target_venue, strictness: d.strictness, sections: d.sections, review: d.review }, token, true);
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function paint(d, shareToken, isShared) {
   const r = d.review || {};
   const decColor = decisionColor(r.decision || '');
+  const shareUrl = shareToken ? (location.origin + '/#/paper-review/r/' + shareToken) : '';
   document.getElementById('pr-result').innerHTML = `
     <div class="card">
       <div class="bold" style="font-size:16px; color:var(--primary)">🎯 査読結果</div>
@@ -120,6 +226,16 @@ function paint(d) {
         <div class="bold">💬 Comments to Authors</div>
         <div style="white-space:pre-wrap; font-size:13px; padding:8px; background:#f8f5fb; border-radius:6px; margin-top:4px">${escapeHtml(r.comments_to_authors)}</div>
       </div>` : ''}
+
+      ${shareUrl && !isShared ? `
+      <div style="margin-top:10px; padding:8px; background:#eef6ff; border:1px dashed #2563eb; border-radius:6px">
+        <div class="bold" style="font-size:13px; color:#2563eb">🔗 共有 URL</div>
+        <div class="row" style="gap:6px; margin-top:4px">
+          <input type="text" id="pr-share" readonly value="${escapeHtml(shareUrl)}" style="flex:1; font-size:12px; padding:4px 6px">
+          <button id="pr-copy" class="btn" style="font-size:11px; padding:4px 10px">📋 コピー</button>
+        </div>
+        ${d.shared_count > 0 ? `<div class="hint-sm" style="margin-top:4px">${d.shared_count} 名の共有対象に通知済み</div>` : ''}
+      </div>` : ''}
     </div>
 
     ${(d.sections && d.sections.length) ? `
@@ -133,6 +249,13 @@ function paint(d) {
       `).join('')}
     </div>` : ''}
   `;
+  if (shareUrl && !isShared) {
+    document.getElementById('pr-copy')?.addEventListener('click', () => {
+      const inp = document.getElementById('pr-share');
+      inp.select();
+      navigator.clipboard?.writeText(shareUrl).then(() => toast('コピーしました'), () => toast('コピー失敗'));
+    });
+  }
 }
 
 function decisionColor(d) {

@@ -38,11 +38,115 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_short_title($pdo, $cfg);
         return;
     }
-    if ($sub === 'paper_review' && $method === 'POST') {
+    if ($sub === 'paper_review' && $method === 'POST' && !isset($seg[2])) {
         ai_paper_review($pdo, $cfg);
         return;
     }
+    if ($sub === 'paper_review' && $method === 'GET' && ($seg[2] ?? '') === 'r' && isset($seg[3])) {
+        ai_paper_review_get_shared($pdo, $cfg, (string)$seg[3]);
+        return;
+    }
+    if ($sub === 'paper_review' && $method === 'GET' && ($seg[2] ?? '') === 'settings') {
+        ai_paper_review_settings_get($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_review' && $method === 'PUT' && ($seg[2] ?? '') === 'settings') {
+        ai_paper_review_settings_put($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_review' && $method === 'GET' && !isset($seg[2])) {
+        ai_paper_review_list($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+const PAPER_REVIEW_COST = 10;
+const PAPER_REVIEW_DEFAULT_PROMPT = "あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。 与えられた論文を 章立てを意識しつつ 日本語で要約し、 続けて指定された会議基準で 査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。";
+
+function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT custom_prompt, share_target_ids FROM user_paper_review_settings WHERE user_id = ?");
+    $st->execute([$uid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    $shareIds = [];
+    if (!empty($row['share_target_ids'])) {
+        $tmp = json_decode($row['share_target_ids'], true);
+        if (is_array($tmp)) $shareIds = array_values(array_map('intval', $tmp));
+    }
+    // 共有対象の表示名も付ける
+    $shareUsers = [];
+    if ($shareIds) {
+        $place = implode(',', array_fill(0, count($shareIds), '?'));
+        $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");
+        $stU->execute($shareIds);
+        $shareUsers = array_map(fn($r) => [
+            'id' => (int)$r['id'], 'display_name' => $r['display_name'], 'avatar_url' => $r['avatar_url'],
+        ], $stU->fetchAll(PDO::FETCH_ASSOC));
+    }
+    json_response([
+        'custom_prompt'   => $row['custom_prompt'] ?? '',
+        'default_prompt'  => PAPER_REVIEW_DEFAULT_PROMPT,
+        'share_target_ids' => $shareIds,
+        'share_targets'   => $shareUsers,
+        'cost_points'     => PAPER_REVIEW_COST,
+    ]);
+}
+
+function ai_paper_review_settings_put(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    $customPrompt = isset($body['custom_prompt']) ? trim((string)$body['custom_prompt']) : '';
+    if (mb_strlen($customPrompt) > 4000) throw new ApiException('bad_request', 'prompt は 4000 文字まで', 400);
+    if ($customPrompt === '') $customPrompt = null;
+    $shareIds = $body['share_target_ids'] ?? [];
+    if (!is_array($shareIds)) $shareIds = [];
+    $shareIds = array_values(array_unique(array_map('intval', $shareIds)));
+    $shareIds = array_filter($shareIds, fn($x) => $x > 0 && $x !== $uid);
+    if (count($shareIds) > 30) throw new ApiException('bad_request', '共有対象は 30 名まで', 400);
+    $pdo->prepare("INSERT INTO user_paper_review_settings (user_id, custom_prompt, share_target_ids)
+                    VALUES (?,?,?)
+                    ON DUPLICATE KEY UPDATE custom_prompt = VALUES(custom_prompt), share_target_ids = VALUES(share_target_ids)")
+        ->execute([$uid, $customPrompt, json_encode(array_values($shareIds), JSON_UNESCAPED_UNICODE)]);
+    json_response(['ok' => true]);
+}
+
+function ai_paper_review_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, target_venue, strictness, created_at
+                          FROM paper_reviews WHERE user_id = ? ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; }
+    unset($r);
+    json_response(['items' => $rows]);
+}
+
+function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT pr.id, pr.user_id, pr.pdf_name, pr.target_venue, pr.strictness,
+                                 pr.sections_json, pr.review_json, pr.created_at,
+                                 u.display_name AS author_name, u.avatar_url AS author_avatar
+                            FROM paper_reviews pr JOIN users u ON u.id = pr.user_id
+                           WHERE pr.share_token = ?");
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'review not found', 404);
+    json_response([
+        'id'           => (int)$row['id'],
+        'author_id'    => (int)$row['user_id'],
+        'author_name'  => $row['author_name'],
+        'author_avatar'=> $row['author_avatar'],
+        'pdf_name'     => $row['pdf_name'],
+        'target_venue' => $row['target_venue'],
+        'strictness'   => $row['strictness'],
+        'sections'     => json_decode($row['sections_json'] ?: '[]', true) ?: [],
+        'review'       => json_decode($row['review_json'] ?: 'null', true),
+        'created_at'   => $row['created_at'],
+    ]);
 }
 
 // v550 #206 論文章立て和訳要約 + 査読アプリ。
@@ -53,7 +157,8 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
 //   返値: { sections: [{title, summary_ja}, ...], review: {decision, score, strengths,
 //          weaknesses, comments_to_authors} }
 function ai_paper_review(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
     ai_assert_configured($cfg);
     // v551 #206 OpenAI Files API + Chat Completions で PDF を直接読ませる方式。
     //   1. multipart/form-data の file を OpenAI Files API に upload (purpose=user_data)
@@ -79,13 +184,32 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $strictness = (string)($_POST['strictness'] ?? 'やや厳しめ');
     if (!in_array($strictness, ['緩め', 'やや厳しめ', '厳しめ'], true)) $strictness = 'やや厳しめ';
 
+    // v552 #211 #212 ユーザー設定 (custom_prompt + share_target_ids) を取得
+    $stS = $pdo->prepare("SELECT custom_prompt, share_target_ids FROM user_paper_review_settings WHERE user_id = ?");
+    $stS->execute([$uid]);
+    $settings = $stS->fetch(PDO::FETCH_ASSOC) ?: [];
+    $customPrompt = trim((string)($settings['custom_prompt'] ?? ''));
+    $shareIds = [];
+    if (!empty($settings['share_target_ids'])) {
+        $tmp = json_decode($settings['share_target_ids'], true);
+        if (is_array($tmp)) $shareIds = array_values(array_map('intval', $tmp));
+    }
+    $shareIds = array_filter($shareIds, fn($x) => $x > 0 && $x !== $uid);
+
+    // v552 #211 課金 10pt (システム宛て)。 残高不足は 400
+    $balRow = $pdo->prepare("SELECT balance FROM users WHERE id = ?");
+    $balRow->execute([$uid]);
+    $bal = (int)$balRow->fetchColumn();
+    if ($bal < PAPER_REVIEW_COST) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', PAPER_REVIEW_COST, $bal), 400);
+    }
+
     // Step 1: OpenAI Files API に upload
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
-    $sys = "あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。" .
-           " 与えられた論文を 章立てを意識しつつ 日本語で要約し、 続けて指定された会議基準で 査読コメントを作ってください。" .
-           " 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。" .
+    $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
+    $sys = $basePrompt .
            " 査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
     $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 査読コメントを作ってください。\n\n"
         . "出力 JSON スキーマ:\n"
@@ -148,12 +272,57 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     if (!is_string($content) || $content === '') throw new ApiException('upstream_error', 'empty', 502);
     $parsed = json_decode($content, true);
     if (!is_array($parsed)) throw new ApiException('upstream_error', 'invalid JSON from upstream', 502);
+
+    // v552 #211 結果を DB に保存 + share_token 発行 + 課金 (db_tx で一貫性)
+    $token = bin2hex(random_bytes(16));
+    $sections = $parsed['sections'] ?? [];
+    $review   = $parsed['review']   ?? null;
+    $pdfName  = (string)($f['name'] ?? 'paper.pdf');
+    $reviewId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $venue, $strictness, $sys, $sections, $review, &$reviewId) {
+        $pdo->prepare("INSERT INTO paper_reviews
+            (user_id, share_token, pdf_name, target_venue, strictness, prompt_used,
+             sections_json, review_json, cost_points)
+            VALUES (?,?,?,?,?,?,?,?,?)")
+            ->execute([
+                $uid, $token, mb_substr($pdfName, 0, 255), $venue, $strictness, $sys,
+                json_encode($sections, JSON_UNESCAPED_UNICODE),
+                json_encode($review, JSON_UNESCAPED_UNICODE),
+                PAPER_REVIEW_COST,
+            ]);
+        $reviewId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, PAPER_REVIEW_COST, 'paper_review', 'paper_review', $reviewId, '論文査読 依頼料');
+    });
+
+    // 共有対象に notify_safely (best effort)
+    if ($shareIds) {
+        $stN = $pdo->prepare("SELECT display_name FROM users WHERE id = ?");
+        $stN->execute([$uid]);
+        $authorName = (string)$stN->fetchColumn();
+        $shortTitle = '';
+        if (!empty($sections[0]['title'])) $shortTitle = mb_substr((string)$sections[0]['title'], 0, 60);
+        elseif ($pdfName !== '') $shortTitle = $pdfName;
+        $decision = is_array($review) ? (string)($review['decision'] ?? '') : '';
+        $shareUrl = '/#/paper-review/r/' . $token;
+        foreach ($shareIds as $tid) {
+            try {
+                notify_safely($pdo, $cfg, (int)$tid, 'admin_notice',
+                    "📄 {$authorName} が査読しました: 「{$shortTitle}」 " . ($decision ? "({$decision})" : "") . " {$shareUrl}",
+                    'paper_review', $reviewId);
+            } catch (Throwable $_) {}
+        }
+    }
+
     json_response([
-        'ok'         => true,
-        'venue'      => $venue,
-        'strictness' => $strictness,
-        'sections'   => $parsed['sections'] ?? [],
-        'review'     => $parsed['review']   ?? null,
+        'ok'           => true,
+        'id'           => $reviewId,
+        'share_token'  => $token,
+        'venue'        => $venue,
+        'strictness'   => $strictness,
+        'sections'     => $sections,
+        'review'       => $review,
+        'cost_points'  => PAPER_REVIEW_COST,
+        'shared_count' => count($shareIds),
     ]);
 }
 
