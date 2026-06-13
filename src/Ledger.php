@@ -9,6 +9,9 @@ class Ledger {
         'initial','checkin','purchase','fee','reversal',
         'transfer','task_reward','deposit','refund','burn',
         'scrapbox_reward','app_open_reward',
+        // v557 #211 #209 拡張: 査読課金 + 麻雀
+        'paper_review',
+        'mahjong_buyin','mahjong_payout','mahjong_refund','mahjong_rake','mahjong_ai_payout',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

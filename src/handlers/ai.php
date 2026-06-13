@@ -147,6 +147,7 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT pr.id, pr.user_id, pr.pdf_name, pr.target_venue, pr.strictness,
                                  pr.sections_json, pr.review_json, pr.created_at,
+                                 pr.status, pr.error_msg,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM paper_reviews pr JOIN users u ON u.id = pr.user_id
                            WHERE pr.share_token = ?");
@@ -163,6 +164,8 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
         'strictness'   => $row['strictness'],
         'sections'     => json_decode($row['sections_json'] ?: '[]', true) ?: [],
         'review'       => json_decode($row['review_json'] ?: 'null', true),
+        'status'       => $row['status'] ?? 'done',
+        'error_msg'    => $row['error_msg'],
         'created_at'   => $row['created_at'],
     ]);
 }
@@ -220,13 +223,15 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', PAPER_REVIEW_COST, $bal), 400);
     }
 
-    // Step 1: OpenAI Files API に upload
+    // v557 #211 非同期化: PDF を OpenAI に upload → record を pending で保存 +
+    //   即座にクライアントに share_token を返す。 GPT への chat.completions 呼出は
+    //   fastcgi_finish_request() で クライアント切断後にバックグラウンド実行。
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
     $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
     $sys = $basePrompt .
-           " 査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
+           "\n\n査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
     $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 続けて査読コメントを作ってください。\n\n"
         . "system prompt のチェックリスト 4 項目 (貢献の妥当性 / 実験統計記述漏れ / 論理的つながり / 背景〜結論 一気通貫性) を 必ず網羅し、 整合性チェック の結果は consistency_check に 4 項目別で残してください。\n\n"
         . "出力 JSON スキーマ:\n"
@@ -268,89 +273,122 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         'max_tokens' => 4000,
     ], JSON_UNESCAPED_UNICODE);
 
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $apiKey,
-        ],
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_TIMEOUT => 240,
-    ]);
-    $resp = curl_exec($ch);
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    // Step 3: ファイル削除 (best effort、 失敗無視)
-    ai_openai_delete_file($fileId, $apiKey);
-
-    if ($resp === false || $status >= 400) {
-        $errMsg = '';
-        if ($resp !== false) {
-            $errJ = json_decode((string)$resp, true);
-            $errMsg = $errJ['error']['message'] ?? '';
-        }
-        throw new ApiException('upstream_error', 'OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''), 502);
-    }
-    $j = json_decode((string)$resp, true);
-    $content = $j['choices'][0]['message']['content'] ?? null;
-    if (!is_string($content) || $content === '') throw new ApiException('upstream_error', 'empty', 502);
-    $parsed = json_decode($content, true);
-    if (!is_array($parsed)) throw new ApiException('upstream_error', 'invalid JSON from upstream', 502);
-
-    // v552 #211 結果を DB に保存 + share_token 発行 + 課金 (db_tx で一貫性)
+    // v557 #211 非同期: pending レコード作成 + 課金 → 即 share_token 返却 →
+    //   fastcgi_finish_request() でクライアント切断 → 裏で OpenAI chat 呼出 → 結果更新
     $token = bin2hex(random_bytes(16));
-    $sections = $parsed['sections'] ?? [];
-    $review   = $parsed['review']   ?? null;
-    $pdfName  = (string)($f['name'] ?? 'paper.pdf');
+    $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $venue, $strictness, $sys, $sections, $review, &$reviewId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $sys, &$reviewId) {
         $pdo->prepare("INSERT INTO paper_reviews
-            (user_id, share_token, pdf_name, target_venue, strictness, prompt_used,
-             sections_json, review_json, cost_points)
-            VALUES (?,?,?,?,?,?,?,?,?)")
+            (user_id, share_token, file_id, pdf_name, target_venue, strictness, prompt_used,
+             sections_json, review_json, cost_points, status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([
-                $uid, $token, mb_substr($pdfName, 0, 255), $venue, $strictness, $sys,
-                json_encode($sections, JSON_UNESCAPED_UNICODE),
-                json_encode($review, JSON_UNESCAPED_UNICODE),
-                PAPER_REVIEW_COST,
+                $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness, $sys,
+                '[]', 'null', PAPER_REVIEW_COST,
             ]);
         $reviewId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, PAPER_REVIEW_COST, 'paper_review', 'paper_review', $reviewId, '論文査読 依頼料');
     });
 
-    // 共有対象に notify_safely (best effort)
-    if ($shareIds) {
-        $stN = $pdo->prepare("SELECT display_name FROM users WHERE id = ?");
-        $stN->execute([$uid]);
-        $authorName = (string)$stN->fetchColumn();
-        $shortTitle = '';
-        if (!empty($sections[0]['title'])) $shortTitle = mb_substr((string)$sections[0]['title'], 0, 60);
-        elseif ($pdfName !== '') $shortTitle = $pdfName;
-        $decision = is_array($review) ? (string)($review['decision'] ?? '') : '';
-        $shareUrl = '/#/paper-review/r/' . $token;
-        foreach ($shareIds as $tid) {
-            try {
-                notify_safely($pdo, $cfg, (int)$tid, 'admin_notice',
-                    "📄 {$authorName} が査読しました: 「{$shortTitle}」 " . ($decision ? "({$decision})" : "") . " {$shareUrl}",
-                    'paper_review', $reviewId);
-            } catch (Throwable $_) {}
-        }
-    }
-
-    json_response([
+    // 早期レスポンス
+    json_response_no_exit([
         'ok'           => true,
         'id'           => $reviewId,
         'share_token'  => $token,
         'venue'        => $venue,
         'strictness'   => $strictness,
-        'sections'     => $sections,
-        'review'       => $review,
+        'status'       => 'pending',
         'cost_points'  => PAPER_REVIEW_COST,
         'shared_count' => count($shareIds),
+        'message'      => '依頼を受け付けました。 OpenAI が査読中… (2-5 分)。 結果ページを開いておくか、 後で /#/paper-review/r/' . $token . ' を確認してください。',
     ]);
+    // クライアント切断 → バックグラウンド継続
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(360);
+
+    // 裏で OpenAI を呼ぶ
+    ai_paper_review_run_background($pdo, $cfg, $reviewId, $token, $fileId, $payload, $apiKey, $pdfName, $shareIds, $uid);
+}
+
+// 早期レスポンス用: json_response と同じ JSON を出力するが exit しない
+function json_response_no_exit($data): void {
+    if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, array $shareIds, int $uid): void {
+    try {
+        $pdo->prepare("UPDATE paper_reviews SET status='processing' WHERE id = ?")->execute([$reviewId]);
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 300,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        ai_openai_delete_file($fileId, $apiKey);
+
+        if ($resp === false || $status >= 400) {
+            $errMsg = '';
+            if ($resp !== false) {
+                $errJ = json_decode((string)$resp, true);
+                $errMsg = $errJ['error']['message'] ?? '';
+            }
+            throw new RuntimeException('OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
+        }
+        $j = json_decode((string)$resp, true);
+        $content = $j['choices'][0]['message']['content'] ?? null;
+        if (!is_string($content) || $content === '') throw new RuntimeException('empty content');
+        $parsed = json_decode($content, true);
+        if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
+
+        $sections = $parsed['sections'] ?? [];
+        $review   = $parsed['review']   ?? null;
+        $pdo->prepare("UPDATE paper_reviews SET sections_json = ?, review_json = ?, status='done' WHERE id = ?")
+            ->execute([
+                json_encode($sections, JSON_UNESCAPED_UNICODE),
+                json_encode($review, JSON_UNESCAPED_UNICODE),
+                $reviewId,
+            ]);
+
+        // 投稿者に完了通知
+        try {
+            $shortTitle = !empty($sections[0]['title']) ? mb_substr((string)$sections[0]['title'], 0, 60) : $pdfName;
+            $decision = is_array($review) ? (string)($review['decision'] ?? '') : '';
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "✅ 査読完了: 「{$shortTitle}」 " . ($decision ? "({$decision})" : "") . " /#/paper-review/r/{$token}",
+                'paper_review', $reviewId);
+        } catch (Throwable $_) {}
+        // 共有対象通知
+        if ($shareIds) {
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id = ?");
+            $stN->execute([$uid]);
+            $authorName = (string)$stN->fetchColumn();
+            $shortTitle = !empty($sections[0]['title']) ? mb_substr((string)$sections[0]['title'], 0, 60) : $pdfName;
+            $decision = is_array($review) ? (string)($review['decision'] ?? '') : '';
+            foreach ($shareIds as $tid) {
+                try {
+                    notify_safely($pdo, $cfg, (int)$tid, 'admin_notice',
+                        "📄 {$authorName} が査読しました: 「{$shortTitle}」 " . ($decision ? "({$decision})" : "") . " /#/paper-review/r/{$token}",
+                        'paper_review', $reviewId);
+                } catch (Throwable $_) {}
+            }
+        }
+    } catch (Throwable $e) {
+        $pdo->prepare("UPDATE paper_reviews SET status='error', error_msg = ? WHERE id = ?")
+            ->execute([mb_substr($e->getMessage(), 0, 500), $reviewId]);
+        try {
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "❌ 査読失敗: " . $e->getMessage() . " /#/paper-review/r/{$token}",
+                'paper_review', $reviewId);
+        } catch (Throwable $_) {}
+    }
 }
 
 // PDF を OpenAI Files API にアップロード。 purpose=user_data (chat.completions の

@@ -16,10 +16,10 @@ export async function renderPaperReview() {
     <div class="card page-header">
       <h2 style="margin:0">📄 論文 査読</h2>
     </div>
-    <details class="card">
-      <summary style="cursor:pointer; font-weight:700">⚙️ 査読プロンプト + 共有対象を設定</summary>
-      <div id="pr-settings-wrap" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
-    </details>
+    <div class="card">
+      <div class="bold" style="font-size:14px; margin-bottom:6px">⚙️ 査読プロンプト + 共有対象</div>
+      <div id="pr-settings-wrap"><div class="muted">読み込み中…</div></div>
+    </div>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
         論文の PDF をアップロードすると、 OpenAI に直接読ませて 章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
@@ -144,9 +144,9 @@ async function go() {
   const venue = document.getElementById('pr-venue').value.trim();
   const strictness = document.getElementById('pr-strict').value;
   const btn = document.getElementById('pr-go');
-  btn.disabled = true; btn.textContent = '🤖 査読中… (2-4 分)';
+  btn.disabled = true; btn.textContent = '⏳ アップロード中…';
   const root = document.getElementById('pr-result');
-  root.innerHTML = '<div class="card"><div class="muted">⏳ PDF を OpenAI にアップロード → 査読中…</div></div>';
+  root.innerHTML = '<div class="card"><div class="muted">⏳ PDF を OpenAI にアップロード中…</div></div>';
   try {
     const fd = new FormData();
     fd.append('file', f);
@@ -161,25 +161,42 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    paint(j, j.share_token);
-    await loadHistory();
+    // v557 #211 非同期: 結果ページに遷移、 そこで polling
+    location.hash = '#/paper-review/r/' + j.share_token;
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
-  } finally {
     btn.disabled = false; btn.textContent = '📄 査読開始 (10pt)';
   }
 }
 
+let sharedPollTimer = null;
 export async function renderPaperReviewShared({ params }) {
   const token = params.token;
   const app = document.getElementById('app');
   app.innerHTML = `<div class="card"><div class="muted">読み込み中…</div></div>`;
+  if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
+  await refreshShared(token);
+  // hash 抜けたら polling 停止
+  const stopOnLeave = () => {
+    if (!location.hash.includes('/paper-review/r/' + token)) {
+      if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
+      window.removeEventListener('hashchange', stopOnLeave);
+    }
+  };
+  window.addEventListener('hashchange', stopOnLeave);
+}
+
+async function refreshShared(token) {
+  const app = document.getElementById('app');
   try {
     const d = await get('/api/ai/paper_review/r/' + encodeURIComponent(token));
     const header = `
       <div class="card">
         <a href="#/paper-review" class="hint">← 査読</a>
-        <h2 style="margin:6px 0">📄 ${escapeHtml(d.pdf_name || '論文査読')}</h2>
+        <h2 style="margin:6px 0">📄 ${escapeHtml(d.pdf_name || '論文査読')}
+          ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
+          ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
+        </h2>
         <div class="meta">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の査読 · ${escapeHtml(d.created_at)}
         </div>
@@ -188,6 +205,35 @@ export async function renderPaperReviewShared({ params }) {
       <div id="pr-result"></div>
     `;
     app.innerHTML = header;
+    if (d.status === 'pending' || d.status === 'processing') {
+      document.getElementById('pr-result').innerHTML = `
+        <div class="card">
+          <div class="bold" style="font-size:16px; color:var(--primary)">⏳ AI が査読中…</div>
+          <p class="hint" style="font-size:13px; margin-top:6px">
+            通常 2〜5 分で完了します。 このページを閉じても大丈夫です (完了したら通知が届きます)。<br>
+            また後で /#/paper-review/r/${escapeHtml(token)} を開けば結果が見れます。
+          </p>
+          <div style="margin-top:10px; padding:10px; background:#f0f9ff; border-radius:6px; font-size:13px">
+            🤖 PDF を OpenAI が読み込み中…<br>
+            <span class="hint-sm">10 秒ごとに自動更新</span>
+          </div>
+        </div>
+      `;
+      // 10 秒ごとに polling
+      if (!sharedPollTimer) {
+        sharedPollTimer = setInterval(() => refreshShared(token), 10000);
+      }
+      return;
+    }
+    if (d.status === 'error') {
+      document.getElementById('pr-result').innerHTML = `
+        <div class="card"><div class="muted">❌ 査読失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div></div>
+      `;
+      if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
+      return;
+    }
+    // 完了
+    if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
     paint({ venue: d.target_venue, strictness: d.strictness, sections: d.sections, review: d.review }, token, true);
   } catch (e) {
     app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
