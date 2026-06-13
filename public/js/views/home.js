@@ -782,6 +782,7 @@ function fmtDeadlineColored(s) {
 }
 
 function renderPendingLikeItems(items, root) {
+  const now = Date.now();
   root.innerHTML = items.map(it => {
     // kind 別の色付きタグで 「投票 / 点呼 / 請求 / タスク」 を 一目で区別。
     const tagBg = {
@@ -797,12 +798,20 @@ function renderPendingLikeItems(items, root) {
       task:          '#2e7d32',
     }[it.kind] || '#555';
     const label = it.kind_label || it.kind;
+    // v567 #216 24h 以内のものは 🔥 + 背景強調
+    let urgent = false;
+    if (it.deadline_at) {
+      const t = new Date(String(it.deadline_at).replace(' ', 'T')).getTime();
+      if (Number.isFinite(t) && Math.abs(t - now) < 24 * 3600 * 1000) urgent = true;
+    }
+    const urgentStyle = urgent ? 'background:#fff7e6; border-left:4px solid #ff6b35;' : '';
+    const urgentBadge = urgent ? '<span style="display:inline-block; background:#ff6b35; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; margin-right:4px">🔥 24h</span>' : '';
     return `
-      <a class="list-item" href="${escapeHtml(it.url)}" style="overflow:hidden">
+      <a class="list-item" href="${escapeHtml(it.url)}" style="overflow:hidden; ${urgentStyle}">
         <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
         <div class="grow" style="min-width:0; overflow:hidden">
           <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-            <span style="display:inline-block; background:${tagBg}; color:${tagFg}; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; margin-right:6px; vertical-align:1px">${escapeHtml(label)}</span>${escapeHtml(it.title)}
+            ${urgentBadge}<span style="display:inline-block; background:${tagBg}; color:${tagFg}; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; margin-right:6px; vertical-align:1px">${escapeHtml(label)}</span>${escapeHtml(it.title)}
           </div>
           <div class="meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
         </div>
@@ -851,8 +860,34 @@ async function renderPendingKindCard(opts) {
   } catch (_) { card.hidden = true; return; }
   if (!items.length) { card.hidden = true; return; }
   card.hidden = false;
-  // ヘッダの 「N 件未対応」 を更新。
-  if (countEl) countEl.textContent = `${items.length} 件${opts.label}`;
+  // v567 #216 24 時間以内に締切のものは 「🔥 もうすぐ」 タグ付きで 必ず一番上に。
+  //   それ以外は 締切順 (締切なし は末尾)。
+  const now = Date.now();
+  const isUrgent = (it) => {
+    if (!it.deadline_at) return false;
+    const t = new Date(String(it.deadline_at).replace(' ', 'T')).getTime();
+    if (!Number.isFinite(t)) return false;
+    return (t - now) < 24 * 3600 * 1000 && (t - now) > -24 * 3600 * 1000; // 24h 以内 (過去 24h まで含めて、 既に過ぎたが対応必要なものも)
+  };
+  const dlTime = (it) => {
+    if (!it.deadline_at) return Number.POSITIVE_INFINITY;
+    const t = new Date(String(it.deadline_at).replace(' ', 'T')).getTime();
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+  };
+  items.sort((a, b) => {
+    const ua = isUrgent(a), ub = isUrgent(b);
+    if (ua !== ub) return ua ? -1 : 1;
+    return dlTime(a) - dlTime(b);
+  });
+  // urgent count をヘッダーに付加
+  const urgentCount = items.filter(isUrgent).length;
+  if (countEl) {
+    countEl.textContent = urgentCount > 0
+      ? `${urgentCount} 件🔥 / ${items.length} 件${opts.label}`
+      : `${items.length} 件${opts.label}`;
+  }
+  // urgent (24h 以内) の件数だけは デフォルト表示数 を 上回っても 全部出す
+  if (urgentCount > opts.getShown()) opts.setShown(urgentCount);
   // 5 件ずつ + 「更に読み込み」 で 全件表示まで。
   const shown = Math.min(opts.getShown(), items.length);
   const slice = items.slice(0, shown);

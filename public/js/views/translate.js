@@ -25,29 +25,25 @@ export async function renderTranslate({ query } = {}) {
       <h2 style="margin:0">🌐 画像 和訳</h2>
     </div>
     <div class="card">
-      <label class="field"><span class="lbl">写真 (8MB まで)</span>
-        <input type="file" id="tr-file" accept="image/*">
-        <input type="hidden" id="tr-url" value="">
-        <img id="tr-prev" alt="" hidden style="max-width:240px; max-height:240px; margin-top:6px; border-radius:8px; object-fit:contain; display:none; background:#f6f6f9">
+      <label class="field"><span class="lbl">写真 (各 8MB まで、 複数選択可)</span>
+        <input type="file" id="tr-file" accept="image/*" multiple>
+        <div id="tr-thumbs" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px"></div>
         <span id="tr-up-st" class="hint-sm"></span>
       </label>
-      <label class="field"><span class="lbl">補足 (任意): どんな 内容か メモ すると 精度が 上がります</span>
-        <input type="text" id="tr-hint" maxlength="500" placeholder="例: 中華料理 メニュー / ベトナム の 駅 表示 / 公園の 注意書き">
+      <label class="field"><span class="lbl">補足 (任意): どんな内容かメモすると精度が上がります</span>
+        <input type="text" id="tr-hint" maxlength="500" placeholder="例: 中華料理メニュー / ベトナムの駅表示 / 公園の注意書き">
       </label>
       <label class="field"><span class="lbl">保存先</span>
         <select id="tr-group" style="max-width:280px">
           <option value="">自分のみ (非公開)</option>
         </select>
-        <span class="hint-sm">グループ を 選ぶと そのメンバー 全員 が この 翻訳結果 を 閲覧 できます。</span>
+        <span class="hint-sm">グループを選ぶと そのメンバー全員 が翻訳結果を閲覧できます。</span>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="tr-go" class="primary" disabled>🌐 和訳する</button>
       </div>
     </div>
-    <div class="card" id="tr-out-card" hidden>
-      <h3 style="margin:0 0 6px">和訳結果 <button id="tr-copy" class="btn" style="padding:2px 10px; font-size:12px; margin-left:6px">📋 コピー</button></h3>
-      <div id="tr-out" style="white-space:pre-wrap; line-height:1.6; font-size:14px"></div>
-    </div>
+    <div id="tr-out-region"></div>
 
     <div class="card">
       <div class="row center">
@@ -79,51 +75,114 @@ export async function renderTranslate({ query } = {}) {
     if (presetGroupId) sel.value = String(presetGroupId);
   } catch (_) { /* swallow */ }
 
+  // v567 #221 複数画像をアップロード保持
+  const uploadedUrls = []; // {url, name}
   document.getElementById('tr-file').addEventListener('change', async (ev) => {
-    const f = ev.target.files?.[0];
-    if (!f) return;
+    const files = Array.from(ev.target.files || []);
+    if (!files.length) return;
     const st = document.getElementById('tr-up-st');
-    st.textContent = 'アップロード中…';
-    try {
-      const data = await uploadImage(f);
-      document.getElementById('tr-url').value = data.url;
-      const prev = document.getElementById('tr-prev');
-      prev.src = data.url; prev.hidden = false; prev.style.display = 'block';
-      st.textContent = '✓ アップロード 完了';
-      document.getElementById('tr-go').disabled = false;
-    } catch (e) {
-      st.textContent = '失敗: ' + e.message;
+    const thumbs = document.getElementById('tr-thumbs');
+    for (const f of files) {
+      st.textContent = `アップロード中… (${uploadedUrls.length + 1}/${uploadedUrls.length + files.length})`;
+      try {
+        const data = await uploadImage(f);
+        uploadedUrls.push({ url: data.url, name: f.name });
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative';
+        wrap.innerHTML = `
+          <img src="${escapeHtml(data.url)}" style="width:80px; height:80px; object-fit:cover; border-radius:6px; background:#f6f6f9">
+          <button data-rm-url="${escapeHtml(data.url)}" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border:none; background:#dc2626; color:#fff; border-radius:50%; cursor:pointer; font-size:12px; padding:0">×</button>`;
+        wrap.querySelector('[data-rm-url]').addEventListener('click', () => {
+          const u = wrap.querySelector('[data-rm-url]').dataset.rmUrl;
+          const idx = uploadedUrls.findIndex(x => x.url === u);
+          if (idx >= 0) uploadedUrls.splice(idx, 1);
+          wrap.remove();
+          updateGoBtn();
+        });
+        thumbs.appendChild(wrap);
+      } catch (e) {
+        st.textContent = '失敗: ' + e.message;
+      }
     }
+    st.textContent = `✓ ${uploadedUrls.length} 件アップロード完了`;
+    updateGoBtn();
+    ev.target.value = '';
   });
+  function updateGoBtn() {
+    const btn = document.getElementById('tr-go');
+    btn.disabled = uploadedUrls.length === 0;
+    btn.textContent = uploadedUrls.length > 1 ? `🌐 ${uploadedUrls.length} 件まとめて和訳` : '🌐 和訳する';
+  }
 
   document.getElementById('tr-go').addEventListener('click', async () => {
-    const url = document.getElementById('tr-url').value;
+    if (!uploadedUrls.length) { toast('先に写真を選んでください'); return; }
     const hint = document.getElementById('tr-hint').value.trim() || null;
     const groupVal = document.getElementById('tr-group').value;
     const group_id = groupVal ? Number(groupVal) : null;
-    if (!url) { toast('先に 写真を 選んでください'); return; }
     const btn = document.getElementById('tr-go');
-    const outCard = document.getElementById('tr-out-card');
-    const outEl = document.getElementById('tr-out');
-    btn.disabled = true; btn.textContent = '🌐 翻訳中…';
-    outCard.hidden = false;
-    outEl.textContent = '画像を 解析中… (5-20 秒)';
-    try {
-      const r = await post('/api/ai/translate_image', { image_url: url, hint, group_id });
-      outEl.textContent = r.text || '(空の応答)';
-      await loadHistory();
-    } catch (e) {
-      outEl.innerHTML = `<span class="muted">失敗: ${escapeHtml(e.message)}</span>`;
-    } finally {
-      btn.disabled = false; btn.textContent = '🌐 和訳する';
+    const outRegion = document.getElementById('tr-out-region');
+    btn.disabled = true;
+    outRegion.innerHTML = '';
+    let done = 0;
+    for (const item of uploadedUrls) {
+      done++;
+      btn.textContent = `🌐 翻訳中… (${done}/${uploadedUrls.length})`;
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="row" style="gap:8px; align-items:flex-start">
+          <img src="${escapeHtml(item.url)}" style="width:60px; height:60px; object-fit:cover; border-radius:6px; flex:none; background:#f6f6f9">
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:13px">${escapeHtml(item.name)}</div>
+            <div class="meta" style="font-size:11px">⏳ 解析中…</div>
+          </div>
+        </div>
+        <div class="tr-content" style="margin-top:8px"></div>`;
+      outRegion.appendChild(card);
+      const contentEl = card.querySelector('.tr-content');
+      try {
+        const r = await post('/api/ai/translate_image', { image_url: item.url, hint, group_id });
+        contentEl.innerHTML = formatTranslationOutput(r.text || '');
+        card.querySelector('.meta').innerHTML = '<span style="color:#15803d">✓ 完了</span>';
+      } catch (e) {
+        contentEl.innerHTML = `<div class="muted">失敗: ${escapeHtml(e.message)}</div>`;
+        card.querySelector('.meta').innerHTML = '<span style="color:#dc2626">✗ 失敗</span>';
+      }
     }
+    await loadHistory();
+    btn.disabled = false;
+    btn.textContent = uploadedUrls.length > 1 ? `🌐 ${uploadedUrls.length} 件まとめて和訳` : '🌐 和訳する';
   });
 
-  document.getElementById('tr-copy').addEventListener('click', async () => {
-    const txt = document.getElementById('tr-out').textContent || '';
-    try { await navigator.clipboard.writeText(txt); toast('コピーしました'); }
-    catch (_) { toast('コピー 失敗'); }
-  });
+// markdown 風出力を CSS スタイリング HTML に変換
+function formatTranslationOutput(text) {
+  if (!text) return '<div class="muted">(空の応答)</div>';
+  // セキュリティ: 一度 escapeHtml した上で 軽量 markdown を解釈
+  let s = escapeHtml(text);
+  // **bold** → <strong>
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:var(--primary, #4a106d)">$1</strong>');
+  // 行頭 「└ ...」 を 補足説明スタイルに
+  const lines = s.split('\n');
+  let html = '<div style="font-family:system-ui, sans-serif; line-height:1.7; font-size:14px">';
+  for (const ln of lines) {
+    const trimmed = ln.trim();
+    if (!trimmed) { html += '<div style="height:6px"></div>'; continue; }
+    if (trimmed.startsWith('└')) {
+      const body = trimmed.replace(/^└\s*/, '');
+      html += `<div style="margin-left:18px; padding:4px 10px; background:#f5f0fa; border-left:3px solid #b3a0e0; border-radius:0 6px 6px 0; font-size:13px; color:#444; margin-bottom:4px">${body}</div>`;
+    } else if (/^#+\s/.test(trimmed)) {
+      const body = trimmed.replace(/^#+\s*/, '');
+      html += `<div style="font-size:16px; font-weight:700; color:var(--primary, #4a106d); margin-top:12px; padding-bottom:3px; border-bottom:2px solid #ede4f3">${body}</div>`;
+    } else if (/^[-*]\s/.test(trimmed)) {
+      const body = trimmed.replace(/^[-*]\s*/, '');
+      html += `<div style="margin-left:14px; padding-left:8px; position:relative; margin-bottom:2px">• ${body}</div>`;
+    } else {
+      html += `<div style="margin-bottom:4px">${ln}</div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
 
   document.getElementById('tr-flt').addEventListener('change', () => loadHistory());
   await loadHistory();
