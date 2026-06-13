@@ -89,7 +89,10 @@ function paint() {
   const isMyTurn = (d.my_seat !== null) && (s.turn === d.my_seat);
   const inDiscardPhase = s.awaiting === 'discard';
   const inNakiPhase = s.awaiting === 'naki_window' || s.awaiting === 'ron_chance';
-  const canRon = inNakiPhase && d.my_seat !== null && s.last_discarded && s.last_discarded.by !== d.my_seat;
+  // v565 サーバが役判定済みの can_tsumo / can_ron / can_riichi を尊重
+  const canTsumo = !!s.can_tsumo;
+  const canRon = !!s.can_ron;
+  const canRiichi = !!s.can_riichi;
   const canPass = inNakiPhase && d.my_seat !== null && s.last_discarded && s.last_discarded.by !== d.my_seat;
   const myNakiChances = (s.naki_chances || []).filter(c => c.seat === d.my_seat);
 
@@ -179,8 +182,8 @@ function paint() {
         ${sortedTiles.map((t, i) => tileBtn(t, { selectable: isMyTurn && inDiscardPhase, onclick: true, size: 28 })).join('')}
       </div>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:8px">
-        ${isMyTurn && inDiscardPhase ? `<button id="mj-tsumo" class="primary" style="font-size:12px">ツモ宣言</button>` : ''}
-        ${isMyTurn && inDiscardPhase && !myP.riichi ? `<button id="mj-riichi" class="btn" style="font-size:12px">リーチ宣言</button>` : ''}
+        ${canTsumo ? `<button id="mj-tsumo" class="primary" style="font-size:12px">ツモ宣言</button>` : ''}
+        ${canRiichi && !myP.riichi ? `<button id="mj-riichi" class="btn" style="font-size:12px">リーチ宣言</button>` : ''}
         ${canRon ? `<button id="mj-ron" class="primary" style="font-size:12px">ロン!</button>` : ''}
         ${nakiBtns}
         ${ankanBtns}

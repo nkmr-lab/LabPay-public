@@ -552,6 +552,32 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
                 'score'      => $p['score'],
             ];
         }
+        // v565 リクエストユーザーが ツモ/ロン/リーチ 可能か判定して flag を付ける
+        $canTsumo = false; $canRon = false; $canRiichi = false;
+        if ($mySeat !== null) {
+            if ($state['awaiting'] === 'discard' && $state['turn'] === $mySeat) {
+                $tCheck = MahjongEngine::tryTsumo($state, $mySeat);
+                $canTsumo = !empty($tCheck['ok']);
+                $rCheck = MahjongEngine::declareRiichi($state, $mySeat);
+                // declareRiichi は state を変えてしまうので 副作用なし版で判定したい
+                // 簡易: 既に riichi 済みなら不可、 そうでなく hand の形状で判定
+                // ここでは tryRiichi の結果のみ参考。 state 変更を巻き戻す
+                if (!empty($rCheck['ok'])) {
+                    $canRiichi = true;
+                    // 副作用 (score-1000 + riichi=true) を取り消し
+                    $state['players'][$mySeat]['riichi'] = false;
+                    $state['players'][$mySeat]['score'] += MahjongEngine::RIICHI_BO;
+                    $state['riichi_pot'] -= MahjongEngine::RIICHI_BO;
+                }
+            }
+            if (($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance')
+                && !empty($state['last_discarded'])
+                && $state['last_discarded']['by'] !== $mySeat
+                && !in_array($mySeat, $state['naki_passed'], true)) {
+                $ronCheck = MahjongEngine::tryRon($state, $mySeat);
+                $canRon = !empty($ronCheck['ok']);
+            }
+        }
         $pub = [
             'phase'           => $state['phase'],
             'round_wind'      => $state['round_wind'],
@@ -566,6 +592,10 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
             'awaiting'        => $state['awaiting'],
             'log'             => array_slice($state['log'], -30),
             'game_winners'    => $state['game_winners'],
+            'riichi_pot'      => $state['riichi_pot'] ?? 0,
+            'can_tsumo'       => $canTsumo,
+            'can_ron'         => $canRon,
+            'can_riichi'      => $canRiichi,
         ];
     }
     json_response([
