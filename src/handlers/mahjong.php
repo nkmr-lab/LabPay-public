@@ -84,8 +84,10 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
 }
 
 // AI 自動進行: turn が bot のときに AI ロジックで進める。 人間の番 or 終局で停止。
-function mahjong_autoplay_ai(PDO $pdo, int $gid): void {
-    $maxIter = 200;
+// v566 #222 maxIter で 1 step ずつに制限可。 state polling から呼ぶ時は 1〜2 で
+//   緩やかに 1人ずつ進む。 action 直後 (人間のアクション後) は 多めに走らせて 人間の
+//   次の番まで進める。
+function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
     for ($i = 0; $i < $maxIter; $i++) {
         $stG = $pdo->prepare("SELECT * FROM mahjong_games WHERE id = ? FOR UPDATE");
         $pdo->beginTransaction();
@@ -519,8 +521,8 @@ function mahjong_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
 
 // v554 GET /api/mahjong/games/:id/state — 現在の状態を返す (相手の hand は隠す)
 function mahjong_state(PDO $pdo, int $uid, int $gid): void {
-    // v557 polling 時に AI ターンが残っていれば 進める
-    mahjong_autoplay_ai($pdo, $gid);
+    // v566 #222 polling 1 回ごとに AI を 1 step だけ進める (= 視覚的にゆっくり)
+    mahjong_autoplay_ai($pdo, $gid, 1);
     $st = $pdo->prepare("SELECT g.*, (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id = g.id) AS player_count FROM mahjong_games g WHERE g.id = ?");
     $st->execute([$gid]);
     $g = $st->fetch(PDO::FETCH_ASSOC);
@@ -712,8 +714,8 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
             }
         }
     });
-    // v557 AI 卓なら 人間の番までボットを 自動進行
-    mahjong_autoplay_ai($pdo, $gid);
+    // v566 #222 人間のアクション後は AI を 1 step だけ進める (= 次の polling で 1人ずつ動く)
+    mahjong_autoplay_ai($pdo, $gid, 1);
     json_response($result ?: ['ok' => true]);
 }
 

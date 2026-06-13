@@ -5,13 +5,13 @@ import { toast } from '../app.js';
 export async function renderAchievements() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <!-- v483 #76 AI 称号 (実績 の 組み合わせ から AI が 命名) -->
+    <!-- v483 #76 AI 称号 (実績の組み合わせから AI が命名) -->
     <div class="card" id="ach-title-card" style="text-align:center" hidden>
-      <div class="muted" style="font-size:11px; margin-bottom:4px">✨ あなた の 称号 (AI 命名)</div>
+      <div class="muted" style="font-size:11px; margin-bottom:4px">✨ あなたの称号 (AI 命名)</div>
       <div id="ach-title-text" style="font-size:22px; font-weight:700; line-height:1.4; color:var(--primary)"></div>
       <div class="hint" id="ach-title-meta" style="font-size:11px; margin-top:6px"></div>
       <div style="margin-top:8px">
-        <button id="ach-title-gen" class="btn">✨ 称号 を 生成</button>
+        <button id="ach-title-gen" class="btn">✨ 称号を生成</button>
       </div>
     </div>
     <div id="ach-list"><div class="muted">読み込み中…</div></div>
@@ -38,22 +38,22 @@ async function renderAchievementsTitle() {
     if (d.title) {
       txt.textContent = d.title;
       meta.textContent = (d.is_stale
-        ? `※ 実績 が 増えました — 「再生成」 で 更新できます  (前回 ${d.generated_at || '?'})`
+        ? `※ 実績が増えました — 「再生成」 で更新できます (前回 ${d.generated_at || '?'})`
         : `${d.generated_at || ''}`);
-      btn.textContent = d.is_stale ? '🔄 再生成' : '🔄 再生成';
+      btn.textContent = '🔄 再生成';
     } else {
-      txt.textContent = '— 称号 を 生成 してね —';
-      meta.textContent = '実績 を 元 に AI が 称号 を 命名 します。';
-      btn.textContent = '✨ 称号 を 生成';
+      txt.textContent = '— 称号を生成してね —';
+      meta.textContent = '実績を元に AI が称号を命名します。';
+      btn.textContent = '✨ 称号を生成';
     }
     btn.onclick = async () => {
       btn.disabled = true;
-      btn.textContent = '⏳ 生成 中…';
+      btn.textContent = '⏳ 生成中…';
       try {
         const r = await post('/api/me/achievements_title', {});
         txt.textContent = r.title;
-        meta.textContent = '✨ 生成 しました';
-        toast('称号 を 生成 しました');
+        meta.textContent = '✨ 生成しました';
+        toast('称号を生成しました');
       } catch (e) {
         toast('失敗: ' + e.message);
       } finally {

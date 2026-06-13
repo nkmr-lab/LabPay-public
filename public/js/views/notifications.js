@@ -167,14 +167,18 @@ function row(n) {
   const unreadBadge = unread
     ? `<span style="display:inline-block; background:#ffb300; color:#fff; font-weight:700; font-size:11px; padding:1px 6px; border-radius:8px; margin-right:6px">●未読</span>`
     : '';
+  // v566 #219 長い URL / 長文で 横に広がる / 文字が大きい問題を修正:
+  //   - 本文は overflow-wrap: anywhere + word-break: break-word で 必ず折り返す
+  //   - bold の継承 font-size を明示的に 14px に抑える
+  //   - 既読ボタンも統一サイズに
   return `
     <${tag} class="list-item" style="${baseStyle}" ${href}>
       <div style="flex:1; min-width:0">
-        <div class="bold" style="white-space:pre-wrap">${unreadBadge}${escapeHtml(n.body)}</div>
-        <div class="meta">${escapeHtml(lbl)} · ${escapeHtml(n.created_at)}</div>
+        <div style="font-size:14px; font-weight:700; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word">${unreadBadge}${escapeHtml(n.body)}</div>
+        <div class="meta" style="font-size:11px">${escapeHtml(lbl)} · ${escapeHtml(n.created_at)}</div>
       </div>
-      <div>${unread
-        ? `<button data-read="${n.id}">既読</button>`
+      <div style="flex:none">${unread
+        ? `<button data-read="${n.id}" class="btn" style="font-size:11px; padding:2px 6px">既読</button>`
         : `<button data-unread="${n.id}" class="btn" style="font-size:11px; padding:2px 6px; color:var(--muted)">未読に戻す</button>`}</div>
     </${tag}>`;
 }
