@@ -102,6 +102,14 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 - 著者が見落としていそうな 強化分析を 必ず 1〜3 個アイテマイズ:
   - 例: 効果量の 95% CI、 ベイズ係数、 質的データの 半構造化インタビュー追加、 行動ログの ヒートマップ可視化、 学習曲線の time-series 分析、 個人差を残差で説明、 シミュレーション or 計算モデルでの検証 など
 
+【貢献の独立解釈 (GPT 視点)】
+- 論文中で著者が主張する貢献 (Introduction の bullet "Our contributions are:" や Conclusion の要約) を 一度脇に置き、 **GPT の独立した読解** として「この論文の貢献は本当のところ何か」 を 再列挙してください
+- そのうえで:
+  - 著者が主張する貢献 (author_claimed_contributions): 著者が明示的に書いている貢献リスト
+  - GPT が読み取った 貢献候補 (reviewer_perceived_contributions): 論文の中身から GPT が 独立に解釈した 「実質的な貢献」 1〜5 個
+  - ギャップの説明 (contribution_gap_explanation): 「あなたの主張は X だが、 私は この論文の貢献は実は Y だと解釈する。 理由は…」 の自由記述。 著者が見落としている可能性のある貢献 や、 逆に 著者が過大主張している貢献の 検証指摘
+- 著者の主張と GPT の解釈が 完全一致する場合は その旨を明示 (「両者一致、 貢献の主張は妥当」 等)
+
 【主張が強すぎる文章 / 記述がおかしい文章のリライト提案】
 - 過大主張 (「世界初」「決定的に」「絶対に」 等)、 論理飛躍、 曖昧 (「効果的だった」 を 数値で支持していない)、 矛盾、 不適切な比較、 で 問題があれば
 - rewrite_suggestions に { original: "問題のある原文を引用", reason: "なぜ問題か", suggested_rewrite: "こう直す案" } の形で 1〜5 件 アイテマイズ
@@ -268,6 +276,9 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"score\": 1-5 の整数,\n"
         . "    \"summary_one_line\": \"査読要約 1 行\",\n"
         . "    \"contribution_validity\": \"貢献の妥当性に関する評価 (100-300 字)\",\n"
+        . "    \"author_claimed_contributions\": [\"著者が論文中で明示的に主張する貢献 (1 件ずつ)\", ...],\n"
+        . "    \"reviewer_perceived_contributions\": [\"GPT が論文を読んで独立に解釈した『実質的な貢献』 1〜5 件\", ...],\n"
+        . "    \"contribution_gap_explanation\": \"著者主張 ⇔ GPT 解釈 のギャップ。 一致なら『両者一致』。 ズレがあるなら『あなたの主張は X だが、 私は この論文の貢献は実は Y だと解釈する。 理由は…』 を 200-500 字で自由記述\",\n"
         . "    \"missing_descriptions\": [\"漏れている記述項目 (章名 + 該当箇所込み)\", ...],\n"
         . "    \"logical_flow\": \"論理的なつながりの評価、 飛躍箇所の指摘 (100-300 字)\",\n"
         . "    \"consistency_check\": {\n"

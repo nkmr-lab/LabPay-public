@@ -257,6 +257,32 @@ function paint(d, shareToken, isShared) {
         <div style="font-size:13px; padding:6px 10px; background:#f8f5fb; border-radius:6px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.contribution_validity)}</div>
       </div>` : ''}
 
+      ${(r.author_claimed_contributions && r.author_claimed_contributions.length) || (r.reviewer_perceived_contributions && r.reviewer_perceived_contributions.length) || r.contribution_gap_explanation ? `
+      <div style="margin-top:10px">
+        <div class="bold" style="color:var(--primary)">🔍 貢献の独立解釈 (著者主張 ⇔ GPT 解釈)</div>
+        <div style="display:grid; grid-template-columns:1fr; gap:6px; margin-top:6px">
+          ${r.author_claimed_contributions && r.author_claimed_contributions.length ? `
+            <div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0">
+              <div class="bold" style="color:#a16207; font-size:12px">📋 著者が主張する貢献</div>
+              <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+                ${r.author_claimed_contributions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+              </ul>
+            </div>` : ''}
+          ${r.reviewer_perceived_contributions && r.reviewer_perceived_contributions.length ? `
+            <div style="padding:8px 12px; background:#dcfce7; border-left:3px solid #15803d; border-radius:0 6px 6px 0">
+              <div class="bold" style="color:#15803d; font-size:12px">🤖 GPT が読み取った 貢献候補</div>
+              <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
+                ${r.reviewer_perceived_contributions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+              </ul>
+            </div>` : ''}
+          ${r.contribution_gap_explanation ? `
+            <div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0">
+              <div class="bold" style="color:#4f46e5; font-size:12px">⚖️ ギャップの説明</div>
+              <div style="font-size:13px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.contribution_gap_explanation)}</div>
+            </div>` : ''}
+        </div>
+      </div>` : ''}
+
       ${r.missing_descriptions && r.missing_descriptions.length ? `
       <div style="margin-top:8px">
         <div class="bold" style="color:#a16207">📋 記述漏れ (実験 / 統計など)</div>
