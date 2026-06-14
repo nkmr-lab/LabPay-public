@@ -72,6 +72,8 @@ export const APPS = [
   { id: 'mahjong',       cat: 'archive', url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 1〜4 位申告で 自動分配 (50/30/15/0% + 場代 5%)。 Phase 1 は実ゲーム外 (雀魂等で遊んで結果報告)、 Phase 2 で実ゲーム化予定。', defaultVisible: true },
   // v568 #223 ito Phase 1
   { id: 'ito',           cat: 'urgent',  url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で 1pt ずつ預託、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
+  // v570 #223 人狼 Phase 1
+  { id: 'jinrou',        cat: 'urgent',  url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },

@@ -64,6 +64,7 @@ $routes = [
     'tierlists'      => 'route_tierlists',
     'mahjong'        => 'route_mahjong',
     'ito'            => 'route_ito',
+    'jinrou'         => 'route_jinrou',
     'money-requests' => 'route_money_requests',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',

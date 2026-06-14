@@ -546,6 +546,10 @@ route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'rende
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));
 route('/ito/:id',           lazy(() => import('./views/ito.js'), 'renderItoDetail'));
+// v570 #223 人狼 Phase 1
+route('/jinrou',            lazy(() => import('./views/jinrou.js'), 'renderJinrou'));
+route('/jinrou/new',        lazy(() => import('./views/jinrou.js'), 'renderJinrouNew'));
+route('/jinrou/:id',        lazy(() => import('./views/jinrou.js'), 'renderJinrouDetail'));
 // v553 #209 麻雀 Phase 1 (lazy import で 普段は未読み込み、 Phase 2 で重くなる予定)
 route('/mahjong/new',       lazy(() => import('./views/mahjong.js'), 'renderMahjongNew'));
 // v556 シミュレータ (内部検証用)

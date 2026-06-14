@@ -148,6 +148,7 @@ function refUrl(n) {
     case 'paper_review':   return '#/paper-review';
     case 'mahjong':        return n.ref_id ? '#/mahjong/' + n.ref_id : '#/mahjong';
     case 'ito':            return n.ref_id ? '#/ito/' + n.ref_id : '#/ito';
+    case 'jinrou':         return n.ref_id ? '#/jinrou/' + n.ref_id : '#/jinrou';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';
