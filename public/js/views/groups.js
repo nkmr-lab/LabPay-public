@@ -1,7 +1,7 @@
 // /#/groups — list + create. /#/groups/{id} — detail with feed + ワリカ +
 // member-context shortcuts for ルーレット / 飲み会割り勘.
 
-import { get, post, patch, del } from '../api.js';
+import { get, post, patch, del, invalidateContentCache } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast, refreshHasGroups } from '../app.js';
 import { uploadImage } from '../upload.js';
@@ -15,15 +15,10 @@ const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 //   される。 支出登録/削除/編集の直後に古いキャッシュが返って 「ワリカに反映されない」
 //   ように見える問題を防ぐため、 操作直後にここで content cache から /api/groups* を
 //   消す。 失敗は黙殺 (キャッシュなしブラウザ等)。
+// v598 fix: 旧版は 'labpay-content-v2' を 直 open していたが 実際の SW キャッシュは v3。
+//   invalidateContentCache (api.js) で labpay-content-* を 全部 invalidate する 方式に変更。
 async function invalidateGroupCache(_gid) {
-  if (!('caches' in window)) return;
-  try {
-    const cache = await caches.open('labpay-content-v2');
-    const keys = await cache.keys();
-    await Promise.all(keys
-      .filter(req => new URL(req.url).pathname.startsWith('/api/groups'))
-      .map(req => cache.delete(req)));
-  } catch (_) {}
+  await invalidateContentCache('/api/groups');
 }
 
 // v340 グループ詳細ヘッダの アクションボタン 8 個の定義 (順番もここの並びを保持)。

@@ -2,7 +2,7 @@
 // フォロー なし、 全員 が 全投稿 を 見る。 テキスト + 画像 + 位置 + @メンション。
 // 返信 (parent_id)、 いいね (toggle) のみ。 リポスト なし。
 
-import { get, post, del } from '../api.js';
+import { get, post, del, invalidateContentCache } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
@@ -228,17 +228,10 @@ let postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
 let postsPollTimer = null;
 let postsKnownLatestId = 0;
 
-// v480 SW の SWR 用 content キャッシュ から /api/posts* を 全部 抜く。
-//   投稿直後 / リアクション 直後 に 呼ぶ。
+// v598 fix: 旧版は 'labpay-content-v1' を 直 open していたが 実際の SW キャッシュは v3。
+//   invalidateContentCache (api.js) で labpay-content-* を 全部 invalidate する 方式に変更。
 async function invalidatePostsCache() {
-  if (!('caches' in window)) return;
-  try {
-    const cache = await caches.open('labpay-content-v1');
-    const keys = await cache.keys();
-    await Promise.all(keys
-      .filter(req => new URL(req.url).pathname.startsWith('/api/posts'))
-      .map(req => cache.delete(req)));
-  } catch (_) {}
+  await invalidateContentCache('/api/posts');
 }
 
 // v480 自動 更新: 10 秒 ごと に /api/posts/latest_id だけ 叩いて、 値 が
@@ -270,6 +263,10 @@ window.addEventListener('hashchange', () => {
 });
 
 export async function renderPosts({ query } = {}) {
+  // v598 SNS ページを開いた瞬間に SW SWR キャッシュを 明示的に invalidate。
+  //   これがないと 「らぼったーが古い」 (= 前回キャッシュ表示 → 裏で fetch → 次回反映)
+  //   になりがち。 invalidate しておけば 初回 get がそのままネットへ抜けて 必ず最新。
+  await invalidatePostsCache();
   // v525 #180 user パラメータで投稿者絞り込み (?user=ID)。 絞り込み中は composer 非表示
   //   + 解除ボタン + 「@name の投稿のみ」 ヘッダ。
   const filterUserId = (query?.user && /^\d+$/.test(query.user)) ? Number(query.user) : null;

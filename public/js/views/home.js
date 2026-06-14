@@ -1,4 +1,4 @@
-import { get, post } from '../api.js';
+import { get, post, invalidateContentCache } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { refreshMe, state, toast } from '../app.js';
 import { ledgerTypeLabel } from '../labels.js';
@@ -755,15 +755,9 @@ function startHomeSnsFastPoll() {
       if (homeSnsKnownLatestId === 0) { homeSnsKnownLatestId = lid; return; }
       if (lid > homeSnsKnownLatestId) {
         homeSnsKnownLatestId = lid;
-        if ('caches' in window) {
-          try {
-            const cache = await caches.open('labpay-content-v1');
-            const keys = await cache.keys();
-            await Promise.all(keys
-              .filter(req => new URL(req.url).pathname.startsWith('/api/posts'))
-              .map(req => cache.delete(req)));
-          } catch (_) {}
-        }
+        // v598 fix: 旧版は 'labpay-content-v1' を 直 open していたが
+        // 実際の SW キャッシュは v3。 invalidateContentCache で 全 vN を なめる。
+        await invalidateContentCache('/api/posts');
         await renderFreshSns();
       }
     } catch (_) {}
@@ -1714,6 +1708,10 @@ async function renderFreshSns() {
   const root = document.getElementById('home-sns');
   if (!card || !root) return;
   try {
+    // v598 ホーム表示時に SW SWR キャッシュを明示的に剥がして 必ず最新を取得。
+    //   旧コードでは存在しない 'labpay-content-v1' を open していて 無効化されず
+    //   ずっと stale (前回ロード時点の投稿) が表示されていた問題対応。
+    await invalidateContentCache('/api/posts');
     const d = await get('/api/posts', { limit: 5 });
     const items = d.items || [];
     card.hidden = false;

@@ -68,6 +68,25 @@ export async function api(method, path, { body, query, withIdempotency = false }
   return data;
 }
 
+// v598 SW の SWR コンテンツ キャッシュ (labpay-content-vN) を path prefix で
+//   一括 invalidate するヘルパ。 SW を bump して キャッシュ名が変わっても
+//   labpay-content-* を全部なめるので 自動追従する。
+//   呼び出し例: invalidateContentCache('/api/posts') — 投稿 直後/新着検知 直後 に。
+export async function invalidateContentCache(pathPrefix) {
+  if (!('caches' in window)) return;
+  try {
+    const names = await caches.keys();
+    const targets = names.filter(n => n.startsWith('labpay-content-'));
+    await Promise.all(targets.map(async (n) => {
+      const cache = await caches.open(n);
+      const keys = await cache.keys();
+      await Promise.all(keys
+        .filter(req => new URL(req.url).pathname.startsWith(pathPrefix))
+        .map(req => cache.delete(req)));
+    }));
+  } catch (_) {}
+}
+
 // Convenience helpers
 export const get   = (p, q)    => api('GET',    p, { query: q });
 export const post  = (p, body, opts) => api('POST',   p, { body, ...opts });
