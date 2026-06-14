@@ -1,5 +1,5 @@
-// /#/games — ゲームハブ。 LabPay 内の ゲーム系アプリを 1 箇所にまとめて表示。
-// v571 #タブ追加。 lazy import なので 普段は読み込まれない。
+// /#/games — 娯楽ハブ。 LabPay 内の ゲーム / ランダム系アプリを 1 箇所にまとめて表示。
+// v571 #タブ追加 (v573 で 「娯楽」 にリネーム)。 lazy import なので 普段は読み込まれない。
 
 import { escapeHtml } from '../router.js';
 
@@ -55,9 +55,9 @@ export function renderGames() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">🎮 ゲーム</h2>
+      <h2 style="margin:0">🎮 娯楽</h2>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        ラボメンバーで遊べる ゲーム集。 プレイフィー / 賭け / 無料 がそれぞれ並びます。
+        ラボメンバーで遊べる ゲーム / ランダム選び。 プレイフィー / 賭け / 無料 がそれぞれ並びます。
       </p>
     </div>
     ${CATEGORIES.map(cat => {

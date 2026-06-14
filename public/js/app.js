@@ -292,6 +292,7 @@ export const TAB_DEFS = [
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
   { id: 'apps',         title: 'アプリ' },
+  { id: 'games',        title: '娯楽' },
   { id: 'achievements', title: '実績' },
 ];
 export const DEFAULT_HIDDEN_TABS = []; // v514 デフォルトでは全部表示 (タブ自体を少数厳選)
