@@ -546,6 +546,11 @@ route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'rende
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
 route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));
+// v586 フライト応援 (オフライン)
+route('/flight',            lazy(() => import('./views/flight.js'), 'renderFlight'));
+// v587 地雷オセロ
+route('/othello/:id',       lazy(() => import('./views/othello.js'), 'renderOthelloDetail'));
+route('/othello',           lazy(() => import('./views/othello.js'), 'renderOthello'));
 // v568 #223 ito アプリ
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));

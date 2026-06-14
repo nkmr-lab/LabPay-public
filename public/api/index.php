@@ -82,6 +82,7 @@ $routes = [
     'ai'             => 'route_ai',
     'predictions'    => 'route_predictions',
     'fortune'        => 'route_fortune',
+    'othello'        => 'route_othello',
 ];
 
 try {

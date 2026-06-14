@@ -14,6 +14,8 @@ class Ledger {
         // v583 #225 レジュメ原稿チェック
         'resume_check',
         'mahjong_buyin','mahjong_payout','mahjong_refund','mahjong_rake','mahjong_ai_payout',
+        // v587 地雷オセロ
+        'othello_buyin','othello_payout','othello_refund',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

@@ -6,6 +6,7 @@
 import { escapeHtml, navigate } from '../router.js';
 import { get, post } from '../api.js';
 import { toast, state } from '../app.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const MEDAL = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
 
@@ -293,6 +294,7 @@ function renderDetailHtml(g) {
       <div style="display:flex; align-items:center; gap:8px">
         <h2 style="margin:0; flex:1">${escapeHtml(g.title)}</h2>
         ${statusBadge(g.status)}
+        <button id="pred-share" class="btn" style="font-size:12px; padding:4px 8px" title="らぼったーで共有">💬 共有</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
         起案: ${escapeHtml(g.creator_name)} ・
@@ -346,6 +348,9 @@ function startPredCountdown() {
 
 function wireDetail(g) {
   startPredCountdown();
+  document.getElementById('pred-share')?.addEventListener('click', () => {
+    shareToSns(`🏆 「${g.title}」 の 優勝予想 を 受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
+  });
   const candById = Object.fromEntries(g.candidates.map(c => [c.id, c]));
   // 自分予想 (予想入力)
   if (g.status === 'open') {

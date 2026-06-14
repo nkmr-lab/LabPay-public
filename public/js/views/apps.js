@@ -72,6 +72,8 @@ export const APPS = [
   { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
   { id: 'resume-check',  cat: 'ai',     url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書 など 1-2 ページの 短原稿 を チェック (5pt)。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 を 一通り 見ます。 論文ほど厳密ではない 軽量版。', defaultVisible: true },
+  // v586 フライト応援 (オフライン、 機内で使う)
+  { id: 'flight',        cat: 'tool',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化。 完全オフラインで動作。 画面 自動ON 維持。 機内で 退屈 しのぎ に。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
   { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は ポイント授受なし の 練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)
@@ -80,6 +82,8 @@ export const APPS = [
   { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップや スポーツ大会、 大学受験・学会 best paper など 「順位」 を予想して 参加フィー で景品を 山分け。 1位のみ / 1-2位 / 1-4位 を 起案ごとに設定可能。', defaultVisible: true },
+  // v587 地雷オセロ
+  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 2 か所 地雷。 地雷を踏むと 周囲 3x3 (9 マス) 反転。 1pt で 対戦、 勝者が pot 総取り (引分は半分ずつ)。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },

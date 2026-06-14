@@ -28,6 +28,9 @@ const GAMES = [
   { id: 'predictions', icon: '🏆', name: '優勝予想',   url: '#/predictions',
     desc: 'W 杯 / スポーツ大会 / 学会 best paper など 順位を予想して 参加フィー を山分け',
     badge: '参加フィー (10-100pt 設定可)' },
+  { id: 'othello',   icon: '💣', name: '地雷オセロ',  url: '#/othello',
+    desc: '通常オセロ + 各自 2 か所 地雷 (踏むと 3x3 反転)。 勝者が pot 総取り',
+    badge: 'プレイ料 1pt' },
 ];
 
 const CATEGORIES = [
@@ -40,6 +43,7 @@ const CATEGORIES = [
 const GAME_CATEGORY = {
   mahjong:       'gamble',
   'mahjong-ai':  'gamble',
+  othello:       'gamble',
   predictions:   'predict',
   ito:           'party',
   jinrou:        'party',

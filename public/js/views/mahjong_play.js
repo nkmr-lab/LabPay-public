@@ -5,6 +5,23 @@ import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 
+// v585 麻雀の 鳴き / アガリ 宣言時 に 音声合成 (チー / ポン / カン / リーチ / ロン / ツモ)。
+//   Web Speech API (browser 内蔵)。 ファイル不要、 ja-JP voice。
+//   音声 OFF にしたい場合は localStorage('labpay-mahjong-mute') = '1'。
+function speakMahjong(text) {
+  try {
+    if (localStorage.getItem('labpay-mahjong-mute') === '1') return;
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP';
+    u.rate = 1.3;
+    u.pitch = 1.1;
+    u.volume = 1.0;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
 let pollTimer = null;
 let lastVer = -1;
 let curGid = null;
@@ -215,9 +232,9 @@ function paint() {
         }
       });
     });
-    document.getElementById('mj-tsumo')?.addEventListener('click', () => doAction('tsumo'));
-    document.getElementById('mj-riichi')?.addEventListener('click', () => doAction('riichi'));
-    document.getElementById('mj-ron')?.addEventListener('click', () => doAction('ron'));
+    document.getElementById('mj-tsumo')?.addEventListener('click', () => { speakMahjong('ツモ!'); doAction('tsumo'); });
+    document.getElementById('mj-riichi')?.addEventListener('click', () => { speakMahjong('リーチ!'); doAction('riichi'); });
+    document.getElementById('mj-ron')?.addEventListener('click', () => { speakMahjong('ロン!'); doAction('ron'); });
     document.getElementById('mj-pass')?.addEventListener('click', () => doAction('pass'));
     // 鳴きボタン
     handBox.querySelectorAll('button[data-naki]').forEach(b => {
@@ -226,6 +243,9 @@ function paint() {
         const tile = Number(b.dataset.tile);
         const body = { type, tile };
         if (type === 'chi') body.with = b.dataset.with.split(',').map(Number);
+        // v585 鳴き音声 (チー / ポン / カン)
+        const voice = type === 'pon' ? 'ポン!' : type === 'chi' ? 'チー!' : type === 'minkan' ? 'カン!' : '';
+        if (voice) speakMahjong(voice);
         try {
           await post(`/api/mahjong/games/${curGid}/action`, body);
           await refresh();
@@ -237,6 +257,7 @@ function paint() {
     });
     handBox.querySelectorAll('button[data-ankan]').forEach(b => {
       b.addEventListener('click', async () => {
+        speakMahjong('カン!');
         try {
           await post(`/api/mahjong/games/${curGid}/action`, { type: 'ankan', tile: Number(b.dataset.ankan) });
           await refresh();
@@ -248,6 +269,7 @@ function paint() {
     });
     handBox.querySelectorAll('button[data-kakan]').forEach(b => {
       b.addEventListener('click', async () => {
+        speakMahjong('カン!');
         try {
           await post(`/api/mahjong/games/${curGid}/action`, { type: 'kakan', tile: Number(b.dataset.kakan) });
           await refresh();

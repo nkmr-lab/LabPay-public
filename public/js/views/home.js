@@ -58,6 +58,8 @@ export const HOME_ACTIONS = [
   { id: 'tierlists',    url: '#/tierlists',          title: 'ティア表',      icon: '🎯', defaultVisible: false }, // v549 #210
   { id: 'paper-review', url: '#/paper-review',       title: '論文査読',      icon: '📄', defaultVisible: false }, // v550 #206
   { id: 'resume-check', url: '#/resume-check',       title: '原稿チェック',  icon: '📝', defaultVisible: false }, // v583 #225
+  { id: 'flight',       url: '#/flight',             title: 'フライト応援',  icon: '✈️', defaultVisible: false }, // v586
+  { id: 'othello',      url: '#/othello',            title: '地雷オセロ',    icon: '💣', defaultVisible: false }, // v587
   { id: 'mahjong',      url: '#/mahjong',            title: '麻雀',          icon: '🀄', defaultVisible: false }, // v553 #209
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
@@ -115,6 +117,8 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-tierlists',    title: '🎯 ティア表',        url: '#/tierlists',    desc: 'みんなで S/A/B/C/D/F の ティア分け' },
   { id: 'sc-paper-review', title: '📄 論文 査読',       url: '#/paper-review', desc: '論文 PDF を AI で 章立て要約 + 査読コメント' },
   { id: 'sc-resume-check', title: '📝 原稿チェック',    url: '#/resume-check', desc: '1-2 ページの 短原稿を 軽量査読 (5pt)' },
+  { id: 'sc-flight',       title: '✈️ フライト応援',    url: '#/flight',       desc: '長いフライト の 進捗を 可視化 (オフライン対応)' },
+  { id: 'sc-othello',      title: '💣 地雷オセロ',      url: '#/othello',      desc: '通常オセロ + 各自 2 地雷 (3x3 反転)。 1pt 対戦' },
   { id: 'sc-regions',      title: '🗺 制覇マップ',       url: '#/regions',      desc: '行った国・都道府県 を タップで 登録' },
   { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
   { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },
@@ -168,6 +172,7 @@ export const HOME_CARDS = [
   { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
+  { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -407,6 +412,14 @@ export async function renderHome() {
       <div id="home-todos" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
+    <div class="card" id="home-weather-card" data-card-id="weather" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">☀️ 今日の空</h2>
+        <span class="hint-sm" id="home-weather-loc"></span>
+      </div>
+      <div id="home-weather"><div class="hint">位置情報 取得中…</div></div>
+    </div>
+
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">💬 らぼったー 最新</h2>
@@ -468,6 +481,7 @@ export async function renderHome() {
     { cardId: 'notices',        fn: renderHomeNotices,     label: 'notices' }, // v514 #139
     { cardId: 'todos',          fn: renderHomeTodos,       label: 'hometodos' },
     { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
+    { cardId: 'weather',        fn: renderWeatherWidget,   label: 'weather' }, // v585
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -1496,6 +1510,123 @@ function ratingStars(r) {
 
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
 // + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
+// v585 ☀️ 今日の空 ウィジェット。
+//   Open-Meteo (天気予報) + 同 API の sunrise/sunset を 表示。
+//   位置は navigator.geolocation で 取得 (localStorage に キャッシュ)。
+//   セカンダリソース: wttr.in (Open-Meteo と 並列で 簡易比較表示)
+const WEATHER_LOC_KEY  = 'labpay-last-coords';
+const WEATHER_CACHE_KEY = 'labpay-weather-cache';
+const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function getCachedCoords() {
+  try {
+    const raw = localStorage.getItem(WEATHER_LOC_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return null;
+}
+async function getCoords() {
+  const cached = await getCachedCoords();
+  if (cached) {
+    // 取れている間に 裏で 最新を 取り直す
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(p => {
+        try { localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify({ lat: p.coords.latitude, lon: p.coords.longitude, ts: Date.now() })); } catch (_) {}
+      }, () => {}, { timeout: 10000, maximumAge: 600000 });
+    }
+    return cached;
+  }
+  return await new Promise((resolve) => {
+    if (!('geolocation' in navigator)) return resolve(null);
+    navigator.geolocation.getCurrentPosition(p => {
+      const c = { lat: p.coords.latitude, lon: p.coords.longitude, ts: Date.now() };
+      try { localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(c)); } catch (_) {}
+      resolve(c);
+    }, () => resolve(null), { timeout: 10000 });
+  });
+}
+
+const WEATHER_CODE_LABEL = {
+  0: ['☀️', '快晴'], 1: ['🌤', 'おおむね晴れ'], 2: ['⛅', '一部曇り'], 3: ['☁️', '曇り'],
+  45: ['🌫', '霧'], 48: ['🌫', '凍霧'], 51: ['🌦', '弱い霧雨'], 53: ['🌦', '霧雨'],
+  55: ['🌧', '強い霧雨'], 61: ['🌧', '小雨'], 63: ['🌧', '雨'], 65: ['🌧', '強い雨'],
+  71: ['🌨', '小雪'], 73: ['🌨', '雪'], 75: ['❄️', '大雪'], 77: ['❄️', '雪粒'],
+  80: ['🌦', '弱いにわか雨'], 81: ['🌧', 'にわか雨'], 82: ['⛈', '激しいにわか雨'],
+  85: ['🌨', '弱いにわか雪'], 86: ['❄️', '強いにわか雪'],
+  95: ['⛈', '雷雨'], 96: ['⛈', '雹を伴う雷雨'], 99: ['⛈', '激しい雹を伴う雷雨'],
+};
+function wxLabel(code) { return WEATHER_CODE_LABEL[code] || ['🌤', '不明']; }
+
+async function renderWeatherWidget() {
+  const card = document.getElementById('home-weather-card');
+  const root = document.getElementById('home-weather');
+  const loc  = document.getElementById('home-weather-loc');
+  if (!card || !root) return;
+  card.hidden = false;
+  const coords = await getCoords();
+  if (!coords) {
+    root.innerHTML = '<div class="hint">位置情報の許可が必要です。 ブラウザの位置情報を 許可すると 天気と日の出日の入りが 表示されます。</div>';
+    return;
+  }
+  loc.textContent = `${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)}`;
+  try {
+    // キャッシュ チェック (30 分)
+    let cached = null;
+    try {
+      const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+      if (raw) {
+        const j = JSON.parse(raw);
+        if (j && Date.now() - j.ts < WEATHER_CACHE_TTL_MS &&
+            Math.abs(j.lat - coords.lat) < 0.02 && Math.abs(j.lon - coords.lon) < 0.02) {
+          cached = j.data;
+        }
+      }
+    } catch (_) {}
+    let om;
+    if (cached) {
+      om = cached;
+    } else {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
+                  `&current_weather=true&daily=sunrise,sunset,weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+                  `&timezone=auto&forecast_days=2`;
+      const res = await fetch(url);
+      om = await res.json();
+      try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ ts: Date.now(), lat: coords.lat, lon: coords.lon, data: om })); } catch (_) {}
+    }
+    const now = om.current_weather || {};
+    const [icon, label] = wxLabel(now.weathercode);
+    const daily = om.daily || {};
+    const sr = daily.sunrise?.[0]?.split('T')[1] || '—';
+    const ss = daily.sunset?.[0]?.split('T')[1] || '—';
+    const tmax = daily.temperature_2m_max?.[0];
+    const tmin = daily.temperature_2m_min?.[0];
+    const pop  = daily.precipitation_probability_max?.[0];
+    const [icon2, label2] = wxLabel(daily.weathercode?.[1]);
+    const tmax2 = daily.temperature_2m_max?.[1];
+    const tmin2 = daily.temperature_2m_min?.[1];
+    const pop2  = daily.precipitation_probability_max?.[1];
+    root.innerHTML = `
+      <div style="display:flex; align-items:center; gap:14px; padding:8px 4px">
+        <div style="font-size:42px">${icon}</div>
+        <div style="flex:1">
+          <div class="bold">今 ${escapeHtml(label)}・${now.temperature?.toFixed?.(1) ?? '—'}°C</div>
+          <div class="hint-sm">最高 ${tmax ?? '—'}° / 最低 ${tmin ?? '—'}° / 降水 ${pop ?? 0}%</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; padding:4px; border-top:1px solid var(--line)">
+        <div style="flex:1; min-width:120px"><span style="color:#f59e0b">🌅</span> 日の出 <b>${sr.slice(0,5)}</b></div>
+        <div style="flex:1; min-width:120px"><span style="color:#e11d48">🌇</span> 日の入 <b>${ss.slice(0,5)}</b></div>
+      </div>
+      <div style="border-top:1px solid var(--line); padding:6px 4px; font-size:13px">
+        <span class="bold">明日</span> ${icon2} ${escapeHtml(label2)}・${tmax2 ?? '—'}° / ${tmin2 ?? '—'}°・降水 ${pop2 ?? 0}%
+      </div>
+      <div class="hint-sm" style="text-align:right; padding-top:4px">data: Open-Meteo</div>
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="hint">天気取得 失敗: ${escapeHtml(String(e?.message || e))}</div>`;
+  }
+}
+
 // v584 1 日 1 回 占い (サーバから その日 の運勢を 取得)。 同じ日 は 同じ結果。
 //   結果は balance hero card 内に 大きめ に 表示される。
 async function loadDailyFortune() {
