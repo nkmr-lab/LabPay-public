@@ -928,15 +928,12 @@ function mahjong_lock_game(PDO $pdo, int $gid): array {
     return $g;
 }
 function mahjong_assert_balance(PDO $pdo, int $uid, int $need): void {
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < $need) {
-        throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %d、 現在 %d)', $need, $bal), 400);
-    }
+    // v571 リファクタ: GameLobby 共通ヘルパに委譲
+    GameLobby::assertBalance($pdo, $uid, $need);
 }
 function mahjong_insert_player(PDO $pdo, int $gid, int $uid, int $seat): void {
     $pdo->prepare("INSERT INTO mahjong_players (game_id, user_id, seat_order) VALUES (?,?,?)")->execute([$gid, $uid, $seat]);
 }
 function mahjong_deposit(PDO $pdo, int $gid, int $uid, int $amount): void {
-    Ledger::transfer($pdo, $uid, 1, $amount, 'mahjong_buyin', 'mahjong', $gid, '麻雀卓 #' . $gid . ' buy-in');
-    $pdo->prepare("UPDATE mahjong_games SET pot_total = pot_total + ? WHERE id = ?")->execute([$amount, $gid]);
+    GameLobby::depositToPot($pdo, $gid, $uid, $amount, 'mahjong_buyin', 'mahjong', 'mahjong_games', '麻雀卓 #' . $gid . ' buy-in');
 }

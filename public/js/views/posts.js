@@ -167,6 +167,10 @@ function renderBodyHtml(body) {
   s = s.replace(/@([\p{L}\p{N}_\-\.]{1,40})/gu, (_, name) =>
     `<a href="#/sns" class="hint" style="color:var(--primary); font-weight:600; text-decoration:none">@${escapeHtml(name)}</a>`);
   s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  // v571 LabPay 内ハッシュリンク (/#/ito など) をクリック可能化。 すでに http リンク化
+  //   された後なので 純粋な /#/ or #/ で始まる URL のみマッチ。
+  s = s.replace(/(^|[\s])(\/?#\/[A-Za-z0-9_\-\/:?=&%\.]+)/g, (_, pre, url) =>
+    `${pre}<a href="${url.replace(/^\//, '')}" style="color:var(--primary); font-weight:600">${url}</a>`);
   return s.replace(/\n/g, '<br>');
 }
 

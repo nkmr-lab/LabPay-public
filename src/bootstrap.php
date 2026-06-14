@@ -533,6 +533,7 @@ require_once __DIR__ . '/handlers/walk.php';
 require_once __DIR__ . '/handlers/shiritori.php';
 require_once __DIR__ . '/handlers/tierlists.php';
 require_once __DIR__ . '/MahjongEngine.php';
+require_once __DIR__ . '/GameLobby.php';
 require_once __DIR__ . '/handlers/mahjong.php';
 require_once __DIR__ . '/handlers/ito.php';
 require_once __DIR__ . '/handlers/jinrou.php';

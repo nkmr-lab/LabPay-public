@@ -258,6 +258,6 @@ function ito_lock(PDO $pdo, int $gid): array {
 }
 function ito_deposit(PDO $pdo, int $gid, int $uid, int $amount): void {
     // v569 ito はプレイフィー: 参加時にシステムへ徴収。 cancel 時のみ返金。
-    Ledger::transfer($pdo, $uid, 1, $amount, 'mahjong_buyin', 'ito', $gid, 'ito プレイフィー');
-    $pdo->prepare("UPDATE ito_games SET pot_total = pot_total + ? WHERE id = ?")->execute([$amount, $gid]);
+    // v571 リファクタ: GameLobby 共通ヘルパに委譲
+    GameLobby::depositToPot($pdo, $gid, $uid, $amount, 'mahjong_buyin', 'ito', 'ito_games', 'ito プレイフィー');
 }

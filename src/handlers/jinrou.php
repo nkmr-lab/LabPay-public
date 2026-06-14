@@ -425,6 +425,6 @@ function jinrou_lock(PDO $pdo, int $gid): array {
     return $g;
 }
 function jinrou_deposit(PDO $pdo, int $gid, int $uid, int $amount): void {
-    Ledger::transfer($pdo, $uid, 1, $amount, 'mahjong_buyin', 'jinrou', $gid, '人狼プレイフィー');
-    $pdo->prepare("UPDATE jinrou_games SET pot_total = pot_total + ? WHERE id = ?")->execute([$amount, $gid]);
+    // v571 リファクタ: GameLobby 共通ヘルパに委譲
+    GameLobby::depositToPot($pdo, $gid, $uid, $amount, 'mahjong_buyin', 'jinrou', 'jinrou_games', '人狼プレイフィー');
 }
