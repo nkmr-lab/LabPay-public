@@ -11,38 +11,40 @@ import { escapeHtml } from '../router.js';
 
 // 通知 軸 カテゴリ。 並び順 = 表示順。
 export const APP_CATEGORIES = [
-  { id: 'urgent',  label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知 を 出す ジャンル。' },
-  { id: 'inform',  label: '🟡 全員に届くお知らせ',       hint: '投稿 や 参加で 全員に 情報通知。 締切は ない / 緩い。' },
-  { id: 'tool',    label: '🟢 その場で結論が出る道具',   hint: '結果は 画面内で 完結。 通知は 出さない。' },
-  { id: 'game',    label: '🎮 ゲーム / 娯楽',           hint: 'ラボメンバーで遊ぶ ゲーム。 娯楽タブからも アクセス可。' },
-  { id: 'health',  label: '💪 健康 / 運動',             hint: '体・運動の記録。 個人ツール 中心。' },
-  { id: 'ai',      label: '🤖 個人ツール (AI / 計算)',   hint: '自分用 の 会話 / 翻訳 / 計算。 通知は 出さない。' },
-  { id: 'archive', label: '📚 ラボの情報・蓄積',         hint: '受動的に 参照する 静的・蓄積系。 通知は 出さない。' },
+  { id: 'research',  label: '🔬 研究用',                  hint: '査読・原稿チェック・締切・タイマー・順番決め・学会情報・グループなど、研究活動で日常的に使うもの。' },
+  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: '投票・点呼・待ち合わせ・割り勘・集金・くじ引きなど、ラボの運営や合意形成で使うもの。' },
+  { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知を出すジャンル。' },
+  { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
+  { id: 'tool',      label: '🟢 その場で結論が出る道具',   hint: '結果は画面内で完結。通知は出さない。' },
+  { id: 'game',      label: '🎮 ゲーム / 娯楽',           hint: 'ラボメンバーで遊ぶゲーム。娯楽タブからもアクセス可。' },
+  { id: 'health',    label: '💪 健康 / 運動',             hint: '体・運動の記録。個人ツール中心。' },
+  { id: 'ai',        label: '🤖 個人ツール (AI / 計算)',   hint: '自分用の会話 / 翻訳 / 計算。通知は出さない。' },
+  { id: 'archive',   label: '📚 ラボの情報・蓄積',         hint: '受動的に参照する静的・蓄積系。通知は出さない。' },
 ];
 
 export const APPS = [
   // 🔴 urgent — 締切・応答が要る (通知 出す)
-  { id: 'rollcalls',     cat: 'urgent', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
-  { id: 'polls',         cat: 'urgent', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
-  { id: 'requests',      cat: 'urgent', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
-  { id: 'meetups',       cat: 'urgent', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
-  { id: 'deadlines',     cat: 'urgent', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで。 待ち合わせ と 同じ 仕組み (kind=deadline)。', defaultVisible: true },
-  { id: 'timers',        cat: 'urgent', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
+  { id: 'rollcalls',     cat: 'lab-mgmt', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる?」「起きてる?」 をワンタップで集める。締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
+  { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
+  { id: 'requests',      cat: 'lab-mgmt', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
+  { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
+  { id: 'deadlines',     cat: 'research', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
+  { id: 'timers',        cat: 'research', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
   { id: 'auctions',      cat: 'urgent', url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
-  { id: 'nomikai',       cat: 'urgent', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
+  { id: 'nomikai',       cat: 'lab-mgmt', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
 
   // 🟡 inform — 全員に届くお知らせ
-  { id: 'notices',       cat: 'inform', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
-  { id: 'groups',        cat: 'inform', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
+  { id: 'notices',       cat: 'research', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。カテゴリで切替。全メンバーが投稿可、投稿者 + admin が編集/削除。', defaultVisible: true },
+  { id: 'groups',        cat: 'research', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
 
   // 🟢 tool — その場で結論が出る道具 (通知なし)
-  { id: 'roulette',      cat: 'tool',   url: '#/roulette',      title: '🎰 ルーレット',       desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
-  { id: 'text-roulette', cat: 'tool',   url: '#/text-roulette', title: '🍜 どこ行くルーレット', desc: '昼飯どこ行く / 何食べる など、 任意のテキスト候補から 1 つを選ぶシンプル版。', defaultVisible: true },
-  { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: '🎲 ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
+  { id: 'roulette',      cat: 'lab-mgmt', url: '#/roulette',      title: '🎰 ルーレット',       desc: 'メンバーから1人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
+  { id: 'text-roulette', cat: 'lab-mgmt', url: '#/text-roulette', title: '🍜 どこ行くルーレット', desc: '昼飯どこ行く / 何食べるなど、任意のテキスト候補から1つを選ぶシンプル版。', defaultVisible: true },
+  { id: 'random-groups', cat: 'research', url: '#/random-groups', title: '🎲 ランダムグループ生成', desc: '選んだメンバーをNチームにランダム分け。学年/男女を 「できるだけ均等」 にする配慮も可能。', defaultVisible: true },
   // v523 #160 順番決め (発表順 / 当番 など)。 メンバーを 1 列に並び替えて 結果を全員に通知。
-  { id: 'orderings',     cat: 'tool',   url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを 1 列に並び替え (発表順 / 当番割 など)。 結果は 各メンバーに通知される。 1 人ずつめくる演出 付き。', defaultVisible: true },
+  { id: 'orderings',     cat: 'research', url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを1列に並び替え (発表順 / 当番割など)。結果は各メンバーに通知される。1人ずつめくる演出付き。', defaultVisible: true },
   // v529 #165 ストップウォッチを 締切系 (urgent) カテゴリに移動 (発表時間など 「時間で動く」 性質)
-  { id: 'stopwatches',   cat: 'urgent', url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有の カウントアップ計測器。 開始 / 一時停止 / リセット 全員操作可。 発表時間 や 雑談計測 用。', defaultVisible: true },
+  { id: 'stopwatches',   cat: 'research', url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有のカウントアップ計測器。開始 / 一時停止 / リセット全員操作可。発表時間や雑談計測用。', defaultVisible: true },
 
   { id: 'todos',         cat: 'ai',     url: '#/todos',         title: '📝 自分の TODO',     desc: 'やる こと メモ。 サーバ 保存 で 端末間 共有。 完了 と 未完了 を 分けて 表示。', defaultVisible: true },
 
@@ -69,9 +71,9 @@ export const APPS = [
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
-  { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
+  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
-  { id: 'resume-check',  cat: 'ai',     url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書 など 1-2 ページの 短原稿 を チェック (5pt)。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 を 一通り 見ます。 論文ほど厳密ではない 軽量版。', defaultVisible: true },
+  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック (5pt)。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を一通り見ます。論文ほど厳密ではない軽量版。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'tool',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化。 完全オフラインで動作。 画面 自動ON 維持。 機内で 退屈 しのぎ に。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
