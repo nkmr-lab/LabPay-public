@@ -14,6 +14,8 @@ export const APP_CATEGORIES = [
   { id: 'urgent',  label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知 を 出す ジャンル。' },
   { id: 'inform',  label: '🟡 全員に届くお知らせ',       hint: '投稿 や 参加で 全員に 情報通知。 締切は ない / 緩い。' },
   { id: 'tool',    label: '🟢 その場で結論が出る道具',   hint: '結果は 画面内で 完結。 通知は 出さない。' },
+  { id: 'game',    label: '🎮 ゲーム / 娯楽',           hint: 'ラボメンバーで遊ぶ ゲーム。 娯楽タブからも アクセス可。' },
+  { id: 'health',  label: '💪 健康 / 運動',             hint: '体・運動の記録。 個人ツール 中心。' },
   { id: 'ai',      label: '🤖 個人ツール (AI / 計算)',   hint: '自分用 の 会話 / 翻訳 / 計算。 通知は 出さない。' },
   { id: 'archive', label: '📚 ラボの情報・蓄積',         hint: '受動的に 参照する 静的・蓄積系。 通知は 出さない。' },
 ];
@@ -53,27 +55,27 @@ export const APPS = [
   { id: 'contacts',      cat: 'archive', url: '#/contacts',     title: '📞 連絡先',          desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
   { id: 'scrapbox',      cat: 'archive', url: '#/scrapbox',     title: '📚 Scrapbox 履歴',   desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
   { id: 'network',       cat: 'archive', url: '#/network',      title: '🕸 関係性グラフ',    desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
-  { id: 'exercise',      cat: 'archive', url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
+  { id: 'exercise',      cat: 'health',  url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
   // v531 #163 行った国 / 都道府県 制覇マップ
   { id: 'regions',       cat: 'archive', url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県 を タップで 登録。 進捗バー (47/47 都道府県 や 100/X 国) + ラボ メンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
   // v532 #161 体重 / BMI 記録 (個人ツール、 通知なし)
-  { id: 'health',        cat: 'ai',     url: '#/health',         title: '⚖️ 体重 / BMI',    desc: '体重・身長・体脂肪 を 1 タップで記録。 BMI 自動計算 + やせ/標準/肥満 分類 + 折れ線グラフ。 完全に個人ツール (他のメンバーには見えません)。', defaultVisible: true },
+  { id: 'health',        cat: 'health', url: '#/health',         title: '⚖️ 体重 / BMI',    desc: '体重・身長・体脂肪 を 1 タップで記録。 BMI 自動計算 + やせ/標準/肥満 分類 + 折れ線グラフ。 完全に個人ツール (他のメンバーには見えません)。', defaultVisible: true },
   // v533 #162 筋トレ記録 + 仲間 (mutual follow)
-  { id: 'workouts',      cat: 'archive', url: '#/workouts',      title: '💪 筋トレ',         desc: '腕立て / 腹筋 / 背筋 / スクワット / プランク / 懸垂 / ベンチプレス などをプリセットから 1 タップ記録。 仲間 (お互いに追加) と 様子を共有 / 比べ合い。', defaultVisible: true },
+  { id: 'workouts',      cat: 'health',  url: '#/workouts',      title: '💪 筋トレ',         desc: '腕立て / 腹筋 / 背筋 / スクワット / プランク / 懸垂 / ベンチプレス などをプリセットから 1 タップ記録。 仲間 (お互いに追加) と 様子を共有 / 比べ合い。', defaultVisible: true },
   // v538 #169 散歩に行きたくなるアプリ
-  { id: 'walk',          cat: 'tool',   url: '#/walk',           title: '🚶 散歩',           desc: '現在地周辺の 食べある記 から 散歩先を ランダムにおすすめ。 距離 + 徒歩何分 + 方位矢印 + Google Maps 経路。 未訪を優先 + 半径切替 (500m〜5km)。', defaultVisible: true },
-  // v540 #171 絵しりとり (Phase 1)
-  { id: 'shiritori',     cat: 'urgent', url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く 絵しりとり。 タイムリミット付きキャンバス + ストローク記録。 自分が何を描いたか + 前の人を何と予想したかを登録。 周回数 + ギブアップ。 AI 予想 + 最終当ては Phase 2 で。', defaultVisible: true },
+  { id: 'walk',          cat: 'health', url: '#/walk',           title: '🚶 散歩',           desc: '現在地周辺の 食べある記 から 散歩先を ランダムにおすすめ。 距離 + 徒歩何分 + 方位矢印 + Google Maps 経路。 未訪を優先 + 半径切替 (500m〜5km)。', defaultVisible: true },
+  // v540 #171 絵しりとり (v574 から game カテゴリへ)
+  { id: 'shiritori',     cat: 'game',   url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く 絵しりとり。 タイムリミット付きキャンバス + ストローク記録。 自分が何を描いたか + 前の人を何と予想したかを登録。 周回数 + ギブアップ。 AI 予想 + 最終当ては Phase 2 で。', defaultVisible: true },
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'tool',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け。 自分の回答を保存すると 他人の回答 + 全員集計 が見れる。', defaultVisible: true },
   // v550 #206 論文査読
   { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
-  // v553 #209 麻雀 Phase 1 (賭けプール only)
-  { id: 'mahjong',       cat: 'archive', url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 1〜4 位申告で 自動分配 (50/30/15/0% + 場代 5%)。 Phase 1 は実ゲーム外 (雀魂等で遊んで結果報告)、 Phase 2 で実ゲーム化予定。', defaultVisible: true },
-  // v568 #223 ito Phase 1
-  { id: 'ito',           cat: 'urgent',  url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
-  // v570 #223 人狼 Phase 1
-  { id: 'jinrou',        cat: 'urgent',  url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
+  // v553 #209 麻雀 (v574 から game カテゴリへ)
+  { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦 (5pt) もあり。', defaultVisible: true },
+  // v568 #223 ito (v574 から game カテゴリへ)
+  { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
+  // v570 #223 人狼 (v574 から game カテゴリへ)
+  { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },

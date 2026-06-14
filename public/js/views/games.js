@@ -22,21 +22,15 @@ const GAMES = [
   { id: 'tierlists', icon: '🎯', name: 'ティア表',     url: '#/tierlists',
     desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け',
     badge: '無料' },
-  { id: 'roulette',  icon: '🎰', name: 'ルーレット',   url: '#/roulette',
-    desc: 'メンバーから ランダムに 1 人 選ぶ (くじ引き)',
-    badge: '無料' },
-  { id: 'text-roulette', icon: '🍜', name: 'どこ行く', url: '#/text-roulette',
-    desc: '候補テキストから ランダムに 1 つ 選ぶ (ランチ決め等)',
-    badge: '無料' },
-  { id: 'orderings', icon: '📋', name: '順番決め',     url: '#/orderings',
-    desc: 'メンバー or 候補を ランダムに 並び替え (発表順 / シャッフル)',
+  { id: 'regions',   icon: '🗺', name: '制覇マップ',   url: '#/regions',
+    desc: '行った国・都道府県 を タップで 登録 → 進捗バー (X/47 都道府県 や X/100+ 国) + ラボ内の集計',
     badge: '無料' },
 ];
 
 const CATEGORIES = [
   { key: 'gamble', label: '💰 賭け / フィー' },
   { key: 'party',  label: '🎉 パーティー' },
-  { key: 'random', label: '🎲 ランダム選び' },
+  { key: 'collect',label: '🗺 集める / 制覇する' },
 ];
 
 const GAME_CATEGORY = {
@@ -46,9 +40,7 @@ const GAME_CATEGORY = {
   jinrou:        'party',
   shiritori:     'party',
   tierlists:     'party',
-  roulette:      'random',
-  'text-roulette': 'random',
-  orderings:     'random',
+  regions:       'collect',
 };
 
 export function renderGames() {
@@ -57,7 +49,8 @@ export function renderGames() {
     <div class="card page-header">
       <h2 style="margin:0">🎮 娯楽</h2>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        ラボメンバーで遊べる ゲーム / ランダム選び。 プレイフィー / 賭け / 無料 がそれぞれ並びます。
+        ラボメンバーで遊べる ゲーム。 プレイフィー / 賭け / 無料 がそれぞれ並びます。
+        (ルーレット / どこ行く / 順番決め は <a href="#/apps">アプリ</a> タブから)
       </p>
     </div>
     ${CATEGORIES.map(cat => {
