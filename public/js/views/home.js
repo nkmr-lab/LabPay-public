@@ -205,6 +205,7 @@ export const HOME_CARDS = [
   { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
+  { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
@@ -218,6 +219,7 @@ export const HOME_CARDS = [
 const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
+  'bingo', // v600 #232 ビンゴ ウィジェット を デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -235,12 +237,17 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
 const NEW_DEFAULT_HIDDEN = ['weather']; // v585 で 追加 / v592b 以降 デフォルト OFF を 強制
+const NEW_DEFAULT_SHOWN  = ['bingo'];   // v600 #232 既存ユーザにも ON を 強制
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
     const hiddenSet = new Set(hidden);
     for (const id of NEW_DEFAULT_HIDDEN) {
       if (!orderSet.has(id)) hiddenSet.add(id);
+    }
+    // 既存ユーザの 保存 order に入って ない && DEFAULT_SHOWN なら hidden から外す
+    for (const id of NEW_DEFAULT_SHOWN) {
+      if (!orderSet.has(id)) hiddenSet.delete(id);
     }
     return { order, hidden: [...hiddenSet] };
   };
@@ -360,6 +367,12 @@ export async function renderHome() {
              border-radius:8px; text-align:center; font-size:14px; line-height:1.4; color:#946d00; display:none">
         <span id="home-fortune-text"></span>
       </div>
+      <!-- v600 #231 誕生日 バナー。 当日のみ表示。 -->
+      <div id="home-birthday" style="margin-top:8px; padding:10px 14px; background:linear-gradient(135deg, #fce7f3, #fde68a, #c7d2fe);
+             border-radius:10px; text-align:center; font-size:15px; line-height:1.5; display:none">
+        <div style="font-size:22px">🎂 お誕生日おめでとう! 🎉</div>
+        <div id="home-birthday-msg" style="font-size:13px; margin-top:4px; color:#7c2d12"></div>
+      </div>
       <div id="checkin-area" style="margin-top:10px; ${isBalanceCompVisible('checkin') ? '' : 'display:none'}"></div>
       <div style="margin-top:14px; display:${isBalanceCompVisible('shortcuts') ? 'flex' : 'none'}; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
         ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => a.jsAction ? `
@@ -460,6 +473,14 @@ export async function renderHome() {
       <div id="home-todos" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
+    <div class="card" id="home-bingo-card" data-card-id="bingo" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎰 今週のビンゴ</h2>
+        <a href="#/bingo" class="hint">詳細 →</a>
+      </div>
+      <div id="home-bingo"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <div class="card" id="home-weather-card" data-card-id="weather" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">☀️ 今日の空</h2>
@@ -551,6 +572,7 @@ export async function renderHome() {
     { cardId: 'todos',          fn: renderHomeTodos,       label: 'hometodos' },
     { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
     { cardId: 'weather',        fn: renderWeatherWidget,   label: 'weather' }, // v585
+    { cardId: 'bingo',          fn: renderBingoWidget,     label: 'bingo' },   // v600 #232
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -574,6 +596,7 @@ export async function renderHome() {
     timed('balance', () => refreshFinancials({ silent: false })),
     timed('checkin', () => renderCheckinArea()),
     timed('medals',  () => renderMedalsStrip()),
+    timed('birthday', () => checkBirthday()),
     // v592 占いは ボタンで 任意 表示 (普段は 非表示)
   ]);
   const cardPromises = cardsToRender
@@ -1688,6 +1711,70 @@ async function renderWeatherWidget() {
   } catch (e) {
     root.innerHTML = `<div class="hint">天気取得 失敗: ${escapeHtml(String(e?.message || e))}</div>`;
   }
+}
+
+// v600 #231 誕生日 バナー。 state.me に birthday_md があり 今日 (MM-DD) と一致したら表示。
+async function checkBirthday() {
+  const box = document.getElementById('home-birthday');
+  const msg = document.getElementById('home-birthday-msg');
+  if (!box || !msg) return;
+  const md = state.me?.birthday_md;
+  if (!md) { box.style.display = 'none'; return; }
+  const now = new Date();
+  const todayMd = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  if (md !== todayMd) { box.style.display = 'none'; return; }
+  const year = state.me?.birthday_year;
+  let suffix = '今日も最高の1日にしましょう!';
+  if (year) {
+    const age = now.getFullYear() - year;
+    suffix = `${age}歳の誕生日 🎁 今日も最高の1日にしましょう!`;
+  }
+  msg.textContent = suffix;
+  box.style.display = '';
+}
+
+// v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
+async function renderBingoWidget() {
+  const card = document.getElementById('home-bingo-card');
+  const root = document.getElementById('home-bingo');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/bingo/me');
+    card.hidden = false;
+    // リーチ計算 (1 マス足りないライン)
+    const set = new Set(d.completed);
+    let reach = 0;
+    const lines = [];
+    for (let r = 0; r < 5; r++) lines.push([r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
+    for (let c = 0; c < 5; c++) lines.push([c, c+5, c+10, c+15, c+20]);
+    lines.push([0,6,12,18,24]); lines.push([4,8,12,16,20]);
+    const reachIdxs = new Set();
+    for (const line of lines) {
+      const missing = line.filter(i => !set.has(i));
+      if (missing.length === 1) { reach++; reachIdxs.add(missing[0]); }
+    }
+    const isBingo = d.bingo_lines > 0;
+    root.innerHTML = `
+      <div style="display:flex; gap:10px; align-items:center">
+        <div style="flex:1">
+          ${isBingo
+            ? `<div class="bold" style="color:#dc2626; font-size:18px">🎉 BINGO! ${d.bingo_lines} 本</div>`
+            : reach > 0
+              ? `<div class="bold" style="color:#f59e0b">⚡ リーチ ${reach}</div>`
+              : `<div class="bold">進捗 ${d.completed.length} / 25</div>`}
+          <div class="hint-sm">${escapeHtml(d.week_start)} 開始</div>
+        </div>
+        <a href="#/bingo" style="display:grid; grid-template-columns:repeat(5, 14px); grid-template-rows:repeat(5, 14px); gap:2px; padding:4px; background:#fafafa; border-radius:6px; text-decoration:none">
+          ${Array.from({length: 25}, (_, i) => {
+            const done = set.has(i);
+            const isReach = reachIdxs.has(i);
+            const bg = done ? '#dc2626' : (isReach ? '#f59e0b' : '#e5e7eb');
+            return `<div style="background:${bg}; border-radius:2px"></div>`;
+          }).join('')}
+        </a>
+      </div>
+    `;
+  } catch (_) { card.hidden = true; }
 }
 
 // v584 1 日 1 回 占い (サーバから その日 の運勢を 取得)。 同じ日 は 同じ結果。

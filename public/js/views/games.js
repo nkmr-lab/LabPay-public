@@ -23,7 +23,10 @@ const GAMES = [
     desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け',
     badge: '無料' },
   { id: 'regions',   icon: '🗺', name: '制覇マップ',   url: '#/regions',
-    desc: '行った国・都道府県 を タップで 登録 → 進捗バー (X/47 都道府県 や X/100+ 国) + ラボ内の集計',
+    desc: '行った国・都道府県をタップで登録 → 進捗バー (X/47都道府県やX/100+国) + ラボ内の集計',
+    badge: '無料' },
+  { id: 'playlists', icon: '🎵', name: 'プレイリスト', url: '#/playlists',
+    desc: 'YouTube/Spotify URLをまとめて紹介。⭐評価+コメント+❤️お気に入り+ジャンル+シャッフル再生',
     badge: '無料' },
   { id: 'predictions', icon: '🏆', name: '優勝予想',   url: '#/predictions',
     desc: 'W 杯 / スポーツ大会 / 学会 best paper など 順位を予想して 参加フィー を山分け',
@@ -52,8 +55,9 @@ const GAME_CATEGORY = {
   ito:           'party',
   jinrou:        'party',
   shiritori:     'party',
-  tierlists:     'party',
+  tierlists:     'collect', // v600 #229 ティア表は 集める/制覇カテゴリへ (好きな物を分類する系)
   regions:       'collect',
+  playlists:     'collect', // v600 #230 プレイリストは 集める/制覇 (音楽コレクション)
 };
 
 export function renderGames() {

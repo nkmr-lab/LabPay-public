@@ -57,7 +57,7 @@ export const APPS = [
   { id: 'network',       cat: 'archive', url: '#/network',      title: '🕸 関係性グラフ',    desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
   { id: 'exercise',      cat: 'health',  url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
   // v531 #163 行った国 / 都道府県 制覇マップ
-  { id: 'regions',       cat: 'archive', url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県 を タップで 登録。 進捗バー (47/47 都道府県 や 100/X 国) + ラボ メンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
+  { id: 'regions',       cat: 'game',   url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県をタップで登録。進捗バー (47/47都道府県や100/X国) + ラボメンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
   // v532 #161 体重 / BMI 記録 (個人ツール、 通知なし)
   { id: 'health',        cat: 'health', url: '#/health',         title: '⚖️ 体重 / BMI',    desc: '体重・身長・体脂肪 を 1 タップで記録。 BMI 自動計算 + やせ/標準/肥満 分類 + 折れ線グラフ。 完全に個人ツール (他のメンバーには見えません)。', defaultVisible: true },
   // v533 #162 筋トレ記録 + 仲間 (mutual follow)
@@ -67,7 +67,7 @@ export const APPS = [
   // v540 #171 絵しりとり (v574 から game カテゴリへ)
   { id: 'shiritori',     cat: 'game',   url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く 絵しりとり。 タイムリミット付きキャンバス + ストローク記録。 自分が何を描いたか + 前の人を何と予想したかを登録。 周回数 + ギブアップ。 AI 予想 + 最終当ては Phase 2 で。', defaultVisible: true },
   // v549 #210 ティア表
-  { id: 'tierlists',     cat: 'tool',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け。 自分の回答を保存すると 他人の回答 + 全員集計 が見れる。', defaultVisible: true },
+  { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
   { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
@@ -88,7 +88,7 @@ export const APPS = [
   { id: 'bingo',         cat: 'game',   url: '#/bingo',          title: '🎰 ビンゴ',          desc: '毎週 5x5 ビンゴカードが 自動生成。 平日の 行動 (ラボイン/らぼったー投稿/麻雀/オセロ/食べある記 など) が 自動カウント。 達成早 + ライン数 で 週次 リーダーボード。', defaultVisible: true },
   // v590 大富豪 (シンプル MVP)
   { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。 単出し / ペア / N 枚 出し で 同枚数 + 強い数字 を 出す。 ジョーカー ワイルド。 1pt buy-in、 1 位が pot 総取り。 革命 / 縛り は省略 (MVP)。', defaultVisible: true },
-  { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },
+  { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
   { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },
 ];

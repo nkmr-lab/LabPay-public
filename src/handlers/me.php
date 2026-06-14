@@ -14,7 +14,17 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info FROM users WHERE id=?');
+        // v600 #228 streak が 切れているなら 表示用に 0 にする。
+        //   last_checkin_date が 今日 or 昨日 ならそのまま。 それより前なら 0。
+        //   (DB の current_streak は そのまま 保存しておく — 次回 checkin の 計算に使う)
+        if ($streak['last_checkin_date']) {
+            $today = (new DateTimeImmutable('now', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
+            $yest  = (new DateTimeImmutable('yesterday', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
+            if ($streak['last_checkin_date'] !== $today && $streak['last_checkin_date'] !== $yest) {
+                $streak['current_streak'] = 0;
+            }
+        }
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
@@ -26,6 +36,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['favorites']         = $row['favorites']         ?? null;
         $u['paypay_id']         = $row['paypay_id']         ?? null;
         $u['bank_info']         = $row['bank_info']         ?? null;
+        $u['birthday_md']       = $row['birthday_md']       ?? null;
+        $u['birthday_year']     = $row['birthday_year']     ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -140,6 +152,31 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $bi = trim((string)$bi);
                 if (mb_strlen($bi) > 500) throw new ApiException('bad_request', 'bank_info は 500 文字 まで', 400);
                 $sets[] = 'bank_info = ?'; $params[] = $bi;
+            }
+        }
+        // v600 #231 誕生日 (MM-DD 形式 + 任意の西暦)
+        if (array_key_exists('birthday_md', $body)) {
+            $bd = $body['birthday_md'];
+            if ($bd === null || trim((string)$bd) === '') {
+                $sets[] = 'birthday_md = NULL';
+            } else {
+                $bd = trim((string)$bd);
+                if (!preg_match('/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/', $bd)) {
+                    throw new ApiException('bad_request', '誕生日は MM-DD 形式 (例: 03-15)', 400);
+                }
+                $sets[] = 'birthday_md = ?'; $params[] = $bd;
+            }
+        }
+        if (array_key_exists('birthday_year', $body)) {
+            $by = $body['birthday_year'];
+            if ($by === null || $by === '' || $by === 0) {
+                $sets[] = 'birthday_year = NULL';
+            } else {
+                $by = (int)$by;
+                if ($by < 1900 || $by > (int)date('Y')) {
+                    throw new ApiException('bad_request', '西暦が不正です', 400);
+                }
+                $sets[] = 'birthday_year = ?'; $params[] = $by;
             }
         }
         if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);

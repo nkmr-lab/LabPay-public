@@ -52,6 +52,16 @@ export async function renderSettings() {
         <span class="lbl">🏦 銀行口座 メモ (送金 用、 他のメンバーから 見えます)</span>
         <textarea id="profile-bank" rows="3" maxlength="500" placeholder="例: ○○銀行 ○○支店 普通 1234567 ヤマダ タロウ"></textarea>
       </label>
+      <div class="row" style="gap:6px; align-items:flex-end">
+        <label class="field" style="flex:1">
+          <span class="lbl">🎂 誕生日 (任意、 ホームでバースデー表示)</span>
+          <input type="text" id="profile-birthday-md" maxlength="5" placeholder="MM-DD (例: 03-15)" style="font-variant-numeric:tabular-nums">
+        </label>
+        <label class="field" style="width:120px">
+          <span class="lbl">西暦 (任意)</span>
+          <input type="number" id="profile-birthday-year" min="1900" max="2100" placeholder="1990">
+        </label>
+      </div>
       <div class="row" style="gap:6px">
         <button id="profile-save" class="primary">保存</button>
         <button id="profile-clear-avatar">アバター削除</button>
@@ -660,6 +670,8 @@ async function loadProfile() {
     document.getElementById('profile-favorites').value = me.user.favorites || '';
     document.getElementById('profile-paypay').value = me.user.paypay_id || '';
     document.getElementById('profile-bank').value   = me.user.bank_info || '';
+    document.getElementById('profile-birthday-md').value   = me.user.birthday_md || '';
+    document.getElementById('profile-birthday-year').value = me.user.birthday_year || '';
     const pv = document.getElementById('profile-view');
     if (pv) pv.href = '#/users/' + me.user.id;
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
@@ -676,6 +688,8 @@ async function onProfileSave() {
   const favorites = document.getElementById('profile-favorites').value.trim();
   const paypay = document.getElementById('profile-paypay').value.trim();
   const bank   = document.getElementById('profile-bank').value.trim();
+  const bdMd   = document.getElementById('profile-birthday-md').value.trim();
+  const bdY    = document.getElementById('profile-birthday-year').value.trim();
   const body = {
     display_name,
     phone_number: phone_raw === '' ? null : phone_raw,
@@ -684,6 +698,8 @@ async function onProfileSave() {
     favorites: favorites === '' ? null : favorites,
     paypay_id: paypay    === '' ? null : paypay,
     bank_info: bank      === '' ? null : bank,
+    birthday_md:   bdMd === '' ? null : bdMd,
+    birthday_year: bdY  === '' ? null : Number(bdY),
   };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {
