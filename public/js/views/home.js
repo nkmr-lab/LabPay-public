@@ -406,6 +406,16 @@ export async function renderHome() {
         <a href="#/sns" class="hint">タイムライン →</a>
       </div>
       <div id="home-sns" class="list"><div class="home-skel-bars"></div></div>
+      <!-- v581 投稿 欄 (ウィジェット 末尾)。 シンプル: テキスト のみ。 画像 / 位置 /
+           メンション 補完 が 要る ときは タイムライン → を 開く。 -->
+      <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
+        <textarea id="home-sns-body" maxlength="2000" rows="2" placeholder="いま どうしてる?"
+                  style="width:100%; box-sizing:border-box; resize:vertical; min-height:48px"></textarea>
+        <div class="row" style="gap:6px; margin-top:6px; align-items:center; justify-content:flex-end">
+          <span id="home-sns-status" class="hint-sm" style="margin-right:auto"></span>
+          <button id="home-sns-post" class="btn primary" style="padding:6px 14px">投稿</button>
+        </div>
+      </div>
     </div>
 
     <details class="card" data-card-id="history">
@@ -1486,6 +1496,7 @@ async function renderFreshSns() {
     const d = await get('/api/posts', { limit: 5 });
     const items = d.items || [];
     card.hidden = false;
+    bindHomeSnsComposer(); // composer は 投稿件数 に関わらず 1 回だけ wire
     if (!items.length) {
       root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ 投稿 なし</div>';
       return;
@@ -1563,7 +1574,43 @@ async function renderFreshSns() {
         </a>`;
     }).join('');
     bindHomeSnsReactions();
+    bindHomeSnsComposer();
   } catch (_) { card.hidden = true; }
+}
+
+// v581 ホーム らぼったー ウィジェット の 投稿欄。 シンプル: テキスト のみ POST。
+//   投稿後は その場で 一覧を 再フェッチ。
+function bindHomeSnsComposer() {
+  const btn  = document.getElementById('home-sns-post');
+  const body = document.getElementById('home-sns-body');
+  const status = document.getElementById('home-sns-status');
+  if (!btn || !body || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async () => {
+    const text = body.value.trim();
+    if (!text) { toast('本文を入力してください'); return; }
+    btn.disabled = true; btn.textContent = '送信中…';
+    if (status) status.textContent = '';
+    try {
+      await post('/api/posts', { body: text });
+      body.value = '';
+      toast('投稿しました');
+      // すぐ 一覧を 更新 (キャッシュ無視で再フェッチ)
+      try { await renderFreshSns(); } catch (_) {}
+    } catch (e) {
+      if (status) status.textContent = '送信失敗: ' + (e?.message || e);
+      else toast('送信失敗: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = '投稿';
+    }
+  });
+  // Ctrl+Enter / Cmd+Enter で 投稿
+  body.addEventListener('keydown', (ev) => {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') {
+      ev.preventDefault();
+      btn.click();
+    }
+  });
 }
 
 // v493 #94 ホーム らぼったー の リアクション ボタン を 押した 瞬間 サーバに 反映し、
