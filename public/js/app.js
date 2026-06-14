@@ -542,6 +542,10 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
+// v568 #223 ito アプリ
+route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
+route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));
+route('/ito/:id',           lazy(() => import('./views/ito.js'), 'renderItoDetail'));
 // v553 #209 麻雀 Phase 1 (lazy import で 普段は未読み込み、 Phase 2 で重くなる予定)
 route('/mahjong/new',       lazy(() => import('./views/mahjong.js'), 'renderMahjongNew'));
 // v556 シミュレータ (内部検証用)

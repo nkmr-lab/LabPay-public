@@ -534,6 +534,7 @@ require_once __DIR__ . '/handlers/shiritori.php';
 require_once __DIR__ . '/handlers/tierlists.php';
 require_once __DIR__ . '/MahjongEngine.php';
 require_once __DIR__ . '/handlers/mahjong.php';
+require_once __DIR__ . '/handlers/ito.php';
 require_once __DIR__ . '/handlers/money_requests.php';
 require_once __DIR__ . '/handlers/polls.php';
 require_once __DIR__ . '/handlers/rollcalls.php';
