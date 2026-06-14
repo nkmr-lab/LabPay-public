@@ -27,7 +27,6 @@ const BINGO_TASK_POOL = [
     ['id' => 'health1',   'label' => '体重 記録 1 回',      'icon' => '⚖️', 'type' => 'health', 'threshold' => 1],
     ['id' => 'poll1',     'label' => '投票 1 回 回答',       'icon' => '📊', 'type' => 'poll_vote', 'threshold' => 1],
     ['id' => 'roll1',     'label' => '点呼 1 回 応答',       'icon' => '📣', 'type' => 'rollcall_resp', 'threshold' => 1],
-    ['id' => 'todo1',     'label' => 'TODO 1 件 完了',      'icon' => '📝', 'type' => 'todo_done', 'threshold' => 1],
     ['id' => 'fortune',   'label' => '占い 大吉 or 中吉',   'icon' => '🔮', 'type' => 'fortune_good', 'threshold' => 1],
     ['id' => 'tier1',     'label' => 'ティア表 1 件 回答',   'icon' => '🎯', 'type' => 'tier_answer', 'threshold' => 1],
     ['id' => 'pred1',     'label' => '優勝予想 1 件 参加',   'icon' => '🏆', 'type' => 'prediction_join', 'threshold' => 1],
@@ -37,7 +36,6 @@ const BINGO_TASK_POOL = [
     ['id' => 'jinrou1',   'label' => '人狼 1 局',           'icon' => '🐺', 'type' => 'jinrou', 'threshold' => 1],
     ['id' => 'ito1',      'label' => 'ito 1 局',           'icon' => '🎲', 'type' => 'ito_game', 'threshold' => 1],
     ['id' => 'meet1',     'label' => '待ち合わせ 1 件 応答', 'icon' => '🤝', 'type' => 'meetup_resp', 'threshold' => 1],
-    ['id' => 'notice1',   'label' => '重要連絡 1 件 投稿',   'icon' => '📢', 'type' => 'notice_post', 'threshold' => 1],
 ];
 
 function route_bingo(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -100,14 +98,12 @@ function bingo_week_start_jst(): string {
 }
 
 function bingo_generate_cells(int $userSeed, string $weekStart): array {
-    // ユーザ + 週 の 安定seed で 25 タスクを 選ぶ
+    // v597 FREE 廃止。 25 マス すべて 通常タスク。 中央を どう 開ける かも 戦略の一部。
     $seed = crc32($userSeed . '_' . $weekStart);
     mt_srand($seed);
     $pool = BINGO_TASK_POOL;
     shuffle($pool);
-    $cells = array_slice($pool, 0, 24);
-    // 中央 (idx 12) は フリー
-    array_splice($cells, 12, 0, [['id' => 'free', 'label' => 'FREE', 'icon' => '🌟', 'type' => 'free', 'threshold' => 0]]);
+    $cells = array_slice($pool, 0, 25);
     mt_srand();
     return $cells;
 }
@@ -119,7 +115,8 @@ function bingo_judge_cells(PDO $pdo, int $uid, string $weekStart, array $cells):
     $weekEnd = (new DateTime($weekStart, new DateTimeZone('Asia/Tokyo')))->modify('+6 days')->format('Y-m-d') . ' 23:59:59';
     $weekStartTs = $weekStart . ' 00:00:00';
     foreach ($cells as $idx => $c) {
-        if ($c['type'] === 'free') { $completed[] = $idx; continue; }
+        // v597 free 廃止。 既存カードの 中央 (free) は そのまま 完了扱いで 残す
+        if (($c['type'] ?? '') === 'free') { $completed[] = $idx; continue; }
         $n = bingo_count_for($pdo, $uid, $c['type'], $weekStartTs, $weekEnd);
         if ($n >= ($c['threshold'] ?? 1)) $completed[] = $idx;
     }
@@ -284,7 +281,7 @@ function bingo_me(PDO $pdo, int $uid): void {
     if (!$card) {
         $cells = bingo_generate_cells($uid, $weekStart);
         $pdo->prepare("INSERT INTO bingo_cards (user_id, week_start, cells_json, completed_idxs_json) VALUES (?,?,?,?)")
-            ->execute([$uid, $weekStart, json_encode($cells, JSON_UNESCAPED_UNICODE), '[12]']);
+            ->execute([$uid, $weekStart, json_encode($cells, JSON_UNESCAPED_UNICODE), '[]']);
         $st->execute([$uid, $weekStart]);
         $card = $st->fetch(PDO::FETCH_ASSOC);
     }
