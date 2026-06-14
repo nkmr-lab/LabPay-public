@@ -102,6 +102,15 @@ const APP_VIS_KEY = 'labpay-apps-visibility';
 export function isAppVisible(_id) { return true; }
 export function setAppVisible(_id, _visible) {}
 
+// v602 カテゴリ内の 表示順を 明示指定するマップ。 値は [id, id, ...] の順序。
+//   ここに 含まれない id は ソース宣言順 で末尾に。
+const CATEGORY_ORDER = {
+  research: [
+    'paper-review', 'resume-check', 'timers', 'stopwatches',
+    'orderings', 'random-groups', 'groups', 'deadlines', 'notices',
+  ],
+};
+
 export async function renderApps() {
   const app = document.getElementById('app');
   const visible = APPS.filter(a => isAppVisible(a.id));
@@ -109,7 +118,16 @@ export async function renderApps() {
 
   // カテゴリ毎 に セクション化。 空セクション は 出さない。
   const sectionsHtml = APP_CATEGORIES.map(c => {
-    const items = visible.filter(a => a.cat === c.id);
+    let items = visible.filter(a => a.cat === c.id);
+    // 指定があれば 並び替え
+    const order = CATEGORY_ORDER[c.id];
+    if (order) {
+      const idx = (id) => {
+        const i = order.indexOf(id);
+        return i === -1 ? 1000 + items.findIndex(x => x.id === id) : i;
+      };
+      items = items.slice().sort((a, b) => idx(a.id) - idx(b.id));
+    }
     if (!items.length) return '';
     return `
       <div class="card" style="margin-top:10px">
