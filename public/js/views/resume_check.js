@@ -16,50 +16,88 @@ export async function renderResumeCheck() {
     <div class="card page-header">
       <h2 style="margin:0">📝 原稿チェック</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        レジュメ / 概要 / 申請書 など 1-2 ページの 短原稿 を チェック。
-        論文ほど厳しくないが、 背景の妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 を 一通り見ます。
-        <b>1 回 5pt</b>。 失敗時は 自動返金。 上限 8000 文字。
+        レジュメ/概要/申請書など1-2ページの短原稿をチェック。
+        論文ほど厳しくないが、背景の妥当性/論理展開/専門用語/接続詞/表記揺れ/引用を一通り見ます。
+        <b>1回5pt</b>。失敗時は自動返金。
       </p>
     </div>
     <div class="card">
+      <div class="row" style="gap:6px; margin-bottom:8px">
+        <button id="rc-tab-pdf" class="btn primary" style="flex:1">📄 PDF アップロード</button>
+        <button id="rc-tab-text" class="btn" style="flex:1">📝 テキスト 貼付</button>
+      </div>
       <label style="display:block; margin-bottom:8px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル (任意)</div>
-        <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿 第 1 稿">
+        <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿 第1稿">
       </label>
-      <label style="display:block; margin-bottom:8px">
+      <div id="rc-pdf-pane">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">原稿 PDF (10 MB まで)</div>
+        <input id="rc-pdf" type="file" accept="application/pdf" class="input">
+        <div class="hint-sm" style="margin-top:4px">図表入りで OK。レイアウトのまま AI に渡るので論理展開が伝わりやすい。</div>
+      </div>
+      <div id="rc-text-pane" hidden>
         <div class="bold" style="font-size:13px; margin-bottom:4px">原稿本文</div>
-        <textarea id="rc-text" class="input" rows="14" placeholder="ここに 原稿を 貼り付け…"></textarea>
+        <textarea id="rc-text" class="input" rows="14" placeholder="ここに原稿を貼り付け…"></textarea>
         <div class="hint" style="font-size:11px; margin-top:2px"><span id="rc-count">0</span> / 8000 文字</div>
-      </label>
-      <div style="display:flex; gap:8px; align-items:center">
-        <button id="rc-submit" class="btn primary">5pt を 支払って チェック依頼</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
+        <button id="rc-submit" class="btn primary">5pt を支払ってチェック依頼</button>
         <span class="hint-sm" id="rc-status"></span>
       </div>
     </div>
     <div class="card">
-      <h3 style="margin:0 0 6px">過去の チェック</h3>
+      <h3 style="margin:0 0 6px">過去のチェック</h3>
       <div id="rc-list"><div class="hint">読み込み中…</div></div>
     </div>
   `;
+  let mode = 'pdf';
+  const tabPdf = document.getElementById('rc-tab-pdf');
+  const tabText = document.getElementById('rc-tab-text');
+  const switchMode = (m) => {
+    mode = m;
+    tabPdf.classList.toggle('primary', m === 'pdf');
+    tabText.classList.toggle('primary', m === 'text');
+    document.getElementById('rc-pdf-pane').hidden = m !== 'pdf';
+    document.getElementById('rc-text-pane').hidden = m !== 'text';
+  };
+  tabPdf.addEventListener('click', () => switchMode('pdf'));
+  tabText.addEventListener('click', () => switchMode('text'));
   const ta = document.getElementById('rc-text');
   const cnt = document.getElementById('rc-count');
   ta.addEventListener('input', () => { cnt.textContent = ta.value.length; });
 
   document.getElementById('rc-submit').addEventListener('click', async () => {
-    const text  = ta.value;
     const title = document.getElementById('rc-title').value.trim();
     const btn   = document.getElementById('rc-submit');
     const sts   = document.getElementById('rc-status');
-    if (text.length < 50) { toast('原稿が短すぎます (50 文字以上)'); return; }
-    if (text.length > 8000) { toast('原稿が長すぎます (8000 文字まで)'); return; }
     btn.disabled = true; btn.textContent = '送信中…'; sts.textContent = '';
     try {
-      const r = await post('/api/ai/resume_check', { text, title: title || null });
-      sts.textContent = `受付けました (id=${r.id})。 結果ページへ…`;
+      let r;
+      if (mode === 'pdf') {
+        const f = document.getElementById('rc-pdf').files?.[0];
+        if (!f) { toast('PDF を選んでください'); btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼'; return; }
+        if (f.size > 10 * 1024 * 1024) { toast('PDF は 10 MB まで'); btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼'; return; }
+        const fd = new FormData();
+        fd.append('file', f);
+        if (title) fd.append('title', title);
+        sts.textContent = 'PDF アップロード中…';
+        const res = await fetch('/api/ai/resume_check', {
+          method: 'POST', body: fd, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
+        });
+        r = await res.json();
+        if (!res.ok || r?.error) throw new Error(r?.error?.message || ('HTTP ' + res.status));
+      } else {
+        const text = ta.value;
+        if (text.length < 50) { toast('原稿が短すぎます (50文字以上)'); btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼'; return; }
+        if (text.length > 8000) { toast('原稿が長すぎます (8000文字まで)。PDF モードへ切替を'); btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼'; return; }
+        r = await post('/api/ai/resume_check', { text, title: title || null });
+      }
+      sts.textContent = `受付けました (id=${r.id})。結果ページへ…`;
       navigate('#/resume-check/' + r.id);
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
-      btn.disabled = false; btn.textContent = '5pt を 支払って チェック依頼';
+      btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼';
     }
   });
   await renderResumeCheckList();
@@ -124,7 +162,7 @@ async function loadAndPaint(id) {
       <div class="card">
         <a class="hint" href="#/resume-check">← 一覧</a>
         <h2 style="margin:6px 0">${escapeHtml(d.title || '(無題)')}</h2>
-        <div class="hint">${statusBadge(d.status)} ・ 5 秒ごとに 自動更新中…</div>
+        <div class="hint">${statusBadge(d.status)} ・ 5秒ごとに自動更新中…</div>
       </div>`;
     pollTimer = setInterval(async () => {
       const d2 = await get('/api/ai/resume_check/' + id).catch(() => null);
@@ -142,7 +180,7 @@ async function loadAndPaint(id) {
         <h2 style="margin:6px 0">${escapeHtml(d.title || '(無題)')}</h2>
         <div class="hint">${statusBadge(d.status)}</div>
         <p>${escapeHtml(d.error_msg || '不明なエラー')}</p>
-        <p class="hint">課金は 返金 されました。 もう一度 お試しください。</p>
+        <p class="hint">課金は返金されました。もう一度お試しください。</p>
       </div>`;
     return;
   }

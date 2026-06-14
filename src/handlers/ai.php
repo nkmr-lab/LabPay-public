@@ -75,6 +75,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 const RESUME_CHECK_COST = 5;
+// テキスト入力時の上限。PDF 入力時は OpenAI Files 経由なので制限なし (10 MB 上限のみ)。
 const RESUME_CHECK_MAX_CHARS = 8000;
 
 function ai_resume_check_list(PDO $pdo, array $cfg): void {
@@ -114,25 +115,56 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     ai_assert_configured($cfg);
-    $body = read_json_body();
-    $text  = trim((string)require_field($body, 'text'));
-    $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : null;
-    if ($title === '') $title = null;
-    $len = mb_strlen($text);
-    if ($len < 50) throw new ApiException('bad_request', '原稿が短すぎます (50 文字以上)', 400);
-    if ($len > RESUME_CHECK_MAX_CHARS) {
-        throw new ApiException('bad_request', sprintf('原稿が長すぎます (上限 %d 文字、 現在 %d 文字)。 論文 査読を使ってください', RESUME_CHECK_MAX_CHARS, $len), 400);
-    }
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < RESUME_CHECK_COST) {
-        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', RESUME_CHECK_COST, $bal), 400);
+
+    // v598 PDF (multipart) と テキスト (JSON) の 両対応。 Content-Type で 振り分け。
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    $isPdf = str_starts_with($contentType, 'multipart/form-data') && isset($_FILES['file']);
+
+    $title = null;
+    $text  = '';
+    $fileId = null;
+    $pdfName = null;
+
+    if ($isPdf) {
+        $f = $_FILES['file'];
+        if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+        if ($f['size'] > 10 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 10 MB まで (原稿チェック)', 400);
+        $tmpPdf = $f['tmp_name'];
+        $head = @file_get_contents($tmpPdf, false, null, 0, 5);
+        if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイルではありません', 400);
+        $pdfName = (string)($f['name'] ?? 'manuscript.pdf');
+        $title = isset($_POST['title']) ? mb_substr(trim((string)$_POST['title']), 0, 200) : mb_substr($pdfName, 0, 200);
+        if ($title === '') $title = $pdfName;
+    } else {
+        $body = read_json_body();
+        $text  = trim((string)require_field($body, 'text'));
+        $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : null;
+        if ($title === '') $title = null;
+        $len = mb_strlen($text);
+        if ($len < 50) throw new ApiException('bad_request', '原稿が短すぎます (50 文字以上)', 400);
+        if ($len > RESUME_CHECK_MAX_CHARS) {
+            throw new ApiException('bad_request', sprintf('原稿が長すぎます (上限 %d 文字、 現在 %d 文字)。論文査読を使ってください', RESUME_CHECK_MAX_CHARS, $len), 400);
+        }
     }
 
-    // pending レコード + 課金 → 非同期で OpenAI 呼出
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < RESUME_CHECK_COST) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、現在 %d pt)', RESUME_CHECK_COST, $bal), 400);
+    }
+
+    // PDF なら OpenAI Files API に 先に アップロード (同期で)。 課金は その後
+    if ($isPdf) {
+        $apiKey = (string)$cfg['openai']['api_key'];
+        $fileId = ai_openai_upload_pdf($tmpPdf, $pdfName, $apiKey);
+    }
+
+    // pending レコード + 課金 → 非同期で OpenAI chat 呼出
     $checkId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $title, $text, &$checkId) {
+    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $fileId, $pdfName, &$checkId) {
+        // input_text 列に PDF の場合は 「[PDF: filename]」 を保存
+        $inputForDb = $fileId !== null ? "[PDF: " . ($pdfName ?? 'manuscript.pdf') . "]" : $text;
         $pdo->prepare("INSERT INTO resume_checks (user_id, title, input_text, cost_points, status) VALUES (?,?,?,?,'pending')")
-            ->execute([$uid, $title, $text, RESUME_CHECK_COST]);
+            ->execute([$uid, $title, $inputForDb, RESUME_CHECK_COST]);
         $checkId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, RESUME_CHECK_COST, 'resume_check', 'resume_check', $checkId, '原稿チェック 依頼料');
     });
@@ -142,51 +174,62 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         'id'          => $checkId,
         'status'      => 'pending',
         'cost_points' => RESUME_CHECK_COST,
-        'message'     => '原稿チェック を 受付けました。 30 秒〜2 分 で 結果が出ます。',
+        'message'     => '原稿チェックを受付けました。30秒〜2分で結果が出ます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
-    @set_time_limit(180);
+    @set_time_limit(240);
 
-    ai_resume_check_run_background($pdo, $cfg, $checkId, $text);
+    ai_resume_check_run_background($pdo, $cfg, $checkId, $text, $fileId);
 }
 
-function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text): void {
+function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null): void {
     try {
         $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
         $model  = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
         $sys = <<<PROMPT
-あなたは 学術 / 業務 の 短い原稿 (1-2 ページ相当、 レジュメ / 概要 / 申請書 など) の チェック担当者 です。
-論文ほど厳密にはチェックしません。 建設的に、 著者が次の改稿で すぐ直せる粒度で指摘してください。
-以下を 必ず網羅:
-- 背景説明の妥当性 (なぜそれが課題か、 動機は伝わるか)
-- 論理展開の妥当性 (飛躍 / 前提抜け / 順序の妥当性)
-- 専門用語の説明 (対象読者を想定して、 説明が足りない / 過剰な箇所)
-- 日本語の接続詞 (「しかし」「したがって」「そして」 等が変じゃないか)
-- 表記揺れ (用語 / 数字書式 / 記号 の一貫性)
-- 引用文献 (あれば: 表記の妥当性 / 存在しなさそう / typo)
+あなたは学術/業務の短い原稿 (1-2 ページ相当、レジュメ/概要/申請書など) のチェック担当者です。
+論文ほど厳密にはチェックしません。建設的に、著者が次の改稿ですぐ直せる粒度で指摘してください。
+以下を必ず網羅:
+- 背景説明の妥当性 (なぜそれが課題か、動機は伝わるか)
+- 論理展開の妥当性 (飛躍/前提抜け/順序の妥当性)
+- 専門用語の説明 (対象読者を想定して、説明が足りない/過剰な箇所)
+- 日本語の接続詞 (「しかし」「したがって」「そして」等が変じゃないか)
+- 表記揺れ (用語/数字書式/記号の一貫性)
+- 引用文献 (あれば: 表記の妥当性/存在しなさそう/typo)
 PROMPT;
-        $userPrompt = "以下の 原稿 を チェックして、 JSON で 返してください。\n\n----- 原稿 -----\n" . $text . "\n----- /原稿 -----\n\n"
-            . "出力 JSON スキーマ:\n"
-            . "{ \"summary_one_line\": \"1 行 で 全体 講評\",\n"
-            . "  \"overall_score\": 1-5 の整数 (1=要大幅改稿, 5=ほぼOK),\n"
-            . "  \"background_validity\": {\"score\": 1-5, \"comment\": \"背景説明の妥当性 (50-200 字)\"},\n"
-            . "  \"logical_flow\": {\"score\": 1-5, \"comment\": \"論理展開の妥当性\", \"issues\": [\"具体的な飛躍 / 順序問題 を 引用付き で\", ...]},\n"
+        $userPromptText = "出力 JSON スキーマ:\n"
+            . "{ \"summary_one_line\": \"1行で全体講評\",\n"
+            . "  \"overall_score\": 1-5の整数 (1=要大幅改稿, 5=ほぼOK),\n"
+            . "  \"background_validity\": {\"score\": 1-5, \"comment\": \"背景説明の妥当性 (50-200字)\"},\n"
+            . "  \"logical_flow\": {\"score\": 1-5, \"comment\": \"論理展開の妥当性\", \"issues\": [\"具体的な飛躍/順序問題を引用付きで\", ...]},\n"
             . "  \"jargon_explanation\": {\"score\": 1-5, \"comment\": \"専門用語の説明適切さ\", \"missing\": [\"説明不足の用語\", ...]},\n"
             . "  \"japanese_connectives\": {\"score\": 1-5, \"comment\": \"接続詞の適切さ\", \"issues\": [{\"original\": \"原文の問題箇所\", \"suggested\": \"こう書き直すと良い\"}, ...]},\n"
             . "  \"terminology_consistency\": {\"score\": 1-5, \"comment\": \"表記揺れの有無\", \"variations\": [\"揺れている表記 (例: 「ユーザ」 と 「ユーザー」)\", ...]},\n"
             . "  \"citations_check\": {\"score\": 1-5, \"comment\": \"引用の問題点 (引用が無ければ 'なし')\", \"issues\": [\"具体的な引用問題\", ...]},\n"
             . "  \"rewrite_suggestions\": [{\"original\": \"原文の該当箇所\", \"reason\": \"なぜ問題か\", \"suggested_rewrite\": \"こう書き直すと良い\"}, ...],\n"
-            . "  \"comments_to_author\": \"著者への 総合コメント (200-500 字、 励まし + 優先度付きの 改善提案)\"\n"
+            . "  \"comments_to_author\": \"著者への総合コメント (200-500字、励まし + 優先度付きの改善提案)\"\n"
             . "}\n\n"
-            . "score は その項目で 1-5 を厳しめにつけてください。 issues / variations / rewrite_suggestions は 該当があれば書く、 なければ空配列で OK。";
+            . "scoreはその項目で1-5を厳しめにつけてください。issues/variations/rewrite_suggestionsは該当があれば書く、なければ空配列でOK。";
+        if ($fileId !== null) {
+            // PDF 添付モード
+            $messages = [
+                ['role' => 'system', 'content' => $sys],
+                ['role' => 'user', 'content' => [
+                    ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                    ['type' => 'text', 'text' => "添付の PDF 原稿をチェックして、JSON で返してください。\n\n" . $userPromptText],
+                ]],
+            ];
+        } else {
+            $messages = [
+                ['role' => 'system', 'content' => $sys],
+                ['role' => 'user', 'content' => "以下の原稿をチェックして、JSON で返してください。\n\n----- 原稿 -----\n" . $text . "\n----- /原稿 -----\n\n" . $userPromptText],
+            ];
+        }
         $payload = json_encode([
             'model' => $model,
-            'messages' => [
-                ['role' => 'system', 'content' => $sys],
-                ['role' => 'user', 'content' => $userPrompt],
-            ],
+            'messages' => $messages,
             'temperature' => 0.3,
             'response_format' => ['type' => 'json_object'],
             'max_tokens' => 3000,

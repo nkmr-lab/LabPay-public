@@ -318,14 +318,17 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
                     }
                 }
                 $sw = imagesx($src); $sh = imagesy($src);
-                $maxDim = 320;
+                // v598 サムネ品質改善: 320px → 640px、JPEG 82 → 90。
+                // PC で らぼったー ウィジェット の 画像が 荒く見えていた問題対応。
+                // ファイルサイズ 影響: linear 4x (面積)、JPEG 圧縮で 実質 2-3x 増。
+                $maxDim = 640;
                 $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
                 $tw = max(1, (int)round($sw * $ratio));
                 $th = max(1, (int)round($sh * $ratio));
                 $thumb = imagecreatetruecolor($tw, $th);
                 imagecopyresampled($thumb, $src, 0, 0, 0, 0, $tw, $th, $sw, $sh);
                 $thumbName = preg_replace('/\.[^.]+$/', '', $stored) . '.thumb.jpg';
-                imagejpeg($thumb, $dir . '/' . $thumbName, 82);
+                imagejpeg($thumb, $dir . '/' . $thumbName, 90);
                 @chmod($dir . '/' . $thumbName, 0644);
                 imagedestroy($thumb); imagedestroy($src);
                 $thumbPath = '/' . $sub . '/' . $thumbName;
