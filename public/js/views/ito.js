@@ -24,7 +24,7 @@ export async function renderIto() {
         <a class="btn primary" href="#/ito/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        2 人以上で 1pt ずつ預託 → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
+        2 人以上で プレイフィー 1pt → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
         数字を直接言わずに 「強い動物の強さ」 などのお題で 表現の妙を楽しむ協力ゲーム。
       </div>
     </div>
@@ -51,7 +51,7 @@ export async function renderIto() {
           <span style="display:inline-flex; flex:none">${avatarHtml(g.creator_name, g.creator_avatar, 'sm')}</span>
           <div class="grow">
             <div class="bold">🎲 ${escapeHtml(g.theme)} ${statusTag} ${meBadge}</div>
-            <div class="meta">${escapeHtml(g.creator_name)} 起案 · ${g.buy_in}pt × ${g.player_count}人 = ${g.pot_total}pt</div>
+            <div class="meta">${escapeHtml(g.creator_name)} 起案 · プレイフィー ${g.buy_in}pt × ${g.player_count}人</div>
           </div>
         </a>`;
     }).join('');
@@ -74,7 +74,7 @@ export async function renderItoNew() {
         </div>
       </label>
       <label class="field">
-        <span class="lbl">参加料 (pt)</span>
+        <span class="lbl">プレイフィー (pt 1 人あたり、 戻ってきません)</span>
         <input type="number" id="ito-buyin" min="1" max="100" value="1">
       </label>
       <div style="margin-top:10px">
@@ -157,7 +157,7 @@ function paintItoDetail(g) {
     <div class="card">
       <a href="#/ito" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">🎲 ${escapeHtml(g.theme)} ${statusLabel}</h2>
-      <div class="meta">${escapeHtml(g.creator_name)} 起案 · ${g.buy_in}pt × ${g.players.length}人 = ${g.pot_total}pt</div>
+      <div class="meta">${escapeHtml(g.creator_name)} 起案 · プレイフィー ${g.buy_in}pt × ${g.players.length}人</div>
     </div>
 
     ${g.status === 'input' && g.me_joined && g.my_number != null ? `
@@ -195,8 +195,8 @@ function paintItoDetail(g) {
         }).join('')}
       </div>
       <div class="row" style="gap:6px; margin-top:10px; flex-wrap:wrap; justify-content:flex-end">
-        ${canJoin   ? `<button id="ito-join"   class="primary">参加する (${g.buy_in}pt)</button>` : ''}
-        ${canLeave  ? `<button id="ito-leave"  class="btn">脱退 (返金)</button>` : ''}
+        ${canJoin   ? `<button id="ito-join"   class="primary">参加する (フィー ${g.buy_in}pt)</button>` : ''}
+        ${canLeave  ? `<button id="ito-leave"  class="btn">脱退 (lobby のみ返金)</button>` : ''}
         ${canStart  ? `<button id="ito-start"  class="primary">数字を配って開始</button>` : ''}
         ${canReveal ? `<button id="ito-reveal" class="primary">📣 全員の数字を公開</button>` : ''}
         ${canCancel ? `<button id="ito-cancel" class="btn danger">卓を取消 (全員返金)</button>` : ''}

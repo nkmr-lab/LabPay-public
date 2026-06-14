@@ -214,7 +214,6 @@ function ito_reveal(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $g = ito_lock($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ公開可', 403);
         if ($g['status'] !== 'input' && $g['status'] !== 'reveal') throw new ApiException('bad_request', '公開できる状態ではありません', 400);
-        // 全員入力したか確認
         $stC = $pdo->prepare("SELECT COUNT(*) FROM ito_players WHERE game_id = ?");
         $stC->execute([$gid]);
         $n = (int)$stC->fetchColumn();
@@ -222,16 +221,7 @@ function ito_reveal(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $stE->execute([$gid]);
         $ne = (int)$stE->fetchColumn();
         if ($ne < $n) throw new ApiException('bad_request', '全員の入力が揃っていません (' . $ne . '/' . $n . ')', 400);
-        // 公開 → reveal → 即 finished (協力勝利という前提)、 pot は全員に等分配
-        $pot = (int)$g['pot_total'];
-        $perPlayer = (int)floor($pot / max(1, $n));
-        $stP = $pdo->prepare("SELECT user_id FROM ito_players WHERE game_id = ?");
-        $stP->execute([$gid]);
-        foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
-            if ($perPlayer > 0) {
-                Ledger::transfer($pdo, 1, (int)$pid, $perPlayer, 'mahjong_payout', 'ito', $gid, 'ito 戻し');
-            }
-        }
+        // v569 #223 修正: ito はプレイフィー (戻さない)、 pot は そのままシステムに残る
         $pdo->prepare("UPDATE ito_games SET status='finished', finished_at=NOW() WHERE id = ?")->execute([$gid]);
     });
     // 全員に開示通知
@@ -267,6 +257,7 @@ function ito_lock(PDO $pdo, int $gid): array {
     return $g;
 }
 function ito_deposit(PDO $pdo, int $gid, int $uid, int $amount): void {
-    Ledger::transfer($pdo, $uid, 1, $amount, 'mahjong_buyin', 'ito', $gid, 'ito buy-in');
+    // v569 ito はプレイフィー: 参加時にシステムへ徴収。 cancel 時のみ返金。
+    Ledger::transfer($pdo, $uid, 1, $amount, 'mahjong_buyin', 'ito', $gid, 'ito プレイフィー');
     $pdo->prepare("UPDATE ito_games SET pot_total = pot_total + ? WHERE id = ?")->execute([$amount, $gid]);
 }
