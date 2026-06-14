@@ -1,30 +1,15 @@
 <?php
-// v576 サンプル 2026 ワールドカップ 優勝予想 を 起案 (admin 名義)。
-//   既に同じ title で open があれば skip。
-//   実行: ssh nakamura@pay.nkmr.io 'cd /var/www/labpay && php tools/seed_wc2026_prediction.php'
-
+// v576b 既存の 2026 ワールドカップ 起案 (id=1) の 候補リストを 48 か国版で 上書き。
 declare(strict_types=1);
 require_once __DIR__ . '/../src/bootstrap.php';
 global $PDO;
 
-$title = '2026 ワールドカップ 優勝予想';
-$st = $PDO->prepare("SELECT id FROM predictions_games WHERE title = ? AND status IN ('open','closed','finished') LIMIT 1");
-$st->execute([$title]);
-$existing = $st->fetchColumn();
-if ($existing) {
-    echo "既に存在 (id={$existing}) — skip\n";
-    exit(0);
-}
-
-// 2026 ワールドカップ は 48 か国出場 (32 → 48 へ拡大)。
-//   AFC 8 + CAF 9 + CONCACAF 6 (うち 3 ホスト) + CONMEBOL 6 + OFC 1 + UEFA 16 + 大陸間PO 2。
-//   現時点 (2026-01 時点 の 知識) で 出場が ほぼ確定/最有力 の 国を 列挙。
 $candidates = [
     // 開催国
     ['id' => 'us', 'name' => 'アメリカ',         'flag' => '🇺🇸'],
     ['id' => 'mx', 'name' => 'メキシコ',         'flag' => '🇲🇽'],
     ['id' => 'ca', 'name' => 'カナダ',           'flag' => '🇨🇦'],
-    // UEFA (欧州)
+    // UEFA 16
     ['id' => 'fr', 'name' => 'フランス',         'flag' => '🇫🇷'],
     ['id' => 'de', 'name' => 'ドイツ',           'flag' => '🇩🇪'],
     ['id' => 'es', 'name' => 'スペイン',         'flag' => '🇪🇸'],
@@ -41,14 +26,14 @@ $candidates = [
     ['id' => 'pl', 'name' => 'ポーランド',       'flag' => '🇵🇱'],
     ['id' => 'cz', 'name' => 'チェコ',           'flag' => '🇨🇿'],
     ['id' => 'rs', 'name' => 'セルビア',         'flag' => '🇷🇸'],
-    // CONMEBOL (南米)
+    // CONMEBOL 6
     ['id' => 'br', 'name' => 'ブラジル',         'flag' => '🇧🇷'],
     ['id' => 'ar', 'name' => 'アルゼンチン',     'flag' => '🇦🇷'],
     ['id' => 'uy', 'name' => 'ウルグアイ',       'flag' => '🇺🇾'],
     ['id' => 'co', 'name' => 'コロンビア',       'flag' => '🇨🇴'],
     ['id' => 'ec', 'name' => 'エクアドル',       'flag' => '🇪🇨'],
     ['id' => 'py', 'name' => 'パラグアイ',       'flag' => '🇵🇾'],
-    // AFC (アジア)
+    // AFC 8
     ['id' => 'jp', 'name' => '日本',             'flag' => '🇯🇵'],
     ['id' => 'kr', 'name' => '韓国',             'flag' => '🇰🇷'],
     ['id' => 'ir', 'name' => 'イラン',           'flag' => '🇮🇷'],
@@ -57,7 +42,7 @@ $candidates = [
     ['id' => 'uz', 'name' => 'ウズベキスタン',   'flag' => '🇺🇿'],
     ['id' => 'qa', 'name' => 'カタール',         'flag' => '🇶🇦'],
     ['id' => 'jo', 'name' => 'ヨルダン',         'flag' => '🇯🇴'],
-    // CAF (アフリカ)
+    // CAF 9
     ['id' => 'ma', 'name' => 'モロッコ',         'flag' => '🇲🇦'],
     ['id' => 'sn', 'name' => 'セネガル',         'flag' => '🇸🇳'],
     ['id' => 'eg', 'name' => 'エジプト',         'flag' => '🇪🇬'],
@@ -67,29 +52,22 @@ $candidates = [
     ['id' => 'cm', 'name' => 'カメルーン',       'flag' => '🇨🇲'],
     ['id' => 'gh', 'name' => 'ガーナ',           'flag' => '🇬🇭'],
     ['id' => 'ng', 'name' => 'ナイジェリア',     'flag' => '🇳🇬'],
-    // CONCACAF (北中米カリブ、 ホスト除く)
+    // CONCACAF 3 (ホスト除く)
     ['id' => 'pa', 'name' => 'パナマ',           'flag' => '🇵🇦'],
     ['id' => 'cr', 'name' => 'コスタリカ',       'flag' => '🇨🇷'],
     ['id' => 'jm', 'name' => 'ジャマイカ',       'flag' => '🇯🇲'],
-    // OFC
+    // OFC 1
     ['id' => 'nz', 'name' => 'ニュージーランド', 'flag' => '🇳🇿'],
-    // 大陸間 プレーオフ 勝者 (2 枠 — 想定)
+    // 大陸間 プレーオフ 勝者 2 (想定)
     ['id' => 'bo', 'name' => 'ボリビア',         'flag' => '🇧🇴'],
     ['id' => 'cd', 'name' => 'コンゴ民主共和国', 'flag' => '🇨🇩'],
 ];
 
-$desc = "北中米 (米国 / カナダ / メキシコ) 開催。 1-4位を予想 してください。\n"
-      . "参加フィー 50pt、 締切は 開幕日 (2026-06-11) の前日まで。\n"
-      . "スコア = 順位重み (1位=4, 2位=3, 3位=2, 4位=1) の合計、 山分け配分。";
+if (count($candidates) !== 48) {
+    echo "WARN: expected 48 candidates, got " . count($candidates) . "\n";
+}
 
-// admin 名義 (id=1)
-$creatorId = 1;
-$deadline = '2026-06-10 23:59:59';
-
-$PDO->prepare("INSERT INTO predictions_games (creator_user_id, title, description, fee, predict_count, candidates_json, deadline_at)
-               VALUES (?,?,?,?,?,?,?)")
-    ->execute([$creatorId, $title, $desc, 50, 4,
-               json_encode($candidates, JSON_UNESCAPED_UNICODE), $deadline]);
-$gid = $PDO->lastInsertId();
-echo "Created predictions_games id={$gid}\n";
-echo "URL: https://pay.nkmr.io/#/predictions/{$gid}\n";
+$st = $PDO->prepare("UPDATE predictions_games SET candidates_json = ? WHERE title = '2026 ワールドカップ 優勝予想' AND status = 'open'");
+$st->execute([json_encode($candidates, JSON_UNESCAPED_UNICODE)]);
+echo "Updated rows: " . $st->rowCount() . "\n";
+echo "候補数: " . count($candidates) . " か国\n";
