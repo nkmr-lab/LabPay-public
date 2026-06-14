@@ -5,6 +5,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const POLL_MS = 2500;
 let pollTimer = null;
@@ -149,6 +150,7 @@ async function paintBoard(gid) {
       <div style="display:flex; align-items:center; gap:10px">
         <a href="#/othello" class="hint">← 一覧</a>
         <span style="flex:1"></span>
+        ${d.status === 'waiting' ? `<button id="ot-share" class="btn" style="font-size:12px; padding:4px 8px">💬 共有</button>` : ''}
         ${statusBadge(d.status)}
       </div>
       <div class="row" style="gap:8px; margin-top:6px">
@@ -190,6 +192,9 @@ async function paintBoard(gid) {
   `;
 
   // ピン留めワイヤリング
+  document.getElementById('ot-share')?.addEventListener('click', () => {
+    shareToSns(`💣 地雷オセロ ${escapeHtml(d.creator_name)} 対戦相手 募集中 (1pt)`, `#/othello/${gid}`);
+  });
   document.getElementById('ot-join')?.addEventListener('click', async () => {
     try { await post(`/api/othello/games/${gid}/join`, {}); paintBoard(gid); }
     catch (e) { toast('失敗: ' + e.message); }

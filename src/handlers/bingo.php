@@ -46,7 +46,49 @@ function route_bingo(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === 'me' && $method === 'GET') { bingo_me($pdo, $uid); return; }
     if ($sub === 'leaderboard' && $method === 'GET') { bingo_leaderboard($pdo); return; }
+    // v593 過去週 閲覧
+    if ($sub === 'history' && $method === 'GET') { bingo_history($pdo, $uid); return; }
+    if ($sub === 'week' && isset($seg[2]) && $method === 'GET') { bingo_week($pdo, $uid, (string)$seg[2]); return; }
     json_error('not_found', "no bingo route", 404);
+}
+
+// v593 過去 12 週の 自分の カード メタ (week_start, 達成率, ライン数)
+function bingo_history(PDO $pdo, int $uid): void {
+    $st = $pdo->prepare("SELECT week_start, cells_json, completed_idxs_json, bingo_lines, first_bingo_at
+                           FROM bingo_cards WHERE user_id=? ORDER BY week_start DESC LIMIT 12");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    $out = [];
+    foreach ($rows as $r) {
+        $completed = json_decode($r['completed_idxs_json'] ?: '[]', true) ?: [];
+        $out[] = [
+            'week_start' => $r['week_start'],
+            'completed_count' => count($completed),
+            'bingo_lines' => (int)$r['bingo_lines'],
+            'first_bingo_at' => $r['first_bingo_at'],
+        ];
+    }
+    json_response(['items' => $out]);
+}
+
+// v593 指定週の カード + 完了状況 (= 過去カード再読み込み、 再判定はしない、 保存値を返す)
+function bingo_week(PDO $pdo, int $uid, string $weekStart): void {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $weekStart)) throw new ApiException('bad_request', 'YYYY-MM-DD', 400);
+    $st = $pdo->prepare("SELECT * FROM bingo_cards WHERE user_id=? AND week_start=?");
+    $st->execute([$uid, $weekStart]);
+    $card = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$card) throw new ApiException('not_found', '該当週の カードが ありません', 404);
+    $cells = json_decode($card['cells_json'], true) ?: [];
+    $completed = json_decode($card['completed_idxs_json'] ?: '[]', true) ?: [];
+    json_response([
+        'week_start' => $card['week_start'],
+        'cells' => $cells,
+        'completed' => $completed,
+        'bingo_lines' => (int)$card['bingo_lines'],
+        'first_bingo_at' => $card['first_bingo_at'],
+        'newly_completed' => [],
+        'newly_bingoed' => false,
+    ]);
 }
 
 function bingo_week_start_jst(): string {

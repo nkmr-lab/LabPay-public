@@ -133,6 +133,8 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
             'pass_count' => 0,
             'finished_ranks' => [],     // 上がった順 [seat, seat, ...]
             'log' => [],
+            // v595 革命 (4 枚同時出しで 強弱反転) + 8切り (rank=5 = "8" で 場流し)
+            'revolution' => false,
         ];
         $pdo->prepare("UPDATE daifugo_games SET status='playing', state_json=?, state_ver=state_ver+1 WHERE id=?")
             ->execute([json_encode($state), $gid]);
@@ -164,26 +166,42 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
         if (count(array_unique($ranks)) > 1) throw new ApiException('bad_request', '同じ数 のカードを 揃えてください', 400);
         $playRank = !empty($ranks) ? reset($ranks) : 14; // ジョーカー単体は最強
         $playCount = count($cards);
-        // 直前と 同数 + 強い rank か
+        // 直前と 同数 + 強い rank か (v595 革命 で 反転)
         $last = $state['last_play'];
+        $rev = !empty($state['revolution']);
         if ($last && $last['count'] !== $playCount) throw new ApiException('bad_request', "場と 同じ枚数 ({$last['count']}) で 出してください", 400);
-        if ($last && $playRank <= $last['rank']) throw new ApiException('bad_request', '場の カードより 強い数 を 出してください', 400);
+        if ($last) {
+            if (!$rev && $playRank <= $last['rank']) throw new ApiException('bad_request', '場の カードより 強い数 を 出してください', 400);
+            if ($rev  && $playRank >= $last['rank']) throw new ApiException('bad_request', '革命中: 場の カードより 弱い数 を 出してください', 400);
+        }
         // 出す → 手札 から 抜く
         $newHand = array_values(array_diff($hand, $cards));
         $state['players'][$myIdx]['hand'] = $newHand;
         $state['last_play'] = ['cards' => $cards, 'by' => $myIdx, 'count' => $playCount, 'rank' => $playRank];
         $state['pass_count'] = 0;
-        // パス フラグを 全員 (出した人以外) リセット — 簡易: 全員 false に戻す
         foreach ($state['players'] as &$p) $p['passed'] = false;
         unset($p);
         $state['log'][] = "{$state['players'][$myIdx]['user_id']} が {$playCount} 枚 (rank " . ($playRank + 3) . ") を出した";
+        // v595 革命: 4 枚同時出し (ジョーカー込みでも 4 枚) で 強弱反転
+        if ($playCount >= 4) {
+            $state['revolution'] = !$state['revolution'];
+            $state['log'][] = $state['revolution'] ? "革命! 強弱反転" : "革命返し! 通常に戻る";
+        }
         // 上がり判定
         if (empty($newHand)) {
             $state['finished_ranks'][] = $myIdx;
             $state['players'][$myIdx]['rank'] = count($state['finished_ranks']);
         }
-        // 次のターン
-        $state['turn'] = daifugo_next_turn($state, $myIdx);
+        // v595 8切り: rank=5 (= 「8」) で 場流し + 同じプレイヤーが もう一度
+        $isEightCut = in_array(5, $ranks, true);
+        if ($isEightCut && !empty($newHand)) {
+            $state['last_play'] = null;
+            $state['log'][] = "8切り! 場が流れて 同じプレイヤーから";
+            $state['turn'] = $myIdx;
+        } else {
+            // 通常: 次のターン
+            $state['turn'] = daifugo_next_turn($state, $myIdx);
+        }
         // ゲーム終了 (上がり残 1 人)
         $remaining = array_filter($state['players'], fn($p) => count($p['hand']) > 0);
         if (count($remaining) <= 1) {
@@ -311,6 +329,7 @@ function daifugo_state(PDO $pdo, int $uid, int $gid): void {
         'my_turn' => $state['turn'] === $mySeat,
         'finished_ranks' => $state['finished_ranks'],
         'log' => array_slice($state['log'] ?? [], -10),
+        'revolution' => !empty($state['revolution']),
         'finished_at' => $g['finished_at'],
     ]);
 }

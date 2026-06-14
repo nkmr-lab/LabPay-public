@@ -10,6 +10,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { tag, fmtDateTime } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const VIS_LABEL = {
   creator: '主催者のみ集計可視',
@@ -282,6 +283,7 @@ export async function renderPollDetail({ params }) {
       <div id="pd-head"><div class="muted">読み込み中…</div></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button id="pd-copy-url" class="btn">🔗 URL をコピー</button>
+        <button id="pd-share" class="btn">💬 らぼったーで共有</button>
       </div>
     </div>
     <div class="card" id="pd-vote-card" hidden>
@@ -334,6 +336,14 @@ export async function renderPollDetail({ params }) {
       ta.select(); try { document.execCommand('copy'); toast('URL をコピーしました'); }
       catch (e) { toast('コピー失敗: ' + e.message); }
       finally { document.body.removeChild(ta); }
+    }
+  });
+  document.getElementById('pd-share')?.addEventListener('click', async () => {
+    try {
+      const d = await get('/api/polls/' + id);
+      shareToSns(`📊 投票 「${d.title || ''}」 を 募集中`, `#/polls/${id}`);
+    } catch (_) {
+      shareToSns(`📊 投票 募集中`, `#/polls/${id}`);
     }
   });
   await loadPollDetail(id);

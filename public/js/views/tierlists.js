@@ -5,6 +5,7 @@
 import { get, post, put, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { shareToSns } from '../share_to_sns.js';
 
 export async function renderTierlists() {
   const app = document.getElementById('app');
@@ -173,9 +174,12 @@ export async function renderTierlistDetail({ params }) {
   app.innerHTML = `
     <div class="card">
       <a href="#/tierlists" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0">🎯 ${escapeHtml(d.title)}
-        ${d.is_closed ? '<span class="tag muted">締切</span>' : ''}
-      </h2>
+      <div style="display:flex; align-items:center; gap:8px; margin:6px 0">
+        <h2 style="margin:0; flex:1">🎯 ${escapeHtml(d.title)}
+          ${d.is_closed ? '<span class="tag muted">締切</span>' : ''}
+        </h2>
+        <button id="tl-share" class="btn" style="font-size:12px; padding:4px 8px">💬 共有</button>
+      </div>
       ${d.description ? `<div class="meta">${escapeHtml(d.description)}</div>` : ''}
       <div class="meta">${escapeHtml(d.creator_name)} 起案 · ${d.answer_count} 人が回答</div>
       ${d.is_creator && !d.is_closed ? `<div style="text-align:right; margin-top:6px"><button id="tl-close" class="btn" style="font-size:11px; padding:2px 8px">締切る</button></div>` : ''}
@@ -204,6 +208,9 @@ export async function renderTierlistDetail({ params }) {
       catch (e) { toast('失敗: ' + e.message); }
     });
   }
+  document.getElementById('tl-share')?.addEventListener('click', () => {
+    shareToSns(`🎯 ティア表 「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人 回答)`, `#/tierlists/${tid}`);
+  });
   paintBoard(d, items, tiers, my);
   paintAggregation(d, items, tiers);
   if (d.other_answers.length) paintOthers(d, items, tiers);

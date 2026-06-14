@@ -231,16 +231,28 @@ const DEFAULT_ORDER = [
   'my-timers', 'pending', 'balance', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
 ];
+// v592b 新規追加の カード (= ユーザの 保存 order に 含まれない 未知 ID) が
+//   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
+//   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
+const NEW_DEFAULT_HIDDEN = ['weather']; // v585 で 追加 / v592b 以降 デフォルト OFF を 強制
 export function readHomeLayout() {
+  const merge = (order, hidden) => {
+    const orderSet = new Set(order);
+    const hiddenSet = new Set(hidden);
+    for (const id of NEW_DEFAULT_HIDDEN) {
+      if (!orderSet.has(id)) hiddenSet.add(id);
+    }
+    return { order, hidden: [...hiddenSet] };
+  };
   try {
     const raw = localStorage.getItem(HOME_LAYOUT_KEY);
-    if (raw === null) return { order: [...DEFAULT_ORDER], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] };
+    if (raw === null) return merge([...DEFAULT_ORDER], [...DEFAULT_HIDDEN_HOME_CARDS]);
     const j = JSON.parse(raw || '{}');
-    return {
-      order:  Array.isArray(j.order)  ? j.order  : [...DEFAULT_ORDER],
-      hidden: Array.isArray(j.hidden) ? j.hidden : [...DEFAULT_HIDDEN_HOME_CARDS],
-    };
-  } catch { return { order: [...DEFAULT_ORDER], hidden: [...DEFAULT_HIDDEN_HOME_CARDS] }; }
+    return merge(
+      Array.isArray(j.order)  ? j.order  : [...DEFAULT_ORDER],
+      Array.isArray(j.hidden) ? j.hidden : [...DEFAULT_HIDDEN_HOME_CARDS],
+    );
+  } catch { return merge([...DEFAULT_ORDER], [...DEFAULT_HIDDEN_HOME_CARDS]); }
 }
 export function writeHomeLayout(layout) {
   try {

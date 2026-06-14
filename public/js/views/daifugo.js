@@ -3,6 +3,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const POLL_MS = 2500;
 let pollTimer = null;
@@ -29,7 +30,8 @@ export async function renderDaifugo() {
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
         2-4 人。 単出し / ペア / N 枚 出し。 1 ゲーム 1pt、 <b>1 位が pot 総取り</b>。
-        ジョーカーは ワイルド (どの数字 でも 出せる、 単体は最強)。 革命 / 縛り は省略。
+        ジョーカーは ワイルド (単体は最強)。 <b>革命 (4 枚同時出しで 強弱反転)</b> ・
+        <b>8切り (「8」 出しで 場流し + 同プレイヤー再開)</b> 採用。
       </p>
     </div>
     <div id="df-list"><div class="hint">読み込み中…</div></div>
@@ -82,9 +84,13 @@ async function paintDaifugo(gid) {
           ${meIn ? '' : `<button id="df-join" class="btn primary">参加 (1pt)</button>`}
           ${isCreator && d.players.length >= 2 ? `<button id="df-start" class="btn primary">開始</button>` : ''}
           ${isCreator ? `<button id="df-cancel" class="btn" style="color:#c00">キャンセル</button>` : ''}
+          <button id="df-share" class="btn" style="font-size:12px">💬 共有</button>
         </div>
       </div>
     `;
+    document.getElementById('df-share')?.addEventListener('click', () => {
+      shareToSns(`🃏 大富豪 卓 #${gid} 募集中 (${d.players.length}/4、 1pt buy-in)`, `#/daifugo/${gid}`);
+    });
     document.getElementById('df-join')?.addEventListener('click', async () => {
       try { await post(`/api/daifugo/games/${gid}/join`, {}); paintDaifugo(gid); } catch (e) { toast('失敗: ' + e.message); }
     });
@@ -121,7 +127,10 @@ async function paintDaifugo(gid) {
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 6px">場</h3>
+      <div style="display:flex; align-items:center; gap:8px">
+        <h3 style="margin:0; flex:1">場</h3>
+        ${d.revolution ? '<span style="background:linear-gradient(90deg, #dc2626, #f59e0b); color:#fff; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:700">🔄 革命中 (強弱反転)</span>' : ''}
+      </div>
       ${d.last_play ? `
         <div style="display:flex; gap:6px; flex-wrap:wrap; padding:8px; background:#dbeafe; border-radius:6px">
           ${d.last_play.cards.map(c => `<div style="padding:8px 12px; background:#fff; border-radius:6px; font-size:20px; min-width:48px; text-align:center">${cardLabel(c)}</div>`).join('')}

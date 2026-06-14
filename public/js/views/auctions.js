@@ -11,6 +11,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { fmtDateTime, tag, fmtRelative } from '../format.js';
+import { shareToSns } from '../share_to_sns.js';
 
 // remainingText は 共有 fmtRelative に委譲 (取消 / 終了 ラベルは引数で指定)。
 function remainingText(closes_at, settled, cancelled) {
@@ -154,7 +155,11 @@ export async function renderAuctionDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/auctions" class="hint">← 一覧</a>
+      <div style="display:flex; align-items:center; gap:8px">
+        <a href="#/auctions" class="hint">← 一覧</a>
+        <span style="flex:1"></span>
+        <button id="aud-share" class="btn" style="font-size:12px; padding:4px 8px">💬 共有</button>
+      </div>
       <div id="aud-head"><div class="muted">読み込み中…</div></div>
     </div>
     <div class="card" id="aud-bid-card" hidden>
@@ -181,6 +186,9 @@ export async function renderAuctionDetail({ params }) {
   try {
     const d = await get('/api/auctions/' + id);
     const a = d.auction;
+    document.getElementById('aud-share')?.addEventListener('click', () => {
+      shareToSns(`🏷 オークション 「${a.title || ''}」 ${a.settled_at ? '落札' : '受付中'}`, `#/auctions/${id}`);
+    });
     const active = !a.settled_at && !a.cancelled_at;
     const meId = Number(state.me?.id);
     const isMine = Number(a.seller_user_id) === meId;

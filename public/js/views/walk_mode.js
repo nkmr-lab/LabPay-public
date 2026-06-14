@@ -46,17 +46,28 @@ export async function renderWalkMode() {
       <div style="background:#000; color:#fff; padding:8px 12px; display:flex; gap:8px; align-items:center; font-size:14px">
         <span>🚶 散歩モード</span>
         <span id="walk-stats" style="flex:1; text-align:center; font-variant-numeric:tabular-nums">起動中…</span>
+        <button id="walk-lock" style="background:#1e293b; color:#fff; border:none; padding:6px 10px; border-radius:6px">🔒 ロック</button>
         <button id="walk-end" style="background:#ef4444; color:#fff; border:none; padding:6px 10px; border-radius:6px">終了</button>
       </div>
       <div id="walk-map" style="flex:1; position:relative"></div>
-      <div id="walk-lock-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; color:#fff; text-align:center; padding:20px; font-size:14px; z-index:200">
-        <div>
-          <div style="font-size:24px; margin-bottom:10px">🔒 散歩モード ロック中</div>
-          <div>3 秒長押し + ↑ スワイプ で 解除</div>
-          <div id="walk-unlock-pad" style="margin-top:30px; width:140px; height:140px; border:3px solid #fff; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-left:auto; margin-right:auto">
-            <div style="font-size:48px">🔓</div>
+      <div id="walk-lock-overlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; flex-direction:column; align-items:center; justify-content:center; color:#fff; text-align:center; padding:20px; font-size:14px; z-index:200; user-select:none; touch-action:none">
+        <div style="font-size:28px; margin-bottom:10px">🔒 散歩モード ロック中</div>
+        <div style="margin-bottom:24px; opacity:0.8">↑→↓→↑ を 順に スワイプ で 解除</div>
+        <div id="walk-unlock-canvas" style="width:280px; height:280px; border:3px solid #fff; border-radius:24px; position:relative; touch-action:none; background:rgba(255,255,255,0.05)">
+          <div id="walk-unlock-arrows" style="position:absolute; inset:0; display:grid; grid-template-rows:1fr 1fr 1fr; grid-template-columns:1fr 1fr 1fr; pointer-events:none; opacity:0.4">
+            <div></div>
+            <div style="display:flex; align-items:center; justify-content:center; font-size:36px" data-step="up">↑</div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div style="display:flex; align-items:center; justify-content:center; font-size:36px" data-step="right">→</div>
+            <div></div>
+            <div style="display:flex; align-items:center; justify-content:center; font-size:36px" data-step="down">↓</div>
+            <div></div>
           </div>
+          <div id="walk-unlock-status" style="position:absolute; bottom:-32px; left:0; right:0; font-size:13px; opacity:0.8">↑ から 始めて</div>
         </div>
+        <div id="walk-stats-locked" style="margin-top:60px; font-size:16px; font-variant-numeric:tabular-nums; opacity:0.85"></div>
       </div>
     </div>
   `;
@@ -120,8 +131,79 @@ export async function renderWalkMode() {
     if (!confirm('散歩モードを終了しますか?')) return;
     await endSession();
   });
-  // 簡易 ロック UI (デモ): スクリーン全体に kbd トラップ無し。 シンプルにロック画面表示で 戻る ロック。
-  // 詳細実装は 別途。
+  // ロック ボタン
+  document.getElementById('walk-lock').addEventListener('click', () => activateLock());
+}
+
+// 特殊スワイプ ロック (↑→↓→↑ の 順に 大きく スワイプで 解除)
+function activateLock() {
+  const overlay = document.getElementById('walk-lock-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  const seq = ['up', 'right', 'down', 'up'];
+  let step = 0;
+  let startX = null, startY = null;
+  const status = document.getElementById('walk-unlock-status');
+  const canvas = document.getElementById('walk-unlock-canvas');
+  const updateStatusText = () => {
+    if (!status) return;
+    const remaining = seq.slice(step);
+    const sym = { up: '↑', right: '→', down: '↓', left: '←' };
+    status.textContent = `次: ${sym[seq[step]] || '✓'} (${remaining.map(s => sym[s]).join(' → ')})`;
+  };
+  updateStatusText();
+  const flashArrow = (dir) => {
+    document.querySelectorAll('#walk-unlock-arrows [data-step]').forEach(el => {
+      if (el.dataset.step === dir) {
+        el.style.opacity = '1';
+        el.style.color = '#22c55e';
+        setTimeout(() => { el.style.opacity = '0.4'; el.style.color = '#fff'; }, 300);
+      }
+    });
+  };
+  const onStart = (ev) => {
+    const t = ev.touches ? ev.touches[0] : ev;
+    startX = t.clientX; startY = t.clientY;
+  };
+  const onEnd = (ev) => {
+    if (startX === null) return;
+    const t = ev.changedTouches ? ev.changedTouches[0] : ev;
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    startX = startY = null;
+    if (Math.hypot(dx, dy) < 50) return; // 短すぎ
+    let dir;
+    if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
+    else dir = dy > 0 ? 'down' : 'up';
+    if (dir === seq[step]) {
+      flashArrow(dir);
+      step++;
+      if (step >= seq.length) {
+        // 解除成功
+        overlay.style.display = 'none';
+        cleanup();
+        return;
+      }
+      updateStatusText();
+    } else {
+      // 失敗 → 最初から
+      step = 0;
+      if (status) {
+        status.textContent = `× 失敗 (やり直し)`;
+        setTimeout(updateStatusText, 800);
+      }
+    }
+  };
+  canvas.addEventListener('touchstart', onStart, { passive: true });
+  canvas.addEventListener('touchend', onEnd, { passive: true });
+  canvas.addEventListener('mousedown', onStart);
+  canvas.addEventListener('mouseup', onEnd);
+  const cleanup = () => {
+    canvas.removeEventListener('touchstart', onStart);
+    canvas.removeEventListener('touchend', onEnd);
+    canvas.removeEventListener('mousedown', onStart);
+    canvas.removeEventListener('mouseup', onEnd);
+  };
 }
 
 async function endSession() {

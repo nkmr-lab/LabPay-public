@@ -4,6 +4,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { shareToSns } from '../share_to_sns.js';
 
 export async function renderMahjong() {
   const app = document.getElementById('app');
@@ -134,7 +135,11 @@ function paintDetail(g) {
 
   app.innerHTML = `
     <div class="card">
-      <a href="#/mahjong" class="hint">← 一覧</a>
+      <div style="display:flex; align-items:center; gap:8px">
+        <a href="#/mahjong" class="hint">← 一覧</a>
+        <span style="flex:1"></span>
+        ${isLobby ? `<button id="mj-share" class="btn" style="font-size:12px; padding:4px 8px">💬 共有</button>` : ''}
+      </div>
       <h2 style="margin:6px 0">🀄 ${escapeHtml(g.title || ('卓 #' + g.id))} ${statusLabel}</h2>
       <div class="meta">${escapeHtml(g.creator_name)} 起案 · buy-in ${g.buy_in}pt · pot ${g.pot_total}pt</div>
     </div>
@@ -180,6 +185,9 @@ function paintDetail(g) {
     </div>` : ''}
   `;
 
+  document.getElementById('mj-share')?.addEventListener('click', () => {
+    shareToSns(`🀄 麻雀卓 「${g.title || ('#' + g.id)}」 募集中 (${g.players.length}/${g.seats}、 buy-in ${g.buy_in}pt)`, `#/mahjong/${g.id}`);
+  });
   if (canJoin)   document.getElementById('mj-join').addEventListener('click', () => doAction(g.id, 'join'));
   if (canLeave)  document.getElementById('mj-leave').addEventListener('click', () => { if (confirm('脱退して返金しますか?')) doAction(g.id, 'leave'); });
   if (canStart)  document.getElementById('mj-start').addEventListener('click', () => { if (confirm('対局を開始しますか?')) doAction(g.id, 'start'); });
