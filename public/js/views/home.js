@@ -126,6 +126,8 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-timers',       title: '🛎 タイマー',        url: '#/timers',       desc: '参加者全員で カウントダウン 共有' },
   { id: 'sc-stopwatches',  title: '⏱ ストップウォッチ', url: '#/stopwatches',  desc: 'メンバー共有 カウントアップ' },
   { id: 'sc-meetups',      title: '🤝 待ち合わせ',      url: '#/meetups',      desc: '集合 時刻 + 場所 + メンバー を 一括通知' },
+  { id: 'sc-deadlines',    title: '📌 〆切',            url: '#/meetups?kind=deadline', desc: '〆切 時刻 + 対象者 を 一括通知 (365 日先 まで)' },
+  { id: 'sc-activity',     title: '🗓 ラボ滞在マップ',   url: '#/activity',     desc: '誰が いつ ラボに 居たか の 滞在ログ + ヒートマップ' },
   { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で 落札' },
   { id: 'sc-nomikai',      title: '🍶 飲み会割り勘',    url: '#/nomikai',      desc: '学年 + ドリンク 種別 で 自動 割り勘' },
   { id: 'sc-wari',         title: '🧮 ワリカ電卓',      url: '#/wari',         desc: '人数 + 金額 で 端数こみ 割り勘' },
