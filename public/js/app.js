@@ -553,6 +553,10 @@ route('/jinrou/new',        lazy(() => import('./views/jinrou.js'), 'renderJinro
 route('/jinrou/:id',        lazy(() => import('./views/jinrou.js'), 'renderJinrouDetail'));
 // v571 ゲームハブ (タブから)
 route('/games',             lazy(() => import('./views/games.js'), 'renderGames'));
+// v576 優勝予想
+route('/predictions',         lazy(() => import('./views/predictions.js'), 'renderPredictions'));
+route('/predictions/new',     lazy(() => import('./views/predictions.js'), 'renderPredictionNew'));
+route('/predictions/:id',     lazy(() => import('./views/predictions.js'), 'renderPredictionDetail'));
 // v553 #209 麻雀 Phase 1 (lazy import で 普段は未読み込み、 Phase 2 で重くなる予定)
 route('/mahjong/new',       lazy(() => import('./views/mahjong.js'), 'renderMahjongNew'));
 // v556 シミュレータ (内部検証用)

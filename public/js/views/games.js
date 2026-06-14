@@ -25,17 +25,22 @@ const GAMES = [
   { id: 'regions',   icon: '🗺', name: '制覇マップ',   url: '#/regions',
     desc: '行った国・都道府県 を タップで 登録 → 進捗バー (X/47 都道府県 や X/100+ 国) + ラボ内の集計',
     badge: '無料' },
+  { id: 'predictions', icon: '🏆', name: '優勝予想',   url: '#/predictions',
+    desc: 'W 杯 / スポーツ大会 / 学会 best paper など 順位を予想して 参加フィー を山分け',
+    badge: '参加フィー (10-100pt 設定可)' },
 ];
 
 const CATEGORIES = [
-  { key: 'gamble', label: '💰 賭け / フィー' },
-  { key: 'party',  label: '🎉 パーティー' },
-  { key: 'collect',label: '🗺 集める / 制覇する' },
+  { key: 'gamble',  label: '💰 賭け / フィー' },
+  { key: 'predict', label: '🏆 予想 / 当て物' },
+  { key: 'party',   label: '🎉 パーティー' },
+  { key: 'collect', label: '🗺 集める / 制覇する' },
 ];
 
 const GAME_CATEGORY = {
   mahjong:       'gamble',
   'mahjong-ai':  'gamble',
+  predictions:   'predict',
   ito:           'party',
   jinrou:        'party',
   shiritori:     'party',

@@ -80,6 +80,7 @@ $routes = [
     'playlists'      => 'route_playlists',
     'stopwatches'    => 'route_stopwatches',
     'ai'             => 'route_ai',
+    'predictions'    => 'route_predictions',
 ];
 
 try {

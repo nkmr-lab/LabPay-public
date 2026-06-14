@@ -1,0 +1,442 @@
+// v576 優勝予想 (Championship Prediction) view.
+//   /#/predictions          一覧
+//   /#/predictions/new      起案
+//   /#/predictions/:id      詳細 (予想入力 / 結果開示 / 集計)
+
+import { escapeHtml, navigate } from '../router.js';
+import { get, post } from '../api.js';
+import { toast, state } from '../app.js';
+
+const MEDAL = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
+
+function medalFor(i) { return MEDAL[i] ?? `${i+1}位`; }
+
+function statusBadge(st) {
+  switch (st) {
+    case 'open':      return '<span style="background:#e3f8e6; color:#1e8b3c; padding:1px 8px; border-radius:6px; font-size:11px">受付中</span>';
+    case 'closed':    return '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">締切済</span>';
+    case 'finished':  return '<span style="background:#e7e7f3; color:#4a106d; padding:1px 8px; border-radius:6px; font-size:11px">結果公開済</span>';
+    case 'cancelled': return '<span style="background:#f8e3e3; color:#8b2c1e; padding:1px 8px; border-radius:6px; font-size:11px">キャンセル</span>';
+    default: return escapeHtml(st);
+  }
+}
+
+export async function renderPredictions() {
+  const app = document.getElementById('app');
+  app.innerHTML = `<div class="card"><div class="hint">読み込み中…</div></div>`;
+  try {
+    const d = await get('/api/predictions/games');
+    const items = d.items || [];
+    app.innerHTML = `
+      <div class="card page-header">
+        <h2 style="margin:0">🏆 優勝予想</h2>
+        <p class="hint" style="margin:6px 0 0; font-size:13px">
+          W 杯 や スポーツ大会、 学会 best paper など 「順位」 を 予想して 参加フィー を 山分け。
+          スコア比例 で 配分、 場代 ${escapeHtml('5%')} のみ システム取り。
+        </p>
+        <p style="margin:8px 0 0">
+          <a class="btn primary" href="#/predictions/new">＋ 予想を起案する</a>
+        </p>
+      </div>
+      ${items.length ? items.map(g => `
+        <a class="card" href="#/predictions/${g.id}" style="display:block; text-decoration:none; color:inherit">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
+            <div class="bold" style="flex:1">${escapeHtml(g.title)}</div>
+            ${statusBadge(g.status)}
+            ${g.me_entered ? '<span style="color:#1e8b3c; font-size:11px">✓ 参加済</span>' : ''}
+          </div>
+          <div class="meta" style="font-size:12px">
+            起案: ${escapeHtml(g.creator_name)} ・
+            参加 ${g.entry_count} 人 ・
+            ${g.predict_count}位まで予想 ・
+            フィー ${g.fee}pt ・
+            プール ${g.pot_total}pt
+            ${g.deadline_at ? ` ・ 締切 ${escapeHtml(g.deadline_at)}` : ''}
+          </div>
+        </a>
+      `).join('') : `
+        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ予想が起案されていません。 最初の起案をどうぞ。</div></div>
+      `}
+    `;
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="hint">読み込み失敗: ${escapeHtml(String(e?.message || e))}</div></div>`;
+  }
+}
+
+export function renderPredictionNew() {
+  const app = document.getElementById('app');
+  // 候補は textarea で 1 行 = 1 候補 (絵文字 + 名前 を スペース区切り)
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin:0 0 10px">🏆 予想を起案する</h2>
+      <label style="display:block; margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル</div>
+        <input id="pn-title" class="input" placeholder="例: 2026 ワールドカップ 優勝予想" maxlength="200">
+      </label>
+      <label style="display:block; margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">説明 (任意)</div>
+        <textarea id="pn-desc" class="input" rows="2" placeholder="例: 北中米開催。 開催前までに予想を出してね" maxlength="1000"></textarea>
+      </label>
+      <div style="display:flex; gap:10px; margin-bottom:10px">
+        <label style="flex:1">
+          <div class="bold" style="font-size:13px; margin-bottom:4px">予想範囲</div>
+          <select id="pn-count" class="input">
+            <option value="1">1位のみ</option>
+            <option value="2">1位 / 2位</option>
+            <option value="4" selected>1位 〜 4位</option>
+          </select>
+        </label>
+        <label style="flex:1">
+          <div class="bold" style="font-size:13px; margin-bottom:4px">参加フィー (10-100pt)</div>
+          <input id="pn-fee" class="input" type="number" min="10" max="100" value="50">
+        </label>
+      </div>
+      <label style="display:block; margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">締切 (任意 / 過ぎたら予想不可)</div>
+        <input id="pn-deadline" class="input" type="datetime-local">
+      </label>
+      <label style="display:block; margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">候補リスト (1 行 = 1 候補)</div>
+        <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) は スペース区切り で 任意。 例: <code>🇧🇷 ブラジル</code></p>
+        <textarea id="pn-candidates" class="input" rows="12" placeholder="🇧🇷 ブラジル&#10;🇦🇷 アルゼンチン&#10;🇫🇷 フランス&#10;…"></textarea>
+      </label>
+      <div style="display:flex; gap:8px">
+        <button class="btn primary" id="pn-submit">起案する</button>
+        <a class="btn" href="#/predictions">キャンセル</a>
+      </div>
+    </div>
+  `;
+  document.getElementById('pn-submit').addEventListener('click', async () => {
+    const title = document.getElementById('pn-title').value.trim();
+    const desc  = document.getElementById('pn-desc').value.trim();
+    const count = parseInt(document.getElementById('pn-count').value, 10);
+    const fee   = parseInt(document.getElementById('pn-fee').value, 10);
+    const dl    = document.getElementById('pn-deadline').value;
+    const raw   = document.getElementById('pn-candidates').value;
+    if (!title) { toast('タイトルを入れてください'); return; }
+    if (!(fee >= 10 && fee <= 100)) { toast('フィーは 10-100pt'); return; }
+    const candidates = raw.split('\n').map(line => line.trim()).filter(Boolean).map((line, i) => {
+      const m = line.match(/^(\p{Extended_Pictographic}(?:‍\p{Extended_Pictographic})*|\S+)\s+(.+)$/u);
+      if (m) return { id: `c${i}`, name: m[2], flag: m[1] };
+      return { id: `c${i}`, name: line, flag: null };
+    });
+    if (candidates.length < count + 1) {
+      toast(`候補が少ないです。 ${count + 1} 個以上 入れてください`); return;
+    }
+    const body = { title, fee, predict_count: count, candidates };
+    if (desc) body.description = desc;
+    if (dl) body.deadline_at = dl.replace('T', ' ') + ':00';
+    try {
+      const r = await post('/api/predictions/games', body);
+      navigate(`#/predictions/${r.id}`);
+    } catch (e) {
+      toast('起案失敗: ' + (e?.message || e));
+    }
+  });
+}
+
+export async function renderPredictionDetail(ctx) {
+  const app = document.getElementById('app');
+  const gid = parseInt(ctx.params.id, 10);
+  app.innerHTML = `<div class="card"><div class="hint">読み込み中…</div></div>`;
+  let g;
+  try {
+    g = await get(`/api/predictions/games/${gid}`);
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="hint">読み込み失敗: ${escapeHtml(String(e?.message || e))}</div></div>`;
+    return;
+  }
+  app.innerHTML = renderDetailHtml(g);
+  wireDetail(g);
+}
+
+function renderDetailHtml(g) {
+  const candById = Object.fromEntries(g.candidates.map(c => [c.id, c]));
+  const renderRanks = (ranks) => ranks
+    ? ranks.map((cid, i) => `<div style="display:flex; gap:6px; align-items:center">
+        <span style="width:30px">${medalFor(i)}</span>
+        <span>${escapeHtml(candById[cid]?.flag || '')} ${escapeHtml(candById[cid]?.name || cid)}</span>
+      </div>`).join('')
+    : '<div class="meta">非公開 (結果開示後に表示)</div>';
+
+  const candidatesHtml = g.candidates.map((c, i) =>
+    `<button class="pred-cand" data-cid="${escapeHtml(c.id)}"
+       style="display:inline-flex; gap:4px; align-items:center; margin:3px;
+              padding:6px 10px; border:1px solid var(--line); border-radius:8px;
+              background:#fff; cursor:pointer">
+       <span style="font-size:18px">${escapeHtml(c.flag || '')}</span>
+       <span>${escapeHtml(c.name)}</span>
+     </button>`
+  ).join('');
+
+  const slotsHtml = Array.from({length: g.predict_count}, (_, i) =>
+    `<div class="pred-slot" data-i="${i}"
+       style="display:flex; align-items:center; gap:8px; padding:6px 10px;
+              border:2px dashed var(--line); border-radius:8px; margin:4px 0; min-height:36px">
+       <span style="font-size:18px; width:32px">${medalFor(i)}</span>
+       <span class="slot-content" style="flex:1; color:#999">タップで 下から選択</span>
+       <button class="slot-clear" type="button"
+         style="background:none; border:none; color:#c00; cursor:pointer; font-size:18px"
+         hidden>×</button>
+     </div>`
+  ).join('');
+
+  let predictArea = '';
+  if (g.status === 'open') {
+    if (g.me_entered) {
+      predictArea = `
+        <div class="card">
+          <h3 style="margin:0 0 6px">あなたの予想 (変更可能)</h3>
+          <div id="pred-slots">${slotsHtml}</div>
+          <div style="margin:10px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
+          <div id="pred-cands">${candidatesHtml}</div>
+          <button class="btn primary" id="pred-submit" style="margin-top:10px">予想を更新する</button>
+        </div>`;
+    } else {
+      predictArea = `
+        <div class="card">
+          <h3 style="margin:0 0 4px">予想を入力する</h3>
+          <p class="hint" style="margin:0 0 8px; font-size:12px">参加フィー ${g.fee}pt を 支払って 予想を 提出します。 締切前なら 何度でも 変更可能。</p>
+          <div id="pred-slots">${slotsHtml}</div>
+          <div style="margin:10px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
+          <div id="pred-cands">${candidatesHtml}</div>
+          <button class="btn primary" id="pred-submit" style="margin-top:10px">フィー ${g.fee}pt を支払って予想する</button>
+        </div>`;
+    }
+  } else if (g.status === 'closed') {
+    predictArea = `
+      <div class="card">
+        <h3 style="margin:0 0 4px">締切済み</h3>
+        <p class="hint" style="margin:0">起案者が 結果を 開示するのを 待ちましょう。</p>
+      </div>`;
+  } else if (g.status === 'cancelled') {
+    predictArea = `
+      <div class="card">
+        <h3 style="margin:0 0 4px">キャンセル済</h3>
+        <p class="hint" style="margin:0">参加フィーは 全員に返金されました。</p>
+      </div>`;
+  }
+
+  const myResult = (g.status === 'finished' && g.my_ranks) ? `
+    <div class="card">
+      <h3 style="margin:0 0 6px">あなたの予想と結果</h3>
+      <div style="display:flex; gap:16px">
+        <div style="flex:1">
+          <div class="bold" style="font-size:12px; margin-bottom:4px">あなたの予想</div>
+          ${renderRanks(g.my_ranks)}
+        </div>
+        <div style="flex:1">
+          <div class="bold" style="font-size:12px; margin-bottom:4px">正解</div>
+          ${renderRanks(g.actual)}
+        </div>
+      </div>
+      <div style="margin-top:8px">スコア: <b>${g.my_score ?? 0}</b> / 払い戻し: <b>${g.my_payout ?? 0}pt</b></div>
+    </div>` : '';
+
+  const actualBlock = (g.status === 'finished' && g.actual) ? `
+    <div class="card">
+      <h3 style="margin:0 0 6px">📣 正解</h3>
+      ${renderRanks(g.actual)}
+    </div>` : '';
+
+  const creatorBlock = (g.is_creator && (g.status === 'open' || g.status === 'closed')) ? `
+    <div class="card">
+      <h3 style="margin:0 0 4px">起案者メニュー</h3>
+      <p class="hint" style="margin:0 0 8px; font-size:12px">受付を締め切ったら 結果を開示できます。 まだ誰も参加していない場合は キャンセルもできます。</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        ${g.status === 'open' ? `<button class="btn" id="pred-close">受付を締め切る</button>` : ''}
+        <button class="btn primary" id="pred-open-finalize">結果を開示する…</button>
+        <button class="btn" id="pred-cancel" style="color:#c00">キャンセル (全員フィー返金)</button>
+      </div>
+      <div id="pred-finalize-form" hidden style="margin-top:12px; padding:10px; border:1px solid var(--line); border-radius:8px">
+        <div class="bold" style="margin-bottom:6px">正解の順位を入力</div>
+        <div id="pred-actual-slots">${slotsHtml.replace(/class="pred-slot"/g, 'class="pred-actual-slot"').replace(/data-i="(\d+)"/g, 'data-i="$1" data-mode="actual"')}</div>
+        <div style="margin:8px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
+        <div id="pred-actual-cands">${candidatesHtml.replace(/class="pred-cand"/g, 'class="pred-actual-cand"')}</div>
+        <button class="btn primary" id="pred-finalize" style="margin-top:10px">結果を確定して 配分する</button>
+      </div>
+    </div>` : '';
+
+  const entriesBlock = (g.entries && g.entries.length) ? `
+    <div class="card">
+      <h3 style="margin:0 0 6px">参加者 (${g.entries.length} 人)</h3>
+      ${g.entries.map(e => g.status === 'finished'
+        ? `<div style="border-top:1px solid var(--line); padding:6px 0">
+             <div style="display:flex; align-items:center; gap:8px">
+               <span class="bold">${escapeHtml(e.display_name)}</span>
+               <span class="meta" style="font-size:12px">スコア ${e.score} / 払戻 ${e.payout}pt</span>
+             </div>
+             <div style="margin-top:4px; font-size:13px">${(e.ranks || []).map((cid, i) =>
+               `<span style="margin-right:8px">${medalFor(i)} ${escapeHtml(candById[cid]?.flag || '')}${escapeHtml(candById[cid]?.name || cid)}</span>`).join('')}</div>
+           </div>`
+        : `<div style="border-top:1px solid var(--line); padding:6px 0">
+             <span class="bold">${escapeHtml(e.display_name)}</span>
+             <span class="meta" style="font-size:12px"> ・ 予想は結果開示後に公開</span>
+           </div>`
+      ).join('')}
+    </div>` : '';
+
+  return `
+    <div class="card page-header">
+      <div style="display:flex; align-items:center; gap:8px">
+        <h2 style="margin:0; flex:1">${escapeHtml(g.title)}</h2>
+        ${statusBadge(g.status)}
+      </div>
+      <p class="hint" style="margin:6px 0 0; font-size:13px">
+        起案: ${escapeHtml(g.creator_name)} ・
+        ${g.predict_count}位まで予想 ・
+        フィー ${g.fee}pt ・
+        プール ${g.pot_total}pt
+        ${g.deadline_at ? ` ・ 締切 ${escapeHtml(g.deadline_at)}` : ''}
+      </p>
+      ${g.description ? `<p style="margin:8px 0 0; white-space:pre-wrap">${escapeHtml(g.description)}</p>` : ''}
+    </div>
+    ${actualBlock}
+    ${myResult}
+    ${predictArea}
+    ${creatorBlock}
+    ${entriesBlock}
+  `;
+}
+
+function wireDetail(g) {
+  const candById = Object.fromEntries(g.candidates.map(c => [c.id, c]));
+  // 自分予想 (予想入力)
+  if (g.status === 'open') {
+    const slotsRoot = document.getElementById('pred-slots');
+    const candsRoot = document.getElementById('pred-cands');
+    if (slotsRoot && candsRoot) {
+      const initial = g.my_ranks || Array.from({length: g.predict_count}, () => null);
+      const picked = [...initial];
+      const refresh = () => {
+        slotsRoot.querySelectorAll('.pred-slot').forEach(slot => {
+          const i = parseInt(slot.dataset.i, 10);
+          const cid = picked[i];
+          const content = slot.querySelector('.slot-content');
+          const clear = slot.querySelector('.slot-clear');
+          if (cid) {
+            content.innerHTML = `${escapeHtml(candById[cid]?.flag || '')} <b>${escapeHtml(candById[cid]?.name || cid)}</b>`;
+            content.style.color = 'var(--text)';
+            clear.hidden = false;
+          } else {
+            content.textContent = 'タップで 下から選択';
+            content.style.color = '#999';
+            clear.hidden = true;
+          }
+        });
+        candsRoot.querySelectorAll('.pred-cand').forEach(b => {
+          const cid = b.dataset.cid;
+          const used = picked.includes(cid);
+          b.style.opacity = used ? '0.35' : '1';
+          b.style.pointerEvents = used ? 'none' : 'auto';
+        });
+      };
+      slotsRoot.addEventListener('click', (ev) => {
+        const c = ev.target.closest('.slot-clear');
+        if (!c) return;
+        const slot = c.closest('.pred-slot');
+        picked[parseInt(slot.dataset.i, 10)] = null;
+        refresh();
+      });
+      candsRoot.addEventListener('click', (ev) => {
+        const b = ev.target.closest('.pred-cand');
+        if (!b) return;
+        const cid = b.dataset.cid;
+        if (picked.includes(cid)) return;
+        const idx = picked.findIndex(x => x === null);
+        if (idx < 0) { toast('全部 埋まっています。 不要なものを × で消してください'); return; }
+        picked[idx] = cid;
+        refresh();
+      });
+      refresh();
+      document.getElementById('pred-submit').addEventListener('click', async () => {
+        if (picked.some(x => !x)) { toast('全 ' + g.predict_count + ' 位を埋めてください'); return; }
+        try {
+          await post(`/api/predictions/games/${g.id}/predict`, { ranks: picked });
+          toast('予想を保存しました');
+          renderPredictionDetail({ params: { id: g.id } });
+        } catch (e) {
+          toast('送信失敗: ' + (e?.message || e));
+        }
+      });
+    }
+  }
+  // 起案者メニュー
+  if (g.is_creator && (g.status === 'open' || g.status === 'closed')) {
+    document.getElementById('pred-close')?.addEventListener('click', async () => {
+      if (!confirm('受付を 締め切りますか? (まだ 結果開示 ではありません)')) return;
+      try {
+        await post(`/api/predictions/games/${g.id}/close`, {});
+        toast('締め切りました');
+        renderPredictionDetail({ params: { id: g.id } });
+      } catch (e) { toast('失敗: ' + (e?.message || e)); }
+    });
+    document.getElementById('pred-cancel')?.addEventListener('click', async () => {
+      if (!confirm('キャンセルすると 全員のフィーが 返金され 予想は破棄されます。 よろしいですか?')) return;
+      try {
+        await post(`/api/predictions/games/${g.id}/cancel`, {});
+        toast('キャンセルしました');
+        navigate('#/predictions');
+      } catch (e) { toast('失敗: ' + (e?.message || e)); }
+    });
+    const openBtn = document.getElementById('pred-open-finalize');
+    const form    = document.getElementById('pred-finalize-form');
+    openBtn?.addEventListener('click', () => { form.hidden = !form.hidden; });
+    // actual 入力
+    const actualSlotsRoot = document.getElementById('pred-actual-slots');
+    const actualCandsRoot = document.getElementById('pred-actual-cands');
+    if (actualSlotsRoot && actualCandsRoot) {
+      const actual = Array.from({length: g.predict_count}, () => null);
+      const refresh = () => {
+        actualSlotsRoot.querySelectorAll('.pred-actual-slot').forEach(slot => {
+          const i = parseInt(slot.dataset.i, 10);
+          const cid = actual[i];
+          const content = slot.querySelector('.slot-content');
+          const clear = slot.querySelector('.slot-clear');
+          if (cid) {
+            content.innerHTML = `${escapeHtml(candById[cid]?.flag || '')} <b>${escapeHtml(candById[cid]?.name || cid)}</b>`;
+            content.style.color = 'var(--text)';
+            clear.hidden = false;
+          } else {
+            content.textContent = 'タップで 下から選択';
+            content.style.color = '#999';
+            clear.hidden = true;
+          }
+        });
+        actualCandsRoot.querySelectorAll('.pred-actual-cand').forEach(b => {
+          const cid = b.dataset.cid;
+          const used = actual.includes(cid);
+          b.style.opacity = used ? '0.35' : '1';
+          b.style.pointerEvents = used ? 'none' : 'auto';
+        });
+      };
+      actualSlotsRoot.addEventListener('click', (ev) => {
+        const c = ev.target.closest('.slot-clear');
+        if (!c) return;
+        const slot = c.closest('.pred-actual-slot');
+        actual[parseInt(slot.dataset.i, 10)] = null;
+        refresh();
+      });
+      actualCandsRoot.addEventListener('click', (ev) => {
+        const b = ev.target.closest('.pred-actual-cand');
+        if (!b) return;
+        const cid = b.dataset.cid;
+        if (actual.includes(cid)) return;
+        const idx = actual.findIndex(x => x === null);
+        if (idx < 0) return;
+        actual[idx] = cid;
+        refresh();
+      });
+      refresh();
+      document.getElementById('pred-finalize').addEventListener('click', async () => {
+        if (actual.some(x => !x)) { toast('全 ' + g.predict_count + ' 位を埋めてください'); return; }
+        if (!confirm('結果を確定して 配分しますか? この操作は取り消せません')) return;
+        try {
+          await post(`/api/predictions/games/${g.id}/finalize`, { actual });
+          toast('結果を開示し 配分しました');
+          renderPredictionDetail({ params: { id: g.id } });
+        } catch (e) { toast('失敗: ' + (e?.message || e)); }
+      });
+    }
+  }
+}
