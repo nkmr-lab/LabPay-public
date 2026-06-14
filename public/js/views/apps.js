@@ -20,23 +20,23 @@ export const APP_CATEGORIES = [
 
 export const APPS = [
   // 🔴 urgent — 締切・応答が要る (通知 出す)
-  { id: 'rollcalls',     cat: 'urgent', url: '#/rollcalls',     title: '点呼',               desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
-  { id: 'polls',         cat: 'urgent', url: '#/polls',         title: '投票・アンケート',   desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
-  { id: 'requests',      cat: 'urgent', url: '#/requests',      title: '請求 (集金)',        desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
+  { id: 'rollcalls',     cat: 'urgent', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる？」 「起きてる？」 をワンタップで集める。 締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
+  { id: 'polls',         cat: 'urgent', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。 個人の票は非公開、 集計の可視タイミングは選べる。', defaultVisible: true },
+  { id: 'requests',      cat: 'urgent', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'meetups',       cat: 'urgent', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバー を 一発で全員に通知。 30 分後 / 1 時間後 などのプリセット時刻あり。', defaultVisible: true },
-  { id: 'deadlines',     cat: 'urgent', url: '#/meetups?kind=deadline', title: '📌 〆切',            desc: '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで。 待ち合わせ と 同じ 仕組み (kind=deadline)。', defaultVisible: true },
-  { id: 'timers',        cat: 'urgent', url: '#/timers',        title: 'タイマー',           desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
+  { id: 'deadlines',     cat: 'urgent', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで。 待ち合わせ と 同じ 仕組み (kind=deadline)。', defaultVisible: true },
+  { id: 'timers',        cat: 'urgent', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で 同じカウントダウンを共有。 ポモドーロ / 会議の時間配分 / イベント開始まで など。', defaultVisible: true },
   { id: 'auctions',      cat: 'urgent', url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
-  { id: 'nomikai',       cat: 'urgent', url: '#/nomikai',       title: '飲み会割り勘',       desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
+  { id: 'nomikai',       cat: 'urgent', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
 
   // 🟡 inform — 全員に届くお知らせ
-  { id: 'notices',       cat: 'inform', url: '#/notices',       title: '重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
-  { id: 'groups',        cat: 'inform', url: '#/groups',        title: 'イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
+  { id: 'notices',       cat: 'inform', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。 カテゴリで切替。 全メンバーが投稿可、 投稿者 + admin が編集 / 削除。', defaultVisible: true },
+  { id: 'groups',        cat: 'inform', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
 
   // 🟢 tool — その場で結論が出る道具 (通知なし)
-  { id: 'roulette',      cat: 'tool',   url: '#/roulette',      title: 'ルーレット',         desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
-  { id: 'text-roulette', cat: 'tool',   url: '#/text-roulette', title: 'どこ行くルーレット', desc: '昼飯どこ行く / 何食べる など、 任意のテキスト候補から 1 つを選ぶシンプル版。', defaultVisible: true },
-  { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: 'ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
+  { id: 'roulette',      cat: 'tool',   url: '#/roulette',      title: '🎰 ルーレット',       desc: 'メンバーから 1 人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
+  { id: 'text-roulette', cat: 'tool',   url: '#/text-roulette', title: '🍜 どこ行くルーレット', desc: '昼飯どこ行く / 何食べる など、 任意のテキスト候補から 1 つを選ぶシンプル版。', defaultVisible: true },
+  { id: 'random-groups', cat: 'tool',   url: '#/random-groups', title: '🎲 ランダムグループ生成', desc: '選んだメンバーを N チームにランダム分け。学年/男女を「できるだけ均等」にする配慮も可能。', defaultVisible: true },
   // v523 #160 順番決め (発表順 / 当番 など)。 メンバーを 1 列に並び替えて 結果を全員に通知。
   { id: 'orderings',     cat: 'tool',   url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを 1 列に並び替え (発表順 / 当番割 など)。 結果は 各メンバーに通知される。 1 人ずつめくる演出 付き。', defaultVisible: true },
   // v529 #165 ストップウォッチを 締切系 (urgent) カテゴリに移動 (発表時間など 「時間で動く」 性質)
@@ -50,9 +50,9 @@ export const APPS = [
   { id: 'translate',     cat: 'ai',     url: '#/translate',     title: '🌐 画像 和訳',       desc: '写真 (メニュー / 看板 / 説明文 など) を アップロード → AI で 日本語に 翻訳。 出張 / 旅行 で 便利。', defaultVisible: true },
 
   // 📚 archive — ラボの情報・蓄積 (受動、 通知なし)
-  { id: 'contacts',      cat: 'archive', url: '#/contacts',     title: '連絡先',             desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
-  { id: 'scrapbox',      cat: 'archive', url: '#/scrapbox',     title: 'Scrapbox 履歴',      desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
-  { id: 'network',       cat: 'archive', url: '#/network',      title: '関係性グラフ',       desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
+  { id: 'contacts',      cat: 'archive', url: '#/contacts',     title: '📞 連絡先',          desc: 'ラボメンバーの緊急連絡用電話番号。 タップで通話。 自分の番号は設定から登録。', defaultVisible: true },
+  { id: 'scrapbox',      cat: 'archive', url: '#/scrapbox',     title: '📚 Scrapbox 履歴',   desc: '#scrapbox の研究ノート編集を読みやすくまとめて表示。', defaultVisible: true },
+  { id: 'network',       cat: 'archive', url: '#/network',      title: '🕸 関係性グラフ',    desc: '売買・タスク・送金・Wishlist などのつながりをグラフで可視化。', defaultVisible: true },
   { id: 'exercise',      cat: 'archive', url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
   // v531 #163 行った国 / 都道府県 制覇マップ
   { id: 'regions',       cat: 'archive', url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県 を タップで 登録。 進捗バー (47/47 都道府県 や 100/X 国) + ラボ メンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
@@ -71,7 +71,7 @@ export const APPS = [
   // v553 #209 麻雀 Phase 1 (賭けプール only)
   { id: 'mahjong',       cat: 'archive', url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 1〜4 位申告で 自動分配 (50/30/15/0% + 場代 5%)。 Phase 1 は実ゲーム外 (雀魂等で遊んで結果報告)、 Phase 2 で実ゲーム化予定。', defaultVisible: true },
   // v568 #223 ito Phase 1
-  { id: 'ito',           cat: 'urgent',  url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で 1pt ずつ預託、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
+  { id: 'ito',           cat: 'urgent',  url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
   // v570 #223 人狼 Phase 1
   { id: 'jinrou',        cat: 'urgent',  url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   { id: 'playlists',     cat: 'archive', url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube / Spotify URL を まとめて 紹介。 ⭐ 1-5 評価 + コメント + ❤️ お気に入り + ジャンル + シャッフル 再生。', defaultVisible: true },

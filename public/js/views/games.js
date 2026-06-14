@@ -5,7 +5,7 @@ import { escapeHtml } from '../router.js';
 
 const GAMES = [
   { id: 'mahjong',   icon: '🀄', name: '麻雀',         url: '#/mahjong',
-    desc: '4 人 50pt 預託で 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 賭けプール only',
+    desc: '4 人 50pt 賭けプール で 本格麻雀 (門前/鳴き/役判定/連荘/半荘)。 終了時に順位別 payout',
     badge: 'プレイ料 (賭けプール)' },
   { id: 'mahjong-ai',icon: '🤖', name: 'AI 麻雀',      url: '#/mahjong',
     desc: '人間 1 + AI 3 で 1 半荘。 1 位 +15pt / 2 位 +5pt / 3 位 -3pt / 4 位 -5pt',
