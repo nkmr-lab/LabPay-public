@@ -75,9 +75,14 @@ function predictions_detail(PDO $pdo, int $uid, int $gid): void {
     $me = $stMe->fetch(PDO::FETCH_ASSOC);
     $myRanks = $me ? json_decode($me['ranks_json'] ?: '[]', true) : null;
 
-    // 全員の予想 (status=finished のみ公開)
+    // 全員の予想 を 公開するか?
+    //   締切後 (deadline_at < now) または status != 'open' なら 開示。
+    //   = 「受付中で 締切前」 のときだけ 他人の予想を 隠す (自分の予想で 引っ張られないように)。
+    //   v577 仕様変更: 結果開示 (finalize) を 待たずに、 締切を過ぎたら すぐ 全員分を開示。
+    $deadlinePassed = !empty($g['deadline_at']) && strtotime((string)$g['deadline_at']) < time();
+    $revealRanks = ($g['status'] !== 'open') || $deadlinePassed;
     $entries = [];
-    if ($g['status'] === 'finished') {
+    if ($revealRanks) {
         $stA = $pdo->prepare("SELECT e.user_id, e.ranks_json, e.score, e.payout, u.display_name, u.avatar_url
                                 FROM predictions_entries e JOIN users u ON u.id = e.user_id
                                WHERE e.game_id = ? ORDER BY e.score DESC, e.payout DESC, e.created_at ASC");
@@ -93,10 +98,7 @@ function predictions_detail(PDO $pdo, int $uid, int $gid): void {
             ];
         }
     } else {
-        // open/closed: 件数だけ
-        $stC = $pdo->prepare("SELECT COUNT(*) FROM predictions_entries WHERE game_id = ?");
-        $stC->execute([$gid]);
-        // 参加者一覧は出すが ranks は隠す
+        // 受付中 (締切前): 参加者一覧は出すが ranks は隠す
         $stA = $pdo->prepare("SELECT e.user_id, u.display_name, u.avatar_url, e.created_at
                                 FROM predictions_entries e JOIN users u ON u.id = e.user_id
                                WHERE e.game_id = ? ORDER BY e.created_at ASC");

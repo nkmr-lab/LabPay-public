@@ -258,21 +258,24 @@ function renderDetailHtml(g) {
       </div>
     </div>` : '';
 
+  // ranks が 入っているか で 公開状態を 判定 (サーバ側で 締切後は ranks を埋めて返す)。
+  const ranksRevealed = (g.entries || []).some(e => Array.isArray(e.ranks));
   const entriesBlock = (g.entries && g.entries.length) ? `
     <div class="card">
-      <h3 style="margin:0 0 6px">参加者 (${g.entries.length} 人)</h3>
-      ${g.entries.map(e => g.status === 'finished'
+      <h3 style="margin:0 0 6px">参加者の予想 (${g.entries.length} 人${ranksRevealed ? ' / スコア順' : ' / 受付中 — 締切後に公開'})</h3>
+      ${g.entries.map((e, idx) => Array.isArray(e.ranks)
         ? `<div style="border-top:1px solid var(--line); padding:6px 0">
              <div style="display:flex; align-items:center; gap:8px">
+               <span style="font-size:13px; color:#888; width:24px">#${idx + 1}</span>
                <span class="bold">${escapeHtml(e.display_name)}</span>
-               <span class="meta" style="font-size:12px">スコア ${e.score} / 払戻 ${e.payout}pt</span>
+               <span class="meta" style="font-size:12px">スコア ${e.score ?? 0}${typeof e.payout === 'number' && e.payout > 0 ? ` / 払戻 ${e.payout}pt` : ''}</span>
              </div>
-             <div style="margin-top:4px; font-size:13px">${(e.ranks || []).map((cid, i) =>
+             <div style="margin-top:4px; font-size:13px">${e.ranks.map((cid, i) =>
                `<span style="margin-right:8px">${medalFor(i)} ${escapeHtml(candById[cid]?.flag || '')}${escapeHtml(candById[cid]?.name || cid)}</span>`).join('')}</div>
            </div>`
         : `<div style="border-top:1px solid var(--line); padding:6px 0">
              <span class="bold">${escapeHtml(e.display_name)}</span>
-             <span class="meta" style="font-size:12px"> ・ 予想は結果開示後に公開</span>
+             <span class="meta" style="font-size:12px"> ・ 予想は締切後に公開</span>
            </div>`
       ).join('')}
     </div>` : '';
