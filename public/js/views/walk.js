@@ -19,6 +19,8 @@ export async function renderWalk() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🚶 散歩に行こう</h2>
         <span style="flex:1"></span>
+        <a class="btn primary" href="#/walk-mode" style="font-size:12px; padding:4px 10px">📍 散歩モード 開始</a>
+        <a class="btn" href="#/walk/sessions" style="font-size:12px; padding:4px 8px">履歴</a>
         <select id="wk-radius" style="font-size:12px">
           <option value="500">500m</option>
           <option value="1000">1km</option>

@@ -60,6 +60,8 @@ export const HOME_ACTIONS = [
   { id: 'resume-check', url: '#/resume-check',       title: '原稿チェック',  icon: '📝', defaultVisible: false }, // v583 #225
   { id: 'flight',       url: '#/flight',             title: 'フライト応援',  icon: '✈️', defaultVisible: false }, // v586
   { id: 'othello',      url: '#/othello',            title: '地雷オセロ',    icon: '💣', defaultVisible: false }, // v587
+  { id: 'bingo',        url: '#/bingo',              title: 'ビンゴ',        icon: '🎰', defaultVisible: false }, // v588
+  { id: 'daifugo',      url: '#/daifugo',            title: '大富豪',        icon: '🃏', defaultVisible: false }, // v590
   { id: 'mahjong',      url: '#/mahjong',            title: '麻雀',          icon: '🀄', defaultVisible: false }, // v553 #209
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
@@ -119,6 +121,8 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-resume-check', title: '📝 原稿チェック',    url: '#/resume-check', desc: '1-2 ページの 短原稿を 軽量査読 (5pt)' },
   { id: 'sc-flight',       title: '✈️ フライト応援',    url: '#/flight',       desc: '長いフライト の 進捗を 可視化 (オフライン対応)' },
   { id: 'sc-othello',      title: '💣 地雷オセロ',      url: '#/othello',      desc: '通常オセロ + 各自 2 地雷 (3x3 反転)。 1pt 対戦' },
+  { id: 'sc-bingo',        title: '🎰 ビンゴ',           url: '#/bingo',        desc: '今週の カードと 進捗。 ラボ行動 が 自動カウント' },
+  { id: 'sc-daifugo',      title: '🃏 大富豪',           url: '#/daifugo',      desc: '2-4 人 カードゲーム。 1pt buy-in、 1 位が総取り' },
   { id: 'sc-regions',      title: '🗺 制覇マップ',       url: '#/regions',      desc: '行った国・都道府県 を タップで 登録' },
   { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
   { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },

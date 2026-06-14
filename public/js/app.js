@@ -551,6 +551,15 @@ route('/flight',            lazy(() => import('./views/flight.js'), 'renderFligh
 // v587 地雷オセロ
 route('/othello/:id',       lazy(() => import('./views/othello.js'), 'renderOthelloDetail'));
 route('/othello',           lazy(() => import('./views/othello.js'), 'renderOthello'));
+// v588 ビンゴ
+route('/bingo',             lazy(() => import('./views/bingo.js'), 'renderBingo'));
+// v589 散歩モード (Wake Lock + GPS 軌跡)
+route('/walk-mode',         lazy(() => import('./views/walk_mode.js'), 'renderWalkMode'));
+route('/walk/sessions',     lazy(() => import('./views/walk_mode.js'), 'renderWalkSessions'));
+route('/walk/session/:id',  lazy(() => import('./views/walk_mode.js'), 'renderWalkSessionDetail'));
+// v590 大富豪
+route('/daifugo/:id',       lazy(() => import('./views/daifugo.js'), 'renderDaifugoDetail'));
+route('/daifugo',           lazy(() => import('./views/daifugo.js'), 'renderDaifugo'));
 // v568 #223 ito アプリ
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));

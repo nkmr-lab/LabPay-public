@@ -62,7 +62,86 @@ function route_walk(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['items' => array_slice($out, 0, 20)]);
         return;
     }
+    // v589 散歩 セッション (歩いた軌跡を 記録)
+    if ($sub === 'sessions' && $method === 'POST' && !isset($seg[2])) {
+        walk_session_start($pdo, $uid);
+        return;
+    }
+    if ($sub === 'sessions' && $method === 'GET' && !isset($seg[2])) {
+        walk_session_list($pdo, $uid);
+        return;
+    }
+    if ($sub === 'sessions' && isset($seg[2])) {
+        $sid = (int)$seg[2];
+        $action = $seg[3] ?? '';
+        if ($method === 'GET' && $action === '') { walk_session_get($pdo, $uid, $sid); return; }
+        if ($method === 'POST' && $action === 'point') { walk_session_point($pdo, $uid, $sid); return; }
+        if ($method === 'POST' && $action === 'end')   { walk_session_end($pdo, $uid, $sid); return; }
+    }
     json_error('not_found', "no walk route for $method $sub", 404);
+}
+
+function walk_session_start(PDO $pdo, int $uid): void {
+    $pdo->prepare("INSERT INTO walk_sessions (user_id, points_json) VALUES (?, '[]')")->execute([$uid]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function walk_session_point(PDO $pdo, int $uid, int $sid): void {
+    $body = read_json_body();
+    $lat = (float)($body['lat'] ?? 0);
+    $lng = (float)($body['lng'] ?? 0);
+    $steps = isset($body['steps']) ? (int)$body['steps'] : null;
+    if ($lat === 0.0 && $lng === 0.0) throw new ApiException('bad_request', 'lat/lng 必須', 400);
+    db_tx($pdo, function () use ($pdo, $uid, $sid, $lat, $lng, $steps) {
+        $st = $pdo->prepare("SELECT user_id, points_json, total_meters, total_steps, ended_at FROM walk_sessions WHERE id=? FOR UPDATE");
+        $st->execute([$sid]);
+        $s = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$s) throw new ApiException('not_found', 'session not found', 404);
+        if ((int)$s['user_id'] !== $uid) throw new ApiException('forbidden', 'not yours', 403);
+        if ($s['ended_at'] !== null) throw new ApiException('bad_request', 'ended', 400);
+        $pts = json_decode($s['points_json'] ?: '[]', true) ?: [];
+        $totalM = (int)$s['total_meters'];
+        if (!empty($pts)) {
+            $last = end($pts);
+            $totalM += (int)round(walk_haversine_m($last[0], $last[1], $lat, $lng));
+        }
+        $pts[] = [$lat, $lng, time()];
+        // 上限: 1 セッション 5000 点まで
+        if (count($pts) > 5000) array_shift($pts);
+        $newSteps = $steps !== null ? max((int)$s['total_steps'], $steps) : (int)$s['total_steps'];
+        $pdo->prepare("UPDATE walk_sessions SET points_json=?, total_meters=?, total_steps=? WHERE id=?")
+            ->execute([json_encode($pts), $totalM, $newSteps, $sid]);
+    });
+    json_response(['ok' => true]);
+}
+
+function walk_session_end(PDO $pdo, int $uid, int $sid): void {
+    $st = $pdo->prepare("UPDATE walk_sessions SET ended_at=NOW() WHERE id=? AND user_id=? AND ended_at IS NULL");
+    $st->execute([$sid, $uid]);
+    json_response(['ok' => true]);
+}
+
+function walk_session_get(PDO $pdo, int $uid, int $sid): void {
+    $st = $pdo->prepare("SELECT * FROM walk_sessions WHERE id=? AND user_id=?");
+    $st->execute([$sid, $uid]);
+    $s = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$s) throw new ApiException('not_found', 'not found', 404);
+    json_response([
+        'id' => (int)$s['id'],
+        'started_at' => $s['started_at'],
+        'ended_at'   => $s['ended_at'],
+        'points'     => json_decode($s['points_json'] ?: '[]', true) ?: [],
+        'total_meters' => (int)$s['total_meters'],
+        'total_steps'  => (int)$s['total_steps'],
+    ]);
+}
+
+function walk_session_list(PDO $pdo, int $uid): void {
+    $st = $pdo->prepare("SELECT id, started_at, ended_at, total_meters, total_steps FROM walk_sessions WHERE user_id=? ORDER BY id DESC LIMIT 50");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['total_meters'] = (int)$r['total_meters']; $r['total_steps'] = (int)$r['total_steps']; }
+    json_response(['items' => $rows]);
 }
 
 function walk_haversine_m(float $lat1, float $lng1, float $lat2, float $lng2): float {

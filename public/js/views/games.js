@@ -31,6 +31,9 @@ const GAMES = [
   { id: 'othello',   icon: '💣', name: '地雷オセロ',  url: '#/othello',
     desc: '通常オセロ + 各自 2 か所 地雷 (踏むと 3x3 反転)。 勝者が pot 総取り',
     badge: 'プレイ料 1pt' },
+  { id: 'daifugo',   icon: '🃏', name: '大富豪',      url: '#/daifugo',
+    desc: '2-4 人、 単出し / ペア / N 枚 出し。 1 位 が pot 総取り (シンプル ルール)',
+    badge: 'プレイ料 1pt' },
 ];
 
 const CATEGORIES = [
@@ -44,6 +47,7 @@ const GAME_CATEGORY = {
   mahjong:       'gamble',
   'mahjong-ai':  'gamble',
   othello:       'gamble',
+  daifugo:       'gamble',
   predictions:   'predict',
   ito:           'party',
   jinrou:        'party',

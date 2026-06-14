@@ -83,6 +83,8 @@ $routes = [
     'predictions'    => 'route_predictions',
     'fortune'        => 'route_fortune',
     'othello'        => 'route_othello',
+    'bingo'          => 'route_bingo',
+    'daifugo'        => 'route_daifugo',
 ];
 
 try {

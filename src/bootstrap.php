@@ -555,3 +555,5 @@ require_once __DIR__ . '/handlers/ai.php';
 require_once __DIR__ . '/handlers/predictions.php';
 require_once __DIR__ . '/handlers/fortune.php';
 require_once __DIR__ . '/handlers/othello.php';
+require_once __DIR__ . '/handlers/bingo.php';
+require_once __DIR__ . '/handlers/daifugo.php';
