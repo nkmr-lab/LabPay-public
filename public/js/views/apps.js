@@ -70,6 +70,8 @@ export const APPS = [
   { id: 'tierlists',     cat: 'tool',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け。 自分の回答を保存すると 他人の回答 + 全員集計 が見れる。', defaultVisible: true },
   // v550 #206 論文査読
   { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
+  // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
+  { id: 'resume-check',  cat: 'ai',     url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書 など 1-2 ページの 短原稿 を チェック (5pt)。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 を 一通り 見ます。 論文ほど厳密ではない 軽量版。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
   { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は ポイント授受なし の 練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)

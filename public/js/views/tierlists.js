@@ -1,5 +1,6 @@
-// /#/tierlists — ティア表 (Tier List)。 v549 #210。
-//   起案者がお題 + 候補リスト → 参加者が S/A/B/C/D/F に振り分け → 提出後 他人の表が見える。
+// /#/tierlists — ティア表 (Tier List)。 v549 #210 / v582 5 段階 (S/A/B/C/D) + 画像対応。
+//   起案者がお題 + 候補リスト → 参加者が S/A/B/C/D に振り分け → 提出後 他人の表が見える。
+//   v582 候補に 正方形画像 を 任意 で 設定可能 (アップロード or URL)。
 
 import { get, post, put, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -55,23 +56,94 @@ export async function renderTierlistNew() {
         <span class="lbl">説明 (任意)</span>
         <textarea id="tl-desc" maxlength="500" rows="2"></textarea>
       </label>
-      <label class="field">
-        <span class="lbl">候補 (1 行 1 候補、 改行区切り、 最大 200 件)</span>
-        <textarea id="tl-items" rows="10" maxlength="20000" placeholder="例:&#10;ラーメン花月&#10;マック&#10;サブウェイ&#10;松屋"></textarea>
-        <div class="hint-sm">後で 「他の人の表を見る」 から 一覧で 集計 (各候補が どの段階に いくつ振り分けられたか) を確認できます。</div>
-      </label>
+      <div class="field">
+        <div class="lbl" style="margin-bottom:6px">候補 (任意で 正方形画像 を 各候補に 設定可能)</div>
+        <div id="tl-items-list" style="display:flex; flex-direction:column; gap:6px"></div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button id="tl-add-item" class="btn" type="button">+ 候補を追加</button>
+          <button id="tl-bulk-paste" class="btn" type="button" style="font-size:12px">複数行 まとめて 貼付け</button>
+        </div>
+        <div class="hint-sm" style="margin-top:4px">画像 アイコンを タップ で 端末から アップロード (任意)。 候補は 最大 200 件。</div>
+      </div>
       <div class="row" style="margin-top:10px; gap:6px; justify-content:flex-end">
         <a href="#/tierlists" class="btn">キャンセル</a>
         <button id="tl-go" class="primary">作成</button>
       </div>
     </div>
   `;
+  // 候補リスト の 状態 (UI から 直接 読み出す方式)
+  const listRoot = document.getElementById('tl-items-list');
+  function addItemRow(label = '', imageUrl = null) {
+    const i = listRoot.children.length;
+    const row = document.createElement('div');
+    row.className = 'tl-new-item';
+    row.style.cssText = 'display:flex; gap:6px; align-items:center; padding:4px 0';
+    row.innerHTML = `
+      <label class="tl-img-pick" data-i="${i}"
+             style="position:relative; width:48px; height:48px; flex:none; border:2px dashed #ccc; border-radius:8px;
+                    display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; background:#fafafa">
+        <img class="tl-img-preview" alt=""
+             style="${imageUrl ? '' : 'display:none'}; width:100%; height:100%; object-fit:cover"
+             ${imageUrl ? `src="${escapeHtml(imageUrl)}"` : ''}>
+        <span class="tl-img-placeholder" style="${imageUrl ? 'display:none;' : ''} font-size:18px; color:#aaa">🖼</span>
+        <input type="file" class="tl-img-input" accept="image/*" hidden>
+      </label>
+      <input type="text" class="tl-item-label" maxlength="80" value="${escapeHtml(label)}"
+             placeholder="例: ラーメン花月" style="flex:1; padding:6px 8px">
+      <button type="button" class="tl-item-remove" style="background:none; border:none; color:#c00; font-size:18px; cursor:pointer; padding:0 6px">×</button>
+    `;
+    const pick    = row.querySelector('.tl-img-pick');
+    const fileIn  = row.querySelector('.tl-img-input');
+    const preview = row.querySelector('.tl-img-preview');
+    const ph      = row.querySelector('.tl-img-placeholder');
+    pick.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'INPUT') fileIn.click();
+    });
+    fileIn.addEventListener('change', async () => {
+      const f = fileIn.files?.[0];
+      if (!f) return;
+      ph.textContent = '⏳';
+      try {
+        const fd = new FormData();
+        fd.append('file', f);
+        const r = await fetch('/api/uploads/image', {
+          method: 'POST', body: fd, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
+        }).then(x => x.json());
+        if (!r || !r.url) throw new Error(r?.error?.message || 'upload failed');
+        preview.src = r.url;
+        preview.style.display = '';
+        ph.style.display = 'none';
+        row.dataset.imageUrl = r.url;
+      } catch (e) {
+        toast('画像 アップロード 失敗: ' + (e?.message || e));
+        ph.textContent = '🖼';
+      }
+    });
+    row.querySelector('.tl-item-remove').addEventListener('click', () => row.remove());
+    if (imageUrl) row.dataset.imageUrl = imageUrl;
+    listRoot.appendChild(row);
+  }
+  // 初期 3 行
+  for (let i = 0; i < 3; i++) addItemRow();
+
+  document.getElementById('tl-add-item').addEventListener('click', () => addItemRow());
+  document.getElementById('tl-bulk-paste').addEventListener('click', () => {
+    const txt = prompt('1 行 = 1 候補。 改行区切りで 貼り付けてください');
+    if (!txt) return;
+    txt.split(/\r?\n/).map(s => s.trim()).filter(s => s).forEach(s => addItemRow(s));
+  });
+
   document.getElementById('tl-go').addEventListener('click', async () => {
     const title = document.getElementById('tl-title').value.trim();
     if (!title) { toast('タイトルを入れてください'); return; }
     const desc  = document.getElementById('tl-desc').value.trim();
-    const raw   = document.getElementById('tl-items').value;
-    const items = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s).map(label => ({ label }));
+    const items = [...listRoot.querySelectorAll('.tl-new-item')]
+      .map(row => ({
+        label: row.querySelector('.tl-item-label').value.trim(),
+        image_url: row.dataset.imageUrl || null,
+      }))
+      .filter(it => it.label);
     if (!items.length) { toast('候補を 1 つ以上入れてください'); return; }
     const btn = document.getElementById('tl-go');
     btn.disabled = true; btn.textContent = '作成中…';
@@ -166,8 +238,18 @@ function paintBoard(d, items, tiers, my) {
     btn.type = 'button';
     btn.className = 'tl-chip';
     btn.dataset.iid = it.id;
-    btn.style.cssText = 'padding:4px 10px; background:#fff; border:1px solid #ccc; border-radius:6px; font-size:13px; cursor:pointer';
-    btn.textContent = it.label;
+    if (it.image_url) {
+      // 正方形 画像 + ラベル を 下に
+      btn.style.cssText = 'padding:0; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer; display:inline-flex; flex-direction:column; align-items:center; overflow:hidden; width:72px';
+      btn.innerHTML = `
+        <img src="${escapeHtml(it.image_url)}" alt="" loading="lazy"
+             style="width:72px; height:72px; object-fit:cover; display:block">
+        <span style="font-size:11px; padding:2px 4px; line-height:1.2; text-align:center; max-width:100%; overflow:hidden; text-overflow:ellipsis">${escapeHtml(it.label)}</span>
+      `;
+    } else {
+      btn.style.cssText = 'padding:4px 10px; background:#fff; border:1px solid #ccc; border-radius:6px; font-size:13px; cursor:pointer';
+      btn.textContent = it.label;
+    }
     if (!d.is_closed) {
       btn.addEventListener('click', () => {
         const order = [...tiers.map(t => t.key), ''];

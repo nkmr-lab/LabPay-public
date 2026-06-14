@@ -10,13 +10,14 @@
 //   POST   /api/tierlists/:id/close      起案者のみ (締切る)
 declare(strict_types=1);
 
+// v582 5 段階 (S/A/B/C/D) に変更。 既存データの F に振られた候補は データ層では
+//   残るが UI 側で C 扱いされる (TIER_DEFAULT に F が無い)。
 const TIER_DEFAULT = [
-    ['key' => 'S', 'label' => 'S',   'color' => '#ff6b6b'],
-    ['key' => 'A', 'label' => 'A',   'color' => '#ff9e6b'],
-    ['key' => 'B', 'label' => 'B',   'color' => '#ffd76b'],
-    ['key' => 'C', 'label' => 'C',   'color' => '#9ee06b'],
-    ['key' => 'D', 'label' => 'D',   'color' => '#6bb4ff'],
-    ['key' => 'F', 'label' => 'F',   'color' => '#b76bff'],
+    ['key' => 'S', 'label' => 'S', 'color' => '#ff6b6b'],
+    ['key' => 'A', 'label' => 'A', 'color' => '#ff9e6b'],
+    ['key' => 'B', 'label' => 'B', 'color' => '#ffd76b'],
+    ['key' => 'C', 'label' => 'C', 'color' => '#9ee06b'],
+    ['key' => 'D', 'label' => 'D', 'color' => '#6bb4ff'],
 ];
 
 function route_tierlists(PDO $pdo, array $cfg, string $method, array $seg): void {

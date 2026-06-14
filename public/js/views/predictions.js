@@ -280,6 +280,14 @@ function renderDetailHtml(g) {
       ).join('')}
     </div>` : '';
 
+  // v582 #226 締切までの カウントダウン (締切 が ある時 だけ 出す)。
+  const countdownBlock = g.deadline_at ? `
+      <div id="pred-countdown" data-deadline="${escapeHtml(g.deadline_at)}"
+           style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
+                  border-left:4px solid #f59e0b; border-radius:6px; font-size:14px; color:#946d00">
+        ⏳ 締切まで <b id="pred-cd-text">計算中…</b>
+        <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
+      </div>` : '';
   return `
     <div class="card page-header">
       <div style="display:flex; align-items:center; gap:8px">
@@ -291,8 +299,8 @@ function renderDetailHtml(g) {
         ${g.predict_count}位まで予想 ・
         フィー ${g.fee}pt ・
         プール ${g.pot_total}pt
-        ${g.deadline_at ? ` ・ 締切 ${escapeHtml(g.deadline_at)}` : ''}
       </p>
+      ${countdownBlock}
       ${g.description ? `<p style="margin:8px 0 0; white-space:pre-wrap">${escapeHtml(g.description)}</p>` : ''}
     </div>
     ${actualBlock}
@@ -303,7 +311,41 @@ function renderDetailHtml(g) {
   `;
 }
 
+let predCountdownTimer = null;
+function startPredCountdown() {
+  if (predCountdownTimer) { clearInterval(predCountdownTimer); predCountdownTimer = null; }
+  const root = document.getElementById('pred-countdown');
+  if (!root) return;
+  const deadlineIso = (root.dataset.deadline || '').replace(' ', 'T');
+  const target = new Date(deadlineIso).getTime();
+  if (!target || isNaN(target)) return;
+  const txt = document.getElementById('pred-cd-text');
+  const tick = () => {
+    const root2 = document.getElementById('pred-countdown');
+    if (!root2) { clearInterval(predCountdownTimer); predCountdownTimer = null; return; }
+    const diff = target - Date.now();
+    if (diff <= 0) {
+      txt.textContent = '締切超過 ⛔';
+      root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
+      root.style.borderLeftColor = '#dc2626';
+      root.style.color = '#7f1d1d';
+      clearInterval(predCountdownTimer); predCountdownTimer = null;
+      return;
+    }
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    txt.textContent = days > 0
+      ? `${days} 日 ${hours} 時間 ${mins} 分 ${secs} 秒`
+      : `${hours} 時間 ${mins} 分 ${secs} 秒`;
+  };
+  tick();
+  predCountdownTimer = setInterval(tick, 1000);
+}
+
 function wireDetail(g) {
+  startPredCountdown();
   const candById = Object.fromEntries(g.candidates.map(c => [c.id, c]));
   // 自分予想 (予想入力)
   if (g.status === 'open') {

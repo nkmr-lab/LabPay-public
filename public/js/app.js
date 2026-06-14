@@ -543,6 +543,9 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
+// v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
+route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
+route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));
 // v568 #223 ito アプリ
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));

@@ -11,6 +11,8 @@ class Ledger {
         'scrapbox_reward','app_open_reward',
         // v557 #211 #209 拡張: 査読課金 + 麻雀
         'paper_review',
+        // v583 #225 レジュメ原稿チェック
+        'resume_check',
         'mahjong_buyin','mahjong_payout','mahjong_refund','mahjong_rake','mahjong_ai_payout',
     ];
 

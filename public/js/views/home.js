@@ -57,6 +57,7 @@ export const HOME_ACTIONS = [
   { id: 'shiritori',    url: '#/shiritori',          title: '絵しりとり',    icon: '🎨', defaultVisible: false }, // v540 #171
   { id: 'tierlists',    url: '#/tierlists',          title: 'ティア表',      icon: '🎯', defaultVisible: false }, // v549 #210
   { id: 'paper-review', url: '#/paper-review',       title: '論文査読',      icon: '📄', defaultVisible: false }, // v550 #206
+  { id: 'resume-check', url: '#/resume-check',       title: '原稿チェック',  icon: '📝', defaultVisible: false }, // v583 #225
   { id: 'mahjong',      url: '#/mahjong',            title: '麻雀',          icon: '🀄', defaultVisible: false }, // v553 #209
   { id: 'auctions',     url: '#/auctions',           title: 'オークション',  icon: '🏷', defaultVisible: false },
   { id: 'playlists',    url: '#/playlists',          title: 'プレイリスト',  icon: '🎵', defaultVisible: false },
@@ -113,6 +114,7 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-shiritori',    title: '🎨 絵しりとり',      url: '#/shiritori',    desc: 'タイムリミット付きキャンバスで 順番に絵を描く' },
   { id: 'sc-tierlists',    title: '🎯 ティア表',        url: '#/tierlists',    desc: 'みんなで S/A/B/C/D/F の ティア分け' },
   { id: 'sc-paper-review', title: '📄 論文 査読',       url: '#/paper-review', desc: '論文 PDF を AI で 章立て要約 + 査読コメント' },
+  { id: 'sc-resume-check', title: '📝 原稿チェック',    url: '#/resume-check', desc: '1-2 ページの 短原稿を 軽量査読 (5pt)' },
   { id: 'sc-regions',      title: '🗺 制覇マップ',       url: '#/regions',      desc: '行った国・都道府県 を タップで 登録' },
   { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
   { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },

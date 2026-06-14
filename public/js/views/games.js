@@ -31,7 +31,7 @@ const GAMES = [
 ];
 
 const CATEGORIES = [
-  { key: 'gamble',  label: '💰 賭け / フィー' },
+  { key: 'gamble',  label: '⚔️ 対戦' },
   { key: 'predict', label: '🏆 予想 / 当て物' },
   { key: 'party',   label: '🎉 パーティー' },
   { key: 'collect', label: '🗺 集める / 制覇する' },

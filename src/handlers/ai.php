@@ -58,7 +58,176 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_review_list($pdo, $cfg);
         return;
     }
+    // v583 #225 レジュメ原稿チェック (paper-review の 軽量版、 5pt、 テキスト入力)
+    if ($sub === 'resume_check' && $method === 'POST' && !isset($seg[2])) {
+        ai_resume_check($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'resume_check' && $method === 'GET' && !isset($seg[2])) {
+        ai_resume_check_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'resume_check' && $method === 'GET' && isset($seg[2])) {
+        ai_resume_check_get($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+const RESUME_CHECK_COST = 5;
+const RESUME_CHECK_MAX_CHARS = 8000;
+
+function ai_resume_check_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, title, status, cost_points, created_at, finished_at,
+                                LEFT(input_text, 100) AS input_head
+                           FROM resume_checks WHERE user_id = ? ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['cost_points'] = (int)$r['cost_points']; }
+    unset($r);
+    json_response(['items' => $rows, 'cost_points' => RESUME_CHECK_COST, 'max_chars' => RESUME_CHECK_MAX_CHARS]);
+}
+
+function ai_resume_check_get(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT * FROM resume_checks WHERE id = ? AND user_id = ?");
+    $st->execute([$id, $uid]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    json_response([
+        'id'          => (int)$r['id'],
+        'title'       => $r['title'],
+        'input_text'  => $r['input_text'],
+        'result'      => $r['result_json'] ? json_decode($r['result_json'], true) : null,
+        'cost_points' => (int)$r['cost_points'],
+        'status'      => $r['status'],
+        'error_msg'   => $r['error_msg'],
+        'created_at'  => $r['created_at'],
+        'finished_at' => $r['finished_at'],
+    ]);
+}
+
+function ai_resume_check(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $text  = trim((string)require_field($body, 'text'));
+    $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : null;
+    if ($title === '') $title = null;
+    $len = mb_strlen($text);
+    if ($len < 50) throw new ApiException('bad_request', '原稿が短すぎます (50 文字以上)', 400);
+    if ($len > RESUME_CHECK_MAX_CHARS) {
+        throw new ApiException('bad_request', sprintf('原稿が長すぎます (上限 %d 文字、 現在 %d 文字)。 論文 査読を使ってください', RESUME_CHECK_MAX_CHARS, $len), 400);
+    }
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < RESUME_CHECK_COST) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', RESUME_CHECK_COST, $bal), 400);
+    }
+
+    // pending レコード + 課金 → 非同期で OpenAI 呼出
+    $checkId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $title, $text, &$checkId) {
+        $pdo->prepare("INSERT INTO resume_checks (user_id, title, input_text, cost_points, status) VALUES (?,?,?,?,'pending')")
+            ->execute([$uid, $title, $text, RESUME_CHECK_COST]);
+        $checkId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, RESUME_CHECK_COST, 'resume_check', 'resume_check', $checkId, '原稿チェック 依頼料');
+    });
+
+    json_response_no_exit([
+        'ok'          => true,
+        'id'          => $checkId,
+        'status'      => 'pending',
+        'cost_points' => RESUME_CHECK_COST,
+        'message'     => '原稿チェック を 受付けました。 30 秒〜2 分 で 結果が出ます。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(180);
+
+    ai_resume_check_run_background($pdo, $cfg, $checkId, $text);
+}
+
+function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text): void {
+    try {
+        $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
+        $apiKey = (string)$cfg['openai']['api_key'];
+        $model  = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+        $sys = <<<PROMPT
+あなたは 学術 / 業務 の 短い原稿 (1-2 ページ相当、 レジュメ / 概要 / 申請書 など) の チェック担当者 です。
+論文ほど厳密にはチェックしません。 建設的に、 著者が次の改稿で すぐ直せる粒度で指摘してください。
+以下を 必ず網羅:
+- 背景説明の妥当性 (なぜそれが課題か、 動機は伝わるか)
+- 論理展開の妥当性 (飛躍 / 前提抜け / 順序の妥当性)
+- 専門用語の説明 (対象読者を想定して、 説明が足りない / 過剰な箇所)
+- 日本語の接続詞 (「しかし」「したがって」「そして」 等が変じゃないか)
+- 表記揺れ (用語 / 数字書式 / 記号 の一貫性)
+- 引用文献 (あれば: 表記の妥当性 / 存在しなさそう / typo)
+PROMPT;
+        $userPrompt = "以下の 原稿 を チェックして、 JSON で 返してください。\n\n----- 原稿 -----\n" . $text . "\n----- /原稿 -----\n\n"
+            . "出力 JSON スキーマ:\n"
+            . "{ \"summary_one_line\": \"1 行 で 全体 講評\",\n"
+            . "  \"overall_score\": 1-5 の整数 (1=要大幅改稿, 5=ほぼOK),\n"
+            . "  \"background_validity\": {\"score\": 1-5, \"comment\": \"背景説明の妥当性 (50-200 字)\"},\n"
+            . "  \"logical_flow\": {\"score\": 1-5, \"comment\": \"論理展開の妥当性\", \"issues\": [\"具体的な飛躍 / 順序問題 を 引用付き で\", ...]},\n"
+            . "  \"jargon_explanation\": {\"score\": 1-5, \"comment\": \"専門用語の説明適切さ\", \"missing\": [\"説明不足の用語\", ...]},\n"
+            . "  \"japanese_connectives\": {\"score\": 1-5, \"comment\": \"接続詞の適切さ\", \"issues\": [{\"original\": \"原文の問題箇所\", \"suggested\": \"こう書き直すと良い\"}, ...]},\n"
+            . "  \"terminology_consistency\": {\"score\": 1-5, \"comment\": \"表記揺れの有無\", \"variations\": [\"揺れている表記 (例: 「ユーザ」 と 「ユーザー」)\", ...]},\n"
+            . "  \"citations_check\": {\"score\": 1-5, \"comment\": \"引用の問題点 (引用が無ければ 'なし')\", \"issues\": [\"具体的な引用問題\", ...]},\n"
+            . "  \"rewrite_suggestions\": [{\"original\": \"原文の該当箇所\", \"reason\": \"なぜ問題か\", \"suggested_rewrite\": \"こう書き直すと良い\"}, ...],\n"
+            . "  \"comments_to_author\": \"著者への 総合コメント (200-500 字、 励まし + 優先度付きの 改善提案)\"\n"
+            . "}\n\n"
+            . "score は その項目で 1-5 を厳しめにつけてください。 issues / variations / rewrite_suggestions は 該当があれば書く、 なければ空配列で OK。";
+        $payload = json_encode([
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $sys],
+                ['role' => 'user', 'content' => $userPrompt],
+            ],
+            'temperature' => 0.3,
+            'response_format' => ['type' => 'json_object'],
+            'max_tokens' => 3000,
+        ], JSON_UNESCAPED_UNICODE);
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 120,
+        ]);
+        $resp = curl_exec($ch);
+        $err  = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($resp === false) throw new RuntimeException("OpenAI curl 失敗: $err");
+        if ($code !== 200) throw new RuntimeException("OpenAI HTTP $code: " . substr($resp, 0, 500));
+        $data = json_decode($resp, true);
+        $content = $data['choices'][0]['message']['content'] ?? '';
+        if ($content === '') throw new RuntimeException('OpenAI 応答が空');
+        $result = json_decode($content, true);
+        if (!is_array($result)) throw new RuntimeException('JSON parse 失敗');
+        $pdo->prepare("UPDATE resume_checks SET result_json = ?, status='done', finished_at=NOW() WHERE id = ?")
+            ->execute([json_encode($result, JSON_UNESCAPED_UNICODE), $checkId]);
+    } catch (Throwable $e) {
+        try {
+            $pdo->prepare("UPDATE resume_checks SET status='error', error_msg = ?, finished_at=NOW() WHERE id = ?")
+                ->execute([mb_substr($e->getMessage(), 0, 500), $checkId]);
+            // エラー時は 課金を返金
+            $stU = $pdo->prepare("SELECT user_id FROM resume_checks WHERE id = ?");
+            $stU->execute([$checkId]);
+            $uid = (int)$stU->fetchColumn();
+            if ($uid > 0) {
+                Ledger::transfer($pdo, 1, $uid, RESUME_CHECK_COST, 'refund', 'resume_check', $checkId, '原稿チェック 失敗 返金');
+            }
+        } catch (Throwable $_) {}
+    }
 }
 
 const PAPER_REVIEW_COST = 10;
