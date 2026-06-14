@@ -71,7 +71,7 @@ export const APPS = [
   // v550 #206 論文査読
   { id: 'paper-review',  cat: 'ai',     url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。 ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
-  { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦 (5pt) もあり。', defaultVisible: true },
+  { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は ポイント授受なし の 練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)
   { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
   // v570 #223 人狼 (v574 から game カテゴリへ)

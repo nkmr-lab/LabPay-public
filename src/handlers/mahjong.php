@@ -48,9 +48,11 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no mahjong route for $method", 404);
 }
 
-const MAHJONG_AI_BUYIN = 5;
+// v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は 練習モード化。
+//   エントリーフィー 0 + 払い出し 0 (= 純粋な練習)。
+const MAHJONG_AI_BUYIN = 0;
 
-// v557 POST /api/mahjong/ai/new — 5pt で AI 3 体相手の対戦卓を作成 + 即開始
+// v557 POST /api/mahjong/ai/new — AI 3 体相手の対戦卓を作成 + 即開始 (練習モード)
 function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
     // bot user_ids を取得
     $stB = $pdo->query("SELECT id FROM users WHERE kind='bot' AND email LIKE 'ai-%@labpay.local' ORDER BY id LIMIT 3");
@@ -58,16 +60,15 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
     if (count($botIds) < 3) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $botIds, &$gameId) {
-        mahjong_assert_balance($pdo, $uid, MAHJONG_AI_BUYIN);
+        // 練習モード: 残高チェック / 預託 は スキップ
         $pdo->prepare("INSERT INTO mahjong_games (creator_user_id, title, buy_in, status, pot_total) VALUES (?,?,?,?,?)")
-            ->execute([$uid, '🤖 AI 対戦', MAHJONG_AI_BUYIN, 'lobby', 0]);
+            ->execute([$uid, '🤖 AI 対戦 (練習)', MAHJONG_AI_BUYIN, 'lobby', 0]);
         $gameId = (int)$pdo->lastInsertId();
         // 起案者 (人間) を seat 0、 AI を 1/2/3
         mahjong_insert_player($pdo, $gameId, $uid, 0);
-        mahjong_deposit($pdo, $gameId, $uid, MAHJONG_AI_BUYIN);
+        // MAHJONG_AI_BUYIN = 0 → 預託なし
         foreach ($botIds as $i => $bid) {
             mahjong_insert_player($pdo, $gameId, $bid, $i + 1);
-            // bot の buy-in は 0 (システムが負担、 pot は人間の 5pt のみ。 結果 1位 = 4pt, 2位 1.4pt etc.)
         }
         // ゲーム開始 (Phase 2 engine init)
         $stPL = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ? ORDER BY seat_order");
@@ -212,26 +213,10 @@ function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn
     usort($scores, fn($a, $b) => $b['score'] - $a['score']);
     $rank = 1;
     foreach ($scores as $j => $sc) if ($sc['idx'] === $humanSeat) { $rank = $j + 1; break; }
-    // 配分: 1位 +15pt (元の 5 戻し + 10pt 増し)、 2位 +0pt (戻し のみ)、 3位 -3pt (戻し のみ、 -3 損)、 4位 -5pt (戻しなし)
-    // 簡略: pot は 5pt (人間分のみ)、 残り 3 席は AI = システム所有
-    //   1位: 5pt 戻し + システムから 10pt = +10pt 増加
-    //   2位: 5pt 戻し + 0
-    //   3位: 戻しなし (-5pt)
-    //   4位: 戻しなし (-5pt)
-    // ↑ これだと 期待値 マイナス、 ややハードモード。 もう少し甘く:
-    //   1位: +15pt 純益 (戻し 5 + ボーナス 10)
-    //   2位: +5pt 純益 (戻し 5 + 0、 ただし振り替え無し)
-    //   3位: -3pt 損 (戻し 2)
-    //   4位: -5pt 損 (戻しなし)
-    $payouts = [1 => 20, 2 => 10, 3 => 2, 4 => 0]; // pot から人間に戻る pt (元 buy_in 5pt が pot に入ってる)
-    $payout = $payouts[$rank] ?? 0;
-    // pot total = 5pt (人間 buy_in)。 配分は実際にはシステムから 上乗せ で 支払う
-    // 簡略実装: human の buy_in は既に 預託済 → payout pt を ledger 経由で system → human に送金
-    if ($payout > 0) {
-        Ledger::transfer($pdo, 1, $humanUid, $payout, 'mahjong_ai_payout', 'mahjong', $gid, "AI麻雀 {$rank}位 (P2)");
-    }
-    $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = ? WHERE game_id = ? AND user_id = ?")
-        ->execute([$rank, $payout, $gid, $humanUid]);
+    // v578 feedback#224: AI 麻雀は 練習モード。 順位は記録するが ポイント払い出しは 0。
+    $payout = 0;
+    $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = 0 WHERE game_id = ? AND user_id = ?")
+        ->execute([$rank, $gid, $humanUid]);
     // bot 用は rank だけ記録
     foreach ($scores as $j => $sc) {
         if ($sc['idx'] === $humanSeat) continue;

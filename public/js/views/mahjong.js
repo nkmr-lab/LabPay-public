@@ -13,7 +13,7 @@ export async function renderMahjong() {
         <h2 style="margin:0">🀄 麻雀</h2>
         <span style="flex:1"></span>
         <a class="btn" href="#/mahjong/sim" style="font-size:12px">🧪 sim</a>
-        <button id="mj-ai" class="btn primary" style="font-size:13px">🤖 AI 対戦 (5pt)</button>
+        <button id="mj-ai" class="btn primary" style="font-size:13px">🤖 AI 対戦 (練習)</button>
         <a class="btn primary" href="#/mahjong/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
@@ -23,13 +23,13 @@ export async function renderMahjong() {
     <div id="mj-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
   document.getElementById('mj-ai').addEventListener('click', async () => {
-    if (!confirm('5pt を支払って AI 3 体と対戦しますか?')) return;
+    if (!confirm('AI 3 体と 練習対戦 を 始めますか? (ポイント授受なし)')) return;
     const btn = document.getElementById('mj-ai');
     btn.disabled = true; btn.textContent = '起動中…';
     try {
       const r = await post('/api/mahjong/ai/new', {});
       navigate('#/mahjong/' + r.id);
-    } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🤖 AI 対戦 (5pt)'; }
+    } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🤖 AI 対戦 (練習)'; }
   });
   try {
     const d = await get('/api/mahjong/games');
