@@ -79,12 +79,13 @@ $candidates = [
 ];
 
 $desc = "北中米 (米国 / カナダ / メキシコ) 開催。 1-4位を予想 してください。\n"
-      . "参加フィー 50pt、 締切は 開幕日 (2026-06-11) の前日まで。\n"
-      . "スコア = 順位重み (1位=4, 2位=3, 3位=2, 4位=1) の合計、 山分け配分。";
+      . "参加フィー 50pt、 締切は 2026-06-18 23:59。\n"
+      . "配分: 1位 を 的中させた人で 山分け (場代 5% を 差し引いた後)。\n"
+      . "ランキング表示用スコア: 1位=5 / 2位=3 / 3位=2 / 4位=1 の 一致した分の合計。";
 
 // admin 名義 (id=1)
 $creatorId = 1;
-$deadline = '2026-06-10 23:59:59';
+$deadline = '2026-06-18 23:59:59';
 
 $PDO->prepare("INSERT INTO predictions_games (creator_user_id, title, description, fee, predict_count, candidates_json, deadline_at)
                VALUES (?,?,?,?,?,?,?)")

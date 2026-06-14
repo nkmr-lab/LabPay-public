@@ -32,7 +32,8 @@ export async function renderPredictions() {
         <h2 style="margin:0">🏆 優勝予想</h2>
         <p class="hint" style="margin:6px 0 0; font-size:13px">
           W 杯 や スポーツ大会、 学会 best paper など 「順位」 を 予想して 参加フィー を 山分け。
-          スコア比例 で 配分、 場代 ${escapeHtml('5%')} のみ システム取り。
+          配分は <b>1位 的中者で 山分け</b> (場代 5% のみ システム取り)。
+          ランキング表示の スコアは 1位=5 / 2位=3 / 3位=2 / 4位=1 の 一致和。
         </p>
         <p style="margin:8px 0 0">
           <a class="btn primary" href="#/predictions/new">＋ 予想を起案する</a>
