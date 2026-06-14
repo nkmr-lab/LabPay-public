@@ -85,12 +85,41 @@ export const HOME_ACTIONS = [
   { id: 'ito',          url: '#/ito',                title: 'ito',          icon: '🎲', defaultVisible: false },
   { id: 'jinrou',       url: '#/jinrou',             title: '人狼',         icon: '🐺', defaultVisible: false },
   { id: 'predictions',  url: '#/predictions',        title: '優勝予想',      icon: '🏆', defaultVisible: false },
+  // v592 占い ボタン (押すと balance card 内に 今日の運勢が 表示される)
+  { id: 'fortune',      url: '#fortune-toggle',      title: '今日の占い',    icon: '🔮', defaultVisible: true, jsAction: true },
   { id: 'deadlines',    url: '#/meetups?kind=deadline', title: '〆切',      icon: '📌', defaultVisible: false },
   { id: 'feedback',     url: '#/feedback',           title: 'フィードバック', icon: '📝', defaultVisible: false },
   // 設定 ボタン自身も HOME_ACTIONS 経由で 表示制御。 これを 隠したら 上部ナビの
   // 「設定」 から 同じ 場所に 辿れる ので 詰まらない。
   { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },
 ];
+// v592 ポイント欄 (balance hero card) の 表示要素 ON/OFF。
+//   各要素を localStorage で 個別 toggle。 占い と 実績 は デフォルト OFF。
+export const BALANCE_COMPONENTS = [
+  { id: 'clock',     label: '⏰ 時計',          defaultOn: true  },
+  { id: 'points',    label: '💴 残高 ポイント',  defaultOn: true  },
+  { id: 'streak',    label: '🔥 連続ラボイン',  defaultOn: true  },
+  { id: 'medals',    label: '🏅 実績 (メダル)', defaultOn: false },
+  { id: 'fortune',   label: '🔮 今日の占い',    defaultOn: false },
+  { id: 'checkin',   label: '🏠 チェックイン',  defaultOn: true  },
+  { id: 'shortcuts', label: '⚡ ショートカット アイコン', defaultOn: true },
+];
+const BALANCE_COMP_KEY = 'labpay-balance-components';
+export function isBalanceCompVisible(id) {
+  try {
+    const j = JSON.parse(localStorage.getItem(BALANCE_COMP_KEY) || '{}');
+    if (id in j) return !!j[id];
+  } catch (_) {}
+  const c = BALANCE_COMPONENTS.find(x => x.id === id);
+  return c ? !!c.defaultOn : true;
+}
+export function setBalanceCompVisible(id, v) {
+  let j = {};
+  try { j = JSON.parse(localStorage.getItem(BALANCE_COMP_KEY) || '{}'); } catch (_) {}
+  j[id] = !!v;
+  try { localStorage.setItem(BALANCE_COMP_KEY, JSON.stringify(j)); } catch (_) {}
+}
+
 const HOME_ACTIONS_KEY = 'labpay-home-actions';
 export function isHomeActionVisible(id) {
   try {
@@ -306,22 +335,25 @@ export async function renderHome() {
     <div class="card balance-hero" data-card-id="balance">
       <!-- v527 #168 ポイントの上に 現地時刻 (年月日 + 曜日 + 時分秒)。 定期的に
            日 / 時 / 分 / 秒 のどれか 1 つが 2 倍フォントサイズに切り替わる演出。 -->
-      <div id="home-clock" style="text-align:center; font-variant-numeric:tabular-nums; font-family:system-ui, -apple-system, sans-serif; margin-bottom:6px; line-height:1.2; color:#4a106d"></div>
+      <div id="home-clock" style="text-align:center; font-variant-numeric:tabular-nums; font-family:system-ui, -apple-system, sans-serif; margin-bottom:6px; line-height:1.2; color:#4a106d; ${isBalanceCompVisible('clock') ? '' : 'display:none'}"></div>
       <a href="#/history" class="balance-line" id="home-balance-link"
-         style="display:block; text-decoration:none; color:inherit; cursor:pointer">
+         style="display:${isBalanceCompVisible('points') ? 'block' : 'none'}; text-decoration:none; color:inherit; cursor:pointer">
         <span class="lbl">残高</span>
         <span class="num" id="home-balance">— pt</span>
       </a>
-      <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
-      <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
-      <!-- v584 1 日 1 回 占い。 サーバから 取得 (同じ日は 同じ結果)。 -->
+      <div class="muted" id="streak-line" style="${isBalanceCompVisible('streak') ? '' : 'display:none'}">連続ラボイン — 日 (最長 — 日)</div>
+      <a id="home-medals" href="#/achievements" class="home-medals" title="実績" style="${isBalanceCompVisible('medals') ? '' : 'display:none'}"></a>
+      <!-- v584 1 日 1 回 占い → v592 アイコン ボタン から 表示。 普段は 非表示。 -->
       <div id="home-fortune" style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
              border-radius:8px; text-align:center; font-size:14px; line-height:1.4; color:#946d00; display:none">
         <span id="home-fortune-text"></span>
       </div>
-      <div id="checkin-area" style="margin-top:10px"></div>
-      <div style="margin-top:14px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
-        ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
+      <div id="checkin-area" style="margin-top:10px; ${isBalanceCompVisible('checkin') ? '' : 'display:none'}"></div>
+      <div style="margin-top:14px; display:${isBalanceCompVisible('shortcuts') ? 'flex' : 'none'}; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
+        ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => a.jsAction ? `
+          <button class="btn home-quick" data-home-action="${escapeHtml(a.id)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
+             style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center; background:#fff">${escapeHtml(a.icon || a.title)}</button>
+        ` : `
           <a class="btn home-quick" href="${escapeHtml(a.url)}" title="${escapeHtml(a.title)}" aria-label="${escapeHtml(a.title)}"
              style="font-size:20px; line-height:1; padding:6px 10px; min-width:38px; text-align:center">${escapeHtml(a.icon || a.title)}</a>
         `).join('')}
@@ -430,15 +462,19 @@ export async function renderHome() {
         <a href="#/sns" class="hint">タイムライン →</a>
       </div>
       <div id="home-sns" class="list"><div class="home-skel-bars"></div></div>
-      <!-- v581 投稿 欄 (ウィジェット 末尾)。 シンプル: テキスト のみ。 画像 / 位置 /
-           メンション 補完 が 要る ときは タイムライン → を 開く。 -->
+      <!-- v592 投稿 欄: テキスト + 画像 + 現在地。 メンション 補完 は タイムライン側で。 -->
       <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
         <textarea id="home-sns-body" maxlength="2000" rows="2" placeholder="いま どうしてる?"
                   style="width:100%; box-sizing:border-box; resize:vertical; min-height:48px"></textarea>
-        <div class="row" style="gap:6px; margin-top:6px; align-items:center; justify-content:flex-end">
-          <span id="home-sns-status" class="hint-sm" style="margin-right:auto"></span>
+        <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
+          <input type="file" id="home-sns-img" accept="image/*" style="flex:1; min-width:120px; font-size:12px">
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
+            <input type="checkbox" id="home-sns-loc"> 📍 現在地
+          </label>
+          <span id="home-sns-status" class="hint-sm" style="margin-left:auto"></span>
           <button id="home-sns-post" class="btn primary" style="padding:6px 14px">投稿</button>
         </div>
+        <div class="hint-sm" id="home-sns-img-status"></div>
       </div>
     </div>
 
@@ -460,6 +496,23 @@ export async function renderHome() {
     </div>
   `;
   applyHomeLayout();
+  // v592 占い ボタン (アイコンとして 設置、 押すと balance card 内に トグル表示)
+  document.querySelectorAll('button[data-home-action]').forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.homeAction;
+      if (id === 'fortune') {
+        const box = document.getElementById('home-fortune');
+        if (!box) return;
+        if (box.style.display === 'none' || box.style.display === '') {
+          await loadDailyFortune();
+        } else {
+          box.style.display = 'none';
+        }
+      }
+    });
+  });
   // v527 #168 現地時刻表示を始動 (1 秒更新 + 5 秒ごとに big highlight をローテ)
   startHomeClock();
 
@@ -509,7 +562,7 @@ export async function renderHome() {
     timed('balance', () => refreshFinancials({ silent: false })),
     timed('checkin', () => renderCheckinArea()),
     timed('medals',  () => renderMedalsStrip()),
-    timed('fortune', () => loadDailyFortune()),
+    // v592 占いは ボタンで 任意 表示 (普段は 非表示)
   ]);
   const cardPromises = cardsToRender
     .filter(c => !hiddenSet.has(c.cardId))
@@ -1740,18 +1793,46 @@ function bindHomeSnsComposer() {
   const btn  = document.getElementById('home-sns-post');
   const body = document.getElementById('home-sns-body');
   const status = document.getElementById('home-sns-status');
+  const imgIn = document.getElementById('home-sns-img');
+  const locCb = document.getElementById('home-sns-loc');
+  const imgStatus = document.getElementById('home-sns-img-status');
   if (!btn || !body || btn.dataset.bound) return;
   btn.dataset.bound = '1';
   btn.addEventListener('click', async () => {
     const text = body.value.trim();
-    if (!text) { toast('本文を入力してください'); return; }
+    if (!text && !imgIn?.files?.[0]) { toast('本文 または 画像を 入力してください'); return; }
     btn.disabled = true; btn.textContent = '送信中…';
     if (status) status.textContent = '';
     try {
-      await post('/api/posts', { body: text });
+      const payload = { body: text };
+      // 画像 アップロード
+      if (imgIn?.files?.[0]) {
+        if (imgStatus) imgStatus.textContent = '画像 アップロード 中…';
+        const fd = new FormData();
+        fd.append('file', imgIn.files[0]);
+        const upRes = await fetch('/api/uploads/image', {
+          method: 'POST', body: fd, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
+        }).then(x => x.json());
+        if (!upRes?.url) throw new Error('画像 アップロード 失敗');
+        payload.image_url = upRes.url;
+        if (imgStatus) imgStatus.textContent = '';
+      }
+      // 位置情報 (オプション)
+      if (locCb?.checked && 'geolocation' in navigator) {
+        try {
+          const p = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+          });
+          payload.lat = p.coords.latitude;
+          payload.lng = p.coords.longitude;
+        } catch (_) { /* 位置取れなくても 投稿は続行 */ }
+      }
+      await post('/api/posts', payload);
       body.value = '';
+      if (imgIn) imgIn.value = '';
+      if (locCb) locCb.checked = false;
       toast('投稿しました');
-      // すぐ 一覧を 更新 (キャッシュ無視で再フェッチ)
       try { await renderFreshSns(); } catch (_) {}
     } catch (e) {
       if (status) status.textContent = '送信失敗: ' + (e?.message || e);
@@ -1760,7 +1841,6 @@ function bindHomeSnsComposer() {
       btn.disabled = false; btn.textContent = '投稿';
     }
   });
-  // Ctrl+Enter / Cmd+Enter で 投稿
   body.addEventListener('keydown', (ev) => {
     if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') {
       ev.preventDefault();

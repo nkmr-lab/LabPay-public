@@ -87,6 +87,8 @@ function bingo_judge_cells(PDO $pdo, int $uid, string $weekStart, array $cells):
 function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string $to): int {
     // 平日 (Mon-Fri) 限定 でカウントするタイプ
     $weekdayClause = " AND DAYOFWEEK(created_at) IN (2,3,4,5,6) "; // Sunday=1
+    // v592 fix: 全て try/catch で 包む。 テーブル / カラム 不在 でも 0 を返して 落ちない。
+    try {
     switch ($type) {
         case 'checkin':
             $sql = "SELECT COUNT(*) FROM ledger_entries WHERE account_id IN (SELECT id FROM accounts WHERE owner_user_id=?) AND type='checkin' AND created_at BETWEEN ? AND ?" . $weekdayClause;
@@ -197,12 +199,12 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
         default:
             return 0;
     }
-    try {
         $st = $pdo->prepare($sql);
         $st->execute([$uid, $from, $to]);
         return (int)$st->fetchColumn();
-    } catch (Throwable $_) {
-        return 0; // テーブルが存在しないとかでも 0 を返す
+    } catch (Throwable $e) {
+        error_log("[bingo_count_for] type=$type error=" . $e->getMessage());
+        return 0;
     }
 }
 

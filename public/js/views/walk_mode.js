@@ -171,23 +171,159 @@ export async function renderWalkSessions() {
 export async function renderWalkSessionDetail({ params }) {
   await loadLeafletIfNeeded();
   const app = document.getElementById('app');
-  app.innerHTML = `<div class="card"><a href="#/walk/sessions" class="hint">← 履歴</a><h2 style="margin:6px 0">🚶 散歩 軌跡</h2><div id="ws-info" class="hint">読み込み中…</div><div id="ws-map" style="height:400px; margin-top:8px; border-radius:8px; overflow:hidden"></div></div>`;
+  const sid = Number(params.id);
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/walk/sessions" class="hint">← 履歴</a>
+      <h2 style="margin:6px 0">🚶 散歩 軌跡</h2>
+      <div id="ws-info" class="hint">読み込み中…</div>
+      <div id="ws-map" style="height:400px; margin-top:8px; border-radius:8px; overflow:hidden"></div>
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap">
+        <button id="ws-share" class="btn primary">📸 軌跡画像を らぼったーに 投稿</button>
+        <button id="ws-overlay" class="btn">🗺 過去の軌跡を 重ねる</button>
+      </div>
+      <div id="ws-overlay-list" style="margin-top:8px"></div>
+    </div>
+  `;
+  let mapObj, ptsAll;
   try {
-    const d = await get('/api/walk/sessions/' + Number(params.id));
+    const d = await get('/api/walk/sessions/' + sid);
     const pts = (d.points || []).map(p => [p[0], p[1]]);
+    ptsAll = pts;
     document.getElementById('ws-info').innerHTML = `
       開始 ${escapeHtml(d.started_at)} / 終了 ${d.ended_at ? escapeHtml(d.ended_at) : '進行中'}<br>
       距離 ${(d.total_meters/1000).toFixed(2)} km / プロット ${pts.length} 点
     `;
     if (!pts.length) return;
     const center = pts[Math.floor(pts.length/2)];
-    const map = window.L.map('ws-map').setView(center, 16);
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-    window.L.polyline(pts, { color: '#4a106d', weight: 4, opacity: 0.7 }).addTo(map);
-    window.L.circleMarker(pts[0], { radius: 6, color: '#22c55e' }).bindPopup('スタート').addTo(map);
-    window.L.circleMarker(pts[pts.length-1], { radius: 6, color: '#ef4444' }).bindPopup('ゴール').addTo(map);
-    map.fitBounds(window.L.polyline(pts).getBounds(), { padding: [20, 20] });
+    mapObj = window.L.map('ws-map', { preferCanvas: true }).setView(center, 16);
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapObj);
+    window.L.polyline(pts, { color: '#4a106d', weight: 4, opacity: 0.85 }).addTo(mapObj);
+    window.L.circleMarker(pts[0], { radius: 6, color: '#22c55e', fillOpacity: 1 }).bindPopup('スタート').addTo(mapObj);
+    window.L.circleMarker(pts[pts.length-1], { radius: 6, color: '#ef4444', fillOpacity: 1 }).bindPopup('ゴール').addTo(mapObj);
+    mapObj.fitBounds(window.L.polyline(pts).getBounds(), { padding: [20, 20] });
   } catch (e) {
     document.getElementById('ws-info').textContent = '読み込み失敗';
+    return;
   }
+
+  // 軌跡画像 → らぼったーに 投稿
+  document.getElementById('ws-share').addEventListener('click', async () => {
+    const btn = document.getElementById('ws-share');
+    btn.disabled = true; btn.textContent = '画像 生成中…';
+    try {
+      const blob = await renderTrailImage(ptsAll);
+      // /api/uploads/image に POST して URL を 取得
+      const fd = new FormData();
+      fd.append('file', blob, `walk-${sid}.png`);
+      const upRes = await fetch('/api/uploads/image', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      }).then(x => x.json());
+      if (!upRes.url) throw new Error('upload 失敗');
+      const body = prompt('らぼったーに 投稿: 本文 (任意で 編集)',
+        `🚶 散歩しました!\n距離: ${(ptsAll.length > 1 ? totalMeters(ptsAll) : 0).toFixed(0)} m\n#/walk/session/${sid}`);
+      if (body === null) { btn.disabled = false; btn.textContent = '📸 軌跡画像を らぼったーに 投稿'; return; }
+      const { post: apiPost } = await import('../api.js');
+      await apiPost('/api/posts', { body: body.trim(), image_url: upRes.url });
+      toast('投稿しました');
+    } catch (e) {
+      toast('失敗: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = '📸 軌跡画像を らぼったーに 投稿';
+    }
+  });
+
+  // 過去の軌跡 重ね合わせ
+  document.getElementById('ws-overlay').addEventListener('click', async () => {
+    try {
+      const lst = await get('/api/walk/sessions');
+      const items = (lst.items || []).filter(x => x.id !== sid).slice(0, 12);
+      document.getElementById('ws-overlay-list').innerHTML = `
+        <div class="hint-sm">他の軌跡 を タップで 重ねる (薄色)</div>
+        ${items.map(it => `<button class="btn ws-add-overlay" data-sid="${it.id}"
+            style="font-size:12px; margin:3px; padding:3px 6px">${escapeHtml(it.started_at)} (${(it.total_meters/1000).toFixed(1)} km)</button>`).join('')}
+      `;
+      document.querySelectorAll('.ws-add-overlay').forEach(b => {
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            const d2 = await get('/api/walk/sessions/' + b.dataset.sid);
+            const p2 = (d2.points || []).map(p => [p[0], p[1]]);
+            if (p2.length) {
+              window.L.polyline(p2, { color: '#6b7280', weight: 2.5, opacity: 0.45, dashArray: '4 6' }).addTo(mapObj);
+            }
+            b.style.background = '#e5e7eb';
+            b.textContent = '✓ ' + b.textContent;
+          } catch (_) {}
+        });
+      });
+    } catch (_) { toast('履歴取得 失敗'); }
+  });
+}
+
+function totalMeters(pts) {
+  let m = 0;
+  for (let i = 1; i < pts.length; i++) m += haversine(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
+  return m;
+}
+
+// 軌跡を 正方形 PNG (1024x1024) に レンダリング (タイルなし、 シンプルな 線画)。
+//   タイル画像は CORS 制約で 直接 canvas に 描けないため、 線画のみ。
+async function renderTrailImage(pts) {
+  if (!pts.length) throw new Error('点なし');
+  const W = 1024, H = 1024;
+  const PADDING = 60;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  // 背景
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#fef3c7');
+  grad.addColorStop(1, '#dbeafe');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  // bounds
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const [la, lo] of pts) {
+    if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+    if (lo < minLng) minLng = lo; if (lo > maxLng) maxLng = lo;
+  }
+  const spanLat = Math.max(1e-6, maxLat - minLat);
+  const spanLng = Math.max(1e-6, maxLng - minLng);
+  const span = Math.max(spanLat, spanLng);
+  const cx = (minLat + maxLat) / 2;
+  const cy = (minLng + maxLng) / 2;
+  const xy = (la, lo) => {
+    // 正方化 + 中心合わせ
+    const x = ((lo - cy) / span + 0.5) * (W - 2 * PADDING) + PADDING;
+    const y = (1 - ((la - cx) / span + 0.5)) * (H - 2 * PADDING) + PADDING;
+    return [x, y];
+  };
+  // 軌跡 線
+  ctx.strokeStyle = '#4a106d';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const [x, y] = xy(pts[i][0], pts[i][1]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // 始点 (緑) / 終点 (赤)
+  const [sx, sy] = xy(pts[0][0], pts[0][1]);
+  const [ex, ey] = xy(pts[pts.length-1][0], pts[pts.length-1][1]);
+  ctx.fillStyle = '#22c55e'; ctx.beginPath(); ctx.arc(sx, sy, 14, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(ex, ey, 14, 0, Math.PI*2); ctx.fill();
+  // タイトル
+  ctx.fillStyle = '#4a106d';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText('🚶 LabPay 散歩', 32, 56);
+  ctx.font = '20px sans-serif';
+  ctx.fillStyle = '#666';
+  const km = (totalMeters(pts) / 1000).toFixed(2);
+  ctx.fillText(`距離 ${km} km / ${pts.length} 点`, 32, 86);
+  ctx.fillText(new Date().toLocaleString('ja-JP'), 32, 110);
+  return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }

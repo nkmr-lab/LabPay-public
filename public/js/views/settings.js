@@ -4,7 +4,8 @@ import { state, toast, refreshMe, requestNotificationPermission, TAB_DEFS, readT
 import { uploadImage } from '../upload.js';
 import { previewSoundUrl, refreshSoundCache } from '../sounds.js';
 import { APPS, APP_CATEGORIES, isAppVisible, setAppVisible } from './apps.js';
-import { HOME_ACTIONS, isHomeActionVisible, setHomeActionVisible } from './home.js';
+import { HOME_ACTIONS, isHomeActionVisible, setHomeActionVisible,
+         BALANCE_COMPONENTS, isBalanceCompVisible, setBalanceCompVisible } from './home.js';
 import { HOME_CARDS, readHomeLayout, writeHomeLayout,
          readCalHideAfterMin, writeCalHideAfterMin } from './home.js';
 
@@ -111,6 +112,15 @@ export async function renderSettings() {
         チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card" id="balance-comp">
+      <h3>ポイント表示欄 (ホーム残高カード) の要素</h3>
+      <p class="hint">
+        時計 / 残高 / 連続ラボイン / 実績メダル / 占い / チェックイン / ショートカット を ON/OFF。
+        占い と 実績 は デフォルト OFF。
+      </p>
+      <div id="balance-comp-list" class="list" style="margin-top:6px"></div>
     </div>
 
     <div class="card" id="home-actions">
@@ -247,6 +257,7 @@ export async function renderSettings() {
   renderTabLayoutEditor();
   // v497 #103 アプリ表示設定撤去 (全部表示する方針)。 関数呼び出しも削除。
   renderHomeActionsEditor();
+  renderBalanceCompEditor();
   // v419b URL ?focus=home-actions の 場合は 該当 カードへ スクロール + 短時間 強調
   try {
     const q = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -407,6 +418,28 @@ function moveTab(id, delta, currentOrder) {
 }
 
 // v419 ホーム クイック ボタン 表示 設定
+function renderBalanceCompEditor() {
+  const root = document.getElementById('balance-comp-list');
+  if (!root) return;
+  root.innerHTML = BALANCE_COMPONENTS.map(c => {
+    const on = isBalanceCompVisible(c.id);
+    return `
+      <div class="list-item" data-bc-id="${escapeHtml(c.id)}" style="gap:8px; align-items:center">
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
+          <input type="checkbox" class="bc-show" ${on ? 'checked' : ''}>
+          <span class="bold">${escapeHtml(c.label)}</span>
+          ${c.defaultOn ? '' : '<span class="hint-sm">(初期 OFF)</span>'}
+        </label>
+      </div>`;
+  }).join('');
+  root.querySelectorAll('.list-item[data-bc-id]').forEach(row => {
+    const id = row.dataset.bcId;
+    row.querySelector('.bc-show').addEventListener('change', (ev) => {
+      setBalanceCompVisible(id, ev.target.checked);
+    });
+  });
+}
+
 function renderHomeActionsEditor() {
   const root = document.getElementById('home-actions-list');
   if (!root) return;
