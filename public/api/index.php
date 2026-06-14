@@ -81,6 +81,7 @@ $routes = [
     'stopwatches'    => 'route_stopwatches',
     'ai'             => 'route_ai',
     'predictions'    => 'route_predictions',
+    'fortune'        => 'route_fortune',
 ];
 
 try {

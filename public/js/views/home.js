@@ -305,6 +305,11 @@ export async function renderHome() {
       </a>
       <div class="muted" id="streak-line">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績"></a>
+      <!-- v584 1 日 1 回 占い。 サーバから 取得 (同じ日は 同じ結果)。 -->
+      <div id="home-fortune" style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
+             border-radius:8px; text-align:center; font-size:14px; line-height:1.4; color:#946d00; display:none">
+        <span id="home-fortune-text"></span>
+      </div>
       <div id="checkin-area" style="margin-top:10px"></div>
       <div style="margin-top:14px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; align-items:center">
         ${HOME_ACTIONS.filter(a => isHomeActionVisible(a.id)).map(a => `
@@ -486,6 +491,7 @@ export async function renderHome() {
     timed('balance', () => refreshFinancials({ silent: false })),
     timed('checkin', () => renderCheckinArea()),
     timed('medals',  () => renderMedalsStrip()),
+    timed('fortune', () => loadDailyFortune()),
   ]);
   const cardPromises = cardsToRender
     .filter(c => !hiddenSet.has(c.cardId))
@@ -1490,6 +1496,19 @@ function ratingStars(r) {
 
 // v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
 // + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
+// v584 1 日 1 回 占い (サーバから その日 の運勢を 取得)。 同じ日 は 同じ結果。
+//   結果は balance hero card 内に 大きめ に 表示される。
+async function loadDailyFortune() {
+  const root = document.getElementById('home-fortune');
+  const txt  = document.getElementById('home-fortune-text');
+  if (!root || !txt) return;
+  try {
+    const f = await get('/api/fortune/today');
+    txt.innerHTML = `${escapeHtml(f.icon || '🔮')} <b>${escapeHtml(f.name || '')}</b> — ${escapeHtml(f.msg || '')}`;
+    root.style.display = '';
+  } catch (_) { /* swallow */ }
+}
+
 async function renderFreshSns() {
   const card = document.getElementById('home-sns-card');
   const root = document.getElementById('home-sns');
