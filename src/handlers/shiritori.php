@@ -65,8 +65,8 @@ function shiritori_game_create(PDO $pdo, array $cfg, int $uid): void {
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title 1..200', 400);
     }
-    $timeLimit = (int)($body['time_limit_sec'] ?? 60);
-    if ($timeLimit < 15 || $timeLimit > 600) throw new ApiException('bad_request', 'time_limit_sec 15-600', 400);
+    // v580 1 ターン 30 秒 固定。 body の time_limit_sec は 互換のため 受けるが 無視。
+    $timeLimit = 30;
     $rounds = (int)($body['round_count'] ?? 2);
     if ($rounds < 1 || $rounds > 10) throw new ApiException('bad_request', 'round_count 1-10', 400);
     $memberIds = $body['member_ids'] ?? [];

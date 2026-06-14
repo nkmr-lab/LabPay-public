@@ -57,14 +57,11 @@ export async function renderShiritoriNew() {
       </div>
       <div class="row" style="gap:10px; margin-top:8px; flex-wrap:wrap">
         <label style="flex:1; min-width:140px">
-          <div style="font-size:13px; margin-bottom:2px">1 ターン時間 (秒)</div>
-          <input type="number" id="sh-time" min="15" max="600" value="60" style="width:100%; box-sizing:border-box">
-        </label>
-        <label style="flex:1; min-width:140px">
           <div style="font-size:13px; margin-bottom:2px">周回数</div>
           <input type="number" id="sh-rounds" min="1" max="10" value="2" style="width:100%; box-sizing:border-box">
         </label>
       </div>
+      <div class="hint" style="font-size:12px; margin-top:6px">⏱ 1 ターン 30 秒 固定</div>
       <div style="margin-top:10px">
         <label style="display:block; font-size:13px; margin-bottom:4px">メンバー (自分は自動で含まれます)</label>
         <div id="sh-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
@@ -91,7 +88,7 @@ export async function renderShiritoriNew() {
   document.getElementById('sh-go').addEventListener('click', async () => {
     const title = document.getElementById('sh-title').value.trim();
     if (!title) { toast('タイトルを入れてください'); return; }
-    const time   = Number(document.getElementById('sh-time').value) || 60;
+    const time   = 30; // v580 固定 (秒数指定UI を 撤去)
     const rounds = Number(document.getElementById('sh-rounds').value) || 2;
     const ids = picker ? [...picker.getSelected()] : [];
     if (ids.length < 1) { toast('1 人以上選んでください'); return; }

@@ -72,6 +72,16 @@ export const HOME_ACTIONS = [
   { id: 'activity',     url: '#/activity',           title: 'ラボ滞在マップ', icon: '🗓', defaultVisible: false },
   { id: 'help',         url: '#/help',               title: '操作ガイド AI', icon: '🤖', defaultVisible: true },
   { id: 'chat',         url: '#/chat',               title: 'AI 対話 / 翻訳', icon: '💬', defaultVisible: true },
+  // v580 新規追加アプリも アイコン候補に
+  { id: 'todos',        url: '#/todos',              title: 'TODO',         icon: '📝', defaultVisible: false },
+  { id: 'places',       url: '#/places',             title: '食べある記',    icon: '🍴', defaultVisible: false },
+  { id: 'sns',          url: '#/sns',                title: 'らぼったー',    icon: '💬', defaultVisible: false },
+  { id: 'games',        url: '#/games',              title: '娯楽',         icon: '🎮', defaultVisible: false },
+  { id: 'ito',          url: '#/ito',                title: 'ito',          icon: '🎲', defaultVisible: false },
+  { id: 'jinrou',       url: '#/jinrou',             title: '人狼',         icon: '🐺', defaultVisible: false },
+  { id: 'predictions',  url: '#/predictions',        title: '優勝予想',      icon: '🏆', defaultVisible: false },
+  { id: 'deadlines',    url: '#/meetups?kind=deadline', title: '〆切',      icon: '📌', defaultVisible: false },
+  { id: 'feedback',     url: '#/feedback',           title: 'フィードバック', icon: '📝', defaultVisible: false },
   // 設定 ボタン自身も HOME_ACTIONS 経由で 表示制御。 これを 隠したら 上部ナビの
   // 「設定」 から 同じ 場所に 辿れる ので 詰まらない。
   { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },
@@ -92,9 +102,51 @@ export function setHomeActionVisible(id, v) {
   try { localStorage.setItem(HOME_ACTIONS_KEY, JSON.stringify(j)); } catch (_) {}
 }
 
+// v580 ショートカット ウィジェット 定義。 全アプリへの 簡単なリンクカードを
+//   ホームに 置けるように。 ロジックは持たず、 タイトル + 説明 + 「→ 開く」 だけ。
+//   設定 → ホーム ウィジェット から ON にすると 並びに 現れる。
+const SHORTCUT_CARDS_DEFS = [
+  { id: 'sc-predictions',  title: '🏆 優勝予想',         url: '#/predictions',  desc: 'W 杯 / スポーツ大会 の 順位を予想して 山分け' },
+  { id: 'sc-mahjong',      title: '🀄 麻雀',            url: '#/mahjong',      desc: '4 人で 50pt 賭けの 本格麻雀 / AI 練習対戦' },
+  { id: 'sc-ito',          title: '🎲 ito',             url: '#/ito',          desc: '1-100 の数字を お題で表現する 協力ゲーム' },
+  { id: 'sc-jinrou',       title: '🐺 人狼',            url: '#/jinrou',       desc: '4-16 人で 役職配布 → 夜 + 昼 で 勝敗' },
+  { id: 'sc-shiritori',    title: '🎨 絵しりとり',      url: '#/shiritori',    desc: 'タイムリミット付きキャンバスで 順番に絵を描く' },
+  { id: 'sc-tierlists',    title: '🎯 ティア表',        url: '#/tierlists',    desc: 'みんなで S/A/B/C/D/F の ティア分け' },
+  { id: 'sc-paper-review', title: '📄 論文 査読',       url: '#/paper-review', desc: '論文 PDF を AI で 章立て要約 + 査読コメント' },
+  { id: 'sc-regions',      title: '🗺 制覇マップ',       url: '#/regions',      desc: '行った国・都道府県 を タップで 登録' },
+  { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
+  { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },
+  { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長 を 記録、 BMI 自動計算 + グラフ' },
+  { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内 歩数 ランキング' },
+  { id: 'sc-chat',         title: '💬 AI 対話 / 翻訳',  url: '#/chat',         desc: '多言語 チャット (出張・旅行 翻訳補助)' },
+  { id: 'sc-help',         title: '🤖 操作ガイド AI',   url: '#/help',         desc: 'LabPay の 使い方を AI に 聞ける' },
+  { id: 'sc-translate',    title: '🌐 画像 和訳',       url: '#/translate',    desc: 'メニュー / 看板 を AI で 和訳' },
+  { id: 'sc-polls',        title: '📊 投票・アンケート', url: '#/polls',        desc: '対象者・締切・選択肢 を 指定して 投票' },
+  { id: 'sc-rollcalls',    title: '📣 点呼',            url: '#/rollcalls',    desc: '「いる?」「起きてる?」 を ワンタップ集計' },
+  { id: 'sc-timers',       title: '🛎 タイマー',        url: '#/timers',       desc: '参加者全員で カウントダウン 共有' },
+  { id: 'sc-stopwatches',  title: '⏱ ストップウォッチ', url: '#/stopwatches',  desc: 'メンバー共有 カウントアップ' },
+  { id: 'sc-meetups',      title: '🤝 待ち合わせ',      url: '#/meetups',      desc: '集合 時刻 + 場所 + メンバー を 一括通知' },
+  { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で 落札' },
+  { id: 'sc-nomikai',      title: '🍶 飲み会割り勘',    url: '#/nomikai',      desc: '学年 + ドリンク 種別 で 自動 割り勘' },
+  { id: 'sc-wari',         title: '🧮 ワリカ電卓',      url: '#/wari',         desc: '人数 + 金額 で 端数こみ 割り勘' },
+  { id: 'sc-money-requests', title: '💴 請求 (集金)',   url: '#/requests',     desc: '同額 or 人別 で 集金 + 支払い 確認' },
+  { id: 'sc-random-groups', title: '🎲 ランダム分け',   url: '#/random-groups', desc: 'メンバー を N チーム に ランダム分け' },
+  { id: 'sc-orderings',    title: '📋 順番決め',        url: '#/orderings',    desc: 'メンバー を 1 列 に 並べ替え (発表順 / 当番)' },
+  { id: 'sc-roulette',     title: '🎰 ルーレット',      url: '#/roulette',     desc: 'メンバー から 1 人 くじ引き (賞金つき可)' },
+  { id: 'sc-text-roulette', title: '🍜 どこ行く',       url: '#/text-roulette', desc: '昼飯 / 何食べる など テキスト候補から 1 つ' },
+  { id: 'sc-wishlist',     title: '✨ 欲しい',          url: '#/wishlist',     desc: 'ほしい物 を 登録、 誰かが 売ってくれる かも' },
+  { id: 'sc-contacts',     title: '📞 連絡先',          url: '#/contacts',     desc: 'ラボメンバー 緊急 連絡先 (タップで通話)' },
+  { id: 'sc-scrapbox',     title: '📚 Scrapbox 履歴',   url: '#/scrapbox',     desc: '#scrapbox の 研究ノート 編集ログ' },
+  { id: 'sc-network',      title: '🕸 関係性グラフ',    url: '#/network',      desc: '売買・タスク・送金 などの つながり 可視化' },
+  { id: 'sc-achievements', title: '🏅 実績',           url: '#/achievements',  desc: 'バッジ / 称号 / 統計' },
+  { id: 'sc-games',        title: '🎮 娯楽 ハブ',       url: '#/games',        desc: 'ラボメンバーで 遊べる ゲーム 一覧' },
+  { id: 'sc-apps',         title: '📦 アプリ ハブ',     url: '#/apps',         desc: '全アプリ 一覧 (カテゴリ別)' },
+];
+
 // v497 #103 ホームに置く要素は 「ウィジェット」 と呼ぶ。 設定画面の表示名も変更。
 //   初期表示は 「進行中 / タスク / いる人 + 残高ヒーロー (常時)」 に絞る。
 //   他は 設定 → ホーム ウィジェット から個別ON可能。
+//   v580 SHORTCUT_CARDS_DEFS を 全部 HOME_CARDS に 注入。 ON にすると リンクカードが ホームに 出る。
 export const HOME_CARDS = [
   { id: 'my-timers',      title: '⏱ 進行中' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
@@ -112,6 +164,8 @@ export const HOME_CARDS = [
   { id: 'playlists',      title: '新着 プレイリスト' },
   { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
+  // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
+  ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
 
 // v514 #131 デフォルト表示 (ユーザ要望に基づく):
@@ -358,6 +412,15 @@ export async function renderHome() {
       </summary>
       <div id="recent" class="list" style="margin-top:8px"><div class="home-skel-bars"></div></div>
     </details>
+
+    ${SHORTCUT_CARDS_DEFS.map(c => `
+    <div class="card" data-card-id="${escapeHtml(c.id)}" hidden>
+      <div class="row center" style="margin-bottom:4px">
+        <h2 class="row-title" style="margin:0">${escapeHtml(c.title)}</h2>
+        <a href="${escapeHtml(c.url)}" class="hint" style="margin-left:auto">開く →</a>
+      </div>
+      <div class="hint" style="font-size:12px; line-height:1.4">${escapeHtml(c.desc)}</div>
+    </div>`).join('')}
     </div>
   `;
   applyHomeLayout();
