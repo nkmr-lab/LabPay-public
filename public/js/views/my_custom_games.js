@@ -121,22 +121,23 @@ async function loadTemplate(key) {
 
 const BLANK_TEMPLATE = `// 新規 自作ゲーム — 3 関数 を 書くだけ で 動く。
 //
-//   setup()           ゲーム開始時 に 1 回 だけ 呼ばれる → 初期 state を return
-//   draw(state, ctx)  画面を 描く時 に 呼ばれる        → HTML を return
-//                     (ボタンに data-move="X" を 入れれば タップで play が 呼ばれる)
-//   play(state, me, move)
-//                     ボタン を 押した時 に 呼ばれる   → { state, finished?, winner? } を return
-//                     winner: 'me' (自分の勝ち) / 'opponent' / null (引分) / uid
+//   setup()            ゲーム開始時 に 1 回 だけ 呼ばれる → 初期 state を return
+//   draw(state, ctx)   画面を 描く時 に 呼ばれる         → HTML を return
+//                      (ボタンに data-move="X" を 入れれば タップで action が 呼ばれる)
+//   action(state, me, move)
+//                      ボタン を 押した時 に 呼ばれる    → { state, finished?, winner? } を return
+//                      winner: 'me' (自分の勝ち) / 'opponent' / null (引分) / uid
 
 import { sketch } from '/js/cg_ui.js';
 
 export const { renderList, renderDetail } = sketch({
-  kind:  'CHANGE_ME',          // ← 上の フォームの kind と 同じ にする
-  title: '🎲 マイゲーム',
-  hint:  'ルール の 1 行 説明',
+  kind:    'CHANGE_ME',          // ← 上の フォームの kind と 同じ にする
+  title:   '🎲 マイゲーム',
+  hint:    'ルール の 1 行 説明',
+  players: 2,                    // 1 (ソロ) / 2 / 4
 
   setup() {
-    return { n: 10 };          // 0 まで 減らしたら 終わる ゲーム の 例
+    return { n: 10 };            // 0 まで 減らしたら 終わる ゲーム の 例
   },
 
   draw(s, ctx) {
@@ -147,10 +148,10 @@ export const { renderList, renderDetail } = sketch({
     \`;
   },
 
-  play(s, me, move) {
+  action(s, me, move) {
     const n = s.n - 1;
     if (n <= 0) return { state: { n }, finished: true, winner: 'me' };
-    return { state: { n } };   // 手番は LabPay が 自動で 相手に 移す
+    return { state: { n } };     // 手番は LabPay が 自動で 相手に 移す
   },
 });
 `;

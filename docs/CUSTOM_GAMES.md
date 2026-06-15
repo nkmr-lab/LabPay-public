@@ -7,7 +7,7 @@ LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で
 | | 内容 | 量 |
 |---|---|---|
 | 設定画面 | `/#/my-games` で kind を 登録 (kind / 表示名 / 説明 / icon / fee / JS ファイル) | フォーム 1 件 |
-| JS | v629 から **Processing 風** の `sketch({ setup, draw, play })` で 書く。 setup = 開始時 / draw = 画面描画 / play = ボタン押された時。 ロビー / 待ち / 参加 / 終了 / 状態取得 / polling / submit は cg_ui が 全部 引き受ける。 **🪙 ニム ~55 行 (コメント込) / ⭕❌ マルバツ ~50 行 / 🟦 四目並べ ~70 行** | 1 ファイル |
+| JS | **Processing 風** の `sketch({ setup, draw, action, players })` で 書く。 setup = 開始時 / draw = 画面描画 / action = ボタン押された時。 ロビー / 待ち / 参加 / 終了 / 状態取得 / polling / submit は cg_ui が 全部 引き受ける。 **🪙 ニム ~55 行 (コメント込) / 🟦 ライツアウト ~55 行 / 🎲 すごろく ~55 行** | 1 ファイル |
 | PHP | **触らない** | 0 行 |
 | SQL | 不要 (新規 ゲームでも `custom_games` テーブルを 共有) | 0 行 |
 | サーバ作業 | **不要** (JS は DB に格納、 配信は `/api/custom-games/kinds/:kind/script.js`) | 0 |

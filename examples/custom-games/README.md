@@ -53,15 +53,16 @@ LabPay → 設定 → 🎮 自作ゲーム 管理 (`/#/my-games`) で:
 ローカル に エディタを 開かなくても、 ファイルを アップロード しなくても OK。
 ファイル添付 や 「空テンプレート」 も 同じ場所 から 選べます。
 
-### 押さえる ポイント — Processing 風 の 3 関数 だけ
+### 押さえる ポイント — 3 関数 だけ で 足ります
 
 ```js
 import { sketch } from '/js/cg_ui.js';
 
 export const { renderList, renderDetail } = sketch({
-  kind:  'mygame',                  // 登録時の kind と 同じ
-  title: '🎲 マイゲーム',
-  hint:  'ルールの 1 行説明',
+  kind:    'mygame',                  // 登録時の kind と 同じ
+  title:   '🎲 マイゲーム',
+  hint:    'ルールの 1 行説明',
+  players: 2,                          // 1 (ソロ) / 2 / 4
 
   // ① 開始時 に 1 回だけ → 初期 state
   setup() { return { /* 自由 */ }; },
@@ -73,7 +74,7 @@ export const { renderList, renderDetail } = sketch({
   // ③ 自分が ボタン を 押した時 → 新しい state
   //    winner: 'me' / 'opponent' / null (引分) / uid。 未終了なら 省略 OK。
   //    手番は LabPay が 自動で 相手に 移します。
-  play(state, me, move) {
+  action(state, me, move) {
     return { state: /* 新state */, finished: true, winner: 'me' };
   },
 });
@@ -84,17 +85,17 @@ export const { renderList, renderDetail } = sketch({
 ```
 [起案者が ＋新規卓]
    │
-   ▼ setup(me)          ←  1 回だけ
+   ▼ setup(me)            ←  1 回だけ
  state ──→ DB
-                       [自分の画面] (2.5 秒ごと polling)    [相手の画面]
-                            │                                    │
-                            ▼ draw(state, ctx)                   ▼ draw(state, ctx)
-                            │  画面を 描く
-                            ▼ ボタン タップ
-                       play(state, me, move)
-                            │
-                            ▼ サーバに送信 → 新 state
-                                          ↑___________________相手側にも 反映
+                         [自分の画面] (2.5 秒ごと polling)    [相手の画面]
+                              │                                    │
+                              ▼ draw(state, ctx)                   ▼ draw(state, ctx)
+                              │  画面を 描く
+                              ▼ ボタン タップ
+                       action(state, me, move)
+                              │
+                              ▼ サーバに送信 → 新 state
+                                            ↑___________________相手側にも 反映
 ```
 
 ### ctx (draw の 第2引数) に 渡るもの

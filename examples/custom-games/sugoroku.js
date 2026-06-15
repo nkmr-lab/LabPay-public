@@ -6,7 +6,7 @@
 // 4 人用 ゲーム で 押さえる ポイント:
 //   - sketch({ players: 4, ... }) と 書く
 //   - 起案者 + 他 3 人 が 参加 → 全員 揃ったら status='playing'。 場代は その瞬間 全員から 徴収
-//   - 手番は LabPay が 自動で 4 人 を rotation。 play() で next を 返せば 明示指定も 可
+//   - 手番は LabPay が 自動で 4 人 を rotation。 action() で next を 返せば 明示指定も 可
 //   - ctx.players = [{uid, name, seat: 0..3, role}, ...] (着席順)
 //   - ctx.seat = 自分の seat (0..3)
 //   - winner: 'me' = 自分 / 'opponent' = 直前の 相手 / 数値 uid を 直接指定 でも OK
@@ -48,7 +48,7 @@ export const { renderList, renderDetail } = sketch({
     `;
   },
 
-  play(s, me, _move, ctx) {
+  action(s, me, _move, ctx) {
     // ctx.seat = 自分の seat (0..3)。 draw と 同じ形 で 渡る。
     const seat = ctx.seat;
     if (seat < 0) throw new Error('seat 不明');

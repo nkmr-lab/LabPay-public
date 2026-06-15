@@ -237,29 +237,29 @@ export function defineGame(spec) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// v629 sketch(): Processing / p5.js 風の 高レベル API。
+// v631 sketch(): Processing / p5.js 風の 高レベル API。
 //
-//   書く 関数は 3 つ だけ:
+//   書く 関数は **3 つ だけ で 足ります** (ターン制 ゲーム なら これで十分):
 //
-//     setup(meId)             ── ゲーム開始時に 1 回 だけ 呼ばれる。
-//                                 ゲーム固有 の 初期 state を return する。
+//     setup(meId)               ── ゲーム開始時に 1 回 だけ 呼ばれる。
+//                                   ゲーム固有 の 初期 state を return する。
 //
-//     draw(state, ctx)        ── 画面を 描く 時に 呼ばれる。
-//                                 HTML 文字列 を return する (盤面でも 文字 でも OK)。
-//                                 自分の番が 来たら、 ボタン に
-//                                 <button data-move="X"> を 入れておくと、
-//                                 タップで 自動的に play() が 呼ばれる。
+//     draw(state, ctx)          ── 画面を 描く 時に 呼ばれる (state が 変わる たび)。
+//                                   HTML 文字列 を return する (盤面でも 文字 でも OK)。
+//                                   自分の番が 来たら、 ボタン に <button data-move="X">
+//                                   を 入れておくと、 タップで action() が 呼ばれる。
 //
-//     play(state, me, move)   ── 自分が ボタンを 押した時 に 呼ばれる。
-//                                 第3引数 move は data-move="X" の X (= 整数 / 文字 / JSON)。
-//                                 { state: 新state, finished?: bool, winner?: 'me'|'opponent'|null }
-//                                 を return する。 手番は LabPay が 自動で 相手に 移す。
+//     action(state, me, move)   ── 自分が ボタンを 押した時 に 呼ばれる。
+//                                   第3引数 move は data-move="X" の X
+//                                   (整数 / 文字 / JSON を 自動判定 して 渡る)。
+//                                   { state: 新state, finished?: bool, winner?: 'me'|'opponent'|null }
+//                                   を return する。 手番は LabPay が 自動で 相手に 移す。
 //
 //   呼び出し 順序 を 図で 示すと:
 //
 //      [起案者が ＋新規卓]
 //         │
-//         ▼ setup(me)
+//         ▼ setup(me)             1 回 だけ
 //       state ──→ DB
 //                         [自分の画面] (polling 2.5s)         [相手の画面]
 //                              │                                     │
@@ -267,32 +267,37 @@ export function defineGame(spec) {
 //                       draw(state, ctx)                       draw(state, ctx)
 //                              │                                     │
 //                              ▼ ボタンタップ
-//                       play(state, me, move)
+//                       action(state, me, move)
 //                              │
 //                              ▼ サーバに 送信
 //                       新 state ─────────────────────────→  相手の draw も 更新
 //
-//   ctx (draw の第2引数) に 渡されるもの:
+//   ctx (draw / action / start の最後の引数) に 渡されるもの:
 //     ctx.me        - 自分の uid (number)
-//     ctx.you       - { uid, name, role: 'creator' | 'opponent' }  自分
-//     ctx.opponent  - { uid, name, role }                          相手 (waiting 中は null)
-//     ctx.players   - [you, opponent].filter(Boolean)
+//     ctx.you       - { uid, name, seat, role: 'creator' | 'opponent' }  自分
+//     ctx.opponent  - 相手 (2 人式 で waiting 中は null)
+//     ctx.players   - 全員の 配列 (着席順)。 各要素 {uid, name, seat, role}
+//     ctx.seat      - 自分の seat (0..N-1)
 //     ctx.turn      - 手番の uid (number、 終了時は null)
 //     ctx.myTurn    - 自分の手番か (boolean)
-//     ctx.winner    - 勝者の uid (number、 引分 or 進行中は null)
+//     ctx.winner    - 勝者の uid (number、 引分 / 進行中 は null)
 //     ctx.status    - 'waiting' | 'playing' | 'finished' | 'cancelled'
 //
-//   play() の return:
+//   action() の return:
 //     {
 //       state:    新しい ゲーム固有 state (必須)
 //       finished: true なら 終了 (省略可、 default false)
 //       winner:   'me' | 'opponent' | <uid> | null
 //                  'me' = 自分の勝ち、 'opponent' = 相手の勝ち、 null = 引分。
 //                  finished=false なら 無視されます。
+//       next:     次の手番 uid (省略時 framework が 自動 rotation)
 //     }
 // ───────────────────────────────────────────────────────────────
 export function sketch(spec) {
-  const { kind, title, hint, detailPath, setup, draw, play } = spec;
+  const { kind, title, hint, detailPath, setup, draw } = spec;
+  // v631 action() に 改名 (旧 play() は 後方互換 で 受け付け)
+  const action = spec.action || spec.play;
+  if (!action) throw new Error('sketch: action(state, me, move) を 渡してください');
   // spec.players: 1 (ソロ) / 2 / 4。 デフォルト 2。
   //   1 → opponent 概念なし、 status='waiting' を 飛ばして 即 playing (server側 処理)
   //   2 → 既存 (turn は 相手 と トグル)
@@ -312,10 +317,10 @@ export function sketch(spec) {
     },
 
     applyMove(s, uid, move, d) {
-      // ctx を play() にも 渡す (= draw と 同じ 形)。 4 人卓 で 自分の seat を 取りたい時 に 便利。
+      // ctx を action() にも 渡す (= draw と 同じ 形)。 N 人卓 で seat / players が 取れる。
       const ctx = buildCtx(s, { meId: uid, d: d || { players: [], creator_name: '', opponent_name: '' }, myTurn: true, status: 'playing' });
-      const res = play(s.g, uid, move, ctx);
-      if (!res || !res.state) throw new Error('play() は { state, ... } を return してください');
+      const res = action(s.g, uid, move, ctx);
+      if (!res || !res.state) throw new Error('action() は { state, ... } を return してください');
       const finished = !!res.finished;
       let winner = null;
       if (finished) {

@@ -1,6 +1,6 @@
 // 🟦 四目並べ (Connect Four) — 自作ゲーム framework サンプル。
 //
-// 3 関数 (setup / draw / play) だけ で 完結。 詳しい コメントは
+// 3 関数 (setup / draw / action) だけ で 完結。 詳しい コメントは
 // examples/custom-games/nim.js が 一番 短くて 読みやすい。
 
 import { sketch, escapeHtml } from '/js/cg_ui.js';
@@ -31,17 +31,14 @@ export const { renderList, renderDetail } = sketch({
     return { board: Array(ROWS * COLS).fill(0) };
   },
 
-  play(s, me, col) {
+  action(s, me, col, ctx) {
     // 重力で 一番下の 空きマス を 探す
     let row = -1;
     for (let r = ROWS - 1; r >= 0; r--) {
       if (s.board[r * COLS + col] === 0) { row = r; break; }
     }
     if (row < 0) throw new Error('その列は満杯');
-    // 「自分が 1 か 2 か」 は 「盤に 1 が 何個 / 2 が 何個」 で判定 (先手 = 1)
-    const ones = s.board.filter(v => v === 1).length;
-    const twos = s.board.filter(v => v === 2).length;
-    const mark = ones === twos ? 1 : 2;
+    const mark = ctx.you?.role === 'creator' ? 1 : 2;
     const board = s.board.slice(); board[row * COLS + col] = mark;
     if (checkWin(board, row, col, mark)) return { state: { board }, finished: true, winner: 'me' };
     if (board.every(v => v !== 0))       return { state: { board }, finished: true, winner: null };

@@ -1,6 +1,6 @@
 // ⭕❌ マルバツ — 自作ゲーム framework の リファレンス サンプル。
 //
-// sketch() に setup / draw / play の 3 関数 を 渡すだけ で 動く。
+// sketch() に setup / draw / action の 3 関数 を 渡すだけ で 動く。
 // 詳しい コメント は examples/custom-games/nim.js が 一番 短くて 読みやすい。
 
 import { sketch, escapeHtml } from '../cg_ui.js';
@@ -18,15 +18,10 @@ export const { renderTicTacToe, renderTicTacToeDetail } = (() => {
       return { board: Array(9).fill(0) };          // 0 = 空、 1 = ⭕、 2 = ❌
     },
 
-    play(s, me, idx) {
+    action(s, me, idx, ctx) {
       if (s.board[idx] !== 0) throw new Error('そのマスは 既に置かれてる');
-      // 自分が ⭕ か ❌ かは role で わかる (sketch が 教えてくれる) が、
-      // play では ctx が 渡らないので me と creator を 比較する 必要がある時 は
-      // state に creator_uid を 入れて 持ち回しても OK。 ここでは シンプルに
-      // 「先手 = 1、 後手 = 2」 として 「盤に 1 が 何個あるか」 で 判定。
-      const ones = s.board.filter(v => v === 1).length;
-      const twos = s.board.filter(v => v === 2).length;
-      const mark = ones === twos ? 1 : 2;           // 1 が多ければ ❌ の番
+      // ctx.you.role で 「自分が ⭕ (creator) か ❌ (opponent) か」 が わかる
+      const mark = ctx.you?.role === 'creator' ? 1 : 2;
       const board = s.board.slice(); board[idx] = mark;
 
       for (const [a,b,c] of LINES) {

@@ -4,9 +4,9 @@
 //   21 個 の 石。 順番に 1〜3 個 ずつ 取る。 最後の 石 を 取った人 が 負け。
 //
 // 自作ゲーム は 3 つの 関数を 書くだけ:
-//   1.  setup()           ゲーム開始時 に 1 回 だけ呼ばれる
-//   2.  draw(state, ctx)  画面を 描く 時 に 呼ばれる
-//   3.  play(state, ...)  自分が ボタン を 押した時 に 呼ばれる
+//   1.  setup()             ゲーム開始時 に 1 回 だけ呼ばれる
+//   2.  draw(state, ctx)    画面を 描く 時 に 呼ばれる
+//   3.  action(state, ...)  自分が ボタン を 押した時 に 呼ばれる
 //
 // 流れ:
 //   ＋新規卓 → setup() → DB に 入る
@@ -15,7 +15,7 @@
 //        ↓
 //   自分の番で <button data-move="2"> を タップ
 //        ↓
-//   play(state, 自分のuid, 2) → 新 state を サーバに 送信
+//   action(state, 自分のuid, 2) → 新 state を サーバに 送信
 //        ↓
 //   相手側 も polling で draw() が 走って 反映
 
@@ -53,7 +53,7 @@ export const { renderList, renderDetail } = sketch({
   // ───── 自分が ボタン を 押した時 ─────
   //   第3引数 take は data-move="X" の X (整数)。
   //   { state: 新state, finished?: true, winner?: 'me'|'opponent'|null } を返す。
-  play(s, me, take) {
+  action(s, me, take) {
     if (take > s.stones) throw new Error('石が 足りない');
     const stones = s.stones - take;
     if (stones === 0) {

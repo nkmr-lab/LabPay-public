@@ -47,7 +47,7 @@ export const { renderList, renderDetail } = sketch({
     `;
   },
 
-  play(s, me, idx) {
+  action(s, me, idx) {
     const cells = s.cells.slice();
     const r = Math.floor(idx / N), c = idx % N;
     for (const [dr, dc] of NEIGHBORS) {
