@@ -2521,10 +2521,10 @@ function paintCheckin(status) {
   const root = document.getElementById('checkin-area');
   if (!root || !status) return;
   if (status.checked_in_today) {
-    // v607 longest_streak >= 3 (= 3 日以上 達成経験あり) なら ボーナス説明は 不要 として 省略
+    // v610 「✓ 本日ラボイン済み」 メッセージは 連続ラボイン表示と 重複するので 撤去。
+    //   ボーナス説明 (まだ初心者) のみ表示。
     const veteran = (status.longest_streak || 0) >= 3;
-    root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日ラボイン済み (+${status.points_today}pt / 連続ラボイン ${status.current_streak} 日)</div>
-      ${veteran ? '' : bonusRuleHtml(status.bonus_rule)}`;
+    root.innerHTML = veteran ? '' : bonusRuleHtml(status.bonus_rule);
     return;
   }
   const seenLabin = (status.longest_streak || 0) >= 1;

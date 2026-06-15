@@ -38,7 +38,7 @@ export async function renderScorePredictions() {
       ${items.length ? items.map(g => `
         <a class="card" href="#/score-predictions/${g.id}" style="display:block; text-decoration:none; color:inherit">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
-            <div class="bold" style="flex:1">${escapeHtml(g.team_home)} <span class="hint">vs</span> ${escapeHtml(g.team_away)}</div>
+            <div class="bold" style="flex:1">${escapeHtml(g.team_home)} <span class="hint">対</span> ${escapeHtml(g.team_away)}</div>
             ${statusBadge(g.status)}
             ${g.me_entered ? '<span style="color:#1e8b3c; font-size:11px">✓ 参加済</span>' : ''}
           </div>
@@ -61,7 +61,8 @@ export async function renderScorePredictions() {
   }
 }
 
-export function renderScorePredictionNew() {
+export async function renderScorePredictionNew() {
+  const { createMemberPicker } = await import('../member_picker.js');
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
@@ -72,12 +73,12 @@ export function renderScorePredictionNew() {
       </label>
       <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px">
         <label style="flex:1">
-          <div class="bold" style="font-size:13px; margin-bottom:4px">ホーム</div>
+          <div class="bold" style="font-size:13px; margin-bottom:4px">対戦カード</div>
           <input id="spn-home" class="input" placeholder="例: 日本" maxlength="80">
         </label>
-        <div style="font-size:20px; padding-top:18px">vs</div>
+        <div style="font-size:20px; padding-top:18px">対</div>
         <label style="flex:1">
-          <div class="bold" style="font-size:13px; margin-bottom:4px">アウェイ</div>
+          <div class="bold" style="font-size:13px; margin-bottom:4px">　</div>
           <input id="spn-away" class="input" placeholder="例: ブラジル" maxlength="80">
         </label>
       </div>
@@ -95,17 +96,31 @@ export function renderScorePredictionNew() {
         <div class="bold" style="font-size:13px; margin-bottom:4px">予想 締切 (任意、試合開始と同じが普通)</div>
         <input id="spn-deadline" class="input" type="datetime-local">
       </label>
+      <div style="margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。 起案直後に admin_notice で受付開始を通知)</div>
+        <div id="spn-notify-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+        <div id="spn-notify-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
       <div style="display:flex; gap:8px">
         <button class="btn primary" id="spn-submit">起案する</button>
         <a class="btn" href="#/score-predictions">キャンセル</a>
       </div>
     </div>
   `;
-  // 試合開始 時刻を 入れたら 締切も 同じに 自動入力
   document.getElementById('spn-match').addEventListener('change', (ev) => {
     const dl = document.getElementById('spn-deadline');
     if (!dl.value) dl.value = ev.target.value;
   });
+  let picker = null;
+  try {
+    picker = await createMemberPicker({
+      bulkContainer:  document.getElementById('spn-notify-bulk'),
+      chipsContainer: document.getElementById('spn-notify-chips'),
+      initial: [],
+      excludeIds: [Number(state.me?.id)],
+      showGenderBulk: false,
+    });
+  } catch (_) {}
   document.getElementById('spn-submit').addEventListener('click', async () => {
     const title = document.getElementById('spn-title').value.trim();
     const home  = document.getElementById('spn-home').value.trim();
@@ -113,12 +128,13 @@ export function renderScorePredictionNew() {
     const fee   = parseInt(document.getElementById('spn-fee').value, 10);
     const match = document.getElementById('spn-match').value;
     const dl    = document.getElementById('spn-deadline').value;
-    if (!title) { toast('タイトル を入れてください'); return; }
-    if (!home || !away) { toast('チーム名を 両方 入れてください'); return; }
-    if (!(fee >= 10 && fee <= 100)) { toast('フィーは 10-100pt'); return; }
+    if (!title) { toast('タイトルを入れてください'); return; }
+    if (!home || !away) { toast('対戦相手を両方入れてください'); return; }
+    if (!(fee >= 10 && fee <= 100)) { toast('フィーは10-100pt'); return; }
     const body = { title, team_home: home, team_away: away, fee };
     if (match) body.match_at = match.replace('T', ' ') + ':00';
     if (dl)    body.deadline_at = dl.replace('T', ' ') + ':00';
+    if (picker) body.notify_user_ids = [...picker.getSelected()];
     try {
       const r = await post('/api/score_predictions/games', body);
       navigate(`#/score-predictions/${r.id}`);
@@ -269,7 +285,7 @@ function paintSpDetail(g) {
   app.innerHTML = `
     <div class="card page-header">
       <div style="display:flex; align-items:center; gap:8px">
-        <h2 style="margin:0; flex:1">${escapeHtml(g.team_home)} <span class="hint">vs</span> ${escapeHtml(g.team_away)}</h2>
+        <h2 style="margin:0; flex:1">${escapeHtml(g.team_home)} <span class="hint">対</span> ${escapeHtml(g.team_away)}</h2>
         ${statusBadge(g.status)}
         <button id="sp-share" class="btn" style="font-size:12px; padding:4px 8px">💬 共有</button>
       </div>

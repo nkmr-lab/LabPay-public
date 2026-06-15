@@ -65,7 +65,8 @@ export async function renderPredictions() {
   }
 }
 
-export function renderPredictionNew() {
+export async function renderPredictionNew() {
+  const { createMemberPicker } = await import('../member_picker.js');
   const app = document.getElementById('app');
   // 候補は textarea で 1 行 = 1 候補 (絵文字 + 名前 を スペース区切り)
   app.innerHTML = `
@@ -102,12 +103,27 @@ export function renderPredictionNew() {
         <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) は スペース区切り で 任意。 例: <code>🇧🇷 ブラジル</code></p>
         <textarea id="pn-candidates" class="input" rows="12" placeholder="🇧🇷 ブラジル&#10;🇦🇷 アルゼンチン&#10;🇫🇷 フランス&#10;…"></textarea>
       </label>
+      <div style="margin-bottom:10px">
+        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。 起案直後に admin_notice で受付開始を通知)</div>
+        <div id="pn-notify-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+        <div id="pn-notify-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
       <div style="display:flex; gap:8px">
         <button class="btn primary" id="pn-submit">起案する</button>
         <a class="btn" href="#/predictions">キャンセル</a>
       </div>
     </div>
   `;
+  let picker = null;
+  try {
+    picker = await createMemberPicker({
+      bulkContainer:  document.getElementById('pn-notify-bulk'),
+      chipsContainer: document.getElementById('pn-notify-chips'),
+      initial: [],
+      excludeIds: [Number(state.me?.id)],
+      showGenderBulk: false,
+    });
+  } catch (_) {}
   document.getElementById('pn-submit').addEventListener('click', async () => {
     const title = document.getElementById('pn-title').value.trim();
     const desc  = document.getElementById('pn-desc').value.trim();
@@ -128,6 +144,7 @@ export function renderPredictionNew() {
     const body = { title, fee, predict_count: count, candidates };
     if (desc) body.description = desc;
     if (dl) body.deadline_at = dl.replace('T', ' ') + ':00';
+    if (picker) body.notify_user_ids = [...picker.getSelected()];
     try {
       const r = await post('/api/predictions/games', body);
       navigate(`#/predictions/${r.id}`);

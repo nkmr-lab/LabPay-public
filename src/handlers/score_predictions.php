@@ -15,7 +15,7 @@ function route_score_predictions(PDO $pdo, array $cfg, string $method, array $se
     if (!isset($seg[1])) throw new ApiException('not_found', 'no route', 404);
     if ($seg[1] === 'games' && !isset($seg[2])) {
         if ($method === 'GET')  { sp_list($pdo, $uid); return; }
-        if ($method === 'POST') { sp_create($pdo, $uid); return; }
+        if ($method === 'POST') { sp_create($pdo, $cfg, $uid); return; }
     }
     if ($seg[1] === 'games' && isset($seg[2])) {
         $gid = (int)$seg[2];
@@ -132,7 +132,7 @@ function sp_detail(PDO $pdo, int $uid, int $gid): void {
     ]);
 }
 
-function sp_create(PDO $pdo, int $uid): void {
+function sp_create(PDO $pdo, array $cfg, int $uid): void {
     $body = read_json_body();
     $title = trim((string)require_field($body, 'title'));
     if ($title === '' || mb_strlen($title) > 200) throw new ApiException('bad_request', 'title 1-200', 400);
@@ -160,6 +160,13 @@ function sp_create(PDO $pdo, int $uid): void {
             $deadlineAt = $dt->format('Y-m-d H:i:s');
         } catch (Throwable $_) {}
     }
+    // v610 起案時 通知対象 user_id 配列 (任意)
+    $notifyIds = [];
+    if (isset($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
+        $notifyIds = array_values(array_unique(array_map('intval',
+            array_filter($body['notify_user_ids'], fn($x) => is_numeric($x) && (int)$x > 0))));
+        $notifyIds = array_filter($notifyIds, fn($x) => $x !== $uid);
+    }
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $title, $home, $away, $fee, $matchAt, $deadlineAt, &$gameId) {
         $pdo->prepare("INSERT INTO score_pred_games (creator_user_id, title, team_home, team_away, match_at, deadline_at, fee)
@@ -167,7 +174,12 @@ function sp_create(PDO $pdo, int $uid): void {
             ->execute([$uid, $title, $home, $away, $matchAt, $deadlineAt, $fee]);
         $gameId = (int)$pdo->lastInsertId();
     });
-    json_response(['ok' => true, 'id' => $gameId]);
+    // 起案時 通知
+    foreach ($notifyIds as $nuid) {
+        $msg = "🎯 「{$home} vs {$away}」 のスコア予想 受付開始! フィー {$fee}pt";
+        notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'score_pred', $gameId);
+    }
+    json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
 }
 
 function sp_predict(PDO $pdo, int $uid, int $gid): void {

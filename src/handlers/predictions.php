@@ -180,6 +180,13 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
             $deadlineAt = $dt->format('Y-m-d H:i:s');
         } catch (Throwable $_) {}
     }
+    // v610 起案時に 通知を 飛ばす対象 user_id 配列 (任意)。
+    $notifyIds = [];
+    if (isset($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
+        $notifyIds = array_values(array_unique(array_map('intval',
+            array_filter($body['notify_user_ids'], fn($x) => is_numeric($x) && (int)$x > 0))));
+        $notifyIds = array_filter($notifyIds, fn($x) => $x !== $uid); // 自分は除外
+    }
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $title, $description, $fee, $predictCount, $cleanCandidates, $deadlineAt, &$gameId) {
         $pdo->prepare("INSERT INTO predictions_games (creator_user_id, title, description, fee, predict_count, candidates_json, deadline_at)
@@ -188,7 +195,12 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
                        json_encode($cleanCandidates, JSON_UNESCAPED_UNICODE), $deadlineAt]);
         $gameId = (int)$pdo->lastInsertId();
     });
-    json_response(['ok' => true, 'id' => $gameId]);
+    // v610 起案時 通知 (1 通ずつ swallow)
+    foreach ($notifyIds as $nuid) {
+        $msg = "🏆 「{$title}」 の優勝予想 受付開始! フィー {$fee}pt、 {$predictCount}位まで予想";
+        notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'prediction', $gameId);
+    }
+    json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
 }
 
 function predictions_predict(PDO $pdo, array $cfg, int $uid, int $gid): void {
