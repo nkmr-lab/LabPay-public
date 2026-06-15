@@ -1724,12 +1724,22 @@ async function checkBirthday() {
   const box = document.getElementById('home-birthday');
   const msg = document.getElementById('home-birthday-msg');
   if (!box || !msg) return;
-  const md = state.me?.birthday_md;
+  // v626 v615 以前 の キャッシュ (birthday_md キーを 持たない) でも 当日 反映されるよう
+  //   state.me に key が 無ければ /api/auth/me を 引き直す。 SW SWR 対象外 なので 最新。
+  let md = state.me?.birthday_md;
+  let year = state.me?.birthday_year;
+  if (state.me && !('birthday_md' in state.me)) {
+    try {
+      const d = await get('/api/auth/me');
+      md = d?.user?.birthday_md ?? null;
+      year = d?.user?.birthday_year ?? null;
+      Object.assign(state.me, { birthday_md: md, birthday_year: year });
+    } catch { /* オフライン: そのまま */ }
+  }
   if (!md) { box.style.display = 'none'; return; }
   const now = new Date();
   const todayMd = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   if (md !== todayMd) { box.style.display = 'none'; return; }
-  const year = state.me?.birthday_year;
   let suffix = '今日も最高の1日にしましょう!';
   if (year) {
     const age = now.getFullYear() - year;

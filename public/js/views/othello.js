@@ -122,7 +122,9 @@ async function paintBoard(gid) {
           <h3 style="margin:0 0 4px">💣 地雷を 1 か所 配置</h3>
           <p class="hint" style="margin:0 0 8px; font-size:12px">
             盤面のマスを 1 つタップ (初期 4 マスは不可)。「確定」 で設定。
-            相手も同じく 1 か所設定したら対戦開始。地雷は互いに終局まで不可視。
+            ${d.is_ai
+              ? '<b>🤖 AI は すでに 地雷を 1 か所 配置済み</b> (場所は 秘密)。 あなたが 配置すれば 開戦。'
+              : '相手も同じく 1 か所設定したら対戦開始。'} 地雷は 終局まで 互いに 不可視。
           </p>
           <div id="ot-mine-pick" class="hint-sm">選択中: <span id="ot-mine-sel">0</span> / 1</div>
           <button id="ot-mine-set" class="btn primary" style="margin-top:8px" disabled>確定</button>

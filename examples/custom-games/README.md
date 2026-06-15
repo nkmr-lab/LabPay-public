@@ -40,6 +40,51 @@ LabPay の **自作ゲーム framework** (v619 〜) で 使える サンプル�
 
 サーバは `state_json` の中身を 触らず、 `turn_user_id` の チェック + 課金 だけ enforce します。
 
+### 共通 UI ヘルパー: `/js/cg_ui.js`
+
+v626 から、 ロビー / 待ち / 参加 / 終了 の カードや 一覧 一行 は LabPay 側で 用意した
+ヘルパー が 引き受けます。 サンプルが ~80-120 行に 収まるのは これのおかげ。
+
+```js
+import {
+  state, toast, escapeHtml,
+  renderLobby,       // ＋ 新規卓 + 卓一覧
+  startGame,         // 起案 + 詳細へ navigate
+  fetchDetail,       // 詳細 GET + エラー時の戻りリンク
+  statusCardHtml,    // waiting / playing / finished の カード HTML
+  wireStatusCard,    // 上の join / cancel ボタン 配線
+  startPolling,      // 詳細ページ の 自動 polling (DOM が 消えたら 自動停止)
+  submitMove,        // applyMove の 結果を POST
+} from '/js/cg_ui.js';
+```
+
+つまり kind 側 は
+
+```js
+const KIND = 'mygame';
+function initialState(uid)         { /* 盤面 + uid */ }
+function applyMove(s, userId, move) { /* 純 JS で 次の state */ }
+
+export function renderList() {
+  return renderLobby({ kind: KIND, title: '🎲 マイゲーム', onNew: ... });
+}
+export function renderDetail({ params }) {
+  startPolling({ paint: () => paint(params.id), guardSelector: `[data-mygame-gid="${params.id}"]` });
+}
+async function paint(gid) {
+  const d = await fetchDetail({ kind: KIND, gid });
+  if (!d) return;
+  document.getElementById('app').innerHTML = `
+    <div class="card" data-mygame-gid="${gid}">…盤面…</div>
+    ${statusCardHtml(d, Number(state.me?.id))}
+  `;
+  wireStatusCard({ kind: KIND, gid, d, meId, onAfter: () => paint(gid) });
+  // 盤面の クリックで applyMove → submitMove
+}
+```
+
+これだけ。 共通カードの 見た目を 揃えたければ そのまま、 凝りたければ `statusCardHtml` を 使わずに 自分で 書いても OK。
+
 ## import パス の 注意
 
 ユーザ アップロード JS は `/api/custom-games/kinds/:kind/script.js` から 配信されます。

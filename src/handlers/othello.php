@@ -376,8 +376,14 @@ function othello_state(PDO $pdo, int $uid, int $gid): void {
 
 // ─── v625 AI 対戦 ──────────────────────────────────────
 function othello_ai_new(PDO $pdo, int $uid): void {
-    $stB = $pdo->query("SELECT id FROM users WHERE kind='bot' AND email LIKE 'ai-%@labpay.local' ORDER BY id LIMIT 1");
-    $botUid = (int)$stB->fetchColumn();
+    // v626 専用 bot を 優先 (麻雀の 東家 と 名前 が 混ざらない ように)。
+    $stB = $pdo->prepare("SELECT id FROM users WHERE email=? AND kind='bot'");
+    $stB->execute(['ai-othello@labpay.local']);
+    $botUid = (int)($stB->fetchColumn() ?: 0);
+    if (!$botUid) {
+        $botUid = (int)$pdo->query("SELECT id FROM users WHERE kind='bot' AND email LIKE 'ai-%@labpay.local' ORDER BY id LIMIT 1")
+            ->fetchColumn();
+    }
     if (!$botUid) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
     $gid = 0;
     db_tx($pdo, function () use ($pdo, $uid, $botUid, &$gid) {
@@ -435,8 +441,15 @@ function othello_ai_choose_move(array $board): ?array {
 
 // AI 番が続くかぎり 自動進行。 user の move/pass の 後で 呼ぶ。
 // パスの 連続や 終局判定 を ここでまとめて 扱う。
+// v626 「考えてる感」 のため 各 着手前に 1 秒スリープ。
 function othello_ai_drive(PDO $pdo, int $gid): void {
     for ($i = 0; $i < 8; $i++) {
+        // 先に 1 秒スリープ。 まず DB を 軽く見て AI 番でなければ 抜ける (= 無駄な待ちなし)。
+        $peek = $pdo->prepare("SELECT is_ai, status, turn_side FROM othello_games WHERE id=?");
+        $peek->execute([$gid]);
+        $p = $peek->fetch(PDO::FETCH_ASSOC);
+        if (!$p || !(int)$p['is_ai'] || $p['status'] !== 'playing' || $p['turn_side'] !== 'opponent') return;
+        usleep(1_000_000);
         $advanced = false;
         db_tx($pdo, function () use ($pdo, $gid, &$advanced) {
             $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");
