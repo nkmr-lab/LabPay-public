@@ -21,6 +21,10 @@ function route_othello(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($method === 'GET') { othello_list($pdo, $uid); return; }
         if ($method === 'POST') { othello_create($pdo, $uid); return; }
     }
+    // v625 AI 対戦
+    if ($seg[1] === 'ai' && ($seg[2] ?? '') === 'new' && $method === 'POST') {
+        othello_ai_new($pdo, $uid); return;
+    }
     if ($seg[1] === 'games' && isset($seg[2])) {
         $gid = (int)$seg[2];
         $action = $seg[3] ?? '';
@@ -129,6 +133,8 @@ function othello_set_mines(PDO $pdo, int $uid, int $gid): void {
         $pdo->prepare("UPDATE othello_games SET mines_json = ?, status = ? WHERE id = ?")
             ->execute([json_encode($mines), $newStatus, $gid]);
     });
+    // v625 AI 戦で 開始直後 AI 番なら 進める (通常は creator 始まりなので no-op)
+    othello_ai_drive($pdo, $gid);
     json_response(['ok' => true]);
 }
 
@@ -240,7 +246,8 @@ function othello_move(PDO $pdo, int $uid, int $gid): void {
             else $winner = 'draw';
             // v612 プレイフィーのみ (= 勝者はポイントもらわない、 pot は システム取り)。
             //   ※ 引分のみ 双方に 半額返金する のもなくす予定だが、 ユーザの 心情考慮で 引分は 全額返金 にしておく。
-            if ($winner === 'draw') {
+            //   v625: AI 戦は 払戻なし (= bot に 1pt 入っても 意味ない)。
+            if ($winner === 'draw' && !(int)$g['is_ai']) {
                 $pot = (int)$g['pot_total'];
                 $each = intdiv($pot, 2);
                 Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
@@ -253,6 +260,7 @@ function othello_move(PDO $pdo, int $uid, int $gid): void {
                 ->execute([json_encode($board), json_encode($mines), json_encode($triggered), $nextSide, $gid]);
         }
     });
+    othello_ai_drive($pdo, $gid);
     json_response(['ok' => true]);
 }
 
@@ -277,8 +285,8 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
             $cBlack = 0; $cWhite = 0;
             foreach ($board as $v) { if ($v === 1) $cBlack++; else if ($v === 2) $cWhite++; }
             $winner = $cBlack > $cWhite ? 'creator' : ($cWhite > $cBlack ? 'opponent' : 'draw');
-            // v612 プレイフィーのみ (勝者は ポイント もらわず、 引分のみ 双方に 返金)
-            if ($winner === 'draw') {
+            // v612 プレイフィーのみ (勝者は ポイント もらわず、 引分のみ 双方に 返金)。 v625: AI 戦は 払戻なし。
+            if ($winner === 'draw' && !(int)$g['is_ai']) {
                 $pot = (int)$g['pot_total'];
                 $each = intdiv($pot, 2);
                 Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
@@ -290,6 +298,7 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
             $pdo->prepare("UPDATE othello_games SET turn_side=? WHERE id=?")->execute([$oppSide, $gid]);
         }
     });
+    othello_ai_drive($pdo, $gid);
     json_response(['ok' => true]);
 }
 
@@ -350,6 +359,7 @@ function othello_state(PDO $pdo, int $uid, int $gid): void {
         'turn_side' => $g['turn_side'],
         'fee' => (int)$g['fee'],
         'pot_total' => (int)$g['pot_total'],
+        'is_ai' => (bool)($g['is_ai'] ?? 0),
         'me_side' => $side,
         'my_mines' => $myMines,
         'opp_mines_visible' => $oppMinesVisible,
@@ -362,4 +372,129 @@ function othello_state(PDO $pdo, int $uid, int $gid): void {
         'finished_at' => $g['finished_at'],
         'created_at' => $g['created_at'],
     ]);
+}
+
+// ─── v625 AI 対戦 ──────────────────────────────────────
+function othello_ai_new(PDO $pdo, int $uid): void {
+    $stB = $pdo->query("SELECT id FROM users WHERE kind='bot' AND email LIKE 'ai-%@labpay.local' ORDER BY id LIMIT 1");
+    $botUid = (int)$stB->fetchColumn();
+    if (!$botUid) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
+    $gid = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $botUid, &$gid) {
+        if (Ledger::balanceOfUser($pdo, $uid) < OTHELLO_FEE) {
+            throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', OTHELLO_FEE), 400);
+        }
+        $board = othello_initial_board();
+        // AI 側 地雷を 即配置 (内側 4x4 から、 初期駒を 避ける)
+        $mines = ['opponent' => [othello_ai_pick_mine()]];
+        $pdo->prepare("INSERT INTO othello_games (creator_user_id, opponent_user_id, is_ai, status, fee, board_json, mines_json)
+                       VALUES (?,?,1,'mine_setup',?,?,?)")
+            ->execute([$uid, $botUid, OTHELLO_FEE, json_encode($board), json_encode($mines)]);
+        $gid = (int)$pdo->lastInsertId();
+        // user のみ プレイフィー (AI は無料)
+        Ledger::transfer($pdo, $uid, 1, OTHELLO_FEE, 'othello_buyin', 'othello', $gid, "地雷オセロ #{$gid} AI プレイフィー");
+        $pdo->prepare("UPDATE othello_games SET pot_total = pot_total + ? WHERE id=?")->execute([OTHELLO_FEE, $gid]);
+    });
+    json_response(['ok' => true, 'id' => $gid]);
+}
+
+function othello_ai_pick_mine(): string {
+    // 内側 4x4 のうち 中央 4 マス (初期駒) を 除いた 12 マスから ランダム選択。
+    $cands = [];
+    for ($r = 2; $r <= 5; $r++) {
+        for ($c = 2; $c <= 5; $c++) {
+            if (($r === 3 || $r === 4) && ($c === 3 || $c === 4)) continue;
+            $cands[] = "{$r}{$c}";
+        }
+    }
+    return $cands[array_rand($cands)];
+}
+
+// AI の着手選択: 翻すコマ数 + 角ボーナス - X-square / C-square ペナルティ。 同点はランダム。
+function othello_ai_choose_move(array $board): ?array {
+    $best = PHP_INT_MIN;
+    $picks = [];
+    for ($r = 0; $r < 8; $r++) {
+        for ($c = 0; $c < 8; $c++) {
+            $flips = othello_flips($board, $r, $c, 2);
+            if (!$flips) continue;
+            $score = count($flips);
+            $isCorner = ($r === 0 || $r === 7) && ($c === 0 || $c === 7);
+            $isXsq    = ($r === 1 || $r === 6) && ($c === 1 || $c === 6);
+            $isCsq    = (($r === 0 || $r === 7) && ($c === 1 || $c === 6))
+                     || (($c === 0 || $c === 7) && ($r === 1 || $r === 6));
+            if ($isCorner) $score += 20;
+            if ($isXsq)    $score -= 8;
+            if ($isCsq)    $score -= 3;
+            if ($score > $best) { $best = $score; $picks = [[$r, $c]]; }
+            elseif ($score === $best) { $picks[] = [$r, $c]; }
+        }
+    }
+    return $picks ? $picks[array_rand($picks)] : null;
+}
+
+// AI 番が続くかぎり 自動進行。 user の move/pass の 後で 呼ぶ。
+// パスの 連続や 終局判定 を ここでまとめて 扱う。
+function othello_ai_drive(PDO $pdo, int $gid): void {
+    for ($i = 0; $i < 8; $i++) {
+        $advanced = false;
+        db_tx($pdo, function () use ($pdo, $gid, &$advanced) {
+            $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");
+            $st->execute([$gid]);
+            $g = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$g || !(int)$g['is_ai'] || $g['status'] !== 'playing' || $g['turn_side'] !== 'opponent') return;
+            $board = json_decode($g['board_json'], true);
+            $mines = json_decode($g['mines_json'] ?: '{}', true) ?: [];
+            $triggered = json_decode($g['triggered_mines_json'] ?: '[]', true) ?: [];
+
+            if (!othello_has_move($board, 2)) {
+                // AI は パス → user に 返す or 終局
+                if (!othello_has_move($board, 1)) {
+                    othello_finalize_ai($pdo, $gid, $board, $mines, $triggered);
+                } else {
+                    $pdo->prepare("UPDATE othello_games SET turn_side='creator' WHERE id=?")->execute([$gid]);
+                }
+                $advanced = true; return;
+            }
+            $mv = othello_ai_choose_move($board);
+            if (!$mv) return;
+            [$r, $c] = $mv;
+            $flips = othello_flips($board, $r, $c, 2);
+            $board[$r * 8 + $c] = 2;
+            foreach ($flips as [$fr, $fc]) { $board[$fr * 8 + $fc] = 2; }
+            // 地雷 (self or user の 地雷を AI が 踏むパターン)
+            $cellKey = "{$r}{$c}";
+            foreach (['creator','opponent'] as $owner) {
+                $list = $mines[$owner] ?? [];
+                if (in_array($cellKey, $list, true) && !in_array($cellKey, array_column($triggered, 'cell'), true)) {
+                    $exp = othello_explode_mine($board, $r, $c);
+                    $triggered[] = ['cell' => $cellKey, 'owner' => $owner, 'flipped' => $exp];
+                }
+            }
+            // ターン進行
+            $finished = false;
+            $nextSide = 'creator';
+            if (!othello_has_move($board, 1)) {
+                if (othello_has_move($board, 2)) { $nextSide = 'opponent'; }
+                else { $finished = true; }
+            }
+            if ($finished) {
+                othello_finalize_ai($pdo, $gid, $board, $mines, $triggered);
+            } else {
+                $pdo->prepare("UPDATE othello_games SET board_json=?, mines_json=?, triggered_mines_json=?, turn_side=? WHERE id=?")
+                    ->execute([json_encode($board), json_encode($mines), json_encode($triggered), $nextSide, $gid]);
+            }
+            $advanced = true;
+        });
+        if (!$advanced) return;
+    }
+}
+
+function othello_finalize_ai(PDO $pdo, int $gid, array $board, array $mines, array $triggered): void {
+    $cBlack = 0; $cWhite = 0;
+    foreach ($board as $v) { if ($v === 1) $cBlack++; else if ($v === 2) $cWhite++; }
+    $winner = $cBlack > $cWhite ? 'creator' : ($cWhite > $cBlack ? 'opponent' : 'draw');
+    // AI モード: 払戻なし (プレイフィーは SYSTEM 取り)
+    $pdo->prepare("UPDATE othello_games SET board_json=?, mines_json=?, triggered_mines_json=?, status='finished', winner=?, finished_at=NOW() WHERE id=?")
+        ->execute([json_encode($board), json_encode($mines), json_encode($triggered), $winner, $gid]);
 }

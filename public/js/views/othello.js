@@ -28,6 +28,7 @@ export async function renderOthello() {
       <div class="row center" style="gap:6px">
         <h2 style="margin:0">💣 地雷オセロ</h2>
         <span style="flex:1"></span>
+        <button id="ot-ai" class="btn" style="font-size:13px">🤖 AI 対戦 (2pt)</button>
         <button id="ot-new" class="btn primary">＋ 新規卓 (2pt)</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
@@ -40,6 +41,13 @@ export async function renderOthello() {
   document.getElementById('ot-new').addEventListener('click', async () => {
     try {
       const r = await post('/api/othello/games', {});
+      navigate('#/othello/' + r.id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('ot-ai').addEventListener('click', async () => {
+    if (!confirm('🤖 AI と 1 局 始めますか? (プレイフィー 2pt、 払戻なし)')) return;
+    try {
+      const r = await post('/api/othello/ai/new', {});
       navigate('#/othello/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
