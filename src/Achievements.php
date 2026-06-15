@@ -289,6 +289,31 @@ class Achievements {
                 ['count' => 50,  'label' => 'ヘッドホン 教祖',       'medal' => '💎'],
             ],
         ],
+        // v622 ビンゴ 実績
+        'bingo_lines_total' => [
+            'title' => 'ビンゴ 職人',
+            'desc'  => '通算 ビンゴ ライン数 (横 / 縦 / 斜め の 合計、 週 を またいで 加算)',
+            'unit'  => 'ライン',
+            'icon'  => '🎯',
+            'tiers' => [
+                ['count' => 1,   'label' => '初 ビンゴ',           'medal' => '🥉'],
+                ['count' => 5,   'label' => '揃え上手',             'medal' => '🥈'],
+                ['count' => 20,  'label' => 'ビンゴ 職人',          'medal' => '🥇'],
+                ['count' => 50,  'label' => 'ビンゴ の 化身',       'medal' => '💎'],
+            ],
+        ],
+        'bingo_weeks_won' => [
+            'title' => '週末 ビンゴ ハンター',
+            'desc'  => 'ビンゴ を 1 ライン以上 達成 した 週 の 数',
+            'unit'  => '週',
+            'icon'  => '🗓',
+            'tiers' => [
+                ['count' => 1,   'label' => 'ビンゴ デビュー',     'medal' => '🥉'],
+                ['count' => 4,   'label' => '月イチ ビンゴ',       'medal' => '🥈'],
+                ['count' => 12,  'label' => '3 ヶ月 ビンゴ',       'medal' => '🥇'],
+                ['count' => 30,  'label' => '半年 級 ビンゴ',      'medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -472,6 +497,19 @@ class Achievements {
         $st = $pdo->prepare('SELECT COUNT(*) FROM playlists WHERE creator_user_id = ?');
         $st->execute([$userId]);
         $out['playlists_created'] = (int)$st->fetchColumn();
+
+        // v622 ビンゴ — 通算ライン数 + ビンゴ達成週数
+        try {
+            $st = $pdo->prepare('SELECT COALESCE(SUM(bingo_lines),0) FROM bingo_cards WHERE user_id=?');
+            $st->execute([$userId]);
+            $out['bingo_lines_total'] = (int)$st->fetchColumn();
+            $st = $pdo->prepare('SELECT COUNT(*) FROM bingo_cards WHERE user_id=? AND bingo_lines >= 1');
+            $st->execute([$userId]);
+            $out['bingo_weeks_won'] = (int)$st->fetchColumn();
+        } catch (Throwable $_) {
+            $out['bingo_lines_total'] = 0;
+            $out['bingo_weeks_won']   = 0;
+        }
 
         return $out;
     }
