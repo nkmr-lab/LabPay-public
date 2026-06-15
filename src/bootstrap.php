@@ -561,3 +561,4 @@ require_once __DIR__ . '/handlers/othello.php';
 require_once __DIR__ . '/handlers/bingo.php';
 require_once __DIR__ . '/handlers/daifugo.php';
 require_once __DIR__ . '/handlers/score_predictions.php';
+require_once __DIR__ . '/handlers/custom_games.php';

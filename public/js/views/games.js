@@ -40,6 +40,9 @@ const GAMES = [
   { id: 'daifugo',   icon: '🃏', name: '大富豪',      url: '#/daifugo',
     desc: '2-4 人、 単出し / ペア / N 枚出し + 革命 + 8切り。純粋に遊ぶ用',
     badge: 'プレイフィー 1pt (1位も貰わない)' },
+  { id: 'tictactoe', icon: '⭕', name: 'マルバツ',     url: '#/tictactoe',
+    desc: '3x3 マルバツ。 縦/横/斜め 3 つ並べたら勝ち。 自作ゲーム フレームワークの サンプル',
+    badge: 'プレイフィー 1pt (勝者が pot 総取り)' },
   // v603 娯楽カテゴリへ追加 (apps cat='game' と同期)
   { id: 'sns',       icon: '💬', name: 'らぼったー',  url: '#/sns',
     desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + リアクション)。フォローなし、全員見える',
@@ -66,6 +69,7 @@ const GAME_CATEGORY = {
   'mahjong-ai':  'gamble',
   othello:       'gamble',
   daifugo:       'gamble',
+  tictactoe:     'gamble',
   predictions:        'predict',
   'score-predictions': 'predict',
   ito:           'party',

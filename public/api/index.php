@@ -86,6 +86,7 @@ $routes = [
     'bingo'          => 'route_bingo',
     'daifugo'        => 'route_daifugo',
     'score_predictions' => 'route_score_predictions',
+    'custom-games'   => 'route_custom_games',
 ];
 
 try {

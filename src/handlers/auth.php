@@ -11,9 +11,13 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         if (!$u) { json_error('unauthorized', 'not logged in', 401); return; }
         $accId = Ledger::accountIdForUser($pdo, $u['id']);
         $bal = Ledger::balanceOf($pdo, $accId);
-        $av = $pdo->prepare('SELECT avatar_url FROM users WHERE id=?');
+        // v615 birthday_md / birthday_year も同梱 (state.me で誕生日バナー判定するため)
+        $av = $pdo->prepare('SELECT avatar_url, birthday_md, birthday_year FROM users WHERE id=?');
         $av->execute([$u['id']]);
-        $u['avatar_url'] = $av->fetchColumn() ?: null;
+        $row = $av->fetch();
+        $u['avatar_url']    = $row['avatar_url']    ?? null;
+        $u['birthday_md']   = $row['birthday_md']   ?? null;
+        $u['birthday_year'] = $row['birthday_year'] ?? null;
         // Mac-registration flag drives a home-screen onboarding banner: the
         // user can't be auto-detected at all until at least one MAC is
         // attached to their account.

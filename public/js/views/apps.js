@@ -94,6 +94,8 @@ export const APPS = [
   { id: 'score-predictions', cat: 'game', url: '#/score-predictions', title: '🎯 勝敗予測', desc: '試合のスコア (X-Y) を予想して完璧に当てた人が pot 総取り (山分け、 場代5%)。誰も当たらなければ全員返金。基本20pt、 10-100pt 設定可。', defaultVisible: true },
   // v587 地雷オセロ
   { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。1pt の プレイフィー (勝者もポイントもらわず純粋に遊ぶ)。引分のみ双方に返金。', defaultVisible: true },
+  // v617 #236 マルバツ (自作ゲーム フレームワーク サンプル)
+  { id: 'tictactoe',     cat: 'game',   url: '#/tictactoe',      title: '⭕❌ マルバツ',      desc: '3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。 1pt プレイフィー、 勝者が pot 総取り (引分は半額返金)。 自作ゲームの サンプル実装 (docs/CUSTOM_GAMES.md 参照)。', defaultVisible: true },
   // v588 ビンゴ (週次)
   { id: 'bingo',         cat: 'game',   url: '#/bingo',          title: '🎰 ビンゴ',          desc: '毎週 5x5 ビンゴカードが 自動生成。 平日の 行動 (ラボイン/らぼったー投稿/麻雀/オセロ/食べある記 など) が 自動カウント。 達成早 + ライン数 で 週次 リーダーボード。', defaultVisible: true },
   // v590 大富豪 (シンプル MVP)

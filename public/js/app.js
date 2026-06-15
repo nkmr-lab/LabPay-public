@@ -572,6 +572,9 @@ route('/daifugo',           lazy(() => import('./views/daifugo.js'), 'renderDaif
 route('/score-predictions/new',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionNew'));
 route('/score-predictions/:id',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionDetail'));
 route('/score-predictions',      lazy(() => import('./views/score_predictions.js'), 'renderScorePredictions'));
+// v617 #236 マルバツ (自作ゲーム フレームワーク サンプル)
+route('/tictactoe/:id',     lazy(() => import('./views/tictactoe.js'), 'renderTicTacToeDetail'));
+route('/tictactoe',         lazy(() => import('./views/tictactoe.js'), 'renderTicTacToe'));
 // v568 #223 ito アプリ
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));

@@ -124,9 +124,11 @@ function bingo_judge_cells(PDO $pdo, int $uid, string $weekStart, array $cells):
 }
 
 function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string $to): int {
-    // 平日 (Mon-Fri) 限定 でカウントするタイプ
-    $weekdayClause = " AND DAYOFWEEK(created_at) IN (2,3,4,5,6) "; // Sunday=1
-    // v592 fix: 全て try/catch で 包む。 テーブル / カラム 不在 でも 0 を返して 落ちない。
+    // v616 #239 平日(Mon-Fri)限定の制約を撤廃。 土日に登録した行動も カウントされる。
+    //   元々 「平日限定」 は 出席頻度を想定した仕様だったが、 食べある記やSNS投稿などは
+    //   土日にこそ発生しやすく 「登録したのにビンゴに反映されない」 という混乱が起きていた。
+    //   weekdayClause を空文字にして、 期間 (Sun 0:00 〜 Sat 23:59 JST) 内の すべての行動をカウント。
+    $weekdayClause = "";
     try {
     switch ($type) {
         case 'checkin':
