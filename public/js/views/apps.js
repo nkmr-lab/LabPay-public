@@ -88,6 +88,8 @@ export const APPS = [
   { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップや スポーツ大会、 大学受験・学会 best paper など 「順位」 を予想して 参加フィー で景品を 山分け。 1位のみ / 1-2位 / 1-4位 を 起案ごとに設定可能。', defaultVisible: true },
+  // v609 #235 勝敗予測 (試合のスコアを当てる)
+  { id: 'score-predictions', cat: 'game', url: '#/score-predictions', title: '🎯 勝敗予測', desc: '試合のスコア (X-Y) を予想して完璧に当てた人が pot 総取り (山分け、 場代5%)。誰も当たらなければ全員返金。基本20pt、 10-100pt 設定可。', defaultVisible: true },
   // v587 地雷オセロ
   { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。1pt で対戦、勝者が pot 総取り (引分は半分ずつ)。', defaultVisible: true },
   // v588 ビンゴ (週次)
@@ -115,13 +117,18 @@ const CATEGORY_ORDER = {
   ],
 };
 
-export async function renderApps() {
+export async function renderApps(ctx = {}) {
   const app = document.getElementById('app');
+  const filterCat = ctx?.cat || null;
   const visible = APPS.filter(a => isAppVisible(a.id));
   const hiddenCount = APPS.length - visible.length;
 
   // カテゴリ毎 に セクション化。 空セクション は 出さない。
-  const sectionsHtml = APP_CATEGORIES.map(c => {
+  //   filterCat が 指定されていたら そのカテゴリだけ 描画。
+  const filteredCats = filterCat
+    ? APP_CATEGORIES.filter(c => c.id === filterCat)
+    : APP_CATEGORIES;
+  const sectionsHtml = filteredCats.map(c => {
     let items = visible.filter(a => a.cat === c.id);
     // 指定があれば 並び替え
     const order = CATEGORY_ORDER[c.id];

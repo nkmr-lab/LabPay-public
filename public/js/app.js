@@ -291,6 +291,8 @@ export const TAB_DEFS = [
   { id: 'sell',         title: '販売' },
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
+  { id: 'research',     title: '🔬 研究' },
+  { id: 'lab-mgmt',     title: '🏢 運営' },
   { id: 'apps',         title: 'アプリ' },
   { id: 'games',        title: '娯楽' },
   { id: 'achievements', title: '実績' },
@@ -506,6 +508,9 @@ route('/chat',              lazy(() => import('./views/chat.js'), 'renderChat'))
 route('/exercise',        lazy(() => import('./views/exercise.js'), 'renderExercise'));
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
 route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
+// v609 #234 タブ単位の カテゴリ絞り込み
+route('/research',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'research' })));
+route('/lab-mgmt',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'lab-mgmt' })));
 route('/contacts',       lazy(() => import('./views/contacts.js'), 'renderContacts'));
 route('/requests-hub',   lazy(() => import('./views/requests_hub.js'), 'renderRequestsHub'));
 route('/wari',           lazy(() => import('./views/wari.js'), 'renderWari'));
@@ -560,6 +565,10 @@ route('/walk/session/:id',  lazy(() => import('./views/walk_mode.js'), 'renderWa
 // v590 大富豪
 route('/daifugo/:id',       lazy(() => import('./views/daifugo.js'), 'renderDaifugoDetail'));
 route('/daifugo',           lazy(() => import('./views/daifugo.js'), 'renderDaifugo'));
+// v609 #235 勝敗予測
+route('/score-predictions/new',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionNew'));
+route('/score-predictions/:id',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionDetail'));
+route('/score-predictions',      lazy(() => import('./views/score_predictions.js'), 'renderScorePredictions'));
 // v568 #223 ito アプリ
 route('/ito',               lazy(() => import('./views/ito.js'), 'renderIto'));
 route('/ito/new',           lazy(() => import('./views/ito.js'), 'renderItoNew'));
