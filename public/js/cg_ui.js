@@ -147,3 +147,82 @@ export async function fetchDetail({ kind, gid, detailPath }) {
 
 // re-export 便利系 (kind 側 が import 1 行で 済むように)
 export { state, toast, navigate, escapeHtml };
+
+// ───────────────────────────────────────────────────────────────
+// v628 defineGame: 全部入りラッパー。
+//   kind 作者は ロジック (initialState / applyMove) と 盤面描画 (renderBoard) だけ
+//   書けば 終わり。 ロビー / 待ち / 参加 / 終了 / polling / submit / 取得 は 全部 自動。
+//
+//   使い方:
+//     export const { renderList, renderDetail } = defineGame({
+//       kind:  'mygame',
+//       title: '🎲 マイゲーム',
+//       hint:  '説明',
+//       initialState: (uid) => ({ ..., creator_uid: uid, opponent_uid: 0, turn_user_id: uid }),
+//       applyMove:    (s, uid, move) => ({ state, finished, winner_user_id, turn_user_id }),
+//       // 盤面描画。 ボタン や マスに data-move="..." (JSON) を つけると 自動配線。
+//       renderBoard:  (s, ctx) => `<div>... <button data-move="0">...</button> ...</div>`,
+//     });
+//
+//   detailPath はビルトイン (旧 path) を使う時だけ指定 (例: '#/tictactoe')。
+// ───────────────────────────────────────────────────────────────
+export function defineGame(spec) {
+  const {
+    kind, title, hint, detailPath,
+    initialState, applyMove, renderBoard,
+    joinTransition = (s, oppUid) => ({ ...s, opponent_uid: oppUid }),
+  } = spec;
+  const dp = detailPath || `#/cg/${kind}`;
+  const guard = `[data-cg-gid="cg-${kind}"]`;
+
+  function renderList() {
+    return renderLobby({
+      kind, detailPath: dp, title, hint,
+      onNew: () => startGame({
+        kind, detailPath: dp,
+        initialState: initialState(Number(state.me?.id)),
+      }),
+    });
+  }
+
+  function renderDetail({ params }) {
+    const gid = Number(params.id);
+    startPolling({
+      paint: () => paint(gid),
+      guardSelector: `[data-cg-gid="cg-${kind}-${gid}"]`,
+    });
+  }
+
+  async function paint(gid) {
+    const d = await fetchDetail({ kind, gid, detailPath: dp });
+    if (!d) return;
+    const meId = Number(state.me?.id);
+    const boardHtml = d.state ? renderBoard(d.state, { meId, d, myTurn: d.my_turn, status: d.status }) : '';
+    document.getElementById('app').innerHTML = `
+      <div class="card" data-cg-gid="cg-${kind}-${gid}">
+        <a href="${dp}" class="hint">← 一覧</a>
+        ${boardHtml}
+      </div>
+      ${statusCardHtml(d, meId)}
+    `;
+    wireStatusCard({ kind, gid, d, meId, joinState: joinTransition, detailPath: dp, onAfter: () => paint(gid) });
+    // data-move 属性を 持つ 要素 を 自動配線。 値は そのまま move として applyMove に渡る。
+    //   数値1個 なら 整数、 JSON っぽければ パース、 それ以外は 文字列。
+    document.querySelectorAll(`[data-cg-gid="cg-${kind}-${gid}"] [data-move]`).forEach(b => {
+      b.addEventListener('click', async () => {
+        try {
+          const raw = b.dataset.move;
+          let move;
+          if (raw.startsWith('{') || raw.startsWith('[')) move = JSON.parse(raw);
+          else if (/^-?\d+$/.test(raw)) move = Number(raw);
+          else move = raw;
+          const res = applyMove(d.state, meId, move);
+          await submitMove({ kind, gid, res });
+          paint(gid);
+        } catch (e) { toast(e?.message || e); }
+      });
+    });
+  }
+
+  return { renderList, renderDetail };
+}

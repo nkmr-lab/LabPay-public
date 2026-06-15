@@ -43,11 +43,24 @@ export async function renderMyCustomGames() {
       </div>
       <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">説明</div>
         <textarea id="mcg-desc" rows="2" maxlength="500" style="width:100%; box-sizing:border-box"></textarea></label>
-      <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">JS ファイル (アップロード、 最大 ${MAX_JS_KB}KB)</div>
-        <input id="mcg-jsfile" type="file" accept=".js,.mjs,text/javascript" style="width:100%"></label>
-      <div class="hint-sm" style="font-size:12px; margin-top:4px">
-        ※ ファイルを 選ばない場合、 既定の URL <code>/api/custom-games/kinds/{kind}/script.js</code> を 使います
-        (= 後で アップロード)。
+      <div style="margin-top:10px; padding:8px; background:#fafafa; border-radius:6px; border:1px solid #e5e7eb">
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+          <div class="bold" style="font-size:13px">JS ソース (直接書く OR ファイル 添付)</div>
+          <span style="flex:1"></span>
+          <select id="mcg-tpl" style="font-size:12px">
+            <option value="">テンプレート 読み込み…</option>
+            <option value="nim">🪙 ニム (~45 行、 盤面ナシ)</option>
+            <option value="tictactoe">⭕❌ マルバツ (~50 行、 3x3 盤)</option>
+            <option value="connect4">🟦 四目並べ (~75 行、 6x7 盤 + 重力)</option>
+            <option value="blank">空テンプレート</option>
+          </select>
+          <input id="mcg-jsfile" type="file" accept=".js,.mjs,text/javascript" style="font-size:12px; max-width:170px">
+        </div>
+        <textarea id="mcg-jssrc" rows="14" placeholder="defineGame({ kind, ... }) で 書く。 上の「テンプレート 読み込み…」 から ひな型を 入れられます。"
+          style="width:100%; box-sizing:border-box; margin-top:6px; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; line-height:1.4; white-space:pre"></textarea>
+        <div class="hint-sm" style="font-size:11px; margin-top:4px">
+          空のままでも 登録 OK (= プレースホルダ kind だけ作成。 後で 「JS 更新」 から差し替え)。 最大 ${MAX_JS_KB}KB。
+        </div>
       </div>
       <div style="margin-top:8px">
         <button id="mcg-create" class="btn primary">登録</button>
@@ -59,8 +72,78 @@ export async function renderMyCustomGames() {
     </div>
   `;
   document.getElementById('mcg-create').addEventListener('click', () => createKind(isAdmin));
+  // テンプレ 読み込み (textarea に挿入)
+  document.getElementById('mcg-tpl').addEventListener('change', async (ev) => {
+    const k = ev.target.value;
+    if (!k) return;
+    const ta = document.getElementById('mcg-jssrc');
+    if (ta.value.trim() && !confirm('textarea の 内容を 置き換えます。 OK?')) { ev.target.value = ''; return; }
+    try {
+      ta.value = await loadTemplate(k);
+    } catch (e) { toast('テンプレ 読込失敗: ' + (e?.message || e)); }
+    ev.target.value = '';
+  });
+  // ファイルを 選んだら textarea に 流し込む (アップロード一発でも OK)
+  document.getElementById('mcg-jsfile').addEventListener('change', async (ev) => {
+    try {
+      const src = await readJsFile(ev.target);
+      if (src !== null) document.getElementById('mcg-jssrc').value = src;
+    } catch (e) { toast(e.message); }
+  });
   await loadKinds(me.id, isAdmin);
 }
+
+// テンプレ: 簡素な ひな型 + 既存サンプル (GitHub raw 経由)。
+//   オフライン時は フォールバック inline 文字列を返す。
+async function loadTemplate(key) {
+  if (key === 'blank') return BLANK_TEMPLATE;
+  const url = {
+    nim:       'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/nim.js',
+    tictactoe: 'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/public/js/views/tictactoe.js',
+    connect4:  'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/connect_four.js',
+  }[key];
+  if (!url) return '';
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return await r.text();
+}
+
+const BLANK_TEMPLATE = `// 新規 自作ゲーム — defineGame() で 書く 最小ひな型。
+// 必須: kind / initialState / applyMove / renderBoard
+//   - kind: 上の フォームの kind と 同じ にする
+//   - initialState(uid): creator_uid / opponent_uid / turn_user_id を 含む state
+//   - applyMove(s, uid, move): { state, finished, winner_user_id, turn_user_id }
+//   - renderBoard(s, { d, myTurn, status }): 盤面 HTML、 data-move="..." で クリック自動配線
+
+import { defineGame } from '/js/cg_ui.js';
+
+export const { renderList, renderDetail } = defineGame({
+  kind: 'CHANGE_ME',
+  title: '🎲 マイゲーム',
+  hint: 'ルールの 1 行説明',
+
+  initialState: (uid) => ({
+    // 例: 整数 1 つを 0 まで 減らす ゲーム
+    n: 10,
+    creator_uid: uid, opponent_uid: 0, turn_user_id: uid,
+  }),
+
+  applyMove: (s, uid, move) => {
+    if (s.turn_user_id !== uid) throw new Error('あなたの番ではありません');
+    // move は data-move 属性の 値 (整数なら 数値、 オブジェクトは JSON)
+    const n = s.n - 1;
+    const finished = n <= 0;
+    const next = finished ? null : (uid === s.creator_uid ? s.opponent_uid : s.creator_uid);
+    const winner = finished ? uid : null;
+    return { state: { ...s, n, turn_user_id: next }, finished, winner_user_id: winner, turn_user_id: next };
+  },
+
+  renderBoard: (s, { myTurn, status }) => \`
+    <h2>残り \${s.n}</h2>
+    <button data-move="dec" \${status === 'playing' && myTurn ? '' : 'disabled'} class="btn primary">1 減らす</button>
+  \`,
+});
+`;
 
 async function readJsFile(input) {
   const f = input.files?.[0];
@@ -76,12 +159,11 @@ async function createKind(isAdmin) {
   const icon = document.getElementById('mcg-icon').value.trim();
   const fee  = parseInt(document.getElementById('mcg-fee').value, 10);
   if (!kind || !name || !desc || !icon) { toast('kind / 表示名 / 説明 / icon は必須'); return; }
-  let jsSource = null;
-  try { jsSource = await readJsFile(document.getElementById('mcg-jsfile')); }
-  catch (e) { toast(e.message); return; }
+  const jsSource = document.getElementById('mcg-jssrc').value;
+  if (jsSource.length > MAX_JS_KB * 1024) { toast(`JS は ${MAX_JS_KB}KB まで`); return; }
   try {
     const body = { kind, display_name: name, description: desc, icon, fee };
-    if (jsSource !== null) body.js_source = jsSource;
+    if (jsSource.trim()) body.js_source = jsSource;
     await post('/api/custom-games/kinds', body);
     toast('登録しました');
     renderMyCustomGames();

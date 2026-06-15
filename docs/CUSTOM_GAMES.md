@@ -7,7 +7,7 @@ LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で
 | | 内容 | 量 |
 |---|---|---|
 | 設定画面 | `/#/my-games` で kind を 登録 (kind / 表示名 / 説明 / icon / fee / JS ファイル) | フォーム 1 件 |
-| JS | **ゲームロジック (initialState + applyMove) + 盤面 1 つ の描画** だけ。 ロビー / 待ち / 参加 / 終了 は 共通ヘルパー `/js/cg_ui.js` (v626 〜) が 引き受ける。 マルバツは ~80 行、 四目並べ サンプルは ~120 行 | 1 ファイル |
+| JS | v628 から `defineGame()` 1 つで 全部 ラップ — ロジック (initialState + applyMove) + 盤面描画 (renderBoard) だけ。 ロビー / 待ち / 参加 / 終了 / 状態取得 / polling / submit は cg_ui が 全部 引き受ける。 **🪙 ニム ~45 行、 ⭕❌ マルバツ ~50 行、 🟦 四目並べ ~75 行** | 1 ファイル |
 | PHP | **触らない** | 0 行 |
 | SQL | 不要 (新規 ゲームでも `custom_games` テーブルを 共有) | 0 行 |
 | サーバ作業 | **不要** (JS は DB に格納、 配信は `/api/custom-games/kinds/:kind/script.js`) | 0 |
@@ -233,10 +233,13 @@ CREATE TABLE custom_games (
 
 ## サンプル
 
-| 名前 | 形態 | 場所 | 動作 |
-|---|---|---|---|
-| ⭕❌ マルバツ | ビルトイン (admin 登録、 旧 import パス) | [public/js/views/tictactoe.js](../public/js/views/tictactoe.js) (~230 行) | `https://pay.nkmr.io/#/tictactoe` |
-| 🟦 四目並べ | アップロード可能 サンプル (絶対 import パス) | [examples/custom-games/connect_four.js](../examples/custom-games/connect_four.js) (~210 行) | アップロード後 `/#/cg/connect-four` |
+| 名前 | 形態 | 場所 | 行数 | 動作 |
+|---|---|---|---|---|
+| 🪙 ニム (石取り) | アップロード可能 (最小例、 盤面ナシ) | [examples/custom-games/nim.js](../examples/custom-games/nim.js) | ~45 | アップロード後 `/#/cg/nim` |
+| ⭕❌ マルバツ | ビルトイン | [public/js/views/tictactoe.js](../public/js/views/tictactoe.js) | ~50 | `/#/tictactoe` |
+| 🟦 四目並べ | アップロード可能 | [examples/custom-games/connect_four.js](../examples/custom-games/connect_four.js) | ~75 | アップロード後 `/#/cg/connect-four` |
+
+`/#/my-games` の フォーム から **「テンプレート 読み込み」** で 上記 3 つを 直接 textarea に 入れて 編集 → そのまま 登録 できます (= ローカル に エディタ + ファイル管理 が 不要)。
 
 詳細 → [examples/custom-games/README.md](../examples/custom-games/README.md)
 

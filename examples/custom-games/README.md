@@ -9,12 +9,13 @@ LabPay の **自作ゲーム framework** (v619 〜) で 使える サンプル�
 
 ## サンプル一覧
 
-| ファイル | 内容 | 推奨 kind / 表示名 | プレイフィー |
-|---|---|---|---|
-| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、 重力で 下から積む、 縦/横/斜め に 4 つ並べたら 勝ち。 サーバ側 ロジック ゼロ。 ~210 行 | `connect-four` / 🟦 四目並べ | 1pt |
+| ファイル | 内容 | 推奨 kind / 表示名 | 行数 | プレイフィー |
+|---|---|---|---|---|
+| [nim.js](nim.js) | 🪙 ニム (石取り、 misère)。 盤面ナシ、 21 個から 1〜3 個取り、 最後を取った人が 負け。 **最小例 — 1 ファイル コピーで 動く** | `nim` / 🪙 ニム | ~45 | 1pt |
+| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、 重力で 下から積む、 縦/横/斜め に 4 つ並べたら 勝ち | `connect-four` / 🟦 四目並べ | ~75 | 1pt |
 
 ビルトインの ⭕❌ マルバツ ([public/js/views/tictactoe.js](../../public/js/views/tictactoe.js))
-も 同じ framework の 実装例 (こちらは ビルトインなので `/#/tictactoe` で 動く)。
+も 同じ framework の 実装例 (こちらは ビルトインなので `/#/tictactoe` で 動く)。 ~50 行。
 
 ## 登録の 手順 (例: 四目並べ)
 
@@ -31,19 +32,38 @@ LabPay の **自作ゲーム framework** (v619 〜) で 使える サンプル�
 
 ## 新ゲームを 自分で 書く
 
-サンプルを コピー → 改造 が 最速。 押さえる ポイント は 4 つだけ:
+LabPay → 設定 → 🎮 自作ゲーム 管理 (`/#/my-games`) で:
+1. フォーム上部 で kind / 表示名 / icon / フィー を 入力
+2. 「テンプレート 読み込み」 ドロップダウン から **🪙 ニム** や **⭕❌ マルバツ** を 選ぶ → textarea に 既存サンプル の JS が 入る
+3. その場で 編集 (盤面 や applyMove を 自分の ゲーム に 書き換える)
+4. 「登録」 ボタン → DB に 入って 即動作
 
-1. **`KIND` 定数を 登録時の kind と 一致** させる
-2. **`initialState(creatorUid)`** を 純 JS で 用意 (盤面 + creator_uid / opponent_uid / turn_user_id)
-3. **`applyMove(state, userId, move)`** で 次の state と 勝敗 を 計算
-4. **`renderList(ctx)` と `renderDetail(ctx)` を export** する (= framework が これを 呼ぶ)
+ローカル に エディタを 開かなくても、 ファイルを アップロード しなくても OK。
+ファイル添付 や 「空テンプレート」 も 同じ場所 から 選べます。
+
+### 押さえる ポイント
+
+`defineGame()` 経由 だと 4 行 で 終わり (=ロビー / 待ち / 終了 などは 全部 LabPay が 用意):
+
+```js
+import { defineGame } from '/js/cg_ui.js';
+export const { renderList, renderDetail } = defineGame({
+  kind: 'mygame',               // 登録時の kind と 一致
+  title: '🎲 マイゲーム',
+  initialState: (uid) => ({ /* creator_uid / opponent_uid / turn_user_id 必須 */ }),
+  applyMove: (s, uid, move) => ({ state, finished, winner_user_id, turn_user_id }),
+  renderBoard: (s, { d, myTurn, status }) => `<div>... <button data-move="0">↓</button> ...</div>`,
+});
+```
 
 サーバは `state_json` の中身を 触らず、 `turn_user_id` の チェック + 課金 だけ enforce します。
+`data-move="..."` 属性の値が そのまま applyMove の `move` に 渡る (整数なら 数値、 JSON は パース、 それ以外は 文字列)。
 
 ### 共通 UI ヘルパー: `/js/cg_ui.js`
 
 v626 から、 ロビー / 待ち / 参加 / 終了 の カードや 一覧 一行 は LabPay 側で 用意した
-ヘルパー が 引き受けます。 サンプルが ~80-120 行に 収まるのは これのおかげ。
+ヘルパー が 引き受けます。 v628 では さらに `defineGame()` で 全部 ラップ できる
+ように なって、 サンプルが **~45-75 行** に 収まります。
 
 ```js
 import {
