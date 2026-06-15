@@ -50,12 +50,12 @@ const GAMES = [
 ];
 
 const CATEGORIES = [
+  { key: 'community', label: '💬 みんなで共有' }, // v604 最上段に
   { key: 'gamble',    label: '⚔️ 対戦' },
   { key: 'predict',   label: '🏆 予想 / 当て物' },
   { key: 'party',     label: '🎉 パーティー' },
   { key: 'collect',   label: '🗺 集める / 制覇する' },
-  { key: 'community', label: '💬 みんなで共有' }, // v603
-  { key: 'solo',      label: '✈️ ひとり遊び' },   // v603
+  { key: 'solo',      label: '✈️ ひとり遊び' },
 ];
 
 const GAME_CATEGORY = {
