@@ -62,15 +62,22 @@ export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
 //   onJoinState は join 時の new_state を返す純粋関数 (state, meId) => newState。
 export function statusCardHtml(d, meId, { joinLabel } = {}) {
   const fee = d.fee ?? 0;
+  const players = Array.isArray(d.players) ? d.players : [];
+  const meJoined = players.some(p => p.uid === meId);
   if (d.status === 'waiting') {
     if (meId === d.creator_user_id) {
+      const joinedCount = players.length;
+      const waitingFor = players.length ? `(${joinedCount} 人 参加中、 開始まで あと ${Math.max(0, /* approx */ 2 - joinedCount)} 人 以上)` : '';
       return `<div class="card">
-        <div class="hint">対戦相手 を 待っています。 開始前なので 料金は まだ 払われていません。</div>
+        <div class="hint">相手 を 待っています。 ${waitingFor} 開始前なので 料金は まだ 払われていません。</div>
         <button data-cg-action="cancel" class="btn" style="margin-top:6px; color:#c00">キャンセル</button>
       </div>`;
     }
+    if (meJoined) {
+      return `<div class="card"><div class="hint">参加済み。 全員 揃うまで お待ち下さい。</div></div>`;
+    }
     return `<div class="card">
-      <div class="hint">対戦相手として 参加しますか? 開始時に 両者から プレイフィー ${fee}pt が 徴収されます。</div>
+      <div class="hint">対戦に 参加しますか? 全員 揃った時に プレイフィー ${fee}pt が 各人から 徴収されます。</div>
       <button data-cg-action="join" class="btn primary" style="margin-top:6px">${escapeHtml(joinLabel || '参加する')}</button>
     </div>`;
   }
@@ -79,6 +86,7 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
     let result;
     if (d.winner_user_id === null) result = '🤝 引分';
     else if (d.winner_user_id === meId) result = '🎉 あなたの 勝ち!';
+    else if (players.length === 1) result = '👏 終了';                        // ソロ
     else result = '😢 あなたの 負け';
     return `<div class="card"><h3 style="margin:0">${result}</h3></div>`;
   }
@@ -216,7 +224,8 @@ export function defineGame(spec) {
           if (raw.startsWith('{') || raw.startsWith('[')) move = JSON.parse(raw);
           else if (/^-?\d+$/.test(raw)) move = Number(raw);
           else move = raw;
-          const res = applyMove(d.state, meId, move);
+          // v630 sketch が ctx 構築のため d を 参照できるように 4 引数で渡す
+          const res = applyMove(d.state, meId, move, d);
           await submitMove({ kind, gid, res });
           paint(gid);
         } catch (e) { toast(e?.message || e); }
@@ -284,30 +293,51 @@ export function defineGame(spec) {
 // ───────────────────────────────────────────────────────────────
 export function sketch(spec) {
   const { kind, title, hint, detailPath, setup, draw, play } = spec;
+  // spec.players: 1 (ソロ) / 2 / 4。 デフォルト 2。
+  //   1 → opponent 概念なし、 status='waiting' を 飛ばして 即 playing (server側 処理)
+  //   2 → 既存 (turn は 相手 と トグル)
+  //   4 → players 配列 を 順に rotation
+  const playerCount = spec.players === 1 ? 1 : spec.players === 4 ? 4 : 2;
 
   return defineGame({
     kind, title, hint, detailPath,
 
     initialState(uid) {
       return {
-        creator_uid: uid, opponent_uid: 0, turn_user_id: uid,
-        g: setup(uid),                                            // ユーザの ゲーム固有 state は g に 隔離
+        creator_uid: uid,
+        opponent_uid: 0,                       // 2 人式の 後方互換
+        turn_user_id: uid,
+        g: setup(uid),                          // ユーザの ゲーム固有 state は g に
       };
     },
 
-    applyMove(s, uid, move) {
-      const res = play(s.g, uid, move);
+    applyMove(s, uid, move, d) {
+      // ctx を play() にも 渡す (= draw と 同じ 形)。 4 人卓 で 自分の seat を 取りたい時 に 便利。
+      const ctx = buildCtx(s, { meId: uid, d: d || { players: [], creator_name: '', opponent_name: '' }, myTurn: true, status: 'playing' });
+      const res = play(s.g, uid, move, ctx);
       if (!res || !res.state) throw new Error('play() は { state, ... } を return してください');
       const finished = !!res.finished;
-      const oppUid = uid === s.creator_uid ? s.opponent_uid : s.creator_uid;
       let winner = null;
       if (finished) {
         if      (res.winner === 'me')        winner = uid;
-        else if (res.winner === 'opponent')  winner = oppUid;
+        else if (res.winner === 'opponent')  winner = ctx.opponent?.uid || null;
         else if (typeof res.winner === 'number') winner = res.winner;
-        else                                  winner = null;       // 引分
+        else                                  winner = null;
       }
-      const next = finished ? null : oppUid;
+      // 次の手番: play() が next を 返せば その uid、 なければ framework が 自動 rotation。
+      let next = null;
+      if (!finished) {
+        if (typeof res.next === 'number') next = res.next;
+        else if (playerCount === 1)       next = uid;             // ソロは ずっと 自分
+        else if (playerCount === 2)       next = uid === s.creator_uid ? s.opponent_uid : s.creator_uid;
+        else {                                                    // 4 人 rotation
+          const list = (ctx.players || []).map(p => p.uid);
+          if (list.length) {
+            const idx = list.indexOf(uid);
+            next = list[(idx + 1) % list.length];
+          } else next = uid;
+        }
+      }
       return {
         state: { ...s, g: res.state, turn_user_id: next },
         finished,
@@ -317,28 +347,39 @@ export function sketch(spec) {
     },
 
     renderBoard(s, raw) {
-      const meId = raw.meId;
-      const d = raw.d;
-      const isCreator = meId === s.creator_uid;
-      const you = { uid: meId, name: isCreator ? d.creator_name : d.opponent_name, role: isCreator ? 'creator' : 'opponent' };
-      const opponent = s.opponent_uid
-        ? { uid: isCreator ? s.opponent_uid : s.creator_uid,
-            name: isCreator ? d.opponent_name : d.creator_name,
-            role: isCreator ? 'opponent' : 'creator' }
-        : null;
-      return draw(s.g, {
-        me: meId, you, opponent,
-        players: [you, opponent].filter(Boolean),
-        turn: s.turn_user_id,
-        myTurn: !!raw.myTurn,
-        winner: d.winner_user_id,
-        status: raw.status,
-      });
+      const ctx = buildCtx(s, raw, /*forPlay*/false);
+      return draw(s.g, ctx);
     },
 
     joinTransition(s, oppUid) {
-      // sketch 系では 手番は 自動なので opponent_uid だけ 入れる (= デフォルトと 同じ、 明示)
-      return { ...s, opponent_uid: oppUid };
+      // 2 人式: opponent_uid を 入れる (旧 UI 互換)。 4 人式は サーバの players_json 任せ。
+      if (playerCount === 2) return { ...s, opponent_uid: oppUid };
+      return s;
     },
   });
+
+  // ctx 組立 (draw / play 共通)
+  function buildCtx(s, raw, forPlay) {
+    const meId  = raw.meId;
+    const d     = raw.d;
+    const list  = Array.isArray(d.players) && d.players.length
+      ? d.players.map(p => ({ uid: p.uid, name: p.name }))
+      : [{ uid: s.creator_uid, name: d.creator_name }, ...(s.opponent_uid ? [{ uid: s.opponent_uid, name: d.opponent_name }] : [])];
+    const enriched = list.map((p, i) => ({
+      uid: p.uid, name: p.name, seat: i,
+      role: p.uid === s.creator_uid ? 'creator' : 'opponent',
+    }));
+    const you = enriched.find(p => p.uid === meId) || null;
+    const opponent = enriched.find(p => p.uid !== meId) || null;
+    return {
+      me: meId,
+      you, opponent,
+      players: enriched,
+      seat: you?.seat ?? -1,
+      turn: s.turn_user_id,
+      myTurn: !!raw.myTurn,
+      winner: d.winner_user_id,
+      status: raw.status,
+    };
+  }
 }

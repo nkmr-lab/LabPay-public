@@ -29,7 +29,7 @@ declare(strict_types=1);
 const CG_PROVIDER_SHARE_PCT = 90;
 
 function cg_kind_meta(PDO $pdo, string $kind): array {
-    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee,
+    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee, max_players,
                                 js_module_url, is_active, created_by_user_id
                            FROM custom_game_kinds WHERE kind=?");
     $st->execute([$kind]);
@@ -37,6 +37,7 @@ function cg_kind_meta(PDO $pdo, string $kind): array {
     if (!$row) throw new ApiException('not_found', "未知のゲーム種別: $kind", 404);
     if (!(int)$row['is_active']) throw new ApiException('not_found', "無効化された ゲーム種別: $kind", 404);
     $row['fee'] = (int)$row['fee'];
+    $row['max_players'] = (int)$row['max_players'];
     $row['created_by_user_id'] = $row['created_by_user_id'] !== null ? (int)$row['created_by_user_id'] : null;
     return $row;
 }
@@ -55,7 +56,7 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
 
     // GET /api/custom-games/list : 有効な kind 一覧
     if (($seg[1] ?? '') === 'list' && $method === 'GET') {
-        $st = $pdo->query("SELECT k.kind, k.display_name, k.description, k.icon, k.fee,
+        $st = $pdo->query("SELECT k.kind, k.display_name, k.description, k.icon, k.fee, k.max_players,
                                   k.js_module_url,
                                   (k.js_source IS NOT NULL) AS has_js_source,
                                   k.created_by_user_id, u.display_name AS created_by_name
@@ -64,6 +65,7 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $r['fee'] = (int)$r['fee'];
+            $r['max_players'] = (int)$r['max_players'];
             $r['has_js_source'] = (bool)$r['has_js_source'];
             $r['created_by_user_id'] = $r['created_by_user_id'] !== null ? (int)$r['created_by_user_id'] : null;
         }
@@ -133,6 +135,8 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     if (mb_strlen($icon) > 20) throw new ApiException('bad_request', 'icon は 20 文字以内', 400);
     $fee = (int)($body['fee'] ?? 1);
     if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
+    $maxP = (int)($body['max_players'] ?? 2);
+    if (!in_array($maxP, [1, 2, 4], true)) throw new ApiException('bad_request', 'max_players は 1/2/4', 400);
     $jsUrl = trim((string)($body['js_module_url'] ?? "/api/custom-games/kinds/{$kind}/script.js"));
     if (mb_strlen($jsUrl) > 200) throw new ApiException('bad_request', 'js_module_url は 200 文字以内', 400);
     // v620 JS source は inline 文字列で 受け取る (PATCH でも更新可)
@@ -142,9 +146,9 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     }
     $jsSize = $jsSource !== null ? strlen($jsSource) : null;
     try {
-        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, js_module_url, js_source, js_size, created_by_user_id, is_active)
-                       VALUES (?,?,?,?,?,?,?,?,?,1)")
-            ->execute([$kind, $name, $desc, $icon, $fee, $jsUrl, $jsSource, $jsSize, $uid]);
+        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, max_players, js_module_url, js_source, js_size, created_by_user_id, is_active)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,1)")
+            ->execute([$kind, $name, $desc, $icon, $fee, $maxP, $jsUrl, $jsSource, $jsSize, $uid]);
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) {
             throw new ApiException('conflict', "kind '$kind' は 既に存在", 409);
@@ -177,6 +181,11 @@ function cg_kinds_update(PDO $pdo, int $uid, bool $isAdmin, string $kind): void 
         $fee = (int)$body['fee'];
         if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
         $sets[] = 'fee = ?'; $args[] = $fee;
+    }
+    if (array_key_exists('max_players', $body)) {
+        $maxP = (int)$body['max_players'];
+        if (!in_array($maxP, [1, 2, 4], true)) throw new ApiException('bad_request', 'max_players は 1/2/4', 400);
+        $sets[] = 'max_players = ?'; $args[] = $maxP;
     }
     if (array_key_exists('is_active', $body)) {
         $sets[] = 'is_active = ?'; $args[] = $body['is_active'] ? 1 : 0;
@@ -254,18 +263,29 @@ function cg_list(PDO $pdo, int $uid, string $kind): void {
 
 function cg_create(PDO $pdo, int $uid, string $kind, array $meta): void {
     $fee = (int)$meta['fee'];
-    // クライアントから 初期 state を 受け取る (JS が computeする)。 無ければ 空 dict。
+    $maxP = (int)$meta['max_players'];
     $body = read_json_body();
     $initState = $body['initial_state'] ?? null;
     if (!is_array($initState)) $initState = new \stdClass();
     $gid = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $kind, $fee, $initState, &$gid) {
-        // v621 起案時は 課金しない (waiting で 誰も来なければ ノーリスク、 cancel も 返金不要)。
-        //   join 成立時に 両者から 場代 を 徴収する。
-        $pdo->prepare("INSERT INTO custom_games (game_kind, creator_user_id, status, fee, state_json, turn_user_id)
-                       VALUES (?,?,'waiting',?,?,?)")
-            ->execute([$kind, $uid, $fee, json_encode($initState, JSON_UNESCAPED_UNICODE), $uid]);
+    db_tx($pdo, function () use ($pdo, $uid, $kind, $fee, $maxP, $meta, $initState, &$gid) {
+        // v630 ソロ (max_players=1) は status='playing' 即開始。 起案者から fee を 徴収。
+        //   N>=2 は 'waiting' で 開始、 join 成立時に 全員から 徴収。
+        $isSolo = $maxP === 1;
+        $status = $isSolo ? 'playing' : 'waiting';
+        $players = [$uid];
+        if ($isSolo && $fee > 0) {
+            if (Ledger::balanceOfUser($pdo, $uid) < $fee) {
+                throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', $fee), 400);
+            }
+        }
+        $pdo->prepare("INSERT INTO custom_games (game_kind, creator_user_id, status, fee, players_json, state_json, turn_user_id)
+                       VALUES (?,?,?,?,?,?,?)")
+            ->execute([$kind, $uid, $status, $fee, json_encode($players), json_encode($initState, JSON_UNESCAPED_UNICODE), $uid]);
         $gid = (int)$pdo->lastInsertId();
+        if ($isSolo) {
+            cg_collect_play_fee($pdo, $uid, $fee, $meta, $gid);
+        }
     });
     json_response(['ok' => true, 'id' => $gid]);
 }
@@ -293,30 +313,37 @@ function cg_collect_play_fee(PDO $pdo, int $payerUid, int $fee, array $meta, int
 
 function cg_join(PDO $pdo, int $uid, int $gid, array $meta): void {
     $body = read_json_body();
-    // クライアントが 「opponent_uid を入れた新 state」 を 計算して 送ってくる (任意)。
-    //   そうでなければ サーバが 既存 state を そのまま保持。
     $newState = $body['new_state'] ?? null;
-    db_tx($pdo, function () use ($pdo, $uid, $gid, $meta, $newState) {
+    $maxP = (int)$meta['max_players'];
+    db_tx($pdo, function () use ($pdo, $uid, $gid, $meta, $newState, $maxP) {
         $st = $pdo->prepare("SELECT * FROM custom_games WHERE id=? FOR UPDATE");
         $st->execute([$gid]);
         $g = $st->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
         if ($g['status'] !== 'waiting') throw new ApiException('bad_request', 'already started', 400);
-        if ((int)$g['creator_user_id'] === $uid) throw new ApiException('bad_request', '自分の卓には 参加できません', 400);
-        $creatorUid = (int)$g['creator_user_id'];
         $fee = (int)$g['fee'];
-        if ($fee > 0) {
-            $balOpp = Ledger::balanceOfUser($pdo, $uid);
-            if ($balOpp < $fee) throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', $fee), 400);
-            $balCreator = Ledger::balanceOfUser($pdo, $creatorUid);
-            if ($balCreator < $fee) throw new ApiException('insufficient_balance', '起案者の ポイント不足で 開始不可', 400);
+        $players = json_decode($g['players_json'] ?: '[]', true) ?: [(int)$g['creator_user_id']];
+        $players = array_map('intval', $players);
+        if (in_array($uid, $players, true)) throw new ApiException('bad_request', '既に 参加済み', 400);
+        if (count($players) >= $maxP) throw new ApiException('bad_request', '満員', 400);
+        $players[] = $uid;
+        $full = count($players) === $maxP;
+        // 全員 揃ったら 一括徴収 (= status='playing' に 遷移する 瞬間)
+        if ($full && $fee > 0) {
+            foreach ($players as $pid) {
+                if (Ledger::balanceOfUser($pdo, $pid) < $fee) {
+                    throw new ApiException('insufficient_balance', "user#{$pid} の ポイント不足で 開始不可", 400);
+                }
+            }
+            foreach ($players as $pid) {
+                cg_collect_play_fee($pdo, $pid, $fee, $meta, $gid);
+            }
         }
-        // v621 join 成立時に 両者から 場代を 徴収 (90% 提供者 / 10% SYSTEM)。
-        cg_collect_play_fee($pdo, $creatorUid, $fee, $meta, $gid);
-        cg_collect_play_fee($pdo, $uid,        $fee, $meta, $gid);
         $stateJson = is_array($newState) ? json_encode($newState, JSON_UNESCAPED_UNICODE) : $g['state_json'];
-        $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, status='playing', state_json=? WHERE id=?")
-            ->execute([$uid, $stateJson, $gid]);
+        // v630 後方互換: 2 人卓では opponent_user_id にも 入れておく (旧 UI が 参照)
+        $oppUid = ($maxP === 2 && count($players) === 2) ? $uid : (int)$g['opponent_user_id'];
+        $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, players_json=?, status=?, state_json=? WHERE id=?")
+            ->execute([$oppUid ?: null, json_encode($players), $full ? 'playing' : 'waiting', $stateJson, $gid]);
     });
     json_response(['ok' => true]);
 }
@@ -388,6 +415,19 @@ function cg_detail(PDO $pdo, int $uid, int $gid): void {
     $g = $st->fetch(PDO::FETCH_ASSOC);
     if (!$g) throw new ApiException('not_found', 'not found', 404);
     $state = json_decode($g['state_json'], true);
+    // v630 N 人プレイ: players_json (uid配列) と 各 user の表示名 を まとめて返す。
+    $playerUids = json_decode($g['players_json'] ?: '[]', true) ?: [];
+    $playerUids = array_map('intval', $playerUids);
+    $names = [];
+    if ($playerUids) {
+        $place = implode(',', array_fill(0, count($playerUids), '?'));
+        $stN = $pdo->prepare("SELECT id, display_name FROM users WHERE id IN ($place)");
+        $stN->execute($playerUids);
+        foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $names[(int)$r['id']] = $r['display_name'];
+        }
+    }
+    $players = array_map(fn($pid) => ['uid' => $pid, 'name' => $names[$pid] ?? null], $playerUids);
     json_response([
         'id' => (int)$g['id'],
         'game_kind' => $g['game_kind'],
@@ -396,6 +436,7 @@ function cg_detail(PDO $pdo, int $uid, int $gid): void {
         'creator_name'     => $g['creator_name'],
         'opponent_user_id' => $g['opponent_user_id'] !== null ? (int)$g['opponent_user_id'] : null,
         'opponent_name'    => $g['opponent_name'],
+        'players'          => $players,                                  // [{uid, name}, ...] 着席順
         'winner_user_id'   => $g['winner_user_id']   !== null ? (int)$g['winner_user_id']   : null,
         'winner_name'      => $g['winner_name'],
         'fee' => (int)$g['fee'],

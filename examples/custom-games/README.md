@@ -7,15 +7,27 @@ LabPay の **自作ゲーム framework** (v619 〜) で 使える サンプル�
 
 詳細な 仕組み は [docs/CUSTOM_GAMES.md](../../docs/CUSTOM_GAMES.md)。
 
-## サンプル一覧
+## サンプル一覧 — プレイヤー数 別
 
-| ファイル | 内容 | 推奨 kind / 表示名 | 行数 | プレイフィー |
-|---|---|---|---|---|
-| [nim.js](nim.js) | 🪙 ニム (石取り、 misère)。 盤面ナシ、 21 個から 1〜3 個取り、 最後を取った人が 負け。 **最小例 — 1 ファイル コピーで 動く** | `nim` / 🪙 ニム | ~45 | 1pt |
-| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、 重力で 下から積む、 縦/横/斜め に 4 つ並べたら 勝ち | `connect-four` / 🟦 四目並べ | ~75 | 1pt |
+`sketch({ players: 1 | 2 | 4, ... })` で 1 人 / 2 人 / 4 人 用 を 切替。
+登録時の フォーム で 「プレイヤー数」 を 揃えて 選択。
 
-ビルトインの ⭕❌ マルバツ ([public/js/views/tictactoe.js](../../public/js/views/tictactoe.js))
-も 同じ framework の 実装例 (こちらは ビルトインなので `/#/tictactoe` で 動く)。 ~50 行。
+### 1 人用 (ソロ)
+| ファイル | 内容 | 推奨 kind | 行数 |
+|---|---|---|---|
+| [lights_out.js](lights_out.js) | 🟦 ライツアウト 3×3。 タップ で マス + 上下左右 が 反転。 全部 OFF で クリア。 起案 直後 から playing 開始、 join 不要 | `lights-out` | ~55 |
+
+### 2 人用 (対戦)
+| ファイル | 内容 | 推奨 kind | 行数 |
+|---|---|---|---|
+| [nim.js](nim.js) | 🪙 ニム (石取り、 misère)。 盤面ナシ、 21 個から 1〜3 個取り、 最後を取った人が 負け。 **2 人用の 最小例** | `nim` | ~55 |
+| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、 縦/横/斜め に 4 つ並べたら 勝ち | `connect-four` | ~75 |
+| (built-in) ⭕❌ [tictactoe.js](../../public/js/views/tictactoe.js) | 3×3 マルバツ。 `/#/tictactoe` で 動作 | `tictactoe` | ~55 |
+
+### 4 人用 (順番回し)
+| ファイル | 内容 | 推奨 kind | 行数 |
+|---|---|---|---|
+| [sugoroku.js](sugoroku.js) | 🎲 すごろく。 順番に サイコロ を 振り、 30 マス 目 に 一番乗り で 勝ち。 4 人 揃ったら 自動で playing | `sugoroku` | ~55 |
 
 ## 登録の 手順 (例: 四目並べ)
 

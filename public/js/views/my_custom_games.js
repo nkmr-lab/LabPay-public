@@ -40,6 +40,13 @@ export async function renderMyCustomGames() {
           <input id="mcg-name" maxlength="80" placeholder="例: 🔲 ドット&ボックス" style="width:100%"></label>
         <label><div class="bold" style="font-size:13px">場代 (pt) — 各プレイヤーが プレイ毎に 払う (0 で 無料)</div>
           <input id="mcg-fee" type="number" min="0" max="100" value="1" style="width:100%"></label>
+        <label><div class="bold" style="font-size:13px">プレイヤー数</div>
+          <select id="mcg-maxp" style="width:100%">
+            <option value="1">1 人 (ソロ)</option>
+            <option value="2" selected>2 人 対戦</option>
+            <option value="4">4 人 対戦</option>
+          </select></label>
+        <span></span>
       </div>
       <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">説明</div>
         <textarea id="mcg-desc" rows="2" maxlength="500" style="width:100%; box-sizing:border-box"></textarea></label>
@@ -49,9 +56,11 @@ export async function renderMyCustomGames() {
           <span style="flex:1"></span>
           <select id="mcg-tpl" style="font-size:12px">
             <option value="">テンプレート 読み込み…</option>
-            <option value="nim">🪙 ニム (~45 行、 盤面ナシ)</option>
-            <option value="tictactoe">⭕❌ マルバツ (~50 行、 3x3 盤)</option>
-            <option value="connect4">🟦 四目並べ (~75 行、 6x7 盤 + 重力)</option>
+            <option value="lights">🟦 ライツアウト [1 人] パズル</option>
+            <option value="nim">🪙 ニム [2 人] 最小例</option>
+            <option value="tictactoe">⭕❌ マルバツ [2 人] 3x3 盤</option>
+            <option value="connect4">🟦 四目並べ [2 人] 6x7 盤</option>
+            <option value="sugoroku">🎲 すごろく [4 人] 順番回し</option>
             <option value="blank">空テンプレート</option>
           </select>
           <input id="mcg-jsfile" type="file" accept=".js,.mjs,text/javascript" style="font-size:12px; max-width:170px">
@@ -101,6 +110,8 @@ async function loadTemplate(key) {
     nim:       'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/nim.js',
     tictactoe: 'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/public/js/views/tictactoe.js',
     connect4:  'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/connect_four.js',
+    lights:    'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/lights_out.js',
+    sugoroku:  'https://raw.githubusercontent.com/nkmr-lab/LabPay/main/examples/custom-games/sugoroku.js',
   }[key];
   if (!url) return '';
   const r = await fetch(url);
@@ -157,11 +168,12 @@ async function createKind(isAdmin) {
   const desc = document.getElementById('mcg-desc').value.trim();
   const icon = document.getElementById('mcg-icon').value.trim();
   const fee  = parseInt(document.getElementById('mcg-fee').value, 10);
+  const maxP = parseInt(document.getElementById('mcg-maxp').value, 10);
   if (!kind || !name || !desc || !icon) { toast('kind / 表示名 / 説明 / icon は必須'); return; }
   const jsSource = document.getElementById('mcg-jssrc').value;
   if (jsSource.length > MAX_JS_KB * 1024) { toast(`JS は ${MAX_JS_KB}KB まで`); return; }
   try {
-    const body = { kind, display_name: name, description: desc, icon, fee };
+    const body = { kind, display_name: name, description: desc, icon, fee, max_players: maxP };
     if (jsSource.trim()) body.js_source = jsSource;
     await post('/api/custom-games/kinds', body);
     toast('登録しました');
