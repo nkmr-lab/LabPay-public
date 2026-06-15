@@ -226,3 +226,119 @@ export function defineGame(spec) {
 
   return { renderList, renderDetail };
 }
+
+// ───────────────────────────────────────────────────────────────
+// v629 sketch(): Processing / p5.js 風の 高レベル API。
+//
+//   書く 関数は 3 つ だけ:
+//
+//     setup(meId)             ── ゲーム開始時に 1 回 だけ 呼ばれる。
+//                                 ゲーム固有 の 初期 state を return する。
+//
+//     draw(state, ctx)        ── 画面を 描く 時に 呼ばれる。
+//                                 HTML 文字列 を return する (盤面でも 文字 でも OK)。
+//                                 自分の番が 来たら、 ボタン に
+//                                 <button data-move="X"> を 入れておくと、
+//                                 タップで 自動的に play() が 呼ばれる。
+//
+//     play(state, me, move)   ── 自分が ボタンを 押した時 に 呼ばれる。
+//                                 第3引数 move は data-move="X" の X (= 整数 / 文字 / JSON)。
+//                                 { state: 新state, finished?: bool, winner?: 'me'|'opponent'|null }
+//                                 を return する。 手番は LabPay が 自動で 相手に 移す。
+//
+//   呼び出し 順序 を 図で 示すと:
+//
+//      [起案者が ＋新規卓]
+//         │
+//         ▼ setup(me)
+//       state ──→ DB
+//                         [自分の画面] (polling 2.5s)         [相手の画面]
+//                              │                                     │
+//                              ▼                                     ▼
+//                       draw(state, ctx)                       draw(state, ctx)
+//                              │                                     │
+//                              ▼ ボタンタップ
+//                       play(state, me, move)
+//                              │
+//                              ▼ サーバに 送信
+//                       新 state ─────────────────────────→  相手の draw も 更新
+//
+//   ctx (draw の第2引数) に 渡されるもの:
+//     ctx.me        - 自分の uid (number)
+//     ctx.you       - { uid, name, role: 'creator' | 'opponent' }  自分
+//     ctx.opponent  - { uid, name, role }                          相手 (waiting 中は null)
+//     ctx.players   - [you, opponent].filter(Boolean)
+//     ctx.turn      - 手番の uid (number、 終了時は null)
+//     ctx.myTurn    - 自分の手番か (boolean)
+//     ctx.winner    - 勝者の uid (number、 引分 or 進行中は null)
+//     ctx.status    - 'waiting' | 'playing' | 'finished' | 'cancelled'
+//
+//   play() の return:
+//     {
+//       state:    新しい ゲーム固有 state (必須)
+//       finished: true なら 終了 (省略可、 default false)
+//       winner:   'me' | 'opponent' | <uid> | null
+//                  'me' = 自分の勝ち、 'opponent' = 相手の勝ち、 null = 引分。
+//                  finished=false なら 無視されます。
+//     }
+// ───────────────────────────────────────────────────────────────
+export function sketch(spec) {
+  const { kind, title, hint, detailPath, setup, draw, play } = spec;
+
+  return defineGame({
+    kind, title, hint, detailPath,
+
+    initialState(uid) {
+      return {
+        creator_uid: uid, opponent_uid: 0, turn_user_id: uid,
+        g: setup(uid),                                            // ユーザの ゲーム固有 state は g に 隔離
+      };
+    },
+
+    applyMove(s, uid, move) {
+      const res = play(s.g, uid, move);
+      if (!res || !res.state) throw new Error('play() は { state, ... } を return してください');
+      const finished = !!res.finished;
+      const oppUid = uid === s.creator_uid ? s.opponent_uid : s.creator_uid;
+      let winner = null;
+      if (finished) {
+        if      (res.winner === 'me')        winner = uid;
+        else if (res.winner === 'opponent')  winner = oppUid;
+        else if (typeof res.winner === 'number') winner = res.winner;
+        else                                  winner = null;       // 引分
+      }
+      const next = finished ? null : oppUid;
+      return {
+        state: { ...s, g: res.state, turn_user_id: next },
+        finished,
+        winner_user_id: winner,
+        turn_user_id: next,
+      };
+    },
+
+    renderBoard(s, raw) {
+      const meId = raw.meId;
+      const d = raw.d;
+      const isCreator = meId === s.creator_uid;
+      const you = { uid: meId, name: isCreator ? d.creator_name : d.opponent_name, role: isCreator ? 'creator' : 'opponent' };
+      const opponent = s.opponent_uid
+        ? { uid: isCreator ? s.opponent_uid : s.creator_uid,
+            name: isCreator ? d.opponent_name : d.creator_name,
+            role: isCreator ? 'opponent' : 'creator' }
+        : null;
+      return draw(s.g, {
+        me: meId, you, opponent,
+        players: [you, opponent].filter(Boolean),
+        turn: s.turn_user_id,
+        myTurn: !!raw.myTurn,
+        winner: d.winner_user_id,
+        status: raw.status,
+      });
+    },
+
+    joinTransition(s, oppUid) {
+      // sketch 系では 手番は 自動なので opponent_uid だけ 入れる (= デフォルトと 同じ、 明示)
+      return { ...s, opponent_uid: oppUid };
+    },
+  });
+}

@@ -41,23 +41,62 @@ LabPay → 設定 → 🎮 自作ゲーム 管理 (`/#/my-games`) で:
 ローカル に エディタを 開かなくても、 ファイルを アップロード しなくても OK。
 ファイル添付 や 「空テンプレート」 も 同じ場所 から 選べます。
 
-### 押さえる ポイント
-
-`defineGame()` 経由 だと 4 行 で 終わり (=ロビー / 待ち / 終了 などは 全部 LabPay が 用意):
+### 押さえる ポイント — Processing 風 の 3 関数 だけ
 
 ```js
-import { defineGame } from '/js/cg_ui.js';
-export const { renderList, renderDetail } = defineGame({
-  kind: 'mygame',               // 登録時の kind と 一致
+import { sketch } from '/js/cg_ui.js';
+
+export const { renderList, renderDetail } = sketch({
+  kind:  'mygame',                  // 登録時の kind と 同じ
   title: '🎲 マイゲーム',
-  initialState: (uid) => ({ /* creator_uid / opponent_uid / turn_user_id 必須 */ }),
-  applyMove: (s, uid, move) => ({ state, finished, winner_user_id, turn_user_id }),
-  renderBoard: (s, { d, myTurn, status }) => `<div>... <button data-move="0">↓</button> ...</div>`,
+  hint:  'ルールの 1 行説明',
+
+  // ① 開始時 に 1 回だけ → 初期 state
+  setup() { return { /* 自由 */ }; },
+
+  // ② 画面 を 描く → HTML を return
+  //    自分の番で <button data-move="X"> を 入れれば、 タップで ③ が 呼ばれる
+  draw(state, ctx) { return '<div>...</div>'; },
+
+  // ③ 自分が ボタン を 押した時 → 新しい state
+  //    winner: 'me' / 'opponent' / null (引分) / uid。 未終了なら 省略 OK。
+  //    手番は LabPay が 自動で 相手に 移します。
+  play(state, me, move) {
+    return { state: /* 新state */, finished: true, winner: 'me' };
+  },
 });
 ```
 
-サーバは `state_json` の中身を 触らず、 `turn_user_id` の チェック + 課金 だけ enforce します。
-`data-move="..."` 属性の値が そのまま applyMove の `move` に 渡る (整数なら 数値、 JSON は パース、 それ以外は 文字列)。
+### 呼び出し の 流れ
+
+```
+[起案者が ＋新規卓]
+   │
+   ▼ setup(me)          ←  1 回だけ
+ state ──→ DB
+                       [自分の画面] (2.5 秒ごと polling)    [相手の画面]
+                            │                                    │
+                            ▼ draw(state, ctx)                   ▼ draw(state, ctx)
+                            │  画面を 描く
+                            ▼ ボタン タップ
+                       play(state, me, move)
+                            │
+                            ▼ サーバに送信 → 新 state
+                                          ↑___________________相手側にも 反映
+```
+
+### ctx (draw の 第2引数) に 渡るもの
+
+| プロパティ | 内容 |
+|---|---|
+| `ctx.me` | 自分の uid |
+| `ctx.you` | `{uid, name, role: 'creator'|'opponent'}` 自分 |
+| `ctx.opponent` | 相手 (waiting 中は null) |
+| `ctx.players` | `[you, opponent].filter(Boolean)` |
+| `ctx.turn` | 手番の uid (終了時 null) |
+| `ctx.myTurn` | 自分の手番か (boolean) |
+| `ctx.winner` | 勝者の uid (引分 / 進行中は null) |
+| `ctx.status` | `'waiting'` / `'playing'` / `'finished'` / `'cancelled'` |
 
 ### 共通 UI ヘルパー: `/js/cg_ui.js`
 

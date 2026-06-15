@@ -108,40 +108,39 @@ async function loadTemplate(key) {
   return await r.text();
 }
 
-const BLANK_TEMPLATE = `// 新規 自作ゲーム — defineGame() で 書く 最小ひな型。
-// 必須: kind / initialState / applyMove / renderBoard
-//   - kind: 上の フォームの kind と 同じ にする
-//   - initialState(uid): creator_uid / opponent_uid / turn_user_id を 含む state
-//   - applyMove(s, uid, move): { state, finished, winner_user_id, turn_user_id }
-//   - renderBoard(s, { d, myTurn, status }): 盤面 HTML、 data-move="..." で クリック自動配線
+const BLANK_TEMPLATE = `// 新規 自作ゲーム — 3 関数 を 書くだけ で 動く。
+//
+//   setup()           ゲーム開始時 に 1 回 だけ 呼ばれる → 初期 state を return
+//   draw(state, ctx)  画面を 描く時 に 呼ばれる        → HTML を return
+//                     (ボタンに data-move="X" を 入れれば タップで play が 呼ばれる)
+//   play(state, me, move)
+//                     ボタン を 押した時 に 呼ばれる   → { state, finished?, winner? } を return
+//                     winner: 'me' (自分の勝ち) / 'opponent' / null (引分) / uid
 
-import { defineGame } from '/js/cg_ui.js';
+import { sketch } from '/js/cg_ui.js';
 
-export const { renderList, renderDetail } = defineGame({
-  kind: 'CHANGE_ME',
+export const { renderList, renderDetail } = sketch({
+  kind:  'CHANGE_ME',          // ← 上の フォームの kind と 同じ にする
   title: '🎲 マイゲーム',
-  hint: 'ルールの 1 行説明',
+  hint:  'ルール の 1 行 説明',
 
-  initialState: (uid) => ({
-    // 例: 整数 1 つを 0 まで 減らす ゲーム
-    n: 10,
-    creator_uid: uid, opponent_uid: 0, turn_user_id: uid,
-  }),
-
-  applyMove: (s, uid, move) => {
-    if (s.turn_user_id !== uid) throw new Error('あなたの番ではありません');
-    // move は data-move 属性の 値 (整数なら 数値、 オブジェクトは JSON)
-    const n = s.n - 1;
-    const finished = n <= 0;
-    const next = finished ? null : (uid === s.creator_uid ? s.opponent_uid : s.creator_uid);
-    const winner = finished ? uid : null;
-    return { state: { ...s, n, turn_user_id: next }, finished, winner_user_id: winner, turn_user_id: next };
+  setup() {
+    return { n: 10 };          // 0 まで 減らしたら 終わる ゲーム の 例
   },
 
-  renderBoard: (s, { myTurn, status }) => \`
-    <h2>残り \${s.n}</h2>
-    <button data-move="dec" \${status === 'playing' && myTurn ? '' : 'disabled'} class="btn primary">1 減らす</button>
-  \`,
+  draw(s, ctx) {
+    const can = ctx.status === 'playing' && ctx.myTurn;
+    return \`
+      <h2>残り \${s.n}</h2>
+      <button data-move="dec" \${can ? '' : 'disabled'} class="btn primary">1 減らす</button>
+    \`;
+  },
+
+  play(s, me, move) {
+    const n = s.n - 1;
+    if (n <= 0) return { state: { n }, finished: true, winner: 'me' };
+    return { state: { n } };   // 手番は LabPay が 自動で 相手に 移す
+  },
 });
 `;
 
