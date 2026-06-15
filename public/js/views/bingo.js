@@ -60,8 +60,8 @@ export async function renderBingo(ctx) {
       </div>
     ` : '')}
 
-    <div class="card" style="padding:6px">
-      <div id="bingo-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; max-width:480px; margin:0 auto">
+    <div class="card" style="padding:6px; overflow:hidden">
+      <div id="bingo-grid" style="display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; max-width:480px; margin:0 auto; box-sizing:border-box">
         ${d.cells.map((c, i) => {
           const done = d.completed.includes(i);
           const isReachCell = !done && reachLines.some(line => line.includes(i));
@@ -69,10 +69,10 @@ export async function renderBingo(ctx) {
             <div style="aspect-ratio:1/1; border:2px solid ${done ? '#dc2626' : (isReachCell ? '#f59e0b' : '#ddd')}; border-radius:8px;
                   background:${done ? 'linear-gradient(145deg, #fecaca, #fca5a5)' : (isReachCell ? '#fef3c7' : '#fff')};
                   display:flex; flex-direction:column; align-items:center; justify-content:center;
-                  text-align:center; padding:4px; font-size:11px; line-height:1.2; position:relative">
-              ${done ? '<div style="position:absolute; font-size:54px; color:rgba(220,38,38,0.5); pointer-events:none; line-height:1">⭕</div>' : ''}
-              <div style="font-size:18px">${escapeHtml(c.icon || '')}</div>
-              <div style="font-size:10px; margin-top:2px">${escapeHtml(c.label)}</div>
+                  text-align:center; padding:4px; font-size:11px; line-height:1.2; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; min-height:0">
+              ${done ? '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:54px; color:rgba(220,38,38,0.5); pointer-events:none; line-height:1">⭕</div>' : ''}
+              <div style="font-size:18px; position:relative; z-index:1">${escapeHtml(c.icon || '')}</div>
+              <div style="font-size:10px; margin-top:2px; position:relative; z-index:1; max-width:100%; overflow:hidden; text-overflow:ellipsis">${escapeHtml(c.label)}</div>
             </div>`;
         }).join('')}
       </div>

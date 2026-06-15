@@ -232,8 +232,10 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
             $sql = "SELECT COUNT(*) FROM ito_players WHERE user_id=? AND game_id IN (SELECT id FROM ito_games WHERE created_at BETWEEN ? AND ?)";
             break;
         case 'meetup_resp':
-            // meetup_participants には timestamp が無いので、 該当週内に作成された meetup への 参加で判定
-            $sql = "SELECT COUNT(*) FROM meetup_participants mp JOIN meetups m ON m.id=mp.meetup_id WHERE mp.user_id=? AND m.created_at BETWEEN ? AND ?";
+            // v619 #待ち合わせ false-positive bug fix。 meetup_participants は ただの 招待リスト
+            // (応答状況を 持たない) なので、 そこに居る = 「応答した」 にならない。
+            // meetup_messages (待ち合わせ内チャット) を 「実際に engagement した」 シグナルとして 使う。
+            $sql = "SELECT COUNT(*) FROM meetup_messages WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'notice_post':
             $sql = "SELECT COUNT(*) FROM notices WHERE user_id=? AND created_at BETWEEN ? AND ?";

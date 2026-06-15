@@ -492,6 +492,7 @@ route('/sns/:id',         lazy(() => import('./views/posts.js'), 'renderPostDeta
 route('/presence',        lazy(() => import('./views/presence.js'), 'renderPresencePage'));
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
 route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
+route('/admin/custom-games', lazy(() => import('./views/admin_custom_games.js'), 'renderAdminCustomGames'));
 route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));
 route('/auctions/new',    lazy(() => import('./views/auctions.js'), 'renderAuctionNew'));
 route('/auctions/:id',    lazy(() => import('./views/auctions.js'), 'renderAuctionDetail'));

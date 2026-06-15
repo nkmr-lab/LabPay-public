@@ -1,62 +1,72 @@
 <?php
-// v618 #236 自作ゲーム フレームワーク。 PHP は 「kind → 表示名/手数料」 の manifest 辞書のみ。
-//   ゲームロジック は すべて public/js/custom_games/{kind}.js (JS) に書く。
-//   サーバは state_json を 不透明 な コンテナとして 保存するだけ で、 中身の判定はしない。
+// v618-v619 #236 自作ゲーム フレームワーク。 PHP ソース改変なし、 DB 管理。
+//   ゲーム kind は custom_game_kinds テーブルに 登録。 管理画面 から 追加可能 (admin 推奨)。
+//   ゲームロジック は すべて JS (js_module_url で 指定)。 サーバは state_json を 不透明な
+//   コンテナとして 保存するだけ。
 //
 //   セキュリティ モデル: 1pt 程度の低額対戦を想定。
 //   - 手番ユーザだけが /move を呼べる (turn_user_id 一致チェック)
 //   - クライアントが 計算した new_state / finished / winner_user_id を 信頼して 保存
 //   - 「対戦相手の クライアントも 同じ JS ロジックで 再計算」 することで 健全性を保つ
-//   - 不正検知が必要なら ゲーム固有の dispute UI を作る (今のところ なし)
 //
 //   API:
-//     GET  /api/custom-games/list                       登録ゲーム一覧
+//     GET  /api/custom-games/list                       有効な kind 一覧
+//     POST /api/custom-games/kinds                      新規 kind 登録 (admin)
+//     PATCH /api/custom-games/kinds/:kind               kind 編集 (admin)
+//     DELETE /api/custom-games/kinds/:kind              kind 無効化 (admin、 既存卓は残る)
 //     GET  /api/custom-games/:kind/games                対戦卓 一覧 (recent 30)
-//     POST /api/custom-games/:kind/games                起案 (1pt buy-in、 body は {initial_state})
-//     GET  /api/custom-games/:kind/games/:id            詳細 (state_json + turn_user_id + status)
+//     POST /api/custom-games/:kind/games                起案 (1pt buy-in)
+//     GET  /api/custom-games/:kind/games/:id            詳細
 //     POST /api/custom-games/:kind/games/:id/join       参加 (1pt)
-//     POST /api/custom-games/:kind/games/:id/move       手を打つ (body は {new_state, finished, winner_user_id, turn_user_id})
+//     POST /api/custom-games/:kind/games/:id/move       手を打つ
 //     POST /api/custom-games/:kind/games/:id/cancel     ロビーで キャンセル
-//
-//   新しいゲームを 追加するには:
-//     1. CG_REGISTRY に 1 行追加 (kind → fee / display_name / icon / description)
-//     2. public/js/custom_games/{kind}.js を 1 ファイル作る
-//   PHP を触る必要は 上記 1 行だけ。
 
 declare(strict_types=1);
 
-const CG_REGISTRY = [
-    'tictactoe' => [
-        'display_name' => '⭕❌ マルバツ',
-        'description'  => '3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。',
-        'icon'         => '⭕',
-        'fee'          => 1,
-    ],
-    // 新しいゲーム を 追加する 場合は ここに 1 行:
-    // 'mygame' => ['display_name' => '🎲 マイゲーム', 'description' => '...', 'icon' => '🎲', 'fee' => 1],
-];
-
-function cg_kind_meta(string $kind): array {
-    if (!isset(CG_REGISTRY[$kind])) throw new ApiException('not_found', "未知のゲーム種別: $kind", 404);
-    return CG_REGISTRY[$kind];
+function cg_kind_meta(PDO $pdo, string $kind): array {
+    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee, js_module_url, is_active FROM custom_game_kinds WHERE kind=?");
+    $st->execute([$kind]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', "未知のゲーム種別: $kind", 404);
+    if (!(int)$row['is_active']) throw new ApiException('not_found', "無効化された ゲーム種別: $kind", 404);
+    $row['fee'] = (int)$row['fee'];
+    return $row;
 }
 
 function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
+    $isAdmin = ($u['role'] ?? '') === 'admin';
 
+    // GET /api/custom-games/list : 有効な kind 一覧
     if (($seg[1] ?? '') === 'list' && $method === 'GET') {
-        $items = [];
-        foreach (CG_REGISTRY as $kind => $meta) {
-            $items[] = ['kind' => $kind] + $meta;
+        $st = $pdo->query("SELECT kind, display_name, description, icon, fee, js_module_url, created_by_user_id
+                             FROM custom_game_kinds WHERE is_active=1 ORDER BY display_name");
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['fee'] = (int)$r['fee'];
+            $r['created_by_user_id'] = $r['created_by_user_id'] !== null ? (int)$r['created_by_user_id'] : null;
         }
-        json_response(['items' => $items]);
+        json_response(['items' => $rows]);
         return;
     }
+
+    // v619 kind CRUD (admin only)
+    if (($seg[1] ?? '') === 'kinds') {
+        if (!$isAdmin) throw new ApiException('forbidden', '管理者のみ', 403);
+        if (!isset($seg[2])) {
+            if ($method === 'GET')  { cg_kinds_list_all($pdo); return; }
+            if ($method === 'POST') { cg_kinds_create($pdo, $uid); return; }
+        }
+        $kind = (string)$seg[2];
+        if ($method === 'PATCH')  { cg_kinds_update($pdo, $kind); return; }
+        if ($method === 'DELETE') { cg_kinds_deactivate($pdo, $kind); return; }
+    }
+
     if (!isset($seg[1]) || !isset($seg[2])) throw new ApiException('not_found', 'no route', 404);
     $kind = (string)$seg[1];
     if ($seg[2] !== 'games') throw new ApiException('not_found', 'no route', 404);
-    $meta = cg_kind_meta($kind);
+    $meta = cg_kind_meta($pdo, $kind);
 
     if (!isset($seg[3])) {
         if ($method === 'GET')  { cg_list($pdo, $uid, $kind); return; }
@@ -69,6 +79,78 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
     if ($action === 'move'   && $method === 'POST')  { cg_move($pdo, $uid, $gid); return; }
     if ($action === 'cancel' && $method === 'POST')  { cg_cancel($pdo, $uid, $gid); return; }
     json_error('not_found', "no custom-games route", 404);
+}
+
+// ── kind CRUD (admin only) ──────────────────────────────────────
+function cg_kinds_list_all(PDO $pdo): void {
+    $st = $pdo->query("SELECT k.*, u.display_name AS created_by_name
+                         FROM custom_game_kinds k LEFT JOIN users u ON u.id = k.created_by_user_id
+                        ORDER BY k.is_active DESC, k.kind");
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['fee'] = (int)$r['fee'];
+        $r['is_active'] = (bool)$r['is_active'];
+        $r['created_by_user_id'] = $r['created_by_user_id'] !== null ? (int)$r['created_by_user_id'] : null;
+    }
+    json_response(['items' => $rows]);
+}
+
+function cg_kinds_create(PDO $pdo, int $uid): void {
+    $body = read_json_body();
+    $kind = trim((string)require_field($body, 'kind'));
+    if (!preg_match('/^[a-z][a-z0-9_-]{1,38}[a-z0-9]$/', $kind)) {
+        throw new ApiException('bad_request', 'kind は 3-40 文字、 lowercase + 数字 + _ + -', 400);
+    }
+    $name = trim((string)require_field($body, 'display_name'));
+    if (mb_strlen($name) > 80) throw new ApiException('bad_request', 'display_name は 80 文字以内', 400);
+    $desc = trim((string)require_field($body, 'description'));
+    if (mb_strlen($desc) > 500) throw new ApiException('bad_request', 'description は 500 文字以内', 400);
+    $icon = trim((string)require_field($body, 'icon'));
+    if (mb_strlen($icon) > 20) throw new ApiException('bad_request', 'icon は 20 文字以内', 400);
+    $fee = (int)($body['fee'] ?? 1);
+    if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
+    $jsUrl = trim((string)($body['js_module_url'] ?? "/js/views/{$kind}.js"));
+    if (mb_strlen($jsUrl) > 200) throw new ApiException('bad_request', 'js_module_url は 200 文字以内', 400);
+    try {
+        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, js_module_url, created_by_user_id, is_active)
+                       VALUES (?,?,?,?,?,?,?,1)")
+            ->execute([$kind, $name, $desc, $icon, $fee, $jsUrl, $uid]);
+    } catch (PDOException $e) {
+        if (str_contains($e->getMessage(), 'Duplicate')) {
+            throw new ApiException('conflict', "kind '$kind' は 既に存在", 409);
+        }
+        throw $e;
+    }
+    json_response(['ok' => true, 'kind' => $kind]);
+}
+
+function cg_kinds_update(PDO $pdo, string $kind): void {
+    $body = read_json_body();
+    $sets = []; $args = [];
+    foreach (['display_name', 'description', 'icon', 'js_module_url'] as $col) {
+        if (array_key_exists($col, $body)) {
+            $sets[] = "$col = ?";
+            $args[] = trim((string)$body[$col]);
+        }
+    }
+    if (array_key_exists('fee', $body)) {
+        $fee = (int)$body['fee'];
+        if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
+        $sets[] = 'fee = ?'; $args[] = $fee;
+    }
+    if (array_key_exists('is_active', $body)) {
+        $sets[] = 'is_active = ?'; $args[] = $body['is_active'] ? 1 : 0;
+    }
+    if (!$sets) throw new ApiException('bad_request', '更新する 内容なし', 400);
+    $args[] = $kind;
+    $pdo->prepare("UPDATE custom_game_kinds SET " . implode(',', $sets) . " WHERE kind=?")->execute($args);
+    json_response(['ok' => true]);
+}
+
+function cg_kinds_deactivate(PDO $pdo, string $kind): void {
+    // 既存卓 (custom_games) は そのまま残す。 新規起案は できなくする。
+    $pdo->prepare("UPDATE custom_game_kinds SET is_active=0 WHERE kind=?")->execute([$kind]);
+    json_response(['ok' => true]);
 }
 
 function cg_list(PDO $pdo, int $uid, string $kind): void {

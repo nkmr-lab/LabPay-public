@@ -1,13 +1,14 @@
 # 自作ゲーム フレームワーク (custom_games)
 
-LabPay に **2 人対戦のターン制ゲームを ほぼ JS だけ で 追加できる** 仕組み。 v618 で JS-only に簡素化。
+LabPay に **2 人対戦のターン制ゲームを 管理画面 + JS だけ で 追加できる** 仕組み。 v619 で DB 管理化、 PHP ソースに 手を入れる必要なし。
 
 ## 何を書くか
 
 | | 内容 | 量 |
 |---|---|---|
-| PHP | `src/handlers/custom_games.php` の `CG_REGISTRY` 辞書に 1 行 追加 (kind / 表示名 / 手数料) | 1 行 |
-| JS | `public/js/views/{kind}.js` を 1 ファイル作る (ゲームロジック + UI、 マルバツは 230 行) | 1 ファイル |
+| 管理画面 | `/#/admin/custom-games` で kind を 登録 (kind / 表示名 / 説明 / icon / fee / JS module URL) | フォーム 1 件 |
+| JS | `public/js/views/{kind}.js` を 1 ファイル 追加 (ゲームロジック + UI、 マルバツは 230 行) | 1 ファイル |
+| PHP | **触らない** | 0 行 |
 | SQL | 不要 (新規 ゲームでも `custom_games` テーブルを 共有) | 0 行 |
 
 新しい 2 人対戦ゲームを 追加するときの 修正量はこれだけ。
@@ -61,25 +62,33 @@ turn_user_id の遷移と Ledger 操作だけが PHP の役目。
 
 ## 新ゲームを 追加する 手順
 
-### 1. PHP の manifest に 1 行 追加
+### 1. 管理画面 から kind を 登録
 
-`src/handlers/custom_games.php`:
+`/#/admin/custom-games` (admin 専用) から フォーム入力:
 
-```php
-const CG_REGISTRY = [
-    'tictactoe' => [
-        'display_name' => '⭕❌ マルバツ',
-        'description'  => '3x3 のマルバツ...',
-        'icon'         => '⭕',
-        'fee'          => 1,
-    ],
-    'mygame' => [ // ← この 1 行
-        'display_name' => '🎲 マイゲーム',
-        'description'  => '...',
-        'icon'         => '🎲',
-        'fee'          => 1,
-    ],
-];
+- **kind**: URL slug (例: `mygame`)。 小文字 + 数字 + `-` `_`、 3-40 文字
+- **表示名**: 例: `🎲 マイゲーム`
+- **説明**: 1-2 文
+- **icon**: 絵文字 1 文字
+- **fee**: プレイフィー (0-100pt)
+- **JS module URL**: 任意。 デフォルトは `/js/views/{kind}.js`
+
+登録すると `custom_game_kinds` テーブルに 1 行入る。 API (`/api/custom-games/list`) に 即座に 反映。 無効化したい場合は 「無効化」 ボタン (既存卓は そのまま残る)。
+
+または API 直叩き:
+
+```bash
+curl -X POST https://pay.nkmr.io/api/custom-games/kinds \
+  -H "X-Requested-With: labpay" -H "Content-Type: application/json" \
+  -b "labpay_sid=..." \
+  -d '{
+    "kind": "mygame",
+    "display_name": "🎲 マイゲーム",
+    "description": "説明",
+    "icon": "🎲",
+    "fee": 1,
+    "js_module_url": "/js/views/mygame.js"
+  }'
 ```
 
 ### 2. JS で ゲーム本体を 書く

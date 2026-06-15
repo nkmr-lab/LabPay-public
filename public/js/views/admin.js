@@ -176,6 +176,7 @@ export async function renderAdmin() {
       <h3 style="margin:0">設定ページ</h3>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
         <a href="#/admin/sounds" class="btn">🔊 効果音の規定値</a>
+        <a href="#/admin/custom-games" class="btn">🎮 自作ゲーム kind 管理</a>
       </div>
     </div>
 
