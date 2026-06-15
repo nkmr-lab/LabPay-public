@@ -231,10 +231,14 @@ CREATE TABLE custom_games (
 
 旧モデル (v620 までの pot / payout / rake) で 残った 既存卓 は finish に到達した時点で 何も払い戻されません (waiting のまま放置されたものは cancel で OK)。 ledger types `custom_game_buyin` / `custom_game_payout` / `custom_game_refund` / `custom_game_rake` は v621 以降 emit されません (allowlist には残しています)。
 
-## サンプル: ⭕❌ マルバツ (TicTacToe)
+## サンプル
 
-実装: [public/js/views/tictactoe.js](../public/js/views/tictactoe.js) (230 行 / PHP は 0 行)
-動作: `https://pay.nkmr.io/#/tictactoe`
+| 名前 | 形態 | 場所 | 動作 |
+|---|---|---|---|
+| ⭕❌ マルバツ | ビルトイン (admin 登録、 旧 import パス) | [public/js/views/tictactoe.js](../public/js/views/tictactoe.js) (~230 行) | `https://pay.nkmr.io/#/tictactoe` |
+| 🟦 四目並べ | アップロード可能 サンプル (絶対 import パス) | [examples/custom-games/connect_four.js](../examples/custom-games/connect_four.js) (~210 行) | アップロード後 `/#/cg/connect-four` |
+
+詳細 → [examples/custom-games/README.md](../examples/custom-games/README.md)
 
 ## なぜこの構成?
 

@@ -95,7 +95,7 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | 🎯 ティア表 (tierlists) | お題 + 候補リスト で みんなで S/A/B/C/D 5 段階の ティア分け。 正方形画像を 候補ごとに 設定可能 |
 | 🏆 優勝予想 (predictions) | W 杯 / スポーツ大会 / 学会 best paper など 順位を予想 (1 位のみ / 1-2 位 / 1-4 位)。 完全的中で 山分け + 場代 5%。 起案時に通知対象 指定可。 締切後 すぐ予想公開 + ライブ カウントダウン |
 | 🎯 勝敗予測 (score-predictions) | 試合 (X 対 Y) のスコアを 当てる (例: 3-2)。 完全的中で 山分け + 場代 5%、 誰も当たらなければ 全員返金。 基本 20pt / 10-100pt 設定可 |
-| ⭕❌ マルバツ + 🎮 自作ゲーム (custom-games) | 3x3 マルバツ を サンプル に、 各ユーザが 設定 → 🎮 自作ゲーム 管理 から 自前の 2 人対戦 JS を アップロード で 登録できる framework。 JS は DB に格納 + `/api/custom-games/kinds/:kind/script.js` で 配信、 サーバの 書き込み権限不要。 課金は **場代** モデル: 両者が join 成立時に fee pt 払い、 提供者 (kind 登録者) に 90% / SYSTEM に 10% 分配。 起案 / 移動 / 終了 では 課金なし。 fee=0 で 無料ゲームも可。 詳細 → [docs/CUSTOM_GAMES.md](docs/CUSTOM_GAMES.md) |
+| ⭕❌ マルバツ + 🎮 自作ゲーム (custom-games) | 3x3 マルバツ を サンプル に、 各ユーザが 設定 → 🎮 自作ゲーム 管理 から 自前の 2 人対戦 JS を アップロード で 登録できる framework。 JS は DB に格納 + `/api/custom-games/kinds/:kind/script.js` で 配信、 サーバの 書き込み権限不要。 課金は **場代** モデル: 両者が join 成立時に fee pt 払い、 提供者 (kind 登録者) に 90% / SYSTEM に 10% 分配。 起案 / 移動 / 終了 では 課金なし。 fee=0 で 無料ゲームも可。 アップロード可能な サンプル: [examples/custom-games/connect_four.js](examples/custom-games/connect_four.js) (🟦 四目並べ)。 詳細 → [docs/CUSTOM_GAMES.md](docs/CUSTOM_GAMES.md) |
 | 🎰 ビンゴ (bingo) | 毎週 5x5 カードが 自動生成 (日曜〜土曜)、 平日 (月-金) の 行動 (ラボイン / オープナー / らぼったー投稿 / 麻雀 / オセロ / 食べある記 / 占い / 投票 等 28 種) を 自動カウント。 リーチ / BINGO 演出 + 達成早 + ライン数 で 週次 リーダーボード。 残高横に 5x5 ミニ盤 サマリ表示 |
 | ✈️ フライト応援 (flight) | 長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化 (機内・ オフライン)。 Wake Lock で 画面維持 + 1 分ごと 応援メッセージローテ |
 | 🚶 散歩モード (walk-mode) | 全画面マップ + Wake Lock + GPS 5 秒 polling で 軌跡 polyline 記録 → SNS 投稿可能 (Canvas で 1024px PNG 生成)。 ↑→↓→↑ 特殊スワイプロック。 過去軌跡 重ね合わせ表示 |
