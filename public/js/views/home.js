@@ -1739,33 +1739,40 @@ async function checkBirthday() {
   box.style.display = '';
 }
 
-// v605 残高横に 今週ビンゴ サマリを 表示 (リーチ/ビンゴ なら 強調)。 タップで /#/bingo。
+// v606 残高横に 今週ビンゴの 5x5 ミニ盤を 表示。 タップで /#/bingo へ。
+//   緑=達成、黄=リーチ、灰=未達。 BINGO 中は 外枠を 金赤グラデ で 強調。
 async function loadBingoMini() {
   const el = document.getElementById('home-bingo-mini');
   if (!el) return;
   try {
     const d = await get('/api/bingo/me');
-    // リーチ計算
     const set = new Set(d.completed);
-    let reach = 0;
+    // リーチ計算 (1 マス不足のライン)
+    const reachIdxs = new Set();
     const lines = [];
     for (let r = 0; r < 5; r++) lines.push([r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
     for (let c = 0; c < 5; c++) lines.push([c, c+5, c+10, c+15, c+20]);
     lines.push([0,6,12,18,24]); lines.push([4,8,12,16,20]);
-    for (const line of lines) if (line.filter(i => !set.has(i)).length === 1) reach++;
-    let html, style;
-    if (d.bingo_lines > 0) {
-      html = `🎉 BINGO ${d.bingo_lines}`;
-      style = 'background:linear-gradient(135deg, #fbbf24, #ef4444); color:#fff; font-weight:700; border-color:#dc2626';
-    } else if (reach > 0) {
-      html = `⚡ リーチ ${reach}`;
-      style = 'background:#fef3c7; color:#946d00; font-weight:700; border-color:#f59e0b';
-    } else {
-      html = `🎰 ${d.completed.length}/25`;
-      style = '';
+    for (const line of lines) {
+      const missing = line.filter(i => !set.has(i));
+      if (missing.length === 1) reachIdxs.add(missing[0]);
     }
-    el.innerHTML = html;
-    el.setAttribute('style', el.getAttribute('style') + '; ' + style + '; display:inline-flex');
+    const isBingo = d.bingo_lines > 0;
+    // 外枠 (BINGO 中は 金赤グラデで 強調)
+    const wrapStyle = isBingo
+      ? 'background:linear-gradient(135deg, #fbbf24, #ef4444); padding:3px; border-radius:6px; border:none'
+      : 'background:#fff; padding:3px; border:1px solid #ddd; border-radius:6px';
+    const grid = Array.from({length: 25}, (_, i) => {
+      const done = set.has(i);
+      const isReach = !done && reachIdxs.has(i);
+      const bg = done ? '#dc2626' : (isReach ? '#f59e0b' : '#e5e7eb');
+      return `<div style="width:9px; height:9px; background:${bg}; border-radius:2px"></div>`;
+    }).join('');
+    el.innerHTML = `<div style="display:grid; grid-template-columns:repeat(5, 9px); grid-template-rows:repeat(5, 9px); gap:2px">${grid}</div>`;
+    el.setAttribute('style', `display:inline-flex; align-items:center; ${wrapStyle}; text-decoration:none; color:inherit; cursor:pointer`);
+    el.title = isBingo
+      ? `🎉 BINGO ${d.bingo_lines} 本`
+      : (reachIdxs.size > 0 ? `⚡ リーチあり (達成 ${d.completed.length}/25)` : `今週のビンゴ ${d.completed.length}/25`);
   } catch (_) { el.style.display = 'none'; }
 }
 
@@ -2514,8 +2521,10 @@ function paintCheckin(status) {
   const root = document.getElementById('checkin-area');
   if (!root || !status) return;
   if (status.checked_in_today) {
+    // v606 longest_streak >= 5 (= 5 日以上 達成経験あり) なら ボーナス説明は 不要 として 省略
+    const veteran = (status.longest_streak || 0) >= 5;
     root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日ラボイン済み (+${status.points_today}pt / 連続ラボイン ${status.current_streak} 日)</div>
-      ${bonusRuleHtml(status.bonus_rule)}`;
+      ${veteran ? '' : bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
   const seenLabin = (status.longest_streak || 0) >= 1;
