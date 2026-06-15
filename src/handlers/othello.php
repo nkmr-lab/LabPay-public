@@ -11,7 +11,7 @@
 
 declare(strict_types=1);
 
-const OTHELLO_FEE = 1;
+const OTHELLO_FEE = 2;
 
 function route_othello(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);

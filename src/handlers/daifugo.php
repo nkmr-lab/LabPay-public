@@ -9,7 +9,7 @@
 //   - 1 ゲーム 1pt 預託、 1 位が pot 総取り
 declare(strict_types=1);
 
-const DAIFUGO_FEE = 1;
+const DAIFUGO_FEE = 2;
 const DAIFUGO_MAX_PLAYERS = 4;
 const DAIFUGO_MIN_PLAYERS = 2;
 

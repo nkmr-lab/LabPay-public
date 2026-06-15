@@ -25,7 +25,7 @@ export async function renderJinrou() {
         <a class="btn primary" href="#/jinrou/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。
+        4-16 人で プレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。
       </div>
     </div>
     <div id="jr-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -73,7 +73,7 @@ export async function renderJinrouNew() {
       </p>
       <label class="field">
         <span class="lbl">プレイフィー (pt 1 人あたり)</span>
-        <input type="number" id="jr-buyin" min="1" max="100" value="1">
+        <input type="number" id="jr-buyin" min="1" max="100" value="2">
       </label>
       <div style="margin-top:10px">
         <span class="lbl">招待するメンバー (任意)</span>

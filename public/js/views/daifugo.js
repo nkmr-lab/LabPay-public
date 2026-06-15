@@ -26,10 +26,10 @@ export async function renderDaifugo() {
       <div class="row center" style="gap:6px">
         <h2 style="margin:0">🃏 大富豪</h2>
         <span style="flex:1"></span>
-        <button id="df-new" class="btn primary">＋ 新規卓 (1pt)</button>
+        <button id="df-new" class="btn primary">＋ 新規卓 (2pt)</button>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        2-4 人。単出し / ペア / N枚出し。<b>1ゲーム 1pt のプレイフィー</b> (1位もポイントもらわず純粋に遊ぶ)。
+        2-4 人。単出し / ペア / N枚出し。<b>プレイフィー 2pt</b>。
         ジョーカーはワイルド (単体は最強)。<b>革命 (4枚同時出しで強弱反転)</b>・
         <b>8切り (「8」出しで場流し + 同プレイヤー再開)</b> 採用。
       </p>
@@ -81,7 +81,7 @@ async function paintDaifugo(gid) {
         <p class="hint">参加者: ${d.players.length} / 4 (2 人以上で 開始可)</p>
         ${d.players.map(p => `<div class="list-item"><div class="grow"><div class="bold">座 ${p.seat + 1}: ${escapeHtml(p.display_name)}</div></div></div>`).join('')}
         <div style="display:flex; gap:6px; margin-top:8px">
-          ${meIn ? '' : `<button id="df-join" class="btn primary">参加 (1pt)</button>`}
+          ${meIn ? '' : `<button id="df-join" class="btn primary">参加 (2pt)</button>`}
           ${isCreator && d.players.length >= 2 ? `<button id="df-start" class="btn primary">開始</button>` : ''}
           ${isCreator ? `<button id="df-cancel" class="btn" style="color:#c00">キャンセル</button>` : ''}
           <button id="df-share" class="btn" style="font-size:12px">💬 共有</button>
@@ -89,7 +89,7 @@ async function paintDaifugo(gid) {
       </div>
     `;
     document.getElementById('df-share')?.addEventListener('click', () => {
-      shareToSns(`🃏 大富豪 卓 #${gid} 募集中 (${d.players.length}/4、 1pt buy-in)`, `#/daifugo/${gid}`);
+      shareToSns(`🃏 大富豪 卓 #${gid} 募集中 (${d.players.length}/4、 プレイフィー 2pt)`, `#/daifugo/${gid}`);
     });
     document.getElementById('df-join')?.addEventListener('click', async () => {
       try { await post(`/api/daifugo/games/${gid}/join`, {}); paintDaifugo(gid); } catch (e) { toast('失敗: ' + e.message); }

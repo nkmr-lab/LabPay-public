@@ -83,23 +83,23 @@ export const APPS = [
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
-  { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は プレイフィー 1pt の 練習モード。', defaultVisible: true },
+  { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は プレイフィー 5pt の 練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)
   { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
   // v570 #223 人狼 (v574 から game カテゴリへ)
-  { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 1pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
+  { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップや スポーツ大会、 大学受験・学会 best paper など 「順位」 を予想して 参加フィー で景品を 山分け。 1位のみ / 1-2位 / 1-4位 を 起案ごとに設定可能。', defaultVisible: true },
   // v609 #235 勝敗予測 (試合のスコアを当てる)
   { id: 'score-predictions', cat: 'game', url: '#/score-predictions', title: '🎯 勝敗予測', desc: '試合のスコア (X-Y) を予想して完璧に当てた人が pot 総取り (山分け、 場代5%)。誰も当たらなければ全員返金。基本20pt、 10-100pt 設定可。', defaultVisible: true },
   // v587 地雷オセロ
-  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。プレイフィー 1pt。', defaultVisible: true },
+  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。プレイフィー 2pt。', defaultVisible: true },
   // v617 #236 マルバツ (自作ゲーム フレームワーク サンプル)
   { id: 'tictactoe',     cat: 'game',   url: '#/tictactoe',      title: '⭕❌ マルバツ',      desc: '3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。 プレイフィー 1pt。 自作ゲームの サンプル実装 (docs/CUSTOM_GAMES.md 参照)。', defaultVisible: true },
   // v588 ビンゴ (週次)
   { id: 'bingo',         cat: 'game',   url: '#/bingo',          title: '🎰 ビンゴ',          desc: '毎週 5x5 ビンゴカードが 自動生成。 平日の 行動 (ラボイン/らぼったー投稿/麻雀/オセロ/食べある記 など) が 自動カウント。 達成早 + ライン数 で 週次 リーダーボード。', defaultVisible: true },
   // v590 大富豪 (シンプル MVP)
-  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。単出し / ペア / N枚出しで同枚数 + 強い数字を出す。ジョーカーワイルド + 革命 + 8切り。プレイフィー 1pt。', defaultVisible: true },
+  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。単出し / ペア / N枚出しで同枚数 + 強い数字を出す。ジョーカーワイルド + 革命 + 8切り。プレイフィー 2pt。', defaultVisible: true },
   { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
   { id: 'places',        cat: 'game',   url: '#/places',       title: '🍴 食べある記',      desc: 'お店情報 (住所 / 緯度経度 / 紹介文) をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー + tabelog URLから自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },

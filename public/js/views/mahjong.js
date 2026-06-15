@@ -24,7 +24,7 @@ export async function renderMahjong() {
     <div id="mj-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
   document.getElementById('mj-ai').addEventListener('click', async () => {
-    if (!confirm('AI 3 体と 練習対戦 を 始めますか? (ポイント授受なし)')) return;
+    if (!confirm('AI 3 体と 練習対戦 を 始めますか? (プレイフィー 5pt)')) return;
     const btn = document.getElementById('mj-ai');
     btn.disabled = true; btn.textContent = '起動中…';
     try {

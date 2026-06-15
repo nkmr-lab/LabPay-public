@@ -49,8 +49,8 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は 練習モード化。
-//   エントリーフィー 1pt (v622 から、 払い出し 0 = 純粋な練習料金)。
-const MAHJONG_AI_BUYIN = 1;
+//   エントリーフィー 5pt (v624 から、 払い出し 0 = 純粋な練習料金)。
+const MAHJONG_AI_BUYIN = 5;
 
 // v557 POST /api/mahjong/ai/new — AI 3 体相手の対戦卓を作成 + 即開始 (練習モード)
 function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {

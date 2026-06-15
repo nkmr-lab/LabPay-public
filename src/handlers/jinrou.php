@@ -5,7 +5,7 @@
 
 declare(strict_types=1);
 
-const JINROU_DEFAULT_BUYIN = 1;
+const JINROU_DEFAULT_BUYIN = 2;
 
 function route_jinrou(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
