@@ -37,13 +37,25 @@ const GAMES = [
   { id: 'daifugo',   icon: '🃏', name: '大富豪',      url: '#/daifugo',
     desc: '2-4 人、 単出し / ペア / N 枚 出し。 1 位 が pot 総取り (シンプル ルール)',
     badge: 'プレイ料 1pt' },
+  // v603 娯楽カテゴリへ追加 (apps cat='game' と同期)
+  { id: 'sns',       icon: '💬', name: 'らぼったー',  url: '#/sns',
+    desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + リアクション)。フォローなし、全員見える',
+    badge: '無料' },
+  { id: 'places',    icon: '🍴', name: '食べある記',  url: '#/places',
+    desc: 'お店情報をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー',
+    badge: '無料' },
+  { id: 'flight',    icon: '✈️', name: 'フライト応援', url: '#/flight',
+    desc: '長いフライトの進捗 (%) / 残り時間を大きく可視化。完全オフライン',
+    badge: '無料' },
 ];
 
 const CATEGORIES = [
-  { key: 'gamble',  label: '⚔️ 対戦' },
-  { key: 'predict', label: '🏆 予想 / 当て物' },
-  { key: 'party',   label: '🎉 パーティー' },
-  { key: 'collect', label: '🗺 集める / 制覇する' },
+  { key: 'gamble',    label: '⚔️ 対戦' },
+  { key: 'predict',   label: '🏆 予想 / 当て物' },
+  { key: 'party',     label: '🎉 パーティー' },
+  { key: 'collect',   label: '🗺 集める / 制覇する' },
+  { key: 'community', label: '💬 みんなで共有' }, // v603
+  { key: 'solo',      label: '✈️ ひとり遊び' },   // v603
 ];
 
 const GAME_CATEGORY = {
@@ -58,6 +70,9 @@ const GAME_CATEGORY = {
   tierlists:     'collect', // v600 #229 ティア表は 集める/制覇カテゴリへ (好きな物を分類する系)
   regions:       'collect',
   playlists:     'collect', // v600 #230 プレイリストは 集める/制覇 (音楽コレクション)
+  sns:           'community', // v603
+  places:        'community', // v603
+  flight:        'solo',      // v603
 };
 
 export function renderGames() {

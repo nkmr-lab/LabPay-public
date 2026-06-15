@@ -13,6 +13,7 @@ import { escapeHtml } from '../router.js';
 export const APP_CATEGORIES = [
   { id: 'research',  label: '🔬 研究用',                  hint: '査読・原稿チェック・締切・タイマー・順番決め・学会情報・グループなど、研究活動で日常的に使うもの。' },
   { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: '投票・点呼・待ち合わせ・割り勘・集金・くじ引きなど、ラボの運営や合意形成で使うもの。' },
+  { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。販売・購入・オークション。' },
   { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知を出すジャンル。' },
   { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
   { id: 'tool',      label: '🟢 その場で結論が出る道具',   hint: '結果は画面内で完結。通知は出さない。' },
@@ -23,6 +24,9 @@ export const APP_CATEGORIES = [
 ];
 
 export const APPS = [
+  // 💴 売買 (v602)
+  { id: 'sell',          cat: 'trade',    url: '#/sell',          title: '🏷 販売',            desc: 'ラボ内に商品を出品。 JAN コード対応、 在庫管理、 ピン留めセール可。', defaultVisible: true },
+  { id: 'buy',           cat: 'trade',    url: '#/buy',           title: '🛒 購入',            desc: 'ラボ内の商品一覧から購入。 出品者・在庫・写真・口コミ付き。', defaultVisible: true },
   // 🔴 urgent — 締切・応答が要る (通知 出す)
   { id: 'rollcalls',     cat: 'lab-mgmt', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる?」「起きてる?」 をワンタップで集める。締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
@@ -30,7 +34,7 @@ export const APPS = [
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
   { id: 'deadlines',     cat: 'research', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'research', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
-  { id: 'auctions',      cat: 'urgent', url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。 締切時刻に 最高額入札者が落札。 落札後は 出品者が 「請求を飛ばす」 ボタンから 請求機能で 集金 (連絡先は ラボ内 既知 前提なので 表示しない)。', defaultVisible: true },
+  { id: 'auctions',      cat: 'trade',  url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。締切時刻に最高額入札者が落札。落札後は出品者が 「請求を飛ばす」 ボタンから請求機能で集金 (連絡先はラボ内既知前提なので表示しない)。', defaultVisible: true },
   { id: 'nomikai',       cat: 'lab-mgmt', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
 
   // 🟡 inform — 全員に届くお知らせ
@@ -75,7 +79,7 @@ export const APPS = [
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
   { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック (5pt)。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を一通り見ます。論文ほど厳密ではない軽量版。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
-  { id: 'flight',        cat: 'tool',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化。 完全オフラインで動作。 画面 自動ON 維持。 機内で 退屈 しのぎ に。', defaultVisible: true },
+  { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
   { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて 本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で 自動分配。 AI 対戦は ポイント授受なし の 練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)
@@ -91,8 +95,8 @@ export const APPS = [
   // v590 大富豪 (シンプル MVP)
   { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。 単出し / ペア / N 枚 出し で 同枚数 + 強い数字 を 出す。 ジョーカー ワイルド。 1pt buy-in、 1 位が pot 総取り。 革命 / 縛り は省略 (MVP)。', defaultVisible: true },
   { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
-  { id: 'places',        cat: 'archive', url: '#/places',       title: '🍴 食べある記',      desc: 'お店 情報 (住所 / 緯度経度 / 紹介文) を ラボメンバー で 共有。 口コミ・写真・⭐評価 + 地図ビュー + tabelog URL から 自動取得。', defaultVisible: true },
-  { id: 'sns',           cat: 'inform',  url: '#/sns',          title: '💬 らぼったー',       desc: 'シンプル な つぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。 フォロー なし — 全員 の 投稿 が 見える。', defaultVisible: true },
+  { id: 'places',        cat: 'game',   url: '#/places',       title: '🍴 食べある記',      desc: 'お店情報 (住所 / 緯度経度 / 紹介文) をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー + tabelog URLから自動取得。', defaultVisible: true },
+  { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
