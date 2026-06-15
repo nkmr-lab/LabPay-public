@@ -78,6 +78,8 @@ export const APPS = [
   { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
   { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック (5pt)。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を一通り見ます。論文ほど厳密ではない軽量版。', defaultVisible: true },
+  // v613 文字数・単語数リライター
+  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (1pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを 色付きdiff で表示。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
@@ -112,7 +114,8 @@ export function setAppVisible(_id, _visible) {}
 //   ここに 含まれない id は ソース宣言順 で末尾に。
 const CATEGORY_ORDER = {
   research: [
-    'paper-review', 'resume-check', 'timers', 'stopwatches',
+    'paper-review', 'resume-check', 'rewriter',
+    'timers', 'stopwatches',
     'orderings', 'random-groups', 'groups', 'deadlines', 'notices',
   ],
 };

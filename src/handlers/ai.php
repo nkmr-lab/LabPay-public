@@ -71,7 +71,223 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_resume_check_get($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v613 文字数 / 単語数制限 リライター
+    if ($sub === 'rewriter' && $method === 'POST' && !isset($seg[2])) {
+        ai_rewriter_run($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'rewriter' && $method === 'GET' && !isset($seg[2])) {
+        ai_rewriter_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'rewriter' && $method === 'GET' && isset($seg[2])) {
+        ai_rewriter_get($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+const REWRITER_COST = 1;
+const REWRITER_MAX_INPUT = 10000;
+const REWRITER_MAX_ITER  = 3;
+
+// 文字数 (スペースあり / なし) と 単語数を サーバ側で 正確にカウント
+function ai_count_text(string $s): array {
+    $sNoSpace = preg_replace('/\s+/u', '', $s) ?? '';
+    $cWithSpace = mb_strlen($s);
+    $cNoSpace   = mb_strlen($sNoSpace);
+    // 単語数: 連続する 非空白 を 1 単語 とカウント (英語向け、 日本語は意味なし)
+    $words = 0;
+    if (preg_match_all('/\S+/u', $s, $m)) $words = count($m[0]);
+    return [
+        'chars_with_space' => $cWithSpace,
+        'chars_no_space'   => $cNoSpace,
+        'words'            => $words,
+    ];
+}
+
+function ai_detect_lang(string $s): string {
+    // 日本語文字 (ひら/カナ/漢字) があれば 'ja'、 それ以外 = 'en'
+    return preg_match('/[\x{3040}-\x{30FF}\x{4E00}-\x{9FFF}]/u', $s) ? 'ja' : 'en';
+}
+
+function ai_rewriter_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, target_mode, target_count, status, iterations, detected_lang,
+                                rewritten_chars_with_space, rewritten_chars_no_space, rewritten_words,
+                                created_at, finished_at, LEFT(source_text, 80) AS source_head
+                           FROM rewriter_tasks WHERE user_id = ? ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['id'] = (int)$r['id'];
+        $r['target_count'] = (int)$r['target_count'];
+        $r['iterations'] = (int)$r['iterations'];
+    }
+    unset($r);
+    json_response(['items' => $rows]);
+}
+
+function ai_rewriter_get(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT * FROM rewriter_tasks WHERE id = ? AND user_id = ?");
+    $st->execute([$id, $uid]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    foreach (['id','target_count','iterations','source_chars_with_space','source_chars_no_space','source_words',
+              'rewritten_chars_with_space','rewritten_chars_no_space','rewritten_words','cost_points'] as $k) {
+        if ($r[$k] !== null) $r[$k] = (int)$r[$k];
+    }
+    json_response($r);
+}
+
+function ai_rewriter_run(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+
+    $body = read_json_body();
+    $text = trim((string)require_field($body, 'text'));
+    $mode = (string)require_field($body, 'mode');
+    if (!in_array($mode, ['chars_no_space','chars_with_space','words'], true)) {
+        throw new ApiException('bad_request', 'mode は chars_no_space / chars_with_space / words', 400);
+    }
+    $target = (int)require_field($body, 'target');
+    if ($target < 10 || $target > 5000) throw new ApiException('bad_request', 'target は 10-5000', 400);
+    if (mb_strlen($text) < 20) throw new ApiException('bad_request', '原稿が短すぎ (20文字以上)', 400);
+    if (mb_strlen($text) > REWRITER_MAX_INPUT) throw new ApiException('bad_request', '原稿が長すぎ (上限 ' . REWRITER_MAX_INPUT . ' 文字)', 400);
+
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < REWRITER_COST) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %d、現在 %d)', REWRITER_COST, $bal), 400);
+    }
+
+    $lang = ai_detect_lang($text);
+    $srcCount = ai_count_text($text);
+
+    // pending 記録 + 課金
+    $taskId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $text, $mode, $target, $lang, $srcCount, &$taskId) {
+        $pdo->prepare("INSERT INTO rewriter_tasks
+            (user_id, source_text, target_mode, target_count, detected_lang,
+             source_chars_with_space, source_chars_no_space, source_words,
+             cost_points, status)
+            VALUES (?,?,?,?,?,?,?,?,?,'processing')")
+            ->execute([
+                $uid, $text, $mode, $target, $lang,
+                $srcCount['chars_with_space'], $srcCount['chars_no_space'], $srcCount['words'],
+                REWRITER_COST,
+            ]);
+        $taskId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, REWRITER_COST, 'rewriter', 'rewriter', $taskId, 'リライター 依頼料');
+    });
+
+    // 同期で OpenAI を呼ぶ (最大 REWRITER_MAX_ITER 回 リトライ)
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $model  = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+    try {
+        $modeLabel = [
+            'chars_no_space'   => 'スペースなし' . $target . '文字',
+            'chars_with_space' => 'スペース込み' . $target . '文字',
+            'words'            => $target . '単語',
+        ][$mode];
+        $sys = "あなたは学術原稿のリライト担当者です。アブストラクト / リバッタル / 概要のような短い文書を、指定された文字数 / 単語数制限以内に書き直してください。論旨と専門性を損なわないよう、語彙の選択や冗長表現の削減で対応してください。出力は書き直した本文のみ、説明や見出しは入れない。";
+        $rewritten = '';
+        $iter = 0;
+        $lastCount = null;
+        for ($i = 0; $i < REWRITER_MAX_ITER; $i++) {
+            $iter++;
+            $extra = '';
+            if ($i > 0 && $lastCount !== null) {
+                $overBy = $lastCount - $target;
+                $extra = "\n\n前回の試みは {$lastCount} で、目標 {$target} を {$overBy} 超過していました。さらに削減してください。";
+            }
+            $userPrompt = "以下の原稿を **{$modeLabel} 以内** に書き直してください。{$extra}\n\n----- 原稿 -----\n{$text}\n----- /原稿 -----\n\n出力は書き直した文章のみ。";
+            $payload = json_encode([
+                'model' => $model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $sys],
+                    ['role' => 'user',   'content' => $userPrompt],
+                ],
+                'temperature' => 0.4,
+                'max_tokens' => 2000,
+            ], JSON_UNESCAPED_UNICODE);
+            $resp = ai_openai_call($payload, $apiKey);
+            $rewritten = trim((string)($resp['choices'][0]['message']['content'] ?? ''));
+            if ($rewritten === '') throw new RuntimeException('OpenAI 応答が空');
+            $cnt = ai_count_text($rewritten);
+            $lastCount = $cnt[$mode];
+            if ($lastCount <= $target) break;
+        }
+        $rwCount = ai_count_text($rewritten);
+
+        // 英文なら 和訳 (原文 + 書き直し)
+        $srcTrans = null; $rwTrans = null;
+        if ($lang === 'en') {
+            $srcTrans = ai_translate_to_jp($text, $apiKey, $model);
+            $rwTrans  = ai_translate_to_jp($rewritten, $apiKey, $model);
+        }
+
+        $pdo->prepare("UPDATE rewriter_tasks SET
+            rewritten_text=?, rewritten_chars_with_space=?, rewritten_chars_no_space=?, rewritten_words=?,
+            source_translation=?, rewritten_translation=?,
+            iterations=?, status='done', finished_at=NOW()
+            WHERE id=?")
+            ->execute([
+                $rewritten,
+                $rwCount['chars_with_space'], $rwCount['chars_no_space'], $rwCount['words'],
+                $srcTrans, $rwTrans,
+                $iter, $taskId,
+            ]);
+    } catch (Throwable $e) {
+        try {
+            $pdo->prepare("UPDATE rewriter_tasks SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
+                ->execute([mb_substr($e->getMessage(), 0, 500), $taskId]);
+            // 失敗なら 返金
+            Ledger::transfer($pdo, 1, $uid, REWRITER_COST, 'refund', 'rewriter', $taskId, 'リライター 失敗返金');
+        } catch (Throwable $_) {}
+        throw new ApiException('server_error', 'リライト失敗: ' . $e->getMessage(), 500);
+    }
+    ai_rewriter_get($pdo, $cfg, $taskId);
+}
+
+function ai_openai_call(string $payload, string $apiKey): array {
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_TIMEOUT        => 120,
+    ]);
+    $resp = curl_exec($ch);
+    $err  = curl_error($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false) throw new RuntimeException("OpenAI curl 失敗: $err");
+    if ($code !== 200) throw new RuntimeException("OpenAI HTTP $code: " . substr($resp, 0, 300));
+    $data = json_decode($resp, true);
+    if (!is_array($data)) throw new RuntimeException('OpenAI 応答 parse 失敗');
+    return $data;
+}
+
+function ai_translate_to_jp(string $text, string $apiKey, string $model): string {
+    $payload = json_encode([
+        'model' => $model,
+        'messages' => [
+            ['role' => 'system', 'content' => 'あなたは学術文書の翻訳者です。専門用語を保ちつつ自然な日本語に訳してください。出力は和訳のみ。'],
+            ['role' => 'user',   'content' => $text],
+        ],
+        'temperature' => 0.3,
+        'max_tokens' => 2500,
+    ], JSON_UNESCAPED_UNICODE);
+    $r = ai_openai_call($payload, $apiKey);
+    return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
 const RESUME_CHECK_COST = 5;

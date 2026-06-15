@@ -18,6 +18,8 @@ class Ledger {
         'othello_buyin','othello_payout','othello_refund',
         // v590 大富豪
         'daifugo_buyin','daifugo_payout','daifugo_refund',
+        // v613 リライター (文字数 / 単語数制限)
+        'rewriter',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

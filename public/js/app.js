@@ -551,6 +551,9 @@ route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'rende
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
 route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));
+// v613 文字数・単語数リライター
+route('/rewriter/:id',      lazy(() => import('./views/rewriter.js'), 'renderRewriterDetail'));
+route('/rewriter',          lazy(() => import('./views/rewriter.js'), 'renderRewriter'));
 // v586 フライト応援 (オフライン)
 route('/flight',            lazy(() => import('./views/flight.js'), 'renderFlight'));
 // v587 地雷オセロ
