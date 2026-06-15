@@ -219,7 +219,7 @@ export const HOME_CARDS = [
 const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
-  'bingo', // v600 #232 ビンゴ ウィジェット を デフォルト ON
+  // v605 ビンゴ ウィジェットは 残高横の サマリで 代替できるので デフォルト OFF に戻す
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -236,8 +236,8 @@ const DEFAULT_ORDER = [
 // v592b 新規追加の カード (= ユーザの 保存 order に 含まれない 未知 ID) が
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
-const NEW_DEFAULT_HIDDEN = ['weather']; // v585 で 追加 / v592b 以降 デフォルト OFF を 強制
-const NEW_DEFAULT_SHOWN  = ['bingo'];   // v600 #232 既存ユーザにも ON を 強制
+const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
+const NEW_DEFAULT_SHOWN  = [];
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -355,11 +355,16 @@ export async function renderHome() {
       <!-- v527 #168 ポイントの上に 現地時刻 (年月日 + 曜日 + 時分秒)。 定期的に
            日 / 時 / 分 / 秒 のどれか 1 つが 2 倍フォントサイズに切り替わる演出。 -->
       <div id="home-clock" style="text-align:center; font-variant-numeric:tabular-nums; font-family:system-ui, -apple-system, sans-serif; margin-bottom:6px; line-height:1.2; color:#4a106d; ${isBalanceCompVisible('clock') ? '' : 'display:none'}"></div>
-      <a href="#/history" class="balance-line" id="home-balance-link"
-         style="display:${isBalanceCompVisible('points') ? 'block' : 'none'}; text-decoration:none; color:inherit; cursor:pointer">
-        <span class="lbl">残高</span>
-        <span class="num" id="home-balance">— pt</span>
-      </a>
+      <div style="display:${isBalanceCompVisible('points') ? 'flex' : 'none'}; align-items:center; gap:10px; justify-content:center; flex-wrap:wrap">
+        <a href="#/history" class="balance-line" id="home-balance-link"
+           style="text-decoration:none; color:inherit; cursor:pointer">
+          <span class="lbl">残高</span>
+          <span class="num" id="home-balance">— pt</span>
+        </a>
+        <!-- v605 ビンゴ サマリ。 タップで /#/bingo 詳細へ。 データ無いときは 非表示。 -->
+        <a id="home-bingo-mini" href="#/bingo"
+           style="display:none; text-decoration:none; color:inherit; padding:6px 10px; background:#fafafa; border:1px solid #ddd; border-radius:8px; font-size:13px; line-height:1.2"></a>
+      </div>
       <div class="muted" id="streak-line" style="${isBalanceCompVisible('streak') ? '' : 'display:none'}">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績" style="${isBalanceCompVisible('medals') ? '' : 'display:none'}"></a>
       <!-- v584 1 日 1 回 占い → v592 アイコン ボタン から 表示。 普段は 非表示。 -->
@@ -597,6 +602,7 @@ export async function renderHome() {
     timed('checkin', () => renderCheckinArea()),
     timed('medals',  () => renderMedalsStrip()),
     timed('birthday', () => checkBirthday()),
+    timed('bingomini', () => loadBingoMini()),
     // v592 占いは ボタンで 任意 表示 (普段は 非表示)
   ]);
   const cardPromises = cardsToRender
@@ -1731,6 +1737,36 @@ async function checkBirthday() {
   }
   msg.textContent = suffix;
   box.style.display = '';
+}
+
+// v605 残高横に 今週ビンゴ サマリを 表示 (リーチ/ビンゴ なら 強調)。 タップで /#/bingo。
+async function loadBingoMini() {
+  const el = document.getElementById('home-bingo-mini');
+  if (!el) return;
+  try {
+    const d = await get('/api/bingo/me');
+    // リーチ計算
+    const set = new Set(d.completed);
+    let reach = 0;
+    const lines = [];
+    for (let r = 0; r < 5; r++) lines.push([r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
+    for (let c = 0; c < 5; c++) lines.push([c, c+5, c+10, c+15, c+20]);
+    lines.push([0,6,12,18,24]); lines.push([4,8,12,16,20]);
+    for (const line of lines) if (line.filter(i => !set.has(i)).length === 1) reach++;
+    let html, style;
+    if (d.bingo_lines > 0) {
+      html = `🎉 BINGO ${d.bingo_lines}`;
+      style = 'background:linear-gradient(135deg, #fbbf24, #ef4444); color:#fff; font-weight:700; border-color:#dc2626';
+    } else if (reach > 0) {
+      html = `⚡ リーチ ${reach}`;
+      style = 'background:#fef3c7; color:#946d00; font-weight:700; border-color:#f59e0b';
+    } else {
+      html = `🎰 ${d.completed.length}/25`;
+      style = '';
+    }
+    el.innerHTML = html;
+    el.setAttribute('style', el.getAttribute('style') + '; ' + style + '; display:inline-flex');
+  } catch (_) { el.style.display = 'none'; }
 }
 
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
