@@ -49,6 +49,16 @@ LabPay は学内ポイントの台帳・タスク市場・在室データを持�
 - **ポイント流通の可視化** — `/api/me/transactions` を全員分集めて (admin 権限が必要) ネットワーク可視化を再実装
 - **タスク完了率 vs 報酬金額** — `/api/tasks` の履歴から「いくら積めば人が動くか」を回帰
 
+### 「予測・予想」系 (v576+)
+- **試合結果アラート bot** — `/api/predictions/games` / `/api/score_predictions/games` の締切前に Slack へ「未予想だよ」リマインド
+- **的中率ランキング** — 過去の `predictions_entries` / `score_pred_entries` を user 別に集計して「的中職人」 を月次表彰
+- **W 杯 / オリンピック 自動起案** — sports API と連携して各日の試合を `score_predictions` に自動投入
+
+### 「研究支援」系 (v550+)
+- **査読依頼 bot** — Slack コマンド `/review <URL>` で `/api/ai/paper_review` (10pt) / `/api/ai/resume_check` (5pt) を kick
+- **アブスト字数 警告** — Scrapbox の新規ノート保存時に `/api/ai/rewriter` で字数チェック、 超過なら警告
+- **学会情報の自動集約** — `/api/notices` カテゴリ `conference` を RSS / API に流す
+
 ---
 
 ## API の基本

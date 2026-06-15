@@ -445,6 +445,66 @@ Content-Type: multipart/form-data
 |---|---|---|
 | GET | `/api/users/{id}/profile` | 公開プロフィール (display_name / avatar / grade / hobbies / favorites / scrapbox_username) |
 
+### 食べある記 / らぼったー / プレイリスト / 制覇マップ / 体重BMI / 筋トレ / 散歩
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / PATCH / DELETE | `/api/places(/...)` | 🍴 お店の共有、 ⭐評価 / 👣 行った / ❤️ いいね / 口コミ + 画像 / カテゴリ |
+| GET / POST / PATCH / DELETE | `/api/posts(/...)` | 💬 らぼったー (テキスト + 画像 + 位置 + @メンション + 返信 + 👍❤⭐ リアクション) |
+| GET / POST / PATCH / DELETE | `/api/playlists(/...)` | 🎵 プレイリスト (YouTube/Spotify URL + ⭐評価) |
+| GET / POST / DELETE | `/api/regions/visit` / `visited` / `stats` | 🗺 行った国・都道府県 (ISO 3166-1 + JP-NN) |
+| GET / POST / DELETE | `/api/health(/...)` | ⚖️ 体重 / 身長 / BMI (個人時系列) |
+| GET / POST / DELETE | `/api/workouts(/...)` | 💪 筋トレ + `/friends` で 仲間の様子 |
+| GET / POST | `/api/walk/suggestions` `/walk/sessions(/...)` | 🚶 散歩おすすめ + 軌跡 GPS 記録 |
+
+### ゲーム系: 麻雀 / ito / 人狼 / 大富豪 / 地雷オセロ / 絵しりとり / ティア表
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/mahjong/(games(/...)|sim|ai/new)` | 🀄 麻雀 賭けプール + 実ゲーム (門前/鳴き/役判定/連荘/半荘) + AI 対戦 (練習モード) |
+| GET / POST | `/api/ito/games(/...)` | 🎲 ito 協力 (1-100 の数字 + お題で表現) |
+| GET / POST | `/api/jinrou/games(/...)` | 🐺 人狼 役職配布 / 夜 (襲撃・占い・護衛) / 昼 (投票で追放) |
+| GET / POST | `/api/daifugo/games(/...)` | 🃏 大富豪 (革命 + 8 切り + ジョーカー)、 プレイフィー 1pt |
+| GET / POST | `/api/othello/games(/...)` | 💣 地雷オセロ、 各自 1 地雷 (3x3 反転)、 プレイフィー 1pt |
+| GET / POST | `/api/shiritori/games(/...)` | 🎨 絵しりとり (時間制限つき キャンバス + ストローク記録) |
+| GET / POST / PUT | `/api/tierlists(/...)` | 🎯 ティア表 S/A/B/C/D 振り分け (5 段階) |
+| GET / POST | `/api/bingo/(me|leaderboard|history|week/{date})` | 🎰 週次 5x5 ビンゴ (平日行動 自動判定) |
+
+### 予測系: 優勝予想 / 勝敗予測
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/predictions/games(/...)` | 🏆 順位予想 (1位のみ / 1-2位 / 1-4位)。 完全的中で 山分け + 場代 5% |
+| POST | `/api/predictions/games/{id}/predict` `/close` `/finalize` `/cancel` | 予想 / 締切 / 結果開示 / キャンセル |
+| GET / POST | `/api/score_predictions/games(/...)` | 🎯 スコア予想 (例: 3-2)。 完全的中で 山分け + 場代 5% |
+
+### AI 系: 論文査読 / 原稿チェック / リライター / 翻訳 / チャット
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST (multipart) | `/api/ai/paper_review` | 📄 論文査読 PDF (10pt)、 OpenAI Files API + chat.completions、 非同期 + share_token |
+| GET / PUT | `/api/ai/paper_review/(settings|r/{token})` | プロンプト編集 + 共有 URL |
+| POST (multipart or JSON) | `/api/ai/resume_check` | 📝 短原稿チェック (5pt、 PDF 必須 v612〜)。 6項目スコア + リライト案 |
+| GET / POST | `/api/ai/rewriter(/{id})` | ✂️ 文字数 / 単語数 制限リライター (1pt)。 サーバ側カウント + 最大 3 回 再依頼 |
+| POST | `/api/ai/short_title` | タイトル AI 命名 |
+| (chat / translate / help は フロント直で OpenAI 呼出、 履歴は別 API) | | |
+
+### 1 日 1 回 占い / 誕生日 / フィードバック
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/fortune/today` | 🔮 今日の運勢 (30 種、 user × date で 一意) |
+| GET / PATCH | `/api/me` (`birthday_md` / `birthday_year`) | 🎂 誕生日 (MM-DD + 西暦任意) |
+| GET / POST / PATCH | `/api/feedback(/...)` | バグ報告 / 機能要望、 claude_status workflow、 admin 返信 + Slack 通知 |
+
+### 順番決め / ランダムグループ / どこ行く ルーレット
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/orderings(/...)` | 📋 順番決め (CSPRNG + 演出 + コピー機能) |
+| POST | `/api/random-groups/notify` | 🎲 ランダムグループ → 分けた瞬間に 全員通知 |
+| (`text-roulette` は サーバ未保存、 端末内ツール) | | |
+
 ---
 
 ## サンプル: Python から購入
