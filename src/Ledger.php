@@ -20,8 +20,10 @@ class Ledger {
         'daifugo_buyin','daifugo_payout','daifugo_refund',
         // v613 リライター (文字数 / 単語数制限)
         'rewriter',
-        // v617 自作ゲーム フレームワーク (v620 場代 rake 追加)
+        // v617 自作ゲーム フレームワーク (v621 場代 = play_fee に 簡素化、 90% 提供者 / 10% SYSTEM)
+        //   buyin/payout/refund/rake は 互換 のため allowlist に残すが v621 以降は emit しない
         'custom_game_buyin','custom_game_payout','custom_game_refund','custom_game_rake',
+        'custom_game_play_fee',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

@@ -1,6 +1,6 @@
 # 自作ゲーム フレームワーク (custom_games)
 
-LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で 追加できる** 仕組み。 v619 で DB 管理化、 v620 で **各ユーザが 設定 → 自作ゲーム から 自由に登録** + **JS ファイル を DB に アップロード** (サーバの 書き込み権限 不要) + **場代 (provider_share_pct%) を 提供者 へ** 渡せるように。
+LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で 追加できる** 仕組み。 v619 で DB 管理化、 v620 で 各ユーザが 自由に登録 + JS を DB に アップロード可能に。 v621 で 課金モデルを **場代 (= プレイ毎の 課金、 90% 提供者 / 10% SYSTEM)** に 簡素化。 掛け金 / pot / 勝者 payout は 廃止。
 
 ## 何を書くか
 
@@ -55,9 +55,9 @@ turn_user_id の遷移と Ledger 操作だけが PHP の役目。
 1pt 程度の低額対戦 を 想定:
 
 - **手番 enforce**: サーバが `turn_user_id == 現在のアクター` を チェック。 違ったら 400
-- **勝者の妥当性**: クライアントが `winner_user_id` を 申告。 サーバは creator/opponent のどちらかであることを チェック
+- **勝者の妥当性**: クライアントが `winner_user_id` を 申告。 サーバは creator/opponent のどちらかであることを チェック (= 集計のための メモ、 課金には 関与しない)
 - **state の整合性**: クライアント任せ。 「対戦相手の クライアントも 同じ JS ロジックで 動いている」 ので 不正な遷移は 相手の画面で 即破綻する
-- **金銭的 上限**: 1pt buy-in × 2 = 2pt pot。 上限は CG_REGISTRY で 制御 (fee = 1)
+- **金銭的 上限**: 1 ゲームあたり 各プレイヤー fee pt の 1 回ぽっきり。 提供者は fee×0.9 / SYSTEM は fee×0.1 (round down)
 
 高額にしたい場合は ゲーム固有の サーバ側 validation (例: PHP で `applyMove` も書く) を 追加できますが、 マルバツ程度 なら 上記で OK です。
 
@@ -71,8 +71,7 @@ turn_user_id の遷移と Ledger 操作だけが PHP の役目。
 - **表示名**: 例: `🎲 マイゲーム`
 - **説明**: 1-2 文
 - **icon**: 絵文字 1 文字
-- **fee**: プレイフィー (0-100pt)、 各プレイヤーが 卓に 預ける 額
-- **場代 (provider_share_pct)**: 0-50 (%)、 pot のうち 提供者 (= あなた) に 入る 割合
+- **fee (場代)**: プレイ毎の 課金 (0-100pt)。 0 なら 無料。 各プレイヤーが 払う
 - **JS ファイル**: ローカルで 書いた `.js` を そのまま アップロード (最大 500KB)
 
 登録すると `custom_game_kinds` テーブルに 1 行 入り、 JS は そのまま DB の `js_source` カラムに 格納される。 サーバの ファイル書き込み権限 は 必要なし。 配信は `/api/custom-games/kinds/:kind/script.js` (no-cache、 更新が 即時反映)。
@@ -91,7 +90,6 @@ curl -X POST https://pay.nkmr.io/api/custom-games/kinds \
     "description": "説明",
     "icon": "🎲",
     "fee": 1,
-    "provider_share_pct": 5,
     "js_source": "import { get, post } from \"../api.js\"; ... (JS 全文)"
   }'
 ```
@@ -220,15 +218,17 @@ CREATE TABLE custom_games (
 
 ゲーム固有 の テーブル を 持ちたい場合 (履歴ログ等) は migration を 追加して OK。 基本は `state_json` だけ で 足りる。
 
-## 課金フロー
+## 課金フロー (v621 〜)
 
-- 起案者: 卓を作る時に `fee` pt を 預ける (`custom_game_buyin`)
-- 参加者: `join` で 同額を 預ける (`custom_game_buyin`)
-- 終了時:
-  - 勝者あり → **場代 rake** (`custom_game_rake`) を 提供者 (kind 登録者) に 渡し、 残りを 勝者へ (`custom_game_payout`)
-    - rake = `floor(pot * provider_share_pct / 100)` (provider が `NULL` or `share=0` なら rake なし)
-  - 引分 → 双方 半額 返金 (`custom_game_refund`、 場代 rake なし)
-- ロビーで キャンセル → 起案者に 返金 (`custom_game_refund`)
+- 起案 (`create`): **課金なし**。 waiting で 誰も 来なければ ノーリスク
+- 参加 (`join`) で 卓 が 成立 → 起案者 + 参加者 から `fee` pt ずつ 徴収:
+  - **提供者 (kind 登録者) に `floor(fee * 0.9)`** (`custom_game_play_fee`、 to_user = provider)
+  - **SYSTEM に 残り** (`custom_game_play_fee`、 to_user = SYSTEM)
+  - provider が NULL (= 旧 admin 登録、 提供者不在) なら **全額 SYSTEM**
+- 手 (`move`) / 終了 (`finished=true`) / 引分 / cancel — 課金 / 払戻 **一切なし**。 終了時は winner_user_id を 記録するだけ (集計用)
+- ロビーで `cancel` — 課金前なので 返金不要
+
+旧モデル (v620 までの pot / payout / rake) で 残った 既存卓 は finish に到達した時点で 何も払い戻されません (waiting のまま放置されたものは cancel で OK)。 ledger types `custom_game_buyin` / `custom_game_payout` / `custom_game_refund` / `custom_game_rake` は v621 以降 emit されません (allowlist には残しています)。
 
 ## サンプル: ⭕❌ マルバツ (TicTacToe)
 

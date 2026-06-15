@@ -42,7 +42,7 @@ const GAMES = [
     badge: 'プレイフィー 1pt (1位も貰わない)' },
   { id: 'tictactoe', icon: '⭕', name: 'マルバツ',     url: '#/tictactoe',
     desc: '3x3 マルバツ。 縦/横/斜め 3 つ並べたら勝ち。 自作ゲーム フレームワークの サンプル',
-    badge: 'プレイフィー 1pt (勝者が pot 総取り)' },
+    badge: '場代 1pt (提供者 90% / SYSTEM 10%)' },
   // v603 娯楽カテゴリへ追加 (apps cat='game' と同期)
   { id: 'sns',       icon: '💬', name: 'らぼったー',  url: '#/sns',
     desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + リアクション)。フォローなし、全員見える',

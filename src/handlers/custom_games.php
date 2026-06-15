@@ -23,8 +23,13 @@
 
 declare(strict_types=1);
 
+// v621 場代モデル: 配分 固定 (90% 提供者 / 10% SYSTEM)。 pot / payout / refund なし。
+//   create では 課金しない (waiting → 誰も参加しなければ ノーリスク)。
+//   join 時に 起案者 + 参加者 から fee を 徴収して 即配分。
+const CG_PROVIDER_SHARE_PCT = 90;
+
 function cg_kind_meta(PDO $pdo, string $kind): array {
-    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee, provider_share_pct,
+    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee,
                                 js_module_url, is_active, created_by_user_id
                            FROM custom_game_kinds WHERE kind=?");
     $st->execute([$kind]);
@@ -32,7 +37,6 @@ function cg_kind_meta(PDO $pdo, string $kind): array {
     if (!$row) throw new ApiException('not_found', "未知のゲーム種別: $kind", 404);
     if (!(int)$row['is_active']) throw new ApiException('not_found', "無効化された ゲーム種別: $kind", 404);
     $row['fee'] = (int)$row['fee'];
-    $row['provider_share_pct'] = (int)$row['provider_share_pct'];
     $row['created_by_user_id'] = $row['created_by_user_id'] !== null ? (int)$row['created_by_user_id'] : null;
     return $row;
 }
@@ -52,7 +56,7 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
     // GET /api/custom-games/list : 有効な kind 一覧
     if (($seg[1] ?? '') === 'list' && $method === 'GET') {
         $st = $pdo->query("SELECT k.kind, k.display_name, k.description, k.icon, k.fee,
-                                  k.provider_share_pct, k.js_module_url,
+                                  k.js_module_url,
                                   (k.js_source IS NOT NULL) AS has_js_source,
                                   k.created_by_user_id, u.display_name AS created_by_name
                              FROM custom_game_kinds k LEFT JOIN users u ON u.id=k.created_by_user_id
@@ -60,7 +64,6 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $r['fee'] = (int)$r['fee'];
-            $r['provider_share_pct'] = (int)$r['provider_share_pct'];
             $r['has_js_source'] = (bool)$r['has_js_source'];
             $r['created_by_user_id'] = $r['created_by_user_id'] !== null ? (int)$r['created_by_user_id'] : null;
         }
@@ -130,8 +133,6 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     if (mb_strlen($icon) > 20) throw new ApiException('bad_request', 'icon は 20 文字以内', 400);
     $fee = (int)($body['fee'] ?? 1);
     if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
-    $share = (int)($body['provider_share_pct'] ?? 0);
-    if ($share < 0 || $share > 50) throw new ApiException('bad_request', 'provider_share_pct は 0-50 (%)', 400);
     $jsUrl = trim((string)($body['js_module_url'] ?? "/api/custom-games/kinds/{$kind}/script.js"));
     if (mb_strlen($jsUrl) > 200) throw new ApiException('bad_request', 'js_module_url は 200 文字以内', 400);
     // v620 JS source は inline 文字列で 受け取る (PATCH でも更新可)
@@ -141,9 +142,9 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     }
     $jsSize = $jsSource !== null ? strlen($jsSource) : null;
     try {
-        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, provider_share_pct, js_module_url, js_source, js_size, created_by_user_id, is_active)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,1)")
-            ->execute([$kind, $name, $desc, $icon, $fee, $share, $jsUrl, $jsSource, $jsSize, $uid]);
+        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, js_module_url, js_source, js_size, created_by_user_id, is_active)
+                       VALUES (?,?,?,?,?,?,?,?,?,1)")
+            ->execute([$kind, $name, $desc, $icon, $fee, $jsUrl, $jsSource, $jsSize, $uid]);
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) {
             throw new ApiException('conflict', "kind '$kind' は 既に存在", 409);
@@ -176,11 +177,6 @@ function cg_kinds_update(PDO $pdo, int $uid, bool $isAdmin, string $kind): void 
         $fee = (int)$body['fee'];
         if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
         $sets[] = 'fee = ?'; $args[] = $fee;
-    }
-    if (array_key_exists('provider_share_pct', $body)) {
-        $share = (int)$body['provider_share_pct'];
-        if ($share < 0 || $share > 50) throw new ApiException('bad_request', 'provider_share_pct は 0-50', 400);
-        $sets[] = 'provider_share_pct = ?'; $args[] = $share;
     }
     if (array_key_exists('is_active', $body)) {
         $sets[] = 'is_active = ?'; $args[] = $body['is_active'] ? 1 : 0;
@@ -264,16 +260,35 @@ function cg_create(PDO $pdo, int $uid, string $kind, array $meta): void {
     if (!is_array($initState)) $initState = new \stdClass();
     $gid = 0;
     db_tx($pdo, function () use ($pdo, $uid, $kind, $fee, $initState, &$gid) {
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $fee) throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', $fee), 400);
+        // v621 起案時は 課金しない (waiting で 誰も来なければ ノーリスク、 cancel も 返金不要)。
+        //   join 成立時に 両者から 場代 を 徴収する。
         $pdo->prepare("INSERT INTO custom_games (game_kind, creator_user_id, status, fee, state_json, turn_user_id)
                        VALUES (?,?,'waiting',?,?,?)")
             ->execute([$kind, $uid, $fee, json_encode($initState, JSON_UNESCAPED_UNICODE), $uid]);
         $gid = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $fee, 'custom_game_buyin', 'custom_game', $gid, "{$kind} #{$gid} buy-in (creator)");
-        $pdo->prepare("UPDATE custom_games SET pot_total = pot_total + ? WHERE id=?")->execute([$fee, $gid]);
     });
     json_response(['ok' => true, 'id' => $gid]);
+}
+
+// v621 場代の徴収: payer → provider (90%) + payer → SYSTEM (10%)。
+//   fee=0 や round-down で 0pt の脚は emit しない (ledger ノイズ回避)。
+//   provider 未設定 (旧 admin 登録) なら 全額 SYSTEM。
+function cg_collect_play_fee(PDO $pdo, int $payerUid, int $fee, array $meta, int $gid): void {
+    if ($fee <= 0) return;
+    $kind = $meta['kind'];
+    $providerUid = $meta['created_by_user_id'] ?? null;
+    if (!$providerUid) {
+        Ledger::transfer($pdo, $payerUid, 1, $fee, 'custom_game_play_fee', 'custom_game', $gid, "{$kind} #{$gid} 場代 (SYSTEM)");
+        return;
+    }
+    $providerCut = intdiv($fee * CG_PROVIDER_SHARE_PCT, 100);
+    $systemCut   = $fee - $providerCut;
+    if ($providerCut > 0) {
+        Ledger::transfer($pdo, $payerUid, (int)$providerUid, $providerCut, 'custom_game_play_fee', 'custom_game', $gid, "{$kind} #{$gid} 場代 → 提供者");
+    }
+    if ($systemCut > 0) {
+        Ledger::transfer($pdo, $payerUid, 1, $systemCut, 'custom_game_play_fee', 'custom_game', $gid, "{$kind} #{$gid} 場代 → SYSTEM");
+    }
 }
 
 function cg_join(PDO $pdo, int $uid, int $gid, array $meta): void {
@@ -288,14 +303,20 @@ function cg_join(PDO $pdo, int $uid, int $gid, array $meta): void {
         if (!$g) throw new ApiException('not_found', 'not found', 404);
         if ($g['status'] !== 'waiting') throw new ApiException('bad_request', 'already started', 400);
         if ((int)$g['creator_user_id'] === $uid) throw new ApiException('bad_request', '自分の卓には 参加できません', 400);
+        $creatorUid = (int)$g['creator_user_id'];
         $fee = (int)$g['fee'];
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $fee) throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', $fee), 400);
+        if ($fee > 0) {
+            $balOpp = Ledger::balanceOfUser($pdo, $uid);
+            if ($balOpp < $fee) throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', $fee), 400);
+            $balCreator = Ledger::balanceOfUser($pdo, $creatorUid);
+            if ($balCreator < $fee) throw new ApiException('insufficient_balance', '起案者の ポイント不足で 開始不可', 400);
+        }
+        // v621 join 成立時に 両者から 場代を 徴収 (90% 提供者 / 10% SYSTEM)。
+        cg_collect_play_fee($pdo, $creatorUid, $fee, $meta, $gid);
+        cg_collect_play_fee($pdo, $uid,        $fee, $meta, $gid);
         $stateJson = is_array($newState) ? json_encode($newState, JSON_UNESCAPED_UNICODE) : $g['state_json'];
         $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, status='playing', state_json=? WHERE id=?")
             ->execute([$uid, $stateJson, $gid]);
-        Ledger::transfer($pdo, $uid, 1, $fee, 'custom_game_buyin', 'custom_game', $gid, "custom_game #{$gid} buy-in (opp)");
-        $pdo->prepare("UPDATE custom_games SET pot_total = pot_total + ? WHERE id=?")->execute([$fee, $gid]);
     });
     json_response(['ok' => true]);
 }
@@ -326,26 +347,7 @@ function cg_move(PDO $pdo, int $uid, int $gid, array $meta): void {
             if (!$valid) throw new ApiException('bad_request', 'winner_user_id 不正', 400);
         }
         if ($finished) {
-            $pot = (int)$g['pot_total'];
-            if ($winnerUid === null) {
-                // 引分: pot 半額ずつ 返金 (場代 rake なし)
-                $each = intdiv($pot, 2);
-                Ledger::transfer($pdo, 1, (int)$g['creator_user_id'],  $each, 'custom_game_refund', 'custom_game', $gid, "引分 返金");
-                Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'custom_game_refund', 'custom_game', $gid, "引分 返金");
-            } else {
-                // v620 場代 rake: pot から 提供者 (kind の登録者) に share_pct% を 渡し、 残り を 勝者へ。
-                //   provider が NULL (= 旧 admin 登録) なら rake せず 全額 勝者へ。
-                $providerUid = $meta['created_by_user_id'] ?? null;
-                $sharePct = (int)($meta['provider_share_pct'] ?? 0);
-                $rake = ($providerUid && $sharePct > 0) ? intdiv($pot * $sharePct, 100) : 0;
-                $payout = $pot - $rake;
-                if ($rake > 0) {
-                    Ledger::transfer($pdo, 1, (int)$providerUid, $rake, 'custom_game_rake', 'custom_game', $gid, "{$meta['kind']} #{$gid} 場代 ({$sharePct}%)");
-                }
-                if ($payout > 0) {
-                    Ledger::transfer($pdo, 1, $winnerUid, $payout, 'custom_game_payout', 'custom_game', $gid, "勝利 payout");
-                }
-            }
+            // v621 終了時の 課金なし。 場代は すでに join で 払い済み。 winner は 記録のみ。
             $pdo->prepare("UPDATE custom_games SET state_json=?, status='finished', winner_user_id=?, turn_user_id=NULL, finished_at=NOW() WHERE id=?")
                 ->execute([json_encode($newState, JSON_UNESCAPED_UNICODE), $winnerUid, $gid]);
         } else {
@@ -368,7 +370,7 @@ function cg_cancel(PDO $pdo, int $uid, int $gid): void {
         if (!$g) throw new ApiException('not_found', 'not found', 404);
         if ($g['status'] !== 'waiting') throw new ApiException('bad_request', '開始後は キャンセル不可', 400);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
-        Ledger::transfer($pdo, 1, $uid, (int)$g['fee'], 'custom_game_refund', 'custom_game', $gid, "キャンセル 返金");
+        // v621 起案時に 課金していないので 返金不要
         $pdo->prepare("UPDATE custom_games SET status='cancelled', finished_at=NOW() WHERE id=?")->execute([$gid]);
     });
     json_response(['ok' => true]);

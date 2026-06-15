@@ -24,9 +24,9 @@ export async function renderMyCustomGames() {
       <a href="#/settings" class="hint">← 設定</a>
       <h2 style="margin:6px 0">🎮 自作ゲーム 登録</h2>
       <p class="hint" style="font-size:13px">
-        自分で 書いた ゲーム を LabPay に 追加できます。 JS ファイル を アップロード して DB に格納、
-        参加者の 「場代」 は 提供者 (自分) に 入ります。 詳細は
-        <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
+        自分で 書いた ゲーム を LabPay に 追加できます。 JS ファイル を アップロード して DB に格納。
+        参加者が 払う 「場代」 は <b>提供者 (自分) に 90%、 SYSTEM に 10%</b> 入ります (fee=0 なら 無料)。
+        詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
       </p>
     </div>
     <div class="card">
@@ -38,11 +38,8 @@ export async function renderMyCustomGames() {
           <input id="mcg-icon" maxlength="20" placeholder="例: 🔲" style="width:100%"></label>
         <label><div class="bold" style="font-size:13px">表示名</div>
           <input id="mcg-name" maxlength="80" placeholder="例: 🔲 ドット&ボックス" style="width:100%"></label>
-        <label><div class="bold" style="font-size:13px">プレイフィー (pt)</div>
+        <label><div class="bold" style="font-size:13px">場代 (pt) — 各プレイヤーが プレイ毎に 払う (0 で 無料)</div>
           <input id="mcg-fee" type="number" min="0" max="100" value="1" style="width:100%"></label>
-        <label><div class="bold" style="font-size:13px">場代 (%) — 提供者 (自分) が pot から 受け取る</div>
-          <input id="mcg-share" type="number" min="0" max="50" value="0" style="width:100%"></label>
-        <span></span>
       </div>
       <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">説明</div>
         <textarea id="mcg-desc" rows="2" maxlength="500" style="width:100%; box-sizing:border-box"></textarea></label>
@@ -78,13 +75,12 @@ async function createKind(isAdmin) {
   const desc = document.getElementById('mcg-desc').value.trim();
   const icon = document.getElementById('mcg-icon').value.trim();
   const fee  = parseInt(document.getElementById('mcg-fee').value, 10);
-  const share = parseInt(document.getElementById('mcg-share').value, 10);
   if (!kind || !name || !desc || !icon) { toast('kind / 表示名 / 説明 / icon は必須'); return; }
   let jsSource = null;
   try { jsSource = await readJsFile(document.getElementById('mcg-jsfile')); }
   catch (e) { toast(e.message); return; }
   try {
-    const body = { kind, display_name: name, description: desc, icon, fee, provider_share_pct: share };
+    const body = { kind, display_name: name, description: desc, icon, fee };
     if (jsSource !== null) body.js_source = jsSource;
     await post('/api/custom-games/kinds', body);
     toast('登録しました');
@@ -106,12 +102,11 @@ async function loadKinds(myUid, isAdmin) {
           <span class="bold">${escapeHtml(k.display_name)}</span>
           <code style="font-size:11px; opacity:0.6">${escapeHtml(k.kind)}</code>
           ${k.is_active ? '<span class="tag ok">有効</span>' : '<span class="tag muted">無効</span>'}
-          <span class="hint-sm">${k.fee}pt</span>
-          ${k.provider_share_pct > 0 ? `<span class="hint-sm">場代 ${k.provider_share_pct}%</span>` : ''}
+          <span class="hint-sm">場代 ${k.fee}pt</span>
           <span style="flex:1"></span>
           <a href="#/cg/${encodeURIComponent(k.kind)}" class="btn" style="font-size:11px; padding:2px 8px">遊ぶ</a>
           <button class="btn mcg-upload" data-kind="${escapeHtml(k.kind)}" style="font-size:11px; padding:2px 8px">JS 更新</button>
-          <button class="btn mcg-share" data-kind="${escapeHtml(k.kind)}" data-share="${k.provider_share_pct}" style="font-size:11px; padding:2px 8px">場代変更</button>
+          <button class="btn mcg-fee" data-kind="${escapeHtml(k.kind)}" data-fee="${k.fee}" style="font-size:11px; padding:2px 8px">場代変更</button>
           <button class="btn mcg-toggle" data-kind="${escapeHtml(k.kind)}" data-active="${k.is_active ? 1 : 0}" style="font-size:11px; padding:2px 8px">${k.is_active ? '無効化' : '有効化'}</button>
         </div>
         <div class="hint-sm" style="font-size:12px">${escapeHtml(k.description)}</div>
@@ -152,16 +147,16 @@ async function loadKinds(myUid, isAdmin) {
         input.click();
       });
     });
-    root.querySelectorAll('.mcg-share').forEach(b => {
+    root.querySelectorAll('.mcg-fee').forEach(b => {
       b.addEventListener('click', async () => {
         const kind = b.dataset.kind;
-        const cur = parseInt(b.dataset.share, 10) || 0;
-        const v = prompt('場代 (%) - 0〜50。 提供者 (自分) が pot から 受け取る 割合。', String(cur));
+        const cur = parseInt(b.dataset.fee, 10) || 0;
+        const v = prompt('場代 (pt) — 0〜100。 プレイ毎に 各プレイヤーが 払う 額 (90% 自分、 10% SYSTEM)。', String(cur));
         if (v === null) return;
-        const share = parseInt(v, 10);
-        if (Number.isNaN(share) || share < 0 || share > 50) { toast('0〜50 の数値で'); return; }
+        const fee = parseInt(v, 10);
+        if (Number.isNaN(fee) || fee < 0 || fee > 100) { toast('0〜100 の数値で'); return; }
         try {
-          await patch(`/api/custom-games/kinds/${encodeURIComponent(kind)}`, { provider_share_pct: share });
+          await patch(`/api/custom-games/kinds/${encodeURIComponent(kind)}`, { fee });
           toast('場代を更新しました');
           loadKinds(myUid, isAdmin);
         } catch (e) { toast('失敗: ' + (e?.message || e)); }
