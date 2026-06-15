@@ -1227,7 +1227,9 @@ async function syncFxPreview() {
   try {
     const entry = await fetchFxRate(ccy);
     pendingFxRate = entry.rate;
-    row.innerHTML = `<span class="muted">登録時点のレート: 1 ${escapeHtml(ccy)} = ${entry.rate.toFixed(4)} JPY <span style="font-size:11px">(${escapeHtml(entry.source)})</span></span>`;
+    // v614 為替手数料 3.63% を 明示
+    const effectiveRate = entry.rate * 1.0363;
+    row.innerHTML = `<span class="muted">登録時点のレート: 1 ${escapeHtml(ccy)} = ${entry.rate.toFixed(4)} JPY (手数料3.63%込み: ${effectiveRate.toFixed(4)}) <span style="font-size:11px">(${escapeHtml(entry.source)})</span></span>`;
   } catch (e) {
     pendingFxRate = null;
     row.innerHTML = `<span style="color:var(--warn)">レート取得失敗 (${escapeHtml(e.message)}) — 送信時にサーバー側で再取得します</span>`;
@@ -1650,8 +1652,9 @@ function renderExpense(e, gid) {
   // wariMembers は loadDetail で全 group member セット済みなので、me がそこに
   // いれば canManage = true とみなす。
   const canManage = !!meId && wariMembers.some(m => Number(m.id) === Number(meId));
+  // v614 海外通貨は 為替手数料 3.63% 上乗せして JPY 換算 (表示にも明記)
   const orig = (e.currency !== 'JPY' && e.amount_original)
-    ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)})</span>` : '';
+    ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)} × 1.0363 手数料込)</span>` : '';
   const names = e.participants.map(uid => {
     const m = wariMembers.find(x => x.id === uid);
     return m ? m.display_name : `#${uid}`;

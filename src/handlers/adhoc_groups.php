@@ -6,6 +6,10 @@
 
 declare(strict_types=1);
 
+// v614 海外通貨の支出には カード会社の為替手数料 (3.63%) を上乗せして JPY 換算。
+//   例: 1 EUR = 192.5 JPY の市況なら 1 EUR × 192.5 × 1.0363 ≈ 199.5 JPY で記録。
+const FX_SURCHARGE = 0.0363;
+
 function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { groups_list($pdo, $cfg);   return; }
@@ -830,9 +834,10 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
         }
         $rate = $live;
     }
+    // v614 海外通貨は カード会社の 為替手数料 (3.63%) を 上乗せして JPY 換算
     $amountJpy = ($currency === 'JPY')
         ? (int)round((float)$amountRaw)
-        : (int)round((float)$amountRaw * $rate);
+        : (int)round((float)$amountRaw * $rate * (1.0 + FX_SURCHARGE));
     if ($amountJpy <= 0) throw new ApiException('bad_request', 'computed amount_jpy <= 0', 400);
 
     $payerId = isset($body['payer_user_id']) ? (int)$body['payer_user_id'] : (int)$u['id'];
@@ -971,9 +976,10 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
             }
             $rate = $live;
         }
+        // v614 海外通貨は 為替手数料 (3.63%) 上乗せ
         $amountJpy = ($currency === 'JPY')
             ? (int)round((float)$amountRaw)
-            : (int)round((float)$amountRaw * $rate);
+            : (int)round((float)$amountRaw * $rate * (1.0 + FX_SURCHARGE));
         $amountOriginal = ($currency === 'JPY') ? null : (float)$amountRaw;
         $sets[] = 'amount_jpy = ?';      $args[] = $amountJpy;
         $sets[] = 'amount_original = ?'; $args[] = $amountOriginal;
