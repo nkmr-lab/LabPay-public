@@ -493,6 +493,10 @@ route('/presence',        lazy(() => import('./views/presence.js'), 'renderPrese
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
 route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
 route('/admin/custom-games', lazy(() => import('./views/admin_custom_games.js'), 'renderAdminCustomGames'));
+// v620 自作ゲーム の ユーザ管理 UI + 汎用ディスパッチャ
+route('/my-games',           lazy(() => import('./views/my_custom_games.js'), 'renderMyCustomGames'));
+route('/cg/:kind/:id',       lazy(() => import('./views/customgame.js'), 'renderCustomGameDetail'));
+route('/cg/:kind',           lazy(() => import('./views/customgame.js'), 'renderCustomGameList'));
 route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));
 route('/auctions/new',    lazy(() => import('./views/auctions.js'), 'renderAuctionNew'));
 route('/auctions/:id',    lazy(() => import('./views/auctions.js'), 'renderAuctionDetail'));

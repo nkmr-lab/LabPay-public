@@ -24,43 +24,62 @@
 declare(strict_types=1);
 
 function cg_kind_meta(PDO $pdo, string $kind): array {
-    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee, js_module_url, is_active FROM custom_game_kinds WHERE kind=?");
+    $st = $pdo->prepare("SELECT kind, display_name, description, icon, fee, provider_share_pct,
+                                js_module_url, is_active, created_by_user_id
+                           FROM custom_game_kinds WHERE kind=?");
     $st->execute([$kind]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', "未知のゲーム種別: $kind", 404);
     if (!(int)$row['is_active']) throw new ApiException('not_found', "無効化された ゲーム種別: $kind", 404);
     $row['fee'] = (int)$row['fee'];
+    $row['provider_share_pct'] = (int)$row['provider_share_pct'];
+    $row['created_by_user_id'] = $row['created_by_user_id'] !== null ? (int)$row['created_by_user_id'] : null;
     return $row;
 }
 
 function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): void {
+    // v620 GET /api/custom-games/kinds/:kind/script.js は 認証不要 (ES module の
+    //   dynamic import が cookies を 自動付与しないため)。 game logic に 機密情報なし。
+    if (($seg[1] ?? '') === 'kinds' && isset($seg[2]) && ($seg[3] ?? '') === 'script.js' && $method === 'GET') {
+        cg_kinds_serve_js($pdo, (string)$seg[2]);
+        return;
+    }
+
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $isAdmin = ($u['role'] ?? '') === 'admin';
 
     // GET /api/custom-games/list : 有効な kind 一覧
     if (($seg[1] ?? '') === 'list' && $method === 'GET') {
-        $st = $pdo->query("SELECT kind, display_name, description, icon, fee, js_module_url, created_by_user_id
-                             FROM custom_game_kinds WHERE is_active=1 ORDER BY display_name");
+        $st = $pdo->query("SELECT k.kind, k.display_name, k.description, k.icon, k.fee,
+                                  k.provider_share_pct, k.js_module_url,
+                                  (k.js_source IS NOT NULL) AS has_js_source,
+                                  k.created_by_user_id, u.display_name AS created_by_name
+                             FROM custom_game_kinds k LEFT JOIN users u ON u.id=k.created_by_user_id
+                            WHERE k.is_active=1 ORDER BY k.display_name");
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $r['fee'] = (int)$r['fee'];
+            $r['provider_share_pct'] = (int)$r['provider_share_pct'];
+            $r['has_js_source'] = (bool)$r['has_js_source'];
             $r['created_by_user_id'] = $r['created_by_user_id'] !== null ? (int)$r['created_by_user_id'] : null;
         }
         json_response(['items' => $rows]);
         return;
     }
 
-    // v619 kind CRUD (admin only)
+    // v619/v620 kind CRUD。 v620 から ユーザ単位の所有 + 任意ユーザが 新規登録可能。
+    //   - GET (一覧): 認証ユーザは全件閲覧可
+    //   - POST (新規): 認証ユーザ なら誰でも (created_by_user_id に自分)
+    //   - PATCH/DELETE: owner or admin
     if (($seg[1] ?? '') === 'kinds') {
-        if (!$isAdmin) throw new ApiException('forbidden', '管理者のみ', 403);
         if (!isset($seg[2])) {
             if ($method === 'GET')  { cg_kinds_list_all($pdo); return; }
             if ($method === 'POST') { cg_kinds_create($pdo, $uid); return; }
         }
         $kind = (string)$seg[2];
-        if ($method === 'PATCH')  { cg_kinds_update($pdo, $kind); return; }
-        if ($method === 'DELETE') { cg_kinds_deactivate($pdo, $kind); return; }
+        if ($method === 'PATCH')  { cg_kinds_update($pdo, $uid, $isAdmin, $kind); return; }
+        if ($method === 'DELETE') { cg_kinds_deactivate($pdo, $uid, $isAdmin, $kind); return; }
     }
 
     if (!isset($seg[1]) || !isset($seg[2])) throw new ApiException('not_found', 'no route', 404);
@@ -76,7 +95,7 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
     $action = $seg[4] ?? '';
     if ($action === '' && $method === 'GET')         { cg_detail($pdo, $uid, $gid); return; }
     if ($action === 'join'   && $method === 'POST')  { cg_join($pdo, $uid, $gid, $meta); return; }
-    if ($action === 'move'   && $method === 'POST')  { cg_move($pdo, $uid, $gid); return; }
+    if ($action === 'move'   && $method === 'POST')  { cg_move($pdo, $uid, $gid, $meta); return; }
     if ($action === 'cancel' && $method === 'POST')  { cg_cancel($pdo, $uid, $gid); return; }
     json_error('not_found', "no custom-games route", 404);
 }
@@ -95,6 +114,8 @@ function cg_kinds_list_all(PDO $pdo): void {
     json_response(['items' => $rows]);
 }
 
+const CG_MAX_JS_BYTES = 500 * 1024; // 500 KB
+
 function cg_kinds_create(PDO $pdo, int $uid): void {
     $body = read_json_body();
     $kind = trim((string)require_field($body, 'kind'));
@@ -109,12 +130,20 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     if (mb_strlen($icon) > 20) throw new ApiException('bad_request', 'icon は 20 文字以内', 400);
     $fee = (int)($body['fee'] ?? 1);
     if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
-    $jsUrl = trim((string)($body['js_module_url'] ?? "/js/views/{$kind}.js"));
+    $share = (int)($body['provider_share_pct'] ?? 0);
+    if ($share < 0 || $share > 50) throw new ApiException('bad_request', 'provider_share_pct は 0-50 (%)', 400);
+    $jsUrl = trim((string)($body['js_module_url'] ?? "/api/custom-games/kinds/{$kind}/script.js"));
     if (mb_strlen($jsUrl) > 200) throw new ApiException('bad_request', 'js_module_url は 200 文字以内', 400);
+    // v620 JS source は inline 文字列で 受け取る (PATCH でも更新可)
+    $jsSource = isset($body['js_source']) ? (string)$body['js_source'] : null;
+    if ($jsSource !== null && strlen($jsSource) > CG_MAX_JS_BYTES) {
+        throw new ApiException('bad_request', sprintf('js_source は %d KB まで', CG_MAX_JS_BYTES / 1024), 400);
+    }
+    $jsSize = $jsSource !== null ? strlen($jsSource) : null;
     try {
-        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, js_module_url, created_by_user_id, is_active)
-                       VALUES (?,?,?,?,?,?,?,1)")
-            ->execute([$kind, $name, $desc, $icon, $fee, $jsUrl, $uid]);
+        $pdo->prepare("INSERT INTO custom_game_kinds (kind, display_name, description, icon, fee, provider_share_pct, js_module_url, js_source, js_size, created_by_user_id, is_active)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,1)")
+            ->execute([$kind, $name, $desc, $icon, $fee, $share, $jsUrl, $jsSource, $jsSize, $uid]);
     } catch (PDOException $e) {
         if (str_contains($e->getMessage(), 'Duplicate')) {
             throw new ApiException('conflict', "kind '$kind' は 既に存在", 409);
@@ -124,7 +153,17 @@ function cg_kinds_create(PDO $pdo, int $uid): void {
     json_response(['ok' => true, 'kind' => $kind]);
 }
 
-function cg_kinds_update(PDO $pdo, string $kind): void {
+function cg_kinds_assert_owner_or_admin(PDO $pdo, int $uid, bool $isAdmin, string $kind): void {
+    if ($isAdmin) return;
+    $st = $pdo->prepare("SELECT created_by_user_id FROM custom_game_kinds WHERE kind=?");
+    $st->execute([$kind]);
+    $owner = $st->fetchColumn();
+    if ($owner === false) throw new ApiException('not_found', 'kind not found', 404);
+    if ((int)$owner !== $uid) throw new ApiException('forbidden', '自分が登録した kind のみ 編集可', 403);
+}
+
+function cg_kinds_update(PDO $pdo, int $uid, bool $isAdmin, string $kind): void {
+    cg_kinds_assert_owner_or_admin($pdo, $uid, $isAdmin, $kind);
     $body = read_json_body();
     $sets = []; $args = [];
     foreach (['display_name', 'description', 'icon', 'js_module_url'] as $col) {
@@ -138,8 +177,26 @@ function cg_kinds_update(PDO $pdo, string $kind): void {
         if ($fee < 0 || $fee > 100) throw new ApiException('bad_request', 'fee は 0-100', 400);
         $sets[] = 'fee = ?'; $args[] = $fee;
     }
+    if (array_key_exists('provider_share_pct', $body)) {
+        $share = (int)$body['provider_share_pct'];
+        if ($share < 0 || $share > 50) throw new ApiException('bad_request', 'provider_share_pct は 0-50', 400);
+        $sets[] = 'provider_share_pct = ?'; $args[] = $share;
+    }
     if (array_key_exists('is_active', $body)) {
         $sets[] = 'is_active = ?'; $args[] = $body['is_active'] ? 1 : 0;
+    }
+    if (array_key_exists('js_source', $body)) {
+        $jsSource = $body['js_source'];
+        if ($jsSource === null) {
+            $sets[] = 'js_source = NULL'; $sets[] = 'js_size = NULL';
+        } else {
+            $jsSource = (string)$jsSource;
+            if (strlen($jsSource) > CG_MAX_JS_BYTES) {
+                throw new ApiException('bad_request', sprintf('js_source は %d KB まで', CG_MAX_JS_BYTES / 1024), 400);
+            }
+            $sets[] = 'js_source = ?'; $args[] = $jsSource;
+            $sets[] = 'js_size = ?';   $args[] = strlen($jsSource);
+        }
     }
     if (!$sets) throw new ApiException('bad_request', '更新する 内容なし', 400);
     $args[] = $kind;
@@ -147,10 +204,27 @@ function cg_kinds_update(PDO $pdo, string $kind): void {
     json_response(['ok' => true]);
 }
 
-function cg_kinds_deactivate(PDO $pdo, string $kind): void {
+function cg_kinds_deactivate(PDO $pdo, int $uid, bool $isAdmin, string $kind): void {
+    cg_kinds_assert_owner_or_admin($pdo, $uid, $isAdmin, $kind);
     // 既存卓 (custom_games) は そのまま残す。 新規起案は できなくする。
     $pdo->prepare("UPDATE custom_game_kinds SET is_active=0 WHERE kind=?")->execute([$kind]);
     json_response(['ok' => true]);
+}
+
+// v620 アップロードされた JS ソースを ES module として 配信。 認証不要 (game logic は 機密でない)。
+function cg_kinds_serve_js(PDO $pdo, string $kind): void {
+    $st = $pdo->prepare("SELECT js_source FROM custom_game_kinds WHERE kind=?");
+    $st->execute([$kind]);
+    $src = $st->fetchColumn();
+    if ($src === false || $src === null) {
+        http_response_code(404);
+        header('Content-Type: application/javascript; charset=utf-8');
+        echo "// kind '$kind' は js_source 未登録\n";
+        return;
+    }
+    header('Content-Type: application/javascript; charset=utf-8');
+    header('Cache-Control: no-cache'); // 更新が 即時反映される (重要)
+    echo $src;
 }
 
 function cg_list(PDO $pdo, int $uid, string $kind): void {
@@ -226,7 +300,7 @@ function cg_join(PDO $pdo, int $uid, int $gid, array $meta): void {
     json_response(['ok' => true]);
 }
 
-function cg_move(PDO $pdo, int $uid, int $gid): void {
+function cg_move(PDO $pdo, int $uid, int $gid, array $meta): void {
     $body = read_json_body();
     if (!isset($body['new_state']) || !is_array($body['new_state'])) {
         throw new ApiException('bad_request', 'new_state 必須', 400);
@@ -236,7 +310,7 @@ function cg_move(PDO $pdo, int $uid, int $gid): void {
     $winnerUid = isset($body['winner_user_id']) && $body['winner_user_id'] !== null ? (int)$body['winner_user_id'] : null;
     $nextTurn  = isset($body['turn_user_id']) && $body['turn_user_id'] !== null ? (int)$body['turn_user_id'] : null;
 
-    db_tx($pdo, function () use ($pdo, $uid, $gid, $newState, $finished, $winnerUid, $nextTurn) {
+    db_tx($pdo, function () use ($pdo, $uid, $gid, $meta, $newState, $finished, $winnerUid, $nextTurn) {
         $st = $pdo->prepare("SELECT * FROM custom_games WHERE id=? FOR UPDATE");
         $st->execute([$gid]);
         $g = $st->fetch(PDO::FETCH_ASSOC);
@@ -254,11 +328,23 @@ function cg_move(PDO $pdo, int $uid, int $gid): void {
         if ($finished) {
             $pot = (int)$g['pot_total'];
             if ($winnerUid === null) {
+                // 引分: pot 半額ずつ 返金 (場代 rake なし)
                 $each = intdiv($pot, 2);
                 Ledger::transfer($pdo, 1, (int)$g['creator_user_id'],  $each, 'custom_game_refund', 'custom_game', $gid, "引分 返金");
                 Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'custom_game_refund', 'custom_game', $gid, "引分 返金");
             } else {
-                Ledger::transfer($pdo, 1, $winnerUid, $pot, 'custom_game_payout', 'custom_game', $gid, "勝利 payout");
+                // v620 場代 rake: pot から 提供者 (kind の登録者) に share_pct% を 渡し、 残り を 勝者へ。
+                //   provider が NULL (= 旧 admin 登録) なら rake せず 全額 勝者へ。
+                $providerUid = $meta['created_by_user_id'] ?? null;
+                $sharePct = (int)($meta['provider_share_pct'] ?? 0);
+                $rake = ($providerUid && $sharePct > 0) ? intdiv($pot * $sharePct, 100) : 0;
+                $payout = $pot - $rake;
+                if ($rake > 0) {
+                    Ledger::transfer($pdo, 1, (int)$providerUid, $rake, 'custom_game_rake', 'custom_game', $gid, "{$meta['kind']} #{$gid} 場代 ({$sharePct}%)");
+                }
+                if ($payout > 0) {
+                    Ledger::transfer($pdo, 1, $winnerUid, $payout, 'custom_game_payout', 'custom_game', $gid, "勝利 payout");
+                }
             }
             $pdo->prepare("UPDATE custom_games SET state_json=?, status='finished', winner_user_id=?, turn_user_id=NULL, finished_at=NOW() WHERE id=?")
                 ->execute([json_encode($newState, JSON_UNESCAPED_UNICODE), $winnerUid, $gid]);

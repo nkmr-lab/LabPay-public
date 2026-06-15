@@ -1,17 +1,18 @@
 # 自作ゲーム フレームワーク (custom_games)
 
-LabPay に **2 人対戦のターン制ゲームを 管理画面 + JS だけ で 追加できる** 仕組み。 v619 で DB 管理化、 PHP ソースに 手を入れる必要なし。
+LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で 追加できる** 仕組み。 v619 で DB 管理化、 v620 で **各ユーザが 設定 → 自作ゲーム から 自由に登録** + **JS ファイル を DB に アップロード** (サーバの 書き込み権限 不要) + **場代 (provider_share_pct%) を 提供者 へ** 渡せるように。
 
 ## 何を書くか
 
 | | 内容 | 量 |
 |---|---|---|
-| 管理画面 | `/#/admin/custom-games` で kind を 登録 (kind / 表示名 / 説明 / icon / fee / JS module URL) | フォーム 1 件 |
-| JS | `public/js/views/{kind}.js` を 1 ファイル 追加 (ゲームロジック + UI、 マルバツは 230 行) | 1 ファイル |
+| 設定画面 | `/#/my-games` で kind を 登録 (kind / 表示名 / 説明 / icon / fee / 場代% / JS ファイル) | フォーム 1 件 |
+| JS | ローカルで 1 ファイル 書いて アップロード (ゲームロジック + UI、 マルバツは 230 行) | 1 ファイル |
 | PHP | **触らない** | 0 行 |
 | SQL | 不要 (新規 ゲームでも `custom_games` テーブルを 共有) | 0 行 |
+| サーバ作業 | **不要** (JS は DB に格納、 配信は `/api/custom-games/kinds/:kind/script.js`) | 0 |
 
-新しい 2 人対戦ゲームを 追加するときの 修正量はこれだけ。
+新しい 2 人対戦ゲームを 追加するときの 修正量はこれだけ。 ssh / scp なし、 管理者でなくても 自分で 登録できる。
 
 ## アーキテクチャ
 
@@ -62,18 +63,21 @@ turn_user_id の遷移と Ledger 操作だけが PHP の役目。
 
 ## 新ゲームを 追加する 手順
 
-### 1. 管理画面 から kind を 登録
+### 1. 設定画面 から kind を 登録 (v620 から 各ユーザ 可能)
 
-`/#/admin/custom-games` (admin 専用) から フォーム入力:
+`設定` → `🎮 自作ゲーム 管理` (= `/#/my-games`) から フォーム入力:
 
 - **kind**: URL slug (例: `mygame`)。 小文字 + 数字 + `-` `_`、 3-40 文字
 - **表示名**: 例: `🎲 マイゲーム`
 - **説明**: 1-2 文
 - **icon**: 絵文字 1 文字
-- **fee**: プレイフィー (0-100pt)
-- **JS module URL**: 任意。 デフォルトは `/js/views/{kind}.js`
+- **fee**: プレイフィー (0-100pt)、 各プレイヤーが 卓に 預ける 額
+- **場代 (provider_share_pct)**: 0-50 (%)、 pot のうち 提供者 (= あなた) に 入る 割合
+- **JS ファイル**: ローカルで 書いた `.js` を そのまま アップロード (最大 500KB)
 
-登録すると `custom_game_kinds` テーブルに 1 行入る。 API (`/api/custom-games/list`) に 即座に 反映。 無効化したい場合は 「無効化」 ボタン (既存卓は そのまま残る)。
+登録すると `custom_game_kinds` テーブルに 1 行 入り、 JS は そのまま DB の `js_source` カラムに 格納される。 サーバの ファイル書き込み権限 は 必要なし。 配信は `/api/custom-games/kinds/:kind/script.js` (no-cache、 更新が 即時反映)。
+
+API (`/api/custom-games/list`) に 即座に 反映。 編集 / 無効化 は **自分が登録した kind** か **admin** のみ。
 
 または API 直叩き:
 
@@ -87,7 +91,8 @@ curl -X POST https://pay.nkmr.io/api/custom-games/kinds \
     "description": "説明",
     "icon": "🎲",
     "fee": 1,
-    "js_module_url": "/js/views/mygame.js"
+    "provider_share_pct": 5,
+    "js_source": "import { get, post } from \"../api.js\"; ... (JS 全文)"
   }'
 ```
 
@@ -141,15 +146,18 @@ export async function renderMyGameDetail({ params }) { /* 盤面 + 手番 pollin
 
 サンプル: [public/js/views/tictactoe.js](../public/js/views/tictactoe.js) (230 行)。
 
-### 3. ルートと apps/games に登録
+### 3. ルートは 自動
 
-`public/js/app.js`:
-```js
-route('/mygame/:id', lazy(() => import('./views/mygame.js'), 'renderMyGameDetail'));
-route('/mygame',     lazy(() => import('./views/mygame.js'), 'renderMyGame'));
-```
+v620 から **汎用ディスパッチャ** が `/cg/:kind` と `/cg/:kind/:id` を 自動で 処理する:
 
-`public/js/views/apps.js` の APPS と `public/js/views/games.js` の GAMES に エントリ追加で 露出。
+- ディスパッチャ (`public/js/views/customgame.js`) が `/api/custom-games/list` を 引いて、
+  `has_js_source` が true なら `/api/custom-games/kinds/:kind/script.js` を `import()`
+- module は **`renderList(ctx)` と `renderDetail(ctx)` を export** すれば 自動で 呼ばれる
+  (フォールバックで `render{KindCamel}` / `render{KindCamel}Detail` も 試す)
+
+つまり JS を アップロード したら `/#/cg/mygame` で 一覧、 `/#/cg/mygame/42` で 詳細が 出る。 `app.js` 修正不要。
+
+`public/js/views/apps.js` の APPS / `public/js/views/games.js` の GAMES に 自分の kind を 追加すれば トップ画面 から 入り口 が 出る (admin 作業)。
 
 ## API: 詳細
 
@@ -214,11 +222,12 @@ CREATE TABLE custom_games (
 
 ## 課金フロー
 
-- 起案者: 卓を作る時に `fee()` pt を 預ける (`custom_game_buyin`)
+- 起案者: 卓を作る時に `fee` pt を 預ける (`custom_game_buyin`)
 - 参加者: `join` で 同額を 預ける (`custom_game_buyin`)
 - 終了時:
-  - 勝者あり → 勝者に pot 総取り (`custom_game_payout`)
-  - 引分 → 双方 半額返金 (`custom_game_refund`)
+  - 勝者あり → **場代 rake** (`custom_game_rake`) を 提供者 (kind 登録者) に 渡し、 残りを 勝者へ (`custom_game_payout`)
+    - rake = `floor(pot * provider_share_pct / 100)` (provider が `NULL` or `share=0` なら rake なし)
+  - 引分 → 双方 半額 返金 (`custom_game_refund`、 場代 rake なし)
 - ロビーで キャンセル → 起案者に 返金 (`custom_game_refund`)
 
 ## サンプル: ⭕❌ マルバツ (TicTacToe)

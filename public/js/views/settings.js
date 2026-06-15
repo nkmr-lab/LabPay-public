@@ -184,6 +184,15 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
+      <h3>🎮 自作ゲーム を 登録</h3>
+      <p class="hint">
+        自分で 書いた 2 人対戦 ゲーム を LabPay に 追加できます。 JS ファイル を アップロード で OK
+        (場代 % を設定 すれば pot から 提供者特典 が 入ります)。
+      </p>
+      <a href="#/my-games" class="btn">🎮 自作ゲーム 管理</a>
+    </div>
+
+    <div class="card">
       <h3>その他</h3>
       <button id="logout-from-settings" class="danger">ログアウト</button>
     </div>
