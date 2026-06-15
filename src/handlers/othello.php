@@ -441,7 +441,7 @@ function othello_ai_choose_move(array $board): ?array {
 
 // AI 番が続くかぎり 自動進行。 user の move/pass の 後で 呼ぶ。
 // パスの 連続や 終局判定 を ここでまとめて 扱う。
-// v626 「考えてる感」 のため 各 着手前に 1 秒スリープ。
+// v627 「考えてる感」 のため 各 着手前に 2 秒スリープ。
 function othello_ai_drive(PDO $pdo, int $gid): void {
     for ($i = 0; $i < 8; $i++) {
         // 先に 1 秒スリープ。 まず DB を 軽く見て AI 番でなければ 抜ける (= 無駄な待ちなし)。
@@ -449,7 +449,7 @@ function othello_ai_drive(PDO $pdo, int $gid): void {
         $peek->execute([$gid]);
         $p = $peek->fetch(PDO::FETCH_ASSOC);
         if (!$p || !(int)$p['is_ai'] || $p['status'] !== 'playing' || $p['turn_side'] !== 'opponent') return;
-        usleep(1_000_000);
+        usleep(2_000_000);
         $advanced = false;
         db_tx($pdo, function () use ($pdo, $gid, &$advanced) {
             $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");
