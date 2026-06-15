@@ -2521,14 +2521,14 @@ function paintCheckin(status) {
   const root = document.getElementById('checkin-area');
   if (!root || !status) return;
   if (status.checked_in_today) {
-    // v606 longest_streak >= 5 (= 5 日以上 達成経験あり) なら ボーナス説明は 不要 として 省略
-    const veteran = (status.longest_streak || 0) >= 5;
+    // v607 longest_streak >= 3 (= 3 日以上 達成経験あり) なら ボーナス説明は 不要 として 省略
+    const veteran = (status.longest_streak || 0) >= 3;
     root.innerHTML = `<div style="font-size:14px" class="muted">✓ 本日ラボイン済み (+${status.points_today}pt / 連続ラボイン ${status.current_streak} 日)</div>
       ${veteran ? '' : bonusRuleHtml(status.bonus_rule)}`;
     return;
   }
   const seenLabin = (status.longest_streak || 0) >= 1;
-  const veteran = (status.longest_streak || 0) >= 5;
+  const veteran = (status.longest_streak || 0) >= 3;
   const intro = seenLabin
     ? ''
     : (status.today_is_workday
