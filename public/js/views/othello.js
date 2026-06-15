@@ -31,8 +31,8 @@ export async function renderOthello() {
         <button id="ot-new" class="btn primary">＋ 新規卓 (1pt)</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        通常のオセロ + <b>各プレイヤー 2 か所 地雷</b>。 そのマスに 自分 or 相手が 置くと
-        <b>周囲 3x3 (9 マス) が 反転</b>。 地雷の場所は 終局まで 互いに 不明。
+        通常のオセロ + <b>各プレイヤー1か所地雷</b>。そのマスに自分 or 相手が置くと
+        <b>周囲 3x3 (9 マス) が反転</b>。地雷の場所は終局まで互いに不明。
       </p>
     </div>
     <div id="ot-list"><div class="hint">読み込み中…</div></div>
@@ -111,12 +111,12 @@ async function paintBoard(gid) {
     if (d.me_side && !d.i_setup_mines) {
       actionArea = `
         <div class="card">
-          <h3 style="margin:0 0 4px">💣 地雷を 2 か所 配置</h3>
+          <h3 style="margin:0 0 4px">💣 地雷を 1 か所 配置</h3>
           <p class="hint" style="margin:0 0 8px; font-size:12px">
-            盤面の マスを 2 つ タップ (初期 4 マスは 不可)。 「確定」 で 設定。
-            相手も 同じ 2 か所 設定で 対戦開始。 地雷は 互いに 終局まで 不可視。
+            盤面のマスを 1 つタップ (初期 4 マスは不可)。「確定」 で設定。
+            相手も同じく 1 か所設定したら対戦開始。地雷は互いに終局まで不可視。
           </p>
-          <div id="ot-mine-pick" class="hint-sm">選択中: <span id="ot-mine-sel">0</span> / 2</div>
+          <div id="ot-mine-pick" class="hint-sm">選択中: <span id="ot-mine-sel">0</span> / 1</div>
           <button id="ot-mine-set" class="btn primary" style="margin-top:8px" disabled>確定</button>
         </div>`;
     } else if (d.me_side && d.i_setup_mines) {
@@ -221,12 +221,12 @@ async function paintBoard(gid) {
       if (['33','34','43','44'].includes(cellKey)) { toast('初期 4 マス には 設置 できません'); return; }
       const i = picked.indexOf(cellKey);
       if (i >= 0) { picked.splice(i, 1); b.style.background = '#3d8b6b'; }
-      else if (picked.length < 2) { picked.push(cellKey); b.style.background = '#a16207'; }
-      else { toast('地雷は 2 か所 まで'); return; }
+      else if (picked.length < 1) { picked.push(cellKey); b.style.background = '#a16207'; }
+      else { toast('地雷は 1 か所のみ'); return; }
       const sel = document.getElementById('ot-mine-sel');
       if (sel) sel.textContent = picked.length;
       const btn = document.getElementById('ot-mine-set');
-      if (btn) btn.disabled = picked.length !== 2;
+      if (btn) btn.disabled = picked.length !== 1;
     });
     document.getElementById('ot-mine-set')?.addEventListener('click', async () => {
       try {

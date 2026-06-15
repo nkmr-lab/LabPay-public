@@ -104,11 +104,11 @@ function othello_join(PDO $pdo, int $uid, int $gid): void {
 function othello_set_mines(PDO $pdo, int $uid, int $gid): void {
     $body = read_json_body();
     $cells = $body['cells'] ?? [];
-    if (!is_array($cells) || count($cells) !== 2) throw new ApiException('bad_request', '地雷は 2 か所', 400);
+    // v608 地雷は 1 個に (2 個だと盤面が地雷だらけになる)
+    if (!is_array($cells) || count($cells) !== 1) throw new ApiException('bad_request', '地雷は 1 か所', 400);
     $clean = [];
     foreach ($cells as $c) {
         if (!is_string($c) || !preg_match('/^[0-7][0-7]$/', $c)) throw new ApiException('bad_request', '位置形式 不正 (rrcc, 0-7)', 400);
-        if (in_array($c, $clean, true)) throw new ApiException('bad_request', '同じ位置に 2 個', 400);
         // 初期 4 マス (33,34,43,44) は ダメ
         if (in_array($c, ['33','34','43','44'], true)) throw new ApiException('bad_request', '初期4マスには 設置できません', 400);
         $clean[] = $c;

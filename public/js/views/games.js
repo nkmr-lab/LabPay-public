@@ -32,7 +32,7 @@ const GAMES = [
     desc: 'W 杯 / スポーツ大会 / 学会 best paper など 順位を予想して 参加フィー を山分け',
     badge: '参加フィー (10-100pt 設定可)' },
   { id: 'othello',   icon: '💣', name: '地雷オセロ',  url: '#/othello',
-    desc: '通常オセロ + 各自 2 か所 地雷 (踏むと 3x3 反転)。 勝者が pot 総取り',
+    desc: '通常オセロ + 各自 1 か所地雷 (踏むと 3x3 反転)。勝者が pot 総取り',
     badge: 'プレイ料 1pt' },
   { id: 'daifugo',   icon: '🃏', name: '大富豪',      url: '#/daifugo',
     desc: '2-4 人、 単出し / ペア / N 枚 出し。 1 位 が pot 総取り (シンプル ルール)',
