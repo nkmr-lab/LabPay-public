@@ -91,11 +91,11 @@ export const APPS = [
   // v609 #235 勝敗予測 (試合のスコアを当てる)
   { id: 'score-predictions', cat: 'game', url: '#/score-predictions', title: '🎯 勝敗予測', desc: '試合のスコア (X-Y) を予想して完璧に当てた人が pot 総取り (山分け、 場代5%)。誰も当たらなければ全員返金。基本20pt、 10-100pt 設定可。', defaultVisible: true },
   // v587 地雷オセロ
-  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。1pt で対戦、勝者が pot 総取り (引分は半分ずつ)。', defaultVisible: true },
+  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。1pt の プレイフィー (勝者もポイントもらわず純粋に遊ぶ)。引分のみ双方に返金。', defaultVisible: true },
   // v588 ビンゴ (週次)
   { id: 'bingo',         cat: 'game',   url: '#/bingo',          title: '🎰 ビンゴ',          desc: '毎週 5x5 ビンゴカードが 自動生成。 平日の 行動 (ラボイン/らぼったー投稿/麻雀/オセロ/食べある記 など) が 自動カウント。 達成早 + ライン数 で 週次 リーダーボード。', defaultVisible: true },
   // v590 大富豪 (シンプル MVP)
-  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。 単出し / ペア / N 枚 出し で 同枚数 + 強い数字 を 出す。 ジョーカー ワイルド。 1pt buy-in、 1 位が pot 総取り。 革命 / 縛り は省略 (MVP)。', defaultVisible: true },
+  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。単出し / ペア / N枚出しで同枚数 + 強い数字を出す。ジョーカーワイルド + 革命 + 8切り。1pt の プレイフィー (1位もポイントもらわず純粋に遊ぶ)。', defaultVisible: true },
   { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
   { id: 'places',        cat: 'game',   url: '#/places',       title: '🍴 食べある記',      desc: 'お店情報 (住所 / 緯度経度 / 紹介文) をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー + tabelog URLから自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },

@@ -238,14 +238,13 @@ function othello_move(PDO $pdo, int $uid, int $gid): void {
             if ($cBlack > $cWhite) $winner = 'creator';
             else if ($cWhite > $cBlack) $winner = 'opponent';
             else $winner = 'draw';
-            $pot = (int)$g['pot_total'];
+            // v612 プレイフィーのみ (= 勝者はポイントもらわない、 pot は システム取り)。
+            //   ※ 引分のみ 双方に 半額返金する のもなくす予定だが、 ユーザの 心情考慮で 引分は 全額返金 にしておく。
             if ($winner === 'draw') {
+                $pot = (int)$g['pot_total'];
                 $each = intdiv($pot, 2);
-                Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分");
-                Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分");
-            } else {
-                $winnerUid = $winner === 'creator' ? (int)$g['creator_user_id'] : (int)$g['opponent_user_id'];
-                Ledger::transfer($pdo, 1, $winnerUid, $pot, 'othello_payout', 'othello', $gid, "オセロ 勝利 payout");
+                Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
+                Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
             }
             $pdo->prepare("UPDATE othello_games SET board_json=?, mines_json=?, triggered_mines_json=?, status='finished', winner=?, finished_at=NOW() WHERE id=?")
                 ->execute([json_encode($board), json_encode($mines), json_encode($triggered), $winner, $gid]);
@@ -274,18 +273,16 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
         $oppSide = $side === 'creator' ? 'opponent' : 'creator';
         $oppColor = $color === 1 ? 2 : 1;
         if (!othello_has_move($board, $oppColor)) {
-            // 終局
+            // 終局 (両者パス)
             $cBlack = 0; $cWhite = 0;
             foreach ($board as $v) { if ($v === 1) $cBlack++; else if ($v === 2) $cWhite++; }
             $winner = $cBlack > $cWhite ? 'creator' : ($cWhite > $cBlack ? 'opponent' : 'draw');
-            $pot = (int)$g['pot_total'];
+            // v612 プレイフィーのみ (勝者は ポイント もらわず、 引分のみ 双方に 返金)
             if ($winner === 'draw') {
+                $pot = (int)$g['pot_total'];
                 $each = intdiv($pot, 2);
-                Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分");
-                Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分");
-            } else {
-                $winnerUid = $winner === 'creator' ? (int)$g['creator_user_id'] : (int)$g['opponent_user_id'];
-                Ledger::transfer($pdo, 1, $winnerUid, $pot, 'othello_payout', 'othello', $gid, "オセロ 勝利 payout");
+                Ledger::transfer($pdo, 1, (int)$g['creator_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
+                Ledger::transfer($pdo, 1, (int)$g['opponent_user_id'], $each, 'othello_refund', 'othello', $gid, "オセロ 引分 返金");
             }
             $pdo->prepare("UPDATE othello_games SET status='finished', winner=?, finished_at=NOW() WHERE id=?")
                 ->execute([$winner, $gid]);

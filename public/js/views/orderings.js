@@ -126,11 +126,28 @@ export async function renderOrderingDetail({ params }) {
       <div id="ord-stage" class="list" style="position:relative; min-height:80px">
         <div class="muted" style="text-align:center; padding:14px">🎲 並べ替え中…</div>
       </div>
-      <div style="text-align:center; margin-top:8px">
+      <div style="text-align:center; margin-top:8px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap">
         <button id="ord-skip" class="btn" style="font-size:11px; padding:2px 10px">⏭ 演出スキップ</button>
+        <button id="ord-copy" class="btn" style="font-size:11px; padding:2px 10px">📋 結果をテキストでコピー</button>
       </div>
     </div>
   `;
+  document.getElementById('ord-copy').addEventListener('click', async () => {
+    const lines = [`【${d.title}】`];
+    d.results.forEach((r, i) => lines.push(`${i + 1}. ${r.display_name}${r.grade ? ` [${r.grade}]` : ''}`));
+    const txt = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(txt);
+      toast('結果をクリップボードにコピーしました');
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); toast('結果をコピーしました'); }
+      catch (e) { toast('コピー失敗'); }
+      finally { document.body.removeChild(ta); }
+    }
+  });
   if (canDelete) {
     document.getElementById('ord-del').addEventListener('click', async () => {
       if (!confirm('この 順番決め を削除しますか? (元には戻せません)')) return;

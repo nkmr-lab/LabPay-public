@@ -209,11 +209,7 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
                 $state['finished_ranks'][] = $idx;
                 $state['players'][$idx]['rank'] = count($state['finished_ranks']);
             }
-            // payout: 1 位が pot 総取り
-            $winnerSeat = $state['finished_ranks'][0];
-            $winnerUid = (int)$state['players'][$winnerSeat]['user_id'];
-            $pot = (int)$g['pot_total'];
-            Ledger::transfer($pdo, 1, $winnerUid, $pot, 'daifugo_payout', 'daifugo', $gid, "大富豪 1 位 payout");
+            // v612 プレイフィーのみ (= 1位もポイントもらわず、 pot は システム取り)
             $pdo->prepare("UPDATE daifugo_games SET state_json=?, state_ver=state_ver+1, status='finished', finished_at=NOW() WHERE id=?")
                 ->execute([json_encode($state), $gid]);
             return;

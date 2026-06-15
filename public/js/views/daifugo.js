@@ -29,9 +29,9 @@ export async function renderDaifugo() {
         <button id="df-new" class="btn primary">＋ 新規卓 (1pt)</button>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        2-4 人。 単出し / ペア / N 枚 出し。 1 ゲーム 1pt、 <b>1 位が pot 総取り</b>。
-        ジョーカーは ワイルド (単体は最強)。 <b>革命 (4 枚同時出しで 強弱反転)</b> ・
-        <b>8切り (「8」 出しで 場流し + 同プレイヤー再開)</b> 採用。
+        2-4 人。単出し / ペア / N枚出し。<b>1ゲーム 1pt のプレイフィー</b> (1位もポイントもらわず純粋に遊ぶ)。
+        ジョーカーはワイルド (単体は最強)。<b>革命 (4枚同時出しで強弱反転)</b>・
+        <b>8切り (「8」出しで場流し + 同プレイヤー再開)</b> 採用。
       </p>
     </div>
     <div id="df-list"><div class="hint">読み込み中…</div></div>

@@ -35,11 +35,11 @@ const GAMES = [
     desc: '試合のスコアを完璧に当てた人が pot 総取り (山分け、 場代5%)',
     badge: '参加フィー (10-100pt 設定可)' },
   { id: 'othello',   icon: '💣', name: '地雷オセロ',  url: '#/othello',
-    desc: '通常オセロ + 各自 1 か所地雷 (踏むと 3x3 反転)。勝者が pot 総取り',
-    badge: 'プレイ料 1pt' },
+    desc: '通常オセロ + 各自 1 か所地雷 (踏むと 3x3 反転)。純粋に遊ぶ用',
+    badge: 'プレイフィー 1pt (勝者も貰わない)' },
   { id: 'daifugo',   icon: '🃏', name: '大富豪',      url: '#/daifugo',
-    desc: '2-4 人、 単出し / ペア / N 枚 出し。 1 位 が pot 総取り (シンプル ルール)',
-    badge: 'プレイ料 1pt' },
+    desc: '2-4 人、 単出し / ペア / N 枚出し + 革命 + 8切り。純粋に遊ぶ用',
+    badge: 'プレイフィー 1pt (1位も貰わない)' },
   // v603 娯楽カテゴリへ追加 (apps cat='game' と同期)
   { id: 'sns',       icon: '💬', name: 'らぼったー',  url: '#/sns',
     desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + リアクション)。フォローなし、全員見える',
@@ -82,13 +82,6 @@ const GAME_CATEGORY = {
 export function renderGames() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card page-header">
-      <h2 style="margin:0">🎮 娯楽</h2>
-      <p class="hint" style="font-size:13px; margin:6px 0 0">
-        ラボメンバーで遊べる ゲーム。 プレイフィー / 賭け / 無料 がそれぞれ並びます。
-        (ルーレット / どこ行く / 順番決め は <a href="#/apps">アプリ</a> タブから)
-      </p>
-    </div>
     ${CATEGORIES.map(cat => {
       const inCat = GAMES.filter(g => GAME_CATEGORY[g.id] === cat.key);
       if (!inCat.length) return '';

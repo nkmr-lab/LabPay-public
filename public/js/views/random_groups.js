@@ -58,7 +58,8 @@ export async function renderRandomGroups() {
       </div>
       <div class="row" style="gap:6px; margin-bottom:10px; flex-wrap:wrap">
         <button id="rg-bulk-create" class="primary">このメンバーでグループ一括作成</button>
-        <button id="rg-notify">📢 結果を全員に通知</button>
+        <button id="rg-copy">📋 結果をテキストでコピー</button>
+        <button id="rg-notify">📢 もう一度通知</button>
       </div>
       <div id="rg-result"></div>
     </div>
@@ -66,8 +67,47 @@ export async function renderRandomGroups() {
   await populatePicker();
   document.getElementById('rg-go').addEventListener('click', () => runShuffle());
   document.getElementById('rg-reshuffle').addEventListener('click', () => runShuffle());
-  document.getElementById('rg-notify').addEventListener('click', () => onNotifyAll());
+  document.getElementById('rg-notify').addEventListener('click', () => onNotifyAll(true));
   document.getElementById('rg-bulk-create').addEventListener('click', () => onBulkCreate());
+  document.getElementById('rg-copy').addEventListener('click', () => onCopyResult());
+}
+
+// v612 分けた瞬間に 自動通知。 押し直し なくても 即届く
+async function autoNotifyAfterShuffle() {
+  if (!lastResult) return;
+  const title = lastTitle || autoTitle();
+  const groups = lastResult.map(g => g.map(m => m.id));
+  try {
+    const r = await post('/api/random-groups/notify', { title, groups });
+    toast(`📢 ${r.sent} 人に結果を通知しました`);
+  } catch (e) { toast('通知失敗: ' + (e?.message || e)); }
+}
+
+// v612 結果を テキストで コピー (Scrapbox 貼付け 用)
+function groupsAsText() {
+  if (!lastResult) return '';
+  const title = lastTitle || autoTitle();
+  const lines = [`【${title}】`];
+  lastResult.forEach((g, i) => {
+    lines.push(`\nグループ${i + 1} (${g.length}人):`);
+    g.forEach(m => lines.push(`  ・ ${m.display_name}${m.grade ? ` [${m.grade}]` : ''}`));
+  });
+  return lines.join('\n');
+}
+async function onCopyResult() {
+  const txt = groupsAsText();
+  if (!txt) { toast('まず分けてください'); return; }
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast('結果をクリップボードにコピーしました');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('結果をコピーしました'); }
+    catch (e) { toast('コピー失敗'); }
+    finally { document.body.removeChild(ta); }
+  }
 }
 
 // Last successful partition result, kept here so 「全員に通知」 can re-use it
@@ -243,7 +283,7 @@ function phase2Swap(initial, considerGrade, considerGender, iterations) {
   return current;
 }
 
-function runShuffle() {
+async function runShuffle() {
   const n = Math.max(2, Math.min(20, Number(document.getElementById('rg-n').value) || 2));
   const considerGrade  = document.getElementById('rg-grade').checked;
   const considerGender = document.getElementById('rg-gender').checked;
@@ -258,6 +298,8 @@ function runShuffle() {
   lastTitle = document.getElementById('rg-title').value.trim() || autoTitle();
   renderResult(groups, lastTitle);
   document.getElementById('rg-reshuffle').disabled = false;
+  // v612 分けた瞬間に 自動で 全員に通知
+  await autoNotifyAfterShuffle();
 }
 
 function renderResult(groups, title) {
@@ -288,11 +330,11 @@ function countByGrade(members) {
   return GRADE_ORDER.filter(g => g && counts[g]).map(g => `${g}:${counts[g]}`).join(' ');
 }
 
-async function onNotifyAll() {
+async function onNotifyAll(reSend = false) {
   if (!lastResult) { toast('まず分けてください'); return; }
   const title = lastTitle || autoTitle();
   const total = lastResult.reduce((s, g) => s + g.length, 0);
-  if (!confirm(`「${title}」の結果を ${total} 人に通知します。よろしいですか?`)) return;
+  if (reSend && !confirm(`「${title}」 の結果を ${total} 人に もう一度 通知しますか?`)) return;
   const groups = lastResult.map(g => g.map(m => m.id));
   try {
     const r = await post('/api/random-groups/notify', { title, groups });

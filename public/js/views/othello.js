@@ -135,13 +135,14 @@ async function paintBoard(gid) {
     }
   } else if (d.status === 'finished') {
     let result;
-    if (d.winner === 'draw') result = '🤝 引分';
-    else if (d.winner === 'creator') result = d.me_side === 'creator' ? '🎉 あなたの 勝ち!' : '😢 あなたの 負け';
-    else result = d.me_side === 'opponent' ? '🎉 あなたの 勝ち!' : '😢 あなたの 負け';
+    if (d.winner === 'draw') result = '🤝 引分 (双方に返金)';
+    else if (d.winner === 'creator') result = d.me_side === 'creator' ? '🎉 あなたの勝ち!' : '😢 あなたの負け';
+    else result = d.me_side === 'opponent' ? '🎉 あなたの勝ち!' : '😢 あなたの負け';
     actionArea = `
       <div class="card">
         <h3 style="margin:0 0 6px">${result}</h3>
         <div>⚫ 黒 ${d.count_black} : ⚪ 白 ${d.count_white}</div>
+        <div class="hint-sm" style="margin-top:6px">プレイフィーのみ なので勝者もポイントもらいません。 純粋に遊ぶゲーム。</div>
       </div>`;
   }
 

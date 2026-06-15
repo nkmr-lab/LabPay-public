@@ -293,8 +293,8 @@ export const TAB_DEFS = [
   { id: 'auctions',     title: '競売 (オークション)' },
   { id: 'research',     title: '研究' },
   { id: 'lab-mgmt',     title: '運営' },
-  { id: 'apps',         title: 'アプリ' },
   { id: 'games',        title: '娯楽' },
+  { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];
 export const DEFAULT_HIDDEN_TABS = []; // v514 デフォルトでは全部表示 (タブ自体を少数厳選)
