@@ -131,74 +131,73 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
     $weekdayClause = "";
     try {
     switch ($type) {
+        // v618 #ビンゴ反映なし bug: テーブル名・カラム名が全部間違っていた。
+        //   ledger_entries → ledger / created_by_user_id → creator_user_id /
+        //   post_reactions → post_likes / rollcall_responses → roll_call_targets /
+        //   todos → user_todos / workouts.created_at → recorded_at / health.created_at → recorded_at /
+        //   meetup_responses → meetup_participants (timestamp なし → meetup created_at で代用)。
+        //   全部 try/catch で 包まれて 0 を 返していたので 「クエリは通るが 何も入らない」 状態だった。
         case 'checkin':
-            $sql = "SELECT COUNT(*) FROM ledger_entries WHERE account_id IN (SELECT id FROM accounts WHERE owner_user_id=?) AND type='checkin' AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM checkins WHERE user_id=? AND checkin_date BETWEEN DATE(?) AND DATE(?)";
             break;
         case 'checkin_streak':
-            // 連続日数: 該当週内の チェックイン日付の数 (5 = 平日全部)
-            $sql = "SELECT COUNT(DISTINCT DATE(created_at)) FROM ledger_entries WHERE account_id IN (SELECT id FROM accounts WHERE owner_user_id=?) AND type='checkin' AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(DISTINCT checkin_date) FROM checkins WHERE user_id=? AND checkin_date BETWEEN DATE(?) AND DATE(?)";
             break;
         case 'opener':
-            // その日の最初の checkin を opener とみなす (簡略化: 該当ユーザが その日の最早 checkin を持っているか)
+            // その日の最初の checkin を opener (該当週内、 自分がオープナーだった日数)
             $sql = "SELECT COUNT(*) FROM (
-                SELECT DATE(created_at) AS d, MIN(created_at) AS minc FROM ledger_entries
-                WHERE type='checkin' AND created_at BETWEEN ? AND ? " . str_replace('created_at', 'created_at', $weekdayClause) . "
-                GROUP BY DATE(created_at)
+                SELECT checkin_date AS d, MIN(created_at) AS minc FROM checkins
+                WHERE checkin_date BETWEEN DATE(?) AND DATE(?)
+                GROUP BY checkin_date
             ) day_first
-            JOIN ledger_entries le ON le.created_at = day_first.minc AND le.type='checkin'
-            JOIN accounts a ON a.id = le.account_id
-            WHERE a.owner_user_id=?";
+            JOIN checkins c ON c.checkin_date = day_first.d AND c.created_at = day_first.minc
+            WHERE c.user_id=?";
             $st = $pdo->prepare($sql);
             $st->execute([$from, $to, $uid]);
             return (int)$st->fetchColumn();
         case 'sns_post':
-            $sql = "SELECT COUNT(*) FROM posts WHERE user_id=? AND parent_id IS NULL AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM posts WHERE user_id=? AND parent_id IS NULL AND created_at BETWEEN ? AND ?";
             break;
         case 'sns_reaction':
-            $sql = "SELECT COUNT(*) FROM post_reactions WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM post_likes WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'purchase':
-            $sql = "SELECT COUNT(*) FROM purchases WHERE buyer_user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM purchases WHERE buyer_user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'sell':
-            $sql = "SELECT COUNT(*) FROM purchases p JOIN listings l ON l.id=p.listing_id WHERE l.seller_user_id=? AND p.created_at BETWEEN ? AND ?" . str_replace('created_at', 'p.created_at', $weekdayClause);
+            $sql = "SELECT COUNT(*) FROM purchases p JOIN listings l ON l.id=p.listing_id WHERE l.seller_user_id=? AND p.created_at BETWEEN ? AND ?";
             break;
         case 'task_complete':
-            $sql = "SELECT COUNT(*) FROM tasks WHERE claimer_user_id=? AND completed_at IS NOT NULL AND completed_at BETWEEN ? AND ?" . str_replace('created_at', 'completed_at', $weekdayClause);
+            $sql = "SELECT COUNT(*) FROM task_claims WHERE user_id=? AND status='approved' AND approved_at IS NOT NULL AND approved_at BETWEEN ? AND ?";
             break;
         case 'mahjong':
-            $sql = "SELECT COUNT(*) FROM mahjong_players mp JOIN mahjong_games mg ON mg.id=mp.game_id WHERE mp.user_id=? AND mg.finished_at IS NOT NULL AND mg.finished_at BETWEEN ? AND ?" . str_replace('created_at', 'mg.finished_at', $weekdayClause);
+            $sql = "SELECT COUNT(*) FROM mahjong_players mp JOIN mahjong_games mg ON mg.id=mp.game_id WHERE mp.user_id=? AND mg.finished_at IS NOT NULL AND mg.finished_at BETWEEN ? AND ?";
             break;
         case 'othello':
-            $sql = "SELECT COUNT(*) FROM othello_games WHERE (creator_user_id=? OR opponent_user_id=?) AND status='finished' AND finished_at BETWEEN ? AND ?" . str_replace('created_at', 'finished_at', $weekdayClause);
+            $sql = "SELECT COUNT(*) FROM othello_games WHERE (creator_user_id=? OR opponent_user_id=?) AND status='finished' AND finished_at BETWEEN ? AND ?";
             $st = $pdo->prepare($sql);
             $st->execute([$uid, $uid, $from, $to]);
             return (int)$st->fetchColumn();
         case 'place_add':
-            $sql = "SELECT COUNT(*) FROM places WHERE created_by_user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM places WHERE creator_user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'walk':
-            // walk_suggestions テーブルが あるなら、 そこから抽出 (なければ 0)
-            $sql = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='walk_sessions'";
-            $st = $pdo->prepare($sql);
-            $st->execute();
-            if (!$st->fetchColumn()) return 0;
-            $sql = "SELECT COUNT(*) FROM walk_sessions WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM walk_sessions WHERE user_id=? AND started_at BETWEEN ? AND ?";
             break;
         case 'workout':
-            $sql = "SELECT COUNT(*) FROM workouts WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM workouts WHERE user_id=? AND recorded_at BETWEEN ? AND ?";
             break;
         case 'health':
-            $sql = "SELECT COUNT(*) FROM health_records WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM health_records WHERE user_id=? AND recorded_at BETWEEN ? AND ?";
             break;
         case 'poll_vote':
-            $sql = "SELECT COUNT(*) FROM poll_votes WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM poll_votes WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'rollcall_resp':
-            $sql = "SELECT COUNT(*) FROM rollcall_responses WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM roll_call_targets WHERE user_id=? AND responded_at IS NOT NULL AND responded_at BETWEEN ? AND ?";
             break;
         case 'todo_done':
-            $sql = "SELECT COUNT(*) FROM todos WHERE user_id=? AND done_at IS NOT NULL AND done_at BETWEEN ? AND ?" . str_replace('created_at', 'done_at', $weekdayClause);
+            $sql = "SELECT COUNT(*) FROM user_todos WHERE user_id=? AND done_at IS NOT NULL AND done_at BETWEEN ? AND ?";
             break;
         case 'fortune_good':
             $sql = "SELECT COUNT(*) FROM user_daily_fortunes WHERE user_id=? AND date_jst BETWEEN DATE(?) AND DATE(?) AND fortune_idx IN (0,1,2,3,4,5,6)";
@@ -206,13 +205,14 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
             $st->execute([$uid, $from, $to]);
             return (int)$st->fetchColumn();
         case 'tier_answer':
-            $sql = "SELECT COUNT(*) FROM tierlist_answers WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM tierlist_answers WHERE user_id=? AND updated_at BETWEEN ? AND ?";
             break;
         case 'prediction_join':
-            $sql = "SELECT COUNT(*) FROM predictions_entries WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM predictions_entries WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'transfer':
-            $sql = "SELECT COUNT(*) FROM ledger_entries WHERE account_id IN (SELECT id FROM accounts WHERE owner_user_id=?) AND type IN ('transfer','task_reward') AND amount < 0 AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            // 自分の口座から 出ていく 取引 (送金 / タスク報酬での支払 など)
+            $sql = "SELECT COUNT(*) FROM ledger WHERE from_account_id IN (SELECT id FROM accounts WHERE owner_user_id=?) AND type IN ('transfer','task_reward') AND created_at BETWEEN ? AND ?";
             break;
         case 'shiritori':
             $sql = "SELECT COUNT(*) FROM shiritori_players WHERE user_id=? AND game_id IN (SELECT id FROM shiritori_games WHERE created_at BETWEEN ? AND ?" . $weekdayClause . ")";
@@ -226,16 +226,17 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
             $st->execute([$uid, $from, $to, $uid, $from, $to]);
             return (int)$st->fetchColumn();
         case 'jinrou':
-            $sql = "SELECT COUNT(*) FROM jinrou_players WHERE user_id=? AND game_id IN (SELECT id FROM jinrou_games WHERE created_at BETWEEN ? AND ?" . $weekdayClause . ")";
+            $sql = "SELECT COUNT(*) FROM jinrou_players WHERE user_id=? AND game_id IN (SELECT id FROM jinrou_games WHERE created_at BETWEEN ? AND ?)";
             break;
         case 'ito_game':
-            $sql = "SELECT COUNT(*) FROM ito_players WHERE user_id=? AND game_id IN (SELECT id FROM ito_games WHERE created_at BETWEEN ? AND ?" . $weekdayClause . ")";
+            $sql = "SELECT COUNT(*) FROM ito_players WHERE user_id=? AND game_id IN (SELECT id FROM ito_games WHERE created_at BETWEEN ? AND ?)";
             break;
         case 'meetup_resp':
-            $sql = "SELECT COUNT(*) FROM meetup_responses WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            // meetup_participants には timestamp が無いので、 該当週内に作成された meetup への 参加で判定
+            $sql = "SELECT COUNT(*) FROM meetup_participants mp JOIN meetups m ON m.id=mp.meetup_id WHERE mp.user_id=? AND m.created_at BETWEEN ? AND ?";
             break;
         case 'notice_post':
-            $sql = "SELECT COUNT(*) FROM notices WHERE user_id=? AND created_at BETWEEN ? AND ?" . $weekdayClause;
+            $sql = "SELECT COUNT(*) FROM notices WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         default:
             return 0;

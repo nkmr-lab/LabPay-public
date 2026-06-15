@@ -1,6 +1,13 @@
-// v617 #236 マルバツ (Tic-Tac-Toe) クライアント。
-//   自作ゲーム フレームワーク (custom_games) を 使うサンプル実装。
-//   新しい 自作ゲームを 作るときは このファイルを コピーして 改造すれば OK。
+// v617/v618 #236 ⭕❌ マルバツ。
+//   自作ゲーム フレームワーク (custom_games) を JS だけ で 使うサンプル実装。
+//   PHP 側は kind を 登録するだけ (CG_REGISTRY)。 ゲームロジックは すべて このファイル に。
+//
+// state 構造:
+//   {
+//     board: [9 マス、 0=空 / 1=⭕ / 2=❌],
+//     creator_uid: int, opponent_uid: int,
+//     turn_user_id: int,
+//   }
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -10,6 +17,51 @@ const KIND = 'tictactoe';
 const POLL_MS = 2500;
 let pollTimer = null;
 
+// ── ゲームロジック (JS) ──────────────────────────────────────────
+function initialState(creatorUid) {
+  return {
+    board: Array(9).fill(0),
+    creator_uid: creatorUid,
+    opponent_uid: 0, // join 時に サーバ側ハンドラ + クライアントで 上書き
+    turn_user_id: creatorUid,
+  };
+}
+
+function joinTransition(state, opponentUid) {
+  return { ...state, opponent_uid: opponentUid };
+}
+
+// 手を打って 新 state + 勝敗 を返す。 不正手は throw。
+function applyMove(state, userId, move) {
+  if (state.turn_user_id !== userId) throw new Error('あなたの手番ではありません');
+  const idx = Number(move.idx);
+  if (!(idx >= 0 && idx <= 8)) throw new Error('idx は 0-8');
+  if (state.board[idx] !== 0) throw new Error('そのマスは 既に置かれています');
+  const mark = userId === state.creator_uid ? 1 : 2;
+  const newBoard = state.board.slice();
+  newBoard[idx] = mark;
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  let winnerUid = null;
+  for (const line of lines) {
+    const a = newBoard[line[0]];
+    if (a !== 0 && a === newBoard[line[1]] && a === newBoard[line[2]]) {
+      winnerUid = a === 1 ? state.creator_uid : state.opponent_uid;
+      break;
+    }
+  }
+  let finished = winnerUid !== null;
+  if (!finished && !newBoard.includes(0)) finished = true; // 引分
+  const oppUid = userId === state.creator_uid ? state.opponent_uid : state.creator_uid;
+  const nextTurn = finished ? null : oppUid;
+  return {
+    state: { ...state, board: newBoard, turn_user_id: nextTurn },
+    finished,
+    winner_user_id: winnerUid,
+    turn_user_id: nextTurn,
+  };
+}
+
+// ── UI ──────────────────────────────────────────────────────────
 function statusBadge(s) {
   switch (s) {
     case 'waiting':   return '<span class="tag warn">対戦相手 募集中</span>';
@@ -38,7 +90,9 @@ export async function renderTicTacToe() {
   `;
   document.getElementById('tt-new').addEventListener('click', async () => {
     try {
-      const r = await post(`/api/custom-games/${KIND}/games`, {});
+      const meId = Number(state.me?.id);
+      const initial = initialState(meId);
+      const r = await post(`/api/custom-games/${KIND}/games`, { initial_state: initial });
       navigate(`#/tictactoe/${r.id}`);
     } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
@@ -46,7 +100,7 @@ export async function renderTicTacToe() {
     const d = await get(`/api/custom-games/${KIND}/games`);
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('tt-list').innerHTML = '<div class="hint">対戦卓がありません。「＋ 新規卓」 で始めましょう。</div>';
+      document.getElementById('tt-list').innerHTML = '<div class="hint">対戦卓 がありません。 「＋ 新規卓」 で 始めましょう。</div>';
       return;
     }
     document.getElementById('tt-list').innerHTML = items.map(g => `
@@ -137,8 +191,11 @@ async function paint(gid) {
   `;
 
   document.getElementById('tt-join')?.addEventListener('click', async () => {
-    try { await post(`/api/custom-games/${KIND}/games/${gid}/join`, {}); paint(gid); }
-    catch (e) { toast('失敗: ' + (e?.message || e)); }
+    try {
+      const newState = joinTransition(d.state, meId);
+      await post(`/api/custom-games/${KIND}/games/${gid}/join`, { new_state: newState });
+      paint(gid);
+    } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
   document.getElementById('tt-cancel')?.addEventListener('click', async () => {
     if (!confirm('キャンセルしますか? (1pt返金)')) return;
@@ -148,8 +205,17 @@ async function paint(gid) {
   document.querySelectorAll('#tt-board button[data-idx]').forEach(b => {
     b.addEventListener('click', async () => {
       const idx = Number(b.dataset.idx);
-      try { await post(`/api/custom-games/${KIND}/games/${gid}/move`, { idx }); paint(gid); }
-      catch (e) { toast('失敗: ' + (e?.message || e)); }
+      try {
+        // v618 JS で applyMove して 結果を サーバに POST
+        const res = applyMove(d.state, meId, { idx });
+        await post(`/api/custom-games/${KIND}/games/${gid}/move`, {
+          new_state: res.state,
+          finished: res.finished,
+          winner_user_id: res.winner_user_id,
+          turn_user_id: res.turn_user_id,
+        });
+        paint(gid);
+      } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
   });
 }
