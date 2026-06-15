@@ -24,6 +24,8 @@ class Ledger {
         //   buyin/payout/refund/rake は 互換 のため allowlist に残すが v621 以降は emit しない
         'custom_game_buyin','custom_game_payout','custom_game_refund','custom_game_rake',
         'custom_game_play_fee',
+        // v623 絵しりとり プレイフィー 2pt/人
+        'shiritori_buyin',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

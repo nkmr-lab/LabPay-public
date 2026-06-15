@@ -49,8 +49,8 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は 練習モード化。
-//   エントリーフィー 0 + 払い出し 0 (= 純粋な練習)。
-const MAHJONG_AI_BUYIN = 0;
+//   エントリーフィー 1pt (v622 から、 払い出し 0 = 純粋な練習料金)。
+const MAHJONG_AI_BUYIN = 1;
 
 // v557 POST /api/mahjong/ai/new — AI 3 体相手の対戦卓を作成 + 即開始 (練習モード)
 function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
@@ -60,13 +60,18 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
     if (count($botIds) < 3) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $botIds, &$gameId) {
-        // 練習モード: 残高チェック / 預託 は スキップ
+        // v623 練習モードでも 1pt の プレイフィー (SYSTEM へ)
+        if (MAHJONG_AI_BUYIN > 0) {
+            mahjong_assert_balance($pdo, $uid, MAHJONG_AI_BUYIN);
+        }
         $pdo->prepare("INSERT INTO mahjong_games (creator_user_id, title, buy_in, status, pot_total) VALUES (?,?,?,?,?)")
             ->execute([$uid, '🤖 AI 対戦 (練習)', MAHJONG_AI_BUYIN, 'lobby', 0]);
         $gameId = (int)$pdo->lastInsertId();
         // 起案者 (人間) を seat 0、 AI を 1/2/3
         mahjong_insert_player($pdo, $gameId, $uid, 0);
-        // MAHJONG_AI_BUYIN = 0 → 預託なし
+        if (MAHJONG_AI_BUYIN > 0) {
+            Ledger::transfer($pdo, $uid, 1, MAHJONG_AI_BUYIN, 'mahjong_buyin', 'mahjong', $gameId, "AI 麻雀 #{$gameId} プレイフィー");
+        }
         foreach ($botIds as $i => $bid) {
             mahjong_insert_player($pdo, $gameId, $bid, $i + 1);
         }

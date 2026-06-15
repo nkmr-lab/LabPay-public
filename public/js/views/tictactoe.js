@@ -79,11 +79,11 @@ export async function renderTicTacToe() {
       <div class="row center" style="gap:6px">
         <h2 style="margin:0">⭕❌ マルバツ</h2>
         <span style="flex:1"></span>
-        <button id="tt-new" class="btn primary">＋ 新規卓 (1pt)</button>
+        <button id="tt-new" class="btn primary">＋ 新規卓</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
         3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。
-        1pt プレイフィー、 勝者が pot 総取り (引分は半額返金)。
+        プレイフィー 1pt。 対戦相手 が 来て 開始 した 時 のみ 両者から 徴収されます。
       </p>
     </div>
     <div id="tt-list"><div class="hint">読み込み中…</div></div>
@@ -143,18 +143,18 @@ async function paint(gid) {
   if (d.status === 'waiting') {
     if (isCreator) {
       actionArea = `<div class="card">
-        <div class="hint">対戦相手を 待っています。</div>
-        <button id="tt-cancel" class="btn" style="margin-top:6px; color:#c00">キャンセル (1pt返金)</button>
+        <div class="hint">対戦相手を 待っています。 開始前なので プレイフィーは まだ 払っていません。</div>
+        <button id="tt-cancel" class="btn" style="margin-top:6px; color:#c00">キャンセル</button>
       </div>`;
     } else {
       actionArea = `<div class="card">
-        <div class="hint">対戦相手として 参加しますか? (1pt)</div>
-        <button id="tt-join" class="btn primary" style="margin-top:6px">参加する (1pt)</button>
+        <div class="hint">対戦相手として 参加しますか? 開始時に 両者から プレイフィー 1pt が 徴収されます。</div>
+        <button id="tt-join" class="btn primary" style="margin-top:6px">参加する (プレイフィー 1pt)</button>
       </div>`;
     }
   } else if (d.status === 'finished') {
     let result;
-    if (d.winner_user_id === null) result = '🤝 引分 (双方 半額返金)';
+    if (d.winner_user_id === null) result = '🤝 引分';
     else if (d.winner_user_id === meId) result = '🎉 あなたの 勝ち!';
     else result = '😢 あなたの 負け';
     actionArea = `<div class="card"><h3 style="margin:0 0 4px">${result}</h3></div>`;

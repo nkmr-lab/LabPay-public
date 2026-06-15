@@ -9,6 +9,9 @@
 
 declare(strict_types=1);
 
+// v623 プレイフィー (1 人 2pt、 初回ターン時に SYSTEM へ)
+const SHIRITORI_FEE = 2;
+
 function route_shiritori(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -187,6 +190,20 @@ function shiritori_turn_submit(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $curIdx = (int)$game['current_turn_idx'] % $n;
         $curPlayer = $players[$curIdx];
         if ((int)$curPlayer['user_id'] !== $uid) throw new ApiException('forbidden', 'あなたのターンではありません', 403);
+
+        // v623 初回ターンで プレイフィー 2pt を SYSTEM に 支払う (lazy charge)。
+        //   paid_at 列が DEFAULT NULL なので 既存ゲームは 課金されず 互換維持。
+        $stPay = $pdo->prepare("SELECT paid_at FROM shiritori_players WHERE game_id=? AND user_id=?");
+        $stPay->execute([$gid, $uid]);
+        $paidAt = $stPay->fetchColumn();
+        if ($paidAt === null) {
+            if (Ledger::balanceOfUser($pdo, $uid) < SHIRITORI_FEE) {
+                throw new ApiException('insufficient_balance', sprintf('プレイフィー %dpt が 必要です', SHIRITORI_FEE), 400);
+            }
+            Ledger::transfer($pdo, $uid, 1, SHIRITORI_FEE, 'shiritori_buyin', 'shiritori', $gid, "絵しりとり #{$gid} プレイフィー");
+            $pdo->prepare("UPDATE shiritori_players SET paid_at=NOW() WHERE game_id=? AND user_id=?")
+                ->execute([$gid, $uid]);
+        }
 
         $roundIdx = intdiv((int)$game['current_turn_idx'], $n);
         $pdo->prepare("INSERT INTO shiritori_drawings

@@ -61,7 +61,7 @@ export async function renderShiritoriNew() {
           <input type="number" id="sh-rounds" min="1" max="10" value="2" style="width:100%; box-sizing:border-box">
         </label>
       </div>
-      <div class="hint" style="font-size:12px; margin-top:6px">⏱ 1 ターン 30 秒 固定</div>
+      <div class="hint" style="font-size:12px; margin-top:6px">⏱ 1 ターン 30 秒 固定 ・ プレイフィー 1 人 2pt (初めて 自分の番を 投稿した 時に 徴収)</div>
       <div style="margin-top:10px">
         <label style="display:block; font-size:13px; margin-bottom:4px">メンバー (自分は自動で含まれます)</label>
         <div id="sh-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>

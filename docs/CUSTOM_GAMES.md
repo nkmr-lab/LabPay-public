@@ -19,19 +19,20 @@ LabPay に **2 人対戦のターン制ゲームを 設定画面 + JS だけ で
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  /api/custom-games/list   ← 登録ゲーム一覧 (UI 用)         │
-│  /api/custom-games/:kind/games            一覧 / 起案     │
+│  /api/custom-games/:kind/games            一覧 / 起案 (無料) │
 │  /api/custom-games/:kind/games/:id        詳細            │
-│  /api/custom-games/:kind/games/:id/join   参加 (1pt)     │
+│  /api/custom-games/:kind/games/:id/join   参加 (両者から 場代 徴収) │
 │  /api/custom-games/:kind/games/:id/move   手を打つ        │
-│  /api/custom-games/:kind/games/:id/cancel  キャンセル      │
+│  /api/custom-games/:kind/games/:id/cancel  キャンセル (無料) │
+│  /api/custom-games/kinds/:kind/script.js  JS module 配信  │
 └─────────────────┬─────────────────────────────────────────┘
                   │ 全 ゲーム共通 / PHP
                   ▼
 ┌──────────────────────────────────────────────────────────┐
 │  src/handlers/custom_games.php                            │
-│  - CG_REGISTRY (kind → display_name / fee / icon / description) │
+│  - custom_game_kinds (DB 管理、 ユーザ自身が登録可能)        │
 │  - 共通 API (list / create / join / move / cancel)         │
-│  - Ledger 操作 (buy-in / payout / refund)                 │
+│  - Ledger: join 時に 場代 を 提供者 90% / SYSTEM 10% へ      │
 │  - turn_user_id を 厳密に enforce (= 不正手 のサーバ側 ガード)   │
 │  - state_json は 不透明 (= 中身は 触らない)                  │
 └─────────────────┬────────────────────────────────────────┘
@@ -160,14 +161,14 @@ v620 から **汎用ディスパッチャ** が `/cg/:kind` と `/cg/:kind/:id` 
 ## API: 詳細
 
 ### POST `/api/custom-games/:kind/games`
-起案。 起案者が 1pt 支払う。 Body:
+起案。 **無課金** (waiting で 卓を 開くだけ)。 Body:
 ```json
 { "initial_state": { /* 自由 */ } }
 ```
 レスポンス: `{ ok: true, id: 42 }`
 
 ### POST `/api/custom-games/:kind/games/:id/join`
-参加。 1pt 支払う。 Body:
+参加。 ここで 初めて 場代 が 動く: **起案者 + 参加者 から fee pt ずつ** 徴収、 各 fee は 提供者 (kind 登録者) 90% / SYSTEM 10% に 配分。 fee=0 なら 課金なし。 Body:
 ```json
 { "new_state": { /* opponent_uid を 埋めた state */ } }
 ```
@@ -182,17 +183,17 @@ v620 から **汎用ディスパッチャ** が `/cg/:kind` と `/cg/:kind/:id` 
   "turn_user_id": 5
 }
 ```
-終了時 (`finished: true`) は 自動で payout / refund。 `winner_user_id = null` なら 引分 (双方 半額返金)。
+終了時 (`finished: true`) は **課金 / 払戻 なし** (場代は すでに join で 払い済み)。 `winner_user_id` は 集計用に 記録するだけ。
 
 ### GET `/api/custom-games/:kind/games/:id`
-詳細を取得。 レスポンス例:
+詳細を取得。 レスポンス例 (pot_total は 旧フィールド、 v621 以降 常に 0):
 ```json
 {
   "id": 42, "game_kind": "tictactoe", "status": "playing",
   "creator_user_id": 3, "creator_name": "...",
   "opponent_user_id": 5, "opponent_name": "...",
   "winner_user_id": null, "winner_name": null,
-  "fee": 1, "pot_total": 2,
+  "fee": 1, "pot_total": 0,
   "turn_user_id": 3, "my_turn": true,
   "state": { "board": [0,0,0,...], "creator_uid": 3, "opponent_uid": 5, "turn_user_id": 3 },
   "finished_at": null, "created_at": "..."
