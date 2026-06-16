@@ -351,10 +351,12 @@ function renderHomeLayoutEditor() {
       const set = new Set(l.hidden);
       if (ev.target.checked) set.delete(id); else set.add(id);
       l.hidden = [...set];
-      // order が未保存 (初回) ならここで現在順を確定して持たせる。
-      if (!l.order.length) l.order = orderedIds.slice();
+      // v652 toggle 時 は 必ず 現在 の 全 id を order に 保存。 これで
+      // readHomeLayout() の NEW_DEFAULT_SHOWN auto-show merge() が
+      // 「order に 既に いる」 と 判断 して ユーザ の チェック 解除 を
+      // 上書き しなく なる (= チェック 外して も 反映 される)。
+      l.order = orderedIds.slice();
       writeHomeLayout(l);
-      // 即時反映の見せ場は home なので、 ここでは UI 整合だけ取り直す。
       renderHomeLayoutEditor();
     });
     row.querySelector('.hl-up')  .addEventListener('click', () => moveCard(id, -1, orderedIds));

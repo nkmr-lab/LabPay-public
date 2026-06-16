@@ -1852,9 +1852,8 @@ async function renderEntertainmentWidget() {
   });
 }
 
-// v651 🏅 実績 + 称号 ウィジェット。 上段 に AI 称号 (あれば)、 下段 に 獲得済
-// 実績 を 直近 5 件 並べる。 まだ 何 も 獲得 してない 時 は 「もう ちょっと」 で
-// 次 の 実績 (next が ある もの の 中 で progress が 最 も 高い 1 件) を 案内。
+// v652 🏅 実績 widget。 シンプル に: 達成 済 実績 リスト (tier 昇順 = 最 高 tier
+// を 下 に) + 一番 下 に 「最新: 〇〇」 テキスト 1 行 だけ。
 async function renderAchievementsWidget() {
   const card = document.getElementById('home-achievements-card');
   const root = document.getElementById('home-achievements');
@@ -1862,59 +1861,32 @@ async function renderAchievementsWidget() {
   card.hidden = false;
   card.classList.remove('home-card-user-hidden');
   try {
-    const [aRes, tRes] = await Promise.allSettled([
-      get('/api/me/achievements'),
-      get('/api/me/achievements_title'),
-    ]);
-    const items = aRes.status === 'fulfilled' ? (aRes.value.items || []) : [];
-    const earned = items.filter(it => it.earned).sort((a, b) => (b.earned_tier || 0) - (a.earned_tier || 0));
-    const title = tRes.status === 'fulfilled' ? tRes.value : null;
-    const parts = [];
-    if (title && title.title) {
-      parts.push(`
-        <div style="padding:8px 10px; background:linear-gradient(135deg, #faf6ff 0%, #f3ebff 100%); border-left:3px solid var(--primary); border-radius:6px; margin-bottom:8px">
-          <div class="hint-sm" style="font-size:11px; color:#7b3fa0; margin-bottom:2px">🪪 あなた の 称号</div>
-          <div class="bold" style="font-size:15px">${escapeHtml(title.title)}</div>
-        </div>`);
-    } else if (earned.length) {
-      parts.push(`
-        <div class="hint-sm" style="font-size:12px; margin-bottom:6px">
-          🪪 称号 未生成 ・ <a href="#/achievements">実績 ページ</a> で 生成 できます
-        </div>`);
+    const d = await get('/api/me/achievements');
+    const items = (d.items || []).filter(it => it.earned);
+    if (!items.length) {
+      root.innerHTML = '<div class="hint" style="font-size:13px">まだ 実績 は 獲得 して いません</div>';
+      return;
     }
-    if (earned.length) {
-      const top = earned.slice(0, 5);
-      parts.push(top.map(it => {
-        const medal = (it.earned && it.earned.medal) ? it.earned.medal : '🏅';
-        const label = (it.earned && it.earned.label) ? it.earned.label : '';
-        return `
-          <div class="list-item" style="padding:4px 0; gap:8px; align-items:center">
-            <span style="font-size:18px">${escapeHtml(medal)}</span>
-            <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:13px">${escapeHtml(it.title)} ・ ${escapeHtml(label)}</div>
-              <div class="meta">通算 ${Number(it.value).toLocaleString()} ${escapeHtml(it.unit || '')}</div>
-            </div>
-          </div>`;
-      }).join(''));
-      if (earned.length > 5) {
-        parts.push(`<div class="hint-sm" style="font-size:12px; padding-top:4px">他 ${earned.length - 5} 件</div>`);
-      }
-    } else {
-      // 未獲得: 「もう ちょっと」 で 次 が 取れそう な 1 件 を 表示
-      const candidates = items.filter(it => it.next && (it.next_progress ?? 0) > 0);
-      candidates.sort((a, b) => (b.next_progress || 0) - (a.next_progress || 0));
-      const c = candidates[0];
-      if (c) {
-        const pct = Math.round((c.next_progress || 0) * 100);
-        parts.push(`
-          <div class="hint" style="font-size:13px">
-            まだ 実績 は 獲得 して いません。 一番 近い: <b>${escapeHtml(c.title)}</b> (${pct}% / 通算 ${Number(c.value).toLocaleString()} ${escapeHtml(c.unit || '')})
-          </div>`);
-      } else {
-        parts.push('<div class="hint" style="font-size:13px">まだ 実績 は 獲得 して いません</div>');
-      }
-    }
-    root.innerHTML = parts.join('');
+    // tier 昇順 (低 → 高)。 同 tier 内 は value 昇順 で 安定。 最新 = 最後 = 最 高 tier。
+    items.sort((a, b) => (a.earned_tier || 0) - (b.earned_tier || 0) || (a.value || 0) - (b.value || 0));
+    const latest = items[items.length - 1];
+    const listHtml = items.map(it => {
+      const medal = (it.earned && it.earned.medal) ? it.earned.medal : '🏅';
+      const label = (it.earned && it.earned.label) ? it.earned.label : '';
+      return `
+        <div class="list-item" style="padding:4px 0; gap:8px; align-items:center">
+          <span style="font-size:18px">${escapeHtml(medal)}</span>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:13px">${escapeHtml(it.title)} ・ ${escapeHtml(label)}</div>
+            <div class="meta">通算 ${Number(it.value).toLocaleString()} ${escapeHtml(it.unit || '')}</div>
+          </div>
+        </div>`;
+    }).join('');
+    const latestMedal = (latest.earned && latest.earned.medal) ? latest.earned.medal : '🏅';
+    const latestLabel = (latest.earned && latest.earned.label) ? latest.earned.label : '';
+    const latestText = `最新: ${latestMedal} ${escapeHtml(latest.title)} ・ ${escapeHtml(latestLabel)}`;
+    root.innerHTML = listHtml +
+      `<div class="hint-sm" style="font-size:12px; padding-top:6px; margin-top:4px; border-top:1px solid var(--line)">${latestText}</div>`;
   } catch (e) {
     root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
   }
