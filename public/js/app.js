@@ -325,32 +325,33 @@ export function applyTabLayout() {
   if (!nav) return;
   const layout = readTabLayout();
   const links = Array.from(nav.querySelectorAll(':scope > [data-tab-id]'));
+  const linkMap = new Map(links.map(l => [l.dataset.tabId, l]));
   const knownIds = links.map(l => l.dataset.tabId);
-  // TAB_DEFS の正規順 (今 DOM に居る ID のみ抽出)
   const canonical = TAB_DEFS.map(t => t.id).filter(id => knownIds.includes(id));
+  // 完全な orderedKnown を構築
   const orderedKnown = [];
-  // 1) ユーザの保存 order を軸に並べる (= 過去のカスタマイズを尊重)。
   for (const id of layout.order) {
-    if (knownIds.includes(id)) orderedKnown.push(id);
+    if (knownIds.includes(id) && !orderedKnown.includes(id)) orderedKnown.push(id);
   }
-  // 2) 保存 order に無い新規 ID を、 canonical で 「直前にあるはず」 の既知タブの
-  //    直後に差し込む。 末尾に放り込まないことで、 新タブの想定位置を維持。
-  const savedSet = new Set(orderedKnown);
+  // layout.order に 無い 新規 ID を canonical で 補完
   for (const id of canonical) {
-    if (savedSet.has(id)) continue;
-    const idx = canonical.indexOf(id);
+    if (orderedKnown.includes(id)) continue;
+    const ci = canonical.indexOf(id);
     let insertAfter = -1;
-    for (let j = idx - 1; j >= 0; j--) {
+    for (let j = ci - 1; j >= 0; j--) {
       const pos = orderedKnown.indexOf(canonical[j]);
       if (pos >= 0) { insertAfter = pos; break; }
     }
     orderedKnown.splice(insertAfter + 1, 0, id);
-    savedSet.add(id);
   }
+  // v642 一旦 全部 detach してから 順番に append。 単純な appendChild の 連発 だと
+  //   ブラウザの 再 layout が 一部 反映されない 報告が あったため 確実に DOM を 再構築。
+  for (const link of links) { if (link.parentNode === nav) nav.removeChild(link); }
   for (const id of orderedKnown) {
-    const el = links.find(l => l.dataset.tabId === id);
+    const el = linkMap.get(id);
     if (el) nav.appendChild(el);
   }
+  // hidden 適用
   for (const link of links) {
     link.classList.toggle('tab-user-hidden', layout.hidden.includes(link.dataset.tabId));
   }
