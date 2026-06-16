@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v643', d: '2026-06-16', s: '📝 フリップ クイズ #240/#241 対応: テキスト入力中 (textarea/input フォーカス時) は polling re-render を スキップ で 入力 消える 問題 解決 + 「🗣️ 口頭モード」 追加 (問題は 声で 出して、 フリップだけ で 解答 → 採点 → 次の問)' },
   { v: 'v642', d: '2026-06-16', s: '設定 タブ順番 が 反映されない 問題 を 修正。 applyTabLayout を appendChild 連発 → remove-then-append に 堅化、 単純な move では 一部 ブラウザで 再 layout 更新されない 報告に 対応' },
   { v: 'v641', d: '2026-06-16', s: '🎉 娯楽ウィジェット を デフォルト ON に。 HOME_CARDS / DEFAULT_VISIBLE / NEW_DEFAULT_SHOWN 全部 に recruiting を追加、 既存ユーザにも 自動表示。 設定 → ホーム からも 個別 ON/OFF 可' },
   { v: 'v640', d: '2026-06-16', s: '🎉 娯楽 ウィジェット 大改修: 参加中 + 募集中 を まとめて 表示。 各 item に ▶参加中 / 🎯募集中 タグ。 優勝予想 / 勝敗予測 の テーブル名 を 修正 (predictions_games / score_pred_games)。 進行中ゲーム も 出るので 「自分の番だっけ?」 が ホームで わかる' },

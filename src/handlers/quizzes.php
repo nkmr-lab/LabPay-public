@@ -56,6 +56,8 @@ function quizzes_create(PDO $pdo, array $cfg, int $uid): void {
     $body = read_json_body();
     $title = trim((string)require_field($body, 'title'));
     if ($title === '' || mb_strlen($title) > 200) throw new ApiException('bad_request', 'title 1-200', 400);
+    $mode = (string)($body['mode'] ?? 'text');
+    if (!in_array($mode, ['text', 'verbal'], true)) throw new ApiException('bad_request', 'mode は text/verbal', 400);
     $participants = $body['participants'] ?? [];
     if (!is_array($participants) || count($participants) < 1) throw new ApiException('bad_request', '参加者 1 人以上', 400);
     $participants = array_values(array_unique(array_map('intval', $participants)));
@@ -75,8 +77,8 @@ function quizzes_create(PDO $pdo, array $cfg, int $uid): void {
         'scores' => new \stdClass(),
         'history' => [],
     ];
-    $pdo->prepare("INSERT INTO quizzes (creator_user_id, title, participants_json, state_json) VALUES (?,?,?,?)")
-        ->execute([$uid, $title, json_encode($participants), json_encode($state, JSON_UNESCAPED_UNICODE)]);
+    $pdo->prepare("INSERT INTO quizzes (creator_user_id, title, mode, participants_json, state_json) VALUES (?,?,?,?,?)")
+        ->execute([$uid, $title, $mode, json_encode($participants), json_encode($state, JSON_UNESCAPED_UNICODE)]);
     $qid = (int)$pdo->lastInsertId();
     $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
     $stN->execute([$uid]); $byName = (string)$stN->fetchColumn();
@@ -128,6 +130,7 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
         'creator_user_id' => (int)$g['creator_user_id'],
         'creator_name' => $g['creator_name'],
         'title' => $g['title'],
+        'mode' => $g['mode'] ?? 'text',
         'status' => $g['status'],
         'participants' => $participantList,
         'i_am_creator' => (int)$g['creator_user_id'] === $uid,
@@ -146,16 +149,21 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
 }
 
 // 出題者 が 問題文 を 出題 (asking → answering)
+//   verbal モード では question が 空でも OK (= 「口頭で 出題、 解答開始」)
 function quizzes_ask(PDO $pdo, int $uid, int $qid): void {
     $body = read_json_body();
-    $question = trim((string)require_field($body, 'question'));
-    if ($question === '' || mb_strlen($question) > 500) throw new ApiException('bad_request', 'question 1-500', 400);
+    $question = trim((string)($body['question'] ?? ''));
+    if (mb_strlen($question) > 500) throw new ApiException('bad_request', 'question は 500 文字以内', 400);
     db_tx($pdo, function () use ($pdo, $uid, $qid, $question) {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
         if ($state['phase'] !== 'asking') throw new ApiException('bad_request', '今は 出題フェーズ ではない', 400);
-        $state['question'] = $question;
+        $mode = $g['mode'] ?? 'text';
+        if ($mode === 'text' && $question === '') {
+            throw new ApiException('bad_request', '問題文 を 入力してください (口頭モード で 作成すると テキスト不要)', 400);
+        }
+        $state['question'] = $question;   // verbal モード なら 空文字列で OK
         $state['answers'] = new \stdClass();
         $state['phase'] = 'answering';
         quizzes_save($pdo, $qid, $state);

@@ -53,6 +53,15 @@ export async function renderQuizNew() {
         <span class="lbl">タイトル</span>
         <input type="text" id="qz-title" maxlength="200" placeholder="例: ラボ クイズ大会">
       </label>
+      <div class="lbl" style="margin-top:8px">出題 モード</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <label style="flex:1; padding:10px; border:2px solid #ddd; border-radius:8px; cursor:pointer">
+          <input type="radio" name="qz-mode" value="text" checked> ⌨️ テキスト入力 (問題文を 入力)
+        </label>
+        <label style="flex:1; padding:10px; border:2px solid #ddd; border-radius:8px; cursor:pointer">
+          <input type="radio" name="qz-mode" value="verbal"> 🗣️ 口頭 (フリップだけ、 出題は 声で)
+        </label>
+      </div>
       <div class="lbl" style="margin-top:8px">参加者 (自分は 自動で 含まれる)</div>
       <div class="hint-sm" style="font-size:12px; margin-bottom:4px">回答する 人。 自分も 回答可</div>
       <div id="qz-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
@@ -80,7 +89,8 @@ export async function renderQuizNew() {
     const btn = document.getElementById('qz-go');
     btn.disabled = true; btn.textContent = '作成中…';
     try {
-      const r = await post('/api/quizzes', { title, participants });
+      const mode = document.querySelector('input[name="qz-mode"]:checked')?.value || 'text';
+      const r = await post('/api/quizzes', { title, mode, participants });
       navigate('#/quizzes/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '📝 開始'; }
   });
@@ -97,6 +107,13 @@ export async function renderQuizDetail({ params }) {
 }
 
 async function paint(qid) {
+  // v643 #240 修正: 入力中の textarea / input が あれば polling re-render を スキップ
+  //   (= フォーカス と 入力内容 を 保護)。 タップ後 別箇所に フォーカス移動 で 復帰。
+  const active = document.activeElement;
+  if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
+      document.getElementById('app')?.contains(active)) {
+    return;
+  }
   let d;
   try { d = await get('/api/quizzes/' + qid); }
   catch (e) {
@@ -159,6 +176,14 @@ function phaseBadge(status, phase) {
 
 function renderAsking(d, me) {
   if (d.i_am_creator) {
+    if (d.mode === 'verbal') {
+      return `<div class="card">
+        <h3 style="margin:0 0 6px">第 ${d.current_q} 問 (🗣️ 口頭モード)</h3>
+        <p class="hint" style="font-size:13px">声で 問題を 出してください。 全員が 聞いたら 下のボタンで 解答受付 を 開始。</p>
+        <button id="qz-ask" class="btn primary" style="margin-top:8px">🗣️ 出題した、 解答受付 開始</button>
+        ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで 終了</button>` : ''}
+      </div>`;
+    }
     return `<div class="card">
       <h3 style="margin:0 0 6px">第 ${d.current_q} 問 を 出題</h3>
       <textarea id="qz-q" rows="3" maxlength="500" placeholder="問題文 を 入力" style="width:100%; box-sizing:border-box; font-size:14px"></textarea>
@@ -166,16 +191,19 @@ function renderAsking(d, me) {
       ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで 終了</button>` : ''}
     </div>`;
   }
-  return `<div class="card"><div class="hint">出題者 が 問題 を 入力中… (第 ${d.current_q} 問)</div></div>`;
+  return `<div class="card"><div class="hint">${d.mode === 'verbal' ? '出題者が 口頭で 問題を 出します…' : '出題者 が 問題 を 入力中…'} (第 ${d.current_q} 問)</div></div>`;
 }
 
 function renderAnswering(d, me, partName) {
   const myAns = d.answers?.[String(me)];
   const submittedCount = Object.keys(d.answers || {}).length;
   const total = d.participants.length;
+  const qHtml = d.mode === 'verbal' && !d.question
+    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:8px; font-size:13px; color:#92400e">🗣️ 口頭で 出された 問題に 答えてください</div>'
+    : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:8px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">第 ${d.current_q} 問</h3>
-    <div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:8px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
+    ${qHtml}`;
   if (d.i_am_participant) {
     if (myAns !== undefined) {
       html += `<div class="hint">送信済: <b>${escapeHtml(myAns)}</b>。 全員 ${submittedCount}/${total} 人 回答中…</div>
@@ -204,9 +232,12 @@ function renderAnswering(d, me, partName) {
 function renderReveal(d, me, partName) {
   const submitted = Object.keys(d.answers || {}).length;
   const total = d.participants.length;
+  const qHtml = d.mode === 'verbal' && !d.question
+    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:10px; font-size:13px; color:#92400e">🗣️ 口頭で 出された 問題</div>'
+    : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">📢 第 ${d.current_q} 問 開示</h3>
-    <div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>
+    ${qHtml}
     <div class="hint-sm" style="font-size:12px; margin-bottom:6px">タップで 拡大表示。 全員 ${submitted}/${total} 人 解答</div>
     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px">
       ${d.participants.map(p => {
@@ -240,9 +271,12 @@ function renderReveal(d, me, partName) {
 }
 
 function renderScored(d, me, partName) {
+  const qHtml = d.mode === 'verbal' && !d.question
+    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:10px; font-size:13px; color:#92400e">🗣️ 口頭問題</div>'
+    : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">第 ${d.current_q} 問 採点結果</h3>
-    <div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>
+    ${qHtml}
     ${d.participants.map(p => {
       const ans = d.answers?.[String(p.uid)];
       const sc = d.scores?.[String(p.uid)];
@@ -274,7 +308,7 @@ function renderFinished(d, partName) {
       <div class="bold" style="margin-bottom:6px">📜 全 ${d.history.length} 問 振り返り</div>
       ${d.history.map((h, idx) => `
         <details style="margin:6px 0; border:1px solid #eee; border-radius:6px">
-          <summary style="padding:8px; cursor:pointer; font-weight:600">第 ${idx + 1} 問: ${escapeHtml(h.q || '')}</summary>
+          <summary style="padding:8px; cursor:pointer; font-weight:600">第 ${idx + 1} 問: ${h.q ? escapeHtml(h.q) : '<span style="color:#92400e">🗣️ 口頭問題</span>'}</summary>
           <div style="padding:8px 12px">
             ${d.participants.map(p => {
               const ans = h.answers?.[String(p.uid)];
@@ -295,8 +329,9 @@ function renderFinished(d, partName) {
 
 function wireActions(qid, d, me, partName) {
   document.getElementById('qz-ask')?.addEventListener('click', async () => {
-    const q = document.getElementById('qz-q').value.trim();
-    if (!q) { toast('問題文 を 入れてください'); return; }
+    const ta = document.getElementById('qz-q');
+    const q = ta ? ta.value.trim() : '';
+    if (d.mode === 'text' && !q) { toast('問題文 を 入れてください'); return; }
     try { await post('/api/quizzes/' + qid + '/ask', { question: q }); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
