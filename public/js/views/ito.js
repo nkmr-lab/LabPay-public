@@ -82,6 +82,10 @@ export async function renderItoNew() {
         <div id="ito-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="ito-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px">
+        <input type="checkbox" id="ito-instant" checked>
+        対象者で 即開始 (全員から 一括徴収 + 数字配布 + 即 input phase)
+      </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/ito" class="btn">キャンセル</a>
         <button id="ito-go" class="primary">卓を立てる</button>
@@ -112,8 +116,9 @@ export async function renderItoNew() {
     const memberIds = picker ? [...picker.getSelected()] : [];
     const btn = document.getElementById('ito-go');
     btn.disabled = true; btn.textContent = '作成中…';
+    const instant = document.getElementById('ito-instant')?.checked && memberIds.length > 0;
     try {
-      const r = await post('/api/ito/games', { theme, buy_in: buyIn, member_ids: memberIds });
+      const r = await post('/api/ito/games', { theme, buy_in: buyIn, member_ids: memberIds, instant_start: instant });
       navigate('#/ito/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '卓を立てる'; }
   });

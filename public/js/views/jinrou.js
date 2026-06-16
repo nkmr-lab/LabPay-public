@@ -80,6 +80,10 @@ export async function renderJinrouNew() {
         <div id="jr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="jr-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px">
+        <input type="checkbox" id="jr-instant" checked>
+        対象者で 即開始 (3 人以上 招待で 全員から 一括徴収 + 役職配布 + 即 night phase)
+      </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/jinrou" class="btn">キャンセル</a>
         <button id="jr-go" class="primary">卓を立てる</button>
@@ -101,8 +105,9 @@ export async function renderJinrouNew() {
     const memberIds = picker ? [...picker.getSelected()] : [];
     const btn = document.getElementById('jr-go');
     btn.disabled = true; btn.textContent = '作成中…';
+    const instant = document.getElementById('jr-instant')?.checked && memberIds.length >= 3;
     try {
-      const r = await post('/api/jinrou/games', { buy_in: buyIn, member_ids: memberIds });
+      const r = await post('/api/jinrou/games', { buy_in: buyIn, member_ids: memberIds, instant_start: instant });
       navigate('#/jinrou/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '卓を立てる'; }
   });

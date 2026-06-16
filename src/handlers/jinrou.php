@@ -158,22 +158,77 @@ function jinrou_create(PDO $pdo, array $cfg, int $uid): void {
     if ($buyIn < 1 || $buyIn > 100) throw new ApiException('bad_request', 'buy_in 1-100', 400);
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) $memberIds = [];
+    // v632 instant_start = 全員 即着席 + 一括徴収 + 役職配布 + status='night' に。
+    //   人狼 は 4 人以上 必要 なので 自分 + 3 人 以上 招待 されてれば 即開始可。
+    $instant = !empty($body['instant_start']) && count($memberIds) >= 3;
     $gameId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $buyIn, &$gameId) {
+    db_tx($pdo, function () use ($pdo, $uid, $buyIn, $memberIds, $instant, &$gameId) {
         mahjong_assert_balance($pdo, $uid, $buyIn);
         $pdo->prepare("INSERT INTO jinrou_games (creator_user_id, buy_in, status, pot_total) VALUES (?,?,?,?)")
             ->execute([$uid, $buyIn, 'lobby', 0]);
         $gameId = (int)$pdo->lastInsertId();
         $pdo->prepare("INSERT INTO jinrou_players (game_id, user_id) VALUES (?, ?)")->execute([$gameId, $uid]);
         jinrou_deposit($pdo, $gameId, $uid, $buyIn);
+        if ($instant) {
+            jinrou_create_with_invitees($pdo, $uid, $gameId, $buyIn, $memberIds);
+        }
     });
     global $CFG;
     foreach ($memberIds as $mid) {
         $mid = (int)$mid;
         if ($mid === $uid || $mid <= 0) continue;
-        try { notify_safely($pdo, $CFG, $mid, 'admin_notice', "🐺 人狼ゲームに招待されました ({$buyIn}pt)", 'jinrou', $gameId); } catch (Throwable $_) {}
+        try {
+            $msg = $instant
+                ? "🐺 人狼 開始! 役職が 配布されました ({$buyIn}pt 預託済)"
+                : "🐺 人狼ゲームに招待されました ({$buyIn}pt)";
+            notify_safely($pdo, $CFG, $mid, 'admin_notice', $msg, 'jinrou', $gameId);
+        } catch (Throwable $_) {}
     }
     json_response(['ok' => true, 'id' => $gameId]);
+}
+
+// v632 instant_start: 招待者を 全員 着席 + 一括徴収 + 役職配布 + 'night' へ
+function jinrou_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $buyIn, array $invitees): void {
+    $invitees = array_values(array_unique(array_map('intval', $invitees)));
+    $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid && $u > 0));
+    $n = 1 + count($invitees);
+    if ($n < 4) throw new ApiException('bad_request', '人狼は 4 人以上 (自分 + 3 人 以上)', 400);
+    if ($n > 16) throw new ApiException('bad_request', '16 人まで', 400);
+    $place = implode(',', array_fill(0, count($invitees), '?'));
+    $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
+    $stU->execute($invitees);
+    $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
+    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバー', 400);
+    foreach ($invitees as $iv) {
+        if (Ledger::balanceOfUser($pdo, $iv) < $buyIn) {
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $stN->execute([$iv]);
+            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
+        }
+    }
+    foreach ($invitees as $iv) {
+        $pdo->prepare("INSERT INTO jinrou_players (game_id, user_id) VALUES (?, ?)")->execute([$gid, $iv]);
+        jinrou_deposit($pdo, $gid, $iv, $buyIn);
+    }
+    // 役職配布 (= jinrou_start core 部分) + status='night'
+    $wolfCount = $n <= 5 ? 1 : ($n <= 8 ? 2 : ($n <= 12 ? 3 : 4));
+    $roles = [];
+    for ($i = 0; $i < $wolfCount; $i++) $roles[] = 'wolf';
+    $roles[] = 'seer';
+    $roles[] = 'knight';
+    while (count($roles) < $n) $roles[] = 'villager';
+    shuffle($roles);
+    $stP = $pdo->prepare("SELECT user_id FROM jinrou_players WHERE game_id = ? ORDER BY joined_at");
+    $stP->execute([$gid]);
+    $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
+    foreach ($playerUids as $i => $puid) {
+        $pdo->prepare("UPDATE jinrou_players SET role = ?, alive = 1 WHERE game_id = ? AND user_id = ?")
+            ->execute([$roles[$i], $gid, $puid]);
+    }
+    $config = ['wolf_count' => $wolfCount, 'seer' => 1, 'knight' => 1];
+    $log = [['event' => 'game_start', 'players' => $n, 'config' => $config]];
+    $pdo->prepare("UPDATE jinrou_games SET status='night', started_at=NOW(), round_no=1, config_json=?, log_json=? WHERE id = ?")
+        ->execute([json_encode($config, JSON_UNESCAPED_UNICODE), json_encode($log, JSON_UNESCAPED_UNICODE), $gid]);
 }
 
 function jinrou_join(PDO $pdo, array $cfg, int $uid, int $gid): void {
