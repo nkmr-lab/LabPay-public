@@ -1797,7 +1797,9 @@ async function loadBingoMini() {
 }
 
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
-// v638 娯楽 募集中 ウィジェット。 自分が 未参加 / 招待 の オープン卓 を 集めて表示。
+// v638 / v640 娯楽 募集中 + 参加中 ウィジェット。
+//   tag=='active' (= 自分が 参加中で 進行中) と tag=='open' (= 未参加で 募集中) を まとめて表示。
+//   active を 先頭、 open を 後ろに。
 async function renderRecruitingWidget() {
   const card = document.getElementById('home-recruiting-card');
   const root = document.getElementById('home-recruiting');
@@ -1806,16 +1808,28 @@ async function renderRecruitingWidget() {
     const d = await get('/api/me/recruiting');
     const items = d.items || [];
     if (!items.length) { card.hidden = true; return; }
+    // active を 先頭 に sort
+    items.sort((a, b) => (a.tag === 'active' ? 0 : 1) - (b.tag === 'active' ? 0 : 1));
     card.hidden = false;
-    root.innerHTML = items.slice(0, 8).map(it => `
-      <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
-        <span style="font-size:20px; flex:none">${it.icon}</span>
-        <div class="grow">
-          <div class="bold" style="font-size:13px">${escapeHtml(it.title)}</div>
-          <div class="hint-sm" style="font-size:11px">${escapeHtml(it.by)} 起案${it.fee ? ' ・ ' + escapeHtml(it.fee) : ''}</div>
-        </div>
-      </a>
-    `).join('');
+    // タイトル を 動的に
+    const activeN = items.filter(i => i.tag === 'active').length;
+    const openN   = items.filter(i => i.tag === 'open').length;
+    card.querySelector('.row-title').innerHTML =
+      `🎉 娯楽 ${activeN ? `<span style="color:#10b981">参加中 ${activeN}</span>` : ''}${activeN && openN ? ' / ' : ''}${openN ? `<span style="color:#f59e0b">募集中 ${openN}</span>` : ''}`;
+    root.innerHTML = items.slice(0, 10).map(it => {
+      const tagHtml = it.tag === 'active'
+        ? '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>'
+        : '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>';
+      return `
+        <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
+          <span style="font-size:20px; flex:none">${it.icon}</span>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:13px">${tagHtml} ${escapeHtml(it.title)}</div>
+            <div class="hint-sm" style="font-size:11px">${escapeHtml(it.by)} 起案${it.fee ? ' ・ ' + escapeHtml(it.fee) : ''}</div>
+          </div>
+        </a>
+      `;
+    }).join('');
   } catch (e) { card.hidden = true; }
 }
 
