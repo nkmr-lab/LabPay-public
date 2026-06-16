@@ -9,6 +9,96 @@ import { shareToSns } from '../share_to_sns.js';
 
 const POLL_MS = 2500;
 let pollTimer = null;
+// v636 地雷踏み 演出: 既に 見た triggered cells を gid 単位で 覚えて、 新規分 だけ アニメ
+const seenTriggers = new Map(); // gid -> Set<cellKey>
+
+// 💥 ドーン (Web Audio で その場 生成、 admin 登録 不要)
+function playBoom() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const t0 = ctx.currentTime;
+    // 低音 の 爆発 (sawtooth + frequency sweep)
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(120, t0);
+    osc.frequency.exponentialRampToValueAtTime(20, t0 + 0.5);
+    gain.gain.setValueAtTime(0.4, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.55);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0); osc.stop(t0 + 0.6);
+    // 高音 の クラック (短い ノイズ)
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.6, t0);
+    g2.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    src.connect(g2).connect(ctx.destination);
+    src.start(t0);
+    setTimeout(() => { try { ctx.close(); } catch (_) {} }, 700);
+  } catch (_) {}
+}
+
+// 3x3 のセルを くるくる + ひっくり返す アニメ、 中心に 🔥
+function runExplosionAnim(boardEl, cellKey) {
+  if (!boardEl) return;
+  const r = Number(cellKey[0]), c = Number(cellKey[1]);
+  // 中心 + 周囲 3x3 にクラス付与
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;
+      const cell = boardEl.querySelector(`[data-othello-cell="${nr}${nc}"]`);
+      if (cell) {
+        cell.classList.add('mine-flip');
+        setTimeout(() => cell.classList.remove('mine-flip'), 1400);
+      }
+    }
+  }
+  // 中心に 🔥 オーバーレイ
+  const center = boardEl.querySelector(`[data-othello-cell="${cellKey}"]`);
+  if (center) {
+    const fire = document.createElement('div');
+    fire.className = 'mine-fire';
+    fire.textContent = '🔥';
+    center.appendChild(fire);
+    setTimeout(() => fire.remove(), 1500);
+  }
+}
+
+// CSS keyframes を 1 回だけ head に 入れる
+function ensureMineFXStyles() {
+  if (document.getElementById('mine-fx-style')) return;
+  const s = document.createElement('style');
+  s.id = 'mine-fx-style';
+  s.textContent = `
+    @keyframes mineFlip {
+      0%   { transform: rotateY(0)    rotateZ(0)   scale(1);   }
+      30%  { transform: rotateY(360deg) rotateZ(180deg) scale(1.15); filter: brightness(1.5) hue-rotate(20deg); }
+      70%  { transform: rotateY(900deg) rotateZ(360deg) scale(1.1);  filter: brightness(1.3); }
+      100% { transform: rotateY(1080deg) rotateZ(360deg) scale(1);   }
+    }
+    .mine-flip { animation: mineFlip 1.3s cubic-bezier(.42,.0,.58,1) forwards; transform-style: preserve-3d; z-index:2; position:relative; }
+    @keyframes mineFire {
+      0%   { opacity: 0; transform: scale(0.3) translateY(0); }
+      15%  { opacity: 1; transform: scale(1.4) translateY(-2px); }
+      60%  { opacity: 1; transform: scale(1.2) translateY(-6px); filter: brightness(1.4); }
+      100% { opacity: 0; transform: scale(0.8) translateY(-14px); }
+    }
+    .mine-fire {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      font-size:48px; pointer-events:none; animation: mineFire 1.4s ease-out forwards;
+      text-shadow: 0 0 12px #ff7700, 0 0 20px #ff3300;
+      z-index: 10;
+    }
+  `;
+  document.head.appendChild(s);
+}
 
 function statusBadge(s) {
   switch (s) {
@@ -108,6 +198,12 @@ async function paintBoard(gid) {
   const myTurn = d.status === 'playing' && d.me_side && d.turn_side === d.me_side;
   const triggeredMap = {};
   for (const t of (d.triggered_mines || [])) triggeredMap[t.cell] = t.owner;
+  // v636 新規 trigger を 検出 (前回の paint 以降に 増えた もの)
+  ensureMineFXStyles();
+  const seen = seenTriggers.get(gid) || new Set();
+  const newlyTriggered = (d.triggered_mines || []).filter(t => !seen.has(t.cell));
+  for (const t of (d.triggered_mines || [])) seen.add(t.cell);
+  seenTriggers.set(gid, seen);
 
   let actionArea = '';
   if (d.status === 'waiting') {
@@ -200,8 +296,8 @@ async function paintBoard(gid) {
           let bg = '#3d8b6b';
           if (myMine) bg = '#a16207'; // 自分の地雷 は 茶色 (自分にだけ 見える)
           if (triggered) bg = '#dc2626'; // 起爆済は 赤
-          return `<button data-cell="${cellKey}" data-r="${r}" data-c="${c}"
-                    style="aspect-ratio:1/1; background:${bg}; border:1px solid #1b4332; padding:0; display:flex; align-items:center; justify-content:center; cursor:${isLegal || d.status === 'mine_setup' ? 'pointer' : 'default'}; min-width:0; min-height:0">
+          return `<button data-cell="${cellKey}" data-r="${r}" data-c="${c}" data-othello-cell="${cellKey}"
+                    style="aspect-ratio:1/1; background:${bg}; border:1px solid #1b4332; padding:0; display:flex; align-items:center; justify-content:center; cursor:${isLegal || d.status === 'mine_setup' ? 'pointer' : 'default'}; min-width:0; min-height:0; position:relative">
                     ${inner}
                   </button>`;
         }).join('')}
@@ -209,6 +305,17 @@ async function paintBoard(gid) {
     </div>
     ${actionArea}
   `;
+
+  // v636 新規 trigger があれば 音 + 🔥 + 3x3 ぐるぐる
+  //   初回 paint (= ページに 入った 直後 = 既に 起爆 済) では 鳴らさない、
+  //   2 回目以降 の paint で 新規が 増えた時だけ。
+  const isFirstPaint = !seenTriggers.has(gid + '_seen_once');
+  seenTriggers.set(gid + '_seen_once', true);
+  if (!isFirstPaint && newlyTriggered.length > 0) {
+    const boardEl = document.getElementById('ot-board');
+    playBoom();
+    for (const t of newlyTriggered) runExplosionAnim(boardEl, t.cell);
+  }
 
   // ピン留めワイヤリング
   document.getElementById('ot-share')?.addEventListener('click', () => {
