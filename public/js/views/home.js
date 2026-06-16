@@ -527,10 +527,9 @@ export async function renderHome() {
     </div>
 
     <details class="card" data-card-id="history">
-      <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">
-        履歴 <a href="#/history" class="hint" style="font-weight:400; margin-left:6px" onclick="event.stopPropagation()">すべて見る →</a>
-      </summary>
-      <div id="recent" class="list" style="margin-top:8px"><div class="home-skel-bars"></div></div>
+      <summary style="cursor:pointer; font-weight:700; font-size:var(--text-lg); list-style:none">履歴</summary>
+      <div style="text-align:right; margin-top:4px"><a href="#/history" class="hint" style="font-size:13px">すべて見る →</a></div>
+      <div id="recent" class="list" style="margin-top:4px"><div class="home-skel-bars"></div></div>
     </details>
 
     ${SHORTCUT_CARDS_DEFS.map(c => `

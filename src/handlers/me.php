@@ -523,42 +523,42 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
         // ───── 自分が 参加中 の active ゲーム ─────
         try {
-            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by_name FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status IN ('mine_setup','playing') AND (g.creator_user_id=? OR g.opponent_user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '💣', 'kind' => 'othello',
-                            'title' => '地雷オセロ #' . (int)$r['id'], 'by' => $r['by'], 'fee' => '',
+                            'title' => '地雷オセロ #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/othello/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by FROM daifugo_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by_name FROM daifugo_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='playing'
                                     AND EXISTS (SELECT 1 FROM daifugo_players p WHERE p.game_id=g.id AND p.user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '🃏', 'kind' => 'daifugo',
-                            'title' => '大富豪 #' . (int)$r['id'], 'by' => $r['by'], 'fee' => '',
+                            'title' => '大富豪 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/daifugo/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by FROM mahjong_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by_name FROM mahjong_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='playing'
                                     AND EXISTS (SELECT 1 FROM mahjong_players p WHERE p.game_id=g.id AND p.user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '🀄', 'kind' => 'mahjong',
-                            'title' => '麻雀 #' . (int)$r['id'], 'by' => $r['by'], 'fee' => '',
+                            'title' => '麻雀 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/mahjong/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, g.theme, uc.display_name AS by FROM ito_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, g.theme, uc.display_name AS by_name FROM ito_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status IN ('input','reveal')
                                     AND EXISTS (SELECT 1 FROM ito_players p WHERE p.game_id=g.id AND p.user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
@@ -566,23 +566,23 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '🎲', 'kind' => 'ito',
                             'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/ito/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/ito/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by FROM jinrou_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, uc.display_name AS by_name FROM jinrou_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status IN ('night','day')
                                     AND EXISTS (SELECT 1 FROM jinrou_players p WHERE p.game_id=g.id AND p.user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '🐺', 'kind' => 'jinrou',
-                            'title' => '人狼 #' . (int)$r['id'], 'by' => $r['by'], 'fee' => '',
+                            'title' => '人狼 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/jinrou/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by FROM shiritori_games g JOIN users uc ON uc.id=g.creator_user_id
+            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by_name FROM shiritori_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='active'
                                     AND EXISTS (SELECT 1 FROM shiritori_players p WHERE p.game_id=g.id AND p.user_id=?)
                                   ORDER BY g.id DESC LIMIT 5");
@@ -590,11 +590,11 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => '🎨', 'kind' => 'shiritori',
                             'title' => '絵しりとり 「' . mb_substr((string)$r['title'], 0, 20) . '」',
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/shiritori/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/shiritori/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
-            $st = $pdo->prepare("SELECT g.id, g.game_kind, k.icon, k.display_name AS kind_name, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.game_kind, k.icon, k.display_name AS kind_name, uc.display_name AS by_name
                                    FROM custom_games g JOIN users uc ON uc.id=g.creator_user_id
                                    LEFT JOIN custom_game_kinds k ON k.kind=g.game_kind
                                   WHERE g.status='playing'
@@ -604,24 +604,24 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'active', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'cg-' . $r['game_kind'],
                             'title' => ($r['kind_name'] ?? $r['game_kind']) . ' #' . (int)$r['id'],
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         // ───── 募集中 (自分が 未参加 で join 可能) ─────
         try {
-            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by_name
                                    FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='waiting' AND g.creator_user_id <> ? AND (g.opponent_user_id IS NULL OR g.opponent_user_id <> ?)
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '💣', 'kind' => 'othello', 'title' => '地雷オセロ #' . (int)$r['id'],
-                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/othello/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/othello/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🃏 大富豪 (lobby で 自分が 未参加)
-            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by,
+            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by_name,
                                         (SELECT COUNT(*) FROM daifugo_players p WHERE p.game_id=g.id) AS pn
                                    FROM daifugo_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
@@ -630,12 +630,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '🃏', 'kind' => 'daifugo', 'title' => '大富豪 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '人)',
-                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/daifugo/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/daifugo/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🀄 麻雀 (lobby で 自分が 未参加)
-            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by,
+            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by_name,
                                         (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id=g.id) AS pn
                                    FROM mahjong_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
@@ -644,12 +644,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '🀄', 'kind' => 'mahjong', 'title' => '麻雀 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '/4)',
-                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/mahjong/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/mahjong/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🎲 ito (lobby、 未参加)
-            $st = $pdo->prepare("SELECT g.id, g.theme, g.buy_in, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.theme, g.buy_in, uc.display_name AS by_name
                                    FROM ito_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
                                     AND NOT EXISTS (SELECT 1 FROM ito_players p WHERE p.game_id=g.id AND p.user_id=?)
@@ -657,12 +657,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '🎲', 'kind' => 'ito', 'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
-                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/ito/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/ito/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🐺 人狼 (lobby、 未参加)
-            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by_name
                                    FROM jinrou_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
                                     AND NOT EXISTS (SELECT 1 FROM jinrou_players p WHERE p.game_id=g.id AND p.user_id=?)
@@ -670,12 +670,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '🐺', 'kind' => 'jinrou', 'title' => '人狼 #' . (int)$r['id'],
-                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/jinrou/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/jinrou/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🎮 custom_games (waiting、 自分が 未参加)
-            $st = $pdo->prepare("SELECT g.id, g.game_kind, g.fee, uc.display_name AS by, k.display_name AS kind_name, k.icon
+            $st = $pdo->prepare("SELECT g.id, g.game_kind, g.fee, uc.display_name AS by_name, k.display_name AS kind_name, k.icon
                                    FROM custom_games g JOIN users uc ON uc.id=g.creator_user_id
                                    LEFT JOIN custom_game_kinds k ON k.kind=g.game_kind
                                   WHERE g.status='waiting' AND g.creator_user_id <> ?
@@ -685,13 +685,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'custom-' . $r['game_kind'],
                             'title' => ($r['kind_name'] ?? $r['game_kind']) . ' #' . (int)$r['id'],
-                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt',
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt',
                             'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // ⚾ ドラフト (active で 自分が participant に 含まれてて 招待された)
-            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by_name
                                    FROM drafts g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='active' AND g.creator_user_id <> ?
                                     AND g.participants_json LIKE CONCAT('%', ?, '%')
@@ -699,12 +699,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '⚾', 'kind' => 'draft', 'title' => 'ドラフト: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/drafts/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/drafts/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 📝 フリップ クイズ (active で 自分が participant)
-            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by_name
                                    FROM quizzes g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='active' AND g.creator_user_id <> ?
                                     AND g.participants_json LIKE CONCAT('%', ?, '%')
@@ -712,12 +712,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '📝', 'kind' => 'quiz', 'title' => 'クイズ: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/quizzes/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/quizzes/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🏆 優勝予想 (predictions_games、 締切前 で 自分が 未提出)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, uc.display_name AS by_name
                                    FROM predictions_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.deadline_at > NOW()
                                     AND NOT EXISTS (SELECT 1 FROM predictions_entries pe WHERE pe.game_id=g.id AND pe.user_id=?)
@@ -725,12 +725,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'open', 'icon' => '🏆', 'kind' => 'prediction', 'title' => '優勝予想: ' . mb_substr((string)$r['title'], 0, 25),
-                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/predictions/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/predictions/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🎯 勝敗予測 (score_pred_games、 締切前 で 自分が 未提出)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, uc.display_name AS by
+            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, uc.display_name AS by_name
                                    FROM score_pred_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.deadline_at > NOW() AND g.status='open'
                                     AND NOT EXISTS (SELECT 1 FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?)
@@ -739,14 +739,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $label = $r['team_home'] && $r['team_away'] ? ($r['team_home'] . ' vs ' . $r['team_away']) : (string)$r['title'];
                 $items[] = ['tag' => 'open', 'icon' => '🎯', 'kind' => 'score-pred', 'title' => '勝敗予測: ' . mb_substr($label, 0, 28),
-                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/score-predictions/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/score-predictions/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
 
         // ───── v644 追加: あなた宛て の その他 アクション ─────
         try {
             // 📊 投票 (未投票 で 締切前)
-            $st = $pdo->prepare("SELECT p.id, p.title, uc.display_name AS by
+            $st = $pdo->prepare("SELECT p.id, p.title, uc.display_name AS by_name
                                    FROM polls p JOIN users uc ON uc.id=p.creator_user_id
                                   WHERE p.status='open' AND p.deleted_at IS NULL
                                     AND (p.deadline_at IS NULL OR p.deadline_at > NOW())
@@ -756,18 +756,18 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'vote', 'icon' => '📊', 'kind' => 'poll',
                             'title' => '投票: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/polls/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/polls/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 📄 論文査読 (自分が 起案、 pending / processing 中)
-            $st = $pdo->prepare("SELECT id, title, status FROM paper_reviews
+            $st = $pdo->prepare("SELECT id, pdf_name, status FROM paper_reviews
                                   WHERE user_id=? AND status IN ('pending','processing')
                                   ORDER BY id DESC LIMIT 3");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'work', 'icon' => '📄', 'kind' => 'paper-review',
-                            'title' => '論文査読: ' . mb_substr((string)$r['title'], 0, 28) . ' (' . $r['status'] . ')',
+                            'title' => '論文査読: ' . mb_substr((string)$r['pdf_name'], 0, 28) . ' (' . $r['status'] . ')',
                             'by' => '', 'fee' => '', 'url' => '#/paper-review'];
             }
         } catch (Throwable $_) {}
@@ -784,18 +784,18 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 📣 点呼 (open で 自分 未応答)
-            $st = $pdo->prepare("SELECT r.id, r.title, uc.display_name AS by
+            // 📣 点呼 (open で 自分 未応答 = roll_call_targets.responded_at IS NULL)
+            $st = $pdo->prepare("SELECT r.id, r.title, uc.display_name AS by_name
                                    FROM roll_calls r JOIN users uc ON uc.id=r.creator_user_id
+                                   JOIN roll_call_targets t ON t.roll_call_id=r.id AND t.user_id=?
                                   WHERE r.status='open' AND r.deleted_at IS NULL
-                                    AND EXISTS (SELECT 1 FROM roll_call_targets t WHERE t.roll_call_id=r.id AND t.user_id=?)
-                                    AND NOT EXISTS (SELECT 1 FROM roll_call_responses rr WHERE rr.roll_call_id=r.id AND rr.user_id=?)
+                                    AND t.responded_at IS NULL
                                   ORDER BY r.deadline_at ASC LIMIT 5");
-            $st->execute([$uid, $uid]);
+            $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['tag' => 'vote', 'icon' => '📣', 'kind' => 'rollcall',
                             'title' => '点呼: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by'], 'fee' => '', 'url' => '#/rollcalls/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/rollcalls/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
 
