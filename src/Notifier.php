@@ -7,6 +7,36 @@ declare(strict_types=1);
 class Notifier {
     private const EMAILABLE_TYPES = ['sale', 'transfer_received', 'task_approved', 'admin_notice'];
 
+    // v656 ref_type + ref_id → アプリ 内 URL fragment。 Slack DM 末尾 に
+    // 「→ https://pay.nkmr.io/#/...」 を 付ける ため。 未対応 type は null。
+    public static function urlFor(?string $refType, ?int $refId): ?string {
+        if (!$refType || !$refId) return null;
+        return match ($refType) {
+            'money_request'                          => "#/requests/{$refId}",
+            'post'                                   => "#/sns/{$refId}",
+            'feedback'                               => "#/feedback",
+            'rollcall'                               => "#/rollcalls/{$refId}",
+            'meetup'                                 => "#/meetups/{$refId}",
+            'poll'                                   => "#/polls/{$refId}",
+            'task', 'task_approved', 'task_claimed',
+            'task_my_claim', 'task_reported',
+            'task_cancelled', 'task_expired'         => "#/tasks/{$refId}",
+            'auction'                                => "#/auctions/{$refId}",
+            'invitation'                             => "#/invitations/{$refId}",
+            'group'                                  => "#/groups/{$refId}",
+            'prediction'                             => "#/predictions/{$refId}",
+            'score_pred'                             => "#/score-predictions/{$refId}",
+            'mahjong'                                => "#/mahjong/{$refId}",
+            'jinrou'                                 => "#/jinrou/{$refId}",
+            'ito'                                    => "#/ito/{$refId}",
+            'drafts'                                 => "#/drafts/{$refId}",
+            'nomikai'                                => "#/nomikai/{$refId}",
+            'roulette'                               => "#/roulette/{$refId}",
+            'timer'                                  => "#/timers/{$refId}",
+            default                                  => null,
+        };
+    }
+
     public static function notify(
         PDO $pdo,
         array $cfg,
@@ -48,10 +78,17 @@ class Notifier {
                 $u->execute([$userId]);
                 $sid = (string)($u->fetchColumn() ?: '');
                 if ($sid !== '') {
+                    // v656 通知 が どの ページ に 対応 する か を URL で 末尾 に 付ける
+                    // (Slack 上 から すぐ 飛べる ように)。 unfurl は 引き続き off の まま。
+                    $slackText = '[LabPay] ' . $body;
+                    $frag = self::urlFor($refType, $refId);
+                    if ($frag !== null) {
+                        $base = rtrim((string)($cfg['app']['base_url'] ?? 'https://pay.nkmr.io'), '/');
+                        $slackText .= "\n→ " . $base . '/' . ltrim($frag, '/');
+                    }
                     @slack_api_post($cfg, 'chat.postMessage', [
                         'channel' => $sid,        // U-prefix の member ID を直接 channel に渡せば DM
-                        'text'    => '[LabPay] ' . $body,
-                        // 通知音やバッジを Slack 側で鳴らすため unfurl は off。 LinkUnfurl は許可。
+                        'text'    => $slackText,
                         'unfurl_links' => false,
                         'unfurl_media' => false,
                     ]);
