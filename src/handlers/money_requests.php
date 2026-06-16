@@ -11,6 +11,7 @@ function route_money_requests(PDO $pdo, array $cfg, string $method, array $seg):
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { money_requests_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { money_requests_create($pdo, $cfg); return; }
+    if ($sub === 'unpaid-summary' && $method === 'GET') { money_requests_unpaid_summary($pdo, $cfg); return; }
 
     $id = (int)$sub;
     if ($id > 0) {
@@ -49,6 +50,59 @@ function money_requests_list(PDO $pdo, array $cfg): void {
          ORDER BY r.closed_at IS NULL DESC, r.created_at DESC LIMIT 100");
     $st->execute([$u['id'], $u['id'], $u['id'], $u['id'], $u['id']]);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+// v658 自分 が creator (= 受取側) の 請求 のうち、 未払 い 受取人 を
+// 人 別 に 合算。 同じ 人 が 複数 の 請求 で 払って ない 場合 は
+// 一行 に まとめて 「user X: 合計 ¥Y (N 件)」 と 返す。
+function money_requests_unpaid_summary(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    // 自分が creator (or created_by) の 請求 で、 受取人 が 未払い の もの。
+    // 削除済 請求 (closed_at) は 除外。 自分 が 自分 宛て (creator==recipient) も 除外。
+    $st = $pdo->prepare("
+        SELECT mr.id   AS request_id,
+               mr.title,
+               mrr.user_id,
+               us.display_name,
+               us.avatar_url,
+               us.grade,
+               mrr.amount_yen
+          FROM money_request_recipients mrr
+          JOIN money_requests mr ON mr.id = mrr.request_id
+          JOIN users us ON us.id = mrr.user_id
+         WHERE (mr.creator_user_id = ? OR mr.created_by_user_id = ?)
+           AND mr.closed_at IS NULL
+           AND mrr.paid_at IS NULL
+           AND mrr.user_id <> mr.creator_user_id
+         ORDER BY mrr.user_id, mr.id");
+    $st->execute([(int)$u['id'], (int)$u['id']]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    // 人 別 集計
+    $perUser = [];
+    foreach ($rows as $r) {
+        $uid = (int)$r['user_id'];
+        if (!isset($perUser[$uid])) {
+            $perUser[$uid] = [
+                'user_id'      => $uid,
+                'display_name' => $r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+                'grade'        => $r['grade'] ?? '',
+                'total_yen'    => 0,
+                'request_count'=> 0,
+                'requests'     => [],
+            ];
+        }
+        $perUser[$uid]['total_yen']     += (int)$r['amount_yen'];
+        $perUser[$uid]['request_count'] += 1;
+        $perUser[$uid]['requests'][]    = [
+            'request_id' => (int)$r['request_id'],
+            'title'      => $r['title'],
+            'amount_yen' => (int)$r['amount_yen'],
+        ];
+    }
+    // 合計額 降順
+    usort($perUser, fn($a, $b) => $b['total_yen'] - $a['total_yen']);
+    json_response(['items' => array_values($perUser)]);
 }
 
 // ─── CREATE ──────────────────────────────────────────────────

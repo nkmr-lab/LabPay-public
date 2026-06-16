@@ -75,6 +75,12 @@ export async function renderMoneyRequests() {
       <h3>履歴</h3>
       <div id="mr-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
+
+    <div id="mr-unpaid-people-card" class="card" hidden>
+      <h3>👥 未払い人 別 合算 (あなたが 受取側)</h3>
+      <div id="mr-unpaid-people-summary" class="muted" style="font-size:13px; margin-bottom:6px"></div>
+      <div id="mr-unpaid-people-list" class="list"></div>
+    </div>
   `;
   await populatePicker();
   document.getElementById('mr-title').addEventListener('input', renderPreview);
@@ -85,6 +91,7 @@ export async function renderMoneyRequests() {
   document.getElementById('mr-clear')      .addEventListener('click', resetForm);
   switchMode('flat');
   await loadList();
+  loadUnpaidPeopleSummary();
   // 直近の自分作成の請求があればプリロード (タイトル/メモ/受取人/金額)。
   // 「またあの集金やる」が大半なので、ベース設定を毎回入れ直さなくて
   // 済むようにする。要らないときは [クリア] で消せる。
@@ -333,6 +340,43 @@ async function loadList() {
     }).join('');
   } catch (e) {
     document.getElementById('mr-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v658 自分 が creator (受取側) の 請求 で、 受取人 別 に 未払 い 合算 を 表示。
+// 同じ 人 が 複数 の 請求 で 払って ない 場合 を 一行 に まとめる。
+async function loadUnpaidPeopleSummary() {
+  const card = document.getElementById('mr-unpaid-people-card');
+  const sum  = document.getElementById('mr-unpaid-people-summary');
+  const list = document.getElementById('mr-unpaid-people-list');
+  if (!card || !sum || !list) return;
+  try {
+    const d = await get('/api/money-requests/unpaid-summary');
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const grand = items.reduce((s, x) => s + Number(x.total_yen || 0), 0);
+    sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${grand.toLocaleString()}</span> (${items.length} 人 / 未払 い)`;
+    list.innerHTML = items.map(p => {
+      const reqLines = p.requests.map(r =>
+        `<div style="font-size:12px; color:var(--muted); padding-left:6px">└ <a href="#/requests/${r.request_id}">${escapeHtml(r.title)}</a> ¥${Number(r.amount_yen).toLocaleString()}</div>`
+      ).join('');
+      return `
+        <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px">
+          <div class="row center" style="gap:8px">
+            ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
+            <div class="grow" style="min-width:0">
+              <div class="bold">${escapeHtml(p.display_name)} ${p.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(p.grade)}]</span>` : ''}</div>
+              <div class="meta">${p.request_count} 件 未払 い</div>
+            </div>
+            <div class="bold" style="font-size:15px; color:#b54708">¥${Number(p.total_yen).toLocaleString()}</div>
+          </div>
+          ${reqLines}
+        </div>`;
+    }).join('');
+  } catch (e) {
+    card.hidden = false;
+    list.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
