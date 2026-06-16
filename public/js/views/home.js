@@ -607,7 +607,8 @@ export async function renderHome() {
   const cardPromises = cardsToRender
     // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
     //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
-    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || !hiddenSet.has(c.cardId))
+    // v654 force-render は 撤去。 ユーザ が 設定 で 隠して も 出続ける 問題 を 防ぐ。
+    .filter(c => !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
@@ -1897,8 +1898,8 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg }) {
   const card = document.getElementById(cardId);
   const root = document.getElementById(rootId);
   if (!card || !root) return;
+  // v654 user-hidden class は applyHomeLayout に 任せる (touch しない)。
   card.hidden = false;
-  card.classList.remove('home-card-user-hidden');
   const allItems = await fetchRecruitingItems();
   if (allItems === null) {
     card.querySelector('.row-title').textContent = `${title} (取得失敗)`;
