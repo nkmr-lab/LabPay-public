@@ -207,6 +207,7 @@ export const HOME_CARDS = [
   { id: 'history',        title: '履歴' },
   { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
+  { id: 'recruiting',     title: '🎉 娯楽 参加中 / 募集中' }, // v641
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -220,6 +221,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
   // v605 ビンゴ ウィジェットは 残高横の サマリで 代替できるので デフォルト OFF に戻す
+  'recruiting', // v641 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -237,7 +239,7 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
 const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
-const NEW_DEFAULT_SHOWN  = [];
+const NEW_DEFAULT_SHOWN  = ['recruiting']; // v641 既存ユーザにも 自動表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
