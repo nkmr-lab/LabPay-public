@@ -363,13 +363,13 @@ async function loadUnpaidPeopleSummary() {
       ).join('');
       return `
         <div class="list-item" style="flex-direction:column; align-items:stretch; gap:4px">
-          <div class="row center" style="gap:8px">
+          <div style="display:flex; align-items:center; gap:8px">
             ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
-            <div class="grow" style="min-width:0">
+            <div style="flex:1; min-width:0">
               <div class="bold">${escapeHtml(p.display_name)} ${p.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(p.grade)}]</span>` : ''}</div>
               <div class="meta">${p.request_count} 件 未払 い</div>
             </div>
-            <div class="bold" style="font-size:15px; color:#b54708">¥${Number(p.total_yen).toLocaleString()}</div>
+            <div class="bold" style="font-size:15px; color:#b54708; flex:none">¥${Number(p.total_yen).toLocaleString()}</div>
           </div>
           ${reqLines}
         </div>`;
