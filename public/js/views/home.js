@@ -2311,6 +2311,9 @@ async function renderMyActiveTimers() {
     // v442 待ち合わせ も 「時間制限あり」 に 合流。 cancelled なし + 未来 (meetup_at > now)
     // のもの だけ。 v445 tick: countdown、 10 分 切ったら 赤。
     // v450 kind = 'deadline' は 📌 〆切、 'meetup' は 🤝 待ち合わせ。
+    // v650 1 週間以上 先 (= 待ち合わせは 180 日先 まで 可能) は 件数だけ 集約。
+    const ONE_WEEK_MS = 7 * 86400 * 1000;
+    let farMeetups = 0, farDeadlines = 0;
     if (mu.status === 'fulfilled') {
       const nowMs = Date.now();
       for (const m of (mu.value.items || [])) {
@@ -2319,6 +2322,10 @@ async function renderMyActiveTimers() {
         if (!ts || ts <= nowMs) continue;
         const remaining = Math.max(0, Math.floor((ts - nowMs) / 1000));
         const isDeadline = m.kind === 'deadline';
+        if (ts - nowMs > ONE_WEEK_MS) {
+          if (isDeadline) farDeadlines++; else farMeetups++;
+          continue;
+        }
         rows.push({
           href: '#/meetups/' + m.id,
           kind: isDeadline ? '📌 〆切' : '🤝 待ち合わせ',
@@ -2430,7 +2437,9 @@ async function renderMyActiveTimers() {
     if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
     // v514 #132 中身が無いときはカードごと非表示 (ユーザがチェック ON にしていても、
     //   空ならホームに領域を取らない。 polling で 1 件でも出てきたら card.hidden=false)。
-    if (!rows.length) { card.hidden = true; root.innerHTML = ''; return; }
+    // v650 1 週間先 の meetup/deadline が ある時 は 件数だけ 表示 (フッタ 用)。
+    const farTotal = farMeetups + farDeadlines;
+    if (!rows.length && farTotal === 0) { card.hidden = true; root.innerHTML = ''; return; }
     card.hidden = false;
     rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
     root.innerHTML = rows.map(r => {
@@ -2467,6 +2476,14 @@ async function renderMyActiveTimers() {
           <div class="hint">→</div>
         </a>`;
     }).join('');
+    // v650 1 週間先 の 集約 footer
+    if (farTotal > 0) {
+      const parts = [];
+      if (farMeetups)   parts.push(`🤝 待ち合わせ ${farMeetups}`);
+      if (farDeadlines) parts.push(`📌 〆切 ${farDeadlines}`);
+      root.insertAdjacentHTML('beforeend',
+        `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; border-top:1px solid var(--line); margin-top:4px">⏳ 他 ${farTotal} 件 (1 週間以上 先 ・ ${parts.join(' / ')})</a>`);
+    }
     // ローカル 秒 tick 開始。 root が DOM から 外れたら 自動 停止。
     myActiveTimersTickId = setInterval(() => updateMyActiveTimersTicks(root), 1000);
   } catch (_) {
