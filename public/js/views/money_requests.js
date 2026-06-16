@@ -65,6 +65,12 @@ export async function renderMoneyRequests() {
       </div>
     </details>
 
+    <div id="mr-pending-card" class="card" hidden>
+      <h3>💰 未払いの請求 (あなた宛て)</h3>
+      <div id="mr-pending-summary" class="muted" style="font-size:13px; margin-bottom:6px"></div>
+      <div id="mr-pending-list" class="list"></div>
+    </div>
+
     <div class="card">
       <h3>履歴</h3>
       <div id="mr-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -302,6 +308,7 @@ async function loadList() {
     const root = document.getElementById('mr-list');
     if (!d.items.length) { root.innerHTML = `<div class="empty">まだ請求はありません</div>`; return; }
     const meId = state.me?.id;
+    renderPendingSummary(d.items, meId);
     root.innerHTML = d.items.map(r => {
       const isMine      = Number(r.creator_user_id) === Number(meId);
       const isGenerator = Number(r.created_by_user_id) === Number(meId) && !isMine;
@@ -327,6 +334,30 @@ async function loadList() {
   } catch (e) {
     document.getElementById('mr-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// v651 未払い 請求 (自分が 受取人、 未払い) を 集めて 合算 表示。 集金 が
+// 重なる時 期 (合宿、 学会、 OB会) に 「合計 で 今いくら 払う 予定 だっけ」 を
+// 一目 で 把握 できる ように。
+function renderPendingSummary(items, meId) {
+  const card = document.getElementById('mr-pending-card');
+  const sum  = document.getElementById('mr-pending-summary');
+  const list = document.getElementById('mr-pending-list');
+  if (!card || !sum || !list) return;
+  const mine = items.filter(r =>
+    r.my_amount != null && !r.my_paid_at && Number(r.creator_user_id) !== Number(meId));
+  if (!mine.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const total = mine.reduce((s, r) => s + Number(r.my_amount || 0), 0);
+  sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${total.toLocaleString()}</span> (${mine.length} 件 / 受取人 別)`;
+  list.innerHTML = mine.map(r => `
+    <a class="list-item" href="#/requests/${r.id}">
+      <div class="grow" style="min-width:0">
+        <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title)}</div>
+        <div class="meta">${escapeHtml(r.creator_name)} さんへ · ¥${Number(r.my_amount).toLocaleString()}</div>
+      </div>
+      <span class="tag warn">未払い</span>
+    </a>`).join('');
 }
 
 // ─── DETAIL ───────────────────────────────────────────────────────────

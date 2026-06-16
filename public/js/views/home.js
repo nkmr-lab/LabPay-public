@@ -147,9 +147,7 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },
   { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長 を 記録、 BMI 自動計算 + グラフ' },
   { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内 歩数 ランキング' },
-  { id: 'sc-activity',     title: '🗓 ラボ滞在マップ',   url: '#/activity',     desc: '誰が いつ ラボに 居たか の 滞在ログ + ヒートマップ' },
   { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で 落札' },
-  { id: 'sc-achievements', title: '🏅 実績',           url: '#/achievements',  desc: 'バッジ / 称号 / 統計' },
 ];
 
 // v497 #103 ホームに置く要素は 「ウィジェット」 と呼ぶ。 設定画面の表示名も変更。
@@ -177,6 +175,7 @@ export const HOME_CARDS = [
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
   { id: 'recruiting',     title: '🎯 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック)' }, // v641, v644, v649
   { id: 'entertainment',  title: '🎉 娯楽 (ゲーム / 予想 / ドラフト / クイズ)' }, // v649
+  { id: 'achievements',   title: '🏅 実績 + 称号' }, // v651
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -192,6 +191,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   // v605 ビンゴ ウィジェットは 残高横の サマリで 代替できるので デフォルト OFF に戻す
   'recruiting',     // v641 デフォルト ON
   'entertainment',  // v649 デフォルト ON
+  'achievements',   // v651 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -209,7 +209,7 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
 const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment']; // v641, v649 既存ユーザにも 自動表示
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements']; // v641, v649, v651 既存ユーザにも 自動表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -466,6 +466,15 @@ export async function renderHome() {
       <div id="home-entertainment"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v651 🏅 実績 + 称号 -->
+    <div class="card" id="home-achievements-card" data-card-id="achievements" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🏅 実績 + 称号</h2>
+        <a href="#/achievements" class="hint" style="margin-left:auto">すべて →</a>
+      </div>
+      <div id="home-achievements"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <!-- v638 / v644 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック) -->
     <div class="card" id="home-recruiting-card" data-card-id="recruiting" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -567,6 +576,7 @@ export async function renderHome() {
     { cardId: 'bingo',          fn: renderBingoWidget,     label: 'bingo' },   // v600 #232
     { cardId: 'recruiting',     fn: renderRecruitingWidget, label: 'recruiting' }, // v638
     { cardId: 'entertainment',  fn: renderEntertainmentWidget, label: 'entertainment' }, // v649
+    { cardId: 'achievements',   fn: renderAchievementsWidget,  label: 'achievements' }, // v651
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -597,7 +607,7 @@ export async function renderHome() {
   const cardPromises = cardsToRender
     // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
     //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
-    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || !hiddenSet.has(c.cardId))
+    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || c.cardId === 'achievements' || !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
@@ -1842,6 +1852,74 @@ async function renderEntertainmentWidget() {
   });
 }
 
+// v651 🏅 実績 + 称号 ウィジェット。 上段 に AI 称号 (あれば)、 下段 に 獲得済
+// 実績 を 直近 5 件 並べる。 まだ 何 も 獲得 してない 時 は 「もう ちょっと」 で
+// 次 の 実績 (next が ある もの の 中 で progress が 最 も 高い 1 件) を 案内。
+async function renderAchievementsWidget() {
+  const card = document.getElementById('home-achievements-card');
+  const root = document.getElementById('home-achievements');
+  if (!card || !root) return;
+  card.hidden = false;
+  card.classList.remove('home-card-user-hidden');
+  try {
+    const [aRes, tRes] = await Promise.allSettled([
+      get('/api/me/achievements'),
+      get('/api/me/achievements_title'),
+    ]);
+    const items = aRes.status === 'fulfilled' ? (aRes.value.items || []) : [];
+    const earned = items.filter(it => it.earned).sort((a, b) => (b.earned_tier || 0) - (a.earned_tier || 0));
+    const title = tRes.status === 'fulfilled' ? tRes.value : null;
+    const parts = [];
+    if (title && title.title) {
+      parts.push(`
+        <div style="padding:8px 10px; background:linear-gradient(135deg, #faf6ff 0%, #f3ebff 100%); border-left:3px solid var(--primary); border-radius:6px; margin-bottom:8px">
+          <div class="hint-sm" style="font-size:11px; color:#7b3fa0; margin-bottom:2px">🪪 あなた の 称号</div>
+          <div class="bold" style="font-size:15px">${escapeHtml(title.title)}</div>
+        </div>`);
+    } else if (earned.length) {
+      parts.push(`
+        <div class="hint-sm" style="font-size:12px; margin-bottom:6px">
+          🪪 称号 未生成 ・ <a href="#/achievements">実績 ページ</a> で 生成 できます
+        </div>`);
+    }
+    if (earned.length) {
+      const top = earned.slice(0, 5);
+      parts.push(top.map(it => {
+        const medal = (it.earned && it.earned.medal) ? it.earned.medal : '🏅';
+        const label = (it.earned && it.earned.label) ? it.earned.label : '';
+        return `
+          <div class="list-item" style="padding:4px 0; gap:8px; align-items:center">
+            <span style="font-size:18px">${escapeHtml(medal)}</span>
+            <div class="grow" style="min-width:0">
+              <div class="bold" style="font-size:13px">${escapeHtml(it.title)} ・ ${escapeHtml(label)}</div>
+              <div class="meta">通算 ${Number(it.value).toLocaleString()} ${escapeHtml(it.unit || '')}</div>
+            </div>
+          </div>`;
+      }).join(''));
+      if (earned.length > 5) {
+        parts.push(`<div class="hint-sm" style="font-size:12px; padding-top:4px">他 ${earned.length - 5} 件</div>`);
+      }
+    } else {
+      // 未獲得: 「もう ちょっと」 で 次 が 取れそう な 1 件 を 表示
+      const candidates = items.filter(it => it.next && (it.next_progress ?? 0) > 0);
+      candidates.sort((a, b) => (b.next_progress || 0) - (a.next_progress || 0));
+      const c = candidates[0];
+      if (c) {
+        const pct = Math.round((c.next_progress || 0) * 100);
+        parts.push(`
+          <div class="hint" style="font-size:13px">
+            まだ 実績 は 獲得 して いません。 一番 近い: <b>${escapeHtml(c.title)}</b> (${pct}% / 通算 ${Number(c.value).toLocaleString()} ${escapeHtml(c.unit || '')})
+          </div>`);
+      } else {
+        parts.push('<div class="hint" style="font-size:13px">まだ 実績 は 獲得 して いません</div>');
+      }
+    }
+    root.innerHTML = parts.join('');
+  } catch (e) {
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
 async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg }) {
   const card = document.getElementById(cardId);
   const root = document.getElementById(rootId);
@@ -2476,13 +2554,10 @@ async function renderMyActiveTimers() {
           <div class="hint">→</div>
         </a>`;
     }).join('');
-    // v650 1 週間先 の 集約 footer
+    // v650 1 週間先 の 集約 footer (v651 シンプルに 「⏳ 他 N 件」 だけ)
     if (farTotal > 0) {
-      const parts = [];
-      if (farMeetups)   parts.push(`🤝 待ち合わせ ${farMeetups}`);
-      if (farDeadlines) parts.push(`📌 〆切 ${farDeadlines}`);
       root.insertAdjacentHTML('beforeend',
-        `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; border-top:1px solid var(--line); margin-top:4px">⏳ 他 ${farTotal} 件 (1 週間以上 先 ・ ${parts.join(' / ')})</a>`);
+        `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; border-top:1px solid var(--line); margin-top:4px">⏳ 他 ${farTotal} 件</a>`);
     }
     // ローカル 秒 tick 開始。 root が DOM から 外れたら 自動 停止。
     myActiveTimersTickId = setInterval(() => updateMyActiveTimersTicks(root), 1000);

@@ -13,6 +13,7 @@ function route_rollcalls(PDO $pdo, array $cfg, string $method, array $seg): void
         $id = (int)$sub;
         $next = $seg[2] ?? '';
         if ($next === ''        && $method === 'GET')    { rollcalls_detail($pdo, $cfg, $id);  return; }
+        if ($next === ''        && $method === 'PATCH')  { rollcalls_patch($pdo, $cfg, $id);   return; }
         if ($next === ''        && $method === 'DELETE') { rollcalls_delete($pdo, $cfg, $id);  return; }
         if ($next === 'respond' && $method === 'POST')   { rollcalls_respond($pdo, $cfg, $id); return; }
         if ($next === 'close'   && $method === 'PATCH')  { rollcalls_close($pdo, $cfg, $id);   return; }
@@ -235,6 +236,59 @@ function rollcalls_remind(PDO $pdo, array $cfg, int $id): void {
         } catch (Throwable $_) { /* swallow */ }
     }
     json_response(['ok' => true, 'sent' => $sent, 'unresponded' => count($ids)]);
+}
+
+// v651 起案者 (admin) のみ。 open な 点呼 の title / body / deadline を 変更可能。
+// 締切 は 現在 から 24h 以内 (新規 作成 と 同じ 上限。 既存 が 24h 超えてても 新値 さえ
+// 24h 以内 なら 受け付ける)。
+function rollcalls_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $st = $pdo->prepare("SELECT creator_user_id, status FROM roll_calls WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '点呼が見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ編集可', 403);
+    }
+    if ((string)$row['status'] !== 'open') {
+        throw new ApiException('closed', '締切済の点呼は編集できません', 400);
+    }
+    $sets = [];
+    $args = [];
+    if (array_key_exists('title', $body)) {
+        $title = trim((string)$body['title']);
+        if ($title === '' || mb_strlen($title) > 200) {
+            throw new ApiException('bad_request', 'title 1..200', 400);
+        }
+        $sets[] = 'title = ?'; $args[] = $title;
+    }
+    if (array_key_exists('body', $body)) {
+        $bt = (string)$body['body'];
+        $bt = $bt === '' ? null : mb_substr($bt, 0, 500);
+        $sets[] = 'body = ?'; $args[] = $bt;
+    }
+    if (array_key_exists('deadline_at', $body)) {
+        $raw = (string)$body['deadline_at'];
+        $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+           ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+           ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+        if (!$dt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
+        $deadline = $dt->format('Y-m-d H:i:s');
+        if (strtotime($deadline) <= time() + 10) {
+            throw new ApiException('bad_request', '締切は現在より先に', 400);
+        }
+        if (strtotime($deadline) > time() + 24 * 3600) {
+            throw new ApiException('bad_request', '締切は 24 時間以内に', 400);
+        }
+        $sets[] = 'deadline_at = ?'; $args[] = $deadline;
+    }
+    if (!$sets) { json_response(['ok' => true, 'noop' => true]); return; }
+    $args[] = $id;
+    $pdo->prepare("UPDATE roll_calls SET " . implode(',', $sets) . " WHERE id = ?")->execute($args);
+    json_response(['ok' => true]);
 }
 
 function rollcalls_close(PDO $pdo, array $cfg, int $id): void {

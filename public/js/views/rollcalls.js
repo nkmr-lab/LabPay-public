@@ -26,8 +26,8 @@ function fmtRemaining(s) {
   if (diff <= 0) return '締切';
   const min = Math.floor(diff / 60000);
   const sec = Math.floor((diff % 60000) / 1000);
-  if (min >= 60) return `あと ${Math.floor(min/60)}時間${min%60}分`;
-  return `あと ${min}:${String(sec).padStart(2,'0')}`;
+  if (min >= 60) return `残り ${Math.floor(min/60)}時間${min%60}分`;
+  return `残り ${min}:${String(sec).padStart(2,'0')}`;
 }
 // v482 #70 「点呼 を 押して から の 経過 時間」 (起案 = 開始 = 押し時刻)。
 function fmtElapsed(s) {
@@ -218,15 +218,33 @@ async function loadRollCallDetail(id) {
     // v482 #70 「点呼 を 押して から の 経過 時間」 を 主表示 に。 締切 は
     //   横 に 「(締切 HH:MM)」 として 副表示。
     head.innerHTML = `
-      <h2 style="margin:6px 0 0">${escapeHtml(r.title)}</h2>
+      <div class="row center" style="gap:8px">
+        <h2 style="margin:6px 0 0; flex:1">${escapeHtml(r.title)}</h2>
+        ${d.is_creator && isOpen ? '<button id="rcd-edit-btn" class="btn">✏️ 編集</button>' : ''}
+      </div>
       <div class="meta">
         起案 ${escapeHtml(r.creator_name)} · ${isOpen ? '受付中' : '締切済'}
       </div>
       <div id="rcd-deadline" class="meta" data-started="${escapeHtml(r.created_at || '')}" data-deadline="${escapeHtml(r.deadline_at)}">
-        ${isOpen ? escapeHtml(fmtElapsed(r.created_at)) + (r.deadline_at ? ' (締切 ' + escapeHtml(deadlineShort(r.deadline_at)) + ')' : '')
+        ${isOpen ? escapeHtml(fmtElapsed(r.created_at)) + (r.deadline_at ? ' (' + escapeHtml(fmtRemaining(r.deadline_at)) + ' / 締切 ' + escapeHtml(deadlineShort(r.deadline_at)) + ')' : '')
                  : '締切済'}
       </div>
       ${r.body ? `<div style="margin-top:6px; white-space:pre-wrap">${escapeHtml(r.body)}</div>` : ''}
+      <div id="rcd-edit-card" hidden style="margin-top:8px; padding:8px; background:#f7f7fc; border-radius:6px">
+        <label class="field"><span class="lbl">タイトル</span>
+          <input type="text" id="rcd-edit-title" maxlength="200">
+        </label>
+        <label class="field"><span class="lbl">本文 (任意)</span>
+          <input type="text" id="rcd-edit-body" maxlength="500">
+        </label>
+        <label class="field"><span class="lbl">締切 (日時)</span>
+          <input type="datetime-local" id="rcd-edit-deadline">
+        </label>
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
+          <button id="rcd-edit-cancel" class="btn">キャンセル</button>
+          <button id="rcd-edit-save" class="primary">保存</button>
+        </div>
+      </div>
     `;
     rcLastDeadline = r.deadline_at;
     if (isOpen) {
@@ -241,7 +259,7 @@ async function loadRollCallDetail(id) {
           loadRollCallDetail(id);
           return;
         }
-        el.textContent = `${fmtElapsed(el.dataset.started)} (締切 ${deadlineShort(el.dataset.deadline)})`;
+        el.textContent = `${fmtElapsed(el.dataset.started)} (${fmtRemaining(el.dataset.deadline)} / 締切 ${deadlineShort(el.dataset.deadline)})`;
       };
       updateCountdown();
       rcCountdownTimer = setInterval(updateCountdown, 1000);
@@ -272,6 +290,42 @@ async function loadRollCallDetail(id) {
     renderRollCallTargets(d);
     rcLastTargets = d.targets;
     schedRollCallRefresh(id, isOpen);
+
+    // v651 編集 (起案者 + open のみ)。 タイトル / 本文 / 締切 を 変更。
+    const editBtn = document.getElementById('rcd-edit-btn');
+    if (editBtn) {
+      const editCard = document.getElementById('rcd-edit-card');
+      const titleI = document.getElementById('rcd-edit-title');
+      const bodyI = document.getElementById('rcd-edit-body');
+      const dlI = document.getElementById('rcd-edit-deadline');
+      editBtn.addEventListener('click', () => {
+        titleI.value = r.title || '';
+        bodyI.value = r.body || '';
+        // 現在 締切 を datetime-local 値 に。 "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DDTHH:MM"
+        const raw = String(r.deadline_at || '').replace(' ', 'T');
+        dlI.value = raw ? raw.slice(0, 16) : '';
+        editCard.hidden = false;
+        editBtn.disabled = true;
+      });
+      document.getElementById('rcd-edit-cancel').addEventListener('click', () => {
+        editCard.hidden = true;
+        editBtn.disabled = false;
+      });
+      document.getElementById('rcd-edit-save').addEventListener('click', async () => {
+        const title = titleI.value.trim();
+        const body  = bodyI.value.trim();
+        const dl    = dlI.value;
+        if (!title) { toast('タイトル必須'); return; }
+        if (!dl)    { toast('締切必須');   return; }
+        try {
+          await patch('/api/rollcalls/' + id, { title, body, deadline_at: dl });
+          toast('更新しました');
+          editCard.hidden = true;
+          editBtn.disabled = false;
+          await loadRollCallDetail(id);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    }
 
     // 管理ボタン (起案者のみ)
     if (d.is_creator) {
