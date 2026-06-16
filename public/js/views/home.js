@@ -607,7 +607,7 @@ export async function renderHome() {
   const cardPromises = cardsToRender
     // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
     //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
-    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || c.cardId === 'achievements' || !hiddenSet.has(c.cardId))
+    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
@@ -1858,8 +1858,9 @@ async function renderAchievementsWidget() {
   const card = document.getElementById('home-achievements-card');
   const root = document.getElementById('home-achievements');
   if (!card || !root) return;
+  // v653 force-show しない。 ユーザ が 設定 で 隠して いる 場合 は
+  // applyHomeLayout が .home-card-user-hidden を 付与 して いる ので 触らない。
   card.hidden = false;
-  card.classList.remove('home-card-user-hidden');
   try {
     const d = await get('/api/me/achievements');
     const items = (d.items || []).filter(it => it.earned);
