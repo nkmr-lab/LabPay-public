@@ -514,6 +514,135 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v638 娯楽 募集中 アグリゲータ。 各ゲームの 「自分が 未参加 で 募集中」 を 集めて返す。
+    if ($sub === 'recruiting' && $method === 'GET') {
+        $uid = (int)$u['id'];
+        $items = [];
+        try {
+            // 💣 地雷オセロ (waiting で 自分が creator でも opponent でもない)
+            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by
+                                   FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='waiting' AND g.creator_user_id <> ? AND (g.opponent_user_id IS NULL OR g.opponent_user_id <> ?)
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid, $uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '💣', 'kind' => 'othello', 'title' => '地雷オセロ #' . (int)$r['id'],
+                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/othello/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🃏 大富豪 (lobby で 自分が 未参加)
+            $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by,
+                                        (SELECT COUNT(*) FROM daifugo_players p WHERE p.game_id=g.id) AS pn
+                                   FROM daifugo_games g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='lobby'
+                                    AND NOT EXISTS (SELECT 1 FROM daifugo_players p WHERE p.game_id=g.id AND p.user_id=?)
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '🃏', 'kind' => 'daifugo', 'title' => '大富豪 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '人)',
+                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/daifugo/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🀄 麻雀 (lobby で 自分が 未参加)
+            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by,
+                                        (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id=g.id) AS pn
+                                   FROM mahjong_games g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='lobby'
+                                    AND NOT EXISTS (SELECT 1 FROM mahjong_players p WHERE p.game_id=g.id AND p.user_id=?)
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '🀄', 'kind' => 'mahjong', 'title' => '麻雀 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '/4)',
+                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/mahjong/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🎲 ito (lobby、 未参加)
+            $st = $pdo->prepare("SELECT g.id, g.theme, g.buy_in, uc.display_name AS by
+                                   FROM ito_games g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='lobby'
+                                    AND NOT EXISTS (SELECT 1 FROM ito_players p WHERE p.game_id=g.id AND p.user_id=?)
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '🎲', 'kind' => 'ito', 'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
+                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/ito/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🐺 人狼 (lobby、 未参加)
+            $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by
+                                   FROM jinrou_games g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='lobby'
+                                    AND NOT EXISTS (SELECT 1 FROM jinrou_players p WHERE p.game_id=g.id AND p.user_id=?)
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '🐺', 'kind' => 'jinrou', 'title' => '人狼 #' . (int)$r['id'],
+                            'by' => $r['by'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/jinrou/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🎮 custom_games (waiting、 自分が 未参加)
+            $st = $pdo->prepare("SELECT g.id, g.game_kind, g.fee, uc.display_name AS by, k.display_name AS kind_name, k.icon
+                                   FROM custom_games g JOIN users uc ON uc.id=g.creator_user_id
+                                   LEFT JOIN custom_game_kinds k ON k.kind=g.game_kind
+                                  WHERE g.status='waiting' AND g.creator_user_id <> ?
+                                    AND (g.players_json IS NULL OR g.players_json NOT LIKE CONCAT('%', ?, '%'))
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid, $uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => $r['icon'] ?? '🎮', 'kind' => 'custom-' . $r['game_kind'],
+                            'title' => ($r['kind_name'] ?? $r['game_kind']) . ' #' . (int)$r['id'],
+                            'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt',
+                            'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // ⚾ ドラフト (active で 自分が participant に 含まれてて 招待された)
+            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by
+                                   FROM drafts g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='active' AND g.creator_user_id <> ?
+                                    AND g.participants_json LIKE CONCAT('%', ?, '%')
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid, $uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '⚾', 'kind' => 'draft', 'title' => 'ドラフト: ' . mb_substr((string)$r['title'], 0, 30),
+                            'by' => $r['by'], 'fee' => '', 'url' => '#/drafts/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 📝 フリップ クイズ (active で 自分が participant)
+            $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by
+                                   FROM quizzes g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='active' AND g.creator_user_id <> ?
+                                    AND g.participants_json LIKE CONCAT('%', ?, '%')
+                                  ORDER BY g.id DESC LIMIT 5");
+            $st->execute([$uid, $uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '📝', 'kind' => 'quiz', 'title' => 'クイズ: ' . mb_substr((string)$r['title'], 0, 30),
+                            'by' => $r['by'], 'fee' => '', 'url' => '#/quizzes/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 🏆 優勝予想 / 🎯 勝敗予測 (締切前 で 自分が 予想 未提出)
+            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.entry_fee, uc.display_name AS by
+                                   FROM predictions g JOIN users uc ON uc.id=g.creator_user_id
+                                  WHERE g.status='open' AND g.deadline_at > NOW()
+                                    AND NOT EXISTS (SELECT 1 FROM prediction_entries pe WHERE pe.prediction_id=g.id AND pe.user_id=?)
+                                  ORDER BY g.deadline_at ASC LIMIT 3");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['icon' => '🏆', 'kind' => 'prediction', 'title' => '優勝予想: ' . mb_substr((string)$r['title'], 0, 25),
+                            'by' => $r['by'], 'fee' => (int)$r['entry_fee'] . 'pt', 'url' => '#/predictions/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        json_response(['items' => $items]);
+        return;
+    }
+
     // v483 #76 AI 称号。 GET = キャッシュ + 新鮮さ チェック、 POST = 生成 & 保存。
     if ($sub === 'achievements_title' && $method === 'GET') {
         $sum = Achievements::earnedSummary($pdo, (int)$u['id']);

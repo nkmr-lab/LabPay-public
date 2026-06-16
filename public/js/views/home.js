@@ -486,6 +486,15 @@ export async function renderHome() {
       <div id="home-bingo"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v638 娯楽 募集中 ウィジェット -->
+    <div class="card" id="home-recruiting-card" data-card-id="recruiting" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎉 娯楽 募集中</h2>
+        <a href="#/games" class="hint">娯楽ハブ →</a>
+      </div>
+      <div id="home-recruiting"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <div class="card" id="home-weather-card" data-card-id="weather" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">☀️ 今日の空</h2>
@@ -578,6 +587,7 @@ export async function renderHome() {
     { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
     { cardId: 'weather',        fn: renderWeatherWidget,   label: 'weather' }, // v585
     { cardId: 'bingo',          fn: renderBingoWidget,     label: 'bingo' },   // v600 #232
+    { cardId: 'recruiting',     fn: renderRecruitingWidget, label: 'recruiting' }, // v638
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -1787,6 +1797,28 @@ async function loadBingoMini() {
 }
 
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
+// v638 娯楽 募集中 ウィジェット。 自分が 未参加 / 招待 の オープン卓 を 集めて表示。
+async function renderRecruitingWidget() {
+  const card = document.getElementById('home-recruiting-card');
+  const root = document.getElementById('home-recruiting');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/me/recruiting');
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.slice(0, 8).map(it => `
+      <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
+        <span style="font-size:20px; flex:none">${it.icon}</span>
+        <div class="grow">
+          <div class="bold" style="font-size:13px">${escapeHtml(it.title)}</div>
+          <div class="hint-sm" style="font-size:11px">${escapeHtml(it.by)} 起案${it.fee ? ' ・ ' + escapeHtml(it.fee) : ''}</div>
+        </div>
+      </a>
+    `).join('');
+  } catch (e) { card.hidden = true; }
+}
+
 async function renderBingoWidget() {
   const card = document.getElementById('home-bingo-card');
   const root = document.getElementById('home-bingo');
