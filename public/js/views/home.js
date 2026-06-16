@@ -139,49 +139,17 @@ export function setHomeActionVisible(id, v) {
 // v580 ショートカット ウィジェット 定義。 全アプリへの 簡単なリンクカードを
 //   ホームに 置けるように。 ロジックは持たず、 タイトル + 説明 + 「→ 開く」 だけ。
 //   設定 → ホーム ウィジェット から ON にすると 並びに 現れる。
+// v649 整理: 大量に あった shortcut カードを 「実際に 進行中 / 関連あり」 を 出す
+//   recruiting ウィジェット に 集約 する 方向 に 切替。 残すのは ラボ 個人ツール のみ
+//   (= 日常 で 進捗 確認 したい もの)。 削除した 35 種 は #/apps ハブ から 引き続き 開ける。
 const SHORTCUT_CARDS_DEFS = [
-  { id: 'sc-predictions',  title: '🏆 優勝予想',         url: '#/predictions',  desc: 'W 杯 / スポーツ大会 の 順位を予想して 山分け' },
-  { id: 'sc-mahjong',      title: '🀄 麻雀',            url: '#/mahjong',      desc: '4 人で 50pt 賭けの 本格麻雀 / AI 練習対戦' },
-  { id: 'sc-ito',          title: '🎲 ito',             url: '#/ito',          desc: '1-100 の数字を お題で表現する 協力ゲーム' },
-  { id: 'sc-jinrou',       title: '🐺 人狼',            url: '#/jinrou',       desc: '4-16 人で 役職配布 → 夜 + 昼 で 勝敗' },
-  { id: 'sc-shiritori',    title: '🎨 絵しりとり',      url: '#/shiritori',    desc: 'タイムリミット付きキャンバスで 順番に絵を描く' },
-  { id: 'sc-tierlists',    title: '🎯 ティア表',        url: '#/tierlists',    desc: 'みんなで S/A/B/C/D/F の ティア分け' },
-  { id: 'sc-paper-review', title: '📄 論文 査読',       url: '#/paper-review', desc: '論文 PDF を AI で 章立て要約 + 査読コメント' },
-  { id: 'sc-resume-check', title: '📝 原稿チェック',    url: '#/resume-check', desc: '1-2 ページの 短原稿を 軽量査読 (5pt)' },
-  { id: 'sc-flight',       title: '✈️ フライト応援',    url: '#/flight',       desc: '長いフライト の 進捗を 可視化 (オフライン対応)' },
-  { id: 'sc-othello',      title: '💣 地雷オセロ',      url: '#/othello',      desc: '通常オセロ + 各自 2 地雷 (3x3 反転)。 1pt 対戦' },
-  { id: 'sc-bingo',        title: '🎰 ビンゴ',           url: '#/bingo',        desc: '今週の カードと 進捗。 ラボ行動 が 自動カウント' },
-  { id: 'sc-daifugo',      title: '🃏 大富豪',           url: '#/daifugo',      desc: '2-4 人 カードゲーム。 1pt buy-in、 1 位が総取り' },
-  { id: 'sc-regions',      title: '🗺 制覇マップ',       url: '#/regions',      desc: '行った国・都道府県 を タップで 登録' },
   { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
   { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },
   { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長 を 記録、 BMI 自動計算 + グラフ' },
   { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内 歩数 ランキング' },
-  { id: 'sc-chat',         title: '💬 AI 対話 / 翻訳',  url: '#/chat',         desc: '多言語 チャット (出張・旅行 翻訳補助)' },
-  { id: 'sc-help',         title: '🤖 操作ガイド AI',   url: '#/help',         desc: 'LabPay の 使い方を AI に 聞ける' },
-  { id: 'sc-translate',    title: '🌐 画像 和訳',       url: '#/translate',    desc: 'メニュー / 看板 を AI で 和訳' },
-  { id: 'sc-polls',        title: '📊 投票・アンケート', url: '#/polls',        desc: '対象者・締切・選択肢 を 指定して 投票' },
-  { id: 'sc-rollcalls',    title: '📣 点呼',            url: '#/rollcalls',    desc: '「いる?」「起きてる?」 を ワンタップ集計' },
-  { id: 'sc-timers',       title: '🛎 タイマー',        url: '#/timers',       desc: '参加者全員で カウントダウン 共有' },
-  { id: 'sc-stopwatches',  title: '⏱ ストップウォッチ', url: '#/stopwatches',  desc: 'メンバー共有 カウントアップ' },
-  { id: 'sc-meetups',      title: '🤝 待ち合わせ',      url: '#/meetups',      desc: '集合 時刻 + 場所 + メンバー を 一括通知' },
-  { id: 'sc-deadlines',    title: '📌 〆切',            url: '#/meetups?kind=deadline', desc: '〆切 時刻 + 対象者 を 一括通知 (365 日先 まで)' },
   { id: 'sc-activity',     title: '🗓 ラボ滞在マップ',   url: '#/activity',     desc: '誰が いつ ラボに 居たか の 滞在ログ + ヒートマップ' },
   { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で 落札' },
-  { id: 'sc-nomikai',      title: '🍶 飲み会割り勘',    url: '#/nomikai',      desc: '学年 + ドリンク 種別 で 自動 割り勘' },
-  { id: 'sc-wari',         title: '🧮 ワリカ電卓',      url: '#/wari',         desc: '人数 + 金額 で 端数こみ 割り勘' },
-  { id: 'sc-money-requests', title: '💴 請求 (集金)',   url: '#/requests',     desc: '同額 or 人別 で 集金 + 支払い 確認' },
-  { id: 'sc-random-groups', title: '🎲 ランダム分け',   url: '#/random-groups', desc: 'メンバー を N チーム に ランダム分け' },
-  { id: 'sc-orderings',    title: '📋 順番決め',        url: '#/orderings',    desc: 'メンバー を 1 列 に 並べ替え (発表順 / 当番)' },
-  { id: 'sc-roulette',     title: '🎰 ルーレット',      url: '#/roulette',     desc: 'メンバー から 1 人 くじ引き (賞金つき可)' },
-  { id: 'sc-text-roulette', title: '🍜 どこ行く',       url: '#/text-roulette', desc: '昼飯 / 何食べる など テキスト候補から 1 つ' },
-  { id: 'sc-wishlist',     title: '✨ 欲しい',          url: '#/wishlist',     desc: 'ほしい物 を 登録、 誰かが 売ってくれる かも' },
-  { id: 'sc-contacts',     title: '📞 連絡先',          url: '#/contacts',     desc: 'ラボメンバー 緊急 連絡先 (タップで通話)' },
-  { id: 'sc-scrapbox',     title: '📚 Scrapbox 履歴',   url: '#/scrapbox',     desc: '#scrapbox の 研究ノート 編集ログ' },
-  { id: 'sc-network',      title: '🕸 関係性グラフ',    url: '#/network',      desc: '売買・タスク・送金 などの つながり 可視化' },
   { id: 'sc-achievements', title: '🏅 実績',           url: '#/achievements',  desc: 'バッジ / 称号 / 統計' },
-  { id: 'sc-games',        title: '🎮 娯楽 ハブ',       url: '#/games',        desc: 'ラボメンバーで 遊べる ゲーム 一覧' },
-  { id: 'sc-apps',         title: '📦 アプリ ハブ',     url: '#/apps',         desc: '全アプリ 一覧 (カテゴリ別)' },
 ];
 
 // v497 #103 ホームに置く要素は 「ウィジェット」 と呼ぶ。 設定画面の表示名も変更。
@@ -207,7 +175,8 @@ export const HOME_CARDS = [
   { id: 'history',        title: '履歴' },
   { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
-  { id: 'recruiting',     title: '🎯 あなた宛て / 関わってる (募集 / 参加中 / 投票 / 査読 / 点呼)' }, // v641, v644 拡張
+  { id: 'recruiting',     title: '🎯 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック)' }, // v641, v644, v649
+  { id: 'entertainment',  title: '🎉 娯楽 (ゲーム / 予想 / ドラフト / クイズ)' }, // v649
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -221,7 +190,8 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
   // v605 ビンゴ ウィジェットは 残高横の サマリで 代替できるので デフォルト OFF に戻す
-  'recruiting', // v641 デフォルト ON
+  'recruiting',     // v641 デフォルト ON
+  'entertainment',  // v649 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -239,7 +209,7 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
 const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
-const NEW_DEFAULT_SHOWN  = ['recruiting']; // v641 既存ユーザにも 自動表示
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment']; // v641, v649 既存ユーザにも 自動表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -488,10 +458,18 @@ export async function renderHome() {
       <div id="home-bingo"><div class="hint">読み込み中…</div></div>
     </div>
 
-    <!-- v638 / v644 あなた宛て / 関わってる ウィジェット -->
+    <!-- v649 娯楽 ウィジェット (ゲーム / 予想 / ドラフト / クイズ) -->
+    <div class="card" id="home-entertainment-card" data-card-id="entertainment" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎉 娯楽</h2>
+      </div>
+      <div id="home-entertainment"><div class="hint">読み込み中…</div></div>
+    </div>
+
+    <!-- v638 / v644 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック) -->
     <div class="card" id="home-recruiting-card" data-card-id="recruiting" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">🎯 あなた宛て / 関わってる</h2>
+        <h2 class="row-title">🎯 あなた宛て</h2>
       </div>
       <div id="home-recruiting"><div class="hint">読み込み中…</div></div>
     </div>
@@ -588,6 +566,7 @@ export async function renderHome() {
     { cardId: 'weather',        fn: renderWeatherWidget,   label: 'weather' }, // v585
     { cardId: 'bingo',          fn: renderBingoWidget,     label: 'bingo' },   // v600 #232
     { cardId: 'recruiting',     fn: renderRecruitingWidget, label: 'recruiting' }, // v638
+    { cardId: 'entertainment',  fn: renderEntertainmentWidget, label: 'entertainment' }, // v649
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -618,7 +597,7 @@ export async function renderHome() {
   const cardPromises = cardsToRender
     // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
     //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
-    .filter(c => c.cardId === 'recruiting' || !hiddenSet.has(c.cardId))
+    .filter(c => c.cardId === 'recruiting' || c.cardId === 'entertainment' || !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
@@ -1799,63 +1778,105 @@ async function loadBingoMini() {
 }
 
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
-// v638 / v640 / v644 あなた宛て / 関わってる ウィジェット。
-//   tag: 'active' = 参加中ゲーム、 'open' = 募集中ゲーム、
-//        'vote' = 投票/点呼 未応答、 'work' = 自分の 査読/原稿チェック 進行中
+// v649 共通: /api/me/recruiting を 取得 + sec_ahead で 1 週間以上先 を 集約。
+const ONE_WEEK_SEC = 7 * 86400;
+let _recruitingCache = null;
+async function fetchRecruitingItems() {
+  if (_recruitingCache) return _recruitingCache;
+  _recruitingCache = (async () => {
+    try { const d = await get('/api/me/recruiting'); return d.items || []; }
+    catch (e) { console.error('[recruiting] fetch failed:', e); return null; }
+  })();
+  return _recruitingCache;
+}
+
+function tagHtml(tag) {
+  return ({
+    active: '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
+    open:   '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
+    vote:   '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
+    work:   '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
+  })[tag] || '';
+}
+
+function renderItemRow(it) {
+  return `
+    <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
+      <span style="font-size:20px; flex:none">${it.icon}</span>
+      <div class="grow" style="min-width:0">
+        <div class="bold" style="font-size:13px">${tagHtml(it.tag)} ${escapeHtml(it.title)}</div>
+        <div class="hint-sm" style="font-size:11px">${it.by ? escapeHtml(it.by) + ' 起案' : ''}${it.fee ? (it.by ? ' ・ ' : '') + escapeHtml(it.fee) : ''}</div>
+      </div>
+    </a>
+  `;
+}
+
+// 1 週間以上 先 (sec_ahead > 7day) は 「他 N 件」 に 集約
+function splitByDeadline(items) {
+  const soon = [];
+  const later = [];
+  for (const it of items) {
+    if (typeof it.sec_ahead === 'number' && it.sec_ahead > ONE_WEEK_SEC) later.push(it);
+    else soon.push(it);
+  }
+  return { soon, later };
+}
+
+// v638 / v644 / v649 🎯 あなた宛て ウィジェット (cat='work': 投票 / 点呼 / 論文査読 / 原稿チェック)
 async function renderRecruitingWidget() {
-  const card = document.getElementById('home-recruiting-card');
-  const root = document.getElementById('home-recruiting');
-  if (!card || !root) { console.warn('[recruiting] card or root not found', { card, root }); return; }
-  // v646 常に カードを 出す (アイテム ない時も hint で 表示、 「ある はず なのに 出てない」 を 切り分け)
+  await renderCategoryWidget({
+    cardId: 'home-recruiting-card', rootId: 'home-recruiting',
+    title: '🎯 あなた宛て',
+    cat: 'work',
+    emptyMsg: '投票 / 点呼 / 論文査読 / 原稿チェック 関連 は ありません',
+  });
+}
+
+// v649 🎉 娯楽 ウィジェット (cat='entertainment': ゲーム / 予想 / ドラフト / クイズ)
+async function renderEntertainmentWidget() {
+  await renderCategoryWidget({
+    cardId: 'home-entertainment-card', rootId: 'home-entertainment',
+    title: '🎉 娯楽',
+    cat: 'entertainment',
+    emptyMsg: 'ゲーム / 予想 / ドラフト / クイズ 関連 は ありません',
+  });
+}
+
+async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg }) {
+  const card = document.getElementById(cardId);
+  const root = document.getElementById(rootId);
+  if (!card || !root) return;
   card.hidden = false;
   card.classList.remove('home-card-user-hidden');
-  try {
-    const d = await get('/api/me/recruiting');
-    const items = d.items || [];
-    console.log('[recruiting] items:', items.length, items);
-    if (!items.length) {
-      card.querySelector('.row-title').textContent = '🎯 あなた宛て (現在 なし)';
-      root.innerHTML = '<div class="hint" style="font-size:12px">参加中ゲーム / 募集中 / 未投票 / 未対応 が ありません</div>';
-      return;
-    }
-    const tagPriority = { active: 0, vote: 1, work: 2, open: 3 };
-    items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
-    // v644 表示強制: ユーザの hidden 設定 を 一時的に 上書き (アイテム ある時のみ)
-    card.hidden = false;
-    card.classList.remove('home-card-user-hidden');
-    // タイトル を 動的に
-    const activeN = items.filter(i => i.tag === 'active').length;
-    const openN   = items.filter(i => i.tag === 'open').length;
-    const voteN   = items.filter(i => i.tag === 'vote').length;
-    const workN   = items.filter(i => i.tag === 'work').length;
-    const parts = [];
-    if (activeN) parts.push(`<span style="color:#10b981">参加中 ${activeN}</span>`);
-    if (openN)   parts.push(`<span style="color:#f59e0b">募集 ${openN}</span>`);
-    if (voteN)   parts.push(`<span style="color:#7c3aed">投票/点呼 ${voteN}</span>`);
-    if (workN)   parts.push(`<span style="color:#0369a1">査読/原稿 ${workN}</span>`);
-    card.querySelector('.row-title').innerHTML = `🎯 あなた宛て ・ ${parts.join(' / ') || ''}`;
-    root.innerHTML = items.slice(0, 12).map(it => {
-      const tagHtml = ({
-        active: '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
-        open:   '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
-        vote:   '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
-        work:   '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
-      })[it.tag] || '';
-      return `
-        <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
-          <span style="font-size:20px; flex:none">${it.icon}</span>
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="font-size:13px">${tagHtml} ${escapeHtml(it.title)}</div>
-            <div class="hint-sm" style="font-size:11px">${it.by ? escapeHtml(it.by) + ' 起案' : ''}${it.fee ? (it.by ? ' ・ ' : '') + escapeHtml(it.fee) : ''}</div>
-          </div>
-        </a>
-      `;
-    }).join('');
-  } catch (e) {
-    console.error('[recruiting] failed:', e);
-    card.querySelector('.row-title').textContent = '🎯 あなた宛て (取得失敗)';
-    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${e?.message || e}</div>`;
+  const allItems = await fetchRecruitingItems();
+  if (allItems === null) {
+    card.querySelector('.row-title').textContent = `${title} (取得失敗)`;
+    root.innerHTML = '<div class="hint" style="font-size:12px; color:#c00">取得 失敗</div>';
+    return;
   }
+  const items = allItems.filter(it => it.cat === cat);
+  if (!items.length) {
+    card.querySelector('.row-title').textContent = `${title} (現在 なし)`;
+    root.innerHTML = `<div class="hint" style="font-size:12px">${emptyMsg}</div>`;
+    return;
+  }
+  const tagPriority = { active: 0, vote: 1, work: 2, open: 3 };
+  items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
+  const { soon, later } = splitByDeadline(items);
+  // タイトル に カウント
+  const counts = { active: 0, vote: 0, work: 0, open: 0 };
+  for (const it of items) counts[it.tag] = (counts[it.tag] || 0) + 1;
+  const parts = [];
+  if (counts.active) parts.push(`<span style="color:#10b981">参加中 ${counts.active}</span>`);
+  if (counts.open)   parts.push(`<span style="color:#f59e0b">募集 ${counts.open}</span>`);
+  if (counts.vote)   parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
+  if (counts.work)   parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
+  card.querySelector('.row-title').innerHTML = `${title} ・ ${parts.join(' / ') || ''}`;
+  let html = soon.slice(0, 10).map(renderItemRow).join('');
+  if (later.length) {
+    html += `<div class="hint-sm" style="font-size:12px; padding:6px 0; border-top:1px solid var(--line); margin-top:4px">⏳ 他 <b>${later.length}</b> 件 (1 週間 以上先)</div>`;
+  }
+  root.innerHTML = html;
 }
 
 async function renderBingoWidget() {

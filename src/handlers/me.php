@@ -528,7 +528,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '💣', 'kind' => 'othello',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '💣', 'kind' => 'othello',
                             'title' => '地雷オセロ #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/othello/' . (int)$r['id']];
             }
@@ -540,7 +540,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '🃏', 'kind' => 'daifugo',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🃏', 'kind' => 'daifugo',
                             'title' => '大富豪 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/daifugo/' . (int)$r['id']];
             }
@@ -552,7 +552,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '🀄', 'kind' => 'mahjong',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🀄', 'kind' => 'mahjong',
                             'title' => '麻雀 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/mahjong/' . (int)$r['id']];
             }
@@ -564,7 +564,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '🎲', 'kind' => 'ito',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🎲', 'kind' => 'ito',
                             'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/ito/' . (int)$r['id']];
             }
@@ -576,7 +576,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '🐺', 'kind' => 'jinrou',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🐺', 'kind' => 'jinrou',
                             'title' => '人狼 #' . (int)$r['id'], 'by' => $r['by_name'], 'fee' => '',
                             'url' => '#/jinrou/' . (int)$r['id']];
             }
@@ -588,7 +588,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => '🎨', 'kind' => 'shiritori',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🎨', 'kind' => 'shiritori',
                             'title' => '絵しりとり 「' . mb_substr((string)$r['title'], 0, 20) . '」',
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/shiritori/' . (int)$r['id']];
             }
@@ -602,7 +602,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'active', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'cg-' . $r['game_kind'],
+                $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'cg-' . $r['game_kind'],
                             'title' => ($r['kind_name'] ?? $r['game_kind']) . ' #' . (int)$r['id'],
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
             }
@@ -615,7 +615,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '💣', 'kind' => 'othello', 'title' => '地雷オセロ #' . (int)$r['id'],
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '💣', 'kind' => 'othello', 'title' => '地雷オセロ #' . (int)$r['id'],
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/othello/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -629,7 +629,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '🃏', 'kind' => 'daifugo', 'title' => '大富豪 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '人)',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🃏', 'kind' => 'daifugo', 'title' => '大富豪 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '人)',
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/daifugo/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -643,7 +643,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '🀄', 'kind' => 'mahjong', 'title' => '麻雀 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '/4)',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🀄', 'kind' => 'mahjong', 'title' => '麻雀 #' . (int)$r['id'] . ' (' . (int)$r['pn'] . '/4)',
                             'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/mahjong/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -656,7 +656,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '🎲', 'kind' => 'ito', 'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🎲', 'kind' => 'ito', 'title' => 'ito 「' . mb_substr((string)$r['theme'], 0, 20) . '」',
                             'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/ito/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -669,7 +669,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '🐺', 'kind' => 'jinrou', 'title' => '人狼 #' . (int)$r['id'],
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🐺', 'kind' => 'jinrou', 'title' => '人狼 #' . (int)$r['id'],
                             'by' => $r['by_name'], 'fee' => (int)$r['buy_in'] . 'pt', 'url' => '#/jinrou/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -683,7 +683,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'custom-' . $r['game_kind'],
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => $r['icon'] ?? '🎮', 'kind' => 'custom-' . $r['game_kind'],
                             'title' => ($r['kind_name'] ?? $r['game_kind']) . ' #' . (int)$r['id'],
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt',
                             'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
@@ -698,7 +698,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '⚾', 'kind' => 'draft', 'title' => 'ドラフト: ' . mb_substr((string)$r['title'], 0, 30),
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '⚾', 'kind' => 'draft', 'title' => 'ドラフト: ' . mb_substr((string)$r['title'], 0, 30),
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/drafts/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -711,42 +711,48 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY g.id DESC LIMIT 5");
             $st->execute([$uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '📝', 'kind' => 'quiz', 'title' => 'クイズ: ' . mb_substr((string)$r['title'], 0, 30),
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '📝', 'kind' => 'quiz', 'title' => 'クイズ: ' . mb_substr((string)$r['title'], 0, 30),
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/quizzes/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
         try {
             // 🏆 優勝予想 (predictions_games、 締切前 で 自分が 未提出)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, uc.display_name AS by_name
+            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, uc.display_name AS by_name,
+                                        TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead
                                    FROM predictions_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.deadline_at > NOW()
                                     AND NOT EXISTS (SELECT 1 FROM predictions_entries pe WHERE pe.game_id=g.id AND pe.user_id=?)
-                                  ORDER BY g.deadline_at ASC LIMIT 3");
+                                  ORDER BY g.deadline_at ASC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'open', 'icon' => '🏆', 'kind' => 'prediction', 'title' => '優勝予想: ' . mb_substr((string)$r['title'], 0, 25),
-                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/predictions/' . (int)$r['id']];
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🏆', 'kind' => 'prediction', 'title' => '優勝予想: ' . mb_substr((string)$r['title'], 0, 25),
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/predictions/' . (int)$r['id'],
+                            'sec_ahead' => (int)$r['sec_ahead']];
             }
         } catch (Throwable $_) {}
         try {
             // 🎯 勝敗予測 (score_pred_games、 締切前 で 自分が 未提出)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, uc.display_name AS by_name
+            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, uc.display_name AS by_name,
+                                        TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead
                                    FROM score_pred_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.deadline_at > NOW() AND g.status='open'
                                     AND NOT EXISTS (SELECT 1 FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?)
-                                  ORDER BY g.deadline_at ASC LIMIT 3");
+                                  ORDER BY g.deadline_at ASC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $label = $r['team_home'] && $r['team_away'] ? ($r['team_home'] . ' vs ' . $r['team_away']) : (string)$r['title'];
-                $items[] = ['tag' => 'open', 'icon' => '🎯', 'kind' => 'score-pred', 'title' => '勝敗予測: ' . mb_substr($label, 0, 28),
-                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/score-predictions/' . (int)$r['id']];
+                $items[] = ['cat' => 'entertainment', 'tag' => 'open', 'icon' => '🎯', 'kind' => 'score-pred', 'title' => '勝敗予測: ' . mb_substr($label, 0, 28),
+                            'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/score-predictions/' . (int)$r['id'],
+                            'sec_ahead' => (int)$r['sec_ahead']];
             }
         } catch (Throwable $_) {}
 
         // ───── v644 追加: あなた宛て の その他 アクション ─────
         try {
             // 📊 投票 (未投票 で 締切前)
-            $st = $pdo->prepare("SELECT p.id, p.title, uc.display_name AS by_name
+            $st = $pdo->prepare("SELECT p.id, p.title, p.deadline_at, uc.display_name AS by_name,
+                                        CASE WHEN p.deadline_at IS NULL THEN NULL
+                                             ELSE TIMESTAMPDIFF(SECOND, NOW(), p.deadline_at) END AS sec_ahead
                                    FROM polls p JOIN users uc ON uc.id=p.creator_user_id
                                   WHERE p.status='open' AND p.deleted_at IS NULL
                                     AND (p.deadline_at IS NULL OR p.deadline_at > NOW())
@@ -754,9 +760,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY p.id DESC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'vote', 'icon' => '📊', 'kind' => 'poll',
+                $items[] = ['cat' => 'work', 'tag' => 'vote', 'icon' => '📊', 'kind' => 'poll',
                             'title' => '投票: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/polls/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/polls/' . (int)$r['id'],
+                            'sec_ahead' => $r['sec_ahead'] !== null ? (int)$r['sec_ahead'] : null];
             }
         } catch (Throwable $_) {}
         try {
@@ -766,7 +773,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY id DESC LIMIT 3");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'work', 'icon' => '📄', 'kind' => 'paper-review',
+                $items[] = ['cat' => 'work', 'tag' => 'work', 'icon' => '📄', 'kind' => 'paper-review',
                             'title' => '論文査読: ' . mb_substr((string)$r['pdf_name'], 0, 28) . ' (' . $r['status'] . ')',
                             'by' => '', 'fee' => '', 'url' => '#/paper-review'];
             }
@@ -778,14 +785,16 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY id DESC LIMIT 3");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'work', 'icon' => '📝', 'kind' => 'resume-check',
+                $items[] = ['cat' => 'work', 'tag' => 'work', 'icon' => '📝', 'kind' => 'resume-check',
                             'title' => '原稿チェック: ' . mb_substr((string)$r['title'], 0, 26) . ' (' . $r['status'] . ')',
                             'by' => '', 'fee' => '', 'url' => '#/resume-check'];
             }
         } catch (Throwable $_) {}
         try {
             // 📣 点呼 (open で 自分 未応答 = roll_call_targets.responded_at IS NULL)
-            $st = $pdo->prepare("SELECT r.id, r.title, uc.display_name AS by_name
+            $st = $pdo->prepare("SELECT r.id, r.title, r.deadline_at, uc.display_name AS by_name,
+                                        CASE WHEN r.deadline_at IS NULL THEN NULL
+                                             ELSE TIMESTAMPDIFF(SECOND, NOW(), r.deadline_at) END AS sec_ahead
                                    FROM roll_calls r JOIN users uc ON uc.id=r.creator_user_id
                                    JOIN roll_call_targets t ON t.roll_call_id=r.id AND t.user_id=?
                                   WHERE r.status='open' AND r.deleted_at IS NULL
@@ -793,9 +802,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                                   ORDER BY r.deadline_at ASC LIMIT 5");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $items[] = ['tag' => 'vote', 'icon' => '📣', 'kind' => 'rollcall',
+                $items[] = ['cat' => 'work', 'tag' => 'vote', 'icon' => '📣', 'kind' => 'rollcall',
                             'title' => '点呼: ' . mb_substr((string)$r['title'], 0, 30),
-                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/rollcalls/' . (int)$r['id']];
+                            'by' => $r['by_name'], 'fee' => '', 'url' => '#/rollcalls/' . (int)$r['id'],
+                            'sec_ahead' => $r['sec_ahead'] !== null ? (int)$r['sec_ahead'] : null];
             }
         } catch (Throwable $_) {}
 
