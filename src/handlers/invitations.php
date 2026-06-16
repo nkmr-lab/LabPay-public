@@ -403,15 +403,16 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
 
 // v639 募集 を 手動で 終了 (= closed_at セット)。 既参加者は そのまま、 新規 join 不可。
 //   cancel と 違って イベント自体は 残る (= 「人 集まったので 確定」 みたいな 使い方)。
+//   v647 修正: cancelled_at は 実在せず、 cancel は deleted_at で 表現される。
 function invitations_close(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    $st = $pdo->prepare("SELECT creator_user_id, closed_at, cancelled_at FROM invitations WHERE id=?");
+    $st = $pdo->prepare("SELECT creator_user_id, closed_at, deleted_at FROM invitations WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', '募集が ありません', 404);
     if ((int)$row['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
-    if ($row['cancelled_at']) throw new ApiException('bad_request', '既に キャンセル済', 400);
+    if ($row['deleted_at']) throw new ApiException('bad_request', '既に 削除済', 400);
     if ($row['closed_at']) { json_response(['ok' => true, 'already' => true]); return; }
     $pdo->prepare("UPDATE invitations SET closed_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);

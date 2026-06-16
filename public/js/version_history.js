@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v647', d: '2026-06-16', s: '募集を終了 (invitations_close) で Internal Server Error → invitations テーブルに 存在しない cancelled_at カラム を 参照していた バグ修正 (実際は deleted_at)' },
   { v: 'v646', d: '2026-06-16', s: 'recruiting ウィジェット を 常時表示 に (アイテム 0 件 でも 「現在 なし」 で 表示)。 console.log 追加 で デバッグ可。 エンドポイント は 動作確認済 (中村さん の 場合 麻雀#4 を 返す) が ブラウザ側 で 表示 されない 報告 への 切り分け' },
   { v: 'v645', d: '2026-06-16', s: 'v644 ウィジェット 全 SQL バグ修正: AS by (予約語) → by_name で 全クエリ silent 失敗してた + paper_reviews.title (実在せず) → pdf_name + roll_call_responses (実在せず) → roll_call_targets.responded_at IS NULL。 履歴カード の summary 内 <a> を 外に出して a11y warning も解消' },
   { v: 'v644', d: '2026-06-16', s: '🎯 ホーム ウィジェット 大拡張 + 強制表示。 「あなた宛て / 関わってる」 に 投票 / 点呼 / 論文査読 / 原稿チェック も 集計 + 表示。 アイテム ある時は ユーザの hidden 設定 を 上書きして 必ず 出す' },
