@@ -149,6 +149,10 @@ function refUrl(n) {
     case 'mahjong':        return n.ref_id ? '#/mahjong/' + n.ref_id : '#/mahjong';
     case 'ito':            return n.ref_id ? '#/ito/' + n.ref_id : '#/ito';
     case 'jinrou':         return n.ref_id ? '#/jinrou/' + n.ref_id : '#/jinrou';
+    case 'post':           return n.ref_id ? '#/sns/' + n.ref_id : '#/sns'; // v657 SNS 反応 / メンション
+    case 'prediction':     return n.ref_id ? '#/predictions/' + n.ref_id : '#/predictions';
+    case 'score_pred':     return n.ref_id ? '#/score-predictions/' + n.ref_id : '#/score-predictions';
+    case 'drafts':         return n.ref_id ? '#/drafts/' + n.ref_id : '#/drafts';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
     case 'scrapbox':       return '#/history';

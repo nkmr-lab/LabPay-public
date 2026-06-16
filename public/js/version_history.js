@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v657', d: '2026-06-16', s: 'LabPay 内 通知 ページ で SNS 反応 / 予想 / スコア予想 / ドラフト 通知 が タップ しても 飛べなかった bug 修正 (refUrl に post / prediction / score_pred / drafts を 追加)。 これで 「どの 投稿 / 予想 か わからない」 問題 を 解消' },
   { v: 'v656', d: '2026-06-16', s: 'Slack DM 通知 の 末尾 に 「→ https://pay.nkmr.io/#/...」 を 自動 付与。 どの 請求 / 投稿 / 点呼 / 集合 / フィードバック / ゲーム の 通知 か が ワンクリック で 開ける ように (ref_type 別 に URL マップ)' },
   { v: 'v655', d: '2026-06-16', s: '進行中 ウィジェット の 「⏳ 他 N 件」 footer の 上 罫線 を 削除 (border-top を 除去)' },
   { v: 'v654', d: '2026-06-16', s: '🐛 設定 で 隠した ウィジェット が 一部 ホーム に 出続けた 問題 を 全 撤去。 あなた宛て / 娯楽 も 影響 (renderCategoryWidget が home-card-user-hidden class を 外して いた)。 force-render filter も 廃止 し、 全 widget が ユーザ の 隠す 設定 を 尊重' },
