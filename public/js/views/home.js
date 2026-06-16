@@ -1805,11 +1805,19 @@ async function loadBingoMini() {
 async function renderRecruitingWidget() {
   const card = document.getElementById('home-recruiting-card');
   const root = document.getElementById('home-recruiting');
-  if (!card || !root) return;
+  if (!card || !root) { console.warn('[recruiting] card or root not found', { card, root }); return; }
+  // v646 常に カードを 出す (アイテム ない時も hint で 表示、 「ある はず なのに 出てない」 を 切り分け)
+  card.hidden = false;
+  card.classList.remove('home-card-user-hidden');
   try {
     const d = await get('/api/me/recruiting');
     const items = d.items || [];
-    if (!items.length) { card.hidden = true; return; }
+    console.log('[recruiting] items:', items.length, items);
+    if (!items.length) {
+      card.querySelector('.row-title').textContent = '🎯 あなた宛て (現在 なし)';
+      root.innerHTML = '<div class="hint" style="font-size:12px">参加中ゲーム / 募集中 / 未投票 / 未対応 が ありません</div>';
+      return;
+    }
     const tagPriority = { active: 0, vote: 1, work: 2, open: 3 };
     items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
     // v644 表示強制: ユーザの hidden 設定 を 一時的に 上書き (アイテム ある時のみ)
@@ -1843,7 +1851,11 @@ async function renderRecruitingWidget() {
         </a>
       `;
     }).join('');
-  } catch (e) { card.hidden = true; }
+  } catch (e) {
+    console.error('[recruiting] failed:', e);
+    card.querySelector('.row-title').textContent = '🎯 あなた宛て (取得失敗)';
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${e?.message || e}</div>`;
+  }
 }
 
 async function renderBingoWidget() {
