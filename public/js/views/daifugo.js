@@ -58,7 +58,7 @@ export async function renderDaifugo() {
     document.getElementById('df-list').innerHTML = items.map(g => `
       <a class="list-item" href="#/daifugo/${g.id}">
         <div class="grow">
-          <div class="bold">${escapeHtml(g.creator_name)} の卓 ・ ${g.player_count} 人参加 ${g.me_in ? '<span class="tag ok">参加中</span>' : ''}</div>
+          <div class="bold">${escapeHtml(g.creator_name)} の卓 ・ ${g.player_count} 人参加 ${g.me_in && g.status !== 'finished' && g.status !== 'cancelled' ? '<span class="tag ok">参加中</span>' : ''}</div>
           <div class="meta">${g.status} / pot ${g.pot_total}pt</div>
         </div>
       </a>
@@ -169,6 +169,7 @@ async function paintDaifugo(gid) {
         </div>
         <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で 出す。 同じ数字を 揃えて 複数枚 出せる。</div>
       ` : '<div class="hint" style="margin-top:8px">相手の番 を 待っています…</div>'}
+      <button id="df-resign" class="btn" style="margin-top:8px; font-size:11px; color:#c00">🏳 投了 (ポイント 戻りません)</button>
     </div>` : ''}
 
     ${d.log && d.log.length ? `
@@ -194,6 +195,11 @@ async function paintDaifugo(gid) {
     });
     document.getElementById('df-pass')?.addEventListener('click', async () => {
       try { await post(`/api/daifugo/games/${gid}/pass`, {}); paintDaifugo(gid); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('df-resign')?.addEventListener('click', async () => {
+      if (!confirm('🏳 投了 しますか? (= ゲーム終了、 ポイント 戻りません)')) return;
+      try { await post(`/api/daifugo/games/${gid}/resign`, {}); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
   }

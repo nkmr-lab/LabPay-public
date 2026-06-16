@@ -34,6 +34,7 @@ function route_othello(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($action === 'move'   && $method === 'POST') { othello_move($pdo, $uid, $gid); return; }
         if ($action === 'pass'   && $method === 'POST') { othello_pass($pdo, $uid, $gid); return; }
         if ($action === 'cancel' && $method === 'POST') { othello_cancel($pdo, $uid, $gid); return; }
+        if ($action === 'resign' && $method === 'POST') { othello_resign($pdo, $uid, $gid); return; }
     }
     json_error('not_found', "no othello route", 404);
 }
@@ -329,6 +330,24 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
         }
     });
     othello_ai_drive($pdo, $gid);
+    json_response(['ok' => true]);
+}
+
+function othello_resign(PDO $pdo, int $uid, int $gid): void {
+    // v637 投了。 ポイント 返却なし。 相手が 勝者。
+    db_tx($pdo, function () use ($pdo, $uid, $gid) {
+        $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");
+        $st->execute([$gid]);
+        $g = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$g) throw new ApiException('not_found', 'not found', 404);
+        if (!in_array($g['status'], ['mine_setup', 'playing'], true)) throw new ApiException('bad_request', '既に終了', 400);
+        $side = (int)$g['creator_user_id'] === $uid ? 'creator'
+              : ((int)$g['opponent_user_id'] === $uid ? 'opponent' : null);
+        if (!$side) throw new ApiException('forbidden', '参加者ではない', 403);
+        $winner = $side === 'creator' ? 'opponent' : 'creator';
+        $pdo->prepare("UPDATE othello_games SET status='finished', winner=?, finished_at=NOW() WHERE id=?")
+            ->execute([$winner, $gid]);
+    });
     json_response(['ok' => true]);
 }
 

@@ -163,7 +163,7 @@ export async function renderOthello() {
           <div class="bold">
             ${escapeHtml(g.creator_name)} (黒) vs ${g.opponent_name ? escapeHtml(g.opponent_name) + ' (白)' : '<span class="muted">対戦相手 募集中</span>'}
             ${statusBadge(g.status)}
-            ${g.me_in ? '<span class="tag ok">参加中</span>' : ''}
+            ${g.me_in && g.status !== 'finished' && g.status !== 'cancelled' ? '<span class="tag ok">参加中</span>' : ''}
           </div>
           <div class="meta">${g.winner ? `勝者: ${g.winner === 'draw' ? '引分' : (g.winner === 'creator' ? '黒' : '白')}` : ''}</div>
         </div>
@@ -259,6 +259,10 @@ async function paintBoard(gid) {
         <div>⚫ 黒 ${d.count_black} : ⚪ 白 ${d.count_white}</div>
       </div>`;
   }
+  // v637 投了 ボタン (参加者 が mine_setup / playing 中なら 出す)
+  if (d.me_side && (d.status === 'mine_setup' || d.status === 'playing')) {
+    actionArea += `<div class="card"><button id="ot-resign" class="btn" style="color:#c00; font-size:12px">🏳 投了 (ポイント 戻りません)</button></div>`;
+  }
 
   app.innerHTML = `
     <div class="card" data-othello-gid="${gid}">
@@ -332,6 +336,11 @@ async function paintBoard(gid) {
   });
   document.getElementById('ot-pass')?.addEventListener('click', async () => {
     try { await post(`/api/othello/games/${gid}/pass`, {}); paintBoard(gid); }
+    catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('ot-resign')?.addEventListener('click', async () => {
+    if (!confirm('🏳 投了 しますか? (= 相手の勝ち、 ポイント 戻りません)')) return;
+    try { await post(`/api/othello/games/${gid}/resign`, {}); paintBoard(gid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
 

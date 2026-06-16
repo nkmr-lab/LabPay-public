@@ -45,7 +45,7 @@ export async function renderIto() {
         finished: '<span class="tag muted">終了</span>',
         cancelled: '<span class="tag" style="background:#fecaca; color:#b91c1c">キャンセル</span>',
       }[g.status] || '';
-      const meBadge = g.me_joined ? '<span class="tag ok">参加中</span>' : '';
+      const meBadge = g.me_joined && g.status !== 'finished' && g.status !== 'cancelled' && g.status !== 'ended' ? '<span class="tag ok">参加中</span>' : '';
       return `
         <a class="list-item" href="#/ito/${g.id}" style="gap:8px; align-items:center">
           <span style="display:inline-flex; flex:none">${avatarHtml(g.creator_name, g.creator_avatar, 'sm')}</span>

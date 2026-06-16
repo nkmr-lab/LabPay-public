@@ -90,10 +90,14 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
     else result = '😢 あなたの 負け';
     return `<div class="card"><h3 style="margin:0">${result}</h3></div>`;
   }
-  // playing
+  // playing — 投了 ボタン も 添える (= 参加者 なら 常時 出す)
+  const meIsPlayer = players.some(p => p.uid === meId);
+  const resignBtn = meIsPlayer
+    ? `<button data-cg-action="resign" class="btn" style="margin-top:6px; font-size:11px; color:#c00">🏳 投了 (ポイント 戻りません)</button>`
+    : '';
   return d.my_turn
-    ? `<div class="card"><div class="bold">あなたの番。 盤面を タップ。</div></div>`
-    : `<div class="card"><div class="hint">相手の番を 待っています…</div></div>`;
+    ? `<div class="card"><div class="bold">あなたの番。 盤面を タップ。</div>${resignBtn}</div>`
+    : `<div class="card"><div class="hint">相手の番を 待っています…</div>${resignBtn}</div>`;
 }
 
 // statusCard 内 の data-cg-action="join"/"cancel" を 配線する ヘルパー。
@@ -104,6 +108,13 @@ export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAf
     try {
       await post(`/api/custom-games/${kind}/games/${gid}/cancel`, {});
       navigate(detailPath || `#/cg/${kind}`);
+    } catch (e) { toast('失敗: ' + (e?.message || e)); }
+  });
+  document.querySelector('[data-cg-action="resign"]')?.addEventListener('click', async () => {
+    if (!confirm('🏳 投了 しますか? (= ゲーム終了、 ポイント 戻りません)')) return;
+    try {
+      await post(`/api/custom-games/${kind}/games/${gid}/resign`, {});
+      onAfter?.();
     } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
   document.querySelector('[data-cg-action="join"]')?.addEventListener('click', async () => {

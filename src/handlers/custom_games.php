@@ -102,6 +102,7 @@ function route_custom_games(PDO $pdo, array $cfg, string $method, array $seg): v
     if ($action === 'join'   && $method === 'POST')  { cg_join($pdo, $uid, $gid, $meta); return; }
     if ($action === 'move'   && $method === 'POST')  { cg_move($pdo, $uid, $gid, $meta); return; }
     if ($action === 'cancel' && $method === 'POST')  { cg_cancel($pdo, $uid, $gid); return; }
+    if ($action === 'resign' && $method === 'POST')  { cg_resign($pdo, $uid, $gid); return; }
     json_error('not_found', "no custom-games route", 404);
 }
 
@@ -385,6 +386,28 @@ function cg_move(PDO $pdo, int $uid, int $gid, array $meta): void {
             $pdo->prepare("UPDATE custom_games SET state_json=?, turn_user_id=? WHERE id=?")
                 ->execute([json_encode($newState, JSON_UNESCAPED_UNICODE), $nextTurn, $gid]);
         }
+    });
+    json_response(['ok' => true]);
+}
+
+// v637 投了: status='finished' に。 2 人卓 では 相手 が 勝者、 4 人卓 では 勝者 null。
+//   場代 は すでに 支払い済 (v621 場代モデル)、 払戻 なし。
+function cg_resign(PDO $pdo, int $uid, int $gid): void {
+    db_tx($pdo, function () use ($pdo, $uid, $gid) {
+        $st = $pdo->prepare("SELECT * FROM custom_games WHERE id=? FOR UPDATE");
+        $st->execute([$gid]);
+        $g = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$g) throw new ApiException('not_found', 'not found', 404);
+        if ($g['status'] !== 'playing') throw new ApiException('bad_request', 'not playing', 400);
+        $players = array_map('intval', json_decode($g['players_json'] ?: '[]', true) ?: []);
+        if (!in_array($uid, $players, true)) throw new ApiException('forbidden', '参加者ではない', 403);
+        // 2 人卓 では 相手 が 勝者
+        $winnerUid = null;
+        if (count($players) === 2) {
+            $winnerUid = $players[0] === $uid ? $players[1] : $players[0];
+        }
+        $pdo->prepare("UPDATE custom_games SET status='finished', winner_user_id=?, turn_user_id=NULL, finished_at=NOW() WHERE id=?")
+            ->execute([$winnerUid, $gid]);
     });
     json_response(['ok' => true]);
 }

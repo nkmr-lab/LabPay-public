@@ -30,6 +30,7 @@ function route_daifugo(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($method === 'POST' && $action === 'play')   { daifugo_play($pdo, $uid, $gid); return; }
         if ($method === 'POST' && $action === 'pass')   { daifugo_pass($pdo, $uid, $gid); return; }
         if ($method === 'POST' && $action === 'cancel') { daifugo_cancel($pdo, $uid, $gid); return; }
+        if ($method === 'POST' && $action === 'resign') { daifugo_resign($pdo, $uid, $gid); return; }
     }
     json_error('not_found', "no daifugo route", 404);
 }
@@ -339,6 +340,22 @@ function daifugo_next_turn(array $state, int $cur): int {
         if (count($state['players'][$next]['hand']) > 0) return $next;
     }
     return $cur;
+}
+
+// v637 投了。 playing 中の 参加者 が 押す と ゲーム終了 (ポイント 戻りません)。
+function daifugo_resign(PDO $pdo, int $uid, int $gid): void {
+    db_tx($pdo, function () use ($pdo, $uid, $gid) {
+        $st = $pdo->prepare("SELECT * FROM daifugo_games WHERE id=? FOR UPDATE");
+        $st->execute([$gid]);
+        $g = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$g) throw new ApiException('not_found', 'not found', 404);
+        if ($g['status'] !== 'playing') throw new ApiException('bad_request', 'プレイ中 以外 は 投了不可', 400);
+        $stE = $pdo->prepare("SELECT 1 FROM daifugo_players WHERE game_id=? AND user_id=?");
+        $stE->execute([$gid, $uid]);
+        if (!$stE->fetchColumn()) throw new ApiException('forbidden', '参加者ではない', 403);
+        $pdo->prepare("UPDATE daifugo_games SET status='finished', finished_at=NOW() WHERE id=?")->execute([$gid]);
+    });
+    json_response(['ok' => true]);
 }
 
 function daifugo_cancel(PDO $pdo, int $uid, int $gid): void {

@@ -47,6 +47,11 @@ const GAMES = [
     desc: 'お店情報をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー' },
   { id: 'flight',    icon: '✈️', name: 'フライト応援', url: '#/flight',
     desc: '長いフライトの進捗 (%) / 残り時間を大きく可視化。完全オフライン' },
+  // v637 lab-mgmt から 娯楽 へ 移動
+  { id: 'drafts',    icon: '⚾', name: 'ドラフト',    url: '#/drafts',
+    desc: 'プロ野球風 順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を 揃えて 1 位、 2 位 と 順番指名。 競合は くじ で 決着' },
+  { id: 'quizzes',   icon: '📝', name: 'フリップクイズ', url: '#/quizzes',
+    desc: '出題 → 参加者 フリップ 記述回答 → 一斉開示 (タップで 拡大) → ⭕❌ 採点 → ランキング 集計' },
 ];
 
 const CATEGORIES = [
@@ -75,6 +80,8 @@ const GAME_CATEGORY = {
   sns:           'community', // v603
   places:        'community', // v603
   flight:        'solo',      // v603
+  drafts:        'party',     // v637
+  quizzes:       'party',     // v637
 };
 
 export function renderGames() {

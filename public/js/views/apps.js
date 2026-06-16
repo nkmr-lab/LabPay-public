@@ -29,10 +29,10 @@ export const APPS = [
   { id: 'buy',           cat: 'trade',    url: '#/buy',           title: '🛒 購入',            desc: 'ラボ内の商品一覧から購入。 出品者・在庫・写真・口コミ付き。', defaultVisible: true },
   // 🔴 urgent — 締切・応答が要る (通知 出す)
   { id: 'rollcalls',     cat: 'lab-mgmt', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる?」「起きてる?」 をワンタップで集める。締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
-  // v634 ⚾ ドラフト
-  { id: 'drafts',        cat: 'lab-mgmt', url: '#/drafts',        title: '⚾ ドラフト',         desc: 'プロ野球風 順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を 揃えて 開始 → 1 位、 2 位 と 順番に 指名、 競合は くじ で 決着。', defaultVisible: true },
-  // v635 📝 フリップ クイズ
-  { id: 'quizzes',       cat: 'lab-mgmt', url: '#/quizzes',       title: '📝 フリップ クイズ', desc: '出題者が 問題 を 出す → 参加者は フリップ に 記述回答 → 一斉開示 (タップで 拡大) → 出題者が ⭕❌ 採点 → ランキング 集計。 連続出題 OK。', defaultVisible: true },
+  // v634 ⚾ ドラフト (v637 娯楽 へ)
+  { id: 'drafts',        cat: 'game', url: '#/drafts',        title: '⚾ ドラフト',         desc: 'プロ野球風 順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を 揃えて 開始 → 1 位、 2 位 と 順番に 指名、 競合は くじ で 決着。', defaultVisible: true },
+  // v635 📝 フリップ クイズ (v637 娯楽 へ)
+  { id: 'quizzes',       cat: 'game', url: '#/quizzes',       title: '📝 フリップ クイズ', desc: '出題者が 問題 を 出す → 参加者は フリップ に 記述回答 → 一斉開示 (タップで 拡大) → 出題者が ⭕❌ 採点 → ランキング 集計。 連続出題 OK。', defaultVisible: true },
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
   { id: 'requests',      cat: 'lab-mgmt', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
