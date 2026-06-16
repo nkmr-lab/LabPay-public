@@ -495,6 +495,10 @@ route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderA
 route('/admin/custom-games', lazy(() => import('./views/admin_custom_games.js'), 'renderAdminCustomGames'));
 // v620 自作ゲーム の ユーザ管理 UI + 汎用ディスパッチャ
 route('/my-games',           lazy(() => import('./views/my_custom_games.js'), 'renderMyCustomGames'));
+// v634 ⚾ ドラフト
+route('/drafts',             lazy(() => import('./views/drafts.js'), 'renderDrafts'));
+route('/drafts/new',         lazy(() => import('./views/drafts.js'), 'renderDraftNew'));
+route('/drafts/:id',         lazy(() => import('./views/drafts.js'), 'renderDraftDetail'));
 route('/cg/:kind/:id',       lazy(() => import('./views/customgame.js'), 'renderCustomGameDetail'));
 route('/cg/:kind',           lazy(() => import('./views/customgame.js'), 'renderCustomGameList'));
 route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));
