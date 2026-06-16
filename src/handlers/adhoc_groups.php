@@ -312,6 +312,7 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_creator_or_admin($pdo, $id, $u);
     $body = read_json_body();
+    $hasTitle = array_key_exists('title', $body);
     $hasSlug  = array_key_exists('slug', $body);
     $hasImage = array_key_exists('image_url', $body);
     $hasStart = array_key_exists('schedule_start_date', $body);
@@ -321,11 +322,17 @@ function groups_patch(PDO $pdo, array $cfg, int $id): void {
              || array_key_exists('feat_flight', $body)
              || array_key_exists('feat_wari', $body)
              || array_key_exists('feat_actions', $body);
-    if (!$hasSlug && !$hasImage && !$hasStart && !$hasEnd && !$hasFeat) {
+    if (!$hasTitle && !$hasSlug && !$hasImage && !$hasStart && !$hasEnd && !$hasFeat) {
         throw new ApiException('bad_request', 'nothing to update', 400);
     }
     $sets = []; $args = [];
     $respSlug = null; $respImage = null;
+    if ($hasTitle) {
+        $t = trim((string)$body['title']);
+        if ($t === '') throw new ApiException('bad_request', 'グループ名 は 必須', 400);
+        if (mb_strlen($t) > 200) throw new ApiException('bad_request', 'グループ名 は 200 文字以内', 400);
+        $sets[] = 'title = ?'; $args[] = $t;
+    }
     if ($hasStart) {
         $v = $body['schedule_start_date'];
         if ($v === null || $v === '') { $sets[] = 'schedule_start_date = NULL'; }

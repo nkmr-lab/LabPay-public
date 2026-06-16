@@ -1,5 +1,5 @@
 <?php
-// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 31 日 以内 (v434)。
+// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 v648 で 180 日 以内 に 拡張 (元 31 日)。
 // 起案時に 自分以外の参加者へ push 通知。 タイマーや点呼と違って 応答ボタンは無く、
 // 「集合する場所を 1 つ決めて 全員に同期する」 のが目的。
 
@@ -267,9 +267,9 @@ function meetups_create(PDO $pdo, array $cfg): void {
     if ($whenTs <= time() + 30) {
         throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . 'は今より先に', 400);
     }
-    // v450 〆切は 365 日まで、 待ち合わせは 従来の 31 日まで。
-    $maxAhead = $isDeadline ? 365 * 86400 : 31 * 86400;
-    $maxLabel = $isDeadline ? '365 日' : '31 日';
+    // v450 〆切は 365 日まで、 待ち合わせは v648 で 180 日 (半年) まで に 拡張。
+    $maxAhead = $isDeadline ? 365 * 86400 : 180 * 86400;
+    $maxLabel = $isDeadline ? '365 日' : '180 日';
     if ($whenTs > time() + $maxAhead) {
         throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . "は {$maxLabel} 以内に", 400);
     }

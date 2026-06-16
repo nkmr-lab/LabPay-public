@@ -716,7 +716,9 @@ async function loadDetail(id) {
     document.getElementById('gd-head').innerHTML = `
       ${imgBlock}
       ${editToggleBtn}
-      <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}</div>
+      <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}
+        ${gdEditMode && isCreator ? `<button id="gd-edit-title" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">✏️ 名前 変更</button>` : ''}
+      </div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(fmtDateTime(g.created_at))}</div>
       ${slugRow}
       ${g.description ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(g.description)}</div>` : ''}
@@ -907,6 +909,18 @@ async function loadDetail(id) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('gd-edit-slug')?.addEventListener('click', () => onEditSlug(g));
+    document.getElementById('gd-edit-title')?.addEventListener('click', async () => {
+      const newTitle = prompt('新しい グループ名 (200 文字以内):', g.title);
+      if (newTitle === null) return;
+      const t = newTitle.trim();
+      if (!t) { toast('グループ名 は 必須'); return; }
+      if (t === g.title) return;
+      try {
+        await patch('/api/groups/' + g.id, { title: t });
+        toast('グループ名 を 変更しました');
+        await loadDetail(id);
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
     // v518 #153 編集モードトグル: クリックで gdEditMode を反転 → loadDetail で再描画。
     document.getElementById('gd-edit-toggle')?.addEventListener('click', () => {
       gdEditMode = !gdEditMode;

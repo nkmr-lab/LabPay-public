@@ -75,7 +75,7 @@ export async function renderMeetups({ query } = {}) {
   const headerSub = meta?.label === '〆切'
     ? '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで 設定可。'
     : meta?.label === '待ち合わせ'
-      ? '集合時刻 + 場所 + メンバー を 一発で全員に通知。 31 日先 まで。'
+      ? '集合時刻 + 場所 + メンバー を 一発で全員に通知。 180 日先 まで。'
       : '集合時刻 / 〆切時刻 を 全員に通知 (タブで 切替)。';
   const tabBtn = (k, txt) => {
     const active = (kindFilter === k) || (!kindFilter && k === '');
@@ -246,7 +246,7 @@ export async function renderMeetupNew({ query } = {}) {
   });
   // URL 経由の preset 時刻を 優先 (期限内かつ 未来 なら 採用)。
   let usedPreset = false;
-  const maxAheadMs = (isDeadline ? 365 : 31) * 86400_000;
+  const maxAheadMs = (isDeadline ? 365 : 180) * 86400_000;
   if (presetWhenRaw) {
     const t = new Date(presetWhenRaw).getTime();
     if (Number.isFinite(t) && t > Date.now() + 30_000 && t <= Date.now() + maxAheadMs) {
