@@ -314,6 +314,7 @@ async function loadDetail(id) {
       if (iJoined) actions += `<button id="inv-detail-leave">参加表明を取消</button>`;
       else         actions += `<button id="inv-detail-join" class="primary">参加表明する</button>`;
       if (isMine)  actions += ` <button id="inv-detail-edit" class="btn">✏️ 編集</button>`;
+      if (isMine)  actions += ` <button id="inv-detail-close" class="btn">✋ 募集を終了</button>`;
       if (isMine)  actions += ` <button id="inv-detail-cancel" class="danger">募集を取消</button>`;
     } else if (isMine) {
       // 終了済みなら発起人だけが「再募集」できる。新しい starts_at を入れて
@@ -348,6 +349,11 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-cancel')?.addEventListener('click', async () => { await onCancel(id); /* may navigate away on success */ });
     document.getElementById('inv-detail-edit')  ?.addEventListener('click', () => openInvEditModal(i));
     document.getElementById('inv-detail-reopen')?.addEventListener('click', async () => { await onReopen(id); await loadDetail(id); });
+    document.getElementById('inv-detail-close') ?.addEventListener('click', async () => {
+      if (!confirm('募集 を 終了 しますか? (= 新規 参加表明 は 受付けません。 既参加者は そのまま、 イベントは 続行)')) return;
+      try { await post('/api/invitations/' + id + '/close', {}); await loadDetail(id); }
+      catch (e) { toast('失敗: ' + (e?.message || e)); }
+    });
 
     // Shortcuts for using this set elsewhere. Creator is always included
     // (organizer is assumed to be in the gathering too) — dedupe in case they

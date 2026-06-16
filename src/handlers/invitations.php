@@ -16,6 +16,7 @@ function route_invitations(PDO $pdo, array $cfg, string $method, array $seg): vo
         if ($method === 'DELETE')                                          { invitations_cancel($pdo, $cfg, $id); return; }
         if (($seg[2] ?? '') === 'join'  && $method === 'POST')            { invitations_join($pdo, $cfg, $id);   return; }
         if (($seg[2] ?? '') === 'leave' && $method === 'POST')            { invitations_leave($pdo, $cfg, $id);  return; }
+        if (($seg[2] ?? '') === 'close' && $method === 'POST')            { invitations_close($pdo, $cfg, $id);  return; }
     }
     json_error('not_found', "no invitations route for $method $sub", 404);
 }
@@ -398,6 +399,22 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
     $pdo->prepare('UPDATE invitations SET ' . implode(', ', $sets) . ' WHERE id=?')
         ->execute($args);
     json_response(['ok' => true, 'reopened' => $reopened]);
+}
+
+// v639 募集 を 手動で 終了 (= closed_at セット)。 既参加者は そのまま、 新規 join 不可。
+//   cancel と 違って イベント自体は 残る (= 「人 集まったので 確定」 みたいな 使い方)。
+function invitations_close(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT creator_user_id, closed_at, cancelled_at FROM invitations WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '募集が ありません', 404);
+    if ((int)$row['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
+    if ($row['cancelled_at']) throw new ApiException('bad_request', '既に キャンセル済', 400);
+    if ($row['closed_at']) { json_response(['ok' => true, 'already' => true]); return; }
+    $pdo->prepare("UPDATE invitations SET closed_at=NOW() WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
 }
 
 function invitations_cancel(PDO $pdo, array $cfg, int $id): void {
