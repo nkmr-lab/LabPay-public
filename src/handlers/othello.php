@@ -71,18 +71,48 @@ function othello_list(PDO $pdo, int $uid): void {
 }
 
 function othello_create(PDO $pdo, int $uid): void {
+    // v632 対象者指定 → 即起動: body.opponent_uid が 渡れば その人を 即着席させて mine_setup に
+    $body = read_json_body();
+    $oppUid = isset($body['opponent_uid']) ? (int)$body['opponent_uid'] : 0;
     $gid = 0;
-    db_tx($pdo, function () use ($pdo, $uid, &$gid) {
+    $oppName = '';
+    db_tx($pdo, function () use ($pdo, $uid, $oppUid, &$gid, &$oppName) {
         $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < OTHELLO_FEE) throw new ApiException('insufficient_balance', "ポイント不足 (要 ${\OTHELLO_FEE} pt)", 400);
+        if ($bal < OTHELLO_FEE) throw new ApiException('insufficient_balance', "ポイント不足 (要 " . OTHELLO_FEE . " pt)", 400);
+        if ($oppUid) {
+            if ($oppUid === $uid) throw new ApiException('bad_request', '自分は 指定不可', 400);
+            $stU = $pdo->prepare("SELECT display_name FROM users WHERE id=? AND kind='human'");
+            $stU->execute([$oppUid]);
+            $oppName = (string)($stU->fetchColumn() ?: '');
+            if (!$oppName) throw new ApiException('bad_request', '無効な相手', 400);
+            if (Ledger::balanceOfUser($pdo, $oppUid) < OTHELLO_FEE) {
+                throw new ApiException('insufficient_balance', "{$oppName} さんの ポイント不足で 開始不可", 400);
+            }
+        }
         $board = othello_initial_board();
-        $pdo->prepare("INSERT INTO othello_games (creator_user_id, status, fee, board_json) VALUES (?,?,?,?)")
-            ->execute([$uid, 'waiting', OTHELLO_FEE, json_encode($board)]);
+        $status = $oppUid ? 'mine_setup' : 'waiting';
+        $pdo->prepare("INSERT INTO othello_games (creator_user_id, opponent_user_id, status, fee, board_json) VALUES (?,?,?,?,?)")
+            ->execute([$uid, $oppUid ?: null, $status, OTHELLO_FEE, json_encode($board)]);
         $gid = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, OTHELLO_FEE, 'othello_buyin', 'othello', $gid, "地雷オセロ #{$gid} buy-in (creator)");
         $pdo->prepare("UPDATE othello_games SET pot_total = pot_total + ? WHERE id = ?")
             ->execute([OTHELLO_FEE, $gid]);
+        if ($oppUid) {
+            Ledger::transfer($pdo, $oppUid, 1, OTHELLO_FEE, 'othello_buyin', 'othello', $gid, "地雷オセロ #{$gid} buy-in (招待相手)");
+            $pdo->prepare("UPDATE othello_games SET pot_total = pot_total + ? WHERE id = ?")
+                ->execute([OTHELLO_FEE, $gid]);
+        }
     });
+    if ($oppUid && $gid) {
+        try {
+            global $CFG;
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $stN->execute([$uid]); $by = (string)$stN->fetchColumn();
+            notify_safely($pdo, $CFG, $oppUid, 'admin_notice',
+                "💣 {$by} さん から 地雷オセロ #{$gid} に 招待 されました (地雷 配置 へ)",
+                'othello', $gid);
+        } catch (Throwable $_) {}
+    }
     json_response(['ok' => true, 'id' => $gid]);
 }
 

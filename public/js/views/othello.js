@@ -39,8 +39,17 @@ export async function renderOthello() {
     <div id="ot-list"><div class="hint">読み込み中…</div></div>
   `;
   document.getElementById('ot-new').addEventListener('click', async () => {
+    const { showInviteModal } = await import('./invite_modal.js');
+    const res = await showInviteModal({
+      title: '💣 地雷オセロ 新規卓',
+      description: 'プレイフィー 2pt。 「対象者で 即開始」 なら 相手 から 即徴収 + 通知 + 即 地雷配置 へ。',
+      minPick: 1, maxPick: 1,        // 自分 + 1 人 = 2 人 (固定)
+      allowPublic: true,
+    });
+    if (!res) return;
     try {
-      const r = await post('/api/othello/games', {});
+      const body = res.kind === 'invite' ? { opponent_uid: res.memberIds[0] } : {};
+      const r = await post('/api/othello/games', body);
       navigate('#/othello/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });

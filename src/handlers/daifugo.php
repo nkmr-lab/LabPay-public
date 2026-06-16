@@ -66,8 +66,11 @@ function daifugo_list(PDO $pdo, int $uid): void {
 }
 
 function daifugo_create(PDO $pdo, int $uid): void {
+    // v632 対象者指定 → 即起動: body.member_ids = [uid, ...] が 渡れば 招待制 で 即 開始
+    $body = read_json_body();
+    $invitees = $body['member_ids'] ?? null;
     $gid = 0;
-    db_tx($pdo, function () use ($pdo, $uid, &$gid) {
+    db_tx($pdo, function () use ($pdo, $uid, $invitees, &$gid) {
         $bal = Ledger::balanceOfUser($pdo, $uid);
         if ($bal < DAIFUGO_FEE) throw new ApiException('insufficient_balance', "ポイント不足", 400);
         $pdo->prepare("INSERT INTO daifugo_games (creator_user_id, fee, state_json, pot_total) VALUES (?,?,'{}',0)")
@@ -76,8 +79,82 @@ function daifugo_create(PDO $pdo, int $uid): void {
         $pdo->prepare("INSERT INTO daifugo_players (game_id, user_id, seat) VALUES (?,?,0)")->execute([$gid, $uid]);
         Ledger::transfer($pdo, $uid, 1, DAIFUGO_FEE, 'daifugo_buyin', 'daifugo', $gid, "大富豪 #{$gid} buy-in");
         $pdo->prepare("UPDATE daifugo_games SET pot_total = pot_total + ? WHERE id=?")->execute([DAIFUGO_FEE, $gid]);
+        // 招待制: 全員参加 + 全員から fee 一括徴収 + その場で deal して playing 開始
+        if (is_array($invitees) && count($invitees) > 0) {
+            daifugo_create_with_invitees($pdo, $uid, $gid, $invitees);
+        }
     });
+    // 通知 (tx 外、 失敗しても 卓は 残る)
+    if (is_array($invitees) && count($invitees) > 0) {
+        try {
+            global $CFG;
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $stN->execute([$uid]); $by = (string)$stN->fetchColumn();
+            foreach ($invitees as $iv) {
+                $iv = (int)$iv; if ($iv === $uid) continue;
+                notify_safely($pdo, $CFG, $iv, 'admin_notice',
+                    "🃏 {$by} さん から 大富豪 #{$gid} に 招待 されました (すぐに 開始)",
+                    'daifugo', $gid);
+            }
+        } catch (Throwable $_) {}
+    }
     json_response(['ok' => true, 'id' => $gid]);
+}
+
+function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array $invitees): void {
+    $invitees = array_values(array_unique(array_map('intval', $invitees)));
+    $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid));
+    if (!count($invitees)) return;
+    if (1 + count($invitees) > DAIFUGO_MAX_PLAYERS) throw new ApiException('bad_request', sprintf('最大 %d 人', DAIFUGO_MAX_PLAYERS), 400);
+    // human チェック
+    $place = implode(',', array_fill(0, count($invitees), '?'));
+    $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
+    $stU->execute($invitees);
+    $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
+    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバー が含まれます', 400);
+    // 残高 一括チェック
+    foreach ($invitees as $iv) {
+        if (Ledger::balanceOfUser($pdo, $iv) < DAIFUGO_FEE) {
+            $name = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $name->execute([$iv]);
+            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足で 開始不可', $name->fetchColumn()), 400);
+        }
+    }
+    // 着席 + 徴収
+    $seat = 1;
+    foreach ($invitees as $iv) {
+        $pdo->prepare("INSERT INTO daifugo_players (game_id, user_id, seat) VALUES (?,?,?)")->execute([$gid, $iv, $seat]);
+        Ledger::transfer($pdo, $iv, 1, DAIFUGO_FEE, 'daifugo_buyin', 'daifugo', $gid, "大富豪 #{$gid} buy-in (招待)");
+        $pdo->prepare("UPDATE daifugo_games SET pot_total = pot_total + ? WHERE id=?")->execute([DAIFUGO_FEE, $gid]);
+        $seat++;
+    }
+    // すぐ 配って 開始 (= daifugo_start の中身を 直接 適用)
+    $players = $pdo->prepare("SELECT user_id, seat FROM daifugo_players WHERE game_id=? ORDER BY seat");
+    $players->execute([$gid]);
+    $players = $players->fetchAll(PDO::FETCH_ASSOC);
+    $deck = range(0, 52);
+    shuffle($deck);
+    $hands = [];
+    $n = count($players);
+    for ($i = 0; $i < $n; $i++) $hands[] = [];
+    foreach ($deck as $i => $c) $hands[$i % $n][] = $c;
+    foreach ($hands as &$h) sort($h);
+    unset($h);
+    $starter = 0;
+    foreach ($hands as $i => $h) if (in_array(0, $h, true)) { $starter = $i; break; }
+    $state = [
+        'players' => array_map(function ($p, $h) {
+            return ['user_id' => (int)$p['user_id'], 'seat' => (int)$p['seat'], 'hand' => $h, 'rank' => null, 'passed' => false];
+        }, $players, $hands),
+        'turn' => $starter,
+        'last_play' => null,
+        'pass_count' => 0,
+        'finished_ranks' => [],
+        'log' => [],
+        'revolution' => false,
+    ];
+    $pdo->prepare("UPDATE daifugo_games SET status='playing', state_json=?, state_ver=state_ver+1 WHERE id=?")
+        ->execute([json_encode($state), $gid]);
 }
 
 function daifugo_join(PDO $pdo, int $uid, int $gid): void {

@@ -77,8 +77,14 @@ export async function renderMahjongNew() {
         <input type="number" id="mj-buyin" min="1" max="10000" value="50">
         <div class="hint-sm">4 人で 4 × buy-in = pot。 場代 5% 引いた残りを 50/30/15/0% で配ります。</div>
       </label>
+      <div style="margin-top:10px">
+        <span class="lbl" style="font-weight:600">対象者 を 指定 (任意、 3 人 選ぶと 即開始)</span>
+        <div id="mj-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin:6px 0"></div>
+        <div id="mj-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
       <div class="hint-sm" style="margin-top:8px; color:var(--muted)">
-        起案者は自動的に参加 (buy-in は今すぐ徴収)。 残り 3 人を待ちます。
+        起案者は 自動的に 参加 (buy-in は 即徴収)。 対象者 指定 で 3 人 選ぶと、
+        全員から 一括徴収 + 通知 + 即 開始。 指定なし なら 公開卓 で 募集。
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/mahjong" class="btn">キャンセル</a>
@@ -86,13 +92,30 @@ export async function renderMahjongNew() {
       </div>
     </div>
   `;
+  let picker = null;
+  try {
+    const { createMemberPicker } = await import('../member_picker.js');
+    picker = await createMemberPicker({
+      bulkContainer:  document.getElementById('mj-bulk'),
+      chipsContainer: document.getElementById('mj-chips'),
+      initial: [],
+      excludeIds: [Number(state.me?.id)],
+      showGenderBulk: false,
+    });
+  } catch (e) {
+    document.getElementById('mj-chips').innerHTML = `<div class="muted">${e.message}</div>`;
+  }
   document.getElementById('mj-go').addEventListener('click', async () => {
     const title = document.getElementById('mj-title').value.trim();
     const buyIn = Number(document.getElementById('mj-buyin').value) || 50;
+    const ids = picker ? [...picker.getSelected()] : [];
+    if (ids.length > 0 && ids.length !== 3) { toast('対象者は 3 人 ちょうど、 または 指定なし'); return; }
     const btn = document.getElementById('mj-go');
     btn.disabled = true; btn.textContent = '作成中…';
     try {
-      const r = await post('/api/mahjong/games', { title: title || null, buy_in: buyIn });
+      const body = { title: title || null, buy_in: buyIn };
+      if (ids.length === 3) body.member_ids = ids;
+      const r = await post('/api/mahjong/games', body);
       navigate('#/mahjong/' + r.id);
     } catch (e) {
       toast('失敗: ' + e.message);

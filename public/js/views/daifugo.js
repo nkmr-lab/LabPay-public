@@ -37,8 +37,19 @@ export async function renderDaifugo() {
     <div id="df-list"><div class="hint">読み込み中…</div></div>
   `;
   document.getElementById('df-new').addEventListener('click', async () => {
-    try { const r = await post('/api/daifugo/games', {}); navigate('#/daifugo/' + r.id); }
-    catch (e) { toast('失敗: ' + e.message); }
+    const { showInviteModal } = await import('./invite_modal.js');
+    const res = await showInviteModal({
+      title: '🃏 大富豪 新規卓',
+      description: 'プレイフィー 2pt。 「対象者で 即開始」 なら 全員から 即 徴収 + 通知 + 即 配牌。',
+      minPick: 1, maxPick: 3,        // 自分 + 1〜3 人 = 2〜4 人
+      allowPublic: true,
+    });
+    if (!res) return;
+    try {
+      const body = res.kind === 'invite' ? { member_ids: res.memberIds } : {};
+      const r = await post('/api/daifugo/games', body);
+      navigate('#/daifugo/' + r.id);
+    } catch (e) { toast('失敗: ' + e.message); }
   });
   try {
     const d = await get('/api/daifugo/games');

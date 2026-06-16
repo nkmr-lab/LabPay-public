@@ -422,16 +422,70 @@ function mahjong_create(PDO $pdo, array $cfg, int $uid): void {
     if ($title === '') $title = null;
     $buyIn = (int)($body['buy_in'] ?? MAHJONG_DEFAULT_BUYIN);
     if ($buyIn < 1 || $buyIn > 10000) throw new ApiException('bad_request', 'buy_in は 1〜10000', 400);
+    // v632 対象者指定 → 即起動: body.member_ids = [uid×3] が 渡れば 4 人 揃えて 即 開始
+    $invitees = $body['member_ids'] ?? null;
     $gameId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $title, $buyIn, &$gameId) {
+    db_tx($pdo, function () use ($pdo, $uid, $title, $buyIn, $invitees, &$gameId) {
         mahjong_assert_balance($pdo, $uid, $buyIn);
         $pdo->prepare("INSERT INTO mahjong_games (creator_user_id, title, buy_in, status, pot_total) VALUES (?,?,?,?,?)")
             ->execute([$uid, $title, $buyIn, 'lobby', 0]);
         $gameId = (int)$pdo->lastInsertId();
         mahjong_insert_player($pdo, $gameId, $uid, 0);
         mahjong_deposit($pdo, $gameId, $uid, $buyIn);
+        // 招待制: 3 人 揃って 全員から 一括徴収 + start
+        if (is_array($invitees) && count($invitees) > 0) {
+            mahjong_create_with_invitees($pdo, $uid, $gameId, $buyIn, $invitees);
+        }
     });
+    if (is_array($invitees) && count($invitees) > 0) {
+        try {
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $stN->execute([$uid]); $by = (string)$stN->fetchColumn();
+            $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id=? AND user_id<>?");
+            $stP->execute([$gameId, $uid]);
+            foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
+                notify_safely($pdo, $cfg, (int)$pid, 'admin_notice',
+                    "🀄 {$by} さん から 麻雀卓 #{$gameId} に 招待 されました (4 人揃って 即開始、 {$buyIn}pt 預託済)",
+                    'mahjong', $gameId);
+            }
+        } catch (Throwable $_) {}
+    }
     json_response(['ok' => true, 'id' => $gameId]);
+}
+
+function mahjong_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $buyIn, array $invitees): void {
+    $invitees = array_values(array_unique(array_map('intval', $invitees)));
+    $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid));
+    $needed = MAHJONG_SEATS - 1;
+    if (count($invitees) !== $needed) {
+        throw new ApiException('bad_request', sprintf('麻雀は あと %d 人 必要', $needed), 400);
+    }
+    $place = implode(',', array_fill(0, count($invitees), '?'));
+    $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
+    $stU->execute($invitees);
+    $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
+    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバー が含まれます', 400);
+    foreach ($invitees as $iv) {
+        if (Ledger::balanceOfUser($pdo, $iv) < $buyIn) {
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
+            $stN->execute([$iv]);
+            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
+        }
+    }
+    $seat = 1;
+    foreach ($invitees as $iv) {
+        mahjong_insert_player($pdo, $gid, $iv, $seat);
+        mahjong_deposit($pdo, $gid, $iv, $buyIn);
+        $seat++;
+    }
+    // 4 人 揃って start
+    $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id=? ORDER BY seat_order");
+    $stP->execute([$gid]);
+    $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
+    $state = MahjongEngine::newGame($playerUids);
+    MahjongEngine::drawForTurn($state);
+    $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
+        ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gid]);
 }
 
 function mahjong_join(PDO $pdo, array $cfg, int $uid, int $gid): void {
