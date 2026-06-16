@@ -88,6 +88,7 @@ $routes = [
     'score_predictions' => 'route_score_predictions',
     'custom-games'   => 'route_custom_games',
     'drafts'         => 'route_drafts',
+    'quizzes'        => 'route_quizzes',
 ];
 
 try {

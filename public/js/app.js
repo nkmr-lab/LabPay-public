@@ -499,6 +499,10 @@ route('/my-games',           lazy(() => import('./views/my_custom_games.js'), 'r
 route('/drafts',             lazy(() => import('./views/drafts.js'), 'renderDrafts'));
 route('/drafts/new',         lazy(() => import('./views/drafts.js'), 'renderDraftNew'));
 route('/drafts/:id',         lazy(() => import('./views/drafts.js'), 'renderDraftDetail'));
+// v635 📝 フリップクイズ
+route('/quizzes',            lazy(() => import('./views/quizzes.js'), 'renderQuizzes'));
+route('/quizzes/new',        lazy(() => import('./views/quizzes.js'), 'renderQuizNew'));
+route('/quizzes/:id',        lazy(() => import('./views/quizzes.js'), 'renderQuizDetail'));
 route('/cg/:kind/:id',       lazy(() => import('./views/customgame.js'), 'renderCustomGameDetail'));
 route('/cg/:kind',           lazy(() => import('./views/customgame.js'), 'renderCustomGameList'));
 route('/auctions',        lazy(() => import('./views/auctions.js'), 'renderAuctions'));
