@@ -742,6 +742,63 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                             'by' => $r['by'], 'fee' => (int)$r['fee'] . 'pt', 'url' => '#/score-predictions/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
+
+        // ───── v644 追加: あなた宛て の その他 アクション ─────
+        try {
+            // 📊 投票 (未投票 で 締切前)
+            $st = $pdo->prepare("SELECT p.id, p.title, uc.display_name AS by
+                                   FROM polls p JOIN users uc ON uc.id=p.creator_user_id
+                                  WHERE p.status='open' AND p.deleted_at IS NULL
+                                    AND (p.deadline_at IS NULL OR p.deadline_at > NOW())
+                                    AND NOT EXISTS (SELECT 1 FROM poll_votes v WHERE v.poll_id=p.id AND v.user_id=?)
+                                  ORDER BY p.id DESC LIMIT 5");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['tag' => 'vote', 'icon' => '📊', 'kind' => 'poll',
+                            'title' => '投票: ' . mb_substr((string)$r['title'], 0, 30),
+                            'by' => $r['by'], 'fee' => '', 'url' => '#/polls/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 📄 論文査読 (自分が 起案、 pending / processing 中)
+            $st = $pdo->prepare("SELECT id, title, status FROM paper_reviews
+                                  WHERE user_id=? AND status IN ('pending','processing')
+                                  ORDER BY id DESC LIMIT 3");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['tag' => 'work', 'icon' => '📄', 'kind' => 'paper-review',
+                            'title' => '論文査読: ' . mb_substr((string)$r['title'], 0, 28) . ' (' . $r['status'] . ')',
+                            'by' => '', 'fee' => '', 'url' => '#/paper-review'];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 📝 原稿チェック (自分が 起案、 pending / processing 中)
+            $st = $pdo->prepare("SELECT id, title, status FROM resume_checks
+                                  WHERE user_id=? AND status IN ('pending','processing')
+                                  ORDER BY id DESC LIMIT 3");
+            $st->execute([$uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['tag' => 'work', 'icon' => '📝', 'kind' => 'resume-check',
+                            'title' => '原稿チェック: ' . mb_substr((string)$r['title'], 0, 26) . ' (' . $r['status'] . ')',
+                            'by' => '', 'fee' => '', 'url' => '#/resume-check'];
+            }
+        } catch (Throwable $_) {}
+        try {
+            // 📣 点呼 (open で 自分 未応答)
+            $st = $pdo->prepare("SELECT r.id, r.title, uc.display_name AS by
+                                   FROM roll_calls r JOIN users uc ON uc.id=r.creator_user_id
+                                  WHERE r.status='open' AND r.deleted_at IS NULL
+                                    AND EXISTS (SELECT 1 FROM roll_call_targets t WHERE t.roll_call_id=r.id AND t.user_id=?)
+                                    AND NOT EXISTS (SELECT 1 FROM roll_call_responses rr WHERE rr.roll_call_id=r.id AND rr.user_id=?)
+                                  ORDER BY r.deadline_at ASC LIMIT 5");
+            $st->execute([$uid, $uid]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $items[] = ['tag' => 'vote', 'icon' => '📣', 'kind' => 'rollcall',
+                            'title' => '点呼: ' . mb_substr((string)$r['title'], 0, 30),
+                            'by' => $r['by'], 'fee' => '', 'url' => '#/rollcalls/' . (int)$r['id']];
+            }
+        } catch (Throwable $_) {}
+
         json_response(['items' => $items]);
         return;
     }

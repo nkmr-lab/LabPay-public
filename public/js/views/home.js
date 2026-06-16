@@ -207,7 +207,7 @@ export const HOME_CARDS = [
   { id: 'history',        title: '履歴' },
   { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
-  { id: 'recruiting',     title: '🎉 娯楽 参加中 / 募集中' }, // v641
+  { id: 'recruiting',     title: '🎯 あなた宛て / 関わってる (募集 / 参加中 / 投票 / 査読 / 点呼)' }, // v641, v644 拡張
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -488,11 +488,10 @@ export async function renderHome() {
       <div id="home-bingo"><div class="hint">読み込み中…</div></div>
     </div>
 
-    <!-- v638 娯楽 募集中 ウィジェット -->
+    <!-- v638 / v644 あなた宛て / 関わってる ウィジェット -->
     <div class="card" id="home-recruiting-card" data-card-id="recruiting" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">🎉 娯楽 募集中</h2>
-        <a href="#/games" class="hint">娯楽ハブ →</a>
+        <h2 class="row-title">🎯 あなた宛て / 関わってる</h2>
       </div>
       <div id="home-recruiting"><div class="hint">読み込み中…</div></div>
     </div>
@@ -618,7 +617,9 @@ export async function renderHome() {
     // v592 占いは ボタンで 任意 表示 (普段は 非表示)
   ]);
   const cardPromises = cardsToRender
-    .filter(c => !hiddenSet.has(c.cardId))
+    // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
+    //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
+    .filter(c => c.cardId === 'recruiting' || !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
   const totalMs = Math.round(performance.now() - perfStart);
@@ -1799,9 +1800,9 @@ async function loadBingoMini() {
 }
 
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
-// v638 / v640 娯楽 募集中 + 参加中 ウィジェット。
-//   tag=='active' (= 自分が 参加中で 進行中) と tag=='open' (= 未参加で 募集中) を まとめて表示。
-//   active を 先頭、 open を 後ろに。
+// v638 / v640 / v644 あなた宛て / 関わってる ウィジェット。
+//   tag: 'active' = 参加中ゲーム、 'open' = 募集中ゲーム、
+//        'vote' = 投票/点呼 未応答、 'work' = 自分の 査読/原稿チェック 進行中
 async function renderRecruitingWidget() {
   const card = document.getElementById('home-recruiting-card');
   const root = document.getElementById('home-recruiting');
@@ -1810,24 +1811,35 @@ async function renderRecruitingWidget() {
     const d = await get('/api/me/recruiting');
     const items = d.items || [];
     if (!items.length) { card.hidden = true; return; }
-    // active を 先頭 に sort
-    items.sort((a, b) => (a.tag === 'active' ? 0 : 1) - (b.tag === 'active' ? 0 : 1));
+    const tagPriority = { active: 0, vote: 1, work: 2, open: 3 };
+    items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
+    // v644 表示強制: ユーザの hidden 設定 を 一時的に 上書き (アイテム ある時のみ)
     card.hidden = false;
+    card.classList.remove('home-card-user-hidden');
     // タイトル を 動的に
     const activeN = items.filter(i => i.tag === 'active').length;
     const openN   = items.filter(i => i.tag === 'open').length;
-    card.querySelector('.row-title').innerHTML =
-      `🎉 娯楽 ${activeN ? `<span style="color:#10b981">参加中 ${activeN}</span>` : ''}${activeN && openN ? ' / ' : ''}${openN ? `<span style="color:#f59e0b">募集中 ${openN}</span>` : ''}`;
-    root.innerHTML = items.slice(0, 10).map(it => {
-      const tagHtml = it.tag === 'active'
-        ? '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>'
-        : '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>';
+    const voteN   = items.filter(i => i.tag === 'vote').length;
+    const workN   = items.filter(i => i.tag === 'work').length;
+    const parts = [];
+    if (activeN) parts.push(`<span style="color:#10b981">参加中 ${activeN}</span>`);
+    if (openN)   parts.push(`<span style="color:#f59e0b">募集 ${openN}</span>`);
+    if (voteN)   parts.push(`<span style="color:#7c3aed">投票/点呼 ${voteN}</span>`);
+    if (workN)   parts.push(`<span style="color:#0369a1">査読/原稿 ${workN}</span>`);
+    card.querySelector('.row-title').innerHTML = `🎯 あなた宛て ・ ${parts.join(' / ') || ''}`;
+    root.innerHTML = items.slice(0, 12).map(it => {
+      const tagHtml = ({
+        active: '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
+        open:   '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
+        vote:   '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
+        work:   '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
+      })[it.tag] || '';
       return `
         <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
           <span style="font-size:20px; flex:none">${it.icon}</span>
           <div class="grow" style="min-width:0">
             <div class="bold" style="font-size:13px">${tagHtml} ${escapeHtml(it.title)}</div>
-            <div class="hint-sm" style="font-size:11px">${escapeHtml(it.by)} 起案${it.fee ? ' ・ ' + escapeHtml(it.fee) : ''}</div>
+            <div class="hint-sm" style="font-size:11px">${it.by ? escapeHtml(it.by) + ' 起案' : ''}${it.fee ? (it.by ? ' ・ ' : '') + escapeHtml(it.fee) : ''}</div>
           </div>
         </a>
       `;
