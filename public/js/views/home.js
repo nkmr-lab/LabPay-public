@@ -2531,7 +2531,7 @@ async function renderMyActiveTimers() {
     // v650 1 週間先 の 集約 footer (v651 シンプルに 「⏳ 他 N 件」 だけ)
     if (farTotal > 0) {
       root.insertAdjacentHTML('beforeend',
-        `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; border-top:1px solid var(--line); margin-top:4px">⏳ 他 ${farTotal} 件</a>`);
+        `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; margin-top:4px">⏳ 他 ${farTotal} 件</a>`);
     }
     // ローカル 秒 tick 開始。 root が DOM から 外れたら 自動 停止。
     myActiveTimersTickId = setInterval(() => updateMyActiveTimersTicks(root), 1000);

@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v655', d: '2026-06-16', s: '進行中 ウィジェット の 「⏳ 他 N 件」 footer の 上 罫線 を 削除 (border-top を 除去)' },
   { v: 'v654', d: '2026-06-16', s: '🐛 設定 で 隠した ウィジェット が 一部 ホーム に 出続けた 問題 を 全 撤去。 あなた宛て / 娯楽 も 影響 (renderCategoryWidget が home-card-user-hidden class を 外して いた)。 force-render filter も 廃止 し、 全 widget が ユーザ の 隠す 設定 を 尊重' },
   { v: 'v653', d: '2026-06-16', s: '🐛 実績 widget が 設定 で 隠して も ホーム に 出続けた bug 修正 (force-render filter から achievements を 除外 + home-card-user-hidden class を 触らない)' },
   { v: 'v652', d: '2026-06-16', s: '🐛 設定 → ホーム ウィジェット 設定 で チェック を 外して も 反映 されない バグ 修正 (NEW_DEFAULT_SHOWN の auto-show merge() が ユーザ の チェック 解除 を 上書き していた)。 実績 widget を シンプル化: 達成 実績 リスト (tier 昇順) + 一番 下 に 「最新: 〇〇」 1 行 だけ (AI 称号 box / 次 の 実績 進捗 hint は 撤去)' },
