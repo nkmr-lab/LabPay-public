@@ -41,11 +41,12 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 主要カテゴリ:
 
 - 🔬 **研究用** — 論文査読 / 原稿チェック / リライター / タイマー / ストップウォッチ / 順番決め / ランダムグループ / グループ / 〆切 / 重要連絡
-- 🏢 **研究室運営サポート** — 投票 / ルーレット / どこ行く / 点呼 / 待ち合わせ / 飲み会割り勘 / 集金
+- 🏢 **研究室運営サポート** — 投票 / ルーレット / どこ行く / 点呼 / 待ち合わせ / 飲み会割り勘 / 集金 / **💼 アルバイト申請** (実験 協力 等 を 時間 + 対象者 で 依頼、 月別 まとめ + 進捗 / 催促)
 - 💴 **売買** — 販売 / 購入 / オークション
-- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ
+- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ
 - 💪 **健康** — 体重 BMI / 筋トレ / 散歩 / 運動
-- 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI
+- 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI / **🏅 実績 称号** (AI が 獲得 実績 から ラノベ 風 称号 を 1 行 生成)
+- 🧩 **拡張** — **ウィジェット センター** (自作 ウィジェット を 登録 → ホーム に 表示。 JS で `render(root)` を 書く だけ。 詳細 → [docs/WIDGETS.md](docs/WIDGETS.md))
 
 | 領域 | 内容 |
 |---|---|
@@ -97,6 +98,11 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | 🎯 勝敗予測 (score-predictions) | 試合 (X 対 Y) のスコアを 当てる (例: 3-2)。 完全的中で 山分け + 場代 5%、 誰も当たらなければ 全員返金。 基本 20pt / 10-100pt 設定可 |
 | ⭕❌ マルバツ + 🎮 自作ゲーム (custom-games) | 3x3 マルバツ を サンプル に、 各ユーザが 設定 → 🎮 自作ゲーム 管理 から 自前の 2 人対戦 JS を アップロード で 登録できる framework。 JS は DB に格納 + `/api/custom-games/kinds/:kind/script.js` で 配信、 サーバの 書き込み権限不要。 課金は **場代** モデル: 両者が join 成立時に fee pt 払い、 提供者 (kind 登録者) に 90% / SYSTEM に 10% 分配。 起案 / 移動 / 終了 では 課金なし。 fee=0 で 無料ゲームも可。 アップロード可能な サンプル: [examples/custom-games/connect_four.js](examples/custom-games/connect_four.js) (🟦 四目並べ)。 詳細 → [docs/CUSTOM_GAMES.md](docs/CUSTOM_GAMES.md) |
 | 🎰 ビンゴ (bingo) | 毎週 5x5 カードが 自動生成 (日曜〜土曜)、 平日 (月-金) の 行動 (ラボイン / オープナー / らぼったー投稿 / 麻雀 / オセロ / 食べある記 / 占い / 投票 等 28 種) を 自動カウント。 リーチ / BINGO 演出 + 達成早 + ライン数 で 週次 リーダーボード。 残高横に 5x5 ミニ盤 サマリ表示 |
+| 📝 フリップクイズ (quizzes) | 出題者 が 問題 を 出す (テキスト / 口頭 モード) → 参加者 は フリップ に 記述 回答 → 一斉 開示 (タップ で 拡大) → 出題者 が ⭕❌ 採点 → ランキング 自動 集計。 連続 出題 + 終了 で 全 履歴 振り返り |
+| ⚾ ドラフト (drafts) | プロ野球 風 順番 指名 + くじ抽選。 候補 は 人 or 自由 入力。 picking → reveal → lottery → 確定 → 次 round の state machine。 競合 は くじ で 決着、 ハズレ は 同 round 内 で 再 指名 |
+| 💼 アルバイト 申請 (bait) | 実験 協力 等 で 学生 に アルバイト を 依頼。 時間 (小数) + 対象者 を 指定 して 送る と、 受け取った 側 は 月別 で 全部 見えて 処理 済 マーク。 依頼者 は 進捗 確認 + 未処理者 催促 可。 タスク と 似て いる が 「自分 が 関わった もの が 月別 で 全部 見える」 が ポイント |
+| 🏅 実績 称号 (achievements_title) | 獲得 した 実績 一覧 を 元 に AI が 「カッコイイ 称号」 を 1 行 生成 (例: 「黄昏 の 点呼 マスター 🌅」)。 実績 が 増える と 自動 で 「stale」 に なって 再 生成 可能 |
+| 🧩 自作 ウィジェット (custom_widgets) | 自分専用 の ウィジェット を 登録 して ホーム に 表示。 JS で `meta` + `render(root)` を 書く だけ。 サンプル 同梱 (🕐 時計 / 💰 残高)。 1 秒 〜 任意 秒 で 自動 リフレッシュ。 詳細 → [docs/WIDGETS.md](docs/WIDGETS.md) |
 | ✈️ フライト応援 (flight) | 長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化 (機内・ オフライン)。 Wake Lock で 画面維持 + 1 分ごと 応援メッセージローテ |
 | 🚶 散歩モード (walk-mode) | 全画面マップ + Wake Lock + GPS 5 秒 polling で 軌跡 polyline 記録 → SNS 投稿可能 (Canvas で 1024px PNG 生成)。 ↑→↓→↑ 特殊スワイプロック。 過去軌跡 重ね合わせ表示 |
 | 💪 筋トレ (workouts) | 腕立て / 腹筋 / プランク等 を 1 タップ記録 + mutual follow で 仲間と 比較 |
@@ -269,7 +275,12 @@ LabPay/
 | **[docs/INSTALL.md](docs/INSTALL.md)** | サーバへの導入を最初から最後まで。学生が読んでセットアップできることを目標にしています |
 | **[docs/HACKATHON.md](docs/HACKATHON.md)** | LabPay の API を使って何か作る人向け。認証フロー・主要エンドポイント・サンプルクライアント |
 | **[docs/api.md](docs/api.md)** | 全エンドポイントの簡易リファレンス |
+| **[docs/WIDGETS.md](docs/WIDGETS.md)** | 🧩 自作 ウィジェット 開発 ガイド (= ホーム に 自分専用 widget を JS で 書ける) |
+| **[docs/CUSTOM_GAMES.md](docs/CUSTOM_GAMES.md)** | 🎮 自作 ゲーム v1 framework (現行 動作中。 ⭕❌ / ニム / ライツアウト / すごろく) |
+| **[docs/CUSTOM_GAMES_V2.md](docs/CUSTOM_GAMES_V2.md)** | 🎮 自作 ゲーム v2 framework cg2 (p5.js + sharedValues 自動 同期、 准 リアルタイム。 サンプル 4 件 同梱) |
+| **[docs/GRANTS_DESIGN.md](docs/GRANTS_DESIGN.md)** | 研究費 執行 管理 設計 案 (保留 中) |
 | **[samples/](samples/)** | API を叩く短い Python サンプル集 (在室一覧 / 商品一覧 / タスク一覧 / 送金 など、 1 ファイル 1 目的) |
+| **[examples/custom-games/](examples/custom-games/)** | v1 自作 ゲーム JS サンプル (アップロード 用 ニム / ライツアウト / すごろく / 四目並べ) |
 | **[bin/README.md](bin/README.md)** | Scanner のセットアップ詳細 (Windows/Linux/Mac) |
 
 ---
@@ -519,6 +530,15 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 137 | 2026‑06‑15 | custom_game_kinds.js_source / js_size (JS module を DB に格納、 ユーザ アップロード対応) |
 | 138 | 2026‑06‑15 | custom_game_kinds.provider_share_pct (v620 でのみ存在、 v621 で drop) |
 | 139 | 2026‑06‑15 | custom_game_kinds.provider_share_pct を drop (場代を 提供者 90% / SYSTEM 10% に 固定化) |
+| 140 | 2026‑06‑15 | shiritori_play_fee (絵しりとり 場代 設定) |
+| 141 | 2026‑06‑15 | othello_ai (地雷オセロ AI 戦 toggle) |
+| 142 | 2026‑06‑15 | othello_ai_bot (地雷オセロ AI 用 bot user 確定) |
+| 143 | 2026‑06‑15 | custom_game_n_players (自作ゲーム 1〜4 人 用 拡張) |
+| 144 | 2026‑06‑16 | drafts + draft_picks (⚾ ドラフト 順番 指名 + くじ抽選) |
+| 145 | 2026‑06‑16 | quizzes + quiz_questions + quiz_answers (📝 フリップ クイズ) |
+| 146 | 2026‑06‑16 | quizzes.mode (text / verbal 切替) |
+| — | 2026‑06‑17 | (migrations フォルダ 外) bait_requests + bait_assignments (アルバイト 申請) |
+| — | 2026‑06‑17 | (migrations フォルダ 外) custom_widgets (自作 ウィジェット) |
 
 ---
 

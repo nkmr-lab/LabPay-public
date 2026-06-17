@@ -68,6 +68,7 @@ $routes = [
     'money-requests' => 'route_money_requests',
     'bait'           => 'route_bait',
     'custom-widgets' => 'route_custom_widgets',
+    'cg2'            => 'route_cg2',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',

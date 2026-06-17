@@ -617,6 +617,9 @@ route('/bait/:id',       lazy(() => import('./views/bait.js'), 'renderBaitDetail
 route('/widgets',        lazy(() => import('./views/widgets.js'), 'renderWidgets'));
 route('/widgets/new',    lazy(() => import('./views/widgets.js'), 'renderWidgetNew'));
 route('/widgets/:id/edit', lazy(() => import('./views/widgets.js'), 'renderWidgetEdit'));
+route('/cg2',            lazy(() => import('./views/cg2.js'), 'renderCg2'));
+route('/cg2/:slug',      lazy(() => import('./views/cg2.js'), 'renderCg2Kind'));
+route('/cg2/:slug/:id',  lazy(() => import('./views/cg2.js'), 'renderCg2Game'));
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と
