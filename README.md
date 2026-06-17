@@ -46,7 +46,7 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 - 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ
 - 💪 **健康** — 体重 BMI / 筋トレ / 散歩 / 運動
 - 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI / **🏅 実績 称号** (AI が 獲得 実績 から ラノベ 風 称号 を 1 行 生成)
-- 🧩 **拡張** — **ウィジェット センター** (自作 ウィジェット を 登録 → ホーム に 表示。 JS で `render(root)` を 書く だけ。 詳細 → [docs/WIDGETS.md](docs/WIDGETS.md))
+- 🧩 **拡張** — **ウィジェット センター** (自作 ウィジェット を 登録 → ホーム に 表示。 JS で `render(root)` を 書く だけ。 詳細 → [docs/CUSTOM_WIDGETS.md](docs/CUSTOM_WIDGETS.md))
 
 | 領域 | 内容 |
 |---|---|
@@ -102,7 +102,7 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | ⚾ ドラフト (drafts) | プロ野球 風 順番 指名 + くじ抽選。 候補 は 人 or 自由 入力。 picking → reveal → lottery → 確定 → 次 round の state machine。 競合 は くじ で 決着、 ハズレ は 同 round 内 で 再 指名 |
 | 💼 アルバイト 申請 (bait) | 実験 協力 等 で 学生 に アルバイト を 依頼。 時間 (小数) + 対象者 を 指定 して 送る と、 受け取った 側 は 月別 で 全部 見えて 処理 済 マーク。 依頼者 は 進捗 確認 + 未処理者 催促 可。 タスク と 似て いる が 「自分 が 関わった もの が 月別 で 全部 見える」 が ポイント |
 | 🏅 実績 称号 (achievements_title) | 獲得 した 実績 一覧 を 元 に AI が 「カッコイイ 称号」 を 1 行 生成 (例: 「黄昏 の 点呼 マスター 🌅」)。 実績 が 増える と 自動 で 「stale」 に なって 再 生成 可能 |
-| 🧩 自作 ウィジェット (custom_widgets) | 自分専用 の ウィジェット を 登録 して ホーム に 表示。 JS で `meta` + `render(root)` を 書く だけ。 サンプル 同梱 (🕐 時計 / 💰 残高)。 1 秒 〜 任意 秒 で 自動 リフレッシュ。 詳細 → [docs/WIDGETS.md](docs/WIDGETS.md) |
+| 🧩 自作 ウィジェット (custom_widgets) | 自分専用 の ウィジェット を 登録 して ホーム に 表示。 JS で `meta` + `render(root)` を 書く だけ。 サンプル 同梱 (🕐 時計 / 💰 残高)。 1 秒 〜 任意 秒 で 自動 リフレッシュ。 詳細 → [docs/CUSTOM_WIDGETS.md](docs/CUSTOM_WIDGETS.md) |
 | ✈️ フライト応援 (flight) | 長いフライトの 進捗 (%) / 残り時間 / 経過時間 を 大きく可視化 (機内・ オフライン)。 Wake Lock で 画面維持 + 1 分ごと 応援メッセージローテ |
 | 🚶 散歩モード (walk-mode) | 全画面マップ + Wake Lock + GPS 5 秒 polling で 軌跡 polyline 記録 → SNS 投稿可能 (Canvas で 1024px PNG 生成)。 ↑→↓→↑ 特殊スワイプロック。 過去軌跡 重ね合わせ表示 |
 | 💪 筋トレ (workouts) | 腕立て / 腹筋 / プランク等 を 1 タップ記録 + mutual follow で 仲間と 比較 |
@@ -275,7 +275,7 @@ LabPay/
 | **[docs/INSTALL.md](docs/INSTALL.md)** | サーバへの導入を最初から最後まで。学生が読んでセットアップできることを目標にしています |
 | **[docs/HACKATHON.md](docs/HACKATHON.md)** | LabPay の API を使って何か作る人向け。認証フロー・主要エンドポイント・サンプルクライアント |
 | **[docs/api.md](docs/api.md)** | 全エンドポイントの簡易リファレンス |
-| **[docs/WIDGETS.md](docs/WIDGETS.md)** | 🧩 自作 ウィジェット 開発 ガイド (= ホーム に 自分専用 widget を JS で 書ける) |
+| **[docs/CUSTOM_WIDGETS.md](docs/CUSTOM_WIDGETS.md)** | 🧩 自作 ウィジェット 開発 ガイド (= ホーム に 自分専用 widget を JS で 書ける) |
 | **[docs/CUSTOM_GAMES.md](docs/CUSTOM_GAMES.md)** | 🎮 自作 ゲーム v1 framework (現行 動作中。 ⭕❌ / ニム / ライツアウト / すごろく) |
 | **[docs/CUSTOM_GAMES_V2.md](docs/CUSTOM_GAMES_V2.md)** | 🎮 自作 ゲーム v2 framework cg2 (p5.js + sharedValues 自動 同期、 准 リアルタイム。 サンプル 4 件 同梱) |
 | **[docs/GRANTS_DESIGN.md](docs/GRANTS_DESIGN.md)** | 研究費 執行 管理 設計 案 (保留 中) |
