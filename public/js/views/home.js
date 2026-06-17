@@ -1811,6 +1811,18 @@ function tagHtml(tag) {
 }
 
 function renderItemRow(it) {
+  // v660 (feedback #243) 娯楽 等 の 参加者 アバター を 重ねて 横並び 表示 (最大 5 名)。
+  const parts = Array.isArray(it.participants) ? it.participants : [];
+  const partsHtml = parts.length ? `
+    <div style="display:flex; flex-shrink:0; margin-left:6px">
+      ${parts.slice(0, 5).map((p, i) => {
+        const ml = i === 0 ? '' : 'margin-left:-6px';
+        const initial = (p.display_name || '?').trim().charAt(0).toUpperCase();
+        return p.avatar_url
+          ? `<img src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.display_name)}" title="${escapeHtml(p.display_name)}" loading="lazy" decoding="async" fetchpriority="low" style="width:20px; height:20px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`
+          : `<div title="${escapeHtml(p.display_name)}" style="width:20px; height:20px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:10px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
+      }).join('')}
+    </div>` : '';
   return `
     <a href="${escapeHtml(it.url)}" class="list-item" style="gap:8px; align-items:center; padding:6px 0">
       <span style="font-size:20px; flex:none">${it.icon}</span>
@@ -1818,6 +1830,7 @@ function renderItemRow(it) {
         <div class="bold" style="font-size:13px">${tagHtml(it.tag)} ${escapeHtml(it.title)}</div>
         <div class="hint-sm" style="font-size:11px">${it.by ? escapeHtml(it.by) + ' 起案' : ''}${it.fee ? (it.by ? ' ・ ' : '') + escapeHtml(it.fee) : ''}</div>
       </div>
+      ${partsHtml}
     </a>
   `;
 }
@@ -2408,6 +2421,8 @@ async function renderMyActiveTimers() {
         const isTarget = Number(r.is_target) === 1 || r.is_target === true;
         if (!isCreator && !isTarget) continue;
         const hasResponded = Number(r.has_responded) === 1 || r.has_responded === true;
+        // v660 (feedback #242) 自分 が 応答 済 の 点呼 は 進行中 から 消す。 起案者 視点 では 引き続き 表示。
+        if (hasResponded && !isCreator) continue;
         const startedMs = r.created_at ? Date.parse(String(r.created_at).replace(' ', 'T')) : null;
         const elapsed = startedMs ? Math.max(0, Math.floor((nowMs - startedMs) / 1000)) : 0;
         const dlShort = r.deadline_at ? String(r.deadline_at).slice(11, 16) : '';
@@ -2482,16 +2497,12 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    // v440 空でも カード自体は 表示 (「進行中なし」 placeholder)。 旧仕様 だと
-    // 「表示されない = 壊れた?」 と 誤認 されやすかった。
-    card.hidden = false;
     // 前回 の tick interval は 解除。 空でも 解除する。
     if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
-    // v514 #132 中身が無いときはカードごと非表示 (ユーザがチェック ON にしていても、
-    //   空ならホームに領域を取らない。 polling で 1 件でも出てきたら card.hidden=false)。
-    // v650 1 週間先 の meetup/deadline が ある時 は 件数だけ 表示 (フッタ 用)。
+    // v660 「他 N 件」 だけ の 時 は ウィジェット 自体 を 出さない (= rows 空 なら hide。
+    // farTotal 件 は 集合連絡 ページ から 見える)。
     const farTotal = farMeetups + farDeadlines;
-    if (!rows.length && farTotal === 0) { card.hidden = true; root.innerHTML = ''; return; }
+    if (!rows.length) { card.hidden = true; root.innerHTML = ''; return; }
     card.hidden = false;
     rows.sort((a, b) => a.sort - b.sort);  // 締切 / 残り少ない順
     root.innerHTML = rows.map(r => {
