@@ -12,8 +12,10 @@ const PREDICTIONS_DEFAULT_FEE = 50;
 const PREDICTIONS_MIN_FEE = 10;
 const PREDICTIONS_MAX_FEE = 100;
 const PREDICTIONS_RAKE_PCT = 5;
-// 順位の 一致重み (表示スコア用)。 配列の i 番目 = (i+1) 位の重み。
-const PREDICTIONS_SCORE_WEIGHTS = [5, 3, 2, 1];
+// v664 順位の 一致重み (= 位置 ピッタリ 的中 で 加算)。 配列 の i 番目 = (i+1) 位 の 重み。
+//   旧: [5,3,2,1] / 新: [4,3,2,1] (1位 を -1)
+//   加えて 「順位 無関係 で top-N 集合 に 入って いる 国」 1 件 ごと に +1 点 を 別途 加算。
+const PREDICTIONS_SCORE_WEIGHTS = [4, 3, 2, 1];
 
 function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -285,19 +287,22 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
             $usedActual[] = $r;
             $cleanActual[] = $r;
         }
-        // 全参加者の score 計算 (= 順位重み [5,3,2,1] の 一致した分の合計)。
-        //   この score は ランキング表示用 (payout の比例配分には使わない)。
-        // 配分: 1位を 的中させた人で 山分け。 山分け前に 5% を 場代 として 徴収。
-        //   1位的中者ゼロ → 全員に フィー返金。
+        // v664 全参加者 の score 計算:
+        //   (1) 順位 無関係 で top-N 集合 (= 4位 以内) に 入って いる 国 1 件 ごと に +1 点
+        //   (2) 順位 ピッタリ 的中 は さらに 重み (1位 +4 / 2位 +3 / 3位 +2 / 4位 +1)
+        // 配分: 最高点 を 取った 人 全員 で 山分け (5% rake を 控除 した 後)。
+        //   全員 が 0 点 だった ら 誰も 何も 当てて ない の で 全員 に フィー 返金。
         $stE = $pdo->prepare("SELECT user_id, ranks_json, created_at FROM predictions_entries WHERE game_id = ? ORDER BY created_at ASC, user_id ASC");
         $stE->execute([$gid]);
         $entries = $stE->fetchAll(PDO::FETCH_ASSOC);
         $scoreByUid = [];
-        $firstWinners = []; // 1位 的中者 の uid (登録順)
         foreach ($entries as $e) {
             $puid = (int)$e['user_id'];
             $userRanks = json_decode($e['ranks_json'] ?: '[]', true) ?: [];
-            $score = 0;
+            // (1) 集合 一致 点 (= ユーザ 予想 と 実際 top-N の 重なり 個数)
+            $setMatch = count(array_intersect($userRanks, $cleanActual));
+            $score = $setMatch;
+            // (2) 順位 ピッタリ 的中 ボーナス
             for ($i = 0; $i < $predictCount; $i++) {
                 if (isset($userRanks[$i]) && isset($cleanActual[$i]) && $userRanks[$i] === $cleanActual[$i]) {
                     $w = PREDICTIONS_SCORE_WEIGHTS[$i] ?? 1;
@@ -305,30 +310,33 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
                 }
             }
             $scoreByUid[$puid] = $score;
-            if (isset($userRanks[0]) && isset($cleanActual[0]) && $userRanks[0] === $cleanActual[0]) {
-                $firstWinners[] = $puid;
-            }
         }
         $pot = (int)$g['pot_total'];
         $payoutByUid = [];
-        if (count($firstWinners) === 0) {
-            // 誰も 1 位を当てなかった: 全員フィー返金
+        $maxScore = $scoreByUid ? max($scoreByUid) : 0;
+        if ($maxScore <= 0) {
+            // 全員 0 点 → 全員 に フィー 返金
             $fee = (int)$g['fee'];
             foreach ($scoreByUid as $puid => $_) {
-                Ledger::transfer($pdo, 1, $puid, $fee, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 誰も1位を当てず返金");
+                Ledger::transfer($pdo, 1, $puid, $fee, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 全員 0 点 で 返金");
                 $payoutByUid[$puid] = $fee;
             }
         } else {
+            // 最高点 を 取った 人 全員 (登録 順 で 端数 上乗せ)
+            $topWinners = [];
+            foreach ($entries as $e) {
+                $puid = (int)$e['user_id'];
+                if (($scoreByUid[$puid] ?? 0) === $maxScore) $topWinners[] = $puid;
+            }
             $rake = (int)floor($pot * PREDICTIONS_RAKE_PCT / 100);
             $payoutPool = $pot - $rake;
-            $nWinners = count($firstWinners);
+            $nWinners = count($topWinners);
             $share = intdiv($payoutPool, $nWinners);
             $remainder = $payoutPool - ($share * $nWinners);
-            // 端数 は 早く参加した人 (firstWinners は ASC 順) に 上乗せ
-            foreach ($firstWinners as $idx => $puid) {
+            foreach ($topWinners as $idx => $puid) {
                 $amount = $share + ($idx === 0 ? $remainder : 0);
                 if ($amount > 0) {
-                    Ledger::transfer($pdo, 1, $puid, $amount, 'mahjong_payout', 'predictions', $gid, "予想 #{$gid} 1位的中 山分け");
+                    Ledger::transfer($pdo, 1, $puid, $amount, 'mahjong_payout', 'predictions', $gid, "予想 #{$gid} 最高点 山分け");
                 }
                 $payoutByUid[$puid] = $amount;
             }
