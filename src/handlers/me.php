@@ -838,27 +838,27 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 } elseif ($kind === 'daifugo') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM daifugo_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'mahjong') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM mahjong_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'ito') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM ito_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'jinrou') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM jinrou_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'shiritori') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM shiritori_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif (str_starts_with($kind, 'cg-') || str_starts_with($kind, 'custom-')) {
                     $st = $pdo->prepare("SELECT players_json FROM custom_games WHERE id=?");
@@ -877,12 +877,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 } elseif ($kind === 'prediction') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM predictions_entries pe JOIN users u ON u.id=pe.user_id
-                                          WHERE pe.game_id=? ORDER BY pe.id LIMIT 6");
+                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'score-pred') {
                     $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
                                            FROM score_pred_entries pe JOIN users u ON u.id=pe.user_id
-                                          WHERE pe.game_id=? ORDER BY pe.id LIMIT 6");
+                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 6");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'draft') {
                     $st = $pdo->prepare("SELECT participants_json FROM drafts WHERE id=?");
