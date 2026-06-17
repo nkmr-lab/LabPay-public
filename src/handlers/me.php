@@ -830,35 +830,35 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $kind = (string)($it['kind'] ?? '');
                 $parts = [];
                 if ($kind === 'othello') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url FROM othello_games g
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind FROM othello_games g
                                            LEFT JOIN users u ON u.id IN (g.creator_user_id, g.opponent_user_id)
                                           WHERE g.id=? AND u.id IS NOT NULL");
                     $st->execute([$iid]);
                     $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'daifugo') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM daifugo_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'mahjong') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM mahjong_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'ito') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM ito_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'jinrou') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM jinrou_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'shiritori') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM shiritori_players p JOIN users u ON u.id=p.user_id
-                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 6");
+                                          WHERE p.game_id=? ORDER BY p.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif (str_starts_with($kind, 'cg-') || str_starts_with($kind, 'custom-')) {
                     $st = $pdo->prepare("SELECT players_json FROM custom_games WHERE id=?");
@@ -866,23 +866,23 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $pj = $st->fetchColumn();
                     if ($pj) {
                         $ids = json_decode($pj, true) ?: [];
-                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 6);
+                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 50);
                         if ($ids) {
                             $in = implode(',', array_fill(0, count($ids), '?'));
-                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($in)");
+                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url, kind FROM users WHERE id IN ($in)");
                             $stU->execute($ids);
                             $parts = $stU->fetchAll(PDO::FETCH_ASSOC);
                         }
                     }
                 } elseif ($kind === 'prediction') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM predictions_entries pe JOIN users u ON u.id=pe.user_id
-                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 6");
+                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'score-pred') {
-                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url
+                    $st = $pdo->prepare("SELECT u.id, u.display_name, u.avatar_url, u.kind
                                            FROM score_pred_entries pe JOIN users u ON u.id=pe.user_id
-                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 6");
+                                          WHERE pe.game_id=? ORDER BY pe.user_id LIMIT 50");
                     $st->execute([$iid]); $parts = $st->fetchAll(PDO::FETCH_ASSOC);
                 } elseif ($kind === 'draft') {
                     $st = $pdo->prepare("SELECT participants_json FROM drafts WHERE id=?");
@@ -890,10 +890,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $pj = $st->fetchColumn();
                     if ($pj) {
                         $ids = json_decode($pj, true) ?: [];
-                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 6);
+                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 50);
                         if ($ids) {
                             $in = implode(',', array_fill(0, count($ids), '?'));
-                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($in)");
+                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url, kind FROM users WHERE id IN ($in)");
                             $stU->execute($ids);
                             $parts = $stU->fetchAll(PDO::FETCH_ASSOC);
                         }
@@ -904,10 +904,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $pj = $st->fetchColumn();
                     if ($pj) {
                         $ids = json_decode($pj, true) ?: [];
-                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 6);
+                        $ids = array_slice(array_values(array_filter(array_map('intval', $ids))), 0, 50);
                         if ($ids) {
                             $in = implode(',', array_fill(0, count($ids), '?'));
-                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($in)");
+                            $stU = $pdo->prepare("SELECT id, display_name, avatar_url, kind FROM users WHERE id IN ($in)");
                             $stU->execute($ids);
                             $parts = $stU->fetchAll(PDO::FETCH_ASSOC);
                         }
@@ -918,6 +918,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'id'           => (int)$p['id'],
                         'display_name' => $p['display_name'],
                         'avatar_url'   => $p['avatar_url'],
+                        'is_ai'        => (($p['kind'] ?? '') === 'bot'),
                     ], $parts);
                 }
             } catch (Throwable $_) { /* skip per-item failures */ }

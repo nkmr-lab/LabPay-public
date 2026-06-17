@@ -1811,12 +1811,15 @@ function tagHtml(tag) {
 }
 
 function renderItemRow(it) {
-  // v660 (feedback #243) 娯楽 等 の 参加者 アバター を 重ねて 横並び 表示 (最大 5 名)。
+  // v662 娯楽 等 の 参加者 アバター を 全員 横並び 表示 (折り返し OK)。 AI (kind='bot') は 🤖 で 表示。
   const parts = Array.isArray(it.participants) ? it.participants : [];
   const partsHtml = parts.length ? `
-    <div style="display:flex; flex-shrink:0; margin-left:6px">
-      ${parts.slice(0, 5).map((p, i) => {
+    <div style="display:flex; flex-wrap:wrap; flex-shrink:0; margin-left:6px; max-width:50%; row-gap:2px">
+      ${parts.map((p, i) => {
         const ml = i === 0 ? '' : 'margin-left:-6px';
+        if (p.is_ai) {
+          return `<div title="${escapeHtml(p.display_name)}" style="width:20px; height:20px; border-radius:50%; background:#e0f2fe; color:#0369a1; display:flex; align-items:center; justify-content:center; font-size:12px; border:2px solid #fff; ${ml}">🤖</div>`;
+        }
         const initial = (p.display_name || '?').trim().charAt(0).toUpperCase();
         return p.avatar_url
           ? `<img src="${escapeHtml(p.avatar_url)}" alt="${escapeHtml(p.display_name)}" title="${escapeHtml(p.display_name)}" loading="lazy" decoding="async" fetchpriority="low" style="width:20px; height:20px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`

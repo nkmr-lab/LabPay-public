@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v662', d: '2026-06-17', s: '🐛 フリップクイズ #245 修正: (a) display:none 配下 の textarea が focus 状態 で polling 停止 → 回答数 表示 が 固定 されて いた / (b) reveal phase で ⭕❌ ボタン を 押す と 1-2 秒 で 元 に 戻る (採点中 polling skip)。 ✨ 娯楽 widget 参加者 アイコン を 全員 表示 (折り返し)、 AI (kind=bot) は 🤖 で 表示' },
   { v: 'v661', d: '2026-06-17', s: '🐛 娯楽 widget の 参加者 アイコン が 出ない bug 修正。 player テーブル に id カラム が ない (game_id, user_id 複合 PK) ので ORDER BY p.id が 全 silent fail していた → ORDER BY p.user_id へ' },
   { v: 'v660', d: '2026-06-17', s: '進行中 widget: 「他 N 件」 だけ の とき は ウィジェット 自体 を 表示 しない (rows 空 で hide)。 応答 済 点呼 は 進行中 から 自動 で 消える (#242)。 娯楽 widget: 参加者 アイコン を 横並び 表示 (#243) — 麻雀 / 大富豪 / ito / 人狼 / 絵しりとり / custom_games / 優勝予想 / 勝敗予測 / ドラフト / クイズ / 地雷オセロ' },
   { v: 'v659', d: '2026-06-16', s: '請求 ページ 未払い人 別 合算 で アバター が 横長 に 伸びて いた 修正 (.row > * の flex:1 1 auto が 効いて いた → plain flex に 変更)' },

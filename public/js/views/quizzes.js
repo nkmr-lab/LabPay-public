@@ -102,18 +102,32 @@ export async function renderQuizDetail({ params }) {
   await paint(qid);
   pollTimer = setInterval(() => {
     if (!document.querySelector(`[data-qz-id="${qid}"]`)) { clearInterval(pollTimer); pollTimer = null; return; }
-    paint(qid).catch(() => {});
+    pollPaint(qid).catch(() => {});
   }, POLL_MS);
 }
 
-async function paint(qid) {
-  // v643 #240 修正: 入力中の textarea / input が あれば polling re-render を スキップ
-  //   (= フォーカス と 入力内容 を 保護)。 タップ後 別箇所に フォーカス移動 で 復帰。
+// v662 #245 polling 用 wrapper。 入力中 の textarea や 採点中 の ⭕❌ を 保護 する
+// ため に skip 判定 を 入れる。 action 後 の 明示 paint(qid) は skip せず 必ず 走る。
+async function pollPaint(qid) {
+  // v643 #240 入力中 の textarea / input が あれば polling re-render を skip。
+  // v662 #245 ただし display:none 配下 の textarea (例: 回答 編集 を 開いて 閉じた 後
+  //   や、 初期化時 に focus が 残った 場合) は 「実入力中」 では ない ので skip しない
+  //   (= offsetParent null = 不可視 なら 通常 polling 続行)。
   const active = document.activeElement;
   if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
-      document.getElementById('app')?.contains(active)) {
+      document.getElementById('app')?.contains(active) && active.offsetParent !== null) {
     return;
   }
+  // v662 #245 採点中 (creator が ⭕ を 付けた score-btn が ある) は repaint が
+  //   dataset を リセット する ので skip。 確定 ボタン を 押せば backend 反映 →
+  //   次 の paint で 正式 状態 に なる。
+  const inScoring = Array.from(document.querySelectorAll('.qz-score-btn'))
+    .some(b => b.dataset.score === '1');
+  if (inScoring) return;
+  return paint(qid);
+}
+
+async function paint(qid) {
   let d;
   try { d = await get('/api/quizzes/' + qid); }
   catch (e) {
