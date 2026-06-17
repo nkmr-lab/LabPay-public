@@ -527,9 +527,13 @@ export async function renderHome() {
       </div>
       <div class="hint" style="font-size:12px; line-height:1.4">${escapeHtml(c.desc)}</div>
     </div>`).join('')}
+
+    <!-- v666 自作 ウィジェット (有効化 されて いる もの を 全部 並べる) -->
+    <div id="home-custom-widgets"></div>
     </div>
   `;
   applyHomeLayout();
+  loadCustomWidgets();
   // v592 占い ボタン (アイコンとして 設置、 押すと balance card 内に トグル表示)
   document.querySelectorAll('button[data-home-action]').forEach(btn => {
     if (btn.dataset.bound) return;
@@ -1871,6 +1875,60 @@ async function renderEntertainmentWidget() {
 
 // v652 🏅 実績 widget。 シンプル に: 達成 済 実績 リスト (tier 昇順 = 最 高 tier
 // を 下 に) + 一番 下 に 「最新: 〇〇」 テキスト 1 行 だけ。
+// v666 (feedback #246) 自作 ウィジェット を ホーム に 並べる。
+// 各 widget は import('/api/custom-widgets/{id}/script.js?v={updated}') で 動的 load。
+// render(root) を 呼んで mutate、 meta.refreshSec で 定期 リロード (default 60s)。
+let _cwTimers = new Map();
+async function loadCustomWidgets() {
+  const root = document.getElementById('home-custom-widgets');
+  if (!root) return;
+  // 既存 timer を 解除 (home 再描画 で 重複 防止)
+  for (const t of _cwTimers.values()) clearInterval(t);
+  _cwTimers.clear();
+  try {
+    const d = await get('/api/custom-widgets');
+    const enabled = (d.items || []).filter(w => w.enabled);
+    if (!enabled.length) { root.innerHTML = ''; return; }
+    root.innerHTML = enabled.map(w => `
+      <div class="card" data-cw-id="${w.id}">
+        <div class="row center" style="margin-bottom:6px">
+          <h2 class="row-title">${escapeHtml(w.icon || '🧩')} ${escapeHtml(w.name)}</h2>
+          <a href="#/widgets" class="hint" style="margin-left:auto">編集 →</a>
+        </div>
+        <div id="cw-root-${w.id}" class="cw-body">読み込み中…</div>
+      </div>
+    `).join('');
+    for (const w of enabled) {
+      const widgetRoot = document.getElementById('cw-root-' + w.id);
+      if (!widgetRoot) continue;
+      try {
+        // updated_at を query で 付けて cache busting
+        const url = `/api/custom-widgets/${w.id}/script.js?v=${encodeURIComponent(w.updated_at)}`;
+        const mod = await import(url);
+        const meta = mod.meta || {};
+        const refreshSec = Number(meta.refreshSec) > 0 ? Number(meta.refreshSec) : 60;
+        const run = async () => {
+          // home から 離れたら timer 解除
+          if (!document.getElementById('cw-root-' + w.id)) {
+            const t = _cwTimers.get(w.id);
+            if (t) { clearInterval(t); _cwTimers.delete(w.id); }
+            return;
+          }
+          try { await mod.render(widgetRoot); }
+          catch (e) { widgetRoot.innerHTML = `<div class="hint" style="color:#c00; font-size:12px">エラー: ${escapeHtml(e.message)}</div>`; }
+        };
+        await run();
+        const timer = setInterval(run, refreshSec * 1000);
+        _cwTimers.set(w.id, timer);
+      } catch (e) {
+        widgetRoot.innerHTML = `<div class="hint" style="color:#c00; font-size:12px">読み込み 失敗: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+  } catch (e) {
+    root.innerHTML = `<div class="hint" style="font-size:12px">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 async function renderAchievementsWidget() {
   const card = document.getElementById('home-achievements-card');
   const root = document.getElementById('home-achievements');

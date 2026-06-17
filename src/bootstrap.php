@@ -542,6 +542,7 @@ require_once __DIR__ . '/handlers/ito.php';
 require_once __DIR__ . '/handlers/jinrou.php';
 require_once __DIR__ . '/handlers/money_requests.php';
 require_once __DIR__ . '/handlers/bait.php';
+require_once __DIR__ . '/handlers/custom_widgets.php';
 require_once __DIR__ . '/handlers/polls.php';
 require_once __DIR__ . '/handlers/rollcalls.php';
 require_once __DIR__ . '/handlers/timers.php';

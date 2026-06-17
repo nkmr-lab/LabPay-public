@@ -67,6 +67,7 @@ $routes = [
     'jinrou'         => 'route_jinrou',
     'money-requests' => 'route_money_requests',
     'bait'           => 'route_bait',
+    'custom-widgets' => 'route_custom_widgets',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',
