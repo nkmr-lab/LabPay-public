@@ -620,6 +620,8 @@ route('/widgets/:id/edit', lazy(() => import('./views/widgets.js'), 'renderWidge
 route('/cg2',            lazy(() => import('./views/cg2.js'), 'renderCg2'));
 route('/cg2/:slug',      lazy(() => import('./views/cg2.js'), 'renderCg2Kind'));
 route('/cg2/:slug/:id',  lazy(() => import('./views/cg2.js'), 'renderCg2Game'));
+route('/chat-rooms',          lazy(() => import('./views/chat_rooms.js'), 'renderChatRooms'));
+route('/chat-rooms/:roomKey', lazy(() => import('./views/chat_rooms.js'), 'renderChatRoom'));
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と

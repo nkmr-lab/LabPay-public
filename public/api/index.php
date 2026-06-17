@@ -69,6 +69,7 @@ $routes = [
     'bait'           => 'route_bait',
     'custom-widgets' => 'route_custom_widgets',
     'cg2'            => 'route_cg2',
+    'chat'           => 'route_chat',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',

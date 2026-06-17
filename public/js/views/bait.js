@@ -169,15 +169,15 @@ export async function renderBaitNew() {
     </div>
   `;
 
-  const picker = await createMemberPicker({
-    bulkContainer: document.getElementById('bn-bulk'),
-    chipsContainer: document.getElementById('bn-members'),
-    onChange: refreshHoursArea,
-    showGenderBulk: false,
-  });
+  // v669 #247: picker は createMemberPicker の await 解決 後 に 入る が、
+  //   createMemberPicker 内 の 初期 refreshChips() が onChange (= refreshHoursArea) を 呼ぶ ので、
+  //   その タイミング で picker は まだ undefined → TDZ ReferenceError。
+  //   let に 先 宣言 + refreshHoursArea 内 で 未 初期化 なら 早期 return。
+  let picker = null;
   const hoursMap = new Map(); // uid → hours
 
   function refreshHoursArea() {
+    if (!picker) return;
     const sel = [...picker.getSelected()];
     document.getElementById('bn-count').textContent = `${sel.length} 人 選択 中`;
     const root = document.getElementById('bn-hours-area');
@@ -206,6 +206,13 @@ export async function renderBaitNew() {
       });
     });
   }
+
+  picker = await createMemberPicker({
+    bulkContainer: document.getElementById('bn-bulk'),
+    chipsContainer: document.getElementById('bn-members'),
+    onChange: refreshHoursArea,
+    showGenderBulk: false,
+  });
   refreshHoursArea();
 
   document.getElementById('bn-save').addEventListener('click', async () => {
