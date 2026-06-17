@@ -611,6 +611,9 @@ route('/mahjong/:id',       lazy(() => import('./views/mahjong.js'), 'renderMahj
 route('/mahjong',           lazy(() => import('./views/mahjong.js'), 'renderMahjong'));
 route('/requests',       lazy(() => import('./views/money_requests.js'), 'renderMoneyRequests'));
 route('/requests/:id',   lazy(() => import('./views/money_requests.js'), 'renderMoneyRequestDetail'));
+route('/bait',           lazy(() => import('./views/bait.js'), 'renderBait'));
+route('/bait/new',       lazy(() => import('./views/bait.js'), 'renderBaitNew'));
+route('/bait/:id',       lazy(() => import('./views/bait.js'), 'renderBaitDetail'));
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と
