@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v668', d: '2026-06-17', s: '🐛 cg2 runtime の critical bug 修正: sharedValues が plain object のまま export されて いた ので mutation 追跡 が 一切 動かず 同期 が ゼロ だった → deep Proxy で wrap し直し。 _suppressDirty で server → client → server の ping-pong も 防止' },
   { v: 'v667', d: '2026-06-17', s: '🎮 自作 ゲーム v2 (cg2) framework 実装。 p5.js + sharedValues 自動 同期 の 准 リアルタイム multiplayer。 DB: cg2_kinds + cg2_games、 backend: src/handlers/cg2.php、 runtime: public/js/cg2.js (deep Proxy + 500ms polling + host.start/stop ライフサイクル)、 view: public/js/views/cg2.js (#/cg2)。 サンプル 4 件 (マルバツ / ニム / ライツアウト / すごろく) を kind に 登録。 詳細: docs/CUSTOM_GAMES_V2.md。 README + docs (CUSTOM_GAMES_V2 / WIDGETS) も 更新' },
   { v: 'v666', d: '2026-06-17', s: '🧩 ウィジェット センター 新規 (#246)。 自作 widget を DB に JS で 登録 → ホーム に 表示。 #/widgets で 管理。 サンプル 2 種 (🕐 時計 / 💰 残高)。 API: /js/widgets_api.js (me / get / post / html を import)。 開発者 は meta + render(root) だけ 書けば OK' },
   { v: 'v665', d: '2026-06-17', s: '既存 娯楽 ゲーム の 順番 を ランダム 化: 地雷オセロ (先手 = creator/opponent ランダム)、 大富豪 (着席 順 + ♣3 ホルダ ランダム)、 麻雀 (親 を 0..3 ランダム)、 絵しりとり (turn_order shuffle)、 custom_games (status→playing 時 に 先手 ランダム)。 ito / 人狼 は 既 に 配布 / 役職 が ランダム 済 で 変更 なし' },

@@ -36,8 +36,29 @@ export function _getMyID()   { return _state.myID; }
 export let myID = 0;
 export let isHost = false;
 
-// sharedValues / localValues は deep Proxy / plain object。
-export const sharedValues = {};
+// sharedValues は deep Proxy で mutate を 追跡 → server へ 同期。 localValues は 単純 object。
+const _sharedRaw = {};
+let _suppressDirty = false;
+function _makeDeepProxy(target) {
+  return new Proxy(target, {
+    get(t, k) {
+      const v = t[k];
+      if (v && typeof v === 'object') return _makeDeepProxy(v);
+      return v;
+    },
+    set(t, k, v) {
+      t[k] = v;
+      if (!_suppressDirty) _markDirty();
+      return true;
+    },
+    deleteProperty(t, k) {
+      delete t[k];
+      if (!_suppressDirty) _markDirty();
+      return true;
+    },
+  });
+}
+export const sharedValues = _makeDeepProxy(_sharedRaw);
 export const localValues = {};
 
 // host.start = () => {...}; host.stop = () => {...}; を 受ける 受け皿
@@ -53,28 +74,6 @@ export function notifyResult(text, opts) {
 // p5 instance は framework が import('/vendor/p5.min.js') した もの を 公開
 export let p5 = null;
 export function _setP5(p5lib) { p5 = p5lib; }
-
-// ── deep Proxy: sharedValues の mutate を 追跡 ──
-function makeDeepProxy(target, path = '') {
-  if (target === null || typeof target !== 'object') return target;
-  return new Proxy(target, {
-    get(t, k) {
-      const v = t[k];
-      if (v && typeof v === 'object') return makeDeepProxy(v, path + '.' + k);
-      return v;
-    },
-    set(t, k, v) {
-      t[k] = v;
-      _markDirty();
-      return true;
-    },
-    deleteProperty(t, k) {
-      delete t[k];
-      _markDirty();
-      return true;
-    },
-  });
-}
 
 function _markDirty() {
   if (_state.pendingTimer) return;
@@ -95,19 +94,21 @@ function _markDirty() {
 }
 
 function _internalSharedRaw() {
-  // sharedValues 本体 (Proxy では なく) を 取り出す。 = sharedValues 自身 だが Proxy 経由 だと self-referential になる
-  // 単純 に Object.assign で copy
-  const out = {};
-  for (const k of Object.keys(sharedValues)) out[k] = sharedValues[k];
-  return out;
+  // _sharedRaw を 直接 dump (Proxy を 通さない)
+  return JSON.parse(JSON.stringify(_sharedRaw));
 }
 
 // ── 内部: server から 値 が 降って 来た とき に sharedValues に merge ──
+// _suppressDirty 中 は Proxy の set が dirty を 立てない (= server → client は ping-pong しない)
 function _applyServerValues(values, seq) {
   _state.seq = seq;
-  // sharedValues の 全 key を いったん 消して 上書き
-  for (const k of Object.keys(sharedValues)) delete sharedValues[k];
-  for (const k of Object.keys(values || {})) sharedValues[k] = values[k];
+  _suppressDirty = true;
+  try {
+    for (const k of Object.keys(_sharedRaw)) delete _sharedRaw[k];
+    for (const k of Object.keys(values || {})) _sharedRaw[k] = values[k];
+  } finally {
+    _suppressDirty = false;
+  }
   _state.rawShared = values || {};
 }
 
@@ -136,8 +137,10 @@ export async function _bootstrap({ gameId, kindSlug, gameData, kindData, p5lib }
   // host だ ったら host.start を 呼んで 初期 sharedValues を server へ
   if (_state.isHost && (gameData.shared_seq | 0) === 0) {
     if (typeof _state.hostHooks.start === 'function') {
+      _suppressDirty = true;     // host.start 中 の mutate は auto-flush しない (= 手動 で 1 回 POST する)
       try { _state.hostHooks.start(); }
-      catch (e) { console.error('[cg2] host.start failed', e); throw e; }
+      catch (e) { console.error('[cg2] host.start failed', e); _suppressDirty = false; throw e; }
+      _suppressDirty = false;
     }
     // sharedValues に 入って いる もの を server に POST (replace モード)
     try {
