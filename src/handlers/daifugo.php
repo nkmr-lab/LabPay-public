@@ -133,6 +133,7 @@ function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array
     $players = $pdo->prepare("SELECT user_id, seat FROM daifugo_players WHERE game_id=? ORDER BY seat");
     $players->execute([$gid]);
     $players = $players->fetchAll(PDO::FETCH_ASSOC);
+    shuffle($players);   // v665 着席 順 を ランダム に
     $deck = range(0, 52);
     shuffle($deck);
     $hands = [];
@@ -144,9 +145,7 @@ function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array
     $starter = 0;
     foreach ($hands as $i => $h) if (in_array(0, $h, true)) { $starter = $i; break; }
     $state = [
-        'players' => array_map(function ($p, $h) {
-            return ['user_id' => (int)$p['user_id'], 'seat' => (int)$p['seat'], 'hand' => $h, 'rank' => null, 'passed' => false];
-        }, $players, $hands),
+        'players' => [],
         'turn' => $starter,
         'last_play' => null,
         'pass_count' => 0,
@@ -154,6 +153,9 @@ function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array
         'log' => [],
         'revolution' => false,
     ];
+    for ($i = 0; $i < $n; $i++) {
+        $state['players'][] = ['user_id' => (int)$players[$i]['user_id'], 'seat' => $i, 'hand' => $hands[$i], 'rank' => null, 'passed' => false];
+    }
     $pdo->prepare("UPDATE daifugo_games SET status='playing', state_json=?, state_ver=state_ver+1 WHERE id=?")
         ->execute([json_encode($state), $gid]);
 }
@@ -190,6 +192,7 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
         if ($g['status'] !== 'lobby') throw new ApiException('bad_request', 'already started', 400);
         $players = $pdo->query("SELECT user_id, seat FROM daifugo_players WHERE game_id={$gid} ORDER BY seat")->fetchAll(PDO::FETCH_ASSOC);
         if (count($players) < DAIFUGO_MIN_PLAYERS) throw new ApiException('bad_request', '2 人以上で 開始', 400);
+        shuffle($players);   // v665 着席 順 を ランダム に
         // カード配布
         $deck = range(0, 52);
         shuffle($deck);
@@ -199,13 +202,11 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
         foreach ($deck as $i => $c) $hands[$i % $n][] = $c;
         foreach ($hands as &$h) sort($h);
         unset($h);
-        // ♣3 (= card 0) を持ってる人 が 親
+        // ♣3 (= card 0) を持ってる人 が 親 (= 配布 が ランダム なので 親 も 自動的 に ランダム)
         $starter = 0;
         foreach ($hands as $i => $h) if (in_array(0, $h, true)) { $starter = $i; break; }
         $state = [
-            'players' => array_map(function ($p, $h) {
-                return ['user_id' => (int)$p['user_id'], 'seat' => (int)$p['seat'], 'hand' => $h, 'rank' => null, 'passed' => false];
-            }, $players, $hands),
+            'players' => [],
             'turn' => $starter,
             'last_play' => null,        // ['cards' => [...], 'by' => seat, 'count' => N, 'rank' => R]
             'pass_count' => 0,
@@ -214,6 +215,9 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
             // v595 革命 (4 枚同時出しで 強弱反転) + 8切り (rank=5 = "8" で 場流し)
             'revolution' => false,
         ];
+        for ($i = 0; $i < $n; $i++) {
+            $state['players'][] = ['user_id' => (int)$players[$i]['user_id'], 'seat' => $i, 'hand' => $hands[$i], 'rank' => null, 'passed' => false];
+        }
         $pdo->prepare("UPDATE daifugo_games SET status='playing', state_json=?, state_ver=state_ver+1 WHERE id=?")
             ->execute([json_encode($state), $gid]);
     });
@@ -394,10 +398,13 @@ function daifugo_state(PDO $pdo, int $uid, int $gid): void {
     $state = json_decode($g['state_json'], true);
     $mySeat = null;
     foreach ($state['players'] as $i => $p) if ($p['user_id'] === $uid) { $mySeat = $i; break; }
+    // v665 着席 順 が 起家 順 と 違う ので、 uid キー で 情報 を 引く
+    $infoByUid = [];
+    foreach ($playersInfo as $pi) { $infoByUid[(int)$pi['user_id']] = $pi; }
     // 公開部分のみ
     $publicPlayers = [];
     foreach ($state['players'] as $i => $p) {
-        $info = $playersInfo[$i] ?? null;
+        $info = $infoByUid[(int)$p['user_id']] ?? null;
         $publicPlayers[] = [
             'seat' => $i,
             'user_id' => $p['user_id'],

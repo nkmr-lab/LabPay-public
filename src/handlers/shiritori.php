@@ -91,8 +91,11 @@ function shiritori_game_create(PDO $pdo, array $cfg, int $uid): void {
         $pdo->prepare("INSERT INTO shiritori_games (creator_user_id, title, time_limit_sec, round_count) VALUES (?,?,?,?)")
             ->execute([$uid, $title, $timeLimit, $rounds]);
         $gameId = (int)$pdo->lastInsertId();
+        // v665 turn_order を ランダム に
+        $shuffled = $memberIds;
+        shuffle($shuffled);
         $insP = $pdo->prepare("INSERT INTO shiritori_players (game_id, user_id, turn_order) VALUES (?,?,?)");
-        foreach ($memberIds as $idx => $userId) {
+        foreach ($shuffled as $idx => $userId) {
             $insP->execute([$gameId, $userId, $idx]);
         }
     });

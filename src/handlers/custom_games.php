@@ -343,8 +343,15 @@ function cg_join(PDO $pdo, int $uid, int $gid, array $meta): void {
         $stateJson = is_array($newState) ? json_encode($newState, JSON_UNESCAPED_UNICODE) : $g['state_json'];
         // v630 後方互換: 2 人卓では opponent_user_id にも 入れておく (旧 UI が 参照)
         $oppUid = ($maxP === 2 && count($players) === 2) ? $uid : (int)$g['opponent_user_id'];
-        $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, players_json=?, status=?, state_json=? WHERE id=?")
-            ->execute([$oppUid ?: null, json_encode($players), $full ? 'playing' : 'waiting', $stateJson, $gid]);
+        // v665 全員 揃って 開始 する 瞬間 に 先手 を ランダム に
+        if ($full) {
+            $randomTurn = $players[random_int(0, count($players) - 1)];
+            $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, players_json=?, status=?, state_json=?, turn_user_id=? WHERE id=?")
+                ->execute([$oppUid ?: null, json_encode($players), 'playing', $stateJson, $randomTurn, $gid]);
+        } else {
+            $pdo->prepare("UPDATE custom_games SET opponent_user_id=?, players_json=?, status=?, state_json=? WHERE id=?")
+                ->execute([$oppUid ?: null, json_encode($players), 'waiting', $stateJson, $gid]);
+        }
     });
     json_response(['ok' => true]);
 }

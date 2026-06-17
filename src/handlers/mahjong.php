@@ -79,7 +79,7 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
         $stPL = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ? ORDER BY seat_order");
         $stPL->execute([$gameId]);
         $playerUids = array_map('intval', $stPL->fetchAll(PDO::FETCH_COLUMN));
-        $state = MahjongEngine::newGame($playerUids);
+        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
         MahjongEngine::drawForTurn($state);
         $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
             ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gameId]);
@@ -262,7 +262,7 @@ function mahjong_sim(PDO $pdo, array $cfg): void {
 // AI で 1 半荘 走らせる (簡易、 sim_mahjong.php と同等)
 function mahjong_sim_one_hanchan(): array {
     $playerUids = [101, 102, 103, 104];
-    $state = MahjongEngine::newGame($playerUids);
+    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
     MahjongEngine::drawForTurn($state);
     $events = ['tsumo' => 0, 'ron' => 0, 'ryukyoku' => 0, 'kyoku' => 0, 'naki' => 0, 'riichi' => 0, 'steps' => 0];
     $maxSteps = 8000;
@@ -482,7 +482,7 @@ function mahjong_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $
     $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id=? ORDER BY seat_order");
     $stP->execute([$gid]);
     $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
-    $state = MahjongEngine::newGame($playerUids);
+    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
     MahjongEngine::drawForTurn($state);
     $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
         ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gid]);
@@ -549,7 +549,7 @@ function mahjong_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
         if (count($playerUids) !== MAHJONG_SEATS) throw new ApiException('bad_request', '4人揃ってから開始してください', 400);
         // v554 Phase 2: 実ゲーム状態を初期化
-        $state = MahjongEngine::newGame($playerUids);
+        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
         // 親 (turn=0) に最初のツモ
         MahjongEngine::drawForTurn($state);
         $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id = ?")

@@ -161,8 +161,15 @@ function othello_set_mines(PDO $pdo, int $uid, int $gid): void {
         $mines[$side] = $clean;
         $bothDone = isset($mines['creator']) && isset($mines['opponent']);
         $newStatus = $bothDone ? 'playing' : 'mine_setup';
-        $pdo->prepare("UPDATE othello_games SET mines_json = ?, status = ? WHERE id = ?")
-            ->execute([json_encode($mines), $newStatus, $gid]);
+        if ($bothDone) {
+            // v665 先手 を ランダム に (= creator / opponent の どちら か)
+            $firstSide = (random_int(0, 1) === 0) ? 'creator' : 'opponent';
+            $pdo->prepare("UPDATE othello_games SET mines_json = ?, status = ?, turn_side = ? WHERE id = ?")
+                ->execute([json_encode($mines), $newStatus, $firstSide, $gid]);
+        } else {
+            $pdo->prepare("UPDATE othello_games SET mines_json = ?, status = ? WHERE id = ?")
+                ->execute([json_encode($mines), $newStatus, $gid]);
+        }
     });
     // v625 AI 戦で 開始直後 AI 番なら 進める (通常は creator 始まりなので no-op)
     othello_ai_drive($pdo, $gid);
