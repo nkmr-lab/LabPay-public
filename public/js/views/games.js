@@ -52,6 +52,9 @@ const GAMES = [
     desc: 'プロ野球風 順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を 揃えて 1 位、 2 位 と 順番指名。 競合は くじ で 決着' },
   { id: 'quizzes',   icon: '📝', name: 'フリップクイズ', url: '#/quizzes',
     desc: '出題 → 参加者 フリップ 記述回答 → 一斉開示 (タップで 拡大) → ⭕❌ 採点 → ランキング 集計' },
+  // v672 #252 占い を 娯楽 タブ に も
+  { id: 'fortune',   icon: '🔮', name: '今日 の 占い', url: '#/fortune',
+    desc: '1 日 1 回 だけ 引ける 運勢。 同じ 日 は 同じ 結果、 翌日 0:00 で 更新' },
 ];
 
 const CATEGORIES = [
@@ -82,6 +85,7 @@ const GAME_CATEGORY = {
   flight:        'solo',      // v603
   drafts:        'party',     // v637
   quizzes:       'party',     // v637
+  fortune:       'solo',      // v672 #252
 };
 
 export function renderGames() {
