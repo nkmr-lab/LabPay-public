@@ -151,8 +151,13 @@ export async function renderTimerNew({ query } = {}) {
       </details>
       <div class="field" style="margin-top:10px">
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
-        ${lockMembers ? '' : `<div id="tmn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>`}
-        <div id="tmn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        <details id="tmn-picker-details" open style="margin-top:4px">
+          <summary id="tmn-picker-summary" style="cursor:pointer; padding:4px 0; font-size:13px; user-select:none">
+            👥 <span id="tmn-picker-count">0</span> 人 選択中 — タップで 一覧 表示 / 非表示
+          </summary>
+          ${lockMembers ? '' : `<div id="tmn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin:6px 0"></div>`}
+          <div id="tmn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        </details>
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/timers" class="btn">キャンセル</a>
@@ -177,7 +182,14 @@ export async function renderTimerNew({ query } = {}) {
 
   // v383 picker が allUsers + selected を 内部で管理。 ここは preset の seed 用のみ。
   // v383 共有 member_picker
+  // v677 #257 選択 後 は picker を 折り畳む。 onChange で 件数 を summary に 反映、
+  //   最初の 1 回 (初期表示) 以外 で 選択 が 変わったら details を 自動 close。
   let picker = null;
+  let autoCollapseDone = false;
+  const updateSummary = (sel) => {
+    const el = document.getElementById('tmn-picker-count');
+    if (el) el.textContent = String(sel ? sel.size : 0);
+  };
   try {
     picker = await createMemberPicker({
       bulkContainer: lockMembers ? null : document.getElementById('tmn-bulk'),
@@ -185,7 +197,23 @@ export async function renderTimerNew({ query } = {}) {
       initial: initialMembers,
       poolIds: lockMembers ? presetMembers : null,
       showGenderBulk: false,
+      onChange: (sel) => {
+        updateSummary(sel);
+        // 1 人 以上 選んだ 状態 で 変化 が あったら 自動 で 畳む (= 1 回 だけ)
+        if (!autoCollapseDone && sel.size > 0) {
+          autoCollapseDone = true;
+          const d = document.getElementById('tmn-picker-details');
+          if (d) d.open = false;
+        }
+      },
     });
+    updateSummary(picker.getSelected());
+    // 初期 メンバー が ある なら 最初 から 畳んで おく
+    if (initialMembers.length > 0) {
+      const d = document.getElementById('tmn-picker-details');
+      if (d) d.open = false;
+      autoCollapseDone = true;
+    }
   } catch (e) {
     document.getElementById('tmn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -604,9 +632,11 @@ function tickTimer() {
       releaseWakeLock('timer');
     }
   } else if (tmStatus === 'done') {
-    stEl.textContent = isOver ? `🎉 終了 (+${fmtDuration(-signedRemain)} 超過)` : '🎉 終了';
+    // v677 #257 終了 後 も 超過 を ずっと 表示 (= 質疑 時間 等 に 役立てる ため)。
+    //   「終了」 と 「+ 超過 X」 を 並べて 表示、 count は ずっと 「+MM:SS 超過」 で 増え 続ける。
+    stEl.textContent = isOver ? `🎉 終了 + 超過 ${fmtDuration(-signedRemain)} 経過 中` : '🎉 終了';
   } else if (isOver) {
-    stEl.textContent = '⚠ 超過中 — 必要なら ⏹ 停止';
+    stEl.textContent = `⚠ 超過 ${fmtDuration(-signedRemain)} 経過 中 — 必要なら ⏹ 停止`;
   } else if (tmRepeatMax > 0) {
     stEl.textContent = `🔁 ${tmRepeatIdx + 1}/${tmRepeatMax + 1} 回目`;
   } else {
