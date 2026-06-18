@@ -188,6 +188,12 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   height: auto;
   min-height: 44px;
 }
+/* v688 #272 学会 〆切 widget は 1 行 = 1 item で 詰めて 見せたい ので、 80px の
+   既定 高 を 解除。 多数件 を 縦 に 並べる ため。 */
+.card[data-card-id="conf-deadlines"] .list-item {
+  height: auto;
+  min-height: 0;
+}
 /* v378 ホームの ヒーロー画像幅は 50% に縮める (情報量が多いので テキスト幅を確保)。
    斜めカットも やや浅め (18px) に。 テキストは 50% 起点 → 画像と かぶらない。 */
 .card[data-card-id] .list-item.with-cover.hero > .cover-img {

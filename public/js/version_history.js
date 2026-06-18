@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v688', d: '2026-06-18', s: '📅 学会 〆切 widget で list-item の 80px 既定 高 を 解除 (#272)。 v687 で 1 行 化 した のに list-item の height:80px が 効いて しまい 縦幅 を 取り過ぎて いた → conf-deadlines カード だけ height:auto + min-height:0 に override' },
   { v: 'v687', d: '2026-06-18', s: '📅 ホーム の 学会 〆切 widget を 1 行 化 して 詰める (#271)。 旧版 は 学会名 と 締切+残日数 が 2 段 で 縦 に 嵩んで いた → icon + 名前 (場所) + 締切 (MM/DD) + 「あと N 日」 を flex 1 行 で 表示。 名前 は ellipsis で 切詰め。 表示 件数 も 5 → 8 件 に 増やした' },
   { v: 'v686', d: '2026-06-18', s: '🛡 在室 検知 で VM の MAC を 除外 (#270)。 Hyper-V / VMware / VirtualBox / KVM / Xen の OUI を 検知 → 新規 登録 を 弾く + 既存 登録 に ⚠️ 警告 を 表示 + 未 登録 一覧 で 「これは私」 ボタン を 非表示。 「ずっと いる」 状態 の 多く は ホスト 常時 稼働 の 仮想 NIC が 原因' },
   { v: 'v685', d: '2026-06-18', s: '🐛 公開 タイマー で 横 が 切れる bug 修正 (#268)。 style.css の main#app { max-width:720px; padding:14px; overflow-x:hidden } が 100vw を 削って いた → 公開 タイマー では 親 #app の 制約 を override (max-width:none, padding:0, overflow:visible)。 ついで に 6 文字 「+MM:SS」 が 確実 に 収まる ように font-size を min(35vw,90vh) → min(26vw,80vh) に 縮小' },
