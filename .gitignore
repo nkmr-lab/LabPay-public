@@ -23,3 +23,7 @@ var/log/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 研究費 関連 (まだ 保留 中 — DB 化 設計 のみ)
+*.xlsx
+docs/GRANTS_DESIGN.md
