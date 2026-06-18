@@ -43,16 +43,21 @@ export async function renderPublicTimer({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <style>
+      /* v685 #268 横が切れる bug 修正。 style.css の main#app { max-width:720px; padding:14px;
+       * overflow-x:hidden } が 100vw を 削って いた。 公開 タイマー では viewport 全幅 を 使う ため
+       * 親 #app の 制約 を override。 */
       body { background:#0b0b0d !important; color:#fff; margin:0 }
+      main#app { max-width:none !important; padding:0 !important; margin:0 !important;
+                 width:100vw !important; overflow:visible !important }
       #pt-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center;
-                 min-height:100vh; width:100vw; box-sizing:border-box; padding:2vw;
+                 min-height:100vh; width:100vw; box-sizing:border-box; padding:1vw;
                  font-family:Inter, system-ui, sans-serif; overflow:hidden }
       #pt-title { font-size:clamp(16px, 3vw, 32px); margin-bottom:8px; opacity:0.85; text-align:center }
-      /* v681 #261 数字 を できる だけ 大きく。 viewport 横幅 35% or 縦幅 90% の min で 決定、
-       * 5 文字 (MM:SS) を 想定 して 横幅 が 切れない 範囲 で 最大化。 */
-      #pt-time { font-size:min(35vw, 90vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
-                 line-height:1; letter-spacing:-0.05em; transition:color 0.2s;
-                 white-space:nowrap; text-align:center; width:100% }
+      /* 5 文字 (MM:SS) or 6 文字 (+MM:SS) を 想定。 monospace digit width ≈ 0.6em で
+       * 6 文字 だと 約 3.6em 必要。 viewport 横 100vw / 3.6 ≈ 27vw が 上限。 安全 マージン 取って 26vw。 */
+      #pt-time { font-size:min(26vw, 80vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
+                 line-height:1; letter-spacing:-0.04em; transition:color 0.2s;
+                 white-space:nowrap; text-align:center; width:100%; max-width:100vw }
       #pt-status { font-size:clamp(14px, 2vw, 22px); margin-top:14px; opacity:0.7; letter-spacing:0.04em; text-align:center }
       .bell-row { display:flex; gap:14px; margin-top:24px; font-size:clamp(12px, 1.5vw, 18px); opacity:0.55; flex-wrap:wrap; justify-content:center }
       .bell-row > div { padding:6px 12px; border:1px solid #444; border-radius:6px }

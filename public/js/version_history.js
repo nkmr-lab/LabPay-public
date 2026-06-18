@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v685', d: '2026-06-18', s: '🐛 公開 タイマー で 横 が 切れる bug 修正 (#268)。 style.css の main#app { max-width:720px; padding:14px; overflow-x:hidden } が 100vw を 削って いた → 公開 タイマー では 親 #app の 制約 を override (max-width:none, padding:0, overflow:visible)。 ついで に 6 文字 「+MM:SS」 が 確実 に 収まる ように font-size を min(35vw,90vh) → min(26vw,80vh) に 縮小' },
   { v: 'v684', d: '2026-06-18', s: '🛎 タイマー 表示 を 3 フェーズ に 整理 (#267)。 ① 発表終了 (= end_bell) まで は 通常 の カウントダウン、 ② そこ から 最後 の ベル まで は 0:00 から カウントアップ (= 質疑 時間)、 ③ 最後 の ベル を 越えて から 「+MM:SS 超過」。 通常 タイマー + 公開 タイマー 共通。 ついで に 公開 タイマー の bells 変数 重複 宣言 bug も 修正' },
   { v: 'v683', d: '2026-06-18', s: '🛎 タイマー の wake lock を 超過 表示 中 も 保持 する ように (#266)。 終了 ding で 解放 して いた 行 を 削除 + status=done でも 取得 し続ける。 公開 タイマー にも acquireWakeLock を 追加 (タブレット 表示 中 は 常時 ON)' },
   { v: 'v682', d: '2026-06-18', s: '🛎 タイマー 超過 の 基準 を 最後 の ベル 位置 に 変更 (#264)。 例: 論文紹介 で 5min=発表終了 (server 側 で done に なる) でも、 視覚 的 には 3鈴 (10min) まで 通常 の 残り 時間 表示、 そこ を 過ぎて から 「+MM:SS 超過」 扱い。 公開 タイマー も 同様' },
