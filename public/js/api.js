@@ -57,7 +57,10 @@ export async function api(method, path, { body, query, withIdempotency = false }
 
   if (res.status === 401) {
     // Avoid bouncing during the OAuth completion redirect.
-    if (location.hash !== '#/login') location.hash = '#/login';
+    // v679 #259 公開 タイマー は 認証 不要 で 表示 する ので 401 で login に 飛ばさ ない
+    if (location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) {
+      location.hash = '#/login';
+    }
   }
   if (!res.ok) {
     const err = (data && data.error) || { code: 'http_' + res.status, message: res.statusText };
