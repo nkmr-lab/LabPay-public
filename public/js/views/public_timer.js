@@ -2,6 +2,7 @@
 // タブレット を 演台 に 置いて 学会 / 論文紹介 で 使う 想定。 残り 時間 を 大きく 表示。
 
 import { escapeHtml } from '../router.js';
+import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
 
 let _tickTimer = null;
 let _pollTimer = null;
@@ -65,6 +66,8 @@ export async function renderPublicTimer({ params }) {
       <div class="bell-row" id="pt-bells"></div>
     </div>
   `;
+  // v683 #266 タブレット を 演台 に 置く 想定 なので 常時 wake lock を 取得
+  acquireWakeLock('public-timer');
   try {
     const d = await fetchState(id);
     _state = d.timer;
@@ -89,10 +92,11 @@ export async function renderPublicTimer({ params }) {
   } catch (e) {
     document.getElementById('pt-title').textContent = 'エラー: ' + e.message;
   }
-  // ページ 離脱 で 背景 + chrome を 戻す
+  // ページ 離脱 で 背景 + chrome を 戻す + wake lock 解放
   window.addEventListener('hashchange', () => {
     if (!location.hash.includes('/public-timer/' + id)) {
       stopAll();
+      releaseWakeLock('public-timer');
       document.body.style.background = '';
       // v678 #258 ログイン 済 なら chrome を 戻す (renderChrome が 再 dispatch 時 に 呼ぶ)
       const topbar = document.getElementById('topbar');

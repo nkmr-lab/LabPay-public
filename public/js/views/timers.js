@@ -451,7 +451,8 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     tmRepeatIdx   = t.repeat_idx || 0;
     if (!isResync) tmBellsFired = new Set();
     // v405 running 中は スクリーンを 起こし続ける
-    if (tmStatus === 'running') acquireWakeLock('timer');
+    // v683 #266 done でも 超過 視覚 表示 が 続く ので wake lock を 保持
+    if (tmStatus === 'running' || tmStatus === 'done') acquireWakeLock('timer');
     else releaseWakeLock('timer');
     // サイクルが進んだら fired をリセット (リピート 2 周目で 再度鳴らす)
     if (tmLastCycleIdx !== tmRepeatIdx) {
@@ -636,7 +637,8 @@ function tickTimer() {
     } else {
       stEl.textContent = '🎉 終了!';
       playEndDing();
-      releaseWakeLock('timer');
+      // v683 #266 終了 後 も 超過 表示 を 続ける ので wake lock は 解放 しない
+      //   (= スリープ で 画面 が 暗く なる の を 防ぐ)
     }
   } else if (tmStatus === 'done') {
     // v677 #257 終了 後 も 超過 を ずっと 表示 (= 質疑 時間 等 に 役立てる ため)。
