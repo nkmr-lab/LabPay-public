@@ -622,6 +622,11 @@ route('/cg2/:slug',      lazy(() => import('./views/cg2.js'), 'renderCg2Kind'));
 route('/cg2/:slug/:id',  lazy(() => import('./views/cg2.js'), 'renderCg2Game'));
 route('/chat-rooms',          lazy(() => import('./views/chat_rooms.js'), 'renderChatRooms'));
 route('/chat-rooms/:roomKey', lazy(() => import('./views/chat_rooms.js'), 'renderChatRoom'));
+route('/fortune',             lazy(() => import('./views/fortune.js'), 'renderFortune'));
+route('/conf-deadlines',          lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlines'));
+route('/conf-deadlines/new',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineForm'));
+route('/conf-deadlines/:id',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineDetail'));
+route('/conf-deadlines/:id/edit', lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineForm'));
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と

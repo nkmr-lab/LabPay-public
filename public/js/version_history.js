@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v671', d: '2026-06-18', s: '🔮 占い を 娯楽 カテゴリ に 追加 (#250) — #/fortune の 単独 ページ + apps menu に 登録。 📅 学会 〆切 一覧 アプリ 新規 (#251) — 国際 会議 / 国内 研究会 / 論文誌 / その他 カテゴリ、 誰でも 登録、 全員 閲覧、 〆切 順 一覧 + あと N 日 カウントダウン。 ホーム widget も 追加 (直近 5 件 を 〆切 順 で 表示)' },
   { v: 'v670', d: '2026-06-18', s: '💬 チャット 「unknown room」 bug 修正 + Slack 風 見た目 改修 (#249): backend で room_key を urldecode (path_segments が 自動 decode しなかった)、 view は 紫 ヘッダ + チャンネル / DM の セクション 分け、 メッセージ は 全部 左寄せ で アバター + 名前 + 時刻 ヘッダ + hover で 削除 ボタン (Slack 風)。 🀄 麻雀 対局画面 で 横向き lock 試行 + portrait の とき は 「横にして」 バナー' },
   { v: 'v669', d: '2026-06-18', s: '💬 Slack 風 チャット 新規 (#248): 3 固定 チャンネル (🚨 重要 / 📢 連絡 / 💭 相談) + 1対1 DM。 2 秒 polling で 准 リアルタイム、 「重要」 への 投稿 は 全員 に 自動 通知 (in-app + Slack DM)。 #/chat-rooms から。 🐛 アルバイト 申請 #244 で picker TDZ ReferenceError 修正 (#247)' },
   { v: 'v668', d: '2026-06-17', s: '🐛 cg2 runtime の critical bug 修正: sharedValues が plain object のまま export されて いた ので mutation 追跡 が 一切 動かず 同期 が ゼロ だった → deep Proxy で wrap し直し。 _suppressDirty で server → client → server の ping-pong も 防止' },

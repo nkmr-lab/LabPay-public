@@ -70,6 +70,7 @@ $routes = [
     'custom-widgets' => 'route_custom_widgets',
     'cg2'            => 'route_cg2',
     'chat'           => 'route_chat',
+    'conf-deadlines' => 'route_conf_deadlines',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',

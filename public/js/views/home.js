@@ -176,6 +176,7 @@ export const HOME_CARDS = [
   { id: 'recruiting',     title: '🎯 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック)' }, // v641, v644, v649
   { id: 'entertainment',  title: '🎉 娯楽 (ゲーム / 予想 / ドラフト / クイズ)' }, // v649
   { id: 'achievements',   title: '🏅 実績 + 称号' }, // v651
+  { id: 'conf-deadlines', title: '📅 学会 〆切 (近い 順)' }, // v671
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -192,6 +193,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'recruiting',     // v641 デフォルト ON
   'entertainment',  // v649 デフォルト ON
   'achievements',   // v651 デフォルト ON
+  'conf-deadlines', // v671 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -209,7 +211,7 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
 const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements']; // v641, v649, v651 既存ユーザにも 自動表示
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines']; // v641, v649, v651, v671 既存ユーザにも 自動表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -466,6 +468,15 @@ export async function renderHome() {
       <div id="home-entertainment"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v671 📅 学会 〆切 (近い 順) -->
+    <div class="card" id="home-confdl-card" data-card-id="conf-deadlines" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">📅 学会 〆切</h2>
+        <a href="#/conf-deadlines" class="hint" style="margin-left:auto">すべて →</a>
+      </div>
+      <div id="home-confdl"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <!-- v651 🏅 実績 + 称号 -->
     <div class="card" id="home-achievements-card" data-card-id="achievements" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -581,6 +592,7 @@ export async function renderHome() {
     { cardId: 'recruiting',     fn: renderRecruitingWidget, label: 'recruiting' }, // v638
     { cardId: 'entertainment',  fn: renderEntertainmentWidget, label: 'entertainment' }, // v649
     { cardId: 'achievements',   fn: renderAchievementsWidget,  label: 'achievements' }, // v651
+    { cardId: 'conf-deadlines', fn: renderConfDeadlinesWidget, label: 'confdl' }, // v671
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -1926,6 +1938,40 @@ async function loadCustomWidgets() {
     }
   } catch (e) {
     root.innerHTML = `<div class="hint" style="font-size:12px">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v671 (#251) 📅 学会 〆切 widget。 直近 5 件 を 〆切順 で 表示、 あと N 日 を カウントダウン。
+async function renderConfDeadlinesWidget() {
+  const card = document.getElementById('home-confdl-card');
+  const root = document.getElementById('home-confdl');
+  if (!card || !root) return;
+  card.hidden = false;
+  try {
+    const d = await get('/api/conf-deadlines/upcoming?limit=5');
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = '<div class="hint" style="font-size:13px">登録 済 の 〆切 は ありません ・ <a href="#/conf-deadlines/new">＋ 登録</a></div>';
+      return;
+    }
+    const catIcon = { intl_conf: '🌐', domestic_conf: '🇯🇵', journal: '📰', other: '📋' };
+    root.innerHTML = items.map(r => {
+      const sec = Number(r.sec_ahead) || 0;
+      const days = Math.floor(sec / 86400);
+      const ahead = sec <= 0 ? '締切 過ぎ' : days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`;
+      const color = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
+      return `
+        <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; padding:4px 0; align-items:center">
+          <span style="font-size:18px; flex:none">${escapeHtml(catIcon[r.category] || '📋')}</span>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}</div>
+            <div class="meta">締切 ${escapeHtml(String(r.deadline_at).slice(0, 16).replace('T',' '))}</div>
+          </div>
+          <div style="flex:none; font-weight:700; color:${color}; font-size:13px">${ahead}</div>
+        </a>`;
+    }).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
