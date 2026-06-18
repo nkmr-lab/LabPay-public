@@ -57,8 +57,19 @@ function windName(t) { return ['東','南','西','北'][t - 27] ?? '?'; }
 export async function renderMahjongPlay({ params }) {
   const gid = Number(params.id);
   curGid = gid;
+  // v670 麻雀 は 横向き 表示 が 見やすい。 lock を 試みる (= フルスクリーン or PWA のみ 効く)。
+  // 失敗 した 場合 は CSS の portrait media query で 「横にして」 バナー を 出す。
+  try { screen.orientation?.lock?.('landscape'); } catch (_) { /* unsupported */ }
   const app = document.getElementById('app');
   app.innerHTML = `
+    <style>
+      @media (orientation: portrait) {
+        #mj-rotate-banner { display:flex !important; }
+      }
+    </style>
+    <div id="mj-rotate-banner" style="display:none; align-items:center; gap:8px; padding:10px 14px; background:#fde68a; color:#92400e; border-radius:8px; margin-bottom:10px; font-weight:600">
+      🔄 麻雀 は 横向き で 見やすい です — 端末 を 横 に してください
+    </div>
     <div class="card page-header">
       <a href="#/mahjong/${gid}" class="hint">← 卓詳細</a>
       <h2 style="margin:6px 0">🀄 対局中</h2>
@@ -79,6 +90,8 @@ export async function renderMahjongPlay({ params }) {
   window.addEventListener('hashchange', () => {
     if (!location.hash.includes('/mahjong/' + gid)) {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      // v670 麻雀 から 離れたら orientation lock を 解除
+      try { screen.orientation?.unlock?.(); } catch (_) {}
     }
   }, { once: true });
 }

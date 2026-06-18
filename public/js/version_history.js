@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v670', d: '2026-06-18', s: '💬 チャット 「unknown room」 bug 修正 + Slack 風 見た目 改修 (#249): backend で room_key を urldecode (path_segments が 自動 decode しなかった)、 view は 紫 ヘッダ + チャンネル / DM の セクション 分け、 メッセージ は 全部 左寄せ で アバター + 名前 + 時刻 ヘッダ + hover で 削除 ボタン (Slack 風)。 🀄 麻雀 対局画面 で 横向き lock 試行 + portrait の とき は 「横にして」 バナー' },
   { v: 'v669', d: '2026-06-18', s: '💬 Slack 風 チャット 新規 (#248): 3 固定 チャンネル (🚨 重要 / 📢 連絡 / 💭 相談) + 1対1 DM。 2 秒 polling で 准 リアルタイム、 「重要」 への 投稿 は 全員 に 自動 通知 (in-app + Slack DM)。 #/chat-rooms から。 🐛 アルバイト 申請 #244 で picker TDZ ReferenceError 修正 (#247)' },
   { v: 'v668', d: '2026-06-17', s: '🐛 cg2 runtime の critical bug 修正: sharedValues が plain object のまま export されて いた ので mutation 追跡 が 一切 動かず 同期 が ゼロ だった → deep Proxy で wrap し直し。 _suppressDirty で server → client → server の ping-pong も 防止' },
   { v: 'v667', d: '2026-06-17', s: '🎮 自作 ゲーム v2 (cg2) framework 実装。 p5.js + sharedValues 自動 同期 の 准 リアルタイム multiplayer。 DB: cg2_kinds + cg2_games、 backend: src/handlers/cg2.php、 runtime: public/js/cg2.js (deep Proxy + 500ms polling + host.start/stop ライフサイクル)、 view: public/js/views/cg2.js (#/cg2)。 サンプル 4 件 (マルバツ / ニム / ライツアウト / すごろく) を kind に 登録。 詳細: docs/CUSTOM_GAMES_V2.md。 README + docs (CUSTOM_GAMES_V2 / WIDGETS) も 更新' },

@@ -12,7 +12,8 @@ function route_chat(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === 'rooms' && $method === 'GET' && ($seg[2] ?? '') === '') { chat_rooms_list($pdo, $cfg); return; }
     if ($sub === 'rooms' && ($seg[2] ?? '') !== '') {
-        $roomKey = $seg[2];
+        // v670 path_segments は URL decode しない ので、 ch%3Aimportant のまま 来る → 明示 decode
+        $roomKey = urldecode((string)$seg[2]);
         $action  = $seg[3] ?? '';
         if ($action === 'messages' && $method === 'GET')  { chat_messages_list($pdo, $cfg, $roomKey); return; }
         if ($action === 'messages' && $method === 'POST') { chat_messages_send($pdo, $cfg, $roomKey); return; }
