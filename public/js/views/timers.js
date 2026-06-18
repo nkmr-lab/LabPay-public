@@ -325,7 +325,7 @@ export async function renderTimerDetail({ params }) {
       <button id="tmd-fs-exit" type="button">✕ 終了</button>
       <div id="tmd-title-fs" class="hint-sm" hidden></div>
       <div id="tmd-count" title="タップで カウントダウン ⇄ カウントアップ"
-           style="font-size:64px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; margin:14px 0 6px; cursor:pointer; user-select:none">--:--</div>
+           style="font-size:clamp(96px, 22vw, 180px); font-weight:800; font-variant-numeric:tabular-nums; line-height:1; margin:18px 0 6px; cursor:pointer; user-select:none; letter-spacing:-0.04em">--:--</div>
       <div id="tmd-mode" class="hint-sm" style="margin-top:-4px; margin-bottom:4px">残り時間</div>
       <div id="tmd-elapsed" class="hint-sm">経過 -- / 合計 --</div>
       <div style="background:#eee; height:10px; border-radius:5px; overflow:hidden; margin-top:14px">
@@ -333,10 +333,10 @@ export async function renderTimerDetail({ params }) {
       </div>
       <div id="tmd-status" style="margin-top:14px; font-weight:700"></div>
     </div>
-    <div class="card">
-      <h3 style="margin:0 0 6px">参加者 (<span id="tmd-pcount">0</span>)</h3>
-      <div id="tmd-participants" class="row" style="gap:6px; flex-wrap:wrap"></div>
-    </div>
+    <details class="card">
+      <summary style="cursor:pointer; font-weight:700; user-select:none">参加者 (<span id="tmd-pcount">0</span>)</summary>
+      <div id="tmd-participants" class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px"></div>
+    </details>
     <div class="card" id="tmd-ctrl-card">
       <div class="row" style="gap:6px; flex-wrap:wrap">
         <button id="tmd-start" class="primary" hidden>▶ 開始</button>

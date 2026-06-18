@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v681', d: '2026-06-18', s: '🛎 タイマー 表示 大型化 + 操作画面 で 参加者 を 折り畳み (#261/#262/#263)。 公開 タイマー font-size を min(25vw,60vh) → min(35vw,90vh)、 通常 タイマー の カウント を 64px → clamp(96px,22vw,180px) で 大幅 拡大。 参加者 セクション を <details> に して 標準 折り畳み' },
   { v: 'v680', d: '2026-06-18', s: '🐛 公開 タイマー で 時間 表示 が 横幅 切れる bug 修正 (#260)。 font-size を clamp 280px 上限 → min(25vw, 60vh) に 変更 して viewport に 完全 fit、 #pt-wrap を 100vw + box-sizing border-box、 white-space:nowrap で 1 行 強制' },
   { v: 'v679', d: '2026-06-18', s: '🐛 公開 タイマー で リロード する と login に 飛ばされる bug 修正 (#259)。 api.js の 401 redirect が /#/public-timer/* も 弾いて いた → 例外 対応' },
   { v: 'v678', d: '2026-06-18', s: '🛎 公開 タイマー (#/public-timer/:id) で topbar / tabs (LabPay の メニュー) を 隠す ように (#258)。 タブレット を 演台 に 置く 用途 で メニュー は 邪魔 だった。 ページ 離脱 で 自動 復帰' },

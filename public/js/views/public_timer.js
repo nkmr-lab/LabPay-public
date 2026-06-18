@@ -47,10 +47,10 @@ export async function renderPublicTimer({ params }) {
                  min-height:100vh; width:100vw; box-sizing:border-box; padding:2vw;
                  font-family:Inter, system-ui, sans-serif; overflow:hidden }
       #pt-title { font-size:clamp(16px, 3vw, 32px); margin-bottom:8px; opacity:0.85; text-align:center }
-      /* v680 #260 font-size を vw + vh の min で 決定 し、 white-space:nowrap で 必ず 1 行 に 収める。
-       * 5 文字 (MM:SS) を 想定。 25vw = viewport 25%、 60vh = viewport 60% の どちら か 小さい 方。 */
-      #pt-time { font-size:min(25vw, 60vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
-                 line-height:1; letter-spacing:-0.04em; transition:color 0.2s;
+      /* v681 #261 数字 を できる だけ 大きく。 viewport 横幅 35% or 縦幅 90% の min で 決定、
+       * 5 文字 (MM:SS) を 想定 して 横幅 が 切れない 範囲 で 最大化。 */
+      #pt-time { font-size:min(35vw, 90vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
+                 line-height:1; letter-spacing:-0.05em; transition:color 0.2s;
                  white-space:nowrap; text-align:center; width:100% }
       #pt-status { font-size:clamp(14px, 2vw, 22px); margin-top:14px; opacity:0.7; letter-spacing:0.04em; text-align:center }
       .bell-row { display:flex; gap:14px; margin-top:24px; font-size:clamp(12px, 1.5vw, 18px); opacity:0.55; flex-wrap:wrap; justify-content:center }
