@@ -33,6 +33,12 @@ async function fetchState(id) {
 export async function renderPublicTimer({ params }) {
   stopAll();
   const id = Number(params.id);
+  // v678 #258 公開 タイマー の とき は topbar / tabs (LabPay の メニュー) を 隠す。
+  //   タブレット に 開いて 演台 に 置く 用 途 で メニュー は 邪魔。
+  const topbar = document.getElementById('topbar');
+  const tabs   = document.getElementById('tabs');
+  if (topbar) topbar.hidden = true;
+  if (tabs)   tabs.hidden = true;
   const app = document.getElementById('app');
   app.innerHTML = `
     <style>
@@ -78,11 +84,16 @@ export async function renderPublicTimer({ params }) {
   } catch (e) {
     document.getElementById('pt-title').textContent = 'エラー: ' + e.message;
   }
-  // ページ 離脱 で 背景 を 戻す
+  // ページ 離脱 で 背景 + chrome を 戻す
   window.addEventListener('hashchange', () => {
     if (!location.hash.includes('/public-timer/' + id)) {
       stopAll();
       document.body.style.background = '';
+      // v678 #258 ログイン 済 なら chrome を 戻す (renderChrome が 再 dispatch 時 に 呼ぶ)
+      const topbar = document.getElementById('topbar');
+      const tabs   = document.getElementById('tabs');
+      if (topbar) topbar.hidden = false;
+      if (tabs)   tabs.hidden = false;
     }
   }, { once: true });
 }
