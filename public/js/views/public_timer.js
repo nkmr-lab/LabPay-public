@@ -15,10 +15,11 @@ function stopAll() {
 
 function fmt(sec) {
   if (sec === null || sec === undefined) return '--:--';
-  const s = Math.max(0, Math.floor(sec));
+  const neg = sec < 0;
+  const s = Math.abs(Math.floor(sec));
   const m = Math.floor(s / 60);
   const r = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  return (neg ? '+' : '') + `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
 async function fetchState(id) {
@@ -107,14 +108,22 @@ function render() {
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
 
+  // v682 #264 視覚 的 「終了」 は 最後 の ベル 位置 (server 側 の duration が 端 で 終わって も、 ベル が 続く なら そこ まで)
+  const bells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(b => b !== null && b !== undefined && b > 0);
+  const maxBellSec = bells.length ? Math.max(...bells) : 0;
+  const visualEndSec = Math.max(maxBellSec, t.duration_seconds || 0);
   let remaining = null;
-  if (t.status === 'running' && t.ends_at) {
-    const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
-    remaining = (ends - (Date.now() + _serverOffsetMs)) / 1000;
+  if (t.status === 'running' && t.started_at) {
+    const started = Date.parse(String(t.started_at).replace(' ', 'T'));
+    const visualEnd = started + visualEndSec * 1000;
+    remaining = (visualEnd - (Date.now() + _serverOffsetMs)) / 1000;
   } else if (t.status === 'paused') {
     remaining = Number(t.remaining_seconds) || 0;
-  } else if (t.status === 'done') {
-    remaining = 0;
+  } else if (t.status === 'done' && t.started_at) {
+    // done で も 視覚 的 終了 まで 表示 続ける
+    const started = Date.parse(String(t.started_at).replace(' ', 'T'));
+    const visualEnd = started + visualEndSec * 1000;
+    remaining = (visualEnd - (Date.now() + _serverOffsetMs)) / 1000;
   }
 
   const elTime = document.getElementById('pt-time');

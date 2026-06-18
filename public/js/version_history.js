@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v682', d: '2026-06-18', s: '🛎 タイマー 超過 の 基準 を 最後 の ベル 位置 に 変更 (#264)。 例: 論文紹介 で 5min=発表終了 (server 側 で done に なる) でも、 視覚 的 には 3鈴 (10min) まで 通常 の 残り 時間 表示、 そこ を 過ぎて から 「+MM:SS 超過」 扱い。 公開 タイマー も 同様' },
   { v: 'v681', d: '2026-06-18', s: '🛎 タイマー 表示 大型化 + 操作画面 で 参加者 を 折り畳み (#261/#262/#263)。 公開 タイマー font-size を min(25vw,60vh) → min(35vw,90vh)、 通常 タイマー の カウント を 64px → clamp(96px,22vw,180px) で 大幅 拡大。 参加者 セクション を <details> に して 標準 折り畳み' },
   { v: 'v680', d: '2026-06-18', s: '🐛 公開 タイマー で 時間 表示 が 横幅 切れる bug 修正 (#260)。 font-size を clamp 280px 上限 → min(25vw, 60vh) に 変更 して viewport に 完全 fit、 #pt-wrap を 100vw + box-sizing border-box、 white-space:nowrap で 1 行 強制' },
   { v: 'v679', d: '2026-06-18', s: '🐛 公開 タイマー で リロード する と login に 飛ばされる bug 修正 (#259)。 api.js の 401 redirect が /#/public-timer/* も 弾いて いた → 例外 対応' },

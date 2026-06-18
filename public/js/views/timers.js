@@ -597,7 +597,13 @@ function tickTimer() {
   // v408 超過 表示。 remainingSec は 0 で 止めず、 マイナスに 突入させて
   // 「+MM:SS 超過」 を 出す。 elapsed も そのまま 加算 (合計超え可)。
   // v411 tmDisplayMode で カウントダウン (残り) ⇄ カウントアップ (経過) を 切替。
-  const signedRemain = Math.ceil((tmEndsMs - now) / 1000);
+  // v682 #264 「終了」 は 最後 の ベル 位置 とする (= 3鈴 が 10分 にあって も、 そこ まで
+  //   は 通常 の 残り 時間 表示。 そこ を 過ぎて 初めて 超過 扱い)。 server の duration_seconds
+  //   (= end_bell の 位置) で done に なって も、 視覚 的 には 最後 の ベル まで 続ける。
+  const maxBellSec    = tmBells.length ? Math.max(...tmBells) : 0;
+  const visualEndSec  = Math.max(maxBellSec, tmDurationSec);
+  const visualEndMs   = tmStartedMs + visualEndSec * 1000;
+  const signedRemain = Math.ceil((visualEndMs - now) / 1000);
   const elapsedSec   = Math.max(0, Math.floor((now - tmStartedMs) / 1000));
   const isOver = signedRemain < 0;
   const modeEl = document.getElementById('tmd-mode');
@@ -616,8 +622,9 @@ function tickTimer() {
                         : '';
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   }
-  elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
-  const pct = tmDurationSec ? Math.min(100, (elapsedSec / tmDurationSec) * 100) : 0;
+  // v682 #264 「合計」 は 視覚 的 終了 (= 最後 の ベル 位置) を 使う
+  elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(visualEndSec)}`;
+  const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (isOver) barEl.style.background = '#c62828';
   // 終了 瞬間 (= signedRemain が 0 を 跨いだ 直後 1 tick) で 一度だけ
