@@ -1948,7 +1948,7 @@ async function renderConfDeadlinesWidget() {
   if (!card || !root) return;
   card.hidden = false;
   try {
-    const d = await get('/api/conf-deadlines/upcoming?limit=5');
+    const d = await get('/api/conf-deadlines/upcoming?limit=8');
     const items = d.items || [];
     if (!items.length) {
       root.innerHTML = '<div class="hint" style="font-size:13px">登録 済 の 〆切 は ありません ・ <a href="#/conf-deadlines/new">＋ 登録</a></div>';
@@ -1961,16 +1961,16 @@ async function renderConfDeadlinesWidget() {
       const ahead = sec <= 0 ? '締切 過ぎ' : days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`;
       const color = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
       const loc = r.location ? ` (${escapeHtml(r.location)})` : '';
+      // v687 #271 件数 を 多く 出したい ので 1 件 = 1 行 に 詰める。 icon + 学会名(場所)
+      //   が flex:1 で 伸び、 右側 に 締切 (MM/DD) と 「あと N 日」 を 並べる。 学会名 が
+      //   長い 場合 は ellipsis で 1 行 に 収める。
+      const dateShort = String(r.deadline_at).slice(5, 10).replace('-', '/');
       return `
-        <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:0; padding:3px 0; align-items:flex-start; flex-direction:column; line-height:1.3">
-          <div style="display:flex; gap:6px; width:100%; align-items:baseline">
-            <span style="font-size:16px; flex:none">${escapeHtml(catIcon[r.category] || '📋')}</span>
-            <div class="bold" style="font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}${loc}</div>
-          </div>
-          <div style="display:flex; gap:6px; width:100%; align-items:baseline; padding-left:22px">
-            <div class="meta" style="flex:1; min-width:0; font-size:11px">締切 ${escapeHtml(String(r.deadline_at).slice(0, 16).replace('T',' '))}</div>
-            <div style="flex:none; font-weight:700; color:${color}; font-size:12px">${ahead}</div>
-          </div>
+        <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:6px; padding:2px 0; align-items:baseline; line-height:1.3">
+          <span style="font-size:14px; flex:none">${escapeHtml(catIcon[r.category] || '📋')}</span>
+          <div class="bold" style="font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}${loc}</div>
+          <div class="meta" style="flex:none; font-size:11px; opacity:0.7">${escapeHtml(dateShort)}</div>
+          <div style="flex:none; font-weight:700; color:${color}; font-size:12px">${ahead}</div>
         </a>`;
     }).join('');
   } catch (e) {
