@@ -476,6 +476,7 @@ route('/rollcalls/:id',  lazy(() => import('./views/rollcalls.js'), 'renderRollC
 route('/timers',         lazy(() => import('./views/timers.js'), 'renderTimers'));
 route('/timers/new',     lazy(() => import('./views/timers.js'), 'renderTimerNew'));
 route('/timers/:id',     lazy(() => import('./views/timers.js'), 'renderTimerDetail'));
+route('/public-timer/:id', lazy(() => import('./views/public_timer.js'), 'renderPublicTimer'));
 route('/notices',        lazy(() => import('./views/notices.js'), 'renderNotices'));
 route('/notices/new',    lazy(() => import('./views/notices.js'), 'renderNoticeForm'));
 route('/notices/:id/edit', lazy(() => import('./views/notices.js'), 'renderNoticeForm'));
@@ -642,11 +643,12 @@ route('/conf-deadlines/:id/edit', lazy(() => import('./views/conf_deadlines.js')
     renderChrome();
     start();                          // ルート即時 dispatch
     refreshMe().then(() => {          // 裏で再検証
-      if (!state.me && location.hash !== '#/login') navigate('#/login');
+      // v676 #256 /public-timer は 認証 不要
+      if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) navigate('#/login');
     });
   } else {
     await refreshMe();
-    if (!state.me && location.hash !== '#/login') {
+    if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) {
       navigate('#/login');
     } else if (state.me && location.hash === '#/login') {
       navigate('#/');

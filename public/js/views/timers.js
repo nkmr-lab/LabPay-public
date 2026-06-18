@@ -28,6 +28,7 @@ const ACADEMIC_PRESETS = [
   { label: '一般 (12/14/15、 3鈴=終了)',  bells: [12, 14, 15], end: 3 },
   { label: '招待 (20/24/25、 3鈴=終了)',  bells: [20, 24, 25], end: 3 },
   { label: 'ライトニング (4/4.5/5、 3鈴=終了)', bells: [4, 4.5, 5], end: 3 },
+  { label: '論文紹介 (4/5/10、 5分=発表終了)', bells: [4, 5, 10], end: 3 }, // v676 #256
   { label: 'ポモドーロ (25 分、 1鈴=終了)', bells: [25, null, null], end: 1 },
   { label: '休憩 (5 分、 1鈴=終了)',       bells: [5, null, null], end: 1 },
 ];
@@ -291,6 +292,7 @@ export async function renderTimerDetail({ params }) {
       <div class="row" style="gap:6px; justify-content:flex-end; position:absolute; top:6px; right:6px">
         <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で 鳴る か 確認)">🔊 試聴</button>
         <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に 時間を 見せる)">🖥 フル</button>
+        <button id="tmd-public" class="btn" style="font-size:11px; padding:2px 8px" title="認証 不要 の 公開 URL を コピー (タブレット に 開いて 演台 に 置く)">🔗 公開 URL</button>
       </div>
       <button id="tmd-fs-exit" type="button">✕ 終了</button>
       <div id="tmd-title-fs" class="hint-sm" hidden></div>
@@ -348,6 +350,16 @@ export async function renderTimerDetail({ params }) {
   });
   document.getElementById('tmd-fs-exit')?.addEventListener('click', () => {
     exitTimerFullscreen();
+  });
+  // v676 #256 公開 URL: 認証 不要 ・ タブレット で 演台 に 置く 用 (タップ で クリップボード コピー)
+  document.getElementById('tmd-public')?.addEventListener('click', async () => {
+    const url = location.origin + '/#/public-timer/' + id;
+    try {
+      await navigator.clipboard?.writeText?.(url);
+      toast('公開 URL を コピー しました: ' + url);
+    } catch (_) {
+      prompt('この URL を コピー して タブレット で 開いて ください:', url);
+    }
   });
 }
 

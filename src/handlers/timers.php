@@ -13,6 +13,7 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
         if ($next === ''       && $method === 'GET')    { timers_detail($pdo, $cfg, $id); return; }
+        if ($next === 'public' && $method === 'GET')    { timers_public_detail($pdo, $cfg, $id); return; } // v676 #256
         if ($next === ''       && $method === 'DELETE') { timers_delete($pdo, $cfg, $id); return; }
         if ($next === 'cancel' && $method === 'PATCH')  { timers_cancel($pdo, $cfg, $id); return; }
         // v446 paused-default model: ▶ 開始 / ⏸ 一時停止 / ↻ リセット を 追加。
@@ -256,6 +257,39 @@ function timer_fmt_short(int $sec): string {
     if ($sec >= 3600) return floor($sec / 3600) . "h" . str_pad((string)(floor(($sec % 3600) / 60)), 2, "0", STR_PAD_LEFT) . "m";
     if ($sec >= 60) return floor($sec / 60) . "分";
     return "{$sec}秒";
+}
+
+// v676 #256 公開 タイマー: 認証 なし で 誰でも 取得 できる (= タブレット 等 に 表示 する 用)。
+// 学会 タイマー は public OK と 割り切る (参加者 / アバター 等 個人 情報 は 返さない)。
+function timers_public_detail(PDO $pdo, array $cfg, int $id): void {
+    timers_autoclose($pdo);
+    $st = $pdo->prepare("SELECT id, title, duration_seconds, remaining_seconds,
+                                bell1_seconds, bell2_seconds, bell3_seconds, end_bell_index,
+                                repeat_max, repeat_idx, started_at, ends_at, status
+                           FROM timers
+                          WHERE id = ? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $t = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$t) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    // server_now を つけて client が 時刻差 を 補正 できる ように
+    json_response([
+        'timer' => [
+            'id'                => (int)$t['id'],
+            'title'             => $t['title'],
+            'duration_seconds'  => (int)$t['duration_seconds'],
+            'remaining_seconds' => isset($t['remaining_seconds']) ? (int)$t['remaining_seconds'] : null,
+            'bell1_seconds'     => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
+            'bell2_seconds'     => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
+            'bell3_seconds'     => isset($t['bell3_seconds']) ? (int)$t['bell3_seconds'] : null,
+            'end_bell_index'    => isset($t['end_bell_index']) ? (int)$t['end_bell_index'] : null,
+            'repeat_max'        => (int)($t['repeat_max'] ?? 0),
+            'repeat_idx'        => (int)($t['repeat_idx'] ?? 0),
+            'started_at'        => $t['started_at'],
+            'ends_at'           => $t['ends_at'],
+            'status'            => $t['status'],
+        ],
+        'server_now' => date('Y-m-d H:i:s'),
+    ]);
 }
 
 function timers_detail(PDO $pdo, array $cfg, int $id): void {
