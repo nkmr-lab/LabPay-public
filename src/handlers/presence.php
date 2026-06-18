@@ -146,6 +146,29 @@ function presence_is_excluded_mac(string $mac): bool {
     return false;
 }
 
+// v686 #270 仮想 マシン の MAC を 検知。 これら は 物理 デバイス と 違って 常時 稼働
+// の Host 上 で 走る ので 「ずっと いる」 状態 に なる → 在室 判定 が 壊れる。 OUI 一覧:
+//   - 00:15:5d  Microsoft Hyper-V
+//   - 00:50:56  VMware ESXi
+//   - 00:0c:29  VMware Workstation
+//   - 00:1c:14  VMware (旧 NIC)
+//   - 08:00:27  VirtualBox
+//   - 52:54:00  KVM / QEMU
+//   - 00:16:3e  Xen
+const PRESENCE_VM_OUI = [
+    '00:15:5d' => 'Microsoft Hyper-V',
+    '00:50:56' => 'VMware ESXi',
+    '00:0c:29' => 'VMware Workstation',
+    '00:1c:14' => 'VMware',
+    '08:00:27' => 'VirtualBox',
+    '52:54:00' => 'KVM / QEMU',
+    '00:16:3e' => 'Xen',
+];
+function presence_vm_kind(string $mac): ?string {
+    $oui = substr($mac, 0, 8);
+    return PRESENCE_VM_OUI[$oui] ?? null;
+}
+
 // Tiny OUI lookup: a few well-known prefixes that appear on lab WiFi. Extend as needed.
 const PRESENCE_KNOWN_OUI = [
     '60:cf:84' => ['Buffalo',  'ルータ?'],
@@ -301,7 +324,17 @@ function presence_devices_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare('SELECT id, mac, label, created_at FROM presence_devices WHERE user_id=? ORDER BY id');
     $st->execute([$u['id']]);
-    json_response(['items' => $st->fetchAll()]);
+    $items = $st->fetchAll();
+    // v686 #270 既存 登録 に も VM MAC 警告 を 付ける。 削除 す べき か は ユーザ 判断。
+    foreach ($items as &$r) {
+        $vm = presence_vm_kind((string)$r['mac']);
+        $r['vm_kind'] = $vm;
+        $r['warning'] = $vm
+            ? "⚠️ これ は $vm の 仮想 NIC の MAC です。 物理 デバイス じゃ ない ので 「ずっと いる」 状態 に なって 在室 判定 が 壊れます。 削除 を 推奨"
+            : null;
+    }
+    unset($r);
+    json_response(['items' => $items]);
 }
 
 // ---------------- POST /api/presence/devices ----------------
@@ -313,6 +346,13 @@ function presence_devices_add(PDO $pdo, array $cfg): void {
     if ($mac === null) throw new ApiException('bad_request', 'invalid MAC address', 400);
     if (presence_is_excluded_mac($mac))
         throw new ApiException('bad_request', 'broadcast/multicast MACs not allowed', 400);
+    // v686 #270 VM の MAC は 登録 不可 (常時 稼働 で 「ずっと いる」 状態 に なる)。
+    $vm = presence_vm_kind($mac);
+    if ($vm !== null) {
+        throw new ApiException('vm_mac',
+            "これ は $vm の 仮想 NIC の MAC です。 物理 デバイス (スマホ / ノート PC) の MAC を 登録 して ください。 仮想 NIC は ホスト が 起動 中 ずっと 同じ MAC を 出し続ける ので 「ずっと ラボに いる」 と 誤判定 されて しまいます。",
+            400);
+    }
 
     $label = isset($body['label']) ? mb_substr((string)$body['label'], 0, 100) : null;
 
@@ -367,8 +407,11 @@ function presence_unregistered_macs(PDO $pdo, array $cfg): void {
     $st->execute([$window]);
     $rows = $st->fetchAll();
     foreach ($rows as &$r) {
-        $r['hint'] = presence_mac_hint((string)$r['mac']);
+        $vm = presence_vm_kind((string)$r['mac']);
+        $r['hint'] = $vm ? "⚠️ $vm の VM (登録 不可)" : presence_mac_hint((string)$r['mac']);
+        $r['is_vm'] = (bool)$vm;
     }
+    unset($r);
     json_response(['items' => $rows, 'window_minutes' => $window]);
 }
 

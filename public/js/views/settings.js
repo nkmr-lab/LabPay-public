@@ -880,6 +880,7 @@ async function load() {
         <div>
           <div class="bold mono">${escapeHtml(d.mac)}</div>
           <div class="meta">${escapeHtml(d.label ?? '(ラベル無し)')} · ${escapeHtml(d.created_at)}</div>
+          ${d.warning ? `<div class="meta" style="color:#c62828; margin-top:4px">${escapeHtml(d.warning)}</div>` : ''}
         </div>
         <button data-rm="${d.id}" class="danger">削除</button>
       </div>
@@ -964,8 +965,12 @@ async function loadUnregistered() {
       const borderStyle = isMine
         ? `border-left:4px solid #f2c700; background:#fffdf4`
         : (isFresh ? `border-left:4px solid ${rc}` : `border-left:4px solid ${rc}33`);
+      // v686 #270 VM の MAC は 登録 不可 (API 側 で 弾く)。 button を 出さない。
       const claimBtnCls = isMine ? 'primary' : 'primary';
       const claimBtnTxt = isMine ? 'これは私 ✓' : 'これは私';
+      const claimBtnHtml = x.is_vm
+        ? '<span class="tag" style="font-size:10px; color:#c62828">登録 不可</span>'
+        : `<button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>`;
       // Show 最終観測 only when it's different from 初観測 (single-shot observations
       // would otherwise duplicate the same timestamp twice).
       const lastTxt = (x.last_seen_at && x.last_seen_at !== x.first_seen_at)
@@ -978,7 +983,7 @@ async function loadUnregistered() {
           <div class="meta">${escapeHtml(x.room_name)} · IP ${ipHtml(x.ip)} · 初観測 ${escapeHtml(x.first_seen_at ?? '-')}${lastTxt}</div>
         </div>
         <div>
-          <button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>
+          ${claimBtnHtml}
           ${adminBtn}
         </div>
       </div>`;
