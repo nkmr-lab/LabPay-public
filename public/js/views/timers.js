@@ -595,57 +595,71 @@ function tickTimer() {
     stEl.textContent = '';
     return;
   }
-  // v408 超過 表示。 remainingSec は 0 で 止めず、 マイナスに 突入させて
-  // 「+MM:SS 超過」 を 出す。 elapsed も そのまま 加算 (合計超え可)。
-  // v411 tmDisplayMode で カウントダウン (残り) ⇄ カウントアップ (経過) を 切替。
-  // v682 #264 「終了」 は 最後 の ベル 位置 とする (= 3鈴 が 10分 にあって も、 そこ まで
-  //   は 通常 の 残り 時間 表示。 そこ を 過ぎて 初めて 超過 扱い)。 server の duration_seconds
-  //   (= end_bell の 位置) で done に なって も、 視覚 的 には 最後 の ベル まで 続ける。
+  // v684 #267 3 フェーズ 表示:
+  //   ① 発表終了 (= end_bell) まで: 通常 の カウントダウン
+  //   ② 発表終了 〜 最後 の ベル: カウントアップ モード では そのまま 経過、 カウントダウン
+  //      モード では 0:00 から 上 に カウント (= 質疑 時間 等 の 経過)
+  //   ③ 最後 の ベル を 越えたら 「+MM:SS 超過」
   const maxBellSec    = tmBells.length ? Math.max(...tmBells) : 0;
-  const visualEndSec  = Math.max(maxBellSec, tmDurationSec);
-  const visualEndMs   = tmStartedMs + visualEndSec * 1000;
-  const signedRemain = Math.ceil((visualEndMs - now) / 1000);
-  const elapsedSec   = Math.max(0, Math.floor((now - tmStartedMs) / 1000));
-  const isOver = signedRemain < 0;
+  const endBellSec    = (tmEndBellSec ?? tmDurationSec) || 0;
+  const visualEndSec  = Math.max(maxBellSec, endBellSec);
+  const elapsed       = (now - tmStartedMs) / 1000;
+  const elapsedSec    = Math.max(0, Math.floor(elapsed));
+  const remainToEndSec = Math.ceil(endBellSec - elapsed);
+  const isOver        = elapsed >= maxBellSec;
+  const isPastEnd     = elapsed >= endBellSec;
   const modeEl = document.getElementById('tmd-mode');
   if (tmDisplayMode === 'elapsed') {
-    countEl.textContent = fmtDuration(elapsedSec);
-    countEl.style.color = isOver ? '#c62828' : '';
+    if (isOver) {
+      countEl.textContent = '+' + fmtDuration(Math.floor(elapsed - maxBellSec)) + ' 超過';
+      countEl.style.color = '#c62828';
+    } else {
+      countEl.textContent = fmtDuration(elapsedSec);
+      countEl.style.color = '';
+    }
     if (modeEl) modeEl.textContent = '↑ 経過時間 (タップで 残り時間)';
   } else if (isOver) {
-    countEl.textContent = '+' + fmtDuration(-signedRemain) + ' 超過';
+    countEl.textContent = '+' + fmtDuration(Math.floor(elapsed - maxBellSec)) + ' 超過';
     countEl.style.color = '#c62828';
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
+  } else if (isPastEnd) {
+    // ② 発表終了 後、 最後 の ベル まで は 0:00 から 上 に カウント
+    countEl.textContent = fmtDuration(Math.floor(elapsed - endBellSec));
+    countEl.style.color = '';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   } else {
-    countEl.textContent = fmtDuration(signedRemain);
-    countEl.style.color = signedRemain === 0 ? 'var(--primary)'
-                        : signedRemain < 10 ? '#c62828'
+    countEl.textContent = fmtDuration(remainToEndSec);
+    countEl.style.color = remainToEndSec === 0 ? 'var(--primary)'
+                        : remainToEndSec < 10 ? '#c62828'
                         : '';
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   }
-  // v682 #264 「合計」 は 視覚 的 終了 (= 最後 の ベル 位置) を 使う
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(visualEndSec)}`;
   const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (isOver) barEl.style.background = '#c62828';
-  // 終了 瞬間 (= signedRemain が 0 を 跨いだ 直後 1 tick) で 一度だけ
-  // 終了音 + ローカル fired フラグ。 以後 サーバ done が 来るまで 超過表示。
-  if (signedRemain === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
+  // 発表終了 ベル の ding は elapsed が endBellSec を 跨いだ 瞬間 で 1 回 のみ。
+  if (remainToEndSec === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
     tmEndFiredOnce = true;
     if (tmRepeatMax > 0 && tmRepeatIdx < tmRepeatMax) {
       stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目 切替中…`;
     } else {
       stEl.textContent = '🎉 終了!';
       playEndDing();
-      // v683 #266 終了 後 も 超過 表示 を 続ける ので wake lock は 解放 しない
-      //   (= スリープ で 画面 が 暗く なる の を 防ぐ)
+      // v683 #266 終了 後 も 表示 を 続ける ので wake lock は 解放 しない
     }
   } else if (tmStatus === 'done') {
-    // v677 #257 終了 後 も 超過 を ずっと 表示 (= 質疑 時間 等 に 役立てる ため)。
-    //   「終了」 と 「+ 超過 X」 を 並べて 表示、 count は ずっと 「+MM:SS 超過」 で 増え 続ける。
-    stEl.textContent = isOver ? `🎉 終了 + 超過 ${fmtDuration(-signedRemain)} 経過 中` : '🎉 終了';
+    if (isOver) {
+      stEl.textContent = `🎉 終了 + 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過 中`;
+    } else if (isPastEnd) {
+      stEl.textContent = `🎉 終了 — 質疑 + ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
+    } else {
+      stEl.textContent = '🎉 終了';
+    }
   } else if (isOver) {
-    stEl.textContent = `⚠ 超過 ${fmtDuration(-signedRemain)} 経過 中 — 必要なら ⏹ 停止`;
+    stEl.textContent = `⚠ 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過 中 — 必要なら ⏹ 停止`;
+  } else if (isPastEnd) {
+    stEl.textContent = `🏁 発表終了 — 質疑 + ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
   } else if (tmRepeatMax > 0) {
     stEl.textContent = `🔁 ${tmRepeatIdx + 1}/${tmRepeatMax + 1} 回目`;
   } else {

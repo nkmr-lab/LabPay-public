@@ -16,11 +16,10 @@ function stopAll() {
 
 function fmt(sec) {
   if (sec === null || sec === undefined) return '--:--';
-  const neg = sec < 0;
-  const s = Math.abs(Math.floor(sec));
+  const s = Math.max(0, Math.floor(sec));
   const m = Math.floor(s / 60);
   const r = s % 60;
-  return (neg ? '+' : '') + `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
 async function fetchState(id) {
@@ -112,46 +111,57 @@ function render() {
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
 
-  // v682 #264 視覚 的 「終了」 は 最後 の ベル 位置 (server 側 の duration が 端 で 終わって も、 ベル が 続く なら そこ まで)
-  const bells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(b => b !== null && b !== undefined && b > 0);
+  // v684 #267 3 フェーズ 表示:
+  //   ① 発表終了 (= end_bell) まで: カウントダウン
+  //   ② 発表終了 〜 最後 の ベル: 0:00 から 上 に カウント
+  //   ③ 最後 の ベル を 越えたら 「+MM:SS」 超過
+  const allBells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
+  const bells = allBells.filter(b => b !== null && b !== undefined && b > 0);
   const maxBellSec = bells.length ? Math.max(...bells) : 0;
-  const visualEndSec = Math.max(maxBellSec, t.duration_seconds || 0);
-  let remaining = null;
-  if (t.status === 'running' && t.started_at) {
+  const endBellSec = ((t.end_bell_index && allBells[t.end_bell_index - 1])
+                      || t.duration_seconds || 0);
+
+  let displayText = '--:--';
+  let color = '#fff';
+  let elapsed = 0;
+
+  if (t.status === 'paused') {
+    displayText = fmt(Number(t.remaining_seconds) || 0);
+  } else if ((t.status === 'running' || t.status === 'done') && t.started_at) {
     const started = Date.parse(String(t.started_at).replace(' ', 'T'));
-    const visualEnd = started + visualEndSec * 1000;
-    remaining = (visualEnd - (Date.now() + _serverOffsetMs)) / 1000;
-  } else if (t.status === 'paused') {
-    remaining = Number(t.remaining_seconds) || 0;
-  } else if (t.status === 'done' && t.started_at) {
-    // done で も 視覚 的 終了 まで 表示 続ける
-    const started = Date.parse(String(t.started_at).replace(' ', 'T'));
-    const visualEnd = started + visualEndSec * 1000;
-    remaining = (visualEnd - (Date.now() + _serverOffsetMs)) / 1000;
+    elapsed = ((Date.now() + _serverOffsetMs) - started) / 1000;
+    if (elapsed < endBellSec) {
+      const remain = Math.ceil(endBellSec - elapsed);
+      displayText = fmt(remain);
+      if (remain <= 30) color = '#ef4444';
+      else if (remain <= 60) color = '#f59e0b';
+    } else if (elapsed < maxBellSec) {
+      // ② 発表終了 後、 最後 の ベル まで は 0:00 から カウントアップ
+      displayText = fmt(Math.floor(elapsed - endBellSec));
+      color = '#fbbf24';
+    } else {
+      // ③ 超過
+      displayText = '+' + fmt(Math.floor(elapsed - maxBellSec));
+      color = '#9ca3af';
+    }
   }
 
   const elTime = document.getElementById('pt-time');
-  elTime.textContent = fmt(remaining);
-
-  // 色: 残り 60秒以下 で 赤、 30秒以下 で 明赤、 終了 で グレー
-  let color = '#fff';
-  if (t.status === 'done' || (remaining !== null && remaining <= 0)) color = '#9ca3af';
-  else if (remaining !== null && remaining <= 30) color = '#ef4444';
-  else if (remaining !== null && remaining <= 60) color = '#f59e0b';
+  elTime.textContent = displayText;
   elTime.style.color = color;
 
-  const statusLabel = {
-    running: '▶ 進行中',
-    paused: '⏸ 一時停止',
-    done: '🏁 終了',
-    cancelled: '❌ キャンセル',
-  }[t.status] || t.status;
+  const statusLabel = (() => {
+    if (t.status === 'paused') return '⏸ 一時停止';
+    if (t.status === 'cancelled') return '❌ キャンセル';
+    if (elapsed >= maxBellSec && maxBellSec > 0) return '⚠ 超過';
+    if (elapsed >= endBellSec && endBellSec > 0) return '🏁 発表終了 — 質疑';
+    if (t.status === 'running') return '▶ 進行中';
+    if (t.status === 'done')    return '🏁 終了';
+    return t.status || '';
+  })();
   document.getElementById('pt-status').textContent = statusLabel;
 
   // ベル 位置 表示 (= 現在 通過 した もの は ハイライト)
-  const bells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds].filter(b => b !== null && b !== undefined && b > 0);
-  const totalDur = t.duration_seconds || 0;
-  const elapsed = totalDur - (remaining ?? 0);
   document.getElementById('pt-bells').innerHTML = bells.map((b, i) => {
     const isEnd = (i + 1) === t.end_bell_index;
     const cur = elapsed >= b;
