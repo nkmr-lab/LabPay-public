@@ -44,7 +44,7 @@ function cd_list(PDO $pdo, array $cfg): void {
 function cd_upcoming(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $limit = max(1, min(20, (int)($_GET['limit'] ?? 5)));
-    $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.url, c.deadline_at,
+    $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
                                 TIMESTAMPDIFF(SECOND, NOW(), c.deadline_at) AS sec_ahead
                            FROM conf_deadlines c
                           WHERE c.deleted_at IS NULL AND c.deadline_at >= NOW()

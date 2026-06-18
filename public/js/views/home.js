@@ -1965,10 +1965,12 @@ async function renderConfDeadlinesWidget() {
         <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; padding:4px 0; align-items:flex-start; flex-direction:column">
           <div style="display:flex; gap:8px; width:100%; align-items:baseline">
             <span style="font-size:18px; flex:none">${escapeHtml(catIcon[r.category] || '📋')}</span>
-            <div class="grow bold" style="font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}${loc}</div>
+            <div class="bold" style="font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}${loc}</div>
+          </div>
+          <div style="display:flex; gap:8px; width:100%; align-items:baseline; padding-left:28px">
+            <div class="meta" style="flex:1; min-width:0">締切 ${escapeHtml(String(r.deadline_at).slice(0, 16).replace('T',' '))}</div>
             <div style="flex:none; font-weight:700; color:${color}; font-size:13px">${ahead}</div>
           </div>
-          <div class="meta" style="padding-left:28px">締切 ${escapeHtml(String(r.deadline_at).slice(0, 16).replace('T',' '))}</div>
         </a>`;
     }).join('');
   } catch (e) {
