@@ -299,18 +299,28 @@ function renderDetailHtml(g) {
     </div>` : '';
 
   // v582 #226 締切までの カウントダウン (締切 が ある時 だけ 出す)。
-  const countdownBlock = g.deadline_at ? `
-      <div id="pred-countdown" data-deadline="${escapeHtml(g.deadline_at)}"
-           style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
-                  border-left:4px solid #f59e0b; border-radius:6px; font-size:14px; color:#946d00">
-        ⏳ 締切まで <b id="pred-cd-text">計算中…</b>
-        <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
-      </div>` : '';
+  // v689 #273 締切 が 既に 過ぎて いれば 「締切終了」 を シンプル に 表示。 status badge も
+  //   server が 「open」 の まま でも 視覚 的 には 「締切済」 に 下げる。
+  const deadlinePassed = g.deadline_at
+    && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
+  const effectiveStatus = (g.status === 'open' && deadlinePassed) ? 'closed' : g.status;
+  const countdownBlock = !g.deadline_at ? '' : (deadlinePassed
+    ? `<div style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fee2e2, #fecaca);
+                   border-left:4px solid #dc2626; border-radius:6px; font-size:14px; color:#7f1d1d">
+         ⏰ 締切終了
+         <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
+       </div>`
+    : `<div id="pred-countdown" data-deadline="${escapeHtml(g.deadline_at)}"
+            style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
+                   border-left:4px solid #f59e0b; border-radius:6px; font-size:14px; color:#946d00">
+         ⏳ 締切まで <b id="pred-cd-text">計算中…</b>
+         <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
+       </div>`);
   return `
     <div class="card page-header">
       <div style="display:flex; align-items:center; gap:8px">
         <h2 style="margin:0; flex:1">${escapeHtml(g.title)}</h2>
-        ${statusBadge(g.status)}
+        <span id="pred-status-badge">${statusBadge(effectiveStatus)}</span>
         <button id="pred-share" class="btn" style="font-size:12px; padding:4px 8px" title="らぼったーで共有">💬 共有</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
@@ -344,10 +354,16 @@ function startPredCountdown() {
     if (!root2) { clearInterval(predCountdownTimer); predCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      txt.textContent = '締切超過 ⛔';
+      // v689 #273 「⏳ 締切まで 締切超過 ⛔」 だと 重ね表示 で 変 だった → root 全体 を
+      //   「⏰ 締切終了」 に 置き換え。 status badge も 「受付中」 のまま なら 「締切済」 に 下げる。
+      root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
       root.style.color = '#7f1d1d';
+      const badge = document.getElementById('pred-status-badge');
+      if (badge && /受付中/.test(badge.textContent)) {
+        badge.innerHTML = '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">締切済</span>';
+      }
       clearInterval(predCountdownTimer); predCountdownTimer = null;
       return;
     }

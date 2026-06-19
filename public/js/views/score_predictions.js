@@ -156,7 +156,8 @@ function startSpCountdown() {
     if (!document.getElementById('sp-countdown')) { clearInterval(spCountdownTimer); spCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      txt.textContent = '締切超過 ⛔';
+      // v689 #273 「⏳ 締切まで 締切超過 ⛔」 だと 重ね 表示 で 変 だった → 「⏰ 締切終了」 だけ に。
+      root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
       root.style.color = '#7f1d1d';
@@ -189,12 +190,17 @@ export async function renderScorePredictionDetail(ctx) {
 
 function paintSpDetail(g) {
   const app = document.getElementById('app');
-  const countdownBlock = g.deadline_at && g.status === 'open' ? `
-      <div id="sp-countdown" data-deadline="${escapeHtml(g.deadline_at)}"
-           style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
-                  border-left:4px solid #f59e0b; border-radius:6px; font-size:14px; color:#946d00">
-        ⏳ 締切まで <b id="sp-cd-text">計算中…</b>
-      </div>` : '';
+  // v689 #273 締切 が 過ぎて いれば シンプル に 「締切終了」 を 表示。
+  const deadlinePassed = g.deadline_at
+    && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
+  const countdownBlock = !g.deadline_at || g.status !== 'open' ? '' : (deadlinePassed
+    ? `<div style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fee2e2, #fecaca);
+                   border-left:4px solid #dc2626; border-radius:6px; font-size:14px; color:#7f1d1d">⏰ 締切終了</div>`
+    : `<div id="sp-countdown" data-deadline="${escapeHtml(g.deadline_at)}"
+            style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
+                   border-left:4px solid #f59e0b; border-radius:6px; font-size:14px; color:#946d00">
+         ⏳ 締切まで <b id="sp-cd-text">計算中…</b>
+       </div>`);
 
   let predictArea = '';
   if (g.status === 'open') {
