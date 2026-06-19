@@ -1970,15 +1970,17 @@ async function renderConfDeadlinesWidget() {
       const ahead = sec <= 0 ? '締切 過ぎ' : days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`;
       const color = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
       const loc = r.location ? ` (${escapeHtml(r.location)})` : '';
-      // v687 #271 件数 を 多く 出したい ので 1 件 = 1 行 に 詰める。 icon + 学会名(場所)
-      //   が flex:1 で 伸び、 右側 に 締切 (MM/DD) と 「あと N 日」 を 並べる。 学会名 が
-      //   長い 場合 は ellipsis で 1 行 に 収める。
-      const dateShort = String(r.deadline_at).slice(5, 10).replace('-', '/');
+      // v696 #281 サブ 締切 が ある と 「最寄り 未過去」 deadline を 表示 (server 側 で 計算 済)。
+      //   ラベル は 原稿 / 申込 等。 旧 deadline_at は フォールバック。
+      const dlAt = r.nearest_at || r.deadline_at;
+      const dlLabel = r.nearest_label || r.deadline_label || '';
+      const dateShort = String(dlAt).slice(5, 10).replace('-', '/');
+      const lblTag = dlLabel ? `<span style="font-size:10px; opacity:0.7; margin-right:2px">[${escapeHtml(dlLabel)}]</span>` : '';
       return `
         <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:6px; padding:2px 0; align-items:baseline; line-height:1.3">
           <span style="font-size:14px; flex:none">${escapeHtml(catIcon[r.category] || '📋')}</span>
           <div class="bold" style="font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.name)}${loc}</div>
-          <div class="meta" style="flex:none; font-size:11px; opacity:0.7">${escapeHtml(dateShort)}</div>
+          <div class="meta" style="flex:none; font-size:11px; opacity:0.7">${lblTag}${escapeHtml(dateShort)}</div>
           <div style="flex:none; font-weight:700; color:${color}; font-size:12px">${ahead}</div>
         </a>`;
     }).join('');

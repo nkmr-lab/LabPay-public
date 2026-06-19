@@ -44,14 +44,52 @@ function cd_list(PDO $pdo, array $cfg): void {
 function cd_upcoming(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $limit = max(1, min(20, (int)($_GET['limit'] ?? 5)));
-    $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
-                                c.deadline_label, c.deadline_is_aoe, c.extra_deadlines,
-                                TIMESTAMPDIFF(SECOND, NOW(), c.deadline_at) AS sec_ahead
-                           FROM conf_deadlines c
-                          WHERE c.deleted_at IS NULL AND c.deadline_at >= NOW()
-                          ORDER BY c.deadline_at ASC LIMIT $limit");
-    $st->execute();
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    // v696 #281 メイン 締切 が 過ぎて も サブ 締切 が 未来 なら 出す。 各 conf で 最も 近い
+    //   未過去 deadline (main / extras の どれか) を 採用 して それ で ソート する。
+    $st = $pdo->query("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
+                              c.deadline_label, c.deadline_is_aoe, c.extra_deadlines
+                         FROM conf_deadlines c WHERE c.deleted_at IS NULL
+                         ORDER BY c.deadline_at DESC LIMIT 200");
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    $now = time();
+    $result = [];
+    foreach ($rows as $r) {
+        $candidates = [];
+        $mainTs = strtotime((string)$r['deadline_at']);
+        if ($mainTs !== false && $mainTs > $now) {
+            $candidates[] = [
+                'label'  => $r['deadline_label'] !== null && $r['deadline_label'] !== '' ? $r['deadline_label'] : '原稿',
+                'at'     => $r['deadline_at'],
+                'is_aoe' => (int)$r['deadline_is_aoe'],
+                'kind'   => 'main',
+            ];
+        }
+        $extras = $r['extra_deadlines'] ? json_decode((string)$r['extra_deadlines'], true) : null;
+        if (is_array($extras)) {
+            foreach ($extras as $e) {
+                if (!is_array($e) || !isset($e['deadline_at'])) continue;
+                $ts = strtotime((string)$e['deadline_at']);
+                if ($ts === false || $ts <= $now) continue;
+                $candidates[] = [
+                    'label'  => (string)($e['label'] ?? '締切'),
+                    'at'     => (string)$e['deadline_at'],
+                    'is_aoe' => !empty($e['is_aoe']) ? 1 : 0,
+                    'kind'   => 'extra',
+                ];
+            }
+        }
+        if (!$candidates) continue;
+        usort($candidates, fn($a, $b) => strcmp($a['at'], $b['at']));
+        $nearest = $candidates[0];
+        $r['nearest_label']  = $nearest['label'];
+        $r['nearest_at']     = $nearest['at'];
+        $r['nearest_is_aoe'] = $nearest['is_aoe'];
+        $r['nearest_kind']   = $nearest['kind'];
+        $r['sec_ahead']      = strtotime($nearest['at']) - $now;
+        $result[] = $r;
+    }
+    usort($result, fn($a, $b) => $a['sec_ahead'] - $b['sec_ahead']);
+    json_response(['items' => array_slice($result, 0, $limit)]);
 }
 
 function cd_detail(PDO $pdo, array $cfg, int $id): void {

@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v696', d: '2026-06-20', s: '📅 ホーム 学会 〆切 widget で サブ 締切 も 考慮 する ように (#281)。 メイン 締切 (原稿) が 過ぎて も サブ 締切 (申込 / アブスト 等) が 未来 なら 出す。 各 conf の 最寄り 未過去 deadline で ソート、 ラベル付き で 表示' },
   { v: 'v695', d: '2026-06-19', s: '🐛 ホーム 娯楽 widget で 麻雀 を キャンセル 後 も 表示 され続ける bug 修正 (#280)。 recruiting cache が page lifetime で 持って いた ため 古い data の まま だった → renderHome 冒頭 で 必ず キャッシュ を 捨てる ように' },
   { v: 'v694', d: '2026-06-19', s: '🐛🎉 AI 麻雀 「対局 を 終了」 で Internal Server Error 修正 + 娯楽 widget に 「締切済 結果待ち」 の 予想 を 表示 (#279, #278)。 AI bot は accounts row が ない ので 返金 対象 から 除外 (人間 のみ)。 優勝予想 / 勝敗予測 は status open/closed の もの を 全件 取得 して 締切後 は pending タグ で 表示' },
   { v: 'v693', d: '2026-06-19', s: '🎉 ホーム の 娯楽 widget を 折りたたまず 全件 表示 に (#277)。 従来 は 上位 10 件 + 「他 N 件 (1 週間 以上先)」 hint だった が、 娯楽 だけ は 全件 並べる ように。 renderCategoryWidget に showAll オプション を 追加' },
