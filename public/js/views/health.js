@@ -32,7 +32,12 @@ export async function renderHealth() {
         <input type="text" id="hl-memo" maxlength="200" placeholder="メモ (任意)" style="flex:1; min-width:140px; font-size:13px">
         <button id="hl-save" class="primary" style="padding:4px 12px; font-size:13px">＋ 記録</button>
       </div>
-      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。 体重は 0.1kg 単位。 ※ 個人ツール、 他のメンバーには見えません。</div>
+      <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center">
+        <label class="hint-sm" style="font-size:11px">📅 日付</label>
+        <input type="date" id="hl-date" style="font-size:13px; padding:2px 6px">
+        <button id="hl-date-today" type="button" class="btn" style="font-size:11px; padding:2px 8px">今日</button>
+      </div>
+      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。 体重は 0.1kg 単位。 日付 を 変えれば 過去 日 の 記録 も 追加 可能。 ※ 個人ツール、 他のメンバーには見えません。</div>
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">📈 推移</div>
@@ -45,6 +50,11 @@ export async function renderHealth() {
   `;
   document.getElementById('hl-days').addEventListener('change', refresh);
   document.getElementById('hl-save').addEventListener('click', save);
+  // v690 #274 日付 入力 を 今日 に 初期化 + 「今日」 ボタン
+  const dateEl = document.getElementById('hl-date');
+  const setToday = () => { dateEl.value = new Date().toISOString().slice(0, 10); };
+  setToday();
+  document.getElementById('hl-date-today').addEventListener('click', setToday);
   await refresh();
 }
 
@@ -68,18 +78,27 @@ async function save() {
   const h = document.getElementById('hl-height').value.trim();
   const b = document.getElementById('hl-bf').value.trim();
   const m = document.getElementById('hl-memo').value.trim();
+  const dStr = document.getElementById('hl-date').value.trim();
   if (!w && !h && !b) { toast('1 つは入力してください'); return; }
+  // v690 #274 日付 を 過去 日 で 指定 する 場合 は その日 の 23:59:59 で 送る
+  //   (server で DateTime parse 通る)。 今日 の 場合 は recorded_at を 渡さず NOW() に 任せる。
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const payload = {
+    weight_kg: w || null,
+    height_cm: h || null,
+    body_fat_pct: b || null,
+    memo: m || null,
+  };
+  if (dStr && dStr !== todayStr) {
+    payload.recorded_at = dStr + ' 23:59:59';
+  }
   try {
-    await post('/api/health/record', {
-      weight_kg: w || null,
-      height_cm: h || null,
-      body_fat_pct: b || null,
-      memo: m || null,
-    });
+    await post('/api/health/record', payload);
     document.getElementById('hl-weight').value = '';
     document.getElementById('hl-bf').value = '';
     document.getElementById('hl-memo').value = '';
-    toast('記録しました');
+    document.getElementById('hl-date').value = todayStr;
+    toast(dStr === todayStr ? '記録しました' : `${dStr} の 記録 として 保存 しました`);
     await refresh();
   } catch (e) { toast('失敗: ' + e.message); }
 }
