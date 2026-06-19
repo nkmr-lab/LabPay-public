@@ -45,6 +45,7 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $limit = max(1, min(20, (int)($_GET['limit'] ?? 5)));
     $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
+                                c.deadline_label, c.deadline_is_aoe, c.extra_deadlines,
                                 TIMESTAMPDIFF(SECOND, NOW(), c.deadline_at) AS sec_ahead
                            FROM conf_deadlines c
                           WHERE c.deleted_at IS NULL AND c.deadline_at >= NOW()
@@ -67,11 +68,14 @@ function cd_detail(PDO $pdo, array $cfg, int $id): void {
 function cd_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
-    [$category, $name, $fullName, $url, $deadlineAt, $notifAt, $eventStart, $eventEnd, $location, $notes] = cd_validate($body);
+    $v = cd_validate($body);
     $pdo->prepare("INSERT INTO conf_deadlines
-        (category, name, full_name, url, deadline_at, notification_at, event_start, event_end, location, notes, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-        ->execute([$category, $name, $fullName, $url, $deadlineAt, $notifAt, $eventStart, $eventEnd, $location, $notes, (int)$u['id']]);
+        (category, name, full_name, url, deadline_at, deadline_label, deadline_is_aoe, extra_deadlines,
+         notification_at, event_start, event_end, location, notes, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$v['category'], $v['name'], $v['full_name'], $v['url'], $v['deadline_at'],
+                   $v['deadline_label'], $v['deadline_is_aoe'], $v['extra_deadlines'],
+                   $v['notification_at'], $v['event_start'], $v['event_end'], $v['location'], $v['notes'], (int)$u['id']]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -86,11 +90,14 @@ function cd_update(PDO $pdo, array $cfg, int $id): void {
         throw new ApiException('forbidden', '登録者 または admin のみ', 403);
     }
     $body = read_json_body();
-    [$category, $name, $fullName, $url, $deadlineAt, $notifAt, $eventStart, $eventEnd, $location, $notes] = cd_validate($body);
+    $v = cd_validate($body);
     $pdo->prepare("UPDATE conf_deadlines
-        SET category=?, name=?, full_name=?, url=?, deadline_at=?, notification_at=?, event_start=?, event_end=?, location=?, notes=?
+        SET category=?, name=?, full_name=?, url=?, deadline_at=?, deadline_label=?, deadline_is_aoe=?, extra_deadlines=?,
+            notification_at=?, event_start=?, event_end=?, location=?, notes=?
         WHERE id=?")
-        ->execute([$category, $name, $fullName, $url, $deadlineAt, $notifAt, $eventStart, $eventEnd, $location, $notes, $id]);
+        ->execute([$v['category'], $v['name'], $v['full_name'], $v['url'], $v['deadline_at'],
+                   $v['deadline_label'], $v['deadline_is_aoe'], $v['extra_deadlines'],
+                   $v['notification_at'], $v['event_start'], $v['event_end'], $v['location'], $v['notes'], $id]);
     json_response(['ok' => true]);
 }
 
@@ -108,6 +115,14 @@ function cd_delete(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
+function cd_parse_datetime(string $raw): ?string {
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+       ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+       ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+       ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+    return $dt ? $dt->format('Y-m-d H:i:s') : null;
+}
+
 function cd_validate(array $body): array {
     $category = (string)($body['category'] ?? 'intl_conf');
     if (!in_array($category, CD_VALID_CATS, true)) throw new ApiException('bad_request', 'category 不正', 400);
@@ -117,19 +132,39 @@ function cd_validate(array $body): array {
     if ($fullName === '') $fullName = null;
     $url = isset($body['url']) ? mb_substr((string)$body['url'], 0, 500) : null;
     if ($url === '') $url = null;
-    $deadlineRaw = (string)($body['deadline_at'] ?? '');
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $deadlineRaw)
-       ?: DateTime::createFromFormat('Y-m-d H:i', $deadlineRaw)
-       ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $deadlineRaw)
-       ?: DateTime::createFromFormat('Y-m-d H:i:s', $deadlineRaw);
-    if (!$dt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
-    $deadlineAt = $dt->format('Y-m-d H:i:s');
+    $deadlineAt = cd_parse_datetime((string)($body['deadline_at'] ?? ''));
+    if (!$deadlineAt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
+    // v691 #275 メイン 締切 の ラベル (原稿 / 申込 / アブスト etc.) と AOE フラグ
+    $deadlineLabel = isset($body['deadline_label']) ? mb_substr(trim((string)$body['deadline_label']), 0, 50) : null;
+    if ($deadlineLabel === '') $deadlineLabel = null;
+    $deadlineIsAoe = !empty($body['deadline_is_aoe']) ? 1 : 0;
+    // v691 #275 追加 の サブ 締切 (申込 / アブスト 等)。 配列 of {label, deadline_at, is_aoe}
+    $extraJson = null;
+    if (!empty($body['extra_deadlines']) && is_array($body['extra_deadlines'])) {
+        $clean = [];
+        foreach ($body['extra_deadlines'] as $e) {
+            if (!is_array($e)) continue;
+            $dl = cd_parse_datetime((string)($e['deadline_at'] ?? ''));
+            if (!$dl) continue;
+            $lbl = mb_substr(trim((string)($e['label'] ?? '')), 0, 50);
+            if ($lbl === '') $lbl = '締切';
+            $clean[] = [
+                'label' => $lbl,
+                'deadline_at' => $dl,
+                'is_aoe' => !empty($e['is_aoe']) ? 1 : 0,
+            ];
+            if (count($clean) >= 10) break;
+        }
+        if ($clean) $extraJson = json_encode($clean, JSON_UNESCAPED_UNICODE);
+    }
     $notifAt = null;
     if (!empty($body['notification_at'])) {
-        $ndt = DateTime::createFromFormat('Y-m-d\TH:i', (string)$body['notification_at'])
-            ?: DateTime::createFromFormat('Y-m-d H:i', (string)$body['notification_at'])
-            ?: DateTime::createFromFormat('Y-m-d', (string)$body['notification_at']);
-        if ($ndt) $notifAt = $ndt->format('Y-m-d H:i:s');
+        $ndt = cd_parse_datetime((string)$body['notification_at']);
+        if (!$ndt) {
+            $ndt2 = DateTime::createFromFormat('Y-m-d', (string)$body['notification_at']);
+            if ($ndt2) $ndt = $ndt2->format('Y-m-d 00:00:00');
+        }
+        if ($ndt) $notifAt = $ndt;
     }
     $eventStart = !empty($body['event_start']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$body['event_start']) ? $body['event_start'] : null;
     $eventEnd   = !empty($body['event_end'])   && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$body['event_end'])   ? $body['event_end']   : null;
@@ -137,5 +172,10 @@ function cd_validate(array $body): array {
     if ($location === '') $location = null;
     $notes = isset($body['notes']) ? mb_substr((string)$body['notes'], 0, 2000) : null;
     if ($notes === '') $notes = null;
-    return [$category, $name, $fullName, $url, $deadlineAt, $notifAt, $eventStart, $eventEnd, $location, $notes];
+    return [
+        'category' => $category, 'name' => $name, 'full_name' => $fullName, 'url' => $url,
+        'deadline_at' => $deadlineAt, 'deadline_label' => $deadlineLabel, 'deadline_is_aoe' => $deadlineIsAoe,
+        'extra_deadlines' => $extraJson, 'notification_at' => $notifAt,
+        'event_start' => $eventStart, 'event_end' => $eventEnd, 'location' => $location, 'notes' => $notes,
+    ];
 }

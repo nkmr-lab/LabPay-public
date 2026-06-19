@@ -27,6 +27,35 @@ function fmtDate(s) {
   return String(s).slice(0, 16).replace('T', ' ');
 }
 
+// v691 #275 AOE (Anywhere on Earth = UTC-12) サポート
+//   AOE 入力 ↔ JST 保存 の 変換 (JST = AOE + 21 時間)。
+//   保存 は 常 に JST wall-clock で、 表示時 に is_aoe なら AOE 形式 に 戻して 見せる。
+function jstStrToAoeStr(jstStr) {
+  if (!jstStr) return '';
+  // jstStr = "2026-06-20 20:59:00" (treat as JST wall-clock)
+  const iso = String(jstStr).replace(' ', 'T') + '+09:00';
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) return '';
+  // AOE = UTC-12. Format the instant in UTC-12 → use offset by hand.
+  const aoe = new Date(ms - 12 * 3600 * 1000); // UTC time - 12h gives AOE wall-clock when read as UTC
+  return aoe.toISOString().slice(0, 16).replace('T', ' ');
+}
+function aoeStrToJstStr(aoeStr) {
+  if (!aoeStr) return '';
+  // aoeStr = "2026-06-19 23:59" treat as UTC-12 wall-clock
+  const iso = String(aoeStr).replace(' ', 'T') + '-12:00';
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) return '';
+  // Format as JST wall-clock
+  const jst = new Date(ms + 9 * 3600 * 1000);
+  return jst.toISOString().slice(0, 16).replace('T', ' ');
+}
+function parseExtra(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch (_) { return []; }
+}
+
 export async function renderConfDeadlines() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -74,12 +103,17 @@ export async function renderConfDeadlines() {
         const ahead = fmtAhead(sec);
         const aheadColor = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
         const canEdit = Number(r.created_by_user_id) === meId;
+        // v691 #275 label / AOE / extras 件数 を 表示
+        const mainLbl = r.deadline_label || '締切';
+        const aoeBadge = Number(r.deadline_is_aoe) ? ' 🌐AOE' : '';
+        const extras = parseExtra(r.extra_deadlines);
+        const extraNote = extras.length ? ` (+${extras.length}件)` : '';
         return `
           <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; align-items:flex-start">
             <span style="font-size:24px; flex:none">${escapeHtml(cat.icon)}</span>
             <div class="grow" style="min-width:0">
               <div class="bold" style="font-size:15px">${escapeHtml(r.name)}</div>
-              <div class="meta">${escapeHtml(cat.label)} ・ 締切 ${escapeHtml(fmtDate(r.deadline_at))}</div>
+              <div class="meta">${escapeHtml(cat.label)} ・ ${escapeHtml(mainLbl)}${aoeBadge} ${escapeHtml(fmtDate(r.deadline_at))}${extraNote}</div>
               ${r.location ? `<div class="meta">📍 ${escapeHtml(r.location)}</div>` : ''}
               <div class="meta">登録: ${escapeHtml(r.creator_name)}${canEdit ? ' ・ あなた' : ''}</div>
             </div>
@@ -127,9 +161,28 @@ export async function renderConfDeadlineForm({ params } = {}) {
       <label class="field"><span class="lbl">URL (任意)</span>
         <input type="url" id="cd-url" maxlength="500" placeholder="https://...">
       </label>
-      <label class="field"><span class="lbl">投稿 締切 (必須)</span>
-        <input type="datetime-local" id="cd-deadline" required>
-      </label>
+      <fieldset class="field" style="border:1px solid var(--line); border-radius:6px; padding:8px">
+        <legend style="font-size:12px; color:#666">📅 メイン 締切 (必須)</legend>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label style="flex:1; min-width:120px"><span class="lbl" style="font-size:11px">種別 (任意)</span>
+            <input type="text" id="cd-deadline-label" maxlength="50" placeholder="原稿 / 申込 / アブスト 等">
+          </label>
+          <label style="flex:2; min-width:180px"><span class="lbl" style="font-size:11px">日時</span>
+            <input type="datetime-local" id="cd-deadline" required>
+          </label>
+        </div>
+        <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
+          <input type="checkbox" id="cd-deadline-aoe">
+          🌐 AOE (Anywhere on Earth) で 指定 する
+          <span class="hint-sm" style="font-size:10px">※ AOE = UTC-12。 入力 は AOE 時刻 で、 内部 は JST 換算 で 保存。</span>
+        </label>
+      </fieldset>
+      <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px">
+        <legend style="font-size:12px; color:#666">➕ サブ 締切 (任意、 最大 10 件)</legend>
+        <div id="cd-extras"></div>
+        <button type="button" id="cd-extra-add" class="btn" style="font-size:12px; padding:2px 8px">＋ サブ 締切 を 追加</button>
+        <div class="hint-sm" style="font-size:10px; margin-top:4px">申込 / アブスト など、 原稿 締切 以外 の 締切 を 並べて 登録 できます。</div>
+      </fieldset>
       <label class="field"><span class="lbl">採択 通知日 (任意)</span>
         <input type="datetime-local" id="cd-notification">
       </label>
@@ -154,6 +207,37 @@ export async function renderConfDeadlineForm({ params } = {}) {
       </div>
     </div>
   `;
+  // v691 #275 サブ 締切 の 行 を 追加
+  const extrasRoot = document.getElementById('cd-extras');
+  function addExtraRow(initial) {
+    const row = document.createElement('div');
+    row.className = 'row cd-extra-row';
+    row.style.cssText = 'gap:6px; align-items:flex-end; margin-bottom:4px; flex-wrap:wrap';
+    row.innerHTML = `
+      <input type="text" class="cd-ex-label" maxlength="50" placeholder="種別 (申込 / アブスト 等)" style="flex:1; min-width:120px; font-size:12px">
+      <input type="datetime-local" class="cd-ex-dt" style="flex:2; min-width:180px; font-size:12px">
+      <label style="display:inline-flex; gap:4px; align-items:center; font-size:11px">
+        <input type="checkbox" class="cd-ex-aoe"> AOE
+      </label>
+      <button type="button" class="btn cd-ex-rm danger" style="font-size:11px; padding:2px 6px">削除</button>
+    `;
+    if (initial) {
+      row.querySelector('.cd-ex-label').value = initial.label || '';
+      const dt = String(initial.deadline_at || '').replace(' ', 'T').slice(0, 16);
+      if (initial.is_aoe) {
+        row.querySelector('.cd-ex-aoe').checked = true;
+        row.querySelector('.cd-ex-dt').value = jstStrToAoeStr(initial.deadline_at);
+      } else {
+        row.querySelector('.cd-ex-dt').value = dt;
+      }
+    }
+    row.querySelector('.cd-ex-rm').addEventListener('click', () => row.remove());
+    extrasRoot.appendChild(row);
+  }
+  document.getElementById('cd-extra-add').addEventListener('click', () => {
+    if (extrasRoot.querySelectorAll('.cd-extra-row').length >= 10) { toast('サブ 締切 は 最大 10 件'); return; }
+    addExtraRow();
+  });
   if (isEdit) {
     try {
       const r = await get('/api/conf-deadlines/' + id);
@@ -161,8 +245,14 @@ export async function renderConfDeadlineForm({ params } = {}) {
       document.getElementById('cd-name').value = r.name || '';
       document.getElementById('cd-full-name').value = r.full_name || '';
       document.getElementById('cd-url').value = r.url || '';
-      const dl = (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
-      document.getElementById('cd-deadline').value = dl;
+      document.getElementById('cd-deadline-label').value = r.deadline_label || '';
+      document.getElementById('cd-deadline-aoe').checked = !!Number(r.deadline_is_aoe);
+      if (Number(r.deadline_is_aoe)) {
+        document.getElementById('cd-deadline').value = jstStrToAoeStr(r.deadline_at);
+      } else {
+        document.getElementById('cd-deadline').value = (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
+      }
+      parseExtra(r.extra_deadlines).forEach(addExtraRow);
       if (r.notification_at) document.getElementById('cd-notification').value = (r.notification_at || '').replace(' ', 'T').slice(0, 16);
       if (r.event_start) document.getElementById('cd-event-start').value = String(r.event_start).slice(0, 10);
       if (r.event_end)   document.getElementById('cd-event-end').value = String(r.event_end).slice(0, 10);
@@ -176,12 +266,30 @@ export async function renderConfDeadlineForm({ params } = {}) {
     } catch (e) { toast('取得 失敗: ' + e.message); return; }
   }
   document.getElementById('cd-save').addEventListener('click', async () => {
+    const isAoe = document.getElementById('cd-deadline-aoe').checked;
+    const dlInput = document.getElementById('cd-deadline').value;
+    const deadlineJst = isAoe ? aoeStrToJstStr(dlInput) : dlInput;
+    const extras = [];
+    document.querySelectorAll('.cd-extra-row').forEach(row => {
+      const lbl = row.querySelector('.cd-ex-label').value.trim();
+      const dt = row.querySelector('.cd-ex-dt').value;
+      const aoe = row.querySelector('.cd-ex-aoe').checked;
+      if (!dt) return;
+      extras.push({
+        label: lbl || '締切',
+        deadline_at: aoe ? aoeStrToJstStr(dt) : dt,
+        is_aoe: aoe ? 1 : 0,
+      });
+    });
     const data = {
       category: document.getElementById('cd-category').value,
       name: document.getElementById('cd-name').value.trim(),
       full_name: document.getElementById('cd-full-name').value.trim() || null,
       url: document.getElementById('cd-url').value.trim() || null,
-      deadline_at: document.getElementById('cd-deadline').value,
+      deadline_at: deadlineJst,
+      deadline_label: document.getElementById('cd-deadline-label').value.trim() || null,
+      deadline_is_aoe: isAoe ? 1 : 0,
+      extra_deadlines: extras,
       notification_at: document.getElementById('cd-notification').value || null,
       event_start: document.getElementById('cd-event-start').value || null,
       event_end: document.getElementById('cd-event-end').value || null,
@@ -221,6 +329,25 @@ export async function renderConfDeadlineDetail({ params }) {
     const dl = new Date(String(r.deadline_at).replace(' ', 'T'));
     const sec = Math.floor((dl - new Date()) / 1000);
     const aheadColor = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
+    // v691 #275 メイン + サブ 締切 を 1 つ の リスト に まとめて 表示。 AOE 付き は AOE 形式 も 併記。
+    const mainLabel = r.deadline_label || '投稿 締切';
+    const mainAoe = !!Number(r.deadline_is_aoe);
+    const allDeadlines = [
+      { label: mainLabel, deadline_at: r.deadline_at, is_aoe: mainAoe ? 1 : 0, _main: true },
+      ...parseExtra(r.extra_deadlines),
+    ];
+    const dlHtml = allDeadlines.map(d => {
+      const dl2 = new Date(String(d.deadline_at).replace(' ', 'T'));
+      const s2 = Math.floor((dl2 - new Date()) / 1000);
+      const col = s2 <= 0 ? '#999' : s2 < 86400*3 ? '#dc2626' : s2 < 86400*14 ? '#ea580c' : '#10b981';
+      const aoeBadge = d.is_aoe ? '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px; margin-left:4px">🌐 AOE</span>' : '';
+      const aoeNote = d.is_aoe ? `<div class="hint-sm" style="font-size:10px">AOE: ${escapeHtml(jstStrToAoeStr(d.deadline_at))}</div>` : '';
+      return `<div style="padding:8px 12px; background:${d._main ? '#fef3c7' : '#fff7ed'}; border-radius:6px; margin-top:6px; border-left:3px solid ${col}">
+        <div class="hint-sm">${escapeHtml(d.label)}${aoeBadge}</div>
+        <div style="font-size:16px; font-weight:700; color:${col}">${escapeHtml(fmtDate(d.deadline_at))} (${fmtAhead(s2)})</div>
+        ${aoeNote}
+      </div>`;
+    }).join('');
     document.getElementById('cd-detail').innerHTML = `
       <div class="row center" style="gap:8px">
         <span style="font-size:32px">${escapeHtml(cat.icon)}</span>
@@ -231,10 +358,7 @@ export async function renderConfDeadlineDetail({ params }) {
         </div>
         ${canEdit ? `<a class="btn" href="#/conf-deadlines/${id}/edit">編集</a>` : ''}
       </div>
-      <div style="margin-top:12px; padding:10px 14px; background:#fef3c7; border-radius:6px">
-        <div class="hint-sm">投稿 締切</div>
-        <div style="font-size:20px; font-weight:700; color:${aheadColor}">${escapeHtml(fmtDate(r.deadline_at))} (${fmtAhead(sec)})</div>
-      </div>
+      ${dlHtml}
       ${r.notification_at ? `<div class="meta" style="margin-top:6px">📬 採択 通知: ${escapeHtml(fmtDate(r.notification_at))}</div>` : ''}
       ${(r.event_start || r.event_end) ? `<div class="meta">📆 開催: ${escapeHtml(String(r.event_start || '').slice(0, 10))}${r.event_end ? ' 〜 ' + escapeHtml(String(r.event_end).slice(0, 10)) : ''}</div>` : ''}
       ${r.location ? `<div class="meta">📍 ${escapeHtml(r.location)}</div>` : ''}

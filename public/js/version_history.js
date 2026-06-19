@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v691', d: '2026-06-19', s: '📅 学会 〆切 で メイン 締切 に 種別 ラベル (原稿 / 申込 / アブスト 等) + AOE フラグ を 追加 + サブ 締切 を 同 entry 内 に 最大 10 件 並べられる ように (#275)。 AOE 入力 は JST 換算 して 保存、 表示 時 に 元 の AOE 形式 も 併記。 conf_deadlines table に deadline_label / deadline_is_aoe / extra_deadlines を 追加' },
   { v: 'v690', d: '2026-06-19', s: '⚖️ 体重 / BMI 記録 で 過去 日 の 入力 が できる ように (#274)。 「📅 日付」 入力 + 「今日」 ボタン を 追加、 既定 は 今日。 過去 日 を 選ぶ と recorded_at に その日 の 23:59:59 を 渡して 保存。 server 側 は 元々 recorded_at 受付 済 だった ので UI 追加 のみ' },
   { v: 'v689', d: '2026-06-19', s: '🏆 優勝予想 / スコア予想 で 「⏳ 締切まで 締切超過 ⛔」 だった 重ね 表示 を 修正 (#273)。 締切 を 過ぎたら シンプル に 「⏰ 締切終了」 を 表示、 status badge も 「受付中」 のまま なら 「締切済」 に 下げる' },
   { v: 'v688', d: '2026-06-18', s: '📅 学会 〆切 widget で list-item の 80px 既定 高 を 解除 (#272)。 v687 で 1 行 化 した のに list-item の height:80px が 効いて しまい 縦幅 を 取り過ぎて いた → conf-deadlines カード だけ height:auto + min-height:0 に override' },
