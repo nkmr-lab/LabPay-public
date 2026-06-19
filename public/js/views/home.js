@@ -283,6 +283,8 @@ function applyHomeLayout() {
 export async function renderHome() {
   if (!state.me) await refreshMe();
   if (!state.me) { navigate('#/login'); return; }
+  // v695 #280 home に 入る たび に recruiting cache を 捨てて 新鮮 な データ で 描き直す。
+  invalidateRecruitingCache();
 
   const app = document.getElementById('app');
   // v514 #131 ホームの並びを再編。 my-timers / pending を balance hero より上に出すため
@@ -1807,7 +1809,12 @@ async function loadBingoMini() {
 // v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
 // v649 共通: /api/me/recruiting を 取得 + sec_ahead で 1 週間以上先 を 集約。
 const ONE_WEEK_SEC = 7 * 86400;
+// v695 #280 home の widget で 使う recruiting cache は per-render (1 hydrate ごと) で 揃える。
+//   従来 は page lifetime で 持って いた ので、 麻雀 を cancel → ホーム に 戻る で 古い data
+//   が 表示 され続けて いた。 renderHome 冒頭 で clear する ことで、 同じ render 内 で の
+//   複数 widget 呼び出し は 共有、 home を 再 描画 する 度 に 必ず フェッチ し直す。
 let _recruitingCache = null;
+function invalidateRecruitingCache() { _recruitingCache = null; }
 async function fetchRecruitingItems() {
   if (_recruitingCache) return _recruitingCache;
   _recruitingCache = (async () => {
