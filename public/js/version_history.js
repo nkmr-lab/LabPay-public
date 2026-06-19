@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v693', d: '2026-06-19', s: '🎉 ホーム の 娯楽 widget を 折りたたまず 全件 表示 に (#277)。 従来 は 上位 10 件 + 「他 N 件 (1 週間 以上先)」 hint だった が、 娯楽 だけ は 全件 並べる ように。 renderCategoryWidget に showAll オプション を 追加' },
   { v: 'v692', d: '2026-06-19', s: '🀄 AI 麻雀 対戦 中 に 「対局 を 終了」 ボタン を 追加 (#276)。 起案者 (= AI 戦 で は 自分) は playing 中 で も 卓 を キャンセル できる。 既存 の /cancel endpoint を 利用、 state response に is_creator フラグ を 追加' },
   { v: 'v691', d: '2026-06-19', s: '📅 学会 〆切 で メイン 締切 に 種別 ラベル (原稿 / 申込 / アブスト 等) + AOE フラグ を 追加 + サブ 締切 を 同 entry 内 に 最大 10 件 並べられる ように (#275)。 AOE 入力 は JST 換算 して 保存、 表示 時 に 元 の AOE 形式 も 併記。 conf_deadlines table に deadline_label / deadline_is_aoe / extra_deadlines を 追加' },
   { v: 'v690', d: '2026-06-19', s: '⚖️ 体重 / BMI 記録 で 過去 日 の 入力 が できる ように (#274)。 「📅 日付」 入力 + 「今日」 ボタン を 追加、 既定 は 今日。 過去 日 を 選ぶ と recorded_at に その日 の 23:59:59 を 渡して 保存。 server 側 は 元々 recorded_at 受付 済 だった ので UI 追加 のみ' },

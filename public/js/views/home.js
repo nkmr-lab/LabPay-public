@@ -1882,6 +1882,7 @@ async function renderEntertainmentWidget() {
     title: '🎉 娯楽',
     cat: 'entertainment',
     emptyMsg: 'ゲーム / 予想 / ドラフト / クイズ 関連 は ありません',
+    showAll: true, // v693 #277 折りたたまず 全件 表示
   });
 }
 
@@ -2017,7 +2018,7 @@ async function renderAchievementsWidget() {
   }
 }
 
-async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg }) {
+async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, showAll }) {
   const card = document.getElementById(cardId);
   const root = document.getElementById(rootId);
   if (!card || !root) return;
@@ -2047,9 +2048,15 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg }) {
   if (counts.vote)   parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
   if (counts.work)   parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
   card.querySelector('.row-title').innerHTML = `${title} ・ ${parts.join(' / ') || ''}`;
-  let html = soon.slice(0, 10).map(renderItemRow).join('');
-  if (later.length) {
-    html += `<div class="hint-sm" style="font-size:12px; padding:6px 0; border-top:1px solid var(--line); margin-top:4px">⏳ 他 <b>${later.length}</b> 件 (1 週間 以上先)</div>`;
+  // v693 #277 showAll=true で 全件 (= soon + later) を 並べる。 既定 は 従来 通り 上位 10 + 他 N 件 hint。
+  let html;
+  if (showAll) {
+    html = soon.concat(later).map(renderItemRow).join('');
+  } else {
+    html = soon.slice(0, 10).map(renderItemRow).join('');
+    if (later.length) {
+      html += `<div class="hint-sm" style="font-size:12px; padding:6px 0; border-top:1px solid var(--line); margin-top:4px">⏳ 他 <b>${later.length}</b> 件 (1 週間 以上先)</div>`;
+    }
   }
   root.innerHTML = html;
 }
