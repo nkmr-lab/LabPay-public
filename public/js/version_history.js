@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v698', d: '2026-06-20', s: '👥 学会 〆切 の メンバー 追加 で 共通 メンバー picker を 利用 (#284)。 v697 で prompt() で user ID を カンマ 区切り 入力 だった のを 廃止 し、 modal 内 の member_picker (学年 / 性別 bulk + chip 選択) を 使う ように。 既存 メンバー と 起案者 は exclude' },
   { v: 'v697', d: '2026-06-20', s: '👥 学会 〆切 に メンバー 機能 を 追加 (#282) + admin が 自分 で 送った feedback の 通知 は 既読 化 (#283)。 起案者 / admin は メンバー を 追加 でき、 誰 でも ⭐ 参加 / 離脱 可能。 自分 関連 の conf は ホーム / 一覧 で ⭐ + 黄色 ハイライト、 「自分 関連 のみ」 フィルター も 追加。 conf_deadline_members table 追加。 feedback の 通知 は Notifier::notify が 自動 で admin → 既読 マーク' },
   { v: 'v696', d: '2026-06-20', s: '📅 ホーム 学会 〆切 widget で サブ 締切 も 考慮 する ように (#281)。 メイン 締切 (原稿) が 過ぎて も サブ 締切 (申込 / アブスト 等) が 未来 なら 出す。 各 conf の 最寄り 未過去 deadline で ソート、 ラベル付き で 表示' },
   { v: 'v695', d: '2026-06-19', s: '🐛 ホーム 娯楽 widget で 麻雀 を キャンセル 後 も 表示 され続ける bug 修正 (#280)。 recruiting cache が page lifetime で 持って いた ため 古い data の まま だった → renderHome 冒頭 で 必ず キャッシュ を 捨てる ように' },

@@ -4,6 +4,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { createMemberPicker } from '../member_picker.js';
 
 const CATEGORIES = {
   intl_conf:    { icon: '🌐', label: '国際 会議' },
@@ -409,13 +410,40 @@ export async function renderConfDeadlineDetail({ params }) {
       try { await post('/api/conf-deadlines/' + id + '/leave', {}); toast('離脱 しました'); renderConfDeadlineDetail({ params: { id } }); }
       catch (e) { toast('失敗: ' + e.message); }
     });
+    // v698 #284 prompt 入力 を 廃止 し、 共通 の member_picker を modal で 出す。
     document.getElementById('cd-add-member')?.addEventListener('click', async () => {
-      const input = prompt('追加 する ユーザ ID を カンマ 区切り で 入力 (例: 5,12,17)');
-      if (!input) return;
-      const ids = input.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
-      if (!ids.length) { toast('ユーザ ID が ありません'); return; }
-      try { await post('/api/conf-deadlines/' + id + '/members', { user_ids: ids }); toast('追加 しました'); renderConfDeadlineDetail({ params: { id } }); }
-      catch (e) { toast('失敗: ' + e.message); }
+      const existingIds = (r.members || []).map(m => Number(m.user_id));
+      const exclude = existingIds.concat([Number(r.created_by_user_id)]);
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; padding:14px';
+      wrap.innerHTML = `
+        <div style="background:#fff; border-radius:8px; padding:14px; max-width:600px; width:100%; max-height:80vh; overflow-y:auto">
+          <div class="bold" style="margin-bottom:6px">👥 メンバー を 選択 (<span id="cd-mp-count">0</span>)</div>
+          <div id="cd-mp-bulk" class="row" style="flex-wrap:wrap; gap:4px; margin-bottom:6px"></div>
+          <div id="cd-mp-chips" class="row" style="flex-wrap:wrap; gap:4px"></div>
+          <div class="row" style="gap:6px; margin-top:10px; justify-content:flex-end">
+            <button id="cd-mp-cancel" class="btn">キャンセル</button>
+            <button id="cd-mp-ok" class="btn primary">追加 する</button>
+          </div>
+        </div>`;
+      document.body.appendChild(wrap);
+      const picker = await createMemberPicker({
+        bulkContainer: wrap.querySelector('#cd-mp-bulk'),
+        chipsContainer: wrap.querySelector('#cd-mp-chips'),
+        countLabel: wrap.querySelector('#cd-mp-count'),
+        excludeIds: exclude,
+      });
+      wrap.querySelector('#cd-mp-cancel').addEventListener('click', () => wrap.remove());
+      wrap.querySelector('#cd-mp-ok').addEventListener('click', async () => {
+        const ids = [...picker.getSelected()];
+        if (!ids.length) { toast('1 人 以上 選んで ください'); return; }
+        try {
+          await post('/api/conf-deadlines/' + id + '/members', { user_ids: ids });
+          toast(`${ids.length} 人 追加 しました`);
+          wrap.remove();
+          renderConfDeadlineDetail({ params: { id } });
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
     });
     document.querySelectorAll('[data-rm-member]').forEach(b => b.addEventListener('click', async (ev) => {
       ev.preventDefault();
