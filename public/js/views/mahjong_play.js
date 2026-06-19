@@ -82,7 +82,12 @@ export async function renderMahjongPlay({ params }) {
       <div class="muted">…</div>
     </div>
     <div class="card" id="mj-log"></div>
+    <div class="card" id="mj-exit-card" hidden>
+      <button id="mj-exit" class="btn danger" style="width:100%">🚪 対局 を 終了 (全員 返金)</button>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">途中 で 終了 すると 卓 が キャンセル され、 buy-in は 全員 に 返金 されます。</div>
+    </div>
   `;
+  document.getElementById('mj-exit')?.addEventListener('click', exitGame);
   await refresh();
   // polling 開始
   if (pollTimer) clearInterval(pollTimer);
@@ -103,10 +108,30 @@ async function refresh() {
     lastVer = d.state_ver;
     curState = d;
     paint();
+    // v692 #276 起案者 (= AI 戦 では 自分) には 「終了」 ボタン を 出す。 playing / lobby / reporting で 押せる。
+    const exitCard = document.getElementById('mj-exit-card');
+    if (exitCard) {
+      const canExit = d.is_creator && ['lobby','playing','reporting'].includes(d.status);
+      exitCard.hidden = !canExit;
+    }
     if (d.status === 'finished') {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     }
   } catch (e) { /* silently retry */ }
+}
+
+async function exitGame() {
+  if (!curGid) return;
+  if (!confirm('対局 を 終了 して キャンセル しますか? (buy-in は 全員 に 返金 されます)')) return;
+  try {
+    await post(`/api/mahjong/games/${curGid}/cancel`, {});
+    toast('対局 を 終了 しました');
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    // 卓 詳細 (= キャンセル 済 状態) に 戻す
+    location.hash = '#/mahjong/' + curGid;
+  } catch (e) {
+    toast('失敗: ' + e.message);
+  }
 }
 
 function paint() {

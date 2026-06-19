@@ -650,6 +650,7 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
         'state_ver'  => (int)$g['state_ver'],
         'state'      => $pub,
         'my_seat'    => $mySeat,
+        'is_creator' => (int)$g['creator_user_id'] === $uid,
         'players'    => array_map(fn($r) => [
             'user_id'      => (int)$r['user_id'],
             'seat_order'   => (int)$r['seat_order'],
