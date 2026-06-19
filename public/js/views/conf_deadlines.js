@@ -74,6 +74,9 @@ export async function renderConfDeadlines() {
         ${Object.entries(CATEGORIES).map(([k, v]) =>
           `<button class="btn cd-cat" data-cat="${k}">${v.icon} ${v.label}</button>`).join('')}
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; margin-left:auto">
+          <input type="checkbox" id="cd-mine"> ⭐ 自分 関連 のみ
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
           <input type="checkbox" id="cd-past"> 過去 も 含める
         </label>
       </div>
@@ -82,10 +85,12 @@ export async function renderConfDeadlines() {
   `;
   let curCat = '';
   let curPast = false;
+  let curMine = false;
   async function reload() {
     const params = [];
     if (curCat) params.push('category=' + curCat);
     if (curPast) params.push('past=1');
+    if (curMine) params.push('mine=1');
     const url = '/api/conf-deadlines' + (params.length ? '?' + params.join('&') : '');
     try {
       const d = await get(url);
@@ -103,16 +108,19 @@ export async function renderConfDeadlines() {
         const ahead = fmtAhead(sec);
         const aheadColor = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
         const canEdit = Number(r.created_by_user_id) === meId;
-        // v691 #275 label / AOE / extras 件数 を 表示
         const mainLbl = r.deadline_label || '締切';
         const aoeBadge = Number(r.deadline_is_aoe) ? ' 🌐AOE' : '';
         const extras = parseExtra(r.extra_deadlines);
         const extraNote = extras.length ? ` (+${extras.length}件)` : '';
+        // v697 #282 自分 関連 は ⭐ + 黄色 ハイライト
+        const isMine = !!Number(r.is_mine);
+        const mineStyle = isMine ? '; background:#fffbeb; border-left:4px solid #f59e0b' : '';
+        const mineMark = isMine ? ' ⭐' : '';
         return `
-          <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; align-items:flex-start">
+          <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; align-items:flex-start${mineStyle}">
             <span style="font-size:24px; flex:none">${escapeHtml(cat.icon)}</span>
             <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:15px">${escapeHtml(r.name)}</div>
+              <div class="bold" style="font-size:15px">${escapeHtml(r.name)}${mineMark}</div>
               <div class="meta">${escapeHtml(cat.label)} ・ ${escapeHtml(mainLbl)}${aoeBadge} ${escapeHtml(fmtDate(r.deadline_at))}${extraNote}</div>
               ${r.location ? `<div class="meta">📍 ${escapeHtml(r.location)}</div>` : ''}
               <div class="meta">登録: ${escapeHtml(r.creator_name)}${canEdit ? ' ・ あなた' : ''}</div>
@@ -133,6 +141,7 @@ export async function renderConfDeadlines() {
     reload();
   }));
   document.getElementById('cd-past').addEventListener('change', e => { curPast = e.target.checked; reload(); });
+  document.getElementById('cd-mine').addEventListener('change', e => { curMine = e.target.checked; reload(); });
   document.querySelector('.cd-cat[data-cat=""]').classList.add('primary');
   await reload();
 }
@@ -365,7 +374,56 @@ export async function renderConfDeadlineDetail({ params }) {
       ${r.url ? `<div class="meta">🔗 <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a></div>` : ''}
       ${r.notes ? `<div style="margin-top:8px; padding:8px; background:#f9fafb; border-radius:6px; white-space:pre-wrap">${escapeHtml(r.notes)}</div>` : ''}
       <div class="meta" style="margin-top:8px">登録: ${escapeHtml(r.creator_name)} ・ ${escapeHtml(fmtDate(r.created_at))}</div>
+      <!-- v697 #282 メンバー セクション -->
+      <div style="margin-top:14px; padding:10px; border:1px solid var(--line); border-radius:6px; background:${r.is_mine ? '#fffbeb' : '#fff'}">
+        <div class="row center" style="gap:6px; margin-bottom:6px">
+          <div class="bold">👥 メンバー (${(r.members || []).length})</div>
+          <span style="flex:1"></span>
+          ${r.is_mine
+            ? `<button id="cd-leave" class="btn" style="font-size:12px">離脱</button>`
+            : `<button id="cd-join" class="btn primary" style="font-size:12px">⭐ 参加 する</button>`}
+          ${canEdit ? `<button id="cd-add-member" class="btn" style="font-size:12px">＋ 追加</button>` : ''}
+        </div>
+        <div id="cd-members-list">
+          ${(r.members || []).length === 0
+            ? '<div class="hint-sm">まだ メンバー は いません</div>'
+            : (r.members || []).map(m => {
+                const initial = (m.display_name || '?').trim().charAt(0).toUpperCase();
+                const av = m.avatar_url
+                  ? `<img src="${escapeHtml(m.avatar_url)}" style="width:24px; height:24px; border-radius:50%; object-fit:cover">`
+                  : `<div style="width:24px; height:24px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px">${escapeHtml(initial)}</div>`;
+                const canRm = canEdit || Number(m.user_id) === meId;
+                return `<div style="display:inline-flex; align-items:center; gap:4px; margin:2px 6px 2px 0; padding:2px 6px; background:#fff; border-radius:14px; border:1px solid var(--line); font-size:12px">
+                  ${av}<span>${escapeHtml(m.display_name)}</span>${canRm ? `<button data-rm-member="${m.user_id}" style="border:none; background:transparent; cursor:pointer; color:#999; padding:0 2px">×</button>` : ''}
+                </div>`;
+              }).join('')}
+        </div>
+      </div>
     `;
+    document.getElementById('cd-join')?.addEventListener('click', async () => {
+      try { await post('/api/conf-deadlines/' + id + '/join', {}); toast('参加 しました'); renderConfDeadlineDetail({ params: { id } }); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('cd-leave')?.addEventListener('click', async () => {
+      if (!confirm('この 学会 〆切 から 離脱 しますか?')) return;
+      try { await post('/api/conf-deadlines/' + id + '/leave', {}); toast('離脱 しました'); renderConfDeadlineDetail({ params: { id } }); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.getElementById('cd-add-member')?.addEventListener('click', async () => {
+      const input = prompt('追加 する ユーザ ID を カンマ 区切り で 入力 (例: 5,12,17)');
+      if (!input) return;
+      const ids = input.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+      if (!ids.length) { toast('ユーザ ID が ありません'); return; }
+      try { await post('/api/conf-deadlines/' + id + '/members', { user_ids: ids }); toast('追加 しました'); renderConfDeadlineDetail({ params: { id } }); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+    document.querySelectorAll('[data-rm-member]').forEach(b => b.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      const target = b.dataset.rmMember;
+      if (!confirm('この メンバー を 外し ますか?')) return;
+      try { await del('/api/conf-deadlines/' + id + '/members/' + target); toast('外し ました'); renderConfDeadlineDetail({ params: { id } }); }
+      catch (e) { toast('失敗: ' + e.message); }
+    }));
   } catch (e) {
     document.getElementById('cd-detail').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

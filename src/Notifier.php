@@ -46,8 +46,23 @@ class Notifier {
         ?string $refType = null,
         ?int $refId = null
     ): int {
-        $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id)
-            VALUES (?,?,?,?,?)');
+        // v697 #283 admin が 自分 で 送った feedback の 通知 は 最初 から 既読 に
+        //   して おく (自作 自演 の 受領 通知 は 表示 不要)。 feedback 以外 は 通常 通り。
+        $readNow = false;
+        if ($refType === 'feedback') {
+            try {
+                $rk = $pdo->prepare('SELECT role FROM users WHERE id=?');
+                $rk->execute([$userId]);
+                if ((string)$rk->fetchColumn() === 'admin') $readNow = true;
+            } catch (Throwable $_) {}
+        }
+        if ($readNow) {
+            $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id, read_at)
+                VALUES (?,?,?,?,?,NOW())');
+        } else {
+            $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id)
+                VALUES (?,?,?,?,?)');
+        }
         $ins->execute([$userId, $type, mb_substr($body, 0, 255), $refType, $refId]);
         $nid = (int)$pdo->lastInsertId();
 
@@ -111,8 +126,21 @@ class Notifier {
         ?string $refType = null,
         ?int $refId = null
     ): int {
-        $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id)
-            VALUES (?,?,?,?,?)');
+        $readNow = false;
+        if ($refType === 'feedback') {
+            try {
+                $rk = $pdo->prepare('SELECT role FROM users WHERE id=?');
+                $rk->execute([$userId]);
+                if ((string)$rk->fetchColumn() === 'admin') $readNow = true;
+            } catch (Throwable $_) {}
+        }
+        if ($readNow) {
+            $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id, read_at)
+                VALUES (?,?,?,?,?,NOW())');
+        } else {
+            $ins = $pdo->prepare('INSERT INTO notifications (user_id, type, body, ref_type, ref_id)
+                VALUES (?,?,?,?,?)');
+        }
         $ins->execute([$userId, $type, mb_substr($body, 0, 255), $refType, $refId]);
         return (int)$pdo->lastInsertId();
     }
