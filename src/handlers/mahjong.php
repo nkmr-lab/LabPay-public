@@ -952,12 +952,17 @@ function mahjong_cancel(PDO $pdo, int $uid, int $gid): void {
         $g = mahjong_lock_game($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['lobby','playing','reporting'], true)) throw new ApiException('bad_request', '既に終了しています', 400);
-        // 全員に buy_in 返金
-        $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ?");
-        $stP->execute([$gid]);
+        // 人間 プレイヤー のみ に buy_in 返金。 v694 #279 AI bot は accounts row が ない ので
+        //   Ledger::transfer が "account row missing" で 失敗 する。 そもそも bot は buy_in を
+        //   払って いない ので 返金 対象 外。
         $buyIn = (int)$g['buy_in'];
-        foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
-            Ledger::transfer($pdo, 1, (int)$pid, $buyIn, 'mahjong_refund', 'mahjong', $gid, "麻雀卓 #{$gid} キャンセル返金");
+        if ($buyIn > 0) {
+            $stP = $pdo->prepare("SELECT p.user_id FROM mahjong_players p JOIN users u ON u.id = p.user_id
+                                   WHERE p.game_id = ? AND u.kind = 'human'");
+            $stP->execute([$gid]);
+            foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
+                Ledger::transfer($pdo, 1, (int)$pid, $buyIn, 'mahjong_refund', 'mahjong', $gid, "麻雀卓 #{$gid} キャンセル返金");
+            }
         }
         $pdo->prepare("UPDATE mahjong_games SET status='cancelled', finished_at=NOW(), pot_total=0 WHERE id = ?")->execute([$gid]);
     });

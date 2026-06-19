@@ -1819,10 +1819,11 @@ async function fetchRecruitingItems() {
 
 function tagHtml(tag) {
   return ({
-    active: '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
-    open:   '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
-    vote:   '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
-    work:   '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
+    active:  '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
+    open:    '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
+    vote:    '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
+    work:    '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
+    pending: '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏰ 締切済 結果待ち</span>',
   })[tag] || '';
 }
 
@@ -2036,7 +2037,7 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, show
     root.innerHTML = `<div class="hint" style="font-size:12px">${emptyMsg}</div>`;
     return;
   }
-  const tagPriority = { active: 0, vote: 1, work: 2, open: 3 };
+  const tagPriority = { active: 0, vote: 1, work: 2, open: 3, pending: 4 };
   items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
   const { soon, later } = splitByDeadline(items);
   // タイトル に カウント

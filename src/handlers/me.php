@@ -716,45 +716,51 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🏆 優勝予想 (predictions_games、 締切前)
-            //   自分が 未提出 → 'open' (募集中、 要応募)
-            //   自分が 提出済 → 'active' (進行中、 結果待ち)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, uc.display_name AS by_name,
+            // 🏆 優勝予想 (predictions_games)
+            //   締切前 で 自分が 未提出 → 'open' (募集中)
+            //   締切前 で 自分が 提出済 → 'active' (進行中)
+            //   v694 #278 締切後 で 結果 未確定 (status open/closed) → 'pending' (締切済 結果待ち)
+            $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, g.status, uc.display_name AS by_name,
                                         TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead,
                                         EXISTS (SELECT 1 FROM predictions_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_in
                                    FROM predictions_games g JOIN users uc ON uc.id=g.creator_user_id
-                                  WHERE g.deadline_at > NOW()
-                                  ORDER BY g.deadline_at ASC LIMIT 8");
+                                  WHERE g.status IN ('open','closed')
+                                  ORDER BY g.deadline_at ASC LIMIT 12");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $isIn = (int)$r['me_in'] === 1;
-                $items[] = ['cat' => 'entertainment', 'tag' => $isIn ? 'active' : 'open',
+                $secAhead = (int)$r['sec_ahead'];
+                $isPending = ($r['status'] === 'closed') || $secAhead <= 0;
+                $tag = $isPending ? 'pending' : ($isIn ? 'active' : 'open');
+                $items[] = ['cat' => 'entertainment', 'tag' => $tag,
                             'icon' => '🏆', 'kind' => 'prediction',
                             'title' => '優勝予想: ' . mb_substr((string)$r['title'], 0, 25),
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt',
                             'url' => '#/predictions/' . (int)$r['id'],
-                            'sec_ahead' => (int)$r['sec_ahead']];
+                            'sec_ahead' => $secAhead];
             }
         } catch (Throwable $_) {}
         try {
-            // 🎯 勝敗予測 (score_pred_games、 締切前)
-            //   自分が 未提出 → 'open'、 提出済 → 'active'
-            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, uc.display_name AS by_name,
+            // 🎯 勝敗予測 (score_pred_games)
+            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, g.status, uc.display_name AS by_name,
                                         TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead,
                                         EXISTS (SELECT 1 FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_in
                                    FROM score_pred_games g JOIN users uc ON uc.id=g.creator_user_id
-                                  WHERE g.deadline_at > NOW() AND g.status='open'
-                                  ORDER BY g.deadline_at ASC LIMIT 8");
+                                  WHERE g.status IN ('open','closed')
+                                  ORDER BY g.deadline_at ASC LIMIT 12");
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $isIn = (int)$r['me_in'] === 1;
+                $secAhead = (int)$r['sec_ahead'];
+                $isPending = ($r['status'] === 'closed') || $secAhead <= 0;
+                $tag = $isPending ? 'pending' : ($isIn ? 'active' : 'open');
                 $label = $r['team_home'] && $r['team_away'] ? ($r['team_home'] . ' vs ' . $r['team_away']) : (string)$r['title'];
-                $items[] = ['cat' => 'entertainment', 'tag' => $isIn ? 'active' : 'open',
+                $items[] = ['cat' => 'entertainment', 'tag' => $tag,
                             'icon' => '🎯', 'kind' => 'score-pred',
                             'title' => '勝敗予測: ' . mb_substr($label, 0, 28),
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt',
                             'url' => '#/score-predictions/' . (int)$r['id'],
-                            'sec_ahead' => (int)$r['sec_ahead']];
+                            'sec_ahead' => $secAhead];
             }
         } catch (Throwable $_) {}
 
