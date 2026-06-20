@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v723', d: '2026-06-20', s: '🧹 ホームの「あなたのグループ」 widget で終了 (closed_at あり) のグループを非表示に + タイマー詳細から起案者用「⏹ 停止」 ボタンを削除 (#319 #320)。停止と一時停止が紛らわしいため、中止したい時は削除で。一時停止は元々上の「⏸ 一時停止」 で可能' },
   { v: 'v722', d: '2026-06-20', s: '🔗 たべある記でお店登録時に元 URL (tabelog 等) を捨てずに source_url 列で保存、詳細ページに「🔗 URL ↗」リンクとして常時表示 (#318)。これまで description に追記していたのを正式な列に格上げ。 places.source_url 列を新設、 import_url 結果と form の隠し input で結ぶ' },
   { v: 'v721', d: '2026-06-20', s: '🗺 たべある記の地図で前回の表示位置 / ズームを localStorage に保存して再来時に復元 (#317)。 移動 / ズーム のたびに保存、保存値がある時は auto-fit せずに前回の view を使う。保存先 key は labpay.places.mapView' },
   { v: 'v720', d: '2026-06-20', s: '🐛 履歴で勝敗予測 / 優勝予測の行に「mahjong_buyin」が生で表示されていた問題を修正 (#316)。 labels.js にゲーム / 予想系の ledger type ラベルを追加 (mahjong / othello / daifugo / 自作ゲーム / しりとり / 論文査読 / 原稿チェック / リライター)。 予想系は mahjong_buyin を ledger type として流用しているため「ゲーム参加フィー」表記に' },

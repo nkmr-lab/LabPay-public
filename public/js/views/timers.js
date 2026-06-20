@@ -347,10 +347,9 @@ export async function renderTimerDetail({ params }) {
     </div>
     <div class="card" id="tmd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
-        <button id="tmd-cancel" class="btn">⏹ 停止</button>
         <button id="tmd-del" class="danger">削除</button>
       </div>
-      <p class="hint-sm" style="margin:6px 0 0">起案者 のみ 表示 (停止 = 中止状態 / 削除 = 完全削除)。</p>
+      <p class="hint-sm" style="margin:6px 0 0">起案者のみ表示 (一時停止は上のボタンから、削除は完全削除)。</p>
     </div>
   `;
   stopTimerLoops();
@@ -492,11 +491,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       }
       if (d.is_creator) {
         document.getElementById('tmd-admin-card').hidden = false;
-        document.getElementById('tmd-cancel').addEventListener('click', async () => {
-          if (!confirm('タイマーを停止しますか?')) return;
-          try { await patch(`/api/timers/${id}/cancel`, {}); toast('停止しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
-          catch (e) { toast('失敗: ' + e.message); }
-        });
+        // v723 #320 「⏹ 停止」 ボタンは「⏸ 一時停止」 と紛らわしいので削除。 中止したければ削除で。
         document.getElementById('tmd-del').addEventListener('click', async () => {
           if (!confirm('削除しますか?')) return;
           try { await del('/api/timers/' + id); toast('削除しました'); navigate('#/timers'); }

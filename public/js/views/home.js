@@ -1505,16 +1505,15 @@ async function renderMyGroups() {
   if (!card || !root) return;
   try {
     const d = await get('/api/groups');
-    const items = d.items || [];
+    // v723 #319 終了したグループはホームに出さない (詳細を見たい時は /#/groups から行ける)。
+    const items = (d.items || []).filter(g => !g.closed_at);
     if (!items.length) { card.hidden = true; return; }
     card.hidden = false;
-    // groups.js の coverListItem を共有 (avatar 行 + 表紙画像のオン/オフが
-    // 同じロジックでまとまる)。 closed は [終了] バッジ付きで同じカードに混ぜる。
     root.innerHTML = items.slice(0, 5).map(g => coverListItem({
       href:            '#/groups/' + escapeHtml(g.slug || g.id),
       image_url:       g.image_url,
       image_thumb_url: g.image_thumb_url, // v511 サーバ側サムネ実在チェック済み
-      title:           escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
+      title:           escapeHtml(g.title),
       members:         g.members || [],
       chipSize:        'xs',  // v412 上下が あふれる 報告 → 元の xs (18px) に 戻し
     })).join('');
