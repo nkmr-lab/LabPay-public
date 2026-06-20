@@ -629,6 +629,7 @@ route('/conf-deadlines/new',      lazy(() => import('./views/conf_deadlines.js')
 route('/conf-deadlines/:id',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineDetail'));
 route('/conf-deadlines/:id/edit', lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineForm'));
 route('/news',                    lazy(() => import('./views/news.js'), 'renderNews')); // v705 #297
+route('/screen-shares',           lazy(() => import('./views/screen_shares.js'), 'renderScreenShares')); // v718 #314
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と

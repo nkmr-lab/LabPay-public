@@ -178,6 +178,7 @@ export const HOME_CARDS = [
   { id: 'achievements',   title: '🏅 実績 + 称号' }, // v651
   { id: 'conf-deadlines', title: '📅 学会 〆切 (近い 順)' }, // v671
   { id: 'it-news',        title: '📰 IT ニュース' },           // v700 #290
+  { id: 'screen-shares',  title: '🖼 共有中の画像' },          // v718 #314
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -195,6 +196,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'entertainment',  // v649 デフォルト ON
   'achievements',   // v651 デフォルト ON
   'conf-deadlines', // v671 デフォルト ON
+  'screen-shares',  // v718 #314 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -480,6 +482,15 @@ export async function renderHome() {
       <div id="home-itnews"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v718 #314 🖼 共有中の画像 -->
+    <div class="card" id="home-ss-card" data-card-id="screen-shares" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🖼 共有中の画像</h2>
+        <a href="#/screen-shares" class="hint" style="margin-left:auto">投稿 / 一覧 →</a>
+      </div>
+      <div id="home-ss"></div>
+    </div>
+
     <!-- v671 📅 学会 〆切 (近い 順) -->
     <div class="card" id="home-confdl-card" data-card-id="conf-deadlines" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -606,6 +617,7 @@ export async function renderHome() {
     { cardId: 'achievements',   fn: renderAchievementsWidget,  label: 'achievements' }, // v651
     { cardId: 'conf-deadlines', fn: renderConfDeadlinesWidget, label: 'confdl' }, // v671
     { cardId: 'it-news',        fn: renderItNewsWidget,        label: 'it-news' }, // v700 #290
+    { cardId: 'screen-shares',  fn: renderScreenSharesWidget,  label: 'screen-shares' }, // v718 #314
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -1993,6 +2005,37 @@ async function renderItNewsWidget() {
     }).join('');
   } catch (e) {
     root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v718 #314 🖼 共有中の画像 widget。 アクティブな共有があれば大きく表示。
+//   無ければカードごと隠して場所を取らない。
+async function renderScreenSharesWidget() {
+  const card = document.getElementById('home-ss-card');
+  const root = document.getElementById('home-ss');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/screen-shares/active');
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.map(s => {
+      const target = s.group_name ? `👥 ${escapeHtml(s.group_name)}` : '📢 全体';
+      return `
+        <div style="margin-bottom:8px">
+          <div class="meta" style="display:flex; gap:6px; align-items:center; margin-bottom:3px; font-size:11px">
+            ${avatarHtml(s.creator_name, s.creator_avatar_url, 'sm')}
+            <span class="bold" style="font-size:12px">${escapeHtml(s.creator_name)}</span>
+            <span style="opacity:0.7">${target}</span>
+          </div>
+          ${s.body ? `<div style="font-size:13px; margin-bottom:4px; white-space:pre-wrap">${escapeHtml(s.body)}</div>` : ''}
+          <a href="${escapeHtml(s.image_url)}" target="_blank" rel="noopener">
+            <img src="${escapeHtml(s.image_url)}" style="max-width:100%; max-height:400px; border-radius:8px; display:block">
+          </a>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    card.hidden = true;
   }
 }
 

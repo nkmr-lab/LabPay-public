@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v718', d: '2026-06-20', s: '🖼 一時画像共有機能を新規追加 (#314)。 /#/screen-shares で画像 + ひとことをラボ全体 or グループ宛に投げて、 期限 (15分〜24時間) 内は大きく表示。ホームに「🖼 共有中の画像」 widget を追加 (アクティブな共有がある時だけ表示)。 screen_shares テーブル + /api/screen-shares (active/create/delete) を新設、 画像は uploads/image にアップ' },
   { v: 'v717', d: '2026-06-20', s: '🔗 たべある記の URL 自動取得欄でペースト時に「https://」以降の URL 部分だけ抽出する (#312) + 過去のバージョン履歴から日本語間の不要なスペースを一括除去 (#313)。今後の追記もスペースなしで書く' },
   { v: 'v716', d: '2026-06-20', s: '📷 たべある記 (places) の口コミで写真を複数枚アップできるように (#311)。 file input multiple 対応、並列 upload、削除可能なサムネプレビュー。 image_urls TEXT (JSON 配列) 列を追加、旧 image_url 単数は互換維持。本文 / 評価が無くても写真だけで投稿可' },
   { v: 'v715', d: '2026-06-20', s: '🐛 IT ニュース widget で「古い記事ばかり並ぶ」問題修正 (#310)。はてなの hot entry は古い記事でも上位に残り続けるため published_at desc だと印象が「古い」に。 server 側で history.json の first_seen_at を引いて新着順 (= news app と同じ並び) に sort し直して返すように変更' },
