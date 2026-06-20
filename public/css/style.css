@@ -823,11 +823,15 @@ a.list-item { text-decoration: none; color: inherit; }
   border-radius: 0 !important;
   box-sizing: border-box !important;
 }
+/* v729 #337 フルスクリーン時はパブリックタイマー並みに大きく + プログレスバーも目立たせる。
+   旧版は max 480px キャップで上限カットされていた → public_timer と同じ min(26vw,80vh) に。 */
 .tmd-fs-on #tmd-count {
-  font-size: clamp(120px, 30vw, 480px) !important;
+  font-size: min(26vw, 80vh) !important;
   color: #fff !important;
   line-height: 1 !important;
   margin: 0 !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
 }
 .tmd-fs-on #tmd-mode,
 .tmd-fs-on #tmd-elapsed,
@@ -836,8 +840,13 @@ a.list-item { text-decoration: none; color: inherit; }
   font-size: clamp(14px, 2.2vw, 28px) !important;
   margin-top: 14px !important;
 }
-.tmd-fs-on #tmd-bar {
-  background: #fff !important;
+/* プログレスバーの容器 (= #tmd-bar の親 div) を フルスクリーン時に大きく */
+.tmd-fs-on div:has(> #tmd-bar) {
+  height: 22px !important;
+  width: 80vw !important;
+  max-width: 1100px !important;
+  border-radius: 11px !important;
+  margin-top: 22px !important;
 }
 /* v724 #322 フルスクリーン中はツールバー (🔊 試聴 / 🖥 フル / 🔗 公開 URL) を隠す。
    「フル」 ボタンが残ってると押した意味がわからないため。 ✕ 終了で抜ける。 */
