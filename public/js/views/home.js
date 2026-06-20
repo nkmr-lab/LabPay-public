@@ -475,6 +475,7 @@ export async function renderHome() {
     <div class="card" id="home-itnews-card" data-card-id="it-news" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">📰 IT ニュース</h2>
+        <a href="#/news" class="hint" style="margin-left:auto">すべて (履歴) →</a>
       </div>
       <div id="home-itnews"><div class="hint">読み込み中…</div></div>
     </div>

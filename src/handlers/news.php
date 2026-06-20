@@ -16,7 +16,8 @@ const NEWS_CACHE_TTL = 3600; // 1 hour
 function route_news(PDO $pdo, array $cfg, string $method, array $seg): void {
     Auth::requireUser($pdo, $cfg);
     $sub = $seg[1] ?? '';
-    if ($sub === 'it' && $method === 'GET') { news_it($cfg); return; }
+    if ($sub === 'it'      && $method === 'GET') { news_it($cfg); return; }
+    if ($sub === 'history' && $method === 'GET') { news_history($cfg); return; }
     json_error('not_found', "no news route for $method $sub", 404);
 }
 
@@ -34,6 +35,8 @@ function news_it(array $cfg): void {
         $items = news_fetch_all();
         @file_put_contents($cacheFile, json_encode($items, JSON_UNESCAPED_UNICODE));
     }
+    // v705 #297 履歴 を 累積 (初出 日付 付き)
+    news_update_history($items);
     // v704 #293 #295 各 item に GPT 要約 (日本語) を 添付。 既 cache は 流用、
     //   未生成 の もの は この リクエスト で 最大 N 個 だけ 即時 生成 (時間 budget 厳守)。
     //   HN 等 海外 source も 自動 で 日本語 要約 兼 翻訳 さ れる。
@@ -43,7 +46,10 @@ function news_it(array $cfg): void {
         $summaries = $sraw ? (json_decode($sraw, true) ?: []) : [];
     }
     $apiKey = (string)($cfg['openai']['api_key'] ?? '');
-    $budget = 2; // 1 request で OpenAI を 叩く 上限
+    // v705 #296 1 request で 4 件 まで 新規 要約 (旧 2 件 → 倍 増)。 全 8 件 が 2 回 の
+    //   request で 揃う。 1 request あたり の レイテンシ は 増える が、 「要約 出ない」
+    //   印象 を 防ぐ ほう を 優先。
+    $budget = 4;
     $sliced = array_slice($items, 0, $limit);
     $sumDirty = false;
     foreach ($sliced as &$it) {
@@ -160,6 +166,51 @@ function news_fetch_hatena(): array {
         if (count($items) >= 15) break;
     }
     return $items;
+}
+
+// v705 #297 履歴 累積 (URL を キー に 初出 日付 を 保存)。 30 日 ローテーション。
+function news_update_history(array $items): void {
+    $histFile = NEWS_CACHE_DIR . '/history.json';
+    $hist = is_file($histFile)
+        ? (json_decode((string)@file_get_contents($histFile), true) ?: [])
+        : [];
+    foreach ($items as $it) {
+        $url = (string)($it['url'] ?? '');
+        if ($url === '') continue;
+        if (!isset($hist[$url])) {
+            $hist[$url] = [
+                'url'           => $url,
+                'title'         => (string)($it['title'] ?? ''),
+                'source'        => (string)($it['source'] ?? ''),
+                'first_seen_at' => date('c'),
+            ];
+        }
+    }
+    $cutoff = time() - 30 * 86400;
+    foreach ($hist as $url => $v) {
+        if (strtotime((string)($v['first_seen_at'] ?? '')) < $cutoff) unset($hist[$url]);
+    }
+    @file_put_contents($histFile, json_encode($hist, JSON_UNESCAPED_UNICODE));
+}
+
+function news_history(array $cfg): void {
+    $limit = max(1, min(500, (int)($_GET['limit'] ?? 100)));
+    $histFile = NEWS_CACHE_DIR . '/history.json';
+    $sumFile  = NEWS_CACHE_DIR . '/summaries.json';
+    $hist = is_file($histFile)
+        ? (json_decode((string)@file_get_contents($histFile), true) ?: [])
+        : [];
+    $summaries = is_file($sumFile)
+        ? (json_decode((string)@file_get_contents($sumFile), true) ?: [])
+        : [];
+    $items = array_values($hist);
+    foreach ($items as &$it) {
+        $k = md5((string)($it['url'] ?? ''));
+        if (isset($summaries[$k]['text'])) $it['summary_jp'] = $summaries[$k]['text'];
+    }
+    unset($it);
+    usort($items, fn($a, $b) => strcmp((string)($b['first_seen_at'] ?? ''), (string)($a['first_seen_at'] ?? '')));
+    json_response(['items' => array_slice($items, 0, $limit)]);
 }
 
 function news_fetch_hn(): array {
