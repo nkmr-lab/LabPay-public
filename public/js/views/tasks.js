@@ -4,6 +4,7 @@ import { state, toast } from '../app.js';
 import { uploadTaskAttachment } from '../upload.js';
 import { fmtLocalInput } from '../format.js';
 import { localDtToIso, isoToLocalDt, tzToggleHtml, bindTzToggle, getTzMode } from '../tz_helper.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 // 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
@@ -603,6 +604,7 @@ async function loadDetail(id) {
             <div class="bold" style="font-size:18px">${escapeHtml(t.title)}</div>
             <div class="meta">${escapeHtml(t.requester_name)} · ${t.created_at}</div>
           </div>
+          <button id="task-share" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="らぼったー で 共有">💬 共有</button>
         </div>
         ${urlBlock}
         ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${escapeHtml(t.description)}</div>` : ''}
@@ -641,6 +643,11 @@ async function loadDetail(id) {
           claimBtn.textContent = 'この枠で引き受ける';
         }
       });
+    });
+    document.getElementById('task-share')?.addEventListener('click', () => {
+      const label = t.is_free ? 'リクエスト' : 'タスク';
+      const reward = t.is_free ? '' : ` ${t.reward}pt`;
+      shareToSns(`🎯 ${label} 「${t.title}」${reward} (残 ${t.remaining}人)`, `#/tasks/${t.id}`);
     });
     document.getElementById('claim-btn')?.addEventListener('click', () => onClaim(id, selectedSlotId));
     document.getElementById('report-btn')?.addEventListener('click', e => onReport(id, e.currentTarget.dataset.claim));
