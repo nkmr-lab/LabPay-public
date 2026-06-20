@@ -488,12 +488,11 @@ async function loadPollDetail(id) {
 }
 
 // 集計セクションだけを描画 (URL コピーや投票 UI を触らないので 入力フォーカスを壊さない)。
-// 表示ルール:
-//   ・「N 票 (P%)」 の P = N / 回答済み人数 × 100
-//     (複数選択時は 1 人で複数票入るので 「総票数 ÷ 」 だと違和感がある)
-//   ・棒グラフの長さ = N / 対象者総数 × 100
-//     (= 「対象の何割がコレを支持してるか」 一目で見える)
-//   ・ヘッダ右に 「X/Y 人回答 · (HH:MM:SS 更新)」
+// v710 #302 表示ルール 改修:
+//   ・各 option 横 に 「N 票 / 回答済 M 人 (P%)」 = 現状 ベース の 集計 を 明示
+//     (P% も 棒 グラフ も 「回答済 M 人」 を 分母 に。 投票 予定 は 含まない)
+//   ・各 option の 下 に 投票者 (アバター + 名前 chip) を 並べる (= 「誰 が どれ に」)
+//   ・ヘッダ 右 に 「X/Y 人 回答 · (HH:MM:SS 更新)」 は 据置
 function renderTallySection(d) {
   const tallyCard = document.getElementById('pd-tally-card');
   if (!tallyCard) return;
@@ -504,20 +503,29 @@ function renderTallySection(d) {
   tallyCard.hidden = false;
   const totalPeople  = d.voters.length;
   const votedPeople  = d.voters.filter(v => v.has_voted).length;
-  const denomText    = votedPeople || 1;      // 0 除算回避 (回答者ゼロの間は P=0%)
+  const denom        = votedPeople || 1;      // 0 除算 回避 (回答者 ゼロ の 間 は P=0%)
+  const optionVoters = d.option_voters || {};
   let html = d.options.map(o => {
     const n = d.tallies[o.id] || 0;
-    const pctText = votedPeople ? Math.round((n / denomText) * 100) : 0;
-    const pctBar  = totalPeople ? Math.round((n / totalPeople) * 100) : 0;
+    const pct = votedPeople ? Math.round((n / denom) * 100) : 0;
+    const voters = optionVoters[o.id] || [];
+    const voterChips = voters.length
+      ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px">${voters.map(v => `
+          <span class="presence-pill" style="background:#f3eaf8; border:1px solid #d3b8e2; font-size:11px; padding:1px 6px">
+            ${avatarHtml(v.display_name, v.avatar_url, 'sm')}
+            <span class="presence-pill-name" style="font-size:11px">${escapeHtml(v.display_name)}</span>
+          </span>`).join('')}</div>`
+      : `<div class="hint-sm" style="margin-top:3px; opacity:0.7">まだ いません</div>`;
     return `
-      <div style="margin-bottom:6px">
+      <div style="margin-bottom:10px">
         <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px">
           <span>${escapeHtml(o.label)}</span>
-          <span class="muted">${n} 票 (回答者の ${pctText}%)</span>
+          <span class="muted">${n} 票 / 回答済 ${votedPeople} 人 (${pct}%)</span>
         </div>
         <div style="background:#eee; height:8px; border-radius:4px; overflow:hidden">
-          <div style="background:var(--primary); height:100%; width:${pctBar}%"></div>
+          <div style="background:var(--primary); height:100%; width:${pct}%"></div>
         </div>
+        ${voterChips}
       </div>`;
   }).join('');
   if (Array.isArray(d.free_texts) && d.free_texts.length) {
@@ -533,7 +541,7 @@ function renderTallySection(d) {
         </div>`).join('')}
     </div>`;
   }
-  html += `<div class="hint-sm" style="margin-top:8px">棒グラフは対象者 ${totalPeople} 人に対する割合。</div>`;
+  html += `<div class="hint-sm" style="margin-top:8px">% と 棒 グラフ は 回答済 ${votedPeople} 人 (= 対象 ${totalPeople} 人 中) に対する 割合。 投票 予定 は 分母 に 含まない。</div>`;
   document.getElementById('pd-tally').innerHTML = html;
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');

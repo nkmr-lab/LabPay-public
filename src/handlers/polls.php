@@ -183,11 +183,29 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         || ($vis === 'after_deadline' && $isClosed);
     $tallies = null;
     $freeTexts = null;
+    $optionVoters = null;
     if ($tallyVisible) {
         $stT = $pdo->prepare("SELECT option_id, COUNT(*) AS n FROM poll_votes WHERE poll_id = ? GROUP BY option_id");
         $stT->execute([$id]);
         $tallies = [];
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) $tallies[(int)$r['option_id']] = (int)$r['n'];
+        // v710 #302 各 option ごと に 誰 が 投票 した か を 公開 (tally と 同じ 可視性)。
+        $stOV = $pdo->prepare("SELECT pv.option_id, pv.user_id, u.display_name, u.avatar_url
+                                 FROM poll_votes pv
+                                 JOIN users u ON u.id = pv.user_id
+                                WHERE pv.poll_id = ?
+                                ORDER BY pv.option_id, u.display_name");
+        $stOV->execute([$id]);
+        $optionVoters = [];
+        foreach ($stOV->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $oid = (int)$r['option_id'];
+            $optionVoters[$oid] ??= [];
+            $optionVoters[$oid][] = [
+                'user_id'      => (int)$r['user_id'],
+                'display_name' => $r['display_name'],
+                'avatar_url'   => $r['avatar_url'],
+            ];
+        }
         // 自由記述本文は 起案者だけに渡す (誰が書いたかも含めて参照したいのは起案者のみ)。
         // 一般の対象者には 「他人の自由記述」 を出さない方針。 自分自身の自由記述は
         // my_free_text 経由で別途返している。
@@ -237,6 +255,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         'my_free_text' => $myFreeText,
         'tally_visible' => $tallyVisible,
         'tallies' => $tallies,
+        'option_voters' => $optionVoters,
         'free_texts' => $freeTexts,
     ]);
 }
