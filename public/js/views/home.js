@@ -1841,7 +1841,7 @@ function tagHtml(tag) {
     open:    '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
     vote:    '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
     work:    '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
-    pending: '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏰ 締切済 結果待ち</span>',
+    pending: '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏳ 結果待ち</span>',
   })[tag] || '';
 }
 

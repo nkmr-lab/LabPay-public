@@ -20,18 +20,19 @@ export async function renderTasks() {
   app.innerHTML = `
     <div class="card">
       <div class="row" style="justify-content:flex-end; gap:6px; flex-wrap:wrap">
-        <button id="task-new"     class="primary">+ タスク (報酬あり)</button>
+        <button id="task-new"     class="primary">+ 募集 (報酬あり)</button>
         <button id="task-assign"  class="btn">+ 割り当て</button>
-        <button id="task-request" class="btn">+ リクエスト (報酬なし)</button>
+        <button id="task-request" class="btn">+ 依頼 (報酬なし)</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
-        <span class="text-primary">●</span> 自分が依頼  ·
-        <span style="color:#b54708">●</span> 引き受け中/承認待ち  ·
+        <span class="text-primary">●</span> 自分 が 起案  ·
+        <span style="color:#b54708">●</span> 引き受け 中 / 承認 待ち  ·
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
       <p class="hint-sm" style="margin:6px 0 0">
-        <b>タスク</b> = 報酬付きの 募集型 / <b>割り当て</b> = 報酬付きの 指名型 /
-        <b>リクエスト</b> = 報酬なしで お願い (善意で 引き受けてもらう)
+        <b>🎯 募集</b> = 報酬付き、 誰 でも 引き受け OK の 公募 型 /
+        <b>👤 割り当て</b> = 報酬付き、 指名 型 /
+        <b>🙏 依頼</b> = 報酬 なし で お願い (善意 で 引き受けて もらう)
       </p>
       <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
         <input type="checkbox" id="task-show-history" ${showHistory ? 'checked' : ''}>
@@ -454,7 +455,10 @@ function renderRow(t) {
       <div class="grow" style="min-width:0">
         <div style="font-size:14px">
           <span class="bold">${escapeHtml(t.title)}</span>
-          ${Number(t.reward) === 0 ? '<span class="tag" style="background:#e3f2fd; color:#0277bd">🙏 リクエスト</span>' : ''}
+          ${Number(t.reward) === 0
+            ? '<span class="tag" style="background:#e3f2fd; color:#0277bd">🙏 依頼</span>'
+            : (t.assigned_user_id ? '<span class="tag" style="background:#fef3c7; color:#92400e">👤 割り当て</span>'
+                                  : '<span class="tag" style="background:#dcfce7; color:#166534">🎯 募集</span>')}
           ${statusTag}${roleBadge}${pendingTag}${audTag}${assignedTag}${deadlineTag}
         </div>
         <div class="meta">${escapeHtml(t.requester_name)} · ${Number(t.reward) === 0 ? '報酬なし' : t.reward + 'pt'} × ${t.capacity}人${t.per_user_limit === 0 ? ' (各自無制限)' : (t.per_user_limit > 1 ? ` (各自 ${t.per_user_limit}回まで)` : '')}</div>

@@ -8,6 +8,7 @@ import { loadLeaflet } from './group_map.js';
 import { tag, fmtDateTime, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
 import { localDtToIso, isoToLocalDt, tzToggleHtml, bindTzToggle } from '../tz_helper.js';
+import { copyShareUrl } from '../share_to_sns.js';
 
 // 場所文字列から 緯度,経度 を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
@@ -339,9 +340,13 @@ export async function renderMeetupDetail({ params }) {
     const m = d.meetup;
     const km = KIND_META[m.kind === 'deadline' ? 'deadline' : 'meetup'];
     document.getElementById('mud-head').innerHTML = `
-      <h2 style="margin:6px 0 0">${km.icon} ${escapeHtml(m.title || km.label)}</h2>
+      <div class="row center" style="gap:8px">
+        <h2 style="margin:6px 0 0; flex:1">${km.icon} ${escapeHtml(m.title || km.label)}</h2>
+        <button id="mud-copy-url" class="btn" style="font-size:12px; padding:4px 8px">🔗 URL</button>
+      </div>
       <div class="meta">起案 ${escapeHtml(m.creator_name)}${m.cancelled_at ? ' · ' + tag('muted', '取消済') : ''}</div>
     `;
+    document.getElementById('mud-copy-url')?.addEventListener('click', () => copyShareUrl(`#/meetups/${id}`));
     const cardClock = document.getElementById('mud-clock-card');
     cardClock.hidden = false;
     const updateClock = () => {

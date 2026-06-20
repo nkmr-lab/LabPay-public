@@ -10,7 +10,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { tag, fmtDateTime } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
-import { shareToSns } from '../share_to_sns.js';
+import { shareToSns, copyShareUrl } from '../share_to_sns.js';
 
 const VIS_LABEL = {
   creator: '主催者のみ集計可視',
@@ -357,7 +357,10 @@ async function loadPollDetail(id) {
     const isCreator = d.is_creator;
     const head = document.getElementById('pd-head');
     head.innerHTML = `
-      <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
+      <div class="row center" style="gap:8px">
+        <h2 style="margin:6px 0 0; flex:1">${escapeHtml(p.title)}</h2>
+        <button id="pd-copy-url" class="btn" style="font-size:12px; padding:4px 8px">🔗 URL</button>
+      </div>
       <div class="meta">
         起案 ${escapeHtml(p.creator_name)} · ${isOpen ? '受付中' : '締切済'} ·
         ${p.multi_select ? '複数選択可' : '単一選択'} · ${escapeHtml(VIS_LABEL[p.visibility] || p.visibility)}
@@ -393,6 +396,7 @@ async function loadPollDetail(id) {
       updateCountdown();
       countdownTimer = setInterval(updateCountdown, 1000);
     }
+    document.getElementById('pd-copy-url')?.addEventListener('click', () => copyShareUrl(`#/polls/${id}`));
 
     // 投票カード。 再投票禁止 + 既に投票済の場合は投票 UI 非表示にし 「投票済」 カード表示。
     const voteCard = document.getElementById('pd-vote-card');

@@ -6,6 +6,7 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { tag, fmtDateTime } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
+import { copyShareUrl } from '../share_to_sns.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 const gradeRank = g => {
@@ -220,6 +221,7 @@ async function loadRollCallDetail(id) {
     head.innerHTML = `
       <div class="row center" style="gap:8px">
         <h2 style="margin:6px 0 0; flex:1">${escapeHtml(r.title)}</h2>
+        <button id="rcd-copy-url" class="btn" style="font-size:12px; padding:4px 8px">🔗 URL</button>
         ${d.is_creator && isOpen ? '<button id="rcd-edit-btn" class="btn">✏️ 編集</button>' : ''}
       </div>
       <div class="meta">
@@ -290,6 +292,8 @@ async function loadRollCallDetail(id) {
     renderRollCallTargets(d);
     rcLastTargets = d.targets;
     schedRollCallRefresh(id, isOpen);
+
+    document.getElementById('rcd-copy-url')?.addEventListener('click', () => copyShareUrl(`#/rollcalls/${id}`));
 
     // v651 編集 (起案者 + open のみ)。 タイトル / 本文 / 締切 を 変更。
     const editBtn = document.getElementById('rcd-edit-btn');
