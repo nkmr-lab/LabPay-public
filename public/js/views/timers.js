@@ -25,10 +25,11 @@ const gradeRank = g => {
 // v449 学会タイマー プリセット。 「1鈴 / 2鈴 / 3鈴 / 終了」 を 一括 埋め。
 // 終了 = end_bell_index (1/2/3)。 単位は 分。
 const ACADEMIC_PRESETS = [
+  // v727 #334 論文紹介を先頭に + end:3 だった bug を end:2 に修正 (= 2鈴 5分が発表終了)
+  { label: '論文紹介 (4/5/10、 2鈴=発表終了)', bells: [4, 5, 10], end: 2 },
   { label: '一般 (12/14/15、 3鈴=終了)',  bells: [12, 14, 15], end: 3 },
   { label: '招待 (20/24/25、 3鈴=終了)',  bells: [20, 24, 25], end: 3 },
   { label: 'ライトニング (4/4.5/5、 3鈴=終了)', bells: [4, 4.5, 5], end: 3 },
-  { label: '論文紹介 (4/5/10、 5分=発表終了)', bells: [4, 5, 10], end: 3 }, // v676 #256
   { label: 'ポモドーロ (25 分、 1鈴=終了)', bells: [25, null, null], end: 1 },
   { label: '休憩 (5 分、 1鈴=終了)',       bells: [5, null, null], end: 1 },
 ];
@@ -652,8 +653,9 @@ function tickTimer() {
     const endPct = (endBellSec / visualEndSec) * 100;
     const linePcts = [];
     if (tmBells && tmBells.length) {
+      // v727 #335 最後のベル (= visualEndSec の位置 = 100%) には線を入れない (端なので不要)。
       for (const b of tmBells) {
-        if (b > 0 && b <= visualEndSec) linePcts.push((b / visualEndSec) * 100);
+        if (b > 0 && b < visualEndSec) linePcts.push((b / visualEndSec) * 100);
       }
     }
     const lines = linePcts.map(p => `transparent ${p - 0.4}%, #333 ${p - 0.4}%, #333 ${p + 0.4}%, transparent ${p + 0.4}%`).join(', ');

@@ -66,48 +66,108 @@ async function onGmapImport(ev) {
 
 export async function renderPlaces() {
   const app = document.getElementById('app');
+  // v727 #332 トップに地図 (約 1/3 viewport) を常時表示。「地図」 ボタンは廃止、
+  //   現在地に移動 ボタン と ハート / 行った の フィルタ チェックボックス を追加。
   app.innerHTML = `
+    <div id="pl-map-wrap" style="position:relative; height:33vh; min-height:200px; background:#eef; margin:-6px -6px 6px">
+      <div id="pl-map" style="height:100%; width:100%"></div>
+      <button id="pl-locate" class="btn" title="現在地に移動"
+        style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
+    </div>
     <div class="card page-header">
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0; flex:1">🍴 食べある記</h2>
       </div>
-      <!-- v616 #238 dropdown (details) が 縦フレーム超えて見切れる問題を解消。
-           「地図 / 新規 / インポート」 を 横並び の フラットボタンに -->
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <a class="btn" href="#/places/map" style="flex:1; min-width:90px; text-align:center">🗺 地図</a>
         <a class="btn primary" href="#/places/new" style="flex:1; min-width:90px; text-align:center">＋ 新規</a>
         <button id="pl-gmap-import" class="btn" style="flex:1; min-width:120px">📥 インポート</button>
+      </div>
+      <div class="row" style="gap:12px; margin-top:8px; align-items:center; font-size:13px; flex-wrap:wrap">
+        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️ ハート だけ</label>
+        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣 行ったところ だけ</label>
       </div>
       <input type="file" id="pl-gmap-file" accept=".kml,.json,.geojson,.kmz" hidden>
     </div>
     <div id="pl-list"><div class="muted">読み込み中…</div></div>
   `;
-  // v502 #119 Google Maps エクスポート (KML / GeoJSON) を読み込んで重複しないものを
-  //   一括登録。 重複判定は (title 大小無視) + 緯度経度 50m 以内。
   document.getElementById('pl-gmap-import')?.addEventListener('click', () => {
     document.getElementById('pl-gmap-file').click();
   });
   document.getElementById('pl-gmap-file')?.addEventListener('change', (ev) => onGmapImport(ev));
+
+  // 地図 (leaflet) 初期化 + 保存ビュー復元 (v721 と 同じ key)。
+  const MAP_VIEW_KEY = 'labpay.places.mapView';
+  let L = null, map = null;
+  try { L = await loadLeaflet(); } catch (_) {}
+  if (L) {
+    map = L.map('pl-map', { zoomControl: true }).setView([35.7, 139.66], 13);
+    try {
+      const raw = localStorage.getItem(MAP_VIEW_KEY);
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (typeof v?.lat === 'number' && typeof v?.lng === 'number') {
+          map.setView([v.lat, v.lng], v.zoom || 13);
+        }
+      }
+    } catch (_) {}
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+    const persistView = () => {
+      try {
+        const c = map.getCenter();
+        localStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
+      } catch (_) {}
+    };
+    map.on('moveend', persistView);
+    map.on('zoomend', persistView);
+  }
+  document.getElementById('pl-locate').addEventListener('click', () => {
+    if (!map) { toast('地図 未初期化'); return; }
+    if (!('geolocation' in navigator)) { toast('現在地取得 が 使えません'); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => map.setView([p.coords.latitude, p.coords.longitude], 16),
+      e => toast('現在地 取得 失敗: ' + (e?.message || '')),
+      { timeout: 6000, enableHighAccuracy: true }
+    );
+  });
+
+  let allItems = [];
   try {
     const d = await get('/api/places');
-    const items = d.items || [];
+    allItems = d.items || [];
+  } catch (e) {
+    document.getElementById('pl-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  let markers = [];
+  const refresh = () => {
+    const fLiked   = document.getElementById('pl-f-liked').checked;
+    const fVisited = document.getElementById('pl-f-visited').checked;
+    const items = allItems.filter(p => {
+      if (fLiked   && !p.liked_by_me)   return false;
+      if (fVisited && !p.visited_by_me) return false;
+      return true;
+    });
+    if (map) {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      for (const p of items) {
+        if (p.lat == null || p.lng == null) continue;
+        const popup = `<a href="#/places/${p.id}" style="color:var(--primary)"><b>${escapeHtml(p.title)}</b></a>`;
+        markers.push(L.marker([p.lat, p.lng]).bindPopup(popup).addTo(map));
+      }
+    }
     if (!items.length) {
-      document.getElementById('pl-list').innerHTML = '<div class="empty">まだ お店は ありません</div>';
+      document.getElementById('pl-list').innerHTML = '<div class="empty">該当する お店は ありません</div>';
       return;
     }
-    // v471 タイル状 (購入ページ と 同じ .tile-grid / .tile を 流用)。
-    // v486 #80 タイル に いいね 表示 (押せる ようには せず、 数 のみ。 詳細 画面 で 押す)。
     document.getElementById('pl-list').innerHTML = `<div class="tile-grid">${items.map(p => {
       const cat = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
-      // v487 #82 いいね は 0 件 でも 常時 表示 (押せる 場所 を 認識 して もらう)。
-      const likeBadge = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
-      // v529 #164 行った (足跡) バッジも常時表示
+      const likeBadge  = ` · ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
       const visitBadge = ` · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
-      // v503 #127 タイル背景は重いオリジナル画像ではなくサムネを使う (サーバ thumb_url_for で
-      //   実在チェック済み、 無ければ原画像 fallback)。
       const tileBg = p.cover_image_thumb || p.cover_image;
       if (tileBg) {
         return `
@@ -118,7 +178,6 @@ export async function renderPlaces() {
             </div>
           </a>`;
       }
-      const initial = (p.title || '?').trim().charAt(0);
       return `
         <a class="tile tile-noimg" href="#/places/${p.id}">
           <span style="position:absolute; top:50%; left:50%; transform:translate(-50%,-65%); font-size:42px">🍴</span>
@@ -128,9 +187,11 @@ export async function renderPlaces() {
           </div>
         </a>`;
     }).join('')}</div>`;
-  } catch (e) {
-    document.getElementById('pl-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
-  }
+  };
+
+  document.getElementById('pl-f-liked')  .addEventListener('change', refresh);
+  document.getElementById('pl-f-visited').addEventListener('change', refresh);
+  refresh();
 }
 
 // v471 地図 ビュー: 全 places を Leaflet に プロット + 表示中エリア + カテゴリ で
