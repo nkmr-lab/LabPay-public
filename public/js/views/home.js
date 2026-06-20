@@ -2012,7 +2012,13 @@ async function renderConfDeadlinesWidget() {
     root.innerHTML = items.map(r => {
       const sec = Number(r.sec_ahead) || 0;
       const days = Math.floor(sec / 86400);
-      const ahead = sec <= 0 ? '締切 過ぎ' : days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`;
+      // v713 #308 仮 (暫定) 締切 は 「およそ あと N 日」 表記 (= 数字 を 強調 し すぎない)。
+      const tentative = !!Number(r.nearest_is_tentative);
+      const ahead = sec <= 0
+        ? '締切 過ぎ'
+        : (tentative
+            ? (days >= 1 ? `およそ あと ${days} 日` : 'もう すぐ')
+            : (days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`));
       const color = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
       const loc = r.location ? ` (${escapeHtml(r.location)})` : '';
       const dlAt = r.nearest_at || r.deadline_at;

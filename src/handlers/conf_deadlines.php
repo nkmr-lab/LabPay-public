@@ -67,7 +67,7 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
     // v702 #291 速度 改善: SQL で 候補 を 絞る (メイン が 30 日 以上 過去 かつ extras なし は 弾く)。
     //   LIMIT 200 → 100 で 十分 (上位 limit 件 だけ 返す)。
     $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
-                                c.deadline_label, c.deadline_is_aoe, c.extra_deadlines,
+                                c.deadline_label, c.deadline_is_aoe, c.deadline_is_tentative, c.extra_deadlines,
                                 (c.created_by_user_id = ? OR EXISTS (SELECT 1 FROM conf_deadline_members m WHERE m.conf_deadline_id = c.id AND m.user_id = ?)) AS is_mine
                            FROM conf_deadlines c
                           WHERE c.deleted_at IS NULL
@@ -83,10 +83,11 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
         $mainTs = strtotime((string)$r['deadline_at']);
         if ($mainTs !== false && $mainTs > $now) {
             $candidates[] = [
-                'label'  => $r['deadline_label'] !== null && $r['deadline_label'] !== '' ? $r['deadline_label'] : '原稿',
-                'at'     => $r['deadline_at'],
-                'is_aoe' => (int)$r['deadline_is_aoe'],
-                'kind'   => 'main',
+                'label'        => $r['deadline_label'] !== null && $r['deadline_label'] !== '' ? $r['deadline_label'] : '原稿',
+                'at'           => $r['deadline_at'],
+                'is_aoe'       => (int)$r['deadline_is_aoe'],
+                'is_tentative' => (int)($r['deadline_is_tentative'] ?? 0),
+                'kind'         => 'main',
             ];
         }
         $extras = $r['extra_deadlines'] ? json_decode((string)$r['extra_deadlines'], true) : null;
@@ -96,21 +97,23 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
                 $ts = strtotime((string)$e['deadline_at']);
                 if ($ts === false || $ts <= $now) continue;
                 $candidates[] = [
-                    'label'  => (string)($e['label'] ?? '締切'),
-                    'at'     => (string)$e['deadline_at'],
-                    'is_aoe' => !empty($e['is_aoe']) ? 1 : 0,
-                    'kind'   => 'extra',
+                    'label'        => (string)($e['label'] ?? '締切'),
+                    'at'           => (string)$e['deadline_at'],
+                    'is_aoe'       => !empty($e['is_aoe']) ? 1 : 0,
+                    'is_tentative' => !empty($e['is_tentative']) ? 1 : 0,
+                    'kind'         => 'extra',
                 ];
             }
         }
         if (!$candidates) continue;
         usort($candidates, fn($a, $b) => strcmp($a['at'], $b['at']));
         $nearest = $candidates[0];
-        $r['nearest_label']  = $nearest['label'];
-        $r['nearest_at']     = $nearest['at'];
-        $r['nearest_is_aoe'] = $nearest['is_aoe'];
-        $r['nearest_kind']   = $nearest['kind'];
-        $r['sec_ahead']      = strtotime($nearest['at']) - $now;
+        $r['nearest_label']        = $nearest['label'];
+        $r['nearest_at']           = $nearest['at'];
+        $r['nearest_is_aoe']       = $nearest['is_aoe'];
+        $r['nearest_is_tentative'] = $nearest['is_tentative'];
+        $r['nearest_kind']         = $nearest['kind'];
+        $r['sec_ahead']            = strtotime($nearest['at']) - $now;
         $result[] = $r;
     }
     usort($result, fn($a, $b) => $a['sec_ahead'] - $b['sec_ahead']);
@@ -143,11 +146,11 @@ function cd_create(PDO $pdo, array $cfg): void {
     $body = read_json_body();
     $v = cd_validate($body);
     $pdo->prepare("INSERT INTO conf_deadlines
-        (category, name, full_name, url, deadline_at, deadline_label, deadline_is_aoe, extra_deadlines,
+        (category, name, full_name, url, deadline_at, deadline_label, deadline_is_aoe, deadline_is_tentative, extra_deadlines,
          notification_at, event_start, event_end, location, notes, created_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         ->execute([$v['category'], $v['name'], $v['full_name'], $v['url'], $v['deadline_at'],
-                   $v['deadline_label'], $v['deadline_is_aoe'], $v['extra_deadlines'],
+                   $v['deadline_label'], $v['deadline_is_aoe'], $v['deadline_is_tentative'], $v['extra_deadlines'],
                    $v['notification_at'], $v['event_start'], $v['event_end'], $v['location'], $v['notes'], (int)$u['id']]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
@@ -165,11 +168,11 @@ function cd_update(PDO $pdo, array $cfg, int $id): void {
     $body = read_json_body();
     $v = cd_validate($body);
     $pdo->prepare("UPDATE conf_deadlines
-        SET category=?, name=?, full_name=?, url=?, deadline_at=?, deadline_label=?, deadline_is_aoe=?, extra_deadlines=?,
+        SET category=?, name=?, full_name=?, url=?, deadline_at=?, deadline_label=?, deadline_is_aoe=?, deadline_is_tentative=?, extra_deadlines=?,
             notification_at=?, event_start=?, event_end=?, location=?, notes=?
         WHERE id=?")
         ->execute([$v['category'], $v['name'], $v['full_name'], $v['url'], $v['deadline_at'],
-                   $v['deadline_label'], $v['deadline_is_aoe'], $v['extra_deadlines'],
+                   $v['deadline_label'], $v['deadline_is_aoe'], $v['deadline_is_tentative'], $v['extra_deadlines'],
                    $v['notification_at'], $v['event_start'], $v['event_end'], $v['location'], $v['notes'], $id]);
     json_response(['ok' => true]);
 }
@@ -270,6 +273,8 @@ function cd_validate(array $body): array {
     $deadlineLabel = isset($body['deadline_label']) ? mb_substr(trim((string)$body['deadline_label']), 0, 50) : null;
     if ($deadlineLabel === '') $deadlineLabel = null;
     $deadlineIsAoe = !empty($body['deadline_is_aoe']) ? 1 : 0;
+    // v713 #308 暫定 / 仮 締切 フラグ
+    $deadlineIsTentative = !empty($body['deadline_is_tentative']) ? 1 : 0;
     // v691 #275 追加 の サブ 締切 (申込 / アブスト 等)。 配列 of {label, deadline_at, is_aoe}
     $extraJson = null;
     if (!empty($body['extra_deadlines']) && is_array($body['extra_deadlines'])) {
@@ -284,6 +289,7 @@ function cd_validate(array $body): array {
                 'label' => $lbl,
                 'deadline_at' => $dl,
                 'is_aoe' => !empty($e['is_aoe']) ? 1 : 0,
+                'is_tentative' => !empty($e['is_tentative']) ? 1 : 0,
             ];
             if (count($clean) >= 10) break;
         }
@@ -307,6 +313,7 @@ function cd_validate(array $body): array {
     return [
         'category' => $category, 'name' => $name, 'full_name' => $fullName, 'url' => $url,
         'deadline_at' => $deadlineAt, 'deadline_label' => $deadlineLabel, 'deadline_is_aoe' => $deadlineIsAoe,
+        'deadline_is_tentative' => $deadlineIsTentative,
         'extra_deadlines' => $extraJson, 'notification_at' => $notifAt,
         'event_start' => $eventStart, 'event_end' => $eventEnd, 'location' => $location, 'notes' => $notes,
     ];

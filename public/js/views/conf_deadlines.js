@@ -106,11 +106,16 @@ export async function renderConfDeadlines() {
         const cat = CATEGORIES[r.category] || CATEGORIES.other;
         const dl = new Date(String(r.deadline_at).replace(' ', 'T'));
         const sec = Math.floor((dl - new Date()) / 1000);
-        const ahead = fmtAhead(sec);
+        // v713 #308 仮 (暫定) 締切 は 「およそ あと N 日」 表記。
+        const isTentative = !!Number(r.deadline_is_tentative);
+        const ahead = sec <= 0
+          ? fmtAhead(sec)
+          : (isTentative ? 'およそ ' + fmtAhead(sec) : fmtAhead(sec));
         const aheadColor = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
         const canEdit = Number(r.created_by_user_id) === meId;
         const mainLbl = r.deadline_label || '締切';
         const aoeBadge = Number(r.deadline_is_aoe) ? ' 🌐AOE' : '';
+        const tentBadge = isTentative ? ' 🤔仮' : '';
         const extras = parseExtra(r.extra_deadlines);
         const extraNote = extras.length ? ` (+${extras.length}件)` : '';
         // v697 #282 自分 関連 は ⭐ + 黄色 ハイライト
@@ -122,7 +127,7 @@ export async function renderConfDeadlines() {
             <span style="font-size:24px; flex:none">${escapeHtml(cat.icon)}</span>
             <div class="grow" style="min-width:0">
               <div class="bold" style="font-size:15px">${escapeHtml(r.name)}${mineMark}</div>
-              <div class="meta">${escapeHtml(cat.label)} ・ ${escapeHtml(mainLbl)}${aoeBadge} ${escapeHtml(fmtDate(r.deadline_at))}${extraNote}</div>
+              <div class="meta">${escapeHtml(cat.label)} ・ ${escapeHtml(mainLbl)}${aoeBadge}${tentBadge} ${escapeHtml(fmtDate(r.deadline_at))}${extraNote}</div>
               ${r.location ? `<div class="meta">📍 ${escapeHtml(r.location)}</div>` : ''}
               <div class="meta">登録: ${escapeHtml(r.creator_name)}${canEdit ? ' ・ あなた' : ''}</div>
             </div>
@@ -186,6 +191,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
           🌐 AOE (Anywhere on Earth) で 指定 する
           <span class="hint-sm" style="font-size:10px">※ AOE = UTC-12。 入力 は AOE 時刻 で、 内部 は JST 換算 で 保存。</span>
         </label>
+        <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
+          <input type="checkbox" id="cd-deadline-tentative">
+          🤔 仮 (暫定) の 締切 ・ widget で 「およそ あと N 日」 と 表示
+        </label>
       </fieldset>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px">
         <legend style="font-size:12px; color:#666">➕ サブ 締切 (任意、 最大 10 件)</legend>
@@ -229,6 +238,9 @@ export async function renderConfDeadlineForm({ params } = {}) {
       <label style="display:inline-flex; gap:4px; align-items:center; font-size:11px">
         <input type="checkbox" class="cd-ex-aoe"> AOE
       </label>
+      <label style="display:inline-flex; gap:4px; align-items:center; font-size:11px">
+        <input type="checkbox" class="cd-ex-tentative"> 🤔 仮
+      </label>
       <button type="button" class="btn cd-ex-rm danger" style="font-size:11px; padding:2px 6px">削除</button>
     `;
     if (initial) {
@@ -240,6 +252,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
       } else {
         row.querySelector('.cd-ex-dt').value = dt;
       }
+      if (initial.is_tentative) row.querySelector('.cd-ex-tentative').checked = true;
     }
     row.querySelector('.cd-ex-rm').addEventListener('click', () => row.remove());
     extrasRoot.appendChild(row);
@@ -249,24 +262,26 @@ export async function renderConfDeadlineForm({ params } = {}) {
     addExtraRow();
   });
 
-  // v712 #306 入力 補助:
-  //   (a) datetime-local の 時刻 が 未入力 (00:00) なら 自動 で 23:59 に。
-  //       締切 は ほぼ 必ず 23:59 なので、 ユーザ が 日付 だけ 選んで も デフォルト で
-  //       23:59 が 入る ように。
+  // v712 #306 + v713 #307 入力 補助:
+  //   (a) datetime-local の 日付 部分 が 変わったら (= calendar 選択) 時刻 を 強制 で 23:59 に。
+  //       締切 は ほぼ 必ず 23:59 なので、 browser が 「今 の 時間」 を 入れて くる の を 上書き。
+  //       ユーザ が 時刻 部分 だけ 変えた 場合 (= 23:59 以外 に した) は 触らない。
   //   (b) カテゴリ が 国際 会議 (intl_conf) に なったら AOE checkbox を 既定 ON に。
-  //       (ユーザ が 既に 手動 で 触って いれば 触らない)
   //   (c) 会期 開始日 を 選んだ ら 終了日 input の min を 開始日 に セット。
-  const force2359 = (el) => {
-    if (!el) return;
-    const v = el.value;
-    if (!v) return;
-    if (v.endsWith('T00:00') || v.endsWith('T00:00:00')) {
-      el.value = v.slice(0, 10) + 'T23:59';
+  const lastDate = new WeakMap();
+  const force2359OnDateChange = (el) => {
+    if (!el || !el.value) return;
+    const newDate = el.value.slice(0, 10);
+    const prevDate = lastDate.get(el) || '';
+    if (newDate && newDate !== prevDate) {
+      el.value = newDate + 'T23:59';
     }
+    lastDate.set(el, newDate);
   };
-  document.getElementById('cd-deadline').addEventListener('change', e => force2359(e.target));
-  extrasRoot.addEventListener('change', e => {
-    if (e.target.classList?.contains('cd-ex-dt')) force2359(e.target);
+  const dlEl = document.getElementById('cd-deadline');
+  dlEl.addEventListener('input', () => force2359OnDateChange(dlEl));
+  extrasRoot.addEventListener('input', e => {
+    if (e.target.classList?.contains('cd-ex-dt')) force2359OnDateChange(e.target);
   });
   let aoeUserTouched = false;
   document.getElementById('cd-deadline-aoe').addEventListener('change', () => { aoeUserTouched = true; });
@@ -301,11 +316,13 @@ export async function renderConfDeadlineForm({ params } = {}) {
       document.getElementById('cd-url').value = r.url || '';
       document.getElementById('cd-deadline-label').value = r.deadline_label || '';
       document.getElementById('cd-deadline-aoe').checked = !!Number(r.deadline_is_aoe);
+      document.getElementById('cd-deadline-tentative').checked = !!Number(r.deadline_is_tentative);
       if (Number(r.deadline_is_aoe)) {
         document.getElementById('cd-deadline').value = jstStrToAoeStr(r.deadline_at);
       } else {
         document.getElementById('cd-deadline').value = (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
       }
+      lastDate.set(dlEl, dlEl.value.slice(0, 10));
       parseExtra(r.extra_deadlines).forEach(addExtraRow);
       if (r.notification_at) document.getElementById('cd-notification').value = (r.notification_at || '').replace(' ', 'T').slice(0, 16);
       if (r.event_start) {
@@ -331,11 +348,13 @@ export async function renderConfDeadlineForm({ params } = {}) {
       const lbl = row.querySelector('.cd-ex-label').value.trim();
       const dt = row.querySelector('.cd-ex-dt').value;
       const aoe = row.querySelector('.cd-ex-aoe').checked;
+      const tentative = row.querySelector('.cd-ex-tentative').checked;
       if (!dt) return;
       extras.push({
         label: lbl || '締切',
         deadline_at: aoe ? aoeStrToJstStr(dt) : dt,
         is_aoe: aoe ? 1 : 0,
+        is_tentative: tentative ? 1 : 0,
       });
     });
     const data = {
@@ -346,6 +365,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
       deadline_at: deadlineJst,
       deadline_label: document.getElementById('cd-deadline-label').value.trim() || null,
       deadline_is_aoe: isAoe ? 1 : 0,
+      deadline_is_tentative: document.getElementById('cd-deadline-tentative').checked ? 1 : 0,
       extra_deadlines: extras,
       notification_at: document.getElementById('cd-notification').value || null,
       event_start: document.getElementById('cd-event-start').value || null,
