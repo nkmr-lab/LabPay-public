@@ -432,9 +432,10 @@ export async function renderPlaceDetail({ params }) {
         </select>
       </div>
       <textarea id="pld-body" maxlength="4000" rows="3" placeholder="どうだった? 何が 美味しい / どう 行く"></textarea>
-      <div class="row" style="gap:6px; margin-top:6px; align-items:center">
-        <input type="file" id="pld-img" accept="image/*">
+      <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
+        <input type="file" id="pld-img" accept="image/*" multiple>
         <span class="hint-sm" id="pld-img-status"></span>
+        <div id="pld-img-thumbs" class="row" style="gap:4px; flex-wrap:wrap; width:100%"></div>
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <button id="pld-submit" class="primary">送信</button>
@@ -451,7 +452,6 @@ export async function renderPlaceDetail({ params }) {
   await loadPlace(id);
 }
 
-let pldImageUrl = null;
 async function loadPlace(id) {
   try {
     const d = await get('/api/places/' + id);
@@ -547,7 +547,10 @@ async function loadPlace(id) {
             <div class="bold">${escapeHtml(c.display_name)} <span class="hint">${escapeHtml(c.created_at || '')}</span></div>
             ${star ? `<div>${star}</div>` : ''}
             ${c.body ? `<div style="font-size:14px">${linkifyText(c.body)}</div>` : ''}
-            ${c.image_url ? `<a href="${escapeHtml(c.image_url)}" target="_blank"><img src="${escapeHtml(c.image_url)}" style="max-width:200px; max-height:200px; border-radius:6px; margin-top:6px"></a>` : ''}
+            ${(c.image_urls && c.image_urls.length)
+                ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">${c.image_urls.map(u => `
+                    <a href="${escapeHtml(u)}" target="_blank"><img src="${escapeHtml(u)}" style="max-width:200px; max-height:200px; border-radius:6px"></a>`).join('')}</div>`
+                : (c.image_url ? `<a href="${escapeHtml(c.image_url)}" target="_blank"><img src="${escapeHtml(c.image_url)}" style="max-width:200px; max-height:200px; border-radius:6px; margin-top:6px"></a>` : '')}
             ${canDel ? `<button class="btn" data-del-cm="${c.id}" style="font-size:11px; padding:2px 6px; margin-top:4px">削除</button>` : ''}
           </div>
         </div>`;
@@ -617,46 +620,71 @@ async function loadPlace(id) {
         };
       };
     }
-    // 画像 upload
-    pldImageUrl = null;
+    // v716 #311 複数 画像 upload。 input は multiple、 選んだ ら 並列 で 全部 上げて URL を 蓄積。
+    let pldImageUrls = [];
     const imgInput = document.getElementById('pld-img');
     const imgStatus = document.getElementById('pld-img-status');
-    imgInput.addEventListener('change', async () => {
-      const f = imgInput.files[0];
-      if (!f) { pldImageUrl = null; imgStatus.textContent = ''; return; }
-      imgStatus.textContent = 'アップロード中…';
-      const fd = new FormData();
-      fd.append('file', f);
-      try {
-        const resp = await fetch('/api/uploads/image', {
-          method: 'POST', body: fd, credentials: 'same-origin',
-          headers: { 'X-Requested-With': 'labpay' },
+    const imgThumbs = document.getElementById('pld-img-thumbs');
+    const renderThumbs = () => {
+      imgThumbs.innerHTML = pldImageUrls.map((u, i) => `
+        <span style="position:relative; display:inline-block">
+          <img src="${escapeHtml(u)}" style="width:50px; height:50px; object-fit:cover; border-radius:4px; border:1px solid #ccc">
+          <button type="button" data-rm-img="${i}" style="position:absolute; top:-4px; right:-4px; width:18px; height:18px; padding:0; border-radius:50%; background:#dc2626; color:#fff; border:none; font-size:10px; line-height:1; cursor:pointer">×</button>
+        </span>`).join('');
+      imgThumbs.querySelectorAll('[data-rm-img]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          pldImageUrls.splice(Number(btn.dataset.rmImg), 1);
+          renderThumbs();
         });
-        const j = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
-          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-        }
-        pldImageUrl = j.url || j.path;
-        imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
-      } catch (e) { imgStatus.textContent = '失敗: ' + (e?.message || e); }
+      });
+    };
+    imgInput.addEventListener('change', async () => {
+      const files = Array.from(imgInput.files || []);
+      if (!files.length) return;
+      imgStatus.textContent = `アップロード 中… (0/${files.length})`;
+      let done = 0, fails = 0;
+      for (const f of files) {
+        const fd = new FormData();
+        fd.append('file', f);
+        try {
+          const resp = await fetch('/api/uploads/image', {
+            method: 'POST', body: fd, credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'labpay' },
+          });
+          const j = await resp.json().catch(() => ({}));
+          if (!resp.ok) {
+            const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
+            throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+          }
+          const u = j.url || j.path;
+          if (u) pldImageUrls.push(u);
+          done++;
+        } catch (e) { fails++; console.warn('upload failed', e); }
+        imgStatus.textContent = `アップロード 中… (${done}/${files.length})`;
+      }
+      imgStatus.innerHTML = fails
+        ? `<span style="color:#c00">${done}/${files.length} 件 成功 ・ ${fails} 件 失敗</span>`
+        : `<span style="color:#0e7c63">✓ ${done} 件 完了</span>`;
+      renderThumbs();
+      imgInput.value = '';
     });
     // 投稿
     document.getElementById('pld-submit').onclick = async () => {
       const body = document.getElementById('pld-body').value.trim();
       const ratingRaw = document.getElementById('pld-rating').value;
       const rating = ratingRaw !== '' ? Number(ratingRaw) : null;
-      if (!body && !pldImageUrl && rating === null) {
+      if (!body && !pldImageUrls.length && rating === null) {
         toast('本文 / 画像 / 評価 の どれか は 入れてください'); return;
       }
       try {
-        await post(`/api/places/${id}/comments`, { body, image_url: pldImageUrl || '', rating });
+        await post(`/api/places/${id}/comments`, { body, image_urls: pldImageUrls, rating });
         toast('投稿しました');
         document.getElementById('pld-body').value = '';
         document.getElementById('pld-rating').value = '';
         imgInput.value = '';
-        pldImageUrl = null;
+        pldImageUrls = [];
         imgStatus.textContent = '';
+        renderThumbs();
         await loadPlace(id);
       } catch (e) { toast('失敗: ' + e.message); }
     };

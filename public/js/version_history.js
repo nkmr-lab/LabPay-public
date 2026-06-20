@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v716', d: '2026-06-20', s: '📷 たべある記 (places) の 口コミ で 写真 を 複数 枚 アップ できる ように (#311)。 file input multiple 対応、 並列 upload、 削除 可能 な サムネ プレビュー。 image_urls TEXT (JSON 配列) 列 を 追加、 旧 image_url 単数 は 互換 維持。 本文 / 評価 が 無くて も 写真 だけ で 投稿 可' },
   { v: 'v715', d: '2026-06-20', s: '🐛 IT ニュース widget で 「古い 記事 ばかり 並ぶ」 問題 修正 (#310)。 はてな の hot entry は 古い 記事 で も 上位 に 残り 続ける ため published_at desc だと 印象 が 「古い」 に。 server 側 で history.json の first_seen_at を 引いて 新着 順 (= news app と 同じ 並び) に sort し 直して 返す ように 変更' },
   { v: 'v714', d: '2026-06-20', s: '✅ タスク に 「✅ 終了 する」 ボタン を 追加 (#309)。 起案者 が 取消 と は 別 に 「もう 締切 で OK、 完了 扱い」 に できる。 未承認 capacity 分 は 返金、 進行 中 の claim は cancel、 status は 「closed」 (cancelled とは 区別)。 POST /api/tasks/{id}/close 新規 endpoint' },
   { v: 'v713', d: '2026-06-20', s: '📅 学会 締切 form: 「今 の 時間」 自動 入力 を 抑止 + 仮 (暫定) 締切 機能 を 追加 (#307 #308)。 datetime-local で 日付 部分 が 変わった 瞬間 に 時刻 を 強制 23:59 上書き (= browser autofill 対策)。 メイン / サブ 締切 ごと に 「🤔 仮」 checkbox、 widget / 一覧 で 「およそ あと N 日」 + 🤔仮 バッジ。 conf_deadlines.deadline_is_tentative 列 を 追加、 extras JSON にも is_tentative フラグ' },

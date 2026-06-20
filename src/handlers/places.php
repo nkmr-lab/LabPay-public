@@ -165,23 +165,34 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
     $stMV->execute([$id, $meId]);
     $visitedByMe = (bool)$stMV->fetchColumn();
     $stC = $pdo->prepare("
-        SELECT c.id, c.body, c.image_url, c.rating, c.user_id, c.created_at,
+        SELECT c.id, c.body, c.image_url, c.image_urls, c.rating, c.user_id, c.created_at,
                u.display_name, u.avatar_url
           FROM place_comments c
           JOIN users u ON u.id = c.user_id
          WHERE c.place_id = ?
          ORDER BY c.created_at DESC");
     $stC->execute([$id]);
-    $comments = array_map(fn($r) => [
-        'id'           => (int)$r['id'],
-        'body'         => $r['body'],
-        'image_url'    => $r['image_url'],
-        'rating'       => $r['rating'] !== null ? (int)$r['rating'] : null,
-        'user_id'      => (int)$r['user_id'],
-        'display_name' => $r['display_name'],
-        'avatar_url'   => $r['avatar_url'],
-        'created_at'   => $r['created_at'],
-    ], $stC->fetchAll(PDO::FETCH_ASSOC));
+    $comments = array_map(function ($r) {
+        // v716 #311 image_urls (JSON 配列) を 返す。 旧 単数 image_url も そのまま 返して
+        //   旧 client 互換 を 維持。
+        $urls = [];
+        if (!empty($r['image_urls'])) {
+            $decoded = json_decode((string)$r['image_urls'], true);
+            if (is_array($decoded)) $urls = array_values(array_filter($decoded, fn($x) => is_string($x) && $x !== ''));
+        }
+        if (!$urls && !empty($r['image_url'])) $urls = [(string)$r['image_url']];
+        return [
+            'id'           => (int)$r['id'],
+            'body'         => $r['body'],
+            'image_url'    => $r['image_url'],
+            'image_urls'   => $urls,
+            'rating'       => $r['rating'] !== null ? (int)$r['rating'] : null,
+            'user_id'      => (int)$r['user_id'],
+            'display_name' => $r['display_name'],
+            'avatar_url'   => $r['avatar_url'],
+            'created_at'   => $r['created_at'],
+        ];
+    }, $stC->fetchAll(PDO::FETCH_ASSOC));
     $avgRating = null;
     $rated = array_filter($comments, fn($c) => $c['rating'] !== null);
     if ($rated) $avgRating = array_sum(array_map(fn($c) => $c['rating'], $rated)) / count($rated);
@@ -285,22 +296,40 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
     $body = read_json_body();
     $bodyText = trim((string)($body['body'] ?? ''));
     if (mb_strlen($bodyText) > 4000) $bodyText = mb_substr($bodyText, 0, 4000);
-    $imageUrl = trim((string)($body['image_url'] ?? ''));
-    if ($imageUrl !== '' && mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
+    // v716 #311 複数 画像 対応。 image_urls (配列) を 受理、 image_url (旧 互換) は 先頭 を 入れる。
+    $imageUrls = [];
+    if (isset($body['image_urls']) && is_array($body['image_urls'])) {
+        foreach ($body['image_urls'] as $u_) {
+            $s = trim((string)$u_);
+            if ($s === '') continue;
+            if (mb_strlen($s) > 500) $s = mb_substr($s, 0, 500);
+            $imageUrls[] = $s;
+            if (count($imageUrls) >= 10) break;
+        }
+    }
+    // 単数 image_url (旧 client) も 受理 して 配列 に 統合
+    $singleUrl = trim((string)($body['image_url'] ?? ''));
+    if ($singleUrl !== '') {
+        if (mb_strlen($singleUrl) > 500) $singleUrl = mb_substr($singleUrl, 0, 500);
+        if (!in_array($singleUrl, $imageUrls, true)) array_unshift($imageUrls, $singleUrl);
+    }
+    $imageUrl = $imageUrls[0] ?? '';
+    $imageUrlsJson = $imageUrls ? json_encode($imageUrls, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
     $rating = null;
     if (isset($body['rating']) && $body['rating'] !== '' && $body['rating'] !== null) {
         $rating = (int)$body['rating'];
         if ($rating < 1 || $rating > 5) throw new ApiException('bad_request', 'rating 1..5', 400);
     }
-    if ($bodyText === '' && $imageUrl === '' && $rating === null) {
+    if ($bodyText === '' && !$imageUrls && $rating === null) {
         throw new ApiException('bad_request', '本文 / 画像 / 評価 の どれか は 必要', 400);
     }
     $ins = $pdo->prepare("INSERT INTO place_comments
-        (place_id, user_id, body, image_url, rating, created_at)
-        VALUES (?, ?, ?, ?, ?, NOW())");
+        (place_id, user_id, body, image_url, image_urls, rating, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())");
     $ins->execute([$placeId, (int)$u['id'],
         $bodyText !== '' ? $bodyText : null,
         $imageUrl !== '' ? $imageUrl : null,
+        $imageUrlsJson,
         $rating]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
