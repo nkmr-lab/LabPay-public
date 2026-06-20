@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v721', d: '2026-06-20', s: '🗺 たべある記の地図で前回の表示位置 / ズームを localStorage に保存して再来時に復元 (#317)。 移動 / ズーム のたびに保存、保存値がある時は auto-fit せずに前回の view を使う。保存先 key は labpay.places.mapView' },
   { v: 'v720', d: '2026-06-20', s: '🐛 履歴で勝敗予測 / 優勝予測の行に「mahjong_buyin」が生で表示されていた問題を修正 (#316)。 labels.js にゲーム / 予想系の ledger type ラベルを追加 (mahjong / othello / daifugo / 自作ゲーム / しりとり / 論文査読 / 原稿チェック / リライター)。 予想系は mahjong_buyin を ledger type として流用しているため「ゲーム参加フィー」表記に' },
   { v: 'v719', d: '2026-06-20', s: '🔍 お店登録でキーワードから tabelog の店舗 URL を自動取得 (#315)。「🔍 キーワードで tabelog を検索 → URL 自動取得」欄を新設、 tabelog の検索結果ページから店舗 URL を抽出して下の URL 欄にセット → 既存の「取得」ボタンを自動実行 → 店名 / 住所 / 緯度経度がそろう。 POST /api/places/search_url 新規 endpoint' },
   { v: 'v718', d: '2026-06-20', s: '🖼 一時画像共有機能を新規追加 (#314)。 /#/screen-shares で画像 + ひとことをラボ全体 or グループ宛に投げて、 期限 (15分〜24時間) 内は大きく表示。ホームに「🖼 共有中の画像」 widget を追加 (アクティブな共有がある時だけ表示)。 screen_shares テーブル + /api/screen-shares (active/create/delete) を新設、 画像は uploads/image にアップ' },

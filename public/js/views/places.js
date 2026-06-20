@@ -165,10 +165,32 @@ export async function renderPlacesMap() {
     return;
   }
   const mapBox = document.getElementById('pm-map');
-  const map = L.map(mapBox, { zoomControl: true }).setView([35.7, 139.66], 13);
+  // v721 #317 前回 の 表示 位置 / ズーム を localStorage から 復元。
+  const MAP_VIEW_KEY = 'labpay.places.mapView';
+  let savedView = null;
+  try {
+    const raw = localStorage.getItem(MAP_VIEW_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (typeof v?.lat === 'number' && typeof v?.lng === 'number' && typeof v?.zoom === 'number') {
+        savedView = v;
+      }
+    }
+  } catch (_) {}
+  const map = L.map(mapBox, { zoomControl: true })
+    .setView(savedView ? [savedView.lat, savedView.lng] : [35.7, 139.66],
+             savedView ? savedView.zoom : 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap', maxZoom: 19,
   }).addTo(map);
+  const persistView = () => {
+    try {
+      const c = map.getCenter();
+      localStorage.setItem(MAP_VIEW_KEY, JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
+    } catch (_) {}
+  };
+  map.on('moveend', persistView);
+  map.on('zoomend', persistView);
 
   let items = [];
   try {
@@ -212,10 +234,13 @@ export async function renderPlacesMap() {
     markersByPid.set(p.id, marker);
   }
   // 全件 が 入る ように auto-fit。 1 件 なら 適当に zoom-in。
-  if (items.length === 1) {
-    map.setView([items[0].lat, items[0].lng], 16);
-  } else if (items.length > 1) {
-    map.fitBounds(L.latLngBounds(items.map(p => [p.lat, p.lng])).pad(0.2));
+  // v721 #317 前回 の view が 残って いれば 復元 した もの を 優先 (auto-fit しない)。
+  if (!savedView) {
+    if (items.length === 1) {
+      map.setView([items[0].lat, items[0].lng], 16);
+    } else if (items.length > 1) {
+      map.fitBounds(L.latLngBounds(items.map(p => [p.lat, p.lng])).pad(0.2));
+    }
   }
 
   const renderList = () => {
