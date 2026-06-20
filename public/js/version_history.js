@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v706', d: '2026-06-20', s: '📰 IT ニュース ページ で 「🔄 要約 を 取得」 ボタン を 追加 (#298)。 要約 が ついて ない 記事 に ボタン が 出る、 タップ で その場 で POST /api/news/summarize 経由 で 即時 生成、 in-place で 要約 に 置換 される。 待たずに 1 件 ずつ 取り に 行ける' },
   { v: 'v705', d: '2026-06-20', s: '📰 IT ニュース 要約 budget を 倍 増 + 履歴 ページ (/#/news) を 追加 (#296 #297)。 1 request あたり 2 件 → 4 件 で 全 8 件 が 2 回 の リロード で 揃う。 news_history.json で URL 単位 に 初出 日付 を 30 日 累積、 ニュース ページ で 日付 ごと に group 表示。 ホーム widget の ヘッダ から 「すべて (履歴) →」 で 飛べる' },
   { v: 'v704', d: '2026-06-20', s: '📰 IT ニュース widget に GPT 要約 (日本語) を 追加 (#293 #295)。 各 記事 を fetch → strip HTML → gpt-4o-mini で 100-150 字 の 日本語 要約。 海外 source (Hacker News 等) は 自動 で 和訳 兼 要約 さ れる。 cache: 1 リクエスト 最大 2 件 だけ 新規 生成、 一度 作った 要約 は 7 日 流用 (/tmp/labpay_news/summaries.json)' },
   { v: 'v703', d: '2026-06-20', s: '🐛 feedback まとめ 横 スクロール 修正 + ドラフト 途中 閉鎖 ボタン 追加 (#292 #294)。 feedback 一覧 の body / claude_summary / reply 各 ブロック に overflow-wrap:anywhere を 強制 して 長い URL や 文 で 横 に はみ出さない ように。 ドラフト は 起案者 だけ どの phase でも 途中 で キャンセル できる ボタン を 全 phase 共通 で 表示' },

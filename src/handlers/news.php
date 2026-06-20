@@ -16,8 +16,9 @@ const NEWS_CACHE_TTL = 3600; // 1 hour
 function route_news(PDO $pdo, array $cfg, string $method, array $seg): void {
     Auth::requireUser($pdo, $cfg);
     $sub = $seg[1] ?? '';
-    if ($sub === 'it'      && $method === 'GET') { news_it($cfg); return; }
-    if ($sub === 'history' && $method === 'GET') { news_history($cfg); return; }
+    if ($sub === 'it'        && $method === 'GET')  { news_it($cfg); return; }
+    if ($sub === 'history'   && $method === 'GET')  { news_history($cfg); return; }
+    if ($sub === 'summarize' && $method === 'POST') { news_summarize_one($cfg); return; }
     json_error('not_found', "no news route for $method $sub", 404);
 }
 
@@ -81,6 +82,32 @@ function news_it(array $cfg): void {
         'items'     => $sliced,
         'cached_at' => is_file($cacheFile) ? date('c', filemtime($cacheFile)) : null,
     ]);
+}
+
+// v706 #298 個別 記事 の 要約 を on-demand で 生成 (UI の 「要約 を 取得」 ボタン)。
+//   キャッシュ に あれば そのまま 返す、 無ければ 新規 生成 して 保存。
+function news_summarize_one(array $cfg): void {
+    $body = read_json_body();
+    $url   = (string)($body['url']   ?? '');
+    $title = (string)($body['title'] ?? '');
+    if ($url === '') throw new ApiException('bad_request', 'url 必須', 400);
+    $sumFile = NEWS_CACHE_DIR . '/summaries.json';
+    if (!is_dir(NEWS_CACHE_DIR)) @mkdir(NEWS_CACHE_DIR, 0775, true);
+    $summaries = is_file($sumFile)
+        ? (json_decode((string)@file_get_contents($sumFile), true) ?: [])
+        : [];
+    $key = md5($url);
+    if (isset($summaries[$key]['text'])) {
+        json_response(['summary_jp' => $summaries[$key]['text'], 'cached' => true]);
+        return;
+    }
+    $apiKey = (string)($cfg['openai']['api_key'] ?? '');
+    if ($apiKey === '') throw new ApiException('not_configured', 'OpenAI API key 未設定', 503);
+    $s = news_summarize_url($url, $title, $apiKey);
+    if ($s === null) throw new ApiException('failed', '要約 生成 に 失敗 (記事 取得 不可 or OpenAI エラー)', 502);
+    $summaries[$key] = ['text' => $s, 'created_at' => time()];
+    @file_put_contents($sumFile, json_encode($summaries, JSON_UNESCAPED_UNICODE));
+    json_response(['summary_jp' => $s, 'cached' => false]);
 }
 
 function news_summarize_url(string $url, string $title, string $apiKey): ?string {
