@@ -137,12 +137,19 @@ function places_create(PDO $pdo, array $cfg): void {
     $sourceUrl = isset($body['source_url']) ? trim((string)$body['source_url']) : '';
     if ($sourceUrl !== '' && !preg_match('#^https?://#', $sourceUrl)) $sourceUrl = '';
     if (mb_strlen($sourceUrl) > 500) $sourceUrl = mb_substr($sourceUrl, 0, 500);
+    // v725 #327 電話番号 / 営業時間
+    $phone = isset($body['phone']) ? trim((string)$body['phone']) : '';
+    if (mb_strlen($phone) > 50) $phone = mb_substr($phone, 0, 50);
+    $hours = isset($body['hours']) ? trim((string)$body['hours']) : '';
+    if (mb_strlen($hours) > 2000) $hours = mb_substr($hours, 0, 2000);
     $ins = $pdo->prepare("INSERT INTO places
-        (title, category, address, lat, lng, description, source_url, image_url, creator_user_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        (title, category, address, lat, lng, description, source_url, phone, hours, image_url, creator_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
     $ins->execute([$title, $category, $address ?: null, $lat, $lng,
                    $description ?: null,
                    $sourceUrl !== '' ? $sourceUrl : null,
+                   $phone !== '' ? $phone : null,
+                   $hours !== '' ? $hours : null,
                    $imageUrl !== '' ? $imageUrl : null, (int)$u['id']]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
@@ -214,6 +221,8 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'lng'                => $p['lng'] !== null ? (float)$p['lng'] : null,
             'description'        => $p['description'],
             'source_url'         => $p['source_url'] ?? null,
+            'phone'              => $p['phone'] ?? null,
+            'hours'              => $p['hours'] ?? null,
             'image_url'          => $p['image_url'] ?? null,
             'image_thumb_url'    => !empty($p['image_url']) ? thumb_url_for((string)$p['image_url']) : null, // v512 詳細ヒーロー用
             'creator_user_id'    => (int)$p['creator_user_id'],
@@ -266,6 +275,14 @@ function places_edit(PDO $pdo, array $cfg, int $id): void {
         if ($su !== '' && !preg_match('#^https?://#', $su)) $su = '';
         $su = mb_substr($su, 0, 500);
         $sets[] = 'source_url = ?'; $args[] = $su !== '' ? $su : null;
+    }
+    if (array_key_exists('phone', $body)) {
+        $ph = mb_substr(trim((string)$body['phone']), 0, 50);
+        $sets[] = 'phone = ?'; $args[] = $ph !== '' ? $ph : null;
+    }
+    if (array_key_exists('hours', $body)) {
+        $hr = mb_substr(trim((string)$body['hours']), 0, 2000);
+        $sets[] = 'hours = ?'; $args[] = $hr !== '' ? $hr : null;
     }
     if (array_key_exists('lat', $body)) {
         $v = $body['lat'];
@@ -399,6 +416,7 @@ function places_import_url(PDO $pdo, array $cfg): void {
     }
 
     $title = ''; $address = ''; $lat = null; $lng = null; $desc = '';
+    $phone = ''; $hours = '';
 
     // 1) JSON-LD
     if (preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
@@ -425,6 +443,25 @@ function places_import_url(PDO $pdo, array $cfg): void {
                     if (isset($node['geo']['latitude']))  $lat = (float)$node['geo']['latitude'];
                     if (isset($node['geo']['longitude'])) $lng = (float)$node['geo']['longitude'];
                 }
+                // v725 #327 電話番号 / 営業時間
+                if ($phone === '' && !empty($node['telephone'])) $phone = (string)$node['telephone'];
+                if ($hours === '') {
+                    if (!empty($node['openingHours'])) {
+                        $oh = $node['openingHours'];
+                        $hours = is_array($oh) ? implode("\n", array_map('strval', $oh)) : (string)$oh;
+                    } elseif (!empty($node['openingHoursSpecification']) && is_array($node['openingHoursSpecification'])) {
+                        $lines = [];
+                        foreach ($node['openingHoursSpecification'] as $spec) {
+                            if (!is_array($spec)) continue;
+                            $day  = $spec['dayOfWeek'] ?? '';
+                            if (is_array($day)) $day = implode(',', array_map('strval', $day));
+                            $open = $spec['opens'] ?? '';
+                            $close = $spec['closes'] ?? '';
+                            $lines[] = trim(((string)$day) . ' ' . (string)$open . '-' . (string)$close);
+                        }
+                        $hours = implode("\n", array_filter($lines, fn($x) => trim($x) !== ''));
+                    }
+                }
                 if ($title !== '' && $lat !== null) break 2;  // 取れたら 抜ける
             }
         }
@@ -443,6 +480,8 @@ function places_import_url(PDO $pdo, array $cfg): void {
         'lat'         => $lat,
         'lng'         => $lng,
         'description' => $desc,
+        'phone'       => $phone,
+        'hours'       => $hours,
         'source_url'  => $url,
     ]);
 }

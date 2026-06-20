@@ -586,7 +586,8 @@ function tickTimer() {
   if (tmStatus === 'paused') {
     const modeEl = document.getElementById('tmd-mode');
     countEl.textContent = fmtDuration(tmRemainingSec);
-    countEl.style.color = '#e65100';
+    // v725 #329 paused の数字色を橙 #e65100 → 落ち着いた緑 #0e7c63 に。 赤い感じが気を引きすぎるため。
+    countEl.style.color = '#0e7c63';
     if (modeEl) modeEl.textContent = '⏸ 一時停止中 — ▶ 開始 を 押すと カウントダウン';
     elEl.textContent = `残り ${fmtDuration(tmRemainingSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
     const usedSec = Math.max(0, tmDurationSec - tmRemainingSec);
@@ -636,11 +637,32 @@ function tickTimer() {
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   }
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(visualEndSec)}`;
-  // v724 #321 プログレスバーは発表終了 (endBellSec) で 100%。 質疑 / 超過に入ったら 100% 据え置き。
-  const pct = endBellSec ? Math.min(100, (elapsedSec / endBellSec) * 100) : 0;
+  // v726 #326 プログレスバー再設計: 合計 = 最後のベル位置 を 100%。
+  //   発表終了までは ベース色 (primary)、 質疑帯 (発表終了〜最後のベル) は橙系、 超過は赤。
+  //   背景に縦線で 一鈴 / 二鈴 / 発表終了 を示す (= tickStyle inline gradient で表示)。
+  const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (isOver) barEl.style.background = '#c62828';
   else if (isPastEnd) barEl.style.background = '#f59e0b';
+  else barEl.style.background = 'var(--primary)';
+  // 背景: 発表終了で切替 + ベル位置に縦線。
+  const bgEl = barEl.parentElement;
+  if (bgEl && visualEndSec) {
+    const endPct = (endBellSec / visualEndSec) * 100;
+    const linePcts = [];
+    if (tmBells && tmBells.length) {
+      for (const b of tmBells) {
+        if (b > 0 && b <= visualEndSec) linePcts.push((b / visualEndSec) * 100);
+      }
+    }
+    const lines = linePcts.map(p => `transparent ${p - 0.4}%, #333 ${p - 0.4}%, #333 ${p + 0.4}%, transparent ${p + 0.4}%`).join(', ');
+    bgEl.style.background = `linear-gradient(to right, #dbeafe 0%, #dbeafe ${endPct}%, #fef3c7 ${endPct}%, #fef3c7 100%)`;
+    if (linePcts.length) {
+      bgEl.style.backgroundImage =
+        `linear-gradient(to right, ${lines}),` +
+        `linear-gradient(to right, #dbeafe 0%, #dbeafe ${endPct}%, #fef3c7 ${endPct}%, #fef3c7 100%)`;
+    }
+  }
   // 発表終了 ベル の ding は elapsed が endBellSec を 跨いだ 瞬間 で 1 回 のみ。
   if (remainToEndSec === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
     tmEndFiredOnce = true;

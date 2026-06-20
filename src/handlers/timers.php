@@ -217,7 +217,12 @@ function timers_start(PDO $pdo, array $cfg, int $id): void {
     }
     $remain = (int)($row['remaining_seconds'] ?? 0);
     if ($remain <= 0) $remain = (int)$row['duration_seconds'];
-    $started = date('Y-m-d H:i:s');
+    // v725 #330 一時停止 → 再生 で「最初に戻る」 bug 修正。
+    //   旧: started_at = NOW なので、 ベル の オフセット (= started_at + bellN) も リセット
+    //       されて 「ベル も 経過 も 最初から」 に 戻って 見えた。
+    //   新: started_at = NOW − 既に経過した秒数。 elapsed の 計算 が 連続 する。
+    $alreadyElapsed = max(0, (int)$row['duration_seconds'] - $remain);
+    $started = date('Y-m-d H:i:s', time() - $alreadyElapsed);
     $ends    = date('Y-m-d H:i:s', time() + $remain);
     $pdo->prepare("UPDATE timers
                       SET status='running', started_at=?, ends_at=?, remaining_seconds=NULL

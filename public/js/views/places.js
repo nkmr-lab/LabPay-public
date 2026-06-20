@@ -341,6 +341,12 @@ export async function renderPlaceNew() {
         </div>
         <span class="hint-sm" style="font-size:11px">Google Maps で 右クリック → 座標 コピー で 取得 でき ます</span>
       </label>
+      <label class="field"><span class="lbl">📞 電話番号 (任意)</span>
+        <input type="tel" id="pln-phone" maxlength="50" placeholder="例: 03-1234-5678">
+      </label>
+      <label class="field"><span class="lbl">🕐 営業時間 (任意)</span>
+        <textarea id="pln-hours" maxlength="2000" rows="3" placeholder="例: 平日 11:00-22:00 / 土日 11:00-23:00 / 火曜定休"></textarea>
+      </label>
       <label class="field"><span class="lbl">紹介文 / なぜ 行きたい か (任意)</span>
         <textarea id="pln-desc" maxlength="4000" rows="4" placeholder="例: 〇〇さん の おすすめ。 □□が 美味しい らしい"></textarea>
       </label>
@@ -446,6 +452,13 @@ export async function renderPlaceNew() {
         if (!descEl.value.trim() && r.description) {
           descEl.value = r.description;
         }
+        // v725 #327 電話番号 / 営業時間 が取れていれば 入れる (空欄なら 上書きしない)。
+        if (r.phone && !document.getElementById('pln-phone').value.trim()) {
+          document.getElementById('pln-phone').value = r.phone;
+        }
+        if (r.hours && !document.getElementById('pln-hours').value.trim()) {
+          document.getElementById('pln-hours').value = r.hours;
+        }
         status.innerHTML = `<span style="color:#0e7c63">✓ 取得 完了</span>`;
       } catch (e) {
         status.innerHTML = `<span style="color:#c62828">失敗: ${escapeHtml(e.message)}</span>`;
@@ -468,6 +481,8 @@ export async function renderPlaceNew() {
         lng: lng !== '' ? Number(lng) : null,
         description: desc,
         source_url: document.getElementById('pln-source-url').value || null,
+        phone: document.getElementById('pln-phone').value.trim() || null,
+        hours: document.getElementById('pln-hours').value.trim() || null,
         image_url: plnImageUrl || '',
       });
       toast('登録しました');
@@ -561,11 +576,20 @@ async function loadPlace(id) {
     const srcUrlBlock = p.source_url
       ? `<div class="meta" style="margin-top:4px"><a href="${escapeHtml(p.source_url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 ${escapeHtml(p.source_url)} ↗</a></div>`
       : '';
+    // v725 #327 電話番号 / 営業時間 を 表示。
+    const phoneBlock = p.phone
+      ? `<div class="meta" style="margin-top:4px">📞 <a href="tel:${escapeHtml(p.phone)}" style="color:var(--primary)">${escapeHtml(p.phone)}</a></div>`
+      : '';
+    const hoursBlock = p.hours
+      ? `<div class="meta" style="margin-top:4px; white-space:pre-wrap">🕐 ${escapeHtml(p.hours)}</div>`
+      : '';
     document.getElementById('pld-head').innerHTML = `
       ${heroImg}
       <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
       ${cat ? `<div class="meta">${escapeHtml(cat)}</div>` : ''}
       ${p.address ? `<div class="meta">📍 ${escapeHtml(p.address)}</div>` : ''}
+      ${phoneBlock}
+      ${hoursBlock}
       ${srcUrlBlock}
       ${ratingLine}
       ${p.description ? `<div style="margin-top:8px; font-size:14px">${linkifyText(p.description)}</div>` : ''}
@@ -676,6 +700,12 @@ async function loadPlace(id) {
               <input type="number" id="pld-edit-lng" step="0.000001" value="${p.lng !== null ? p.lng : ''}" placeholder="経度" style="flex:1">
             </div>
           </label>
+          <label class="field"><span class="lbl">📞 電話番号 (任意)</span>
+            <input type="tel" id="pld-edit-phone" maxlength="50" value="${escapeHtml(p.phone || '')}" placeholder="例: 03-1234-5678">
+          </label>
+          <label class="field"><span class="lbl">🕐 営業時間 (任意)</span>
+            <textarea id="pld-edit-hours" maxlength="2000" rows="3" placeholder="例: 平日 11:00-22:00 / 火曜定休">${escapeHtml(p.hours || '')}</textarea>
+          </label>
           <label class="field"><span class="lbl">紹介文 / メモ</span>
             <textarea id="pld-edit-desc" maxlength="4000" rows="5">${escapeHtml(p.description || '')}</textarea>
           </label>
@@ -693,6 +723,8 @@ async function loadPlace(id) {
               category:    document.getElementById('pld-edit-cat').value,
               address:     document.getElementById('pld-edit-addr').value.trim(),
               description: document.getElementById('pld-edit-desc').value.trim(),
+              phone:       document.getElementById('pld-edit-phone').value.trim(),
+              hours:       document.getElementById('pld-edit-hours').value.trim(),
               lat: lat !== '' ? Number(lat) : null,
               lng: lng !== '' ? Number(lng) : null,
             });

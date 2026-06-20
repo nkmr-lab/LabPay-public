@@ -2713,10 +2713,11 @@ async function renderMyActiveTimers() {
             title: t.title,
             time: `${fmtTmDur(remaining)} 残`,
             tick: null,
-            sort: 888888 + remaining,  // paused は running の 後 / SW 一時停止 の 前
-            color: '#e65100',
-            bg: '#fff3e0',
-            participants: t.participants || [],  // v466
+            sort: 888888 + remaining,
+            // v725 #329 paused の色を 橙→緑 (赤い感じが目障りとの指摘)。
+            color: '#0e7c63',
+            bg: '#e0f7f1',
+            participants: t.participants || [],
           });
         }
       }
