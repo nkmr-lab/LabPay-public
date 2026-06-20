@@ -183,6 +183,12 @@ async function paint(did) {
   } else if (d.phase === 'finished') {
     body += renderFinished(d, labelOf, confirmedByUser);
   }
+  // v703 #294 起案者 は どの phase でも 途中 キャンセル できる ように (旧 版 は picking
+  //   phase のみ ボタン を 出して いた)。 active で 起案者 の とき は 常時 表示。
+  if (d.i_am_creator && d.status === 'active') {
+    body += `<div class="card"><button id="dr-cancel-global" class="btn danger" style="font-size:13px; width:100%">🛑 ドラフト を 途中 で 閉鎖 (キャンセル)</button>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">起案者 専用。 押す と この ドラフト は cancelled に なり、 以後 編集 不可。</div></div>`;
+  }
 
   // ── 累積 結果 (常時 表示) ──
   if (rounds > 0) {
@@ -210,6 +216,12 @@ async function paint(did) {
   document.getElementById('dr-advance')?.addEventListener('click', () => onAdvance(did));
   document.getElementById('dr-cancel')?.addEventListener('click', async () => {
     if (!confirm('ドラフトを キャンセル しますか?')) return;
+    try { await post('/api/drafts/' + did + '/cancel', {}); paint(did); }
+    catch (e) { toast('失敗: ' + e.message); }
+  });
+  // v703 #294 phase 共通 の キャンセル ボタン
+  document.getElementById('dr-cancel-global')?.addEventListener('click', async () => {
+    if (!confirm('ドラフト を 途中 で 閉鎖 (キャンセル) しますか? 元 に は 戻せません。')) return;
     try { await post('/api/drafts/' + did + '/cancel', {}); paint(did); }
     catch (e) { toast('失敗: ' + e.message); }
   });

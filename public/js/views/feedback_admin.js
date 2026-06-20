@@ -196,21 +196,23 @@ function row(f) {
   } else if (cs === 'blocked') {
     claudeBtn = `<button data-claude-fb="${f.id}" data-next="none" class="btn" style="padding:2px 8px; font-size:11px">再投入準備 (none に戻す)</button>`;
   }
-  // Claude のサマリが あれば 表示
+  // v703 #292 すべて 表示 で 長 文 が 横 に はみ出して 横 スクロール 発生 → 各 テキスト
+  //   コンテナ に overflow-wrap:anywhere を 強制 して 改行 させる。
+  const wrapStyle = 'overflow-wrap:anywhere; word-break:break-word';
   const claudeSummary = f.claude_summary
-    ? `<div style="margin-top:4px; padding:6px 8px; background:#f5f3ff; border-left:3px solid #8b5cf6; border-radius:4px; font-size:12px; white-space:pre-wrap">${escapeHtml(f.claude_summary)}</div>`
+    ? `<div style="margin-top:4px; padding:6px 8px; background:#f5f3ff; border-left:3px solid #8b5cf6; border-radius:4px; font-size:12px; white-space:pre-wrap; ${wrapStyle}">${escapeHtml(f.claude_summary)}</div>`
     : '';
   return `
-    <div class="list-item" style="${replied ? 'opacity:.6' : 'border-left:3px solid var(--primary)'}; align-items:flex-start">
-      <div style="flex:1; min-width:0">
-        <div class="bold">${escapeHtml(kindLbl)} · ${escapeHtml(f.user_name)} <span class="muted" style="font-weight:normal; font-size:11px">${escapeHtml(f.created_at)}</span> ${claudeBadge}</div>
-        <div class="meta" style="white-space:pre-wrap; margin-top:2px">${escapeHtml(f.body)}</div>
-        ${f.url ? `<div class="meta" style="font-size:11px">📍 ${escapeHtml(f.url)}</div>` : ''}
+    <div class="list-item" style="${replied ? 'opacity:.6' : 'border-left:3px solid var(--primary)'}; align-items:flex-start; max-width:100%">
+      <div style="flex:1; min-width:0; max-width:100%">
+        <div class="bold" style="${wrapStyle}">${escapeHtml(kindLbl)} · ${escapeHtml(f.user_name)} <span class="muted" style="font-weight:normal; font-size:11px">${escapeHtml(f.created_at)}</span> ${claudeBadge}</div>
+        <div class="meta" style="white-space:pre-wrap; margin-top:2px; ${wrapStyle}">${escapeHtml(f.body)}</div>
+        ${f.url ? `<div class="meta" style="font-size:11px; ${wrapStyle}">📍 ${escapeHtml(f.url)}</div>` : ''}
         ${claudeSummary}
         ${replied
           ? `<div style="margin-top:6px; padding:6px 8px; background:#eaf5ef; border-radius:6px; font-size:13px">
-               <div class="bold" style="color:#0e7c63">✅ 返信済 (${escapeHtml(f.replied_by_name || 'admin')} · ${escapeHtml(f.replied_at)})</div>
-               <div style="white-space:pre-wrap; margin-top:2px">${escapeHtml(f.reply_body)}</div>
+               <div class="bold" style="color:#0e7c63; ${wrapStyle}">✅ 返信済 (${escapeHtml(f.replied_by_name || 'admin')} · ${escapeHtml(f.replied_at)})</div>
+               <div style="white-space:pre-wrap; margin-top:2px; ${wrapStyle}">${escapeHtml(f.reply_body)}</div>
              </div>`
           : `<div style="margin-top:6px">
                <textarea id="fb-reply-${f.id}" rows="2" maxlength="4000" placeholder="例: 対応したよ！" style="width:100%; box-sizing:border-box"></textarea>
