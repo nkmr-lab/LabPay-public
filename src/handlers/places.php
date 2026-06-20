@@ -133,11 +133,17 @@ function places_create(PDO $pdo, array $cfg): void {
     if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
     $imageUrl = isset($body['image_url']) ? trim((string)$body['image_url']) : '';
     if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
+    // v722 #318 元 URL (tabelog / Retty 等) を そのまま 保存。
+    $sourceUrl = isset($body['source_url']) ? trim((string)$body['source_url']) : '';
+    if ($sourceUrl !== '' && !preg_match('#^https?://#', $sourceUrl)) $sourceUrl = '';
+    if (mb_strlen($sourceUrl) > 500) $sourceUrl = mb_substr($sourceUrl, 0, 500);
     $ins = $pdo->prepare("INSERT INTO places
-        (title, category, address, lat, lng, description, image_url, creator_user_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        (title, category, address, lat, lng, description, source_url, image_url, creator_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
     $ins->execute([$title, $category, $address ?: null, $lat, $lng,
-                   $description ?: null, $imageUrl !== '' ? $imageUrl : null, (int)$u['id']]);
+                   $description ?: null,
+                   $sourceUrl !== '' ? $sourceUrl : null,
+                   $imageUrl !== '' ? $imageUrl : null, (int)$u['id']]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
 
@@ -207,6 +213,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'lat'                => $p['lat'] !== null ? (float)$p['lat'] : null,
             'lng'                => $p['lng'] !== null ? (float)$p['lng'] : null,
             'description'        => $p['description'],
+            'source_url'         => $p['source_url'] ?? null,
             'image_url'          => $p['image_url'] ?? null,
             'image_thumb_url'    => !empty($p['image_url']) ? thumb_url_for((string)$p['image_url']) : null, // v512 詳細ヒーロー用
             'creator_user_id'    => (int)$p['creator_user_id'],
@@ -253,6 +260,12 @@ function places_edit(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('description', $body)) {
         $d = mb_substr(trim((string)$body['description']), 0, 4000);
         $sets[] = 'description = ?'; $args[] = $d !== '' ? $d : null;
+    }
+    if (array_key_exists('source_url', $body)) {
+        $su = trim((string)$body['source_url']);
+        if ($su !== '' && !preg_match('#^https?://#', $su)) $su = '';
+        $su = mb_substr($su, 0, 500);
+        $sets[] = 'source_url = ?'; $args[] = $su !== '' ? $su : null;
     }
     if (array_key_exists('lat', $body)) {
         $v = $body['lat'];

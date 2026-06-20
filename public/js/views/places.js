@@ -344,6 +344,8 @@ export async function renderPlaceNew() {
       <label class="field"><span class="lbl">紹介文 / なぜ 行きたい か (任意)</span>
         <textarea id="pln-desc" maxlength="4000" rows="4" placeholder="例: 〇〇さん の おすすめ。 □□が 美味しい らしい"></textarea>
       </label>
+      <!-- v722 #318 元 URL (tabelog / Retty 等) を 保存 する 隠し input -->
+      <input type="hidden" id="pln-source-url">
       <label class="field"><span class="lbl">📷 メイン 写真 (任意)</span>
         <div class="row" style="gap:6px; align-items:center">
           <input type="file" id="pln-img" accept="image/*" style="flex:1">
@@ -437,11 +439,12 @@ export async function renderPlaceNew() {
         if (r.address)     document.getElementById('pln-addr').value  = r.address;
         if (r.lat != null) document.getElementById('pln-lat').value   = r.lat;
         if (r.lng != null) document.getElementById('pln-lng').value   = r.lng;
-        // 紹介文 が 空 なら URL を 入れて おく (description に URL を 含めて おけば
-        // 一覧 / 詳細 で クリック可能 リンク に なる)
+        // v722 #318 元 URL を 隠し input に 保存 (= 詳細 で クリック 可能 リンク に)。
+        //   旧版 は description に 追記 して いた が、 これ で 捨て な く 済む。
+        document.getElementById('pln-source-url').value = r.source_url || url;
         const descEl = document.getElementById('pln-desc');
-        if (!descEl.value.trim()) {
-          descEl.value = (r.description || '') + (r.description ? '\n\n' : '') + url;
+        if (!descEl.value.trim() && r.description) {
+          descEl.value = r.description;
         }
         status.innerHTML = `<span style="color:#0e7c63">✓ 取得 完了</span>`;
       } catch (e) {
@@ -464,6 +467,7 @@ export async function renderPlaceNew() {
         lat: lat !== '' ? Number(lat) : null,
         lng: lng !== '' ? Number(lng) : null,
         description: desc,
+        source_url: document.getElementById('pln-source-url').value || null,
         image_url: plnImageUrl || '',
       });
       toast('登録しました');
@@ -553,11 +557,16 @@ async function loadPlace(id) {
               style="font-size:13px; padding:4px 12px; ${p.visited_by_me ? 'background:#dcfce7; color:#15803d; border-color:#15803d' : ''}">
         ${p.visited_by_me ? '👣' : '🐾'} <span id="pld-visit-n">${p.visit_count || 0}</span>
       </button>`;
+    // v722 #318 source_url (tabelog 等) を 表示。
+    const srcUrlBlock = p.source_url
+      ? `<div class="meta" style="margin-top:4px"><a href="${escapeHtml(p.source_url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 ${escapeHtml(p.source_url)} ↗</a></div>`
+      : '';
     document.getElementById('pld-head').innerHTML = `
       ${heroImg}
       <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
       ${cat ? `<div class="meta">${escapeHtml(cat)}</div>` : ''}
       ${p.address ? `<div class="meta">📍 ${escapeHtml(p.address)}</div>` : ''}
+      ${srcUrlBlock}
       ${ratingLine}
       ${p.description ? `<div style="margin-top:8px; font-size:14px">${linkifyText(p.description)}</div>` : ''}
       <div class="meta" style="margin-top:6px">起案 ${escapeHtml(p.creator_name)} · ${escapeHtml(p.created_at || '')}</div>
