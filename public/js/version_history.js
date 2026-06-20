@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v700', d: '2026-06-20', s: '🐛 リクエスト (報酬なし) で 「リクエスト を 出す」 ボタン が 無反応 だった bug 修正 (#289)。 isFree=true 時 に rewardRow 全体 が skip される ため t-capacity DOM が 存在 せず、 querySelector が null を 返して .value で TypeError → 失敗 して いた。 fallback で 1 人 募集 既定 に' },
   { v: 'v699', d: '2026-06-20', s: '🎮📊 オセロ AI 強化 + 活動 マップ に 全 日程 mode + 10 分 帯 を 横 スクロール 不要 に (#285 #286 #287)。 オセロ AI を alpha-beta minimax (深さ 3、 終盤 6) + 位置 重み + mobility に 置換、 思考 時間 2s → 3s。 ラボ活動 マップ に 「全 日程 (日 × 時)」 モード 追加。 10 分 単位 在室 帯 を grid 1fr で viewport に 合わせて 自動 縮小、 横 スクロール 不要 に' },
   { v: 'v698', d: '2026-06-20', s: '👥 学会 〆切 の メンバー 追加 で 共通 メンバー picker を 利用 (#284)。 v697 で prompt() で user ID を カンマ 区切り 入力 だった のを 廃止 し、 modal 内 の member_picker (学年 / 性別 bulk + chip 選択) を 使う ように。 既存 メンバー と 起案者 は exclude' },
   { v: 'v697', d: '2026-06-20', s: '👥 学会 〆切 に メンバー 機能 を 追加 (#282) + admin が 自分 で 送った feedback の 通知 は 既読 化 (#283)。 起案者 / admin は メンバー を 追加 でき、 誰 でも ⭐ 参加 / 離脱 可能。 自分 関連 の conf は ホーム / 一覧 で ⭐ + 黄色 ハイライト、 「自分 関連 のみ」 フィルター も 追加。 conf_deadline_members table 追加。 feedback の 通知 は Notifier::notify が 自動 で admin → 既読 マーク' },

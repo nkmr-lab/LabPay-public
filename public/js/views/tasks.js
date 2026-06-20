@@ -313,9 +313,12 @@ async function onCreate() {
     payload.capacity = assignedPicked.size; // backend 側でも上書きされるが明示。
   } else {
     const slots_spec = document.getElementById('t-slots').value.trim();
-    const capacityRaw = Number(document.getElementById('t-capacity').value);
-    // リクエストモードは reward フィールドが無いので 「報酬」 行も hidden、 capacity も
-    // 共用フォームの初期値 1 を そのまま使う (= 1 人募集)。
+    // v700 #289 リクエスト モード では t-capacity input が DOM に 無い (rewardRow 側 の
+    //   入力 として 同居 して いた ため、 isFree=true で 「報酬」 行 ごと skip される)。
+    //   結果、 querySelector が null を 返して .value で TypeError → ボタン が
+    //   無反応 に なる bug 修正。 fallback で 1 人 募集 を 既定 に。
+    const tCapEl = document.getElementById('t-capacity');
+    const capacityRaw = tCapEl ? Number(tCapEl.value) : 1;
     const capacity = isFree ? Math.max(1, capacityRaw || 1) : capacityRaw;
     const per_user_limit = Number(document.getElementById('t-perlimit').value);
     if (!isFree && !slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
