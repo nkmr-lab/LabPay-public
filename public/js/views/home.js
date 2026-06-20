@@ -1975,12 +1975,21 @@ async function renderItNewsWidget() {
       root.innerHTML = '<div class="hint" style="font-size:13px">取得 失敗 (ネットワーク または 一時的 な 問題)</div>';
       return;
     }
-    root.innerHTML = items.map(it => `
-      <a class="list-item" href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="gap:6px; padding:3px 0; align-items:baseline; line-height:1.3">
-        <span class="bold" style="font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title)}</span>
-        <span class="hint-sm" style="font-size:10px; opacity:0.6; flex:none">${escapeHtml(it.source || '')}</span>
-      </a>
-    `).join('');
+    // v704 #293 #295 summary_jp が ある なら タイトル の 下 に 表示。 海外 記事 (HN 等) でも
+    //   日本語 で 出る ので 「中身 を 開かなくて も 概要 が わかる」 状態 に。
+    root.innerHTML = items.map(it => {
+      const sum = it.summary_jp
+        ? `<div style="font-size:11px; line-height:1.4; color:#555; margin-top:2px; overflow-wrap:anywhere">${escapeHtml(it.summary_jp)}</div>`
+        : '';
+      return `
+      <a class="list-item" href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="padding:5px 0; flex-direction:column; align-items:flex-start; line-height:1.3; gap:0">
+        <div style="display:flex; width:100%; gap:6px; align-items:baseline">
+          <span class="bold" style="font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title)}</span>
+          <span class="hint-sm" style="font-size:10px; opacity:0.6; flex:none">${escapeHtml(it.source || '')}</span>
+        </div>
+        ${sum}
+      </a>`;
+    }).join('');
   } catch (e) {
     root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
   }

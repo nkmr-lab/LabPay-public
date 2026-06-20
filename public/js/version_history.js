@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v704', d: '2026-06-20', s: '📰 IT ニュース widget に GPT 要約 (日本語) を 追加 (#293 #295)。 各 記事 を fetch → strip HTML → gpt-4o-mini で 100-150 字 の 日本語 要約。 海外 source (Hacker News 等) は 自動 で 和訳 兼 要約 さ れる。 cache: 1 リクエスト 最大 2 件 だけ 新規 生成、 一度 作った 要約 は 7 日 流用 (/tmp/labpay_news/summaries.json)' },
   { v: 'v703', d: '2026-06-20', s: '🐛 feedback まとめ 横 スクロール 修正 + ドラフト 途中 閉鎖 ボタン 追加 (#292 #294)。 feedback 一覧 の body / claude_summary / reply 各 ブロック に overflow-wrap:anywhere を 強制 して 長い URL や 文 で 横 に はみ出さない ように。 ドラフト は 起案者 だけ どの phase でも 途中 で キャンセル できる ボタン を 全 phase 共通 で 表示' },
   { v: 'v702', d: '2026-06-20', s: '⚡ ホーム 学会 〆切 widget の 読み込み 速度 改善 (#291)。 widget 群 は 既に Promise.all で 並列 だった が、 cd_upcoming の SQL が 全 conf 200 件 を 取って いた → メイン 締切 が 30 日 以上 過去 で extras も ない conf を SQL レベル で 弾く + LIMIT 200 → 100。 候補 が 大きく 減って 体感 速度 改善' },
   { v: 'v701', d: '2026-06-20', s: '📰 ホーム に IT ニュース widget を 追加 (#290)。 server (/api/news/it) で はてな ブックマーク IT 人気 + Hacker News best stories を 1 時間 ファイル cache で 集約、 widget で 上位 8 件 を 1 行 = 1 件 で 表示。 タップ で 元 記事 に 飛ぶ' },
