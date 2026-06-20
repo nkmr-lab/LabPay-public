@@ -9,7 +9,7 @@ import { fmtDate, fmtDateTime, fmtLocalInput, tag } from '../format.js';
 import { openModal } from '../modal.js';
 import { createMemberPicker } from '../member_picker.js';
 import { isAppVisible } from './apps.js';
-import { shareToSns } from '../share_to_sns.js';
+import { shareToSns, copyShareUrl } from '../share_to_sns.js';
 
 // v396 募集 詳細の 「ショートカット」 アプリ群。 groups の GROUP_ACTIONS と
 // 同じ規約。 i.feat_actions が null/undefined なら 「全 ON」、 配列なら その中
@@ -333,6 +333,7 @@ async function loadDetail(id) {
       // closed_at を NULL に戻す。
       actions += `<button id="inv-detail-reopen" class="primary">再募集する</button>`;
     }
+    actions += ` <button id="inv-detail-copy-url" class="btn">🔗 URL</button>`;
     actions += ` <button id="inv-detail-share" class="btn">💬 共有</button>`;
     const imgBlock = renderCoverEditor({
       imageUrl: i.image_url,
@@ -357,6 +358,7 @@ async function loadDetail(id) {
         catch (e) { toast('失敗: ' + e.message); }
       },
     });
+    document.getElementById('inv-detail-copy-url')?.addEventListener('click', () => copyShareUrl(`#/invitations/${i.id}`));
     document.getElementById('inv-detail-share')?.addEventListener('click', () => {
       const cap = i.capacity ? ` (${(i.joins || []).length}/${i.capacity})` : '';
       shareToSns(`🙌 募集 「${i.title}」${cap}`, `#/invitations/${i.id}`);

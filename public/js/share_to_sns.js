@@ -73,6 +73,31 @@ export async function shareToSns(title, hashUrl) {
   });
 }
 
+// v709 #301 ラボ 全体 で 共有 する 用 (Slack / DM 等 LabPay 外 へ 貼れる) の
+//   絶対 URL を クリップボード に コピー する。 base = location.origin (例:
+//   https://pay.nkmr.io)、 hashUrl は '#/invitations/123' / '#/tasks/45' 形式。
+//   失敗 (HTTPS 外 / 権限 拒否 等) は textarea fallback で 救う。
+export async function copyShareUrl(hashUrl) {
+  const url = hashUrl.startsWith('#') ? hashUrl : '#' + hashUrl;
+  const fullUrl = location.origin + '/' + url;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(fullUrl);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = fullUrl;
+      ta.style.cssText = 'position:fixed; top:-1000px; left:0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    toast('URL を コピー しました: ' + fullUrl);
+  } catch (e) {
+    toast('コピー 失敗: ' + (e?.message || e));
+  }
+}
+
 // 既存 view から シェア ボタンを 簡単に 生成 する ヘルパ。
 //   ボタン要素を 親に append し、 クリックで shareToSns を 呼ぶ。
 export function makeShareButton(title, hashUrl, label = '💬 らぼったーで共有') {
