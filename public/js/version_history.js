@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v701', d: '2026-06-20', s: '📰 ホーム に IT ニュース widget を 追加 (#290)。 server (/api/news/it) で はてな ブックマーク IT 人気 + Hacker News best stories を 1 時間 ファイル cache で 集約、 widget で 上位 8 件 を 1 行 = 1 件 で 表示。 タップ で 元 記事 に 飛ぶ' },
   { v: 'v700', d: '2026-06-20', s: '🐛 リクエスト (報酬なし) で 「リクエスト を 出す」 ボタン が 無反応 だった bug 修正 (#289)。 isFree=true 時 に rewardRow 全体 が skip される ため t-capacity DOM が 存在 せず、 querySelector が null を 返して .value で TypeError → 失敗 して いた。 fallback で 1 人 募集 既定 に' },
   { v: 'v699', d: '2026-06-20', s: '🎮📊 オセロ AI 強化 + 活動 マップ に 全 日程 mode + 10 分 帯 を 横 スクロール 不要 に (#285 #286 #287)。 オセロ AI を alpha-beta minimax (深さ 3、 終盤 6) + 位置 重み + mobility に 置換、 思考 時間 2s → 3s。 ラボ活動 マップ に 「全 日程 (日 × 時)」 モード 追加。 10 分 単位 在室 帯 を grid 1fr で viewport に 合わせて 自動 縮小、 横 スクロール 不要 に' },
   { v: 'v698', d: '2026-06-20', s: '👥 学会 〆切 の メンバー 追加 で 共通 メンバー picker を 利用 (#284)。 v697 で prompt() で user ID を カンマ 区切り 入力 だった のを 廃止 し、 modal 内 の member_picker (学年 / 性別 bulk + chip 選択) を 使う ように。 既存 メンバー と 起案者 は exclude' },

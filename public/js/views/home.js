@@ -177,6 +177,7 @@ export const HOME_CARDS = [
   { id: 'entertainment',  title: '🎉 娯楽 (ゲーム / 予想 / ドラフト / クイズ)' }, // v649
   { id: 'achievements',   title: '🏅 実績 + 称号' }, // v651
   { id: 'conf-deadlines', title: '📅 学会 〆切 (近い 順)' }, // v671
+  { id: 'it-news',        title: '📰 IT ニュース' },           // v700 #290
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -470,6 +471,14 @@ export async function renderHome() {
       <div id="home-entertainment"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v700 #290 📰 IT ニュース -->
+    <div class="card" id="home-itnews-card" data-card-id="it-news" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">📰 IT ニュース</h2>
+      </div>
+      <div id="home-itnews"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <!-- v671 📅 学会 〆切 (近い 順) -->
     <div class="card" id="home-confdl-card" data-card-id="conf-deadlines" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -595,6 +604,7 @@ export async function renderHome() {
     { cardId: 'entertainment',  fn: renderEntertainmentWidget, label: 'entertainment' }, // v649
     { cardId: 'achievements',   fn: renderAchievementsWidget,  label: 'achievements' }, // v651
     { cardId: 'conf-deadlines', fn: renderConfDeadlinesWidget, label: 'confdl' }, // v671
+    { cardId: 'it-news',        fn: renderItNewsWidget,        label: 'it-news' }, // v700 #290
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -1951,6 +1961,31 @@ async function loadCustomWidgets() {
 }
 
 // v671 (#251) 📅 学会 〆切 widget。 直近 5 件 を 〆切順 で 表示、 あと N 日 を カウントダウン。
+// v700 #290 📰 IT ニュース widget。 server (= /api/news/it) が はてな IT + Hacker News
+//   を 1 時間 cache で 集めて くる。 ホーム で 上位 8 件 を 1 行 = 1 件 で 表示。
+async function renderItNewsWidget() {
+  const card = document.getElementById('home-itnews-card');
+  const root = document.getElementById('home-itnews');
+  if (!card || !root) return;
+  card.hidden = false;
+  try {
+    const d = await get('/api/news/it', { limit: 8 });
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = '<div class="hint" style="font-size:13px">取得 失敗 (ネットワーク または 一時的 な 問題)</div>';
+      return;
+    }
+    root.innerHTML = items.map(it => `
+      <a class="list-item" href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="gap:6px; padding:3px 0; align-items:baseline; line-height:1.3">
+        <span class="bold" style="font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title)}</span>
+        <span class="hint-sm" style="font-size:10px; opacity:0.6; flex:none">${escapeHtml(it.source || '')}</span>
+      </a>
+    `).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
 async function renderConfDeadlinesWidget() {
   const card = document.getElementById('home-confdl-card');
   const root = document.getElementById('home-confdl');

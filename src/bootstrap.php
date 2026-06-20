@@ -569,3 +569,4 @@ require_once __DIR__ . '/handlers/score_predictions.php';
 require_once __DIR__ . '/handlers/custom_games.php';
 require_once __DIR__ . '/handlers/drafts.php';
 require_once __DIR__ . '/handlers/quizzes.php';
+require_once __DIR__ . '/handlers/news.php';

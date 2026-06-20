@@ -71,6 +71,7 @@ $routes = [
     'cg2'            => 'route_cg2',
     'chat'           => 'route_chat',
     'conf-deadlines' => 'route_conf_deadlines',
+    'news'           => 'route_news',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',

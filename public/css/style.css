@@ -190,7 +190,8 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 }
 /* v688 #272 学会 〆切 widget は 1 行 = 1 item で 詰めて 見せたい ので、 80px の
    既定 高 を 解除。 多数件 を 縦 に 並べる ため。 */
-.card[data-card-id="conf-deadlines"] .list-item {
+.card[data-card-id="conf-deadlines"] .list-item,
+.card[data-card-id="it-news"]        .list-item {
   height: auto;
   min-height: 0;
 }
