@@ -358,14 +358,16 @@ body.group-map-fullscreen #app { padding-top: 4px; }
 
 /* Avatars */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
-/* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js */
-.pb-grid { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
-.pb-row  { display: flex; align-items: center; gap: 4px; }
+/* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js
+   v699 #287 横 スクロール 必須 だった の を 解除。 grid を 1fr で 等分 して
+   viewport 幅 に 合わせて 自動 縮小。 */
+.pb-grid { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.pb-row  { display: flex; align-items: center; gap: 4px; width: 100%; }
 .pb-row.pb-head .pb-cells { padding-left: 0; }
 .pb-d-label { width: 56px; font-size: 11px; color: var(--muted); text-align: right; padding-right: 4px; flex-shrink: 0; }
-.pb-cells { display: grid; grid-template-columns: repeat(144, 3px); gap: 1px; flex-shrink: 0; }
-.pb-cells-head { grid-template-columns: repeat(24, 18px) !important; }
-.pb-cell { width: 3px; height: 14px; border-radius: 1px; }
+.pb-cells { display: grid; grid-template-columns: repeat(144, minmax(0, 1fr)); gap: 0; flex: 1; min-width: 0 }
+.pb-cells-head { grid-template-columns: repeat(24, minmax(0, 1fr)) !important; }
+.pb-cell { width: auto; height: 14px; border-radius: 0; min-width: 0 }
 
 .avatar-xs   { width:18px; height:18px; }
 .avatar-sm   { width:24px; height:24px; }

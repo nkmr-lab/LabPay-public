@@ -472,27 +472,108 @@ function othello_ai_pick_mine(): string {
     return $cands[array_rand($cands)];
 }
 
-// AI の着手選択: 翻すコマ数 + 角ボーナス - X-square / C-square ペナルティ。 同点はランダム。
-function othello_ai_choose_move(array $board): ?array {
-    $best = PHP_INT_MIN;
-    $picks = [];
+// v699 #285 オセロ 標準 の positional weight matrix。 角 (corner) は +100、
+//   X-square (角 の 斜め 隣) は -50、 C-square は -20、 中央 は ほぼ 0。
+const OTHELLO_WEIGHTS = [
+    100, -20,  10,   5,   5,  10, -20, 100,
+    -20, -50,  -2,  -2,  -2,  -2, -50, -20,
+     10,  -2,  -1,  -1,  -1,  -1,  -2,  10,
+      5,  -2,  -1,   0,   0,  -1,  -2,   5,
+      5,  -2,  -1,   0,   0,  -1,  -2,   5,
+     10,  -2,  -1,  -1,  -1,  -1,  -2,  10,
+    -20, -50,  -2,  -2,  -2,  -2, -50, -20,
+    100, -20,  10,   5,   5,  10, -20, 100,
+];
+
+// 全 候補手 を 列挙
+function othello_legal_moves(array $board, int $side): array {
+    $moves = [];
     for ($r = 0; $r < 8; $r++) {
         for ($c = 0; $c < 8; $c++) {
-            $flips = othello_flips($board, $r, $c, 2);
-            if (!$flips) continue;
-            $score = count($flips);
-            $isCorner = ($r === 0 || $r === 7) && ($c === 0 || $c === 7);
-            $isXsq    = ($r === 1 || $r === 6) && ($c === 1 || $c === 6);
-            $isCsq    = (($r === 0 || $r === 7) && ($c === 1 || $c === 6))
-                     || (($c === 0 || $c === 7) && ($r === 1 || $r === 6));
-            if ($isCorner) $score += 20;
-            if ($isXsq)    $score -= 8;
-            if ($isCsq)    $score -= 3;
-            if ($score > $best) { $best = $score; $picks = [[$r, $c]]; }
-            elseif ($score === $best) { $picks[] = [$r, $c]; }
+            $f = othello_flips($board, $r, $c, $side);
+            if ($f) $moves[] = [$r, $c, $f];
         }
     }
-    return $picks ? $picks[array_rand($picks)] : null;
+    return $moves;
+}
+
+// 評価 関数: 位置 重み (own - opp) + mobility * 5。 終盤 (空き 8 以下) は 純粋 に 石 数 差。
+function othello_eval_board(array $board, int $aiSide): int {
+    $oppSide = $aiSide === 1 ? 2 : 1;
+    $posScore = 0; $myCount = 0; $oppCount = 0; $empty = 0;
+    foreach ($board as $idx => $cell) {
+        if ($cell === $aiSide) { $posScore += OTHELLO_WEIGHTS[$idx]; $myCount++; }
+        elseif ($cell === $oppSide) { $posScore -= OTHELLO_WEIGHTS[$idx]; $oppCount++; }
+        else { $empty++; }
+    }
+    if ($empty <= 8) {
+        // 終盤: 石 数 差 で 勝負
+        return ($myCount - $oppCount) * 100;
+    }
+    // mobility (合法手 数 差)
+    $myMob = count(othello_legal_moves($board, $aiSide));
+    $oppMob = count(othello_legal_moves($board, $oppSide));
+    return $posScore + ($myMob - $oppMob) * 6;
+}
+
+// alpha-beta minimax
+function othello_minimax(array $board, int $depth, int $alpha, int $beta, bool $maxTurn, int $aiSide, int $oppSide): int {
+    if ($depth === 0) return othello_eval_board($board, $aiSide);
+    $side = $maxTurn ? $aiSide : $oppSide;
+    $moves = othello_legal_moves($board, $side);
+    if (!$moves) {
+        // パス → 相手 も 打てない なら 終局
+        $otherSide = $side === $aiSide ? $oppSide : $aiSide;
+        if (!othello_legal_moves($board, $otherSide)) {
+            return othello_eval_board($board, $aiSide);
+        }
+        return othello_minimax($board, $depth - 1, $alpha, $beta, !$maxTurn, $aiSide, $oppSide);
+    }
+    if ($maxTurn) {
+        $value = PHP_INT_MIN;
+        foreach ($moves as [$r, $c, $flips]) {
+            $nb = $board;
+            $nb[$r * 8 + $c] = $side;
+            foreach ($flips as [$fr, $fc]) $nb[$fr * 8 + $fc] = $side;
+            $v = othello_minimax($nb, $depth - 1, $alpha, $beta, false, $aiSide, $oppSide);
+            if ($v > $value) $value = $v;
+            if ($value >= $beta) break;
+            if ($value > $alpha) $alpha = $value;
+        }
+        return $value;
+    } else {
+        $value = PHP_INT_MAX;
+        foreach ($moves as [$r, $c, $flips]) {
+            $nb = $board;
+            $nb[$r * 8 + $c] = $side;
+            foreach ($flips as [$fr, $fc]) $nb[$fr * 8 + $fc] = $side;
+            $v = othello_minimax($nb, $depth - 1, $alpha, $beta, true, $aiSide, $oppSide);
+            if ($v < $value) $value = $v;
+            if ($value <= $alpha) break;
+            if ($value < $beta) $beta = $value;
+        }
+        return $value;
+    }
+}
+
+// AI の着手選択: minimax (深さ 3、 終盤 は 深さ 5 で 全 探索)
+function othello_ai_choose_move(array $board): ?array {
+    $aiSide = 2; $oppSide = 1;
+    $moves = othello_legal_moves($board, $aiSide);
+    if (!$moves) return null;
+    $empty = count(array_filter($board, fn($v) => $v === 0));
+    $depth = $empty <= 10 ? 6 : ($empty <= 18 ? 4 : 3);
+    $bestScore = PHP_INT_MIN;
+    $bestMoves = [];
+    foreach ($moves as [$r, $c, $flips]) {
+        $nb = $board;
+        $nb[$r * 8 + $c] = $aiSide;
+        foreach ($flips as [$fr, $fc]) $nb[$fr * 8 + $fc] = $aiSide;
+        $score = othello_minimax($nb, $depth - 1, PHP_INT_MIN, PHP_INT_MAX, false, $aiSide, $oppSide);
+        if ($score > $bestScore) { $bestScore = $score; $bestMoves = [[$r, $c]]; }
+        elseif ($score === $bestScore) { $bestMoves[] = [$r, $c]; }
+    }
+    return $bestMoves[array_rand($bestMoves)];
 }
 
 // AI 番が続くかぎり 自動進行。 user の move/pass の 後で 呼ぶ。
@@ -505,7 +586,9 @@ function othello_ai_drive(PDO $pdo, int $gid): void {
         $peek->execute([$gid]);
         $p = $peek->fetch(PDO::FETCH_ASSOC);
         if (!$p || !(int)$p['is_ai'] || $p['status'] !== 'playing' || $p['turn_side'] !== 'opponent') return;
-        usleep(2_000_000);
+        // v699 #285 「考えてる感」 アップ + 強化 minimax の 実時間 を 隠す ため
+        //   3 秒 に 延長 (元 2 秒)
+        usleep(3_000_000);
         $advanced = false;
         db_tx($pdo, function () use ($pdo, $gid, &$advanced) {
             $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");

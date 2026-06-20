@@ -53,12 +53,16 @@ export async function renderActivity() {
 
     <!-- ===== 下半分: ラボ活動マップ ===== -->
     <div class="card">
-      <div class="row center">
+      <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h3 class="row-title">ラボ活動マップ (全員)</h3>
         <select id="act-window" style="max-width:160px">
           ${WINDOWS.map(w => `
             <option value="${w.days}" ${w.days === savedDays ? 'selected' : ''}>${w.label}</option>
           `).join('')}
+        </select>
+        <select id="act-mode" style="max-width:140px" title="表示 モード">
+          <option value="avg">曜日 別 平均</option>
+          <option value="daily">全 日程 (日 × 時)</option>
         </select>
       </div>
     </div>
@@ -70,6 +74,13 @@ export async function renderActivity() {
   `;
   document.getElementById('act-window').addEventListener('change', e => {
     localStorage.setItem('labpay-activity-days', e.target.value);
+    loadHeatmap();
+  });
+  // v699 #286 表示 モード (avg / daily)
+  const savedMode = localStorage.getItem('labpay-activity-mode') || 'avg';
+  document.getElementById('act-mode').value = savedMode;
+  document.getElementById('act-mode').addEventListener('change', e => {
+    localStorage.setItem('labpay-activity-mode', e.target.value);
     loadHeatmap();
   });
   // v397 1 週間 10 分 帯 (個人)
@@ -278,22 +289,59 @@ async function loadHeatmap() {
   const root = document.getElementById('act-rooms');
   root.innerHTML = `<div class="card muted">読み込み中…</div>`;
   const days = Number(document.getElementById('act-window').value);
+  const mode = document.getElementById('act-mode')?.value || 'avg';
   try {
-    const d = await get('/api/presence/heatmap', { days });
+    const d = await get('/api/presence/heatmap', { days, mode });
     if (!d.rooms.length) {
       root.innerHTML = `<div class="card muted">部屋が登録されていません</div>`;
       return;
     }
-    // Cross-room global max so colors are comparable between rooms in the same view.
     let max = 0;
     d.rooms.forEach(r => r.matrix.forEach(row => row.forEach(v => { if (v > max) max = v; })));
-    if (max === 0) max = 1; // avoid div by zero on a blank week
-
-    root.innerHTML = d.rooms.map(r => renderRoomCard(r, max)).join('');
+    if (max === 0) max = 1;
+    if (mode === 'daily') {
+      root.innerHTML = d.rooms.map(r => renderRoomCardDaily(r, max, d.dates || [])).join('');
+    } else {
+      root.innerHTML = d.rooms.map(r => renderRoomCard(r, max)).join('');
+    }
   } catch (e) {
     root.innerHTML = `<div class="card muted">${escapeHtml(e.message)}</div>`;
     toast('取得失敗: ' + e.message);
   }
+}
+
+// v699 #286 全日程 mode 用 の カード
+function renderRoomCardDaily(room, globalMax, dates) {
+  const hourLabels = HOURS.map(h => h % 3 === 0
+    ? `<div class="hm-h-label">${h}</div>`
+    : `<div class="hm-h-label"></div>`).join('');
+  const rows = room.matrix.map((row, di) => {
+    const dateStr = dates[di] || '';
+    const dt = dateStr ? new Date(dateStr + 'T00:00:00') : null;
+    const wk = dt ? ['日','月','火','水','木','金','土'][dt.getDay()] : '';
+    const lbl = dt ? `${dt.getMonth()+1}/${dt.getDate()}(${wk})` : '';
+    return `<div class="hm-row">
+      <div class="hm-d-label" style="white-space:nowrap">${escapeHtml(lbl)}</div>
+      ${row.map((v, hr) => {
+        const t = Math.min(1, v / globalMax);
+        const bg = heatColor(t);
+        const txt = v === 0 ? '' : Math.round(v);
+        return `<div class="hm-cell" style="background:${bg}" title="${escapeHtml(dateStr)} ${hr}:00 · ${v} 人">${txt}</div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  return `
+    <div class="card">
+      <h3 style="margin:0 0 8px">${escapeHtml(room.display_name)} <span class="hint-sm">(${room.id}) ・ 全 ${dates.length} 日</span></h3>
+      <div class="hm-grid" style="overflow-x:auto">
+        <div class="hm-row hm-head">
+          <div class="hm-d-label"></div>
+          ${hourLabels}
+        </div>
+        ${rows}
+      </div>
+    </div>
+  `;
 }
 
 function renderRoomCard(room, globalMax) {

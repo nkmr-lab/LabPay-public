@@ -41,6 +41,9 @@ function route_presence(PDO $pdo, array $cfg, string $method, array $seg): void 
 function presence_heatmap(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $days = max(1, min(365, (int)($_GET['days'] ?? 7)));
+    // v699 #286 mode=daily で 全 日程 別 (= N 日 × 24 時間) の matrix を 返す。 default は
+    //   従来 通り 曜日 別 平均 (avg)。
+    $mode = ($_GET['mode'] ?? 'avg') === 'daily' ? 'daily' : 'avg';
     $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
     $end   = new DateTimeImmutable('tomorrow midnight', $tz); // exclusive upper bound
     $start = $end->modify("-{$days} days");
@@ -70,21 +73,75 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
     $startStr = $start->format('Y-m-d H:i:s');
     $stmt->execute([$endStr, $startStr, $endStr, $startStr]);
 
+    $startTs = $start->getTimestamp();
+    $endTs   = $end->getTimestamp();
+
+    if ($mode === 'daily') {
+        // v699 #286 N 行 (日付) × 24 列 の matrix。 日付 文字列 を 行 キー に。
+        $dateList = [];
+        for ($t = $startTs; $t < $endTs; $t += 86400) {
+            $dateList[] = date('Y-m-d', $t);
+        }
+        $dateIdx = array_flip($dateList);
+        // bucket[room][date_idx][hour] = set of user_id
+        $bucket = [];
+        foreach ($rooms as $r) {
+            $bucket[$r['id']] = array_fill(0, count($dateList), array_fill(0, 24, []));
+        }
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $room = $s['room_id'];
+            if (!isset($bucket[$room])) continue;
+            $a = max(strtotime($s['started_at']), $startTs);
+            $b = min(strtotime($s['ended_at']),   $endTs);
+            if ($b <= $a) continue;
+            $h = $a - ($a % 3600);
+            while ($h < $b) {
+                $dStr = date('Y-m-d', $h);
+                $di = $dateIdx[$dStr] ?? null;
+                if ($di !== null) {
+                    $hr = (int)date('G', $h);
+                    $bucket[$room][$di][$hr][(int)$s['user_id']] = true;
+                }
+                $h += 3600;
+            }
+        }
+        $out = [];
+        foreach ($bucket as $room => $rowsArr) {
+            $matrix = [];
+            foreach ($rowsArr as $di => $hours) {
+                $row = [];
+                foreach ($hours as $hr => $set) $row[$hr] = count($set);
+                $matrix[$di] = $row;
+            }
+            $out[$room] = $matrix;
+        }
+        json_response([
+            'mode'        => 'daily',
+            'days'        => $days,
+            'range_from'  => $start->format('Y-m-d H:i:s'),
+            'range_to'    => $end->format('Y-m-d H:i:s'),
+            'dates'       => $dateList,
+            'rooms'       => array_map(fn($r) => [
+                'id' => $r['id'], 'display_name' => $r['display_name'],
+                'matrix' => $out[$r['id']] ?? array_fill(0, count($dateList), array_fill(0, 24, 0)),
+            ], $rooms),
+        ]);
+        return;
+    }
+
+    // ─── 従来 の 曜日 別 平均 mode ───
     // bucket[room][weekday(0=Sun..6=Sat)][hour(0..23)] = set of user_ids
     // PHP 0=Sun..6=Sat (date('w')); UI converts to Mon-first labels.
     $bucket = [];
     foreach ($rooms as $r) {
         $bucket[$r['id']] = array_fill(0, 7, array_fill(0, 24, []));
     }
-    $startTs = $start->getTimestamp();
-    $endTs   = $end->getTimestamp();
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
         $room = $s['room_id'];
         if (!isset($bucket[$room])) continue;
         $a = max(strtotime($s['started_at']), $startTs);
         $b = min(strtotime($s['ended_at']),   $endTs);
         if ($b <= $a) continue;
-        // Walk hour boundaries inside [a, b)
         $h = $a - ($a % 3600);
         while ($h < $b) {
             $w = (int)date('w', $h);
@@ -93,16 +150,10 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
             $h += 3600;
         }
     }
-
-    // Count distinct calendar dates per weekday in the window (the denominator
-    // for averaging — one Monday in a 7-day window contributes once, three
-    // Mondays in a 21-day window contribute thrice).
     $daysOfWeek = array_fill(0, 7, 0);
     for ($t = $startTs; $t < $endTs; $t += 86400) {
         $daysOfWeek[(int)date('w', $t)]++;
     }
-
-    // Convert sets to averages.
     $out = [];
     foreach ($bucket as $room => $weekdays) {
         $matrix = [];
@@ -116,12 +167,12 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
         }
         $out[$room] = $matrix;
     }
-
     json_response([
+        'mode'        => 'avg',
         'days'        => $days,
         'range_from'  => $start->format('Y-m-d H:i:s'),
         'range_to'    => $end->format('Y-m-d H:i:s'),
-        'days_of_week' => $daysOfWeek, // [Sun..Sat] count of dates sampled
+        'days_of_week' => $daysOfWeek,
         'rooms'       => array_map(fn($r) => [
             'id' => $r['id'], 'display_name' => $r['display_name'],
             'matrix' => $out[$r['id']] ?? array_fill(0, 7, array_fill(0, 24, 0)),
