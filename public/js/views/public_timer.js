@@ -145,9 +145,9 @@ function render() {
       displayText = fmt(Math.floor(elapsed - endBellSec));
       color = '#fbbf24';
     } else {
-      // ③ 超過
+      // ③ 超過 — v724 #325 ハッキリ赤に (旧 #9ca3af では目立たない)
       displayText = '+' + fmt(Math.floor(elapsed - maxBellSec));
-      color = '#9ca3af';
+      color = '#ef4444';
     }
   }
 

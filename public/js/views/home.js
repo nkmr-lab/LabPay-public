@@ -2676,17 +2676,35 @@ async function renderMyActiveTimers() {
           const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
           const targetClient = ends - tOff;
           const remaining = Math.max(0, Math.floor((targetClient - Date.now()) / 1000));
-          rows.push({
-            href: '#/timers/' + t.id,
-            kind: '⏱ タイマー',
-            title: t.title,
-            time: `${fmtTmDur(remaining)} 残`,
-            tick: { mode: 'countdown', targetMs: targetClient, suffix: ' 残', redBelow: 60, colorRed: '#c62828', colorNorm: '#1565c0' },
-            sort: remaining,
-            color: remaining < 60 ? '#c62828' : '#1565c0',
-            bg: '#e3f2fd',
-            participants: t.participants || [],  // v466
-          });
+          // v724 #324 発表終了後 (= ends_at 過ぎ) は 質疑 経過 を カウントアップ で 表示。
+          //   running の まま でも ホーム に 残す ように なった ので、 「0:00 残」 に
+          //   貼り付かない ように 質疑時間 N に 切替。
+          if (remaining === 0) {
+            const elapsedSinceEnd = Math.max(0, Math.floor((Date.now() - targetClient) / 1000));
+            rows.push({
+              href: '#/timers/' + t.id,
+              kind: '🏁 タイマー 質疑',
+              title: t.title,
+              time: `質疑 ${fmtTmDur(elapsedSinceEnd)}`,
+              tick: { mode: 'countup', baseSec: elapsedSinceEnd, anchorMs: Date.now(), prefix: '質疑 ' },
+              sort: -elapsedSinceEnd,
+              color: '#b45309',
+              bg: '#fef3c7',
+              participants: t.participants || [],
+            });
+          } else {
+            rows.push({
+              href: '#/timers/' + t.id,
+              kind: '⏱ タイマー',
+              title: t.title,
+              time: `${fmtTmDur(remaining)} 残`,
+              tick: { mode: 'countdown', targetMs: targetClient, suffix: ' 残', redBelow: 60, colorRed: '#c62828', colorNorm: '#1565c0' },
+              sort: remaining,
+              color: remaining < 60 ? '#c62828' : '#1565c0',
+              bg: '#e3f2fd',
+              participants: t.participants || [],
+            });
+          }
         } else if (t.status === 'paused') {
           const remaining = Math.max(0, Number(t.remaining_seconds) || 0);
           rows.push({

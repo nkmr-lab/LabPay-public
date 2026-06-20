@@ -839,6 +839,9 @@ a.list-item { text-decoration: none; color: inherit; }
 .tmd-fs-on #tmd-bar {
   background: #fff !important;
 }
+/* v724 #322 フルスクリーン中はツールバー (🔊 試聴 / 🖥 フル / 🔗 公開 URL) を隠す。
+   「フル」 ボタンが残ってると押した意味がわからないため。 ✕ 終了で抜ける。 */
+.tmd-fs-on > .row { display: none !important; }
 /* 退出ボタン: 通常時は 隠す、 全画面化 中 だけ 出す (iOS の ESC 代わり) */
 #tmd-fs-exit { display: none; }
 .tmd-fs-on #tmd-fs-exit {

@@ -73,7 +73,13 @@ export async function renderTimers() {
       if (t.status === 'running') {
         const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
         const remaining = Math.max(0, Math.floor((ends - (Date.now() + serverOffset)) / 1000));
-        statusTag = `<span class="tag" style="background:#e3f2fd; color:#1565c0">▶ ${fmtDuration(remaining)} 残</span>`;
+        // v724 #324 発表終了後は質疑経過を表示 (止まってる感を消す)。
+        if (remaining === 0) {
+          const elapsedSinceEnd = Math.max(0, Math.floor(((Date.now() + serverOffset) - ends) / 1000));
+          statusTag = `<span class="tag" style="background:#fef3c7; color:#b45309">🏁 質疑 ${fmtDuration(elapsedSinceEnd)}</span>`;
+        } else {
+          statusTag = `<span class="tag" style="background:#e3f2fd; color:#1565c0">▶ ${fmtDuration(remaining)} 残</span>`;
+        }
       } else if (t.status === 'paused') {
         const rem = Math.max(0, Number(t.remaining_seconds) || 0);
         statusTag = `<span class="tag" style="background:#fff3e0; color:#e65100">⏸ ${fmtDuration(rem)} 残</span>`;
@@ -630,9 +636,11 @@ function tickTimer() {
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   }
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(visualEndSec)}`;
-  const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
+  // v724 #321 プログレスバーは発表終了 (endBellSec) で 100%。 質疑 / 超過に入ったら 100% 据え置き。
+  const pct = endBellSec ? Math.min(100, (elapsedSec / endBellSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (isOver) barEl.style.background = '#c62828';
+  else if (isPastEnd) barEl.style.background = '#f59e0b';
   // 発表終了 ベル の ding は elapsed が endBellSec を 跨いだ 瞬間 で 1 回 のみ。
   if (remainToEndSec === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
     tmEndFiredOnce = true;
@@ -647,14 +655,14 @@ function tickTimer() {
     if (isOver) {
       stEl.textContent = `🎉 終了 + 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過 中`;
     } else if (isPastEnd) {
-      stEl.textContent = `🎉 終了 — 質疑 + ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
+      stEl.textContent = `🎉 終了 — 質疑 ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
     } else {
       stEl.textContent = '🎉 終了';
     }
   } else if (isOver) {
-    stEl.textContent = `⚠ 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過 中 — 必要なら ⏹ 停止`;
+    stEl.textContent = `⚠ 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過中`;
   } else if (isPastEnd) {
-    stEl.textContent = `🏁 発表終了 — 質疑 + ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
+    stEl.textContent = `🏁 発表終了 — 質疑 ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
   } else if (tmRepeatMax > 0) {
     stEl.textContent = `🔁 ${tmRepeatIdx + 1}/${tmRepeatMax + 1} 回目`;
   } else {

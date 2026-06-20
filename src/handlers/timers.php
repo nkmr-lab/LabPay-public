@@ -44,8 +44,17 @@ function timers_autoclose(PDO $pdo): void {
                  WHERE status='running' AND ends_at <= NOW()
                    AND repeat_max > 0 AND repeat_idx < repeat_max");
     // 2) 終了時刻 過ぎ かつ repeat 切れ / 無 → 完了に。
+    // v724 #324 「ends_at <= NOW()」 では 発表終了 (= end bell) で done に なって
+    //   しまい、 質疑 / 超過 中 も ホーム / 一覧 から 消える の が 違和感。
+    //   ベル の 中 で 一番 遅い もの まで は running の まま 残す。
     $pdo->exec("UPDATE timers SET status='done', closed_at=NOW()
-                 WHERE status='running' AND ends_at <= NOW()");
+                 WHERE status='running' AND started_at IS NOT NULL
+                   AND DATE_ADD(started_at, INTERVAL GREATEST(
+                         COALESCE(duration_seconds, 0),
+                         COALESCE(bell1_seconds, 0),
+                         COALESCE(bell2_seconds, 0),
+                         COALESCE(bell3_seconds, 0)
+                       ) SECOND) <= NOW()");
 }
 
 function timers_list(PDO $pdo, array $cfg): void {
