@@ -64,11 +64,16 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
     // v696 #281 メイン 締切 が 過ぎて も サブ 締切 が 未来 なら 出す。 各 conf で 最も 近い
     //   未過去 deadline (main / extras の どれか) を 採用 して それ で ソート する。
     // v697 #282 is_mine フラグ も 付ける (= 自分 が メンバー or 起案者)。
+    // v702 #291 速度 改善: SQL で 候補 を 絞る (メイン が 30 日 以上 過去 かつ extras なし は 弾く)。
+    //   LIMIT 200 → 100 で 十分 (上位 limit 件 だけ 返す)。
     $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
                                 c.deadline_label, c.deadline_is_aoe, c.extra_deadlines,
                                 (c.created_by_user_id = ? OR EXISTS (SELECT 1 FROM conf_deadline_members m WHERE m.conf_deadline_id = c.id AND m.user_id = ?)) AS is_mine
-                           FROM conf_deadlines c WHERE c.deleted_at IS NULL
-                           ORDER BY c.deadline_at DESC LIMIT 200");
+                           FROM conf_deadlines c
+                          WHERE c.deleted_at IS NULL
+                            AND (c.deadline_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                                 OR (c.extra_deadlines IS NOT NULL AND c.extra_deadlines != ''))
+                          ORDER BY c.deadline_at DESC LIMIT 100");
     $st->execute([$uid, $uid]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     $now = time();
