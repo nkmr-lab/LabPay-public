@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら 先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v715', d: '2026-06-20', s: '🐛 IT ニュース widget で 「古い 記事 ばかり 並ぶ」 問題 修正 (#310)。 はてな の hot entry は 古い 記事 で も 上位 に 残り 続ける ため published_at desc だと 印象 が 「古い」 に。 server 側 で history.json の first_seen_at を 引いて 新着 順 (= news app と 同じ 並び) に sort し 直して 返す ように 変更' },
   { v: 'v714', d: '2026-06-20', s: '✅ タスク に 「✅ 終了 する」 ボタン を 追加 (#309)。 起案者 が 取消 と は 別 に 「もう 締切 で OK、 完了 扱い」 に できる。 未承認 capacity 分 は 返金、 進行 中 の claim は cancel、 status は 「closed」 (cancelled とは 区別)。 POST /api/tasks/{id}/close 新規 endpoint' },
   { v: 'v713', d: '2026-06-20', s: '📅 学会 締切 form: 「今 の 時間」 自動 入力 を 抑止 + 仮 (暫定) 締切 機能 を 追加 (#307 #308)。 datetime-local で 日付 部分 が 変わった 瞬間 に 時刻 を 強制 23:59 上書き (= browser autofill 対策)。 メイン / サブ 締切 ごと に 「🤔 仮」 checkbox、 widget / 一覧 で 「およそ あと N 日」 + 🤔仮 バッジ。 conf_deadlines.deadline_is_tentative 列 を 追加、 extras JSON にも is_tentative フラグ' },
   { v: 'v712', d: '2026-06-20', s: '📅 学会 締切 登録 form の 入力 補助 を 改善 (#306)。 (a) datetime-local が 00:00 (= 日付 だけ 選択) の 場合 自動 で 23:59 に 補完、 (b) カテゴリ を 「国際 会議」 に した 段階 で AOE 既定 ON (手動 で 触ったら そのまま)、 (c) 会期 開始日 を 選ぶ と 終了日 input の min が 開始日 に セット さ れ、 開始日 より 前 は 選べ なく なる' },

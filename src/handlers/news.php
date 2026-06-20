@@ -51,7 +51,44 @@ function news_it(array $cfg): void {
     //   request で 揃う。 1 request あたり の レイテンシ は 増える が、 「要約 出ない」
     //   印象 を 防ぐ ほう を 優先。
     $budget = 4;
-    $sliced = array_slice($items, 0, $limit);
+    // v715 #310 ホーム widget で 「古い 記事 ばかり」 と 見える 不具合 修正。
+    //   原因: はてな の hot entry は 一旦 人気 に なった 古い 記事 が 上位 に 残り 続け、
+    //          news_fetch_all が published_at desc で sort して も 「初出 が 数日 前」 の
+    //          記事 が 上 に 来る。 一方 news app の /api/news/history は first_seen_at desc。
+    //   対処: news_it も history.json を 引いて 「LabPay で 初めて 見た 順」 (= 新着 順)
+    //         に sort し、 news app の 並び と 同じ に。 これで 「アプリ では 新しい のが
+    //         見えるのに home は 古い」 の 印象 ズレ を 解消。
+    $histFile = NEWS_CACHE_DIR . '/history.json';
+    $hist = is_file($histFile)
+        ? (json_decode((string)@file_get_contents($histFile), true) ?: [])
+        : [];
+    // 候補 を history と 現在 fetch の union に。 history 側 は first_seen_at で 並ぶ、
+    // 現在 fetch には まだ history に 反映 さ れ ない 一瞬 の new も 含む。
+    $byUrl = [];
+    foreach ($items as $it) {
+        $u = (string)($it['url'] ?? '');
+        if ($u === '') continue;
+        $byUrl[$u] = $it;
+    }
+    foreach ($hist as $u => $h) {
+        if (!isset($byUrl[$u])) {
+            $byUrl[$u] = [
+                'title'        => (string)($h['title'] ?? ''),
+                'url'          => $u,
+                'source'       => (string)($h['source'] ?? ''),
+                'published_at' => (string)($h['first_seen_at'] ?? ''),
+            ];
+        }
+    }
+    $merged = array_values($byUrl);
+    usort($merged, function ($a, $b) use ($hist) {
+        $ka = (string)($a['url'] ?? '');
+        $kb = (string)($b['url'] ?? '');
+        $ta = (string)($hist[$ka]['first_seen_at'] ?? ($a['published_at'] ?? ''));
+        $tb = (string)($hist[$kb]['first_seen_at'] ?? ($b['published_at'] ?? ''));
+        return strcmp($tb, $ta);
+    });
+    $sliced = array_slice($merged, 0, $limit);
     $sumDirty = false;
     foreach ($sliced as &$it) {
         $key = md5((string)($it['url'] ?? ''));
