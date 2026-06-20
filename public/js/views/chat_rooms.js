@@ -17,8 +17,18 @@ function stopPoll() {
 }
 
 // ─── /#/chat-rooms (ルーム 一覧、 Slack 風 サイドバー) ─
+// v726 #328 タブ UI に統一したので、 ここを訪れたら最初のチャンネルへ自動遷移。
 export async function renderChatRooms() {
   stopPoll();
+  try {
+    const d = await get('/api/chat/rooms');
+    const rooms = d.rooms || [];
+    const first = rooms.find(r => r.type === 'ch') || rooms[0];
+    if (first) {
+      navigate(`#/chat-rooms/${encodeURIComponent(first.room_key)}`);
+      return;
+    }
+  } catch (_) {}
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card" style="background:#3f0e40; color:#fff; padding:14px">
@@ -85,33 +95,51 @@ function roomRow(r) {
 }
 
 // ─── /#/chat-rooms/:roomKey (メッセージ ストリーム) ─
+// v726 #328 layout 改修:
+//   (a) チャンネル / DM 選択をタブ的に上部に並べる + 未読件数バッジ。
+//   (b) 入力欄を viewport 下に固定 (旧版は card 内 flex 末尾で スクロール先にあった)。
 export async function renderChatRoom({ params }) {
   stopPoll();
   _currentRoom = decodeURIComponent(params.roomKey);
   _lastMsgId = 0;
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card" style="padding:10px 14px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:1">
-      <a href="#/chat-rooms" style="font-size:12px; color:#666; text-decoration:none">← チャット 一覧</a>
-      <div id="cr-head" style="margin-top:4px">読み込み中…</div>
-    </div>
-    <div class="card" style="padding:0; display:flex; flex-direction:column; height:calc(100vh - 220px); min-height:400px">
-      <div id="cr-stream" style="flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:2px; background:#fff">
+    <div id="cr-shell" style="position:fixed; top:96px; left:0; right:0; bottom:0; display:flex; flex-direction:column; background:#fff; z-index:2">
+      <div id="cr-tabs" style="display:flex; overflow-x:auto; background:#3f0e40; flex:none; gap:2px; padding:0"></div>
+      <div id="cr-head" style="padding:6px 12px; font-size:12px; color:#555; background:#f3f4f6; border-bottom:1px solid var(--line); flex:none">読み込み中…</div>
+      <div id="cr-stream" style="flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:2px; background:#fff; min-height:0">
         <div class="muted">読み込み中…</div>
       </div>
-      <div style="border-top:1px solid var(--line); padding:8px 10px; background:#fafafa; display:flex; gap:6px; align-items:flex-end">
-        <textarea id="cr-input" rows="2" maxlength="4000" placeholder="メッセージ を 入力 (Ctrl+Enter で 送信)" style="flex:1; box-sizing:border-box; resize:vertical; min-height:36px; max-height:200px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
+      <div style="border-top:1px solid var(--line); padding:8px 10px; background:#fafafa; display:flex; gap:6px; align-items:flex-end; flex:none">
+        <textarea id="cr-input" rows="2" maxlength="4000" placeholder="メッセージ を 入力 (Ctrl+Enter で 送信)" style="flex:1; box-sizing:border-box; resize:none; min-height:36px; max-height:140px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
         <button id="cr-send" class="btn primary" style="flex:none">送信</button>
       </div>
     </div>
   `;
   try {
-    const rooms = await get('/api/chat/rooms');
-    const r = (rooms.rooms || []).find(x => x.room_key === _currentRoom);
+    const roomsData = await get('/api/chat/rooms');
+    const allRooms = roomsData.rooms || [];
+    // タブ描画 (チャンネル + DM すべて + 未読バッジ)。
+    const tabsEl = document.getElementById('cr-tabs');
+    tabsEl.innerHTML = allRooms.map(r => {
+      const active = r.room_key === _currentRoom;
+      const unread = Number(r.unread) || 0;
+      const badge = unread > 0
+        ? `<span style="background:#dc2626; color:#fff; font-weight:700; font-size:10px; padding:1px 6px; border-radius:9px; margin-left:4px">${unread > 99 ? '99+' : unread}</span>`
+        : '';
+      return `
+        <a href="#/chat-rooms/${encodeURIComponent(r.room_key)}"
+           style="display:inline-flex; align-items:center; gap:4px; padding:8px 12px; text-decoration:none; color:#fff; font-size:13px; white-space:nowrap; border-bottom:3px solid ${active ? '#fff' : 'transparent'}; background:${active ? 'rgba(255,255,255,0.1)' : 'transparent'}; ${unread && !active ? 'font-weight:700' : ''}">
+          <span>${escapeHtml(r.icon || '#️⃣')}</span>
+          <span>${escapeHtml(r.name)}</span>
+          ${badge}
+        </a>`;
+    }).join('');
+    const r = allRooms.find(x => x.room_key === _currentRoom);
     let headHtml = '';
     if (r) {
-      headHtml = `<h2 style="margin:6px 0 0">${escapeHtml(r.icon)} ${escapeHtml(r.name)}</h2>` +
-                 (r.description ? `<div class="meta">${escapeHtml(r.description)}</div>` : '');
+      headHtml = `<span class="bold" style="font-size:13px">${escapeHtml(r.icon)} ${escapeHtml(r.name)}</span>` +
+                 (r.description ? ` ・ ${escapeHtml(r.description)}` : '');
     } else if (_currentRoom.startsWith('dm:')) {
       const [a, b] = _currentRoom.slice(3).split('-').map(Number);
       const meId = Number(state.me?.id);
@@ -119,10 +147,10 @@ export async function renderChatRoom({ params }) {
       try {
         const u = await get('/api/users');
         const other = (u.items || []).find(x => x.id === otherUid);
-        if (other) headHtml = `<h2 style="margin:6px 0 0">💬 ${escapeHtml(other.display_name)} と の DM</h2>`;
+        if (other) headHtml = `💬 ${escapeHtml(other.display_name)} と の DM`;
       } catch (_) {}
     }
-    document.getElementById('cr-head').innerHTML = headHtml || `<div class="muted">${escapeHtml(_currentRoom)}</div>`;
+    document.getElementById('cr-head').innerHTML = headHtml || `<span class="muted">${escapeHtml(_currentRoom)}</span>`;
     await loadMessages();
   } catch (e) {
     document.getElementById('cr-stream').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;

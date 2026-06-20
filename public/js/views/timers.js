@@ -626,8 +626,9 @@ function tickTimer() {
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   } else if (isPastEnd) {
     // ② 発表終了 後、 最後 の ベル まで は 0:00 から 上 に カウント
+    // v726 #331 質疑帯は黄色 (#ca8a04 amber) で発表中と区別。
     countEl.textContent = fmtDuration(Math.floor(elapsed - endBellSec));
-    countEl.style.color = '';
+    countEl.style.color = '#ca8a04';
     if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
   } else {
     countEl.textContent = fmtDuration(remainToEndSec);

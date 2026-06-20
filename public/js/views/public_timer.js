@@ -142,8 +142,9 @@ function render() {
       else if (remain <= 60) color = '#f59e0b';
     } else if (elapsed < maxBellSec) {
       // ② 発表終了 後、 最後 の ベル まで は 0:00 から カウントアップ
+      // v726 #331 質疑帯は鮮やかな黄色で目立たせる。
       displayText = fmt(Math.floor(elapsed - endBellSec));
-      color = '#fbbf24';
+      color = '#facc15';
     } else {
       // ③ 超過 — v724 #325 ハッキリ赤に (旧 #9ca3af では目立たない)
       displayText = '+' + fmt(Math.floor(elapsed - maxBellSec));
