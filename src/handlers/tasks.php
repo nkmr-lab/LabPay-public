@@ -15,6 +15,7 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($id > 0 && $method === 'PATCH' && !isset($seg[2])) { tasks_update($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'claim'  && $method === 'POST') { tasks_claim($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'cancel' && $method === 'POST') { tasks_cancel($pdo, $cfg, $id); return; }
+    if ($id > 0 && ($seg[2] ?? '') === 'close'  && $method === 'POST') { tasks_close ($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'attachments' && $method === 'POST' && !isset($seg[3])) {
         task_attachments_upload($pdo, $cfg, $id); return;
     }
@@ -856,6 +857,46 @@ function tasks_reject(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     if ($upd->rowCount() === 0)
         throw new ApiException('bad_state', '却下できない状態です', 409);
     json_response(['ok' => true]);
+}
+
+// ---------- POST /api/tasks/{id}/close ----------
+// v714 #309 取消 と 違って 「終了」 = もう 募集 締切 で OK、 完了 扱い に したい 場合。
+//   - status を 'closed' に (cancelled では ない の で、 履歴 上 「✅ 終了」 表記)
+//   - 未承認 capacity 分 の 報酬 は 起案者 に 返金 (cancel と 同じ)
+//   - 進行 中 (claimed/reported) の claim は cancelled に。 引き受け 者 に は 通知。
+function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    [$affectedClaimants, $taskTitle, $refund] = db_tx($pdo, function () use ($pdo, $taskId, $u) {
+        $st = $pdo->prepare('SELECT * FROM tasks WHERE id=? AND requester_user_id=? FOR UPDATE');
+        $st->execute([$taskId, $u['id']]);
+        $task = $st->fetch();
+        if (!$task) throw new ApiException('forbidden', '依頼者のみ終了可能です', 403);
+        if ($task['status'] !== 'open')
+            throw new ApiException('not_open', 'task is not open', 409);
+        $aq = $pdo->prepare("SELECT DISTINCT user_id FROM task_claims
+            WHERE task_id=? AND status IN ('claimed','reported')");
+        $aq->execute([$taskId]);
+        $affectedClaimants = array_column($aq->fetchAll(), 'user_id');
+        $approved = tasks_approved_count($pdo, $taskId);
+        $refund   = ((int)$task['capacity'] - $approved) * (int)$task['reward'];
+        if ($refund > 0) {
+            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
+            Ledger::transfer($pdo, $escAcc, $userAcc, $refund, 'refund',
+                'task', $taskId, "タスク「{$task['title']}」終了 返金");
+        }
+        $pdo->prepare("UPDATE tasks SET status='closed', closed_at=NOW() WHERE id=?")->execute([$taskId]);
+        $pdo->prepare("UPDATE task_claims SET status='cancelled'
+            WHERE task_id=? AND status IN ('claimed','reported')")->execute([$taskId]);
+        return [$affectedClaimants, (string)$task['title'], $refund];
+    });
+    foreach ($affectedClaimants as $cid) {
+        try {
+            Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',
+                "引き受け 中 の タスク 「{$taskTitle}」 が 依頼者 により 終了 されました", 'task', $taskId);
+        } catch (Throwable $e) {}
+    }
+    json_response(['ok' => true, 'refunded' => $refund]);
 }
 
 // ---------- POST /api/tasks/{id}/cancel ----------

@@ -536,8 +536,9 @@ async function loadDetail(id) {
 
     if (isRequester && t.status === 'open') {
       actions += `
-        <div class="row" style="margin-top:6px; gap:6px">
+        <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
           <button id="edit-task">編集</button>
+          <button id="close-task" class="btn">✅ 終了 する</button>
           <button id="cancel-task" class="danger">取り消す</button>
         </div>`;
     }
@@ -657,6 +658,7 @@ async function loadDetail(id) {
     });
     document.getElementById('claim-btn')?.addEventListener('click', () => onClaim(id, selectedSlotId));
     document.getElementById('report-btn')?.addEventListener('click', e => onReport(id, e.currentTarget.dataset.claim));
+    document.getElementById('close-task')?.addEventListener('click', () => onCloseTask(id));
     document.getElementById('cancel-task')?.addEventListener('click', () => onCancelTask(id));
     document.getElementById('edit-task')?.addEventListener('click', () => renderEditForm(t));
     root.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => onApprove(id, b.dataset.approve)));
@@ -860,5 +862,14 @@ async function onSaveEdit(taskId) {
 async function onCancelTask(taskId) {
   if (!confirm('タスクを取り消しますか? (未承認分の報酬が返金されます)')) return;
   try { const r = await post(`/api/tasks/${taskId}/cancel`, {}); toast(`取り消しました (${r.refunded}pt 返金)`); await loadDetail(taskId); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+// v714 #309 「終了」 = 取消 と 違って 「もう 募集 締切 で OK」 完了 扱い に する。
+//   未承認 capacity 分 は 返金、 進行 中 の claim は cancel 扱い (取消 と 同じ)、
+//   ただし 履歴 上 の status は 'closed'。
+async function onCloseTask(taskId) {
+  if (!confirm('タスク を 終了 しますか? (= 募集 を 締切 完了 扱い に。 未承認 分 の 報酬 は 返金 されます)')) return;
+  try { const r = await post(`/api/tasks/${taskId}/close`, {}); toast(`終了 しました (${r.refunded}pt 返金)`); await loadDetail(taskId); }
   catch (e) { toast('失敗: ' + e.message); }
 }
