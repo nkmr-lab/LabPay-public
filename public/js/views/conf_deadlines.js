@@ -248,9 +248,53 @@ export async function renderConfDeadlineForm({ params } = {}) {
     if (extrasRoot.querySelectorAll('.cd-extra-row').length >= 10) { toast('サブ 締切 は 最大 10 件'); return; }
     addExtraRow();
   });
+
+  // v712 #306 入力 補助:
+  //   (a) datetime-local の 時刻 が 未入力 (00:00) なら 自動 で 23:59 に。
+  //       締切 は ほぼ 必ず 23:59 なので、 ユーザ が 日付 だけ 選んで も デフォルト で
+  //       23:59 が 入る ように。
+  //   (b) カテゴリ が 国際 会議 (intl_conf) に なったら AOE checkbox を 既定 ON に。
+  //       (ユーザ が 既に 手動 で 触って いれば 触らない)
+  //   (c) 会期 開始日 を 選んだ ら 終了日 input の min を 開始日 に セット。
+  const force2359 = (el) => {
+    if (!el) return;
+    const v = el.value;
+    if (!v) return;
+    if (v.endsWith('T00:00') || v.endsWith('T00:00:00')) {
+      el.value = v.slice(0, 10) + 'T23:59';
+    }
+  };
+  document.getElementById('cd-deadline').addEventListener('change', e => force2359(e.target));
+  extrasRoot.addEventListener('change', e => {
+    if (e.target.classList?.contains('cd-ex-dt')) force2359(e.target);
+  });
+  let aoeUserTouched = false;
+  document.getElementById('cd-deadline-aoe').addEventListener('change', () => { aoeUserTouched = true; });
+  document.getElementById('cd-category').addEventListener('change', e => {
+    if (aoeUserTouched) return;
+    document.getElementById('cd-deadline-aoe').checked = (e.target.value === 'intl_conf');
+  });
+  const eventEnd = document.getElementById('cd-event-end');
+  document.getElementById('cd-event-start').addEventListener('change', e => {
+    if (e.target.value) {
+      eventEnd.min = e.target.value;
+      if (eventEnd.value && eventEnd.value < e.target.value) eventEnd.value = e.target.value;
+    } else {
+      eventEnd.removeAttribute('min');
+    }
+  });
+
+  if (!isEdit) {
+    // v712 #306 新規 登録 で カテゴリ 既定 が 国際 会議 なら AOE も 既定 ON。
+    if (document.getElementById('cd-category').value === 'intl_conf') {
+      document.getElementById('cd-deadline-aoe').checked = true;
+    }
+  }
   if (isEdit) {
     try {
       const r = await get('/api/conf-deadlines/' + id);
+      // 既存 値 を 読み込んだ 後 は カテゴリ 変更 で AOE を 触らない (手動 扱い)。
+      aoeUserTouched = true;
       document.getElementById('cd-category').value = r.category;
       document.getElementById('cd-name').value = r.name || '';
       document.getElementById('cd-full-name').value = r.full_name || '';
@@ -264,7 +308,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
       }
       parseExtra(r.extra_deadlines).forEach(addExtraRow);
       if (r.notification_at) document.getElementById('cd-notification').value = (r.notification_at || '').replace(' ', 'T').slice(0, 16);
-      if (r.event_start) document.getElementById('cd-event-start').value = String(r.event_start).slice(0, 10);
+      if (r.event_start) {
+        document.getElementById('cd-event-start').value = String(r.event_start).slice(0, 10);
+        eventEnd.min = String(r.event_start).slice(0, 10);
+      }
       if (r.event_end)   document.getElementById('cd-event-end').value = String(r.event_end).slice(0, 10);
       document.getElementById('cd-location').value = r.location || '';
       document.getElementById('cd-notes').value = r.notes || '';
