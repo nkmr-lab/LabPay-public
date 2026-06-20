@@ -11,6 +11,8 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === '' && $method === 'POST') { places_create($pdo, $cfg); return; }
     // v471 URL (tabelog / Retty) から JSON-LD で 店名 / 住所 / 緯度経度 を 取得
     if ($sub === 'import_url' && $method === 'POST') { places_import_url($pdo, $cfg); return; }
+    // v719 #315 キーワードから tabelog URL を引いてくる
+    if ($sub === 'search_url' && $method === 'POST') { places_search_url($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
@@ -429,5 +431,44 @@ function places_import_url(PDO $pdo, array $cfg): void {
         'lng'         => $lng,
         'description' => $desc,
         'source_url'  => $url,
+    ]);
+}
+
+// v719 #315 キーワードから tabelog URL を探す。
+//   tabelog の検索結果ページ (https://tabelog.com/rstLst/?sw=...) を取って、
+//   検索結果内の店舗 URL (/<prefecture>/A<area>/A<sub>/<id>/) パターンを抽出する。
+//   ヒットしたら上位 5 件と top を返す。 client はその URL をそのまま import_url に流す。
+function places_search_url(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $q = trim((string)($body['q'] ?? ''));
+    if ($q === '' || mb_strlen($q) > 200) throw new ApiException('bad_request', 'q 1..200', 400);
+    $url = 'https://tabelog.com/rstLst/?sw=' . urlencode($q);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+        CURLOPT_ENCODING => '',
+    ]);
+    $html = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$html || $code !== 200) {
+        throw new ApiException('fetch_failed', "tabelog 検索失敗 (HTTP {$code})", 502);
+    }
+    $candidates = [];
+    if (preg_match_all('@https?://tabelog\.com/[a-z]+/A\d+/A\d+/\d+/?@', (string)$html, $m)) {
+        foreach ($m[0] as $u) {
+            $clean = rtrim($u, '/') . '/';
+            if (!in_array($clean, $candidates, true)) $candidates[] = $clean;
+        }
+    }
+    if (!$candidates) throw new ApiException('not_found', '結果が見つかりませんでした', 404);
+    json_response([
+        'top'        => $candidates[0],
+        'candidates' => array_slice($candidates, 0, 5),
+        'search_url' => $url,
     ]);
 }

@@ -284,6 +284,13 @@ export async function renderPlaceNew() {
       <h2 style="margin:6px 0 0">📍 お店 を 登録</h2>
     </div>
     <div class="card">
+      <label class="field"><span class="lbl">🔍 キーワードで tabelog を検索 → URL 自動取得</span>
+        <div class="row" style="gap:6px">
+          <input type="text" id="pln-search-kw" maxlength="200" placeholder="例: 〇〇カフェ 新宿" style="flex:1">
+          <button id="pln-search-btn" class="btn">検索</button>
+        </div>
+        <span class="hint-sm" style="font-size:11px" id="pln-search-status">tabelog の検索結果から店舗 URL を取得して下の欄に入れます</span>
+      </label>
       <label class="field"><span class="lbl">🔗 URL から 自動取得 (tabelog / Retty / hotpepper)</span>
         <div class="row" style="gap:6px">
           <input type="url" id="pln-import-url" placeholder="https://tabelog.com/..." style="flex:1">
@@ -349,6 +356,30 @@ export async function renderPlaceNew() {
       plnImgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
     } catch (e) { plnImgStatus.textContent = '失敗: ' + (e?.message || e); }
   });
+  // v719 #315 キーワード → tabelog 検索 → URL 自動 入力 + import_url 自動実行
+  const searchBtn = document.getElementById('pln-search-btn');
+  const searchInput = document.getElementById('pln-search-kw');
+  const searchStatus = document.getElementById('pln-search-status');
+  const doSearch = async () => {
+    const q = searchInput.value.trim();
+    if (!q) { toast('キーワードを入れてください'); return; }
+    searchBtn.disabled = true;
+    searchStatus.textContent = 'tabelog 検索中…';
+    try {
+      const r = await post('/api/places/search_url', { q });
+      const url = r.top || (r.candidates && r.candidates[0]);
+      if (!url) throw new Error('候補なし');
+      document.getElementById('pln-import-url').value = url;
+      searchStatus.innerHTML = `<span style="color:#0e7c63">✓ ${url} を取得 → 自動で 「取得」 を実行します</span>`;
+      document.getElementById('pln-import-btn').click();
+    } catch (e) { searchStatus.innerHTML = `<span style="color:#c00">失敗: ${e?.message || e}</span>`; }
+    finally { searchBtn.disabled = false; }
+  };
+  if (searchBtn) {
+    searchBtn.addEventListener('click', doSearch);
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+  }
+
   // v471 URL から 自動 取得 (tabelog / Retty / hotpepper)
   // v717 #312 paste 時 に も URL 部分 のみ 残す ように 即時 補正
   const importUrlInput = document.getElementById('pln-import-url');
