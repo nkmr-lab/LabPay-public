@@ -57,8 +57,13 @@ export async function renderInvitations() {
         <input type="text" id="inv-where" maxlength="200" placeholder="例: 大学前のラーメン屋">
       </label>
       <label class="field">
-        <span class="lbl">上限人数 (任意・空欄なら制限なし)</span>
-        <input type="number" id="inv-cap" min="1" max="1000" placeholder="例: 4">
+        <span class="lbl">募集 人数 (任意・空欄なら 制限なし)</span>
+        <input type="number" id="inv-cap" min="1" max="1000" placeholder="例: 4 (自分 を 除いて)">
+        <span class="hint-sm">既定: 自分 (発起人) は 含まない 「集めたい 他 人数」。</span>
+        <label class="row" style="gap:6px; font-size:12px; margin-top:4px; align-items:center">
+          <input type="checkbox" id="inv-cap-include-self">
+          <span>この 人数 に 自分 も 含める (= 上限 = この 値)</span>
+        </label>
       </label>
       <label class="field">
         <span class="lbl">詳細 (任意)</span>
@@ -186,9 +191,12 @@ function renderRow(i) {
   }
   // 参加者数 / 募集人数。 終了時は人数 をピープル行右端に出すので、 ここでは
   // 募集中の時だけ出す。
+  // v708 capacity_excludes_creator=1 なら 「他 N 人 募集」 と 表示 (発起人 別)。
   const capLine = !isClosed
     ? (i.capacity
-        ? `<div class="meta">${i.join_count} / ${i.capacity} 人</div>`
+        ? (Number(i.capacity_excludes_creator)
+            ? `<div class="meta">${i.join_count} 人 参加 / 募集 ${i.capacity} 人 (発起人 別)</div>`
+            : `<div class="meta">${i.join_count} / ${i.capacity} 人</div>`)
         : `<div class="meta">${i.join_count} 人</div>`)
     : '';
   const statusTag = isClosed
@@ -302,8 +310,11 @@ async function loadDetail(id) {
       deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(fmtDateTime(i.signup_closes_at))}${remStr}</div>`;
     }
     const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
+    // v708 #300 capacity_excludes_creator=1 (新 既定) なら 「発起人 + 募集 X 人」 表示。
     const capLine = i.capacity
-      ? `<div class="meta">参加 ${(i.joins || []).length} / 上限 ${i.capacity}</div>`
+      ? (Number(i.capacity_excludes_creator)
+          ? `<div class="meta">参加 ${(i.joins || []).length} 人 (発起人 含む) / 募集 ${i.capacity} 人 (発起人 別)</div>`
+          : `<div class="meta">参加 ${(i.joins || []).length} / 上限 ${i.capacity}</div>`)
       : `<div class="meta">参加 ${(i.joins || []).length} 人</div>`;
     const statusTag = isClosed
       ? `<span class="tag muted">終了</span>`
@@ -434,12 +445,14 @@ async function onCreate() {
   const pre_join_user_ids = invPrePicker ? [...invPrePicker.getSelected()] : [];
   const location = document.getElementById('inv-where').value.trim() || null;
   const capacity = document.getElementById('inv-cap').value;
+  const capacity_excludes_creator = !document.getElementById('inv-cap-include-self').checked;
   const description = document.getElementById('inv-desc').value.trim() || null;
   const image_url = document.getElementById('inv-image-url').value || null;
   try {
     await post('/api/invitations', {
       title, starts_at, signup_closes_at, location, description, image_url,
       capacity: capacity ? Number(capacity) : null,
+      capacity_excludes_creator,
       pre_join_user_ids,
     });
     document.getElementById('inv-title').value = '';
@@ -448,6 +461,7 @@ async function onCreate() {
     document.getElementById('inv-signup-deadline').value = '';
     document.getElementById('inv-where').value = '';
     document.getElementById('inv-cap').value = '';
+    document.getElementById('inv-cap-include-self').checked = false;
     document.getElementById('inv-desc').value = '';
     if (invPrePicker) invPrePicker.setSelected([]);
     // picker.setSelected([]) で reset 済
@@ -537,8 +551,13 @@ function openInvEditModal(i) {
     <label class="field"><span class="lbl">場所 (任意)</span>
       <input type="text" id="ied-where" maxlength="200" value="${escapeHtml(i.location || '')}">
     </label>
-    <label class="field"><span class="lbl">上限人数 (任意・空欄なし)</span>
+    <label class="field"><span class="lbl">募集 人数 (任意・空欄 なら 制限 なし)</span>
       <input type="number" id="ied-cap" min="1" max="1000" value="${i.capacity != null ? i.capacity : ''}">
+      <span class="hint-sm">既定: 自分 (発起人) は 含まない 「集めたい 他 人数」。</span>
+      <label class="row" style="gap:6px; font-size:12px; margin-top:4px; align-items:center">
+        <input type="checkbox" id="ied-cap-include-self" ${Number(i.capacity_excludes_creator) === 0 ? 'checked' : ''}>
+        <span>この 人数 に 自分 も 含める (= 上限 = この 値)</span>
+      </label>
     </label>
     <label class="field"><span class="lbl">詳細 (任意)</span>
       <textarea id="ied-desc" maxlength="5000" rows="3">${escapeHtml(i.description || '')}</textarea>
@@ -572,6 +591,7 @@ function openInvEditModal(i) {
           signup_closes_at: document.getElementById('ied-deadline').value || null,
           location:         document.getElementById('ied-where').value.trim() || null,
           capacity:         document.getElementById('ied-cap').value ? Number(document.getElementById('ied-cap').value) : null,
+          capacity_excludes_creator: !document.getElementById('ied-cap-include-self').checked,
           description:      document.getElementById('ied-desc').value.trim() || null,
           feat_actions,
         };

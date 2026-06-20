@@ -187,6 +187,12 @@ function invitations_create(PDO $pdo, array $cfg): void {
     $location = isset($body['location'])    ? mb_substr((string)$body['location'], 0, 200) : null;
     $capacity = isset($body['capacity']) && $body['capacity'] !== '' && $body['capacity'] !== null
         ? max(1, min(1000, (int)$body['capacity'])) : null;
+    // v708 #300 capacity を 「発起人 を 含まない 募集 人数」 として 扱う モード。
+    //   既定 (form 新規 = true): capacity = 募集 する 他 人数。 実 上限 = capacity + 1 (自分)。
+    //   false (旧 互換): capacity = 全員 上限 (自分 込み)。
+    $capExcludesCreator = !empty($body['capacity_excludes_creator']) ? 1 : 0;
+    // 実 上限 (= invitation_joins テーブル 上 の 最大 行数)。 既参加者 数 比較 用。
+    $effectiveTotalCap = $capacity === null ? null : ($capacity + ($capExcludesCreator ? 1 : 0));
     $imageUrl = validate_product_image_url($body['image_url'] ?? null);
     // v370 starts_at は Y-m-d (日付だけ) も許容。 has_time フラグで 区別。
     //   * "Y-m-d"            → starts_at_has_time=0 (00:00:00 で保存)
@@ -219,7 +225,7 @@ function invitations_create(PDO $pdo, array $cfg): void {
         if ((int)$stU->fetchColumn() !== count($preJoinIds)) {
             throw new ApiException('bad_request', '存在しない user_id が含まれます', 400);
         }
-        if ($capacity !== null && (1 + count($preJoinIds)) > $capacity) {
+        if ($effectiveTotalCap !== null && (1 + count($preJoinIds)) > $effectiveTotalCap) {
             throw new ApiException('bad_request', '事前参加者の人数が上限を超えています', 400);
         }
     }
@@ -229,9 +235,9 @@ function invitations_create(PDO $pdo, array $cfg): void {
         $featActionsJson = invitations_normalize_feat_actions($body['feat_actions']);
     }
     $ins = $pdo->prepare("INSERT INTO invitations
-        (creator_user_id, title, description, starts_at, starts_at_has_time, signup_closes_at, location, capacity, feat_actions, image_url)
-        VALUES (?,?,?,?,?,?,?,?,?,?)");
-    $ins->execute([$u['id'], $title, $desc, $startsAt, $startsHasTime, $signupClosesAt, $location, $capacity, $featActionsJson, $imageUrl]);
+        (creator_user_id, title, description, starts_at, starts_at_has_time, signup_closes_at, location, capacity, capacity_excludes_creator, feat_actions, image_url)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$u['id'], $title, $desc, $startsAt, $startsHasTime, $signupClosesAt, $location, $capacity, $capExcludesCreator, $featActionsJson, $imageUrl]);
     $invId = (int)$pdo->lastInsertId();
 
     // v370 発起人を 自動で 参加表明済 に + 事前参加者も 同時 join。
@@ -276,9 +282,11 @@ function invitations_join(PDO $pdo, array $cfg, int $id): void {
             throw new ApiException('closed', '募集締切を過ぎています', 409);
         }
         if ($inv['capacity']) {
+            // v708 #300 capacity_excludes_creator=1 なら 実 上限 は capacity + 1 (発起人 分)。
+            $effCap = (int)$inv['capacity'] + ((int)($inv['capacity_excludes_creator'] ?? 0) ? 1 : 0);
             $stC = $pdo->prepare("SELECT COUNT(*) FROM invitation_joins WHERE invitation_id=?");
             $stC->execute([$id]);
-            if ((int)$stC->fetchColumn() >= (int)$inv['capacity']) {
+            if ((int)$stC->fetchColumn() >= $effCap) {
                 throw new ApiException('full', '定員に達しています', 409);
             }
         }
@@ -383,6 +391,10 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
             }
             $sets[] = 'capacity = ?'; $args[] = $iv;
         }
+    }
+    if (array_key_exists('capacity_excludes_creator', $body)) {
+        $sets[] = 'capacity_excludes_creator = ?';
+        $args[] = !empty($body['capacity_excludes_creator']) ? 1 : 0;
     }
     // v396 アプリ ショートカット の ON/OFF 編集。 feat_actions: null/array。
     // null/省略 = 「全 ON」 (= DB は NULL), 配列 = 指定 ID のみ ON。
