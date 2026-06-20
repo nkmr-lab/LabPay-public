@@ -62,11 +62,16 @@ export async function renderPublicTimer({ params }) {
       .bell-row { display:flex; gap:14px; margin-top:24px; font-size:clamp(12px, 1.5vw, 18px); opacity:0.55; flex-wrap:wrap; justify-content:center }
       .bell-row > div { padding:6px 12px; border:1px solid #444; border-radius:6px }
       .bell-row > div.cur { border-color:#fbbf24; color:#fbbf24; opacity:1 }
+      /* v728 #336 プログレスバー */
+      #pt-bar-bg { width:80vw; max-width:1100px; height:clamp(10px, 1.6vw, 22px);
+                   margin:18px 0 4px; border-radius:8px; overflow:hidden; position:relative; background:#222 }
+      #pt-bar-fill { height:100%; width:0%; transition:width 0.4s linear; background:#3b82f6 }
     </style>
     <div id="pt-wrap">
       <div id="pt-title">読み込み中…</div>
       <div id="pt-time">--:--</div>
       <div id="pt-status"></div>
+      <div id="pt-bar-bg"><div id="pt-bar-fill"></div></div>
       <div class="bell-row" id="pt-bells"></div>
     </div>
   `;
@@ -174,4 +179,32 @@ function render() {
     const min = (b / 60).toFixed(b % 60 === 0 ? 0 : 1);
     return `<div class="${cur ? 'cur' : ''}">${i + 1}鈴 ${min}分${isEnd ? ' (終了)' : ''}</div>`;
   }).join('');
+
+  // v728 #336 プログレスバー: 合計 = 最後のベル (= visualEndSec) 100%。
+  //   発表終了帯 (青) / 質疑帯 (橙) で背景色分け、 ベル位置に縦線 (最後のベルは端なので除外)。
+  //   経過バーの色は フェーズ (発表中: 青 / 質疑: 黄 / 超過: 赤) に追従。
+  const visualEndSec = Math.max(maxBellSec, endBellSec);
+  const barBg = document.getElementById('pt-bar-bg');
+  const barFill = document.getElementById('pt-bar-fill');
+  if (barBg && barFill) {
+    if (visualEndSec > 0) {
+      const endPct = (endBellSec / visualEndSec) * 100;
+      const linePcts = [];
+      for (const b of bells) {
+        if (b > 0 && b < visualEndSec) linePcts.push((b / visualEndSec) * 100);
+      }
+      const lines = linePcts.map(p => `transparent ${p - 0.3}%, rgba(255,255,255,0.7) ${p - 0.3}%, rgba(255,255,255,0.7) ${p + 0.3}%, transparent ${p + 0.3}%`).join(', ');
+      const baseGradient = `linear-gradient(to right, #1e3a8a 0%, #1e3a8a ${endPct}%, #92400e ${endPct}%, #92400e 100%)`;
+      barBg.style.backgroundImage = linePcts.length
+        ? `linear-gradient(to right, ${lines}), ${baseGradient}`
+        : baseGradient;
+      const pct = Math.min(100, (elapsed / visualEndSec) * 100);
+      barFill.style.width = pct.toFixed(1) + '%';
+      const isOver = elapsed >= maxBellSec;
+      const isPastEnd = elapsed >= endBellSec;
+      barFill.style.background = isOver ? '#ef4444' : (isPastEnd ? '#facc15' : '#3b82f6');
+    } else {
+      barFill.style.width = '0%';
+    }
+  }
 }
