@@ -350,10 +350,27 @@ export async function renderPlaceNew() {
     } catch (e) { plnImgStatus.textContent = '失敗: ' + (e?.message || e); }
   });
   // v471 URL から 自動 取得 (tabelog / Retty / hotpepper)
+  // v717 #312 paste 時 に も URL 部分 のみ 残す ように 即時 補正
+  const importUrlInput = document.getElementById('pln-import-url');
+  if (importUrlInput) {
+    importUrlInput.addEventListener('paste', e => {
+      setTimeout(() => {
+        const v = importUrlInput.value;
+        const mm = v.match(/https?:\/\/\S+/);
+        if (mm) importUrlInput.value = mm[0].replace(/[\s,;]+$/, '');
+      }, 0);
+    });
+  }
   const importBtn = document.getElementById('pln-import-btn');
   if (importBtn) {
     importBtn.addEventListener('click', async () => {
-      const url = document.getElementById('pln-import-url').value.trim();
+      // v717 #312 ペースト 文 から URL 部分 だけ 抽出 (前後 の 余計 な 説明 文 を 落とす)。
+      let url = document.getElementById('pln-import-url').value.trim();
+      const m = url.match(/https?:\/\/\S+/);
+      if (m) {
+        url = m[0].replace(/[\s,;]+$/, '');
+        document.getElementById('pln-import-url').value = url;
+      }
       if (!url) { toast('URL を 入れて ください'); return; }
       const status = document.getElementById('pln-import-status');
       importBtn.disabled = true;
