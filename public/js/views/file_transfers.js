@@ -30,14 +30,22 @@ export async function renderFileTransfers() {
         <div id="ft-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="ft-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
-      <label class="field"><span class="lbl">ファイル</span>
-        <input type="file" id="ft-file">
-        <span class="hint-sm" style="font-size:11px">単一ファイル送信 (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB)</span>
-      </label>
-      <label class="field"><span class="lbl">📁 または フォルダ (v735 #345)</span>
-        <input type="file" id="ft-folder" webkitdirectory directory multiple>
-        <span class="hint-sm" style="font-size:11px">フォルダを丸ごと送信。サーバ側で zip にまとめて送信されます (合計 50MB 上限)</span>
-      </label>
+      <div class="field">
+        <span class="lbl">ファイル (複数選択 / フォルダ / ドラッグ&ドロップ 可)</span>
+        <div id="ft-drop" style="border:2px dashed #9ca3af; border-radius:10px; padding:18px; text-align:center; background:#fafafa; cursor:pointer; transition:background 0.15s, border-color 0.15s">
+          <div style="font-size:32px; margin-bottom:4px">📂</div>
+          <div style="font-size:13px; color:#374151">ここに ファイル / フォルダ を ドロップ</div>
+          <div style="font-size:11px; color:#6b7280; margin-top:4px">または タップで 選ぶ (複数 OK)</div>
+          <input type="file" id="ft-files" multiple hidden>
+          <input type="file" id="ft-folder" webkitdirectory directory multiple hidden>
+          <div class="row" style="gap:6px; margin-top:8px; justify-content:center">
+            <button type="button" id="ft-pick-files" class="btn" style="font-size:12px; padding:4px 10px">📄 ファイル を 選ぶ</button>
+            <button type="button" id="ft-pick-folder" class="btn" style="font-size:12px; padding:4px 10px">📁 フォルダ を 選ぶ</button>
+          </div>
+        </div>
+        <div id="ft-selected" style="margin-top:8px"></div>
+        <span class="hint-sm" style="font-size:11px">複数 ファイル は zip に まとめ られて 送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 50MB 上限</span>
+      </div>
       <label class="field"><span class="lbl">メッセージ (任意)</span>
         <textarea id="ft-body" rows="2" maxlength="2000" placeholder="例: 査読お願いします"></textarea>
       </label>
@@ -67,25 +75,107 @@ export async function renderFileTransfers() {
     });
   } catch (e) { console.error('[ft] picker init failed:', e); }
 
+  // v743 #354 ファイル選択 を ドラッグ&ドロップ + 複数選択 に 対応。
+  //   保持構造: { file: File, relPath: string }[]
+  //   relPath は フォルダドロップ時 のみ "folder/sub/file.txt" 形式、 単独 file は file.name。
+  const selectedFiles = [];
+  function renderSelected() {
+    const root = document.getElementById('ft-selected');
+    if (selectedFiles.length === 0) { root.innerHTML = ''; return; }
+    let total = 0;
+    for (const it of selectedFiles) total += it.file.size;
+    root.innerHTML = `
+      <div style="background:#f3f4f6; border-radius:8px; padding:8px; font-size:12px">
+        <div style="font-weight:600; margin-bottom:4px">選択中: ${selectedFiles.length} 件 (合計 ${fmtBytes(total)})</div>
+        <div style="display:flex; flex-direction:column; gap:2px; max-height:200px; overflow:auto">
+          ${selectedFiles.map((it, i) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; padding:2px 0; border-bottom:1px solid #e5e7eb">
+              <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.relPath || it.file.name)}</span>
+              <span style="color:#6b7280; flex:none">${fmtBytes(it.file.size)}</span>
+              <button type="button" class="btn" data-ft-rm="${i}" style="font-size:10px; padding:0 6px; flex:none">×</button>
+            </div>
+          `).join('')}
+        </div>
+        <button type="button" id="ft-clear" class="btn" style="font-size:11px; padding:2px 8px; margin-top:6px">全部 クリア</button>
+      </div>`;
+    root.querySelectorAll('[data-ft-rm]').forEach(b => b.addEventListener('click', () => {
+      selectedFiles.splice(Number(b.dataset.ftRm), 1); renderSelected();
+    }));
+    document.getElementById('ft-clear').addEventListener('click', () => {
+      selectedFiles.length = 0; renderSelected();
+    });
+  }
+  function addFiles(files, basePath = '') {
+    for (const f of files) {
+      const rel = basePath ? (basePath + '/' + f.name) : (f.webkitRelativePath || f.name);
+      selectedFiles.push({ file: f, relPath: rel });
+    }
+    renderSelected();
+  }
+
+  // ファイル選択ボタン
+  const fInput = document.getElementById('ft-files');
+  const dInput = document.getElementById('ft-folder');
+  document.getElementById('ft-pick-files').addEventListener('click', () => fInput.click());
+  document.getElementById('ft-pick-folder').addEventListener('click', () => dInput.click());
+  fInput.addEventListener('change', () => { addFiles(fInput.files); fInput.value = ''; });
+  dInput.addEventListener('change', () => { addFiles(dInput.files); dInput.value = ''; });
+
+  // ドロップゾーン本体タップでもファイル選択 (ボタン以外を タップ した時)
+  const drop = document.getElementById('ft-drop');
+  drop.addEventListener('click', (ev) => {
+    if (ev.target.closest('button')) return;     // ボタンクリックは別ハンドラ
+    fInput.click();
+  });
+
+  // ドラッグ&ドロップ
+  ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, (ev) => {
+    ev.preventDefault();
+    drop.style.background = '#ede4f3';
+    drop.style.borderColor = '#7b3fa0';
+  }));
+  ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, (ev) => {
+    ev.preventDefault();
+    drop.style.background = '#fafafa';
+    drop.style.borderColor = '#9ca3af';
+  }));
+  drop.addEventListener('drop', async (ev) => {
+    ev.preventDefault();
+    const items = ev.dataTransfer?.items;
+    if (items && items.length && items[0].webkitGetAsEntry) {
+      // ディレクトリ も 含めて 再帰 で 拾う
+      const entries = [];
+      for (let i = 0; i < items.length; i++) {
+        const e = items[i].webkitGetAsEntry?.();
+        if (e) entries.push(e);
+      }
+      const all = [];
+      await Promise.all(entries.map(e => walkEntry(e, '', all)));
+      for (const { file, path } of all) {
+        selectedFiles.push({ file, relPath: path || file.name });
+      }
+      renderSelected();
+    } else if (ev.dataTransfer?.files) {
+      addFiles(ev.dataTransfer.files);
+    }
+  });
+
   document.getElementById('ft-send').addEventListener('click', async () => {
     const selected = picker ? [...picker.getSelected()] : [];
-    const fileInput   = document.getElementById('ft-file');
-    const folderInput = document.getElementById('ft-folder');
     const body = document.getElementById('ft-body').value.trim();
     if (!selected.length) { toast('宛先を 1 人以上 選んで ください'); return; }
-    const folderFiles = Array.from(folderInput.files || []);
-    const singleFile  = fileInput.files[0];
-    if (!folderFiles.length && !singleFile) { toast('ファイル または フォルダ を 選んで ください'); return; }
+    if (selectedFiles.length === 0) { toast('ファイル を 選んで ください'); return; }
     const fd = new FormData();
-    if (folderFiles.length > 0) {
+    if (selectedFiles.length === 1 && !selectedFiles[0].relPath.includes('/')) {
+      // 単一 ファイル (フォルダ階層なし) → 旧 file 互換 で 送る (= zip し ない、 原 形 で 保存)
+      fd.append('file', selectedFiles[0].file);
+    } else {
       const paths = [];
-      for (const f of folderFiles) {
-        fd.append('files[]', f, f.name);
-        paths.push(f.webkitRelativePath || f.name);
+      for (const it of selectedFiles) {
+        fd.append('files[]', it.file, it.file.name);
+        paths.push(it.relPath || it.file.name);
       }
       fd.append('paths', JSON.stringify(paths));
-    } else {
-      fd.append('file', singleFile);
     }
     for (const id of selected) fd.append('recipient_user_ids[]', String(id));
     if (body) fd.append('body', body);
@@ -102,8 +192,8 @@ export async function renderFileTransfers() {
         throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
       toast(`送信しました (${selected.length} 人)`);
-      document.getElementById('ft-file').value = '';
-      document.getElementById('ft-folder').value = '';
+      selectedFiles.length = 0;
+      renderSelected();
       document.getElementById('ft-body').value = '';
       if (picker) picker.setSelected([]);
       await loadList();
@@ -112,6 +202,25 @@ export async function renderFileTransfers() {
   });
 
   await loadList();
+}
+
+// FileSystemEntry を 再帰 で 走査 して 全 File を all[] に push (path 付き)
+async function walkEntry(entry, prefix, all) {
+  if (entry.isFile) {
+    await new Promise((resolve) => entry.file((f) => {
+      all.push({ file: f, path: prefix ? (prefix + '/' + f.name) : f.name });
+      resolve();
+    }, () => resolve()));
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    // readEntries は 1 回で 全部 返さない 仕様 なので ループ
+    while (true) {
+      const batch = await new Promise((res) => reader.readEntries(res, () => res([])));
+      if (!batch || batch.length === 0) break;
+      const nextPrefix = prefix ? (prefix + '/' + entry.name) : entry.name;
+      for (const child of batch) await walkEntry(child, nextPrefix, all);
+    }
+  }
 }
 
 async function loadList() {

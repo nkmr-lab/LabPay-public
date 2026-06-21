@@ -134,13 +134,18 @@ function ft_create(PDO $pdo, array $cfg): void {
             $mb = (int)round(FT_MAX_BYTES / 1024 / 1024);
             throw new ApiException('too_large', "合計サイズが {$mb}MB を超えています", 413);
         }
-        // root folder の名前を decide
-        $folderName = 'folder';
-        if (!empty($paths[0])) {
-            $first = (string)$paths[0];
-            if (str_contains($first, '/')) $folderName = explode('/', $first, 2)[0];
+        // root folder の名前を decide。 v743 #354 フォルダ なし (= 単純 複数 ファイル) なら
+        //   'files.zip' に。 フォルダ ドロップなら 最初のパス先頭を採用。
+        $hasFolderStruct = false;
+        foreach ($paths as $p) {
+            if (is_string($p) && str_contains($p, '/')) { $hasFolderStruct = true; break; }
         }
-        $folderName = preg_replace('/[^\w.-]+/u', '_', $folderName) ?: 'folder';
+        $folderName = 'files';
+        if ($hasFolderStruct && !empty($paths[0])) {
+            $first = (string)$paths[0];
+            $folderName = explode('/', $first, 2)[0];
+        }
+        $folderName = preg_replace('/[^\w.-]+/u', '_', $folderName) ?: 'files';
         // tmp zip を作る
         $tmpZip = tempnam(sys_get_temp_dir(), 'ft_') . '.zip';
         $zip = new ZipArchive();
