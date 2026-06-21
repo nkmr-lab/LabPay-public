@@ -92,6 +92,7 @@ $routes = [
     'fortune'        => 'route_fortune',
     'othello'        => 'route_othello',
     'bingo'          => 'route_bingo',
+    'bingofit'       => 'route_bingofit',
     'daifugo'        => 'route_daifugo',
     'score_predictions' => 'route_score_predictions',
     'custom-games'   => 'route_custom_games',

@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v740', d: '2026-06-21', s: '👕 BingoFit (着回しビンゴ) を新規追加 (#288)。 手持ちの服を 25 着以上登録すると、 日曜始まりの 5x5 ビンゴ盤が自動生成。 着た服を盤面から開けてラインを揃えるとビンゴ。 衣類画像の背景は cron worker (毎分) が rembg で 非同期 に透過 PNG 化 (~2 秒 / 枚)。 アプリ一覧 → 👕 着回しビンゴ (BingoFit) から。 #/bingofit/closet クローゼット、 #/bingofit/board 今週の盤、 #/bingofit/history 過去 12 週。 bingofit_items / bingofit_boards / bingofit_cell_opens 3 テーブル新設、 worker は scripts/bingofit_worker.php (flock 付き cron)、 rembg は /opt/labpay-bgremove/venv の Python 3.12' },
   { v: 'v739', d: '2026-06-21', s: '🎯 勝敗予測の結果通知と widget 残存を改善 (#352)。 (1) finalize 時の通知に「自分の予想 X-Y 完全的中! 払戻 +Npt」 など個人結果を追記 (旧版は最終スコアだけで自分が当たったか分からなかった)。 (2) 結果確定後すぐ消えていたのを 24h は ホーム widget に「🏁 結果 / 結果 4-0 ✨的中 +500pt」 のように残すように、 me.php の query を finished_at >= NOW - 24h で拡張 + 新 tag finished を追加' },
   { v: 'v738', d: '2026-06-21', s: '✏️ 仮 (暫定) 締切の表記を「およそ あと N 日」→「およそ N 日」 に変更 (#349)。ホーム widget / 一覧両方で「あと」 を落として日本語として自然に' },
   { v: 'v737', d: '2026-06-21', s: '🐛 勝敗予測 / 優勝予測で全員外れ時に rake (5% 場代) を取り損ねていた問題を修正 (#347 #348)。旧版は full refund で system 取り分ゼロ → 場代 5% を system に残し、 残り 95% を各自に返金するように。 当たり時の rake と同じ運用に' },

@@ -576,6 +576,11 @@ route('/othello/:id',       lazy(() => import('./views/othello.js'), 'renderOthe
 route('/othello',           lazy(() => import('./views/othello.js'), 'renderOthello'));
 // v588 ビンゴ
 route('/bingo',             lazy(() => import('./views/bingo.js'), 'renderBingo'));
+// v740 #288 BingoFit (衣類着回しビンゴ)
+route('/bingofit',          lazy(() => import('./views/bingofit_closet.js'), 'renderBingofitCloset'));
+route('/bingofit/closet',   lazy(() => import('./views/bingofit_closet.js'), 'renderBingofitCloset'));
+route('/bingofit/board',    lazy(() => import('./views/bingofit_board.js'),  'renderBingofitBoard'));
+route('/bingofit/history',  lazy(() => import('./views/bingofit_board.js'),  'renderBingofitHistory'));
 // v589 散歩モード (Wake Lock + GPS 軌跡)
 route('/walk-mode',         lazy(() => import('./views/walk_mode.js'), 'renderWalkMode'));
 route('/walk/sessions',     lazy(() => import('./views/walk_mode.js'), 'renderWalkSessions'));

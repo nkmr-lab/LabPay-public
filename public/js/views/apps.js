@@ -42,6 +42,8 @@ export const APPS = [
   // v734 #344 新規追加機能の登録 (v718 / v733 で実装したが apps 一覧に入れ忘れていたもの)
   { id: 'screen-shares', cat: 'lab-mgmt', url: '#/screen-shares', title: '🖼 一時画像共有',  desc: 'ラボ全体 or 自分のグループ宛に画像 + ひとことを投げて 15 分〜24 時間の間ホームに大きく表示。「とにかく今これ見て」 用。', defaultVisible: true },
   { id: 'file-transfers', cat: 'lab-mgmt', url: '#/file-transfers', title: '📦 ファイル送受信', desc: '相手を指定してファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) を送れる。受信者のダウンロード回数と初回ダウンロード時刻を記録。', defaultVisible: true },
+  // v740 #288 BingoFit
+  { id: 'bingofit',      cat: 'lab-mgmt', url: '#/bingofit/closet', title: '👕 着回しビンゴ (BingoFit)', desc: '手持ちの服を 25 着以上登録すると、 日曜始まりの 5x5 ビンゴ盤が自動生成。 着た服を盤面から開けて、 ラインが揃えばビンゴ。 背景は自動で透過処理されます。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
   { id: 'deadlines',     cat: 'research', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'research', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
