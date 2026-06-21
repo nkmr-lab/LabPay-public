@@ -66,34 +66,36 @@ async function onGmapImport(ev) {
 
 export async function renderPlaces() {
   const app = document.getElementById('app');
-  // v727 #332 トップに地図 (約 1/3 viewport) を常時表示。「地図」 ボタンは廃止、
-  //   現在地に移動 ボタン と ハート / 行った の フィルタ チェックボックス を追加。
+  // v730 #338 #339 たべある記ページのレイアウト調整:
+  //   - 表示中はナビ tabs を隠す (場所節約)
+  //   - h2 ヘッダー / 📥 インポートボタンを廃止
+  //   - 地図 bounds フィルタを復活 (デフォルト ON)
+  //   - ハート / 足跡フィルタの「・」 や説明文を間引いて省スペース
+  const tabsEl = document.getElementById('tabs');
+  if (tabsEl) tabsEl.dataset.placesHidden = tabsEl.hidden ? '0' : '1';
+  if (tabsEl) tabsEl.hidden = true;
+  window.addEventListener('hashchange', () => {
+    if (!location.hash.startsWith('#/places') || location.hash !== '#/places') {
+      if (tabsEl && tabsEl.dataset.placesHidden === '1') tabsEl.hidden = false;
+    }
+  }, { once: true });
   app.innerHTML = `
     <div id="pl-map-wrap" style="position:relative; height:33vh; min-height:200px; background:#eef; margin:-6px -6px 6px">
       <div id="pl-map" style="height:100%; width:100%"></div>
       <button id="pl-locate" class="btn" title="現在地に移動"
         style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
     </div>
-    <div class="card page-header">
-      <div class="row center" style="gap:6px; flex-wrap:wrap">
-        <h2 style="margin:0; flex:1">🍴 食べある記</h2>
+    <div class="card" style="padding:8px 10px">
+      <div class="row" style="gap:8px; align-items:center; font-size:13px; flex-wrap:wrap">
+        <a class="btn primary" href="#/places/new" style="padding:4px 10px; font-size:12px">＋ 新規</a>
+        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-bounds" checked> 🗺 地図内のみ</label>
+        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️</label>
+        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣</label>
+        <span id="pl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
-      <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <a class="btn primary" href="#/places/new" style="flex:1; min-width:90px; text-align:center">＋ 新規</a>
-        <button id="pl-gmap-import" class="btn" style="flex:1; min-width:120px">📥 インポート</button>
-      </div>
-      <div class="row" style="gap:12px; margin-top:8px; align-items:center; font-size:13px; flex-wrap:wrap">
-        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️ ハート だけ</label>
-        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣 行ったところ だけ</label>
-      </div>
-      <input type="file" id="pl-gmap-file" accept=".kml,.json,.geojson,.kmz" hidden>
     </div>
     <div id="pl-list"><div class="muted">読み込み中…</div></div>
   `;
-  document.getElementById('pl-gmap-import')?.addEventListener('click', () => {
-    document.getElementById('pl-gmap-file').click();
-  });
-  document.getElementById('pl-gmap-file')?.addEventListener('change', (ev) => onGmapImport(ev));
 
   // 地図 (leaflet) 初期化 + 保存ビュー復元 (v721 と 同じ key)。
   const MAP_VIEW_KEY = 'labpay.places.mapView';
@@ -141,33 +143,45 @@ export async function renderPlaces() {
 
   let markers = [];
   const refresh = () => {
-    const fLiked   = document.getElementById('pl-f-liked').checked;
+    const fLiked   = document.getElementById('pl-f-liked')  .checked;
     const fVisited = document.getElementById('pl-f-visited').checked;
+    const fBounds  = document.getElementById('pl-f-bounds') .checked;
+    const bounds = (fBounds && map) ? map.getBounds() : null;
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
       if (fVisited && !p.visited_by_me) return false;
+      if (bounds && p.lat != null && p.lng != null && !bounds.contains([p.lat, p.lng])) return false;
       return true;
     });
     if (map) {
+      // markers は フィルタ前の全件 (lat/lng あり) を出す。 list だけ bounds で絞る。
       markers.forEach(m => map.removeLayer(m));
       markers = [];
-      for (const p of items) {
+      const mItems = allItems.filter(p => {
+        if (fLiked   && !p.liked_by_me)   return false;
+        if (fVisited && !p.visited_by_me) return false;
+        return true;
+      });
+      for (const p of mItems) {
         if (p.lat == null || p.lng == null) continue;
         const popup = `<a href="#/places/${p.id}" style="color:var(--primary)"><b>${escapeHtml(p.title)}</b></a>`;
         markers.push(L.marker([p.lat, p.lng]).bindPopup(popup).addTo(map));
       }
     }
+    const countEl = document.getElementById('pl-count');
+    if (countEl) countEl.textContent = `${items.length} 件`;
     if (!items.length) {
       document.getElementById('pl-list').innerHTML = '<div class="empty">該当する お店は ありません</div>';
       return;
     }
+    // v730 #339 ハート / 足跡 の 前 に 「・」 は 入れない (絵文字 だけ で 区別 つく)。
     document.getElementById('pl-list').innerHTML = `<div class="tile-grid">${items.map(p => {
       const cat = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
-      const likeBadge  = ` · ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
-      const visitBadge = ` · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
+      const likeBadge  = ` ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
+      const visitBadge = ` ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
       const tileBg = p.cover_image_thumb || p.cover_image;
       if (tileBg) {
         return `
@@ -191,6 +205,9 @@ export async function renderPlaces() {
 
   document.getElementById('pl-f-liked')  .addEventListener('change', refresh);
   document.getElementById('pl-f-visited').addEventListener('change', refresh);
+  document.getElementById('pl-f-bounds') .addEventListener('change', refresh);
+  // v730 #338 地図移動でリスト再フィルタ (デフォルト「地図内のみ」 ON)
+  if (map) map.on('moveend', refresh);
   refresh();
 }
 
