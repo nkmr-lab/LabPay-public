@@ -5,6 +5,16 @@ import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
 
+// v747 #358 ローカル時刻 (= ブラウザ の タイムゾーン) で 今日 を 計算 する ヘルパ。
+//   toISOString() は UTC ベース なので JST の 朝 (UTC 前日) に ズレ が 出ていた。
+function todayLocal() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export async function renderHealth() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -51,8 +61,10 @@ export async function renderHealth() {
   document.getElementById('hl-days').addEventListener('change', refresh);
   document.getElementById('hl-save').addEventListener('click', save);
   // v690 #274 日付 入力 を 今日 に 初期化 + 「今日」 ボタン
+  // v747 #358 toISOString は UTC ベース なので JST の 朝 (UTC 前日) は「今日」が 前日扱い に なる
+  //   bug を 修正。 ローカル時刻で 計算 (= 単純 に YYYY-MM-DD を 組み立て)。
   const dateEl = document.getElementById('hl-date');
-  const setToday = () => { dateEl.value = new Date().toISOString().slice(0, 10); };
+  const setToday = () => { dateEl.value = todayLocal(); };
   setToday();
   document.getElementById('hl-date-today').addEventListener('click', setToday);
   await refresh();
@@ -82,7 +94,8 @@ async function save() {
   if (!w && !h && !b) { toast('1 つは入力してください'); return; }
   // v690 #274 日付 を 過去 日 で 指定 する 場合 は その日 の 23:59:59 で 送る
   //   (server で DateTime parse 通る)。 今日 の 場合 は recorded_at を 渡さず NOW() に 任せる。
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // v747 #358 todayStr は ローカル時刻 で 計算 (UTC ベース だと JST 朝 に 別日 と 比較 が ズレる)。
+  const todayStr = todayLocal();
   const payload = {
     weight_kg: w || null,
     height_cm: h || null,
