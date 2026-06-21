@@ -742,22 +742,41 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (Throwable $_) {}
         try {
             // 🎯 勝敗予測 (score_pred_games)
-            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, g.status, uc.display_name AS by_name,
+            // v739 #352 結果 確定 後 も 24 時間 は widget に 残す ように 修正。 旧版 は
+            //   status='finished' に なった 瞬間 widget から 消えて 「自分 の 結果 を
+            //   見返せ ない」 状態 だった。 finished_at >= NOW() - 24h で 残し つつ
+            //   tag='finished' + 結果 スコア + 自分 の 払戻 を title に 入れる。
+            $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, g.status,
+                                        g.actual_home, g.actual_away, g.finished_at,
+                                        uc.display_name AS by_name,
                                         TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead,
-                                        EXISTS (SELECT 1 FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_in
+                                        EXISTS (SELECT 1 FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_in,
+                                        (SELECT pe.payout    FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_payout,
+                                        (SELECT pe.is_winner FROM score_pred_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_winner
                                    FROM score_pred_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status IN ('open','closed')
+                                     OR (g.status='finished' AND g.finished_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
                                   ORDER BY g.deadline_at ASC LIMIT 12");
-            $st->execute([$uid]);
+            $st->execute([$uid, $uid, $uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $isIn = (int)$r['me_in'] === 1;
                 $secAhead = (int)$r['sec_ahead'];
-                $isPending = ($r['status'] === 'closed') || $secAhead <= 0;
-                $tag = $isPending ? 'pending' : ($isIn ? 'active' : 'open');
+                $isFinished = $r['status'] === 'finished';
+                $isPending  = !$isFinished && (($r['status'] === 'closed') || $secAhead <= 0);
+                $tag = $isFinished ? 'finished' : ($isPending ? 'pending' : ($isIn ? 'active' : 'open'));
                 $label = $r['team_home'] && $r['team_away'] ? ($r['team_home'] . ' vs ' . $r['team_away']) : (string)$r['title'];
+                $title = '勝敗予測: ' . mb_substr($label, 0, 28);
+                if ($isFinished) {
+                    $title .= ' / 結果 ' . (int)$r['actual_home'] . '-' . (int)$r['actual_away'];
+                    if ($isIn) {
+                        if ((int)$r['me_winner'] === 1)      $title .= ' ✨的中 +' . (int)$r['me_payout'] . 'pt';
+                        elseif ((int)$r['me_payout'] > 0)    $title .= ' 返金 ' . (int)$r['me_payout'] . 'pt';
+                        else                                 $title .= ' 外れ';
+                    }
+                }
                 $items[] = ['cat' => 'entertainment', 'tag' => $tag,
                             'icon' => '🎯', 'kind' => 'score-pred',
-                            'title' => '勝敗予測: ' . mb_substr($label, 0, 28),
+                            'title' => $title,
                             'by' => $r['by_name'], 'fee' => (int)$r['fee'] . 'pt',
                             'url' => '#/score-predictions/' . (int)$r['id'],
                             'sec_ahead' => $secAhead];

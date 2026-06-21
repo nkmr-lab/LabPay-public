@@ -281,13 +281,26 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         }
         $pdo->prepare("UPDATE score_pred_games SET status='finished', actual_home=?, actual_away=?, finished_at=NOW() WHERE id = ?")
             ->execute([$home, $away, $gid]);
-        // 通知
-        $stAll = $pdo->prepare("SELECT user_id FROM score_pred_entries WHERE game_id = ?");
+        // v739 #352 通知 を 1 人ずつ パーソナライズ。 旧版 は スコア だけ で 「自分 が
+        // 当たった か / 何 pt 戻った か」 が 分から なかった ので、 自分 の 予想 + 払戻
+        // を 末尾 に 付ける。
+        $stAll = $pdo->prepare("SELECT user_id, guess_home, guess_away, payout, is_winner
+                                  FROM score_pred_entries WHERE game_id = ?");
         $stAll->execute([$gid]);
-        foreach ($stAll->fetchAll(PDO::FETCH_COLUMN) as $puid) {
+        foreach ($stAll->fetchAll(PDO::FETCH_ASSOC) as $r) {
             try {
-                $msg = "🎯 勝敗予測 「{$g['title']}」 結果: {$g['team_home']} {$home}-{$away} {$g['team_away']}";
-                notify_safely($pdo, $cfg, (int)$puid, 'admin_notice', $msg, 'score_pred', $gid);
+                $puid = (int)$r['user_id'];
+                $gh = (int)$r['guess_home']; $ga = (int)$r['guess_away'];
+                $pay = (int)$r['payout'];
+                $head = "🎯 勝敗予測 「{$g['title']}」 結果: {$g['team_home']} {$home}-{$away} {$g['team_away']}";
+                if ((int)$r['is_winner'] === 1) {
+                    $tail = "\nあなたの予想 {$gh}-{$ga} 完全的中! 払戻 +{$pay}pt";
+                } elseif ($pay > 0) {
+                    $tail = "\nあなたの予想 {$gh}-{$ga} は外れ (誰も当たらず場代差引で {$pay}pt 返金)";
+                } else {
+                    $tail = "\nあなたの予想 {$gh}-{$ga} は外れ (払戻なし)";
+                }
+                notify_safely($pdo, $cfg, $puid, 'admin_notice', $head . $tail, 'score_pred', $gid);
             } catch (Throwable $_) {}
         }
     });

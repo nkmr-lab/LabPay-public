@@ -1848,11 +1848,13 @@ async function fetchRecruitingItems() {
 
 function tagHtml(tag) {
   return ({
-    active:  '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
-    open:    '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
-    vote:    '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
-    work:    '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
-    pending: '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏳ 結果待ち</span>',
+    active:   '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
+    open:     '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
+    vote:     '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
+    work:     '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
+    pending:  '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏳ 結果待ち</span>',
+    // v739 #352 結果 確定 後 24h は widget に 残す ように なった ので 'finished' tag を 追加
+    finished: '<span class="tag" style="background:#e5e7eb; color:#374151; font-size:10px">🏁 結果</span>',
   })[tag] || '';
 }
 
