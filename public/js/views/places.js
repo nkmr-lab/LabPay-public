@@ -6,6 +6,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
+import { openImageLightbox } from '../lightbox.js';
 
 const CATEGORIES = [
   { id: '',       label: '指定なし' },
@@ -677,9 +678,11 @@ async function loadPlace(id) {
       : `<div class="meta">${p.comment_count} 件 の 口コミ</div>`;
     // v478 メイン写真 が あれば 上に 大きく
     // v512 サムネ優先 (220px 表示で原画像は重い、 サーバが返す image_thumb_url を使う)
+    // v745 #356 タップで lightbox (原画像) 表示。 target=_blank だと スマホで「戻れない」 ので。
     const heroSrc = p.image_thumb_url || p.image_url;
+    const heroFull = p.image_url || p.image_thumb_url;
     const heroImg = heroSrc
-      ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0">`
+      ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" data-zoom-src="${escapeHtml(heroFull)}" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0; cursor:zoom-in">`
       : '';
     // v486 #80 いいね ボタン + v529 #164 行った (足跡) ボタン (2 軸)
     const likeBtn = `
@@ -778,12 +781,23 @@ async function loadPlace(id) {
             ${c.body ? `<div style="font-size:14px">${linkifyText(c.body)}</div>` : ''}
             ${(c.image_urls && c.image_urls.length)
                 ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">${c.image_urls.map(u => `
-                    <a href="${escapeHtml(u)}" target="_blank"><img src="${escapeHtml(u)}" style="max-width:200px; max-height:200px; border-radius:6px"></a>`).join('')}</div>`
-                : (c.image_url ? `<a href="${escapeHtml(c.image_url)}" target="_blank"><img src="${escapeHtml(c.image_url)}" style="max-width:200px; max-height:200px; border-radius:6px; margin-top:6px"></a>` : '')}
+                    <img src="${escapeHtml(u)}" data-zoom-src="${escapeHtml(u)}" loading="lazy" style="max-width:200px; max-height:200px; border-radius:6px; cursor:zoom-in">`).join('')}</div>`
+                : (c.image_url ? `<img src="${escapeHtml(c.image_url)}" data-zoom-src="${escapeHtml(c.image_url)}" loading="lazy" style="max-width:200px; max-height:200px; border-radius:6px; margin-top:6px; cursor:zoom-in">` : '')}
             ${canDel ? `<button class="btn" data-del-cm="${c.id}" style="font-size:11px; padding:2px 6px; margin-top:4px">削除</button>` : ''}
           </div>
         </div>`;
     }).join('') || '<div class="empty">まだ 口コミ なし</div>';
+    // v745 #356 data-zoom-src を 持つ 画像 を タップしたら lightbox で 全画面 表示。
+    //   旧版は target=_blank で 新タブ に 開いていたので スマホ で 「戻れない」 状態 だった。
+    document.querySelectorAll('[data-zoom-src]').forEach(el => {
+      if (el.dataset.bound) return;
+      el.dataset.bound = '1';
+      el.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openImageLightbox(el.dataset.zoomSrc);
+      });
+    });
     document.querySelectorAll('[data-del-cm]').forEach(b => {
       b.addEventListener('click', async () => {
         if (!confirm('この 口コミ を 削除 しますか?')) return;
