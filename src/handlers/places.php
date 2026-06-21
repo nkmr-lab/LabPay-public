@@ -13,6 +13,8 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_url' && $method === 'POST') { places_import_url($pdo, $cfg); return; }
     // v719 #315 キーワードから tabelog URL を引いてくる
     if ($sub === 'search_url' && $method === 'POST') { places_search_url($pdo, $cfg); return; }
+    // v731 #340 admin が 1 click で tabelog URL を 自動補完 (1 回 最大 10 件、 繰返 して 全件)
+    if ($sub === 'backfill_tabelog_urls' && $method === 'POST') { places_backfill_tabelog($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
         $next = $seg[2] ?? '';
@@ -523,4 +525,68 @@ function places_search_url(PDO $pdo, array $cfg): void {
         'candidates' => array_slice($candidates, 0, 5),
         'search_url' => $url,
     ]);
+}
+
+// v731 #340 source_url が 空 の place を 一度 に 最大 10 件 まで 探して 自動 で 入れる。
+//   admin 限定。 タイトル (+ 住所 先頭) で tabelog 検索 → 1 件 目 の URL を 採用。
+function places_backfill_tabelog(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    if ((string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', 'admin のみ', 403);
+    }
+    $body = read_json_body();
+    $batch = max(1, min(10, (int)($body['limit'] ?? 10)));
+    // 未補完 件数
+    $totalLeft = (int)$pdo->query("SELECT COUNT(*) FROM places
+                                     WHERE source_url IS NULL OR source_url = ''")->fetchColumn();
+    $st = $pdo->prepare("SELECT id, title, address FROM places
+                          WHERE source_url IS NULL OR source_url = ''
+                          ORDER BY id ASC LIMIT $batch");
+    $st->execute();
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    $upd = $pdo->prepare("UPDATE places SET source_url=? WHERE id=?");
+    $updated = 0; $missed = 0; $results = [];
+    foreach ($rows as $r) {
+        $kw = (string)$r['title'];
+        if (!empty($r['address']) && preg_match('/^(.{1,15}?[都道府県市区町村])/u', (string)$r['address'], $am)) {
+            $kw .= ' ' . $am[1];
+        }
+        $url = places_tabelog_first_hit($kw);
+        if ($url) {
+            $upd->execute([$url, (int)$r['id']]);
+            $updated++;
+            $results[] = ['id' => (int)$r['id'], 'title' => $r['title'], 'url' => $url];
+        } else {
+            $missed++;
+            $results[] = ['id' => (int)$r['id'], 'title' => $r['title'], 'url' => null];
+        }
+        usleep(800 * 1000); // 0.8 秒 sleep でレート制限を避ける
+    }
+    json_response([
+        'processed' => count($rows),
+        'updated'   => $updated,
+        'missed'    => $missed,
+        'remaining' => max(0, $totalLeft - count($rows)),
+        'results'   => $results,
+    ]);
+}
+
+function places_tabelog_first_hit(string $kw): ?string {
+    $url = 'https://tabelog.com/rstLst/?sw=' . urlencode($kw);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+        CURLOPT_ENCODING => '',
+    ]);
+    $html = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$html || $code !== 200) return null;
+    if (preg_match('@https?://tabelog\.com/[a-z]+/A\d+/A\d+/\d+/?@', (string)$html, $m)) {
+        return rtrim($m[0], '/') . '/';
+    }
+    return null;
 }
