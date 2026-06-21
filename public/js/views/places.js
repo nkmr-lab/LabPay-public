@@ -165,8 +165,25 @@ export async function renderPlaces() {
       });
       for (const p of mItems) {
         if (p.lat == null || p.lng == null) continue;
-        const popup = `<a href="#/places/${p.id}" style="color:var(--primary)"><b>${escapeHtml(p.title)}</b></a>`;
-        markers.push(L.marker([p.lat, p.lng]).bindPopup(popup).addTo(map));
+        // v732 #341 写真があればサムネを divIcon マーカーに (v535 で旧 renderPlacesMap が持っていた挙動を復活)
+        const imgSrc = p.cover_image_thumb || p.cover_image;
+        const popupImg = imgSrc
+          ? `<img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" style="display:block; width:100%; max-height:120px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
+          : '';
+        const popup = `<div style="min-width:160px; max-width:220px">${popupImg}<a href="#/places/${p.id}" style="color:var(--primary)"><b>${escapeHtml(p.title)}</b></a></div>`;
+        let marker;
+        if (imgSrc) {
+          const icon = L.divIcon({
+            className: 'pl-img-marker',
+            html: `<div style="width:42px; height:42px; border-radius:8px; overflow:hidden; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4); background:#fff"><img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" style="width:100%; height:100%; object-fit:cover"></div>`,
+            iconSize: [42, 42],
+            iconAnchor: [21, 21],
+          });
+          marker = L.marker([p.lat, p.lng], { icon }).bindPopup(popup).addTo(map);
+        } else {
+          marker = L.marker([p.lat, p.lng]).bindPopup(popup).addTo(map);
+        }
+        markers.push(marker);
       }
     }
     const countEl = document.getElementById('pl-count');
