@@ -249,15 +249,20 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $winners = array_map('intval', $stW->fetchAll(PDO::FETCH_COLUMN));
         $pot = (int)$g['pot_total'];
         if (empty($winners)) {
-            // 全員 フィー返金
+            // v737 #347 全員外れ: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を 各自に返金。
+            //   旧版は full refund で system 取り分ゼロになっていた。
             $stAll = $pdo->prepare("SELECT user_id FROM score_pred_entries WHERE game_id = ?");
             $stAll->execute([$gid]);
             $allUids = array_map('intval', $stAll->fetchAll(PDO::FETCH_COLUMN));
             $fee = (int)$g['fee'];
+            $rakePer = (int)floor($fee * SP_RAKE_PCT / 100);
+            $refund = max(0, $fee - $rakePer);
             foreach ($allUids as $puid) {
-                Ledger::transfer($pdo, 1, $puid, $fee, 'mahjong_refund', 'score_pred', $gid, "勝敗予測 #{$gid} 誰も当たらず返金");
+                if ($refund > 0) {
+                    Ledger::transfer($pdo, 1, $puid, $refund, 'mahjong_refund', 'score_pred', $gid, "勝敗予測 #{$gid} 誰も当たらず返金 (場代 {$rakePer}pt 差引)");
+                }
                 $pdo->prepare("UPDATE score_pred_entries SET payout = ?, is_winner = 0 WHERE game_id = ? AND user_id = ?")
-                    ->execute([$fee, $gid, $puid]);
+                    ->execute([$refund, $gid, $puid]);
             }
         } else {
             $rake = (int)floor($pot * SP_RAKE_PCT / 100);

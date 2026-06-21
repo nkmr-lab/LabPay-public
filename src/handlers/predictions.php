@@ -315,11 +315,16 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $payoutByUid = [];
         $maxScore = $scoreByUid ? max($scoreByUid) : 0;
         if ($maxScore <= 0) {
-            // 全員 0 点 → 全員 に フィー 返金
+            // v737 #347 全員 0 点: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を 各自に返金。
+            //   旧版は full refund で system 取り分ゼロになっていた。
             $fee = (int)$g['fee'];
+            $rakePer = (int)floor($fee * PREDICTIONS_RAKE_PCT / 100);
+            $refund = max(0, $fee - $rakePer);
             foreach ($scoreByUid as $puid => $_) {
-                Ledger::transfer($pdo, 1, $puid, $fee, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 全員 0 点 で 返金");
-                $payoutByUid[$puid] = $fee;
+                if ($refund > 0) {
+                    Ledger::transfer($pdo, 1, $puid, $refund, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 全員 0 点 で 返金 (場代 {$rakePer}pt 差引)");
+                }
+                $payoutByUid[$puid] = $refund;
             }
         } else {
             // 最高点 を 取った 人 全員 (登録 順 で 端数 上乗せ)
