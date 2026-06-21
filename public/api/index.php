@@ -73,6 +73,7 @@ $routes = [
     'conf-deadlines' => 'route_conf_deadlines',
     'news'           => 'route_news',
     'screen-shares'  => 'route_screen_shares',
+    'file-transfers' => 'route_file_transfers',
     'polls'          => 'route_polls',
     'rollcalls'      => 'route_rollcalls',
     'timers'         => 'route_timers',

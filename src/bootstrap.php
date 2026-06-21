@@ -571,3 +571,4 @@ require_once __DIR__ . '/handlers/drafts.php';
 require_once __DIR__ . '/handlers/quizzes.php';
 require_once __DIR__ . '/handlers/news.php';
 require_once __DIR__ . '/handlers/screen_shares.php';
+require_once __DIR__ . '/handlers/file_transfers.php';
