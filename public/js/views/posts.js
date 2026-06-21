@@ -200,8 +200,10 @@ function postCard(p, opts = {}) {
   const authorIsSystem = p.author_kind === 'system';
   const canDelete = isMine || (isAdmin && authorIsSystem);
   const replyHash = opts.skipReplyHash ? '' : `#/sns/${p.id}`;
+  // v736 #346 投稿者本人 / admin は位置情報だけを削除できる
+  const canClearLoc = isMine || isAdmin;
   const loc = (p.lat !== null && p.lng !== null)
-    ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>`
+    ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>${canClearLoc ? `<button class="btn" data-clear-loc="${p.id}" title="位置情報だけを削除" style="font-size:10px; padding:0 5px; line-height:1.6">📍✕</button>` : ''}`
     : '';
   // v525 #180 アバター + 投稿者名を タップ で その人のだけに絞り込み (?user=ID)
   return `
@@ -824,6 +826,25 @@ function bindRowHandlers() {
         toast('削除しました');
         const row = el.closest('[data-post-id]');
         if (row) row.remove();
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+  // v736 #346 位置情報だけを削除
+  document.querySelectorAll('[data-clear-loc]').forEach(el => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', async () => {
+      if (!confirm('この投稿の位置情報だけを削除しますか? (本文は残ります)')) return;
+      try {
+        await del(`/api/posts/${el.dataset.clearLoc}/location`);
+        await invalidatePostsCache();
+        toast('位置情報を削除しました');
+        // 該当行の loc 部分を消す: 「📍 地図」 と 自身を non-render
+        const row = el.closest('[data-post-id]');
+        if (row) {
+          row.querySelectorAll('a[href^="https://maps.google.com"]').forEach(a => a.remove());
+          el.remove();
+        }
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });

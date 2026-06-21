@@ -19,6 +19,8 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
         $next = $seg[2] ?? '';
         if ($next === ''       && $method === 'GET')    { posts_detail($pdo, $cfg, $id); return; }
         if ($next === ''       && $method === 'DELETE') { posts_delete($pdo, $cfg, $id); return; }
+        // v736 #346 投稿後に位置情報だけを削除 (投稿者または admin)
+        if ($next === 'location' && $method === 'DELETE') { posts_clear_location($pdo, $cfg, $id); return; }
         // v480 旧 /like (引数 なし = ❤️ 単一) → /reaction?kind=thumb|heart|star に 統一。
         //   後方互換: /like POST/DELETE は kind='heart' として 扱う。
         if ($next === 'like'     && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, 'heart', true);  return; }
@@ -309,6 +311,21 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
         ], $stReact->fetchAll(PDO::FETCH_ASSOC));
     }
     json_response(['post' => $post, 'replies' => $replies, 'reactors' => $reactors]);
+}
+
+// v736 #346 投稿後に位置情報だけを削除する。投稿者または admin のみ。
+function posts_clear_location(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT user_id FROM posts WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '投稿がありません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '投稿者または admin のみ', 403);
+    }
+    $pdo->prepare("UPDATE posts SET lat=NULL, lng=NULL WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
 }
 
 function posts_delete(PDO $pdo, array $cfg, int $id): void {

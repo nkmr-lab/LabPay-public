@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v736', d: '2026-06-21', s: '📍 らぼったーで投稿後に位置情報だけを削除する機能を追加 (#346)。位置付き投稿の「📍 地図」 横に「📍✕」 ボタンを設置 (投稿者本人 / admin のみ表示)、押すと本文と画像はそのままで lat / lng だけを NULL に。 DELETE /api/posts/:id/location 新規 endpoint' },
   { v: 'v735', d: '2026-06-21', s: '📁 ファイル送受信でフォルダ送信に対応 (#345)。 webkitdirectory で複数ファイルを選んで送信 → サーバ側で ZipArchive にまとめて 1 件の zip として送られます。受信者は zip でダウンロード。合計 50MB 上限。フォルダ内の階層構造 (webkitRelativePath) も保持' },
   { v: 'v734', d: '2026-06-21', s: '🐛📦 たべある記の地図フィルタ修正 + 新機能のアプリ登録 (#343 #344)。 (1) 「🗺 地図内のみ」 ON の時、緯度経度未設定の店舗を除外 (旧版は無条件で残ってしまっていた)。 (2) v718 「🖼 一時画像共有」 と v733 「📦 ファイル送受信」 をアプリ一覧 (/#/apps) に登録' },
   { v: 'v733', d: '2026-06-21', s: '📦 相手指定のファイル送受信機能を新規追加 (#342)。 /#/file-transfers で宛先 + ファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) + 任意メッセージで送信。受信者のダウンロード回数と初回ダウンロード時刻を記録。送信者は「未ダウンロード」「✓ N 回 DL」 タグで状態を一目で確認可。 file_transfers テーブル + /api/file-transfers (list / create / download / delete) を新設、 download endpoint は recipient 以外もアクセス可 (sender 確認 / admin)、 ただしカウントは recipient だけ' },
