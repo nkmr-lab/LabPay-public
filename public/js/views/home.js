@@ -465,6 +465,15 @@ export async function renderHome() {
       <div id="home-bingo"><div class="hint">読み込み中…</div></div>
     </div>
 
+    <!-- v741 #288 BingoFit (着回しビンゴ) widget。 衣類 25 着未満なら隠す。 -->
+    <div class="card" id="home-bingofit-card" data-card-id="bingofit" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">👕 今週の着回しビンゴ</h2>
+        <a href="#/bingofit/board" class="hint">詳細 →</a>
+      </div>
+      <div id="home-bingofit"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <!-- v649 娯楽 ウィジェット (ゲーム / 予想 / ドラフト / クイズ) -->
     <div class="card" id="home-entertainment-card" data-card-id="entertainment" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -612,6 +621,7 @@ export async function renderHome() {
     { cardId: 'history',        fn: renderRecentTx,        label: 'recenttx' },
     { cardId: 'weather',        fn: renderWeatherWidget,   label: 'weather' }, // v585
     { cardId: 'bingo',          fn: renderBingoWidget,     label: 'bingo' },   // v600 #232
+    { cardId: 'bingofit',       fn: renderBingofitWidget,  label: 'bingofit' }, // v741 #288
     { cardId: 'recruiting',     fn: renderRecruitingWidget, label: 'recruiting' }, // v638
     { cardId: 'entertainment',  fn: renderEntertainmentWidget, label: 'entertainment' }, // v649
     { cardId: 'achievements',   fn: renderAchievementsWidget,  label: 'achievements' }, // v651
@@ -2204,6 +2214,66 @@ async function renderBingoWidget() {
             const done = set.has(i);
             const isReach = reachIdxs.has(i);
             const bg = done ? '#dc2626' : (isReach ? '#f59e0b' : '#e5e7eb');
+            return `<div style="background:${bg}; border-radius:2px"></div>`;
+          }).join('')}
+        </a>
+      </div>
+    `;
+  } catch (_) { card.hidden = true; }
+}
+
+// v741 #288 着回しビンゴ widget。 衣類 25 未満なら隠す。 リーチ計算 + 完成ライン 強調。
+async function renderBingofitWidget() {
+  const card = document.getElementById('home-bingofit-card');
+  const root = document.getElementById('home-bingofit');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/bingofit/board');
+    if (d.need_items !== undefined && d.need_items > 0) {
+      // 衣類 25 着未満 → 登録誘導 widget。 アクティブ衣類が 1 着以上ある時だけ出す。
+      if ((d.active_count || 0) === 0) { card.hidden = true; return; }
+      card.hidden = false;
+      root.innerHTML = `
+        <a href="#/bingofit/closet" style="display:block; text-decoration:none; color:inherit; padding:8px; background:#fef3c7; border:1px solid #fde68a; border-radius:6px; font-size:13px">
+          あと <b style="color:#92400e">${d.need_items}</b> 着 登録すると 今週の盤が作られます (${d.active_count}/25)
+        </a>`;
+      return;
+    }
+    if (!d.cells || !d.cells.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const opens = d.opens || {};
+    const openedIdxs = Object.keys(opens).map(Number);
+    const set = new Set(openedIdxs);
+    const lines = d.bingo_lines || 0;
+    // リーチ計算 + 完成ライン
+    const lit = new Set();
+    let reach = 0;
+    const lineGroups = [];
+    for (let r = 0; r < 5; r++) lineGroups.push([r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
+    for (let c = 0; c < 5; c++) lineGroups.push([c, c+5, c+10, c+15, c+20]);
+    lineGroups.push([0,6,12,18,24]); lineGroups.push([4,8,12,16,20]);
+    const reachIdxs = new Set();
+    for (const line of lineGroups) {
+      const missing = line.filter(i => !set.has(i));
+      if (missing.length === 0) line.forEach(i => lit.add(i));
+      else if (missing.length === 1) { reach++; reachIdxs.add(missing[0]); }
+    }
+    root.innerHTML = `
+      <div style="display:flex; gap:10px; align-items:center">
+        <div style="flex:1">
+          ${lines > 0
+            ? `<div class="bold" style="color:#7b3fa0; font-size:18px">🎯 ${lines} ビンゴ!</div>`
+            : reach > 0
+              ? `<div class="bold" style="color:#f59e0b">⚡ リーチ ${reach}</div>`
+              : `<div class="bold">${openedIdxs.length} / 25 マス開け</div>`}
+          <div class="hint-sm">${escapeHtml(d.week_start)} 開始</div>
+        </div>
+        <a href="#/bingofit/board" style="display:grid; grid-template-columns:repeat(5, 14px); grid-template-rows:repeat(5, 14px); gap:2px; padding:4px; background:#fafafa; border-radius:6px; text-decoration:none">
+          ${Array.from({length: 25}, (_, i) => {
+            const done = set.has(i);
+            const isLit = lit.has(i);
+            const isReach = reachIdxs.has(i);
+            const bg = isLit ? '#7b3fa0' : (done ? '#a78bfa' : (isReach ? '#f59e0b' : '#e5e7eb'));
             return `<div style="background:${bg}; border-radius:2px"></div>`;
           }).join('')}
         </a>

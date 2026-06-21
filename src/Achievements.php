@@ -314,6 +314,55 @@ class Achievements {
                 ['count' => 30,  'label' => '半年 級 ビンゴ',      'medal' => '💎'],
             ],
         ],
+        // v741 #288 BingoFit (着回しビンゴ) 実績
+        'bingofit_lines_total' => [
+            'title' => '着回し ビンゴ 職人',
+            'desc'  => '着回しビンゴ の 通算 ライン数',
+            'unit'  => 'ライン',
+            'icon'  => '👕',
+            'tiers' => [
+                ['count' => 1,   'label' => '初 着回しビンゴ',      'medal' => '🥉'],
+                ['count' => 5,   'label' => '揃える ファッション', 'medal' => '🥈'],
+                ['count' => 20,  'label' => '着回し マスター',      'medal' => '🥇'],
+                ['count' => 50,  'label' => 'ワードローブ の 化身','medal' => '💎'],
+            ],
+        ],
+        'bingofit_weeks_won' => [
+            'title' => '着回し 週次 ハンター',
+            'desc'  => '着回しビンゴ を 1 ライン以上 達成 した 週 の 数',
+            'unit'  => '週',
+            'icon'  => '🗓',
+            'tiers' => [
+                ['count' => 1,   'label' => '着回し デビュー',     'medal' => '🥉'],
+                ['count' => 4,   'label' => '月イチ 着回し',       'medal' => '🥈'],
+                ['count' => 12,  'label' => '3 ヶ月 着回し',       'medal' => '🥇'],
+                ['count' => 30,  'label' => '半年 級 着回し',      'medal' => '💎'],
+            ],
+        ],
+        'bingofit_full_houses' => [
+            'title' => 'フルハウス キング',
+            'desc'  => '着回しビンゴ で 25 マス すべて 開けた 週 の 数 (毎日 違う服)',
+            'unit'  => '週',
+            'icon'  => '🌟',
+            'tiers' => [
+                ['count' => 1,  'label' => '初 フルハウス',    'medal' => '🥉'],
+                ['count' => 3,  'label' => 'フルハウス 常連',  'medal' => '🥈'],
+                ['count' => 10, 'label' => 'フルハウス マスター', 'medal' => '🥇'],
+                ['count' => 25, 'label' => 'クローゼット の 神','medal' => '💎'],
+            ],
+        ],
+        'bingofit_items_active' => [
+            'title' => 'クローゼット の 厚み',
+            'desc'  => '着回しビンゴ に 登録 された アクティブ 衣類 数',
+            'unit'  => '着',
+            'icon'  => '🧥',
+            'tiers' => [
+                ['count' => 10, 'label' => 'ミニマリスト',     'medal' => '🥉'],
+                ['count' => 25, 'label' => '盤 が 作れる ライン', 'medal' => '🥈'],
+                ['count' => 40, 'label' => 'おしゃれ さん',    'medal' => '🥇'],
+                ['count' => 50, 'label' => '満員 クローゼット','medal' => '💎'],
+            ],
+        ],
     ];
 
     // Returns the user's current measured value for each achievement category.
@@ -510,6 +559,37 @@ class Achievements {
             $out['bingo_lines_total'] = 0;
             $out['bingo_weeks_won']   = 0;
         }
+
+        // v741 #288 着回しビンゴ (BingoFit) 実績。 ライン数は cells_json/cell_opens から
+        //   都度計算 (専用カラムは持たない)。
+        $out['bingofit_lines_total']  = 0;
+        $out['bingofit_weeks_won']    = 0;
+        $out['bingofit_full_houses']  = 0;
+        $out['bingofit_items_active'] = 0;
+        try {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM bingofit_items WHERE user_id=? AND archived_at IS NULL");
+            $st->execute([$userId]);
+            $out['bingofit_items_active'] = (int)$st->fetchColumn();
+
+            $st = $pdo->prepare("SELECT b.id, (SELECT COUNT(*) FROM bingofit_cell_opens o WHERE o.board_id=b.id) AS oc
+                                   FROM bingofit_boards b WHERE b.user_id=?");
+            $st->execute([$userId]);
+            $linesSum = 0; $weeksWon = 0; $fullHouses = 0;
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $b) {
+                $oc = (int)$b['oc'];
+                if ($oc === 0) continue;
+                $stO = $pdo->prepare("SELECT cell_index FROM bingofit_cell_opens WHERE board_id=?");
+                $stO->execute([(int)$b['id']]);
+                $opened = array_map('intval', $stO->fetchAll(PDO::FETCH_COLUMN));
+                $lines = bingofit_count_lines($opened);
+                $linesSum += $lines;
+                if ($lines >= 1) $weeksWon++;
+                if ($oc >= 25) $fullHouses++;
+            }
+            $out['bingofit_lines_total'] = $linesSum;
+            $out['bingofit_weeks_won']   = $weeksWon;
+            $out['bingofit_full_houses'] = $fullHouses;
+        } catch (Throwable $_) { /* swallow — テーブル無い 環境 で 0 のまま */ }
 
         return $out;
     }

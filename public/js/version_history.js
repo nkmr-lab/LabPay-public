@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v741', d: '2026-06-21', s: '👕 BingoFit Phase2 (#288)。 (1) ホーム widget 「今週の着回しビンゴ」 追加 (ミニ 5x5、 完成ライン強調、 リーチ表示)。 (2) クローゼットに「💤 最近着てない服」 サジェスト + 各 item に「✓ 今週」「💤 N日」 バッジ (cell_open で items.last_worn_at をデノーマライズ更新)。 (3) 実績 4 種追加: 👕 着回しビンゴ職人 (通算ライン)、 🗓 着回し週次ハンター、 🌟 フルハウスキング、 🧥 クローゼットの厚み。 (4) 週次集計 cron (月曜 09:00 JST): 先週の盤を集計して参加者に admin_notice + Slack #/bingofit/board に全体サマリ。 migration 148 + scripts/bingofit_weekly_summary.php + /etc/cron.d/labpay-bingofit-weekly' },
   { v: 'v740', d: '2026-06-21', s: '👕 BingoFit (着回しビンゴ) を新規追加 (#288)。 手持ちの服を 25 着以上登録すると、 日曜始まりの 5x5 ビンゴ盤が自動生成。 着た服を盤面から開けてラインを揃えるとビンゴ。 衣類画像の背景は cron worker (毎分) が rembg で 非同期 に透過 PNG 化 (~2 秒 / 枚)。 アプリ一覧 → 👕 着回しビンゴ (BingoFit) から。 #/bingofit/closet クローゼット、 #/bingofit/board 今週の盤、 #/bingofit/history 過去 12 週。 bingofit_items / bingofit_boards / bingofit_cell_opens 3 テーブル新設、 worker は scripts/bingofit_worker.php (flock 付き cron)、 rembg は /opt/labpay-bgremove/venv の Python 3.12' },
   { v: 'v739', d: '2026-06-21', s: '🎯 勝敗予測の結果通知と widget 残存を改善 (#352)。 (1) finalize 時の通知に「自分の予想 X-Y 完全的中! 払戻 +Npt」 など個人結果を追記 (旧版は最終スコアだけで自分が当たったか分からなかった)。 (2) 結果確定後すぐ消えていたのを 24h は ホーム widget に「🏁 結果 / 結果 4-0 ✨的中 +500pt」 のように残すように、 me.php の query を finished_at >= NOW - 24h で拡張 + 新 tag finished を追加' },
   { v: 'v738', d: '2026-06-21', s: '✏️ 仮 (暫定) 締切の表記を「およそ あと N 日」→「およそ N 日」 に変更 (#349)。ホーム widget / 一覧両方で「あと」 を落として日本語として自然に' },

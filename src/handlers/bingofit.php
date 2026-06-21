@@ -50,7 +50,11 @@ function route_bingofit(PDO $pdo, array $cfg, string $method, array $seg): void 
 
 // ── 衣類 ──────────────────────────────────────────────────────
 function bingofit_items_list(PDO $pdo, int $uid): void {
-    $st = $pdo->prepare("SELECT id, label, category, image_url, image_url_transparent, bg_status, bg_error, archived_at, created_at
+    // v741 last_worn_at + days_since_worn を 付ける (「最近着てない服」 表示 用)。
+    $st = $pdo->prepare("SELECT id, label, category, image_url, image_url_transparent, bg_status, bg_error,
+                                archived_at, created_at, last_worn_at,
+                                CASE WHEN last_worn_at IS NULL THEN NULL
+                                     ELSE TIMESTAMPDIFF(DAY, last_worn_at, NOW()) END AS days_since_worn
                            FROM bingofit_items
                           WHERE user_id=?
                           ORDER BY archived_at IS NOT NULL, id DESC");
@@ -66,6 +70,8 @@ function bingofit_items_list(PDO $pdo, int $uid): void {
             'bg_error' => $r['bg_error'],
             'archived' => $r['archived_at'] !== null,
             'created_at' => $r['created_at'],
+            'last_worn_at' => $r['last_worn_at'],
+            'days_since_worn' => $r['days_since_worn'] !== null ? (int)$r['days_since_worn'] : null,
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
     json_response(['items' => $items, 'max_items' => BINGOFIT_MAX_ITEMS]);
@@ -270,13 +276,21 @@ function bingofit_count_lines(array $openedIdxs): int {
 function bingofit_cell_open(PDO $pdo, int $uid, int $idx, bool $open): void {
     if ($idx < 0 || $idx >= BINGOFIT_BOARD_CELLS) throw new ApiException('bad_request', 'cell_index 0-24', 400);
     $week = bingofit_week_start_jst();
-    $st = $pdo->prepare("SELECT id FROM bingofit_boards WHERE user_id=? AND week_start=?");
+    $st = $pdo->prepare("SELECT id, cells_json FROM bingofit_boards WHERE user_id=? AND week_start=?");
     $st->execute([$uid, $week]);
-    $bid = (int)$st->fetchColumn();
-    if (!$bid) throw new ApiException('not_found', '今週の盤がありません (GET /board で先に生成)', 404);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '今週の盤がありません (GET /board で先に生成)', 404);
+    $bid = (int)$row['id'];
     if ($open) {
         $pdo->prepare("INSERT INTO bingofit_cell_opens (board_id, cell_index) VALUES (?,?) ON DUPLICATE KEY UPDATE opened_at=opened_at")
             ->execute([$bid, $idx]);
+        // v741 該当 item の last_worn_at を 更新 (「最近 着てない 服」 サジェスト 用)。
+        $cellsArr = json_decode($row['cells_json'], true) ?: [];
+        $itemId = (int)($cellsArr[$idx] ?? 0);
+        if ($itemId > 0) {
+            $pdo->prepare("UPDATE bingofit_items SET last_worn_at=NOW() WHERE id=? AND user_id=?")
+                ->execute([$itemId, $uid]);
+        }
     } else {
         $pdo->prepare("DELETE FROM bingofit_cell_opens WHERE board_id=? AND cell_index=?")->execute([$bid, $idx]);
     }
