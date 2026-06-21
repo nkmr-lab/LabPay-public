@@ -12,9 +12,11 @@ const BINGO_TASK_POOL = [
     ['id' => 'checkin3',  'label' => 'ラボイン 3 回',       'icon' => '🏠', 'type' => 'checkin', 'threshold' => 3],
     ['id' => 'checkin5',  'label' => 'ラボイン 5 日 連続',  'icon' => '🔥', 'type' => 'checkin_streak', 'threshold' => 5],
     ['id' => 'opener1',   'label' => 'オープナー 1 回',     'icon' => '🌅', 'type' => 'opener', 'threshold' => 1],
-    ['id' => 'opener2',   'label' => 'オープナー 2 回',     'icon' => '🌅', 'type' => 'opener', 'threshold' => 2],
+    // v746 #357 opener2 (2 回) は ハードル 高すぎ で 削除。 代わり に sns5 を 追加 して
+    //   らぼったー 5 投稿 を 優先 で 入れる ように。
     ['id' => 'sns1',      'label' => 'らぼったー 1 投稿',   'icon' => '💬', 'type' => 'sns_post', 'threshold' => 1],
     ['id' => 'sns3',      'label' => 'らぼったー 3 投稿',   'icon' => '💬', 'type' => 'sns_post', 'threshold' => 3],
+    ['id' => 'sns5',      'label' => 'らぼったー 5 投稿',   'icon' => '💬', 'type' => 'sns_post', 'threshold' => 5],
     ['id' => 'sns_react', 'label' => 'リアクション 5 個',    'icon' => '❤️', 'type' => 'sns_reaction', 'threshold' => 5],
     ['id' => 'buy1',      'label' => '購入 1 件',           'icon' => '🛒', 'type' => 'purchase', 'threshold' => 1],
     ['id' => 'sell1',     'label' => '販売 1 件',           'icon' => '🏷', 'type' => 'sell', 'threshold' => 1],
