@@ -77,9 +77,6 @@ function ft_list(PDO $pdo, array $cfg): void {
 
 function ft_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
-        throw new ApiException('no_file', 'multipart field "file" 必須', 400);
-    }
     $recipient = (int)($_POST['recipient_user_id'] ?? 0);
     if ($recipient <= 0) throw new ApiException('bad_request', 'recipient_user_id 必須', 400);
     if ($recipient === (int)$u['id']) throw new ApiException('bad_request', '自分には送れません', 400);
@@ -88,17 +85,90 @@ function ft_create(PDO $pdo, array $cfg): void {
     if (!$chk->fetchColumn()) throw new ApiException('bad_request', '宛先ユーザーが見つかりません', 400);
     $body = isset($_POST['body']) ? mb_substr(trim((string)$_POST['body']), 0, 2000) : null;
     if ($body === '') $body = null;
-    $originalName = mb_substr((string)($_FILES['file']['name'] ?? 'file'), 0, 255);
 
-    $saved = save_uploaded_file($_FILES['file'], 'uploads/transfers', FT_MAX_BYTES, FT_MIME_ALLOW);
+    // v735 #345 フォルダ送信対応: files[] が来たら zip にまとめる。
+    //   単一 file (旧 互換) は従来通り save_uploaded_file。
+    if (!empty($_FILES['files']) && is_array($_FILES['files']['tmp_name'] ?? null)) {
+        if (!class_exists('ZipArchive')) {
+            throw new ApiException('not_supported', 'サーバに ZipArchive がありません (PHP zip 拡張未導入)', 500);
+        }
+        $tmpNames = $_FILES['files']['tmp_name'];
+        $origNames = $_FILES['files']['name'];
+        $sizes     = $_FILES['files']['size'];
+        $errors    = $_FILES['files']['error'];
+        $n = count($tmpNames);
+        if ($n === 0) throw new ApiException('no_file', 'ファイル必須', 400);
+        $paths = [];
+        if (!empty($_POST['paths'])) {
+            $j = json_decode((string)$_POST['paths'], true);
+            if (is_array($j)) $paths = $j;
+        }
+        $totalSize = 0;
+        for ($i = 0; $i < $n; $i++) {
+            if ((int)$errors[$i] !== UPLOAD_ERR_OK) throw new ApiException('upload_error', "ファイル {$i} アップロード失敗", 400);
+            $totalSize += (int)$sizes[$i];
+        }
+        if ($totalSize > FT_MAX_BYTES) {
+            $mb = (int)round(FT_MAX_BYTES / 1024 / 1024);
+            throw new ApiException('too_large', "合計サイズが {$mb}MB を超えています", 413);
+        }
+        // root folder の名前を decide
+        $folderName = 'folder';
+        if (!empty($paths[0])) {
+            $first = (string)$paths[0];
+            if (str_contains($first, '/')) $folderName = explode('/', $first, 2)[0];
+        }
+        $folderName = preg_replace('/[^\w.-]+/u', '_', $folderName) ?: 'folder';
+        // tmp zip を作る
+        $tmpZip = tempnam(sys_get_temp_dir(), 'ft_') . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new ApiException('zip_error', 'zip 作成失敗', 500);
+        }
+        for ($i = 0; $i < $n; $i++) {
+            $rel = $paths[$i] ?? $origNames[$i];
+            $rel = ltrim((string)$rel, '/');
+            // 危険な .. を除去
+            $rel = str_replace(['../', '..\\'], '', $rel);
+            if ($rel === '') $rel = $origNames[$i];
+            $zip->addFile($tmpNames[$i], $rel);
+        }
+        $zip->close();
+        // public/uploads/transfers/ に移動
+        $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+        $dir = $publicDir . '/uploads/transfers';
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            @unlink($tmpZip);
+            throw new ApiException('mkdir_failed', 'upload dir 作成失敗', 500);
+        }
+        $stored = bin2hex(random_bytes(12)) . '.zip';
+        $dest = $dir . '/' . $stored;
+        if (!rename($tmpZip, $dest)) {
+            @unlink($tmpZip);
+            throw new ApiException('save_failed', 'zip 保存失敗', 500);
+        }
+        @chmod($dest, 0644);
+        $size = filesize($dest);
+        $originalName = $folderName . '.zip';
+        $relPath = '/uploads/transfers/' . $stored;
+        $mime    = 'application/zip';
+    } else {
+        if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+            throw new ApiException('no_file', 'multipart field "file" もしくは "files[]" が必要です', 400);
+        }
+        $originalName = mb_substr((string)($_FILES['file']['name'] ?? 'file'), 0, 255);
+        $saved = save_uploaded_file($_FILES['file'], 'uploads/transfers', FT_MAX_BYTES, FT_MIME_ALLOW);
+        $relPath = (string)$saved['path'];
+        $mime    = (string)$saved['mime'];
+        $size    = (int)$saved['size'];
+    }
 
     $ins = $pdo->prepare("INSERT INTO file_transfers
         (sender_user_id, recipient_user_id, file_path, original_name, file_size, mime_type, body, sent_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
     $ins->execute([
         (int)$u['id'], $recipient,
-        (string)$saved['path'], $originalName,
-        (int)$saved['size'], (string)$saved['mime'], $body
+        $relPath, $originalName, $size, $mime, $body
     ]);
     $id = (int)$pdo->lastInsertId();
     try {

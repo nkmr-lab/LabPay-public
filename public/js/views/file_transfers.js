@@ -32,6 +32,11 @@ export async function renderFileTransfers() {
       </label>
       <label class="field"><span class="lbl">ファイル</span>
         <input type="file" id="ft-file">
+        <span class="hint-sm" style="font-size:11px">単一ファイル送信 (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB)</span>
+      </label>
+      <label class="field"><span class="lbl">📁 または フォルダ (v735 #345)</span>
+        <input type="file" id="ft-folder" webkitdirectory directory multiple>
+        <span class="hint-sm" style="font-size:11px">フォルダを丸ごと送信。サーバ側で zip にまとめて送信されます (合計 50MB 上限)</span>
       </label>
       <label class="field"><span class="lbl">メッセージ (任意)</span>
         <textarea id="ft-body" rows="2" maxlength="2000" placeholder="例: 査読お願いします"></textarea>
@@ -61,12 +66,24 @@ export async function renderFileTransfers() {
 
   document.getElementById('ft-send').addEventListener('click', async () => {
     const recipientId = document.getElementById('ft-recipient').value;
-    const file = document.getElementById('ft-file').files[0];
+    const fileInput   = document.getElementById('ft-file');
+    const folderInput = document.getElementById('ft-folder');
     const body = document.getElementById('ft-body').value.trim();
     if (!recipientId) { toast('宛先 を 選んで ください'); return; }
-    if (!file) { toast('ファイル を 選んで ください'); return; }
+    const folderFiles = Array.from(folderInput.files || []);
+    const singleFile  = fileInput.files[0];
+    if (!folderFiles.length && !singleFile) { toast('ファイル または フォルダ を 選んで ください'); return; }
     const fd = new FormData();
-    fd.append('file', file);
+    if (folderFiles.length > 0) {
+      const paths = [];
+      for (const f of folderFiles) {
+        fd.append('files[]', f, f.name);
+        paths.push(f.webkitRelativePath || f.name);
+      }
+      fd.append('paths', JSON.stringify(paths));
+    } else {
+      fd.append('file', singleFile);
+    }
     fd.append('recipient_user_id', recipientId);
     if (body) fd.append('body', body);
     const btn = document.getElementById('ft-send');
@@ -83,6 +100,7 @@ export async function renderFileTransfers() {
       }
       toast('送信しました');
       document.getElementById('ft-file').value = '';
+      document.getElementById('ft-folder').value = '';
       document.getElementById('ft-body').value = '';
       document.getElementById('ft-recipient').value = '';
       await loadList();
