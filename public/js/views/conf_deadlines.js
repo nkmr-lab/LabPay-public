@@ -106,11 +106,11 @@ export async function renderConfDeadlines() {
         const cat = CATEGORIES[r.category] || CATEGORIES.other;
         const dl = new Date(String(r.deadline_at).replace(' ', 'T'));
         const sec = Math.floor((dl - new Date()) / 1000);
-        // v713 #308 仮 (暫定) 締切 は 「およそ あと N 日」 表記。
+        // v713 #308 仮 (暫定) 締切 は 「およそ N 日」 表記。 v738 #349 「あと」 を 落とす。
         const isTentative = !!Number(r.deadline_is_tentative);
         const ahead = sec <= 0
           ? fmtAhead(sec)
-          : (isTentative ? 'およそ ' + fmtAhead(sec) : fmtAhead(sec));
+          : (isTentative ? 'およそ ' + fmtAhead(sec).replace(/^あと /, '') : fmtAhead(sec));
         const aheadColor = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
         const canEdit = Number(r.created_by_user_id) === meId;
         const mainLbl = r.deadline_label || '締切';
@@ -193,7 +193,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
         </label>
         <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
           <input type="checkbox" id="cd-deadline-tentative">
-          🤔 仮 (暫定) の 締切 ・ widget で 「およそ あと N 日」 と 表示
+          🤔 仮 (暫定) の 締切 ・ widget で 「およそ N 日」 と 表示
         </label>
       </fieldset>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px">
