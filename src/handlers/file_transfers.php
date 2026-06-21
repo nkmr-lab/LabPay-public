@@ -22,7 +22,7 @@ const FT_MIME_ALLOW = [
     'image/webp' => 'webp',
     'image/gif' => 'gif',
 ];
-const FT_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+const FT_MAX_BYTES = 100 * 1024 * 1024; // v744 #355 100 MB
 
 function route_file_transfers(PDO $pdo, array $cfg, string $method, array $seg): void {
     Auth::requireUser($pdo, $cfg);

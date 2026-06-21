@@ -19,7 +19,7 @@ export async function renderFileTransfers() {
     <div class="card page-header">
       <h2 style="margin:0">📦 ファイル送受信</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        相手を指定してファイルを送れます。 PDF / Word / Excel / 画像 / zip / txt 等 (最大 50MB)。
+        相手を指定してファイルを送れます。 PDF / Word / Excel / 画像 / zip / txt 等 (最大 100MB)。
         受信者がダウンロードした回数と最初のダウンロード時刻が記録されます。
       </p>
     </div>
@@ -44,7 +44,7 @@ export async function renderFileTransfers() {
           </div>
         </div>
         <div id="ft-selected" style="margin-top:8px"></div>
-        <span class="hint-sm" style="font-size:11px">複数 ファイル は zip に まとめ られて 送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 50MB 上限</span>
+        <span class="hint-sm" style="font-size:11px">複数 ファイル は zip に まとめ られて 送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 100MB 上限</span>
       </div>
       <label class="field"><span class="lbl">メッセージ (任意)</span>
         <textarea id="ft-body" rows="2" maxlength="2000" placeholder="例: 査読お願いします"></textarea>

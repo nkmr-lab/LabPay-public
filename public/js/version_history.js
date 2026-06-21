@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v744', d: '2026-06-21', s: '📦 ファイル送受信 の 上限 を 50MB → 100MB に拡張 (#355)。 サーバ側 PHP も 合わせて 引き上げ (upload_max_filesize 60M → 100M、 post_max_size 80M → 130M、 max_file_uploads 20 → 100)。 hint 文 も「最大 100MB」 に更新' },
   { v: 'v743', d: '2026-06-21', s: '📦 ファイル送受信 を ドラッグ&ドロップ + 複数ファイル選択 対応 (#354)。 大きな ドロップゾーン (📂) を 設置、 ファイル / フォルダ を タップ or ドロップで 追加 (複数 OK、 フォルダは webkitGetAsEntry で 再帰 走査)。 選択中 リストで × ボタンで個別削除 / 「全部 クリア」 可。 送信時、 単一 ファイル (フォルダ階層なし) は そのまま、 複数 or フォルダ は サーバ側で zip にまとめて 送信 (合計 50MB 上限)。 zip のデフォルト名は files.zip / フォルダ名.zip' },
   { v: 'v742', d: '2026-06-21', s: '📦🖼 ファイル送受信 / 一時画像共有 を 複数人 宛 対応 (#353)。 (1) 📦 ファイル送受信: 宛先を共通の memberPicker (全員 / 学年 一括選択 可) に差し替え、 1 アップロードで N 人に同時送信。 送信一覧は batch_id でグルーピング表示 (個別ダウンロード状況を 1 ブロック内に並べる、 「この人だけ削除」 / 「全員分削除」 ボタン)。 (2) 🖼 一時画像共有: 宛先モード切替 (📢 ラボ全体 / 👥 グループ / 👤 個人複数) を追加、 個人モードでは memberPicker、 一覧の宛先表示は target_user_names で「👤 A / B / C」 表示。 migration 149: file_transfers.batch_id, screen_shares.target_user_ids (TEXT JSON)' },
   { v: 'v741', d: '2026-06-21', s: '👕 BingoFit Phase2 (#288)。 (1) ホーム widget 「今週の着回しビンゴ」 追加 (ミニ 5x5、 完成ライン強調、 リーチ表示)。 (2) クローゼットに「💤 最近着てない服」 サジェスト + 各 item に「✓ 今週」「💤 N日」 バッジ (cell_open で items.last_worn_at をデノーマライズ更新)。 (3) 実績 4 種追加: 👕 着回しビンゴ職人 (通算ライン)、 🗓 着回し週次ハンター、 🌟 フルハウスキング、 🧥 クローゼットの厚み。 (4) 週次集計 cron (月曜 09:00 JST): 先週の盤を集計して参加者に admin_notice + Slack #/bingofit/board に全体サマリ。 migration 148 + scripts/bingofit_weekly_summary.php + /etc/cron.d/labpay-bingofit-weekly' },
