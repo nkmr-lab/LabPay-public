@@ -39,6 +39,9 @@ export const APPS = [
   { id: 'widgets',       cat: 'misc', url: '#/widgets',       title: '🧩 ウィジェット センター', desc: '自作 ウィジェット を 登録 して ホーム に 表示。 JS で render(root) を 書く だけ。 サンプル も 用意 (時計 / 残高)。', defaultVisible: true },
   { id: 'cg2',           cat: 'game', url: '#/cg2',           title: '🎮 自作 ゲーム v2 (cg2)', desc: 'p5.js で 描画 する 准 リアルタイム multiplayer framework。 sharedValues 自動 同期 + host.start / host.stop の ライフサイクル + CPU 戦 対応。 サンプル: マルバツ / ニム / ライツアウト / すごろく。', defaultVisible: true },
   { id: 'chat-rooms',    cat: 'lab-mgmt', url: '#/chat-rooms', title: '💬 チャット (重要 / 連絡 / 相談 + DM)', desc: 'Slack 風 チャット。 3 つ の チャンネル + 1対1 DM。 2 秒 polling で 准 リアルタイム。 「重要」 への 投稿 は 全員 に 通知 が 飛ぶ。', defaultVisible: true },
+  // v734 #344 新規追加機能の登録 (v718 / v733 で実装したが apps 一覧に入れ忘れていたもの)
+  { id: 'screen-shares', cat: 'lab-mgmt', url: '#/screen-shares', title: '🖼 一時画像共有',  desc: 'ラボ全体 or 自分のグループ宛に画像 + ひとことを投げて 15 分〜24 時間の間ホームに大きく表示。「とにかく今これ見て」 用。', defaultVisible: true },
+  { id: 'file-transfers', cat: 'lab-mgmt', url: '#/file-transfers', title: '📦 ファイル送受信', desc: '相手を指定してファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) を送れる。受信者のダウンロード回数と初回ダウンロード時刻を記録。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
   { id: 'deadlines',     cat: 'research', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'research', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },

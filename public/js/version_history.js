@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v734', d: '2026-06-21', s: '🐛📦 たべある記の地図フィルタ修正 + 新機能のアプリ登録 (#343 #344)。 (1) 「🗺 地図内のみ」 ON の時、緯度経度未設定の店舗を除外 (旧版は無条件で残ってしまっていた)。 (2) v718 「🖼 一時画像共有」 と v733 「📦 ファイル送受信」 をアプリ一覧 (/#/apps) に登録' },
   { v: 'v733', d: '2026-06-21', s: '📦 相手指定のファイル送受信機能を新規追加 (#342)。 /#/file-transfers で宛先 + ファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) + 任意メッセージで送信。受信者のダウンロード回数と初回ダウンロード時刻を記録。送信者は「未ダウンロード」「✓ N 回 DL」 タグで状態を一目で確認可。 file_transfers テーブル + /api/file-transfers (list / create / download / delete) を新設、 download endpoint は recipient 以外もアクセス可 (sender 確認 / admin)、 ただしカウントは recipient だけ' },
   { v: 'v732', d: '2026-06-21', s: '📷 たべある記の地図マーカーで写真サムネを復活 (#341)。 v727 で /#/places を再設計した時に divIcon (写真サムネ) ベースのマーカーが普通のピンに退化していた → cover_image_thumb があればサムネをマーカーアイコンに、 popup にも上に出す形に戻した' },
   { v: 'v731', d: '2026-06-21', s: '🔗 たべある記で admin が 1 click で tabelog URL を自動補完 (#340)。 source_url が空の店舗をタイトル + 住所先頭で tabelog 検索 → 1 件目の URL を採用。 admin のみ表示の「🔗 tabelog 自動補完」 ボタンを /#/places に追加、 1 リクエストで最大 10 件処理、 client は remaining=0 まで自動でループ実行 (max 30 回)。 POST /api/places/backfill_tabelog_urls 新規 endpoint' },

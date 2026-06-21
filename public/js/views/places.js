@@ -151,7 +151,11 @@ export async function renderPlaces() {
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
       if (fVisited && !p.visited_by_me) return false;
-      if (bounds && p.lat != null && p.lng != null && !bounds.contains([p.lat, p.lng])) return false;
+      // v734 #343 地図内のみフィルタが ON のとき、 緯度経度未設定の店は除外 (含めると無条件で残ってしまうので)。
+      if (bounds) {
+        if (p.lat == null || p.lng == null) return false;
+        if (!bounds.contains([p.lat, p.lng])) return false;
+      }
       return true;
     });
     if (map) {
