@@ -25,22 +25,28 @@ export async function renderScreenShares() {
       <label class="field"><span class="lbl">ひとこと (任意)</span>
         <input type="text" id="ss-body" maxlength="1000" placeholder="例: この図みて / 急ぎでチェック">
       </label>
-      <div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px">
-        <label class="field" style="flex:1; min-width:140px"><span class="lbl">宛先</span>
-          <select id="ss-group">
-            <option value="">📢 ラボ全体</option>
-          </select>
-        </label>
-        <label class="field" style="flex:1; min-width:140px"><span class="lbl">期限</span>
-          <select id="ss-expires">
-            <option value="15">15 分</option>
-            <option value="60" selected>1 時間</option>
-            <option value="180">3 時間</option>
-            <option value="720">12 時間</option>
-            <option value="1440">24 時間</option>
-          </select>
-        </label>
+      <div class="field">
+        <span class="lbl">宛先</span>
+        <div class="row" style="gap:8px; margin-bottom:6px; flex-wrap:wrap">
+          <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="all" checked> 📢 ラボ全体</label>
+          <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="group"> 👥 グループ</label>
+          <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="users"> 👤 個人 (複数 選択 可)</label>
+        </div>
+        <select id="ss-group" hidden style="margin-bottom:6px"></select>
+        <div id="ss-users-wrap" hidden>
+          <div id="ss-users-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+          <div id="ss-users-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+        </div>
       </div>
+      <label class="field"><span class="lbl">期限</span>
+        <select id="ss-expires">
+          <option value="15">15 分</option>
+          <option value="60" selected>1 時間</option>
+          <option value="180">3 時間</option>
+          <option value="720">12 時間</option>
+          <option value="1440">24 時間</option>
+        </select>
+      </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="ss-submit" class="primary">投稿</button>
       </div>
@@ -51,6 +57,7 @@ export async function renderScreenShares() {
     </div>
   `;
   await loadGroups();
+  await wireTargetMode();
   wireUploader();
   await loadActive();
 }
@@ -59,6 +66,7 @@ async function loadGroups() {
   try {
     const d = await get('/api/groups', { mine: 1 });
     const sel = document.getElementById('ss-group');
+    sel.innerHTML = '';
     (d.items || d.groups || []).forEach(g => {
       const opt = document.createElement('option');
       opt.value = g.id;
@@ -66,6 +74,34 @@ async function loadGroups() {
       sel.appendChild(opt);
     });
   } catch (_) { /* グループ取得失敗は致命的でない */ }
+}
+
+// v742 #353 宛先モード (全体 / グループ / 個人) で UI を 出し分け。
+//   個人モード では 共通 member picker を 遅延 ロード。
+let _userPicker = null;
+async function wireTargetMode() {
+  const grpSel = document.getElementById('ss-group');
+  const usersWrap = document.getElementById('ss-users-wrap');
+  const radios = document.querySelectorAll('input[name="ss-target-mode"]');
+  const apply = async () => {
+    const v = document.querySelector('input[name="ss-target-mode"]:checked')?.value || 'all';
+    grpSel.hidden = (v !== 'group');
+    usersWrap.hidden = (v !== 'users');
+    if (v === 'users' && !_userPicker) {
+      try {
+        const { createMemberPicker } = await import('../member_picker.js');
+        _userPicker = await createMemberPicker({
+          bulkContainer: document.getElementById('ss-users-bulk'),
+          chipsContainer: document.getElementById('ss-users-chips'),
+          initial: [],
+          excludeIds: [Number(state.me?.id)],
+          showGenderBulk: false,
+        });
+      } catch (e) { console.error('[ss] picker init failed:', e); }
+    }
+  };
+  radios.forEach(r => r.addEventListener('change', apply));
+  await apply();
 }
 
 let uploadedImageUrl = null;
@@ -98,13 +134,25 @@ function wireUploader() {
   document.getElementById('ss-submit').addEventListener('click', async () => {
     if (!uploadedImageUrl) { toast('画像を選んでください'); return; }
     const body = document.getElementById('ss-body').value.trim() || null;
-    const groupId = document.getElementById('ss-group').value || null;
+    const mode = document.querySelector('input[name="ss-target-mode"]:checked')?.value || 'all';
+    let groupId = null;
+    let targetUserIds = null;
+    if (mode === 'group') {
+      const gv = document.getElementById('ss-group').value;
+      if (!gv) { toast('グループを選んでください'); return; }
+      groupId = Number(gv);
+    } else if (mode === 'users') {
+      const sel = _userPicker ? [..._userPicker.getSelected()] : [];
+      if (!sel.length) { toast('宛先を 1 人以上 選んで ください'); return; }
+      targetUserIds = sel;
+    }
     const expires = Number(document.getElementById('ss-expires').value) || 60;
     try {
       await post('/api/screen-shares', {
         image_url: uploadedImageUrl,
         body,
-        group_id: groupId ? Number(groupId) : null,
+        group_id: groupId,
+        target_user_ids: targetUserIds,
         expires_in_min: expires,
       });
       toast('共有しました');
@@ -113,6 +161,7 @@ function wireUploader() {
       uploadedImageUrl = null;
       document.getElementById('ss-img-status').textContent = '';
       document.getElementById('ss-img-preview').hidden = true;
+      if (_userPicker) _userPicker.setSelected([]);
       await loadActive();
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -128,7 +177,15 @@ async function loadActive() {
       return;
     }
     root.innerHTML = items.map(s => {
-      const target = s.group_name ? `👥 ${escapeHtml(s.group_name)}` : '📢 ラボ全体';
+      // v742 #353 個人 (複数) 宛 を 表示
+      let target;
+      if (s.target_user_names && s.target_user_names.length) {
+        target = `👤 ${s.target_user_names.map(escapeHtml).join(' / ')}`;
+      } else if (s.group_name) {
+        target = `👥 ${escapeHtml(s.group_name)}`;
+      } else {
+        target = '📢 ラボ全体';
+      }
       const exp = new Date(String(s.expires_at).replace(' ', 'T'));
       const remMin = Math.max(0, Math.floor((exp - new Date()) / 60000));
       const remStr = remMin < 60 ? `あと ${remMin} 分` : `あと ${Math.floor(remMin/60)} 時間 ${remMin%60} 分`;

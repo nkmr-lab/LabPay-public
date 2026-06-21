@@ -25,11 +25,11 @@ export async function renderFileTransfers() {
     </div>
     <div class="card">
       <h3 style="margin:0 0 6px">＋ 新規送信</h3>
-      <label class="field"><span class="lbl">宛先</span>
-        <select id="ft-recipient">
-          <option value="">読み込み中…</option>
-        </select>
-      </label>
+      <div class="field">
+        <span class="lbl">宛先 (複数選択 可)</span>
+        <div id="ft-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
+        <div id="ft-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
+      </div>
       <label class="field"><span class="lbl">ファイル</span>
         <input type="file" id="ft-file">
         <span class="hint-sm" style="font-size:11px">単一ファイル送信 (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB)</span>
@@ -54,22 +54,25 @@ export async function renderFileTransfers() {
       <div id="ft-sent"><div class="hint">読み込み中…</div></div>
     </div>
   `;
-  // 宛先の選択肢を埋める
+  // v742 #353 複数選択 可 の 共通 member picker に 差し替え。
+  const { createMemberPicker } = await import('../member_picker.js');
+  let picker = null;
   try {
-    const u = await get('/api/users');
-    const sel = document.getElementById('ft-recipient');
-    const meId = Number(state.me?.id);
-    sel.innerHTML = '<option value="">＋ 宛先 を 選ぶ</option>' +
-      (u.items || []).filter(x => x.id !== meId).map(x =>
-        `<option value="${x.id}">${escapeHtml(x.display_name)}${x.grade ? ` [${escapeHtml(x.grade)}]` : ''}</option>`).join('');
-  } catch (_) {}
+    picker = await createMemberPicker({
+      bulkContainer: document.getElementById('ft-bulk'),
+      chipsContainer: document.getElementById('ft-chips'),
+      initial: [],
+      excludeIds: [Number(state.me?.id)],
+      showGenderBulk: false,
+    });
+  } catch (e) { console.error('[ft] picker init failed:', e); }
 
   document.getElementById('ft-send').addEventListener('click', async () => {
-    const recipientId = document.getElementById('ft-recipient').value;
+    const selected = picker ? [...picker.getSelected()] : [];
     const fileInput   = document.getElementById('ft-file');
     const folderInput = document.getElementById('ft-folder');
     const body = document.getElementById('ft-body').value.trim();
-    if (!recipientId) { toast('宛先 を 選んで ください'); return; }
+    if (!selected.length) { toast('宛先を 1 人以上 選んで ください'); return; }
     const folderFiles = Array.from(folderInput.files || []);
     const singleFile  = fileInput.files[0];
     if (!folderFiles.length && !singleFile) { toast('ファイル または フォルダ を 選んで ください'); return; }
@@ -84,7 +87,7 @@ export async function renderFileTransfers() {
     } else {
       fd.append('file', singleFile);
     }
-    fd.append('recipient_user_id', recipientId);
+    for (const id of selected) fd.append('recipient_user_ids[]', String(id));
     if (body) fd.append('body', body);
     const btn = document.getElementById('ft-send');
     btn.disabled = true; btn.textContent = '送信中…';
@@ -98,11 +101,11 @@ export async function renderFileTransfers() {
         const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
         throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
-      toast('送信しました');
+      toast(`送信しました (${selected.length} 人)`);
       document.getElementById('ft-file').value = '';
       document.getElementById('ft-folder').value = '';
       document.getElementById('ft-body').value = '';
-      document.getElementById('ft-recipient').value = '';
+      if (picker) picker.setSelected([]);
       await loadList();
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '送信'; }
@@ -118,11 +121,13 @@ async function loadList() {
     const meId = Number(state.me?.id);
     const recv = items.filter(it => it.recipient_user_id === meId);
     const sent = items.filter(it => it.sender_user_id    === meId);
+    // v742 #353 送信側は batch_id ごとに 1 枚にまとめる (= 複数受信者送信の 1 アクションを 1 行で 表示)。
+    const sentGrouped = groupByBatch(sent);
     document.getElementById('ft-recv').innerHTML = recv.length
       ? recv.map(renderRecvRow).join('')
       : '<div class="empty">受信ファイルはありません</div>';
-    document.getElementById('ft-sent').innerHTML = sent.length
-      ? sent.map(renderSentRow).join('')
+    document.getElementById('ft-sent').innerHTML = sentGrouped.length
+      ? sentGrouped.map(renderSentGroup).join('')
       : '<div class="empty">送信ファイルはありません</div>';
     document.querySelectorAll('[data-ft-del]').forEach(b => {
       b.addEventListener('click', async () => {
@@ -131,9 +136,29 @@ async function loadList() {
         catch (e) { toast('失敗: ' + e.message); }
       });
     });
+    document.querySelectorAll('[data-ft-del-batch]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const ids = b.dataset.ftDelBatch.split(',');
+        if (!confirm(`この送信 (${ids.length} 人宛) を全部 削除しますか?`)) return;
+        try {
+          await Promise.all(ids.map(id => del('/api/file-transfers/' + id)));
+          toast('削除しました'); await loadList();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
   } catch (e) {
     document.getElementById('ft-recv').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+function groupByBatch(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const k = r.batch_id || ('single-' + r.id);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  return [...groups.values()].sort((a, b) => (b[0].sent_at || '').localeCompare(a[0].sent_at || ''));
 }
 
 function renderRecvRow(it) {
@@ -149,21 +174,36 @@ function renderRecvRow(it) {
     </div>`;
 }
 
-function renderSentRow(it) {
-  const dlInfo = it.download_count > 0
-    ? `<span class="tag ok">✓ ${it.download_count} 回 DL ・ 初回 ${escapeHtml(String(it.first_downloaded_at || ''))}</span>`
-    : `<span class="tag warn">未ダウンロード</span>`;
+// 1 つの送信アクション (= 同じ batch) を 1 ブロックで 表示。 受信者 1 人なら 旧 UI に近い。
+function renderSentGroup(rows) {
+  const head = rows[0];
+  const ids = rows.map(r => r.id);
   return `
-    <div class="list-item" style="align-items:flex-start; gap:10px">
-      <div style="flex:none">${avatarHtml(it.recipient_name, it.recipient_avatar, 'md')}</div>
-      <div class="grow" style="min-width:0">
-        <div class="bold">${escapeHtml(it.original_name)} <span class="hint-sm" style="font-size:11px; opacity:0.7">${fmtBytes(it.file_size)}</span></div>
-        <div class="meta">${escapeHtml(it.recipient_name)} へ · ${escapeHtml(it.sent_at)}</div>
-        ${it.body ? `<div style="white-space:pre-wrap; font-size:13px; margin-top:4px">${escapeHtml(it.body)}</div>` : ''}
-        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
-          ${dlInfo}
-          <a href="/api/file-transfers/${it.id}/download" class="btn" style="font-size:12px; padding:2px 8px">⬇️ 確認</a>
-          <button class="btn danger" style="font-size:12px; padding:2px 8px" data-ft-del="${it.id}">削除</button>
+    <div class="list-item" style="align-items:flex-start; gap:10px; flex-direction:column">
+      <div style="display:flex; gap:10px; width:100%; align-items:flex-start">
+        <div style="flex:none">📦</div>
+        <div class="grow" style="min-width:0">
+          <div class="bold">${escapeHtml(head.original_name)} <span class="hint-sm" style="font-size:11px; opacity:0.7">${fmtBytes(head.file_size)}</span></div>
+          <div class="meta">${rows.length} 人 宛 · ${escapeHtml(head.sent_at)}</div>
+          ${head.body ? `<div style="white-space:pre-wrap; font-size:13px; margin-top:4px">${escapeHtml(head.body)}</div>` : ''}
+        </div>
+      </div>
+      <div style="width:100%; padding-left:24px; display:flex; flex-direction:column; gap:4px">
+        ${rows.map(r => {
+          const dl = r.download_count > 0
+            ? `<span class="tag ok">✓ ${r.download_count} 回 DL ・ 初回 ${escapeHtml(String(r.first_downloaded_at || ''))}</span>`
+            : `<span class="tag warn">未ダウンロード</span>`;
+          return `
+            <div style="display:flex; gap:6px; align-items:center; font-size:12px">
+              ${avatarHtml(r.recipient_name, r.recipient_avatar, 'sm')}
+              <span style="font-weight:600">${escapeHtml(r.recipient_name)}</span>
+              ${dl}
+              <button class="btn danger" style="font-size:11px; padding:1px 6px; margin-left:auto" data-ft-del="${r.id}">この人だけ削除</button>
+            </div>`;
+        }).join('')}
+        <div style="display:flex; gap:6px; margin-top:4px">
+          <a href="/api/file-transfers/${head.id}/download" class="btn" style="font-size:12px; padding:2px 8px">⬇️ 内容 確認</a>
+          ${rows.length > 1 ? `<button class="btn danger" style="font-size:12px; padding:2px 8px" data-ft-del-batch="${ids.join(',')}">全員 分 削除</button>` : ''}
         </div>
       </div>
     </div>`;

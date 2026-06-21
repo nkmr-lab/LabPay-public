@@ -16,46 +16,75 @@ function route_screen_shares(PDO $pdo, array $cfg, string $method, array $seg): 
     json_error('not_found', "no screen-shares route for $method $sub", 404);
 }
 
-// ラボ全体宛 (group_id IS NULL) + 自分が所属するグループ宛をマージで返す。
+// 表示対象 (= 自分が宛先) の active な共有を返す:
+//   ・group_id IS NULL かつ target_user_ids IS NULL → ラボ全体宛 (全員見える)
+//   ・group_id がある かつ 自分が そのグループ メンバー → グループ宛 (見える)
+//   ・target_user_ids に 自分が 含まれる → 個人宛 (見える) ※ v742 #353
+//   ・creator が自分 → 自分の投稿 (常に見える)
 function ss_active(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // 自分の所属グループを取得
     $gst = $pdo->prepare('SELECT group_id FROM adhoc_group_members WHERE user_id = ?');
     $gst->execute([$uid]);
     $gids = array_map('intval', array_column($gst->fetchAll(PDO::FETCH_ASSOC), 'group_id'));
-    $where = 's.deleted_at IS NULL AND s.expires_at > NOW() AND (s.group_id IS NULL';
-    $args = [];
-    if ($gids) {
-        $place = implode(',', array_fill(0, count($gids), '?'));
-        $where .= " OR s.group_id IN ($place)";
-        $args = $gids;
-    }
-    $where .= ')';
-    $sql = "SELECT s.id, s.creator_user_id, s.group_id, s.image_url, s.body,
+
+    // 共有 を 全部 取って PHP 側 で 可視性 判定 (target_user_ids は JSON 文字列、
+    //   行数 は たかが しれている ので 単純化)。
+    $sql = "SELECT s.id, s.creator_user_id, s.group_id, s.target_user_ids, s.image_url, s.body,
                    s.created_at, s.expires_at,
                    u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
                    g.name AS group_name
               FROM screen_shares s
               JOIN users u ON u.id = s.creator_user_id
          LEFT JOIN adhoc_groups g ON g.id = s.group_id
-             WHERE $where
-          ORDER BY s.created_at DESC";
+             WHERE s.deleted_at IS NULL AND s.expires_at > NOW()
+          ORDER BY s.created_at DESC LIMIT 200";
     $st = $pdo->prepare($sql);
-    $st->execute($args);
-    $items = array_map(fn($r) => [
-        'id'                 => (int)$r['id'],
-        'creator_user_id'    => (int)$r['creator_user_id'],
-        'creator_name'       => $r['creator_name'],
-        'creator_avatar_url' => $r['creator_avatar_url'],
-        'group_id'           => $r['group_id'] !== null ? (int)$r['group_id'] : null,
-        'group_name'         => $r['group_name'],
-        'image_url'          => $r['image_url'],
-        'body'               => $r['body'],
-        'created_at'         => $r['created_at'],
-        'expires_at'         => $r['expires_at'],
-        'is_mine'            => (int)$r['creator_user_id'] === $uid,
-    ], $st->fetchAll(PDO::FETCH_ASSOC));
+    $st->execute();
+    $items = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $isMine = (int)$r['creator_user_id'] === $uid;
+        $gid = $r['group_id'] !== null ? (int)$r['group_id'] : null;
+        $targetIds = [];
+        if (!empty($r['target_user_ids'])) {
+            $dec = json_decode((string)$r['target_user_ids'], true);
+            if (is_array($dec)) $targetIds = array_map('intval', $dec);
+        }
+        $visible = $isMine;
+        if (!$visible) {
+            if (!empty($targetIds)) {
+                $visible = in_array($uid, $targetIds, true);
+            } elseif ($gid !== null) {
+                $visible = in_array($gid, $gids, true);
+            } else {
+                $visible = true;       // 全体 broadcast
+            }
+        }
+        if (!$visible) continue;
+        // 宛先 ラベル 用 に target user 名 を 引く (重い 場合 は 後日 join)
+        $targetNames = [];
+        if (!empty($targetIds)) {
+            $place = implode(',', array_fill(0, count($targetIds), '?'));
+            $stN = $pdo->prepare("SELECT display_name FROM users WHERE id IN ($place) ORDER BY display_name");
+            $stN->execute($targetIds);
+            $targetNames = $stN->fetchAll(PDO::FETCH_COLUMN);
+        }
+        $items[] = [
+            'id'                 => (int)$r['id'],
+            'creator_user_id'    => (int)$r['creator_user_id'],
+            'creator_name'       => $r['creator_name'],
+            'creator_avatar_url' => $r['creator_avatar_url'],
+            'group_id'           => $gid,
+            'group_name'         => $r['group_name'],
+            'target_user_ids'    => $targetIds,
+            'target_user_names'  => $targetNames,
+            'image_url'          => $r['image_url'],
+            'body'               => $r['body'],
+            'created_at'         => $r['created_at'],
+            'expires_at'         => $r['expires_at'],
+            'is_mine'            => $isMine,
+        ];
+    }
     json_response(['items' => $items]);
 }
 
@@ -76,12 +105,33 @@ function ss_create(PDO $pdo, array $cfg): void {
         if (!$chk->fetchColumn()) throw new ApiException('bad_request', '指定のグループが見つかりません', 400);
         $groupId = $gid;
     }
+    // v742 #353 個人 (複数 可) 宛 を 受ける。 target_user_ids が 与えられたら 該当 user 限定。
+    //   group_id と target_user_ids は 排他 (同時 指定 は target_user_ids を 優先)。
+    $targetIdsJson = null;
+    if (isset($body['target_user_ids']) && is_array($body['target_user_ids'])) {
+        $ids = [];
+        foreach ($body['target_user_ids'] as $v) {
+            $i = (int)$v;
+            if ($i > 0 && $i !== (int)$u['id']) $ids[] = $i;
+        }
+        $ids = array_values(array_unique($ids));
+        if (!empty($ids)) {
+            $place = implode(',', array_fill(0, count($ids), '?'));
+            $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE kind='human' AND id IN ($place)");
+            $chk->execute($ids);
+            if ((int)$chk->fetchColumn() !== count($ids)) {
+                throw new ApiException('bad_request', '宛先ユーザーが見つかりません', 400);
+            }
+            $targetIdsJson = json_encode($ids);
+            $groupId = null;   // 個人 宛 が 優先
+        }
+    }
     $expiresIn = (int)($body['expires_in_min'] ?? 60);
     $expiresIn = max(5, min(1440, $expiresIn));  // 5 分..24 時間
     $ins = $pdo->prepare("INSERT INTO screen_shares
-        (creator_user_id, group_id, image_url, body, created_at, expires_at)
-        VALUES (?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? MINUTE))");
-    $ins->execute([(int)$u['id'], $groupId, $imageUrl, $text, $expiresIn]);
+        (creator_user_id, group_id, target_user_ids, image_url, body, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? MINUTE))");
+    $ins->execute([(int)$u['id'], $groupId, $targetIdsJson, $imageUrl, $text, $expiresIn]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
 }
 

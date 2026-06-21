@@ -43,6 +43,7 @@ function ft_list(PDO $pdo, array $cfg): void {
     $uid = (int)$u['id'];
     $sql = "SELECT f.id, f.sender_user_id, f.recipient_user_id, f.file_path, f.original_name,
                    f.file_size, f.mime_type, f.body, f.sent_at, f.first_downloaded_at, f.download_count,
+                   f.batch_id,
                    us.display_name AS sender_name,    us.avatar_url AS sender_avatar,
                    ur.display_name AS recipient_name, ur.avatar_url AS recipient_avatar
               FROM file_transfers f
@@ -50,7 +51,7 @@ function ft_list(PDO $pdo, array $cfg): void {
               JOIN users ur ON ur.id = f.recipient_user_id
              WHERE f.deleted_at IS NULL
                AND (f.sender_user_id = ? OR f.recipient_user_id = ?)
-          ORDER BY f.sent_at DESC LIMIT 200";
+          ORDER BY f.sent_at DESC LIMIT 400";
     $st = $pdo->prepare($sql);
     $st->execute([$uid, $uid]);
     $items = array_map(fn($r) => [
@@ -69,6 +70,7 @@ function ft_list(PDO $pdo, array $cfg): void {
         'sent_at'             => $r['sent_at'],
         'first_downloaded_at' => $r['first_downloaded_at'],
         'download_count'      => (int)$r['download_count'],
+        'batch_id'            => $r['batch_id'] !== null ? (int)$r['batch_id'] : null,
         'is_mine_sent'        => (int)$r['sender_user_id']    === $uid,
         'is_mine_recv'        => (int)$r['recipient_user_id'] === $uid,
     ], $st->fetchAll(PDO::FETCH_ASSOC));
@@ -77,12 +79,32 @@ function ft_list(PDO $pdo, array $cfg): void {
 
 function ft_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $recipient = (int)($_POST['recipient_user_id'] ?? 0);
-    if ($recipient <= 0) throw new ApiException('bad_request', 'recipient_user_id 必須', 400);
-    if ($recipient === (int)$u['id']) throw new ApiException('bad_request', '自分には送れません', 400);
-    $chk = $pdo->prepare("SELECT 1 FROM users WHERE id=? AND kind='human'");
-    $chk->execute([$recipient]);
-    if (!$chk->fetchColumn()) throw new ApiException('bad_request', '宛先ユーザーが見つかりません', 400);
+    // v742 #353 複数 受信者 対応。 recipient_user_ids[] が 来たら 配列、 旧 互換 で
+    //   recipient_user_id 単数 も 受ける。 1 ファイルアップロード = 同じ batch_id で
+    //   N 行 INSERT (= 受信者ごと に download 状況 を 個別 に 持つ)。
+    $recipientIds = [];
+    if (isset($_POST['recipient_user_ids']) && is_array($_POST['recipient_user_ids'])) {
+        foreach ($_POST['recipient_user_ids'] as $rid) {
+            $r = (int)$rid;
+            if ($r > 0) $recipientIds[] = $r;
+        }
+    } elseif (isset($_POST['recipient_user_id'])) {
+        $r = (int)$_POST['recipient_user_id'];
+        if ($r > 0) $recipientIds[] = $r;
+    }
+    $recipientIds = array_values(array_unique($recipientIds));
+    if (empty($recipientIds)) throw new ApiException('bad_request', 'recipient_user_id(s) 必須', 400);
+    $meId = (int)$u['id'];
+    foreach ($recipientIds as $r) {
+        if ($r === $meId) throw new ApiException('bad_request', '自分には送れません', 400);
+    }
+    // 全員 humans であることを 確認
+    $place = implode(',', array_fill(0, count($recipientIds), '?'));
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE kind='human' AND id IN ($place)");
+    $chk->execute($recipientIds);
+    if ((int)$chk->fetchColumn() !== count($recipientIds)) {
+        throw new ApiException('bad_request', '宛先ユーザーが見つかりません', 400);
+    }
     $body = isset($_POST['body']) ? mb_substr(trim((string)$_POST['body']), 0, 2000) : null;
     if ($body === '') $body = null;
 
@@ -163,20 +185,33 @@ function ft_create(PDO $pdo, array $cfg): void {
         $size    = (int)$saved['size'];
     }
 
+    // batch_id = 「同じ送信アクション」 を 識別 する 値。 一括 INSERT 後 に 一番 古い id
+    //   を batch_id として 全行 に書き戻す (= UI 側で 同一 batch をまとめて 表示)。
     $ins = $pdo->prepare("INSERT INTO file_transfers
         (sender_user_id, recipient_user_id, file_path, original_name, file_size, mime_type, body, sent_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-    $ins->execute([
-        (int)$u['id'], $recipient,
-        $relPath, $originalName, $size, $mime, $body
-    ]);
-    $id = (int)$pdo->lastInsertId();
-    try {
-        notify_safely($pdo, $cfg, $recipient, 'admin_notice',
-            "📦 {$u['display_name']} さんから ファイル 「{$originalName}」 が届きました",
-            'file_transfer', $id);
-    } catch (Throwable $_) {}
-    json_response(['id' => $id]);
+    $insertedIds = [];
+    foreach ($recipientIds as $rid) {
+        $ins->execute([$meId, $rid, $relPath, $originalName, $size, $mime, $body]);
+        $insertedIds[] = (int)$pdo->lastInsertId();
+    }
+    $batchId = $insertedIds[0];
+    if (count($insertedIds) > 1) {
+        $upPlace = implode(',', array_fill(0, count($insertedIds), '?'));
+        $up = $pdo->prepare("UPDATE file_transfers SET batch_id=? WHERE id IN ($upPlace)");
+        $up->execute(array_merge([$batchId], $insertedIds));
+    } else {
+        $pdo->prepare("UPDATE file_transfers SET batch_id=? WHERE id=?")->execute([$batchId, $batchId]);
+    }
+    foreach ($insertedIds as $i => $rowId) {
+        $rid = $recipientIds[$i];
+        try {
+            notify_safely($pdo, $cfg, $rid, 'admin_notice',
+                "📦 {$u['display_name']} さんから ファイル 「{$originalName}」 が届きました",
+                'file_transfer', $rowId);
+        } catch (Throwable $_) {}
+    }
+    json_response(['ids' => $insertedIds, 'batch_id' => $batchId, 'recipient_count' => count($insertedIds)]);
 }
 
 function ft_download(PDO $pdo, array $cfg, int $id): void {
