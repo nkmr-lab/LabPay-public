@@ -512,9 +512,13 @@ function renderRqHypothesis(rh) {
 //   experiments と results_summary の 各 文 から 「Author Year」 を 抽出 → 同じ key で 紐付け。
 function studyKey(s) {
   const str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');
-  // 先頭 から 最初 の 西暦 (1900-2099) まで を 研究名 と みなす
-  const m = str.match(/^[^()「」]*?(?:19|20)\d{2}/);
-  return m ? m[0].replace(/\s+/g, ' ').trim() : null;
+  // 西暦 (1900-2099) を 探して、 先頭 から 西暦 + 直後 の 閉じ括弧 まで を 研究名 と みなす。
+  //   著者名 に 「Smith, A. (1989)」 等 の パターン が ある ので 括弧 内 の 年 も 含める。
+  const m = str.match(/(?:19|20)\d{2}/);
+  if (!m) return null;
+  let end = m.index + m[0].length;
+  if (str[end] === ')' || str[end] === '）') end++;
+  return str.substring(0, end).replace(/\s+/g, ' ').trim();
 }
 function stripStudyKey(s, key) {
   let str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');

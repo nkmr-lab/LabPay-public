@@ -39,12 +39,17 @@ export async function renderPaperReview() {
         </select>
       </label>
       <label class="field">
+        <span class="lbl">🤖 モデル (高いほど高品質)</span>
+        <select id="pr-model"><option value="">読み込み中…</option></select>
+        <div class="hint-sm" id="pr-model-info" style="font-size:11px; margin-top:4px"></div>
+      </label>
+      <label class="field">
         <span class="lbl">論文 PDF (最大 30 MB、 通常 〜10 ページ程度)</span>
         <input type="file" id="pr-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="pr-go" class="primary" disabled>📄 査読開始 (10pt)</button>
+        <button id="pr-go" class="primary" disabled>📄 査読開始</button>
       </div>
     </div>
     <div id="pr-result"></div>
@@ -75,6 +80,23 @@ export async function renderPaperReview() {
 async function loadSettings() {
   try { cachedSettings = await get('/api/ai/paper_review/settings'); }
   catch (e) { document.getElementById('pr-settings-wrap').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`; return; }
+  // v774 #396 モデル ドロップダウン を 埋める
+  const sel = document.getElementById('pr-model');
+  const info = document.getElementById('pr-model-info');
+  const btn = document.getElementById('pr-go');
+  if (sel && cachedSettings.models) {
+    const def = cachedSettings.default_model || 'gpt-4.1';
+    sel.innerHTML = Object.entries(cachedSettings.models).map(([m, pt]) =>
+      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`).join('');
+    const refresh = () => {
+      const m = sel.value;
+      const pt = cachedSettings.models[m] || 10;
+      if (info) info.textContent = `選択中: ${m} ・ 1 回 ${pt}pt`;
+      if (btn) btn.textContent = `📄 査読開始 (${pt}pt)`;
+    };
+    sel.addEventListener('change', refresh);
+    refresh();
+  }
   const wrap = document.getElementById('pr-settings-wrap');
   const cur = cachedSettings.custom_prompt || '';
   wrap.innerHTML = `
@@ -152,6 +174,8 @@ async function go() {
     fd.append('file', f);
     fd.append('target_venue', venue);
     fd.append('strictness', strictness);
+    const model = document.getElementById('pr-model')?.value || 'gpt-4.1';
+    fd.append('model', model);
     const resp = await fetch('/api/ai/paper_review', {
       method: 'POST', body: fd, credentials: 'same-origin',
       headers: { 'X-Requested-With': 'labpay' },

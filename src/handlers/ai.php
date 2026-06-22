@@ -214,7 +214,7 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
 
     // 同期で OpenAI を呼ぶ (最大 REWRITER_MAX_ITER 回 リトライ)
     $apiKey = (string)$cfg['openai']['api_key'];
-    $model  = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+    $model  = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
     try {
         $modeLabel = [
             'chars_no_space'   => 'スペースなし' . $target . '文字',
@@ -240,7 +240,7 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
                     ['role' => 'user',   'content' => $userPrompt],
                 ],
                 'temperature' => 0.4,
-                'max_tokens' => 2000,
+                'max_completion_tokens' => 2000,
             ], JSON_UNESCAPED_UNICODE);
             $resp = ai_openai_call($payload, $apiKey);
             $rewritten = trim((string)($resp['choices'][0]['message']['content'] ?? ''));
@@ -312,13 +312,19 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
             ['role' => 'user',   'content' => $text],
         ],
         'temperature' => 0.3,
-        'max_tokens' => 2500,
+        'max_completion_tokens' => 2500,
     ], JSON_UNESCAPED_UNICODE);
     $r = ai_openai_call($payload, $apiKey);
     return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
-const RESUME_CHECK_COST = 5;
+const RESUME_CHECK_COST = 5;        // 旧 互換 (gpt-4.1 想定 の 標準 料金)。
+const RESUME_CHECK_MODELS = [       // v774 #396 モデル 別 価格 (paper_review と 同じ 軸)
+    'gpt-4.1'    => 5,
+    'gpt-5-mini' => 8,
+    'gpt-5'      => 15,
+    'o1'         => 25,
+];
 // テキスト入力時の上限。PDF 入力時は OpenAI Files 経由なので制限なし (10 MB 上限のみ)。
 const RESUME_CHECK_MAX_CHARS = 8000;
 
@@ -332,7 +338,13 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['cost_points'] = (int)$r['cost_points']; }
     unset($r);
-    json_response(['items' => $rows, 'cost_points' => RESUME_CHECK_COST, 'max_chars' => RESUME_CHECK_MAX_CHARS]);
+    json_response([
+        'items'         => $rows,
+        'cost_points'   => RESUME_CHECK_COST,           // 旧 互換
+        'max_chars'     => RESUME_CHECK_MAX_CHARS,
+        'models'        => RESUME_CHECK_MODELS,         // v774 #396
+        'default_model' => 'gpt-4.1',
+    ]);
 }
 
 function ai_resume_check_get(PDO $pdo, array $cfg, int $id): void {
@@ -391,9 +403,16 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         }
     }
 
+    // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
+    $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-4.1') : ($body['model'] ?? 'gpt-4.1')));
+    if (!isset(RESUME_CHECK_MODELS[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $checkCost = (int)RESUME_CHECK_MODELS[$reqModel];
+
     $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < RESUME_CHECK_COST) {
-        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、現在 %d pt)', RESUME_CHECK_COST, $bal), 400);
+    if ($bal < $checkCost) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、現在 %d pt)', $checkCost, $bal), 400);
     }
 
     // PDF なら OpenAI Files API に 先に アップロード (同期で)。 課金は その後
@@ -404,34 +423,35 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
 
     // pending レコード + 課金 → 非同期で OpenAI chat 呼出
     $checkId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $fileId, $pdfName, &$checkId) {
+    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $fileId, $pdfName, $checkCost, &$checkId) {
         // input_text 列に PDF の場合は 「[PDF: filename]」 を保存
         $inputForDb = $fileId !== null ? "[PDF: " . ($pdfName ?? 'manuscript.pdf') . "]" : $text;
         $pdo->prepare("INSERT INTO resume_checks (user_id, title, input_text, cost_points, status) VALUES (?,?,?,?,'pending')")
-            ->execute([$uid, $title, $inputForDb, RESUME_CHECK_COST]);
+            ->execute([$uid, $title, $inputForDb, $checkCost]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, RESUME_CHECK_COST, 'resume_check', 'resume_check', $checkId, '原稿チェック 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $checkCost, 'resume_check', 'resume_check', $checkId, '原稿チェック 依頼料');
     });
 
     json_response_no_exit([
         'ok'          => true,
         'id'          => $checkId,
         'status'      => 'pending',
-        'cost_points' => RESUME_CHECK_COST,
-        'message'     => '原稿チェックを受付けました。30秒〜2分で結果が出ます。',
+        'cost_points' => $checkCost,
+        'model'       => $reqModel,
+        'message'     => '原稿チェック (' . $reqModel . ') を 受付けました。 30秒〜2分 で 結果 が 出ます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
     @set_time_limit(240);
 
-    ai_resume_check_run_background($pdo, $cfg, $checkId, $text, $fileId);
+    ai_resume_check_run_background($pdo, $cfg, $checkId, $text, $fileId, $reqModel);
 }
 
-function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null): void {
+function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null, string $reqModel = 'gpt-4.1'): void {
     try {
         $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
-        $model  = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+        $model  = $reqModel;     // v774 #396 ユーザ 指定 モデル
         $sys = <<<PROMPT
 あなたは学術/業務の短い原稿 (1-2 ページ相当、レジュメ/概要/申請書など) のチェック担当者です。
 論文ほど厳密にはチェックしません。建設的に、著者が次の改稿ですぐ直せる粒度で指摘してください。
@@ -471,13 +491,14 @@ PROMPT;
                 ['role' => 'user', 'content' => "以下の原稿をチェックして、JSON で返してください。\n\n----- 原稿 -----\n" . $text . "\n----- /原稿 -----\n\n" . $userPromptText],
             ];
         }
-        $payload = json_encode([
+        $payloadArr = [
             'model' => $model,
             'messages' => $messages,
-            'temperature' => 0.3,
             'response_format' => ['type' => 'json_object'],
-            'max_tokens' => 3000,
-        ], JSON_UNESCAPED_UNICODE);
+            'max_completion_tokens' => 3000,
+        ];
+        if (!preg_match('/^(gpt-5|o1|o3)/', $model)) $payloadArr['temperature'] = 0.3;
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
         $ch = curl_init('https://api.openai.com/v1/chat/completions');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -517,7 +538,13 @@ PROMPT;
     }
 }
 
-const PAPER_REVIEW_COST = 10;
+const PAPER_REVIEW_COST = 10;       // 旧 互換 (gpt-4.1 想定 の 標準 料金)。 v774 #396 モデル別 価格 へ 移行。
+const PAPER_REVIEW_MODELS = [       // v774 #396 モデル 別 価格 (paper_translate と 同じ 軸)
+    'gpt-4.1'    => 10,
+    'gpt-5-mini' => 15,
+    'gpt-5'      => 30,
+    'o1'         => 50,
+];
 // v557 #211 拡張: 査読の評価軸を 明示。 貢献の妥当性 / 統計記述の漏れ / 論理の流れ / 章間の一気通貫性 を 徹底チェック。
 const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。 与えられた PDF の論文を 入念に読み、 章立てを意識して 日本語で要約し、 続けて指定された会議基準で 厳密な査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。
@@ -595,11 +622,13 @@ function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
         ], $stU->fetchAll(PDO::FETCH_ASSOC));
     }
     json_response([
-        'custom_prompt'   => $row['custom_prompt'] ?? '',
-        'default_prompt'  => PAPER_REVIEW_DEFAULT_PROMPT,
+        'custom_prompt'    => $row['custom_prompt'] ?? '',
+        'default_prompt'   => PAPER_REVIEW_DEFAULT_PROMPT,
         'share_target_ids' => $shareIds,
-        'share_targets'   => $shareUsers,
-        'cost_points'     => PAPER_REVIEW_COST,
+        'share_targets'    => $shareUsers,
+        'cost_points'      => PAPER_REVIEW_COST,        // 旧 互換
+        'models'           => PAPER_REVIEW_MODELS,      // v774 #396
+        'default_model'    => 'gpt-4.1',
     ]);
 }
 
@@ -708,10 +737,17 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     }
     $shareIds = array_filter($shareIds, fn($x) => $x > 0 && $x !== $uid);
 
-    // v552 #211 課金 10pt (システム宛て)。 残高不足は 400
+    // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4.1'));
+    if (!isset(PAPER_REVIEW_MODELS[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $reviewCost = (int)PAPER_REVIEW_MODELS[$reqModel];
+
+    // 残高チェック (旧 PAPER_REVIEW_COST → 動的 $reviewCost)
     $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < PAPER_REVIEW_COST) {
-        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', PAPER_REVIEW_COST, $bal), 400);
+    if ($bal < $reviewCost) {
+        throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、 現在 %d pt)', $reviewCost, $bal), 400);
     }
 
     // v557 #211 非同期化: PDF を OpenAI に upload → record を pending で保存 +
@@ -761,9 +797,9 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "  }\n"
         . "}";
 
-    // Step 2: chat.completions に file 添付 (gpt-4o 系で対応)
-    $model = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
-    $payload = json_encode([
+    // v774 #396 #397 ユーザが 選んだ モデル を 使う。 推論モデル は temperature 非対応
+    $model = $reqModel;
+    $payloadArr = [
         'model' => $model,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
@@ -772,27 +808,30 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
                 ['type' => 'text', 'text' => $userPrompt],
             ]],
         ],
-        'temperature' => 0.4,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 4000,
-    ], JSON_UNESCAPED_UNICODE);
+        'max_completion_tokens' => 8000,
+    ];
+    if (!preg_match('/^(gpt-5|o1|o3)/', $model)) {
+        $payloadArr['temperature'] = 0.3;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
     // v557 #211 非同期: pending レコード作成 + 課金 → 即 share_token 返却 →
     //   fastcgi_finish_request() でクライアント切断 → 裏で OpenAI chat 呼出 → 結果更新
     $token = bin2hex(random_bytes(16));
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $sys, &$reviewId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $sys, $reviewCost, &$reviewId) {
         $pdo->prepare("INSERT INTO paper_reviews
             (user_id, share_token, file_id, pdf_name, target_venue, strictness, prompt_used,
              sections_json, review_json, cost_points, status)
             VALUES (?,?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([
                 $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness, $sys,
-                '[]', 'null', PAPER_REVIEW_COST,
+                '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, PAPER_REVIEW_COST, 'paper_review', 'paper_review', $reviewId, '論文査読 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $reviewCost, 'paper_review', 'paper_review', $reviewId, '論文査読 依頼料');
     });
 
     // 早期レスポンス
@@ -803,9 +842,10 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         'venue'        => $venue,
         'strictness'   => $strictness,
         'status'       => 'pending',
-        'cost_points'  => PAPER_REVIEW_COST,
+        'cost_points'  => $reviewCost,
+        'model'        => $reqModel,
         'shared_count' => count($shareIds),
-        'message'      => '依頼を受け付けました。 OpenAI が査読中… (2-5 分)。 結果ページを開いておくか、 後で /#/paper-review/r/' . $token . ' を確認してください。',
+        'message'      => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が査読中… (2-5 分)。 結果ページを開いておくか、 後で /#/paper-review/r/' . $token . ' を確認してください。',
     ]);
     // クライアント切断 → バックグラウンド継続
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
@@ -914,8 +954,9 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 
 # 最重要 ルール (これ を 守れ ない 出力 は ダメ)
 
-**detailed_sections の 各 節 の body は 必ず 1200 字 以上、 2000 字 を 目標 に 書く こと。**
-**1000 字 未満 は 失格 と 見な す。 短く 終わらせる の では なく、 論文 を 丁寧 に 説明 する こと。**
+**detailed_sections の 各 節 の body は 600-1000 字 を 目標。 500 字 未満 は 短すぎ、
+350 字 で 終わらせる の は ダメ。 短すぎる の も 冗長 も 避け、 「論文 の 章 を 読んだ 感」
+が しっかり 残る 適度 な 厚み で 書く。**
 
 単純な 機械翻訳 では なく、 「研究論文 として 何が 書かれて いるか」 を 強く 意識して、
 以下 の 順番 で 構造化 した 詳細な 和訳要約 を 作って ください。 全体 で 6000-12000 字 程度 を 目指す。
@@ -934,8 +975,7 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
    論文 内 で 章 タイトル (Abstract / Introduction / Background / Related Work / Theory /
    Method / Experiment N / Results / Discussion / Conclusion 等) が 明示 されて いる なら、
    その タイトル を heading に そのまま 採用 (日本語訳 + 必要 なら 原題 併記)。 章 が 細かく
-   分かれて いる なら 5-9 個 で 構成、 各節 1200-2000 字 以上 で 3-5 段落 に 分けて 丁寧 に
-   要約 する。
+   分かれて いる なら 5-9 個 で 構成、 各節 600-1000 字 で 2-3 段落 に 分けて 丁寧 に 要約 する。
    ・ 1 章 を 1 段落 で 雑 に 終わらせ ない (= 元 論文 が 1 章 で 説明 して いる 量 を 1 段落
      に 圧縮 する のは ダメ)
    ・ 著者 の 主張 / 数値 / 用語 / 図表 へ の 言及 / 引用文献 名 等 を 残す
@@ -965,7 +1005,7 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 
 論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
 - heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
-- body: 節 本文 の 和訳要約 (**1200-2000 字 を 死守、 1000 字 未満 は 失格、 必ず 3-5 段落 に 分けて 構造化**、
+- body: 節 本文 の 和訳要約 (**600-1000 字、 必ず 2-3 段落 に 分けて 構造化**、
   数値 / 用語 / 手法名 / 著者 主張 / 実験 設定 / 結果 数字 を 残す。 1 段落 300-500 字 を
   目安、 各章 を 「研究 ノート を 取った 上 で 自分 の 言葉 で 丁寧 に 説明」 した レベル に。
   元 論文 で 1 章 が 説明 して いる 内容 を 1 段落 に 圧縮 するな (= 章 が 厚い なら 要約 も
@@ -1282,7 +1322,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // v755 #371 ユーザ が 選んだ モデル を 使う (config の default は 無視)。
     // v757 #376 ハルシネーション 防止 の self-check を 明示。 temperature を 下げる。
     $model = $reqModel;
-    $payload = json_encode([
+    // v774 #397 gpt-5 / o1 等 の 推論モデル は temperature を 受け付けない。
+    $payloadArr = [
         'model' => $model,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
@@ -1291,10 +1332,13 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                 ['type' => 'text', 'text' => $userPrompt . "\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。"],
             ]],
         ],
-        'temperature' => 0.2,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 12000,
-    ], JSON_UNESCAPED_UNICODE);
+        'max_completion_tokens' => 12000,
+    ];
+    if (!preg_match('/^(gpt-5|o1|o3)/', $model)) {
+        $payloadArr['temperature'] = 0.2;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
@@ -1360,7 +1404,8 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
     $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
 
-    $payload = json_encode([
+    // v774 #397 推論モデル は temperature 非対応
+    $payloadArr = [
         'model' => $reqModel,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
@@ -1369,10 +1414,13 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
                 ['type' => 'text', 'text' => $userPrompt],
             ]],
         ],
-        'temperature' => 0.2,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 12000,
-    ], JSON_UNESCAPED_UNICODE);
+        'max_completion_tokens' => 12000,
+    ];
+    if (!preg_match('/^(gpt-5|o1|o3)/', $reqModel)) {
+        $payloadArr['temperature'] = 0.2;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
     db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
         $pdo->prepare("UPDATE paper_translates SET status='pending', model=?, cost_points=cost_points+? WHERE id=?")
@@ -1504,13 +1552,13 @@ function ai_short_title(PDO $pdo, array $cfg): void {
     $sys = "短い 楽しい 日本語 タイトル を 1 つだけ 返してください。 5-15 文字。 絵文字 1 個 まで 添えても OK。 余計な 前置き や 解説は 不要、 タイトル 1 行のみ。 引用符 (「」 等) で 囲まない。";
 
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
         'messages' => [
             ['role' => 'system', 'content' => $sys],
             ['role' => 'user',   'content' => $context],
         ],
         'temperature' => 0.9,
-        'max_tokens' => 30,
+        'max_completion_tokens' => 30,
     ], JSON_UNESCAPED_UNICODE);
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
@@ -1593,7 +1641,7 @@ SYS;
     $messages[] = ['role' => 'user', 'content' => $msg];
 
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
         'messages' => $messages,
         'temperature' => 0.3,
     ], JSON_UNESCAPED_UNICODE);
@@ -1689,7 +1737,7 @@ SYS;
     $messages[] = ['role' => 'user', 'content' => $msg];
 
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
         'messages' => $messages,
         'temperature' => 0.3,
     ], JSON_UNESCAPED_UNICODE);
@@ -1861,7 +1909,7 @@ function ai_expand_schedule(PDO $pdo, array $cfg): void {
 SYS;
 
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
         'messages' => [
             ['role' => 'system', 'content' => $system],
             ['role' => 'user',   'content' => $text],
@@ -2007,7 +2055,7 @@ SYS;
     }
 
     $payload = json_encode([
-        'model' => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
+        'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
         'messages' => [
             ['role' => 'system', 'content' => $sysPrompt],
             ['role' => 'user', 'content' => [
