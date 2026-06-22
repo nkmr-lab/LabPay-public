@@ -21,14 +21,16 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''         && $method === 'GET')    { places_detail($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'DELETE') { places_delete($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'PATCH')  { places_edit($pdo, $cfg, $id);   return; }
-        if ($next === 'comments' && $method === 'POST')   { places_comment_create($pdo, $cfg, $id); return; }
-        if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
-            places_comment_delete($pdo, $cfg, $id, (int)$seg[3]);
-            return;
-        }
-        // v752 #370 画像 を 90° / 180° / 270° 回転 (server 側で 上書き保存、 thumb も 連動)
+        // v761 #380 rotate-image を 先 に マッチ させる (旧版 では POST /comments が
+        //   先 に places_comment_create に 食われて 「本文 / 画像 / 評価 のどれか は 必要」
+        //   エラー が 返って いた bug)。
         if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && ($seg[4] ?? '') === 'rotate-image' && $method === 'POST') {
             places_comment_rotate_image($pdo, $cfg, $id, (int)$seg[3]);
+            return;
+        }
+        if ($next === 'comments' && !isset($seg[3]) && $method === 'POST') { places_comment_create($pdo, $cfg, $id); return; }
+        if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
+            places_comment_delete($pdo, $cfg, $id, (int)$seg[3]);
             return;
         }
         if ($next === 'rotate-image' && $method === 'POST') {

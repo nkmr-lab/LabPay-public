@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v761', d: '2026-06-22', s: '🐛 たべある記 口コミ画像 の 回転 で「本文 / 画像 / 評価 のどれか は 必要」 エラー で 失敗 してた bug 修正 (#372)。 ルーティング 順序 で POST /comments の 一般 matcher が rotate-image を 先 に 食って comment_create に 流れて しまって いた。 rotate-image を 先 に マッチ + comment_create に !isset(seg[3]) ガード を 追加' },
   { v: 'v760', d: '2026-06-22', s: '🖼 論文要約 で 図表 が ページ全体 になっていた のを 実際に 1/3 切り出す ように 修正 (#379)。 旧版 (object-fit: cover) は 縦長 ページ で 高さ 制約 が 効きづらく ほぼ 全 ページ が 見えて しまって いた。 v760 では background-image で 3x ズーム + position (top/middle/bottom) で 200×220 の box に ページ の 該当 部分 だけ 見える ように。 タップ で 全 ページ lightbox に。 ※ 既存 row の 押さえておくべき 参考文献 の 原題 は、 再 処理 (🔁 やりなおす) しないと 反映 されません' },
   { v: 'v759', d: '2026-06-22', s: '🐛📑 論文要約 細fix + 各章 もっと厚く (#378)。 (1) 図表 が 表示 されない bug 修正: pdftoppm が 総ページ数の桁 に 合わせて 0 padding する (例: 32 ページ なら page-01.jpg) のに client が padding なしで URL を 組み立てて 404 だった → pagesCount から digits を 計算 して 揃える。 (2) 各章 要約 を 500-900 字 → 1000-1600 字 以上、 3 段落以上 を 必須 に。 「元論文を読まなくても 主要な流れが 把握できる レベル」 と GPT に 明示、 max_tokens 8000 → 12000。 (3) 押さえておくべき 参考文献 に 原題 (title_orig) を追加、 和訳 (title_ja) と 分けて 表示' },
   { v: 'v758', d: '2026-06-22', s: '🔁 論文要約 で「やりなおす」 + URL を /#/paper-summary に 統一 (#377)。 (1) PDF を サーバ に 保存 (uploads/paper_pdfs/<token>/original.pdf)、 model も DB に 記録、 owner 限定の「🔁 やりなおす」 ボタン で 同じ PDF を 再 uploadして 再処理 (再課金 同モデル価格)。 (2) 一覧・履歴 から の リンク を 全部 /#/paper-summary/r/TOKEN に 統一 (旧 /#/paper-translate/r/ も routing 互換)。 (3) ledger の 摘要 を 「論文和訳要約」 → 「論文要約」 に。 migration 153 で pdf_path / model カラム 追加' },
