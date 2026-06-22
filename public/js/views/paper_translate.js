@@ -394,12 +394,12 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v759 #379 background-image で ページ画像 を 3x zoom + position で 実際 に 1/3 だけ 切り出し。
-  //   旧 object-fit:cover では 縦長 ページ で ほぼ 全体 表示 になって crop に なって いなかった。
-  //   サイズ: 200x220 の box に 横 600 (= 3x) で 画像 を 入れる → 200/600 = 33% だけ 見える。
-  const wrap = 200;       // box 幅
-  const height = 220;     // box 高さ
-  const scale = 3;        // 横方向 ズーム 倍率
+  // v765 #383 crop 領域 を 1/3 → 約半分 に 緩める。 GPT の page_region が 微妙 でも 図 が
+  //   入る確率 を 上げる。 240×280 box に 横 480 (= 2x) → 縦 約 620、 280/620 = 約 45%。
+  //   旧版 (3x) では 33% しか 見えず、 図 が 微妙 に 外れる ケース が 多かった。
+  const wrap = 240;       // box 幅
+  const height = 280;     // box 高さ
+  const scale = 2;        // 横方向 ズーム 倍率
   const bgSize = `${wrap * scale}px auto`;
   const bgPos = (() => {
     switch (region) {
@@ -495,7 +495,7 @@ function renderRqHypothesis(rh) {
     const ans = (typeof item === 'object' && item?.answer) ? String(item.answer) : '';
     return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px">
       <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(label)}</div>
-      ${ans ? `<div style="font-size:13px; margin-top:4px"><b>✅ 結果:</b> ${escapeHtml(ans)}</div>` : ''}
+      ${ans ? `<div style="font-size:13px; margin-top:4px"><b>💡 示唆:</b> ${escapeHtml(ans)}</div>` : ''}
     </div>`;
   }).join('');
   const hyHtml = hys.map((item, i) => {
@@ -504,12 +504,12 @@ function renderRqHypothesis(rh) {
     const res = (typeof item === 'object' && item?.result) ? String(item.result) : '';
     return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px">
       <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(label)}</div>
-      ${res ? `<div style="font-size:13px; margin-top:4px"><b>📊 結果:</b> ${escapeHtml(res)}</div>` : ''}
+      ${res ? `<div style="font-size:13px; margin-top:4px"><b>💡 示唆:</b> ${escapeHtml(res)}</div>` : ''}
     </div>`;
   }).join('');
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説と結果</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説と示唆</div>
       ${rqHtml}
       ${hyHtml}
     </div>`;

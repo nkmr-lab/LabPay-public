@@ -922,7 +922,8 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 
 1. summary_one_paragraph: 1 段落 (300-500 字) の 「まず これ だけ 読めば 概要 が 分かる」 全体要約
 2. rq_hypothesis: 著者 が 立てた リサーチクエスチョン (RQ) と 仮説、 そして それぞれ に対して
-   論文 の 結果 が どうだったか (= 答え / 支持 / 棄却 / 部分支持) も 必ず 整理
+   論文 全体 から 読み取れる 「示唆」 (= こう言える / こう解釈できる / 部分的に こうだ など) を
+   必ず 整理。 「結果」 と 断定 せず、 論文 が 示唆 する 内容 として 書く こと
 3. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
 4. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
    Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 各節 1000-1600 字 以上 で
@@ -985,12 +986,12 @@ PDF に 書かれて いない 数値 や 主張 を 補完 しない。
   "summary_one_paragraph": "1 段落 (300-500 字) の 全体 サマリ",
   "rq_hypothesis": {
     "research_questions": [
-      { "rq": "RQ1: 質問 文",
-        "answer": "論文 で の 答え (例: 「平均反応時間 が X ms 短縮 された」 等、 結果 を 具体的 に)" }
+      { "rq": "RQ: 質問 文 (RQ が 複数 ある場合 は 「RQ1:」「RQ2:」)",
+        "answer": "論文 から 読み取れる 示唆 (例: 「平均反応時間 が X ms 短縮 された ことから、 …と 言える」 等、 断定 せず 示唆 として 書く)" }
     ],
     "hypotheses": [
-      { "hypothesis": "H1: 仮説 文",
-        "result":     "結果: 支持 / 棄却 / 部分支持 + 具体的 な 根拠 (数値 / 効果量 / p 値)" }
+      { "hypothesis": "H: 仮説 文 (仮説 が 複数 ある場合 は 「H1:」「H2:」)",
+        "result":     "示唆: 支持 / 棄却 / 部分支持 + 具体的 な 根拠 (数値 / 効果量 / p 値)、 論文 が 何を 示唆 して いるか の 視点 で 書く" }
     ]
   },
   "contributions": ["著者 が 主張 する 貢献 1", "貢献 2"],
