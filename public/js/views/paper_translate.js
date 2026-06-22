@@ -305,8 +305,24 @@ function paintResult(d, token) {
 
     ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
 
-    ${renderListSection('🔬 行った実験', r.experiments)}
-    ${renderListSection('📊 主要な結果', r.results_summary)}
+    ${(() => {
+      // v771 #391 「(引用)」 prefix で 自前 vs 引用 を 自動 振り分け。 自前 が ない なら
+      //   「この論文の実験」 セクション を 出さ ず 「引用された関連実験」 だけ 表示。
+      const exps = Array.isArray(r.experiments) ? r.experiments : [];
+      const ress = Array.isArray(r.results_summary) ? r.results_summary : [];
+      const isCited = s => /^\s*\(?引用\)?\s*[:：]?/.test(String(s));
+      const own = exps.filter(s => !isCited(s));
+      const cited = exps.filter(isCited);
+      const ownR = ress.filter(s => !isCited(s));
+      const citedR = ress.filter(isCited);
+      const strip = s => String(s).replace(/^\s*\(?引用\)?\s*[:：]?\s*/, '');
+      return [
+        renderListSection('🔬 この論文で行った実験', own),
+        renderListSection('📊 この論文の結果', ownR),
+        renderListSection('📚 引用された関連実験', cited.map(strip)),
+        renderListSection('📈 引用研究の主な結果', citedR.map(strip)),
+      ].join('');
+    })()}
 
     ${renderListSection('🚀 今後の課題', r.future_work)}
 
