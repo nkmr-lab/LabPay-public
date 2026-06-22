@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v754', d: '2026-06-22', s: '🔄📑 たべある記 画像 回転 ボタン を lightbox 内 に 移動 + apps 一覧 タイトル 修正 (#370 続き)。 (1) 旧 v752 で 入った サムネ 上 の 「🔄」 ボタン を 廃止、 画像 を タップ で lightbox 拡大 → lightbox 右上 の 「🔄 回転」 ボタン で 90° 回転。 起案者 / 投稿者 / admin のみ ボタン が 出る。 (2) アプリ一覧 の 論文和訳要約 タイトル を 「(落合メソッド)」 削除 し 単に 「📑 論文和訳要約」 に' },
   { v: 'v753', d: '2026-06-22', s: '📑🐛 論文 和訳要約 構造 再 修正 + たべある記 詳細 で エラー bug fix。 (1) 和訳要約 を「全体要約 → RQ・仮説 + 結果 → 主張する貢献 → 章立て要約 (図表 inline) → 今後の課題 → 落合メソッド」 順 に 再編成。 RQ・仮説 は それぞれ「❓ RQ / ✅ 結果」「💡 仮説 / 📊 結果」 のペアで表示 (旧 schema の 文字列配列 も 互換 fallback)。 (2) v752 で 入った たべある記 詳細ページ の「Cannot access me before initialization」 TDZ bug を 修正 (me の 宣言 を hero 部分 の 前 に 移動)' },
   { v: 'v752', d: '2026-06-22', s: '🔄 たべある記 画像 を 右下 ボタン で 90° 回転できる ように (#370)。 メイン写真 (hero、 起案者 / admin) と 口コミ画像 (投稿者 / admin) に「🔄」 ボタン。 サーバ側 GD imagerotate で 同じ ファイルパス に 上書き保存 (thumb.jpg も 連動)、 client は ?v=ts で cache bust して 即 再描画。 POST /api/places/:id/rotate-image と POST /api/places/:id/comments/:cid/rotate-image' },
   { v: 'v751', d: '2026-06-22', s: '🐛📷 たべある記 修正 2 件 (#368 #369)。 (1) 口コミの写真サムネを 一貫した 120x120 の 正方形 (object-fit: cover) に。 旧版は max-width/max-height だけだったので 縦長 / 横長 が混じって ガタガタ だった。 lightbox で 元画像 表示 は そのまま。 (2) tabelog URL インポートで lat/lng が 取れない 不具合を 修正。 原因は html_entity_decode が tabelog の生 JSON-LD を 壊して JSON パース 失敗 (例: つけめんTETSU 三鷹店) → raw decode を 先に 試して、 失敗 した 時だけ entity-decode を fallback' },

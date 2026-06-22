@@ -90,7 +90,7 @@ export const APPS = [
   // v550 #206 論文査読
   { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文 査読',      desc: '論文本文を貼ると章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
   // v748 #359 #360 #361 論文 和訳要約 (落合メソッド)
-  { id: 'paper-translate', cat: 'research', url: '#/paper-translate', title: '📑 論文 和訳要約 (落合メソッド)', desc: '論文 PDF を読ませて、 落合陽一メソッド の章立て (どんなもの / 先行研究比較 / 手法のキモ / 検証 / 議論 / 次に読む論文) + RQ・仮説・貢献・今後の課題・重要図表 を 3-5 分 (1500-2500 字) で 構造化して返します。 1 回 20pt', defaultVisible: true },
+  { id: 'paper-translate', cat: 'research', url: '#/paper-translate', title: '📑 論文和訳要約', desc: '論文 PDF を読ませて、 全体要約 → RQ・仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) → 今後の課題 → 落合メソッドまとめ、 という順番 で 構造化して 3-5 分 (1500-2500 字) で 返します。 1 回 20pt', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け 軽量版、 5pt)
   { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック (5pt)。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を一通り見ます。論文ほど厳密ではない軽量版。', defaultVisible: true },
   // v613 文字数・単語数リライター
