@@ -887,67 +887,73 @@ const PAPER_TRANSLATE_COST = 20;
 
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 あなた は 研究論文 を 日本語 で 要約 する アシスタント です。
-単純な 機械翻訳 では なく、 「研究論文 として 何が書かれているか」 を 強く 意識して、
-落合陽一メソッド の 章立て で、 3-5 分 で 読める 分量 (= 全体 1500-2500 文字 程度) の
-要約 を 作って ください。 短すぎ は ダメ、 ただし 冗長 も ダメ です。
+単純な 機械翻訳 では なく、 「研究論文 として 何が 書かれて いるか」 を 強く 意識して、
+論文 の 構造 に 沿った 詳細な 和訳要約 を 作り、 最後 に 落合陽一メソッド の 6 項目 で
+全体 を 重ね合わせて まとめて ください。 短すぎ は ダメ、 ただし 冗長 も ダメ。
+全体 で 3-5 分 (= 1500-2500 字 程度) で 読める 分量 が 理想 です。
 
-# 落合メソッド の 章立て (これに 加えて RQ / 仮説 / 貢献 / 今後の課題 / 図表 を 抽出)
+# 全体 構成
 
-1. どんなもの? (what)
-2. 先行研究 と 比べて どこが すごい? (vs_prior_work)
-3. 技術 や 手法 の キモ は どこに ある? (key_method)
-4. どうやって 有効 だ と 検証 した? (validation)
-5. 議論 は ある? (discussion)
-6. 次に 読む べき 論文 は? (next_papers)
+1. summary_one_paragraph: 1 段落 (300-500 字) の 「まず これ だけ 読めば 概要 が 分かる」 サマリ
+2. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
+   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 必要 に 応じて
+   figure_refs で 重要 な 図 や 表 を 引用 し、 ページ番号 と キャプション の 和訳 を 添える
+3. rq_hypothesis: 著者 が 立てた リサーチクエスチョン (RQ) と 仮説 を 整理
+4. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
+5. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 追加 した 方 が 良い 課題
+6. ochiai_method: 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめる
 
-# 加えて 研究論文 として 重要 な 以下 を 必ず 抽出
+# detailed_sections の 中身
 
-7. リサーチクエスチョン (RQ) と 仮説 (rq_hypothesis): 著者 が 立てた RQ と 仮説 を 整理
-8. 主張 する 貢献 (contributions): 著者 が 明示的 に 主張 する 貢献 を 箇条書き
-9. 今後 の 課題 で 取り組む こと (future_work): 著者 が 示した 今後 の 課題 を 中心 に、
-   読者 として 自然 に 追加 した 方 が 良い 課題 も 加えて 整理
-10. 重要 な 図 / 表 の キャプション と 解釈 (important_figures): Figure / Table 番号 と
-    キャプション の 日本語訳、 なぜ 重要 か (50-150 字) を 3-6 件
+論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
+- heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
+- body: 節 本文 の 和訳要約 (300-600 字、 数値 / 用語 を 残す)
+- figure_refs: その 節 で 言及 する 重要 な 図 / 表 (0-3 件)。 figure_refs の 形:
+  { "label": "Figure 2", "page": 3, "caption_ja": "図 の キャプション の 和訳",
+    "why_important": "この 図 で 何 が 分かる か (50-150 字)" }
+  page は PDF の 物理ページ番号 (1 始まり) を 正確 に 入れる こと。
 
 # トーン
 ・ 単なる 翻訳 では なく、 「研究論文 を 読んで 伝える」 立場 で 書く
 ・ 略語 は 初出 で フルスペル + 日本語訳 を 添える
-・ 各 セクション は 200-400 字 を 目安、 全体 1500-2500 字 (= 3-5 分 で 読める)
-・ 数値 (実験 N、 効果量、 p 値 等) は 落とさず 残す
+・ 数値 (実験 N、 効果量、 p 値) は 落とさず 残す
 ・ 引用 や 推測 は 「論文 では…」「ここ から 推測 する に…」 で 区別
 
-# 出力 JSON スキーマ (必ず 以下 の キーで 出す)
+# 出力 JSON スキーマ
 
 {
-  "title_ja": "論文タイトル の 日本語訳 (副題 も)",
+  "title_ja": "論文 タイトル の 日本語訳 (副題 も)",
   "title_orig": "原題",
   "authors": "著者名 (代表 3 名 まで + et al.)",
   "venue": "発表会議 / ジャーナル + 年",
-  "summary_one_paragraph": "全体 を 1 段落 (300-500 字) で まとめた 要約。 まず ここ から 読む 用",
-  "ochiai": {
-    "what":          "1. どんなもの? (200-400 字)",
-    "vs_prior_work": "2. 先行研究 と 比べて どこ が すごい? (200-400 字)",
-    "key_method":    "3. 技術 や 手法 の キモ (200-400 字)",
-    "validation":    "4. どうやって 有効 だ と 検証 した? (200-400 字)",
-    "discussion":    "5. 議論 は ある? (100-300 字)",
-    "next_papers":   ["6-A. 次に 読む べき 関連論文 (タイトル + 1 行 説明)", "6-B. …", "..."]
-  },
+  "summary_one_paragraph": "1 段落 (300-500 字) の 全体 サマリ",
+  "detailed_sections": [
+    {
+      "heading": "節 タイトル",
+      "body":    "節 本文 の 和訳要約 (300-600 字)",
+      "figure_refs": [
+        { "label": "Figure 2", "page": 3,
+          "caption_ja": "図 / 表 キャプション の 和訳",
+          "why_important": "なぜ 重要 か (50-150 字)" }
+      ]
+    }
+  ],
   "rq_hypothesis": {
     "research_questions": ["RQ1: …", "RQ2: …"],
     "hypotheses":         ["H1: …", "H2: …"]
   },
-  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2", "…"],
-  "future_work":   ["著者 が 示す 今後 の 課題 1", "課題 2", "(読者観点) 追加 課題 1", "…"],
-  "important_figures": [
-    {
-      "label":         "Figure 2 (システム 構成図) のように 番号 + 内容 を 軽く",
-      "caption_ja":    "図 / 表 の キャプション の 日本語訳",
-      "why_important": "なぜ この 図 / 表 が 重要 か (50-150 字)"
-    }
-  ]
+  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2"],
+  "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
+  "ochiai_method": {
+    "what":          "1. どんな もの? (200-400 字)",
+    "vs_prior_work": "2. 先行研究 と 比べて どこ が すごい? (200-400 字)",
+    "key_method":    "3. 技術 や 手法 の キモ (200-400 字)",
+    "validation":    "4. どうやって 有効 だ と 検証 した? (200-400 字)",
+    "discussion":    "5. 議論 は ある? (100-300 字)",
+    "next_papers":   ["6. 次に 読む べき 関連 論文 (タイトル + 1 行 説明)"]
+  }
 }
 
-英語 の 章 タイトル を そのまま 残す のでは なく、 必ず 落合メソッド の 章立て で 整理 してください。
 JSON 以外 の 前置き や 解説 は 不要。 JSON のみ を 返却。
 PROMPT;
 
@@ -967,6 +973,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
+                                pt.pages_count, pt.pages_dir,
                                 u.display_name AS author_name, u.avatar_url AS author_avatar
                            FROM paper_translates pt JOIN users u ON u.id = pt.user_id
                           WHERE pt.share_token = ?");
@@ -984,6 +991,8 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'error_msg'     => $row['error_msg'],
         'created_at'    => $row['created_at'],
         'finished_at'   => $row['finished_at'],
+        'pages_count'   => $row['pages_count'] !== null ? (int)$row['pages_count'] : null,
+        'pages_dir'     => $row['pages_dir'],
     ]);
 }
 
@@ -1016,8 +1025,28 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
+    // v750 #366 図表 抽出: PDF を ページ単位 JPEG に レンダリング (pdftoppm)。
+    //   client は figure_refs の page 番号 から この ページ画像 を 引いて 表示。
+    $token = bin2hex(random_bytes(16));
+    $publicDir = '/var/www/labpay/public';
+    $pagesRel = '/uploads/paper_pages/' . $token;
+    $pagesAbs = $publicDir . $pagesRel;
+    @mkdir($pagesAbs, 0775, true);
+    $pagesCount = 0;
+    try {
+        $cmd = sprintf('pdftoppm -jpeg -r 110 %s %s 2>&1',
+            escapeshellarg($tmpPdf),
+            escapeshellarg($pagesAbs . '/page')
+        );
+        exec($cmd, $out, $rc);
+        if ($rc === 0) {
+            foreach (glob($pagesAbs . '/page-*.jpg') ?: [] as $p) @chmod($p, 0644);
+            $pagesCount = count(glob($pagesAbs . '/page-*.jpg') ?: []);
+        }
+    } catch (Throwable $_) { /* ページレンダリング失敗 は 致命的ではない */ }
+
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
-    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 落合 メソッド で 日本語 要約 してください。 出力 JSON のみ。";
+    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。";
 
     $model = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
     $payload = json_encode([
@@ -1034,14 +1063,15 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         'max_tokens' => 6000,
     ], JSON_UNESCAPED_UNICODE);
 
-    $token = bin2hex(random_bytes(16));
+    // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status)
-            VALUES (?,?,?,?,?,?,?,'pending')")
-            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', PAPER_TRANSLATE_COST]);
+            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status, pages_count, pages_dir)
+            VALUES (?,?,?,?,?,?,?,'pending',?,?)")
+            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', PAPER_TRANSLATE_COST,
+                       $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null]);
         $rowId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, PAPER_TRANSLATE_COST, 'paper_review', 'paper_translate', $rowId, '論文和訳要約 依頼料');
     });
