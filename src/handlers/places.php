@@ -423,7 +423,14 @@ function places_import_url(PDO $pdo, array $cfg): void {
     // 1) JSON-LD
     if (preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
         foreach ($m[1] as $raw) {
-            $j = json_decode(html_entity_decode($raw, ENT_QUOTES|ENT_HTML5, 'UTF-8'), true);
+            // v751 #369 tabelog の Restaurant JSON-LD は HTML entity が ない 生 JSON。
+            //   html_entity_decode を 通すと 「&quot;」 が ない 文字列も 何故か 壊れる ケース
+            //   が ある (=「￥」 等 の 特殊 文字 が 影響) ので、 まず raw で decode を 試して
+            //   失敗 した 時だけ html_entity_decode を fallback。
+            $j = json_decode($raw, true);
+            if (!is_array($j)) {
+                $j = json_decode(html_entity_decode($raw, ENT_QUOTES|ENT_HTML5, 'UTF-8'), true);
+            }
             if (!is_array($j)) continue;
             $list = isset($j[0]) ? $j : [$j];
             foreach ($list as $node) {

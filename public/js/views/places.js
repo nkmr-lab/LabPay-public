@@ -781,8 +781,8 @@ async function loadPlace(id) {
             ${c.body ? `<div style="font-size:14px">${linkifyText(c.body)}</div>` : ''}
             ${(c.image_urls && c.image_urls.length)
                 ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">${c.image_urls.map(u => `
-                    <img src="${escapeHtml(u)}" data-zoom-src="${escapeHtml(u)}" loading="lazy" style="max-width:200px; max-height:200px; border-radius:6px; cursor:zoom-in">`).join('')}</div>`
-                : (c.image_url ? `<img src="${escapeHtml(c.image_url)}" data-zoom-src="${escapeHtml(c.image_url)}" loading="lazy" style="max-width:200px; max-height:200px; border-radius:6px; margin-top:6px; cursor:zoom-in">` : '')}
+                    <img src="${escapeHtml(u)}" data-zoom-src="${escapeHtml(u)}" loading="lazy" style="width:120px; height:120px; object-fit:cover; border-radius:6px; cursor:zoom-in; background:#f3f4f6">`).join('')}</div>`
+                : (c.image_url ? `<img src="${escapeHtml(c.image_url)}" data-zoom-src="${escapeHtml(c.image_url)}" loading="lazy" style="width:120px; height:120px; object-fit:cover; border-radius:6px; margin-top:6px; cursor:zoom-in; background:#f3f4f6">` : '')}
             ${canDel ? `<button class="btn" data-del-cm="${c.id}" style="font-size:11px; padding:2px 6px; margin-top:4px">削除</button>` : ''}
           </div>
         </div>`;
