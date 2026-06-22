@@ -16,10 +16,12 @@ export async function renderPaperReview() {
     <div class="card page-header">
       <h2 style="margin:0">📄 論文 査読</h2>
     </div>
-    <div class="card">
-      <div class="bold" style="font-size:14px; margin-bottom:6px">⚙️ 査読プロンプト + 共有対象</div>
-      <div id="pr-settings-wrap"><div class="muted">読み込み中…</div></div>
-    </div>
+    <details class="card" style="padding:0">
+      <summary style="cursor:pointer; padding:10px 14px; font-weight:700; font-size:14px; color:var(--primary)">
+        ⚙️ 査読プロンプト + 共有対象 <span style="font-weight:400; font-size:12px; color:#6b21a8">(クリック で 開閉)</span>
+      </summary>
+      <div id="pr-settings-wrap" style="padding:0 14px 14px"><div class="muted">読み込み中…</div></div>
+    </details>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
         論文の PDF をアップロードすると、 OpenAI に直接読ませて 章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
@@ -49,9 +51,11 @@ export async function renderPaperReview() {
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
       <label class="field">
-        <span class="lbl">🗨️ 著者の回答文 / リバトル (任意)</span>
-        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。"></textarea>
-        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力すると、 査読指摘 が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないか まで評価します。</div>
+        <span class="lbl">🗨️ 著者の回答文 / リバトル (任意 — テキスト or PDF)</span>
+        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。 PDF アップロード でも OK。"></textarea>
+        <input type="file" id="pr-response-pdf" accept="application/pdf,.pdf" style="margin-top:6px">
+        <div class="hint-sm" id="pr-response-pdf-status" style="font-size:11px; margin-top:4px"></div>
+        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、 査読指摘 が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないか まで評価します。 両方 入れたら 両方 参照。</div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pr-go" class="primary" disabled>📄 査読開始</button>
@@ -78,6 +82,24 @@ export async function renderPaperReview() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
+  // v782 #379 回答文 PDF プレビュー
+  const respPdfInput = document.getElementById('pr-response-pdf');
+  const respPdfStatus = document.getElementById('pr-response-pdf-status');
+  respPdfInput?.addEventListener('change', () => {
+    const rf = respPdfInput.files?.[0];
+    if (!rf) { respPdfStatus.textContent = ''; return; }
+    if (rf.type !== 'application/pdf' && !/\.pdf$/i.test(rf.name)) {
+      respPdfStatus.innerHTML = '<span style="color:#dc2626">PDF ファイルを選んでください</span>';
+      respPdfInput.value = '';
+      return;
+    }
+    if (rf.size > 30 * 1024 * 1024) {
+      respPdfStatus.innerHTML = '<span style="color:#dc2626">30 MB を超えています</span>';
+      respPdfInput.value = '';
+      return;
+    }
+    respPdfStatus.innerHTML = `<span style="color:#15803d">✓ ${escapeHtml(rf.name)} (${(rf.size / 1024 / 1024).toFixed(1)} MB)</span>`;
+  });
   await loadSettings();
   await loadHistory();
 }
@@ -184,6 +206,12 @@ async function go() {
     // v780 #404 任意 の 回答文 (rebuttal)。 空 なら 送らない (= 通常 の 査読 モード)
     const responseText = (document.getElementById('pr-response')?.value || '').trim();
     if (responseText !== '') fd.append('response_text', responseText);
+    // v782 #379 PDF 回答文 (textarea と 同時 添付 も OK、 GPT に 両方 渡る)
+    const respPdf = document.getElementById('pr-response-pdf')?.files?.[0];
+    if (respPdf) {
+      if (respPdf.size > 30 * 1024 * 1024) { toast('回答文 PDF は 30 MB まで'); btn.disabled = false; btn.textContent = '📄 査読開始'; return; }
+      fd.append('response_pdf', respPdf);
+    }
     const resp = await fetch('/api/ai/paper_review', {
       method: 'POST', body: fd, credentials: 'same-origin',
       headers: { 'X-Requested-With': 'labpay' },

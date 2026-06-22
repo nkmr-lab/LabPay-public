@@ -751,6 +751,20 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     //   論文 査読 + 回答 妥当性 評価 モード に なる。 空 なら 従来 通り の 査読 のみ。
     $responseText = trim((string)($_POST['response_text'] ?? ''));
     if (mb_strlen($responseText) > 20000) $responseText = mb_substr($responseText, 0, 20000);
+    // v782 #379 回答文 PDF も 同時 に 受け取れる。 テキスト と PDF 両方 ある なら 両方 を GPT に 渡す。
+    $responsePdfTmp = null;
+    $responsePdfName = null;
+    if (isset($_FILES['response_pdf']) && is_uploaded_file($_FILES['response_pdf']['tmp_name'])) {
+        $rf = $_FILES['response_pdf'];
+        if ($rf['error'] === UPLOAD_ERR_OK) {
+            if ($rf['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '回答 PDF は 30 MB まで', 400);
+            $rhead = @file_get_contents($rf['tmp_name'], false, null, 0, 5);
+            if ($rhead !== '%PDF-') throw new ApiException('bad_request', '回答 PDF は PDF ファイル を 指定 して ください', 400);
+            $responsePdfTmp  = $rf['tmp_name'];
+            $responsePdfName = (string)($rf['name'] ?? 'rebuttal.pdf');
+        }
+    }
+    $hasResponse = $responseText !== '' || $responsePdfTmp !== null;
 
     // v552 #211 #212 ユーザー設定 (custom_prompt + share_target_ids) を取得
     $stS = $pdo->prepare("SELECT custom_prompt, share_target_ids FROM user_paper_review_settings WHERE user_id = ?");
@@ -786,8 +800,9 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
     $sys = $basePrompt .
            "\n\n査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
-    if ($responseText !== '') {
+    if ($hasResponse) {
         // v780 #404 回答文 が ある とき は 「査読 + 回答 評価」 モード
+        // v782 #379 PDF と text 両方 ある場合 も 同 モード。 PDF は file_id で 添付、 text は user prompt に 埋め込み
         $sys .= "\n\n【回答文 評価 モード】\n"
               . "この 依頼 に は 著者 から の 回答文 (rebuttal / 査読 コメント へ の 反論・返答) が 添えられて います。\n"
               . "通常 の 査読 に 加え、 以下 を 評価 して ください:\n"
@@ -832,7 +847,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)\", \"suggested_rewrite\":\"こう書き直すと良い、 という具体案\"}, ...],\n"
         . "    \"revision_to_accept\": [\"採録に導くために 必要な修正を 優先度順に アイテマイズ (具体的 / 実行可能、 ただし 「N を増やす」 系は p-hacking リスクを添える)\", ...],\n"
         . "    \"comments_to_authors\": \"著者への総合コメント (400〜800 文字)\",\n"
-        . ($responseText !== ''
+        . ($hasResponse
             ? "    \"response_evaluation\": {\n"
               . "      \"overall_assessment\": \"回答 全体 の 妥当性 評価 (200〜500 字)。 査読 指摘 に 対して 過不足 なく 対応 できて いる か、 安直 な「N 増 / 再 実験」 で 流して いない か、 論文 本文 と 矛盾 が ない か を 含めて\",\n"
               . "      \"covered_points\":      [\"回答 が 良く 対応 でき て いる 指摘 (1 件 ずつ)\", ...],\n"
@@ -847,22 +862,41 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "  }\n"
         . "}";
     if ($responseText !== '') {
-        $userPrompt .= "\n\n【著者 から の 回答文】 (これ を 評価 して response_evaluation に 入れる)\n\n"
+        $userPrompt .= "\n\n【著者 から の 回答文 (テキスト)】 (これ を 評価 して response_evaluation に 入れる)\n\n"
                      . "------ ここ から 回答文 ------\n"
                      . $responseText . "\n"
                      . "------ ここ まで ------\n";
     }
+    if ($responsePdfTmp !== null) {
+        $userPrompt .= "\n\n【著者 から の 回答文 PDF】 が 添付 されて います (2 つめ の PDF ファイル として)。 1 つめ が 論文 本体、 2 つめ が 回答文 PDF。 両方 を 読んで、 response_evaluation を 作って ください。\n";
+    }
 
     // v774 #396 #397 ユーザが 選んだ モデル を 使う。 推論モデル は temperature 非対応
+    // v782 #379 回答 PDF が ある なら OpenAI Files API に も アップ → 2 つめ の file content と して 添付
+    $responseFileId = null;
+    if ($responsePdfTmp !== null) {
+        try {
+            $responseFileId = ai_openai_upload_pdf($responsePdfTmp, $responsePdfName, $apiKey);
+        } catch (Throwable $e) {
+            // 失敗 しても 査読 本体 は 続行 (text の 回答 だけ で 動く ケース)
+            $responseFileId = null;
+            fwrite(STDERR, "[paper_review] response_pdf upload failed: " . $e->getMessage() . "\n");
+        }
+    }
+    $userContent = [
+        ['type' => 'file', 'file' => ['file_id' => $fileId]],
+    ];
+    if ($responseFileId !== null) {
+        $userContent[] = ['type' => 'file', 'file' => ['file_id' => $responseFileId]];
+    }
+    $userContent[] = ['type' => 'text', 'text' => $userPrompt];
+
     $model = $reqModel;
     $payloadArr = [
         'model' => $model,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
-            ['role' => 'user', 'content' => [
-                ['type' => 'file', 'file' => ['file_id' => $fileId]],
-                ['type' => 'text', 'text' => $userPrompt],
-            ]],
+            ['role' => 'user', 'content' => $userContent],
         ],
         'response_format' => ['type' => 'json_object'],
         'max_completion_tokens' => 8000,
@@ -877,14 +911,20 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $token = bin2hex(random_bytes(16));
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $responseText, $sys, $reviewCost, &$reviewId) {
+    // v782 #379 response_text に PDF 添付 マーカ を 追加 (UI で「PDF 添付 されました」 と 出す)
+    $responseTextForDb = $responseText !== '' ? $responseText : null;
+    if ($responsePdfTmp !== null) {
+        $pdfMarker = "📎 [回答 PDF 添付: " . $responsePdfName . "]";
+        $responseTextForDb = $responseTextForDb === null ? $pdfMarker : $pdfMarker . "\n\n" . $responseTextForDb;
+    }
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $responseTextForDb, $sys, $reviewCost, &$reviewId) {
         $pdo->prepare("INSERT INTO paper_reviews
             (user_id, share_token, file_id, pdf_name, target_venue, strictness, response_text, prompt_used,
              sections_json, review_json, cost_points, status)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([
                 $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness,
-                $responseText !== '' ? $responseText : null, $sys,
+                $responseTextForDb, $sys,
                 '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();
@@ -910,7 +950,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     @set_time_limit(360);
 
     // 裏で OpenAI を呼ぶ
-    ai_paper_review_run_background($pdo, $cfg, $reviewId, $token, $fileId, $payload, $apiKey, $pdfName, $shareIds, $uid);
+    ai_paper_review_run_background($pdo, $cfg, $reviewId, $token, $fileId, $payload, $apiKey, $pdfName, $shareIds, $uid, $responseFileId);
 }
 
 // 早期レスポンス用: json_response と同じ JSON を出力するが exit しない
@@ -919,7 +959,7 @@ function json_response_no_exit($data): void {
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
-function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, array $shareIds, int $uid): void {
+function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, array $shareIds, int $uid, ?string $responseFileId = null): void {
     try {
         $pdo->prepare("UPDATE paper_reviews SET status='processing' WHERE id = ?")->execute([$reviewId]);
         $ch = curl_init('https://api.openai.com/v1/chat/completions');
@@ -934,6 +974,9 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         ai_openai_delete_file($fileId, $apiKey);
+        if ($responseFileId !== null) {
+            try { ai_openai_delete_file($responseFileId, $apiKey); } catch (Throwable $_) {}
+        }
 
         if ($resp === false || $status >= 400) {
             $errMsg = '';
