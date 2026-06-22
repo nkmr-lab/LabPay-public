@@ -549,18 +549,24 @@ function stripStudyKey(s, key) {
 }
 // v778 #402 自前実験 を「実験N」 単位 で ペア リング する 用 の キー 抽出。
 //   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」 等 を 全部 「実験1」 に 正規化。
-//   1 行 目 だけ で 拾える ように、 prefix 系 の パターン のみ 評価 (本文 中 の「研究 1 で は」 等 を 拾わない)。
+// v779 #403 結果側 は 「実験1 (引用 X):」 の よう に「実験1 + 空白 + (引用 X)」 形 が 多い ため、
+//   「実験1」 の 後 が 「:」 で なくて も 数字 で 終わって いれば キー と 認める (look-ahead で 非数字)。
 function ownExpKey(s) {
   const str = String(s).trim();
-  // 全角 数字 を 半角 化
   const norm = str.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
-  const m = norm.match(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*(\d+)\s*[:：・\-]/i);
+  const m = norm.match(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*(\d+)(?=\D|$)/i);
   if (!m) return null;
   return '実験' + m[1];
 }
 function stripOwnExpKey(s) {
-  // 先頭 の 「研究1：」「実験1:」「Study 1 -」 等 を 取り除いて 本文 だけ 返す。
-  return String(s).replace(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*[0-9０-９]+\s*[:：・\-]\s*/i, '').trim();
+  // 先頭 の 「研究1：」「実験1:」「Study 1 -」「実験1 (引用 X):」 等 を 取り除いて 本文 だけ 返す。
+  // 数字 の 後 に 「:」 が ある なら そこまで、 なければ 数字 + 直後 の 空白 を 取る。
+  return String(s).replace(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*[0-9０-９]+\s*[:：・\-]?\s*/i, '').trim();
+}
+// v779 #403 「(引用)」「(引用 X)」「(引用 X 19xx)」 が 本文 中 に 含まれて いる か。 全 要素 が
+//   引用 なら 「参考 に した 実験」 ラベル に 切り替える。
+function isCitedItem(s) {
+  return /\(\s*引用/.test(String(s));
 }
 function renderExperimentsBlock(expsRaw, resRaw) {
   const exps = Array.isArray(expsRaw) ? expsRaw : [];
@@ -597,11 +603,31 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (k) addOwnPair(k, 'res', rs); else ownUnkeyedRess.push(rs);
   }
 
+  // v779 #403 ペア の 中身 を 見て 「引用 比率」 を 判定。 全 ペア (or 全 体) が 引用 なら
+  //   「📚 この論文 が 参考 に した 実験」 ラベル に 切り替える。 自前 と 引用 が 混在 する
+  //   場合 は デフォルト の 「🔬 この論文 で 行った 実験」 を 使い、 引用 / 自前 を 個別 タグ で 区別。
+  const allBodies = [...ownPairs.values()].flatMap(p => [p.exp, p.res].filter(Boolean));
+  const citedCount = allBodies.filter(isCitedItem).length;
+  const isAllCited = ownPairs.size > 0 && citedCount === allBodies.length;
+  const expsHeader = isAllCited ? '📚 この論文が参考にした実験' : '🔬 この論文で行った実験';
+  const resHeaderForPair = (p, key) => {
+    const cited = isCitedItem(p.exp) || isCitedItem(p.res);
+    return cited
+      ? `📊 ${escapeHtml(key)} の結果 (引用元からの要約)`
+      : `📊 ${escapeHtml(key)} の結果`;
+  };
+  const pairTitle = (p, key) => {
+    const cited = isCitedItem(p.exp) || isCitedItem(p.res);
+    return cited
+      ? `${escapeHtml(key)}: 参考にした実験の内容`
+      : `${escapeHtml(key)}: 実験の内容`;
+  };
+
   let html = '';
   if (ownPairs.size > 0) {
     html += `
       <div class="card">
-        <div class="bold" style="color:var(--primary); margin-bottom:10px">🔬 この論文で行った実験</div>
+        <div class="bold" style="color:var(--primary); margin-bottom:10px">${expsHeader}</div>
         <div style="display:flex; flex-direction:column; gap:14px">
           ${[...ownPairs.values()].map(p => {
             const expBody = stripOwnExpKey(p.exp);
@@ -609,14 +635,14 @@ function renderExperimentsBlock(expsRaw, resRaw) {
             return `
               <div>
                 <div style="padding:10px 12px; border:2px solid var(--primary); border-radius:8px; background:#fff">
-                  <div class="bold" style="color:var(--primary); margin-bottom:5px">${escapeHtml(p.key)}: 実験の内容</div>
+                  <div class="bold" style="color:var(--primary); margin-bottom:5px">${pairTitle(p, p.key)}</div>
                   ${expBody
                     ? `<div style="font-size:13.5px; line-height:1.75">${escapeHtml(expBody)}</div>`
                     : `<div style="font-size:13px; color:#999">(実験記述なし)</div>`}
                 </div>
                 ${resBody ? `
                   <div style="margin-top:6px; padding:8px 12px; background:#f5f0fa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0">
-                    <div class="bold" style="font-size:13px; color:var(--primary); margin-bottom:3px">📊 ${escapeHtml(p.key)} の結果</div>
+                    <div class="bold" style="font-size:13px; color:var(--primary); margin-bottom:3px">${resHeaderForPair(p, p.key)}</div>
                     <div style="font-size:13.5px; line-height:1.75">${escapeHtml(resBody)}</div>
                   </div>` : ''}
               </div>`;
@@ -627,9 +653,17 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     html += renderListSection('🔬 その他の実験記述', ownUnkeyedExps);
     html += renderListSection('📊 その他の結果記述', ownUnkeyedRess);
   } else {
-    // 全部 「実験N」 で 拾え なかった → 従来 の リスト 表示
-    html += renderListSection('🔬 この論文で行った実験', own.exps);
-    html += renderListSection('📊 この論文の結果',     own.ress);
+    // 全部 「実験N」 で 拾え なかった → 従来 の リスト 表示。 配列 全体 が 引用 中心 なら
+    //   ヘッダ を 「参考 に した 実験」 に 切り替える。
+    const fallbackAllCited = own.exps.length > 0 && own.exps.every(isCitedItem);
+    html += renderListSection(
+      fallbackAllCited ? '📚 この論文が参考にした実験' : '🔬 この論文で行った実験',
+      own.exps
+    );
+    html += renderListSection(
+      fallbackAllCited ? '📊 引用研究の結果' : '📊 この論文の結果',
+      own.ress
+    );
   }
   if (cited.size > 0) {
     html += `
