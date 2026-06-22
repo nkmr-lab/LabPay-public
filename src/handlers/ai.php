@@ -67,6 +67,16 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_get_shared($pdo, $cfg, (string)$seg[3]);
         return;
     }
+    // v756 #372 みんな の 公開 要約 一覧 (キーワード検索 付き)
+    if ($sub === 'paper_translate' && $method === 'GET' && ($seg[2] ?? '') === 'shared') {
+        ai_paper_translate_shared_list($pdo, $cfg);
+        return;
+    }
+    // v756 #372 共有 ON/OFF toggle
+    if ($sub === 'paper_translate' && $method === 'PATCH' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_paper_translate_patch($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'paper_translate' && $method === 'GET' && !isset($seg[2])) {
         ai_paper_translate_list($pdo, $cfg);
         return;
@@ -961,12 +971,12 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
   ],
   "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
   "ochiai_method": {
-    "what":          "1. どんな もの? (200-400 字)",
-    "vs_prior_work": "2. 先行研究 と 比べて どこ が すごい? (200-400 字)",
-    "key_method":    "3. 技術 や 手法 の キモ (200-400 字)",
-    "validation":    "4. どうやって 有効 だ と 検証 した? (200-400 字)",
-    "discussion":    "5. 議論 は ある? (100-300 字)",
-    "next_papers":   ["6. 次に 読む べき 関連 論文 (タイトル + 1 行 説明)"]
+    "what":          "値 は 説明本文 のみ。「1. どんな もの?」 等 の 番号 / 設問 を 先頭 に 入れない (200-400 字)",
+    "vs_prior_work": "値 は 説明本文 のみ (200-400 字)",
+    "key_method":    "値 は 説明本文 のみ (200-400 字)",
+    "validation":    "値 は 説明本文 のみ (200-400 字)",
+    "discussion":    "値 は 説明本文 のみ (100-300 字)",
+    "next_papers":   ["タイトル + 1 行 説明 (各 文字列)"]
   }
 }
 
@@ -976,11 +986,11 @@ PROMPT;
 function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    $st = $pdo->prepare("SELECT id, share_token, pdf_name, status, created_at, finished_at
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, status, is_shared, shared_at, created_at, finished_at
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$r) $r['id'] = (int)$r['id'];
+    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['is_shared'] = (bool)$r['is_shared']; }
     unset($r);
     json_response([
         'items'        => $rows,
@@ -990,11 +1000,76 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     ]);
 }
 
+// v756 #372 みんな の 公開 要約 一覧 (is_shared=1)。 q= で キーワード 部分一致 検索 (pdf_name +
+//   title_ja / title_orig / authors / venue / summary_one_paragraph)。
+function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $q = trim((string)($_GET['q'] ?? ''));
+    $args = [];
+    $sql = "SELECT pt.id, pt.share_token, pt.pdf_name, pt.result_json, pt.status, pt.shared_at,
+                   pt.created_at, pt.finished_at, pt.user_id,
+                   u.display_name AS author_name, u.avatar_url AS author_avatar
+              FROM paper_translates pt
+              JOIN users u ON u.id = pt.user_id
+             WHERE pt.is_shared = 1 AND pt.status = 'done'";
+    if ($q !== '' && mb_strlen($q) <= 100) {
+        // LIKE %q% 検索 (pdf_name + result_json 全体)。 結果セット が 小さい 前提。
+        $sql .= " AND (pt.pdf_name LIKE ? OR pt.result_json LIKE ?)";
+        $args[] = '%' . $q . '%';
+        $args[] = '%' . $q . '%';
+    }
+    $sql .= " ORDER BY pt.shared_at DESC LIMIT 100";
+    $st = $pdo->prepare($sql);
+    $st->execute($args);
+    $items = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $result = json_decode($r['result_json'] ?: 'null', true);
+        $items[] = [
+            'id'                  => (int)$r['id'],
+            'share_token'         => $r['share_token'],
+            'pdf_name'            => $r['pdf_name'],
+            'title_ja'            => is_array($result) ? ($result['title_ja']  ?? null) : null,
+            'title_orig'          => is_array($result) ? ($result['title_orig']?? null) : null,
+            'authors'             => is_array($result) ? ($result['authors']   ?? null) : null,
+            'venue'               => is_array($result) ? ($result['venue']     ?? null) : null,
+            'summary_one_paragraph' => is_array($result) ? ($result['summary_one_paragraph'] ?? null) : null,
+            'shared_at'           => $r['shared_at'],
+            'created_at'          => $r['created_at'],
+            'author_id'           => (int)$r['user_id'],
+            'author_name'         => $r['author_name'],
+            'author_avatar'       => $r['author_avatar'],
+        ];
+    }
+    json_response(['items' => $items, 'q' => $q]);
+}
+
+// v756 #372 共有 ON/OFF (本人 のみ)。 body = { is_shared: bool }
+function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    if (!array_key_exists('is_shared', $body)) {
+        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+    }
+    $st = $pdo->prepare("SELECT user_id, status FROM paper_translates WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '要約 完了 後 のみ 共有 切替 可', 400);
+    $on = (bool)$body['is_shared'];
+    $pdo->prepare("UPDATE paper_translates
+                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
+                    WHERE id = ?")
+        ->execute([$on ? 1 : 0, $id]);
+    json_response(['ok' => true, 'is_shared' => $on]);
+}
+
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
-                                pt.pages_count, pt.pages_dir,
+                                pt.pages_count, pt.pages_dir, pt.is_shared, pt.shared_at,
                                 u.display_name AS author_name, u.avatar_url AS author_avatar
                            FROM paper_translates pt JOIN users u ON u.id = pt.user_id
                           WHERE pt.share_token = ?");
@@ -1014,6 +1089,8 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'finished_at'   => $row['finished_at'],
         'pages_count'   => $row['pages_count'] !== null ? (int)$row['pages_count'] : null,
         'pages_dir'     => $row['pages_dir'],
+        'is_shared'     => (bool)$row['is_shared'],
+        'shared_at'     => $row['shared_at'],
     ]);
 }
 

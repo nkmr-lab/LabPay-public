@@ -3,7 +3,7 @@
 //   重要 図表 (ページ画像 を pdftoppm で 抽出 表示) + 最後 に 落合メソッド の 6 項目 で
 //   全体 を 重ね合わせて まとめる。 結果は share_token で URL 共有可能。
 
-import { get } from '../api.js';
+import { get, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -37,7 +37,16 @@ export async function renderPaperTranslate() {
       </div>
     </div>
     <div id="pt-result"></div>
-    <div id="pt-history" class="card" style="margin-top:8px"><div class="muted">過去の要約履歴…</div></div>
+    <!-- v756 #372 自分 の 履歴 と みんな の 公開 一覧 を タブ で 切替 -->
+    <div class="card" style="margin-top:8px">
+      <div class="row" style="gap:6px; margin-bottom:8px; align-items:center">
+        <button id="pt-tab-mine"   class="btn primary" data-tab="mine"   style="font-size:13px">📜 自分の履歴</button>
+        <button id="pt-tab-shared" class="btn"         data-tab="shared" style="font-size:13px">🌐 みんなの公開要約</button>
+        <span style="flex:1"></span>
+        <input type="search" id="pt-search" placeholder="🔍 検索 (公開のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
+      </div>
+      <div id="pt-history"><div class="muted">読み込み中…</div></div>
+    </div>
   `;
   const fileInput = document.getElementById('pt-file');
   const fileStatus = document.getElementById('pt-file-status');
@@ -57,6 +66,26 @@ export async function renderPaperTranslate() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
+  // v756 #372 タブ 切替 + 検索
+  let curTab = 'mine';
+  let searchTimer = null;
+  const tabMine   = document.getElementById('pt-tab-mine');
+  const tabShared = document.getElementById('pt-tab-shared');
+  const searchEl  = document.getElementById('pt-search');
+  const switchTab = (t) => {
+    curTab = t;
+    tabMine.classList.toggle('primary',   t === 'mine');
+    tabShared.classList.toggle('primary', t === 'shared');
+    searchEl.hidden = (t !== 'shared');
+    if (t === 'mine') loadHistory();
+    else              loadSharedList(searchEl.value || '');
+  };
+  tabMine.addEventListener('click',   () => switchTab('mine'));
+  tabShared.addEventListener('click', () => switchTab('shared'));
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
+  });
   await loadHistory();    // history 取得 と 同時 に models / cost を ロード
 }
 
@@ -118,20 +147,53 @@ async function loadHistory() {
       document.getElementById('pt-history').innerHTML = '<div class="empty">まだ 要約 履歴 が ありません</div>';
       return;
     }
-    document.getElementById('pt-history').innerHTML = `
-      <div class="bold" style="margin-bottom:6px">📜 過去の要約</div>
-      ${items.map(it => `
+    document.getElementById('pt-history').innerHTML = items.map(it => {
+      const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
+      return `
         <a href="#/paper-translate/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px">
           <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
           <div class="grow" style="min-width:0">
-            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name)}</div>
+            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name)}${sharedBadge}</div>
             <div class="hint-sm" style="font-size:11px">${escapeHtml(it.created_at)} · ${escapeHtml(it.status)}</div>
           </div>
-        </a>
-      `).join('')}
-    `;
+        </a>`;
+    }).join('');
   } catch (e) {
     document.getElementById('pt-history').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v756 #372 みんな の 公開 要約 一覧 (q= で 検索)
+async function loadSharedList(q) {
+  const root = document.getElementById('pt-history');
+  root.innerHTML = '<div class="muted">読み込み中…</div>';
+  try {
+    const url = '/api/ai/paper_translate/shared' + (q ? '?q=' + encodeURIComponent(q) : '');
+    const d = await get(url);
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = q
+        ? `<div class="empty">「${escapeHtml(q)}」 に 該当 する 公開 要約 が ありません</div>`
+        : '<div class="empty">まだ 公開 されて いる 要約 は ありません</div>';
+      return;
+    }
+    root.innerHTML = items.map(it => {
+      const title = it.title_ja || it.pdf_name;
+      const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
+      const summary = it.summary_one_paragraph || '';
+      return `
+        <a href="#/paper-translate/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
+          <div style="flex:none; font-size:20px">📑</div>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:14px">${escapeHtml(title)}</div>
+            ${meta ? `<div class="hint-sm" style="font-size:11px; color:#666; margin-top:1px">${escapeHtml(meta)}</div>` : ''}
+            ${summary ? `<div style="font-size:12px; color:#374151; margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(summary)}</div>` : ''}
+            <div class="hint-sm" style="font-size:10px; margin-top:3px; color:#9ca3af">${avatarHtml(it.author_name, it.author_avatar, 'xs')} ${escapeHtml(it.author_name)} · ${escapeHtml(it.shared_at || it.created_at)}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -181,6 +243,9 @@ function paintResult(d, token) {
   const shareUrl = location.origin + '/#/paper-translate/r/' + token;
   const pagesDir = d.pages_dir || null;
   const pagesCount = d.pages_count || 0;
+  const meId = Number(state.me?.id) || 0;
+  const isOwner = meId && meId === Number(d.author_id);
+  const isShared = !!d.is_shared;
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0; font-size:18px">📑 ${escapeHtml(r.title_ja || d.pdf_name)}</h2>
@@ -190,8 +255,13 @@ function paintResult(d, token) {
       <div class="meta" style="font-size:11px; margin-top:6px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
       </div>
-      <div class="row" style="gap:6px; margin-top:8px">
+      <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL を コピー</button>
+        ${isOwner ? `
+          <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
+            ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
+          </button>` : ''}
+        ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
         <a class="btn" href="#/paper-translate" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
     </div>
@@ -217,6 +287,20 @@ function paintResult(d, token) {
       await navigator.clipboard.writeText(shareUrl);
       toast('コピーしました');
     } catch (_) { toast(shareUrl); }
+  });
+  // v756 #372 公開 ON/OFF toggle (本人 のみ)
+  document.getElementById('pt-share-toggle')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    const wasOn = btn.dataset.on === '1';
+    btn.disabled = true;
+    try {
+      const r = await patch('/api/ai/paper_translate/' + d.id, { is_shared: !wasOn });
+      btn.dataset.on = r.is_shared ? '1' : '0';
+      btn.classList.toggle('primary', !!r.is_shared);
+      btn.textContent = r.is_shared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)';
+      toast(r.is_shared ? '🌐 公開しました' : '🔒 非公開にしました');
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; }
   });
   // 画像 タップ で lightbox (戻る ボタン で 閉じる)
   document.querySelectorAll('[data-pt-zoom]').forEach(el => {
@@ -291,8 +375,11 @@ function renderOchiai(o) {
   ];
   let html = '<div class="card" style="background:#fafaf5; border:1px dashed #d4b8e0"><div class="bold" style="color:var(--primary); margin-bottom:6px; font-size:15px">📚 落合メソッド で まとめ</div><div class="hint-sm" style="font-size:11px; margin-bottom:8px">論文 全体 を 6 項目 で 重ね合わせ</div>';
   for (const [key, label, icon] of sections) {
-    const txt = (o[key] || '').toString().trim();
+    let txt = (o[key] || '').toString().trim();
     if (!txt) continue;
+    // v756 #374 GPT が 値 の 先頭 に 「1. どんなもの?」 等 の 設問 を 繰り返して 入れる ことが
+    //   ある ので、 先頭 が ラベル と 同じ 設問 で 始まる 場合 は 取り除く (重複表示 防止)。
+    txt = txt.replace(/^\s*\d+\.\s*[^\n]{0,40}[?？]\s*/, '').trim();
     html += `
       <div style="margin-bottom:10px">
         <div class="bold" style="font-size:13px; color:#4a106d">${icon} ${escapeHtml(label)}</div>
