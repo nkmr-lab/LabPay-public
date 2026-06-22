@@ -54,7 +54,32 @@ function cd_list(PDO $pdo, array $cfg): void {
     $sql .= " ORDER BY c.deadline_at ASC LIMIT 200";
     $st = $pdo->prepare($sql);
     $st->execute($args);
-    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // v749 #362 #364 list 行 にも members を 付ける (アイコン 横並び 表示 用)。
+    //   1 query で 全 deadline 分 を まとめて 取って merge。
+    $ids = array_map('intval', array_column($rows, 'id'));
+    $byId = [];
+    if (!empty($ids)) {
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $mst = $pdo->prepare("SELECT m.conf_deadline_id, m.user_id, u.display_name, u.avatar_url
+                                FROM conf_deadline_members m JOIN users u ON u.id = m.user_id
+                               WHERE m.conf_deadline_id IN ($place)
+                               ORDER BY m.added_at ASC");
+        $mst->execute($ids);
+        foreach ($mst->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $cid = (int)$m['conf_deadline_id'];
+            if (!isset($byId[$cid])) $byId[$cid] = [];
+            $byId[$cid][] = [
+                'user_id'      => (int)$m['user_id'],
+                'display_name' => $m['display_name'],
+                'avatar_url'   => $m['avatar_url'],
+            ];
+        }
+    }
+    foreach ($rows as &$r) { $r['members'] = $byId[(int)$r['id']] ?? []; }
+    unset($r);
+    json_response(['items' => $rows]);
 }
 
 function cd_upcoming(PDO $pdo, array $cfg): void {

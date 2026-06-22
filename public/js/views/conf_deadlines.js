@@ -122,6 +122,24 @@ export async function renderConfDeadlines() {
         const isMine = !!Number(r.is_mine);
         const mineStyle = isMine ? '; background:#fffbeb; border-left:4px solid #f59e0b' : '';
         const mineMark = isMine ? ' ⭐' : '';
+        // v749 #362 #364 list 行 にも 参加者 を 重ねた アイコン で 表示。
+        //   最大 6 件 まで 表示、 オーバー したら 「+N」 で 省略。 名前 ホバー で 出る。
+        const members = Array.isArray(r.members) ? r.members : [];
+        const maxAv = 6;
+        const shown = members.slice(0, maxAv);
+        const overflow = members.length - shown.length;
+        const memHtml = members.length ? `
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:4px">
+            <span style="font-size:11px; color:#666">👥</span>
+            ${shown.map((m, i) => {
+              const initial = (m.display_name || '?').trim().charAt(0).toUpperCase();
+              const ml = i === 0 ? '' : 'margin-left:-6px';
+              return m.avatar_url
+                ? `<img src="${escapeHtml(m.avatar_url)}" alt="${escapeHtml(m.display_name)}" title="${escapeHtml(m.display_name)}" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover; border:2px solid #fff; ${ml}">`
+                : `<div title="${escapeHtml(m.display_name)}" style="width:20px; height:20px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:10px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
+            }).join('')}
+            ${overflow > 0 ? `<span style="font-size:10px; color:#666; margin-left:4px">+${overflow}</span>` : ''}
+          </div>` : '';
         return `
           <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:8px; align-items:flex-start${mineStyle}">
             <span style="font-size:24px; flex:none">${escapeHtml(cat.icon)}</span>
@@ -130,6 +148,7 @@ export async function renderConfDeadlines() {
               <div class="meta">${escapeHtml(cat.label)} ・ ${escapeHtml(mainLbl)}${aoeBadge}${tentBadge} ${escapeHtml(fmtDate(r.deadline_at))}${extraNote}</div>
               ${r.location ? `<div class="meta">📍 ${escapeHtml(r.location)}</div>` : ''}
               <div class="meta">登録: ${escapeHtml(r.creator_name)}${canEdit ? ' ・ あなた' : ''}</div>
+              ${memHtml}
             </div>
             <div style="flex:none; text-align:right">
               <div class="bold" style="color:${aheadColor}; font-size:14px">${ahead}</div>

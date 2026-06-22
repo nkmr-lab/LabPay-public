@@ -162,12 +162,13 @@ function toggleCreateForm(mode = null) {
         <input type="datetime-local" id="t-deadline">
       </label>`;
 
+  // v749 #363 添付欄 が でかすぎ た ので コンパクト化。 label を 詰めて hint を 1 行 に。
   const files = `
-      <label class="field">
-        <span class="lbl">ファイル添付 (任意・複数 OK / 1ファイル 50MB まで)</span>
+      <label class="field" style="margin-bottom:6px">
+        <span class="lbl" style="font-size:12px">📎 添付 (任意・複数可・1 ファイル 50MB)</span>
         <input type="file" id="t-files" multiple
-               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*">
-        <span class="hint-sm">原稿チェック依頼などで PDF や docx をそのまま渡せます。</span>
+               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.md,.csv,image/*"
+               style="font-size:12px">
       </label>`;
 
   const heading = isAssign ? 'タスクを割り当てる'
