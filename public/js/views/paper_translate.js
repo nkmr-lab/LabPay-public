@@ -392,6 +392,7 @@ function renderDetailedSections(sections, pagesDir, pagesCount) {
 function renderFigure(fig, pagesDir, pagesCount) {
   const label = (fig && fig.label) ? String(fig.label) : '';
   const cap = (fig && fig.caption_ja) ? String(fig.caption_ja) : '';
+  const visual = (fig && fig.visual_content) ? String(fig.visual_content) : '';
   const why = (fig && fig.why_important) ? String(fig.why_important) : '';
   const page = Number(fig?.page) || null;
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
@@ -411,6 +412,7 @@ function renderFigure(fig, pagesDir, pagesCount) {
       <div style="flex:1; min-width:0; font-size:13px">
         <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}</div>
         ${cap ? `<div style="margin-top:3px"><b>キャプション:</b> ${escapeHtml(cap)}</div>` : ''}
+        ${visual ? `<div style="margin-top:3px"><b>👁 視覚要素:</b> ${escapeHtml(visual)}</div>` : ''}
         ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
       </div>
     </div>`;
