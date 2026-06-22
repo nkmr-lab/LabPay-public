@@ -27,6 +27,8 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'like'     && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, 'heart', false); return; }
         if ($next === 'reaction' && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), true);  return; }
         if ($next === 'reaction' && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), false); return; }
+        // v785 #383 投稿 画像 を 90° 回転 (投稿者 / admin のみ)。 places と 同じく サーバ 側 で 上書き 保存。
+        if ($next === 'rotate-image' && $method === 'POST') { posts_rotate_image($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no posts route for $method $sub", 404);
 }
@@ -347,6 +349,24 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
         throw new ApiException('forbidden', '投稿者本人 または admin (system 投稿のみ) しか削除できません', 403);
     }
     $pdo->prepare("DELETE FROM posts WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+// v785 #383 投稿 画像 を 90° 回転 し、 サーバ 側 で 上書き 保存。 投稿者 or admin のみ。
+function posts_rotate_image(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $degrees = (int)($body['degrees'] ?? 90);
+    $st = $pdo->prepare("SELECT user_id, image_url FROM posts WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '投稿 が ありません', 404);
+    $isAuthor = (int)$row['user_id'] === (int)$u['id'];
+    $isAdmin  = (string)($u['role'] ?? '') === 'admin';
+    if (!$isAuthor && !$isAdmin) throw new ApiException('forbidden', '投稿者 または admin のみ 回転可', 403);
+    $url = (string)($row['image_url'] ?? '');
+    if ($url === '') throw new ApiException('bad_request', '画像 が ありません', 400);
+    rotate_image_file_inplace(_places_url_to_path($url), $degrees);
     json_response(['ok' => true]);
 }
 

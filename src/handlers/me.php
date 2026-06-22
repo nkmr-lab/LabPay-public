@@ -1756,6 +1756,66 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '✅',
             ];
         }
+        // v785 #384 各 item に「対応 待ち の 人」 (アイコン 表示 用) を 追加。 kind 別 に
+        //   pending な users を 一括 取得 し、 item に merge。 1 item あたり 最大 10 人。
+        $pollIds  = []; $rcIds    = []; $mrIds    = []; $taskIds  = [];
+        foreach ($items as $it) {
+            if ($it['kind'] === 'poll')          $pollIds[]  = $it['id'];
+            elseif ($it['kind'] === 'rollcall')  $rcIds[]    = $it['id'];
+            elseif ($it['kind'] === 'money_request') $mrIds[] = $it['id'];
+            elseif ($it['kind'] === 'task')      $taskIds[]  = $it['id'];
+        }
+        $pendingByItem = [];  // [kind][item_id] = [{id, display_name, avatar_url}, ...]
+        $addPending = function (string $kind, int $itemId, array $u) use (&$pendingByItem) {
+            if (!isset($pendingByItem[$kind][$itemId])) $pendingByItem[$kind][$itemId] = [];
+            if (count($pendingByItem[$kind][$itemId]) >= 10) return;
+            $pendingByItem[$kind][$itemId][] = [
+                'id'           => (int)$u['id'],
+                'display_name' => $u['display_name'],
+                'avatar_url'   => $u['avatar_url'],
+            ];
+        };
+        if ($pollIds) {
+            $in = implode(',', array_fill(0, count($pollIds), '?'));
+            $st = $pdo->prepare("SELECT pv.poll_id, u.id, u.display_name, u.avatar_url
+                                   FROM poll_voters pv JOIN users u ON u.id = pv.user_id
+                                  WHERE pv.poll_id IN ($in) AND pv.voted_at IS NULL
+                               ORDER BY pv.poll_id, u.display_name");
+            $st->execute($pollIds);
+            foreach ($st as $r) $addPending('poll', (int)$r['poll_id'], $r);
+        }
+        if ($rcIds) {
+            $in = implode(',', array_fill(0, count($rcIds), '?'));
+            $st = $pdo->prepare("SELECT t.roll_call_id, u.id, u.display_name, u.avatar_url
+                                   FROM roll_call_targets t JOIN users u ON u.id = t.user_id
+                                  WHERE t.roll_call_id IN ($in) AND t.responded_at IS NULL
+                               ORDER BY t.roll_call_id, u.display_name");
+            $st->execute($rcIds);
+            foreach ($st as $r) $addPending('rollcall', (int)$r['roll_call_id'], $r);
+        }
+        if ($mrIds) {
+            $in = implode(',', array_fill(0, count($mrIds), '?'));
+            $st = $pdo->prepare("SELECT rr.request_id, u.id, u.display_name, u.avatar_url
+                                   FROM money_request_recipients rr JOIN users u ON u.id = rr.user_id
+                                  WHERE rr.request_id IN ($in) AND rr.paid_at IS NULL
+                               ORDER BY rr.request_id, u.display_name");
+            $st->execute($mrIds);
+            foreach ($st as $r) $addPending('money_request', (int)$r['request_id'], $r);
+        }
+        if ($taskIds) {
+            // task は claimed / reported な assignee を 「対応 待ち」 と みなす
+            $in = implode(',', array_fill(0, count($taskIds), '?'));
+            $st = $pdo->prepare("SELECT tc.task_id, u.id, u.display_name, u.avatar_url, tc.status
+                                   FROM task_claims tc JOIN users u ON u.id = tc.user_id
+                                  WHERE tc.task_id IN ($in) AND tc.status IN ('claimed','reported')
+                               ORDER BY tc.task_id, u.display_name");
+            $st->execute($taskIds);
+            foreach ($st as $r) $addPending('task', (int)$r['task_id'], $r);
+        }
+        foreach ($items as &$it) {
+            $it['pending_users'] = $pendingByItem[$it['kind']][$it['id']] ?? [];
+        }
+        unset($it);
         // 新しい順 (id DESC)。
         usort($items, function ($a, $b) {
             return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);

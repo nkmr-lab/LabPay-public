@@ -1048,6 +1048,23 @@ function renderPendingLikeItems(items, root) {
     }
     const urgentStyle = urgent ? 'background:#fff7e6; border-left:4px solid #ff6b35;' : '';
     const urgentBadge = urgent ? '<span style="display:inline-block; background:#ff6b35; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; margin-right:4px">🔥 24h</span>' : '';
+    // v785 #384 対応 待ち の 人 を アイコン (アバター 重ね) で 横 並び 表示。 最大 6 人、 残りは「+N」
+    const pending = Array.isArray(it.pending_users) ? it.pending_users : [];
+    const pendingHtml = pending.length ? (() => {
+      const visible = pending.slice(0, 6);
+      const rest = pending.length - visible.length;
+      const icons = visible.map((u, i) => {
+        const initial = (u.display_name || '?').slice(0, 1);
+        const bg = u.avatar_url
+          ? `background:url('${escapeHtml(u.avatar_url)}') center/cover no-repeat`
+          : 'background:#9ca3af; color:#fff; display:flex; align-items:center; justify-content:center';
+        return `<span title="${escapeHtml(u.display_name || '')}" style="display:inline-block; width:18px; height:18px; border-radius:50%; border:1.5px solid #fff; box-shadow:0 0 0 1px #d1d5db; margin-left:${i === 0 ? '0' : '-6px'}; vertical-align:middle; font-size:10px; font-weight:700; line-height:18px; text-align:center; ${bg}">${u.avatar_url ? '' : escapeHtml(initial)}</span>`;
+      }).join('');
+      const restHtml = rest > 0
+        ? `<span style="display:inline-block; margin-left:-6px; padding:0 5px; height:18px; line-height:18px; border-radius:9px; background:#e5e7eb; color:#374151; font-size:10px; font-weight:700; vertical-align:middle; border:1.5px solid #fff; box-shadow:0 0 0 1px #d1d5db">+${rest}</span>`
+        : '';
+      return `<div style="margin-top:3px; display:flex; align-items:center; gap:0; flex-wrap:nowrap; min-width:0">${icons}${restHtml}<span style="font-size:11px; color:#6b7280; margin-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">⏳ 対応 待ち</span></div>`;
+    })() : '';
     return `
       <a class="list-item" href="${escapeHtml(it.url)}" style="overflow:hidden; ${urgentStyle}">
         <span style="font-size:20px; width:28px; text-align:center; flex-shrink:0">${it.icon}</span>
@@ -1056,6 +1073,7 @@ function renderPendingLikeItems(items, root) {
             ${urgentBadge}<span style="display:inline-block; background:${tagBg}; color:${tagFg}; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; margin-right:6px; vertical-align:1px">${escapeHtml(label)}</span>${escapeHtml(it.title)}
           </div>
           <div class="meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.subtitle)}${it.deadline_at ? ' · ' + fmtDeadlineColored(it.deadline_at) : ''}</div>
+          ${pendingHtml}
         </div>
       </a>`;
   }).join('');
