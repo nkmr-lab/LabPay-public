@@ -58,6 +58,19 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_review_list($pdo, $cfg);
         return;
     }
+    // v748 #359 #360 #361 論文 和訳 要約 (落合メソッド + 図表ピックアップ + 20pt)
+    if ($sub === 'paper_translate' && $method === 'POST' && !isset($seg[2])) {
+        ai_paper_translate($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_translate' && $method === 'GET' && ($seg[2] ?? '') === 'r' && isset($seg[3])) {
+        ai_paper_translate_get_shared($pdo, $cfg, (string)$seg[3]);
+        return;
+    }
+    if ($sub === 'paper_translate' && $method === 'GET' && !isset($seg[2])) {
+        ai_paper_translate_list($pdo, $cfg);
+        return;
+    }
     // v583 #225 レジュメ原稿チェック (paper-review の 軽量版、 5pt、 テキスト入力)
     if ($sub === 'resume_check' && $method === 'POST' && !isset($seg[2])) {
         ai_resume_check($pdo, $cfg);
@@ -863,6 +876,238 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
                 "❌ 査読失敗: " . $e->getMessage() . " /#/paper-review/r/{$token}",
                 'paper_review', $reviewId);
+        } catch (Throwable $_) {}
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// v748 #359 #360 #361 論文 和訳 要約 (落合メソッド + 図表ピックアップ + 20pt)
+// ─────────────────────────────────────────────────────────────
+const PAPER_TRANSLATE_COST = 20;
+
+const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
+あなた は 研究論文 を 日本語 で 要約 する アシスタント です。
+単純な 機械翻訳 では なく、 「研究論文 として 何が書かれているか」 を 強く 意識して、
+落合陽一メソッド の 章立て で、 3-5 分 で 読める 分量 (= 全体 1500-2500 文字 程度) の
+要約 を 作って ください。 短すぎ は ダメ、 ただし 冗長 も ダメ です。
+
+# 落合メソッド の 章立て (これに 加えて RQ / 仮説 / 貢献 / 今後の課題 / 図表 を 抽出)
+
+1. どんなもの? (what)
+2. 先行研究 と 比べて どこが すごい? (vs_prior_work)
+3. 技術 や 手法 の キモ は どこに ある? (key_method)
+4. どうやって 有効 だ と 検証 した? (validation)
+5. 議論 は ある? (discussion)
+6. 次に 読む べき 論文 は? (next_papers)
+
+# 加えて 研究論文 として 重要 な 以下 を 必ず 抽出
+
+7. リサーチクエスチョン (RQ) と 仮説 (rq_hypothesis): 著者 が 立てた RQ と 仮説 を 整理
+8. 主張 する 貢献 (contributions): 著者 が 明示的 に 主張 する 貢献 を 箇条書き
+9. 今後 の 課題 で 取り組む こと (future_work): 著者 が 示した 今後 の 課題 を 中心 に、
+   読者 として 自然 に 追加 した 方 が 良い 課題 も 加えて 整理
+10. 重要 な 図 / 表 の キャプション と 解釈 (important_figures): Figure / Table 番号 と
+    キャプション の 日本語訳、 なぜ 重要 か (50-150 字) を 3-6 件
+
+# トーン
+・ 単なる 翻訳 では なく、 「研究論文 を 読んで 伝える」 立場 で 書く
+・ 略語 は 初出 で フルスペル + 日本語訳 を 添える
+・ 各 セクション は 200-400 字 を 目安、 全体 1500-2500 字 (= 3-5 分 で 読める)
+・ 数値 (実験 N、 効果量、 p 値 等) は 落とさず 残す
+・ 引用 や 推測 は 「論文 では…」「ここ から 推測 する に…」 で 区別
+
+# 出力 JSON スキーマ (必ず 以下 の キーで 出す)
+
+{
+  "title_ja": "論文タイトル の 日本語訳 (副題 も)",
+  "title_orig": "原題",
+  "authors": "著者名 (代表 3 名 まで + et al.)",
+  "venue": "発表会議 / ジャーナル + 年",
+  "summary_one_paragraph": "全体 を 1 段落 (300-500 字) で まとめた 要約。 まず ここ から 読む 用",
+  "ochiai": {
+    "what":          "1. どんなもの? (200-400 字)",
+    "vs_prior_work": "2. 先行研究 と 比べて どこ が すごい? (200-400 字)",
+    "key_method":    "3. 技術 や 手法 の キモ (200-400 字)",
+    "validation":    "4. どうやって 有効 だ と 検証 した? (200-400 字)",
+    "discussion":    "5. 議論 は ある? (100-300 字)",
+    "next_papers":   ["6-A. 次に 読む べき 関連論文 (タイトル + 1 行 説明)", "6-B. …", "..."]
+  },
+  "rq_hypothesis": {
+    "research_questions": ["RQ1: …", "RQ2: …"],
+    "hypotheses":         ["H1: …", "H2: …"]
+  },
+  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2", "…"],
+  "future_work":   ["著者 が 示す 今後 の 課題 1", "課題 2", "(読者観点) 追加 課題 1", "…"],
+  "important_figures": [
+    {
+      "label":         "Figure 2 (システム 構成図) のように 番号 + 内容 を 軽く",
+      "caption_ja":    "図 / 表 の キャプション の 日本語訳",
+      "why_important": "なぜ この 図 / 表 が 重要 か (50-150 字)"
+    }
+  ]
+}
+
+英語 の 章 タイトル を そのまま 残す のでは なく、 必ず 落合メソッド の 章立て で 整理 してください。
+JSON 以外 の 前置き や 解説 は 不要。 JSON のみ を 返却。
+PROMPT;
+
+function ai_paper_translate_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, status, created_at, finished_at
+                          FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) $r['id'] = (int)$r['id'];
+    unset($r);
+    json_response(['items' => $rows, 'cost_points' => PAPER_TRANSLATE_COST]);
+}
+
+function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.result_json, pt.status,
+                                pt.error_msg, pt.created_at, pt.finished_at,
+                                u.display_name AS author_name, u.avatar_url AS author_avatar
+                           FROM paper_translates pt JOIN users u ON u.id = pt.user_id
+                          WHERE pt.share_token = ?");
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'paper_translate not found', 404);
+    json_response([
+        'id'            => (int)$row['id'],
+        'author_id'     => (int)$row['user_id'],
+        'author_name'   => $row['author_name'],
+        'author_avatar' => $row['author_avatar'],
+        'pdf_name'      => $row['pdf_name'],
+        'result'        => json_decode($row['result_json'] ?: 'null', true),
+        'status'        => $row['status'] ?? 'done',
+        'error_msg'     => $row['error_msg'],
+        'created_at'    => $row['created_at'],
+        'finished_at'   => $row['finished_at'],
+    ]);
+}
+
+function ai_paper_translate(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    if (!str_starts_with($contentType, 'multipart/form-data')) {
+        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロード してください', 400);
+    }
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file (PDF) が必要です', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
+    $tmpPdf = $f['tmp_name'];
+    $head = @file_get_contents($tmpPdf, false, null, 0, 5);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
+
+    // 残高 チェック
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < PAPER_TRANSLATE_COST) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', PAPER_TRANSLATE_COST, $bal), 400);
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
+
+    $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
+    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 落合 メソッド で 日本語 要約 してください。 出力 JSON のみ。";
+
+    $model = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+    $payload = json_encode([
+        'model' => $model,
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user', 'content' => [
+                ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                ['type' => 'text', 'text' => $userPrompt],
+            ]],
+        ],
+        'temperature' => 0.3,
+        'response_format' => ['type' => 'json_object'],
+        'max_tokens' => 6000,
+    ], JSON_UNESCAPED_UNICODE);
+
+    $token = bin2hex(random_bytes(16));
+    $pdfName = (string)($f['name'] ?? 'paper.pdf');
+    $rowId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, &$rowId) {
+        $pdo->prepare("INSERT INTO paper_translates
+            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status)
+            VALUES (?,?,?,?,?,?,?,'pending')")
+            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', PAPER_TRANSLATE_COST]);
+        $rowId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, PAPER_TRANSLATE_COST, 'paper_review', 'paper_translate', $rowId, '論文和訳要約 依頼料');
+    });
+
+    json_response_no_exit([
+        'ok'          => true,
+        'id'          => $rowId,
+        'share_token' => $token,
+        'status'      => 'pending',
+        'cost_points' => PAPER_TRANSLATE_COST,
+        'message'     => '依頼を受け付けました。 OpenAI が要約中… (1-4 分)。 結果ページを開いておくか、 後で /#/paper-translate/r/' . $token . ' を確認してください。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(360);
+
+    ai_paper_translate_run_background($pdo, $cfg, $rowId, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
+}
+
+function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, int $uid): void {
+    try {
+        $pdo->prepare("UPDATE paper_translates SET status='processing' WHERE id = ?")->execute([$rowId]);
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 300,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        ai_openai_delete_file($fileId, $apiKey);
+
+        if ($resp === false || $status >= 400) {
+            $errMsg = '';
+            if ($resp !== false) {
+                $errJ = json_decode((string)$resp, true);
+                $errMsg = $errJ['error']['message'] ?? '';
+            }
+            throw new RuntimeException('OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
+        }
+        $j = json_decode((string)$resp, true);
+        $content = $j['choices'][0]['message']['content'] ?? null;
+        if (!is_string($content) || $content === '') throw new RuntimeException('empty content');
+        $parsed = json_decode($content, true);
+        if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
+
+        $pdo->prepare("UPDATE paper_translates SET result_json = ?, status='done', finished_at = NOW() WHERE id = ?")
+            ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $rowId]);
+
+        try {
+            $shortTitle = (string)($parsed['title_ja'] ?? $pdfName);
+            $shortTitle = mb_substr($shortTitle, 0, 60);
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "✅ 和訳要約 完了: 「{$shortTitle}」 /#/paper-translate/r/{$token}",
+                'paper_translate', $rowId);
+        } catch (Throwable $_) {}
+    } catch (Throwable $e) {
+        $pdo->prepare("UPDATE paper_translates SET status='error', error_msg = ?, finished_at = NOW() WHERE id = ?")
+            ->execute([mb_substr($e->getMessage(), 0, 500), $rowId]);
+        try {
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "❌ 和訳要約 失敗: " . $e->getMessage() . " /#/paper-translate/r/{$token}",
+                'paper_translate', $rowId);
         } catch (Throwable $_) {}
     }
 }

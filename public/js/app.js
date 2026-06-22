@@ -563,6 +563,9 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
+// v748 #359 #360 #361 論文 和訳要約 (落合メソッド + 20pt)
+route('/paper-translate/r/:token', lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
+route('/paper-translate',          lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
 route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));
