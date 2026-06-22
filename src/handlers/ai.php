@@ -1843,11 +1843,20 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //   実 token / 検索 回数 は usage_json に 記録 して 後 から 参照 可能。
 // ============================================================================
 
-// 深さ × モデル 別 ポイント (依頼料 = 実 API コスト ($) を 円換算 した 概算 + 余裕)
+// v783 #380 深さ × モデル 別 ポイント を 実 API コスト ベース で 再計算。
+//   OpenAI Responses API 2026/06 時点 の おおむね の 料金:
+//     - web_search hosted tool: ~$0.030 per call
+//     - gpt-5-mini: $0.15/1M input、 $1.50/1M output
+//     - gpt-5:      $1.25/1M input、 $10.00/1M output
+//   ざっくり 試算 (1 USD ≈ 150 円、 1 pt = 1 円):
+//     - light (gpt-5-mini, ~4 検索, 5K in / 3K out): ~$0.13 = 約 20 円
+//     - standard (gpt-5, ~7 検索, 15K in / 10K out): ~$0.33 = 約 50 円
+//     - deep (gpt-5 高 reasoning, ~12 検索, 30K in / 30K out): ~$0.70 = 約 100 円
+//   実 トークン / 検索 数 は usage_json に 残す ので、 実 コスト が ズレ た 場合 は 後 で 調整。
 const DEEP_RESEARCH_TIERS = [
-    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 100, 'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, 数 サイト)'],
-    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 250, 'max_tokens' => 16000, 'label' => '標準 (gpt-5, 10 前後)'],
-    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 500, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning)'],
+    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
+    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
+    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
 ];
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'

@@ -329,6 +329,21 @@ input[type=text], input[type=number], input[type=url], input[type=email], select
   width: 100%; padding: 10px var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--line); background: white;
 }
 textarea { min-height: 80px; resize: vertical; }
+/* v783 #381 ファイル 入力 が 大きすぎる ので コンパクト 化。 アプリ 全体 で 適用。 */
+input[type=file] {
+  font-size: 12px;
+  padding: 2px 0;
+  max-width: 100%;
+}
+input[type=file]::file-selector-button {
+  font-size: 12px;
+  padding: 4px 10px;
+  margin-right: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 

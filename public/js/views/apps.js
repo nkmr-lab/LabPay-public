@@ -96,7 +96,7 @@ export const APPS = [
   // v613 文字数・単語数リライター
   { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (1pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを 色付きdiff で表示。', defaultVisible: true },
   // v781 #376 Deep Research (ChatGPT 風 多段 Web 調査)
-  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を 真似た 多段 Web 調査。 クエリ を 投げる と OpenAI が web_search を 必要な だけ 使って 複数 ソース を 横断 検索 → サブ問い 分解 + セクション別 調査 + 全体 まとめ + 出典 URL 一覧 を 構造化 して 返します。 深さ 3 段階 (軽い 100pt / 標準 250pt / 深い 500pt)。', defaultVisible: true },
+  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を 真似た 多段 Web 調査。 クエリ を 投げる と OpenAI が web_search を 必要な だけ 使って 複数 ソース を 横断 検索 → サブ問い 分解 + セクション別 調査 + 全体 まとめ + 出典 URL 一覧 を 構造化 して 返します。 深さ 3 段階 (軽い gpt-5-mini 20pt / 標準 gpt-5 50pt / 深い gpt-5 高 reasoning 100pt)。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
