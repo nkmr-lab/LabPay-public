@@ -126,6 +126,16 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_deep_research_get_shared($pdo, $cfg, (string)$seg[3]);
         return;
     }
+    // v784 #382 共有 一覧 (q= 検索) — 履歴 list より 先 に 評価 (= 'shared' 文字列 を 数値 と 誤判定 しない)
+    if ($sub === 'deep_research' && $method === 'GET' && ($seg[2] ?? '') === 'shared') {
+        ai_deep_research_shared_list($pdo, $cfg);
+        return;
+    }
+    // v784 #382 共有 ON/OFF toggle (本人 のみ)
+    if ($sub === 'deep_research' && $method === 'PATCH' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_deep_research_patch($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'deep_research' && $method === 'GET' && !isset($seg[2])) {
         ai_deep_research_list($pdo, $cfg);
         return;
@@ -1906,7 +1916,8 @@ PROMPT;
 function ai_deep_research_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    $st = $pdo->prepare("SELECT id, share_token, query_text, model, depth, cost_points, status, created_at, finished_at, error_msg
+    $st = $pdo->prepare("SELECT id, share_token, query_text, model, depth, cost_points, status,
+                                created_at, finished_at, error_msg, is_shared, shared_at
                            FROM deep_researches WHERE user_id = ?
                        ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
@@ -1922,6 +1933,8 @@ function ai_deep_research_list(PDO $pdo, array $cfg): void {
             'created_at'  => $r['created_at'],
             'finished_at' => $r['finished_at'],
             'error_msg'   => $r['error_msg'],
+            'is_shared'   => (bool)$r['is_shared'],
+            'shared_at'   => $r['shared_at'],
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
     json_response([
@@ -1935,7 +1948,7 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT dr.id, dr.user_id, dr.share_token, dr.query_text, dr.model, dr.depth,
                                  dr.cost_points, dr.status, dr.result_json, dr.usage_json,
-                                 dr.error_msg, dr.created_at, dr.finished_at,
+                                 dr.error_msg, dr.created_at, dr.finished_at, dr.is_shared, dr.shared_at,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM deep_researches dr JOIN users u ON u.id = dr.user_id
                            WHERE dr.share_token = ?");
@@ -1957,7 +1970,71 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
         'error_msg'     => $row['error_msg'],
         'created_at'    => $row['created_at'],
         'finished_at'   => $row['finished_at'],
+        'is_shared'     => (bool)$row['is_shared'],
+        'shared_at'     => $row['shared_at'],
     ]);
+}
+
+// v784 #382 共有 ON / OFF (本人 のみ)
+function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    if (!array_key_exists('is_shared', $body)) {
+        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+    }
+    $st = $pdo->prepare("SELECT user_id, status FROM deep_researches WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '調査 完了 後 のみ 共有 切替 可', 400);
+    $on = (bool)$body['is_shared'];
+    $pdo->prepare("UPDATE deep_researches
+                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
+                    WHERE id = ?")
+        ->execute([$on ? 1 : 0, $id]);
+    json_response(['ok' => true, 'is_shared' => $on]);
+}
+
+// v784 #382 みんな の 共有 Deep Research 一覧。 q= で キーワード 検索 (query_text + result_json 内 LIKE)
+function ai_deep_research_shared_list(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $q = trim((string)($_GET['q'] ?? ''));
+    $args = [];
+    $sql = "SELECT dr.id, dr.share_token, dr.query_text, dr.model, dr.depth,
+                   dr.cost_points, dr.result_json, dr.shared_at, dr.created_at, dr.finished_at,
+                   dr.user_id, u.display_name AS author_name, u.avatar_url AS author_avatar
+              FROM deep_researches dr
+              JOIN users u ON u.id = dr.user_id
+             WHERE dr.is_shared = 1 AND dr.status = 'done'";
+    if ($q !== '' && mb_strlen($q) <= 100) {
+        $sql .= " AND (dr.query_text LIKE ? OR dr.result_json LIKE ?)";
+        $args[] = '%' . $q . '%';
+        $args[] = '%' . $q . '%';
+    }
+    $sql .= " ORDER BY dr.shared_at DESC LIMIT 100";
+    $st = $pdo->prepare($sql);
+    $st->execute($args);
+    $items = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $result = json_decode($r['result_json'] ?: 'null', true);
+        $items[] = [
+            'id'            => (int)$r['id'],
+            'share_token'   => $r['share_token'],
+            'query_short'   => mb_substr((string)$r['query_text'], 0, 120),
+            'summary_short' => is_array($result) ? mb_substr((string)($result['summary'] ?? ''), 0, 200) : '',
+            'model'         => $r['model'],
+            'depth'         => $r['depth'],
+            'cost_points'   => (int)$r['cost_points'],
+            'shared_at'     => $r['shared_at'],
+            'created_at'    => $r['created_at'],
+            'author_id'     => (int)$r['user_id'],
+            'author_name'   => $r['author_name'],
+            'author_avatar' => $r['author_avatar'],
+        ];
+    }
+    json_response(['items' => $items, 'q' => $q]);
 }
 
 function ai_deep_research_delete(PDO $pdo, array $cfg, int $id): void {

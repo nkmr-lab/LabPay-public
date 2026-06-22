@@ -8,9 +8,9 @@
 //   2. 結果 ページ に 遷移、 status=pending/processing なら 10 秒 ごと に polling
 //   3. done に なれ ば レポート + 出典 が 表示 される
 
-import { get, post, del } from '../api.js';
+import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { toast } from '../app.js';
+import { state, toast } from '../app.js';
 
 let cachedSettings = null;
 
@@ -41,10 +41,56 @@ export async function renderDeepResearch() {
     </div>
     <div id="dr-result"></div>
     <div id="dr-history" class="card" style="margin-top:8px"><div class="muted">過去 の Deep Research 履歴…</div></div>
+    <div class="card" style="margin-top:8px">
+      <div class="bold" style="font-size:14px; margin-bottom:6px">🌐 みんなの 公開 Deep Research</div>
+      <div class="row" style="gap:6px; margin-bottom:6px">
+        <input type="text" id="dr-shared-q" placeholder="キーワード で 検索 (空欄 で 最新 100 件)" style="flex:1">
+        <button id="dr-shared-go">検索</button>
+      </div>
+      <div id="dr-shared-list"><div class="muted">読み込み中…</div></div>
+    </div>
   `;
   await loadSettings();
   await loadHistory();
+  await loadSharedList('');
   document.getElementById('dr-go').addEventListener('click', go);
+  document.getElementById('dr-shared-go').addEventListener('click', () => {
+    const q = (document.getElementById('dr-shared-q').value || '').trim();
+    loadSharedList(q);
+  });
+  document.getElementById('dr-shared-q').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const q = (document.getElementById('dr-shared-q').value || '').trim();
+      loadSharedList(q);
+    }
+  });
+}
+
+async function loadSharedList(q) {
+  const root = document.getElementById('dr-shared-list');
+  if (!root) return;
+  try {
+    const url = '/api/ai/deep_research/shared' + (q ? '?q=' + encodeURIComponent(q) : '');
+    const d = await get(url);
+    if (!d.items || !d.items.length) {
+      root.innerHTML = `<div class="muted">${q ? '「' + escapeHtml(q) + '」 に 該当 する 公開 Deep Research は ありません' : '公開 されて いる Deep Research は まだ ありません'}</div>`;
+      return;
+    }
+    root.innerHTML = `<div style="display:flex; flex-direction:column; gap:6px">
+      ${d.items.map(r => `
+        <a class="list-item" href="#/deep-research/r/${escapeHtml(r.share_token)}" style="flex-direction:column; align-items:stretch; text-decoration:none; color:inherit">
+          <div style="display:flex; align-items:center; gap:6px">
+            ${avatarHtml(r.author_name, r.author_avatar, 'xs')}
+            <span class="bold" style="font-size:13px">${escapeHtml(r.author_name || '')}</span>
+            <span class="meta" style="font-size:11px; margin-left:auto">${escapeHtml(r.depth || '')} ・ ${r.cost_points}pt ・ ${escapeHtml(r.shared_at || '')}</span>
+          </div>
+          <div style="font-size:13.5px; margin-top:4px; font-weight:600">🔎 ${escapeHtml(r.query_short)}</div>
+          ${r.summary_short ? `<div style="font-size:12.5px; margin-top:3px; color:#374151; line-height:1.6">${escapeHtml(r.summary_short)}…</div>` : ''}
+        </a>`).join('')}
+    </div>`;
+  } catch (e) {
+    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function loadSettings() {
@@ -83,7 +129,7 @@ async function loadHistory() {
         ${d.items.map(r => `
           <div style="display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; background:#fafafa">
             <a class="grow" href="#/deep-research/r/${escapeHtml(r.share_token)}" style="text-decoration:none; color:inherit; min-width:0; flex:1">
-              <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.query_short)}</div>
+              <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${r.is_shared ? '🌐 ' : ''}${escapeHtml(r.query_short)}</div>
               <div class="meta" style="font-size:11px">${escapeHtml(r.depth)} ・ ${escapeHtml(r.model)} ・ ${r.cost_points}pt ・ ${escapeHtml(r.status)} ・ ${escapeHtml(r.created_at || '')}</div>
             </a>
             <button class="ghost" data-del="${r.id}" title="削除" style="font-size:14px; padding:2px 8px">🗑</button>
@@ -142,17 +188,28 @@ async function refreshShared(token) {
   const app = document.getElementById('app');
   try {
     const d = await get('/api/ai/deep_research/r/' + encodeURIComponent(token));
+    const myUid = Number(state.me?.id || 0);
+    const isOwner = myUid > 0 && Number(d.author_id) === myUid;
+    const shareToggleHtml = (isOwner && d.status === 'done') ? `
+      <div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-radius:6px; font-size:13px; display:flex; align-items:center; gap:8px">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
+          <input type="checkbox" id="dr-share-toggle" ${d.is_shared ? 'checked' : ''}>
+          <span>🌐 みんな に 公開 (他 メンバ が キーワード 検索 で 見つけ られる ように する)</span>
+        </label>
+      </div>` : '';
     const header = `
       <div class="card">
         <a href="#/deep-research" class="hint">← Deep Research</a>
         <h2 style="margin:6px 0">🔎 Deep Research
           ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
           ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
+          ${d.is_shared ? '<span class="tag" style="background:#dcfce7; color:#15803d">🌐 公開中</span>' : ''}
         </h2>
         <div class="meta">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} ・ ${escapeHtml(d.model || '')} (${escapeHtml(d.depth || '')}) ・ ${d.cost_points}pt ・ ${escapeHtml(d.created_at || '')}
         </div>
         <div style="margin-top:8px; padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px; white-space:pre-wrap">${escapeHtml(d.query_text)}</div>
+        ${shareToggleHtml}
       </div>
       <div id="dr-result"></div>
     `;
@@ -175,6 +232,17 @@ async function refreshShared(token) {
         <div class="card"><div class="muted">❌ 調査 失敗: ${escapeHtml(d.error_msg || '不明 な エラー')}</div></div>`;
       return;
     }
+    // v784 #382 公開 切替
+    document.getElementById('dr-share-toggle')?.addEventListener('change', async (e) => {
+      try {
+        await patch('/api/ai/deep_research/' + d.id, { is_shared: e.target.checked });
+        toast(e.target.checked ? '公開 しました' : '公開 を 停止 しました');
+        refreshShared(token);
+      } catch (err) {
+        toast('失敗: ' + err.message);
+        e.target.checked = !e.target.checked;
+      }
+    });
     paintResult(d);
   } catch (e) {
     app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
