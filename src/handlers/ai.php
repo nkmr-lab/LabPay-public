@@ -900,15 +900,12 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
-// v755 #371 モデル 別 価格 (高い モデル ほど 高品質 + 高 pt)。 default は gpt-4o (20pt)。
-//   実 トークン コスト 比 を 反映 (gpt-4o = 1x、 o1 は 6x + reasoning tokens で 実質 10x)。
-//   client が model を 渡したら 該当 pt を 徴収。 未対応 model は 400。
+// v773 #395 モデル 一覧 を 整理。 gpt-4o-mini / gpt-4o は 200-300 字 の 短い 要約 しか
+//   出さない ので 論文要約 用途 では 失格 → 削除。 真面目 に 要約 する なら 最低 でも 4.1。
 const PAPER_TRANSLATE_MODELS = [
-    'gpt-4o-mini' => 5,    // 4o 軽量 (速い / 安い)
-    'gpt-4o'      => 20,   // 標準 (デフォルト)
-    'gpt-4.1'     => 30,   // 4.1 (推論力 アップ)
+    'gpt-4.1'     => 30,   // 標準 (デフォルト、 500 字 前後 / 節)
     'gpt-5-mini'  => 40,   // 5 系 軽量
-    'gpt-5'       => 80,   // 5 系 標準 (高品質)
+    'gpt-5'       => 80,   // 5 系 標準 (高品質、 各節 が しっかり 厚く 出る)
     'o1'          => 120,  // o1 推論 モデル (深い 解析、 reasoning tokens 込みで 実 6-10x)
 ];
 
