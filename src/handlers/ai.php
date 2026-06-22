@@ -77,6 +77,11 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_patch($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v758 #377 「やりなおす」 (本人 のみ、 保存 された PDF で 再 処理)
+    if ($sub === 'paper_translate' && $method === 'POST' && isset($seg[2]) && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'redo') {
+        ai_paper_translate_redo($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'paper_translate' && $method === 'GET' && !isset($seg[2])) {
         ai_paper_translate_list($pdo, $cfg);
         return;
@@ -1091,7 +1096,7 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
 
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.result_json, pt.status,
+    $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.pdf_path, pt.model, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
                                 pt.pages_count, pt.pages_dir, pt.is_shared, pt.shared_at,
                                 u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -1106,6 +1111,8 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'author_name'   => $row['author_name'],
         'author_avatar' => $row['author_avatar'],
         'pdf_name'      => $row['pdf_name'],
+        'pdf_path'      => $row['pdf_path'],    // v758 #377 redo 可能 か client が判定
+        'model'         => $row['model'],
         'result'        => json_decode($row['result_json'] ?: 'null', true),
         'status'        => $row['status'] ?? 'done',
         'error_msg'     => $row['error_msg'],
@@ -1156,12 +1163,23 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
 
     // v750 #366 図表 抽出: PDF を ページ単位 JPEG に レンダリング (pdftoppm)。
     // v757 #375 解像度 を 110 → 160 DPI に bump、 図表 を crop 表示 する 時 の 質 を 上げる。
+    // v758 #377 PDF 本体 も サーバ に 保存 (やりなおす 用)。
     //   client は figure_refs の page + page_region から この ページ画像 を crop 表示。
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pagesRel = '/uploads/paper_pages/' . $token;
     $pagesAbs = $publicDir . $pagesRel;
     @mkdir($pagesAbs, 0775, true);
+    // PDF 本体 を 保存
+    $pdfRel = '/uploads/paper_pdfs/' . $token . '/original.pdf';
+    $pdfAbs = $publicDir . $pdfRel;
+    @mkdir(dirname($pdfAbs), 0775, true);
+    if (!copy($tmpPdf, $pdfAbs)) {
+        fwrite(STDERR, "[paper_translate] failed to save PDF locally: $pdfAbs\n");
+        $pdfRel = null;
+    } else {
+        @chmod($pdfAbs, 0644);
+    }
     $pagesCount = 0;
     try {
         $cmd = sprintf('pdftoppm -jpeg -jpegopt quality=85 -r 160 %s %s 2>&1',
@@ -1198,14 +1216,15 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $cost, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $reqModel, $cost, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status, pages_count, pages_dir)
-            VALUES (?,?,?,?,?,?,?,'pending',?,?)")
+            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model)
+            VALUES (?,?,?,?,?,?,?,'pending',?,?,?,?)")
             ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', $cost,
-                       $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null]);
+                       $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
+                       $pdfRel, $reqModel]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $rowId, '論文和訳要約 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $rowId, '論文要約 依頼料');
     });
 
     json_response_no_exit([
@@ -1222,6 +1241,77 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     @set_time_limit(360);
 
     ai_paper_translate_run_background($pdo, $cfg, $rowId, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
+}
+
+// v758 #377 既存 row の PDF を 使って 再 処理 (本人 のみ)。 body: { model?: string }
+function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $body = read_json_body();
+    $reqModel = isset($body['model']) ? trim((string)$body['model']) : '';
+    $st = $pdo->prepare("SELECT * FROM paper_translates WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ', 403);
+    if (empty($row['pdf_path'])) throw new ApiException('bad_request', 'PDF 保存 が ない 古い 要約 は やりなおせません', 400);
+    $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかりません', 404);
+
+    // モデル: body で 指定 されたら それ、 なければ 前回 使った モデル、 それも なければ gpt-4o
+    if ($reqModel === '') $reqModel = (string)($row['model'] ?? 'gpt-4o');
+    if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
+
+    $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
+    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+
+    $payload = json_encode([
+        'model' => $reqModel,
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user', 'content' => [
+                ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                ['type' => 'text', 'text' => $userPrompt],
+            ]],
+        ],
+        'temperature' => 0.2,
+        'response_format' => ['type' => 'json_object'],
+        'max_tokens' => 8000,
+    ], JSON_UNESCAPED_UNICODE);
+
+    db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
+        $pdo->prepare("UPDATE paper_translates SET status='pending', model=?, cost_points=cost_points+? WHERE id=?")
+            ->execute([$reqModel, $cost, $id]);
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $id, '論文要約 やりなおし');
+    });
+
+    json_response_no_exit([
+        'ok'          => true,
+        'id'          => $id,
+        'status'      => 'pending',
+        'model'       => $reqModel,
+        'cost_points' => $cost,
+        'message'     => '再 処理 を 開始 しました (' . $reqModel . ')',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(360);
+
+    $token = (string)($row['share_token'] ?? '');
+    $pdfName = (string)($row['pdf_name'] ?? 'paper.pdf');
+    ai_paper_translate_run_background($pdo, $cfg, $id, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
 }
 
 function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, int $uid): void {

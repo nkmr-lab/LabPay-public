@@ -3,7 +3,7 @@
 //   重要 図表 (ページ画像 を pdftoppm で 抽出 表示) + 最後 に 落合メソッド の 6 項目 で
 //   全体 を 重ね合わせて まとめる。 結果は share_token で URL 共有可能。
 
-import { get, patch } from '../api.js';
+import { get, patch, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -131,7 +131,7 @@ async function go() {
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     toast('要約 開始 (' + (j.model || model) + ')');
-    location.hash = '#/paper-translate/r/' + j.share_token;
+    location.hash = '#/paper-summary/r/' + j.share_token;
   } catch (e) {
     toast('失敗: ' + e.message);
     btn.disabled = false; btn.textContent = oldText;
@@ -150,7 +150,7 @@ async function loadHistory() {
     document.getElementById('pt-history').innerHTML = items.map(it => {
       const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
       return `
-        <a href="#/paper-translate/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px">
+        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px">
           <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name)}${sharedBadge}</div>
@@ -182,7 +182,7 @@ async function loadSharedList(q) {
       const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
       const summary = it.summary_one_paragraph || '';
       return `
-        <a href="#/paper-translate/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
+        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
           <div style="flex:none; font-size:20px">📑</div>
           <div class="grow" style="min-width:0">
             <div class="bold" style="font-size:14px">${escapeHtml(title)}</div>
@@ -197,7 +197,7 @@ async function loadSharedList(q) {
   }
 }
 
-// /#/paper-translate/r/:token  個別 結果ページ。
+// /#/paper-summary/r/:token  個別 結果ページ。
 export async function renderPaperTranslateShared() {
   const token = decodeURIComponent(location.hash.split('/').pop() || '');
   const app = document.getElementById('app');
@@ -240,7 +240,7 @@ async function refreshShared(token, app) {
 function paintResult(d, token) {
   const r = d.result || {};
   const app = document.getElementById('app');
-  const shareUrl = location.origin + '/#/paper-translate/r/' + token;
+  const shareUrl = location.origin + '/#/paper-summary/r/' + token;
   const pagesDir = d.pages_dir || null;
   const pagesCount = d.pages_count || 0;
   const meId = Number(state.me?.id) || 0;
@@ -261,8 +261,9 @@ function paintResult(d, token) {
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
+        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で 同じ モデル で 再 処理 (再課金)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
-        <a class="btn" href="#/paper-translate" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
+        <a class="btn" href="#/paper-summary" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
     </div>
 
@@ -289,6 +290,18 @@ function paintResult(d, token) {
       await navigator.clipboard.writeText(shareUrl);
       toast('コピーしました');
     } catch (_) { toast(shareUrl); }
+  });
+  // v758 #377 やりなおす (本人 のみ、 保存 PDF で 再 処理 + 再課金)
+  document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    if (!confirm('保存 された PDF で 同じ モデル で 再 処理 します (再 課金 されます)。 続行 しますか?')) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = '🔁 開始中…';
+    try {
+      const r = await post('/api/ai/paper_translate/' + d.id + '/redo', {});
+      toast('再 処理 を 開始 しました (' + (r.model || '') + ')');
+      // status=pending に なった ので polling 状態 を 表示 し直す
+      await refreshShared(token, document.getElementById('app'));
+    } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
   // v756 #372 公開 ON/OFF toggle (本人 のみ)
   document.getElementById('pt-share-toggle')?.addEventListener('click', async (ev) => {
