@@ -547,6 +547,21 @@ function stripStudyKey(s, key) {
   str = str.replace(/^[)）]+\s*/, '').replace(/^の?(実験|研究|結果)[\s:：]*/, '').replace(/^[:：]\s*/, '').trim();
   return str;
 }
+// v778 #402 自前実験 を「実験N」 単位 で ペア リング する 用 の キー 抽出。
+//   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」 等 を 全部 「実験1」 に 正規化。
+//   1 行 目 だけ で 拾える ように、 prefix 系 の パターン のみ 評価 (本文 中 の「研究 1 で は」 等 を 拾わない)。
+function ownExpKey(s) {
+  const str = String(s).trim();
+  // 全角 数字 を 半角 化
+  const norm = str.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+  const m = norm.match(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*(\d+)\s*[:：・\-]/i);
+  if (!m) return null;
+  return '実験' + m[1];
+}
+function stripOwnExpKey(s) {
+  // 先頭 の 「研究1：」「実験1:」「Study 1 -」 等 を 取り除いて 本文 だけ 返す。
+  return String(s).replace(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*[0-9０-９]+\s*[:：・\-]\s*/i, '').trim();
+}
 function renderExperimentsBlock(expsRaw, resRaw) {
   const exps = Array.isArray(expsRaw) ? expsRaw : [];
   const ress = Array.isArray(resRaw)  ? resRaw  : [];
@@ -565,9 +580,57 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (!isCited(rs)) { own.ress.push(rs); continue; }
     const k = studyKey(rs); if (k) addCited(k, 'res', rs); else own.ress.push(rs);
   }
+  // v778 #402 自前 実験 を 「実験N」 で ペア リング (insertion order を 保つ)
+  const ownPairs = new Map();
+  const ownUnkeyedExps = [];
+  const ownUnkeyedRess = [];
+  const addOwnPair = (key, kind, body) => {
+    if (!ownPairs.has(key)) ownPairs.set(key, { key, exp: '', res: '' });
+    ownPairs.get(key)[kind] = body;
+  };
+  for (const e of own.exps) {
+    const k = ownExpKey(e);
+    if (k) addOwnPair(k, 'exp', e); else ownUnkeyedExps.push(e);
+  }
+  for (const rs of own.ress) {
+    const k = ownExpKey(rs);
+    if (k) addOwnPair(k, 'res', rs); else ownUnkeyedRess.push(rs);
+  }
+
   let html = '';
-  html += renderListSection('🔬 この論文で行った実験', own.exps);
-  html += renderListSection('📊 この論文の結果',     own.ress);
+  if (ownPairs.size > 0) {
+    html += `
+      <div class="card">
+        <div class="bold" style="color:var(--primary); margin-bottom:10px">🔬 この論文で行った実験</div>
+        <div style="display:flex; flex-direction:column; gap:14px">
+          ${[...ownPairs.values()].map(p => {
+            const expBody = stripOwnExpKey(p.exp);
+            const resBody = stripOwnExpKey(p.res);
+            return `
+              <div>
+                <div style="padding:10px 12px; border:2px solid var(--primary); border-radius:8px; background:#fff">
+                  <div class="bold" style="color:var(--primary); margin-bottom:5px">${escapeHtml(p.key)}: 実験の内容</div>
+                  ${expBody
+                    ? `<div style="font-size:13.5px; line-height:1.75">${escapeHtml(expBody)}</div>`
+                    : `<div style="font-size:13px; color:#999">(実験記述なし)</div>`}
+                </div>
+                ${resBody ? `
+                  <div style="margin-top:6px; padding:8px 12px; background:#f5f0fa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0">
+                    <div class="bold" style="font-size:13px; color:var(--primary); margin-bottom:3px">📊 ${escapeHtml(p.key)} の結果</div>
+                    <div style="font-size:13.5px; line-height:1.75">${escapeHtml(resBody)}</div>
+                  </div>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    // 「実験N」 形式 で 拾え なかった 残り は 補足 リスト に
+    html += renderListSection('🔬 その他の実験記述', ownUnkeyedExps);
+    html += renderListSection('📊 その他の結果記述', ownUnkeyedRess);
+  } else {
+    // 全部 「実験N」 で 拾え なかった → 従来 の リスト 表示
+    html += renderListSection('🔬 この論文で行った実験', own.exps);
+    html += renderListSection('📊 この論文の結果',     own.ress);
+  }
   if (cited.size > 0) {
     html += `
       <div class="card">
