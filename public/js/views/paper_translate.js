@@ -171,14 +171,17 @@ async function loadHistory() {
       document.getElementById('pt-history').innerHTML = '<div class="empty">まだ 要約 履歴 が ありません</div>';
       return;
     }
+    // v772 #393 履歴 表示 を 「論文タイトル / ファイル名 (日時)」 形式 に。
     document.getElementById('pt-history').innerHTML = items.map(it => {
       const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
+      const title = it.title_ja || it.pdf_name;
+      const sub = it.title_ja ? `${it.pdf_name} (${it.created_at})` : `${it.created_at} · ${it.status}`;
       return `
-        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px">
+        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0">
           <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
           <div class="grow" style="min-width:0">
-            <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name)}${sharedBadge}</div>
-            <div class="hint-sm" style="font-size:11px">${escapeHtml(it.created_at)} · ${escapeHtml(it.status)}</div>
+            <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
+            <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
           </div>
         </a>`;
     }).join('');
@@ -305,24 +308,7 @@ function paintResult(d, token) {
 
     ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
 
-    ${(() => {
-      // v771 #391 「(引用)」 prefix で 自前 vs 引用 を 自動 振り分け。 自前 が ない なら
-      //   「この論文の実験」 セクション を 出さ ず 「引用された関連実験」 だけ 表示。
-      const exps = Array.isArray(r.experiments) ? r.experiments : [];
-      const ress = Array.isArray(r.results_summary) ? r.results_summary : [];
-      const isCited = s => /^\s*\(?引用\)?\s*[:：]?/.test(String(s));
-      const own = exps.filter(s => !isCited(s));
-      const cited = exps.filter(isCited);
-      const ownR = ress.filter(s => !isCited(s));
-      const citedR = ress.filter(isCited);
-      const strip = s => String(s).replace(/^\s*\(?引用\)?\s*[:：]?\s*/, '');
-      return [
-        renderListSection('🔬 この論文で行った実験', own),
-        renderListSection('📊 この論文の結果', ownR),
-        renderListSection('📚 引用された関連実験', cited.map(strip)),
-        renderListSection('📈 引用研究の主な結果', citedR.map(strip)),
-      ].join('');
-    })()}
+    ${renderExperimentsBlock(r.experiments, r.results_summary)}
 
     ${renderListSection('🚀 今後の課題', r.future_work)}
 
@@ -520,6 +506,66 @@ function renderRqHypothesis(rh) {
       ${rqHtml}
       ${hyHtml}
     </div>`;
+}
+
+// v772 #392 実験 と 結果 を 研究名 (例: "Kirmani & Wright 1989") で 自動 ペアリング 表示。
+//   experiments と results_summary の 各 文 から 「Author Year」 を 抽出 → 同じ key で 紐付け。
+function studyKey(s) {
+  const str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');
+  // 先頭 から 最初 の 西暦 (1900-2099) まで を 研究名 と みなす
+  const m = str.match(/^[^()「」]*?(?:19|20)\d{2}/);
+  return m ? m[0].replace(/\s+/g, ' ').trim() : null;
+}
+function stripStudyKey(s, key) {
+  let str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');
+  if (key) {
+    const escaped = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    str = str.replace(new RegExp('^' + escaped + '\\s*'), '');
+  }
+  // 残った 「)」「の実験:」「の結果:」「:」 等 の 接続 文字 を 除去
+  str = str.replace(/^[)）]+\s*/, '').replace(/^の?(実験|研究|結果)[\s:：]*/, '').replace(/^[:：]\s*/, '').trim();
+  return str;
+}
+function renderExperimentsBlock(expsRaw, resRaw) {
+  const exps = Array.isArray(expsRaw) ? expsRaw : [];
+  const ress = Array.isArray(resRaw)  ? resRaw  : [];
+  const isCited = s => /^\s*\(?\s*引用/.test(String(s));
+  const own = { exps: [], ress: [] };
+  const cited = new Map();  // key → { exp, res }
+  const addCited = (k, kind, item) => {
+    if (!cited.has(k)) cited.set(k, { key: k, exp: '', res: '' });
+    cited.get(k)[kind] = item;
+  };
+  for (const e of exps) {
+    if (!isCited(e)) { own.exps.push(e); continue; }
+    const k = studyKey(e); if (k) addCited(k, 'exp', e); else own.exps.push(e);
+  }
+  for (const rs of ress) {
+    if (!isCited(rs)) { own.ress.push(rs); continue; }
+    const k = studyKey(rs); if (k) addCited(k, 'res', rs); else own.ress.push(rs);
+  }
+  let html = '';
+  html += renderListSection('🔬 この論文で行った実験', own.exps);
+  html += renderListSection('📊 この論文の結果',     own.ress);
+  if (cited.size > 0) {
+    html += `
+      <div class="card">
+        <div class="bold" style="color:var(--primary); margin-bottom:8px">📚 引用された関連研究 (実験 + 結果)</div>
+        <div style="display:flex; flex-direction:column; gap:10px">
+          ${[...cited.values()].map(p => {
+            const expBody = stripStudyKey(p.exp, p.key);
+            const resBody = stripStudyKey(p.res, p.key);
+            return `
+              <div style="padding:8px 12px; background:#fafafa; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0">
+                <div class="bold" style="font-size:13px; color:#6b21a8">${escapeHtml(p.key)}</div>
+                ${expBody ? `<div style="margin-top:4px; font-size:13px"><b>🔬 実験:</b> ${escapeHtml(expBody)}</div>` : ''}
+                ${resBody ? `<div style="margin-top:3px; font-size:13px"><b>📊 結果:</b> ${escapeHtml(resBody)}</div>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+  return html;
 }
 
 // v757 #375 参考文献 で 特に 重要 な もの。 v759 #378 原題 + 和訳 を 分けて 表示。

@@ -1084,17 +1084,34 @@ PROMPT;
 function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    $st = $pdo->prepare("SELECT id, share_token, pdf_name, status, is_shared, shared_at, created_at, finished_at
+    // v772 #393 result_json から title_ja を 引いて 履歴 行 に 表示 用 に 添える。
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
-    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['is_shared'] = (bool)$r['is_shared']; }
-    unset($r);
+    $rows = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $title = null;
+        if (!empty($r['result_json'])) {
+            $j = json_decode((string)$r['result_json'], true);
+            if (is_array($j) && !empty($j['title_ja'])) $title = (string)$j['title_ja'];
+        }
+        $rows[] = [
+            'id'          => (int)$r['id'],
+            'share_token' => $r['share_token'],
+            'pdf_name'    => $r['pdf_name'],
+            'title_ja'    => $title,
+            'status'      => $r['status'],
+            'is_shared'   => (bool)$r['is_shared'],
+            'shared_at'   => $r['shared_at'],
+            'created_at'  => $r['created_at'],
+            'finished_at' => $r['finished_at'],
+        ];
+    }
     json_response([
         'items'        => $rows,
         'cost_points'  => PAPER_TRANSLATE_COST,        // 旧 互換
         'models'       => PAPER_TRANSLATE_MODELS,      // v755 #371 モデル別 価格 リスト
-        'default_model'=> 'gpt-4o',
+        'default_model'=> 'gpt-4.1',                   // v772 #394 デフォルト を 4.1 (30pt) に
     ]);
 }
 
@@ -1213,8 +1230,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $head = @file_get_contents($tmpPdf, false, null, 0, 5);
     if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
 
-    // v755 #371 モデル 選択 (default: gpt-4o)。 未対応 モデル は 400。
-    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4o'));
+    // v755 #371 モデル 選択 (default: gpt-4.1 から v772 #394)。 未対応 モデル は 400。
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4.1'));
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
     }
