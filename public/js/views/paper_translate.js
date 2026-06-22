@@ -168,17 +168,15 @@ function paintResult(d, token) {
 
     ${r.summary_one_paragraph ? `
     <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
-      <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 まず 1 段落 サマリ</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 まず 全体 要約</div>
       <div style="font-size:14px; line-height:1.7; white-space:pre-wrap">${escapeHtml(r.summary_one_paragraph)}</div>
     </div>` : ''}
 
-    ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
-
-    ${renderListSection('🔬 RQ と 仮説',
-        [...(r.rq_hypothesis?.research_questions || []).map(s => '【RQ】 ' + s),
-         ...(r.rq_hypothesis?.hypotheses          || []).map(s => '【H】 ' + s)])}
+    ${renderRqHypothesis(r.rq_hypothesis)}
 
     ${renderListSection('🎯 主張する 貢献', r.contributions)}
+
+    ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
 
     ${renderListSection('🚀 今後 の 課題', r.future_work)}
 
@@ -283,6 +281,38 @@ function renderOchiai(o) {
   }
   html += '</div>';
   return html;
+}
+
+// v753 RQ と 仮説 + それぞれ の 結果 を ペア 表示。 旧 schema (文字列 配列) も fallback 表示。
+function renderRqHypothesis(rh) {
+  if (!rh || typeof rh !== 'object') return '';
+  const rqs = Array.isArray(rh.research_questions) ? rh.research_questions : [];
+  const hys = Array.isArray(rh.hypotheses)         ? rh.hypotheses         : [];
+  if (!rqs.length && !hys.length) return '';
+  const rqHtml = rqs.map(item => {
+    if (typeof item === 'string') return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px"><div class="bold" style="font-size:13px; color:#4f46e5">RQ</div><div style="font-size:14px">${escapeHtml(item)}</div></div>`;
+    const rq = item?.rq ? String(item.rq) : '';
+    const ans = item?.answer ? String(item.answer) : '';
+    return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px">
+      <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(rq)}</div>
+      ${ans ? `<div style="font-size:13px; margin-top:4px"><b>✅ 結果:</b> ${escapeHtml(ans)}</div>` : ''}
+    </div>`;
+  }).join('');
+  const hyHtml = hys.map(item => {
+    if (typeof item === 'string') return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px"><div class="bold" style="font-size:13px; color:#a16207">仮説</div><div style="font-size:14px">${escapeHtml(item)}</div></div>`;
+    const hyp = item?.hypothesis ? String(item.hypothesis) : '';
+    const res = item?.result     ? String(item.result)     : '';
+    return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px">
+      <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(hyp)}</div>
+      ${res ? `<div style="font-size:13px; margin-top:4px"><b>📊 結果:</b> ${escapeHtml(res)}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `
+    <div class="card">
+      <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説 と 結果</div>
+      ${rqHtml}
+      ${hyHtml}
+    </div>`;
 }
 
 function renderListSection(title, list) {

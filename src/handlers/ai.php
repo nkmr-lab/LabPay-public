@@ -888,19 +888,19 @@ const PAPER_TRANSLATE_COST = 20;
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 あなた は 研究論文 を 日本語 で 要約 する アシスタント です。
 単純な 機械翻訳 では なく、 「研究論文 として 何が 書かれて いるか」 を 強く 意識して、
-論文 の 構造 に 沿った 詳細な 和訳要約 を 作り、 最後 に 落合陽一メソッド の 6 項目 で
-全体 を 重ね合わせて まとめて ください。 短すぎ は ダメ、 ただし 冗長 も ダメ。
-全体 で 3-5 分 (= 1500-2500 字 程度) で 読める 分量 が 理想 です。
+以下 の 順番 で 構造化 した 詳細な 和訳要約 を 作って ください。 短すぎ は ダメ、 ただし
+冗長 も ダメ。 全体 で 3-5 分 (= 1500-2500 字 程度) で 読める 分量 が 理想 です。
 
-# 全体 構成
+# 出力 順番 (= 読者 が 上 から 下 へ 読み 進める 順番)
 
-1. summary_one_paragraph: 1 段落 (300-500 字) の 「まず これ だけ 読めば 概要 が 分かる」 サマリ
-2. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
-   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 必要 に 応じて
-   figure_refs で 重要 な 図 や 表 を 引用 し、 ページ番号 と キャプション の 和訳 を 添える
-3. rq_hypothesis: 著者 が 立てた リサーチクエスチョン (RQ) と 仮説 を 整理
-4. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
-5. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 追加 した 方 が 良い 課題
+1. summary_one_paragraph: 1 段落 (300-500 字) の 「まず これ だけ 読めば 概要 が 分かる」 全体要約
+2. rq_hypothesis: 著者 が 立てた リサーチクエスチョン (RQ) と 仮説、 そして それぞれ に対して
+   論文 の 結果 が どうだったか (= 答え / 支持 / 棄却 / 部分支持) も 必ず 整理
+3. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
+4. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
+   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 重要 な 図 や 表 を
+   figure_refs で 引用 し、 ページ番号 と キャプション の 和訳、 なぜ 重要 か を 添える
+5. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 自然 に 追加 した 方 が 良い 課題
 6. ochiai_method: 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめる
 
 # detailed_sections の 中身
@@ -908,10 +908,8 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
 - heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
 - body: 節 本文 の 和訳要約 (300-600 字、 数値 / 用語 を 残す)
-- figure_refs: その 節 で 言及 する 重要 な 図 / 表 (0-3 件)。 figure_refs の 形:
-  { "label": "Figure 2", "page": 3, "caption_ja": "図 の キャプション の 和訳",
-    "why_important": "この 図 で 何 が 分かる か (50-150 字)" }
-  page は PDF の 物理ページ番号 (1 始まり) を 正確 に 入れる こと。
+- figure_refs: その 節 で 言及 する 重要 な 図 / 表 (0-3 件)。 page は PDF の 物理ページ番号
+  (1 始まり) を 正確 に 入れる こと (= サーバ で ページ画像 を 紐付ける ので 必須)。
 
 # トーン
 ・ 単なる 翻訳 では なく、 「研究論文 を 読んで 伝える」 立場 で 書く
@@ -927,6 +925,17 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
   "authors": "著者名 (代表 3 名 まで + et al.)",
   "venue": "発表会議 / ジャーナル + 年",
   "summary_one_paragraph": "1 段落 (300-500 字) の 全体 サマリ",
+  "rq_hypothesis": {
+    "research_questions": [
+      { "rq": "RQ1: 質問 文",
+        "answer": "論文 で の 答え (例: 「平均反応時間 が X ms 短縮 された」 等、 結果 を 具体的 に)" }
+    ],
+    "hypotheses": [
+      { "hypothesis": "H1: 仮説 文",
+        "result":     "結果: 支持 / 棄却 / 部分支持 + 具体的 な 根拠 (数値 / 効果量 / p 値)" }
+    ]
+  },
+  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2"],
   "detailed_sections": [
     {
       "heading": "節 タイトル",
@@ -938,11 +947,6 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
       ]
     }
   ],
-  "rq_hypothesis": {
-    "research_questions": ["RQ1: …", "RQ2: …"],
-    "hypotheses":         ["H1: …", "H2: …"]
-  },
-  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2"],
   "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
   "ochiai_method": {
     "what":          "1. どんな もの? (200-400 字)",

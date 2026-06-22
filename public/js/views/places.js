@@ -680,6 +680,8 @@ async function loadPlace(id) {
     // v512 サムネ優先 (220px 表示で原画像は重い、 サーバが返す image_thumb_url を使う)
     // v745 #356 タップで lightbox (原画像) 表示。 target=_blank だと スマホで「戻れない」 ので。
     // v752 #370 起案者 / admin は 右下 に 🔄 ボタンで 回転 可能。
+    // v753 #371 me を ここで 先取り (旧版は 下の方で const me = ... してた ので TDZ エラー)
+    const me = state.me;
     const heroSrc = p.image_thumb_url || p.image_url;
     const heroFull = p.image_url || p.image_thumb_url;
     const canEditHero = me && (me.id === p.creator_user_id || me.role === 'admin');
@@ -773,7 +775,7 @@ async function loadPlace(id) {
     }
     // 口コミ
     document.getElementById('pld-cn').textContent = (d.comments || []).length;
-    const me = state.me;
+    // v753 me は 上 で すでに 宣言済み (canEditHero 用 に 先取り した)
     document.getElementById('pld-comments').innerHTML = (d.comments || []).map(c => {
       const canDel = (me && (me.id === c.user_id || me.role === 'admin'));
       const star = c.rating !== null ? `<span class="bold">${ratingStars(c.rating)}</span> ` : '';
