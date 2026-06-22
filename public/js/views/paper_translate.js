@@ -9,6 +9,30 @@ import { state, toast } from '../app.js';
 
 let sharedPollTimer = null;
 
+// v762 #381 既存 result_json に 入って いる 日本語 中 の 不要 な スペース を 取り除く
+//   defensive helper。 日本語文字 (ひらがな / カタカナ / 漢字) どうし の 間 の 半角 スペース
+//   を 1 個 ずつ 削除。 英数字 / 記号 と 日本語 の 境界 スペース は 残す。
+const JA_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]/;
+function stripJaSpaces(s) {
+  if (!s || typeof s !== 'string') return s;
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/([぀-ゟ゠-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]) +([぀-ゟ゠-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ])/g, '$1$2');
+  } while (s !== prev);
+  return s;
+}
+function stripJaSpacesDeep(v) {
+  if (typeof v === 'string') return stripJaSpaces(v);
+  if (Array.isArray(v)) return v.map(stripJaSpacesDeep);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = stripJaSpacesDeep(v[k]);
+    return out;
+  }
+  return v;
+}
+
 export async function renderPaperTranslate() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -238,7 +262,8 @@ async function refreshShared(token, app) {
 }
 
 function paintResult(d, token) {
-  const r = d.result || {};
+  // v762 #381 既存 result_json の 日本語 中 の 不要 な 半角 スペース を 取り除いて から 描画
+  const r = stripJaSpacesDeep(d.result || {});
   const app = document.getElementById('app');
   const shareUrl = location.origin + '/#/paper-summary/r/' + token;
   const pagesDir = d.pages_dir || null;
