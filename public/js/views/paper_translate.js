@@ -305,6 +305,9 @@ function paintResult(d, token) {
 
     ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
 
+    ${renderListSection('🔬 行った実験', r.experiments)}
+    ${renderListSection('📊 主要な結果', r.results_summary)}
+
     ${renderListSection('🚀 今後の課題', r.future_work)}
 
     ${renderKeyReferences(r.key_references)}
