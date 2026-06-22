@@ -1947,6 +1947,7 @@ function ai_deep_research_list(PDO $pdo, array $cfg): void {
 function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT dr.id, dr.user_id, dr.share_token, dr.query_text, dr.model, dr.depth,
+                                 dr.openai_response_id, dr.progress_text,
                                  dr.cost_points, dr.status, dr.result_json, dr.usage_json,
                                  dr.error_msg, dr.created_at, dr.finished_at, dr.is_shared, dr.shared_at,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -1955,23 +1956,30 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'deep_research not found', 404);
+    // v786 #385 まだ 進行中 なら OpenAI に 進捗 を 取り に 行く
+    if ($row['status'] === 'processing' && !empty($row['openai_response_id'])) {
+        try { $row = ai_deep_research_poll($pdo, $cfg, $row); }
+        catch (Throwable $_) { /* poll 失敗 は 致命的 で は ない */ }
+    }
     json_response([
-        'id'            => (int)$row['id'],
-        'author_id'     => (int)$row['user_id'],
-        'author_name'   => $row['author_name'],
-        'author_avatar' => $row['author_avatar'],
-        'query_text'    => $row['query_text'],
-        'model'         => $row['model'],
-        'depth'         => $row['depth'],
-        'cost_points'   => (int)$row['cost_points'],
-        'status'        => $row['status'],
-        'result'        => json_decode($row['result_json'] ?: 'null', true),
-        'usage'         => json_decode($row['usage_json']  ?: 'null', true),
-        'error_msg'     => $row['error_msg'],
-        'created_at'    => $row['created_at'],
-        'finished_at'   => $row['finished_at'],
-        'is_shared'     => (bool)$row['is_shared'],
-        'shared_at'     => $row['shared_at'],
+        'id'                 => (int)$row['id'],
+        'author_id'          => (int)$row['user_id'],
+        'author_name'        => $row['author_name'],
+        'author_avatar'      => $row['author_avatar'],
+        'query_text'         => $row['query_text'],
+        'model'              => $row['model'],
+        'depth'              => $row['depth'],
+        'cost_points'        => (int)$row['cost_points'],
+        'status'             => $row['status'],
+        'progress_text'      => $row['progress_text'] ?? null,
+        'openai_response_id' => $row['openai_response_id'] ?? null,
+        'result'             => json_decode($row['result_json'] ?: 'null', true),
+        'usage'              => json_decode($row['usage_json']  ?: 'null', true),
+        'error_msg'          => $row['error_msg'],
+        'created_at'         => $row['created_at'],
+        'finished_at'        => $row['finished_at'],
+        'is_shared'          => (bool)$row['is_shared'],
+        'shared_at'          => $row['shared_at'],
     ]);
 }
 
@@ -2100,9 +2108,14 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
     ai_deep_research_run_background($pdo, $cfg, $rowId, $token, $query, $tier, $apiKey, $uid);
 }
 
+// v786 #385 OpenAI Responses API は web_search + reasoning だと 30 分 超 を 普通 に 使う ため、
+//   従来 の 同期 POST 1 本 だけ だと PHP プロセス が PHP-FPM の request_terminate_timeout に
+//   殺されて 結果 が DB に 入らず status=processing で 永遠 に 残る。 background=true で
+//   投げ て、 結果 ページ アクセス の たび に GET /v1/responses/{id} で 進捗 / 完了 を 取り
+//   行く 方式 に 改修 (= polling)。
 function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $query, array $tier, string $apiKey, int $uid): void {
     try {
-        $pdo->prepare("UPDATE deep_researches SET status='processing' WHERE id = ?")->execute([$rowId]);
+        $pdo->prepare("UPDATE deep_researches SET status='processing', progress_text='OpenAI に 依頼 中…' WHERE id = ?")->execute([$rowId]);
 
         $payloadArr = [
             'model' => $tier['model'],
@@ -2112,8 +2125,8 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
             ],
             'tools' => [['type' => 'web_search']],
             'max_output_tokens' => (int)$tier['max_tokens'],
+            'background' => true,   // 非同期 化、 response_id だけ 即 返って くる
         ];
-        // 推論 モデル に reasoning.effort を 指定
         if (preg_match('/^(gpt-5|o1|o3)/', (string)$tier['model'])) {
             $payloadArr['reasoning'] = ['effort' => (string)$tier['effort']];
         }
@@ -2125,7 +2138,7 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
             CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_TIMEOUT => 840,  // 14 分
+            CURLOPT_TIMEOUT => 60,  // background なら 数 秒 で response_id が 返る
         ]);
         $resp = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -2140,59 +2153,14 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
             throw new RuntimeException('OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
         }
         $j = json_decode((string)$resp, true);
-
-        // Responses API: output_text を 探す
-        $text = '';
-        $searchCount = 0;
-        foreach (($j['output'] ?? []) as $item) {
-            if (($item['type'] ?? '') === 'message') {
-                foreach (($item['content'] ?? []) as $c) {
-                    if (($c['type'] ?? '') === 'output_text' && isset($c['text'])) {
-                        $text .= (string)$c['text'];
-                    }
-                }
-            }
-            if (($item['type'] ?? '') === 'web_search_call') $searchCount++;
-        }
-        // 一部 SDK は output_text フィールド を 直接 返す
-        if ($text === '' && isset($j['output_text']) && is_string($j['output_text'])) {
-            $text = (string)$j['output_text'];
-        }
-        if ($text === '') throw new RuntimeException('empty content (no output_text in response)');
-
-        // JSON 文字列 を 抽出 (モデル が markdown フェンス で 囲って しまう ケース に 対応)
-        $jsonText = $text;
-        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) {
-            $jsonText = $m[1];
-        } elseif (preg_match('/(\{.*\})/s', $text, $m)) {
-            $jsonText = $m[1];
-        }
-        $parsed = json_decode($jsonText, true);
-        if (!is_array($parsed)) throw new RuntimeException('invalid JSON in output');
-
-        $usage = $j['usage'] ?? [];
-        $usageRec = [
-            'input_tokens'  => (int)($usage['input_tokens']  ?? 0),
-            'output_tokens' => (int)($usage['output_tokens'] ?? 0),
-            'total_tokens'  => (int)($usage['total_tokens']  ?? 0),
-            'search_count'  => $searchCount,
-        ];
+        $rid = (string)($j['id'] ?? '');
+        if ($rid === '') throw new RuntimeException('response_id 取得失敗');
 
         $pdo->prepare("UPDATE deep_researches
-                          SET result_json = ?, usage_json = ?, status='done', finished_at = NOW()
+                          SET openai_response_id = ?, progress_text = ?
                         WHERE id = ?")
-            ->execute([
-                json_encode($parsed, JSON_UNESCAPED_UNICODE),
-                json_encode($usageRec, JSON_UNESCAPED_UNICODE),
-                $rowId,
-            ]);
-
-        try {
-            $shortQ = mb_substr($query, 0, 60);
-            notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "🔎 Deep Research 完了: 「{$shortQ}」 /#/deep-research/r/{$token}",
-                'deep_research', $rowId);
-        } catch (Throwable $_) {}
+            ->execute([$rid, '🌐 Web 検索 を 開始…', $rowId]);
+        // 完了通知 は ポーリング 側 で 発火 (get_shared 内)
     } catch (Throwable $e) {
         $pdo->prepare("UPDATE deep_researches SET status='error', error_msg = ?, finished_at = NOW() WHERE id = ?")
             ->execute([mb_substr($e->getMessage(), 0, 1000), $rowId]);
@@ -2202,6 +2170,119 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
                 'deep_research', $rowId);
         } catch (Throwable $_) {}
     }
+}
+
+// v786 #385 OpenAI に 進捗 を 取り に 行く ヘルパ。 status=processing で openai_response_id が
+//   ある 行 を 渡す と、 GET /v1/responses/{id} を 叩いて status を 更新 する。
+//   - completed: result_json + usage_json を 保存 → status='done' → 通知
+//   - failed:    status='error' → error_msg 保存 → 通知
+//   - その他: progress_text だけ 更新 (web_search 件数 / 状態)
+function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $rid    = (string)$row['openai_response_id'];
+    if ($apiKey === '' || $rid === '') return $row;
+
+    $ch = curl_init('https://api.openai.com/v1/responses/' . urlencode($rid));
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) {
+        return $row; // poll 失敗 は 致命的 で は ない (次回 retry)
+    }
+    $j = json_decode((string)$resp, true);
+    if (!is_array($j)) return $row;
+
+    $oaStatus = (string)($j['status'] ?? 'in_progress');
+
+    // 進捗 集計
+    $searchCount = 0;
+    $reasoningCount = 0;
+    $hasMessage = false;
+    foreach (($j['output'] ?? []) as $it) {
+        $t = $it['type'] ?? '';
+        if ($t === 'web_search_call') $searchCount++;
+        elseif ($t === 'reasoning')   $reasoningCount++;
+        elseif ($t === 'message')     $hasMessage = true;
+    }
+
+    if ($oaStatus === 'completed') {
+        // output_text 抽出
+        $text = '';
+        foreach (($j['output'] ?? []) as $item) {
+            if (($item['type'] ?? '') === 'message') {
+                foreach (($item['content'] ?? []) as $c) {
+                    if (($c['type'] ?? '') === 'output_text' && isset($c['text'])) {
+                        $text .= (string)$c['text'];
+                    }
+                }
+            }
+        }
+        if ($text === '' && isset($j['output_text']) && is_string($j['output_text'])) {
+            $text = (string)$j['output_text'];
+        }
+        if ($text === '') {
+            $pdo->prepare("UPDATE deep_researches SET status='error', error_msg='completed だが output_text が 空', finished_at=NOW() WHERE id=?")
+                ->execute([$row['id']]);
+            $row['status'] = 'error'; return $row;
+        }
+        $jsonText = $text;
+        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) $jsonText = $m[1];
+        elseif (preg_match('/(\{.*\})/s', $text, $m)) $jsonText = $m[1];
+        $parsed = json_decode($jsonText, true);
+        if (!is_array($parsed)) {
+            $pdo->prepare("UPDATE deep_researches SET status='error', error_msg='invalid JSON in output', finished_at=NOW() WHERE id=?")
+                ->execute([$row['id']]);
+            $row['status'] = 'error'; return $row;
+        }
+        $usage = $j['usage'] ?? [];
+        $usageRec = [
+            'input_tokens'  => (int)($usage['input_tokens']  ?? 0),
+            'output_tokens' => (int)($usage['output_tokens'] ?? 0),
+            'total_tokens'  => (int)($usage['total_tokens']  ?? 0),
+            'search_count'  => $searchCount,
+        ];
+        $pdo->prepare("UPDATE deep_researches
+                          SET result_json=?, usage_json=?, status='done',
+                              progress_text=NULL, finished_at=NOW()
+                        WHERE id=?")
+            ->execute([
+                json_encode($parsed, JSON_UNESCAPED_UNICODE),
+                json_encode($usageRec, JSON_UNESCAPED_UNICODE),
+                $row['id'],
+            ]);
+        try {
+            $shortQ = mb_substr((string)$row['query_text'], 0, 60);
+            notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
+                "🔎 Deep Research 完了: 「{$shortQ}」 /#/deep-research/r/{$row['share_token']}",
+                'deep_research', (int)$row['id']);
+        } catch (Throwable $_) {}
+        // 行 を 最新化 して 返す
+        $row['status'] = 'done';
+        $row['result_json'] = json_encode($parsed, JSON_UNESCAPED_UNICODE);
+        $row['usage_json']  = json_encode($usageRec, JSON_UNESCAPED_UNICODE);
+        $row['progress_text'] = null;
+        return $row;
+    }
+    if ($oaStatus === 'failed' || $oaStatus === 'cancelled' || $oaStatus === 'incomplete') {
+        $errMsg = (string)($j['error']['message'] ?? ($j['incomplete_details']['reason'] ?? $oaStatus));
+        $pdo->prepare("UPDATE deep_researches SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
+            ->execute(['OpenAI ' . $oaStatus . ': ' . mb_substr($errMsg, 0, 400), (int)$row['id']]);
+        $row['status'] = 'error';
+        $row['error_msg'] = 'OpenAI ' . $oaStatus . ': ' . $errMsg;
+        return $row;
+    }
+
+    // 進捗中 (queued / in_progress)
+    $progress = "🌐 Web 検索 {$searchCount} 回 / 🧠 推論 {$reasoningCount} 段 (OpenAI: {$oaStatus})";
+    $pdo->prepare("UPDATE deep_researches SET progress_text=? WHERE id=?")
+        ->execute([$progress, (int)$row['id']]);
+    $row['progress_text'] = $progress;
+    return $row;
 }
 
 // POST /api/ai/short_title { context: "...説明..." }

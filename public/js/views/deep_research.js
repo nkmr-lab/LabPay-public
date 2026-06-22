@@ -219,9 +219,14 @@ async function refreshShared(token) {
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">⏳ Web を 横断 調査 中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            深さ に より 1-15 分 程度 かかります。 この ページ を 閉じて も 大丈夫 (完了 したら 通知 が 届きます)。<br>
+            深さ に より 1-30 分 程度 かかります。 この ページ を 閉じて も 大丈夫 (完了 したら 通知 が 届きます)。<br>
             10 秒 ごと に 自動 更新。
           </p>
+          ${d.progress_text ? `
+            <div style="margin-top:10px; padding:10px 14px; background:#f0f9ff; border-left:4px solid #0284c7; border-radius:0 6px 6px 0">
+              <div class="bold" style="font-size:13px; color:#0284c7">📡 現在 の 状況</div>
+              <div style="font-size:13.5px; margin-top:4px">${escapeHtml(d.progress_text)}</div>
+            </div>` : ''}
         </div>`;
       if (!pollTimer) pollTimer = setInterval(() => refreshShared(token), 10000);
       return;
