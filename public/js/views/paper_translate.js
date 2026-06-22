@@ -397,36 +397,19 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v765 #383 crop 領域 を 1/3 → 約半分 に 緩める。 GPT の page_region が 微妙 でも 図 が
-  //   入る確率 を 上げる。 240×280 box に 横 480 (= 2x) → 縦 約 620、 280/620 = 約 45%。
-  //   旧版 (3x) では 33% しか 見えず、 図 が 微妙 に 外れる ケース が 多かった。
-  const wrap = 240;       // box 幅
-  const height = 280;     // box 高さ
-  const scale = 2;        // 横方向 ズーム 倍率
-  const bgSize = `${wrap * scale}px auto`;
-  const bgPos = (() => {
-    switch (region) {
-      case 'top':    return 'center top';
-      case 'middle': return 'center center';
-      case 'bottom': return 'center bottom';
-      default:       return 'center center';
-    }
-  })();
-  const boxStyle = region === 'full'
-    ? `width:${wrap}px; max-height:300px; background:#fff; border:1px solid #ddd; border-radius:4px; display:flex; align-items:center; justify-content:center; overflow:hidden`
-    : `width:${wrap}px; height:${height}px; background-color:#fff; background-image:url('${imgUrl}'); background-size:${bgSize}; background-position:${bgPos}; background-repeat:no-repeat; border:1px solid #ddd; border-radius:4px`;
-  const inner = region === 'full' && imgUrl
-    ? `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="max-width:100%; max-height:300px; object-fit:contain">`
-    : '';
+  // v767 #385 crop は GPT region の 精度 が 安定 しない ので 廃止。 全 ページ を そのまま
+  //   サムネ 表示 + click で lightbox。 region は label の 補足 表示 に だけ 使う。
+  const wrap = 220;       // box 幅 (ページ 全体 を 含める)
+  const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
         <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; cursor:zoom-in">
-          <div style="${boxStyle}">${inner}</div>
-          <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
+          <img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:340px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">
+          <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで拡大</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
-        <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page})</span>` : ''}</div>
+        <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}</div>
         ${cap ? `<div style="margin-top:3px"><b>キャプション:</b> ${escapeHtml(cap)}</div>` : ''}
         ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
       </div>
