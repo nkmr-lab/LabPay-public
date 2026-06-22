@@ -35,17 +35,17 @@ function stripJaSpacesDeep(v) {
 
 export async function renderPaperTranslate() {
   const app = document.getElementById('app');
-  app.innerHTML = `
+  app.innerHTML = stripJaSpaces(`
     <div class="card page-header">
       <h2 style="margin:0">📑 論文要約 <span style="font-size:12px; color:#9ca3af; font-weight:normal">(自動翻訳)</span></h2>
     </div>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
-        論文 PDF を アップ すると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
-        今後の課題 → 落合メソッドまとめ という 順番 で 構造化 して 返します。 全体 1500-2500 字 (≒ 3-5 分 で 読める 分量)。
+        論文 PDF をアップすると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
+        今後の課題 → 落合メソッドまとめ という順番で構造化して返します。 全体 1500-2500 字 (≒ 3-5 分で読める分量)。
       </p>
       <label class="field">
-        <span class="lbl">🤖 モデル (高い ほど 高品質)</span>
+        <span class="lbl">🤖 モデル (高いほど高品質)</span>
         <select id="pt-model" style="font-size:13px">
           <option value="">読み込み中…</option>
         </select>
@@ -71,7 +71,7 @@ export async function renderPaperTranslate() {
       </div>
       <div id="pt-history"><div class="muted">読み込み中…</div></div>
     </div>
-  `;
+  `);
   const fileInput = document.getElementById('pt-file');
   const fileStatus = document.getElementById('pt-file-status');
   const btn = document.getElementById('pt-go');
@@ -86,7 +86,7 @@ export async function renderPaperTranslate() {
       fileStatus.innerHTML = '<span style="color:#dc2626">30 MB を 超えて います</span>';
       btn.disabled = true; return;
     }
-    fileStatus.innerHTML = `<span style="color:#15803d">✓ ${escapeHtml(f.name)} (${(f.size / 1024 / 1024).toFixed(1)} MB)</span>`;
+    fileStatus.innerHTML = stripJaSpaces(`<span style="color:#15803d">✓ ${escapeHtml(f.name)} (${(f.size / 1024 / 1024).toFixed(1)} MB)</span>`);
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
@@ -217,7 +217,7 @@ async function loadSharedList(q) {
         </a>`;
     }).join('');
   } catch (e) {
-    root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    root.innerHTML = stripJaSpaces(`<div class="muted">${escapeHtml(e.message)}</div>`);
   }
 }
 
@@ -234,7 +234,7 @@ async function refreshShared(token, app) {
   try {
     const d = await get('/api/ai/paper_translate/r/' + encodeURIComponent(token));
     if (d.status === 'pending' || d.status === 'processing') {
-      app.innerHTML = `
+      app.innerHTML = stripJaSpaces(`
         <div class="card page-header">
           <h2 style="margin:0">⏳ 要約中… 「${escapeHtml(d.pdf_name)}」</h2>
           <div class="meta">${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}</div>
@@ -246,18 +246,18 @@ async function refreshShared(token, app) {
             10 秒 ごと に 自動更新。
           </p>
         </div>
-      `;
+      `);
       if (!sharedPollTimer) sharedPollTimer = setInterval(() => refreshShared(token, app), 10000);
       return;
     }
     if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
     if (d.status === 'error') {
-      app.innerHTML = `<div class="card"><div class="muted">❌ 要約失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div></div>`;
+      app.innerHTML = stripJaSpaces(`<div class="card"><div class="muted">❌ 要約失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div></div>`);
       return;
     }
     paintResult(d, token);
   } catch (e) {
-    app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
+    app.innerHTML = stripJaSpaces(`<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`);
   }
 }
 
@@ -271,7 +271,7 @@ function paintResult(d, token) {
   const meId = Number(state.me?.id) || 0;
   const isOwner = meId && meId === Number(d.author_id);
   const isShared = !!d.is_shared;
-  app.innerHTML = `
+  app.innerHTML = stripJaSpaces(`
     <div class="card page-header">
       <h2 style="margin:0; font-size:18px">📑 ${escapeHtml(r.title_ja || d.pdf_name)}</h2>
       ${r.title_orig ? `<div class="meta" style="font-size:13px; opacity:0.8; margin-top:2px">原題: ${escapeHtml(r.title_orig)}</div>` : ''}
@@ -282,11 +282,12 @@ function paintResult(d, token) {
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL を コピー</button>
+        ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を 開く</a>` : ''}
         ${isOwner ? `
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
-        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で 同じ モデル で 再 処理 (再課金)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
+        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (再課金)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
         <a class="btn" href="#/paper-summary" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
@@ -294,22 +295,22 @@ function paintResult(d, token) {
 
     ${r.summary_one_paragraph ? `
     <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
-      <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 まず 全体 要約</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 まず全体要約</div>
       <div style="font-size:14px; line-height:1.7; white-space:pre-wrap">${escapeHtml(r.summary_one_paragraph)}</div>
     </div>` : ''}
 
     ${renderRqHypothesis(r.rq_hypothesis)}
 
-    ${renderListSection('🎯 主張する 貢献', r.contributions)}
+    ${renderListSection('🎯 主張する貢献', r.contributions)}
 
     ${renderDetailedSections(r.detailed_sections, pagesDir, pagesCount)}
 
-    ${renderListSection('🚀 今後 の 課題', r.future_work)}
+    ${renderListSection('🚀 今後の課題', r.future_work)}
 
     ${renderKeyReferences(r.key_references)}
 
     ${renderOchiai(r.ochiai_method || r.ochiai)}
-  `;
+  `);
   document.getElementById('pt-copy')?.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -366,7 +367,7 @@ function renderDetailedSections(sections, pagesDir, pagesCount) {
   if (!Array.isArray(sections) || !sections.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); margin-bottom:8px; font-size:15px">📖 詳細 要約</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:8px; font-size:15px">📖 詳細要約</div>
       ${sections.map(s => {
         const heading = (s && s.heading) ? String(s.heading) : '';
         const body = (s && s.body) ? String(s.body) : '';
@@ -438,7 +439,7 @@ function renderOchiai(o) {
     ['validation',    '4. どう 検証 した?',              '✅'],
     ['discussion',    '5. 議論 は ある?',                '💬'],
   ];
-  let html = '<div class="card" style="background:#fafaf5; border:1px dashed #d4b8e0"><div class="bold" style="color:var(--primary); margin-bottom:6px; font-size:15px">📚 落合メソッド で まとめ</div><div class="hint-sm" style="font-size:11px; margin-bottom:8px">論文 全体 を 6 項目 で 重ね合わせ</div>';
+  let html = '<div class="card" style="background:#fafaf5; border:1px dashed #d4b8e0"><div class="bold" style="color:var(--primary); margin-bottom:6px; font-size:15px">📚 落合メソッドでまとめ</div><div class="hint-sm" style="font-size:11px; margin-bottom:8px">論文全体を6項目で重ね合わせ</div>';
   for (const [key, label, icon] of sections) {
     let txt = (o[key] || '').toString().trim();
     if (!txt) continue;
@@ -491,7 +492,7 @@ function renderRqHypothesis(rh) {
   }).join('');
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説 と 結果</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説と結果</div>
       ${rqHtml}
       ${hyHtml}
     </div>`;
@@ -502,7 +503,7 @@ function renderKeyReferences(refs) {
   if (!Array.isArray(refs) || !refs.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); margin-bottom:8px">📚 押さえて おく べき 参考文献</div>
+      <div class="bold" style="color:var(--primary); margin-bottom:8px">📚 押さえておくべき参考文献</div>
       <div style="display:flex; flex-direction:column; gap:8px">
         ${refs.map(ref => {
           const cit       = ref?.citation       ? String(ref.citation)       : '';
