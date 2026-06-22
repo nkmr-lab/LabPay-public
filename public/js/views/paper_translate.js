@@ -467,26 +467,43 @@ function renderOchiai(o) {
 }
 
 // v753 RQ と 仮説 + それぞれ の 結果 を ペア 表示。 旧 schema (文字列 配列) も fallback 表示。
+// v764 #382 1 個 だけ の とき は「RQ1」 → 「RQ」、「H1」 → 「H」 に 自動変換。
+function normalizeQLabel(s, prefix, isSingle) {
+  // prefix 例: "RQ" / "H"。 GPT が「RQ1: ...」「RQ：…」 や 単に「1. …」 で 来る場合 を 正規化。
+  if (typeof s !== 'string') return s;
+  let txt = s.trim();
+  // 数字 + コロン or 数字 + ピリオド の 接頭辞 を 検出 + 取り除く
+  const m = txt.match(new RegExp(`^${prefix}(\\d+)?\\s*[:：.]?\\s*(.*)$`, 'i')) || txt.match(/^(\d+)\s*[:：.]?\s*(.*)$/);
+  let body = txt;
+  if (m) {
+    body = (m[2] !== undefined ? m[2] : m[1]) || txt;
+    body = body.trim() || txt;
+  }
+  return (isSingle ? prefix : (m && m[1] ? `${prefix}${m[1]}` : prefix)) + ': ' + body;
+}
+
 function renderRqHypothesis(rh) {
   if (!rh || typeof rh !== 'object') return '';
   const rqs = Array.isArray(rh.research_questions) ? rh.research_questions : [];
   const hys = Array.isArray(rh.hypotheses)         ? rh.hypotheses         : [];
   if (!rqs.length && !hys.length) return '';
-  const rqHtml = rqs.map(item => {
-    if (typeof item === 'string') return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px"><div class="bold" style="font-size:13px; color:#4f46e5">RQ</div><div style="font-size:14px">${escapeHtml(item)}</div></div>`;
-    const rq = item?.rq ? String(item.rq) : '';
-    const ans = item?.answer ? String(item.answer) : '';
+  const rqSingle = rqs.length === 1;
+  const hySingle = hys.length === 1;
+  const rqHtml = rqs.map((item, i) => {
+    const raw = typeof item === 'string' ? item : (item?.rq || '');
+    const label = normalizeQLabel(raw, 'RQ', rqSingle);
+    const ans = (typeof item === 'object' && item?.answer) ? String(item.answer) : '';
     return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px">
-      <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(rq)}</div>
+      <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(label)}</div>
       ${ans ? `<div style="font-size:13px; margin-top:4px"><b>✅ 結果:</b> ${escapeHtml(ans)}</div>` : ''}
     </div>`;
   }).join('');
-  const hyHtml = hys.map(item => {
-    if (typeof item === 'string') return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px"><div class="bold" style="font-size:13px; color:#a16207">仮説</div><div style="font-size:14px">${escapeHtml(item)}</div></div>`;
-    const hyp = item?.hypothesis ? String(item.hypothesis) : '';
-    const res = item?.result     ? String(item.result)     : '';
+  const hyHtml = hys.map((item, i) => {
+    const raw = typeof item === 'string' ? item : (item?.hypothesis || '');
+    const label = normalizeQLabel(raw, 'H', hySingle);
+    const res = (typeof item === 'object' && item?.result) ? String(item.result) : '';
     return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px">
-      <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(hyp)}</div>
+      <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(label)}</div>
       ${res ? `<div style="font-size:13px; margin-top:4px"><b>📊 結果:</b> ${escapeHtml(res)}</div>` : ''}
     </div>`;
   }).join('');
