@@ -368,21 +368,32 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v757 #375 ページ画像 を page_region で crop 表示。 top/middle/bottom/full。
-  //   object-position で 上下 オフセット + 視野 を 制限 して 図表 部分 だけ 見せる。
-  const cropStyle = (() => {
+  // v759 #379 background-image で ページ画像 を 3x zoom + position で 実際 に 1/3 だけ 切り出し。
+  //   旧 object-fit:cover では 縦長 ページ で ほぼ 全体 表示 になって crop に なって いなかった。
+  //   サイズ: 200x220 の box に 横 600 (= 3x) で 画像 を 入れる → 200/600 = 33% だけ 見える。
+  const wrap = 200;       // box 幅
+  const height = 220;     // box 高さ
+  const scale = 3;        // 横方向 ズーム 倍率
+  const bgSize = `${wrap * scale}px auto`;
+  const bgPos = (() => {
     switch (region) {
-      case 'top':    return 'height:230px; object-fit:cover; object-position:50% 0%';
-      case 'middle': return 'height:230px; object-fit:cover; object-position:50% 50%';
-      case 'bottom': return 'height:230px; object-fit:cover; object-position:50% 100%';
-      default:       return 'max-height:300px; object-fit:contain';
+      case 'top':    return 'center top';
+      case 'middle': return 'center center';
+      case 'bottom': return 'center bottom';
+      default:       return 'center center';
     }
   })();
+  const boxStyle = region === 'full'
+    ? `width:${wrap}px; max-height:300px; background:#fff; border:1px solid #ddd; border-radius:4px; display:flex; align-items:center; justify-content:center; overflow:hidden`
+    : `width:${wrap}px; height:${height}px; background-color:#fff; background-image:url('${imgUrl}'); background-size:${bgSize}; background-position:${bgPos}; background-repeat:no-repeat; border:1px solid #ddd; border-radius:4px`;
+  const inner = region === 'full' && imgUrl
+    ? `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="max-width:100%; max-height:300px; object-fit:contain">`
+    : '';
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
-        <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; width:200px; cursor:zoom-in">
-          <img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:200px; ${cropStyle}; background:#fff; border:1px solid #ddd; border-radius:4px">
+        <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; cursor:zoom-in">
+          <div style="${boxStyle}">${inner}</div>
           <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
