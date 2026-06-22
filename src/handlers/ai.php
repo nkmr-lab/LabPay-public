@@ -885,6 +885,18 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
+// v755 #371 モデル 別 価格 (高い モデル ほど 高品質 + 高 pt)。 default は gpt-4o (20pt)。
+//   実 トークン コスト 比 を 反映 (gpt-4o = 1x、 o1 は 6x + reasoning tokens で 実質 10x)。
+//   client が model を 渡したら 該当 pt を 徴収。 未対応 model は 400。
+const PAPER_TRANSLATE_MODELS = [
+    'gpt-4o-mini' => 5,    // 4o 軽量 (速い / 安い)
+    'gpt-4o'      => 20,   // 標準 (デフォルト)
+    'gpt-4.1'     => 30,   // 4.1 (推論力 アップ)
+    'gpt-5-mini'  => 40,   // 5 系 軽量
+    'gpt-5'       => 80,   // 5 系 標準 (高品質)
+    'o1'          => 120,  // o1 推論 モデル (深い 解析、 reasoning tokens 込みで 実 6-10x)
+];
+
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 あなた は 研究論文 を 日本語 で 要約 する アシスタント です。
 単純な 機械翻訳 では なく、 「研究論文 として 何が 書かれて いるか」 を 強く 意識して、
@@ -970,7 +982,12 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) $r['id'] = (int)$r['id'];
     unset($r);
-    json_response(['items' => $rows, 'cost_points' => PAPER_TRANSLATE_COST]);
+    json_response([
+        'items'        => $rows,
+        'cost_points'  => PAPER_TRANSLATE_COST,        // 旧 互換
+        'models'       => PAPER_TRANSLATE_MODELS,      // v755 #371 モデル別 価格 リスト
+        'default_model'=> 'gpt-4o',
+    ]);
 }
 
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
@@ -1019,11 +1036,18 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $head = @file_get_contents($tmpPdf, false, null, 0, 5);
     if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
 
+    // v755 #371 モデル 選択 (default: gpt-4o)。 未対応 モデル は 400。
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4o'));
+    if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+
     // 残高 チェック
     $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < PAPER_TRANSLATE_COST) {
+    if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
-            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', PAPER_TRANSLATE_COST, $bal), 400);
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -1052,7 +1076,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
     $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。";
 
-    $model = (string)($cfg['openai']['model'] ?? 'gpt-4o-mini');
+    // v755 #371 ユーザ が 選んだ モデル を 使う (config の default は 無視)。
+    $model = $reqModel;
     $payload = json_encode([
         'model' => $model,
         'messages' => [
@@ -1070,14 +1095,14 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $cost, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
             (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status, pages_count, pages_dir)
             VALUES (?,?,?,?,?,?,?,'pending',?,?)")
-            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', PAPER_TRANSLATE_COST,
+            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', $cost,
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, PAPER_TRANSLATE_COST, 'paper_review', 'paper_translate', $rowId, '論文和訳要約 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $rowId, '論文和訳要約 依頼料');
     });
 
     json_response_no_exit([
@@ -1085,8 +1110,9 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         'id'          => $rowId,
         'share_token' => $token,
         'status'      => 'pending',
-        'cost_points' => PAPER_TRANSLATE_COST,
-        'message'     => '依頼を受け付けました。 OpenAI が要約中… (1-4 分)。 結果ページを開いておくか、 後で /#/paper-translate/r/' . $token . ' を確認してください。',
+        'cost_points' => $cost,
+        'model'       => $reqModel,
+        'message'     => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が要約中… (1-4 分、 推論 モデル の 場合 は 3-8 分)。 結果ページを開いておくか、 後で /#/paper-translate/r/' . $token . ' を確認してください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);

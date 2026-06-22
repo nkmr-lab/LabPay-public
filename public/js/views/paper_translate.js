@@ -17,17 +17,23 @@ export async function renderPaperTranslate() {
     </div>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
-        論文 PDF を アップ すると、 GPT-4o が 論文構造 に 沿った 詳細サマリ + 重要な 図表 (ページ画像 を 抽出 して 表示) +
-        RQ / 仮説 / 貢献 / 今後の課題 を 整理 し、 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめます。
-        全体 1500-2500 字 (≒ 3-5 分 で 読める 分量)。 <b>1 回 20pt がシステムに支払われます</b>。
+        論文 PDF を アップ すると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
+        今後の課題 → 落合メソッドまとめ という 順番 で 構造化 して 返します。 全体 1500-2500 字 (≒ 3-5 分 で 読める 分量)。
       </p>
+      <label class="field">
+        <span class="lbl">🤖 モデル (高い ほど 高品質)</span>
+        <select id="pt-model" style="font-size:13px">
+          <option value="">読み込み中…</option>
+        </select>
+        <div class="hint-sm" id="pt-model-info" style="margin-top:4px; font-size:11px"></div>
+      </label>
       <label class="field">
         <span class="lbl">論文 PDF (最大 30 MB)</span>
         <input type="file" id="pt-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="pt-go" class="primary" disabled>📑 要約を作る (20pt)</button>
+        <button id="pt-go" class="primary" disabled>📑 要約を作る</button>
       </div>
     </div>
     <div id="pt-result"></div>
@@ -51,7 +57,27 @@ export async function renderPaperTranslate() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
-  await loadHistory();
+  await loadHistory();    // history 取得 と 同時 に models / cost を ロード
+}
+
+function updateModelInfo(d) {
+  const sel = document.getElementById('pt-model');
+  const info = document.getElementById('pt-model-info');
+  if (!sel || !info) return;
+  const models = d.models || { 'gpt-4o': 20 };
+  const def = d.default_model || 'gpt-4o';
+  sel.innerHTML = Object.entries(models).map(([m, pt]) =>
+    `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`
+  ).join('');
+  const refresh = () => {
+    const m = sel.value;
+    const pt = models[m] || 20;
+    info.textContent = `選択中: ${m} ・ 1 回 ${pt}pt`;
+    const btn = document.getElementById('pt-go');
+    if (btn) btn.textContent = `📑 要約を作る (${pt}pt)`;
+  };
+  sel.addEventListener('change', refresh);
+  refresh();
 }
 
 async function go() {
@@ -59,10 +85,13 @@ async function go() {
   const f = fileInput.files[0];
   if (!f) { toast('PDF を 選んで ください'); return; }
   const btn = document.getElementById('pt-go');
+  const oldText = btn.textContent;
   btn.disabled = true; btn.textContent = '送信中…';
   try {
     const fd = new FormData();
     fd.append('file', f);
+    const model = document.getElementById('pt-model')?.value || 'gpt-4o';
+    fd.append('model', model);
     const resp = await fetch('/api/ai/paper_translate', {
       method: 'POST', body: fd, credentials: 'same-origin',
       headers: { 'X-Requested-With': 'labpay' },
@@ -72,17 +101,18 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    toast('要約 開始 (1-4 分)');
+    toast('要約 開始 (' + (j.model || model) + ')');
     location.hash = '#/paper-translate/r/' + j.share_token;
   } catch (e) {
     toast('失敗: ' + e.message);
-    btn.disabled = false; btn.textContent = '📑 要約を作る (20pt)';
+    btn.disabled = false; btn.textContent = oldText;
   }
 }
 
 async function loadHistory() {
   try {
     const d = await get('/api/ai/paper_translate');
+    updateModelInfo(d);
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('pt-history').innerHTML = '<div class="empty">まだ 要約 履歴 が ありません</div>';

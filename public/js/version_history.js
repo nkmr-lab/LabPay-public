@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v755', d: '2026-06-22', s: '🤖 論文 和訳要約 で モデル 選択 + 価格 設定。 フォーム に モデル ドロップダウン (gpt-4o-mini 5pt / gpt-4o 20pt デフォルト / gpt-4.1 30pt / gpt-5-mini 40pt / gpt-5 80pt / o1 120pt)。 価格 は 実 トークン コスト 比 を 反映 (gpt-4o = 1x、 o1 は input 6x + reasoning tokens で 実質 10x 程度)。 サーバ で 該当 pt を 徴収 + 選択 モデル を OpenAI chat.completions に渡す。 未対応 モデル は 400' },
   { v: 'v754', d: '2026-06-22', s: '🔄📑 たべある記 画像 回転 ボタン を lightbox 内 に 移動 + apps 一覧 タイトル 修正 (#370 続き)。 (1) 旧 v752 で 入った サムネ 上 の 「🔄」 ボタン を 廃止、 画像 を タップ で lightbox 拡大 → lightbox 右上 の 「🔄 回転」 ボタン で 90° 回転。 起案者 / 投稿者 / admin のみ ボタン が 出る。 (2) アプリ一覧 の 論文和訳要約 タイトル を 「(落合メソッド)」 削除 し 単に 「📑 論文和訳要約」 に' },
   { v: 'v753', d: '2026-06-22', s: '📑🐛 論文 和訳要約 構造 再 修正 + たべある記 詳細 で エラー bug fix。 (1) 和訳要約 を「全体要約 → RQ・仮説 + 結果 → 主張する貢献 → 章立て要約 (図表 inline) → 今後の課題 → 落合メソッド」 順 に 再編成。 RQ・仮説 は それぞれ「❓ RQ / ✅ 結果」「💡 仮説 / 📊 結果」 のペアで表示 (旧 schema の 文字列配列 も 互換 fallback)。 (2) v752 で 入った たべある記 詳細ページ の「Cannot access me before initialization」 TDZ bug を 修正 (me の 宣言 を hero 部分 の 前 に 移動)' },
   { v: 'v752', d: '2026-06-22', s: '🔄 たべある記 画像 を 右下 ボタン で 90° 回転できる ように (#370)。 メイン写真 (hero、 起案者 / admin) と 口コミ画像 (投稿者 / admin) に「🔄」 ボタン。 サーバ側 GD imagerotate で 同じ ファイルパス に 上書き保存 (thumb.jpg も 連動)、 client は ?v=ts で cache bust して 即 再描画。 POST /api/places/:id/rotate-image と POST /api/places/:id/comments/:cid/rotate-image' },
