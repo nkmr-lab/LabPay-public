@@ -475,22 +475,25 @@ function renderRqHypothesis(rh) {
   if (!rqs.length && !hys.length) return '';
   const rqSingle = rqs.length === 1;
   const hySingle = hys.length === 1;
-  const rqHtml = rqs.map((item, i) => {
+  // v768 #387 「💡 示唆:」 ラベル は 廃止 (GPT が 値 の 先頭 にも「示唆:」 を 書く 場合 が あり
+  //   「💡 示唆: 示唆: …」 に なって しまう ため)。 値 の 先頭 の 「示唆:」「結果:」 等 も strip。
+  const stripPrefix = (s) => String(s || '').replace(/^\s*(示唆|結果|答え)\s*[:：]\s*/u, '').trim();
+  const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');
     const label = normalizeQLabel(raw, 'RQ', rqSingle);
-    const ans = (typeof item === 'object' && item?.answer) ? String(item.answer) : '';
+    const ans = (typeof item === 'object' && item?.answer) ? stripPrefix(item.answer) : '';
     return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px">
       <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(label)}</div>
-      ${ans ? `<div style="font-size:13px; margin-top:4px"><b>💡 示唆:</b> ${escapeHtml(ans)}</div>` : ''}
+      ${ans ? `<div style="font-size:13px; margin-top:4px">${escapeHtml(ans)}</div>` : ''}
     </div>`;
   }).join('');
-  const hyHtml = hys.map((item, i) => {
+  const hyHtml = hys.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.hypothesis || '');
     const label = normalizeQLabel(raw, 'H', hySingle);
-    const res = (typeof item === 'object' && item?.result) ? String(item.result) : '';
+    const res = (typeof item === 'object' && item?.result) ? stripPrefix(item.result) : '';
     return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px">
       <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(label)}</div>
-      ${res ? `<div style="font-size:13px; margin-top:4px"><b>💡 示唆:</b> ${escapeHtml(res)}</div>` : ''}
+      ${res ? `<div style="font-size:13px; margin-top:4px">${escapeHtml(res)}</div>` : ''}
     </div>`;
   }).join('');
   return `
