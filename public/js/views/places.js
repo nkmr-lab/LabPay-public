@@ -679,10 +679,15 @@ async function loadPlace(id) {
     // v478 メイン写真 が あれば 上に 大きく
     // v512 サムネ優先 (220px 表示で原画像は重い、 サーバが返す image_thumb_url を使う)
     // v745 #356 タップで lightbox (原画像) 表示。 target=_blank だと スマホで「戻れない」 ので。
+    // v752 #370 起案者 / admin は 右下 に 🔄 ボタンで 回転 可能。
     const heroSrc = p.image_thumb_url || p.image_url;
     const heroFull = p.image_url || p.image_thumb_url;
+    const canEditHero = me && (me.id === p.creator_user_id || me.role === 'admin');
     const heroImg = heroSrc
-      ? `<img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" data-zoom-src="${escapeHtml(heroFull)}" style="display:block; width:calc(100% + 20px); max-height:220px; object-fit:cover; margin:-12px -10px 10px; border-radius:8px 8px 0 0; cursor:zoom-in">`
+      ? `<div style="position:relative; margin:-12px -10px 10px">
+          <img src="${escapeHtml(heroSrc)}" alt="" loading="lazy" decoding="async" data-zoom-src="${escapeHtml(heroFull)}" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:8px 8px 0 0; cursor:zoom-in">
+          ${canEditHero ? `<button class="btn" id="pld-hero-rot" title="90° 回転" style="position:absolute; right:8px; bottom:8px; font-size:12px; padding:3px 8px; background:rgba(255,255,255,0.92); border:1px solid #ccc; border-radius:4px; cursor:pointer">🔄 回転</button>` : ''}
+        </div>`
       : '';
     // v486 #80 いいね ボタン + v529 #164 行った (足跡) ボタン (2 軸)
     const likeBtn = `
@@ -779,10 +784,21 @@ async function loadPlace(id) {
             <div class="bold">${escapeHtml(c.display_name)} <span class="hint">${escapeHtml(c.created_at || '')}</span></div>
             ${star ? `<div>${star}</div>` : ''}
             ${c.body ? `<div style="font-size:14px">${linkifyText(c.body)}</div>` : ''}
-            ${(c.image_urls && c.image_urls.length)
-                ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">${c.image_urls.map(u => `
-                    <img src="${escapeHtml(u)}" data-zoom-src="${escapeHtml(u)}" loading="lazy" style="width:120px; height:120px; object-fit:cover; border-radius:6px; cursor:zoom-in; background:#f3f4f6">`).join('')}</div>`
-                : (c.image_url ? `<img src="${escapeHtml(c.image_url)}" data-zoom-src="${escapeHtml(c.image_url)}" loading="lazy" style="width:120px; height:120px; object-fit:cover; border-radius:6px; margin-top:6px; cursor:zoom-in; background:#f3f4f6">` : '')}
+            ${(c.image_urls && c.image_urls.length) || c.image_url
+                ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">${
+                    ((c.image_urls && c.image_urls.length) ? c.image_urls : [c.image_url])
+                      .map((u, idx) => {
+                        const canRot = canDel;       // 自分の口コミ or admin なら 回転 可
+                        const tag = `<img src="${escapeHtml(u)}" data-zoom-src="${escapeHtml(u)}" loading="lazy" style="width:120px; height:120px; object-fit:cover; border-radius:6px; cursor:zoom-in; background:#f3f4f6">`;
+                        if (!canRot) return tag;
+                        return `<div style="position:relative; width:120px; height:120px">
+                          ${tag.replace('width:120px; height:120px', 'width:120px; height:120px; display:block')}
+                          <button class="btn" data-pc-rot="${c.id}" data-pc-idx="${idx}" title="90° 回転"
+                                  style="position:absolute; right:4px; bottom:4px; font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.9); border:1px solid #ccc; border-radius:4px; cursor:pointer">🔄</button>
+                        </div>`;
+                      }).join('')
+                  }</div>`
+                : ''}
             ${canDel ? `<button class="btn" data-del-cm="${c.id}" style="font-size:11px; padding:2px 6px; margin-top:4px">削除</button>` : ''}
           </div>
         </div>`;
@@ -797,6 +813,50 @@ async function loadPlace(id) {
         ev.stopPropagation();
         openImageLightbox(el.dataset.zoomSrc);
       });
+    });
+    // v752 #370 画像 90° 回転 (server で 上書き保存)。 タップ後 cache-bust で再描画。
+    document.querySelectorAll('[data-pc-rot]').forEach(b => {
+      b.addEventListener('click', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const cid = b.dataset.pcRot;
+        const idx = b.dataset.pcIdx;
+        b.disabled = true; const old = b.textContent; b.textContent = '...';
+        try {
+          await post(`/api/places/${id}/comments/${cid}/rotate-image`, { index: Number(idx), degrees: 90 });
+          // 同じ <div> 内 の img を cache bust
+          const wrap = b.closest('div');
+          const img = wrap?.querySelector('img');
+          if (img) {
+            const sep = img.src.includes('?') ? '&' : '?';
+            const base = img.src.replace(/[?&]v=\d+(&|$)/, '');
+            img.src = base + sep + 'v=' + Date.now();
+            if (img.dataset.zoomSrc) {
+              const sep2 = img.dataset.zoomSrc.includes('?') ? '&' : '?';
+              img.dataset.zoomSrc = img.dataset.zoomSrc.replace(/[?&]v=\d+(&|$)/, '') + sep2 + 'v=' + Date.now();
+            }
+          }
+        } catch (e) { toast('失敗: ' + e.message); }
+        finally { b.disabled = false; b.textContent = old; }
+      });
+    });
+    document.getElementById('pld-hero-rot')?.addEventListener('click', async (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const btn = ev.currentTarget;
+      btn.disabled = true; const old = btn.textContent; btn.textContent = '...';
+      try {
+        await post(`/api/places/${id}/rotate-image`, { degrees: 90 });
+        const img = btn.parentElement?.querySelector('img');
+        if (img) {
+          const base = img.src.replace(/[?&]v=\d+(&|$)/, '');
+          const sep = base.includes('?') ? '&' : '?';
+          img.src = base + sep + 'v=' + Date.now();
+          if (img.dataset.zoomSrc) {
+            const sep2 = img.dataset.zoomSrc.includes('?') ? '&' : '?';
+            img.dataset.zoomSrc = img.dataset.zoomSrc.replace(/[?&]v=\d+(&|$)/, '') + sep2 + 'v=' + Date.now();
+          }
+        }
+      } catch (e) { toast('失敗: ' + e.message); }
+      finally { btn.disabled = false; btn.textContent = old; }
     });
     document.querySelectorAll('[data-del-cm]').forEach(b => {
       b.addEventListener('click', async () => {

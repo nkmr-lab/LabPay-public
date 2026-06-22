@@ -26,6 +26,15 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
             places_comment_delete($pdo, $cfg, $id, (int)$seg[3]);
             return;
         }
+        // v752 #370 画像 を 90° / 180° / 270° 回転 (server 側で 上書き保存、 thumb も 連動)
+        if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && ($seg[4] ?? '') === 'rotate-image' && $method === 'POST') {
+            places_comment_rotate_image($pdo, $cfg, $id, (int)$seg[3]);
+            return;
+        }
+        if ($next === 'rotate-image' && $method === 'POST') {
+            places_hero_rotate_image($pdo, $cfg, $id);
+            return;
+        }
         // v486 #80 いいね トグル
         if ($next === 'like' && $method === 'POST')   { places_like_toggle($pdo, $cfg, $id, true);  return; }
         if ($next === 'like' && $method === 'DELETE') { places_like_toggle($pdo, $cfg, $id, false); return; }
@@ -578,6 +587,104 @@ function places_backfill_tabelog(PDO $pdo, array $cfg): void {
     ]);
 }
 
+// v752 #370 画像 を 90°/180°/270° 回転 して 同じ ファイル パス に 上書き 保存。
+//   thumb.jpg が 横に あれば 同 角度 で 回転。 client は URL に ?v=ts を 付けて cache bust。
+//   失敗 系 (GD 無し / mime 非対応 / 書き込み 不可) は ApiException で 400 / 500 返す。
+function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
+    $degrees = ((int)$degrees) % 360;
+    if (!in_array($degrees, [90, 180, 270], true)) {
+        throw new ApiException('bad_request', 'degrees は 90 / 180 / 270 のみ', 400);
+    }
+    if (!function_exists('imagecreatefromstring')) {
+        throw new ApiException('not_supported', 'GD 拡張 が ない ので 回転できません', 500);
+    }
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    // 先頭 が '/' で 始まる public 配下 の path に 限定
+    if (!preg_match('#^/uploads/#', $imageUrlPath)) {
+        throw new ApiException('bad_request', 'uploads/ 以下 の path のみ', 400);
+    }
+    $abs = $publicDir . $imageUrlPath;
+    if (!is_file($abs)) throw new ApiException('not_found', 'image not found: ' . $imageUrlPath, 404);
+    if (!is_writable($abs)) throw new ApiException('forbidden', 'file not writable', 500);
+    $rotate = function (string $path) use ($degrees): void {
+        $raw = @file_get_contents($path);
+        if ($raw === false) throw new ApiException('io_error', 'read failed', 500);
+        $src = @imagecreatefromstring($raw);
+        if (!$src) throw new ApiException('bad_request', '画像 として 読めません', 400);
+        // imagerotate は 反時計回り 角度 を 取る (90 = 反時計 90°)。
+        //   ユーザ 期待 = 時計回り 90° なら -90 を 渡す。 ここ では「右 (時計回り) 90°」 を 標準 と する。
+        $rotated = imagerotate($src, -$degrees, 0);
+        imagedestroy($src);
+        if (!$rotated) throw new ApiException('io_error', 'rotate failed', 500);
+        // 拡張子 を 見て 保存形式 を 決める (jpg/jpeg/png/webp/gif)
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $ok = false;
+        if ($ext === 'jpg' || $ext === 'jpeg') $ok = imagejpeg($rotated, $path, 90);
+        elseif ($ext === 'png') $ok = imagepng($rotated, $path);
+        elseif ($ext === 'webp' && function_exists('imagewebp')) $ok = imagewebp($rotated, $path, 90);
+        elseif ($ext === 'gif') $ok = imagegif($rotated, $path);
+        else throw new ApiException('bad_request', '対応外 拡張子: ' . $ext, 400);
+        imagedestroy($rotated);
+        if (!$ok) throw new ApiException('io_error', 'save failed', 500);
+        @chmod($path, 0644);
+    };
+    $rotate($abs);
+    // thumb があれば 同 角度 で 回す (save_uploaded_file が 作る .thumb.jpg)
+    $thumb = preg_replace('/\.[^.]+$/', '', $abs) . '.thumb.jpg';
+    if (is_file($thumb) && is_writable($thumb)) {
+        try { $rotate($thumb); } catch (Throwable $_) { /* thumb 失敗 は 致命的ではない */ }
+    }
+}
+
+function places_hero_rotate_image(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $degrees = (int)($body['degrees'] ?? 90);
+    $st = $pdo->prepare("SELECT creator_user_id, image_url FROM places WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'お店 が ありません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者 / admin のみ 回転 可', 403);
+    }
+    $url = (string)$row['image_url'];
+    if ($url === '') throw new ApiException('bad_request', '画像が ありません', 400);
+    rotate_image_file_inplace(_places_url_to_path($url), $degrees);
+    json_response(['ok' => true]);
+}
+
+function places_comment_rotate_image(PDO $pdo, array $cfg, int $placeId, int $commentId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $degrees = (int)($body['degrees'] ?? 90);
+    $index = (int)($body['index'] ?? 0);
+    $st = $pdo->prepare("SELECT user_id, image_url, image_urls FROM place_comments WHERE id=? AND place_id=?");
+    $st->execute([$commentId, $placeId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', '口コミ が ありません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '投稿者 / admin のみ 回転 可', 403);
+    }
+    $urls = [];
+    if (!empty($row['image_urls'])) {
+        $d = json_decode((string)$row['image_urls'], true);
+        if (is_array($d)) $urls = array_values(array_filter(array_map('strval', $d)));
+    }
+    if (!$urls && !empty($row['image_url'])) $urls = [(string)$row['image_url']];
+    if (!isset($urls[$index])) throw new ApiException('bad_request', 'index 範囲外', 400);
+    rotate_image_file_inplace(_places_url_to_path($urls[$index]), $degrees);
+    json_response(['ok' => true]);
+}
+
+// /uploads/.../xxx.jpg または https://host/uploads/.../xxx.jpg を /uploads/.../xxx.jpg に 正規化
+function _places_url_to_path(string $url): string {
+    if (preg_match('#^https?://[^/]+(/.*)$#', $url, $m)) return $m[1];
+    if (str_starts_with($url, '/')) return $url;
+    return '/' . $url;
+}
+
 function places_tabelog_first_hit(string $kw): ?string {
     $url = 'https://tabelog.com/rstLst/?sw=' . urlencode($kw);
     $ch = curl_init($url);
@@ -597,3 +704,4 @@ function places_tabelog_first_hit(string $kw): ?string {
     }
     return null;
 }
+
