@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v777', d: '2026-06-22', s: '✨🇯🇵 論文要約 を 2 段階 化 (#401)。 (1) 選択 モデル (gpt-5 等) で 詳細 抽出 → (2) gpt-4.1 で 日本語 を 校正 (学術 直訳 調 / 名詞 止め / 不自然 連結 を 「同僚 に 説明 する つもり の 自然 な 日本語」 に 書き 直す)。 数値 / 著者 名 / 構造 は 改変 しない 安全 弁 付き、 校正 失敗 時 は 元 JSON で 続行。 + RQ や 仮説 を 「具体的 な シーン が 浮かぶ 自然 文」 に する 指示 を プロンプト 本体 にも 追加 (帰属 / 想起 容易性 等 の 直訳 を 平易 説明 に)' },
   { v: 'v776', d: '2026-06-22', s: '🐛 論文要約 で gpt-5 等 推論モデル の「empty content」 対策 (#400)。 reasoning モデル は max_completion_tokens に reasoning tokens も 含まれる ため 12000 だと 不足 して 本文 が 出なかった → 24000 に拡張。 エラー時 の error_msg に finish_reason + reasoning_tokens 数 を 残して 切り分け 可能に' },
   { v: 'v775', d: '2026-06-22', s: '🗑 論文要約 履歴 を アイテム単位 で 削除 できる ように (#399)。 各 行 に 「🗑」 ボタン、 本人 のみ。 削除 と 同時 に サーバ側 の ページ画像 / 保存 PDF も 一緒 に 物理削除。 失敗 した row (max_tokens エラー 等) を 手動 で 消す用途' },
   { v: 'v774', d: '2026-06-22', s: '🤖 論文要約 / 査読 / 原稿チェック で gpt-5 対応 + 各 章 長 を 半分 に + studyKey 修正 (#396 #397 #398)。 (1) max_tokens → max_completion_tokens、 gpt-5/o1 等 推論モデル は temperature 抜き で 投げる。 (2) 詳細要約 1200-2000 字 → 600-1000 字 (半分)。 (3) 引用研究 の studyKey 抽出 を 「Smith, A. (1989)」 等 著者名 内 括弧 も 含めて 拾う ように 修正。 (4) paper_review / resume_check に モデル 選択 追加 (PAPER_REVIEW_MODELS 10/15/30/50pt、 RESUME_CHECK_MODELS 5/8/15/25pt、 default gpt-4.1)。 ユーティリティ AI 呼出 の default も gpt-4o-mini → gpt-5-mini に' },

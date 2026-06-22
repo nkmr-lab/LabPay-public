@@ -1050,6 +1050,36 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 ・ 数値 (実験 N、 効果量、 p 値) は 落とさず 残す
 ・ 例外: ハルシネーション 回避 の ため 自分 で 推測 を 加える 場合 のみ「ここ から 推測 すると…」
   と 明示 する (= 著者 の 主張 と 自分 の 解釈 を 区別)
+
+# **自然 で 読み やすい 日本語 で 書く** (v777 で 強化)
+
+文章 を 「論文 用語 を 直訳 して 並べた もの」 では なく、 「人 に 説明 する つもり で
+書いた 読み やすい 日本語」 に する こと。 学術 直訳 調 / 名詞止め / 機械的 連結 を 避ける。
+
+× 名詞 止め に せず、 述語 で 終える:
+  × 「認知容量 は 動機 が 低 アクセス の とき に 決定的 に 働く 示唆」
+  ○ 「認知容量 は、 動機 が 低 アクセス の とき に 決定的 に 働く こと を 示唆 する」
+  × 「忙しい 標的 は 観察者 より 動機 推論 を 行わず、 販売員 を 誠実 と 捉える 傾向 が 示唆」
+  ○ 「忙しい とき は、 観察者 ほど 動機 推論 を しない ため、 販売員 を 誠実 と 捉え やすい」
+
+× 概念 用語 を そのまま 並べた 翻訳 調 の 質問 文 は ダメ。 RQ や 仮説 は 「具体的 な
+  シーン が 思い 浮かぶ よう な 自然 な 文」 に 言い 換える:
+  × 「消費者 は どの 条件 で 販売員 の 行動 に 潜在的 な 説得動機 を 帰属 し、 説得知識 を 用いる か?」
+  ○ 「消費者 は どんな とき に 販売員 の 行動 を 『売り たくて やって いる』 と 受け取り、
+       説得知識 を 働かせて 警戒 する のだろう か?」
+  × 「認知容量 (標的 / 観察者、 二重課題) は 説得知識 の 使用 に どう 影響 する か?」
+  ○ 「会話 に 集中 して 余裕 が ない 立場 (標的) と、 落ち着いて 見て いる 立場 (観察者) で、
+       説得知識 の 使い 方 は どう 変わる の か?」
+
+× 「示唆」「帰属」「想起 容易性」「アクセス 可能性」 など、 専門 用語 を そのまま 並べる だけ
+  に せず、 必要 なら 補足 説明 や 平易 な 言い 換え を 添える (専門 用語 完全 排除 は しない、
+  論文 用語 + 平易 説明 の セット が 望ましい):
+  × 「動機 の 想起 容易性 が 効果 を 調整 する」
+  ○ 「動機 (販売員 が 売り たがって いる こと) が 思い 浮かび やすい か どうか で、 効果 が 変わる」
+
+文章 を 1 度 書いた 後、 「これ、 同僚 に 読み 上げて 自然 に 響く か?」 と 自分 で 読み 返し、
+不自然 な 直訳 調 / 名詞 止め / 助詞 の 抜け / 同じ 述語 (「示す」「した」「である」) の
+3 連発 が あれば 言い 換えて から JSON を 出す こと。
 ・ **日本語 の 文章 中 に 不要 な 半角 スペース を 絶対 に 入れない こと**。 system prompt
   の この 説明 文 は 読み やすさ の ため 「どんな もの」 の ような スペース 入り 表記 を
   使って いる が、 これ は 説明文 の 都合 で、 出力 する JSON の 値 (= 読者 に 見せる 文章)
@@ -1478,6 +1508,118 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     ai_paper_translate_run_background($pdo, $cfg, $id, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
 }
 
+// v777 #401 多段階 要約 の 2 段目: 1 段目 が 出力 した JSON の 日本語 を 「学術 直訳 調」 →
+//   「自然 で 読み やすい 日本語」 に 書き 直す。 数値 / 著者 名 / 固有名詞 / 構造 (キー / 配列 / 文献 番号)
+//   は そのまま、 言い 回し・文末・助詞・冗長表現 だけ を 改善。 安価 で 速い モデル を 使う
+//   (本来 の 要約 と 別 軸 の 「日本語 校正」 タスク な ので 1 件 数 円 で 十分)。
+function ai_paper_translate_polish_ja(array $parsed, string $apiKey): ?array {
+    $sys = <<<'PROMPT'
+あなた は 日本語 の 文章 校正 アシスタント です。 与えられた JSON は、 別 の AI が 英語 論文 を
+日本語 で 要約 した もの です。 ただし 学術 直訳 調 / 名詞 止め / 不自然 な 連結 が 多く 残って
+います。 これ を 「同僚 に 説明 する つもり で 書いた 読み やすい 日本語」 に 書き 直して
+ください。 同じ JSON スキーマ で 返却 します。
+
+# 必ず 守る ルール (内容 は いじらない、 言い 回し だけ 直す)
+
+1. **キー / 配列 / オブジェクト 構造 は 一切 変更 しない**。 同じ キー 名、 同じ 配列 長、
+   同じ ネスト で 返却 する。
+2. **数値 / 効果量 / p 値 / d 値 / 信頼区間 / 著者 名 / 年 / 論文 タイトル 原文 / 文献番号 /
+   会議名 / N 値 / セクション 番号 は 一切 変更 しない**。 「F(1,89)=4.71, p<.03」 等 の 数値
+   表記 は コピー して 保持。
+3. **論文 が 主張 して いる 内容 を 改竄 しない**。 「示唆 する」 を 「証明 した」 に 書き 換える
+   等、 強度 を 変える の は 禁止。 「示唆」 が 残って も 「ことを 示唆 する」 に 直す 等、 文末 が
+   自然 に なる よう に 整える だけ。
+4. **新しい 情報 を 加えない**。 元 の JSON に ない 数値 / 解釈 を 追加 する のは ハルシネーション
+   と 同じ。 削る の も 最低限 で OK (重複 削除 は OK、 情報 損失 は ダメ)。
+
+# 何 を 直す か
+
+A. **名詞 止め の 文末** を 述語 で 終え、 自然 な 文 に する:
+   × 「認知容量 は 動機 が 低 アクセス の とき に 決定的 に 働く 示唆」
+   ○ 「認知容量 は、 動機 が 低 アクセス の とき に 決定的 に 働く こと を 示唆 する」
+   × 「忙しい 標的 は 観察者 より 動機 推論 を 行わず」
+   ○ 「忙しい とき は、 観察者 より 動機 推論 を しない」
+
+B. **学術 直訳 調 の RQ・仮説** を 「具体的 な シーン が 思い 浮かぶ 自然 な 文」 に 言い 換える
+   (構造 = key 値 の 文字列 は 書き 換えて OK):
+   × 「消費者 は どの 条件 で 販売員 の 行動 に 潜在的 な 説得動機 を 帰属 し、 説得知識 を 用いる か?」
+   ○ 「消費者 は どんな とき に 販売員 の 行動 を 『売り たくて やって いる』 と 受け取り、
+        説得知識 を 働かせて 警戒 する のだろう か?」
+
+C. **専門 用語 だけ の 羅列** に は 平易 な 補足 を 添える (用語 を 消す ので は なく、 用語 + 平易
+   説明 の 形 に):
+   × 「動機 の 想起 容易性 が 効果 を 調整 する」
+   ○ 「動機 (販売員 が 売り たがって いる こと) が 思い 浮かび やすい か どうか で、 効果 が 変わる」
+
+D. **同じ 述語 の 3 連発** を 避ける (「示す」「示す」「示す」 や 「した」「した」「した」 が
+   並んだら、 「明らかに した」「確かめた」「裏付け られた」 等 で 変化 を つける)。
+
+E. **冗長 な メタ 解説** (「論文 では ◯◯ と 主張 して いる」「著者 は ◯◯ と 説明 して いる」)
+   は 削って 直接 書く (「◯◯ で ある」「◯◯ が 生じる」)。
+
+F. **「・」 や 中点 で つないだ 機械翻訳 風 短文** は 段落 の 中 で 文 に なる よう 接続詞 で
+   つなぐ (「また」「これ に 対し」「その 一方 で」 等)。
+
+G. **日本語 の 文中 に 半角 スペース を 入れない**。 「日本 語」「説 明」 等 の 妙 な 切れ目 が
+   あれば 詰める。 英数字 と 日本語 の 境界 は スペース OK。
+
+# 出力
+入力 JSON と 同じ スキーマ で、 上記 観点 で 書き 直した JSON のみ を 返却 して ください。
+JSON 以外 の 前置き / 説明 は 不要。
+PROMPT;
+
+    $userText = "次 の JSON を 上記 ルール で 校正 して ください。 同じ スキーマ で 返却:\n\n"
+              . json_encode($parsed, JSON_UNESCAPED_UNICODE);
+
+    $payloadArr = [
+        'model' => 'gpt-4.1',  // 校正 タスク は 安く 速く
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user',   'content' => $userText],
+        ],
+        'response_format' => ['type' => 'json_object'],
+        'max_completion_tokens' => 16000,
+        'temperature' => 0.3,
+    ];
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 180,
+    ]);
+    $resp = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) {
+        $errMsg = '';
+        if ($resp !== false) {
+            $errJ = json_decode((string)$resp, true);
+            $errMsg = $errJ['error']['message'] ?? '';
+        }
+        throw new RuntimeException('polish: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
+    }
+    $j = json_decode((string)$resp, true);
+    $content = $j['choices'][0]['message']['content'] ?? null;
+    if (!is_string($content) || $content === '') {
+        $finish = $j['choices'][0]['finish_reason'] ?? '?';
+        throw new RuntimeException('polish: empty content (finish=' . $finish . ')');
+    }
+    $polished = json_decode($content, true);
+    if (!is_array($polished)) throw new RuntimeException('polish: invalid JSON');
+
+    // 安全 弁: トップレベル の 主要 キー が 落ちて いない こと を 確認。 落ちて いたら 元 を 返す。
+    foreach (['title_ja', 'summary_one_paragraph', 'rq_hypothesis', 'detailed_sections'] as $k) {
+        if (!array_key_exists($k, $polished) && array_key_exists($k, $parsed)) {
+            return null; // ポリッシュ が 構造 を 壊した → 諦めて 元 を 使う
+        }
+    }
+    return $polished;
+}
+
 function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $payload, string $apiKey, string $pdfName, int $uid): void {
     try {
         $pdo->prepare("UPDATE paper_translates SET status='processing' WHERE id = ?")->execute([$rowId]);
@@ -1516,6 +1658,20 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
         }
         $parsed = json_decode($content, true);
         if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
+
+        // v777 #401 2 段階目: 学術直訳調 を 自然 で 読み やすい 日本語 に 書き直す ポリッシュ。
+        //   失敗 しても 元 の JSON で 続行 (本体 を 落とさ ない)。 別 モデル (gpt-4.1) を 使う
+        //   こと で 安く・速く 仕上げる。 status は processing の まま (ユーザ に は 「要約 中」
+        //   の 一貫 した 見え方)。
+        try {
+            $polished = ai_paper_translate_polish_ja($parsed, $apiKey);
+            if (is_array($polished)) {
+                $parsed = $polished;
+            }
+        } catch (Throwable $polishE) {
+            // ポリッシュ 失敗 は ログ 残し て 元 JSON で 続行
+            fwrite(STDERR, "[paper_translate] polish failed (row $rowId): " . $polishE->getMessage() . "\n");
+        }
 
         $pdo->prepare("UPDATE paper_translates SET result_json = ?, status='done', finished_at = NOW() WHERE id = ?")
             ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $rowId]);
