@@ -327,12 +327,14 @@ function paintResult(d, token) {
   });
 }
 
-function pageImgUrl(pagesDir, page) {
+// v759 #378 pdftoppm は 総ページ数 の 桁 に 合わせて 0 パディング する。
+//   例: 32 ページ なら page-01.jpg / page-02.jpg ... 100 ページ なら page-001.jpg。
+//   pagesCount を 使って 桁数 を 求めて 同じ パディング を 入れる。
+function pageImgUrl(pagesDir, page, pagesCount) {
   if (!pagesDir) return null;
-  const padded = String(page).padStart(pagesDir.includes('paper_pages') ? 1 : 1, '0');
-  // pdftoppm は page-1.jpg, page-2.jpg ... の 形 (パディングは 桁数次第 で 自動)
-  //   → 桁数 を 推定: page < 10 は 1 桁、 100 未満 は 2 桁、 など
-  return pagesDir + '/page-' + page + '.jpg';
+  const digits = Math.max(1, String(Number(pagesCount) || page || 1).length);
+  const padded = String(page).padStart(digits, '0');
+  return pagesDir + '/page-' + padded + '.jpg';
 }
 
 function renderDetailedSections(sections, pagesDir, pagesCount) {
@@ -365,7 +367,7 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const page = Number(fig?.page) || null;
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
-  const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page) : null;
+  const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
   // v757 #375 ページ画像 を page_region で crop 表示。 top/middle/bottom/full。
   //   object-position で 上下 オフセット + 視野 を 制限 して 図表 部分 だけ 見せる。
   const cropStyle = (() => {
@@ -459,7 +461,7 @@ function renderRqHypothesis(rh) {
     </div>`;
 }
 
-// v757 #375 参考文献 で 特に 重要 な もの。
+// v757 #375 参考文献 で 特に 重要 な もの。 v759 #378 原題 + 和訳 を 分けて 表示。
 function renderKeyReferences(refs) {
   if (!Array.isArray(refs) || !refs.length) return '';
   return `
@@ -467,12 +469,15 @@ function renderKeyReferences(refs) {
       <div class="bold" style="color:var(--primary); margin-bottom:8px">📚 押さえて おく べき 参考文献</div>
       <div style="display:flex; flex-direction:column; gap:8px">
         ${refs.map(ref => {
-          const cit = ref?.citation ? String(ref.citation) : '';
-          const title = ref?.title ? String(ref.title) : '';
-          const why = ref?.why_important ? String(ref.why_important) : '';
+          const cit       = ref?.citation       ? String(ref.citation)       : '';
+          const titleOrig = ref?.title_orig     ? String(ref.title_orig)     : '';
+          const titleJa   = ref?.title_ja       ? String(ref.title_ja)       : (ref?.title || '');
+          const why       = ref?.why_important  ? String(ref.why_important)  : '';
           return `
             <div style="padding:8px 10px; background:#fafafa; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px">
-              <div class="bold" style="color:#6b21a8">${escapeHtml(cit)}${title ? ` ・ ${escapeHtml(title)}` : ''}</div>
+              <div class="bold" style="color:#6b21a8">${escapeHtml(cit)}</div>
+              ${titleOrig ? `<div style="margin-top:2px; font-size:13px"><b>原題:</b> ${escapeHtml(titleOrig)}</div>` : ''}
+              ${titleJa   ? `<div style="margin-top:2px; font-size:13px; color:#374151"><b>和訳:</b> ${escapeHtml(titleJa)}</div>` : ''}
               ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
             </div>`;
         }).join('')}

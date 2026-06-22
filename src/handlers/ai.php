@@ -925,8 +925,9 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
    論文 の 結果 が どうだったか (= 答え / 支持 / 棄却 / 部分支持) も 必ず 整理
 3. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
 4. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
-   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 各節 500-900 字 で
-   しっかり 内容 を 書く。 重要 な 図 や 表 は figure_refs で 引用 し、 ページ番号 + page_region
+   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 各節 1000-1600 字 以上 で
+   3 段落 以上 に 分けて 厚み を 持たせる (= 元論文 を 読まなくても 主要 な 流れ が 把握 できる
+   レベル)。 重要 な 図 や 表 は figure_refs で 引用 し、 ページ番号 + page_region
    (top/middle/bottom/full) + キャプション の 和訳 + なぜ 重要 か を 添える
 5. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 自然 に 追加 した 方 が 良い 課題
 6. key_references: 参考文献 の 中 で 「この 論文 を 理解 する 上 で 特に 重要、 読者 も 抑え
@@ -937,9 +938,11 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 
 論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
 - heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
-- body: 節 本文 の 和訳要約 (500-900 字、 数値 / 用語 / 手法名 を 残す、 各 節 は 1 段落 で
-  まとめず 必要 なら 2-3 段落 に 分けて 構造化する。 機械翻訳 の 1 行 要約 に せず、
-  本気で 内容 が 伝わる ように 書く)
+- body: 節 本文 の 和訳要約 (1000-1600 字 以上、 必ず 3 段落 以上 に 分けて 構造化、
+  数値 / 用語 / 手法名 / 著者 主張 / 実験 設定 / 結果 数字 を 残す。 1 段落 300-500 字 を
+  目安、 各章 を 「読み 物 として 厚み が あり、 元論文 を 読まなくても 主要 な 流れ が
+  把握 できる」 レベル に。 機械翻訳 の 短い まとめ や 箇条書き 風 の 詰め込み は ダメ、
+  段落 で 論理 を つなげて 書く。 文字 数 が 少ない の は その 章 を 軽視 して いる 証拠 と 思え)
 - figure_refs: その 節 で 言及 する 重要 な 図 / 表 を 厳選 して 入れる (各 節 0-2 件、 全節
   合計 で 最大 3 件 まで)。 優先 する のは 「提案 手法 の 中核 を 示す 図」 と 「主たる
   結果 の 図 / 表 (=効果量 / 比較表 / プロット)」。 補助的 な 図 (背景 イラスト 等) は 省く。
@@ -996,7 +999,8 @@ PDF に 書かれて いない 数値 や 主張 を 補完 しない。
   "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
   "key_references": [
     { "citation":      "[12] や Smith et al. 2024 など 本文 で 参照 されて いる 表記",
-      "title":         "参考文献 の タイトル (日本語訳 も 可)",
+      "title_orig":    "参考文献 の 原題 (英語 など 原文 ママ)",
+      "title_ja":      "原題 の 日本語訳 (短く 意訳 で OK)",
       "why_important": "この 論文 の 主張 を 理解 する 上で なぜ 必読 か (50-150 字)" }
   ],
   "ochiai_method": {
@@ -1210,7 +1214,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         ],
         'temperature' => 0.2,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 8000,
+        'max_tokens' => 12000,
     ], JSON_UNESCAPED_UNICODE);
 
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
@@ -1288,7 +1292,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
         ],
         'temperature' => 0.2,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 8000,
+        'max_tokens' => 12000,
     ], JSON_UNESCAPED_UNICODE);
 
     db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
