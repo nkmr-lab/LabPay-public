@@ -1338,7 +1338,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
             ]],
         ],
         'response_format' => ['type' => 'json_object'],
-        'max_completion_tokens' => 12000,
+        'max_completion_tokens' => 24000,
     ];
     if (!preg_match('/^(gpt-5|o1|o3)/', $model)) {
         $payloadArr['temperature'] = 0.2;
@@ -1448,7 +1448,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
             ]],
         ],
         'response_format' => ['type' => 'json_object'],
-        'max_completion_tokens' => 12000,
+        'max_completion_tokens' => 24000,
     ];
     if (!preg_match('/^(gpt-5|o1|o3)/', $reqModel)) {
         $payloadArr['temperature'] = 0.2;
@@ -1504,7 +1504,16 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
         }
         $j = json_decode((string)$resp, true);
         $content = $j['choices'][0]['message']['content'] ?? null;
-        if (!is_string($content) || $content === '') throw new RuntimeException('empty content');
+        $finish  = $j['choices'][0]['finish_reason'] ?? '?';
+        $usage   = $j['usage'] ?? [];
+        if (!is_string($content) || $content === '') {
+            // v776 #400 reasoning モデル で max_completion_tokens 不足 (= 全部 reasoning に 消費)
+            //   の 切り分け の ため finish_reason + usage を error_msg に 残す。
+            $info = " (finish=$finish";
+            if (!empty($usage)) $info .= ", reasoning=" . ($usage['completion_tokens_details']['reasoning_tokens'] ?? '?') . ", completion=" . ($usage['completion_tokens'] ?? '?');
+            $info .= ")";
+            throw new RuntimeException('empty content' . $info);
+        }
         $parsed = json_decode($content, true);
         if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
 
