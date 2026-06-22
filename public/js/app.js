@@ -569,6 +569,9 @@ route('/paper-summary/r/:token',   lazy(() => import('./views/paper_translate.js
 route('/paper-summary',            lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 route('/paper-translate/r/:token', lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
 route('/paper-translate',          lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
+// v781 #376 Deep Research (ChatGPT 風 多段 Web 調査)
+route('/deep-research/r/:token',   lazy(() => import('./views/deep_research.js'), 'renderDeepResearchShared'));
+route('/deep-research',            lazy(() => import('./views/deep_research.js'), 'renderDeepResearch'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
 route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));

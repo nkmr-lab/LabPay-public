@@ -117,6 +117,23 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_rewriter_get($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v781 #376 Deep Research (ChatGPT 風 多段 Web 調査)
+    if ($sub === 'deep_research' && $method === 'POST' && !isset($seg[2])) {
+        ai_deep_research($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'deep_research' && $method === 'GET' && ($seg[2] ?? '') === 'r' && isset($seg[3])) {
+        ai_deep_research_get_shared($pdo, $cfg, (string)$seg[3]);
+        return;
+    }
+    if ($sub === 'deep_research' && $method === 'GET' && !isset($seg[2])) {
+        ai_deep_research_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'deep_research' && $method === 'DELETE' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_deep_research_delete($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -1773,6 +1790,289 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
     ]);
     @curl_exec($ch);
     curl_close($ch);
+}
+
+// ============================================================================
+// v781 #376 Deep Research — ChatGPT の Deep Research 機能 を 真似た 多段 Web 調査。
+//   OpenAI Responses API + web_search hosted tool で Web を 横断 検索 し、
+//   構造化 された 調査 レポート (要点 / セクション / 出典) を JSON で 返す。
+//   コスト: 軽い (gpt-5-mini, 100pt) / 標準 (gpt-5, 250pt) / 深い (gpt-5 + 高 reasoning, 500pt)。
+//   実 token / 検索 回数 は usage_json に 記録 して 後 から 参照 可能。
+// ============================================================================
+
+// 深さ × モデル 別 ポイント (依頼料 = 実 API コスト ($) を 円換算 した 概算 + 余裕)
+const DEEP_RESEARCH_TIERS = [
+    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 100, 'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, 数 サイト)'],
+    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 250, 'max_tokens' => 16000, 'label' => '標準 (gpt-5, 10 前後)'],
+    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 500, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning)'],
+];
+
+const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
+あなた は 「深く 横断的 に Web を 調べて 整理 して 報告 する」 リサーチ アシスタント です。
+ユーザ から 与えられた リサーチ クエリ に 対して、 web_search ツール を 必要 な だけ 使って
+複数 の 信頼 できる 情報 源 を 横断 し、 以下 の 構造 で 日本語 の 調査 レポート を 作って
+ください。
+
+# 振る舞い
+- 最初 に クエリ を 分解 し、 調べる べき サブ トピック (3-6 個) を 自分 で 立てる
+- それぞれ について web_search を 使い、 一次 情報 / 学術 論文 / 公式 ドキュメント を 優先
+- 1 つ の ソース だけ で 結論 を 出さず、 複数 ソース を 突き合わせて 食い違い も 拾う
+- 引用 は 必ず URL + 短い 出典 名 (例: 「OpenAI 公式 ブログ」「Wikipedia」「Nature 2024」) を
+  そのまま 残す。 出典 を 落とさない
+- 「分から ない / 確認 できない」 は そう 書く。 知らない こと を 創作 しない
+- 用語 は 初出 で 簡潔 に 説明
+- 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 と の 境界 は OK)
+
+# 出力 JSON スキーマ (これ を そのまま 返す)
+
+{
+  "query_understanding": "ユーザ クエリ を 自分 が どう 理解 し、 何 を 調べる つもり か (100-300 字)",
+  "sub_questions": ["立てた サブ 問い 1", "問い 2", ...],
+  "sections": [
+    {
+      "heading": "セクション タイトル",
+      "body": "そのセクション の 説明 本文 (400-1000 字、 必要 なら 段落 分け)。 数値 や 主要 用語 は 残す",
+      "sources": [
+        {"label": "短い 出典 名", "url": "https://..."},
+        ...
+      ]
+    },
+    ...
+  ],
+  "summary": "全 セクション を 通した 結論 / 重要 ポイント の 要約 (400-800 字)",
+  "key_findings": ["3-7 個 の 重要 発見・主張 を 1 行 ずつ"],
+  "open_questions": ["まだ 残って いる 問い・追加 で 調べる と 良い こと"],
+  "all_sources": [
+    {"label": "出典 名", "url": "https://...", "why": "なぜ 参照 した か (50-100 字)"},
+    ...
+  ]
+}
+
+JSON 以外 の 前置き / 解説 / markdown コード フェンス は 不要、 JSON のみ を 返却。
+PROMPT;
+
+function ai_deep_research_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, share_token, query_text, model, depth, cost_points, status, created_at, finished_at, error_msg
+                           FROM deep_researches WHERE user_id = ?
+                       ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $items = array_map(function ($r) {
+        return [
+            'id'          => (int)$r['id'],
+            'share_token' => $r['share_token'],
+            'query_short' => mb_substr((string)$r['query_text'], 0, 80),
+            'model'       => $r['model'],
+            'depth'       => $r['depth'],
+            'cost_points' => (int)$r['cost_points'],
+            'status'      => $r['status'],
+            'created_at'  => $r['created_at'],
+            'finished_at' => $r['finished_at'],
+            'error_msg'   => $r['error_msg'],
+        ];
+    }, $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response([
+        'items'  => $items,
+        'tiers'  => DEEP_RESEARCH_TIERS,
+        'default_depth' => 'standard',
+    ]);
+}
+
+function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT dr.id, dr.user_id, dr.share_token, dr.query_text, dr.model, dr.depth,
+                                 dr.cost_points, dr.status, dr.result_json, dr.usage_json,
+                                 dr.error_msg, dr.created_at, dr.finished_at,
+                                 u.display_name AS author_name, u.avatar_url AS author_avatar
+                            FROM deep_researches dr JOIN users u ON u.id = dr.user_id
+                           WHERE dr.share_token = ?");
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'deep_research not found', 404);
+    json_response([
+        'id'            => (int)$row['id'],
+        'author_id'     => (int)$row['user_id'],
+        'author_name'   => $row['author_name'],
+        'author_avatar' => $row['author_avatar'],
+        'query_text'    => $row['query_text'],
+        'model'         => $row['model'],
+        'depth'         => $row['depth'],
+        'cost_points'   => (int)$row['cost_points'],
+        'status'        => $row['status'],
+        'result'        => json_decode($row['result_json'] ?: 'null', true),
+        'usage'         => json_decode($row['usage_json']  ?: 'null', true),
+        'error_msg'     => $row['error_msg'],
+        'created_at'    => $row['created_at'],
+        'finished_at'   => $row['finished_at'],
+    ]);
+}
+
+function ai_deep_research_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT user_id FROM deep_researches WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    $pdo->prepare("DELETE FROM deep_researches WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+function ai_deep_research(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+
+    $body = read_json_body();
+    $query = trim((string)($body['query'] ?? ''));
+    if ($query === '') throw new ApiException('bad_request', 'query が 必要 です', 400);
+    if (mb_strlen($query) > 4000) throw new ApiException('bad_request', 'query は 4000 字 まで', 400);
+    $depth = (string)($body['depth'] ?? 'standard');
+    if (!isset(DEEP_RESEARCH_TIERS[$depth])) {
+        throw new ApiException('bad_request', '未対応 depth: ' . $depth, 400);
+    }
+    $tier = DEEP_RESEARCH_TIERS[$depth];
+    $cost = (int)$tier['cost'];
+
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $token = bin2hex(random_bytes(16));
+
+    $rowId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $query, $tier, $depth, $cost, &$rowId) {
+        $pdo->prepare("INSERT INTO deep_researches
+            (user_id, share_token, query_text, model, depth, cost_points, status)
+            VALUES (?,?,?,?,?,?,'pending')")
+            ->execute([$uid, $token, $query, $tier['model'], $depth, $cost]);
+        $rowId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
+    });
+
+    json_response_no_exit([
+        'ok'          => true,
+        'id'          => $rowId,
+        'share_token' => $token,
+        'status'      => 'pending',
+        'cost_points' => $cost,
+        'depth'       => $depth,
+        'message'     => '依頼を受け付けました。 OpenAI (' . $tier['model'] . ' / ' . $depth . ') が 調査中… (深さ により 1-15 分)。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(900);
+
+    ai_deep_research_run_background($pdo, $cfg, $rowId, $token, $query, $tier, $apiKey, $uid);
+}
+
+function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $query, array $tier, string $apiKey, int $uid): void {
+    try {
+        $pdo->prepare("UPDATE deep_researches SET status='processing' WHERE id = ?")->execute([$rowId]);
+
+        $payloadArr = [
+            'model' => $tier['model'],
+            'input' => [
+                ['role' => 'system', 'content' => DEEP_RESEARCH_SYSTEM_PROMPT],
+                ['role' => 'user',   'content' => $query],
+            ],
+            'tools' => [['type' => 'web_search']],
+            'max_output_tokens' => (int)$tier['max_tokens'],
+        ];
+        // 推論 モデル に reasoning.effort を 指定
+        if (preg_match('/^(gpt-5|o1|o3)/', (string)$tier['model'])) {
+            $payloadArr['reasoning'] = ['effort' => (string)$tier['effort']];
+        }
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+        $ch = curl_init('https://api.openai.com/v1/responses');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 840,  // 14 分
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($resp === false || $status >= 400) {
+            $errMsg = '';
+            if ($resp !== false) {
+                $errJ = json_decode((string)$resp, true);
+                $errMsg = $errJ['error']['message'] ?? '';
+            }
+            throw new RuntimeException('OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
+        }
+        $j = json_decode((string)$resp, true);
+
+        // Responses API: output_text を 探す
+        $text = '';
+        $searchCount = 0;
+        foreach (($j['output'] ?? []) as $item) {
+            if (($item['type'] ?? '') === 'message') {
+                foreach (($item['content'] ?? []) as $c) {
+                    if (($c['type'] ?? '') === 'output_text' && isset($c['text'])) {
+                        $text .= (string)$c['text'];
+                    }
+                }
+            }
+            if (($item['type'] ?? '') === 'web_search_call') $searchCount++;
+        }
+        // 一部 SDK は output_text フィールド を 直接 返す
+        if ($text === '' && isset($j['output_text']) && is_string($j['output_text'])) {
+            $text = (string)$j['output_text'];
+        }
+        if ($text === '') throw new RuntimeException('empty content (no output_text in response)');
+
+        // JSON 文字列 を 抽出 (モデル が markdown フェンス で 囲って しまう ケース に 対応)
+        $jsonText = $text;
+        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) {
+            $jsonText = $m[1];
+        } elseif (preg_match('/(\{.*\})/s', $text, $m)) {
+            $jsonText = $m[1];
+        }
+        $parsed = json_decode($jsonText, true);
+        if (!is_array($parsed)) throw new RuntimeException('invalid JSON in output');
+
+        $usage = $j['usage'] ?? [];
+        $usageRec = [
+            'input_tokens'  => (int)($usage['input_tokens']  ?? 0),
+            'output_tokens' => (int)($usage['output_tokens'] ?? 0),
+            'total_tokens'  => (int)($usage['total_tokens']  ?? 0),
+            'search_count'  => $searchCount,
+        ];
+
+        $pdo->prepare("UPDATE deep_researches
+                          SET result_json = ?, usage_json = ?, status='done', finished_at = NOW()
+                        WHERE id = ?")
+            ->execute([
+                json_encode($parsed, JSON_UNESCAPED_UNICODE),
+                json_encode($usageRec, JSON_UNESCAPED_UNICODE),
+                $rowId,
+            ]);
+
+        try {
+            $shortQ = mb_substr($query, 0, 60);
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "🔎 Deep Research 完了: 「{$shortQ}」 /#/deep-research/r/{$token}",
+                'deep_research', $rowId);
+        } catch (Throwable $_) {}
+    } catch (Throwable $e) {
+        $pdo->prepare("UPDATE deep_researches SET status='error', error_msg = ?, finished_at = NOW() WHERE id = ?")
+            ->execute([mb_substr($e->getMessage(), 0, 1000), $rowId]);
+        try {
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "❌ Deep Research 失敗: " . $e->getMessage() . " /#/deep-research/r/{$token}",
+                'deep_research', $rowId);
+        } catch (Throwable $_) {}
+    }
 }
 
 // POST /api/ai/short_title { context: "...説明..." }

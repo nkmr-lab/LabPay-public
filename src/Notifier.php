@@ -34,6 +34,8 @@ class Notifier {
             'roulette'                               => "#/roulette/{$refId}",
             'timer'                                  => "#/timers/{$refId}",
             'bait_request'                           => "#/bait/{$refId}",  // v780 #374 アルバイト 申請 通知 に URL を 付ける
+            // v781 #376 deep_research は ref_id が DB row id だが URL は share_token な ので
+            //   urlFor では 解決 でき ない (body に URL を 含めて いる の で 不要)
             default                                  => null,
         };
     }
