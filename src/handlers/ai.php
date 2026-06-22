@@ -671,7 +671,7 @@ function ai_paper_review_list(PDO $pdo, array $cfg): void {
 function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT pr.id, pr.user_id, pr.pdf_name, pr.target_venue, pr.strictness,
-                                 pr.sections_json, pr.review_json, pr.created_at,
+                                 pr.response_text, pr.sections_json, pr.review_json, pr.created_at,
                                  pr.status, pr.error_msg,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM paper_reviews pr JOIN users u ON u.id = pr.user_id
@@ -687,6 +687,7 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
         'pdf_name'     => $row['pdf_name'],
         'target_venue' => $row['target_venue'],
         'strictness'   => $row['strictness'],
+        'response_text'=> $row['response_text'],   // v780 #404
         'sections'     => json_decode($row['sections_json'] ?: '[]', true) ?: [],
         'review'       => json_decode($row['review_json'] ?: 'null', true),
         'status'       => $row['status'] ?? 'done',
@@ -729,6 +730,10 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     if ($venue === '') $venue = 'HCI 系の国際会議 (CHI / UIST / IUI / DIS / CSCW など)';
     $strictness = (string)($_POST['strictness'] ?? 'やや厳しめ');
     if (!in_array($strictness, ['緩め', 'やや厳しめ', '厳しめ'], true)) $strictness = 'やや厳しめ';
+    // v780 #404 オプション: 回答文 (rebuttal / response to reviewers)。 与えられた 場合 は
+    //   論文 査読 + 回答 妥当性 評価 モード に なる。 空 なら 従来 通り の 査読 のみ。
+    $responseText = trim((string)($_POST['response_text'] ?? ''));
+    if (mb_strlen($responseText) > 20000) $responseText = mb_substr($responseText, 0, 20000);
 
     // v552 #211 #212 ユーザー設定 (custom_prompt + share_target_ids) を取得
     $stS = $pdo->prepare("SELECT custom_prompt, share_target_ids FROM user_paper_review_settings WHERE user_id = ?");
@@ -764,6 +769,18 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
     $sys = $basePrompt .
            "\n\n査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
+    if ($responseText !== '') {
+        // v780 #404 回答文 が ある とき は 「査読 + 回答 評価」 モード
+        $sys .= "\n\n【回答文 評価 モード】\n"
+              . "この 依頼 に は 著者 から の 回答文 (rebuttal / 査読 コメント へ の 反論・返答) が 添えられて います。\n"
+              . "通常 の 査読 に 加え、 以下 を 評価 して ください:\n"
+              . "(1) 回答 内容 が 査読 で 指摘 する べき 主要 な 弱み / 記述 漏れ / 論理 飛躍 を カバー して いる か\n"
+              . "(2) 回答 の 主張 が 論文 本文 と 矛盾 して いない か (回答 で 「分析 し直 した」 と 書いて あるが 本文 が 古い まま の よう な 不整合 を 検出)\n"
+              . "(3) 回答 が 「N を 増やす だけ」「再 実験 する だけ」 で 終わって いる など 安直 な 対応 で は ない か (代替 分析 や 限界 明示 への 言及 を 重視)\n"
+              . "(4) 回答 の 文章 自体 に 過大 主張 / 曖昧 / 矛盾 が ない か\n"
+              . "(5) 査読 で 上げた 改稿 案 に 対して 回答 が 過不足 なく 対応 できて いる か (上記 weaknesses と 突き合わせ)\n"
+              . "出力 JSON に 新規 フィールド「response_evaluation」 を 追加 する こと (詳細 は user 指示 の スキーマ 参照)。";
+    }
     $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 続けて査読コメントを作ってください。\n\n"
         . "system prompt のチェックリスト 4 項目 (貢献の妥当性 / 実験統計記述漏れ / 論理的つながり / 背景〜結論 一気通貫性) を 必ず網羅し、 整合性チェック の結果は consistency_check に 4 項目別で残してください。\n\n"
         . "出力 JSON スキーマ:\n"
@@ -798,9 +815,26 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)\", \"suggested_rewrite\":\"こう書き直すと良い、 という具体案\"}, ...],\n"
         . "    \"revision_to_accept\": [\"採録に導くために 必要な修正を 優先度順に アイテマイズ (具体的 / 実行可能、 ただし 「N を増やす」 系は p-hacking リスクを添える)\", ...],\n"
         . "    \"comments_to_authors\": \"著者への総合コメント (400〜800 文字)\",\n"
+        . ($responseText !== ''
+            ? "    \"response_evaluation\": {\n"
+              . "      \"overall_assessment\": \"回答 全体 の 妥当性 評価 (200〜500 字)。 査読 指摘 に 対して 過不足 なく 対応 できて いる か、 安直 な「N 増 / 再 実験」 で 流して いない か、 論文 本文 と 矛盾 が ない か を 含めて\",\n"
+              . "      \"covered_points\":      [\"回答 が 良く 対応 でき て いる 指摘 (1 件 ずつ)\", ...],\n"
+              . "      \"missing_points\":      [\"査読 で 指摘 すべき に も かかわら ず 回答 が 触れて いない / 不十分 な 論点 (1 件 ずつ + どう 補強 する か の 助言)\", ...],\n"
+              . "      \"inconsistencies\":     [\"回答 と 論文 本文 / 数値 / 主張 と の 矛盾 点 (具体 引用 + どこ と どこ が 矛盾 か)\", ...],\n"
+              . "      \"weak_arguments\":      [\"回答 中 で 主張 が 弱い / 曖昧 / 飛躍 して いる 箇所 (引用 + 改善案)\", ...],\n"
+              . "      \"recommended_revisions_to_response\": [\"回答文 自体 を こう 書き 換える と 査読者 を 説得 し やすい、 と いう 具体 提案 1〜5 件\", ...]\n"
+              . "    },\n"
+            : ""
+          )
         . "    \"confidence\": 1-5 の整数 (査読者の自信)\n"
         . "  }\n"
         . "}";
+    if ($responseText !== '') {
+        $userPrompt .= "\n\n【著者 から の 回答文】 (これ を 評価 して response_evaluation に 入れる)\n\n"
+                     . "------ ここ から 回答文 ------\n"
+                     . $responseText . "\n"
+                     . "------ ここ まで ------\n";
+    }
 
     // v774 #396 #397 ユーザが 選んだ モデル を 使う。 推論モデル は temperature 非対応
     $model = $reqModel;
@@ -826,13 +860,14 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $token = bin2hex(random_bytes(16));
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $sys, $reviewCost, &$reviewId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $responseText, $sys, $reviewCost, &$reviewId) {
         $pdo->prepare("INSERT INTO paper_reviews
-            (user_id, share_token, file_id, pdf_name, target_venue, strictness, prompt_used,
+            (user_id, share_token, file_id, pdf_name, target_venue, strictness, response_text, prompt_used,
              sections_json, review_json, cost_points, status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,'pending')")
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([
-                $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness, $sys,
+                $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness,
+                $responseText !== '' ? $responseText : null, $sys,
                 '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();

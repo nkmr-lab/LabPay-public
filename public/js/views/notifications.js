@@ -145,6 +145,7 @@ function refUrl(n) {
     case 'ordering':       return n.ref_id ? '#/orderings/' + n.ref_id : '#/orderings';
     case 'shiritori':      return n.ref_id ? '#/shiritori/' + n.ref_id : '#/shiritori';
     case 'tierlist':       return n.ref_id ? '#/tierlists/' + n.ref_id : '#/tierlists';
+    case 'bait_request':   return n.ref_id ? '#/bait/' + n.ref_id : '#/bait';  // v780 #374
     case 'paper_review':   return '#/paper-review';
     // v756 #373 paper_translate: ref_id は row id だが、 URL は share_token なので
     //   body に 含まれて いる「/#/paper-(translate|summary)/r/TOKEN」 を 抽出 して 使う。

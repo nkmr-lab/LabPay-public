@@ -48,6 +48,11 @@ export async function renderPaperReview() {
         <input type="file" id="pr-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
+      <label class="field">
+        <span class="lbl">🗨️ 著者の回答文 / リバトル (任意)</span>
+        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。"></textarea>
+        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力すると、 査読指摘 が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないか まで評価します。</div>
+      </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pr-go" class="primary" disabled>📄 査読開始</button>
       </div>
@@ -176,6 +181,9 @@ async function go() {
     fd.append('strictness', strictness);
     const model = document.getElementById('pr-model')?.value || 'gpt-4.1';
     fd.append('model', model);
+    // v780 #404 任意 の 回答文 (rebuttal)。 空 なら 送らない (= 通常 の 査読 モード)
+    const responseText = (document.getElementById('pr-response')?.value || '').trim();
+    if (responseText !== '') fd.append('response_text', responseText);
     const resp = await fetch('/api/ai/paper_review', {
       method: 'POST', body: fd, credentials: 'same-origin',
       headers: { 'X-Requested-With': 'labpay' },
@@ -258,7 +266,7 @@ async function refreshShared(token) {
     }
     // 完了
     if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
-    paint({ venue: d.target_venue, strictness: d.strictness, sections: d.sections, review: d.review }, token, true);
+    paint({ venue: d.target_venue, strictness: d.strictness, response_text: d.response_text, sections: d.sections, review: d.review }, token, true);
   } catch (e) {
     app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`;
   }
@@ -274,6 +282,44 @@ function paint(d, shareToken, isShared) {
       <div class="meta" style="font-size:12px; margin-bottom:8px">対象会議: ${escapeHtml(d.venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
       ${r.decision ? `<div style="font-size:18px; font-weight:700; padding:6px 12px; background:${decColor}22; color:${decColor}; border-left:5px solid ${decColor}; border-radius:6px; display:inline-block">${escapeHtml(r.decision)}${r.score ? ` (Score ${r.score}/5)` : ''}${r.confidence ? ` (Confidence ${r.confidence}/5)` : ''}</div>` : ''}
       ${r.summary_one_line ? `<div class="meta" style="font-size:13px; margin-top:6px">${escapeHtml(r.summary_one_line)}</div>` : ''}
+
+      ${d.response_text ? `
+      <div style="margin-top:10px">
+        <div class="bold" style="color:#6b21a8">🗨️ 著者の回答文</div>
+        <div style="font-size:12.5px; padding:8px 12px; background:#faf5ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; white-space:pre-wrap; margin-top:4px; line-height:1.7">${escapeHtml(d.response_text)}</div>
+      </div>` : ''}
+
+      ${r.response_evaluation ? `
+      <div style="margin-top:10px; padding:10px 14px; background:#f5f3ff; border:2px solid #6b21a8; border-radius:8px">
+        <div class="bold" style="color:#6b21a8; font-size:14px">🧐 回答文の妥当性 評価</div>
+        ${r.response_evaluation.overall_assessment ? `
+          <div style="font-size:13px; padding:8px 10px; background:#fff; border-radius:6px; white-space:pre-wrap; margin-top:6px; line-height:1.7">${escapeHtml(r.response_evaluation.overall_assessment)}</div>` : ''}
+        ${r.response_evaluation.covered_points && r.response_evaluation.covered_points.length ? `
+          <div style="margin-top:6px">
+            <div class="bold" style="color:#15803d; font-size:12.5px">✅ 良くカバーできている指摘</div>
+            <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.response_evaluation.covered_points.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+        ${r.response_evaluation.missing_points && r.response_evaluation.missing_points.length ? `
+          <div style="margin-top:6px">
+            <div class="bold" style="color:#a16207; font-size:12.5px">⚠️ 回答が触れていない / 不十分な論点</div>
+            <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.response_evaluation.missing_points.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+        ${r.response_evaluation.inconsistencies && r.response_evaluation.inconsistencies.length ? `
+          <div style="margin-top:6px">
+            <div class="bold" style="color:#dc2626; font-size:12.5px">⛔ 論文本文との矛盾点</div>
+            <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.response_evaluation.inconsistencies.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+        ${r.response_evaluation.weak_arguments && r.response_evaluation.weak_arguments.length ? `
+          <div style="margin-top:6px">
+            <div class="bold" style="color:#b91c1c; font-size:12.5px">🪨 主張が弱い / 曖昧 / 飛躍がある箇所</div>
+            <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.response_evaluation.weak_arguments.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+        ${r.response_evaluation.recommended_revisions_to_response && r.response_evaluation.recommended_revisions_to_response.length ? `
+          <div style="margin-top:6px">
+            <div class="bold" style="color:#1d4ed8; font-size:12.5px">📝 回答文の書き換え提案</div>
+            <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.response_evaluation.recommended_revisions_to_response.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+      </div>` : ''}
 
       ${r.contribution_validity ? `
       <div style="margin-top:10px">

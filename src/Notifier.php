@@ -33,6 +33,7 @@ class Notifier {
             'nomikai'                                => "#/nomikai/{$refId}",
             'roulette'                               => "#/roulette/{$refId}",
             'timer'                                  => "#/timers/{$refId}",
+            'bait_request'                           => "#/bait/{$refId}",  // v780 #374 アルバイト 申請 通知 に URL を 付ける
             default                                  => null,
         };
     }
