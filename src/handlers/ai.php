@@ -82,6 +82,11 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_redo($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v775 #399 本人 のみ 削除 (履歴 から 消す)
+    if ($sub === 'paper_translate' && $method === 'DELETE' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_paper_translate_delete($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'paper_translate' && $method === 'GET' && !isset($seg[2])) {
         ai_paper_translate_list($pdo, $cfg);
         return;
@@ -1368,6 +1373,34 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     @set_time_limit(360);
 
     ai_paper_translate_run_background($pdo, $cfg, $rowId, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
+}
+
+// v775 #399 本人 のみ 履歴 から 削除。 関連 ファイル (pdf / pages / paper_pdfs) も 削除。
+function ai_paper_translate_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT user_id, pages_dir, pdf_path FROM paper_translates WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    $publicDir = '/var/www/labpay/public';
+    // ページ画像 ディレクトリ 削除
+    if (!empty($row['pages_dir'])) {
+        $abs = $publicDir . $row['pages_dir'];
+        if (is_dir($abs)) {
+            foreach (glob($abs . '/*') ?: [] as $f) @unlink($f);
+            @rmdir($abs);
+        }
+    }
+    // PDF + dir 削除
+    if (!empty($row['pdf_path'])) {
+        $pdfAbs = $publicDir . $row['pdf_path'];
+        @unlink($pdfAbs);
+        @rmdir(dirname($pdfAbs));
+    }
+    $pdo->prepare("DELETE FROM paper_translates WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
 }
 
 // v758 #377 既存 row の PDF を 使って 再 処理 (本人 のみ)。 body: { model?: string }

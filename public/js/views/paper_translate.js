@@ -3,7 +3,7 @@
 //   重要 図表 (ページ画像 を pdftoppm で 抽出 表示) + 最後 に 落合メソッド の 6 項目 で
 //   全体 を 重ね合わせて まとめる。 結果は share_token で URL 共有可能。
 
-import { get, patch, post } from '../api.js';
+import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
@@ -172,19 +172,36 @@ async function loadHistory() {
       return;
     }
     // v772 #393 履歴 表示 を 「論文タイトル / ファイル名 (日時)」 形式 に。
-    document.getElementById('pt-history').innerHTML = items.map(it => {
+    // v775 #399 各 行 に 削除 ボタン (間違って 作って しまった とき 用)。
+    const root = document.getElementById('pt-history');
+    root.innerHTML = items.map(it => {
       const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
       const title = it.title_ja || it.pdf_name;
       const sub = it.title_ja ? `${it.pdf_name} (${it.created_at})` : `${it.created_at} · ${it.status}`;
       return `
-        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0">
-          <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
-            <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
-          </div>
-        </a>`;
+        <div class="list-item" style="gap:8px; align-items:flex-start; padding:8px 0">
+          <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" style="display:flex; gap:8px; flex:1; min-width:0; text-decoration:none; color:inherit; align-items:flex-start">
+            <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
+            <div class="grow" style="min-width:0">
+              <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
+              <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
+            </div>
+          </a>
+          <button class="btn" data-pt-del="${it.id}" title="削除" style="font-size:11px; padding:2px 8px; flex:none">🗑</button>
+        </div>`;
     }).join('');
+    root.querySelectorAll('[data-pt-del]').forEach(b => {
+      b.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const id = b.dataset.ptDel;
+        if (!confirm('この 要約 を 履歴 から 削除 します か? (PDF や ページ画像 も 一緒 に 削除)')) return;
+        try {
+          await del('/api/ai/paper_translate/' + id);
+          toast('削除しました');
+          await loadHistory();
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
   } catch (e) {
     document.getElementById('pt-history').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
