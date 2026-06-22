@@ -563,7 +563,10 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
-// v748 #359 #360 #361 論文 和訳要約 (落合メソッド + 20pt)
+// v748 #359 #360 #361 論文 要約 (= paper_translate handler を そのまま 使う)
+// v757 #375 slug を paper-summary に 改名 (和訳ない 論文 も ある ため)、 旧 paper-translate も 互換。
+route('/paper-summary/r/:token',   lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
+route('/paper-summary',            lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 route('/paper-translate/r/:token', lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
 route('/paper-translate',          lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)

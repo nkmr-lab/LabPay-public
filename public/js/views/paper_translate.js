@@ -13,7 +13,7 @@ export async function renderPaperTranslate() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">📑 論文 和訳 要約</h2>
+      <h2 style="margin:0">📑 論文要約 <span style="font-size:12px; color:#9ca3af; font-weight:normal">(自動翻訳)</span></h2>
     </div>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
@@ -280,6 +280,8 @@ function paintResult(d, token) {
 
     ${renderListSection('🚀 今後 の 課題', r.future_work)}
 
+    ${renderKeyReferences(r.key_references)}
+
     ${renderOchiai(r.ochiai_method || r.ochiai)}
   `;
   document.getElementById('pt-copy')?.addEventListener('click', async () => {
@@ -348,13 +350,25 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const cap = (fig && fig.caption_ja) ? String(fig.caption_ja) : '';
   const why = (fig && fig.why_important) ? String(fig.why_important) : '';
   const page = Number(fig?.page) || null;
+  const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page) : null;
+  // v757 #375 ページ画像 を page_region で crop 表示。 top/middle/bottom/full。
+  //   object-position で 上下 オフセット + 視野 を 制限 して 図表 部分 だけ 見せる。
+  const cropStyle = (() => {
+    switch (region) {
+      case 'top':    return 'height:230px; object-fit:cover; object-position:50% 0%';
+      case 'middle': return 'height:230px; object-fit:cover; object-position:50% 50%';
+      case 'bottom': return 'height:230px; object-fit:cover; object-position:50% 100%';
+      default:       return 'max-height:300px; object-fit:contain';
+    }
+  })();
   return `
-    <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0">
+    <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
-        <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; width:140px; cursor:zoom-in">
-          <img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:140px; max-height:200px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px">
+        <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; width:200px; cursor:zoom-in">
+          <img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:200px; ${cropStyle}; background:#fff; border:1px solid #ddd; border-radius:4px">
+          <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
         <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page})</span>` : ''}</div>
@@ -429,6 +443,27 @@ function renderRqHypothesis(rh) {
       <div class="bold" style="color:var(--primary); margin-bottom:8px">🔬 RQ / 仮説 と 結果</div>
       ${rqHtml}
       ${hyHtml}
+    </div>`;
+}
+
+// v757 #375 参考文献 で 特に 重要 な もの。
+function renderKeyReferences(refs) {
+  if (!Array.isArray(refs) || !refs.length) return '';
+  return `
+    <div class="card">
+      <div class="bold" style="color:var(--primary); margin-bottom:8px">📚 押さえて おく べき 参考文献</div>
+      <div style="display:flex; flex-direction:column; gap:8px">
+        ${refs.map(ref => {
+          const cit = ref?.citation ? String(ref.citation) : '';
+          const title = ref?.title ? String(ref.title) : '';
+          const why = ref?.why_important ? String(ref.why_important) : '';
+          return `
+            <div style="padding:8px 10px; background:#fafafa; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px">
+              <div class="bold" style="color:#6b21a8">${escapeHtml(cit)}${title ? ` ・ ${escapeHtml(title)}` : ''}</div>
+              ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
+            </div>`;
+        }).join('')}
+      </div>
     </div>`;
 }
 

@@ -920,24 +920,43 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
    論文 の 結果 が どうだったか (= 答え / 支持 / 棄却 / 部分支持) も 必ず 整理
 3. contributions: 著者 が 明示的 に 主張 する 貢献 を 箇条書き
 4. detailed_sections: 論文 の 構造 (Abstract / Introduction / Related Work / Method / Experiment /
-   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 重要 な 図 や 表 を
-   figure_refs で 引用 し、 ページ番号 と キャプション の 和訳、 なぜ 重要 か を 添える
+   Results / Discussion / Conclusion 等) に 沿って 章立て 要約 を 作る。 各節 500-900 字 で
+   しっかり 内容 を 書く。 重要 な 図 や 表 は figure_refs で 引用 し、 ページ番号 + page_region
+   (top/middle/bottom/full) + キャプション の 和訳 + なぜ 重要 か を 添える
 5. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 自然 に 追加 した 方 が 良い 課題
-6. ochiai_method: 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめる
+6. key_references: 参考文献 の 中 で 「この 論文 を 理解 する 上 で 特に 重要、 読者 も 抑え
+   ておく べき」 もの を 3-7 件 ピックアップ
+7. ochiai_method: 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめる
 
 # detailed_sections の 中身
 
 論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
 - heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
-- body: 節 本文 の 和訳要約 (300-600 字、 数値 / 用語 を 残す)
-- figure_refs: その 節 で 言及 する 重要 な 図 / 表 (0-3 件)。 page は PDF の 物理ページ番号
-  (1 始まり) を 正確 に 入れる こと (= サーバ で ページ画像 を 紐付ける ので 必須)。
+- body: 節 本文 の 和訳要約 (500-900 字、 数値 / 用語 / 手法名 を 残す、 各 節 は 1 段落 で
+  まとめず 必要 なら 2-3 段落 に 分けて 構造化する。 機械翻訳 の 1 行 要約 に せず、
+  本気で 内容 が 伝わる ように 書く)
+- figure_refs: その 節 で 言及 する 重要 な 図 / 表 を 厳選 して 入れる (各 節 0-2 件、 全節
+  合計 で 最大 3 件 まで)。 優先 する のは 「提案 手法 の 中核 を 示す 図」 と 「主たる
+  結果 の 図 / 表 (=効果量 / 比較表 / プロット)」。 補助的 な 図 (背景 イラスト 等) は 省く。
+  page は PDF の 物理ページ番号 (1 始まり) を 正確 に 入れる こと (= サーバ で ページ画像 を
+  紐付ける ので 必須)。 page_region は その 図 / 表 が ページ の どこに あるか の 大雑把 な ヒント:
+    "top" (上 1/3) / "middle" (中央) / "bottom" (下 1/3) / "full" (ページ大半)
+  client は これ を 使って ページ画像 を crop 表示 する。
 
 # トーン
 ・ 単なる 翻訳 では なく、 「研究論文 を 読んで 伝える」 立場 で 書く
 ・ 略語 は 初出 で フルスペル + 日本語訳 を 添える
 ・ 数値 (実験 N、 効果量、 p 値) は 落とさず 残す
 ・ 引用 や 推測 は 「論文 では…」「ここ から 推測 する に…」 で 区別
+
+# ハルシネーション 防止 (重要)
+
+各 セクション を 書く 前 に、 PDF の 該当 箇所 を 必ず 確認 して ください。
+書いた 後 も、 数値 / 用語 / 著者 が 主張 した 内容 / 引用 / 結果 / 著者名 / 会議名 等 が
+PDF の 記述 と 一致 して いるか 自分で 再 精査 し、 ズレ が あれば 修正 して から
+JSON を 出力 して ください。 「PDF に そう 書かれて いるか 怪しい が 文脈 上 推測 する」
+部分 は 「論文 から の 推測」 と 明示 する こと。 創作 / 拡大解釈 は 厳禁 です。
+PDF に 書かれて いない 数値 や 主張 を 補完 しない。
 
 # 出力 JSON スキーマ
 
@@ -961,15 +980,20 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
   "detailed_sections": [
     {
       "heading": "節 タイトル",
-      "body":    "節 本文 の 和訳要約 (300-600 字)",
+      "body":    "節 本文 の 和訳要約 (500-900 字、 必要 なら 段落 分け)",
       "figure_refs": [
-        { "label": "Figure 2", "page": 3,
+        { "label": "Figure 2", "page": 3, "page_region": "top",
           "caption_ja": "図 / 表 キャプション の 和訳",
           "why_important": "なぜ 重要 か (50-150 字)" }
       ]
     }
   ],
   "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
+  "key_references": [
+    { "citation":      "[12] や Smith et al. 2024 など 本文 で 参照 されて いる 表記",
+      "title":         "参考文献 の タイトル (日本語訳 も 可)",
+      "why_important": "この 論文 の 主張 を 理解 する 上で なぜ 必読 か (50-150 字)" }
+  ],
   "ochiai_method": {
     "what":          "値 は 説明本文 のみ。「1. どんな もの?」 等 の 番号 / 設問 を 先頭 に 入れない (200-400 字)",
     "vs_prior_work": "値 は 説明本文 のみ (200-400 字)",
@@ -1131,7 +1155,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
     // v750 #366 図表 抽出: PDF を ページ単位 JPEG に レンダリング (pdftoppm)。
-    //   client は figure_refs の page 番号 から この ページ画像 を 引いて 表示。
+    // v757 #375 解像度 を 110 → 160 DPI に bump、 図表 を crop 表示 する 時 の 質 を 上げる。
+    //   client は figure_refs の page + page_region から この ページ画像 を crop 表示。
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pagesRel = '/uploads/paper_pages/' . $token;
@@ -1139,7 +1164,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     @mkdir($pagesAbs, 0775, true);
     $pagesCount = 0;
     try {
-        $cmd = sprintf('pdftoppm -jpeg -r 110 %s %s 2>&1',
+        $cmd = sprintf('pdftoppm -jpeg -jpegopt quality=85 -r 160 %s %s 2>&1',
             escapeshellarg($tmpPdf),
             escapeshellarg($pagesAbs . '/page')
         );
@@ -1154,6 +1179,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。";
 
     // v755 #371 ユーザ が 選んだ モデル を 使う (config の default は 無視)。
+    // v757 #376 ハルシネーション 防止 の self-check を 明示。 temperature を 下げる。
     $model = $reqModel;
     $payload = json_encode([
         'model' => $model,
@@ -1161,12 +1187,12 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
             ['role' => 'system', 'content' => $sys],
             ['role' => 'user', 'content' => [
                 ['type' => 'file', 'file' => ['file_id' => $fileId]],
-                ['type' => 'text', 'text' => $userPrompt],
+                ['type' => 'text', 'text' => $userPrompt . "\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。"],
             ]],
         ],
-        'temperature' => 0.3,
+        'temperature' => 0.2,
         'response_format' => ['type' => 'json_object'],
-        'max_tokens' => 6000,
+        'max_tokens' => 8000,
     ], JSON_UNESCAPED_UNICODE);
 
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
@@ -1235,7 +1261,7 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             $shortTitle = (string)($parsed['title_ja'] ?? $pdfName);
             $shortTitle = mb_substr($shortTitle, 0, 60);
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "✅ 和訳要約 完了: 「{$shortTitle}」 /#/paper-translate/r/{$token}",
+                "✅ 論文要約 完了: 「{$shortTitle}」 /#/paper-summary/r/{$token}",
                 'paper_translate', $rowId);
         } catch (Throwable $_) {}
     } catch (Throwable $e) {
@@ -1243,7 +1269,7 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             ->execute([mb_substr($e->getMessage(), 0, 500), $rowId]);
         try {
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "❌ 和訳要約 失敗: " . $e->getMessage() . " /#/paper-translate/r/{$token}",
+                "❌ 論文要約 失敗: " . $e->getMessage() . " /#/paper-summary/r/{$token}",
                 'paper_translate', $rowId);
         } catch (Throwable $_) {}
     }

@@ -147,10 +147,10 @@ function refUrl(n) {
     case 'tierlist':       return n.ref_id ? '#/tierlists/' + n.ref_id : '#/tierlists';
     case 'paper_review':   return '#/paper-review';
     // v756 #373 paper_translate: ref_id は row id だが、 URL は share_token なので
-    //   body に 含まれて いる「/#/paper-translate/r/TOKEN」 を 抽出 して 使う。
+    //   body に 含まれて いる「/#/paper-(translate|summary)/r/TOKEN」 を 抽出 して 使う。
     case 'paper_translate': {
-      const m = (n.body || '').match(/#\/paper-translate\/r\/[a-f0-9]+/);
-      return m ? m[0] : '#/paper-translate';
+      const m = (n.body || '').match(/#\/paper-(?:translate|summary)\/r\/[a-f0-9]+/);
+      return m ? m[0] : '#/paper-summary';
     }
     case 'mahjong':        return n.ref_id ? '#/mahjong/' + n.ref_id : '#/mahjong';
     case 'ito':            return n.ref_id ? '#/ito/' + n.ref_id : '#/ito';
