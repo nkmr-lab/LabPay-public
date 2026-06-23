@@ -98,6 +98,7 @@ $routes = [
     'custom-games'   => 'route_custom_games',
     'drafts'         => 'route_drafts',
     'quizzes'        => 'route_quizzes',
+    'quotes'         => 'route_quotes',     // v804 名言
 ];
 
 try {

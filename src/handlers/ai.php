@@ -1527,6 +1527,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
     }
     $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    // v804 「終わった 瞬間 共有 ON」 オプション
+    $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
 
     // v797 同 PDF を 識別 する SHA-256 を 算出 (= 横展開 用 / 「同 PDF の 全訳 が ある」 リンク 等)。
     //   注意: 同 PDF + 同 モデル でも 再 処理 は 別 row + 別 課金 で 行う (要約 と 全訳 で 扱う 軸 が
@@ -1602,13 +1604,13 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model)
-            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?)")
+            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share)
+            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)")
             ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfSha, $sys, 'null', $cost,
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
-                       $pdfRel, $reqModel]);
+                       $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $rowId, '論文要約 依頼料');
     });
@@ -1899,6 +1901,9 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
 
         $pdo->prepare("UPDATE paper_translates SET result_json = ?, status='done', finished_at = NOW() WHERE id = ?")
             ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $rowId]);
+        // v804 auto_share=1 なら 公開 ON に
+        $pdo->prepare("UPDATE paper_translates SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
+            ->execute([$rowId]);
 
         try {
             $shortTitle = (string)($parsed['title_ja'] ?? $pdfName);
@@ -2743,6 +2748,8 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
     }
     $cost = (int)$models[$reqModel];
+    // v804 「終わった 瞬間 共有 ON」
+    $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
 
     // v797 SHA-256 は 横展開 リンク 用 だけ に 算出 (同 PDF でも 別 ジョブ で 走らせる、 課金 も 別)
     $pdfSha = hash_file('sha256', $tmpPdf);
@@ -2766,11 +2773,11 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
-            (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text)
-            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…')")
-            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost]);
+            (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
+            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
+            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_full_translation', $rowId,
             '論文 全訳 (' . $direction . ') 依頼料');
@@ -2917,6 +2924,9 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
                 json_encode($usageRec, JSON_UNESCAPED_UNICODE),
                 $row['id'],
             ]);
+        // v804 auto_share=1 なら 公開 ON に
+        $pdo->prepare("UPDATE paper_full_translations SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
+            ->execute([$row['id']]);
         try {
             $title = is_array($parsed) ? (string)($parsed['title_translated'] ?? $parsed['title_original'] ?? $row['pdf_name']) : $row['pdf_name'];
             $title = mb_substr($title, 0, 60);

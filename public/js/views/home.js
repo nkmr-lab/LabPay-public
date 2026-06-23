@@ -179,6 +179,7 @@ export const HOME_CARDS = [
   { id: 'conf-deadlines', title: '📅 学会 〆切 (近い 順)' }, // v671
   { id: 'it-news',        title: '📰 IT ニュース' },           // v700 #290
   { id: 'screen-shares',  title: '🖼 共有中の画像' },          // v718 #314
+  { id: 'quote',          title: '💬 今日 の 名言 (偉人 / 漫画 / アニメ + ラボ メン 登録)' }, // v796 #396 / v804
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -2507,22 +2508,38 @@ function bindHomeSnsReactions() {
   });
 }
 
-// v796 #396 今日 の 1 名言 (偉人 / 漫画 / アニメ)。 日付 で deterministic、 同 日 内 は 全員 同じ。
+// v796 #396 今日 の 1 名言 (偉人 / 漫画 / アニメ + ラボ メン 登録)。
+// v804 静的 配列 + DB 登録 を 合算 し、 日付 で deterministic に 1 個 選ぶ。
 async function renderHomeQuote() {
   const card = document.getElementById('home-quote-card');
   const root = document.getElementById('home-quote');
   if (!card || !root) return;
   try {
     const mod = await import('../quotes_daily.js');
-    const q = mod.pickTodayQuote(new Date());
+    // DB 登録 を 取って 静的 配列 と 合算
+    let dbItems = [];
+    try {
+      const d = await get('/api/quotes');
+      dbItems = (d.items || []).map(it => ({ q: it.quote, a: it.author || '不明', src: it.source || '', _dbId: it.id, _by: it.submitter_name }));
+    } catch (_) {}
+    const pool = mod.QUOTES.concat(dbItems);
+    if (!pool.length) { card.hidden = true; return; }
+    const now = new Date();
+    const jst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60 * 1000);
+    const epochDay = Math.floor(jst.getTime() / 86400000);
+    const q = pool[((epochDay % pool.length) + pool.length) % pool.length];
     const srcLine = q.src ? ` <span style="color:#9ca3af; font-size:11px">(${escapeHtml(q.src)})</span>` : '';
+    const byLine = q._by ? `<div style="font-size:10.5px; color:#9ca3af; margin-top:2px; text-align:right">📝 登録: ${escapeHtml(q._by)} さん</div>` : '';
     root.innerHTML = `
       <div class="row center" style="gap:8px; margin-bottom:4px">
         <h2 class="row-title" style="margin:0">💬 今日 の 名言</h2>
+        <span style="flex:1"></span>
+        <a href="#/quotes" class="btn" style="font-size:11px; padding:2px 8px">📝 登録 / 管理</a>
       </div>
       <div style="padding:10px 14px; background:#faf5ff; border-left:4px solid #6b21a8; border-radius:0 6px 6px 0">
         <div style="font-size:14.5px; line-height:1.85; white-space:pre-wrap; color:#1f2937">「${escapeHtml(q.q)}」</div>
         <div style="font-size:12.5px; color:#6b21a8; margin-top:6px; text-align:right">— ${escapeHtml(q.a)}${srcLine}</div>
+        ${byLine}
       </div>`;
   } catch (e) { card.hidden = true; }
 }

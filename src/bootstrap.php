@@ -577,6 +577,7 @@ require_once __DIR__ . '/handlers/score_predictions.php';
 require_once __DIR__ . '/handlers/custom_games.php';
 require_once __DIR__ . '/handlers/drafts.php';
 require_once __DIR__ . '/handlers/quizzes.php';
+require_once __DIR__ . '/handlers/quotes.php';   // v804 名言
 require_once __DIR__ . '/handlers/news.php';
 require_once __DIR__ . '/handlers/screen_shares.php';
 require_once __DIR__ . '/handlers/file_transfers.php';

@@ -38,6 +38,10 @@ export async function renderPaperTranslateFull() {
         <input type="file" id="pft-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pft-file-status" style="margin-top:4px"></div>
       </label>
+      <label class="field" style="display:flex; align-items:center; gap:6px; margin-top:4px">
+        <input type="checkbox" id="pft-auto-share">
+        <span style="font-size:13px">🌐 完了 と 同時 に 公開 ON に する</span>
+      </label>
       <!-- v798 同時 に 要約 も 走らせる オプション -->
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
         <legend style="font-size:12px; color:#6b7280">📑📑 同時 に 要約 も 走らせる (任意)</legend>
@@ -232,6 +236,8 @@ async function go() {
     fd.append('file', f);
     fd.append('direction', direction);
     fd.append('model', model);
+    // v804 完了 と 同時 に 公開 ON
+    if (document.getElementById('pft-auto-share')?.checked) fd.append('auto_share', '1');
     const resp = await fetch('/api/ai/paper_full_translate', {
       method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' },
     });
