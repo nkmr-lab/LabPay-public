@@ -180,6 +180,7 @@ export const HOME_CARDS = [
   { id: 'it-news',        title: '📰 IT ニュース' },           // v700 #290
   { id: 'screen-shares',  title: '🖼 共有中の画像' },          // v718 #314
   { id: 'quote',          title: '💬 今日 の 名言 (偉人 / 漫画 / アニメ + ラボ メン 登録)' }, // v796 #396 / v804
+  { id: 'papers-recent',  title: '📑 論文 要約 / 全訳 (新着、 公開 + 自分)' }, // v809
   // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -198,6 +199,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'achievements',   // v651 デフォルト ON
   'conf-deadlines', // v671 デフォルト ON
   'screen-shares',  // v718 #314 デフォルト ON
+  'papers-recent',  // v809 論文 要約 / 全訳 新着 デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -214,8 +216,8 @@ const DEFAULT_ORDER = [
 // v592b 新規追加の カード (= ユーザの 保存 order に 含まれない 未知 ID) が
 //   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
 //   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
-const NEW_DEFAULT_HIDDEN = ['weather', 'bingo']; // v605 ビンゴも default OFF に
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines']; // v641, v649, v651, v671 既存ユーザにも 自動表示
+const NEW_DEFAULT_HIDDEN = ['weather', 'bingo', 'quote']; // v605 ビンゴも default OFF に / v809 名言 widget を デフォルト OFF (既存 ユーザ にも 適用)
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent']; // v641, v649, v651, v671 既存ユーザにも 自動表示 / v809 論文 新着 widget を 既存 ユーザ にも デフォルト 表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -540,6 +542,15 @@ export async function renderHome() {
       <div id="home-quote"></div>
     </div>
 
+    <!-- v809 論文 要約 / 全訳 新着 (公開 + 自分、 直近 10 件) -->
+    <div class="card" id="home-papers-recent-card" data-card-id="papers-recent" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">📑 論文 要約 / 全訳 (新着)</h2>
+        <a href="#/papers-recent" class="hint" style="margin-left:auto">すべて →</a>
+      </div>
+      <div id="home-papers-recent" class="list"><div class="home-skel-bars"></div></div>
+    </div>
+
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">💬 らぼったー 最新</h2>
@@ -635,6 +646,7 @@ export async function renderHome() {
     { cardId: 'it-news',        fn: renderItNewsWidget,        label: 'it-news' }, // v700 #290
     { cardId: 'screen-shares',  fn: renderScreenSharesWidget,  label: 'screen-shares' }, // v718 #314
     { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日 の 1 名言
+    { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文 要約 / 全訳 新着
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -814,6 +826,7 @@ async function doHomePoll() {
     skip('notices')        ? null : renderHomeNotices(), // v514 #139
     skip('todos')          ? null : renderHomeTodos(),
     skip('history')        ? null : renderRecentTx(),
+    skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文 新着 widget
   ].filter(Boolean);
   await Promise.allSettled(tasks);
 }
@@ -2542,6 +2555,54 @@ async function renderHomeQuote() {
         ${byLine}
       </div>`;
   } catch (e) { card.hidden = true; }
+}
+
+// v809 論文 要約 / 全訳 (公開 + 自分) の 直近 10 件 を 時系列 で 表示。
+//   行 タップ で 各 結果 ページ (paper-summary / paper-translate-full) へ。
+async function renderHomePapersRecent() {
+  const card = document.getElementById('home-papers-recent-card');
+  const root = document.getElementById('home-papers-recent');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/ai/paper_recent?limit=10');
+    const items = d.items || [];
+    if (!items.length) {
+      card.hidden = false;
+      root.innerHTML = '<div class="hint" style="font-size:12px">まだ 1 件 も ありません ・ <a href="#/paper-summary">📑 要約</a> / <a href="#/paper-translate-full">📑 全訳</a> を 試す</div>';
+      return;
+    }
+    card.hidden = false;
+    root.innerHTML = items.map(it => renderPaperRecentRow(it)).join('');
+  } catch (_) { card.hidden = true; }
+}
+
+// 1 行 の HTML を 共通化 (widget + 一覧 page で 同じ 見た目)。
+export function renderPaperRecentRow(it) {
+  const kindIcon = it.kind === 'summary' ? '📑 要約'
+                 : (it.direction === 'ja2en' ? '📑 全訳 (日→英)' : '📑 全訳');
+  const statusBadge = it.status === 'done'
+    ? (it.is_shared ? '<span style="color:#10b981; font-size:10.5px">🌐 公開</span>' : '')
+    : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理 中</span>'
+    : it.status === 'error' ? '<span style="color:#dc2626; font-size:10.5px">❌ エラー</span>'
+    : '';
+  const mineBadge = it.is_mine ? '<span style="color:#7b3fa0; font-size:10.5px; font-weight:600">📝 自分</span>' : '';
+  const title = it.title || it.pdf_name || '(無題)';
+  const url = `#/${it.url_slug}/r/${encodeURIComponent(it.share_token)}`;
+  const when = String(it.finished_at || it.created_at || '').slice(5, 16).replace('-', '/').replace(' ', ' ');
+  return `
+    <a class="list-item" href="${url}" style="gap:8px; align-items:flex-start; padding:6px 8px">
+      ${avatarHtml(it.author_name, it.author_avatar, 'sm')}
+      <div style="flex:1; min-width:0">
+        <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px">${escapeHtml(title)}</div>
+        <div class="meta" style="font-size:11px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
+          <span>${kindIcon}</span>
+          <span>${escapeHtml(it.author_name || '')}</span>
+          ${mineBadge}
+          ${statusBadge}
+          <span style="margin-left:auto; opacity:0.7">${escapeHtml(when)}</span>
+        </div>
+      </div>
+    </a>`;
 }
 
 // v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。

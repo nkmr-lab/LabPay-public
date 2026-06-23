@@ -206,7 +206,86 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_comment_delete($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2], (int)$seg[4]);
         return;
     }
+    // v809 論文 要約 / 全訳 を 時系列 で 合算 した 新着 feed (公開 + 自分)。 ホーム widget +
+    //   /#/papers-recent ページ で 共有。 ?offset=&limit= で ページング。
+    if ($sub === 'paper_recent' && $method === 'GET' && !isset($seg[2])) {
+        ai_paper_recent_feed($pdo, $cfg);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
+}
+
+// v809 論文 要約 + 全訳 の 合算 新着 feed。 公開 中 (is_shared=1, done) の もの と
+//   自分 の もの (status 問わず) を created_at DESC で 合算。 widget (limit=10) と
+//   /#/papers-recent (limit=20, offset=N) の 両方 で 使う。
+function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $limit  = max(1, min(50, (int)($_GET['limit']  ?? 10)));
+    $offset = max(0, (int)($_GET['offset'] ?? 0));
+    // 公開 or 本人 の 要約 + 全訳 を UNION ALL で 取得、 created_at DESC で ソート、
+    // limit + offset で 切り出す。 件数 多くて も result_json は 軽量 な title だけ 取り出す。
+    $sql = "
+      SELECT * FROM (
+        SELECT 'summary' AS kind,
+               pt.id, pt.share_token, pt.user_id, pt.pdf_name, pt.result_json,
+               pt.status, pt.is_shared, pt.created_at, pt.finished_at,
+               NULL AS direction,
+               u.display_name AS author_name, u.avatar_url AS author_avatar
+          FROM paper_translates pt
+          JOIN users u ON u.id = pt.user_id
+         WHERE pt.user_id = :uid1
+            OR (pt.is_shared = 1 AND pt.status = 'done')
+        UNION ALL
+        SELECT 'full' AS kind,
+               pft.id, pft.share_token, pft.user_id, pft.pdf_name, pft.result_json,
+               pft.status, pft.is_shared, pft.created_at, pft.finished_at,
+               pft.direction,
+               u.display_name AS author_name, u.avatar_url AS author_avatar
+          FROM paper_full_translations pft
+          JOIN users u ON u.id = pft.user_id
+         WHERE pft.user_id = :uid2
+            OR (pft.is_shared = 1 AND pft.status = 'done')
+      ) t
+      ORDER BY t.created_at DESC
+      LIMIT $limit OFFSET $offset
+    ";
+    $st = $pdo->prepare($sql);
+    $st->execute([':uid1' => $uid, ':uid2' => $uid]);
+    $items = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $title = null;
+        if (!empty($r['result_json'])) {
+            $j = json_decode((string)$r['result_json'], true);
+            if (is_array($j)) {
+                // 要約 は title_ja / 全訳 は title_translated → title_original
+                $title = (string)($j['title_ja'] ?? $j['title_translated'] ?? $j['title_original'] ?? '') ?: null;
+            }
+        }
+        $items[] = [
+            'kind'          => $r['kind'],  // 'summary' or 'full'
+            'id'            => (int)$r['id'],
+            'share_token'   => $r['share_token'],
+            'url_slug'      => $r['kind'] === 'summary' ? 'paper-summary' : 'paper-translate-full',
+            'pdf_name'      => $r['pdf_name'],
+            'title'         => $title,
+            'direction'     => $r['direction'],
+            'status'        => $r['status'],
+            'is_shared'     => (bool)$r['is_shared'],
+            'is_mine'       => ((int)$r['user_id'] === $uid),
+            'created_at'    => $r['created_at'],
+            'finished_at'   => $r['finished_at'],
+            'author_id'     => (int)$r['user_id'],
+            'author_name'   => $r['author_name'],
+            'author_avatar' => $r['author_avatar'],
+        ];
+    }
+    json_response([
+        'items'  => $items,
+        'limit'  => $limit,
+        'offset' => $offset,
+        'has_more' => count($items) === $limit,
+    ]);
 }
 
 const REWRITER_COST = 1;

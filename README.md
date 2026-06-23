@@ -40,12 +40,12 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 
 主要カテゴリ:
 
-- 🔬 **研究用** — 論文査読 / 原稿チェック / リライター / タイマー / ストップウォッチ / 順番決め / ランダムグループ / グループ / 〆切 / 重要連絡
-- 🏢 **研究室運営サポート** — 投票 / ルーレット / どこ行く / 点呼 / 待ち合わせ / 飲み会割り勘 / 集金 / **💼 アルバイト申請** (実験 協力 等 を 時間 + 対象者 で 依頼、 月別 まとめ + 進捗 / 催促)
+- 🔬 **研究用** (v792 で AI で 研究 を 直接 進める もの に 絞り 込み) — **🔎 Deep Research** / **📑 論文要約** / **📑 論文全訳** / **📝 原稿チェック** / **📄 論文査読** / **✂️ 文字数 リライター**
+- 🏢 **研究室運営サポート** (v793 で 2 サブ ブロック に 分割表示) — **🏫 ゼミ・研究会・学会 サポート** (タイマー / ストップウォッチ / 順番決め / ランダムグループ / イベント・出張用グループ / ルーレット / どこ行くルーレット) + **🏢 研究室 運営** (投票 / チャット / ファイル / 一時画像 / 〆切 / 学会〆切 / 重要連絡 / 点呼 / 待ち合わせ / 飲み会割り勘 / 集金 / **💼 アルバイト申請**)
 - 💴 **売買** — 販売 / 購入 / オークション
-- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ
+- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ / **🎰 着回し ビンゴ** (着る服 5x5)
 - 💪 **健康** — 体重 BMI / 筋トレ / 散歩 / 運動
-- 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI / **🏅 実績 称号** (AI が 獲得 実績 から ラノベ 風 称号 を 1 行 生成)
+- 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI / **🏅 実績 称号** (AI が 獲得 実績 から ラノベ 風 称号 を 1 行 生成) / **💬 今日 の 名言** (デフォルト OFF、 偉人 / 漫画 / アニメ 名言 を 日 単位 で 1 件、 ラボメン による 名言 登録 可)
 - 🧩 **拡張** — **ウィジェット センター** (自作 ウィジェット を 登録 → ホーム に 表示。 JS で `render(root)` を 書く だけ。 詳細 → [docs/CUSTOM_WIDGETS.md](docs/CUSTOM_WIDGETS.md))
 
 | 領域 | 内容 |
@@ -84,8 +84,11 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | ⏱ ストップウォッチ (stopwatches) | メンバー共有の カウントアップ計測器 (ms 精度)。 開始 / 一時停止 / リセット / ラップ 全員操作可。 発表時間 や 雑談計測 用 |
 | 📋 順番決め (orderings) | メンバーを 1 列に並べ替え (発表順 / 当番 など)。 CSPRNG + 1 人ずつめくる演出。 結果は全員通知 + テキストコピー (Scrapbox 貼付け 用) |
 | 🎲 ランダムグループ (random-groups) | N チームに均等分け (学年 / 性別 配慮可)。 分けた瞬間に全員自動通知 + テキストコピー + そのまま ad-hoc グループ実体化 |
-| 📄 論文査読 (paper-review) | 論文 PDF を upload → OpenAI Files API + chat.completions で 章立て要約 + 査読 (10pt、 非同期 + share_token + プロンプト編集 + 共有対象通知) |
-| 📝 原稿チェック (resume-check) | 1-2 ページの 短原稿 を PDF アップロードで チェック (5pt)。 6項目スコア (背景 / 論理 / 専門用語 / 接続詞 / 表記揺れ / 引用) + リライト案 + 著者コメント。 失敗時 自動返金 |
+| 🔎 Deep Research (deep-research) | ChatGPT の Deep Research を 真似た 多段 Web 調査 (v781〜)。 OpenAI Responses API + web_search ツール で Web を 横断 検索 → サブ 問い 分解 → セクション別 調査 → 全体 まとめ + 重要 発見 + 出典 URL 一覧 を 構造化 JSON で 返す。 深さ 3 段階 (軽い gpt-5-mini 20pt / 標準 gpt-5 50pt / 深い gpt-5 高 reasoning 100pt)、 background mode + ポーリング で 長時間 ジョブ を 安全 に。 公開 + キーワード 検索 + 履歴 削除 + 完了 通知 込み |
+| 📑 論文要約 (paper-summary) | 論文 PDF を upload → 章立て 要約 + RQ / 仮説 / 主張 する 貢献 / 自前 実験 + 結果 / 引用 研究 / 押さえて おく べき 参考文献 / 落合 メソッド / 図表 (ページ 画像 + 視覚要素 説明) を 構造化 JSON で 抽出。 モデル 選択 (gpt-4.1=20 / gpt-5-mini=30 / gpt-5=50 デフォルト / o1=80pt)、 2 段階 (推論 モデル で 詳細 抽出 → gpt-4.1 で 日本語 を 自然 に 校正)、 公開 / キーワード 検索 / いいね・ブックマーク・コメント / 失敗 row 再 実施 ボタン |
+| 📑 論文全訳 (paper-translate-full) | 章 ごと の フル 翻訳 + 2-3 文 サンプル を back-translation して 整合 確認 + 用語 統一 と 全体 ポリッシュ。 方向 切替 で 英→日 (gpt-5-mini=30 / gpt-5=50 / o1=80pt) と 日→英 (5x、 em-dash 等 GPT-isms 除去 込み) 両 対応。 OpenAI Responses API + background mode。 公開 / 検索 / コメント / 同 PDF の 要約 へ の クロス リンク (pdf_sha256) / 失敗 row 再 実施 ボタン |
+| 📄 論文査読 (paper-review) | 論文 PDF を upload → OpenAI Files API + chat.completions で 章立て要約 + 査読 (10pt 〜、 モデル 選択 可、 非同期 + share_token + プロンプト編集 + 共有対象通知)。 + 任意 で 回答文 (rebuttal) を 渡す と 「査読 指摘 を 回答 が カバー できて いる か / 安直 な N 増 で 流して いない か / 主張 弱い 箇所 / 書き換え 提案」 まで 評価。 アップロード PDF + 回答 PDF を サーバ に 保存 して 結果 ページ から 開ける |
+| 📝 原稿チェック (resume-check) | 1-2 ページの 短原稿 を PDF アップロードで チェック (5pt 〜、 モデル 選択 可)。 6項目スコア (背景 / 論理 / 専門用語 / 接続詞 / 表記揺れ / 引用) + リライト案 + 著者コメント。 失敗時 自動返金 |
 | ✂️ 文字数 / 単語数 リライター (rewriter) | アブスト / リバッタル の 文字数・単語数制限と戦う (1pt)。 サーバ側で 正確カウント + 超過時は GPT に再依頼 (最大 3 回)。 英文は 元と書き直しを 和訳。 単語レベル diff で 色付き表示 |
 | 🀄 麻雀 (mahjong) | 4 人で 50pt 賭けの 本格麻雀 (門前 / 鳴き / 役判定 / 連荘 / 半荘 / 点数計算)。 AI 3 体との 練習対戦も (ポイント授受なし) |
 | 🃏 大富豪 (daifugo) | 2-4 人、 単出し / ペア / N 枚出し + ジョーカーワイルド + 革命 (4 枚同時) + 8 切り。 1pt の プレイフィー (1 位もポイント貰わず純粋に遊ぶ) |
@@ -537,6 +540,25 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 144 | 2026‑06‑16 | drafts + draft_picks (⚾ ドラフト 順番 指名 + くじ抽選) |
 | 145 | 2026‑06‑16 | quizzes + quiz_questions + quiz_answers (📝 フリップ クイズ) |
 | 146 | 2026‑06‑16 | quizzes.mode (text / verbal 切替) |
+| 147 | 2026‑06‑17 | bingofit_cards (🎰 着回し ビンゴ、 5x5 服 グリッド) |
+| 148 | 2026‑06‑17 | bingofit_cards.last_worn_at (最後 に 着た 日 を 記録) |
+| 149 | 2026‑06‑18 | money_requests.recipients_json (1 回 の 請求 で 複数 人 別 額 を 指定 できる) |
+| 150 | 2026‑06‑20 | paper_translates (📑 論文 要約 v755〜、 OpenAI Files API + chat.completions) |
+| 151 | 2026‑06‑21 | paper_translates.pages_json (PDF ページ サムネ + 図表 region) |
+| 152 | 2026‑06‑21 | paper_translates.is_shared / shared_at (🌐 公開) |
+| 153 | 2026‑06‑22 | paper_translates.pdf_path / model (再 実施 用 PDF 保存 + 使用 モデル 記録) |
+| 154 | 2026‑06‑22 | paper_reviews.response_text (🗨️ 回答文 / リバトル 評価 モード) |
+| 155 | 2026‑06‑22 | deep_researches (🔎 Deep Research、 Responses API + web_search) |
+| 156 | 2026‑06‑22 | deep_researches.is_shared / shared_at (🌐 公開) |
+| 157 | 2026‑06‑22 | deep_researches.openai_response_id / progress_text (background mode 進捗) |
+| 158 | 2026‑06‑23 | paper_full_translations (📑 論文 全訳、 章 ごと 翻訳 + back-translation) |
+| 159 | 2026‑06‑23 | paper_reactions + paper_comments (要約 / 全訳 に ❤️ / 🔖 / 💬) |
+| 160 | 2026‑06‑23 | tasks.completion_fields_json + task_claims.completion_data_json (📝 タスク 完了 時 カスタム 入力 欄) |
+| 161 | 2026‑06‑23 | paper_reviews.pdf_path + response_pdf_path (元 PDF / 回答 PDF を 保存 して 結果 ページ から 開ける) |
+| 162 | 2026‑06‑23 | paper_translates / paper_full_translations.pdf_sha256 (同 PDF の 横展開 リンク) |
+| 163 | 2026‑06‑23 | quotes (💬 名言 を ラボメン が 登録、 静的 配列 と 合算 で 日 単位 で 1 件) |
+| 164 | 2026‑06‑23 | paper_translates / paper_full_translations.auto_share (完了 と 同時 に 自動 公開 ON) |
+| 165 | 2026‑06‑23 | ledger.type に paper_translate / paper_full_translate / deep_research (取引 履歴 で 個別 表示) |
 | — | 2026‑06‑17 | (migrations フォルダ 外) bait_requests + bait_assignments (アルバイト 申請) |
 | — | 2026‑06‑17 | (migrations フォルダ 外) custom_widgets (自作 ウィジェット) |
 

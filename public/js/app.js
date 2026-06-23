@@ -575,6 +575,8 @@ route('/deep-research',            lazy(() => import('./views/deep_research.js')
 // v788 #386 #387 #388 論文 全訳 (要約 で なく フル 翻訳、 章 ごと + back-translation)
 route('/paper-translate-full/r/:token', lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFullShared'));
 route('/paper-translate-full',          lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFull'));
+// v809 論文 要約 + 全訳 の 合算 新着 一覧 (ホーム widget の 「すべて →」 リンク 先)
+route('/papers-recent',                 lazy(() => import('./views/papers_recent.js'), 'renderPapersRecent'));
 // v804 名言 登録 / 管理
 route('/quotes',                        lazy(() => import('./views/quotes.js'), 'renderQuotes'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
