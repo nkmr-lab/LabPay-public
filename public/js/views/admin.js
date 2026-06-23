@@ -600,22 +600,32 @@ function renderSystemFlowTable(title, items, total, color) {
 function renderDashboard(d) {
   const el = document.getElementById('dash');
   if (!el) return;
-  const inFlowHtml  = renderSystemFlowTable('💰 SYSTEM が 受け取った 内訳',   d.system_income_by_type,  d.system_income_total  || 0, '#15803d');
-  const outFlowHtml = renderSystemFlowTable('💸 SYSTEM が 支払った / 配布 した 内訳', d.system_outflow_by_type, d.system_outflow_total || 0, '#b45309');
-  // v801 ESCROW も 同 並び で
-  const escInHtml   = renderSystemFlowTable('📥 ESCROW に 入った 内訳 (預け入れ)',  d.escrow_income_by_type,  d.escrow_income_total  || 0, '#0891b2');
-  const escOutHtml  = renderSystemFlowTable('📤 ESCROW から 出た 内訳 (精算 / 返金)', d.escrow_outflow_by_type, d.escrow_outflow_total || 0, '#7c3aed');
-  const netReturn = (d.system_income_total || 0) - (d.system_outflow_total || 0);
+  // v802 SYSTEM の 「ユーザ 直接 やり取り」 と 「ESCROW 経由」 を 分けて、 戻り は 直接 だけ で 計算
+  const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ 直接 (=「戻り」 集計 対象)',
+                                              d.system_income_user,    d.system_income_user_total    || 0, '#15803d');
+  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、 戻り に は 入れない)',
+                                              d.system_income_escrow,  d.system_income_escrow_total  || 0, '#0891b2');
+  const outUserHtml   = renderSystemFlowTable('💸 SYSTEM 支出: ユーザ 直接 (= 配布)',
+                                              d.system_outflow_user,   d.system_outflow_user_total   || 0, '#b45309');
+  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、 戻り に は 入れない)',
+                                              d.system_outflow_escrow, d.system_outflow_escrow_total || 0, '#7c3aed');
+  const escInHtml     = renderSystemFlowTable('📥 ESCROW に 入った 内訳 (預け入れ)',
+                                              d.escrow_income_by_type,  d.escrow_income_total  || 0, '#0891b2');
+  const escOutHtml    = renderSystemFlowTable('📤 ESCROW から 出た 内訳 (精算 / 返金)',
+                                              d.escrow_outflow_by_type, d.escrow_outflow_total || 0, '#7c3aed');
+  const netReturn = d.system_net_user || 0;
   el.innerHTML = `
     <table class="table">
       <tr><th>SYSTEM残高</th><td class="right mono">${d.system_balance.toLocaleString()}</td>
           <th>ESCROW残高</th><td class="right mono">${d.escrow_balance.toLocaleString()}</td></tr>
       <tr><th>総発行 (initial+checkin)</th><td class="right mono">${d.total_minted.toLocaleString()}</td>
           <th>手数料 (fee のみ)</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
-      <tr><th>SYSTEM 収入 合計</th><td class="right mono" style="color:#15803d">${(d.system_income_total || 0).toLocaleString()}</td>
-          <th>SYSTEM 支出 合計</th><td class="right mono" style="color:#b45309">${(d.system_outflow_total || 0).toLocaleString()}</td></tr>
-      <tr><th>SYSTEM 収支 (戻り)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
+      <tr><th>SYSTEM 収入 (ユーザ 直接)</th><td class="right mono" style="color:#15803d">${(d.system_income_user_total || 0).toLocaleString()}</td>
+          <th>SYSTEM 支出 (ユーザ 直接)</th><td class="right mono" style="color:#b45309">${(d.system_outflow_user_total || 0).toLocaleString()}</td></tr>
+      <tr><th>SYSTEM 戻り (直接 のみ)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
           <th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td></tr>
+      <tr><th>SYSTEM 収入 (ESCROW 経由)</th><td class="right mono" style="color:#0891b2">${(d.system_income_escrow_total || 0).toLocaleString()}</td>
+          <th>SYSTEM 支出 (ESCROW へ)</th><td class="right mono" style="color:#7c3aed">${(d.system_outflow_escrow_total || 0).toLocaleString()}</td></tr>
       <tr><th>ESCROW 累計 預入</th><td class="right mono" style="color:#0891b2">${(d.escrow_income_total || 0).toLocaleString()}</td>
           <th>ESCROW 累計 払出</th><td class="right mono" style="color:#7c3aed">${(d.escrow_outflow_total || 0).toLocaleString()}</td></tr>
       <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
@@ -627,8 +637,10 @@ function renderDashboard(d) {
       <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>
           <th>&nbsp;</th><td class="right mono">&nbsp;</td></tr>
     </table>
-    ${inFlowHtml}
-    ${outFlowHtml}
+    ${incUserHtml}
+    ${outUserHtml}
+    ${incEscHtml}
+    ${outEscHtml}
     ${escInHtml}
     ${escOutHtml}
   `;

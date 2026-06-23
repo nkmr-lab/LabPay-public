@@ -294,41 +294,66 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
               (SELECT COALESCE(SUM(unit_price * qty),0) FROM purchases)                     AS turnover
         ";
         $row = $pdo->query($sql)->fetch();
-        // v799 SYSTEM の 収支 を 種類 別 に 取得 (= 「手数料 だけ」 じゃ なく
-        //   paper_review / rewriter / ゲーム buyin など SYSTEM が 受け取った もの 全部 +
-        //   minting / scrapbox_reward など SYSTEM が 出した もの 全部 を 並べる)。
-        // v801 ESCROW も 同じ ように 種類 別 内訳 を 出す (= deposit / task_reward /
-        //   refund / 各 ゲーム buyin / payout / refund 等 の 流れ が 見える ように)。
-        $breakdown = function (int $acctId) use ($pdo) {
-            $st = $pdo->prepare("
-                SELECT
-                  CASE WHEN to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
-                  type,
-                  SUM(amount) AS pt,
-                  COUNT(*)    AS n
-                FROM ledger
-                WHERE to_account_id = ? OR from_account_id = ?
-                GROUP BY dir, type
-                ORDER BY pt DESC");
-            $st->execute([$acctId, $acctId, $acctId]);
-            $in = []; $outA = [];
-            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $e = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
-                if ($r['dir'] === 'in') $in[] = $e; else $outA[] = $e;
-            }
-            return [$in, $outA];
-        };
-        [$sysIn, $sysOut] = $breakdown($sysAcc);
-        [$escIn, $escOut] = $breakdown($escAcc);
+        // v802 SYSTEM の 収支 を 「ユーザ 直接 やり取り」 と 「ESCROW 経由」 に 分けて 集計。
+        //   - ユーザ 直接: paper_review / rewriter / fee 等 (= ユーザ が SYSTEM に 直接 支払う)
+        //                  と minting / scrapbox_reward 等 (= SYSTEM が ユーザ に 直接 配る)
+        //   - ESCROW 経由: mahjong_rake (escrow → system) や escrow_deposit 等
+        //   「戻り」 計算 は ユーザ 直接 の もの だけ で OK と いう 方針 (ESCROW 経由 は
+        //   循環 中 の 内部 移動 な ので 「戻り」 で は ない)。
+        $stSys = $pdo->prepare("
+            SELECT
+              CASE WHEN l.to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
+              CASE
+                WHEN l.to_account_id = ?   THEN (CASE WHEN l.from_account_id = ? THEN 'via_escrow' ELSE 'with_user' END)
+                ELSE                              (CASE WHEN l.to_account_id   = ? THEN 'via_escrow' ELSE 'with_user' END)
+              END AS counterparty,
+              l.type,
+              SUM(l.amount) AS pt,
+              COUNT(*) AS n
+            FROM ledger l
+            WHERE l.to_account_id = ? OR l.from_account_id = ?
+            GROUP BY dir, counterparty, l.type
+            ORDER BY pt DESC");
+        $stSys->execute([$sysAcc, $sysAcc, $escAcc, $escAcc, $sysAcc, $sysAcc]);
+        // bucket → [{type, pt, n}]
+        $buckets = [
+            'in_user'    => [], 'in_escrow'  => [],
+            'out_user'   => [], 'out_escrow' => [],
+        ];
+        foreach ($stSys->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $key = ($r['dir'] === 'in' ? 'in' : 'out') . '_' . ($r['counterparty'] === 'via_escrow' ? 'escrow' : 'user');
+            $buckets[$key][] = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
+        }
+        $sumPt = fn($arr) => array_sum(array_column($arr, 'pt'));
+
+        // ESCROW 側 は 単純 な 種別 別 (in/out 双方)
+        $stEsc = $pdo->prepare("
+            SELECT
+              CASE WHEN to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
+              type, SUM(amount) AS pt, COUNT(*) AS n
+            FROM ledger
+            WHERE to_account_id = ? OR from_account_id = ?
+            GROUP BY dir, type ORDER BY pt DESC");
+        $stEsc->execute([$escAcc, $escAcc, $escAcc]);
+        $escIn = []; $escOut = [];
+        foreach ($stEsc->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $e = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
+            if ($r['dir'] === 'in') $escIn[] = $e; else $escOut[] = $e;
+        }
+
         $out = array_map('intval', $row);
-        $out['system_income_by_type']   = $sysIn;
-        $out['system_outflow_by_type']  = $sysOut;
-        $out['system_income_total']     = array_sum(array_column($sysIn,  'pt'));
-        $out['system_outflow_total']    = array_sum(array_column($sysOut, 'pt'));
+        // v802 ユーザ 直接 / ESCROW 経由 で 分けて
+        $out['system_income_user']    = $buckets['in_user'];    $out['system_income_user_total']    = $sumPt($buckets['in_user']);
+        $out['system_income_escrow']  = $buckets['in_escrow'];  $out['system_income_escrow_total']  = $sumPt($buckets['in_escrow']);
+        $out['system_outflow_user']   = $buckets['out_user'];   $out['system_outflow_user_total']   = $sumPt($buckets['out_user']);
+        $out['system_outflow_escrow'] = $buckets['out_escrow']; $out['system_outflow_escrow_total'] = $sumPt($buckets['out_escrow']);
+        // 「戻り」 は ユーザ 直接 だけ で 計算
+        $out['system_net_user'] = $out['system_income_user_total'] - $out['system_outflow_user_total'];
+        // ESCROW 側 内訳
         $out['escrow_income_by_type']   = $escIn;
         $out['escrow_outflow_by_type']  = $escOut;
-        $out['escrow_income_total']     = array_sum(array_column($escIn,  'pt'));
-        $out['escrow_outflow_total']    = array_sum(array_column($escOut, 'pt'));
+        $out['escrow_income_total']     = $sumPt($escIn);
+        $out['escrow_outflow_total']    = $sumPt($escOut);
         json_response($out);
         return;
     }

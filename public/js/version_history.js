@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v802', d: '2026-06-23', s: '📊 SYSTEM の 収支 を 「ユーザ 直接 やり取り」 と 「ESCROW 経由」 で 分けて 表示 する ように 変更。 「戻り」 (= net return) は ユーザ 直接 の もの だけ で 計算 する 仕様 に (ESCROW 経由 は 循環 中 の 内部 移動 な ので 含め ない)。 メイン 表 に 「SYSTEM 収入 / 支出 (ユーザ 直接) 」 と 「SYSTEM 収入 / 支出 (ESCROW 経由)」 を 別 行 で 表示、 内訳 表 も 同じく 「💰 ユーザ 直接 (戻り 集計 対象)」 と 「🔁 ESCROW 経由 (戻り に は 入れない)」 に 分割' },
   { v: 'v801', d: '2026-06-23', s: '📊 admin ダッシュボード に ESCROW の 種別 内訳 + 累計 預入 / 払出 を 追加。 v799 で SYSTEM 用 に 作った 内訳 表 と 同 並び で ESCROW にも 「📥 ESCROW に 入った 内訳 (預け入れ)」 (deposit / 各 ゲーム buyin 等) と 「📤 ESCROW から 出た 内訳 (精算 / 返金)」 (task_reward / 各 ゲーム payout / refund 等) を 表示。 メイン 表 にも 「ESCROW 累計 預入 / 累計 払出」 行 を 追加。 残高 0 でも、 これ まで に どれくらい 通った か / どんな 種別 で 出入り した か が 一望 できます' },
   { v: 'v800', d: '2026-06-23', s: '🐛 v799 で admin.js が JS エラー「Identifier LEDGER_TYPE_LABEL has already been declared」 で 全 画面 真っ白 だった 件 を hotfix。 labels.js から の import と 重複 宣言 して しまって いた → 重複 const を 削除 し、 labels.js の LEDGER_TYPE_LABEL / ledgerTypeLabel を そのまま 使用 する 形 に' },
   { v: 'v799', d: '2026-06-23', s: '📊 admin ダッシュボード に SYSTEM 収支 の 種別 内訳 を 追加。 これ まで 「手数料 総額」 = type=fee の もの しか 出して おらず、 paper_review (論文 系) / rewriter / ゲーム buyin など SYSTEM が 受け取った 大半 が 見え なかった。 v799 で /api/admin/dashboard が system_income_by_type + system_outflow_by_type + 合計 を 返す ように なり、 UI で 「💰 SYSTEM が 受け取った 内訳」 (種別 / pt / 件数) と 「💸 SYSTEM が 支払った 内訳」 を 表示。 ダッシュボード 上部 にも 「SYSTEM 収入 合計 / SYSTEM 支出 合計 / 収支 (戻り)」 を 追加 (= 「どれくらい 戻り が ある か」 が 一目 で 分かる)' },
