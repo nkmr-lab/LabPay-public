@@ -102,6 +102,83 @@ function tasks_validate_url($raw): ?string {
     return $u;
 }
 
+// v790 #393 完了 時 入力 欄 (起案者 定義) を 検証 して JSON 文字列 で 返す。 null なら NULL 保存。
+function tasks_validate_completion_fields($raw): ?string {
+    if ($raw === null || $raw === '' || $raw === []) return null;
+    if (is_string($raw)) {
+        $dec = json_decode($raw, true);
+        if (!is_array($dec)) throw new ApiException('bad_request', 'completion_fields は JSON 配列', 400);
+        $raw = $dec;
+    }
+    if (!is_array($raw)) throw new ApiException('bad_request', 'completion_fields は 配列', 400);
+    if (count($raw) > 10) throw new ApiException('bad_request', '完了 入力 欄 は 最大 10 個 まで', 400);
+    $allowedTypes = ['text', 'textarea', 'select'];
+    $out = [];
+    $seenKeys = [];
+    foreach ($raw as $f) {
+        if (!is_array($f)) throw new ApiException('bad_request', '各 field は object', 400);
+        $key = trim((string)($f['key'] ?? ''));
+        $label = trim((string)($f['label'] ?? ''));
+        $type = trim((string)($f['type'] ?? 'text'));
+        if ($key === '' || $label === '') throw new ApiException('bad_request', 'key / label が 必須', 400);
+        if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $key)) {
+            throw new ApiException('bad_request', 'key は 英数字 + _- のみ、 32 字 以内', 400);
+        }
+        if (isset($seenKeys[$key])) throw new ApiException('bad_request', 'key 重複: ' . $key, 400);
+        $seenKeys[$key] = true;
+        if (!in_array($type, $allowedTypes, true)) {
+            throw new ApiException('bad_request', 'type は text/textarea/select のみ', 400);
+        }
+        $entry = [
+            'key' => $key,
+            'label' => mb_substr($label, 0, 100),
+            'type' => $type,
+            'required' => !empty($f['required']),
+        ];
+        if (!empty($f['placeholder'])) $entry['placeholder'] = mb_substr((string)$f['placeholder'], 0, 200);
+        if ($type === 'select') {
+            $opts = $f['options'] ?? [];
+            if (!is_array($opts) || count($opts) < 1) {
+                throw new ApiException('bad_request', 'select は options が 必要', 400);
+            }
+            $entry['options'] = array_values(array_map(fn($o) => mb_substr((string)$o, 0, 100), $opts));
+        }
+        $out[] = $entry;
+    }
+    return json_encode($out, JSON_UNESCAPED_UNICODE);
+}
+
+// v790 #393 完了 時 入力 値 を 定義 に 照らして 検証 + 正規化。
+//   $fieldsDef = decoded array (= completion_fields_json)
+//   $data      = client が 送って きた key→value (string)
+//   戻り値: 正規化 した key→value の 配列 (JSON 化 して 保存 する 用)
+function tasks_validate_completion_data($fieldsDef, $data): array {
+    $out = [];
+    if (!is_array($fieldsDef) || empty($fieldsDef)) return $out;
+    if (!is_array($data)) $data = [];
+    foreach ($fieldsDef as $field) {
+        $k = $field['key'];
+        $val = (string)($data[$k] ?? '');
+        $val = trim($val);
+        if ($val === '') {
+            if (!empty($field['required'])) {
+                throw new ApiException('bad_request', "「{$field['label']}」 は 入力 必須 です", 400);
+            }
+            continue;
+        }
+        if (mb_strlen($val) > 5000) {
+            throw new ApiException('bad_request', "「{$field['label']}」 が 長 すぎ ます (5000 字 まで)", 400);
+        }
+        if ($field['type'] === 'select') {
+            if (!in_array($val, $field['options'] ?? [], true)) {
+                throw new ApiException('bad_request', "「{$field['label']}」 は 選択肢 から 選んで ください", 400);
+            }
+        }
+        $out[$k] = $val;
+    }
+    return $out;
+}
+
 // Parse a free-text "時間枠" spec into a list of (start, end) DateTime pairs.
 //
 // Supported per-line patterns (use a multi-line spec to mix days):
@@ -190,10 +267,24 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     $row['approved_count'] = tasks_approved_count($pdo, $taskId);
     $row['remaining']      = max(0, (int)$row['capacity'] - $row['approved_count']);
     if ($forUserId !== null) {
-        $st2 = $pdo->prepare("SELECT id, status, slot_id, reported_at, approved_at, notes, created_at
+        // v790 #393 completion_data_json も 返す (受諾 者 が 完了 報告 時 に 埋めた 値)
+        $st2 = $pdo->prepare("SELECT id, status, slot_id, reported_at, approved_at, notes, completion_data_json, created_at
             FROM task_claims WHERE task_id=? AND user_id=? ORDER BY id DESC");
         $st2->execute([$taskId, $forUserId]);
-        $row['my_claims'] = $st2->fetchAll();
+        $myRows = $st2->fetchAll();
+        foreach ($myRows as &$c) {
+            $c['completion_data'] = !empty($c['completion_data_json'])
+                ? json_decode((string)$c['completion_data_json'], true) : null;
+            unset($c['completion_data_json']);
+        }
+        unset($c);
+        $row['my_claims'] = $myRows;
+    }
+    // v790 #393 起案者 向け に 完了 入力 欄 定義 を decoded で 返す
+    if (!empty($row['completion_fields_json'])) {
+        $row['completion_fields'] = json_decode((string)$row['completion_fields_json'], true) ?: [];
+    } else {
+        $row['completion_fields'] = [];
     }
 
     // Slots (if any) — include per-slot claim counts so the picker can grey out
@@ -443,7 +534,15 @@ function tasks_detail(PDO $pdo, array $cfg, int $taskId): void {
               FROM task_claims tc JOIN users u ON u.id = tc.user_id
              WHERE tc.task_id = ? ORDER BY tc.id DESC");
         $st->execute([$taskId]);
-        $task['claims'] = $st->fetchAll();
+        $claims = $st->fetchAll();
+        // v790 #393 completion_data を decoded で 返す
+        foreach ($claims as &$c) {
+            $c['completion_data'] = !empty($c['completion_data_json'])
+                ? json_decode((string)$c['completion_data_json'], true) : null;
+            unset($c['completion_data_json']);
+        }
+        unset($c);
+        $task['claims'] = $claims;
     }
     json_response($task);
 }
@@ -456,6 +555,10 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $description   = optional_text_field($body, 'description', 5000);
     $url           = tasks_validate_url($body['url'] ?? null);
     $completionMsg = optional_text_field($body, 'completion_message', 2000);
+    // v790 #393 完了 時 入力 欄 (起案者 が 定義 する カスタム フィールド 群)。
+    //   各 要素: { key:string, label:string, type:'text'|'textarea'|'select',
+    //              required:bool, placeholder?:string, options?:string[] }
+    $completionFieldsJson = tasks_validate_completion_fields($body['completion_fields'] ?? null);
     // 0 pt 許可 (ボランティア / お願いベースのタスク用)。
     $reward   = require_int_nonneg($body['reward']   ?? null, 'reward');
     $perLimit = require_int_nonneg($body['per_user_limit'] ?? 1, 'per_user_limit');
@@ -546,13 +649,13 @@ function tasks_create(PDO $pdo, array $cfg): void {
 
     $taskId = db_tx($pdo, function () use ($pdo, $u, $title, $description, $url, $reward,
                                             $capacity, $perLimit, $deadline, $aud, $assignedCsv,
-                                            $completionMsg, $parsedSlots, $autoClaim, $autoClaimIds,
+                                            $completionMsg, $completionFieldsJson, $parsedSlots, $autoClaim, $autoClaimIds,
                                             $totalEscrow) {
         // Insert task first to get id
         $ins = $pdo->prepare('INSERT INTO tasks
-            (requester_user_id, title, description, url, reward, capacity, per_user_limit, deadline, audience_grades, assigned_user_ids, completion_message)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)');
-        $ins->execute([$u['id'], $title, $description, $url, $reward, $capacity, $perLimit, $deadline, $aud, $assignedCsv, $completionMsg]);
+            (requester_user_id, title, description, completion_fields_json, url, reward, capacity, per_user_limit, deadline, audience_grades, assigned_user_ids, completion_message)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$u['id'], $title, $description, $completionFieldsJson, $url, $reward, $capacity, $perLimit, $deadline, $aud, $assignedCsv, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
 
         if (!empty($parsedSlots)) {
@@ -681,10 +784,19 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             }
         }
 
-        $pdo->prepare('UPDATE tasks SET title=?, description=?, url=?, completion_message=?,
-            reward=?, capacity=?, per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
-            ->execute([$newTitle, $newDesc, $newUrl, $newCMsg,
-                       $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
+        // v790 #393 completion_fields の 更新 も 受け付ける
+        if (array_key_exists('completion_fields', $body)) {
+            $newCFields = tasks_validate_completion_fields($body['completion_fields']);
+            $pdo->prepare('UPDATE tasks SET title=?, description=?, completion_fields_json=?, url=?, completion_message=?,
+                reward=?, capacity=?, per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
+                ->execute([$newTitle, $newDesc, $newCFields, $newUrl, $newCMsg,
+                           $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
+        } else {
+            $pdo->prepare('UPDATE tasks SET title=?, description=?, url=?, completion_message=?,
+                reward=?, capacity=?, per_user_limit=?, deadline=?, audience_grades=? WHERE id=?')
+                ->execute([$newTitle, $newDesc, $newUrl, $newCMsg,
+                           $newReward, $newCap, $newPerLim, $newDeadline, $newAud, $taskId]);
+        }
     });
     json_response(tasks_fetch_with_meta($pdo, $taskId, (int)$u['id']));
 }
@@ -771,10 +883,18 @@ function tasks_report(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     $body = read_json_body();
     $notes = optional_text_field($body, 'notes', 2000);
 
+    // v790 #393 完了 時 入力 欄 の 検証
+    $stTk = $pdo->prepare("SELECT completion_fields_json FROM tasks WHERE id=?");
+    $stTk->execute([$taskId]);
+    $defRaw = (string)($stTk->fetchColumn() ?: '');
+    $fieldsDef = $defRaw !== '' ? (json_decode($defRaw, true) ?: []) : [];
+    $completionData = tasks_validate_completion_data($fieldsDef, $body['completion_data'] ?? []);
+    $completionDataJson = !empty($completionData) ? json_encode($completionData, JSON_UNESCAPED_UNICODE) : null;
+
     $upd = $pdo->prepare("UPDATE task_claims
-        SET status='reported', notes=?, reported_at=NOW()
+        SET status='reported', notes=?, completion_data_json=?, reported_at=NOW()
         WHERE id=? AND task_id=? AND user_id=? AND status='claimed'");
-    $upd->execute([$notes, $claimId, $taskId, $u['id']]);
+    $upd->execute([$notes, $completionDataJson, $claimId, $taskId, $u['id']]);
     if ($upd->rowCount() === 0)
         throw new ApiException('bad_state', 'claim not found or not in claimed state', 409);
 

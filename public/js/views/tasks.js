@@ -17,6 +17,87 @@ function linkifyUrlsHtml(escapedText) {
   );
 }
 
+// v790 #393 完了 時 入力 欄 spec をパース。 1 行 1 項目、 `key|label|type|options` 形式。
+//   type は text / textarea / select、 options は select 用 の ; 区切り。
+//   label / type 末尾 に「*」 で required。 全 空 → null を 返す。
+function parseCompletionFieldsSpec(text) {
+  const lines = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  if (lines.length > 10) throw new Error('最大 10 個 まで');
+  const out = [];
+  const seen = new Set();
+  for (const ln of lines) {
+    const parts = ln.split('|').map(s => s.trim());
+    let key = parts[0] || '';
+    let label = parts[1] || '';
+    let type = (parts[2] || 'text').replace(/\*$/, '').trim();
+    const requiredMark = (parts[2] || '').endsWith('*') || (parts[1] || '').endsWith('*');
+    if (label.endsWith('*')) label = label.slice(0, -1).trim();
+    const optsRaw = parts[3] || '';
+    if (!key || !label) throw new Error(`行「${ln}」: key|label が 必要`);
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(key)) throw new Error(`「${key}」 は 半角英数 _ - 32 字 以内`);
+    if (seen.has(key)) throw new Error(`key 重複: ${key}`);
+    seen.add(key);
+    if (!['text', 'textarea', 'select'].includes(type)) throw new Error(`type は text / textarea / select のみ`);
+    const f = { key, label, type, required: requiredMark };
+    if (type === 'select') {
+      const opts = optsRaw.split(';').map(s => s.trim()).filter(Boolean);
+      if (!opts.length) throw new Error(`select は ; 区切り の オプション が 必要 (例: OK;NG)`);
+      f.options = opts;
+    }
+    out.push(f);
+  }
+  return out;
+}
+
+// v790 #393 受諾者 の 完了 報告 フォーム に カスタム 入力 欄 を 差し込む HTML
+function renderCompletionFieldsForm(fields) {
+  if (!Array.isArray(fields) || !fields.length) return '';
+  return `<div style="margin-top:8px; padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0">
+    <div class="bold" style="font-size:13px; color:#6b21a8; margin-bottom:4px">📝 完了 時 の 入力 欄</div>
+    ${fields.map(f => {
+      const id = 'cf-' + f.key;
+      const lbl = escapeHtml(f.label) + (f.required ? ' <span style="color:#dc2626">*</span>' : '');
+      if (f.type === 'select') {
+        return `<label class="field" style="margin:6px 0">
+          <span class="lbl" style="font-size:12px">${lbl}</span>
+          <select id="${id}" data-cf-key="${escapeHtml(f.key)}">
+            <option value=""></option>
+            ${f.options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}
+          </select>
+        </label>`;
+      }
+      if (f.type === 'textarea') {
+        return `<label class="field" style="margin:6px 0">
+          <span class="lbl" style="font-size:12px">${lbl}</span>
+          <textarea id="${id}" data-cf-key="${escapeHtml(f.key)}" rows="2" maxlength="5000" placeholder="${escapeHtml(f.placeholder||'')}"></textarea>
+        </label>`;
+      }
+      return `<label class="field" style="margin:6px 0">
+        <span class="lbl" style="font-size:12px">${lbl}</span>
+        <input id="${id}" data-cf-key="${escapeHtml(f.key)}" type="text" maxlength="2000" placeholder="${escapeHtml(f.placeholder||'')}">
+      </label>`;
+    }).join('')}
+  </div>`;
+}
+
+// v790 #393 完了 報告 フォーム から 値 を 収集 + 簡易 必須 チェック
+function collectCompletionFieldsValues(fields) {
+  if (!Array.isArray(fields) || !fields.length) return null;
+  const out = {};
+  for (const f of fields) {
+    const el = document.getElementById('cf-' + f.key);
+    if (!el) continue;
+    const v = (el.value || '').trim();
+    if (!v) {
+      if (f.required) throw new Error(`「${f.label}」 は 入力 必須 です`);
+      continue;
+    }
+    out[f.key] = v;
+  }
+  return out;
+}
+
 // 履歴トグル: デフォは 「進行中のみ」、ON にすると終了/取消も含めて表示する。
 // 同一セッション内では維持したいが、メモリ上の変数で十分 (renderTasks 呼び直し
 // で初期化されても利便性は下がらない)。
@@ -105,6 +186,11 @@ function toggleCreateForm(mode = null) {
         <span class="lbl">完了時のメッセージ (任意)</span>
         <textarea id="t-cmsg" maxlength="2000" rows="2" placeholder="ありがとうございます!次もよろしくね"></textarea>
         <div class="hint-sm">承認時にやってくれた人へ表示されます (note 風)。</div>
+      </label>
+      <label class="field">
+        <span class="lbl">📝 完了時の入力欄 (任意・最大 10 個)</span>
+        <textarea id="t-cfields" maxlength="2000" rows="3" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を 並べる。 type は text / textarea / select。 select の オプション は ; 区切り。 末尾 に * を 付ける と 必須。 例:&#10;user_id|ユーザID|text*&#10;result|結果|select|OK;NG;Warning*&#10;issue|問題があれば|textarea"></textarea>
+        <div class="hint-sm">受諾者が完了報告時に埋める欄。 ID 選択 / 自由入力 / 問題報告 などに 使えます (key は半角英数 _- 32 字 以内)。</div>
       </label>`;
 
   // 報酬欄: 募集型は「報酬 + 募集人数」 2 列、指名型は「報酬」 1 列のみ。
@@ -296,6 +382,10 @@ async function onCreate() {
   const url = document.getElementById('t-url').value.trim();
   const description = document.getElementById('t-desc').value.trim();
   const completion_message = document.getElementById('t-cmsg').value.trim();
+  // v790 #393 完了 時 入力 欄
+  let completion_fields = null;
+  try { completion_fields = parseCompletionFieldsSpec(document.getElementById('t-cfields')?.value || ''); }
+  catch (e) { toast('完了 時 入力 欄: ' + e.message); return; }
   // 報酬: リクエストモードは 強制 0、 そうでなければ フォームから。
   const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
   // v560 #215 deadline は TZ helper 経由で JST or ローカル を選択可能に
@@ -312,6 +402,7 @@ async function onCreate() {
     url: url || null,
     description: description || null,
     completion_message: completion_message || null,
+    completion_fields: completion_fields,   // v790 #393
     reward,
     deadline,
   };
@@ -486,9 +577,11 @@ export async function renderTaskDetail({ params }) {
   await loadDetail(id);
 }
 
+let lastLoadedTask = null;   // v790 #393 onReport が completion_fields を 参照 する 用
 async function loadDetail(id) {
   try {
     const t = await get('/api/tasks/' + id);
+    lastLoadedTask = t;  // v790 #393
     const root = document.getElementById('task-detail');
     const meId = state.me?.id;
     const isRequester = meId === Number(t.requester_user_id);
@@ -512,6 +605,7 @@ async function loadDetail(id) {
           actions = `
             ${openBtn}
             <textarea id="report-notes" maxlength="2000" placeholder="完了内容や気づき (任意) — 実験で問題があった点なども" rows="3" style="margin-top:6px; width:100%; box-sizing:border-box"></textarea>
+            ${renderCompletionFieldsForm(t.completion_fields)}
             <button id="report-btn" class="primary" data-claim="${myLastClaim.id}">完了報告</button>`;
         } else if (myLastClaim.status === 'reported') {
           actions = `<div class="muted">承認待ち</div>`;
@@ -708,6 +802,14 @@ async function loadDetail(id) {
 // One reported-claim card inside the top pendingAlert: avatar, worker name, notes,
 // and big inline approve/reject buttons so the requester can act immediately.
 function renderReportedClaimCard(c, reward) {
+  // v790 #393 受諾者 が 埋めた completion_data を 表示
+  const cd = c.completion_data;
+  const cdHtml = (cd && typeof cd === 'object' && Object.keys(cd).length) ? `
+    <div style="margin-top:4px; padding:8px 10px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px">
+      <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:4px">📝 完了 時 の 入力</div>
+      ${Object.entries(cd).map(([k, v]) =>
+        `<div style="margin-top:3px"><span class="bold">${escapeHtml(k)}:</span> ${escapeHtml(String(v))}</div>`).join('')}
+    </div>` : '';
   return `
     <div class="list-item" style="background:#fff; align-items:flex-start; margin-top:6px">
       <div style="display:flex; gap:8px; align-items:flex-start; flex:1">
@@ -715,6 +817,7 @@ function renderReportedClaimCard(c, reward) {
         <div class="grow">
           <div class="bold">${escapeHtml(c.display_name)}</div>
           ${c.notes ? `<div style="margin-top:4px; padding:8px 10px; background:#f6f3fa; border-radius:6px; white-space:pre-wrap; font-size:13px">${escapeHtml(c.notes)}</div>` : '<div class="meta" style="margin-top:4px">(完了メモなし)</div>'}
+          ${cdHtml}
           <div class="meta">報告 ${escapeHtml(c.reported_at ?? '')}</div>
         </div>
       </div>
@@ -757,8 +860,16 @@ async function onClaim(taskId, slotId) {
 
 async function onReport(taskId, claimId) {
   const notes = document.getElementById('report-notes')?.value.trim() || null;
-  try { await post(`/api/tasks/${taskId}/claims/${claimId}/report`, { notes }); toast('完了報告しました'); await loadDetail(taskId); }
-  catch (e) { toast('失敗: ' + e.message); }
+  // v790 #393 task.completion_fields に 基づい て 値 を 集める (loadDetail で 取得 した task object を 参照)
+  const fields = lastLoadedTask?.completion_fields || [];
+  let completion_data = null;
+  try { completion_data = collectCompletionFieldsValues(fields); }
+  catch (e) { toast(e.message); return; }
+  try {
+    await post(`/api/tasks/${taskId}/claims/${claimId}/report`, { notes, completion_data });
+    toast('完了報告しました');
+    await loadDetail(taskId);
+  } catch (e) { toast('失敗: ' + e.message); }
 }
 
 async function onApprove(taskId, claimId) {
