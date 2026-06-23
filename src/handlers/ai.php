@@ -677,9 +677,17 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 
 【主張が強すぎる文章 / 記述がおかしい文章のリライト提案】
 - 過大主張 (「世界初」「決定的に」「絶対に」 等)、 論理飛躍、 曖昧 (「効果的だった」 を 数値で支持していない)、 矛盾、 不適切な比較、 で 問題があれば
-- rewrite_suggestions に { original: "問題のある原文を引用", reason: "なぜ問題か", suggested_rewrite: "こう直す案" } の形で 1〜5 件 アイテマイズ
-- 「世界初」 → 「我々の知る限り、 ◯◯ の分野で 最初の試みである」 のように 弱める or 根拠を添える書き換えを 提案
-- 「効果的だった」 → 「条件 A は B より平均反応時間が X ms 短く (p<.01, d=0.5)、 ユーザーは A を好む傾向が示唆された」 のように 数値を入れた書き換えを 提案
+- rewrite_suggestions に 以下 の 形 で 1〜5 件 アイテマイズ:
+  {
+    "original":             "問題のある原文 (原文 ママ、 引用 句 込み)",
+    "original_ja":          "原文 の 日本語 訳 (要約 で なく 訳)",
+    "reason":               "なぜ 問題 か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)",
+    "suggested_rewrite_en": "原文 と 同じ 言語 (= 英語 論文 なら 英語) で の 書き換え 案",
+    "suggested_rewrite_ja": "その 書き換え 案 を 日本語 で 訳した もの"
+  }
+- 例: 「世界初」 → 「To our knowledge, this is the first attempt in the field of ...」 + 「我々 の 知る 限り、 ◯◯ の 分野 で 最初 の 試み で ある」
+- 例: 「効果的だった」 → 「Condition A reduced mean response time by X ms compared to B (p<.01, d=0.5), suggesting users tend to prefer A.」 + 「条件 A は B より 平均 反応 時間 が X ms 短く (p<.01, d=0.5)、 ユーザー は A を 好む 傾向 が 示唆 された」
+- 旧 フィールド 名 (suggested_rewrite, original のみ) は 後方 互換 で 残して も OK だが、 上記 5 フィールド を 揃える こと を 優先
 PROMPT;
 
 function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
@@ -747,8 +755,9 @@ function ai_paper_review_list(PDO $pdo, array $cfg): void {
 
 function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
     Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT pr.id, pr.user_id, pr.pdf_name, pr.target_venue, pr.strictness,
-                                 pr.response_text, pr.sections_json, pr.review_json, pr.created_at,
+    $st = $pdo->prepare("SELECT pr.id, pr.user_id, pr.pdf_name, pr.pdf_path, pr.target_venue, pr.strictness,
+                                 pr.response_text, pr.response_pdf_path,
+                                 pr.sections_json, pr.review_json, pr.created_at,
                                  pr.status, pr.error_msg,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM paper_reviews pr JOIN users u ON u.id = pr.user_id
@@ -762,9 +771,11 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
         'author_name'  => $row['author_name'],
         'author_avatar'=> $row['author_avatar'],
         'pdf_name'     => $row['pdf_name'],
+        'pdf_path'     => $row['pdf_path'],         // v795 アップロード 元 PDF へ の リンク
         'target_venue' => $row['target_venue'],
         'strictness'   => $row['strictness'],
-        'response_text'=> $row['response_text'],   // v780 #404
+        'response_text'=> $row['response_text'],    // v780 #404
+        'response_pdf_path' => $row['response_pdf_path'],  // v795 回答 PDF
         'sections'     => json_decode($row['sections_json'] ?: '[]', true) ?: [],
         'review'       => json_decode($row['review_json'] ?: 'null', true),
         'status'       => $row['status'] ?? 'done',
@@ -857,6 +868,32 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
+    // v795 アップロード された PDF を サーバ にも 保存 (結果 ページ から リンク で 開ける ように)。
+    //   token が この あと 生成 される ので 先 に 作って 流用 する。
+    $token = bin2hex(random_bytes(16));
+    $publicDir = '/var/www/labpay/public';
+    $pdfRel = '/uploads/paper_reviews/' . $token . '/original.pdf';
+    $pdfAbs = $publicDir . $pdfRel;
+    @mkdir(dirname($pdfAbs), 0775, true);
+    if (!copy($tmpPdf, $pdfAbs)) {
+        fwrite(STDERR, "[paper_review] failed to save PDF locally: $pdfAbs\n");
+        $pdfRel = null;
+    } else {
+        @chmod($pdfAbs, 0644);
+    }
+    // 回答 PDF も 同じ ように 保存
+    $responsePdfRel = null;
+    if ($responsePdfTmp !== null) {
+        $responsePdfRel = '/uploads/paper_reviews/' . $token . '/response.pdf';
+        $responsePdfAbs = $publicDir . $responsePdfRel;
+        if (!copy($responsePdfTmp, $responsePdfAbs)) {
+            fwrite(STDERR, "[paper_review] failed to save response PDF: $responsePdfAbs\n");
+            $responsePdfRel = null;
+        } else {
+            @chmod($responsePdfAbs, 0644);
+        }
+    }
+
     $basePrompt = $customPrompt !== '' ? $customPrompt : PAPER_REVIEW_DEFAULT_PROMPT;
     $sys = $basePrompt .
            "\n\n査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
@@ -904,7 +941,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"weaknesses\": [\"具体的な弱み + 直すべき改稿案\", ...],\n"
         . "    \"strengthening_analyses\": [\"こういう追加分析をすると強くなる、 という提案 (1〜3 個、 効果量CI / 質的補完 / シミュレーション 等の具体例)\", ...],\n"
         . "    \"alternatives_when_no_reexp\": [\"追加実験ができない場合の代替案 (既存データ再分析 / 公開データ補完 / limitation 明示 等)\", ...],\n"
-        . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)\", \"suggested_rewrite\":\"こう書き直すと良い、 という具体案\"}, ...],\n"
+        . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"original_ja\":\"原文 の 日本語 訳\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)\", \"suggested_rewrite_en\":\"原文 と 同じ 言語 で の 書き換え 案 (英語 論文 なら 英語)\", \"suggested_rewrite_ja\":\"その 書き換え 案 の 日本語 訳\"}, ...],\n"
         . "    \"revision_to_accept\": [\"採録に導くために 必要な修正を 優先度順に アイテマイズ (具体的 / 実行可能、 ただし 「N を増やす」 系は p-hacking リスクを添える)\", ...],\n"
         . "    \"comments_to_authors\": \"著者への総合コメント (400〜800 文字)\",\n"
         . ($hasResponse
@@ -968,7 +1005,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
 
     // v557 #211 非同期: pending レコード作成 + 課金 → 即 share_token 返却 →
     //   fastcgi_finish_request() でクライアント切断 → 裏で OpenAI chat 呼出 → 結果更新
-    $token = bin2hex(random_bytes(16));
+    // v795 token は 前段 で PDF 保存 用 に 生成 済 (= ここ で 再 生成 しない)
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
     // v782 #379 response_text に PDF 添付 マーカ を 追加 (UI で「PDF 添付 されました」 と 出す)
@@ -977,14 +1014,14 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         $pdfMarker = "📎 [回答 PDF 添付: " . $responsePdfName . "]";
         $responseTextForDb = $responseTextForDb === null ? $pdfMarker : $pdfMarker . "\n\n" . $responseTextForDb;
     }
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $venue, $strictness, $responseTextForDb, $sys, $reviewCost, &$reviewId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $pdfRel, $venue, $strictness, $responseTextForDb, $responsePdfRel, $sys, $reviewCost, &$reviewId) {
         $pdo->prepare("INSERT INTO paper_reviews
-            (user_id, share_token, file_id, pdf_name, target_venue, strictness, response_text, prompt_used,
+            (user_id, share_token, file_id, pdf_name, pdf_path, target_venue, strictness, response_text, response_pdf_path, prompt_used,
              sections_json, review_json, cost_points, status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')")
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([
-                $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $venue, $strictness,
-                $responseTextForDb, $sys,
+                $uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfRel, $venue, $strictness,
+                $responseTextForDb, $responsePdfRel, $sys,
                 '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();

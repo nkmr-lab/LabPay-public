@@ -261,6 +261,11 @@ async function refreshShared(token) {
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の査読 · ${escapeHtml(d.created_at)}
         </div>
         <div class="meta" style="font-size:12px">対象会議: ${escapeHtml(d.target_venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
+        ${d.pdf_path || d.response_pdf_path ? `
+          <div style="margin-top:6px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap">
+            ${d.pdf_path ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener">📄 元 PDF を 開く ↗</a>` : ''}
+            ${d.response_pdf_path ? `<a href="${escapeHtml(d.response_pdf_path)}" target="_blank" rel="noopener">📎 回答 PDF を 開く ↗</a>` : ''}
+          </div>` : ''}
       </div>
       <div id="pr-result"></div>
     `;
@@ -453,12 +458,19 @@ function paint(d, shareToken, isShared) {
       <div style="margin-top:10px">
         <div class="bold" style="color:#b91c1c">✍️ 主張が強すぎる / 記述がおかしい箇所のリライト案</div>
         <div style="font-size:13px; margin-top:4px">
-          ${r.rewrite_suggestions.map(s => `
+          ${r.rewrite_suggestions.map(s => {
+            // v795 新形式 (en + ja) と 旧 形式 (suggested_rewrite のみ) の 両対応
+            const enRw = s.suggested_rewrite_en || '';
+            const jaRw = s.suggested_rewrite_ja || s.suggested_rewrite || '';
+            return `
             <div style="padding:8px 12px; background:#fef2f2; border-left:3px solid #b91c1c; border-radius:0 6px 6px 0; margin-bottom:8px">
               <div style="margin-bottom:4px"><span class="bold" style="color:#b91c1c">原文:</span> 「${escapeHtml(s.original || '')}」</div>
+              ${s.original_ja ? `<div style="margin-bottom:4px; font-size:12.5px; color:#374151"><span class="bold">原文 訳:</span> ${escapeHtml(s.original_ja)}</div>` : ''}
               ${s.reason ? `<div style="margin-bottom:4px; font-size:12px"><span class="bold">理由:</span> ${escapeHtml(s.reason)}</div>` : ''}
-              ${s.suggested_rewrite ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px"><span class="bold" style="color:#15803d">提案:</span> ${escapeHtml(s.suggested_rewrite)}</div>` : ''}
-            </div>`).join('')}
+              ${enRw ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px; margin-bottom:4px"><span class="bold" style="color:#15803d">提案 (英文):</span> ${escapeHtml(enRw)}</div>` : ''}
+              ${jaRw ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px"><span class="bold" style="color:#15803d">提案 (和訳):</span> ${escapeHtml(jaRw)}</div>` : ''}
+            </div>`;
+          }).join('')}
         </div>
       </div>` : ''}
 
