@@ -534,6 +534,11 @@ export async function renderHome() {
       <div id="home-weather"><div class="hint">位置情報 取得中…</div></div>
     </div>
 
+    <!-- v796 #396 今日 の 1 名言 -->
+    <div class="card" id="home-quote-card" data-card-id="quote">
+      <div id="home-quote"></div>
+    </div>
+
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">💬 らぼったー 最新</h2>
@@ -628,6 +633,7 @@ export async function renderHome() {
     { cardId: 'conf-deadlines', fn: renderConfDeadlinesWidget, label: 'confdl' }, // v671
     { cardId: 'it-news',        fn: renderItNewsWidget,        label: 'it-news' }, // v700 #290
     { cardId: 'screen-shares',  fn: renderScreenSharesWidget,  label: 'screen-shares' }, // v718 #314
+    { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日 の 1 名言
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -2499,6 +2505,26 @@ function bindHomeSnsReactions() {
       } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
   });
+}
+
+// v796 #396 今日 の 1 名言 (偉人 / 漫画 / アニメ)。 日付 で deterministic、 同 日 内 は 全員 同じ。
+async function renderHomeQuote() {
+  const card = document.getElementById('home-quote-card');
+  const root = document.getElementById('home-quote');
+  if (!card || !root) return;
+  try {
+    const mod = await import('../quotes_daily.js');
+    const q = mod.pickTodayQuote(new Date());
+    const srcLine = q.src ? ` <span style="color:#9ca3af; font-size:11px">(${escapeHtml(q.src)})</span>` : '';
+    root.innerHTML = `
+      <div class="row center" style="gap:8px; margin-bottom:4px">
+        <h2 class="row-title" style="margin:0">💬 今日 の 名言</h2>
+      </div>
+      <div style="padding:10px 14px; background:#faf5ff; border-left:4px solid #6b21a8; border-radius:0 6px 6px 0">
+        <div style="font-size:14.5px; line-height:1.85; white-space:pre-wrap; color:#1f2937">「${escapeHtml(q.q)}」</div>
+        <div style="font-size:12.5px; color:#6b21a8; margin-top:6px; text-align:right">— ${escapeHtml(q.a)}${srcLine}</div>
+      </div>`;
+  } catch (e) { card.hidden = true; }
 }
 
 // v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。

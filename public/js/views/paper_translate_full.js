@@ -171,6 +171,8 @@ async function go() {
   btn.disabled = true; btn.textContent = '⏳ アップロード 中…';
   const root = document.getElementById('pft-result');
   root.innerHTML = '<div class="card"><div class="muted">⏳ PDF を OpenAI に 送信 中…</div></div>';
+  // v796 #397 await 中 に 別 ページ に 移った ら 引き 戻さ ない
+  const startedHash = location.hash;
   try {
     const fd = new FormData();
     fd.append('file', f);
@@ -184,7 +186,11 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    location.hash = '#/paper-translate-full/r/' + j.share_token;
+    if (location.hash === startedHash || location.hash.startsWith('#/paper-translate-full')) {
+      location.hash = '#/paper-translate-full/r/' + j.share_token;
+    } else {
+      toast('裏 で 全訳 中。 通知 が 届いたら 結果 ページ を 開いて ください');
+    }
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
     btn.disabled = false; btn.textContent = '📑 全訳 開始';

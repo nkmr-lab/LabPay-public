@@ -56,6 +56,27 @@ export async function renderPaperTranslate() {
         <input type="file" id="pt-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
       </label>
+      <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
+        <legend style="font-size:12px; color:#6b7280">📑📑 同時 に 全訳 も 走らせる (任意)</legend>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px">
+          <input type="checkbox" id="pt-also-full">
+          全訳 (章 ごと + back-translation) も 一緒 に 開始
+        </label>
+        <div id="pt-also-full-opts" style="margin-top:6px; display:none">
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">方向</span>
+            <select id="pt-ft-direction" style="font-size:12px">
+              <option value="en2ja" selected>英→日</option>
+              <option value="ja2en">日→英 (5x)</option>
+            </select>
+          </label>
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">全訳 モデル</span>
+            <select id="pt-ft-model" style="font-size:12px"></select>
+            <div class="hint-sm" id="pt-ft-cost-info" style="font-size:11px; margin-top:2px"></div>
+          </label>
+        </div>
+      </fieldset>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pt-go" class="primary" disabled>📑 要約を作る</button>
       </div>
@@ -90,6 +111,8 @@ export async function renderPaperTranslate() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
+  // v796 #398 「同時 に 全訳 も」 トグル + 全訳 モデル ロード
+  setupAlsoFullTranslate();
   // v756 #372 タブ 切替 + 検索
   let curTab = 'mine';
   let searchTimer = null;
@@ -133,6 +156,42 @@ function updateModelInfo(d) {
   refresh();
 }
 
+// v796 #398 全訳 オプション の セット アップ
+let ftSettingsCache = null;
+async function setupAlsoFullTranslate() {
+  const toggle = document.getElementById('pt-also-full');
+  const opts   = document.getElementById('pt-also-full-opts');
+  const dirSel = document.getElementById('pt-ft-direction');
+  const modSel = document.getElementById('pt-ft-model');
+  const info   = document.getElementById('pt-ft-cost-info');
+  if (!toggle) return;
+  toggle.addEventListener('change', async () => {
+    opts.style.display = toggle.checked ? '' : 'none';
+    if (toggle.checked && !ftSettingsCache) {
+      try { ftSettingsCache = await get('/api/ai/paper_full_translate'); }
+      catch (e) { toast('全訳 設定 読込 失敗: ' + e.message); return; }
+      rebuildFtModels();
+    }
+  });
+  function rebuildFtModels() {
+    if (!ftSettingsCache) return;
+    const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
+    const def = ftSettingsCache.default_model || Object.keys(models)[0];
+    modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
+      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`).join('');
+    refreshCost();
+  }
+  function refreshCost() {
+    if (!ftSettingsCache) return;
+    const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
+    const m = modSel.value;
+    const pt = models[m] || 0;
+    info.textContent = `全訳 ${pt}pt (要約 + 全訳 を 同時 課金)`;
+  }
+  dirSel.addEventListener('change', rebuildFtModels);
+  modSel.addEventListener('change', refreshCost);
+}
+
 async function go() {
   const fileInput = document.getElementById('pt-file');
   const f = fileInput.files[0];
@@ -140,6 +199,12 @@ async function go() {
   const btn = document.getElementById('pt-go');
   const oldText = btn.textContent;
   btn.disabled = true; btn.textContent = '送信中…';
+  // v796 #397 ユーザ が 既に 他 ページ へ 移って いる 場合 は location.hash を 触らない (= 強制 引き 戻し 防止)
+  const startedHash = location.hash;
+  // v796 #398 同時 全訳 オプション
+  const alsoFull = document.getElementById('pt-also-full')?.checked;
+  const ftDir   = document.getElementById('pt-ft-direction')?.value;
+  const ftModel = document.getElementById('pt-ft-model')?.value;
   try {
     const fd = new FormData();
     fd.append('file', f);
@@ -155,7 +220,35 @@ async function go() {
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     toast('要約 開始 (' + (j.model || model) + ')');
-    location.hash = '#/paper-summary/r/' + j.share_token;
+
+    // v796 #398 全訳 も 同時 開始 する なら ここ で 2 本目 を 投げる (同じ PDF を 別 アップロード)
+    let ftToken = null;
+    if (alsoFull && ftDir && ftModel) {
+      try {
+        const fd2 = new FormData();
+        fd2.append('file', f);
+        fd2.append('direction', ftDir);
+        fd2.append('model', ftModel);
+        const r2 = await fetch('/api/ai/paper_full_translate', {
+          method: 'POST', body: fd2, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' },
+        });
+        const j2 = await r2.json().catch(() => ({}));
+        if (!r2.ok) throw new Error(j2?.error?.message || j2?.error || ('HTTP ' + r2.status));
+        ftToken = j2.share_token;
+        toast('全訳 も 開始 (' + (j2.model || ftModel) + ')');
+      } catch (e2) {
+        toast('全訳 開始 失敗: ' + e2.message + ' (要約 は 走って ます)');
+      }
+    }
+
+    // v796 #397 await が 解決 した 時点 で ユーザ が paper-summary から 離れて いた ら 移動 しない
+    if (location.hash === startedHash || location.hash.startsWith('#/paper-summary')) {
+      location.hash = '#/paper-summary/r/' + j.share_token;
+      // 全訳 も 同時 開始 した なら 履歴 で 確認 できる よう に トースト で 案内
+      if (ftToken) toast('全訳 は /#/paper-translate-full/r/' + ftToken + ' で 進捗 確認');
+    } else {
+      toast('裏 で 処理 中。 通知 が 届いたら 結果 ページ を 開いて ください');
+    }
   } catch (e) {
     toast('失敗: ' + e.message);
     btn.disabled = false; btn.textContent = oldText;
