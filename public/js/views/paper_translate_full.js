@@ -360,7 +360,22 @@ async function refresh(token) {
     }
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     if (d.status === 'error') {
-      document.getElementById('pft-r').innerHTML = `<div class="card"><div class="muted">❌ ${escapeHtml(d.error_msg || '不明 な エラー')}</div></div>`;
+      const myUid = Number(state.me?.id || 0);
+      const isOwner2 = myUid > 0 && Number(d.author_id) === myUid;
+      document.getElementById('pft-r').innerHTML = `
+        <div class="card">
+          <div class="muted">❌ ${escapeHtml(d.error_msg || '不明 な エラー')}</div>
+          ${isOwner2 && d.pdf_path ? `<div style="margin-top:10px"><button id="pft-retry" class="primary">🔁 再 実施 (新規 課金 なし)</button></div>` : ''}
+        </div>`;
+      document.getElementById('pft-retry')?.addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        btn.disabled = true; btn.textContent = '⏳ 再 投入 中…';
+        try {
+          await post('/api/ai/paper_full_translate/' + d.id + '/retry', {});
+          toast('再 投入 を 開始 しました');
+          refresh(token);
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再 実施 (新規 課金 なし)'; }
+      });
       return;
     }
     document.getElementById('pft-share-toggle')?.addEventListener('change', async (e) => {

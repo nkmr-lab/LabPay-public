@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v806', d: '2026-06-23', s: '🔁 論文 要約 / 全訳 の エラー row に 「🔁 再 実施 (新規 課金 なし)」 ボタン を 追加。 本人 + PDF が 残って いる エラー row 限定 で、 同 row を リセット → 保存 済 PDF を OpenAI に 再 アップロード → 再 投入。 別 row 作成 なし / 別 課金 なし' },
   { v: 'v805', d: '2026-06-23', s: '🏷 取引 履歴 で 論文 要約 / 全訳 / Deep Research が それぞれ「論文査読料」 と 表示 されて いた の を 修正。 ledger.type に paper_translate / paper_full_translate / deep_research を 新規 追加 (migration 165)、 ai.php の Ledger::transfer を 正しい type に 切替、 labels.js に 「論文要約料 / 論文全訳料 / Deep Research料」 を 追加。 admin の SYSTEM 収支 内訳 でも これら が 個別 で 出る ように。 既存 row は type=paper_review の まま (= 「論文査読料」 で 表示 される) が、 新規 の もの は 正しい 名称 で 出ます。 + 中村 さん の 未 払い戻し 分 700pt (要約 + 全訳 10 件) を 自動 払い戻し 済' },
   { v: 'v804', d: '2026-06-23', s: '💬📝🌐 名言 ウィジェット を デフォルト OFF + 名言 登録 機能 + 論文 要約 / 全訳 で 「終わった 瞬間 共有 ON」 チェックボックス を 追加。 (1) ホーム の 「💬 今日 の 名言」 を デフォルト OFF に (設定 → ホーム から ON 可)。 (2) /#/quotes で ラボ メン が 自由 に 名言 を 登録 / 削除 でき、 静的 配列 と 合算 されて 日 単位 で deterministic に 1 件 表示 (migration 163: quotes テーブル)。 (3) 論文 要約 / 論文 全訳 の アップロード フォーム に 「🌐 完了 と 同時 に 公開 ON」 チェックボックス。 status=done に なった タイミング で 自動 で is_shared=1 に セット (migration 164: paper_translates / paper_full_translations.auto_share 列)' },
   { v: 'v803', d: '2026-06-23', s: '📊🗂 admin 画面 整理: SYSTEM / ESCROW 収支 表 を 「詳細管理」 の 中 から 取り 出して 一番 上 の 「流通ポイント」 カード に 統合 (毎回 折りたたみ 展開 しなく て も 見える)。 「Scrapbox 名簿」 は 普段 触ら ない の で 折りたたみ デフォルト 閉 に' },

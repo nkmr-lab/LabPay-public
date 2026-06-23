@@ -145,6 +145,18 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     // v788 #386 #387 #388 論文 全訳 (E→J / J→E、 章 ごと + back-translation チェック)
+    // v806 paper_full_translate の エラー row を 同 row で 再 投入 (新規 課金 なし)
+    if ($sub === 'paper_full_translate' && $method === 'POST' && isset($seg[2])
+        && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
+        ai_paper_full_translate_retry($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
+    // v806 paper_translate の エラー row を 同 row で 再 投入 (新規 課金 なし)
+    if ($sub === 'paper_translate' && $method === 'POST' && isset($seg[2])
+        && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
+        ai_paper_translate_retry($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'paper_full_translate' && $method === 'POST' && !isset($seg[2])) {
         ai_paper_full_translate($pdo, $cfg);
         return;
@@ -2793,6 +2805,106 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     @set_time_limit(120);
 
     ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
+}
+
+// v806 エラー row を 同 row で 再 投入 (新規 課金 / 新規 row なし)。 status=error の もの だけ。
+function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $st = $pdo->prepare("SELECT * FROM paper_full_translations WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
+    if ($row['status'] !== 'error') {
+        throw new ApiException('bad_request', '再 実施 は エラー 状態 の row のみ (現 status: ' . $row['status'] . ')', 400);
+    }
+    if (empty($row['pdf_path'])) {
+        throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
+    }
+    $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
+
+    // row リセット (新規 課金 なし)
+    $pdo->prepare("UPDATE paper_full_translations
+                      SET status='processing', progress_text='再 投入 中…',
+                          openai_response_id=NULL, error_msg=NULL, result_json=NULL,
+                          usage_json=NULL, finished_at=NULL
+                    WHERE id=?")->execute([$id]);
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
+        'message' => '再 投入 を 開始 しました (新規 課金 なし)。 結果 ページ で 進捗 を 確認 して ください。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(120);
+
+    ai_paper_full_translate_submit($pdo, $cfg, $id, (string)$row['share_token'], $fileId,
+        (string)$row['direction'], (string)$row['model'], $apiKey, $uid);
+}
+
+// v806 paper_translate (要約) の エラー row を 同 row で 再 投入 (新規 課金 なし)。
+function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $st = $pdo->prepare("SELECT * FROM paper_translates WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
+    if ($row['status'] !== 'error') {
+        throw new ApiException('bad_request', '再 実施 は エラー 状態 の row のみ (現 status: ' . $row['status'] . ')', 400);
+    }
+    if (empty($row['pdf_path'])) {
+        throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
+    }
+    $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
+
+    $reqModel = (string)$row['model'];
+    $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
+    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+
+    $payloadArr = [
+        'model' => $reqModel,
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user', 'content' => [
+                ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                ['type' => 'text', 'text' => $userPrompt],
+            ]],
+        ],
+        'response_format' => ['type' => 'json_object'],
+        'max_completion_tokens' => 24000,
+    ];
+    if (!preg_match('/^(gpt-5|o1|o3)/', $reqModel)) {
+        $payloadArr['temperature'] = 0.2;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+    // row リセット
+    $pdo->prepare("UPDATE paper_translates
+                      SET status='processing', error_msg=NULL, result_json='null', finished_at=NULL
+                    WHERE id=?")->execute([$id]);
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
+        'message' => '再 投入 を 開始 しました (新規 課金 なし)。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(360);
+
+    ai_paper_translate_run_background($pdo, $cfg, $id, (string)$row['share_token'], $fileId, $payload, $apiKey, (string)$row['pdf_name'], $uid);
 }
 
 function ai_paper_full_translate_submit(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $direction, string $model, string $apiKey, int $uid): void {
