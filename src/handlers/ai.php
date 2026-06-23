@@ -1895,7 +1895,10 @@ const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
       "heading": "セクション タイトル",
       "body": "そのセクション の 説明 本文 (400-1000 字、 必要 なら 段落 分け)。 数値 や 主要 用語 は 残す",
       "sources": [
-        {"label": "短い 出典 名", "url": "https://..."},
+        {"label": "短い 出典 名 (例: 「Smith 2024 (Nature)」)", "url": "https://...",
+         "first_author": "Smith, J. など 第一 著者 名 (論文 の 場合)",
+         "title": "論文 / 記事 タイトル (原文)",
+         "venue": "Nature 2024 / OpenAI 公式 ブログ など 投稿 先 / 媒体"},
         ...
       ]
     },
@@ -1905,10 +1908,20 @@ const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
   "key_findings": ["3-7 個 の 重要 発見・主張 を 1 行 ずつ"],
   "open_questions": ["まだ 残って いる 問い・追加 で 調べる と 良い こと"],
   "all_sources": [
-    {"label": "出典 名", "url": "https://...", "why": "なぜ 参照 した か (50-100 字)"},
+    {"label": "短い 出典 名", "url": "https://...",
+     "first_author": "第一 著者 名 (論文 の 場合)",
+     "title":        "論文 / 記事 タイトル (原文)",
+     "venue":        "Nature / arXiv / 著者 公式 ブログ など 投稿 先 / 媒体",
+     "why":          "なぜ 参照 した か (50-100 字)"},
     ...
   ]
 }
+
+# 出典 (sources / all_sources) の 必須 ルール
+論文 を 参照 した 場合 は **first_author + title + venue** を 出来る だけ 埋める。
+URL だけ で 終わら ない 事 (ユーザ が ぱっと 見て 何 の 出典 か 分かる 情報量 を 残す)。
+論文 で ない (ブログ / 公式 ドキュメント / Wikipedia 等) の 場合 は title + venue 中心 で OK、
+first_author は 該当 しない なら 省略 で OK。
 
 JSON 以外 の 前置き / 解説 / markdown コード フェンス は 不要、 JSON のみ を 返却。
 PROMPT;

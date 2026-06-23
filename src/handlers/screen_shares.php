@@ -33,7 +33,7 @@ function ss_active(PDO $pdo, array $cfg): void {
     $sql = "SELECT s.id, s.creator_user_id, s.group_id, s.target_user_ids, s.image_url, s.body,
                    s.created_at, s.expires_at,
                    u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
-                   g.name AS group_name
+                   g.title AS group_name
               FROM screen_shares s
               JOIN users u ON u.id = s.creator_user_id
          LEFT JOIN adhoc_groups g ON g.id = s.group_id

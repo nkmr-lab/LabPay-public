@@ -306,7 +306,7 @@ function paintResult(d) {
                 <div style="margin-top:8px">
                   <div class="bold" style="font-size:12px; color:#4f46e5">📎 このセクションの 出典</div>
                   <ul style="margin:3px 0 0 0; padding-left:20px; font-size:12.5px; line-height:1.7">
-                    ${sec.sources.map(src => `<li>${escapeHtml(src.label || '')} — <a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></li>`).join('')}
+                    ${sec.sources.map(src => `<li>${renderSourceMeta(src)}<br><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></li>`).join('')}
                   </ul>
                 </div>` : ''}
             </div>`).join('')}
@@ -328,10 +328,24 @@ function paintResult(d) {
           ${r.all_sources.map(src => `
             <div style="padding:6px 10px; background:#eef2ff; border-radius:6px; font-size:12.5px">
               <div class="bold" style="color:#4f46e5">${escapeHtml(src.label || '')}</div>
+              ${renderSourceMeta(src, true)}
               <div style="margin-top:2px"><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></div>
               ${src.why ? `<div style="font-size:12px; color:#374151; margin-top:2px">${escapeHtml(src.why)}</div>` : ''}
             </div>`).join('')}
         </div>
       </div>` : ''}
   `;
+}
+
+// v787 #385 出典 の メタ情報 (第一 著者 / タイトル / 投稿先) を 整形 して 表示。
+function renderSourceMeta(src, asBlock = false) {
+  if (!src) return '';
+  const parts = [];
+  if (src.first_author) parts.push(`<b>${escapeHtml(src.first_author)}</b>`);
+  if (src.title)        parts.push(escapeHtml(src.title));
+  if (src.venue)        parts.push(`<span style="color:#6b7280">${escapeHtml(src.venue)}</span>`);
+  if (!parts.length) return '';
+  return asBlock
+    ? `<div style="margin-top:2px; font-size:12.5px">${parts.join(' / ')}</div>`
+    : `<span>${parts.join(' / ')}</span>`;
 }

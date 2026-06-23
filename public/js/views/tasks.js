@@ -10,6 +10,13 @@ const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 // 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
+// v787 #390 タスク 説明 内 の URL を 別 タブ で 開ける リンク に。 escapeHtml した 後 で URL パターン だけ <a target="_blank"> に 置換。
+function linkifyUrlsHtml(escapedText) {
+  return String(escapedText).replace(/(https?:\/\/[^\s<>"']+)/g, url =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline; word-break:break-all">${url}</a>`
+  );
+}
+
 // 履歴トグル: デフォは 「進行中のみ」、ON にすると終了/取消も含めて表示する。
 // 同一セッション内では維持したいが、メモリ上の変数で十分 (renderTasks 呼び直し
 // で初期化されても利便性は下がらない)。
@@ -529,9 +536,17 @@ async function loadDetail(id) {
           actions = `<button id="claim-btn" class="primary">これを引き受ける</button>`;
         }
       } else if (t.remaining === 0) {
-        actions = `<div class="muted">定員に達しています</div>`;
+        actions = `<button class="primary" disabled>定員 に 達して います</button>`;
       } else {
-        actions = `<div class="muted">引き受け上限/対象外で受けられません</div>`;
+        // v787 #392 指名 型 で 自分 が 対象 外 なら 「指名 対象 外 です」 と 明示 した
+        //   disabled ボタン に。 単純 な 上限 オーバー の 場合 も 同じ ボタン で 統一。
+        const isAssignTaskNotMe = (t.assigned_user_ids?.length || 0) > 0
+          && !t.is_assigned_to_me;
+        const label = isAssignTaskNotMe ? '🚫 指名 対象 外 です'
+          : (t.per_user_limit > 0 && myActive.length >= t.per_user_limit)
+            ? '上限 に 達して います'
+            : '対象 外 で 受け られ ません';
+        actions = `<button class="primary" disabled>${label}</button>`;
       }
     }
 
@@ -614,7 +629,7 @@ async function loadDetail(id) {
           <button id="task-share" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="らぼったー で 共有">💬 共有</button>
         </div>
         ${urlBlock}
-        ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${escapeHtml(t.description)}</div>` : ''}
+        ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${linkifyUrlsHtml(escapeHtml(t.description))}</div>` : ''}
         ${attBlock}
         <div class="sep"></div>
         <div>
