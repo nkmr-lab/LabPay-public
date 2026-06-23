@@ -135,6 +135,22 @@ export function setAppVisible(_id, _visible) {}
 
 // v602 カテゴリ内の 表示順を 明示指定するマップ。 値は [id, id, ...] の順序。
 //   ここに 含まれない id は ソース宣言順 で末尾に。
+// v792 #396 (再 編) カテゴリ 内 で さらに サブ 見出し で 2 分割 した い 場合 の 設定。
+//   サブ グループ に 該当 する id は その 順番 で 並ぶ。 ここ に 載って いない id は
+//   末尾 の 「(その他)」 に 自動 で 入る (普段 は 起きない 想定)。
+const CATEGORY_SUBGROUPS = {
+  'lab-mgmt': [
+    { label: '🏫 ゼミ・研究会・学会 サポート',
+      hint:  '発表 順 / タイマー / 一時 グループ / くじ など。 ゼミ や 研究会、 学会 出張 で 使う。',
+      ids: ['timers', 'stopwatches', 'orderings', 'random-groups', 'groups', 'roulette', 'text-roulette'] },
+    { label: '🏢 研究室 運営 サポート',
+      hint:  '投票 / 連絡 / 締切 / 割り勘 / 集金 / アルバイト など、 研究室 の 運営 と 合意 形成。',
+      ids: ['polls', 'chat-rooms', 'file-transfers', 'screen-shares',
+            'deadlines', 'conf-deadlines', 'notices',
+            'rollcalls', 'meetups', 'nomikai', 'requests', 'bait'] },
+  ],
+};
+
 const CATEGORY_ORDER = {
   // v792 #396 研究用 は AI で 研究 を 直接 進める もの だけ
   research: [
@@ -179,6 +195,13 @@ export async function renderApps(ctx = {}) {
   const filteredCats = filterCat
     ? APP_CATEGORIES.filter(c => c.id === filterCat)
     : APP_CATEGORIES;
+  const renderItemRow = (a) => `
+    <a class="list-item" href="${a.url}">
+      <div class="grow">
+        <div class="bold">${escapeHtml(a.title)} →</div>
+        <div class="meta">${escapeHtml(a.desc)}</div>
+      </div>
+    </a>`;
   const sectionsHtml = filteredCats.map(c => {
     let items = visible.filter(a => a.cat === c.id);
     // 指定があれば 並び替え
@@ -191,18 +214,45 @@ export async function renderApps(ctx = {}) {
       items = items.slice().sort((a, b) => idx(a.id) - idx(b.id));
     }
     if (!items.length) return '';
+    // v792 #396 (再 編) サブ グループ 設定 が ある なら 1 つ の カード 内 を 2 ブロック で 出す
+    const subgroups = CATEGORY_SUBGROUPS[c.id];
+    if (subgroups && subgroups.length) {
+      const byId = new Map(items.map(a => [a.id, a]));
+      const used = new Set();
+      const subSections = subgroups.map(sg => {
+        const sgItems = sg.ids.map(id => byId.get(id)).filter(Boolean);
+        sgItems.forEach(it => used.add(it.id));
+        if (!sgItems.length) return '';
+        return `
+          <div style="margin-top:10px">
+            <div class="bold" style="font-size:13px; color:var(--primary); margin-bottom:2px">${escapeHtml(sg.label)}</div>
+            ${sg.hint ? `<p class="hint" style="margin:0 0 6px; font-size:11px">${escapeHtml(sg.hint)}</p>` : ''}
+            <div class="list">
+              ${sgItems.map(renderItemRow).join('')}
+            </div>
+          </div>`;
+      }).join('');
+      const leftover = items.filter(a => !used.has(a.id));
+      const leftoverHtml = leftover.length ? `
+        <div style="margin-top:10px">
+          <div class="bold" style="font-size:13px; color:#6b7280; margin-bottom:4px">（その他）</div>
+          <div class="list">${leftover.map(renderItemRow).join('')}</div>
+        </div>` : '';
+      return `
+        <div class="card" style="margin-top:10px">
+          <h3 style="margin:0 0 4px">${escapeHtml(c.label)}</h3>
+          <p class="hint" style="margin:0 0 8px">${escapeHtml(c.hint)}</p>
+          ${subSections}
+          ${leftoverHtml}
+        </div>`;
+    }
+    // 通常 (フラット な リスト)
     return `
       <div class="card" style="margin-top:10px">
         <h3 style="margin:0 0 4px">${escapeHtml(c.label)}</h3>
         <p class="hint" style="margin:0 0 8px">${escapeHtml(c.hint)}</p>
         <div class="list">
-          ${items.map(a => `
-            <a class="list-item" href="${a.url}">
-              <div class="grow">
-                <div class="bold">${escapeHtml(a.title)} →</div>
-                <div class="meta">${escapeHtml(a.desc)}</div>
-              </div>
-            </a>`).join('')}
+          ${items.map(renderItemRow).join('')}
         </div>
       </div>`;
   }).join('');
