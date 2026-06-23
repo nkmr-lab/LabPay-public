@@ -369,9 +369,13 @@ function thumb_url_for(string $imageUrl): string {
 // to pull conversation history. Returns the decoded JSON array. Throws on
 // transport failure or {ok:false}; callers may catch and report.
 // Bot Token lives in $cfg['slack']['bot_token'] (production config only).
-function slack_api_get(array $cfg, string $endpoint, array $params = []): array {
-    $tok = (string)($cfg['slack']['bot_token'] ?? '');
-    if ($tok === '') throw new RuntimeException('slack.bot_token is empty');
+// v794 Slack Web API GET。 第 4 引数 で token override (= 別 アプリ の bot token を 使い たい
+//   場合 用、 例 え ば Scrapbox Reader の bot token)。 省略 時 は 既定 の slack.bot_token。
+function slack_api_get(array $cfg, string $endpoint, array $params = [], ?string $tokenOverride = null): array {
+    $tok = $tokenOverride !== null && $tokenOverride !== ''
+        ? $tokenOverride
+        : (string)($cfg['slack']['bot_token'] ?? '');
+    if ($tok === '') throw new RuntimeException('slack token is empty');
     $url = 'https://slack.com/api/' . ltrim($endpoint, '/');
     if ($params) $url .= '?' . http_build_query($params);
     $ch = curl_init($url);
@@ -392,9 +396,12 @@ function slack_api_get(array $cfg, string $endpoint, array $params = []): array 
 }
 
 // Slack Web API POST (chat.postMessage 等)。 JSON body + Bearer。
-function slack_api_post(array $cfg, string $endpoint, array $body): array {
-    $tok = (string)($cfg['slack']['bot_token'] ?? '');
-    if ($tok === '') throw new RuntimeException('slack.bot_token is empty');
+// v794 第 4 引数 で token override (上 と 同様)。
+function slack_api_post(array $cfg, string $endpoint, array $body, ?string $tokenOverride = null): array {
+    $tok = $tokenOverride !== null && $tokenOverride !== ''
+        ? $tokenOverride
+        : (string)($cfg['slack']['bot_token'] ?? '');
+    if ($tok === '') throw new RuntimeException('slack token is empty');
     $url = 'https://slack.com/api/' . ltrim($endpoint, '/');
     $ch = curl_init($url);
     curl_setopt_array($ch, [

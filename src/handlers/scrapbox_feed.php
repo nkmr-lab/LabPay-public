@@ -52,12 +52,14 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     //   と表示できるように。
     $messages = [];
     $cursor = null;
+    // v794 Scrapbox reader 専用 bot token を 優先 (= channels:history scope を 持つ 別 アプリ)
+    $readerTok = (string)($cfg['slack']['scrapbox_bot_token'] ?? '') ?: null;
     try {
         for ($i = 0; $i < 10; $i++) {
             $params = ['channel' => $channel, 'oldest' => $oldest, 'limit' => 200, 'inclusive' => 'true'];
             if ($latest !== null) $params['latest'] = $latest;
             if ($cursor) $params['cursor'] = $cursor;
-            $r = slack_api_get($cfg, 'conversations.history', $params);
+            $r = slack_api_get($cfg, 'conversations.history', $params, $readerTok);
             $messages = array_merge($messages, $r['messages'] ?? []);
             $cursor = $r['response_metadata']['next_cursor'] ?? '';
             if (!$cursor) break;

@@ -225,6 +225,14 @@ class ScrapboxSlackSync {
         ];
     }
 
+    // v794 Scrapbox reader 専用 bot token (= channels:history scope を 持って いて、
+    //   #scrapbox に 招待 されて いる Slack App の token)。 config に 'scrapbox_bot_token'
+    //   が あれば そちら を 使い、 なければ 既定 の bot_token に フォールバック。
+    private function readerToken(): ?string {
+        $tok = (string)($this->cfg['slack']['scrapbox_bot_token'] ?? '');
+        return $tok !== '' ? $tok : null;
+    }
+
     // Paginated conversations.history for [oldest, latest] inclusive. Slack returns
     // newest-first; we accumulate then sort ascending.
     private function fetchHistory(string $channel, int $oldest, int $latest): array {
@@ -241,7 +249,7 @@ class ScrapboxSlackSync {
                 'inclusive' => 'true',
             ];
             if ($cursor) $params['cursor'] = $cursor;
-            $r = slack_api_get($this->cfg, 'conversations.history', $params);
+            $r = slack_api_get($this->cfg, 'conversations.history', $params, $this->readerToken());
             $all = array_merge($all, $r['messages'] ?? []);
             $cursor = $r['response_metadata']['next_cursor'] ?? '';
             if (!$cursor) break;

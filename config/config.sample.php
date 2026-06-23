@@ -46,15 +46,20 @@ return [
   // Slack integration.
   //   webhook_url: Incoming webhook for outbound notifications (商品入荷, タスク追加など).
   //     Create at https://api.slack.com/apps -> Incoming Webhooks -> Add to channel.
-  //   bot_token: Bot User OAuth Token (xoxb-) for READING channel history. Needed only
-  //     for the Scrapbox-via-Slack contribution counter. Scopes: channels:history
-  //     (public) or groups:history (private). Bot must be /invite-d to the channel.
+  //   bot_token: Bot User OAuth Token (xoxb-) for the notification/DM bot. Used by
+  //     Notifier::notify slack DM, slack_notify, etc. Scopes typically chat:write 等。
+  //   scrapbox_bot_token: (v794) Optional separate Bot User token used ONLY for
+  //     reading the Scrapbox channel history (= conversations.history). When the
+  //     reader is a separate Slack App (e.g. "LabPay scrapbox reader") whose only
+  //     scope is channels:history, set it here and leave the main bot_token as the
+  //     notifications bot. Falls back to bot_token if empty.
   //   scrapbox_channel_id: Cxxxxxxxxxx — the channel where Scrapbox edit notifications
   //     are posted. Leave empty to disable the Scrapbox bridge.
   // Leave any field empty to disable the corresponding feature.
   'slack' => [
     'webhook_url'         => '',
     'bot_token'           => '',
+    'scrapbox_bot_token'  => '',  // v794 reader 専用 (channels:history のみ の 別 アプリ)
     'scrapbox_channel_id' => '',
   ],
 
