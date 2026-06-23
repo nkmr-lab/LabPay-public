@@ -348,8 +348,21 @@ export async function renderPaperTranslateShared() {
 
 async function refreshShared(token, app) {
   if (!app) app = document.getElementById('app');
+  // v798 ユーザ が 既に 別 ページ に 移って いる なら 何 も 触らず、 タイマー を 自殺 させる
+  //   (= 10 秒 ごと の 「要約 中… 」 表示 で 強制 引き 戻し に なる の を 防ぐ)。
+  if (!location.hash.includes('/paper-summary/r/' + token)
+   && !location.hash.includes('/paper-translate/r/' + token)) {
+    if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
+    return;
+  }
   try {
     const d = await get('/api/ai/paper_translate/r/' + encodeURIComponent(token));
+    // v798 fetch 中 に ユーザ が 移動 した 可能性 を もう 一度 確認
+    if (!location.hash.includes('/paper-summary/r/' + token)
+     && !location.hash.includes('/paper-translate/r/' + token)) {
+      if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
+      return;
+    }
     if (d.status === 'pending' || d.status === 'processing') {
       app.innerHTML = stripJaSpaces(`
         <div class="card page-header">
@@ -374,7 +387,10 @@ async function refreshShared(token, app) {
     }
     paintResult(d, token);
   } catch (e) {
-    app.innerHTML = stripJaSpaces(`<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`);
+    // v798 エラー 時 も 滞在 確認 して から 表示
+    if (location.hash.includes('/paper-summary/r/' + token) || location.hash.includes('/paper-translate/r/' + token)) {
+      app.innerHTML = stripJaSpaces(`<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`);
+    }
   }
 }
 

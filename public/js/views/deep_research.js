@@ -186,8 +186,17 @@ export async function renderDeepResearchShared({ params }) {
 
 async function refreshShared(token) {
   const app = document.getElementById('app');
+  // v798 別 ページ に 移って いる なら 触らず timer 自殺 (= 強制 引き 戻し 防止)
+  if (!location.hash.includes('/deep-research/r/' + token)) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    return;
+  }
   try {
     const d = await get('/api/ai/deep_research/r/' + encodeURIComponent(token));
+    if (!location.hash.includes('/deep-research/r/' + token)) {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      return;
+    }
     const myUid = Number(state.me?.id || 0);
     const isOwner = myUid > 0 && Number(d.author_id) === myUid;
     const shareToggleHtml = (isOwner && d.status === 'done') ? `

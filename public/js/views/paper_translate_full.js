@@ -38,6 +38,21 @@ export async function renderPaperTranslateFull() {
         <input type="file" id="pft-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pft-file-status" style="margin-top:4px"></div>
       </label>
+      <!-- v798 同時 に 要約 も 走らせる オプション -->
+      <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
+        <legend style="font-size:12px; color:#6b7280">📑📑 同時 に 要約 も 走らせる (任意)</legend>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px">
+          <input type="checkbox" id="pft-also-summary">
+          要約 (落合 メソッド + 図表 抽出) も 一緒 に 開始
+        </label>
+        <div id="pft-also-summary-opts" style="margin-top:6px; display:none">
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">要約 モデル</span>
+            <select id="pft-sum-model" style="font-size:12px"></select>
+            <div class="hint-sm" id="pft-sum-cost-info" style="font-size:11px; margin-top:2px"></div>
+          </label>
+        </div>
+      </fieldset>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pft-go" class="primary" disabled>📑 全訳 開始</button>
       </div>
@@ -97,6 +112,42 @@ function bindEvents() {
   sel?.addEventListener('change', refreshCost);
   btn?.addEventListener('click', go);
   if (settings) rebuildModelOptions();
+  // v798 同時 に 要約 も 走らせる オプション
+  setupAlsoSummary();
+}
+
+// v798 同時 要約 オプション の セット アップ
+let summarySettingsCache = null;
+async function setupAlsoSummary() {
+  const toggle = document.getElementById('pft-also-summary');
+  const opts   = document.getElementById('pft-also-summary-opts');
+  const modSel = document.getElementById('pft-sum-model');
+  const info   = document.getElementById('pft-sum-cost-info');
+  if (!toggle) return;
+  toggle.addEventListener('change', async () => {
+    opts.style.display = toggle.checked ? '' : 'none';
+    if (toggle.checked && !summarySettingsCache) {
+      try { summarySettingsCache = await get('/api/ai/paper_translate'); }
+      catch (e) { toast('要約 設定 読込 失敗: ' + e.message); return; }
+      rebuildSummaryModels();
+    }
+  });
+  function rebuildSummaryModels() {
+    if (!summarySettingsCache) return;
+    const models = summarySettingsCache.models || {};
+    const def = summarySettingsCache.default_model || Object.keys(models)[0];
+    modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
+      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`).join('');
+    refreshCost();
+  }
+  function refreshCost() {
+    if (!summarySettingsCache) return;
+    const models = summarySettingsCache.models || {};
+    const m = modSel.value;
+    const pt = models[m] || 0;
+    info.textContent = `要約 ${pt}pt (全訳 + 要約 を 同時 課金)`;
+  }
+  modSel.addEventListener('change', refreshCost);
 }
 
 async function loadSettings() {
@@ -173,6 +224,9 @@ async function go() {
   root.innerHTML = '<div class="card"><div class="muted">⏳ PDF を OpenAI に 送信 中…</div></div>';
   // v796 #397 await 中 に 別 ページ に 移った ら 引き 戻さ ない
   const startedHash = location.hash;
+  // v798 同時 要約 オプション
+  const alsoSum = document.getElementById('pft-also-summary')?.checked;
+  const sumModel = document.getElementById('pft-sum-model')?.value;
   try {
     const fd = new FormData();
     fd.append('file', f);
@@ -187,8 +241,30 @@ async function go() {
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     if (j.deduped) toast('🔁 同じ PDF + 方向 + モデル の 全訳 が 既に あった の で 流用 (課金 なし)');
+
+    // v798 同時 に 要約 も 開始 する なら 2 本目 を 投げる
+    let sumToken = null;
+    if (alsoSum && sumModel) {
+      try {
+        const fd2 = new FormData();
+        fd2.append('file', f);
+        fd2.append('model', sumModel);
+        const r2 = await fetch('/api/ai/paper_translate', {
+          method: 'POST', body: fd2, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' },
+        });
+        const j2 = await r2.json().catch(() => ({}));
+        if (!r2.ok) throw new Error(j2?.error?.message || j2?.error || ('HTTP ' + r2.status));
+        sumToken = j2.share_token;
+        if (j2.deduped) toast('🔁 要約 も 既存 row を 流用 (課金 なし)');
+        else             toast('要約 も 開始 (' + (j2.model || sumModel) + ')');
+      } catch (e2) {
+        toast('要約 開始 失敗: ' + e2.message + ' (全訳 は 走って ます)');
+      }
+    }
+
     if (location.hash === startedHash || location.hash.startsWith('#/paper-translate-full')) {
       location.hash = '#/paper-translate-full/r/' + j.share_token;
+      if (sumToken) toast('要約 は /#/paper-summary/r/' + sumToken + ' で 進捗 確認');
     } else {
       toast('裏 で 全訳 中。 通知 が 届いたら 結果 ページ を 開いて ください');
     }
@@ -216,8 +292,18 @@ export async function renderPaperTranslateFullShared({ params }) {
 
 async function refresh(token) {
   const app = document.getElementById('app');
+  // v798 別 ページ に 移って いる なら 触らず timer 自殺
+  if (!location.hash.includes('/paper-translate-full/r/' + token)) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    return;
+  }
   try {
     const d = await get('/api/ai/paper_full_translate/r/' + encodeURIComponent(token));
+    // fetch 中 に 移動 した か もう 一度 確認
+    if (!location.hash.includes('/paper-translate-full/r/' + token)) {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      return;
+    }
     const myUid = Number(state.me?.id || 0);
     const isOwner = myUid > 0 && Number(d.author_id) === myUid;
     const shareToggleHtml = (isOwner && d.status === 'done') ? `
