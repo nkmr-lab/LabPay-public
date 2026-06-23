@@ -430,6 +430,19 @@ export async function renderGroupDetail({ params }) {
       <div id="gd-tr-list" class="list"></div>
     </details>
 
+    <details class="card" id="gd-files-card">
+      <summary style="font-weight:700; cursor:pointer">📎 ファイル / 🖼 画像 <span id="gd-files-count" class="hint-sm"></span></summary>
+      <p class="hint-sm" style="margin:6px 0 4px">グループ メンバー で 共有 する ファイル / 画像 (PDF, Office, 画像, zip 等。 最大 16 MB)。 追加 で メンバー 全員 に 通知。</p>
+      <div class="row" style="gap:6px; margin:6px 0; align-items:center; flex-wrap:wrap">
+        <input type="file" id="gd-files-input" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.ics,.zip" style="flex:1; min-width:140px; font-size:12px">
+        <input type="text" id="gd-files-note" maxlength="500" placeholder="メモ (任意)" style="flex:2; min-width:140px; font-size:12px; padding:4px 6px">
+        <button id="gd-files-upload" class="btn primary" style="padding:4px 12px; font-size:12px">アップロード</button>
+        <span id="gd-files-status" class="hint-sm" style="margin-left:auto"></span>
+      </div>
+      <div id="gd-files-images" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px"></div>
+      <div id="gd-files-list" class="list" style="margin-top:6px"></div>
+    </details>
+
     <details class="card" id="gd-chat-card">
       <summary style="font-weight:700; cursor:pointer">💬 チャット <span id="gd-chat-status" class="hint-sm"></span></summary>
       <div id="gd-chat-list" style="max-height:280px; min-height:140px; overflow-y:auto; padding:6px; background:#f6f6f9; border-radius:8px; display:flex; flex-direction:column; gap:6px; margin-top:6px">
@@ -504,8 +517,109 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
   document.getElementById('gd-flight-add')?.addEventListener('click', () => openFlightModal(id, {}));
   document.getElementById('gd-tr-add')?.setAttribute('href', '#/translate?group_id=' + id);
-  Promise.all([loadWari(id), loadGroupTranslations(id)]).catch(() => {});
+  Promise.all([loadWari(id), loadGroupTranslations(id), loadGroupFiles(id)]).catch(() => {});
+  bindGroupFilesUI(id);
   startChatLoop(id);
+}
+
+// v810 #400 グループ ファイル / 画像 共有。 アップロード → サーバ で kind 判定
+//   (image/* なら kind='image')、 画像 は サムネ grid、 非 画像 は ファイル リスト で 表示。
+async function loadGroupFiles(gid) {
+  const card = document.getElementById('gd-files-card');
+  const imgs = document.getElementById('gd-files-images');
+  const list = document.getElementById('gd-files-list');
+  const cnt  = document.getElementById('gd-files-count');
+  if (!card || !imgs || !list) return;
+  try {
+    const d = await get(`/api/groups/${gid}/files`);
+    const items = d.items || [];
+    if (cnt) cnt.textContent = items.length ? `(${items.length})` : '';
+    const images = items.filter(it => it.kind === 'image');
+    const files  = items.filter(it => it.kind !== 'image');
+    const fmtSize = (n) => n < 1024 ? `${n}B` : n < 1024 * 1024 ? `${(n/1024).toFixed(0)}KB` : `${(n/1024/1024).toFixed(1)}MB`;
+    const renderActions = (it) => {
+      if (!groupFilesCanDelete(it)) return '';
+      return `<button class="btn" data-gd-file-del="${it.id}" style="padding:1px 6px; font-size:11px; margin-left:4px">🗑</button>`;
+    };
+    imgs.innerHTML = images.map(it => {
+      const url = escapeHtml(it.stored_path);
+      const thumb = it.thumb_path ? escapeHtml(it.thumb_path) : url;
+      const note = it.note ? `<div style="font-size:10.5px; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(it.note)}">📝 ${escapeHtml(it.note)}</div>` : '';
+      return `
+        <div style="position:relative; width:100px">
+          <a href="${url}" target="_blank" rel="noopener">
+            <img src="${thumb}" alt="${escapeHtml(it.filename)}" loading="lazy"
+                 style="width:100px; height:100px; object-fit:cover; border-radius:6px; display:block">
+          </a>
+          <div style="font-size:10px; color:#6b6b6b; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(it.uploader_name)}">${escapeHtml(it.uploader_name)}</div>
+          ${note}
+          <div style="position:absolute; top:2px; right:2px">${renderActions(it)}</div>
+        </div>`;
+    }).join('');
+    list.innerHTML = files.map(it => {
+      const url = escapeHtml(it.stored_path);
+      const note = it.note ? ` 📝 ${escapeHtml(it.note)}` : '';
+      return `
+        <div class="list-item" style="gap:6px; align-items:center; padding:4px 6px">
+          <a href="${url}" target="_blank" rel="noopener" style="flex:1; min-width:0; overflow:hidden">
+            <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">📎 ${escapeHtml(it.filename)}</div>
+            <div class="meta" style="font-size:11px">${escapeHtml(it.uploader_name)} ・ ${fmtSize(it.size)}${note}</div>
+          </a>
+          ${renderActions(it)}
+        </div>`;
+    }).join('');
+    if (!items.length) list.innerHTML = '<div class="hint-sm" style="padding:6px">まだ アップロード されて いません</div>';
+    // delete buttons
+    card.querySelectorAll('[data-gd-file-del]').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        if (!confirm('この ファイル を 削除 しますか?')) return;
+        const fid = btn.getAttribute('data-gd-file-del');
+        try { await del(`/api/groups/${gid}/files/${fid}`); await loadGroupFiles(gid); }
+        catch (e) { toast('削除 失敗: ' + (e?.message || e)); }
+      });
+    });
+  } catch (_) { /* silently */ }
+}
+
+function groupFilesCanDelete(it) {
+  const myId = state.me?.id;
+  const role = state.me?.role;
+  if (!myId) return false;
+  if ((it.uploader_id || 0) === myId) return true;
+  if (role === 'admin') return true;
+  // creator チェック は サーバ 側 で 改めて 判定 する ので、 クライアント では 投稿者 + admin のみ ボタン表示
+  return false;
+}
+
+function bindGroupFilesUI(gid) {
+  const btn = document.getElementById('gd-files-upload');
+  const fileInput = document.getElementById('gd-files-input');
+  const noteInput = document.getElementById('gd-files-note');
+  const status = document.getElementById('gd-files-status');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async () => {
+    const f = fileInput?.files?.[0];
+    if (!f) { toast('ファイル を 選択 して ください'); return; }
+    if (f.size > 16 * 1024 * 1024) { toast('16 MB を 超えて います'); return; }
+    btn.disabled = true;
+    if (status) status.textContent = '送信 中…';
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      if (noteInput?.value) fd.append('note', noteInput.value);
+      const resp = await fetch(`/api/groups/${gid}/files`, { method: 'POST', body: fd, credentials: 'same-origin' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      if (fileInput) fileInput.value = '';
+      if (noteInput) noteInput.value = '';
+      if (status) status.textContent = '✅ 完了';
+      await loadGroupFiles(gid);
+      setTimeout(() => { if (status) status.textContent = ''; }, 1500);
+    } catch (e) {
+      if (status) status.textContent = '失敗: ' + (e?.message || e);
+    } finally { btn.disabled = false; }
+  });
 }
 
 async function loadGroupTranslations(gid) {

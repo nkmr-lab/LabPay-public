@@ -85,6 +85,10 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'locations' && $method === 'GET')    { group_locations_list($pdo, $cfg, $id);    return; }
             if ($next === 'locations' && $method === 'POST')   { group_locations_upsert($pdo, $cfg, $id);  return; }
             if ($next === 'locations' && $method === 'DELETE') { group_locations_delete($pdo, $cfg, $id);  return; }
+            // v810 #400 グループ ファイル / 画像 共有: /files  GET/POST、/files/{fileId} DELETE
+            if ($next === 'files' && $method === 'GET'  && !isset($seg[3])) { group_files_list($pdo, $cfg, $id);       return; }
+            if ($next === 'files' && $method === 'POST' && !isset($seg[3])) { group_files_add($pdo, $cfg, $id);        return; }
+            if ($next === 'files' && $method === 'DELETE' && isset($seg[3])) { group_files_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             // 添付ファイル: /schedule/{itemId}/attachments  GET/POST、/attachments/{attId} DELETE
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'attachments') {
                 $itemId = (int)$seg[3];
@@ -1952,6 +1956,136 @@ function group_sched_att_del(PDO $pdo, array $cfg, int $id, int $itemId, int $at
     }
     $pdo->prepare("DELETE FROM adhoc_group_schedule_attachments WHERE id=?")->execute([$attId]);
     // 実ファイルも削除 (ベストエフォート)。
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    foreach ([$row['stored_path'], $row['thumb_path']] as $p) {
+        if ($p && is_file($publicDir . $p)) @unlink($publicDir . $p);
+    }
+    json_response(['ok' => true]);
+}
+
+// ────────── v810 #400 グループ ファイル / 画像 共有 ──────────
+// schedule / 航空券 など 既存 エンティティ に 紐 付か ない、 グループ 全体 の フリー 共有 領域。
+const GROUP_FILE_MAX_BYTES = 16 * 1024 * 1024; // 16MB
+const GROUP_FILE_MIME = [
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/gif'  => 'gif',
+    'image/webp' => 'webp',
+    'image/heic' => 'heic',
+    'image/heif' => 'heif',
+    'application/pdf' => 'pdf',
+    'application/msword' => 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+    'application/vnd.ms-excel' => 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+    'application/vnd.ms-powerpoint' => 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+    'text/plain' => 'txt',
+    'text/calendar' => 'ics',
+    'application/zip' => 'zip',
+];
+
+function group_files_list(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT f.id, f.kind, f.filename, f.stored_path, f.thumb_path, f.mime, f.size,
+                                f.note, f.uploader_user_id, f.created_at,
+                                u.display_name AS uploader_name, u.avatar_url AS uploader_avatar
+                           FROM adhoc_group_files f
+                           JOIN users u ON u.id = f.uploader_user_id
+                          WHERE f.group_id = ?
+                          ORDER BY f.created_at DESC, f.id DESC");
+    $st->execute([$id]);
+    $items = array_map(function ($r) {
+        return [
+            'id'              => (int)$r['id'],
+            'kind'            => $r['kind'],
+            'filename'        => $r['filename'],
+            'stored_path'     => $r['stored_path'],
+            'thumb_path'      => $r['thumb_path'],
+            'mime'            => $r['mime'],
+            'size'            => (int)$r['size'],
+            'note'            => $r['note'],
+            'uploader_id'     => (int)$r['uploader_user_id'],
+            'uploader_name'   => $r['uploader_name'],
+            'uploader_avatar' => $r['uploader_avatar'],
+            'created_at'      => $r['created_at'],
+        ];
+    }, $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response(['items' => $items]);
+}
+
+function group_files_add(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+        throw new ApiException('no_file', 'multipart field "file" is required', 400);
+    }
+    $original = (string)($_FILES['file']['name'] ?? 'file');
+    $original = mb_substr(preg_replace('/[\x00-\x1F]/u', '', $original) ?? 'file', 0, 200);
+    $note = trim((string)($_POST['note'] ?? ''));
+    if (mb_strlen($note) > 500) $note = mb_substr($note, 0, 500);
+    $saved = save_uploaded_file($_FILES['file'], 'uploads/group_files',
+        GROUP_FILE_MAX_BYTES, GROUP_FILE_MIME);
+    $isImage = str_starts_with($saved['mime'], 'image/');
+    $kind = $isImage ? 'image' : 'file';
+    $ins = $pdo->prepare("INSERT INTO adhoc_group_files
+        (group_id, uploader_user_id, kind, filename, stored_path, thumb_path, mime, size, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$id, (int)$u['id'], $kind, $original, $saved['path'], $saved['thumb_path'] ?? null,
+        $saved['mime'], (int)$saved['size'], $note !== '' ? $note : null]);
+    $fileId = (int)$pdo->lastInsertId();
+    // メンバー に 通知 (自分 を 除く)。 1 件 ずつ DM (Notifier::notify)。
+    try {
+        $gst = $pdo->prepare("SELECT title FROM adhoc_groups WHERE id=?");
+        $gst->execute([$id]);
+        $gtitle = (string)$gst->fetchColumn();
+        $mst = $pdo->prepare("SELECT user_id FROM adhoc_group_members WHERE group_id=? AND user_id<>?");
+        $mst->execute([$id, (int)$u['id']]);
+        $icon = $isImage ? '🖼' : '📎';
+        $noteSnip = $note !== '' ? " 「" . mb_substr($note, 0, 40) . "」" : '';
+        $msg = "{$icon} 「{$gtitle}」 に {$u['display_name']} が " . ($isImage ? '画像' : 'ファイル') . " を 追加 し ました{$noteSnip}";
+        foreach ($mst as $row) {
+            Notifier::notify($pdo, $cfg, (int)$row['user_id'], 'group_post',
+                $msg, 'adhoc_group', $id);
+        }
+    } catch (Throwable $_) {}
+    json_response([
+        'ok' => true,
+        'file' => [
+            'id'              => $fileId,
+            'kind'            => $kind,
+            'filename'        => $original,
+            'stored_path'     => $saved['path'],
+            'thumb_path'      => $saved['thumb_path'] ?? null,
+            'mime'            => $saved['mime'],
+            'size'            => (int)$saved['size'],
+            'note'            => $note !== '' ? $note : null,
+            'uploader_id'     => (int)$u['id'],
+            'uploader_name'   => $u['display_name'],
+            'uploader_avatar' => $u['avatar_url'] ?? null,
+            'created_at'      => date('Y-m-d H:i:s'),
+        ],
+    ]);
+}
+
+function group_files_del(PDO $pdo, array $cfg, int $id, int $fileId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    group_assert_member($pdo, $id, (int)$u['id']);
+    $st = $pdo->prepare("SELECT f.uploader_user_id, f.stored_path, f.thumb_path, g.creator_user_id
+                           FROM adhoc_group_files f
+                           JOIN adhoc_groups g ON g.id = ?
+                          WHERE f.id = ? AND f.group_id = ?");
+    $st->execute([$id, $fileId, $id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'file not found', 404);
+    $isOwner   = (int)$row['uploader_user_id'] === (int)$u['id'];
+    $isCreator = (int)$row['creator_user_id']  === (int)$u['id'];
+    $isAdmin   = (string)($u['role'] ?? '') === 'admin';
+    if (!$isOwner && !$isCreator && !$isAdmin) {
+        throw new ApiException('forbidden', '投稿者・グループ作成者・admin のみ 削除 可', 403);
+    }
+    $pdo->prepare("DELETE FROM adhoc_group_files WHERE id=?")->execute([$fileId]);
     $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
     foreach ([$row['stored_path'], $row['thumb_path']] as $p) {
         if ($p && is_file($publicDir . $p)) @unlink($publicDir . $p);
