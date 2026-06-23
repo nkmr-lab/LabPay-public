@@ -144,6 +144,31 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_deep_research_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v788 #386 #387 #388 論文 全訳 (E→J / J→E、 章 ごと + back-translation チェック)
+    if ($sub === 'paper_full_translate' && $method === 'POST' && !isset($seg[2])) {
+        ai_paper_full_translate($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_full_translate' && $method === 'GET' && ($seg[2] ?? '') === 'r' && isset($seg[3])) {
+        ai_paper_full_translate_get_shared($pdo, $cfg, (string)$seg[3]);
+        return;
+    }
+    if ($sub === 'paper_full_translate' && $method === 'GET' && ($seg[2] ?? '') === 'shared') {
+        ai_paper_full_translate_shared_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_full_translate' && $method === 'PATCH' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_paper_full_translate_patch($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
+    if ($sub === 'paper_full_translate' && $method === 'GET' && !isset($seg[2])) {
+        ai_paper_full_translate_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'paper_full_translate' && $method === 'DELETE' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_paper_full_translate_delete($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -2293,6 +2318,514 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
     // 進捗中 (queued / in_progress)
     $progress = "🌐 Web 検索 {$searchCount} 回 / 🧠 推論 {$reasoningCount} 段 (OpenAI: {$oaStatus})";
     $pdo->prepare("UPDATE deep_researches SET progress_text=? WHERE id=?")
+        ->execute([$progress, (int)$row['id']]);
+    $row['progress_text'] = $progress;
+    return $row;
+}
+
+// ============================================================================
+// v788 #386 #387 #388 論文 全訳 — paper-summary と 似た UI で フル 翻訳 を 出す。
+//   章 ごと に 訳 → サンプル 文 を back-translate して 整合 確認 → 用語 統一 + 全体 ポリッシュ。
+//   direction:
+//     en2ja: 英語 論文 → 日本語 (要約 と 同程度 の コスト)
+//     ja2en: 日本語 論文 → 英語 (5x、 + em-dash 等 GPT-isms 除去)
+//   Responses API + background mode + polling で 長 時間 ジョブ を 安全 に。
+// ============================================================================
+
+const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
+    'gpt-5-mini' => 50,
+    'gpt-5'      => 120,
+    'o1'         => 200,
+];
+const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x (J→E は em-dash 除去 + 用語 統一 で 重い)
+    'gpt-5-mini' => 250,
+    'gpt-5'      => 600,
+    'o1'         => 1000,
+];
+
+const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
+あなた は 学術 論文 を **章 ごと に 全訳** する 翻訳 アシスタント です。 添付 された 英語 論文 PDF
+を 全訳 し、 同時 に 各 章 で back-translation で 訳 の 信頼性 を 確認 し、 最後 に 全体 を
+見渡 して 用語 統一 と 自然 さ を 整える ところ まで やって ください。
+
+# 大切 な ルール
+
+1. **全文 を 訳す** (要約 では ない)。 段落 を 飛ばしたり 圧縮 したり しない。 数式 / 図表 番号 /
+   引用 番号 [12] / 著者名 表記 (Smith et al., 2024) など は そのまま 残す。
+2. **章 (Section) 単位 で 区切って 翻訳** する。 章 タイトル も 「Introduction (はじめに)」 の よう
+   に 原題 + 訳 を 併記。
+3. **back-translation**: 各 章 から 2-3 文 を サンプル として 取って 日本語 → 英語 に 逆 翻訳 し、
+   元 英文 と 突き合わせて 「ズレ が ない か」 を コメント する。 ズレ が あれば 訳 を 修正 し直す。
+4. **用語 統一**: 重要 用語 (proper noun, jargon) は 章 を またいで 同じ 訳語 を 使う。 章 ごと の
+   訳 が 終わった あと、 全体 ポリッシュ で 用語 ブレ を 直す。
+5. **「論文 で は 〜 と 述べて いる」 などの メタ 解説 で 包まない**。 原文 と 同じ 主張 で 直接 訳す。
+6. 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 と の 境界 は OK)。
+
+# 出力 JSON スキーマ (これ を そのまま 返却)
+
+{
+  "title_original":    "原 タイトル (英語)",
+  "title_translated":  "日本語 タイトル",
+  "authors":           "著者名 (代表 3 名 まで + et al.)",
+  "venue":             "発表 会議 / ジャーナル + 年",
+  "language_detected": "en",
+  "chapters": [
+    {
+      "chapter_title_original":   "Introduction",
+      "chapter_title_translated": "はじめに",
+      "translation":              "全文 訳 (省略 せず)。 段落 は \n\n で 区切る",
+      "back_translation_samples": [
+        { "ja_translation": "サンプル と して 選んだ 訳文 (1-2 文)",
+          "back_to_en":     "それ を 逆 翻訳 した 英文",
+          "original_en":    "対応 する 原文 (引用)",
+          "notes":          "ズレ や 訂正 の メモ (なし なら 空 文字列)" }
+      ],
+      "key_terms": [
+        { "original": "term", "translation": "用語 訳", "note": "なぜ こう 訳した か" }
+      ]
+    }
+  ],
+  "overall_polish": {
+    "terminology_consistency": "全体 で 用語 ブレ を 統一 した メモ (どの 用語 を どう 揃え た か)",
+    "adjustments_made":        ["章 を またいで 修正 した 点 1", "..."],
+    "remaining_concerns":      ["残った 不確か な 訳 / 用語 / 数値 など"]
+  }
+}
+
+JSON 以外 の 前置き / 解説 / markdown コード フェンス は 不要、 JSON のみ を 返却。
+PROMPT;
+
+const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_JA2EN = <<<'PROMPT'
+You are a translator who renders Japanese academic papers into **full English chapter-by-chapter**.
+Given an attached Japanese PDF, translate the whole paper, run back-translation on samples per chapter
+to verify fidelity, then perform a final polish pass that:
+- unifies terminology across chapters,
+- removes GPT-ish stylistic tells (em-dashes "—", excessive "moreover/furthermore/however" chains,
+  hedge clauses like "It is important to note that ..." that feel like LLM filler),
+- ensures natural academic English with concrete claims (not vague "we explore" without verbs).
+
+# Rules
+
+1. Translate the **entire text** (not a summary). Keep equation numbers, figure references, citation
+   markers (e.g. [12], Smith et al. 2024) verbatim. Keep tables/figures referenced as in the original.
+2. Use **chapter (Section) granularity**. For each chapter give the original Japanese chapter title
+   AND the English title.
+3. **back-translation**: per chapter, pick 2-3 sample sentences, back-translate them to Japanese and
+   compare against the original Japanese. Note any drift and fix the English.
+4. **terminology consistency**: proper nouns / jargon must use the same English term across chapters.
+   Resolve any inconsistency in the final overall_polish pass.
+5. **No meta-narration** ("The paper states that ..."). Translate the claim directly in the third
+   person where the original implies it.
+6. **GPT-ism removal**: scrub em-dashes "—" (replace with commas, parens, or rewrites), avoid
+   over-using "moreover/furthermore", avoid "delve into / dive into / leverage" filler.
+
+# Output JSON schema (return this exact shape, JSON only — no markdown fences)
+
+{
+  "title_original":    "Original Japanese title",
+  "title_translated":  "English title",
+  "authors":           "Author names (up to 3 + et al.)",
+  "venue":             "Conference/journal + year",
+  "language_detected": "ja",
+  "chapters": [
+    {
+      "chapter_title_original":   "はじめに",
+      "chapter_title_translated": "Introduction",
+      "translation":              "Full English translation. Paragraphs separated by \n\n. No omission.",
+      "back_translation_samples": [
+        { "en_translation": "1-2 sentence sample from the translation",
+          "back_to_ja":     "back-translated Japanese",
+          "original_ja":    "matching original Japanese sentence(s)",
+          "notes":          "drift notes / fixes; empty string if none" }
+      ],
+      "key_terms": [
+        { "original": "原語", "translation": "term", "note": "why this term" }
+      ]
+    }
+  ],
+  "overall_polish": {
+    "terminology_consistency": "Notes on how terms were unified across chapters",
+    "adjustments_made":        ["cross-chapter edits 1", "..."],
+    "gpt_ism_scrub":           ["List of GPT-ism patterns we removed (e.g. removed N em-dashes, replaced 'moreover' chains with shorter connectors)"],
+    "remaining_concerns":      ["Uncertain terms / numbers / phrases worth a human pass"]
+  }
+}
+
+Return ONLY the JSON.
+PROMPT;
+
+function ai_paper_full_translate_models_for(string $direction): array {
+    return $direction === 'ja2en' ? PAPER_FULL_TRANSLATE_MODELS_JA2EN : PAPER_FULL_TRANSLATE_MODELS_EN2JA;
+}
+
+function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, direction, model, cost_points, status,
+                                created_at, finished_at, is_shared, shared_at, error_msg
+                           FROM paper_full_translations WHERE user_id = ?
+                       ORDER BY id DESC LIMIT 30");
+    $st->execute([$uid]);
+    $rows = array_map(function ($r) {
+        return [
+            'id' => (int)$r['id'],
+            'share_token' => $r['share_token'],
+            'pdf_name'    => $r['pdf_name'],
+            'direction'   => $r['direction'],
+            'model'       => $r['model'],
+            'cost_points' => (int)$r['cost_points'],
+            'status'      => $r['status'],
+            'created_at'  => $r['created_at'],
+            'finished_at' => $r['finished_at'],
+            'is_shared'   => (bool)$r['is_shared'],
+            'shared_at'   => $r['shared_at'],
+            'error_msg'   => $r['error_msg'],
+        ];
+    }, $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response([
+        'items'      => $rows,
+        'models_en2ja' => PAPER_FULL_TRANSLATE_MODELS_EN2JA,
+        'models_ja2en' => PAPER_FULL_TRANSLATE_MODELS_JA2EN,
+        'default_direction' => 'en2ja',
+        'default_model'     => 'gpt-5',
+    ]);
+}
+
+function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT pft.*, u.display_name AS author_name, u.avatar_url AS author_avatar
+                           FROM paper_full_translations pft JOIN users u ON u.id = pft.user_id
+                          WHERE pft.share_token = ?");
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'paper_full_translation not found', 404);
+    // 進行中 なら OpenAI に 進捗 を 取り に 行く
+    if ($row['status'] === 'processing' && !empty($row['openai_response_id'])) {
+        try { $row = ai_paper_full_translate_poll($pdo, $cfg, $row); }
+        catch (Throwable $_) {}
+    }
+    json_response([
+        'id'                 => (int)$row['id'],
+        'author_id'          => (int)$row['user_id'],
+        'author_name'        => $row['author_name'],
+        'author_avatar'      => $row['author_avatar'],
+        'pdf_name'           => $row['pdf_name'],
+        'pdf_path'           => $row['pdf_path'],
+        'direction'          => $row['direction'],
+        'model'              => $row['model'],
+        'cost_points'        => (int)$row['cost_points'],
+        'status'             => $row['status'],
+        'progress_text'      => $row['progress_text'] ?? null,
+        'openai_response_id' => $row['openai_response_id'] ?? null,
+        'result'             => json_decode($row['result_json'] ?: 'null', true),
+        'usage'              => json_decode($row['usage_json']  ?: 'null', true),
+        'error_msg'          => $row['error_msg'],
+        'created_at'         => $row['created_at'],
+        'finished_at'        => $row['finished_at'],
+        'is_shared'          => (bool)$row['is_shared'],
+        'shared_at'          => $row['shared_at'],
+    ]);
+}
+
+function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $q = trim((string)($_GET['q'] ?? ''));
+    $args = [];
+    $sql = "SELECT pft.id, pft.share_token, pft.pdf_name, pft.direction, pft.model, pft.cost_points,
+                   pft.result_json, pft.shared_at, pft.created_at, pft.finished_at,
+                   pft.user_id, u.display_name AS author_name, u.avatar_url AS author_avatar
+              FROM paper_full_translations pft JOIN users u ON u.id = pft.user_id
+             WHERE pft.is_shared = 1 AND pft.status = 'done'";
+    if ($q !== '' && mb_strlen($q) <= 100) {
+        $sql .= " AND (pft.pdf_name LIKE ? OR pft.result_json LIKE ?)";
+        $args[] = '%' . $q . '%';
+        $args[] = '%' . $q . '%';
+    }
+    $sql .= " ORDER BY pft.shared_at DESC LIMIT 100";
+    $st = $pdo->prepare($sql);
+    $st->execute($args);
+    $items = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $result = json_decode($r['result_json'] ?: 'null', true);
+        $items[] = [
+            'id' => (int)$r['id'],
+            'share_token' => $r['share_token'],
+            'pdf_name' => $r['pdf_name'],
+            'direction' => $r['direction'],
+            'title_original'   => is_array($result) ? ($result['title_original']   ?? null) : null,
+            'title_translated' => is_array($result) ? ($result['title_translated'] ?? null) : null,
+            'authors' => is_array($result) ? ($result['authors'] ?? null) : null,
+            'venue'   => is_array($result) ? ($result['venue']   ?? null) : null,
+            'shared_at' => $r['shared_at'],
+            'created_at' => $r['created_at'],
+            'author_id' => (int)$r['user_id'],
+            'author_name' => $r['author_name'],
+            'author_avatar' => $r['author_avatar'],
+        ];
+    }
+    json_response(['items' => $items, 'q' => $q]);
+}
+
+function ai_paper_full_translate_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    if (!array_key_exists('is_shared', $body)) {
+        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+    }
+    $st = $pdo->prepare("SELECT user_id, status FROM paper_full_translations WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '完了 後 のみ 共有 切替 可', 400);
+    $on = (bool)$body['is_shared'];
+    $pdo->prepare("UPDATE paper_full_translations
+                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
+                    WHERE id = ?")
+        ->execute([$on ? 1 : 0, $id]);
+    json_response(['ok' => true, 'is_shared' => $on]);
+}
+
+function ai_paper_full_translate_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT user_id, pdf_path FROM paper_full_translations WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除 可', 403);
+    if (!empty($row['pdf_path'])) {
+        $abs = '/var/www/labpay/public' . $row['pdf_path'];
+        @unlink($abs);
+        @rmdir(dirname($abs));
+    }
+    $pdo->prepare("DELETE FROM paper_full_translations WHERE id=?")->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+function ai_paper_full_translate(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    if (!str_starts_with($contentType, 'multipart/form-data')) {
+        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロード してください', 400);
+    }
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file (PDF) が必要です', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
+    $tmpPdf = $f['tmp_name'];
+    $head = @file_get_contents($tmpPdf, false, null, 0, 5);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
+
+    $direction = (string)($_POST['direction'] ?? 'en2ja');
+    if (!in_array($direction, ['en2ja', 'ja2en'], true)) {
+        throw new ApiException('bad_request', 'direction は en2ja / ja2en のみ', 400);
+    }
+    $models = ai_paper_full_translate_models_for($direction);
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-5'));
+    if (!isset($models[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $cost = (int)$models[$reqModel];
+
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
+
+    // PDF 保存 (削除 時 / 再 表示 時 用)
+    $token = bin2hex(random_bytes(16));
+    $publicDir = '/var/www/labpay/public';
+    $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
+    $pdfAbs = $publicDir . $pdfRel;
+    @mkdir(dirname($pdfAbs), 0775, true);
+    if (!copy($tmpPdf, $pdfAbs)) { $pdfRel = null; } else { @chmod($pdfAbs, 0644); }
+
+    $pdfName = (string)($f['name'] ?? 'paper.pdf');
+    $rowId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, &$rowId) {
+        $pdo->prepare("INSERT INTO paper_full_translations
+            (user_id, share_token, pdf_path, pdf_name, direction, model, cost_points, status, progress_text)
+            VALUES (?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…')")
+            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $direction, $reqModel, $cost]);
+        $rowId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_full_translation', $rowId,
+            '論文 全訳 (' . $direction . ') 依頼料');
+    });
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
+        'cost_points' => $cost, 'direction' => $direction, 'model' => $reqModel,
+        'message' => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が 全訳 中… (10-30 分)。 結果ページを 開いて おいて も OK、 完了 通知 が 届きます。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(120);
+
+    ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
+}
+
+function ai_paper_full_translate_submit(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $direction, string $model, string $apiKey, int $uid): void {
+    try {
+        $pdo->prepare("UPDATE paper_full_translations SET status='processing' WHERE id=?")->execute([$rowId]);
+
+        $sys = $direction === 'ja2en' ? PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_JA2EN : PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA;
+        $userInstruction = $direction === 'ja2en'
+            ? "Translate the attached Japanese paper to full English with chapter-by-chapter back-translation, then a polish pass. Return JSON only per the schema."
+            : "添付 の 英語 論文 を 章 ごと に 日本語 で 全訳 + back-translation で 整合 確認 + 用語 統一 と 全体 ポリッシュ まで やって ください。 JSON のみ 返却。";
+
+        $payloadArr = [
+            'model' => $model,
+            'input' => [
+                ['role' => 'system', 'content' => $sys],
+                ['role' => 'user', 'content' => [
+                    ['type' => 'input_file', 'file_id' => $fileId],
+                    ['type' => 'input_text', 'text' => $userInstruction],
+                ]],
+            ],
+            'max_output_tokens' => 64000,
+            'background' => true,
+        ];
+        if (preg_match('/^(gpt-5|o1|o3)/', $model)) {
+            $payloadArr['reasoning'] = ['effort' => 'medium'];
+        }
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+        $ch = curl_init('https://api.openai.com/v1/responses');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+            CURLOPT_POSTFIELDS => $payload, CURLOPT_TIMEOUT => 60,
+        ]);
+        $resp = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($resp === false || $status >= 400) {
+            $errMsg = '';
+            if ($resp !== false) {
+                $errJ = json_decode((string)$resp, true);
+                $errMsg = $errJ['error']['message'] ?? '';
+            }
+            throw new RuntimeException('OpenAI: HTTP ' . $status . ($errMsg ? ' — ' . $errMsg : ''));
+        }
+        $j = json_decode((string)$resp, true);
+        $rid = (string)($j['id'] ?? '');
+        if ($rid === '') throw new RuntimeException('response_id 取得失敗');
+
+        $pdo->prepare("UPDATE paper_full_translations SET openai_response_id=?, progress_text=? WHERE id=?")
+            ->execute([$rid, '📑 章 を 切り出し て 翻訳 を 始めて います…', $rowId]);
+    } catch (Throwable $e) {
+        $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
+            ->execute([mb_substr($e->getMessage(), 0, 1000), $rowId]);
+        try {
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "❌ 論文 全訳 失敗: " . $e->getMessage() . " /#/paper-translate-full/r/{$token}",
+                'paper_full_translation', $rowId);
+        } catch (Throwable $_) {}
+    }
+}
+
+// Deep Research と 同じ ポーリング 構造 で OpenAI に 状態 を 問い合わせ。
+function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $rid    = (string)$row['openai_response_id'];
+    if ($apiKey === '' || $rid === '') return $row;
+
+    $ch = curl_init('https://api.openai.com/v1/responses/' . urlencode($rid));
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $apiKey],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $resp = curl_exec($ch); $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $status >= 400) return $row;
+    $j = json_decode((string)$resp, true);
+    if (!is_array($j)) return $row;
+
+    $oaStatus = (string)($j['status'] ?? 'in_progress');
+    $reasoningCount = 0; $hasMessage = false;
+    foreach (($j['output'] ?? []) as $it) {
+        $t = $it['type'] ?? '';
+        if ($t === 'reasoning') $reasoningCount++;
+        elseif ($t === 'message') $hasMessage = true;
+    }
+
+    if ($oaStatus === 'completed') {
+        $text = '';
+        foreach (($j['output'] ?? []) as $item) {
+            if (($item['type'] ?? '') === 'message') {
+                foreach (($item['content'] ?? []) as $c) {
+                    if (($c['type'] ?? '') === 'output_text' && isset($c['text'])) {
+                        $text .= (string)$c['text'];
+                    }
+                }
+            }
+        }
+        if ($text === '' && isset($j['output_text']) && is_string($j['output_text'])) $text = (string)$j['output_text'];
+        if ($text === '') {
+            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg='completed だが output_text が 空', finished_at=NOW() WHERE id=?")
+                ->execute([$row['id']]);
+            $row['status'] = 'error'; return $row;
+        }
+        $jsonText = $text;
+        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/s', $text, $m)) $jsonText = $m[1];
+        elseif (preg_match('/(\{.*\})/s', $text, $m)) $jsonText = $m[1];
+        $parsed = json_decode($jsonText, true);
+        if (!is_array($parsed)) {
+            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg='invalid JSON in output', finished_at=NOW() WHERE id=?")
+                ->execute([$row['id']]);
+            $row['status'] = 'error'; return $row;
+        }
+        $usage = $j['usage'] ?? [];
+        $usageRec = [
+            'input_tokens'  => (int)($usage['input_tokens']  ?? 0),
+            'output_tokens' => (int)($usage['output_tokens'] ?? 0),
+            'total_tokens'  => (int)($usage['total_tokens']  ?? 0),
+            'chapters_count'=> count($parsed['chapters'] ?? []),
+        ];
+        $pdo->prepare("UPDATE paper_full_translations
+                          SET result_json=?, usage_json=?, status='done',
+                              progress_text=NULL, finished_at=NOW()
+                        WHERE id=?")
+            ->execute([
+                json_encode($parsed, JSON_UNESCAPED_UNICODE),
+                json_encode($usageRec, JSON_UNESCAPED_UNICODE),
+                $row['id'],
+            ]);
+        try {
+            $title = is_array($parsed) ? (string)($parsed['title_translated'] ?? $parsed['title_original'] ?? $row['pdf_name']) : $row['pdf_name'];
+            $title = mb_substr($title, 0, 60);
+            notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
+                "📑 論文 全訳 完了: 「{$title}」 /#/paper-translate-full/r/{$row['share_token']}",
+                'paper_full_translation', (int)$row['id']);
+        } catch (Throwable $_) {}
+        $row['status'] = 'done';
+        $row['result_json'] = json_encode($parsed, JSON_UNESCAPED_UNICODE);
+        $row['usage_json']  = json_encode($usageRec, JSON_UNESCAPED_UNICODE);
+        $row['progress_text'] = null;
+        return $row;
+    }
+    if ($oaStatus === 'failed' || $oaStatus === 'cancelled' || $oaStatus === 'incomplete') {
+        $errMsg = (string)($j['error']['message'] ?? ($j['incomplete_details']['reason'] ?? $oaStatus));
+        $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
+            ->execute(['OpenAI ' . $oaStatus . ': ' . mb_substr($errMsg, 0, 400), (int)$row['id']]);
+        $row['status'] = 'error'; $row['error_msg'] = 'OpenAI ' . $oaStatus . ': ' . $errMsg;
+        return $row;
+    }
+    $progress = "🧠 推論 {$reasoningCount} 段 / OpenAI: {$oaStatus}";
+    $pdo->prepare("UPDATE paper_full_translations SET progress_text=? WHERE id=?")
         ->execute([$progress, (int)$row['id']]);
     $row['progress_text'] = $progress;
     return $row;

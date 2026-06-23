@@ -158,6 +158,11 @@ function refUrl(n) {
       const m = (n.body || '').match(/#\/deep-research\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/deep-research';
     }
+    case 'paper_full_translation': {
+      // v788 #386 body に 「/#/paper-translate-full/r/TOKEN」 が 入って いる
+      const m = (n.body || '').match(/#\/paper-translate-full\/r\/[a-f0-9]+/);
+      return m ? m[0] : '#/paper-translate-full';
+    }
     case 'mahjong':        return n.ref_id ? '#/mahjong/' + n.ref_id : '#/mahjong';
     case 'ito':            return n.ref_id ? '#/ito/' + n.ref_id : '#/ito';
     case 'jinrou':         return n.ref_id ? '#/jinrou/' + n.ref_id : '#/jinrou';
