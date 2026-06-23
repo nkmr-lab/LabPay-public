@@ -11,8 +11,8 @@ import { escapeHtml } from '../router.js';
 
 // 通知 軸 カテゴリ。 並び順 = 表示順。
 export const APP_CATEGORIES = [
-  { id: 'research',  label: '🔬 研究用',                  hint: '査読・原稿チェック・締切・タイマー・順番決め・学会情報・グループなど、研究活動で日常的に使うもの。' },
-  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: '投票・点呼・待ち合わせ・割り勘・集金・くじ引きなど、ラボの運営や合意形成で使うもの。' },
+  { id: 'research',  label: '🔬 研究用',                  hint: '論文 要約 / 全訳 / 査読 / 原稿 チェック / リライター / Deep Research など、 AI を 使って 研究 を 直接 進める もの。' },
+  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会 サポート (タイマー・順番決め・グループ・ルーレット) + 研究室 運営 (投票・チャット・締切・集金 など)。' },
   { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。販売・購入・オークション。' },
   { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応 通知を出すジャンル。' },
   { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
@@ -43,25 +43,25 @@ export const APPS = [
   { id: 'screen-shares', cat: 'lab-mgmt', url: '#/screen-shares', title: '🖼 一時画像共有',  desc: 'ラボ全体 or 自分のグループ宛に画像 + ひとことを投げて 15 分〜24 時間の間ホームに大きく表示。「とにかく今これ見て」 用。', defaultVisible: true },
   { id: 'file-transfers', cat: 'lab-mgmt', url: '#/file-transfers', title: '📦 ファイル送受信', desc: '相手を指定してファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) を送れる。受信者のダウンロード回数と初回ダウンロード時刻を記録。', defaultVisible: true },
   // v740 #288 BingoFit
-  { id: 'bingofit',      cat: 'lab-mgmt', url: '#/bingofit/closet', title: '👕 着回しビンゴ (BingoFit)', desc: '手持ちの服を 25 着以上登録すると、 日曜始まりの 5x5 ビンゴ盤が自動生成。 着た服を盤面から開けて、 ラインが揃えばビンゴ。 背景は自動で透過処理されます。', defaultVisible: true },
+  { id: 'bingofit',      cat: 'game',     url: '#/bingofit/closet', title: '👕 着回しビンゴ (BingoFit)', desc: '手持ちの服を 25 着以上登録すると、 日曜始まりの 5x5 ビンゴ盤が自動生成。 着た服を盤面から開けて、 ラインが揃えばビンゴ。 背景は自動で透過処理されます。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
-  { id: 'deadlines',     cat: 'research', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
-  { id: 'timers',        cat: 'research', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
+  { id: 'deadlines',     cat: 'lab-mgmt', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
+  { id: 'timers',        cat: 'lab-mgmt', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
   { id: 'auctions',      cat: 'trade',  url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。締切時刻に最高額入札者が落札。落札後は出品者が 「請求を飛ばす」 ボタンから請求機能で集金 (連絡先はラボ内既知前提なので表示しない)。', defaultVisible: true },
   { id: 'nomikai',       cat: 'lab-mgmt', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
 
   // 🟡 inform — 全員に届くお知らせ
-  { id: 'notices',       cat: 'research', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。カテゴリで切替。全メンバーが投稿可、投稿者 + admin が編集/削除。', defaultVisible: true },
-  { id: 'groups',        cat: 'research', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
+  { id: 'notices',       cat: 'lab-mgmt', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。カテゴリで切替。全メンバーが投稿可、投稿者 + admin が編集/削除。', defaultVisible: true },
+  { id: 'groups',        cat: 'lab-mgmt', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
 
   // 🟢 tool — その場で結論が出る道具 (通知なし)
   { id: 'roulette',      cat: 'lab-mgmt', url: '#/roulette',      title: '🎰 ルーレット',       desc: 'メンバーから1人をくじ引きで選ぶ。賞金つき可。', defaultVisible: true },
   { id: 'text-roulette', cat: 'lab-mgmt', url: '#/text-roulette', title: '🍜 どこ行くルーレット', desc: '昼飯どこ行く / 何食べるなど、任意のテキスト候補から1つを選ぶシンプル版。', defaultVisible: true },
-  { id: 'random-groups', cat: 'research', url: '#/random-groups', title: '🎲 ランダムグループ生成', desc: '選んだメンバーをNチームにランダム分け。学年/男女を 「できるだけ均等」 にする配慮も可能。', defaultVisible: true },
+  { id: 'random-groups', cat: 'lab-mgmt', url: '#/random-groups', title: '🎲 ランダムグループ生成', desc: '選んだメンバーをNチームにランダム分け。学年/男女を 「できるだけ均等」 にする配慮も可能。', defaultVisible: true },
   // v523 #160 順番決め (発表順 / 当番 など)。 メンバーを 1 列に並び替えて 結果を全員に通知。
-  { id: 'orderings',     cat: 'research', url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを1列に並び替え (発表順 / 当番割など)。結果は各メンバーに通知される。1人ずつめくる演出付き。', defaultVisible: true },
+  { id: 'orderings',     cat: 'lab-mgmt', url: '#/orderings',     title: '📋 順番決め',         desc: 'メンバーを1列に並び替え (発表順 / 当番割など)。結果は各メンバーに通知される。1人ずつめくる演出付き。', defaultVisible: true },
   // v529 #165 ストップウォッチを 締切系 (urgent) カテゴリに移動 (発表時間など 「時間で動く」 性質)
-  { id: 'stopwatches',   cat: 'research', url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有のカウントアップ計測器。開始 / 一時停止 / リセット全員操作可。発表時間や雑談計測用。', defaultVisible: true },
+  { id: 'stopwatches',   cat: 'lab-mgmt', url: '#/stopwatches',   title: '⏱ ストップウォッチ', desc: 'メンバー共有のカウントアップ計測器。開始 / 一時停止 / リセット全員操作可。発表時間や雑談計測用。', defaultVisible: true },
 
   { id: 'todos',         cat: 'ai',     url: '#/todos',         title: '📝 自分の TODO',     desc: 'やる こと メモ。 サーバ 保存 で 端末間 共有。 完了 と 未完了 を 分けて 表示。', defaultVisible: true },
 
@@ -108,7 +108,7 @@ export const APPS = [
   // v570 #223 人狼 (v574 から game カテゴリへ)
   { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
   { id: 'fortune',       cat: 'game',   url: '#/fortune',        title: '🔮 今日 の 占い',  desc: '1 日 1 回 だけ 引ける 運勢。 同じ 日 は 同じ 結果、 翌日 0:00 で 更新。 ホーム の 残高 エリア 🔮 アイコン から も 引ける。', defaultVisible: true },
-  { id: 'conf-deadlines',cat: 'research',url: '#/conf-deadlines', title: '📅 学会 〆切',    desc: '国際 会議 / 国内 研究会 / 論文誌 の 投稿 〆切 を 登録 + 一覧。 誰でも 登録 可、 全員 閲覧 可。 〆切順 表示 + あと N 日 のカウントダウン。', defaultVisible: true },
+  { id: 'conf-deadlines',cat: 'lab-mgmt',url: '#/conf-deadlines', title: '📅 学会 〆切',    desc: '国際 会議 / 国内 研究会 / 論文誌 の 投稿 〆切 を 登録 + 一覧。 誰でも 登録 可、 全員 閲覧 可。 〆切順 表示 + あと N 日 のカウントダウン。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップや スポーツ大会、 大学受験・学会 best paper など 「順位」 を予想して 参加フィー で景品を 山分け。 1位のみ / 1-2位 / 1-4位 を 起案ごとに設定可能。', defaultVisible: true },
   // v609 #235 勝敗予測 (試合のスコアを当てる)
@@ -136,11 +136,35 @@ export function setAppVisible(_id, _visible) {}
 // v602 カテゴリ内の 表示順を 明示指定するマップ。 値は [id, id, ...] の順序。
 //   ここに 含まれない id は ソース宣言順 で末尾に。
 const CATEGORY_ORDER = {
+  // v792 #396 研究用 は AI で 研究 を 直接 進める もの だけ
   research: [
-    'paper-summary', 'paper-translate-full', 'paper-review', 'resume-check', 'rewriter', 'deep-research',
-    'conf-deadlines',
+    'deep-research',
+    'paper-summary',
+    'paper-translate-full',
+    'resume-check',
+    'paper-review',
+    'rewriter',
+  ],
+  // v792 #396 ゼミ・研究会・学会 サポート 群 → 研究室 運営 群 の 順 で 並べる
+  'lab-mgmt': [
+    // ── ゼミ・研究会・学会 サポート ──
     'timers', 'stopwatches',
-    'orderings', 'random-groups', 'groups', 'deadlines', 'notices',
+    'orderings', 'random-groups',
+    'groups',                       // イベント・出張 用 グループ 作成
+    'roulette', 'text-roulette',
+    // ── 研究室 運営 サポート ──
+    'polls',                        // 投票・アンケート
+    'chat-rooms',                   // チャット (重要 / 連絡 / 相談 / DM)
+    'file-transfers',               // ファイル 送受信
+    'screen-shares',                // 一時 画像 共有
+    'deadlines',                    // 〆切
+    'conf-deadlines',               // 学会 〆切
+    'notices',                      // 重要連絡 / 学会情報
+    'rollcalls',                    // 点呼
+    'meetups',                      // 待ち合わせ
+    'nomikai',                      // 飲み会 割り勘
+    'requests',                     // 請求 (集金)
+    'bait',                         // アルバイト 申請
   ],
 };
 
