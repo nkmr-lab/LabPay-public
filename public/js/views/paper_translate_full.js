@@ -62,20 +62,40 @@ export async function renderPaperTranslateFull() {
       </div>
     </div>
     <div id="pft-result"></div>
-    <div id="pft-history" class="card" style="margin-top:8px"><div class="muted">過去 の 履歴…</div></div>
+    <!-- v807 自分の履歴 と みんなの公開 全訳 を タブ で 切替 (要約 ページ と 同 形式) -->
     <div class="card" style="margin-top:8px">
-      <div class="bold" style="font-size:14px; margin-bottom:6px">🌐 みんなの 公開 全訳</div>
-      <div class="row" style="gap:6px; margin-bottom:6px">
-        <input type="text" id="pft-shared-q" placeholder="キーワード で 検索" style="flex:1">
-        <button id="pft-shared-go">検索</button>
+      <div class="row" style="gap:6px; margin-bottom:8px; align-items:center">
+        <button id="pft-tab-mine"   class="btn primary" data-tab="mine"   style="font-size:13px">📜 自分 の 履歴</button>
+        <button id="pft-tab-shared" class="btn"         data-tab="shared" style="font-size:13px">🌐 みんなの 公開 全訳</button>
+        <span style="flex:1"></span>
+        <input type="search" id="pft-search" placeholder="🔍 検索 (公開 のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
       </div>
-      <div id="pft-shared-list"><div class="muted">読み込み中…</div></div>
+      <div id="pft-list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
   await loadSettings();
-  await loadHistory();
-  await loadSharedList('');
   bindEvents();
+  // v807 タブ 切替
+  let curTab = 'mine';
+  let searchTimer = null;
+  const tabMine   = document.getElementById('pft-tab-mine');
+  const tabShared = document.getElementById('pft-tab-shared');
+  const searchEl  = document.getElementById('pft-search');
+  const switchTab = (t) => {
+    curTab = t;
+    tabMine.classList.toggle('primary',   t === 'mine');
+    tabShared.classList.toggle('primary', t === 'shared');
+    searchEl.hidden = (t !== 'shared');
+    if (t === 'mine') loadHistory();
+    else              loadSharedList(searchEl.value || '');
+  };
+  tabMine.addEventListener('click',   () => switchTab('mine'));
+  tabShared.addEventListener('click', () => switchTab('shared'));
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
+  });
+  await loadHistory();   // 初期 は 自分の履歴
 }
 
 function bindEvents() {
@@ -159,32 +179,41 @@ async function loadSettings() {
   catch (e) { toast('設定 読込 失敗: ' + e.message); return; }
 }
 
+// v807 自分 の 履歴 (タイトル / 公開中 バッジ / 削除 ボタン)
 async function loadHistory() {
-  const root = document.getElementById('pft-history');
+  const root = document.getElementById('pft-list');
   try {
     const d = await get('/api/ai/paper_full_translate');
-    if (!d.items || !d.items.length) {
-      root.innerHTML = '<div class="muted">過去 の 履歴 は ありません</div>';
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = '<div class="empty">まだ 全訳 履歴 が ありません</div>';
       return;
     }
-    root.innerHTML = `
-      <div class="bold" style="margin-bottom:6px">📚 自分 の 履歴</div>
-      <div style="display:flex; flex-direction:column; gap:4px">
-        ${d.items.map(r => `
-          <div style="display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:6px; background:#fafafa">
-            <a class="grow" href="#/paper-translate-full/r/${escapeHtml(r.share_token)}" style="text-decoration:none; color:inherit; min-width:0; flex:1">
-              <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${r.is_shared ? '🌐 ' : ''}${escapeHtml(r.pdf_name || '')}</div>
-              <div class="meta" style="font-size:11px">${escapeHtml(r.direction)} ・ ${escapeHtml(r.model)} ・ ${r.cost_points}pt ・ ${escapeHtml(r.status)} ・ ${escapeHtml(r.created_at || '')}</div>
-            </a>
-            <button class="ghost" data-del="${r.id}" style="font-size:14px; padding:2px 8px">🗑</button>
-          </div>`).join('')}
-      </div>`;
-    root.querySelectorAll('[data-del]').forEach(b => {
-      b.addEventListener('click', async ev => {
+    root.innerHTML = items.map(it => {
+      const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
+      const title = it.title_translated || it.title_original || it.pdf_name;
+      const sub = it.title_translated
+        ? `${it.pdf_name} ・ ${it.direction} ・ ${it.model} ・ ${it.cost_points}pt ・ ${it.status} ・ ${it.created_at}`
+        : `${it.direction} ・ ${it.model} ・ ${it.cost_points}pt ・ ${it.status} ・ ${it.created_at}`;
+      const icon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
+      return `
+        <div class="list-item" style="gap:8px; align-items:flex-start; padding:8px 0">
+          <a href="#/paper-translate-full/r/${escapeHtml(it.share_token)}" style="display:flex; gap:8px; flex:1; min-width:0; text-decoration:none; color:inherit; align-items:flex-start">
+            <div style="flex:none; font-size:20px">${icon}</div>
+            <div class="grow" style="min-width:0">
+              <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
+              <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
+            </div>
+          </a>
+          <button class="btn" data-pft-del="${it.id}" title="削除" style="font-size:11px; padding:2px 8px; flex:none">🗑</button>
+        </div>`;
+    }).join('');
+    root.querySelectorAll('[data-pft-del]').forEach(b => {
+      b.addEventListener('click', async (ev) => {
         ev.preventDefault();
-        if (!confirm('この 履歴 を 削除 しますか?')) return;
-        try { await del('/api/ai/paper_full_translate/' + b.dataset.del); await loadHistory(); }
-        catch (e) { toast('削除 失敗: ' + e.message); }
+        if (!confirm('この 全訳 を 履歴 から 削除 します か? (PDF も 一緒 に 削除)')) return;
+        try { await del('/api/ai/paper_full_translate/' + b.dataset.pftDel); toast('削除 しました'); await loadHistory(); }
+        catch (e) { toast('失敗: ' + e.message); }
       });
     });
   } catch (e) {
@@ -192,26 +221,34 @@ async function loadHistory() {
   }
 }
 
+// v807 みんなの 公開 全訳 (q で 検索)
 async function loadSharedList(q) {
-  const root = document.getElementById('pft-shared-list');
+  const root = document.getElementById('pft-list');
   if (!root) return;
+  root.innerHTML = '<div class="muted">読み込み中…</div>';
   try {
     const url = '/api/ai/paper_full_translate/shared' + (q ? '?q=' + encodeURIComponent(q) : '');
     const d = await get(url);
-    if (!d.items || !d.items.length) {
-      root.innerHTML = `<div class="muted">${q ? '該当 なし' : '公開 されて いる 全訳 は まだ ありません'}</div>`;
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = q
+        ? `<div class="empty">「${escapeHtml(q)}」 に 該当 する 公開 全訳 が ありません</div>`
+        : '<div class="empty">まだ 公開 されて いる 全訳 は ありません</div>';
       return;
     }
-    root.innerHTML = d.items.map(r => `
-      <a class="list-item" href="#/paper-translate-full/r/${escapeHtml(r.share_token)}" style="flex-direction:column; align-items:stretch; text-decoration:none; color:inherit">
-        <div style="display:flex; align-items:center; gap:6px">
-          ${avatarHtml(r.author_name, r.author_avatar, 'xs')}
-          <span class="bold" style="font-size:13px">${escapeHtml(r.author_name || '')}</span>
-          <span class="meta" style="font-size:11px; margin-left:auto">${escapeHtml(r.direction)} ・ ${r.cost_points || 0}pt ・ ${escapeHtml(r.shared_at || '')}</span>
-        </div>
-        <div style="font-size:13.5px; margin-top:4px; font-weight:600">📑 ${escapeHtml(r.title_translated || r.title_original || r.pdf_name)}</div>
-        ${r.authors ? `<div style="font-size:12px; color:#6b7280; margin-top:2px">${escapeHtml(r.authors)}</div>` : ''}
-      </a>`).join('');
+    root.innerHTML = items.map(it => {
+      const title = it.title_translated || it.title_original || it.pdf_name;
+      const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
+      return `
+        <a href="#/paper-translate-full/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
+          <div style="flex:none; font-size:20px">📑</div>
+          <div class="grow" style="min-width:0">
+            <div class="bold" style="font-size:14px">${escapeHtml(title)}</div>
+            ${meta ? `<div class="hint-sm" style="font-size:11px; color:#666; margin-top:1px">${escapeHtml(meta)}</div>` : ''}
+            <div class="hint-sm" style="font-size:10px; margin-top:3px; color:#9ca3af">${avatarHtml(it.author_name, it.author_avatar, 'xs')} ${escapeHtml(it.author_name)} ・ ${escapeHtml(it.direction)} ・ ${escapeHtml(it.shared_at || it.created_at)}</div>
+          </div>
+        </a>`;
+    }).join('');
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -312,32 +349,38 @@ async function refresh(token) {
     }
     const myUid = Number(state.me?.id || 0);
     const isOwner = myUid > 0 && Number(d.author_id) === myUid;
-    const shareToggleHtml = (isOwner && d.status === 'done') ? `
-      <div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-radius:6px; font-size:13px">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer">
-          <input type="checkbox" id="pft-share-toggle" ${d.is_shared ? 'checked' : ''}>
-          <span>🌐 みんな に 公開</span>
-        </label>
-      </div>` : '';
+    const isShared = !!d.is_shared;
+    // v807 要約 ページ と 同じ 「ボタン 形式」 公開 切替
+    const shareButton = (isOwner && d.status === 'done') ? `
+      <button class="btn ${isShared ? 'primary' : ''}" id="pft-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px; margin-left:6px">
+        ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
+      </button>` : '';
+    const sharedTag = (isShared && !isOwner) ? '<span class="tag ok" style="font-size:11px; margin-left:6px">🌐 公開全訳</span>' : '';
     const header = `
       <div class="card">
         <a href="#/paper-translate-full" class="hint">← 論文 全訳</a>
-        <h2 style="margin:6px 0">📑 ${escapeHtml(d.pdf_name)}
+        <h2 style="margin:6px 0; font-size:17px">📑 ${escapeHtml(d.result?.title_translated || d.result?.title_original || d.pdf_name)}
           ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
           ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
-          ${d.is_shared ? '<span class="tag" style="background:#dcfce7; color:#15803d">🌐 公開中</span>' : ''}
+          ${sharedTag}
         </h2>
-        <div class="meta">
-          ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} ・
+        ${d.result?.title_original && d.result?.title_translated ? `<div class="meta" style="font-size:13px; opacity:0.8; margin-top:2px">原題: ${escapeHtml(d.result.title_original)}</div>` : ''}
+        ${d.result?.authors ? `<div class="meta" style="font-size:13px; margin-top:2px">👥 ${escapeHtml(d.result.authors)}</div>` : ''}
+        ${d.result?.venue   ? `<div class="meta" style="font-size:13px; margin-top:2px">📍 ${escapeHtml(d.result.venue)}</div>` : ''}
+        <div class="meta" style="font-size:11px; margin-top:6px">
+          ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 ・
           ${escapeHtml(d.direction)} ・ ${escapeHtml(d.model || '')} ・ ${d.cost_points}pt ・ ${escapeHtml(d.created_at || '')}
         </div>
-        ${d.pdf_path ? `<div style="margin-top:6px"><a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener">📥 元 PDF</a></div>` : ''}
+        <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+          ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📥 元の PDF を 開く</a>` : ''}
+          ${shareButton}
+          <a class="btn" href="#/paper-translate-full" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
+        </div>
         ${Array.isArray(d.cross_refs) && d.cross_refs.length ? `
-          <div style="margin-top:6px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
+          <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
             📑 同じ PDF の 関連:
             ${d.cross_refs.map(x => `<a href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="margin-left:6px">${x.kind === 'paper_translate' ? '📄 要約' : '📑 全訳'} (${escapeHtml(x.model || '')}, ${escapeHtml(x.status || '')}) ↗</a>`).join(' / ')}
           </div>` : ''}
-        ${shareToggleHtml}
       </div>
       <div id="pft-r"></div>`;
     app.innerHTML = header;
@@ -378,10 +421,16 @@ async function refresh(token) {
       });
       return;
     }
-    document.getElementById('pft-share-toggle')?.addEventListener('change', async (e) => {
-      try { await patch('/api/ai/paper_full_translate/' + d.id, { is_shared: e.target.checked });
-            toast(e.target.checked ? '公開 しました' : '非公開 に しました'); refresh(token); }
-      catch (err) { toast('失敗: ' + err.message); e.target.checked = !e.target.checked; }
+    // v807 button-style 公開 切替
+    document.getElementById('pft-share-toggle')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget;
+      const wasOn = btn.dataset.on === '1';
+      btn.disabled = true;
+      try {
+        await patch('/api/ai/paper_full_translate/' + d.id, { is_shared: !wasOn });
+        toast(!wasOn ? '公開 しました' : '非公開 に しました');
+        refresh(token);
+      } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; }
     });
     paint(d);
   } catch (e) {

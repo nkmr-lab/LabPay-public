@@ -2567,16 +2567,22 @@ function ai_paper_full_translate_models_for(string $direction): array {
 function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
+    // v807 result_json から title 系 も 取り 出して 履歴 表示 を リッチ に
     $st = $pdo->prepare("SELECT id, share_token, pdf_name, direction, model, cost_points, status,
-                                created_at, finished_at, is_shared, shared_at, error_msg
+                                created_at, finished_at, is_shared, shared_at, error_msg, result_json
                            FROM paper_full_translations WHERE user_id = ?
                        ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
     $rows = array_map(function ($r) {
+        $result = !empty($r['result_json']) ? json_decode((string)$r['result_json'], true) : null;
         return [
             'id' => (int)$r['id'],
             'share_token' => $r['share_token'],
             'pdf_name'    => $r['pdf_name'],
+            'title_translated' => is_array($result) ? ($result['title_translated'] ?? null) : null,
+            'title_original'   => is_array($result) ? ($result['title_original']   ?? null) : null,
+            'authors'          => is_array($result) ? ($result['authors']          ?? null) : null,
+            'venue'            => is_array($result) ? ($result['venue']            ?? null) : null,
             'direction'   => $r['direction'],
             'model'       => $r['model'],
             'cost_points' => (int)$r['cost_points'],
