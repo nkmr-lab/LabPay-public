@@ -1612,7 +1612,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $rowId, '論文要約 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約 依頼料');
     });
 
     json_response_no_exit([
@@ -1714,7 +1714,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
         $pdo->prepare("UPDATE paper_translates SET status='pending', model=?, cost_points=cost_points+? WHERE id=?")
             ->execute([$reqModel, $cost, $id]);
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_translate', $id, '論文要約 やりなおし');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $id, '論文要約 やりなおし');
     });
 
     json_response_no_exit([
@@ -2221,7 +2221,7 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
             VALUES (?,?,?,?,?,?,'pending')")
             ->execute([$uid, $token, $query, $tier['model'], $depth, $cost]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'deep_research', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
     });
 
     json_response_no_exit([
@@ -2779,7 +2779,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_full_translation', $rowId,
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
             '論文 全訳 (' . $direction . ') 依頼料');
     });
 

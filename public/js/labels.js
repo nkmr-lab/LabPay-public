@@ -16,6 +16,9 @@ export const LEDGER_TYPE_LABEL = {
   // v720 #316 ゲーム / 予想系 (mahjong_buyin が「予想 / 勝敗予測」にも流用されている。
   //   ラベルを追加して履歴で「mahjong_buyin」そのまま表示されるのを解消)。
   paper_review:           '論文査読料',
+  paper_translate:        '論文要約料',          // v805
+  paper_full_translate:   '論文全訳料',          // v805
+  deep_research:          'Deep Research料',     // v805
   resume_check:           '原稿チェック料',
   rewriter:               'リライター料',
   mahjong_buyin:          'ゲーム参加フィー',

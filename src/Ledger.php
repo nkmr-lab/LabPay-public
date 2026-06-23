@@ -26,6 +26,10 @@ class Ledger {
         'custom_game_play_fee',
         // v623 絵しりとり プレイフィー 2pt/人
         'shiritori_buyin',
+        // v805 論文 系 を 個別 に (= 取引 履歴 で 「論文 査読料」 と 一括 表示 さ れて いた もの を 分割)
+        'paper_translate',       // 論文 要約 料
+        'paper_full_translate',  // 論文 全訳 料
+        'deep_research',         // Deep Research 料
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.
