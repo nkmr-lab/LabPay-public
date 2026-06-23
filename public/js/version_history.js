@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v800', d: '2026-06-23', s: '🐛 v799 で admin.js が JS エラー「Identifier LEDGER_TYPE_LABEL has already been declared」 で 全 画面 真っ白 だった 件 を hotfix。 labels.js から の import と 重複 宣言 して しまって いた → 重複 const を 削除 し、 labels.js の LEDGER_TYPE_LABEL / ledgerTypeLabel を そのまま 使用 する 形 に' },
   { v: 'v799', d: '2026-06-23', s: '📊 admin ダッシュボード に SYSTEM 収支 の 種別 内訳 を 追加。 これ まで 「手数料 総額」 = type=fee の もの しか 出して おらず、 paper_review (論文 系) / rewriter / ゲーム buyin など SYSTEM が 受け取った 大半 が 見え なかった。 v799 で /api/admin/dashboard が system_income_by_type + system_outflow_by_type + 合計 を 返す ように なり、 UI で 「💰 SYSTEM が 受け取った 内訳」 (種別 / pt / 件数) と 「💸 SYSTEM が 支払った 内訳」 を 表示。 ダッシュボード 上部 にも 「SYSTEM 収入 合計 / SYSTEM 支出 合計 / 収支 (戻り)」 を 追加 (= 「どれくらい 戻り が ある か」 が 一目 で 分かる)' },
   { v: 'v798', d: '2026-06-23', s: '🐛📑📑 10 秒 ごと の 強制 引き 戻し bug 修正 + 全訳 側 に 「同時 に 要約 も」 IF。 (1) 要約 / 全訳 / Deep Research の polling timer が ユーザ が 別 ページ に 移って いて も 動き 続け、 10 秒 ごと に app.innerHTML を 上書き して 「⏳ 処理 中… 」 画面 で 引き 戻して いた 不具合 を 修正 (= location.hash が 該当 token を 含まなく なった ら timer 自殺 + 描画 もしない)。 (2) 全訳 ページ にも 要約 ページ と 同じ 「📑📑 同時 に 要約 も 走らせる」 トグル を 追加 (要約 モデル 選択 + 同時 課金)' },
   { v: 'v797', d: '2026-06-23', s: '🔗 同じ PDF の 要約 / 全訳 を 横展開 リンク で 行き来 できる ように。 paper_translates / paper_full_translations に pdf_sha256 列 を 追加 (= アップロード PDF の SHA-256)、 結果 ページ で 「📑 同じ PDF の 関連」 として 同 ユーザ の 「要約 / 全訳」 の 別 種類 row へ の リンク を 表示。 同 PDF + 同 ツール + 同 モデル でも 別 ジョブ / 別 課金 (要約 と 全訳 で 処理 内容 が 違う ため 流用 しない)。 既存 row も backfill 済。 migration 162' },

@@ -1,7 +1,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
-import { LEDGER_TYPE_LABEL } from '../labels.js';
+import { LEDGER_TYPE_LABEL, ledgerTypeLabel } from '../labels.js';
 
 // Common fetch-into-element wrapper used by every admin sub-section.
 // fetcher(el) does the actual GET + DOM build + event wiring; on throw we set a friendly message.
@@ -578,24 +578,6 @@ function renderSupply(d) {
     </div>
   `;
 }
-
-// v799 ledger の type コード → 表示 名 (admin 向け)
-const LEDGER_TYPE_LABEL = {
-  initial: '初期 配布', checkin: 'ラボイン 報酬', purchase: '購入',
-  fee: '手数料', reversal: 'reversal', transfer: '送金',
-  task_reward: 'タスク 報酬', deposit: 'escrow 預け', refund: '返金',
-  burn: 'burn', scrapbox_reward: 'Scrapbox 寄稿', app_open_reward: 'アプリ 起動 報酬',
-  paper_review: '論文 系 (要約 / 全訳 / 査読 / Deep Research 等)',
-  resume_check: '原稿 チェック',
-  mahjong_buyin: '麻雀 参加 費', mahjong_payout: '麻雀 配当', mahjong_refund: '麻雀 返金',
-  mahjong_rake: '麻雀 ラケ', mahjong_ai_payout: '麻雀 AI 配当',
-  othello_buyin: 'オセロ 参加 費', othello_payout: 'オセロ 配当', othello_refund: 'オセロ 返金',
-  daifugo_buyin: '大富豪 参加 費', daifugo_payout: '大富豪 配当', daifugo_refund: '大富豪 返金',
-  rewriter: 'リライター',
-  custom_game_buyin: '自作 ゲーム 参加 費', custom_game_payout: '自作 ゲーム 配当',
-  custom_game_refund: '自作 ゲーム 返金',
-};
-function ledgerTypeLabel(t) { return LEDGER_TYPE_LABEL[t] || t; }
 
 function renderSystemFlowTable(title, items, total, color) {
   if (!items || !items.length) return '';
