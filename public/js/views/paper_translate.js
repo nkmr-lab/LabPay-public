@@ -281,7 +281,7 @@ async function refreshShared(token, app) {
   }
 }
 
-function paintResult(d, token) {
+async function paintResult(d, token) {
   // v762 #381 既存 result_json の 日本語 中 の 不要 な 半角 スペース を 取り除いて から 描画
   const r = stripJaSpacesDeep(d.result || {});
   const app = document.getElementById('app');
@@ -332,7 +332,20 @@ function paintResult(d, token) {
     ${renderKeyReferences(r.key_references)}
 
     ${renderOchiai(r.ochiai_method || r.ochiai)}
+
+    <div id="pt-interactions-slot"></div>
   `);
+  // v789 #389 いいね・ブックマーク・コメント
+  if (d.id) {
+    try {
+      const mod = await import('../paper_interactions.js');
+      const slot = document.getElementById('pt-interactions-slot');
+      if (slot) {
+        slot.innerHTML = mod.renderInteractionsCard({ apiBase: '/api/ai/paper_translate', refId: d.id, reactions: d.reactions });
+        mod.mountInteractionsCard({ apiBase: '/api/ai/paper_translate', refId: d.id });
+      }
+    } catch (_) { /* fall through */ }
+  }
   document.getElementById('pt-copy')?.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);

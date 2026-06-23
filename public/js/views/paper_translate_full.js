@@ -270,7 +270,7 @@ async function refresh(token) {
   }
 }
 
-function paint(d) {
+async function paint(d) {
   const r = d.result || {};
   const u = d.usage || {};
   const root = document.getElementById('pft-r');
@@ -296,6 +296,8 @@ function paint(d) {
         </div>
       </div>` : ''}
 
+    <div id="pft-interactions-slot"></div>
+
     ${r.overall_polish ? `
       <div class="card" style="border:2px solid #6b21a8">
         <div class="bold" style="color:#6b21a8; font-size:14px">🪡 全体 ポリッシュ</div>
@@ -317,6 +319,17 @@ function paint(d) {
           </div>` : ''}
       </div>` : ''}
   `;
+  // v789 #389 いいね・ブックマーク・コメント
+  if (d.id) {
+    try {
+      const mod = await import('../paper_interactions.js');
+      const slot = document.getElementById('pft-interactions-slot');
+      if (slot) {
+        slot.innerHTML = mod.renderInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id, reactions: d.reactions });
+        mod.mountInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id });
+      }
+    } catch (_) {}
+  }
 }
 
 function renderChapter(ch, idx, direction) {

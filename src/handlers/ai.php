@@ -169,6 +169,31 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_full_translate_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v789 #389 論文 要約 / 全訳 に いいね・ブックマーク・コメント
+    if (in_array($sub, ['paper_translate', 'paper_full_translate'], true)
+        && isset($seg[2]) && ctype_digit((string)$seg[2])
+        && ($seg[3] ?? '') === 'react' && $method === 'POST') {
+        ai_paper_react_toggle($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2]);
+        return;
+    }
+    if (in_array($sub, ['paper_translate', 'paper_full_translate'], true)
+        && isset($seg[2]) && ctype_digit((string)$seg[2])
+        && ($seg[3] ?? '') === 'comments' && $method === 'GET' && !isset($seg[4])) {
+        ai_paper_comments_list($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2]);
+        return;
+    }
+    if (in_array($sub, ['paper_translate', 'paper_full_translate'], true)
+        && isset($seg[2]) && ctype_digit((string)$seg[2])
+        && ($seg[3] ?? '') === 'comments' && $method === 'POST' && !isset($seg[4])) {
+        ai_paper_comment_create($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2]);
+        return;
+    }
+    if (in_array($sub, ['paper_translate', 'paper_full_translate'], true)
+        && isset($seg[2]) && ctype_digit((string)$seg[2])
+        && ($seg[3] ?? '') === 'comments' && $method === 'DELETE' && isset($seg[4]) && ctype_digit((string)$seg[4])) {
+        ai_paper_comment_delete($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2], (int)$seg[4]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -1388,7 +1413,8 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
 }
 
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $meId = (int)$u['id'];
     $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.pdf_path, pt.model, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
                                 pt.pages_count, pt.pages_dir, pt.is_shared, pt.shared_at,
@@ -1398,6 +1424,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'paper_translate not found', 404);
+    $reactions = ai_paper_reactions_summary($pdo, 'paper_translate', (int)$row['id'], $meId);  // v789 #389
     json_response([
         'id'            => (int)$row['id'],
         'author_id'     => (int)$row['user_id'],
@@ -1415,6 +1442,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'pages_dir'     => $row['pages_dir'],
         'is_shared'     => (bool)$row['is_shared'],
         'shared_at'     => $row['shared_at'],
+        'reactions'     => $reactions,   // v789 #389
     ]);
 }
 
@@ -2492,7 +2520,8 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
 }
 
 function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $meId = (int)$u['id'];
     $st = $pdo->prepare("SELECT pft.*, u.display_name AS author_name, u.avatar_url AS author_avatar
                            FROM paper_full_translations pft JOIN users u ON u.id = pft.user_id
                           WHERE pft.share_token = ?");
@@ -2504,7 +2533,9 @@ function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token)
         try { $row = ai_paper_full_translate_poll($pdo, $cfg, $row); }
         catch (Throwable $_) {}
     }
+    $reactions = ai_paper_reactions_summary($pdo, 'paper_full_translation', (int)$row['id'], $meId);  // v789 #389
     json_response([
+        'reactions' => $reactions,
         'id'                 => (int)$row['id'],
         'author_id'          => (int)$row['user_id'],
         'author_name'        => $row['author_name'],
@@ -2829,6 +2860,129 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
         ->execute([$progress, (int)$row['id']]);
     $row['progress_text'] = $progress;
     return $row;
+}
+
+// ============================================================================
+// v789 #389 論文 要約 / 全訳 共通 の いいね・ブックマーク・コメント。
+//   ref_type は 'paper_translate' (要約) / 'paper_full_translation' (全訳)。
+// ============================================================================
+
+function ai_paper_react_toggle(PDO $pdo, array $cfg, string $refType, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    $kind = (string)($body['kind'] ?? '');
+    if (!in_array($kind, ['like', 'bookmark'], true)) {
+        throw new ApiException('bad_request', 'kind は like / bookmark のみ', 400);
+    }
+    // 存在 確認
+    $table = $refType === 'paper_full_translation' ? 'paper_full_translations' : 'paper_translates';
+    $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
+    $st->execute([$refId]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'ref not found', 404);
+
+    // toggle
+    $del = $pdo->prepare("DELETE FROM paper_reactions WHERE ref_type=? AND ref_id=? AND user_id=? AND kind=?");
+    $del->execute([$refType, $refId, $uid, $kind]);
+    $turnedOn = $del->rowCount() === 0;
+    if ($turnedOn) {
+        $pdo->prepare("INSERT INTO paper_reactions (ref_type, ref_id, user_id, kind) VALUES (?,?,?,?)")
+            ->execute([$refType, $refId, $uid, $kind]);
+    }
+    // 集計
+    $st2 = $pdo->prepare("SELECT kind, COUNT(*) AS n FROM paper_reactions WHERE ref_type=? AND ref_id=? GROUP BY kind");
+    $st2->execute([$refType, $refId]);
+    $counts = ['like' => 0, 'bookmark' => 0];
+    foreach ($st2->fetchAll(PDO::FETCH_ASSOC) as $r) $counts[$r['kind']] = (int)$r['n'];
+    json_response([
+        'ok' => true, 'kind' => $kind, 'on' => $turnedOn,
+        'counts' => $counts,
+    ]);
+}
+
+function ai_paper_comments_list(PDO $pdo, array $cfg, string $refType, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT c.id, c.user_id, c.body, c.created_at,
+                                u.display_name, u.avatar_url
+                           FROM paper_comments c JOIN users u ON u.id = c.user_id
+                          WHERE c.ref_type=? AND c.ref_id=?
+                          ORDER BY c.created_at ASC LIMIT 200");
+    $st->execute([$refType, $refId]);
+    $items = array_map(function ($r) use ($uid) {
+        return [
+            'id' => (int)$r['id'], 'user_id' => (int)$r['user_id'],
+            'display_name' => $r['display_name'], 'avatar_url' => $r['avatar_url'],
+            'body' => $r['body'], 'created_at' => $r['created_at'],
+            'mine' => (int)$r['user_id'] === $uid,
+        ];
+    }, $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response(['items' => $items]);
+}
+
+function ai_paper_comment_create(PDO $pdo, array $cfg, string $refType, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    $text = trim((string)($body['body'] ?? ''));
+    if ($text === '') throw new ApiException('bad_request', 'body が 必要', 400);
+    if (mb_strlen($text) > 2000) throw new ApiException('bad_request', 'コメント は 2000 字 まで', 400);
+    $table = $refType === 'paper_full_translation' ? 'paper_full_translations' : 'paper_translates';
+    $st = $pdo->prepare("SELECT user_id FROM $table WHERE id=?");
+    $st->execute([$refId]);
+    $authorUid = (int)$st->fetchColumn();
+    if (!$authorUid) throw new ApiException('not_found', 'ref not found', 404);
+    $ins = $pdo->prepare("INSERT INTO paper_comments (ref_type, ref_id, user_id, body) VALUES (?,?,?,?)");
+    $ins->execute([$refType, $refId, $uid, $text]);
+    $cid = (int)$pdo->lastInsertId();
+    // 投稿者 が 別人 なら 通知
+    if ($authorUid !== $uid) {
+        try {
+            $snippet = mb_substr($text, 0, 60);
+            $kindLabel = $refType === 'paper_full_translation' ? '論文 全訳' : '論文 要約';
+            $urlSlug   = $refType === 'paper_full_translation' ? 'paper-translate-full' : 'paper-summary';
+            // ref token を 取って 通知 body に 埋め込み (Slack DM が body 内 URL を 拾う)
+            $st2 = $pdo->prepare("SELECT share_token FROM $table WHERE id=?");
+            $st2->execute([$refId]);
+            $token = (string)$st2->fetchColumn();
+            notify_safely($pdo, $cfg, $authorUid, 'admin_notice',
+                "💬 {$u['display_name']} さん が あなた の {$kindLabel} に コメント: 「{$snippet}」 /#/{$urlSlug}/r/{$token}",
+                $refType === 'paper_full_translation' ? 'paper_full_translation' : 'paper_translate',
+                $refId);
+        } catch (Throwable $_) {}
+    }
+    json_response(['ok' => true, 'id' => $cid]);
+}
+
+function ai_paper_comment_delete(PDO $pdo, array $cfg, string $refType, int $refId, int $cid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT user_id FROM paper_comments WHERE id=? AND ref_type=? AND ref_id=?");
+    $st->execute([$cid, $refType, $refId]);
+    $cuid = (int)$st->fetchColumn();
+    if (!$cuid) throw new ApiException('not_found', 'comment not found', 404);
+    if ($cuid !== $uid && (string)($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', '本人 / admin のみ 削除 可', 403);
+    }
+    $pdo->prepare("DELETE FROM paper_comments WHERE id=?")->execute([$cid]);
+    json_response(['ok' => true]);
+}
+
+// 要約 / 全訳 の get_shared レスポンス に 反応 集計 を 付ける ヘルパ
+function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $meId): array {
+    $st = $pdo->prepare("SELECT kind, COUNT(*) AS n, MAX(user_id=?) AS mine
+                           FROM paper_reactions WHERE ref_type=? AND ref_id=? GROUP BY kind");
+    $st->execute([$meId, $refType, $refId]);
+    $r = ['like' => 0, 'bookmark' => 0, 'my_like' => false, 'my_bookmark' => false];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $r[$row['kind']] = (int)$row['n'];
+        if ((int)$row['mine'] === 1) $r['my_' . $row['kind']] = true;
+    }
+    // コメント 数 も 軽く 取得
+    $st2 = $pdo->prepare("SELECT COUNT(*) FROM paper_comments WHERE ref_type=? AND ref_id=?");
+    $st2->execute([$refType, $refId]);
+    $r['comment_count'] = (int)$st2->fetchColumn();
+    return $r;
 }
 
 // POST /api/ai/short_title { context: "...説明..." }
