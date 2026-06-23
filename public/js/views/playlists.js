@@ -531,14 +531,22 @@ function renderCurrent() {
   const meta = parseUrlMeta(it.url);
   if (meta.type === 'youtube') {
     // YouTube IFrame API: enablejsapi=1 + listen for 'onStateChange' postMessage
-    const autoNext = detailState.autoNext;
     root.innerHTML = `
       <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
-        <iframe id="ytframe" src="${meta.embed}${autoNext ? '&autoplay=1' : '&autoplay=1'}"
+        <iframe id="ytframe" src="${meta.embed}&autoplay=1"
                 allow="autoplay; encrypted-media; fullscreen" allowfullscreen
                 frameborder="0"
                 style="position:absolute; inset:0; width:100%; height:100%"></iframe>
       </div>`;
+    // v808 #401 YouTube IFrame に 「onStateChange を 親 に 送って」 と 登録 する 必要 あり。
+    //   これ が ない と enablejsapi=1 でも イベント が 飛んで こない → 次曲 自動 再生 が 効かない。
+    const yt = document.getElementById('ytframe');
+    yt?.addEventListener('load', () => {
+      try {
+        yt.contentWindow?.postMessage(JSON.stringify({event:'listening', id:'ytframe', channel:'widget'}), '*');
+        yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
+      } catch (_) {}
+    });
   } else if (meta.type.startsWith('spotify_')) {
     root.innerHTML = `
       <iframe src="${meta.embed}" style="width:100%; height:152px; border:none; border-radius:8px"

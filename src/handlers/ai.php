@@ -1151,11 +1151,12 @@ const PAPER_TRANSLATE_COST = 20;
 
 // v773 #395 モデル 一覧 を 整理。 gpt-4o-mini / gpt-4o は 200-300 字 の 短い 要約 しか
 //   出さない ので 論文要約 用途 では 失格 → 削除。 真面目 に 要約 する なら 最低 でも 4.1。
+// v808 #403 価格 調整 + デフォルト を gpt-5 に。
 const PAPER_TRANSLATE_MODELS = [
-    'gpt-4.1'     => 30,   // 標準 (デフォルト、 500 字 前後 / 節)
-    'gpt-5-mini'  => 40,   // 5 系 軽量
-    'gpt-5'       => 80,   // 5 系 標準 (高品質、 各節 が しっかり 厚く 出る)
-    'o1'          => 120,  // o1 推論 モデル (深い 解析、 reasoning tokens 込みで 実 6-10x)
+    'gpt-4.1'     => 20,   // 軽量 (短め に なり がち)
+    'gpt-5-mini'  => 30,   // 5 系 軽量
+    'gpt-5'       => 50,   // 5 系 標準 (デフォルト、 高品質)
+    'o1'          => 80,   // o1 推論 モデル (深い 解析)
 ];
 
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
@@ -1392,7 +1393,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
         'items'        => $rows,
         'cost_points'  => PAPER_TRANSLATE_COST,        // 旧 互換
         'models'       => PAPER_TRANSLATE_MODELS,      // v755 #371 モデル別 価格 リスト
-        'default_model'=> 'gpt-4.1',                   // v772 #394 デフォルト を 4.1 (30pt) に
+        'default_model'=> 'gpt-5',                     // v808 #403 デフォルト を gpt-5 (50pt) に
     ]);
 }
 
@@ -1533,8 +1534,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $head = @file_get_contents($tmpPdf, false, null, 0, 5);
     if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
 
-    // v755 #371 モデル 選択 (default: gpt-4.1 から v772 #394)。 未対応 モデル は 400。
-    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4.1'));
+    // v808 #403 デフォルト を gpt-5 に。 未対応 モデル は 400。
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-5'));
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
     }
@@ -1547,11 +1548,17 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     //   違う ので、 「同 ファイル なら 流用」 で 課金 を スキップ する とは しない 方針)。
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // 残高 チェック
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < $cost) {
-        throw new ApiException('insufficient_balance',
-            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    // v808 #402 ラボ PI (user_id=3 = 中村) は SYSTEM の 表現 でも あり、 自分 で 自分 に
+    //   ポイント を 払って も 意味 が ない の で 課金 スキップ (cost は そのまま 表示 用 に 保持)。
+    $skipCharge = ($uid === 3);
+
+    if (!$skipCharge) {
+        // 残高 チェック
+        $bal = Ledger::balanceOfUser($pdo, $uid);
+        if ($bal < $cost) {
+            throw new ApiException('insufficient_balance',
+                sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+        }
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -1616,7 +1623,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
             (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share)
             VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)")
@@ -1624,7 +1631,10 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約 依頼料');
+        // v808 #402 ラボ PI は 課金 スキップ (cost は 表示 上 残す が ledger 転送 しない)
+        if (!$skipCharge) {
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約 依頼料');
+        }
     });
 
     json_response_no_exit([
@@ -2438,15 +2448,16 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 //   Responses API + background mode + polling で 長 時間 ジョブ を 安全 に。
 // ============================================================================
 
+// v808 #403 価格 調整 + デフォルト を gpt-5 に。
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
-    'gpt-5-mini' => 25,    // v791 #395 1/2 に 引き下げ (50→25)
-    'gpt-5'      => 60,    // 120 → 60
-    'o1'         => 100,   // 200 → 100
+    'gpt-5-mini' => 30,
+    'gpt-5'      => 50,   // デフォルト
+    'o1'         => 80,
 ];
-const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x、 1/2 に 引き下げ
-    'gpt-5-mini' => 125,   // 250 → 125
-    'gpt-5'      => 300,   // 600 → 300
-    'o1'         => 500,   // 1000 → 500
+const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x
+    'gpt-5-mini' => 150,
+    'gpt-5'      => 250,  // デフォルト
+    'o1'         => 400,
 ];
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
@@ -2772,10 +2783,14 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     // v797 SHA-256 は 横展開 リンク 用 だけ に 算出 (同 PDF でも 別 ジョブ で 走らせる、 課金 も 別)
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < $cost) {
-        throw new ApiException('insufficient_balance',
-            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    // v808 #402 ラボ PI (user_id=3) は 課金 スキップ
+    $skipCharge = ($uid === 3);
+    if (!$skipCharge) {
+        $bal = Ledger::balanceOfUser($pdo, $uid);
+        if ($bal < $cost) {
+            throw new ApiException('insufficient_balance',
+                sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+        }
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -2791,14 +2806,17 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
             (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
-            '論文 全訳 (' . $direction . ') 依頼料');
+        // v808 #402 ラボ PI は 課金 スキップ
+        if (!$skipCharge) {
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+                '論文 全訳 (' . $direction . ') 依頼料');
+        }
     });
 
     json_response_no_exit([

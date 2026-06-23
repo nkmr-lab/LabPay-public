@@ -505,9 +505,11 @@ function renderChapter(ch, idx, direction) {
   const titleTrans = ch.chapter_title_translated || '';
   const samples = Array.isArray(ch.back_translation_samples) ? ch.back_translation_samples : [];
   const terms = Array.isArray(ch.key_terms) ? ch.key_terms : [];
+  // v808 #399 章 番号 (1, 2, ...) を 出さない。 元 タイトル に 既に「1.」「Chapter 1」「第1章」 等
+  //   が 含まれて る ケース が 多く、 二重 表記 で 違和感 が あった。 タイトル を そのまま 出す。
   return `
     <div style="padding:10px 12px; border-left:3px solid var(--primary); background:#fafafa; border-radius:0 6px 6px 0">
-      <div class="bold" style="font-size:14px; color:var(--primary)">${idx+1}. ${escapeHtml(titleTrans)} ${titleOrig ? `<span style="font-size:12px; color:#6b7280; font-weight:400">(${escapeHtml(titleOrig)})</span>` : ''}</div>
+      <div class="bold" style="font-size:14px; color:var(--primary)">${escapeHtml(titleTrans || '(無題)')} ${titleOrig ? `<span style="font-size:12px; color:#6b7280; font-weight:400">(${escapeHtml(titleOrig)})</span>` : ''}</div>
       <div style="font-size:13.5px; line-height:1.85; margin-top:8px; white-space:pre-wrap">${escapeHtml(ch.translation || '')}</div>
       ${samples.length ? `
         <details style="margin-top:8px; background:#fff; padding:6px 10px; border-radius:6px">
