@@ -297,28 +297,38 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         // v799 SYSTEM の 収支 を 種類 別 に 取得 (= 「手数料 だけ」 じゃ なく
         //   paper_review / rewriter / ゲーム buyin など SYSTEM が 受け取った もの 全部 +
         //   minting / scrapbox_reward など SYSTEM が 出した もの 全部 を 並べる)。
-        $stIO = $pdo->prepare("
-            SELECT
-              CASE WHEN to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
-              type,
-              SUM(amount) AS pt,
-              COUNT(*)    AS n
-            FROM ledger
-            WHERE to_account_id = ? OR from_account_id = ?
-            GROUP BY dir, type
-            ORDER BY pt DESC");
-        $stIO->execute([$sysAcc, $sysAcc, $sysAcc]);
-        $income = [];   $outflow = [];
-        foreach ($stIO->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $entry = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
-            if ($r['dir'] === 'in') $income[] = $entry;
-            else                    $outflow[] = $entry;
-        }
+        // v801 ESCROW も 同じ ように 種類 別 内訳 を 出す (= deposit / task_reward /
+        //   refund / 各 ゲーム buyin / payout / refund 等 の 流れ が 見える ように)。
+        $breakdown = function (int $acctId) use ($pdo) {
+            $st = $pdo->prepare("
+                SELECT
+                  CASE WHEN to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
+                  type,
+                  SUM(amount) AS pt,
+                  COUNT(*)    AS n
+                FROM ledger
+                WHERE to_account_id = ? OR from_account_id = ?
+                GROUP BY dir, type
+                ORDER BY pt DESC");
+            $st->execute([$acctId, $acctId, $acctId]);
+            $in = []; $outA = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $e = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
+                if ($r['dir'] === 'in') $in[] = $e; else $outA[] = $e;
+            }
+            return [$in, $outA];
+        };
+        [$sysIn, $sysOut] = $breakdown($sysAcc);
+        [$escIn, $escOut] = $breakdown($escAcc);
         $out = array_map('intval', $row);
-        $out['system_income_by_type']  = $income;
-        $out['system_outflow_by_type'] = $outflow;
-        $out['system_income_total']  = array_sum(array_column($income,  'pt'));
-        $out['system_outflow_total'] = array_sum(array_column($outflow, 'pt'));
+        $out['system_income_by_type']   = $sysIn;
+        $out['system_outflow_by_type']  = $sysOut;
+        $out['system_income_total']     = array_sum(array_column($sysIn,  'pt'));
+        $out['system_outflow_total']    = array_sum(array_column($sysOut, 'pt'));
+        $out['escrow_income_by_type']   = $escIn;
+        $out['escrow_outflow_by_type']  = $escOut;
+        $out['escrow_income_total']     = array_sum(array_column($escIn,  'pt'));
+        $out['escrow_outflow_total']    = array_sum(array_column($escOut, 'pt'));
         json_response($out);
         return;
     }
