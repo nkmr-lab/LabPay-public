@@ -294,7 +294,32 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
               (SELECT COALESCE(SUM(unit_price * qty),0) FROM purchases)                     AS turnover
         ";
         $row = $pdo->query($sql)->fetch();
-        json_response(array_map('intval', $row));
+        // v799 SYSTEM の 収支 を 種類 別 に 取得 (= 「手数料 だけ」 じゃ なく
+        //   paper_review / rewriter / ゲーム buyin など SYSTEM が 受け取った もの 全部 +
+        //   minting / scrapbox_reward など SYSTEM が 出した もの 全部 を 並べる)。
+        $stIO = $pdo->prepare("
+            SELECT
+              CASE WHEN to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
+              type,
+              SUM(amount) AS pt,
+              COUNT(*)    AS n
+            FROM ledger
+            WHERE to_account_id = ? OR from_account_id = ?
+            GROUP BY dir, type
+            ORDER BY pt DESC");
+        $stIO->execute([$sysAcc, $sysAcc, $sysAcc]);
+        $income = [];   $outflow = [];
+        foreach ($stIO->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $entry = ['type' => (string)$r['type'], 'pt' => (int)$r['pt'], 'n' => (int)$r['n']];
+            if ($r['dir'] === 'in') $income[] = $entry;
+            else                    $outflow[] = $entry;
+        }
+        $out = array_map('intval', $row);
+        $out['system_income_by_type']  = $income;
+        $out['system_outflow_by_type'] = $outflow;
+        $out['system_income_total']  = array_sum(array_column($income,  'pt'));
+        $out['system_outflow_total'] = array_sum(array_column($outflow, 'pt'));
+        json_response($out);
         return;
     }
 

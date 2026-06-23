@@ -579,24 +579,69 @@ function renderSupply(d) {
   `;
 }
 
+// v799 ledger の type コード → 表示 名 (admin 向け)
+const LEDGER_TYPE_LABEL = {
+  initial: '初期 配布', checkin: 'ラボイン 報酬', purchase: '購入',
+  fee: '手数料', reversal: 'reversal', transfer: '送金',
+  task_reward: 'タスク 報酬', deposit: 'escrow 預け', refund: '返金',
+  burn: 'burn', scrapbox_reward: 'Scrapbox 寄稿', app_open_reward: 'アプリ 起動 報酬',
+  paper_review: '論文 系 (要約 / 全訳 / 査読 / Deep Research 等)',
+  resume_check: '原稿 チェック',
+  mahjong_buyin: '麻雀 参加 費', mahjong_payout: '麻雀 配当', mahjong_refund: '麻雀 返金',
+  mahjong_rake: '麻雀 ラケ', mahjong_ai_payout: '麻雀 AI 配当',
+  othello_buyin: 'オセロ 参加 費', othello_payout: 'オセロ 配当', othello_refund: 'オセロ 返金',
+  daifugo_buyin: '大富豪 参加 費', daifugo_payout: '大富豪 配当', daifugo_refund: '大富豪 返金',
+  rewriter: 'リライター',
+  custom_game_buyin: '自作 ゲーム 参加 費', custom_game_payout: '自作 ゲーム 配当',
+  custom_game_refund: '自作 ゲーム 返金',
+};
+function ledgerTypeLabel(t) { return LEDGER_TYPE_LABEL[t] || t; }
+
+function renderSystemFlowTable(title, items, total, color) {
+  if (!items || !items.length) return '';
+  const rows = items.map(r => `
+    <tr>
+      <td>${escapeHtml(ledgerTypeLabel(r.type))} <span class="hint-sm" style="font-size:10px; color:#9ca3af">(${escapeHtml(r.type)})</span></td>
+      <td class="right mono">${r.pt.toLocaleString()}</td>
+      <td class="right mono" style="color:#6b7280">${r.n.toLocaleString()}</td>
+    </tr>`).join('');
+  return `
+    <div style="margin-top:8px">
+      <div class="bold" style="color:${color}; font-size:13px; margin-bottom:4px">${escapeHtml(title)} 合計 ${total.toLocaleString()} pt</div>
+      <table class="table" style="font-size:12.5px">
+        <thead><tr><th>種別</th><th class="right">合計 pt</th><th class="right">件数</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderDashboard(d) {
   const el = document.getElementById('dash');
   if (!el) return;
+  const inFlowHtml  = renderSystemFlowTable('💰 SYSTEM が 受け取った 内訳',   d.system_income_by_type,  d.system_income_total  || 0, '#15803d');
+  const outFlowHtml = renderSystemFlowTable('💸 SYSTEM が 支払った / 配布 した 内訳', d.system_outflow_by_type, d.system_outflow_total || 0, '#b45309');
+  const netReturn = (d.system_income_total || 0) - (d.system_outflow_total || 0);
   el.innerHTML = `
     <table class="table">
       <tr><th>SYSTEM残高</th><td class="right mono">${d.system_balance.toLocaleString()}</td>
           <th>ESCROW残高</th><td class="right mono">${d.escrow_balance.toLocaleString()}</td></tr>
       <tr><th>総発行 (initial+checkin)</th><td class="right mono">${d.total_minted.toLocaleString()}</td>
-          <th>手数料総額</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
+          <th>手数料 (fee のみ)</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
+      <tr><th>SYSTEM 収入 合計</th><td class="right mono" style="color:#15803d">${(d.system_income_total || 0).toLocaleString()}</td>
+          <th>SYSTEM 支出 合計</th><td class="right mono" style="color:#b45309">${(d.system_outflow_total || 0).toLocaleString()}</td></tr>
+      <tr><th>収支 (戻り)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
+          <th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td></tr>
       <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
           <th>取引数</th><td class="right mono">${d.purchase_count.toLocaleString()}</td></tr>
       <tr><th>うち Admin 保有</th><td class="right mono">${d.held_by_admins.toLocaleString()}</td>
           <th>うち 一般 保有</th><td class="right mono">${d.held_by_members.toLocaleString()}</td></tr>
-      <tr><th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td>
-          <th>商品マスタ数</th><td class="right mono">${d.product_count.toLocaleString()}</td></tr>
-      <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>
+      <tr><th>商品マスタ数</th><td class="right mono">${d.product_count.toLocaleString()}</td>
           <th>稼働中出品</th><td class="right mono">${d.listings_active.toLocaleString()}</td></tr>
+      <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>
+          <th>&nbsp;</th><td class="right mono">&nbsp;</td></tr>
     </table>
+    ${inFlowHtml}
+    ${outFlowHtml}
   `;
 }
 
