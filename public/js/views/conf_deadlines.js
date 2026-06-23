@@ -198,11 +198,17 @@ export async function renderConfDeadlineForm({ params } = {}) {
       <fieldset class="field" style="border:1px solid var(--line); border-radius:6px; padding:8px">
         <legend style="font-size:12px; color:#666">📅 メイン 締切 (必須)</legend>
         <div class="row" style="gap:6px; flex-wrap:wrap">
-          <label style="flex:1; min-width:120px"><span class="lbl" style="font-size:11px">種別 (任意)</span>
-            <input type="text" id="cd-deadline-label" maxlength="50" placeholder="原稿 / 申込 / アブスト 等">
+          <label style="flex:1; min-width:120px"><span class="lbl" style="font-size:11px">種別</span>
+            <select id="cd-deadline-label-sel">
+              <option value="申込">申込</option>
+              <option value="原稿" selected>原稿</option>
+              <option value="__other__">その他…</option>
+            </select>
+            <input type="text" id="cd-deadline-label" maxlength="50" placeholder="種別 を 入力 (例: アブスト)" style="display:none; margin-top:4px">
           </label>
           <label style="flex:2; min-width:180px"><span class="lbl" style="font-size:11px">日時</span>
             <input type="datetime-local" id="cd-deadline" required>
+            <div class="hint-sm" style="font-size:10px">時刻 未指定 (= 日付 のみ) なら 自動で 23:59 に なります</div>
           </label>
         </div>
         <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
@@ -252,7 +258,14 @@ export async function renderConfDeadlineForm({ params } = {}) {
     row.className = 'row cd-extra-row';
     row.style.cssText = 'gap:6px; align-items:flex-end; margin-bottom:4px; flex-wrap:wrap';
     row.innerHTML = `
-      <input type="text" class="cd-ex-label" maxlength="50" placeholder="種別 (申込 / アブスト 等)" style="flex:1; min-width:120px; font-size:12px">
+      <div style="flex:1; min-width:120px">
+        <select class="cd-ex-label-sel" style="font-size:12px">
+          <option value="申込">申込</option>
+          <option value="原稿">原稿</option>
+          <option value="__other__">その他…</option>
+        </select>
+        <input type="text" class="cd-ex-label" maxlength="50" placeholder="種別 入力" style="display:none; margin-top:3px; font-size:12px">
+      </div>
       <input type="datetime-local" class="cd-ex-dt" style="flex:2; min-width:180px; font-size:12px">
       <label style="display:inline-flex; gap:4px; align-items:center; font-size:11px">
         <input type="checkbox" class="cd-ex-aoe"> AOE
@@ -263,7 +276,17 @@ export async function renderConfDeadlineForm({ params } = {}) {
       <button type="button" class="btn cd-ex-rm danger" style="font-size:11px; padding:2px 6px">削除</button>
     `;
     if (initial) {
-      row.querySelector('.cd-ex-label').value = initial.label || '';
+      // v791 #394 種別 を select + 「その他」 だけ テキスト ボックス
+      const lbl = initial.label || '';
+      const sel = row.querySelector('.cd-ex-label-sel');
+      const txt = row.querySelector('.cd-ex-label');
+      if (lbl === '申込' || lbl === '原稿') {
+        sel.value = lbl;
+      } else if (lbl) {
+        sel.value = '__other__';
+        txt.value = lbl;
+        txt.style.display = '';
+      }
       const dt = String(initial.deadline_at || '').replace(' ', 'T').slice(0, 16);
       if (initial.is_aoe) {
         row.querySelector('.cd-ex-aoe').checked = true;
@@ -273,6 +296,9 @@ export async function renderConfDeadlineForm({ params } = {}) {
       }
       if (initial.is_tentative) row.querySelector('.cd-ex-tentative').checked = true;
     }
+    row.querySelector('.cd-ex-label-sel').addEventListener('change', e => {
+      row.querySelector('.cd-ex-label').style.display = e.target.value === '__other__' ? '' : 'none';
+    });
     row.querySelector('.cd-ex-rm').addEventListener('click', () => row.remove());
     extrasRoot.appendChild(row);
   }
@@ -302,6 +328,18 @@ export async function renderConfDeadlineForm({ params } = {}) {
   extrasRoot.addEventListener('input', e => {
     if (e.target.classList?.contains('cd-ex-dt')) force2359OnDateChange(e.target);
   });
+  // v791 #394 メイン 締切 種別 select、 「その他」 だけ テキスト ボックス
+  const dlLblSel = document.getElementById('cd-deadline-label-sel');
+  const dlLblTxt = document.getElementById('cd-deadline-label');
+  dlLblSel.addEventListener('change', () => {
+    dlLblTxt.style.display = dlLblSel.value === '__other__' ? '' : 'none';
+  });
+  // v791 #394 日付 のみ → 23:59 を 強制 補完 する ヘルパ
+  function ensureTimeIso(s) {
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s + 'T23:59';
+    return s;
+  }
   let aoeUserTouched = false;
   document.getElementById('cd-deadline-aoe').addEventListener('change', () => { aoeUserTouched = true; });
   document.getElementById('cd-category').addEventListener('change', e => {
@@ -333,7 +371,18 @@ export async function renderConfDeadlineForm({ params } = {}) {
       document.getElementById('cd-name').value = r.name || '';
       document.getElementById('cd-full-name').value = r.full_name || '';
       document.getElementById('cd-url').value = r.url || '';
-      document.getElementById('cd-deadline-label').value = r.deadline_label || '';
+      // v791 #394 種別 を select + テキスト で 復元
+      {
+        const lbl = r.deadline_label || '';
+        if (lbl === '申込' || lbl === '原稿') {
+          dlLblSel.value = lbl;
+          dlLblTxt.style.display = 'none';
+        } else if (lbl) {
+          dlLblSel.value = '__other__';
+          dlLblTxt.value = lbl;
+          dlLblTxt.style.display = '';
+        }
+      }
       document.getElementById('cd-deadline-aoe').checked = !!Number(r.deadline_is_aoe);
       document.getElementById('cd-deadline-tentative').checked = !!Number(r.deadline_is_tentative);
       if (Number(r.deadline_is_aoe)) {
@@ -360,17 +409,25 @@ export async function renderConfDeadlineForm({ params } = {}) {
   }
   document.getElementById('cd-save').addEventListener('click', async () => {
     const isAoe = document.getElementById('cd-deadline-aoe').checked;
-    const dlInput = document.getElementById('cd-deadline').value;
+    // v791 #394 日付 のみ なら 23:59 に 補完
+    const dlInput = ensureTimeIso(document.getElementById('cd-deadline').value);
     const deadlineJst = isAoe ? aoeStrToJstStr(dlInput) : dlInput;
+    // v791 #394 種別: select の 「申込 / 原稿」 → そのまま、 「その他」 → テキスト 値
+    const dlLblSelVal = dlLblSel.value;
+    const deadlineLabel = dlLblSelVal === '__other__'
+      ? (dlLblTxt.value.trim() || null)
+      : dlLblSelVal;
     const extras = [];
     document.querySelectorAll('.cd-extra-row').forEach(row => {
-      const lbl = row.querySelector('.cd-ex-label').value.trim();
-      const dt = row.querySelector('.cd-ex-dt').value;
+      const selVal = row.querySelector('.cd-ex-label-sel').value;
+      const txtVal = row.querySelector('.cd-ex-label').value.trim();
+      const lbl = selVal === '__other__' ? (txtVal || '締切') : selVal;
+      const dt = ensureTimeIso(row.querySelector('.cd-ex-dt').value);  // v791 #394
       const aoe = row.querySelector('.cd-ex-aoe').checked;
       const tentative = row.querySelector('.cd-ex-tentative').checked;
       if (!dt) return;
       extras.push({
-        label: lbl || '締切',
+        label: lbl,
         deadline_at: aoe ? aoeStrToJstStr(dt) : dt,
         is_aoe: aoe ? 1 : 0,
         is_tentative: tentative ? 1 : 0,
@@ -382,7 +439,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
       full_name: document.getElementById('cd-full-name').value.trim() || null,
       url: document.getElementById('cd-url').value.trim() || null,
       deadline_at: deadlineJst,
-      deadline_label: document.getElementById('cd-deadline-label').value.trim() || null,
+      deadline_label: deadlineLabel,
       deadline_is_aoe: isAoe ? 1 : 0,
       deadline_is_tentative: document.getElementById('cd-deadline-tentative').checked ? 1 : 0,
       extra_deadlines: extras,

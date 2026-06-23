@@ -2361,14 +2361,14 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 // ============================================================================
 
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
-    'gpt-5-mini' => 50,
-    'gpt-5'      => 120,
-    'o1'         => 200,
+    'gpt-5-mini' => 25,    // v791 #395 1/2 に 引き下げ (50→25)
+    'gpt-5'      => 60,    // 120 → 60
+    'o1'         => 100,   // 200 → 100
 ];
-const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x (J→E は em-dash 除去 + 用語 統一 で 重い)
-    'gpt-5-mini' => 250,
-    'gpt-5'      => 600,
-    'o1'         => 1000,
+const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x、 1/2 に 引き下げ
+    'gpt-5-mini' => 125,   // 250 → 125
+    'gpt-5'      => 300,   // 600 → 300
+    'o1'         => 500,   // 1000 → 500
 ];
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
