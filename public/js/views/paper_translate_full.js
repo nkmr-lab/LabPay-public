@@ -186,6 +186,7 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
+    if (j.deduped) toast('🔁 同じ PDF + 方向 + モデル の 全訳 が 既に あった の で 流用 (課金 なし)');
     if (location.hash === startedHash || location.hash.startsWith('#/paper-translate-full')) {
       location.hash = '#/paper-translate-full/r/' + j.share_token;
     } else {
@@ -239,6 +240,11 @@ async function refresh(token) {
           ${escapeHtml(d.direction)} ・ ${escapeHtml(d.model || '')} ・ ${d.cost_points}pt ・ ${escapeHtml(d.created_at || '')}
         </div>
         ${d.pdf_path ? `<div style="margin-top:6px"><a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener">📥 元 PDF</a></div>` : ''}
+        ${Array.isArray(d.cross_refs) && d.cross_refs.length ? `
+          <div style="margin-top:6px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
+            📑 同じ PDF の 関連:
+            ${d.cross_refs.map(x => `<a href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="margin-left:6px">${x.kind === 'paper_translate' ? '📄 要約' : '📑 全訳'} (${escapeHtml(x.model || '')}, ${escapeHtml(x.status || '')}) ↗</a>`).join(' / ')}
+          </div>` : ''}
         ${shareToggleHtml}
       </div>
       <div id="pft-r"></div>`;

@@ -219,7 +219,9 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    toast('要約 開始 (' + (j.model || model) + ')');
+    // v797 同 PDF + 同 モデル の 既存 row を 流用 した 場合 は 別 メッセージ
+    if (j.deduped) toast('🔁 同じ PDF の 要約 が 既に あった の で 流用 しま した (課金 なし)');
+    else            toast('要約 開始 (' + (j.model || model) + ')');
 
     // v796 #398 全訳 も 同時 開始 する なら ここ で 2 本目 を 投げる (同じ PDF を 別 アップロード)
     let ftToken = null;
@@ -235,7 +237,9 @@ async function go() {
         const j2 = await r2.json().catch(() => ({}));
         if (!r2.ok) throw new Error(j2?.error?.message || j2?.error || ('HTTP ' + r2.status));
         ftToken = j2.share_token;
-        toast('全訳 も 開始 (' + (j2.model || ftModel) + ')');
+        // v797 全訳 側 も dedup 流用 した か どうか で メッセージ を 分ける
+        if (j2.deduped) toast('🔁 全訳 も 既存 row を 流用 (課金 なし)');
+        else             toast('全訳 も 開始 (' + (j2.model || ftModel) + ')');
       } catch (e2) {
         toast('全訳 開始 失敗: ' + e2.message + ' (要約 は 走って ます)');
       }
@@ -404,6 +408,11 @@ async function paintResult(d, token) {
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
         <a class="btn" href="#/paper-summary" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
+      ${Array.isArray(d.cross_refs) && d.cross_refs.length ? `
+        <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
+          📑 同じ PDF の 関連:
+          ${d.cross_refs.map(x => `<a href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="margin-left:6px">${x.kind === 'paper_full_translation' ? '📑 全訳' : '📄 要約'} (${escapeHtml(x.direction || '')}${x.direction ? '/' : ''}${escapeHtml(x.model || '')}, ${escapeHtml(x.status || '')}) ↗</a>`).join(' / ')}
+        </div>` : ''}
     </div>
 
     ${r.summary_one_paragraph ? `

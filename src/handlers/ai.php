@@ -1452,7 +1452,7 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
     $u = Auth::requireUser($pdo, $cfg);
     $meId = (int)$u['id'];
-    $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.pdf_path, pt.model, pt.result_json, pt.status,
+    $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.pdf_path, pt.pdf_sha256, pt.model, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
                                 pt.pages_count, pt.pages_dir, pt.is_shared, pt.shared_at,
                                 u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -1462,6 +1462,24 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'paper_translate not found', 404);
     $reactions = ai_paper_reactions_summary($pdo, 'paper_translate', (int)$row['id'], $meId);  // v789 #389
+    // v797 同 PDF (= 同 sha256) で 自分 の paper_full_translations row が あれ ば 相互 リンク を 出す
+    $crossRefs = [];
+    if (!empty($row['pdf_sha256']) && (int)$row['user_id'] === $meId) {
+        $stX = $pdo->prepare("SELECT share_token, direction, model, status FROM paper_full_translations
+                                WHERE user_id=? AND pdf_sha256=? AND status IN ('processing','done')
+                                ORDER BY id DESC LIMIT 3");
+        $stX->execute([$meId, $row['pdf_sha256']]);
+        foreach ($stX as $r) {
+            $crossRefs[] = [
+                'kind' => 'paper_full_translation',
+                'share_token' => $r['share_token'],
+                'direction' => $r['direction'],
+                'model' => $r['model'],
+                'status' => $r['status'],
+                'url_slug' => 'paper-translate-full',
+            ];
+        }
+    }
     json_response([
         'id'            => (int)$row['id'],
         'author_id'     => (int)$row['user_id'],
@@ -1480,6 +1498,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'is_shared'     => (bool)$row['is_shared'],
         'shared_at'     => $row['shared_at'],
         'reactions'     => $reactions,   // v789 #389
+        'cross_refs'    => $crossRefs,   // v797 同 PDF の 全訳 等
     ]);
 }
 
@@ -1508,6 +1527,11 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
     }
     $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+
+    // v797 同 PDF を 識別 する SHA-256 を 算出 (= 横展開 用 / 「同 PDF の 全訳 が ある」 リンク 等)。
+    //   注意: 同 PDF + 同 モデル でも 再 処理 は 別 row + 別 課金 で 行う (要約 と 全訳 で 扱う 軸 が
+    //   違う ので、 「同 ファイル なら 流用」 で 課金 を スキップ する とは しない 方針)。
+    $pdfSha = hash_file('sha256', $tmpPdf);
 
     // 残高 チェック
     $bal = Ledger::balanceOfUser($pdo, $uid);
@@ -1578,11 +1602,11 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $reqModel, $cost, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model)
-            VALUES (?,?,?,?,?,?,?,'pending',?,?,?,?)")
-            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $sys, 'null', $cost,
+            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model)
+            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?)")
+            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfSha, $sys, 'null', $cost,
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel]);
         $rowId = (int)$pdo->lastInsertId();
@@ -2571,8 +2595,26 @@ function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token)
         catch (Throwable $_) {}
     }
     $reactions = ai_paper_reactions_summary($pdo, 'paper_full_translation', (int)$row['id'], $meId);  // v789 #389
+    // v797 同 PDF の 要約 row が あれ ば 相互 リンク を 出す
+    $crossRefs = [];
+    if (!empty($row['pdf_sha256']) && (int)$row['user_id'] === $meId) {
+        $stX = $pdo->prepare("SELECT share_token, model, status FROM paper_translates
+                                WHERE user_id=? AND pdf_sha256=? AND status IN ('processing','done')
+                                ORDER BY id DESC LIMIT 3");
+        $stX->execute([$meId, $row['pdf_sha256']]);
+        foreach ($stX as $r) {
+            $crossRefs[] = [
+                'kind' => 'paper_translate',
+                'share_token' => $r['share_token'],
+                'model' => $r['model'],
+                'status' => $r['status'],
+                'url_slug' => 'paper-summary',
+            ];
+        }
+    }
     json_response([
-        'reactions' => $reactions,
+        'reactions'  => $reactions,
+        'cross_refs' => $crossRefs,   // v797
         'id'                 => (int)$row['id'],
         'author_id'          => (int)$row['user_id'],
         'author_name'        => $row['author_name'],
@@ -2702,6 +2744,9 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     }
     $cost = (int)$models[$reqModel];
 
+    // v797 SHA-256 は 横展開 リンク 用 だけ に 算出 (同 PDF でも 別 ジョブ で 走らせる、 課金 も 別)
+    $pdfSha = hash_file('sha256', $tmpPdf);
+
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -2721,11 +2766,11 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
-            (user_id, share_token, pdf_path, pdf_name, direction, model, cost_points, status, progress_text)
-            VALUES (?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…')")
-            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $direction, $reqModel, $cost]);
+            (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text)
+            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…')")
+            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost]);
         $rowId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, $cost, 'paper_review', 'paper_full_translation', $rowId,
             '論文 全訳 (' . $direction . ') 依頼料');
