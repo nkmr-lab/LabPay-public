@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v803', d: '2026-06-23', s: '📊🗂 admin 画面 整理: SYSTEM / ESCROW 収支 表 を 「詳細管理」 の 中 から 取り 出して 一番 上 の 「流通ポイント」 カード に 統合 (毎回 折りたたみ 展開 しなく て も 見える)。 「Scrapbox 名簿」 は 普段 触ら ない の で 折りたたみ デフォルト 閉 に' },
   { v: 'v802', d: '2026-06-23', s: '📊 SYSTEM の 収支 を 「ユーザ 直接 やり取り」 と 「ESCROW 経由」 で 分けて 表示 する ように 変更。 「戻り」 (= net return) は ユーザ 直接 の もの だけ で 計算 する 仕様 に (ESCROW 経由 は 循環 中 の 内部 移動 な ので 含め ない)。 メイン 表 に 「SYSTEM 収入 / 支出 (ユーザ 直接) 」 と 「SYSTEM 収入 / 支出 (ESCROW 経由)」 を 別 行 で 表示、 内訳 表 も 同じく 「💰 ユーザ 直接 (戻り 集計 対象)」 と 「🔁 ESCROW 経由 (戻り に は 入れない)」 に 分割' },
   { v: 'v801', d: '2026-06-23', s: '📊 admin ダッシュボード に ESCROW の 種別 内訳 + 累計 預入 / 払出 を 追加。 v799 で SYSTEM 用 に 作った 内訳 表 と 同 並び で ESCROW にも 「📥 ESCROW に 入った 内訳 (預け入れ)」 (deposit / 各 ゲーム buyin 等) と 「📤 ESCROW から 出た 内訳 (精算 / 返金)」 (task_reward / 各 ゲーム payout / refund 等) を 表示。 メイン 表 にも 「ESCROW 累計 預入 / 累計 払出」 行 を 追加。 残高 0 でも、 これ まで に どれくらい 通った か / どんな 種別 で 出入り した か が 一望 できます' },
   { v: 'v800', d: '2026-06-23', s: '🐛 v799 で admin.js が JS エラー「Identifier LEDGER_TYPE_LABEL has already been declared」 で 全 画面 真っ白 だった 件 を hotfix。 labels.js から の import と 重複 宣言 して しまって いた → 重複 const を 削除 し、 labels.js の LEDGER_TYPE_LABEL / ledgerTypeLabel を そのまま 使用 する 形 に' },

@@ -170,6 +170,10 @@ export async function renderAdmin() {
       <div class="muted" style="font-size:11px; margin-top:8px">
         Admin 以外の保有量が増えすぎたらインフレ気味、減りすぎたら手数料/還流不足の目安。
       </div>
+      <!-- v803 SYSTEM / ESCROW 収支 ダッシュボード を 一番 上 に 統合 -->
+      <div class="sep" style="margin:14px 0 8px"></div>
+      <h4 style="margin:4px 0 6px">SYSTEM / ESCROW 収支</h4>
+      <div id="dash" class="muted">読み込み中…</div>
     </div>
 
     <div class="card">
@@ -272,23 +276,21 @@ export async function renderAdmin() {
       <h4 style="margin:10px 0 4px">Zoom 連携</h4>
       <div id="zoom-section"><div class="muted">読み込み中…</div></div>
       <div class="sep" style="margin:14px 0 6px"></div>
-      <h4 style="margin:6px 0 4px">Scrapbox 名簿</h4>
-      <p class="hint-sm">
-        各メンバー の Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
-        他メンバーに既に紐づいてる名前を登録すると steal される。
-      </p>
-      <div id="sb-roster" class="list" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
+      <!-- v803 Scrapbox 名簿 は 普段 触らない の で 折りたたみ デフォルト 閉 -->
+      <details>
+        <summary style="cursor:pointer; font-weight:700; font-size:14px; margin:6px 0">📚 Scrapbox 名簿 (タップ で 開く)</summary>
+        <p class="hint-sm" style="margin-top:6px">
+          各メンバー の Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
+          他メンバーに既に紐づいてる名前を登録すると steal される。
+        </p>
+        <div id="sb-roster" class="list" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
+      </details>
     </div>
 
     <details class="card collapsible-form">
       <summary>詳細管理 (普段触らない設定など)</summary>
-      <div style="margin-top:10px">
-        <h3>管理ダッシュボード</h3>
-        <div id="dash" class="muted">読み込み中…</div>
-      </div>
-
-      <div class="sep"></div>
-      <h3>許可リスト</h3>
+      <!-- v803 管理ダッシュボード は 上 の 「流通ポイント」 カード に 統合 した の で 削除 -->
+      <h3 style="margin-top:10px">許可リスト</h3>
       <div id="allow" class="muted">読み込み中…</div>
       <details style="margin-top:8px">
         <summary>追加 / 更新</summary>
