@@ -370,6 +370,18 @@ async function refreshShared(token, app) {
       return;
     }
     if (d.status === 'pending' || d.status === 'processing') {
+      // v810 30 分 以上 処理 中 = 詰まって る 可能性 (PHP プロセス が タイム アウト で 死んだ)。
+      //   本人 に は 「再 投入」 ボタン を 出す。
+      const myUid = Number(state.me?.id) || 0;
+      const isOwner = myUid && myUid === Number(d.author_id);
+      const ageMin = d.created_at ? Math.round((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
+      const isStale = ageMin >= 30;
+      const staleBanner = (isStale && isOwner && d.pdf_path) ? `
+        <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
+          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分 処理 中。 サーバ プロセス が 途中 で 死んだ 可能性 が あります。</div>
+          <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で 再 投入 し ます (新規 課金 なし)。</p>
+          <button id="pt-retry-stale" class="primary">🔁 再 投入 (新規 課金 なし)</button>
+        </div>` : '';
       app.innerHTML = stripJaSpaces(`
         <div class="card page-header">
           <h2 style="margin:0">⏳ 要約中… 「${escapeHtml(d.pdf_name)}」</h2>
@@ -382,7 +394,17 @@ async function refreshShared(token, app) {
             10 秒 ごと に 自動更新。
           </p>
         </div>
+        ${staleBanner}
       `);
+      document.getElementById('pt-retry-stale')?.addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        btn.disabled = true; btn.textContent = '⏳ 再 投入 中…';
+        try {
+          await post('/api/ai/paper_translate/' + d.id + '/retry', {});
+          toast('再 投入 を 開始 しました');
+          refreshShared(token, app);
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再 投入 (新規 課金 なし)'; }
+      });
       if (!sharedPollTimer) sharedPollTimer = setInterval(() => refreshShared(token, app), 10000);
       return;
     }

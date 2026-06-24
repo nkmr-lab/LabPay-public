@@ -385,6 +385,17 @@ async function refresh(token) {
       <div id="pft-r"></div>`;
     app.innerHTML = header;
     if (d.status === 'pending' || d.status === 'processing') {
+      // v810 30 分 以上 経って いれば stale な 可能性 → 本人 に 「再 投入」 ボタン を 出す。
+      const myUidS = Number(state.me?.id || 0);
+      const isOwnerS = myUidS > 0 && Number(d.author_id) === myUidS;
+      const ageMin = d.created_at ? Math.round((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
+      const isStale = ageMin >= 30;
+      const staleBanner = (isStale && isOwnerS && d.pdf_path) ? `
+        <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
+          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分 処理 中。 OpenAI の background job が 詰まって いる か、 結果 取得 が 失敗 した 可能性 が あります。</div>
+          <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で 再 投入 し ます (新規 課金 なし)。</p>
+          <button id="pft-retry-stale" class="primary">🔁 再 投入 (新規 課金 なし)</button>
+        </div>` : '';
       document.getElementById('pft-r').innerHTML = `
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">⏳ 全訳 中…</div>
@@ -397,7 +408,17 @@ async function refresh(token) {
               <div class="bold" style="font-size:13px; color:#0284c7">📡 現在 の 状況</div>
               <div style="font-size:13.5px; margin-top:4px">${escapeHtml(d.progress_text)}</div>
             </div>` : ''}
-        </div>`;
+        </div>
+        ${staleBanner}`;
+      document.getElementById('pft-retry-stale')?.addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        btn.disabled = true; btn.textContent = '⏳ 再 投入 中…';
+        try {
+          await post('/api/ai/paper_full_translate/' + d.id + '/retry', {});
+          toast('再 投入 を 開始 しました');
+          refresh(token);
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再 投入 (新規 課金 なし)'; }
+      });
       if (!pollTimer) pollTimer = setInterval(() => refresh(token), 10000);
       return;
     }

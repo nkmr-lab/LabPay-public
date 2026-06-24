@@ -2910,7 +2910,8 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
 }
 
-// v806 エラー row を 同 row で 再 投入 (新規 課金 / 新規 row なし)。 status=error の もの だけ。
+// v806 エラー row を 同 row で 再 投入 (新規 課金 / 新規 row なし)。 v810 #_stuck status=error の もの
+// に 加え、 status=processing で 30 分 以上 進ま ない もの も 「stale = 詰まって いる」 と 見なし 再 投入 可。
 function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -2920,8 +2921,12 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
     if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
-    if ($row['status'] !== 'error') {
-        throw new ApiException('bad_request', '再 実施 は エラー 状態 の row のみ (現 status: ' . $row['status'] . ')', 400);
+    $okError = $row['status'] === 'error';
+    $okStaleProc = $row['status'] === 'processing'
+        && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
+        && (time() - strtotime((string)$row['created_at'])) >= 1800;
+    if (!$okError && !$okStaleProc) {
+        throw new ApiException('bad_request', '再 実施 は エラー / 30 分 以上 経過 した 処理 中 のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
         throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
@@ -2952,6 +2957,7 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
 }
 
 // v806 paper_translate (要約) の エラー row を 同 row で 再 投入 (新規 課金 なし)。
+// v810 #_stuck status=processing で 30 分 以上 進ま ない stale row も 再 投入 可。
 function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -2961,8 +2967,12 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
     if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
-    if ($row['status'] !== 'error') {
-        throw new ApiException('bad_request', '再 実施 は エラー 状態 の row のみ (現 status: ' . $row['status'] . ')', 400);
+    $okError = $row['status'] === 'error';
+    $okStaleProc = $row['status'] === 'processing'
+        && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
+        && (time() - strtotime((string)$row['created_at'])) >= 1800;
+    if (!$okError && !$okStaleProc) {
+        throw new ApiException('bad_request', '再 実施 は エラー / 30 分 以上 経過 した 処理 中 のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
         throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
