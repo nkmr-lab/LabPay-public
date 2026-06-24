@@ -212,6 +212,18 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_recent_feed($pdo, $cfg);
         return;
     }
+    // v813 #405 要約 row から ペア の 全訳 を 作る (= 保存 済 PDF を 再 利用、 アップロード 不要)
+    if ($sub === 'paper_full_translate' && $method === 'POST'
+        && ($seg[2] ?? '') === 'from_summary' && isset($seg[3]) && ctype_digit((string)$seg[3])) {
+        ai_paper_full_translate_from_summary($pdo, $cfg, (int)$seg[3]);
+        return;
+    }
+    // v813 #405 同 方向 (全訳 row → 要約) も 対称 で 用意
+    if ($sub === 'paper_translate' && $method === 'POST'
+        && ($seg[2] ?? '') === 'from_full' && isset($seg[3]) && ctype_digit((string)$seg[3])) {
+        ai_paper_translate_from_full($pdo, $cfg, (int)$seg[3]);
+        return;
+    }
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
@@ -3018,6 +3030,183 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     @set_time_limit(360);
 
     ai_paper_translate_run_background($pdo, $cfg, $id, (string)$row['share_token'], $fileId, $payload, $apiKey, (string)$row['pdf_name'], $uid);
+}
+
+// v813 #405 要約 row の 保存 済 PDF を 流用 して ペア の 全訳 row を 新規 作成。
+//   アップロード 不要、 直接 「📑 全訳 を 作る」 ボタン から 呼ぶ。
+function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summaryId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $st = $pdo->prepare("SELECT * FROM paper_translates WHERE id=?");
+    $st->execute([$summaryId]);
+    $sumRow = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$sumRow) throw new ApiException('not_found', '要約 row が ありません', 404);
+    if ((int)$sumRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人 の 要約 のみ ペア 全訳 を 作れ ます', 403);
+    if (empty($sumRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が 残って いない の で 全訳 を 作れ ません', 400);
+    $pdfAbs = '/var/www/labpay/public' . $sumRow['pdf_path'];
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+
+    $body = read_json_body();
+    $direction = (string)($body['direction'] ?? 'en2ja');
+    if (!in_array($direction, ['en2ja', 'ja2en'], true)) {
+        throw new ApiException('bad_request', 'direction は en2ja / ja2en のみ', 400);
+    }
+    $models = ai_paper_full_translate_models_for($direction);
+    $reqModel = trim((string)($body['model'] ?? 'gpt-5'));
+    if (!isset($models[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $cost = (int)$models[$reqModel];
+    $autoShare = !empty($body['auto_share']) ? 1 : 0;
+
+    $skipCharge = ($uid === 3);
+    if (!$skipCharge) {
+        $bal = Ledger::balanceOfUser($pdo, $uid);
+        if ($bal < $cost) {
+            throw new ApiException('insufficient_balance',
+                sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+        }
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($pdfAbs, (string)$sumRow['pdf_name'], $apiKey);
+
+    // 保存 用 PDF を 新規 token フォルダ に コピー (paper_full_translations は 自分 の pdf_path を 持つ)
+    $token = bin2hex(random_bytes(16));
+    $publicDir = '/var/www/labpay/public';
+    $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
+    $pdfAbsNew = $publicDir . $pdfRel;
+    @mkdir(dirname($pdfAbsNew), 0775, true);
+    if (!copy($pdfAbs, $pdfAbsNew)) { $pdfRel = null; } else { @chmod($pdfAbsNew, 0644); }
+
+    $pdfName = (string)$sumRow['pdf_name'];
+    $pdfSha = (string)$sumRow['pdf_sha256'];
+    $rowId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
+        $pdo->prepare("INSERT INTO paper_full_translations
+            (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
+            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
+            ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
+        $rowId = (int)$pdo->lastInsertId();
+        if (!$skipCharge) {
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+                '論文 全訳 (' . $direction . ') 依頼料 (要約 から)');
+        }
+    });
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
+        'cost_points' => $cost, 'direction' => $direction, 'model' => $reqModel,
+        'message' => 'ペア の 全訳 を 開始 し ました。 結果 ページ で 進捗 を 確認 して ください。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(120);
+
+    ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
+}
+
+// v813 #405 対称: 全訳 row の 保存 済 PDF を 流用 して ペア の 要約 row を 新規 作成。
+function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $st = $pdo->prepare("SELECT * FROM paper_full_translations WHERE id=?");
+    $st->execute([$fullId]);
+    $fullRow = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$fullRow) throw new ApiException('not_found', '全訳 row が ありません', 404);
+    if ((int)$fullRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人 の 全訳 のみ ペア 要約 を 作れ ます', 403);
+    if (empty($fullRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が 残って いない の で 要約 を 作れ ません', 400);
+    $pdfAbs = '/var/www/labpay/public' . $fullRow['pdf_path'];
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+
+    $body = read_json_body();
+    $reqModel = trim((string)($body['model'] ?? 'gpt-5'));
+    if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
+        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+    }
+    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    $autoShare = !empty($body['auto_share']) ? 1 : 0;
+
+    $skipCharge = ($uid === 3);
+    if (!$skipCharge) {
+        $bal = Ledger::balanceOfUser($pdo, $uid);
+        if ($bal < $cost) {
+            throw new ApiException('insufficient_balance',
+                sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+        }
+    }
+
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = ai_openai_upload_pdf($pdfAbs, (string)$fullRow['pdf_name'], $apiKey);
+
+    $token = bin2hex(random_bytes(16));
+    $publicDir = '/var/www/labpay/public';
+    $pagesRel = '/uploads/paper_pages/' . $token;
+    $pagesAbs = $publicDir . $pagesRel;
+    @mkdir($pagesAbs, 0775, true);
+    $pdfRel = '/uploads/paper_pdfs/' . $token . '/original.pdf';
+    $pdfAbsNew = $publicDir . $pdfRel;
+    @mkdir(dirname($pdfAbsNew), 0775, true);
+    if (!copy($pdfAbs, $pdfAbsNew)) { $pdfRel = null; } else { @chmod($pdfAbsNew, 0644); }
+    $pagesCount = 0;
+    try {
+        $cmd = sprintf('pdftoppm -jpeg -jpegopt quality=85 -r 160 %s %s 2>&1',
+            escapeshellarg($pdfAbs), escapeshellarg($pagesAbs . '/page'));
+        exec($cmd, $out, $rc);
+        if ($rc === 0) {
+            foreach (glob($pagesAbs . '/page-*.jpg') ?: [] as $p) @chmod($p, 0644);
+            $pagesCount = count(glob($pagesAbs . '/page-*.jpg') ?: []);
+        }
+    } catch (Throwable $_) {}
+
+    $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
+    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+
+    $payloadArr = [
+        'model' => $reqModel,
+        'messages' => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user', 'content' => [
+                ['type' => 'file', 'file' => ['file_id' => $fileId]],
+                ['type' => 'text', 'text' => $userPrompt],
+            ]],
+        ],
+        'response_format' => ['type' => 'json_object'],
+        'max_completion_tokens' => 24000,
+    ];
+    if (!preg_match('/^(gpt-5|o1|o3)/', $reqModel)) {
+        $payloadArr['temperature'] = 0.2;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+    $pdfName = (string)$fullRow['pdf_name'];
+    $pdfSha = (string)$fullRow['pdf_sha256'];
+    $rowId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
+        $pdo->prepare("INSERT INTO paper_translates
+            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share)
+            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)")
+            ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfSha, $sys, 'null', $cost,
+                       $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
+                       $pdfRel, $reqModel, $autoShare]);
+        $rowId = (int)$pdo->lastInsertId();
+        if (!$skipCharge) {
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文 要約 依頼料 (全訳 から)');
+        }
+    });
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
+        'cost_points' => $cost, 'model' => $reqModel,
+        'message' => 'ペア の 要約 を 開始 し ました。 結果 ページ で 進捗 を 確認 して ください。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(360);
+
+    ai_paper_translate_run_background($pdo, $cfg, $rowId, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
 }
 
 function ai_paper_full_translate_submit(PDO $pdo, array $cfg, int $rowId, string $token, string $fileId, string $direction, string $model, string $apiKey, int $uid): void {

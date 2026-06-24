@@ -376,11 +376,7 @@ async function refresh(token) {
           ${shareButton}
           <a class="btn" href="#/paper-translate-full" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
         </div>
-        ${Array.isArray(d.cross_refs) && d.cross_refs.length ? `
-          <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
-            📑 同じ PDF の 関連:
-            ${d.cross_refs.map(x => `<a href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="margin-left:6px">${x.kind === 'paper_translate' ? '📄 要約' : '📑 全訳'} (${escapeHtml(x.model || '')}, ${escapeHtml(x.status || '')}) ↗</a>`).join(' / ')}
-          </div>` : ''}
+        ${renderFullCrossRefsAndCreate(d)}
       </div>
       <div id="pft-r"></div>`;
     app.innerHTML = header;
@@ -519,6 +515,68 @@ async function paint(d) {
       }
     } catch (_) {}
   }
+  // v813 #405 ペア の 要約 を 作る ボタン
+  bindMakeSummary(d);
+}
+
+// v813 #406 cross_refs を 「📄 要約 へ」 ボタン に 簡素化 + #405 ペア の 要約 が 無い 場合 は
+//   「📄 要約 を 作る」 ボタン を 出す (本人 + PDF 保存 済 + status=done な とき)。
+function renderFullCrossRefsAndCreate(d) {
+  const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
+  const myUid = Number(state.me?.id || 0);
+  const isOwner = !!d.author_id && Number(d.author_id) === myUid;
+  const hasSummary = refs.some(x => x.kind === 'paper_translate');
+  const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasSummary;
+  if (!refs.length && !canCreate) return '';
+  const refBtns = refs.map(x => `
+    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; margin-right:6px">
+      ${x.kind === 'paper_translate' ? '📄 要約 へ' : '📑 全訳 へ'}
+    </a>`).join('');
+  const createBtn = canCreate ? `
+    <button class="btn primary" id="pft-make-summary" style="font-size:12px; padding:3px 10px">📄 要約 を 作る</button>` : '';
+  return `
+    <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+      ${refBtns}${createBtn}
+    </div>`;
+}
+
+async function bindMakeSummary(d) {
+  const btn = document.getElementById('pft-make-summary');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  const { openModal } = await import('../modal.js');
+  btn.addEventListener('click', async () => {
+    const html = `
+      <p style="font-size:13px; margin:0 0 8px">この PDF で 論文 要約 を 開始 します。 課金 は ポイント 残高 から (中村 PI は 無料)。</p>
+      <label class="field"><span class="lbl">モデル</span>
+        <select id="mfs-model" style="font-size:13px">
+          <option value="gpt-4.1">gpt-4.1 (20pt)</option>
+          <option value="gpt-5-mini">gpt-5-mini (30pt)</option>
+          <option value="gpt-5" selected>gpt-5 (50pt)</option>
+          <option value="o1">o1 (80pt)</option>
+        </select>
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
+        <input type="checkbox" id="mfs-auto-share"> 🌐 完了 と 同時 に 公開 ON
+      </label>`;
+    openModal({
+      title: '📄 要約 を 作る',
+      bodyHtml: html,
+      buttons: [
+        { label: 'キャンセル', onClick: (close) => close() },
+        { label: '開始', primary: true, onClick: async (close) => {
+          const model = document.getElementById('mfs-model')?.value || 'gpt-5';
+          const auto_share = !!document.getElementById('mfs-auto-share')?.checked;
+          try {
+            const j = await post(`/api/ai/paper_translate/from_full/${d.id}`, { model, auto_share });
+            close();
+            toast('📄 要約 を 開始 しました');
+            if (j?.share_token) location.hash = '#/paper-summary/r/' + encodeURIComponent(j.share_token);
+          } catch (e) { toast('失敗: ' + (e?.message || e)); }
+        }},
+      ],
+    });
+  });
 }
 
 function renderChapter(ch, idx, direction) {

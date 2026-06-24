@@ -467,11 +467,7 @@ async function paintResult(d, token) {
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
         <a class="btn" href="#/paper-summary" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
-      ${Array.isArray(d.cross_refs) && d.cross_refs.length ? `
-        <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; font-size:12.5px">
-          📑 同じ PDF の 関連:
-          ${d.cross_refs.map(x => `<a href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="margin-left:6px">${x.kind === 'paper_full_translation' ? '📑 全訳' : '📄 要約'} (${escapeHtml(x.direction || '')}${x.direction ? '/' : ''}${escapeHtml(x.model || '')}, ${escapeHtml(x.status || '')}) ↗</a>`).join(' / ')}
-        </div>` : ''}
+      ${renderPaperCrossRefsAndCreate(d)}
     </div>
 
     ${r.summary_one_paragraph ? `
@@ -513,6 +509,8 @@ async function paintResult(d, token) {
       toast('コピーしました');
     } catch (_) { toast(shareUrl); }
   });
+  // v813 #405 ペア の 全訳 を 作る ボタン
+  bindMakeFullTranslate(d);
   // v758 #377 やりなおす (本人 のみ、 保存 PDF で 再 処理 + 再課金)
   document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
@@ -545,6 +543,73 @@ async function paintResult(d, token) {
       ev.preventDefault();
       const { openImageLightbox } = await import('../lightbox.js');
       openImageLightbox(el.dataset.ptZoom);
+    });
+  });
+}
+
+// v813 #406 cross_refs を 「📑 全訳 へ」 ボタン に 簡素化 + #405 ペア が 無い 場合 は
+//   「📑 全訳 を 作る」 ボタン を 出す (本人 + PDF 保存 済 + status=done な とき)。
+function renderPaperCrossRefsAndCreate(d) {
+  const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
+  const myUid = Number(state.me?.id || 0);
+  const isOwner = !!d.author_id && Number(d.author_id) === myUid;
+  const hasFull = refs.some(x => x.kind === 'paper_full_translation');
+  const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasFull;
+  if (!refs.length && !canCreate) return '';
+  const refBtns = refs.map(x => `
+    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; margin-right:6px">
+      ${x.kind === 'paper_full_translation' ? '📑 全訳 へ' : '📄 要約 へ'}
+    </a>`).join('');
+  const createBtn = canCreate ? `
+    <button class="btn primary" id="pt-make-full" style="font-size:12px; padding:3px 10px">📑 全訳 を 作る</button>` : '';
+  return `
+    <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+      ${refBtns}${createBtn}
+    </div>`;
+}
+
+// 「📑 全訳 を 作る」 ボタン の クリック ハンドラ。 paintResult 後 に bind。
+async function bindMakeFullTranslate(d) {
+  const btn = document.getElementById('pt-make-full');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  const { openModal } = await import('../modal.js');
+  btn.addEventListener('click', async () => {
+    const html = `
+      <p style="font-size:13px; margin:0 0 8px">この PDF で 論文 全訳 を 開始 します。 課金 は ポイント 残高 から (中村 PI は 無料)。</p>
+      <label class="field"><span class="lbl">方向</span>
+        <select id="mft-dir" style="font-size:13px">
+          <option value="en2ja" selected>英 → 日 (en2ja)</option>
+          <option value="ja2en">日 → 英 (ja2en)</option>
+        </select>
+      </label>
+      <label class="field"><span class="lbl">モデル</span>
+        <select id="mft-model" style="font-size:13px">
+          <option value="gpt-5-mini">gpt-5-mini (30pt / ja2en 150pt)</option>
+          <option value="gpt-5" selected>gpt-5 (50pt / ja2en 250pt)</option>
+          <option value="o1">o1 (80pt / ja2en 400pt)</option>
+        </select>
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
+        <input type="checkbox" id="mft-auto-share"> 🌐 完了 と 同時 に 公開 ON
+      </label>`;
+    openModal({
+      title: '📑 全訳 を 作る',
+      bodyHtml: html,
+      buttons: [
+        { label: 'キャンセル', onClick: (close) => close() },
+        { label: '開始', primary: true, onClick: async (close) => {
+          const direction = document.getElementById('mft-dir')?.value || 'en2ja';
+          const model     = document.getElementById('mft-model')?.value || 'gpt-5';
+          const auto_share = !!document.getElementById('mft-auto-share')?.checked;
+          try {
+            const j = await post(`/api/ai/paper_full_translate/from_summary/${d.id}`, { direction, model, auto_share });
+            close();
+            toast('📑 全訳 を 開始 しました');
+            if (j?.share_token) location.hash = '#/paper-translate-full/r/' + encodeURIComponent(j.share_token);
+          } catch (e) { toast('失敗: ' + (e?.message || e)); }
+        }},
+      ],
     });
   });
 }
