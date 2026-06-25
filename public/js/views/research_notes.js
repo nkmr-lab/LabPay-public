@@ -2,7 +2,7 @@
 //   v834: フルスクリーン表示 + ✕で閉じる、 GitHub風ヒートカレンダー、 localStorage キャッシュ +
 //   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンド プリフェッチ。
 import { post } from '../api.js';
-import { escapeHtml, navigate } from '../router.js';
+import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
 
 const CACHE_PREFIX = 'cosense:';
@@ -21,10 +21,9 @@ let stateLocal = {
 export async function renderResearchNotes() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div id="rn-fullscreen" style="position:fixed; inset:0; background:#fff; z-index:1000; overflow-y:auto; padding:10px 12px; box-sizing:border-box">
+    <div id="rn-fullscreen" style="box-sizing:border-box">
       <div class="row center" style="margin-bottom:8px; gap:8px">
         <h2 style="margin:0; font-size:18px; flex:1">📝 研究ノート</h2>
-        <button id="rn-close" class="btn" style="font-size:18px; line-height:1; padding:6px 12px" title="閉じる">✕</button>
       </div>
       <div id="rn-status" hidden>
         <div class="muted">読み込み中…</div>
@@ -70,7 +69,6 @@ export async function renderResearchNotes() {
       </div>
     </div>
   `;
-  document.getElementById('rn-close').addEventListener('click', () => navigate('#/apps'));
   await loadInitial();
 }
 

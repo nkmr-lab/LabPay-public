@@ -58,6 +58,59 @@ function highlightTab() {
 //   2回走り 「Home load レポートが2回出る」 のを抑止。
 let lastDispatchHash = null;
 let lastDispatchAt = 0;
+
+// v836 「アプリ」 と判定されない navigation/系統 系 ルート。 これら以外は全部 フルスクリーン化。
+const NON_FULLSCREEN_TOP_PARTS = new Set([
+  '',                // ホーム
+  'groups',          // グループ (タブ)
+  'sns',             // らぼったー (タブ)
+  'buy', 'sell', 'sellers',
+  'requests-hub',
+  'auctions',
+  'research',        // 研究タブ
+  'lab-mgmt',        // 運営タブ
+  'games',           // 娯楽タブ
+  'apps',            // アプリ一覧
+  'achievements',
+  'settings',
+  'notifications',
+  'history',
+  'admin',
+  'feedback', 'feedback-admin',
+  'login',
+  'users', 'me',
+  'dashboard',
+  'activity',
+  'contacts',
+  'widgets',         // ウィジェットセンター
+  'my-games',
+  'public-timer',
+]);
+
+function applyFullscreenMode(topPart) {
+  const fs = !NON_FULLSCREEN_TOP_PARTS.has(topPart);
+  document.body.classList.toggle('app-fullscreen', fs);
+  // 閉じる ✕ ボタンを動的に生成 / 撤去
+  let closeBtn = document.getElementById('fs-close-btn');
+  if (fs) {
+    if (!closeBtn) {
+      closeBtn = document.createElement('button');
+      closeBtn.id = 'fs-close-btn';
+      closeBtn.type = 'button';
+      closeBtn.title = '閉じる';
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'position:fixed; top:8px; right:8px; z-index:1001; width:36px; height:36px; border-radius:18px; border:none; background:rgba(0,0,0,0.6); color:#fff; font-size:18px; line-height:36px; cursor:pointer; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+      closeBtn.addEventListener('click', () => {
+        if (history.length > 1) history.back();
+        else location.hash = '#/apps';
+      });
+      document.body.appendChild(closeBtn);
+    }
+  } else if (closeBtn) {
+    closeBtn.remove();
+  }
+}
+
 async function dispatch() {
   const now = performance.now();
   const hashKey = location.hash || '';
@@ -69,6 +122,9 @@ async function dispatch() {
   // Expose the active view as a body data attribute so per-view CSS
   // (e.g. body[data-view="home"] for the fill-bottom layout) can target it.
   document.body.dataset.view = (target.filter(Boolean).join('-') || 'home');
+  // v836 アプリ系の画面は基本的にフルスクリーンモード (上部バー・タブを隠す + ✕で戻る)。
+  //   タブナビ + 設定 + 通知 + 履歴 + 管理 + ログイン 等 の navigation/系統 系は除外。
+  applyFullscreenMode(target[0] || '');
   // v515 #142 タブ切替直後に「読み込み中」 プレースホルダ + nav ハイライトを即更新
   //   する (= ユーザがタップした瞬間に画面が反応する)。 各 view の renderer が
   //   app.innerHTML を上書きすれば プレースホルダは消える。 dynamic import の

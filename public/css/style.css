@@ -105,6 +105,13 @@ nav#tabs a.active { background: var(--primary); color: var(--primary-fg); }
 
 main#app { padding: 14px 14px 4px 14px; max-width: 720px; margin: 0 auto; }
 
+/* v836 アプリ系画面はフルスクリーンモード — トップバー/タブを隠して全画面で集中。 */
+body.app-fullscreen header#topbar,
+body.app-fullscreen nav#tabs,
+body.app-fullscreen #install-banner { display: none !important; }
+body.app-fullscreen main#app { max-width: none; padding: 8px 10px 12px 10px; }
+body.app-fullscreen { background: #fff; }
+
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-4); box-shadow: var(--shadow); margin-bottom: var(--space-3); }
