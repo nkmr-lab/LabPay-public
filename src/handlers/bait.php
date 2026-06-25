@@ -9,9 +9,9 @@ declare(strict_types=1);
 
 function route_bait(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
-    if ($sub === 'requests' && $method === 'GET')  { bait_list($pdo, $cfg);   return; }
-    if ($sub === 'requests' && $method === 'POST') { bait_create($pdo, $cfg); return; }
-    if ($sub === 'my-assignments' && $method === 'GET') { bait_my_assignments($pdo, $cfg); return; }
+    // v823 #416 list / detail の 優先 順 が 逆 で 「/api/bait/requests/<id>」 まで list に
+    //   食われ て いた (= detail が 「{items: ...}」 を 返し client で r.title undefined)。
+    //   先 に detail 系 を チェック して 残った 場合 のみ list に 落とす。
     if ($sub === 'requests' && ctype_digit((string)($seg[2] ?? ''))) {
         $rid = (int)$seg[2];
         $next = $seg[3] ?? '';
@@ -20,6 +20,9 @@ function route_bait(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'remind' && $method === 'POST')    { bait_remind($pdo, $cfg, $rid);  return; }
         if ($next === 'close'  && $method === 'PATCH')   { bait_close($pdo, $cfg, $rid);   return; }
     }
+    if ($sub === 'requests' && $method === 'GET'  && !isset($seg[2])) { bait_list($pdo, $cfg);   return; }
+    if ($sub === 'requests' && $method === 'POST' && !isset($seg[2])) { bait_create($pdo, $cfg); return; }
+    if ($sub === 'my-assignments' && $method === 'GET') { bait_my_assignments($pdo, $cfg); return; }
     if ($sub === 'assignments' && ctype_digit((string)($seg[2] ?? ''))) {
         $aid = (int)$seg[2];
         $next = $seg[3] ?? '';
