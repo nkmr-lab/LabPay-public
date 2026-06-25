@@ -645,6 +645,7 @@ route('/cg2/:slug/:id',  lazy(() => import('./views/cg2.js'), 'renderCg2Game'));
 route('/chat-rooms',          lazy(() => import('./views/chat_rooms.js'), 'renderChatRooms'));
 route('/chat-rooms/:roomKey', lazy(() => import('./views/chat_rooms.js'), 'renderChatRoom'));
 route('/fortune',             lazy(() => import('./views/fortune.js'), 'renderFortune'));
+route('/research-notes',      lazy(() => import('./views/research_notes.js'), 'renderResearchNotes')); // v821 Cosense 連携
 route('/conf-deadlines',          lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlines'));
 route('/conf-deadlines/new',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineForm'));
 route('/conf-deadlines/:id',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineDetail'));

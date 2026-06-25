@@ -53,6 +53,7 @@ $routes = [
     'nomikai'        => 'route_nomikai',
     'groups'         => 'route_groups',          // ad-hoc groups
     'scrapbox'       => 'route_scrapbox',
+    'cosense'        => 'route_cosense',          // v821 Cosense (旧 Scrapbox) 直接 連携
     'fx'             => 'route_fx',
     'random-groups'  => 'route_random_groups',
     'orderings'      => 'route_orderings',
