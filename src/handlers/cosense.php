@@ -29,6 +29,13 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'append') {
         cosense_research_note_append($pdo, $cfg, $uid); return;
     }
+    // v830 #editable 当日セクションを丸ごとロード + 差分保存 する 2 endpoint
+    if ($sub === 'research-note' && $method === 'GET' && ($seg[2] ?? '') === 'section') {
+        cosense_research_note_section_get($pdo, $cfg, $uid); return;
+    }
+    if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'replace-section') {
+        cosense_research_note_section_replace($pdo, $cfg, $uid); return;
+    }
     if ($sub === 'page' && $method === 'GET') {
         cosense_page_text($pdo, $cfg, $uid); return;
     }
@@ -429,6 +436,177 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
         'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
         'inserted_lines' => count($changes),
     ]);
+}
+
+// ───────── editable section (v830) ─────────
+
+// 指定日のセクション (= [*( YYYY.MM.DD ...)] ヘッダの直下から、次の日付ヘッダの直前まで) を
+//   ヘッダを除く本文行だけの配列 + テキスト形式 で返す。 textarea のロード元。
+function cosense_research_note_section_get(PDO $pdo, array $cfg, int $uid): void {
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition', 'Scrapbox の鍵が未登録です', 412);
+    }
+    $handle = cosense_user_handle($pdo, $uid);
+    if ($handle === null) {
+        throw new ApiException('precondition', '研究ノートの名前 (handle) が未設定', 412);
+    }
+    $date = trim((string)($_GET['date'] ?? ''));
+    if (!preg_match('/^20\d{2}\.\d{2}\.\d{2}$/', $date)) {
+        throw new ApiException('bad_request', 'date は YYYY.MM.DD', 400);
+    }
+    $ym = substr($date, 0, 7);
+    $title = $ym . '_研究ノート_' . $handle;
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    $existsPage = $r['ok'];
+    $pageId = $existsPage ? ($r['page']['id'] ?? null) : null;
+    $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
+
+    [$headerIdx, $headerLineId, $nextAnchorId, $bodyLines] = cosense_locate_section($allLines, $date);
+
+    json_response([
+        'ok' => true,
+        'title' => $title,
+        'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
+        'date' => $date,
+        'exists_page' => $existsPage,
+        'exists_section' => $headerIdx >= 0,
+        'page_id' => $pageId,
+        'header_line_id' => $headerLineId,
+        'next_anchor' => $nextAnchorId,
+        'lines' => $bodyLines,
+        'body_text' => implode("\n", array_column($bodyLines, 'text')),
+    ]);
+}
+
+// 指定日のセクション本文を新しい text で置き換える (= 差分のみコミット)。
+//   body = { date: "YYYY.MM.DD", text: "改行区切り の 新 本文" }
+//   text の各行は そのまま Cosense に書き込まれる (=リード スペース等もユーザー入力をそのまま使用)。
+function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): void {
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition', 'Scrapbox の鍵が未登録です', 412);
+    }
+    $handle = cosense_user_handle($pdo, $uid);
+    if ($handle === null) {
+        throw new ApiException('precondition', '研究ノートの名前 (handle) が未設定', 412);
+    }
+    $body = read_json_body();
+    $date = trim((string)($body['date'] ?? ''));
+    if (!preg_match('/^(20\d{2})\.(\d{2})\.(\d{2})$/', $date, $m)) {
+        throw new ApiException('bad_request', 'date は YYYY.MM.DD', 400);
+    }
+    $newText = (string)($body['text'] ?? '');
+    if (mb_strlen($newText) > 50000) {
+        throw new ApiException('bad_request', '本文が長すぎます (50000 文字以内)', 400);
+    }
+    $ym = $m[1] . '.' . $m[2];
+    $title = $ym . '_研究ノート_' . $handle;
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    $existsPage = $r['ok'];
+    $pageId = $existsPage ? ($r['page']['id'] ?? null) : null;
+    $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
+    [$headerIdx, $headerLineId, $nextAnchorId, $oldBodyLines] = cosense_locate_section($allLines, $date);
+
+    // 新しい text を行分解。 末尾の空行は削る (UI 側で余計な空行が付くのを防ぐ)。
+    $newLines = preg_split('/\r?\n/', $newText);
+    while (count($newLines) > 0 && trim((string)end($newLines)) === '') {
+        array_pop($newLines);
+    }
+    $makeLineId = fn () => bin2hex(random_bytes(12));
+    $changes = [];
+    $stats = ['inserts' => 0, 'updates' => 0, 'deletes' => 0, 'header_created' => false];
+
+    if ($headerIdx < 0) {
+        // セクションがない → ヘッダ + 内容を末尾に追加
+        if (count($newLines) === 0) {
+            json_response(['ok' => true, 'noop' => true, 'message' => '内容が空のためスキップ']);
+            return;
+        }
+        $wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][(int)date('w', strtotime($date))];
+        $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(), 'text' => sprintf('[*( %s %s )]', $date, $wd)]];
+        $stats['header_created'] = true;
+        foreach ($newLines as $bl) {
+            $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(), 'text' => $bl]];
+            $stats['inserts']++;
+        }
+    } else {
+        // 既存セクション → 行ごとに diff (greedy by-index)
+        $anchor = $nextAnchorId ?? '_end';
+        $nOld = count($oldBodyLines);
+        $nNew = count($newLines);
+        $minN = min($nOld, $nNew);
+        for ($i = 0; $i < $minN; $i++) {
+            if ((string)$oldBodyLines[$i]['text'] !== (string)$newLines[$i]) {
+                $changes[] = ['_update' => $oldBodyLines[$i]['id'], 'lines' => ['text' => $newLines[$i]]];
+                $stats['updates']++;
+            }
+        }
+        for ($i = $minN; $i < $nNew; $i++) {
+            $changes[] = ['_insert' => $anchor, 'lines' => ['id' => $makeLineId(), 'text' => $newLines[$i]]];
+            $stats['inserts']++;
+        }
+        for ($i = $minN; $i < $nOld; $i++) {
+            $changes[] = ['_delete' => $oldBodyLines[$i]['id']];
+            $stats['deletes']++;
+        }
+        if (empty($changes)) {
+            json_response(['ok' => true, 'noop' => true, 'message' => '変更なし']);
+            return;
+        }
+    }
+
+    if ($pageId === null && $existsPage) {
+        throw new ApiException('internal', 'pageId が取れません', 500);
+    }
+    $c = cosense_v2_commit($cfg, $pat, $pageId, $changes);
+    if (!$c['ok']) {
+        json_response_no_exit([
+            'ok' => false,
+            'stage' => $c['stage'] ?? 'unknown',
+            'status' => $c['status'] ?? null,
+            'body' => $c['body'] ?? null,
+        ], 502);
+        return;
+    }
+    json_response([
+        'ok' => true,
+        'commitId' => $c['commitId'],
+        'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
+        'stats' => $stats,
+        'change_count' => count($changes),
+    ]);
+}
+
+// 指定日の セクション を $allLines から探す。
+// 返り値: [headerIdx, headerLineId, nextAnchorId, bodyLines]
+//   headerIdx     : ヘッダ行のインデックス。 見つからなければ -1
+//   headerLineId  : ヘッダ行の id (null も可)
+//   nextAnchorId  : 「次の日付ヘッダ」 の id (= セクション末尾 anchor)。 次がなければ null
+//   bodyLines     : [{id, text}, ...] ヘッダを除く本文行
+function cosense_locate_section(array $allLines, string $date): array {
+    $dateRe = '/^\[\*\(\s*' . preg_quote($date, '/') . '/u';
+    $headerIdx = -1;
+    $headerLineId = null;
+    $nextAnchorId = null;
+    $bodyLines = [];
+    foreach ($allLines as $i => $ln) {
+        $t = (string)($ln['text'] ?? '');
+        if ($headerIdx === -1) {
+            if (preg_match($dateRe, $t)) {
+                $headerIdx = $i;
+                $headerLineId = $ln['id'] ?? null;
+            }
+            continue;
+        }
+        // header 見つかった後
+        if (preg_match('/^\[\*\(\s*20\d{2}\.\d{2}\.\d{2}/u', $t)) {
+            $nextAnchorId = $ln['id'] ?? null;
+            break;
+        }
+        $bodyLines[] = ['id' => $ln['id'] ?? '', 'text' => $t];
+    }
+    return [$headerIdx, $headerLineId, $nextAnchorId, $bodyLines];
 }
 
 // ───────── me settings ─────────
