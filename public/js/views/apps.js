@@ -107,7 +107,7 @@ export const APPS = [
   { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上で プレイフィー 1pt、 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。 数字を直接言わずに 「強い動物の強さ」 などで 大小を伝える。', defaultVisible: true },
   // v570 #223 人狼 (v574 から game カテゴリへ)
   { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人で プレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。', defaultVisible: true },
-  { id: 'fortune',       cat: 'game',   url: '#/fortune',        title: '🔮 今日 の 占い',  desc: '1 日 1 回 だけ 引ける 運勢。 同じ 日 は 同じ 結果、 翌日 0:00 で 更新。 ホーム の 残高 エリア 🔮 アイコン から も 引ける。', defaultVisible: true },
+  { id: 'fortune',       cat: 'game',   url: '#/fortune',        title: '🔮 今日 の 占い + ♈ 西洋占星術',  desc: '1 日 1 回 だけ 引ける 運勢 (大吉 / 中吉 / 凶 等 30 種)。 設定 → プロフィール で 誕生日 を 登録 する と 12 星座 占い (メッセージ + ラッキー カラー / アイテム / ナンバー) も 一緒 に 表示。 同じ 日 は 同じ 結果、 翌日 0:00 で 更新。 ホーム の 残高 エリア 🔮 アイコン から も 引ける。', defaultVisible: true },
   { id: 'conf-deadlines',cat: 'lab-mgmt',url: '#/conf-deadlines', title: '📅 学会 〆切',    desc: '国際 会議 / 国内 研究会 / 論文誌 の 投稿 〆切 を 登録 + 一覧。 誰でも 登録 可、 全員 閲覧 可。 〆切順 表示 + あと N 日 のカウントダウン。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップや スポーツ大会、 大学受験・学会 best paper など 「順位」 を予想して 参加フィー で景品を 山分け。 1位のみ / 1-2位 / 1-4位 を 起案ごとに設定可能。', defaultVisible: true },
