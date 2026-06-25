@@ -165,6 +165,33 @@ export async function renderSettings() {
       <div id="unreg-list" class="list"><div class="muted">読み込み中…</div></div>
     </details>
 
+    <div class="card" id="cosense-card">
+      <h3>📝 Cosense (Scrapbox) 連携</h3>
+      <p class="hint" style="margin:6px 0 8px">
+        自分 の Cosense session cookie (<code>connect.sid</code>) を 登録 する と、
+        /#/research-notes で 「あなた 自身 の cookie」 で ページ を 取得 / 書き込み でき ます (= 編集 attribution が 正しく 「あなた」 に なる)。
+      </p>
+      <details style="margin:6px 0 10px; font-size:12.5px">
+        <summary style="cursor:pointer; color:#0284c7">📖 cookie の 取り 方</summary>
+        <ol style="margin:6px 0 0 18px; line-height:1.6">
+          <li>scrapbox.io に Google ログイン (nkmr-lab に 参加 済 み の アカウント)</li>
+          <li>ブラウザ DevTools を 開く (Chrome / Edge: F12、 Safari: 開発 メニュー)</li>
+          <li>「Application」 (Chrome) または 「Storage」 (Safari) タブ → Cookies → https://scrapbox.io</li>
+          <li><code>connect.sid</code> の Value 列 を コピー (s%3A... で 始まる 長い 文字列)</li>
+          <li>下 の 欄 に 貼り 付け て 保存</li>
+        </ol>
+      </details>
+      <div id="cosense-status" class="hint-sm" style="margin-bottom:6px">読み込み 中…</div>
+      <label class="field">
+        <span class="lbl">connect.sid 値</span>
+        <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で 始まる 長い 文字列" style="font-family:monospace; font-size:12px"></textarea>
+      </label>
+      <div class="row" style="gap:6px">
+        <button id="cosense-save" class="primary">保存</button>
+        <button id="cosense-clear">解除 (空 に する)</button>
+      </div>
+    </div>
+
     <div class="card">
       <h3>🎮 自作ゲーム を 登録</h3>
       <p class="hint">
@@ -309,7 +336,48 @@ export async function renderSettings() {
   }
   await loadCalendar();
   await loadCalendarFilterRules();
+  await wireCosenseCookieUI();
+}
 
+// v822 Cosense session cookie 登録 UI
+async function wireCosenseCookieUI() {
+  const statusEl = document.getElementById('cosense-status');
+  const input = document.getElementById('cosense-cookie-input');
+  const saveBtn = document.getElementById('cosense-save');
+  const clearBtn = document.getElementById('cosense-clear');
+  if (!statusEl || !saveBtn) return;
+  const refreshStatus = async () => {
+    try {
+      const s = await get('/api/cosense/me/status');
+      if (s.has_self_cookie) {
+        statusEl.innerHTML = `✅ <b>登録 済 み</b> (末尾 ...${escapeHtml(s.self_cookie_tail || '')})  ${s.handle ? `・ handle: <code>${escapeHtml(s.handle)}</code>` : '・ handle 未 登録 (admin に 依頼)'}`;
+      } else if (s.has_shared_cookie) {
+        statusEl.innerHTML = `⚙ <b>未 登録</b> — 現状 は 共有 (admin) cookie 経由 で 読み取り のみ。 自分 で 書き込み する に は 自分 の cookie を 登録 して ください。`;
+      } else {
+        statusEl.innerHTML = `⚠ <b>共有 cookie も 未 設定</b> — admin に 連絡 して ください。`;
+      }
+    } catch (e) { statusEl.textContent = '状態 取得 失敗: ' + e.message; }
+  };
+  await refreshStatus();
+  saveBtn.addEventListener('click', async () => {
+    const v = input.value.trim();
+    if (!v) { toast('cookie を 入れて ください'); return; }
+    try {
+      await patch('/api/cosense/me/cookie', { cookie: v });
+      input.value = '';
+      toast('保存 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  clearBtn?.addEventListener('click', async () => {
+    if (!confirm('Cosense cookie を 解除 し ます か?')) return;
+    try {
+      await patch('/api/cosense/me/cookie', { cookie: '' });
+      input.value = '';
+      toast('解除 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }
 
 // ---------------- ホームのカスタマイズ ----------------

@@ -18,11 +18,61 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
         cosense_my_research_note_days($pdo, $cfg, (int)$u['id']);
         return;
     }
+    if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'append') {
+        cosense_research_note_append($pdo, $cfg, (int)$u['id']);
+        return;
+    }
     if ($sub === 'page' && $method === 'GET') {
         cosense_page_text($pdo, $cfg);
         return;
     }
+    // v822 自分 の Cosense cookie を 登録 / 更新 / 解除
+    if ($sub === 'me' && $method === 'GET' && ($seg[2] ?? '') === 'status') {
+        cosense_me_status($pdo, $cfg, (int)$u['id']);
+        return;
+    }
+    if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'cookie') {
+        cosense_me_set_cookie($pdo, (int)$u['id']);
+        return;
+    }
     json_error('not_found', "no cosense route for $method $sub", 404);
+}
+
+// 自分 の cookie 設定 状況 を 返す
+function cosense_me_status(PDO $pdo, array $cfg, int $uid): void {
+    $c = cosense_user_cookie($pdo, $uid);
+    json_response([
+        'has_self_cookie'    => $c !== null,
+        'self_cookie_tail'   => $c !== null ? mb_substr($c, -6) : null,
+        'has_shared_cookie'  => cosense_cookie($cfg) !== null,
+        'handle'             => cosense_user_handle($pdo, $uid),
+    ]);
+}
+
+// 自分 の cookie を 設定 / 削除。 body = { cookie: "s%3A..." | "" }
+function cosense_me_set_cookie(PDO $pdo, int $uid): void {
+    $body = read_json_body();
+    $c = trim((string)($body['cookie'] ?? ''));
+    if ($c !== '') {
+        // 簡易 バリデ: connect.sid は s%3A から 始まる 長い 文字列
+        if (mb_strlen($c) > 500) throw new ApiException('bad_request', 'cookie が 長過ぎ ます', 400);
+        if (!str_starts_with($c, 's%3A') && !str_starts_with($c, 's:')) {
+            throw new ApiException('bad_request', 'connect.sid 値 (s%3A... で 始まる 文字列) を 貼り 付けて ください', 400);
+        }
+    } else {
+        $c = null;
+    }
+    $pdo->prepare("UPDATE users SET cosense_session_cookie=? WHERE id=?")->execute([$c, $uid]);
+    json_response(['ok' => true, 'has_self_cookie' => $c !== null]);
+}
+
+// v822 Phase B 用 stub: 書き込み エンドポイント (実装 は 別 turn)。
+function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
+    $cookie = cosense_user_cookie($pdo, $uid);
+    if ($cookie === null) {
+        throw new ApiException('precondition', '本人 の Cosense cookie が 未 登録 です。 設定 → Cosense 連携 で 登録 して ください', 412);
+    }
+    throw new ApiException('not_implemented', 'サーバ 経由 の Cosense 書き込み は 未 実装 (Socket.io commit 実装 中)。 当面 は 「✏️ Cosense で 書く」 ボタン で 新規 タブ から 書き込んで ください', 501);
 }
 
 // Cosense API base URL を 返す。 既定 は https://scrapbox.io。
@@ -34,10 +84,23 @@ function cosense_project(array $cfg): string {
     return (string)($cfg['cosense']['project'] ?? 'nkmr-lab');
 }
 
-// connect.sid cookie を 取り出す。 未 設定 なら null。
+// 共有 (admin) cookie を 取り出す。 未 設定 なら null。
 function cosense_cookie(array $cfg): ?string {
     $c = trim((string)($cfg['cosense']['session_cookie'] ?? ''));
     return $c !== '' ? $c : null;
+}
+
+// v822 ユーザ 個別 の cookie を 取り出す (= users.cosense_session_cookie)。 未 登録 なら null。
+function cosense_user_cookie(PDO $pdo, int $uid): ?string {
+    $st = $pdo->prepare("SELECT cosense_session_cookie FROM users WHERE id=?");
+    $st->execute([$uid]);
+    $c = trim((string)($st->fetchColumn() ?: ''));
+    return $c !== '' ? $c : null;
+}
+
+// 「読み取り」 で 使う cookie を 決める: 本人 cookie が あれば 本人、 なければ 共有。
+function cosense_effective_cookie(PDO $pdo, array $cfg, int $uid): ?string {
+    return cosense_user_cookie($pdo, $uid) ?? cosense_cookie($cfg);
 }
 
 // scrapbox handle を 引く。 未 登録 なら null。
@@ -71,8 +134,8 @@ function cosense_http_get(string $url, ?string $cookie): array {
 }
 
 // ページ text 全文 を 取得。 404 なら 空、 401 なら 例外。
-function cosense_fetch_page_text(array $cfg, string $title): array {
-    $cookie = cosense_cookie($cfg);
+function cosense_fetch_page_text(array $cfg, string $title, ?string $cookieOverride = null): array {
+    $cookie = $cookieOverride ?? cosense_cookie($cfg);
     $project = cosense_project($cfg);
     $url = cosense_base($cfg) . '/api/pages/' . rawurlencode($project) . '/' . rawurlencode($title) . '/text';
     $res = cosense_http_get($url, $cookie);
@@ -101,7 +164,8 @@ function cosense_my_research_note(PDO $pdo, array $cfg, int $uid): void {
         throw new ApiException('bad_request', 'ym は YYYY.MM 形式 (例: 2026.06)', 400);
     }
     $title = $ym . '_研究ノート_' . $handle;
-    $res = cosense_fetch_page_text($cfg, $title);
+    $cookie = cosense_effective_cookie($pdo, $cfg, $uid);
+    $res = cosense_fetch_page_text($cfg, $title, $cookie);
     json_response([
         'has_handle'  => true,
         'handle'      => $handle,
@@ -111,6 +175,7 @@ function cosense_my_research_note(PDO $pdo, array $cfg, int $uid): void {
         'status'      => $res['status'],
         'text'        => $res['text'],
         'cookie_present' => $res['cookie_present'],
+        'cookie_source'  => cosense_user_cookie($pdo, $uid) !== null ? 'self' : 'shared',
         'err'         => $res['err'],
     ]);
 }
@@ -133,10 +198,11 @@ function cosense_my_research_note_days(PDO $pdo, array $cfg, int $uid): void {
         $lastYm . '_研究ノート_' . $handle,
     ];
 
+    $cookie = cosense_effective_cookie($pdo, $cfg, $uid);
     $combined = '';
     $pages = [];
     foreach ($titles as $title) {
-        $res = cosense_fetch_page_text($cfg, $title);
+        $res = cosense_fetch_page_text($cfg, $title, $cookie);
         $pages[] = [
             'title'    => $title,
             'page_url' => $res['url'],
@@ -158,7 +224,8 @@ function cosense_my_research_note_days(PDO $pdo, array $cfg, int $uid): void {
     json_response([
         'has_handle'     => true,
         'handle'         => $handle,
-        'cookie_present' => cosense_cookie($cfg) !== null,
+        'cookie_present' => $cookie !== null,
+        'cookie_source'  => cosense_user_cookie($pdo, $uid) !== null ? 'self' : (cosense_cookie($cfg) !== null ? 'shared' : 'none'),
         'pages'          => $pages,
         'recent'         => $recent,
         'today'          => $now->format('Y.m.d'),
