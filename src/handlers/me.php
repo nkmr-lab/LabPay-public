@@ -1651,6 +1651,30 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '👉',
             ];
         }
+        // v819 #413 アルバイト 申請 (bait) の 未 処理 assignment も pending widget に
+        //   出す。 自分 が worker で status='pending' (= まだ 申請 して いない) の もの。
+        $stB = $pdo->prepare("
+            SELECT a.id AS assignment_id, a.bait_request_id, a.hours,
+                   r.title, r.period, u.display_name AS requester_name
+              FROM bait_assignments a
+              JOIN bait_requests r ON r.id = a.bait_request_id
+              JOIN users u ON u.id = r.requester_user_id
+             WHERE a.worker_user_id = ? AND a.status='pending'
+               AND (r.closed_at IS NULL)
+             ORDER BY a.bait_request_id DESC LIMIT 50");
+        $stB->execute([$uid]);
+        foreach ($stB->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $items[] = [
+                'kind' => 'bait',
+                'kind_label' => 'アルバイト',
+                'id' => (int)$r['bait_request_id'],
+                'title' => $r['title'],
+                'subtitle' => '依頼 ' . $r['requester_name'] . ' · ' . (string)$r['period'] . ' · ' . $r['hours'] . 'h',
+                'deadline_at' => null,
+                'url' => '#/bait/' . (int)$r['bait_request_id'],
+                'icon' => '💼',
+            ];
+        }
         // 新しい順 (= 直近に届いたものが上)。 kind + id を tiebreaker。
         usort($items, function ($a, $b) {
             return ($b['id'] ?? 0) <=> ($a['id'] ?? 0);

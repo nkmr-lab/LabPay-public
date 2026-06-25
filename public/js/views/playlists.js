@@ -348,6 +348,12 @@ function renderDetailHead(p) {
   });
   document.getElementById('pld-play0').addEventListener('click', () => startPlayback(p, 0, false));
   document.getElementById('pld-shuffle0').addEventListener('click', () => startPlayback(p, 0, true));
+  // v819 #414 プレイリスト を 開いた タイミング で アイテム が ある なら 自動 で
+  //   再生 開始 + 連続 再生 ON。 動画 音声 は ブラウザ ポリシー で 無音 開始 に なる
+  //   ケース が あり、 その 時 は 再生 ボタン を 1 回 タップ する と 音 が 出る。
+  if (p.items.length && !detailState) {
+    setTimeout(() => { if (!detailState) startPlayback(p, 0, false); }, 50);
+  }
 }
 
 function renderDetailItems(p) {
@@ -474,13 +480,15 @@ function startPlayback(p, startIdx, shuffle) {
     ? shuffleArr(p.items.map((_, i) => i))
     : p.items.map((_, i) => i);
   const startInOrder = shuffle ? 0 : order.indexOf(startIdx);
+  // v819 #414 デフォルト で 連続 再生 ON (= 1 曲 終わったら 次曲 へ 自動)。
   detailState = {
     pid: p.id, items: p.items,
     order, orderIdx: startInOrder,
-    shuffle, autoNext: false,
+    shuffle, autoNext: true,
   };
   document.getElementById('pld-player-card').hidden = false;
   document.getElementById('pld-shuffle').checked = shuffle;
+  document.getElementById('pld-auto').checked = true;
   document.getElementById('pld-prev').onclick = () => stepPlayback(-1);
   document.getElementById('pld-next').onclick = () => stepPlayback(1);
   document.getElementById('pld-close').onclick = closePlayer;
