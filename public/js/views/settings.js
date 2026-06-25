@@ -168,31 +168,42 @@ export async function renderSettings() {
     <div class="card" id="cosense-card">
       <h3>📝 Cosense (Scrapbox) 連携</h3>
       <p class="hint" style="margin:6px 0 8px">
-        自分 の Cosense PAT (Personal Access Token) を 登録 する と、 /#/research-notes で
-        ページ の 取得 と 書き込み が 「あなた 名義」 で 行え ます。 PAT は cookie より 永続 で セキュア な 推奨 方式 です。
+        LabPay の <b>/#/research-notes</b> から Cosense (nkmr-lab) の 自分 の 研究 ノート を 読み書き でき ます。
+        ページ 名 は <code>YYYY.MM_研究ノート_<実名></code> で、 実名 は LabPay の 表示名 を そのまま 使う 仕様 (= 中村 研 の Scrapbox は 実名 ベース 運用)。
       </p>
-      <details style="margin:6px 0 10px; font-size:12.5px">
-        <summary style="cursor:pointer; color:#0284c7">📖 PAT の 取り 方</summary>
-        <ol style="margin:6px 0 0 18px; line-height:1.6">
-          <li>scrapbox.io に Google ログイン (nkmr-lab に 参加 済 み の アカウント)</li>
-          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener">https://scrapbox.io/settings/personal-access-tokens</a> を 開く</li>
-          <li>「Generate Token」 を 押して 説明 文 を 入れて 生成 (例: "LabPay")</li>
-          <li>表示 された PAT を コピー (1 回 だけ 表示、 再 表示 不可)</li>
-          <li>下 の 欄 に 貼り 付け て 保存</li>
+
+      <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
+        <div class="bold" style="color:#0284c7; margin-bottom:4px">🔑 PAT って な に?</div>
+        PAT (= <b>Personal Access Token</b>) は、 ログイン パスワード の 代わり に なる <b>長い ランダム な 文字列</b> です。
+        scrapbox.io で 自分 用 に 1 つ 発行 して LabPay に 貼って おく と、 LabPay は その PAT を 使って 「あなた と して」 Scrapbox に 読み書き でき ます。
+        パスワード より セキュア (= scrapbox の ログイン 情報 を LabPay に 渡す 必要 が ない、 PAT 単体 を いつ でも 取り消し 可)、 そして 期限 が 来て も 自分 で 作り直せます。
+      </div>
+
+      <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
+        <div class="bold" style="color:#92400e; margin-bottom:4px">📖 PAT の 作り 方 (3 ステップ)</div>
+        <ol style="margin:4px 0 0 18px; padding:0">
+          <li>scrapbox.io に Google ログイン (nkmr-lab に 入って いる 自分 の アカウント で)</li>
+          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>https://scrapbox.io/settings/personal-access-tokens</b></a> を 開く → 「Generate Token」</li>
+          <li>説明 (例: "LabPay") を 入れて 生成 → <b>表示 された 文字列 を コピー</b> (1 回 だけ 表示、 後 で 見直し 不可)</li>
         </ol>
-      </details>
-      <div id="cosense-status" class="hint-sm" style="margin-bottom:6px">読み込み 中…</div>
+        <div style="margin-top:6px">コピー した PAT を 下 の 欄 に 貼って 「保存」 を 押せば 完了。</div>
+      </div>
+
+      <div id="cosense-status" class="hint-sm" style="margin:10px 0 6px">読み込み 中…</div>
+
       <label class="field">
-        <span class="lbl">PAT (推奨)</span>
-        <input type="password" id="cosense-pat-input" placeholder="scrapbox.io の Personal Access Token" autocomplete="off" style="font-family:monospace; font-size:12px">
+        <span class="lbl">🔑 PAT (Personal Access Token)</span>
+        <input type="password" id="cosense-pat-input" placeholder="scrapbox.io で 発行 した PAT を 貼り 付け" autocomplete="off" style="font-family:monospace; font-size:12px">
       </label>
-      <div class="row" style="gap:6px; margin-bottom:10px">
+      <div class="row" style="gap:6px; margin-bottom:14px">
         <button id="cosense-pat-save" class="primary">保存</button>
         <button id="cosense-pat-clear">解除</button>
+        <span class="hint-sm" style="margin-left:auto">保存 後 は 末尾 6 文字 のみ 表示 されます</span>
       </div>
+
       <label class="field">
-        <span class="lbl">研究 ノート ページ で 使う 名前 (例: <code>中村聡史</code>) <span class="hint-sm">— 空 なら 表示名 を 使う</span></span>
-        <input type="text" id="cosense-page-handle-input" placeholder="Scrapbox 上 の 表示名 (Slack の 英語 handle と は 別)" maxlength="100" style="font-size:13px">
+        <span class="lbl">🏷 研究 ノート の ページ 名 に 使う 実名 <span class="hint-sm">— 空 なら 「表示名」 が そのまま 使われ ます (中村 研 の Scrapbox は 実名 ベース 運用)</span></span>
+        <input type="text" id="cosense-page-handle-input" placeholder="例: 中村聡史 (= Scrapbox 上 の 自分 の ページ 名 と 一致 する 表記)" maxlength="100" style="font-size:13px">
       </label>
       <div class="row" style="gap:6px; margin-bottom:10px">
         <button id="cosense-page-handle-save" class="primary">保存</button>
