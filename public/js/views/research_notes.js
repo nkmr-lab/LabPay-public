@@ -10,41 +10,43 @@ export async function renderResearchNotes() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">📝 研究 ノート (Cosense)</h2>
+      <h2 style="margin:0">📝 研究ノート (Cosense)</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        「YYYY.MM_研究ノート_<i>handle</i>」 ページ を 取得 し、 直近 の 日付 セクション を 表示 し ます。
-        書き込み は <b>PAT 登録 済 み</b> の 場合 LabPay 内 で 直接 (preview → submit)、 未 登録 の 場合 は Cosense を 開いて 編集。
+        nkmr-lab の 「YYYY.MM_研究ノート_<i>名前</i>」 ページから、今日と昨日の分を読み込んで表示します。
+        Scrapbox の 鍵 (Personal Access Token) を登録していれば、LabPay からそのまま書き込めます。
       </p>
     </div>
     <div class="card" id="rn-status">
-      <div class="muted">読み込み 中…</div>
+      <div class="muted">読み込み中…</div>
     </div>
     <div class="card" id="rn-today" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">📅 今日 (<span id="rn-today-date"></span>)</h3>
-        <a id="rn-today-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Cosense を 開く</a>
+        <a id="rn-today-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Scrapbox を開く</a>
       </div>
       <div id="rn-today-body" class="muted" style="margin-bottom:10px"></div>
       <div id="rn-today-write" class="rn-write" hidden>
-        <textarea id="rn-today-text" rows="4" maxlength="20000" placeholder="今日 の 研究 ノート を 書く" style="width:100%; font-family:inherit; font-size:13.5px; box-sizing:border-box; padding:6px 8px"></textarea>
+        <textarea id="rn-today-text" rows="4" maxlength="20000" placeholder="今日の研究ノートを書く" style="width:100%; font-family:inherit; font-size:13.5px; box-sizing:border-box; padding:6px 8px"></textarea>
         <div class="row" style="gap:6px; margin-top:6px; align-items:center">
-          <button id="rn-today-submit" class="primary">📝 LabPay 内 から 追記</button>
-          <span class="hint-sm">先頭 半角 スペース が 自動 で 付き ます (Scrapbox の インデント 記法)</span>
+          <button id="rn-today-submit" class="primary">📝 ここから追記</button>
+          <span class="hint-sm">行頭に半角スペースが自動で入ります (Scrapbox のインデント記法)</span>
         </div>
       </div>
       <div id="rn-today-write-disabled" class="hint-sm" hidden style="color:#dc2626">
-        PAT 未 登録 の ため LabPay 内 書き込み は 無効。 「↗ Cosense を 開く」 で 編集 する か、 設定 → Cosense 連携 で PAT を 登録 して ください。
+        Scrapbox の鍵 (Personal Access Token) をまだ登録していないので、LabPay からはそのまま書き込めません。<br>
+        ・ ひとまず「↗ Scrapbox を開く」をタップ → ブラウザの Scrapbox 側で書く<br>
+        ・ または「設定」 → 「📝 Cosense (Scrapbox) 連携」で鍵を 1 回登録すれば、以降は LabPay からそのまま書き込めるようになります (青と黄色のボックスに取り方の説明あり)
       </div>
     </div>
     <div class="card" id="rn-yesterday" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">🌗 昨日 (<span id="rn-yesterday-date"></span>)</h3>
-        <a id="rn-yesterday-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Cosense を 開く</a>
+        <a id="rn-yesterday-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Scrapbox を開く</a>
       </div>
       <div id="rn-yesterday-body" class="muted"></div>
     </div>
     <div class="card" id="rn-page-links" hidden>
-      <h3 style="margin:0 0 6px">📂 今月 / 先月 の ページ</h3>
+      <h3 style="margin:0 0 6px">📂 今月 / 先月のページ</h3>
       <div id="rn-page-list" class="list"></div>
     </div>
   `;
@@ -60,25 +62,25 @@ async function load() {
     lastDays = d;
     if (d.has_handle === false) {
       statusEl.innerHTML = `
-        <div class="bold" style="color:#dc2626">Scrapbox handle が 未 登録</div>
+        <div class="bold" style="color:#dc2626">名前 (Scrapbox 上の表記) が未設定</div>
         <div style="font-size:13px; margin-top:6px">${escapeHtml(d.message || '')}</div>`;
       return;
     }
     if (!d.cookie_present) {
       statusEl.innerHTML = `
-        <div class="bold" style="color:#dc2626">⚠ Cosense 認証 が 未 設定</div>
+        <div class="bold" style="color:#dc2626">⚠ Scrapbox との連携がまだ設定されていません</div>
         <div style="font-size:13px; margin-top:6px">
-          設定 → Cosense 連携 で <b>PAT</b> を 登録 して ください (推奨)。
+          「設定」 → 「📝 Cosense (Scrapbox) 連携」 から、Scrapbox の鍵 (Personal Access Token) を登録してください。
         </div>`;
       return;
     }
     const source = d.cookie_source || 'none';
     const canWrite = !!d.can_write;
-    const sourceLabel = source === 'self-pat' ? '✅ PAT (本人)' :
-                       source === 'self-cookie' ? '☑ cookie (本人)' :
-                       source === 'shared-cookie' ? '⚙ 共有 cookie (中村 名義)' : '?';
+    const sourceLabel = source === 'self-pat' ? '✅ 自分の鍵 (本人)' :
+                       source === 'self-cookie' ? '☑ 自分の cookie (本人)' :
+                       source === 'shared-cookie' ? '⚙ 共有 cookie (中村名義)' : '?';
     statusEl.innerHTML = `
-      <div style="font-size:13px">handle: <code>${escapeHtml(d.handle)}</code> ・ 認証: ${sourceLabel} ・ ${d.recent?.length || 0} 件 の 日付 セクション 抽出</div>`;
+      <div style="font-size:13px">名前: <code>${escapeHtml(d.handle)}</code> ・ 認証: ${sourceLabel} ・ ${d.recent?.length || 0} 件の日付ブロックを取得</div>`;
 
     // ページ リンク
     const pl = document.getElementById('rn-page-links');
@@ -121,10 +123,10 @@ function paintSection(cardId, dateKey, section, pageUrl, allowWrite) {
     bodyEl.innerHTML = `<pre style="white-space:pre-wrap; font-family:inherit; margin:0; font-size:13px; line-height:1.6">${escapeHtml(section.body)}</pre>`;
   } else if (section) {
     bodyEl.classList.add('muted');
-    bodyEl.textContent = '(日付 ヘッダ は ある が 内容 が 空)';
+    bodyEl.textContent = '(日付ヘッダはあるが内容が空)';
   } else {
     bodyEl.classList.add('muted');
-    bodyEl.textContent = '(まだ 書か れて いません)';
+    bodyEl.textContent = '(まだ書かれていません)';
   }
 
   // 書き込み UI (今日 のみ)
@@ -140,15 +142,15 @@ function paintSection(cardId, dateKey, section, pageUrl, allowWrite) {
         btn.dataset.bound = '1';
         btn.addEventListener('click', async () => {
           const text = ta.value.trim();
-          if (!text) { toast('内容 を 入れて ください'); return; }
+          if (!text) { toast('内容を入れてください'); return; }
           btn.disabled = true;
           const old = btn.textContent;
-          btn.textContent = '送信 中…';
+          btn.textContent = '送信中…';
           try {
             const r = await post('/api/cosense/research-note/append', { date: dateKey, text });
             if (r.ok) {
               ta.value = '';
-              toast('✅ Cosense に 書き込み ました (' + (r.inserted_lines || 0) + ' 行)');
+              toast('✅ Scrapbox に書き込みました (' + (r.inserted_lines || 0) + '行)');
               await load();
             } else {
               toast('失敗: ' + (r.reason || r.body || ('HTTP ' + r.status)));

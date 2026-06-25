@@ -168,56 +168,56 @@ export async function renderSettings() {
     <div class="card" id="cosense-card">
       <h3>📝 Cosense (Scrapbox) 連携</h3>
       <p class="hint" style="margin:6px 0 8px">
-        LabPay の <b>/#/research-notes</b> から Cosense (nkmr-lab) の 自分 の 研究 ノート を 読み書き でき ます。
-        ページ 名 は <code>YYYY.MM_研究ノート_<実名></code> で、 実名 は LabPay の 表示名 を そのまま 使う 仕様 (= 中村 研 の Scrapbox は 実名 ベース 運用)。
+        LabPay の <b>/#/research-notes</b> から自分の研究ノートを読み書きできます。
+        ページ名は <code>YYYY.MM_研究ノート_<実名></code> で、実名は LabPay の表示名をそのまま使います (中村研の Scrapbox は実名ベース運用)。
       </p>
 
       <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
-        <div class="bold" style="color:#0284c7; margin-bottom:4px">🔑 PAT って な に?</div>
-        PAT (= <b>Personal Access Token</b>) は、 ログイン パスワード の 代わり に なる <b>長い ランダム な 文字列</b> です。
-        scrapbox.io で 自分 用 に 1 つ 発行 して LabPay に 貼って おく と、 LabPay は その PAT を 使って 「あなた と して」 Scrapbox に 読み書き でき ます。
-        パスワード より セキュア (= scrapbox の ログイン 情報 を LabPay に 渡す 必要 が ない、 PAT 単体 を いつ でも 取り消し 可)、 そして 期限 が 来て も 自分 で 作り直せます。
+        <div class="bold" style="color:#0284c7; margin-bottom:4px">🔑 Personal Access Token (PAT) ってなに?</div>
+        Scrapbox にログインするためのパスワードの代わりになる、長いランダムな文字列です。
+        scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、LabPay は その鍵を使って「あなたとして」 Scrapbox に読み書きできます。
+        パスワードより安全 (scrapbox のログイン情報自体を LabPay に渡さなくていい、鍵単体はいつでも取り消せる) で、期限が来ても自分で作り直せます。
       </div>
 
       <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
-        <div class="bold" style="color:#92400e; margin-bottom:4px">📖 PAT の 作り 方 (3 ステップ)</div>
+        <div class="bold" style="color:#92400e; margin-bottom:4px">📖 鍵の作り方 (3 ステップ)</div>
         <ol style="margin:4px 0 0 18px; padding:0">
-          <li>scrapbox.io に Google ログイン (nkmr-lab に 入って いる 自分 の アカウント で)</li>
-          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>https://scrapbox.io/settings/personal-access-tokens</b></a> を 開く → 「Generate Token」</li>
-          <li>説明 (例: "LabPay") を 入れて 生成 → <b>表示 された 文字列 を コピー</b> (1 回 だけ 表示、 後 で 見直し 不可)</li>
+          <li>scrapbox.io に Google ログイン (nkmr-lab に入っている自分のアカウントで)</li>
+          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>https://scrapbox.io/settings/personal-access-tokens</b></a> を開く → 「Generate Token」</li>
+          <li>説明 (例: "LabPay") を入れて生成 → <b>表示された文字列をコピー</b> (1 回だけ表示、あとで見直し不可)</li>
         </ol>
-        <div style="margin-top:6px">コピー した PAT を 下 の 欄 に 貼って 「保存」 を 押せば 完了。</div>
+        <div style="margin-top:6px">コピーした鍵を下の欄に貼って「保存」を押せば完了。</div>
       </div>
 
-      <div id="cosense-status" class="hint-sm" style="margin:10px 0 6px">読み込み 中…</div>
+      <div id="cosense-status" class="hint-sm" style="margin:10px 0 6px">読み込み中…</div>
 
       <label class="field">
-        <span class="lbl">🔑 PAT (Personal Access Token)</span>
-        <input type="password" id="cosense-pat-input" placeholder="scrapbox.io で 発行 した PAT を 貼り 付け" autocomplete="off" style="font-family:monospace; font-size:12px">
+        <span class="lbl">🔑 Scrapbox の鍵 (Personal Access Token)</span>
+        <input type="password" id="cosense-pat-input" placeholder="scrapbox.io で発行した鍵を貼り付け" autocomplete="off" style="font-family:monospace; font-size:12px">
       </label>
       <div class="row" style="gap:6px; margin-bottom:14px">
         <button id="cosense-pat-save" class="primary">保存</button>
         <button id="cosense-pat-clear">解除</button>
-        <span class="hint-sm" style="margin-left:auto">保存 後 は 末尾 6 文字 のみ 表示 されます</span>
+        <span class="hint-sm" style="margin-left:auto">保存後は末尾 6 文字だけ表示されます</span>
       </div>
 
       <label class="field">
-        <span class="lbl">🏷 研究 ノート の ページ 名 に 使う 実名 <span class="hint-sm">— 空 なら 「表示名」 が そのまま 使われ ます (中村 研 の Scrapbox は 実名 ベース 運用)</span></span>
-        <input type="text" id="cosense-page-handle-input" placeholder="例: 中村聡史 (= Scrapbox 上 の 自分 の ページ 名 と 一致 する 表記)" maxlength="100" style="font-size:13px">
+        <span class="lbl">🏷 研究ノートのページ名に使う実名 <span class="hint-sm">— 空なら LabPay の「表示名」がそのまま使われます (中村研の Scrapbox は実名ベース運用)</span></span>
+        <input type="text" id="cosense-page-handle-input" placeholder="例: 中村聡史 (Scrapbox 上の自分のページ名と一致する表記)" maxlength="100" style="font-size:13px">
       </label>
       <div class="row" style="gap:6px; margin-bottom:10px">
         <button id="cosense-page-handle-save" class="primary">保存</button>
-        <button id="cosense-page-handle-clear">表示名 に 戻す</button>
+        <button id="cosense-page-handle-clear">表示名に戻す</button>
       </div>
       <details style="font-size:12px; margin-top:6px">
-        <summary style="cursor:pointer; color:#6b7280">🛠 legacy: connect.sid cookie で 登録 する (古い 経路、 PAT が あれば 不要)</summary>
+        <summary style="cursor:pointer; color:#6b7280">🛠 旧経路: connect.sid cookie で登録する (鍵があれば不要)</summary>
         <label class="field" style="margin-top:8px">
-          <span class="lbl">connect.sid 値</span>
-          <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で 始まる 文字列" style="font-family:monospace; font-size:12px"></textarea>
+          <span class="lbl">connect.sid の値</span>
+          <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で始まる文字列" style="font-family:monospace; font-size:12px"></textarea>
         </label>
         <div class="row" style="gap:6px">
-          <button id="cosense-save" class="btn">cookie 保存</button>
-          <button id="cosense-clear" class="btn">cookie 解除</button>
+          <button id="cosense-save" class="btn">cookie を保存</button>
+          <button id="cosense-clear" class="btn">cookie を解除</button>
         </div>
       </details>
     </div>
@@ -385,86 +385,86 @@ async function wireCosenseCookieUI() {
   const refreshStatus = async () => {
     try {
       const s = await get('/api/cosense/me/status');
-      // page handle の 由来 表示
+      // 名前の由来表示
       const handle = s.handle || '';
       let handleLine;
       if (handle) {
         if (s.page_handle_explicit) {
-          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code> (個別 設定)`;
+          handleLine = `📝 ページ名に使う名前: <code>${escapeHtml(handle)}</code> (個別設定)`;
         } else if (s.display_name_fallback && handle === s.display_name_fallback) {
-          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code> (= 表示名)`;
+          handleLine = `📝 ページ名に使う名前: <code>${escapeHtml(handle)}</code> (= 表示名)`;
         } else {
-          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code>`;
+          handleLine = `📝 ページ名に使う名前: <code>${escapeHtml(handle)}</code>`;
         }
       } else {
-        handleLine = '<span style="color:#dc2626">📝 handle 未 設定</span>';
+        handleLine = '<span style="color:#dc2626">📝 名前が未設定</span>';
       }
       let lines = [];
-      if (s.has_pat) lines.push(`✅ PAT 登録 済 (末尾 ...${escapeHtml(s.pat_tail || '')}) — 読み取り / 書き込み <b>本人 名義</b>`);
-      if (s.has_self_cookie) lines.push(`☑ legacy cookie 登録 済 (末尾 ...${escapeHtml(s.self_cookie_tail || '')}) — PAT が あれ ば 不要`);
+      if (s.has_pat) lines.push(`✅ 鍵を登録済 (末尾 ...${escapeHtml(s.pat_tail || '')}) — 読み書き <b>本人名義</b>`);
+      if (s.has_self_cookie) lines.push(`☑ 旧経路 cookie を登録済 (末尾 ...${escapeHtml(s.self_cookie_tail || '')}) — 鍵があれば不要`);
       if (!s.has_pat && !s.has_self_cookie) {
-        if (s.has_shared_cookie) lines.push(`⚙ 未 登録 — 共有 cookie 経由 で 読み取り のみ (中村 名義)`);
-        else lines.push(`⚠ 共有 cookie も 未 設定`);
+        if (s.has_shared_cookie) lines.push(`⚙ 未登録 — 共有 cookie で読み取りのみ (中村名義)`);
+        else lines.push(`⚠ 共有 cookie も未設定`);
       }
       lines.push(handleLine);
       statusEl.innerHTML = lines.join(' ・ ');
-      // 入力 欄 に 現 値 を 反映 (空 なら placeholder の まま)
+      // 入力欄に現在の値を反映 (空なら placeholder のまま)
       if (phInput && s.page_handle_explicit) phInput.value = s.page_handle_explicit;
-    } catch (e) { statusEl.textContent = '状態 取得 失敗: ' + e.message; }
+    } catch (e) { statusEl.textContent = '状態取得失敗: ' + e.message; }
   };
   await refreshStatus();
   phSave?.addEventListener('click', async () => {
     const v = phInput.value.trim();
     try {
       await patch('/api/cosense/me/page-handle', { handle: v });
-      toast('保存 し ました');
+      toast('保存しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
   phClear?.addEventListener('click', async () => {
-    if (!confirm('個別 設定 を 解除 し て 表示名 に 戻し ます か?')) return;
+    if (!confirm('個別設定を解除して表示名に戻しますか?')) return;
     try {
       await patch('/api/cosense/me/page-handle', { handle: '' });
       phInput.value = '';
-      toast('解除 し ました');
+      toast('解除しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
   patSave.addEventListener('click', async () => {
     const v = patInput.value.trim();
-    if (!v) { toast('PAT を 入れて ください'); return; }
+    if (!v) { toast('鍵を入れてください'); return; }
     try {
       await patch('/api/cosense/me/pat', { pat: v });
       patInput.value = '';
-      toast('保存 し ました');
+      toast('保存しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
   patClear?.addEventListener('click', async () => {
-    if (!confirm('Cosense PAT を 解除 し ます か?')) return;
+    if (!confirm('登録した鍵を解除しますか?')) return;
     try {
       await patch('/api/cosense/me/pat', { pat: '' });
       patInput.value = '';
-      toast('解除 し ました');
+      toast('解除しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
   cookieSave?.addEventListener('click', async () => {
     const v = cookieInput.value.trim();
-    if (!v) { toast('cookie を 入れて ください'); return; }
+    if (!v) { toast('cookie を入れてください'); return; }
     try {
       await patch('/api/cosense/me/cookie', { cookie: v });
       cookieInput.value = '';
-      toast('保存 し ました');
+      toast('保存しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
   cookieClear?.addEventListener('click', async () => {
-    if (!confirm('Cosense cookie を 解除 し ます か?')) return;
+    if (!confirm('登録した cookie を解除しますか?')) return;
     try {
       await patch('/api/cosense/me/cookie', { cookie: '' });
       cookieInput.value = '';
-      toast('解除 し ました');
+      toast('解除しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
