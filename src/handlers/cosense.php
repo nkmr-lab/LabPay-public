@@ -513,6 +513,11 @@ function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): 
     while (count($newLines) > 0 && trim((string)end($newLines)) === '') {
         array_pop($newLines);
     }
+    // v831 #418-2 次の日付ヘッダがある場合は、 本文の末尾に空行を 1 行入れる
+    //   (= 次の日付セクションとの間に視覚的な切れ目を作る)。
+    if ($nextAnchorId !== null && count($newLines) > 0) {
+        $newLines[] = '';
+    }
     $makeLineId = fn () => bin2hex(random_bytes(12));
     $changes = [];
     $stats = ['inserts' => 0, 'updates' => 0, 'deletes' => 0, 'header_created' => false];

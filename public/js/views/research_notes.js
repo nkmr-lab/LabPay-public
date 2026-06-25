@@ -26,10 +26,19 @@ export async function renderResearchNotes() {
       <div id="rn-today-edit" hidden>
         <p class="hint-sm" style="margin:4px 0 6px">
           今日のセクション本文をまるごとロードしています。 自由に編集してください。 保存を押すと差分のみ Scrapbox にコミットされます。
-          先頭の半角スペースは Scrapbox のインデント記法なので、 そのまま残してください。
+          行頭の半角スペースは Scrapbox のインデントなので、 右側のプレビューで「保存するとこう見える」 を確認しながら書いてください。
         </p>
-        <textarea id="rn-today-text" rows="10" maxlength="50000" placeholder=" 今日のメモを書く" style="width:100%; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace; font-size:13px; line-height:1.6; box-sizing:border-box; padding:8px 10px; min-height:200px"></textarea>
-        <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
+        <div class="rn-edit-pane" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:stretch">
+          <div>
+            <div class="hint-sm" style="margin-bottom:2px">📝 編集 (textarea)</div>
+            <textarea id="rn-today-text" rows="12" maxlength="50000" placeholder=" 今日のメモを書く" style="width:100%; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace; font-size:13px; line-height:1.6; box-sizing:border-box; padding:8px 10px; min-height:240px"></textarea>
+          </div>
+          <div>
+            <div class="hint-sm" style="margin-bottom:2px">👁 プレビュー (Scrapbox 表示風)</div>
+            <div id="rn-today-preview" style="min-height:240px; max-height:480px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:#fafafa; font-size:13px; line-height:1.6"></div>
+          </div>
+        </div>
+        <div class="row" style="gap:6px; margin-top:8px; align-items:center; flex-wrap:wrap">
           <button id="rn-today-save" class="primary">💾 保存 (差分コミット)</button>
           <button id="rn-today-reload" class="btn">🔄 ロードし直す</button>
           <span id="rn-today-stats" class="hint-sm" style="margin-left:auto"></span>
@@ -166,6 +175,11 @@ function setupTodayCard(dateKey, section, pageUrl, canWrite) {
   const saveBtn = document.getElementById('rn-today-save');
   const reloadBtn = document.getElementById('rn-today-reload');
   const statsEl = document.getElementById('rn-today-stats');
+  const taEl = document.getElementById('rn-today-text');
+  if (taEl && !taEl.dataset.previewBound) {
+    taEl.dataset.previewBound = '1';
+    taEl.addEventListener('input', renderPreview);
+  }
   if (saveBtn && !saveBtn.dataset.bound) {
     saveBtn.dataset.bound = '1';
     saveBtn.addEventListener('click', async () => {
@@ -216,9 +230,98 @@ async function loadEditable(dateKey) {
     const s = await get('/api/cosense/research-note/section?date=' + encodeURIComponent(dateKey));
     ta.value = s.body_text || '';
     ta.placeholder = ' 今日のメモを書く (1 行の頭に半角スペースで Scrapbox のインデント)';
+    renderPreview();
   } catch (e) {
     toast('セクションのロード失敗: ' + e.message);
   } finally {
     ta.disabled = false;
   }
+}
+
+// textarea の中身を Scrapbox 風に簡易レンダリングする。
+//   行頭スペースの数 = インデント段数。 さらに [* text] を太字、 [text url] / [url] をリンクに。
+//   気持ち悪さの解消用 で、 表示は近似なので Scrapbox の完全再現ではない。
+function renderPreview() {
+  const ta = document.getElementById('rn-today-text');
+  const root = document.getElementById('rn-today-preview');
+  if (!ta || !root) return;
+  const lines = ta.value.split('\n');
+  const html = lines.map(line => renderPreviewLine(line)).join('');
+  root.innerHTML = html || '<div class="muted" style="font-size:12px">(空)</div>';
+}
+
+function renderPreviewLine(line) {
+  // 行頭スペースの個数を数える
+  let indent = 0;
+  while (indent < line.length && line[indent] === ' ') indent++;
+  const rest = line.slice(indent);
+  const padPx = indent * 14;
+  // 簡易 Scrapbox 記法レンダリング
+  const inner = renderScrapboxInline(rest);
+  const empty = inner.trim() === '' ? '&nbsp;' : inner;
+  const bulletDot = indent > 0 ? '<span style="color:#9ca3af; margin-right:6px">•</span>' : '';
+  return `<div style="padding-left:${padPx}px; min-height:1em; white-space:pre-wrap; word-break:break-word">${bulletDot}${empty}</div>`;
+}
+
+// Scrapbox インライン記法 (簡易):
+//   [* text] → <b>
+//   [** text] → <b style="font-size:larger">
+//   [/ text] → <i>
+//   [- text] → <s>
+//   [text url] / [url text] / [url] → リンク
+//   `code` → <code>
+//   その他は escape
+function renderScrapboxInline(s) {
+  // まず HTML を escape
+  const esc = (t) => t.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  // [...] のマッチ
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '`') {
+      const end = s.indexOf('`', i + 1);
+      if (end > i) {
+        out += '<code style="background:#eef; padding:0 3px; border-radius:3px">' + esc(s.slice(i + 1, end)) + '</code>';
+        i = end + 1; continue;
+      }
+    }
+    if (s[i] === '[') {
+      const end = s.indexOf(']', i + 1);
+      if (end > i) {
+        const inside = s.slice(i + 1, end);
+        out += renderBracket(inside);
+        i = end + 1; continue;
+      }
+    }
+    out += esc(s[i]);
+    i++;
+  }
+  return out;
+}
+
+function renderBracket(inside) {
+  // [* text] / [** text]
+  const heading = inside.match(/^(\*+)\s+(.+)$/);
+  if (heading) {
+    const stars = heading[1].length;
+    const text = heading[2];
+    const size = stars === 1 ? '1em' : (stars === 2 ? '1.15em' : '1.3em');
+    const esc = (t) => t.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    return `<b style="font-size:${size}; color:#1f2937">${esc(text)}</b>`;
+  }
+  // [/ text] 斜体
+  const it = inside.match(/^\/\s+(.+)$/);
+  if (it) return `<i>${escapeHtml(it[1])}</i>`;
+  // [- text] 取消
+  const st = inside.match(/^-\s+(.+)$/);
+  if (st) return `<s>${escapeHtml(st[1])}</s>`;
+  // url 入りリンク
+  const urlMatch = inside.match(/https?:\/\/\S+/);
+  if (urlMatch) {
+    const url = urlMatch[0];
+    const text = inside.replace(url, '').trim() || url;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#0284c7">${escapeHtml(text)}</a>`;
+  }
+  // ページリンク (内部リンク扱い)
+  return `<span style="color:#9333ea; border-bottom:1px dotted #9333ea">${escapeHtml(inside)}</span>`;
 }
