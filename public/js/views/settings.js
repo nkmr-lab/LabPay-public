@@ -168,28 +168,39 @@ export async function renderSettings() {
     <div class="card" id="cosense-card">
       <h3>📝 Cosense (Scrapbox) 連携</h3>
       <p class="hint" style="margin:6px 0 8px">
-        自分 の Cosense session cookie (<code>connect.sid</code>) を 登録 する と、
-        /#/research-notes で 「あなた 自身 の cookie」 で ページ を 取得 / 書き込み でき ます (= 編集 attribution が 正しく 「あなた」 に なる)。
+        自分 の Cosense PAT (Personal Access Token) を 登録 する と、 /#/research-notes で
+        ページ の 取得 と 書き込み が 「あなた 名義」 で 行え ます。 PAT は cookie より 永続 で セキュア な 推奨 方式 です。
       </p>
       <details style="margin:6px 0 10px; font-size:12.5px">
-        <summary style="cursor:pointer; color:#0284c7">📖 cookie の 取り 方</summary>
+        <summary style="cursor:pointer; color:#0284c7">📖 PAT の 取り 方</summary>
         <ol style="margin:6px 0 0 18px; line-height:1.6">
           <li>scrapbox.io に Google ログイン (nkmr-lab に 参加 済 み の アカウント)</li>
-          <li>ブラウザ DevTools を 開く (Chrome / Edge: F12、 Safari: 開発 メニュー)</li>
-          <li>「Application」 (Chrome) または 「Storage」 (Safari) タブ → Cookies → https://scrapbox.io</li>
-          <li><code>connect.sid</code> の Value 列 を コピー (s%3A... で 始まる 長い 文字列)</li>
+          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener">https://scrapbox.io/settings/personal-access-tokens</a> を 開く</li>
+          <li>「Generate Token」 を 押して 説明 文 を 入れて 生成 (例: "LabPay")</li>
+          <li>表示 された PAT を コピー (1 回 だけ 表示、 再 表示 不可)</li>
           <li>下 の 欄 に 貼り 付け て 保存</li>
         </ol>
       </details>
       <div id="cosense-status" class="hint-sm" style="margin-bottom:6px">読み込み 中…</div>
       <label class="field">
-        <span class="lbl">connect.sid 値</span>
-        <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で 始まる 長い 文字列" style="font-family:monospace; font-size:12px"></textarea>
+        <span class="lbl">PAT (推奨)</span>
+        <input type="password" id="cosense-pat-input" placeholder="scrapbox.io の Personal Access Token" autocomplete="off" style="font-family:monospace; font-size:12px">
       </label>
-      <div class="row" style="gap:6px">
-        <button id="cosense-save" class="primary">保存</button>
-        <button id="cosense-clear">解除 (空 に する)</button>
+      <div class="row" style="gap:6px; margin-bottom:10px">
+        <button id="cosense-pat-save" class="primary">保存</button>
+        <button id="cosense-pat-clear">解除</button>
       </div>
+      <details style="font-size:12px; margin-top:6px">
+        <summary style="cursor:pointer; color:#6b7280">🛠 legacy: connect.sid cookie で 登録 する (古い 経路、 PAT が あれば 不要)</summary>
+        <label class="field" style="margin-top:8px">
+          <span class="lbl">connect.sid 値</span>
+          <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で 始まる 文字列" style="font-family:monospace; font-size:12px"></textarea>
+        </label>
+        <div class="row" style="gap:6px">
+          <button id="cosense-save" class="btn">cookie 保存</button>
+          <button id="cosense-clear" class="btn">cookie 解除</button>
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -339,41 +350,66 @@ export async function renderSettings() {
   await wireCosenseCookieUI();
 }
 
-// v822 Cosense session cookie 登録 UI
+// v823 Cosense PAT + legacy cookie 登録 UI
 async function wireCosenseCookieUI() {
   const statusEl = document.getElementById('cosense-status');
-  const input = document.getElementById('cosense-cookie-input');
-  const saveBtn = document.getElementById('cosense-save');
-  const clearBtn = document.getElementById('cosense-clear');
-  if (!statusEl || !saveBtn) return;
+  const patInput = document.getElementById('cosense-pat-input');
+  const patSave  = document.getElementById('cosense-pat-save');
+  const patClear = document.getElementById('cosense-pat-clear');
+  const cookieInput = document.getElementById('cosense-cookie-input');
+  const cookieSave  = document.getElementById('cosense-save');
+  const cookieClear = document.getElementById('cosense-clear');
+  if (!statusEl || !patSave) return;
   const refreshStatus = async () => {
     try {
       const s = await get('/api/cosense/me/status');
-      if (s.has_self_cookie) {
-        statusEl.innerHTML = `✅ <b>登録 済 み</b> (末尾 ...${escapeHtml(s.self_cookie_tail || '')})  ${s.handle ? `・ handle: <code>${escapeHtml(s.handle)}</code>` : '・ handle 未 登録 (admin に 依頼)'}`;
-      } else if (s.has_shared_cookie) {
-        statusEl.innerHTML = `⚙ <b>未 登録</b> — 現状 は 共有 (admin) cookie 経由 で 読み取り のみ。 自分 で 書き込み する に は 自分 の cookie を 登録 して ください。`;
-      } else {
-        statusEl.innerHTML = `⚠ <b>共有 cookie も 未 設定</b> — admin に 連絡 して ください。`;
+      const handleLine = s.handle ? `handle: <code>${escapeHtml(s.handle)}</code>` : '<span style="color:#dc2626">handle 未 登録 (admin に 依頼)</span>';
+      let lines = [];
+      if (s.has_pat) lines.push(`✅ PAT 登録 済 (末尾 ...${escapeHtml(s.pat_tail || '')}) — 読み取り / 書き込み <b>本人 名義</b>`);
+      if (s.has_self_cookie) lines.push(`☑ legacy cookie 登録 済 (末尾 ...${escapeHtml(s.self_cookie_tail || '')}) — PAT が あれ ば 不要`);
+      if (!s.has_pat && !s.has_self_cookie) {
+        if (s.has_shared_cookie) lines.push(`⚙ 未 登録 — 共有 cookie 経由 で 読み取り のみ (中村 名義)`);
+        else lines.push(`⚠ 共有 cookie も 未 設定`);
       }
+      lines.push(handleLine);
+      statusEl.innerHTML = lines.join(' ・ ');
     } catch (e) { statusEl.textContent = '状態 取得 失敗: ' + e.message; }
   };
   await refreshStatus();
-  saveBtn.addEventListener('click', async () => {
-    const v = input.value.trim();
-    if (!v) { toast('cookie を 入れて ください'); return; }
+  patSave.addEventListener('click', async () => {
+    const v = patInput.value.trim();
+    if (!v) { toast('PAT を 入れて ください'); return; }
     try {
-      await patch('/api/cosense/me/cookie', { cookie: v });
-      input.value = '';
+      await patch('/api/cosense/me/pat', { pat: v });
+      patInput.value = '';
       toast('保存 し ました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
   });
-  clearBtn?.addEventListener('click', async () => {
+  patClear?.addEventListener('click', async () => {
+    if (!confirm('Cosense PAT を 解除 し ます か?')) return;
+    try {
+      await patch('/api/cosense/me/pat', { pat: '' });
+      patInput.value = '';
+      toast('解除 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  cookieSave?.addEventListener('click', async () => {
+    const v = cookieInput.value.trim();
+    if (!v) { toast('cookie を 入れて ください'); return; }
+    try {
+      await patch('/api/cosense/me/cookie', { cookie: v });
+      cookieInput.value = '';
+      toast('保存 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  cookieClear?.addEventListener('click', async () => {
     if (!confirm('Cosense cookie を 解除 し ます か?')) return;
     try {
       await patch('/api/cosense/me/cookie', { cookie: '' });
-      input.value = '';
+      cookieInput.value = '';
       toast('解除 し ました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }

@@ -1,8 +1,10 @@
-// /#/research-notes — Cosense (nkmr-lab) 上 の 「YYYY.MM_研究ノート_<handle>」 ページ を 読み込み、
-//   今日 / 昨日 の 日付 セクション を 抽出 して 表示。 書く 時 は Cosense の edit URL を 開く。
-//   v821 #cosense Cosense REST API 直接 連携 (config.cosense.session_cookie 必須)。
-import { get } from '../api.js';
+// /#/research-notes — Cosense (nkmr-lab) の 「YYYY.MM_研究ノート_<handle>」 ページ を 読み込み、
+//   今日 / 昨日 の 日付 セクション を 表示。 PAT 登録 済 み なら LabPay 内 で 直接 書き込み (v2 API)。
+//   v823 Phase B: PAT 経由 で の preview → submit 書き込み を 実装。
+
+import { get, post } from '../api.js';
 import { escapeHtml } from '../router.js';
+import { toast } from '../app.js';
 
 export async function renderResearchNotes() {
   const app = document.getElementById('app');
@@ -10,24 +12,34 @@ export async function renderResearchNotes() {
     <div class="card page-header">
       <h2 style="margin:0">📝 研究 ノート (Cosense)</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        nkmr-lab の 「YYYY.MM_研究ノート_<i>handle</i>」 ページ を ロード し、 直近 の 日付
-        セクション を 抽出 して 表示 します。 書く 時 は Cosense を 開いて 直接 編集 し ます。
+        「YYYY.MM_研究ノート_<i>handle</i>」 ページ を 取得 し、 直近 の 日付 セクション を 表示 し ます。
+        書き込み は <b>PAT 登録 済 み</b> の 場合 LabPay 内 で 直接 (preview → submit)、 未 登録 の 場合 は Cosense を 開いて 編集。
       </p>
     </div>
     <div class="card" id="rn-status">
-      <div class="muted">読み込み中…</div>
+      <div class="muted">読み込み 中…</div>
     </div>
     <div class="card" id="rn-today" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">📅 今日 (<span id="rn-today-date"></span>)</h3>
-        <a id="rn-today-edit" class="btn primary" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">✏️ Cosense で 書く</a>
+        <a id="rn-today-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Cosense を 開く</a>
       </div>
-      <div id="rn-today-body" class="muted"></div>
+      <div id="rn-today-body" class="muted" style="margin-bottom:10px"></div>
+      <div id="rn-today-write" class="rn-write" hidden>
+        <textarea id="rn-today-text" rows="4" maxlength="20000" placeholder="今日 の 研究 ノート を 書く" style="width:100%; font-family:inherit; font-size:13.5px; box-sizing:border-box; padding:6px 8px"></textarea>
+        <div class="row" style="gap:6px; margin-top:6px; align-items:center">
+          <button id="rn-today-submit" class="primary">📝 LabPay 内 から 追記</button>
+          <span class="hint-sm">先頭 半角 スペース が 自動 で 付き ます (Scrapbox の インデント 記法)</span>
+        </div>
+      </div>
+      <div id="rn-today-write-disabled" class="hint-sm" hidden style="color:#dc2626">
+        PAT 未 登録 の ため LabPay 内 書き込み は 無効。 「↗ Cosense を 開く」 で 編集 する か、 設定 → Cosense 連携 で PAT を 登録 して ください。
+      </div>
     </div>
     <div class="card" id="rn-yesterday" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title" style="margin:0">🌗 昨日 (<span id="rn-yesterday-date"></span>)</h3>
-        <a id="rn-yesterday-edit" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">✏️ Cosense で 書く</a>
+        <a id="rn-yesterday-open" class="btn" style="font-size:12px; padding:3px 10px; margin-left:auto" target="_blank" rel="noopener">↗ Cosense を 開く</a>
       </div>
       <div id="rn-yesterday-body" class="muted"></div>
     </div>
@@ -39,10 +51,13 @@ export async function renderResearchNotes() {
   await load();
 }
 
+let lastDays = null; // 全体 state 保持
+
 async function load() {
   const statusEl = document.getElementById('rn-status');
   try {
     const d = await get('/api/cosense/research-note/days?count=2');
+    lastDays = d;
     if (d.has_handle === false) {
       statusEl.innerHTML = `
         <div class="bold" style="color:#dc2626">Scrapbox handle が 未 登録</div>
@@ -51,14 +66,21 @@ async function load() {
     }
     if (!d.cookie_present) {
       statusEl.innerHTML = `
-        <div class="bold" style="color:#dc2626">⚠ Cosense session cookie が 未 設定</div>
-        <div style="font-size:13px; margin-top:6px; line-height:1.6">
-          admin が config.php の <code>cosense.session_cookie</code> に connect.sid 値 を 設定 する 必要 が あります。<br>
-          取得 方法: Cosense (scrapbox.io) に ログイン → DevTools → Application → Cookies → connect.sid 値 (s%3A... で 始まる 長い 文字列) を コピー。
+        <div class="bold" style="color:#dc2626">⚠ Cosense 認証 が 未 設定</div>
+        <div style="font-size:13px; margin-top:6px">
+          設定 → Cosense 連携 で <b>PAT</b> を 登録 して ください (推奨)。
         </div>`;
       return;
     }
-    // ページ リンク (今月 + 先月)
+    const source = d.cookie_source || 'none';
+    const canWrite = !!d.can_write;
+    const sourceLabel = source === 'self-pat' ? '✅ PAT (本人)' :
+                       source === 'self-cookie' ? '☑ cookie (本人)' :
+                       source === 'shared-cookie' ? '⚙ 共有 cookie (中村 名義)' : '?';
+    statusEl.innerHTML = `
+      <div style="font-size:13px">handle: <code>${escapeHtml(d.handle)}</code> ・ 認証: ${sourceLabel} ・ ${d.recent?.length || 0} 件 の 日付 セクション 抽出</div>`;
+
+    // ページ リンク
     const pl = document.getElementById('rn-page-links');
     const plRoot = document.getElementById('rn-page-list');
     pl.hidden = false;
@@ -71,58 +93,77 @@ async function load() {
         <span style="font-size:18px">↗</span>
       </a>`).join('');
 
-    const recent = d.recent || [];
-    const todayKey = d.today;       // YYYY.MM.DD
-    const yesterdayKey = d.yesterday;
-    const findByDate = (k) => recent.find(s => s.date === k);
-    const handle = d.handle;
-    const buildEditUrl = (dateKey, sectionBody) => {
-      // YYYY.MM.DD → YYYY.MM の ページ に 日付 ヘッダ を 追加 する URL を 生成
-      const [y, m, day] = dateKey.split('.');
-      const ym = `${y}.${m}`;
-      const title = `${ym}_研究ノート_${handle}`;
-      // section が 既に ある なら そのまま 開く、 ない なら 日付 ヘッダ を body 付与 で 新規 追加
-      const proj = 'nkmr-lab';
-      const baseUrl = `https://scrapbox.io/${encodeURIComponent(proj)}/${encodeURIComponent(title)}`;
-      if (sectionBody) return baseUrl; // 既存 セクション に スクロール (Cosense 上 で)
-      // 新規 セクション を 追加 する body
-      const wday = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(Number(y), Number(m)-1, Number(day)).getDay()];
-      const header = `[*( ${dateKey} ${wday} )]`;
-      return baseUrl + '?body=' + encodeURIComponent('\n' + header + '\n');
+    const todayKey = d.today, yKey = d.yesterday;
+    const findByDate = (k) => (d.recent || []).find(s => s.date === k);
+    const buildPageUrl = (dateKey) => {
+      const ym = dateKey.slice(0, 7);
+      const title = `${ym}_研究ノート_${d.handle}`;
+      return `https://scrapbox.io/nkmr-lab/${encodeURIComponent(title)}`;
     };
-    statusEl.innerHTML = `
-      <div class="bold">Scrapbox handle: <code>${escapeHtml(handle)}</code></div>
-      <div class="meta" style="font-size:12px">${recent.length} 件 の 日付 セクション を 抽出 (直近 2 日 分)</div>`;
-
-    const today = findByDate(todayKey);
-    const yest = findByDate(yesterdayKey);
-    paintSection('rn-today', todayKey, today, buildEditUrl(todayKey, today?.body));
-    paintSection('rn-yesterday', yesterdayKey, yest, buildEditUrl(yesterdayKey, yest?.body));
+    paintSection('rn-today', todayKey, findByDate(todayKey), buildPageUrl(todayKey), canWrite);
+    paintSection('rn-yesterday', yKey, findByDate(yKey), buildPageUrl(yKey), false);
   } catch (e) {
     statusEl.innerHTML = `<div class="muted">取得 失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-function paintSection(cardId, dateKey, section, editUrl) {
+function paintSection(cardId, dateKey, section, pageUrl, allowWrite) {
   const card = document.getElementById(cardId);
   const dateEl = document.getElementById(cardId + '-date');
   const bodyEl = document.getElementById(cardId + '-body');
-  const editEl = document.getElementById(cardId + '-edit');
+  const openEl = document.getElementById(cardId + '-open');
   if (!card) return;
   card.hidden = false;
   if (dateEl) dateEl.textContent = dateKey;
-  if (editEl) editEl.href = editUrl;
-  if (section && section.body !== undefined) {
-    const body = section.body;
-    if (body && body.trim() !== '') {
-      bodyEl.classList.remove('muted');
-      bodyEl.innerHTML = `<pre style="white-space:pre-wrap; font-family:inherit; margin:0; font-size:13px; line-height:1.6">${escapeHtml(body)}</pre>`;
-    } else {
-      bodyEl.classList.add('muted');
-      bodyEl.textContent = '(日付 ヘッダ は ある が 内容 が 空)';
-    }
+  if (openEl) openEl.href = pageUrl;
+  if (section && section.body && section.body.trim() !== '') {
+    bodyEl.classList.remove('muted');
+    bodyEl.innerHTML = `<pre style="white-space:pre-wrap; font-family:inherit; margin:0; font-size:13px; line-height:1.6">${escapeHtml(section.body)}</pre>`;
+  } else if (section) {
+    bodyEl.classList.add('muted');
+    bodyEl.textContent = '(日付 ヘッダ は ある が 内容 が 空)';
   } else {
     bodyEl.classList.add('muted');
-    bodyEl.textContent = '(まだ 書か れて いません) ' + (editEl ? '→ 「✏️ Cosense で 書く」 を タップ' : '');
+    bodyEl.textContent = '(まだ 書か れて いません)';
+  }
+
+  // 書き込み UI (今日 のみ)
+  if (cardId === 'rn-today') {
+    const writeBox = document.getElementById('rn-today-write');
+    const disabled = document.getElementById('rn-today-write-disabled');
+    if (allowWrite) {
+      writeBox.hidden = false;
+      if (disabled) disabled.hidden = true;
+      const ta = document.getElementById('rn-today-text');
+      const btn = document.getElementById('rn-today-submit');
+      if (btn && !btn.dataset.bound) {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', async () => {
+          const text = ta.value.trim();
+          if (!text) { toast('内容 を 入れて ください'); return; }
+          btn.disabled = true;
+          const old = btn.textContent;
+          btn.textContent = '送信 中…';
+          try {
+            const r = await post('/api/cosense/research-note/append', { date: dateKey, text });
+            if (r.ok) {
+              ta.value = '';
+              toast('✅ Cosense に 書き込み ました (' + (r.inserted_lines || 0) + ' 行)');
+              await load();
+            } else {
+              toast('失敗: ' + (r.reason || r.body || ('HTTP ' + r.status)));
+            }
+          } catch (e) {
+            toast('失敗: ' + (e?.message || e));
+          } finally {
+            btn.disabled = false;
+            btn.textContent = old;
+          }
+        });
+      }
+    } else {
+      writeBox.hidden = true;
+      if (disabled) disabled.hidden = false;
+    }
   }
 }
