@@ -36,6 +36,10 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'replace-section') {
         cosense_research_note_section_replace($pdo, $cfg, $uid); return;
     }
+    // v834 月の日別統計 (カレンダーのヒート表示用)
+    if ($sub === 'research-note' && $method === 'GET' && ($seg[2] ?? '') === 'month') {
+        cosense_research_note_month_stats($pdo, $cfg, $uid); return;
+    }
     if ($sub === 'page' && $method === 'GET') {
         cosense_page_text($pdo, $cfg, $uid); return;
     }
@@ -438,6 +442,25 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     ]);
 }
 
+// v834 ETag 付きで JSON を返す。 If-None-Match と一致すれば 304。
+function cosense_send_json_etagged(array $resp): void {
+    $body = json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $etag = '"' . md5($body) . '"';
+    $ifNone = trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+    if ($ifNone === $etag) {
+        http_response_code(304);
+        header('ETag: ' . $etag);
+        header('Cache-Control: no-cache');
+        exit;
+    }
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-cache');
+    header('ETag: ' . $etag);
+    echo $body;
+    exit;
+}
+
 // ───────── editable section (v830) ─────────
 
 // 指定日のセクション (= [*( YYYY.MM.DD ...)] ヘッダの直下から、次の日付ヘッダの直前まで) を
@@ -464,7 +487,7 @@ function cosense_research_note_section_get(PDO $pdo, array $cfg, int $uid): void
 
     [$headerIdx, $headerLineId, $nextAnchorId, $bodyLines] = cosense_locate_section($allLines, $date);
 
-    json_response([
+    cosense_send_json_etagged([
         'ok' => true,
         'title' => $title,
         'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
@@ -612,6 +635,58 @@ function cosense_locate_section(array $allLines, string $date): array {
         $bodyLines[] = ['id' => $ln['id'] ?? '', 'text' => $t];
     }
     return [$headerIdx, $headerLineId, $nextAnchorId, $bodyLines];
+}
+
+// v834 指定月の研究ノートページを開いて、 日別の line_count / char_count を集計する。
+//   GET /api/cosense/research-note/month?ym=YYYY.MM
+//   ETag 対応 (= 内容が変わってなければ 304)。
+function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void {
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition', 'Scrapboxの鍵が未登録です', 412);
+    }
+    $handle = cosense_user_handle($pdo, $uid);
+    if ($handle === null) {
+        throw new ApiException('precondition', '名前が未設定', 412);
+    }
+    $ym = trim((string)($_GET['ym'] ?? ''));
+    if (!preg_match('/^20\d{2}\.\d{2}$/', $ym)) {
+        throw new ApiException('bad_request', 'ym は YYYY.MM', 400);
+    }
+    $title = $ym . '_研究ノート_' . $handle;
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    $existsPage = $r['ok'];
+    $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
+
+    // 全日付セクションを集計
+    $days = [];
+    $curDate = null;
+    foreach ($allLines as $ln) {
+        $t = (string)($ln['text'] ?? '');
+        if (preg_match('/^\[\*\(\s*(20\d{2}\.\d{2}\.\d{2})/u', $t, $m)) {
+            $curDate = $m[1];
+            if (!isset($days[$curDate])) {
+                $days[$curDate] = ['line_count' => 0, 'char_count' => 0];
+            }
+            continue;
+        }
+        if ($curDate !== null && isset($days[$curDate])) {
+            $tt = trim($t);
+            if ($tt !== '') {
+                $days[$curDate]['line_count']++;
+                $days[$curDate]['char_count'] += mb_strlen($tt);
+            }
+        }
+    }
+
+    cosense_send_json_etagged([
+        'ok' => true,
+        'ym' => $ym,
+        'title' => $title,
+        'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
+        'exists_page' => $existsPage,
+        'days' => (object)$days, // 空オブジェクト保証
+    ]);
 }
 
 // ───────── me settings ─────────

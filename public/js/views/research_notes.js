@@ -1,67 +1,80 @@
-// /#/research-notes — Cosense (nkmr-lab) の研究ノートを LabPay 内で閲覧 / 編集。
-//   v832: 閲覧モードで起動 + カレンダーで日付選択 → 「✏️ 編集」 で編集モード → 「💾 保存」 で
-//   差分コミット。 「最初から追記モードが気持ち悪い」 への対応。
-import { get, post } from '../api.js';
-import { escapeHtml } from '../router.js';
+// /#/research-notes — Cosense 研究ノート ビューア + エディタ。
+//   v834: フルスクリーン表示 + ✕で閉じる、 GitHub風ヒートカレンダー、 localStorage キャッシュ +
+//   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンド プリフェッチ。
+import { post } from '../api.js';
+import { escapeHtml, navigate } from '../router.js';
 import { toast } from '../app.js';
+
+const CACHE_PREFIX = 'cosense:';
+const SECTION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30日でキャッシュ自動破棄
 
 let stateLocal = {
   handle: null,
   canWrite: false,
-  selectedDate: null,   // 'YYYY.MM.DD'
-  mode: 'view',          // 'view' | 'edit'
+  selectedDate: null,
+  visibleYm: null,
+  mode: 'view',                  // 'view' | 'edit'
   loaded: { date: null, text: '', exists: false },
+  monthData: {},                 // 'YYYY.MM' → { days: {date: {line_count, char_count}} }
 };
 
 export async function renderResearchNotes() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="card page-header">
-      <h2 style="margin:0">📝 研究ノート (Cosense)</h2>
-    </div>
-    <div class="card" id="rn-status" hidden>
-      <div class="muted">読み込み中…</div>
-    </div>
-    <div class="card" id="rn-main" hidden>
-      <div class="row center" style="gap:6px; flex-wrap:wrap; margin-bottom:8px">
-        <input type="date" id="rn-date-picker" style="font-size:14px; padding:4px 6px">
-        <button id="rn-prev" class="btn" style="padding:3px 8px">←</button>
-        <button id="rn-today" class="btn" style="padding:3px 10px">今日</button>
-        <button id="rn-next" class="btn" style="padding:3px 8px">→</button>
-        <span id="rn-date-label" class="muted" style="font-size:12px; margin-left:6px"></span>
+    <div id="rn-fullscreen" style="position:fixed; inset:0; background:#fff; z-index:1000; overflow-y:auto; padding:10px 12px; box-sizing:border-box">
+      <div class="row center" style="margin-bottom:8px; gap:8px">
+        <h2 style="margin:0; font-size:18px; flex:1">📝 研究ノート</h2>
+        <button id="rn-close" class="btn" style="font-size:18px; line-height:1; padding:6px 12px" title="閉じる">✕</button>
       </div>
+      <div id="rn-status" hidden>
+        <div class="muted">読み込み中…</div>
+      </div>
+      <div id="rn-body" hidden>
+        <div id="rn-calendar" style="margin-bottom:12px"></div>
 
-      <div id="rn-view" hidden>
-        <div id="rn-view-body" style="min-height:60px"></div>
-        <div class="row" style="margin-top:8px; gap:6px; align-items:center">
-          <button id="rn-edit-btn" class="primary" hidden>✏️ 編集</button>
-          <span id="rn-no-edit-hint" class="hint-sm" style="color:#dc2626" hidden></span>
+        <div class="row center" style="gap:6px; flex-wrap:wrap; margin-bottom:8px">
+          <input type="date" id="rn-date-picker" style="font-size:14px; padding:4px 6px">
+          <button id="rn-prev" class="btn" style="padding:3px 8px">←</button>
+          <button id="rn-today" class="btn" style="padding:3px 10px">今日</button>
+          <button id="rn-next" class="btn" style="padding:3px 8px">→</button>
+          <span id="rn-date-label" class="muted" style="font-size:12px; margin-left:6px"></span>
+          <span style="flex:1"></span>
+          <span id="rn-cache-badge" class="hint-sm" style="font-size:11px"></span>
         </div>
-      </div>
 
-      <div id="rn-edit" hidden>
-        <p class="hint-sm" style="margin:4px 0 6px">
-          このセクションの本文をまるごとロードしています。 自由に編集してください。 保存を押すと差分のみ Scrapbox にコミット。
-          行頭の半角スペースは Scrapbox のインデントなので、 右側のプレビューで「保存するとこう見える」 を確認しながら書いてください。
-        </p>
-        <div class="rn-edit-pane" style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
-          <div>
-            <div class="hint-sm" style="margin-bottom:2px">📝 編集</div>
-            <textarea id="rn-text" rows="12" maxlength="50000" placeholder=" 本文を書く" style="width:100%; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace; font-size:13px; line-height:1.6; box-sizing:border-box; padding:8px 10px; min-height:240px"></textarea>
-          </div>
-          <div>
-            <div class="hint-sm" style="margin-bottom:2px">👁 プレビュー</div>
-            <div id="rn-preview" style="min-height:240px; max-height:480px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:#fafafa; font-size:13px; line-height:1.6"></div>
+        <div id="rn-view" hidden>
+          <div id="rn-view-body" style="min-height:60px"></div>
+          <div class="row" style="margin-top:8px; gap:6px; align-items:center">
+            <button id="rn-edit-btn" class="primary" hidden>✏️ 編集</button>
+            <span id="rn-no-edit-hint" class="hint-sm" style="color:#dc2626" hidden></span>
           </div>
         </div>
-        <div class="row" style="gap:6px; margin-top:8px; align-items:center; flex-wrap:wrap">
-          <button id="rn-save" class="primary">💾 保存 (差分コミット)</button>
-          <button id="rn-cancel" class="btn">キャンセル</button>
-          <span id="rn-stats" class="hint-sm" style="margin-left:auto"></span>
+
+        <div id="rn-edit" hidden>
+          <p class="hint-sm" style="margin:4px 0 6px">
+            このセクションの本文をまるごとロードしています。 自由に編集してください。 保存を押すと差分のみ Scrapbox にコミット。
+            行頭の半角スペースは Scrapbox のインデントなので、 右側のプレビューで「保存するとこう見える」 を確認しながら書いてください。
+          </p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+            <div>
+              <div class="hint-sm" style="margin-bottom:2px">📝 編集</div>
+              <textarea id="rn-text" rows="12" maxlength="50000" placeholder=" 本文を書く" style="width:100%; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace; font-size:13px; line-height:1.6; box-sizing:border-box; padding:8px 10px; min-height:240px"></textarea>
+            </div>
+            <div>
+              <div class="hint-sm" style="margin-bottom:2px">👁 プレビュー</div>
+              <div id="rn-preview" style="min-height:240px; max-height:480px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:#fafafa; font-size:13px; line-height:1.6"></div>
+            </div>
+          </div>
+          <div class="row" style="gap:6px; margin-top:8px; align-items:center; flex-wrap:wrap">
+            <button id="rn-save" class="primary">💾 保存 (差分コミット)</button>
+            <button id="rn-cancel" class="btn">キャンセル</button>
+            <span id="rn-stats" class="hint-sm" style="margin-left:auto"></span>
+          </div>
         </div>
       </div>
     </div>
   `;
+  document.getElementById('rn-close').addEventListener('click', () => navigate('#/apps'));
   await loadInitial();
 }
 
@@ -70,8 +83,8 @@ async function loadInitial() {
   statusEl.hidden = false;
   statusEl.innerHTML = '<div class="muted">読み込み中…</div>';
   try {
-    // 状態とハンドル情報を取得 + 今日の日付を確定
-    const d = await get('/api/cosense/research-note/days?count=2');
+    const r = await fetchEtagged('/api/cosense/research-note/days?count=2', 'days');
+    const d = r.data;
     if (d.has_handle === false) {
       statusEl.innerHTML = `
         <div class="bold" style="color:#dc2626">名前 (Scrapbox 上の表記) が未設定</div>
@@ -89,15 +102,16 @@ async function loadInitial() {
     stateLocal.handle = d.handle;
     stateLocal.canWrite = !!d.can_write;
     stateLocal.selectedDate = d.today;
-    // 認証 OK のときはステータスカードを隠す (= 場所を取らない)。
+    stateLocal.visibleYm = d.today.slice(0, 7); // 'YYYY.MM'
     statusEl.hidden = true;
-
-    document.getElementById('rn-main').hidden = false;
-
-    // バインド
+    document.getElementById('rn-body').hidden = false;
     bindNav();
     document.getElementById('rn-date-picker').value = dateKeyToInputValue(stateLocal.selectedDate);
+
+    await renderCalendar(stateLocal.visibleYm);
     await loadSection(stateLocal.selectedDate);
+    // 前月/次月をバックグラウンドでプリフェッチ
+    schedulePrefetch(stateLocal.visibleYm);
   } catch (e) {
     statusEl.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
@@ -105,30 +119,24 @@ async function loadInitial() {
 
 function bindNav() {
   document.getElementById('rn-date-picker').addEventListener('change', (ev) => {
-    const v = ev.target.value; // 'YYYY-MM-DD'
+    const v = ev.target.value;
     if (!v) return;
-    const dateKey = v.replace(/-/g, '.'); // 'YYYY.MM.DD'
-    switchDate(dateKey);
+    switchDate(v.replace(/-/g, '.'));
   });
   document.getElementById('rn-prev').addEventListener('click', () => moveDays(-1));
   document.getElementById('rn-next').addEventListener('click', () => moveDays(+1));
-  document.getElementById('rn-today').addEventListener('click', () => {
-    const t = todayJstKey();
-    switchDate(t);
-  });
+  document.getElementById('rn-today').addEventListener('click', () => switchDate(todayJstKey()));
 }
 
 function moveDays(delta) {
   const cur = parseDateKey(stateLocal.selectedDate);
   cur.setDate(cur.getDate() + delta);
-  const k = formatDateKey(cur);
-  switchDate(k);
+  switchDate(formatDateKey(cur));
 }
 
 async function switchDate(dateKey) {
   if (stateLocal.mode === 'edit') {
     if (!confirm('編集中の内容は破棄されます。 別の日に移動しますか?')) {
-      // ピッカーを元の日付に戻す
       document.getElementById('rn-date-picker').value = dateKeyToInputValue(stateLocal.selectedDate);
       return;
     }
@@ -136,6 +144,15 @@ async function switchDate(dateKey) {
   }
   stateLocal.selectedDate = dateKey;
   document.getElementById('rn-date-picker').value = dateKeyToInputValue(dateKey);
+  const ym = dateKey.slice(0, 7);
+  if (ym !== stateLocal.visibleYm) {
+    stateLocal.visibleYm = ym;
+    await renderCalendar(ym);
+    schedulePrefetch(ym);
+  } else {
+    // 同じ月内 — 選択ハイライトだけ更新
+    updateCalendarSelection();
+  }
   await loadSection(dateKey);
 }
 
@@ -145,21 +162,22 @@ async function loadSection(dateKey) {
   const noEditHint = document.getElementById('rn-no-edit-hint');
   const label = document.getElementById('rn-date-label');
   label.textContent = humanDateLabel(dateKey);
-
-  // 画面状態リセット
   document.getElementById('rn-view').hidden = false;
   document.getElementById('rn-edit').hidden = true;
   stateLocal.mode = 'view';
   viewBody.innerHTML = '<div class="muted">読み込み中…</div>';
+  setCacheBadge('');
 
   try {
-    const s = await get('/api/cosense/research-note/section?date=' + encodeURIComponent(dateKey));
+    const r = await fetchEtagged('/api/cosense/research-note/section?date=' + encodeURIComponent(dateKey), 'section:' + dateKey);
+    const s = r.data;
     stateLocal.loaded = {
       date: dateKey,
       text: s.body_text || '',
       exists: !!s.exists_section,
     };
     renderViewBody();
+    setCacheBadge(r.stale ? '⚠ オフライン (キャッシュ表示)' : (r.fromCache ? '✓ 最新 (キャッシュから即時表示)' : '✓ 取得済'));
   } catch (e) {
     viewBody.innerHTML = `<div class="muted">セクションのロード失敗: ${escapeHtml(e.message)}</div>`;
   }
@@ -188,7 +206,6 @@ function renderViewBody() {
     viewBody.innerHTML = '<div class="muted">(日付ヘッダはあるが内容が空)</div>';
     return;
   }
-  // 閲覧モードでも簡易レンダリングする (= スペースインデントを視覚化)
   const lines = stateLocal.loaded.text.split('\n');
   viewBody.innerHTML = lines.map(renderPreviewLine).join('');
 }
@@ -243,7 +260,11 @@ function bindSaveCancel() {
             toast('✅ 保存しました (' + (parts.join('+') || (r.change_count + '件')) + ')', 5000);
             document.getElementById('rn-stats').textContent = '直前の保存: ' + (parts.join('+') || (r.change_count + '件'));
           }
+          // キャッシュ無効化 (該当セクション + その月)
+          cacheRemove('section:' + dateKey);
+          cacheRemove('month:' + dateKey.slice(0, 7));
           await loadSection(dateKey);
+          await renderCalendar(stateLocal.visibleYm);
           setMode('view');
         } else {
           toast('失敗: ' + (r.body || ('HTTP ' + r.status)));
@@ -265,7 +286,192 @@ function bindSaveCancel() {
   }
 }
 
-// プレビュー再描画 (Scrapbox 簡易レンダリング)
+// ───────── カレンダー ─────────
+
+async function renderCalendar(ym) {
+  const root = document.getElementById('rn-calendar');
+  // まずキャッシュから即描画 (空でも骨組みだけ)
+  let data = stateLocal.monthData[ym];
+  if (!data) {
+    const cached = cacheGet('month:' + ym);
+    if (cached) data = cached.body;
+  }
+  paintCalendar(ym, data);
+
+  // 裏でフレッシュ取得 (ETag 付き)
+  try {
+    const r = await fetchEtagged('/api/cosense/research-note/month?ym=' + encodeURIComponent(ym), 'month:' + ym);
+    stateLocal.monthData[ym] = r.data;
+    paintCalendar(ym, r.data);
+  } catch (e) { /* 失敗してもキャッシュ表示で続行 */ }
+}
+
+function paintCalendar(ym, data) {
+  const root = document.getElementById('rn-calendar');
+  const [yy, mm] = ym.split('.').map(Number);
+  const firstDay = new Date(yy, mm - 1, 1);
+  const lastDay = new Date(yy, mm, 0);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateKey = `${yy}.${String(mm).padStart(2, '0')}.${String(d).padStart(2, '0')}`;
+    cells.push({ day: d, date: dateKey });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+  const days = (data && data.days) || {};
+  const today = todayJstKey();
+  const headerRow = ['日','月','火','水','木','金','土'].map((w, i) =>
+    `<div style="text-align:center; font-size:11px; padding:4px 0; color:${i === 0 ? '#dc2626' : (i === 6 ? '#0284c7' : '#6b7280')}">${w}</div>`
+  ).join('');
+  const cellHtml = cells.map(c => {
+    if (!c) return '<div></div>';
+    const dayInfo = days[c.date] || { line_count: 0, char_count: 0 };
+    const lc = dayInfo.line_count || 0;
+    const isToday = c.date === today;
+    const isSelected = c.date === stateLocal.selectedDate;
+    const heat = heatColor(lc);
+    const border = isSelected ? '2px solid #0284c7' : '1px solid #e5e7eb';
+    const todayMark = isToday ? 'box-shadow:0 0 0 2px #fde68a; ' : '';
+    return `
+      <button type="button" data-rn-day="${c.date}" class="rn-day"
+        style="position:relative; padding:4px 2px 8px; border:${border}; border-radius:6px; background:${heat}; cursor:pointer; min-height:42px; ${todayMark}font-size:12px"
+        title="${c.date} — ${lc}行 / ${dayInfo.char_count || 0}文字">
+        <div style="font-weight:${isToday ? '700' : '400'}; color:${lc > 5 ? '#fff' : '#1f2937'}">${c.day}</div>
+        ${lc > 0 ? `<div style="position:absolute; bottom:2px; left:0; right:0; text-align:center; font-size:9px; color:${lc > 5 ? '#fff' : '#6b7280'}">${lc}</div>` : ''}
+      </button>`;
+  }).join('');
+  root.innerHTML = `
+    <div class="row" style="margin-bottom:6px; gap:6px; align-items:center">
+      <button id="rn-cal-prev" class="btn" style="padding:3px 8px">←</button>
+      <div class="bold" style="flex:1; text-align:center">${ym}</div>
+      <button id="rn-cal-next" class="btn" style="padding:3px 8px">→</button>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px">
+      ${headerRow}
+      ${cellHtml}
+    </div>`;
+  // バインド
+  root.querySelectorAll('[data-rn-day]').forEach(btn => {
+    btn.addEventListener('click', () => switchDate(btn.getAttribute('data-rn-day')));
+  });
+  document.getElementById('rn-cal-prev').addEventListener('click', () => switchMonth(-1));
+  document.getElementById('rn-cal-next').addEventListener('click', () => switchMonth(+1));
+}
+
+function updateCalendarSelection() {
+  // 軽量更新: ハイライトだけ
+  const root = document.getElementById('rn-calendar');
+  if (!root) return;
+  root.querySelectorAll('[data-rn-day]').forEach(btn => {
+    const dk = btn.getAttribute('data-rn-day');
+    const isSel = dk === stateLocal.selectedDate;
+    btn.style.border = isSel ? '2px solid #0284c7' : '1px solid #e5e7eb';
+  });
+}
+
+async function switchMonth(delta) {
+  const [yy, mm] = stateLocal.visibleYm.split('.').map(Number);
+  const d = new Date(yy, mm - 1 + delta, 1);
+  const newYm = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+  stateLocal.visibleYm = newYm;
+  await renderCalendar(newYm);
+  schedulePrefetch(newYm);
+}
+
+function heatColor(n) {
+  if (n === 0) return '#fff';
+  if (n <= 2) return '#dcfce7';
+  if (n <= 5) return '#86efac';
+  if (n <= 15) return '#22c55e';
+  return '#15803d';
+}
+
+function schedulePrefetch(ym) {
+  // 前月+次月を裏で読みに行く
+  const [yy, mm] = ym.split('.').map(Number);
+  const prev = new Date(yy, mm - 2, 1);
+  const next = new Date(yy, mm, 1);
+  const pYm = `${prev.getFullYear()}.${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  const nYm = `${next.getFullYear()}.${String(next.getMonth() + 1).padStart(2, '0')}`;
+  [pYm, nYm].forEach(y => {
+    fetchEtagged('/api/cosense/research-note/month?ym=' + encodeURIComponent(y), 'month:' + y)
+      .then(r => { stateLocal.monthData[y] = r.data; })
+      .catch(() => {});
+  });
+}
+
+function setCacheBadge(msg) {
+  const el = document.getElementById('rn-cache-badge');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = msg.includes('オフライン') ? '#dc2626' : '#6b7280';
+  }
+}
+
+// ───────── キャッシュ + ETag ─────────
+
+function cacheGet(key) {
+  try {
+    const s = localStorage.getItem(CACHE_PREFIX + key);
+    if (!s) return null;
+    const obj = JSON.parse(s);
+    if (obj?.ts && Date.now() - obj.ts > SECTION_TTL_MS) {
+      localStorage.removeItem(CACHE_PREFIX + key);
+      return null;
+    }
+    return obj;
+  } catch { return null; }
+}
+function cacheSet(key, data) {
+  try { localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data)); }
+  catch (e) {
+    // QuotaExceeded — 古いキャッシュを破棄してリトライ
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith(CACHE_PREFIX)) localStorage.removeItem(k);
+      }
+      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(data));
+    } catch {}
+  }
+}
+function cacheRemove(key) {
+  try { localStorage.removeItem(CACHE_PREFIX + key); } catch {}
+}
+
+// ETag 対応 fetch。 304 ならキャッシュをそのまま、 200 なら最新で上書き、 ネットワーク失敗時は
+//   キャッシュにフォールバック。
+async function fetchEtagged(url, cacheKey) {
+  const cached = cacheGet(cacheKey);
+  const headers = { 'Accept': 'application/json' };
+  if (cached?.etag) headers['If-None-Match'] = cached.etag;
+  let resp;
+  try {
+    resp = await fetch(url, { credentials: 'same-origin', headers, cache: 'no-store' });
+  } catch (e) {
+    if (cached) return { data: cached.body, fromCache: true, stale: true };
+    throw e;
+  }
+  if (resp.status === 304 && cached) {
+    return { data: cached.body, fromCache: true, stale: false };
+  }
+  if (resp.status === 401) {
+    if (cached) return { data: cached.body, fromCache: true, stale: true };
+    throw new Error('未認証');
+  }
+  if (!resp.ok) {
+    if (cached) return { data: cached.body, fromCache: true, stale: true };
+    throw new Error('HTTP ' + resp.status);
+  }
+  const body = await resp.json();
+  const etag = resp.headers.get('ETag');
+  cacheSet(cacheKey, { etag, body, ts: Date.now() });
+  return { data: body, fromCache: false, stale: false };
+}
+
+// ───────── プレビュー (Scrapbox 簡易レンダリング) ─────────
+
 function renderPreview() {
   const ta = document.getElementById('rn-text');
   const root = document.getElementById('rn-preview');
@@ -331,10 +537,9 @@ function renderBracket(inside) {
   return `<span style="color:#9333ea; border-bottom:1px dotted #9333ea">${escapeHtml(inside)}</span>`;
 }
 
-// ───────── helpers ─────────
+// ───────── date helpers ─────────
 function dateKeyToInputValue(k) { return k.replace(/\./g, '-'); }
 function parseDateKey(k) {
-  // 'YYYY.MM.DD' → Date (LocalDate)
   const m = k.split('.').map(Number);
   return new Date(m[0], m[1] - 1, m[2]);
 }
@@ -345,7 +550,6 @@ function formatDateKey(d) {
   return `${y}.${m}.${dd}`;
 }
 function todayJstKey() {
-  // JST 現在日
   const now = new Date();
   const jst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60 * 1000);
   return formatDateKey(jst);
