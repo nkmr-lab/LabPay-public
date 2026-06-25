@@ -41,6 +41,9 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'pat') {
         cosense_me_set_pat($pdo, $uid); return;
     }
+    if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'page-handle') {
+        cosense_me_set_page_handle($pdo, $uid); return;
+    }
     json_error('not_found', "no cosense route for $method $sub", 404);
 }
 
@@ -68,11 +71,23 @@ function cosense_user_pat(PDO $pdo, int $uid): ?string {
     $c = trim((string)($st->fetchColumn() ?: ''));
     return $c !== '' ? $c : null;
 }
+// v825 Cosense page 名 に 使う handle。 優先 順:
+//   1) users.cosense_page_handle (個別 設定、 例: 「中村聡史」)
+//   2) users.display_name (LabPay 表示名、 通常 これ が Cosense 表示名 と 同じ)
+//   3) user_scrapbox_handles.scrapbox_name (Slack 同期 用、 英語 名 の こと も ある)
 function cosense_user_handle(PDO $pdo, int $uid): ?string {
-    $st = $pdo->prepare("SELECT scrapbox_name FROM user_scrapbox_handles WHERE user_id=?");
+    $st = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
     $st->execute([$uid]);
-    $h = $st->fetchColumn();
-    return $h ? (string)$h : null;
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) return null;
+    $h = trim((string)($r['cosense_page_handle'] ?? ''));
+    if ($h !== '') return $h;
+    $dn = trim((string)($r['display_name'] ?? ''));
+    if ($dn !== '') return $dn;
+    $st2 = $pdo->prepare("SELECT scrapbox_name FROM user_scrapbox_handles WHERE user_id=?");
+    $st2->execute([$uid]);
+    $sn = trim((string)($st2->fetchColumn() ?: ''));
+    return $sn !== '' ? $sn : null;
 }
 
 // 内部 helper: HTTP 共通 curl ラッパー。
@@ -414,14 +429,20 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
 function cosense_me_status(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     $cookie = cosense_user_cookie($pdo, $uid);
+    // page handle の 内訳 (どこ から 来て いる か)
+    $stu = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
+    $stu->execute([$uid]);
+    $r = $stu->fetch(PDO::FETCH_ASSOC) ?: [];
     json_response([
         'has_pat'          => $pat !== null,
         'pat_tail'         => $pat !== null ? mb_substr($pat, -6) : null,
         'has_self_cookie'  => $cookie !== null,
         'self_cookie_tail' => $cookie !== null ? mb_substr($cookie, -6) : null,
         'has_shared_cookie'=> cosense_shared_cookie($cfg) !== null,
-        'handle'           => cosense_user_handle($pdo, $uid),
-        'pat_settings_url' => cosense_base($cfg) . '/settings/personal-access-tokens',
+        'handle'                 => cosense_user_handle($pdo, $uid),
+        'page_handle_explicit'   => $r['cosense_page_handle'] ?? null,
+        'display_name_fallback'  => $r['display_name'] ?? null,
+        'pat_settings_url'       => cosense_base($cfg) . '/settings/personal-access-tokens',
     ]);
 }
 
@@ -456,4 +477,17 @@ function cosense_me_set_pat(PDO $pdo, int $uid): void {
     }
     $pdo->prepare("UPDATE users SET cosense_pat=? WHERE id=?")->execute([$p, $uid]);
     json_response(['ok' => true, 'has_pat' => $p !== null]);
+}
+
+function cosense_me_set_page_handle(PDO $pdo, int $uid): void {
+    $body = read_json_body();
+    $h = trim((string)($body['handle'] ?? ''));
+    if ($h !== '') {
+        if (mb_strlen($h) > 100) throw new ApiException('bad_request', 'handle は 100 文字 以内', 400);
+        if (preg_match('/[\/\\\\\\r\\n\\t]/u', $h)) throw new ApiException('bad_request', '/ \\ 改行 タブ は 使えません', 400);
+    } else {
+        $h = null;
+    }
+    $pdo->prepare("UPDATE users SET cosense_page_handle=? WHERE id=?")->execute([$h, $uid]);
+    json_response(['ok' => true, 'has_page_handle' => $h !== null, 'effective' => cosense_user_handle($pdo, $uid)]);
 }

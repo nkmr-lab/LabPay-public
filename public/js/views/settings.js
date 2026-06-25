@@ -190,6 +190,14 @@ export async function renderSettings() {
         <button id="cosense-pat-save" class="primary">保存</button>
         <button id="cosense-pat-clear">解除</button>
       </div>
+      <label class="field">
+        <span class="lbl">研究 ノート ページ で 使う 名前 (例: <code>中村聡史</code>) <span class="hint-sm">— 空 なら 表示名 を 使う</span></span>
+        <input type="text" id="cosense-page-handle-input" placeholder="Scrapbox 上 の 表示名 (Slack の 英語 handle と は 別)" maxlength="100" style="font-size:13px">
+      </label>
+      <div class="row" style="gap:6px; margin-bottom:10px">
+        <button id="cosense-page-handle-save" class="primary">保存</button>
+        <button id="cosense-page-handle-clear">表示名 に 戻す</button>
+      </div>
       <details style="font-size:12px; margin-top:6px">
         <summary style="cursor:pointer; color:#6b7280">🛠 legacy: connect.sid cookie で 登録 する (古い 経路、 PAT が あれば 不要)</summary>
         <label class="field" style="margin-top:8px">
@@ -350,12 +358,15 @@ export async function renderSettings() {
   await wireCosenseCookieUI();
 }
 
-// v823 Cosense PAT + legacy cookie 登録 UI
+// v823 Cosense PAT + legacy cookie 登録 UI、 v825 page handle 追加
 async function wireCosenseCookieUI() {
   const statusEl = document.getElementById('cosense-status');
   const patInput = document.getElementById('cosense-pat-input');
   const patSave  = document.getElementById('cosense-pat-save');
   const patClear = document.getElementById('cosense-pat-clear');
+  const phInput = document.getElementById('cosense-page-handle-input');
+  const phSave  = document.getElementById('cosense-page-handle-save');
+  const phClear = document.getElementById('cosense-page-handle-clear');
   const cookieInput = document.getElementById('cosense-cookie-input');
   const cookieSave  = document.getElementById('cosense-save');
   const cookieClear = document.getElementById('cosense-clear');
@@ -363,7 +374,20 @@ async function wireCosenseCookieUI() {
   const refreshStatus = async () => {
     try {
       const s = await get('/api/cosense/me/status');
-      const handleLine = s.handle ? `handle: <code>${escapeHtml(s.handle)}</code>` : '<span style="color:#dc2626">handle 未 登録 (admin に 依頼)</span>';
+      // page handle の 由来 表示
+      const handle = s.handle || '';
+      let handleLine;
+      if (handle) {
+        if (s.page_handle_explicit) {
+          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code> (個別 設定)`;
+        } else if (s.display_name_fallback && handle === s.display_name_fallback) {
+          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code> (= 表示名)`;
+        } else {
+          handleLine = `📝 ページ 名 用 handle: <code>${escapeHtml(handle)}</code>`;
+        }
+      } else {
+        handleLine = '<span style="color:#dc2626">📝 handle 未 設定</span>';
+      }
       let lines = [];
       if (s.has_pat) lines.push(`✅ PAT 登録 済 (末尾 ...${escapeHtml(s.pat_tail || '')}) — 読み取り / 書き込み <b>本人 名義</b>`);
       if (s.has_self_cookie) lines.push(`☑ legacy cookie 登録 済 (末尾 ...${escapeHtml(s.self_cookie_tail || '')}) — PAT が あれ ば 不要`);
@@ -373,9 +397,28 @@ async function wireCosenseCookieUI() {
       }
       lines.push(handleLine);
       statusEl.innerHTML = lines.join(' ・ ');
+      // 入力 欄 に 現 値 を 反映 (空 なら placeholder の まま)
+      if (phInput && s.page_handle_explicit) phInput.value = s.page_handle_explicit;
     } catch (e) { statusEl.textContent = '状態 取得 失敗: ' + e.message; }
   };
   await refreshStatus();
+  phSave?.addEventListener('click', async () => {
+    const v = phInput.value.trim();
+    try {
+      await patch('/api/cosense/me/page-handle', { handle: v });
+      toast('保存 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  phClear?.addEventListener('click', async () => {
+    if (!confirm('個別 設定 を 解除 し て 表示名 に 戻し ます か?')) return;
+    try {
+      await patch('/api/cosense/me/page-handle', { handle: '' });
+      phInput.value = '';
+      toast('解除 し ました');
+      await refreshStatus();
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
   patSave.addEventListener('click', async () => {
     const v = patInput.value.trim();
     if (!v) { toast('PAT を 入れて ください'); return; }
