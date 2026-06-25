@@ -17,10 +17,13 @@ const GENRES = ['J-POP','洋楽','K-POP','アニメ','ボカロ','ジャズ','�
 // ─────────────── URL → embed src 解決 ───────────────
 function parseUrlMeta(url) {
   const u = String(url || '').trim();
+  // v820 #415 スマホ で の 自動 再生 確率 を 上げる ため playsinline=1 + mute=1 を 追加
+  //   (iOS Safari は 音 付き 自動 再生 を 許可 し ない の で、 初手 は 無音 + 最初 の
+  //   ユーザ タップ で 音 を 出す 戦略)。
   const yt = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   if (yt) return {
     type: 'youtube', id: yt[1],
-    embed: `https://www.youtube.com/embed/${yt[1]}?autoplay=1&enablejsapi=1`,
+    embed: `https://www.youtube.com/embed/${yt[1]}?autoplay=1&enablejsapi=1&playsinline=1&mute=1`,
     thumb: `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`,
   };
   const sp = u.match(/open\.spotify\.com\/(track|album|playlist|episode)\/([A-Za-z0-9]+)/);
@@ -539,15 +542,17 @@ function renderCurrent() {
   const meta = parseUrlMeta(it.url);
   if (meta.type === 'youtube') {
     // YouTube IFrame API: enablejsapi=1 + listen for 'onStateChange' postMessage
+    // v820 #415 スマホ で の 音 付き 自動 再生 は ブラウザ に 拒否 される ため、 mute=1 で
+    //   無音 自動 再生 → 「🔊 タップ で 音 を 出す」 ボタン で 1 回 タップ させて unMute
+    //   コマンド を 送る。 1 回 タップ し て 以降 は 連続 再生 も 音 付き で 続く。
     root.innerHTML = `
       <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
-        <iframe id="ytframe" src="${meta.embed}&autoplay=1"
+        <iframe id="ytframe" src="${meta.embed}"
                 allow="autoplay; encrypted-media; fullscreen" allowfullscreen
                 frameborder="0"
                 style="position:absolute; inset:0; width:100%; height:100%"></iframe>
-      </div>`;
-    // v808 #401 YouTube IFrame に 「onStateChange を 親 に 送って」 と 登録 する 必要 あり。
-    //   これ が ない と enablejsapi=1 でも イベント が 飛んで こない → 次曲 自動 再生 が 効かない。
+      </div>
+      <button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップ で 音 を 出す</button>`;
     const yt = document.getElementById('ytframe');
     yt?.addEventListener('load', () => {
       try {
@@ -555,13 +560,22 @@ function renderCurrent() {
         yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
       } catch (_) {}
     });
+    document.getElementById('pld-unmute')?.addEventListener('click', () => {
+      try {
+        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'unMute', args:[]}), '*');
+        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'setVolume', args:[80]}), '*');
+        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'playVideo', args:[]}), '*');
+        document.getElementById('pld-unmute')?.remove();
+      } catch (_) {}
+    });
   } else if (meta.type.startsWith('spotify_')) {
     root.innerHTML = `
       <iframe src="${meta.embed}" style="width:100%; height:152px; border:none; border-radius:8px"
         allow="encrypted-media; autoplay" loading="lazy"></iframe>`;
   } else if (meta.type === 'direct_video') {
+    // v820 #415 スマホ で の 自動 再生 確率 を 上げる ため muted + playsinline を 追加
     root.innerHTML = `
-      <video controls autoplay src="${escapeHtml(it.url)}" style="width:100%; max-height:360px; border-radius:8px; background:#000"
+      <video controls autoplay muted playsinline src="${escapeHtml(it.url)}" style="width:100%; max-height:360px; border-radius:8px; background:#000"
         onended="window.__plOnEnded && window.__plOnEnded()"></video>`;
     window.__plOnEnded = () => { if (detailState?.autoNext) stepPlayback(1); };
   } else {
