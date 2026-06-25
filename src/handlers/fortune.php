@@ -52,19 +52,22 @@ function route_fortune(PDO $pdo, array $cfg, string $method, array $seg): void {
 
 // v814 #408 西洋占星術 (12 星座) を 生年月日 (users.birthday_md, MM-DD) から 引き、 1 日 1 件
 //   メッセージ を deterministic に 選ぶ。 占い 本体 と 並べて 表示 する。
+// v817 #412 これ は 「太陽星座 を 元 に した 簡易 西洋占星術」 で あって、 natal chart
+//   (出生時刻 + 出生地 から 月 / 上昇 宮 / 各 惑星 配置 を 計算 する 本格 ホロスコープ) で は
+//   ありません。 守護 星 / エレメント / 性格 / 当日 相性 星座 まで 出します。
 const ZODIAC_SIGNS = [
-    ['key'=>'capricorn',   'name'=>'山羊座', 'icon'=>'♑', 'start'=>'12-22', 'end'=>'01-19', 'element'=>'土'],
-    ['key'=>'aquarius',    'name'=>'水瓶座', 'icon'=>'♒', 'start'=>'01-20', 'end'=>'02-18', 'element'=>'風'],
-    ['key'=>'pisces',      'name'=>'魚座',   'icon'=>'♓', 'start'=>'02-19', 'end'=>'03-20', 'element'=>'水'],
-    ['key'=>'aries',       'name'=>'牡羊座', 'icon'=>'♈', 'start'=>'03-21', 'end'=>'04-19', 'element'=>'火'],
-    ['key'=>'taurus',      'name'=>'牡牛座', 'icon'=>'♉', 'start'=>'04-20', 'end'=>'05-20', 'element'=>'土'],
-    ['key'=>'gemini',      'name'=>'双子座', 'icon'=>'♊', 'start'=>'05-21', 'end'=>'06-21', 'element'=>'風'],
-    ['key'=>'cancer',      'name'=>'蟹座',   'icon'=>'♋', 'start'=>'06-22', 'end'=>'07-22', 'element'=>'水'],
-    ['key'=>'leo',         'name'=>'獅子座', 'icon'=>'♌', 'start'=>'07-23', 'end'=>'08-22', 'element'=>'火'],
-    ['key'=>'virgo',       'name'=>'乙女座', 'icon'=>'♍', 'start'=>'08-23', 'end'=>'09-22', 'element'=>'土'],
-    ['key'=>'libra',       'name'=>'天秤座', 'icon'=>'♎', 'start'=>'09-23', 'end'=>'10-23', 'element'=>'風'],
-    ['key'=>'scorpio',     'name'=>'蠍座',   'icon'=>'♏', 'start'=>'10-24', 'end'=>'11-22', 'element'=>'水'],
-    ['key'=>'sagittarius', 'name'=>'射手座', 'icon'=>'♐', 'start'=>'11-23', 'end'=>'12-21', 'element'=>'火'],
+    ['key'=>'capricorn',   'name'=>'山羊座', 'icon'=>'♑', 'start'=>'12-22', 'end'=>'01-19', 'element'=>'土', 'modality'=>'活動', 'ruler'=>'土星',     'strengths'=>'責任感 / 努力 / 現実 的', 'weaknesses'=>'頑固 / 真面目 過ぎる'],
+    ['key'=>'aquarius',    'name'=>'水瓶座', 'icon'=>'♒', 'start'=>'01-20', 'end'=>'02-18', 'element'=>'風', 'modality'=>'不動', 'ruler'=>'天王星',   'strengths'=>'革新 的 / 知的 / 自由 で 独創 的', 'weaknesses'=>'距離 感 / 気まぐれ'],
+    ['key'=>'pisces',      'name'=>'魚座',   'icon'=>'♓', 'start'=>'02-19', 'end'=>'03-20', 'element'=>'水', 'modality'=>'柔軟', 'ruler'=>'海王星',   'strengths'=>'共感 / 想像力 / 優しさ', 'weaknesses'=>'流され やすい / 現実 逃避'],
+    ['key'=>'aries',       'name'=>'牡羊座', 'icon'=>'♈', 'start'=>'03-21', 'end'=>'04-19', 'element'=>'火', 'modality'=>'活動', 'ruler'=>'火星',     'strengths'=>'行動 力 / 情熱 / リーダー 気質', 'weaknesses'=>'短気 / 衝動 的'],
+    ['key'=>'taurus',      'name'=>'牡牛座', 'icon'=>'♉', 'start'=>'04-20', 'end'=>'05-20', 'element'=>'土', 'modality'=>'不動', 'ruler'=>'金星',     'strengths'=>'落ち着き / 美的 感覚 / 持続 力', 'weaknesses'=>'頑固 / 保守 的'],
+    ['key'=>'gemini',      'name'=>'双子座', 'icon'=>'♊', 'start'=>'05-21', 'end'=>'06-21', 'element'=>'風', 'modality'=>'柔軟', 'ruler'=>'水星',     'strengths'=>'多才 / コミュ 力 / 好奇心', 'weaknesses'=>'飽きっぽい / 二面 性'],
+    ['key'=>'cancer',      'name'=>'蟹座',   'icon'=>'♋', 'start'=>'06-22', 'end'=>'07-22', 'element'=>'水', 'modality'=>'活動', 'ruler'=>'月',       'strengths'=>'共感 力 / 家庭 的 / 直感 的', 'weaknesses'=>'感情 的 / 内 こもり 気味'],
+    ['key'=>'leo',         'name'=>'獅子座', 'icon'=>'♌', 'start'=>'07-23', 'end'=>'08-22', 'element'=>'火', 'modality'=>'不動', 'ruler'=>'太陽',     'strengths'=>'自信 / カリスマ / 創造 的', 'weaknesses'=>'プライド / 目立ち たがり'],
+    ['key'=>'virgo',       'name'=>'乙女座', 'icon'=>'♍', 'start'=>'08-23', 'end'=>'09-22', 'element'=>'土', 'modality'=>'柔軟', 'ruler'=>'水星',     'strengths'=>'几帳面 / 分析 的 / 観察 力', 'weaknesses'=>'神経質 / 完璧 主義'],
+    ['key'=>'libra',       'name'=>'天秤座', 'icon'=>'♎', 'start'=>'09-23', 'end'=>'10-23', 'element'=>'風', 'modality'=>'活動', 'ruler'=>'金星',     'strengths'=>'調和 / 美的 / 外交 的', 'weaknesses'=>'優柔不断 / 八方 美人'],
+    ['key'=>'scorpio',     'name'=>'蠍座',   'icon'=>'♏', 'start'=>'10-24', 'end'=>'11-22', 'element'=>'水', 'modality'=>'不動', 'ruler'=>'冥王星',   'strengths'=>'情熱 / 洞察 / 集中 力', 'weaknesses'=>'嫉妬 / 執着 心'],
+    ['key'=>'sagittarius', 'name'=>'射手座', 'icon'=>'♐', 'start'=>'11-23', 'end'=>'12-21', 'element'=>'火', 'modality'=>'柔軟', 'ruler'=>'木星',     'strengths'=>'自由 / 楽観 / 哲学 的', 'weaknesses'=>'飽きっぽい / 大ざっぱ'],
 ];
 
 const ZODIAC_MOODS = [
@@ -144,17 +147,35 @@ function fortune_today(PDO $pdo, int $uid): void {
         $moodIdx = ($epochDay * 12 + $zIdx) % count(ZODIAC_MOODS);
         $colorIdx = ($epochDay + $zIdx * 7) % count(ZODIAC_LUCK_COLORS);
         $itemIdx = ($epochDay + $zIdx * 5 + 3) % count(ZODIAC_LUCK_ITEMS);
-        // ラッキー ナンバー 1..40
         $luckyNum = 1 + (($epochDay * 17 + $zIdx * 23) % 40);
+        // v817 #412 当日 の 相性 が 良い 星座 (= エレメント の 相性: 火↔風 / 土↔水)。
+        //   毎日 同じ にしない ため、 同 グループ 内 で 1 つ を 日替わり で 選ぶ。
+        $compatGroup = [];
+        if ($z['element'] === '火' || $z['element'] === '風') {
+            foreach (ZODIAC_SIGNS as $i => $zz) if ($zz['element'] === '火' || $zz['element'] === '風') if ($i !== $zIdx) $compatGroup[] = $i;
+        } else {
+            foreach (ZODIAC_SIGNS as $i => $zz) if ($zz['element'] === '土' || $zz['element'] === '水') if ($i !== $zIdx) $compatGroup[] = $i;
+        }
+        $compatIdx = $compatGroup[$epochDay % max(1, count($compatGroup))] ?? null;
+        $compat = $compatIdx !== null ? ZODIAC_SIGNS[$compatIdx] : null;
         $zodiac = [
-            'key'        => $z['key'],
-            'name'       => $z['name'],
-            'icon'       => $z['icon'],
-            'element'    => $z['element'],
-            'msg'        => ZODIAC_MOODS[$moodIdx],
+            'key'         => $z['key'],
+            'name'        => $z['name'],
+            'icon'        => $z['icon'],
+            'element'     => $z['element'],
+            'modality'    => $z['modality'],
+            'ruler'       => $z['ruler'],
+            'strengths'   => $z['strengths'],
+            'weaknesses'  => $z['weaknesses'],
+            'msg'         => ZODIAC_MOODS[$moodIdx],
             'lucky_color' => ZODIAC_LUCK_COLORS[$colorIdx],
             'lucky_item'  => ZODIAC_LUCK_ITEMS[$itemIdx],
             'lucky_number'=> $luckyNum,
+            'compat_today'=> $compat ? [
+                'name' => $compat['name'],
+                'icon' => $compat['icon'],
+            ] : null,
+            'note'        => '※ 太陽星座 を 元 に した 簡易 西洋占星術 です (本格 ホロスコープ は 出生 時刻 + 出生 地 が 必要)',
         ];
     }
 

@@ -267,11 +267,21 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     $items = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $title = null;
+        $titleOrig = null;
+        $snippet = null;
         if (!empty($r['result_json'])) {
             $j = json_decode((string)$r['result_json'], true);
             if (is_array($j)) {
                 // 要約 は title_ja / 全訳 は title_translated → title_original
-                $title = (string)($j['title_ja'] ?? $j['title_translated'] ?? $j['title_original'] ?? '') ?: null;
+                $title = (string)($j['title_ja'] ?? $j['title_translated'] ?? '') ?: null;
+                $titleOrig = (string)($j['title_original'] ?? $j['title_orig'] ?? '') ?: null;
+                if ($title === null && $titleOrig !== null) { $title = $titleOrig; $titleOrig = null; }
+                // v817 #411 要約 / アブスト の 先頭 約 140 字 を snippet と して 添える
+                $snipRaw = (string)($j['summary_one_paragraph'] ?? $j['abstract_ja'] ?? $j['abstract_translated'] ?? $j['abstract'] ?? $j['abstract_original'] ?? '');
+                if ($snipRaw !== '') {
+                    $snipRaw = preg_replace('/\s+/u', ' ', trim($snipRaw)) ?? '';
+                    $snippet = mb_strlen($snipRaw) > 140 ? (mb_substr($snipRaw, 0, 140) . '…') : $snipRaw;
+                }
             }
         }
         $items[] = [
@@ -281,6 +291,8 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
             'url_slug'      => $r['kind'] === 'summary' ? 'paper-summary' : 'paper-translate-full',
             'pdf_name'      => $r['pdf_name'],
             'title'         => $title,
+            'title_original'=> $titleOrig,
+            'snippet'       => $snippet,
             'direction'     => $r['direction'],
             'status'        => $r['status'],
             'is_shared'     => (bool)$r['is_shared'],

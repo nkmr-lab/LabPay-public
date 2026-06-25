@@ -35,27 +35,52 @@ export async function renderFortune() {
     if (z) {
       zCard.hidden = false;
       zCard.innerHTML = `
-        <div style="text-align:center; padding:24px 12px; background:linear-gradient(135deg, #fdf4ff, #f3e8ff); border-radius:12px">
-          <div style="font-size:64px; line-height:1; margin-bottom:8px">${escapeHtml(z.icon || '')}</div>
-          <div style="font-size:24px; font-weight:700; color:#6b21a8; margin-bottom:4px">${escapeHtml(z.name || '')} <span style="font-size:14px; font-weight:400; color:#9333ea">(${escapeHtml(z.element || '')})</span></div>
-          <div style="font-size:14.5px; color:#581c87; line-height:1.7; margin:12px 0">${escapeHtml(z.msg || '')}</div>
-          <div style="display:flex; justify-content:center; gap:18px; flex-wrap:wrap; margin-top:14px; font-size:13px; color:#6b21a8">
-            <span>🎨 <b>ラッキー カラー</b><br>${escapeHtml(z.lucky_color || '')}</span>
-            <span>🍀 <b>ラッキー アイテム</b><br>${escapeHtml(z.lucky_item || '')}</span>
-            <span>🔢 <b>ラッキー ナンバー</b><br>${escapeHtml(String(z.lucky_number ?? ''))}</span>
+        <div style="padding:20px 14px; background:linear-gradient(135deg, #fdf4ff, #f3e8ff); border-radius:12px">
+          <div style="text-align:center">
+            <div style="font-size:60px; line-height:1; margin-bottom:6px">${escapeHtml(z.icon || '')}</div>
+            <div style="font-size:22px; font-weight:700; color:#6b21a8">${escapeHtml(z.name || '')}</div>
+            <div style="font-size:12.5px; color:#9333ea; margin-top:2px">
+              ${escapeHtml(z.element || '')} の ${escapeHtml(z.modality || '')} 宮 ・ 守護 星: ${escapeHtml(z.ruler || '')}
+            </div>
           </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0; font-size:12.5px">
+            <div style="background:#fff; padding:8px 10px; border-radius:8px">
+              <div class="bold" style="color:#16a34a; font-size:11.5px; margin-bottom:2px">💪 得意 / 強み</div>
+              <div>${escapeHtml(z.strengths || '')}</div>
+            </div>
+            <div style="background:#fff; padding:8px 10px; border-radius:8px">
+              <div class="bold" style="color:#dc2626; font-size:11.5px; margin-bottom:2px">⚠ 苦手 / 弱み</div>
+              <div>${escapeHtml(z.weaknesses || '')}</div>
+            </div>
+          </div>
+          <div style="background:#fff; padding:10px 12px; border-radius:8px; font-size:14px; color:#581c87; line-height:1.7">
+            <span class="bold" style="font-size:12px; color:#7c3aed">📅 ${escapeHtml(String(f.date || ''))} の メッセージ</span><br>
+            ${escapeHtml(z.msg || '')}
+          </div>
+          <div style="display:flex; justify-content:space-around; gap:8px; flex-wrap:wrap; margin-top:12px; font-size:12.5px; color:#6b21a8; text-align:center">
+            <div>🎨<br><b>${escapeHtml(z.lucky_color || '')}</b><br><span style="font-size:10px">カラー</span></div>
+            <div>🍀<br><b>${escapeHtml(z.lucky_item || '')}</b><br><span style="font-size:10px">アイテム</span></div>
+            <div>🔢<br><b>${escapeHtml(String(z.lucky_number ?? ''))}</b><br><span style="font-size:10px">ナンバー</span></div>
+            ${z.compat_today ? `<div>💞<br><b>${escapeHtml(z.compat_today.icon)} ${escapeHtml(z.compat_today.name)}</b><br><span style="font-size:10px">相性</span></div>` : ''}
+          </div>
+          ${z.note ? `<div class="muted" style="font-size:10.5px; margin-top:10px; text-align:center">${escapeHtml(z.note)}</div>` : ''}
         </div>
       `;
     } else if (f.has_birthday === false) {
       zCard.hidden = false;
       zCard.innerHTML = `
-        <div style="text-align:center; padding:20px 12px; background:#fdf4ff; border-radius:12px">
-          <div style="font-size:36px; margin-bottom:8px">♈♉♊♋♌♍</div>
-          <div style="font-size:14px; color:#6b21a8; line-height:1.6">
-            西洋占星術 (12 星座) を 表示 する に は<br>
-            設定 → プロフィール で 誕生日 (MM-DD) を 登録 して ください
+        <div style="text-align:center; padding:24px 14px; background:linear-gradient(135deg, #fdf4ff, #f3e8ff); border-radius:12px">
+          <div style="font-size:42px; line-height:1; margin-bottom:8px">♈♉♊♋♌♍<br>♎♏♐♑♒♓</div>
+          <div class="bold" style="font-size:15px; color:#6b21a8; margin-bottom:6px">♈ 西洋占星術 を 適用 する に は</div>
+          <div style="font-size:13.5px; color:#581c87; line-height:1.7">
+            生年月日 (誕生日) を 入力 して ください。<br>
+            設定 → プロフィール で 「誕生日 (MM-DD)」 を 登録 する と<br>
+            12 星座 の 性格 + 当日 メッセージ + ラッキー 情報 が 出ます。
           </div>
-          <a href="#/settings?focus=profile" class="btn primary" style="margin-top:12px; display:inline-block">⚙ 設定 を 開く</a>
+          <a href="#/settings?focus=profile" class="btn primary" style="margin-top:14px; display:inline-block; font-size:13px; padding:8px 18px">⚙ 設定 で 誕生日 を 登録</a>
+          <div class="muted" style="font-size:10.5px; margin-top:10px">
+            ※ 太陽星座 を 元 に した 簡易 西洋占星術 です (本格 natal chart は 出生 時刻 + 出生 地 が 必要)
+          </div>
         </div>
       `;
     }

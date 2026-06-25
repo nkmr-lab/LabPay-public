@@ -2334,13 +2334,18 @@ async function loadDailyFortune() {
       const z = f.zodiac;
       zHtml = `
         <div style="margin-top:8px; padding:6px 10px; background:#fdf4ff; border-left:3px solid #a855f7; border-radius:0 6px 6px 0; font-size:12.5px; line-height:1.6">
-          <div><b>${escapeHtml(z.icon || '')} ${escapeHtml(z.name || '')}</b> (${escapeHtml(z.element || '')}) — ${escapeHtml(z.msg || '')}</div>
+          <div><b>${escapeHtml(z.icon || '')} ${escapeHtml(z.name || '')}</b> (${escapeHtml(z.element || '')}・${escapeHtml(z.ruler || '')}) — ${escapeHtml(z.msg || '')}</div>
           <div class="muted" style="font-size:11.5px; margin-top:2px">
-            🎨 ${escapeHtml(z.lucky_color || '')} ・ 🍀 ${escapeHtml(z.lucky_item || '')} ・ 🔢 ${escapeHtml(String(z.lucky_number ?? ''))}
+            🎨 ${escapeHtml(z.lucky_color || '')} ・ 🍀 ${escapeHtml(z.lucky_item || '')} ・ 🔢 ${escapeHtml(String(z.lucky_number ?? ''))}${z.compat_today ? ' ・ 💞 ' + escapeHtml(z.compat_today.icon) + escapeHtml(z.compat_today.name) : ''}
           </div>
         </div>`;
     } else if (f.has_birthday === false) {
-      zHtml = `<div class="muted" style="font-size:11.5px; margin-top:6px">💡 設定 → プロフィール で 誕生日 を 登録 する と 西洋占星術 も 出ます</div>`;
+      zHtml = `
+        <div style="margin-top:8px; padding:8px 10px; background:#fdf4ff; border-left:3px solid #a855f7; border-radius:0 6px 6px 0">
+          <div class="bold" style="font-size:12.5px; color:#6b21a8">♈ 西洋占星術 を 適用 する に は、 生年月日 を 入力 して ください</div>
+          <div style="font-size:11.5px; color:#581c87; margin-top:2px">設定 → プロフィール で 誕生日 (MM-DD) を 登録 する と、 12 星座 の メッセージ + ラッキー 情報 が 出 ます。</div>
+          <a href="#/settings?focus=profile" class="btn primary" style="margin-top:6px; display:inline-block; font-size:11.5px; padding:3px 10px">⚙ 設定 で 登録</a>
+        </div>`;
     }
     txt.innerHTML = `${escapeHtml(f.icon || '🔮')} <b>${escapeHtml(f.name || '')}</b> — ${escapeHtml(f.msg || '')}${zHtml}`;
     root.style.display = '';
@@ -2591,6 +2596,8 @@ async function renderHomePapersRecent() {
 }
 
 // 1 行 の HTML を 共通化 (widget + 一覧 page で 同じ 見た目)。
+// v817 #411 タイトル の 下 に 原題 (= 日本語 タイトル と 違う 場合 だけ) と
+//   要約 / アブスト の 先頭 数 行 を 追加 で 表示。
 export function renderPaperRecentRow(it) {
   const kindIcon = it.kind === 'summary' ? '📑 要約'
                  : (it.direction === 'ja2en' ? '📑 全訳 (日→英)' : '📑 全訳');
@@ -2603,12 +2610,20 @@ export function renderPaperRecentRow(it) {
   const title = it.title || it.pdf_name || '(無題)';
   const url = `#/${it.url_slug}/r/${encodeURIComponent(it.share_token)}`;
   const when = String(it.finished_at || it.created_at || '').slice(5, 16).replace('-', '/').replace(' ', ' ');
+  // 原題 と 翻訳 タイトル が 同じ 時 は 出さ ない
+  const showOrig = it.title_original && it.title_original !== it.title;
+  const origLine = showOrig ? `
+    <div class="muted" style="font-size:11px; line-height:1.4; margin-top:2px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical">${escapeHtml(it.title_original)}</div>` : '';
+  const snippetLine = it.snippet ? `
+    <div style="font-size:11.5px; color:#4b5563; line-height:1.45; margin-top:3px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(it.snippet)}</div>` : '';
   return `
     <a class="list-item" href="${url}" style="gap:8px; align-items:flex-start; padding:6px 8px">
       ${avatarHtml(it.author_name, it.author_avatar, 'sm')}
       <div style="flex:1; min-width:0">
-        <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px">${escapeHtml(title)}</div>
-        <div class="meta" style="font-size:11px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
+        <div class="bold" style="overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:13.5px; line-height:1.4">${escapeHtml(title)}</div>
+        ${origLine}
+        ${snippetLine}
+        <div class="meta" style="font-size:11px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:3px">
           <span>${kindIcon}</span>
           <span>${escapeHtml(it.author_name || '')}</span>
           ${mineBadge}
