@@ -465,12 +465,15 @@ function cosense_me_set_pat(PDO $pdo, int $uid): void {
     $body = read_json_body();
     $p = trim((string)($body['pat'] ?? ''));
     if ($p !== '') {
-        if (mb_strlen($p) < 8 || mb_strlen($p) > 200) {
-            throw new ApiException('bad_request', 'PAT 長 が 不正 (8..200)', 400);
+        if (mb_strlen($p) < 8) {
+            throw new ApiException('bad_request', '鍵が短すぎます (8文字以上)', 400);
         }
-        // PAT は 英数 + 記号 の random 文字列 を 想定
-        if (!preg_match('/^[A-Za-z0-9._\-]+$/', $p)) {
-            throw new ApiException('bad_request', 'PAT は 英数 + . _ - のみ', 400);
+        if (mb_strlen($p) > 500) {
+            throw new ApiException('bad_request', '鍵が長すぎます (500文字以下)', 400);
+        }
+        // 印字可能ASCII (0x21〜0x7E、=や+や/含む) のみ。 空白文字や日本語の混入だけ弾く。
+        if (!preg_match('/^[\x21-\x7E]+$/', $p)) {
+            throw new ApiException('bad_request', '鍵に空白や記号以外の文字が混ざっています。 もう一度コピーし直してください', 400);
         }
     } else {
         $p = null;

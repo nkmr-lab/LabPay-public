@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v828', d: '2026-06-25', s: '🔓 Scrapboxの鍵 (PAT) のバリデーションが厳しすぎて保存できなかったのを修正 (#417)。 長さ上限を200→500、許可文字を「英数+.+_+-」から印字可能ASCII全部 (=や+や/などのbase64っぽい記号も含む) に緩和。 エラーメッセージも「鍵が短すぎます」のような自然な日本語に。' },
   { v: 'v827', d: '2026-06-25', s: '✍️ Cosense連携と研究ノートページの日本語を全体的に書き直し。過剰な半角スペースを撤去 (中村研UIルール: 日本語にスペース入れない)、「PAT」を「鍵 (Personal Access Token)」と平易な言い換えに統一、エラーや状態メッセージも自然な日本語に。' },
   { v: 'v826', d: '2026-06-25', s: '🔑 Cosense連携設定UIを学生向けに大幅改善。「PATってなに?」説明ボックス(青)、「PATの作り方3ステップ」ボックス(黄)をデフォルトで表示(折り畳み廃止)。PAT欄のplaceholderとラベルを平易に。ページ名用実名欄に「中村研のScrapboxは実名ベース運用」と明記+例(中村聡史)を含める' },
   { v: 'v825', d: '2026-06-25', s: '🏷 Cosense ページ 名 用 の handle を 個別 設定 可能 に。 「YYYY.MM_研究ノート_<name>」 の <name> 部分 は Slack 同期 用 の 英語 handle (例: Satoshi Nakamura) と 違って 日本語 表示名 (例: 中村聡史) が 使わ れる ため、 Cosense 専用 の page handle 列 を 追加。 設定 → Cosense 連携 で 個別 入力 可能、 空 なら users.display_name に fallback。 migration 169: users.cosense_page_handle 列、 新 API: PATCH /api/cosense/me/page-handle' },
