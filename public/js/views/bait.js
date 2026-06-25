@@ -237,8 +237,12 @@ export async function renderBaitNew() {
 }
 
 export async function renderBaitDetail({ params }) {
-  const id = Number(params.id);
+  const id = Number(params?.id);
   const app = document.getElementById('app');
+  if (!Number.isFinite(id) || id <= 0) {
+    app.innerHTML = `<div class="card"><a href="#/bait" class="hint">← 一覧</a><div class="muted" style="margin-top:6px">依頼 ID が 不正 です (${escapeHtml(String(params?.id ?? '不明'))})。 一覧 から 開き 直して ください。</div></div>`;
+    return;
+  }
   app.innerHTML = `
     <div class="card">
       <a href="#/bait" class="hint">← 一覧</a>
@@ -262,14 +266,22 @@ export async function renderBaitDetail({ params }) {
 async function loadDetail(id) {
   try {
     const d = await get('/api/bait/requests/' + id);
+    // v814 #407 防御: 旧 キャッシュ JS / 一時 fetch 失敗 等 で d.request が 欠落 した 場合
+    //   「undefined is not an object (evaluating 'r.title')」 で 詰まら ない ように 早期 検知。
+    if (!d || !d.request) {
+      const got = d ? Object.keys(d).join(', ') : 'null';
+      throw new Error(`detail レスポンス に request 欠落 (キー: ${got})。 アプリ を 一度 リロード して み て ください。`);
+    }
     const r = d.request;
-    const totalH = (d.assignments || []).reduce((s, a) => s + Number(a.hours || 0), 0);
-    const doneN  = (d.assignments || []).filter(a => a.status === 'done').length;
-    const total  = (d.assignments || []).length;
+    const assignments = Array.isArray(d.assignments) ? d.assignments : [];
+    const totalH = assignments.reduce((s, a) => s + Number(a.hours || 0), 0);
+    const doneN  = assignments.filter(a => a.status === 'done').length;
+    const total  = assignments.length;
     document.getElementById('bd-head').innerHTML = `
-      <h2 style="margin:6px 0 0">${escapeHtml(r.title)}</h2>
+      <h2 style="margin:6px 0 0">${escapeHtml(r.title || '(タイトル なし)')}</h2>
       <div class="meta">
-        起案 ${escapeHtml(r.requester_name)} ・ ${escapeHtml(periodLabel(r.period))} ・ 合計 ${totalH} 時間 ・ ${doneN}/${total} 件 処理 済
+        起案 ${escapeHtml(r.requester_name || '?')} ・ ${escapeHtml(periodLabel(r.period || ''))} ・ 合計 ${totalH} 時間 ・ ${doneN}/${total} 件 処理 済
+        ${r.closed_at ? '・ <span style="color:#10b981">🏁 完了 マーク 済</span>' : ''}
       </div>
       ${r.notes ? `<div style="margin-top:6px; padding:6px 8px; background:#f9fafb; border-radius:6px; white-space:pre-wrap">${escapeHtml(r.notes)}</div>` : ''}
     `;

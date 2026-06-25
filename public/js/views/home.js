@@ -2328,7 +2328,21 @@ async function loadDailyFortune() {
   if (!root || !txt) return;
   try {
     const f = await get('/api/fortune/today');
-    txt.innerHTML = `${escapeHtml(f.icon || '🔮')} <b>${escapeHtml(f.name || '')}</b> — ${escapeHtml(f.msg || '')}`;
+    // v814 #408 西洋占星術 (生年月日 が 設定 されて いる 時 だけ 出る)
+    let zHtml = '';
+    if (f.zodiac) {
+      const z = f.zodiac;
+      zHtml = `
+        <div style="margin-top:8px; padding:6px 10px; background:#fdf4ff; border-left:3px solid #a855f7; border-radius:0 6px 6px 0; font-size:12.5px; line-height:1.6">
+          <div><b>${escapeHtml(z.icon || '')} ${escapeHtml(z.name || '')}</b> (${escapeHtml(z.element || '')}) — ${escapeHtml(z.msg || '')}</div>
+          <div class="muted" style="font-size:11.5px; margin-top:2px">
+            🎨 ${escapeHtml(z.lucky_color || '')} ・ 🍀 ${escapeHtml(z.lucky_item || '')} ・ 🔢 ${escapeHtml(String(z.lucky_number ?? ''))}
+          </div>
+        </div>`;
+    } else if (f.has_birthday === false) {
+      zHtml = `<div class="muted" style="font-size:11.5px; margin-top:6px">💡 設定 → プロフィール で 誕生日 を 登録 する と 西洋占星術 も 出ます</div>`;
+    }
+    txt.innerHTML = `${escapeHtml(f.icon || '🔮')} <b>${escapeHtml(f.name || '')}</b> — ${escapeHtml(f.msg || '')}${zHtml}`;
     root.style.display = '';
   } catch (_) { /* swallow */ }
 }
