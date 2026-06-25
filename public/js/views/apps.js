@@ -36,7 +36,7 @@ export const APPS = [
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
   { id: 'requests',      cat: 'lab-mgmt', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'bait',          cat: 'lab-mgmt', url: '#/bait',          title: '💼 アルバイト 申請', desc: '実験 協力 などで 学生 に アルバイト を 依頼。 時間 (小数) + 対象者 を 指定 して 送ると、 受け取った 側 は 月別 で 全部 見えて 処理 済 マーク。 依頼者 は 進捗 確認 + 未処理者 催促 可。', defaultVisible: true },
-  { id: 'widgets',       cat: 'misc', url: '#/widgets',       title: '🧩 ウィジェット センター', desc: '自作 ウィジェット を 登録 して ホーム に 表示。 JS で render(root) を 書く だけ。 サンプル も 用意 (時計 / 残高)。', defaultVisible: true },
+  { id: 'widgets',       cat: 'lab-mgmt', url: '#/widgets',       title: '🧩 ウィジェット センター', desc: '自作 ウィジェット を 登録 して ホーム に 表示。 JS で render(root) を 書く だけ。 サンプル も 用意 (時計 / 残高)。', defaultVisible: true },
   { id: 'cg2',           cat: 'game', url: '#/cg2',           title: '🎮 自作 ゲーム v2 (cg2)', desc: 'p5.js で 描画 する 准 リアルタイム multiplayer framework。 sharedValues 自動 同期 + host.start / host.stop の ライフサイクル + CPU 戦 対応。 サンプル: マルバツ / ニム / ライツアウト / すごろく。', defaultVisible: true },
   { id: 'chat-rooms',    cat: 'lab-mgmt', url: '#/chat-rooms', title: '💬 チャット (重要 / 連絡 / 相談 + DM)', desc: 'Slack 風 チャット。 3 つ の チャンネル + 1対1 DM。 2 秒 polling で 准 リアルタイム。 「重要」 への 投稿 は 全員 に 通知 が 飛ぶ。', defaultVisible: true },
   // v734 #344 新規追加機能の登録 (v718 / v733 で実装したが apps 一覧に入れ忘れていたもの)

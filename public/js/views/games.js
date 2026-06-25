@@ -7,9 +7,6 @@ const GAMES = [
   { id: 'mahjong',   icon: '🀄', name: '麻雀',         url: '#/mahjong',
     desc: '4 人 50pt 賭けプール で 本格麻雀 (門前/鳴き/役判定/連荘/半荘)。 終了時に順位別 payout',
     badge: '賭けプール 50pt' },
-  { id: 'mahjong-ai',icon: '🤖', name: 'AI 麻雀 (練習)', url: '#/mahjong',
-    desc: '人間 1 + AI 3 で 1 半荘 (AI 弱め、 役・打牌の練習用)',
-    badge: 'プレイフィー 5pt' },
   { id: 'ito',       icon: '🎲', name: 'ito',          url: '#/ito',
     desc: '協力ゲーム。 各自に 1-100 配布 → お題に沿った表現 → 全員の数字を開示',
     badge: 'プレイフィー 1pt' },
@@ -55,6 +52,13 @@ const GAMES = [
   // v672 #252 占い を 娯楽 タブ に も。 v816 #408 西洋占星術 (12 星座) を 追加
   { id: 'fortune',   icon: '🔮', name: '今日 の 占い + ♈ 西洋占星術', url: '#/fortune',
     desc: '1 日 1 回 だけ 引ける 運勢 + 誕生日 から 12 星座 占い (ラッキー カラー / アイテム / ナンバー 付き)' },
+  // v837 cat='game' の APPS に揃える (apps.js との同期漏れ修正)
+  { id: 'cg2',       icon: '🎮', name: '自作ゲームv2 (cg2)', url: '#/cg2',
+    desc: 'p5.jsベースの准リアルタイムmultiplayerフレームワーク。マルバツ/ニム/ライツアウト/すごろくのサンプル付き' },
+  { id: 'bingofit',  icon: '👕', name: '着回しビンゴ', url: '#/bingofit/closet',
+    desc: '手持ちの服を25着以上登録すると、日曜始まりの5x5ビンゴ盤が自動生成。着た服を盤面から開けてラインが揃えばビンゴ' },
+  { id: 'bingo',     icon: '🎰', name: 'ビンゴ (週次)', url: '#/bingo',
+    desc: '毎週5x5ビンゴカードが自動生成。平日の行動(ラボイン/らぼったー投稿/麻雀/オセロ/食べある記など)が自動カウント' },
 ];
 
 const CATEGORIES = [
@@ -68,7 +72,6 @@ const CATEGORIES = [
 
 const GAME_CATEGORY = {
   mahjong:       'gamble',
-  'mahjong-ai':  'gamble',
   othello:       'gamble',
   daifugo:       'gamble',
   tictactoe:     'gamble',
@@ -86,6 +89,9 @@ const GAME_CATEGORY = {
   drafts:        'party',     // v637
   quizzes:       'party',     // v637
   fortune:       'solo',      // v672 #252
+  cg2:           'gamble',    // v837
+  bingofit:      'collect',   // v837
+  bingo:         'collect',   // v837
 };
 
 export function renderGames() {
