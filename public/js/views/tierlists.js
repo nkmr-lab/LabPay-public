@@ -186,7 +186,7 @@ export async function renderTierlistDetail({ params }) {
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">✏️ あなたの回答</div>
-      <div class="hint-sm" style="margin-bottom:6px">候補ボタンをタップすると 段階が回ります (S → A → B → C → D → F → 未配置)。</div>
+      <div class="hint-sm" style="margin-bottom:6px">候補 を <b>ドラッグ</b> で 行 を 移動 (タップ で 段階 を 回す こと も でき ます)。 「?」 は 「行って ない / 評価 不能」 の 意味 で 使って ください。</div>
       <div id="tl-board"></div>
       <div class="row" style="gap:6px; margin-top:10px; justify-content:flex-end">
         <button id="tl-save" class="primary"${d.is_closed ? ' disabled' : ''}>${d.my_answer ? '更新を保存' : '回答する'}</button>
@@ -231,6 +231,8 @@ export async function renderTierlistDetail({ params }) {
 function paintBoard(d, items, tiers, my) {
   const board = document.getElementById('tl-board');
   if (!board) return;
+  // v815 #410 サーバ が tiers 末尾 に 「?」 (評価 不能) を 追加 して 返す。 「未」 (未 配置) と
+  //   「?」 (行って ない / 評価 不能) は 別物 として 残す。
   const slots = [...tiers.map(t => ({ key: t.key, label: t.label, color: t.color })), { key: '', label: '未', color: '#888' }];
   board.innerHTML = slots.map(s => `
     <div class="tl-row" data-tier="${escapeHtml(s.key)}" style="display:flex; gap:6px; align-items:center; margin-bottom:4px; min-height:38px; padding:4px 6px; background:${s.color}22; border-left:4px solid ${s.color}; border-radius:6px">
@@ -246,19 +248,26 @@ function paintBoard(d, items, tiers, my) {
     btn.className = 'tl-chip';
     btn.dataset.iid = it.id;
     if (it.image_url) {
-      // 正方形 画像 + ラベル を 下に
-      btn.style.cssText = 'padding:0; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer; display:inline-flex; flex-direction:column; align-items:center; overflow:hidden; width:72px';
+      btn.style.cssText = 'padding:0; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:grab; touch-action:none; display:inline-flex; flex-direction:column; align-items:center; overflow:hidden; width:72px; user-select:none';
       btn.innerHTML = `
-        <img src="${escapeHtml(it.image_url)}" alt="" loading="lazy"
-             style="width:72px; height:72px; object-fit:cover; display:block">
-        <span style="font-size:11px; padding:2px 4px; line-height:1.2; text-align:center; max-width:100%; overflow:hidden; text-overflow:ellipsis">${escapeHtml(it.label)}</span>
+        <img src="${escapeHtml(it.image_url)}" alt="" loading="lazy" draggable="false"
+             style="width:72px; height:72px; object-fit:cover; display:block; pointer-events:none">
+        <span style="font-size:11px; padding:2px 4px; line-height:1.2; text-align:center; max-width:100%; overflow:hidden; text-overflow:ellipsis; pointer-events:none">${escapeHtml(it.label)}</span>
       `;
     } else {
-      btn.style.cssText = 'padding:4px 10px; background:#fff; border:1px solid #ccc; border-radius:6px; font-size:13px; cursor:pointer';
+      btn.style.cssText = 'padding:4px 10px; background:#fff; border:1px solid #ccc; border-radius:6px; font-size:13px; cursor:grab; touch-action:none; user-select:none';
       btn.textContent = it.label;
     }
     if (!d.is_closed) {
-      btn.addEventListener('click', () => {
+      // v815 #409 ドラッグ アンド ドロップ (pointer events で desktop + touch を 統一)
+      attachTierChipDnd(btn, it.id, d, items, tiers, my);
+      // 既存 の 「タップ で 段階 を 回す」 動作 も 残す (DnD で 動か なかった 時 = pointertap)
+      btn.addEventListener('click', (ev) => {
+        if (btn.dataset.dragged === '1') {
+          btn.dataset.dragged = '';
+          ev.preventDefault();
+          return;
+        }
         const order = [...tiers.map(t => t.key), ''];
         const cur = my[it.id] || '';
         const idx = order.indexOf(cur);
@@ -269,6 +278,70 @@ function paintBoard(d, items, tiers, my) {
     }
     rows[tk]?.appendChild(btn);
   }
+}
+
+// v815 #409 ティア チップ の DnD。 pointer events で desktop / mobile 共通 に。
+//   - pointerdown で ゴースト 要素 を 作って 体感 ドラッグ
+//   - pointermove で elementFromPoint → 最 近 接 の .tl-row を ハイライト
+//   - pointerup で 該当 row の data-tier を my[iid] に 反映 → 再 描画
+//   - 5 px 未満 の 移動 で 終わった ら クリック (= 段階 を 回す) として 扱う
+function attachTierChipDnd(btn, iid, d, items, tiers, my) {
+  btn.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== undefined && ev.button !== 0) return; // 左 クリック / 主 ポインタ のみ
+    ev.preventDefault();
+    const startX = ev.clientX, startY = ev.clientY;
+    const rect = btn.getBoundingClientRect();
+    const offX = startX - rect.left, offY = startY - rect.top;
+    let moved = false;
+    let lastTarget = null;
+    // ゴースト (元 を 半透明 に、 cursor 追従 の クローン を body に append)
+    const ghost = btn.cloneNode(true);
+    ghost.style.position = 'fixed';
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top = rect.top + 'px';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.zIndex = 9999;
+    ghost.style.pointerEvents = 'none';
+    ghost.style.opacity = '0.85';
+    ghost.style.transform = 'scale(1.05)';
+    ghost.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+    document.body.appendChild(ghost);
+    btn.style.opacity = '0.3';
+    const findRow = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      return el?.closest?.('.tl-row');
+    };
+    const onMove = (e) => {
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (!moved && (Math.abs(dx) + Math.abs(dy)) > 5) moved = true;
+      ghost.style.left = (e.clientX - offX) + 'px';
+      ghost.style.top  = (e.clientY - offY) + 'px';
+      const row = findRow(e.clientX, e.clientY);
+      if (row !== lastTarget) {
+        if (lastTarget) lastTarget.style.outline = '';
+        if (row) row.style.outline = '2px dashed #a855f7';
+        lastTarget = row;
+      }
+    };
+    const onUp = (e) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      ghost.remove();
+      btn.style.opacity = '';
+      if (lastTarget) lastTarget.style.outline = '';
+      if (!moved) return; // click → cycle に 任せる
+      btn.dataset.dragged = '1';
+      const row = findRow(e.clientX, e.clientY);
+      if (!row) return;
+      const tier = row.dataset.tier || '';
+      if (tier) my[iid] = tier; else delete my[iid];
+      paintBoard(d, items, tiers, my);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  });
 }
 
 function paintAggregation(d, items, tiers) {

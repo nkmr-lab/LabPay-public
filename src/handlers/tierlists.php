@@ -20,6 +20,17 @@ const TIER_DEFAULT = [
     ['key' => 'D', 'label' => 'D', 'color' => '#6bb4ff'],
 ];
 
+// v815 #410 「?」 評価 不能 (= 行って ない / 知ら ない) tier を 全 tier list に 強制 付与。
+//   新規 / 既存 問わず 適用 する ため、 detail / answer の 読み出し 時 に append する。
+function tier_with_unknown(array $tiers): array {
+    $tiers = array_values($tiers);
+    foreach ($tiers as $t) {
+        if (($t['key'] ?? '') === '?') return $tiers; // 既に ある
+    }
+    $tiers[] = ['key' => '?', 'label' => '?', 'color' => '#9ca3af'];
+    return $tiers;
+}
+
 function route_tierlists(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -101,6 +112,8 @@ function tierlists_detail(PDO $pdo, int $uid, int $tid): void {
     if (!$t) throw new ApiException('not_found', 'tierlist not found', 404);
     $items = json_decode($t['items_json'] ?: '[]', true) ?: [];
     $tiers = json_decode($t['tiers_json'] ?: 'null', true) ?: TIER_DEFAULT;
+    // v815 #410 「?」 評価 不能 tier を 常 に 末尾 に 追加
+    $tiers = tier_with_unknown($tiers);
 
     $stA = $pdo->prepare("SELECT a.user_id, a.assignments_json, a.updated_at, u.display_name, u.avatar_url
                             FROM tierlist_answers a JOIN users u ON u.id = a.user_id
@@ -163,6 +176,8 @@ function tierlists_answer(PDO $pdo, array $cfg, int $uid, int $tid): void {
     if ($t['is_closed']) throw new ApiException('bad_request', '締切られています', 400);
     $items = json_decode($t['items_json'] ?: '[]', true) ?: [];
     $tiers = json_decode($t['tiers_json'] ?: 'null', true) ?: TIER_DEFAULT;
+    // v815 #410 「?」 を 受け入れる ように
+    $tiers = tier_with_unknown($tiers);
     $itemIds = array_flip(array_column($items, 'id'));
     $tierKeys = array_flip(array_column($tiers, 'key'));
     $clean = [];
