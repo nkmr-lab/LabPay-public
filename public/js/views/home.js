@@ -2342,9 +2342,9 @@ async function loadDailyFortune() {
     } else if (f.has_birthday === false) {
       zHtml = `
         <div style="margin-top:8px; padding:8px 10px; background:#fdf4ff; border-left:3px solid #a855f7; border-radius:0 6px 6px 0">
-          <div class="bold" style="font-size:12.5px; color:#6b21a8">♈ 西洋占星術 を 適用 する に は、 生年月日 を 入力 して ください</div>
-          <div style="font-size:11.5px; color:#581c87; margin-top:2px">設定 → プロフィール で 誕生日 (MM-DD) を 登録 する と、 12 星座 の メッセージ + ラッキー 情報 が 出 ます。</div>
-          <a href="#/settings?focus=profile" class="btn primary" style="margin-top:6px; display:inline-block; font-size:11.5px; padding:3px 10px">⚙ 設定 で 登録</a>
+          <div class="bold" style="font-size:12.5px; color:#6b21a8">♈ 西洋占星術を適用するには、生年月日を入力してください</div>
+          <div style="font-size:11.5px; color:#581c87; margin-top:2px">設定 → プロフィールで誕生日 (MM-DD) を登録すると、12 星座のメッセージ+ラッキー情報が出ます。</div>
+          <a href="#/settings?focus=profile" class="btn primary" style="margin-top:6px; display:inline-block; font-size:11.5px; padding:3px 10px">⚙ 設定で登録</a>
         </div>`;
     }
     txt.innerHTML = `${escapeHtml(f.icon || '🔮')} <b>${escapeHtml(f.name || '')}</b> — ${escapeHtml(f.msg || '')}${zHtml}`;

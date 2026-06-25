@@ -33,11 +33,7 @@ export async function renderResearchNotes() {
         <div id="rn-calendar" style="margin-bottom:12px"></div>
 
         <div class="row center" style="gap:6px; flex-wrap:wrap; margin-bottom:8px">
-          <input type="date" id="rn-date-picker" style="font-size:14px; padding:4px 6px">
-          <button id="rn-prev" class="btn" style="padding:3px 8px">←</button>
-          <button id="rn-today" class="btn" style="padding:3px 10px">今日</button>
-          <button id="rn-next" class="btn" style="padding:3px 8px">→</button>
-          <span id="rn-date-label" class="muted" style="font-size:12px; margin-left:6px"></span>
+          <span id="rn-date-label" class="bold" style="font-size:14px"></span>
           <span style="flex:1"></span>
           <span id="rn-cache-badge" class="hint-sm" style="font-size:11px"></span>
         </div>
@@ -105,52 +101,27 @@ async function loadInitial() {
     stateLocal.visibleYm = d.today.slice(0, 7); // 'YYYY.MM'
     statusEl.hidden = true;
     document.getElementById('rn-body').hidden = false;
-    bindNav();
-    document.getElementById('rn-date-picker').value = dateKeyToInputValue(stateLocal.selectedDate);
 
     await renderCalendar(stateLocal.visibleYm);
     await loadSection(stateLocal.selectedDate);
-    // 前月/次月をバックグラウンドでプリフェッチ
     schedulePrefetch(stateLocal.visibleYm);
   } catch (e) {
     statusEl.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-function bindNav() {
-  document.getElementById('rn-date-picker').addEventListener('change', (ev) => {
-    const v = ev.target.value;
-    if (!v) return;
-    switchDate(v.replace(/-/g, '.'));
-  });
-  document.getElementById('rn-prev').addEventListener('click', () => moveDays(-1));
-  document.getElementById('rn-next').addEventListener('click', () => moveDays(+1));
-  document.getElementById('rn-today').addEventListener('click', () => switchDate(todayJstKey()));
-}
-
-function moveDays(delta) {
-  const cur = parseDateKey(stateLocal.selectedDate);
-  cur.setDate(cur.getDate() + delta);
-  switchDate(formatDateKey(cur));
-}
-
 async function switchDate(dateKey) {
   if (stateLocal.mode === 'edit') {
-    if (!confirm('編集中の内容は破棄されます。 別の日に移動しますか?')) {
-      document.getElementById('rn-date-picker').value = dateKeyToInputValue(stateLocal.selectedDate);
-      return;
-    }
+    if (!confirm('編集中の内容は破棄されます。 別の日に移動しますか?')) return;
     setMode('view');
   }
   stateLocal.selectedDate = dateKey;
-  document.getElementById('rn-date-picker').value = dateKeyToInputValue(dateKey);
   const ym = dateKey.slice(0, 7);
   if (ym !== stateLocal.visibleYm) {
     stateLocal.visibleYm = ym;
     await renderCalendar(ym);
     schedulePrefetch(ym);
   } else {
-    // 同じ月内 — 選択ハイライトだけ更新
     updateCalendarSelection();
   }
   await loadSection(dateKey);
@@ -346,6 +317,7 @@ function paintCalendar(ym, data) {
     <div class="row" style="margin-bottom:6px; gap:6px; align-items:center">
       <button id="rn-cal-prev" class="btn" style="padding:3px 8px">←</button>
       <div class="bold" style="flex:1; text-align:center">${ym}</div>
+      <button id="rn-cal-today" class="btn" style="padding:3px 10px; font-size:12px">📅 今日</button>
       <button id="rn-cal-next" class="btn" style="padding:3px 8px">→</button>
     </div>
     <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px">
@@ -358,6 +330,7 @@ function paintCalendar(ym, data) {
   });
   document.getElementById('rn-cal-prev').addEventListener('click', () => switchMonth(-1));
   document.getElementById('rn-cal-next').addEventListener('click', () => switchMonth(+1));
+  document.getElementById('rn-cal-today').addEventListener('click', () => switchDate(todayJstKey()));
 }
 
 function updateCalendarSelection() {
@@ -372,12 +345,16 @@ function updateCalendarSelection() {
 }
 
 async function switchMonth(delta) {
+  // v835 #419 月変更時は表示中の日も同月内の同日(または月末)に移動して、 セクション表示も切替
   const [yy, mm] = stateLocal.visibleYm.split('.').map(Number);
-  const d = new Date(yy, mm - 1 + delta, 1);
-  const newYm = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
-  stateLocal.visibleYm = newYm;
-  await renderCalendar(newYm);
-  schedulePrefetch(newYm);
+  const targetMonthStart = new Date(yy, mm - 1 + delta, 1);
+  const targetY = targetMonthStart.getFullYear();
+  const targetM = targetMonthStart.getMonth() + 1;
+  const targetLastDay = new Date(targetY, targetM, 0).getDate();
+  const selDay = Number(stateLocal.selectedDate.split('.')[2]);
+  const newDay = Math.min(selDay, targetLastDay);
+  const newDateKey = `${targetY}.${String(targetM).padStart(2, '0')}.${String(newDay).padStart(2, '0')}`;
+  await switchDate(newDateKey);
 }
 
 function heatColor(n) {
@@ -517,11 +494,17 @@ function renderScrapboxInline(s) {
 }
 
 function renderBracket(inside) {
+  // [* 見出し] の場合に中に URL が含まれていたら 画像表示も検討する
   const heading = inside.match(/^(\*+)\s+(.+)$/);
   if (heading) {
     const stars = heading[1].length;
     const text = heading[2];
     const size = stars === 1 ? '1em' : (stars === 2 ? '1.15em' : '1.3em');
+    const urlInHead = text.match(/https?:\/\/\S+/);
+    if (urlInHead) {
+      const imgSrc = imageUrlOf(urlInHead[0]);
+      if (imgSrc) return `<a href="${escapeHtml(urlInHead[0])}" target="_blank" rel="noopener"><img src="${escapeHtml(imgSrc)}" loading="lazy" style="max-width:100%; max-height:280px; border-radius:4px; display:block; margin:4px 0"></a>`;
+    }
     return `<b style="font-size:${size}; color:#1f2937">${escapeHtml(text)}</b>`;
   }
   const it = inside.match(/^\/\s+(.+)$/);
@@ -531,10 +514,27 @@ function renderBracket(inside) {
   const urlMatch = inside.match(/https?:\/\/\S+/);
   if (urlMatch) {
     const url = urlMatch[0];
+    // v835 #420 画像 URL なら img タグで表示 (Scrapbox 記法準拠)
+    const imgSrc = imageUrlOf(url);
+    if (imgSrc) {
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(imgSrc)}" loading="lazy" style="max-width:100%; max-height:280px; border-radius:4px; display:block; margin:4px 0"></a>`;
+    }
     const text = inside.replace(url, '').trim() || url;
     return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#0284c7">${escapeHtml(text)}</a>`;
   }
   return `<span style="color:#9333ea; border-bottom:1px dotted #9333ea">${escapeHtml(inside)}</span>`;
+}
+
+// URL が画像っぽいかを判定し、 表示用 img src を返す (= 直接画像URLでなければ変換)。
+//   - .jpg/.jpeg/.png/.gif/.webp/.svg/.bmp/.ico で終わる → そのまま
+//   - gyazo.com/<id> → https://i.gyazo.com/<id>.png
+//   - scrapbox.io/api/pages/.../icon → そのまま (アイコン)
+function imageUrlOf(url) {
+  if (/\.(jpe?g|png|gif|webp|svg|bmp|ico|avif)(\?|#|$)/i.test(url)) return url;
+  const gz = url.match(/^https?:\/\/(?:scrapbox-userscript-)?(?:i\.)?gyazo\.com\/([a-f0-9]+)(?:\/raw)?(?:\?[^#]*)?$/i);
+  if (gz) return `https://i.gyazo.com/${gz[1]}.png`;
+  if (/scrapbox\.io\/api\/pages\/.+\/icon$/.test(url)) return url;
+  return null;
 }
 
 // ───────── date helpers ─────────
