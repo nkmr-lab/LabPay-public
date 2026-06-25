@@ -69,6 +69,37 @@ export async function renderSettings() {
       </div>
     </div>
 
+    <!-- v818 設定 カード の 並び を 整理 (プロフィール → ホーム ウィジェット → タブ →
+         クイック ボタン → 通知 → Google Calendar → 自分 の 端末 → 自動 検出 → 自作 ゲーム
+         → ポイント 表示欄 → 効果音 → その他) -->
+
+    <div class="card">
+      <h3>ホーム ウィジェット</h3>
+      <p class="hint">
+        ホームに置く ウィジェット (進行中・タスク・いる人 など) と並び順を変えられます。
+        チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
+      </p>
+      <div id="home-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h3>タブのカスタマイズ</h3>
+      <p class="hint">
+        上部のナビゲーションに表示するタブと並び順を変えられます。
+        チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
+      </p>
+      <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card" id="home-actions">
+      <h3>ホーム上部の クイック ボタン</h3>
+      <p class="hint">
+        ホーム画面の 残高 直下に 並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
+        必要なものだけ ON に。 設定は このブラウザ にのみ 保存されます。
+      </p>
+      <div id="home-actions-list" class="list" style="margin-top:6px"></div>
+    </div>
+
     <div class="card">
       <h3>通知</h3>
       <p class="hint" style="margin:6px 0 8px">
@@ -76,6 +107,34 @@ export async function renderSettings() {
       </p>
       <button id="notif-perm" class="primary">🔔 ブラウザ通知を有効にする</button>
       <span id="notif-perm-status" class="hint-sm" style="margin-left:8px"></span>
+    </div>
+
+    <div class="card">
+      <h3>Google Calendar 連携</h3>
+      <p class="hint">
+        連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
+        どのカレンダーを表示するかは下で個別に切り替えられます。
+      </p>
+      <div id="cal-section"><div class="muted">読み込み中…</div></div>
+      <div class="sep" style="margin:14px 0 10px"></div>
+      <h3 style="margin:0">終わった予定を消すまでの時間</h3>
+      <p class="hint">
+        予定の終了時刻から指定した分数が経過したら、 ホームの「今日の予定」 から
+        消えます (0 で即時、 1440 で 24 時間)。 default 120 分。
+      </p>
+      <div class="row" style="gap:6px; align-items:center; margin-top:4px">
+        <input type="number" id="cal-hide-after-min" min="0" max="1440" step="10" style="max-width:120px">
+        <span class="muted" style="font-size:13px">分</span>
+        <button id="cal-hide-save" class="primary">保存</button>
+      </div>
+      <div class="sep" style="margin:14px 0 10px"></div>
+      <h3 style="margin:0">予定の非表示ルール</h3>
+      <p class="hint">
+        タイトルにこの文字列を含む予定はホームの「今日の予定」に出ない。
+        正規表現も可 (チェック ON で <code>^MTG </code>、<code>(個人|サブ)</code> など)。
+        どれか 1 ルールにでもマッチすれば hide。
+      </p>
+      <div id="cal-filter-section" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
@@ -107,21 +166,12 @@ export async function renderSettings() {
     </details>
 
     <div class="card">
-      <h3>ホーム ウィジェット</h3>
+      <h3>🎮 自作ゲーム を 登録</h3>
       <p class="hint">
-        ホームに置く ウィジェット (進行中・タスク・いる人 など) と並び順を変えられます。
-        チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
+        自分で 書いた 2 人対戦 ゲーム を LabPay に 追加できます。 JS ファイル を アップロード で OK
+        (場代 % を設定 すれば pot から 提供者特典 が 入ります)。
       </p>
-      <div id="home-layout-list" class="list" style="margin-top:6px"></div>
-    </div>
-
-    <div class="card">
-      <h3>タブのカスタマイズ</h3>
-      <p class="hint">
-        上部のナビゲーションに表示するタブと並び順を変えられます。
-        チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
-      </p>
-      <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
+      <a href="#/my-games" class="btn">🎮 自作ゲーム 管理</a>
     </div>
 
     <div class="card" id="balance-comp">
@@ -133,47 +183,6 @@ export async function renderSettings() {
       <div id="balance-comp-list" class="list" style="margin-top:6px"></div>
     </div>
 
-    <div class="card" id="home-actions">
-      <h3>ホーム上部の クイック ボタン</h3>
-      <p class="hint">
-        ホーム画面の 残高 直下に 並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
-        必要なものだけ ON に。 設定は このブラウザ にのみ 保存されます。
-      </p>
-      <div id="home-actions-list" class="list" style="margin-top:6px"></div>
-    </div>
-
-    <!-- v497 #103 アプリ表示設定は撤去。 アプリは全部表示する方針 (apps.js 側で
-         isAppVisible を常時 true 化済み)。 -->
-
-
-    <div class="card">
-      <h3>Google Calendar 連携</h3>
-      <p class="hint">
-        連携するとホームに「今日の予定」が出ます (calendar.readonly のみ)。
-        どのカレンダーを表示するかは下で個別に切り替えられます。
-      </p>
-      <div id="cal-section"><div class="muted">読み込み中…</div></div>
-      <div class="sep" style="margin:14px 0 10px"></div>
-      <h3 style="margin:0">終わった予定を消すまでの時間</h3>
-      <p class="hint">
-        予定の終了時刻から指定した分数が経過したら、 ホームの「今日の予定」 から
-        消えます (0 で即時、 1440 で 24 時間)。 default 120 分。
-      </p>
-      <div class="row" style="gap:6px; align-items:center; margin-top:4px">
-        <input type="number" id="cal-hide-after-min" min="0" max="1440" step="10" style="max-width:120px">
-        <span class="muted" style="font-size:13px">分</span>
-        <button id="cal-hide-save" class="primary">保存</button>
-      </div>
-      <div class="sep" style="margin:14px 0 10px"></div>
-      <h3 style="margin:0">予定の非表示ルール</h3>
-      <p class="hint">
-        タイトルにこの文字列を含む予定はホームの「今日の予定」に出ない。
-        正規表現も可 (チェック ON で <code>^MTG </code>、<code>(個人|サブ)</code> など)。
-        どれか 1 ルールにでもマッチすれば hide。
-      </p>
-      <div id="cal-filter-section" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
-    </div>
-
     <div class="card">
       <h3>効果音</h3>
       <p class="hint">
@@ -181,15 +190,6 @@ export async function renderSettings() {
         音源そのものは admin が登録します。
       </p>
       <div id="sound-prefs"><div class="muted">読み込み中…</div></div>
-    </div>
-
-    <div class="card">
-      <h3>🎮 自作ゲーム を 登録</h3>
-      <p class="hint">
-        自分で 書いた 2 人対戦 ゲーム を LabPay に 追加できます。 JS ファイル を アップロード で OK
-        (場代 % を設定 すれば pot から 提供者特典 が 入ります)。
-      </p>
-      <a href="#/my-games" class="btn">🎮 自作ゲーム 管理</a>
     </div>
 
     <div class="card">
