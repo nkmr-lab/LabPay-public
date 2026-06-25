@@ -8,7 +8,6 @@ import { toast } from '../app.js';
 let stateLocal = {
   handle: null,
   canWrite: false,
-  pageUrl: '',
   selectedDate: null,   // 'YYYY.MM.DD'
   mode: 'view',          // 'view' | 'edit'
   loaded: { date: null, text: '', exists: false },
@@ -19,12 +18,8 @@ export async function renderResearchNotes() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">📝 研究ノート (Cosense)</h2>
-      <p class="hint" style="font-size:13px; margin-top:6px">
-        nkmr-lab の 「YYYY.MM_研究ノート_<i>名前</i>」 ページから、 選んだ日のセクションを表示します。
-        編集するには、 設定 → Cosense 連携で Scrapbox の鍵 を登録してから 「✏️ 編集」 を押してください。
-      </p>
     </div>
-    <div class="card" id="rn-status">
+    <div class="card" id="rn-status" hidden>
       <div class="muted">読み込み中…</div>
     </div>
     <div class="card" id="rn-main" hidden>
@@ -34,8 +29,6 @@ export async function renderResearchNotes() {
         <button id="rn-today" class="btn" style="padding:3px 10px">今日</button>
         <button id="rn-next" class="btn" style="padding:3px 8px">→</button>
         <span id="rn-date-label" class="muted" style="font-size:12px; margin-left:6px"></span>
-        <span style="flex:1"></span>
-        <a id="rn-open" class="btn" style="font-size:12px; padding:3px 10px" target="_blank" rel="noopener">↗ Scrapbox を開く</a>
       </div>
 
       <div id="rn-view" hidden>
@@ -74,6 +67,8 @@ export async function renderResearchNotes() {
 
 async function loadInitial() {
   const statusEl = document.getElementById('rn-status');
+  statusEl.hidden = false;
+  statusEl.innerHTML = '<div class="muted">読み込み中…</div>';
   try {
     // 状態とハンドル情報を取得 + 今日の日付を確定
     const d = await get('/api/cosense/research-note/days?count=2');
@@ -94,11 +89,8 @@ async function loadInitial() {
     stateLocal.handle = d.handle;
     stateLocal.canWrite = !!d.can_write;
     stateLocal.selectedDate = d.today;
-    const source = d.cookie_source || 'none';
-    const sourceLabel = source === 'self-pat' ? '✅ 自分の鍵 (本人)' :
-                       source === 'self-cookie' ? '☑ 自分の cookie (本人)' :
-                       source === 'shared-cookie' ? '⚙ 共有 cookie (中村名義、 読み取りのみ)' : '?';
-    statusEl.innerHTML = `<div style="font-size:13px">名前: <code>${escapeHtml(d.handle)}</code> ・ 認証: ${sourceLabel}</div>`;
+    // 認証 OK のときはステータスカードを隠す (= 場所を取らない)。
+    statusEl.hidden = true;
 
     document.getElementById('rn-main').hidden = false;
 
@@ -152,7 +144,6 @@ async function loadSection(dateKey) {
   const editBtn = document.getElementById('rn-edit-btn');
   const noEditHint = document.getElementById('rn-no-edit-hint');
   const label = document.getElementById('rn-date-label');
-  const open = document.getElementById('rn-open');
   label.textContent = humanDateLabel(dateKey);
 
   // 画面状態リセット
@@ -160,12 +151,6 @@ async function loadSection(dateKey) {
   document.getElementById('rn-edit').hidden = true;
   stateLocal.mode = 'view';
   viewBody.innerHTML = '<div class="muted">読み込み中…</div>';
-
-  // ページ URL (日付の月部分でページ名生成)
-  const ym = dateKey.slice(0, 7);
-  const title = `${ym}_研究ノート_${stateLocal.handle}`;
-  stateLocal.pageUrl = `https://scrapbox.io/nkmr-lab/${encodeURIComponent(title)}`;
-  open.href = stateLocal.pageUrl;
 
   try {
     const s = await get('/api/cosense/research-note/section?date=' + encodeURIComponent(dateKey));
