@@ -433,12 +433,18 @@ async function wireCosenseCookieUI() {
   patSave.addEventListener('click', async () => {
     const v = patInput.value.trim();
     if (!v) { toast('鍵を入れてください'); return; }
+    const old = patSave.textContent;
+    patSave.disabled = true; patSave.textContent = 'テスト中…';
     try {
-      await patch('/api/cosense/me/pat', { pat: v });
+      const r = await patch('/api/cosense/me/pat', { pat: v });
       patInput.value = '';
-      toast('保存しました');
+      const tail = r.pat_tail ? ' (末尾...' + r.pat_tail + ')' : '';
+      let msg = '✅ 保存しました' + tail;
+      if (r.test && r.test.message) msg += ' / ' + r.test.message;
+      toast(msg, 8000); // 長めに表示
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }
+    finally { patSave.disabled = false; patSave.textContent = old; }
   });
   patClear?.addEventListener('click', async () => {
     if (!confirm('登録した鍵を解除しますか?')) return;

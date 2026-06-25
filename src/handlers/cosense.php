@@ -39,7 +39,7 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
         cosense_me_set_cookie($pdo, $uid); return;
     }
     if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'pat') {
-        cosense_me_set_pat($pdo, $uid); return;
+        cosense_me_set_pat($pdo, $cfg, $uid); return;
     }
     if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'page-handle') {
         cosense_me_set_page_handle($pdo, $uid); return;
@@ -356,7 +356,13 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     $pageId = $existsPage ? ($r['page']['id'] ?? null) : null;
     $lines = $existsPage ? ($r['page']['lines'] ?? []) : [];
 
-    // 日付 ヘッダ 行 が ある か 探す
+    // v829 #418 「日付ヘッダの直下、 既存内容があればその末尾」 = 「今日の日付セクションの末尾」 に挿入する。
+    //
+    //   1. 日付ヘッダ行を探す (= [*( YYYY.MM.DD ...)])
+    //   2. ヘッダの次の行から、 次の日付ヘッダが現れるまでスキャン
+    //      → その「次の日付ヘッダ」 の前 = 現セクションの末尾
+    //   3. 次の日付ヘッダがなければ `_end` (= ページ末尾) を anchor に
+    //   4. 日付ヘッダ自体が存在しなければ、 ヘッダ + 内容を全部ページ末尾に追加
     $dateRe = '/^\[\*\(\s*' . preg_quote($date, '/') . '/u';
     $headerLineId = null;
     $nextDateLineId = null;
@@ -364,7 +370,6 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
         $t = (string)($ln['text'] ?? '');
         if (preg_match($dateRe, $t)) {
             $headerLineId = $ln['id'] ?? null;
-            // この ヘッダ の 「次 の 日付 ヘッダ 行 の id」 を 探す = ここ より 後 の 最初 の 日付 ヘッダ
             for ($j = $i + 1; $j < count($lines); $j++) {
                 $tj = (string)($lines[$j]['text'] ?? '');
                 if (preg_match('/^\[\*\(\s*20\d{2}\.\d{2}\.\d{2}/u', $tj)) {
@@ -378,25 +383,27 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
 
     // 入力 text を 行 分解 + 各 行 に id を 振る
     $bodyLines = preg_split('/\r?\n/', $text);
-    $now = time();
     $changes = [];
-    $makeLineId = function (int $i) use ($now): string {
-        // Cosense の lineId は 24 桁 hex の よう な もの。 簡易 に random で 生成。
+    $makeLineId = function (): string {
+        // Cosense の lineId は ランダム 16進。 12 byte = 24 桁 hex。
         return bin2hex(random_bytes(12));
     };
 
+    // anchor 決定: ヘッダなしならヘッダごと末尾、 ありなら現セクションの末尾。
     if ($headerLineId === null) {
-        // 日付 ヘッダ ごと 新規 に 末尾 へ 追加
         $wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][((int)date('w', strtotime($date)))];
-        $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(0), 'text' => sprintf('[*( %s %s )]', $date, $wd)]];
-        foreach ($bodyLines as $i => $bl) {
-            $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId($i + 1), 'text' => ' ' . $bl]];
+        $headerNewId = $makeLineId();
+        $changes[] = ['_insert' => '_end', 'lines' => ['id' => $headerNewId, 'text' => sprintf('[*( %s %s )]', $date, $wd)]];
+        foreach ($bodyLines as $bl) {
+            $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(), 'text' => ' ' . $bl]];
         }
     } else {
-        // 既存 の 日付 ヘッダ 直下 (= 次 の 日付 ヘッダ の 前) に 挿入
+        // 「セクションの末尾」 = 次の日付ヘッダの直前。 次がなければページ末尾。
         $anchor = $nextDateLineId ?? '_end';
-        foreach ($bodyLines as $i => $bl) {
-            $changes[] = ['_insert' => $anchor, 'lines' => ['id' => $makeLineId($i), 'text' => ' ' . $bl]];
+        foreach ($bodyLines as $bl) {
+            // 順次評価: 同じ anchor の前に挿入を繰り返すと、 結果的に anchor の直前に
+            //   入れた順番で並ぶ (Cosense API はこの順番を保つ)。
+            $changes[] = ['_insert' => $anchor, 'lines' => ['id' => $makeLineId(), 'text' => ' ' . $bl]];
         }
     }
 
@@ -461,7 +468,7 @@ function cosense_me_set_cookie(PDO $pdo, int $uid): void {
     json_response(['ok' => true, 'has_self_cookie' => $c !== null]);
 }
 
-function cosense_me_set_pat(PDO $pdo, int $uid): void {
+function cosense_me_set_pat(PDO $pdo, array $cfg, int $uid): void {
     $body = read_json_body();
     $p = trim((string)($body['pat'] ?? ''));
     if ($p !== '') {
@@ -479,7 +486,36 @@ function cosense_me_set_pat(PDO $pdo, int $uid): void {
         $p = null;
     }
     $pdo->prepare("UPDATE users SET cosense_pat=? WHERE id=?")->execute([$p, $uid]);
-    json_response(['ok' => true, 'has_pat' => $p !== null]);
+
+    // v829 #418 保存と同時に「実際に Cosense で読み取りできるか」をテスト。
+    //   貼り付け後すぐ入力欄が空になるので、 toast に結果を出して安心感を与える。
+    $test = null;
+    if ($p !== null) {
+        $handle = cosense_user_handle($pdo, $uid);
+        if ($handle !== null) {
+            $title = date('Y.m') . '_研究ノート_' . $handle;
+            $r = cosense_v2_get_page($cfg, $title, $p);
+            if ($r['ok']) {
+                $linesN = is_array($r['page']['lines'] ?? null) ? count($r['page']['lines']) : 0;
+                $test = ['ok' => true, 'message' => '✅ 読み取り成功 (' . $title . ' を ' . $linesN . ' 行取得)'];
+            } else {
+                $status = $r['status'] ?? '?';
+                $hint = $status === 401 ? '鍵が無効か期限切れ' : ($status === 404 ? 'ページがまだ存在しないだけ (= 鍵自体は OK)' : ('HTTP ' . $status));
+                $test = ['ok' => $status === 404, 'status' => $status, 'message' => $status === 404
+                    ? '☑ 鍵は有効 (' . $title . ' はまだ未作成)'
+                    : '⚠ 読み取り失敗: ' . $hint];
+            }
+        } else {
+            $test = ['ok' => false, 'message' => 'handle が未設定のためテスト省略'];
+        }
+    }
+
+    json_response([
+        'ok' => true,
+        'has_pat' => $p !== null,
+        'pat_tail' => $p !== null ? mb_substr($p, -6) : null,
+        'test' => $test,
+    ]);
 }
 
 function cosense_me_set_page_handle(PDO $pdo, int $uid): void {
