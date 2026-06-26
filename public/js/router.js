@@ -63,7 +63,7 @@ let lastDispatchAt = 0;
 const NON_FULLSCREEN_TOP_PARTS = new Set([
   '',                // ホーム
   'groups',          // グループ (タブ)
-  'sns',             // らぼったー (タブ)
+  // v844 #427 sns (らぼったー) は タブ ではあるが、 投稿スレッドを 大きく見たいので fullscreen 化
   'buy', 'sell', 'sellers',
   'requests-hub',
   'auctions',
