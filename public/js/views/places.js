@@ -92,7 +92,6 @@ export async function renderPlaces() {
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-bounds" checked> 🗺 地図内のみ</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣</label>
-        ${state.me?.role === 'admin' ? '<button id="pl-backfill" class="btn" style="padding:4px 8px; font-size:11px" title="source_url が空の店舗を tabelog で自動検索して埋める (admin のみ)">🔗 tabelog 自動補完</button>' : ''}
         <span id="pl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
     </div>
@@ -231,29 +230,8 @@ export async function renderPlaces() {
   document.getElementById('pl-f-bounds') .addEventListener('change', refresh);
   // v730 #338 地図移動でリスト再フィルタ (デフォルト「地図内のみ」 ON)
   if (map) map.on('moveend', refresh);
-  // v731 #340 admin が押すと source_url 空の店舗を tabelog で順次補完。 10 件ずつ繰返。
-  document.getElementById('pl-backfill')?.addEventListener('click', async () => {
-    const btn = document.getElementById('pl-backfill');
-    if (!confirm('source_url が空の店舗を tabelog で検索して URL を埋めます。よろしいですか?')) return;
-    btn.disabled = true;
-    let totalUpdated = 0, totalMissed = 0, round = 0;
-    try {
-      while (true) {
-        round++;
-        btn.textContent = `🔗 補完中… ${round} 回目`;
-        const r = await post('/api/places/backfill_tabelog_urls', { limit: 10 });
-        totalUpdated += r.updated || 0;
-        totalMissed  += r.missed  || 0;
-        if (!r.processed || r.remaining === 0) break;
-        if (round >= 30) { toast('30 回でストップ (続きは再実行)'); break; }
-      }
-      toast(`✓ ${totalUpdated} 件補完 / ${totalMissed} 件未マッチ`);
-      // 結果反映のためリスト再取得
-      try { const d = await get('/api/places'); allItems = d.items || []; } catch (_) {}
-      refresh();
-    } catch (e) { toast('失敗: ' + e.message); }
-    finally { btn.disabled = false; btn.textContent = '🔗 tabelog 自動補完'; }
-  });
+  // v845 #428 admin 用 「🔗 tabelog 自動補完」 ボタンとハンドラ を撤去。
+  //   バックエンドの /api/places/backfill_tabelog_urls は残しているので、 必要なら手動で叩ける。
   refresh();
 }
 

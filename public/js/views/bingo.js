@@ -1,8 +1,38 @@
 // v588 ビンゴ。 週次 5x5、 自動判定、 リーチ / ビンゴ で 演出。
+// v845 #429 マス目タップで該当アプリへ遷移できるように。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
+
+// マスの type → 該当 アプリ の URL マップ。 対応するアプリ がないものは null (リンクなし)。
+const CELL_TYPE_TO_URL = {
+  checkin:         '#/',
+  checkin_streak:  '#/',
+  opener:          '#/',
+  sns_post:        '#/sns',
+  sns_reaction:    '#/sns',
+  purchase:        '#/buy',
+  sell:            '#/sell',
+  task_complete:   '#/tasks',
+  mahjong:         '#/mahjong',
+  othello:         '#/othello',
+  place_add:       '#/places',
+  walk:            '#/walk',
+  workout:         '#/workouts',
+  health:          '#/health',
+  poll_vote:       '#/polls',
+  rollcall_resp:   '#/rollcalls',
+  fortune_good:    '#/fortune',
+  tier_answer:     '#/tierlists',
+  prediction_join: '#/predictions',
+  transfer:        '#/send',
+  shiritori:       '#/shiritori',
+  ai_review:       '#/paper-review',
+  jinrou:          '#/jinrou',
+  ito_game:        '#/ito',
+  meetup_resp:     '#/meetups',
+};
 
 export async function renderBingo(ctx) {
   const app = document.getElementById('app');
@@ -65,15 +95,20 @@ export async function renderBingo(ctx) {
         ${d.cells.map((c, i) => {
           const done = d.completed.includes(i);
           const isReachCell = !done && reachLines.some(line => line.includes(i));
-          return `
-            <div style="aspect-ratio:1/1; border:2px solid ${done ? '#dc2626' : (isReachCell ? '#f59e0b' : '#ddd')}; border-radius:8px;
+          const url = CELL_TYPE_TO_URL[c.type] || null;
+          const baseStyle = `aspect-ratio:1/1; border:2px solid ${done ? '#dc2626' : (isReachCell ? '#f59e0b' : '#ddd')}; border-radius:8px;
                   background:${done ? 'linear-gradient(145deg, #fecaca, #fca5a5)' : (isReachCell ? '#fef3c7' : '#fff')};
                   display:flex; flex-direction:column; align-items:center; justify-content:center;
-                  text-align:center; padding:4px; font-size:11px; line-height:1.2; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; min-height:0">
+                  text-align:center; padding:4px; font-size:11px; line-height:1.2; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; min-height:0; color:inherit; text-decoration:none`;
+          const inner = `
               ${done ? '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:54px; color:rgba(220,38,38,0.5); pointer-events:none; line-height:1">⭕</div>' : ''}
               <div style="font-size:18px; position:relative; z-index:1">${escapeHtml(c.icon || '')}</div>
               <div style="font-size:10px; margin-top:2px; position:relative; z-index:1; max-width:100%; overflow:hidden; text-overflow:ellipsis">${escapeHtml(c.label)}</div>
-            </div>`;
+              ${url && !done ? '<div style="position:absolute; right:2px; bottom:2px; font-size:9px; color:#9ca3af; z-index:1">▶</div>' : ''}`;
+          if (url) {
+            return `<a href="${escapeHtml(url)}" title="${escapeHtml(c.label)} を実行" style="${baseStyle}; cursor:pointer">${inner}</a>`;
+          }
+          return `<div style="${baseStyle}">${inner}</div>`;
         }).join('')}
       </div>
     </div>
