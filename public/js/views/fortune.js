@@ -62,7 +62,11 @@ export async function renderFortune() {
             <div>🍀<br><b>${escapeHtml(z.lucky_item || '')}</b><br><span style="font-size:10px">アイテム</span></div>
             <div>🔢<br><b>${escapeHtml(String(z.lucky_number ?? ''))}</b><br><span style="font-size:10px">ナンバー</span></div>
             ${z.compat_today ? `<div>💞<br><b>${escapeHtml(z.compat_today.icon)} ${escapeHtml(z.compat_today.name)}</b><br><span style="font-size:10px">相性</span></div>` : ''}
+            ${z.lucky_direction ? `<div>${escapeHtml(z.lucky_direction.icon)}<br><b>${escapeHtml(z.lucky_direction.name)}</b><br><span style="font-size:10px" title="${escapeHtml(z.lucky_direction.place)} 由来">出生地から</span></div>` : ''}
           </div>
+          ${!z.lucky_direction ? `<div class="hint-sm" style="font-size:11px; text-align:center; margin-top:8px; color:#9333ea">
+            📍 <a href="#/settings?focus=profile" style="color:#7c3aed">出生地を登録</a> すると 「ラッキー方位」 も出ます (出生時刻は不要)
+          </div>` : ''}
           ${z.note ? `<div class="muted" style="font-size:10.5px; margin-top:10px; text-align:center">${escapeHtml(z.note)}</div>` : ''}
         </div>
       `;

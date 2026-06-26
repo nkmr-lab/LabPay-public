@@ -2338,7 +2338,7 @@ async function loadDailyFortune() {
         <div style="margin-top:8px; padding:6px 10px; background:#fdf4ff; border-left:3px solid #a855f7; border-radius:0 6px 6px 0; font-size:12.5px; line-height:1.6">
           <div><b>${escapeHtml(z.icon || '')} ${escapeHtml(z.name || '')}</b> (${escapeHtml(z.element || '')}・${escapeHtml(z.ruler || '')}) — ${escapeHtml(z.msg || '')}</div>
           <div class="muted" style="font-size:11.5px; margin-top:2px">
-            🎨 ${escapeHtml(z.lucky_color || '')} ・ 🍀 ${escapeHtml(z.lucky_item || '')} ・ 🔢 ${escapeHtml(String(z.lucky_number ?? ''))}${z.compat_today ? ' ・ 💞 ' + escapeHtml(z.compat_today.icon) + escapeHtml(z.compat_today.name) : ''}
+            🎨 ${escapeHtml(z.lucky_color || '')} ・ 🍀 ${escapeHtml(z.lucky_item || '')} ・ 🔢 ${escapeHtml(String(z.lucky_number ?? ''))}${z.compat_today ? ' ・ 💞 ' + escapeHtml(z.compat_today.icon) + escapeHtml(z.compat_today.name) : ''}${z.lucky_direction ? ' ・ ' + escapeHtml(z.lucky_direction.icon) + ' ' + escapeHtml(z.lucky_direction.name) : ''}
           </div>
         </div>`;
     } else if (f.has_birthday === false) {

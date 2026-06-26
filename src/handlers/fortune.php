@@ -135,10 +135,13 @@ function fortune_today(PDO $pdo, int $uid): void {
     $f = FORTUNES[$idx] ?? FORTUNES[0];
 
     // v814 #408 西洋占星術 (生年月日 が 設定 されて いれば)
+    // v852 #439 出生地 も 一緒に 取って、 ラッキー方位 を 計算
     $zodiac = null;
-    $bSt = $pdo->prepare("SELECT birthday_md FROM users WHERE id=?");
+    $bSt = $pdo->prepare("SELECT birthday_md, birth_place FROM users WHERE id=?");
     $bSt->execute([$uid]);
-    $birthdayMd = (string)($bSt->fetchColumn() ?: '');
+    $bRow = $bSt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $birthdayMd = (string)($bRow['birthday_md'] ?? '');
+    $birthPlace = trim((string)($bRow['birth_place'] ?? ''));
     $zIdx = zodiac_sign_for($birthdayMd ?: null);
     if ($zIdx >= 0) {
         $z = ZODIAC_SIGNS[$zIdx];
@@ -158,6 +161,17 @@ function fortune_today(PDO $pdo, int $uid): void {
         }
         $compatIdx = $compatGroup[$epochDay % max(1, count($compatGroup))] ?? null;
         $compat = $compatIdx !== null ? ZODIAC_SIGNS[$compatIdx] : null;
+        // v852 #439 出生地 + 当日 + 星座 から ラッキー方位 を deterministic に 決定。
+        //   出生時刻 がない 場合 でも 出生地 が あれば 「あなたの土地に縁のある方位」 という
+        //   占星術的解釈 が できる。 8 方位 (北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西)。
+        $luckyDir = null;
+        if ($birthPlace !== '') {
+            $h = crc32($birthPlace . '|' . $today . '|' . $zIdx);
+            $dirs = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
+            $dirIcons = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'];
+            $di = $h % 8;
+            $luckyDir = ['name' => $dirs[$di], 'icon' => $dirIcons[$di], 'place' => $birthPlace];
+        }
         $zodiac = [
             'key'         => $z['key'],
             'name'        => $z['name'],
@@ -175,6 +189,7 @@ function fortune_today(PDO $pdo, int $uid): void {
                 'name' => $compat['name'],
                 'icon' => $compat['icon'],
             ] : null,
+            'lucky_direction' => $luckyDir,
             'note'        => '※ 太陽星座をもとにした簡易西洋占星術です (本格ホロスコープは出生時刻+出生地が必要)',
         ];
     }

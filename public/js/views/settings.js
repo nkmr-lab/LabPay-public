@@ -62,6 +62,10 @@ export async function renderSettings() {
           <input type="number" id="profile-birthday-year" min="1900" max="2100" placeholder="1990">
         </label>
       </div>
+      <label class="field">
+        <span class="lbl">📍 出生地 (任意、 西洋占星術のラッキー方位に使用) <span class="hint-sm">— 都市名 or 都道府県 で OK (出生時間は不要)</span></span>
+        <input type="text" id="profile-birth-place" maxlength="100" placeholder="例: 神戸市 / 兵庫県 / 東京">
+      </label>
       <div class="row" style="gap:6px">
         <button id="profile-save" class="primary">保存</button>
         <button id="profile-clear-avatar">アバター削除</button>
@@ -810,6 +814,8 @@ async function loadProfile() {
     document.getElementById('profile-bank').value   = me.user.bank_info || '';
     document.getElementById('profile-birthday-md').value   = me.user.birthday_md || '';
     document.getElementById('profile-birthday-year').value = me.user.birthday_year || '';
+    const bpEl = document.getElementById('profile-birth-place');
+    if (bpEl) bpEl.value = me.user.birth_place || '';
     const pv = document.getElementById('profile-view');
     if (pv) pv.href = '#/users/' + me.user.id;
     document.getElementById('profile-avatar-wrap').innerHTML = avatarHtml(me.user.display_name, me.user.avatar_url, 'lg');
@@ -828,6 +834,7 @@ async function onProfileSave() {
   const bank   = document.getElementById('profile-bank').value.trim();
   const bdMd   = document.getElementById('profile-birthday-md').value.trim();
   const bdY    = document.getElementById('profile-birthday-year').value.trim();
+  const bp     = (document.getElementById('profile-birth-place')?.value || '').trim();
   const body = {
     display_name,
     phone_number: phone_raw === '' ? null : phone_raw,
@@ -838,6 +845,7 @@ async function onProfileSave() {
     bank_info: bank      === '' ? null : bank,
     birthday_md:   bdMd === '' ? null : bdMd,
     birthday_year: bdY  === '' ? null : Number(bdY),
+    birth_place:   bp   === '' ? null : bp,
   };
   if (pendingAvatarUrl !== null) body.avatar_url = pendingAvatarUrl;
   try {

@@ -24,7 +24,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $streak['current_streak'] = 0;
             }
         }
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year, birth_place FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
@@ -38,6 +38,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['bank_info']         = $row['bank_info']         ?? null;
         $u['birthday_md']       = $row['birthday_md']       ?? null;
         $u['birthday_year']     = $row['birthday_year']     ?? null;
+        $u['birth_place']       = $row['birth_place']       ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
         json_response([
@@ -177,6 +178,21 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     throw new ApiException('bad_request', '西暦が不正です', 400);
                 }
                 $sets[] = 'birthday_year = ?'; $params[] = $by;
+            }
+        }
+        // v852 #439 出生地 (西洋占星術の補助。 出生時間がない人でも 緯度経度 / 都市名 が
+        //   あれば 大まかな ラッキー方位 を 出せる)。 自由テキスト 100 文字まで。
+        if (array_key_exists('birth_place', $body)) {
+            $bp = $body['birth_place'];
+            if ($bp === null) {
+                $sets[] = 'birth_place = NULL';
+            } else {
+                $bp = trim((string)$bp);
+                if ($bp === '') { $sets[] = 'birth_place = NULL'; }
+                else {
+                    if (mb_strlen($bp) > 100) throw new ApiException('bad_request', '出生地は 100 文字まで', 400);
+                    $sets[] = 'birth_place = ?'; $params[] = $bp;
+                }
             }
         }
         if (!$sets) throw new ApiException('bad_request', 'nothing to update', 400);
