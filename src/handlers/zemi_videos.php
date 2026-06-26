@@ -67,6 +67,9 @@ function zemi_videos_row_to_array(array $r): array {
         'id'           => (int)$r['id'],
         'user_id'      => (int)$r['user_id'],
         'title'        => (string)$r['title'],
+        // v849 #436 YouTube タイトル (登録時に oEmbed で 取得した もの) を 優先 表示 する 用
+        'youtube_title'  => $r['youtube_title']  ?? null,
+        'youtube_author' => $r['youtube_author'] ?? null,
         'description'  => $r['description'],
         'youtube_id'   => $vid,
         'youtube_url'  => (string)$r['youtube_url'],
@@ -79,10 +82,33 @@ function zemi_videos_row_to_array(array $r): array {
     ];
 }
 
+// v849 #436 YouTube oEmbed API で title + author_name を 取得 (失敗時 null)
+function zemi_videos_fetch_youtube_meta(string $videoId): array {
+    $url = 'https://www.youtube.com/oembed?url=' . rawurlencode('https://www.youtube.com/watch?v=' . $videoId) . '&format=json';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_HTTPHEADER     => ['User-Agent: LabPay/zemi-videos'],
+    ]);
+    $body = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($status !== 200 || !$body) return ['title' => null, 'author' => null];
+    $j = json_decode((string)$body, true);
+    if (!is_array($j)) return ['title' => null, 'author' => null];
+    return [
+        'title'  => isset($j['title'])       ? mb_substr((string)$j['title'],       0, 300) : null,
+        'author' => isset($j['author_name']) ? mb_substr((string)$j['author_name'], 0, 200) : null,
+    ];
+}
+
 function zemi_videos_list(PDO $pdo, array $cfg): void {
     $q = trim((string)($_GET['q'] ?? ''));
     $limit = max(1, min(200, (int)($_GET['limit'] ?? 60)));
-    $sql = "SELECT zv.id, zv.user_id, zv.title, zv.description, zv.youtube_id, zv.youtube_url,
+    $sql = "SELECT zv.id, zv.user_id, zv.title, zv.youtube_title, zv.youtube_author,
+                   zv.description, zv.youtube_id, zv.youtube_url,
                    zv.occurred_on, zv.created_at,
                    u.display_name AS author_name, u.avatar_url AS author_avatar
               FROM zemi_videos zv
@@ -127,6 +153,13 @@ function zemi_videos_create(PDO $pdo, int $uid): void {
     if ($vid === null) {
         throw new ApiException('bad_request', 'YouTube URL が認識できませんでした (youtube.com / youtu.be 形式 か 11 文字の ID)', 400);
     }
+    // v849 #435 重複防止: 既に同じ youtube_id が登録されていれば そちらを返す
+    $exist = $pdo->prepare("SELECT id FROM zemi_videos WHERE youtube_id=?");
+    $exist->execute([$vid]);
+    $existId = (int)$exist->fetchColumn();
+    if ($existId > 0) {
+        throw new ApiException('conflict', "この YouTube 動画は既に登録されています (#{$existId})", 409);
+    }
     $dateNorm = null;
     if ($date !== '') {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -134,10 +167,12 @@ function zemi_videos_create(PDO $pdo, int $uid): void {
         }
         $dateNorm = $date;
     }
-    $st = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?)");
-    $st->execute([$uid, $title, ($desc === '' ? null : $desc), $vid, $url, $dateNorm]);
+    // v849 #436 YouTube oEmbed で 正式 タイトル + author を 取得 (失敗時 null)
+    $meta = zemi_videos_fetch_youtube_meta($vid);
+    $st = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?)");
+    $st->execute([$uid, $title, $meta['title'], $meta['author'], ($desc === '' ? null : $desc), $vid, $url, $dateNorm]);
     $newId = (int)$pdo->lastInsertId();
-    json_response(['ok' => true, 'id' => $newId]);
+    json_response(['ok' => true, 'id' => $newId, 'youtube_title' => $meta['title']]);
 }
 
 function zemi_videos_update(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
@@ -279,10 +314,12 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
             $seenInThisPage[$vid] = true;
             $existing[$vid] = true;
             try {
-                $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?)");
-                $ins->execute([$uid, mb_substr($title, 0, 300), $desc, $vid, $url, $occurred]);
+                // v849 #436 import 時も oEmbed で YouTube タイトル を 取得 (= 動画一覧の表示が良くなる)
+                $meta = zemi_videos_fetch_youtube_meta($vid);
+                $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?)");
+                $ins->execute([$uid, mb_substr($title, 0, 300), $meta['title'], $meta['author'], $desc, $vid, $url, $occurred]);
                 $stats['inserted']++;
-                $details[] = ['page' => $title, 'youtube_id' => $vid, 'occurred_on' => $occurred];
+                $details[] = ['page' => $title, 'youtube_id' => $vid, 'youtube_title' => $meta['title'], 'occurred_on' => $occurred];
             } catch (Throwable $e) {
                 $stats['errors']++;
             }

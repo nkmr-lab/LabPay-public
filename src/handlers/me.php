@@ -188,6 +188,53 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v849 #434 自分の販売履歴 (自分が出品して売れたもの一覧)
+    if ($sub === 'sales' && $method === 'GET') {
+        $limit = min(200, max(1, (int)($_GET['limit'] ?? 100)));
+        $offset = max(0, (int)($_GET['offset'] ?? 0));
+        $sql = "SELECT p.id, p.listing_id, p.jan, p.unit_price, p.fee, p.qty, p.created_at,
+                       p.buyer_user_id,
+                       pr.name AS product_name,
+                       u.display_name AS buyer_name, u.avatar_url AS buyer_avatar
+                  FROM purchases p
+                  LEFT JOIN products pr ON pr.jan = p.jan
+                  LEFT JOIN users u ON u.id = p.buyer_user_id
+                 WHERE p.seller_user_id = ?
+                 ORDER BY p.id DESC
+                 LIMIT ? OFFSET ?";
+        $st = $pdo->prepare($sql);
+        $st->bindValue(1, (int)$u['id'], PDO::PARAM_INT);
+        $st->bindValue(2, $limit, PDO::PARAM_INT);
+        $st->bindValue(3, $offset, PDO::PARAM_INT);
+        $st->execute();
+        $items = [];
+        $totalEarned = 0;
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $unit = (int)$r['unit_price'];
+            $fee  = (int)$r['fee'];
+            $qty  = (int)$r['qty'];
+            // 自分が受け取った額 = unit_price * qty - fee (手数料はシステム取り、 売り手が払う扱い)
+            $take = $unit * $qty - $fee;
+            $totalEarned += $take;
+            $items[] = [
+                'id'             => (int)$r['id'],
+                'listing_id'     => (int)$r['listing_id'],
+                'jan'            => $r['jan'],
+                'product_name'   => $r['product_name'] ?? $r['jan'],
+                'unit_price'     => $unit,
+                'fee'            => $fee,
+                'qty'            => $qty,
+                'take'           => $take,
+                'buyer_user_id'  => (int)$r['buyer_user_id'],
+                'buyer_name'     => $r['buyer_name'],
+                'buyer_avatar'   => $r['buyer_avatar'],
+                'created_at'     => $r['created_at'],
+            ];
+        }
+        json_response(['items' => $items, 'limit' => $limit, 'offset' => $offset, 'total_earned_in_window' => $totalEarned]);
+        return;
+    }
+
     // v847 #430 自分の購入履歴 (購入したものを見たい / 鳩貝)
     if ($sub === 'purchases' && $method === 'GET') {
         $limit = min(200, max(1, (int)($_GET['limit'] ?? 100)));

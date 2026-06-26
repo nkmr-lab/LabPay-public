@@ -117,6 +117,9 @@ async function loadList() {
 }
 
 function renderTile(it) {
+  // v849 #436 YouTube タイトル を優先 (登録時 oEmbed で 取得した正式タイトル)
+  const display = it.youtube_title || it.title;
+  const sub = it.youtube_title && it.title && it.youtube_title !== it.title ? it.title : '';
   return `
     <a class="ai-tile" href="#/zemi-videos/${it.id}">
       <div style="aspect-ratio:16/9; background:#000 url(${escapeHtml(it.thumbnail_url)}) center/cover no-repeat; border-radius:6px; margin:-2px -4px 6px; position:relative">
@@ -127,7 +130,8 @@ function renderTile(it) {
         <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
         ${it.occurred_on ? `<span style="margin-left:auto; font-size:11px">${escapeHtml(it.occurred_on)}</span>` : ''}
       </div>
-      <div class="ai-tile-title">${escapeHtml(it.title)}</div>
+      <div class="ai-tile-title">${escapeHtml(display)}</div>
+      ${sub ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(sub)}</div>` : ''}
       ${it.description ? `<div class="ai-tile-snippet">${escapeHtml(it.description)}</div>` : ''}
     </a>`;
 }
@@ -178,10 +182,15 @@ export async function renderZemiVideoDetail({ params }) {
   const myUid = Number(state.me?.id || 0);
   const isOwner = myUid > 0 && Number(d.user_id) === myUid;
   const isAdmin = (state.me?.role === 'admin');
+  // v849 #436 YouTube タイトル優先 表示
+  const displayTitle = d.youtube_title || d.title;
+  const subTitle = d.youtube_title && d.title && d.youtube_title !== d.title ? d.title : '';
   app.innerHTML = `
     <div class="card">
       <a href="#/zemi-videos" class="hint">← ゼミ動画一覧</a>
-      <h2 style="margin:6px 0">🎥 ${escapeHtml(d.title)}</h2>
+      <h2 style="margin:6px 0">🎥 ${escapeHtml(displayTitle)}</h2>
+      ${subTitle ? `<div class="hint" style="font-size:12px; margin-top:-4px">登録時タイトル: ${escapeHtml(subTitle)}</div>` : ''}
+      ${d.youtube_author ? `<div class="hint" style="font-size:12px">YouTube: ${escapeHtml(d.youtube_author)}</div>` : ''}
       <div class="meta" style="font-size:13px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name || '')}
         ${d.occurred_on ? ' ・ 📅 ' + escapeHtml(d.occurred_on) : ''}
