@@ -659,14 +659,25 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
     $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
 
     // 全日付セクションを集計
+    // v838 #422 PC向けに preview (各日の本文 先頭 2 行 連結 / 最大 80 文字) も返す。
+    //   カレンダーのセル内に直接 「3 lines: 論文要約 + ミーティング」 のように表示する用。
     $days = [];
     $curDate = null;
+    $previewLines = [];
+    $flushPreview = function() use (&$days, &$curDate, &$previewLines) {
+        if ($curDate !== null && isset($days[$curDate])) {
+            $joined = mb_substr(trim(implode(' / ', $previewLines)), 0, 80);
+            $days[$curDate]['preview'] = $joined;
+        }
+        $previewLines = [];
+    };
     foreach ($allLines as $ln) {
         $t = (string)($ln['text'] ?? '');
         if (preg_match('/^\[\*\(\s*(20\d{2}\.\d{2}\.\d{2})/u', $t, $m)) {
+            $flushPreview();
             $curDate = $m[1];
             if (!isset($days[$curDate])) {
-                $days[$curDate] = ['line_count' => 0, 'char_count' => 0];
+                $days[$curDate] = ['line_count' => 0, 'char_count' => 0, 'preview' => ''];
             }
             continue;
         }
@@ -675,9 +686,18 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
             if ($tt !== '') {
                 $days[$curDate]['line_count']++;
                 $days[$curDate]['char_count'] += mb_strlen($tt);
+                if (count($previewLines) < 2) {
+                    // Scrapbox 記法 [* xxx] や [url] を素のテキストに
+                    $plain = preg_replace('/\[\*+\s+([^\]]+)\]/u', '$1', $tt);
+                    $plain = preg_replace('/\[https?:\/\/\S+\s*([^\]]*)\]/u', '$1', $plain);
+                    $plain = preg_replace('/\[(https?:\/\/\S+)\]/u', '$1', $plain);
+                    $plain = trim($plain);
+                    if ($plain !== '') $previewLines[] = $plain;
+                }
             }
         }
     }
+    $flushPreview();
 
     cosense_send_json_etagged([
         'ok' => true,

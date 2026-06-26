@@ -294,21 +294,29 @@ function paintCalendar(ym, data) {
   const headerRow = ['日','月','火','水','木','金','土'].map((w, i) =>
     `<div style="text-align:center; font-size:11px; padding:4px 0; color:${i === 0 ? '#dc2626' : (i === 6 ? '#0284c7' : '#6b7280')}">${w}</div>`
   ).join('');
+  // v838 #422 PC向け拡張: wide screen ではセルを大きくして、 セル内に preview text を表示する。
+  //   class 'rn-day' に CSS media query を当てて、 ≥900px で min-height 110px、 preview を可視に。
   const cellHtml = cells.map(c => {
     if (!c) return '<div></div>';
-    const dayInfo = days[c.date] || { line_count: 0, char_count: 0 };
+    const dayInfo = days[c.date] || { line_count: 0, char_count: 0, preview: '' };
     const lc = dayInfo.line_count || 0;
+    const preview = dayInfo.preview || '';
     const isToday = c.date === today;
     const isSelected = c.date === stateLocal.selectedDate;
     const heat = heatColor(lc);
     const border = isSelected ? '2px solid #0284c7' : '1px solid #e5e7eb';
     const todayMark = isToday ? 'box-shadow:0 0 0 2px #fde68a; ' : '';
+    const textCol = lc > 5 ? '#fff' : '#1f2937';
+    const subCol = lc > 5 ? 'rgba(255,255,255,0.85)' : '#4b5563';
     return `
       <button type="button" data-rn-day="${c.date}" class="rn-day"
-        style="position:relative; padding:4px 2px 8px; border:${border}; border-radius:6px; background:${heat}; cursor:pointer; min-height:42px; ${todayMark}font-size:12px"
-        title="${c.date} — ${lc}行 / ${dayInfo.char_count || 0}文字">
-        <div style="font-weight:${isToday ? '700' : '400'}; color:${lc > 5 ? '#fff' : '#1f2937'}">${c.day}</div>
-        ${lc > 0 ? `<div style="position:absolute; bottom:2px; left:0; right:0; text-align:center; font-size:9px; color:${lc > 5 ? '#fff' : '#6b7280'}">${lc}</div>` : ''}
+        style="position:relative; padding:4px 4px 6px; border:${border}; border-radius:6px; background:${heat}; cursor:pointer; ${todayMark}font-size:12px; text-align:left; overflow:hidden"
+        title="${c.date} — ${lc}行 / ${dayInfo.char_count || 0}文字${preview ? '\n' + preview : ''}">
+        <div class="rn-day-head" style="display:flex; align-items:baseline; gap:4px">
+          <span style="font-weight:${isToday ? '700' : '500'}; color:${textCol}">${c.day}</span>
+          ${lc > 0 ? `<span class="rn-day-count" style="font-size:9px; color:${subCol}; margin-left:auto">${lc}</span>` : ''}
+        </div>
+        ${preview ? `<div class="rn-day-preview" style="font-size:10px; color:${subCol}; line-height:1.3; margin-top:2px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; word-break:break-word">${escapeHtml(preview)}</div>` : ''}
       </button>`;
   }).join('');
   root.innerHTML = `

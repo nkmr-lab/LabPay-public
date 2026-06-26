@@ -889,3 +889,15 @@ a.list-item { text-decoration: none; color: inherit; }
   font-size: 14px !important;
   cursor: pointer !important;
 }
+
+/* v838 #422 研究ノート カレンダー: PCサイズではセルを拡大して preview text を表示 */
+.rn-day { min-height: 42px; }
+.rn-day .rn-day-preview { display: none; }
+@media (min-width: 900px) {
+  .rn-day { min-height: 110px; }
+  .rn-day .rn-day-preview { display: -webkit-box; }
+}
+@media (min-width: 1280px) {
+  .rn-day { min-height: 130px; }
+  .rn-day .rn-day-preview { -webkit-line-clamp: 6 !important; }
+}
