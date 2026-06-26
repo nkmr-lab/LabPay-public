@@ -87,9 +87,18 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
   'public-timer',
 ]);
 
+// v842 ✕ で閉じる時の戻り先。 history.back() を使うと、 アプリ内部の hash遷移 (例:
+//   /#/places → /#/places/123 → ...) が history に積み上がっていて、 1 回押すごとに 1 つ
+//   ずつしか戻れず 「✕ を何回も押す羽目になる」 という問題があった (#places 報告)。
+//   代わりに、 フルスクリーンに「入った瞬間」 の前の hash を覚えておいて、 そこに直接戻す。
+//   入る前の hash が分からない場合は /#/apps (アプリ一覧) に戻す。
+let fsEntryHash = null;
 function closeFullscreen() {
-  if (history.length > 1) history.back();
-  else location.hash = '#/apps';
+  if (fsEntryHash && fsEntryHash !== location.hash) {
+    location.hash = fsEntryHash;
+  } else {
+    location.hash = '#/apps';
+  }
 }
 
 // v840 アプリフルモードの間だけ、 Escape キーでも閉じられるようにする (PC キーボード)。
@@ -110,8 +119,16 @@ function ensureFullscreenEscHandler() {
   });
 }
 
-function applyFullscreenMode(topPart) {
+function applyFullscreenMode(topPart, prevHash) {
+  const wasFs = document.body.classList.contains('app-fullscreen');
   const fs = !NON_FULLSCREEN_TOP_PARTS.has(topPart);
+  // v842 フルスクリーンに「入った瞬間」 だけ entryHash を更新する。 既にフルスクリーン
+  //   状態で内部 hash 遷移しただけの時は entryHash を上書きしない (= 元の戻り先を保つ)。
+  if (fs && !wasFs) {
+    fsEntryHash = (prevHash && prevHash !== location.hash) ? prevHash : null;
+  } else if (!fs) {
+    fsEntryHash = null;
+  }
   document.body.classList.toggle('app-fullscreen', fs);
   // 閉じる ✕ ボタンを動的に生成 / 撤去
   let closeBtn = document.getElementById('fs-close-btn');
@@ -136,6 +153,7 @@ async function dispatch() {
   const now = performance.now();
   const hashKey = location.hash || '';
   if (hashKey === lastDispatchHash && (now - lastDispatchAt) < 800) return;
+  const prevHash = lastDispatchHash;  // v842 ✕ 戻り先計算用 (上書き前にスナップ)
   lastDispatchHash = hashKey;
   lastDispatchAt = now;
   const { parts, query } = parse(location.hash);
@@ -145,7 +163,7 @@ async function dispatch() {
   document.body.dataset.view = (target.filter(Boolean).join('-') || 'home');
   // v836 アプリ系の画面は基本的にフルスクリーンモード (上部バー・タブを隠す + ✕で戻る)。
   //   タブナビ + 設定 + 通知 + 履歴 + 管理 + ログイン 等 の navigation/系統 系は除外。
-  applyFullscreenMode(target[0] || '');
+  applyFullscreenMode(target[0] || '', prevHash);
   // v515 #142 タブ切替直後に「読み込み中」 プレースホルダ + nav ハイライトを即更新
   //   する (= ユーザがタップした瞬間に画面が反応する)。 各 view の renderer が
   //   app.innerHTML を上書きすれば プレースホルダは消える。 dynamic import の
