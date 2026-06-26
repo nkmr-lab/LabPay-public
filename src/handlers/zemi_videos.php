@@ -17,6 +17,12 @@ function route_zemi_videos(PDO $pdo, array $cfg, string $method, array $seg): vo
         zemi_videos_list($pdo, $cfg);
         return;
     }
+    // v846 Cosense (nkmr-lab Scrapbox) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み
+    if ($method === 'POST' && ($seg[1] ?? '') === 'import-from-cosense') {
+        if (!$isAdmin) throw new ApiException('forbidden', 'admin のみ', 403);
+        zemi_videos_import_from_cosense($pdo, $cfg, $uid);
+        return;
+    }
     if ($method === 'POST' && !isset($seg[1])) {
         zemi_videos_create($pdo, $uid);
         return;
@@ -185,4 +191,102 @@ function zemi_videos_delete(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
     }
     $pdo->prepare("DELETE FROM zemi_videos WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
+}
+
+// v846 Cosense (nkmr-lab) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み。
+//
+//   1. タグページ /api/pages/<project>/全体ゼミ を取得 → relatedPages.links1hop で
+//      タグが貼られた全ページのタイトル一覧を得る
+//   2. 各ページの本文 (lines) を取得 → YouTube URL を正規表現で抽出
+//   3. 既存の youtube_id と重複しないものを zemi_videos に INSERT
+//      (title = ページタイトル、 description = 本文先頭の非空行 + URL周辺のテキスト、
+//       occurred_on = ページタイトルから日付抽出、 user_id = 取り込み実行者)
+function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition', 'Scrapboxの鍵 (PAT) が未登録です。 設定 → Cosense連携 で登録してください', 412);
+    }
+    $tag = (string)($_GET['tag'] ?? '全体ゼミ');
+    if ($tag === '') $tag = '全体ゼミ';
+
+    // タグページ取得 (v2: lines + linked が同居しないので v1 API を使う)
+    $baseUrl = cosense_base($cfg) . '/api/pages/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($tag);
+    $res = cosense_http('GET', $baseUrl, ['pat' => $pat]);
+    if ($res['status'] !== 200) {
+        throw new ApiException('upstream', "Cosense からのタグページ取得に失敗 (HTTP {$res['status']})。 タグ「{$tag}」 が存在するか確認", 502);
+    }
+    $tagPage = json_decode($res['body'], true);
+    if (!is_array($tagPage)) {
+        throw new ApiException('upstream', 'Cosense レスポンス が JSON ではありません', 502);
+    }
+    // relatedPages.links1hop : このタグページにリンクしているページ群 (= タグが貼られたページ)
+    $linked = $tagPage['relatedPages']['links1hop'] ?? $tagPage['links1hop'] ?? [];
+    if (!is_array($linked)) $linked = [];
+
+    $stats = ['tag' => $tag, 'pages_scanned' => 0, 'urls_found' => 0, 'inserted' => 0, 'skipped_existing' => 0, 'errors' => 0];
+    $details = []; // pages with何 videos imported
+
+    // 既存 youtube_id セット (重複防止)
+    $existing = [];
+    $exSt = $pdo->query("SELECT youtube_id FROM zemi_videos");
+    foreach ($exSt->fetchAll(PDO::FETCH_COLUMN) as $vid) $existing[$vid] = true;
+
+    foreach ($linked as $lp) {
+        $title = (string)($lp['title'] ?? '');
+        if ($title === '') continue;
+        $stats['pages_scanned']++;
+        // 個別ページの本文取得 (v2 で lines が一覧で取れる)
+        $r = cosense_v2_get_page($cfg, $title, $pat);
+        if (!$r['ok']) { $stats['errors']++; continue; }
+        $lines = $r['page']['lines'] ?? [];
+        $allText = '';
+        foreach ($lines as $ln) {
+            $t = (string)($ln['text'] ?? '');
+            $allText .= $t . "\n";
+        }
+        // YouTube URL 抽出
+        preg_match_all(
+            '~https?://(?:www\.|m\.)?(?:youtu(?:be\.com/(?:watch\?(?:[^\s\]]*&)?v=|embed/|shorts/|v/)|\.be/))([A-Za-z0-9_-]{11})~',
+            $allText, $matches, PREG_SET_ORDER
+        );
+        if (!$matches) continue;
+        // ページタイトルから日付抽出 (YYYY.MM.DD / YYYY-MM-DD / YYYY/MM/DD)
+        $occurred = null;
+        if (preg_match('/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/u', $title, $dm)) {
+            $occurred = sprintf('%04d-%02d-%02d', (int)$dm[1], (int)$dm[2], (int)$dm[3]);
+        }
+        // ページの最初の非空行を description として使う (タイトル除外)
+        $descLines = [];
+        foreach ($lines as $i => $ln) {
+            if ($i === 0) continue; // 1 行目は タイトル
+            $t = trim((string)($ln['text'] ?? ''));
+            if ($t === '') continue;
+            $descLines[] = $t;
+            if (count($descLines) >= 3) break;
+        }
+        $desc = trim(implode("\n", $descLines));
+        if ($desc === '') $desc = null;
+
+        $seenInThisPage = [];
+        foreach ($matches as $m) {
+            $url = $m[0];
+            $vid = $m[1];
+            $stats['urls_found']++;
+            if (isset($existing[$vid]) || isset($seenInThisPage[$vid])) {
+                $stats['skipped_existing']++;
+                continue;
+            }
+            $seenInThisPage[$vid] = true;
+            $existing[$vid] = true;
+            try {
+                $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?)");
+                $ins->execute([$uid, mb_substr($title, 0, 300), $desc, $vid, $url, $occurred]);
+                $stats['inserted']++;
+                $details[] = ['page' => $title, 'youtube_id' => $vid, 'occurred_on' => $occurred];
+            } catch (Throwable $e) {
+                $stats['errors']++;
+            }
+        }
+    }
+    json_response(['ok' => true, 'stats' => $stats, 'inserted_pages' => $details]);
 }

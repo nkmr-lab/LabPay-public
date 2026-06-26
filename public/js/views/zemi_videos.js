@@ -23,6 +23,11 @@ export async function renderZemiVideos() {
                style="flex:1; font-size:14px; padding:4px 8px; border:1px solid #d1d5db; border-radius:4px">
         <button id="zv-q-go">検索</button>
       </div>
+      ${state.me?.role === 'admin' ? `
+        <div class="row" style="gap:6px; align-items:center; font-size:12px">
+          <button id="zv-import" class="btn" style="padding:3px 10px; font-size:12px" title="Cosense (nkmr-lab) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み (admin のみ)">🔄 Scrapbox 「全体ゼミ」 タグから取り込み</button>
+          <span id="zv-import-status" class="hint-sm" style="font-size:11px"></span>
+        </div>` : ''}
     </div>
     <details class="card" id="zv-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい動画を登録</summary>
@@ -61,7 +66,30 @@ export async function renderZemiVideos() {
     }
   });
   document.getElementById('zv-save').addEventListener('click', onSave);
+  document.getElementById('zv-import')?.addEventListener('click', onImportFromCosense);
   await loadList();
+}
+
+async function onImportFromCosense() {
+  const btn = document.getElementById('zv-import');
+  const status = document.getElementById('zv-import-status');
+  if (!confirm('Cosense の 「全体ゼミ」 タグページから YouTube URL を取り込みます。 数分かかる場合があります。 よろしいですか?')) return;
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ 取り込み中…';
+  status.textContent = '';
+  try {
+    const r = await post('/api/zemi-videos/import-from-cosense', {});
+    const s = r.stats || {};
+    const msg = `✅ ${s.pages_scanned || 0} ページ走査、 URL ${s.urls_found || 0} 件発見、 新規 ${s.inserted || 0} 件追加 (重複 ${s.skipped_existing || 0} / エラー ${s.errors || 0})`;
+    status.innerHTML = `<span style="color:#15803d">${msg}</span>`;
+    toast(msg, 8000);
+    await loadList();
+  } catch (e) {
+    status.innerHTML = `<span style="color:#dc2626">失敗: ${e.message}</span>`;
+    toast('取り込み失敗: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
 }
 
 async function loadList() {
