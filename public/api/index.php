@@ -100,6 +100,7 @@ $routes = [
     'drafts'         => 'route_drafts',
     'quizzes'        => 'route_quizzes',
     'quotes'         => 'route_quotes',     // v804 名言
+    'zemi-videos'    => 'route_zemi_videos', // v843 #426 ゼミ動画 (YouTube limited)
 ];
 
 try {

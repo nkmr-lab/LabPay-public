@@ -582,3 +582,4 @@ require_once __DIR__ . '/handlers/quotes.php';   // v804 名言
 require_once __DIR__ . '/handlers/news.php';
 require_once __DIR__ . '/handlers/screen_shares.php';
 require_once __DIR__ . '/handlers/file_transfers.php';
+require_once __DIR__ . '/handlers/zemi_videos.php';  // v843 #426 ゼミ動画

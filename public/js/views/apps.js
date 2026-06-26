@@ -101,6 +101,7 @@ export const APPS = [
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文 全訳', desc: '要約 で なく **章 ごと の フル 翻訳**。 各 章 を 訳 → 2-3 文 サンプル を back-translation で 整合 確認 → 用語 統一 + 全体 ポリッシュ。 英→日 (gpt-5-mini 25 / gpt-5 60 / o1 100 pt) と 日→英 (5x、 em-dash 等 GPT-isms 除去 込み) の 双方向 対応。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究 ノート の 今日 / 昨日 を ロード + 編集 リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究 ノート (Cosense)', desc: 'nkmr-lab Cosense の 「YYYY.MM_研究ノート_<handle>」 ページ を 直接 ロード し、 今日 / 昨日 の 日付 セクション を 抽出 表示。 書く 時 は Cosense を 開いて 編集。 admin 側 で session cookie 設定 必須。', defaultVisible: true },
+  { id: 'zemi-videos', cat: 'lab-mgmt', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。 誰でも 動画URL + タイトル + 説明 を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
@@ -144,7 +145,7 @@ const CATEGORY_SUBGROUPS = {
   'lab-mgmt': [
     { label: '🏫 ゼミ・研究会・学会 サポート',
       hint:  '発表 順 / タイマー / 一時 グループ / くじ など。 ゼミ や 研究会、 学会 出張 で 使う。',
-      ids: ['timers', 'stopwatches', 'orderings', 'random-groups', 'groups', 'roulette', 'text-roulette'] },
+      ids: ['timers', 'stopwatches', 'orderings', 'random-groups', 'groups', 'roulette', 'text-roulette', 'zemi-videos'] },
     { label: '🏢 研究室 運営 サポート',
       hint:  '投票 / 連絡 / 締切 / 割り勘 / 集金 / アルバイト など、 研究室 の 運営 と 合意 形成。',
       ids: ['polls', 'chat-rooms', 'file-transfers', 'screen-shares',
@@ -171,6 +172,7 @@ const CATEGORY_ORDER = {
     'orderings', 'random-groups',
     'groups',                       // イベント・出張 用 グループ 作成
     'roulette', 'text-roulette',
+    'zemi-videos',                  // v843 ゼミ動画 (YouTube limited)
     // ── 研究室 運営 サポート ──
     'polls',                        // 投票・アンケート
     'chat-rooms',                   // チャット (重要 / 連絡 / 相談 / DM)
