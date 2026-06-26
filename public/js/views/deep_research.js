@@ -329,6 +329,32 @@ async function refreshShared(token) {
   }
 }
 
+// v850 #437 Markdown 形式 [label](url) を <a href> に変換しつつ XSS 安全に escape する。
+//   裸の http(s) URL もリンク化。 既存の HTML タグは入っていない前提 (OpenAI のテキストはプレーン)。
+function renderRichText(text) {
+  if (text == null) return '';
+  const s = String(text);
+  const out = [];
+  // 1) markdown [label](url) を マッチして 分解、 それ以外の text は escape
+  const re = /\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s\])]+)/g;
+  let last = 0, m;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) out.push(escapeHtml(s.slice(last, m.index)));
+    if (m[1] && m[2]) {
+      out.push(`<a href="${escapeHtml(m[2])}" target="_blank" rel="noopener" style="color:#0284c7">${escapeHtml(m[1])}</a>`);
+    } else if (m[3]) {
+      // bare URL — 末尾 のピリオド / カンマ / 全角句読点 はリンクから外す
+      let url = m[3];
+      let tail = '';
+      while (url && /[.,。、!?!?]$/.test(url)) { tail = url.slice(-1) + tail; url = url.slice(0, -1); }
+      out.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#0284c7; word-break:break-all">${escapeHtml(url)}</a>${escapeHtml(tail)}`);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) out.push(escapeHtml(s.slice(last)));
+  return out.join('');
+}
+
 function paintResult(d) {
   const r = d.result || {};
   const u = d.usage || {};
@@ -344,28 +370,28 @@ function paintResult(d) {
     ${r.query_understanding ? `
       <div class="card">
         <div class="bold" style="color:var(--primary)">🧐 クエリの理解</div>
-        <div style="font-size:13.5px; line-height:1.75; margin-top:4px; white-space:pre-wrap">${escapeHtml(r.query_understanding)}</div>
+        <div style="font-size:13.5px; line-height:1.75; margin-top:4px; white-space:pre-wrap">${renderRichText(r.query_understanding)}</div>
       </div>` : ''}
 
     ${r.sub_questions && r.sub_questions.length ? `
       <div class="card">
         <div class="bold" style="color:var(--primary)">🧩 立てたサブ問い</div>
         <ul style="margin:6px 0 0 0; padding-left:20px; font-size:13.5px; line-height:1.7">
-          ${r.sub_questions.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}
+          ${r.sub_questions.map(s => `<li>${renderRichText(String(s))}</li>`).join('')}
         </ul>
       </div>` : ''}
 
     ${r.summary ? `
       <div class="card" style="border:2px solid var(--primary)">
         <div class="bold" style="color:var(--primary); font-size:15px">📝 全体まとめ</div>
-        <div style="font-size:14px; line-height:1.8; margin-top:6px; white-space:pre-wrap">${escapeHtml(r.summary)}</div>
+        <div style="font-size:14px; line-height:1.8; margin-top:6px; white-space:pre-wrap">${renderRichText(r.summary)}</div>
       </div>` : ''}
 
     ${r.key_findings && r.key_findings.length ? `
       <div class="card">
         <div class="bold" style="color:#15803d">💡 重要発見・主張</div>
         <ul style="margin:6px 0 0 0; padding-left:20px; font-size:13.5px; line-height:1.75">
-          ${r.key_findings.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}
+          ${r.key_findings.map(s => `<li>${renderRichText(String(s))}</li>`).join('')}
         </ul>
       </div>` : ''}
 
@@ -376,7 +402,7 @@ function paintResult(d) {
           ${r.sections.map(sec => `
             <div style="padding:10px 12px; border-left:3px solid var(--primary); background:#fafafa; border-radius:0 6px 6px 0">
               <div class="bold" style="font-size:14px; color:var(--primary)">${escapeHtml(sec.heading || '')}</div>
-              <div style="font-size:13.5px; line-height:1.75; margin-top:6px; white-space:pre-wrap">${escapeHtml(sec.body || '')}</div>
+              <div style="font-size:13.5px; line-height:1.75; margin-top:6px; white-space:pre-wrap">${renderRichText(sec.body || '')}</div>
               ${sec.sources && sec.sources.length ? `
                 <div style="margin-top:8px">
                   <div class="bold" style="font-size:12px; color:#4f46e5">📎 このセクションの出典</div>
@@ -392,7 +418,7 @@ function paintResult(d) {
       <div class="card">
         <div class="bold" style="color:#a16207">❓ まだ残っている問い</div>
         <ul style="margin:6px 0 0 0; padding-left:20px; font-size:13.5px; line-height:1.75">
-          ${r.open_questions.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}
+          ${r.open_questions.map(s => `<li>${renderRichText(String(s))}</li>`).join('')}
         </ul>
       </div>` : ''}
 
@@ -405,7 +431,7 @@ function paintResult(d) {
               <div class="bold" style="color:#4f46e5">${escapeHtml(src.label || '')}</div>
               ${renderSourceMeta(src, true)}
               <div style="margin-top:2px"><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></div>
-              ${src.why ? `<div style="font-size:12px; color:#374151; margin-top:2px">${escapeHtml(src.why)}</div>` : ''}
+              ${src.why ? `<div style="font-size:12px; color:#374151; margin-top:2px">${renderRichText(src.why)}</div>` : ''}
             </div>`).join('')}
         </div>
       </div>` : ''}
