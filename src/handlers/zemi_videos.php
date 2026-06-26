@@ -244,7 +244,12 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
     $tag = (string)($_GET['tag'] ?? '全体ゼミ');
     if ($tag === '') $tag = '全体ゼミ';
 
-    // タグページ取得 (v2: lines + linked が同居しないので v1 API を使う)
+    // v851 #438 修正: relatedPages.links1hop (= タグページに backlinks してる ページ群) は、
+    //   研究ノートや月報など 「全体ゼミ」 をテキスト中で参照しているだけの ノイズページが大量
+    //   に混じる。 そこから YouTube URL を 拾うと 「踊歌ってみた」 みたいな 個人の音楽動画 が
+    //   ゼミ動画として 登録されてしまう。
+    //   タグページの `links` (= outgoing) を 使い、 「全体ゼミ」 で始まる ページタイトル に
+    //   限定する ことで、 実際の ゼミページ ([全体ゼミ 2026.04.30] みたいなやつ) だけ拾う。
     $baseUrl = cosense_base($cfg) . '/api/pages/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($tag);
     $res = cosense_http('GET', $baseUrl, ['pat' => $pat]);
     if ($res['status'] !== 200) {
@@ -254,9 +259,43 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
     if (!is_array($tagPage)) {
         throw new ApiException('upstream', 'Cosense レスポンス が JSON ではありません', 502);
     }
-    // relatedPages.links1hop : このタグページにリンクしているページ群 (= タグが貼られたページ)
-    $linked = $tagPage['relatedPages']['links1hop'] ?? $tagPage['links1hop'] ?? [];
-    if (!is_array($linked)) $linked = [];
+    // 候補ページタイトル を 3 系統 から かき集めて、 タグ名で始まるものだけに 絞る。
+    //   (a) page.links (= outgoing。 v1 でも 値は ある)
+    //   (b) page.lines を スキャン して [全体ゼミ XXX] パターンを抜く (= 確実な outgoing)
+    //   (c) relatedPages.links1hop (= incoming = backlinks。 タグが付いてるページ群)
+    //   いずれも 「全体ゼミ XXXX」 で始まるタイトルに限定して dedupe。
+    $prefix = $tag;
+    $matchesPrefix = function($s) use ($prefix) {
+        if (!is_string($s) || $s === '') return false;
+        if (mb_strpos($s, $prefix) !== 0) return false;
+        if ($s === $prefix) return false;
+        // 次の文字が空白 / アンダーバー / カッコ / 数字 等で 「全体ゼミの後に何か追記がある」 形のみ採用
+        return preg_match('/^' . preg_quote($prefix, '/') . '[\s_\-（(\d]/u', $s) === 1;
+    };
+    $titles = [];
+    $seen = [];
+    foreach (($tagPage['links'] ?? []) as $t) {
+        $s = is_string($t) ? $t : (string)($t['title'] ?? '');
+        if ($matchesPrefix($s) && !isset($seen[$s])) { $titles[] = $s; $seen[$s] = true; }
+    }
+    foreach (($tagPage['lines'] ?? []) as $ln) {
+        $t = (string)($ln['text'] ?? '');
+        if (preg_match_all('/\[([^\]]+)\]/u', $t, $mm)) {
+            foreach ($mm[1] as $cand) {
+                $cand = trim($cand);
+                // [* xxx] や [/ xxx] 等の 装飾記法 を除外
+                if ($cand === '' || preg_match('/^[\*\/\-]/u', $cand)) continue;
+                // [text url] 形式 (URL 入りの装飾) は URL を含むので除外
+                if (preg_match('~https?://~', $cand)) continue;
+                if ($matchesPrefix($cand) && !isset($seen[$cand])) { $titles[] = $cand; $seen[$cand] = true; }
+            }
+        }
+    }
+    foreach (($tagPage['relatedPages']['links1hop'] ?? []) as $lp) {
+        $s = is_string($lp) ? $lp : (string)($lp['title'] ?? '');
+        if ($matchesPrefix($s) && !isset($seen[$s])) { $titles[] = $s; $seen[$s] = true; }
+    }
+    $linked = array_map(fn($t) => ['title' => $t], $titles);
 
     $stats = ['tag' => $tag, 'pages_scanned' => 0, 'urls_found' => 0, 'inserted' => 0, 'skipped_existing' => 0, 'errors' => 0];
     $details = []; // pages with何 videos imported
