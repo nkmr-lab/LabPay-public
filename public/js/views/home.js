@@ -1656,8 +1656,10 @@ async function renderFreshPlaces() {
         ? `<div class="price-badge" style="color:#f59e0b">${rating}</div>`
         : '';
       // v486 #80 / v487 #82 いいね 数 を 0 件 でも 常時 表示。
-      const likeBit = ` · ${p.liked_by_me ? '❤️' : '🤍'}${p.like_count || 0}`;
-      const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}`;
+      // v848 #432 足跡 (👣) も 一緒 に 表示。
+      const likeBit  = ` · ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
+      const visitBit = ` · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
+      const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}${visitBit}`;
       const href = `#/places/${p.id}`;
       // v503 #127 サムネを優先
       const coverBg = p.cover_image_thumb || p.cover_image;

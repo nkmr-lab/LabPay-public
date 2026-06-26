@@ -197,20 +197,31 @@ export async function renderPlaces() {
       return;
     }
     // v730 #339 ハート / 足跡 の 前 に 「・」 は 入れない (絵文字 だけ で 区別 つく)。
+    // v848 #432 ❤ / 👣 を タイル 内 でも タップ で トグル できる ボタン に。
+    const placeBadgesHtml = (p) => `
+      <button type="button" class="pl-tile-like" data-pl-like-id="${p.id}" data-on="${p.liked_by_me ? '1' : '0'}"
+              onclick="event.preventDefault(); event.stopPropagation();"
+              style="background:rgba(0,0,0,0.45); color:#fff; border:none; border-radius:10px; padding:1px 7px; font-size:11px; cursor:pointer; line-height:1.4">
+        ${p.liked_by_me ? '❤️' : '🤍'}<span class="n">${p.like_count || 0}</span>
+      </button>
+      <button type="button" class="pl-tile-visit" data-pl-visit-id="${p.id}" data-on="${p.visited_by_me ? '1' : '0'}"
+              onclick="event.preventDefault(); event.stopPropagation();"
+              style="background:rgba(0,0,0,0.45); color:#fff; border:none; border-radius:10px; padding:1px 7px; font-size:11px; cursor:pointer; line-height:1.4; margin-left:4px">
+        ${p.visited_by_me ? '👣' : '🐾'}<span class="n">${p.visit_count || 0}</span>
+      </button>`;
     document.getElementById('pl-list').innerHTML = `<div class="tile-grid">${items.map(p => {
       const cat = p.category ? (CAT_LBL[p.category] || p.category) : '';
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
-      const likeBadge  = ` ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
-      const visitBadge = ` ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
       const tileBg = p.cover_image_thumb || p.cover_image;
       if (tileBg) {
         return `
           <a class="tile" href="#/places/${p.id}" style="background-image:url('${escapeHtml(tileBg)}')">
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
-              <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}${visitBadge}</div>
+              <div style="font-size:11px; opacity:0.9; margin-top:2px">${escapeHtml(cat)} · ${rating}</div>
+              <div style="margin-top:4px">${placeBadgesHtml(p)}</div>
             </div>
           </a>`;
       }
@@ -219,10 +230,44 @@ export async function renderPlaces() {
           <span style="position:absolute; top:50%; left:50%; transform:translate(-50%,-65%); font-size:42px">🍴</span>
           <div class="tile-overlay">
             <div class="name">${escapeHtml(p.title)}</div>
-            <div style="font-size:11px; opacity:0.9">${escapeHtml(cat)} · ${rating}${likeBadge}${visitBadge}</div>
+            <div style="font-size:11px; opacity:0.9; margin-top:2px">${escapeHtml(cat)} · ${rating}</div>
+            <div style="margin-top:4px">${placeBadgesHtml(p)}</div>
           </div>
         </a>`;
     }).join('')}</div>`;
+    // v848 #432 タイル内 ❤ / 👣 ボタン の wire。 トグル成功で その場で表示更新。
+    document.getElementById('pl-list').querySelectorAll('.pl-tile-like').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const id = btn.dataset.plLikeId;
+        const on = btn.dataset.on === '1';
+        btn.disabled = true;
+        try {
+          const r = on ? await del(`/api/places/${id}/like`) : await post(`/api/places/${id}/like`, {});
+          const newOn = !!r.liked_by_me;
+          btn.dataset.on = newOn ? '1' : '0';
+          btn.firstChild.nodeValue = newOn ? '❤️' : '🤍';
+          btn.querySelector('.n').textContent = r.like_count;
+        } catch (e) { toast('失敗: ' + e.message); }
+        finally { btn.disabled = false; }
+      });
+    });
+    document.getElementById('pl-list').querySelectorAll('.pl-tile-visit').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const id = btn.dataset.plVisitId;
+        const on = btn.dataset.on === '1';
+        btn.disabled = true;
+        try {
+          const r = on ? await del(`/api/places/${id}/visit`) : await post(`/api/places/${id}/visit`, {});
+          const newOn = !!r.visited_by_me;
+          btn.dataset.on = newOn ? '1' : '0';
+          btn.firstChild.nodeValue = newOn ? '👣' : '🐾';
+          btn.querySelector('.n').textContent = r.visit_count;
+        } catch (e) { toast('失敗: ' + e.message); }
+        finally { btn.disabled = false; }
+      });
+    });
   };
 
   document.getElementById('pl-f-liked')  .addEventListener('change', refresh);

@@ -33,8 +33,40 @@ function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): vo
         if ($action === 'close'    && $method === 'POST') { predictions_close($pdo, $uid, $gid); return; }
         if ($action === 'finalize' && $method === 'POST') { predictions_finalize($pdo, $cfg, $uid, $gid); return; }
         if ($action === 'cancel'   && $method === 'POST') { predictions_cancel($pdo, $uid, $gid); return; }
+        if ($action === ''         && $method === 'PATCH') { predictions_patch($pdo, $uid, $gid); return; }
     }
     json_error('not_found', "no predictions route for $method", 404);
+}
+
+// v848 #431 起案者が title / description を編集できる。 〆切や候補は変えない (混乱回避)。
+function predictions_patch(PDO $pdo, int $uid, int $gid): void {
+    $st = $pdo->prepare("SELECT creator_user_id, status FROM predictions_games WHERE id=?");
+    $st->execute([$gid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'game not found', 404);
+    if ((int)$row['creator_user_id'] !== $uid) {
+        throw new ApiException('forbidden', '起案者のみ編集可', 403);
+    }
+    if (in_array($row['status'], ['finished', 'cancelled'], true)) {
+        throw new ApiException('bad_request', '終了済 / 取消済は編集できません', 400);
+    }
+    $body = read_json_body();
+    $sets = [];
+    $args = [];
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) throw new ApiException('bad_request', 'タイトルは 1〜200 文字', 400);
+        $sets[] = 'title=?'; $args[] = $t;
+    }
+    if (array_key_exists('description', $body)) {
+        $d = trim((string)$body['description']);
+        if (mb_strlen($d) > 2000) throw new ApiException('bad_request', '説明は 2000 文字まで', 400);
+        $sets[] = 'description=?'; $args[] = ($d === '' ? null : $d);
+    }
+    if (!$sets) { json_response(['ok' => true]); return; }
+    $args[] = $gid;
+    $pdo->prepare("UPDATE predictions_games SET " . implode(', ', $sets) . " WHERE id=?")->execute($args);
+    json_response(['ok' => true]);
 }
 
 function predictions_list(PDO $pdo, int $uid): void {

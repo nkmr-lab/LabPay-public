@@ -12,8 +12,11 @@ export async function renderBuy() {
     <div class="card balance-strip">
       <span class="muted">残高</span>
       <span class="bold text-primary" id="buy-balance">— pt</span>
-      <a href="#/me/purchases" class="btn" style="margin-left:auto; font-size:12px; padding:2px 8px">🛒 自分の購入履歴</a>
     </div>
+    <details class="card" id="buy-history">
+      <summary style="cursor:pointer; font-weight:600; user-select:none">🛒 自分の購入履歴</summary>
+      <div id="buy-history-body" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+    </details>
 
     <div class="card">
       <p class="muted" style="margin:6px 0">バーコードを読み取るか、下の一覧から選んでください。</p>
@@ -54,7 +57,52 @@ export async function renderBuy() {
     if (el) el.textContent = (d.balance ?? 0).toLocaleString() + ' pt';
   }).catch(() => {});
 
+  // v848 #433 購入履歴を開いた時に lazy load (折りたたみが開いた最初の 1 回だけ)
+  const histDetails = document.getElementById('buy-history');
+  histDetails?.addEventListener('toggle', () => {
+    if (histDetails.open && !histDetails.dataset.loaded) {
+      histDetails.dataset.loaded = '1';
+      loadPurchaseHistory();
+    }
+  }, { once: false });
+
   window.addEventListener('hashchange', stopCurrent, { once: true });
+}
+
+async function loadPurchaseHistory() {
+  const root = document.getElementById('buy-history-body');
+  if (!root) return;
+  try {
+    const d = await get('/api/me/purchases', { limit: 100 });
+    const items = d.items || [];
+    if (!items.length) {
+      root.innerHTML = '<div class="muted">まだ購入履歴はありません</div>';
+      return;
+    }
+    const total = (d.total_spent_in_window || 0).toLocaleString();
+    root.innerHTML = `
+      <div style="font-size:12px; color:#6b7280; margin-bottom:6px">${items.length} 件 ・ 合計 ${total} pt</div>
+      <div class="list">
+        ${items.map(it => `
+          <div class="list-item" style="gap:8px; align-items:flex-start; padding:6px 0">
+            <div style="font-size:20px; flex:none">🛒</div>
+            <div class="grow" style="min-width:0">
+              <div class="bold" style="font-size:13.5px">${escapeHtml(it.product_name || it.jan || '(商品名なし)')}</div>
+              <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">
+                ${avatarHtml(it.seller_name, it.seller_avatar, 'xs')}
+                <span style="margin-left:4px">${escapeHtml(it.seller_name || '?')} さんから</span>
+                ・ ${escapeHtml(it.created_at || '')}
+                ${it.qty > 1 ? ` ・ ${it.qty} 個` : ''}
+              </div>
+            </div>
+            <div style="text-align:right; flex:none; font-size:13px">
+              <div class="bold">${(it.line_total || 0).toLocaleString()} pt</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  } catch (e) {
+    root.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function toggleScanner() {

@@ -4,7 +4,7 @@
 //   /#/predictions/:id      詳細 (予想入力 / 結果開示 / 集計)
 
 import { escapeHtml, navigate } from '../router.js';
-import { get, post } from '../api.js';
+import { get, post, patch } from '../api.js';
 import { toast, state } from '../app.js';
 import { shareToSns } from '../share_to_sns.js';
 
@@ -316,11 +316,28 @@ function renderDetailHtml(g) {
          ⏳ 締切まで <b id="pred-cd-text">計算中…</b>
          <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
        </div>`);
+  // v848 #431 起案者は タイトル / 説明 を 編集できる (open / closed 中のみ)
+  const canEdit = g.is_creator && (g.status === 'open' || g.status === 'closed');
+  const editForm = canEdit ? `
+    <div id="pred-edit-form" hidden style="margin-top:10px; padding:10px; border:1px dashed #c4b5fd; border-radius:8px; background:#faf5ff">
+      <div class="bold" style="font-size:13px; margin-bottom:6px">✏️ タイトル / 説明 を編集</div>
+      <label class="field"><span class="lbl">タイトル</span>
+        <input type="text" id="pred-edit-title" maxlength="200">
+      </label>
+      <label class="field"><span class="lbl">説明 (任意)</span>
+        <textarea id="pred-edit-desc" rows="3" maxlength="2000"></textarea>
+      </label>
+      <div class="row" style="gap:6px">
+        <button class="btn primary" id="pred-edit-save">保存</button>
+        <button class="btn" id="pred-edit-cancel">キャンセル</button>
+      </div>
+    </div>` : '';
   return `
     <div class="card page-header">
       <div style="display:flex; align-items:center; gap:8px">
-        <h2 style="margin:0; flex:1">${escapeHtml(g.title)}</h2>
+        <h2 style="margin:0; flex:1" id="pred-title-display">${escapeHtml(g.title)}</h2>
         <span id="pred-status-badge">${statusBadge(effectiveStatus)}</span>
+        ${canEdit ? '<button id="pred-edit-btn" class="btn" style="font-size:12px; padding:4px 8px" title="タイトル / 説明 を編集">✏️</button>' : ''}
         <button id="pred-share" class="btn" style="font-size:12px; padding:4px 8px" title="らぼったーで共有">💬 共有</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
@@ -330,7 +347,8 @@ function renderDetailHtml(g) {
         プール ${g.pot_total}pt
       </p>
       ${countdownBlock}
-      ${g.description ? `<p style="margin:8px 0 0; white-space:pre-wrap">${escapeHtml(g.description)}</p>` : ''}
+      <p id="pred-desc-display" style="margin:8px 0 0; white-space:pre-wrap" ${g.description ? '' : 'hidden'}>${escapeHtml(g.description || '')}</p>
+      ${editForm}
     </div>
     ${actualBlock}
     ${myResult}
@@ -383,6 +401,34 @@ function wireDetail(g) {
   startPredCountdown();
   document.getElementById('pred-share')?.addEventListener('click', () => {
     shareToSns(`🏆 「${g.title}」 の 優勝予想 を 受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
+  });
+  // v848 #431 起案者によるタイトル / 説明 編集
+  const editBtn   = document.getElementById('pred-edit-btn');
+  const editForm  = document.getElementById('pred-edit-form');
+  const titleDsp  = document.getElementById('pred-title-display');
+  const descDsp   = document.getElementById('pred-desc-display');
+  const titleInp  = document.getElementById('pred-edit-title');
+  const descInp   = document.getElementById('pred-edit-desc');
+  editBtn?.addEventListener('click', () => {
+    if (titleInp) titleInp.value = g.title || '';
+    if (descInp)  descInp.value  = g.description || '';
+    if (editForm) editForm.hidden = false;
+  });
+  document.getElementById('pred-edit-cancel')?.addEventListener('click', () => {
+    if (editForm) editForm.hidden = true;
+  });
+  document.getElementById('pred-edit-save')?.addEventListener('click', async () => {
+    const t = (titleInp?.value || '').trim();
+    const d = (descInp?.value  || '').trim();
+    if (!t) { toast('タイトルを入れてください'); return; }
+    try {
+      await patch(`/api/predictions/games/${g.id}`, { title: t, description: d });
+      toast('保存しました');
+      g.title = t; g.description = d;
+      if (titleDsp) titleDsp.textContent = t;
+      if (descDsp)  { descDsp.textContent = d; descDsp.hidden = !d; }
+      if (editForm) editForm.hidden = true;
+    } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
   const candById = Object.fromEntries(g.candidates.map(c => [c.id, c]));
   // 自分予想 (予想入力)
