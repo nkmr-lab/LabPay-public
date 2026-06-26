@@ -188,6 +188,52 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v847 #430 自分の購入履歴 (購入したものを見たい / 鳩貝)
+    if ($sub === 'purchases' && $method === 'GET') {
+        $limit = min(200, max(1, (int)($_GET['limit'] ?? 100)));
+        $offset = max(0, (int)($_GET['offset'] ?? 0));
+        $sql = "SELECT p.id, p.listing_id, p.jan, p.unit_price, p.fee, p.qty, p.created_at,
+                       p.seller_user_id,
+                       pr.name AS product_name,
+                       u.display_name AS seller_name, u.avatar_url AS seller_avatar
+                  FROM purchases p
+                  LEFT JOIN products pr ON pr.jan = p.jan
+                  LEFT JOIN users u ON u.id = p.seller_user_id
+                 WHERE p.buyer_user_id = ?
+                 ORDER BY p.id DESC
+                 LIMIT ? OFFSET ?";
+        $st = $pdo->prepare($sql);
+        $st->bindValue(1, (int)$u['id'], PDO::PARAM_INT);
+        $st->bindValue(2, $limit, PDO::PARAM_INT);
+        $st->bindValue(3, $offset, PDO::PARAM_INT);
+        $st->execute();
+        $items = [];
+        $totalSpent = 0;
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $unit = (int)$r['unit_price'];
+            $fee  = (int)$r['fee'];
+            $qty  = (int)$r['qty'];
+            $line = $unit * $qty + $fee;
+            $totalSpent += $line;
+            $items[] = [
+                'id'             => (int)$r['id'],
+                'listing_id'     => (int)$r['listing_id'],
+                'jan'            => $r['jan'],
+                'product_name'   => $r['product_name'] ?? $r['jan'],
+                'unit_price'     => $unit,
+                'fee'            => $fee,
+                'qty'            => $qty,
+                'line_total'     => $line,
+                'seller_user_id' => (int)$r['seller_user_id'],
+                'seller_name'    => $r['seller_name'],
+                'seller_avatar'  => $r['seller_avatar'],
+                'created_at'     => $r['created_at'],
+            ];
+        }
+        json_response(['items' => $items, 'limit' => $limit, 'offset' => $offset, 'total_spent_in_window' => $totalSpent]);
+        return;
+    }
+
     if ($sub === 'transactions' && $method === 'GET') {
         $limit = min(200, max(1, (int)($_GET['limit'] ?? 50)));
         $offset = max(0, (int)($_GET['offset'] ?? 0));

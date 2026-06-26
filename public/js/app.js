@@ -648,6 +648,7 @@ route('/fortune',             lazy(() => import('./views/fortune.js'), 'renderFo
 route('/research-notes',      lazy(() => import('./views/research_notes.js'), 'renderResearchNotes')); // v821 Cosense 連携
 route('/zemi-videos',         lazy(() => import('./views/zemi_videos.js'), 'renderZemiVideos'));    // v843 #426
 route('/zemi-videos/:id',     lazy(() => import('./views/zemi_videos.js'), 'renderZemiVideoDetail'));
+route('/me/purchases',        lazy(() => import('./views/my_purchases.js'), 'renderMyPurchases'));   // v847 #430
 route('/conf-deadlines',          lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlines'));
 route('/conf-deadlines/new',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineForm'));
 route('/conf-deadlines/:id',      lazy(() => import('./views/conf_deadlines.js'), 'renderConfDeadlineDetail'));

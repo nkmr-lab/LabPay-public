@@ -12,6 +12,7 @@ export async function renderBuy() {
     <div class="card balance-strip">
       <span class="muted">残高</span>
       <span class="bold text-primary" id="buy-balance">— pt</span>
+      <a href="#/me/purchases" class="btn" style="margin-left:auto; font-size:12px; padding:2px 8px">🛒 自分の購入履歴</a>
     </div>
 
     <div class="card">
