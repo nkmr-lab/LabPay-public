@@ -7,7 +7,7 @@
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
-import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 
 let settings = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -206,6 +206,8 @@ async function loadHistory() {
     }
     root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
       const title = it.title_translated || it.title_original || it.pdf_name || '(無題)';
+      const showOrig = it.title_original && it.title_original !== title;
+      const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
       const icon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
       const dirMark = it.direction === 'ja2en' ? '🇯🇵→🇬🇧' : '🇬🇧→🇯🇵';
       return `
@@ -216,16 +218,22 @@ async function loadHistory() {
             <span style="margin-left:auto; font-size:11px">${dirMark} ・ ${escapeHtml(it.model || '')}</span>
           </div>
           <div class="ai-tile-title">${escapeHtml(title)}</div>
-          <div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name || '')} ・ ${it.cost_points}pt</div>
+          ${showOrig ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_original)}</div>` : ''}
+          ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+          ${it.snippet ? `<div class="ai-tile-snippet">${escapeHtml(it.snippet)}</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(it.created_at || '')}</span>
-            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <span style="margin-left:auto">
+              ${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}
+              ${bookmarkButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.bookmark_count, mine: it.my_bookmarked })}
+            </span>
             <button class="ghost" data-pft-del="${it.id}" title="削除" style="font-size:12px; padding:2px 6px; margin-left:2px"
               onclick="event.preventDefault(); event.stopPropagation();">🗑</button>
           </div>
         </a>`;
     }).join('')}</div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
     root.querySelectorAll('[data-pft-del]').forEach(b => {
       b.addEventListener('click', async (ev) => {
         ev.preventDefault(); ev.stopPropagation();
@@ -282,11 +290,15 @@ async function loadSharedList(q) {
           ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(it.shared_at || it.created_at || '')}</span>
-            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <span style="margin-left:auto">
+              ${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}
+              ${bookmarkButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.bookmark_count, mine: it.my_bookmarked })}
+            </span>
           </div>
         </a>`;
     }).join('')}</div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

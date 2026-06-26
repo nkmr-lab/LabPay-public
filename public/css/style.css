@@ -903,6 +903,19 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-star-btn .ai-star-count { font-weight: 600; }
 .ai-star-btn:disabled { opacity: 0.6; cursor: wait; }
 
+/* v841 🔖 ブックマーク ボタン (⭐ と並ぶ、 紫系) */
+.ai-bookmark-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 12px;
+  background: #fff; cursor: pointer; font-size: 12px; color: #4b5563;
+  line-height: 1.4; margin-left: 4px;
+}
+.ai-bookmark-btn:hover { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+.ai-bookmark-btn.on    { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+.ai-bookmark-btn .ai-bm-icon { font-size: 13px; }
+.ai-bookmark-btn .ai-bm-count { font-weight: 600; }
+.ai-bookmark-btn:disabled { opacity: 0.6; cursor: wait; }
+
 .ai-view-controls {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   margin: 4px 0 10px; font-size: 13px;

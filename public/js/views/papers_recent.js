@@ -3,7 +3,7 @@
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls } from '../ui_ai_stars.js';
+import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls } from '../ui_ai_stars.js';
 
 const PAGE_SIZE = 20;
 let viewState = { sort: 'new', mineOnly: false };
@@ -67,6 +67,7 @@ async function loadMore() {
     const filtered = viewState.mineOnly ? acc.filter(r => r.my_starred) : acc;
     gridEl.innerHTML = `<div class="ai-tile-grid">${filtered.map(renderTile).join('')}</div>`;
     bindStarButtons(gridEl);
+    bindBookmarkButtons(gridEl);
     offset += items.length;
     // 更新 (filtered の場合 件数 表示は filter 適用後 / 全 acc 中)
     const controls = document.getElementById('papers-recent-controls');
@@ -112,7 +113,10 @@ function renderTile(it) {
       ${it.snippet ? `<div class="ai-tile-snippet">${escapeHtml(it.snippet)}</div>` : ''}
       <div class="ai-tile-foot">
         <span>${escapeHtml(it.created_at || '')}</span>
-        <span style="margin-left:auto">${starButtonHtml({ kind: starRefKind, refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+        <span style="margin-left:auto">
+          ${starButtonHtml({ kind: starRefKind, refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}
+          ${bookmarkButtonHtml({ kind: starRefKind, refId: it.id, count: it.bookmark_count, mine: it.my_bookmarked })}
+        </span>
       </div>
     </a>`;
 }

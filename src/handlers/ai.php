@@ -29,6 +29,11 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_stars_toggle($pdo, $cfg, $method);
         return;
     }
+    // v841 #424 同 結果の 🔖 ブックマーク (個人 メモ、 他人には数だけ見える)
+    if ($sub === 'bookmarks' && in_array($method, ['POST', 'DELETE'], true) && !isset($seg[2])) {
+        ai_bookmarks_toggle($pdo, $cfg, $method);
+        return;
+    }
     if ($sub === 'translations' && $method === 'DELETE' && isset($seg[2])) {
         ai_translation_delete($pdo, $cfg, (int)$seg[2]);
         return;
@@ -317,21 +322,27 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     foreach ($items as $i => $it) $byKind[$it['kind']][] = ['id' => $it['id'], '_idx' => $i];
     if ($byKind['summary']) {
         ai_stars_enrich($pdo, 'paper_translate', $byKind['summary'], $uid);
+        ai_bookmarks_enrich($pdo, 'paper_translate', $byKind['summary'], $uid);
         foreach ($byKind['summary'] as $r) {
             $i = $r['_idx'];
             $items[$i]['star_count'] = $r['star_count'] ?? 0;
             $items[$i]['my_starred'] = $r['my_starred'] ?? false;
             $items[$i]['star_users'] = $r['star_users'] ?? [];
+            $items[$i]['bookmark_count'] = $r['bookmark_count'] ?? 0;
+            $items[$i]['my_bookmarked']  = $r['my_bookmarked']  ?? false;
             $items[$i]['star_kind']  = 'paper_translate';
         }
     }
     if ($byKind['full']) {
         ai_stars_enrich($pdo, 'paper_full_translation', $byKind['full'], $uid);
+        ai_bookmarks_enrich($pdo, 'paper_full_translation', $byKind['full'], $uid);
         foreach ($byKind['full'] as $r) {
             $i = $r['_idx'];
             $items[$i]['star_count'] = $r['star_count'] ?? 0;
             $items[$i]['my_starred'] = $r['my_starred'] ?? false;
             $items[$i]['star_users'] = $r['star_users'] ?? [];
+            $items[$i]['bookmark_count'] = $r['bookmark_count'] ?? 0;
+            $items[$i]['my_bookmarked']  = $r['my_bookmarked']  ?? false;
             $items[$i]['star_kind']  = 'paper_full_translation';
         }
     }
@@ -1508,22 +1519,36 @@ PROMPT;
 function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // v772 #393 result_json から title_ja を 引いて 履歴 行 に 表示 用 に 添える。
+    // v841 #423 自分の履歴タイルにも 原題 / 著者 / 投稿先 / summary snippet を返す
     $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
     $rows = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $title = null;
+        $titleOrig = null;
+        $authors = null;
+        $venue = null;
+        $summary = null;
         if (!empty($r['result_json'])) {
             $j = json_decode((string)$r['result_json'], true);
-            if (is_array($j) && !empty($j['title_ja'])) $title = (string)$j['title_ja'];
+            if (is_array($j)) {
+                $title = !empty($j['title_ja']) ? (string)$j['title_ja'] : null;
+                $titleOrig = !empty($j['title_orig']) ? (string)$j['title_orig'] : (!empty($j['title_original']) ? (string)$j['title_original'] : null);
+                $authors = !empty($j['authors']) ? (string)$j['authors'] : null;
+                $venue = !empty($j['venue']) ? (string)$j['venue'] : null;
+                $summary = !empty($j['summary_one_paragraph']) ? (string)$j['summary_one_paragraph'] : null;
+            }
         }
         $rows[] = [
             'id'          => (int)$r['id'],
             'share_token' => $r['share_token'],
             'pdf_name'    => $r['pdf_name'],
             'title_ja'    => $title,
+            'title_orig'  => $titleOrig,
+            'authors'     => $authors,
+            'venue'       => $venue,
+            'summary_one_paragraph' => $summary,
             'status'      => $r['status'],
             'is_shared'   => (bool)$r['is_shared'],
             'shared_at'   => $r['shared_at'],
@@ -1532,6 +1557,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
         ];
     }
     ai_stars_enrich($pdo, 'paper_translate', $rows, $uid);
+    ai_bookmarks_enrich($pdo, 'paper_translate', $rows, $uid);
     $sort = (string)($_GET['sort'] ?? '');
     $rows = ai_stars_apply_sort('paper_translate', $rows, $sort);
     json_response([
@@ -1584,6 +1610,7 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
         ];
     }
     ai_stars_enrich($pdo, 'paper_translate', $items, $myUid);
+    ai_bookmarks_enrich($pdo, 'paper_translate', $items, $myUid);
     $sort = (string)($_GET['sort'] ?? '');
     $items = ai_stars_apply_sort('paper_translate', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
@@ -2241,6 +2268,7 @@ function ai_deep_research_list(PDO $pdo, array $cfg): void {
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
     ai_stars_enrich($pdo, 'deep_research', $items, $uid);
+    ai_bookmarks_enrich($pdo, 'deep_research', $items, $uid);
     $sort = (string)($_GET['sort'] ?? '');
     $items = ai_stars_apply_sort('deep_research', $items, $sort);
     json_response([
@@ -2350,6 +2378,7 @@ function ai_deep_research_shared_list(PDO $pdo, array $cfg): void {
         ];
     }
     ai_stars_enrich($pdo, 'deep_research', $items, $myUid);
+    ai_bookmarks_enrich($pdo, 'deep_research', $items, $myUid);
     $sort = (string)($_GET['sort'] ?? '');
     $items = ai_stars_apply_sort('deep_research', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
@@ -2742,6 +2771,15 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
     $st->execute([$uid]);
     $rows = array_map(function ($r) {
         $result = !empty($r['result_json']) ? json_decode((string)$r['result_json'], true) : null;
+        // v841 #423 abstract 系も snippet として返す (= 自分の履歴タイル も みんなと同じ密度に)
+        $snippet = null;
+        if (is_array($result)) {
+            $raw = (string)($result['abstract_translated'] ?? $result['abstract_original'] ?? $result['abstract'] ?? '');
+            if ($raw !== '') {
+                $raw = preg_replace('/\s+/u', ' ', trim($raw)) ?? '';
+                $snippet = mb_strlen($raw) > 140 ? (mb_substr($raw, 0, 140) . '…') : $raw;
+            }
+        }
         return [
             'id' => (int)$r['id'],
             'share_token' => $r['share_token'],
@@ -2750,6 +2788,7 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
             'title_original'   => is_array($result) ? ($result['title_original']   ?? null) : null,
             'authors'          => is_array($result) ? ($result['authors']          ?? null) : null,
             'venue'            => is_array($result) ? ($result['venue']            ?? null) : null,
+            'snippet'          => $snippet,
             'direction'   => $r['direction'],
             'model'       => $r['model'],
             'cost_points' => (int)$r['cost_points'],
@@ -2762,6 +2801,7 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
     ai_stars_enrich($pdo, 'paper_full_translation', $rows, $uid);
+    ai_bookmarks_enrich($pdo, 'paper_full_translation', $rows, $uid);
     $sort = (string)($_GET['sort'] ?? '');
     $rows = ai_stars_apply_sort('paper_full_translation', $rows, $sort);
     json_response([
@@ -2868,6 +2908,7 @@ function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
         ];
     }
     ai_stars_enrich($pdo, 'paper_full_translation', $items, $myUid);
+    ai_bookmarks_enrich($pdo, 'paper_full_translation', $items, $myUid);
     $sort = (string)($_GET['sort'] ?? '');
     $items = ai_stars_apply_sort('paper_full_translation', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
@@ -3445,6 +3486,9 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
 //   ref_type は 'paper_translate' (要約) / 'paper_full_translation' (全訳)。
 // ============================================================================
 
+// v841 #424 旧 react エンドポイント。 ai_result_stars / ai_result_bookmarks に書くように変更
+// (新フロントは /api/ai/stars と /api/ai/bookmarks を直接呼ぶが、 旧キャッシュ /Service worker の
+// クライアントが POST してきた場合の互換性のため残す)。
 function ai_paper_react_toggle(PDO $pdo, array $cfg, string $refType, int $refId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3453,28 +3497,28 @@ function ai_paper_react_toggle(PDO $pdo, array $cfg, string $refType, int $refId
     if (!in_array($kind, ['like', 'bookmark'], true)) {
         throw new ApiException('bad_request', 'kind は like / bookmark のみ', 400);
     }
-    // 存在 確認
     $table = $refType === 'paper_full_translation' ? 'paper_full_translations' : 'paper_translates';
     $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
     $st->execute([$refId]);
     if (!$st->fetchColumn()) throw new ApiException('not_found', 'ref not found', 404);
 
-    // toggle
-    $del = $pdo->prepare("DELETE FROM paper_reactions WHERE ref_type=? AND ref_id=? AND user_id=? AND kind=?");
-    $del->execute([$refType, $refId, $uid, $kind]);
+    // like → ai_result_stars、 bookmark → ai_result_bookmarks にトグル
+    $tgtTable = $kind === 'like' ? 'ai_result_stars' : 'ai_result_bookmarks';
+    $del = $pdo->prepare("DELETE FROM $tgtTable WHERE kind=? AND ref_id=? AND user_id=?");
+    $del->execute([$refType, $refId, $uid]);
     $turnedOn = $del->rowCount() === 0;
     if ($turnedOn) {
-        $pdo->prepare("INSERT INTO paper_reactions (ref_type, ref_id, user_id, kind) VALUES (?,?,?,?)")
-            ->execute([$refType, $refId, $uid, $kind]);
+        $pdo->prepare("INSERT IGNORE INTO $tgtTable (kind, ref_id, user_id) VALUES (?,?,?)")
+            ->execute([$refType, $refId, $uid]);
     }
     // 集計
-    $st2 = $pdo->prepare("SELECT kind, COUNT(*) AS n FROM paper_reactions WHERE ref_type=? AND ref_id=? GROUP BY kind");
-    $st2->execute([$refType, $refId]);
-    $counts = ['like' => 0, 'bookmark' => 0];
-    foreach ($st2->fetchAll(PDO::FETCH_ASSOC) as $r) $counts[$r['kind']] = (int)$r['n'];
+    $countSt = $pdo->prepare("SELECT (SELECT COUNT(*) FROM ai_result_stars WHERE kind=? AND ref_id=?) AS likes,
+                                     (SELECT COUNT(*) FROM ai_result_bookmarks WHERE kind=? AND ref_id=?) AS bookmarks");
+    $countSt->execute([$refType, $refId, $refType, $refId]);
+    $c = $countSt->fetch(PDO::FETCH_ASSOC) ?: ['likes' => 0, 'bookmarks' => 0];
     json_response([
         'ok' => true, 'kind' => $kind, 'on' => $turnedOn,
-        'counts' => $counts,
+        'counts' => ['like' => (int)$c['likes'], 'bookmark' => (int)$c['bookmarks']],
     ]);
 }
 
@@ -3546,16 +3590,33 @@ function ai_paper_comment_delete(PDO $pdo, array $cfg, string $refType, int $ref
     json_response(['ok' => true]);
 }
 
-// 要約 / 全訳 の get_shared レスポンス に 反応 集計 を 付ける ヘルパ
+// 要約 / 全訳 / Deep Research 詳細 ページ の 反応 集計。
+// v841 #424 paper_reactions を捨てて ai_result_stars + ai_result_bookmarks に統合 (一覧と同じソース)。
+// 後方互換 のため like/my_like/bookmark/my_bookmark の キー名 は そのまま 維持
+// (= フロント の 既存 コード が r.like / r.bookmark を 参照 して も 動く)。
 function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $meId): array {
-    $st = $pdo->prepare("SELECT kind, COUNT(*) AS n, MAX(user_id=?) AS mine
-                           FROM paper_reactions WHERE ref_type=? AND ref_id=? GROUP BY kind");
-    $st->execute([$meId, $refType, $refId]);
-    $r = ['like' => 0, 'bookmark' => 0, 'my_like' => false, 'my_bookmark' => false];
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $r[$row['kind']] = (int)$row['n'];
-        if ((int)$row['mine'] === 1) $r['my_' . $row['kind']] = true;
-    }
+    // ai_result_stars (= ⭐)
+    $stS = $pdo->prepare("SELECT COUNT(*) AS n, MAX(user_id=?) AS mine
+                            FROM ai_result_stars WHERE kind=? AND ref_id=?");
+    $stS->execute([$meId, $refType, $refId]);
+    $rs = $stS->fetch(PDO::FETCH_ASSOC) ?: ['n' => 0, 'mine' => 0];
+    // ai_result_bookmarks (= 🔖)
+    $stB = $pdo->prepare("SELECT COUNT(*) AS n, MAX(user_id=?) AS mine
+                            FROM ai_result_bookmarks WHERE kind=? AND ref_id=?");
+    $stB->execute([$meId, $refType, $refId]);
+    $rb = $stB->fetch(PDO::FETCH_ASSOC) ?: ['n' => 0, 'mine' => 0];
+    $r = [
+        // 新キー (v841 以降の フロント が参照)
+        'star_count'     => (int)$rs['n'],
+        'my_starred'     => (int)$rs['mine'] === 1,
+        'bookmark_count' => (int)$rb['n'],
+        'my_bookmarked'  => (int)$rb['mine'] === 1,
+        // 旧キー (後方互換)
+        'like'        => (int)$rs['n'],
+        'my_like'     => (int)$rs['mine'] === 1,
+        'bookmark'    => (int)$rb['n'],
+        'my_bookmark' => (int)$rb['mine'] === 1,
+    ];
     // コメント 数 も 軽く 取得
     $st2 = $pdo->prepare("SELECT COUNT(*) FROM paper_comments WHERE ref_type=? AND ref_id=?");
     $st2->execute([$refType, $refId]);
@@ -4326,4 +4387,68 @@ function ai_stars_apply_sort(string $kind, array $items, string $sort): array {
         });
     }
     return $items;
+}
+
+// ───────── v841 🔖 ブックマーク (ai_result_bookmarks) ─────────
+
+function ai_bookmarks_toggle(PDO $pdo, array $cfg, string $method): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    $kind = (string)($body['kind'] ?? '');
+    $refId = (int)($body['ref_id'] ?? 0);
+    if (!in_array($kind, ai_stars_valid_kinds(), true)) {
+        throw new ApiException('bad_request', 'kind が 不正', 400);
+    }
+    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が 必要', 400);
+    $table = ai_stars_resolve_table($kind);
+    $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
+    $st->execute([$refId]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'ref not found', 404);
+
+    if ($method === 'POST') {
+        $pdo->prepare("INSERT IGNORE INTO ai_result_bookmarks (kind, ref_id, user_id) VALUES (?,?,?)")
+            ->execute([$kind, $refId, $uid]);
+    } else {
+        $pdo->prepare("DELETE FROM ai_result_bookmarks WHERE kind=? AND ref_id=? AND user_id=?")
+            ->execute([$kind, $refId, $uid]);
+    }
+    $countSt = $pdo->prepare("SELECT COUNT(*) FROM ai_result_bookmarks WHERE kind=? AND ref_id=?");
+    $countSt->execute([$kind, $refId]);
+    $count = (int)$countSt->fetchColumn();
+    $mineSt = $pdo->prepare("SELECT 1 FROM ai_result_bookmarks WHERE kind=? AND ref_id=? AND user_id=?");
+    $mineSt->execute([$kind, $refId, $uid]);
+    json_response([
+        'ok' => true,
+        'kind' => $kind,
+        'ref_id' => $refId,
+        'bookmark_count' => $count,
+        'my_bookmarked' => (bool)$mineSt->fetchColumn(),
+    ]);
+}
+
+// 同型の enrich (bookmark_count + my_bookmarked + bookmark_users)
+function ai_bookmarks_enrich(PDO $pdo, string $kind, array &$items, int $myUid): void {
+    if (!$items) return;
+    if (!in_array($kind, ai_stars_valid_kinds(), true)) return;
+    $ids = array_values(array_unique(array_map(fn($r) => (int)($r['id'] ?? 0), $items)));
+    $ids = array_filter($ids, fn($v) => $v > 0);
+    if (!$ids) return;
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $st = $pdo->prepare("SELECT ref_id, COUNT(*) AS n, MAX(user_id=?) AS mine
+                          FROM ai_result_bookmarks
+                         WHERE kind=? AND ref_id IN ($place)
+                         GROUP BY ref_id");
+    $st->execute(array_merge([$myUid, $kind], $ids));
+    $byId = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $byId[(int)$r['ref_id']] = ['count' => (int)$r['n'], 'mine' => (int)$r['mine'] === 1];
+    }
+    foreach ($items as &$it) {
+        $rid = (int)($it['id'] ?? 0);
+        $info = $byId[$rid] ?? ['count' => 0, 'mine' => false];
+        $it['bookmark_count'] = $info['count'];
+        $it['my_bookmarked']  = $info['mine'];
+    }
+    unset($it);
 }

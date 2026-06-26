@@ -4,7 +4,7 @@
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
-import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 
 let cachedSettings = null;
 let viewState = {
@@ -136,6 +136,7 @@ async function loadHistory() {
             <span>${escapeHtml(r.created_at || '')}</span>
             <span style="margin-left:auto">
               ${starButtonHtml({ kind: 'deep_research', refId: r.id, count: r.star_count, mine: r.my_starred, users: r.star_users })}
+              ${bookmarkButtonHtml({ kind: 'deep_research', refId: r.id, count: r.bookmark_count, mine: r.my_bookmarked })}
             </span>
             <button class="ghost" data-del="${r.id}" title="削除" style="font-size:12px; padding:2px 6px; margin-left:2px"
               onclick="event.preventDefault(); event.stopPropagation();">🗑</button>
@@ -143,6 +144,7 @@ async function loadHistory() {
         </a>`).join('')}
     </div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
     root.querySelectorAll('[data-del]').forEach(b => {
       b.addEventListener('click', async ev => {
         ev.preventDefault(); ev.stopPropagation();
@@ -202,11 +204,15 @@ async function loadSharedList(q) {
           ${r.summary_short ? `<div class="ai-tile-snippet">${escapeHtml(r.summary_short)}…</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(r.shared_at || '')}</span>
-            <span style="margin-left:auto">${starButtonHtml({ kind: 'deep_research', refId: r.id, count: r.star_count, mine: r.my_starred, users: r.star_users })}</span>
+            <span style="margin-left:auto">
+              ${starButtonHtml({ kind: 'deep_research', refId: r.id, count: r.star_count, mine: r.my_starred, users: r.star_users })}
+              ${bookmarkButtonHtml({ kind: 'deep_research', refId: r.id, count: r.bookmark_count, mine: r.my_bookmarked })}
+            </span>
           </div>
         </a>`).join('')}
     </div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

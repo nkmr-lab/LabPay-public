@@ -6,7 +6,7 @@
 import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
-import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 
 let sharedPollTimer = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -292,8 +292,10 @@ async function loadHistory() {
       return;
     }
     root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
-      const title = it.title_ja || it.pdf_name || '(無題)';
-      const sub = it.title_ja ? it.pdf_name : '';
+      const title = it.title_ja || it.title_orig || it.pdf_name || '(無題)';
+      const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
+      const showOrig = it.title_orig && it.title_orig !== title;
+      const summary = it.summary_one_paragraph || '';
       const statusIcon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
       return `
         <a class="ai-tile" href="#/paper-summary/r/${escapeHtml(it.share_token)}">
@@ -303,16 +305,22 @@ async function loadHistory() {
             <span style="margin-left:auto; font-size:11px">${escapeHtml(it.status || '')}</span>
           </div>
           <div class="ai-tile-title">${escapeHtml(title)}</div>
-          ${sub ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(sub)}</div>` : ''}
+          ${showOrig ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_orig)}</div>` : ''}
+          ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+          ${summary ? `<div class="ai-tile-snippet">${escapeHtml(summary)}</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(it.created_at || '')}</span>
-            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <span style="margin-left:auto">
+              ${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}
+              ${bookmarkButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.bookmark_count, mine: it.my_bookmarked })}
+            </span>
             <button class="ghost" data-pt-del="${it.id}" title="削除" style="font-size:12px; padding:2px 6px; margin-left:2px"
               onclick="event.preventDefault(); event.stopPropagation();">🗑</button>
           </div>
         </a>`;
     }).join('')}</div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
     root.querySelectorAll('[data-pt-del]').forEach(b => {
       b.addEventListener('click', async (ev) => {
         ev.preventDefault(); ev.stopPropagation();
@@ -373,11 +381,15 @@ async function loadSharedList(q) {
           ${summary ? `<div class="ai-tile-snippet">${escapeHtml(summary)}</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(it.shared_at || it.created_at || '')}</span>
-            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <span style="margin-left:auto">
+              ${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}
+              ${bookmarkButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.bookmark_count, mine: it.my_bookmarked })}
+            </span>
           </div>
         </a>`;
     }).join('')}</div>`;
     bindStarButtons(root);
+    bindBookmarkButtons(root);
   } catch (e) {
     root.innerHTML = stripJaSpaces(`<div class="muted">${escapeHtml(e.message)}</div>`);
   }

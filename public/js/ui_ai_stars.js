@@ -60,6 +60,56 @@ export function bindStarButtons(root, onChange) {
   });
 }
 
+// v841 🔖 ブックマーク (star と同型 + 別エンドポイント)。 タイル / 詳細 / リスト で共通。
+export function bookmarkButtonHtml({ kind, refId, count = 0, mine = false }) {
+  return `<button type="button" class="ai-bookmark-btn${mine ? ' on' : ''}"
+    data-bm-kind="${escapeHtml(kind)}" data-bm-ref="${Number(refId)}"
+    title="🔖 ブックマーク"
+    onclick="event.preventDefault(); event.stopPropagation();">
+    <span class="ai-bm-icon">${mine ? '🔖' : '📑'}</span>
+    <span class="ai-bm-count">${Number(count) || 0}</span>
+  </button>`;
+}
+
+export async function toggleBookmark(kind, refId, currentlyOn) {
+  const method = currentlyOn ? 'DELETE' : 'POST';
+  const resp = await fetch('/api/ai/bookmarks', {
+    method,
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ kind, ref_id: Number(refId) }),
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return await resp.json();
+}
+
+export function bindBookmarkButtons(root, onChange) {
+  if (!root) return;
+  root.querySelectorAll('.ai-bookmark-btn').forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const kind = btn.dataset.bmKind;
+      const refId = Number(btn.dataset.bmRef);
+      const wasOn = btn.classList.contains('on');
+      btn.disabled = true;
+      try {
+        const r = await toggleBookmark(kind, refId, wasOn);
+        btn.classList.toggle('on', !!r.my_bookmarked);
+        const ic = btn.querySelector('.ai-bm-icon');
+        if (ic) ic.textContent = r.my_bookmarked ? '🔖' : '📑';
+        const cn = btn.querySelector('.ai-bm-count');
+        if (cn) cn.textContent = String(r.bookmark_count || 0);
+        if (typeof onChange === 'function') onChange({ kind, refId, my_bookmarked: !!r.my_bookmarked, bookmark_count: r.bookmark_count });
+      } catch (e) {
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 // 並び順 + 「自分のスターのみ」 トグル の 共通 UI。
 //   options.id   : 一意なID (CSS衝突避け)
 //   options.sort : 'new' | 'stars' (現在値)
