@@ -87,6 +87,29 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
   'public-timer',
 ]);
 
+function closeFullscreen() {
+  if (history.length > 1) history.back();
+  else location.hash = '#/apps';
+}
+
+// v840 アプリフルモードの間だけ、 Escape キーでも閉じられるようにする (PC キーボード)。
+//   keydown は capture せず、 textarea/input にフォーカスが当たっていて IME 変換確定で Esc が
+//   来た場合などは無視 (入力欄で困らないように)。
+let fsEscBound = false;
+function ensureFullscreenEscHandler() {
+  if (fsEscBound) return;
+  fsEscBound = true;
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (!document.body.classList.contains('app-fullscreen')) return;
+    const t = ev.target;
+    const tag = t?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+    ev.preventDefault();
+    closeFullscreen();
+  });
+}
+
 function applyFullscreenMode(topPart) {
   const fs = !NON_FULLSCREEN_TOP_PARTS.has(topPart);
   document.body.classList.toggle('app-fullscreen', fs);
@@ -97,15 +120,13 @@ function applyFullscreenMode(topPart) {
       closeBtn = document.createElement('button');
       closeBtn.id = 'fs-close-btn';
       closeBtn.type = 'button';
-      closeBtn.title = '閉じる';
+      closeBtn.title = '閉じる (Esc)';
       closeBtn.textContent = '✕';
       closeBtn.style.cssText = 'position:fixed; top:8px; right:8px; z-index:1001; width:36px; height:36px; border-radius:18px; border:none; background:rgba(0,0,0,0.6); color:#fff; font-size:18px; line-height:36px; cursor:pointer; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.3)';
-      closeBtn.addEventListener('click', () => {
-        if (history.length > 1) history.back();
-        else location.hash = '#/apps';
-      });
+      closeBtn.addEventListener('click', closeFullscreen);
       document.body.appendChild(closeBtn);
     }
+    ensureFullscreenEscHandler();
   } else if (closeBtn) {
     closeBtn.remove();
   }

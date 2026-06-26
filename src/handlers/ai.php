@@ -22,6 +22,13 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_translations_list($pdo, $cfg);
         return;
     }
+    // v840 #422 Deep Research / 論文要約 / 論文全訳 結果の ⭐ スター
+    //   POST   /api/ai/stars  body { kind, ref_id }  → 付ける (idempotent)
+    //   DELETE /api/ai/stars  body { kind, ref_id }  → 外す
+    if ($sub === 'stars' && in_array($method, ['POST', 'DELETE'], true) && !isset($seg[2])) {
+        ai_stars_toggle($pdo, $cfg, $method);
+        return;
+    }
     if ($sub === 'translations' && $method === 'DELETE' && isset($seg[2])) {
         ai_translation_delete($pdo, $cfg, (int)$seg[2]);
         return;
@@ -303,6 +310,38 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
             'author_name'   => $r['author_name'],
             'author_avatar' => $r['author_avatar'],
         ];
+    }
+    // v840 papers-recent は 2 種類 (summary=paper_translate / full=paper_full_translation) が
+    //   混在するので、 種類ごとに分けて star 情報をひっぱり、 後で戻し合成する。
+    $byKind = ['summary' => [], 'full' => []];
+    foreach ($items as $i => $it) $byKind[$it['kind']][] = ['id' => $it['id'], '_idx' => $i];
+    if ($byKind['summary']) {
+        ai_stars_enrich($pdo, 'paper_translate', $byKind['summary'], $uid);
+        foreach ($byKind['summary'] as $r) {
+            $i = $r['_idx'];
+            $items[$i]['star_count'] = $r['star_count'] ?? 0;
+            $items[$i]['my_starred'] = $r['my_starred'] ?? false;
+            $items[$i]['star_users'] = $r['star_users'] ?? [];
+            $items[$i]['star_kind']  = 'paper_translate';
+        }
+    }
+    if ($byKind['full']) {
+        ai_stars_enrich($pdo, 'paper_full_translation', $byKind['full'], $uid);
+        foreach ($byKind['full'] as $r) {
+            $i = $r['_idx'];
+            $items[$i]['star_count'] = $r['star_count'] ?? 0;
+            $items[$i]['my_starred'] = $r['my_starred'] ?? false;
+            $items[$i]['star_users'] = $r['star_users'] ?? [];
+            $items[$i]['star_kind']  = 'paper_full_translation';
+        }
+    }
+    $sort = (string)($_GET['sort'] ?? '');
+    if ($sort === 'stars') {
+        usort($items, function($a, $b) {
+            $da = (int)($a['star_count'] ?? 0); $db = (int)($b['star_count'] ?? 0);
+            if ($db !== $da) return $db <=> $da;
+            return strcmp((string)($b['created_at'] ?? ''), (string)($a['created_at'] ?? ''));
+        });
     }
     json_response([
         'items'  => $items,
@@ -1492,6 +1531,9 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
             'finished_at' => $r['finished_at'],
         ];
     }
+    ai_stars_enrich($pdo, 'paper_translate', $rows, $uid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $rows = ai_stars_apply_sort('paper_translate', $rows, $sort);
     json_response([
         'items'        => $rows,
         'cost_points'  => PAPER_TRANSLATE_COST,        // 旧 互換
@@ -1503,7 +1545,8 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
 // v756 #372 みんな の 公開 要約 一覧 (is_shared=1)。 q= で キーワード 部分一致 検索 (pdf_name +
 //   title_ja / title_orig / authors / venue / summary_one_paragraph)。
 function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $myUid = (int)$u['id'];
     $q = trim((string)($_GET['q'] ?? ''));
     $args = [];
     $sql = "SELECT pt.id, pt.share_token, pt.pdf_name, pt.result_json, pt.status, pt.shared_at,
@@ -1540,6 +1583,9 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
             'author_avatar'       => $r['author_avatar'],
         ];
     }
+    ai_stars_enrich($pdo, 'paper_translate', $items, $myUid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $items = ai_stars_apply_sort('paper_translate', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
 }
 
@@ -2194,6 +2240,9 @@ function ai_deep_research_list(PDO $pdo, array $cfg): void {
             'shared_at'   => $r['shared_at'],
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
+    ai_stars_enrich($pdo, 'deep_research', $items, $uid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $items = ai_stars_apply_sort('deep_research', $items, $sort);
     json_response([
         'items'  => $items,
         'tiers'  => DEEP_RESEARCH_TIERS,
@@ -2264,7 +2313,8 @@ function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
 
 // v784 #382 みんな の 共有 Deep Research 一覧。 q= で キーワード 検索 (query_text + result_json 内 LIKE)
 function ai_deep_research_shared_list(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $myUid = (int)$u['id'];
     $q = trim((string)($_GET['q'] ?? ''));
     $args = [];
     $sql = "SELECT dr.id, dr.share_token, dr.query_text, dr.model, dr.depth,
@@ -2299,6 +2349,9 @@ function ai_deep_research_shared_list(PDO $pdo, array $cfg): void {
             'author_avatar' => $r['author_avatar'],
         ];
     }
+    ai_stars_enrich($pdo, 'deep_research', $items, $myUid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $items = ai_stars_apply_sort('deep_research', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
 }
 
@@ -2708,6 +2761,9 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
             'error_msg'   => $r['error_msg'],
         ];
     }, $st->fetchAll(PDO::FETCH_ASSOC));
+    ai_stars_enrich($pdo, 'paper_full_translation', $rows, $uid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $rows = ai_stars_apply_sort('paper_full_translation', $rows, $sort);
     json_response([
         'items'      => $rows,
         'models_en2ja' => PAPER_FULL_TRANSLATE_MODELS_EN2JA,
@@ -2775,7 +2831,8 @@ function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token)
 }
 
 function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
+    $myUid = (int)$u['id'];
     $q = trim((string)($_GET['q'] ?? ''));
     $args = [];
     $sql = "SELECT pft.id, pft.share_token, pft.pdf_name, pft.direction, pft.model, pft.cost_points,
@@ -2810,6 +2867,9 @@ function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
             'author_avatar' => $r['author_avatar'],
         ];
     }
+    ai_stars_enrich($pdo, 'paper_full_translation', $items, $myUid);
+    $sort = (string)($_GET['sort'] ?? '');
+    $items = ai_stars_apply_sort('paper_full_translation', $items, $sort);
     json_response(['items' => $items, 'q' => $q]);
 }
 
@@ -4155,4 +4215,115 @@ function ai_norm_time($v): ?string {
         }
     }
     return null;
+}
+
+// ───────── v840 ⭐ スター (ai_result_stars) ─────────
+
+function ai_stars_valid_kinds(): array {
+    return ['deep_research', 'paper_translate', 'paper_full_translation'];
+}
+
+function ai_stars_resolve_table(string $kind): string {
+    return [
+        'deep_research'           => 'deep_researches',
+        'paper_translate'         => 'paper_translates',
+        'paper_full_translation'  => 'paper_full_translations',
+    ][$kind] ?? '';
+}
+
+function ai_stars_toggle(PDO $pdo, array $cfg, string $method): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    $kind = (string)($body['kind'] ?? '');
+    $refId = (int)($body['ref_id'] ?? 0);
+    if (!in_array($kind, ai_stars_valid_kinds(), true)) {
+        throw new ApiException('bad_request', 'kind が 不正', 400);
+    }
+    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が 必要', 400);
+    // ref の存在確認
+    $table = ai_stars_resolve_table($kind);
+    $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
+    $st->execute([$refId]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'ref not found', 404);
+
+    if ($method === 'POST') {
+        $pdo->prepare("INSERT IGNORE INTO ai_result_stars (kind, ref_id, user_id) VALUES (?,?,?)")
+            ->execute([$kind, $refId, $uid]);
+    } else { // DELETE
+        $pdo->prepare("DELETE FROM ai_result_stars WHERE kind=? AND ref_id=? AND user_id=?")
+            ->execute([$kind, $refId, $uid]);
+    }
+    // 集計を返す
+    $countSt = $pdo->prepare("SELECT COUNT(*) FROM ai_result_stars WHERE kind=? AND ref_id=?");
+    $countSt->execute([$kind, $refId]);
+    $count = (int)$countSt->fetchColumn();
+    $mineSt = $pdo->prepare("SELECT 1 FROM ai_result_stars WHERE kind=? AND ref_id=? AND user_id=?");
+    $mineSt->execute([$kind, $refId, $uid]);
+    json_response([
+        'ok' => true,
+        'kind' => $kind,
+        'ref_id' => $refId,
+        'star_count' => $count,
+        'my_starred' => (bool)$mineSt->fetchColumn(),
+    ]);
+}
+
+// 結果 list に star_count + my_starred + star_user_names (先頭3名まで) を 追加する。
+//   items は ['id' => ..., ...] の連想配列の配列で、 in-place に書き換える。
+function ai_stars_enrich(PDO $pdo, string $kind, array &$items, int $myUid): void {
+    if (!$items) return;
+    if (!in_array($kind, ai_stars_valid_kinds(), true)) return;
+    $ids = array_values(array_unique(array_map(fn($r) => (int)($r['id'] ?? 0), $items)));
+    $ids = array_filter($ids, fn($v) => $v > 0);
+    if (!$ids) return;
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    // 集計: 各 ref の count + 自分が star してるか
+    $args = array_merge([$kind], $ids);
+    $st = $pdo->prepare("SELECT ref_id, COUNT(*) AS n, MAX(user_id=?) AS mine
+                          FROM ai_result_stars
+                         WHERE kind=? AND ref_id IN ($place)
+                         GROUP BY ref_id");
+    $st->execute(array_merge([$myUid, $kind], $ids));
+    $byId = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $byId[(int)$r['ref_id']] = ['count' => (int)$r['n'], 'mine' => (int)$r['mine'] === 1];
+    }
+    // 各 ref の star した人 (先頭 3 名、 display_name) も 軽く 取る
+    $st2 = $pdo->prepare("SELECT s.ref_id, u.display_name, u.avatar_url
+                            FROM ai_result_stars s JOIN users u ON u.id = s.user_id
+                           WHERE s.kind=? AND s.ref_id IN ($place)
+                           ORDER BY s.created_at DESC");
+    $st2->execute(array_merge([$kind], $ids));
+    $namesById = [];
+    foreach ($st2->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $rid = (int)$r['ref_id'];
+        if (!isset($namesById[$rid])) $namesById[$rid] = [];
+        if (count($namesById[$rid]) < 3) {
+            $namesById[$rid][] = ['name' => $r['display_name'], 'avatar' => $r['avatar_url']];
+        }
+    }
+    foreach ($items as &$it) {
+        $rid = (int)($it['id'] ?? 0);
+        $info = $byId[$rid] ?? ['count' => 0, 'mine' => false];
+        $it['star_count'] = $info['count'];
+        $it['my_starred'] = $info['mine'];
+        $it['star_users'] = $namesById[$rid] ?? [];
+    }
+    unset($it);
+}
+
+// sort=stars のとき、 SQL ORDER BY を star count desc にするための SELECT 句 を 返すヘルパ。
+//   ai.php の各 list クエリで使う想定だが、 副問合せが入る分だけ場合分けが面倒なので、
+//   list 側は単純な「クエリ実行後 PHP 側で sort」 で対応する (件数 100 以下が前提)。
+function ai_stars_apply_sort(string $kind, array $items, string $sort): array {
+    if ($sort === 'stars') {
+        usort($items, function($a, $b) {
+            $da = (int)($a['star_count'] ?? 0); $db = (int)($b['star_count'] ?? 0);
+            if ($db !== $da) return $db <=> $da;
+            // tie-break: created_at desc (元の order が DESC なので id desc fallback)
+            return (int)($b['id'] ?? 0) <=> (int)($a['id'] ?? 0);
+        });
+    }
+    return $items;
 }

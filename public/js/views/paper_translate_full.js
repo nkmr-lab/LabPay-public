@@ -7,8 +7,10 @@
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 
 let settings = null;
+let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
 
 export async function renderPaperTranslateFull() {
   const app = document.getElementById('app');
@@ -20,8 +22,9 @@ export async function renderPaperTranslateFull() {
         英→日 と 日→英 が 選べ ます (日→英 は em-dash 等 GPT-isms 除去 も 込み)。
       </p>
     </div>
-    <div class="card">
-      <label class="field">
+    <details class="card" id="pft-form">
+      <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい全訳を依頼</summary>
+      <label class="field" style="margin-top:8px">
         <span class="lbl">🌐 翻訳 方向</span>
         <select id="pft-direction">
           <option value="en2ja" selected>英語 → 日本語 (E→J)</option>
@@ -60,7 +63,7 @@ export async function renderPaperTranslateFull() {
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pft-go" class="primary" disabled>📑 全訳 開始</button>
       </div>
-    </div>
+    </details>
     <div id="pft-result"></div>
     <!-- v807 自分の履歴 と みんなの公開 全訳 を タブ で 切替 (要約 ページ と 同 形式) -->
     <div class="card" style="margin-top:8px">
@@ -70,6 +73,7 @@ export async function renderPaperTranslateFull() {
         <span style="flex:1"></span>
         <input type="search" id="pft-search" placeholder="🔍 検索 (公開 のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
       </div>
+      <div id="pft-controls"></div>
       <div id="pft-list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
@@ -183,36 +187,50 @@ async function loadSettings() {
 async function loadHistory() {
   const root = document.getElementById('pft-list');
   try {
-    const d = await get('/api/ai/paper_full_translate');
-    const items = d.items || [];
+    const url = '/api/ai/paper_full_translate' + (viewState.mineSort === 'stars' ? '?sort=stars' : '');
+    const d = await get(url);
+    let items = d.items || [];
+    if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
+
+    setFormOpen('pft-form', (d.items || []).length === 0);
+
+    const ctlRoot = document.getElementById('pft-controls');
+    if (ctlRoot) {
+      ctlRoot.innerHTML = viewControlsHtml({ id: 'pft-mine-vc', sort: viewState.mineSort, mineOnly: viewState.mineOnly_mine, total: items.length });
+      bindViewControls(ctlRoot, ({ mineOnly, sort }) => { viewState.mineOnly_mine = mineOnly; viewState.mineSort = sort; loadHistory(); });
+    }
+
     if (!items.length) {
-      root.innerHTML = '<div class="empty">まだ 全訳 履歴 が ありません</div>';
+      root.innerHTML = `<div class="empty">${viewState.mineOnly_mine ? 'スター付きの全訳はまだありません' : 'まだ全訳履歴がありません'}</div>`;
       return;
     }
-    root.innerHTML = items.map(it => {
-      const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
-      const title = it.title_translated || it.title_original || it.pdf_name;
-      const sub = it.title_translated
-        ? `${it.pdf_name} ・ ${it.direction} ・ ${it.model} ・ ${it.cost_points}pt ・ ${it.status} ・ ${it.created_at}`
-        : `${it.direction} ・ ${it.model} ・ ${it.cost_points}pt ・ ${it.status} ・ ${it.created_at}`;
+    root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
+      const title = it.title_translated || it.title_original || it.pdf_name || '(無題)';
       const icon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
+      const dirMark = it.direction === 'ja2en' ? '🇯🇵→🇬🇧' : '🇬🇧→🇯🇵';
       return `
-        <div class="list-item" style="gap:8px; align-items:flex-start; padding:8px 0">
-          <a href="#/paper-translate-full/r/${escapeHtml(it.share_token)}" style="display:flex; gap:8px; flex:1; min-width:0; text-decoration:none; color:inherit; align-items:flex-start">
-            <div style="flex:none; font-size:20px">${icon}</div>
-            <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
-              <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
-            </div>
-          </a>
-          <button class="btn" data-pft-del="${it.id}" title="削除" style="font-size:11px; padding:2px 8px; flex:none">🗑</button>
-        </div>`;
-    }).join('');
+        <a class="ai-tile" href="#/paper-translate-full/r/${escapeHtml(it.share_token)}">
+          <div class="ai-tile-head">
+            <span>${icon}</span>
+            ${it.is_shared ? '<span style="color:#15803d">🌐</span>' : ''}
+            <span style="margin-left:auto; font-size:11px">${dirMark} ・ ${escapeHtml(it.model || '')}</span>
+          </div>
+          <div class="ai-tile-title">${escapeHtml(title)}</div>
+          <div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.pdf_name || '')} ・ ${it.cost_points}pt</div>
+          <div class="ai-tile-foot">
+            <span>${escapeHtml(it.created_at || '')}</span>
+            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <button class="ghost" data-pft-del="${it.id}" title="削除" style="font-size:12px; padding:2px 6px; margin-left:2px"
+              onclick="event.preventDefault(); event.stopPropagation();">🗑</button>
+          </div>
+        </a>`;
+    }).join('')}</div>`;
+    bindStarButtons(root);
     root.querySelectorAll('[data-pft-del]').forEach(b => {
       b.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        if (!confirm('この 全訳 を 履歴 から 削除 します か? (PDF も 一緒 に 削除)')) return;
-        try { await del('/api/ai/paper_full_translate/' + b.dataset.pftDel); toast('削除 しました'); await loadHistory(); }
+        ev.preventDefault(); ev.stopPropagation();
+        if (!confirm('この全訳を履歴から削除しますか? (PDF も一緒に削除)')) return;
+        try { await del('/api/ai/paper_full_translate/' + b.dataset.pftDel); toast('削除しました'); await loadHistory(); }
         catch (e) { toast('失敗: ' + e.message); }
       });
     });
@@ -221,34 +239,54 @@ async function loadHistory() {
   }
 }
 
-// v807 みんなの 公開 全訳 (q で 検索)
+// v807 みんなの公開全訳 (q で検索)
 async function loadSharedList(q) {
   const root = document.getElementById('pft-list');
   if (!root) return;
   root.innerHTML = '<div class="muted">読み込み中…</div>';
+  viewState.lastQuery = q;
   try {
-    const url = '/api/ai/paper_full_translate/shared' + (q ? '?q=' + encodeURIComponent(q) : '');
+    const params = [];
+    if (q) params.push('q=' + encodeURIComponent(q));
+    if (viewState.pubSort === 'stars') params.push('sort=stars');
+    const url = '/api/ai/paper_full_translate/shared' + (params.length ? '?' + params.join('&') : '');
     const d = await get(url);
-    const items = d.items || [];
+    let items = d.items || [];
+    if (viewState.mineOnly_pub) items = items.filter(r => r.my_starred);
+
+    const ctlRoot = document.getElementById('pft-controls');
+    if (ctlRoot) {
+      ctlRoot.innerHTML = viewControlsHtml({ id: 'pft-pub-vc', sort: viewState.pubSort, mineOnly: viewState.mineOnly_pub, total: items.length });
+      bindViewControls(ctlRoot, ({ mineOnly, sort }) => { viewState.mineOnly_pub = mineOnly; viewState.pubSort = sort; loadSharedList(viewState.lastQuery); });
+    }
+
     if (!items.length) {
-      root.innerHTML = q
-        ? `<div class="empty">「${escapeHtml(q)}」 に 該当 する 公開 全訳 が ありません</div>`
-        : '<div class="empty">まだ 公開 されて いる 全訳 は ありません</div>';
+      root.innerHTML = viewState.mineOnly_pub
+        ? '<div class="empty">スター付きの公開全訳はありません</div>'
+        : (q ? `<div class="empty">「${escapeHtml(q)}」 に該当する公開全訳がありません</div>`
+             : '<div class="empty">まだ公開されている全訳はありません</div>');
       return;
     }
-    root.innerHTML = items.map(it => {
+    root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
       const title = it.title_translated || it.title_original || it.pdf_name;
       const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
+      const dirMark = it.direction === 'ja2en' ? '🇯🇵→🇬🇧' : '🇬🇧→🇯🇵';
       return `
-        <a href="#/paper-translate-full/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
-          <div style="flex:none; font-size:20px">📑</div>
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="font-size:14px">${escapeHtml(title)}</div>
-            ${meta ? `<div class="hint-sm" style="font-size:11px; color:#666; margin-top:1px">${escapeHtml(meta)}</div>` : ''}
-            <div class="hint-sm" style="font-size:10px; margin-top:3px; color:#9ca3af">${avatarHtml(it.author_name, it.author_avatar, 'xs')} ${escapeHtml(it.author_name)} ・ ${escapeHtml(it.direction)} ・ ${escapeHtml(it.shared_at || it.created_at)}</div>
+        <a class="ai-tile" href="#/paper-translate-full/r/${escapeHtml(it.share_token)}">
+          <div class="ai-tile-head">
+            ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
+            <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
+            <span style="margin-left:auto; font-size:11px">${dirMark}</span>
+          </div>
+          <div class="ai-tile-title">${escapeHtml(title)}</div>
+          ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+          <div class="ai-tile-foot">
+            <span>${escapeHtml(it.shared_at || it.created_at || '')}</span>
+            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_full_translation', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
           </div>
         </a>`;
-    }).join('');
+    }).join('')}</div>`;
+    bindStarButtons(root);
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }

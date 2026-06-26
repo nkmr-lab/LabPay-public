@@ -890,6 +890,52 @@ a.list-item { text-decoration: none; color: inherit; }
   cursor: pointer !important;
 }
 
+/* v840 Deep Research / 論文要約 / 全訳 / papers-recent 共通 ⭐ スター + タイル + 並び替え */
+.ai-star-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 12px;
+  background: #fff; cursor: pointer; font-size: 12px; color: #4b5563;
+  line-height: 1.4;
+}
+.ai-star-btn:hover { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+.ai-star-btn.on    { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+.ai-star-btn .ai-star-icon { font-size: 13px; }
+.ai-star-btn .ai-star-count { font-weight: 600; }
+.ai-star-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.ai-view-controls {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin: 4px 0 10px; font-size: 13px;
+}
+.ai-view-controls .ai-vc-item { display: inline-flex; align-items: center; gap: 4px; }
+.ai-view-controls .ai-vc-total { margin-left: auto; color: #6b7280; font-size: 12px; }
+.ai-view-controls select { font-size: 13px; padding: 2px 6px; }
+
+.ai-tile-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 720px)  { .ai-tile-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1200px) { .ai-tile-grid { grid-template-columns: repeat(3, 1fr); } }
+.ai-tile {
+  display: flex; flex-direction: column;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; text-decoration: none; color: inherit;
+  transition: box-shadow 0.15s;
+  min-height: 110px;
+}
+.ai-tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #c4b5fd; }
+.ai-tile .ai-tile-head {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7280;
+  margin-bottom: 4px;
+}
+.ai-tile .ai-tile-title { font-weight: 600; font-size: 13.5px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-word;
+}
+.ai-tile .ai-tile-snippet { font-size: 12px; color: #4b5563; line-height: 1.6; margin-top: 6px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-word;
+}
+.ai-tile .ai-tile-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 8px; font-size: 11px; color: #6b7280; }
+
 /* v838 #422 研究ノート カレンダー: PCサイズではセルを拡大して preview text を表示 */
 .rn-day { min-height: 42px; }
 .rn-day .rn-day-preview { display: none; }

@@ -6,8 +6,10 @@
 import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
+import { starButtonHtml, bindStarButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 
 let sharedPollTimer = null;
+let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
 
 // v762 #381 既存 result_json に 入って いる 日本語 中 の 不要 な スペース を 取り除く
 //   defensive helper。 日本語文字 (ひらがな / カタカナ / 漢字) どうし の 間 の 半角 スペース
@@ -39,8 +41,9 @@ export async function renderPaperTranslate() {
     <div class="card page-header">
       <h2 style="margin:0">📑 論文要約 <span style="font-size:12px; color:#9ca3af; font-weight:normal">(自動翻訳)</span></h2>
     </div>
-    <div class="card">
-      <p class="hint" style="font-size:13px; margin:0 0 8px">
+    <details class="card" id="pt-form">
+      <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい論文要約を依頼</summary>
+      <p class="hint" style="font-size:13px; margin:8px 0">
         論文 PDF をアップすると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
         今後の課題 → 落合メソッドまとめ という順番で構造化して返します。 全体 1500-2500 字 (≒ 3-5 分で読める分量)。
       </p>
@@ -84,7 +87,7 @@ export async function renderPaperTranslate() {
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pt-go" class="primary" disabled>📑 要約を作る</button>
       </div>
-    </div>
+    </details>
     <div id="pt-result"></div>
     <!-- v756 #372 自分 の 履歴 と みんな の 公開 一覧 を タブ で 切替 -->
     <div class="card" style="margin-top:8px">
@@ -94,6 +97,7 @@ export async function renderPaperTranslate() {
         <span style="flex:1"></span>
         <input type="search" id="pt-search" placeholder="🔍 検索 (公開のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
       </div>
+      <div id="pt-controls"></div>
       <div id="pt-history"><div class="muted">読み込み中…</div></div>
     </div>
   `);
@@ -267,37 +271,53 @@ async function go() {
 
 async function loadHistory() {
   try {
-    const d = await get('/api/ai/paper_translate');
+    const url = '/api/ai/paper_translate' + (viewState.mineSort === 'stars' ? '?sort=stars' : '');
+    const d = await get(url);
     updateModelInfo(d);
-    const items = d.items || [];
+    let items = d.items || [];
+    if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
+
+    // 履歴が空 (初回) なら form を 開く、 ある なら 閉じる
+    setFormOpen('pt-form', (d.items || []).length === 0);
+
+    const ctlRoot = document.getElementById('pt-controls');
+    if (ctlRoot) {
+      ctlRoot.innerHTML = viewControlsHtml({ id: 'pt-mine-vc', sort: viewState.mineSort, mineOnly: viewState.mineOnly_mine, total: items.length });
+      bindViewControls(ctlRoot, ({ mineOnly, sort }) => { viewState.mineOnly_mine = mineOnly; viewState.mineSort = sort; loadHistory(); });
+    }
+
+    const root = document.getElementById('pt-history');
     if (!items.length) {
-      document.getElementById('pt-history').innerHTML = '<div class="empty">まだ 要約 履歴 が ありません</div>';
+      root.innerHTML = `<div class="empty">${viewState.mineOnly_mine ? 'スター付きの要約はまだありません' : 'まだ要約履歴がありません'}</div>`;
       return;
     }
-    // v772 #393 履歴 表示 を 「論文タイトル / ファイル名 (日時)」 形式 に。
-    // v775 #399 各 行 に 削除 ボタン (間違って 作って しまった とき 用)。
-    const root = document.getElementById('pt-history');
-    root.innerHTML = items.map(it => {
-      const sharedBadge = it.is_shared ? ' <span class="tag ok" style="font-size:10px">🌐 公開中</span>' : '';
-      const title = it.title_ja || it.pdf_name;
-      const sub = it.title_ja ? `${it.pdf_name} (${it.created_at})` : `${it.created_at} · ${it.status}`;
+    root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
+      const title = it.title_ja || it.pdf_name || '(無題)';
+      const sub = it.title_ja ? it.pdf_name : '';
+      const statusIcon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
       return `
-        <div class="list-item" style="gap:8px; align-items:flex-start; padding:8px 0">
-          <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" style="display:flex; gap:8px; flex:1; min-width:0; text-decoration:none; color:inherit; align-items:flex-start">
-            <div style="flex:none; font-size:20px">${it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳'}</div>
-            <div class="grow" style="min-width:0">
-              <div class="bold" style="font-size:14px; line-height:1.4">${escapeHtml(title)}${sharedBadge}</div>
-              <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">${escapeHtml(sub)}</div>
-            </div>
-          </a>
-          <button class="btn" data-pt-del="${it.id}" title="削除" style="font-size:11px; padding:2px 8px; flex:none">🗑</button>
-        </div>`;
-    }).join('');
+        <a class="ai-tile" href="#/paper-summary/r/${escapeHtml(it.share_token)}">
+          <div class="ai-tile-head">
+            <span>${statusIcon}</span>
+            ${it.is_shared ? '<span style="color:#15803d">🌐</span>' : ''}
+            <span style="margin-left:auto; font-size:11px">${escapeHtml(it.status || '')}</span>
+          </div>
+          <div class="ai-tile-title">${escapeHtml(title)}</div>
+          ${sub ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(sub)}</div>` : ''}
+          <div class="ai-tile-foot">
+            <span>${escapeHtml(it.created_at || '')}</span>
+            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
+            <button class="ghost" data-pt-del="${it.id}" title="削除" style="font-size:12px; padding:2px 6px; margin-left:2px"
+              onclick="event.preventDefault(); event.stopPropagation();">🗑</button>
+          </div>
+        </a>`;
+    }).join('')}</div>`;
+    bindStarButtons(root);
     root.querySelectorAll('[data-pt-del]').forEach(b => {
       b.addEventListener('click', async (ev) => {
-        ev.preventDefault();
+        ev.preventDefault(); ev.stopPropagation();
         const id = b.dataset.ptDel;
-        if (!confirm('この 要約 を 履歴 から 削除 します か? (PDF や ページ画像 も 一緒 に 削除)')) return;
+        if (!confirm('この要約を履歴から削除しますか? (PDF やページ画像も一緒に削除)')) return;
         try {
           await del('/api/ai/paper_translate/' + id);
           toast('削除しました');
@@ -310,35 +330,54 @@ async function loadHistory() {
   }
 }
 
-// v756 #372 みんな の 公開 要約 一覧 (q= で 検索)
+// v756 #372 みんなの公開要約一覧 (q= で検索)
 async function loadSharedList(q) {
   const root = document.getElementById('pt-history');
   root.innerHTML = '<div class="muted">読み込み中…</div>';
+  viewState.lastQuery = q;
   try {
-    const url = '/api/ai/paper_translate/shared' + (q ? '?q=' + encodeURIComponent(q) : '');
+    const params = [];
+    if (q) params.push('q=' + encodeURIComponent(q));
+    if (viewState.pubSort === 'stars') params.push('sort=stars');
+    const url = '/api/ai/paper_translate/shared' + (params.length ? '?' + params.join('&') : '');
     const d = await get(url);
-    const items = d.items || [];
+    let items = d.items || [];
+    if (viewState.mineOnly_pub) items = items.filter(r => r.my_starred);
+
+    const ctlRoot = document.getElementById('pt-controls');
+    if (ctlRoot) {
+      ctlRoot.innerHTML = viewControlsHtml({ id: 'pt-pub-vc', sort: viewState.pubSort, mineOnly: viewState.mineOnly_pub, total: items.length });
+      bindViewControls(ctlRoot, ({ mineOnly, sort }) => { viewState.mineOnly_pub = mineOnly; viewState.pubSort = sort; loadSharedList(viewState.lastQuery); });
+    }
+
     if (!items.length) {
-      root.innerHTML = q
-        ? `<div class="empty">「${escapeHtml(q)}」 に 該当 する 公開 要約 が ありません</div>`
-        : '<div class="empty">まだ 公開 されて いる 要約 は ありません</div>';
+      root.innerHTML = viewState.mineOnly_pub
+        ? '<div class="empty">スター付きの公開要約はありません</div>'
+        : (q ? `<div class="empty">「${escapeHtml(q)}」 に該当する公開要約がありません</div>`
+             : '<div class="empty">まだ公開されている要約はありません</div>');
       return;
     }
-    root.innerHTML = items.map(it => {
+    root.innerHTML = `<div class="ai-tile-grid">${items.map(it => {
       const title = it.title_ja || it.pdf_name;
       const meta = [it.authors, it.venue].filter(Boolean).join(' ・ ');
       const summary = it.summary_one_paragraph || '';
       return `
-        <a href="#/paper-summary/r/${escapeHtml(it.share_token)}" class="list-item" style="text-decoration:none; color:inherit; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid #f0f0f0">
-          <div style="flex:none; font-size:20px">📑</div>
-          <div class="grow" style="min-width:0">
-            <div class="bold" style="font-size:14px">${escapeHtml(title)}</div>
-            ${meta ? `<div class="hint-sm" style="font-size:11px; color:#666; margin-top:1px">${escapeHtml(meta)}</div>` : ''}
-            ${summary ? `<div style="font-size:12px; color:#374151; margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">${escapeHtml(summary)}</div>` : ''}
-            <div class="hint-sm" style="font-size:10px; margin-top:3px; color:#9ca3af">${avatarHtml(it.author_name, it.author_avatar, 'xs')} ${escapeHtml(it.author_name)} · ${escapeHtml(it.shared_at || it.created_at)}</div>
+        <a class="ai-tile" href="#/paper-summary/r/${escapeHtml(it.share_token)}">
+          <div class="ai-tile-head">
+            ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
+            <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
+            <span style="margin-left:auto; font-size:11px">📑 要約</span>
+          </div>
+          <div class="ai-tile-title">${escapeHtml(title)}</div>
+          ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+          ${summary ? `<div class="ai-tile-snippet">${escapeHtml(summary)}</div>` : ''}
+          <div class="ai-tile-foot">
+            <span>${escapeHtml(it.shared_at || it.created_at || '')}</span>
+            <span style="margin-left:auto">${starButtonHtml({ kind: 'paper_translate', refId: it.id, count: it.star_count, mine: it.my_starred, users: it.star_users })}</span>
           </div>
         </a>`;
-    }).join('');
+    }).join('')}</div>`;
+    bindStarButtons(root);
   } catch (e) {
     root.innerHTML = stripJaSpaces(`<div class="muted">${escapeHtml(e.message)}</div>`);
   }
