@@ -1,7 +1,7 @@
 <?php
-// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 認証 は 各 ユーザ の PAT (Personal Access
-//   Token, ヘッダ x-personal-access-token) を 優先。 PAT 未 登録 の 場合 は legacy connect.sid
-//   cookie (users.cosense_session_cookie or config の 共有 cookie) で 旧 API を 叩いて 読み取り のみ。
+// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 v839 以降、 認証は 各ユーザの PAT
+//   (Personal Access Token, ヘッダ x-personal-access-token) のみ。 legacy connect.sid cookie
+//   経路は撤廃済み (鍵だけで十分なため、 設定を一本化)。
 //
 //   研究 ノート ページ 名 規則 (https://github.com/nkmr-lab/scrapbox-helper-for-nkmrlab):
 //     Page 名: YYYY.MM_研究ノート_<scrapbox_handle>
@@ -9,11 +9,10 @@
 //
 //   GET  /api/cosense/research-note?ym=YYYY.MM    今月 / 指定 月 の 自分 の ページ
 //   GET  /api/cosense/research-note/days?count=2  直近 N 日 セクション 抽出 (今日 / 昨日)
-//   POST /api/cosense/research-note/append        今日 セクション に 追記 (PAT 必須)
+//   POST /api/cosense/research-note/append        今日 セクション に 追記
 //   GET  /api/cosense/page?title=...              任意 ページ
-//   GET  /api/cosense/me/status                   自分 の cookie/PAT 設定 状況
-//   PATCH /api/cosense/me/cookie  {cookie:"s%3A..."}  自分 の cookie を 設定 (legacy)
-//   PATCH /api/cosense/me/pat     {pat:"..."}         自分 の PAT を 設定 (推奨)
+//   GET  /api/cosense/me/status                   自分 の PAT 設定 状況
+//   PATCH /api/cosense/me/pat     {pat:"..."}     自分 の PAT を 設定
 declare(strict_types=1);
 
 function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -46,9 +45,6 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'me' && $method === 'GET' && ($seg[2] ?? '') === 'status') {
         cosense_me_status($pdo, $cfg, $uid); return;
     }
-    if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'cookie') {
-        cosense_me_set_cookie($pdo, $uid); return;
-    }
     if ($sub === 'me' && $method === 'PATCH' && ($seg[2] ?? '') === 'pat') {
         cosense_me_set_pat($pdo, $cfg, $uid); return;
     }
@@ -65,16 +61,6 @@ function cosense_base(array $cfg): string {
 }
 function cosense_project(array $cfg): string {
     return (string)($cfg['cosense']['project'] ?? 'nkmr-lab');
-}
-function cosense_shared_cookie(array $cfg): ?string {
-    $c = trim((string)($cfg['cosense']['session_cookie'] ?? ''));
-    return $c !== '' ? $c : null;
-}
-function cosense_user_cookie(PDO $pdo, int $uid): ?string {
-    $st = $pdo->prepare("SELECT cosense_session_cookie FROM users WHERE id=?");
-    $st->execute([$uid]);
-    $c = trim((string)($st->fetchColumn() ?: ''));
-    return $c !== '' ? $c : null;
 }
 function cosense_user_pat(PDO $pdo, int $uid): ?string {
     $st = $pdo->prepare("SELECT cosense_pat FROM users WHERE id=?");
@@ -121,9 +107,6 @@ function cosense_http(string $method, string $url, array $opts = []): array {
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_HTTPHEADER     => $headers,
     ]);
-    if (!empty($opts['cookie'])) {
-        curl_setopt($ch, CURLOPT_COOKIE, 'connect.sid=' . $opts['cookie']);
-    }
     if ($body !== null) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     }
@@ -167,61 +150,25 @@ function cosense_v2_commit(array $cfg, string $pat, ?string $pageId, array $chan
     return ['ok' => true, 'commitId' => $sj['commitId'] ?? null, 'page' => $sj['page'] ?? null];
 }
 
-// 旧 API (text endpoint) で ページ text を 取得 (cookie 経由、 PAT 不要)。
-function cosense_legacy_get_text(array $cfg, string $title, ?string $cookie): array {
-    $url = cosense_base($cfg) . '/api/pages/' . rawurlencode(cosense_project($cfg))
-         . '/' . rawurlencode($title) . '/text';
-    $res = cosense_http('GET', $url, ['cookie' => $cookie]);
-    return [
-        'status' => $res['status'],
-        'text'   => $res['status'] === 200 ? $res['body'] : null,
-    ];
-}
-
-// 「ページ text を ロード」 の 統一 経路。 PAT が あれば v2 から lines を text に 復元、
-// 無ければ legacy cookie で text を 取る。
+// PAT 経由で ページ text を ロード (v2 lines → text に 復元)。 PAT 未登録なら source='none'。
 function cosense_load_page_text(PDO $pdo, array $cfg, int $uid, string $title): array {
+    $pageUrl = cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title);
     $pat = cosense_user_pat($pdo, $uid);
-    if ($pat !== null) {
-        $r = cosense_v2_get_page($cfg, $title, $pat);
-        if ($r['ok']) {
-            $lines = $r['page']['lines'] ?? [];
-            $text = '';
-            foreach ($lines as $ln) {
-                $text .= ($text === '' ? '' : "\n") . (string)($ln['text'] ?? '');
-            }
-            return [
-                'source' => 'v2-pat',
-                'status' => 200,
-                'text'   => $text,
-                'page'   => $r['page'],
-                'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
-            ];
+    if ($pat === null) {
+        return ['source' => 'none', 'status' => 0, 'text' => null, 'page' => null, 'page_url' => $pageUrl];
+    }
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    if ($r['ok']) {
+        $lines = $r['page']['lines'] ?? [];
+        $text = '';
+        foreach ($lines as $ln) {
+            $text .= ($text === '' ? '' : "\n") . (string)($ln['text'] ?? '');
         }
-        // PAT で 失敗 (404 等) → 空 として 扱う
-        return [
-            'source' => 'v2-pat',
-            'status' => $r['status'],
-            'text'   => null,
-            'page'   => null,
-            'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
-            'err'    => $r['err'] ?? null,
-        ];
+        return ['source' => 'v2-pat', 'status' => 200, 'text' => $text, 'page' => $r['page'], 'page_url' => $pageUrl];
     }
-    // legacy fallback (cookie)
-    $cookie = cosense_user_cookie($pdo, $uid) ?? cosense_shared_cookie($cfg);
-    if ($cookie === null) {
-        return ['source' => 'none', 'status' => 0, 'text' => null, 'page' => null,
-            'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title)];
-    }
-    $r = cosense_legacy_get_text($cfg, $title, $cookie);
-    return [
-        'source' => 'legacy-cookie',
-        'status' => $r['status'],
-        'text'   => $r['text'],
-        'page'   => null,
-        'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
-    ];
+    // PAT で 失敗 (404 等) → 空 として 扱う
+    return ['source' => 'v2-pat', 'status' => $r['status'], 'text' => null, 'page' => null,
+            'page_url' => $pageUrl, 'err' => $r['err'] ?? null];
 }
 
 // ───────── handlers ─────────
@@ -286,14 +233,13 @@ function cosense_my_research_note_days(PDO $pdo, array $cfg, int $uid): void {
     $recent = array_slice($sections, 0, $count);
 
     $hasPat = cosense_user_pat($pdo, $uid) !== null;
-    $hasCookie = cosense_user_cookie($pdo, $uid) !== null;
-    $hasShared = cosense_shared_cookie($cfg) !== null;
 
     json_response([
         'has_handle'    => true,
         'handle'        => $handle,
-        'cookie_present'=> $hasPat || $hasCookie || $hasShared,
-        'cookie_source' => $hasPat ? 'self-pat' : ($hasCookie ? 'self-cookie' : ($hasShared ? 'shared-cookie' : 'none')),
+        'has_pat'       => $hasPat,
+        // legacy 互換 (v839 までは cookie_present だった)。 PAT 一本化後は has_pat と同義。
+        'cookie_present'=> $hasPat,
         'pages'         => $pages,
         'recent'        => $recent,
         'today'         => $now->format('Y.m.d'),
@@ -713,7 +659,6 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
 
 function cosense_me_status(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
-    $cookie = cosense_user_cookie($pdo, $uid);
     // page handle の 内訳 (どこ から 来て いる か)
     $stu = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
     $stu->execute([$uid]);
@@ -721,29 +666,11 @@ function cosense_me_status(PDO $pdo, array $cfg, int $uid): void {
     json_response([
         'has_pat'          => $pat !== null,
         'pat_tail'         => $pat !== null ? mb_substr($pat, -6) : null,
-        'has_self_cookie'  => $cookie !== null,
-        'self_cookie_tail' => $cookie !== null ? mb_substr($cookie, -6) : null,
-        'has_shared_cookie'=> cosense_shared_cookie($cfg) !== null,
         'handle'                 => cosense_user_handle($pdo, $uid),
         'page_handle_explicit'   => $r['cosense_page_handle'] ?? null,
         'display_name_fallback'  => $r['display_name'] ?? null,
         'pat_settings_url'       => cosense_base($cfg) . '/settings/personal-access-tokens',
     ]);
-}
-
-function cosense_me_set_cookie(PDO $pdo, int $uid): void {
-    $body = read_json_body();
-    $c = trim((string)($body['cookie'] ?? ''));
-    if ($c !== '') {
-        if (mb_strlen($c) > 500) throw new ApiException('bad_request', 'cookie が 長過ぎ ます', 400);
-        if (!str_starts_with($c, 's%3A') && !str_starts_with($c, 's:')) {
-            throw new ApiException('bad_request', 'connect.sid 値 (s%3A... で 始まる 文字列) を 貼って ください', 400);
-        }
-    } else {
-        $c = null;
-    }
-    $pdo->prepare("UPDATE users SET cosense_session_cookie=? WHERE id=?")->execute([$c, $uid]);
-    json_response(['ok' => true, 'has_self_cookie' => $c !== null]);
 }
 
 function cosense_me_set_pat(PDO $pdo, array $cfg, int $uid): void {

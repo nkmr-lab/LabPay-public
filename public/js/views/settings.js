@@ -209,17 +209,6 @@ export async function renderSettings() {
         <button id="cosense-page-handle-save" class="primary">保存</button>
         <button id="cosense-page-handle-clear">表示名に戻す</button>
       </div>
-      <details style="font-size:12px; margin-top:6px">
-        <summary style="cursor:pointer; color:#6b7280">🛠 旧経路: connect.sid cookie で登録する (鍵があれば不要)</summary>
-        <label class="field" style="margin-top:8px">
-          <span class="lbl">connect.sid の値</span>
-          <textarea id="cosense-cookie-input" rows="2" placeholder="s%3A... で始まる文字列" style="font-family:monospace; font-size:12px"></textarea>
-        </label>
-        <div class="row" style="gap:6px">
-          <button id="cosense-save" class="btn">cookie を保存</button>
-          <button id="cosense-clear" class="btn">cookie を解除</button>
-        </div>
-      </details>
     </div>
 
     <div class="card">
@@ -378,9 +367,6 @@ async function wireCosenseCookieUI() {
   const phInput = document.getElementById('cosense-page-handle-input');
   const phSave  = document.getElementById('cosense-page-handle-save');
   const phClear = document.getElementById('cosense-page-handle-clear');
-  const cookieInput = document.getElementById('cosense-cookie-input');
-  const cookieSave  = document.getElementById('cosense-save');
-  const cookieClear = document.getElementById('cosense-clear');
   if (!statusEl || !patSave) return;
   const refreshStatus = async () => {
     try {
@@ -401,11 +387,7 @@ async function wireCosenseCookieUI() {
       }
       let lines = [];
       if (s.has_pat) lines.push(`✅ 鍵を登録済 (末尾 ...${escapeHtml(s.pat_tail || '')}) — 読み書き <b>本人名義</b>`);
-      if (s.has_self_cookie) lines.push(`☑ 旧経路 cookie を登録済 (末尾 ...${escapeHtml(s.self_cookie_tail || '')}) — 鍵があれば不要`);
-      if (!s.has_pat && !s.has_self_cookie) {
-        if (s.has_shared_cookie) lines.push(`⚙ 未登録 — 共有 cookie で読み取りのみ (中村名義)`);
-        else lines.push(`⚠ 共有 cookie も未設定`);
-      }
+      else lines.push(`⚠ 鍵が未登録です (登録するまで研究ノートは使えません)`);
       lines.push(handleLine);
       statusEl.innerHTML = lines.join(' ・ ');
       // 入力欄に現在の値を反映 (空なら placeholder のまま)
@@ -451,25 +433,6 @@ async function wireCosenseCookieUI() {
     try {
       await patch('/api/cosense/me/pat', { pat: '' });
       patInput.value = '';
-      toast('解除しました');
-      await refreshStatus();
-    } catch (e) { toast('失敗: ' + e.message); }
-  });
-  cookieSave?.addEventListener('click', async () => {
-    const v = cookieInput.value.trim();
-    if (!v) { toast('cookie を入れてください'); return; }
-    try {
-      await patch('/api/cosense/me/cookie', { cookie: v });
-      cookieInput.value = '';
-      toast('保存しました');
-      await refreshStatus();
-    } catch (e) { toast('失敗: ' + e.message); }
-  });
-  cookieClear?.addEventListener('click', async () => {
-    if (!confirm('登録した cookie を解除しますか?')) return;
-    try {
-      await patch('/api/cosense/me/cookie', { cookie: '' });
-      cookieInput.value = '';
       toast('解除しました');
       await refreshStatus();
     } catch (e) { toast('失敗: ' + e.message); }

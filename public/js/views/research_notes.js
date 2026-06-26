@@ -1,7 +1,7 @@
 // /#/research-notes — Cosense 研究ノート ビューア + エディタ。
 //   v834: フルスクリーン表示 + ✕で閉じる、 GitHub風ヒートカレンダー、 localStorage キャッシュ +
 //   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンド プリフェッチ。
-import { post } from '../api.js';
+import { post, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
 
@@ -80,17 +80,13 @@ async function loadInitial() {
     const r = await fetchEtagged('/api/cosense/research-note/days?count=2', 'days');
     const d = r.data;
     if (d.has_handle === false) {
-      statusEl.innerHTML = `
-        <div class="bold" style="color:#dc2626">名前 (Scrapbox 上の表記) が未設定</div>
-        <div style="font-size:13px; margin-top:6px">${escapeHtml(d.message || '')}</div>`;
+      // 名前未設定 (= LabPay の表示名が空) — 鍵 + 名前 を同時設定できる inline UI を出す
+      renderInlineSetup({ noHandle: true, message: d.message || '' });
       return;
     }
     if (!d.cookie_present) {
-      statusEl.innerHTML = `
-        <div class="bold" style="color:#dc2626">⚠ Scrapbox との連携がまだ設定されていません</div>
-        <div style="font-size:13px; margin-top:6px">
-          「設定」 → 「📝 Cosense (Scrapbox) 連携」 から、 Scrapbox の鍵 (Personal Access Token) を登録してください。
-        </div>`;
+      // v839 PAT 未設定 — 設定画面に飛ばすのではなく、 ここで inline で 設定 してもらう
+      renderInlineSetup({ noHandle: false, message: '' });
       return;
     }
     stateLocal.handle = d.handle;
@@ -106,6 +102,86 @@ async function loadInitial() {
   } catch (e) {
     statusEl.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+// v839 鍵 (PAT) 未設定の場合、 アプリ内でその場で 設定できる UI。
+//   設定画面と同じ内容を inline で出す。 保存後に loadInitial を呼び直してノート本体に遷移。
+function renderInlineSetup(opts) {
+  const statusEl = document.getElementById('rn-status');
+  if (!statusEl) return;
+  const noHandle = !!opts.noHandle;
+  statusEl.hidden = false;
+  statusEl.innerHTML = `
+    <div class="card" style="max-width:680px; margin:0 auto; padding:14px 16px">
+      <h3 style="margin:0 0 8px">🔑 Scrapbox の鍵を登録</h3>
+      <p class="hint" style="margin:0 0 8px">
+        研究ノートを読み書きするには、 Scrapbox の <b>Personal Access Token (鍵)</b> が必要です。 一度登録すれば、 以降この画面には出てきません (変更は <a href="#/settings" style="color:var(--primary)">設定</a> から)。
+      </p>
+
+      <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
+        <div class="bold" style="color:#0284c7; margin-bottom:4px">鍵 ってなに?</div>
+        Scrapbox のログインの代わりになる、 長いランダムな文字列です。 scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、 LabPay が 「あなたとして」 読み書きできるようになります。 パスワードより安全 (鍵単体でいつでも取り消せる) で、 期限が来ても自分で作り直せます。
+      </div>
+
+      <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
+        <div class="bold" style="color:#92400e; margin-bottom:4px">📖 鍵の作り方 (3 ステップ)</div>
+        <ol style="margin:4px 0 0 18px; padding:0">
+          <li>scrapbox.io に Google ログイン (nkmr-lab に入っている自分のアカウントで)</li>
+          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>scrapbox.io/settings/personal-access-tokens</b></a> を開く → 「Generate Token」</li>
+          <li>説明 (例: "LabPay") を入れて生成 → <b>表示された文字列をコピー</b> (1 回だけ表示)</li>
+        </ol>
+      </div>
+
+      <label class="field" style="margin-top:10px">
+        <span class="lbl">🔑 鍵 (Personal Access Token)</span>
+        <input type="password" id="rn-setup-pat" placeholder="scrapbox.io で発行した鍵を貼り付け" autocomplete="off" style="font-family:monospace; font-size:12px">
+      </label>
+      <div class="row" style="gap:6px; margin-bottom:14px">
+        <button id="rn-setup-pat-save" class="primary">鍵を保存</button>
+        <span class="hint-sm" style="margin-left:auto">保存後は末尾 6 文字だけ表示されます</span>
+      </div>
+
+      <label class="field">
+        <span class="lbl">🏷 ページ名に使う実名 <span class="hint-sm">— 空なら LabPay の表示名がそのまま使われます (中村研の Scrapbox は実名運用)</span></span>
+        <input type="text" id="rn-setup-page-handle" placeholder="例: 中村聡史" maxlength="100" style="font-size:13px">
+      </label>
+      <div class="row" style="gap:6px">
+        <button id="rn-setup-page-handle-save">名前を保存</button>
+      </div>
+
+      ${noHandle ? `<div style="margin-top:10px; padding:8px 12px; background:#fee2e2; border-radius:6px; font-size:13px; color:#7f1d1d">${escapeHtml(opts.message)}</div>` : ''}
+    </div>
+  `;
+  document.getElementById('rn-setup-pat-save')?.addEventListener('click', async () => {
+    const inp = document.getElementById('rn-setup-pat');
+    const v = inp.value.trim();
+    if (!v) { toast('鍵を入れてください'); return; }
+    const btn = document.getElementById('rn-setup-pat-save');
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = 'テスト中…';
+    try {
+      const r = await patch('/api/cosense/me/pat', { pat: v });
+      inp.value = '';
+      const tail = r.pat_tail ? ' (末尾...' + r.pat_tail + ')' : '';
+      let msg = '✅ 保存しました' + tail;
+      if (r.test && r.test.message) msg += ' / ' + r.test.message;
+      toast(msg, 6000);
+      // ノート本体に遷移
+      await loadInitial();
+    } catch (e) {
+      toast('失敗: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  });
+  document.getElementById('rn-setup-page-handle-save')?.addEventListener('click', async () => {
+    const inp = document.getElementById('rn-setup-page-handle');
+    const v = inp.value.trim();
+    try {
+      await patch('/api/cosense/me/page-handle', { handle: v });
+      toast('保存しました');
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 }
 
 async function switchDate(dateKey) {
