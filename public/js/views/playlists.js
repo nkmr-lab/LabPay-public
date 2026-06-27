@@ -572,21 +572,29 @@ function renderCurrent() {
     const ytSend = (func, args = []) => {
       try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
     };
+    // v860 #444 連続再生 が 止まる 問題 修正: autoUnmute の playVideo を 削除。
+    //   YouTube iframe は autoplay=1&mute=1 で 自動 再生 を 開始 する が、 そこに
+    //   さらに playVideo コマンド を 送ると iOS Safari の autoplay state machine
+    //   が 「ユーザ ジェスチャ なし の 強制 再生」 と みなして 停止 → ended 通知 も
+    //   来なく なり 連続 再生 が 切れて いた。 unmute と setVolume だけ 送れば
+    //   既に 再生 中 の 動画 が 音 付き に 切り替わる だけ で 済む。
+    //   タイマー は 800ms に 延長、 mute autoplay が 始まって から unmute する。
     const autoUnmute = () => {
       ytSend('unMute');
       ytSend('setVolume', [80]);
-      ytSend('playVideo');
     };
     yt?.addEventListener('load', () => {
       try {
         yt.contentWindow?.postMessage(JSON.stringify({event:'listening', id:'ytframe', channel:'widget'}), '*');
         yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
       } catch (_) {}
-      // 既に 一度 音を出した ことがあれば、 load 後 すぐに 自動で unmute
-      if (alreadyUnmuted) setTimeout(autoUnmute, 400);
+      // 既に 一度 音を出した ことがあれば、 load 後 800ms ほど 経って から 自動で unmute
+      if (alreadyUnmuted) setTimeout(autoUnmute, 800);
     });
     document.getElementById('pld-unmute')?.addEventListener('click', () => {
+      // ユーザ タップ 由来 なので playVideo も 安全 に 送れる (ジェスチャ chain あり)
       autoUnmute();
+      ytSend('playVideo');
       try { localStorage.setItem('labpay-pl-unmuted', '1'); } catch (_) {}
       document.getElementById('pld-unmute')?.remove();
     });

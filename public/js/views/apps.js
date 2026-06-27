@@ -77,6 +77,8 @@ export const APPS = [
   { id: 'exercise',      cat: 'health',  url: '#/exercise',     title: '🏃 運動 (歩数)',     desc: 'ポケットに入れて 「開始」 → 歩く / 階段。 端末センサーで歩数カウント、 ラボ内 ランキング表示。', defaultVisible: true },
   // v531 #163 行った国 / 都道府県 制覇マップ
   { id: 'regions',       cat: 'game',   url: '#/regions',       title: '🗺 制覇マップ',     desc: '行った国・都道府県をタップで登録。進捗バー (47/47都道府県や100/X国) + ラボメンバーの集計 (何人訪問してるか) も表示。', defaultVisible: true },
+  // v860 #445 ユーザが自由に作れる制覇リスト (中野区 の パン屋 / 県庁所在地 など)
+  { id: 'conquest',      cat: 'game',   url: '#/conquest',      title: '🏁 制覇 リスト',    desc: '街 の パン屋、 ラーメン屋、 温泉地 など、 自分 だけ の 制覇 対象 リスト を 作って、 達成 したら チェック。 公開 すれば みんな で アイテム を 育てられる。', defaultVisible: true },
   // v532 #161 体重 / BMI 記録 (個人ツール、 通知なし)
   { id: 'health',        cat: 'health', url: '#/health',         title: '⚖️ 体重 / BMI',    desc: '体重・身長・体脂肪 を 1 タップで記録。 BMI 自動計算 + やせ/標準/肥満 分類 + 折れ線グラフ。 完全に個人ツール (他のメンバーには見えません)。', defaultVisible: true },
   // v533 #162 筋トレ記録 + 仲間 (mutual follow)

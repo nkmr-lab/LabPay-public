@@ -558,21 +558,19 @@ function bindComposer(parentId) {
   // v485 #79 アップロード 中 は 投稿 ボタン を disable する (待たず 押すと 画像 が
   //   付与 されない 問題 を 防ぐ)。 完了 か 失敗 で 元に 戻す。
   const submitBtn = document.getElementById('po-submit');
-  imgInput?.addEventListener('change', async () => {
-    const f = imgInput.files[0];
+  // v860 #446 file input change と クリップボード paste 双方 から 同じ アップロード
+  //   フロー を 呼べる よう に 共通 関数 化。
+  const uploadComposerImage = async (f) => {
     if (!f) { composerImageUrl = null; imgStatus.textContent = ''; return; }
     imgStatus.textContent = '⏳ アップロード 中…';
     if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
-    // v498 #107 EXIF GPS が画像に乗っていれば、 navigator.geolocation より優先して使う。
-    //   アップロードと並行で読み取り。 失敗は黙殺。
-    composerImageExifCoords = null; // 新しい画像 = 古い EXIF はクリア
+    composerImageExifCoords = null;
     readExifGps(f).then(gps => {
       if (gps) {
         composerImageExifCoords = { lat: gps.lat, lng: gps.lng };
         toast(`📍 写真のEXIFから位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
       }
     }).catch(() => {});
-    // v548 #207 大きい JPEG は クライアント側で 縮小して EXIF を再注入。
     let uploadFile = f;
     try {
       const resized = await maybeResizeJpegPreserveExif(f);
@@ -580,7 +578,7 @@ function bindComposer(parentId) {
         uploadFile = resized;
         imgStatus.textContent = `⏳ 縮小して アップロード中… (${(f.size / 1024 / 1024).toFixed(1)} MB → ${(resized.size / 1024 / 1024).toFixed(1)} MB)`;
       }
-    } catch (_) { /* 縮小失敗時は そのまま元ファイルで続行 */ }
+    } catch (_) {}
     const fd = new FormData();
     fd.append('file', uploadFile);
     try {
@@ -590,7 +588,6 @@ function bindComposer(parentId) {
       });
       const j = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        // server's error 形式 = {error:{code, message}}。 message を 取り出す。
         const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
         throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
@@ -600,6 +597,27 @@ function bindComposer(parentId) {
       imgStatus.textContent = '失敗: ' + (e?.message || e);
     } finally {
       if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
+    }
+  };
+  imgInput?.addEventListener('change', () => uploadComposerImage(imgInput.files[0]));
+  // v860 #446 クリップボード (画像) を textarea に paste で アップロード。
+  //   Win の 「Print Screen + Snipping Tool」 や Mac の ⌘+Shift+4 で 撮った
+  //   スクショ を 直接 貼り 付けら れる。 画像 type で 拾えれば preventDefault して
+  //   テキスト として は 入れない。 ファイル名 は clipboard-<ts>.<ext> で 仮 命名。
+  const taBody = document.getElementById('po-body');
+  taBody?.addEventListener('paste', async (ev) => {
+    const items = ev.clipboardData?.items || [];
+    for (const it of items) {
+      if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+        const blob = it.getAsFile();
+        if (!blob) continue;
+        ev.preventDefault();
+        const ext = ((blob.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
+        const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
+        toast('📋 クリップボード 画像 を アップロード 中…');
+        await uploadComposerImage(file);
+        return;
+      }
     }
   });
   // v482 #69 起動時 に 前回 の 設定 を 復元。 ON だった なら 自動 で 位置 取得。

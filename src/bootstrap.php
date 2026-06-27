@@ -584,3 +584,4 @@ require_once __DIR__ . '/handlers/screen_shares.php';
 require_once __DIR__ . '/handlers/file_transfers.php';
 require_once __DIR__ . '/handlers/zemi_videos.php';  // v843 #426 ゼミ動画
 require_once __DIR__ . '/handlers/share.php';        // v853 共有 (タイトル+URL をメンバーに送信)
+require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇 リスト (ユーザ作成)

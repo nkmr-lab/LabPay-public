@@ -544,6 +544,10 @@ route('/orderings/new',   lazy(() => import('./views/orderings.js'), 'renderOrde
 route('/orderings/:id',   lazy(() => import('./views/orderings.js'), 'renderOrderingDetail'));
 // v531 #163 行った国 / 都道府県 制覇マップ
 route('/regions',         lazy(() => import('./views/regions.js'), 'renderRegions'));
+// v860 #445 制覇 リスト (ユーザ自由 リスト + チェック)
+route('/conquest',         lazy(() => import('./views/conquest.js'), 'renderConquest'));
+route('/conquest/new',     lazy(() => import('./views/conquest.js'), 'renderConquestNew'));
+route('/conquest/:id',     lazy(() => import('./views/conquest.js'), 'renderConquestDetail'));
 // v532 #161 体重 / BMI 記録
 route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'));
 // v533 #162 筋トレ記録 + 仲間
