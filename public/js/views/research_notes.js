@@ -14,8 +14,9 @@ let stateLocal = {
   selectedDate: null,
   visibleYm: null,
   mode: 'view',                  // 'view' | 'edit'
+  calMode: 'month',              // 'month' | 'week' v853
   loaded: { date: null, text: '', exists: false },
-  monthData: {},                 // 'YYYY.MM' → { days: {date: {line_count, char_count}} }
+  monthData: {},                 // 'YYYY.MM' → { days: {date: {line_count, char_count, preview}} }
 };
 
 export async function renderResearchNotes() {
@@ -24,13 +25,20 @@ export async function renderResearchNotes() {
     <div id="rn-fullscreen" style="box-sizing:border-box">
       <div class="row center" style="margin-bottom:8px; gap:8px">
         <h2 style="margin:0; font-size:18px; flex:1">📝 研究ノート</h2>
+        <div class="row" style="gap:4px">
+          <button class="btn" id="rn-cal-mode-month" data-on="1" style="font-size:11px; padding:2px 8px">月</button>
+          <button class="btn" id="rn-cal-mode-week"  data-on="0" style="font-size:11px; padding:2px 8px">週</button>
+        </div>
       </div>
       <div id="rn-status" hidden>
         <div class="muted">読み込み中…</div>
       </div>
-      <div id="rn-body" hidden>
-        <div id="rn-calendar" style="margin-bottom:12px"></div>
-
+      <!-- v853 PC では 左カレンダー + 右セクション の 2 列、 モバイル では 縦並び -->
+      <div id="rn-body" hidden class="rn-layout">
+        <div id="rn-calendar-wrap" class="rn-cal-pane">
+          <div id="rn-calendar"></div>
+        </div>
+        <div id="rn-section-wrap" class="rn-section-pane">
         <div class="row center" style="gap:6px; flex-wrap:wrap; margin-bottom:8px">
           <span id="rn-date-label" class="bold" style="font-size:14px"></span>
           <span style="flex:1"></span>
@@ -66,10 +74,21 @@ export async function renderResearchNotes() {
             <span id="rn-stats" class="hint-sm" style="margin-left:auto"></span>
           </div>
         </div>
+        </div><!-- /rn-section-wrap -->
       </div>
     </div>
   `;
+  document.getElementById('rn-cal-mode-month')?.addEventListener('click', () => setCalMode('month'));
+  document.getElementById('rn-cal-mode-week')?.addEventListener('click',  () => setCalMode('week'));
   await loadInitial();
+}
+
+function setCalMode(mode) {
+  if (mode !== 'month' && mode !== 'week') return;
+  stateLocal.calMode = mode;
+  document.getElementById('rn-cal-mode-month')?.classList.toggle('primary', mode === 'month');
+  document.getElementById('rn-cal-mode-week')?.classList.toggle('primary',  mode === 'week');
+  if (stateLocal.visibleYm) renderCalendar(stateLocal.visibleYm);
 }
 
 async function loadInitial() {
@@ -354,24 +373,38 @@ async function renderCalendar(ym) {
 function paintCalendar(ym, data) {
   const root = document.getElementById('rn-calendar');
   const [yy, mm] = ym.split('.').map(Number);
-  const firstDay = new Date(yy, mm - 1, 1);
-  const lastDay = new Date(yy, mm, 0);
-  const startWeekday = firstDay.getDay();
-  const daysInMonth = lastDay.getDate();
-  const cells = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateKey = `${yy}.${String(mm).padStart(2, '0')}.${String(d).padStart(2, '0')}`;
-    cells.push({ day: d, date: dateKey });
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
   const days = (data && data.days) || {};
   const today = todayJstKey();
   const headerRow = ['日','月','火','水','木','金','土'].map((w, i) =>
-    `<div style="text-align:center; font-size:11px; padding:4px 0; color:${i === 0 ? '#dc2626' : (i === 6 ? '#0284c7' : '#6b7280')}">${w}</div>`
+    `<div style="text-align:center; font-size:12px; padding:4px 0; color:${i === 0 ? '#dc2626' : (i === 6 ? '#0284c7' : '#6b7280')}">${w}</div>`
   ).join('');
-  // v838 #422 PC向け拡張: wide screen ではセルを大きくして、 セル内に preview text を表示する。
-  //   class 'rn-day' に CSS media query を当てて、 ≥900px で min-height 110px、 preview を可視に。
+  // v853 calMode === 'week' なら 選択日 の 週 (日曜始まり) の 7 日 だけ。 month は 従来の 5-6 週
+  let cells;
+  if (stateLocal.calMode === 'week') {
+    const sel = parseDateKey(stateLocal.selectedDate || `${yy}.${String(mm).padStart(2, '0')}.01`);
+    const weekStart = new Date(sel);
+    weekStart.setDate(sel.getDate() - sel.getDay());
+    cells = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      cells.push({ day: d.getDate(), date: formatDateKey(d) });
+    }
+  } else {
+    const firstDay = new Date(yy, mm - 1, 1);
+    const lastDay = new Date(yy, mm, 0);
+    const startWeekday = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+    cells = [];
+    for (let i = 0; i < startWeekday; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateKey = `${yy}.${String(mm).padStart(2, '0')}.${String(d).padStart(2, '0')}`;
+      cells.push({ day: d, date: dateKey });
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+  }
+  // v838/v853 セル: 日数字を見やすいサイズに (≥900px で 17px → 20px)、 行数バッジは撤去
+  //   preview は wide では引き続き複数行で表示。 week モードでは セル がさらに大きい。
   const cellHtml = cells.map(c => {
     if (!c) return '<div></div>';
     const dayInfo = days[c.date] || { line_count: 0, char_count: 0, preview: '' };
@@ -385,14 +418,13 @@ function paintCalendar(ym, data) {
     const textCol = lc > 5 ? '#fff' : '#1f2937';
     const subCol = lc > 5 ? 'rgba(255,255,255,0.85)' : '#4b5563';
     return `
-      <button type="button" data-rn-day="${c.date}" class="rn-day"
-        style="position:relative; padding:4px 4px 6px; border:${border}; border-radius:6px; background:${heat}; cursor:pointer; ${todayMark}font-size:12px; text-align:left; overflow:hidden"
-        title="${c.date} — ${lc}行 / ${dayInfo.char_count || 0}文字${preview ? '\n' + preview : ''}">
+      <button type="button" data-rn-day="${c.date}" class="rn-day ${stateLocal.calMode === 'week' ? 'rn-week' : ''}"
+        style="position:relative; padding:4px 4px 6px; border:${border}; border-radius:6px; background:${heat}; cursor:pointer; ${todayMark}text-align:left; overflow:hidden"
+        title="${c.date}${preview ? '\n' + preview : ''}">
         <div class="rn-day-head" style="display:flex; align-items:baseline; gap:4px">
-          <span style="font-weight:${isToday ? '700' : '500'}; color:${textCol}">${c.day}</span>
-          ${lc > 0 ? `<span class="rn-day-count" style="font-size:9px; color:${subCol}; margin-left:auto">${lc}</span>` : ''}
+          <span class="rn-day-num" style="font-weight:${isToday ? '700' : '600'}; color:${textCol}">${c.day}</span>
         </div>
-        ${preview ? `<div class="rn-day-preview" style="font-size:10px; color:${subCol}; line-height:1.3; margin-top:2px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; word-break:break-word">${escapeHtml(preview)}</div>` : ''}
+        ${preview ? `<div class="rn-day-preview" style="font-size:11px; color:${subCol}; line-height:1.35; margin-top:3px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; word-break:break-word">${escapeHtml(preview)}</div>` : ''}
       </button>`;
   }).join('');
   root.innerHTML = `

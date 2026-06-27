@@ -950,13 +950,30 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-tile .ai-tile-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 8px; font-size: 11px; color: #6b7280; }
 
 /* v838 #422 研究ノート カレンダー: PCサイズではセルを拡大して preview text を表示 */
+/* v853 day 数字を 見やすく + wide-screen で 2 column レイアウト (左カレンダー / 右セクション) */
 .rn-day { min-height: 42px; }
 .rn-day .rn-day-preview { display: none; }
+.rn-day .rn-day-num { font-size: 15px; }
 @media (min-width: 900px) {
   .rn-day { min-height: 110px; }
   .rn-day .rn-day-preview { display: -webkit-box; }
+  .rn-day .rn-day-num { font-size: 18px; }
 }
 @media (min-width: 1280px) {
   .rn-day { min-height: 130px; }
   .rn-day .rn-day-preview { -webkit-line-clamp: 6 !important; }
+  .rn-day .rn-day-num { font-size: 22px; }
+}
+.rn-day.rn-week { min-height: 200px; }
+@media (min-width: 900px) {
+  .rn-day.rn-week { min-height: 280px; }
+  .rn-day.rn-week .rn-day-preview { -webkit-line-clamp: 10 !important; }
+}
+
+/* v853 研究ノート レイアウト: モバイル縦 / wide で 左カレンダー + 右セクション の 2 列 */
+.rn-layout { display: block; }
+.rn-cal-pane { margin-bottom: 12px; }
+@media (min-width: 1100px) {
+  .rn-layout { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr); gap: 16px; align-items: start; }
+  .rn-cal-pane { position: sticky; top: 8px; margin-bottom: 0; }
 }

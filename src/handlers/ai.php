@@ -2181,9 +2181,10 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //     - deep (gpt-5 高 reasoning, ~12 検索, 30K in / 30K out): ~$0.70 = 約 100 円
 //   実 トークン / 検索 数 は usage_json に 残す ので、 実 コスト が ズレ た 場合 は 後 で 調整。
 const DEEP_RESEARCH_TIERS = [
-    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
-    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
-    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
+    // v853 価格半額化 (20/50/100 → 10/25/50)
+    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 10, 'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
+    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 25, 'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
+    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 50, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
 ];
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'

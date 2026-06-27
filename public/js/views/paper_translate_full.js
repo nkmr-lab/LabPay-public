@@ -8,6 +8,7 @@ import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { shareDialog } from '../share_to_sns.js';
 
 let settings = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -408,7 +409,10 @@ async function refresh(token) {
     const sharedTag = (isShared && !isOwner) ? '<span class="tag ok" style="font-size:11px; margin-left:6px">🌐 公開全訳</span>' : '';
     const header = `
       <div class="card">
-        <a href="#/paper-translate-full" class="hint">← 論文 全訳</a>
+        <div class="row" style="gap:6px; align-items:center">
+          <a href="#/paper-translate-full" class="hint" style="flex:1">← 論文 全訳</a>
+          <button id="pft-share-dialog" class="btn primary" style="font-size:12px; padding:3px 10px">📤 共有</button>
+        </div>
         <h2 style="margin:6px 0; font-size:17px">📑 ${escapeHtml(d.result?.title_translated || d.result?.title_original || d.pdf_name)}
           ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
           ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
@@ -489,6 +493,10 @@ async function refresh(token) {
       return;
     }
     // v807 button-style 公開 切替
+    document.getElementById('pft-share-dialog')?.addEventListener('click', () => {
+      const t = d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文全訳';
+      shareDialog('📑 論文全訳: ' + t, '#/paper-translate-full/r/' + token);
+    });
     document.getElementById('pft-share-toggle')?.addEventListener('click', async (ev) => {
       const btn = ev.currentTarget;
       const wasOn = btn.dataset.on === '1';

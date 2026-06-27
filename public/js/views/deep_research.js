@@ -5,6 +5,7 @@ import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { shareDialog } from '../share_to_sns.js';
 
 let cachedSettings = null;
 let viewState = {
@@ -275,7 +276,10 @@ async function refreshShared(token) {
       </div>` : '';
     const header = `
       <div class="card">
-        <a href="#/deep-research" class="hint">← Deep Research</a>
+        <div class="row" style="gap:6px; align-items:center">
+          <a href="#/deep-research" class="hint" style="flex:1">← Deep Research</a>
+          <button id="dr-share-dialog" class="btn" style="font-size:12px; padding:4px 8px">📤 共有</button>
+        </div>
         <h2 style="margin:6px 0">🔎 Deep Research
           ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
           ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
@@ -313,6 +317,11 @@ async function refreshShared(token) {
         <div class="card"><div class="muted">❌ 調査失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div></div>`;
       return;
     }
+    // v853 📤 共有 ダイアログ (タイトル+URL コピー / らぼったー / メンバーに送る)
+    document.getElementById('dr-share-dialog')?.addEventListener('click', () => {
+      const titleShort = (d.query_text || '').slice(0, 80);
+      shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token);
+    });
     document.getElementById('dr-share-toggle')?.addEventListener('change', async (e) => {
       try {
         await patch('/api/ai/deep_research/' + d.id, { is_shared: e.target.checked });

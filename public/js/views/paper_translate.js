@@ -7,6 +7,7 @@ import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
+import { shareDialog } from '../share_to_sns.js';
 
 let sharedPollTimer = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -508,6 +509,7 @@ async function paintResult(d, token) {
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+        <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
         <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL を コピー</button>
         ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を 開く</a>` : ''}
         ${isOwner ? `
@@ -554,6 +556,9 @@ async function paintResult(d, token) {
       }
     } catch (_) { /* fall through */ }
   }
+  document.getElementById('pt-share-dialog')?.addEventListener('click', () => {
+    shareDialog('📑 論文要約: ' + (r.title_ja || d.pdf_name), '#/paper-summary/r/' + d.share_token);
+  });
   document.getElementById('pt-copy')?.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
