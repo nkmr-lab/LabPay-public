@@ -106,7 +106,7 @@ function zemi_videos_fetch_youtube_meta(string $videoId): array {
 
 function zemi_videos_list(PDO $pdo, array $cfg): void {
     $q = trim((string)($_GET['q'] ?? ''));
-    $limit = max(1, min(200, (int)($_GET['limit'] ?? 60)));
+    $limit = max(1, min(500, (int)($_GET['limit'] ?? 300)));
     $sql = "SELECT zv.id, zv.user_id, zv.title, zv.youtube_title, zv.youtube_author,
                    zv.description, zv.youtube_id, zv.youtube_url,
                    zv.occurred_on, zv.created_at,
@@ -123,7 +123,9 @@ function zemi_videos_list(PDO $pdo, array $cfg): void {
     $st = $pdo->prepare($sql);
     $st->execute($args);
     $items = array_map('zemi_videos_row_to_array', $st->fetchAll(PDO::FETCH_ASSOC));
-    json_response(['items' => $items, 'q' => $q]);
+    // v854 「途中で止まってる」 と感じないよう、 全件 数も同時に返す
+    $totalAll = (int)$pdo->query("SELECT COUNT(*) FROM zemi_videos")->fetchColumn();
+    json_response(['items' => $items, 'q' => $q, 'total_in_db' => $totalAll]);
 }
 
 function zemi_videos_get(PDO $pdo, int $id): void {

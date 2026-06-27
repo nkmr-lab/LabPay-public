@@ -19,7 +19,7 @@ export async function renderZemiVideos() {
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:center; margin-bottom:8px">
-        <input type="search" id="zv-q" placeholder="🔍 タイトル / 説明 で検索 (空欄で最新60件)" maxlength="100"
+        <input type="search" id="zv-q" placeholder="🔍 タイトル / 説明 で検索 (空欄で全件)" maxlength="100"
                style="flex:1; font-size:14px; padding:4px 8px; border:1px solid #d1d5db; border-radius:4px">
         <button id="zv-q-go">検索</button>
       </div>
@@ -110,7 +110,9 @@ async function loadList() {
         : '<div class="muted">まだ動画が登録されていません。 上のフォームから登録してください。</div>';
       return;
     }
-    root.innerHTML = `<div class="ai-tile-grid">${items.map(renderTile).join('')}</div>`;
+    const totalAll = d.total_in_db || items.length;
+    const head = `<div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">${items.length} / 全 ${totalAll} 件 表示中${lastQuery ? ' (検索: 「' + escapeHtml(lastQuery) + '」)' : ''}</div>`;
+    root.innerHTML = head + `<div class="ai-tile-grid">${items.map(renderTile).join('')}</div>`;
   } catch (e) {
     root.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
