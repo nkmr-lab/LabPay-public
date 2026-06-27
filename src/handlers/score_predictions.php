@@ -25,8 +25,77 @@ function route_score_predictions(PDO $pdo, array $cfg, string $method, array $se
         if ($action === 'close'    && $method === 'POST') { sp_close($pdo, $uid, $gid); return; }
         if ($action === 'finalize' && $method === 'POST') { sp_finalize($pdo, $cfg, $uid, $gid); return; }
         if ($action === 'cancel'   && $method === 'POST') { sp_cancel($pdo, $uid, $gid); return; }
+        if ($action === ''         && $method === 'PATCH') { sp_edit($pdo, $uid, $gid); return; }
     }
     json_error('not_found', "no score_predictions route", 404);
+}
+
+// v866 #448 起案者 が タイトル / チーム名 / 試合日時 / 〆切 / フィー を 後 から
+//   編集 可能 に。 fee は 予想者 が 既に いれば 変更 不可 (返金 ロジック が ややこしく
+//   なるため)。 status が finished / cancelled なら 一切 編集 不可。
+function sp_edit(PDO $pdo, int $uid, int $gid): void {
+    $st = $pdo->prepare("SELECT creator_user_id, status FROM score_pred_games WHERE id=?");
+    $st->execute([$gid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'game not found', 404);
+    if ((int)$row['creator_user_id'] !== $uid) {
+        throw new ApiException('forbidden', '起案者のみ編集可', 403);
+    }
+    if (in_array($row['status'], ['finished', 'cancelled'], true)) {
+        throw new ApiException('bad_request', '終了済 / 取消済は編集できません', 400);
+    }
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('title', $body)) {
+        $t = trim((string)$body['title']);
+        if ($t === '' || mb_strlen($t) > 200) throw new ApiException('bad_request', 'title 1-200', 400);
+        $sets[] = 'title=?'; $args[] = $t;
+    }
+    if (array_key_exists('team_home', $body)) {
+        $t = trim((string)$body['team_home']);
+        if ($t === '' || mb_strlen($t) > 80) throw new ApiException('bad_request', 'team_home 1-80', 400);
+        $sets[] = 'team_home=?'; $args[] = $t;
+    }
+    if (array_key_exists('team_away', $body)) {
+        $t = trim((string)$body['team_away']);
+        if ($t === '' || mb_strlen($t) > 80) throw new ApiException('bad_request', 'team_away 1-80', 400);
+        $sets[] = 'team_away=?'; $args[] = $t;
+    }
+    if (array_key_exists('match_at', $body)) {
+        $v = trim((string)$body['match_at']);
+        if ($v === '') { $sets[] = 'match_at=NULL'; }
+        else {
+            try {
+                $dt = new DateTime($v);
+                $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                $sets[] = 'match_at=?'; $args[] = $dt->format('Y-m-d H:i:s');
+            } catch (Throwable $_) { throw new ApiException('bad_request', 'match_at 形式不正', 400); }
+        }
+    }
+    if (array_key_exists('deadline_at', $body)) {
+        $v = trim((string)$body['deadline_at']);
+        if ($v === '') { $sets[] = 'deadline_at=NULL'; }
+        else {
+            try {
+                $dt = new DateTime($v);
+                $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                $sets[] = 'deadline_at=?'; $args[] = $dt->format('Y-m-d H:i:s');
+            } catch (Throwable $_) { throw new ApiException('bad_request', 'deadline_at 形式不正', 400); }
+        }
+    }
+    if (array_key_exists('fee', $body)) {
+        $cnt = (int)$pdo->query("SELECT COUNT(*) FROM score_pred_entries WHERE game_id=$gid")->fetchColumn();
+        if ($cnt > 0) throw new ApiException('bad_request', 'すでに予想者がいるためフィーは変更できません', 400);
+        $fee = (int)$body['fee'];
+        if ($fee < SP_MIN_FEE || $fee > SP_MAX_FEE) {
+            throw new ApiException('bad_request', sprintf('fee %d-%d', SP_MIN_FEE, SP_MAX_FEE), 400);
+        }
+        $sets[] = 'fee=?'; $args[] = $fee;
+    }
+    if (!$sets) { json_response(['ok' => true, 'unchanged' => true]); return; }
+    $args[] = $gid;
+    $pdo->prepare("UPDATE score_pred_games SET " . implode(', ', $sets) . " WHERE id=?")->execute($args);
+    json_response(['ok' => true]);
 }
 
 function sp_list(PDO $pdo, int $uid): void {

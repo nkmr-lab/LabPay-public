@@ -4,7 +4,7 @@
 //   /#/score-predictions/:id      詳細 (予想 / 結果開示)
 
 import { escapeHtml, navigate } from '../router.js';
-import { get, post } from '../api.js';
+import { get, post, patch } from '../api.js';
 import { toast, state } from '../app.js';
 import { shareToSns } from '../share_to_sns.js';
 
@@ -250,13 +250,49 @@ function paintSpDetail(g) {
       </div>
     </div>` : '';
 
+  // v866 #448 起案者 が タイトル / チーム名 / 試合日時 / 〆切 / フィー を 後 から
+  //   編集 でき る。 fee は エントリー が ある と 変更 不可 (サーバ で 弾く)。
+  const fmtForLocal = (s) => {
+    if (!s) return '';
+    // 「2026-06-27 19:00:00」 形式 → 「2026-06-27T19:00」
+    return String(s).replace(' ', 'T').slice(0, 16);
+  };
   const creatorBlock = (g.is_creator && (g.status === 'open' || g.status === 'closed')) ? `
     <div class="card">
       <h3 style="margin:0 0 4px">起案者メニュー</h3>
       <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="btn" id="sp-open-edit">✏️ 編集</button>
         ${g.status === 'open' ? `<button class="btn" id="sp-close">受付を締め切る</button>` : ''}
         <button class="btn primary" id="sp-open-finalize">結果を登録する…</button>
         <button class="btn" id="sp-cancel" style="color:#c00">キャンセル (全員返金)</button>
+      </div>
+      <div id="sp-edit-form" hidden style="margin-top:12px; padding:10px; border:1px solid var(--line); border-radius:8px">
+        <div class="bold" style="margin-bottom:6px">✏️ 編集</div>
+        <label style="display:block; font-size:13px; margin-top:6px">タイトル</label>
+        <input id="sp-edit-title" type="text" maxlength="200" value="${escapeHtml(g.title || '')}" style="width:100%; padding:6px; border:1px solid var(--line); border-radius:6px">
+        <div style="display:flex; gap:8px; margin-top:6px">
+          <label style="flex:1; font-size:13px">
+            ホーム
+            <input id="sp-edit-home" type="text" maxlength="80" value="${escapeHtml(g.team_home || '')}" style="width:100%; padding:6px; border:1px solid var(--line); border-radius:6px">
+          </label>
+          <label style="flex:1; font-size:13px">
+            アウェイ
+            <input id="sp-edit-away" type="text" maxlength="80" value="${escapeHtml(g.team_away || '')}" style="width:100%; padding:6px; border:1px solid var(--line); border-radius:6px">
+          </label>
+        </div>
+        <label style="display:block; font-size:13px; margin-top:6px">試合 日時 (任意)</label>
+        <input id="sp-edit-match" type="datetime-local" value="${fmtForLocal(g.match_at)}" style="padding:6px; border:1px solid var(--line); border-radius:6px">
+        <label style="display:block; font-size:13px; margin-top:6px">〆切 日時 (任意)</label>
+        <input id="sp-edit-deadline" type="datetime-local" value="${fmtForLocal(g.deadline_at)}" style="padding:6px; border:1px solid var(--line); border-radius:6px">
+        <label style="display:block; font-size:13px; margin-top:6px">
+          フィー (pt)
+          ${g.entries && g.entries.length ? '<span class="hint-sm" style="color:#c00"> ※ すでに 予想者 が いる ので 変更 不可</span>' : ''}
+        </label>
+        <input id="sp-edit-fee" type="number" min="1" max="500" value="${g.fee}" ${g.entries && g.entries.length ? 'disabled' : ''} style="padding:6px; border:1px solid var(--line); border-radius:6px; width:120px">
+        <div style="margin-top:10px; display:flex; gap:8px">
+          <button class="btn primary" id="sp-edit-save">保存</button>
+          <button class="btn" id="sp-edit-cancel">取消</button>
+        </div>
       </div>
       <div id="sp-finalize-form" hidden style="margin-top:12px; padding:10px; border:1px solid var(--line); border-radius:8px">
         <div class="bold" style="margin-bottom:6px">最終 スコア</div>
@@ -341,6 +377,33 @@ function paintSpDetail(g) {
     document.getElementById('sp-open-finalize')?.addEventListener('click', () => {
       const form = document.getElementById('sp-finalize-form');
       form.hidden = !form.hidden;
+    });
+    // v866 #448 編集 フォーム
+    document.getElementById('sp-open-edit')?.addEventListener('click', () => {
+      const form = document.getElementById('sp-edit-form');
+      form.hidden = !form.hidden;
+    });
+    document.getElementById('sp-edit-cancel')?.addEventListener('click', () => {
+      document.getElementById('sp-edit-form').hidden = true;
+    });
+    document.getElementById('sp-edit-save')?.addEventListener('click', async () => {
+      const payload = {
+        title:       document.getElementById('sp-edit-title').value.trim(),
+        team_home:   document.getElementById('sp-edit-home').value.trim(),
+        team_away:   document.getElementById('sp-edit-away').value.trim(),
+        match_at:    document.getElementById('sp-edit-match').value,
+        deadline_at: document.getElementById('sp-edit-deadline').value,
+      };
+      const feeEl = document.getElementById('sp-edit-fee');
+      if (feeEl && !feeEl.disabled) payload.fee = parseInt(feeEl.value, 10);
+      if (!payload.title || !payload.team_home || !payload.team_away) {
+        toast('タイトル / チーム名 を 入力 してください'); return;
+      }
+      try {
+        await patch(`/api/score_predictions/games/${g.id}`, payload);
+        toast('✏️ 編集 を 保存 しました');
+        renderScorePredictionDetail({ params: { id: g.id } });
+      } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
     document.getElementById('sp-finalize')?.addEventListener('click', async () => {
       const home = parseInt(document.getElementById('sp-fin-home').value, 10);
