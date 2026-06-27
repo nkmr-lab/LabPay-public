@@ -510,6 +510,10 @@ function startPlayback(p, startIdx, shuffle) {
       : p.items.map((_, i) => i);
     detailState.orderIdx = detailState.order.indexOf(p.items.findIndex(x => x.id === cur));
     if (detailState.orderIdx < 0) detailState.orderIdx = 0;
+    // v863 並び が 変わる → YT playlist iframe を 強制 再構築
+    detailState._ytIframe = null;
+    detailState._ytPlaylistKey = null;
+    renderCurrent();
   };
   document.getElementById('pld-auto').onchange = (ev) => { detailState.autoNext = ev.target.checked; };
   renderCurrent();
@@ -524,6 +528,19 @@ function currentItemId() {
 
 function stepPlayback(delta) {
   if (!detailState) return;
+  // v863 #444 全 曲 YouTube モード では iframe を 再 ロード せず YT API の
+  //   nextVideo / previousVideo で 切替 → user gesture chain が 切れず、 iOS でも
+  //   1 タップ で 以降 全曲 音 付き 連続 再生 が 可能 に なる。
+  if (detailState._ytIframe && document.body.contains(detailState._ytIframe)) {
+    const cmd = delta > 0 ? 'nextVideo' : 'previousVideo';
+    try { detailState._ytIframe.contentWindow?.postMessage(JSON.stringify({event:'command', func: cmd, args: []}), '*'); } catch (_) {}
+    let next = detailState.orderIdx + delta;
+    if (next < 0) next = detailState.order.length - 1;
+    if (next >= detailState.order.length) next = 0;
+    detailState.orderIdx = next;
+    updateNowPlayingLabel();
+    return;
+  }
   let next = detailState.orderIdx + delta;
   if (next < 0) next = detailState.order.length - 1;
   if (next >= detailState.order.length) next = 0;
@@ -531,12 +548,98 @@ function stepPlayback(delta) {
   renderCurrent();
 }
 
+function updateNowPlayingLabel() {
+  if (!detailState) return;
+  const now = document.getElementById('pld-now');
+  const it = detailState.items[detailState.order[detailState.orderIdx]];
+  if (now && it) {
+    now.innerHTML = `<span class="bold">${escapeHtml(it.title)}</span>
+      <span class="muted" style="font-size:12px">  ・ ${detailState.orderIdx + 1} / ${detailState.order.length}</span>`;
+  }
+}
+
 function closePlayer() {
+  if (detailState) { detailState._ytIframe = null; detailState._ytPlaylistKey = null; }
   detailState = null; ytPlayer = null;
   const card = document.getElementById('pld-player-card');
   if (card) { card.hidden = true; }
   const root = document.getElementById('pld-player');
   if (root) root.innerHTML = '';
+}
+
+// v863 #444 全 曲 YouTube プレイリスト 用 の 一括 iframe レンダ。 iframe 内 に
+//   playlist パラメータ で 全 曲 ID を 渡し、 次 / 前 は YT IFrame API の
+//   nextVideo / previousVideo で 切替 (= iframe 再 生成 なし → ジェスチャ chain 維持)。
+//   1 タップ で 音 を 出した あと は 同じ iframe 内 で 連続 再生 されるので iOS でも
+//   2 曲目 以降 自動 で 音 付き 再生 が 続く。
+function renderYouTubeBatchPlayer(root) {
+  const ids = detailState.order.map(i => parseUrlMeta(detailState.items[i].url).id);
+  const playlistKey = ids.join(',');
+  const curIdx = detailState.orderIdx;
+
+  // 既存 iframe + 同じ 並び なら playVideoAt で seek するだけ (= iframe 再生成 しない)
+  if (detailState._ytIframe && document.body.contains(detailState._ytIframe) && detailState._ytPlaylistKey === playlistKey) {
+    try { detailState._ytIframe.contentWindow?.postMessage(JSON.stringify({event:'command', func:'playVideoAt', args:[curIdx]}), '*'); } catch (_) {}
+    return;
+  }
+
+  const firstId = ids[0];
+  const restIds = ids.slice(1).join(',');
+  // mute=1 で 起動 → 一度 ユーザ タップ で unMute → 同じ iframe 内 で 連続 再生 が
+  //   続く 限り 音 は 出 続ける (iOS でも sticky)。 別 プレイリスト を 開いた 直後 は
+  //   新 iframe な ので もう 一度 タップ 必要 (これ は 物理的 制約)。
+  const url = `https://www.youtube.com/embed/${firstId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1${restIds ? '&playlist=' + restIds : ''}`;
+
+  root.innerHTML = `
+    <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
+      <iframe id="ytframe" src="${url}"
+              allow="autoplay; encrypted-media; fullscreen" allowfullscreen
+              frameborder="0"
+              style="position:absolute; inset:0; width:100%; height:100%"></iframe>
+    </div>
+    <button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップ で 音 を 出す (1 回 だけ で 以降 全曲 OK)</button>
+    <div class="row" style="gap:6px; margin-top:6px; font-size:12px; flex-wrap:wrap">
+      <button id="pld-seek-back" class="btn" style="font-size:12px; padding:3px 8px">⏪ 10秒</button>
+      <button id="pld-seek-fwd"  class="btn" style="font-size:12px; padding:3px 8px">10秒 ⏩</button>
+    </div>`;
+
+  const yt = document.getElementById('ytframe');
+  detailState._ytIframe = yt;
+  detailState._ytPlaylistKey = playlistKey;
+  const ytSend = (func, args = []) => {
+    try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
+  };
+
+  yt?.addEventListener('load', () => {
+    try {
+      yt.contentWindow?.postMessage(JSON.stringify({event:'listening', id:'ytframe', channel:'widget'}), '*');
+      yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
+    } catch (_) {}
+    // 開始 位置 が 0 でなければ playVideoAt(curIdx) で 飛ばす
+    if (curIdx > 0) setTimeout(() => ytSend('playVideoAt', [curIdx]), 600);
+  });
+
+  document.getElementById('pld-unmute')?.addEventListener('click', () => {
+    ytSend('unMute');
+    ytSend('setVolume', [80]);
+    ytSend('playVideo');
+    document.getElementById('pld-unmute')?.remove();
+    try { localStorage.setItem('labpay-pl-unmuted', '1'); } catch (_) {}
+  });
+
+  document.getElementById('pld-seek-back')?.addEventListener('click', () => {
+    const cur = detailState?._ytCurSec || 0;
+    ytSend('seekTo', [Math.max(0, cur - 10), true]);
+  });
+  document.getElementById('pld-seek-fwd')?.addEventListener('click', () => {
+    const cur = detailState?._ytCurSec || 0;
+    ytSend('seekTo', [cur + 10, true]);
+  });
+}
+
+function isAllYouTubePlaylist() {
+  if (!detailState || !detailState.items.length) return false;
+  return detailState.items.every(x => parseUrlMeta(x.url).type === 'youtube');
 }
 
 function renderCurrent() {
@@ -546,6 +649,13 @@ function renderCurrent() {
   if (!it) { root.innerHTML = '<div class="muted">空</div>'; return; }
   now.innerHTML = `<span class="bold">${escapeHtml(it.title)}</span>
     <span class="muted" style="font-size:12px">  ・ ${detailState.orderIdx + 1} / ${detailState.order.length}</span>`;
+  // v863 #444 全 曲 YouTube なら 1 iframe + playlist パラメータ で 一括 ロード →
+  //   曲 切替 で iframe を 再生成 し ない の で user gesture chain が 維持 され、
+  //   iOS Safari でも 1 回 タップ で 以降 全曲 音 付き 連続再生 が 可能。
+  if (isAllYouTubePlaylist()) {
+    renderYouTubeBatchPlayer(root);
+    return;
+  }
   const meta = parseUrlMeta(it.url);
   if (meta.type === 'youtube') {
     // YouTube IFrame API: enablejsapi=1 + listen for 'onStateChange' postMessage
@@ -655,16 +765,29 @@ function shuffleArr(a) {
   return arr;
 }
 
-// YouTube IFrame postMessage listener — 「video ended (state=0)」 で 自動次へ
-// (autoNext ON のとき)。 YT は postMessage で {event:'onStateChange', info:0} を
-// 親に投げてくれる (enablejsapi=1 設定時)。
+// YouTube IFrame postMessage listener — ended → 自動 次へ、 infoDelivery → curSec キャッシュ
+//   v863 #444 全曲 YouTube モード では YT 内部 が 次 動画 へ 自動 進む の で、 親 は
+//   orderIdx + UI ラベル だけ 更新 (iframe は 再生成 しない = ジェスチャ chain 保持)。
 window.addEventListener('message', (ev) => {
-  if (!detailState?.autoNext) return;
+  if (!detailState) return;
   if (typeof ev.data !== 'string' && typeof ev.data !== 'object') return;
   try {
     const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+    if (data?.event === 'infoDelivery' && data.info && typeof data.info.currentTime === 'number') {
+      detailState._ytCurSec = data.info.currentTime;
+    }
     if (data?.event === 'onStateChange' && data.info === 0) {
-      stepPlayback(1);
+      if (!detailState.autoNext) return;
+      if (detailState._ytIframe && document.body.contains(detailState._ytIframe)) {
+        // YT 内部 で 次曲 へ 自動進行 → 親 は orderIdx と ラベル だけ 同期
+        let next = detailState.orderIdx + 1;
+        if (next >= detailState.order.length) next = 0;
+        detailState.orderIdx = next;
+        detailState._ytCurSec = 0;
+        updateNowPlayingLabel();
+      } else {
+        stepPlayback(1);
+      }
     }
   } catch (_) { /* swallow */ }
 });
