@@ -111,6 +111,16 @@ body.app-fullscreen nav#tabs,
 body.app-fullscreen #install-banner { display: none !important; }
 body.app-fullscreen main#app { max-width: none; padding: 8px 10px 12px 10px; }
 body.app-fullscreen { background: #fff; }
+/* v867 #449 フルスクリーン系 ページ で カード が 画面 横 一杯 まで 伸びて、 中身 の
+   長い URL や 英単語 が wrap せず 右に 溢れて 横スクロール が 出ていた。 直接 の 子
+   (主に カード) を 1400px の センター 揃え に + .card に overflow-wrap を 効かせて、
+   PC でも 適切な 横幅 + 長文字列 の 折り返し を 強制 する。 */
+body.app-fullscreen main#app > * {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.card { overflow-wrap: anywhere; word-break: break-word; }
 
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
