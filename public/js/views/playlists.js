@@ -553,7 +553,17 @@ function renderCurrent() {
     //   無音 自動 再生 → 「🔊 タップ で 音 を 出す」 ボタン で 1 回 タップ させて unMute
     //   コマンド を 送る。 1 回 タップ し て 以降 は 連続 再生 も 音 付き で 続く。
     // v857 #443 一度音を出したら localStorage で 記憶、 以降は 自動 unmute で 「🔊 タップ」 ボタン 出さない
-    const alreadyUnmuted = (() => { try { return localStorage.getItem('labpay-pl-unmuted') === '1'; } catch { return false; } })();
+    // v862 #444 続報 iOS Safari は autoplay 中 の iframe に unMute を 送る だけ で
+    //   「user gesture 無し の 音 付き 再生」 と みなして 停止 → 連続 再生 が 死ぬ。
+    //   sticky autoplay 許可 は 親 origin 単位 で、 youtube-nocookie iframe には 引き継が
+    //   ない の で、 iOS では 各 曲 で 1 タップ 必須 が 物理的 制約。 ここ では iOS 判定 で
+    //   alreadyUnmuted を 強制 false にして、 「毎回 タップ」 と 引き換え に 連続 再生 を
+    //   優先 する。 PC / Android Chrome は 引き続き 自動 unmute。
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+      || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+    const alreadyUnmuted = !isIOS && (() => {
+      try { return localStorage.getItem('labpay-pl-unmuted') === '1'; } catch { return false; }
+    })();
     root.innerHTML = `
       <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
         <iframe id="ytframe" src="${meta.embed}"
