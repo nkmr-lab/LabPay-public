@@ -102,6 +102,11 @@ export async function renderConquestDetail({ id }) {
   let d;
   try { d = await get('/api/conquest/lists/' + id); }
   catch (e) { app.innerHTML = `<div class="card muted">読み込み 失敗: ${escapeHtml(e.message)}</div>`; return; }
+  // v865 #447 念のため API レスポンス が 期待形 でない 場合 の 防御
+  if (!d || !Array.isArray(d.items)) {
+    app.innerHTML = `<div class="card muted">読み込み 失敗: 無効 な レスポンス</div>`;
+    return;
+  }
   const pct = d.items.length > 0 ? Math.round(d.my_visit_count * 100 / d.items.length) : 0;
   const visTag = d.visibility === 'private'
     ? '<span class="tag muted">🔒 非公開</span>'
