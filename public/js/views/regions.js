@@ -128,29 +128,53 @@ function paint() {
 }
 
 // v536 #192 都道府県を地理位置っぽい配置で並べた 「日本地図風」 表示。
-//   visited は塗り、 未訪は薄色。 タップでトグル。
+//   v858 #442 div grid 版 を 廃止 し、 SVG ベクター 版 (renderJpMapSvg) に 一本化。
+//   背景 に 日本列島 シルエット (海 + 北海道/本州/四国/九州/沖縄) を 描画 し、
+//   その 上 に 各 都道府県 を ベクター circle + ラベル で プロット。
+//   ベクター な ので 拡大 縮小 でも 滲まず、 PC では 大きく、 スマホ では 横幅 100% で 描画。
 function renderJpMap() {
-  // 14 cols × 16 rows
-  const COLS = 14;
-  const ROWS = 16;
+  const SVG_W = 400, SVG_H = 540;
+  const CELL_GAP = 26;
+  const OFFSET_X = 18, OFFSET_Y = 18;
   const prefMap = Object.fromEntries(PREFECTURES.map(p => [p.code, p]));
-  // 名前→short label (2 文字目までで認識しやすく)
-  const shortLabel = (name) => name.replace(/[都道府県]$/, '');
-  const cells = JP_MAP_LAYOUT.map(([col, row, code]) => {
-    const p = prefMap[code];
-    if (!p) return '';
+  const shortLabel = (name) => name.replace(/[都道府県]$/, '').slice(0, 2);
+
+  // 日本列島 を ざっくり 4 つ の 多角形 + 沖縄 楕円 で 近似。 正確 な 地図 では ない が、
+  // 「海 と 島 の 形 が ある」 ことで 「ベクター な 地図」 として 機能 する。
+  // 後 で 真 の GeoJSON 由来 polygon に 差し替え 予定 (別 バッチ)。
+  const islandLayer = `
+    <path d="M 250 30 Q 295 22, 340 38 Q 372 58, 372 95 Q 352 132, 305 142 Q 252 132, 232 102 Q 232 60, 250 30 Z"
+          fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>
+    <path d="M 70 230 Q 105 198, 165 200 Q 232 222, 272 248 Q 322 254, 360 282 Q 380 320, 348 350 Q 290 362, 232 352 Q 168 342, 110 312 Q 58 282, 70 230 Z"
+          fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>
+    <path d="M 170 380 Q 200 372, 240 376 Q 258 390, 248 408 Q 220 414, 190 405 Q 172 396, 170 380 Z"
+          fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>
+    <path d="M 60 372 Q 100 366, 132 380 Q 152 412, 130 452 Q 100 472, 70 460 Q 40 432, 50 402 Q 55 380, 60 372 Z"
+          fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>
+    <ellipse cx="40" cy="492" rx="24" ry="8" fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>`;
+
+  const dots = JP_MAP_LAYOUT.map(([col, row, code]) => {
+    const p = prefMap[code]; if (!p) return '';
     const visited = visitedSet.has(`prefecture:${code}`);
-    const bg = visited ? 'var(--primary, #4a106d)' : '#fafafa';
-    const fg = visited ? '#fff' : '#888';
-    const border = visited ? 'var(--primary, #4a106d)' : '#ddd';
-    return `<button class="rg-map-cell" data-code="${code}" title="${escapeHtml(p.name)}"
-              style="grid-column:${col + 1}; grid-row:${row + 1}; padding:0; border:1.5px solid ${border}; background:${bg}; color:${fg}; border-radius:4px; font-size:9px; font-weight:${visited ? '700' : '500'}; cursor:pointer; overflow:hidden; line-height:1; text-align:center; min-height:0; transition:transform 0.1s">${escapeHtml(shortLabel(p.name))}</button>`;
+    const cx = col * CELL_GAP + OFFSET_X;
+    const cy = row * CELL_GAP + OFFSET_Y;
+    const fill = visited ? '#4a106d' : 'rgba(255,255,255,0.92)';
+    const stroke = visited ? '#4a106d' : '#a07090';
+    const labelColor = visited ? '#fff' : '#5a3068';
+    return `
+      <g class="rg-map-cell" data-code="${code}" style="cursor:pointer">
+        <title>${escapeHtml(p.name)}</title>
+        <circle cx="${cx}" cy="${cy}" r="11.5" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <text x="${cx}" y="${cy + 3.3}" text-anchor="middle" font-size="9" font-weight="${visited ? '700' : '500'}" fill="${labelColor}" pointer-events="none">${escapeHtml(shortLabel(p.name))}</text>
+      </g>`;
   }).join('');
+
   return `
-    <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #e0f2fe, #f0f9ff); border-radius:10px">
-      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (スタイライズ — タップで トグル)</div>
-      <div style="display:grid; grid-template-columns:repeat(${COLS}, minmax(0, 1fr)); grid-template-rows:repeat(${ROWS}, 26px); gap:2px; max-width:420px; margin:0 auto">
-        ${cells}
-      </div>
+    <div style="margin-top:14px; padding:8px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (SVG ベクター — タップで トグル)</div>
+      <svg viewBox="0 0 ${SVG_W} ${SVG_H}" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; max-width:520px; margin:0 auto">
+        ${islandLayer}
+        ${dots}
+      </svg>
     </div>`;
 }
