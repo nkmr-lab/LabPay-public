@@ -121,6 +121,21 @@ body.app-fullscreen main#app > * {
   margin-right: auto;
 }
 .card { overflow-wrap: anywhere; word-break: break-word; }
+/* v868 #450 論文要約 / 全訳 系 ページ で 「右 に 溢れる」 件 の 強化 防御。
+   v867 で 全カード に 1400px max-width + overflow-wrap を 入れた が、 paper 系
+   ページ 内 の フォーム input や 詳細 ページ の 長い 行 が なお 親 を 押し広げて
+   いた。 paper 系 限定 で input / select / textarea を max-width:100% に
+   強制、 .row 系 を flex-wrap:wrap + 子 に min-width:0 を 入れて 確実 に 親 内
+   で 収まる ように。 */
+body[data-view^="paper-"] main#app input,
+body[data-view^="paper-"] main#app select,
+body[data-view^="paper-"] main#app textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+body[data-view^="paper-"] main#app .row { flex-wrap: wrap; }
+body[data-view^="paper-"] main#app .row > * { min-width: 0; }
+body[data-view^="paper-"] main#app .card * { max-width: 100%; }
 
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
