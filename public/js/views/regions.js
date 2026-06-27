@@ -11,6 +11,22 @@ import { PREFECTURES, COUNTRIES, JP_MAP_LAYOUT } from '../data/regions_data.js';
 let visitedSet = null;  // 'kind:code' Set
 let labStats   = { country: {}, prefecture: {} };
 let activeTab  = 'prefecture';
+// v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 47 都道府県 polygon SVG を
+//   /img/jp-prefectures.svg に 配置、 ここ で 1 回 fetch + parse して キャッシュ。
+//   paint() の renderJpMap で cloneNode して 色 を 塗り替える。
+let cachedJpSvgEl = null;
+
+async function ensureJpSvg() {
+  if (cachedJpSvgEl) return;
+  try {
+    const r = await fetch('/img/jp-prefectures.svg', { cache: 'force-cache' });
+    if (!r.ok) throw new Error('地図 SVG fetch 失敗 (' + r.status + ')');
+    const txt = await r.text();
+    const wrap = document.createElement('div');
+    wrap.innerHTML = txt;
+    cachedJpSvgEl = wrap.querySelector('svg');
+  } catch (_) { cachedJpSvgEl = null; }
+}
 
 export async function renderRegions() {
   const app = document.getElementById('app');
@@ -39,6 +55,7 @@ export async function renderRegions() {
     const [v, s] = await Promise.all([
       get('/api/regions/visited'),
       get('/api/regions/stats'),
+      ensureJpSvg(),
     ]);
     visitedSet = new Set((v.items || []).map(it => `${it.kind}:${it.code}`));
     labStats   = s || { country: {}, prefecture: {} };
@@ -127,12 +144,45 @@ function paint() {
   });
 }
 
-// v536 #192 都道府県を地理位置っぽい配置で並べた 「日本地図風」 表示。
-//   v858 #442 div grid 版 を 廃止 し、 SVG ベクター 版 (renderJpMapSvg) に 一本化。
-//   背景 に 日本列島 シルエット (海 + 北海道/本州/四国/九州/沖縄) を 描画 し、
-//   その 上 に 各 都道府県 を ベクター circle + ラベル で プロット。
-//   ベクター な ので 拡大 縮小 でも 滲まず、 PC では 大きく、 スマホ では 横幅 100% で 描画。
+// v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 実 polygon SVG を
+//   使って 「本物 の 日本地図」 を 描画。 各 prefecture g に visited 色 を 塗り、
+//   既存 の .rg-map-cell click handler に 乗せて トグル。 SVG は ensureJpSvg で
+//   1 回 fetch 済み、 ここ では cloneNode して 状態 反映 だけ。
 function renderJpMap() {
+  if (cachedJpSvgEl) return renderJpMapSvg();
+  return renderJpMapFallback();
+}
+
+function renderJpMapSvg() {
+  const svg = cachedJpSvgEl.cloneNode(true);
+  svg.removeAttribute('class');
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.setAttribute('style', 'display:block; width:100%; max-width:560px; margin:0 auto');
+  // 各 都道府県 g に 色 + class + dataset.code を 仕込む。
+  // geolonia は data-code="1" 〜 "47" (ゼロパディング なし)、 LabPay は 'JP-01' 〜 'JP-47'。
+  svg.querySelectorAll('g.prefecture').forEach(g => {
+    const num = g.getAttribute('data-code');
+    if (!num) return;
+    const code = 'JP-' + String(num).padStart(2, '0');
+    const visited = visitedSet.has(`prefecture:${code}`);
+    g.setAttribute('fill', visited ? '#4a106d' : '#ffffff');
+    g.setAttribute('stroke', visited ? '#2a063e' : '#a0a0a0');
+    g.setAttribute('stroke-width', visited ? '1.2' : '0.8');
+    g.style.cursor = 'pointer';
+    g.classList.add('rg-map-cell');
+    g.setAttribute('data-code', code);
+  });
+  return `
+    <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (タップで トグル) — 地図 © <a href="https://github.com/geolonia/japanese-prefectures" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Geolonia</a> (MIT)</div>
+      ${svg.outerHTML}
+    </div>`;
+}
+
+// fetch 失敗 時 の 退避 (旧 14×16 ダミー 配置 を 簡素 SVG で 描画)。
+//   通常 は 発火 しない。 オフライン 初回 で SVG キャッシュ が 無い 等。
+function renderJpMapFallback() {
   const SVG_W = 400, SVG_H = 540;
   const CELL_GAP = 26;
   const OFFSET_X = 18, OFFSET_Y = 18;
