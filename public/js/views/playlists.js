@@ -9,6 +9,8 @@ import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';
 import { fmtRelative, tag } from '../format.js';
+// v857 #443 共有 ダイアログ (タイトル + URL コピー / SNS 投稿 / ユーザ へ 送信) を 再利用
+import { shareDialog } from '../share_to_sns.js';
 
 // v543 #200 「ボカロ」 を 追加
 const GENRES = ['J-POP','洋楽','K-POP','アニメ','ボカロ','ジャズ','クラシック','ロック',
@@ -340,8 +342,13 @@ function renderDetailHead(p) {
       <button id="pld-like" class="btn">${heart} ${p.like_count} お気に入り</button>
       <button id="pld-play0" class="primary" ${p.items.length ? '' : 'disabled'}>▶ 再生</button>
       <button id="pld-shuffle0" class="btn" ${p.items.length ? '' : 'disabled'}>🔀 シャッフル再生</button>
+      <button id="pld-share" class="btn">📤 共有</button>
       ${p.is_mine ? `<a class="btn" href="#/playlists/${p.id}/edit">✏️ 編集</a>` : ''}
     </div>`;
+  // v857 #443 共有 (タイトル+URL コピー、 SNS 投稿、 ユーザ へ 直接 送信)
+  document.getElementById('pld-share')?.addEventListener('click', () => {
+    shareDialog('🎵 ' + p.title, '#/playlists/' + p.id);
+  });
   document.getElementById('pld-like').addEventListener('click', async () => {
     try {
       const r = await post(`/api/playlists/${p.id}/like`, {});
@@ -545,6 +552,8 @@ function renderCurrent() {
     // v820 #415 スマホ で の 音 付き 自動 再生 は ブラウザ に 拒否 される ため、 mute=1 で
     //   無音 自動 再生 → 「🔊 タップ で 音 を 出す」 ボタン で 1 回 タップ させて unMute
     //   コマンド を 送る。 1 回 タップ し て 以降 は 連続 再生 も 音 付き で 続く。
+    // v857 #443 一度音を出したら localStorage で 記憶、 以降は 自動 unmute で 「🔊 タップ」 ボタン 出さない
+    const alreadyUnmuted = (() => { try { return localStorage.getItem('labpay-pl-unmuted') === '1'; } catch { return false; } })();
     root.innerHTML = `
       <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
         <iframe id="ytframe" src="${meta.embed}"
@@ -552,21 +561,53 @@ function renderCurrent() {
                 frameborder="0"
                 style="position:absolute; inset:0; width:100%; height:100%"></iframe>
       </div>
-      <button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップ で 音 を 出す</button>`;
+      ${alreadyUnmuted ? '' : '<button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップ で 音 を 出す</button>'}
+      <!-- v857 #443 シーク (10 秒 戻し / 進み) と 音量 トグル を 簡単操作 で 提供 -->
+      <div class="row" style="gap:6px; margin-top:6px; font-size:12px; flex-wrap:wrap">
+        <button id="pld-seek-back"  class="btn" style="font-size:12px; padding:3px 8px">⏪ 10秒</button>
+        <button id="pld-seek-fwd"   class="btn" style="font-size:12px; padding:3px 8px">10秒 ⏩</button>
+        <button id="pld-mute-tgl"   class="btn" style="font-size:12px; padding:3px 8px">🔈 音量 ON / OFF</button>
+      </div>`;
     const yt = document.getElementById('ytframe');
+    const ytSend = (func, args = []) => {
+      try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
+    };
+    const autoUnmute = () => {
+      ytSend('unMute');
+      ytSend('setVolume', [80]);
+      ytSend('playVideo');
+    };
     yt?.addEventListener('load', () => {
       try {
         yt.contentWindow?.postMessage(JSON.stringify({event:'listening', id:'ytframe', channel:'widget'}), '*');
         yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
       } catch (_) {}
+      // 既に 一度 音を出した ことがあれば、 load 後 すぐに 自動で unmute
+      if (alreadyUnmuted) setTimeout(autoUnmute, 400);
     });
     document.getElementById('pld-unmute')?.addEventListener('click', () => {
-      try {
-        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'unMute', args:[]}), '*');
-        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'setVolume', args:[80]}), '*');
-        yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func:'playVideo', args:[]}), '*');
-        document.getElementById('pld-unmute')?.remove();
-      } catch (_) {}
+      autoUnmute();
+      try { localStorage.setItem('labpay-pl-unmuted', '1'); } catch (_) {}
+      document.getElementById('pld-unmute')?.remove();
+    });
+    // 現在 の 再生 位置 を 取得 する のは getCurrentTime コマンド → 別 message で 返って くる
+    //   ので、 ここ では 単純に relative seek (seekTo (current+/-10)) ではなく、 ヒューリスティック
+    //   に 「現在位置 から +/-10 秒」 を 実現 する。 YT IFrame API の seekTo は 絶対 値 のみ なので、
+    //   getCurrentTime を 取れる よう addEventListener で 受信 する。
+    let curSec = 0;
+    window.__plYtCurrent = (sec) => { curSec = Number(sec) || 0; };
+    document.getElementById('pld-seek-back')?.addEventListener('click', () => {
+      ytSend('getCurrentTime'); // doesn't return; we use last cached curSec
+      ytSend('seekTo', [Math.max(0, curSec - 10), true]);
+    });
+    document.getElementById('pld-seek-fwd')?.addEventListener('click', () => {
+      ytSend('seekTo', [curSec + 10, true]);
+    });
+    document.getElementById('pld-mute-tgl')?.addEventListener('click', () => {
+      // 音量 トグル: 簡易 (mute / unmute 切替)
+      ytSend('unMute'); ytSend('setVolume', [80]); ytSend('playVideo');
+      try { localStorage.setItem('labpay-pl-unmuted', '1'); } catch (_) {}
+      document.getElementById('pld-unmute')?.remove();
     });
   } else if (meta.type.startsWith('spotify_')) {
     root.innerHTML = `
