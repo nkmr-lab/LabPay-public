@@ -14,7 +14,11 @@ let activeTab  = 'prefecture';
 // v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 47 都道府県 polygon SVG を
 //   /img/jp-prefectures.svg に 配置、 ここ で 1 回 fetch + parse して キャッシュ。
 //   paint() の renderJpMap で cloneNode して 色 を 塗り替える。
+// v864 #442 第三段: 同じ 仕組み で 世界地図 も SVG ベクター 化。 /img/world.svg は
+//   Natural Earth 110m (Public Domain) を Equirectangular で SVG 化 した もの。
+//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と 1:1 で 整合。
 let cachedJpSvgEl = null;
+let cachedWorldSvgEl = null;
 
 async function ensureJpSvg() {
   if (cachedJpSvgEl) return;
@@ -26,6 +30,18 @@ async function ensureJpSvg() {
     wrap.innerHTML = txt;
     cachedJpSvgEl = wrap.querySelector('svg');
   } catch (_) { cachedJpSvgEl = null; }
+}
+
+async function ensureWorldSvg() {
+  if (cachedWorldSvgEl) return;
+  try {
+    const r = await fetch('/img/world.svg', { cache: 'force-cache' });
+    if (!r.ok) throw new Error('世界地図 SVG fetch 失敗 (' + r.status + ')');
+    const txt = await r.text();
+    const wrap = document.createElement('div');
+    wrap.innerHTML = txt;
+    cachedWorldSvgEl = wrap.querySelector('svg');
+  } catch (_) { cachedWorldSvgEl = null; }
 }
 
 export async function renderRegions() {
@@ -56,6 +72,7 @@ export async function renderRegions() {
       get('/api/regions/visited'),
       get('/api/regions/stats'),
       ensureJpSvg(),
+      ensureWorldSvg(),
     ]);
     visitedSet = new Set((v.items || []).map(it => `${it.kind}:${it.code}`));
     labStats   = s || { country: {}, prefecture: {} };
@@ -83,8 +100,8 @@ function paint() {
   }
   const pct = total ? Math.round(visitedN * 100 / total) : 0;
   // v536 #192 都道府県タブ では 進捗バー の下に スタイライズ Japan マップ を表示。
-  //   行った場所は塗りつぶし、 未訪は薄色。 タップでトグル。
-  const mapBlock = activeTab === 'prefecture' ? renderJpMap() : '';
+  //   v864 #442 国 タブ も Natural Earth 由来 の 世界地図 SVG を 表示。
+  const mapBlock = activeTab === 'prefecture' ? renderJpMap() : renderWorldMap();
   document.getElementById('rg-progress').innerHTML = `
     <div class="bold" style="font-size:16px; color:var(--primary)">${visitedN} / ${total} 制覇 (${pct}%)</div>
     <div style="height:8px; background:#ede4f3; border-radius:99px; overflow:hidden; margin-top:6px">
@@ -151,6 +168,32 @@ function paint() {
 function renderJpMap() {
   if (cachedJpSvgEl) return renderJpMapSvg();
   return renderJpMapFallback();
+}
+
+// v864 #442 第三段: Natural Earth 110m (Public Domain) の 世界地図 SVG を 描画。
+//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と 同じ 形式。
+//   既訪 は 濃紫 ベタ塗り、 未訪 は 白塗り + 薄枠、 タップ で トグル。
+function renderWorldMap() {
+  if (!cachedWorldSvgEl) return '';
+  const svg = cachedWorldSvgEl.cloneNode(true);
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.setAttribute('style', 'display:block; width:100%; max-width:1000px; margin:0 auto; background:#e8f4fd; border-radius:6px');
+  svg.querySelectorAll('path[id]').forEach(p => {
+    const code = p.getAttribute('id');
+    const visited = visitedSet.has(`country:${code}`);
+    p.setAttribute('fill', visited ? '#4a106d' : '#ffffff');
+    p.setAttribute('stroke', visited ? '#2a063e' : '#a0a0a0');
+    p.setAttribute('stroke-width', visited ? '0.6' : '0.3');
+    p.style.cursor = 'pointer';
+    p.classList.add('rg-map-cell');
+    p.setAttribute('data-code', code);
+  });
+  return `
+    <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🌏 世界地図 (タップで トグル) — 地図 © <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Natural Earth</a> (Public Domain)</div>
+      ${svg.outerHTML}
+    </div>`;
 }
 
 function renderJpMapSvg() {
