@@ -70,6 +70,7 @@ function zemi_videos_row_to_array(array $r): array {
         // v849 #436 YouTube タイトル (登録時に oEmbed で 取得した もの) を 優先 表示 する 用
         'youtube_title'  => $r['youtube_title']  ?? null,
         'youtube_author' => $r['youtube_author'] ?? null,
+        'youtube_duration_sec' => isset($r['youtube_duration_sec']) ? (int)$r['youtube_duration_sec'] : null,
         'description'  => $r['description'],
         'youtube_id'   => $vid,
         'youtube_url'  => (string)$r['youtube_url'],
@@ -83,6 +84,7 @@ function zemi_videos_row_to_array(array $r): array {
 }
 
 // v849 #436 YouTube oEmbed API で title + author_name を 取得 (失敗時 null)
+// v855 さらに watch ページから lengthSeconds (動画 長 秒) も スクレイプ で 取得。
 function zemi_videos_fetch_youtube_meta(string $videoId): array {
     $url = 'https://www.youtube.com/oembed?url=' . rawurlencode('https://www.youtube.com/watch?v=' . $videoId) . '&format=json';
     $ch = curl_init($url);
@@ -95,19 +97,48 @@ function zemi_videos_fetch_youtube_meta(string $videoId): array {
     $body = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($status !== 200 || !$body) return ['title' => null, 'author' => null];
-    $j = json_decode((string)$body, true);
-    if (!is_array($j)) return ['title' => null, 'author' => null];
-    return [
-        'title'  => isset($j['title'])       ? mb_substr((string)$j['title'],       0, 300) : null,
-        'author' => isset($j['author_name']) ? mb_substr((string)$j['author_name'], 0, 200) : null,
-    ];
+    $title = null; $author = null;
+    if ($status === 200 && $body) {
+        $j = json_decode((string)$body, true);
+        if (is_array($j)) {
+            $title  = isset($j['title'])       ? mb_substr((string)$j['title'],       0, 300) : null;
+            $author = isset($j['author_name']) ? mb_substr((string)$j['author_name'], 0, 200) : null;
+        }
+    }
+    // 動画 長 (秒) スクレイプ。 watch ページに "lengthSeconds":"NNNN" が出るのでそれを抜く。
+    //   失敗しても null で 戻す (=タイトルだけは取れた状態)。
+    $durSec = null;
+    $watchUrl = 'https://www.youtube.com/watch?v=' . rawurlencode($videoId);
+    $ch2 = curl_init($watchUrl);
+    curl_setopt_array($ch2, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 12,
+        CURLOPT_HTTPHEADER     => [
+            'User-Agent: Mozilla/5.0 (compatible; LabPay/zemi-videos)',
+            'Accept-Language: ja,en;q=0.7',
+        ],
+    ]);
+    $html = curl_exec($ch2);
+    $st2 = (int)curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+    curl_close($ch2);
+    if ($st2 === 200 && $html) {
+        // ytInitialPlayerResponse の videoDetails.lengthSeconds
+        if (preg_match('/"lengthSeconds":"(\d+)"/', (string)$html, $m)) {
+            $durSec = (int)$m[1];
+        } elseif (preg_match('/itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/', (string)$html, $mm)) {
+            // ISO 8601 PT…H…M…S fallback
+            $durSec = ((int)($mm[1] ?? 0)) * 3600 + ((int)($mm[2] ?? 0)) * 60 + ((int)($mm[3] ?? 0));
+            if ($durSec === 0) $durSec = null;
+        }
+    }
+    return ['title' => $title, 'author' => $author, 'duration_sec' => $durSec];
 }
 
 function zemi_videos_list(PDO $pdo, array $cfg): void {
     $q = trim((string)($_GET['q'] ?? ''));
     $limit = max(1, min(500, (int)($_GET['limit'] ?? 300)));
-    $sql = "SELECT zv.id, zv.user_id, zv.title, zv.youtube_title, zv.youtube_author,
+    $sql = "SELECT zv.id, zv.user_id, zv.title, zv.youtube_title, zv.youtube_author, zv.youtube_duration_sec,
                    zv.description, zv.youtube_id, zv.youtube_url,
                    zv.occurred_on, zv.created_at,
                    u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -170,11 +201,12 @@ function zemi_videos_create(PDO $pdo, int $uid): void {
         $dateNorm = $date;
     }
     // v849 #436 YouTube oEmbed で 正式 タイトル + author を 取得 (失敗時 null)
+    // v855 + 動画 長 (秒) も 一緒 に
     $meta = zemi_videos_fetch_youtube_meta($vid);
-    $st = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?)");
-    $st->execute([$uid, $title, $meta['title'], $meta['author'], ($desc === '' ? null : $desc), $vid, $url, $dateNorm]);
+    $st = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, youtube_duration_sec, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?,?)");
+    $st->execute([$uid, $title, $meta['title'], $meta['author'], $meta['duration_sec'], ($desc === '' ? null : $desc), $vid, $url, $dateNorm]);
     $newId = (int)$pdo->lastInsertId();
-    json_response(['ok' => true, 'id' => $newId, 'youtube_title' => $meta['title']]);
+    json_response(['ok' => true, 'id' => $newId, 'youtube_title' => $meta['title'], 'youtube_duration_sec' => $meta['duration_sec']]);
 }
 
 function zemi_videos_update(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
@@ -356,11 +388,12 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
             $existing[$vid] = true;
             try {
                 // v849 #436 import 時も oEmbed で YouTube タイトル を 取得 (= 動画一覧の表示が良くなる)
+                // v855 + 動画 長 (秒) も
                 $meta = zemi_videos_fetch_youtube_meta($vid);
-                $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?)");
-                $ins->execute([$uid, mb_substr($title, 0, 300), $meta['title'], $meta['author'], $desc, $vid, $url, $occurred]);
+                $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, youtube_duration_sec, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?,?)");
+                $ins->execute([$uid, mb_substr($title, 0, 300), $meta['title'], $meta['author'], $meta['duration_sec'], $desc, $vid, $url, $occurred]);
                 $stats['inserted']++;
-                $details[] = ['page' => $title, 'youtube_id' => $vid, 'youtube_title' => $meta['title'], 'occurred_on' => $occurred];
+                $details[] = ['page' => $title, 'youtube_id' => $vid, 'youtube_title' => $meta['title'], 'duration_sec' => $meta['duration_sec'], 'occurred_on' => $occurred];
             } catch (Throwable $e) {
                 $stats['errors']++;
             }

@@ -118,14 +118,26 @@ async function loadList() {
   }
 }
 
+function formatDuration(sec) {
+  sec = Number(sec) || 0;
+  if (sec <= 0) return '';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return h > 0
+    ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+    : m + ':' + String(s).padStart(2, '0');
+}
+
 function renderTile(it) {
   // v849 #436 YouTube タイトル を優先 (登録時 oEmbed で 取得した正式タイトル)
   const display = it.youtube_title || it.title;
   const sub = it.youtube_title && it.title && it.youtube_title !== it.title ? it.title : '';
+  const dur = formatDuration(it.youtube_duration_sec);
   return `
     <a class="ai-tile" href="#/zemi-videos/${it.id}">
       <div style="aspect-ratio:16/9; background:#000 url(${escapeHtml(it.thumbnail_url)}) center/cover no-repeat; border-radius:6px; margin:-2px -4px 6px; position:relative">
-        <div style="position:absolute; right:6px; bottom:6px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:1px 6px; border-radius:3px">▶ 再生</div>
+        ${dur ? `<div style="position:absolute; right:6px; bottom:6px; background:rgba(0,0,0,0.8); color:#fff; font-size:11px; padding:1px 6px; border-radius:3px; font-variant-numeric:tabular-nums">${escapeHtml(dur)}</div>` : `<div style="position:absolute; right:6px; bottom:6px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:1px 6px; border-radius:3px">▶ 再生</div>`}
       </div>
       <div class="ai-tile-head">
         ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
@@ -192,7 +204,7 @@ export async function renderZemiVideoDetail({ params }) {
       <a href="#/zemi-videos" class="hint">← ゼミ動画一覧</a>
       <h2 style="margin:6px 0">🎥 ${escapeHtml(displayTitle)}</h2>
       ${subTitle ? `<div class="hint" style="font-size:12px; margin-top:-4px">登録時タイトル: ${escapeHtml(subTitle)}</div>` : ''}
-      ${d.youtube_author ? `<div class="hint" style="font-size:12px">YouTube: ${escapeHtml(d.youtube_author)}</div>` : ''}
+      ${d.youtube_author ? `<div class="hint" style="font-size:12px">YouTube: ${escapeHtml(d.youtube_author)}${d.youtube_duration_sec ? ' ・ ⏱ ' + escapeHtml(formatDuration(d.youtube_duration_sec)) : ''}</div>` : (d.youtube_duration_sec ? `<div class="hint" style="font-size:12px">⏱ ${escapeHtml(formatDuration(d.youtube_duration_sec))}</div>` : '')}
       <div class="meta" style="font-size:13px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name || '')}
         ${d.occurred_on ? ' ・ 📅 ' + escapeHtml(d.occurred_on) : ''}
