@@ -10,22 +10,26 @@ let viewState = { sort: 'new', mineOnly: false };
 
 export async function renderPapersRecent() {
   const app = document.getElementById('app');
+  // v856 #441 PC のフルスクリーンだと 横幅が広すぎて タイルが巨大化する問題を 修正。
+  //   max-width:1400px の センター揃え コンテナ で 囲んで サイズ感を 統一。
   app.innerHTML = `
-    <div class="card page-header">
-      <h2 style="margin:0">📑 論文 要約 / 全訳 (新着)</h2>
-    </div>
-    <div class="card">
-      <p class="hint" style="font-size:13px; margin:0 0 8px">
-        公開中のもの + 自分のもの を時系列で表示。 タップで各結果ページへ。
-      </p>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:12px; margin-bottom:8px">
-        <a href="#/paper-summary" class="btn">📑 要約を新規作成</a>
-        <a href="#/paper-translate-full" class="btn">📑 全訳を新規作成</a>
+    <div style="max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box">
+      <div class="card page-header">
+        <h2 style="margin:0">📑 論文 要約 / 全訳 (新着)</h2>
       </div>
-      <div id="papers-recent-controls"></div>
-      <div id="papers-recent-grid"></div>
-      <div id="papers-recent-more" style="margin-top:10px; text-align:center"></div>
-      <div id="papers-recent-status" class="hint" style="margin-top:6px; text-align:center; font-size:12px"></div>
+      <div class="card">
+        <p class="hint" style="font-size:13px; margin:0 0 8px">
+          公開中のもの + 自分のもの を時系列で表示。 タップで各結果ページへ。
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:12px; margin-bottom:8px">
+          <a href="#/paper-summary" class="btn">📑 要約を新規作成</a>
+          <a href="#/paper-translate-full" class="btn">📑 全訳を新規作成</a>
+        </div>
+        <div id="papers-recent-controls"></div>
+        <div id="papers-recent-grid"></div>
+        <div id="papers-recent-more" style="margin-top:10px; text-align:center"></div>
+        <div id="papers-recent-status" class="hint" style="margin-top:6px; text-align:center; font-size:12px"></div>
+      </div>
     </div>
   `;
   const ctlRoot = document.getElementById('papers-recent-controls');

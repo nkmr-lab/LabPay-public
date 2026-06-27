@@ -830,13 +830,43 @@ async function loadPlace(id) {
         const canRot = el.dataset.canRot === '1';
         const opts = {};
         if (canRot) {
+          // v856 #440 lightbox 内で回転が成功したら 「回転した」 フラグを 立てて、 lightbox を閉じた後に
+          //   loadPlace(id) で 全画像 を 再ロード (= サムネ + 一覧 + 詳細 すべて 反映)。
+          let rotated = false;
           if (el.dataset.rotHero === '1') {
-            opts.onRotate = (degrees) => post(`/api/places/${id}/rotate-image`, { degrees });
+            opts.onRotate = async (degrees) => { await post(`/api/places/${id}/rotate-image`, { degrees }); rotated = true; };
           } else if (el.dataset.rotComment) {
             const cid = el.dataset.rotComment;
             const idx = Number(el.dataset.rotIdx || 0);
-            opts.onRotate = (degrees) => post(`/api/places/${id}/comments/${cid}/rotate-image`, { index: idx, degrees });
+            opts.onRotate = async (degrees) => { await post(`/api/places/${id}/comments/${cid}/rotate-image`, { index: idx, degrees }); rotated = true; };
           }
+          opts.onClose = async () => {
+            if (!rotated) return;
+            try {
+              await loadPlace(id);
+              // v856 #440 ブラウザは同じ URL の画像をキャッシュするので、 サムネ や 詳細の画像が
+              //   再ロードされない。 描画後に /uploads/ を含む img と background-image に
+              //   ?_t=NOW を 付けて 強制再フェッチ。
+              const stamp = Date.now();
+              const root = document.getElementById('app');
+              if (!root) return;
+              root.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src') || '';
+                if (!src.includes('/uploads/')) return;
+                const base = src.split('#')[0].replace(/[?&]_t=\d+/g, '').replace(/[?&]$/, '');
+                img.src = base + (base.includes('?') ? '&' : '?') + '_t=' + stamp;
+              });
+              root.querySelectorAll('[style*="background-image"]').forEach(el => {
+                const style = el.getAttribute('style') || '';
+                const m = style.match(/url\((['"]?)([^'")]*\/uploads\/[^'")]+)\1\)/);
+                if (!m) return;
+                const orig = m[2];
+                const base = orig.split('#')[0].replace(/[?&]_t=\d+/g, '').replace(/[?&]$/, '');
+                const newUrl = base + (base.includes('?') ? '&' : '?') + '_t=' + stamp;
+                el.setAttribute('style', style.replace(orig, newUrl));
+              });
+            } catch (_) {}
+          };
         }
         openImageLightbox(el.dataset.zoomSrc, opts);
       });

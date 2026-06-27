@@ -11,6 +11,8 @@ export function openImageLightbox(src, opts = {}) {
   //   オーバーレイ 内に「🔄 回転」 ボタンを表示。 タップ で onRotate(90) を呼んで、
   //   解決後 cache-bust で 再ロードして 表示し直す。
   const onRotate = typeof opts.onRotate === 'function' ? opts.onRotate : null;
+  // v856 #440 閉じた時に外側を refresh するためのコールバック
+  const onClose  = typeof opts.onClose  === 'function' ? opts.onClose  : null;
   const old = document.getElementById('lb-overlay');
   if (old) old.remove();
   const box = document.createElement('div');
@@ -101,9 +103,10 @@ export function openImageLightbox(src, opts = {}) {
     window.removeEventListener('popstate', onPop);
     // 自分 が push した state の 場合 だけ pop 戻す (popstate 経由の close では skip)
     if (history.state && history.state.lb) history.back();
+    if (onClose) { try { onClose(); } catch (_) {} }
   };
   const onKey = (ev) => { if (ev.key === 'Escape') close(); };
-  const onPop = () => { closing = true; box.remove(); document.body.style.overflow = prevOverflow; document.removeEventListener('keydown', onKey); window.removeEventListener('popstate', onPop); };
+  const onPop = () => { closing = true; box.remove(); document.body.style.overflow = prevOverflow; document.removeEventListener('keydown', onKey); window.removeEventListener('popstate', onPop); if (onClose) { try { onClose(); } catch (_) {} } };
   document.addEventListener('keydown', onKey);
   window.addEventListener('popstate', onPop);
   document.getElementById('lb-close').addEventListener('click', (ev) => { ev.stopPropagation(); close(); });

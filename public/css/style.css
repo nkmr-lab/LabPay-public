@@ -927,6 +927,7 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-tile-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
 @media (min-width: 720px)  { .ai-tile-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1200px) { .ai-tile-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1600px) { .ai-tile-grid { grid-template-columns: repeat(4, 1fr); } }
 .ai-tile {
   display: flex; flex-direction: column;
   padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
