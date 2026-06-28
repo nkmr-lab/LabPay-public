@@ -63,6 +63,52 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
         if (mb_strlen($d) > 2000) throw new ApiException('bad_request', '説明は 2000 文字まで', 400);
         $sets[] = 'description=?'; $args[] = ($d === '' ? null : $d);
     }
+    // v871 #453 〆切 を 起案者 が 後 から 変更 可能 に。 空 で 渡せば NULL (= 締切 なし)。
+    if (array_key_exists('deadline_at', $body)) {
+        $v = trim((string)$body['deadline_at']);
+        if ($v === '') {
+            $sets[] = 'deadline_at=NULL';
+        } else {
+            try {
+                $dt = new DateTime($v);
+                $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                $sets[] = 'deadline_at=?';
+                $args[] = $dt->format('Y-m-d H:i:s');
+            } catch (Throwable $_) {
+                throw new ApiException('bad_request', 'deadline_at 形式 不正', 400);
+            }
+        }
+    }
+    // v871 #453 候補 (例: 対象 国) と 予想 件数 (上位 N 位) を 編集 可能 に。 ただし
+    //   既に エントリー が ある なら 順位 整合性 が 壊れる ので 変更 不可。
+    if (array_key_exists('candidates', $body) || array_key_exists('predict_count', $body)) {
+        $entryCount = (int)$pdo->query("SELECT COUNT(*) FROM predictions_entries WHERE game_id=$gid")->fetchColumn();
+        if ($entryCount > 0) {
+            throw new ApiException('bad_request', 'すでに予想者がいるため候補 / 予想件数 は変更できません', 400);
+        }
+        if (array_key_exists('candidates', $body)) {
+            $cands = $body['candidates'];
+            if (!is_array($cands) || count($cands) < 2) {
+                throw new ApiException('bad_request', '候補 は 2 件 以上 必要', 400);
+            }
+            $clean = [];
+            foreach ($cands as $c) {
+                $s = trim((string)$c);
+                if ($s === '' || mb_strlen($s) > 80) {
+                    throw new ApiException('bad_request', '候補 1 件 1-80 文字', 400);
+                }
+                $clean[] = $s;
+            }
+            if (count($clean) > 100) throw new ApiException('bad_request', '候補 は 100 件 まで', 400);
+            $sets[] = 'candidates_json=?';
+            $args[] = json_encode($clean, JSON_UNESCAPED_UNICODE);
+        }
+        if (array_key_exists('predict_count', $body)) {
+            $pc = (int)$body['predict_count'];
+            if ($pc < 1 || $pc > 50) throw new ApiException('bad_request', 'predict_count は 1-50', 400);
+            $sets[] = 'predict_count=?'; $args[] = $pc;
+        }
+    }
     if (!$sets) { json_response(['ok' => true]); return; }
     $args[] = $gid;
     $pdo->prepare("UPDATE predictions_games SET " . implode(', ', $sets) . " WHERE id=?")->execute($args);

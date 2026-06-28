@@ -318,14 +318,30 @@ function renderDetailHtml(g) {
        </div>`);
   // v848 #431 起案者は タイトル / 説明 を 編集できる (open / closed 中のみ)
   const canEdit = g.is_creator && (g.status === 'open' || g.status === 'closed');
+  // v871 #453 〆切 / 候補 / 予想 件数 も 編集 可能 に (候補 と 件数 は エントリー 0 件 の とき だけ)。
+  const fmtLocal = (s) => s ? String(s).replace(' ', 'T').slice(0, 16) : '';
+  const hasEntries = (g.entries || []).length > 0;
   const editForm = canEdit ? `
     <div id="pred-edit-form" hidden style="margin-top:10px; padding:10px; border:1px dashed #c4b5fd; border-radius:8px; background:#faf5ff">
-      <div class="bold" style="font-size:13px; margin-bottom:6px">✏️ タイトル / 説明 を編集</div>
+      <div class="bold" style="font-size:13px; margin-bottom:6px">✏️ 編集</div>
       <label class="field"><span class="lbl">タイトル</span>
         <input type="text" id="pred-edit-title" maxlength="200">
       </label>
       <label class="field"><span class="lbl">説明 (任意)</span>
         <textarea id="pred-edit-desc" rows="3" maxlength="2000"></textarea>
+      </label>
+      <label class="field"><span class="lbl">〆切 日時 (任意)</span>
+        <input type="datetime-local" id="pred-edit-deadline">
+      </label>
+      <label class="field">
+        <span class="lbl">候補 (1 行 1 件、 例: 日本 / ブラジル / アルゼンチン…)</span>
+        ${hasEntries ? '<div class="hint-sm" style="color:#c00">※ すでに 予想者 が いる ので 候補 は 変更 できません</div>' : ''}
+        <textarea id="pred-edit-cands" rows="4" ${hasEntries ? 'disabled' : ''}>${escapeHtml((g.candidates || []).map(c => c.name).join('\n'))}</textarea>
+      </label>
+      <label class="field"><span class="lbl">予想 する 上位 順位 数 (1-50)
+        ${hasEntries ? '<span class="hint-sm" style="color:#c00"> ※ 予想者 が いる ので 変更 不可</span>' : ''}
+      </span>
+        <input type="number" id="pred-edit-pc" min="1" max="50" value="${g.predict_count}" ${hasEntries ? 'disabled' : ''} style="width:100px">
       </label>
       <div class="row" style="gap:6px">
         <button class="btn primary" id="pred-edit-save">保存</button>
@@ -409,9 +425,13 @@ function wireDetail(g) {
   const descDsp   = document.getElementById('pred-desc-display');
   const titleInp  = document.getElementById('pred-edit-title');
   const descInp   = document.getElementById('pred-edit-desc');
+  const deadlineInp = document.getElementById('pred-edit-deadline');
+  const candsInp    = document.getElementById('pred-edit-cands');
+  const pcInp       = document.getElementById('pred-edit-pc');
   editBtn?.addEventListener('click', () => {
     if (titleInp) titleInp.value = g.title || '';
     if (descInp)  descInp.value  = g.description || '';
+    if (deadlineInp) deadlineInp.value = g.deadline_at ? String(g.deadline_at).replace(' ', 'T').slice(0, 16) : '';
     if (editForm) editForm.hidden = false;
   });
   document.getElementById('pred-edit-cancel')?.addEventListener('click', () => {
@@ -421,9 +441,26 @@ function wireDetail(g) {
     const t = (titleInp?.value || '').trim();
     const d = (descInp?.value  || '').trim();
     if (!t) { toast('タイトルを入れてください'); return; }
+    const payload = { title: t, description: d, deadline_at: deadlineInp?.value || '' };
+    // v871 #453 候補 / 予想件数 は entries が 0 のとき (disabled でない とき) だけ 送る
+    if (candsInp && !candsInp.disabled) {
+      const arr = candsInp.value.split('\n').map(s => s.trim()).filter(Boolean);
+      if (arr.length < 2) { toast('候補 は 2 件 以上 必要'); return; }
+      payload.candidates = arr;
+    }
+    if (pcInp && !pcInp.disabled) {
+      const pc = parseInt(pcInp.value, 10);
+      if (isNaN(pc) || pc < 1 || pc > 50) { toast('予想 件数 は 1-50'); return; }
+      payload.predict_count = pc;
+    }
     try {
-      await patch(`/api/predictions/games/${g.id}`, { title: t, description: d });
+      await patch(`/api/predictions/games/${g.id}`, payload);
       toast('保存しました');
+      // 候補 / 件数 を 変えた 場合 は 描画 を 再 取得 した方 が 早い
+      if (payload.candidates || payload.predict_count || payload.deadline_at !== (g.deadline_at || '')) {
+        renderPredictionDetail({ params: { id: g.id } });
+        return;
+      }
       g.title = t; g.description = d;
       if (titleDsp) titleDsp.textContent = t;
       if (descDsp)  { descDsp.textContent = d; descDsp.hidden = !d; }
