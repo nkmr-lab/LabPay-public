@@ -548,6 +548,10 @@ route('/regions',         lazy(() => import('./views/regions.js'), 'renderRegion
 route('/conquest',         lazy(() => import('./views/conquest.js'), 'renderConquest'));
 route('/conquest/new',     lazy(() => import('./views/conquest.js'), 'renderConquestNew'));
 route('/conquest/:id',     lazy(() => import('./views/conquest.js'), 'renderConquestDetail'));
+// v870 #452 Habit Tracker (個人 / 公開 習慣 の 日 毎 ✓ 入力)
+route('/habits',           lazy(() => import('./views/habits.js'), 'renderHabits'));
+route('/habits/new',       lazy(() => import('./views/habits.js'), 'renderHabitsNew'));
+route('/habits/:id',       lazy(() => import('./views/habits.js'), 'renderHabitDetail'));
 // v532 #161 体重 / BMI 記録
 route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'));
 // v533 #162 筋トレ記録 + 仲間

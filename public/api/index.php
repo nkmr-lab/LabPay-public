@@ -103,6 +103,7 @@ $routes = [
     'zemi-videos'    => 'route_zemi_videos', // v843 #426 ゼミ動画 (YouTube limited)
     'share'          => 'route_share',       // v853 タイトル+URL をメンバーに共有
     'conquest'       => 'route_conquest',    // v860 #445 制覇 リスト (ユーザ作成)
+    'habits'         => 'route_habits',      // v870 #452 Habit Tracker
 ];
 
 try {
