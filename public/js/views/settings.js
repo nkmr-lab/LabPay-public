@@ -464,10 +464,12 @@ function renderHomeLayoutEditor() {
     const visible = !hiddenSet.has(id);
     const isFirst = idx === 0;
     const isLast  = idx === orderedIds.length - 1;
+    // v869 #451 balance は 隠せない (= 設定 上 で チェック ボックス を disable + ヒント 表示)。
+    const cantHide = (id === 'balance');
     return `
       <div class="list-item" data-card-id="${escapeHtml(id)}" style="gap:6px; align-items:center">
-        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:pointer">
-          <input type="checkbox" class="hl-show" ${visible ? 'checked' : ''}>
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:${cantHide ? 'default' : 'pointer'}" ${cantHide ? 'title="常時 表示 ・ 非表示 にはできません"' : ''}>
+          <input type="checkbox" class="hl-show" ${visible ? 'checked' : ''} ${cantHide ? 'disabled' : ''}>
           <span class="bold">${escapeHtml(card.title)}</span>
         </label>
         <button class="hl-up"   ${isFirst ? 'disabled' : ''}>↑</button>

@@ -157,6 +157,10 @@ const SHORTCUT_CARDS_DEFS = [
 export const HOME_CARDS = [
   { id: 'my-timers',      title: '⏱ 進行中' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
+  // v869 #451 balance ヒーロー (残高 / 時計 / ビンゴ / 占い サマリ) を 並べ替え 対象 に
+  //   追加。 「未対応 の 下 に 張り付いて 別々 に 動かせない」 と の 報告。 隠す ことは
+  //   できない (settings 側 で チェックボックス を disabled)。
+  { id: 'balance',        title: '💰 残高 / 時計 / ビンゴ サマリ (常時 表示)' },
   { id: 'groups',         title: 'あなたのグループ' },
   { id: 'sns',            title: '💬 らぼったー 最新' },
   { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
