@@ -552,6 +552,10 @@ route('/conquest/:id',     lazy(() => import('./views/conquest.js'), 'renderConq
 route('/habits',           lazy(() => import('./views/habits.js'), 'renderHabits'));
 route('/habits/new',       lazy(() => import('./views/habits.js'), 'renderHabitsNew'));
 route('/habits/:id',       lazy(() => import('./views/habits.js'), 'renderHabitDetail'));
+// v872 #454 早押し クイズ (リアル 現場 で 出題者 + 参加者 で 早押し ボタン)
+route('/buzzer',           lazy(() => import('./views/buzzer.js'), 'renderBuzzerList'));
+route('/buzzer/new',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerNew'));
+route('/buzzer/:id',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerDetail'));
 // v532 #161 体重 / BMI 記録
 route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'));
 // v533 #162 筋トレ記録 + 仲間

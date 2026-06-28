@@ -81,6 +81,8 @@ export const APPS = [
   { id: 'conquest',      cat: 'game',   url: '#/conquest',      title: '🏁 制覇 リスト',    desc: '街 の パン屋、 ラーメン屋、 温泉地 など、 自分 だけ の 制覇 対象 リスト を 作って、 達成 したら チェック。 公開 すれば みんな で アイテム を 育てられる。', defaultVisible: true },
   // v870 #452 Habit Tracker (個人 / 公開 習慣 の 日 毎 ✓ 入力)
   { id: 'habits',        cat: 'health', url: '#/habits',        title: '📓 Habit Tracker',  desc: '毎日 論文 を 読む / 早起き / 運動 など 自分 の 習慣 を 登録 して、 日 毎 ✓ で 積み上げ。 連続記録 (streak) と 60 日 カレンダー で 可視化。 公開 すれば ラボ メン 全員 が 達成 状況 を 見られる。', defaultVisible: true },
+  // v872 #454 早押し クイズ (リアル現場 で 出題者 + 参加者 早押し)
+  { id: 'buzzer',        cat: 'game',   url: '#/buzzer',        title: '⚡ 早押し クイズ',  desc: 'リアル現場 (ゼミ / 飲み会 等) で クイズ を 出題 → 参加者 が スマホ で 早押し。 タップ し た 順 で 順位 が 決まり、 1 位 は 緑 で 回答権、 他 は 赤 + 1 位 と の 差 が ms で 表示。 出題者 が 「次 へ」 で 全員 が 再 入力 モード に。', defaultVisible: true },
   // v532 #161 体重 / BMI 記録 (個人ツール、 通知なし)
   { id: 'health',        cat: 'health', url: '#/health',         title: '⚖️ 体重 / BMI',    desc: '体重・身長・体脂肪 を 1 タップで記録。 BMI 自動計算 + やせ/標準/肥満 分類 + 折れ線グラフ。 完全に個人ツール (他のメンバーには見えません)。', defaultVisible: true },
   // v533 #162 筋トレ記録 + 仲間 (mutual follow)

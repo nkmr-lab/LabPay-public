@@ -104,6 +104,7 @@ $routes = [
     'share'          => 'route_share',       // v853 タイトル+URL をメンバーに共有
     'conquest'       => 'route_conquest',    // v860 #445 制覇 リスト (ユーザ作成)
     'habits'         => 'route_habits',      // v870 #452 Habit Tracker
+    'buzzer'         => 'route_buzzer',      // v872 #454 早押し クイズ
 ];
 
 try {
