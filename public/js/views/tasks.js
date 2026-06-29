@@ -192,7 +192,7 @@ function toggleCreateForm(mode = null) {
         <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を 並べる。 type は text / textarea / select。 select の オプション は ; 区切り。 末尾 に * を 付ける と 必須。 例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想 アンケート (target=_blank)|text"></textarea>
         <div class="hint-sm" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap">
           <button type="button" class="btn" id="t-cfields-preset-userexp"  style="font-size:11px; padding:2px 8px">↳ サンプル: ユーザID + 実験ID</button>
-          <button type="button" class="btn" id="t-cfields-preset-pre"     style="font-size:11px; padding:2px 8px">↳ サンプル: プレ 実験 (問題点 + 感想 URL)</button>
+          <button type="button" class="btn" id="t-cfields-preset-pre"     style="font-size:11px; padding:2px 8px">↳ サンプル: プレ実験 (問題点 + 感想URL)</button>
         </div>
         <div class="hint-sm">受諾者が完了報告時に埋める欄。 ID 選択 / 自由入力 / 問題報告 などに 使えます (key は半角英数 _- 32 字 以内)。</div>
       </label>`;
@@ -227,10 +227,10 @@ function toggleCreateForm(mode = null) {
         </select>
       </label>
       <label class="field">
-        <span class="lbl">時間枠 (任意・指定すると 各 枠 単位 で 募集)</span>
-        <textarea id="t-slots" rows="5" placeholder="例)&#10;8/6 x35                           ← 8/6 終日 35 人 (時間枠 なし)&#10;8/7 x35                           ← 8/7 終日 35 人&#10;6/15 11:00-15:00 30分刻み      ← 各 枠 1 人&#10;6/16 13:00-17:00 60分刻み x3   ← 各 枠 3 人&#10;6/17 14:00-18:00 30分刻み 5人  ← 各 枠 5 人 (日本語)"></textarea>
+        <span class="lbl">時間枠 (任意・指定すると各枠単位で募集)</span>
+        <textarea id="t-slots" rows="5" placeholder="例)&#10;8/6 x35                           ← 8/6 終日 35 人 (時間枠なし)&#10;8/7 x35                           ← 8/7 終日 35 人&#10;6/15 11:00-15:00 30分刻み      ← 各枠 1 人&#10;6/16 13:00-17:00 60分刻み x3   ← 各枠 3 人&#10;6/17 14:00-18:00 30分刻み 5人  ← 各枠 5 人 (日本語)"></textarea>
         <span class="hint-sm">
-          書式: 「<b>M/D</b>」 (= 終日 1 人) / 「<b>M/D xN</b>」 (= 終日 N 人) / 「<b>M/D HH:MM-HH:MM N分刻み</b>」 (= 時間枠 各 1 人) / 末尾 に <b>xN</b> や <b>N人</b> で 各 枠 複数 人。 「募集人数」 は 全 枠 capacity の 合計 で 自動 算出。
+          書式: 「<b>M/D</b>」(=終日 1 人) / 「<b>M/D xN</b>」(=終日 N 人) / 「<b>M/D HH:MM-HH:MM N分刻み</b>」(=時間枠各 1 人) / 末尾に <b>xN</b> や <b>N人</b> で各枠複数人。「募集人数」は全枠 capacity の合計で自動算出。
         </span>
       </label>`;
 
@@ -280,7 +280,7 @@ function toggleCreateForm(mode = null) {
     ? `<b>報酬なしで お願い</b>するモードです。 善意で 誰かが 引き受けてくれます。 ESCROW も発生しません。
        <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて 表示されます。`
     : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
-       <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」 で 枠 ごと に 1 人 / 末尾 「<b>x3</b>」 or 「<b>3人</b>」 で 各 枠 複数 人 募集 (v875)。
+       <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」で枠ごとに 1 人 / 末尾「<b>x3</b>」or「<b>3人</b>」で各枠複数人募集 (v875)。
        <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
 
   card.hidden = false;
@@ -295,15 +295,15 @@ function toggleCreateForm(mode = null) {
       ${isFree || state.me?.role !== 'admin' ? '' : `
         <label class="field" style="display:flex; align-items:center; gap:6px; background:#fef9c3; border:1px dashed #ca8a04; padding:6px 10px; border-radius:6px">
           <input type="checkbox" id="t-fund-system">
-          <span style="font-size:13px"><b>💰 システム 持ち出し</b> (admin のみ — 報酬 × 人数 を LabPay 公式 アカウント から 出金 する)</span>
+          <span style="font-size:13px"><b>💰 システム持ち出し</b> (adminのみ — 報酬 × 人数 を LabPay公式アカウント から出金する)</span>
         </label>`}
       ${deadline}
       ${requestOnly}
       ${pickerSection}
       ${files}
-      <!-- v878 タスク作成 フォーム の プレビュー (一覧 で どう 見える か を リアル タイム 表示) -->
+      <!-- v878 タスク作成フォームのプレビュー (一覧でどう見えるかをリアルタイム表示) -->
       <div class="card" style="margin:10px -4px 0; background:#faf5ff; border:1px dashed #c4b5fd">
-        <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:6px">📋 プレビュー (一覧 で の 見え方)</div>
+        <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:6px">📋 プレビュー (一覧での見え方)</div>
         <div id="t-preview" style="font-size:13px"></div>
       </div>
       <div class="row" style="margin-top:6px">
@@ -313,11 +313,11 @@ function toggleCreateForm(mode = null) {
     </div>`;
   document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(null));
   document.getElementById('t-submit').addEventListener('click', onCreate);
-  // v878 プレビュー の リアルタイム 更新
+  // v878 プレビューのリアルタイム更新。 v879 で「請け負ったときの完了報告フォーム」も並べて表示。
   const updatePreview = () => {
     const root = document.getElementById('t-preview');
     if (!root) return;
-    const title = (document.getElementById('t-title')?.value || '(タイトル 未入力)').trim();
+    const title = (document.getElementById('t-title')?.value || '(タイトル未入力)').trim();
     const desc  = (document.getElementById('t-desc')?.value  || '').trim();
     const url   = (document.getElementById('t-url')?.value   || '').trim();
     const reward = isFree ? 0 : Number(document.getElementById('t-reward')?.value || 0);
@@ -326,12 +326,23 @@ function toggleCreateForm(mode = null) {
     const slotLines = slotsRaw ? slotsRaw.split(/\r?\n/).filter(s => s.trim()).length : 0;
     const cap = isAssign
       ? (assignedPicked?.size || 0)
-      : (slotLines > 0 ? `${slotLines} 行 の 時間枠` : (capInp ? Number(capInp.value || 1) : 1));
+      : (slotLines > 0 ? `${slotLines}行の時間枠` : (capInp ? Number(capInp.value || 1) : 1));
     const ddRaw = document.getElementById('t-deadline')?.value || '';
     const deadlineDisp = ddRaw ? ddRaw.replace('T', ' ') : '無期限';
     const kind = isAssign ? '👤 割り当て' : isFree ? '🙏 リクエスト' : '🎯 募集';
-    const rewardLine = isFree ? '報酬 なし' : `${reward}pt × ${cap}人 = 合計 ${typeof cap === 'number' ? reward * cap : '?'}pt`;
+    const rewardLine = isFree ? '報酬なし' : `${reward}pt × ${cap}人 = 合計 ${typeof cap === 'number' ? reward * cap : '?'}pt`;
+    // v879 完了報告フォーム (請け負った側の見え方)。 パース失敗時は静かにskip。
+    const cfRaw = document.getElementById('t-cfields')?.value || '';
+    let cfHtml = '';
+    if (cfRaw.trim()) {
+      try {
+        const fields = parseCompletionFieldsSpec(cfRaw);
+        if (fields && fields.length) cfHtml = renderCompletionFieldsForm(fields);
+      } catch (_) { /* パース失敗時はスキップ (送信時に再エラー) */ }
+    }
+    const cmsg = (document.getElementById('t-cmsg')?.value || '').trim();
     root.innerHTML = `
+      <div class="bold" style="font-size:11px; color:#6b21a8; margin:2px 0 4px">▶︎ 一覧での見え方</div>
       <div style="border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff">
         <div class="bold">${escapeHtml(title)} <span class="tag" style="font-size:10px">${kind}</span></div>
         ${desc ? `<div style="white-space:pre-wrap; margin-top:4px; font-size:13px">${escapeHtml(desc).slice(0, 300)}${desc.length > 300 ? '…' : ''}</div>` : ''}
@@ -340,19 +351,25 @@ function toggleCreateForm(mode = null) {
           ${escapeHtml(state.me?.display_name || '自分')} ・ ${rewardLine}
         </div>
         <div class="meta" style="font-size:12px">⏰ 締切: ${escapeHtml(deadlineDisp)}</div>
-        ${slotLines > 0 ? `<div class="hint-sm" style="font-size:11px; margin-top:4px">🕒 時間枠 ${slotLines} 行</div>` : ''}
+        ${slotLines > 0 ? `<div class="hint-sm" style="font-size:11px; margin-top:4px">🕒 時間枠 ${slotLines}行</div>` : ''}
+      </div>
+      <div class="bold" style="font-size:11px; color:#6b21a8; margin:10px 0 4px">▶︎ 請け負って完了報告するときの見え方</div>
+      <div style="border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff">
+        ${cmsg ? `<div style="background:#fef9c3; padding:6px 8px; border-radius:4px; font-size:12px; margin-bottom:6px; white-space:pre-wrap">💬 ${escapeHtml(cmsg)}</div>` : ''}
+        ${cfHtml || '<div class="muted" style="font-size:12px">完了時入力欄なし (報告ボタンのみ)</div>'}
+        <button class="btn primary" style="font-size:12px; padding:4px 10px; margin-top:6px" disabled>完了を報告する</button>
       </div>`;
   };
-  ['t-title','t-desc','t-url','t-reward','t-capacity','t-slots','t-deadline']
+  ['t-title','t-desc','t-url','t-reward','t-capacity','t-slots','t-deadline','t-cfields','t-cmsg']
     .forEach(id => document.getElementById(id)?.addEventListener('input', updatePreview));
   updatePreview();
   // v874 #455 完了 時 入力欄 サンプル の プリセット ボタン
   const cfEl = document.getElementById('t-cfields');
   document.getElementById('t-cfields-preset-userexp')?.addEventListener('click', () => {
-    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nexp_id|実験ID|select|A;B;C;D*\nnote|メモ (任意)|textarea';
+    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nexp_id|実験ID|select|A;B;C;D*\nnote|メモ(任意)|textarea';
   });
   document.getElementById('t-cfields-preset-pre')?.addEventListener('click', () => {
-    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nissue|問題点・気づき|textarea*\nsurvey_url|↗ 感想 アンケート (target=_blank で 開く)|text';
+    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nissue|問題点・気づき|textarea*\nsurvey_url|↗ 感想アンケート(target=_blankで開く)|text';
   });
   populateAssignedPicker();
 }
@@ -433,6 +450,16 @@ function refreshPickChips() {
 }
 
 async function onCreate() {
+  // v879 多重submit防止: ボタンを押した瞬間にdisable + 「送信中…」表示。
+  //   ユーザからの「タスク依頼で通知が6件飛んだ」報告で、同じフォームを5秒で6連打したのが真因と判明
+  //   (task#23-28 が同内容で連続作成)。
+  const submitBtn = document.getElementById('t-submit');
+  if (submitBtn?.disabled) return; // 既に送信中
+  const submitOrig = submitBtn?.textContent || '';
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '送信中…'; }
+  const restoreBtn = () => {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitOrig; }
+  };
   const isAssign = createMode === 'assign';
   const isFree   = createMode === 'free';
   const title = document.getElementById('t-title').value.trim();
@@ -442,13 +469,13 @@ async function onCreate() {
   // v790 #393 完了 時 入力 欄
   let completion_fields = null;
   try { completion_fields = parseCompletionFieldsSpec(document.getElementById('t-cfields')?.value || ''); }
-  catch (e) { toast('完了 時 入力 欄: ' + e.message); return; }
+  catch (e) { toast('完了 時 入力 欄: ' + e.message); restoreBtn(); return; }
   // 報酬: リクエストモードは 強制 0、 そうでなければ フォームから。
   const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
   // v560 #215 deadline は TZ helper 経由で JST or ローカル を選択可能に
   const deadlineRaw = document.getElementById('t-deadline').value || null;
   const deadline = deadlineRaw ? localDtToIso(deadlineRaw) : null;
-  if (!title || !(reward >= 0)) { toast('タイトルを確認してください'); return; }
+  if (!title || !(reward >= 0)) { toast('タイトルを確認してください'); restoreBtn(); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
 
   // モード別ペイロード組み立て:
@@ -465,7 +492,7 @@ async function onCreate() {
     deadline,
   };
   if (isAssign) {
-    if (assignedPicked.size === 0) { toast('割り当てる人を 1 人以上選んでください'); return; }
+    if (assignedPicked.size === 0) { toast('割り当てる人を 1 人以上選んでください'); restoreBtn(); return; }
     payload.assigned_user_ids = [...assignedPicked];
     payload.auto_claim = true;
     payload.per_user_limit = 1;
@@ -480,7 +507,7 @@ async function onCreate() {
     const capacityRaw = tCapEl ? Number(tCapEl.value) : 1;
     const capacity = isFree ? Math.max(1, capacityRaw || 1) : capacityRaw;
     const per_user_limit = Number(document.getElementById('t-perlimit').value);
-    if (!isFree && !slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); return; }
+    if (!isFree && !slots_spec && !(capacity > 0)) { toast('募集人数か時間枠を入れてください'); restoreBtn(); return; }
     payload.capacity = capacity;
     payload.per_user_limit = per_user_limit;
     payload.slots_spec = slots_spec || null;
@@ -508,7 +535,10 @@ async function onCreate() {
     toggleCreateForm(null);
     await loadList();
     navigate('#/tasks');
-  } catch (e) { toast('失敗: ' + e.message); }
+  } catch (e) {
+    toast('失敗: ' + e.message);
+    restoreBtn();
+  }
 }
 
 
