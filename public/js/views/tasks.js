@@ -301,6 +301,11 @@ function toggleCreateForm(mode = null) {
       ${requestOnly}
       ${pickerSection}
       ${files}
+      <!-- v878 タスク作成 フォーム の プレビュー (一覧 で どう 見える か を リアル タイム 表示) -->
+      <div class="card" style="margin:10px -4px 0; background:#faf5ff; border:1px dashed #c4b5fd">
+        <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:6px">📋 プレビュー (一覧 で の 見え方)</div>
+        <div id="t-preview" style="font-size:13px"></div>
+      </div>
       <div class="row" style="margin-top:6px">
         <button id="t-submit" class="primary">${isAssign ? '割り当てる' : isFree ? 'リクエストを出す' : '依頼する'}</button>
         <button id="t-cancel">キャンセル</button>
@@ -308,6 +313,39 @@ function toggleCreateForm(mode = null) {
     </div>`;
   document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(null));
   document.getElementById('t-submit').addEventListener('click', onCreate);
+  // v878 プレビュー の リアルタイム 更新
+  const updatePreview = () => {
+    const root = document.getElementById('t-preview');
+    if (!root) return;
+    const title = (document.getElementById('t-title')?.value || '(タイトル 未入力)').trim();
+    const desc  = (document.getElementById('t-desc')?.value  || '').trim();
+    const url   = (document.getElementById('t-url')?.value   || '').trim();
+    const reward = isFree ? 0 : Number(document.getElementById('t-reward')?.value || 0);
+    const capInp = document.getElementById('t-capacity');
+    const slotsRaw = document.getElementById('t-slots')?.value.trim() || '';
+    const slotLines = slotsRaw ? slotsRaw.split(/\r?\n/).filter(s => s.trim()).length : 0;
+    const cap = isAssign
+      ? (assignedPicked?.size || 0)
+      : (slotLines > 0 ? `${slotLines} 行 の 時間枠` : (capInp ? Number(capInp.value || 1) : 1));
+    const ddRaw = document.getElementById('t-deadline')?.value || '';
+    const deadlineDisp = ddRaw ? ddRaw.replace('T', ' ') : '無期限';
+    const kind = isAssign ? '👤 割り当て' : isFree ? '🙏 リクエスト' : '🎯 募集';
+    const rewardLine = isFree ? '報酬 なし' : `${reward}pt × ${cap}人 = 合計 ${typeof cap === 'number' ? reward * cap : '?'}pt`;
+    root.innerHTML = `
+      <div style="border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff">
+        <div class="bold">${escapeHtml(title)} <span class="tag" style="font-size:10px">${kind}</span></div>
+        ${desc ? `<div style="white-space:pre-wrap; margin-top:4px; font-size:13px">${escapeHtml(desc).slice(0, 300)}${desc.length > 300 ? '…' : ''}</div>` : ''}
+        ${url ? `<div style="margin-top:4px; font-size:12px"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></div>` : ''}
+        <div class="meta" style="font-size:12px; margin-top:6px">
+          ${escapeHtml(state.me?.display_name || '自分')} ・ ${rewardLine}
+        </div>
+        <div class="meta" style="font-size:12px">⏰ 締切: ${escapeHtml(deadlineDisp)}</div>
+        ${slotLines > 0 ? `<div class="hint-sm" style="font-size:11px; margin-top:4px">🕒 時間枠 ${slotLines} 行</div>` : ''}
+      </div>`;
+  };
+  ['t-title','t-desc','t-url','t-reward','t-capacity','t-slots','t-deadline']
+    .forEach(id => document.getElementById(id)?.addEventListener('input', updatePreview));
+  updatePreview();
   // v874 #455 完了 時 入力欄 サンプル の プリセット ボタン
   const cfEl = document.getElementById('t-cfields');
   document.getElementById('t-cfields-preset-userexp')?.addEventListener('click', () => {
