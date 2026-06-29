@@ -59,6 +59,12 @@ const GAMES = [
     desc: '手持ちの服を25着以上登録すると、日曜始まりの5x5ビンゴ盤が自動生成。着た服を盤面から開けてラインが揃えばビンゴ' },
   { id: 'bingo',     icon: '🎰', name: 'ビンゴ (週次)', url: '#/bingo',
     desc: '毎週5x5ビンゴカードが自動生成。平日の行動(ラボイン/らぼったー投稿/麻雀/オセロ/食べある記など)が自動カウント' },
+  // v860 #445 ユーザ自由 制覇 リスト
+  { id: 'conquest',  icon: '🏁', name: '制覇 リスト',   url: '#/conquest',
+    desc: '街 の パン屋 / ラーメン屋 / 温泉地 など 自分 だけ の 制覇 対象 リスト を 作って、 達成 したら チェック。 公開 すれば みんな で アイテム を 育てられる' },
+  // v872 #454 早押し クイズ (リアル現場)
+  { id: 'buzzer',    icon: '⚡', name: '早押し クイズ', url: '#/buzzer',
+    desc: 'リアル現場 (ゼミ / 飲み会 等) で 出題者 が 口頭 出題 → 参加者 が スマホ で 早押し ボタン。 1 位 緑 / 他 赤 + 1 位 と の 差 を ms で 表示' },
 ];
 
 const CATEGORIES = [
@@ -92,6 +98,8 @@ const GAME_CATEGORY = {
   cg2:           'gamble',    // v837
   bingofit:      'collect',   // v837
   bingo:         'collect',   // v837
+  conquest:      'collect',   // v873 #445 ユーザ自由 制覇 リスト も 「集める / 制覇する」 へ
+  buzzer:        'party',     // v873 #454 早押し クイズ は パーティー へ
 };
 
 export function renderGames() {
