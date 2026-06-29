@@ -228,9 +228,9 @@ function toggleCreateForm(mode = null) {
       </label>
       <label class="field">
         <span class="lbl">時間枠 (任意・指定すると 各 枠 単位 で 募集)</span>
-        <textarea id="t-slots" rows="4" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み x3      ← 各 枠 3 人&#10;6/17 14:00-18:00 30分刻み 5人   ← 各 枠 5 人"></textarea>
+        <textarea id="t-slots" rows="5" placeholder="例)&#10;8/6 x35                           ← 8/6 終日 35 人 (時間枠 なし)&#10;8/7 x35                           ← 8/7 終日 35 人&#10;6/15 11:00-15:00 30分刻み      ← 各 枠 1 人&#10;6/16 13:00-17:00 60分刻み x3   ← 各 枠 3 人&#10;6/17 14:00-18:00 30分刻み 5人  ← 各 枠 5 人 (日本語)"></textarea>
         <span class="hint-sm">
-          各 枠 の 募集 人数 は 末尾 に <b>x3</b> や <b>3人</b> を 付けて 指定 (省略 時 1 人)。 「募集人数」 は 全 枠 の 合計 で 自動 算出 されます。
+          書式: 「<b>M/D</b>」 (= 終日 1 人) / 「<b>M/D xN</b>」 (= 終日 N 人) / 「<b>M/D HH:MM-HH:MM N分刻み</b>」 (= 時間枠 各 1 人) / 末尾 に <b>xN</b> や <b>N人</b> で 各 枠 複数 人。 「募集人数」 は 全 枠 capacity の 合計 で 自動 算出。
         </span>
       </label>`;
 

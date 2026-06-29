@@ -196,8 +196,34 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
     foreach (preg_split('/\R/u', $spec) as $line) {
         $line = trim($line);
         if ($line === '') continue;
-        // YYYY-M(M)-D(D) or M(M)/D(D), HH:MM-HH:MM, N分刻み, [optional " xN" or " N人" suffix]
-        $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み(?:\s+(?:[x×✕]\s*(\d+)|(\d+)\s*人))?\s*$/u';
+        // v876 #455 続報 「日 だけ」 (時間枠 なし) を 先 に トライ。 1 日 1 slot (終日)、
+        //   末尾 xN / N人 で 各日 capacity 指定可。 例: 「6/15」 「6/15 3人」 「6/15 x3」。
+        $patDayOnly = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s*(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名])?\s*$/iu';
+        if (preg_match($patDayOnly, $line, $md)) {
+            $year  = $md[1] !== '' ? (int)$md[1] : (int)$now->format('Y');
+            $month = (int)$md[2];
+            $day   = (int)$md[3];
+            $perSlot = 1;
+            if (!empty($md[4]))      $perSlot = max(1, min(50, (int)$md[4]));
+            elseif (!empty($md[5])) $perSlot = max(1, min(50, (int)$md[5]));
+            try {
+                $start = new DateTimeImmutable(sprintf('%04d-%02d-%02d 00:00:00', $year, $month, $day));
+                $end   = $start->modify('+1 day');
+            } catch (Throwable $e) { continue; }
+            if ($md[1] === '' && $end < $now) {
+                $start = $start->modify('+1 year');
+                $end   = $end->modify('+1 year');
+            }
+            $slots[] = [
+                'start'    => $start->format('Y-m-d H:i:s'),
+                'end'      => $end->format('Y-m-d H:i:s'),
+                'capacity' => $perSlot,
+            ];
+            if (count($slots) > 200) break;
+            continue;
+        }
+        // 時間 枠 付き パターン。 v875.1 #455 末尾 capacity は スペース 任意、 「人」 「名」 どちら も 可、 「x」 「×」 「*」 受け付ける。
+        $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み\s*(?:(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名]))?\s*$/iu';
         if (!preg_match($pat, $line, $m)) continue;
         $year   = $m[1] !== '' ? (int)$m[1] : (int)$now->format('Y');
         $month  = (int)$m[2];
@@ -575,7 +601,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $parsedSlots = $slotsSpec !== null ? tasks_parse_slot_spec($slotsSpec) : [];
     if ($slotsSpec !== null && empty($parsedSlots)) {
         throw new ApiException('bad_request',
-            '時間枠の書式: 6/15 11:00-15:00 30分刻み (行ごとに複数日)', 400);
+            '時間枠 の 書式: 「8/6 x35」 (= 終日 35 人) / 「8/7」 (= 終日 1 人) / 「6/15 11:00-15:00 30分刻み」 (= 時間枠 1 人) / 末尾 「x3」 や 「3人」 で 各枠 複数 人', 400);
     }
     // If slots are provided, derive capacity from them (sum of per-slot capacities,
     //   which defaults to 1 unless the slot line has an explicit " xN" / " N人" suffix).
