@@ -190,6 +190,32 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
 //
 // Year fallback: when omitted, use the current year — bumping to next year if the
 // resulting date is already in the past.
+// v877 deadline は フロント の localDtToIso が ISO 8601 (例: 2026-08-06T14:00:00.000Z) を
+//   送る ので まず DateTimeImmutable で 直接 解釈、 失敗時 のみ 旧 「Y-m-d H:i:s」 / 「Y-m-dTH:i」
+//   形式 を fallback で 受け 入れる。 サーバ TZ (Asia/Tokyo) に 変換 して 保存。
+function tasks_parse_deadline($raw): ?string {
+    if ($raw === null) return null;
+    $raw = trim((string)$raw);
+    if ($raw === '') return null;
+    $dt = null;
+    try {
+        $dt = new DateTimeImmutable($raw);
+    } catch (Throwable $_) { $dt = null; }
+    if (!$dt) {
+        $alt = str_replace('T', ' ', $raw);
+        if (strlen($alt) === 16) $alt .= ':00';
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $alt) ?: null;
+    }
+    if (!$dt) {
+        throw new ApiException('bad_request', '締切 の 日時 形式 が 不正 です (例: 2026-08-06 14:00:00 / ISO 8601)', 400);
+    }
+    $dt = $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+    if ($dt < (new DateTimeImmutable('now'))->modify('-1 minute')) {
+        throw new ApiException('bad_request', '締切は未来の日時で', 400);
+    }
+    return $dt->format('Y-m-d H:i:s');
+}
+
 function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): array {
     $now = $now ?? new DateTimeImmutable('now');
     $slots = [];
@@ -610,19 +636,10 @@ function tasks_create(PDO $pdo, array $cfg): void {
         ? array_sum(array_map(fn($s) => (int)($s['capacity'] ?? 1), $parsedSlots))
         : require_int_positive($body['capacity'] ?? null, 'capacity');
 
-    // Optional deadline (accept ISO Y-m-d H:i:s or Y-m-d\TH:i from <input type=datetime-local>)
-    $deadline = null;
-    if (isset($body['deadline']) && trim((string)$body['deadline']) !== '') {
-        $raw = trim((string)$body['deadline']);
-        $raw = str_replace('T', ' ', $raw);
-        if (strlen($raw) === 16) $raw .= ':00';
-        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
-        if (!$dt) throw new ApiException('bad_request', 'deadline must be Y-m-d H:i:s', 400);
-        if ($dt < (new DateTimeImmutable('now'))->modify('-1 minute')) {
-            throw new ApiException('bad_request', '締切は未来の日時で', 400);
-        }
-        $deadline = $dt->format('Y-m-d H:i:s');
-    }
+    // Optional deadline。 v877 フロント の localDtToIso は ISO 8601 (例:
+    //   "2026-08-06T14:00:00.000Z") を 送る ので、 まず DateTimeImmutable で 直接 解釈し、
+    //   失敗時 のみ 旧 形式 「Y-m-d H:i:s」 「Y-m-d\TH:i」 を fallback で 受け 入れる。
+    $deadline = tasks_parse_deadline($body['deadline'] ?? null);
 
     // audience_grades: accept either array or CSV string
     $aud = $body['audience_grades'] ?? null;
@@ -794,18 +811,8 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
 
         $newDeadline = $task['deadline'];
         if (array_key_exists('deadline', $body)) {
-            $d = $body['deadline'];
-            if ($d === null || trim((string)$d) === '') {
-                $newDeadline = null;
-            } else {
-                $raw = str_replace('T', ' ', trim((string)$d));
-                if (strlen($raw) === 16) $raw .= ':00';
-                $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw);
-                if (!$dt) throw new ApiException('bad_request', 'deadline must be Y-m-d H:i:s', 400);
-                if ($dt < (new DateTimeImmutable('now'))->modify('-1 minute'))
-                    throw new ApiException('bad_request', '締切は未来の日時で', 400);
-                $newDeadline = $dt->format('Y-m-d H:i:s');
-            }
+            // v877 共通 パーサ で ISO 8601 / Y-m-d H:i:s / Y-m-d\TH:i を 一括 対応。
+            $newDeadline = tasks_parse_deadline($body['deadline']);
         }
 
         $newAud = $task['audience_grades'];
