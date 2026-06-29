@@ -646,16 +646,20 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $capacity = count($autoClaimIds);
     }
     $totalEscrow = $reward * $capacity;
+    // v874 #455 続報 admin が 「💰 システム 持ち出し」 を ON にした 場合 だけ、
+    //   ESCROW へ の 入金 元 を LabPay system user (kind='system') に 切り替える。
+    //   admin 以外 が送って きたら 無視 する (権限 ガード)。
+    $fundedBySystem = (!empty($body['funded_by_system']) && (($u['role'] ?? '') === 'admin')) ? 1 : 0;
 
     $taskId = db_tx($pdo, function () use ($pdo, $u, $title, $description, $url, $reward,
                                             $capacity, $perLimit, $deadline, $aud, $assignedCsv,
                                             $completionMsg, $completionFieldsJson, $parsedSlots, $autoClaim, $autoClaimIds,
-                                            $totalEscrow) {
+                                            $totalEscrow, $fundedBySystem) {
         // Insert task first to get id
         $ins = $pdo->prepare('INSERT INTO tasks
-            (requester_user_id, title, description, completion_fields_json, url, reward, capacity, per_user_limit, deadline, audience_grades, assigned_user_ids, completion_message)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-        $ins->execute([$u['id'], $title, $description, $completionFieldsJson, $url, $reward, $capacity, $perLimit, $deadline, $aud, $assignedCsv, $completionMsg]);
+            (requester_user_id, title, description, completion_fields_json, url, reward, capacity, per_user_limit, funded_by_system, deadline, audience_grades, assigned_user_ids, completion_message)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$u['id'], $title, $description, $completionFieldsJson, $url, $reward, $capacity, $perLimit, $fundedBySystem, $deadline, $aud, $assignedCsv, $completionMsg]);
         $taskId = (int)$pdo->lastInsertId();
 
         if (!empty($parsedSlots)) {
@@ -675,10 +679,19 @@ function tasks_create(PDO $pdo, array $cfg): void {
         }
 
         if ($totalEscrow > 0) {
-            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
+            // v874 #455 続報 funded_by_system=1 のとき は LabPay system user (kind='system')
+            //   を 出金 元 に する。 system user が なければ 通常 通り 起案者 から 引く (安全側)。
+            $sourceUid = (int)$u['id'];
+            if ($fundedBySystem) {
+                $sysUid = (int)$pdo->query("SELECT id FROM users WHERE kind='system' LIMIT 1")->fetchColumn();
+                if ($sysUid > 0) $sourceUid = $sysUid;
+            }
+            $userAcc = Ledger::accountIdForUser($pdo, $sourceUid);
             $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
-            Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit',
-                'task', $taskId, "タスク「{$title}」報酬預け");
+            $memo = $fundedBySystem
+                ? "タスク「{$title}」報酬預け (システム 持ち出し)"
+                : "タスク「{$title}」報酬預け";
+            Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit', 'task', $taskId, $memo);
         }
         return $taskId;
     });

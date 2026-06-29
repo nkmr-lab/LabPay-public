@@ -189,7 +189,11 @@ function toggleCreateForm(mode = null) {
       </label>
       <label class="field">
         <span class="lbl">📝 完了時の入力欄 (任意・最大 10 個)</span>
-        <textarea id="t-cfields" maxlength="2000" rows="3" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を 並べる。 type は text / textarea / select。 select の オプション は ; 区切り。 末尾 に * を 付ける と 必須。 例:&#10;user_id|ユーザID|text*&#10;result|結果|select|OK;NG;Warning*&#10;issue|問題があれば|textarea"></textarea>
+        <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を 並べる。 type は text / textarea / select。 select の オプション は ; 区切り。 末尾 に * を 付ける と 必須。 例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想 アンケート (target=_blank)|text"></textarea>
+        <div class="hint-sm" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap">
+          <button type="button" class="btn" id="t-cfields-preset-userexp"  style="font-size:11px; padding:2px 8px">↳ サンプル: ユーザID + 実験ID</button>
+          <button type="button" class="btn" id="t-cfields-preset-pre"     style="font-size:11px; padding:2px 8px">↳ サンプル: プレ 実験 (問題点 + 感想 URL)</button>
+        </div>
         <div class="hint-sm">受諾者が完了報告時に埋める欄。 ID 選択 / 自由入力 / 問題報告 などに 使えます (key は半角英数 _- 32 字 以内)。</div>
       </label>`;
 
@@ -286,6 +290,11 @@ function toggleCreateForm(mode = null) {
       </div>
       ${commonTop}
       ${isFree ? '' : rewardRow}
+      ${isFree || state.me?.role !== 'admin' ? '' : `
+        <label class="field" style="display:flex; align-items:center; gap:6px; background:#fef9c3; border:1px dashed #ca8a04; padding:6px 10px; border-radius:6px">
+          <input type="checkbox" id="t-fund-system">
+          <span style="font-size:13px"><b>💰 システム 持ち出し</b> (admin のみ — 報酬 × 人数 を LabPay 公式 アカウント から 出金 する)</span>
+        </label>`}
       ${deadline}
       ${requestOnly}
       ${pickerSection}
@@ -297,6 +306,14 @@ function toggleCreateForm(mode = null) {
     </div>`;
   document.getElementById('t-cancel').addEventListener('click', () => toggleCreateForm(null));
   document.getElementById('t-submit').addEventListener('click', onCreate);
+  // v874 #455 完了 時 入力欄 サンプル の プリセット ボタン
+  const cfEl = document.getElementById('t-cfields');
+  document.getElementById('t-cfields-preset-userexp')?.addEventListener('click', () => {
+    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nexp_id|実験ID|select|A;B;C;D*\nnote|メモ (任意)|textarea';
+  });
+  document.getElementById('t-cfields-preset-pre')?.addEventListener('click', () => {
+    if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nissue|問題点・気づき|textarea*\nsurvey_url|↗ 感想 アンケート (target=_blank で 開く)|text';
+  });
   populateAssignedPicker();
 }
 
@@ -403,6 +420,7 @@ async function onCreate() {
     description: description || null,
     completion_message: completion_message || null,
     completion_fields: completion_fields,   // v790 #393
+    funded_by_system: document.getElementById('t-fund-system')?.checked ? 1 : 0,  // v874 #455 admin only
     reward,
     deadline,
   };
