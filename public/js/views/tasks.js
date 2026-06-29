@@ -227,9 +227,11 @@ function toggleCreateForm(mode = null) {
         </select>
       </label>
       <label class="field">
-        <span class="lbl">時間枠 (任意・指定すると枠ごとに 1 人ずつ募集)</span>
-        <textarea id="t-slots" rows="3" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み"></textarea>
-        <span class="hint-sm">指定すると「募集人数」は枠数から自動算出されます。</span>
+        <span class="lbl">時間枠 (任意・指定すると 各 枠 単位 で 募集)</span>
+        <textarea id="t-slots" rows="4" placeholder="例) 6/15 11:00-15:00 30分刻み&#10;6/16 13:00-17:00 60分刻み x3      ← 各 枠 3 人&#10;6/17 14:00-18:00 30分刻み 5人   ← 各 枠 5 人"></textarea>
+        <span class="hint-sm">
+          各 枠 の 募集 人数 は 末尾 に <b>x3</b> や <b>3人</b> を 付けて 指定 (省略 時 1 人)。 「募集人数」 は 全 枠 の 合計 で 自動 算出 されます。
+        </span>
       </label>`;
 
   // 依頼 / 割り当て 共通の picker: 全員/学年/性別 bulk + 個別 chip。
@@ -278,7 +280,7 @@ function toggleCreateForm(mode = null) {
     ? `<b>報酬なしで お願い</b>するモードです。 善意で 誰かが 引き受けてくれます。 ESCROW も発生しません。
        <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて 表示されます。`
     : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
-       <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」 と書くと枠ごとに 1 人ずつ申込形式に。
+       <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」 で 枠 ごと に 1 人 / 末尾 「<b>x3</b>」 or 「<b>3人</b>」 で 各 枠 複数 人 募集 (v875)。
        <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
 
   card.hidden = false;

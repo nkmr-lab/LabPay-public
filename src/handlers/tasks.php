@@ -182,9 +182,11 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
 // Parse a free-text "時間枠" spec into a list of (start, end) DateTime pairs.
 //
 // Supported per-line patterns (use a multi-line spec to mix days):
-//   6/15 11:00-15:00 30分刻み      -> generates 8 slots (start..start+30) until end
-//   6/15 11:00-15:00 60分刻み      -> 4 slots
-//   2026-06-15 11:00-15:00 30分刻み -> explicit year
+//   6/15 11:00-15:00 30分刻み         -> 各 枠 1 人 で 8 slots
+//   6/15 11:00-15:00 30分刻み x3      -> 各 枠 3 人 (v875 #455 拡張)
+//   6/15 11:00-15:00 30分刻み 3人     -> 各 枠 3 人 (日本語 構文)
+//   6/16 13:00-17:00 60分刻み         -> 4 slots
+//   2026-06-15 11:00-15:00 30分刻み   -> explicit year
 //
 // Year fallback: when omitted, use the current year — bumping to next year if the
 // resulting date is already in the past.
@@ -194,8 +196,8 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
     foreach (preg_split('/\R/u', $spec) as $line) {
         $line = trim($line);
         if ($line === '') continue;
-        // YYYY-M(M)-D(D)  or  M(M)/D(D)  then  HH:MM-HH:MM  then  N分刻み
-        $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み\s*$/u';
+        // YYYY-M(M)-D(D) or M(M)/D(D), HH:MM-HH:MM, N分刻み, [optional " xN" or " N人" suffix]
+        $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み(?:\s+(?:[x×✕]\s*(\d+)|(\d+)\s*人))?\s*$/u';
         if (!preg_match($pat, $line, $m)) continue;
         $year   = $m[1] !== '' ? (int)$m[1] : (int)$now->format('Y');
         $month  = (int)$m[2];
@@ -203,6 +205,10 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
         $startH = (int)$m[4]; $startM = (int)$m[5];
         $endH   = (int)$m[6]; $endM   = (int)$m[7];
         $stride = (int)$m[8];
+        // v875 #455 各 枠 の 募集 人数。 「x3」 or 「3人」 で 指定、 省略 時 1。
+        $perSlot = 1;
+        if (!empty($m[9]))      $perSlot = max(1, min(50, (int)$m[9]));
+        elseif (!empty($m[10])) $perSlot = max(1, min(50, (int)$m[10]));
         if ($stride < 1 || $stride > 24 * 60) continue;
         try {
             $start = new DateTimeImmutable(sprintf('%04d-%02d-%02d %02d:%02d:00', $year, $month, $day, $startH, $startM));
@@ -219,8 +225,9 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
             $next = $cur->modify("+{$stride} minutes");
             if ($next > $end) break;
             $slots[] = [
-                'start' => $cur->format('Y-m-d H:i:s'),
-                'end'   => $next->format('Y-m-d H:i:s'),
+                'start'    => $cur->format('Y-m-d H:i:s'),
+                'end'      => $next->format('Y-m-d H:i:s'),
+                'capacity' => $perSlot,
             ];
             $cur = $next;
         }
@@ -570,10 +577,11 @@ function tasks_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request',
             '時間枠の書式: 6/15 11:00-15:00 30分刻み (行ごとに複数日)', 400);
     }
-    // If slots are provided, derive capacity from them. Otherwise require an
-    // explicit capacity number like before.
+    // If slots are provided, derive capacity from them (sum of per-slot capacities,
+    //   which defaults to 1 unless the slot line has an explicit " xN" / " N人" suffix).
+    //   Otherwise require an explicit capacity number like before.
     $capacity = !empty($parsedSlots)
-        ? count($parsedSlots)
+        ? array_sum(array_map(fn($s) => (int)($s['capacity'] ?? 1), $parsedSlots))
         : require_int_positive($body['capacity'] ?? null, 'capacity');
 
     // Optional deadline (accept ISO Y-m-d H:i:s or Y-m-d\TH:i from <input type=datetime-local>)
@@ -663,10 +671,11 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $taskId = (int)$pdo->lastInsertId();
 
         if (!empty($parsedSlots)) {
+            // v875 #455 続報 各 枠 の capacity を 構文 から 反映 (xN / N人)。 省略 時 は 1。
             $slotIns = $pdo->prepare('INSERT INTO task_slots (task_id, started_at, ended_at, capacity)
-                VALUES (?,?,?,1)');
+                VALUES (?,?,?,?)');
             foreach ($parsedSlots as $s) {
-                $slotIns->execute([$taskId, $s['start'], $s['end']]);
+                $slotIns->execute([$taskId, $s['start'], $s['end'], (int)($s['capacity'] ?? 1)]);
             }
         }
 
