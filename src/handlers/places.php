@@ -87,10 +87,16 @@ function places_list(PDO $pdo, array $cfg): void {
     $meId = (int)$u['id'];
     // v478 image_url (メイン写真) を 追加。 cover_image は image_url 優先 → 最新 review。
     // v486 #80 いいね カウント + 自分 が 押したか。
+    // v885 last_activity_at = 場所の作成 or 最終 口コミ投稿 のうち最新。
+    //   フロント側で「新着順」 ビューを出すために使う (口コミが新たに付いた店も 新着 扱い)。
     $st = $pdo->prepare("
         SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
                p.created_at,
+               GREATEST(
+                 p.created_at,
+                 COALESCE((SELECT MAX(c.created_at) FROM place_comments c WHERE c.place_id=p.id), p.created_at)
+               ) AS last_activity_at,
                (SELECT COUNT(*) FROM place_comments c WHERE c.place_id=p.id) AS comment_count,
                (SELECT AVG(c.rating) FROM place_comments c WHERE c.place_id=p.id AND c.rating IS NOT NULL) AS avg_rating,
                (SELECT c.image_url FROM place_comments c WHERE c.place_id=p.id AND c.image_url IS NOT NULL
@@ -102,7 +108,7 @@ function places_list(PDO $pdo, array $cfg): void {
                EXISTS(SELECT 1 FROM place_visits v WHERE v.place_id=p.id AND v.user_id=?) AS visited_by_me
           FROM places p
           JOIN users u ON u.id = p.creator_user_id
-         ORDER BY p.created_at DESC
+         ORDER BY last_activity_at DESC, p.id DESC
          LIMIT 200");
     $st->execute([$meId, $meId]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);

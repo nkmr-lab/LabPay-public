@@ -80,22 +80,51 @@ export async function renderPlaces() {
       if (tabsEl && tabsEl.dataset.placesHidden === '1') tabsEl.hidden = false;
     }
   }, { once: true });
+  // v885 ビュー モード = 'map' | 'recent'。 PC 幅では 'map' で 地図(左) + 一覧(右) の
+  //   横並びレイアウト、 narrow では 縦 (従来通り)。 'recent' は 地図 を隠して 新着順 タイル のみ。
+  const VIEW_KEY = 'labpay.places.viewMode';
+  const initialView = (() => {
+    try { const v = localStorage.getItem(VIEW_KEY); return (v === 'recent' || v === 'map') ? v : 'map'; }
+    catch { return 'map'; }
+  })();
   app.innerHTML = `
-    <div id="pl-map-wrap" style="position:relative; height:33vh; min-height:200px; background:#eef; margin:-6px -6px 6px">
-      <div id="pl-map" style="height:100%; width:100%"></div>
-      <button id="pl-locate" class="btn" title="現在地に移動"
-        style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
-    </div>
-    <div class="card" style="padding:8px 10px">
-      <div class="row" style="gap:8px; align-items:center; font-size:13px; flex-wrap:wrap">
+    <style>
+      /* v885 食べある記 PC 横長対策: 900px 以上で 地図(左) + 一覧(右) の split */
+      #pl-shell { display:block; }
+      #pl-map-wrap { position:relative; height:33vh; min-height:200px; background:#eef; margin:-6px -6px 6px }
+      #pl-list-wrap { }
+      @media (min-width: 900px) {
+        #pl-shell.is-map { display:grid; grid-template-columns: minmax(380px, 1.1fr) 1fr; gap:10px;
+          height: calc(100vh - 130px); margin:-6px -6px 0; }
+        #pl-shell.is-map #pl-map-wrap { height:100%; min-height:0; margin:0 }
+        #pl-shell.is-map #pl-list-wrap { overflow-y:auto; padding:0 6px 12px 0 }
+      }
+      /* recent モードでは地図を完全に隠す */
+      #pl-shell.is-recent #pl-map-wrap { display:none }
+    </style>
+    <div class="card" style="padding:6px 10px; margin-bottom:6px">
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; font-size:13px">
+        <div class="row" style="gap:0; border-radius:14px; overflow:hidden; border:1px solid var(--primary-soft)">
+          <button id="pl-mode-map"    type="button" style="border:none; padding:5px 14px; font-size:12px; cursor:pointer; background:${initialView==='map'   ?'var(--primary)':'#fff'}; color:${initialView==='map'   ?'#fff':'var(--primary)'}">🗺 地図</button>
+          <button id="pl-mode-recent" type="button" style="border:none; padding:5px 14px; font-size:12px; cursor:pointer; background:${initialView==='recent'?'var(--primary)':'#fff'}; color:${initialView==='recent'?'#fff':'var(--primary)'}">🆕 新着</button>
+        </div>
         <a class="btn primary" href="#/places/new" style="padding:4px 10px; font-size:12px">＋ 新規</a>
-        <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-bounds" checked> 🗺 地図内のみ</label>
+        <label id="pl-f-bounds-lbl" style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-bounds" checked> 🗺 地図内のみ</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣</label>
         <span id="pl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
     </div>
-    <div id="pl-list"><div class="muted">読み込み中…</div></div>
+    <div id="pl-shell" class="is-${initialView}">
+      <div id="pl-map-wrap">
+        <div id="pl-map" style="height:100%; width:100%"></div>
+        <button id="pl-locate" class="btn" title="現在地に移動"
+          style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
+      </div>
+      <div id="pl-list-wrap">
+        <div id="pl-list"><div class="muted">読み込み中…</div></div>
+      </div>
+    </div>
   `;
 
   // 地図 (leaflet) 初期化 + 保存ビュー復元 (v721 と 同じ key)。
@@ -146,7 +175,10 @@ export async function renderPlaces() {
   const refresh = () => {
     const fLiked   = document.getElementById('pl-f-liked')  .checked;
     const fVisited = document.getElementById('pl-f-visited').checked;
-    const fBounds  = document.getElementById('pl-f-bounds') .checked;
+    // v885 新着モードでは地図内フィルタは適用しない (地図が表示されていないので)
+    const fBounds  = (typeof viewMode !== 'undefined' && viewMode === 'recent')
+                     ? false
+                     : document.getElementById('pl-f-bounds').checked;
     const bounds = (fBounds && map) ? map.getBounds() : null;
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
@@ -275,6 +307,35 @@ export async function renderPlaces() {
   document.getElementById('pl-f-bounds') .addEventListener('change', refresh);
   // v730 #338 地図移動でリスト再フィルタ (デフォルト「地図内のみ」 ON)
   if (map) map.on('moveend', refresh);
+
+  // v885 ビュー モード 切替 (🗺 地図 / 🆕 新着)
+  let viewMode = initialView;
+  const applyViewMode = (next) => {
+    viewMode = next;
+    try { localStorage.setItem(VIEW_KEY, next); } catch (_) {}
+    const shell = document.getElementById('pl-shell');
+    if (shell) { shell.classList.toggle('is-map', next === 'map'); shell.classList.toggle('is-recent', next === 'recent'); }
+    const setBtn = (id, on) => {
+      const b = document.getElementById(id); if (!b) return;
+      b.style.background = on ? 'var(--primary)' : '#fff';
+      b.style.color      = on ? '#fff'           : 'var(--primary)';
+    };
+    setBtn('pl-mode-map',    next === 'map');
+    setBtn('pl-mode-recent', next === 'recent');
+    // 新着モードでは「地図内のみ」フィルタは無意味なので隠す
+    const blbl = document.getElementById('pl-f-bounds-lbl');
+    if (blbl) blbl.style.display = next === 'recent' ? 'none' : '';
+    // 地図表示中になったら invalidateSize で leaflet レイアウト再計算 (PC split で初出時にずれる対策)
+    if (next === 'map' && map) setTimeout(() => map.invalidateSize(), 50);
+    refresh();
+  };
+  document.getElementById('pl-mode-map')   ?.addEventListener('click', () => applyViewMode('map'));
+  document.getElementById('pl-mode-recent')?.addEventListener('click', () => applyViewMode('recent'));
+  // 初期状態が recent なら 「地図内のみ」 ラベルも 隠す
+  if (initialView === 'recent') {
+    const blbl = document.getElementById('pl-f-bounds-lbl');
+    if (blbl) blbl.style.display = 'none';
+  }
   // v845 #428 admin 用 「🔗 tabelog 自動補完」 ボタンとハンドラ を撤去。
   //   バックエンドの /api/places/backfill_tabelog_urls は残しているので、 必要なら手動で叩ける。
   refresh();
