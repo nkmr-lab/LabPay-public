@@ -230,7 +230,6 @@ export async function renderOverleafList() {
       const cur  = p.latest?.[mf.latest] || 0;
       const d24  = p.delta_24h?.[deltaKey];
       const d7   = p.delta_7d?.[deltaKey];
-      const own  = p.owner_name || p.owner_email || '?';
       const lastU = fmtPast(p.last_remote_updated_at);
       const lastUTitle = p.last_remote_updated_at ? `title="${escapeHtml(p.last_remote_updated_at)}"` : '';
       const tags = [];
@@ -243,7 +242,7 @@ export async function renderOverleafList() {
               ${escapeHtml(p.name)} ${tags.join(' ')}
             </div>
             <div class="meta" style="font-size:12px">
-              👤 ${escapeHtml(own)} ・最終更新 <span ${lastUTitle}>${escapeHtml(lastU)}</span>
+              最終更新 <span ${lastUTitle}>${escapeHtml(lastU)}</span>
               ${p.latest?.main_file_path ? ` ・🎯 ${escapeHtml(p.latest.main_file_path)}` : (p.latest ? ` ・${p.latest.file_count}ファイル` : '')}
             </div>
             <div style="margin-top:4px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
@@ -374,11 +373,10 @@ export async function renderOverleafDetail({ params }) {
   const p = d.project;
   const head = document.getElementById('ovd-head');
   const latest = d.latest;
-  const own = p.owner_name || p.owner_email || '?';
   const overleafUrl = `https://www.overleaf.com/project/${encodeURIComponent(p.overleaf_id)}`;
   head.innerHTML = `
     <h2 style="margin:0">${escapeHtml(p.name)}</h2>
-    <div class="meta" style="margin-top:4px">👤 ${escapeHtml(own)} ・初回観測 ${escapeHtml(fmtPast(p.first_seen_at))} ・最終更新 <span title="${escapeHtml(p.last_remote_updated_at || '')}">${escapeHtml(fmtPast(p.last_remote_updated_at))}</span></div>
+    <div class="meta" style="margin-top:4px">初回観測 ${escapeHtml(fmtPast(p.first_seen_at))} ・最終更新 <span title="${escapeHtml(p.last_remote_updated_at || '')}">${escapeHtml(fmtPast(p.last_remote_updated_at))}</span></div>
     <div style="margin-top:8px">
       <a class="btn primary" href="${escapeHtml(overleafUrl)}" target="_blank" rel="noopener">↗ Overleaf で開く</a>
     </div>

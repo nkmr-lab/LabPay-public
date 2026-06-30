@@ -32,17 +32,31 @@ function _overleaf_require_admin(PDO $pdo, array $cfg): array {
     return $u;
 }
 
+// v897 教員 (自分自身) のメール = DBで一番プロジェクト数の多い owner_email。
+//   外部との共同研究プロジェクト (他人がowner) は除外する。
+function _overleaf_self_email(PDO $pdo): ?string {
+    $em = $pdo->query("SELECT owner_email FROM overleaf_projects
+        WHERE owner_email IS NOT NULL AND owner_email <> ''
+        GROUP BY owner_email ORDER BY COUNT(*) DESC LIMIT 1")->fetchColumn();
+    return $em ?: null;
+}
+
 function overleaf_list(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
+    $selfEmail = _overleaf_self_email($pdo);
     // 各 project に対して「最新 snapshot」「24h 前 snapshot」「7d 前 snapshot」を抽出して
     // 文字数 + 差分を返す。 N 件 (最大 100) 想定。
-    $rows = $pdo->query("
-        SELECT p.id, p.overleaf_id, p.name, p.owner_email, p.owner_name,
-               p.last_remote_updated_at, p.is_archived, p.is_trashed, p.first_seen_at
-          FROM overleaf_projects p
-         WHERE p.is_trashed = 0
-         ORDER BY p.last_remote_updated_at DESC, p.id DESC
-         LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
+    // v897 教員 (自分) 所有のみ表示 (外部共同研究プロジェクトは除外)
+    $sql = "SELECT p.id, p.overleaf_id, p.name, p.owner_email, p.owner_name,
+                   p.last_remote_updated_at, p.is_archived, p.is_trashed, p.first_seen_at
+              FROM overleaf_projects p
+             WHERE p.is_trashed = 0";
+    $params = [];
+    if ($selfEmail) { $sql .= " AND p.owner_email = ?"; $params[] = $selfEmail; }
+    $sql .= " ORDER BY p.last_remote_updated_at DESC, p.id DESC LIMIT 200";
+    $st0 = $pdo->prepare($sql);
+    $st0->execute($params);
+    $rows = $st0->fetchAll(PDO::FETCH_ASSOC);
 
     // v892 「メイン.tex」 (\\documentclass を含む主文書) があれば main_* を優先、 無ければ
     //   旧 snapshot のため legacy total_* に fallback。 これでサンプルファイルや過去ファイル
@@ -145,6 +159,11 @@ function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
     $stP->execute([$id]);
     $p = $stP->fetch(PDO::FETCH_ASSOC);
     if (!$p) throw new ApiException('not_found', 'project not found', 404);
+    // v897 教員 (自分) 所有以外は隠す
+    $selfEmail = _overleaf_self_email($pdo);
+    if ($selfEmail && $p['owner_email'] !== $selfEmail) {
+        throw new ApiException('not_found', 'project not found', 404);
+    }
 
     // 最新 snapshot (v892 main_* がある場合は優先、なければ legacy total_* に fallback)
     $stS = $pdo->prepare("SELECT id, taken_at, file_count, main_file_path,
