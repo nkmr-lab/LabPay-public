@@ -453,11 +453,13 @@ function renderCompareChart(items, mf, filterStr = '') {
     xLabels.push(`<text x="${xAt(t)}" y="${h - 12}" text-anchor="middle" font-size="10" fill="#666">${d.getMonth()+1}/${d.getDate()}</text>`);
   }
 
-  // 各プロジェクトの線を生成。 色は HSL ローテーション。
+  // v904 凡例と線は文字数の多い順に並べる (見やすさ)。 hue は同じ並び順で割り振り、
+  //   線の重なり順も多い人が後 (上) に来るようにする。
+  const sortedByCount = items.slice().sort((a, b) => (b.latest?.[mf.latest] || 0) - (a.latest?.[mf.latest] || 0));
   const lines = [];
   const legend = [];
-  items.forEach((p, idx) => {
-    const hue = (idx * 360 / Math.max(items.length, 1)) % 360;
+  sortedByCount.forEach((p, idx) => {
+    const hue = (idx * 360 / Math.max(sortedByCount.length, 1)) % 360;
     const color = `hsl(${hue.toFixed(0)}, 65%, 45%)`;
     const pts = (p.sparkline || []).map(s => {
       const t = new Date(s.d).getTime();
