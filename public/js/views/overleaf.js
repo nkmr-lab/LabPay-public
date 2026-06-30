@@ -18,6 +18,23 @@ function fmtSigned(n) {
   if (n === 0 || n == null) return '±0';
   return (n > 0 ? '+' : '') + n.toLocaleString('en-US');
 }
+
+// v895 過去時刻向け 「N分前 / N時間前 / N日前 / YYYY-MM-DD」 表示。
+//   fmtRelative は未来時刻 (締切までN分) 用で、過去だと 「超過」 と返すので overleaf には不適切。
+function fmtPast(s) {
+  if (!s) return '—';
+  const t = new Date(String(s).replace(' ', 'T') + (String(s).includes('T') ? '' : '+09:00')).getTime();
+  if (!Number.isFinite(t)) return '—';
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 0)       return new Date(t).toLocaleString('ja-JP', { hour12: false });
+  if (diffSec < 60)      return 'たった今';
+  if (diffSec < 3600)    return `${Math.floor(diffSec / 60)}分前`;
+  if (diffSec < 86400)   return `${Math.floor(diffSec / 3600)}時間前`;
+  if (diffSec < 86400*7) return `${Math.floor(diffSec / 86400)}日前`;
+  // 1週間以上は絶対日付
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function colorForDelta(n) {
   if (n == null) return '#888';
   if (n > 0) return '#16a34a';
@@ -95,7 +112,7 @@ export async function renderOverleafList() {
     const st = document.getElementById('ovl-status');
     if (s.last_run) {
       const tag = s.last_run.ok ? '✓' : '✗';
-      st.innerHTML = `${tag} 最終取得: ${fmtRelative(s.last_run.finished_at || s.last_run.started_at)} ・プロジェクト ${s.project_count} 件 / snapshot ${s.snapshot_count.toLocaleString()} 件`;
+      st.innerHTML = `${tag} 最終取得: ${fmtPast(s.last_run.finished_at || s.last_run.started_at)} ・プロジェクト ${s.project_count} 件 / snapshot ${s.snapshot_count.toLocaleString()} 件`;
       if (!s.last_run.ok && s.last_run.error_msg) {
         st.innerHTML += ` <span style="color:#dc2626">(err: ${escapeHtml(s.last_run.error_msg.slice(0,120))})</span>`;
       }
@@ -203,7 +220,8 @@ export async function renderOverleafList() {
       const d24  = p.delta_24h?.[deltaKey];
       const d7   = p.delta_7d?.[deltaKey];
       const own  = p.owner_name || p.owner_email || '?';
-      const lastU = p.last_remote_updated_at ? fmtRelative(p.last_remote_updated_at) : '—';
+      const lastU = fmtPast(p.last_remote_updated_at);
+      const lastUTitle = p.last_remote_updated_at ? `title="${escapeHtml(p.last_remote_updated_at)}"` : '';
       const tags = [];
       if (p.is_stale)    tags.push('<span class="tag muted" style="font-size:10px; background:#f3f4f6">💤 1か月以上更新なし</span>');
       if (p.is_archived) tags.push('<span class="tag muted" style="font-size:10px">🗄 archived</span>');
@@ -214,7 +232,7 @@ export async function renderOverleafList() {
               ${escapeHtml(p.name)} ${tags.join(' ')}
             </div>
             <div class="meta" style="font-size:12px">
-              👤 ${escapeHtml(own)} ・最終更新 ${escapeHtml(lastU)}
+              👤 ${escapeHtml(own)} ・最終更新 <span ${lastUTitle}>${escapeHtml(lastU)}</span>
               ${p.latest?.main_file_path ? ` ・🎯 ${escapeHtml(p.latest.main_file_path)}` : (p.latest ? ` ・${p.latest.file_count}ファイル` : '')}
             </div>
             <div style="margin-top:4px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
@@ -334,7 +352,7 @@ export async function renderOverleafDetail({ params }) {
   const overleafUrl = `https://www.overleaf.com/project/${encodeURIComponent(p.overleaf_id)}`;
   head.innerHTML = `
     <h2 style="margin:0">${escapeHtml(p.name)}</h2>
-    <div class="meta" style="margin-top:4px">👤 ${escapeHtml(own)} ・初回観測 ${escapeHtml(p.first_seen_at || '?')} ・最終更新 ${escapeHtml(p.last_remote_updated_at || '?')}</div>
+    <div class="meta" style="margin-top:4px">👤 ${escapeHtml(own)} ・初回観測 ${escapeHtml(fmtPast(p.first_seen_at))} ・最終更新 <span title="${escapeHtml(p.last_remote_updated_at || '')}">${escapeHtml(fmtPast(p.last_remote_updated_at))}</span></div>
     <div style="margin-top:8px">
       <a class="btn primary" href="${escapeHtml(overleafUrl)}" target="_blank" rel="noopener">↗ Overleaf で開く</a>
     </div>
