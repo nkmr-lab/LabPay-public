@@ -387,10 +387,11 @@ function renderDetailItems(p) {
   root.innerHTML = p.items.map((it, idx) => renderItemRow(it, idx, p)).join('');
   // wire each row
   p.items.forEach((it, idx) => {
-    document.getElementById(`pli-play-${it.id}`)?.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      startPlayback(p, idx, false);
-    });
+    // v882 タイトル & サムネ どちらタップしても曲ジャンプ。再生中ならiframe維持で
+    //   loadVideoByIdジャンプ、未再生なら新規startPlayback。シャッフル中も維持。
+    const onPlayClick = (ev) => { ev.preventDefault(); jumpToItem(p, idx); };
+    document.getElementById(`pli-play-${it.id}`)?.addEventListener('click', onPlayClick);
+    document.getElementById(`pli-thumb-${it.id}`)?.addEventListener('click', onPlayClick);
     if (p.is_mine) {
       document.getElementById(`pli-up-${it.id}`)?.addEventListener('click', () => moveItem(p.id, it.id, 'up'));
       document.getElementById(`pli-down-${it.id}`)?.addEventListener('click', () => moveItem(p.id, it.id, 'down'));
@@ -449,7 +450,7 @@ function renderItemRow(it, idx, p) {
   return `
     <div class="list-item" style="align-items:flex-start; gap:8px; flex-direction:column">
       <div class="row" style="gap:8px; align-items:flex-start; width:100%">
-        ${thumbHtml}
+        <a href="#" id="pli-thumb-${it.id}" style="text-decoration:none; flex-shrink:0; display:block; cursor:pointer" title="この曲を再生">${thumbHtml}</a>
         <div class="grow" style="min-width:0">
           <div class="bold" style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
             <a href="#" id="pli-play-${it.id}" style="color:inherit; text-decoration:none">${escapeHtml(it.title)}</a>
@@ -461,6 +462,20 @@ function renderItemRow(it, idx, p) {
       </div>
       ${myRatingArea}
     </div>`;
+}
+
+// v882 サムネ or タイトル タップ で 再生中 playlist に対しては iframe を保持したまま
+//   loadVideoById で曲ジャンプ。未再生 or 別 playlist なら fresh start。
+function jumpToItem(p, idx) {
+  if (detailState && detailState.pid === p.id) {
+    const orderPos = detailState.order.indexOf(idx);
+    if (orderPos >= 0) {
+      detailState.orderIdx = orderPos;
+      renderCurrent();
+      return;
+    }
+  }
+  startPlayback(p, idx, false);
 }
 
 async function moveItem(pid, iid, dir) {
@@ -521,11 +536,9 @@ function startPlayback(p, startIdx, shuffle) {
       : p.items.map((_, i) => i);
     detailState.orderIdx = detailState.order.indexOf(p.items.findIndex(x => x.id === cur));
     if (detailState.orderIdx < 0) detailState.orderIdx = 0;
-    // v863 並び が 変わる → YT playlist iframe を 強制 再構築
-    detailState._ytIframe = null;
-    detailState._ytPlaylistKey = null;
-    detailState._ytLastVid = null;  // v881 新 iframe → 初回 infoDelivery で再同期
-    renderCurrent();
+    // v882 単一動画iframe方式では順序変更でiframe再構築は不要。現在曲はそのまま継続、
+    //   次回ended時の遷移先だけが新orderに従う。ラベルだけ更新。
+    updateNowPlayingLabel();
   };
   document.getElementById('pld-auto').onchange = (ev) => { detailState.autoNext = ev.target.checked; };
   renderCurrent();
@@ -540,19 +553,9 @@ function currentItemId() {
 
 function stepPlayback(delta) {
   if (!detailState) return;
-  // v863 #444 全 曲 YouTube モード では iframe を 再 ロード せず YT API の
-  //   nextVideo / previousVideo で 切替 → user gesture chain が 切れず、 iOS でも
-  //   1 タップ で 以降 全曲 音 付き 連続 再生 が 可能 に なる。
-  if (detailState._ytIframe && document.body.contains(detailState._ytIframe)) {
-    const cmd = delta > 0 ? 'nextVideo' : 'previousVideo';
-    try { detailState._ytIframe.contentWindow?.postMessage(JSON.stringify({event:'command', func: cmd, args: []}), '*'); } catch (_) {}
-    let next = detailState.orderIdx + delta;
-    if (next < 0) next = detailState.order.length - 1;
-    if (next >= detailState.order.length) next = 0;
-    detailState.orderIdx = next;
-    updateNowPlayingLabel();
-    return;
-  }
+  // v882 単一動画iframe方式: 全曲YouTubeも個別動画もrenderCurrent経由で曲送り。
+  //   YT batchはrenderYouTubeBatchPlayer内のiframe保持branchでloadVideoByIdを使うので
+  //   iframe再生成はせず gesture chain維持。非YT/混合は従来通りiframe再構築。
   let next = detailState.orderIdx + delta;
   if (next < 0) next = detailState.order.length - 1;
   if (next >= detailState.order.length) next = 0;
@@ -622,28 +625,39 @@ function closePlayer() {
   if (root) root.innerHTML = '';
 }
 
-// v863 #444 全 曲 YouTube プレイリスト 用 の 一括 iframe レンダ。 iframe 内 に
-//   playlist パラメータ で 全 曲 ID を 渡し、 次 / 前 は YT IFrame API の
-//   nextVideo / previousVideo で 切替 (= iframe 再 生成 なし → ジェスチャ chain 維持)。
-//   1 タップ で 音 を 出した あと は 同じ iframe 内 で 連続 再生 されるので iOS でも
-//   2 曲目 以降 自動 で 音 付き 再生 が 続く。
+// v882 全曲YouTubeプレイリスト用の単一動画iframe + loadVideoById方式。
+//   v863で `playlist=` URLパラメータ方式にしてiOSのジェスチャchain維持を試みていたが、
+//   YT側の挙動でURL pathのfirstIdが内部playlistの先頭に来ない(2曲目から再生される)
+//   /YTコントロールから1曲目に戻れないバグがあった。
+//   v882で方針変更: iframe URLは単一動画のみ、曲送りは全てloadVideoById commandで
+//   制御し、YT側にplaylistの存在を知らせない。これで:
+//     - 1曲目から確実に再生される
+//     - YT controls側にplaylist UIが出ない (代わりに我々のprev/next/サムネクリック)
+//     - 曲遷移は完全に我々の管理下なのでNOW PLAYING同期も確実
+//   iOSのmuteリセット問題: 同iframe内のloadVideoByIdでもiOSは新動画扱いするので
+//   タップ要求は残るが、これは物理制約。非iOSではsticky unmuteで連続音付き再生OK。
 function renderYouTubeBatchPlayer(root) {
-  const ids = detailState.order.map(i => parseUrlMeta(detailState.items[i].url).id);
-  const playlistKey = ids.join(',');
   const curIdx = detailState.orderIdx;
+  const curId = parseUrlMeta(detailState.items[detailState.order[curIdx]].url).id;
 
-  // 既存 iframe + 同じ 並び なら playVideoAt で seek するだけ (= iframe 再生成 しない)
-  if (detailState._ytIframe && document.body.contains(detailState._ytIframe) && detailState._ytPlaylistKey === playlistKey) {
-    try { detailState._ytIframe.contentWindow?.postMessage(JSON.stringify({event:'command', func:'playVideoAt', args:[curIdx]}), '*'); } catch (_) {}
+  // 既存iframe生存中なら、URL再ロードせずloadVideoByIdで曲ジャンプのみ
+  if (detailState._ytIframe && document.body.contains(detailState._ytIframe)) {
+    try {
+      detailState._ytIframe.contentWindow?.postMessage(
+        JSON.stringify({event:'command', func:'loadVideoById', args:[curId]}), '*');
+    } catch (_) {}
+    maybeReUnmuteAfterLoad();
     return;
   }
 
-  const firstId = ids[0];
-  const restIds = ids.slice(1).join(',');
-  // mute=1 で 起動 → 一度 ユーザ タップ で unMute → 同じ iframe 内 で 連続 再生 が
-  //   続く 限り 音 は 出 続ける (iOS でも sticky)。 別 プレイリスト を 開いた 直後 は
-  //   新 iframe な ので もう 一度 タップ 必要 (これ は 物理的 制約)。
-  const url = `https://www.youtube.com/embed/${firstId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1${restIds ? '&playlist=' + restIds : ''}`;
+  // 新規iframe — 単一動画モード (playlist= パラメータ無し)
+  const url = `https://www.youtube.com/embed/${curId}?autoplay=1&mute=1&playsinline=1&enablejsapi=1`;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+    || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  const alreadyUnmuted = !isIOS && (() => {
+    try { return localStorage.getItem('labpay-pl-unmuted') === '1'; } catch { return false; }
+  })();
 
   root.innerHTML = `
     <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000">
@@ -652,7 +666,7 @@ function renderYouTubeBatchPlayer(root) {
               frameborder="0"
               style="position:absolute; inset:0; width:100%; height:100%"></iframe>
     </div>
-    <button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップ で 音 を 出す (1 回 だけ で 以降 全曲 OK)</button>
+    ${alreadyUnmuted ? '' : '<button id="pld-unmute" class="primary" style="margin-top:6px; padding:4px 12px; font-size:12px">🔊 タップで音を出す</button>'}
     <div class="row" style="gap:6px; margin-top:6px; font-size:12px; flex-wrap:wrap">
       <button id="pld-seek-back" class="btn" style="font-size:12px; padding:3px 8px">⏪ 10秒</button>
       <button id="pld-seek-fwd"  class="btn" style="font-size:12px; padding:3px 8px">10秒 ⏩</button>
@@ -660,8 +674,8 @@ function renderYouTubeBatchPlayer(root) {
 
   const yt = document.getElementById('ytframe');
   detailState._ytIframe = yt;
-  detailState._ytPlaylistKey = playlistKey;
-  detailState._ytLastVid = null;  // v881 新 iframe → 初回 infoDelivery で同期 fire させる
+  detailState._ytPlaylistKey = null;  // 廃止 (旧 playlist= キャッシュ判定用)
+  detailState._ytLastVid = null;      // v881 初回 infoDelivery で同期 fire させる
   const ytSend = (func, args = []) => {
     try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
   };
@@ -671,16 +685,16 @@ function renderYouTubeBatchPlayer(root) {
       yt.contentWindow?.postMessage(JSON.stringify({event:'listening', id:'ytframe', channel:'widget'}), '*');
       yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'addEventListener', args:['onStateChange']}), '*');
     } catch (_) {}
-    // 開始 位置 が 0 でなければ playVideoAt(curIdx) で 飛ばす
-    if (curIdx > 0) setTimeout(() => ytSend('playVideoAt', [curIdx]), 600);
+    if (alreadyUnmuted) setTimeout(() => { ytSend('unMute'); ytSend('setVolume', [80]); }, 800);
   });
 
   document.getElementById('pld-unmute')?.addEventListener('click', () => {
     ytSend('unMute');
     ytSend('setVolume', [80]);
     ytSend('playVideo');
-    document.getElementById('pld-unmute')?.remove();
     try { localStorage.setItem('labpay-pl-unmuted', '1'); } catch (_) {}
+    // 非iOSなら以降ボタン不要、iOSでは毎曲タップ必要なので残す
+    if (!isIOS) document.getElementById('pld-unmute')?.remove();
   });
 
   document.getElementById('pld-seek-back')?.addEventListener('click', () => {
@@ -691,6 +705,25 @@ function renderYouTubeBatchPlayer(root) {
     const cur = detailState?._ytCurSec || 0;
     ytSend('seekTo', [cur + 10, true]);
   });
+}
+
+// v882 loadVideoByIdで曲が切り替わった直後、保存済みunmuteフラグがあれば再適用 (非iOSのみ)。
+//   iOSは新動画ごとにユーザジェスチャ必須なので何もしない (button残置で対応)。
+function maybeReUnmuteAfterLoad() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+    || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  if (isIOS) return;
+  let flag = false;
+  try { flag = localStorage.getItem('labpay-pl-unmuted') === '1'; } catch (_) {}
+  if (!flag) return;
+  const yt = detailState?._ytIframe;
+  if (!yt) return;
+  setTimeout(() => {
+    try {
+      yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'unMute', args:[]}), '*');
+      yt.contentWindow?.postMessage(JSON.stringify({event:'command', func:'setVolume', args:[80]}), '*');
+    } catch (_) {}
+  }, 600);
 }
 
 function isAllYouTubePlaylist() {
