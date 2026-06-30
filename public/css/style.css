@@ -137,6 +137,11 @@ body[data-view^="paper-"] main#app .row { flex-wrap: wrap; }
 body[data-view^="paper-"] main#app .row > * { min-width: 0; }
 body[data-view^="paper-"] main#app .card * { max-width: 100%; }
 
+/* v902 らぼったー (SNS) は PC で Twitter / X 風の narrow column に。 タイムライン系は
+   横にだだ広いと視線移動が増えて読みにくい (ユーザ要望)。 fullscreen mode の中で
+   さらに max-width を絞る。 mobile では viewport幅に追従するので問題なし。 */
+body.app-fullscreen[data-view^="sns"] main#app > * { max-width: 640px; }
+
 /* Cards */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-4); box-shadow: var(--shadow); margin-bottom: var(--space-3); }

@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v902', d: '2026-06-30', s: '📐 らぼったー (SNS) PC幅を狭くした (ユーザ要望「PC版、左右をさすがにもう少し縮めたほうが見やすい、Twitter のように必要な幅で止めよう」)。 既存の fullscreen mode は max-width:1400px だったので、 SNS だけ 640px に絞る CSS を追加 (body.app-fullscreen[data-view^="sns"] main#app > *)。 mobile/narrow では viewport幅に追従するので影響なし。 タイムラインが横にだだ広いと視線移動が増えて読みづらかった問題を解消。' },
   { v: 'v901', d: '2026-06-30', s: '🛠 Overleaf絞り込み 2点修正 (ユーザ要望)。(1) プリセットを3種に絞った: ResearchProgressReport / MasterThesis2026 / BachelorThesis2026。 PhD/NordiCHI/CHI/IUI/WISS/IPSJ/HCI研究会/EC/SIGGRAPH/UIST は削除 (使うことになったら「カスタム…」 で対応)。(2) カスタム入力した文字列が ドロップダウンの選択中ラベルに反映されない問題 (固定で 「🔎 カスタム…」 のままだった) を修正。 inject 関数を refreshFilterUI に改名、 active filter が変わる度に label を毎回 リビルドするように。 これでカスタム入力後 「🔎 「<入れた文字>」」 と現在の値がドロップダウンにも見える。 ✕解除ボタンからも refreshFilterUI を呼んで同期。' },
   { v: 'v900', d: '2026-06-30', s: '🔖 Overleaf絞り込みのslug を意味のある形に変更 (ユーザ要望「URLに入れるものは省略しないほうがわかりやすい」)。 rpr → ResearchProgressReport、 mthesis → MasterThesis2026、 phd → PhDThesis、 humi → HCIKenkyukai 等。 これで /#/overleaf?filter=MasterThesis2026 のように URL を見ただけで何の絞り込みか分かる。 また「修士論文」「卒業論文」 (日本語) プリセットは削除して、 替わりに 「MasterThesis2026」 「BachelorThesis2026」 (英字でスペースなし、 学生の実プロジェクト名想定) を追加。' },
   { v: 'v899', d: '2026-06-30', s: '🐛 v898 で導入した絞り込み機能で 「Cannot access \\'metricField\\' before initialization」 エラー (TDZ) が出ていたのを修正。 metricField の宣言を render() / sortItems() の参照より前 (= applyMode(\\'chart\\') の初回呼び出しよりも前) に移動。 これでURLに ?mode=chart が乗ったときの初期描画が動く。' },
