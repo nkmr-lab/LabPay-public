@@ -62,21 +62,21 @@ function sparklineSvg(points, metricKey = 'c') {
 
 // v898 グラフ絞り込みプリセット。 slug は URL 共有可能、 match は projectName.includes() で判定。
 //   よくある共著体パターンを最初から用意。 ここに無いものは「カスタム…」 で自由入力。
+// v900 slug は URL に出るので意味のある形に。 例: /#/overleaf?filter=MasterThesis2026
 const FILTER_PRESETS = [
-  { slug: 'rpr',        label: '📝 Research Progress Report', match: 'Research Progress Report' },
-  { slug: 'mthesis',    label: '🎓 Master Thesis',            match: 'Master Thesis' },
-  { slug: 'mthesis-jp', label: '🎓 修士論文',                  match: '修士論文' },
-  { slug: 'bthesis-jp', label: '📜 卒業論文',                  match: '卒業論文' },
-  { slug: 'phd',        label: '🎓 PhD Thesis',               match: 'PhD' },
-  { slug: 'nordichi',   label: '🌍 NordiCHI',                 match: 'NordiCHI' },
-  { slug: 'chi',        label: '🌍 CHI',                      match: 'CHI20' },
-  { slug: 'iui',        label: '🤖 IUI',                      match: 'IUI' },
-  { slug: 'wiss',       label: '🇯🇵 WISS',                   match: 'WISS' },
-  { slug: 'ipsj',       label: '🇯🇵 IPSJ / 情処',             match: 'IPSJ' },
-  { slug: 'humi',       label: '🇯🇵 HCI研究会',               match: 'HCI研究会' },
-  { slug: 'ec',         label: '🎮 EC (エンタテインメントコンピューティング)', match: 'EC20' },
-  { slug: 'siggraph',   label: '🎨 SIGGRAPH',                 match: 'SIGGRAPH' },
-  { slug: 'uist',       label: '🖱 UIST',                     match: 'UIST' },
+  { slug: 'ResearchProgressReport', label: '📝 Research Progress Report', match: 'Research Progress Report' },
+  { slug: 'MasterThesis2026',       label: '🎓 MasterThesis2026',         match: 'MasterThesis2026' },
+  { slug: 'BachelorThesis2026',     label: '📜 BachelorThesis2026',       match: 'BachelorThesis2026' },
+  { slug: 'PhDThesis',              label: '🎓 PhD Thesis',               match: 'PhD' },
+  { slug: 'NordiCHI',               label: '🌍 NordiCHI',                 match: 'NordiCHI' },
+  { slug: 'CHI',                    label: '🌍 CHI (CHI20xx)',            match: 'CHI20' },
+  { slug: 'IUI',                    label: '🤖 IUI',                      match: 'IUI' },
+  { slug: 'WISS',                   label: '🇯🇵 WISS',                   match: 'WISS' },
+  { slug: 'IPSJ',                   label: '🇯🇵 IPSJ',                   match: 'IPSJ' },
+  { slug: 'HCIKenkyukai',           label: '🇯🇵 HCI研究会',               match: 'HCI研究会' },
+  { slug: 'EC',                     label: '🎮 EC (EC20xx)',              match: 'EC20' },
+  { slug: 'SIGGRAPH',               label: '🎨 SIGGRAPH',                 match: 'SIGGRAPH' },
+  { slug: 'UIST',                   label: '🖱 UIST',                     match: 'UIST' },
 ];
 
 function applyOverleafFilter(items, filterStr) {
