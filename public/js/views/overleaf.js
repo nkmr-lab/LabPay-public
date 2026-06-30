@@ -60,9 +60,39 @@ function sparklineSvg(points, metricKey = 'c') {
   </svg>`;
 }
 
-export async function renderOverleafList() {
+// v898 グラフ絞り込みプリセット。 slug は URL 共有可能、 match は projectName.includes() で判定。
+//   よくある共著体パターンを最初から用意。 ここに無いものは「カスタム…」 で自由入力。
+const FILTER_PRESETS = [
+  { slug: 'rpr',        label: '📝 Research Progress Report', match: 'Research Progress Report' },
+  { slug: 'mthesis',    label: '🎓 Master Thesis',            match: 'Master Thesis' },
+  { slug: 'mthesis-jp', label: '🎓 修士論文',                  match: '修士論文' },
+  { slug: 'bthesis-jp', label: '📜 卒業論文',                  match: '卒業論文' },
+  { slug: 'phd',        label: '🎓 PhD Thesis',               match: 'PhD' },
+  { slug: 'nordichi',   label: '🌍 NordiCHI',                 match: 'NordiCHI' },
+  { slug: 'chi',        label: '🌍 CHI',                      match: 'CHI20' },
+  { slug: 'iui',        label: '🤖 IUI',                      match: 'IUI' },
+  { slug: 'wiss',       label: '🇯🇵 WISS',                   match: 'WISS' },
+  { slug: 'ipsj',       label: '🇯🇵 IPSJ / 情処',             match: 'IPSJ' },
+  { slug: 'humi',       label: '🇯🇵 HCI研究会',               match: 'HCI研究会' },
+  { slug: 'ec',         label: '🎮 EC (エンタテインメントコンピューティング)', match: 'EC20' },
+  { slug: 'siggraph',   label: '🎨 SIGGRAPH',                 match: 'SIGGRAPH' },
+  { slug: 'uist',       label: '🖱 UIST',                     match: 'UIST' },
+];
+
+function applyOverleafFilter(items, filterStr) {
+  if (!filterStr) return items;
+  // preset slug 完全一致 → preset.match で includes 検索 (case insensitive)
+  const preset = FILTER_PRESETS.find(p => p.slug === filterStr);
+  const needle = (preset ? preset.match : filterStr).toLowerCase();
+  return items.filter(p => (p.name || '').toLowerCase().includes(needle));
+}
+
+export async function renderOverleafList({ query = {} } = {}) {
   const app = document.getElementById('app');
   const isAdmin = (state.me?.role || '') === 'admin';
+  // v898 URL からモード / 絞り込み 復元
+  const urlMode   = (query.mode === 'chart' || query.mode === 'list') ? query.mode : null;
+  const urlFilter = query.filter || '';
   app.innerHTML = `
     <style>
       /* v891 横幅オーバーフロー防止。 SVG / テーブル / list-item が viewport を突き抜けるのを抑える。 */
@@ -134,10 +164,24 @@ export async function renderOverleafList() {
   const metricSel = document.getElementById('ovl-metric');
   const modeListBtn  = document.getElementById('ovl-mode-list');
   const modeChartBtn = document.getElementById('ovl-mode-chart');
-  let viewMode = (() => {
+  // v898 URL の query が優先、 次に localStorage、 ない時 list
+  let viewMode = urlMode || (() => {
     try { return localStorage.getItem('labpay.overleaf.viewMode') === 'chart' ? 'chart' : 'list'; }
     catch { return 'list'; }
   })();
+  let activeFilter = urlFilter;
+
+  // v898 URL を絞り込み/モードと同期 (history.replaceState で hashchange 抑止 → 二重 render 防止)
+  const syncUrl = () => {
+    const params = new URLSearchParams();
+    if (viewMode === 'chart')  params.set('mode', 'chart');
+    if (activeFilter)          params.set('filter', activeFilter);
+    const qs = params.toString();
+    const newHash = '#/overleaf' + (qs ? '?' + qs : '');
+    if (location.hash !== newHash) {
+      try { history.replaceState(history.state, '', newHash); } catch (_) {}
+    }
+  };
 
   const applyMode = (next) => {
     viewMode = next;
@@ -148,6 +192,7 @@ export async function renderOverleafList() {
     };
     set(modeListBtn,  viewMode === 'list');
     set(modeChartBtn, viewMode === 'chart');
+    syncUrl();
     render();
   };
   modeListBtn.addEventListener('click',  () => applyMode('list'));
@@ -156,6 +201,37 @@ export async function renderOverleafList() {
 
   sortSel.addEventListener('change', render);
   metricSel.addEventListener('change', render);
+
+  // v898 絞り込み UI を 動的に挿入 (sort/metric の隣)
+  function injectFilterUI() {
+    const row = sortSel.closest('.row');
+    if (!row || row.querySelector('#ovl-filter')) return;
+    const customLabel = (activeFilter && !FILTER_PRESETS.some(p => p.slug === activeFilter))
+      ? `🔎 「${activeFilter}」`
+      : '🔎 カスタム…';
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:inline-flex; align-items:center; gap:4px';
+    lbl.innerHTML = `絞り込み:
+      <select id="ovl-filter" style="font-size:12px; max-width:200px">
+        <option value="">全件</option>
+        ${FILTER_PRESETS.map(p => `<option value="${escapeHtml(p.slug)}" ${activeFilter===p.slug?'selected':''}>${p.label}</option>`).join('')}
+        <option value="__custom__" ${activeFilter && !FILTER_PRESETS.some(p => p.slug===activeFilter) ? 'selected' : ''}>${escapeHtml(customLabel)}</option>
+      </select>`;
+    row.insertBefore(lbl, document.getElementById('ovl-count'));
+    document.getElementById('ovl-filter').addEventListener('change', (ev) => {
+      let v = ev.target.value;
+      if (v === '__custom__') {
+        const cur = (activeFilter && !FILTER_PRESETS.some(p => p.slug === activeFilter)) ? activeFilter : '';
+        v = prompt('プロジェクト名の一部を入れてください (大文字小文字無視で部分一致):', cur);
+        if (v === null) { ev.target.value = activeFilter; return; }
+        v = v.trim();
+      }
+      activeFilter = v;
+      syncUrl();
+      render();
+    });
+  }
+  injectFilterUI();
 
   // metric の latest フィールド + 単位 + spark/history のキー
   const metricField = {
@@ -183,10 +259,21 @@ export async function renderOverleafList() {
   }
 
   function render() {
-    const sorted = sortItems(items);
+    // v898 絞り込み (preset slug or 任意 substring)
+    const filtered = applyOverleafFilter(items, activeFilter);
+    const sorted = sortItems(filtered);
     const mf = metricField[metricSel.value];
     const countEl = document.getElementById('ovl-count');
     const body = document.getElementById('ovl-body');
+    // 絞り込みチップ表示 (絞り込みが有効な時、 解除ボタン付き)
+    const filterChip = activeFilter ? (() => {
+      const preset = FILTER_PRESETS.find(p => p.slug === activeFilter);
+      const lbl = preset ? preset.label : `🔎 「${activeFilter}」`;
+      return `<div class="card" style="margin-bottom:8px; padding:6px 10px; background:#f3e8ff; border-left:3px solid #7b3fa0; font-size:12px">
+        絞り込み中: <b>${escapeHtml(lbl)}</b> (${filtered.length}件マッチ)
+        <a href="#" id="ovl-filter-clear" style="margin-left:8px; color:#7b3fa0">✕ 解除</a>
+      </div>`;
+    })() : '';
 
     if (viewMode === 'chart') {
       // v889 stale (1か月以上更新なし) を除外。
@@ -202,10 +289,11 @@ export async function renderOverleafList() {
         </div>` : '';
       countEl.textContent = `${active.length} 件アクティブ / ${stale.length} 件 stale 除外`;
       if (!active.length) {
-        body.innerHTML = `<div class="empty">過去 1 か月で更新があったプロジェクトがありません。</div>${singleDayNote}`;
+        body.innerHTML = filterChip + `<div class="empty">${activeFilter ? '絞り込み条件に該当するプロジェクトがありません。' : '過去 1 か月で更新があったプロジェクトがありません。'}</div>${singleDayNote}`;
+        wireFilterChip();
         return;
       }
-      body.innerHTML = singleDayNote + renderCompareChart(active, mf) +
+      body.innerHTML = filterChip + singleDayNote + renderCompareChart(active, mf) +
         (stale.length ? `
           <div class="card" style="margin-top:10px; font-size:12px">
             <div class="muted" style="margin-bottom:4px">💤 1か月以上更新なし (グラフから除外: ${stale.length} 件)</div>
@@ -213,13 +301,15 @@ export async function renderOverleafList() {
               ${stale.map(p => `<span class="tag" style="font-size:11px; background:#f3f4f6; color:#666">${escapeHtml(p.name)}</span>`).join('')}
             </div>
           </div>` : '');
+      wireFilterChip();
       return;
     }
 
     // list mode (v896 stale は折りたたみ)
     if (!sorted.length) {
       countEl.textContent = '0 件';
-      body.innerHTML = `<div class="empty">まだプロジェクトがありません。 collector が走るとここに出てきます。</div>`;
+      body.innerHTML = filterChip + `<div class="empty">${activeFilter ? '絞り込み条件に該当するプロジェクトがありません。' : 'まだプロジェクトがありません。 collector が走るとここに出てきます。'}</div>`;
+      wireFilterChip();
       return;
     }
     const activeList = sorted.filter(p => !p.is_stale);
@@ -265,8 +355,22 @@ export async function renderOverleafList() {
            <div class="list" style="margin-top:8px">${staleList.map(renderRow).join('')}</div>
          </details>`
       : '';
-    body.innerHTML = activeHtml + staleHtml;
+    body.innerHTML = filterChip + activeHtml + staleHtml;
+    wireFilterChip();
   }
+
+  // 絞り込みチップの ✕ 解除 をクリックすると、 絞り込みを解除して再 render。
+  function wireFilterChip() {
+    document.getElementById('ovl-filter-clear')?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      activeFilter = '';
+      const sel = document.getElementById('ovl-filter');
+      if (sel) sel.value = '';
+      syncUrl();
+      render();
+    });
+  }
+
   render();
 }
 
