@@ -12,7 +12,16 @@ const MEDAL = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8�
 
 function medalFor(i) { return MEDAL[i] ?? `${i+1}位`; }
 
-function statusBadge(st) {
+function statusBadge(st, deadlineAt) {
+  // v907 #462 締切を 過ぎていて まだ open のままの予想は、 「受付中」だと参加できると
+  //   勘違いさせるので 「結果待ち」 と表示。 詳細ページでは effectiveStatus で同じ扱いを
+  //   既にしているが、 一覧ページでも吸収。
+  if (st === 'open' && deadlineAt) {
+    const t = new Date(String(deadlineAt).replace(' ', 'T')).getTime();
+    if (Number.isFinite(t) && t < Date.now()) {
+      return '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">⏰ 結果待ち</span>';
+    }
+  }
   switch (st) {
     case 'open':      return '<span style="background:#e3f8e6; color:#1e8b3c; padding:1px 8px; border-radius:6px; font-size:11px">受付中</span>';
     case 'closed':    return '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">締切済</span>';
@@ -44,7 +53,7 @@ export async function renderPredictions() {
         <a class="card" href="#/predictions/${g.id}" style="display:block; text-decoration:none; color:inherit">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
             <div class="bold" style="flex:1">${escapeHtml(g.title)}</div>
-            ${statusBadge(g.status)}
+            ${statusBadge(g.status, g.deadline_at)}
             ${g.me_entered ? '<span style="color:#1e8b3c; font-size:11px">✓ 参加済</span>' : ''}
           </div>
           <div class="meta" style="font-size:12px">

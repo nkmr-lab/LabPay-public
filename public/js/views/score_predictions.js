@@ -8,7 +8,16 @@ import { get, post, patch } from '../api.js';
 import { toast, state } from '../app.js';
 import { shareToSns } from '../share_to_sns.js';
 
-function statusBadge(st) {
+function statusBadge(st, deadlineAt) {
+  // v907 #461 締切を 過ぎていて まだ open のままの試合は、 視覚的に 「受付中」だと
+  //   紛らわしい (もう参加できない) ので 「結果待ち」 と表示する。 DB 上の status は
+  //   結果登録 (確定) アクションで動く設計なので、 ここではビュー側で吸収。
+  if (st === 'open' && deadlineAt) {
+    const t = new Date(String(deadlineAt).replace(' ', 'T')).getTime();
+    if (Number.isFinite(t) && t < Date.now()) {
+      return '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">⏰ 結果待ち</span>';
+    }
+  }
   switch (st) {
     case 'open':      return '<span style="background:#e3f8e6; color:#1e8b3c; padding:1px 8px; border-radius:6px; font-size:11px">受付中</span>';
     case 'closed':    return '<span style="background:#fff5d4; color:#946d00; padding:1px 8px; border-radius:6px; font-size:11px">締切済</span>';
@@ -39,7 +48,7 @@ export async function renderScorePredictions() {
         <a class="card" href="#/score-predictions/${g.id}" style="display:block; text-decoration:none; color:inherit">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
             <div class="bold" style="flex:1">${escapeHtml(g.team_home)} <span class="hint">対</span> ${escapeHtml(g.team_away)}</div>
-            ${statusBadge(g.status)}
+            ${statusBadge(g.status, g.deadline_at)}
             ${g.me_entered ? '<span style="color:#1e8b3c; font-size:11px">✓ 参加済</span>' : ''}
           </div>
           <div class="meta" style="font-size:12px">${escapeHtml(g.title)}</div>
