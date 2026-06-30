@@ -128,9 +128,30 @@ function places_list(PDO $pdo, array $cfg): void {
         // v503 #127 タイル表示は重いオリジナル画像を使っていたので、サムネ URL を
         //   別フィールドで返す (実在しなければ原画像 fallback)。
         $r['cover_image_thumb'] = $r['cover_image'] ? thumb_url_for((string)$r['cover_image']) : null;
+        // v894 #460 回転後の地図マーカー/タイル画像のキャッシュ問題対策。
+        //   ファイル mtime を ?v= に乗せて URL を一意化、 ブラウザ HTTP キャッシュも
+        //   旧 image を返さなくなる (rotate-image は in-place 書き換え → mtime 更新される)。
+        $r['cover_image']       = _places_image_url_versioned((string)$r['cover_image']);
+        $r['cover_image_thumb'] = _places_image_url_versioned((string)$r['cover_image_thumb']);
     }
     unset($r);
     json_response(['items' => $rows]);
+}
+
+// v894 #460 /uploads/ 配下の画像 URL に ?v=<mtime> を付けて返す。 file が無ければそのまま。
+function _places_image_url_versioned(string $url): string {
+    if ($url === '') return '';
+    if (!preg_match('#^/uploads/#', $url)) return $url;  // 絶対 URL や 別系統は触らない
+    // 既存の ?v=, ?_t= は取り除いて 付け直す (旧クライアントが付けたものを上書き)
+    $clean = preg_replace('/[?&](?:v|_t)=\d+(&|$)/', '$1', $url);
+    $clean = rtrim($clean, '?&');
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    $abs = $publicDir . explode('?', $clean, 2)[0];
+    if (!is_file($abs)) return $clean;
+    $mtime = @filemtime($abs);
+    if (!$mtime) return $clean;
+    $sep = (strpos($clean, '?') === false) ? '?' : '&';
+    return $clean . $sep . 'v=' . $mtime;
 }
 
 function places_create(PDO $pdo, array $cfg): void {
@@ -215,10 +236,13 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             if (is_array($decoded)) $urls = array_values(array_filter($decoded, fn($x) => is_string($x) && $x !== ''));
         }
         if (!$urls && !empty($r['image_url'])) $urls = [(string)$r['image_url']];
+        // v894 #460 ?v=mtime でキャッシュ破棄 (rotate 後の地図/タイル画像更新対策)
+        $urls         = array_map('_places_image_url_versioned', $urls);
+        $singleImage  = !empty($r['image_url']) ? _places_image_url_versioned((string)$r['image_url']) : $r['image_url'];
         return [
             'id'           => (int)$r['id'],
             'body'         => $r['body'],
-            'image_url'    => $r['image_url'],
+            'image_url'    => $singleImage,
             'image_urls'   => $urls,
             'rating'       => $r['rating'] !== null ? (int)$r['rating'] : null,
             'user_id'      => (int)$r['user_id'],
@@ -242,8 +266,8 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
             'source_url'         => $p['source_url'] ?? null,
             'phone'              => $p['phone'] ?? null,
             'hours'              => $p['hours'] ?? null,
-            'image_url'          => $p['image_url'] ?? null,
-            'image_thumb_url'    => !empty($p['image_url']) ? thumb_url_for((string)$p['image_url']) : null, // v512 詳細ヒーロー用
+            'image_url'          => !empty($p['image_url']) ? _places_image_url_versioned((string)$p['image_url']) : ($p['image_url'] ?? null),
+            'image_thumb_url'    => !empty($p['image_url']) ? _places_image_url_versioned(thumb_url_for((string)$p['image_url'])) : null, // v512 詳細ヒーロー用 v894 ?v=mtime 付き
             'creator_user_id'    => (int)$p['creator_user_id'],
             'creator_name'       => $p['creator_name'],
             'creator_avatar_url' => $p['creator_avatar_url'],
