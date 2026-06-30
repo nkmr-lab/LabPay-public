@@ -253,6 +253,11 @@ export async function renderPlaylistDetail({ params }) {
     </div>
     <div class="card" id="pld-player-card" hidden>
       <div id="pld-player"></div>
+      <!-- v880 再生中の曲タイトルをiframe直下に大きく表示。
+           以前はプレイヤーカード一番下にmeta文字色で出してただけで、見落とされていた。 -->
+      <div id="pld-now" style="margin-top:10px; padding:8px 10px; background:#f3e8ff; border-left:4px solid #7b3fa0; border-radius:6px; font-size:15px; line-height:1.4"></div>
+      <!-- v880 再生中の曲を直接★評価できるバー。下のアイテム一覧までスクロールしなくて良いように。 -->
+      <div id="pld-rate-now" style="margin-top:6px"></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap; align-items:center">
         <button id="pld-prev" class="btn">⏮ 前</button>
         <button id="pld-next" class="btn">⏭ 次</button>
@@ -264,7 +269,6 @@ export async function renderPlaylistDetail({ params }) {
         </label>
         <button id="pld-close" class="btn" style="margin-left:auto">✕ 閉じる</button>
       </div>
-      <div id="pld-now" class="meta" style="margin-top:6px"></div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 6px">アイテム (<span id="pld-cnt">0</span>)</h3>
@@ -280,6 +284,13 @@ async function loadPlDetail(id) {
     const p = await get('/api/playlists/' + id);
     renderDetailHead(p);
     renderDetailItems(p);
+    // v880 再生中なら detailState.items も差し替えて、プレイヤー側の評価バーも最新化。
+    //   id をキーに in-place で置き換える (順序や order[] はそのまま) → iframe 触らず安全。
+    if (detailState && detailState.pid === p.id) {
+      const byId = Object.fromEntries(p.items.map(it => [it.id, it]));
+      detailState.items = detailState.items.map(it => byId[it.id] || it);
+      renderPlayerRating();
+    }
     if (p.is_mine) {
       const root = document.getElementById('pld-add');
       root.hidden = false;
@@ -550,12 +561,55 @@ function stepPlayback(delta) {
 
 function updateNowPlayingLabel() {
   if (!detailState) return;
+  renderNowPlayingLabel();
+  renderPlayerRating();
+}
+
+// v880 「再生中の曲」をプレイヤー直下の紫帯に大きく表示。タイトル + N/M + 元リンク。
+function renderNowPlayingLabel() {
   const now = document.getElementById('pld-now');
+  if (!now || !detailState) return;
   const it = detailState.items[detailState.order[detailState.orderIdx]];
-  if (now && it) {
-    now.innerHTML = `<span class="bold">${escapeHtml(it.title)}</span>
-      <span class="muted" style="font-size:12px">  ・ ${detailState.orderIdx + 1} / ${detailState.order.length}</span>`;
-  }
+  if (!it) { now.innerHTML = ''; return; }
+  const url = it.url ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" style="color:#7b3fa0; font-size:11px; text-decoration:underline; margin-left:6px">↗ 元リンク</a>` : '';
+  const memo = it.memo ? `<div style="font-size:12px; color:#555; margin-top:3px">💬 ${escapeHtml(it.memo)}</div>` : '';
+  now.innerHTML = `
+    <div style="font-size:11px; color:#7b3fa0; font-weight:600; letter-spacing:0.05em">🎵 NOW PLAYING ・ ${detailState.orderIdx + 1} / ${detailState.order.length}</div>
+    <div style="font-weight:700; color:#2a0840; margin-top:2px; word-break:break-word">${escapeHtml(it.title)}${url}</div>
+    ${memo}
+  `;
+}
+
+// v880 プレイヤー直下の「再生中の曲を評価」バー。
+//   ★1-5 + コメント編集 を、画面下のアイテム一覧までスクロールせずその場で打てる。
+//   既存の rateItem / clearRating / editRatingComment API をそのまま再利用。
+function renderPlayerRating() {
+  const root = document.getElementById('pld-rate-now');
+  if (!root) return;
+  if (!detailState) { root.innerHTML = ''; return; }
+  const it = detailState.items[detailState.order[detailState.orderIdx]];
+  if (!it) { root.innerHTML = ''; return; }
+  const avgLabel = it.avg_rating != null
+    ? `平均${Number(it.avg_rating).toFixed(1)}⭐(${it.rating_count})`
+    : 'まだ評価なし';
+  root.innerHTML = `
+    <div class="row center" style="gap:8px; flex-wrap:wrap; padding:8px 10px; background:#faf5ff; border:1px solid #ede4f3; border-radius:8px">
+      <span style="font-size:12px; color:#4a106d; font-weight:600">再生中の曲を評価:</span>
+      <div data-rate-now-stars>${starsHtml(it.id, it.my_rating)}</div>
+      ${it.my_rating ? `<button id="pli-rate-clear-now" class="btn" style="padding:0 6px; font-size:11px">取消</button>` : ''}
+      <button id="pli-rate-comment-now" class="btn" style="padding:0 6px; font-size:11px">💬 コメント</button>
+      <span class="muted" style="font-size:11px; margin-left:auto">${avgLabel}</span>
+    </div>
+    ${it.my_comment ? `<div class="meta" style="font-size:12px; margin-top:4px; padding:0 10px">あなたのコメント:「${escapeHtml(it.my_comment)}」</div>` : ''}
+  `;
+  // 同じ data-rate-item 属性が一覧側にもあるので、必ず root スコープで wire する。
+  root.querySelectorAll('[data-rate-now-stars] [data-rate-item]').forEach(b => {
+    b.addEventListener('click', () => rateItem(detailState.pid, it.id, Number(b.dataset.rateValue)));
+  });
+  document.getElementById('pli-rate-clear-now')?.addEventListener('click',
+    () => clearRating(detailState.pid, it.id));
+  document.getElementById('pli-rate-comment-now')?.addEventListener('click',
+    () => editRatingComment(detailState.pid, it.id, it.my_rating, it.my_comment));
 }
 
 function closePlayer() {
@@ -645,10 +699,10 @@ function isAllYouTubePlaylist() {
 function renderCurrent() {
   const it = detailState.items[detailState.order[detailState.orderIdx]];
   const root = document.getElementById('pld-player');
-  const now = document.getElementById('pld-now');
-  if (!it) { root.innerHTML = '<div class="muted">空</div>'; return; }
-  now.innerHTML = `<span class="bold">${escapeHtml(it.title)}</span>
-    <span class="muted" style="font-size:12px">  ・ ${detailState.orderIdx + 1} / ${detailState.order.length}</span>`;
+  if (!it) { root.innerHTML = '<div class="muted">空</div>'; renderNowPlayingLabel(); renderPlayerRating(); return; }
+  // v880 「いま流れている曲」タイトルをプレイヤー直下に大きく + 評価バー追従。
+  renderNowPlayingLabel();
+  renderPlayerRating();
   // v863 #444 全 曲 YouTube なら 1 iframe + playlist パラメータ で 一括 ロード →
   //   曲 切替 で iframe を 再生成 し ない の で user gesture chain が 維持 され、
   //   iOS Safari でも 1 回 タップ で 以降 全曲 音 付き 連続再生 が 可能。
