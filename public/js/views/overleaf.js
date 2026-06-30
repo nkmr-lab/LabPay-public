@@ -461,22 +461,32 @@ function renderCompareChart(items, mf, filterStr = '') {
   sortedByCount.forEach((p, idx) => {
     const hue = (idx * 360 / Math.max(sortedByCount.length, 1)) % 360;
     const color = `hsl(${hue.toFixed(0)}, 65%, 45%)`;
-    const pts = (p.sparkline || []).map(s => {
-      const t = new Date(s.d).getTime();
-      return `${xAt(t).toFixed(1)},${yAt(s[mf.sparkKey] || 0).toFixed(1)}`;
-    }).join(' ');
-    if (!pts) return;
-    lines.push(`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>`);
-    // 終点に小さなドット + ラベル
-    const last = (p.sparkline || []).slice(-1)[0];
-    if (last) {
-      const lx = xAt(new Date(last.d).getTime()), ly = yAt(last[mf.sparkKey] || 0);
-      lines.push(`<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3" fill="${color}"/>`);
-    }
+    const displayName = shortenName(p.name, filterStr);
+    const sparkPoints = (p.sparkline || []).map(s => ({
+      d: s.d,
+      v: s[mf.sparkKey] || 0,
+      x: xAt(new Date(s.d).getTime()),
+      y: yAt(s[mf.sparkKey] || 0),
+    })).filter(pt => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+    if (!sparkPoints.length) return;
+    const ptsStr = sparkPoints.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ');
+    // v905 折れ線に <title> でホバー時にプロジェクト名を表示
+    lines.push(`<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"><title>${escapeHtml(displayName)}</title></polyline>`);
+    // v905 各データ点に小さな可視ドット + <title> で 「名前: 値 (日付)」 ツールチップ。
+    //   ホバー判定領域を 広げるため透明な大きい円を上から重ねる。
+    sparkPoints.forEach(pt => {
+      const dateStr = String(pt.d).slice(5).replace('-', '/');  // MM-DD → MM/DD
+      const title = `${displayName}: ${pt.v.toLocaleString()} ${mf.unit} (${dateStr})`;
+      lines.push(`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2.5" fill="${color}" opacity="0.7"><title>${escapeHtml(title)}</title></circle>`);
+      lines.push(`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="8" fill="${color}" fill-opacity="0" style="cursor:crosshair; pointer-events:all"><title>${escapeHtml(title)}</title></circle>`);
+    });
+    // 終点 (最新値) は大きめのドット
+    const last = sparkPoints[sparkPoints.length - 1];
+    lines.push(`<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1"><title>${escapeHtml(displayName)}: ${last.v.toLocaleString()} ${mf.unit} (最新)</title></circle>`);
     legend.push(`
-      <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#fafafa; border-radius:10px; font-size:11px">
+      <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#fafafa; border-radius:10px; font-size:11px" title="${escapeHtml(p.name)}">
         <span style="display:inline-block; width:10px; height:10px; background:${color}; border-radius:2px"></span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px" title="${escapeHtml(p.name)}">${escapeHtml(shortenName(p.name, filterStr))}</span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px">${escapeHtml(displayName)}</span>
         <span class="muted">(${(p.latest?.[mf.latest] || 0).toLocaleString()})</span>
       </div>`);
   });
