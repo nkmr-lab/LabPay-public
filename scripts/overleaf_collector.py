@@ -165,16 +165,16 @@ def main():
         api.login_from_cookies({'overleaf_session2': cookie})
         projects = api.get_projects()
         print(f"[start] fetched {len(projects)} projects from Overleaf", flush=True)
+        skipped_count = 0
         for i, p in enumerate(projects):
             try:
                 proj_id = _upsert_project(conn, p)
-                _take_snapshot(conn, api, p, proj_id)
+                result = _take_snapshot(conn, api, p, proj_id)
                 projects_seen += 1
+                if result == 'skipped': skipped_count += 1
                 conn.commit()
-                # 進捗ログ (10 件 毎)
-                if (i + 1) % 10 == 0:
-                    print(f"[progress] {i+1}/{len(projects)}: {p.name[:60]}", flush=True)
-                    # 途中で killed されても progress を残せるよう run row を更新
+                if (i + 1) % 25 == 0:
+                    print(f"[progress] {i+1}/{len(projects)} (skipped so far: {skipped_count})", flush=True)
                     with conn.cursor() as cur:
                         cur.execute("UPDATE overleaf_collector_runs SET projects_seen=%s WHERE id=%s",
                                     (projects_seen, run_id))
@@ -183,7 +183,7 @@ def main():
                 conn.rollback()
                 print(f"  ! project {p.id} ({p.name}): {e}", file=sys.stderr, flush=True)
         ok = True
-        print(f"[end] processed {projects_seen}/{len(projects)} projects", flush=True)
+        print(f"[end] processed {projects_seen}/{len(projects)} projects (skipped {skipped_count} unchanged)", flush=True)
     except Exception as e:
         err_msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()[:500]}"
         print("FATAL:", err_msg, file=sys.stderr)
@@ -278,10 +278,31 @@ def _pick_main_file(per_file):
         return (per_file_sorted[0][0], per_file_sorted[0][1], per_file_sorted[0][2])
     return None
 
+def _last_remote_dt(p):
+    """Project.last_updated (ISO 8601 UTC string) を JST naive datetime に変換。"""
+    raw = getattr(p, 'last_updated', None) or getattr(p, 'lastUpdated', None)
+    if not raw: return None
+    try:
+        from datetime import timedelta
+        s = str(raw).split('.')[0].rstrip('Z')
+        dt = datetime.strptime(s, '%Y-%m-%dT%H:%M:%S')
+        return dt + timedelta(hours=9)  # UTC → JST
+    except Exception:
+        return None
+
 def _take_snapshot(conn, api, p, proj_id):
     """1 project の全 .tex を取得して snapshot を 1 件作成。
     v892 メインの .tex を \\documentclass の有無で検出し、 集計値はメインのみ。
-    全ファイル合計も保持するが UI のデフォルト表示は メイン。"""
+    v896 Overleaf 側の last_updated が前回 snapshot 以後変わっていなければ .tex ダウンロードを
+         skip (Overleaf への負荷削減)。 ETag のような働き。"""
+    # v896 不変判定: 前回 snapshot の taken_at vs. Overleaf 側 last_updated
+    last_remote = _last_remote_dt(p)
+    with conn.cursor() as cur:
+        cur.execute("SELECT MAX(taken_at) FROM overleaf_snapshots WHERE project_id = %s", (proj_id,))
+        prev_taken = cur.fetchone()[0]
+    if last_remote and prev_taken and last_remote <= prev_taken:
+        return 'skipped'  # 変更なし → 無処理
+
     root = api.project_get_files(p.id)
     file_entries = list(_walk_tex_files(root))
     if not file_entries:

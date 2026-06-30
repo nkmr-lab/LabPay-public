@@ -108,7 +108,7 @@ export const APPS = [
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)
-  { id: 'overleaf',     cat: 'research', url: '#/overleaf',     title: '📝 Overleaf 追跡',  desc: '教員アカウントで共有されてる全Overleafプロジェクトの文字数推移をラボメンバー全員で可視化。24h/7d差分やsparkline、複数プロジェクトの推移比較グラフ、60日履歴、ファイル別内訳。1か月以上更新なしのプロジェクトはグラフから除外。', defaultVisible: true },
+  { id: 'overleaf',     cat: 'research', url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウントで共有されてる全Overleafプロジェクトの文字数推移をラボメンバー全員で可視化。24h/7d差分やsparkline、複数プロジェクトの推移比較グラフ、60日履歴、ファイル別内訳。1か月以上更新なしのプロジェクトはグラフから除外。', defaultVisible: true },
   { id: 'zemi-videos', cat: 'lab-mgmt', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。誰でも動画URL + タイトル + 説明を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },

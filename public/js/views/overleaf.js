@@ -72,7 +72,7 @@ export async function renderOverleafList() {
     </style>
     <div class="card page-header">
       <div class="row center" style="justify-content:space-between; gap:8px; flex-wrap:wrap">
-        <h2 style="margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis">📝 Overleaf プロジェクト追跡</h2>
+        <h2 style="margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis">📝 Overleaf 更新状況</h2>
         ${isAdmin ? `<a class="btn" href="#/overleaf/admin" style="padding:4px 10px; font-size:12px; flex-shrink:0">⚙ 設定</a>` : ''}
       </div>
       <div id="ovl-status" class="hint" style="margin-top:4px; font-size:11px; word-break:break-word"></div>
@@ -189,15 +189,23 @@ export async function renderOverleafList() {
     const body = document.getElementById('ovl-body');
 
     if (viewMode === 'chart') {
-      // v889 stale (1か月以上更新なし) を除外
-      const active = sorted.filter(p => !p.is_stale && p.sparkline && p.sparkline.length >= 2);
+      // v889 stale (1か月以上更新なし) を除外。
+      // v896 sparkline.length >= 2 だと初日(今日のデータしか無い)に全部消える問題があったので
+      //   >= 1 に緩めて、 1点だけのプロジェクトもドットで表示。 多日分溜まったら線になる。
+      const active = sorted.filter(p => !p.is_stale && p.sparkline && p.sparkline.length >= 1);
       const stale  = sorted.filter(p => p.is_stale);
+      const noData = sorted.filter(p => !p.is_stale && (!p.sparkline || !p.sparkline.length));
+      const maxLen = active.reduce((m, p) => Math.max(m, p.sparkline.length), 0);
+      const singleDayNote = (maxLen <= 1) ? `
+        <div class="card" style="margin-top:10px; font-size:12px; background:#fff8e1; border-left:3px solid #f59e0b">
+          ⏳ まだ今日 1 日分のデータしかないので、推移グラフは点だけです。明日以降データが溜まると折れ線が描かれます (collector は 1 時間おきに自動実行)。
+        </div>` : '';
       countEl.textContent = `${active.length} 件アクティブ / ${stale.length} 件 stale 除外`;
       if (!active.length) {
-        body.innerHTML = `<div class="empty">過去 1 か月で更新があったプロジェクトがありません。</div>`;
+        body.innerHTML = `<div class="empty">過去 1 か月で更新があったプロジェクトがありません。</div>${singleDayNote}`;
         return;
       }
-      body.innerHTML = renderCompareChart(active, mf) +
+      body.innerHTML = singleDayNote + renderCompareChart(active, mf) +
         (stale.length ? `
           <div class="card" style="margin-top:10px; font-size:12px">
             <div class="muted" style="margin-bottom:4px">💤 1か月以上更新なし (グラフから除外: ${stale.length} 件)</div>
@@ -208,14 +216,17 @@ export async function renderOverleafList() {
       return;
     }
 
-    // list mode
-    countEl.textContent = `${sorted.length} 件`;
+    // list mode (v896 stale は折りたたみ)
     if (!sorted.length) {
+      countEl.textContent = '0 件';
       body.innerHTML = `<div class="empty">まだプロジェクトがありません。 collector が走るとここに出てきます。</div>`;
       return;
     }
+    const activeList = sorted.filter(p => !p.is_stale);
+    const staleList  = sorted.filter(p => p.is_stale);
+    countEl.textContent = `${activeList.length} 件アクティブ${staleList.length ? ` (+ 1か月以上更新なし ${staleList.length} 件)` : ''}`;
     const deltaKey = mf.latest === 'total_char_count' ? 'total_char_count' : 'total_char_body';
-    body.innerHTML = `<div class="list">` + sorted.map(p => {
+    const renderRow = (p) => {
       const cur  = p.latest?.[mf.latest] || 0;
       const d24  = p.delta_24h?.[deltaKey];
       const d7   = p.delta_7d?.[deltaKey];
@@ -243,7 +254,19 @@ export async function renderOverleafList() {
             </div>
           </div>
         </a>`;
-    }).join('') + `</div>`;
+    };
+    const activeHtml = activeList.length
+      ? `<div class="list">${activeList.map(renderRow).join('')}</div>`
+      : `<div class="empty">過去1か月で更新があったプロジェクトがありません。</div>`;
+    const staleHtml = staleList.length
+      ? `<details class="card" style="margin-top:10px">
+           <summary style="cursor:pointer; font-size:13px; color:#666; padding:4px 0">
+             💤 1か月以上更新なし (${staleList.length} 件) — タップで展開
+           </summary>
+           <div class="list" style="margin-top:8px">${staleList.map(renderRow).join('')}</div>
+         </details>`
+      : '';
+    body.innerHTML = activeHtml + staleHtml;
   }
   render();
 }
@@ -258,11 +281,14 @@ function renderCompareChart(items, mf) {
     const t = new Date(s.d).getTime();
     if (isFinite(t)) allPts.push({ t, v: s[mf.sparkKey] || 0 });
   }
-  if (allPts.length < 2) return `<div class="card"><div class="muted">データ不足です</div></div>`;
+  if (allPts.length < 1) return `<div class="card"><div class="muted">データ不足です</div></div>`;
   const tMin = Math.min(...allPts.map(p => p.t));
   const tMax = Math.max(...allPts.map(p => p.t));
   const yMax = Math.max(...allPts.map(p => p.v), 100);
-  const xAt = t => padL + ((t - tMin) / (tMax - tMin || 1)) * innerW;
+  // v896 全部同じ日 (初日) のときは X 軸中央にドットを集める。 複数日あれば通常スケール。
+  const xAt = t => (tMax === tMin)
+    ? padL + innerW / 2
+    : padL + ((t - tMin) / (tMax - tMin)) * innerW;
   const yAt = v => padT + innerH - (v / yMax) * innerH;
 
   // 軸グリッド
@@ -446,7 +472,7 @@ export async function renderOverleafAdmin() {
   app.innerHTML = `
     <div class="card">
       <a href="#/overleaf" class="hint">← Overleaf 一覧</a>
-      <h2 style="margin:6px 0 0">⚙ Overleaf 設定</h2>
+      <h2 style="margin:6px 0 0">⚙ Overleaf 更新状況 設定</h2>
       <p class="hint" style="margin:4px 0 0; font-size:11px">
         教員アカウントの Overleaf cookie を登録し、collector を走らせて文字数 snapshot を取得します。
         cookie は数か月で失効するので、その時はここから貼り直し。
