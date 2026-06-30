@@ -133,6 +133,8 @@ export const APPS = [
   { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
   { id: 'places',        cat: 'game',   url: '#/places',       title: '🍴 食べある記',      desc: 'お店情報 (住所 / 緯度経度 / 紹介文) をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー + tabelog URLから自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },
+  // v884 #457 実績 (アプリ一覧に入れ忘れていた)
+  { id: 'achievements',  cat: 'archive', url: '#/achievements', title: '🏆 実績',           desc: 'ラボ内で達成してきた実績を一覧表示。 売買/投稿/食べある記/ゲーム/筋トレ/論文要約など各種行動が記念バッジとして並び、AI が称号 (例「らぼ酒場の主」) を命名してくれる。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
