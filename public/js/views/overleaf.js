@@ -78,6 +78,21 @@ function applyOverleafFilter(items, filterStr) {
   return items.filter(p => (p.name || '').toLowerCase().includes(needle));
 }
 
+// v903 絞り込み中は project name から 共通部分 (フィルタ文字列) を削って、 個別部分だけを表示。
+//   例: filter='Research Progress Report' → 「Research Progress Report（中村聡史）」 → 「中村聡史」
+//   括弧/区切り文字も削って、 空になったら元の名前で fallback。
+function _escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function shortenName(name, filterStr) {
+  if (!name || !filterStr) return name;
+  const preset = FILTER_PRESETS.find(p => p.slug === filterStr);
+  const needle = preset ? preset.match : filterStr;
+  let s = name.replace(new RegExp(_escRe(needle), 'i'), '');
+  // 前後の 括弧 / 区切り文字 / 空白 を削る
+  s = s.replace(/^[\s（）()「」【】『』、・\-_:：]+/, '')
+       .replace(/[\s（）()「」【】『』、・\-_:：]+$/, '');
+  return s || name;
+}
+
 export async function renderOverleafList({ query = {} } = {}) {
   const app = document.getElementById('app');
   const isAdmin = (state.me?.role || '') === 'admin';
@@ -294,14 +309,40 @@ export async function renderOverleafList({ query = {} } = {}) {
         wireFilterChip();
         return;
       }
-      body.innerHTML = filterChip + singleDayNote + renderCompareChart(active, mf) +
-        (stale.length ? `
-          <div class="card" style="margin-top:10px; font-size:12px">
-            <div class="muted" style="margin-bottom:4px">💤 1か月以上更新なし (グラフから除外: ${stale.length} 件)</div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap">
-              ${stale.map(p => `<span class="tag" style="font-size:11px; background:#f3f4f6; color:#666">${escapeHtml(p.name)}</span>`).join('')}
+      // v903 絞り込み中は stale プロジェクトも文字数+最終更新日付きで一覧表示。
+      //   グラフには出さない (古い + 動かないので線にならない) が、
+      //   「過去にXX字書いた人」として参照できるように。
+      const staleDetailRow = (p) => {
+        const cur = p.latest?.[mf.latest];
+        return `
+          <a class="list-item" href="#/overleaf/${p.id}" style="align-items:flex-start; font-size:12px" title="${escapeHtml(p.name)}">
+            <div class="grow" style="min-width:0">
+              <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                💤 ${escapeHtml(shortenName(p.name, activeFilter))}
+              </div>
+              <div class="meta" style="font-size:11px; margin-top:2px">
+                ${cur != null ? `<b>${cur.toLocaleString()}</b> <span class="muted">${mf.unit}</span> ・` : ''}
+                最終更新 ${escapeHtml(fmtPast(p.last_remote_updated_at))}
+              </div>
             </div>
-          </div>` : '');
+          </a>`;
+      };
+      const staleSummary = stale.length
+        ? (activeFilter
+            ? `<details class="card" style="margin-top:10px" open>
+                 <summary style="cursor:pointer; font-size:12px; color:#666; padding:4px 0">
+                   💤 1か月以上更新なし (グラフ非表示: ${stale.length} 件)
+                 </summary>
+                 <div class="list" style="margin-top:6px">${stale.map(staleDetailRow).join('')}</div>
+               </details>`
+            : `<div class="card" style="margin-top:10px; font-size:12px">
+                 <div class="muted" style="margin-bottom:4px">💤 1か月以上更新なし (グラフから除外: ${stale.length} 件)</div>
+                 <div style="display:flex; gap:6px; flex-wrap:wrap">
+                   ${stale.map(p => `<span class="tag" style="font-size:11px; background:#f3f4f6; color:#666">${escapeHtml(p.name)}</span>`).join('')}
+                 </div>
+               </div>`)
+        : '';
+      body.innerHTML = filterChip + singleDayNote + renderCompareChart(active, mf, activeFilter) + staleSummary;
       wireFilterChip();
       return;
     }
@@ -326,11 +367,12 @@ export async function renderOverleafList({ query = {} } = {}) {
       const tags = [];
       if (p.is_stale)    tags.push('<span class="tag muted" style="font-size:10px; background:#f3f4f6">💤 1か月以上更新なし</span>');
       if (p.is_archived) tags.push('<span class="tag muted" style="font-size:10px">🗄 archived</span>');
+      const displayName = shortenName(p.name, activeFilter);
       return `
-        <a class="list-item" href="#/overleaf/${p.id}" style="align-items:flex-start">
+        <a class="list-item" href="#/overleaf/${p.id}" style="align-items:flex-start" title="${escapeHtml(p.name)}">
           <div class="grow" style="min-width:0">
             <div class="bold" style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-              ${escapeHtml(p.name)} ${tags.join(' ')}
+              ${escapeHtml(displayName)} ${tags.join(' ')}
             </div>
             <div class="meta" style="font-size:12px">
               最終更新 <span ${lastUTitle}>${escapeHtml(lastU)}</span>
@@ -375,7 +417,7 @@ export async function renderOverleafList({ query = {} } = {}) {
 }
 
 // 複数プロジェクトを 1 つの SVG に重ね描き。 各プロジェクトに固有色を振る。
-function renderCompareChart(items, mf) {
+function renderCompareChart(items, mf, filterStr = '') {
   const w = 720, h = 360, padL = 60, padR = 20, padT = 24, padB = 40;
   const innerW = w - padL - padR, innerH = h - padT - padB;
   // 全 sparkline points を 走査して時間軸と最大値を出す
@@ -432,7 +474,7 @@ function renderCompareChart(items, mf) {
     legend.push(`
       <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#fafafa; border-radius:10px; font-size:11px">
         <span style="display:inline-block; width:10px; height:10px; background:${color}; border-radius:2px"></span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px" title="${escapeHtml(p.name)}">${escapeHtml(shortenName(p.name, filterStr))}</span>
         <span class="muted">(${(p.latest?.[mf.latest] || 0).toLocaleString()})</span>
       </div>`);
   });
