@@ -164,6 +164,15 @@ export async function renderOverleafList({ query = {} } = {}) {
   const metricSel = document.getElementById('ovl-metric');
   const modeListBtn  = document.getElementById('ovl-mode-list');
   const modeChartBtn = document.getElementById('ovl-mode-chart');
+  // metric の latest フィールド + 単位 + spark/history のキー。
+  // v898 hotfix: render() からも sortItems() からも参照されるので applyMode('chart') の
+  //   初回呼び出しより前に宣言しないと TDZ で 「Cannot access 'metricField' before init」 になる。
+  const metricField = {
+    total: { latest: 'total_char_count',    unit: '字',            sparkKey: 'c'  },
+    body:  { latest: 'total_char_body',     unit: '字 (本文)',      sparkKey: 'cb' },
+    jp:    { latest: 'total_jp_char_count', unit: '字 (日本語)',    sparkKey: 'jp' },
+    word:  { latest: 'total_word_count',    unit: 'words',         sparkKey: 'w'  },
+  };
   // v898 URL の query が優先、 次に localStorage、 ない時 list
   let viewMode = urlMode || (() => {
     try { return localStorage.getItem('labpay.overleaf.viewMode') === 'chart' ? 'chart' : 'list'; }
@@ -232,14 +241,6 @@ export async function renderOverleafList({ query = {} } = {}) {
     });
   }
   injectFilterUI();
-
-  // metric の latest フィールド + 単位 + spark/history のキー
-  const metricField = {
-    total: { latest: 'total_char_count',    unit: '字',            sparkKey: 'c'  },
-    body:  { latest: 'total_char_body',     unit: '字 (本文)',      sparkKey: 'cb' },
-    jp:    { latest: 'total_jp_char_count', unit: '字 (日本語)',    sparkKey: 'jp' },
-    word:  { latest: 'total_word_count',    unit: 'words',         sparkKey: 'w'  },
-  };
 
   function sortItems(arr) {
     const sort = sortSel.value;
