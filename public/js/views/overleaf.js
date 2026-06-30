@@ -63,20 +63,11 @@ function sparklineSvg(points, metricKey = 'c') {
 // v898 グラフ絞り込みプリセット。 slug は URL 共有可能、 match は projectName.includes() で判定。
 //   よくある共著体パターンを最初から用意。 ここに無いものは「カスタム…」 で自由入力。
 // v900 slug は URL に出るので意味のある形に。 例: /#/overleaf?filter=MasterThesis2026
+// v901 プリセットを3種に絞った (ユーザ要望)。 他は 「カスタム…」 で自由入力可能。
 const FILTER_PRESETS = [
   { slug: 'ResearchProgressReport', label: '📝 Research Progress Report', match: 'Research Progress Report' },
   { slug: 'MasterThesis2026',       label: '🎓 MasterThesis2026',         match: 'MasterThesis2026' },
   { slug: 'BachelorThesis2026',     label: '📜 BachelorThesis2026',       match: 'BachelorThesis2026' },
-  { slug: 'PhDThesis',              label: '🎓 PhD Thesis',               match: 'PhD' },
-  { slug: 'NordiCHI',               label: '🌍 NordiCHI',                 match: 'NordiCHI' },
-  { slug: 'CHI',                    label: '🌍 CHI (CHI20xx)',            match: 'CHI20' },
-  { slug: 'IUI',                    label: '🤖 IUI',                      match: 'IUI' },
-  { slug: 'WISS',                   label: '🇯🇵 WISS',                   match: 'WISS' },
-  { slug: 'IPSJ',                   label: '🇯🇵 IPSJ',                   match: 'IPSJ' },
-  { slug: 'HCIKenkyukai',           label: '🇯🇵 HCI研究会',               match: 'HCI研究会' },
-  { slug: 'EC',                     label: '🎮 EC (EC20xx)',              match: 'EC20' },
-  { slug: 'SIGGRAPH',               label: '🎨 SIGGRAPH',                 match: 'SIGGRAPH' },
-  { slug: 'UIST',                   label: '🖱 UIST',                     match: 'UIST' },
 ];
 
 function applyOverleafFilter(items, filterStr) {
@@ -211,20 +202,24 @@ export async function renderOverleafList({ query = {} } = {}) {
   sortSel.addEventListener('change', render);
   metricSel.addEventListener('change', render);
 
-  // v898 絞り込み UI を 動的に挿入 (sort/metric の隣)
-  function injectFilterUI() {
+  // v898 絞り込み UI を動的に挿入 (sort/metric の隣)。
+  // v901 active filter が変わるたびに毎回 リビルドするように変更。 これで custom 入力後に
+  //   ドロップダウンが 「🔎 「<typed>」」 と現在のカスタム値を反映する。
+  function refreshFilterUI() {
     const row = sortSel.closest('.row');
-    if (!row || row.querySelector('#ovl-filter')) return;
-    const customLabel = (activeFilter && !FILTER_PRESETS.some(p => p.slug === activeFilter))
-      ? `🔎 「${activeFilter}」`
-      : '🔎 カスタム…';
+    if (!row) return;
+    // 既存があれば一旦削除
+    const existing = row.querySelector('#ovl-filter')?.closest('label');
+    if (existing) existing.remove();
+    const isCustomActive = activeFilter && !FILTER_PRESETS.some(p => p.slug === activeFilter);
+    const customLabel = isCustomActive ? `🔎 「${activeFilter}」` : '🔎 カスタム…';
     const lbl = document.createElement('label');
     lbl.style.cssText = 'display:inline-flex; align-items:center; gap:4px';
     lbl.innerHTML = `絞り込み:
-      <select id="ovl-filter" style="font-size:12px; max-width:200px">
+      <select id="ovl-filter" style="font-size:12px; max-width:240px">
         <option value="">全件</option>
         ${FILTER_PRESETS.map(p => `<option value="${escapeHtml(p.slug)}" ${activeFilter===p.slug?'selected':''}>${p.label}</option>`).join('')}
-        <option value="__custom__" ${activeFilter && !FILTER_PRESETS.some(p => p.slug===activeFilter) ? 'selected' : ''}>${escapeHtml(customLabel)}</option>
+        <option value="__custom__" ${isCustomActive ? 'selected' : ''}>${escapeHtml(customLabel)}</option>
       </select>`;
     row.insertBefore(lbl, document.getElementById('ovl-count'));
     document.getElementById('ovl-filter').addEventListener('change', (ev) => {
@@ -232,15 +227,20 @@ export async function renderOverleafList({ query = {} } = {}) {
       if (v === '__custom__') {
         const cur = (activeFilter && !FILTER_PRESETS.some(p => p.slug === activeFilter)) ? activeFilter : '';
         v = prompt('プロジェクト名の一部を入れてください (大文字小文字無視で部分一致):', cur);
-        if (v === null) { ev.target.value = activeFilter; return; }
+        if (v === null) {
+          // キャンセル → 元の値に戻す
+          refreshFilterUI();
+          return;
+        }
         v = v.trim();
       }
       activeFilter = v;
       syncUrl();
+      refreshFilterUI();  // v901 ドロップダウンも再描画 (custom 値を反映)
       render();
     });
   }
-  injectFilterUI();
+  refreshFilterUI();
 
   function sortItems(arr) {
     const sort = sortSel.value;
@@ -365,9 +365,8 @@ export async function renderOverleafList({ query = {} } = {}) {
     document.getElementById('ovl-filter-clear')?.addEventListener('click', (ev) => {
       ev.preventDefault();
       activeFilter = '';
-      const sel = document.getElementById('ovl-filter');
-      if (sel) sel.value = '';
       syncUrl();
+      refreshFilterUI();
       render();
     });
   }
