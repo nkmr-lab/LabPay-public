@@ -33,8 +33,8 @@ export async function renderRoulette({ query } = {}) {
     const ids = raw.split(',').map(Number).filter(Boolean);
     if (ids.length) lockedIds = new Set(ids);
   }
-  // グループから飛んでくる時 title=<グループ名> 付き。 何も入っていない人間が
-  // 「タイトル考えるの面倒」 で止まらないように初期値として埋める。
+  // グループから飛んでくる時 title=<グループ名> 付き。何も入っていない人間が
+  // 「タイトル考えるの面倒」で止まらないように初期値として埋める。
   const initialTitle = String(query?.title || '').trim();
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -91,10 +91,10 @@ export async function renderRoulette({ query } = {}) {
 }
 
 // ---------------- タグ (タイトル補助) ----------------
-// admin が config.roulette_tags にカンマ区切りで持つ共通タグと、 ユーザが
-// localStorage に持つ個人タグをマージしてチップで並べる。 タップで現在の
-// タイトル末尾に半角スペース + タグを差し込む。 末尾に既にそのタグがあれば
-// 重複追加しない。「＋」 で個人タグを追加可。 個人タグは右上に小さな
+// admin が config.roulette_tags にカンマ区切りで持つ共通タグと、ユーザが
+// localStorage に持つ個人タグをマージしてチップで並べる。タップで現在の
+// タイトル末尾に半角スペース + タグを差し込む。末尾に既にそのタグがあれば
+// 重複追加しない。「＋」で個人タグを追加可。個人タグは右上に小さな
 // × が出て削除できる。
 const PERSONAL_TAGS_KEY = 'labpay-roulette-tags-personal';
 function readPersonalTags() {
@@ -125,7 +125,7 @@ function renderTagRow() {
   const row = document.getElementById('rl-tag-row');
   if (!row) return;
   const personal = readPersonalTags();
-  // 共通タグは ×不可、 個人タグは × 付き。 重複時は共通を優先。
+  // 共通タグは ×不可、個人タグは × 付き。重複時は共通を優先。
   const sharedSet = new Set(SHARED_TAGS);
   const personalOnly = personal.filter(t => !sharedSet.has(t));
   const chips = [
@@ -417,7 +417,7 @@ async function onSpin() {
     const total = 360 * 12 + target;
     const svg = document.getElementById('rl-wheel');
     svg.style.transition = 'transform 14s cubic-bezier(.22,.04,.08,1)';
-    // ホイール停止後 (transitionend) に発火するフラグ。 通知 POST はこれが立ってから。
+    // ホイール停止後 (transitionend) に発火するフラグ。通知 POST はこれが立ってから。
     let wheelStopped = false;
     const onTransitionEnd = (ev) => {
       // 子要素の transition イベントは無視 (rotate は svg 自体に効いてる)。
@@ -436,7 +436,7 @@ async function onSpin() {
     playSpinSounds(N, total);
     // Reveal result after animation completes (matches the CSS transition).
     // 通知 POST は wheelStopped を待つ (転送・タブ切り替え等で setTimeout が遅延しても
-    // 「ホイール停止前に通知が飛ぶ」 を防ぐ)。
+    // 「ホイール停止前に通知が飛ぶ」を防ぐ)。
     setTimeout(() => {
       let prize = '';
       if (r.dry_run) {
@@ -468,8 +468,8 @@ async function onSpin() {
       spinning = false;
       if (!r.dry_run) {
         loadHistory();
-        // 「答えバレ」 防止のため通知は wheelStopped を待ってから。 transitionend が
-        // 既に来ていれば即時、 まだなら待ってから 1 回だけ送る。 最大 4 秒で諦め。
+        // 「答えバレ」防止のため通知は wheelStopped を待ってから。 transitionend が
+        // 既に来ていれば即時、まだなら待ってから 1 回だけ送る。最大 4 秒で諦め。
         const doNotify = () => post(`/api/roulettes/${r.id}/notify`, {}).catch(() => {});
         if (wheelStopped) {
           doNotify();
@@ -530,7 +530,7 @@ export async function renderRouletteResult({ params }) {
       </div>
       <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
     // 描画前に wcard を表示にしておく (drawStaticWheel が万一 throw しても
-    // ホイールカードが 「たたまれて見えない」 状態にならないように)。
+    // ホイールカードが「たたまれて見えない」状態にならないように)。
     wcard.hidden = false;
     drawStaticWheel(r);
     document.getElementById('rl-detail-members').innerHTML = r.members.map(m =>

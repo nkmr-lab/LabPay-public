@@ -6,8 +6,8 @@ import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 
-// 範囲は 「今日 / 昨日 / 今週」 の 3 択。 1 ヶ月だと量が多すぎて読めなくなるので
-// 廃止。 サーバ側は range キーで oldest/latest を切り出して Slack を叩く。
+// 範囲は「今日 / 昨日 / 今週」の 3 択。 1 ヶ月だと量が多すぎて読めなくなるので
+// 廃止。サーバ側は range キーで oldest/latest を切り出して Slack を叩く。
 const RANGES = [
   { key: 'today',     label: '今日' },
   { key: 'yesterday', label: '昨日' },
@@ -44,8 +44,8 @@ async function load() {
   root.innerHTML = `<div class="muted">読み込み中…</div>`;
   try {
     const d = await get('/api/scrapbox/feed', { range });
-    // v494 #98 Slack連携が止まっている場合は note が入る。 空の groups でも
-    //   internal error にせず、 管理者向けの案内を出す。
+    // v494 #98 Slack連携が止まっている場合は note が入る。空の groups でも
+    //   internal error にせず、管理者向けの案内を出す。
     if (d.note) {
       root.innerHTML = `
         <div class="card" style="background:#fff8e6; border-left:3px solid #f5d089">

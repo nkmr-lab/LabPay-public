@@ -1,11 +1,11 @@
-// /#/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。 教員 admin 限定。
+// /#/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。教員 admin 限定。
 //   pyoverleaf が教員アカウントの全共有プロジェクトを定期取得 → 文字数スナップショット
-//   が DB に積まれる → ここで 「最近動きがあったプロジェクト」 を一覧表示、 詳細で推移を見る。
+//   が DB に積まれる → ここで「最近動きがあったプロジェクト」を一覧表示、詳細で推移を見る。
 //
 // 設計:
-//   - 一覧: 直近 24h / 7d の文字数増減を出す、 並び順 = 最終更新 / 24h 増加 / 7d 増加 / 名前
+//   - 一覧: 直近 24h / 7d の文字数増減を出す、並び順 = 最終更新 / 24h 増加 / 7d 増加 / 名前
 //   - 詳細: 60 日 chart + 最新ファイル別内訳
-//   - admin が collector を設定して走らせる想定。 未設定なら 「セットアップガイド」 表示。
+//   - admin が collector を設定して走らせる想定。未設定なら「セットアップガイド」表示。
 
 import { get } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -94,7 +94,7 @@ export async function renderOverleafList() {
         st.innerHTML += ` <span style="color:#dc2626">(err: ${escapeHtml(s.last_run.error_msg.slice(0,120))})</span>`;
       }
     } else {
-      st.innerHTML = `⚠ collector がまだ一度も走っていません。 サーバで <code>scripts/overleaf_collector.py</code> をセットアップしてください。`;
+      st.innerHTML = `⚠ collector がまだ一度も走っていません。サーバで <code>scripts/overleaf_collector.py</code> をセットアップしてください。`;
     }
   } catch (e) { /* status は best-effort */ }
 

@@ -1,5 +1,5 @@
-// /#/meetups — 次の待ち合わせ。 集合時刻 + 場所 + メンバーを全員に同期する軽量機能。
-// タイマー的に 「あと N 分で」 の表示はするが、 個別応答は無し (シンプル)。
+// /#/meetups — 次の待ち合わせ。集合時刻 + 場所 + メンバーを全員に同期する軽量機能。
+// タイマー的に「あと N 分で」の表示はするが、個別応答は無し (シンプル)。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -13,8 +13,8 @@ import { copyShareUrl } from '../share_to_sns.js';
 // 場所文字列から緯度,経度を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
 //   * "(35.6586, 139.7454) 駅前ホテル" / "lat:35.65 lng:139.74"
-// 範囲: 緯度 [-90, 90], 経度 [-180, 180]。 駅名や住所文字が混在しても
-// 最初の lat/lng ペアを返す。 該当無しなら null。
+// 範囲: 緯度 [-90, 90], 経度 [-180, 180]。駅名や住所文字が混在しても
+// 最初の lat/lng ペアを返す。該当無しなら null。
 function parseLatLng(s) {
   if (!s) return null;
   const m = String(s).match(/(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)/);
@@ -32,7 +32,7 @@ const gradeRank = g => {
 };
 
 // 残り時間文字列 (集合済 / まもなく / あと N 分 ...)。 fmtRelative とは独自ラベルなので残置。
-// v450 kind=deadline は 「集合済」 → 「期限超過」、 長期 (>= 1 日) では日単位表示。
+// v450 kind=deadline は「集合済」 → 「期限超過」、長期 (>= 1 日) では日単位表示。
 function fmtRemaining(s, kind = 'meetup') {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
@@ -71,7 +71,7 @@ export async function renderMeetups({ query } = {}) {
   const kindFilter = (query?.kind === 'meetup' || query?.kind === 'deadline') ? query.kind : '';
   const meta = kindFilter ? KIND_META[kindFilter] : null;
   const app = document.getElementById('app');
-  // v450 タイトル + サブ + 「＋ 新規」 をフィルタにより切替。 フィルタなしは両方表示。
+  // v450 タイトル + サブ + 「＋ 新規」をフィルタにより切替。フィルタなしは両方表示。
   const headerTitle = meta ? `${meta.icon} ${meta.label}` : '🤝 待ち合わせ / 📌 〆切';
   const headerSub = meta?.label === '〆切'
     ? '〆切時刻 + 対象者を一発で全員に通知。 365 日先まで設定可。'
@@ -239,9 +239,9 @@ export async function renderMeetupNew({ query } = {}) {
   });
   whenEl.addEventListener('input', syncRem);
   // v560 #213 TZ toggle: 切替時に preset / 既存値の表示を再計算するため reload-relative
-  //   な計算をするより、 ボタンを再 click して埋め直す方が確実なので簡略実装
+  //   な計算をするより、ボタンを再 click して埋め直す方が確実なので簡略実装
   bindTzToggle('mun-tz', () => {
-    // 切替後はフォームの値が JST/ローカルどちらの解釈に変わるので、 ユーザーが手動で
+    // 切替後はフォームの値が JST/ローカルどちらの解釈に変わるので、ユーザーが手動で
     //   合わせ直す前提 (ヒント文だけ更新)
     syncRem();
   });
@@ -279,7 +279,7 @@ export async function renderMeetupNew({ query } = {}) {
     const location = locEl ? locEl.value.trim() : '';
     const whenLocal = whenEl.value;
     if (!whenLocal) { toast(`${km.timeLabel}を入れてください`); return; }
-    // v560 #213 タイムゾーン helper で 「JST / ローカル」 切替可能化
+    // v560 #213 タイムゾーン helper で「JST / ローカル」切替可能化
     const whenUtc = localDtToIso(whenLocal);
     const memberIds = picker ? [...picker.getSelected()] : [];
     if (!memberIds.length) { toast(`${isDeadline ? '対象者' : '参加者'}を 1 人以上`); return; }
@@ -324,7 +324,7 @@ export async function renderMeetupDetail({ params }) {
       </div>
       <div id="mud-edit-form" hidden style="margin-top:8px"></div>
     </div>
-    <!-- v482 #71 シェアメッセージ。 「少し遅れます」 「もう入ってます」 等 -->
+    <!-- v482 #71 シェアメッセージ。「少し遅れます」「もう入ってます」等 -->
     <div class="card" id="mud-msg-card">
       <h3 style="margin:0 0 6px">💬 メッセージ (<span id="mud-mn">0</span>)</h3>
       <div id="mud-msgs" class="list" style="margin-bottom:8px"><div class="muted">読み込み中…</div></div>
@@ -355,7 +355,7 @@ export async function renderMeetupDetail({ params }) {
       const dt = new Date(String(m.meetup_at).replace(' ', 'T'));
       const pad = n => String(n).padStart(2, '0');
       if (whenEl) {
-        // 〆切 / 待ち合わせいずれも表示は HH:MM。 日付が違う場合のみ月/日も。
+        // 〆切 / 待ち合わせいずれも表示は HH:MM。日付が違う場合のみ月/日も。
         const now = new Date();
         const sameDay = now.toDateString() === dt.toDateString();
         whenEl.textContent = sameDay
@@ -371,7 +371,7 @@ export async function renderMeetupDetail({ params }) {
     const locEl = document.getElementById('mud-loc');
     const ll = parseLatLng(m.location);
     if (locEl) {
-      // 緯度/経度っぽい時は Google Maps を coord 形式に。 そうでなければ住所/施設名検索。
+      // 緯度/経度っぽい時は Google Maps を coord 形式に。そうでなければ住所/施設名検索。
       const href = ll
         ? `https://maps.google.com/?q=${ll.lat},${ll.lng}`
         : `https://maps.google.com/?q=${encodeURIComponent(m.location || '')}`;

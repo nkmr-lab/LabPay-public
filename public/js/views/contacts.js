@@ -1,5 +1,5 @@
 // /#/contacts — 連絡先 (緊急連絡用)。
-// 「電話番号を登録済みのメンバー」 を強調しつつ、 全員 (登録無しの人も) 一覧表示。
+// 「電話番号を登録済みのメンバー」を強調しつつ、全員 (登録無しの人も) 一覧表示。
 // tel: リンクでタップ通話。
 
 import { get } from '../api.js';
@@ -12,7 +12,7 @@ const gradeRank = g => {
 };
 
 function telHref(s) {
-  // 全角 → 半角、 数字 / + 以外を落とす (tel: の RFC に従う)。
+  // 全角 → 半角、数字 / + 以外を落とす (tel: の RFC に従う)。
   if (!s) return '';
   const half = s.replace(/[０-９＋]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
   return 'tel:' + half.replace(/[^\d+]/g, '');
@@ -27,7 +27,7 @@ export async function renderContacts() {
     <div id="contacts-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
   try {
-    // v494 #99 #100 一般の /api/users からは phone_number を除外。 専用エンドポイント
+    // v494 #99 #100 一般の /api/users からは phone_number を除外。専用エンドポイント
     //   /api/users/contacts なら admin/自分/同グループメンバーのみ phone を含む。
     const d = await get('/api/users/contacts');
     const users = [...(d.items || [])].sort((a, b) => {
@@ -44,7 +44,7 @@ export async function renderContacts() {
       const phoneRow = phone
         ? `<a href="${escapeHtml(telHref(phone))}" class="bold" style="color:var(--primary)" onclick="event.stopPropagation()">📞 ${escapeHtml(phone)}</a>`
         : `<span class="muted" style="font-size:12px">未登録</span>`;
-      // 行全体を公開プロフィールへの link に。 電話タップだけは stopPropagation で
+      // 行全体を公開プロフィールへの link に。電話タップだけは stopPropagation で
       // tel: 直行 (プロフィールへは行かない)。
       return `
         <a class="list-item" href="#/users/${u.id}" style="gap:10px; align-items:center; text-decoration:none; color:inherit">

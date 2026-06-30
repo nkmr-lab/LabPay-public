@@ -1,12 +1,12 @@
 // Screen Wake Lock helper. タイマー / ストップウォッチ実行中にスクリーンが
-// スリープしないように取得し、 終了 / 一時停止 / ページ離脱で解放する。
+// スリープしないように取得し、終了 / 一時停止 / ページ離脱で解放する。
 //
 // 仕様:
 //  - navigator.wakeLock.request('screen') を持続中 acquire
 //  - ページが visibilityhidden で OS が自動解放するため、 visible に戻ったら再取得
-//  - 「持続中フラグ」 を内部で持って、 release() が来たら取らない
+//  - 「持続中フラグ」を内部で持って、 release() が来たら取らない
 //
-// 単一インスタンス。 acquire(key) で同じ key 同士はノーオプ、 別 key も重複呼びは
+// 単一インスタンス。 acquire(key) で同じ key 同士はノーオプ、別 key も重複呼びは
 // 直近の key だけ有効 (旧 key の sentinel はそっと release)。
 //
 // 失敗 (未対応 / NotAllowedError / フォーカスなし) は silently swallow。
@@ -40,8 +40,8 @@ function _ensureVisListener() {
   document.addEventListener('visibilitychange', _visListener);
 }
 
-// acquire('timer-123' など key) で 「この対象が動いている間 ON」 を表現。
-// 同じ key で連続呼んでも重複取得しない。 別 key で呼んだら旧 key は上書き。
+// acquire('timer-123' など key) で「この対象が動いている間 ON」を表現。
+// 同じ key で連続呼んでも重複取得しない。別 key で呼んだら旧 key は上書き。
 export async function acquireWakeLock(key) {
   _activeKey = key;
   _ensureVisListener();

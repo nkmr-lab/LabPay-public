@@ -1,5 +1,5 @@
 <?php
-// /api/exercise — 運動 (歩数) セッション。 端末側で DeviceMotion を読んで
+// /api/exercise — 運動 (歩数) セッション。端末側で DeviceMotion を読んで
 // 歩数をカウント → 終了時に 1 セッション分を POST。
 // Routes:
 //   GET    /api/exercise            自分のセッション履歴 + 集計

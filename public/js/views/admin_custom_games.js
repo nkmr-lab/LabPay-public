@@ -15,9 +15,9 @@ export async function renderAdminCustomGames() {
       <a href="#/admin" class="hint">← 管理</a>
       <h2 style="margin:6px 0">🎮 自作ゲーム kind 管理</h2>
       <p class="hint" style="font-size:13px">
-        custom_game_kinds テーブルの内容を編集。 ここで新規 kind を登録すると、
+        custom_game_kinds テーブルの内容を編集。ここで新規 kind を登録すると、
         対応する JS ファイル (デフォルト <code>/js/views/{kind}.js</code>) があれば
-        すぐに /api/custom-games/list に出現します。 詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
+        すぐに /api/custom-games/list に出現します。詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
       </p>
     </div>
     <div class="card">
@@ -34,7 +34,7 @@ export async function renderAdminCustomGames() {
       </div>
       <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">説明</div>
         <textarea id="acg-desc" rows="2" maxlength="500" style="width:100%; box-sizing:border-box"></textarea></label>
-      <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">JS module URL (任意、 デフォルト /js/views/{kind}.js)</div>
+      <label style="display:block; margin-top:8px"><div class="bold" style="font-size:13px">JS module URL (任意、デフォルト /js/views/{kind}.js)</div>
         <input id="acg-jsurl" maxlength="200" placeholder="/js/views/dotsboxes.js" style="width:100%"></label>
       <div style="margin-top:8px">
         <button id="acg-create" class="btn primary">登録</button>

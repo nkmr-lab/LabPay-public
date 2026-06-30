@@ -1,19 +1,19 @@
 // LabPay service worker.
 // Goals:
 //   * Make the app installable (PWA criterion).
-//   * v506: shell (HTML/CSS/JS) は stale-while-revalidate に変更。 前回のキャッシュを即座に
-//     返してから裏で更新版を取りに行く。 これでスマホ起動時のロゴ出現が「キャッシュから
-//     即」 になり、 体感が劇的に短縮。 deploy で CACHE_NAME を bump すれば古い shell は
-//     activate 時に破棄され、 次回アクセスで新版が降りてくる。
+//   * v506: shell (HTML/CSS/JS) は stale-while-revalidate に変更。前回のキャッシュを即座に
+//     返してから裏で更新版を取りに行く。これでスマホ起動時のロゴ出現が「キャッシュから
+//     即」になり、体感が劇的に短縮。 deploy で CACHE_NAME を bump すれば古い shell は
+//     activate 時に破棄され、次回アクセスで新版が降りてくる。
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v887';
+const CACHE_NAME = 'labpay-shell-v888';
 // アップロード画像 (固定 URL = ファイル名ハッシュ) は cache-first に
-// 別キャッシュで永続化。 シェルを更新しても画像は落ちない。
+// 別キャッシュで永続化。シェルを更新しても画像は落ちない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
 // グループ / 食べある記 / SNS / 重要連絡 / Scrapbox の GET を stale-while-revalidate
-// 別キャッシュで保持。 オフラインや通信遅延時でも直前の内容を即表示、
+// 別キャッシュで保持。オフラインや通信遅延時でも直前の内容を即表示、
 // 裏で新鮮版を取得。 ledger 系 (送金 / 残高) は含めない。
 // v534 #189 古い stale な /api/groups* キャッシュが renderer を壊している可能性があるので
 //   コンテンツキャッシュを v3 に bump (activate で v2 が削除される → 次回 fetch が全部
@@ -47,7 +47,7 @@ const PRECACHE_URLS = [
 function isSwrContentPath(pathname) {
   if (!pathname.startsWith('/api/')) return false;
   // posts/latest_id はポーリング用軽量 endpoint なので必ずネット行く (キャッシュ
-  // 不要だし、 古い id を返すと更新検出が遅れる)。
+  // 不要だし、古い id を返すと更新検出が遅れる)。
   if (pathname === '/api/posts/latest_id') return false;
   return (
     pathname === '/api/groups'  || pathname.startsWith('/api/groups/') ||
@@ -75,7 +75,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    // シェルの古いキャッシュは削除、 画像 / コンテンツキャッシュは保持。
+    // シェルの古いキャッシュは削除、画像 / コンテンツキャッシュは保持。
     await Promise.all(keys
       .filter(k => k !== CACHE_NAME && k !== IMG_CACHE_NAME && k !== CONTENT_CACHE_NAME)
       .map(k => caches.delete(k)));
@@ -85,7 +85,7 @@ self.addEventListener('activate', (event) => {
 
 // v506 shell ファイル (HTML/CSS/JS) を stale-while-revalidate で返す共通処理。
 //   1) キャッシュにあれば即返す (体感ほぼゼロ)
-//   2) 並行してネットワークから新版を取り直し、 成功なら次回用に保存
+//   2) 並行してネットワークから新版を取り直し、成功なら次回用に保存
 //   3) キャッシュも無ければネットワーク待ち
 async function swrShell(req) {
   const cache = await caches.open(CACHE_NAME);
@@ -111,10 +111,10 @@ async function swrShell(req) {
   throw new Error('offline');
 }
 
-// v517 #147 #148 #149 #150 mutation (POST/PATCH/DELETE) の成功後に、 関連リソースの
-//   SWR キャッシュを一括破棄。 これによりクライアント側で個別に invalidate を呼ばず
-//   とも、 「投稿 → 一覧で反映されない」 「フィード追加 → 反映されない」 「らぼったー
-//   削除 → 残ってる」 などのリロード必要問題を SW レベルで根治する。
+// v517 #147 #148 #149 #150 mutation (POST/PATCH/DELETE) の成功後に、関連リソースの
+//   SWR キャッシュを一括破棄。これによりクライアント側で個別に invalidate を呼ばず
+//   とも、「投稿 → 一覧で反映されない」「フィード追加 → 反映されない」「らぼったー
+//   削除 → 残ってる」などのリロード必要問題を SW レベルで根治する。
 //   破棄ロジック: mutation のパス第一セグメント (e.g. /api/posts/123/likes → 'posts')
 //   をプレフィックスにして CONTENT_CACHE の同プレフィックスエントリ全削除。
 async function invalidateContentByPrefix(prefix) {
@@ -132,7 +132,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // v517 mutation API 成功後にキャッシュ破棄。 GET 以外の /api/* リクエストを
-  //   ハイジャックして、 サーバ応答が 2xx なら同じトップセグメントの SWR キャッシュ
+  //   ハイジャックして、サーバ応答が 2xx なら同じトップセグメントの SWR キャッシュ
   //   をパージする。 ledger 系 (送金 / 残高) は SWR 対象外なので影響なし。
   if (req.method !== 'GET' && url.pathname.startsWith('/api/')) {
     event.respondWith((async () => {
@@ -144,7 +144,7 @@ self.addEventListener('fetch', (event) => {
         }
         // v883 #456 rotate-image エンドポイント (places/posts) の POST が成功したら
         //   IMG_CACHE 全消しで /uploads/ 配下の古いキャッシュを切り落とす。
-        //   個別 URL 特定するより全消しの方が確実、 画像は次回 fetch でまた埋まる。
+        //   個別 URL 特定するより全消しの方が確実、画像は次回 fetch でまた埋まる。
         if (url.pathname.includes('/rotate-image')) {
           try { await caches.delete(IMG_CACHE_NAME); } catch (_) {}
         }
@@ -200,8 +200,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // v506 シェル (HTML / CSS / JS / 静的ファイル) は stale-while-revalidate。
-  //   旧コードは network-first だったので、 モバイル網で毎回数秒の往復待ちが発生していた。
-  //   SWR にすることで前回のキャッシュから即返り、 裏で新版を取り直す。 デプロイ時に
+  //   旧コードは network-first だったので、モバイル網で毎回数秒の往復待ちが発生していた。
+  //   SWR にすることで前回のキャッシュから即返り、裏で新版を取り直す。デプロイ時に
   //   CACHE_NAME を bump → 旧 shell が activate で破棄 → 次回アクセスで新版が降りる。
   if (url.origin === self.location.origin) {
     event.respondWith(swrShell(req));

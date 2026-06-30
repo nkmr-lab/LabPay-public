@@ -1,5 +1,5 @@
 // /#/conf-deadlines — 学会〆切一覧 (#251)。
-// 誰でも登録、 全員閲覧。 カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。 〆切順表示。
+// 誰でも登録、全員閲覧。カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。〆切順表示。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -30,7 +30,7 @@ function fmtDate(s) {
 
 // v691 #275 AOE (Anywhere on Earth = UTC-12) サポート
 //   AOE 入力 ↔ JST 保存の変換 (JST = AOE + 21 時間)。
-//   保存は常に JST wall-clock で、 表示時に is_aoe なら AOE 形式に戻して見せる。
+//   保存は常に JST wall-clock で、表示時に is_aoe なら AOE 形式に戻して見せる。
 function jstStrToAoeStr(jstStr) {
   if (!jstStr) return '';
   // jstStr = "2026-06-20 20:59:00" (treat as JST wall-clock)
@@ -66,7 +66,7 @@ export async function renderConfDeadlines() {
         <a class="btn primary" href="#/conf-deadlines/new">＋ 新規登録</a>
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        学会 / 研究会 / 論文誌の投稿〆切。 誰でも登録可、 全員閲覧可。
+        学会 / 研究会 / 論文誌の投稿〆切。誰でも登録可、全員閲覧可。
       </p>
     </div>
     <div class="card">
@@ -106,7 +106,7 @@ export async function renderConfDeadlines() {
         const cat = CATEGORIES[r.category] || CATEGORIES.other;
         const dl = new Date(String(r.deadline_at).replace(' ', 'T'));
         const sec = Math.floor((dl - new Date()) / 1000);
-        // v713 #308 仮 (暫定) 締切は 「およそ N 日」 表記。 v738 #349 「あと」 を落とす。
+        // v713 #308 仮 (暫定) 締切は「およそ N 日」表記。 v738 #349 「あと」を落とす。
         const isTentative = !!Number(r.deadline_is_tentative);
         const ahead = sec <= 0
           ? fmtAhead(sec)
@@ -123,7 +123,7 @@ export async function renderConfDeadlines() {
         const mineStyle = isMine ? '; background:#fffbeb; border-left:4px solid #f59e0b' : '';
         const mineMark = isMine ? ' ⭐' : '';
         // v749 #362 #364 list 行にも参加者を重ねたアイコンで表示。
-        //   最大 6 件まで表示、 オーバーしたら 「+N」 で省略。 名前ホバーで出る。
+        //   最大 6 件まで表示、オーバーしたら「+N」で省略。名前ホバーで出る。
         const members = Array.isArray(r.members) ? r.members : [];
         const maxAv = 6;
         const shown = members.slice(0, maxAv);
@@ -214,18 +214,18 @@ export async function renderConfDeadlineForm({ params } = {}) {
         <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
           <input type="checkbox" id="cd-deadline-aoe">
           🌐 AOE (Anywhere on Earth) で指定する
-          <span class="hint-sm" style="font-size:10px">※ AOE = UTC-12。 入力は AOE 時刻で、 内部は JST 換算で保存。</span>
+          <span class="hint-sm" style="font-size:10px">※ AOE = UTC-12。入力は AOE 時刻で、内部は JST 換算で保存。</span>
         </label>
         <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
           <input type="checkbox" id="cd-deadline-tentative">
-          🤔 仮 (暫定) の締切・ widget で 「およそ N 日」 と表示
+          🤔 仮 (暫定) の締切・ widget で「およそ N 日」と表示
         </label>
       </fieldset>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px">
-        <legend style="font-size:12px; color:#666">➕ サブ締切 (任意、 最大 10 件)</legend>
+        <legend style="font-size:12px; color:#666">➕ サブ締切 (任意、最大 10 件)</legend>
         <div id="cd-extras"></div>
         <button type="button" id="cd-extra-add" class="btn" style="font-size:12px; padding:2px 8px">＋ サブ締切を追加</button>
-        <div class="hint-sm" style="font-size:10px; margin-top:4px">申込 / アブストなど、 原稿締切以外の締切を並べて登録できます。</div>
+        <div class="hint-sm" style="font-size:10px; margin-top:4px">申込 / アブストなど、原稿締切以外の締切を並べて登録できます。</div>
       </fieldset>
       <label class="field"><span class="lbl">採択通知日 (任意)</span>
         <input type="datetime-local" id="cd-notification">
@@ -242,7 +242,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
         <input type="text" id="cd-location" maxlength="200" placeholder="Yokohama, Japan / Online 等">
       </label>
       <label class="field"><span class="lbl">メモ (任意)</span>
-        <textarea id="cd-notes" maxlength="2000" rows="3" placeholder="トラック、 推し論文、 投稿注意等"></textarea>
+        <textarea id="cd-notes" maxlength="2000" rows="3" placeholder="トラック、推し論文、投稿注意等"></textarea>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/conf-deadlines" class="btn">キャンセル</a>
@@ -276,7 +276,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
       <button type="button" class="btn cd-ex-rm danger" style="font-size:11px; padding:2px 6px">削除</button>
     `;
     if (initial) {
-      // v791 #394 種別を select + 「その他」 だけテキストボックス
+      // v791 #394 種別を select + 「その他」だけテキストボックス
       const lbl = initial.label || '';
       const sel = row.querySelector('.cd-ex-label-sel');
       const txt = row.querySelector('.cd-ex-label');
@@ -309,7 +309,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
 
   // v712 #306 + v713 #307 入力補助:
   //   (a) datetime-local の日付部分が変わったら (= calendar 選択) 時刻を強制で 23:59 に。
-  //       締切はほぼ必ず 23:59 なので、 browser が 「今の時間」 を入れてくるのを上書き。
+  //       締切はほぼ必ず 23:59 なので、 browser が「今の時間」を入れてくるのを上書き。
   //       ユーザが時刻部分だけ変えた場合 (= 23:59 以外にした) は触らない。
   //   (b) カテゴリが国際会議 (intl_conf) になったら AOE checkbox を既定 ON に。
   //   (c) 会期開始日を選んだら終了日 input の min を開始日にセット。
@@ -328,7 +328,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
   extrasRoot.addEventListener('input', e => {
     if (e.target.classList?.contains('cd-ex-dt')) force2359OnDateChange(e.target);
   });
-  // v791 #394 メイン締切種別 select、 「その他」 だけテキストボックス
+  // v791 #394 メイン締切種別 select、「その他」だけテキストボックス
   const dlLblSel = document.getElementById('cd-deadline-label-sel');
   const dlLblTxt = document.getElementById('cd-deadline-label');
   dlLblSel.addEventListener('change', () => {
@@ -412,7 +412,7 @@ export async function renderConfDeadlineForm({ params } = {}) {
     // v791 #394 日付のみなら 23:59 に補完
     const dlInput = ensureTimeIso(document.getElementById('cd-deadline').value);
     const deadlineJst = isAoe ? aoeStrToJstStr(dlInput) : dlInput;
-    // v791 #394 種別: select の 「申込 / 原稿」 → そのまま、 「その他」 → テキスト値
+    // v791 #394 種別: select の「申込 / 原稿」 → そのまま、「その他」 → テキスト値
     const dlLblSelVal = dlLblSel.value;
     const deadlineLabel = dlLblSelVal === '__other__'
       ? (dlLblTxt.value.trim() || null)
@@ -553,7 +553,7 @@ export async function renderConfDeadlineDetail({ params }) {
       try { await post('/api/conf-deadlines/' + id + '/leave', {}); toast('離脱しました'); renderConfDeadlineDetail({ params: { id } }); }
       catch (e) { toast('失敗: ' + e.message); }
     });
-    // v698 #284 prompt 入力を廃止し、 共通の member_picker を modal で出す。
+    // v698 #284 prompt 入力を廃止し、共通の member_picker を modal で出す。
     document.getElementById('cd-add-member')?.addEventListener('click', async () => {
       const existingIds = (r.members || []).map(m => Number(m.user_id));
       const exclude = existingIds.concat([Number(r.created_by_user_id)]);

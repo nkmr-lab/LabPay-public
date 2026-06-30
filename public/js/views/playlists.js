@@ -12,7 +12,7 @@ import { fmtRelative, tag } from '../format.js';
 // v857 #443 共有ダイアログ (タイトル + URL コピー / SNS 投稿 / ユーザへ送信) を再利用
 import { shareDialog } from '../share_to_sns.js';
 
-// v543 #200 「ボカロ」 を追加
+// v543 #200 「ボカロ」を追加
 const GENRES = ['J-POP','洋楽','K-POP','アニメ','ボカロ','ジャズ','クラシック','ロック',
   'EDM','ヒップホップ','VTuber','作業用 BGM','その他'];
 
@@ -20,7 +20,7 @@ const GENRES = ['J-POP','洋楽','K-POP','アニメ','ボカロ','ジャズ','�
 function parseUrlMeta(url) {
   const u = String(url || '').trim();
   // v820 #415 スマホでの自動再生確率を上げるため playsinline=1 + mute=1 を追加
-  //   (iOS Safari は音付き自動再生を許可しないので、 初手は無音 + 最初の
+  //   (iOS Safari は音付き自動再生を許可しないので、初手は無音 + 最初の
   //   ユーザタップで音を出す戦略)。
   const yt = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   if (yt) return {
@@ -233,7 +233,7 @@ function wirePlaylistForm({ mode, id, p }) {
   });
   if (mode === 'edit') {
     document.getElementById('pln-delete')?.addEventListener('click', async () => {
-      if (!confirm('このプレイリストを削除します。 アイテム + 評価 + ❤️ もすべて消えます。 良いですか?')) return;
+      if (!confirm('このプレイリストを削除します。アイテム + 評価 + ❤️ もすべて消えます。良いですか?')) return;
       try { await del('/api/playlists/' + id); toast('削除しました'); navigate('#/playlists'); }
       catch (e) { toast('失敗: ' + e.message); }
     });
@@ -356,7 +356,7 @@ function renderDetailHead(p) {
       <button id="pld-share" class="btn">📤 共有</button>
       ${p.is_mine ? `<a class="btn" href="#/playlists/${p.id}/edit">✏️ 編集</a>` : ''}
     </div>`;
-  // v857 #443 共有 (タイトル+URL コピー、 SNS 投稿、 ユーザへ直接送信)
+  // v857 #443 共有 (タイトル+URL コピー、 SNS 投稿、ユーザへ直接送信)
   document.getElementById('pld-share')?.addEventListener('click', () => {
     shareDialog('🎵 ' + p.title, '#/playlists/' + p.id);
   });
@@ -370,8 +370,8 @@ function renderDetailHead(p) {
   document.getElementById('pld-play0').addEventListener('click', () => startPlayback(p, 0, false));
   document.getElementById('pld-shuffle0').addEventListener('click', () => startPlayback(p, 0, true));
   // v819 #414 プレイリストを開いたタイミングでアイテムがあるなら自動で
-  //   再生開始 + 連続再生 ON。 動画音声はブラウザポリシーで無音開始になる
-  //   ケースがあり、 その時は再生ボタンを 1 回タップすると音が出る。
+  //   再生開始 + 連続再生 ON。動画音声はブラウザポリシーで無音開始になる
+  //   ケースがあり、その時は再生ボタンを 1 回タップすると音が出る。
   if (p.items.length && !detailState) {
     setTimeout(() => { if (!detailState) startPlayback(p, 0, false); }, 50);
   }
@@ -381,7 +381,7 @@ function renderDetailItems(p) {
   const root = document.getElementById('pld-items');
   document.getElementById('pld-cnt').textContent = p.items.length;
   if (!p.items.length) {
-    root.innerHTML = `<div class="empty">${p.is_mine ? '↓ 下の 「＋ アイテムを追加」 から URL を追加してください' : 'アイテムはまだありません'}</div>`;
+    root.innerHTML = `<div class="empty">${p.is_mine ? '↓ 下の「＋ アイテムを追加」から URL を追加してください' : 'アイテムはまだありません'}</div>`;
     return;
   }
   root.innerHTML = p.items.map((it, idx) => renderItemRow(it, idx, p)).join('');
@@ -749,14 +749,14 @@ function renderCurrent() {
   if (meta.type === 'youtube') {
     // YouTube IFrame API: enablejsapi=1 + listen for 'onStateChange' postMessage
     // v820 #415 スマホでの音付き自動再生はブラウザに拒否されるため、 mute=1 で
-    //   無音自動再生 → 「🔊 タップで音を出す」 ボタンで 1 回タップさせて unMute
+    //   無音自動再生 → 「🔊 タップで音を出す」ボタンで 1 回タップさせて unMute
     //   コマンドを送る。 1 回タップして以降は連続再生も音付きで続く。
-    // v857 #443 一度音を出したら localStorage で記憶、 以降は自動 unmute で 「🔊 タップ」 ボタン出さない
+    // v857 #443 一度音を出したら localStorage で記憶、以降は自動 unmute で「🔊 タップ」ボタン出さない
     // v862 #444 続報 iOS Safari は autoplay 中の iframe に unMute を送るだけで
-    //   「user gesture 無しの音付き再生」 とみなして停止 → 連続再生が死ぬ。
+    //   「user gesture 無しの音付き再生」とみなして停止 → 連続再生が死ぬ。
     //   sticky autoplay 許可は親 origin 単位で、 youtube-nocookie iframe には引き継が
-    //   ないので、 iOS では各曲で 1 タップ必須が物理的制約。 ここでは iOS 判定で
-    //   alreadyUnmuted を強制 false にして、 「毎回タップ」 と引き換えに連続再生を
+    //   ないので、 iOS では各曲で 1 タップ必須が物理的制約。ここでは iOS 判定で
+    //   alreadyUnmuted を強制 false にして、「毎回タップ」と引き換えに連続再生を
     //   優先する。 PC / Android Chrome は引き続き自動 unmute。
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '')
       || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
@@ -782,9 +782,9 @@ function renderCurrent() {
       try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
     };
     // v860 #444 連続再生が止まる問題修正: autoUnmute の playVideo を削除。
-    //   YouTube iframe は autoplay=1&mute=1 で自動再生を開始するが、 そこに
+    //   YouTube iframe は autoplay=1&mute=1 で自動再生を開始するが、そこに
     //   さらに playVideo コマンドを送ると iOS Safari の autoplay state machine
-    //   が 「ユーザジェスチャなしの強制再生」 とみなして停止 → ended 通知も
+    //   が「ユーザジェスチャなしの強制再生」とみなして停止 → ended 通知も
     //   来なくなり連続再生が切れていた。 unmute と setVolume だけ送れば
     //   既に再生中の動画が音付きに切り替わるだけで済む。
     //   タイマーは 800ms に延長、 mute autoplay が始まってから unmute する。
@@ -808,8 +808,8 @@ function renderCurrent() {
       document.getElementById('pld-unmute')?.remove();
     });
     // 現在の再生位置を取得するのは getCurrentTime コマンド → 別 message で返ってくる
-    //   ので、 ここでは単純に relative seek (seekTo (current+/-10)) ではなく、 ヒューリスティック
-    //   に 「現在位置から +/-10 秒」 を実現する。 YT IFrame API の seekTo は絶対値のみなので、
+    //   ので、ここでは単純に relative seek (seekTo (current+/-10)) ではなく、ヒューリスティック
+    //   に「現在位置から +/-10 秒」を実現する。 YT IFrame API の seekTo は絶対値のみなので、
     //   getCurrentTime を取れるよう addEventListener で受信する。
     let curSec = 0;
     window.__plYtCurrent = (sec) => { curSec = Number(sec) || 0; };
@@ -855,7 +855,7 @@ function shuffleArr(a) {
 }
 
 // YouTube IFrame postMessage listener — ended → 自動次へ、 infoDelivery → curSec キャッシュ
-//   v863 #444 全曲 YouTube モードでは YT 内部が次動画へ自動進むので、 親は
+//   v863 #444 全曲 YouTube モードでは YT 内部が次動画へ自動進むので、親は
 //   orderIdx + UI ラベルだけ更新 (iframe は再生成しない = ジェスチャ chain 保持)。
 //   v881 シャッフル時のNOW PLAYINGずれ対策: YTが実際に再生中の video_id を信頼源にして
 //     orderIdx を逆引き同期する。endedカウンタ依存だと削除動画スキップやended抜けで

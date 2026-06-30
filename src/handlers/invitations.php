@@ -80,7 +80,7 @@ function invitations_list(PDO $pdo, array $cfg): void {
         }
         unset($it);
     }
-    // v377 一覧の各 invitation に joins (参加表明者) を詰める。 ホームのアイコン表示用。
+    // v377 一覧の各 invitation に joins (参加表明者) を詰める。ホームのアイコン表示用。
     // N+1 を避けるため invitation_id IN (...) で 1 クエリ。
     if ($items) {
         $ids = array_map(fn($r) => (int)$r['id'], $items);
@@ -109,7 +109,7 @@ function invitations_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
-// v396 募集の 「アプリショートカット」 用 feat_actions の許可リスト。
+// v396 募集の「アプリショートカット」用 feat_actions の許可リスト。
 // groups の normalize_feat_actions と同じ規約 (ID と意味)。
 function invitations_normalize_feat_actions(array $ids): string {
     static $ALLOWED = ['roulette','nomikai','polls','rollcalls','timers','meetups'];
@@ -148,7 +148,7 @@ function invitations_detail(PDO $pdo, array $cfg, int $id): void {
          ORDER BY j.joined_at");
     $stJ->execute([$id]);
     $row['joins'] = $stJ->fetchAll();
-    // v396 feat_actions は JSON 文字列で保存。 NULL = 「全 ON」 シグナル。
+    // v396 feat_actions は JSON 文字列で保存。 NULL = 「全 ON」シグナル。
     if (array_key_exists('feat_actions', $row)) {
         $row['feat_actions'] = $row['feat_actions'] === null
             ? null
@@ -164,7 +164,7 @@ function invitations_detail(PDO $pdo, array $cfg, int $id): void {
 function invitations_parse_starts_at($raw): array {
     if ($raw === null || $raw === '' || $raw === false) return [null, 1];
     $s = str_replace('T', ' ', trim((string)$raw));
-    // 「Y-m-d」 のみ (10 文字、 ハイフン 2 つ) は日付モード
+    // 「Y-m-d」のみ (10 文字、ハイフン 2 つ) は日付モード
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
         $dt = DateTimeImmutable::createFromFormat('Y-m-d', $s);
         if (!$dt) throw new ApiException('bad_request', 'starts_at は Y-m-d', 400);
@@ -187,11 +187,11 @@ function invitations_create(PDO $pdo, array $cfg): void {
     $location = isset($body['location'])    ? mb_substr((string)$body['location'], 0, 200) : null;
     $capacity = isset($body['capacity']) && $body['capacity'] !== '' && $body['capacity'] !== null
         ? max(1, min(1000, (int)$body['capacity'])) : null;
-    // v708 #300 capacity を 「発起人を含まない募集人数」 として扱うモード。
-    //   既定 (form 新規 = true): capacity = 募集する他人数。 実上限 = capacity + 1 (自分)。
+    // v708 #300 capacity を「発起人を含まない募集人数」として扱うモード。
+    //   既定 (form 新規 = true): capacity = 募集する他人数。実上限 = capacity + 1 (自分)。
     //   false (旧互換): capacity = 全員上限 (自分込み)。
     $capExcludesCreator = !empty($body['capacity_excludes_creator']) ? 1 : 0;
-    // 実上限 (= invitation_joins テーブル上の最大行数)。 既参加者数比較用。
+    // 実上限 (= invitation_joins テーブル上の最大行数)。既参加者数比較用。
     $effectiveTotalCap = $capacity === null ? null : ($capacity + ($capExcludesCreator ? 1 : 0));
     $imageUrl = validate_product_image_url($body['image_url'] ?? null);
     // v370 starts_at は Y-m-d (日付だけ) も許容。 has_time フラグで区別。
@@ -213,7 +213,7 @@ function invitations_create(PDO $pdo, array $cfg): void {
         }
         $signupClosesAt = $dt->format('Y-m-d H:i:s');
     }
-    // v370 事前参加者 (任意)。 自分以外の human user_id を受理。 存在チェック。
+    // v370 事前参加者 (任意)。自分以外の human user_id を受理。存在チェック。
     $preJoinIds = $body['pre_join_user_ids'] ?? [];
     if (!is_array($preJoinIds)) $preJoinIds = [];
     $preJoinIds = array_values(array_unique(array_filter(array_map('intval', $preJoinIds))));
@@ -250,7 +250,7 @@ function invitations_create(PDO $pdo, array $cfg): void {
     foreach ($preJoinIds as $uid) {
         try {
             notify_safely($pdo, $cfg, (int)$uid, 'admin_notice',
-                "🎉 「{$title}」 に事前参加者として登録されました", 'invitation', $invId);
+                "🎉 「{$title}」に事前参加者として登録されました", 'invitation', $invId);
         } catch (Throwable $_) { /* swallow */ }
     }
 
@@ -326,7 +326,7 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
     $reopened = false;
     if (array_key_exists('starts_at', $body)) {
         [$startsAt, $startsHasTime] = invitations_parse_starts_at($body['starts_at']);
-        // 再募集時 (= reopen フラグ付き) は過去日時を弾く。 通常編集ならゆるくする。
+        // 再募集時 (= reopen フラグ付き) は過去日時を弾く。通常編集ならゆるくする。
         if (!empty($body['reopen']) && $startsAt !== null) {
             $ts = $startsHasTime ? strtotime($startsAt) : strtotime($startsAt) + 86400;
             if ($ts <= time()) {
@@ -413,8 +413,8 @@ function invitations_patch(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'reopened' => $reopened]);
 }
 
-// v639 募集を手動で終了 (= closed_at セット)。 既参加者はそのまま、 新規 join 不可。
-//   cancel と違ってイベント自体は残る (= 「人集まったので確定」 みたいな使い方)。
+// v639 募集を手動で終了 (= closed_at セット)。既参加者はそのまま、新規 join 不可。
+//   cancel と違ってイベント自体は残る (= 「人集まったので確定」みたいな使い方)。
 //   v647 修正: cancelled_at は実在せず、 cancel は deleted_at で表現される。
 function invitations_close(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);

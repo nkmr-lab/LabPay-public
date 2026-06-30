@@ -1,6 +1,6 @@
 // /#/file-transfers — v733 #342 相手指定のファイル送受信。
 //   送信: 宛先 + ファイル (PDF / Word / Excel / 画像 / zip / txt 等最大 50MB) + 任意メッセージ
-//   受信: 一覧でファイル名 / 送信者 / 大きさ / ダウンロード回数を表示、 即ダウンロード可。
+//   受信: 一覧でファイル名 / 送信者 / 大きさ / ダウンロード回数を表示、即ダウンロード可。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -44,7 +44,7 @@ export async function renderFileTransfers() {
           </div>
         </div>
         <div id="ft-selected" style="margin-top:8px"></div>
-        <span class="hint-sm" style="font-size:11px">複数ファイルは zip にまとめられて送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 100MB 上限</span>
+        <span class="hint-sm" style="font-size:11px">複数ファイルは zip にまとめられて送信。 PDF / Word / Excel / 画像 / zip / txt 等、合計 100MB 上限</span>
       </div>
       <label class="field"><span class="lbl">メッセージ (任意)</span>
         <textarea id="ft-body" rows="2" maxlength="2000" placeholder="例: 査読お願いします"></textarea>
@@ -77,7 +77,7 @@ export async function renderFileTransfers() {
 
   // v743 #354 ファイル選択をドラッグ&ドロップ + 複数選択に対応。
   //   保持構造: { file: File, relPath: string }[]
-  //   relPath はフォルダドロップ時のみ "folder/sub/file.txt" 形式、 単独 file は file.name。
+  //   relPath はフォルダドロップ時のみ "folder/sub/file.txt" 形式、単独 file は file.name。
   const selectedFiles = [];
   function renderSelected() {
     const root = document.getElementById('ft-selected');
@@ -167,7 +167,7 @@ export async function renderFileTransfers() {
     if (selectedFiles.length === 0) { toast('ファイルを選んでください'); return; }
     const fd = new FormData();
     if (selectedFiles.length === 1 && !selectedFiles[0].relPath.includes('/')) {
-      // 単一ファイル (フォルダ階層なし) → 旧 file 互換で送る (= zip しない、 原形で保存)
+      // 単一ファイル (フォルダ階層なし) → 旧 file 互換で送る (= zip しない、原形で保存)
       fd.append('file', selectedFiles[0].file);
     } else {
       const paths = [];
@@ -283,7 +283,7 @@ function renderRecvRow(it) {
     </div>`;
 }
 
-// 1 つの送信アクション (= 同じ batch) を 1 ブロックで表示。 受信者 1 人なら旧 UI に近い。
+// 1 つの送信アクション (= 同じ batch) を 1 ブロックで表示。受信者 1 人なら旧 UI に近い。
 function renderSentGroup(rows) {
   const head = rows[0];
   const ids = rows.map(r => r.id);

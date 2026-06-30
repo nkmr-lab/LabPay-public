@@ -52,13 +52,13 @@ function money_requests_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
 
-// v658 自分が creator (= 受取側) の請求のうち、 未払い受取人を
-// 人別に合算。 同じ人が複数の請求で払ってない場合は
-// 一行にまとめて 「user X: 合計 ¥Y (N 件)」 と返す。
+// v658 自分が creator (= 受取側) の請求のうち、未払い受取人を
+// 人別に合算。同じ人が複数の請求で払ってない場合は
+// 一行にまとめて「user X: 合計 ¥Y (N 件)」と返す。
 function money_requests_unpaid_summary(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // 自分が creator (or created_by) の請求で、 受取人が未払いのもの。
-    // 削除済請求 (closed_at) は除外。 自分が自分宛て (creator==recipient) も除外。
+    // 自分が creator (or created_by) の請求で、受取人が未払いのもの。
+    // 削除済請求 (closed_at) は除外。自分が自分宛て (creator==recipient) も除外。
     $st = $pdo->prepare("
         SELECT mr.id   AS request_id,
                mr.title,
@@ -116,10 +116,10 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
     $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
-    // 任意: adhoc_groups の精算サマリ 「請求一括生成」 から呼ばれた場合に
-    // どのグループ由来かを記録する。 これがあると groups.js の精算モーダル
-    // で 「この送金プランはもう支払い済」 を表示できる。 FK は ON DELETE
-    // SET NULL なので、 後でグループを消しても請求は残る。 不正な ID を
+    // 任意: adhoc_groups の精算サマリ「請求一括生成」から呼ばれた場合に
+    // どのグループ由来かを記録する。これがあると groups.js の精算モーダル
+    // で「この送金プランはもう支払い済」を表示できる。 FK は ON DELETE
+    // SET NULL なので、後でグループを消しても請求は残る。不正な ID を
     // 渡されたら FK 違反で落ちるので別途存在 check はしない。
     $sourceGroupId = isset($body['source_group_id']) && (int)$body['source_group_id'] > 0
         ? (int)$body['source_group_id'] : null;
@@ -355,8 +355,8 @@ function money_requests_close(PDO $pdo, array $cfg, int $id): void {
 }
 
 // ─── PAY / UNPAY (recipient) ─────────────────────────────────
-// pay は冪等に「上書き」 仕様: paid_at が既にある場合は paid_at を keep して
-// method/proxy/note だけ差し替える (「方法を間違えて記録した」 を後から訂正
+// pay は冪等に「上書き」仕様: paid_at が既にある場合は paid_at を keep して
+// method/proxy/note だけ差し替える (「方法を間違えて記録した」を後から訂正
 // するための経路)。通知も訂正用の文面に切り替えて creator に飛ばす。
 
 function money_requests_pay(PDO $pdo, array $cfg, int $id): void {

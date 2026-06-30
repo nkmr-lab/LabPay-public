@@ -1,5 +1,5 @@
-// v745 #356 画像全画面ライトボックス (共通化)。 元は v492 #92 で posts.js に実装した
-//   もの。 同じ 「別タブで開くと戻れない」 問題が places.js でも起きていたので、
+// v745 #356 画像全画面ライトボックス (共通化)。元は v492 #92 で posts.js に実装した
+//   もの。同じ「別タブで開くと戻れない」問題が places.js でも起きていたので、
 //   共有モジュールに切り出して両方から使えるようにした。
 //
 //   使い方: import { openImageLightbox } from '../lightbox.js'; openImageLightbox(src);
@@ -8,7 +8,7 @@
 
 export function openImageLightbox(src, opts = {}) {
   // v754 #370 opts.onRotate: async (degrees) => void があると
-  //   オーバーレイ内に「🔄 回転」 ボタンを表示。 タップで onRotate(90) を呼んで、
+  //   オーバーレイ内に「🔄 回転」ボタンを表示。タップで onRotate(90) を呼んで、
   //   解決後 cache-bust で再ロードして表示し直す。
   const onRotate = typeof opts.onRotate === 'function' ? opts.onRotate : null;
   // v856 #440 閉じた時に外側を refresh するためのコールバック
@@ -34,7 +34,7 @@ export function openImageLightbox(src, opts = {}) {
   const imgEl = box.querySelector('#lb-img');
   const loadEl = box.querySelector('#lb-loading');
   const pctEl = box.querySelector('#lb-pct');
-  // 同じ src を何度 cache-bust しても同じ URL で fetch するように、 現在表示中の URL を持つ
+  // 同じ src を何度 cache-bust しても同じ URL で fetch するように、現在表示中の URL を持つ
   let currentSrc = src;
   function loadImage(url) {
     if (loadEl && !loadEl.parentNode) box.insertBefore(loadEl, imgEl);
@@ -90,7 +90,7 @@ export function openImageLightbox(src, opts = {}) {
 
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
-  // popstate を拾って閉じる: スマホの戻るボタンやスワイプで 「戻る」 と
+  // popstate を拾って閉じる: スマホの戻るボタンやスワイプで「戻る」と
   //   思った時に SPA ナビゲーションせずライトボックスだけ閉じるように。
   history.pushState({ lb: 1 }, '');
   let closing = false;
@@ -111,7 +111,7 @@ export function openImageLightbox(src, opts = {}) {
   window.addEventListener('popstate', onPop);
   document.getElementById('lb-close').addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
   box.addEventListener('click', (ev) => {
-    // ライトボックス内のボタン (× / 🔄) はタップで閉じない、 それ以外タップで閉じる
+    // ライトボックス内のボタン (× / 🔄) はタップで閉じない、それ以外タップで閉じる
     if (ev.target.closest('#lb-close, #lb-rotate')) return;
     close();
   });

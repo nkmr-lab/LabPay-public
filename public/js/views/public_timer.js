@@ -1,5 +1,5 @@
 // /#/public-timer/:id — 認証不要で表示する公開タイマー (#256)。
-// タブレットを演台に置いて学会 / 論文紹介で使う想定。 残り時間を大きく表示。
+// タブレットを演台に置いて学会 / 論文紹介で使う想定。残り時間を大きく表示。
 
 import { escapeHtml } from '../router.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
@@ -44,7 +44,7 @@ export async function renderPublicTimer({ params }) {
   app.innerHTML = `
     <style>
       /* v685 #268 横が切れる bug 修正。 style.css の main#app { max-width:720px; padding:14px;
-       * overflow-x:hidden } が 100vw を削っていた。 公開タイマーでは viewport 全幅を使うため
+       * overflow-x:hidden } が 100vw を削っていた。公開タイマーでは viewport 全幅を使うため
        * 親 #app の制約を override。 */
       body { background:#0b0b0d !important; color:#fff; margin:0 }
       main#app { max-width:none !important; padding:0 !important; margin:0 !important;
@@ -54,7 +54,7 @@ export async function renderPublicTimer({ params }) {
                  font-family:Inter, system-ui, sans-serif; overflow:hidden }
       #pt-title { font-size:clamp(16px, 3vw, 32px); margin-bottom:8px; opacity:0.85; text-align:center }
       /* 5 文字 (MM:SS) or 6 文字 (+MM:SS) を想定。 monospace digit width ≈ 0.6em で
-       * 6 文字だと約 3.6em 必要。 viewport 横 100vw / 3.6 ≈ 27vw が上限。 安全マージン取って 26vw。 */
+       * 6 文字だと約 3.6em 必要。 viewport 横 100vw / 3.6 ≈ 27vw が上限。安全マージン取って 26vw。 */
       #pt-time { font-size:min(26vw, 80vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
                  line-height:1; letter-spacing:-0.04em; transition:color 0.2s;
                  white-space:nowrap; text-align:center; width:100%; max-width:100vw }
@@ -124,7 +124,7 @@ function render() {
   // v684 #267 3 フェーズ表示:
   //   ① 発表終了 (= end_bell) まで: カウントダウン
   //   ② 発表終了 〜 最後のベル: 0:00 から上にカウント
-  //   ③ 最後のベルを越えたら 「+MM:SS」 超過
+  //   ③ 最後のベルを越えたら「+MM:SS」超過
   const allBells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
   const bells = allBells.filter(b => b !== null && b !== undefined && b > 0);
   const maxBellSec = bells.length ? Math.max(...bells) : 0;
@@ -146,7 +146,7 @@ function render() {
       if (remain <= 30) color = '#ef4444';
       else if (remain <= 60) color = '#f59e0b';
     } else if (elapsed < maxBellSec) {
-      // ② 発表終了後、 最後のベルまでは 0:00 からカウントアップ
+      // ② 発表終了後、最後のベルまでは 0:00 からカウントアップ
       // v726 #331 質疑帯は鮮やかな黄色で目立たせる。
       displayText = fmt(Math.floor(elapsed - endBellSec));
       color = '#facc15';
@@ -181,7 +181,7 @@ function render() {
   }).join('');
 
   // v728 #336 プログレスバー: 合計 = 最後のベル (= visualEndSec) 100%。
-  //   発表終了帯 (青) / 質疑帯 (橙) で背景色分け、 ベル位置に縦線 (最後のベルは端なので除外)。
+  //   発表終了帯 (青) / 質疑帯 (橙) で背景色分け、ベル位置に縦線 (最後のベルは端なので除外)。
   //   経過バーの色はフェーズ (発表中: 青 / 質疑: 黄 / 超過: 赤) に追従。
   const visualEndSec = Math.max(maxBellSec, endBellSec);
   const barBg = document.getElementById('pt-bar-bg');

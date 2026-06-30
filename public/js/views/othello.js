@@ -9,7 +9,7 @@ import { shareToSns } from '../share_to_sns.js';
 
 const POLL_MS = 2500;
 let pollTimer = null;
-// v636 地雷踏み演出: 既に見た triggered cells を gid 単位で覚えて、 新規分だけアニメ
+// v636 地雷踏み演出: 既に見た triggered cells を gid 単位で覚えて、新規分だけアニメ
 const seenTriggers = new Map(); // gid -> Set<cellKey>
 
 // 💥 ドーン (Web Audio でその場生成、 admin 登録不要)
@@ -44,7 +44,7 @@ function playBoom() {
   } catch (_) {}
 }
 
-// 3x3 のセルをくるくる + ひっくり返すアニメ、 中心に 🔥
+// 3x3 のセルをくるくる + ひっくり返すアニメ、中心に 🔥
 function runExplosionAnim(boardEl, cellKey) {
   if (!boardEl) return;
   const r = Number(cellKey[0]), c = Number(cellKey[1]);
@@ -132,7 +132,7 @@ export async function renderOthello() {
     const { showInviteModal } = await import('./invite_modal.js');
     const res = await showInviteModal({
       title: '💣 地雷オセロ新規卓',
-      description: 'プレイフィー 2pt。 「対象者で即開始」 なら相手から即徴収 + 通知 + 即地雷配置へ。',
+      description: 'プレイフィー 2pt。「対象者で即開始」なら相手から即徴収 + 通知 + 即地雷配置へ。',
       minPick: 1, maxPick: 1,        // 自分 + 1 人 = 2 人 (固定)
       allowPublic: true,
     });
@@ -144,7 +144,7 @@ export async function renderOthello() {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('ot-ai').addEventListener('click', async () => {
-    if (!confirm('🤖 AI と 1 局始めますか? (プレイフィー 2pt、 払戻なし)')) return;
+    if (!confirm('🤖 AI と 1 局始めますか? (プレイフィー 2pt、払戻なし)')) return;
     try {
       const r = await post('/api/othello/ai/new', {});
       navigate('#/othello/' + r.id);
@@ -154,7 +154,7 @@ export async function renderOthello() {
     const d = await get('/api/othello/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('ot-list').innerHTML = '<div class="hint">対戦卓がありません。 「＋ 新規卓」 で始めましょう。</div>';
+      document.getElementById('ot-list').innerHTML = '<div class="hint">対戦卓がありません。「＋ 新規卓」で始めましょう。</div>';
       return;
     }
     document.getElementById('ot-list').innerHTML = items.map(g => `
@@ -226,23 +226,23 @@ async function paintBoard(gid) {
         <div class="card">
           <h3 style="margin:0 0 4px">💣 地雷を 1 か所配置</h3>
           <p class="hint" style="margin:0 0 8px; font-size:12px">
-            盤面のマスを 1 つタップ (初期 4 マスは不可)。「確定」 で設定。
+            盤面のマスを 1 つタップ (初期 4 マスは不可)。「確定」で設定。
             ${d.is_ai
-              ? '<b>🤖 AI はすでに地雷を 1 か所配置済み</b> (場所は秘密)。 あなたが配置すれば開戦。'
+              ? '<b>🤖 AI はすでに地雷を 1 か所配置済み</b> (場所は秘密)。あなたが配置すれば開戦。'
               : '相手も同じく 1 か所設定したら対戦開始。'} 地雷は終局まで互いに不可視。
           </p>
           <div id="ot-mine-pick" class="hint-sm">選択中: <span id="ot-mine-sel">0</span> / 1</div>
           <button id="ot-mine-set" class="btn primary" style="margin-top:8px" disabled>確定</button>
         </div>`;
     } else if (d.me_side && d.i_setup_mines) {
-      actionArea = `<div class="card"><div class="hint">設定完了。 相手の設定を待っています…</div></div>`;
+      actionArea = `<div class="card"><div class="hint">設定完了。相手の設定を待っています…</div></div>`;
     }
   } else if (d.status === 'playing') {
     if (myTurn) {
       const canPass = (d.legal_moves || []).length === 0;
       actionArea = `<div class="card">
         <div class="bold">あなたの番 (${myColor})</div>
-        <div class="hint-sm">置けるマスは緑で表示。 タップで着手。</div>
+        <div class="hint-sm">置けるマスは緑で表示。タップで着手。</div>
         ${canPass ? `<button id="ot-pass" class="btn" style="margin-top:8px">置けない → パス</button>` : ''}
       </div>`;
     } else {
@@ -339,7 +339,7 @@ async function paintBoard(gid) {
     catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('ot-resign')?.addEventListener('click', async () => {
-    if (!confirm('🏳 投了しますか? (= 相手の勝ち、 ポイント戻りません)')) return;
+    if (!confirm('🏳 投了しますか? (= 相手の勝ち、ポイント戻りません)')) return;
     try { await post(`/api/othello/games/${gid}/resign`, {}); paintBoard(gid); }
     catch (e) { toast('失敗: ' + e.message); }
   });

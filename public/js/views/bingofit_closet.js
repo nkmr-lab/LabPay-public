@@ -1,6 +1,6 @@
 // v740 BingoFit (feedback #288) クローゼット: 衣類の追加 / 編集 / アーカイブ。
 // 写真は /api/uploads/image にアップ → 返ってきた URL を POST /api/bingofit/items に渡す。
-// 背景透過は worker (cron 1 分) が非同期で生成。 pending の間は「🪄 切り抜き中」 バッジを出して
+// 背景透過は worker (cron 1 分) が非同期で生成。 pending の間は「🪄 切り抜き中」バッジを出して
 // 5 秒 polling、 done になったら image_url_transparent に差し替える。
 
 import { get, post, patch, del } from '../api.js';
@@ -16,8 +16,8 @@ export async function renderBingofitCloset() {
     <div style="max-width:720px; margin:0 auto; padding:12px">
       <h2 style="margin:0 0 12px; font-size:20px">👕 着回しビンゴ - クローゼット</h2>
       <div style="font-size:12px; color:#666; margin-bottom:14px; line-height:1.6">
-        手持ちの服を 25 着以上登録すると、 日曜始まりの週次ビンゴ盤が自動生成されます。
-        着た服を盤面から開けて、 ラインが揃えばビンゴ! 背景は自動で透過処理されます (1 分以内に完了)。
+        手持ちの服を 25 着以上登録すると、日曜始まりの週次ビンゴ盤が自動生成されます。
+        着た服を盤面から開けて、ラインが揃えばビンゴ! 背景は自動で透過処理されます (1 分以内に完了)。
       </div>
       <div style="display:flex; gap:12px; margin-bottom:14px">
         <a href="#/bingofit/board"   class="btn" style="flex:1; text-align:center; padding:10px; background:#7b3fa0; color:#fff; border-radius:8px; text-decoration:none; font-weight:600">🎯 今週の盤を見る</a>
@@ -72,8 +72,8 @@ function renderItems(d) {
       </div>`;
     return;
   }
-  // v741 「最近着てない服」 サジェスト。 14 日以上着てない (or 一度も) アクティブ衣類を 5 件まで。
-  //   研究 (BingoFit) の効果検証部分: 眠ってる服を見せて 「次これ着てみない?」 を促す。
+  // v741 「最近着てない服」サジェスト。 14 日以上着てない (or 一度も) アクティブ衣類を 5 件まで。
+  //   研究 (BingoFit) の効果検証部分: 眠ってる服を見せて「次これ着てみない?」を促す。
   const suggestions = active
     .filter(i => i.days_since_worn === null || i.days_since_worn >= 14)
     .sort((a, b) => {
@@ -112,7 +112,7 @@ function itemCard(it) {
   const isFailed = it.bg_status === 'failed';
   const archived = it.archived;
   const bg = isDone ? 'linear-gradient(135deg,#fafaf5,#ede4f3)' : '#f3f4f6';
-  // v741 「N 日前に着た」 / 「14 日以上着てない」 バッジ
+  // v741 「N 日前に着た」 / 「14 日以上着てない」バッジ
   let wornBadge = '';
   if (!archived && it.days_since_worn !== null) {
     const d = it.days_since_worn;

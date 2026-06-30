@@ -31,7 +31,7 @@ export function _setMyID(v) { _state.myID = v; }
 export function _getMyID()   { return _state.myID; }
 
 // JS では `import { myID }` した瞬間の binding がライブ同期するのは export const のみ。
-// なので _internal を通して関数経由で取れるようにもするが、 開発者体験用に
+// なので _internal を通して関数経由で取れるようにもするが、開発者体験用に
 // const myID も export する (framework が _bootstrap で値を確定してから JS module を import するので OK)。
 export let myID = 0;
 export let isHost = false;

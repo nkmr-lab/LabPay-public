@@ -5,7 +5,7 @@
 //   asking     - 出題者が問題文を入力中 (参加者は待機)
 //   answering  - 参加者がフリップに回答中 (各自の回答は公開前隠す)
 //   reveal     - 全員の回答を一斉開示 (タップで拡大表示)
-//   scored     - 出題者がマルバツ採点済、 次の問へボタン
+//   scored     - 出題者がマルバツ採点済、次の問へボタン
 //   finished   - 終了 (集計表示)
 //
 // 累積集計 = history[] に各問の {q, answers, scores} が残る。
@@ -85,7 +85,7 @@ function quizzes_create(PDO $pdo, array $cfg, int $uid): void {
     foreach ($participants as $pid) {
         if ($pid === $uid) continue;
         try { notify_safely($pdo, $cfg, $pid, 'admin_notice',
-            "📝 {$byName} さんからクイズ 「{$title}」 に招待されました", 'quizzes', $qid); }
+            "📝 {$byName} さんからクイズ「{$title}」に招待されました", 'quizzes', $qid); }
         catch (Throwable $_) {}
     }
     json_response(['ok' => true, 'id' => $qid]);
@@ -149,7 +149,7 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
 }
 
 // 出題者が問題文を出題 (asking → answering)
-//   verbal モードでは question が空でも OK (= 「口頭で出題、 解答開始」)
+//   verbal モードでは question が空でも OK (= 「口頭で出題、解答開始」)
 function quizzes_ask(PDO $pdo, int $uid, int $qid): void {
     $body = read_json_body();
     $question = trim((string)($body['question'] ?? ''));
@@ -188,7 +188,7 @@ function quizzes_answer(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 出題者が 「開示」 → reveal phase へ (= 全員出揃ってなくても強制開示可能)
+// 出題者が「開示」 → reveal phase へ (= 全員出揃ってなくても強制開示可能)
 function quizzes_reveal(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid) {
         $g = quizzes_lock($pdo, $qid);
@@ -249,7 +249,7 @@ function quizzes_next(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 終了 (= scored のあと、 出題者が 「ここで終わる」 を押した時)
+// 終了 (= scored のあと、出題者が「ここで終わる」を押した時)
 function quizzes_finish(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid) {
         $g = quizzes_lock($pdo, $qid);

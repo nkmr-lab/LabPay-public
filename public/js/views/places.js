@@ -1,6 +1,6 @@
 // /#/places — 行きたい店 / 行ったお店共有 (食べログ的)。
 // 一覧 → 詳細 → 口コミ投稿 + 削除。 lat/lng があれば Leaflet で地図表示。
-// 画像は /api/uploads/image で先に上げ、 返りの URL を image_url に。
+// 画像は /api/uploads/image で先に上げ、返りの URL を image_url に。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
@@ -25,7 +25,7 @@ function ratingStars(r) {
   return '⭐'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full));
 }
 
-// v471 本文内の URL をクリック可能リンクに。 改行も <br> に。
+// v471 本文内の URL をクリック可能リンクに。改行も <br> に。
 function linkifyText(s) {
   let h = escapeHtml(s || '');
   h = h.replace(/(https?:\/\/[^\s<]+)/g,
@@ -33,8 +33,8 @@ function linkifyText(s) {
   return h.replace(/\n/g, '<br>');
 }
 
-// v502 #119 Google Maps の保存リスト (KML / GeoJSON) を取り込み、 既存と重複しない
-//   場所だけを /api/places に登録。 共通パーサは ../gmap_import.js に切り出し済み。
+// v502 #119 Google Maps の保存リスト (KML / GeoJSON) を取り込み、既存と重複しない
+//   場所だけを /api/places に登録。共通パーサは ../gmap_import.js に切り出し済み。
 async function onGmapImport(ev) {
   const f = ev.target.files?.[0];
   ev.target.value = '';
@@ -71,7 +71,7 @@ export async function renderPlaces() {
   //   - 表示中はナビ tabs を隠す (場所節約)
   //   - h2 ヘッダー / 📥 インポートボタンを廃止
   //   - 地図 bounds フィルタを復活 (デフォルト ON)
-  //   - ハート / 足跡フィルタの「・」 や説明文を間引いて省スペース
+  //   - ハート / 足跡フィルタの「・」や説明文を間引いて省スペース
   const tabsEl = document.getElementById('tabs');
   if (tabsEl) tabsEl.dataset.placesHidden = tabsEl.hidden ? '0' : '1';
   if (tabsEl) tabsEl.hidden = true;
@@ -183,7 +183,7 @@ export async function renderPlaces() {
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
       if (fVisited && !p.visited_by_me) return false;
-      // v734 #343 地図内のみフィルタが ON のとき、 緯度経度未設定の店は除外 (含めると無条件で残ってしまうので)。
+      // v734 #343 地図内のみフィルタが ON のとき、緯度経度未設定の店は除外 (含めると無条件で残ってしまうので)。
       if (bounds) {
         if (p.lat == null || p.lng == null) return false;
         if (!bounds.contains([p.lat, p.lng])) return false;
@@ -228,7 +228,7 @@ export async function renderPlaces() {
       document.getElementById('pl-list').innerHTML = '<div class="empty">該当するお店はありません</div>';
       return;
     }
-    // v730 #339 ハート / 足跡の前に 「・」 は入れない (絵文字だけで区別つく)。
+    // v730 #339 ハート / 足跡の前に「・」は入れない (絵文字だけで区別つく)。
     // v848 #432 ❤ / 👣 をタイル内でもタップでトグルできるボタンに。
     const placeBadgesHtml = (p) => `
       <button type="button" class="pl-tile-like" data-pl-like-id="${p.id}" data-on="${p.liked_by_me ? '1' : '0'}"
@@ -267,7 +267,7 @@ export async function renderPlaces() {
           </div>
         </a>`;
     }).join('')}</div>`;
-    // v848 #432 タイル内 ❤ / 👣 ボタンの wire。 トグル成功でその場で表示更新。
+    // v848 #432 タイル内 ❤ / 👣 ボタンの wire。トグル成功でその場で表示更新。
     document.getElementById('pl-list').querySelectorAll('.pl-tile-like').forEach(btn => {
       btn.addEventListener('click', async (ev) => {
         ev.preventDefault(); ev.stopPropagation();
@@ -331,18 +331,18 @@ export async function renderPlaces() {
   };
   document.getElementById('pl-mode-map')   ?.addEventListener('click', () => applyViewMode('map'));
   document.getElementById('pl-mode-recent')?.addEventListener('click', () => applyViewMode('recent'));
-  // 初期状態が recent なら 「地図内のみ」 ラベルも隠す
+  // 初期状態が recent なら「地図内のみ」ラベルも隠す
   if (initialView === 'recent') {
     const blbl = document.getElementById('pl-f-bounds-lbl');
     if (blbl) blbl.style.display = 'none';
   }
-  // v845 #428 admin 用 「🔗 tabelog 自動補完」 ボタンとハンドラを撤去。
-  //   バックエンドの /api/places/backfill_tabelog_urls は残しているので、 必要なら手動で叩ける。
+  // v845 #428 admin 用「🔗 tabelog 自動補完」ボタンとハンドラを撤去。
+  //   バックエンドの /api/places/backfill_tabelog_urls は残しているので、必要なら手動で叩ける。
   refresh();
 }
 
 // v471 地図ビュー: 全 places を Leaflet にプロット + 表示中エリア + カテゴリで
-// 一覧を絞り込み。 group_map.js と同じ思想で 「map.getBounds().contains(...)」
+// 一覧を絞り込み。 group_map.js と同じ思想で「map.getBounds().contains(...)」
 // をベースにしたリアクティブフィルタ。
 export async function renderPlacesMap() {
   const app = document.getElementById('app');
@@ -409,7 +409,7 @@ export async function renderPlacesMap() {
     return;
   }
 
-  // マーカー (全 places。 表示状態は後述フィルタで制御)
+  // マーカー (全 places。表示状態は後述フィルタで制御)
   const markersByPid = new Map();
   for (const p of items) {
     const ratingTxt = p.avg_rating !== null
@@ -565,7 +565,7 @@ export async function renderPlaceNew() {
           <input type="file" id="pln-img" accept="image/*" style="flex:1">
           <span class="hint-sm" id="pln-img-status"></span>
         </div>
-        <span class="hint-sm" style="font-size:11px">タイル / 地図で背景画像になります。 未設定なら最新レビュー画像が代替で使われます。</span>
+        <span class="hint-sm" style="font-size:11px">タイル / 地図で背景画像になります。未設定なら最新レビュー画像が代替で使われます。</span>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/places" class="btn">キャンセル</a>
@@ -611,7 +611,7 @@ export async function renderPlaceNew() {
       const url = r.top || (r.candidates && r.candidates[0]);
       if (!url) throw new Error('候補なし');
       document.getElementById('pln-import-url').value = url;
-      searchStatus.innerHTML = `<span style="color:#0e7c63">✓ ${url} を取得 → 自動で 「取得」 を実行します</span>`;
+      searchStatus.innerHTML = `<span style="color:#0e7c63">✓ ${url} を取得 → 自動で「取得」を実行します</span>`;
       document.getElementById('pln-import-btn').click();
     } catch (e) { searchStatus.innerHTML = `<span style="color:#c00">失敗: ${e?.message || e}</span>`; }
     finally { searchBtn.disabled = false; }
@@ -654,7 +654,7 @@ export async function renderPlaceNew() {
         if (r.lat != null) document.getElementById('pln-lat').value   = r.lat;
         if (r.lng != null) document.getElementById('pln-lng').value   = r.lng;
         // v722 #318 元 URL を隠し input に保存 (= 詳細でクリック可能リンクに)。
-        //   旧版は description に追記していたが、 これで捨てなく済む。
+        //   旧版は description に追記していたが、これで捨てなく済む。
         document.getElementById('pln-source-url').value = r.source_url || url;
         const descEl = document.getElementById('pln-desc');
         if (!descEl.value.trim() && r.description) {
@@ -702,7 +702,7 @@ export async function renderPlaceNew() {
 export async function renderPlaceDetail({ params }) {
   const id = Number(params.id);
   const app = document.getElementById('app');
-  // v481 #67 カバー画像 (negative margin で上に 12px はみ出る) が 「← 一覧」 ボタン
+  // v481 #67 カバー画像 (negative margin で上に 12px はみ出る) が「← 一覧」ボタン
   //   を被って戻りにくい問題 → 戻りボタンを別カードに分離。
   app.innerHTML = `
     <div class="card" style="padding:6px 10px">
@@ -761,8 +761,8 @@ async function loadPlace(id) {
       ? `<div class="meta">${ratingStars(p.avg_rating)} <b>${p.avg_rating.toFixed(1)}</b> (${p.comment_count} 件の口コミ)</div>`
       : `<div class="meta">${p.comment_count} 件の口コミ</div>`;
     // v478 メイン写真があれば上に大きく
-    // v512 サムネ優先 (220px 表示で原画像は重い、 サーバが返す image_thumb_url を使う)
-    // v745 #356 タップで lightbox (原画像) 表示。 target=_blank だとスマホで「戻れない」 ので。
+    // v512 サムネ優先 (220px 表示で原画像は重い、サーバが返す image_thumb_url を使う)
+    // v745 #356 タップで lightbox (原画像) 表示。 target=_blank だとスマホで「戻れない」ので。
     // v752 #370 起案者 / admin は拡大 (lightbox) 内で 🔄 ボタンで回転可能。
     // v754 #370 サムネ上のボタンは廃止、 lightbox 内のみに。
     // v753 me をここで先取り (旧版は下の方で const me = ... してたので TDZ エラー)
@@ -879,9 +879,9 @@ async function loadPlace(id) {
         </div>`;
     }).join('') || '<div class="empty">まだ口コミなし</div>';
     // v745 #356 data-zoom-src を持つ画像をタップしたら lightbox で全画面表示。
-    //   旧版は target=_blank で新タブに開いていたのでスマホで 「戻れない」 状態だった。
-    // v754 #370 画像タップで lightbox。 起案者 / 投稿者 / admin なら lightbox 内の
-    //   「🔄 回転」 ボタンで 90° 回転 (server で上書き保存) → cache-bust で再ロード。
+    //   旧版は target=_blank で新タブに開いていたのでスマホで「戻れない」状態だった。
+    // v754 #370 画像タップで lightbox。起案者 / 投稿者 / admin なら lightbox 内の
+    //   「🔄 回転」ボタンで 90° 回転 (server で上書き保存) → cache-bust で再ロード。
     document.querySelectorAll('[data-zoom-src]').forEach(el => {
       if (el.dataset.bound) return;
       el.dataset.bound = '1';
@@ -891,7 +891,7 @@ async function loadPlace(id) {
         const canRot = el.dataset.canRot === '1';
         const opts = {};
         if (canRot) {
-          // v856 #440 lightbox 内で回転が成功したら 「回転した」 フラグを立てて、 lightbox を閉じた後に
+          // v856 #440 lightbox 内で回転が成功したら「回転した」フラグを立てて、 lightbox を閉じた後に
           //   loadPlace(id) で全画像を再ロード (= サムネ + 一覧 + 詳細すべて反映)。
           let rotated = false;
           if (el.dataset.rotHero === '1') {
@@ -905,8 +905,8 @@ async function loadPlace(id) {
             if (!rotated) return;
             try {
               await loadPlace(id);
-              // v856 #440 ブラウザは同じ URL の画像をキャッシュするので、 サムネや詳細の画像が
-              //   再ロードされない。 描画後に /uploads/ を含む img と background-image に
+              // v856 #440 ブラウザは同じ URL の画像をキャッシュするので、サムネや詳細の画像が
+              //   再ロードされない。描画後に /uploads/ を含む img と background-image に
               //   ?_t=NOW を付けて強制再フェッチ。
               const stamp = Date.now();
               const root = document.getElementById('app');
@@ -1005,7 +1005,7 @@ async function loadPlace(id) {
         };
       };
     }
-    // v716 #311 複数画像 upload。 input は multiple、 選んだら並列で全部上げて URL を蓄積。
+    // v716 #311 複数画像 upload。 input は multiple、選んだら並列で全部上げて URL を蓄積。
     let pldImageUrls = [];
     const imgInput = document.getElementById('pld-img');
     const imgStatus = document.getElementById('pld-img-status');

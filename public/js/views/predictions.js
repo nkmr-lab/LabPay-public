@@ -32,7 +32,7 @@ export async function renderPredictions() {
       <div class="card page-header">
         <h2 style="margin:0">🏆 優勝予想</h2>
         <p class="hint" style="margin:6px 0 0; font-size:13px">
-          W 杯やスポーツ大会、 学会 best paper など 「順位」 を予想して参加フィーを山分け。
+          W 杯やスポーツ大会、学会 best paper など「順位」を予想して参加フィーを山分け。
           配分は <b>1位的中者で山分け</b> (場代 5% のみシステム取り)。
           ランキング表示のスコアは 1位=5 / 2位=3 / 3位=2 / 4位=1 の一致和。
         </p>
@@ -57,7 +57,7 @@ export async function renderPredictions() {
           </div>
         </a>
       `).join('') : `
-        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ予想が起案されていません。 最初の起案をどうぞ。</div></div>
+        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ予想が起案されていません。最初の起案をどうぞ。</div></div>
       `}
     `;
   } catch (e) {
@@ -78,7 +78,7 @@ export async function renderPredictionNew() {
       </label>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">説明 (任意)</div>
-        <textarea id="pn-desc" class="input" rows="2" placeholder="例: 北中米開催。 開催前までに予想を出してね" maxlength="1000"></textarea>
+        <textarea id="pn-desc" class="input" rows="2" placeholder="例: 北中米開催。開催前までに予想を出してね" maxlength="1000"></textarea>
       </label>
       <div style="display:flex; gap:10px; margin-bottom:10px">
         <label style="flex:1">
@@ -100,11 +100,11 @@ export async function renderPredictionNew() {
       </label>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">候補リスト (1 行 = 1 候補)</div>
-        <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) はスペース区切りで任意。 例: <code>🇧🇷 ブラジル</code></p>
+        <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) はスペース区切りで任意。例: <code>🇧🇷 ブラジル</code></p>
         <textarea id="pn-candidates" class="input" rows="12" placeholder="🇧🇷 ブラジル&#10;🇦🇷 アルゼンチン&#10;🇫🇷 フランス&#10;…"></textarea>
       </label>
       <div style="margin-bottom:10px">
-        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。 起案直後に admin_notice で受付開始を通知)</div>
+        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。起案直後に admin_notice で受付開始を通知)</div>
         <div id="pn-notify-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="pn-notify-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
@@ -215,7 +215,7 @@ function renderDetailHtml(g) {
       predictArea = `
         <div class="card">
           <h3 style="margin:0 0 4px">予想を入力する</h3>
-          <p class="hint" style="margin:0 0 8px; font-size:12px">参加フィー ${g.fee}pt を支払って予想を提出します。 締切前なら何度でも変更可能。</p>
+          <p class="hint" style="margin:0 0 8px; font-size:12px">参加フィー ${g.fee}pt を支払って予想を提出します。締切前なら何度でも変更可能。</p>
           <div id="pred-slots">${slotsHtml}</div>
           <div style="margin:10px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
           <div id="pred-cands">${candidatesHtml}</div>
@@ -261,7 +261,7 @@ function renderDetailHtml(g) {
   const creatorBlock = (g.is_creator && (g.status === 'open' || g.status === 'closed')) ? `
     <div class="card">
       <h3 style="margin:0 0 4px">起案者メニュー</h3>
-      <p class="hint" style="margin:0 0 8px; font-size:12px">受付を締め切ったら結果を開示できます。 まだ誰も参加していない場合はキャンセルもできます。</p>
+      <p class="hint" style="margin:0 0 8px; font-size:12px">受付を締め切ったら結果を開示できます。まだ誰も参加していない場合はキャンセルもできます。</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap">
         ${g.status === 'open' ? `<button class="btn" id="pred-close">受付を締め切る</button>` : ''}
         <button class="btn primary" id="pred-open-finalize">結果を開示する…</button>
@@ -299,8 +299,8 @@ function renderDetailHtml(g) {
     </div>` : '';
 
   // v582 #226 締切までのカウントダウン (締切がある時だけ出す)。
-  // v689 #273 締切が既に過ぎていれば 「締切終了」 をシンプルに表示。 status badge も
-  //   server が 「open」 のままでも視覚的には 「締切済」 に下げる。
+  // v689 #273 締切が既に過ぎていれば「締切終了」をシンプルに表示。 status badge も
+  //   server が「open」のままでも視覚的には「締切済」に下げる。
   const deadlinePassed = g.deadline_at
     && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
   const effectiveStatus = (g.status === 'open' && deadlinePassed) ? 'closed' : g.status;
@@ -334,7 +334,7 @@ function renderDetailHtml(g) {
         <input type="datetime-local" id="pred-edit-deadline">
       </label>
       <label class="field">
-        <span class="lbl">候補 (1 行 1 件、 例: 日本 / ブラジル / アルゼンチン…)</span>
+        <span class="lbl">候補 (1 行 1 件、例: 日本 / ブラジル / アルゼンチン…)</span>
         ${hasEntries ? '<div class="hint-sm" style="color:#c00">※ すでに予想者がいるので候補は変更できません</div>' : ''}
         <textarea id="pred-edit-cands" rows="4" ${hasEntries ? 'disabled' : ''}>${escapeHtml((g.candidates || []).map(c => c.name).join('\n'))}</textarea>
       </label>
@@ -388,8 +388,8 @@ function startPredCountdown() {
     if (!root2) { clearInterval(predCountdownTimer); predCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      // v689 #273 「⏳ 締切まで締切超過 ⛔」 だと重ね表示で変だった → root 全体を
-      //   「⏰ 締切終了」 に置き換え。 status badge も 「受付中」 のままなら 「締切済」 に下げる。
+      // v689 #273 「⏳ 締切まで締切超過 ⛔」だと重ね表示で変だった → root 全体を
+      //   「⏰ 締切終了」に置き換え。 status badge も「受付中」のままなら「締切済」に下げる。
       root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
@@ -416,7 +416,7 @@ function startPredCountdown() {
 function wireDetail(g) {
   startPredCountdown();
   document.getElementById('pred-share')?.addEventListener('click', () => {
-    shareToSns(`🏆 「${g.title}」 の優勝予想を受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
+    shareToSns(`🏆 「${g.title}」の優勝予想を受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
   });
   // v848 #431 起案者によるタイトル / 説明編集
   const editBtn   = document.getElementById('pred-edit-btn');
@@ -511,7 +511,7 @@ function wireDetail(g) {
         const cid = b.dataset.cid;
         if (picked.includes(cid)) return;
         const idx = picked.findIndex(x => x === null);
-        if (idx < 0) { toast('全部埋まっています。 不要なものを × で消してください'); return; }
+        if (idx < 0) { toast('全部埋まっています。不要なものを × で消してください'); return; }
         picked[idx] = cid;
         refresh();
       });
@@ -539,7 +539,7 @@ function wireDetail(g) {
       } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
     document.getElementById('pred-cancel')?.addEventListener('click', async () => {
-      if (!confirm('キャンセルすると全員のフィーが返金され予想は破棄されます。 よろしいですか?')) return;
+      if (!confirm('キャンセルすると全員のフィーが返金され予想は破棄されます。よろしいですか?')) return;
       try {
         await post(`/api/predictions/games/${g.id}/cancel`, {});
         toast('キャンセルしました');

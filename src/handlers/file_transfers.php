@@ -79,7 +79,7 @@ function ft_list(PDO $pdo, array $cfg): void {
 
 function ft_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // v742 #353 複数受信者対応。 recipient_user_ids[] が来たら配列、 旧互換で
+    // v742 #353 複数受信者対応。 recipient_user_ids[] が来たら配列、旧互換で
     //   recipient_user_id 単数も受ける。 1 ファイルアップロード = 同じ batch_id で
     //   N 行 INSERT (= 受信者ごとに download 状況を個別に持つ)。
     $recipientIds = [];
@@ -135,7 +135,7 @@ function ft_create(PDO $pdo, array $cfg): void {
             throw new ApiException('too_large', "合計サイズが {$mb}MB を超えています", 413);
         }
         // root folder の名前を decide。 v743 #354 フォルダなし (= 単純複数ファイル) なら
-        //   'files.zip' に。 フォルダドロップなら最初のパス先頭を採用。
+        //   'files.zip' に。フォルダドロップなら最初のパス先頭を採用。
         $hasFolderStruct = false;
         foreach ($paths as $p) {
             if (is_string($p) && str_contains($p, '/')) { $hasFolderStruct = true; break; }
@@ -190,7 +190,7 @@ function ft_create(PDO $pdo, array $cfg): void {
         $size    = (int)$saved['size'];
     }
 
-    // batch_id = 「同じ送信アクション」 を識別する値。 一括 INSERT 後に一番古い id
+    // batch_id = 「同じ送信アクション」を識別する値。一括 INSERT 後に一番古い id
     //   を batch_id として全行に書き戻す (= UI 側で同一 batch をまとめて表示)。
     $ins = $pdo->prepare("INSERT INTO file_transfers
         (sender_user_id, recipient_user_id, file_path, original_name, file_size, mime_type, body, sent_at)
@@ -212,7 +212,7 @@ function ft_create(PDO $pdo, array $cfg): void {
         $rid = $recipientIds[$i];
         try {
             notify_safely($pdo, $cfg, $rid, 'admin_notice',
-                "📦 {$u['display_name']} さんからファイル 「{$originalName}」 が届きました",
+                "📦 {$u['display_name']} さんからファイル「{$originalName}」が届きました",
                 'file_transfer', $rowId);
         } catch (Throwable $_) {}
     }

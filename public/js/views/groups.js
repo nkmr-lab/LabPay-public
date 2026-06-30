@@ -12,9 +12,9 @@ import { createMemberPicker } from '../member_picker.js';
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
 // v499 #112 グループ系 API (/api/groups, /api/groups/:id/*) は SW で SWR キャッシュ
-//   される。 支出登録/削除/編集の直後に古いキャッシュが返って 「ワリカに反映されない」
-//   ように見える問題を防ぐため、 操作直後にここで content cache から /api/groups* を
-//   消す。 失敗は黙殺 (キャッシュなしブラウザ等)。
+//   される。支出登録/削除/編集の直後に古いキャッシュが返って「ワリカに反映されない」
+//   ように見える問題を防ぐため、操作直後にここで content cache から /api/groups* を
+//   消す。失敗は黙殺 (キャッシュなしブラウザ等)。
 // v598 fix: 旧版は 'labpay-content-v2' を直 open していたが実際の SW キャッシュは v3。
 //   invalidateContentCache (api.js) で labpay-content-* を全部 invalidate する方式に変更。
 async function invalidateGroupCache(_gid) {
@@ -35,7 +35,7 @@ const GROUP_ACTIONS = [
   { id: 'meetups',   label: '🤝 待ち合わせ',     wariDep: false },
   { id: 'translate', label: '🌐 画像翻訳',       wariDep: false },
 ];
-// アクションが有効か (g.feat_actions が null = 「全 ON」、 配列ならその中に含まれる物)
+// アクションが有効か (g.feat_actions が null = 「全 ON」、配列ならその中に含まれる物)
 function actionEnabled(g, id) {
   const list = g?.feat_actions;
   if (list === null || list === undefined) return true; // 後方互換
@@ -50,7 +50,7 @@ function actionShownForUser(id) {
 }
 
 // v475 招待URL 経由で参加 (= /#/groups/join/{token})。 POST 一発で参加して
-// グループ詳細に遷移。 失効済 / 404 はエラーカードを表示。
+// グループ詳細に遷移。失効済 / 404 はエラーカードを表示。
 export async function renderGroupJoin({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -60,7 +60,7 @@ export async function renderGroupJoin({ params }) {
     </div>`;
   try {
     const r = await post(`/api/groups/join/${encodeURIComponent(params.token)}`, {});
-    toast(`グループ「${r.title || ''}」 に参加しました`);
+    toast(`グループ「${r.title || ''}」に参加しました`);
     navigate('#/groups/' + r.group_id);
   } catch (e) {
     document.getElementById('gj-body').innerHTML =
@@ -216,7 +216,7 @@ async function onCreate() {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// 共通: 詳細ページの 「表紙画像 + 編集ボタン」 UI を組み立てる。
+// 共通: 詳細ページの「表紙画像 + 編集ボタン」 UI を組み立てる。
 // idPrefix で複数ページの ID 衝突を避ける ('gd' = groups detail, 'id' = invitation detail)。
 export function renderCoverEditor({ imageUrl, canEdit, idPrefix }) {
   const ip = idPrefix;
@@ -278,7 +278,7 @@ export function coverListItem({ href, image_url, image_thumb_url, title, meta = 
   // v511 サムネが渡されていれば原画像より優先 (ホームのウィジェットで効く)。
   const bg = image_thumb_url || image_url;
   // v374 メンバ行: 名前は出さず avatar のみ並べる (狭いリスト幅を圧迫しない)。
-  // 8 人まで並べて、 9 人以上は 「+N」 / 末尾に (N人)。
+  // 8 人まで並べて、 9 人以上は「+N」 / 末尾に (N人)。
   // v396 ホーム用に chipSize='sm' を受けられるよう引数化 (デフォは従来の xs)。
   const memberRow = (Array.isArray(members) && members.length)
     ? `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">
@@ -325,7 +325,7 @@ async function loadList() {
     if (!items.length) {
       root.innerHTML = showClosed
         ? `<div class="empty">グループはありません</div>`
-        : `<div class="empty">進行中のグループはありません${d.items.length ? ' (終了したものは 「終了も表示」 で見られます)' : ''}</div>`;
+        : `<div class="empty">進行中のグループはありません${d.items.length ? ' (終了したものは「終了も表示」で見られます)' : ''}</div>`;
       return;
     }
     root.innerHTML = items.map(g => coverListItem({
@@ -405,7 +405,7 @@ export async function renderGroupDetail({ params }) {
         </div>
       </div>
       <p class="muted" style="font-size:13px; margin:6px 0">
-        立替えた支出を積み上げて、 最後にまとめて精算 (貸し借り) します。
+        立替えた支出を積み上げて、最後にまとめて精算 (貸し借り) します。
       </p>
       <h4 style="margin:8px 0 4px">支払いの記録</h4>
       <div id="gd-wari-summary" class="muted" style="font-size:13px">読み込み中…</div>
@@ -432,7 +432,7 @@ export async function renderGroupDetail({ params }) {
 
     <details class="card" id="gd-files-card">
       <summary style="font-weight:700; cursor:pointer">📎 ファイル / 🖼 画像 <span id="gd-files-count" class="hint-sm"></span></summary>
-      <p class="hint-sm" style="margin:6px 0 4px">グループメンバーで共有するファイル / 画像 (PDF, Office, 画像, zip 等。 最大 16 MB)。 追加でメンバー全員に通知。</p>
+      <p class="hint-sm" style="margin:6px 0 4px">グループメンバーで共有するファイル / 画像 (PDF, Office, 画像, zip 等。最大 16 MB)。追加でメンバー全員に通知。</p>
       <div class="row" style="gap:6px; margin:6px 0; align-items:center; flex-wrap:wrap">
         <input type="file" id="gd-files-input" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.ics,.zip" style="flex:1; min-width:140px; font-size:12px">
         <input type="text" id="gd-files-note" maxlength="500" placeholder="メモ (任意)" style="flex:2; min-width:140px; font-size:12px; padding:4px 6px">
@@ -482,7 +482,7 @@ export async function renderGroupDetail({ params }) {
 
     <div class="card" id="gd-danger-card" hidden>
       <p class="muted" style="font-size:13px; margin:0 0 8px">
-        閉鎖してもデータは残ります。 新規投稿・ワリカ追加ができなくなるだけ。
+        閉鎖してもデータは残ります。新規投稿・ワリカ追加ができなくなるだけ。
       </p>
       <div class="row" style="gap:6px; flex-wrap:wrap">
         <button id="gd-close" class="danger">グループを閉鎖する</button>
@@ -500,9 +500,9 @@ export async function renderGroupDetail({ params }) {
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
   // 精算ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
-  // v491 #91 gd-snap-expense は loadDetail で gd-head に注入されるので、 ここで
+  // v491 #91 gd-snap-expense は loadDetail で gd-head に注入されるので、ここで
   //   bind すると要素がまだ無く no-op になる (= 「支出を記録で入力画面が
-  //   出ない」 バグ)。 bind は loadDetail 内 (receipt と同じ場所) で行う。
+  //   出ない」バグ)。 bind は loadDetail 内 (receipt と同じ場所) で行う。
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
   // v516 #144 Google Map インポートのボタン/file input は loadSchedule の stock card 内
@@ -522,8 +522,8 @@ export async function renderGroupDetail({ params }) {
   startChatLoop(id);
 }
 
-// v810 #400 グループファイル / 画像共有。 アップロード → サーバで kind 判定
-//   (image/* なら kind='image')、 画像はサムネ grid、 非画像はファイルリストで表示。
+// v810 #400 グループファイル / 画像共有。アップロード → サーバで kind 判定
+//   (image/* なら kind='image')、画像はサムネ grid、非画像はファイルリストで表示。
 async function loadGroupFiles(gid) {
   const card = document.getElementById('gd-files-card');
   const imgs = document.getElementById('gd-files-images');
@@ -588,7 +588,7 @@ function groupFilesCanDelete(it) {
   if (!myId) return false;
   if ((it.uploader_id || 0) === myId) return true;
   if (role === 'admin') return true;
-  // creator チェックはサーバ側で改めて判定するので、 クライアントでは投稿者 + admin のみボタン表示
+  // creator チェックはサーバ側で改めて判定するので、クライアントでは投稿者 + admin のみボタン表示
   return false;
 }
 
@@ -636,7 +636,7 @@ async function loadGroupTranslations(gid) {
       return;
     }
     // v488 #83 翻訳結果が切れて全文見えない問題 → <details> で折り畳み、
-    //   タップで全文展開。 画像もタップで拡大 (新タブで原寸)。
+    //   タップで全文展開。画像もタップで拡大 (新タブで原寸)。
     root.innerHTML = items.map(t => {
       const full = String(t.result_text || '');
       const isLong = full.length > 120;
@@ -663,8 +663,8 @@ async function loadGroupTranslations(gid) {
   }
 }
 
-// グループの 「使う機能」 フラグに応じて関連カードの表示 + データロードを制御。
-// loadDetail から呼ぶ。 後で feature を ON/OFF した時も呼び直せばよい。
+// グループの「使う機能」フラグに応じて関連カードの表示 + データロードを制御。
+// loadDetail から呼ぶ。後で feature を ON/OFF した時も呼び直せばよい。
 function applyGroupFeatures(g) {
   const groupId = g.id;
   const schedCard = document.getElementById('gd-sched-card');
@@ -678,7 +678,7 @@ function applyGroupFeatures(g) {
   if (g.feat_schedule) loadSchedule(groupId);
   if (g.feat_lodging)  loadLodgings(groupId);
   if (g.feat_flight)   loadFlights(groupId);
-  // ヘッダの 「地図」 ボタンもスケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
+  // ヘッダの「地図」ボタンもスケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
   const mapBtn = document.querySelector(`a[href="#/groups/${groupId}/map"]`);
   if (mapBtn) mapBtn.hidden = !g.feat_schedule;
   // 8 個のアクションボタン: feat_actions の null/配列に従って表示制御。 receipt と
@@ -689,7 +689,7 @@ function applyGroupFeatures(g) {
     const allowed = actionEnabled(g, a.id) && (!a.wariDep || g.feat_wari);
     el.hidden = !allowed;
   }
-  // 機能設定カード (作成者のみ表示)。 トグル変更で PATCH + 即時反映。
+  // 機能設定カード (作成者のみ表示)。トグル変更で PATCH + 即時反映。
   const featCard = document.getElementById('gd-feat-card');
   const isCreator = state.me?.id === Number(g.creator_user_id);
   if (featCard) {
@@ -718,7 +718,7 @@ function applyGroupFeatures(g) {
       wire('gd-feat-lodging', 'feat_lodging');
       wire('gd-feat-flight', 'feat_flight');
       wire('gd-feat-wari', 'feat_wari');
-      // アクションボタンの設定 UI を作成 (初回のみ)、 トグル変更で feat_actions PATCH
+      // アクションボタンの設定 UI を作成 (初回のみ)、トグル変更で feat_actions PATCH
       const actBox = document.getElementById('gd-feat-actions');
       if (actBox && !actBox.dataset.wired) {
         actBox.dataset.wired = '1';
@@ -802,20 +802,20 @@ async function onClearSlug(g) {
 async function loadDetail(id) {
   try {
     const g = await get('/api/groups/' + id);
-    // 機能の ON/OFF。 ここで関連カードを表示制御 + 関連 loader 呼び出し。
+    // 機能の ON/OFF。ここで関連カードを表示制御 + 関連 loader 呼び出し。
     applyGroupFeatures(g);
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
     setWariMembers(g.members);
-    // v518 #153 「解除」 ボタンは廃止 (「変更」 → 空欄で保存で解除できる)。 また編集
-    //   モード時のみ 「変更/設定」 を出す (普段はただの表示)。
+    // v518 #153 「解除」ボタンは廃止 (「変更」 → 空欄で保存で解除できる)。また編集
+    //   モード時のみ「変更/設定」を出す (普段はただの表示)。
     const slugRow = isCreator
       ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">${g.slug ? '/#/groups/' + escapeHtml(g.slug) : '(未設定)'}</span>
            ${gdEditMode ? `<button id="gd-edit-slug" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">${g.slug ? '変更' : '設定'}</button>` : ''}
          </div>`
       : (g.slug ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">/#/groups/${escapeHtml(g.slug)}</span></div>` : '');
-    // 表紙画像: 設定済みなら 16:9 ヒーロー、creator なら 「変更/削除」 ボタン付き。
-    // 未設定 + creator なら 「📷 表紙画像を追加」 ボタンだけ表示。
+    // 表紙画像: 設定済みなら 16:9 ヒーロー、creator なら「変更/削除」ボタン付き。
+    // 未設定 + creator なら「📷 表紙画像を追加」ボタンだけ表示。
     // v518 #153 編集モード時のみ canEdit を有効に。
     const imgBlock = renderCoverEditor({
       imageUrl: g.image_url,
@@ -857,8 +857,8 @@ async function loadDetail(id) {
         <a class="btn" data-gd-act="translate" ${actionEnabled(g, 'translate') && actionShownForUser('translate') ? '' : 'hidden'} href="#/translate?group_id=${id}">🌐 画像翻訳</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
         <!-- v490 #90 単一 input、 capture 属性なし → カメラ / フォト / ファイル
-             のどれからでも選べる (端末が標準で 「撮影する」 「ライブラリから
-             選ぶ」 「ファイルから選ぶ」 を出す)。 -->
+             のどれからでも選べる (端末が標準で「撮影する」「ライブラリから
+             選ぶ」「ファイルから選ぶ」を出す)。 -->
         <input type="file" id="gd-receipt-file" accept="image/*" hidden>
       </div>`;
     // v475 メンバー追加 / 削除 / 招待リンク (起案者 + admin)
@@ -869,7 +869,7 @@ async function loadDetail(id) {
     if (addMemBtn) addMemBtn.style.display = canManageMembers ? '' : 'none';
     if (invBtn)    invBtn.style.display    = canManageMembers ? '' : 'none';
     if (canManageMembers) {
-      // v518 #153 メンバー × ボタンは編集モード ON 時のみ表示。 普段は誤タップ防止。
+      // v518 #153 メンバー × ボタンは編集モード ON 時のみ表示。普段は誤タップ防止。
       if (gdEditMode) {
         const memList = document.getElementById('gd-members-list');
         if (memList) {
@@ -972,7 +972,7 @@ async function loadDetail(id) {
           catch (_) { navigator.clipboard?.writeText(inp.value).then(() => toast('コピーしました')); }
         });
         document.getElementById('gd-invite-revoke')?.addEventListener('click', async () => {
-          if (!confirm('招待リンクを失効します。 既存メンバーはそのままです。 OK?')) return;
+          if (!confirm('招待リンクを失効します。既存メンバーはそのままです。 OK?')) return;
           try { await del(`/api/groups/${id}/invite`); toast('失効しました'); await loadDetail(id); }
           catch (e) { toast('失敗: ' + e.message); }
         });
@@ -980,9 +980,9 @@ async function loadDetail(id) {
     }
 
     // 閉鎖 / 完全削除カード:
-    //   * 「閉鎖する」 は未閉鎖かつ creator/admin
-    //   * 「完全削除」 は閉鎖済かつ creator/admin (admin であっても閉鎖前は出さない)。
-    //     「いきなり完全削除」 にならないよう、 必ず閉鎖を経由するワンクッション。
+    //   * 「閉鎖する」は未閉鎖かつ creator/admin
+    //   * 「完全削除」は閉鎖済かつ creator/admin (admin であっても閉鎖前は出さない)。
+    //     「いきなり完全削除」にならないよう、必ず閉鎖を経由するワンクッション。
     const dangerCard = document.getElementById('gd-danger-card');
     const canClose = (isCreator || isAdmin) && !g.closed_at;
     const canHardDel = (isCreator || isAdmin) && !!g.closed_at;
@@ -1014,7 +1014,7 @@ async function loadDetail(id) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('gd-hard-delete')?.addEventListener('click', async () => {
-      if (!confirm('完全削除します。 投稿 / ワリカ / 宿泊 / 航空券 / スケジュール / チャットの全データが消えます。 元に戻せません。 良いですか?')) return;
+      if (!confirm('完全削除します。投稿 / ワリカ / 宿泊 / 航空券 / スケジュール / チャットの全データが消えます。元に戻せません。良いですか?')) return;
       if (!confirm('本当に削除しますか? (最終確認)')) return;
       try {
         await del('/api/groups/' + id + '/hard_delete');
@@ -1078,7 +1078,7 @@ function renderItem(it, gid) {
   } else if (it.body) {
     middle = `<div style="white-space:pre-wrap">${escapeHtml(it.body)}</div>`;
   }
-  // 「アバター: 投稿内容 / 日付」 形式。投稿者名は冗長なので出さない (タップ
+  // 「アバター: 投稿内容 / 日付」形式。投稿者名は冗長なので出さない (タップ
   // すれば avatar の title 属性で確認できる)。
   return `
     <div class="list-item" style="gap:10px; align-items:flex-start">
@@ -1112,8 +1112,8 @@ async function fetchFxRate(ccy) {
 // Set of user_ids the next expense applies to. Initialized to all current
 // members when setWariMembers() runs; user deselects chips to exclude people.
 let wariFor = new Set();
-// v488 #84 個別金額 (user_id → number)。 空 / 0 は 「均等割」 扱い、 number > 0 は
-//   その人の固定金額。 入力あるとチップの横に数字を表示。
+// v488 #84 個別金額 (user_id → number)。空 / 0 は「均等割」扱い、 number > 0 は
+//   その人の固定金額。入力あるとチップの横に数字を表示。
 let wariFixed = new Map();
 let wariFormOnSubmitted = null;
 
@@ -1210,13 +1210,13 @@ async function onExImageFile(ev) {
 
 // ─── RECEIPTS (撮影ストック → 後でワリカに転用) ─────────────────────
 
-// JPEG の EXIF から DateTimeOriginal (tag 0x9003) を読む。 戻り値は
-// 「YYYY-MM-DD HH:MM:SS」 形式 (server 期待) または null。 ライブラリ不要、
+// JPEG の EXIF から DateTimeOriginal (tag 0x9003) を読む。戻り値は
+// 「YYYY-MM-DD HH:MM:SS」形式 (server 期待) または null。ライブラリ不要、
 // 自前で TIFF を辿る最小実装。 EXIF が無い / HEIC / 解析失敗で null。
 //
 // EXIF 仕様: JPEG (FFD8) → APP1 マーカー (FFE1) + "Exif\0\0" + TIFF。
 // TIFF は "II" (little-endian) または "MM" (big-endian) + 0x002A magic +
-// IFD0 offset。 IFD0 の中に ExifIFD pointer (tag 0x8769) があり、 その先に
+// IFD0 offset。 IFD0 の中に ExifIFD pointer (tag 0x8769) があり、その先に
 // DateTimeOriginal (tag 0x9003、 ASCII 20 byte 「YYYY:MM:DD HH:MM:SS\0」)。
 async function readExifDateTime(file) {
   if (!file || !/^image\/jpe?g$/i.test(file.type)) return null;
@@ -1274,9 +1274,9 @@ async function onReceiptFile(ev, gid) {
   if (!f) return;
   // 撮影時刻の決め方:
   //   (1) JPEG なら EXIF の DateTimeOriginal を優先 (= カメラがその場で
-  //       記録した時刻、 後でアルバムから古い写真を選んだ時も正しい)
-  //   (2) 取れなければブラウザの 「今」 ローカル時刻 (= 今その場で撮った想定)
-  // 規約は MTG 入力と同じく 「YYYY-MM-DD HH:MM:SS」 のローカル時刻文字列。
+  //       記録した時刻、後でアルバムから古い写真を選んだ時も正しい)
+  //   (2) 取れなければブラウザの「今」ローカル時刻 (= 今その場で撮った想定)
+  // 規約は MTG 入力と同じく「YYYY-MM-DD HH:MM:SS」のローカル時刻文字列。
   let takenAt = await readExifDateTime(f);
   if (!takenAt) {
     const now = new Date();
@@ -1306,7 +1306,7 @@ async function onReceiptFile(ev, gid) {
 }
 
 // 未確定レシート (draft) 1 行を確定支出と同じ list-item 形式でレンダリング。
-// 視覚的に区別しすぎず、 「立替: ?」 で 「まだ修正が必要」 と促す。
+// 視覚的に区別しすぎず、「立替: ?」で「まだ修正が必要」と促す。
 // loadWari の中で expense と一緒にソートされて出る。
 let cachedReceipts = [];
 function renderReceiptRow(r) {
@@ -1382,9 +1382,9 @@ async function tryFetchCustomRate() {
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
 // exclude that person from this expense.
-// v488 #84 「個別金額」 モード: トグルを ON にすると各メンバーの横に数値
-//   入力が出る。 入れた人はその額が固定、 残りを入っている他メンバーで
-//   均等割り。 空 / 0 は均等割 (今までと同じ)。
+// v488 #84 「個別金額」モード: トグルを ON にすると各メンバーの横に数値
+//   入力が出る。入れた人はその額が固定、残りを入っている他メンバーで
+//   均等割り。空 / 0 は均等割 (今までと同じ)。
 // v490 #87 chip 全体をクリックターゲットに戻し (data-for-uid を外側に)、
 //   個別額 input は stopPropagation で chip トグルを抑止。
 let wariCustomMode = false;
@@ -1486,8 +1486,8 @@ async function onAddExpense() {
   }
   try {
     await post(`/api/groups/${gid}/expenses`, body);
-    // v499 #112 /api/groups/* は SW で SWR キャッシュされているので、 古いキャッシュが
-    //   そのまま返って 「登録したのにワリカに出ない」 を引き起こす。 自分の操作
+    // v499 #112 /api/groups/* は SW で SWR キャッシュされているので、古いキャッシュが
+    //   そのまま返って「登録したのにワリカに出ない」を引き起こす。自分の操作
     //   直後はキャッシュを消して新鮮取り直し。
     await invalidateGroupCache(gid);
     document.getElementById('ex-amt').value = '';
@@ -1564,7 +1564,7 @@ async function loadWari(id) {
         } catch (e) { toast('失敗: ' + e.message); }
       });
     });
-    // 未確定 (receipt) の編集/破棄。 編集は openExpenseEdit を draft 用 default で。
+    // 未確定 (receipt) の編集/破棄。編集は openExpenseEdit を draft 用 default で。
     root.querySelectorAll('[data-edit-receipt]').forEach(b => {
       b.addEventListener('click', () => {
         const r = cachedReceipts.find(x => Number(x.id) === Number(b.dataset.editReceipt));
@@ -1759,7 +1759,7 @@ function openExpenseEdit(gid, e) {
     const payer_user_id = payerRaw === '' ? null : Number(payerRaw);
     const memo = overlay.querySelector('#ex-edit-memo').value.trim() || null;
     if (currency === 'OTHER') { toast('「その他」通貨での編集は未対応'); return; }
-    // draft は amount=0 でも保存可 (途中保存 OK)。 通常支出は >0 必須。
+    // draft は amount=0 でも保存可 (途中保存 OK)。通常支出は >0 必須。
     if (!e.is_draft && !(amount > 0)) { toast('金額を入れてください'); return; }
     if (!e.is_draft && !initSet.size) { toast('対象者を 1 人以上選んでください'); return; }
     const body = { amount: isNaN(amount) ? 0 : amount, currency, payer_user_id, memo, participant_ids: [...initSet] };
@@ -1827,8 +1827,8 @@ function openSettleModal(gid) {
 
   // v394: source_group_id 経由でこのグループに紐づく money_request 群が
   // settlement_charges に入っているので、 (from_user_id, to_user_id) で
-  // マッチングして各プラン行に 「✅ 支払い済」 / 「💸 請求済 (未払い)」 を
-  // 上乗せ表示。 同じペアの請求が複数あったら最新の paid 状態を採用。
+  // マッチングして各プラン行に「✅ 支払い済」 / 「💸 請求済 (未払い)」を
+  // 上乗せ表示。同じペアの請求が複数あったら最新の paid 状態を採用。
   const chargesByPair = new Map();
   for (const c of (d.settlement_charges || [])) {
     const key = `${c.from_user_id}-${c.to_user_id}`;
@@ -1894,7 +1894,7 @@ function openSettleModal(gid) {
   root.querySelector('#gd-settle-asreq')?.addEventListener('click', async (ev) => {
     // ev.currentTarget は async の await を跨いだ後 null になるので、最初に
     // 参照を捕まえておく (caching pattern)。これがないと後で disabled を
-    // 戻すときに 「Cannot set properties of null」 で吹き飛ぶ。
+    // 戻すときに「Cannot set properties of null」で吹き飛ぶ。
     const btn = ev.currentTarget;
     try {
       if (!d.settlements.length) { toast('送金プランがありません'); return; }
@@ -1925,8 +1925,8 @@ function openSettleModal(gid) {
             memo: null,
             creator_user_id: creatorId,
             recipients,
-            // v394: source_group_id を渡すと、 精算サマリモーダルが 「この
-            // プランはもう支払い済」 を後で反映できるようになる。
+            // v394: source_group_id を渡すと、精算サマリモーダルが「この
+            // プランはもう支払い済」を後で反映できるようになる。
             source_group_id: Number(currentGroupId),
           });
           if (firstId === null) firstId = created.id;
@@ -1984,7 +1984,7 @@ async function onPost(gid) {
 }
 
 // v504 #122 グループの行きたい場所ストックに Google Maps の保存リストから一括取り込み。
-//   /api/groups/:gid/schedule に day_date=null (= ストック) で POST。 既存スケジュール
+//   /api/groups/:gid/schedule に day_date=null (= ストック) で POST。既存スケジュール
 //   アイテムとタイトル重複 (大小無視) + 緯度経度 50m 以内は spkip。
 async function onSchedGmapImport(ev, gid) {
   const f = ev.target.files?.[0];
@@ -2025,14 +2025,14 @@ async function onSchedGmapImport(ev, gid) {
 }
 
 // ─── スケジュール / 行程 ─────────────────────────────────────────────
-// 日程範囲 (開始日 〜 終了日) を持ち、 範囲内の各日に時刻付きアイテムを並べる。
+// 日程範囲 (開始日 〜 終了日) を持ち、範囲内の各日に時刻付きアイテムを並べる。
 // 種類は ✈️ 移動 / 🏨 宿 / 🎓 学会 / 👥 会議 / 🍽 食事 / 🎢 観光 / 📝 その他。
 
-// 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
-// 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
+// 種類順は dropdown 並び順とも兼ねる。移動系は同じ「移動」グループとして
+// 上のかたまりで表示。旧 'move' は後方互換のため表示時のみハンドリング。
 let schedEditMode = false;
 // v518 #153 グループの編集モード。 OFF (default) では表紙画像変更ボタン / メンバー
-//   削除 × ボタンを隠して、 「閲覧用」 として軽い見た目に。 ヘッダの ✏ 編集モード
+//   削除 × ボタンを隠して、「閲覧用」として軽い見た目に。ヘッダの ✏ 編集モード
 //   トグルで ON。 isCreator / isAdmin のみアクセス可能。
 let gdEditMode = false;
 let schedPairSlots = {};
@@ -2040,10 +2040,10 @@ let schedPairMaxSlot = -1;
 let schedPairFirstIds = new Set();
 let schedPairLastIds  = new Set();
 // 帯の左右位置はカテゴリ別の slot で決めて確実に重ならないようにする。
-// hash だけで決めると 「__mdi_31 と __mdi_32」 みたいな 1 文字差で
+// hash だけで決めると「__mdi_31 と __mdi_32」みたいな 1 文字差で
 // rightPx がほぼ同じになり帯が重なって見える。
 let schedPairCatSlots = { transport: {}, staying: {} };
-// modal の 「ペア相手」 dropdown で同グループの他アイテムを出すために、
+// modal の「ペア相手」 dropdown で同グループの他アイテムを出すために、
 // 最新の取得結果を持っておく。
 let lastSchedItems = [];
 const SCHED_KINDS = {
@@ -2065,9 +2065,9 @@ const SCHED_KINDS = {
 
 async function loadSchedule(gid) {
   // v528 #184 #186 await 中に loadDetail が再走すると DOM が差し替わって古い body
-  //   参照は orphan になる。 fetch 後に再取得する形で 「読み込み中…」 が残るバグを防ぐ。
-  // v534 #189 描画コード内の JS エラーで body が 「読み込み中…」 のまま残るのを防ぐ
-  //   ため、 関数全体を try/catch で包む。 catch 時はエラーメッセージを body に出す。
+  //   参照は orphan になる。 fetch 後に再取得する形で「読み込み中…」が残るバグを防ぐ。
+  // v534 #189 描画コード内の JS エラーで body が「読み込み中…」のまま残るのを防ぐ
+  //   ため、関数全体を try/catch で包む。 catch 時はエラーメッセージを body に出す。
   try { return await loadScheduleInner(gid); }
   catch (e) {
     console.error('[loadSchedule]', e);
@@ -2090,8 +2090,8 @@ async function loadScheduleInner(gid) {
   const body = document.getElementById('gd-sched-body');
   if (!card || !body) return;
   card.hidden = false;
-  // 日程が無いとき: 「スケジュール編集モード」 は隠して、 「📅 日程設定」 だけ primary 色で出す。
-  // 日程あり: 「スケジュール編集モード」 を primary で復活、 「日程設定」 は 「全体日程の修正」 に。
+  // 日程が無いとき: 「スケジュール編集モード」は隠して、「📅 日程設定」だけ primary 色で出す。
+  // 日程あり: 「スケジュール編集モード」を primary で復活、「日程設定」は「全体日程の修正」に。
   const emBtn = document.getElementById('gd-sched-editmode');
   const rgBtn = document.getElementById('gd-sched-range');
   const hasDates = d.start_date && d.end_date;
@@ -2112,11 +2112,11 @@ async function loadScheduleInner(gid) {
     }
   }
   if (!hasDates) {
-    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「📅 日程設定」 から開始日〜終了日を入れると各日のカードが並びます。</div>`;
+    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。右上「📅 日程設定」から開始日〜終了日を入れると各日のカードが並びます。</div>`;
     return;
   }
   // 日付範囲を 1 日ずつ展開。 toISOString は UTC に変換してしまい JST 環境で
-  // 1 日前にズレるバグの元。 文字列のまま素直に +1 する。
+  // 1 日前にズレるバグの元。文字列のまま素直に +1 する。
   const addOneDay = (s) => {
     const [y, m, dd] = s.split('-').map(Number);
     const dt = new Date(y, m - 1, dd);
@@ -2135,12 +2135,12 @@ async function loadScheduleInner(gid) {
   // day_date 無し = 行きたい場所ストック (別枠で表示)。
   const stockItems = (d.items || []).filter(it => !it.day_date);
   const dayItems = (d.items || []).filter(it => it.day_date);
-  // end_date がある (= 複数日に渡る) アイテムは、 当日・終了日・(宿泊の中間日)
-  // に展開して each day に並べる。 元の id をそのまま保持し、 _occ で
-  // 「'start' / 'mid' / 'end'」 のロールを付ける (描画時に label を出し分け)。
+  // end_date がある (= 複数日に渡る) アイテムは、当日・終了日・(宿泊の中間日)
+  // に展開して each day に並べる。元の id をそのまま保持し、 _occ で
+  // 「'start' / 'mid' / 'end'」のロールを付ける (描画時に label を出し分け)。
   // multi-day item (end_date が day_date と違う) には link_pair_id が無くても
   // 帯描画のための合成 pair_id を当てる (同じアイテムが byDay で N 個に展開される
-  // ので、 下の pair occurrence カウントで N>=2 になり band が引かれる)。
+  // ので、下の pair occurrence カウントで N>=2 になり band が引かれる)。
   for (const it of dayItems) {
     if (!it.link_pair_id && it.end_date && it.end_date !== it.day_date) {
       it.link_pair_id = '__mdi_' + it.id;
@@ -2167,8 +2167,8 @@ async function loadScheduleInner(gid) {
       cur = addOne(cur);
     }
   }
-  // byDay 内を 「その日の視覚順」 に並べ直す。 サーバ側は ORDER BY で
-  // 「start_time あり → start_time 昇順 → NULL は末尾」 を保証してくれているが、
+  // byDay 内を「その日の視覚順」に並べ直す。サーバ側は ORDER BY で
+  // 「start_time あり → start_time 昇順 → NULL は末尾」を保証してくれているが、
   // 展開された multi-day item の mid 行はその日の文脈で時刻が無い (元アイテムの
   // start_time はチェックイン日のもので、 mid 日の話ではない) ので末尾に置きたい。
   // end 行は end_time があればその時刻位置に置く。
@@ -2184,8 +2184,8 @@ async function loadScheduleInner(gid) {
         const c = aT.localeCompare(bT);
         if (c !== 0) return c;
       }
-      // 同じ NULL 時刻組内では mid を末尾に。 元アイテムの sort_order が低くても
-      // (= push 順で先頭) その日のコンテキストでは 「滞在中なだけ」 なので下に。
+      // 同じ NULL 時刻組内では mid を末尾に。元アイテムの sort_order が低くても
+      // (= push 順で先頭) その日のコンテキストでは「滞在中なだけ」なので下に。
       const aMid = a._occ === 'mid' ? 1 : 0;
       const bMid = b._occ === 'mid' ? 1 : 0;
       if (aMid !== bMid) return aMid - bMid;
@@ -2195,7 +2195,7 @@ async function loadScheduleInner(gid) {
     });
   }
   // 帯描画のためのペア出現カウント: byDay 全日にわたって同じ pair_id が
-  // 「何日」 出るかで判定。 multi-day item は 1 行が N 日に展開されるので
+  // 「何日」出るかで判定。 multi-day item は 1 行が N 日に展開されるので
   // この時点で N 回カウントされる。
   const pairOccurrences = {};
   for (const date of days) {
@@ -2205,7 +2205,7 @@ async function loadScheduleInner(gid) {
       }
     }
   }
-  // 連結グループ (N >= 2) を 「最初の日時」 順に slot 番号付け。
+  // 連結グループ (N >= 2) を「最初の日時」順に slot 番号付け。
   const pairSlots = {};
   Object.entries(pairOccurrences)
     .filter(([, arr]) => arr.length >= 2)
@@ -2222,7 +2222,7 @@ async function loadScheduleInner(gid) {
     .forEach(([pid], idx) => { pairSlots[pid] = idx; });
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
-  // カテゴリ別 slot index (左右の位置決め用)。 ペアの代表 kind で振り分け、
+  // カテゴリ別 slot index (左右の位置決め用)。ペアの代表 kind で振り分け、
   // 同カテゴリ内で連番を振る → 帯が確実に重ならない。
   const tSlots = {}, sSlots = {};
   let ti = 0, si = 0;
@@ -2245,7 +2245,7 @@ async function loadScheduleInner(gid) {
       else                                       sSlots[pid] = si++;
     });
   schedPairCatSlots = { transport: tSlots, staying: sSlots };
-  // 「最初 / 最後」 は (id, day) のペアで判定 (multi-day item は同じ id が複数日に
+  // 「最初 / 最後」は (id, day) のペアで判定 (multi-day item は同じ id が複数日に
   // 跨るため、 id だけだと帯の端を上下とも 1 日に集中させてしまう)。
   schedPairFirstIds = new Set();
   schedPairLastIds  = new Set();
@@ -2260,17 +2260,17 @@ async function loadScheduleInner(gid) {
     schedPairLastIds.add(Number(last.it.id)   + ':' + last.date);
   }
   const dayLabels = ['日','月','火','水','木','金','土'];
-  // v403 ストック (日付未定) はタイル並び。 件数が多くなりがちな 「行きたい場所
-  // 候補」 を圧縮して一覧しやすく。 1 枚あたり約 140px、 grid auto-fill。
-  // v516 #144 Google Map インポートは 「行きたい場所ストック」 の中 (＋ 候補を追加の隣)
-  //   に移動。 スケジュールヘッダから外して普段邪魔にならない位置に。
+  // v403 ストック (日付未定) はタイル並び。件数が多くなりがちな「行きたい場所
+  // 候補」を圧縮して一覧しやすく。 1 枚あたり約 140px、 grid auto-fill。
+  // v516 #144 Google Map インポートは「行きたい場所ストック」の中 (＋ 候補を追加の隣)
+  //   に移動。スケジュールヘッダから外して普段邪魔にならない位置に。
   const stockCard = stockItems.length || schedEditMode ? `
     <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0; border-left:4px solid #fcd34d">
       <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
       <div class="sched-stock-grid" data-day="stock"
            style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px; margin-top:6px">
         ${stockItems.map(it => renderSchedStockTile({ ...it, _occ: 'single' })).join('')
-          || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。 編集モードで 「＋ 候補を追加」 か 「📥 Google Map」 から取り込み。</div>'}
+          || '<div class="empty" style="padding:6px; grid-column:1/-1">候補なし。編集モードで「＋ 候補を追加」か「📥 Google Map」から取り込み。</div>'}
       </div>
       <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap">
         <button class="btn primary" id="gd-sched-add-stock" style="padding:4px 10px; font-size:12px">＋ 候補を追加</button>
@@ -2279,7 +2279,7 @@ async function loadScheduleInner(gid) {
       </div>
     </details>` : '';
 
-  // v403 1 日ごとに背景色を周期で振る。 日数が多くても視覚的に区切れる。
+  // v403 1 日ごとに背景色を周期で振る。日数が多くても視覚的に区切れる。
   const DAY_BG_PALETTE = ['#f0f9ff', '#fdf4ff', '#f0fdf4', '#fef3c7', '#fce4ec', '#f1f5f9', '#fff7ed'];
   const DAY_BORDER_PALETTE = ['#7dd3fc', '#e879f9', '#86efac', '#fcd34d', '#f9a8d4', '#94a3b8', '#fdba74'];
   const dayMemos = d.day_memos || {};
@@ -2295,7 +2295,7 @@ async function loadScheduleInner(gid) {
       const bg = DAY_BG_PALETTE[idx % DAY_BG_PALETTE.length];
       const bd = DAY_BORDER_PALETTE[idx % DAY_BORDER_PALETTE.length];
       const memo = dayMemos[date] || '';
-      // 日メモ表示部 (常に show、 タップで編集に切替)
+      // 日メモ表示部 (常に show、タップで編集に切替)
       const memoBlock = `
         <div class="gd-day-memo" data-memo-date="${date}" style="margin:6px 0; padding:6px 8px; background:rgba(255,255,255,0.7); border-radius:6px; border:1px dashed ${bd}">
           ${memo
@@ -2340,7 +2340,7 @@ async function loadScheduleInner(gid) {
       });
     });
   });
-  // 「+ 追加」 ボタン
+  // 「+ 追加」ボタン
   body.querySelectorAll('[data-add-sched-day]').forEach(b => {
     b.addEventListener('click', () => openSchedItemModal(gid, { day_date: b.dataset.addSchedDay }));
   });
@@ -2353,9 +2353,9 @@ async function loadScheduleInner(gid) {
     document.getElementById('gd-sched-gmap-file')?.click();
   });
   document.getElementById('gd-sched-gmap-file')?.addEventListener('change', (ev) => onSchedGmapImport(ev, gid));
-  // v489 #85 タップでまず 「内容確認」 を表示 → 編集ボタンで編集モーダルへ。
-  //   (旧: タップで即編集モーダル)。 編集モードでは行内の ↑↓× ボタンが
-  //   出るので、 タップ → 内容確認で妥当な UX。
+  // v489 #85 タップでまず「内容確認」を表示 → 編集ボタンで編集モーダルへ。
+  //   (旧: タップで即編集モーダル)。編集モードでは行内の ↑↓× ボタンが
+  //   出るので、タップ → 内容確認で妥当な UX。
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
       if (suppressNextClick) { suppressNextClick = false; return; }
@@ -2383,7 +2383,7 @@ async function loadScheduleInner(gid) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
-  // v428 ❤️ 「行った」 トグル
+  // v428 ❤️ 「行った」トグル
   body.querySelectorAll('[data-heart-it]').forEach(b => {
     b.addEventListener('click', async (ev) => {
       ev.stopPropagation();
@@ -2394,13 +2394,13 @@ async function loadScheduleInner(gid) {
     });
   });
   // ── v362 ドラッグアンドドロップで並び替え (日またぎ可) ──
-  // - 並び替え可能 (canEdit) なアイテムの「⋮⋮ハンドル」 だけ draggable。
+  // - 並び替え可能 (canEdit) なアイテムの「⋮⋮ハンドル」だけ draggable。
   //   ハンドル以外のクリックはそのまま編集 modal を開く。
   // - 同日内ドロップ → 既存 /move を chain swap で距離分呼び出し (start_time 含め swap)。
   // - 別日ドロップ → /relocate で day_date + sort_order を更新 (start_time は維持)。
-  // - 日の <details> ヘッダや 「+ 追加」 ボタンエリアにドロップしたらその日の末尾に。
+  // - 日の <details> ヘッダや「+ 追加」ボタンエリアにドロップしたらその日の末尾に。
   let dragSrcId = null, dragSrcDay = null;
-  // v484 #77 ステップ計算用: 同日の全行 (canedit + ロック)。 サーバの swap は
+  // v484 #77 ステップ計算用: 同日の全行 (canedit + ロック)。サーバの swap は
   //   ロック行も含めた並びで 1 ステップ進むので、 DOM の DnD index も
   //   全行で数える必要がある。
   const itemsSameDay = (day) =>
@@ -2446,9 +2446,9 @@ async function loadScheduleInner(gid) {
       const savedSrc = dragSrcId, savedSrcDay = dragSrcDay;
       dragSrcId = null; dragSrcDay = null;
       try {
-        // v402: バックエンド ORDER は start_time 主導に戻したので、 同日 DnD は
+        // v402: バックエンド ORDER は start_time 主導に戻したので、同日 DnD は
         // 隣接 N ステップ分 ↑↓ swap (時刻 + sort_order を連鎖 swap) で並びを
-        // 変える。 これにより時刻つきアイテムも視覚的に並び替えできる。
+        // 変える。これにより時刻つきアイテムも視覚的に並び替えできる。
         // 別日 DnD はそのまま /relocate (day_date 移動)。
         if (targetDay === savedSrcDay) {
           const editable = editableSameDay(savedSrcDay);
@@ -2632,11 +2632,11 @@ async function loadScheduleInner(gid) {
 // v415 ドラッグ完了直後の余計な click を 1 回だけ消す
 let suppressNextClick = false;
 
-// 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
+// 移動系 kind は左半分、それ以外は右半分に帯を出す (ややこしい時の住み分け)。
 const SCHED_TRANSPORT_KINDS = new Set(['flight','train','bus','taxi','car','walk','move']);
 
-// 「35.6586, 139.7454」 形式の文字列を {lat, lng} に。 解釈できなければ両方 null。
-// Google Maps の右クリック → 「緯度経度をコピー」 がこの形式で取れる。
+// 「35.6586, 139.7454」形式の文字列を {lat, lng} に。解釈できなければ両方 null。
+// Google Maps の右クリック → 「緯度経度をコピー」がこの形式で取れる。
 function parseLatLng(s) {
   if (!s || typeof s !== 'string') return { lat: null, lng: null };
   const parts = s.split(',').map(x => x.trim()).filter(x => x.length);
@@ -2648,9 +2648,9 @@ function parseLatLng(s) {
   return { lat, lng };
 }
 
-// ペア id を 2 つの独立 hash → 色相 + 位置 spread に。 同じ pair_id = 同じ色 /
-// 同じ位置に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
-// 色相レンジを区切って 「青系=移動」 「赤系=宿泊」 がぱっと見で分かるように。
+// ペア id を 2 つの独立 hash → 色相 + 位置 spread に。同じ pair_id = 同じ色 /
+// 同じ位置に必ず落ちる (帯が縦に連続)。カテゴリ別 (移動 / 宿泊 / その他) で
+// 色相レンジを区切って「青系=移動」「赤系=宿泊」がぱっと見で分かるように。
 function schedPairStyleFromId(pid, isTransport, kind) {
   let h1 = 0, h2 = 0, h3 = 0;
   for (let i = 0; i < pid.length; i++) {
@@ -2676,8 +2676,8 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.50)`;
   // 端 (最初/最後) 用の濃い色: 明度をぐっと下げてアルファ不透明に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
-  // 位置: 移動形は左、 滞在形は右、 に住み分け + カテゴリ内 slot で確実に重ならない
-  // ように 30px ステップで離す。 ステップ数を超えたら再循環 (= ペア数が多い時のみ衝突)。
+  // 位置: 移動形は左、滞在形は右、に住み分け + カテゴリ内 slot で確実に重ならない
+  // ように 30px ステップで離す。ステップ数を超えたら再循環 (= ペア数が多い時のみ衝突)。
   const catSlots = isTransport ? schedPairCatSlots.transport : schedPairCatSlots.staying;
   const slot = catSlots[pid] ?? 0;
   const rangeStart = isTransport ? 140 : 16;
@@ -2688,8 +2688,8 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   return { color, capColor, rightPx };
 }
 
-// v403 ストック専用タイルレンダラ。 候補が多くても一覧で見えるようコンパクト。
-// 画像 (or 絵文字) + タイトルを縦に積む。 編集モードなら ⋮⋮ ハンドル + × 付き。
+// v403 ストック専用タイルレンダラ。候補が多くても一覧で見えるようコンパクト。
+// 画像 (or 絵文字) + タイトルを縦に積む。編集モードなら ⋮⋮ ハンドル + × 付き。
 function renderSchedStockTile(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   // v521 #157 サムネ URL を優先 (なければ原画像)
@@ -2708,7 +2708,7 @@ function renderSchedStockTile(it) {
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="stock"`
     : '';
-  // v428 ❤️ 「行った / 良いね」 トグル (ダブルタップ or タップ)
+  // v428 ❤️ 「行った / 良いね」トグル (ダブルタップ or タップ)
   const heartCount = Number(it.hearts_count || 0);
   const myHearted = !!it.my_hearted;
   const heartBtn = `
@@ -2738,7 +2738,7 @@ function renderSchedItem(it) {
   } else if (it._occ === 'end') {
     if (it.end_time) timeStr = it.end_time.slice(0, 5);
   } else if (it._occ === 'mid') {
-    // 中間日は時刻なし、 接尾辞なし。
+    // 中間日は時刻なし、接尾辞なし。
   } else {
     // single
     if (it.start_time) {
@@ -2759,10 +2759,10 @@ function renderSchedItem(it) {
       }
     }
   }
-  // 中間日も他の日と同じ濃さ (旧版は opacity 0.55 で薄めていたが、 「同じような予定で大丈夫」)。
-  // ペアは帯 (右側縦ストリップ) だけで表現する方針。 タイトル横の 🔗 文字は出さない。
-  // v366: 画像つきはヒーロー風: 左端から約 2/3 まで埋め尽くし、 右端に斜め切れ目。
-  //       clip-path で右下が 22px 内側に切れ、 そこから斜めに右上 100% へ。
+  // 中間日も他の日と同じ濃さ (旧版は opacity 0.55 で薄めていたが、「同じような予定で大丈夫」)。
+  // ペアは帯 (右側縦ストリップ) だけで表現する方針。タイトル横の 🔗 文字は出さない。
+  // v366: 画像つきはヒーロー風: 左端から約 2/3 まで埋め尽くし、右端に斜め切れ目。
+  //       clip-path で右下が 22px 内側に切れ、そこから斜めに右上 100% へ。
   //       画像なしは従来通り 32px 絵文字アイコン。
   const HERO_PCT = 64;        // 画像幅 (行幅に対する %)
   const HERO_SLANT = 22;      // 斜めの傾き量 (px)
@@ -2800,14 +2800,14 @@ function renderSchedItem(it) {
     : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
   // 編集モード ON だけボタンを出す。 OFF 時は完全に隠す (アイテム自体が
   // タップ可能で edit modal が開く)。
-  // ↑↓× は 「DB 上の本拠地となる日」 = single / start の行にだけ出す。
+  // ↑↓× は「DB 上の本拠地となる日」 = single / start の行にだけ出す。
   // multi-day 展開の mid / end 行 (= 宿泊の 6/9, 6/10, 6/11 など) で押されても、
   // DB の day_date は start 日なので表示中の日 (6/9 等) の並び替えにはならない
-  // → 押しても無反応に見える、 という混乱を防ぐためボタンを出さない。
+  // → 押しても無反応に見える、という混乱を防ぐためボタンを出さない。
   // z-index:2 + 半透明白背景でペア帯より前面に。
   const canEdit = schedEditMode && (it._occ === 'single' || it._occ === 'start');
   // v362 DnD: canEdit 行は draggable, 日またぎ並び替え可能。
-  //          mid/end 行は 🔒 アイコンで 「動かせない」 ことを明示。
+  //          mid/end 行は 🔒 アイコンで「動かせない」ことを明示。
   // ※ dayKey は dragHandle 内で参照するので先に定義しておく (TDZ で死なないように)。
   const dayKey = String(it.day_date || 'stock');
   const isLocked = schedEditMode && !canEdit;
@@ -2828,13 +2828,13 @@ function renderSchedItem(it) {
           aria-label="ドラッグして並び替え" title="ドラッグで並び替え (日をまたいでも OK)"
           style="${heroBg ? 'position:absolute; top:4px; left:4px; z-index:3;' : ''} ${overlayBg} color:#666; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
   // ペア帯: link_pair_id があれば行の右端から N px 内側に 20px 幅の縦
-  // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
+  // ストリップ。移動系 kind は左半分、それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
   const isTransport = SCHED_TRANSPORT_KINDS.has(it.kind);
   const stripStyle = it.link_pair_id
     ? schedPairStyleFromId(it.link_pair_id, isTransport, it.kind)
     : null;
-  // 連結グループの 「最初」「最後」 のアイテムは帯の端 5px を濃い同系色で塗って、
+  // 連結グループの「最初」「最後」のアイテムは帯の端 5px を濃い同系色で塗って、
   // チェーンの始点 / 終点が一目で分かるようにする (中間はフラット)。
   const occKey = Number(it.id) + ':' + (it._dayKey || it.day_date);
   const isFirst = stripStyle && schedPairFirstIds.has(occKey);
@@ -2856,10 +2856,10 @@ function renderSchedItem(it) {
   //       こうしないと行クリックがドラッグ判定に食われて編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
   // v484 #77 data-sched-day はロック行 (🔒 多日中間 / 終了) にも必ず付ける。
-  //   同日 swap のステップ数計算で 「サーバの全行並び」 と DOM の同日並びを
-  //   一致させるため。 ロック行をスキップすると step count がずれて別の場所に
-  //   item が移動してしまう ( = 「変なところに移動」 バグ)。 data-sched-canedit
-  //   は引き続き 「ドラッグ開始 / ドロップ受け可」 のフラグ。
+  //   同日 swap のステップ数計算で「サーバの全行並び」と DOM の同日並びを
+  //   一致させるため。ロック行をスキップすると step count がずれて別の場所に
+  //   item が移動してしまう ( = 「変なところに移動」バグ)。 data-sched-canedit
+  //   は引き続き「ドラッグ開始 / ドロップ受け可」のフラグ。
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="${escapeHtml(dayKey)}"`
     : `data-sched-day="${escapeHtml(dayKey)}"`;
@@ -2929,12 +2929,12 @@ function openSchedRangeModal(gid) {
 }
 
 // リンク picker: このアイテム以外の同グループ全アイテムをチェックボックスで
-// 並べる。 複数選択可。 同じ link_pair_id を持つ予定 (= 既に同じグループに
+// 並べる。複数選択可。同じ link_pair_id を持つ予定 (= 既に同じグループに
 // 居る) はプリセットでチェック済み。
 function renderSchedPairPickerHtml(it) {
-  // v399 BUGFIX: day_date=null (ストック item) を 「連結対象」 に出すと
-  // o.day_date.slice(5) が TypeError → モーダルが壊れて 「2 個目以降が追加できない」
-  // 症状に。 ストック同士を連結帯で繋ぐ用途は無いので候補から除外。
+  // v399 BUGFIX: day_date=null (ストック item) を「連結対象」に出すと
+  // o.day_date.slice(5) が TypeError → モーダルが壊れて「2 個目以降が追加できない」
+  // 症状に。ストック同士を連結帯で繋ぐ用途は無いので候補から除外。
   const others = lastSchedItems.filter(x =>
     Number(x.id) !== Number(it.id) && x.day_date !== null);
   if (!others.length) return '';
@@ -2971,8 +2971,8 @@ function renderSchedPairPickerHtml(it) {
     </details>`;
 }
 
-// v489 #85 タップでまず 「内容確認」 を開く読み取り専用ビュー。 そこから
-//   ✏ 編集で既存の編集モーダルへ。 新規追加や編集モードでの内部ボタン
+// v489 #85 タップでまず「内容確認」を開く読み取り専用ビュー。そこから
+//   ✏ 編集で既存の編集モーダルへ。新規追加や編集モードでの内部ボタン
 //   はそのまま編集モーダルを直接開く。
 function openSchedItemViewModal(gid, it) {
   const root = document.getElementById('gd-sched-modal');
@@ -3039,7 +3039,7 @@ function openSchedItemViewModal(gid, it) {
     close();
     openSchedItemModal(gid, it);
   });
-  // v493 #97 日付を外して 「行きたい場所」 ストックに戻す。
+  // v493 #97 日付を外して「行きたい場所」ストックに戻す。
   document.getElementById('siv-tostock')?.addEventListener('click', async () => {
     try {
       await patch(`/api/groups/${gid}/schedule/${it.id}/relocate`, { day_date: '' });
@@ -3101,7 +3101,7 @@ function openSchedItemModal(gid, it) {
         ${isNew ? `
         <details class="field" style="margin-top:6px; background:#fffbf0; border-left:3px solid #fcd34d; padding:8px 10px; border-radius:6px">
           <summary class="bold" style="font-size:13px; cursor:pointer">✨ フリーテキストから AI で自動入力</summary>
-          <textarea id="sim-ai-text" rows="2" maxlength="2000" placeholder="例: 6/15 12 時からヤキニク飲み会、 渋谷駅前で 2 時間半 / https://example.com" style="width:100%; box-sizing:border-box; margin-top:6px"></textarea>
+          <textarea id="sim-ai-text" rows="2" maxlength="2000" placeholder="例: 6/15 12 時からヤキニク飲み会、渋谷駅前で 2 時間半 / https://example.com" style="width:100%; box-sizing:border-box; margin-top:6px"></textarea>
           <div class="row" style="gap:6px; align-items:center; margin-top:4px">
             <button id="sim-ai-go" class="btn primary" style="padding:2px 12px; font-size:12px">📝 展開して流し込む</button>
             <span id="sim-ai-status" class="hint-sm"></span>
@@ -3111,7 +3111,7 @@ function openSchedItemModal(gid, it) {
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
         <!-- v485 #78 タイトルラベル内の button が input のフォーカス/カーソル
-             を引っ張って 「カーソル位置がずれる」 と報告された。 button を
+             を引っ張って「カーソル位置がずれる」と報告された。 button を
              label 外に出し、 row レイアウトで並べることで解消。 -->
         <div class="field">
           <div class="row" style="gap:6px; align-items:center; margin:0 0 4px">
@@ -3163,7 +3163,7 @@ function openSchedItemModal(gid, it) {
             <input type="file" id="sim-att-file" multiple style="font-size:12px">
             <span id="sim-att-status" class="hint-sm"></span>
           </div>
-          <div class="hint-sm">16MB まで。 タップでダウンロード / ブラウザ表示。</div>
+          <div class="hint-sm">16MB まで。タップでダウンロード / ブラウザ表示。</div>
         </div>`}
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px; flex-wrap:wrap">
           ${!isNew ? `<button id="sim-copy" type="button" class="btn">📋 コピー</button>` : ''}
@@ -3203,7 +3203,7 @@ function openSchedItemModal(gid, it) {
           parts.push('場所名');
         }
       }
-      // 説明 → メモ (既存に追記しない、 空のときだけ入れる)
+      // 説明 → メモ (既存に追記しない、空のときだけ入れる)
       if (r.description) {
         const memoEl = document.getElementById('sim-memo');
         if (memoEl && !memoEl.value) {
@@ -3281,7 +3281,7 @@ function openSchedItemModal(gid, it) {
     document.getElementById('sim-img-file').value = '';
     document.getElementById('sim-img-clear').hidden = true;
   });
-  // 添付ファイル (既存アイテムのみ)。 一覧 + アップロード + 削除。
+  // 添付ファイル (既存アイテムのみ)。一覧 + アップロード + 削除。
   if (!isNew) {
     const renderAttRow = (a) => {
       const sz = a.size > 1024 * 1024
@@ -3353,7 +3353,7 @@ function openSchedItemModal(gid, it) {
     if (!body.title)    { toast('タイトルを入れてください'); return; }
     // day_date は null OK (= ストック)
     // リンク picker: チェック済み他アイテムをすべて自分と同じ pair_id に揃える。
-    // 自分の現 pair_id (it.link_pair_id) は 「外された人」 を NULL に戻すための比較に使う。
+    // 自分の現 pair_id (it.link_pair_id) は「外された人」を NULL に戻すための比較に使う。
     const linkChecks = Array.from(document.querySelectorAll('[data-link-item]'));
     const selectedIds = linkChecks.filter(c => c.checked).map(c => Number(c.dataset.linkItem));
     try {
@@ -3368,12 +3368,12 @@ function openSchedItemModal(gid, it) {
       // リンク処理
       if (linkChecks.length) {
         if (selectedIds.length === 0) {
-          // 全部外し → 自分の pair_id を NULL に。 残ったメンバはそのまま連結状態。
+          // 全部外し → 自分の pair_id を NULL に。残ったメンバはそのまま連結状態。
           if (it.link_pair_id) {
             await patch(`/api/groups/${gid}/schedule/${saveId}`, { link_pair_id: null });
           }
         } else {
-          // 既存連結グループの pair_id を引き継ぐか、 新規生成。
+          // 既存連結グループの pair_id を引き継ぐか、新規生成。
           let pid = it.link_pair_id;
           if (!pid) {
             const someone = selectedIds.map(id => lastSchedItems.find(x => Number(x.id) === id))
@@ -3403,7 +3403,7 @@ function openSchedItemModal(gid, it) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   // コピー: 現在のアイテムをほぼそのまま別 row として複製。 day_date は 1 日後を
-  // 初期値に (連泊や同じ予定の翌日繰り返しを楽にする)。 ペアリンクは引き継がない。
+  // 初期値に (連泊や同じ予定の翌日繰り返しを楽にする)。ペアリンクは引き継がない。
   document.getElementById('sim-copy')?.addEventListener('click', async () => {
     if (!confirm('このアイテムをコピーしますか? (翌日に複製します)')) return;
     const next = (() => {
@@ -3492,7 +3492,7 @@ function appendChatMessages(items) {
   if (lastEl) {
     const id = Number(lastEl.dataset.chatId);
     // body は持って無いので最低限の prev を仮構築 (user / created_at を持つ要素は無い
-    // ので、 隣の bubble を見て display_name を読む程度。 大事なのは user_id 一致だけ。
+    // ので、隣の bubble を見て display_name を読む程度。大事なのは user_id 一致だけ。
     // ここでは前回最後の msg を chatPrevMsg として module 持ち回す)。
     prev = chatPrevMsg;
   }
@@ -3529,7 +3529,7 @@ async function startChatLoop(gid) {
   if (list) {
     list.innerHTML = '';
     list.addEventListener('scroll', () => {
-      // ユーザが上に戻ったら自動末尾追従を無効化、 末尾近くに戻ったら再有効化。
+      // ユーザが上に戻ったら自動末尾追従を無効化、末尾近くに戻ったら再有効化。
       const distFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
       chatUserScrolled = distFromBottom > 80;
     });
@@ -3546,7 +3546,7 @@ async function startChatLoop(gid) {
       }
     });
   }
-  // 入力欄: Enter で送信、 Shift+Enter で改行。 自動高さ調整。
+  // 入力欄: Enter で送信、 Shift+Enter で改行。自動高さ調整。
   const input = document.getElementById('gd-chat-input');
   const send = document.getElementById('gd-chat-send');
   if (input && send) {
@@ -3573,7 +3573,7 @@ async function startChatLoop(gid) {
       finally { send.disabled = false; input.focus(); }
     });
   }
-  // 5 秒ごとに poll。 タブ裏なら skip。 ページから離れたら stop。
+  // 5 秒ごとに poll。タブ裏なら skip。ページから離れたら stop。
   chatPollTimer = setInterval(() => {
     if (!document.getElementById('gd-chat-card')) { stopChatLoop(); return; }
     if (document.hidden) return;
@@ -3584,11 +3584,11 @@ async function startChatLoop(gid) {
 }
 
 // ──────────────────────────── LODGINGS / FLIGHTS ──────────────────────
-// 「ちょくちょく参照する」 ための独立エンティティ。 詳細フィールド
-// (部屋番号・確認コード等) を保持して、 必要に応じて 「スケジュールに反映」 で
+// 「ちょくちょく参照する」ための独立エンティティ。詳細フィールド
+// (部屋番号・確認コード等) を保持して、必要に応じて「スケジュールに反映」で
 // schedule_items として 2 行 (チェックイン/アウト, 出発/到着) を 1 ペアで生成。
 
-// 空港 / 航空会社自動補完。 静的 JSON を 1 度だけ fetch して module レベルで持つ。
+// 空港 / 航空会社自動補完。静的 JSON を 1 度だけ fetch して module レベルで持つ。
 let airportsPromise = null;
 let airlinesPromise = null;
 function loadAirports() {
@@ -3600,7 +3600,7 @@ function loadAirlines() {
   return airlinesPromise;
 }
 
-// 入力された IATA 3 文字を大文字化して空港 DB から探す。 見つかれば名前 + 市
+// 入力された IATA 3 文字を大文字化して空港 DB から探す。見つかれば名前 + 市
 // をヒントとして表示。
 async function setupAirportAutocomplete(inputId, hintId) {
   const input = document.getElementById(inputId);
@@ -3625,7 +3625,7 @@ async function setupAirportAutocomplete(inputId, hintId) {
 }
 
 // 便名 (例 NH771, JL101, CX543) の先頭 1〜3 文字から航空会社を推定して
-// airline input が空なら自動補完。 既に airline に値があれば上書きしない。
+// airline input が空なら自動補完。既に airline に値があれば上書きしない。
 async function setupAirlineAutoComplete(numId, airlineId) {
   const num = document.getElementById(numId);
   const air = document.getElementById(airlineId);
@@ -3638,7 +3638,7 @@ async function setupAirlineAutoComplete(numId, airlineId) {
     const m = v.match(/^([A-Z0-9]{2,3})/);
     if (!m) return;
     const prefix = m[1];
-    // IATA は 2 文字または 2 数字、 ICAO は 3 文字。 まず 2 文字、 次に 3 文字。
+    // IATA は 2 文字または 2 数字、 ICAO は 3 文字。まず 2 文字、次に 3 文字。
     let label = airlines[prefix] || airlines[prefix.slice(0, 2)] || null;
     if (label && !air.value.trim()) {
       air.value = label;
@@ -3650,19 +3650,19 @@ async function setupAirlineAutoComplete(numId, airlineId) {
 }
 
 // 航空券添付ファイル (PDF / 画像 / e-ticket 等) を持ち主タグ付きで管理。
-// 持ち主はグループメンバーから選択。 同便の複数メンバーのチケットが整理可能。
+// 持ち主はグループメンバーから選択。同便の複数メンバーのチケットが整理可能。
 async function setupFlightAttachments(gid, fid) {
   const listEl = document.getElementById('fm-att-list');
   const ownerSel = document.getElementById('fm-att-owner');
   const fileEl = document.getElementById('fm-att-file');
   if (!listEl || !ownerSel || !fileEl) return;
-  // グループメンバーを owner プルダウンに入れる。 デフォルトは自分。
+  // グループメンバーを owner プルダウンに入れる。デフォルトは自分。
   let members = [];
   try {
     const g = await get(`/api/groups/${gid}`);
     members = (g.members || []).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
   } catch (_) {}
-  // v459 owner は 「未割当 (後で紐付け)」 をデフォ + 各行で後付け紐付け可能に。
+  // v459 owner は「未割当 (後で紐付け)」をデフォ + 各行で後付け紐付け可能に。
   const ownerOptions = (selectedId, includeBlank = true) => {
     const blank = includeBlank ? `<option value="">— 未割当 —</option>` : '';
     return blank + members.map(m =>
@@ -3691,7 +3691,7 @@ async function setupFlightAttachments(gid, fid) {
     try {
       const d = await get(`/api/groups/${gid}/flights/${fid}/attachments`);
       const arr = Array.isArray(d?.attachments) ? d.attachments : [];
-      // 未割当を上に。 一目で 「誰か紐付けしてね」 とわかるように。
+      // 未割当を上に。一目で「誰か紐付けしてね」とわかるように。
       arr.sort((a, b) => {
         if (!a.owner_user_id && b.owner_user_id) return -1;
         if (a.owner_user_id && !b.owner_user_id) return 1;
@@ -3759,7 +3759,7 @@ async function setupFlightAttachments(gid, fid) {
 }
 
 // v354/v357 航空券 e-ticket: 航空会社配布の QR 画像をそのままアップロード保存。
-// 1 行 = 1 人分。 表示はサムネ → タップで原寸 (新タブ)。
+// 1 行 = 1 人分。表示はサムネ → タップで原寸 (新タブ)。
 async function setupFlightEtickets(gid, fid) {
   const listEl = document.getElementById('fm-et-list');
   const ownerSel = document.getElementById('fm-et-owner');
@@ -3780,7 +3780,7 @@ async function setupFlightEtickets(gid, fid) {
       listEl.innerHTML = arr.map(e => {
         const thumb = e.qr_thumb_url || e.qr_image_url;
         const full = e.qr_image_url || e.qr_thumb_url;
-        // 画像があればサムネタップで原寸 (新タブ)、 無ければ qr_payload 文字を表示。
+        // 画像があればサムネタップで原寸 (新タブ)、無ければ qr_payload 文字を表示。
         const qrBlock = full
           ? `<a href="${escapeHtml(full)}" target="_blank" rel="noopener" style="display:block; margin-top:6px; text-align:center"><img src="${escapeHtml(thumb)}" alt="QR" style="max-width:180px; max-height:180px; border:1px solid var(--line); border-radius:6px"></a>`
           : (e.qr_payload ? `<div class="mono hint-sm" style="white-space:pre-wrap; word-break:break-all; margin-top:4px">${escapeHtml(e.qr_payload)}</div>` : '');
@@ -4098,7 +4098,7 @@ function openFlightModal(gid, it) {
             <select id="fm-att-owner" style="flex:1; min-width:120px; font-size:13px"></select>
             <input type="file" id="fm-att-file" style="font-size:12px; flex:2; min-width:140px">
           </div>
-          <div class="hint-sm">16MB まで。 持ち主はグループメンバーから選択。</div>
+          <div class="hint-sm">16MB まで。持ち主はグループメンバーから選択。</div>
         </div>
         <div class="field">
           <span class="lbl">e-ticket (航空会社の QR 画像) 人ごと</span>
@@ -4140,7 +4140,7 @@ function openFlightModal(gid, it) {
   document.getElementById('fm-cancel').addEventListener('click', close);
   document.getElementById('fm-overlay').addEventListener('click', e => { if (e.target.id === 'fm-overlay') close(); });
   document.getElementById('fm-sync')?.addEventListener('click', async () => {
-    // まず通常 save、 続けて sync を呼ぶ。
+    // まず通常 save、続けて sync を呼ぶ。
     try {
       const body = collectFlightModal();
       if (!body.airline && !body.flight_number) { toast('航空会社か便名を入れてください'); return; }
@@ -4152,7 +4152,7 @@ function openFlightModal(gid, it) {
       await loadSchedule(gid);
     } catch (e) { toast('失敗: ' + e.message); }
   });
-  // 空港 / 航空会社自動補完。 入力直後に bundled JSON でルックアップ。
+  // 空港 / 航空会社自動補完。入力直後に bundled JSON でルックアップ。
   setupAirportAutocomplete('fm-depap', 'fm-depap-info');
   setupAirportAutocomplete('fm-arrap', 'fm-arrap-info');
   setupAirlineAutoComplete('fm-num', 'fm-airline');

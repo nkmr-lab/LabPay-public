@@ -1,9 +1,9 @@
 <?php
-// v870 #452 Habit Tracker。 個人ごとに習慣を登録、 日毎達成を ✓ で入力。
-//   GET    /api/habits                      一覧 (公開 + 自分の private)、 各件に今日達成と
-//                                           直近 7 日 streak、 月達成数を同梱
+// v870 #452 Habit Tracker。個人ごとに習慣を登録、日毎達成を ✓ で入力。
+//   GET    /api/habits                      一覧 (公開 + 自分の private)、各件に今日達成と
+//                                           直近 7 日 streak、月達成数を同梱
 //   POST   /api/habits                      作成 { title, description?, emoji?, target_per_week?, visibility? }
-//   GET    /api/habits/<id>                 詳細 + 直近 60 日のカレンダー、 streak、 自分 + 他人の
+//   GET    /api/habits/<id>                 詳細 + 直近 60 日のカレンダー、 streak、自分 + 他人の
 //                                           月達成数 (公開リストのとき)
 //   PATCH  /api/habits/<id>                 編集 (owner)
 //   DELETE /api/habits/<id>                 削除 (owner)

@@ -98,7 +98,7 @@ export async function renderActivity() {
   await loadHeatmap();
 }
 
-// v397 個人の 「いつどこにいたか」 10 分帯。 days 行 × 144 セル/日。
+// v397 個人の「いつどこにいたか」 10 分帯。 days 行 × 144 セル/日。
 // 部屋ごとに色付け (順番で palette を割り当て)。
 const BAND_ROOM_PALETTE = [
   ['#bfdbfe', '#3b82f6', '#1d4ed8'],   // blue

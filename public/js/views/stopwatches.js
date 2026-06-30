@@ -19,7 +19,7 @@ function fmtElapsed(sec) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-// v447 ms 精度 (詳細画面表示用)。 ホーム / 一覧は秒精度の fmtElapsed を継続使用。
+// v447 ms 精度 (詳細画面表示用)。ホーム / 一覧は秒精度の fmtElapsed を継続使用。
 function fmtElapsedMs(ms) {
   ms = Math.max(0, Math.floor(ms));
   const h = Math.floor(ms / 3600000);
@@ -96,7 +96,7 @@ export async function renderStopwatchNew() {
       <h2 style="margin:6px 0 0">＋ 新規ストップウォッチ</h2>
     </div>
     <div class="card">
-      <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「ストップウォッチ」)</span>
+      <label class="field"><span class="lbl">タイトル (任意 / 空欄なら「ストップウォッチ」)</span>
         <input type="text" id="swn-title" maxlength="200"
                placeholder="例: 発表時間 / 雑談タイム" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
@@ -131,7 +131,7 @@ export async function renderStopwatchNew() {
       if (!title) {
         btn.textContent = '🤖 タイトル生成中…';
         const part = picker ? [...picker.getSelected()].length : 1;
-        const ctx = `共有ストップウォッチ (カウントアップ計測器) を今 ${part} 人で作成します。 用途はたぶん発表時間・雑談計測・作業セット・実験など。 ピッタリな短いタイトルを 1 つ。`;
+        const ctx = `共有ストップウォッチ (カウントアップ計測器) を今 ${part} 人で作成します。用途はたぶん発表時間・雑談計測・作業セット・実験など。ピッタリな短いタイトルを 1 つ。`;
         try {
           const r = await post('/api/ai/short_title', { context: ctx });
           title = r.title || 'ストップウォッチ';
@@ -318,7 +318,7 @@ function renderControls(sw, id) {
     try { await post('/api/stopwatches/' + id + '/reset', {}); await loadDetail(id); }
     catch (e) { toast('失敗: ' + e.message); }
   };
-  // v447 ラップ。 client_elapsed_ms を送って 「タップ瞬間」 を正確に反映。
+  // v447 ラップ。 client_elapsed_ms を送って「タップ瞬間」を正確に反映。
   lapBtn.onclick = async () => {
     if (!swState?.sw || swState.sw.status !== 'running') return;
     const clientMs = currentElapsedMs();

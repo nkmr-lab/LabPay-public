@@ -1,5 +1,5 @@
 <?php
-// v570 #223 人狼 Phase 1。 役職: 村人 / 人狼 / 占い師 / 騎士。 シンプル夜投票 → 昼投票。
+// v570 #223 人狼 Phase 1。役職: 村人 / 人狼 / 占い師 / 騎士。シンプル夜投票 → 昼投票。
 //   lobby → night (人狼襲撃 + 占い + 護衛) → day (襲撃結果開示 + 全員で投票) → 勝敗 or 次 night
 //   プレイフィー方式 (戻ってこない、 lobby 中の cancel/leave のみ返金)。
 
@@ -110,7 +110,7 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
         }
     }
 
-    // 占い結果 (自分が占い師なら、 自分が占ったターゲットの役を取得)
+    // 占い結果 (自分が占い師なら、自分が占ったターゲットの役を取得)
     $inspectResults = [];
     if ($myRole === 'seer') {
         $stI = $pdo->prepare("SELECT a.target_user_id, a.round_no, p.role AS target_role
@@ -122,7 +122,7 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
             $inspectResults[] = [
                 'round'      => (int)$r['round_no'],
                 'target_uid' => (int)$r['target_user_id'],
-                'target_role'=> $r['target_role'], // 占い師には全公開、 シンプル化のため
+                'target_role'=> $r['target_role'], // 占い師には全公開、シンプル化のため
             ];
         }
     }
@@ -292,7 +292,7 @@ function jinrou_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $pdo->prepare("UPDATE jinrou_games SET status='night', started_at=NOW(), round_no=1, config_json=?, log_json=? WHERE id = ?")
             ->execute([json_encode($config, JSON_UNESCAPED_UNICODE), json_encode($log, JSON_UNESCAPED_UNICODE), $gid]);
     });
-    // 全員に通知 (役の中身は通知しない、 詳細ページで確認させる)
+    // 全員に通知 (役の中身は通知しない、詳細ページで確認させる)
     $stP = $pdo->prepare("SELECT user_id FROM jinrou_players WHERE game_id = ?");
     $stP->execute([$gid]);
     foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
@@ -350,7 +350,7 @@ function jinrou_advance(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $phase = $g['status'];
 
         if ($phase === 'night') {
-            // 人狼の襲撃 (多数決、 同点はランダム)
+            // 人狼の襲撃 (多数決、同点はランダム)
             $stA = $pdo->prepare("SELECT target_user_id FROM jinrou_actions WHERE game_id = ? AND round_no = ? AND phase = 'night' AND action_type = 'attack'");
             $stA->execute([$gid, $round]);
             $attacks = array_filter(array_map('intval', $stA->fetchAll(PDO::FETCH_COLUMN)), fn($x) => $x > 0);

@@ -1,5 +1,5 @@
 // /#/workouts — 筋トレ記録 + 仲間 (mutual follow)。
-// v533 #162。 プリセットの種目ピル + 回数 / ウェイト / セット + 仲間との共有。
+// v533 #162。プリセットの種目ピル + 回数 / ウェイト / セット + 仲間との共有。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -177,7 +177,7 @@ export async function renderWorkoutsFriends() {
     <div class="card">
       <a href="#/workouts" class="hint">← 筋トレ</a>
       <h2 style="margin:6px 0">🤝 筋トレ仲間</h2>
-      <p class="hint-sm" style="font-size:12px">お互いに追加し合うと、 互いの記録が見えます。 片方だけの場合は 「申請中」 表示になります。</p>
+      <p class="hint-sm" style="font-size:12px">お互いに追加し合うと、互いの記録が見えます。片方だけの場合は「申請中」表示になります。</p>
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">＋ 追加</div>

@@ -1,7 +1,7 @@
 // /#/ito — ito ゲーム Phase 1。 v568 #223。
-//   2 人以上でプレイフィー 1pt、 各自に 1-100 の数字、 お題に沿って表現を入力、
+//   2 人以上でプレイフィー 1pt、各自に 1-100 の数字、お題に沿って表現を入力、
 //   起案者が公開ボタンで全員の数字 + 表現を開示、 pot は全員に等分配。
-//   実プレイは 「数字を直接言わずに表現で大小を推測してもらう」 協力ゲーム。
+//   実プレイは「数字を直接言わずに表現で大小を推測してもらう」協力ゲーム。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -25,7 +25,7 @@ export async function renderIto() {
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
         2 人以上でプレイフィー 1pt → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
-        数字を直接言わずに 「強い動物の強さ」 などのお題で表現の妙を楽しむ協力ゲーム。
+        数字を直接言わずに「強い動物の強さ」などのお題で表現の妙を楽しむ協力ゲーム。
       </div>
     </div>
     <div id="ito-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -34,7 +34,7 @@ export async function renderIto() {
     const d = await get('/api/ito/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('ito-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立ててメンバーを集めましょう。</div>';
+      document.getElementById('ito-list').innerHTML = '<div class="empty">卓がありません。「＋ 新規卓」から立ててメンバーを集めましょう。</div>';
       return;
     }
     document.getElementById('ito-list').innerHTML = items.map(g => {
@@ -74,11 +74,11 @@ export async function renderItoNew() {
         </div>
       </label>
       <label class="field">
-        <span class="lbl">プレイフィー (pt 1 人あたり、 戻ってきません)</span>
+        <span class="lbl">プレイフィー (pt 1 人あたり、戻ってきません)</span>
         <input type="number" id="ito-buyin" min="1" max="100" value="1">
       </label>
       <div style="margin-top:10px">
-        <span class="lbl">招待するメンバー (任意、 後から自由に参加もできる)</span>
+        <span class="lbl">招待するメンバー (任意、後から自由に参加もできる)</span>
         <div id="ito-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="ito-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
@@ -169,7 +169,7 @@ function paintItoDetail(g) {
       <div class="card" style="background:linear-gradient(135deg, #4a106d, #b3a0e0); color:#fff; text-align:center">
         <div style="font-size:12px; opacity:0.9">あなたの数字 (他の人には見えません)</div>
         <div style="font-size:60px; font-weight:700; line-height:1">${g.my_number}</div>
-        <div style="font-size:12px; opacity:0.9; margin-top:4px">これを 「${escapeHtml(g.theme)}」 で表現してください</div>
+        <div style="font-size:12px; opacity:0.9; margin-top:4px">これを「${escapeHtml(g.theme)}」で表現してください</div>
       </div>` : ''}
 
     ${canExpress ? `<div class="card">

@@ -1,5 +1,5 @@
 <?php
-// /api/share — v853 任意のページを別ユーザに 「送る」 簡易共有エンドポイント。
+// /api/share — v853 任意のページを別ユーザに「送る」簡易共有エンドポイント。
 //   POST /api/share/notify-users  body { user_ids:[..], title, hash_url, message? }
 //     → 指定ユーザに admin_notice で URL + 一言メッセージを通知
 declare(strict_types=1);
@@ -45,7 +45,7 @@ function share_notify_users(PDO $pdo, array $cfg, array $sender, int $senderUid)
         $toUid = (int)$rawUid;
         if ($toUid <= 0 || $toUid === $senderUid) continue;
         try {
-            // notify_safely があればそちら、 なければ Notifier::notify
+            // notify_safely があればそちら、なければ Notifier::notify
             if (function_exists('notify_safely')) {
                 notify_safely($pdo, $cfg, $toUid, 'admin_notice', $msgBody, 'share', 0);
             } else {

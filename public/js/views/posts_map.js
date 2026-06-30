@@ -1,8 +1,8 @@
 // /#/sns/map — 自分のらぼったー投稿のうち位置情報がついているものを地図に
-// プロット。 マップを動かす (= 表示中エリアを変える) と下の一覧がそれに合わせて
+// プロット。マップを動かす (= 表示中エリアを変える) と下の一覧がそれに合わせて
 // 自動で絞り込まれる (= 食べある記のマップビューと同じ思想)。
 //
-// v530 #181 実装。 自分がらぼったーで投稿した場所一覧 + 地図インターフェース。
+// v530 #181 実装。自分がらぼったーで投稿した場所一覧 + 地図インターフェース。
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -39,7 +39,7 @@ export async function renderPostsMap() {
 
   const mapBox = document.getElementById('pm-map');
   // v535 #191 前回 (= 直前にこのページを閉じた時) の中心 + ズームを localStorage に
-  //   保存しておき、 復元する。 ない場合は東京デフォルト。
+  //   保存しておき、復元する。ない場合は東京デフォルト。
   let initView = { lat: 35.7, lng: 139.66, zoom: 12 };
   try {
     const j = JSON.parse(localStorage.getItem('labpay-postsmap-view') || 'null');
@@ -50,7 +50,7 @@ export async function renderPostsMap() {
     attribution: '&copy; OpenStreetMap', maxZoom: 19,
   }).addTo(map);
 
-  // v535 #191 「📍 現在地」 ボタン (地図右上)。 geolocation で現在地に setView。
+  // v535 #191 「📍 現在地」ボタン (地図右上)。 geolocation で現在地に setView。
   //   サイズ/ズームは変えず位置だけ移す。
   const locCtl = L.control({ position: 'topright' });
   locCtl.onAdd = () => {
@@ -73,11 +73,11 @@ export async function renderPostsMap() {
   };
   locCtl.addTo(map);
 
-  // 前回 view が無い (= 初回) の時だけ全マーカーが収まるよう fitBounds する。 ある時は
+  // 前回 view が無い (= 初回) の時だけ全マーカーが収まるよう fitBounds する。ある時は
   //   保存した位置を尊重する (= ユーザ意図を維持)。
   const hadSavedView = localStorage.getItem('labpay-postsmap-view') !== null;
 
-  // 自分の投稿で lat/lng が入ってるものだけ集める。 多数を期待していい (200 件まで)。
+  // 自分の投稿で lat/lng が入ってるものだけ集める。多数を期待していい (200 件まで)。
   const meId = Number(state.me?.id);
   let items = [];
   try {
@@ -90,7 +90,7 @@ export async function renderPostsMap() {
 
   if (!items.length) {
     document.getElementById('pm-list').innerHTML =
-      '<div class="empty">位置情報付きの投稿はまだありません。 投稿時に 📍 をオンにするとここに出ます。</div>';
+      '<div class="empty">位置情報付きの投稿はまだありません。投稿時に 📍 をオンにするとここに出ます。</div>';
     return;
   }
 
@@ -111,9 +111,9 @@ export async function renderPostsMap() {
       });
       marker = L.marker([lat, lng], { icon }).addTo(map);
     } else {
-      // v542 #198 画像なしのマーカーが真っ白で寂しいので、 アバター画像 or
-      //   本文先頭の絵文字を入れた divIcon で描画。 ユーザ色 (display_name hash で
-      //   背景色を決定) で 「誰の投稿か」 も一目で分かる。
+      // v542 #198 画像なしのマーカーが真っ白で寂しいので、アバター画像 or
+      //   本文先頭の絵文字を入れた divIcon で描画。ユーザ色 (display_name hash で
+      //   背景色を決定) で「誰の投稿か」も一目で分かる。
       const firstEmoji = extractFirstEmoji(p.body || '');
       const userColor  = colorFromName(p.display_name || '');
       const avatarSrc  = p.avatar_url || '';
@@ -147,7 +147,7 @@ export async function renderPostsMap() {
     markersByPid.set(p.id, m);
   }
 
-  // v535 #191 初回 (= 保存 view 無し) のみ全マーカー fitBounds、 保存 view 有りなら
+  // v535 #191 初回 (= 保存 view 無し) のみ全マーカー fitBounds、保存 view 有りなら
   //   ユーザ意図を維持。
   if (!hadSavedView) {
     const group = L.featureGroup([...markersByPid.values()]);
@@ -197,14 +197,14 @@ export async function renderPostsMap() {
 }
 
 // v542 #198 本文の先頭から絵文字 (Unicode Emoji_Presentation 範囲) を 1 つ抽出。
-//   なければ '' を返す。 シンプルなヒューリスティック (完璧網羅は不要)。
+//   なければ '' を返す。シンプルなヒューリスティック (完璧網羅は不要)。
 function extractFirstEmoji(s) {
   if (!s) return '';
   // 絵文字っぽい範囲を緩く拾う (記号+変体セレクタ含む)
   const m = s.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}](\u{FE0F})?/u);
   return m ? m[0] : '';
 }
-// 文字列を簡易 hash → HSL カラー (パステル系) に。 同じ名前は同じ色。
+// 文字列を簡易 hash → HSL カラー (パステル系) に。同じ名前は同じ色。
 function colorFromName(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;

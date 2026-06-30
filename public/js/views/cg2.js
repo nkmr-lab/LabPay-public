@@ -82,7 +82,7 @@ export async function renderCg2Kind({ params }) {
     const root = document.getElementById('cg2-games');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 で開始</div>';
+      root.innerHTML = '<div class="empty">卓がありません。「＋ 新規卓」で開始</div>';
     } else {
       root.innerHTML = items.map(g => {
         const players = JSON.parse(g.players_json || '[]');

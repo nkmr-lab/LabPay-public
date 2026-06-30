@@ -22,7 +22,7 @@ function route_stopwatches(PDO $pdo, array $cfg, string $method, array $seg): vo
         if ($op === 'pause' && $method === 'POST') { stopwatches_pause($pdo, $cfg, $id); return; }
         if ($op === 'reset' && $method === 'POST') { stopwatches_reset($pdo, $cfg, $id); return; }
         // v447 ラップ。 client が観測した累計 ms を送ってくる (タップ瞬間を正確に
-        // 反映するため)。 サーバはバリデーション (prev_lap 以上 / 現在 elapsed_ms 以下)
+        // 反映するため)。サーバはバリデーション (prev_lap 以上 / 現在 elapsed_ms 以下)
         // 後 insert。
         if ($op === 'lap'   && $method === 'POST') { stopwatches_lap($pdo, $cfg, $id);   return; }
     }
@@ -44,7 +44,7 @@ function stopwatches_assert_access(PDO $pdo, int $id, int $userId): array {
     return $sw;
 }
 
-// v447 ms 精度で計算。 ms が primary、 秒は floor 後方互換用。
+// v447 ms 精度で計算。 ms が primary、秒は floor 後方互換用。
 // running 中: elapsed_offset_ms + (now_ms - started_at_ms)。 started_at_ms が落ちて
 // いる古いデータでは started_at (秒精度) にフォールバック。
 function stopwatch_elapsed_ms(array $sw): int {
@@ -237,8 +237,8 @@ function stopwatches_reset(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v447 ラップ記録。 動作中のみ受付。 client_elapsed_ms が付いて来たら
-// 「タップ瞬間を正確に」 用にそれを採用 (送信遅延を補正)。 妥当性:
+// v447 ラップ記録。動作中のみ受付。 client_elapsed_ms が付いて来たら
+// 「タップ瞬間を正確に」用にそれを採用 (送信遅延を補正)。妥当性:
 // 0 以上 / 直前ラップ以上 / サーバ算定 elapsed_ms + 200ms 以下 (改竄防止)。
 function stopwatches_lap(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);

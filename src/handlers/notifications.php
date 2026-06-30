@@ -11,8 +11,8 @@ function route_notifications(PDO $pdo, array $cfg, string $method, array $seg): 
     if ($sub === '' && $method === 'GET') {
         $unreadOnly = !empty($_GET['unread']);
         $limit = min(200, max(1, (int)($_GET['limit'] ?? 50)));
-        // v512 ページング: ?before_id=N で 「id < N」 の範囲を取りに行く。
-        //   id が降順 (新しい順) なので、 末尾の最古の id を返してクライアントが次回
+        // v512 ページング: ?before_id=N で「id < N」の範囲を取りに行く。
+        //   id が降順 (新しい順) なので、末尾の最古の id を返してクライアントが次回
         //   before_id に渡せばカーソルベース pagination が成り立つ。
         $beforeId = isset($_GET['before_id']) ? (int)$_GET['before_id'] : 0;
         $args = [$uid];
@@ -28,7 +28,7 @@ function route_notifications(PDO $pdo, array $cfg, string $method, array $seg): 
         $st->execute();
         $items = $st->fetchAll();
         // has_more 判定: 取得件数 == limit なら次がある可能性あり (本来は LIMIT+1 で
-        //   ちゃんと判定すべきだが、 通知は数千件規模なので簡易判定で十分)。
+        //   ちゃんと判定すべきだが、通知は数千件規模なので簡易判定で十分)。
         json_response([
             'items'    => $items,
             'has_more' => count($items) === $limit,
@@ -58,7 +58,7 @@ function route_notifications(PDO $pdo, array $cfg, string $method, array $seg): 
         return;
     }
 
-    // 既読を未読に戻す。 通知を流し見してしまった時のセーフネット。
+    // 既読を未読に戻す。通知を流し見してしまった時のセーフネット。
     if (is_numeric($sub) && ($seg[2] ?? '') === 'unread' && $method === 'PATCH') {
         $nid = (int)$sub;
         $st = $pdo->prepare('UPDATE notifications SET read_at=NULL WHERE id=? AND user_id=?');

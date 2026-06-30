@@ -1,5 +1,5 @@
 <?php
-// v532 #161 体重・BMI 記録 (レコーディングダイエット)。 個人ツール — public_read 等は出さない。
+// v532 #161 体重・BMI 記録 (レコーディングダイエット)。個人ツール — public_read 等は出さない。
 //   GET    /api/health/records?days=N   自分の直近 N 日 (default 90)
 //   POST   /api/health/record            { weight_kg?, height_cm?, body_fat_pct?, memo?, recorded_at? }
 //   DELETE /api/health/record/:id        起案者本人のみ削除可

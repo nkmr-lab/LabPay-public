@@ -1,4 +1,4 @@
-// /#/mahjong — 麻雀 Phase 1: 賭けプール + 結果分配 (v553 #209)。 実ゲームは外部 (雀魂等)。
+// /#/mahjong — 麻雀 Phase 1: 賭けプール + 結果分配 (v553 #209)。実ゲームは外部 (雀魂等)。
 //   lazy import で普段は読み込まれない (apps から開いた時だけ)。 Phase 2 で実ゲーム化時に重くなる予定。
 
 import { get, post } from '../api.js';
@@ -18,7 +18,7 @@ export async function renderMahjong() {
         <a class="btn primary" href="#/mahjong/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        4 人で 50pt 預けて 1〜4 位申告で自動分配 (50/30/15/0% + 場代 5%)。 実ゲームは雀魂 / 紙麻雀で。
+        4 人で 50pt 預けて 1〜4 位申告で自動分配 (50/30/15/0% + 場代 5%)。実ゲームは雀魂 / 紙麻雀で。
       </div>
     </div>
     <div id="mj-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -36,7 +36,7 @@ export async function renderMahjong() {
     const d = await get('/api/mahjong/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('mj-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立てて 4 人集めましょう。</div>';
+      document.getElementById('mj-list').innerHTML = '<div class="empty">卓がありません。「＋ 新規卓」から立てて 4 人集めましょう。</div>';
       return;
     }
     document.getElementById('mj-list').innerHTML = items.map(g => {
@@ -75,7 +75,7 @@ export async function renderMahjongNew() {
       <label class="field">
         <span class="lbl">参加料 (buy-in)</span>
         <input type="number" id="mj-buyin" min="1" max="10000" value="50">
-        <div class="hint-sm">4 人で 4 × buy-in = pot。 場代 5% 引いた残りを 50/30/15/0% で配ります。</div>
+        <div class="hint-sm">4 人で 4 × buy-in = pot。場代 5% 引いた残りを 50/30/15/0% で配ります。</div>
       </label>
       <div style="margin-top:10px">
         <span class="lbl" style="font-weight:600">対象者を指定 (任意、 3 人選ぶと即開始)</span>
@@ -83,8 +83,8 @@ export async function renderMahjongNew() {
         <div id="mj-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
       <div class="hint-sm" style="margin-top:8px; color:var(--muted)">
-        起案者は自動的に参加 (buy-in は即徴収)。 対象者指定で 3 人選ぶと、
-        全員から一括徴収 + 通知 + 即開始。 指定なしなら公開卓で募集。
+        起案者は自動的に参加 (buy-in は即徴収)。対象者指定で 3 人選ぶと、
+        全員から一括徴収 + 通知 + 即開始。指定なしなら公開卓で募集。
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/mahjong" class="btn">キャンセル</a>
@@ -109,7 +109,7 @@ export async function renderMahjongNew() {
     const title = document.getElementById('mj-title').value.trim();
     const buyIn = Number(document.getElementById('mj-buyin').value) || 50;
     const ids = picker ? [...picker.getSelected()] : [];
-    if (ids.length > 0 && ids.length !== 3) { toast('対象者は 3 人ちょうど、 または指定なし'); return; }
+    if (ids.length > 0 && ids.length !== 3) { toast('対象者は 3 人ちょうど、または指定なし'); return; }
     const btn = document.getElementById('mj-go');
     btn.disabled = true; btn.textContent = '作成中…';
     try {
@@ -199,7 +199,7 @@ function paintDetail(g) {
 
     ${g.status === 'playing' ? `<div class="card">
       <div class="bold">対局中 🀄</div>
-      <p class="hint">雀魂 / 紙麻雀等で半荘終わったら起案者が 「結果を報告」 を押して 1〜4位を入力してください。</p>
+      <p class="hint">雀魂 / 紙麻雀等で半荘終わったら起案者が「結果を報告」を押して 1〜4位を入力してください。</p>
     </div>` : ''}
 
     ${g.status === 'finished' ? `<div class="card">
@@ -209,7 +209,7 @@ function paintDetail(g) {
   `;
 
   document.getElementById('mj-share')?.addEventListener('click', () => {
-    shareToSns(`🀄 麻雀卓 「${g.title || ('#' + g.id)}」 募集中 (${g.players.length}/${g.seats}、 buy-in ${g.buy_in}pt)`, `#/mahjong/${g.id}`);
+    shareToSns(`🀄 麻雀卓「${g.title || ('#' + g.id)}」募集中 (${g.players.length}/${g.seats}、 buy-in ${g.buy_in}pt)`, `#/mahjong/${g.id}`);
   });
   if (canJoin)   document.getElementById('mj-join').addEventListener('click', () => doAction(g.id, 'join'));
   if (canLeave)  document.getElementById('mj-leave').addEventListener('click', () => { if (confirm('脱退して返金しますか?')) doAction(g.id, 'leave'); });

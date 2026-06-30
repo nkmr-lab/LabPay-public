@@ -1,6 +1,6 @@
 <?php
-// v590 大富豪 (シンプル MVP)。 ローカルルール:
-//   - 4 人 (lobby は 2-4 人で開始可)、 ジョーカー 1 + 52 = 53 枚
+// v590 大富豪 (シンプル MVP)。ローカルルール:
+//   - 4 人 (lobby は 2-4 人で開始可)、ジョーカー 1 + 52 = 53 枚
 //   - 単出し / ペア / 3 枚 / 4 枚出し OK (同枚数で上を出す)
 //   - パス全員 → 場流れ + 最後に出した人から
 //   - 上がった順に 1 位 / 2 位 / ... の rank
@@ -36,7 +36,7 @@ function route_daifugo(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // カード ID = 0-52 (0-12: ♣3-A, 13-25: ♦, 26-38: ♥, 39-51: ♠, 52: Joker)
-// 強さ: 3 が最弱、 2 が最強、 ジョーカーが最強+1
+// 強さ: 3 が最弱、 2 が最強、ジョーカーが最強+1
 function daifugo_rank_of(int $card): int {
     if ($card === 52) return 14;
     return $card % 13; // 0=3, 12=2
@@ -85,7 +85,7 @@ function daifugo_create(PDO $pdo, int $uid): void {
             daifugo_create_with_invitees($pdo, $uid, $gid, $invitees);
         }
     });
-    // 通知 (tx 外、 失敗しても卓は残る)
+    // 通知 (tx 外、失敗しても卓は残る)
     if (is_array($invitees) && count($invitees) > 0) {
         try {
             global $CFG;

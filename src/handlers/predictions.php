@@ -1,20 +1,20 @@
 <?php
-// v576 優勝予想アプリ。 ワールドカップ等の順位を予想 → 答え合わせで配分。
+// v576 優勝予想アプリ。ワールドカップ等の順位を予想 → 答え合わせで配分。
 //   1位のみ予想 (predict_count=1) / 1-2位 / 1-4位で答え合わせ。
 //   スコア = 順位重み [5, 3, 2, 1] (1位から順) の一致した分の合計 (= 予想ランキング表示用)。
 //   payout: 1位を的中させた人で山分け (場代 5%)。
 //     - 的中者複数 → pot × 95% を均等分配 (端数は早く参加した人)
 //     - 的中者ゼロ → 全員にフィー返金
-//   v576c 山分けモデル (旧: スコア比例) に変更、 重みも [5,3,2,1] に。
+//   v576c 山分けモデル (旧: スコア比例) に変更、重みも [5,3,2,1] に。
 declare(strict_types=1);
 
 const PREDICTIONS_DEFAULT_FEE = 50;
 const PREDICTIONS_MIN_FEE = 10;
 const PREDICTIONS_MAX_FEE = 100;
 const PREDICTIONS_RAKE_PCT = 5;
-// v664 順位の一致重み (= 位置ピッタリ的中で加算)。 配列の i 番目 = (i+1) 位の重み。
+// v664 順位の一致重み (= 位置ピッタリ的中で加算)。配列の i 番目 = (i+1) 位の重み。
 //   旧: [5,3,2,1] / 新: [4,3,2,1] (1位を -1)
-//   加えて 「順位無関係で top-N 集合に入っている国」 1 件ごとに +1 点を別途加算。
+//   加えて「順位無関係で top-N 集合に入っている国」 1 件ごとに +1 点を別途加算。
 const PREDICTIONS_SCORE_WEIGHTS = [4, 3, 2, 1];
 
 function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -38,7 +38,7 @@ function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): vo
     json_error('not_found', "no predictions route for $method", 404);
 }
 
-// v848 #431 起案者が title / description を編集できる。 〆切や候補は変えない (混乱回避)。
+// v848 #431 起案者が title / description を編集できる。〆切や候補は変えない (混乱回避)。
 function predictions_patch(PDO $pdo, int $uid, int $gid): void {
     $st = $pdo->prepare("SELECT creator_user_id, status FROM predictions_games WHERE id=?");
     $st->execute([$gid]);
@@ -63,7 +63,7 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
         if (mb_strlen($d) > 2000) throw new ApiException('bad_request', '説明は 2000 文字まで', 400);
         $sets[] = 'description=?'; $args[] = ($d === '' ? null : $d);
     }
-    // v871 #453 〆切を起案者が後から変更可能に。 空で渡せば NULL (= 締切なし)。
+    // v871 #453 〆切を起案者が後から変更可能に。空で渡せば NULL (= 締切なし)。
     if (array_key_exists('deadline_at', $body)) {
         $v = trim((string)$body['deadline_at']);
         if ($v === '') {
@@ -79,7 +79,7 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
             }
         }
     }
-    // v871 #453 候補 (例: 対象国) と予想件数 (上位 N 位) を編集可能に。 ただし
+    // v871 #453 候補 (例: 対象国) と予想件数 (上位 N 位) を編集可能に。ただし
     //   既にエントリーがあるなら順位整合性が壊れるので変更不可。
     if (array_key_exists('candidates', $body) || array_key_exists('predict_count', $body)) {
         $entryCount = (int)$pdo->query("SELECT COUNT(*) FROM predictions_entries WHERE game_id=$gid")->fetchColumn();
@@ -157,8 +157,8 @@ function predictions_detail(PDO $pdo, int $uid, int $gid): void {
 
     // 全員の予想を公開するか?
     //   締切後 (deadline_at < now) または status != 'open' なら開示。
-    //   = 「受付中で締切前」 のときだけ他人の予想を隠す (自分の予想で引っ張られないように)。
-    //   v577 仕様変更: 結果開示 (finalize) を待たずに、 締切を過ぎたらすぐ全員分を開示。
+    //   = 「受付中で締切前」のときだけ他人の予想を隠す (自分の予想で引っ張られないように)。
+    //   v577 仕様変更: 結果開示 (finalize) を待たずに、締切を過ぎたらすぐ全員分を開示。
     $deadlinePassed = !empty($g['deadline_at']) && strtotime((string)$g['deadline_at']) < time();
     $revealRanks = ($g['status'] !== 'open') || $deadlinePassed;
     $entries = [];
@@ -277,7 +277,7 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
     });
     // v610 起案時通知 (1 通ずつ swallow)
     foreach ($notifyIds as $nuid) {
-        $msg = "🏆 「{$title}」 の優勝予想受付開始! フィー {$fee}pt、 {$predictCount}位まで予想";
+        $msg = "🏆 「{$title}」の優勝予想受付開始! フィー {$fee}pt、 {$predictCount}位まで予想";
         notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'prediction', $gameId);
     }
     json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
@@ -393,7 +393,7 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $payoutByUid = [];
         $maxScore = $scoreByUid ? max($scoreByUid) : 0;
         if ($maxScore <= 0) {
-            // v737 #347 全員 0 点: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を各自に返金。
+            // v737 #347 全員 0 点: 場代 (= 5%) 分を rake として system に残し、残り (95%) を各自に返金。
             //   旧版は full refund で system 取り分ゼロになっていた。
             $fee = (int)$g['fee'];
             $rakePer = (int)floor($fee * PREDICTIONS_RAKE_PCT / 100);
@@ -437,7 +437,7 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
             try {
                 $payout = (int)$pdo->query("SELECT payout FROM predictions_entries WHERE game_id = {$gid} AND user_id = {$puid}")->fetchColumn();
                 notify_safely($pdo, $cfg, (int)$puid, 'admin_notice',
-                    "🏆 予想 「{$g['title']}」 結果開示! スコア {$score} / payout {$payout}pt",
+                    "🏆 予想「{$g['title']}」結果開示! スコア {$score} / payout {$payout}pt",
                     'prediction', $gid);
             } catch (Throwable $_) {}
         }

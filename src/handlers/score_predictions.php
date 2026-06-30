@@ -1,6 +1,6 @@
 <?php
-// v609 #235 勝敗予測。 試合 (X vs Y) のスコアを予想 → 完璧に当てた人が pot 総取り。
-//   山分け前に 5% 場代。 誰も当たらなければ全員にフィー返金。
+// v609 #235 勝敗予測。試合 (X vs Y) のスコアを予想 → 完璧に当てた人が pot 総取り。
+//   山分け前に 5% 場代。誰も当たらなければ全員にフィー返金。
 //   Ledger type は predictions と同じ 'mahjong_buyin'/'mahjong_payout'/'mahjong_refund' を流用。
 declare(strict_types=1);
 
@@ -245,7 +245,7 @@ function sp_create(PDO $pdo, array $cfg, int $uid): void {
     });
     // 起案時通知
     foreach ($notifyIds as $nuid) {
-        $msg = "🎯 「{$home} vs {$away}」 のスコア予想受付開始! フィー {$fee}pt";
+        $msg = "🎯 「{$home} vs {$away}」のスコア予想受付開始! フィー {$fee}pt";
         notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'score_pred', $gameId);
     }
     json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
@@ -318,7 +318,7 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $winners = array_map('intval', $stW->fetchAll(PDO::FETCH_COLUMN));
         $pot = (int)$g['pot_total'];
         if (empty($winners)) {
-            // v737 #347 全員外れ: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を各自に返金。
+            // v737 #347 全員外れ: 場代 (= 5%) 分を rake として system に残し、残り (95%) を各自に返金。
             //   旧版は full refund で system 取り分ゼロになっていた。
             $stAll = $pdo->prepare("SELECT user_id FROM score_pred_entries WHERE game_id = ?");
             $stAll->execute([$gid]);
@@ -350,8 +350,8 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         }
         $pdo->prepare("UPDATE score_pred_games SET status='finished', actual_home=?, actual_away=?, finished_at=NOW() WHERE id = ?")
             ->execute([$home, $away, $gid]);
-        // v739 #352 通知を 1 人ずつパーソナライズ。 旧版はスコアだけで 「自分が
-        // 当たったか / 何 pt 戻ったか」 が分からなかったので、 自分の予想 + 払戻
+        // v739 #352 通知を 1 人ずつパーソナライズ。旧版はスコアだけで「自分が
+        // 当たったか / 何 pt 戻ったか」が分からなかったので、自分の予想 + 払戻
         // を末尾に付ける。
         $stAll = $pdo->prepare("SELECT user_id, guess_home, guess_away, payout, is_winner
                                   FROM score_pred_entries WHERE game_id = ?");
@@ -361,7 +361,7 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
                 $puid = (int)$r['user_id'];
                 $gh = (int)$r['guess_home']; $ga = (int)$r['guess_away'];
                 $pay = (int)$r['payout'];
-                $head = "🎯 勝敗予測 「{$g['title']}」 結果: {$g['team_home']} {$home}-{$away} {$g['team_away']}";
+                $head = "🎯 勝敗予測「{$g['title']}」結果: {$g['team_home']} {$home}-{$away} {$g['team_away']}";
                 if ((int)$r['is_winner'] === 1) {
                     $tail = "\nあなたの予想 {$gh}-{$ga} 完全的中! 払戻 +{$pay}pt";
                 } elseif ($pay > 0) {

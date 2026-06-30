@@ -1,7 +1,7 @@
 // /#/regions — 行った国 / 都道府県を登録 + 可視化 (制覇マップ)。
 // v531 #163。 2 タブ (🇯🇵 都道府県 / 🌏 国) でそれぞれグリッド表示、
-//   タップでトグル、 進捗バー + 件数表示。 他メンバーの集計 (ラボ全体) も
-//   各セルに 「N 人訪問」 と控えめに表示。
+//   タップでトグル、進捗バー + 件数表示。他メンバーの集計 (ラボ全体) も
+//   各セルに「N 人訪問」と控えめに表示。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -12,7 +12,7 @@ let visitedSet = null;  // 'kind:code' Set
 let labStats   = { country: {}, prefecture: {} };
 let activeTab  = 'prefecture';
 // v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 47 都道府県 polygon SVG を
-//   /img/jp-prefectures.svg に配置、 ここで 1 回 fetch + parse してキャッシュ。
+//   /img/jp-prefectures.svg に配置、ここで 1 回 fetch + parse してキャッシュ。
 //   paint() の renderJpMap で cloneNode して色を塗り替える。
 // v864 #442 第三段: 同じ仕組みで世界地図も SVG ベクター化。 /img/world.svg は
 //   Natural Earth 110m (Public Domain) を Equirectangular で SVG 化したもの。
@@ -162,9 +162,9 @@ function paint() {
 }
 
 // v859 #442 第二段: geolonia/japanese-prefectures (MIT) の実 polygon SVG を
-//   使って 「本物の日本地図」 を描画。 各 prefecture g に visited 色を塗り、
+//   使って「本物の日本地図」を描画。各 prefecture g に visited 色を塗り、
 //   既存の .rg-map-cell click handler に乗せてトグル。 SVG は ensureJpSvg で
-//   1 回 fetch 済み、 ここでは cloneNode して状態反映だけ。
+//   1 回 fetch 済み、ここでは cloneNode して状態反映だけ。
 function renderJpMap() {
   if (cachedJpSvgEl) return renderJpMapSvg();
   return renderJpMapFallback();
@@ -172,7 +172,7 @@ function renderJpMap() {
 
 // v864 #442 第三段: Natural Earth 110m (Public Domain) の世界地図 SVG を描画。
 //   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と同じ形式。
-//   既訪は濃紫ベタ塗り、 未訪は白塗り + 薄枠、 タップでトグル。
+//   既訪は濃紫ベタ塗り、未訪は白塗り + 薄枠、タップでトグル。
 function renderWorldMap() {
   if (!cachedWorldSvgEl) return '';
   const svg = cachedWorldSvgEl.cloneNode(true);
@@ -224,7 +224,7 @@ function renderJpMapSvg() {
 }
 
 // fetch 失敗時の退避 (旧 14×16 ダミー配置を簡素 SVG で描画)。
-//   通常は発火しない。 オフライン初回で SVG キャッシュが無い等。
+//   通常は発火しない。オフライン初回で SVG キャッシュが無い等。
 function renderJpMapFallback() {
   const SVG_W = 400, SVG_H = 540;
   const CELL_GAP = 26;
@@ -232,8 +232,8 @@ function renderJpMapFallback() {
   const prefMap = Object.fromEntries(PREFECTURES.map(p => [p.code, p]));
   const shortLabel = (name) => name.replace(/[都道府県]$/, '').slice(0, 2);
 
-  // 日本列島をざっくり 4 つの多角形 + 沖縄楕円で近似。 正確な地図ではないが、
-  // 「海と島の形がある」 ことで 「ベクターな地図」 として機能する。
+  // 日本列島をざっくり 4 つの多角形 + 沖縄楕円で近似。正確な地図ではないが、
+  // 「海と島の形がある」ことで「ベクターな地図」として機能する。
   // 後で真の GeoJSON 由来 polygon に差し替え予定 (別バッチ)。
   const islandLayer = `
     <path d="M 250 30 Q 295 22, 340 38 Q 372 58, 372 95 Q 352 132, 305 142 Q 252 132, 232 102 Q 232 60, 250 30 Z"

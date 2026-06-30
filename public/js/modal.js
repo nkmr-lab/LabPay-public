@@ -1,6 +1,6 @@
-// 共有モーダルヘルパ。 各 view で 「position:fixed; inset:0; background:rgba(0,0,0,0.5);
-// z-index:9999; display:flex; ...」 のオーバーレイ + 「白いカード + × ボタン + 中身」 を
-// 書いていたが、 13 箇所くらいでコピペされていた。 ここに集約。
+// 共有モーダルヘルパ。各 view で「position:fixed; inset:0; background:rgba(0,0,0,0.5);
+// z-index:9999; display:flex; ...」のオーバーレイ + 「白いカード + × ボタン + 中身」を
+// 書いていたが、 13 箇所くらいでコピペされていた。ここに集約。
 //
 // 使い方:
 //   import { openModal } from '../modal.js';
@@ -109,7 +109,7 @@ export function openModal(opts = {}) {
   return api;
 }
 
-// 「キャンセル + 確定」 の 2 ボタンモーダルの薄いラッパ。
+// 「キャンセル + 確定」の 2 ボタンモーダルの薄いラッパ。
 // async function 内で `const ok = await confirmModal({...}); if (!ok) return;`
 export function confirmModal({ title, message, okLabel = 'OK', cancelLabel = 'キャンセル', danger = false } = {}) {
   return new Promise(resolve => {

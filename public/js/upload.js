@@ -3,16 +3,16 @@
 // cookie credentials, and error decoding consistent.
 
 // POST /api/uploads/image — for product / avatar / listing images.
-// Returns { url, path, mime, size, thumb_url?, thumb_path? }。 サムネは
+// Returns { url, path, mime, size, thumb_url?, thumb_path? }。サムネは
 // 画像 + GD 利用可なときだけ付く。 frontend は thumb_url があればそれを
 // 一覧などのサムネ表示に使うのが望ましい (本文表示はオリジナルで)。
 export async function uploadImage(file) {
   return uploadTo('/api/uploads/image', file);
 }
 
-// 既知の image URL から推定サムネ URL を返す helper。 サーバの
+// 既知の image URL から推定サムネ URL を返す helper。サーバの
 // thumb_url_for() と同じ規約 (/uploads/<name>.<ext> → /uploads/<name>.thumb.jpg)。
-// サムネ存在チェックは出来ないので、 サムネ無い古い画像でも 「.thumb.jpg」
+// サムネ存在チェックは出来ないので、サムネ無い古い画像でも「.thumb.jpg」
 // にアクセスして 404 になる可能性あり (img tag は onerror で fallback できる)。
 export function thumbUrlFor(imageUrl) {
   if (!imageUrl) return imageUrl;

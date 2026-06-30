@@ -1,7 +1,7 @@
 // /#/paper-translate — v748 #359-#361 / v750 #365-#367 論文和訳要約。
-//   PDF を OpenAI Files API 経由で GPT-4o に直接読ませ、 論文構造に沿った詳細サマリ +
+//   PDF を OpenAI Files API 経由で GPT-4o に直接読ませ、論文構造に沿った詳細サマリ +
 //   重要図表 (ページ画像を pdftoppm で抽出表示) + 最後に落合メソッドの 6 項目で
-//   全体を重ね合わせてまとめる。 結果は share_token で URL 共有可能。
+//   全体を重ね合わせてまとめる。結果は share_token で URL 共有可能。
 
 import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -13,8 +13,8 @@ let sharedPollTimer = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
 
 // v762 #381 既存 result_json に入っている日本語中の不要なスペースを取り除く
-//   defensive helper。 日本語文字 (ひらがな / カタカナ / 漢字) どうしの間の半角スペース
-//   を 1 個ずつ削除。 英数字 / 記号と日本語の境界スペースは残す。
+//   defensive helper。日本語文字 (ひらがな / カタカナ / 漢字) どうしの間の半角スペース
+//   を 1 個ずつ削除。英数字 / 記号と日本語の境界スペースは残す。
 const JA_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]/;
 function stripJaSpaces(s) {
   if (!s || typeof s !== 'string') return s;
@@ -45,8 +45,8 @@ export async function renderPaperTranslate() {
     <details class="card" id="pt-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい論文要約を依頼</summary>
       <p class="hint" style="font-size:13px; margin:8px 0">
-        論文 PDF をアップすると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
-        今後の課題 → 落合メソッドまとめという順番で構造化して返します。 全体 1500-2500 字 (≒ 3-5 分で読める分量)。
+        論文 PDF をアップすると、全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
+        今後の課題 → 落合メソッドまとめという順番で構造化して返します。全体 1500-2500 字 (≒ 3-5 分で読める分量)。
       </p>
       <label class="field">
         <span class="lbl">🤖 モデル (高いほど高品質)</span>
@@ -96,7 +96,7 @@ export async function renderPaperTranslate() {
         <button id="pt-tab-mine"   class="btn primary" data-tab="mine"   style="font-size:13px">📜 自分の履歴</button>
         <button id="pt-tab-shared" class="btn"         data-tab="shared" style="font-size:13px">🌐 みんなの公開要約</button>
         <span style="flex:1"></span>
-        <input type="search" id="pt-search" placeholder="🔍 検索 (公開のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
+        <input type="search" id="pt-search" placeholder="🔍 検索 (公開のみ、タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
       </div>
       <div id="pt-controls"></div>
       <div id="pt-history"><div class="muted">読み込み中…</div></div>
@@ -120,7 +120,7 @@ export async function renderPaperTranslate() {
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
-  // v796 #398 「同時に全訳も」 トグル + 全訳モデルロード
+  // v796 #398 「同時に全訳も」トグル + 全訳モデルロード
   setupAlsoFullTranslate();
   // v756 #372 タブ切替 + 検索
   let curTab = 'mine';
@@ -262,7 +262,7 @@ async function go() {
       // 全訳も同時開始したなら履歴で確認できるようにトーストで案内
       if (ftToken) toast('全訳は /#/paper-translate-full/r/' + ftToken + ' で進捗確認');
     } else {
-      toast('裏で処理中。 通知が届いたら結果ページを開いてください');
+      toast('裏で処理中。通知が届いたら結果ページを開いてください');
     }
   } catch (e) {
     toast('失敗: ' + e.message);
@@ -278,7 +278,7 @@ async function loadHistory() {
     let items = d.items || [];
     if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
 
-    // 履歴が空 (初回) なら form を開く、 あるなら閉じる
+    // 履歴が空 (初回) なら form を開く、あるなら閉じる
     setFormOpen('pt-form', (d.items || []).length === 0);
 
     const ctlRoot = document.getElementById('pt-controls');
@@ -362,7 +362,7 @@ async function loadSharedList(q) {
     if (!items.length) {
       root.innerHTML = viewState.mineOnly_pub
         ? '<div class="empty">スター付きの公開要約はありません</div>'
-        : (q ? `<div class="empty">「${escapeHtml(q)}」 に該当する公開要約がありません</div>`
+        : (q ? `<div class="empty">「${escapeHtml(q)}」に該当する公開要約がありません</div>`
              : '<div class="empty">まだ公開されている要約はありません</div>');
       return;
     }
@@ -406,8 +406,8 @@ export async function renderPaperTranslateShared() {
 
 async function refreshShared(token, app) {
   if (!app) app = document.getElementById('app');
-  // v798 ユーザが既に別ページに移っているなら何も触らず、 タイマーを自殺させる
-  //   (= 10 秒ごとの 「要約中… 」 表示で強制引き戻しになるのを防ぐ)。
+  // v798 ユーザが既に別ページに移っているなら何も触らず、タイマーを自殺させる
+  //   (= 10 秒ごとの「要約中… 」表示で強制引き戻しになるのを防ぐ)。
   if (!location.hash.includes('/paper-summary/r/' + token)
    && !location.hash.includes('/paper-translate/r/' + token)) {
     if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
@@ -423,14 +423,14 @@ async function refreshShared(token, app) {
     }
     if (d.status === 'pending' || d.status === 'processing') {
       // v810 30 分以上処理中 = 詰まってる可能性 (PHP プロセスがタイムアウトで死んだ)。
-      //   本人には 「再投入」 ボタンを出す。
+      //   本人には「再投入」ボタンを出す。
       const myUid = Number(state.me?.id) || 0;
       const isOwner = myUid && myUid === Number(d.author_id);
       const ageMin = d.created_at ? Math.round((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
       const isStale = ageMin >= 30;
       const staleBanner = (isStale && isOwner && d.pdf_path) ? `
         <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
-          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分処理中。 サーバプロセスが途中で死んだ可能性があります。</div>
+          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分処理中。サーバプロセスが途中で死んだ可能性があります。</div>
           <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で再投入します (新規課金なし)。</p>
           <button id="pt-retry-stale" class="primary">🔁 再投入 (新規課金なし)</button>
         </div>` : '';
@@ -442,7 +442,7 @@ async function refreshShared(token, app) {
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">🤖 OpenAI が要約中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            通常 1-4 分で完了します。 このページを閉じても大丈夫です (完了通知が届きます)。<br>
+            通常 1-4 分で完了します。このページを閉じても大丈夫です (完了通知が届きます)。<br>
             10 秒ごとに自動更新。
           </p>
         </div>
@@ -567,10 +567,10 @@ async function paintResult(d, token) {
   });
   // v813 #405 ペアの全訳を作るボタン
   bindMakeFullTranslate(d);
-  // v758 #377 やりなおす (本人のみ、 保存 PDF で再処理 + 再課金)
+  // v758 #377 やりなおす (本人のみ、保存 PDF で再処理 + 再課金)
   document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
-    if (!confirm('保存された PDF で同じモデルで再処理します (再課金されます)。 続行しますか?')) return;
+    if (!confirm('保存された PDF で同じモデルで再処理します (再課金されます)。続行しますか?')) return;
     btn.disabled = true; const old = btn.textContent; btn.textContent = '🔁 開始中…';
     try {
       const r = await post('/api/ai/paper_translate/' + d.id + '/redo', {});
@@ -603,8 +603,8 @@ async function paintResult(d, token) {
   });
 }
 
-// v813 #406 cross_refs を 「📑 全訳へ」 ボタンに簡素化 + #405 ペアが無い場合は
-//   「📑 全訳を作る」 ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
+// v813 #406 cross_refs を「📑 全訳へ」ボタンに簡素化 + #405 ペアが無い場合は
+//   「📑 全訳を作る」ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
 function renderPaperCrossRefsAndCreate(d) {
   const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
   const myUid = Number(state.me?.id || 0);
@@ -624,7 +624,7 @@ function renderPaperCrossRefsAndCreate(d) {
     </div>`;
 }
 
-// 「📑 全訳を作る」 ボタンのクリックハンドラ。 paintResult 後に bind。
+// 「📑 全訳を作る」ボタンのクリックハンドラ。 paintResult 後に bind。
 async function bindMakeFullTranslate(d) {
   const btn = document.getElementById('pt-make-full');
   if (!btn || btn.dataset.bound) return;
@@ -632,7 +632,7 @@ async function bindMakeFullTranslate(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。 課金はポイント残高から (中村 PI は無料)。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。課金はポイント残高から (中村 PI は無料)。</p>
       <label class="field"><span class="lbl">方向</span>
         <select id="mft-dir" style="font-size:13px">
           <option value="en2ja" selected>英 → 日 (en2ja)</option>
@@ -712,7 +712,7 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v767 #385 crop は GPT region の精度が安定しないので廃止。 全ページをそのまま
+  // v767 #385 crop は GPT region の精度が安定しないので廃止。全ページをそのまま
   //   サムネ表示 + click で lightbox。 region は label の補足表示にだけ使う。
   const wrap = 220;       // box 幅 (ページ全体を含める)
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
@@ -745,8 +745,8 @@ function renderOchiai(o) {
   for (const [key, label, icon] of sections) {
     let txt = (o[key] || '').toString().trim();
     if (!txt) continue;
-    // v756 #374 GPT が値の先頭に 「1. どんなもの?」 等の設問を繰り返して入れることが
-    //   あるので、 先頭がラベルと同じ設問で始まる場合は取り除く (重複表示防止)。
+    // v756 #374 GPT が値の先頭に「1. どんなもの?」等の設問を繰り返して入れることが
+    //   あるので、先頭がラベルと同じ設問で始まる場合は取り除く (重複表示防止)。
     txt = txt.replace(/^\s*\d+\.\s*[^\n]{0,40}[?？]\s*/, '').trim();
     html += `
       <div style="margin-bottom:10px">
@@ -768,10 +768,10 @@ function renderOchiai(o) {
   return html;
 }
 
-// v753 RQ と仮説 + それぞれの結果をペア表示。 旧 schema (文字列配列) も fallback 表示。
-// v764 #382 1 個だけのときは「RQ1」 → 「RQ」、「H1」 → 「H」 に自動変換。
+// v753 RQ と仮説 + それぞれの結果をペア表示。旧 schema (文字列配列) も fallback 表示。
+// v764 #382 1 個だけのときは「RQ1」 → 「RQ」、「H1」 → 「H」に自動変換。
 function normalizeQLabel(s, prefix, isSingle) {
-  // prefix 例: "RQ" / "H"。 GPT が「RQ1: ...」「RQ：…」 や単に「1. …」 で来る場合を正規化。
+  // prefix 例: "RQ" / "H"。 GPT が「RQ1: ...」「RQ：…」や単に「1. …」で来る場合を正規化。
   if (typeof s !== 'string') return s;
   let txt = s.trim();
   // 数字 + コロン or 数字 + ピリオドの接頭辞を検出 + 取り除く
@@ -791,8 +791,8 @@ function renderRqHypothesis(rh) {
   if (!rqs.length && !hys.length) return '';
   const rqSingle = rqs.length === 1;
   const hySingle = hys.length === 1;
-  // v768 #387 「💡 示唆:」 ラベルは廃止 (GPT が値の先頭にも「示唆:」 を書く場合があり
-  //   「💡 示唆: 示唆: …」 になってしまうため)。 値の先頭の 「示唆:」「結果:」 等も strip。
+  // v768 #387 「💡 示唆:」ラベルは廃止 (GPT が値の先頭にも「示唆:」を書く場合があり
+  //   「💡 示唆: 示唆: …」になってしまうため)。値の先頭の「示唆:」「結果:」等も strip。
   const stripPrefix = (s) => String(s || '').replace(/^\s*(示唆|結果|答え)\s*[:：]\s*/u, '').trim();
   const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');
@@ -821,11 +821,11 @@ function renderRqHypothesis(rh) {
 }
 
 // v772 #392 実験と結果を研究名 (例: "Kirmani & Wright 1989") で自動ペアリング表示。
-//   experiments と results_summary の各文から 「Author Year」 を抽出 → 同じ key で紐付け。
+//   experiments と results_summary の各文から「Author Year」を抽出 → 同じ key で紐付け。
 function studyKey(s) {
   const str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');
-  // 西暦 (1900-2099) を探して、 先頭から西暦 + 直後の閉じ括弧までを研究名とみなす。
-  //   著者名に 「Smith, A. (1989)」 等のパターンがあるので括弧内の年も含める。
+  // 西暦 (1900-2099) を探して、先頭から西暦 + 直後の閉じ括弧までを研究名とみなす。
+  //   著者名に「Smith, A. (1989)」等のパターンがあるので括弧内の年も含める。
   const m = str.match(/(?:19|20)\d{2}/);
   if (!m) return null;
   let end = m.index + m[0].length;
@@ -838,14 +838,14 @@ function stripStudyKey(s, key) {
     const escaped = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     str = str.replace(new RegExp('^' + escaped + '\\s*'), '');
   }
-  // 残った 「)」「の実験:」「の結果:」「:」 等の接続文字を除去
+  // 残った「)」「の実験:」「の結果:」「:」等の接続文字を除去
   str = str.replace(/^[)）]+\s*/, '').replace(/^の?(実験|研究|結果)[\s:：]*/, '').replace(/^[:：]\s*/, '').trim();
   return str;
 }
-// v778 #402 自前実験を「実験N」 単位でペアリングする用のキー抽出。
-//   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」 等を全部 「実験1」 に正規化。
-// v779 #403 結果側は 「実験1 (引用 X):」 のように「実験1 + 空白 + (引用 X)」 形が多いため、
-//   「実験1」 の後が 「:」 でなくても数字で終わっていればキーと認める (look-ahead で非数字)。
+// v778 #402 自前実験を「実験N」単位でペアリングする用のキー抽出。
+//   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」等を全部「実験1」に正規化。
+// v779 #403 結果側は「実験1 (引用 X):」のように「実験1 + 空白 + (引用 X)」形が多いため、
+//   「実験1」の後が「:」でなくても数字で終わっていればキーと認める (look-ahead で非数字)。
 function ownExpKey(s) {
   const str = String(s).trim();
   const norm = str.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
@@ -854,12 +854,12 @@ function ownExpKey(s) {
   return '実験' + m[1];
 }
 function stripOwnExpKey(s) {
-  // 先頭の 「研究1：」「実験1:」「Study 1 -」「実験1 (引用 X):」 等を取り除いて本文だけ返す。
-  // 数字の後に 「:」 があるならそこまで、 なければ数字 + 直後の空白を取る。
+  // 先頭の「研究1：」「実験1:」「Study 1 -」「実験1 (引用 X):」等を取り除いて本文だけ返す。
+  // 数字の後に「:」があるならそこまで、なければ数字 + 直後の空白を取る。
   return String(s).replace(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*[0-9０-９]+\s*[:：・\-]?\s*/i, '').trim();
 }
-// v779 #403 「(引用)」「(引用 X)」「(引用 X 19xx)」 が本文中に含まれているか。 全要素が
-//   引用なら 「参考にした実験」 ラベルに切り替える。
+// v779 #403 「(引用)」「(引用 X)」「(引用 X 19xx)」が本文中に含まれているか。全要素が
+//   引用なら「参考にした実験」ラベルに切り替える。
 function isCitedItem(s) {
   return /\(\s*引用/.test(String(s));
 }
@@ -881,7 +881,7 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (!isCited(rs)) { own.ress.push(rs); continue; }
     const k = studyKey(rs); if (k) addCited(k, 'res', rs); else own.ress.push(rs);
   }
-  // v778 #402 自前実験を 「実験N」 でペアリング (insertion order を保つ)
+  // v778 #402 自前実験を「実験N」でペアリング (insertion order を保つ)
   const ownPairs = new Map();
   const ownUnkeyedExps = [];
   const ownUnkeyedRess = [];
@@ -898,9 +898,9 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (k) addOwnPair(k, 'res', rs); else ownUnkeyedRess.push(rs);
   }
 
-  // v779 #403 ペアの中身を見て 「引用比率」 を判定。 全ペア (or 全体) が引用なら
-  //   「📚 この論文が参考にした実験」 ラベルに切り替える。 自前と引用が混在する
-  //   場合はデフォルトの 「🔬 この論文で行った実験」 を使い、 引用 / 自前を個別タグで区別。
+  // v779 #403 ペアの中身を見て「引用比率」を判定。全ペア (or 全体) が引用なら
+  //   「📚 この論文が参考にした実験」ラベルに切り替える。自前と引用が混在する
+  //   場合はデフォルトの「🔬 この論文で行った実験」を使い、引用 / 自前を個別タグで区別。
   const allBodies = [...ownPairs.values()].flatMap(p => [p.exp, p.res].filter(Boolean));
   const citedCount = allBodies.filter(isCitedItem).length;
   const isAllCited = ownPairs.size > 0 && citedCount === allBodies.length;
@@ -944,12 +944,12 @@ function renderExperimentsBlock(expsRaw, resRaw) {
           }).join('')}
         </div>
       </div>`;
-    // 「実験N」 形式で拾えなかった残りは補足リストに
+    // 「実験N」形式で拾えなかった残りは補足リストに
     html += renderListSection('🔬 その他の実験記述', ownUnkeyedExps);
     html += renderListSection('📊 その他の結果記述', ownUnkeyedRess);
   } else {
-    // 全部 「実験N」 で拾えなかった → 従来のリスト表示。 配列全体が引用中心なら
-    //   ヘッダを 「参考にした実験」 に切り替える。
+    // 全部「実験N」で拾えなかった → 従来のリスト表示。配列全体が引用中心なら
+    //   ヘッダを「参考にした実験」に切り替える。
     const fallbackAllCited = own.exps.length > 0 && own.exps.every(isCitedItem);
     html += renderListSection(
       fallbackAllCited ? '📚 この論文が参考にした実験' : '🔬 この論文で行った実験',

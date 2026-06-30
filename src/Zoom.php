@@ -1,6 +1,6 @@
 <?php
 // Zoom 連携: User-managed OAuth で各ユーザの代理権限を預かり、 LabPay から
-// Zoom MTG を生成する。 構造は GoogleCalendar.php に揃えてあり、 違うのは
+// Zoom MTG を生成する。構造は GoogleCalendar.php に揃えてあり、違うのは
 // (1) token endpoint が HTTP Basic 認証 (Google は form パラメータ)、
 // (2) refresh で新しい refresh_token も返ってくる (rotate するので毎回 DB 更新)、
 // (3) 必要 scope は meeting:write:meeting + user:read:user。
@@ -8,9 +8,9 @@
 declare(strict_types=1);
 
 class Zoom {
-    // Marketplace で許可済みの scope を明示的に要求する。 これを付けないと
-    // Zoom はトークンに scope を全く載せずに返してくる仕様で、 後で API が
-    // 「Invalid access token, does not contain scopes」 で落ちる。 スペース
+    // Marketplace で許可済みの scope を明示的に要求する。これを付けないと
+    // Zoom はトークンに scope を全く載せずに返してくる仕様で、後で API が
+    // 「Invalid access token, does not contain scopes」で落ちる。スペース
     // 区切りで複数 scope を渡せる。
     public const SCOPES = 'meeting:write:meeting user:read:user';
 
@@ -78,7 +78,7 @@ class Zoom {
         return $data;
     }
 
-    // 取り出した token が期限切れなら refresh して DB に保存、 最新の access_token を返す。
+    // 取り出した token が期限切れなら refresh して DB に保存、最新の access_token を返す。
     // Zoom は refresh するたびに新しい refresh_token も返してくる (rotate 方式) ので
     // 古いのを残さないよう必ず両方更新。
     public static function ensureValidAccessToken(PDO $pdo, array $cfg, int $userId): string {
@@ -146,7 +146,7 @@ class Zoom {
                     $userId,
                 ]);
         } catch (Throwable $e) {
-            // user:read:user scope 無し → silently skip。 ログだけ残す。
+            // user:read:user scope 無し → silently skip。ログだけ残す。
             error_log('[labpay/zoom] identity fetch skipped: ' . $e->getMessage());
         }
     }
@@ -163,8 +163,8 @@ class Zoom {
     }
 
     // POST /users/me/meetings  type=2 (scheduled). Zoom 側は時刻を ISO8601 と
-    // timezone で受ける (start_time は timezone 上のローカル時刻、 末尾 Z なし)。
-    // 戻り値はそのまま Zoom の meeting オブジェクト。 主に join_url を使う。
+    // timezone で受ける (start_time は timezone 上のローカル時刻、末尾 Z なし)。
+    // 戻り値はそのまま Zoom の meeting オブジェクト。主に join_url を使う。
     public static function createMeeting(string $accessToken, array $params): array {
         $body = [
             'topic'      => (string)($params['topic']      ?? 'Meeting'),

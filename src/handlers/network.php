@@ -24,8 +24,8 @@ function route_network(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // 在室共起ネットワーク: 同じ部屋 (room_id) で同じ 1 時間スロットに在室が
-// 検出されたユーザー同士に共起カウントを +1。 ペア (a < b) で集計し
-// 「件数」 としてエッジ重みに。 days で集計幅切替 (7 / 30 / 365 / 0=全期間)。
+// 検出されたユーザー同士に共起カウントを +1。ペア (a < b) で集計し
+// 「件数」としてエッジ重みに。 days で集計幅切替 (7 / 30 / 365 / 0=全期間)。
 function network_presence_cooc(PDO $pdo, array $cfg): void {
     $days = max(0, min(3650, (int)($_GET['days'] ?? 7)));
     $params = [];
@@ -94,9 +94,9 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         return;
     }
 
-    // v452 サーバ側で閾値を適用せず、 全エッジ + 提案閾値 (75 パーセンタイル)
-    // を返す。 クライアントがスライダで動的にフィルタ。
-    // (最大 30 ユーザで 30*29/2 = 435 エッジ ≈ 数 KB、 ペイロード問題なし)。
+    // v452 サーバ側で閾値を適用せず、全エッジ + 提案閾値 (75 パーセンタイル)
+    // を返す。クライアントがスライダで動的にフィルタ。
+    // (最大 30 ユーザで 30*29/2 = 435 エッジ ≈ 数 KB、ペイロード問題なし)。
     $counts = array_values($edges);
     sort($counts, SORT_NUMERIC);
     $n = count($counts);

@@ -10,9 +10,9 @@ import { createMemberPicker } from '../member_picker.js';
 
 const ROLE_LABELS = {
   villager: { name: '村人', icon: '👨‍🌾', desc: '昼の投票で人狼を追放することが目標', color: '#666' },
-  wolf:     { name: '人狼', icon: '🐺', desc: '夜に襲撃、 仲間と協力して村人を全滅させる', color: '#dc2626' },
+  wolf:     { name: '人狼', icon: '🐺', desc: '夜に襲撃、仲間と協力して村人を全滅させる', color: '#dc2626' },
   seer:     { name: '占い師', icon: '🔮', desc: '夜に 1 人占って人狼かどうか分かる', color: '#7c3aed' },
-  knight:   { name: '騎士', icon: '🛡', desc: '夜に 1 人護衛、 人狼の襲撃から守る', color: '#15803d' },
+  knight:   { name: '騎士', icon: '🛡', desc: '夜に 1 人護衛、人狼の襲撃から守る', color: '#15803d' },
 };
 
 export async function renderJinrou() {
@@ -34,7 +34,7 @@ export async function renderJinrou() {
     const d = await get('/api/jinrou/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('jr-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立ててメンバーを集めましょう (4 人以上必要)。</div>';
+      document.getElementById('jr-list').innerHTML = '<div class="empty">卓がありません。「＋ 新規卓」から立ててメンバーを集めましょう (4 人以上必要)。</div>';
       return;
     }
     document.getElementById('jr-list').innerHTML = items.map(g => {
@@ -69,7 +69,7 @@ export async function renderJinrouNew() {
       <a href="#/jinrou" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">🐺 人狼 — 新規卓</h2>
       <p class="hint" style="font-size:13px">
-        4 人以上で開始可能。 役職構成は人数で自動調整 (4-5人: 人狼1 / 占い1 / 騎士1 / 残り村人、 6-8人: 人狼2、 9-12人: 人狼3、 13-16人: 人狼4)。
+        4 人以上で開始可能。役職構成は人数で自動調整 (4-5人: 人狼1 / 占い1 / 騎士1 / 残り村人、 6-8人: 人狼2、 9-12人: 人狼3、 13-16人: 人狼4)。
       </p>
       <label class="field">
         <span class="lbl">プレイフィー (pt 1 人あたり)</span>
@@ -144,7 +144,7 @@ function paintJinrouDetail(g) {
       if (meRole === 'wolf') { actionType = 'attack'; title = '🐺 襲撃する相手を選ぶ'; }
       else if (meRole === 'seer') { actionType = 'inspect'; title = '🔮 占う相手を選ぶ'; }
       else if (meRole === 'knight') { actionType = 'protect'; title = '🛡 護衛する相手を選ぶ (人狼の襲撃から守る)'; }
-      else { actionUI = '<div class="card"><div class="hint">🌙 夜 — あなたには夜のアクションはありません。 起案者が「夜を終える」 と昼に進みます。</div></div>'; }
+      else { actionUI = '<div class="card"><div class="hint">🌙 夜 — あなたには夜のアクションはありません。起案者が「夜を終える」と昼に進みます。</div></div>'; }
     } else {
       actionType = 'vote';
       title = '☀ 追放する相手を投票';
@@ -170,7 +170,7 @@ function paintJinrouDetail(g) {
     }
   }
   if (g.me_joined && !g.my_alive && (g.status === 'night' || g.status === 'day')) {
-    actionUI = '<div class="card"><div class="hint" style="color:#dc2626">💀 あなたは死亡しています。 観戦のみ。</div></div>';
+    actionUI = '<div class="card"><div class="hint" style="color:#dc2626">💀 あなたは死亡しています。観戦のみ。</div></div>';
   }
 
   // 占い結果 (占い師のみ)
@@ -196,7 +196,7 @@ function paintJinrouDetail(g) {
       <div class="card">
         <div class="bold" style="margin-bottom:6px">📜 ログ</div>
         ${g.log.map(e => {
-          if (e.event === 'game_start') return `<div class="meta">⏯ ゲーム開始 (${e.players} 人、 人狼${e.config?.wolf_count || '?'})</div>`;
+          if (e.event === 'game_start') return `<div class="meta">⏯ ゲーム開始 (${e.players} 人、人狼${e.config?.wolf_count || '?'})</div>`;
           if (e.event === 'night_result') {
             const k = g.players.find(p => p.user_id === e.killed);
             const p = g.players.find(p => p.user_id === e.protected);
@@ -230,7 +230,7 @@ function paintJinrouDetail(g) {
     ${inspectUI}
 
     <div class="card">
-      <div class="bold" style="margin-bottom:6px">👥 参加者 (${g.players.length}名、 生存 ${g.players.filter(p => p.alive).length})</div>
+      <div class="bold" style="margin-bottom:6px">👥 参加者 (${g.players.length}名、生存 ${g.players.filter(p => p.alive).length})</div>
       <div class="list">
         ${g.players.map(p => {
           const roleInfo = p.role ? ROLE_LABELS[p.role] : null;

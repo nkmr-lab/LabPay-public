@@ -40,12 +40,12 @@ function route_feedback(PDO $pdo, array $cfg, string $method, array $seg): void 
 }
 
 // v465 → v470 feedback 完了を SNS の LabPay 公式アカウントとして投稿。
-// v470: $shortMessage は 「〇〇 を 〇〇 したよ!」 的に完結した 1 文。 全文サマリ
+// v470: $shortMessage は「〇〇 を 〇〇 したよ!」的に完結した 1 文。全文サマリ
 // (feedback テーブルの reply_body) とは別物。 SNS は流し読みされるので
 //   🐛 タイマー音直したよ!
 //   ✨ 〆切編集 + 参加者追加できるようにしたよ!
-//   🛠 @abe さん、 バグ直したよ!
-//   🎁 @abe さん、 リクエストやってみた!
+//   🛠 @abe さん、バグ直したよ!
+//   🎁 @abe さん、リクエストやってみた!
 // の 1 行で出す。 (feedback #N) などの機械っぽい余白は入れない。
 function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $shortMessage): void {
     try {
@@ -84,7 +84,7 @@ function feedback_post_release_to_sns(PDO $pdo, int $fbId, string $shortMessage)
     } catch (Throwable $_) { /* swallow */ }
 }
 
-// v453 管理画面用ダッシュボード。 admin のみ。 内容:
+// v453 管理画面用ダッシュボード。 admin のみ。内容:
 //  - last_polled_at: /api/feedback/claude_queue が最後に叩かれた時刻
 //  - last_done:      直近 done の id + summary + finished_at
 //  - approved / working 一覧 (id, kind, age, body 抜粋)
@@ -100,7 +100,7 @@ function feedback_claude_dashboard(PDO $pdo, array $cfg): void {
     if ($lastDone) $lastDone['id'] = (int)$lastDone['id'];
     // v515 #141 「最終巡回」 = MAX(claude_last_poll.txt, MAX(claude_finished_at))
     //   ファイル経由のヘルスチェックを実装してない巡回方法 (= 私が SQL を直接読みに行く形)
-    //   でも完了タイムスタンプが入っていれば 「Claude は生きてる」 とみなす。
+    //   でも完了タイムスタンプが入っていれば「Claude は生きてる」とみなす。
     $lastPoll = $lastPollFile;
     if ($lastDone && !empty($lastDone['claude_finished_at'])) {
         $finishedIso = date('c', strtotime((string)$lastDone['claude_finished_at']));
@@ -140,12 +140,12 @@ function feedback_claude_dashboard(PDO $pdo, array $cfg): void {
 }
 
 // GET /api/feedback/claude_queue
-//   無認証。 「Claude に approved 状態の feedback があるか」 を外部から polling
-//   する用。 個人情報を露出しない (個数 + working/approved の最古 age のみ)。
-//   外部アプリ (GitHub Actions / 自前 lambda / ...) で polling し、 状態変化を
+//   無認証。「Claude に approved 状態の feedback があるか」を外部から polling
+//   する用。個人情報を露出しない (個数 + working/approved の最古 age のみ)。
+//   外部アプリ (GitHub Actions / 自前 lambda / ...) で polling し、状態変化を
 //   検出して端末側オートメーションをキックする設計。
 function feedback_claude_queue_status(PDO $pdo): void {
-    // v453 巡回した瞬間を記録 (= 「最後に Claude が来た時刻」)。 ファイル書き込み
+    // v453 巡回した瞬間を記録 (= 「最後に Claude が来た時刻」)。ファイル書き込み
     // 失敗は黙殺 (= ダッシュボードが古いままでも機能を止めない)。
     @file_put_contents('/var/www/labpay/var/claude_last_poll.txt', date('c'));
     $st = $pdo->query("
@@ -169,7 +169,7 @@ function feedback_claude_queue_status(PDO $pdo): void {
     ]);
 }
 
-// admin が 「Claude に任せる」 / 「取り消す」 をトグル。
+// admin が「Claude に任せる」 / 「取り消す」をトグル。
 // body: { status: 'none' | 'approved' | 'blocked' }
 // approved のとき claude_assigned_at をセット。 cron が 'approved' を拾って
 // 'working' → 'done' に進める。 'blocked' は巡回除外 (admin が none に戻して再投入)。
@@ -190,12 +190,12 @@ function feedback_claude_set_status(PDO $pdo, array $cfg, int $id): void {
         throw new ApiException('bad_request', "working / done からは直接 approved に戻せません (一度 none に)", 400);
     }
     if ($status === 'approved') {
-        // v431 「Claude に任せる」 を押した admin id を記録 → 完了時に reply の
+        // v431 「Claude に任せる」を押した admin id を記録 → 完了時に reply の
         // replied_by_user_id に使う。
         $admin = Auth::requireAdmin($pdo, $cfg);
         $pdo->prepare("UPDATE feedback SET claude_status='approved', claude_assigned_at=NOW(),
             claude_assigned_by_user_id=? WHERE id = ?")->execute([(int)$admin['id'], $id]);
-        // v438 出張中でも 「approved 入った」 のを即知るために Slack 通知。
+        // v438 出張中でも「approved 入った」のを即知るために Slack 通知。
         try {
             $stF = $pdo->prepare("SELECT f.kind, f.body, u.display_name AS user_name
                                     FROM feedback f JOIN users u ON u.id = f.user_id
@@ -251,7 +251,7 @@ function feedback_reply(PDO $pdo, array $cfg, int $id): void {
 
     $kindLabel = Labels::feedbackKind((string)$row['kind']);
     $origSnip = mb_substr((string)$row['body'], 0, 60) . (mb_strlen((string)$row['body']) > 60 ? '…' : '');
-    $msg = "✅ あなたの {$kindLabel}「{$origSnip}」 に {$admin['display_name']} さんから返信:\n{$reply}";
+    $msg = "✅ あなたの {$kindLabel}「{$origSnip}」に {$admin['display_name']} さんから返信:\n{$reply}";
     notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice', $msg, 'feedback', $id);
 
     json_response(['ok' => true]);
@@ -292,7 +292,7 @@ function feedback_create(PDO $pdo, array $cfg): void {
     notify_admins($pdo, $cfg, 'admin_notice', $msg, 'feedback', $fbId);
 
     // v547 #208 投稿者が中村聡史 (= 自分) の場合、 Slack 通知は不要 (自分で投稿 →
-    //   自分の Slack に通知されると二度手間)。 表示名を部分一致でガード。
+    //   自分の Slack に通知されると二度手間)。表示名を部分一致でガード。
     $authorName = (string)$u['display_name'];
     $isSelfAuthor = (strpos($authorName, '中村聡史') !== false);
     if (!$isSelfAuthor) {

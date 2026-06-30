@@ -17,7 +17,7 @@ function stopPoll() {
 }
 
 // ─── /#/chat-rooms (ルーム一覧、 Slack 風サイドバー) ─
-// v726 #328 タブ UI に統一したので、 ここを訪れたら最初のチャンネルへ自動遷移。
+// v726 #328 タブ UI に統一したので、ここを訪れたら最初のチャンネルへ自動遷移。
 export async function renderChatRooms() {
   stopPoll();
   try {
@@ -34,7 +34,7 @@ export async function renderChatRooms() {
     <div class="card" style="background:#3f0e40; color:#fff; padding:14px">
       <h2 style="margin:0; font-size:20px">💬 LabPay チャット</h2>
       <p style="font-size:12px; margin:4px 0 0; opacity:0.85">
-        チャンネル + DM。 「🚨 重要」 への投稿は全員に通知されます。
+        チャンネル + DM。「🚨 重要」への投稿は全員に通知されます。
       </p>
     </div>
     <div class="card" style="padding:0">
@@ -213,7 +213,7 @@ async function loadMessages(scrollToBottom = false) {
   });
 }
 
-// v670 Slack 風メッセージ表示: 全メッセージ左寄せ、 アバター + 名前 + 時刻をヘッダに、
+// v670 Slack 風メッセージ表示: 全メッセージ左寄せ、アバター + 名前 + 時刻をヘッダに、
 // 削除ボタンは hover で出る (.cm-row:hover .cm-del で表示)。
 function renderMsg(m, meId) {
   if (m.deleted_at) {

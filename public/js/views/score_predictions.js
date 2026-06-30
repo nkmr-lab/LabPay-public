@@ -53,7 +53,7 @@ export async function renderScorePredictions() {
           </div>
         </a>
       `).join('') : `
-        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ試合が起案されていません。「＋ 試合を起案する」 からどうぞ。</div></div>
+        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ試合が起案されていません。「＋ 試合を起案する」からどうぞ。</div></div>
       `}
     `;
   } catch (e) {
@@ -97,7 +97,7 @@ export async function renderScorePredictionNew() {
         <input id="spn-deadline" class="input" type="datetime-local">
       </label>
       <div style="margin-bottom:10px">
-        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。 起案直後に admin_notice で受付開始を通知)</div>
+        <div class="bold" style="font-size:13px; margin-bottom:4px">📣 通知を飛ばすメンバー (任意。起案直後に admin_notice で受付開始を通知)</div>
         <div id="spn-notify-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="spn-notify-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
@@ -156,7 +156,7 @@ function startSpCountdown() {
     if (!document.getElementById('sp-countdown')) { clearInterval(spCountdownTimer); spCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      // v689 #273 「⏳ 締切まで締切超過 ⛔」 だと重ね表示で変だった → 「⏰ 締切終了」 だけに。
+      // v689 #273 「⏳ 締切まで締切超過 ⛔」だと重ね表示で変だった → 「⏰ 締切終了」だけに。
       root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
@@ -190,7 +190,7 @@ export async function renderScorePredictionDetail(ctx) {
 
 function paintSpDetail(g) {
   const app = document.getElementById('app');
-  // v689 #273 締切が過ぎていればシンプルに 「締切終了」 を表示。
+  // v689 #273 締切が過ぎていればシンプルに「締切終了」を表示。
   const deadlinePassed = g.deadline_at
     && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
   const countdownBlock = !g.deadline_at || g.status !== 'open' ? '' : (deadlinePassed
@@ -254,7 +254,7 @@ function paintSpDetail(g) {
   //   編集できる。 fee はエントリーがあると変更不可 (サーバで弾く)。
   const fmtForLocal = (s) => {
     if (!s) return '';
-    // 「2026-06-27 19:00:00」 形式 → 「2026-06-27T19:00」
+    // 「2026-06-27 19:00:00」形式 → 「2026-06-27T19:00」
     return String(s).replace(' ', 'T').slice(0, 16);
   };
   const creatorBlock = (g.is_creator && (g.status === 'open' || g.status === 'closed')) ? `
@@ -347,7 +347,7 @@ function paintSpDetail(g) {
   startSpCountdown();
 
   document.getElementById('sp-share')?.addEventListener('click', () => {
-    shareToSns(`🎯 「${g.team_home} vs ${g.team_away}」 のスコア予想を ${g.status === 'open' ? '受付中' : '結果開示'}! フィー ${g.fee}pt`, `#/score-predictions/${g.id}`);
+    shareToSns(`🎯 「${g.team_home} vs ${g.team_away}」のスコア予想を ${g.status === 'open' ? '受付中' : '結果開示'}! フィー ${g.fee}pt`, `#/score-predictions/${g.id}`);
   });
 
   if (g.status === 'open') {

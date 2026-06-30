@@ -6,7 +6,7 @@ import { escapeHtml, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 
 // v585 麻雀の鳴き / アガリ宣言時に音声合成 (チー / ポン / カン / リーチ / ロン / ツモ)。
-//   Web Speech API (browser 内蔵)。 ファイル不要、 ja-JP voice。
+//   Web Speech API (browser 内蔵)。ファイル不要、 ja-JP voice。
 //   音声 OFF にしたい場合は localStorage('labpay-mahjong-mute') = '1'。
 function speakMahjong(text) {
   try {
@@ -58,7 +58,7 @@ export async function renderMahjongPlay({ params }) {
   const gid = Number(params.id);
   curGid = gid;
   // v670 麻雀は横向き表示が見やすい。 lock を試みる (= フルスクリーン or PWA のみ効く)。
-  // 失敗した場合は CSS の portrait media query で 「横にして」 バナーを出す。
+  // 失敗した場合は CSS の portrait media query で「横にして」バナーを出す。
   try { screen.orientation?.lock?.('landscape'); } catch (_) { /* unsupported */ }
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -108,7 +108,7 @@ async function refresh() {
     lastVer = d.state_ver;
     curState = d;
     paint();
-    // v692 #276 起案者 (= AI 戦では自分) には 「終了」 ボタンを出す。 playing / lobby / reporting で押せる。
+    // v692 #276 起案者 (= AI 戦では自分) には「終了」ボタンを出す。 playing / lobby / reporting で押せる。
     const exitCard = document.getElementById('mj-exit-card');
     if (exitCard) {
       const canExit = d.is_creator && ['lobby','playing','reporting'].includes(d.status);
@@ -161,7 +161,7 @@ function paint() {
     リーチ棒 ${s.riichi_pot || 0}
   `;
 
-  // 4 卓の表示 (自分は下、 上家/対面/下家を画面上/右/左)
+  // 4 卓の表示 (自分は下、上家/対面/下家を画面上/右/左)
   const seats = d.players;
   const me = d.my_seat;
   function seatBox(seatIdx) {
@@ -337,7 +337,7 @@ async function doAction(type) {
     if (r.yaku) toast(`和了! 役: ${(r.yaku.list || []).join(', ')} ${r.yaku.han}翻 / ${r.score.total}点`);
     await refresh();
   } catch (e) {
-    // v564 polling と AI 自動進行のレースで 「あなたの番ではありません」 が出るが、
+    // v564 polling と AI 自動進行のレースで「あなたの番ではありません」が出るが、
     //   ユーザーには表示せず黙って state を再取得する (UI が古かっただけ)
     if (/番ではありません|今は.*できません/.test(e.message)) {
       await refresh();

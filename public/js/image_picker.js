@@ -1,4 +1,4 @@
-// 画像アップロード UI の共通配線。 各 view で
+// 画像アップロード UI の共通配線。各 view で
 //   <input type="file" id="X-file"> + <input type="hidden" id="X-url"> +
 //   <img id="X-preview" hidden> + <div id="X-status"></div>
 // を自前で wire up していたパターンを 1 関数に。

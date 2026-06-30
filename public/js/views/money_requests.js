@@ -343,7 +343,7 @@ async function loadList() {
   }
 }
 
-// v658 自分が creator (受取側) の請求で、 受取人別に未払い合算を表示。
+// v658 自分が creator (受取側) の請求で、受取人別に未払い合算を表示。
 // 同じ人が複数の請求で払ってない場合を一行にまとめる。
 async function loadUnpaidPeopleSummary() {
   const card = document.getElementById('mr-unpaid-people-card');
@@ -380,8 +380,8 @@ async function loadUnpaidPeopleSummary() {
   }
 }
 
-// v651 未払い請求 (自分が受取人、 未払い) を集めて合算表示。 集金が
-// 重なる時期 (合宿、 学会、 OB会) に 「合計で今いくら払う予定だっけ」 を
+// v651 未払い請求 (自分が受取人、未払い) を集めて合算表示。集金が
+// 重なる時期 (合宿、学会、 OB会) に「合計で今いくら払う予定だっけ」を
 // 一目で把握できるように。
 function renderPendingSummary(items, meId) {
   const card = document.getElementById('mr-pending-card');
@@ -540,7 +540,7 @@ async function onPay(id, method, r) {
     if (!proxyId) { toast('user_id を入れてください'); return; }
   }
   try {
-    // backend が paid_at の有無を見て 「新規 / 訂正」 を自動判定し、
+    // backend が paid_at の有無を見て「新規 / 訂正」を自動判定し、
     // res.corrected で結果を返す。toast はそれで切り替える。
     const res = await patch(`/api/money-requests/${id}/pay`, { method, proxy_user_id: proxyId });
     toast(res?.corrected ? '支払い方法を訂正しました' : '支払い済にしました');

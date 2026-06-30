@@ -19,7 +19,7 @@ export async function renderPaperTranslateFull() {
     <div class="card page-header">
       <h2 style="margin:0">📑 論文全訳</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        要約でなく全文翻訳。 章ごとに訳 → back-translation で整合確認 → 用語統一と全体ポリッシュ。
+        要約でなく全文翻訳。章ごとに訳 → back-translation で整合確認 → 用語統一と全体ポリッシュ。
         英→日と日→英が選べます (日→英は em-dash 等 GPT-isms 除去も込み)。
       </p>
     </div>
@@ -72,7 +72,7 @@ export async function renderPaperTranslateFull() {
         <button id="pft-tab-mine"   class="btn primary" data-tab="mine"   style="font-size:13px">📜 自分の履歴</button>
         <button id="pft-tab-shared" class="btn"         data-tab="shared" style="font-size:13px">🌐 みんなの公開全訳</button>
         <span style="flex:1"></span>
-        <input type="search" id="pft-search" placeholder="🔍 検索 (公開のみ、 タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
+        <input type="search" id="pft-search" placeholder="🔍 検索 (公開のみ、タイトル / 著者 / 本文)" maxlength="100" style="font-size:13px; padding:3px 8px; border:1px solid #d1d5db; border-radius:4px; min-width:180px" hidden>
       </div>
       <div id="pft-controls"></div>
       <div id="pft-list"><div class="muted">読み込み中…</div></div>
@@ -272,7 +272,7 @@ async function loadSharedList(q) {
     if (!items.length) {
       root.innerHTML = viewState.mineOnly_pub
         ? '<div class="empty">スター付きの公開全訳はありません</div>'
-        : (q ? `<div class="empty">「${escapeHtml(q)}」 に該当する公開全訳がありません</div>`
+        : (q ? `<div class="empty">「${escapeHtml(q)}」に該当する公開全訳がありません</div>`
              : '<div class="empty">まだ公開されている全訳はありません</div>');
       return;
     }
@@ -360,7 +360,7 @@ async function go() {
       location.hash = '#/paper-translate-full/r/' + j.share_token;
       if (sumToken) toast('要約は /#/paper-summary/r/' + sumToken + ' で進捗確認');
     } else {
-      toast('裏で全訳中。 通知が届いたら結果ページを開いてください');
+      toast('裏で全訳中。通知が届いたら結果ページを開いてください');
     }
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
@@ -401,7 +401,7 @@ async function refresh(token) {
     const myUid = Number(state.me?.id || 0);
     const isOwner = myUid > 0 && Number(d.author_id) === myUid;
     const isShared = !!d.is_shared;
-    // v807 要約ページと同じ 「ボタン形式」 公開切替
+    // v807 要約ページと同じ「ボタン形式」公開切替
     const shareButton = (isOwner && d.status === 'done') ? `
       <button class="btn ${isShared ? 'primary' : ''}" id="pft-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px; margin-left:6px">
         ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
@@ -435,14 +435,14 @@ async function refresh(token) {
       <div id="pft-r"></div>`;
     app.innerHTML = header;
     if (d.status === 'pending' || d.status === 'processing') {
-      // v810 30 分以上経っていれば stale な可能性 → 本人に 「再投入」 ボタンを出す。
+      // v810 30 分以上経っていれば stale な可能性 → 本人に「再投入」ボタンを出す。
       const myUidS = Number(state.me?.id || 0);
       const isOwnerS = myUidS > 0 && Number(d.author_id) === myUidS;
       const ageMin = d.created_at ? Math.round((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
       const isStale = ageMin >= 30;
       const staleBanner = (isStale && isOwnerS && d.pdf_path) ? `
         <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
-          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分処理中。 OpenAI の background job が詰まっているか、 結果取得が失敗した可能性があります。</div>
+          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分処理中。 OpenAI の background job が詰まっているか、結果取得が失敗した可能性があります。</div>
           <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で再投入します (新規課金なし)。</p>
           <button id="pft-retry-stale" class="primary">🔁 再投入 (新規課金なし)</button>
         </div>` : '';
@@ -450,7 +450,7 @@ async function refresh(token) {
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">⏳ 全訳中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            10-30 分程度 (論文長とモデルにより変動)。 閉じても OK、 完了で通知が届きます。
+            10-30 分程度 (論文長とモデルにより変動)。閉じても OK、完了で通知が届きます。
             10 秒ごとに自動更新。
           </p>
           ${d.progress_text ? `
@@ -577,8 +577,8 @@ async function paint(d) {
   bindMakeSummary(d);
 }
 
-// v813 #406 cross_refs を 「📄 要約へ」 ボタンに簡素化 + #405 ペアの要約が無い場合は
-//   「📄 要約を作る」 ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
+// v813 #406 cross_refs を「📄 要約へ」ボタンに簡素化 + #405 ペアの要約が無い場合は
+//   「📄 要約を作る」ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
 function renderFullCrossRefsAndCreate(d) {
   const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
   const myUid = Number(state.me?.id || 0);
@@ -605,7 +605,7 @@ async function bindMakeSummary(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で論文要約を開始します。 課金はポイント残高から (中村 PI は無料)。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文要約を開始します。課金はポイント残高から (中村 PI は無料)。</p>
       <label class="field"><span class="lbl">モデル</span>
         <select id="mfs-model" style="font-size:13px">
           <option value="gpt-4.1">gpt-4.1 (20pt)</option>
@@ -642,8 +642,8 @@ function renderChapter(ch, idx, direction) {
   const titleTrans = ch.chapter_title_translated || '';
   const samples = Array.isArray(ch.back_translation_samples) ? ch.back_translation_samples : [];
   const terms = Array.isArray(ch.key_terms) ? ch.key_terms : [];
-  // v808 #399 章番号 (1, 2, ...) を出さない。 元タイトルに既に「1.」「Chapter 1」「第1章」 等
-  //   が含まれてるケースが多く、 二重表記で違和感があった。 タイトルをそのまま出す。
+  // v808 #399 章番号 (1, 2, ...) を出さない。元タイトルに既に「1.」「Chapter 1」「第1章」等
+  //   が含まれてるケースが多く、二重表記で違和感があった。タイトルをそのまま出す。
   return `
     <div style="padding:10px 12px; border-left:3px solid var(--primary); background:#fafafa; border-radius:0 6px 6px 0">
       <div class="bold" style="font-size:14px; color:var(--primary)">${escapeHtml(titleTrans || '(無題)')} ${titleOrig ? `<span style="font-size:12px; color:#6b7280; font-weight:400">(${escapeHtml(titleOrig)})</span>` : ''}</div>

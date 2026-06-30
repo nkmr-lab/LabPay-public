@@ -1,12 +1,12 @@
-// v632 「対象者指定 → 即起動」 用の共通モーダル。
-//   各ゲームの 「＋ 新規卓」 ボタンから呼ぶ。
+// v632 「対象者指定 → 即起動」用の共通モーダル。
+//   各ゲームの「＋ 新規卓」ボタンから呼ぶ。
 //
 //   showInviteModal({
 //     title:       '🃏 大富豪新規卓',
-//     description: 'プレイフィー 2pt。 全員同意済で即開始。',
+//     description: 'プレイフィー 2pt。全員同意済で即開始。',
 //     minPick:     1,            // 最少招待人数 (= max_players - 1)
 //     maxPick:     3,            // 最大招待人数
-//     allowPublic: true,         // 「公開卓で立てる」 ボタンを出すか
+//     allowPublic: true,         // 「公開卓で立てる」ボタンを出すか
 //   })
 //   ⇒ 戻り値: { kind: 'public' } | { kind: 'invite', memberIds: [uid,...] } | null (cancel)
 

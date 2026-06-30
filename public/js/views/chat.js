@@ -15,7 +15,7 @@ function saveHistory(arr) {
   try { localStorage.setItem(HIST_KEY, JSON.stringify(arr.slice(-HIST_MAX))); } catch {}
 }
 
-// 入力欄にプリセット文を流し込む 「クイックボタン」。
+// 入力欄にプリセット文を流し込む「クイックボタン」。
 const QUICKS = [
   { label: '🇨🇳 中国語に',  prefix: 'これを中国語(簡体字)で: ' },
   { label: '🇮🇹 伊語に',    prefix: 'これをイタリア語で: ' },
@@ -27,7 +27,7 @@ const QUICKS = [
   { label: '🍽 注文したい', prefix: '注文する時のフレーズ: ' },
 ];
 
-// Markdown を軽く描画 (太字 / 改行のみ。 安全のため innerHTML は escapeHtml 後の文字列に対して限定的に置換)。
+// Markdown を軽く描画 (太字 / 改行のみ。安全のため innerHTML は escapeHtml 後の文字列に対して限定的に置換)。
 function renderMarkdownSafe(s) {
   // まず HTML エスケープ → 太字 → 改行
   let html = escapeHtml(s);
@@ -57,7 +57,7 @@ export async function renderChat() {
       <div style="padding:8px; background:#fff; border-top:1px solid var(--line)">
         <div class="row" style="gap:6px; align-items:flex-end">
           <textarea id="chat-input" rows="2" maxlength="4000"
-            placeholder="日本語 / 外国語どちらでも。 例: 「すみません、トイレはどこですか？を中国語で」"
+            placeholder="日本語 / 外国語どちらでも。例: 「すみません、トイレはどこですか？を中国語で」"
             style="flex:1; resize:none; min-height:48px; max-height:200px; font-size:14px"></textarea>
           <button id="chat-send" class="primary" style="padding:8px 16px">送信</button>
         </div>
@@ -77,7 +77,7 @@ export async function renderChat() {
   const renderLog = () => {
     if (!history.length) {
       log.innerHTML = `
-        <div class="hint" style="font-size:12px; color:#555">↓ 上のクイックボタンで始めるか、 自由に入力してください</div>`;
+        <div class="hint" style="font-size:12px; color:#555">↓ 上のクイックボタンで始めるか、自由に入力してください</div>`;
       return;
     }
     log.innerHTML = history.map(m => {
@@ -124,7 +124,7 @@ export async function renderChat() {
 
   sendBtn.addEventListener('click', onSend);
   input.addEventListener('keydown', (ev) => {
-    // v463 IME 変換確定の Enter は keyCode=229 / isComposing=true。 これらを除外
+    // v463 IME 変換確定の Enter は keyCode=229 / isComposing=true。これらを除外
     // しないと日本語入力で変換確定するたびに送信されてしまう。
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
       ev.preventDefault();

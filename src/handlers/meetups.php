@@ -1,7 +1,7 @@
 <?php
-// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 v648 で 180 日以内に拡張 (元 31 日)。
-// 起案時に自分以外の参加者へ push 通知。 タイマーや点呼と違って応答ボタンは無く、
-// 「集合する場所を 1 つ決めて全員に同期する」 のが目的。
+// /api/meetups — 「次の待ち合わせ」機能。集合時刻 + 場所 + メンバー。 v648 で 180 日以内に拡張 (元 31 日)。
+// 起案時に自分以外の参加者へ push 通知。タイマーや点呼と違って応答ボタンは無く、
+// 「集合する場所を 1 つ決めて全員に同期する」のが目的。
 
 declare(strict_types=1);
 
@@ -24,8 +24,8 @@ function route_meetups(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no meetups route for $method $sub", 404);
 }
 
-// v482 #71 待ち合わせへのシェアメッセージ (例: 「5 分遅れます」 「先に中に
-//   入ってます」)。 参加者と起案者のみ閲覧 / 投稿可。
+// v482 #71 待ち合わせへのシェアメッセージ (例: 「5 分遅れます」「先に中に
+//   入ってます」)。参加者と起案者のみ閲覧 / 投稿可。
 function meetups_messages_assert_visible(PDO $pdo, int $meetupId, int $userId): array {
     $st = $pdo->prepare("SELECT id, creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
     $st->execute([$meetupId]);
@@ -136,7 +136,7 @@ function meetups_edit(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v468 参加者追加。 既存メンバーは INSERT IGNORE で重複排除。
+// v468 参加者追加。既存メンバーは INSERT IGNORE で重複排除。
 function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
@@ -186,7 +186,7 @@ function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
 function meetups_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // v450 ?kind=meetup|deadline で絞り込み。 未指定 = 両方。
+    // v450 ?kind=meetup|deadline で絞り込み。未指定 = 両方。
     $kindFilter = (string)($_GET['kind'] ?? '');
     $where = "(m.creator_user_id = ? OR EXISTS(SELECT 1 FROM meetup_participants p WHERE p.meetup_id=m.id AND p.user_id=?))";
     $args = [$uid, $uid];
@@ -205,8 +205,8 @@ function meetups_list(PDO $pdo, array $cfg): void {
          LIMIT 100");
     $st->execute($args);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
-    // v466 関係者アバターを同梱 (最大 5 名)。 ホームの進行中カードで 「誰の
-    // 待ち合わせ / 〆切か」 を顔で把握する用。
+    // v466 関係者アバターを同梱 (最大 5 名)。ホームの進行中カードで「誰の
+    // 待ち合わせ / 〆切か」を顔で把握する用。
     $ids = array_map(fn($r) => (int)$r['id'], $items);
     $parts = [];
     if ($ids) {
@@ -267,7 +267,7 @@ function meetups_create(PDO $pdo, array $cfg): void {
     if ($whenTs <= time() + 30) {
         throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . 'は今より先に', 400);
     }
-    // v450 〆切は 365 日まで、 待ち合わせは v648 で 180 日 (半年) までに拡張。
+    // v450 〆切は 365 日まで、待ち合わせは v648 で 180 日 (半年) までに拡張。
     $maxAhead = $isDeadline ? 365 * 86400 : 180 * 86400;
     $maxLabel = $isDeadline ? '365 日' : '180 日';
     if ($whenTs > time() + $maxAhead) {
@@ -296,7 +296,7 @@ function meetups_create(PDO $pdo, array $cfg): void {
         $stP = $pdo->prepare("INSERT INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)");
         foreach ($memberIds as $uid) $stP->execute([$mid, $uid]);
     });
-    // 通知文言を kind で切り替え。 〆切は月日 + 時刻まで載せた方が一目で分かる。
+    // 通知文言を kind で切り替え。〆切は月日 + 時刻まで載せた方が一目で分かる。
     $icon  = $isDeadline ? '📌' : '🤝';
     $label = $isDeadline ? '〆切' : '待ち合わせ';
     $whenShort = $isDeadline ? date('n/j H:i', strtotime($when)) : substr($when, 11, 5);

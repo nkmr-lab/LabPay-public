@@ -1,9 +1,9 @@
 <?php
 // v740 BingoFit (feedback #288) 衣類着回しビンゴ。
-//   5x5 盤、 日曜 00:00 (JST) 始まり週次サイクル (既存 bingo に合わせた)。
+//   5x5 盤、日曜 00:00 (JST) 始まり週次サイクル (既存 bingo に合わせた)。
 //   衣類画像は /api/uploads/image で先にアップ → 返ってきた URL を image_url で渡して POST /items。
 //   背景透過 PNG (image_url_transparent) は cron worker (scripts/bingofit_worker.php) が
-//   非同期で生成。 done になるまで closet UI は「🪄 切り抜き中」 バッジ表示。
+//   非同期で生成。 done になるまで closet UI は「🪄 切り抜き中」バッジ表示。
 //
 //   GET    /api/bingofit/items                    自分のクローゼット
 //   POST   /api/bingofit/items                    衣類追加 (image_url + label + category)
@@ -50,7 +50,7 @@ function route_bingofit(PDO $pdo, array $cfg, string $method, array $seg): void 
 
 // ── 衣類 ──────────────────────────────────────────────────────
 function bingofit_items_list(PDO $pdo, int $uid): void {
-    // v741 last_worn_at + days_since_worn を付ける (「最近着てない服」 表示用)。
+    // v741 last_worn_at + days_since_worn を付ける (「最近着てない服」表示用)。
     $st = $pdo->prepare("SELECT id, label, category, image_url, image_url_transparent, bg_status, bg_error,
                                 archived_at, created_at, last_worn_at,
                                 CASE WHEN last_worn_at IS NULL THEN NULL
@@ -284,7 +284,7 @@ function bingofit_cell_open(PDO $pdo, int $uid, int $idx, bool $open): void {
     if ($open) {
         $pdo->prepare("INSERT INTO bingofit_cell_opens (board_id, cell_index) VALUES (?,?) ON DUPLICATE KEY UPDATE opened_at=opened_at")
             ->execute([$bid, $idx]);
-        // v741 該当 item の last_worn_at を更新 (「最近着てない服」 サジェスト用)。
+        // v741 該当 item の last_worn_at を更新 (「最近着てない服」サジェスト用)。
         $cellsArr = json_decode($row['cells_json'], true) ?: [];
         $itemId = (int)($cellsArr[$idx] ?? 0);
         if ($itemId > 0) {

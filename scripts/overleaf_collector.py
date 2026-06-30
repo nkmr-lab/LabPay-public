@@ -19,7 +19,7 @@
 #      cookie 取得手順:
 #        - chrome で overleaf.com に login (中村アカウント)
 #        - DevTools > Application > Cookies > https://www.overleaf.com
-#        - 「overleaf_session」 の Value をコピー (s%3A... で始まる長い文字列)
+#        - 「overleaf_session」の Value をコピー (s%3A... で始まる長い文字列)
 #   3) 初回手動実行:
 #        sudo -u apache /var/www/labpay/.venv-overleaf/bin/python /var/www/labpay/scripts/overleaf_collector.py
 #   4) systemd timer (/etc/systemd/system/labpay-overleaf.service + .timer) で 1 時間おきに自動実行:
@@ -43,7 +43,7 @@
 #        sudo systemctl enable --now labpay-overleaf.timer
 #
 # 文字数カウント方式:
-#   - total_char_count: ファイルの文字数 (mb 単位、 改行込み)
+#   - total_char_count: ファイルの文字数 (mb 単位、改行込み)
 #   - total_char_body : % コメント行と \\command{} 引数を簡易除いた本文文字数
 #   - total_jp_char_count: 漢字 (一-鿿) + ひらがな (぀-ゟ) + カタカナ (゠-ヿ) のみ
 #   - total_word_count: 空白区切り word 数 (本文文字列から)
@@ -60,7 +60,7 @@ LABPAY_ROOT = '/var/www/labpay'
 CONFIG_PATH = os.path.join(LABPAY_ROOT, 'config', 'config.php')
 
 def parse_labpay_config(path):
-    """config.php を簡易 PHP パース (return [...] 形式限定)。 必要なキーだけ取り出す。"""
+    """config.php を簡易 PHP パース (return [...] 形式限定)。必要なキーだけ取り出す。"""
     # PHP を起動して JSON で吐かせるのが一番確実。
     import subprocess
     php_snippet = (
@@ -83,7 +83,7 @@ def count_chars(content: str) -> dict:
     no_comment = RE_COMMENT.sub('', content)
     no_cmd     = RE_TEX_CMD.sub('', no_comment)
     no_opt     = RE_BRACKETS.sub('', no_cmd)
-    # 中の '{' '}' は残すが、 視覚的ノイズが多いので落とす
+    # 中の '{' '}' は残すが、視覚的ノイズが多いので落とす
     body = no_opt.replace('{', '').replace('}', '').replace('$', '')
     body_chars = sum(1 for ch in body if not ch.isspace())
     jp_chars = len(RE_JP.findall(body))

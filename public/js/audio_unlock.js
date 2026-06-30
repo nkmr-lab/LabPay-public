@@ -1,16 +1,16 @@
 // v448 共有オーディオ unlock。
-// iOS Safari / 多くの Mobile ブラウザでは 「ユーザ操作 1 回後」 でないと
+// iOS Safari / 多くの Mobile ブラウザでは「ユーザ操作 1 回後」でないと
 //  - Web Audio API: AudioContext が suspended のまま (createOscillator + start
 //    しても音は出ない)
 //  - HTMLAudio: new Audio(url).play() が NotAllowedError
-// となる。 一度 unlock すればそのページに居る間は自動再生 (setInterval からの
+// となる。一度 unlock すればそのページに居る間は自動再生 (setInterval からの
 // 鳴動含む) が通る。
 //
 // ストラテジ:
-//  - installGlobalAudioUnlock() を起動時に呼ぶ。 次に起きた pointerdown /
-//    touchstart / keydown 1 回で unlockAudio() を走らせ、 リスナを外す。
+//  - installGlobalAudioUnlock() を起動時に呼ぶ。次に起きた pointerdown /
+//    touchstart / keydown 1 回で unlockAudio() を走らせ、リスナを外す。
 //  - これで送金 / 購入 / 開始 / 一時停止などどのボタンを押しても結果的に
-//    unlock 済み。 個別ハンドラに仕込む必要なし。
+//    unlock 済み。個別ハンドラに仕込む必要なし。
 //  - 明示的に呼びたい場面 (例: ▶ 開始直押しで即鳴らしたい) では
 //    unlockAudio() を click ハンドラ内で直接呼ぶのも OK。
 //
@@ -34,7 +34,7 @@ export function getAudioCtx() {
   return audioCtx;
 }
 
-// ユーザ操作文脈で呼ぶ unlock。 多重呼び出し OK (冪等)。
+// ユーザ操作文脈で呼ぶ unlock。多重呼び出し OK (冪等)。
 export function unlockAudio() {
   // 1) Web Audio: resume + 短い無音 osc をスケジュール
   const ctx = getAudioCtx();
@@ -66,7 +66,7 @@ export function unlockAudio() {
   }
 }
 
-// 起動時に 1 度だけ呼ぶ。 次の任意のユーザ操作で unlock + リスナ解除。
+// 起動時に 1 度だけ呼ぶ。次の任意のユーザ操作で unlock + リスナ解除。
 export function installGlobalAudioUnlock() {
   if (installed) return;
   installed = true;
@@ -83,16 +83,16 @@ export function installGlobalAudioUnlock() {
   window.addEventListener('keydown',     handler, true);
 }
 
-// ─── 合成音 (オシレータ生成、 アセット不要) ────────────────────────────
-// ルーレットの境界通過音 / 終了音と同じ。 「学会タイマーのベル」 や
-// 「タップフィードバック」 など短い合図にそのまま使える。
+// ─── 合成音 (オシレータ生成、アセット不要) ────────────────────────────
+// ルーレットの境界通過音 / 終了音と同じ。「学会タイマーのベル」や
+// 「タップフィードバック」など短い合図にそのまま使える。
 
 // v455 境界通過音 / 終了音は毎回 new AudioContext を作って鳴らす
-// (= ルーレットの playSpinSounds と同じパターン)。 共有 ctx を使う方式は
+// (= ルーレットの playSpinSounds と同じパターン)。共有 ctx を使う方式は
 // iOS Safari がバックグラウンド ⇄ フォアグラウンドで ctx を suspended に
 // 戻し、 setInterval からの resume() が効かず無音化する事故がある。
-// 新 ctx は 「ページにユーザ操作が 1 回でも起きていた状態」 を引き継いで
-// 直ちに running で立ち上がるので音が出る。 鳴り終わったら close する。
+// 新 ctx は「ページにユーザ操作が 1 回でも起きていた状態」を引き継いで
+// 直ちに running で立ち上がるので音が出る。鳴り終わったら close する。
 
 function makeCtx() {
   try {
@@ -103,7 +103,7 @@ function makeCtx() {
 }
 
 // 境界通過 (= 1 鈴 / 2 鈴 / 3 鈴 / ストップウォッチラップなど)。
-// 880 Hz / square / 50 ms。 短い 「カチッ」 〜 「キン」。
+// 880 Hz / square / 50 ms。短い「カチッ」 〜 「キン」。
 export function playBoundaryTick() {
   const ctx = makeCtx();
   if (!ctx) return;
@@ -122,7 +122,7 @@ export function playBoundaryTick() {
   setTimeout(() => { try { ctx.close(); } catch (_) {} }, 200);
 }
 
-// 終了 「ターン・ダ」 (= ~B5 + 完全5度上)。 2 音を 180ms ずらして鳴らす。
+// 終了「ターン・ダ」 (= ~B5 + 完全5度上)。 2 音を 180ms ずらして鳴らす。
 export function playEndDing() {
   const ctx = makeCtx();
   if (!ctx) return;

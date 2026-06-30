@@ -1,11 +1,11 @@
 <?php
-// /api/auctions — オークション MVP。 出品 + 入札 + lazy settle。 落札後の円移動は無し。
+// /api/auctions — オークション MVP。出品 + 入札 + lazy settle。落札後の円移動は無し。
 // Routes:
 //   GET    /api/auctions                  自分の関連 + 進行中の一覧
 //   POST   /api/auctions                  出品作成
 //   GET    /api/auctions/:id              詳細 (lazy settle 含む)
 //   POST   /api/auctions/:id/bids         入札
-//   PATCH  /api/auctions/:id/cancel       出品取消 (seller のみ、 入札 0 件か、 admin)
+//   PATCH  /api/auctions/:id/cancel       出品取消 (seller のみ、入札 0 件か、 admin)
 //   DELETE /api/auctions/:id              削除 (seller / admin)
 
 declare(strict_types=1);
@@ -25,8 +25,8 @@ function route_auctions(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no auctions route for $method $sub", 404);
 }
 
-// 締切過ぎでまだ settle されてないオークションをその場で確定。 高 traffic でない
-// 前提なので cron 不要。 落札者 + 出品者に通知。
+// 締切過ぎでまだ settle されてないオークションをその場で確定。高 traffic でない
+// 前提なので cron 不要。落札者 + 出品者に通知。
 function auctions_maybe_settle(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT id, seller_user_id, title, closes_at, settled_at, cancelled_at
                            FROM auctions WHERE id = ?");
@@ -204,7 +204,7 @@ function auctions_bid(PDO $pdo, array $cfg, int $id): void {
         $pdo->prepare("INSERT INTO auction_bids (auction_id, bidder_user_id, amount, created_at)
                        VALUES (?,?,?, NOW())")
             ->execute([$id, (int)$u['id'], $amount]);
-        // 通知: 1) 出品者 「新しい入札」  2) 直前 top bidder 「他に上を取られました」
+        // 通知: 1) 出品者「新しい入札」  2) 直前 top bidder 「他に上を取られました」
         try {
             Notifier::notify($pdo, $cfg, (int)$a['seller_user_id'], 'auction',
                 "💰 新しい入札: 「{$a['title']}」 {$amount}円", 'auction', $id);

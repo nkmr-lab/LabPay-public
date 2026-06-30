@@ -1,6 +1,6 @@
 <?php
-// v860 #445 制覇リスト。 ユーザが自由に 「中野区のパン屋」 のような制覇対象
-// リストを作って、 アイテムを追加 + 自分が達成したものをチェックしていく。
+// v860 #445 制覇リスト。ユーザが自由に「中野区のパン屋」のような制覇対象
+// リストを作って、アイテムを追加 + 自分が達成したものをチェックしていく。
 //
 //   GET    /api/conquest/lists                       一覧 (公開 + 自分)
 //   POST   /api/conquest/lists                       作成 { title, description?, visibility? }
@@ -19,7 +19,7 @@ function route_conquest(PDO $pdo, array $cfg, string $method, array $seg): void 
     $uid = (int)$u['id'];
     $sub = $seg[1] ?? '';
 
-    // v865 #447 json_error は exit せず単にレスポンスを書き出すだけなので、 呼んだあと
+    // v865 #447 json_error は exit せず単にレスポンスを書き出すだけなので、呼んだあと
     //   明示的に return しないと後続が動いて多重レスポンスや Undefined access が起きる。
     //   ルータも各ヘルパも json_error 直後に return を添える必要あり。
     if ($sub !== 'lists') {
@@ -170,7 +170,7 @@ function conquest_list_delete(PDO $pdo, int $uid, int $listId): void {
 }
 
 function conquest_item_create(PDO $pdo, int $uid, int $listId): void {
-    // 公開リストなら誰でも追加 OK、 非公開なら owner のみ
+    // 公開リストなら誰でも追加 OK、非公開なら owner のみ
     $vis = conquest_visibility_or_404($pdo, $listId);
     if ($vis === null) return;
     if ($vis !== 'public') {
@@ -222,7 +222,7 @@ function conquest_visit_toggle(PDO $pdo, int $uid, int $listId, int $itemId): vo
         $own = conquest_owner_of($pdo, $listId);
         if ($own !== $uid) { json_error('forbidden', '非公開リスト', 403); return; }
     }
-    // 既訪? なら削除、 でなければ追加
+    // 既訪? なら削除、でなければ追加
     $st = $pdo->prepare("SELECT 1 FROM conquest_visits WHERE item_id = ? AND user_id = ?");
     $st->execute([$itemId, $uid]);
     if ($st->fetchColumn()) {
@@ -239,7 +239,7 @@ function conquest_visit_toggle(PDO $pdo, int $uid, int $listId, int $itemId): vo
 
 // v865 #447 json_error が exit しない仕様のため、 list 不在時は null を返して
 //   caller 側で return させる形に変更。 caller が null チェックを忘れると
-//   レスポンスが重なるので、 呼び出し側は必ず if ($vis === null) return; を入れる。
+//   レスポンスが重なるので、呼び出し側は必ず if ($vis === null) return; を入れる。
 function conquest_visibility_or_404(PDO $pdo, int $listId): ?string {
     $st = $pdo->prepare("SELECT visibility FROM conquest_lists WHERE id = ?");
     $st->execute([$listId]);
@@ -254,7 +254,7 @@ function conquest_owner_of(PDO $pdo, int $listId): int {
     return (int)$st->fetchColumn();
 }
 
-// 所有者チェック。 不一致なら json_error を投げて false を返す → caller は必ず
+// 所有者チェック。不一致なら json_error を投げて false を返す → caller は必ず
 //   if (!conquest_require_owner(...)) return; の形で使う必要あり。
 function conquest_require_owner(PDO $pdo, int $uid, int $listId): bool {
     if (conquest_owner_of($pdo, $listId) !== $uid) {

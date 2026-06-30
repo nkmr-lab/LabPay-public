@@ -1,6 +1,6 @@
 <?php
 // /api/notices — 重要連絡 / 学会情報を同じテーブルでカテゴリ分けして管理。
-// 投稿: 全メンバー。 編集 / 削除: 投稿者 or admin。
+// 投稿: 全メンバー。編集 / 削除: 投稿者 or admin。
 
 declare(strict_types=1);
 

@@ -34,7 +34,7 @@ function loadD3() {
 // Module-scope reference to the active graph data + render handle so drag /
 // highlight handlers can mutate positions and re-render without re-fetching.
 let GRAPH = null;
-// v452 ライブシミュレーションハンドル。 ノードをふわふわさせる。
+// v452 ライブシミュレーションハンドル。ノードをふわふわさせる。
 // ティック毎に updateLivePositions() で SVG 既存要素の cx/cy/d だけ書き換え
 // (innerHTML 再構築を走らせない → ドラッグ中の svg ref が切れない)。
 let SIM = null;
@@ -151,7 +151,7 @@ async function loadAndRender(tab, layoutMode, weightMode) {
       document.getElementById('net-loading').textContent = 'データがまだありません';
       return;
     }
-    // v452 cooc は閾値をスライダで動的制御。 その他タブはしきい値=0 で全件。
+    // v452 cooc は閾値をスライダで動的制御。その他タブはしきい値=0 で全件。
     const directed = tab !== 'presence_cooc';
     let threshold = 0, suggested = 0, maxCount = 1;
     if (tab === 'presence_cooc') {
@@ -180,13 +180,13 @@ async function loadAndRender(tab, layoutMode, weightMode) {
 function applyThreshold() {
   if (!GRAPH) return;
   const { rawNodes, rawEdges, tab, layoutMode, weightMode, threshold } = GRAPH;
-  // cooc は count >= threshold のみ。 他タブは全件。
+  // cooc は count >= threshold のみ。他タブは全件。
   const edges = (tab === 'presence_cooc')
     ? rawEdges.filter(e => (e.count || 0) >= threshold)
     : rawEdges.slice();
   const nodeIds = new Set();
   edges.forEach(e => { nodeIds.add(e.from); nodeIds.add(e.to); });
-  // cooc は孤立ノードは落とす (グラフがすっきり)。 他タブは全員出す。
+  // cooc は孤立ノードは落とす (グラフがすっきり)。他タブは全員出す。
   const nodes = (tab === 'presence_cooc')
     ? rawNodes.filter(n => nodeIds.has(n.id))
     : rawNodes.slice();
@@ -267,7 +267,7 @@ function hideThresholdSlider() {
 }
 
 // v452 ライブシミュレーション: d3-force をそのまま動かして毎ティック
-// SVG の位置だけ更新。 ふわふわ動く + 閾値 / ドラッグで動的に再収束。
+// SVG の位置だけ更新。ふわふわ動く + 閾値 / ドラッグで動的に再収束。
 function d3Layout(nodes, edges) {
   const d3 = window.d3;
   if (!d3) return;
@@ -290,7 +290,7 @@ function d3Layout(nodes, edges) {
     .force('collide', d3.forceCollide().radius(d => d.r + 6).iterations(2))
     .force('x', d3.forceX(W / 2).strength(0.04))
     .force('y', d3.forceY(H / 2).strength(0.04))
-    // alphaDecay 標準 0.0228 → 0.012 で倍ぐらい長くふわふわ。 アイドルでも
+    // alphaDecay 標準 0.0228 → 0.012 で倍ぐらい長くふわふわ。アイドルでも
     // alphaMin に達したら d3 が自動で止まるので無限ループにはならない。
     .alphaDecay(0.012)
     .velocityDecay(0.5)
@@ -337,8 +337,8 @@ function computeEdgePath(a, b, e, directed) {
   return `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
 }
 
-// v452 ライブティックで位置だけ更新 (innerHTML 再構築しない)。 ノードの
-// <g> は transform="translate(x,y)" で動かす。 エッジの <path> は d 属性を差替。
+// v452 ライブティックで位置だけ更新 (innerHTML 再構築しない)。ノードの
+// <g> は transform="translate(x,y)" で動かす。エッジの <path> は d 属性を差替。
 function updateLivePositions() {
   if (!GRAPH) return;
   const { nodes, edges, directed } = GRAPH;
@@ -379,7 +379,7 @@ function drawSvg() {
   // so purple+green strands are visually distinguishable when they overlap a pair.
   // v452 cooc は在室共起 (グレー寄り)。
   const colorFor = (e) => directed === false ? '#5e6b7a' : (e.type === 'task' ? '#0e7c63' : '#4a106d');
-  // v452 edge に index 付与。 直径方向で 1 本描く。 directed=false (cooc) は矢印なし。
+  // v452 edge に index 付与。直径方向で 1 本描く。 directed=false (cooc) は矢印なし。
   const edgesHtml = edges.map((e, i) => {
     const a = nodes.find(n => n.id === e.from);
     const b = nodes.find(n => n.id === e.to);
@@ -483,8 +483,8 @@ function drawSvg() {
 }
 
 // Drag a node by pointer; tiny moves are treated as a click (selection).
-// v452 ライブ sim 中は fx/fy を操作。 シミュレーションがこのノードを
-// 「ピン留め」 状態として扱い、 周囲のノードがふわふわ反応する。
+// v452 ライブ sim 中は fx/fy を操作。シミュレーションがこのノードを
+// 「ピン留め」状態として扱い、周囲のノードがふわふわ反応する。
 function startDrag(ev, id, svg) {
   ev.preventDefault();
   const n = GRAPH.nodes.find(x => x.id === id);
@@ -533,7 +533,7 @@ function showNodeDetail(userId) {
   const card = document.getElementById('net-detail');
   card.hidden = false;
 
-  // v452 cooc は無向なので 1 セクション 「よく一緒にいる相手」 で完結。
+  // v452 cooc は無向なので 1 セクション「よく一緒にいる相手」で完結。
   if (tab === 'presence_cooc') {
     const involved = edges
       .filter(e => e.from === userId || e.to === userId)

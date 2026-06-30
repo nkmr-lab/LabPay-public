@@ -14,7 +14,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { groups_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { groups_create($pdo, $cfg); return; }
-    // v475 招待URL 経由の参加。 /api/groups/join/{token} POST。 ログイン要。
+    // v475 招待URL 経由の参加。 /api/groups/join/{token} POST。ログイン要。
     if ($sub === 'join' && $method === 'POST') {
         $token = (string)($seg[2] ?? '');
         group_invite_join($pdo, $cfg, $token);
@@ -33,7 +33,7 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'items' && isset($seg[3]) && $method === 'DELETE') { group_items_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'members' && $method === 'POST')              { group_members_add($pdo, $cfg, $id);  return; }
             if ($next === 'members' && isset($seg[3]) && $method === 'DELETE') { group_members_del($pdo, $cfg, $id, (int)$seg[3]); return; }
-            // v475 招待URL: 起案者がトークンを発行 / 失効、 誰でも (ログイン要) /api/groups/join/{token} で参加
+            // v475 招待URL: 起案者がトークンを発行 / 失効、誰でも (ログイン要) /api/groups/join/{token} で参加
             if ($next === 'invite' && $method === 'POST')   { group_invite_create($pdo, $cfg, $id); return; }
             if ($next === 'invite' && $method === 'DELETE') { group_invite_revoke($pdo, $cfg, $id); return; }
             if ($next === 'expenses' && $method === 'GET')              { group_expenses_list($pdo, $cfg, $id); return; }
@@ -73,10 +73,10 @@ function route_groups(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'chats'    && isset($seg[3]) && $method === 'DELETE') { group_chats_del($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && $method === 'GET')              { group_schedule_list($pdo, $cfg, $id);   return; }
             if ($next === 'day_memos' && $method === 'PATCH' && isset($seg[3])) { group_day_memo_upsert($pdo, $cfg, $id, (string)$seg[3]); return; }
-            // v466 「/schedule POST」 (= 追加) は seg[3] がない場合のみ。 さもないと
-            // 後段の /schedule/{id}/heart POST がここに先取りされて 「title 1..200」 エラーになる。
+            // v466 「/schedule POST」 (= 追加) は seg[3] がない場合のみ。さもないと
+            // 後段の /schedule/{id}/heart POST がここに先取りされて「title 1..200」エラーになる。
             if ($next === 'schedule' && $method === 'POST' && !isset($seg[3])) { group_schedule_add($pdo, $cfg, $id); return; }
-            // 「/schedule/{id}/move」 が generic PATCH /schedule/{id} に吸い込まれないよう
+            // 「/schedule/{id}/move」が generic PATCH /schedule/{id} に吸い込まれないよう
             // より具体的な move ルートを先に判定する。
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'move' && $method === 'PATCH') { group_schedule_move($pdo, $cfg, $id, (int)$seg[3]); return; }
             if ($next === 'schedule' && isset($seg[3]) && ($seg[4] ?? '') === 'relocate' && $method === 'PATCH') { group_schedule_relocate($pdo, $cfg, $id, (int)$seg[3]); return; }
@@ -137,7 +137,7 @@ function group_assert_creator_or_admin(PDO $pdo, int $groupId, array $u): void {
 }
 
 // v340 アクションボタンの有効 ID リストを正規化 → JSON 文字列で返す (DB 保存用)。
-// 許可 ID 以外は捨て、 重複も除去。 PHP 8.3 では static 宣言は関数スコープで OK。
+// 許可 ID 以外は捨て、重複も除去。 PHP 8.3 では static 宣言は関数スコープで OK。
 function normalize_feat_actions(array $ids): string {
     static $ALLOWED = ['receipt','expense','roulette','nomikai','polls','rollcalls','timers','meetups','translate'];
     $clean = array_values(array_unique(array_filter(array_map('strval', $ids),
@@ -234,13 +234,13 @@ function groups_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'one or more member_ids not found', 400);
     }
 
-    // オプション機能: スケジュール / 宿泊地 / 航空券。 基本は OFF、 学会・出張用に ON。
+    // オプション機能: スケジュール / 宿泊地 / 航空券。基本は OFF、学会・出張用に ON。
     $featSched   = !empty($body['feat_schedule']) ? 1 : 0;
     $featLodging = !empty($body['feat_lodging'])  ? 1 : 0;
     $featFlight  = !empty($body['feat_flight'])   ? 1 : 0;
     // ワリカはデフォ ON (連幹事の主目的)、 OFF にできるようトグル付与。
     $featWari    = array_key_exists('feat_wari', $body) ? (!empty($body['feat_wari']) ? 1 : 0) : 1;
-    // アクションボタン群 (8 種)。 NULL なら 「全 ON」 (後方互換)。
+    // アクションボタン群 (8 種)。 NULL なら「全 ON」 (後方互換)。
     $featActionsJson = null;
     if (array_key_exists('feat_actions', $body) && is_array($body['feat_actions'])) {
         $featActionsJson = normalize_feat_actions($body['feat_actions']);
@@ -300,7 +300,7 @@ function groups_detail(PDO $pdo, array $cfg, int $id): void {
     $g['items'] = $stI->fetchAll(PDO::FETCH_ASSOC);
 
     // feat_actions は JSON 文字列で保存しているのでデコードして返す。 NULL なら
-    // 「全 ON」 のシグナルとして null を返し、 フロントで判断させる。
+    // 「全 ON」のシグナルとして null を返し、フロントで判断させる。
     if (array_key_exists('feat_actions', $g)) {
         $g['feat_actions'] = $g['feat_actions'] === null
             ? null
@@ -409,9 +409,9 @@ function groups_close(PDO $pdo, array $cfg, int $id): void {
 }
 
 // 完全削除: 閉鎖済グループの全データ (items / members / lodgings / flights /
-// schedules / receipts / expenses / chats) を一括削除。 ほとんどの子テーブルは
+// schedules / receipts / expenses / chats) を一括削除。ほとんどの子テーブルは
 // FK ON DELETE CASCADE が効くので親 1 行 DELETE で済むが、 CASCADE 未指定の
-// テーブル (もしあれば) は明示削除する。 ここでは adhoc_groups の DELETE 一発
+// テーブル (もしあれば) は明示削除する。ここでは adhoc_groups の DELETE 一発
 // で済ませる前提 (schema 上全子は CASCADE 設定されている想定)。
 function groups_hard_delete(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -420,13 +420,13 @@ function groups_hard_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'group not found', 404);
-    // 「いきなり完全削除」 を防ぐワンクッション。 admin であっても閉鎖済のみに制限。
+    // 「いきなり完全削除」を防ぐワンクッション。 admin であっても閉鎖済のみに制限。
     // どうしても緊急で消したい場合はサーバ側で SQL を叩くか一旦閉鎖してから削除。
     if ($row['closed_at'] === null) {
         throw new ApiException('bad_request', '先にグループを閉鎖してください', 400);
     }
     // CASCADE が無いテーブルが将来増えた時に備えて明示 DELETE を並列で走らせる
-    // (失敗しても続行)。 ただし大半は CASCADE 任せ。
+    // (失敗しても続行)。ただし大半は CASCADE 任せ。
     try { $pdo->prepare("DELETE FROM adhoc_group_chat WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
     try { $pdo->prepare("DELETE FROM adhoc_group_items WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
     try { $pdo->prepare("DELETE FROM adhoc_group_members WHERE group_id=?")->execute([$id]); } catch (Throwable $_) {}
@@ -492,12 +492,12 @@ function group_items_del(PDO $pdo, array $cfg, int $groupId, int $itemId): void 
 // ─── MEMBERS ─────────────────────────────────────────────────
 
 // ─── RECEIPTS (レシートストック) ─────────────────────────────
-// 撮影だけして後で 「これをワリカに使う」 二段運用のためのストック。
+// 撮影だけして後で「これをワリカに使う」二段運用のためのストック。
 // taken_at / lat / lng はクライアントから送信、 GPS は許可された時だけ。
 
 // Receipt = is_draft=1 の adhoc_group_expenses 行として一元管理。撮影時は最低限の
 // メタ (image_url, taken_at, lat, lng) だけ入れて、 amount/payer/participants/memo
-// は空状態。 後で /expenses/{id} の PATCH で精緻化すると、 amount > 0 になった
+// は空状態。後で /expenses/{id} の PATCH で精緻化すると、 amount > 0 になった
 // 時点で backend が is_draft=0 に自動 flip 。
 function group_receipts_list(PDO $pdo, array $cfg, int $groupId): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -555,7 +555,7 @@ function group_receipts_add(PDO $pdo, array $cfg, int $groupId): void {
 function group_receipts_delete(PDO $pdo, array $cfg, int $groupId, int $rid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $groupId, (int)$u['id']);
-    // 安全側: draft (is_draft=1) のみ削除可。 通常支出は /expenses/{id} DELETE で。
+    // 安全側: draft (is_draft=1) のみ削除可。通常支出は /expenses/{id} DELETE で。
     $pdo->prepare("DELETE FROM adhoc_group_expenses
         WHERE id=? AND group_id=? AND is_draft=1")->execute([$rid, $groupId]);
     json_response(['ok' => true]);
@@ -588,8 +588,8 @@ function group_members_del(PDO $pdo, array $cfg, int $groupId, int $uid): void {
     json_response(['ok' => true]);
 }
 
-// v475 招待URL: 起案者/admin がトークンを発行。 既存トークンがあれば再利用、
-// なければランダム 32 字を生成。 期限 (days) は任意、 デフォルト 30 日。
+// v475 招待URL: 起案者/admin がトークンを発行。既存トークンがあれば再利用、
+// なければランダム 32 字を生成。期限 (days) は任意、デフォルト 30 日。
 function group_invite_create(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_creator_or_admin($pdo, $id, $u);
@@ -611,7 +611,7 @@ function group_invite_create(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'token' => $token, 'expires_at' => $expires]);
 }
 
-// v475 招待URL 失効。 起案者/admin。
+// v475 招待URL 失効。起案者/admin。
 function group_invite_revoke(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_creator_or_admin($pdo, $id, $u);
@@ -620,7 +620,7 @@ function group_invite_revoke(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v475 招待URL 経由で参加。 token はランダム文字列。 期限切れ / 不在で 410/404。
+// v475 招待URL 経由で参加。 token はランダム文字列。期限切れ / 不在で 410/404。
 function group_invite_join(PDO $pdo, array $cfg, string $token): void {
     $u = Auth::requireUser($pdo, $cfg);
     if ($token === '') throw new ApiException('bad_request', 'token 必要', 400);
@@ -648,7 +648,7 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
 
-    // draft (is_draft=1) は 「保存済みレシート」 で別管理。ワリカ集計には含めない。
+    // draft (is_draft=1) は「保存済みレシート」で別管理。ワリカ集計には含めない。
     // payer_user_id は draft で NULL になり得るので INNER JOIN ではなく LEFT JOIN。
     $st = $pdo->prepare("
         SELECT e.*, up.display_name AS payer_name, up.avatar_url AS payer_avatar_url
@@ -671,7 +671,7 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
         // participants_json は 2 形式を受ける:
         //   旧 (legacy):  [1, 2, 3]                              全員等分
         //   新 (rich):    [{"u":1,"fixed":5000},{"u":2},{"u":3}] 一部固定 + 残り等分
-        // 内部で 「ids + fixed map」 に normalize して扱う。
+        // 内部で「ids + fixed map」に normalize して扱う。
         $parts = json_decode((string)$r['participants_json'], true);
         $ids = []; $fixed = []; // user_id => int
         if (is_array($parts)) {
@@ -721,7 +721,7 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     // 全部の関与者 (払ったか使ったかどちらかでも) を拾う。
     // 注: array_unique は元の key を保持するので [0=>A, 2=>B] のように index が
     // 飛ぶことがあり、その配列をそのまま $st->execute() に渡すと PDO が positional
-    // binding を array key で解釈して 「Invalid parameter number」 になる。
+    // binding を array key で解釈して「Invalid parameter number」になる。
     // array_values で 0,1,2,... に詰め直してから渡す。
     $allUids = array_values(array_unique(array_merge(array_keys($paid), array_keys($spent))));
     $byUser = [];
@@ -752,8 +752,8 @@ function group_expenses_list(PDO $pdo, array $cfg, int $id): void {
     $settlements = compute_settlements($balances);
 
     // このグループから「請求一括生成」で作成された money_request 群を
-    // 集計し、 (creditor, debtor) ペア -> 支払い状況を返す。 フロントは
-    // 推奨送金プラン行にこの情報を上乗せして 「支払い済」 グレーアウトを表示。
+    // 集計し、 (creditor, debtor) ペア -> 支払い状況を返す。フロントは
+    // 推奨送金プラン行にこの情報を上乗せして「支払い済」グレーアウトを表示。
     $stC = $pdo->prepare("
         SELECT mr.id AS request_id,
                mr.creator_user_id AS to_user_id,
@@ -865,7 +865,7 @@ function group_expenses_add(PDO $pdo, array $cfg, int $id): void {
     // participants は 2 形式どちらも受ける:
     //   participant_ids: [1, 2, 3]                                (旧 / 全員等分)
     //   participants:    [{user_id:1, fixed:5000}, {user_id:2}]   (新 / 固定額あり)
-    // どちらも省略すれば 「全員」 が対象 (= 全員等分)。
+    // どちらも省略すれば「全員」が対象 (= 全員等分)。
     $participants = $allMembers;
     if (isset($body['participants']) && is_array($body['participants'])) {
         $rich = []; $seen = [];
@@ -954,7 +954,7 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
     if (array_key_exists('payer_user_id', $body)) {
         $pidRaw = $body['payer_user_id'];
         if ($pidRaw === null || $pidRaw === '') {
-            // draft が 「立替人未確定」 状態を許すため NULL も受ける。
+            // draft が「立替人未確定」状態を許すため NULL も受ける。
             $sets[] = 'payer_user_id = NULL';
         } else {
             $pid = (int)$pidRaw;
@@ -970,7 +970,7 @@ function group_expenses_patch(PDO $pdo, array $cfg, int $groupId, int $eid): voi
         if (!is_numeric($amountRaw)) {
             throw new ApiException('bad_request', 'amount must be numeric', 400);
         }
-        // draft は 0 を許容 (未確定状態を維持できる)。 通常支出は > 0 必須。
+        // draft は 0 を許容 (未確定状態を維持できる)。通常支出は > 0 必須。
         if (!$rowIsDraft && (float)$amountRaw <= 0) {
             throw new ApiException('bad_request', 'amount must be positive', 400);
         }
@@ -1205,7 +1205,7 @@ function group_settle_notify(PDO $pdo, array $cfg, int $id): void {
 
 // ─── スケジュール / 行程 ──────────────────────────────────────────────
 // グループ (主に学会 / 旅行) の日程表。 schedule_start_date 〜 schedule_end_date
-// の範囲内の各日にアイテムを並べる。 並び順は start_time → sort_order → id。
+// の範囲内の各日にアイテムを並べる。並び順は start_time → sort_order → id。
 
 const GROUP_SCHEDULE_KINDS = [
     'flight','train','bus','taxi','car','walk','move',
@@ -1297,8 +1297,8 @@ function group_lodgings_del(PDO $pdo, array $cfg, int $id, int $lid): void {
     json_response(['ok' => true]);
 }
 
-// 宿泊地 → スケジュール展開: 「各日 1 行」 で N 行作成 (= mid 日でも独立して
-// ↑↓ 並び替えできるように)。 全行は link_pair_id (= lod_<lid>_<rand>) で
+// 宿泊地 → スケジュール展開: 「各日 1 行」で N 行作成 (= mid 日でも独立して
+// ↑↓ 並び替えできるように)。全行は link_pair_id (= lod_<lid>_<rand>) で
 // 同じグループに紐づく → 帯が縦に通る。
 // 既存の同じ宿泊地由来の行 (link_pair_id LIKE 'lod_<lid>_%') は事前に削除 = 再 sync が冪等。
 function group_lodgings_sync(PDO $pdo, array $cfg, int $id, int $lid): void {
@@ -1436,7 +1436,7 @@ function group_flights_del(PDO $pdo, array $cfg, int $id, int $fid): void {
 
 // 航空券 → スケジュール展開: 出発 + 到着の 2 アイテムを 1 ペアで作成。
 // IATA 3 文字を緯度経度 + 正式名に解決。 public/data/airports.json から読む
-// (process 毎に 1 回読んでキャッシュ)。 見つからなければ null。
+// (process 毎に 1 回読んでキャッシュ)。見つからなければ null。
 function iata_lookup(string $code): ?array {
     static $cache = null;
     if ($cache === null) {
@@ -1499,7 +1499,7 @@ function group_flights_sync(PDO $pdo, array $cfg, int $id, int $fid): void {
     json_response(['ok' => true, 'created_ids' => $created, 'pair_id' => $pairId]);
 }
 
-// ──────── 航空券添付 (e-ticket PDF / QR / スクショ等、 持ち主タグ付き) ────────
+// ──────── 航空券添付 (e-ticket PDF / QR / スクショ等、持ち主タグ付き) ────────
 const FLIGHT_ATT_MAX_BYTES = 16 * 1024 * 1024;
 const FLIGHT_ATT_MIME = [
     'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
@@ -1542,7 +1542,7 @@ function group_flight_att_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
     if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
         throw new ApiException('no_file', 'multipart field "file" 必要', 400);
     }
-    // v459 owner_user_id は省略可 (NULL = 未割当)。 後で PATCH で紐付け。
+    // v459 owner_user_id は省略可 (NULL = 未割当)。後で PATCH で紐付け。
     $ownerRaw = $_POST['owner_user_id'] ?? '';
     $ownerId = null;
     if ($ownerRaw !== '' && $ownerRaw !== '0' && $ownerRaw !== null) {
@@ -1568,7 +1568,7 @@ function group_flight_att_add(PDO $pdo, array $cfg, int $gid, int $fid): void {
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 
-// v459 owner 後付け / 変更。 アップ済み添付の owner_user_id を更新。 NULL も許可 (= 未割当に戻す)。
+// v459 owner 後付け / 変更。アップ済み添付の owner_user_id を更新。 NULL も許可 (= 未割当に戻す)。
 function group_flight_att_set_owner(PDO $pdo, array $cfg, int $gid, int $fid, int $aid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $gid, (int)$u['id']);
@@ -1646,7 +1646,7 @@ function group_flight_eticket_add(PDO $pdo, array $cfg, int $gid, int $fid): voi
     $ownerId = (int)($body['owner_user_id'] ?? 0);
     if ($ownerId <= 0) throw new ApiException('bad_request', 'owner_user_id 必須', 400);
     group_assert_member($pdo, $gid, $ownerId);
-    // v357: 航空会社配布の QR 画像 URL が主、 旧 qr_payload (生成元テキスト) は互換用。
+    // v357: 航空会社配布の QR 画像 URL が主、旧 qr_payload (生成元テキスト) は互換用。
     $qrImage = trim((string)($body['qr_image_url'] ?? ''));
     $qrThumb = trim((string)($body['qr_thumb_url'] ?? ''));
     $qrText  = trim((string)($body['qr_payload'] ?? ''));
@@ -1780,7 +1780,7 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
                   s.sort_order,
                   s.id");
     // v402 v398 ORDER に再復帰 (start_time 優先 / sort_order はタイブレーク)。
-    // v399 で sort_order 主導に切り替えたが、 時刻付きアイテムが ↑↓ や DnD で
+    // v399 で sort_order 主導に切り替えたが、時刻付きアイテムが ↑↓ や DnD で
     // 「視覚位置が動かない」 (フロント側も byDay 内で start_time 主導で再ソート
     // しているため) という問題が出たので戻す。 ↑↓ は start_time も swap する
     // 旧仕様に戻し、 stock (時刻なし) アイテムは sort_order のみで並ぶため
@@ -1801,7 +1801,7 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
         foreach ($items as &$it) $it['attachment_count'] = $counts[(int)$it['id']] ?? 0;
         unset($it);
 
-        // v428 ❤️ 行きたい場所 / 予定への 「行った / 良いね」 件数 + 自分がマーク済か
+        // v428 ❤️ 行きたい場所 / 予定への「行った / 良いね」件数 + 自分がマーク済か
         $stH = $pdo->prepare("SELECT item_id, COUNT(*) AS n,
                                      SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS mine
                                 FROM adhoc_group_schedule_item_hearts
@@ -1837,7 +1837,7 @@ function group_schedule_list(PDO $pdo, array $cfg, int $id): void {
     ]);
 }
 
-// v403 1 日メモ upsert。 空文字 / null で行を消す。
+// v403 1 日メモ upsert。空文字 / null で行を消す。
 function group_day_memo_upsert(PDO $pdo, array $cfg, int $gid, string $date): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $gid, (int)$u['id']);
@@ -1860,7 +1860,7 @@ function group_day_memo_upsert(PDO $pdo, array $cfg, int $gid, string $date): vo
 }
 
 // ----- 予定アイテム添付ファイル -----
-// 画像/PDF/オフィス文書/プレーンテキストを許可。 サイズ上限 16MB。
+// 画像/PDF/オフィス文書/プレーンテキストを許可。サイズ上限 16MB。
 const SCHED_ATT_MAX_BYTES = 16 * 1024 * 1024;
 const SCHED_ATT_MIME = [
     'image/jpeg' => 'jpg',
@@ -1964,7 +1964,7 @@ function group_sched_att_del(PDO $pdo, array $cfg, int $id, int $itemId, int $at
 }
 
 // ────────── v810 #400 グループファイル / 画像共有 ──────────
-// schedule / 航空券など既存エンティティに紐付かない、 グループ全体のフリー共有領域。
+// schedule / 航空券など既存エンティティに紐付かない、グループ全体のフリー共有領域。
 const GROUP_FILE_MAX_BYTES = 16 * 1024 * 1024; // 16MB
 const GROUP_FILE_MIME = [
     'image/jpeg' => 'jpg',
@@ -2044,7 +2044,7 @@ function group_files_add(PDO $pdo, array $cfg, int $id): void {
         $mst->execute([$id, (int)$u['id']]);
         $icon = $isImage ? '🖼' : '📎';
         $noteSnip = $note !== '' ? " 「" . mb_substr($note, 0, 40) . "」" : '';
-        $msg = "{$icon} 「{$gtitle}」 に {$u['display_name']} が " . ($isImage ? '画像' : 'ファイル') . " を追加しました{$noteSnip}";
+        $msg = "{$icon} 「{$gtitle}」に {$u['display_name']} が " . ($isImage ? '画像' : 'ファイル') . " を追加しました{$noteSnip}";
         foreach ($mst as $row) {
             Notifier::notify($pdo, $cfg, (int)$row['user_id'], 'group_post',
                 $msg, 'adhoc_group', $id);
@@ -2097,7 +2097,7 @@ function group_schedule_add(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $id, (int)$u['id']);
     $body = read_json_body();
-    // day_date は NULL OK (= ストック / 行きたい場所候補)。 値あるなら YYYY-MM-DD。
+    // day_date は NULL OK (= ストック / 行きたい場所候補)。値あるなら YYYY-MM-DD。
     $day = isset($body['day_date']) && $body['day_date'] !== '' ? (string)$body['day_date'] : null;
     if ($day !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
         throw new ApiException('bad_request', 'day_date は YYYY-MM-DD', 400);
@@ -2328,10 +2328,10 @@ function group_schedule_del(PDO $pdo, array $cfg, int $id, int $itemId): void {
 // PATCH /api/groups/{id}/schedule/{itemId}/move  body: {dir: 'up'|'down'}
 // 同日の隣の項目と sort_order を swap (時刻が同じ枠の中で並び替え)。
 // 一覧 GET 側のソートが (start_time IS NULL), start_time, sort_order の順なので、
-// 「sort_order だけ swap」 では始時刻の違う 2 件は視覚順が変わらない。
-// → 隣接アイテムを 「視覚順」 (= 同じ ORDER BY) で取得した上で、
+// 「sort_order だけ swap」では始時刻の違う 2 件は視覚順が変わらない。
+// → 隣接アイテムを「視覚順」 (= 同じ ORDER BY) で取得した上で、
 //    start_time / sort_order をまとめて swap する。 = ↑↓ で時刻と並び順が
-//    ペアでひっくり返る。 「14:00 を 9:00 の上に」 = 「14:00 だったやつが 9:00 になる」。
+//    ペアでひっくり返る。「14:00 を 9:00 の上に」 = 「14:00 だったやつが 9:00 になる」。
 // v362 cross-day DnD: 別の日 (or ストック) に項目を引っ越し + 目的位置に挿入。
 // body: { day_date: 'YYYY-MM-DD' | null, before_id?: int }
 //   * before_id 指定 → その項目の直前に挿入 (= sort_order をそこに割り込む)。
@@ -2376,7 +2376,7 @@ function group_schedule_relocate(PDO $pdo, array $cfg, int $id, int $itemId): vo
                     ->execute([$id, $dayDate, $targetSort, $itemId]);
             }
             // 自分を day_date + sort_order に。 start_time はそのまま保持 (引っ越し先で
-            // 時刻指定を尊重)。 ただし並び順は sort_order が支配する場面で効く。
+            // 時刻指定を尊重)。ただし並び順は sort_order が支配する場面で効く。
             $pdo->prepare("UPDATE adhoc_group_schedule_items SET day_date=?, sort_order=? WHERE id=?")
                 ->execute([$dayDate, $targetSort, $itemId]);
         });
@@ -2412,10 +2412,10 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     $st->execute([$itemId, $id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'item not found', 404);
-    // 同じ day_date 内で 「視覚順」 に並べ、 自分の隣を取る。
-    // start_time NULL は最後扱い、 次点 sort_order で安定化。 day_date が NULL の
+    // 同じ day_date 内で「視覚順」に並べ、自分の隣を取る。
+    // start_time NULL は最後扱い、次点 sort_order で安定化。 day_date が NULL の
     // ストック内移動も同様に動く。
-    // v402 GET ORDER (start_time 主導) に揃える。 同日内を視覚順に列挙し、
+    // v402 GET ORDER (start_time 主導) に揃える。同日内を視覚順に列挙し、
     // 隣の項目を取って、 start_time と sort_order をまとめて swap。
     if ($row['day_date'] === null) {
         $stAll = $pdo->prepare("SELECT id, start_time, sort_order
@@ -2440,7 +2440,7 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     }
     $nei = $list[$neiIdx];
     // start_time と sort_order をペアで swap (v398 仕様)。
-    // 時刻つきアイテムなら 「14:00 を ↑ → 9:00 と入れ替わる」 ように時刻も動く。
+    // 時刻つきアイテムなら「14:00 を ↑ → 9:00 と入れ替わる」ように時刻も動く。
     // 時刻なしは両方とも NULL なので sort_order だけ実質 swap される。
     db_tx($pdo, function () use ($pdo, $row, $nei, $itemId) {
         $pdo->prepare("UPDATE adhoc_group_schedule_items SET start_time=?, sort_order=? WHERE id=?")
@@ -2451,7 +2451,7 @@ function group_schedule_move(PDO $pdo, array $cfg, int $id, int $itemId): void {
     json_response(['ok' => true, 'moved' => true]);
 }
 
-// v428 ❤️ 「行った / 良いね」 トグル。 メンバー全員 ON/OFF 可能 (各人 1 個)。
+// v428 ❤️ 「行った / 良いね」トグル。メンバー全員 ON/OFF 可能 (各人 1 個)。
 function group_schedule_heart_toggle(PDO $pdo, array $cfg, int $gid, int $iid): void {
     $u = Auth::requireUser($pdo, $cfg);
     group_assert_member($pdo, $gid, (int)$u['id']);
@@ -2459,7 +2459,7 @@ function group_schedule_heart_toggle(PDO $pdo, array $cfg, int $gid, int $iid): 
     $st = $pdo->prepare("SELECT 1 FROM adhoc_group_schedule_items WHERE id=? AND group_id=?");
     $st->execute([$iid, $gid]);
     if (!$st->fetchColumn()) throw new ApiException('not_found', 'item not found', 404);
-    // 既存ハートあれば削除、 無ければ INSERT
+    // 既存ハートあれば削除、無ければ INSERT
     $st = $pdo->prepare("SELECT 1 FROM adhoc_group_schedule_item_hearts WHERE item_id=? AND user_id=?");
     $st->execute([$iid, (int)$u['id']]);
     if ($st->fetchColumn()) {
@@ -2510,7 +2510,7 @@ function group_locations_list(PDO $pdo, array $cfg, int $gid): void {
     $st->execute([$gid]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     // v486 #81 旅行中 (端末 TZ ≠ JST) でクライアントの Date.parse がローカル TZ
-    //   解釈 → 「-3500 秒前」 等の表示バグ。 サーバで経過秒を計算して返す。
+    //   解釈 → 「-3500 秒前」等の表示バグ。サーバで経過秒を計算して返す。
     $nowTs = time();
     foreach ($rows as &$r) {
         $r['user_id']    = (int)$r['user_id'];

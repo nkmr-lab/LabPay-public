@@ -1,5 +1,5 @@
-// v589 散歩モード。 地図全画面 + Wake Lock + GPS 5 秒ポーリング → 軌跡記録。
-//   特殊スワイプ (画面横断 2 本指 → ↓↑↓) で解除。 終了で軌跡表示 + SNS 投稿可能。
+// v589 散歩モード。地図全画面 + Wake Lock + GPS 5 秒ポーリング → 軌跡記録。
+//   特殊スワイプ (画面横断 2 本指 → ↓↑↓) で解除。終了で軌跡表示 + SNS 投稿可能。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -234,7 +234,7 @@ export async function renderWalkSessions() {
     const d = await get('/api/walk/sessions');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('ws-list').innerHTML = '<div class="hint">まだ散歩記録がありません。 「散歩モード」 で開始しましょう。</div>';
+      document.getElementById('ws-list').innerHTML = '<div class="hint">まだ散歩記録がありません。「散歩モード」で開始しましょう。</div>';
       return;
     }
     document.getElementById('ws-list').innerHTML = items.map(s => `
@@ -350,8 +350,8 @@ function totalMeters(pts) {
   return m;
 }
 
-// 軌跡を正方形 PNG (1024x1024) にレンダリング (タイルなし、 シンプルな線画)。
-//   タイル画像は CORS 制約で直接 canvas に描けないため、 線画のみ。
+// 軌跡を正方形 PNG (1024x1024) にレンダリング (タイルなし、シンプルな線画)。
+//   タイル画像は CORS 制約で直接 canvas に描けないため、線画のみ。
 async function renderTrailImage(pts) {
   if (!pts.length) throw new Error('点なし');
   const W = 1024, H = 1024;

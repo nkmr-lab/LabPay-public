@@ -8,7 +8,7 @@ class Notifier {
     private const EMAILABLE_TYPES = ['sale', 'transfer_received', 'task_approved', 'admin_notice'];
 
     // v656 ref_type + ref_id → アプリ内 URL fragment。 Slack DM 末尾に
-    // 「→ https://pay.nkmr.io/#/...」 を付けるため。 未対応 type は null。
+    // 「→ https://pay.nkmr.io/#/...」を付けるため。未対応 type は null。
     public static function urlFor(?string $refType, ?int $refId): ?string {
         if (!$refType || !$refId) return null;
         return match ($refType) {
@@ -119,8 +119,8 @@ class Notifier {
         return $nid;
     }
 
-    // notifications 行だけ作る (Slack DM / メールを送らない)。 督促のように
-    // 「LabPay の通知タブにだけ出したい」 系の用途で使う。
+    // notifications 行だけ作る (Slack DM / メールを送らない)。督促のように
+    // 「LabPay の通知タブにだけ出したい」系の用途で使う。
     public static function notifyInApp(
         PDO $pdo,
         int $userId,

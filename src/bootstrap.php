@@ -342,15 +342,15 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
         'ext'         => $ext,
         'size'        => (int)$f['size'],
         'path'        => '/' . $sub . '/' . $stored,  // relative URL, suitable for public href
-        'thumb_path'  => $thumbPath,                  // 画像のみ。 失敗時は null
+        'thumb_path'  => $thumbPath,                  // 画像のみ。失敗時は null
     ];
 }
 
-// 既存画像 URL からサムネ URL を推定するヘルパ。 サムネが実在すればそのURL、
+// 既存画像 URL からサムネ URL を推定するヘルパ。サムネが実在すればそのURL、
 // 存在しなければオリジナル URL を返す。 v494 サブディレクトリ
 // (/uploads/products/<hash>.jpg) と絶対 URL (https://.../uploads/...) の両方に対応。
 function thumb_url_for(string $imageUrl): string {
-    // 絶対 URL ならパス成分だけ取り出す。 同一ホスト前提。
+    // 絶対 URL ならパス成分だけ取り出す。同一ホスト前提。
     $path = $imageUrl;
     if (preg_match('#^https?://[^/]+(/.*)$#', $imageUrl, $m)) {
         $path = $m[1];
@@ -369,8 +369,8 @@ function thumb_url_for(string $imageUrl): string {
 // to pull conversation history. Returns the decoded JSON array. Throws on
 // transport failure or {ok:false}; callers may catch and report.
 // Bot Token lives in $cfg['slack']['bot_token'] (production config only).
-// v794 Slack Web API GET。 第 4 引数で token override (= 別アプリの bot token を使いたい
-//   場合用、 例えば Scrapbox Reader の bot token)。 省略時は既定の slack.bot_token。
+// v794 Slack Web API GET。第 4 引数で token override (= 別アプリの bot token を使いたい
+//   場合用、例えば Scrapbox Reader の bot token)。省略時は既定の slack.bot_token。
 function slack_api_get(array $cfg, string $endpoint, array $params = [], ?string $tokenOverride = null): array {
     $tok = $tokenOverride !== null && $tokenOverride !== ''
         ? $tokenOverride
@@ -475,9 +475,9 @@ function notify_admins(PDO $pdo, array $cfg, string $type, string $body,
 // ---------------- Slack notifications (incoming webhook) ----------------
 // Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
 // and swallows all errors — Slack being down must never break a listing/scan/etc.
-// v456 link 引数を追加。 渡すと本文末尾に LabPay の該当 URL を追記する
-// (Slack 上で 「どこに行けば良いか」 が一目で分かるように)。
-//   $link はフラグメント (例: "#/feedback-admin") か、 もしくは完全URL。
+// v456 link 引数を追加。渡すと本文末尾に LabPay の該当 URL を追記する
+// (Slack 上で「どこに行けば良いか」が一目で分かるように)。
+//   $link はフラグメント (例: "#/feedback-admin") か、もしくは完全URL。
 function slack_notify(array $cfg, string $text, ?array $blocks = null, ?string $link = null): void {
     $url = (string)($cfg['slack']['webhook_url'] ?? '');
     if ($url === '') return;

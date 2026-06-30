@@ -2,15 +2,15 @@
 // /api/bait — アルバイト申請依頼 (#244)。
 // 依頼 (bait_requests) と各 worker への assignment (bait_assignments) を管理。
 //
-// 依頼者: 時間 (小数点) + 対象者 + 用途で依頼を作成、 進捗確認 + 未処理者催促。
-// 受け取った側 (worker): 自分宛ての依頼リストを月別で見て、 申請処理後に done に。
+// 依頼者: 時間 (小数点) + 対象者 + 用途で依頼を作成、進捗確認 + 未処理者催促。
+// 受け取った側 (worker): 自分宛ての依頼リストを月別で見て、申請処理後に done に。
 
 declare(strict_types=1);
 
 function route_bait(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
-    // v823 #416 list / detail の優先順が逆で 「/api/bait/requests/<id>」 まで list に
-    //   食われていた (= detail が 「{items: ...}」 を返し client で r.title undefined)。
+    // v823 #416 list / detail の優先順が逆で「/api/bait/requests/<id>」まで list に
+    //   食われていた (= detail が「{items: ...}」を返し client で r.title undefined)。
     //   先に detail 系をチェックして残った場合のみ list に落とす。
     if ($sub === 'requests' && ctype_digit((string)($seg[2] ?? ''))) {
         $rid = (int)$seg[2];
@@ -120,7 +120,7 @@ function bait_create(PDO $pdo, array $cfg): void {
             $stA->execute([$rid, $a['user_id'], $a['hours']]);
         }
     });
-    // 通知 (各 worker に 「アルバイト申請が来ました」)
+    // 通知 (各 worker に「アルバイト申請が来ました」)
     foreach ($normalized as $a) {
         try {
             Notifier::notify($pdo, $cfg, $a['user_id'], 'admin_notice',

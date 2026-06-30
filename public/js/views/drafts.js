@@ -1,4 +1,4 @@
-// v634 ⚾ ドラフト UI。 起案 / 一覧 / 詳細 (state-aware polling) を 1 ファイルで。
+// v634 ⚾ ドラフト UI。起案 / 一覧 / 詳細 (state-aware polling) を 1 ファイルで。
 
 import { get, post } from '../api.js';
 import { state, toast } from '../app.js';
@@ -18,7 +18,7 @@ export async function renderDrafts() {
         <a href="#/drafts/new" class="btn primary">＋ 新規ドラフト</a>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        プロ野球ドラフト風の順番指名 + くじ抽選ツール。 参加者と候補 (人 or 自由入力) を揃えて開始。
+        プロ野球ドラフト風の順番指名 + くじ抽選ツール。参加者と候補 (人 or 自由入力) を揃えて開始。
       </p>
     </div>
     <div id="dr-list"><div class="hint">読み込み中…</div></div>
@@ -187,7 +187,7 @@ async function paint(did) {
   //   phase のみボタンを出していた)。 active で起案者のときは常時表示。
   if (d.i_am_creator && d.status === 'active') {
     body += `<div class="card"><button id="dr-cancel-global" class="btn danger" style="font-size:13px; width:100%">🛑 ドラフトを途中で閉鎖 (キャンセル)</button>
-      <div class="hint-sm" style="font-size:11px; margin-top:4px">起案者専用。 押すとこのドラフトは cancelled になり、 以後編集不可。</div></div>`;
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">起案者専用。押すとこのドラフトは cancelled になり、以後編集不可。</div></div>`;
   }
 
   // ── 累積結果 (常時表示) ──
@@ -249,15 +249,15 @@ function renderPicking(d, me, labelOf, confirmedByUser) {
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">第 ${d.round} 巡・あなたの指名</h3>`;
   if (!d.i_am_participant) {
-    html += `<div class="hint">あなたは参加者ではありません (観戦中)。 まだ ${stillCount} 人指名待ち</div>`;
+    html += `<div class="hint">あなたは参加者ではありません (観戦中)。まだ ${stillCount} 人指名待ち</div>`;
   } else if (!isPending) {
     if (mySubmitted) {
-      html += `<div class="hint">送信済: <b>${escapeHtml(labelOf(mySubmitted))}</b>。 まだ ${stillCount} 人指名待ち</div>`;
+      html += `<div class="hint">送信済: <b>${escapeHtml(labelOf(mySubmitted))}</b>。まだ ${stillCount} 人指名待ち</div>`;
     } else {
-      html += `<div class="hint">この round は既に確定しました。 他の人を待っています</div>`;
+      html += `<div class="hint">この round は既に確定しました。他の人を待っています</div>`;
     }
   } else if (mySubmitted) {
-    html += `<div class="hint">送信済: <b>${escapeHtml(labelOf(mySubmitted))}</b>。 まだ ${stillCount} 人指名待ち</div>`;
+    html += `<div class="hint">送信済: <b>${escapeHtml(labelOf(mySubmitted))}</b>。まだ ${stillCount} 人指名待ち</div>`;
   } else {
     html += `<div class="hint" style="margin-bottom:8px">候補から 1 つ選ぶ:</div>
       <div id="dr-pick-choices" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px">
@@ -296,9 +296,9 @@ function renderReveal(d, me, labelOf) {
     ${rows}
   </div>`;
   if (d.i_am_creator) {
-    html += `<div class="card"><button id="dr-advance" class="btn primary">次へ (競合 → くじ、 そうでなければ確定 + 次の指名)</button></div>`;
+    html += `<div class="card"><button id="dr-advance" class="btn primary">次へ (競合 → くじ、そうでなければ確定 + 次の指名)</button></div>`;
   } else {
-    html += `<div class="card"><div class="hint">起案者の 「次へ」 待ち…</div></div>`;
+    html += `<div class="card"><div class="hint">起案者の「次へ」待ち…</div></div>`;
   }
   return html;
 }
@@ -320,7 +320,7 @@ function renderLottery(d, me, labelOf) {
       ).join('')}
       </div>`;
   } else if (isContender) {
-    html += `<div class="hint">あなたは ${myDraw + 1} 番目のくじを引きました。 残りを待っています…</div>`;
+    html += `<div class="hint">あなたは ${myDraw + 1} 番目のくじを引きました。残りを待っています…</div>`;
   } else {
     html += `<div class="hint">対象者のくじ引きを待っています…</div>`;
   }
@@ -349,7 +349,7 @@ function renderLotteryReveal(d, me, labelOf) {
   if (d.i_am_creator) {
     html += `<div class="card"><button id="dr-advance" class="btn primary">次へ</button></div>`;
   } else {
-    html += `<div class="card"><div class="hint">起案者の 「次へ」 待ち…</div></div>`;
+    html += `<div class="card"><div class="hint">起案者の「次へ」待ち…</div></div>`;
   }
   return html;
 }

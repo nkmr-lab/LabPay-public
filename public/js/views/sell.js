@@ -288,7 +288,7 @@ function showPreview(prefix, src) {
 // Unified submit for both JAN and no-JAN flows. `kind` is 'jan' or 'no_jan'.
 // JAN flow: register the product under the scanned JAN, then list it.
 // no-JAN flow: ask the server to mint a synthetic JAN, then list under it.
-// 出品プレビュー: 出品しないまま 「購入画面一覧 / 詳細でどう見えるか」 を
+// 出品プレビュー: 出品しないまま「購入画面一覧 / 詳細でどう見えるか」を
 // モーダルで表示。 buy.js の tile + product.js の購入カードを寄せて作る。
 function openSellPreview(kind) {
   const p = kind === 'jan' ? '' : 'nj-';
@@ -351,14 +351,14 @@ function openSellPreview(kind) {
   openModal({
     title: '👀 プレビュー',
     bodyHtml: `
-      <p class="hint" style="font-size:12px; margin:0 0 6px">出品はまだ実行されていません。 以下の見た目になります:</p>
+      <p class="hint" style="font-size:12px; margin:0 0 6px">出品はまだ実行されていません。以下の見た目になります:</p>
       <h4 style="margin:10px 0 6px; font-size:13px">購入一覧 (タイル)</h4>
       ${tileHtml}
       <h4 style="margin:14px 0 6px; font-size:13px">購入詳細</h4>
       ${detailHtml}`,
   });
 }
-// avatarHtml は router.js export 済だが、 ここでは name only の小型版を直接組む。
+// avatarHtml は router.js export 済だが、ここでは name only の小型版を直接組む。
 function avatarSmall(name, url) {
   if (url) return `<img src="${escapeHtml(url)}" alt="" style="width:24px; height:24px; border-radius:50%; object-fit:cover; vertical-align:middle">`;
   const ch = (name || '?').trim().charAt(0).toUpperCase();

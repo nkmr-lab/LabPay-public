@@ -1,6 +1,6 @@
-// /#/text-roulette — 任意テキストでの汎用ルーレット (「どこ行く」 「何食べる」 等)。
-// メンバー連動の通知付き roulette とは別物で、 サーバには何も保存しない
-// 純粋なクライアント側ツール。 入力履歴だけ localStorage に保存する。
+// /#/text-roulette — 任意テキストでの汎用ルーレット (「どこ行く」「何食べる」等)。
+// メンバー連動の通知付き roulette とは別物で、サーバには何も保存しない
+// 純粋なクライアント側ツール。入力履歴だけ localStorage に保存する。
 
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
@@ -93,7 +93,7 @@ function parseOptions(raw) {
     .split(/\r?\n/)
     .map(s => s.trim())
     .filter(s => s.length > 0)
-    .slice(0, 30);   // 30 個も並んだら読めない。 上限。
+    .slice(0, 30);   // 30 個も並んだら読めない。上限。
 }
 
 function renderPresets() {
@@ -101,7 +101,7 @@ function renderPresets() {
   if (!root) return;
   const presets = loadPresets();
   if (!presets.length) {
-    root.innerHTML = '<div class="hint-sm">プリセット無し。 候補を整えて 「保存」 で覚えられる。</div>';
+    root.innerHTML = '<div class="hint-sm">プリセット無し。候補を整えて「保存」で覚えられる。</div>';
     return;
   }
   root.innerHTML = presets.map((p, i) => `
@@ -123,7 +123,7 @@ function renderPresets() {
       const idx = Number(b.dataset.presetRm);
       const arr = loadPresets();
       const name = arr[idx]?.name;
-      if (!confirm(`プリセット 「${name}」 を消しますか?`)) return;
+      if (!confirm(`プリセット「${name}」を消しますか?`)) return;
       arr.splice(idx, 1);
       savePresets(arr);
       renderPresets();
@@ -139,7 +139,7 @@ function onSavePreset() {
   const arr = loadPresets();
   const existing = arr.findIndex(p => p.name === name);
   if (existing >= 0) {
-    if (!confirm(`「${name}」 は既にあります。 上書きしますか?`)) return;
+    if (!confirm(`「${name}」は既にあります。上書きしますか?`)) return;
     arr[existing] = { name, options: options.slice() };
   } else {
     if (arr.length >= 12) { toast('プリセット上限 (12 個) に達しました'); return; }
@@ -224,7 +224,7 @@ async function onSpin() {
   }, 14100);
 }
 
-// ---- 音響 (roulette.js と同じ手法。 重複だが import 関係を増やしたくないので copy。)
+// ---- 音響 (roulette.js と同じ手法。重複だが import 関係を増やしたくないので copy。)
 function playSpinSounds(sliceCount, totalRotationDeg) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;

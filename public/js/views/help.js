@@ -1,6 +1,6 @@
 // /#/help — LabPay 操作ガイド AI アシスタント。
-// 「○○ したいんだけどどう操作する?」 に答える Q&A チャット。
-// 会話履歴は localStorage に保存 (端末ローカル)、 サーバには都度送信。
+// 「○○ したいんだけどどう操作する?」に答える Q&A チャット。
+// 会話履歴は localStorage に保存 (端末ローカル)、サーバには都度送信。
 
 import { post } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -89,7 +89,7 @@ export async function renderHelp() {
     history.push({ role: 'user', content: text });
     saveHistory(history);
     renderLog();
-    // 「考え中…」 プレースホルダ
+    // 「考え中…」プレースホルダ
     history.push({ role: 'assistant', content: '…考え中' });
     renderLog();
     try {

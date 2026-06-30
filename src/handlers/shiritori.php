@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-// v623 プレイフィー (1 人 2pt、 初回ターン時に SYSTEM へ)
+// v623 プレイフィー (1 人 2pt、初回ターン時に SYSTEM へ)
 const SHIRITORI_FEE = 2;
 
 function route_shiritori(PDO $pdo, array $cfg, string $method, array $seg): void {

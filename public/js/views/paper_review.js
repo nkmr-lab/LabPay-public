@@ -25,7 +25,7 @@ export async function renderPaperReview() {
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
         論文の PDF をアップロードすると、 OpenAI に直接読ませて章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
-        ターゲット会議が空欄なら 「HCI 系国際会議」 想定。
+        ターゲット会議が空欄なら「HCI 系国際会議」想定。
         <strong>1 回につき 10pt がシステムに支払われます</strong>。
       </p>
       <label class="field">
@@ -46,16 +46,16 @@ export async function renderPaperReview() {
         <div class="hint-sm" id="pr-model-info" style="font-size:11px; margin-top:4px"></div>
       </label>
       <label class="field">
-        <span class="lbl">論文 PDF (最大 30 MB、 通常 〜10 ページ程度)</span>
+        <span class="lbl">論文 PDF (最大 30 MB、通常 〜10 ページ程度)</span>
         <input type="file" id="pr-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
       <label class="field">
         <span class="lbl">🗨️ 著者の回答文 / リバトル (任意 — テキスト or PDF)</span>
-        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。 PDF アップロードでも OK。"></textarea>
+        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、査読 + 回答の妥当性も評価するモードになります。空欄なら通常の査読のみ。 PDF アップロードでも OK。"></textarea>
         <input type="file" id="pr-response-pdf" accept="application/pdf,.pdf" style="margin-top:6px">
         <div class="hint-sm" id="pr-response-pdf-status" style="font-size:11px; margin-top:4px"></div>
-        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、 査読指摘が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないかまで評価します。 両方入れたら両方参照。</div>
+        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、査読指摘が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないかまで評価します。両方入れたら両方参照。</div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pr-go" class="primary" disabled>📄 査読開始</button>
@@ -203,7 +203,7 @@ async function go() {
     fd.append('strictness', strictness);
     const model = document.getElementById('pr-model')?.value || 'gpt-4.1';
     fd.append('model', model);
-    // v780 #404 任意の回答文 (rebuttal)。 空なら送らない (= 通常の査読モード)
+    // v780 #404 任意の回答文 (rebuttal)。空なら送らない (= 通常の査読モード)
     const responseText = (document.getElementById('pr-response')?.value || '').trim();
     if (responseText !== '') fd.append('response_text', responseText);
     // v782 #379 PDF 回答文 (textarea と同時添付も OK、 GPT に両方渡る)
@@ -221,7 +221,7 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    // v557 #211 非同期: 結果ページに遷移、 そこで polling
+    // v557 #211 非同期: 結果ページに遷移、そこで polling
     location.hash = '#/paper-review/r/' + j.share_token;
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
@@ -275,7 +275,7 @@ async function refreshShared(token) {
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">⏳ AI が査読中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            通常 2〜5 分で完了します。 このページを閉じても大丈夫です (完了したら通知が届きます)。<br>
+            通常 2〜5 分で完了します。このページを閉じても大丈夫です (完了したら通知が届きます)。<br>
             また後で /#/paper-review/r/${escapeHtml(token)} を開けば結果が見れます。
           </p>
           <div style="margin-top:10px; padding:10px; background:#f0f9ff; border-radius:6px; font-size:13px">

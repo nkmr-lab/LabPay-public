@@ -1,7 +1,7 @@
 <?php
 // /api/news/it — IT 系ニュース (はてなブックマーク IT 人気 + Hacker News) を集めて返す。
 // v700 #290 ホーム widget 用。 file cache (1 時間) で外部 API への負荷と
-// レスポンスを抑える。 失敗時は空 list を返す (widget 側で 「取得失敗」 表示)。
+// レスポンスを抑える。失敗時は空 list を返す (widget 側で「取得失敗」表示)。
 //
 // data source:
 //   - はてなブックマークテクノロジー RSS:  https://b.hatena.ne.jp/hotentry/it.rss
@@ -38,7 +38,7 @@ function news_it(array $cfg): void {
     }
     // v705 #297 履歴を累積 (初出日付付き)
     news_update_history($items);
-    // v704 #293 #295 各 item に GPT 要約 (日本語) を添付。 既 cache は流用、
+    // v704 #293 #295 各 item に GPT 要約 (日本語) を添付。既 cache は流用、
     //   未生成のものはこのリクエストで最大 N 個だけ即時生成 (時間 budget 厳守)。
     //   HN 等海外 source も自動で日本語要約兼翻訳される。
     $summaries = [];
@@ -47,17 +47,17 @@ function news_it(array $cfg): void {
         $summaries = $sraw ? (json_decode($sraw, true) ?: []) : [];
     }
     $apiKey = (string)($cfg['openai']['api_key'] ?? '');
-    // v705 #296 1 request で 4 件まで新規要約 (旧 2 件 → 倍増)。 全 8 件が 2 回の
-    //   request で揃う。 1 request あたりのレイテンシは増えるが、 「要約出ない」
+    // v705 #296 1 request で 4 件まで新規要約 (旧 2 件 → 倍増)。全 8 件が 2 回の
+    //   request で揃う。 1 request あたりのレイテンシは増えるが、「要約出ない」
     //   印象を防ぐほうを優先。
     $budget = 4;
-    // v715 #310 ホーム widget で 「古い記事ばかり」 と見える不具合修正。
+    // v715 #310 ホーム widget で「古い記事ばかり」と見える不具合修正。
     //   原因: はてなの hot entry は一旦人気になった古い記事が上位に残り続け、
-    //          news_fetch_all が published_at desc で sort しても 「初出が数日前」 の
-    //          記事が上に来る。 一方 news app の /api/news/history は first_seen_at desc。
-    //   対処: news_it も history.json を引いて 「LabPay で初めて見た順」 (= 新着順)
-    //         に sort し、 news app の並びと同じに。 これで 「アプリでは新しいのが
-    //         見えるのに home は古い」 の印象ズレを解消。
+    //          news_fetch_all が published_at desc で sort しても「初出が数日前」の
+    //          記事が上に来る。一方 news app の /api/news/history は first_seen_at desc。
+    //   対処: news_it も history.json を引いて「LabPay で初めて見た順」 (= 新着順)
+    //         に sort し、 news app の並びと同じに。これで「アプリでは新しいのが
+    //         見えるのに home は古い」の印象ズレを解消。
     $histFile = NEWS_CACHE_DIR . '/history.json';
     $hist = is_file($histFile)
         ? (json_decode((string)@file_get_contents($histFile), true) ?: [])
@@ -121,8 +121,8 @@ function news_it(array $cfg): void {
     ]);
 }
 
-// v706 #298 個別記事の要約を on-demand で生成 (UI の 「要約を取得」 ボタン)。
-//   キャッシュにあればそのまま返す、 無ければ新規生成して保存。
+// v706 #298 個別記事の要約を on-demand で生成 (UI の「要約を取得」ボタン)。
+//   キャッシュにあればそのまま返す、無ければ新規生成して保存。
 function news_summarize_one(array $cfg): void {
     $body = read_json_body();
     $url   = (string)($body['url']   ?? '');
@@ -162,7 +162,7 @@ function news_summarize_url(string $url, string $title, string $apiKey): ?string
         $payload = json_encode([
             'model' => 'gpt-4o-mini',
             'messages' => [
-                ['role' => 'system', 'content' => 'あなたは IT ニュース編集者です。 与えられた記事を日本語で 2-3 文 (合計 100-150 字目安) に要約してください。 英語記事でも必ず日本語で。 結論とトピックを端的に、 文末は体言止めかです/ます調。'],
+                ['role' => 'system', 'content' => 'あなたは IT ニュース編集者です。与えられた記事を日本語で 2-3 文 (合計 100-150 字目安) に要約してください。英語記事でも必ず日本語で。結論とトピックを端的に、文末は体言止めかです/ます調。'],
                 ['role' => 'user',   'content' => "タイトル: {$title}\n\n本文 (抜粋):\n{$text}"],
             ],
             'temperature' => 0.3,

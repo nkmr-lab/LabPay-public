@@ -1,4 +1,4 @@
-// v613 文字数 / 単語数制限リライター。 アブスト・リバッタルの文字数制限と戦うためのツール。
+// v613 文字数 / 単語数制限リライター。アブスト・リバッタルの文字数制限と戦うためのツール。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -10,9 +10,9 @@ export async function renderRewriter() {
     <div class="card page-header">
       <h2 style="margin:0">✂️ 文字数・単語数リライター</h2>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        アブストやリバッタルなど、 文字数・単語数の上限と戦うためのツール。
-        GPT の自己カウントは間違うので、 サーバ側で正確にカウントして超過時は再依頼します (最大3回)。
-        <b>1回 1pt</b>。 失敗時は自動返金。
+        アブストやリバッタルなど、文字数・単語数の上限と戦うためのツール。
+        GPT の自己カウントは間違うので、サーバ側で正確にカウントして超過時は再依頼します (最大3回)。
+        <b>1回 1pt</b>。失敗時は自動返金。
       </p>
     </div>
     <div class="card">
@@ -119,7 +119,7 @@ function statusBadge(s) {
   return '';
 }
 
-// 単純な単語レベル diff (LCS ベース)。 共通部分は灰色、 削除は赤、 追加は緑で表示
+// 単純な単語レベル diff (LCS ベース)。共通部分は灰色、削除は赤、追加は緑で表示
 function wordDiff(a, b) {
   const aw = a.match(/\S+|\s+/g) || [];
   const bw = b.match(/\S+|\s+/g) || [];
@@ -225,7 +225,7 @@ export async function renderRewriterDetail({ params }) {
     </div>
 
     <div class="hint-sm" style="text-align:center; padding:10px">
-      🟥 削除部分 = 元にあって削った所、 🟩 追加部分 = 書き直しで足した所、 灰色 = 共通
+      🟥 削除部分 = 元にあって削った所、 🟩 追加部分 = 書き直しで足した所、灰色 = 共通
     </div>
   `;
   document.getElementById('rw-copy').addEventListener('click', async () => {

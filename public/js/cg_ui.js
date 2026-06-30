@@ -1,6 +1,6 @@
 // LabPay 自作ゲーム framework 共通 UI ヘルパー (v626 〜)。
 //   各 kind の JS がロビー / 待ち / 参加 / 終了を毎回書かなくて済むように、
-//   よく使う部品をここに集約。 ゲームロジック (盤面描画 + applyMove) だけ
+//   よく使う部品をここに集約。ゲームロジック (盤面描画 + applyMove) だけ
 //   各 kind が書けば動くのがゴール。
 //
 //   絶対パスで import:  import { ... } from '/js/cg_ui.js';
@@ -11,7 +11,7 @@ import { state, toast } from '/js/app.js';
 import { navigate, escapeHtml } from '/js/router.js';
 
 // 起案時の API へ POST。 initial_state は kind 側が用意。
-//   成功で /#/cg/<kind>/<id> へ navigate。 ビルトイン (旧 import パス) は
+//   成功で /#/cg/<kind>/<id> へ navigate。ビルトイン (旧 import パス) は
 //   detailPath を渡せる: ({ kind, initialState, detailPath: '#/tictactoe' })
 export async function startGame({ kind, initialState, detailPath }) {
   try {
@@ -41,7 +41,7 @@ export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
     const items = d.items || [];
     const root = document.getElementById('cg-list');
     if (!items.length) {
-      root.innerHTML = '<div class="hint">対戦卓がありません。 「＋ 新規卓」 で始めましょう。</div>';
+      root.innerHTML = '<div class="hint">対戦卓がありません。「＋ 新規卓」で始めましょう。</div>';
       return;
     }
     root.innerHTML = items.map(g => `
@@ -57,7 +57,7 @@ export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
   }
 }
 
-// 詳細画面の共通ステータスカードを返す (HTML 文字列)。 盤面とは分けて上か下に配置。
+// 詳細画面の共通ステータスカードを返す (HTML 文字列)。盤面とは分けて上か下に配置。
 //   d は GET /api/custom-games/:kind/games/:id のレスポンス。
 //   onJoinState は join 時の new_state を返す純粋関数 (state, meId) => newState。
 export function statusCardHtml(d, meId, { joinLabel } = {}) {
@@ -67,14 +67,14 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
   if (d.status === 'waiting') {
     if (meId === d.creator_user_id) {
       const joinedCount = players.length;
-      const waitingFor = players.length ? `(${joinedCount} 人参加中、 開始まであと ${Math.max(0, /* approx */ 2 - joinedCount)} 人以上)` : '';
+      const waitingFor = players.length ? `(${joinedCount} 人参加中、開始まであと ${Math.max(0, /* approx */ 2 - joinedCount)} 人以上)` : '';
       return `<div class="card">
         <div class="hint">相手を待っています。 ${waitingFor} 開始前なので料金はまだ払われていません。</div>
         <button data-cg-action="cancel" class="btn" style="margin-top:6px; color:#c00">キャンセル</button>
       </div>`;
     }
     if (meJoined) {
-      return `<div class="card"><div class="hint">参加済み。 全員揃うまでお待ち下さい。</div></div>`;
+      return `<div class="card"><div class="hint">参加済み。全員揃うまでお待ち下さい。</div></div>`;
     }
     return `<div class="card">
       <div class="hint">対戦に参加しますか? 全員揃った時にプレイフィー ${fee}pt が各人から徴収されます。</div>
@@ -96,7 +96,7 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
     ? `<button data-cg-action="resign" class="btn" style="margin-top:6px; font-size:11px; color:#c00">🏳 投了 (ポイント戻りません)</button>`
     : '';
   return d.my_turn
-    ? `<div class="card"><div class="bold">あなたの番。 盤面をタップ。</div>${resignBtn}</div>`
+    ? `<div class="card"><div class="bold">あなたの番。盤面をタップ。</div>${resignBtn}</div>`
     : `<div class="card"><div class="hint">相手の番を待っています…</div>${resignBtn}</div>`;
 }
 
@@ -111,7 +111,7 @@ export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAf
     } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
   document.querySelector('[data-cg-action="resign"]')?.addEventListener('click', async () => {
-    if (!confirm('🏳 投了しますか? (= ゲーム終了、 ポイント戻りません)')) return;
+    if (!confirm('🏳 投了しますか? (= ゲーム終了、ポイント戻りません)')) return;
     try {
       await post(`/api/custom-games/${kind}/games/${gid}/resign`, {});
       onAfter?.();
@@ -127,7 +127,7 @@ export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAf
   });
 }
 
-// 詳細 polling を抽象化: paint 関数を一定間隔で呼び、 ノードが消えたら自動停止。
+// 詳細 polling を抽象化: paint 関数を一定間隔で呼び、ノードが消えたら自動停止。
 //   guardSelector に data 属性などを与えると DOM 検出で自動 unmount。
 export function startPolling({ paint, ms = 2500, guardSelector }) {
   let timer = null;
@@ -153,7 +153,7 @@ export async function submitMove({ kind, gid, res }) {
   });
 }
 
-// kind 詳細を取得 (共通ラッパー、 失敗時は一覧へ戻る hint を表示)。
+// kind 詳細を取得 (共通ラッパー、失敗時は一覧へ戻る hint を表示)。
 export async function fetchDetail({ kind, gid, detailPath }) {
   try {
     return await get(`/api/custom-games/${kind}/games/${gid}`);
@@ -170,7 +170,7 @@ export { state, toast, navigate, escapeHtml };
 // ───────────────────────────────────────────────────────────────
 // v628 defineGame: 全部入りラッパー。
 //   kind 作者はロジック (initialState / applyMove) と盤面描画 (renderBoard) だけ
-//   書けば終わり。 ロビー / 待ち / 参加 / 終了 / polling / submit / 取得は全部自動。
+//   書けば終わり。ロビー / 待ち / 参加 / 終了 / polling / submit / 取得は全部自動。
 //
 //   使い方:
 //     export const { renderList, renderDetail } = defineGame({
@@ -179,7 +179,7 @@ export { state, toast, navigate, escapeHtml };
 //       hint:  '説明',
 //       initialState: (uid) => ({ ..., creator_uid: uid, opponent_uid: 0, turn_user_id: uid }),
 //       applyMove:    (s, uid, move) => ({ state, finished, winner_user_id, turn_user_id }),
-//       // 盤面描画。 ボタンやマスに data-move="..." (JSON) をつけると自動配線。
+//       // 盤面描画。ボタンやマスに data-move="..." (JSON) をつけると自動配線。
 //       renderBoard:  (s, ctx) => `<div>... <button data-move="0">...</button> ...</div>`,
 //     });
 //
@@ -225,8 +225,8 @@ export function defineGame(spec) {
       ${statusCardHtml(d, meId)}
     `;
     wireStatusCard({ kind, gid, d, meId, joinState: joinTransition, detailPath: dp, onAfter: () => paint(gid) });
-    // data-move 属性を持つ要素を自動配線。 値はそのまま move として applyMove に渡る。
-    //   数値1個なら整数、 JSON っぽければパース、 それ以外は文字列。
+    // data-move 属性を持つ要素を自動配線。値はそのまま move として applyMove に渡る。
+    //   数値1個なら整数、 JSON っぽければパース、それ以外は文字列。
     document.querySelectorAll(`[data-cg-gid="cg-${kind}-${gid}"] [data-move]`).forEach(b => {
       b.addEventListener('click', async () => {
         try {
@@ -257,14 +257,14 @@ export function defineGame(spec) {
 //
 //     draw(state, ctx)          ── 画面を描く時に呼ばれる (state が変わるたび)。
 //                                   HTML 文字列を return する (盤面でも文字でも OK)。
-//                                   自分の番が来たら、 ボタンに <button data-move="X">
-//                                   を入れておくと、 タップで action() が呼ばれる。
+//                                   自分の番が来たら、ボタンに <button data-move="X">
+//                                   を入れておくと、タップで action() が呼ばれる。
 //
 //     action(state, me, move)   ── 自分がボタンを押した時に呼ばれる。
 //                                   第3引数 move は data-move="X" の X
 //                                   (整数 / 文字 / JSON を自動判定して渡る)。
 //                                   { state: 新state, finished?: bool, winner?: 'me'|'opponent'|null }
-//                                   を return する。 手番は LabPay が自動で相手に移す。
+//                                   を return する。手番は LabPay が自動で相手に移す。
 //
 //   呼び出し順序を図で示すと:
 //
@@ -287,11 +287,11 @@ export function defineGame(spec) {
 //     ctx.me        - 自分の uid (number)
 //     ctx.you       - { uid, name, seat, role: 'creator' | 'opponent' }  自分
 //     ctx.opponent  - 相手 (2 人式で waiting 中は null)
-//     ctx.players   - 全員の配列 (着席順)。 各要素 {uid, name, seat, role}
+//     ctx.players   - 全員の配列 (着席順)。各要素 {uid, name, seat, role}
 //     ctx.seat      - 自分の seat (0..N-1)
-//     ctx.turn      - 手番の uid (number、 終了時は null)
+//     ctx.turn      - 手番の uid (number、終了時は null)
 //     ctx.myTurn    - 自分の手番か (boolean)
-//     ctx.winner    - 勝者の uid (number、 引分 / 進行中は null)
+//     ctx.winner    - 勝者の uid (number、引分 / 進行中は null)
 //     ctx.status    - 'waiting' | 'playing' | 'finished' | 'cancelled'
 //
 //   action() の return:
@@ -309,7 +309,7 @@ export function sketch(spec) {
   // v631 action() に改名 (旧 play() は後方互換で受け付け)
   const action = spec.action || spec.play;
   if (!action) throw new Error('sketch: action(state, me, move) を渡してください');
-  // spec.players: 1 (ソロ) / 2 / 4。 デフォルト 2。
+  // spec.players: 1 (ソロ) / 2 / 4。デフォルト 2。
   //   1 → opponent 概念なし、 status='waiting' を飛ばして即 playing (server側処理)
   //   2 → 既存 (turn は相手とトグル)
   //   4 → players 配列を順に rotation
@@ -340,7 +340,7 @@ export function sketch(spec) {
         else if (typeof res.winner === 'number') winner = res.winner;
         else                                  winner = null;
       }
-      // 次の手番: play() が next を返せばその uid、 なければ framework が自動 rotation。
+      // 次の手番: play() が next を返せばその uid、なければ framework が自動 rotation。
       let next = null;
       if (!finished) {
         if (typeof res.next === 'number') next = res.next;

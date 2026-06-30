@@ -1,5 +1,5 @@
 <?php
-// v523 #160 順番決め (発表順 / 当番割など)。 ルーレットの全員順列版。
+// v523 #160 順番決め (発表順 / 当番割など)。ルーレットの全員順列版。
 //   POST /api/orderings        — タイトル + メンバー指定で順番を決定 (CSPRNG シャッフル)
 //                                 → 結果を保存 + 全員に通知 (ref_type='ordering')
 //   GET  /api/orderings        — 自分が起案 or メンバーに含まれているものの最近 50 件
@@ -80,7 +80,7 @@ function orderings_create(PDO $pdo, array $cfg, int $uid): void {
         }
     });
 
-    // 通知 (各メンバーに自分の順番を伝える)。 自分が含まれていても 「自分が起案した順番決め」 を
+    // 通知 (各メンバーに自分の順番を伝える)。自分が含まれていても「自分が起案した順番決め」を
     //   通知するのは少し冗長なので起案者 = メンバーの場合は通知不要 (起案者自身は画面で結果を見るので)。
     $cfg2 = $GLOBALS['CFG'] ?? $cfg;
     $stNm = $pdo->prepare("SELECT display_name FROM users WHERE id IN ($place)");
@@ -91,7 +91,7 @@ function orderings_create(PDO $pdo, array $cfg, int $uid): void {
         try {
             notify_safely(
                 $pdo, $cfg2, $userId, 'admin_notice',
-                "📋 『{$title}』 の順番が決まりました! あなたは {$pos} 番目です。",
+                "📋 『{$title}』の順番が決まりました! あなたは {$pos} 番目です。",
                 'ordering', $orderingId
             );
         } catch (Throwable $_) { /* swallow */ }

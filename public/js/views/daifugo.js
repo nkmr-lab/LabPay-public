@@ -1,4 +1,4 @@
-// v590 大富豪 (MVP)。 単出し / ペア / N 枚出しのみ、 革命なし、 シンプルルール。
+// v590 大富豪 (MVP)。単出し / ペア / N 枚出しのみ、革命なし、シンプルルール。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -40,7 +40,7 @@ export async function renderDaifugo() {
     const { showInviteModal } = await import('./invite_modal.js');
     const res = await showInviteModal({
       title: '🃏 大富豪新規卓',
-      description: 'プレイフィー 2pt。 「対象者で即開始」 なら全員から即徴収 + 通知 + 即配牌。',
+      description: 'プレイフィー 2pt。「対象者で即開始」なら全員から即徴収 + 通知 + 即配牌。',
       minPick: 1, maxPick: 3,        // 自分 + 1〜3 人 = 2〜4 人
       allowPublic: true,
     });
@@ -54,7 +54,7 @@ export async function renderDaifugo() {
   try {
     const d = await get('/api/daifugo/games');
     const items = d.items || [];
-    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓がありません。 「＋ 新規卓」 で始めましょう。</div>'; return; }
+    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓がありません。「＋ 新規卓」で始めましょう。</div>'; return; }
     document.getElementById('df-list').innerHTML = items.map(g => `
       <a class="list-item" href="#/daifugo/${g.id}">
         <div class="grow">
@@ -100,7 +100,7 @@ async function paintDaifugo(gid) {
       </div>
     `;
     document.getElementById('df-share')?.addEventListener('click', () => {
-      shareToSns(`🃏 大富豪卓 #${gid} 募集中 (${d.players.length}/4、 プレイフィー 2pt)`, `#/daifugo/${gid}`);
+      shareToSns(`🃏 大富豪卓 #${gid} 募集中 (${d.players.length}/4、プレイフィー 2pt)`, `#/daifugo/${gid}`);
     });
     document.getElementById('df-join')?.addEventListener('click', async () => {
       try { await post(`/api/daifugo/games/${gid}/join`, {}); paintDaifugo(gid); } catch (e) { toast('失敗: ' + e.message); }
@@ -167,7 +167,7 @@ async function paintDaifugo(gid) {
           <button id="df-play" class="btn primary">選んだカードを出す</button>
           ${d.last_play ? `<button id="df-pass" class="btn">パス</button>` : ''}
         </div>
-        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で出す。 同じ数字を揃えて複数枚出せる。</div>
+        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で出す。同じ数字を揃えて複数枚出せる。</div>
       ` : '<div class="hint" style="margin-top:8px">相手の番を待っています…</div>'}
       <button id="df-resign" class="btn" style="margin-top:8px; font-size:11px; color:#c00">🏳 投了 (ポイント戻りません)</button>
     </div>` : ''}
@@ -198,7 +198,7 @@ async function paintDaifugo(gid) {
       catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('df-resign')?.addEventListener('click', async () => {
-      if (!confirm('🏳 投了しますか? (= ゲーム終了、 ポイント戻りません)')) return;
+      if (!confirm('🏳 投了しますか? (= ゲーム終了、ポイント戻りません)')) return;
       try { await post(`/api/daifugo/games/${gid}/resign`, {}); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });

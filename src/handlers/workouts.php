@@ -147,7 +147,7 @@ function route_workouts(PDO $pdo, array $cfg, string $method, array $seg): void 
         try {
             global $CFG;
             notify_safely($pdo, $CFG, $fid, 'admin_notice',
-                "🤝 筋トレ仲間に追加されました ({$u['display_name']})。 自分も追加すると互いの記録が見えるようになります。",
+                "🤝 筋トレ仲間に追加されました ({$u['display_name']})。自分も追加すると互いの記録が見えるようになります。",
                 'workout', null);
         } catch (Throwable $_) {}
         json_response(['ok' => true]);

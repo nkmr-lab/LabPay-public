@@ -28,7 +28,7 @@ export async function renderAdminSounds() {
       <p class="hint">mp3 / ogg / wav / m4a など。 2 MB まで。</p>
       <label class="field">
         <span class="lbl">ラベル (画面に出る名前)</span>
-        <input type="text" id="snd-up-label" maxlength="120" placeholder="例: コイン音、 ピロンッ">
+        <input type="text" id="snd-up-label" maxlength="120" placeholder="例: コイン音、ピロンッ">
       </label>
       <label class="field">
         <span class="lbl">音源ファイル</span>
@@ -47,7 +47,7 @@ export async function renderAdminSounds() {
 
     <div class="card">
       <h3 style="margin:0">イベントごとの規定値</h3>
-      <p class="hint">「— なし —」 を選ぶと既定では無音。 各ユーザは 「設定」 から個別に上書き可。</p>
+      <p class="hint">「— なし —」を選ぶと既定では無音。各ユーザは「設定」から個別に上書き可。</p>
       <div id="snd-defaults"><div class="muted">読み込み中…</div></div>
     </div>
   `;

@@ -15,7 +15,7 @@ class Labels {
     ];
 
     // /api/money-requests と /api/nomikai の paid_method。
-    // 「{name} から ¥{amt} ({method}) 支払い済」 みたいな通知に使う。
+    // 「{name} から ¥{amt} ({method}) 支払い済」みたいな通知に使う。
     public const PAYMENT_METHOD = [
         'cash'   => '現金',
         'paypay' => 'PayPay',

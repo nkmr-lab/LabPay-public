@@ -1,5 +1,5 @@
-// /#/habits — Habit Tracker。 個人ごとに 「毎日論文を読む」 などの習慣を登録、
-//   日毎達成を ✓ で入力、 連続記録 (streak) と 60 日カレンダーで可視化。 公開
+// /#/habits — Habit Tracker。個人ごとに「毎日論文を読む」などの習慣を登録、
+//   日毎達成を ✓ で入力、連続記録 (streak) と 60 日カレンダーで可視化。公開
 //   リストはラボメン全員が見えて達成数で比較できる。 v870 #452。
 
 import { get, post, patch, del } from '../api.js';
@@ -19,7 +19,7 @@ export async function renderHabits() {
         <a class="btn primary" href="#/habits/new">＋ 新しい習慣</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
-        毎日論文を読む / 早起き / 運動など、 自分の習慣を登録して日毎 ✓ で積み上げ。 公開すればラボメン全員が達成状況を確認できて励まし合えます。
+        毎日論文を読む / 早起き / 運動など、自分の習慣を登録して日毎 ✓ で積み上げ。公開すればラボメン全員が達成状況を確認できて励まし合えます。
       </div>
     </div>
     <div id="hb-list"><div class="muted">読込中…</div></div>`;
@@ -29,7 +29,7 @@ export async function renderHabits() {
     if (!items.length) {
       document.getElementById('hb-list').innerHTML = `
         <div class="card center muted">
-          まだ習慣がありません。 「＋ 新しい習慣」 から始めよう。
+          まだ習慣がありません。「＋ 新しい習慣」から始めよう。
         </div>`;
       return;
     }
@@ -166,7 +166,7 @@ export async function renderHabitDetail({ id }) {
         <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_streak}</div><div class="hint-sm">🔥 連続日数</div></div>
         <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_done_60d}</div><div class="hint-sm">60 日で達成</div></div>
       </div>
-      <div class="hint-sm" style="margin-top:10px; font-size:11px">直近 60 日 (右端が今日、 緑は達成)</div>
+      <div class="hint-sm" style="margin-top:10px; font-size:11px">直近 60 日 (右端が今日、緑は達成)</div>
       <div style="display:grid; grid-template-columns:repeat(20, 1fr); gap:3px; margin-top:6px">${cells.join('')}</div>
     </div>
     ${h.visibility === 'public' && (h.others || []).length ? `
@@ -188,7 +188,7 @@ export async function renderHabitDetail({ id }) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('hb-del')?.addEventListener('click', async () => {
-    if (!confirm('この習慣を削除します (記録も全部消えます)。 いいですか?')) return;
+    if (!confirm('この習慣を削除します (記録も全部消えます)。いいですか?')) return;
     try { await del('/api/habits/' + id); toast('削除しました'); navigate('#/habits'); }
     catch (e) { toast('失敗: ' + e.message); }
   });

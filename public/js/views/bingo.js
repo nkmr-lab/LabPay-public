@@ -1,11 +1,11 @@
-// v588 ビンゴ。 週次 5x5、 自動判定、 リーチ / ビンゴで演出。
+// v588 ビンゴ。週次 5x5、自動判定、リーチ / ビンゴで演出。
 // v845 #429 マス目タップで該当アプリへ遷移できるように。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
-// マスの type → 該当アプリの URL マップ。 対応するアプリがないものは null (リンクなし)。
+// マスの type → 該当アプリの URL マップ。対応するアプリがないものは null (リンクなし)。
 const CELL_TYPE_TO_URL = {
   checkin:         '#/',
   checkin_streak:  '#/',
@@ -67,8 +67,8 @@ export async function renderBingo(ctx) {
         ${isPast ? `<a href="#/bingo" class="btn" style="font-size:12px">今週へ</a>` : ''}
       </div>
       ${isPast ? '' : `<p class="hint" style="margin:6px 0 0; font-size:13px">
-        週次 5x5 マス。 毎週日曜 0:00 リセット → 土曜 23:59 終了。
-        平日 (月-金) の行動が自動カウント。 自分のカードだけ見えます。
+        週次 5x5 マス。毎週日曜 0:00 リセット → 土曜 23:59 終了。
+        平日 (月-金) の行動が自動カウント。自分のカードだけ見えます。
       </p>`}
       <p style="margin:8px 0 0; font-size:13px">
         ${isPast ? '対象週' : '今週'}: <b>${escapeHtml(d.week_start)}</b> 開始・

@@ -26,7 +26,7 @@ class Ledger {
         'custom_game_play_fee',
         // v623 絵しりとりプレイフィー 2pt/人
         'shiritori_buyin',
-        // v805 論文系を個別に (= 取引履歴で 「論文査読料」 と一括表示されていたものを分割)
+        // v805 論文系を個別に (= 取引履歴で「論文査読料」と一括表示されていたものを分割)
         'paper_translate',       // 論文要約料
         'paper_full_translate',  // 論文全訳料
         'deep_research',         // Deep Research 料

@@ -1,5 +1,5 @@
 <?php
-// v588 ビンゴ。 日曜 0:00 (JST) 〜 土曜 23:59 (JST) の週次サイクル。
+// v588 ビンゴ。日曜 0:00 (JST) 〜 土曜 23:59 (JST) の週次サイクル。
 //   GET  /api/bingo/me            今週の自分のカード (なければ生成 + 自動判定)
 //   GET  /api/bingo/leaderboard   今週のリーダーボード (達成順 / ライン数)
 //   GET  /api/bingo/history?week=YYYY-MM-DD  過去のカード閲覧
@@ -12,7 +12,7 @@ const BINGO_TASK_POOL = [
     ['id' => 'checkin3',  'label' => 'ラボイン 3 回',       'icon' => '🏠', 'type' => 'checkin', 'threshold' => 3],
     ['id' => 'checkin5',  'label' => 'ラボイン 5 日連続',  'icon' => '🔥', 'type' => 'checkin_streak', 'threshold' => 5],
     ['id' => 'opener1',   'label' => 'オープナー 1 回',     'icon' => '🌅', 'type' => 'opener', 'threshold' => 1],
-    // v746 #357 opener2 (2 回) はハードル高すぎで削除。 代わりに sns5 を追加して
+    // v746 #357 opener2 (2 回) はハードル高すぎで削除。代わりに sns5 を追加して
     //   らぼったー 5 投稿を優先で入れるように。
     ['id' => 'sns1',      'label' => 'らぼったー 1 投稿',   'icon' => '💬', 'type' => 'sns_post', 'threshold' => 1],
     ['id' => 'sns3',      'label' => 'らぼったー 3 投稿',   'icon' => '💬', 'type' => 'sns_post', 'threshold' => 3],
@@ -71,7 +71,7 @@ function bingo_history(PDO $pdo, int $uid): void {
     json_response(['items' => $out]);
 }
 
-// v593 指定週のカード + 完了状況 (= 過去カード再読み込み、 再判定はしない、 保存値を返す)
+// v593 指定週のカード + 完了状況 (= 過去カード再読み込み、再判定はしない、保存値を返す)
 function bingo_week(PDO $pdo, int $uid, string $weekStart): void {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $weekStart)) throw new ApiException('bad_request', 'YYYY-MM-DD', 400);
     $st = $pdo->prepare("SELECT * FROM bingo_cards WHERE user_id=? AND week_start=?");
@@ -92,7 +92,7 @@ function bingo_week(PDO $pdo, int $uid, string $weekStart): void {
 }
 
 function bingo_week_start_jst(): string {
-    // JST の今日の日曜を返す (今日が日曜なら今日、 他なら直近の日曜)
+    // JST の今日の日曜を返す (今日が日曜なら今日、他なら直近の日曜)
     $d = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
     $dow = (int)$d->format('w'); // 0=Sun
     $d->modify('-' . $dow . ' days');
@@ -100,7 +100,7 @@ function bingo_week_start_jst(): string {
 }
 
 function bingo_generate_cells(int $userSeed, string $weekStart): array {
-    // v597 FREE 廃止。 25 マスすべて通常タスク。 中央をどう開けるかも戦略の一部。
+    // v597 FREE 廃止。 25 マスすべて通常タスク。中央をどう開けるかも戦略の一部。
     $seed = crc32($userSeed . '_' . $weekStart);
     mt_srand($seed);
     $pool = BINGO_TASK_POOL;
@@ -117,7 +117,7 @@ function bingo_judge_cells(PDO $pdo, int $uid, string $weekStart, array $cells):
     $weekEnd = (new DateTime($weekStart, new DateTimeZone('Asia/Tokyo')))->modify('+6 days')->format('Y-m-d') . ' 23:59:59';
     $weekStartTs = $weekStart . ' 00:00:00';
     foreach ($cells as $idx => $c) {
-        // v597 free 廃止。 既存カードの中央 (free) はそのまま完了扱いで残す
+        // v597 free 廃止。既存カードの中央 (free) はそのまま完了扱いで残す
         if (($c['type'] ?? '') === 'free') { $completed[] = $idx; continue; }
         $n = bingo_count_for($pdo, $uid, $c['type'], $weekStartTs, $weekEnd);
         if ($n >= ($c['threshold'] ?? 1)) $completed[] = $idx;
@@ -126,10 +126,10 @@ function bingo_judge_cells(PDO $pdo, int $uid, string $weekStart, array $cells):
 }
 
 function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string $to): int {
-    // v616 #239 平日(Mon-Fri)限定の制約を撤廃。 土日に登録した行動もカウントされる。
-    //   元々 「平日限定」 は出席頻度を想定した仕様だったが、 食べある記やSNS投稿などは
-    //   土日にこそ発生しやすく 「登録したのにビンゴに反映されない」 という混乱が起きていた。
-    //   weekdayClause を空文字にして、 期間 (Sun 0:00 〜 Sat 23:59 JST) 内のすべての行動をカウント。
+    // v616 #239 平日(Mon-Fri)限定の制約を撤廃。土日に登録した行動もカウントされる。
+    //   元々「平日限定」は出席頻度を想定した仕様だったが、食べある記やSNS投稿などは
+    //   土日にこそ発生しやすく「登録したのにビンゴに反映されない」という混乱が起きていた。
+    //   weekdayClause を空文字にして、期間 (Sun 0:00 〜 Sat 23:59 JST) 内のすべての行動をカウント。
     $weekdayClause = "";
     try {
     switch ($type) {
@@ -138,7 +138,7 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
         //   post_reactions → post_likes / rollcall_responses → roll_call_targets /
         //   todos → user_todos / workouts.created_at → recorded_at / health.created_at → recorded_at /
         //   meetup_responses → meetup_participants (timestamp なし → meetup created_at で代用)。
-        //   全部 try/catch で包まれて 0 を返していたので 「クエリは通るが何も入らない」 状態だった。
+        //   全部 try/catch で包まれて 0 を返していたので「クエリは通るが何も入らない」状態だった。
         case 'checkin':
             $sql = "SELECT COUNT(*) FROM checkins WHERE user_id=? AND checkin_date BETWEEN DATE(?) AND DATE(?)";
             break;
@@ -146,7 +146,7 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
             $sql = "SELECT COUNT(DISTINCT checkin_date) FROM checkins WHERE user_id=? AND checkin_date BETWEEN DATE(?) AND DATE(?)";
             break;
         case 'opener':
-            // その日の最初の checkin を opener (該当週内、 自分がオープナーだった日数)
+            // その日の最初の checkin を opener (該当週内、自分がオープナーだった日数)
             $sql = "SELECT COUNT(*) FROM (
                 SELECT checkin_date AS d, MIN(created_at) AS minc FROM checkins
                 WHERE checkin_date BETWEEN DATE(?) AND DATE(?)
@@ -235,8 +235,8 @@ function bingo_count_for(PDO $pdo, int $uid, string $type, string $from, string 
             break;
         case 'meetup_resp':
             // v619 #待ち合わせ false-positive bug fix。 meetup_participants はただの招待リスト
-            // (応答状況を持たない) なので、 そこに居る = 「応答した」 にならない。
-            // meetup_messages (待ち合わせ内チャット) を 「実際に engagement した」 シグナルとして使う。
+            // (応答状況を持たない) なので、そこに居る = 「応答した」にならない。
+            // meetup_messages (待ち合わせ内チャット) を「実際に engagement した」シグナルとして使う。
             $sql = "SELECT COUNT(*) FROM meetup_messages WHERE user_id=? AND created_at BETWEEN ? AND ?";
             break;
         case 'notice_post':

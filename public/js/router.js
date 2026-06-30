@@ -55,15 +55,15 @@ function highlightTab() {
 
 // v503 #125 #126 同一 hash の dispatch を 800ms 以内なら重複として skip。 boot 直後の
 //   start() で DOMContentLoaded + 即時 dispatch が両方走るレースで renderHome が
-//   2回走り 「Home load レポートが2回出る」 のを抑止。
+//   2回走り「Home load レポートが2回出る」のを抑止。
 let lastDispatchHash = null;
 let lastDispatchAt = 0;
 
-// v836 「アプリ」 と判定されない navigation/系統系ルート。 これら以外は全部フルスクリーン化。
+// v836 「アプリ」と判定されない navigation/系統系ルート。これら以外は全部フルスクリーン化。
 const NON_FULLSCREEN_TOP_PARTS = new Set([
   '',                // ホーム
   'groups',          // グループ (タブ)
-  // v844 #427 sns (らぼったー) はタブではあるが、 投稿スレッドを大きく見たいので fullscreen 化
+  // v844 #427 sns (らぼったー) はタブではあるが、投稿スレッドを大きく見たいので fullscreen 化
   'buy', 'sell', 'sellers',
   'requests-hub',
   'auctions',
@@ -87,10 +87,10 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
   'public-timer',
 ]);
 
-// v842 ✕ で閉じる時の戻り先。 history.back() を使うと、 アプリ内部の hash遷移 (例:
+// v842 ✕ で閉じる時の戻り先。 history.back() を使うと、アプリ内部の hash遷移 (例:
 //   /#/places → /#/places/123 → ...) が history に積み上がっていて、 1 回押すごとに 1 つ
-//   ずつしか戻れず 「✕ を何回も押す羽目になる」 という問題があった (#places 報告)。
-//   代わりに、 フルスクリーンに「入った瞬間」 の前の hash を覚えておいて、 そこに直接戻す。
+//   ずつしか戻れず「✕ を何回も押す羽目になる」という問題があった (#places 報告)。
+//   代わりに、フルスクリーンに「入った瞬間」の前の hash を覚えておいて、そこに直接戻す。
 //   入る前の hash が分からない場合は /#/apps (アプリ一覧) に戻す。
 let fsEntryHash = null;
 function closeFullscreen() {
@@ -122,7 +122,7 @@ function ensureFullscreenEscHandler() {
 function applyFullscreenMode(topPart, prevHash) {
   const wasFs = document.body.classList.contains('app-fullscreen');
   const fs = !NON_FULLSCREEN_TOP_PARTS.has(topPart);
-  // v842 フルスクリーンに「入った瞬間」 だけ entryHash を更新する。 既にフルスクリーン
+  // v842 フルスクリーンに「入った瞬間」だけ entryHash を更新する。既にフルスクリーン
   //   状態で内部 hash 遷移しただけの時は entryHash を上書きしない (= 元の戻り先を保つ)。
   if (fs && !wasFs) {
     fsEntryHash = (prevHash && prevHash !== location.hash) ? prevHash : null;
@@ -164,10 +164,10 @@ async function dispatch() {
   // v836 アプリ系の画面は基本的にフルスクリーンモード (上部バー・タブを隠す + ✕で戻る)。
   //   タブナビ + 設定 + 通知 + 履歴 + 管理 + ログイン等の navigation/系統系は除外。
   applyFullscreenMode(target[0] || '', prevHash);
-  // v515 #142 タブ切替直後に「読み込み中」 プレースホルダ + nav ハイライトを即更新
-  //   する (= ユーザがタップした瞬間に画面が反応する)。 各 view の renderer が
+  // v515 #142 タブ切替直後に「読み込み中」プレースホルダ + nav ハイライトを即更新
+  //   する (= ユーザがタップした瞬間に画面が反応する)。各 view の renderer が
   //   app.innerHTML を上書きすればプレースホルダは消える。 dynamic import の
-  //   完了を待たずに画面が動くので 「反応が遅い」 感覚が大幅に減る。
+  //   完了を待たずに画面が動くので「反応が遅い」感覚が大幅に減る。
   highlightTab();
   const appPlaceholder = document.getElementById('app');
   if (appPlaceholder) {
@@ -179,7 +179,7 @@ async function dispatch() {
         <div class="home-skel-bars"></div>
       </div>`;
   }
-  // 直近 hash を保存 (個別 view の renderer から 「自分が古い hash の render か」 を
+  // 直近 hash を保存 (個別 view の renderer から「自分が古い hash の render か」を
   //   判定したい場合に使える)。
   window.__labpay_dispatch_hash = hashKey;
   for (const r of routes) {
@@ -223,8 +223,8 @@ export function safeHttpUrl(raw) {
 // Render either an <img class="avatar"> when avatar_url is set, or a colored
 // circle with the first character of display_name as a fallback.
 // v507 loading=lazy + decoding=async + fetchpriority=low をデフォルトで付ける。
-//   アバターは大量に並ぶがどれもクリティカルではないので、 ビューポート到達まで
-//   遅延ロードして OK。 ホームの 5 秒スタートアップが大幅に減る。
+//   アバターは大量に並ぶがどれもクリティカルではないので、ビューポート到達まで
+//   遅延ロードして OK。ホームの 5 秒スタートアップが大幅に減る。
 export function avatarHtml(displayName, avatarUrl, size = 'sm') {
   const cls = 'avatar-' + size;
   if (avatarUrl) return `<img class="avatar ${cls}" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" decoding="async" fetchpriority="low">`;

@@ -1,6 +1,6 @@
 // /#/orderings — 順番決め (発表順 / 当番割など)。
-// v523 #160 ルーレット (1 人選ぶ) の全員順列版。 タイトル + メンバー指定 → 並び替え
-//   結果を保存 + 各メンバーに通知。 詳細ページで順番を 1 人ずつめくる演出。
+// v523 #160 ルーレット (1 人選ぶ) の全員順列版。タイトル + メンバー指定 → 並び替え
+//   結果を保存 + 各メンバーに通知。詳細ページで順番を 1 人ずつめくる演出。
 //
 // ルート:
 //   /#/orderings              一覧 (自分が起案 or 含まれてる)
@@ -29,7 +29,7 @@ export async function renderOrderings() {
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('ord-list').innerHTML =
-        '<div class="empty">まだ順番決めはありません。 「＋ 新規」 から作成してください。</div>';
+        '<div class="empty">まだ順番決めはありません。「＋ 新規」から作成してください。</div>';
       return;
     }
     document.getElementById('ord-list').innerHTML = items.map(o => {

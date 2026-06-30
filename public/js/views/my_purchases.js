@@ -1,5 +1,5 @@
 // /#/me/purchases — 自分の購入履歴 (v847 #430)
-//   ラボ内で買ったものを最新順で一覧。 商品名 + 値段 + 出品者 + 日付。
+//   ラボ内で買ったものを最新順で一覧。商品名 + 値段 + 出品者 + 日付。
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -10,7 +10,7 @@ export async function renderMyPurchases() {
     <div class="card page-header">
       <h2 style="margin:0">🛒 自分の購入履歴</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        ラボ内で買ったもの一覧。 新しい順、 最大 100 件まで表示。
+        ラボ内で買ったもの一覧。新しい順、最大 100 件まで表示。
       </p>
     </div>
     <div id="mp-summary" class="card" hidden></div>

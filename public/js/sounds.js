@@ -4,8 +4,8 @@
 //                            ついでに HTMLAudio を warm up (ブラウザによっては
 //                            最初の play() で 200ms 遅延するため)。
 //   playSound(eventKey)     即時再生。 mute / clip 未設定なら no-op。
-//                            ブラウザの autoplay 制限のため必ず 「ユーザ操作の
-//                            イベントハンドラ内」 で呼ぶこと (タップ後の click handler 内 OK)。
+//                            ブラウザの autoplay 制限のため必ず「ユーザ操作の
+//                            イベントハンドラ内」で呼ぶこと (タップ後の click handler 内 OK)。
 //
 // event_key の定義はサーバ側 SOUND_EVENTS と一致させる。
 
@@ -34,8 +34,8 @@ export async function preloadSounds() {
   }
 }
 
-// 「ユーザ操作」 が直近にあったとき (タップなどから連鎖して呼んだとき) 限定で再生。
-// 再生中の重複は OK (HTMLAudio を毎回 new。 連打しても重ねて鳴る)。
+// 「ユーザ操作」が直近にあったとき (タップなどから連鎖して呼んだとき) 限定で再生。
+// 再生中の重複は OK (HTMLAudio を毎回 new。連打しても重ねて鳴る)。
 export function playSound(eventKey) {
   const cfg = cache.get(eventKey);
   if (!cfg) return; // 未設定 / mute

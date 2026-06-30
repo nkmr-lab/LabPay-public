@@ -1,7 +1,7 @@
 <?php
 // /api/places — お店情報 (タイトル + 住所 + lat/lng + 紹介文) + 口コミ。
-// 食べログ的な共有。 ラボメンバー誰でも投稿可、 削除は投稿者 + admin。
-// 画像は /api/uploads/image で先に上げ、 返ってきた URL を image_url に。
+// 食べログ的な共有。ラボメンバー誰でも投稿可、削除は投稿者 + admin。
+// 画像は /api/uploads/image で先に上げ、返ってきた URL を image_url に。
 
 declare(strict_types=1);
 
@@ -13,7 +13,7 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_url' && $method === 'POST') { places_import_url($pdo, $cfg); return; }
     // v719 #315 キーワードから tabelog URL を引いてくる
     if ($sub === 'search_url' && $method === 'POST') { places_search_url($pdo, $cfg); return; }
-    // v731 #340 admin が 1 click で tabelog URL を自動補完 (1 回最大 10 件、 繰返して全件)
+    // v731 #340 admin が 1 click で tabelog URL を自動補完 (1 回最大 10 件、繰返して全件)
     if ($sub === 'backfill_tabelog_urls' && $method === 'POST') { places_backfill_tabelog($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
@@ -22,7 +22,7 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''         && $method === 'DELETE') { places_delete($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'PATCH')  { places_edit($pdo, $cfg, $id);   return; }
         // v761 #380 rotate-image を先にマッチさせる (旧版では POST /comments が
-        //   先に places_comment_create に食われて 「本文 / 画像 / 評価のどれかは必要」
+        //   先に places_comment_create に食われて「本文 / 画像 / 評価のどれかは必要」
         //   エラーが返っていた bug)。
         if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && ($seg[4] ?? '') === 'rotate-image' && $method === 'POST') {
             places_comment_rotate_image($pdo, $cfg, $id, (int)$seg[3]);
@@ -88,7 +88,7 @@ function places_list(PDO $pdo, array $cfg): void {
     // v478 image_url (メイン写真) を追加。 cover_image は image_url 優先 → 最新 review。
     // v486 #80 いいねカウント + 自分が押したか。
     // v885 last_activity_at = 場所の作成 or 最終口コミ投稿のうち最新。
-    //   フロント側で「新着順」 ビューを出すために使う (口コミが新たに付いた店も新着扱い)。
+    //   フロント側で「新着順」ビューを出すために使う (口コミが新たに付いた店も新着扱い)。
     $st = $pdo->prepare("
         SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
@@ -123,9 +123,9 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['liked_by_me']     = (bool)$r['liked_by_me'];
         $r['visit_count']     = (int)$r['visit_count'];
         $r['visited_by_me']   = (bool)$r['visited_by_me'];
-        // v478 cover_image: 店のメイン画像を優先、 なければ最新のレビュー画像
+        // v478 cover_image: 店のメイン画像を優先、なければ最新のレビュー画像
         $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
-        // v503 #127 タイル表示は重いオリジナル画像を使っていたので、 サムネ URL を
+        // v503 #127 タイル表示は重いオリジナル画像を使っていたので、サムネ URL を
         //   別フィールドで返す (実在しなければ原画像 fallback)。
         $r['cover_image_thumb'] = $r['cover_image'] ? thumb_url_for((string)$r['cover_image']) : null;
     }
@@ -207,7 +207,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
          ORDER BY c.created_at DESC");
     $stC->execute([$id]);
     $comments = array_map(function ($r) {
-        // v716 #311 image_urls (JSON 配列) を返す。 旧単数 image_url もそのまま返して
+        // v716 #311 image_urls (JSON 配列) を返す。旧単数 image_url もそのまま返して
         //   旧 client 互換を維持。
         $urls = [];
         if (!empty($r['image_urls'])) {
@@ -441,8 +441,8 @@ function places_import_url(PDO $pdo, array $cfg): void {
     if (preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
         foreach ($m[1] as $raw) {
             // v751 #369 tabelog の Restaurant JSON-LD は HTML entity がない生 JSON。
-            //   html_entity_decode を通すと 「&quot;」 がない文字列も何故か壊れるケース
-            //   がある (=「￥」 等の特殊文字が影響) ので、 まず raw で decode を試して
+            //   html_entity_decode を通すと「&quot;」がない文字列も何故か壊れるケース
+            //   がある (=「￥」等の特殊文字が影響) ので、まず raw で decode を試して
             //   失敗した時だけ html_entity_decode を fallback。
             $j = json_decode($raw, true);
             if (!is_array($j)) {
@@ -552,7 +552,7 @@ function places_search_url(PDO $pdo, array $cfg): void {
 }
 
 // v731 #340 source_url が空の place を一度に最大 10 件まで探して自動で入れる。
-//   admin 限定。 タイトル (+ 住所先頭) で tabelog 検索 → 1 件目の URL を採用。
+//   admin 限定。タイトル (+ 住所先頭) で tabelog 検索 → 1 件目の URL を採用。
 function places_backfill_tabelog(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     if ((string)($u['role'] ?? '') !== 'admin') {
@@ -623,7 +623,7 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
         //   iPhone 縦撮影 (EXIF=6) の画像は元ファイルに EXIF orientation tag が残ったまま
         //   pixel データは横倒し → ブラウザは EXIF を見て縦表示。サーバ rotate は EXIF
         //   無視で pixel rotate するため、初回 click が EXIF rotation を相殺してしまい
-        //   「1 回押しても動かず、2 回押すと 180° 回転」 という挙動になっていた。
+        //   「1 回押しても動かず、2 回押すと 180° 回転」という挙動になっていた。
         //   先に EXIF orientation 通り pixel を回しておけば、保存時に EXIF が落ちる
         //   (imagejpeg 等は EXIF を保存しない) ので、以降の回転は user の入力通り素直に重なる。
         $ext0 = strtolower(pathinfo($path, PATHINFO_EXTENSION));
@@ -636,7 +636,7 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
             // 鏡像 (2/4/5/7) は稀なのでスキップ
         }
         // imagerotate は反時計回り角度を取る (90 = 反時計 90°)。
-        //   ユーザ期待 = 時計回り 90° なら -90 を渡す。 ここでは「右 (時計回り) 90°」 を標準とする。
+        //   ユーザ期待 = 時計回り 90° なら -90 を渡す。ここでは「右 (時計回り) 90°」を標準とする。
         $rotated = imagerotate($src, -$degrees, 0);
         imagedestroy($src);
         if (!$rotated) throw new ApiException('io_error', 'rotate failed', 500);

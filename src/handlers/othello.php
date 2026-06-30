@@ -1,5 +1,5 @@
 <?php
-// v587 地雷オセロ。 2 人対戦、 各自 2 地雷を設定 → 踏むと周囲 3x3 反転。
+// v587 地雷オセロ。 2 人対戦、各自 2 地雷を設定 → 踏むと周囲 3x3 反転。
 //   GET    /api/othello/games            一覧 (waiting / playing / 最近 finished)
 //   POST   /api/othello/games            新規卓 (1pt 預託)
 //   POST   /api/othello/games/:id/join   参加 (1pt 預託)
@@ -283,7 +283,7 @@ function othello_move(PDO $pdo, int $uid, int $gid): void {
             else if ($cWhite > $cBlack) $winner = 'opponent';
             else $winner = 'draw';
             // v612 プレイフィーのみ (= 勝者はポイントもらわない、 pot はシステム取り)。
-            //   ※ 引分のみ双方に半額返金するのもなくす予定だが、 ユーザの心情考慮で引分は全額返金にしておく。
+            //   ※ 引分のみ双方に半額返金するのもなくす予定だが、ユーザの心情考慮で引分は全額返金にしておく。
             //   v625: AI 戦は払戻なし (= bot に 1pt 入っても意味ない)。
             if ($winner === 'draw' && !(int)$g['is_ai']) {
                 $pot = (int)$g['pot_total'];
@@ -323,7 +323,7 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
             $cBlack = 0; $cWhite = 0;
             foreach ($board as $v) { if ($v === 1) $cBlack++; else if ($v === 2) $cWhite++; }
             $winner = $cBlack > $cWhite ? 'creator' : ($cWhite > $cBlack ? 'opponent' : 'draw');
-            // v612 プレイフィーのみ (勝者はポイントもらわず、 引分のみ双方に返金)。 v625: AI 戦は払戻なし。
+            // v612 プレイフィーのみ (勝者はポイントもらわず、引分のみ双方に返金)。 v625: AI 戦は払戻なし。
             if ($winner === 'draw' && !(int)$g['is_ai']) {
                 $pot = (int)$g['pot_total'];
                 $each = intdiv($pot, 2);
@@ -341,7 +341,7 @@ function othello_pass(PDO $pdo, int $uid, int $gid): void {
 }
 
 function othello_resign(PDO $pdo, int $uid, int $gid): void {
-    // v637 投了。 ポイント返却なし。 相手が勝者。
+    // v637 投了。ポイント返却なし。相手が勝者。
     db_tx($pdo, function () use ($pdo, $uid, $gid) {
         $st = $pdo->prepare("SELECT * FROM othello_games WHERE id=? FOR UPDATE");
         $st->execute([$gid]);
@@ -447,7 +447,7 @@ function othello_ai_new(PDO $pdo, int $uid): void {
             throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %dpt)', OTHELLO_FEE), 400);
         }
         $board = othello_initial_board();
-        // AI 側地雷を即配置 (内側 4x4 から、 初期駒を避ける)
+        // AI 側地雷を即配置 (内側 4x4 から、初期駒を避ける)
         $mines = ['opponent' => [othello_ai_pick_mine()]];
         $pdo->prepare("INSERT INTO othello_games (creator_user_id, opponent_user_id, is_ai, status, fee, board_json, mines_json)
                        VALUES (?,?,1,'mine_setup',?,?,?)")
@@ -472,8 +472,8 @@ function othello_ai_pick_mine(): string {
     return $cands[array_rand($cands)];
 }
 
-// v699 #285 オセロ標準の positional weight matrix。 角 (corner) は +100、
-//   X-square (角の斜め隣) は -50、 C-square は -20、 中央はほぼ 0。
+// v699 #285 オセロ標準の positional weight matrix。角 (corner) は +100、
+//   X-square (角の斜め隣) は -50、 C-square は -20、中央はほぼ 0。
 const OTHELLO_WEIGHTS = [
     100, -20,  10,   5,   5,  10, -20, 100,
     -20, -50,  -2,  -2,  -2,  -2, -50, -20,
@@ -497,7 +497,7 @@ function othello_legal_moves(array $board, int $side): array {
     return $moves;
 }
 
-// 評価関数: 位置重み (own - opp) + mobility * 5。 終盤 (空き 8 以下) は純粋に石数差。
+// 評価関数: 位置重み (own - opp) + mobility * 5。終盤 (空き 8 以下) は純粋に石数差。
 function othello_eval_board(array $board, int $aiSide): int {
     $oppSide = $aiSide === 1 ? 2 : 1;
     $posScore = 0; $myCount = 0; $oppCount = 0; $empty = 0;
@@ -556,7 +556,7 @@ function othello_minimax(array $board, int $depth, int $alpha, int $beta, bool $
     }
 }
 
-// AI の着手選択: minimax (深さ 3、 終盤は深さ 5 で全探索)
+// AI の着手選択: minimax (深さ 3、終盤は深さ 5 で全探索)
 function othello_ai_choose_move(array $board): ?array {
     $aiSide = 2; $oppSide = 1;
     $moves = othello_legal_moves($board, $aiSide);
@@ -578,15 +578,15 @@ function othello_ai_choose_move(array $board): ?array {
 
 // AI 番が続くかぎり自動進行。 user の move/pass の後で呼ぶ。
 // パスの連続や終局判定をここでまとめて扱う。
-// v627 「考えてる感」 のため各着手前に 2 秒スリープ。
+// v627 「考えてる感」のため各着手前に 2 秒スリープ。
 function othello_ai_drive(PDO $pdo, int $gid): void {
     for ($i = 0; $i < 8; $i++) {
-        // 先に 1 秒スリープ。 まず DB を軽く見て AI 番でなければ抜ける (= 無駄な待ちなし)。
+        // 先に 1 秒スリープ。まず DB を軽く見て AI 番でなければ抜ける (= 無駄な待ちなし)。
         $peek = $pdo->prepare("SELECT is_ai, status, turn_side FROM othello_games WHERE id=?");
         $peek->execute([$gid]);
         $p = $peek->fetch(PDO::FETCH_ASSOC);
         if (!$p || !(int)$p['is_ai'] || $p['status'] !== 'playing' || $p['turn_side'] !== 'opponent') return;
-        // v699 #285 「考えてる感」 アップ + 強化 minimax の実時間を隠すため
+        // v699 #285 「考えてる感」アップ + 強化 minimax の実時間を隠すため
         //   3 秒に延長 (元 2 秒)
         usleep(3_000_000);
         $advanced = false;

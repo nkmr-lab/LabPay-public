@@ -12,13 +12,13 @@ export function renderMahjongSim() {
       <a href="#/mahjong" class="hint">← 麻雀</a>
       <h2 style="margin:6px 0">🧪 麻雀エンジンシミュレータ</h2>
       <p class="hint" style="font-size:13px; margin:0">
-        4 AI で N 半荘を走らせて、 点数合計 100000 不変 / 全 8 局完走を検証します。
-        AI は簡易ルール (字牌優先打牌、 鳴き 50%、 ロン即宣言)。
+        4 AI で N 半荘を走らせて、点数合計 100000 不変 / 全 8 局完走を検証します。
+        AI は簡易ルール (字牌優先打牌、鳴き 50%、ロン即宣言)。
       </p>
     </div>
     <div class="card">
       <label class="field">
-        <span class="lbl">半荘数 (1〜30、 多いほど時間かかる)</span>
+        <span class="lbl">半荘数 (1〜30、多いほど時間かかる)</span>
         <input type="number" id="sim-n" min="1" max="30" value="5" style="width:100px">
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">

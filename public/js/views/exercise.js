@@ -1,8 +1,8 @@
 // /#/exercise — ポケットに入れて歩数をカウント。 DeviceMotion API を使う簡易歩数計。
 // iOS 13+ は DeviceMotionEvent.requestPermission() の明示許可が必要なので、
-// 「開始」 ボタン (ユーザ操作) を起点に request → listen 開始。
+// 「開始」ボタン (ユーザ操作) を起点に request → listen 開始。
 // 検出: accelerationIncludingGravity の magnitude を 200ms 窓で smoothing し、
-// 閾値 2.0 m/s² を超え、 前回検出から 250ms 以上経っていれば 1 歩としてカウント。
+// 閾値 2.0 m/s² を超え、前回検出から 250ms 以上経っていれば 1 歩としてカウント。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -41,7 +41,7 @@ function onMotion(e) {
   const a = e.accelerationIncludingGravity;
   if (!a) return;
   const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
-  // gravity ~9.8 を引いた純振動成分。 簡易 low-pass smoothing。
+  // gravity ~9.8 を引いた純振動成分。簡易 low-pass smoothing。
   smoothedMag = smoothedMag * 0.7 + (mag - 9.8) * 0.3;
   const now = performance.now();
   const TH_HI = 2.0, TH_LO = 0.5;
@@ -144,7 +144,7 @@ async function toggle() {
   permEl.textContent = 'センサー許可を確認中…';
   const perm = await requestMotionPermission();
   if (perm !== 'granted') {
-    permEl.textContent = 'センサー利用が拒否されました。 ブラウザ設定で 「動き / 方向」 を許可してください';
+    permEl.textContent = 'センサー利用が拒否されました。ブラウザ設定で「動き / 方向」を許可してください';
     return;
   }
   permEl.textContent = '';

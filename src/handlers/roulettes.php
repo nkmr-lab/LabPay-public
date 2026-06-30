@@ -23,10 +23,10 @@ function route_roulettes(PDO $pdo, array $cfg, string $method, array $seg): void
 }
 
 // GET /api/roulettes/tags — admin が config テーブルにカンマ区切りで持つ
-// 共通タグの list を返す。 ユーザはこれを localStorage の個人タグとマージして
+// 共通タグの list を返す。ユーザはこれを localStorage の個人タグとマージして
 // 表示する (ハイブリッド方式)。
 // POST /api/roulettes/{id}/notify — client がホイール停止後に呼ぶ。
-// 起案者 (= creator) のみ送信可。 多重防止のため notified_at が既にあれば no-op。
+// 起案者 (= creator) のみ送信可。多重防止のため notified_at が既にあれば no-op。
 function roulettes_notify(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT title, creator_user_id, winner_user_id, member_ids, reward, notified_at FROM roulettes WHERE id=?");
@@ -241,8 +241,8 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
         return [$rouletteId, $ledgerId];
     });
 
-    // 通知はホイール停止後 (= client が POST /announce する) に遅延。 ここでは送らない。
-    // (アニメーション中に通知が飛んで 「答えバレ」 を起こさないため。)
+    // 通知はホイール停止後 (= client が POST /announce する) に遅延。ここでは送らない。
+    // (アニメーション中に通知が飛んで「答えバレ」を起こさないため。)
     $winnerName = $idToName[$winnerId] ?? 'someone';
     json_response([
         'ok' => true,

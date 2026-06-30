@@ -12,8 +12,8 @@ export async function renderNews() {
     <div class="card page-header">
       <h2 style="margin:0">📰 IT ニュース</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        過去 30 日分の IT 記事を初出日付ごとに。 各記事に GPT 要約 (日本語) が付くと
-        中身を開かなくても概要がわかります。 タップで元記事へ。
+        過去 30 日分の IT 記事を初出日付ごとに。各記事に GPT 要約 (日本語) が付くと
+        中身を開かなくても概要がわかります。タップで元記事へ。
       </p>
     </div>
     <div class="card">
@@ -65,7 +65,7 @@ async function load() {
           }).join('')}
         </div>`;
     }).join('');
-    // v706 #298 「要約を取得」 ボタン: 個別に POST して即時生成、 in-place で置換。
+    // v706 #298 「要約を取得」ボタン: 個別に POST して即時生成、 in-place で置換。
     root.querySelectorAll('.news-load-sum').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = '生成中…';

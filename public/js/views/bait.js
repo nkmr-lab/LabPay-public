@@ -1,6 +1,6 @@
 // /#/bait — アルバイト申請 (#244)。
-// 依頼者: 「時間 (小数) + 対象者 + 用途」 で依頼を作って進捗確認 + 催促。
-// 受け取った側: 月別で自分宛ての全依頼を見て、 申請処理後 done に。
+// 依頼者: 「時間 (小数) + 対象者 + 用途」で依頼を作って進捗確認 + 催促。
+// 受け取った側: 月別で自分宛ての全依頼を見て、申請処理後 done に。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -31,7 +31,7 @@ export async function renderBait() {
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
         実験協力などで学生にアルバイトを依頼するときに。
-        受け取った側は自分の月別リストで全部見えるので、 申請処理をまとめて進められます。
+        受け取った側は自分の月別リストで全部見えるので、申請処理をまとめて進められます。
       </p>
     </div>
 
@@ -92,7 +92,7 @@ async function loadMyAssignments() {
     root.querySelectorAll('.mr-done').forEach(b => b.addEventListener('click', async (e) => {
       e.preventDefault();
       const aid = b.dataset.aid;
-      const note = prompt('処理時のメモ (任意。 アルバイト申請の申請番号等)', '');
+      const note = prompt('処理時のメモ (任意。アルバイト申請の申請番号等)', '');
       try {
         await patch('/api/bait/assignments/' + aid + '/done', { note: note || null });
         toast('処理済にしました');
@@ -189,7 +189,7 @@ export async function renderBaitNew() {
       .sort((a, b) => (GRADE_ORDER.indexOf(a.grade || '') - GRADE_ORDER.indexOf(b.grade || ''))
         || (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
     root.innerHTML = `
-      <div class="muted" style="font-size:12px; margin:6px 0 4px">各人の時間を入力 (小数 OK、 単位 = 時間)</div>
+      <div class="muted" style="font-size:12px; margin:6px 0 4px">各人の時間を入力 (小数 OK、単位 = 時間)</div>
       ${sorted.map(u => `
         <div class="row" style="gap:6px; align-items:center; padding:3px 0">
           ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
@@ -240,7 +240,7 @@ export async function renderBaitDetail({ params }) {
   const id = Number(params?.id);
   const app = document.getElementById('app');
   if (!Number.isFinite(id) || id <= 0) {
-    app.innerHTML = `<div class="card"><a href="#/bait" class="hint">← 一覧</a><div class="muted" style="margin-top:6px">依頼 ID が不正です (${escapeHtml(String(params?.id ?? '不明'))})。 一覧から開き直してください。</div></div>`;
+    app.innerHTML = `<div class="card"><a href="#/bait" class="hint">← 一覧</a><div class="muted" style="margin-top:6px">依頼 ID が不正です (${escapeHtml(String(params?.id ?? '不明'))})。一覧から開き直してください。</div></div>`;
     return;
   }
   app.innerHTML = `
@@ -267,10 +267,10 @@ async function loadDetail(id) {
   try {
     const d = await get('/api/bait/requests/' + id);
     // v814 #407 防御: 旧キャッシュ JS / 一時 fetch 失敗等で d.request が欠落した場合
-    //   「undefined is not an object (evaluating 'r.title')」 で詰まらないように早期検知。
+    //   「undefined is not an object (evaluating 'r.title')」で詰まらないように早期検知。
     if (!d || !d.request) {
       const got = d ? Object.keys(d).join(', ') : 'null';
-      throw new Error(`detail レスポンスに request 欠落 (キー: ${got})。 アプリを一度リロードしてみてください。`);
+      throw new Error(`detail レスポンスに request 欠落 (キー: ${got})。アプリを一度リロードしてみてください。`);
     }
     const r = d.request;
     const assignments = Array.isArray(d.assignments) ? d.assignments : [];

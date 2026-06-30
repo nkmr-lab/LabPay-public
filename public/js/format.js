@@ -1,4 +1,4 @@
-// 共有表示ヘルパ。 各 view で同じパターンがばらつくのを抑える。
+// 共有表示ヘルパ。各 view で同じパターンがばらつくのを抑える。
 //
 //   fmtDate(s)       "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD"      (日付だけ)
 //   fmtDateTime(s)   "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD HH:MM" (秒なし)
@@ -10,8 +10,8 @@
 //                                  'danger' (期限切れ・取消理由), 'muted' (終了・取消),
 //                                  ''      (規定色 = 紫)
 //
-//   participantChip(p)   avatar のみ (small 12px) + title 属性で名前。 行のサマリ用。
-//   participantPill(p)   avatar + 名前 (詳細ページの参加者一覧用、 既存 presence-pill)
+//   participantChip(p)   avatar のみ (small 12px) + title 属性で名前。行のサマリ用。
+//   participantPill(p)   avatar + 名前 (詳細ページの参加者一覧用、既存 presence-pill)
 
 import { escapeHtml, avatarHtml } from './router.js';
 
@@ -63,7 +63,7 @@ export function fmtLocalInput(s) {
 }
 
 // "YYYY-MM-DD HH:MM" → 「あと N 分」 / 「あと N 時間 M 分」 / 「あと N 日」 / 「終了」
-// closed が true なら 「終了」。 過去時刻なら 「超過」 (短い)。
+// closed が true なら「終了」。過去時刻なら「超過」 (短い)。
 export function fmtRelative(s, opts = {}) {
   const { closed = false, expiredLabel = '超過', endedLabel = '終了' } = opts;
   if (closed) return endedLabel;
@@ -87,7 +87,7 @@ export function tag(kind, label) {
   return `<span class="${cls}">${label}</span>`;
 }
 
-// presence-pill 形式 (既存 CSS)。 詳細ページの参加者一覧で使う。
+// presence-pill 形式 (既存 CSS)。詳細ページの参加者一覧で使う。
 export function participantPill(p) {
   if (!p) return '';
   const name = p.display_name || '';
@@ -99,7 +99,7 @@ export function participantPill(p) {
     </span>`;
 }
 
-// avatar のみ (チップ列 = リストサマリ等)。 名前は title (hover) で確認。
+// avatar のみ (チップ列 = リストサマリ等)。名前は title (hover) で確認。
 export function participantChip(p) {
   if (!p) return '';
   const name = p.display_name || '';

@@ -1,6 +1,6 @@
 <?php
 // /api/conf-deadlines — 学会〆切一覧 (#251)。
-// 誰でも登録可、 全員閲覧可。 カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。
+// 誰でも登録可、全員閲覧可。カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。
 
 declare(strict_types=1);
 
@@ -86,7 +86,7 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $limit = max(1, min(20, (int)($_GET['limit'] ?? 5)));
-    // v696 #281 メイン締切が過ぎてもサブ締切が未来なら出す。 各 conf で最も近い
+    // v696 #281 メイン締切が過ぎてもサブ締切が未来なら出す。各 conf で最も近い
     //   未過去 deadline (main / extras のどれか) を採用してそれでソートする。
     // v697 #282 is_mine フラグも付ける (= 自分がメンバー or 起案者)。
     // v702 #291 速度改善: SQL で候補を絞る (メインが 30 日以上過去かつ extras なしは弾く)。
@@ -274,7 +274,7 @@ function cd_members_remove(PDO $pdo, array $cfg, int $id, int $targetUid): void 
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', '見つかりません', 404);
-    // 自分自身を外すか、 起案者 / admin が他人を外すか
+    // 自分自身を外すか、起案者 / admin が他人を外すか
     if ($targetUid !== $uid && (int)$row['created_by_user_id'] !== $uid && !$isAdmin) {
         throw new ApiException('forbidden', '権限なし', 403);
     }
@@ -300,7 +300,7 @@ function cd_validate(array $body): array {
     $deadlineIsAoe = !empty($body['deadline_is_aoe']) ? 1 : 0;
     // v713 #308 暫定 / 仮締切フラグ
     $deadlineIsTentative = !empty($body['deadline_is_tentative']) ? 1 : 0;
-    // v691 #275 追加のサブ締切 (申込 / アブスト等)。 配列 of {label, deadline_at, is_aoe}
+    // v691 #275 追加のサブ締切 (申込 / アブスト等)。配列 of {label, deadline_at, is_aoe}
     $extraJson = null;
     if (!empty($body['extra_deadlines']) && is_array($body['extra_deadlines'])) {
         $clean = [];

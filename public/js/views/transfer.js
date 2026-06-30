@@ -4,7 +4,7 @@ import { state, toast } from '../app.js';
 import { playSound } from '../sounds.js';
 
 export async function renderTransfer({ query } = {}) {
-  // v477 ?to=:user_id で受取人を自動選択 (プロフィール → 「💸 LabPay で送金」 経由)
+  // v477 ?to=:user_id で受取人を自動選択 (プロフィール → 「💸 LabPay で送金」経由)
   const presetTo = query?.to ? Number(query.to) : null;
   const app = document.getElementById('app');
   app.innerHTML = `

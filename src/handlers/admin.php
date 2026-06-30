@@ -294,12 +294,12 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
               (SELECT COALESCE(SUM(unit_price * qty),0) FROM purchases)                     AS turnover
         ";
         $row = $pdo->query($sql)->fetch();
-        // v802 SYSTEM の収支を 「ユーザ直接やり取り」 と 「ESCROW 経由」 に分けて集計。
+        // v802 SYSTEM の収支を「ユーザ直接やり取り」と「ESCROW 経由」に分けて集計。
         //   - ユーザ直接: paper_review / rewriter / fee 等 (= ユーザが SYSTEM に直接支払う)
         //                  と minting / scrapbox_reward 等 (= SYSTEM がユーザに直接配る)
         //   - ESCROW 経由: mahjong_rake (escrow → system) や escrow_deposit 等
-        //   「戻り」 計算はユーザ直接のものだけで OK という方針 (ESCROW 経由は
-        //   循環中の内部移動なので 「戻り」 ではない)。
+        //   「戻り」計算はユーザ直接のものだけで OK という方針 (ESCROW 経由は
+        //   循環中の内部移動なので「戻り」ではない)。
         $stSys = $pdo->prepare("
             SELECT
               CASE WHEN l.to_account_id = ? THEN 'in' ELSE 'out' END AS dir,
@@ -347,7 +347,7 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         $out['system_income_escrow']  = $buckets['in_escrow'];  $out['system_income_escrow_total']  = $sumPt($buckets['in_escrow']);
         $out['system_outflow_user']   = $buckets['out_user'];   $out['system_outflow_user_total']   = $sumPt($buckets['out_user']);
         $out['system_outflow_escrow'] = $buckets['out_escrow']; $out['system_outflow_escrow_total'] = $sumPt($buckets['out_escrow']);
-        // 「戻り」 はユーザ直接だけで計算
+        // 「戻り」はユーザ直接だけで計算
         $out['system_net_user'] = $out['system_income_user_total'] - $out['system_outflow_user_total'];
         // ESCROW 側内訳
         $out['escrow_income_by_type']   = $escIn;
@@ -379,7 +379,7 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
     // ----- users_without_mac -----
     // GET  /api/admin/users_without_mac          : MAC 未登録 (presence_devices 0 件) の human user 一覧
     // POST /api/admin/users_without_mac/notify   : {body, user_ids?} で一斉通知 (user_ids 省略時は全員)
-    //   admin が 「Mac 登録してください」 と督促するための簡易一斉送信。
+    //   admin が「Mac 登録してください」と督促するための簡易一斉送信。
     if ($sub === 'users_without_mac') {
         if ($method === 'GET' && !isset($seg[2])) {
             $st = $pdo->query("
@@ -398,8 +398,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($msg === '' || mb_strlen($msg) > 1000) {
                 throw new ApiException('bad_request', 'body length 1..1000', 400);
             }
-            // user_ids が無ければ MAC 未登録全員を解決。 ある場合は指定された
-            // ID のうち 「MAC 未登録かつ在籍中の human」 のみに絞る (悪用防止)。
+            // user_ids が無ければ MAC 未登録全員を解決。ある場合は指定された
+            // ID のうち「MAC 未登録かつ在籍中の human」のみに絞る (悪用防止)。
             $candidates = [];
             $stC = $pdo->query("
                 SELECT u.id FROM users u
@@ -635,8 +635,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $out['ok'] = false;
                 $out['error'] = $e->getMessage();
             }
-            // scope は auth.test の response header に X-OAuth-Scopes として乗るが、 我々の
-            // slack_api_post は body しか返さないので別途取得。 ここでは body のみ。
+            // scope は auth.test の response header に X-OAuth-Scopes として乗るが、我々の
+            // slack_api_post は body しか返さないので別途取得。ここでは body のみ。
             // chat:write の有無は下の test エンドポイントで 1 通送ってみるのが確実。
             json_response($out);
             return;
@@ -649,7 +649,7 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
             $slackId = (string)$st->fetchColumn();
             if ($slackId === '') {
                 throw new ApiException('bad_request',
-                    '自分の slack_member_id が未設定。 設定 → プロフィールの Slack member ID を埋めてください。', 400);
+                    '自分の slack_member_id が未設定。設定 → プロフィールの Slack member ID を埋めてください。', 400);
             }
             try {
                 $r = slack_api_post($cfg, 'chat.postMessage', [
@@ -669,8 +669,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                 } elseif (str_contains($msg, 'invalid_auth') || str_contains($msg, 'not_authed')) {
                     $hint = 'bot_token が不正 / 期限切れ。 Slack 側で新しいトークンを発行。';
                 } elseif (str_contains($msg, 'channel_not_found')) {
-                    $hint = "あなたの slack_member_id が不正、 もしくは Bot が DM 開けない状態。\n"
-                          . "Slack でアプリの 「ホーム」 タブを 1 回開いてから再試行してください。";
+                    $hint = "あなたの slack_member_id が不正、もしくは Bot が DM 開けない状態。\n"
+                          . "Slack でアプリの「ホーム」タブを 1 回開いてから再試行してください。";
                 }
                 json_response(['ok' => false, 'error' => $msg, 'hint' => $hint]);
             }
@@ -772,7 +772,7 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         db_tx($pdo, function () use ($pdo, $uid, $name) {
             // 既存の handle を user から全部はがす (1 user 1 handle に強制)。
             $pdo->prepare('DELETE FROM user_scrapbox_handles WHERE user_id=?')->execute([$uid]);
-            if ($name === '') return; // 空文字は 「未設定にする」 = 削除のみ
+            if ($name === '') return; // 空文字は「未設定にする」 = 削除のみ
             // 他 user が同じ handle を持ってたら剥がす (steal)。
             $pdo->prepare('DELETE FROM user_scrapbox_handles WHERE scrapbox_name=?')->execute([$name]);
             $pdo->prepare('INSERT INTO user_scrapbox_handles (scrapbox_name, user_id) VALUES (?,?)')

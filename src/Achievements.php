@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 class Achievements {
     // Each tier: ['count' => threshold, 'label' => display, 'medal' => icon].
-    // 各カテゴリで段位名は 「軽い」 → 「極端」 にエスカレートする。 medal は段位の
-    // 視覚的強さを統一 (🥉/🥈/🥇/💎) で揃える。 ラベルだけ category 固有。
+    // 各カテゴリで段位名は「軽い」 → 「極端」にエスカレートする。 medal は段位の
+    // 視覚的強さを統一 (🥉/🥈/🥇/💎) で揃える。ラベルだけ category 固有。
     public const DEFS = [
         'checkin_total' => [
             'title' => 'ラボインマスター',
@@ -191,7 +191,7 @@ class Achievements {
                 ['count' => 50, 'label' => '闇に消えた最終者',     'medal' => '💎'],
             ],
         ],
-        // v473 → v474 食べある記 (places アプリ) 関連実績。 閾値を 5/10/50/200 に。
+        // v473 → v474 食べある記 (places アプリ) 関連実績。閾値を 5/10/50/200 に。
         'places_added' => [
             'title' => '食べある記投稿者',
             'desc'  => '食べある記に登録した店の数',
@@ -292,7 +292,7 @@ class Achievements {
         // v622 ビンゴ実績
         'bingo_lines_total' => [
             'title' => 'ビンゴ職人',
-            'desc'  => '通算ビンゴライン数 (横 / 縦 / 斜めの合計、 週をまたいで加算)',
+            'desc'  => '通算ビンゴライン数 (横 / 縦 / 斜めの合計、週をまたいで加算)',
             'unit'  => 'ライン',
             'icon'  => '🎯',
             'tiers' => [
@@ -441,7 +441,7 @@ class Achievements {
         $out['night_use'] = (int)$st->fetchColumn();
 
         // 早起き: D 07:00〜D 08:30 に presence あり AND D 02:00〜D 05:00 に presence なし
-        // (= 泊まりじゃなく朝来た日)。 全部 INTERVAL N MINUTE。
+        // (= 泊まりじゃなく朝来た日)。全部 INTERVAL N MINUTE。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT d) FROM (
               SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
@@ -461,7 +461,7 @@ class Achievements {
 
         // オープナー: DATE(start) D について min(start) を取る user が自分 AND 自分が
         // その日 0:00 をまたぐセッションを持っていない (= 自分が泊まりでなく朝来た)。
-        // v390 旧版は presence_sessions (閉じた) だけ見ていたが、 まだラボに居る人
+        // v390 旧版は presence_sessions (閉じた) だけ見ていたが、まだラボに居る人
         //      (今朝来てまだ session が閉じてない人) は presence_seen に open で
         //      残っていて拾えなかった → UNION で両方見るように。
         //      presence_seen の session_start_at を s、 last_seen_at を e として扱う。
@@ -490,7 +490,7 @@ class Achievements {
 
         // クローザー: DATE(end) D について max(end) を取る user が自分 AND 自分が
         // その夜 (D+1 00:00:00) をまたぐセッションを持っていない (= 自分が
-        // 泊まりでなく退社した)。 max(end) は 「閉じた end / 開きの last_seen」 を両方見る。
+        // 泊まりでなく退社した)。 max(end) は「閉じた end / 開きの last_seen」を両方見る。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(e) AS d, MAX(e) AS m FROM ({$allSessionsSql}) AS a2
@@ -532,7 +532,7 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['sns_reactions_received'] = (int)$st->fetchColumn();
 
-        // 落札 — auctions テーブルに winner_user_id 列があると仮定。 列が無い場合は 0。
+        // 落札 — auctions テーブルに winner_user_id 列があると仮定。列が無い場合は 0。
         try {
             $st = $pdo->prepare('SELECT COUNT(*) FROM auctions WHERE winner_user_id = ?');
             $st->execute([$userId]);
@@ -560,7 +560,7 @@ class Achievements {
             $out['bingo_weeks_won']   = 0;
         }
 
-        // v741 #288 着回しビンゴ (BingoFit) 実績。 ライン数は cells_json/cell_opens から
+        // v741 #288 着回しビンゴ (BingoFit) 実績。ライン数は cells_json/cell_opens から
         //   都度計算 (専用カラムは持たない)。
         $out['bingofit_lines_total']  = 0;
         $out['bingofit_weeks_won']    = 0;
@@ -638,7 +638,7 @@ class Achievements {
         return $out;
     }
 
-    // v483 #76 AI 称号生成用。 現在獲得中の tier ラベルを 1 行ずつ並べ
+    // v483 #76 AI 称号生成用。現在獲得中の tier ラベルを 1 行ずつ並べ
     //   ハッシュ + プロンプト用テキストを返す。
     public static function earnedSummary(PDO $pdo, int $userId): array {
         $report = self::reportFor($pdo, $userId);

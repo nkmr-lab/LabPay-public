@@ -38,7 +38,7 @@ export async function renderFeedbackAdmin() {
   await loadList();
 }
 
-// v453 Claude 巡回状況を上部に表示。 最終巡回時刻 / approved・working 一覧 +
+// v453 Claude 巡回状況を上部に表示。最終巡回時刻 / approved・working 一覧 +
 // 各行に [Claude に任せる] / [取り消す] / [対象外 (blocked)] ボタン。
 async function renderClaudeDashboard() {
   const root = document.getElementById('fb-claude-dash-body');
@@ -94,7 +94,7 @@ async function renderClaudeDashboard() {
       ${lastDoneLine}
       ${itemsHtml}
     `;
-    // 退避: approved/working → none に戻す (再度 「Claude に任せる」 で再投入)
+    // 退避: approved/working → none に戻す (再度「Claude に任せる」で再投入)
     root.querySelectorAll('[data-dash-block-fb]').forEach(b => {
       b.addEventListener('click', async () => {
         try {
@@ -187,7 +187,7 @@ function row(f) {
     done:     '<span class="tag ok" style="font-size:10px">✅ Claude 完了</span>',
     blocked:  '<span class="tag" style="background:#fee2e2; color:#c62828; font-size:10px">⚠ Claude 中断</span>',
   })[cs] || '';
-  // ステータス変更ボタン (admin が toggleできるのは none ⇄ approved、 ブロック解除は blocked → none)
+  // ステータス変更ボタン (admin が toggleできるのは none ⇄ approved、ブロック解除は blocked → none)
   let claudeBtn = '';
   if (cs === 'none') {
     claudeBtn = `<button data-claude-fb="${f.id}" data-next="approved" class="btn" style="padding:2px 8px; font-size:11px; color:#9a6700; border:1px solid #d4a017">🤖 Claude に任せる</button>`;

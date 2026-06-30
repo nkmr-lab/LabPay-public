@@ -25,7 +25,7 @@ function _overleaf_require_admin(PDO $pdo, array $cfg): array {
 
 function overleaf_list(PDO $pdo, array $cfg): void {
     _overleaf_require_admin($pdo, $cfg);
-    // 各 project に対して 「最新 snapshot」 「24h 前 snapshot」 「7d 前 snapshot」 を抽出して
+    // 各 project に対して「最新 snapshot」「24h 前 snapshot」「7d 前 snapshot」を抽出して
     // 文字数 + 差分を返す。 N 件 (最大 100) 想定。
     $rows = $pdo->query("
         SELECT p.id, p.overleaf_id, p.name, p.owner_email, p.owner_name,
@@ -41,7 +41,7 @@ function overleaf_list(PDO $pdo, array $cfg): void {
           FROM overleaf_snapshots
          WHERE project_id = ?
          ORDER BY taken_at DESC LIMIT 1");
-    // 「N 時間前 (またはそれ以前) の最新 snapshot」 を返す
+    // 「N 時間前 (またはそれ以前) の最新 snapshot」を返す
     $stPast = $pdo->prepare("
         SELECT total_char_count, total_char_body, total_jp_char_count, total_word_count, taken_at
           FROM overleaf_snapshots

@@ -24,11 +24,11 @@ export async function renderSettings() {
         <input type="text" id="profile-name" maxlength="100">
       </label>
       <label class="field">
-        <span class="lbl">電話番号 (任意) <span class="hint-sm">— 緊急連絡用。 ログイン中のラボメンバーに見えます</span></span>
+        <span class="lbl">電話番号 (任意) <span class="hint-sm">— 緊急連絡用。ログイン中のラボメンバーに見えます</span></span>
         <input type="tel" id="profile-phone" maxlength="50" placeholder="例: 090-1234-5678" inputmode="tel">
       </label>
       <label class="field">
-        <span class="lbl">Slack member ID (任意) <span class="hint-sm">— 設定するとアプリ通知が Slack DM にも届きます。 取得方法: Slack プロフィール → 「⋯」 → 「メンバー ID をコピー」</span></span>
+        <span class="lbl">Slack member ID (任意) <span class="hint-sm">— 設定するとアプリ通知が Slack DM にも届きます。取得方法: Slack プロフィール → 「⋯」 → 「メンバー ID をコピー」</span></span>
         <input type="text" id="profile-slack" maxlength="40" placeholder="例: U01ABCD2345" autocapitalize="characters">
       </label>
       <label class="field">
@@ -45,16 +45,16 @@ export async function renderSettings() {
         <textarea id="profile-favorites" rows="3" maxlength="1000" placeholder="例: 〇〇 (アニメ) / △△ (バンド) / □□ (アイドル)"></textarea>
       </label>
       <label class="field">
-        <span class="lbl">💴 PayPay ID (送金用、 他のメンバーから見えます)</span>
+        <span class="lbl">💴 PayPay ID (送金用、他のメンバーから見えます)</span>
         <input type="text" id="profile-paypay" maxlength="100" placeholder="例: yourid1234 (PayPay 内で検索できる ID)">
       </label>
       <label class="field">
-        <span class="lbl">🏦 銀行口座メモ (送金用、 他のメンバーから見えます)</span>
+        <span class="lbl">🏦 銀行口座メモ (送金用、他のメンバーから見えます)</span>
         <textarea id="profile-bank" rows="3" maxlength="500" placeholder="例: ○○銀行 ○○支店普通 1234567 ヤマダタロウ"></textarea>
       </label>
       <div class="row" style="gap:6px; align-items:flex-end">
         <label class="field" style="flex:1">
-          <span class="lbl">🎂 誕生日 (任意、 ホームでバースデー表示)</span>
+          <span class="lbl">🎂 誕生日 (任意、ホームでバースデー表示)</span>
           <input type="text" id="profile-birthday-md" maxlength="5" placeholder="MM-DD (例: 03-15)" style="font-variant-numeric:tabular-nums">
         </label>
         <label class="field" style="width:120px">
@@ -63,7 +63,7 @@ export async function renderSettings() {
         </label>
       </div>
       <label class="field">
-        <span class="lbl">📍 出生地 (任意、 西洋占星術のラッキー方位に使用) <span class="hint-sm">— 都市名 or 都道府県で OK (出生時間は不要)</span></span>
+        <span class="lbl">📍 出生地 (任意、西洋占星術のラッキー方位に使用) <span class="hint-sm">— 都市名 or 都道府県で OK (出生時間は不要)</span></span>
         <input type="text" id="profile-birth-place" maxlength="100" placeholder="例: 神戸市 / 兵庫県 / 東京">
       </label>
       <div class="row" style="gap:6px">
@@ -81,7 +81,7 @@ export async function renderSettings() {
       <h3>ホームウィジェット</h3>
       <p class="hint">
         ホームに置くウィジェット (進行中・タスク・いる人など) と並び順を変えられます。
-        チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
+        チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-layout-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -90,7 +90,7 @@ export async function renderSettings() {
       <h3>タブのカスタマイズ</h3>
       <p class="hint">
         上部のナビゲーションに表示するタブと並び順を変えられます。
-        チェックを外すと非表示。 ↑ ↓ で並び替え。 設定はこのブラウザにのみ保存されます。
+        チェックを外すと非表示。 ↑ ↓ で並び替え。設定はこのブラウザにのみ保存されます。
       </p>
       <div id="tab-layout-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -98,8 +98,8 @@ export async function renderSettings() {
     <div class="card" id="home-actions">
       <h3>ホーム上部のクイックボタン</h3>
       <p class="hint">
-        ホーム画面の残高直下に並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
-        必要なものだけ ON に。 設定はこのブラウザにのみ保存されます。
+        ホーム画面の残高直下に並ぶ「買う / 売る / 頼む / 送る…」のセット。
+        必要なものだけ ON に。設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-actions-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -107,7 +107,7 @@ export async function renderSettings() {
     <div class="card">
       <h3>通知</h3>
       <p class="hint" style="margin:6px 0 8px">
-        ブラウザ通知を許可すると、 アプリを開いていない時でも新着通知がスマホの通知センターに出ます (タブを開きっぱなしの時のみ動作)。
+        ブラウザ通知を許可すると、アプリを開いていない時でも新着通知がスマホの通知センターに出ます (タブを開きっぱなしの時のみ動作)。
       </p>
       <button id="notif-perm" class="primary">🔔 ブラウザ通知を有効にする</button>
       <span id="notif-perm-status" class="hint-sm" style="margin-left:8px"></span>
@@ -123,7 +123,7 @@ export async function renderSettings() {
       <div class="sep" style="margin:14px 0 10px"></div>
       <h3 style="margin:0">終わった予定を消すまでの時間</h3>
       <p class="hint">
-        予定の終了時刻から指定した分数が経過したら、 ホームの「今日の予定」 から
+        予定の終了時刻から指定した分数が経過したら、ホームの「今日の予定」から
         消えます (0 で即時、 1440 で 24 時間)。 default 120 分。
       </p>
       <div class="row" style="gap:6px; align-items:center; margin-top:4px">
@@ -249,7 +249,7 @@ export async function renderSettings() {
   `;
 
   // v525 #175 各カテゴリ (h2 が無い card) をデフォルト折りたたみに変換。
-  //   先頭の h2「設定」 カードはそのまま、 各 .card で 「:scope > h3」 を持つものを
+  //   先頭の h2「設定」カードはそのまま、各 .card で「:scope > h3」を持つものを
   //   <details>/<summary> に変換して default closed に。
   for (const card of document.querySelectorAll('#app > .card')) {
     const h3 = card.querySelector(':scope > h3');
@@ -280,8 +280,8 @@ export async function renderSettings() {
   await load();
   loadSoundPrefs(); // fire-and-forget; 失敗してもページ全体は崩れない
   // v545 #203 全 getElementById に optional chaining + null ガードを入れる。 hash 変化等で
-  //   非同期に DOM が差し替わったり、 条件付きレンダリングで要素が無い場合でも 「null is
-  //   not an object」 で settings 全体が落ちないように。
+  //   非同期に DOM が差し替わったり、条件付きレンダリングで要素が無い場合でも「null is
+  //   not an object」で settings 全体が落ちないように。
   const savedIp = localStorage.getItem('labpay-my-ip');
   const myIpInput = document.getElementById('my-ip-input');
   if (savedIp && myIpInput) myIpInput.value = savedIp;
@@ -308,7 +308,7 @@ export async function renderSettings() {
       npBtn.textContent = '🔔 通知有効';
       npBtn.disabled = true;
     } else if (Notification.permission === 'denied') {
-      npStatus.textContent = '(ブロック中。 ブラウザ設定から許可してください)';
+      npStatus.textContent = '(ブロック中。ブラウザ設定から許可してください)';
       npStatus.style.color = 'var(--danger)';
     } else {
       npStatus.textContent = '(未許可)';
@@ -324,7 +324,7 @@ export async function renderSettings() {
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
-  // v497 #103 アプリ表示設定撤去 (全部表示する方針)。 関数呼び出しも削除。
+  // v497 #103 アプリ表示設定撤去 (全部表示する方針)。関数呼び出しも削除。
   renderHomeActionsEditor();
   renderBalanceCompEditor();
   // v419b URL ?focus=home-actions の場合は該当カードへスクロール + 短時間強調
@@ -345,7 +345,7 @@ export async function renderSettings() {
     }
   } catch (_) {}
   // 終わった予定を消す分数: localStorage から現在値を読んで input に流し込み、
-  // 「保存」 で writeCalHideAfterMin。 即座に home.js が次回 render で使う。
+  // 「保存」で writeCalHideAfterMin。即座に home.js が次回 render で使う。
   const hideInput = document.getElementById('cal-hide-after-min');
   if (hideInput) {
     hideInput.value = String(readCalHideAfterMin());
@@ -451,7 +451,7 @@ function renderHomeLayoutEditor() {
   if (!root) return;
   const layout = readHomeLayout();
   const knownIds = HOME_CARDS.map(c => c.id);
-  // 保存 order に無いものは末尾。 未知の id は捨てる。
+  // 保存 order に無いものは末尾。未知の id は捨てる。
   const orderedIds = [
     ...layout.order.filter(id => knownIds.includes(id)),
     ...knownIds.filter(id => !layout.order.includes(id)),
@@ -484,9 +484,9 @@ function renderHomeLayoutEditor() {
       const set = new Set(l.hidden);
       if (ev.target.checked) set.delete(id); else set.add(id);
       l.hidden = [...set];
-      // v652 toggle 時は必ず現在の全 id を order に保存。 これで
+      // v652 toggle 時は必ず現在の全 id を order に保存。これで
       // readHomeLayout() の NEW_DEFAULT_SHOWN auto-show merge() が
-      // 「order に既にいる」 と判断してユーザのチェック解除を
+      // 「order に既にいる」と判断してユーザのチェック解除を
       // 上書きしなくなる (= チェック外しても反映される)。
       l.order = orderedIds.slice();
       writeHomeLayout(l);
@@ -618,7 +618,7 @@ function renderHomeActionsEditor() {
 }
 
 // ---------------- アプリ表示 (/#/apps) ----------------
-// 各 app id について表示 / 非表示を localStorage に保存。 設定値が無ければ defaultVisible。
+// 各 app id について表示 / 非表示を localStorage に保存。設定値が無ければ defaultVisible。
 // v444: 通知軸カテゴリごとにセクション見出し付きで並べる。
 function renderAppsVisEditor() {
   const root = document.getElementById('apps-vis-list');
@@ -654,7 +654,7 @@ function renderAppsVisEditor() {
 }
 
 // ---------------- Google Calendar ----------------
-// 連携状態を /api/me/calendar で取得し、未連携なら 「連携する」 ボタン
+// 連携状態を /api/me/calendar で取得し、未連携なら「連携する」ボタン
 // (Google OAuth incremental authz)、連携済みなら calendar 一覧 + toggle + 解除を出す。
 async function loadCalendar() {
   const root = document.getElementById('cal-section');
@@ -677,7 +677,7 @@ async function loadCalendar() {
         <button id="cal-disconnect" class="danger">連携を解除</button>
       </div>
       <div class="hint-sm" style="margin-top:6px">
-        書き込み権限 (Zoom MTG 作成など) を追加で要求する時は 「再連携」 でもう一度 Google の同意画面を通してください。
+        書き込み権限 (Zoom MTG 作成など) を追加で要求する時は「再連携」でもう一度 Google の同意画面を通してください。
       </div>`;
     document.getElementById('cal-refresh')?.addEventListener('click', loadCalendar);
     document.getElementById('cal-disconnect')?.addEventListener('click', async () => {
@@ -689,7 +689,7 @@ async function loadCalendar() {
     let cals;
     try { cals = await get('/api/me/calendar/calendars'); }
     catch (e) {
-      // 401/409 で再連携を促されたら 「連携する」 に戻ったような表示に。
+      // 401/409 で再連携を促されたら「連携する」に戻ったような表示に。
       document.getElementById('cal-list').innerHTML =
         `<div class="muted">${escapeHtml(e.message)}</div>`;
       return;
@@ -730,7 +730,7 @@ async function loadCalendar() {
 }
 
 // ---------------- Calendar filter rules ----------------
-// タイトル部分一致 / 正規表現で 「今日の予定」 カードに出さない予定を絞る。
+// タイトル部分一致 / 正規表現で「今日の予定」カードに出さない予定を絞る。
 // rules = [{pattern, regex?: true}, ...]
 let cachedFilterRules = [];
 
@@ -892,7 +892,7 @@ async function onLogoutFromSettings() {
 }
 
 // 効果音設定セクション: イベントごとに規定 / 自分で選ぶ / 無音の 3 モード切替。
-// custom の時だけ clip dropdown + 音量 slider を露出。 変更はその場で PATCH。
+// custom の時だけ clip dropdown + 音量 slider を露出。変更はその場で PATCH。
 async function loadSoundPrefs() {
   const root = document.getElementById('sound-prefs');
   if (!root) return;
@@ -1006,7 +1006,7 @@ async function load() {
     const data = await get('/api/presence/devices');
     const root = document.getElementById('dev-list');
     // v524 #173 #177 ページ遷移中に async が解決すると root が null になることがある
-    //   ので防御。 古い render の async 処理を捨てる形。
+    //   ので防御。古い render の async 処理を捨てる形。
     if (!root) return;
     if (!data.items.length) {
       root.innerHTML = `<div class="empty">まだ登録されていません</div>`;

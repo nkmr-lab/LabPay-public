@@ -1,5 +1,5 @@
 // v789 #389 論文要約 / 全訳詳細ページの反応 + コメントパネル。
-// v841 #424 ❤ → ⭐ に統合、 一覧と同じ ai_result_stars / ai_result_bookmarks を読む。
+// v841 #424 ❤ → ⭐ に統合、一覧と同じ ai_result_stars / ai_result_bookmarks を読む。
 //
 // 使い方:
 //   container.innerHTML = renderInteractionsCard({ apiBase: '/api/ai/paper_translate', refId, reactions });

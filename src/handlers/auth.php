@@ -128,7 +128,7 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
 
     // ─── Zoom OAuth (User-managed) ────────────────────────────────────
     // /api/auth/zoom/connect  (GET): 認可画面へリダイレクト。 CSRF state を cookie に。
-    // /api/auth/zoom/callback (GET): code → token、 users 更新、 設定ページへ戻す。
+    // /api/auth/zoom/callback (GET): code → token、 users 更新、設定ページへ戻す。
     if ($sub === 'zoom' && ($seg[2] ?? '') === 'connect' && $method === 'GET') {
         $u = Auth::requireUser($pdo, $cfg);
         if (empty($cfg['zoom']['client_id'])) {

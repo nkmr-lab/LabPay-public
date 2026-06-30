@@ -1,4 +1,4 @@
-// v620 自作ゲームのユーザ向け管理画面。 各ユーザが /#/my-games で
+// v620 自作ゲームのユーザ向け管理画面。各ユーザが /#/my-games で
 //   - 自分の kind を新規登録 / 編集 / 無効化
 //   - JS module をファイルアップロードで DB に格納 (サーバの書き込み権限不要)
 //   - 場代 (provider_share_pct) で提供者 (= 自分) に pot の一部が入る
@@ -25,7 +25,7 @@ export async function renderMyCustomGames() {
       <h2 style="margin:6px 0">🎮 自作ゲーム登録</h2>
       <p class="hint" style="font-size:13px">
         自分で書いたゲームを LabPay に追加できます。 JS ファイルをアップロードして DB に格納。
-        参加者が払う 「場代」 は <b>提供者 (自分) に 90%、 SYSTEM に 10%</b> 入ります (fee=0 なら無料)。
+        参加者が払う「場代」は <b>提供者 (自分) に 90%、 SYSTEM に 10%</b> 入ります (fee=0 なら無料)。
         詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
       </p>
     </div>
@@ -65,10 +65,10 @@ export async function renderMyCustomGames() {
           </select>
           <input id="mcg-jsfile" type="file" accept=".js,.mjs,text/javascript" style="font-size:12px; max-width:170px">
         </div>
-        <textarea id="mcg-jssrc" rows="14" placeholder="defineGame({ kind, ... }) で書く。 上の「テンプレート読み込み…」 からひな型を入れられます。"
+        <textarea id="mcg-jssrc" rows="14" placeholder="defineGame({ kind, ... }) で書く。上の「テンプレート読み込み…」からひな型を入れられます。"
           style="width:100%; box-sizing:border-box; margin-top:6px; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; line-height:1.4; white-space:pre"></textarea>
         <div class="hint-sm" style="font-size:11px; margin-top:4px">
-          空のままでも登録 OK (= プレースホルダ kind だけ作成。 後で 「JS 更新」 から差し替え)。 最大 ${MAX_JS_KB}KB。
+          空のままでも登録 OK (= プレースホルダ kind だけ作成。後で「JS 更新」から差し替え)。最大 ${MAX_JS_KB}KB。
         </div>
       </div>
       <div style="margin-top:8px">
@@ -245,7 +245,7 @@ async function loadKinds(myUid, isAdmin) {
       b.addEventListener('click', async () => {
         const kind = b.dataset.kind;
         const cur = parseInt(b.dataset.fee, 10) || 0;
-        const v = prompt('場代 (pt) — 0〜100。 プレイ毎に各プレイヤーが払う額 (90% 自分、 10% SYSTEM)。', String(cur));
+        const v = prompt('場代 (pt) — 0〜100。プレイ毎に各プレイヤーが払う額 (90% 自分、 10% SYSTEM)。', String(cur));
         if (v === null) return;
         const fee = parseInt(v, 10);
         if (Number.isNaN(fee) || fee < 0 || fee > 100) { toast('0〜100 の数値で'); return; }

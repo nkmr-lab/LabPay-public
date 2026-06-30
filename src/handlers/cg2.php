@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const CG2_MAX_JS_BYTES = 200_000;
-const CG2_RAKE_PCT = 10;   // 場代の 10% を SYSTEM、 残り 90% を提供者へ
+const CG2_RAKE_PCT = 10;   // 場代の 10% を SYSTEM、残り 90% を提供者へ
 
 function route_cg2(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';

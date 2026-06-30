@@ -1,5 +1,5 @@
 <?php
-// v634 ⚾ ドラフトハンドラ。 プロ野球風順番指名 + くじ抽選。
+// v634 ⚾ ドラフトハンドラ。プロ野球風順番指名 + くじ抽選。
 //
 // state_json の形:
 // {
@@ -114,7 +114,7 @@ function drafts_create(PDO $pdo, array $cfg, int $uid): void {
     foreach ($participants as $pid) {
         if ($pid === $uid) continue;
         try { notify_safely($pdo, $cfg, $pid, 'admin_notice',
-            "⚾ {$byName} さんから 「{$title}」 ドラフトに参加を招待されました", 'drafts', $did); }
+            "⚾ {$byName} さんから「{$title}」ドラフトに参加を招待されました", 'drafts', $did); }
         catch (Throwable $_) {}
     }
     json_response(['ok' => true, 'id' => $did]);
@@ -212,7 +212,7 @@ function drafts_pick(PDO $pdo, int $uid, int $did): void {
         $pending = array_map('intval', $state['pending'] ?? []);
         if (!in_array($uid, $pending, true)) throw new ApiException('forbidden', 'あなたは今指名する番ではない', 403);
 
-        // value の有効性: 候補に含まれて、 自分がまだ確定で取ってないこと
+        // value の有効性: 候補に含まれて、自分がまだ確定で取ってないこと
         $candidates = json_decode($g['candidates_json'], true) ?: [];
         $candValues = array_map(fn($c) => $g['target_type'] === 'user' ? (int)$c : (string)$c, $candidates);
         $pickVal = $g['target_type'] === 'user' ? (int)$value : (string)$value;
@@ -278,7 +278,7 @@ function drafts_draw(PDO $pdo, int $uid, int $did): void {
     json_response(['ok' => true]);
 }
 
-// creator が 「次へ」 押す。 reveal や lottery_reveal から進める。
+// creator が「次へ」押す。 reveal や lottery_reveal から進める。
 function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
     db_tx($pdo, function () use ($pdo, $cfg, $uid, $did) {
         $g = drafts_lock($pdo, $did);
@@ -297,7 +297,7 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
                 $byCandidate[$key] = $byCandidate[$key] ?? [];
                 $byCandidate[$key][] = (int)$u;
             }
-            // 単独 = 確定、 競合 = 後でくじ
+            // 単独 = 確定、競合 = 後でくじ
             $round = (int)$state['round'];
             $confirmed = $state['confirmed'] ?? [];
             $confirmed[(string)$round] = $confirmed[(string)$round] ?? [];
@@ -369,7 +369,7 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
             $pdo->prepare("UPDATE drafts SET status='finished', finished_at=NOW() WHERE id=?")->execute([$did]);
             try {
                 foreach ($participants as $p) {
-                    notify_safely($pdo, $cfg, $p, 'admin_notice', "⚾ ドラフト 「{$g['title']}」 終了。 結果を確認してください", 'drafts', $did);
+                    notify_safely($pdo, $cfg, $p, 'admin_notice', "⚾ ドラフト「{$g['title']}」終了。結果を確認してください", 'drafts', $did);
                 }
             } catch (Throwable $_) {}
         }
@@ -389,7 +389,7 @@ function drafts_advance_after_round_pick(array &$state, array $participants, arr
         if (!isset($confirmed[(string)$p])) $stillPending[] = $p;
     }
     if (count($stillPending) > 0) {
-        // 1 人だけなら残り候補から自動確定? いや、 仕様通り picking させる (1 人なら即確定)
+        // 1 人だけなら残り候補から自動確定? いや、仕様通り picking させる (1 人なら即確定)
         $state['phase'] = 'picking';
         $state['pending'] = $stillPending;
         return;
@@ -406,8 +406,8 @@ function drafts_advance_after_round_pick(array &$state, array $participants, arr
     ));
     if (count($remaining) < 1 || count($remaining) < count($participants)) {
         // 候補が参加者数を下回ったら終了 (= 全員が次 round で取れない)
-        // ただし残り >= 1 なら 「もう 1 round 走らせて取れる人だけ取る」 でも良い。
-        // ここでは 「全員取れる」 という公平性優先で終了。
+        // ただし残り >= 1 なら「もう 1 round 走らせて取れる人だけ取る」でも良い。
+        // ここでは「全員取れる」という公平性優先で終了。
         $state['phase'] = 'finished';
         return;
     }

@@ -1,13 +1,13 @@
 <?php
-// v872 #454 早押しクイズ。 リアル現場 (ゼミ等) で出題者が口頭で出題、
-// 参加者がスマホで 「ボタン」 をタップ → 1 番早かった人が回答権 (緑) +
-// 他の人は順位と 「1 位との差」 が表示 (赤)。 出題者が 「次へ」 で
+// v872 #454 早押しクイズ。リアル現場 (ゼミ等) で出題者が口頭で出題、
+// 参加者がスマホで「ボタン」をタップ → 1 番早かった人が回答権 (緑) +
+// 他の人は順位と「1 位との差」が表示 (赤)。出題者が「次へ」で
 // 全員早押しモードに戻る。
 //
 //   GET    /api/buzzer/sessions                  active 一覧
 //   POST   /api/buzzer/sessions                  作成 { title }
 //   GET    /api/buzzer/sessions/<id>             詳細 (現在ラウンド + タップランキング)
-//   POST   /api/buzzer/sessions/<id>/new-round   起案者が 「次へ」 (round_no++)
+//   POST   /api/buzzer/sessions/<id>/new-round   起案者が「次へ」 (round_no++)
 //   POST   /api/buzzer/sessions/<id>/tap         { elapsed_ms } 自分の早押しを送信
 //   POST   /api/buzzer/sessions/<id>/end         起案者が終了
 //   GET    /api/buzzer/sessions/<id>/poll        軽量ポーリング (round_no + taps だけ)

@@ -1,5 +1,5 @@
 <?php
-// /api/posts — シンプル SNS (Twitter 風)。 全員が全投稿を見る (フォローなし)。
+// /api/posts — シンプル SNS (Twitter 風)。全員が全投稿を見る (フォローなし)。
 //  - body / image_url / lat / lng を投稿
 //  - parent_id で返信 (スレッド)
 //  - いいねは post_likes (PK = post_id + user_id) でトグル
@@ -11,7 +11,7 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { posts_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { posts_create($pdo, $cfg); return; }
-    // v480 軽量ポーリング: 最新投稿 id だけ返す。 これより大きい id を持つ
+    // v480 軽量ポーリング: 最新投稿 id だけ返す。これより大きい id を持つ
     //   投稿があるならクライアントが一覧を取り直す。 DB 1 クエリで終わる。
     if ($sub === 'latest_id' && $method === 'GET') { posts_latest_id($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
@@ -88,16 +88,16 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             'author_kind'     => $r['author_kind'] ?? null,
             'body'            => $r['body'],
             'image_url'       => $r['image_url'],
-            // v494 #101 サムネが実在する時だけそのURLを返す。 存在しなければ null。
+            // v494 #101 サムネが実在する時だけそのURLを返す。存在しなければ null。
             //   クライアントは image_thumb_url ?? image_url を使う。
             'image_thumb_url' => $r['image_url'] ? thumb_url_for((string)$r['image_url']) : null,
             'lat'             => $r['lat'] !== null ? (float)$r['lat'] : null,
             'lng'             => $r['lng'] !== null ? (float)$r['lng'] : null,
             'parent_id'       => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,
             'created_at'      => $r['created_at'],
-            // v497 #104 旅行中などタイムゾーンが端末≠サーバ (JST) の時、 クライアントの
+            // v497 #104 旅行中などタイムゾーンが端末≠サーバ (JST) の時、クライアントの
             //   new Date('YYYY-MM-DD HH:MM:SS') は端末ローカルとして解釈してしまい
-            //   「結構前の投稿がたった今」 になる。 TZ付きISOで返して曖昧さをなくす。
+            //   「結構前の投稿がたった今」になる。 TZ付きISOで返して曖昧さをなくす。
             'created_at_iso'  => $r['created_at'] ? (new DateTimeImmutable((string)$r['created_at']))->format('c') : null,
             // 後方互換: like = heart。
             'like_count'      => $heartN,
@@ -188,7 +188,7 @@ function posts_create(PDO $pdo, array $cfg): void {
         if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先投稿がありません', 404);
     }
     // v465 → v477 @LabPay メンション or LabPay 投稿への返信 → 自動的に feedback 起票。
-    // admin 投稿なら即 approved。 「#バグ」 ハッシュタグで kind='bug'、 それ以外 (default) は 'feature'。
+    // admin 投稿なら即 approved。「#バグ」ハッシュタグで kind='bug'、それ以外 (default) は 'feature'。
     // i フラグで大文字小文字を無視 (@labpay も拾う)。
     $linkedFeedbackId = null;
     $shouldCreateFb = false;
@@ -291,7 +291,7 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
     $stR->execute([$id]);
     $replies = posts_serialize_rows($pdo, $stR->fetchAll(PDO::FETCH_ASSOC), (int)$u['id']);
     // v498 #106 詳細では誰がどの kind を押したかも返す。
-    // v499 #117 reactors は投稿者本人と admin のみ閲覧可。 他人が見るとプライバシー
+    // v499 #117 reactors は投稿者本人と admin のみ閲覧可。他人が見るとプライバシー
     //   懸念があるので空配列で隠す。
     $reactors = [];
     $isOwner = (int)$post['user_id'] === (int)$u['id'];
@@ -341,7 +341,7 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     // v524 #182 削除権限を絞る:
     //   - 投稿者本人: 常に OK
-    //   - admin: 自分の投稿 + system (LabPay 自動投稿) のみ。 他人の人間投稿は削除不可
+    //   - admin: 自分の投稿 + system (LabPay 自動投稿) のみ。他人の人間投稿は削除不可
     //   - その他: 自分のみ
     $isAuthor = $cuid === (int)$u['id'];
     $canDelete = $isAuthor || ($isAdmin && $authorIsSystem);
@@ -352,7 +352,7 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v785 #383 投稿画像を 90° 回転し、 サーバ側で上書き保存。 投稿者 or admin のみ。
+// v785 #383 投稿画像を 90° 回転し、サーバ側で上書き保存。投稿者 or admin のみ。
 function posts_rotate_image(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();

@@ -1,5 +1,5 @@
 <?php
-// v553 #209 麻雀 Phase 1: 4人卓の賭けプール + 結果分配 (実ゲームは外部、 結果だけ申告)。
+// v553 #209 麻雀 Phase 1: 4人卓の賭けプール + 結果分配 (実ゲームは外部、結果だけ申告)。
 //   GET    /api/mahjong/games               一覧 (lobby + playing + 直近 finished)
 //   POST   /api/mahjong/games               { title?, buy_in? } 新規 (起案者は自動参加 = 50pt 預託)
 //   GET    /api/mahjong/games/:id           詳細 (players + pot + status)
@@ -7,7 +7,7 @@
 //   POST   /api/mahjong/games/:id/leave     脱退 (lobby 中のみ、 50pt 返金)
 //   POST   /api/mahjong/games/:id/start     開始 (4人揃って起案者のみ。 playing 状態へ)
 //   POST   /api/mahjong/games/:id/report    結果報告 { ranks: { user_id: rank } } 起案者のみ
-//   POST   /api/mahjong/games/:id/cancel    キャンセル (lobby/reporting のみ、 全員返金)
+//   POST   /api/mahjong/games/:id/cancel    キャンセル (lobby/reporting のみ、全員返金)
 
 declare(strict_types=1);
 
@@ -49,7 +49,7 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は練習モード化。
-//   エントリーフィー 5pt (v624 から、 払い出し 0 = 純粋な練習料金)。
+//   エントリーフィー 5pt (v624 から、払い出し 0 = 純粋な練習料金)。
 const MAHJONG_AI_BUYIN = 5;
 
 // v557 POST /api/mahjong/ai/new — AI 3 体相手の対戦卓を作成 + 即開始 (練習モード)
@@ -89,7 +89,7 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
     json_response(['ok' => true, 'id' => $gameId]);
 }
 
-// AI 自動進行: turn が bot のときに AI ロジックで進める。 人間の番 or 終局で停止。
+// AI 自動進行: turn が bot のときに AI ロジックで進める。人間の番 or 終局で停止。
 // v566 #222 maxIter で 1 step ずつに制限可。 state polling から呼ぶ時は 1〜2 で
 //   緩やかに 1人ずつ進む。 action 直後 (人間のアクション後) は多めに走らせて人間の
 //   次の番まで進める。
@@ -143,7 +143,7 @@ function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
             $progressed = true;
         }
         else if ($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance') {
-            // 鳴き/ロン候補をループ。 人間が候補に居れば人間のアクション待ちで停止
+            // 鳴き/ロン候補をループ。人間が候補に居れば人間のアクション待ちで停止
             $discarder = $state['last_discarded']['by'] ?? null;
             $allHandled = true;
             for ($s = 0; $s < 4; $s++) {
@@ -154,7 +154,7 @@ function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
                     $allHandled = false;
                     break;
                 }
-                // bot: ロン可能ならする、 鳴きは確率
+                // bot: ロン可能ならする、鳴きは確率
                 $ronCheck = MahjongEngine::tryRon($state, $s);
                 if ($ronCheck['ok']) {
                     $isOya = ($s === $state['oya']);
@@ -196,8 +196,8 @@ function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
     }
 }
 
-// AI 卓の終局: pot は人間が払った 5pt のみ。 配分は順位ベースで:
-//   1位: 5pt × 4 = 20pt (= pot × 4 倍) — 簡略のため 5pt 出した相手の AI 3 体は仮想 pot を出した扱いで、 結果分配。
+// AI 卓の終局: pot は人間が払った 5pt のみ。配分は順位ベースで:
+//   1位: 5pt × 4 = 20pt (= pot × 4 倍) — 簡略のため 5pt 出した相手の AI 3 体は仮想 pot を出した扱いで、結果分配。
 //   実際は: 人間が 1位 → +15pt (= 4回分の戻り) / 2位 → +0pt / 3位 → -2pt / 4位 → -5pt 等
 // 簡略: 人間の最終 vs 25000 点の差分を pt 換算 (4000点 = 1pt) で直接 ledger 動かす
 function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn): void {
@@ -212,13 +212,13 @@ function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn
     }
     if ($humanUid === null) return;
     $finalScore = (int)$state['players'][$humanSeat]['score'];
-    // 25000 → buy_in 充当済。 順位を出す
+    // 25000 → buy_in 充当済。順位を出す
     $scores = [];
     foreach ($state['players'] as $i => $p) $scores[] = ['idx' => $i, 'score' => (int)$p['score']];
     usort($scores, fn($a, $b) => $b['score'] - $a['score']);
     $rank = 1;
     foreach ($scores as $j => $sc) if ($sc['idx'] === $humanSeat) { $rank = $j + 1; break; }
-    // v578 feedback#224: AI 麻雀は練習モード。 順位は記録するがポイント払い出しは 0。
+    // v578 feedback#224: AI 麻雀は練習モード。順位は記録するがポイント払い出しは 0。
     $payout = 0;
     $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = 0 WHERE game_id = ? AND user_id = ?")
         ->execute([$rank, $gid, $humanUid]);
@@ -515,7 +515,7 @@ function mahjong_join(PDO $pdo, array $cfg, int $uid, int $gid): void {
                 $remaining = MAHJONG_SEATS - ($cnt + 1);
                 $msg = $remaining > 0
                     ? "🀄 {$name} が麻雀卓 #{$gid} に参加 (残り {$remaining} 席)"
-                    : "🀄 {$name} が参加して麻雀卓 #{$gid} が満卓に! 起案者は 「開始」 を押してください";
+                    : "🀄 {$name} が参加して麻雀卓 #{$gid} が満卓に! 起案者は「開始」を押してください";
                 notify_safely($pdo, $CFG, (int)$other, 'admin_notice', $msg, 'mahjong', $gid);
             } catch (Throwable $_) {}
         }
@@ -583,7 +583,7 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
     $players = $stPa->fetchAll(PDO::FETCH_ASSOC);
 
     $state = $g['state_json'] ? json_decode($g['state_json'], true) : null;
-    // 公開可能な状態を構成 (deck は完全に隠す、 他人の hand はサイズだけ)
+    // 公開可能な状態を構成 (deck は完全に隠す、他人の hand はサイズだけ)
     $pub = null;
     if ($state) {
         $pubPlayers = [];
@@ -606,7 +606,7 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
                 $canTsumo = !empty($tCheck['ok']);
                 $rCheck = MahjongEngine::declareRiichi($state, $mySeat);
                 // declareRiichi は state を変えてしまうので副作用なし版で判定したい
-                // 簡易: 既に riichi 済みなら不可、 そうでなく hand の形状で判定
+                // 簡易: 既に riichi 済みなら不可、そうでなく hand の形状で判定
                 // ここでは tryRiichi の結果のみ参考。 state 変更を巻き戻す
                 if (!empty($rCheck['ok'])) {
                     $canRiichi = true;
@@ -764,7 +764,7 @@ function mahjong_action(PDO $pdo, array $cfg, int $uid, int $gid): void {
     json_response($result ?: ['ok' => true]);
 }
 
-// 打牌後、 鳴き候補が無い場合に turn を進める helper
+// 打牌後、鳴き候補が無い場合に turn を進める helper
 function mahjong_advance_after_discard(array &$state): void {
     if ($state['awaiting'] !== 'ron_chance') return;
     $discarder = $state['last_discarded']['by'] ?? null;
@@ -815,7 +815,7 @@ function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array 
 
 // 局終了後に次局へ進める or 終了
 //   v555: 連荘 + 半荘 (東1-4 + 南1-4 = round_index 0..7) 対応
-//   親和了 or 流局時テンパイ親 → 親継続 (honba+1)。 それ以外 → oya 進行 + round_index++
+//   親和了 or 流局時テンパイ親 → 親継続 (honba+1)。それ以外 → oya 進行 + round_index++
 function mahjong_maybe_advance_round(?PDO $pdo, array &$state, array $g): void {
     if ($state['phase'] !== 'kyoku_end') return;
     $oyaContinue = false;
@@ -906,7 +906,7 @@ function mahjong_report(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $rakePct = (int)$g['rake_pct'];
         $rake = (int)floor($pot * $rakePct / 100);
         // 場代をシステムへ
-        if ($rake > 0) Ledger::transfer($pdo, 1, 1, 0, 'mahjong_rake', 'mahjong', $gid, '麻雀場代 ' . $rake . 'pt 徴収'); // (1→1 は no-op、 実質 pot だけ残す)
+        if ($rake > 0) Ledger::transfer($pdo, 1, 1, 0, 'mahjong_rake', 'mahjong', $gid, '麻雀場代 ' . $rake . 'pt 徴収'); // (1→1 は no-op、実質 pot だけ残す)
         // 配分計算 (端数は 1位に上乗せ)
         $payouts = [];
         $allocated = 0;
@@ -953,7 +953,7 @@ function mahjong_cancel(PDO $pdo, int $uid, int $gid): void {
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['lobby','playing','reporting'], true)) throw new ApiException('bad_request', '既に終了しています', 400);
         // 人間プレイヤーのみに buy_in 返金。 v694 #279 AI bot は accounts row がないので
-        //   Ledger::transfer が "account row missing" で失敗する。 そもそも bot は buy_in を
+        //   Ledger::transfer が "account row missing" で失敗する。そもそも bot は buy_in を
         //   払っていないので返金対象外。
         $buyIn = (int)$g['buy_in'];
         if ($buyIn > 0) {

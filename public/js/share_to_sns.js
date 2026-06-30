@@ -1,11 +1,11 @@
 // v585 ワンボタンでらぼったー (SNS) に投稿する汎用ヘルパ。
 //   引数: title (投稿冒頭メッセージ) と hashUrl ('#/predictions/1' など)。
-//   POST /api/posts で 「{title}\n\n{hashUrl}」 形式で投げる。
+//   POST /api/posts で「{title}\n\n{hashUrl}」形式で投げる。
 //   既存の posts renderer (v562) が #/ で始まる URL を自動リンク化するので、
 //   投稿された文章中に URL を書くとそのままタップで該当ページにジャンプ。
 //
 // v616 #237 prompt() ベースからモーダル UI に改修。
-//   テキスト編集 textarea + 「現在地添付」 チェック + 「らぼったーに投稿」/「キャンセル」 ボタン。
+//   テキスト編集 textarea + 「現在地添付」チェック + 「らぼったーに投稿」/「キャンセル」ボタン。
 
 import { post } from './api.js';
 import { toast } from './app.js';
@@ -99,7 +99,7 @@ export async function copyShareUrl(hashUrl) {
 }
 
 // 既存 view からシェアボタンを簡単に生成するヘルパ。
-//   ボタン要素を親に append し、 クリックで shareToSns を呼ぶ。
+//   ボタン要素を親に append し、クリックで shareToSns を呼ぶ。
 export function makeShareButton(title, hashUrl, label = '💬 らぼったーで共有') {
   const btn = document.createElement('button');
   btn.type = 'button';

@@ -1,4 +1,4 @@
-// /#/todos — 個人 TODO リスト。 自分用のやることメモ。 サーバ保存で端末間共有。
+// /#/todos — 個人 TODO リスト。自分用のやることメモ。サーバ保存で端末間共有。
 // v482 #72 締切 (due_at) サポート + ホームカードで直近締切をハイライト。
 
 import { get, post, patch, del } from '../api.js';
@@ -135,7 +135,7 @@ function bindRows() {
       catch (e) { toast('失敗: ' + e.message); }
     });
     row.querySelector('[data-td-due]')?.addEventListener('click', async () => {
-      // 簡易: prompt で YYYY-MM-DD HH:MM、 空 = クリア。
+      // 簡易: prompt で YYYY-MM-DD HH:MM、空 = クリア。
       const v = prompt('締切を YYYY-MM-DD HH:MM で入力 (空でクリア):');
       if (v == null) return;
       try {
@@ -158,7 +158,7 @@ function bindRows() {
   });
 }
 
-// v483 #75 詳細編集パネル (url / 相手 / 詳細 / 締切)。 行の下に差し込む。
+// v483 #75 詳細編集パネル (url / 相手 / 詳細 / 締切)。行の下に差し込む。
 let openDetailFor = null;
 async function openDetailPanel(id) {
   // 既に同じ ID で開いてたら閉じるトグル
@@ -197,7 +197,7 @@ async function openDetailPanel(id) {
       <input type="datetime-local" data-d-due value="${escapeHtml(dueLocal)}">
     </label>
     <label class="field"><span class="lbl">📝 詳細 / メモ</span>
-      <textarea data-d-notes maxlength="5000" rows="4" placeholder="補足、 メモ、 リンク詳細等">${escapeHtml(cur.notes || '')}</textarea>
+      <textarea data-d-notes maxlength="5000" rows="4" placeholder="補足、メモ、リンク詳細等">${escapeHtml(cur.notes || '')}</textarea>
     </label>
     <div class="row" style="gap:6px; justify-content:flex-end">
       <button data-d-cancel class="btn">閉じる</button>

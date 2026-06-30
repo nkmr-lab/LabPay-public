@@ -11,8 +11,8 @@ export async function renderScreenShares() {
     <div class="card page-header">
       <h2 style="margin:0">🖼 一時画像共有</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        ラボ全体 or グループ宛に画像 (+ 短文) を投げて、 期限内はみんなにすぐ表示されます。
-        スマホで写真を撮って共有、 PC で画面ショットを撮って共有、 等。
+        ラボ全体 or グループ宛に画像 (+ 短文) を投げて、期限内はみんなにすぐ表示されます。
+        スマホで写真を撮って共有、 PC で画面ショットを撮って共有、等。
       </p>
     </div>
     <div class="card">

@@ -1,7 +1,7 @@
 // App entry: wires router, loads views, manages global chrome (balance pill, unread badge, logout).
 // v490 #88 起動速度改善: 50+ の view モジュールを eager import していたのを
-//   route 時の dynamic import() に変更。 初回起動で必要なのは shell + login と
-//   home のみ。 これら 2 つだけ eager、 他はタップ時に初回ロード + キャッシュ。
+//   route 時の dynamic import() に変更。初回起動で必要なのは shell + login と
+//   home のみ。これら 2 つだけ eager、他はタップ時に初回ロード + キャッシュ。
 
 import { route, start, navigate, escapeHtml } from './router.js';
 import { get, post } from './api.js';
@@ -14,7 +14,7 @@ import { installGlobalAudioUnlock } from './audio_unlock.js';
 import { bootSettingsSync } from './settings_sync.js';
 
 // 遅延ロードヘルパー: route 時に初回だけ import する。 import() が返す
-//   Promise はブラウザがキャッシュするので、 同じページを 2 回目開くと
+//   Promise はブラウザがキャッシュするので、同じページを 2 回目開くと
 //   即時解決。
 function lazy(loader, name) {
   return (ctx) => loader().then(m => m[name](ctx));
@@ -37,11 +37,11 @@ export const state = {
   unread: 0,
   inLab: false,   // server-enforced lab-Wi-Fi gate; mirrored here so the UI can grey out 購入 buttons
   hasMac: true,   // false → show "Mac 登録してね" onboarding banner on home
-  hasGroups: false, // 自分が入ってるグループが 1 つ以上あるか (タブの 「グループ」 表示制御)
+  hasGroups: false, // 自分が入ってるグループが 1 つ以上あるか (タブの「グループ」表示制御)
 };
 
-// v498 #108 起動高速化: /api/auth/me の結果を localStorage にキャッシュして、 起動時の
-//   白画面を縮める。 ここに前回のレスポンスを優しくスナップショットしておき、 boot 時に
+// v498 #108 起動高速化: /api/auth/me の結果を localStorage にキャッシュして、起動時の
+//   白画面を縮める。ここに前回のレスポンスを優しくスナップショットしておき、 boot 時に
 //   即座に hydrate → chrome を出す → 裏で再検証 (SWR 風)。
 const ME_CACHE_KEY = 'labpay-me-cache';
 function readMeCache() {
@@ -74,17 +74,17 @@ export async function refreshMe() {
     state.hasMac = !!data.has_registered_mac;
     writeMeCache(data);
     renderChrome();
-    // タブの 「グループ」 表示判定。 失敗・遅延しても他の処理を止めないよう
-    // fire-and-forget。 結果が遅れて来てもタブが追加で出るだけなので無害。
+    // タブの「グループ」表示判定。失敗・遅延しても他の処理を止めないよう
+    // fire-and-forget。結果が遅れて来てもタブが追加で出るだけなので無害。
     refreshHasGroups();
-    // 効果音の解決済み設定を 1 回だけ pull。 失敗しても他に影響しないよう fire-and-forget。
+    // 効果音の解決済み設定を 1 回だけ pull。失敗しても他に影響しないよう fire-and-forget。
     preloadSounds();
     // v448 ページ上のどこかで最初に起きた pointerdown / touchstart / keydown
-    // 1 回で共有 AudioContext + HTMLAudio を unlock。 以降 setInterval からの
+    // 1 回で共有 AudioContext + HTMLAudio を unlock。以降 setInterval からの
     // タイマーベル / 効果音が iOS Safari でも通る。
     installGlobalAudioUnlock();
     // v456 設定をサーバから引いて localStorage に反映 (デバイス間同期)。
-    // 直後に localStorage を読み込む view があるので await。 失敗しても黙殺
+    // 直後に localStorage を読み込む view があるので await。失敗しても黙殺
     // (オフラインや未ログインのフォールバックがきく)。
     await bootSettingsSync();
     return data;
@@ -106,7 +106,7 @@ export async function refreshMe() {
 }
 
 // 自分が入ってるグループの有無を /api/groups で確認してタブ可視を更新。
-// home / groups の各 view で再度叩かれるが、 タブ判定だけは bootstrap で
+// home / groups の各 view で再度叩かれるが、タブ判定だけは bootstrap で
 // 走らないと初回ページが home 以外の時タブが出ないので app.js でも呼ぶ。
 export async function refreshHasGroups() {
   try {
@@ -127,8 +127,8 @@ export async function refreshUnread() {
   try {
     const d = await get('/api/notifications/unread_count');
     const newCount = d.unread || 0;
-    // 増加分があれば直近の未読を取りに行って 「新着通知トースト」 を出す。
-    // 初回ロード時 (lastSeenNotifId 未定) は 「これ以降の追加分だけ」 を toast 対象にしたいので
+    // 増加分があれば直近の未読を取りに行って「新着通知トースト」を出す。
+    // 初回ロード時 (lastSeenNotifId 未定) は「これ以降の追加分だけ」を toast 対象にしたいので
     // 高水位を立てるだけで toast は鳴らさない。
     if (lastSeenNotifId !== undefined && newCount > lastUnread) {
       try {
@@ -154,12 +154,12 @@ export async function refreshUnread() {
   } catch (_) {}
 }
 
-// 新着通知 1 〜 N 件を 「アプリ内トースト」 + (許可があれば) 「OS 通知」 で見せる。
+// 新着通知 1 〜 N 件を「アプリ内トースト」 + (許可があれば) 「OS 通知」で見せる。
 // 行数が多い時はまとめて 1 つの toast にする。
 function showNotificationToasts(items) {
   // OS 通知 (許可済みの時だけ)。
-  // タップで該当ページに飛ばす。 service worker 経由しない 「ページが開いてる時の通知」 なので
-  // タブがアクティブだと OS の通知センターに残らない端末もあるが、 トースト感は出る。
+  // タップで該当ページに飛ばす。 service worker 経由しない「ページが開いてる時の通知」なので
+  // タブがアクティブだと OS の通知センターに残らない端末もあるが、トースト感は出る。
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     for (const n of items.slice(0, 3)) {
       try {
@@ -194,7 +194,7 @@ export async function requestNotificationPermission() {
   }
   if (Notification.permission === 'granted') return 'granted';
   if (Notification.permission === 'denied') {
-    toast('ブラウザ設定で 「ブロック」 になっています。 ブラウザ設定から許可してください', 5000);
+    toast('ブラウザ設定で「ブロック」になっています。ブラウザ設定から許可してください', 5000);
     return 'denied';
   }
   const result = await Notification.requestPermission();
@@ -207,13 +207,13 @@ export async function requestNotificationPermission() {
   return result;
 }
 
-// 「今日のアプリ起動ボーナス」 すでに試した日を localStorage に持っておく。
+// 「今日のアプリ起動ボーナス」すでに試した日を localStorage に持っておく。
 // awarded / already_today を貰えた日はこれ以上 ping しない。 unread_pending /
-// fetch エラーは未着なので残しておいて、 次の refreshUnread でまた試す。
+// fetch エラーは未着なので残しておいて、次の refreshUnread でまた試す。
 const REWARD_CACHE_KEY = 'labpay-app-open-reward-date';
 function todayJST() {
-  // サーバ側は date('Y-m-d') (= JST。 PHP の default_timezone)。 ブラウザは
-  // ユーザ環境依存だが、 日本国内利用なので Asia/Tokyo に揃える。
+  // サーバ側は date('Y-m-d') (= JST。 PHP の default_timezone)。ブラウザは
+  // ユーザ環境依存だが、日本国内利用なので Asia/Tokyo に揃える。
   const d = new Date(Date.now() + 9 * 3600 * 1000);
   return d.toISOString().slice(0, 10);
 }
@@ -226,7 +226,7 @@ async function tryAppOpenReward() {
       toast(`🎁 アプリ起動ボーナス +${r.points}pt`);
       localStorage.setItem(REWARD_CACHE_KEY, today);
     } else if (r.reason === 'already_today' || r.reason === 'disabled') {
-      // 既に貰った / 機能無効。 今日はもう ping しない。
+      // 既に貰った / 機能無効。今日はもう ping しない。
       localStorage.setItem(REWARD_CACHE_KEY, today);
     }
     // unread_pending やネットワークエラーは cache しない (次の機会に再試行)。
@@ -250,11 +250,11 @@ function renderChrome() {
   const isAdmin = state.me.role === 'admin';
   adminLink.hidden = !isAdmin;
   if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
-  // v445 → v464: admin のトップバーは 「通知 / 設定 / 管理 / FB | 機能要望 / バグ報告」。
+  // v445 → v464: admin のトップバーは「通知 / 設定 / 管理 / FB | 機能要望 / バグ報告」。
   // FB (= 報告・要望、 admin 専用受信箱) と機能要望 / バグ報告 (投稿入口) を
-  // セパレータで分ける。 機能要望 / バグ報告は admin にも表示 (Claude への指示
+  // セパレータで分ける。機能要望 / バグ報告は admin にも表示 (Claude への指示
   // チャネルとして使うため)。
-  // v517 #146 「要望」 「報告」 を統合して 「📝 フィードバック」 1 つに
+  // v517 #146 「要望」「報告」を統合して「📝 フィードバック」 1 つに
   const fbLink = document.getElementById('feedback-link');
   const sep    = document.getElementById('topbar-sep');
   if (fbLink) fbLink.hidden = false;
@@ -271,18 +271,18 @@ function renderChrome() {
 }
 
 // ────────────── タブのカスタマイズ ──────────────────────────────────
-// 表示するタブと並び順を localStorage に保存。 設定の 「タブのカスタマイズ」 で編集。
+// 表示するタブと並び順を localStorage に保存。設定の「タブのカスタマイズ」で編集。
 // nav#tabs 内の <a data-tab-id="..."> を保存 order に従って並べ替え + hidden 適用。
 // v497 #103 タブ整理:
-//   - 「購入」 を 「売買」 にrename (販売との合算入口的位置づけ)
+//   - 「購入」を「売買」にrename (販売との合算入口的位置づけ)
 //   - 「食べある記」 (places) をタブとして追加
 //   - DEFAULT_HIDDEN_TABS: 販売 / 競売 / ラボにいる人を初期非表示
-//     (販売・競売は能動操作型なのでメニュー深掘りで足りる、 「ラボにいる人」 は
-//      ホームに常設するため重複を避ける)。 ユーザが localStorage で明示設定済み
+//     (販売・競売は能動操作型なのでメニュー深掘りで足りる、「ラボにいる人」は
+//      ホームに常設するため重複を避ける)。ユーザが localStorage で明示設定済み
 //      なら尊重。
 // v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
-//   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。 食べある記・ラボにいる人はタブから外し
-//   #/apps からアクセスする形に。 全員デフォルトに戻すため、 layout key を v2 に上げる。
+//   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。食べある記・ラボにいる人はタブから外し
+//   #/apps からアクセスする形に。全員デフォルトに戻すため、 layout key を v2 に上げる。
 export const TAB_DEFS = [
   { id: 'home',         title: 'ホーム' },
   { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
@@ -344,7 +344,7 @@ export function applyTabLayout() {
     }
     orderedKnown.splice(insertAfter + 1, 0, id);
   }
-  // v642 一旦全部 detach してから順番に append。 単純な appendChild の連発だと
+  // v642 一旦全部 detach してから順番に append。単純な appendChild の連発だと
   //   ブラウザの再 layout が一部反映されない報告があったため確実に DOM を再構築。
   for (const link of links) { if (link.parentNode === nav) nav.removeChild(link); }
   for (const id of orderedKnown) {
@@ -438,7 +438,7 @@ document.getElementById('install-close').addEventListener('click', (ev) => {
 });
 
 // ---------- Routes ----------
-// 起動ホットパス: ログイン / ホームは eager-import 済み。 残りの view は
+// 起動ホットパス: ログイン / ホームは eager-import 済み。残りの view は
 //   lazy() で初回アクセス時だけロード。 module はブラウザがキャッシュする
 //   ので 2 回目以降は即時。
 route('/login',          renderLogin);
@@ -556,7 +556,7 @@ route('/habits/:id',       lazy(() => import('./views/habits.js'), 'renderHabitD
 route('/buzzer',           lazy(() => import('./views/buzzer.js'), 'renderBuzzerList'));
 route('/buzzer/new',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerNew'));
 route('/buzzer/:id',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerDetail'));
-// v886 Overleaf プロジェクト追跡 (教員 admin 限定、 学生の論文執筆状況を可視化)
+// v886 Overleaf プロジェクト追跡 (教員 admin 限定、学生の論文執筆状況を可視化)
 route('/overleaf',         lazy(() => import('./views/overleaf.js'), 'renderOverleafList'));
 route('/overleaf/:id',     lazy(() => import('./views/overleaf.js'), 'renderOverleafDetail'));
 // v532 #161 体重 / BMI 記録
@@ -579,7 +579,7 @@ route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTi
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
 // v748 #359 #360 #361 論文要約 (= paper_translate handler をそのまま使う)
-// v757 #375 slug を paper-summary に改名 (和訳ない論文もあるため)、 旧 paper-translate も互換。
+// v757 #375 slug を paper-summary に改名 (和訳ない論文もあるため)、旧 paper-translate も互換。
 route('/paper-summary/r/:token',   lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
 route('/paper-summary',            lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 route('/paper-translate/r/:token', lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
@@ -587,10 +587,10 @@ route('/paper-translate',          lazy(() => import('./views/paper_translate.js
 // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
 route('/deep-research/r/:token',   lazy(() => import('./views/deep_research.js'), 'renderDeepResearchShared'));
 route('/deep-research',            lazy(() => import('./views/deep_research.js'), 'renderDeepResearch'));
-// v788 #386 #387 #388 論文全訳 (要約でなくフル翻訳、 章ごと + back-translation)
+// v788 #386 #387 #388 論文全訳 (要約でなくフル翻訳、章ごと + back-translation)
 route('/paper-translate-full/r/:token', lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFullShared'));
 route('/paper-translate-full',          lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFull'));
-// v809 論文要約 + 全訳の合算新着一覧 (ホーム widget の 「すべて →」 リンク先)
+// v809 論文要約 + 全訳の合算新着一覧 (ホーム widget の「すべて →」リンク先)
 route('/papers-recent',                 lazy(() => import('./views/papers_recent.js'), 'renderPapersRecent'));
 // v804 名言登録 / 管理
 route('/quotes',                        lazy(() => import('./views/quotes.js'), 'renderQuotes'));
@@ -674,8 +674,8 @@ route('/file-transfers',          lazy(() => import('./views/file_transfers.js')
 
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と
-//   ルートを並行で立ち上げる。 サーバ再検証は裏で。 失敗 (401など) すれば clearMeCache +
-//   /#/login へ。 オンライン時の体感が劇的に縮む。
+//   ルートを並行で立ち上げる。サーバ再検証は裏で。失敗 (401など) すれば clearMeCache +
+//   /#/login へ。オンライン時の体感が劇的に縮む。
 (async function boot() {
   const cached = readMeCache();
   if (cached) {

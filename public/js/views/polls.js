@@ -82,13 +82,13 @@ export async function renderPolls() {
   }
 }
 
-// 作成 / 編集共通のフォーム本体 HTML。 初期値は createMode の時 default、
+// 作成 / 編集共通のフォーム本体 HTML。初期値は createMode の時 default、
 // editMode の時既存値。
 function pollFormCardHtml(initial, isEdit) {
   return `
     <div class="card">
       <label class="field"><span class="lbl">タイトル</span>
-        <input type="text" id="pn-title" maxlength="200" placeholder="例: 飲み会の店、 どこにする?" value="${escapeHtml(initial.title || '')}" autofocus>
+        <input type="text" id="pn-title" maxlength="200" placeholder="例: 飲み会の店、どこにする?" value="${escapeHtml(initial.title || '')}" autofocus>
       </label>
       <label class="field"><span class="lbl">本文 (任意)</span>
         <textarea id="pn-body" rows="2" maxlength="2000" placeholder="補足説明など">${escapeHtml(initial.body || '')}</textarea>
@@ -117,7 +117,7 @@ function pollFormCardHtml(initial, isEdit) {
       </label>
       <label class="field"><span class="lbl">選択肢 (1 行に 1 つ、 2 個以上)</span>
         <textarea id="pn-options" rows="5" placeholder="例:&#10;A 店&#10;B 店&#10;C 店">${escapeHtml((initial.options || []).join('\n'))}</textarea>
-        ${isEdit ? `<div class="hint-sm">既存ラベルと一致する行はそのまま残ります (票も維持)。 削除した行の票は消えます。</div>` : ''}
+        ${isEdit ? `<div class="hint-sm">既存ラベルと一致する行はそのまま残ります (票も維持)。削除した行の票は消えます。</div>` : ''}
       </label>
       <div class="field">
         <span class="lbl">対象者</span>
@@ -152,7 +152,7 @@ async function wirePollForm(initial, isEdit, onSave, opts = {}) {
       `${def.getFullYear()}-${p(def.getMonth()+1)}-${p(def.getDate())}T${p(def.getHours())}:${p(def.getMinutes())}`;
   }
 
-  // v383 共有 member_picker。 編集モード時 (isEdit) は voterIds 初期化、 新規は自分をデフォ ON。
+  // v383 共有 member_picker。編集モード時 (isEdit) は voterIds 初期化、新規は自分をデフォ ON。
   const initialIds = new Set((initial.voterIds || []).map(Number));
   if (!isEdit && state.me?.id) initialIds.add(Number(state.me.id));
   const lockedIds = opts.lockedToIds && opts.lockedToIds.length ? opts.lockedToIds.map(Number) : null;
@@ -215,7 +215,7 @@ export async function renderPollNew({ query } = {}) {
     </div>
     ${pollFormCardHtml(initial, false)}
   `;
-  // wirePollForm の isEdit=false で 「自分をデフォ ON」 がかかるが、 グループから来た
+  // wirePollForm の isEdit=false で「自分をデフォ ON」がかかるが、グループから来た
   // 場合はそちらの voterIds を優先したい → isEdit=true 相当として渡す。
   await wirePollForm(initial, presetVoters.length > 0, async (payload) => {
     const r = await post('/api/polls', payload);
@@ -244,7 +244,7 @@ export async function renderPollEdit({ params }) {
       return;
     }
     document.getElementById('pe-status').textContent = '';
-    // datetime-local 用に「YYYY-MM-DDTHH:MM」 へ。
+    // datetime-local 用に「YYYY-MM-DDTHH:MM」へ。
     const dl = String(d.poll.deadline_at || '').slice(0, 16).replace(' ', 'T');
     const initial = {
       id,
@@ -323,7 +323,7 @@ export async function renderPollDetail({ params }) {
   `;
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   if (tallyRefreshTimer) { clearTimeout(tallyRefreshTimer); tallyRefreshTimer = null; }
-  // URL コピー (ページが描かれた時点で 1 回だけ wire-up。 ボタン自体は常設)。
+  // URL コピー (ページが描かれた時点で 1 回だけ wire-up。ボタン自体は常設)。
   document.getElementById('pd-copy-url')?.addEventListener('click', async () => {
     const url = location.origin + location.pathname + '#/polls/' + id;
     try {
@@ -341,7 +341,7 @@ export async function renderPollDetail({ params }) {
   document.getElementById('pd-share')?.addEventListener('click', async () => {
     try {
       const d = await get('/api/polls/' + id);
-      shareToSns(`📊 投票 「${d.title || ''}」 を募集中`, `#/polls/${id}`);
+      shareToSns(`📊 投票「${d.title || ''}」を募集中`, `#/polls/${id}`);
     } catch (_) {
       shareToSns(`📊 投票募集中`, `#/polls/${id}`);
     }
@@ -398,7 +398,7 @@ async function loadPollDetail(id) {
     }
     document.getElementById('pd-copy-url')?.addEventListener('click', () => copyShareUrl(`#/polls/${id}`));
 
-    // 投票カード。 再投票禁止 + 既に投票済の場合は投票 UI 非表示にし 「投票済」 カード表示。
+    // 投票カード。再投票禁止 + 既に投票済の場合は投票 UI 非表示にし「投票済」カード表示。
     const voteCard = document.getElementById('pd-vote-card');
     const votedCard = document.getElementById('pd-voted-card');
     const alreadyVoted = d.my_votes.length > 0 || (d.my_free_text && d.my_free_text.length > 0);
@@ -414,7 +414,7 @@ async function loadPollDetail(id) {
         </label>`).join('');
       document.getElementById('pd-vote-title').textContent =
         alreadyVoted ? '投票し直す' : (p.multi_select ? '投票 (複数可)' : '投票');
-      // 保存ボタンの文言も同期。 投票済 + 再投票可 = 「投票し直す」。
+      // 保存ボタンの文言も同期。投票済 + 再投票可 = 「投票し直す」。
       document.getElementById('pd-vote-save').textContent =
         alreadyVoted ? '投票し直す' : '投票する';
       // 自由記述 (複数選択 + allow_free_text)
@@ -431,7 +431,7 @@ async function loadPollDetail(id) {
           .map(i => Number(i.value));
         const freeText = (p.multi_select && p.allow_free_text && ftInput) ? ftInput.value.trim() : '';
         if (!ids.length && !(p.multi_select && p.allow_free_text && freeText)) {
-          toast(p.allow_free_text ? '選択肢を選ぶか、 自由記述を書いてください' : '1 つ以上選んでください');
+          toast(p.allow_free_text ? '選択肢を選ぶか、自由記述を書いてください' : '1 つ以上選んでください');
           return;
         }
         try {
@@ -446,9 +446,9 @@ async function loadPollDetail(id) {
       votedCard.hidden = !(d.is_voter && alreadyVoted && !p.allow_revote);
     }
 
-    // 集計カード (本体描画は専用関数に切り出し、 自動更新でも再利用)。
+    // 集計カード (本体描画は専用関数に切り出し、自動更新でも再利用)。
     renderTallySection(d);
-    // 対象者 (学年順)。 投票済の色付け + 「催促 (N)」 のカウントを自動更新でも反映。
+    // 対象者 (学年順)。投票済の色付け + 「催促 (N)」のカウントを自動更新でも反映。
     renderVotersSection(d);
     // 締切と (集計 + 対象者) の自動更新スケジュール。
     lastDeadline = p.deadline_at;
@@ -493,10 +493,10 @@ async function loadPollDetail(id) {
 
 // 集計セクションだけを描画 (URL コピーや投票 UI を触らないので入力フォーカスを壊さない)。
 // v710 #302 表示ルール改修:
-//   ・各 option 横に 「N 票 / 回答済 M 人 (P%)」 = 現状ベースの集計を明示
-//     (P% も棒グラフも 「回答済 M 人」 を分母に。 投票予定は含まない)
+//   ・各 option 横に「N 票 / 回答済 M 人 (P%)」 = 現状ベースの集計を明示
+//     (P% も棒グラフも「回答済 M 人」を分母に。投票予定は含まない)
 //   ・各 option の下に投票者 (アバター + 名前 chip) を並べる (= 「誰がどれに」)
-//   ・ヘッダ右に 「X/Y 人回答 · (HH:MM:SS 更新)」 は据置
+//   ・ヘッダ右に「X/Y 人回答 · (HH:MM:SS 更新)」は据置
 function renderTallySection(d) {
   const tallyCard = document.getElementById('pd-tally-card');
   if (!tallyCard) return;
@@ -545,7 +545,7 @@ function renderTallySection(d) {
         </div>`).join('')}
     </div>`;
   }
-  html += `<div class="hint-sm" style="margin-top:8px">% と棒グラフは回答済 ${votedPeople} 人 (= 対象 ${totalPeople} 人中) に対する割合。 投票予定は分母に含まない。</div>`;
+  html += `<div class="hint-sm" style="margin-top:8px">% と棒グラフは回答済 ${votedPeople} 人 (= 対象 ${totalPeople} 人中) に対する割合。投票予定は分母に含まない。</div>`;
   document.getElementById('pd-tally').innerHTML = html;
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -554,7 +554,7 @@ function renderTallySection(d) {
     `${votedPeople}/${totalPeople} 人回答 · (${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} 更新)`;
 }
 
-// 対象者リスト + 「催促 (N)」 のカウントを描画。 自動更新でも投票済の色付けと
+// 対象者リスト + 「催促 (N)」のカウントを描画。自動更新でも投票済の色付けと
 // remind ボタンの数字を最新化したい。
 function renderVotersSection(d) {
   lastVotersSnapshot = d.voters;
@@ -577,7 +577,7 @@ function renderVotersSection(d) {
   }
 }
 
-// 締切までの残り時間で更新間隔を決める。 締切過ぎ / 集計不可視 (詳細レスポンス
+// 締切までの残り時間で更新間隔を決める。締切過ぎ / 集計不可視 (詳細レスポンス
 // で tally_visible=false) のときは止める。
 function pickRefreshIntervalMs() {
   if (!lastDeadline) return 60_000;
@@ -601,7 +601,7 @@ function schedulePollRefresh(id, isOpen) {
       renderVotersSection(d);
       const stillOpen = d.poll?.status === 'open';
       if (!stillOpen) {
-        // 締切直後で 1 度反映した時点で安定。 これ以上 polling しない。
+        // 締切直後で 1 度反映した時点で安定。これ以上 polling しない。
         return;
       }
       lastDeadline = d.poll.deadline_at;

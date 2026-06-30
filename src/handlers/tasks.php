@@ -162,16 +162,16 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
         $val = trim($val);
         if ($val === '') {
             if (!empty($field['required'])) {
-                throw new ApiException('bad_request', "「{$field['label']}」 は入力必須です", 400);
+                throw new ApiException('bad_request', "「{$field['label']}」は入力必須です", 400);
             }
             continue;
         }
         if (mb_strlen($val) > 5000) {
-            throw new ApiException('bad_request', "「{$field['label']}」 が長すぎます (5000 字まで)", 400);
+            throw new ApiException('bad_request', "「{$field['label']}」が長すぎます (5000 字まで)", 400);
         }
         if ($field['type'] === 'select') {
             if (!in_array($val, $field['options'] ?? [], true)) {
-                throw new ApiException('bad_request', "「{$field['label']}」 は選択肢から選んでください", 400);
+                throw new ApiException('bad_request', "「{$field['label']}」は選択肢から選んでください", 400);
             }
         }
         $out[$k] = $val;
@@ -191,8 +191,8 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
 // Year fallback: when omitted, use the current year — bumping to next year if the
 // resulting date is already in the past.
 // v877 deadline はフロントの localDtToIso が ISO 8601 (例: 2026-08-06T14:00:00.000Z) を
-//   送るのでまず DateTimeImmutable で直接解釈、 失敗時のみ旧 「Y-m-d H:i:s」 / 「Y-m-dTH:i」
-//   形式を fallback で受け入れる。 サーバ TZ (Asia/Tokyo) に変換して保存。
+//   送るのでまず DateTimeImmutable で直接解釈、失敗時のみ旧「Y-m-d H:i:s」 / 「Y-m-dTH:i」
+//   形式を fallback で受け入れる。サーバ TZ (Asia/Tokyo) に変換して保存。
 function tasks_parse_deadline($raw): ?string {
     if ($raw === null) return null;
     $raw = trim((string)$raw);
@@ -222,8 +222,8 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
     foreach (preg_split('/\R/u', $spec) as $line) {
         $line = trim($line);
         if ($line === '') continue;
-        // v876 #455 続報 「日だけ」 (時間枠なし) を先にトライ。 1 日 1 slot (終日)、
-        //   末尾 xN / N人で各日 capacity 指定可。 例: 「6/15」 「6/15 3人」 「6/15 x3」。
+        // v876 #455 続報「日だけ」 (時間枠なし) を先にトライ。 1 日 1 slot (終日)、
+        //   末尾 xN / N人で各日 capacity 指定可。例: 「6/15」「6/15 3人」「6/15 x3」。
         $patDayOnly = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s*(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名])?\s*$/iu';
         if (preg_match($patDayOnly, $line, $md)) {
             $year  = $md[1] !== '' ? (int)$md[1] : (int)$now->format('Y');
@@ -248,7 +248,7 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
             if (count($slots) > 200) break;
             continue;
         }
-        // 時間枠付きパターン。 v875.1 #455 末尾 capacity はスペース任意、 「人」 「名」 どちらも可、 「x」 「×」 「*」 受け付ける。
+        // 時間枠付きパターン。 v875.1 #455 末尾 capacity はスペース任意、「人」「名」どちらも可、「x」「×」「*」受け付ける。
         $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み\s*(?:(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名]))?\s*$/iu';
         if (!preg_match($pat, $line, $m)) continue;
         $year   = $m[1] !== '' ? (int)$m[1] : (int)$now->format('Y');
@@ -257,7 +257,7 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
         $startH = (int)$m[4]; $startM = (int)$m[5];
         $endH   = (int)$m[6]; $endM   = (int)$m[7];
         $stride = (int)$m[8];
-        // v875 #455 各枠の募集人数。 「x3」 or 「3人」 で指定、 省略時 1。
+        // v875 #455 各枠の募集人数。「x3」 or 「3人」で指定、省略時 1。
         $perSlot = 1;
         if (!empty($m[9]))      $perSlot = max(1, min(50, (int)$m[9]));
         elseif (!empty($m[10])) $perSlot = max(1, min(50, (int)$m[10]));
@@ -548,7 +548,7 @@ function tasks_list(PDO $pdo, array $cfg): void {
             ? null
             : array_map('intval', explode(',', (string)$r['assigned_user_ids']));
         $r['is_assigned_to_me'] = $assignedIds !== null && in_array($uid, $assignedIds, true);
-        // 指名されてる人の名前リストを add (UI 表示用)。 lookup に無ければ 「user#42」 で fallback。
+        // 指名されてる人の名前リストを add (UI 表示用)。 lookup に無ければ「user#42」で fallback。
         $r['assigned_names'] = $assignedIds === null ? []
             : array_map(fn($aid) => $nameById[$aid] ?? "user#$aid", $assignedIds);
         // avatar 付きの assigned/approved リストを追加 (フロントが chip 表示するのに使う)。
@@ -627,7 +627,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $parsedSlots = $slotsSpec !== null ? tasks_parse_slot_spec($slotsSpec) : [];
     if ($slotsSpec !== null && empty($parsedSlots)) {
         throw new ApiException('bad_request',
-            '時間枠の書式: 「8/6 x35」 (= 終日 35 人) / 「8/7」 (= 終日 1 人) / 「6/15 11:00-15:00 30分刻み」 (= 時間枠 1 人) / 末尾 「x3」 や 「3人」 で各枠複数人', 400);
+            '時間枠の書式: 「8/6 x35」 (= 終日 35 人) / 「8/7」 (= 終日 1 人) / 「6/15 11:00-15:00 30分刻み」 (= 時間枠 1 人) / 末尾「x3」や「3人」で各枠複数人', 400);
     }
     // If slots are provided, derive capacity from them (sum of per-slot capacities,
     //   which defaults to 1 unless the slot line has an explicit " xN" / " N人" suffix).
@@ -637,8 +637,8 @@ function tasks_create(PDO $pdo, array $cfg): void {
         : require_int_positive($body['capacity'] ?? null, 'capacity');
 
     // Optional deadline。 v877 フロントの localDtToIso は ISO 8601 (例:
-    //   "2026-08-06T14:00:00.000Z") を送るので、 まず DateTimeImmutable で直接解釈し、
-    //   失敗時のみ旧形式 「Y-m-d H:i:s」 「Y-m-d\TH:i」 を fallback で受け入れる。
+    //   "2026-08-06T14:00:00.000Z") を送るので、まず DateTimeImmutable で直接解釈し、
+    //   失敗時のみ旧形式「Y-m-d H:i:s」「Y-m-d\TH:i」を fallback で受け入れる。
     $deadline = tasks_parse_deadline($body['deadline'] ?? null);
 
     // audience_grades: accept either array or CSV string
@@ -673,7 +673,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
 
-    // 指名 = 「やる人として確定 (auto-claim)」 か 「audience filter (誰が claim 可)」 か。
+    // 指名 = 「やる人として確定 (auto-claim)」か「audience filter (誰が claim 可)」か。
     // - 依頼 mode (auto_claim=false): assigned_user_ids は audience filter として保存、
     //   本人が踏みに来るのを待つ。 capacity は body で指定された値。
     // - 割り当て mode (auto_claim=true): assigned_ids に task_claims を 'claimed' で
@@ -697,7 +697,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $capacity = count($autoClaimIds);
     }
     $totalEscrow = $reward * $capacity;
-    // v874 #455 続報 admin が 「💰 システム持ち出し」 を ON にした場合だけ、
+    // v874 #455 続報 admin が「💰 システム持ち出し」を ON にした場合だけ、
     //   ESCROW への入金元を LabPay system user (kind='system') に切り替える。
     //   admin 以外が送ってきたら無視する (権限ガード)。
     $fundedBySystem = (!empty($body['funded_by_system']) && (($u['role'] ?? '') === 'admin')) ? 1 : 0;
@@ -714,7 +714,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $taskId = (int)$pdo->lastInsertId();
 
         if (!empty($parsedSlots)) {
-            // v875 #455 続報各枠の capacity を構文から反映 (xN / N人)。 省略時は 1。
+            // v875 #455 続報各枠の capacity を構文から反映 (xN / N人)。省略時は 1。
             $slotIns = $pdo->prepare('INSERT INTO task_slots (task_id, started_at, ended_at, capacity)
                 VALUES (?,?,?,?)');
             foreach ($parsedSlots as $s) {
@@ -1035,10 +1035,10 @@ function tasks_reject(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 }
 
 // ---------- POST /api/tasks/{id}/close ----------
-// v714 #309 取消と違って 「終了」 = もう募集締切で OK、 完了扱いにしたい場合。
-//   - status を 'closed' に (cancelled ではないので、 履歴上 「✅ 終了」 表記)
+// v714 #309 取消と違って「終了」 = もう募集締切で OK、完了扱いにしたい場合。
+//   - status を 'closed' に (cancelled ではないので、履歴上「✅ 終了」表記)
 //   - 未承認 capacity 分の報酬は起案者に返金 (cancel と同じ)
-//   - 進行中 (claimed/reported) の claim は cancelled に。 引き受け者には通知。
+//   - 進行中 (claimed/reported) の claim は cancelled に。引き受け者には通知。
 function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
     [$affectedClaimants, $taskTitle, $refund] = db_tx($pdo, function () use ($pdo, $taskId, $u) {
@@ -1068,7 +1068,7 @@ function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
     foreach ($affectedClaimants as $cid) {
         try {
             Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',
-                "引き受け中のタスク 「{$taskTitle}」 が依頼者により終了されました", 'task', $taskId);
+                "引き受け中のタスク「{$taskTitle}」が依頼者により終了されました", 'task', $taskId);
         } catch (Throwable $e) {}
     }
     json_response(['ok' => true, 'refunded' => $refund]);

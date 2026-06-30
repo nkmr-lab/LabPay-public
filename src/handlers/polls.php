@@ -1,8 +1,8 @@
 <?php
 // /api/polls — 投票 (polls)。
-// 個人の票はデフォルト非公開。 起案者 / 締切後 / open visibility のときだけ
-// 全体集計が見える。 「誰が何に入れたか」 はどの設定でも他者には見せない
-// (起案者にも個別の票は見せず、 集計のみ)。
+// 個人の票はデフォルト非公開。起案者 / 締切後 / open visibility のときだけ
+// 全体集計が見える。「誰が何に入れたか」はどの設定でも他者には見せない
+// (起案者にも個別の票は見せず、集計のみ)。
 
 declare(strict_types=1);
 
@@ -25,7 +25,7 @@ function route_polls(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no polls route for $method $sub", 404);
 }
 
-// 締切過ぎたら自動 close。 詳細 / 一覧の前に呼んで一貫した状態にする。
+// 締切過ぎたら自動 close。詳細 / 一覧の前に呼んで一貫した状態にする。
 function polls_autoclose(PDO $pdo): void {
     $pdo->exec("UPDATE polls SET status='closed', closed_at=NOW()
                  WHERE status='open' AND deadline_at <= NOW()");
@@ -77,7 +77,7 @@ function polls_create(PDO $pdo, array $cfg): void {
     $multi = !empty($body['multi_select']) ? 1 : 0;
     $allowRevote   = array_key_exists('allow_revote', $body)   ? (!empty($body['allow_revote'])   ? 1 : 0) : 1;
     $allowFreeText = !empty($body['allow_free_text']) ? 1 : 0;
-    // 自由記述は 「複数選択可」 と組み合わせる前提。 単一選択で許可しても意味が
+    // 自由記述は「複数選択可」と組み合わせる前提。単一選択で許可しても意味が
     // 無いので無効化 (UI 側のチェック漏れを backend でも止める)。
     if (!$multi) $allowFreeText = 0;
     $vis = (string)($body['visibility'] ?? 'after_deadline');
@@ -123,7 +123,7 @@ function polls_create(PDO $pdo, array $cfg): void {
         $stV = $pdo->prepare("INSERT INTO poll_voters (poll_id, user_id) VALUES (?, ?)");
         foreach ($voterIds as $uid) $stV->execute([$pollId, $uid]);
     });
-    // 通知: 自分以外の対象者に 「投票してください」 を送る。
+    // 通知: 自分以外の対象者に「投票してください」を送る。
     foreach ($voterIds as $uid) {
         if ((int)$uid === (int)$u['id']) continue;
         try {
@@ -207,7 +207,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
             ];
         }
         // 自由記述本文は起案者だけに渡す (誰が書いたかも含めて参照したいのは起案者のみ)。
-        // 一般の対象者には 「他人の自由記述」 を出さない方針。 自分自身の自由記述は
+        // 一般の対象者には「他人の自由記述」を出さない方針。自分自身の自由記述は
         // my_free_text 経由で別途返している。
         if (!empty($poll['allow_free_text']) && $isCreator) {
             $stF = $pdo->prepare("SELECT pv.free_text, pv.user_id, pv.voted_at,
@@ -277,11 +277,11 @@ function polls_vote(PDO $pdo, array $cfg, int $id): void {
     if (empty($poll['multi_select']) && count($optionIds) > 1) {
         throw new ApiException('bad_request', '単一選択の投票です', 400);
     }
-    // 投票内容のバリデーション。 自由記述 OK の時のみ 「候補 0 + 自由記述あり」
+    // 投票内容のバリデーション。自由記述 OK の時のみ「候補 0 + 自由記述あり」
     // を許す (= 既存の選択肢に該当無し時の脱出口)。
     if (count($optionIds) === 0 && !(empty($poll['multi_select']) === false && !empty($poll['allow_free_text']) && $freeText !== '')) {
         throw new ApiException('bad_request',
-            empty($poll['allow_free_text']) ? '1 つ以上選んでください' : '選択肢を選ぶか、 自由記述を書いてください',
+            empty($poll['allow_free_text']) ? '1 つ以上選んでください' : '選択肢を選ぶか、自由記述を書いてください',
             400);
     }
     // 対象者チェック + 再投票可否判定。
@@ -315,9 +315,9 @@ function polls_vote(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// 未投票の対象者に 「まだ投票してないよ」 push を一斉送信 (起案者のみ)。
+// 未投票の対象者に「まだ投票してないよ」 push を一斉送信 (起案者のみ)。
 // 過剰連打を避けるため、 polls.last_reminded_at は無いが、 1 回の API 呼び出しで
-// 全員に 1 通だけ届くシンプル実装。 通知のレート制限は Notifier 側に任せる。
+// 全員に 1 通だけ届くシンプル実装。通知のレート制限は Notifier 側に任せる。
 function polls_remind(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     polls_autoclose($pdo);
@@ -348,10 +348,10 @@ function polls_remind(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'sent' => $sent, 'unvoted' => count($ids)]);
 }
 
-// PATCH /api/polls/{id} — 起案者 / admin による編集。 渡したフィールドだけ更新。
-//   options : 配列が来たら 「同じラベルは残し、 無くなったものは削除 (=その option への票も cascade で消える)、
-//             新規ラベルは追加」 の差分更新。
-//   voter_ids: 同様に差分更新。 外された voter の票は削除。 追加された voter は voted_at=NULL。
+// PATCH /api/polls/{id} — 起案者 / admin による編集。渡したフィールドだけ更新。
+//   options : 配列が来たら「同じラベルは残し、無くなったものは削除 (=その option への票も cascade で消える)、
+//             新規ラベルは追加」の差分更新。
+//   voter_ids: 同様に差分更新。外された voter の票は削除。追加された voter は voted_at=NULL。
 function polls_update(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT * FROM polls WHERE id=?");

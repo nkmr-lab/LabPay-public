@@ -2,8 +2,8 @@ import { get, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { refreshUnread, toast, state } from '../app.js';
 
-// v512 ユーザ報告: 「通知のロードが重い。 全件ロードしてる」 → 20 件ずつカーソル
-//   ベース pagination に変更。 サーバ側 /api/notifications は ?before_id= の
+// v512 ユーザ報告: 「通知のロードが重い。全件ロードしてる」 → 20 件ずつカーソル
+//   ベース pagination に変更。サーバ側 /api/notifications は ?before_id= の
 //   カーソルと has_more フラグを返す (= 1 ページずつ append)。
 const PAGE_SIZE = 10; // v514 #133 デフォルト 10 件に変更
 let loadedItems = [];
@@ -24,7 +24,7 @@ export async function renderNotifications() {
     </div>
   `;
   document.getElementById('mark-all').addEventListener('click', async () => {
-    // v525 #178 表示先行 (= UI 即時更新) + DB 更新は裏で。 全件 re-fetch しない。
+    // v525 #178 表示先行 (= UI 即時更新) + DB 更新は裏で。全件 re-fetch しない。
     const now = new Date().toISOString();
     for (const it of loadedItems) { if (!it.read_at) it.read_at = now; }
     paint();
@@ -148,18 +148,18 @@ function refUrl(n) {
     case 'bait_request':   return n.ref_id ? '#/bait/' + n.ref_id : '#/bait';  // v780 #374
     case 'paper_review':   return '#/paper-review';
     // v756 #373 paper_translate: ref_id は row id だが、 URL は share_token なので
-    //   body に含まれている「/#/paper-(translate|summary)/r/TOKEN」 を抽出して使う。
+    //   body に含まれている「/#/paper-(translate|summary)/r/TOKEN」を抽出して使う。
     case 'paper_translate': {
       const m = (n.body || '').match(/#\/paper-(?:translate|summary)\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/paper-summary';
     }
     case 'deep_research': {
-      // v781 #376 body に 「/#/deep-research/r/TOKEN」 が入っている
+      // v781 #376 body に「/#/deep-research/r/TOKEN」が入っている
       const m = (n.body || '').match(/#\/deep-research\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/deep-research';
     }
     case 'paper_full_translation': {
-      // v788 #386 body に 「/#/paper-translate-full/r/TOKEN」 が入っている
+      // v788 #386 body に「/#/paper-translate-full/r/TOKEN」が入っている
       const m = (n.body || '').match(/#\/paper-translate-full\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/paper-translate-full';
     }

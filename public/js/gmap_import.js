@@ -63,8 +63,8 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// 既存リスト ([{title, lat, lng, ...}]) との重複判定。 タイトル一致 (大小無視) +
-// 緯度経度 50m 以内なら同じ場所とみなす。 緯度経度が無い場合はタイトル一致のみ。
+// 既存リスト ([{title, lat, lng, ...}]) との重複判定。タイトル一致 (大小無視) +
+// 緯度経度 50m 以内なら同じ場所とみなす。緯度経度が無い場合はタイトル一致のみ。
 export function isDupOf(existing, candidate) {
   return existing.some(e => {
     if (!e.title || !candidate.title) return false;

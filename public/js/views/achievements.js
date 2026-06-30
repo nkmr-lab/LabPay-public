@@ -38,7 +38,7 @@ async function renderAchievementsTitle() {
     if (d.title) {
       txt.textContent = d.title;
       meta.textContent = (d.is_stale
-        ? `※ 実績が増えました — 「再生成」 で更新できます (前回 ${d.generated_at || '?'})`
+        ? `※ 実績が増えました — 「再生成」で更新できます (前回 ${d.generated_at || '?'})`
         : `${d.generated_at || ''}`);
       btn.textContent = '🔄 再生成';
     } else {

@@ -77,7 +77,7 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
     $endTs   = $end->getTimestamp();
 
     if ($mode === 'daily') {
-        // v699 #286 N 行 (日付) × 24 列の matrix。 日付文字列を行キーに。
+        // v699 #286 N 行 (日付) × 24 列の matrix。日付文字列を行キーに。
         $dateList = [];
         for ($t = $startTs; $t < $endTs; $t += 86400) {
             $dateList[] = date('Y-m-d', $t);
@@ -197,8 +197,8 @@ function presence_is_excluded_mac(string $mac): bool {
     return false;
 }
 
-// v686 #270 仮想マシンの MAC を検知。 これらは物理デバイスと違って常時稼働
-// の Host 上で走るので 「ずっといる」 状態になる → 在室判定が壊れる。 OUI 一覧:
+// v686 #270 仮想マシンの MAC を検知。これらは物理デバイスと違って常時稼働
+// の Host 上で走るので「ずっといる」状態になる → 在室判定が壊れる。 OUI 一覧:
 //   - 00:15:5d  Microsoft Hyper-V
 //   - 00:50:56  VMware ESXi
 //   - 00:0c:29  VMware Workstation
@@ -376,12 +376,12 @@ function presence_devices_list(PDO $pdo, array $cfg): void {
     $st = $pdo->prepare('SELECT id, mac, label, created_at FROM presence_devices WHERE user_id=? ORDER BY id');
     $st->execute([$u['id']]);
     $items = $st->fetchAll();
-    // v686 #270 既存登録にも VM MAC 警告を付ける。 削除すべきかはユーザ判断。
+    // v686 #270 既存登録にも VM MAC 警告を付ける。削除すべきかはユーザ判断。
     foreach ($items as &$r) {
         $vm = presence_vm_kind((string)$r['mac']);
         $r['vm_kind'] = $vm;
         $r['warning'] = $vm
-            ? "⚠️ これは $vm の仮想 NIC の MAC です。 物理デバイスじゃないので 「ずっといる」 状態になって在室判定が壊れます。 削除を推奨"
+            ? "⚠️ これは $vm の仮想 NIC の MAC です。物理デバイスじゃないので「ずっといる」状態になって在室判定が壊れます。削除を推奨"
             : null;
     }
     unset($r);
@@ -397,11 +397,11 @@ function presence_devices_add(PDO $pdo, array $cfg): void {
     if ($mac === null) throw new ApiException('bad_request', 'invalid MAC address', 400);
     if (presence_is_excluded_mac($mac))
         throw new ApiException('bad_request', 'broadcast/multicast MACs not allowed', 400);
-    // v686 #270 VM の MAC は登録不可 (常時稼働で 「ずっといる」 状態になる)。
+    // v686 #270 VM の MAC は登録不可 (常時稼働で「ずっといる」状態になる)。
     $vm = presence_vm_kind($mac);
     if ($vm !== null) {
         throw new ApiException('vm_mac',
-            "これは $vm の仮想 NIC の MAC です。 物理デバイス (スマホ / ノート PC) の MAC を登録してください。 仮想 NIC はホストが起動中ずっと同じ MAC を出し続けるので 「ずっとラボにいる」 と誤判定されてしまいます。",
+            "これは $vm の仮想 NIC の MAC です。物理デバイス (スマホ / ノート PC) の MAC を登録してください。仮想 NIC はホストが起動中ずっと同じ MAC を出し続けるので「ずっとラボにいる」と誤判定されてしまいます。",
             400);
     }
 

@@ -23,7 +23,7 @@ export async function renderShiritori() {
     const d = await get('/api/shiritori/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('sh-list').innerHTML = '<div class="empty">まだゲームがありません。 「＋ 新規」 から作成してください。</div>';
+      document.getElementById('sh-list').innerHTML = '<div class="empty">まだゲームがありません。「＋ 新規」から作成してください。</div>';
       return;
     }
     document.getElementById('sh-list').innerHTML = items.map(g => {
@@ -106,8 +106,8 @@ export async function renderShiritoriNew() {
   });
 }
 
-// 絵しりとりのゲーム本体。 現在のターンが自分ならキャンバス + タイマー、 他人なら
-//   「○○さんが描いてます」 + 過去の絵 (直近 2 枚)。 終了したら全描画一覧。
+// 絵しりとりのゲーム本体。現在のターンが自分ならキャンバス + タイマー、他人なら
+//   「○○さんが描いてます」 + 過去の絵 (直近 2 枚)。終了したら全描画一覧。
 let canvasState = null;
 export async function renderShiritoriDetail({ params }) {
   const gid = Number(params.id);
@@ -166,7 +166,7 @@ function paintWaitingTurn(root, g) {
   root.innerHTML = `
     <div class="card">
       <div class="bold" style="margin-bottom:6px">⏳ ${escapeHtml(cur ? cur.display_name : '?')} さんが描いています…</div>
-      <div class="hint-sm">あなたの番が来たらホームの通知が届きます。 このページをリロードしてください。</div>
+      <div class="hint-sm">あなたの番が来たらホームの通知が届きます。このページをリロードしてください。</div>
     </div>
     ${last2.length ? `<div class="card">
       <div class="bold" style="margin-bottom:6px">最新 ${last2.length} 枚</div>
@@ -201,7 +201,7 @@ function paintMyTurn(root, g) {
     ${last2.length ? `<div class="card">
       <div class="bold" style="margin-bottom:6px">📷 直近 ${last2.length} 枚 (これを見て次を描く)</div>
       <div class="list">${last2.map(d => paintDrawingRow(d, g.players)).join('')}</div>
-    </div>` : '<div class="card"><div class="hint">あなたが最初の描き手です。 自由に何か 1 つ描いてください。</div></div>'}
+    </div>` : '<div class="card"><div class="hint">あなたが最初の描き手です。自由に何か 1 つ描いてください。</div></div>'}
     <div class="card">
       <div class="bold" style="margin-bottom:6px">✏️ あなたの番 (残り <span id="sh-timer">${g.time_limit_sec}</span> 秒)</div>
       <canvas id="sh-canvas" width="500" height="500"

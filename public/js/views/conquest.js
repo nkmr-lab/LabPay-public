@@ -1,6 +1,6 @@
-// /#/conquest — ユーザが自由に 「制覇リスト」 を作って、 アイテムを追加 + 自分が
+// /#/conquest — ユーザが自由に「制覇リスト」を作って、アイテムを追加 + 自分が
 //   達成したものをチェックしていくアプリ。 v860 #445。
-//   例: 「中野区のパン屋」 「都内のラーメン屋一蘭」 「47 都道府県県庁所在地」 …
+//   例: 「中野区のパン屋」「都内のラーメン屋一蘭」「47 都道府県県庁所在地」 …
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -17,7 +17,7 @@ export async function renderConquest() {
         <a class="btn primary" href="#/conquest/new">＋ 新しいリスト</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
-        街のパン屋、 通った学会、 行きたい温泉など、 自分だけの制覇リストを作ってチェックしていけます。
+        街のパン屋、通った学会、行きたい温泉など、自分だけの制覇リストを作ってチェックしていけます。
       </div>
     </div>
     <div id="cq-list"><div class="muted">読込中…</div></div>`;
@@ -28,7 +28,7 @@ export async function renderConquest() {
     if (!items.length) {
       document.getElementById('cq-list').innerHTML = `
         <div class="card center muted">
-          まだリストがありません。 「＋ 新しいリスト」 から作ってみよう。
+          まだリストがありません。「＋ 新しいリスト」から作ってみよう。
         </div>`;
       return;
     }
@@ -76,7 +76,7 @@ export async function renderConquestNew() {
       <textarea id="cq-desc" rows="3" style="width:100%; padding:8px; margin-top:4px"></textarea>
       <label style="font-size:13px; margin-top:10px; display:block">公開設定</label>
       <select id="cq-vis" style="padding:8px; margin-top:4px">
-        <option value="public">🌐 公開 (誰でも見られる、 みんなで追加 OK)</option>
+        <option value="public">🌐 公開 (誰でも見られる、みんなで追加 OK)</option>
         <option value="private">🔒 非公開 (自分だけ)</option>
       </select>
       <div style="margin-top:14px">
@@ -133,7 +133,7 @@ export async function renderConquestDetail({ id }) {
         <div class="bold" style="font-size:13px; margin-bottom:6px">＋ アイテムを追加</div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <input id="cq-item-name" type="text" maxlength="160" placeholder="お店名 / 対象名" style="flex:1; min-width:160px; padding:8px">
-          <input id="cq-item-note" type="text" maxlength="400" placeholder="メモ (住所等、 任意)" style="flex:1; min-width:160px; padding:8px">
+          <input id="cq-item-note" type="text" maxlength="400" placeholder="メモ (住所等、任意)" style="flex:1; min-width:160px; padding:8px">
           <button id="cq-item-add" class="primary">追加</button>
         </div>
       </div>` : ''}
@@ -141,13 +141,13 @@ export async function renderConquestDetail({ id }) {
       <div class="bold" style="margin-bottom:6px">アイテム (${d.items.length})</div>
       <div id="cq-items">
         ${d.items.length === 0
-          ? '<div class="muted">まだアイテムがありません。 上から追加してください。</div>'
+          ? '<div class="muted">まだアイテムがありません。上から追加してください。</div>'
           : d.items.map(it => renderItemRow(it, d)).join('')}
       </div>
     </div>`;
   if (d.is_mine) {
     document.getElementById('cq-del')?.addEventListener('click', async () => {
-      if (!confirm('このリストを削除します。 いいですか?')) return;
+      if (!confirm('このリストを削除します。いいですか?')) return;
       try { await del('/api/conquest/lists/' + id); toast('削除しました'); navigate('#/conquest'); }
       catch (e) { toast('失敗: ' + e.message); }
     });
@@ -177,7 +177,7 @@ export async function renderConquestDetail({ id }) {
   document.querySelectorAll('[data-del-item]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const itemId = btn.dataset.delItem;
-      if (!confirm('このアイテムを削除します。 いいですか?')) return;
+      if (!confirm('このアイテムを削除します。いいですか?')) return;
       try { await del(`/api/conquest/lists/${id}/items/${itemId}`); toast('削除'); renderConquestDetail({ id }); }
       catch (e) { toast('失敗: ' + e.message); }
     });

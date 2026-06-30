@@ -1,7 +1,7 @@
 <?php
-// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 v839 以降、 認証は各ユーザの PAT
+// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 v839 以降、認証は各ユーザの PAT
 //   (Personal Access Token, ヘッダ x-personal-access-token) のみ。 legacy connect.sid cookie
-//   経路は撤廃済み (鍵だけで十分なため、 設定を一本化)。
+//   経路は撤廃済み (鍵だけで十分なため、設定を一本化)。
 //
 //   研究ノートページ名規則 (https://github.com/nkmr-lab/scrapbox-helper-for-nkmrlab):
 //     Page 名: YYYY.MM_研究ノート_<scrapbox_handle>
@@ -68,10 +68,10 @@ function cosense_user_pat(PDO $pdo, int $uid): ?string {
     $c = trim((string)($st->fetchColumn() ?: ''));
     return $c !== '' ? $c : null;
 }
-// v825 Cosense page 名に使う handle。 優先順:
-//   1) users.cosense_page_handle (個別設定、 例: 「中村聡史」)
-//   2) users.display_name (LabPay 表示名、 通常これが Cosense 表示名と同じ)
-//   3) user_scrapbox_handles.scrapbox_name (Slack 同期用、 英語名のこともある)
+// v825 Cosense page 名に使う handle。優先順:
+//   1) users.cosense_page_handle (個別設定、例: 「中村聡史」)
+//   2) users.display_name (LabPay 表示名、通常これが Cosense 表示名と同じ)
+//   3) user_scrapbox_handles.scrapbox_name (Slack 同期用、英語名のこともある)
 function cosense_user_handle(PDO $pdo, int $uid): ?string {
     $st = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
     $st->execute([$uid]);
@@ -117,7 +117,7 @@ function cosense_http(string $method, string $url, array $opts = []): array {
     return ['status' => $status, 'body' => (string)$resp, 'err' => $err];
 }
 
-// v2 API でページを取得 (json)。 PAT 必須。 構造: { title, lines: [{id, text}], ... }
+// v2 API でページを取得 (json)。 PAT 必須。構造: { title, lines: [{id, text}], ... }
 function cosense_v2_get_page(array $cfg, string $title, string $pat): array {
     $url = cosense_base($cfg) . '/api/pages/v2/' . rawurlencode(cosense_project($cfg))
          . '/' . rawurlencode($title);
@@ -289,7 +289,7 @@ function cosense_page_text(PDO $pdo, array $cfg, int $uid): void {
 function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
-        throw new ApiException('precondition', 'Cosense PAT が未登録です。 設定 → Cosense 連携で登録してください', 412);
+        throw new ApiException('precondition', 'Cosense PAT が未登録です。設定 → Cosense 連携で登録してください', 412);
     }
     $handle = cosense_user_handle($pdo, $uid);
     if ($handle === null) {
@@ -313,13 +313,13 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     $pageId = $existsPage ? ($r['page']['id'] ?? null) : null;
     $lines = $existsPage ? ($r['page']['lines'] ?? []) : [];
 
-    // v829 #418 「日付ヘッダの直下、 既存内容があればその末尾」 = 「今日の日付セクションの末尾」 に挿入する。
+    // v829 #418 「日付ヘッダの直下、既存内容があればその末尾」 = 「今日の日付セクションの末尾」に挿入する。
     //
     //   1. 日付ヘッダ行を探す (= [*( YYYY.MM.DD ...)])
-    //   2. ヘッダの次の行から、 次の日付ヘッダが現れるまでスキャン
-    //      → その「次の日付ヘッダ」 の前 = 現セクションの末尾
+    //   2. ヘッダの次の行から、次の日付ヘッダが現れるまでスキャン
+    //      → その「次の日付ヘッダ」の前 = 現セクションの末尾
     //   3. 次の日付ヘッダがなければ `_end` (= ページ末尾) を anchor に
-    //   4. 日付ヘッダ自体が存在しなければ、 ヘッダ + 内容を全部ページ末尾に追加
+    //   4. 日付ヘッダ自体が存在しなければ、ヘッダ + 内容を全部ページ末尾に追加
     $dateRe = '/^\[\*\(\s*' . preg_quote($date, '/') . '/u';
     $headerLineId = null;
     $nextDateLineId = null;
@@ -346,7 +346,7 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
         return bin2hex(random_bytes(12));
     };
 
-    // anchor 決定: ヘッダなしならヘッダごと末尾、 ありなら現セクションの末尾。
+    // anchor 決定: ヘッダなしならヘッダごと末尾、ありなら現セクションの末尾。
     if ($headerLineId === null) {
         $wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][((int)date('w', strtotime($date)))];
         $headerNewId = $makeLineId();
@@ -355,10 +355,10 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
             $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(), 'text' => ' ' . $bl]];
         }
     } else {
-        // 「セクションの末尾」 = 次の日付ヘッダの直前。 次がなければページ末尾。
+        // 「セクションの末尾」 = 次の日付ヘッダの直前。次がなければページ末尾。
         $anchor = $nextDateLineId ?? '_end';
         foreach ($bodyLines as $bl) {
-            // 順次評価: 同じ anchor の前に挿入を繰り返すと、 結果的に anchor の直前に
+            // 順次評価: 同じ anchor の前に挿入を繰り返すと、結果的に anchor の直前に
             //   入れた順番で並ぶ (Cosense API はこの順番を保つ)。
             $changes[] = ['_insert' => $anchor, 'lines' => ['id' => $makeLineId(), 'text' => ' ' . $bl]];
         }
@@ -477,12 +477,12 @@ function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): 
     $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
     [$headerIdx, $headerLineId, $nextAnchorId, $oldBodyLines] = cosense_locate_section($allLines, $date);
 
-    // 新しい text を行分解。 末尾の空行は削る (UI 側で余計な空行が付くのを防ぐ)。
+    // 新しい text を行分解。末尾の空行は削る (UI 側で余計な空行が付くのを防ぐ)。
     $newLines = preg_split('/\r?\n/', $newText);
     while (count($newLines) > 0 && trim((string)end($newLines)) === '') {
         array_pop($newLines);
     }
-    // v831 #418-2 次の日付ヘッダがある場合は、 本文の末尾に空行を 1 行入れる
+    // v831 #418-2 次の日付ヘッダがある場合は、本文の末尾に空行を 1 行入れる
     //   (= 次の日付セクションとの間に視覚的な切れ目を作る)。
     if ($nextAnchorId !== null && count($newLines) > 0) {
         $newLines[] = '';
@@ -554,9 +554,9 @@ function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): 
 
 // 指定日のセクションを $allLines から探す。
 // 返り値: [headerIdx, headerLineId, nextAnchorId, bodyLines]
-//   headerIdx     : ヘッダ行のインデックス。 見つからなければ -1
+//   headerIdx     : ヘッダ行のインデックス。見つからなければ -1
 //   headerLineId  : ヘッダ行の id (null も可)
-//   nextAnchorId  : 「次の日付ヘッダ」 の id (= セクション末尾 anchor)。 次がなければ null
+//   nextAnchorId  : 「次の日付ヘッダ」の id (= セクション末尾 anchor)。次がなければ null
 //   bodyLines     : [{id, text}, ...] ヘッダを除く本文行
 function cosense_locate_section(array $allLines, string $date): array {
     $dateRe = '/^\[\*\(\s*' . preg_quote($date, '/') . '/u';
@@ -583,7 +583,7 @@ function cosense_locate_section(array $allLines, string $date): array {
     return [$headerIdx, $headerLineId, $nextAnchorId, $bodyLines];
 }
 
-// v834 指定月の研究ノートページを開いて、 日別の line_count / char_count を集計する。
+// v834 指定月の研究ノートページを開いて、日別の line_count / char_count を集計する。
 //   GET /api/cosense/research-note/month?ym=YYYY.MM
 //   ETag 対応 (= 内容が変わってなければ 304)。
 function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void {
@@ -606,7 +606,7 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
 
     // 全日付セクションを集計
     // v838 #422 PC向けに preview (各日の本文先頭 2 行連結 / 最大 80 文字) も返す。
-    //   カレンダーのセル内に直接 「3 lines: 論文要約 + ミーティング」 のように表示する用。
+    //   カレンダーのセル内に直接「3 lines: 論文要約 + ミーティング」のように表示する用。
     $days = [];
     $curDate = null;
     $previewLines = [];
@@ -683,9 +683,9 @@ function cosense_me_set_pat(PDO $pdo, array $cfg, int $uid): void {
         if (mb_strlen($p) > 500) {
             throw new ApiException('bad_request', '鍵が長すぎます (500文字以下)', 400);
         }
-        // 印字可能ASCII (0x21〜0x7E、=や+や/含む) のみ。 空白文字や日本語の混入だけ弾く。
+        // 印字可能ASCII (0x21〜0x7E、=や+や/含む) のみ。空白文字や日本語の混入だけ弾く。
         if (!preg_match('/^[\x21-\x7E]+$/', $p)) {
-            throw new ApiException('bad_request', '鍵に空白や記号以外の文字が混ざっています。 もう一度コピーし直してください', 400);
+            throw new ApiException('bad_request', '鍵に空白や記号以外の文字が混ざっています。もう一度コピーし直してください', 400);
         }
     } else {
         $p = null;

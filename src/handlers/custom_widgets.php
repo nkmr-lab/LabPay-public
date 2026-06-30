@@ -1,7 +1,7 @@
 <?php
 // /api/custom-widgets — 自作ウィジェット (#246)。
 // ユーザが JS を書いて登録 → ホームに表示する簡易 widget。
-// 自分専用 (= owner) のみ。 共有や stream はフェーズ 2 以降。
+// 自分専用 (= owner) のみ。共有や stream はフェーズ 2 以降。
 
 declare(strict_types=1);
 

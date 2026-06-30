@@ -4,14 +4,14 @@
 //   GET    /api/sounds/clips                  全 clip 一覧 (誰でも)
 //   POST   /api/sounds/clips                  upload clip (admin)
 //   DELETE /api/sounds/clips/:id              clip 削除 (admin)
-//   GET    /api/sounds/defaults               event 規定値一覧 (誰でも、 既知 event を返す)
+//   GET    /api/sounds/defaults               event 規定値一覧 (誰でも、既知 event を返す)
 //   PATCH  /api/sounds/defaults/:event_key    規定値変更 (admin)
 //   GET    /api/sounds/my                     自分のオーバーライド + 解決済 (再生に必要な情報)
 //   PATCH  /api/sounds/my/:event_key          オーバーライド設定
 
 declare(strict_types=1);
 
-// 既知イベント。 追加するときはここに 1 行 + sound_event_defaults INSERT IGNORE で済む。
+// 既知イベント。追加するときはここに 1 行 + sound_event_defaults INSERT IGNORE で済む。
 const SOUND_EVENTS = [
     'payment'       => ['label' => '決済 (送金 / 購入成功時)'],
     'roulette_spin' => ['label' => 'ルーレット回転開始時'],

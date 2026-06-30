@@ -1,9 +1,9 @@
-// /#/auctions — オークション MVP。 一覧 / 出品 / 詳細。
+// /#/auctions — オークション MVP。一覧 / 出品 / 詳細。
 //   * 出品: タイトル + 説明 + 画像 + 最低価格 + 締切時刻
 //   * 入札: 現在の最高 + 1 以上
 //   * 締切: 自動で settle (lazy 集計、 lazy notify)
-//   * 落札後の円移動は無し (LabPay pt は動かない)。 ラボ内既知前提で
-//     連絡先は出さず、 出品者が 「請求を飛ばす」 ボタンで money_requests
+//   * 落札後の円移動は無し (LabPay pt は動かない)。ラボ内既知前提で
+//     連絡先は出さず、出品者が「請求を飛ばす」ボタンで money_requests
 //     を生成 → 落札者に通知 → 落札者は普通の請求 UI で支払い済をチェック。
 
 import { get, post, patch, del } from '../api.js';
@@ -187,13 +187,13 @@ export async function renderAuctionDetail({ params }) {
     const d = await get('/api/auctions/' + id);
     const a = d.auction;
     document.getElementById('aud-share')?.addEventListener('click', () => {
-      shareToSns(`🏷 オークション 「${a.title || ''}」 ${a.settled_at ? '落札' : '受付中'}`, `#/auctions/${id}`);
+      shareToSns(`🏷 オークション「${a.title || ''}」 ${a.settled_at ? '落札' : '受付中'}`, `#/auctions/${id}`);
     });
     const active = !a.settled_at && !a.cancelled_at;
     const meId = Number(state.me?.id);
     const isMine = Number(a.seller_user_id) === meId;
     // v392: TDZ 回避 (旧名 tag を statusTag に rename。 import 済の tag() を
-    // 同名 const がシャドウして 「Cannot access 'tag' before initialization」 を
+    // 同名 const がシャドウして「Cannot access 'tag' before initialization」を
     // 起こしていた)
     const statusTag = a.cancelled_at
       ? tag('muted', '取消')
@@ -204,9 +204,9 @@ export async function renderAuctionDetail({ params }) {
         : tag('ok', escapeHtml(remainingText(a.closes_at, false, false)));
     const img = a.image_url
       ? `<img src="${escapeHtml(a.image_url)}" alt="" style="display:block; max-width:100%; max-height:240px; border-radius:8px; object-fit:contain; margin:0 auto 8px">` : '';
-    // v392: 連絡先表示は廃止 (ラボ内既知前提)。 代わりに落札後に
-    //   - 出品者には 「💸 請求を飛ばす」 ボタン (落札者宛 money_request を生成)
-    //   - 落札者には 「請求が届きしだい [請求] から支払済をマーク」 ヒント
+    // v392: 連絡先表示は廃止 (ラボ内既知前提)。代わりに落札後に
+    //   - 出品者には「💸 請求を飛ばす」ボタン (落札者宛 money_request を生成)
+    //   - 落札者には「請求が届きしだい [請求] から支払済をマーク」ヒント
     // を出す。
     let chargeBlock = '';
     if (a.settled_at && a.winner_user_id) {
@@ -221,7 +221,7 @@ export async function renderAuctionDetail({ params }) {
         chargeBlock = `
           <div class="card" style="background:#fff8e6; margin-top:8px">
             <h4 style="margin:0 0 4px">🎉 落札しました</h4>
-            <div class="meta">出品者 ${escapeHtml(a.seller_name)} さんから ¥${Number(a.winning_bid).toLocaleString()} 円の請求が届きます。 届きしだい <a href="#/requests">[請求]</a> から支払い済をマークしてください。</div>
+            <div class="meta">出品者 ${escapeHtml(a.seller_name)} さんから ¥${Number(a.winning_bid).toLocaleString()} 円の請求が届きます。届きしだい <a href="#/requests">[請求]</a> から支払い済をマークしてください。</div>
           </div>`;
       }
     }
@@ -264,7 +264,7 @@ export async function renderAuctionDetail({ params }) {
       document.getElementById('aud-amt').min = min;
       document.getElementById('aud-amt').value = min;
       document.getElementById('aud-bid-hint').textContent =
-        `${min}円以上で入札可能。 入札後の取消はできません。`;
+        `${min}円以上で入札可能。入札後の取消はできません。`;
       document.getElementById('aud-bid-go').addEventListener('click', async () => {
         const amount = Number(document.getElementById('aud-amt').value);
         if (!(amount > 0)) { toast('金額を入れてください'); return; }
@@ -299,12 +299,12 @@ export async function renderAuctionDetail({ params }) {
       const cBtn = document.getElementById('aud-cancel');
       cBtn.disabled = !active;
       cBtn.addEventListener('click', async () => {
-        if (!confirm('出品を取消します。 入札者全員に通知が飛びます。')) return;
+        if (!confirm('出品を取消します。入札者全員に通知が飛びます。')) return;
         try { await patch(`/api/auctions/${id}/cancel`, {}); toast('取消しました'); await renderAuctionDetail({ params: { id } }); }
         catch (e) { toast('失敗: ' + e.message); }
       });
       document.getElementById('aud-del').addEventListener('click', async () => {
-        if (!confirm('完全に削除します (入札履歴も)。 戻せません。 良いですか?')) return;
+        if (!confirm('完全に削除します (入札履歴も)。戻せません。良いですか?')) return;
         try { await del('/api/auctions/' + id); toast('削除しました'); navigate('#/auctions'); }
         catch (e) { toast('失敗: ' + e.message); }
       });

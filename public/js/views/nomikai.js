@@ -127,7 +127,7 @@ export async function renderNomikaiNew({ query }) {
       <label class="field">
         <span class="lbl">ソフドリ対象者減額 (円・任意)</span>
         <input type="number" id="nm-sd-discount" min="0" step="100" placeholder="例: 1000">
-        <div class="hint-sm">🥤 の人を 1 人につき N 円引きにし、 その差額を 🍺 の人で weight 按分して吸収します。</div>
+        <div class="hint-sm">🥤 の人を 1 人につき N 円引きにし、その差額を 🍺 の人で weight 按分して吸収します。</div>
       </label>
       <label class="field">
         <span class="lbl">メモ (任意)</span>
@@ -265,7 +265,7 @@ function computeAmounts() {
       x.amount = remaining * x.weight / sumW;
     }
   }
-  // Step 2: ソフドリ割引 (weighted のみが対象)。 ソフドリの人から -D、
+  // Step 2: ソフドリ割引 (weighted のみが対象)。ソフドリの人から -D、
   // 飲み手の人で weight 按分して +(D * numSoftdri / sumDrinkerW) を上乗せ。
   // 飲み手 0 / ソフドリ 0 のどちらかなら適用不能 → 何もしない。
   if (sdDiscount > 0) {
@@ -308,7 +308,7 @@ function updatePreviewTotal(arr) {
   if (!el) return;
   const total = arr._total;
   // ソフドリ割引が指定されてるのに飲み手 0 / ソフドリ 0 で適用不能なケースは
-  // ユーザに分かるように 「適用不能」 を明示。
+  // ユーザに分かるように「適用不能」を明示。
   let sdHint = '';
   if (arr._sdDiscount > 0) {
     if (arr._sdCount === 0)       sdHint = ' · ソフドリ 0 人 → 割引なし';

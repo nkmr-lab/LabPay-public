@@ -1,4 +1,4 @@
-// 共有メンバー選択 picker。 各 view が ad-hoc で書いていた 「全員 / 学年 / 性別」 bulk +
+// 共有メンバー選択 picker。各 view が ad-hoc で書いていた「全員 / 学年 / 性別」 bulk +
 // 個別 chip + 選択数ラベルを 1 箇所に集約。
 //
 // 使い方:
@@ -8,7 +8,7 @@
 //     chipsContainer: document.getElementById('xxx-members'),
 //     countLabel:    document.getElementById('xxx-count'),  // 任意
 //     initial:       [12, 34, ...],         // 初期選択 (任意)
-//     poolIds:       [1, 2, 3, ...],        // 「これらの user_id のみ表示」 (任意。 グループ
+//     poolIds:       [1, 2, 3, ...],        // 「これらの user_id のみ表示」 (任意。グループ
 //                                              内などで member を制限したい時に使う)
 //     showGenderBulk: true,                  // 男 / 女ボタンを出すか (デフォ true)
 //     excludeIds:    [meId],                 // 表示しない user_id (発起人を picker から外す等)

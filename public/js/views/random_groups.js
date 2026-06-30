@@ -2,7 +2,7 @@
 // 学年 / 性別を「できるだけ均等」に配慮するオプション付き (バケット分け
 // → 各バケット内シャッフル → ラウンドロビンで分配)。純粋なローカル計算で、
 // DB には書き込まない。結果は「このメンバーでグループ一括作成」で
-// 「グループ1」 「グループ2」 … という名前で順に実体化できる。
+// 「グループ1」「グループ2」 … という名前で順に実体化できる。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -72,7 +72,7 @@ export async function renderRandomGroups() {
   document.getElementById('rg-copy').addEventListener('click', () => onCopyResult());
 }
 
-// v612 分けた瞬間に自動通知。 押し直しなくても即届く
+// v612 分けた瞬間に自動通知。押し直しなくても即届く
 async function autoNotifyAfterShuffle() {
   if (!lastResult) return;
   const title = lastTitle || autoTitle();
@@ -201,8 +201,8 @@ function shuffle(arr) {
 }
 
 // Phase 1: bucket → round-robin で大まかに均等に配置。
-// Phase 2: ランダム 2-swap を 200 回試行し、 不均衡スコアが下がる時だけ
-// 採用する貪欲法で安定解に近づける。 何の attribute を考えるかは
+// Phase 2: ランダム 2-swap を 200 回試行し、不均衡スコアが下がる時だけ
+// 採用する貪欲法で安定解に近づける。何の attribute を考えるかは
 // considerGrade / considerGender / 常に size でカウント。
 function partition(members, numGroups, considerGrade, considerGender) {
   const groups = phase1Initial(members, numGroups, considerGrade, considerGender);
@@ -239,7 +239,7 @@ function phase1Initial(members, numGroups, considerGrade, considerGender) {
 }
 
 // 全 group × 全 attribute 値のカウントが平均にどれだけ近いかを 2 乗誤差で
-// 評価。 小さいほど均等。 size の変動も常に評価に含める。
+// 評価。小さいほど均等。 size の変動も常に評価に含める。
 function imbalanceScore(groups, considerGrade, considerGender) {
   let score = 0;
   const addAttr = (getter) => {
@@ -334,7 +334,7 @@ async function onNotifyAll(reSend = false) {
   if (!lastResult) { toast('まず分けてください'); return; }
   const title = lastTitle || autoTitle();
   const total = lastResult.reduce((s, g) => s + g.length, 0);
-  if (reSend && !confirm(`「${title}」 の結果を ${total} 人にもう一度通知しますか?`)) return;
+  if (reSend && !confirm(`「${title}」の結果を ${total} 人にもう一度通知しますか?`)) return;
   const groups = lastResult.map(g => g.map(m => m.id));
   try {
     const r = await post('/api/random-groups/notify', { title, groups });
@@ -342,7 +342,7 @@ async function onNotifyAll(reSend = false) {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// 「グループN」 という名前で全グループを順番に作成。 1 つでも失敗したら
+// 「グループN」という名前で全グループを順番に作成。 1 つでも失敗したら
 // 進行状況を toast で報せつつ続行する。
 async function onBulkCreate() {
   if (!lastResult || !lastResult.length) { toast('まず分けてください'); return; }
@@ -365,6 +365,6 @@ async function onBulkCreate() {
     toast(`${ok} 個のグループを作成しました`);
     location.hash = '#/groups';
   } else {
-    toast(`完了 ${ok}/${n}。 失敗: ${errors[0]}`);
+    toast(`完了 ${ok}/${n}。失敗: ${errors[0]}`);
   }
 }

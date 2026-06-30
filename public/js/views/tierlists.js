@@ -23,7 +23,7 @@ export async function renderTierlists() {
     const d = await get('/api/tierlists');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('tl-list').innerHTML = '<div class="empty">まだティア表がありません。 「＋ 新規」 から作ってみてください。</div>';
+      document.getElementById('tl-list').innerHTML = '<div class="empty">まだティア表がありません。「＋ 新規」から作ってみてください。</div>';
       return;
     }
     document.getElementById('tl-list').innerHTML = items.map(t => `
@@ -64,7 +64,7 @@ export async function renderTierlistNew() {
           <button id="tl-add-item" class="btn" type="button">+ 候補を追加</button>
           <button id="tl-bulk-paste" class="btn" type="button" style="font-size:12px">複数行まとめて貼付け</button>
         </div>
-        <div class="hint-sm" style="margin-top:4px">画像アイコンをタップで端末からアップロード (任意)。 候補は最大 200 件。</div>
+        <div class="hint-sm" style="margin-top:4px">画像アイコンをタップで端末からアップロード (任意)。候補は最大 200 件。</div>
       </div>
       <div class="row" style="margin-top:10px; gap:6px; justify-content:flex-end">
         <a href="#/tierlists" class="btn">キャンセル</a>
@@ -130,7 +130,7 @@ export async function renderTierlistNew() {
 
   document.getElementById('tl-add-item').addEventListener('click', () => addItemRow());
   document.getElementById('tl-bulk-paste').addEventListener('click', () => {
-    const txt = prompt('1 行 = 1 候補。 改行区切りで貼り付けてください');
+    const txt = prompt('1 行 = 1 候補。改行区切りで貼り付けてください');
     if (!txt) return;
     txt.split(/\r?\n/).map(s => s.trim()).filter(s => s).forEach(s => addItemRow(s));
   });
@@ -186,7 +186,7 @@ export async function renderTierlistDetail({ params }) {
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">✏️ あなたの回答</div>
-      <div class="hint-sm" style="margin-bottom:6px">候補を <b>ドラッグ</b> で行を移動 (タップで段階を回すこともできます)。 「?」 は 「行ってない / 評価不能」 の意味で使ってください。</div>
+      <div class="hint-sm" style="margin-bottom:6px">候補を <b>ドラッグ</b> で行を移動 (タップで段階を回すこともできます)。「?」は「行ってない / 評価不能」の意味で使ってください。</div>
       <div id="tl-board"></div>
       <div class="row" style="gap:6px; margin-top:10px; justify-content:flex-end">
         <button id="tl-save" class="primary"${d.is_closed ? ' disabled' : ''}>${d.my_answer ? '更新を保存' : '回答する'}</button>
@@ -209,7 +209,7 @@ export async function renderTierlistDetail({ params }) {
     });
   }
   document.getElementById('tl-share')?.addEventListener('click', () => {
-    shareToSns(`🎯 ティア表 「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人回答)`, `#/tierlists/${tid}`);
+    shareToSns(`🎯 ティア表「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人回答)`, `#/tierlists/${tid}`);
   });
   paintBoard(d, items, tiers, my);
   paintAggregation(d, items, tiers);
@@ -231,7 +231,7 @@ export async function renderTierlistDetail({ params }) {
 function paintBoard(d, items, tiers, my) {
   const board = document.getElementById('tl-board');
   if (!board) return;
-  // v815 #410 サーバが tiers 末尾に 「?」 (評価不能) を追加して返す。 「未」 (未配置) と
+  // v815 #410 サーバが tiers 末尾に「?」 (評価不能) を追加して返す。「未」 (未配置) と
   //   「?」 (行ってない / 評価不能) は別物として残す。
   const slots = [...tiers.map(t => ({ key: t.key, label: t.label, color: t.color })), { key: '', label: '未', color: '#888' }];
   board.innerHTML = slots.map(s => `
@@ -261,7 +261,7 @@ function paintBoard(d, items, tiers, my) {
     if (!d.is_closed) {
       // v815 #409 ドラッグアンドドロップ (pointer events で desktop + touch を統一)
       attachTierChipDnd(btn, it.id, d, items, tiers, my);
-      // 既存の 「タップで段階を回す」 動作も残す (DnD で動かなかった時 = pointertap)
+      // 既存の「タップで段階を回す」動作も残す (DnD で動かなかった時 = pointertap)
       btn.addEventListener('click', (ev) => {
         if (btn.dataset.dragged === '1') {
           btn.dataset.dragged = '';

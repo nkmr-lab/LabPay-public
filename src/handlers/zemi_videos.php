@@ -17,7 +17,7 @@ function route_zemi_videos(PDO $pdo, array $cfg, string $method, array $seg): vo
         zemi_videos_list($pdo, $cfg);
         return;
     }
-    // v846 Cosense (nkmr-lab Scrapbox) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み
+    // v846 Cosense (nkmr-lab Scrapbox) の「全体ゼミ」タグページから YouTube URL を一括取り込み
     if ($method === 'POST' && ($seg[1] ?? '') === 'import-from-cosense') {
         if (!$isAdmin) throw new ApiException('forbidden', 'admin のみ', 403);
         zemi_videos_import_from_cosense($pdo, $cfg, $uid);
@@ -48,7 +48,7 @@ function route_zemi_videos(PDO $pdo, array $cfg, string $method, array $seg): vo
     throw new ApiException('not_found', "no route for $method", 404);
 }
 
-// YouTube URL から ID を抽出。 失敗で null。
+// YouTube URL から ID を抽出。失敗で null。
 //   対応: youtube.com/watch?v=XXX, youtu.be/XXX, youtube.com/embed/XXX, youtube.com/shorts/XXX
 function zemi_videos_extract_youtube_id(string $url): ?string {
     $url = trim($url);
@@ -154,7 +154,7 @@ function zemi_videos_list(PDO $pdo, array $cfg): void {
     $st = $pdo->prepare($sql);
     $st->execute($args);
     $items = array_map('zemi_videos_row_to_array', $st->fetchAll(PDO::FETCH_ASSOC));
-    // v854 「途中で止まってる」 と感じないよう、 全件数も同時に返す
+    // v854 「途中で止まってる」と感じないよう、全件数も同時に返す
     $totalAll = (int)$pdo->query("SELECT COUNT(*) FROM zemi_videos")->fetchColumn();
     json_response(['items' => $items, 'q' => $q, 'total_in_db' => $totalAll]);
 }
@@ -262,7 +262,7 @@ function zemi_videos_delete(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v846 Cosense (nkmr-lab) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み。
+// v846 Cosense (nkmr-lab) の「全体ゼミ」タグページから YouTube URL を一括取り込み。
 //
 //   1. タグページ /api/pages/<project>/全体ゼミを取得 → relatedPages.links1hop で
 //      タグが貼られた全ページのタイトル一覧を得る
@@ -273,37 +273,37 @@ function zemi_videos_delete(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
 function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
-        throw new ApiException('precondition', 'Scrapboxの鍵 (PAT) が未登録です。 設定 → Cosense連携で登録してください', 412);
+        throw new ApiException('precondition', 'Scrapboxの鍵 (PAT) が未登録です。設定 → Cosense連携で登録してください', 412);
     }
     $tag = (string)($_GET['tag'] ?? '全体ゼミ');
     if ($tag === '') $tag = '全体ゼミ';
 
     // v851 #438 修正: relatedPages.links1hop (= タグページに backlinks してるページ群) は、
-    //   研究ノートや月報など 「全体ゼミ」 をテキスト中で参照しているだけのノイズページが大量
-    //   に混じる。 そこから YouTube URL を拾うと 「踊歌ってみた」 みたいな個人の音楽動画が
+    //   研究ノートや月報など「全体ゼミ」をテキスト中で参照しているだけのノイズページが大量
+    //   に混じる。そこから YouTube URL を拾うと「踊歌ってみた」みたいな個人の音楽動画が
     //   ゼミ動画として登録されてしまう。
-    //   タグページの `links` (= outgoing) を使い、 「全体ゼミ」 で始まるページタイトルに
-    //   限定することで、 実際のゼミページ ([全体ゼミ 2026.04.30] みたいなやつ) だけ拾う。
+    //   タグページの `links` (= outgoing) を使い、「全体ゼミ」で始まるページタイトルに
+    //   限定することで、実際のゼミページ ([全体ゼミ 2026.04.30] みたいなやつ) だけ拾う。
     $baseUrl = cosense_base($cfg) . '/api/pages/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($tag);
     $res = cosense_http('GET', $baseUrl, ['pat' => $pat]);
     if ($res['status'] !== 200) {
-        throw new ApiException('upstream', "Cosense からのタグページ取得に失敗 (HTTP {$res['status']})。 タグ「{$tag}」 が存在するか確認", 502);
+        throw new ApiException('upstream', "Cosense からのタグページ取得に失敗 (HTTP {$res['status']})。タグ「{$tag}」が存在するか確認", 502);
     }
     $tagPage = json_decode($res['body'], true);
     if (!is_array($tagPage)) {
         throw new ApiException('upstream', 'Cosense レスポンスが JSON ではありません', 502);
     }
-    // 候補ページタイトルを 3 系統からかき集めて、 タグ名で始まるものだけに絞る。
+    // 候補ページタイトルを 3 系統からかき集めて、タグ名で始まるものだけに絞る。
     //   (a) page.links (= outgoing。 v1 でも値はある)
     //   (b) page.lines をスキャンして [全体ゼミ XXX] パターンを抜く (= 確実な outgoing)
-    //   (c) relatedPages.links1hop (= incoming = backlinks。 タグが付いてるページ群)
-    //   いずれも 「全体ゼミ XXXX」 で始まるタイトルに限定して dedupe。
+    //   (c) relatedPages.links1hop (= incoming = backlinks。タグが付いてるページ群)
+    //   いずれも「全体ゼミ XXXX」で始まるタイトルに限定して dedupe。
     $prefix = $tag;
     $matchesPrefix = function($s) use ($prefix) {
         if (!is_string($s) || $s === '') return false;
         if (mb_strpos($s, $prefix) !== 0) return false;
         if ($s === $prefix) return false;
-        // 次の文字が空白 / アンダーバー / カッコ / 数字等で 「全体ゼミの後に何か追記がある」 形のみ採用
+        // 次の文字が空白 / アンダーバー / カッコ / 数字等で「全体ゼミの後に何か追記がある」形のみ採用
         return preg_match('/^' . preg_quote($prefix, '/') . '[\s_\-（(\d]/u', $s) === 1;
     };
     $titles = [];

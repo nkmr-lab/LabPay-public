@@ -1,5 +1,5 @@
-// /#/notices — 重要連絡 + 学会情報。 シンプルなリスト (タイトル + 本文 + URL)。
-// カテゴリ切替タブ。 ピン留めしたものは上に。
+// /#/notices — 重要連絡 + 学会情報。シンプルなリスト (タイトル + 本文 + URL)。
+// カテゴリ切替タブ。ピン留めしたものは上に。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';

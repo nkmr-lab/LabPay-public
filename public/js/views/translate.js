@@ -25,7 +25,7 @@ export async function renderTranslate({ query } = {}) {
       <h2 style="margin:0">🌐 画像和訳</h2>
     </div>
     <div class="card">
-      <label class="field"><span class="lbl">写真 (各 8MB まで、 複数選択可)</span>
+      <label class="field"><span class="lbl">写真 (各 8MB まで、複数選択可)</span>
         <input type="file" id="tr-file" accept="image/*" multiple>
         <div id="tr-thumbs" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px"></div>
         <span id="tr-up-st" class="hint-sm"></span>
@@ -161,7 +161,7 @@ function formatTranslationOutput(text) {
   let s = escapeHtml(text);
   // **bold** → <strong>
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:var(--primary, #4a106d)">$1</strong>');
-  // 行頭 「└ ...」 を補足説明スタイルに
+  // 行頭「└ ...」を補足説明スタイルに
   const lines = s.split('\n');
   let html = '<div style="font-family:system-ui, sans-serif; line-height:1.7; font-size:14px">';
   for (const ln of lines) {

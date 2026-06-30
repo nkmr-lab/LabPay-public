@@ -44,8 +44,8 @@ async function loadAdminZoom() {
 }
 
 // ---------------- Admin: MAC 未登録ユーザー督促 ----------------
-// presence_devices に 1 件も無い human user を一覧化し、 デフォ全員選択で
-// 「MAC 登録してね」 DM を一斉送信。 チェックを外せば個別除外可能。
+// presence_devices に 1 件も無い human user を一覧化し、デフォ全員選択で
+// 「MAC 登録してね」 DM を一斉送信。チェックを外せば個別除外可能。
 async function loadMacReminder() {
   const root = document.getElementById('mac-rem-list');
   if (!root) return;
@@ -88,7 +88,7 @@ async function onMacReminderSend() {
   const uids = [...document.querySelectorAll('.mac-rem-chk:checked')]
     .map(cb => Number(cb.dataset.uid));
   if (!uids.length) { toast('送信先が 0 人です'); return; }
-  if (!confirm(`${uids.length} 人に MAC 登録督促通知 (アプリ内) を送信します。 よろしいですか?`)) return;
+  if (!confirm(`${uids.length} 人に MAC 登録督促通知 (アプリ内) を送信します。よろしいですか?`)) return;
   const btn = document.getElementById('mac-rem-send');
   btn.disabled = true;
   try {
@@ -103,9 +103,9 @@ async function onMacReminderSend() {
 }
 
 // ---------------- Admin: Scrapbox 名簿 ----------------
-// 各 user の 「Slack #scrapbox で使う表示名」 を 1 つだけ管理。
+// 各 user の「Slack #scrapbox で使う表示名」を 1 つだけ管理。
 // レガシー (1 user に複数 handle 行) は同 user_id でグループ化して
-// カンマ区切り表示するが、 保存時は 1 つに統合。
+// カンマ区切り表示するが、保存時は 1 つに統合。
 async function loadScrapboxRoster() {
   const root = document.getElementById('sb-roster');
   if (!root) return;
@@ -186,7 +186,7 @@ export async function renderAdmin() {
 
     <div class="card">
       <h3 style="margin:0">Slack 通知診断</h3>
-      <p class="hint">「Notifier slack DM failed」 が増えてる時の調査用。 bot token とスコープを確認。</p>
+      <p class="hint">「Notifier slack DM failed」が増えてる時の調査用。 bot token とスコープを確認。</p>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
         <button id="sld-check" class="btn">⚙ 接続確認 (auth.test)</button>
         <button id="sld-send"  class="btn primary">✉ テスト DM 送信</button>
@@ -251,9 +251,9 @@ export async function renderAdmin() {
     <div class="card">
       <h3 style="margin-top:0">MAC 未登録ユーザー督促</h3>
       <p class="hint">
-        在室判定 (presence) 用の MAC アドレスを 1 件も登録していない人に、 まとめて
-        「登録してね」 と **アプリ内通知 (LabPay の 🔔 通知タブ)** を送ります (Slack DM
-        は送りません)。 デフォは MAC 未登録全員、 チェックを外せば個別除外もできます。
+        在室判定 (presence) 用の MAC アドレスを 1 件も登録していない人に、まとめて
+        「登録してね」と **アプリ内通知 (LabPay の 🔔 通知タブ)** を送ります (Slack DM
+        は送りません)。デフォは MAC 未登録全員、チェックを外せば個別除外もできます。
       </p>
       <div id="mac-rem-list" class="muted" style="margin-top:6px">読み込み中…</div>
       <label class="field" style="margin-top:8px">
@@ -280,7 +280,7 @@ export async function renderAdmin() {
       <details>
         <summary style="cursor:pointer; font-weight:700; font-size:14px; margin:6px 0">📚 Scrapbox 名簿 (タップで開く)</summary>
         <p class="hint-sm" style="margin-top:6px">
-          各メンバーの Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
+          各メンバーの Slack #scrapbox 通知に出る表示名を 1 つだけ登録。空欄保存で未設定に戻る。
           他メンバーに既に紐づいてる名前を登録すると steal される。
         </p>
         <div id="sb-roster" class="list" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
@@ -289,7 +289,7 @@ export async function renderAdmin() {
 
     <details class="card collapsible-form">
       <summary>詳細管理 (普段触らない設定など)</summary>
-      <!-- v803 管理ダッシュボードは上の 「流通ポイント」 カードに統合したので削除 -->
+      <!-- v803 管理ダッシュボードは上の「流通ポイント」カードに統合したので削除 -->
       <h3 style="margin-top:10px">許可リスト</h3>
       <div id="allow" class="muted">読み込み中…</div>
       <details style="margin-top:8px">
@@ -602,14 +602,14 @@ function renderSystemFlowTable(title, items, total, color) {
 function renderDashboard(d) {
   const el = document.getElementById('dash');
   if (!el) return;
-  // v802 SYSTEM の 「ユーザ直接やり取り」 と 「ESCROW 経由」 を分けて、 戻りは直接だけで計算
-  const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ直接 (=「戻り」 集計対象)',
+  // v802 SYSTEM の「ユーザ直接やり取り」と「ESCROW 経由」を分けて、戻りは直接だけで計算
+  const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ直接 (=「戻り」集計対象)',
                                               d.system_income_user,    d.system_income_user_total    || 0, '#15803d');
-  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、 戻りには入れない)',
+  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、戻りには入れない)',
                                               d.system_income_escrow,  d.system_income_escrow_total  || 0, '#0891b2');
   const outUserHtml   = renderSystemFlowTable('💸 SYSTEM 支出: ユーザ直接 (= 配布)',
                                               d.system_outflow_user,   d.system_outflow_user_total   || 0, '#b45309');
-  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、 戻りには入れない)',
+  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、戻りには入れない)',
                                               d.system_outflow_escrow, d.system_outflow_escrow_total || 0, '#7c3aed');
   const escInHtml     = renderSystemFlowTable('📥 ESCROW に入った内訳 (預け入れ)',
                                               d.escrow_income_by_type,  d.escrow_income_total  || 0, '#0891b2');
@@ -803,7 +803,7 @@ async function renderCalendarGrid(year, month) {
   const grid = document.getElementById('cal-grid');
   const title = document.getElementById('cal-title');
   // v524 #176 ページ遷移中で grid/title が null になることがある (async がページ
-  //   切替後に解決するケース)。 防御してから操作。
+  //   切替後に解決するケース)。防御してから操作。
   if (!grid || !title) return;
   title.textContent = `${year} 年 ${month} 月`;
   grid.innerHTML = `<div class="muted">読み込み中…</div>`;

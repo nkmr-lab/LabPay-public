@@ -15,7 +15,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
         // v600 #228 streak が切れているなら表示用に 0 にする。
-        //   last_checkin_date が今日 or 昨日ならそのまま。 それより前なら 0。
+        //   last_checkin_date が今日 or 昨日ならそのまま。それより前なら 0。
         //   (DB の current_streak はそのまま保存しておく — 次回 checkin の計算に使う)
         if ($streak['last_checkin_date']) {
             $today = (new DateTimeImmutable('now', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
@@ -104,7 +104,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'phone_number = NULL';
             } else {
                 $ph = trim((string)$ph);
-                // 数字 / + / - / 半角スペース / 丸括弧のみ許容。 長さ 5..50。
+                // 数字 / + / - / 半角スペース / 丸括弧のみ許容。長さ 5..50。
                 if (!preg_match('/^[0-9+\-\s()]{5,50}$/', $ph)) {
                     throw new ApiException('bad_request', 'phone_number は数字 / + / - / 空白 / () のみ、 5〜50 文字', 400);
                 }
@@ -121,7 +121,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'scrapbox_username = ?'; $params[] = $sb;
             }
         }
-        // v360 趣味 / 推し (1000 文字まで、 空欄なら NULL)
+        // v360 趣味 / 推し (1000 文字まで、空欄なら NULL)
         foreach (['hobbies', 'favorites'] as $k) {
             if (array_key_exists($k, $body)) {
                 $v = $body[$k];
@@ -180,8 +180,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'birthday_year = ?'; $params[] = $by;
             }
         }
-        // v852 #439 出生地 (西洋占星術の補助。 出生時間がない人でも緯度経度 / 都市名が
-        //   あれば大まかなラッキー方位を出せる)。 自由テキスト 100 文字まで。
+        // v852 #439 出生地 (西洋占星術の補助。出生時間がない人でも緯度経度 / 都市名が
+        //   あれば大まかなラッキー方位を出せる)。自由テキスト 100 文字まで。
         if (array_key_exists('birth_place', $body)) {
             $bp = $body['birth_place'];
             if ($bp === null) {
@@ -229,7 +229,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $unit = (int)$r['unit_price'];
             $fee  = (int)$r['fee'];
             $qty  = (int)$r['qty'];
-            // 自分が受け取った額 = unit_price * qty - fee (手数料はシステム取り、 売り手が払う扱い)
+            // 自分が受け取った額 = unit_price * qty - fee (手数料はシステム取り、売り手が払う扱い)
             $take = $unit * $qty - $fee;
             $totalEarned += $take;
             $items[] = [
@@ -351,9 +351,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // POST /api/me/app-open-reward — 1 日 1 回、未読通知 0 の状態で叩かれた時のみ
-    // pt を出す。 既に今日もらってる / 未読がある場合は no-op (silent OK)。
-    // フロント側は通知バッジが 0 になるたびに ping する想定で、 冪等を確保する
-    // ため (user_id, awarded_on) PK で衝突したら 「もう貰った」 扱い。
+    // pt を出す。既に今日もらってる / 未読がある場合は no-op (silent OK)。
+    // フロント側は通知バッジが 0 になるたびに ping する想定で、冪等を確保する
+    // ため (user_id, awarded_on) PK で衝突したら「もう貰った」扱い。
     if ($sub === 'app-open-reward' && $method === 'POST') {
         $st = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id=? AND read_at IS NULL');
         $st->execute([$u['id']]);
@@ -413,7 +413,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     // ─── Zoom 連携状態取得 / 解除 ─────────────────────────────────────
     if ($sub === 'zoom' && ($seg[2] ?? '') === '' && $method === 'GET') {
         // 連携判定は token の有無で。 zoom_user_id / email は scope 不足だと
-        // 取れないので、 オプショナル表示のみに使う。
+        // 取れないので、オプショナル表示のみに使う。
         $st = $pdo->prepare('SELECT zoom_access_token, zoom_email FROM users WHERE id=?');
         $st->execute([$u['id']]);
         $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -438,7 +438,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     //    location に Zoom URL を、 description にも join_url を埋める
     // 3. 作成された event オブジェクトを返す
     // /me/calendar/events 本体 (seg[3] 無し)。 seg[3] 付きの POST は別 route
-     // (events/{id}/zoom) に通すので、 ここで吸い込まないよう segment 制限。
+     // (events/{id}/zoom) に通すので、ここで吸い込まないよう segment 制限。
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'events'
         && ($seg[3] ?? '') === '' && $method === 'POST') {
         $body = read_json_body();
@@ -448,8 +448,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         $startRaw = (string)($body['start'] ?? '');
         if ($startRaw === '') throw new ApiException('bad_request', 'start (ISO8601) required', 400);
-        // クライアントの実 TZ。 海外滞在中はここを Europe/Rome 等に切り替え、
-        // Zoom / Calendar に 「その場所のローカル時刻」 として登録できるように。
+        // クライアントの実 TZ。海外滞在中はここを Europe/Rome 等に切り替え、
+        // Zoom / Calendar に「その場所のローカル時刻」として登録できるように。
         $tzName = (string)($body['timezone'] ?? '');
         if ($tzName !== '') {
             try { $localTz = new DateTimeZone($tzName); }
@@ -470,7 +470,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
         $joinUrl = ''; $passcode = ''; $meeting = null;
         if ($withZoom) {
-            // Zoom の start_time は 「その TZ におけるローカル時刻」 (Z なし)。
+            // Zoom の start_time は「その TZ におけるローカル時刻」 (Z なし)。
             $zoomStart  = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
             $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
             $meeting = Zoom::createMeeting($zoomAccess, [
@@ -504,7 +504,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (ApiException $e) {
             if ($e->errCode === 'calendar_scope') {
                 throw new ApiException('calendar_scope',
-                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携から再連携してください', 403);
+                    'Google Calendar に書き込み権限がありません。設定 → Google Calendar 連携から再連携してください', 403);
             }
             throw $e;
         }
@@ -530,7 +530,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     // POST /api/me/calendar/events/{eventId}/zoom  body: {calendar_id?}
     // 既存予定に Zoom MTG を追加する。 event を Google から取って start/end/title
     // を読み、 Zoom MTG を作成 → location/description に join_url を追記して
-    // PATCH。 終日予定は対象外 (Zoom 不要)、 既に Zoom URL がある予定も拒否
+    // PATCH。終日予定は対象外 (Zoom 不要)、既に Zoom URL がある予定も拒否
     // (重複作成を防ぐ — UI 側でも button 出さないが server gate)。
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'events'
         && ($seg[3] ?? '') !== '' && ($seg[4] ?? '') === 'zoom' && $method === 'POST') {
@@ -562,7 +562,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $duration = max(5, (int)round(($endDt->getTimestamp() - $startDt->getTimestamp()) / 60));
 
         // Google Calendar イベントが持つ timeZone をそのまま Zoom 側にも使う
-        // (= 既存予定の現地時刻で Zoom MTG を立てる)。 取れなければ Asia/Tokyo。
+        // (= 既存予定の現地時刻で Zoom MTG を立てる)。取れなければ Asia/Tokyo。
         $eventTz = (string)($event['start']['timeZone'] ?? '');
         if ($eventTz === '') $eventTz = 'Asia/Tokyo';
         try { $localTz = new DateTimeZone($eventTz); }
@@ -581,7 +581,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         $passcode = (string)($meeting['password'] ?? '');
 
-        // 既存値を保持しつつ追記。 location は空なら join_url を、 あるなら
+        // 既存値を保持しつつ追記。 location は空なら join_url を、あるなら
         // 改行で join_url を後ろに追加。 description は空行を挟んで Zoom 情報を追記。
         $oldLocation    = (string)($event['location']    ?? '');
         $oldDescription = (string)($event['description'] ?? '');
@@ -601,7 +601,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (ApiException $e) {
             if ($e->errCode === 'calendar_scope') {
                 throw new ApiException('calendar_scope',
-                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携から再連携してください', 403);
+                    'Google Calendar に書き込み権限がありません。設定 → Google Calendar 連携から再連携してください', 403);
             }
             throw $e;
         }
@@ -624,7 +624,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // v638 娯楽募集中 + v640 参加中アグリゲータ。
-    //   「自分が未参加で募集中」 + 「自分が参加中で進行中」 の娯楽をまとめて返す。
+    //   「自分が未参加で募集中」 + 「自分が参加中で進行中」の娯楽をまとめて返す。
     //   item.tag: 'open' = 募集中 (まだ join 可)、 'active' = 自分が参加中で進行中
     if ($sub === 'recruiting' && $method === 'GET') {
         $uid = (int)$u['id'];
@@ -698,7 +698,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $st->execute([$uid]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $items[] = ['cat' => 'entertainment', 'tag' => 'active', 'icon' => '🎨', 'kind' => 'shiritori',
-                            'title' => '絵しりとり 「' . mb_substr((string)$r['title'], 0, 20) . '」',
+                            'title' => '絵しりとり「' . mb_substr((string)$r['title'], 0, 20) . '」',
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/shiritori/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
@@ -757,7 +757,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🎲 ito (lobby、 未参加)
+            // 🎲 ito (lobby、未参加)
             $st = $pdo->prepare("SELECT g.id, g.theme, g.buy_in, uc.display_name AS by_name
                                    FROM ito_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
@@ -770,7 +770,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🐺 人狼 (lobby、 未参加)
+            // 🐺 人狼 (lobby、未参加)
             $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by_name
                                    FROM jinrou_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='lobby'
@@ -783,7 +783,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🎮 custom_games (waiting、 自分が未参加)
+            // 🎮 custom_games (waiting、自分が未参加)
             $st = $pdo->prepare("SELECT g.id, g.game_kind, g.fee, uc.display_name AS by_name, k.display_name AS kind_name, k.icon
                                    FROM custom_games g JOIN users uc ON uc.id=g.creator_user_id
                                    LEFT JOIN custom_game_kinds k ON k.kind=g.game_kind
@@ -851,9 +851,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (Throwable $_) {}
         try {
             // 🎯 勝敗予測 (score_pred_games)
-            // v739 #352 結果確定後も 24 時間は widget に残すように修正。 旧版は
-            //   status='finished' になった瞬間 widget から消えて 「自分の結果を
-            //   見返せない」 状態だった。 finished_at >= NOW() - 24h で残しつつ
+            // v739 #352 結果確定後も 24 時間は widget に残すように修正。旧版は
+            //   status='finished' になった瞬間 widget から消えて「自分の結果を
+            //   見返せない」状態だった。 finished_at >= NOW() - 24h で残しつつ
             //   tag='finished' + 結果スコア + 自分の払戻を title に入れる。
             $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, g.status,
                                         g.actual_home, g.actual_away, g.finished_at,
@@ -1090,7 +1090,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         $name = (string)($u['display_name'] ?? 'この人');
         $achievementsText = implode("\n", $sum['lines']);
-        $sys = "ラボ内ツールの実績一覧から、 その人を形容する 「カッコイイ称号」 を 1 つだけ生成してください。 8-22 文字、 漢字 / カタカナ / 英語混在 OK、 絵文字 1-2 個添えて OK。 ラノベや二つ名風にカッコ良く。 例: 「黄昏の点呼マスター 🌅」 「ラボ DJ の不眠王 🎧」 「現場を統べるオークションキング 👑」。 称号だけ 1 行、 引用符や前置きは不要。";
+        $sys = "ラボ内ツールの実績一覧から、その人を形容する「カッコイイ称号」を 1 つだけ生成してください。 8-22 文字、漢字 / カタカナ / 英語混在 OK、絵文字 1-2 個添えて OK。ラノベや二つ名風にカッコ良く。例: 「黄昏の点呼マスター 🌅」「ラボ DJ の不眠王 🎧」「現場を統べるオークションキング 👑」。称号だけ 1 行、引用符や前置きは不要。";
         $userPrompt = "対象: {$name}\n獲得実績:\n{$achievementsText}\n\nこの人にカッコイイ称号を 1 つ。";
 
         $payload = json_encode([
@@ -1247,7 +1247,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $openStart = null; $openEnd = null; $isFresh = false;
         // v344 bug fix: presence_seen に数日前の化石行が残っていた場合 (= scanner
         // が close し損ねた行)、 MIN(session_start_at) がそれを拾って開セッション
-        // の start が数日前にズレ、 今日の貢献が異常に大きく出ていた (中村のケース
+        // の start が数日前にズレ、今日の貢献が異常に大きく出ていた (中村のケース
         // で 17.6h)。 last_seen_at が 6 時間以内の行のみ MIN/MAX 対象にすることで
         // 化石を排除。 isFresh (10 分以内) はそのまま据え置き。
         $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
@@ -1348,9 +1348,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // GET /api/me/presence_band?days=7
-    // 自分の過去 N 日 (デフォ 7) の 10 分単位在室記録。 cells は 「ある 10 分
-    // スロットで何分 / どの部屋」 を sparse に返す。 草グリッドが 1 日単位
-    // なのに対し、 これは 「いつどこにいたか」 を細かく見るための帯グラフ用。
+    // 自分の過去 N 日 (デフォ 7) の 10 分単位在室記録。 cells は「ある 10 分
+    // スロットで何分 / どの部屋」を sparse に返す。草グリッドが 1 日単位
+    // なのに対し、これは「いつどこにいたか」を細かく見るための帯グラフ用。
     if ($sub === 'presence_band' && $method === 'GET') {
         $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
         $days = max(1, min(31, (int)($_GET['days'] ?? 7)));
@@ -1383,8 +1383,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $stR = $pdo->query("SELECT id, display_name FROM rooms ORDER BY id");
         $rooms = $stR->fetchAll(PDO::FETCH_ASSOC);
 
-        // 各セッションを 10 分単位で加算。 同じ slot に複数部屋が混じれば
-        // 各 (slot, room) ペアを出す (フロントが 「主な部屋」 を選ぶ)。
+        // 各セッションを 10 分単位で加算。同じ slot に複数部屋が混じれば
+        // 各 (slot, room) ペアを出す (フロントが「主な部屋」を選ぶ)。
         $startTs = $start->getTimestamp();
         $endTs   = $end->getTimestamp();
         $cells = []; // "YYYY-MM-DD|slot|room_id" => minutes_in_slot
@@ -1483,7 +1483,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['items' => $cals]);
         return;
     }
-    // 「今日の予定」 タイトル個人フィルタ (ホームの calendar カードで適用)。
+    // 「今日の予定」タイトル個人フィルタ (ホームの calendar カードで適用)。
     // ルール = JSON 配列、各要素は {pattern: string, regex?: bool}。
     // どれか 1 つにタイトルがマッチすれば hide。
     if ($sub === 'calendar' && ($seg[2] ?? '') === 'filter-rules' && $method === 'GET') {
@@ -1548,9 +1548,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $j = json_decode((string)$row['calendar_filter_rules'], true);
             if (is_array($j)) $filterRules = calendar_filter_rules_clean($j);
         }
-        // 「今日 00:00 〜 明日 24:00」 を timeMin/timeMax に変換 (RFC3339)。
+        // 「今日 00:00 〜 明日 24:00」を timeMin/timeMax に変換 (RFC3339)。
         // クライアントが ?tz=Europe/Rome みたいに送ってきたらそれで日付境界を
-        // 計算する (海外滞在時に 「今日」 がズレないように)。 不正な TZ 名は
+        // 計算する (海外滞在時に「今日」がズレないように)。不正な TZ 名は
         // 設定 default にフォールバック。
         $clientTz = (string)($_GET['tz'] ?? '');
         try {
@@ -1640,7 +1640,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // 「自分がまだ回答していないもの」 一覧。 通知を既読にしても消えないよう、
+    // 「自分がまだ回答していないもの」一覧。通知を既読にしても消えないよう、
     // 状態をソースに見てそのまま並べる。
     //   - polls: 自分が対象 (poll_voters) + status=open + 自分の poll_votes 無し
     //   - rollcalls: 自分が対象 + status=open + 自分が responded_at NULL
@@ -1672,7 +1672,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '📊',
             ];
         }
-        // rollcalls (v482 #70 created_at = 「点呼を押した時刻」 を返す)
+        // rollcalls (v482 #70 created_at = 「点呼を押した時刻」を返す)
         $stR = $pdo->prepare("
             SELECT r.id, r.title, r.deadline_at, r.created_at, u.display_name AS creator_name
               FROM roll_calls r
@@ -1761,7 +1761,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             ];
         }
         // v819 #413 アルバイト申請 (bait) の未処理 assignment も pending widget に
-        //   出す。 自分が worker で status='pending' (= まだ申請していない) のもの。
+        //   出す。自分が worker で status='pending' (= まだ申請していない) のもの。
         $stB = $pdo->prepare("
             SELECT a.id AS assignment_id, a.bait_request_id, a.hours,
                    r.title, r.period, u.display_name AS requester_name
@@ -1792,7 +1792,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // 「自分が依頼している (起案している) もの」 一覧。 起案者として締切前 + まだ
+    // 「自分が依頼している (起案している) もの」一覧。起案者として締切前 + まだ
     // 全員が応答していない polls / rollcalls / money_requests を返す。
     if ($sub === 'asking' && $method === 'GET') {
         $items = [];
@@ -1863,8 +1863,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '💸',
             ];
         }
-        // tasks: 自分が依頼 (requester) で、 まだ approved 件数 < 必要数のもの。
-        // 承認待ち (reported) があれば 「承認まち」 を強調。
+        // tasks: 自分が依頼 (requester) で、まだ approved 件数 < 必要数のもの。
+        // 承認待ち (reported) があれば「承認まち」を強調。
         $stT = $pdo->prepare("
             SELECT t.id, t.title, t.deadline AS deadline_at,
                    (SELECT COUNT(*) FROM task_claims tc1 WHERE tc1.task_id=t.id AND tc1.status='approved') AS approved_n,
@@ -1936,7 +1936,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st as $r) $addPending('money_request', (int)$r['request_id'], $r);
         }
         if ($taskIds) {
-            // task は claimed / reported な assignee を 「対応待ち」 とみなす
+            // task は claimed / reported な assignee を「対応待ち」とみなす
             $in = implode(',', array_fill(0, count($taskIds), '?'));
             $st = $pdo->prepare("SELECT tc.task_id, u.id, u.display_name, u.avatar_url, tc.status
                                    FROM task_claims tc JOIN users u ON u.id = tc.user_id
@@ -2054,7 +2054,7 @@ function calendar_filter_rules_match(array $rules, string $title): bool {
 // GET /api/users/:id/profile — 公開プロフィール (display_name / avatar / grade /
 //                              hobbies / favorites / scrapbox_username)。 LabPay
 //                              にログインしている human user 全員から閲覧可。
-// GET /api/users/contacts — 連絡先 (電話番号付き)。 同じグループのメンバー / admin / 自分
+// GET /api/users/contacts — 連絡先 (電話番号付き)。同じグループのメンバー / admin / 自分
 //                            だけが閲覧できる人の番号のみを返す (v494 #99 #100)。
 function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -2071,8 +2071,8 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['profile' => $row]);
         return;
     }
-    // v494 #99 #100 連絡先専用エンドポイント。 電話番号は 「自分」 「admin」 「同じグループ
-    //   のメンバー」 にだけ見せる。 デフォルトの /api/users からは phone_number を除外。
+    // v494 #99 #100 連絡先専用エンドポイント。電話番号は「自分」「admin」「同じグループ
+    //   のメンバー」にだけ見せる。デフォルトの /api/users からは phone_number を除外。
     if ($method === 'GET' && ($seg[1] ?? '') === 'contacts' && !isset($seg[2])) {
         $meId = (int)$u['id'];
         $isAdmin = (string)($u['role'] ?? '') === 'admin';

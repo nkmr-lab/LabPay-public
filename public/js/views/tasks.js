@@ -19,7 +19,7 @@ function linkifyUrlsHtml(escapedText) {
 
 // v790 #393 完了時入力欄 spec をパース。 1 行 1 項目、 `key|label|type|options` 形式。
 //   type は text / textarea / select、 options は select 用の ; 区切り。
-//   label / type 末尾に「*」 で required。 全空 → null を返す。
+//   label / type 末尾に「*」で required。全空 → null を返す。
 function parseCompletionFieldsSpec(text) {
   const lines = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   if (!lines.length) return null;
@@ -35,7 +35,7 @@ function parseCompletionFieldsSpec(text) {
     if (label.endsWith('*')) label = label.slice(0, -1).trim();
     const optsRaw = parts[3] || '';
     if (!key || !label) throw new Error(`行「${ln}」: key|label が必要`);
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(key)) throw new Error(`「${key}」 は半角英数 _ - 32 字以内`);
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(key)) throw new Error(`「${key}」は半角英数 _ - 32 字以内`);
     if (seen.has(key)) throw new Error(`key 重複: ${key}`);
     seen.add(key);
     if (!['text', 'textarea', 'select'].includes(type)) throw new Error(`type は text / textarea / select のみ`);
@@ -90,7 +90,7 @@ function collectCompletionFieldsValues(fields) {
     if (!el) continue;
     const v = (el.value || '').trim();
     if (!v) {
-      if (f.required) throw new Error(`「${f.label}」 は入力必須です`);
+      if (f.required) throw new Error(`「${f.label}」は入力必須です`);
       continue;
     }
     out[f.key] = v;
@@ -98,7 +98,7 @@ function collectCompletionFieldsValues(fields) {
   return out;
 }
 
-// 履歴トグル: デフォは 「進行中のみ」、ON にすると終了/取消も含めて表示する。
+// 履歴トグル: デフォは「進行中のみ」、ON にすると終了/取消も含めて表示する。
 // 同一セッション内では維持したいが、メモリ上の変数で十分 (renderTasks 呼び直し
 // で初期化されても利便性は下がらない)。
 let showHistory = false;
@@ -118,8 +118,8 @@ export async function renderTasks() {
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
       <p class="hint-sm" style="margin:6px 0 0">
-        <b>🎯 募集</b> = 報酬付き、 誰でも引き受け OK の公募型 /
-        <b>👤 割り当て</b> = 報酬付き、 指名型 /
+        <b>🎯 募集</b> = 報酬付き、誰でも引き受け OK の公募型 /
+        <b>👤 割り当て</b> = 報酬付き、指名型 /
         <b>🙏 依頼</b> = 報酬なしでお願い (善意で引き受けてもらう)
       </p>
       <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
@@ -138,15 +138,15 @@ export async function renderTasks() {
     showHistory = ev.currentTarget.checked;
     loadList();
   });
-  // ホームの「＋ 新しくタスクを設定する」 経由など、 #/tasks?new=request / ?new=assign
+  // ホームの「＋ 新しくタスクを設定する」経由など、 #/tasks?new=request / ?new=assign
   // で来た場合は対応フォームを自動展開。query 部分はそのまま残しておくと再 render
   // で毎回開いて鬱陶しいので、 URL を綺麗にしてから開く。
   const m = (location.hash || '').match(/[?&]new=(request|assign|free)/);
   if (m) {
     history.replaceState(null, '', '#/tasks');
     toggleCreateForm(m[1]);
-    // ホームからの遷移で前画面のスクロール位置が引き継がれて 「フォーム途中
-    // からになる」 不具合の対処 (feedback#11)。 ページ先頭に戻してから開いた
+    // ホームからの遷移で前画面のスクロール位置が引き継がれて「フォーム途中
+    // からになる」不具合の対処 (feedback#11)。ページ先頭に戻してから開いた
     // フォームの先頭が自然に見える状態にする。
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -189,7 +189,7 @@ function toggleCreateForm(mode = null) {
       </label>
       <label class="field">
         <span class="lbl">📝 完了時の入力欄 (任意・最大 10 個)</span>
-        <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を並べる。 type は text / textarea / select。 select のオプションは ; 区切り。 末尾に * を付けると必須。 例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想アンケート (target=_blank)|text"></textarea>
+        <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」を並べる。 type は text / textarea / select。 select のオプションは ; 区切り。末尾に * を付けると必須。例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想アンケート (target=_blank)|text"></textarea>
         <div class="hint-sm" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap">
           <button type="button" class="btn" id="t-cfields-preset-userexp"  style="font-size:11px; padding:2px 8px">↳ サンプル: ユーザID + 実験ID</button>
           <button type="button" class="btn" id="t-cfields-preset-pre"     style="font-size:11px; padding:2px 8px">↳ サンプル: プレ実験 (問題点 + 感想URL)</button>
@@ -214,7 +214,7 @@ function toggleCreateForm(mode = null) {
          </label>
        </div>`;
 
-  // 募集型のみ: 参加回数、時間枠。 対象学年の checkbox は廃止し、共通の picker
+  // 募集型のみ: 参加回数、時間枠。対象学年の checkbox は廃止し、共通の picker
   // (全員/学年/性別 bulk + 個別 chip) で対象を絞る。
   const requestOnly = isAssign ? '' : `
       <label class="field">
@@ -241,7 +241,7 @@ function toggleCreateForm(mode = null) {
     ? '割り当てる人 (必須・1 人以上)'
     : '対象 (空欄なら全員 OK / 絞り込みたい時に選ぶ)';
   const pickerHint = isAssign
-    ? '承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認で支払い。'
+    ? '承諾不要で「やってください」状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認で支払い。'
     : 'チェックを入れた人だけが引き受け可能になります。空欄なら学年制限なし。';
   const pickerSection = `
       <div class="field">
@@ -274,11 +274,11 @@ function toggleCreateForm(mode = null) {
                 : isFree   ? 'リクエスト (報酬なし) を出す'
                 : 'タスクを依頼する';
   const intro = isAssign
-    ? `<b>指定した人に直接アサイン</b>します。承諾不要で 「やる人」 として登録され、本人に通知が飛びます。完了報告→承認の流れは募集型と同じ。
+    ? `<b>指定した人に直接アサイン</b>します。承諾不要で「やる人」として登録され、本人に通知が飛びます。完了報告→承認の流れは募集型と同じ。
        <br>・<b>報酬 × 指名人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`
     : isFree
-    ? `<b>報酬なしでお願い</b>するモードです。 善意で誰かが引き受けてくれます。 ESCROW も発生しません。
-       <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて表示されます。`
+    ? `<b>報酬なしでお願い</b>するモードです。善意で誰かが引き受けてくれます。 ESCROW も発生しません。
+       <br>・タスクの一覧では「🙏 リクエスト」タグが付いて表示されます。`
     : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
        <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」で枠ごとに 1 人 / 末尾「<b>x3</b>」or「<b>3人</b>」で各枠複数人募集 (v875)。
        <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
@@ -331,7 +331,7 @@ function toggleCreateForm(mode = null) {
     const deadlineDisp = ddRaw ? ddRaw.replace('T', ' ') : '無期限';
     const kind = isAssign ? '👤 割り当て' : isFree ? '🙏 リクエスト' : '🎯 募集';
     const rewardLine = isFree ? '報酬なし' : `${reward}pt × ${cap}人 = 合計 ${typeof cap === 'number' ? reward * cap : '?'}pt`;
-    // v879 完了報告フォーム (請け負った側の見え方)。 パース失敗時は静かにskip。
+    // v879 完了報告フォーム (請け負った側の見え方)。パース失敗時は静かにskip。
     const cfRaw = document.getElementById('t-cfields')?.value || '';
     let cfHtml = '';
     if (cfRaw.trim()) {
@@ -374,7 +374,7 @@ function toggleCreateForm(mode = null) {
   populateAssignedPicker();
 }
 
-// 指名 / 対象 picker — 「全員」 「学年」 「性別」 の bulk filter + 個別 chip。
+// 指名 / 対象 picker — 「全員」「学年」「性別」の bulk filter + 個別 chip。
 // 学年順 (D → M2 → M1 → B4 → B3 → 他) でソート。同学年内は表示名 50 音順。
 // 依頼 mode / 割り当て mode の両方で同じ picker を使う (上位 toggleCreateForm が
 // label と hint だけ出し分け、picker の使い方は同じ)。
@@ -470,7 +470,7 @@ async function onCreate() {
   let completion_fields = null;
   try { completion_fields = parseCompletionFieldsSpec(document.getElementById('t-cfields')?.value || ''); }
   catch (e) { toast('完了時入力欄: ' + e.message); restoreBtn(); return; }
-  // 報酬: リクエストモードは強制 0、 そうでなければフォームから。
+  // 報酬: リクエストモードは強制 0、そうでなければフォームから。
   const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
   // v560 #215 deadline は TZ helper 経由で JST or ローカルを選択可能に
   const deadlineRaw = document.getElementById('t-deadline').value || null;
@@ -500,7 +500,7 @@ async function onCreate() {
   } else {
     const slots_spec = document.getElementById('t-slots').value.trim();
     // v700 #289 リクエストモードでは t-capacity input が DOM に無い (rewardRow 側の
-    //   入力として同居していたため、 isFree=true で 「報酬」 行ごと skip される)。
+    //   入力として同居していたため、 isFree=true で「報酬」行ごと skip される)。
     //   結果、 querySelector が null を返して .value で TypeError → ボタンが
     //   無反応になる bug 修正。 fallback で 1 人募集を既定に。
     const tCapEl = document.getElementById('t-capacity');
@@ -633,7 +633,7 @@ function renderRow(t) {
          ${t.approved_users.map(peopleChip).join('')}
        </div>` : '';
 
-  // 進捗集計。 完了者を avatar で出すなら 「X / Y 人」 だけで十分。
+  // 進捗集計。完了者を avatar で出すなら「X / Y 人」だけで十分。
   const progressLine = `<div class="meta">完了 ${t.approved_count ?? 0} / ${t.capacity}人${t.pending_count ? ` · 完了待ち ${t.pending_count}` : ''}</div>`;
 
   return `
@@ -720,8 +720,8 @@ async function loadDetail(id) {
       } else if (t.remaining === 0) {
         actions = `<button class="primary" disabled>定員に達しています</button>`;
       } else {
-        // v787 #392 指名型で自分が対象外なら 「指名対象外です」 と明示した
-        //   disabled ボタンに。 単純な上限オーバーの場合も同じボタンで統一。
+        // v787 #392 指名型で自分が対象外なら「指名対象外です」と明示した
+        //   disabled ボタンに。単純な上限オーバーの場合も同じボタンで統一。
         const isAssignTaskNotMe = (t.assigned_user_ids?.length || 0) > 0
           && !t.is_assigned_to_me;
         const label = isAssignTaskNotMe ? '🚫 指名対象外です'
@@ -1080,11 +1080,11 @@ async function onCancelTask(taskId) {
   catch (e) { toast('失敗: ' + e.message); }
 }
 
-// v714 #309 「終了」 = 取消と違って 「もう募集締切で OK」 完了扱いにする。
-//   未承認 capacity 分は返金、 進行中の claim は cancel 扱い (取消と同じ)、
+// v714 #309 「終了」 = 取消と違って「もう募集締切で OK」完了扱いにする。
+//   未承認 capacity 分は返金、進行中の claim は cancel 扱い (取消と同じ)、
 //   ただし履歴上の status は 'closed'。
 async function onCloseTask(taskId) {
-  if (!confirm('タスクを終了しますか? (= 募集を締切完了扱いに。 未承認分の報酬は返金されます)')) return;
+  if (!confirm('タスクを終了しますか? (= 募集を締切完了扱いに。未承認分の報酬は返金されます)')) return;
   try { const r = await post(`/api/tasks/${taskId}/close`, {}); toast(`終了しました (${r.refunded}pt 返金)`); await loadDetail(taskId); }
   catch (e) { toast('失敗: ' + e.message); }
 }

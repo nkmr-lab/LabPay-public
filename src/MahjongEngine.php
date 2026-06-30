@@ -21,7 +21,7 @@ final class MahjongEngine {
     const T_HAKU = 31; const T_HATSU = 32; const T_CHUN = 33;
 
     public static function newGame(array $playerUids, ?array $carryScores = null, int $startOya = 0, int $roundWind = self::T_E, int $roundIndex = 0, int $honba = 0, int $riichiPot = 0): array {
-        // 全牌 0-33 を各 4 枚 = 136 個。 シャッフル → 山。 赤5 は man=4, pin=4, sou=4 の位置に
+        // 全牌 0-33 を各 4 枚 = 136 個。シャッフル → 山。赤5 は man=4, pin=4, sou=4 の位置に
         //   赤フラグを付与 (1 枚ずつ)
         $deck = [];
         for ($i = 0; $i < self::TYPES; $i++) {
@@ -49,7 +49,7 @@ final class MahjongEngine {
                 'discard_reds' => 0,
                 'melds'      => [],         // 副露 (鳴き)
                 'riichi'     => false,
-                'ippatsu'    => false,      // 一発 (リーチ後の一巡内、 鳴き無し)
+                'ippatsu'    => false,      // 一発 (リーチ後の一巡内、鳴き無し)
                 'double_riichi' => false,
                 'score'      => $carryScores ? (int)$carryScores[$idx] : 25000,
                 'declared'   => false,
@@ -57,7 +57,7 @@ final class MahjongEngine {
         }
         $wallPointer = $pos; // 次のツモ位置 (= 52)
         $wanpaiStart = self::TOTAL_TILES - self::WANPAI; // 122
-        // ドラ表示は王牌の 5 枚目 (慣習: 山の末尾から逆順、 王牌 5 枚目 = wanpaiStart + 4)
+        // ドラ表示は王牌の 5 枚目 (慣習: 山の末尾から逆順、王牌 5 枚目 = wanpaiStart + 4)
         $doraIndicators    = [$deck[$wanpaiStart + 4]];
         $uradoraIndicators = [$deck[$wanpaiStart + 9]]; // リーチ和了時にのみ公開
 
@@ -168,7 +168,7 @@ final class MahjongEngine {
             if ($cnt[$tile] >= 2) $chances[] = ['seat' => $s, 'type' => 'pon', 'tile' => $tile];
             // 大明カン: 同じ牌 3 枚
             if ($cnt[$tile] >= 3) $chances[] = ['seat' => $s, 'type' => 'minkan', 'tile' => $tile];
-            // チー: 直前の seat = (discarder+1) % 4 だけ可能、 数牌のみ
+            // チー: 直前の seat = (discarder+1) % 4 だけ可能、数牌のみ
             if ($s === ($discarderIdx + 1) % self::SEATS && $tile < 27) {
                 $r = $tile % 9;
                 $opts = [];
@@ -227,15 +227,15 @@ final class MahjongEngine {
             return ['ok' => false, 'msg' => '不明な鳴き'];
         }
         $p['melds'][] = $meld;
-        // 直前の捨牌を捨てた人の河から「鳴かれた」マークを付ける (UIで判別、 簡略: discards はそのまま)
+        // 直前の捨牌を捨てた人の河から「鳴かれた」マークを付ける (UIで判別、簡略: discards はそのまま)
         $st['log'][] = ['type' => 'naki', 'by' => $playerIdx, 'naki' => $type, 'tile' => $tile];
-        // 鳴いた人が turn になり、 即打牌フェーズへ
+        // 鳴いた人が turn になり、即打牌フェーズへ
         $st['turn'] = $playerIdx;
         $st['awaiting'] = $type === 'minkan' ? 'kan_draw' : 'discard';
         $st['naki_chances'] = [];
         $st['naki_passed'] = [];
         $st['last_discarded'] = null;
-        // 一発フラグ消去 (鳴きが入った瞬間、 全員)
+        // 一発フラグ消去 (鳴きが入った瞬間、全員)
         foreach ($st['players'] as &$pp) $pp['ippatsu'] = false;
         unset($pp);
         if ($type === 'minkan') {
@@ -536,7 +536,7 @@ final class MahjongEngine {
         return $order[($idx + 1) % 3];
     }
     private static function redsInMeld(array $m, array $st): int {
-        // 副露時の赤ドラ判定は省略 (簡略: 0 として扱う)。 自摸 / 鳴き時の deck index を保持していないため。
+        // 副露時の赤ドラ判定は省略 (簡略: 0 として扱う)。自摸 / 鳴き時の deck index を保持していないため。
         return 0;
     }
 

@@ -1,7 +1,7 @@
 <?php
 // v571 リファクタ: ゲーム共通の預託 / プレイフィー / 返金ロジックをまとめる。
 //   mahjong / ito / jinrou が同じパターン (起案 → 参加 → buy_in 預託 → 開始 → ... →
-//   終了 or cancel) を持っているので、 残高チェック / Ledger 送金 / pot 更新を 1 か所に。
+//   終了 or cancel) を持っているので、残高チェック / Ledger 送金 / pot 更新を 1 か所に。
 //
 //   特性別の 2 モデル:
 //     A. プール型 (mahjong): 預託 → 終了時に順位別 payout で戻る (一部は場代)
@@ -15,7 +15,7 @@ final class GameLobby {
     public static function assertBalance(PDO $pdo, int $uid, int $amount): void {
         $bal = Ledger::balanceOfUser($pdo, $uid);
         if ($bal < $amount) {
-            throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %d、 現在 %d)', $amount, $bal), 400);
+            throw new ApiException('insufficient_balance', sprintf('ポイント不足 (要 %d、現在 %d)', $amount, $bal), 400);
         }
     }
 

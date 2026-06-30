@@ -1,6 +1,6 @@
-// /#/buzzer — 早押しクイズ。 リアル現場 (ゼミ等) で出題者が口頭出題、 参加者
-//   がスマホで 「タップ」 → 1 番早かった人が緑 (回答権) + 他は赤 (順位 + 1 位
-//   との差)。 出題者 「次へ」 で全員早押しモードに戻る。 v872 #454。
+// /#/buzzer — 早押しクイズ。リアル現場 (ゼミ等) で出題者が口頭出題、参加者
+//   がスマホで「タップ」 → 1 番早かった人が緑 (回答権) + 他は赤 (順位 + 1 位
+//   との差)。出題者「次へ」で全員早押しモードに戻る。 v872 #454。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -28,7 +28,7 @@ export async function renderBuzzerList() {
         <a class="btn primary" href="#/buzzer/new">＋ 新しいセッション</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
-        リアルのクイズで早押しボタン代わりに。 出題者が 「次へ」 を押すと全員のスマホが入力モードになり、 タップした順で順位が決まる。 1 位だけ緑で回答権を取れる。
+        リアルのクイズで早押しボタン代わりに。出題者が「次へ」を押すと全員のスマホが入力モードになり、タップした順で順位が決まる。 1 位だけ緑で回答権を取れる。
       </div>
     </div>
     <div id="bz-list"><div class="muted">読込中…</div></div>`;
@@ -37,7 +37,7 @@ export async function renderBuzzerList() {
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('bz-list').innerHTML = `
-        <div class="card center muted">まだセッションがありません。 「＋ 新しいセッション」 から作ってください。</div>`;
+        <div class="card center muted">まだセッションがありません。「＋ 新しいセッション」から作ってください。</div>`;
       return;
     }
     document.getElementById('bz-list').innerHTML = items.map(it => `
@@ -111,7 +111,7 @@ export async function renderBuzzerDetail({ id }) {
     ${status === 'active' ? `
       <div class="card" style="text-align:center; padding:16px">
         <div id="bz-stage" style="min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px">
-          <div class="muted">${d.round_no === 0 ? '出題者が 「次へ」 を押すと早押し開始' : '出題者の操作を待ってます…'}</div>
+          <div class="muted">${d.round_no === 0 ? '出題者が「次へ」を押すと早押し開始' : '出題者の操作を待ってます…'}</div>
         </div>
       </div>
       ${isCreator ? `
@@ -135,7 +135,7 @@ export async function renderBuzzerDetail({ id }) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('bz-end')?.addEventListener('click', async () => {
-    if (!confirm('セッションを終了します。 いいですか?')) return;
+    if (!confirm('セッションを終了します。いいですか?')) return;
     try { await post(`/api/buzzer/sessions/${id}/end`, {}); toast('終了しました'); navigate('#/buzzer'); }
     catch (e) { toast('失敗: ' + e.message); }
   });
@@ -169,7 +169,7 @@ async function startPoll(id) {
   tick();
 }
 
-// ラウンド開始を検知した瞬間。 stage を入力モードに切替、 タップハンドラを設置。
+// ラウンド開始を検知した瞬間。 stage を入力モードに切替、タップハンドラを設置。
 function handleRoundChange(newRoundNo) {
   lastRoundNo = newRoundNo;
   clientRoundStartMs = Date.now();
@@ -233,7 +233,7 @@ function renderRanking(taps) {
 }
 
 function updateMyStage(taps) {
-  // 自分の stage 色を順位で更新 (1位 = 緑、 それ以外 = 赤)
+  // 自分の stage 色を順位で更新 (1位 = 緑、それ以外 = 赤)
   if (!state.me) return;
   const me = taps.find(t => t.user_id === state.me.id);
   const tap = document.getElementById('bz-tap');

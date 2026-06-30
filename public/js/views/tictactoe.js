@@ -10,9 +10,9 @@ const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 export const { renderTicTacToe, renderTicTacToeDetail } = (() => {
   const g = sketch({
     kind: 'tictactoe',
-    detailPath: '#/tictactoe',                    // ビルトインなので旧 path 維持。 ユーザ自作は不要。
+    detailPath: '#/tictactoe',                    // ビルトインなので旧 path 維持。ユーザ自作は不要。
     title: '⭕❌ マルバツ',
-    hint: '3x3 のマルバツ。 ⭕ vs ❌、 3 つ並べたら勝ち。 プレイフィー 1pt。',
+    hint: '3x3 のマルバツ。 ⭕ vs ❌、 3 つ並べたら勝ち。プレイフィー 1pt。',
 
     setup() {
       return { board: Array(9).fill(0) };          // 0 = 空、 1 = ⭕、 2 = ❌
@@ -20,7 +20,7 @@ export const { renderTicTacToe, renderTicTacToeDetail } = (() => {
 
     action(s, me, idx, ctx) {
       if (s.board[idx] !== 0) throw new Error('そのマスは既に置かれてる');
-      // ctx.you.role で 「自分が ⭕ (creator) か ❌ (opponent) か」 がわかる
+      // ctx.you.role で「自分が ⭕ (creator) か ❌ (opponent) か」がわかる
       const mark = ctx.you?.role === 'creator' ? 1 : 2;
       const board = s.board.slice(); board[idx] = mark;
 

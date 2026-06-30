@@ -1,8 +1,8 @@
 // /#/groups/:id/map — グループのスケジュールに登録された lat/lng をマップ表示。
 // v428 拡張:
 //   - 地図の center + zoom を group_id 別 localStorage で復元
-//   - 「📍 自分の位置へ」 ボタン (現在地に flyTo)
-//   - 「📡 位置共有」 トグル: ON で自分の位置を 30s 毎に POST、 メンバー全員表示
+//   - 「📍 自分の位置へ」ボタン (現在地に flyTo)
+//   - 「📡 位置共有」トグル: ON で自分の位置を 30s 毎に POST、メンバー全員表示
 //   - マーカーが画像URL ありの場合はサムネアイコン
 //   - ポップアップに画像 + タイトル + メモ
 
@@ -136,7 +136,7 @@ export async function renderGroupMap({ params }) {
   // v437 線で結ぶ / 並び順リセットは撤去。 lineOn は常に false 固定。
   const lineOn = false;
 
-  // 地図 init (1 回だけ)。 保存された view を優先、 無ければ地点に fitBounds。
+  // 地図 init (1 回だけ)。保存された view を優先、無ければ地点に fitBounds。
   const savedView = loadJSON(VIEW_KEY(id), null);
   const map = L.map('gm-map', { zoomControl: true });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -189,7 +189,7 @@ export async function renderGroupMap({ params }) {
     const img = it.image_url
       ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:100%; max-width:240px; max-height:170px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
       : '';
-    // v432 popup の情報量を増やす。 時刻範囲 (start-end) / URL リンク / 追加者名 / メモ 300 字。
+    // v432 popup の情報量を増やす。時刻範囲 (start-end) / URL リンク / 追加者名 / メモ 300 字。
     const time = (() => {
       const s = (it.start_time || '').slice(0, 5);
       const e = (it.end_time || '').slice(0, 5);
@@ -215,7 +215,7 @@ export async function renderGroupMap({ params }) {
       </div>`;
   };
 
-  // v433 markers / lines は全件、 list は 「表示中エリアのみ」 toggle で
+  // v433 markers / lines は全件、 list は「表示中エリアのみ」 toggle で
   // map.getBounds() フィルタ → moveend/zoomend で即再描画。 1 画面で
   // 地図と連動する検索 UI。
   const drawMarkersAndLines = () => {
@@ -265,7 +265,7 @@ export async function renderGroupMap({ params }) {
     if (!listEl) return;
     if (!filteredIdxs.length) {
       listEl.innerHTML = boundsOnly
-        ? '<div class="empty" style="padding:6px">表示中エリアに地点なし。 地図を動かしてください。</div>'
+        ? '<div class="empty" style="padding:6px">表示中エリアに地点なし。地図を動かしてください。</div>'
         : '<div class="empty" style="padding:6px">地点なし</div>';
       return;
     }
@@ -329,7 +329,7 @@ export async function renderGroupMap({ params }) {
     renderList();
   };
 
-  // 地図の移動 / ズームで 「表示中エリアのみ」 ON の時 list を再描画。
+  // 地図の移動 / ズームで「表示中エリアのみ」 ON の時 list を再描画。
   // v435 toggle 状態にかかわらず moveend/zoomend で必ず renderList (内部で
   // checkbox を読んで分岐するので二重判定不要 / 早期 return を避ける)。
   map.on('moveend zoomend', () => renderList());
@@ -412,7 +412,7 @@ export async function renderGroupMap({ params }) {
     redraw();
   } else {
     document.getElementById('gm-info').textContent =
-      '緯度経度が登録された予定はまだありません。 「📍 自分の位置へ」 や 「位置共有」 は使えます。';
+      '緯度経度が登録された予定はまだありません。「📍 自分の位置へ」や「位置共有」は使えます。';
   }
 }
 
@@ -435,9 +435,9 @@ function drawMemberMarkers(L, layer, items) {
       ? `background:#fff center/cover no-repeat url('${cssUrl(it.avatar_url)}')`
       : `background:${color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px`;
     const dotClass = it.is_me ? 'border:3px solid #0e7c63' : `border:3px solid ${color}`;
-    // v486 #81 サーバで計算した seconds_ago を優先。 旅行中 (端末 TZ ≠ JST) で
-    //   Date.parse がローカル解釈してしまう 「-3500 秒前」 等のバグを回避。
-    //   updated_at_iso (タイムゾーン付き ISO) を 2 番手 fallback、 旧 updated_at は
+    // v486 #81 サーバで計算した seconds_ago を優先。旅行中 (端末 TZ ≠ JST) で
+    //   Date.parse がローカル解釈してしまう「-3500 秒前」等のバグを回避。
+    //   updated_at_iso (タイムゾーン付き ISO) を 2 番手 fallback、旧 updated_at は
     //   最終 fallback として残す。
     let since;
     if (typeof it.seconds_ago === 'number') {

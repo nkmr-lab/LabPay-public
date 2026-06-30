@@ -1,4 +1,4 @@
-// v635 📝 フリップクイズ UI。 出題者 = 問題 + 採点、 参加者 = 回答 + 拡大表示。
+// v635 📝 フリップクイズ UI。出題者 = 問題 + 採点、参加者 = 回答 + 拡大表示。
 
 import { get, post } from '../api.js';
 import { state, toast } from '../app.js';
@@ -59,11 +59,11 @@ export async function renderQuizNew() {
           <input type="radio" name="qz-mode" value="text" checked> ⌨️ テキスト入力 (問題文を入力)
         </label>
         <label style="flex:1; padding:10px; border:2px solid #ddd; border-radius:8px; cursor:pointer">
-          <input type="radio" name="qz-mode" value="verbal"> 🗣️ 口頭 (フリップだけ、 出題は声で)
+          <input type="radio" name="qz-mode" value="verbal"> 🗣️ 口頭 (フリップだけ、出題は声で)
         </label>
       </div>
       <div class="lbl" style="margin-top:8px">参加者 (自分は自動で含まれる)</div>
-      <div class="hint-sm" style="font-size:12px; margin-bottom:4px">回答する人。 自分も回答可</div>
+      <div class="hint-sm" style="font-size:12px; margin-bottom:4px">回答する人。自分も回答可</div>
       <div id="qz-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
       <div id="qz-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:14px">
@@ -106,12 +106,12 @@ export async function renderQuizDetail({ params }) {
   }, POLL_MS);
 }
 
-// v662 #245 polling 用 wrapper。 入力中の textarea や採点中の ⭕❌ を保護する
+// v662 #245 polling 用 wrapper。入力中の textarea や採点中の ⭕❌ を保護する
 // ために skip 判定を入れる。 action 後の明示 paint(qid) は skip せず必ず走る。
 async function pollPaint(qid) {
   // v643 #240 入力中の textarea / input があれば polling re-render を skip。
   // v662 #245 ただし display:none 配下の textarea (例: 回答編集を開いて閉じた後
-  //   や、 初期化時に focus が残った場合) は 「実入力中」 ではないので skip しない
+  //   や、初期化時に focus が残った場合) は「実入力中」ではないので skip しない
   //   (= offsetParent null = 不可視なら通常 polling 続行)。
   const active = document.activeElement;
   if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
@@ -119,7 +119,7 @@ async function pollPaint(qid) {
     return;
   }
   // v662 #245 採点中 (creator が ⭕ を付けた score-btn がある) は repaint が
-  //   dataset をリセットするので skip。 確定ボタンを押せば backend 反映 →
+  //   dataset をリセットするので skip。確定ボタンを押せば backend 反映 →
   //   次の paint で正式状態になる。
   const inScoring = Array.from(document.querySelectorAll('.qz-score-btn'))
     .some(b => b.dataset.score === '1');
@@ -193,8 +193,8 @@ function renderAsking(d, me) {
     if (d.mode === 'verbal') {
       return `<div class="card">
         <h3 style="margin:0 0 6px">第 ${d.current_q} 問 (🗣️ 口頭モード)</h3>
-        <p class="hint" style="font-size:13px">声で問題を出してください。 全員が聞いたら下のボタンで解答受付を開始。</p>
-        <button id="qz-ask" class="btn primary" style="margin-top:8px">🗣️ 出題した、 解答受付開始</button>
+        <p class="hint" style="font-size:13px">声で問題を出してください。全員が聞いたら下のボタンで解答受付を開始。</p>
+        <button id="qz-ask" class="btn primary" style="margin-top:8px">🗣️ 出題した、解答受付開始</button>
         ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで終了</button>` : ''}
       </div>`;
     }
@@ -220,7 +220,7 @@ function renderAnswering(d, me, partName) {
     ${qHtml}`;
   if (d.i_am_participant) {
     if (myAns !== undefined) {
-      html += `<div class="hint">送信済: <b>${escapeHtml(myAns)}</b>。 全員 ${submittedCount}/${total} 人回答中…</div>
+      html += `<div class="hint">送信済: <b>${escapeHtml(myAns)}</b>。全員 ${submittedCount}/${total} 人回答中…</div>
         <button id="qz-edit-answer" class="btn" style="margin-top:6px; font-size:12px">回答を変更</button>
         <div id="qz-answer-edit" style="display:none; margin-top:8px">
           <textarea id="qz-a" rows="2" maxlength="200" style="width:100%; box-sizing:border-box">${escapeHtml(myAns)}</textarea>
@@ -232,7 +232,7 @@ function renderAnswering(d, me, partName) {
         <button id="qz-answer" class="btn primary" style="margin-top:6px">回答を送信</button>`;
     }
   } else {
-    html += `<div class="hint">あなたは観戦中。 全員 ${submittedCount}/${total} 人回答中…</div>`;
+    html += `<div class="hint">あなたは観戦中。全員 ${submittedCount}/${total} 人回答中…</div>`;
   }
   if (d.i_am_creator) {
     html += `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
@@ -252,7 +252,7 @@ function renderReveal(d, me, partName) {
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">📢 第 ${d.current_q} 問開示</h3>
     ${qHtml}
-    <div class="hint-sm" style="font-size:12px; margin-bottom:6px">タップで拡大表示。 全員 ${submitted}/${total} 人解答</div>
+    <div class="hint-sm" style="font-size:12px; margin-bottom:6px">タップで拡大表示。全員 ${submitted}/${total} 人解答</div>
     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px">
       ${d.participants.map(p => {
         const ans = d.answers?.[String(p.uid)];

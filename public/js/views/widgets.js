@@ -68,7 +68,7 @@ export async function renderWidgets() {
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
         自作ウィジェットを登録してホームに出せます。
-        JS を書いて render(root) で描画するだけ。 詳細は 「＋ 新規」 からサンプルを見てください。
+        JS を書いて render(root) で描画するだけ。詳細は「＋ 新規」からサンプルを見てください。
       </p>
     </div>
     <div class="card">
@@ -85,7 +85,7 @@ async function loadList() {
     const d = await get('/api/custom-widgets');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="empty">まだウィジェットはありません。 「＋ 新規」 から作成してください</div>';
+      root.innerHTML = '<div class="empty">まだウィジェットはありません。「＋ 新規」から作成してください</div>';
       return;
     }
     root.innerHTML = items.map(w => `

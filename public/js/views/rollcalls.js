@@ -1,5 +1,5 @@
-// /#/rollcalls — 点呼 (roll call)。 「いる？」 「起きてる？」 をワンタップで集める。
-// 投票と似てるが選択肢が無く 「応答済 / 未応答」 のみ + 任意メモ。
+// /#/rollcalls — 点呼 (roll call)。「いる？」「起きてる？」をワンタップで集める。
+// 投票と似てるが選択肢が無く「応答済 / 未応答」のみ + 任意メモ。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -216,8 +216,8 @@ async function loadRollCallDetail(id) {
     const r = d.rollcall;
     const isOpen = r.status === 'open';
     const head = document.getElementById('rcd-head');
-    // v482 #70 「点呼を押してからの経過時間」 を主表示に。 締切は
-    //   横に 「(締切 HH:MM)」 として副表示。
+    // v482 #70 「点呼を押してからの経過時間」を主表示に。締切は
+    //   横に「(締切 HH:MM)」として副表示。
     head.innerHTML = `
       <div class="row center" style="gap:8px">
         <h2 style="margin:6px 0 0; flex:1">${escapeHtml(r.title)}</h2>
@@ -295,7 +295,7 @@ async function loadRollCallDetail(id) {
 
     document.getElementById('rcd-copy-url')?.addEventListener('click', () => copyShareUrl(`#/rollcalls/${id}`));
 
-    // v651 編集 (起案者 + open のみ)。 タイトル / 本文 / 締切を変更。
+    // v651 編集 (起案者 + open のみ)。タイトル / 本文 / 締切を変更。
     const editBtn = document.getElementById('rcd-edit-btn');
     if (editBtn) {
       const editCard = document.getElementById('rcd-edit-card');
@@ -379,7 +379,7 @@ function renderRollCallTargets(d) {
   }
   const root = document.getElementById('rcd-targets');
   if (!root) return;
-  // 応答済を上に、 未応答を下に。 グループ内では学年順 (server がもう並べてる)。
+  // 応答済を上に、未応答を下に。グループ内では学年順 (server がもう並べてる)。
   const sorted = [...d.targets].sort((a, b) => (a.has_responded ? 0 : 1) - (b.has_responded ? 0 : 1));
   root.innerHTML = sorted.map(t => {
     const time = t.responded_at ? String(t.responded_at).slice(11, 16) : '';

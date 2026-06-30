@@ -1,5 +1,5 @@
 // /#/deep-research — Deep Research。
-//   v840 #422 依頼フォームを <details> で折りたたみ、 過去結果をタイル表示、 ⭐ スター + 並び替え。
+//   v840 #422 依頼フォームを <details> で折りたたみ、過去結果をタイル表示、 ⭐ スター + 並び替え。
 
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -28,8 +28,8 @@ export async function renderDeepResearch() {
       <div style="margin-top:8px">
         <label class="field">
           <span class="lbl">🧐 調査したいこと</span>
-          <textarea id="dr-query" rows="4" maxlength="4000" placeholder="例: 「2026年時点の視線追跡 (eye tracking) センサの民生機器での採用状況と、 主要メーカの技術トレンドを整理して」"></textarea>
-          <div class="hint-sm" style="font-size:11px; margin-top:4px">範囲が広すぎない、 一文〜数文で具体的に書くと質が上がります。</div>
+          <textarea id="dr-query" rows="4" maxlength="4000" placeholder="例: 「2026年時点の視線追跡 (eye tracking) センサの民生機器での採用状況と、主要メーカの技術トレンドを整理して」"></textarea>
+          <div class="hint-sm" style="font-size:11px; margin-top:4px">範囲が広すぎない、一文〜数文で具体的に書くと質が上がります。</div>
         </label>
         <label class="field">
           <span class="lbl">⚙️ 深さ</span>
@@ -105,7 +105,7 @@ async function loadHistory() {
     let items = d.items || [];
     if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
 
-    // 履歴が空 (初回) なら form を開く、 あるなら閉じる
+    // 履歴が空 (初回) なら form を開く、あるなら閉じる
     setFormOpen('dr-form', items.length === 0);
 
     ctlRoot.innerHTML = viewControlsHtml({
@@ -189,7 +189,7 @@ async function loadSharedList(q) {
     if (!items.length) {
       root.innerHTML = `<div class="muted">${
         viewState.mineOnly_pub ? 'スター付きの公開 Deep Research はありません'
-        : (q ? '「' + escapeHtml(q) + '」 に該当する公開 Deep Research はありません' : '公開されている Deep Research はまだありません')
+        : (q ? '「' + escapeHtml(q) + '」に該当する公開 Deep Research はありません' : '公開されている Deep Research はまだありません')
       }</div>`;
       return;
     }
@@ -299,7 +299,7 @@ async function refreshShared(token) {
         <div class="card">
           <div class="bold" style="font-size:16px; color:var(--primary)">⏳ Web を横断調査中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            深さにより 1-30 分程度かかります。 このページを閉じても大丈夫 (完了したら通知が届きます)。<br>
+            深さにより 1-30 分程度かかります。このページを閉じても大丈夫 (完了したら通知が届きます)。<br>
             10 秒ごとに自動更新。
           </p>
           ${d.progress_text ? `
@@ -339,12 +339,12 @@ async function refreshShared(token) {
 }
 
 // v850 #437 Markdown 形式 [label](url) を <a href> に変換しつつ XSS 安全に escape する。
-//   裸の http(s) URL もリンク化。 既存の HTML タグは入っていない前提 (OpenAI のテキストはプレーン)。
+//   裸の http(s) URL もリンク化。既存の HTML タグは入っていない前提 (OpenAI のテキストはプレーン)。
 function renderRichText(text) {
   if (text == null) return '';
   const s = String(text);
   const out = [];
-  // 1) markdown [label](url) をマッチして分解、 それ以外の text は escape
+  // 1) markdown [label](url) をマッチして分解、それ以外の text は escape
   const re = /\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s\])]+)/g;
   let last = 0, m;
   while ((m = re.exec(s)) !== null) {

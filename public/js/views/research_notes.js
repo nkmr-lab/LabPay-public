@@ -1,6 +1,6 @@
 // /#/research-notes — Cosense 研究ノートビューア + エディタ。
 //   v834: フルスクリーン表示 + ✕で閉じる、 GitHub風ヒートカレンダー、 localStorage キャッシュ +
-//   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンドプリフェッチ。
+//   ETag (304) によるかしこい再取得、前月/次月をバックグラウンドプリフェッチ。
 import { post, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
@@ -33,7 +33,7 @@ export async function renderResearchNotes() {
       <div id="rn-status" hidden>
         <div class="muted">読み込み中…</div>
       </div>
-      <!-- v853 PC では左カレンダー + 右セクションの 2 列、 モバイルでは縦並び -->
+      <!-- v853 PC では左カレンダー + 右セクションの 2 列、モバイルでは縦並び -->
       <div id="rn-body" hidden class="rn-layout">
         <div id="rn-calendar-wrap" class="rn-cal-pane">
           <div id="rn-calendar"></div>
@@ -55,8 +55,8 @@ export async function renderResearchNotes() {
 
         <div id="rn-edit" hidden>
           <p class="hint-sm" style="margin:4px 0 6px">
-            このセクションの本文をまるごとロードしています。 自由に編集してください。 保存を押すと差分のみ Scrapbox にコミット。
-            行頭の半角スペースは Scrapbox のインデントなので、 右側のプレビューで「保存するとこう見える」 を確認しながら書いてください。
+            このセクションの本文をまるごとロードしています。自由に編集してください。保存を押すと差分のみ Scrapbox にコミット。
+            行頭の半角スペースは Scrapbox のインデントなので、右側のプレビューで「保存するとこう見える」を確認しながら書いてください。
           </p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
             <div>
@@ -104,7 +104,7 @@ async function loadInitial() {
       return;
     }
     if (!d.cookie_present) {
-      // v839 PAT 未設定 — 設定画面に飛ばすのではなく、 ここで inline で設定してもらう
+      // v839 PAT 未設定 — 設定画面に飛ばすのではなく、ここで inline で設定してもらう
       renderInlineSetup({ noHandle: false, message: '' });
       return;
     }
@@ -123,8 +123,8 @@ async function loadInitial() {
   }
 }
 
-// v839 鍵 (PAT) 未設定の場合、 アプリ内でその場で設定できる UI。
-//   設定画面と同じ内容を inline で出す。 保存後に loadInitial を呼び直してノート本体に遷移。
+// v839 鍵 (PAT) 未設定の場合、アプリ内でその場で設定できる UI。
+//   設定画面と同じ内容を inline で出す。保存後に loadInitial を呼び直してノート本体に遷移。
 function renderInlineSetup(opts) {
   const statusEl = document.getElementById('rn-status');
   if (!statusEl) return;
@@ -134,12 +134,12 @@ function renderInlineSetup(opts) {
     <div class="card" style="max-width:680px; margin:0 auto; padding:14px 16px">
       <h3 style="margin:0 0 8px">🔑 Scrapbox の鍵を登録</h3>
       <p class="hint" style="margin:0 0 8px">
-        研究ノートを読み書きするには、 Scrapbox の <b>Personal Access Token (鍵)</b> が必要です。 一度登録すれば、 以降この画面には出てきません (変更は <a href="#/settings" style="color:var(--primary)">設定</a> から)。
+        研究ノートを読み書きするには、 Scrapbox の <b>Personal Access Token (鍵)</b> が必要です。一度登録すれば、以降この画面には出てきません (変更は <a href="#/settings" style="color:var(--primary)">設定</a> から)。
       </p>
 
       <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
         <div class="bold" style="color:#0284c7; margin-bottom:4px">鍵ってなに?</div>
-        Scrapbox のログインの代わりになる、 長いランダムな文字列です。 scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、 LabPay が 「あなたとして」 読み書きできるようになります。 パスワードより安全 (鍵単体でいつでも取り消せる) で、 期限が来ても自分で作り直せます。
+        Scrapbox のログインの代わりになる、長いランダムな文字列です。 scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、 LabPay が「あなたとして」読み書きできるようになります。パスワードより安全 (鍵単体でいつでも取り消せる) で、期限が来ても自分で作り直せます。
       </div>
 
       <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
@@ -205,7 +205,7 @@ function renderInlineSetup(opts) {
 
 async function switchDate(dateKey) {
   if (stateLocal.mode === 'edit') {
-    if (!confirm('編集中の内容は破棄されます。 別の日に移動しますか?')) return;
+    if (!confirm('編集中の内容は破棄されます。別の日に移動しますか?')) return;
     setMode('view');
   }
   stateLocal.selectedDate = dateKey;
@@ -256,7 +256,7 @@ async function loadSection(dateKey) {
   } else {
     editBtn.hidden = true;
     noEditHint.hidden = false;
-    noEditHint.textContent = '編集するには、 設定 → Cosense 連携で Scrapbox の鍵を登録してください。';
+    noEditHint.textContent = '編集するには、設定 → Cosense 連携で Scrapbox の鍵を登録してください。';
   }
 }
 
@@ -403,7 +403,7 @@ function paintCalendar(ym, data) {
     }
     while (cells.length % 7 !== 0) cells.push(null);
   }
-  // v838/v853 セル: 日数字を見やすいサイズに (≥900px で 17px → 20px)、 行数バッジは撤去
+  // v838/v853 セル: 日数字を見やすいサイズに (≥900px で 17px → 20px)、行数バッジは撤去
   //   preview は wide では引き続き複数行で表示。 week モードではセルがさらに大きい。
   const cellHtml = cells.map(c => {
     if (!c) return '<div></div>';
@@ -459,7 +459,7 @@ function updateCalendarSelection() {
 }
 
 async function switchMonth(delta) {
-  // v835 #419 月変更時は表示中の日も同月内の同日(または月末)に移動して、 セクション表示も切替
+  // v835 #419 月変更時は表示中の日も同月内の同日(または月末)に移動して、セクション表示も切替
   const [yy, mm] = stateLocal.visibleYm.split('.').map(Number);
   const targetMonthStart = new Date(yy, mm - 1 + delta, 1);
   const targetY = targetMonthStart.getFullYear();
@@ -531,7 +531,7 @@ function cacheRemove(key) {
   try { localStorage.removeItem(CACHE_PREFIX + key); } catch {}
 }
 
-// ETag 対応 fetch。 304 ならキャッシュをそのまま、 200 なら最新で上書き、 ネットワーク失敗時は
+// ETag 対応 fetch。 304 ならキャッシュをそのまま、 200 なら最新で上書き、ネットワーク失敗時は
 //   キャッシュにフォールバック。
 async function fetchEtagged(url, cacheKey) {
   const cached = cacheGet(cacheKey);
@@ -639,7 +639,7 @@ function renderBracket(inside) {
   return `<span style="color:#9333ea; border-bottom:1px dotted #9333ea">${escapeHtml(inside)}</span>`;
 }
 
-// URL が画像っぽいかを判定し、 表示用 img src を返す (= 直接画像URLでなければ変換)。
+// URL が画像っぽいかを判定し、表示用 img src を返す (= 直接画像URLでなければ変換)。
 //   - .jpg/.jpeg/.png/.gif/.webp/.svg/.bmp/.ico で終わる → そのまま
 //   - gyazo.com/<id> → https://i.gyazo.com/<id>.png
 //   - scrapbox.io/api/pages/.../icon → そのまま (アイコン)

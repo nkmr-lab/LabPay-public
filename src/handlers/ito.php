@@ -2,8 +2,8 @@
 // v568 #223 ito ゲーム (協力ゲーム: 1-100 の数字を表現で当てる)。
 //   1. lobby: 起案者がお題 + メンバー選択 + 1pt 預託 → 参加者も 1pt 預託
 //   2. input: 各自に 1-100 の数字 (重複なし) が配布 → お題に沿って表現を入力
-//   3. reveal: 全員入力したら数字を公開 (小さい順)、 全員で並び順を当てる
-//   4. finished: 結果表示 + pot 分配 (全員で割り勘戻し: 1pt × N → 全員 1pt 戻し、 場代 0)
+//   3. reveal: 全員入力したら数字を公開 (小さい順)、全員で並び順を当てる
+//   4. finished: 結果表示 + pot 分配 (全員で割り勘戻し: 1pt × N → 全員 1pt 戻し、場代 0)
 
 declare(strict_types=1);
 
@@ -72,7 +72,7 @@ function ito_detail(PDO $pdo, int $uid, int $gid): void {
     foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $isMe = ((int)$r['user_id'] === $uid);
         if ($isMe) $myNumber = $r['number'] !== null ? (int)$r['number'] : null;
-        // reveal/finished 以降は数字を全員に公開、 それ以前は自分のだけ
+        // reveal/finished 以降は数字を全員に公開、それ以前は自分のだけ
         $showNum = ($g['status'] === 'reveal' || $g['status'] === 'finished');
         $players[] = [
             'user_id'      => (int)$r['user_id'],
@@ -132,8 +132,8 @@ function ito_create(PDO $pdo, array $cfg, int $uid): void {
         if ($mid === $uid || $mid <= 0) continue;
         try {
             $msg = $instant
-                ? "🎲 ito 「{$theme}」 開始! あなたに数字が配布されました ({$buyIn}pt 預託済)"
-                : "🎲 ito 「{$theme}」 に招待されました ({$buyIn}pt)";
+                ? "🎲 ito 「{$theme}」開始! あなたに数字が配布されました ({$buyIn}pt 預託済)"
+                : "🎲 ito 「{$theme}」に招待されました ({$buyIn}pt)";
             notify_safely($pdo, $CFG, $mid, 'admin_notice', $msg, 'ito', $gameId);
         } catch (Throwable $_) {}
     }

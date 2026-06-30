@@ -1,5 +1,5 @@
 // /#/health — 体重 + BMI 記録 (レコーディングダイエット)。
-// v532 #161 実装。 個人ツール (他人には見えない)。
+// v532 #161 実装。個人ツール (他人には見えない)。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -47,7 +47,7 @@ export async function renderHealth() {
         <input type="date" id="hl-date" style="font-size:13px; padding:2px 6px">
         <button id="hl-date-today" type="button" class="btn" style="font-size:11px; padding:2px 8px">今日</button>
       </div>
-      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。 体重は 0.1kg 単位。 日付を変えれば過去日の記録も追加可能。 ※ 個人ツール、 他のメンバーには見えません。</div>
+      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。体重は 0.1kg 単位。日付を変えれば過去日の記録も追加可能。 ※ 個人ツール、他のメンバーには見えません。</div>
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">📈 推移</div>
@@ -60,9 +60,9 @@ export async function renderHealth() {
   `;
   document.getElementById('hl-days').addEventListener('change', refresh);
   document.getElementById('hl-save').addEventListener('click', save);
-  // v690 #274 日付入力を今日に初期化 + 「今日」 ボタン
+  // v690 #274 日付入力を今日に初期化 + 「今日」ボタン
   // v747 #358 toISOString は UTC ベースなので JST の朝 (UTC 前日) は「今日」が前日扱いになる
-  //   bug を修正。 ローカル時刻で計算 (= 単純に YYYY-MM-DD を組み立て)。
+  //   bug を修正。ローカル時刻で計算 (= 単純に YYYY-MM-DD を組み立て)。
   const dateEl = document.getElementById('hl-date');
   const setToday = () => { dateEl.value = todayLocal(); };
   setToday();
@@ -93,7 +93,7 @@ async function save() {
   const dStr = document.getElementById('hl-date').value.trim();
   if (!w && !h && !b) { toast('1 つは入力してください'); return; }
   // v690 #274 日付を過去日で指定する場合はその日の 23:59:59 で送る
-  //   (server で DateTime parse 通る)。 今日の場合は recorded_at を渡さず NOW() に任せる。
+  //   (server で DateTime parse 通る)。今日の場合は recorded_at を渡さず NOW() に任せる。
   // v747 #358 todayStr はローカル時刻で計算 (UTC ベースだと JST 朝に別日と比較がズレる)。
   const todayStr = todayLocal();
   const payload = {
@@ -141,7 +141,7 @@ function paintSummary(s) {
     items.push(`BMI: <span class="bold">${s.bmi}</span> ${bmiLabel}`);
   }
   if (!items.length) {
-    root.innerHTML = '<div class="muted">まだ記録がありません。 下の入力フォームから始めましょう。</div>';
+    root.innerHTML = '<div class="muted">まだ記録がありません。下の入力フォームから始めましょう。</div>';
     return;
   }
   root.innerHTML = `<div style="font-size:14px; line-height:1.6">${items.join(' · ')}</div>

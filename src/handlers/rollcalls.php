@@ -1,7 +1,7 @@
 <?php
-// /api/rollcalls — 点呼 (roll call)。 「いる？」 「起きてる？」 を集めるための簡易仕組み。
-// 構造は投票に似ているが選択肢 / 集計可視性などは無く、 「応答済 / 未応答」 のみ。
-// 任意メモ (例: 「起きました」 「あと 5 分で行く」)。
+// /api/rollcalls — 点呼 (roll call)。「いる？」「起きてる？」を集めるための簡易仕組み。
+// 構造は投票に似ているが選択肢 / 集計可視性などは無く、「応答済 / 未応答」のみ。
+// 任意メモ (例: 「起きました」「あと 5 分で行く」)。
 
 declare(strict_types=1);
 
@@ -67,7 +67,7 @@ function rollcalls_create(PDO $pdo, array $cfg): void {
     if (strtotime($deadline) <= time() + 10) {
         throw new ApiException('bad_request', '締切は現在より先に', 400);
     }
-    // 締切は最大 24h までに制限 (= 短時間 「みんないる？」 用)。
+    // 締切は最大 24h までに制限 (= 短時間「みんないる？」用)。
     if (strtotime($deadline) > time() + 24 * 3600) {
         throw new ApiException('bad_request', '締切は 24 時間以内に', 400);
     }
@@ -91,8 +91,8 @@ function rollcalls_create(PDO $pdo, array $cfg): void {
             VALUES (?, ?, ?, ?, 'open', NOW())");
         $ins->execute([$title, $bodyText, (int)$u['id'], $deadline]);
         $rcId = (int)$pdo->lastInsertId();
-        // v482 #73 起案者が対象に含まれている場合、 既に 「答えてる」 状態で
-        //   挿入。 起案した人 = 「いる」 のが自明なので、 自分への 「答えてね」 通知を
+        // v482 #73 起案者が対象に含まれている場合、既に「答えてる」状態で
+        //   挿入。起案した人 = 「いる」のが自明なので、自分への「答えてね」通知を
         //   出さないため。
         $creatorUid = (int)$u['id'];
         $stT = $pdo->prepare("INSERT INTO roll_call_targets (roll_call_id, user_id, responded_at, note)
@@ -105,7 +105,7 @@ function rollcalls_create(PDO $pdo, array $cfg): void {
             }
         }
     });
-    // 通知。 「📣 点呼: 起きてる？ (締切 22:30)」 のような body で受信側が分かりやすく。
+    // 通知。「📣 点呼: 起きてる？ (締切 22:30)」のような body で受信側が分かりやすく。
     $deadlineShort = substr($deadline, 11, 5);   // HH:MM
     foreach ($targetIds as $uid) {
         if ((int)$uid === (int)$u['id']) continue;
@@ -129,7 +129,7 @@ function rollcalls_detail(PDO $pdo, array $cfg, int $id): void {
     $rc = $st->fetch(PDO::FETCH_ASSOC);
     if (!$rc) throw new ApiException('not_found', '点呼が見つかりません', 404);
     $isCreator = (int)$rc['creator_user_id'] === (int)$u['id'];
-    // 対象者 (学年順)。 応答済 / 未応答 + メモ。
+    // 対象者 (学年順)。応答済 / 未応答 + メモ。
     $stT = $pdo->prepare("SELECT t.user_id, t.responded_at, t.note,
                                  us.display_name, us.avatar_url, us.grade
                             FROM roll_call_targets t
@@ -239,7 +239,7 @@ function rollcalls_remind(PDO $pdo, array $cfg, int $id): void {
 }
 
 // v651 起案者 (admin) のみ。 open な点呼の title / body / deadline を変更可能。
-// 締切は現在から 24h 以内 (新規作成と同じ上限。 既存が 24h 超えてても新値さえ
+// 締切は現在から 24h 以内 (新規作成と同じ上限。既存が 24h 超えてても新値さえ
 // 24h 以内なら受け付ける)。
 function rollcalls_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);

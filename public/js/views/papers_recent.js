@@ -1,5 +1,5 @@
 // /#/papers-recent — v809 論文要約 + 全訳を時系列で全件一覧。
-//   v840 タイル表示 + ⭐ スター + 並び替え + 「自分のスター付きだけ」 フィルタ対応。
+//   v840 タイル表示 + ⭐ スター + 並び替え + 「自分のスター付きだけ」フィルタ対応。
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -19,7 +19,7 @@ export async function renderPapersRecent() {
       </div>
       <div class="card">
         <p class="hint" style="font-size:13px; margin:0 0 8px">
-          公開中のもの + 自分のものを時系列で表示。 タップで各結果ページへ。
+          公開中のもの + 自分のものを時系列で表示。タップで各結果ページへ。
         </p>
         <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:12px; margin-bottom:8px">
           <a href="#/paper-summary" class="btn">📑 要約を新規作成</a>

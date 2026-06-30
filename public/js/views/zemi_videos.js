@@ -40,7 +40,7 @@ export async function renderZemiVideos() {
           <input type="date" id="zv-date">
         </label>
         <label class="field">
-          <span class="lbl">説明 (任意、 検索対象になる)</span>
+          <span class="lbl">説明 (任意、検索対象になる)</span>
           <textarea id="zv-desc" rows="3" maxlength="5000" placeholder="発表者・テーマ・キーワードなど (例: 中村 / 視線追跡 / CHI rebuttal)"></textarea>
         </label>
         <div class="row" style="gap:6px; justify-content:flex-end">
@@ -78,8 +78,8 @@ async function loadList() {
     }
     if (!items.length) {
       root.innerHTML = lastQuery
-        ? `<div class="muted">「${escapeHtml(lastQuery)}」 に一致するゼミ動画はありませんでした</div>`
-        : '<div class="muted">まだ動画が登録されていません。 上のフォームから登録してください。</div>';
+        ? `<div class="muted">「${escapeHtml(lastQuery)}」に一致するゼミ動画はありませんでした</div>`
+        : '<div class="muted">まだ動画が登録されていません。上のフォームから登録してください。</div>';
       return;
     }
     const totalAll = d.total_in_db || items.length;

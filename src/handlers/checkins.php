@@ -22,11 +22,11 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 //    'current_streak' => int, 'longest_streak' => int, 'new_balance' => int]
 //
 // Streak rule (2026-06 v499 #117): admin config の streak_weekday_only で 2 つのモード
-// を切り替え。 デフォルトは true (workday-only) = 土日祝は休んでも streak 維持、
-// 平日 (workday) を欠かすと decay でリセット気味に。 平日勤務型の人にやさしい挙動。
-// false にすると 「1 日でも空けば streak=1 にリセット」 のシンプルルール。
-// (v498 #109 で 「workday判定撤廃」 に倒したら 「平日毎日来てるのに 3 連続止まり」 と
-//  逆方向の混乱が起きたため、 旧挙動を default に戻し設定で切り替え可能にした)
+// を切り替え。デフォルトは true (workday-only) = 土日祝は休んでも streak 維持、
+// 平日 (workday) を欠かすと decay でリセット気味に。平日勤務型の人にやさしい挙動。
+// false にすると「1 日でも空けば streak=1 にリセット」のシンプルルール。
+// (v498 #109 で「workday判定撤廃」に倒したら「平日毎日来てるのに 3 連続止まり」と
+//  逆方向の混乱が起きたため、旧挙動を default に戻し設定で切り替え可能にした)
 function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): array {
     $today = (new DateTimeImmutable('now'))->format('Y-m-d');
     $base    = (int)cfg_get($pdo, 'checkin_base', '5');

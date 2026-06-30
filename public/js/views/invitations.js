@@ -11,8 +11,8 @@ import { createMemberPicker } from '../member_picker.js';
 import { isAppVisible } from './apps.js';
 import { shareToSns, copyShareUrl } from '../share_to_sns.js';
 
-// v396 募集詳細の 「ショートカット」 アプリ群。 groups の GROUP_ACTIONS と
-// 同じ規約。 i.feat_actions が null/undefined なら 「全 ON」、 配列ならその中
+// v396 募集詳細の「ショートカット」アプリ群。 groups の GROUP_ACTIONS と
+// 同じ規約。 i.feat_actions が null/undefined なら「全 ON」、配列ならその中
 // の ID のみ ON。
 const INV_ACTIONS = [
   { id: 'meetups',   label: '🤝 待ち合わせを作る', primary: true },
@@ -45,12 +45,12 @@ export async function renderInvitations() {
           <input type="date" id="inv-date" style="flex:1; min-width:130px">
           <input type="time" id="inv-time" style="flex:1; min-width:90px">
         </div>
-        <span class="hint-sm">時刻は任意。 日付だけなら終日扱い (当日いっぱい募集)。</span>
+        <span class="hint-sm">時刻は任意。日付だけなら終日扱い (当日いっぱい募集)。</span>
       </label>
       <label class="field">
         <span class="lbl">募集締切 (任意・これ以降は参加表明を受け付けない)</span>
         <input type="datetime-local" id="inv-signup-deadline">
-        <span class="hint-sm">空欄 = 開催時刻まで募集。 例: 「19:00 開始だけど 17:00 まで」 → ここに 17:00 を入れる。</span>
+        <span class="hint-sm">空欄 = 開催時刻まで募集。例: 「19:00 開始だけど 17:00 まで」 → ここに 17:00 を入れる。</span>
       </label>
       <label class="field">
         <span class="lbl">場所 (任意)</span>
@@ -59,7 +59,7 @@ export async function renderInvitations() {
       <label class="field">
         <span class="lbl">募集人数 (任意・空欄なら制限なし)</span>
         <input type="number" id="inv-cap" min="1" max="1000" placeholder="例: 4 (自分を除いて)">
-        <span class="hint-sm">既定: 自分 (発起人) は含まない 「集めたい他人数」。</span>
+        <span class="hint-sm">既定: 自分 (発起人) は含まない「集めたい他人数」。</span>
         <label class="row" style="gap:6px; font-size:12px; margin-top:4px; align-items:center">
           <input type="checkbox" id="inv-cap-include-self">
           <span>この人数に自分も含める (= 上限 = この値)</span>
@@ -72,7 +72,7 @@ export async function renderInvitations() {
       <details class="field">
         <summary class="hint" style="cursor:pointer">👥 事前参加者を登録 (任意)</summary>
         <div style="margin-top:6px">
-          <div class="hint-sm" style="margin-bottom:4px">選んだ人を作成時に 「参加表明済」 として登録 + 通知。 発起人 (自分) は自動で +1 されます。</div>
+          <div class="hint-sm" style="margin-bottom:4px">選んだ人を作成時に「参加表明済」として登録 + 通知。発起人 (自分) は自動で +1 されます。</div>
           <div id="inv-pre-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
           <div id="inv-pre-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
         </div>
@@ -104,7 +104,7 @@ export async function renderInvitations() {
   await loadList();
 }
 
-// v383 共有 member_picker。 発起人 (自分) は picker から除外、 作成時 backend が自動 join。
+// v383 共有 member_picker。発起人 (自分) は picker から除外、作成時 backend が自動 join。
 let invPrePicker = null;
 async function populateInvPreMembers() {
   const root = document.getElementById('inv-pre-members');
@@ -189,9 +189,9 @@ function renderRow(i) {
       deadlineHint = `<div class="meta">${tag('danger', '⏰ 募集締切超過')}</div>`;
     }
   }
-  // 参加者数 / 募集人数。 終了時は人数をピープル行右端に出すので、 ここでは
+  // 参加者数 / 募集人数。終了時は人数をピープル行右端に出すので、ここでは
   // 募集中の時だけ出す。
-  // v708 capacity_excludes_creator=1 なら 「他 N 人募集」 と表示 (発起人別)。
+  // v708 capacity_excludes_creator=1 なら「他 N 人募集」と表示 (発起人別)。
   const capLine = !isClosed
     ? (i.capacity
         ? (Number(i.capacity_excludes_creator)
@@ -221,8 +221,8 @@ function renderRow(i) {
     ? `<div class="meta" style="white-space:pre-wrap; margin-top:4px">${escapeHtml(i.description)}</div>`
     : '';
 
-  // 発起人｜参加者リスト行。 発起人を左、 参加者を | の後ろに。
-  // 終了時は 「発起人を含めた合計人数」 を右端に。
+  // 発起人｜参加者リスト行。発起人を左、参加者を | の後ろに。
+  // 終了時は「発起人を含めた合計人数」を右端に。
   const joins = Array.isArray(i.joins) ? i.joins : [];
   const creatorJoined = joins.some(j => Number(j.id) === Number(i.creator_user_id));
   const totalCount = joins.length + (creatorJoined ? 0 : 1);
@@ -293,7 +293,7 @@ async function loadDetail(id) {
     // v370: starts_at_has_time=0 (日付だけ) のときは YYYY-MM-DD で表示。
     const fmtStarts = (s) => Number(i.starts_at_has_time) === 0 ? fmtDate(s) : fmtDateTime(s);
     const whenLine = i.starts_at ? `<div class="meta">🕒 ${escapeHtml(fmtStarts(i.starts_at))}${Number(i.starts_at_has_time)===0 ? ' <span class="hint-sm">(終日)</span>' : ''}</div>` : '';
-    // v368 募集締切。 過ぎてれば赤、 まだなら残り時間を緑で。
+    // v368 募集締切。過ぎてれば赤、まだなら残り時間を緑で。
     let deadlineLine = '';
     if (i.signup_closes_at) {
       const t = new Date(String(i.signup_closes_at).replace(' ', 'T'));
@@ -310,7 +310,7 @@ async function loadDetail(id) {
       deadlineLine = `<div class="meta">⏰ 募集締切 ${escapeHtml(fmtDateTime(i.signup_closes_at))}${remStr}</div>`;
     }
     const whereLine = i.location ? `<div class="meta">📍 ${escapeHtml(i.location)}</div>` : '';
-    // v708 #300 capacity_excludes_creator=1 (新既定) なら 「発起人 + 募集 X 人」 表示。
+    // v708 #300 capacity_excludes_creator=1 (新既定) なら「発起人 + 募集 X 人」表示。
     const capLine = i.capacity
       ? (Number(i.capacity_excludes_creator)
           ? `<div class="meta">参加 ${(i.joins || []).length} 人 (発起人含む) / 募集 ${i.capacity} 人 (発起人別)</div>`
@@ -361,7 +361,7 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-copy-url')?.addEventListener('click', () => copyShareUrl(`#/invitations/${i.id}`));
     document.getElementById('inv-detail-share')?.addEventListener('click', () => {
       const cap = i.capacity ? ` (${(i.joins || []).length}/${i.capacity})` : '';
-      shareToSns(`🙌 募集 「${i.title}」${cap}`, `#/invitations/${i.id}`);
+      shareToSns(`🙌 募集「${i.title}」${cap}`, `#/invitations/${i.id}`);
     });
     document.getElementById('inv-detail-join')  ?.addEventListener('click', async () => { await onJoin(id);   await loadDetail(id); });
     document.getElementById('inv-detail-leave') ?.addEventListener('click', async () => { await onLeave(id);  await loadDetail(id); });
@@ -369,7 +369,7 @@ async function loadDetail(id) {
     document.getElementById('inv-detail-edit')  ?.addEventListener('click', () => openInvEditModal(i));
     document.getElementById('inv-detail-reopen')?.addEventListener('click', async () => { await onReopen(id); await loadDetail(id); });
     document.getElementById('inv-detail-close') ?.addEventListener('click', async () => {
-      if (!confirm('募集を終了しますか? (= 新規参加表明は受付けません。 既参加者はそのまま、 イベントは続行)')) return;
+      if (!confirm('募集を終了しますか? (= 新規参加表明は受付けません。既参加者はそのまま、イベントは続行)')) return;
       try { await post('/api/invitations/' + id + '/close', {}); await loadDetail(id); }
       catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
@@ -529,7 +529,7 @@ async function onCancel(id) {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// v388 modal.js + format.fmtLocalInput を利用。 旧版の自作 overlay + close 配線を撤去。
+// v388 modal.js + format.fmtLocalInput を利用。旧版の自作 overlay + close 配線を撤去。
 // 画像は既存の renderCoverEditor で別途編集可なのでここでは扱わない。
 function openInvEditModal(i) {
   const id = Number(i.id);
@@ -555,7 +555,7 @@ function openInvEditModal(i) {
     </label>
     <label class="field"><span class="lbl">募集人数 (任意・空欄なら制限なし)</span>
       <input type="number" id="ied-cap" min="1" max="1000" value="${i.capacity != null ? i.capacity : ''}">
-      <span class="hint-sm">既定: 自分 (発起人) は含まない 「集めたい他人数」。</span>
+      <span class="hint-sm">既定: 自分 (発起人) は含まない「集めたい他人数」。</span>
       <label class="row" style="gap:6px; font-size:12px; margin-top:4px; align-items:center">
         <input type="checkbox" id="ied-cap-include-self" ${Number(i.capacity_excludes_creator) === 0 ? 'checked' : ''}>
         <span>この人数に自分も含める (= 上限 = この値)</span>
@@ -566,7 +566,7 @@ function openInvEditModal(i) {
     </label>
     <div class="field">
       <span class="lbl">アプリショートカット</span>
-      <div class="hint-sm" style="margin-bottom:6px">この募集ページに出すアプリボタン。 全 OFF も可。</div>
+      <div class="hint-sm" style="margin-bottom:6px">この募集ページに出すアプリボタン。全 OFF も可。</div>
       <div id="ied-feat-actions" class="row" style="gap:4px 12px; flex-wrap:wrap">
         ${INV_ACTIONS.map(a => {
           const on = invActionEnabled(i, a.id);

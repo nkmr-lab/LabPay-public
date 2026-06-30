@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 class GoogleCalendar {
     public const READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-    // events スコープは 「ユーザが作成したカレンダー」 への CRUD 可。 全体読み取りは
-    // readonly が必要なので両方リクエストする。 既存ユーザはこの bump で再連携必要。
+    // events スコープは「ユーザが作成したカレンダー」への CRUD 可。全体読み取りは
+    // readonly が必要なので両方リクエストする。既存ユーザはこの bump で再連携必要。
     public const EVENTS_SCOPE   = 'https://www.googleapis.com/auth/calendar.events';
 
     // 既存セッションに対して追加 scope を要求する認可 URL。access_type=offline +
@@ -217,7 +217,7 @@ class GoogleCalendar {
     }
 
     // ETag つきで events list を取得。 ifNoneMatch を渡すと Google が「変わって
-    // なければ 304」 を返す。 戻り値:
+    // なければ 304」を返す。戻り値:
     //   ['status' => 200, 'etag' => '...', 'items' => [...]]  ← 新データ
     //   ['status' => 304, 'etag' => '...', 'items' => null]   ← 変更なし
     public static function listEvents(string $accessToken, string $calendarId,
@@ -251,7 +251,7 @@ class GoogleCalendar {
         return $r['data'] ?? [];
     }
 
-    // event の部分更新 (PATCH)。 patch に入れたフィールドだけ上書き、 他はそのまま。
+    // event の部分更新 (PATCH)。 patch に入れたフィールドだけ上書き、他はそのまま。
     public static function patchEvent(string $accessToken, string $calendarId, string $eventId, array $patch): array {
         $url = 'https://www.googleapis.com/calendar/v3/calendars/'
              . rawurlencode($calendarId) . '/events/' . rawurlencode($eventId);
@@ -290,7 +290,7 @@ class GoogleCalendar {
         return is_array($data) ? $data : [];
     }
 
-    // POST /calendars/{calendarId}/events で予定を作成。 戻り値は Google の event
+    // POST /calendars/{calendarId}/events で予定を作成。戻り値は Google の event
      // オブジェクト全体 (htmlLink, hangoutLink などが入る)。
     // start/end は RFC3339 (例: '2026-06-03T15:00:00+09:00')、 timeZone は IANA 名。
     public static function createEvent(string $accessToken, string $calendarId, array $event): array {
@@ -334,7 +334,7 @@ class GoogleCalendar {
 
     // event の description / location から Zoom / Meet URL を抽出。
     // v400 以前は任意の URL を hit させていたが、 description に Slack / 論文
-    // URL を貼っただけで 「📹 参加する」 ボタンが出る誤検出があったので、
+    // URL を貼っただけで「📹 参加する」ボタンが出る誤検出があったので、
     // 既知のビデオ会議ドメインに限定。
     public static function extractMeetingUrl(array $event): ?string {
         $eps = $event['conferenceData']['entryPoints'] ?? [];
@@ -345,7 +345,7 @@ class GoogleCalendar {
         }
         $haystack = trim((string)($event['location'] ?? '') . "\n" . (string)($event['description'] ?? ''));
         if ($haystack === '') return null;
-        // 既知の video meeting URL パターン。 サブドメインあり。
+        // 既知の video meeting URL パターン。サブドメインあり。
         $pattern = '#https?://(?:[a-z0-9-]+\.)*'
                  . '(?:zoom\.us|zoom-x\.com|meet\.google\.com|hangouts\.google\.com'
                  . '|teams\.microsoft\.com|teams\.live\.com|webex\.com|webex\.zoom\.us'

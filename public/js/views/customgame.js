@@ -1,4 +1,4 @@
-// v620 自作ゲームの汎用ディスパッチャ。 ユーザ登録した kind を /#/cg/:kind で受ける。
+// v620 自作ゲームの汎用ディスパッチャ。ユーザ登録した kind を /#/cg/:kind で受ける。
 //   - /api/custom-games/list から kind のメタ (js_module_url) を取得
 //   - ES module を動的 import して renderList / renderDetail を呼び出す
 //   - kind の JS module 側は任意の export 名で OK (例: renderTicTacToe) だが、
@@ -32,7 +32,7 @@ function camel(s) {
 }
 
 function pickRender(mod, kind, suffix) {
-  // renderList / renderDetail を優先、 なければ render{KindCamel}{Suffix} を試す
+  // renderList / renderDetail を優先、なければ render{KindCamel}{Suffix} を試す
   const key = (suffix === 'List') ? 'renderList' : 'renderDetail';
   if (typeof mod[key] === 'function') return mod[key];
   const fallback = 'render' + camel(kind) + (suffix === 'List' ? '' : 'Detail');

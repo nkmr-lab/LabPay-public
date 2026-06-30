@@ -21,7 +21,7 @@ export async function renderHistory() {
   `;
 
   try {
-    // 残高 + 取引を並列取得。 残高は /api/me の balance field。
+    // 残高 + 取引を並列取得。残高は /api/me の balance field。
     const [meResp, tx] = await Promise.all([
       get('/api/me'),
       get('/api/me/transactions', { limit: 200 }),
@@ -38,7 +38,7 @@ export async function renderHistory() {
   }
 }
 
-// items は新しい順 (created_at DESC)。 「今の残高」 から逆算して各取引後の残高
+// items は新しい順 (created_at DESC)。「今の残高」から逆算して各取引後の残高
 // 系列を作り、 SVG ラインチャートで描画。
 function renderBalanceChart(items, currentBalance) {
   const card = document.getElementById('hist-chart-card');
@@ -46,7 +46,7 @@ function renderBalanceChart(items, currentBalance) {
   const rangeEl = document.getElementById('hist-chart-range');
   if (!card || !root || !items?.length) return;
 
-  // 新しい順 → 古い順に並べ替えて、 各取引後の残高を累積
+  // 新しい順 → 古い順に並べ替えて、各取引後の残高を累積
   const asc = items.slice().reverse();
   const totalSigned = asc.reduce((s, t) => s + (Number(t.signed_amount) || 0), 0);
   // 古い方の起点残高 = 現残高 - これから起きる全取引の合計
@@ -83,7 +83,7 @@ function renderBalanceChart(items, currentBalance) {
   // area path (下を塗る)
   const area = path + ` L${sx(xMax).toFixed(1)},${(H - padB).toFixed(1)} L${sx(xMin).toFixed(1)},${(H - padB).toFixed(1)} Z`;
 
-  // Y 軸目盛 (4 段、 整数寄り)
+  // Y 軸目盛 (4 段、整数寄り)
   const yTicks = niceTicks(yLo, yHi, 4);
   const yLines = yTicks.map(v => {
     const y = sy(v);

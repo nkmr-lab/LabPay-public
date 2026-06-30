@@ -1,5 +1,5 @@
 // /#/fortune — 1 日 1 回占い単独ページ (v671 #250)。
-// /api/fortune/today を引いて大きく表示。 同じ日は同じ結果 (= server 側で固定)。
+// /api/fortune/today を引いて大きく表示。同じ日は同じ結果 (= server 側で固定)。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -65,7 +65,7 @@ export async function renderFortune() {
             ${z.lucky_direction ? `<div>${escapeHtml(z.lucky_direction.icon)}<br><b>${escapeHtml(z.lucky_direction.name)}</b><br><span style="font-size:10px" title="${escapeHtml(z.lucky_direction.place)} 由来">出生地から</span></div>` : ''}
           </div>
           ${!z.lucky_direction ? `<div class="hint-sm" style="font-size:11px; text-align:center; margin-top:8px; color:#9333ea">
-            📍 <a href="#/settings?focus=profile" style="color:#7c3aed">出生地を登録</a> すると 「ラッキー方位」 も出ます (出生時刻は不要)
+            📍 <a href="#/settings?focus=profile" style="color:#7c3aed">出生地を登録</a> すると「ラッキー方位」も出ます (出生時刻は不要)
           </div>` : ''}
           ${z.note ? `<div class="muted" style="font-size:10.5px; margin-top:10px; text-align:center">${escapeHtml(z.note)}</div>` : ''}
         </div>

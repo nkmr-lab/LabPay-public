@@ -24,7 +24,7 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     }
 
     // 期間の切り出し。 'range' (today / yesterday / this_week) が来たら
-    // それで oldest+latest を決め、 来なければ legacy 'days' (rolling N days) で
+    // それで oldest+latest を決め、来なければ legacy 'days' (rolling N days) で
     // 後方互換。 today/this_week は latest=now、 yesterday だけ latest=今日 0:00。
     $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
     $now        = new DateTimeImmutable('now', $tz);
@@ -32,7 +32,7 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     $range = (string)($_GET['range'] ?? '');
     $latest = null;
     // v494 #98 $days は legacy 経路でしか定義されていないと response 出力時に
-    //   undefined variable で警告が出る。 全経路で既定値を持つように。
+    //   undefined variable で警告が出る。全経路で既定値を持つように。
     $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
     if ($range === 'today') {
         $oldest = $todayStart->getTimestamp();
@@ -48,7 +48,7 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
 
     // Paginated fetch — same shape as bin/scrapbox_slack_sync.php.
     // v494 #98 Slack の scope 不足 (missing_scope) などで slack_api_get が throw すると
-    //   500 になっていた → 200 + note で穏便に返し、 UI に 「Slack 連携が止まっている」
+    //   500 になっていた → 200 + note で穏便に返し、 UI に「Slack 連携が止まっている」
     //   と表示できるように。
     $messages = [];
     $cursor = null;
