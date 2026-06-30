@@ -558,6 +558,7 @@ route('/buzzer/new',       lazy(() => import('./views/buzzer.js'), 'renderBuzzer
 route('/buzzer/:id',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerDetail'));
 // v886 Overleaf プロジェクト追跡 (教員 admin 限定、学生の論文執筆状況を可視化)
 route('/overleaf',         lazy(() => import('./views/overleaf.js'), 'renderOverleafList'));
+route('/overleaf/admin',   lazy(() => import('./views/overleaf.js'), 'renderOverleafAdmin'));
 route('/overleaf/:id',     lazy(() => import('./views/overleaf.js'), 'renderOverleafDetail'));
 // v532 #161 体重 / BMI 記録
 route('/health',          lazy(() => import('./views/health.js'), 'renderHealth'));

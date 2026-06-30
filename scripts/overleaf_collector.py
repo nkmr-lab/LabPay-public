@@ -63,8 +63,9 @@ def parse_labpay_config(path):
     """config.php を簡易 PHP パース (return [...] 形式限定)。必要なキーだけ取り出す。"""
     # PHP を起動して JSON で吐かせるのが一番確実。
     import subprocess
+    # php -r モードでは <?php タグ不要 (付けるとパースエラー)。
     php_snippet = (
-        "<?php $c = require '%s'; "
+        "$c = require '%s'; "
         "echo json_encode(['db' => $c['db'] ?? null, 'overleaf' => $c['overleaf'] ?? null]);"
     ) % path
     r = subprocess.run(['php', '-r', php_snippet], capture_output=True, text=True, check=True)
@@ -131,8 +132,9 @@ def main():
     try:
         import pyoverleaf
         api = pyoverleaf.Api()
-        api.login_from_cookies({'overleaf_session': cookie})
-        projects = api.list_projects()
+        # v890 cookie 名は overleaf_session2 (overleaf_session は古い形式で 302 になる)。
+        api.login_from_cookies({'overleaf_session2': cookie})
+        projects = api.get_projects()
         for p in projects:
             try:
                 proj_id = _upsert_project(conn, p)
@@ -162,6 +164,13 @@ def _upsert_project(conn, p):
     last_remote = getattr(p, 'last_updated', None) or getattr(p, 'lastUpdated', None)
     if isinstance(last_remote, datetime):
         last_remote = last_remote.strftime('%Y-%m-%d %H:%M:%S')
+    elif isinstance(last_remote, str) and last_remote:
+        # ISO 8601 (2026-06-30T08:50:10.870Z) を MySQL DATETIME 形式に変換
+        try:
+            dt = datetime.strptime(last_remote.replace('Z', '+0000').split('.')[0], '%Y-%m-%dT%H:%M:%S')
+            last_remote = dt.strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            last_remote = None
     owner_email = None
     owner_name  = None
     owner = getattr(p, 'owner', None)
@@ -189,23 +198,21 @@ def _upsert_project(conn, p):
         cur.execute("SELECT id FROM overleaf_projects WHERE overleaf_id = %s", (p.id,))
         return cur.fetchone()[0]
 
+def _walk_tex_files(folder, prefix=''):
+    """ProjectFolder ツリーを再帰歩いて .tex ファイルだけ yield する。
+    pyoverleaf 0.1.x には walk_files が無いので自前で children を辿る。"""
+    for child in getattr(folder, 'children', []) or []:
+        name = getattr(child, 'name', '') or ''
+        full = prefix + '/' + name
+        if hasattr(child, 'children'):
+            yield from _walk_tex_files(child, full)
+        elif name.endswith('.tex'):
+            yield child, full
+
 def _take_snapshot(conn, api, p, proj_id):
     """1 project の全 .tex を取得して snapshot を 1 件作成。"""
-    # ファイルツリーを取得 — pyoverleaf API 経由で project の files を列挙。
-    project_io = api.project(p.id) if hasattr(api, 'project') else None
-    file_entries = []
-    if project_io and hasattr(project_io, 'walk_files'):
-        for f in project_io.walk_files():
-            path = getattr(f, 'path', None) or '/'.join(getattr(f, 'folder_path', []) + [f.name])
-            if path.endswith('.tex'):
-                file_entries.append((f, path))
-    elif hasattr(api, 'project_files'):
-        for path in api.project_files(p.id):
-            if path.endswith('.tex'):
-                file_entries.append((path, path))
-    else:
-        raise RuntimeError("pyoverleaf API に walk_files / project_files が見つかりません — version 違いかも")
-
+    root = api.project_get_files(p.id)
+    file_entries = list(_walk_tex_files(root))
     if not file_entries:
         return  # 本文 .tex 無し → snapshot しない
 
@@ -217,12 +224,7 @@ def _take_snapshot(conn, api, p, proj_id):
         tot = {'total': 0, 'body': 0, 'jp': 0, 'word': 0}
         for fobj, path in file_entries:
             try:
-                if hasattr(fobj, 'get_content'):
-                    raw = fobj.get_content()
-                elif hasattr(api, 'project_file_content'):
-                    raw = api.project_file_content(p.id, path)
-                else:
-                    continue
+                raw = api.project_download_file(p.id, fobj)
                 content = raw.decode('utf-8', errors='replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
             except Exception as e:
                 print(f"  ! {p.name}::{path}: {e}", file=sys.stderr)

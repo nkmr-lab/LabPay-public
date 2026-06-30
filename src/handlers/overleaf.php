@@ -12,7 +12,24 @@ function route_overleaf(PDO $pdo, array $cfg, string $method, array $seg): void 
         overleaf_detail($pdo, $cfg, (int)$seg[2]); return;
     }
     if ($sub === 'status' && $method === 'GET') { overleaf_status($pdo, $cfg); return; }
+    // v890 admin 設定 API: cookie 確認/設定 + collector 即時実行 + 実行履歴
+    if ($sub === 'admin') {
+        $next = $seg[2] ?? '';
+        if ($next === 'cookie' && $method === 'GET')  { overleaf_admin_cookie_get($pdo, $cfg);  return; }
+        if ($next === 'cookie' && $method === 'POST') { overleaf_admin_cookie_set($pdo, $cfg);  return; }
+        if ($next === 'verify' && $method === 'POST') { overleaf_admin_verify($pdo, $cfg);      return; }
+        if ($next === 'run'    && $method === 'POST') { overleaf_admin_run($pdo, $cfg);         return; }
+        if ($next === 'runs'   && $method === 'GET')  { overleaf_admin_runs($pdo, $cfg);        return; }
+    }
     json_error('not_found', "no overleaf route for $method $sub", 404);
+}
+
+function _overleaf_require_admin(PDO $pdo, array $cfg): array {
+    $u = Auth::requireUser($pdo, $cfg);
+    if (($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', 'admin のみ', 403);
+    }
+    return $u;
 }
 
 function overleaf_list(PDO $pdo, array $cfg): void {
@@ -196,4 +213,118 @@ function overleaf_status(PDO $pdo, array $cfg): void {
         'project_count'  => $cnt,
         'snapshot_count' => $snapCnt,
     ]);
+}
+
+// ---------- v890 admin endpoints (cookie management + collector trigger) ----------
+
+const _OVERLEAF_CONFIG_PATH = '/var/www/labpay/config/config.php';
+
+function overleaf_admin_cookie_get(PDO $pdo, array $cfg): void {
+    _overleaf_require_admin($pdo, $cfg);
+    $cookie = $cfg['overleaf']['olauth_cookie'] ?? '';
+    $masked = '';
+    if ($cookie !== '') {
+        $n = strlen($cookie);
+        $masked = substr($cookie, 0, 8) . '...' . substr($cookie, -6) . " ({$n}文字)";
+    }
+    json_response(['has_cookie' => $cookie !== '', 'masked' => $masked]);
+}
+
+function overleaf_admin_cookie_set(PDO $pdo, array $cfg): void {
+    _overleaf_require_admin($pdo, $cfg);
+    $body = read_json_body();
+    $cookie = trim((string)($body['cookie'] ?? ''));
+    if ($cookie === '' || strlen($cookie) < 20 || strlen($cookie) > 2000) {
+        throw new ApiException('bad_request', 'cookie が空 / 短すぎ / 長すぎ', 400);
+    }
+    // overleaf_session2 は URL エンコード文字列 (英数 + %._-/=:+) のみ想定
+    if (!preg_match('/^[A-Za-z0-9%._\-\/=+:]+$/', $cookie)) {
+        throw new ApiException('bad_request', 'cookie に不正な文字が含まれています', 400);
+    }
+
+    $path = _OVERLEAF_CONFIG_PATH;
+    if (!is_writable($path)) {
+        throw new ApiException('io_error', 'config.php が書き込み不可 (apache 所有か確認)', 500);
+    }
+    $src = @file_get_contents($path);
+    if ($src === false) throw new ApiException('io_error', 'config.php 読み込み失敗', 500);
+
+    $entry = "    'overleaf' => ['olauth_cookie' => '" . str_replace("'", "\\'", $cookie) . "'],\n";
+    // 既存エントリ削除
+    $src = preg_replace("/^\s*'overleaf'\s*=>\s*\[[^\]]*\]\s*,\s*\n/m", '', $src);
+    // 末尾の `];` の直前に挿入
+    $pos = strrpos($src, "];");
+    if ($pos === false) throw new ApiException('io_error', 'config.php の array close `];` が見つからない', 500);
+    $src = substr($src, 0, $pos) . $entry . substr($src, $pos);
+    if (@file_put_contents($path, $src) === false) {
+        throw new ApiException('io_error', 'config.php 書き込み失敗', 500);
+    }
+    json_response(['ok' => true]);
+}
+
+function overleaf_admin_verify(PDO $pdo, array $cfg): void {
+    _overleaf_require_admin($pdo, $cfg);
+    // config を再読込 (cookie 更新直後でも反映)
+    $latest = require _OVERLEAF_CONFIG_PATH;
+    $cookie = $latest['overleaf']['olauth_cookie'] ?? '';
+    if ($cookie === '') {
+        json_response(['ok' => false, 'reason' => 'cookie が未設定']);
+        return;
+    }
+    if (!function_exists('curl_init')) {
+        json_response(['ok' => false, 'reason' => 'PHP curl がない']);
+        return;
+    }
+    $ch = curl_init('https://www.overleaf.com/project');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER     => ['Cookie: overleaf_session2=' . $cookie, 'User-Agent: Mozilla/5.0'],
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
+    curl_close($ch);
+    if ($resp === false) {
+        json_response(['ok' => false, 'reason' => 'HTTP リクエスト失敗: ' . $err]);
+        return;
+    }
+    $valid = ((int)$code === 200 && strpos((string)$resp, 'ol-prefetchedProjectsBlob') !== false);
+    json_response([
+        'ok'        => $valid,
+        'http_code' => (int)$code,
+        'reason'    => $valid ? 'cookie 有効' : '無効 (login にリダイレクトされた可能性、cookie 期限切れか取り違え)',
+    ]);
+}
+
+function overleaf_admin_run(PDO $pdo, array $cfg): void {
+    _overleaf_require_admin($pdo, $cfg);
+    $venv = '/var/www/labpay/.venv-overleaf/bin/python';
+    $script = '/var/www/labpay/scripts/overleaf_collector.py';
+    if (!is_file($venv))   { throw new ApiException('not_found', 'venv 未セットアップ: ' . $venv, 500); }
+    if (!is_file($script)) { throw new ApiException('not_found', 'collector script 不在', 500); }
+    $log = '/tmp/overleaf_collect_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.log';
+    // detach 起動 (戻りを待たない)
+    $cmd = "nohup $venv $script > " . escapeshellarg($log) . " 2>&1 & echo $!";
+    $pid = (int)trim((string)shell_exec($cmd));
+    json_response(['ok' => true, 'pid' => $pid, 'log' => $log]);
+}
+
+function overleaf_admin_runs(PDO $pdo, array $cfg): void {
+    _overleaf_require_admin($pdo, $cfg);
+    $rows = $pdo->query("SELECT id, started_at, finished_at, ok, projects_seen, error_msg
+        FROM overleaf_collector_runs ORDER BY id DESC LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
+    $items = [];
+    foreach ($rows as $r) {
+        $items[] = [
+            'id'            => (int)$r['id'],
+            'started_at'    => $r['started_at'],
+            'finished_at'   => $r['finished_at'],
+            'ok'            => (int)$r['ok'] === 1,
+            'projects_seen' => (int)$r['projects_seen'],
+            'error_msg'     => $r['error_msg'],
+        ];
+    }
+    json_response(['items' => $items]);
 }

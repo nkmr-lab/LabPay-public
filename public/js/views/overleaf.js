@@ -9,7 +9,7 @@
 //   - 比較グラフ: 全プロジェクトを 1 つの SVG に重ね描き。stale (1か月以上更新なし) は除外。
 //   - 詳細: 60 日 chart + 最新ファイル別内訳。
 
-import { get } from '../api.js';
+import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { fmtRelative } from '../format.js';
@@ -45,10 +45,12 @@ function sparklineSvg(points, metricKey = 'c') {
 
 export async function renderOverleafList() {
   const app = document.getElementById('app');
+  const isAdmin = (state.me?.role || '') === 'admin';
   app.innerHTML = `
     <div class="card page-header">
-      <div class="row center">
+      <div class="row center" style="justify-content:space-between">
         <h2 style="margin:0">📝 Overleaf プロジェクト追跡</h2>
+        ${isAdmin ? `<a class="btn" href="#/overleaf/admin" style="padding:4px 10px; font-size:12px">⚙ 設定</a>` : ''}
       </div>
       <div id="ovl-status" class="hint" style="margin-top:4px; font-size:11px"></div>
     </div>
@@ -404,3 +406,150 @@ function renderHistoryChart(history) {
       <text x="${padL + 90}" y="10" font-size="10" fill="#16a34a">┄┄ 本文(cmd除外)</text>
     </svg>`;
 }
+
+// v890 admin 設定 (cookie 管理 + collector 即時実行)
+export async function renderOverleafAdmin() {
+  const app = document.getElementById('app');
+  if ((state.me?.role || '') !== 'admin') {
+    app.innerHTML = `<div class="card"><p>admin 限定です。</p></div>`;
+    return;
+  }
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/overleaf" class="hint">← Overleaf 一覧</a>
+      <h2 style="margin:6px 0 0">⚙ Overleaf 設定</h2>
+      <p class="hint" style="margin:4px 0 0; font-size:11px">
+        教員アカウントの Overleaf cookie を登録し、collector を走らせて文字数 snapshot を取得します。
+        cookie は数か月で失効するので、その時はここから貼り直し。
+      </p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">🔑 cookie (overleaf_session2)</h3>
+      <div id="ova-cookie-status" class="muted" style="font-size:12px">確認中…</div>
+
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer; font-size:13px; color:var(--primary)">cookie の取得方法 (Chrome)</summary>
+        <ol style="font-size:12px; line-height:1.6; margin:6px 0 0 18px">
+          <li>Chrome で https://www.overleaf.com に教員アカウントでログイン</li>
+          <li>DevTools (F12) > Application > Cookies > <code>https://www.overleaf.com</code></li>
+          <li><code>overleaf_session2</code> 行の Value を全選択 → コピー (<code>s%3A...</code> で始まる長い文字列)</li>
+          <li>下のテキストボックスに貼り付けて「保存」</li>
+        </ol>
+      </details>
+
+      <label class="field" style="margin-top:10px">
+        <span class="lbl">新しい cookie 値</span>
+        <textarea id="ova-cookie-input" rows="3" placeholder="s%3A…" style="font-family:monospace; font-size:11px; word-break:break-all"></textarea>
+      </label>
+      <div class="row" style="gap:6px; justify-content:flex-end">
+        <button id="ova-verify" class="btn">🩺 検証 (保存せず確認)</button>
+        <button id="ova-save"   class="primary">💾 保存して検証</button>
+      </div>
+      <div id="ova-verify-result" style="margin-top:6px; font-size:12px"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">🔄 collector を実行</h3>
+      <p class="hint" style="font-size:11px; margin:0 0 8px">
+        手動で 1 回走らせます。 250プロジェクト程度で 3〜10 分。完了すると下の履歴に反映されます。
+      </p>
+      <button id="ova-run" class="primary">▶ いま実行</button>
+      <span id="ova-run-result" style="margin-left:8px; font-size:12px"></span>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">📊 直近の実行履歴</h3>
+      <div id="ova-runs" class="muted">読み込み中…</div>
+    </div>
+  `;
+
+  // Wire up
+
+  async function loadCookieStatus() {
+    try {
+      const r = await get('/api/overleaf/admin/cookie');
+      document.getElementById('ova-cookie-status').innerHTML = r.has_cookie
+        ? `✓ 設定済み: <code>${escapeHtml(r.masked)}</code>`
+        : `⚠ 未設定 — cookie を貼って保存してください`;
+    } catch (e) {
+      document.getElementById('ova-cookie-status').textContent = '取得失敗: ' + e.message;
+    }
+  }
+
+  async function loadRuns() {
+    try {
+      const r = await get('/api/overleaf/admin/runs');
+      const items = r.items || [];
+      if (!items.length) {
+        document.getElementById('ova-runs').innerHTML = '<div class="empty">まだ実行ログがありません</div>';
+        return;
+      }
+      document.getElementById('ova-runs').innerHTML = `
+        <table style="width:100%; border-collapse:collapse; font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--line)">
+            <th style="text-align:left; padding:4px">開始</th>
+            <th style="text-align:left; padding:4px">終了</th>
+            <th style="text-align:center; padding:4px">結果</th>
+            <th style="text-align:right; padding:4px">プロジェクト数</th>
+            <th style="text-align:left; padding:4px">エラー</th>
+          </tr></thead>
+          <tbody>${items.map(it => {
+            const dur = it.finished_at ? '' : ' <span style="color:#f59e0b">(実行中)</span>';
+            const okTag = it.ok ? '<span style="color:#16a34a">✓ OK</span>'
+                                : (it.finished_at ? '<span style="color:#dc2626">✗ 失敗</span>' : '<span class="muted">…</span>');
+            const errSnippet = it.error_msg ? `<span style="color:#dc2626">${escapeHtml(String(it.error_msg).slice(0, 100))}</span>` : '';
+            return `<tr style="border-bottom:1px solid var(--line)">
+              <td style="padding:4px">${escapeHtml(it.started_at)}${dur}</td>
+              <td style="padding:4px">${escapeHtml(it.finished_at || '—')}</td>
+              <td style="padding:4px; text-align:center">${okTag}</td>
+              <td style="padding:4px; text-align:right">${it.projects_seen}</td>
+              <td style="padding:4px">${errSnippet}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>`;
+    } catch (e) {
+      document.getElementById('ova-runs').textContent = '失敗: ' + e.message;
+    }
+  }
+
+  async function doVerify(saveFirst) {
+    const input = document.getElementById('ova-cookie-input').value.trim();
+    const out = document.getElementById('ova-verify-result');
+    out.innerHTML = '<span class="muted">処理中…</span>';
+    try {
+      if (saveFirst) {
+        if (!input) { out.innerHTML = '<span style="color:#dc2626">cookie を貼ってください</span>'; return; }
+        await post('/api/overleaf/admin/cookie', { cookie: input });
+        document.getElementById('ova-cookie-input').value = '';
+        await loadCookieStatus();
+      }
+      const r = await post('/api/overleaf/admin/verify', {});
+      if (r.ok) {
+        out.innerHTML = `<span style="color:#16a34a">✓ cookie 有効 (HTTP ${r.http_code})</span>`;
+      } else {
+        out.innerHTML = `<span style="color:#dc2626">✗ 無効: ${escapeHtml(r.reason || '')} (HTTP ${r.http_code || '—'})</span>`;
+      }
+    } catch (e) {
+      out.innerHTML = `<span style="color:#dc2626">エラー: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  document.getElementById('ova-verify').addEventListener('click', () => doVerify(false));
+  document.getElementById('ova-save')  .addEventListener('click', () => doVerify(true));
+  document.getElementById('ova-run')   .addEventListener('click', async () => {
+    const out = document.getElementById('ova-run-result');
+    out.innerHTML = '<span class="muted">起動中…</span>';
+    try {
+      const r = await post('/api/overleaf/admin/run', {});
+      out.innerHTML = `<span style="color:#16a34a">✓ 起動しました (PID ${r.pid}) — 数分後にまた更新</span>`;
+      setTimeout(loadRuns, 2500);
+    } catch (e) {
+      out.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`;
+    }
+  });
+
+  loadCookieStatus();
+  loadRuns();
+}
+
