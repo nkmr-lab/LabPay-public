@@ -72,23 +72,52 @@ def parse_labpay_config(path):
     return json.loads(r.stdout)
 
 # ---- 文字数カウンタ ----
-RE_COMMENT  = re.compile(r'(?<!\\)%[^\n]*')          # 行末までの % コメント (\\% はエスケープ)
-RE_TEX_CMD  = re.compile(r'\\[a-zA-Z@]+\*?')         # \section, \emph 等 (引数は残す)
-RE_BRACKETS = re.compile(r'\[[^\]\n]*\]')            # [optional] 引数
+# v891 「本文」を実際に読まれるproseだけにする抽出を強化。除外する対象:
+#   % コメント / 数式環境 / code/figure/table/equation 等の環境ブロック全体 /
+#   preamble (\documentclass /\usepackage / \begin / \end / \cite / \ref 等) のコマンド+引数全部 /
+#   残りの \command 名と [opt] と {} 中括弧 / $ 記号。
+#   旧版は \command 名 を消すだけで引数や数式は本文扱いだったので、 「文字数が多すぎる」 と
+#   見える原因になっていた。
+RE_COMMENT     = re.compile(r'(?<!\\)%[^\n]*')          # % コメント
+RE_MATH_BLOCK  = re.compile(r'\$\$.*?\$\$', re.DOTALL)
+RE_MATH_INLINE = re.compile(r'\$[^\$\n]*\$')
+RE_MATH_BRACK  = re.compile(r'\\\[.*?\\\]', re.DOTALL)
+RE_MATH_PAREN  = re.compile(r'\\\(.*?\\\)', re.DOTALL)
+RE_CODE_ENV    = re.compile(
+    r'\\begin\{(verbatim|lstlisting|minted|tikzpicture|figure\*?|table\*?|'
+    r'equation\*?|align\*?|gather\*?|eqnarray\*?|thebibliography|abstract|tabular\*?)\}'
+    r'.*?\\end\{\1\}', re.DOTALL)
+RE_PREAMBLE_CMD = re.compile(
+    r'\\(documentclass|usepackage|RequirePackage|bibliographystyle|bibliography|'
+    r'input|include|newcommand|renewcommand|providecommand|setlength|geometry|'
+    r'title|author|date|maketitle|label|ref|eqref|pageref|cite|citep|citet|citeauthor|'
+    r'footnote|footnotemark|footnotetext|begin|end|tableofcontents|listoffigures|'
+    r'listoftables|caption|includegraphics|hspace|vspace|noindent|small|large|'
+    r'tiny|huge|normalsize|bibitem|color|textcolor|definecolor|hyperref|url)'
+    r'(\[[^\]]*\])?(\{[^\}]*\})*', re.IGNORECASE)
+RE_TEX_CMD  = re.compile(r'\\[a-zA-Z@]+\*?')  # 残った \command 名
+RE_BRACKETS = re.compile(r'\[[^\]\n]*\]')
 RE_JP       = re.compile(r'[一-鿿぀-ゟ゠-ヿ]')
+RE_LATIN_WORD = re.compile(r'[A-Za-z][A-Za-z\'\-]*')  # v891 英文単語抽出 (アポストロフィ/ハイフン込み)
 RE_WS       = re.compile(r'\s+')
 
 def count_chars(content: str) -> dict:
     total = len(content)
-    # body = comment 除去 + cmd 名除去 + [optional] 除去したものの文字数
-    no_comment = RE_COMMENT.sub('', content)
-    no_cmd     = RE_TEX_CMD.sub('', no_comment)
-    no_opt     = RE_BRACKETS.sub('', no_cmd)
-    # 中の '{' '}' は残すが、視覚的ノイズが多いので落とす
-    body = no_opt.replace('{', '').replace('}', '').replace('$', '')
+    s = content
+    s = RE_COMMENT.sub('', s)
+    s = RE_CODE_ENV.sub('', s)
+    s = RE_MATH_BLOCK.sub('', s)
+    s = RE_MATH_BRACK.sub('', s)
+    s = RE_MATH_PAREN.sub('', s)
+    s = RE_MATH_INLINE.sub('', s)
+    s = RE_PREAMBLE_CMD.sub('', s)
+    s = RE_TEX_CMD.sub('', s)
+    s = RE_BRACKETS.sub('', s)
+    body = s.replace('{', '').replace('}', '').replace('$', '').replace('~', ' ').replace('&', ' ')
     body_chars = sum(1 for ch in body if not ch.isspace())
     jp_chars = len(RE_JP.findall(body))
-    words = len(RE_WS.split(body.strip())) if body.strip() else 0
+    # v891 単語数は英文の単語 (連続するラテン文字シーケンス)。 日本語混在文でも英単語だけ数える。
+    words = len(RE_LATIN_WORD.findall(body))
     return {
         'total': total,
         'body':  body_chars,
@@ -115,7 +144,7 @@ def main():
         host=parts.get('host', 'localhost'),
         user=db_cfg['user'],
         password=db_cfg['pass'],
-        db=parts.get('dbname'),
+        database=parts.get('dbname'),
         charset='utf8mb4',
         autocommit=False,
     )
@@ -135,16 +164,26 @@ def main():
         # v890 cookie 名は overleaf_session2 (overleaf_session は古い形式で 302 になる)。
         api.login_from_cookies({'overleaf_session2': cookie})
         projects = api.get_projects()
-        for p in projects:
+        print(f"[start] fetched {len(projects)} projects from Overleaf", flush=True)
+        for i, p in enumerate(projects):
             try:
                 proj_id = _upsert_project(conn, p)
                 _take_snapshot(conn, api, p, proj_id)
                 projects_seen += 1
                 conn.commit()
+                # 進捗ログ (10 件 毎)
+                if (i + 1) % 10 == 0:
+                    print(f"[progress] {i+1}/{len(projects)}: {p.name[:60]}", flush=True)
+                    # 途中で killed されても progress を残せるよう run row を更新
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE overleaf_collector_runs SET projects_seen=%s WHERE id=%s",
+                                    (projects_seen, run_id))
+                    conn.commit()
             except Exception as e:
                 conn.rollback()
-                print(f"  ! project {p.id} ({p.name}): {e}", file=sys.stderr)
+                print(f"  ! project {p.id} ({p.name}): {e}", file=sys.stderr, flush=True)
         ok = True
+        print(f"[end] processed {projects_seen}/{len(projects)} projects", flush=True)
     except Exception as e:
         err_msg = f"{type(e).__name__}: {e}\n{traceback.format_exc()[:500]}"
         print("FATAL:", err_msg, file=sys.stderr)
@@ -165,9 +204,13 @@ def _upsert_project(conn, p):
     if isinstance(last_remote, datetime):
         last_remote = last_remote.strftime('%Y-%m-%d %H:%M:%S')
     elif isinstance(last_remote, str) and last_remote:
-        # ISO 8601 (2026-06-30T08:50:10.870Z) を MySQL DATETIME 形式に変換
+        # ISO 8601 (2026-06-30T08:50:10.870Z) UTC を JST (Asia/Tokyo) に変換して
+        #   MySQL DATETIME に格納。 LabPay は server / MySQL とも JST 前提なので、 UTC のまま
+        #   入れると 「9時間後」 → 「最終更新超過」 のように見える。
         try:
-            dt = datetime.strptime(last_remote.replace('Z', '+0000').split('.')[0], '%Y-%m-%dT%H:%M:%S')
+            from datetime import timedelta
+            dt = datetime.strptime(last_remote.split('.')[0].rstrip('Z'), '%Y-%m-%dT%H:%M:%S')
+            dt = dt + timedelta(hours=9)  # UTC → JST
             last_remote = dt.strftime('%Y-%m-%d %H:%M:%S')
         except Exception:
             last_remote = None

@@ -47,12 +47,18 @@ export async function renderOverleafList() {
   const app = document.getElementById('app');
   const isAdmin = (state.me?.role || '') === 'admin';
   app.innerHTML = `
+    <style>
+      /* v891 横幅オーバーフロー防止。 SVG / テーブル / list-item が viewport を突き抜けるのを抑える。 */
+      #app .card, #app .list-item { max-width:100%; box-sizing:border-box; overflow:hidden }
+      #app .ovl-row-nums { min-width:0 }
+      #app svg { max-width:100% }
+    </style>
     <div class="card page-header">
-      <div class="row center" style="justify-content:space-between">
-        <h2 style="margin:0">📝 Overleaf プロジェクト追跡</h2>
-        ${isAdmin ? `<a class="btn" href="#/overleaf/admin" style="padding:4px 10px; font-size:12px">⚙ 設定</a>` : ''}
+      <div class="row center" style="justify-content:space-between; gap:8px; flex-wrap:wrap">
+        <h2 style="margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis">📝 Overleaf プロジェクト追跡</h2>
+        ${isAdmin ? `<a class="btn" href="#/overleaf/admin" style="padding:4px 10px; font-size:12px; flex-shrink:0">⚙ 設定</a>` : ''}
       </div>
-      <div id="ovl-status" class="hint" style="margin-top:4px; font-size:11px"></div>
+      <div id="ovl-status" class="hint" style="margin-top:4px; font-size:11px; word-break:break-word"></div>
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:center; font-size:13px; flex-wrap:wrap">
@@ -71,10 +77,10 @@ export async function renderOverleafList() {
         </label>
         <label>表示:
           <select id="ovl-metric" style="font-size:12px">
-            <option value="total">全文字数</option>
-            <option value="body">本文のみ (コマンド除外)</option>
-            <option value="jp">日本語文字数</option>
-            <option value="word">単語数</option>
+            <option value="body" selected>本文のみ (cmd除外)</option>
+            <option value="total">全文字 (TeXコマンド込み)</option>
+            <option value="jp">日本語文字</option>
+            <option value="word">英単語数</option>
           </select>
         </label>
         <span id="ovl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
@@ -334,11 +340,11 @@ export async function renderOverleafDetail({ params }) {
     </div>
     ${latest ? `
       <div style="margin-top:10px; display:flex; gap:14px; flex-wrap:wrap">
-        <div><div class="muted" style="font-size:11px">全文字数</div><div class="bold" style="font-size:18px">${latest.total_char_count.toLocaleString()}</div></div>
         <div><div class="muted" style="font-size:11px">本文 (cmd除外)</div><div class="bold" style="font-size:18px">${latest.total_char_body.toLocaleString()}</div></div>
         <div><div class="muted" style="font-size:11px">日本語文字</div><div class="bold" style="font-size:18px">${latest.total_jp_char_count.toLocaleString()}</div></div>
-        <div><div class="muted" style="font-size:11px">単語数 (英文)</div><div class="bold" style="font-size:18px">${latest.total_word_count.toLocaleString()}</div></div>
+        <div><div class="muted" style="font-size:11px">英単語数</div><div class="bold" style="font-size:18px">${latest.total_word_count.toLocaleString()}</div></div>
         <div><div class="muted" style="font-size:11px">ファイル数</div><div class="bold" style="font-size:18px">${latest.file_count}</div></div>
+        <div><div class="muted" style="font-size:11px">全文字 (cmd込み)</div><div class="muted" style="font-size:14px">${latest.total_char_count.toLocaleString()}</div></div>
       </div>` : '<div class="muted" style="margin-top:8px">snapshot がまだありません</div>'}`;
 
   if (d.history && d.history.length >= 2) {
@@ -348,24 +354,26 @@ export async function renderOverleafDetail({ params }) {
   if (d.files && d.files.length) {
     document.getElementById('ovd-files-card').hidden = false;
     document.getElementById('ovd-files').innerHTML = `
-      <table style="width:100%; border-collapse:collapse; font-size:12px">
+      <div style="overflow-x:auto; max-width:100%">
+      <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:480px">
         <thead><tr style="border-bottom:1px solid var(--line)">
           <th style="text-align:left; padding:4px">ファイル</th>
-          <th style="text-align:right; padding:4px">全文字</th>
           <th style="text-align:right; padding:4px">本文</th>
+          <th style="text-align:right; padding:4px">全文字</th>
           <th style="text-align:right; padding:4px">日本語</th>
-          <th style="text-align:right; padding:4px">単語</th>
+          <th style="text-align:right; padding:4px">英単語</th>
         </tr></thead>
         <tbody>${d.files.map(f => `
           <tr style="border-bottom:1px solid var(--line)">
-            <td style="padding:4px">${escapeHtml(f.file_path)}</td>
-            <td style="padding:4px; text-align:right">${f.char_count_total.toLocaleString()}</td>
-            <td style="padding:4px; text-align:right">${f.char_count_body.toLocaleString()}</td>
+            <td style="padding:4px; word-break:break-all">${escapeHtml(f.file_path)}</td>
+            <td style="padding:4px; text-align:right"><b>${f.char_count_body.toLocaleString()}</b></td>
+            <td style="padding:4px; text-align:right" class="muted">${f.char_count_total.toLocaleString()}</td>
             <td style="padding:4px; text-align:right">${f.jp_char_count.toLocaleString()}</td>
             <td style="padding:4px; text-align:right">${f.word_count.toLocaleString()}</td>
           </tr>`).join('')}
         </tbody>
-      </table>`;
+      </table>
+      </div>`;
   }
 }
 
@@ -486,7 +494,8 @@ export async function renderOverleafAdmin() {
         return;
       }
       document.getElementById('ova-runs').innerHTML = `
-        <table style="width:100%; border-collapse:collapse; font-size:12px">
+        <div style="overflow-x:auto; max-width:100%">
+        <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:560px">
           <thead><tr style="border-bottom:1px solid var(--line)">
             <th style="text-align:left; padding:4px">開始</th>
             <th style="text-align:left; padding:4px">終了</th>
@@ -507,7 +516,8 @@ export async function renderOverleafAdmin() {
               <td style="padding:4px">${errSnippet}</td>
             </tr>`;
           }).join('')}</tbody>
-        </table>`;
+        </table>
+        </div>`;
     } catch (e) {
       document.getElementById('ova-runs').textContent = '失敗: ' + e.message;
     }
