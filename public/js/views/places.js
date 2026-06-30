@@ -12,6 +12,7 @@ const CATEGORIES = [
   { id: '',       label: '指定なし' },
   { id: 'cafe',   label: '☕ カフェ' },
   { id: 'lunch',  label: '🍱 ランチ' },
+  { id: 'ramen',  label: '🍜 ラーメン' },
   { id: 'dinner', label: '🍣 ディナー' },
   { id: 'bar',    label: '🍺 飲み屋' },
   { id: 'sweets', label: '🍰 スイーツ' },
