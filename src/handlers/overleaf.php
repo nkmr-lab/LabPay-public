@@ -1,7 +1,7 @@
 <?php
 // /api/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。
 //   pyoverleaf が DB に snapshot を入れる → ここで集計して返す。
-//   現状 admin 限定 (教員アカウントが cookie 持ってる前提)。
+//   v889 admin 限定だったのを LabPay ユーザ全員に開放 (他の人の状況も見えるように)。
 
 declare(strict_types=1);
 
@@ -15,16 +15,8 @@ function route_overleaf(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no overleaf route for $method $sub", 404);
 }
 
-function _overleaf_require_admin(PDO $pdo, array $cfg): array {
-    $u = Auth::requireUser($pdo, $cfg);
-    if (($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', 'admin のみ', 403);
-    }
-    return $u;
-}
-
 function overleaf_list(PDO $pdo, array $cfg): void {
-    _overleaf_require_admin($pdo, $cfg);
+    Auth::requireUser($pdo, $cfg);
     // 各 project に対して「最新 snapshot」「24h 前 snapshot」「7d 前 snapshot」を抽出して
     // 文字数 + 差分を返す。 N 件 (最大 100) 想定。
     $rows = $pdo->query("
@@ -47,13 +39,18 @@ function overleaf_list(PDO $pdo, array $cfg): void {
           FROM overleaf_snapshots
          WHERE project_id = ? AND taken_at <= (NOW() - INTERVAL ? HOUR)
          ORDER BY taken_at DESC LIMIT 1");
-    // sparkline: 過去 14 日を 24h 区切りで 14 点 (最新 snapshot を各 day で取る)
+    // sparkline / 比較グラフ用 daily 集計: 過去 60 日を 24h 区切り (最新 snapshot を各 day で取る)。
+    //   v889 比較グラフ機能のため 14 日 → 60 日に拡張。
     $stSpark = $pdo->prepare("
-        SELECT DATE(taken_at) AS d, MAX(total_char_count) AS c
+        SELECT DATE(taken_at) AS d, MAX(total_char_count) AS c, MAX(total_char_body) AS cb,
+               MAX(total_jp_char_count) AS jp, MAX(total_word_count) AS w
           FROM overleaf_snapshots
-         WHERE project_id = ? AND taken_at >= (NOW() - INTERVAL 14 DAY)
+         WHERE project_id = ? AND taken_at >= (NOW() - INTERVAL 60 DAY)
          GROUP BY DATE(taken_at)
          ORDER BY d ASC");
+
+    // v889 「1か月以上更新なし」 判定。 last_remote_updated_at が NULL のときは stale 扱い。
+    $staleThresholdTs = time() - 30 * 86400;
 
     $items = [];
     foreach ($rows as $r) {
@@ -67,6 +64,9 @@ function overleaf_list(PDO $pdo, array $cfg): void {
         $stSpark->execute([$pid]);
         $spark = $stSpark->fetchAll(PDO::FETCH_ASSOC);
 
+        $lastRemoteTs = $r['last_remote_updated_at'] ? strtotime($r['last_remote_updated_at']) : null;
+        $isStale = ($lastRemoteTs === null || $lastRemoteTs < $staleThresholdTs);
+
         $items[] = [
             'id'                     => $pid,
             'overleaf_id'            => $r['overleaf_id'],
@@ -75,6 +75,7 @@ function overleaf_list(PDO $pdo, array $cfg): void {
             'owner_name'             => $r['owner_name'],
             'last_remote_updated_at' => $r['last_remote_updated_at'],
             'is_archived'            => (int)$r['is_archived'] === 1,
+            'is_stale'               => $isStale,       // v889 1か月以上更新なし
             'first_seen_at'          => $r['first_seen_at'],
             'latest' => $latest ? [
                 'taken_at'            => $latest['taken_at'],
@@ -94,7 +95,14 @@ function overleaf_list(PDO $pdo, array $cfg): void {
                 'total_char_body'  => (int)$latest['total_char_body']  - (int)$past7d['total_char_body'],
                 'baseline_at'      => $past7d['taken_at'],
             ] : null,
-            'sparkline' => array_map(fn($s) => ['d' => $s['d'], 'c' => (int)$s['c']], $spark),
+            // v889 sparkline は 各 metric の値を含む (chart 切替用)
+            'sparkline' => array_map(fn($s) => [
+                'd'  => $s['d'],
+                'c'  => (int)$s['c'],
+                'cb' => (int)$s['cb'],
+                'jp' => (int)$s['jp'],
+                'w'  => (int)$s['w'],
+            ], $spark),
         ];
     }
 
@@ -102,7 +110,7 @@ function overleaf_list(PDO $pdo, array $cfg): void {
 }
 
 function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
-    _overleaf_require_admin($pdo, $cfg);
+    Auth::requireUser($pdo, $cfg);
     $stP = $pdo->prepare("SELECT * FROM overleaf_projects WHERE id = ?");
     $stP->execute([$id]);
     $p = $stP->fetch(PDO::FETCH_ASSOC);
@@ -170,7 +178,7 @@ function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
 }
 
 function overleaf_status(PDO $pdo, array $cfg): void {
-    _overleaf_require_admin($pdo, $cfg);
+    Auth::requireUser($pdo, $cfg);
     $stR = $pdo->query("SELECT id, started_at, finished_at, ok, projects_seen, error_msg
         FROM overleaf_collector_runs ORDER BY started_at DESC LIMIT 1");
     $last = $stR->fetch(PDO::FETCH_ASSOC) ?: null;

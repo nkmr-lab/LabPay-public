@@ -1,11 +1,13 @@
-// /#/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。教員 admin 限定。
+// /#/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。
 //   pyoverleaf が教員アカウントの全共有プロジェクトを定期取得 → 文字数スナップショット
 //   が DB に積まれる → ここで「最近動きがあったプロジェクト」を一覧表示、詳細で推移を見る。
+//   v889 admin 限定だったのを LabPay ユーザ全員に開放、比較グラフ + stale 除外を追加。
 //
 // 設計:
-//   - 一覧: 直近 24h / 7d の文字数増減を出す、並び順 = 最終更新 / 24h 増加 / 7d 増加 / 名前
-//   - 詳細: 60 日 chart + 最新ファイル別内訳
-//   - admin が collector を設定して走らせる想定。未設定なら「セットアップガイド」表示。
+//   - 一覧: 直近 24h / 7d の文字数増減を出す、並び順 = 最終更新 / 24h 増加 / 7d 増加 / 名前。
+//     1か月以上更新なしのプロジェクトは 💤 タグ表示。
+//   - 比較グラフ: 全プロジェクトを 1 つの SVG に重ね描き。stale (1か月以上更新なし) は除外。
+//   - 詳細: 60 日 chart + 最新ファイル別内訳。
 
 import { get } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -23,17 +25,17 @@ function colorForDelta(n) {
   return '#888';
 }
 
-// 14日sparkline (純CSS / SVG 描画、 chart ライブラリ無し)
-function sparklineSvg(points) {
+// sparkline (純 SVG、 chart ライブラリ無し)
+function sparklineSvg(points, metricKey = 'c') {
   if (!points || !points.length) return '';
   const w = 80, h = 20, pad = 1;
-  const cs = points.map(p => p.c);
+  const cs = points.map(p => p[metricKey] || 0);
   const min = Math.min(...cs), max = Math.max(...cs);
   const span = max - min || 1;
   const xStep = (w - pad * 2) / Math.max(1, points.length - 1);
   const pts = points.map((p, i) => {
     const x = pad + i * xStep;
-    const y = pad + (h - pad * 2) * (1 - (p.c - min) / span);
+    const y = pad + (h - pad * 2) * (1 - ((p[metricKey] || 0) - min) / span);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="vertical-align:middle">
@@ -43,14 +45,6 @@ function sparklineSvg(points) {
 
 export async function renderOverleafList() {
   const app = document.getElementById('app');
-  if ((state.me?.role || '') !== 'admin') {
-    app.innerHTML = `
-      <div class="card">
-        <h2 style="margin:0">📝 Overleaf 追跡</h2>
-        <p>このアプリは教員アカウント(admin)限定です。</p>
-      </div>`;
-    return;
-  }
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center">
@@ -60,6 +54,10 @@ export async function renderOverleafList() {
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:center; font-size:13px; flex-wrap:wrap">
+        <div class="row" style="gap:0; border-radius:14px; overflow:hidden; border:1px solid var(--primary-soft)">
+          <button id="ovl-mode-list"  type="button" style="border:none; padding:5px 14px; font-size:12px; cursor:pointer; background:var(--primary); color:#fff">🗂 一覧</button>
+          <button id="ovl-mode-chart" type="button" style="border:none; padding:5px 14px; font-size:12px; cursor:pointer; background:#fff; color:var(--primary)">📊 比較</button>
+        </div>
         <label>並び順:
           <select id="ovl-sort" style="font-size:12px">
             <option value="recent">最終更新が新しい順</option>
@@ -69,7 +67,7 @@ export async function renderOverleafList() {
             <option value="name">名前順</option>
           </select>
         </label>
-        <label style="margin-left:8px">表示:
+        <label>表示:
           <select id="ovl-metric" style="font-size:12px">
             <option value="total">全文字数</option>
             <option value="body">本文のみ (コマンド除外)</option>
@@ -80,7 +78,7 @@ export async function renderOverleafList() {
         <span id="ovl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
     </div>
-    <div id="ovl-list" class="list" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
+    <div id="ovl-body" style="margin-top:8px"><div class="muted">読み込み中…</div></div>
   `;
 
   // status (collector last run)
@@ -94,7 +92,7 @@ export async function renderOverleafList() {
         st.innerHTML += ` <span style="color:#dc2626">(err: ${escapeHtml(s.last_run.error_msg.slice(0,120))})</span>`;
       }
     } else {
-      st.innerHTML = `⚠ collector がまだ一度も走っていません。サーバで <code>scripts/overleaf_collector.py</code> をセットアップしてください。`;
+      st.innerHTML = `⚠ collector がまだ一度も走っていません。 admin がサーバで <code>scripts/overleaf_collector.py</code> をセットアップ中の可能性。`;
     }
   } catch (e) { /* status は best-effort */ }
 
@@ -103,32 +101,53 @@ export async function renderOverleafList() {
     const d = await get('/api/overleaf/projects');
     items = d.items || [];
   } catch (e) {
-    document.getElementById('ovl-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    document.getElementById('ovl-body').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
     return;
   }
 
   const sortSel   = document.getElementById('ovl-sort');
   const metricSel = document.getElementById('ovl-metric');
+  const modeListBtn  = document.getElementById('ovl-mode-list');
+  const modeChartBtn = document.getElementById('ovl-mode-chart');
+  let viewMode = (() => {
+    try { return localStorage.getItem('labpay.overleaf.viewMode') === 'chart' ? 'chart' : 'list'; }
+    catch { return 'list'; }
+  })();
+
+  const applyMode = (next) => {
+    viewMode = next;
+    try { localStorage.setItem('labpay.overleaf.viewMode', next); } catch (_) {}
+    const set = (b, on) => {
+      b.style.background = on ? 'var(--primary)' : '#fff';
+      b.style.color      = on ? '#fff'           : 'var(--primary)';
+    };
+    set(modeListBtn,  viewMode === 'list');
+    set(modeChartBtn, viewMode === 'chart');
+    render();
+  };
+  modeListBtn.addEventListener('click',  () => applyMode('list'));
+  modeChartBtn.addEventListener('click', () => applyMode('chart'));
+  if (viewMode === 'chart') applyMode('chart');
+
   sortSel.addEventListener('change', render);
   metricSel.addEventListener('change', render);
 
+  // metric の latest フィールド + 単位 + spark/history のキー
   const metricField = {
-    total: ['total_char_count', '字'],
-    body:  ['total_char_body',  '字(本文)'],
-    jp:    ['total_jp_char_count', '字(日本語)'],
-    word:  ['total_word_count', 'words'],
+    total: { latest: 'total_char_count',    unit: '字',            sparkKey: 'c'  },
+    body:  { latest: 'total_char_body',     unit: '字 (本文)',      sparkKey: 'cb' },
+    jp:    { latest: 'total_jp_char_count', unit: '字 (日本語)',    sparkKey: 'jp' },
+    word:  { latest: 'total_word_count',    unit: 'words',         sparkKey: 'w'  },
   };
 
-  function render() {
+  function sortItems(arr) {
     const sort = sortSel.value;
-    const [mField, mUnit] = metricField[metricSel.value];
-    const sorted = items.slice().sort((a, b) => {
-      const av = a.latest?.[mField] || 0;
-      const bv = b.latest?.[mField] || 0;
-      const ad24 = a.delta_24h?.[mField === 'total_char_count' ? 'total_char_count' : 'total_char_body'] || 0;
-      const bd24 = b.delta_24h?.[mField === 'total_char_count' ? 'total_char_count' : 'total_char_body'] || 0;
-      const ad7  = a.delta_7d?.[mField === 'total_char_count' ? 'total_char_count' : 'total_char_body'] || 0;
-      const bd7  = b.delta_7d?.[mField === 'total_char_count' ? 'total_char_count' : 'total_char_body'] || 0;
+    const mf = metricField[metricSel.value];
+    const deltaKey = mf.latest === 'total_char_count' ? 'total_char_count' : 'total_char_body';
+    return arr.slice().sort((a, b) => {
+      const av = a.latest?.[mf.latest] || 0, bv = b.latest?.[mf.latest] || 0;
+      const ad24 = a.delta_24h?.[deltaKey] || 0, bd24 = b.delta_24h?.[deltaKey] || 0;
+      const ad7  = a.delta_7d?.[deltaKey]  || 0, bd7  = b.delta_7d?.[deltaKey]  || 0;
       if (sort === 'recent') return (b.last_remote_updated_at || '').localeCompare(a.last_remote_updated_at || '');
       if (sort === 'delta24') return bd24 - ad24;
       if (sort === 'delta7')  return bd7  - ad7;
@@ -136,49 +155,150 @@ export async function renderOverleafList() {
       if (sort === 'name')    return (a.name || '').localeCompare(b.name || '');
       return 0;
     });
-    document.getElementById('ovl-count').textContent = `${sorted.length} 件`;
-    if (!sorted.length) {
-      document.getElementById('ovl-list').innerHTML = `<div class="empty">まだプロジェクトがありません。 collector が走るとここに出てきます。</div>`;
+  }
+
+  function render() {
+    const sorted = sortItems(items);
+    const mf = metricField[metricSel.value];
+    const countEl = document.getElementById('ovl-count');
+    const body = document.getElementById('ovl-body');
+
+    if (viewMode === 'chart') {
+      // v889 stale (1か月以上更新なし) を除外
+      const active = sorted.filter(p => !p.is_stale && p.sparkline && p.sparkline.length >= 2);
+      const stale  = sorted.filter(p => p.is_stale);
+      countEl.textContent = `${active.length} 件アクティブ / ${stale.length} 件 stale 除外`;
+      if (!active.length) {
+        body.innerHTML = `<div class="empty">過去 1 か月で更新があったプロジェクトがありません。</div>`;
+        return;
+      }
+      body.innerHTML = renderCompareChart(active, mf) +
+        (stale.length ? `
+          <div class="card" style="margin-top:10px; font-size:12px">
+            <div class="muted" style="margin-bottom:4px">💤 1か月以上更新なし (グラフから除外: ${stale.length} 件)</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap">
+              ${stale.map(p => `<span class="tag" style="font-size:11px; background:#f3f4f6; color:#666">${escapeHtml(p.name)}</span>`).join('')}
+            </div>
+          </div>` : '');
       return;
     }
-    document.getElementById('ovl-list').innerHTML = sorted.map(p => {
-      const cur  = p.latest?.[mField] || 0;
-      const d24Key = mField === 'total_char_count' ? 'total_char_count' : 'total_char_body';
-      const d24  = p.delta_24h?.[d24Key];
-      const d7   = p.delta_7d?.[d24Key];
+
+    // list mode
+    countEl.textContent = `${sorted.length} 件`;
+    if (!sorted.length) {
+      body.innerHTML = `<div class="empty">まだプロジェクトがありません。 collector が走るとここに出てきます。</div>`;
+      return;
+    }
+    const deltaKey = mf.latest === 'total_char_count' ? 'total_char_count' : 'total_char_body';
+    body.innerHTML = `<div class="list">` + sorted.map(p => {
+      const cur  = p.latest?.[mf.latest] || 0;
+      const d24  = p.delta_24h?.[deltaKey];
+      const d7   = p.delta_7d?.[deltaKey];
       const own  = p.owner_name || p.owner_email || '?';
       const lastU = p.last_remote_updated_at ? fmtRelative(p.last_remote_updated_at) : '—';
-      const archTag = p.is_archived ? '<span class="tag muted" style="font-size:10px">🗄 archived</span>' : '';
+      const tags = [];
+      if (p.is_stale)    tags.push('<span class="tag muted" style="font-size:10px; background:#f3f4f6">💤 1か月以上更新なし</span>');
+      if (p.is_archived) tags.push('<span class="tag muted" style="font-size:10px">🗄 archived</span>');
       return `
         <a class="list-item" href="#/overleaf/${p.id}" style="align-items:flex-start">
           <div class="grow" style="min-width:0">
             <div class="bold" style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-              ${escapeHtml(p.name)} ${archTag}
+              ${escapeHtml(p.name)} ${tags.join(' ')}
             </div>
             <div class="meta" style="font-size:12px">
               👤 ${escapeHtml(own)} ・最終更新 ${escapeHtml(lastU)}
-              ${p.latest ? ` ・ ${p.latest.file_count} ファイル` : ''}
+              ${p.latest ? ` ・${p.latest.file_count}ファイル` : ''}
             </div>
             <div style="margin-top:4px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-              <span><b>${cur.toLocaleString()}</b> <span class="muted" style="font-size:11px">${mUnit}</span></span>
+              <span><b>${cur.toLocaleString()}</b> <span class="muted" style="font-size:11px">${mf.unit}</span></span>
               <span style="color:${colorForDelta(d24)}">24h: ${d24 != null ? fmtSigned(d24) : '—'}</span>
               <span style="color:${colorForDelta(d7)}">7d: ${d7 != null ? fmtSigned(d7) : '—'}</span>
-              <span style="margin-left:auto">${sparklineSvg(p.sparkline)}</span>
+              <span style="margin-left:auto">${sparklineSvg(p.sparkline, mf.sparkKey)}</span>
             </div>
           </div>
         </a>`;
-    }).join('');
+    }).join('') + `</div>`;
   }
   render();
+}
+
+// 複数プロジェクトを 1 つの SVG に重ね描き。 各プロジェクトに固有色を振る。
+function renderCompareChart(items, mf) {
+  const w = 720, h = 360, padL = 60, padR = 20, padT = 24, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  // 全 sparkline points を 走査して時間軸と最大値を出す
+  const allPts = [];
+  for (const p of items) for (const s of (p.sparkline || [])) {
+    const t = new Date(s.d).getTime();
+    if (isFinite(t)) allPts.push({ t, v: s[mf.sparkKey] || 0 });
+  }
+  if (allPts.length < 2) return `<div class="card"><div class="muted">データ不足です</div></div>`;
+  const tMin = Math.min(...allPts.map(p => p.t));
+  const tMax = Math.max(...allPts.map(p => p.t));
+  const yMax = Math.max(...allPts.map(p => p.v), 100);
+  const xAt = t => padL + ((t - tMin) / (tMax - tMin || 1)) * innerW;
+  const yAt = v => padT + innerH - (v / yMax) * innerH;
+
+  // 軸グリッド
+  const yTicks = 5;
+  const yAxis = [];
+  for (let i = 0; i <= yTicks; i++) {
+    const yv = Math.round(yMax * (i / yTicks));
+    const y = yAt(yv);
+    yAxis.push(`<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
+                <text x="${padL-6}" y="${y+3}" text-anchor="end" font-size="10" fill="#888">${yv.toLocaleString()}</text>`);
+  }
+  const nXTicks = 6;
+  const xLabels = [];
+  for (let i = 0; i <= nXTicks; i++) {
+    const t = tMin + (tMax - tMin) * (i / nXTicks);
+    const d = new Date(t);
+    xLabels.push(`<text x="${xAt(t)}" y="${h - 12}" text-anchor="middle" font-size="10" fill="#666">${d.getMonth()+1}/${d.getDate()}</text>`);
+  }
+
+  // 各プロジェクトの線を生成。 色は HSL ローテーション。
+  const lines = [];
+  const legend = [];
+  items.forEach((p, idx) => {
+    const hue = (idx * 360 / Math.max(items.length, 1)) % 360;
+    const color = `hsl(${hue.toFixed(0)}, 65%, 45%)`;
+    const pts = (p.sparkline || []).map(s => {
+      const t = new Date(s.d).getTime();
+      return `${xAt(t).toFixed(1)},${yAt(s[mf.sparkKey] || 0).toFixed(1)}`;
+    }).join(' ');
+    if (!pts) return;
+    lines.push(`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>`);
+    // 終点に小さなドット + ラベル
+    const last = (p.sparkline || []).slice(-1)[0];
+    if (last) {
+      const lx = xAt(new Date(last.d).getTime()), ly = yAt(last[mf.sparkKey] || 0);
+      lines.push(`<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3" fill="${color}"/>`);
+    }
+    legend.push(`
+      <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#fafafa; border-radius:10px; font-size:11px">
+        <span style="display:inline-block; width:10px; height:10px; background:${color}; border-radius:2px"></span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+        <span class="muted">(${(p.latest?.[mf.latest] || 0).toLocaleString()})</span>
+      </div>`);
+  });
+
+  return `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:14px">📊 ${escapeHtml(mf.unit)}の推移比較 (直近60日)</h3>
+      <svg width="100%" viewBox="0 0 ${w} ${h}" style="display:block; max-width:100%; background:#fff">
+        ${yAxis.join('')}
+        ${lines.join('')}
+        ${xLabels.join('')}
+      </svg>
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
+        ${legend.join('')}
+      </div>
+    </div>`;
 }
 
 export async function renderOverleafDetail({ params }) {
   const id = Number(params.id);
   const app = document.getElementById('app');
-  if ((state.me?.role || '') !== 'admin') {
-    app.innerHTML = `<div class="card"><p>admin 限定です。</p></div>`;
-    return;
-  }
   app.innerHTML = `
     <div class="card">
       <a href="#/overleaf" class="hint">← 一覧</a>
@@ -219,12 +339,10 @@ export async function renderOverleafDetail({ params }) {
         <div><div class="muted" style="font-size:11px">ファイル数</div><div class="bold" style="font-size:18px">${latest.file_count}</div></div>
       </div>` : '<div class="muted" style="margin-top:8px">snapshot がまだありません</div>'}`;
 
-  // chart
   if (d.history && d.history.length >= 2) {
     document.getElementById('ovd-chart-card').hidden = false;
     document.getElementById('ovd-chart').innerHTML = renderHistoryChart(d.history);
   }
-  // files
   if (d.files && d.files.length) {
     document.getElementById('ovd-files-card').hidden = false;
     document.getElementById('ovd-files').innerHTML = `
@@ -250,7 +368,6 @@ export async function renderOverleafDetail({ params }) {
 }
 
 function renderHistoryChart(history) {
-  // SVG折れ線。 X = 時間軸、 Y = total_char_count + total_char_body の2系列。
   const w = 640, h = 200, padL = 50, padR = 16, padT = 14, padB = 30;
   const inner_w = w - padL - padR, inner_h = h - padT - padB;
   const xs = history.map(h => new Date(h.taken_at).getTime());
@@ -269,7 +386,6 @@ function renderHistoryChart(history) {
     yAxis.push(`<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
                 <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="#888">${yv.toLocaleString()}</text>`);
   }
-  // X 軸ラベル: 日付 (4 箇所)
   const xLabels = [];
   const nTicks = 4;
   for (let i = 0; i <= nTicks; i++) {
