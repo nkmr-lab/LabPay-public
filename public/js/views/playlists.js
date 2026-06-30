@@ -524,6 +524,7 @@ function startPlayback(p, startIdx, shuffle) {
     // v863 並び が 変わる → YT playlist iframe を 強制 再構築
     detailState._ytIframe = null;
     detailState._ytPlaylistKey = null;
+    detailState._ytLastVid = null;  // v881 新 iframe → 初回 infoDelivery で再同期
     renderCurrent();
   };
   document.getElementById('pld-auto').onchange = (ev) => { detailState.autoNext = ev.target.checked; };
@@ -660,6 +661,7 @@ function renderYouTubeBatchPlayer(root) {
   const yt = document.getElementById('ytframe');
   detailState._ytIframe = yt;
   detailState._ytPlaylistKey = playlistKey;
+  detailState._ytLastVid = null;  // v881 新 iframe → 初回 infoDelivery で同期 fire させる
   const ytSend = (func, args = []) => {
     try { yt?.contentWindow?.postMessage(JSON.stringify({event:'command', func, args}), '*'); } catch (_) {}
   };
@@ -822,18 +824,38 @@ function shuffleArr(a) {
 // YouTube IFrame postMessage listener — ended → 自動 次へ、 infoDelivery → curSec キャッシュ
 //   v863 #444 全曲 YouTube モード では YT 内部 が 次 動画 へ 自動 進む の で、 親 は
 //   orderIdx + UI ラベル だけ 更新 (iframe は 再生成 しない = ジェスチャ chain 保持)。
+//   v881 シャッフル時のNOW PLAYINGずれ対策: YTが実際に再生中の video_id を信頼源にして
+//     orderIdx を逆引き同期する。endedカウンタ依存だと削除動画スキップやended抜けで
+//     ズレるため、infoDelivery.info.videoData.video_id が変わった瞬間に詰める。
 window.addEventListener('message', (ev) => {
   if (!detailState) return;
   if (typeof ev.data !== 'string' && typeof ev.data !== 'object') return;
   try {
     const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-    if (data?.event === 'infoDelivery' && data.info && typeof data.info.currentTime === 'number') {
-      detailState._ytCurSec = data.info.currentTime;
+    if (data?.event === 'infoDelivery' && data.info) {
+      if (typeof data.info.currentTime === 'number') {
+        detailState._ytCurSec = data.info.currentTime;
+      }
+      // v881 YT実機が再生中の video_id を取得 → items から逆引き → orderIdx 同期。
+      const vid = data.info.videoData?.video_id;
+      if (vid && detailState._ytLastVid !== vid) {
+        detailState._ytLastVid = vid;
+        const itemsIdx = detailState.items.findIndex(it => parseUrlMeta(it.url).id === vid);
+        if (itemsIdx >= 0) {
+          const orderPos = detailState.order.indexOf(itemsIdx);
+          if (orderPos >= 0 && orderPos !== detailState.orderIdx) {
+            detailState.orderIdx = orderPos;
+            renderNowPlayingLabel();
+            renderPlayerRating();
+          }
+        }
+      }
     }
     if (data?.event === 'onStateChange' && data.info === 0) {
       if (!detailState.autoNext) return;
       if (detailState._ytIframe && document.body.contains(detailState._ytIframe)) {
-        // YT 内部 で 次曲 へ 自動進行 → 親 は orderIdx と ラベル だけ 同期
+        // YT 内部 で 次曲 へ 自動進行 → 親 は orderIdx と ラベル だけ 同期。
+        // v881 infoDelivery 経路で詰め直されるが、ended時点でも一旦+1して反応性を保つ。
         let next = detailState.orderIdx + 1;
         if (next >= detailState.order.length) next = 0;
         detailState.orderIdx = next;
