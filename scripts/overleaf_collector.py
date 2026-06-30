@@ -252,38 +252,90 @@ def _walk_tex_files(folder, prefix=''):
         elif name.endswith('.tex'):
             yield child, full
 
+RE_DOCUMENTCLASS = re.compile(r'\\documentclass\s*(\[[^\]]*\])?\s*\{')
+
+def _pick_main_file(per_file):
+    """per_file = [(path, content, counts, has_documentclass), ...] から主文書を 1 つ選ぶ。
+    優先順:
+      1. \\documentclass を含む候補のうち、 最も浅い path、 同じ深さなら本文文字数が最大のもの。
+      2. 候補なし → 名前ベース fallback (main.tex / paper.tex / manuscript.tex / thesis.tex)
+      3. それも無ければ全 .tex 中で本文文字数が最大のもの。
+    """
+    candidates = [(p, c, k) for (p, c, k, dc) in per_file if dc]
+    if candidates:
+        # path の '/' 数 = 深さ。 浅い順 → body の大きい順
+        candidates.sort(key=lambda t: (t[0].count('/'), -t[2]['body']))
+        return candidates[0]
+    # name fallback
+    preferred_names = ('main.tex', 'paper.tex', 'manuscript.tex', 'thesis.tex', 'report.tex')
+    for prefn in preferred_names:
+        for (p, c, k, _) in per_file:
+            if p.endswith('/' + prefn):
+                return (p, c, k)
+    # fall back to largest body
+    if per_file:
+        per_file_sorted = sorted(per_file, key=lambda t: -t[2]['body'])
+        return (per_file_sorted[0][0], per_file_sorted[0][1], per_file_sorted[0][2])
+    return None
+
 def _take_snapshot(conn, api, p, proj_id):
-    """1 project の全 .tex を取得して snapshot を 1 件作成。"""
+    """1 project の全 .tex を取得して snapshot を 1 件作成。
+    v892 メインの .tex を \\documentclass の有無で検出し、 集計値はメインのみ。
+    全ファイル合計も保持するが UI のデフォルト表示は メイン。"""
     root = api.project_get_files(p.id)
     file_entries = list(_walk_tex_files(root))
     if not file_entries:
         return  # 本文 .tex 無し → snapshot しない
 
+    # まずは全ファイルを取得 + count + \\documentclass 有無の判定
+    per_file = []
+    for fobj, path in file_entries:
+        try:
+            raw = api.project_download_file(p.id, fobj)
+            content = raw.decode('utf-8', errors='replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
+        except Exception as e:
+            print(f"  ! {p.name}::{path}: {e}", file=sys.stderr)
+            continue
+        c = count_chars(content)
+        has_dc = bool(RE_DOCUMENTCLASS.search(content))
+        per_file.append((path, content, c, has_dc))
+
+    if not per_file:
+        return
+
+    # メイン .tex 検出
+    main = _pick_main_file(per_file)
+    main_path = main[0] if main else None
+    main_c    = main[2] if main else None
+
+    # 全ファイル合計 (legacy互換 + 「全ファイル合計を見たい」用)
+    tot = {'total': 0, 'body': 0, 'jp': 0, 'word': 0}
+    for (_p, _ct, c, _dc) in per_file:
+        tot['total'] += c['total']; tot['body'] += c['body']; tot['jp'] += c['jp']; tot['word'] += c['word']
+
     with conn.cursor() as cur:
-        cur.execute("INSERT INTO overleaf_snapshots (project_id, file_count) VALUES (%s, %s)",
-                    (proj_id, len(file_entries)))
+        cur.execute("""
+            INSERT INTO overleaf_snapshots
+              (project_id, file_count,
+               total_char_count, total_char_body, total_jp_char_count, total_word_count,
+               main_file_path,
+               main_char_count_total, main_char_count_body, main_jp_char_count, main_word_count)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (proj_id, len(per_file),
+              tot['total'], tot['body'], tot['jp'], tot['word'],
+              main_path[:500] if main_path else None,
+              main_c['total'] if main_c else None,
+              main_c['body']  if main_c else None,
+              main_c['jp']    if main_c else None,
+              main_c['word']  if main_c else None))
         snap_id = cur.lastrowid
 
-        tot = {'total': 0, 'body': 0, 'jp': 0, 'word': 0}
-        for fobj, path in file_entries:
-            try:
-                raw = api.project_download_file(p.id, fobj)
-                content = raw.decode('utf-8', errors='replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
-            except Exception as e:
-                print(f"  ! {p.name}::{path}: {e}", file=sys.stderr)
-                continue
-            c = count_chars(content)
-            tot['total'] += c['total']; tot['body'] += c['body']; tot['jp'] += c['jp']; tot['word'] += c['word']
+        for (path, _ct, c, _dc) in per_file:
             cur.execute("""
                 INSERT INTO overleaf_file_snapshots
                   (snapshot_id, file_path, char_count_total, char_count_body, jp_char_count, word_count)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (snap_id, path[:500], c['total'], c['body'], c['jp'], c['word']))
-        cur.execute("""
-            UPDATE overleaf_snapshots
-            SET total_char_count=%s, total_char_body=%s, total_jp_char_count=%s, total_word_count=%s
-            WHERE id=%s
-        """, (tot['total'], tot['body'], tot['jp'], tot['word'], snap_id))
 
 if __name__ == '__main__':
     main()

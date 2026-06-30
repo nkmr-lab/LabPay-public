@@ -44,23 +44,35 @@ function overleaf_list(PDO $pdo, array $cfg): void {
          ORDER BY p.last_remote_updated_at DESC, p.id DESC
          LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
 
+    // v892 「メイン.tex」 (\\documentclass を含む主文書) があれば main_* を優先、 無ければ
+    //   旧 snapshot のため legacy total_* に fallback。 これでサンプルファイルや過去ファイル
+    //   が混ざった過大カウントを解消。
     $stLatest = $pdo->prepare("
-        SELECT id, taken_at, total_char_count, total_char_body, total_jp_char_count,
-               total_word_count, file_count
+        SELECT id, taken_at,
+               COALESCE(main_char_count_total, total_char_count) AS total_char_count,
+               COALESCE(main_char_count_body,  total_char_body)  AS total_char_body,
+               COALESCE(main_jp_char_count,    total_jp_char_count) AS total_jp_char_count,
+               COALESCE(main_word_count,       total_word_count) AS total_word_count,
+               file_count, main_file_path
           FROM overleaf_snapshots
          WHERE project_id = ?
          ORDER BY taken_at DESC LIMIT 1");
-    // 「N 時間前 (またはそれ以前) の最新 snapshot」を返す
     $stPast = $pdo->prepare("
-        SELECT total_char_count, total_char_body, total_jp_char_count, total_word_count, taken_at
+        SELECT
+               COALESCE(main_char_count_total, total_char_count) AS total_char_count,
+               COALESCE(main_char_count_body,  total_char_body)  AS total_char_body,
+               COALESCE(main_jp_char_count,    total_jp_char_count) AS total_jp_char_count,
+               COALESCE(main_word_count,       total_word_count) AS total_word_count,
+               taken_at
           FROM overleaf_snapshots
          WHERE project_id = ? AND taken_at <= (NOW() - INTERVAL ? HOUR)
          ORDER BY taken_at DESC LIMIT 1");
-    // sparkline / 比較グラフ用 daily 集計: 過去 60 日を 24h 区切り (最新 snapshot を各 day で取る)。
-    //   v889 比較グラフ機能のため 14 日 → 60 日に拡張。
     $stSpark = $pdo->prepare("
-        SELECT DATE(taken_at) AS d, MAX(total_char_count) AS c, MAX(total_char_body) AS cb,
-               MAX(total_jp_char_count) AS jp, MAX(total_word_count) AS w
+        SELECT DATE(taken_at) AS d,
+               MAX(COALESCE(main_char_count_total, total_char_count)) AS c,
+               MAX(COALESCE(main_char_count_body,  total_char_body))  AS cb,
+               MAX(COALESCE(main_jp_char_count,    total_jp_char_count)) AS jp,
+               MAX(COALESCE(main_word_count,       total_word_count)) AS w
           FROM overleaf_snapshots
          WHERE project_id = ? AND taken_at >= (NOW() - INTERVAL 60 DAY)
          GROUP BY DATE(taken_at)
@@ -101,6 +113,7 @@ function overleaf_list(PDO $pdo, array $cfg): void {
                 'total_jp_char_count' => (int)$latest['total_jp_char_count'],
                 'total_word_count'    => (int)$latest['total_word_count'],
                 'file_count'          => (int)$latest['file_count'],
+                'main_file_path'      => $latest['main_file_path'] ?? null,
             ] : null,
             'delta_24h' => ($latest && $past24) ? [
                 'total_char_count' => (int)$latest['total_char_count'] - (int)$past24['total_char_count'],
@@ -133,14 +146,22 @@ function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
     $p = $stP->fetch(PDO::FETCH_ASSOC);
     if (!$p) throw new ApiException('not_found', 'project not found', 404);
 
-    // 最新 snapshot
-    $stS = $pdo->prepare("SELECT * FROM overleaf_snapshots
-        WHERE project_id = ? ORDER BY taken_at DESC LIMIT 1");
+    // 最新 snapshot (v892 main_* がある場合は優先、なければ legacy total_* に fallback)
+    $stS = $pdo->prepare("SELECT id, taken_at, file_count, main_file_path,
+        COALESCE(main_char_count_total, total_char_count) AS total_char_count,
+        COALESCE(main_char_count_body,  total_char_body)  AS total_char_body,
+        COALESCE(main_jp_char_count,    total_jp_char_count) AS total_jp_char_count,
+        COALESCE(main_word_count,       total_word_count) AS total_word_count
+        FROM overleaf_snapshots WHERE project_id = ? ORDER BY taken_at DESC LIMIT 1");
     $stS->execute([$id]);
     $latest = $stS->fetch(PDO::FETCH_ASSOC);
 
     // 直近 60 日全 snapshot (chart 用)
-    $stHist = $pdo->prepare("SELECT id, taken_at, total_char_count, total_char_body, total_word_count, total_jp_char_count
+    $stHist = $pdo->prepare("SELECT id, taken_at,
+        COALESCE(main_char_count_total, total_char_count) AS total_char_count,
+        COALESCE(main_char_count_body,  total_char_body)  AS total_char_body,
+        COALESCE(main_word_count,       total_word_count) AS total_word_count,
+        COALESCE(main_jp_char_count,    total_jp_char_count) AS total_jp_char_count
         FROM overleaf_snapshots
         WHERE project_id = ? AND taken_at >= (NOW() - INTERVAL 60 DAY)
         ORDER BY taken_at ASC");
@@ -182,6 +203,7 @@ function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
             'total_jp_char_count' => (int)$latest['total_jp_char_count'],
             'total_word_count'    => (int)$latest['total_word_count'],
             'file_count'          => (int)$latest['file_count'],
+            'main_file_path'      => $latest['main_file_path'] ?? null,
         ] : null,
         'history' => array_map(fn($h) => [
             'taken_at'            => $h['taken_at'],

@@ -215,7 +215,7 @@ export async function renderOverleafList() {
             </div>
             <div class="meta" style="font-size:12px">
               👤 ${escapeHtml(own)} ・最終更新 ${escapeHtml(lastU)}
-              ${p.latest ? ` ・${p.latest.file_count}ファイル` : ''}
+              ${p.latest?.main_file_path ? ` ・🎯 ${escapeHtml(p.latest.main_file_path)}` : (p.latest ? ` ・${p.latest.file_count}ファイル` : '')}
             </div>
             <div style="margin-top:4px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
               <span><b>${cur.toLocaleString()}</b> <span class="muted" style="font-size:11px">${mf.unit}</span></span>
@@ -339,6 +339,7 @@ export async function renderOverleafDetail({ params }) {
       <a class="btn primary" href="${escapeHtml(overleafUrl)}" target="_blank" rel="noopener">↗ Overleaf で開く</a>
     </div>
     ${latest ? `
+      ${latest.main_file_path ? `<div class="hint" style="margin-top:8px; font-size:12px">🎯 メイン: <code>${escapeHtml(latest.main_file_path)}</code> (これだけ集計対象)</div>` : ''}
       <div style="margin-top:10px; display:flex; gap:14px; flex-wrap:wrap">
         <div><div class="muted" style="font-size:11px">本文 (cmd除外)</div><div class="bold" style="font-size:18px">${latest.total_char_body.toLocaleString()}</div></div>
         <div><div class="muted" style="font-size:11px">日本語文字</div><div class="bold" style="font-size:18px">${latest.total_jp_char_count.toLocaleString()}</div></div>
@@ -363,14 +364,16 @@ export async function renderOverleafDetail({ params }) {
           <th style="text-align:right; padding:4px">日本語</th>
           <th style="text-align:right; padding:4px">英単語</th>
         </tr></thead>
-        <tbody>${d.files.map(f => `
-          <tr style="border-bottom:1px solid var(--line)">
-            <td style="padding:4px; word-break:break-all">${escapeHtml(f.file_path)}</td>
+        <tbody>${d.files.map(f => {
+          const isMain = latest && latest.main_file_path === f.file_path;
+          return `
+          <tr style="border-bottom:1px solid var(--line); ${isMain ? 'background:#f3e8ff' : ''}">
+            <td style="padding:4px; word-break:break-all">${isMain ? '🎯 ' : ''}${escapeHtml(f.file_path)}${isMain ? ' <span class="muted" style="font-size:10px">(集計対象)</span>' : ''}</td>
             <td style="padding:4px; text-align:right"><b>${f.char_count_body.toLocaleString()}</b></td>
             <td style="padding:4px; text-align:right" class="muted">${f.char_count_total.toLocaleString()}</td>
             <td style="padding:4px; text-align:right">${f.jp_char_count.toLocaleString()}</td>
             <td style="padding:4px; text-align:right">${f.word_count.toLocaleString()}</td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
         </tbody>
       </table>
       </div>`;
