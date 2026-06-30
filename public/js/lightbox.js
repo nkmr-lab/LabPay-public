@@ -1,15 +1,15 @@
-// v745 #356 画像 全画面 ライトボックス (共通 化)。 元は v492 #92 で posts.js に実装した
-//   もの。 同じ 「別タブ で 開くと 戻れない」 問題が places.js でも起きていたので、
-//   共有 モジュール に 切り出して 両方 から 使えるように した。
+// v745 #356 画像全画面ライトボックス (共通化)。 元は v492 #92 で posts.js に実装した
+//   もの。 同じ 「別タブで開くと戻れない」 問題が places.js でも起きていたので、
+//   共有モジュールに切り出して両方から使えるようにした。
 //
 //   使い方: import { openImageLightbox } from '../lightbox.js'; openImageLightbox(src);
-//   挙動: × ボタン / 背景 タップ / 画像 タップ / Esc で 閉じる。 body スクロール ロック。
-//   大きな 画像 で 体感数秒 空く ので XHR で progress 表示。
+//   挙動: × ボタン / 背景タップ / 画像タップ / Esc で閉じる。 body スクロールロック。
+//   大きな画像で体感数秒空くので XHR で progress 表示。
 
 export function openImageLightbox(src, opts = {}) {
-  // v754 #370 opts.onRotate: async (degrees) => void がある と
-  //   オーバーレイ 内に「🔄 回転」 ボタンを表示。 タップ で onRotate(90) を呼んで、
-  //   解決後 cache-bust で 再ロードして 表示し直す。
+  // v754 #370 opts.onRotate: async (degrees) => void があると
+  //   オーバーレイ内に「🔄 回転」 ボタンを表示。 タップで onRotate(90) を呼んで、
+  //   解決後 cache-bust で再ロードして表示し直す。
   const onRotate = typeof opts.onRotate === 'function' ? opts.onRotate : null;
   // v856 #440 閉じた時に外側を refresh するためのコールバック
   const onClose  = typeof opts.onClose  === 'function' ? opts.onClose  : null;
@@ -34,7 +34,7 @@ export function openImageLightbox(src, opts = {}) {
   const imgEl = box.querySelector('#lb-img');
   const loadEl = box.querySelector('#lb-loading');
   const pctEl = box.querySelector('#lb-pct');
-  // 同じ src を 何度 cache-bust しても 同じ URL で fetch する ように、 現在 表示中 の URL を 持つ
+  // 同じ src を何度 cache-bust しても同じ URL で fetch するように、 現在表示中の URL を持つ
   let currentSrc = src;
   function loadImage(url) {
     if (loadEl && !loadEl.parentNode) box.insertBefore(loadEl, imgEl);
@@ -75,13 +75,13 @@ export function openImageLightbox(src, opts = {}) {
       const old = btn.textContent; btn.textContent = '処理中…';
       try {
         await onRotate(90);
-        // cache-bust で 再ロード
+        // cache-bust で再ロード
         const base = currentSrc.replace(/[?&]v=\d+(&|$)/, '').replace(/\?$/, '');
         const sep = base.includes('?') ? '&' : '?';
         currentSrc = base + sep + 'v=' + Date.now();
         loadImage(currentSrc);
       } catch (e) {
-        alert('回転 失敗: ' + (e?.message || e));
+        alert('回転失敗: ' + (e?.message || e));
       } finally {
         btn.disabled = false; btn.textContent = old;
       }
@@ -90,8 +90,8 @@ export function openImageLightbox(src, opts = {}) {
 
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
-  // popstate を 拾って 閉じる: スマホ の 戻る ボタンや スワイプ で 「戻る」 と
-  //   思った 時 に SPA ナビゲーション せず ライトボックス だけ 閉じる ように。
+  // popstate を拾って閉じる: スマホの戻るボタンやスワイプで 「戻る」 と
+  //   思った時に SPA ナビゲーションせずライトボックスだけ閉じるように。
   history.pushState({ lb: 1 }, '');
   let closing = false;
   const close = () => {
@@ -101,7 +101,7 @@ export function openImageLightbox(src, opts = {}) {
     document.body.style.overflow = prevOverflow;
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('popstate', onPop);
-    // 自分 が push した state の 場合 だけ pop 戻す (popstate 経由の close では skip)
+    // 自分が push した state の場合だけ pop 戻す (popstate 経由の close では skip)
     if (history.state && history.state.lb) history.back();
     if (onClose) { try { onClose(); } catch (_) {} }
   };
@@ -111,7 +111,7 @@ export function openImageLightbox(src, opts = {}) {
   window.addEventListener('popstate', onPop);
   document.getElementById('lb-close').addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
   box.addEventListener('click', (ev) => {
-    // ライトボックス 内 の ボタン (× / 🔄) は タップ で 閉じない、 それ以外 タップ で 閉じる
+    // ライトボックス内のボタン (× / 🔄) はタップで閉じない、 それ以外タップで閉じる
     if (ev.target.closest('#lb-close, #lb-rotate')) return;
     close();
   });

@@ -102,7 +102,7 @@ function tasks_validate_url($raw): ?string {
     return $u;
 }
 
-// v790 #393 完了 時 入力 欄 (起案者 定義) を 検証 して JSON 文字列 で 返す。 null なら NULL 保存。
+// v790 #393 完了時入力欄 (起案者定義) を検証して JSON 文字列で返す。 null なら NULL 保存。
 function tasks_validate_completion_fields($raw): ?string {
     if ($raw === null || $raw === '' || $raw === []) return null;
     if (is_string($raw)) {
@@ -110,8 +110,8 @@ function tasks_validate_completion_fields($raw): ?string {
         if (!is_array($dec)) throw new ApiException('bad_request', 'completion_fields は JSON 配列', 400);
         $raw = $dec;
     }
-    if (!is_array($raw)) throw new ApiException('bad_request', 'completion_fields は 配列', 400);
-    if (count($raw) > 10) throw new ApiException('bad_request', '完了 入力 欄 は 最大 10 個 まで', 400);
+    if (!is_array($raw)) throw new ApiException('bad_request', 'completion_fields は配列', 400);
+    if (count($raw) > 10) throw new ApiException('bad_request', '完了入力欄は最大 10 個まで', 400);
     $allowedTypes = ['text', 'textarea', 'select'];
     $out = [];
     $seenKeys = [];
@@ -120,9 +120,9 @@ function tasks_validate_completion_fields($raw): ?string {
         $key = trim((string)($f['key'] ?? ''));
         $label = trim((string)($f['label'] ?? ''));
         $type = trim((string)($f['type'] ?? 'text'));
-        if ($key === '' || $label === '') throw new ApiException('bad_request', 'key / label が 必須', 400);
+        if ($key === '' || $label === '') throw new ApiException('bad_request', 'key / label が必須', 400);
         if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $key)) {
-            throw new ApiException('bad_request', 'key は 英数字 + _- のみ、 32 字 以内', 400);
+            throw new ApiException('bad_request', 'key は英数字 + _- のみ、 32 字以内', 400);
         }
         if (isset($seenKeys[$key])) throw new ApiException('bad_request', 'key 重複: ' . $key, 400);
         $seenKeys[$key] = true;
@@ -139,7 +139,7 @@ function tasks_validate_completion_fields($raw): ?string {
         if ($type === 'select') {
             $opts = $f['options'] ?? [];
             if (!is_array($opts) || count($opts) < 1) {
-                throw new ApiException('bad_request', 'select は options が 必要', 400);
+                throw new ApiException('bad_request', 'select は options が必要', 400);
             }
             $entry['options'] = array_values(array_map(fn($o) => mb_substr((string)$o, 0, 100), $opts));
         }
@@ -148,10 +148,10 @@ function tasks_validate_completion_fields($raw): ?string {
     return json_encode($out, JSON_UNESCAPED_UNICODE);
 }
 
-// v790 #393 完了 時 入力 値 を 定義 に 照らして 検証 + 正規化。
+// v790 #393 完了時入力値を定義に照らして検証 + 正規化。
 //   $fieldsDef = decoded array (= completion_fields_json)
-//   $data      = client が 送って きた key→value (string)
-//   戻り値: 正規化 した key→value の 配列 (JSON 化 して 保存 する 用)
+//   $data      = client が送ってきた key→value (string)
+//   戻り値: 正規化した key→value の配列 (JSON 化して保存する用)
 function tasks_validate_completion_data($fieldsDef, $data): array {
     $out = [];
     if (!is_array($fieldsDef) || empty($fieldsDef)) return $out;
@@ -162,16 +162,16 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
         $val = trim($val);
         if ($val === '') {
             if (!empty($field['required'])) {
-                throw new ApiException('bad_request', "「{$field['label']}」 は 入力 必須 です", 400);
+                throw new ApiException('bad_request', "「{$field['label']}」 は入力必須です", 400);
             }
             continue;
         }
         if (mb_strlen($val) > 5000) {
-            throw new ApiException('bad_request', "「{$field['label']}」 が 長 すぎ ます (5000 字 まで)", 400);
+            throw new ApiException('bad_request', "「{$field['label']}」 が長すぎます (5000 字まで)", 400);
         }
         if ($field['type'] === 'select') {
             if (!in_array($val, $field['options'] ?? [], true)) {
-                throw new ApiException('bad_request', "「{$field['label']}」 は 選択肢 から 選んで ください", 400);
+                throw new ApiException('bad_request', "「{$field['label']}」 は選択肢から選んでください", 400);
             }
         }
         $out[$k] = $val;
@@ -182,17 +182,17 @@ function tasks_validate_completion_data($fieldsDef, $data): array {
 // Parse a free-text "時間枠" spec into a list of (start, end) DateTime pairs.
 //
 // Supported per-line patterns (use a multi-line spec to mix days):
-//   6/15 11:00-15:00 30分刻み         -> 各 枠 1 人 で 8 slots
-//   6/15 11:00-15:00 30分刻み x3      -> 各 枠 3 人 (v875 #455 拡張)
-//   6/15 11:00-15:00 30分刻み 3人     -> 各 枠 3 人 (日本語 構文)
+//   6/15 11:00-15:00 30分刻み         -> 各枠 1 人で 8 slots
+//   6/15 11:00-15:00 30分刻み x3      -> 各枠 3 人 (v875 #455 拡張)
+//   6/15 11:00-15:00 30分刻み 3人     -> 各枠 3 人 (日本語構文)
 //   6/16 13:00-17:00 60分刻み         -> 4 slots
 //   2026-06-15 11:00-15:00 30分刻み   -> explicit year
 //
 // Year fallback: when omitted, use the current year — bumping to next year if the
 // resulting date is already in the past.
-// v877 deadline は フロント の localDtToIso が ISO 8601 (例: 2026-08-06T14:00:00.000Z) を
-//   送る ので まず DateTimeImmutable で 直接 解釈、 失敗時 のみ 旧 「Y-m-d H:i:s」 / 「Y-m-dTH:i」
-//   形式 を fallback で 受け 入れる。 サーバ TZ (Asia/Tokyo) に 変換 して 保存。
+// v877 deadline はフロントの localDtToIso が ISO 8601 (例: 2026-08-06T14:00:00.000Z) を
+//   送るのでまず DateTimeImmutable で直接解釈、 失敗時のみ旧 「Y-m-d H:i:s」 / 「Y-m-dTH:i」
+//   形式を fallback で受け入れる。 サーバ TZ (Asia/Tokyo) に変換して保存。
 function tasks_parse_deadline($raw): ?string {
     if ($raw === null) return null;
     $raw = trim((string)$raw);
@@ -207,7 +207,7 @@ function tasks_parse_deadline($raw): ?string {
         $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $alt) ?: null;
     }
     if (!$dt) {
-        throw new ApiException('bad_request', '締切 の 日時 形式 が 不正 です (例: 2026-08-06 14:00:00 / ISO 8601)', 400);
+        throw new ApiException('bad_request', '締切の日時形式が不正です (例: 2026-08-06 14:00:00 / ISO 8601)', 400);
     }
     $dt = $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
     if ($dt < (new DateTimeImmutable('now'))->modify('-1 minute')) {
@@ -222,8 +222,8 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
     foreach (preg_split('/\R/u', $spec) as $line) {
         $line = trim($line);
         if ($line === '') continue;
-        // v876 #455 続報 「日 だけ」 (時間枠 なし) を 先 に トライ。 1 日 1 slot (終日)、
-        //   末尾 xN / N人 で 各日 capacity 指定可。 例: 「6/15」 「6/15 3人」 「6/15 x3」。
+        // v876 #455 続報 「日だけ」 (時間枠なし) を先にトライ。 1 日 1 slot (終日)、
+        //   末尾 xN / N人で各日 capacity 指定可。 例: 「6/15」 「6/15 3人」 「6/15 x3」。
         $patDayOnly = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s*(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名])?\s*$/iu';
         if (preg_match($patDayOnly, $line, $md)) {
             $year  = $md[1] !== '' ? (int)$md[1] : (int)$now->format('Y');
@@ -248,7 +248,7 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
             if (count($slots) > 200) break;
             continue;
         }
-        // 時間 枠 付き パターン。 v875.1 #455 末尾 capacity は スペース 任意、 「人」 「名」 どちら も 可、 「x」 「×」 「*」 受け付ける。
+        // 時間枠付きパターン。 v875.1 #455 末尾 capacity はスペース任意、 「人」 「名」 どちらも可、 「x」 「×」 「*」 受け付ける。
         $pat = '/^(?:(\d{4})[-\/])?(\d{1,2})[\/-](\d{1,2})\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(\d+)\s*分刻み\s*(?:(?:[x×*✕]\s*(\d+)|(\d+)\s*[人名]))?\s*$/iu';
         if (!preg_match($pat, $line, $m)) continue;
         $year   = $m[1] !== '' ? (int)$m[1] : (int)$now->format('Y');
@@ -257,7 +257,7 @@ function tasks_parse_slot_spec(string $spec, ?DateTimeImmutable $now = null): ar
         $startH = (int)$m[4]; $startM = (int)$m[5];
         $endH   = (int)$m[6]; $endM   = (int)$m[7];
         $stride = (int)$m[8];
-        // v875 #455 各 枠 の 募集 人数。 「x3」 or 「3人」 で 指定、 省略 時 1。
+        // v875 #455 各枠の募集人数。 「x3」 or 「3人」 で指定、 省略時 1。
         $perSlot = 1;
         if (!empty($m[9]))      $perSlot = max(1, min(50, (int)$m[9]));
         elseif (!empty($m[10])) $perSlot = max(1, min(50, (int)$m[10]));
@@ -326,7 +326,7 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     $row['approved_count'] = tasks_approved_count($pdo, $taskId);
     $row['remaining']      = max(0, (int)$row['capacity'] - $row['approved_count']);
     if ($forUserId !== null) {
-        // v790 #393 completion_data_json も 返す (受諾 者 が 完了 報告 時 に 埋めた 値)
+        // v790 #393 completion_data_json も返す (受諾者が完了報告時に埋めた値)
         $st2 = $pdo->prepare("SELECT id, status, slot_id, reported_at, approved_at, notes, completion_data_json, created_at
             FROM task_claims WHERE task_id=? AND user_id=? ORDER BY id DESC");
         $st2->execute([$taskId, $forUserId]);
@@ -339,7 +339,7 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
         unset($c);
         $row['my_claims'] = $myRows;
     }
-    // v790 #393 起案者 向け に 完了 入力 欄 定義 を decoded で 返す
+    // v790 #393 起案者向けに完了入力欄定義を decoded で返す
     if (!empty($row['completion_fields_json'])) {
         $row['completion_fields'] = json_decode((string)$row['completion_fields_json'], true) ?: [];
     } else {
@@ -566,7 +566,7 @@ function tasks_list(PDO $pdo, array $cfg): void {
             && ($perLimit === 0 || $myActive < $perLimit)
             && $audienceOk;
     }
-    // 指名タスクは指名された本人 / 依頼者 / 既 claim 者 にだけ見せる。
+    // 指名タスクは指名された本人 / 依頼者 / 既 claim 者にだけ見せる。
     // (audience_grades の filter は SQL では効いていなくて PHP 側で「open は全員に
     // 見せる」状態だったので、指名タスクが全員に見えると煩いため frontend に
     // 投げる前に絞る)
@@ -594,7 +594,7 @@ function tasks_detail(PDO $pdo, array $cfg, int $taskId): void {
              WHERE tc.task_id = ? ORDER BY tc.id DESC");
         $st->execute([$taskId]);
         $claims = $st->fetchAll();
-        // v790 #393 completion_data を decoded で 返す
+        // v790 #393 completion_data を decoded で返す
         foreach ($claims as &$c) {
             $c['completion_data'] = !empty($c['completion_data_json'])
                 ? json_decode((string)$c['completion_data_json'], true) : null;
@@ -614,8 +614,8 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $description   = optional_text_field($body, 'description', 5000);
     $url           = tasks_validate_url($body['url'] ?? null);
     $completionMsg = optional_text_field($body, 'completion_message', 2000);
-    // v790 #393 完了 時 入力 欄 (起案者 が 定義 する カスタム フィールド 群)。
-    //   各 要素: { key:string, label:string, type:'text'|'textarea'|'select',
+    // v790 #393 完了時入力欄 (起案者が定義するカスタムフィールド群)。
+    //   各要素: { key:string, label:string, type:'text'|'textarea'|'select',
     //              required:bool, placeholder?:string, options?:string[] }
     $completionFieldsJson = tasks_validate_completion_fields($body['completion_fields'] ?? null);
     // 0 pt 許可 (ボランティア / お願いベースのタスク用)。
@@ -627,7 +627,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
     $parsedSlots = $slotsSpec !== null ? tasks_parse_slot_spec($slotsSpec) : [];
     if ($slotsSpec !== null && empty($parsedSlots)) {
         throw new ApiException('bad_request',
-            '時間枠 の 書式: 「8/6 x35」 (= 終日 35 人) / 「8/7」 (= 終日 1 人) / 「6/15 11:00-15:00 30分刻み」 (= 時間枠 1 人) / 末尾 「x3」 や 「3人」 で 各枠 複数 人', 400);
+            '時間枠の書式: 「8/6 x35」 (= 終日 35 人) / 「8/7」 (= 終日 1 人) / 「6/15 11:00-15:00 30分刻み」 (= 時間枠 1 人) / 末尾 「x3」 や 「3人」 で各枠複数人', 400);
     }
     // If slots are provided, derive capacity from them (sum of per-slot capacities,
     //   which defaults to 1 unless the slot line has an explicit " xN" / " N人" suffix).
@@ -636,9 +636,9 @@ function tasks_create(PDO $pdo, array $cfg): void {
         ? array_sum(array_map(fn($s) => (int)($s['capacity'] ?? 1), $parsedSlots))
         : require_int_positive($body['capacity'] ?? null, 'capacity');
 
-    // Optional deadline。 v877 フロント の localDtToIso は ISO 8601 (例:
-    //   "2026-08-06T14:00:00.000Z") を 送る ので、 まず DateTimeImmutable で 直接 解釈し、
-    //   失敗時 のみ 旧 形式 「Y-m-d H:i:s」 「Y-m-d\TH:i」 を fallback で 受け 入れる。
+    // Optional deadline。 v877 フロントの localDtToIso は ISO 8601 (例:
+    //   "2026-08-06T14:00:00.000Z") を送るので、 まず DateTimeImmutable で直接解釈し、
+    //   失敗時のみ旧形式 「Y-m-d H:i:s」 「Y-m-d\TH:i」 を fallback で受け入れる。
     $deadline = tasks_parse_deadline($body['deadline'] ?? null);
 
     // audience_grades: accept either array or CSV string
@@ -697,9 +697,9 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $capacity = count($autoClaimIds);
     }
     $totalEscrow = $reward * $capacity;
-    // v874 #455 続報 admin が 「💰 システム 持ち出し」 を ON にした 場合 だけ、
-    //   ESCROW へ の 入金 元 を LabPay system user (kind='system') に 切り替える。
-    //   admin 以外 が送って きたら 無視 する (権限 ガード)。
+    // v874 #455 続報 admin が 「💰 システム持ち出し」 を ON にした場合だけ、
+    //   ESCROW への入金元を LabPay system user (kind='system') に切り替える。
+    //   admin 以外が送ってきたら無視する (権限ガード)。
     $fundedBySystem = (!empty($body['funded_by_system']) && (($u['role'] ?? '') === 'admin')) ? 1 : 0;
 
     $taskId = db_tx($pdo, function () use ($pdo, $u, $title, $description, $url, $reward,
@@ -714,7 +714,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
         $taskId = (int)$pdo->lastInsertId();
 
         if (!empty($parsedSlots)) {
-            // v875 #455 続報 各 枠 の capacity を 構文 から 反映 (xN / N人)。 省略 時 は 1。
+            // v875 #455 続報各枠の capacity を構文から反映 (xN / N人)。 省略時は 1。
             $slotIns = $pdo->prepare('INSERT INTO task_slots (task_id, started_at, ended_at, capacity)
                 VALUES (?,?,?,?)');
             foreach ($parsedSlots as $s) {
@@ -731,8 +731,8 @@ function tasks_create(PDO $pdo, array $cfg): void {
         }
 
         if ($totalEscrow > 0) {
-            // v874 #455 続報 funded_by_system=1 のとき は LabPay system user (kind='system')
-            //   を 出金 元 に する。 system user が なければ 通常 通り 起案者 から 引く (安全側)。
+            // v874 #455 続報 funded_by_system=1 のときは LabPay system user (kind='system')
+            //   を出金元にする。 system user がなければ通常通り起案者から引く (安全側)。
             $sourceUid = (int)$u['id'];
             if ($fundedBySystem) {
                 $sysUid = (int)$pdo->query("SELECT id FROM users WHERE kind='system' LIMIT 1")->fetchColumn();
@@ -741,7 +741,7 @@ function tasks_create(PDO $pdo, array $cfg): void {
             $userAcc = Ledger::accountIdForUser($pdo, $sourceUid);
             $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
             $memo = $fundedBySystem
-                ? "タスク「{$title}」報酬預け (システム 持ち出し)"
+                ? "タスク「{$title}」報酬預け (システム持ち出し)"
                 : "タスク「{$title}」報酬預け";
             Ledger::transfer($pdo, $userAcc, $escAcc, $totalEscrow, 'deposit', 'task', $taskId, $memo);
         }
@@ -811,7 +811,7 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
 
         $newDeadline = $task['deadline'];
         if (array_key_exists('deadline', $body)) {
-            // v877 共通 パーサ で ISO 8601 / Y-m-d H:i:s / Y-m-d\TH:i を 一括 対応。
+            // v877 共通パーサで ISO 8601 / Y-m-d H:i:s / Y-m-d\TH:i を一括対応。
             $newDeadline = tasks_parse_deadline($body['deadline']);
         }
 
@@ -839,7 +839,7 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
             }
         }
 
-        // v790 #393 completion_fields の 更新 も 受け付ける
+        // v790 #393 completion_fields の更新も受け付ける
         if (array_key_exists('completion_fields', $body)) {
             $newCFields = tasks_validate_completion_fields($body['completion_fields']);
             $pdo->prepare('UPDATE tasks SET title=?, description=?, completion_fields_json=?, url=?, completion_message=?,
@@ -938,7 +938,7 @@ function tasks_report(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
     $body = read_json_body();
     $notes = optional_text_field($body, 'notes', 2000);
 
-    // v790 #393 完了 時 入力 欄 の 検証
+    // v790 #393 完了時入力欄の検証
     $stTk = $pdo->prepare("SELECT completion_fields_json FROM tasks WHERE id=?");
     $stTk->execute([$taskId]);
     $defRaw = (string)($stTk->fetchColumn() ?: '');
@@ -1035,10 +1035,10 @@ function tasks_reject(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 }
 
 // ---------- POST /api/tasks/{id}/close ----------
-// v714 #309 取消 と 違って 「終了」 = もう 募集 締切 で OK、 完了 扱い に したい 場合。
-//   - status を 'closed' に (cancelled では ない の で、 履歴 上 「✅ 終了」 表記)
-//   - 未承認 capacity 分 の 報酬 は 起案者 に 返金 (cancel と 同じ)
-//   - 進行 中 (claimed/reported) の claim は cancelled に。 引き受け 者 に は 通知。
+// v714 #309 取消と違って 「終了」 = もう募集締切で OK、 完了扱いにしたい場合。
+//   - status を 'closed' に (cancelled ではないので、 履歴上 「✅ 終了」 表記)
+//   - 未承認 capacity 分の報酬は起案者に返金 (cancel と同じ)
+//   - 進行中 (claimed/reported) の claim は cancelled に。 引き受け者には通知。
 function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
     [$affectedClaimants, $taskTitle, $refund] = db_tx($pdo, function () use ($pdo, $taskId, $u) {
@@ -1058,7 +1058,7 @@ function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
             $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
             $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
             Ledger::transfer($pdo, $escAcc, $userAcc, $refund, 'refund',
-                'task', $taskId, "タスク「{$task['title']}」終了 返金");
+                'task', $taskId, "タスク「{$task['title']}」終了返金");
         }
         $pdo->prepare("UPDATE tasks SET status='closed', closed_at=NOW() WHERE id=?")->execute([$taskId]);
         $pdo->prepare("UPDATE task_claims SET status='cancelled'
@@ -1068,7 +1068,7 @@ function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
     foreach ($affectedClaimants as $cid) {
         try {
             Notifier::notify($pdo, $cfg, (int)$cid, 'task_cancelled',
-                "引き受け 中 の タスク 「{$taskTitle}」 が 依頼者 により 終了 されました", 'task', $taskId);
+                "引き受け中のタスク 「{$taskTitle}」 が依頼者により終了されました", 'task', $taskId);
         } catch (Throwable $e) {}
     }
     json_response(['ok' => true, 'refunded' => $refund]);

@@ -2,8 +2,8 @@
 // 統合フォーム単独ページ。
 // v517 #146 「要望と報告は分ける必要ないかな。 1つのページにまとめて、 そのどちらかを
 //   選択する」 形に統合。 旧 /#/feature-request, /#/bug-report は同じ画面に転送して、
-//   どちらにアクセスしても 同じフォームが出るようにする (radio で 「✨ 機能要望 / 🐛
-//   バグ報告」 を切替)。 デフォルトは 機能要望 (一番多いので)。
+//   どちらにアクセスしても同じフォームが出るようにする (radio で 「✨ 機能要望 / 🐛
+//   バグ報告」 を切替)。 デフォルトは機能要望 (一番多いので)。
 
 import { post } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -31,7 +31,7 @@ function renderForm(initialKind) {
         <button id="fu-send" class="primary">送る</button>
       </div>
       <p class="hint-sm" style="margin-top:10px">
-        送信先は 管理者 (中村)。 返信があると 通知 タブに届きます。
+        送信先は管理者 (中村)。 返信があると通知タブに届きます。
       </p>
     </div>
   `;
@@ -40,11 +40,11 @@ function renderForm(initialKind) {
   function applyKind(kind) {
     const isBug = kind === 'bug';
     introEl.textContent = isBug
-      ? 'バグや変な挙動を見つけたら 教えてください。 発生手順 (どこで何をしたら) も書いてもらえると助かります。'
-      : 'こんな機能があったら / こうなってたら便利、 みたいなアイデアを 教えてください。';
+      ? 'バグや変な挙動を見つけたら教えてください。 発生手順 (どこで何をしたら) も書いてもらえると助かります。'
+      : 'こんな機能があったら / こうなってたら便利、 みたいなアイデアを教えてください。';
     textArea.placeholder = isBug
       ? '例: 〇〇画面で △△ するとボタンが反応しません。 端末: iPhone 15, Safari'
-      : '例: 「行く場所マップ」 に 移動手段別の色分けが欲しいです';
+      : '例: 「行く場所マップ」 に移動手段別の色分けが欲しいです';
   }
   applyKind(initialKind);
   document.querySelectorAll('input[name="fu-kind"]').forEach(r => {
@@ -81,5 +81,5 @@ function renderForm(initialKind) {
 // 旧経路の互換: /#/feature-request → 機能要望が初期選択 / /#/bug-report → バグ報告初期選択
 export async function renderFeatureRequest() { renderForm('feature'); }
 export async function renderBugReport()      { renderForm('bug'); }
-// 新統合 URL: /#/feedback (デフォルト 機能要望)
+// 新統合 URL: /#/feedback (デフォルト機能要望)
 export async function renderFeedbackForm()   { renderForm('feature'); }

@@ -18,8 +18,8 @@ function route_screen_shares(PDO $pdo, array $cfg, string $method, array $seg): 
 
 // 表示対象 (= 自分が宛先) の active な共有を返す:
 //   ・group_id IS NULL かつ target_user_ids IS NULL → ラボ全体宛 (全員見える)
-//   ・group_id がある かつ 自分が そのグループ メンバー → グループ宛 (見える)
-//   ・target_user_ids に 自分が 含まれる → 個人宛 (見える) ※ v742 #353
+//   ・group_id があるかつ自分がそのグループメンバー → グループ宛 (見える)
+//   ・target_user_ids に自分が含まれる → 個人宛 (見える) ※ v742 #353
 //   ・creator が自分 → 自分の投稿 (常に見える)
 function ss_active(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -28,8 +28,8 @@ function ss_active(PDO $pdo, array $cfg): void {
     $gst->execute([$uid]);
     $gids = array_map('intval', array_column($gst->fetchAll(PDO::FETCH_ASSOC), 'group_id'));
 
-    // 共有 を 全部 取って PHP 側 で 可視性 判定 (target_user_ids は JSON 文字列、
-    //   行数 は たかが しれている ので 単純化)。
+    // 共有を全部取って PHP 側で可視性判定 (target_user_ids は JSON 文字列、
+    //   行数はたかがしれているので単純化)。
     $sql = "SELECT s.id, s.creator_user_id, s.group_id, s.target_user_ids, s.image_url, s.body,
                    s.created_at, s.expires_at,
                    u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
@@ -61,7 +61,7 @@ function ss_active(PDO $pdo, array $cfg): void {
             }
         }
         if (!$visible) continue;
-        // 宛先 ラベル 用 に target user 名 を 引く (重い 場合 は 後日 join)
+        // 宛先ラベル用に target user 名を引く (重い場合は後日 join)
         $targetNames = [];
         if (!empty($targetIds)) {
             $place = implode(',', array_fill(0, count($targetIds), '?'));
@@ -105,8 +105,8 @@ function ss_create(PDO $pdo, array $cfg): void {
         if (!$chk->fetchColumn()) throw new ApiException('bad_request', '指定のグループが見つかりません', 400);
         $groupId = $gid;
     }
-    // v742 #353 個人 (複数 可) 宛 を 受ける。 target_user_ids が 与えられたら 該当 user 限定。
-    //   group_id と target_user_ids は 排他 (同時 指定 は target_user_ids を 優先)。
+    // v742 #353 個人 (複数可) 宛を受ける。 target_user_ids が与えられたら該当 user 限定。
+    //   group_id と target_user_ids は排他 (同時指定は target_user_ids を優先)。
     $targetIdsJson = null;
     if (isset($body['target_user_ids']) && is_array($body['target_user_ids'])) {
         $ids = [];
@@ -123,7 +123,7 @@ function ss_create(PDO $pdo, array $cfg): void {
                 throw new ApiException('bad_request', '宛先ユーザーが見つかりません', 400);
             }
             $targetIdsJson = json_encode($ids);
-            $groupId = null;   // 個人 宛 が 優先
+            $groupId = null;   // 個人宛が優先
         }
     }
     $expiresIn = (int)($body['expires_in_min'] ?? 60);

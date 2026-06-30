@@ -31,8 +31,8 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     $todayStart = $now->setTime(0, 0, 0);
     $range = (string)($_GET['range'] ?? '');
     $latest = null;
-    // v494 #98 $days は legacy 経路 でしか 定義 されて いない と response 出力時 に
-    //   undefined variable で 警告 が 出る。 全 経路 で 既定値 を 持つ ように。
+    // v494 #98 $days は legacy 経路でしか定義されていないと response 出力時に
+    //   undefined variable で警告が出る。 全経路で既定値を持つように。
     $days = max(1, min(90, (int)($_GET['days'] ?? 7)));
     if ($range === 'today') {
         $oldest = $todayStart->getTimestamp();
@@ -52,7 +52,7 @@ function scrapbox_feed(PDO $pdo, array $cfg): void {
     //   と表示できるように。
     $messages = [];
     $cursor = null;
-    // v794 Scrapbox reader 専用 bot token を 優先 (= channels:history scope を 持つ 別 アプリ)
+    // v794 Scrapbox reader 専用 bot token を優先 (= channels:history scope を持つ別アプリ)
     $readerTok = (string)($cfg['slack']['scrapbox_bot_token'] ?? '') ?: null;
     try {
         for ($i = 0; $i < 10; $i++) {

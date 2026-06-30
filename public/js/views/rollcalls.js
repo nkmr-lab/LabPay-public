@@ -1,5 +1,5 @@
 // /#/rollcalls — 点呼 (roll call)。 「いる？」 「起きてる？」 をワンタップで集める。
-// 投票と似てるが 選択肢が無く 「応答済 / 未応答」 のみ + 任意メモ。
+// 投票と似てるが選択肢が無く 「応答済 / 未応答」 のみ + 任意メモ。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -15,7 +15,7 @@ const gradeRank = g => {
 };
 
 const PRESETS = [
-  { title: '起きてる？',     minutes: 10, hint: '朝の出勤 / 学会の集合前 など' },
+  { title: '起きてる？',     minutes: 10, hint: '朝の出勤 / 学会の集合前など' },
   { title: 'いる？',         minutes: 5,  hint: 'ミーティング前の出席確認' },
   { title: '帰宅できた？',   minutes: 60, hint: '夜の安全確認' },
 ];
@@ -30,7 +30,7 @@ function fmtRemaining(s) {
   if (min >= 60) return `残り ${Math.floor(min/60)}時間${min%60}分`;
   return `残り ${min}:${String(sec).padStart(2,'0')}`;
 }
-// v482 #70 「点呼 を 押して から の 経過 時間」 (起案 = 開始 = 押し時刻)。
+// v482 #70 「点呼を押してからの経過時間」 (起案 = 開始 = 押し時刻)。
 function fmtElapsed(s) {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
@@ -38,7 +38,7 @@ function fmtElapsed(s) {
   if (diff < 0) return '0:00 経過';
   const sec = Math.floor(diff / 1000);
   const min = Math.floor(sec / 60);
-  if (min >= 60) return `${Math.floor(min/60)}時間${min%60}分 経過`;
+  if (min >= 60) return `${Math.floor(min/60)}時間${min%60}分経過`;
   return `${min}:${String(sec%60).padStart(2,'0')} 経過`;
 }
 function deadlineShort(s) {
@@ -156,7 +156,7 @@ export async function renderRollCallNew({ query } = {}) {
     if (!title) { toast('タイトル必須'); return; }
     const targetIds = picker ? [...picker.getSelected()] : [];
     if (!targetIds.length) { toast('対象者を 1 人以上'); return; }
-    // 現在時刻 + min 分 を ISO datetime-local 形式へ。
+    // 現在時刻 + min 分を ISO datetime-local 形式へ。
     const dl = new Date(Date.now() + min * 60_000);
     const pad = n => String(n).padStart(2, '0');
     const deadline = `${dl.getFullYear()}-${pad(dl.getMonth()+1)}-${pad(dl.getDate())}T${pad(dl.getHours())}:${pad(dl.getMinutes())}`;
@@ -216,8 +216,8 @@ async function loadRollCallDetail(id) {
     const r = d.rollcall;
     const isOpen = r.status === 'open';
     const head = document.getElementById('rcd-head');
-    // v482 #70 「点呼 を 押して から の 経過 時間」 を 主表示 に。 締切 は
-    //   横 に 「(締切 HH:MM)」 として 副表示。
+    // v482 #70 「点呼を押してからの経過時間」 を主表示に。 締切は
+    //   横に 「(締切 HH:MM)」 として副表示。
     head.innerHTML = `
       <div class="row center" style="gap:8px">
         <h2 style="margin:6px 0 0; flex:1">${escapeHtml(r.title)}</h2>
@@ -253,7 +253,7 @@ async function loadRollCallDetail(id) {
       const updateCountdown = () => {
         const el = document.getElementById('rcd-deadline');
         if (!el) return;
-        // 締切 まで 来た ら 自動 で 再 読込 (server 側 で autoclose)。
+        // 締切まで来たら自動で再読込 (server 側で autoclose)。
         const dlMs = new Date(String(el.dataset.deadline).replace(' ', 'T')) - new Date();
         if (dlMs <= 0) {
           el.textContent = '締切';
@@ -295,7 +295,7 @@ async function loadRollCallDetail(id) {
 
     document.getElementById('rcd-copy-url')?.addEventListener('click', () => copyShareUrl(`#/rollcalls/${id}`));
 
-    // v651 編集 (起案者 + open のみ)。 タイトル / 本文 / 締切 を 変更。
+    // v651 編集 (起案者 + open のみ)。 タイトル / 本文 / 締切を変更。
     const editBtn = document.getElementById('rcd-edit-btn');
     if (editBtn) {
       const editCard = document.getElementById('rcd-edit-card');
@@ -305,7 +305,7 @@ async function loadRollCallDetail(id) {
       editBtn.addEventListener('click', () => {
         titleI.value = r.title || '';
         bodyI.value = r.body || '';
-        // 現在 締切 を datetime-local 値 に。 "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DDTHH:MM"
+        // 現在締切を datetime-local 値に。 "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DDTHH:MM"
         const raw = String(r.deadline_at || '').replace(' ', 'T');
         dlI.value = raw ? raw.slice(0, 16) : '';
         editCard.hidden = false;
@@ -379,7 +379,7 @@ function renderRollCallTargets(d) {
   }
   const root = document.getElementById('rcd-targets');
   if (!root) return;
-  // 応答済を上に、 未応答を下に。 グループ内では 学年順 (server がもう並べてる)。
+  // 応答済を上に、 未応答を下に。 グループ内では学年順 (server がもう並べてる)。
   const sorted = [...d.targets].sort((a, b) => (a.has_responded ? 0 : 1) - (b.has_responded ? 0 : 1));
   root.innerHTML = sorted.map(t => {
     const time = t.responded_at ? String(t.responded_at).slice(11, 16) : '';

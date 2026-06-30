@@ -1,6 +1,6 @@
-// /#/bait — アルバイト 申請 (#244)。
-// 依頼者: 「時間 (小数) + 対象者 + 用途」 で 依頼 を 作って 進捗 確認 + 催促。
-// 受け取った 側: 月別 で 自分宛て の 全 依頼 を 見て、 申請 処理 後 done に。
+// /#/bait — アルバイト申請 (#244)。
+// 依頼者: 「時間 (小数) + 対象者 + 用途」 で依頼を作って進捗確認 + 催促。
+// 受け取った側: 月別で自分宛ての全依頼を見て、 申請処理後 done に。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -26,22 +26,22 @@ export async function renderBait() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center">
-        <h2 style="margin:0">💼 アルバイト 申請</h2>
-        <a class="btn primary" href="#/bait/new">＋ 新規 依頼</a>
+        <h2 style="margin:0">💼 アルバイト申請</h2>
+        <a class="btn primary" href="#/bait/new">＋ 新規依頼</a>
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        実験 協力 などで 学生 に アルバイト を 依頼 する とき に。
-        受け取った 側 は 自分 の 月別 リスト で 全部 見える ので、 申請 処理 を まとめて 進められます。
+        実験協力などで学生にアルバイトを依頼するときに。
+        受け取った側は自分の月別リストで全部見えるので、 申請処理をまとめて進められます。
       </p>
     </div>
 
     <div class="card">
-      <h3>📥 あなた宛て の 依頼 (アルバイト 申請 して ください)</h3>
+      <h3>📥 あなた宛ての依頼 (アルバイト申請してください)</h3>
       <div id="bait-mine" class="list"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
-      <h3>📤 あなた が 出した 依頼</h3>
+      <h3>📤 あなたが出した依頼</h3>
       <div id="bait-out" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
@@ -54,7 +54,7 @@ async function loadMyAssignments() {
     const d = await get('/api/bait/my-assignments');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="empty">あなた宛て の 依頼 は ありません</div>';
+      root.innerHTML = '<div class="empty">あなた宛ての依頼はありません</div>';
       return;
     }
     // 月別 group
@@ -70,7 +70,7 @@ async function loadMyAssignments() {
       const totalH   = arr.reduce((s, a) => s + Number(a.hours || 0), 0);
       html += `<details ${pendingN > 0 ? 'open' : ''} style="margin:6px 0; border:1px solid var(--line); border-radius:6px">
         <summary style="padding:8px; cursor:pointer; font-weight:600">
-          ${escapeHtml(periodLabel(p))} ・ ${arr.length} 件 (${pendingN} 件 未処理) ・ 合計 ${totalH} 時間
+          ${escapeHtml(periodLabel(p))} ・ ${arr.length} 件 (${pendingN} 件未処理) ・合計 ${totalH} 時間
         </summary>
         <div style="padding:6px 8px">
           ${arr.map(a => `
@@ -79,8 +79,8 @@ async function loadMyAssignments() {
                 <a href="#/bait/${a.bait_request_id}" class="grow bold" style="text-decoration:none; color:inherit; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.title)}</a>
                 <span style="flex:none; color:#7c3aed; font-weight:700">${Number(a.hours)} h</span>
                 ${a.status === 'done'
-                  ? `<span class="tag ok" style="flex:none">✓ 処理 済</span>`
-                  : `<button class="btn primary mr-done" data-aid="${a.id}" style="flex:none; padding:3px 10px; font-size:12px">処理 済 に する</button>`}
+                  ? `<span class="tag ok" style="flex:none">✓ 処理済</span>`
+                  : `<button class="btn primary mr-done" data-aid="${a.id}" style="flex:none; padding:3px 10px; font-size:12px">処理済にする</button>`}
               </div>
               <div class="meta">${escapeHtml(a.requester_name)} から ${a.notes ? '・ ' + escapeHtml(String(a.notes).slice(0, 60)) : ''}</div>
             </div>
@@ -92,10 +92,10 @@ async function loadMyAssignments() {
     root.querySelectorAll('.mr-done').forEach(b => b.addEventListener('click', async (e) => {
       e.preventDefault();
       const aid = b.dataset.aid;
-      const note = prompt('処理 時 の メモ (任意。 アルバイト 申請 の 申請番号 等)', '');
+      const note = prompt('処理時のメモ (任意。 アルバイト申請の申請番号等)', '');
       try {
         await patch('/api/bait/assignments/' + aid + '/done', { note: note || null });
-        toast('処理 済 に しました');
+        toast('処理済にしました');
         loadMyAssignments();
       } catch (e) { toast('失敗: ' + e.message); }
     }));
@@ -111,7 +111,7 @@ async function loadMyRequests() {
     const meId = Number(state.me?.id);
     const items = (d.items || []).filter(r => Number(r.requester_user_id) === meId);
     if (!items.length) {
-      root.innerHTML = '<div class="empty">まだ あなた が 出した 依頼 は ありません</div>';
+      root.innerHTML = '<div class="empty">まだあなたが出した依頼はありません</div>';
       return;
     }
     root.innerHTML = items.map(r => {
@@ -125,7 +125,7 @@ async function loadMyRequests() {
             <span class="hint-sm" style="flex:none">${escapeHtml(periodLabel(r.period))}</span>
             <span class="bold" style="flex:none; color:${done === total ? '#10b981' : '#e65100'}">${done}/${total}</span>
           </div>
-          <div class="meta">合計 ${Number(r.total_hours || 0)} 時間 ・ ${pct}% 処理 済</div>
+          <div class="meta">合計 ${Number(r.total_hours || 0)} 時間・ ${pct}% 処理済</div>
         </a>`;
     }).join('');
   } catch (e) {
@@ -137,59 +137,59 @@ export async function renderBaitNew() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/bait" class="hint">← アルバイト 申請</a>
-      <h2 style="margin:6px 0">＋ 新規 依頼</h2>
+      <a href="#/bait" class="hint">← アルバイト申請</a>
+      <h2 style="margin:6px 0">＋ 新規依頼</h2>
     </div>
     <div class="card">
       <label class="field">
         <span class="lbl">タイトル / 何のため</span>
-        <input type="text" id="bn-title" maxlength="200" placeholder="例: 6月 実験 協力 (○○ 実験 の 観測者)">
+        <input type="text" id="bn-title" maxlength="200" placeholder="例: 6月実験協力 (○○ 実験の観測者)">
       </label>
       <label class="field">
-        <span class="lbl">対象 月</span>
+        <span class="lbl">対象月</span>
         <input type="month" id="bn-period" value="${currentPeriod()}">
       </label>
       <label class="field">
         <span class="lbl">メモ (任意)</span>
-        <textarea id="bn-notes" maxlength="2000" rows="2" placeholder="補足 / 申請 時 の 注意 など"></textarea>
+        <textarea id="bn-notes" maxlength="2000" rows="2" placeholder="補足 / 申請時の注意など"></textarea>
       </label>
 
       <div class="field">
-        <span class="lbl">対象者 (各 人 の 時間 を 設定 — 小数点 OK)</span>
+        <span class="lbl">対象者 (各人の時間を設定 — 小数点 OK)</span>
         <div id="bn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="bn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
         <div id="bn-hours-area" style="margin-top:8px"></div>
-        <div id="bn-count" class="muted" style="font-size:12px; margin-top:6px">0 人 選択 中</div>
+        <div id="bn-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
       </div>
 
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/bait" class="btn">キャンセル</a>
-        <button id="bn-save" class="primary">依頼 を 送る</button>
+        <button id="bn-save" class="primary">依頼を送る</button>
       </div>
     </div>
   `;
 
-  // v669 #247: picker は createMemberPicker の await 解決 後 に 入る が、
-  //   createMemberPicker 内 の 初期 refreshChips() が onChange (= refreshHoursArea) を 呼ぶ ので、
-  //   その タイミング で picker は まだ undefined → TDZ ReferenceError。
-  //   let に 先 宣言 + refreshHoursArea 内 で 未 初期化 なら 早期 return。
+  // v669 #247: picker は createMemberPicker の await 解決後に入るが、
+  //   createMemberPicker 内の初期 refreshChips() が onChange (= refreshHoursArea) を呼ぶので、
+  //   そのタイミングで picker はまだ undefined → TDZ ReferenceError。
+  //   let に先宣言 + refreshHoursArea 内で未初期化なら早期 return。
   let picker = null;
   const hoursMap = new Map(); // uid → hours
 
   function refreshHoursArea() {
     if (!picker) return;
     const sel = [...picker.getSelected()];
-    document.getElementById('bn-count').textContent = `${sel.length} 人 選択 中`;
+    document.getElementById('bn-count').textContent = `${sel.length} 人選択中`;
     const root = document.getElementById('bn-hours-area');
     if (!sel.length) { root.innerHTML = ''; return; }
-    // pool は picker が 持って いる
+    // pool は picker が持っている
     const pool = picker.users() || [];
     const byUid = new Map(pool.map(u => [u.id, u]));
     const sorted = sel.map(uid => byUid.get(Number(uid))).filter(Boolean)
       .sort((a, b) => (GRADE_ORDER.indexOf(a.grade || '') - GRADE_ORDER.indexOf(b.grade || ''))
         || (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
     root.innerHTML = `
-      <div class="muted" style="font-size:12px; margin:6px 0 4px">各 人 の 時間 を 入力 (小数 OK、 単位 = 時間)</div>
+      <div class="muted" style="font-size:12px; margin:6px 0 4px">各人の時間を入力 (小数 OK、 単位 = 時間)</div>
       ${sorted.map(u => `
         <div class="row" style="gap:6px; align-items:center; padding:3px 0">
           ${avatarHtml(u.display_name, u.avatar_url, 'sm')}
@@ -220,17 +220,17 @@ export async function renderBaitNew() {
     const period = document.getElementById('bn-period').value;
     const notes  = document.getElementById('bn-notes').value.trim() || null;
     if (!title)  { toast('タイトル必須'); return; }
-    if (!period) { toast('対象月 必須'); return; }
+    if (!period) { toast('対象月必須'); return; }
     const assignments = [];
     document.querySelectorAll('[data-hr]').forEach(inp => {
       const uid = Number(inp.dataset.hr);
       const h = Math.max(0, Number(inp.value) || 0);
       if (h > 0) assignments.push({ user_id: uid, hours: h });
     });
-    if (!assignments.length) { toast('対象者 + 時間 を 1 件 以上'); return; }
+    if (!assignments.length) { toast('対象者 + 時間を 1 件以上'); return; }
     try {
       const r = await post('/api/bait/requests', { title, period, notes, assignments });
-      toast('依頼 を 送りました');
+      toast('依頼を送りました');
       navigate('#/bait/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -240,7 +240,7 @@ export async function renderBaitDetail({ params }) {
   const id = Number(params?.id);
   const app = document.getElementById('app');
   if (!Number.isFinite(id) || id <= 0) {
-    app.innerHTML = `<div class="card"><a href="#/bait" class="hint">← 一覧</a><div class="muted" style="margin-top:6px">依頼 ID が 不正 です (${escapeHtml(String(params?.id ?? '不明'))})。 一覧 から 開き 直して ください。</div></div>`;
+    app.innerHTML = `<div class="card"><a href="#/bait" class="hint">← 一覧</a><div class="muted" style="margin-top:6px">依頼 ID が不正です (${escapeHtml(String(params?.id ?? '不明'))})。 一覧から開き直してください。</div></div>`;
     return;
   }
   app.innerHTML = `
@@ -254,8 +254,8 @@ export async function renderBaitDetail({ params }) {
     </div>
     <div class="card" id="bd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
-        <button id="bd-remind" class="btn">📣 未処理者 に 催促</button>
-        <button id="bd-close" class="btn">🏁 依頼 を 完了 マーク</button>
+        <button id="bd-remind" class="btn">📣 未処理者に催促</button>
+        <button id="bd-close" class="btn">🏁 依頼を完了マーク</button>
         <button id="bd-del" class="danger">削除</button>
       </div>
     </div>
@@ -266,11 +266,11 @@ export async function renderBaitDetail({ params }) {
 async function loadDetail(id) {
   try {
     const d = await get('/api/bait/requests/' + id);
-    // v814 #407 防御: 旧 キャッシュ JS / 一時 fetch 失敗 等 で d.request が 欠落 した 場合
-    //   「undefined is not an object (evaluating 'r.title')」 で 詰まら ない ように 早期 検知。
+    // v814 #407 防御: 旧キャッシュ JS / 一時 fetch 失敗等で d.request が欠落した場合
+    //   「undefined is not an object (evaluating 'r.title')」 で詰まらないように早期検知。
     if (!d || !d.request) {
       const got = d ? Object.keys(d).join(', ') : 'null';
-      throw new Error(`detail レスポンス に request 欠落 (キー: ${got})。 アプリ を 一度 リロード して み て ください。`);
+      throw new Error(`detail レスポンスに request 欠落 (キー: ${got})。 アプリを一度リロードしてみてください。`);
     }
     const r = d.request;
     const assignments = Array.isArray(d.assignments) ? d.assignments : [];
@@ -278,10 +278,10 @@ async function loadDetail(id) {
     const doneN  = assignments.filter(a => a.status === 'done').length;
     const total  = assignments.length;
     document.getElementById('bd-head').innerHTML = `
-      <h2 style="margin:6px 0 0">${escapeHtml(r.title || '(タイトル なし)')}</h2>
+      <h2 style="margin:6px 0 0">${escapeHtml(r.title || '(タイトルなし)')}</h2>
       <div class="meta">
-        起案 ${escapeHtml(r.requester_name || '?')} ・ ${escapeHtml(periodLabel(r.period || ''))} ・ 合計 ${totalH} 時間 ・ ${doneN}/${total} 件 処理 済
-        ${r.closed_at ? '・ <span style="color:#10b981">🏁 完了 マーク 済</span>' : ''}
+        起案 ${escapeHtml(r.requester_name || '?')} ・ ${escapeHtml(periodLabel(r.period || ''))} ・合計 ${totalH} 時間・ ${doneN}/${total} 件処理済
+        ${r.closed_at ? '・ <span style="color:#10b981">🏁 完了マーク済</span>' : ''}
       </div>
       ${r.notes ? `<div style="margin-top:6px; padding:6px 8px; background:#f9fafb; border-radius:6px; white-space:pre-wrap">${escapeHtml(r.notes)}</div>` : ''}
     `;
@@ -302,22 +302,22 @@ async function loadDetail(id) {
             <div class="meta">
               ${Number(a.hours)} h
               ${a.status === 'done'
-                ? ` ・ ✓ ${escapeHtml(doneTime)} 処理 済`
+                ? ` ・ ✓ ${escapeHtml(doneTime)} 処理済`
                 : ' ・ <span style="color:#e65100">未処理</span>'}
               ${a.worker_note ? ` ・ ${escapeHtml(a.worker_note)}` : ''}
             </div>
           </div>
           ${mine ? (
             a.status === 'done'
-              ? `<button class="btn bd-undone" data-aid="${a.id}" style="flex:none; font-size:12px">未処理 に 戻す</button>`
-              : `<button class="btn primary bd-done" data-aid="${a.id}" style="flex:none; font-size:12px">処理 済 に</button>`
+              ? `<button class="btn bd-undone" data-aid="${a.id}" style="flex:none; font-size:12px">未処理に戻す</button>`
+              : `<button class="btn primary bd-done" data-aid="${a.id}" style="flex:none; font-size:12px">処理済に</button>`
           ) : ''}
         </div>`;
     }).join('');
     root.querySelectorAll('.bd-done').forEach(b => b.addEventListener('click', async () => {
-      const note = prompt('処理 時 の メモ (任意)', '') || null;
+      const note = prompt('処理時のメモ (任意)', '') || null;
       try { await patch('/api/bait/assignments/' + b.dataset.aid + '/done', { note });
-        toast('処理 済 に しました');
+        toast('処理済にしました');
         loadDetail(id);
       } catch (e) { toast('失敗: ' + e.message); }
     }));
@@ -333,28 +333,28 @@ async function loadDetail(id) {
       admin.hidden = false;
       const unr = total - doneN;
       const remindBtn = document.getElementById('bd-remind');
-      remindBtn.textContent = `📣 未処理者 に 催促 (${unr})`;
+      remindBtn.textContent = `📣 未処理者に催促 (${unr})`;
       remindBtn.disabled = unr === 0;
       remindBtn.addEventListener('click', async () => {
-        if (!confirm(`${unr} 人 に 催促 通知 を 送りますか?`)) return;
+        if (!confirm(`${unr} 人に催促通知を送りますか?`)) return;
         try {
           const r = await post('/api/bait/requests/' + id + '/remind', {});
-          toast(`${r.sent} 人 に 送りました`);
+          toast(`${r.sent} 人に送りました`);
         } catch (e) { toast('失敗: ' + e.message); }
       });
       document.getElementById('bd-close').addEventListener('click', async () => {
-        if (!confirm('この 依頼 を 完了 マーク しますか?')) return;
+        if (!confirm('この依頼を完了マークしますか?')) return;
         try {
           await patch('/api/bait/requests/' + id + '/close', {});
-          toast('完了 マーク しました');
+          toast('完了マークしました');
           loadDetail(id);
         } catch (e) { toast('失敗: ' + e.message); }
       });
       document.getElementById('bd-del').addEventListener('click', async () => {
-        if (!confirm('この 依頼 を 削除 しますか? assignment も 全部 消えます。')) return;
+        if (!confirm('この依頼を削除しますか? assignment も全部消えます。')) return;
         try {
           await del('/api/bait/requests/' + id);
-          toast('削除 しました');
+          toast('削除しました');
           navigate('#/bait');
         } catch (e) { toast('失敗: ' + e.message); }
       });

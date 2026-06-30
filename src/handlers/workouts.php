@@ -94,7 +94,7 @@ function route_workouts(PDO $pdo, array $cfg, string $method, array $seg): void 
     }
 
     if ($sub === 'summary' && $method === 'GET') {
-        // 自分の7日間 種目別合計 reps + sets
+        // 自分の7日間種目別合計 reps + sets
         $st = $pdo->prepare("SELECT exercise,
                                     COALESCE(SUM(reps), 0) AS total_reps,
                                     COALESCE(SUM(sets), 0) AS total_sets,
@@ -147,7 +147,7 @@ function route_workouts(PDO $pdo, array $cfg, string $method, array $seg): void 
         try {
             global $CFG;
             notify_safely($pdo, $CFG, $fid, 'admin_notice',
-                "🤝 筋トレ仲間に追加されました ({$u['display_name']})。 自分も追加すると 互いの記録が見えるように なります。",
+                "🤝 筋トレ仲間に追加されました ({$u['display_name']})。 自分も追加すると互いの記録が見えるようになります。",
                 'workout', null);
         } catch (Throwable $_) {}
         json_response(['ok' => true]);

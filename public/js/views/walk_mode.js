@@ -1,5 +1,5 @@
-// v589 散歩モード。 地図全画面 + Wake Lock + GPS 5 秒 ポーリング → 軌跡記録。
-//   特殊スワイプ (画面横断 2 本指 → ↓↑↓) で 解除。 終了で 軌跡 表示 + SNS 投稿可能。
+// v589 散歩モード。 地図全画面 + Wake Lock + GPS 5 秒ポーリング → 軌跡記録。
+//   特殊スワイプ (画面横断 2 本指 → ↓↑↓) で解除。 終了で軌跡表示 + SNS 投稿可能。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -51,8 +51,8 @@ export async function renderWalkMode() {
       </div>
       <div id="walk-map" style="flex:1; position:relative"></div>
       <div id="walk-lock-overlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; flex-direction:column; align-items:center; justify-content:center; color:#fff; text-align:center; padding:20px; font-size:14px; z-index:200; user-select:none; touch-action:none">
-        <div style="font-size:28px; margin-bottom:10px">🔒 散歩モード ロック中</div>
-        <div style="margin-bottom:24px; opacity:0.8">↑→↓→↑ を 順に スワイプ で 解除</div>
+        <div style="font-size:28px; margin-bottom:10px">🔒 散歩モードロック中</div>
+        <div style="margin-bottom:24px; opacity:0.8">↑→↓→↑ を順にスワイプで解除</div>
         <div id="walk-unlock-canvas" style="width:280px; height:280px; border:3px solid #fff; border-radius:24px; position:relative; touch-action:none; background:rgba(255,255,255,0.05)">
           <div id="walk-unlock-arrows" style="position:absolute; inset:0; display:grid; grid-template-rows:1fr 1fr 1fr; grid-template-columns:1fr 1fr 1fr; pointer-events:none; opacity:0.4">
             <div></div>
@@ -65,7 +65,7 @@ export async function renderWalkMode() {
             <div style="display:flex; align-items:center; justify-content:center; font-size:36px" data-step="down">↓</div>
             <div></div>
           </div>
-          <div id="walk-unlock-status" style="position:absolute; bottom:-32px; left:0; right:0; font-size:13px; opacity:0.8">↑ から 始めて</div>
+          <div id="walk-unlock-status" style="position:absolute; bottom:-32px; left:0; right:0; font-size:13px; opacity:0.8">↑ から始めて</div>
         </div>
         <div id="walk-stats-locked" style="margin-top:60px; font-size:16px; font-variant-numeric:tabular-nums; opacity:0.85"></div>
       </div>
@@ -73,13 +73,13 @@ export async function renderWalkMode() {
   `;
 
   await reqWakeLock();
-  // 初期 セッション 開始
+  // 初期セッション開始
   try {
     const r = await post('/api/walk/sessions', {});
     currentSessionId = r.id;
-  } catch (e) { toast('セッション 開始失敗: ' + e.message); navigate('#/walk'); return; }
+  } catch (e) { toast('セッション開始失敗: ' + e.message); navigate('#/walk'); return; }
 
-  // 地図 初期化
+  // 地図初期化
   let initialPos = null;
   await new Promise((resolve) => {
     if (!('geolocation' in navigator)) { resolve(); return; }
@@ -104,12 +104,12 @@ export async function renderWalkMode() {
     navigator.geolocation.getCurrentPosition(async p => {
       const pos = [p.coords.latitude, p.coords.longitude];
       const d = haversine(lastPos[0], lastPos[1], pos[0], pos[1]);
-      if (d < 2) return; // ノイズ抑制 (< 2m は 無視)
+      if (d < 2) return; // ノイズ抑制 (< 2m は無視)
       lastPos = pos;
       marker.setLatLng(pos);
       trail.addLatLng(pos);
       map.panTo(pos);
-      // サーバへ POST (15 秒 ごと まとめる)
+      // サーバへ POST (15 秒ごとまとめる)
       if (Date.now() - lastSentAt > 15000) {
         try { await post(`/api/walk/sessions/${currentSessionId}/point`, { lat: pos[0], lng: pos[1] }); lastSentAt = Date.now(); } catch (_) {}
       }
@@ -131,11 +131,11 @@ export async function renderWalkMode() {
     if (!confirm('散歩モードを終了しますか?')) return;
     await endSession();
   });
-  // ロック ボタン
+  // ロックボタン
   document.getElementById('walk-lock').addEventListener('click', () => activateLock());
 }
 
-// 特殊スワイプ ロック (↑→↓→↑ の 順に 大きく スワイプで 解除)
+// 特殊スワイプロック (↑→↓→↑ の順に大きくスワイプで解除)
 function activateLock() {
   const overlay = document.getElementById('walk-lock-overlay');
   if (!overlay) return;
@@ -226,15 +226,15 @@ function haversine(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// 過去の セッション 一覧 + 個別表示
+// 過去のセッション一覧 + 個別表示
 export async function renderWalkSessions() {
   const app = document.getElementById('app');
-  app.innerHTML = `<div class="card"><a href="#/walk" class="hint">← 散歩</a><h2 style="margin:6px 0">🚶 散歩 履歴</h2><div id="ws-list"><div class="hint">読み込み中…</div></div></div>`;
+  app.innerHTML = `<div class="card"><a href="#/walk" class="hint">← 散歩</a><h2 style="margin:6px 0">🚶 散歩履歴</h2><div id="ws-list"><div class="hint">読み込み中…</div></div></div>`;
   try {
     const d = await get('/api/walk/sessions');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('ws-list').innerHTML = '<div class="hint">まだ 散歩 記録 がありません。 「散歩モード」 で 開始しましょう。</div>';
+      document.getElementById('ws-list').innerHTML = '<div class="hint">まだ散歩記録がありません。 「散歩モード」 で開始しましょう。</div>';
       return;
     }
     document.getElementById('ws-list').innerHTML = items.map(s => `
@@ -257,12 +257,12 @@ export async function renderWalkSessionDetail({ params }) {
   app.innerHTML = `
     <div class="card">
       <a href="#/walk/sessions" class="hint">← 履歴</a>
-      <h2 style="margin:6px 0">🚶 散歩 軌跡</h2>
+      <h2 style="margin:6px 0">🚶 散歩軌跡</h2>
       <div id="ws-info" class="hint">読み込み中…</div>
       <div id="ws-map" style="height:400px; margin-top:8px; border-radius:8px; overflow:hidden"></div>
       <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap">
-        <button id="ws-share" class="btn primary">📸 軌跡画像を らぼったーに 投稿</button>
-        <button id="ws-overlay" class="btn">🗺 過去の軌跡を 重ねる</button>
+        <button id="ws-share" class="btn primary">📸 軌跡画像をらぼったーに投稿</button>
+        <button id="ws-overlay" class="btn">🗺 過去の軌跡を重ねる</button>
       </div>
       <div id="ws-overlay-list" style="margin-top:8px"></div>
     </div>
@@ -289,13 +289,13 @@ export async function renderWalkSessionDetail({ params }) {
     return;
   }
 
-  // 軌跡画像 → らぼったーに 投稿
+  // 軌跡画像 → らぼったーに投稿
   document.getElementById('ws-share').addEventListener('click', async () => {
     const btn = document.getElementById('ws-share');
-    btn.disabled = true; btn.textContent = '画像 生成中…';
+    btn.disabled = true; btn.textContent = '画像生成中…';
     try {
       const blob = await renderTrailImage(ptsAll);
-      // /api/uploads/image に POST して URL を 取得
+      // /api/uploads/image に POST して URL を取得
       const fd = new FormData();
       fd.append('file', blob, `walk-${sid}.png`);
       const upRes = await fetch('/api/uploads/image', {
@@ -303,26 +303,26 @@ export async function renderWalkSessionDetail({ params }) {
         headers: { 'X-Requested-With': 'labpay' },
       }).then(x => x.json());
       if (!upRes.url) throw new Error('upload 失敗');
-      const body = prompt('らぼったーに 投稿: 本文 (任意で 編集)',
+      const body = prompt('らぼったーに投稿: 本文 (任意で編集)',
         `🚶 散歩しました!\n距離: ${(ptsAll.length > 1 ? totalMeters(ptsAll) : 0).toFixed(0)} m\n#/walk/session/${sid}`);
-      if (body === null) { btn.disabled = false; btn.textContent = '📸 軌跡画像を らぼったーに 投稿'; return; }
+      if (body === null) { btn.disabled = false; btn.textContent = '📸 軌跡画像をらぼったーに投稿'; return; }
       const { post: apiPost } = await import('../api.js');
       await apiPost('/api/posts', { body: body.trim(), image_url: upRes.url });
       toast('投稿しました');
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
     } finally {
-      btn.disabled = false; btn.textContent = '📸 軌跡画像を らぼったーに 投稿';
+      btn.disabled = false; btn.textContent = '📸 軌跡画像をらぼったーに投稿';
     }
   });
 
-  // 過去の軌跡 重ね合わせ
+  // 過去の軌跡重ね合わせ
   document.getElementById('ws-overlay').addEventListener('click', async () => {
     try {
       const lst = await get('/api/walk/sessions');
       const items = (lst.items || []).filter(x => x.id !== sid).slice(0, 12);
       document.getElementById('ws-overlay-list').innerHTML = `
-        <div class="hint-sm">他の軌跡 を タップで 重ねる (薄色)</div>
+        <div class="hint-sm">他の軌跡をタップで重ねる (薄色)</div>
         ${items.map(it => `<button class="btn ws-add-overlay" data-sid="${it.id}"
             style="font-size:12px; margin:3px; padding:3px 6px">${escapeHtml(it.started_at)} (${(it.total_meters/1000).toFixed(1)} km)</button>`).join('')}
       `;
@@ -340,7 +340,7 @@ export async function renderWalkSessionDetail({ params }) {
           } catch (_) {}
         });
       });
-    } catch (_) { toast('履歴取得 失敗'); }
+    } catch (_) { toast('履歴取得失敗'); }
   });
 }
 
@@ -350,8 +350,8 @@ function totalMeters(pts) {
   return m;
 }
 
-// 軌跡を 正方形 PNG (1024x1024) に レンダリング (タイルなし、 シンプルな 線画)。
-//   タイル画像は CORS 制約で 直接 canvas に 描けないため、 線画のみ。
+// 軌跡を正方形 PNG (1024x1024) にレンダリング (タイルなし、 シンプルな線画)。
+//   タイル画像は CORS 制約で直接 canvas に描けないため、 線画のみ。
 async function renderTrailImage(pts) {
   if (!pts.length) throw new Error('点なし');
   const W = 1024, H = 1024;
@@ -382,7 +382,7 @@ async function renderTrailImage(pts) {
     const y = (1 - ((la - cx) / span + 0.5)) * (H - 2 * PADDING) + PADDING;
     return [x, y];
   };
-  // 軌跡 線
+  // 軌跡線
   ctx.strokeStyle = '#4a106d';
   ctx.lineWidth = 6;
   ctx.lineCap = 'round';

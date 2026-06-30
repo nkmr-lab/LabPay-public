@@ -51,7 +51,7 @@ export async function renderBingofitHistory() {
         `).join('')}
       </div>`;
   } catch (e) {
-    document.getElementById('bf-history').innerHTML = `<div style="color:#c00; padding:12px">取得 失敗: ${escapeHtml(String(e))}</div>`;
+    document.getElementById('bf-history').innerHTML = `<div style="color:#c00; padding:12px">取得失敗: ${escapeHtml(String(e))}</div>`;
   }
 }
 
@@ -64,7 +64,7 @@ async function loadAndRender() {
     const d = await get('/api/bingofit/board' + (week ? '?week=' + encodeURIComponent(week) : ''));
     renderBoard(d);
   } catch (e) {
-    document.getElementById('bf-board-root').innerHTML = `<div style="color:#c00; padding:12px">取得 失敗: ${escapeHtml(String(e))}</div>`;
+    document.getElementById('bf-board-root').innerHTML = `<div style="color:#c00; padding:12px">取得失敗: ${escapeHtml(String(e))}</div>`;
   }
 }
 
@@ -76,7 +76,7 @@ function renderBoard(d) {
   if (d.need_items !== undefined && d.need_items > 0) {
     root.innerHTML = `
       <div style="text-align:center; padding:24px; background:#fef3c7; border:1px solid #fde68a; border-radius:10px">
-        <div style="font-size:14px; margin-bottom:8px">あと <b style="font-size:24px; color:#92400e">${d.need_items}</b> 着 登録すると盤が作られます</div>
+        <div style="font-size:14px; margin-bottom:8px">あと <b style="font-size:24px; color:#92400e">${d.need_items}</b> 着登録すると盤が作られます</div>
         <div style="font-size:11px; color:#92400e">現在 ${d.active_count} 着 / 必要 25 着</div>
         <div style="margin-top:14px">
           <a href="#/bingofit/closet" style="display:inline-block; padding:10px 20px; background:#4a106d; color:#fff; text-decoration:none; border-radius:6px; font-weight:600">👕 クローゼットへ</a>
@@ -103,7 +103,7 @@ function renderBoard(d) {
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:4px; max-width:520px; margin:0 auto; aspect-ratio:1">
       ${d.cells.map(c => cellHtml(c, opens[c.index], litCells.has(c.index), isCurrent)).join('')}
     </div>
-    <div style="font-size:11px; color:#9ca3af; text-align:center; margin-top:12px">タップ = 「今日 着た」 / 再タップで取消</div>
+    <div style="font-size:11px; color:#9ca3af; text-align:center; margin-top:12px">タップ = 「今日着た」 / 再タップで取消</div>
   `;
   if (isCurrent) {
     root.querySelectorAll('[data-bf-cell]').forEach(el => {
@@ -159,6 +159,6 @@ async function onCellClick(idx, currentlyOpen) {
     }
     await loadAndRender();
   } catch (e) {
-    toast('更新 失敗: ' + (e?.message || e));
+    toast('更新失敗: ' + (e?.message || e));
   }
 }

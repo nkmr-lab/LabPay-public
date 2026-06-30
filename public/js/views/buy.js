@@ -64,7 +64,7 @@ export async function renderBuy() {
     if (el) el.textContent = (d.balance ?? 0).toLocaleString() + ' pt';
   }).catch(() => {});
 
-  // v849 #434 売買履歴: 開いた瞬間に lazy load (購入 + 販売を 並列取得 + 収支表示)。 タブで切替。
+  // v849 #434 売買履歴: 開いた瞬間に lazy load (購入 + 販売を並列取得 + 収支表示)。 タブで切替。
   const histDetails = document.getElementById('buy-history');
   let histLoaded = false;
   let histData = { purchases: null, sales: null };

@@ -1,6 +1,6 @@
 <?php
-// /api/conf-deadlines — 学会 〆切 一覧 (#251)。
-// 誰でも 登録 可、 全員 閲覧 可。 カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。
+// /api/conf-deadlines — 学会〆切一覧 (#251)。
+// 誰でも登録可、 全員閲覧可。 カテゴリ: 国際会議 / 国内研究会 / 論文誌 / その他。
 
 declare(strict_types=1);
 
@@ -15,7 +15,7 @@ function route_conf_deadlines(PDO $pdo, array $cfg, string $method, array $seg):
         if ($sub2 === '' && $method === 'GET')    { cd_detail($pdo, $cfg, $id); return; }
         if ($sub2 === '' && $method === 'PATCH')  { cd_update($pdo, $cfg, $id); return; }
         if ($sub2 === '' && $method === 'DELETE') { cd_delete($pdo, $cfg, $id); return; }
-        // v697 #282 メンバー 機能
+        // v697 #282 メンバー機能
         if ($sub2 === 'members' && $method === 'POST') { cd_members_add($pdo, $cfg, $id); return; }
         if ($sub2 === 'join'    && $method === 'POST') { cd_join($pdo, $cfg, $id); return; }
         if ($sub2 === 'leave'   && $method === 'POST') { cd_leave($pdo, $cfg, $id); return; }
@@ -34,7 +34,7 @@ function cd_list(PDO $pdo, array $cfg): void {
     $category = $_GET['category'] ?? null;
     $past = !empty($_GET['past']);
     $mine = !empty($_GET['mine']);
-    // v697 #282 is_mine 計算: メンバー or 起案者 で 自分 関連 と みなす
+    // v697 #282 is_mine 計算: メンバー or 起案者で自分関連とみなす
     $sql = "SELECT c.*, u.display_name AS creator_name,
                    (c.created_by_user_id = ? OR EXISTS (SELECT 1 FROM conf_deadline_members m WHERE m.conf_deadline_id = c.id AND m.user_id = ?)) AS is_mine
               FROM conf_deadlines c JOIN users u ON u.id = c.created_by_user_id
@@ -56,8 +56,8 @@ function cd_list(PDO $pdo, array $cfg): void {
     $st->execute($args);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // v749 #362 #364 list 行 にも members を 付ける (アイコン 横並び 表示 用)。
-    //   1 query で 全 deadline 分 を まとめて 取って merge。
+    // v749 #362 #364 list 行にも members を付ける (アイコン横並び表示用)。
+    //   1 query で全 deadline 分をまとめて取って merge。
     $ids = array_map('intval', array_column($rows, 'id'));
     $byId = [];
     if (!empty($ids)) {
@@ -86,11 +86,11 @@ function cd_upcoming(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $limit = max(1, min(20, (int)($_GET['limit'] ?? 5)));
-    // v696 #281 メイン 締切 が 過ぎて も サブ 締切 が 未来 なら 出す。 各 conf で 最も 近い
-    //   未過去 deadline (main / extras の どれか) を 採用 して それ で ソート する。
-    // v697 #282 is_mine フラグ も 付ける (= 自分 が メンバー or 起案者)。
-    // v702 #291 速度 改善: SQL で 候補 を 絞る (メイン が 30 日 以上 過去 かつ extras なし は 弾く)。
-    //   LIMIT 200 → 100 で 十分 (上位 limit 件 だけ 返す)。
+    // v696 #281 メイン締切が過ぎてもサブ締切が未来なら出す。 各 conf で最も近い
+    //   未過去 deadline (main / extras のどれか) を採用してそれでソートする。
+    // v697 #282 is_mine フラグも付ける (= 自分がメンバー or 起案者)。
+    // v702 #291 速度改善: SQL で候補を絞る (メインが 30 日以上過去かつ extras なしは弾く)。
+    //   LIMIT 200 → 100 で十分 (上位 limit 件だけ返す)。
     $st = $pdo->prepare("SELECT c.id, c.category, c.name, c.location, c.url, c.deadline_at,
                                 c.deadline_label, c.deadline_is_aoe, c.deadline_is_tentative, c.extra_deadlines,
                                 (c.created_by_user_id = ? OR EXISTS (SELECT 1 FROM conf_deadline_members m WHERE m.conf_deadline_id = c.id AND m.user_id = ?)) AS is_mine
@@ -188,7 +188,7 @@ function cd_update(PDO $pdo, array $cfg, int $id): void {
     if (!$row) throw new ApiException('not_found', '見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['created_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者 または admin のみ', 403);
+        throw new ApiException('forbidden', '登録者または admin のみ', 403);
     }
     $body = read_json_body();
     $v = cd_validate($body);
@@ -210,7 +210,7 @@ function cd_delete(PDO $pdo, array $cfg, int $id): void {
     if (!$row) throw new ApiException('not_found', '見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['created_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者 または admin のみ', 403);
+        throw new ApiException('forbidden', '登録者または admin のみ', 403);
     }
     $pdo->prepare("UPDATE conf_deadlines SET deleted_at = NOW() WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
@@ -224,7 +224,7 @@ function cd_parse_datetime(string $raw): ?string {
     return $dt ? $dt->format('Y-m-d H:i:s') : null;
 }
 
-// v697 #282 メンバー 関連 endpoint 群
+// v697 #282 メンバー関連 endpoint 群
 function cd_join(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -274,9 +274,9 @@ function cd_members_remove(PDO $pdo, array $cfg, int $id, int $targetUid): void 
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', '見つかりません', 404);
-    // 自分 自身 を 外す か、 起案者 / admin が 他人 を 外す か
+    // 自分自身を外すか、 起案者 / admin が他人を外すか
     if ($targetUid !== $uid && (int)$row['created_by_user_id'] !== $uid && !$isAdmin) {
-        throw new ApiException('forbidden', '権限 なし', 403);
+        throw new ApiException('forbidden', '権限なし', 403);
     }
     $pdo->prepare("DELETE FROM conf_deadline_members WHERE conf_deadline_id = ? AND user_id = ?")
         ->execute([$id, $targetUid]);
@@ -294,13 +294,13 @@ function cd_validate(array $body): array {
     if ($url === '') $url = null;
     $deadlineAt = cd_parse_datetime((string)($body['deadline_at'] ?? ''));
     if (!$deadlineAt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
-    // v691 #275 メイン 締切 の ラベル (原稿 / 申込 / アブスト etc.) と AOE フラグ
+    // v691 #275 メイン締切のラベル (原稿 / 申込 / アブスト etc.) と AOE フラグ
     $deadlineLabel = isset($body['deadline_label']) ? mb_substr(trim((string)$body['deadline_label']), 0, 50) : null;
     if ($deadlineLabel === '') $deadlineLabel = null;
     $deadlineIsAoe = !empty($body['deadline_is_aoe']) ? 1 : 0;
-    // v713 #308 暫定 / 仮 締切 フラグ
+    // v713 #308 暫定 / 仮締切フラグ
     $deadlineIsTentative = !empty($body['deadline_is_tentative']) ? 1 : 0;
-    // v691 #275 追加 の サブ 締切 (申込 / アブスト 等)。 配列 of {label, deadline_at, is_aoe}
+    // v691 #275 追加のサブ締切 (申込 / アブスト等)。 配列 of {label, deadline_at, is_aoe}
     $extraJson = null;
     if (!empty($body['extra_deadlines']) && is_array($body['extra_deadlines'])) {
         $clean = [];

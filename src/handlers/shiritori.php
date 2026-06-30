@@ -68,7 +68,7 @@ function shiritori_game_create(PDO $pdo, array $cfg, int $uid): void {
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title 1..200', 400);
     }
-    // v580 1 ターン 30 秒 固定。 body の time_limit_sec は 互換のため 受けるが 無視。
+    // v580 1 ターン 30 秒固定。 body の time_limit_sec は互換のため受けるが無視。
     $timeLimit = 30;
     $rounds = (int)($body['round_count'] ?? 2);
     if ($rounds < 1 || $rounds > 10) throw new ApiException('bad_request', 'round_count 1-10', 400);
@@ -91,7 +91,7 @@ function shiritori_game_create(PDO $pdo, array $cfg, int $uid): void {
         $pdo->prepare("INSERT INTO shiritori_games (creator_user_id, title, time_limit_sec, round_count) VALUES (?,?,?,?)")
             ->execute([$uid, $title, $timeLimit, $rounds]);
         $gameId = (int)$pdo->lastInsertId();
-        // v665 turn_order を ランダム に
+        // v665 turn_order をランダムに
         $shuffled = $memberIds;
         shuffle($shuffled);
         $insP = $pdo->prepare("INSERT INTO shiritori_players (game_id, user_id, turn_order) VALUES (?,?,?)");
@@ -194,14 +194,14 @@ function shiritori_turn_submit(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $curPlayer = $players[$curIdx];
         if ((int)$curPlayer['user_id'] !== $uid) throw new ApiException('forbidden', 'あなたのターンではありません', 403);
 
-        // v623 初回ターンで プレイフィー 2pt を SYSTEM に 支払う (lazy charge)。
-        //   paid_at 列が DEFAULT NULL なので 既存ゲームは 課金されず 互換維持。
+        // v623 初回ターンでプレイフィー 2pt を SYSTEM に支払う (lazy charge)。
+        //   paid_at 列が DEFAULT NULL なので既存ゲームは課金されず互換維持。
         $stPay = $pdo->prepare("SELECT paid_at FROM shiritori_players WHERE game_id=? AND user_id=?");
         $stPay->execute([$gid, $uid]);
         $paidAt = $stPay->fetchColumn();
         if ($paidAt === null) {
             if (Ledger::balanceOfUser($pdo, $uid) < SHIRITORI_FEE) {
-                throw new ApiException('insufficient_balance', sprintf('プレイフィー %dpt が 必要です', SHIRITORI_FEE), 400);
+                throw new ApiException('insufficient_balance', sprintf('プレイフィー %dpt が必要です', SHIRITORI_FEE), 400);
             }
             Ledger::transfer($pdo, $uid, 1, SHIRITORI_FEE, 'shiritori_buyin', 'shiritori', $gid, "絵しりとり #{$gid} プレイフィー");
             $pdo->prepare("UPDATE shiritori_players SET paid_at=NOW() WHERE game_id=? AND user_id=?")

@@ -85,7 +85,7 @@ function paint() {
       try { await patch('/api/notifications/' + btn.dataset.read + '/read', {}); }
       catch (e) { toast('失敗: ' + e.message); return; }
       await refreshUnread();
-      // v512 該当だけ ローカル更新して再描画 (全件 reload しない)
+      // v512 該当だけローカル更新して再描画 (全件 reload しない)
       const id = Number(btn.dataset.read);
       const it = loadedItems.find(x => Number(x.id) === id);
       if (it) it.read_at = new Date().toISOString();
@@ -148,18 +148,18 @@ function refUrl(n) {
     case 'bait_request':   return n.ref_id ? '#/bait/' + n.ref_id : '#/bait';  // v780 #374
     case 'paper_review':   return '#/paper-review';
     // v756 #373 paper_translate: ref_id は row id だが、 URL は share_token なので
-    //   body に 含まれて いる「/#/paper-(translate|summary)/r/TOKEN」 を 抽出 して 使う。
+    //   body に含まれている「/#/paper-(translate|summary)/r/TOKEN」 を抽出して使う。
     case 'paper_translate': {
       const m = (n.body || '').match(/#\/paper-(?:translate|summary)\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/paper-summary';
     }
     case 'deep_research': {
-      // v781 #376 body に 「/#/deep-research/r/TOKEN」 が 入って いる
+      // v781 #376 body に 「/#/deep-research/r/TOKEN」 が入っている
       const m = (n.body || '').match(/#\/deep-research\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/deep-research';
     }
     case 'paper_full_translation': {
-      // v788 #386 body に 「/#/paper-translate-full/r/TOKEN」 が 入って いる
+      // v788 #386 body に 「/#/paper-translate-full/r/TOKEN」 が入っている
       const m = (n.body || '').match(/#\/paper-translate-full\/r\/[a-f0-9]+/);
       return m ? m[0] : '#/paper-translate-full';
     }
@@ -190,8 +190,8 @@ function row(n) {
   const unreadBadge = unread
     ? `<span style="display:inline-block; background:#ffb300; color:#fff; font-weight:700; font-size:11px; padding:1px 6px; border-radius:8px; margin-right:6px">●未読</span>`
     : '';
-  // v566 #219 長い URL / 長文で 横に広がる / 文字が大きい問題を修正:
-  //   - 本文は overflow-wrap: anywhere + word-break: break-word で 必ず折り返す
+  // v566 #219 長い URL / 長文で横に広がる / 文字が大きい問題を修正:
+  //   - 本文は overflow-wrap: anywhere + word-break: break-word で必ず折り返す
   //   - bold の継承 font-size を明示的に 14px に抑える
   //   - 既読ボタンも統一サイズに
   return `

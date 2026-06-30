@@ -15,15 +15,15 @@ const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 //   される。 支出登録/削除/編集の直後に古いキャッシュが返って 「ワリカに反映されない」
 //   ように見える問題を防ぐため、 操作直後にここで content cache から /api/groups* を
 //   消す。 失敗は黙殺 (キャッシュなしブラウザ等)。
-// v598 fix: 旧版は 'labpay-content-v2' を 直 open していたが 実際の SW キャッシュは v3。
-//   invalidateContentCache (api.js) で labpay-content-* を 全部 invalidate する 方式に変更。
+// v598 fix: 旧版は 'labpay-content-v2' を直 open していたが実際の SW キャッシュは v3。
+//   invalidateContentCache (api.js) で labpay-content-* を全部 invalidate する方式に変更。
 async function invalidateGroupCache(_gid) {
   await invalidateContentCache('/api/groups');
 }
 
-// v340 グループ詳細ヘッダの アクションボタン 8 個の定義 (順番もここの並びを保持)。
+// v340 グループ詳細ヘッダのアクションボタン 8 個の定義 (順番もここの並びを保持)。
 // feat_actions JSON 配列の値はこの id。 receipt / expense は wari に依存するので
-// feat_wari が OFF なら 強制的に hidden。
+// feat_wari が OFF なら強制的に hidden。
 const GROUP_ACTIONS = [
   { id: 'receipt',   label: '📷 レシート',       wariDep: true  },
   { id: 'expense',   label: '＋ 支出を記録',     wariDep: true  },
@@ -41,31 +41,31 @@ function actionEnabled(g, id) {
   if (list === null || list === undefined) return true; // 後方互換
   return Array.isArray(list) && list.includes(id);
 }
-// v385 ユーザの アプリ表示設定 とも 重ね合わせる (apps id と groups action id が一致するもの)。
-// receipt / expense は アプリ メニューに無いので 常に true。
+// v385 ユーザのアプリ表示設定とも重ね合わせる (apps id と groups action id が一致するもの)。
+// receipt / expense はアプリメニューに無いので常に true。
 function actionShownForUser(id) {
   const APP_LINKED = ['roulette','nomikai','polls','rollcalls','timers','meetups','translate'];
   if (!APP_LINKED.includes(id)) return true;
   return isAppVisible(id);
 }
 
-// v475 招待URL 経由 で 参加 (= /#/groups/join/{token})。 POST 一発 で 参加 して
-// グループ詳細 に 遷移。 失効済 / 404 は エラー カード を 表示。
+// v475 招待URL 経由で参加 (= /#/groups/join/{token})。 POST 一発で参加して
+// グループ詳細に遷移。 失効済 / 404 はエラーカードを表示。
 export async function renderGroupJoin({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <h2 style="margin-top:0">🔗 グループ に 参加</h2>
+      <h2 style="margin-top:0">🔗 グループに参加</h2>
       <div id="gj-body" class="hint">参加処理中…</div>
     </div>`;
   try {
     const r = await post(`/api/groups/join/${encodeURIComponent(params.token)}`, {});
-    toast(`グループ「${r.title || ''}」 に 参加しました`);
+    toast(`グループ「${r.title || ''}」 に参加しました`);
     navigate('#/groups/' + r.group_id);
   } catch (e) {
     document.getElementById('gj-body').innerHTML =
       `<div class="muted">${escapeHtml(e.message || '失敗')}</div>` +
-      `<div style="margin-top:10px"><a href="#/groups" class="btn">← グループ 一覧 へ</a></div>`;
+      `<div style="margin-top:10px"><a href="#/groups" class="btn">← グループ一覧へ</a></div>`;
   }
 }
 
@@ -104,7 +104,7 @@ export async function renderGroups() {
       </div>
       <div class="field">
         <span class="lbl">使う機能 (後から ON/OFF 可)</span>
-        <div class="hint-sm" style="margin-bottom:4px">必要なものだけ ON に。 OFF にしても 既に登録したデータは残ります。</div>
+        <div class="hint-sm" style="margin-bottom:4px">必要なものだけ ON に。 OFF にしても既に登録したデータは残ります。</div>
         <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
           <span class="switch"><input type="checkbox" id="gr-feat-sched"><span class="slider"></span></span>
           <span>📅 スケジュール (学会・出張など)</span>
@@ -121,7 +121,7 @@ export async function renderGroups() {
           <span class="switch"><input type="checkbox" id="gr-feat-wari" checked><span class="slider"></span></span>
           <span>💴 ワリカ (立替を積み上げ → 精算)</span>
         </label>
-        <div class="hint" style="margin-top:6px; margin-bottom:4px">アクションボタンの 表示</div>
+        <div class="hint" style="margin-top:6px; margin-bottom:4px">アクションボタンの表示</div>
         <div id="gr-feat-actions"></div>
       </div>
       <button id="gr-submit" class="primary">作成</button>
@@ -174,7 +174,7 @@ async function onGroupImageFile(ev) {
   } catch (e) { status.textContent = '失敗: ' + e.message; }
 }
 
-// v385 共有 member_picker。 createMemberPicker が selected を 内部で持つので、
+// v385 共有 member_picker。 createMemberPicker が selected を内部で持つので、
 // onCreate から picker.getSelected() で吸い上げる形に。
 let grPicker = null;
 
@@ -275,11 +275,11 @@ export function wireCoverEditor({ idPrefix, onChange }) {
 // 共通: 画像つきリストアイテム。image_url が無い場合は従来の text-only
 // レイアウトに fallback (.list-item の素の見た目)。
 export function coverListItem({ href, image_url, image_thumb_url, title, meta = '', rightExtra = '', members = null, chipSize = 'xs' }) {
-  // v511 サムネが渡されていれば 原画像 より優先 (ホームのウィジェットで効く)。
+  // v511 サムネが渡されていれば原画像より優先 (ホームのウィジェットで効く)。
   const bg = image_thumb_url || image_url;
-  // v374 メンバ行: 名前は出さず avatar のみ 並べる (狭いリスト幅を 圧迫しない)。
+  // v374 メンバ行: 名前は出さず avatar のみ並べる (狭いリスト幅を圧迫しない)。
   // 8 人まで並べて、 9 人以上は 「+N」 / 末尾に (N人)。
-  // v396 ホーム用に chipSize='sm' を 受けられるよう 引数化 (デフォは 従来の xs)。
+  // v396 ホーム用に chipSize='sm' を受けられるよう引数化 (デフォは従来の xs)。
   const memberRow = (Array.isArray(members) && members.length)
     ? `<div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; align-items:center">
          ${members.slice(0, 8).map(m =>
@@ -292,7 +292,7 @@ export function coverListItem({ href, image_url, image_thumb_url, title, meta = 
     : '';
   const metaBlock = meta ? `<div class="meta">${meta}</div>` : '';
   if (bg) {
-    // v372 グループ / 募集は hero 修飾を付けて 64% 表紙 + 斜めカット に。
+    // v372 グループ / 募集は hero 修飾を付けて 64% 表紙 + 斜めカットに。
     return `
       <a class="list-item with-cover hero" href="${href}">
         <div class="cover-img" style="background-image:url('${escapeHtml(bg)}')"></div>
@@ -332,7 +332,7 @@ async function loadList() {
       href: '#/groups/' + escapeHtml(g.slug || g.id),
       image_url: g.image_url,
       title: escapeHtml(g.title) + (g.closed_at ? ' <span class="tag muted">終了</span>' : ''),
-      // meta は avatar 行が代わりに伝えるので省略 (発起人 / 日時 は重複情報)。
+      // meta は avatar 行が代わりに伝えるので省略 (発起人 / 日時は重複情報)。
       members: g.members || [],
     })).join('');
   } catch (e) {
@@ -423,16 +423,16 @@ export async function renderGroupDetail({ params }) {
 
     <details class="card" id="gd-tr-card">
       <summary style="font-weight:700; cursor:pointer">📚 翻訳ログ <span id="gd-tr-count" class="hint-sm"></span></summary>
-      <p class="hint-sm" style="margin:6px 0 4px">出張先などで メニュー / 看板を 撮って 全員で 共有。</p>
+      <p class="hint-sm" style="margin:6px 0 4px">出張先などでメニュー / 看板を撮って全員で共有。</p>
       <div class="row" style="gap:6px; margin:6px 0; flex-wrap:wrap">
-        <a id="gd-tr-add" class="btn primary" style="padding:2px 10px; font-size:12px">🌐 このグループで 新規 翻訳</a>
+        <a id="gd-tr-add" class="btn primary" style="padding:2px 10px; font-size:12px">🌐 このグループで新規翻訳</a>
       </div>
       <div id="gd-tr-list" class="list"></div>
     </details>
 
     <details class="card" id="gd-files-card">
       <summary style="font-weight:700; cursor:pointer">📎 ファイル / 🖼 画像 <span id="gd-files-count" class="hint-sm"></span></summary>
-      <p class="hint-sm" style="margin:6px 0 4px">グループ メンバー で 共有 する ファイル / 画像 (PDF, Office, 画像, zip 等。 最大 16 MB)。 追加 で メンバー 全員 に 通知。</p>
+      <p class="hint-sm" style="margin:6px 0 4px">グループメンバーで共有するファイル / 画像 (PDF, Office, 画像, zip 等。 最大 16 MB)。 追加でメンバー全員に通知。</p>
       <div class="row" style="gap:6px; margin:6px 0; align-items:center; flex-wrap:wrap">
         <input type="file" id="gd-files-input" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.ics,.zip" style="flex:1; min-width:140px; font-size:12px">
         <input type="text" id="gd-files-note" maxlength="500" placeholder="メモ (任意)" style="flex:2; min-width:140px; font-size:12px; padding:4px 6px">
@@ -458,7 +458,7 @@ export async function renderGroupDetail({ params }) {
     <details class="card" id="gd-feat-card" hidden>
       <summary style="font-weight:700; cursor:pointer">⚙ 使う機能の設定</summary>
       <p class="hint" style="margin:8px 0 8px">
-        必要なものだけ ON に。 OFF にしても 既に登録したデータは残ります。
+        必要なものだけ ON に。 OFF にしても既に登録したデータは残ります。
       </p>
       <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
         <span class="switch"><input type="checkbox" id="gd-feat-sched"><span class="slider"></span></span>
@@ -476,7 +476,7 @@ export async function renderGroupDetail({ params }) {
         <span class="switch"><input type="checkbox" id="gd-feat-wari"><span class="slider"></span></span>
         <span>💴 ワリカ</span>
       </label>
-      <div class="hint" style="margin-top:10px; margin-bottom:4px">アクションボタンの 表示</div>
+      <div class="hint" style="margin-top:10px; margin-bottom:4px">アクションボタンの表示</div>
       <div id="gd-feat-actions"></div>
     </details>
 
@@ -498,11 +498,11 @@ export async function renderGroupDetail({ params }) {
   // Default kind: memo.
   switchKind(document.querySelector('[data-kind="memo"]'));
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
-  // 精算 ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
+  // 精算ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
-  // v491 #91 gd-snap-expense は loadDetail で gd-head に注入 される ので、 ここで
-  //   bind すると 要素 が まだ 無く no-op に なる (= 「支出を 記録 で 入力 画面 が
-  //   出ない」 バグ)。 bind は loadDetail 内 (receipt と 同じ 場所) で 行う。
+  // v491 #91 gd-snap-expense は loadDetail で gd-head に注入されるので、 ここで
+  //   bind すると要素がまだ無く no-op になる (= 「支出を記録で入力画面が
+  //   出ない」 バグ)。 bind は loadDetail 内 (receipt と同じ場所) で行う。
   // スケジュールの日程設定 + 編集モード + 一覧
   document.getElementById('gd-sched-range')?.addEventListener('click', () => openSchedRangeModal(id));
   // v516 #144 Google Map インポートのボタン/file input は loadSchedule の stock card 内
@@ -511,7 +511,7 @@ export async function renderGroupDetail({ params }) {
     schedEditMode = !schedEditMode;
     loadSchedule(id);
   });
-  await loadDetail(id);   // ← 機能フラグを取ってから 関連 loader を判断
+  await loadDetail(id);   // ← 機能フラグを取ってから関連 loader を判断
   // v510 loadWari と loadGroupTranslations は互いに依存しないので並列化。
   //   各カードの DOM は loadDetail 時点で出来ているので片方の遅延でブロック不要。
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
@@ -522,8 +522,8 @@ export async function renderGroupDetail({ params }) {
   startChatLoop(id);
 }
 
-// v810 #400 グループ ファイル / 画像 共有。 アップロード → サーバ で kind 判定
-//   (image/* なら kind='image')、 画像 は サムネ grid、 非 画像 は ファイル リスト で 表示。
+// v810 #400 グループファイル / 画像共有。 アップロード → サーバで kind 判定
+//   (image/* なら kind='image')、 画像はサムネ grid、 非画像はファイルリストで表示。
 async function loadGroupFiles(gid) {
   const card = document.getElementById('gd-files-card');
   const imgs = document.getElementById('gd-files-images');
@@ -568,15 +568,15 @@ async function loadGroupFiles(gid) {
           ${renderActions(it)}
         </div>`;
     }).join('');
-    if (!items.length) list.innerHTML = '<div class="hint-sm" style="padding:6px">まだ アップロード されて いません</div>';
+    if (!items.length) list.innerHTML = '<div class="hint-sm" style="padding:6px">まだアップロードされていません</div>';
     // delete buttons
     card.querySelectorAll('[data-gd-file-del]').forEach(btn => {
       btn.addEventListener('click', async (ev) => {
         ev.preventDefault();
-        if (!confirm('この ファイル を 削除 しますか?')) return;
+        if (!confirm('このファイルを削除しますか?')) return;
         const fid = btn.getAttribute('data-gd-file-del');
         try { await del(`/api/groups/${gid}/files/${fid}`); await loadGroupFiles(gid); }
-        catch (e) { toast('削除 失敗: ' + (e?.message || e)); }
+        catch (e) { toast('削除失敗: ' + (e?.message || e)); }
       });
     });
   } catch (_) { /* silently */ }
@@ -588,7 +588,7 @@ function groupFilesCanDelete(it) {
   if (!myId) return false;
   if ((it.uploader_id || 0) === myId) return true;
   if (role === 'admin') return true;
-  // creator チェック は サーバ 側 で 改めて 判定 する ので、 クライアント では 投稿者 + admin のみ ボタン表示
+  // creator チェックはサーバ側で改めて判定するので、 クライアントでは投稿者 + admin のみボタン表示
   return false;
 }
 
@@ -601,10 +601,10 @@ function bindGroupFilesUI(gid) {
   btn.dataset.bound = '1';
   btn.addEventListener('click', async () => {
     const f = fileInput?.files?.[0];
-    if (!f) { toast('ファイル を 選択 して ください'); return; }
-    if (f.size > 16 * 1024 * 1024) { toast('16 MB を 超えて います'); return; }
+    if (!f) { toast('ファイルを選択してください'); return; }
+    if (f.size > 16 * 1024 * 1024) { toast('16 MB を超えています'); return; }
     btn.disabled = true;
-    if (status) status.textContent = '送信 中…';
+    if (status) status.textContent = '送信中…';
     try {
       const fd = new FormData();
       fd.append('file', f);
@@ -632,11 +632,11 @@ async function loadGroupTranslations(gid) {
     const items = d.items || [];
     if (cnt) cnt.textContent = '(' + items.length + ')';
     if (!items.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px">まだ 翻訳は ありません</div>';
+      root.innerHTML = '<div class="empty" style="padding:6px">まだ翻訳はありません</div>';
       return;
     }
-    // v488 #83 翻訳結果 が 切れて 全文 見えない 問題 → <details> で 折り畳み、
-    //   タップ で 全文 展開。 画像 も タップ で 拡大 (新タブ で 原寸)。
+    // v488 #83 翻訳結果が切れて全文見えない問題 → <details> で折り畳み、
+    //   タップで全文展開。 画像もタップで拡大 (新タブで原寸)。
     root.innerHTML = items.map(t => {
       const full = String(t.result_text || '');
       const isLong = full.length > 120;
@@ -659,11 +659,11 @@ async function loadGroupTranslations(gid) {
         </div>`;
     }).join('');
   } catch (_) {
-    root.innerHTML = '<div class="muted" style="padding:6px; font-size:12px">取得 失敗</div>';
+    root.innerHTML = '<div class="muted" style="padding:6px; font-size:12px">取得失敗</div>';
   }
 }
 
-// グループの 「使う機能」 フラグに応じて 関連カードの表示 + データロードを制御。
+// グループの 「使う機能」 フラグに応じて関連カードの表示 + データロードを制御。
 // loadDetail から呼ぶ。 後で feature を ON/OFF した時も呼び直せばよい。
 function applyGroupFeatures(g) {
   const groupId = g.id;
@@ -678,11 +678,11 @@ function applyGroupFeatures(g) {
   if (g.feat_schedule) loadSchedule(groupId);
   if (g.feat_lodging)  loadLodgings(groupId);
   if (g.feat_flight)   loadFlights(groupId);
-  // ヘッダの 「地図」 ボタンも スケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
+  // ヘッダの 「地図」 ボタンもスケジュール機能と連動 (lat/lng はスケジュールに乗るため)。
   const mapBtn = document.querySelector(`a[href="#/groups/${groupId}/map"]`);
   if (mapBtn) mapBtn.hidden = !g.feat_schedule;
   // 8 個のアクションボタン: feat_actions の null/配列に従って表示制御。 receipt と
-  // expense は ワリカ依存なので feat_wari OFF なら強制 hidden。
+  // expense はワリカ依存なので feat_wari OFF なら強制 hidden。
   for (const a of GROUP_ACTIONS) {
     const el = document.querySelector(`[data-gd-act="${a.id}"]`);
     if (!el) continue;
@@ -742,7 +742,7 @@ function applyGroupFeatures(g) {
           });
         });
       }
-      // 現在の有効状態を反映 (feat_actions=null は 全 ON)
+      // 現在の有効状態を反映 (feat_actions=null は全 ON)
       if (actBox) {
         actBox.querySelectorAll('input[data-act]').forEach(cb => {
           cb.checked = actionEnabled(g, cb.dataset.act);
@@ -807,8 +807,8 @@ async function loadDetail(id) {
     const isCreator = state.me?.id === Number(g.creator_user_id);
     const memberIds = g.members.map(m => m.id).join(',');
     setWariMembers(g.members);
-    // v518 #153 「解除」 ボタンは廃止 (「変更」 → 空欄で保存 で解除できる)。 また 編集
-    //   モード時のみ 「変更/設定」 を出す (普段は ただの表示)。
+    // v518 #153 「解除」 ボタンは廃止 (「変更」 → 空欄で保存で解除できる)。 また編集
+    //   モード時のみ 「変更/設定」 を出す (普段はただの表示)。
     const slugRow = isCreator
       ? `<div class="meta" style="margin-top:4px">URL 用の名前: <span class="mono">${g.slug ? '/#/groups/' + escapeHtml(g.slug) : '(未設定)'}</span>
            ${gdEditMode ? `<button id="gd-edit-slug" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">${g.slug ? '変更' : '設定'}</button>` : ''}
@@ -822,7 +822,7 @@ async function loadDetail(id) {
       canEdit:  isCreator && gdEditMode,
       idPrefix: 'gd',
     });
-    // v518 #153 ヘッダ右上に ✏ 編集モード トグル (isCreator || isAdmin のみ)。
+    // v518 #153 ヘッダ右上に ✏ 編集モードトグル (isCreator || isAdmin のみ)。
     const canEditGroup = (isCreator || (state.me?.role === 'admin')) && !g.closed_at;
     const editToggleBtn = canEditGroup
       ? `<button id="gd-edit-toggle" class="btn" style="float:right; padding:2px 10px; font-size:12px; ${gdEditMode ? 'background:#fef3c7' : ''}">${gdEditMode ? '✏ 編集モード ON' : '✏ 編集モード'}</button>`
@@ -831,7 +831,7 @@ async function loadDetail(id) {
       ${imgBlock}
       ${editToggleBtn}
       <div class="bold" style="font-size:18px">${escapeHtml(g.title)} ${g.closed_at ? '<span class="tag muted">終了</span>' : ''}
-        ${gdEditMode && isCreator ? `<button id="gd-edit-title" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">✏️ 名前 変更</button>` : ''}
+        ${gdEditMode && isCreator ? `<button id="gd-edit-title" class="btn" style="padding:2px 6px; font-size:11px; margin-left:6px">✏️ 名前変更</button>` : ''}
       </div>
       <div class="meta">${escapeHtml(g.creator_name)} · ${escapeHtml(fmtDateTime(g.created_at))}</div>
       ${slugRow}
@@ -844,8 +844,8 @@ async function loadDetail(id) {
       <div id="gd-mem-form" hidden style="margin-top:8px"></div>
       <div id="gd-invite-form" hidden style="margin-top:8px"></div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <!-- v490 #90 レシート ボタン は 1 つ に 統合。 capture 属性 を 外して
-             カメラ / フォト ライブラリ / ファイル の どれ から も 選べる ように -->
+        <!-- v490 #90 レシートボタンは 1 つに統合。 capture 属性を外して
+             カメラ / フォトライブラリ / ファイルのどれからも選べるように -->
         <button class="btn primary" id="gd-snap-receipt" data-gd-act="receipt" ${actionEnabled(g, 'receipt') && g.feat_wari ? '' : 'hidden'}>📷 レシート</button>
         <button class="btn primary" id="gd-snap-expense" data-gd-act="expense" ${actionEnabled(g, 'expense') && g.feat_wari ? '' : 'hidden'}>＋ 支出を記録</button>
         <a class="btn" data-gd-act="roulette"  ${actionEnabled(g, 'roulette')  && actionShownForUser('roulette')  ? '' : 'hidden'} href="#/roulette?members=${memberIds}&title=${encodeURIComponent(g.title)}">🎰 ルーレット</a>
@@ -856,12 +856,12 @@ async function loadDetail(id) {
         <a class="btn" data-gd-act="meetups"   ${actionEnabled(g, 'meetups')   && actionShownForUser('meetups')   ? '' : 'hidden'} href="#/meetups/new?members=${memberIds}&title=${encodeURIComponent('[' + g.title + '] ')}">🤝 待ち合わせ</a>
         <a class="btn" data-gd-act="translate" ${actionEnabled(g, 'translate') && actionShownForUser('translate') ? '' : 'hidden'} href="#/translate?group_id=${id}">🌐 画像翻訳</a>
         <a class="btn" ${g.feat_schedule ? '' : 'hidden'} href="#/groups/${escapeHtml(String(g.id))}/map">🗺️ 地図</a>
-        <!-- v490 #90 単一 input、 capture 属性 なし → カメラ / フォト / ファイル
-             の どれ から でも 選べる (端末 が 標準 で 「撮影 する」 「ライブラリ から
-             選ぶ」 「ファイル から 選ぶ」 を 出す)。 -->
+        <!-- v490 #90 単一 input、 capture 属性なし → カメラ / フォト / ファイル
+             のどれからでも選べる (端末が標準で 「撮影する」 「ライブラリから
+             選ぶ」 「ファイルから選ぶ」 を出す)。 -->
         <input type="file" id="gd-receipt-file" accept="image/*" hidden>
       </div>`;
-    // v475 メンバー 追加 / 削除 / 招待リンク (起案者 + admin)
+    // v475 メンバー追加 / 削除 / 招待リンク (起案者 + admin)
     const isAdmin = state.me?.role === 'admin';
     const canManageMembers = (isCreator || isAdmin) && !g.closed_at;
     const addMemBtn = document.getElementById('gd-add-mem-btn');
@@ -869,13 +869,13 @@ async function loadDetail(id) {
     if (addMemBtn) addMemBtn.style.display = canManageMembers ? '' : 'none';
     if (invBtn)    invBtn.style.display    = canManageMembers ? '' : 'none';
     if (canManageMembers) {
-      // v518 #153 メンバー × ボタンは 編集モード ON 時のみ表示。 普段は誤タップ防止。
+      // v518 #153 メンバー × ボタンは編集モード ON 時のみ表示。 普段は誤タップ防止。
       if (gdEditMode) {
         const memList = document.getElementById('gd-members-list');
         if (memList) {
           memList.querySelectorAll('[data-gd-mem]').forEach(span => {
             const uid = Number(span.dataset.gdMem);
-            if (uid === Number(g.creator_user_id)) return;  // 起案者 は 削除 不可
+            if (uid === Number(g.creator_user_id)) return;  // 起案者は削除不可
             const x = document.createElement('button');
             x.textContent = '×';
             x.title = '外す';
@@ -884,7 +884,7 @@ async function loadDetail(id) {
             x.addEventListener('click', async (ev) => {
               ev.preventDefault();
               ev.stopPropagation();
-              if (!confirm('このメンバー を 外しますか?')) return;
+              if (!confirm('このメンバーを外しますか?')) return;
               try { await del(`/api/groups/${id}/members/${uid}`); await loadDetail(id); }
               catch (e) { toast('失敗: ' + e.message); }
             });
@@ -892,7 +892,7 @@ async function loadDetail(id) {
           });
         }
       }
-      // 追加 ボタン
+      // 追加ボタン
       addMemBtn?.addEventListener('click', async () => {
         const form = document.getElementById('gd-mem-form');
         if (!form.hidden) { form.hidden = true; return; }
@@ -920,17 +920,17 @@ async function loadDetail(id) {
         document.getElementById('gd-mem-cancel').onclick = () => { form.hidden = true; };
         document.getElementById('gd-mem-save').onclick = async () => {
           const ids = picker ? [...picker.getSelected()] : [];
-          if (!ids.length) { toast('追加 する メンバー を 選んで ください'); return; }
+          if (!ids.length) { toast('追加するメンバーを選んでください'); return; }
           let added = 0;
           for (const uid of ids) {
             try { await post(`/api/groups/${id}/members`, { user_id: uid }); added++; }
             catch (e) { toast(`#${uid}: ${e.message}`); }
           }
-          toast(`${added} 人 追加しました`);
+          toast(`${added} 人追加しました`);
           await loadDetail(id);
         };
       });
-      // 招待 リンク
+      // 招待リンク
       invBtn?.addEventListener('click', () => {
         const form = document.getElementById('gd-invite-form');
         if (!form.hidden) { form.hidden = true; return; }
@@ -950,7 +950,7 @@ async function loadDetail(id) {
                  <button id="gd-invite-copy" class="btn">📋 コピー</button>
                  <button id="gd-invite-revoke" class="btn danger">失効</button>
                </div>`
-            : `<div class="hint-sm" style="margin-bottom:4px">まだ 発行 されて いません</div>`
+            : `<div class="hint-sm" style="margin-bottom:4px">まだ発行されていません</div>`
           }
           <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
             <button id="gd-invite-issue" class="primary">${cur ? '更新' : '発行'} (有効期限 30 日)</button>
@@ -958,9 +958,9 @@ async function loadDetail(id) {
         document.getElementById('gd-invite-issue').onclick = async () => {
           try {
             const r = await post(`/api/groups/${id}/invite`, { days: 30 });
-            toast('招待リンク を 発行しました');
+            toast('招待リンクを発行しました');
             await loadDetail(id);
-            // 再 描画 後 に もう一度 開く
+            // 再描画後にもう一度開く
             document.getElementById('gd-invite-btn')?.click();
           } catch (e) { toast('失敗: ' + e.message); }
         };
@@ -972,17 +972,17 @@ async function loadDetail(id) {
           catch (_) { navigator.clipboard?.writeText(inp.value).then(() => toast('コピーしました')); }
         });
         document.getElementById('gd-invite-revoke')?.addEventListener('click', async () => {
-          if (!confirm('招待リンク を 失効 します。 既存 メンバー は そのまま です。 OK?')) return;
+          if (!confirm('招待リンクを失効します。 既存メンバーはそのままです。 OK?')) return;
           try { await del(`/api/groups/${id}/invite`); toast('失効しました'); await loadDetail(id); }
           catch (e) { toast('失敗: ' + e.message); }
         });
       });
     }
 
-    // 閉鎖 / 完全削除 カード:
-    //   * 「閉鎖する」 は 未閉鎖 かつ creator/admin
-    //   * 「完全削除」 は 閉鎖済 かつ creator/admin (admin であっても 閉鎖前は出さない)。
-    //     「いきなり完全削除」 にならないよう、 必ず 閉鎖 を 経由するワンクッション。
+    // 閉鎖 / 完全削除カード:
+    //   * 「閉鎖する」 は未閉鎖かつ creator/admin
+    //   * 「完全削除」 は閉鎖済かつ creator/admin (admin であっても閉鎖前は出さない)。
+    //     「いきなり完全削除」 にならないよう、 必ず閉鎖を経由するワンクッション。
     const dangerCard = document.getElementById('gd-danger-card');
     const canClose = (isCreator || isAdmin) && !g.closed_at;
     const canHardDel = (isCreator || isAdmin) && !!g.closed_at;
@@ -1002,7 +1002,7 @@ async function loadDetail(id) {
       document.getElementById('gd-receipt-file').click();
     });
     document.getElementById('gd-receipt-file')?.addEventListener('change', (ev) => onReceiptFile(ev, id));
-    // v491 #91 支出 ボタン も loadDetail で 注入 さ れる ので ここ で bind。
+    // v491 #91 支出ボタンも loadDetail で注入されるのでここで bind。
     document.getElementById('gd-snap-expense')?.addEventListener('click', () => openWariFormModal(id));
     // 受け皿は loadWari に統合済み (確定支出と未確定レシートを一覧にまとめる)。
     document.getElementById('gd-close')?.addEventListener('click', async () => {
@@ -1014,7 +1014,7 @@ async function loadDetail(id) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('gd-hard-delete')?.addEventListener('click', async () => {
-      if (!confirm('完全削除します。 投稿 / ワリカ / 宿泊 / 航空券 / スケジュール / チャット の全データが消えます。 元に戻せません。 良いですか?')) return;
+      if (!confirm('完全削除します。 投稿 / ワリカ / 宿泊 / 航空券 / スケジュール / チャットの全データが消えます。 元に戻せません。 良いですか?')) return;
       if (!confirm('本当に削除しますか? (最終確認)')) return;
       try {
         await del('/api/groups/' + id + '/hard_delete');
@@ -1024,14 +1024,14 @@ async function loadDetail(id) {
     });
     document.getElementById('gd-edit-slug')?.addEventListener('click', () => onEditSlug(g));
     document.getElementById('gd-edit-title')?.addEventListener('click', async () => {
-      const newTitle = prompt('新しい グループ名 (200 文字以内):', g.title);
+      const newTitle = prompt('新しいグループ名 (200 文字以内):', g.title);
       if (newTitle === null) return;
       const t = newTitle.trim();
-      if (!t) { toast('グループ名 は 必須'); return; }
+      if (!t) { toast('グループ名は必須'); return; }
       if (t === g.title) return;
       try {
         await patch('/api/groups/' + g.id, { title: t });
-        toast('グループ名 を 変更しました');
+        toast('グループ名を変更しました');
         await loadDetail(id);
       } catch (e) { toast('失敗: ' + e.message); }
     });
@@ -1112,8 +1112,8 @@ async function fetchFxRate(ccy) {
 // Set of user_ids the next expense applies to. Initialized to all current
 // members when setWariMembers() runs; user deselects chips to exclude people.
 let wariFor = new Set();
-// v488 #84 個別 金額 (user_id → number)。 空 / 0 は 「均等 割」 扱い、 number > 0 は
-//   その人 の 固定 金額。 入力 ある と チップ の 横 に 数字 を 表示。
+// v488 #84 個別金額 (user_id → number)。 空 / 0 は 「均等割」 扱い、 number > 0 は
+//   その人の固定金額。 入力あるとチップの横に数字を表示。
 let wariFixed = new Map();
 let wariFormOnSubmitted = null;
 
@@ -1212,7 +1212,7 @@ async function onExImageFile(ev) {
 
 // JPEG の EXIF から DateTimeOriginal (tag 0x9003) を読む。 戻り値は
 // 「YYYY-MM-DD HH:MM:SS」 形式 (server 期待) または null。 ライブラリ不要、
-// 自前で TIFF を辿る最小実装。 EXIF が無い / HEIC / 解析失敗 で null。
+// 自前で TIFF を辿る最小実装。 EXIF が無い / HEIC / 解析失敗で null。
 //
 // EXIF 仕様: JPEG (FFD8) → APP1 マーカー (FFE1) + "Exif\0\0" + TIFF。
 // TIFF は "II" (little-endian) または "MM" (big-endian) + 0x002A magic +
@@ -1345,7 +1345,7 @@ async function syncFxPreview() {
   if (ccy === 'OTHER') {
     customRow.hidden = false;
     row.hidden = false;
-    row.innerHTML = `<span class="muted">通貨コード (3文字) と 1通貨=?円 を入れてください。コードが対応していれば自動取得します。</span>`;
+    row.innerHTML = `<span class="muted">通貨コード (3文字) と 1通貨=?円を入れてください。コードが対応していれば自動取得します。</span>`;
     return;
   }
   customRow.hidden = true;
@@ -1355,7 +1355,7 @@ async function syncFxPreview() {
   try {
     const entry = await fetchFxRate(ccy);
     pendingFxRate = entry.rate;
-    // v614 為替手数料 3.63% を 明示
+    // v614 為替手数料 3.63% を明示
     const effectiveRate = entry.rate * 1.0363;
     row.innerHTML = `<span class="muted">登録時点のレート: 1 ${escapeHtml(ccy)} = ${entry.rate.toFixed(4)} JPY (手数料3.63%込み: ${effectiveRate.toFixed(4)}) <span style="font-size:11px">(${escapeHtml(entry.source)})</span></span>`;
   } catch (e) {
@@ -1382,11 +1382,11 @@ async function tryFetchCustomRate() {
 
 // 「誰の分?」 picker. Chip row with everyone pre-selected; tap a chip to
 // exclude that person from this expense.
-// v488 #84 「個別 金額」 モード: トグル を ON に する と 各 メンバー の 横 に 数値
-//   入力 が 出る。 入れた 人 は その 額 が 固定、 残り を 入って いる 他 メンバー で
-//   均等 割り。 空 / 0 は 均等 割 (今 まで と 同じ)。
-// v490 #87 chip 全体 を クリック ターゲット に 戻し (data-for-uid を 外側 に)、
-//   個別 額 input は stopPropagation で chip トグル を 抑止。
+// v488 #84 「個別金額」 モード: トグルを ON にすると各メンバーの横に数値
+//   入力が出る。 入れた人はその額が固定、 残りを入っている他メンバーで
+//   均等割り。 空 / 0 は均等割 (今までと同じ)。
+// v490 #87 chip 全体をクリックターゲットに戻し (data-for-uid を外側に)、
+//   個別額 input は stopPropagation で chip トグルを抑止。
 let wariCustomMode = false;
 function renderForPicker() {
   const root = document.getElementById('ex-for');
@@ -1396,14 +1396,14 @@ function renderForPicker() {
   const summary = n === 0
     ? `<span style="color:var(--warn)">対象者を 1 人以上選んでください</span>`
     : (wariCustomMode && fixedSum > 0
-        ? `${n}人 中 固定 額 合計 ${fixedSum.toLocaleString()} (残額 は 等分)`
+        ? `${n}人中固定額合計 ${fixedSum.toLocaleString()} (残額は等分)`
         : (n === wariMembers.length ? `全員 (${n}人)` : `${n}人で割る`));
   root.innerHTML = `
     <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
       <span class="hint-sm" style="flex:1">誰の分? <span style="margin-left:6px">${summary}</span></span>
       <label style="display:inline-flex; align-items:center; gap:4px; font-size:11px; cursor:pointer; flex:none">
         <input type="checkbox" id="ex-custom-toggle" ${wariCustomMode ? 'checked' : ''}>
-        🔢 個別 金額
+        🔢 個別金額
       </label>
     </div>
     <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:4px">
@@ -1425,7 +1425,7 @@ function renderForPicker() {
   `;
   root.querySelectorAll('[data-for-uid]').forEach(c => {
     c.addEventListener('click', (ev) => {
-      // 個別 額 input への クリック / フォーカス は chip トグル を 抑止。
+      // 個別額 input へのクリック / フォーカスは chip トグルを抑止。
       if (ev.target.closest('[data-fixed-uid]')) return;
       const uid = Number(c.dataset.forUid);
       if (wariFor.has(uid)) { wariFor.delete(uid); wariFixed.delete(uid); }
@@ -1473,8 +1473,8 @@ async function onAddExpense() {
   }
   body.currency = currency;
   if (wariFor.size === 0) { toast('対象者を 1 人以上選んでください'); return; }
-  // v488 #84 個別 金額 が 1 件 でも あれば rich 形式 で 送る (backend は
-  //   participants: [{user_id, fixed}] を 受け取る)。
+  // v488 #84 個別金額が 1 件でもあれば rich 形式で送る (backend は
+  //   participants: [{user_id, fixed}] を受け取る)。
   const anyFixed = [...wariFor].some(uid => (wariFixed.get(uid) || 0) > 0);
   if (anyFixed) {
     body.participants = [...wariFor].map(uid => {
@@ -1487,7 +1487,7 @@ async function onAddExpense() {
   try {
     await post(`/api/groups/${gid}/expenses`, body);
     // v499 #112 /api/groups/* は SW で SWR キャッシュされているので、 古いキャッシュが
-    //   そのまま返って 「登録したのに ワリカ に出ない」 を引き起こす。 自分の操作
+    //   そのまま返って 「登録したのにワリカに出ない」 を引き起こす。 自分の操作
     //   直後はキャッシュを消して新鮮取り直し。
     await invalidateGroupCache(gid);
     document.getElementById('ex-amt').value = '';
@@ -1516,7 +1516,7 @@ async function loadWari(id) {
   const summary = document.getElementById('gd-wari-summary');
   if (!root || !summary) return;
   try {
-    // 確定済み支出 + 下書きレシート を時系列で混ぜて並べる。
+    // 確定済み支出 + 下書きレシートを時系列で混ぜて並べる。
     // (支出と receipt は同じ adhoc_group_expenses 表だが、 API は分かれてる)
     const [d, recd] = await Promise.all([
       get(`/api/groups/${id}/expenses`),
@@ -1529,7 +1529,7 @@ async function loadWari(id) {
       : (cachedReceipts.length
           ? `<span class="muted">確定支出はまだなし (未確定レシート ${cachedReceipts.length} 件)</span>`
           : '<span class="muted">まだ支出はありません</span>');
-    // 各 row に sort 用キー (created_at desc) を付けて 一覧 を組む。
+    // 各 row に sort 用キー (created_at desc) を付けて一覧を組む。
     const expRows = (d.expenses || []).map(e => ({
       _ts: e.created_at || '',
       _draft: false,
@@ -1759,7 +1759,7 @@ function openExpenseEdit(gid, e) {
     const payer_user_id = payerRaw === '' ? null : Number(payerRaw);
     const memo = overlay.querySelector('#ex-edit-memo').value.trim() || null;
     if (currency === 'OTHER') { toast('「その他」通貨での編集は未対応'); return; }
-    // draft は amount=0 でも保存可 (途中保存 OK)。 通常支出 は >0 必須。
+    // draft は amount=0 でも保存可 (途中保存 OK)。 通常支出は >0 必須。
     if (!e.is_draft && !(amount > 0)) { toast('金額を入れてください'); return; }
     if (!e.is_draft && !initSet.size) { toast('対象者を 1 人以上選んでください'); return; }
     const body = { amount: isNaN(amount) ? 0 : amount, currency, payer_user_id, memo, participant_ids: [...initSet] };
@@ -1780,7 +1780,7 @@ function renderExpense(e, gid) {
   // wariMembers は loadDetail で全 group member セット済みなので、me がそこに
   // いれば canManage = true とみなす。
   const canManage = !!meId && wariMembers.some(m => Number(m.id) === Number(meId));
-  // v614 海外通貨は 為替手数料 3.63% 上乗せして JPY 換算 (表示にも明記)
+  // v614 海外通貨は為替手数料 3.63% 上乗せして JPY 換算 (表示にも明記)
   const orig = (e.currency !== 'JPY' && e.amount_original)
     ? ` <span class="muted" style="font-size:11px">(${Number(e.amount_original).toLocaleString()} ${escapeHtml(e.currency)} × ${Number(e.rate_to_jpy).toFixed(2)} × 1.0363 手数料込)</span>` : '';
   const names = e.participants.map(uid => {
@@ -1825,15 +1825,15 @@ function openSettleModal(gid) {
   const meId = Number(state.me?.id) || 0;
   const mineStyle = 'background:#fff8e6; border-left:3px solid var(--primary)';
 
-  // v394: source_group_id 経由で この グループに 紐づく money_request 群が
+  // v394: source_group_id 経由でこのグループに紐づく money_request 群が
   // settlement_charges に入っているので、 (from_user_id, to_user_id) で
-  // マッチングして 各プラン行に 「✅ 支払い済」 / 「💸 請求済 (未払い)」 を
-  // 上乗せ表示。 同じ ペアの 請求が 複数あったら 最新の paid 状態を 採用。
+  // マッチングして各プラン行に 「✅ 支払い済」 / 「💸 請求済 (未払い)」 を
+  // 上乗せ表示。 同じペアの請求が複数あったら最新の paid 状態を採用。
   const chargesByPair = new Map();
   for (const c of (d.settlement_charges || [])) {
     const key = `${c.from_user_id}-${c.to_user_id}`;
-    // 後勝ち = 同 (from, to) で 新しい請求 ほど 優先 (settlement_charges は
-    // mr.id ASC で 来るので 最後が 最新)
+    // 後勝ち = 同 (from, to) で新しい請求ほど優先 (settlement_charges は
+    // mr.id ASC で来るので最後が最新)
     chargesByPair.set(key, c);
   }
   const planRows = d.settlements.length
@@ -1886,7 +1886,7 @@ function openSettleModal(gid) {
     </div>`;
   // 私あての送金プラン分を「請求」フォーマットで発射する。各 from_user が
   // 私 (creator=me) に支払うべき額を recipient として登録した money_request
-  // を新規作成。受取人はその後 PayPay/銀行 等で「支払い済」をチェックできる。
+  // を新規作成。受取人はその後 PayPay/銀行等で「支払い済」をチェックできる。
   // 推奨送金プランの各 to_user_id (受取側) を creator にして、対応する
   // from_user_id 群を recipients にした money_request を一斉に作成する。
   // 1 creditor = 1 請求。タイトルは全件共通で prompt 編集可能 (デフォルト
@@ -1925,8 +1925,8 @@ function openSettleModal(gid) {
             memo: null,
             creator_user_id: creatorId,
             recipients,
-            // v394: source_group_id を 渡すと、 精算サマリ モーダルが 「この
-            // プランは もう 支払い済」 を 後で 反映できるようになる。
+            // v394: source_group_id を渡すと、 精算サマリモーダルが 「この
+            // プランはもう支払い済」 を後で反映できるようになる。
             source_group_id: Number(currentGroupId),
           });
           if (firstId === null) firstId = created.id;
@@ -2031,19 +2031,19 @@ async function onSchedGmapImport(ev, gid) {
 // 種類順は dropdown 並び順とも兼ねる。 移動系は同じ 「移動」 グループとして
 // 上のかたまりで表示。 旧 'move' は後方互換のため表示時のみハンドリング。
 let schedEditMode = false;
-// v518 #153 グループの編集モード。 OFF (default) では 表紙画像 変更ボタン / メンバー
-//   削除 × ボタンを 隠して、 「閲覧用」 として 軽い見た目に。 ヘッダの ✏ 編集モード
-//   トグルで ON。 isCreator / isAdmin のみ アクセス可能。
+// v518 #153 グループの編集モード。 OFF (default) では表紙画像変更ボタン / メンバー
+//   削除 × ボタンを隠して、 「閲覧用」 として軽い見た目に。 ヘッダの ✏ 編集モード
+//   トグルで ON。 isCreator / isAdmin のみアクセス可能。
 let gdEditMode = false;
 let schedPairSlots = {};
 let schedPairMaxSlot = -1;
 let schedPairFirstIds = new Set();
 let schedPairLastIds  = new Set();
-// 帯の左右位置 はカテゴリ別の slot で決めて 確実に重ならないようにする。
-// hash だけで決めると 「__mdi_31 と __mdi_32」 みたいな 1 文字差 で
-// rightPx がほぼ同じになり 帯が重なって見える。
+// 帯の左右位置はカテゴリ別の slot で決めて確実に重ならないようにする。
+// hash だけで決めると 「__mdi_31 と __mdi_32」 みたいな 1 文字差で
+// rightPx がほぼ同じになり帯が重なって見える。
 let schedPairCatSlots = { transport: {}, staying: {} };
-// modal の 「ペア相手」 dropdown で 同グループの他アイテムを出すために、
+// modal の 「ペア相手」 dropdown で同グループの他アイテムを出すために、
 // 最新の取得結果を持っておく。
 let lastSchedItems = [];
 const SCHED_KINDS = {
@@ -2064,7 +2064,7 @@ const SCHED_KINDS = {
 };
 
 async function loadSchedule(gid) {
-  // v528 #184 #186 await 中に loadDetail が再走すると DOM が差し替わって 古い body
+  // v528 #184 #186 await 中に loadDetail が再走すると DOM が差し替わって古い body
   //   参照は orphan になる。 fetch 後に再取得する形で 「読み込み中…」 が残るバグを防ぐ。
   // v534 #189 描画コード内の JS エラーで body が 「読み込み中…」 のまま残るのを防ぐ
   //   ため、 関数全体を try/catch で包む。 catch 時はエラーメッセージを body に出す。
@@ -2112,7 +2112,7 @@ async function loadScheduleInner(gid) {
     }
   }
   if (!hasDates) {
-    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「📅 日程設定」 から 開始日〜終了日 を入れると 各日のカードが並びます。</div>`;
+    body.innerHTML = `<div class="empty" style="padding:8px">日程未設定。 右上 「📅 日程設定」 から開始日〜終了日を入れると各日のカードが並びます。</div>`;
     return;
   }
   // 日付範囲を 1 日ずつ展開。 toISOString は UTC に変換してしまい JST 環境で
@@ -2169,9 +2169,9 @@ async function loadScheduleInner(gid) {
   }
   // byDay 内を 「その日の視覚順」 に並べ直す。 サーバ側は ORDER BY で
   // 「start_time あり → start_time 昇順 → NULL は末尾」 を保証してくれているが、
-  // 展開された multi-day item の mid 行は その日の文脈で時刻が無い (元アイテムの
-  // start_time は チェックイン日のもので、 mid 日の話ではない) ので 末尾に置きたい。
-  // end 行は end_time があれば その時刻位置に置く。
+  // 展開された multi-day item の mid 行はその日の文脈で時刻が無い (元アイテムの
+  // start_time はチェックイン日のもので、 mid 日の話ではない) ので末尾に置きたい。
+  // end 行は end_time があればその時刻位置に置く。
   for (const date of Object.keys(byDay)) {
     byDay[date].sort((a, b) => {
       const effTime = (it) => it._occ === 'mid' ? null
@@ -2223,7 +2223,7 @@ async function loadScheduleInner(gid) {
   schedPairSlots = pairSlots;
   schedPairMaxSlot = Math.max(-1, ...Object.values(pairSlots));
   // カテゴリ別 slot index (左右の位置決め用)。 ペアの代表 kind で振り分け、
-  // 同カテゴリ内で 連番を振る → 帯が確実に重ならない。
+  // 同カテゴリ内で連番を振る → 帯が確実に重ならない。
   const tSlots = {}, sSlots = {};
   let ti = 0, si = 0;
   Object.entries(pairOccurrences)
@@ -2260,10 +2260,10 @@ async function loadScheduleInner(gid) {
     schedPairLastIds.add(Number(last.it.id)   + ':' + last.date);
   }
   const dayLabels = ['日','月','火','水','木','金','土'];
-  // v403 ストック (日付未定) は タイル 並び。 件数が多くなりがちな 「行きたい場所
-  // 候補」 を 圧縮して 一覧 しやすく。 1 枚あたり 約 140px、 grid auto-fill。
-  // v516 #144 Google Map インポート は 「行きたい場所ストック」 の中 (＋ 候補を追加 の隣)
-  //   に移動。 スケジュールヘッダから外して 普段邪魔にならない位置に。
+  // v403 ストック (日付未定) はタイル並び。 件数が多くなりがちな 「行きたい場所
+  // 候補」 を圧縮して一覧しやすく。 1 枚あたり約 140px、 grid auto-fill。
+  // v516 #144 Google Map インポートは 「行きたい場所ストック」 の中 (＋ 候補を追加の隣)
+  //   に移動。 スケジュールヘッダから外して普段邪魔にならない位置に。
   const stockCard = stockItems.length || schedEditMode ? `
     <details class="card collapsible-sub" open style="margin:6px 0; padding:8px 10px; background:#fffbf0; border-left:4px solid #fcd34d">
       <summary style="font-weight:700">📋 行きたい場所ストック <span class="hint-sm">— ${stockItems.length} 件</span></summary>
@@ -2279,14 +2279,14 @@ async function loadScheduleInner(gid) {
       </div>
     </details>` : '';
 
-  // v403 1 日 ごとに 背景色 を 周期で振る。 日数 が 多くても 視覚的に 区切れる。
+  // v403 1 日ごとに背景色を周期で振る。 日数が多くても視覚的に区切れる。
   const DAY_BG_PALETTE = ['#f0f9ff', '#fdf4ff', '#f0fdf4', '#fef3c7', '#fce4ec', '#f1f5f9', '#fff7ed'];
   const DAY_BORDER_PALETTE = ['#7dd3fc', '#e879f9', '#86efac', '#fcd34d', '#f9a8d4', '#94a3b8', '#fdba74'];
   const dayMemos = d.day_memos || {};
 
   body.innerHTML = `
     <div class="hint-sm" style="margin-bottom:6px">${escapeHtml(d.start_date)} 〜 ${escapeHtml(d.end_date)} (${days.length} 日)</div>
-    ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ハンドルをドラッグで 並び替え (日をまたいでも OK / 行全体タップは編集) · 🔒 は 多日またぎの中間/終了行で 動かせません</div>' : ''}
+    ${schedEditMode ? '<div class="hint" style="font-size:12px; background:#fff8e6; border-left:3px solid var(--warn); padding:6px 8px; border-radius:6px; margin-bottom:6px">⋮⋮ ハンドルをドラッグで並び替え (日をまたいでも OK / 行全体タップは編集) · 🔒 は多日またぎの中間/終了行で動かせません</div>' : ''}
     ${stockCard}
     ${days.map((date, idx) => {
       const dow = dayLabels[new Date(date + 'T00:00:00').getDay()];
@@ -2295,12 +2295,12 @@ async function loadScheduleInner(gid) {
       const bg = DAY_BG_PALETTE[idx % DAY_BG_PALETTE.length];
       const bd = DAY_BORDER_PALETTE[idx % DAY_BORDER_PALETTE.length];
       const memo = dayMemos[date] || '';
-      // 日 メモ 表示部 (常に show、 タップで 編集に 切替)
+      // 日メモ表示部 (常に show、 タップで編集に切替)
       const memoBlock = `
         <div class="gd-day-memo" data-memo-date="${date}" style="margin:6px 0; padding:6px 8px; background:rgba(255,255,255,0.7); border-radius:6px; border:1px dashed ${bd}">
           ${memo
             ? `<div class="gd-day-memo-view" style="white-space:pre-wrap; font-size:13px; cursor:pointer">${escapeHtml(memo)}</div>`
-            : `<div class="gd-day-memo-view muted" style="font-size:12px; cursor:pointer">📝 この日のメモを 追加…</div>`}
+            : `<div class="gd-day-memo-view muted" style="font-size:12px; cursor:pointer">📝 この日のメモを追加…</div>`}
         </div>`;
       return `
         <details class="card collapsible-sub" data-day="${date}" open
@@ -2314,7 +2314,7 @@ async function loadScheduleInner(gid) {
         </details>`;
     }).join('')}
   `;
-  // v403 日メモ: タップ → textarea で 編集 → blur or ✓ で 保存
+  // v403 日メモ: タップ → textarea で編集 → blur or ✓ で保存
   body.querySelectorAll('.gd-day-memo-view').forEach(el => {
     el.addEventListener('click', () => {
       const wrap = el.closest('.gd-day-memo');
@@ -2353,9 +2353,9 @@ async function loadScheduleInner(gid) {
     document.getElementById('gd-sched-gmap-file')?.click();
   });
   document.getElementById('gd-sched-gmap-file')?.addEventListener('change', (ev) => onSchedGmapImport(ev, gid));
-  // v489 #85 タップ で まず 「内容 確認」 を 表示 → 編集 ボタン で 編集 モーダル へ。
-  //   (旧: タップ で 即 編集 モーダル)。 編集 モード では 行 内 の ↑↓× ボタン が
-  //   出る ので、 タップ → 内容 確認 で 妥当 な UX。
+  // v489 #85 タップでまず 「内容確認」 を表示 → 編集ボタンで編集モーダルへ。
+  //   (旧: タップで即編集モーダル)。 編集モードでは行内の ↑↓× ボタンが
+  //   出るので、 タップ → 内容確認で妥当な UX。
   body.querySelectorAll('[data-sched-item]').forEach(el => {
     el.addEventListener('click', (ev) => {
       if (suppressNextClick) { suppressNextClick = false; return; }
@@ -2393,19 +2393,19 @@ async function loadScheduleInner(gid) {
       } catch (e) { toast('失敗: ' + e.message); }
     });
   });
-  // ── v362 ドラッグアンドドロップで 並び替え (日またぎ可) ──
+  // ── v362 ドラッグアンドドロップで並び替え (日またぎ可) ──
   // - 並び替え可能 (canEdit) なアイテムの「⋮⋮ハンドル」 だけ draggable。
-  //   ハンドル以外のクリックは そのまま編集 modal を開く。
+  //   ハンドル以外のクリックはそのまま編集 modal を開く。
   // - 同日内ドロップ → 既存 /move を chain swap で距離分呼び出し (start_time 含め swap)。
   // - 別日ドロップ → /relocate で day_date + sort_order を更新 (start_time は維持)。
-  // - 日の <details> ヘッダや 「+ 追加」 ボタン エリアに ドロップしたら その日の末尾に。
+  // - 日の <details> ヘッダや 「+ 追加」 ボタンエリアにドロップしたらその日の末尾に。
   let dragSrcId = null, dragSrcDay = null;
-  // v484 #77 ステップ 計算 用: 同日 の 全行 (canedit + ロック)。 サーバ の swap は
-  //   ロック 行 も 含めた 並び で 1 ステップ 進む ので、 DOM の DnD index も
-  //   全行 で 数える 必要 が ある。
+  // v484 #77 ステップ計算用: 同日の全行 (canedit + ロック)。 サーバの swap は
+  //   ロック行も含めた並びで 1 ステップ進むので、 DOM の DnD index も
+  //   全行で数える必要がある。
   const itemsSameDay = (day) =>
     [...body.querySelectorAll(`[data-sched-item][data-sched-day="${CSS.escape(day)}"]`)];
-  // 後方互換: 同名 を 残しつつ ステップ 計算 は 全行 ベース に。
+  // 後方互換: 同名を残しつつステップ計算は全行ベースに。
   const editableSameDay = itemsSameDay;
 
   body.querySelectorAll('[data-drag-handle="1"]').forEach(h => {
@@ -2426,7 +2426,7 @@ async function loadScheduleInner(gid) {
     });
   });
 
-  // ドロップ先: canEdit な list-item (= before_id を指定して 直前に挿入)
+  // ドロップ先: canEdit な list-item (= before_id を指定して直前に挿入)
   body.querySelectorAll('[data-sched-canedit="1"]').forEach(el => {
     el.addEventListener('dragover', (ev) => {
       if (dragSrcId === null) return;
@@ -2446,10 +2446,10 @@ async function loadScheduleInner(gid) {
       const savedSrc = dragSrcId, savedSrcDay = dragSrcDay;
       dragSrcId = null; dragSrcDay = null;
       try {
-        // v402: バックエンド ORDER は start_time 主導に 戻したので、 同日 DnD は
-        // 隣接 N ステップ 分 ↑↓ swap (時刻 + sort_order を 連鎖 swap) で 並びを
-        // 変える。 これにより 時刻つき アイテム も 視覚的に 並び替えできる。
-        // 別日 DnD は そのまま /relocate (day_date 移動)。
+        // v402: バックエンド ORDER は start_time 主導に戻したので、 同日 DnD は
+        // 隣接 N ステップ分 ↑↓ swap (時刻 + sort_order を連鎖 swap) で並びを
+        // 変える。 これにより時刻つきアイテムも視覚的に並び替えできる。
+        // 別日 DnD はそのまま /relocate (day_date 移動)。
         if (targetDay === savedSrcDay) {
           const editable = editableSameDay(savedSrcDay);
           const srcIdx = editable.findIndex(e => Number(e.dataset.schedItem) === savedSrc);
@@ -2472,8 +2472,8 @@ async function loadScheduleInner(gid) {
     });
   });
 
-  // 日のコンテナ <details data-day="YYYY-MM-DD"> 自体を ドロップ先に
-  // (空の日や 末尾追加 用): その日の最後に relocate。
+  // 日のコンテナ <details data-day="YYYY-MM-DD"> 自体をドロップ先に
+  // (空の日や末尾追加用): その日の最後に relocate。
   body.querySelectorAll('[data-day]').forEach(dayEl => {
     dayEl.addEventListener('dragover', (ev) => {
       if (dragSrcId === null) return;
@@ -2484,7 +2484,7 @@ async function loadScheduleInner(gid) {
       dayEl.classList.add('gd-sched-drop-over');
     });
     dayEl.addEventListener('dragleave', (ev) => {
-      // 子要素 経由の dragleave で 親 highlight が点滅するのを 抑える
+      // 子要素経由の dragleave で親 highlight が点滅するのを抑える
       if (!dayEl.contains(ev.relatedTarget)) dayEl.classList.remove('gd-sched-drop-over');
     });
     dayEl.addEventListener('drop', async (ev) => {
@@ -2506,11 +2506,11 @@ async function loadScheduleInner(gid) {
     });
   });
 
-  // ─── v415 タッチ / ポインター ベース DnD ───
-  // 左端の ⋮⋮ ハンドル を 掴んだら 即 ドラッグ開始 (待ち無し)。
-  // それ以外の 行 内側 を 掴んだら 350ms 長押しで ドラッグ開始 (誤爆 / スクロール
-  // 妨害 を 避ける)。 8px 以上 動いたら 長押し 判定 キャンセル (スクロール扱い)。
-  // タッチ端末で ネイティブ HTML5 DnD が 効かない 問題 への 対処も 兼ねる。
+  // ─── v415 タッチ / ポインターベース DnD ───
+  // 左端の ⋮⋮ ハンドルを掴んだら即ドラッグ開始 (待ち無し)。
+  // それ以外の行内側を掴んだら 350ms 長押しでドラッグ開始 (誤爆 / スクロール
+  // 妨害を避ける)。 8px 以上動いたら長押し判定キャンセル (スクロール扱い)。
+  // タッチ端末でネイティブ HTML5 DnD が効かない問題への対処も兼ねる。
   let pointerDrag = null;
   const startDrag = (state, parentItem, handleEl) => {
     state.active = true;
@@ -2522,8 +2522,8 @@ async function loadScheduleInner(gid) {
     rowEl.addEventListener('pointerdown', (ev) => {
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       const handleEl = ev.target.closest('[data-drag-handle="1"]');
-      // ハンドル以外 を 掴んだ時、 button/a/select 等の上 なら ドラッグも しない
-      // (各自の click handler に 渡す)
+      // ハンドル以外を掴んだ時、 button/a/select 等の上ならドラッグもしない
+      // (各自の click handler に渡す)
       if (!handleEl && ev.target.closest('button,a,input,select,textarea')) return;
       const handleFromRow = rowEl.querySelector('[data-drag-handle="1"]');
       const srcEl = handleEl || handleFromRow;
@@ -2539,11 +2539,11 @@ async function loadScheduleInner(gid) {
       };
       pointerDrag = state;
       if (handleEl) {
-        // ハンドル直撃 → 即 開始
+        // ハンドル直撃 → 即開始
         startDrag(state, parentItem, srcEl);
         ev.preventDefault();
       } else {
-        // 行 中央 など → 350ms 長押し
+        // 行中央など → 350ms 長押し
         state.timer = setTimeout(() => {
           if (pointerDrag === state) startDrag(state, parentItem, srcEl);
         }, 350);
@@ -2580,7 +2580,7 @@ async function loadScheduleInner(gid) {
       body.querySelectorAll('.gd-sched-drop-over').forEach(x => x.classList.remove('gd-sched-drop-over'));
       if (!pd.active) return;
       ev.preventDefault();
-      // ドラッグ後の click は 編集 modal を 開きたくない → suppressClick で 1 回 だけ ガード
+      // ドラッグ後の click は編集 modal を開きたくない → suppressClick で 1 回だけガード
       suppressNextClick = true;
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
       if (!el) return;
@@ -2629,7 +2629,7 @@ async function loadScheduleInner(gid) {
   });
 }
 
-// v415 ドラッグ完了直後の 余計な click を 1 回だけ 消す
+// v415 ドラッグ完了直後の余計な click を 1 回だけ消す
 let suppressNextClick = false;
 
 // 移動系 kind は左半分、 それ以外は右半分に帯を出す (ややこしい時の住み分け)。
@@ -2649,7 +2649,7 @@ function parseLatLng(s) {
 }
 
 // ペア id を 2 つの独立 hash → 色相 + 位置 spread に。 同じ pair_id = 同じ色 /
-// 同じ位置 に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
+// 同じ位置に必ず落ちる (帯が縦に連続)。 カテゴリ別 (移動 / 宿泊 / その他) で
 // 色相レンジを区切って 「青系=移動」 「赤系=宿泊」 がぱっと見で分かるように。
 function schedPairStyleFromId(pid, isTransport, kind) {
   let h1 = 0, h2 = 0, h3 = 0;
@@ -2674,10 +2674,10 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   const sat   = 58 + (Math.abs(h2) % 32);   // 58-90% (前は 60-85)
   const light = 40 + (Math.abs(h3) % 22);   // 40-62% (前は 45-57)
   const color = `hsla(${hue}, ${sat}%, ${light}%, 0.50)`;
-  // 端 (最初/最後) 用の濃い色: 明度をぐっと下げて アルファ不透明 に。
+  // 端 (最初/最後) 用の濃い色: 明度をぐっと下げてアルファ不透明に。
   const capColor = `hsla(${hue}, ${sat}%, ${Math.max(15, light - 25)}%, 0.95)`;
-  // 位置: 移動形は 左、 滞在形は 右、 に住み分け + カテゴリ内 slot で確実に重ならない
-  // ように 30px ステップで離す。 ステップ数を超えたら 再循環 (= ペア数が多い時のみ衝突)。
+  // 位置: 移動形は左、 滞在形は右、 に住み分け + カテゴリ内 slot で確実に重ならない
+  // ように 30px ステップで離す。 ステップ数を超えたら再循環 (= ペア数が多い時のみ衝突)。
   const catSlots = isTransport ? schedPairCatSlots.transport : schedPairCatSlots.staying;
   const slot = catSlots[pid] ?? 0;
   const rangeStart = isTransport ? 140 : 16;
@@ -2688,8 +2688,8 @@ function schedPairStyleFromId(pid, isTransport, kind) {
   return { color, capColor, rightPx };
 }
 
-// v403 ストック専用 タイル レンダラ。 候補が 多くても 一覧で 見えるよう コンパクト。
-// 画像 (or 絵文字) + タイトル を 縦に積む。 編集モードなら ⋮⋮ ハンドル + × 付き。
+// v403 ストック専用タイルレンダラ。 候補が多くても一覧で見えるようコンパクト。
+// 画像 (or 絵文字) + タイトルを縦に積む。 編集モードなら ⋮⋮ ハンドル + × 付き。
 function renderSchedStockTile(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
   // v521 #157 サムネ URL を優先 (なければ原画像)
@@ -2700,7 +2700,7 @@ function renderSchedStockTile(it) {
   const canEdit = schedEditMode;
   const dragHandle = canEdit ? `
     <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="stock"
-          aria-label="ドラッグして 日付に 移動" title="ドラッグで 日に 投入"
+          aria-label="ドラッグして日付に移動" title="ドラッグで日に投入"
           style="position:absolute; top:4px; left:4px; z-index:2; background:rgba(255,255,255,0.9); color:#666; font-size:13px; cursor:grab; user-select:none; padding:1px 4px; border-radius:4px; touch-action:none">⋮⋮</span>` : '';
   const rmBtn = canEdit ? `
     <button data-sched-rm="${it.id}" class="btn"
@@ -2712,7 +2712,7 @@ function renderSchedStockTile(it) {
   const heartCount = Number(it.hearts_count || 0);
   const myHearted = !!it.my_hearted;
   const heartBtn = `
-    <button data-heart-it="${it.id}" title="行った / 良いね (ダブルタップ で トグル)"
+    <button data-heart-it="${it.id}" title="行った / 良いね (ダブルタップでトグル)"
             style="position:absolute; bottom:4px; right:4px; z-index:2; padding:1px 6px; font-size:11px; background:rgba(255,255,255,0.92); border-radius:10px; border:1px solid rgba(0,0,0,0.08); cursor:pointer; user-select:none">
       ${myHearted ? '❤️' : '🤍'}${heartCount > 0 ? ' ' + heartCount : ''}
     </button>`;
@@ -2730,9 +2730,9 @@ function renderSchedStockTile(it) {
 
 function renderSchedItem(it) {
   const k = SCHED_KINDS[it.kind] || SCHED_KINDS.other;
-  // 複数日展開: start / mid / end によって 時刻と接尾語を変える。
+  // 複数日展開: start / mid / end によって時刻と接尾語を変える。
   let timeStr = '';
-  let roleSuffix = '';   // multi-day item でも 全日 同じ見た目 (タイトルのみ) で出す。
+  let roleSuffix = '';   // multi-day item でも全日同じ見た目 (タイトルのみ) で出す。
   if (it._occ === 'start') {
     if (it.start_time) timeStr = it.start_time.slice(0, 5);
   } else if (it._occ === 'end') {
@@ -2746,9 +2746,9 @@ function renderSchedItem(it) {
       if (it.end_time) {
         timeStr = `${t}〜${it.end_time.slice(0, 5)}`;
       } else if (it.duration_minutes) {
-        // v485 #78 旅行 中 (時差 異なる 地域) で Date.parse が 端末 ローカル TZ
-        //   解釈 → 別 TZ で 開いた とき に 端 時刻 が ずれる 可能性 が ある ため、
-        //   純粋 な 分 計算 に 変更。 HH:MM → 分 → +duration → HH:MM。
+        // v485 #78 旅行中 (時差異なる地域) で Date.parse が端末ローカル TZ
+        //   解釈 → 別 TZ で開いたときに端時刻がずれる可能性があるため、
+        //   純粋な分計算に変更。 HH:MM → 分 → +duration → HH:MM。
         const [sh, sm] = it.start_time.slice(0, 5).split(':').map(Number);
         const total = (sh * 60 + sm + Number(it.duration_minutes)) % (24 * 60);
         const eh = String(Math.floor(total / 60)).padStart(2, '0');
@@ -2760,10 +2760,10 @@ function renderSchedItem(it) {
     }
   }
   // 中間日も他の日と同じ濃さ (旧版は opacity 0.55 で薄めていたが、 「同じような予定で大丈夫」)。
-  // ペアは 帯 (右側 縦ストリップ) だけで表現する方針。 タイトル横の 🔗 文字は出さない。
-  // v366: 画像つきはヒーロー風: 左端から 約 2/3 まで埋め尽くし、 右端に 斜め切れ目。
-  //       clip-path で 右下が 22px 内側に切れ、 そこから 斜めに 右上 100% へ。
-  //       画像なしは 従来通り 32px 絵文字アイコン。
+  // ペアは帯 (右側縦ストリップ) だけで表現する方針。 タイトル横の 🔗 文字は出さない。
+  // v366: 画像つきはヒーロー風: 左端から約 2/3 まで埋め尽くし、 右端に斜め切れ目。
+  //       clip-path で右下が 22px 内側に切れ、 そこから斜めに右上 100% へ。
+  //       画像なしは従来通り 32px 絵文字アイコン。
   const HERO_PCT = 64;        // 画像幅 (行幅に対する %)
   const HERO_SLANT = 22;      // 斜めの傾き量 (px)
   // v521 #157 ヒーロー背景もサムネ優先
@@ -2774,7 +2774,7 @@ function renderSchedItem(it) {
          clip-path:polygon(0 0, 100% 0, calc(100% - ${HERO_SLANT}px) 100%, 0 100%);
          pointer-events:none; z-index:1; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.04)"></div>` : '';
   const thumb = heroBg
-    ? '' // ヒーロー が代替
+    ? '' // ヒーローが代替
     : `<span style="font-size:22px; line-height:1; width:32px; text-align:center; flex-shrink:0">${k.icon}</span>`;
   const urlIcon = it.url
     ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary); margin-left:4px">🔗</a>`
@@ -2798,17 +2798,17 @@ function renderSchedItem(it) {
   const line2 = line2bits.length
     ? `<div class="meta" style="font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${line2bits.join(' · ')}${urlIcon}</div>`
     : (urlIcon ? `<div class="meta">${urlIcon}</div>` : '');
-  // 編集モード ON だけ ボタンを出す。 OFF 時は完全に隠す (アイテム自体が
+  // 編集モード ON だけボタンを出す。 OFF 時は完全に隠す (アイテム自体が
   // タップ可能で edit modal が開く)。
   // ↑↓× は 「DB 上の本拠地となる日」 = single / start の行にだけ出す。
   // multi-day 展開の mid / end 行 (= 宿泊の 6/9, 6/10, 6/11 など) で押されても、
-  // DB の day_date は start 日なので 表示中の日 (6/9 等) の並び替えにはならない
+  // DB の day_date は start 日なので表示中の日 (6/9 等) の並び替えにはならない
   // → 押しても無反応に見える、 という混乱を防ぐためボタンを出さない。
   // z-index:2 + 半透明白背景でペア帯より前面に。
   const canEdit = schedEditMode && (it._occ === 'single' || it._occ === 'start');
   // v362 DnD: canEdit 行は draggable, 日またぎ並び替え可能。
   //          mid/end 行は 🔒 アイコンで 「動かせない」 ことを明示。
-  // ※ dayKey は dragHandle 内で参照するので 先に定義しておく (TDZ で死なないように)。
+  // ※ dayKey は dragHandle 内で参照するので先に定義しておく (TDZ で死なないように)。
   const dayKey = String(it.day_date || 'stock');
   const isLocked = schedEditMode && !canEdit;
   const editControls = canEdit ? `
@@ -2817,17 +2817,17 @@ function renderSchedItem(it) {
       <button data-sched-move="${it.id}" data-dir="down" class="btn" style="padding:0 6px; font-size:11px">↓</button>
       <button data-sched-rm="${it.id}" class="btn" style="padding:0 6px; font-size:12px; color:var(--muted)">×</button>
     </div>` : '';
-  // 画像ありの場合は ロック/ハンドル を 画像の左上に 半透明バッジで オーバーレイ。
-  // 画像なし時は 従来通り (lock は absolute、 handle は flex 内)。
+  // 画像ありの場合はロック/ハンドルを画像の左上に半透明バッジでオーバーレイ。
+  // 画像なし時は従来通り (lock は absolute、 handle は flex 内)。
   const overlayBg = heroBg ? 'background:rgba(255,255,255,0.88); padding:2px 4px; border-radius:6px;' : '';
   const lockBadge = isLocked ? `
-    <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行は ここでは並び替えできません (本拠日でのみ可)"
+    <span aria-label="多日またぎ項目の中間/終了行: 並び替えは本拠日 (= start 日) でのみ可能" title="多日またぎ項目の中間/終了行はここでは並び替えできません (本拠日でのみ可)"
           style="position:absolute; top:4px; left:4px; font-size:11px; opacity:0.85; pointer-events:none; z-index:3; ${overlayBg}">🔒</span>` : '';
   const dragHandle = canEdit ? `
     <span draggable="true" data-drag-handle="1" data-sched-src="${it.id}" data-sched-srcday="${escapeHtml(dayKey)}"
           aria-label="ドラッグして並び替え" title="ドラッグで並び替え (日をまたいでも OK)"
           style="${heroBg ? 'position:absolute; top:4px; left:4px; z-index:3;' : ''} ${overlayBg} color:#666; font-size:16px; cursor:grab; user-select:none; padding:2px 6px; touch-action:none">⋮⋮</span>` : '';
-  // ペア帯: link_pair_id があれば 行の右端から N px 内側に 20px 幅の縦
+  // ペア帯: link_pair_id があれば行の右端から N px 内側に 20px 幅の縦
   // ストリップ。 移動系 kind は左半分、 それ以外は右半分に出して被りを減らす。
   // 色・位置は pair_id の hash で散らす → 同じグループは同じ位置 / 同じ色。
   const isTransport = SCHED_TRANSPORT_KINDS.has(it.kind);
@@ -2849,17 +2849,17 @@ function renderSchedItem(it) {
   // 2 行目 (line2) は空でも HTML 上は存在させる。
   const line2Slot = line2 || '<div class="meta" style="height:14px"></div>';
   // 右側に常に余白を確保 (帯が動いてもサムネや編集ボタンに被らない)。
-  // 画像つきは 左 2/3 がヒーロー → コンテンツ (タイトル + メタ) を 右側に逃がす。
+  // 画像つきは左 2/3 がヒーロー → コンテンツ (タイトル + メタ) を右側に逃がす。
   const rightPad = 'padding-right:18px;';
   const leftPad = heroBg ? `padding-left:calc(${HERO_PCT}% + 10px);` : '';
-  // v362: draggable は ハンドル span だけに付ける (list-item 全体ではない)。
-  //       こうしないと 行クリックが ドラッグ判定に食われて 編集 modal が開かなくなる。
+  // v362: draggable はハンドル span だけに付ける (list-item 全体ではない)。
+  //       こうしないと行クリックがドラッグ判定に食われて編集 modal が開かなくなる。
   //       data-sched-day は drop target 判定 + DOM index 計算で使うので list-item に残す。
-  // v484 #77 data-sched-day は ロック 行 (🔒 多日 中間 / 終了) にも 必ず 付ける。
-  //   同日 swap の ステップ 数 計算 で 「サーバ の 全行 並び」 と DOM の 同日 並び を
-  //   一致 させる ため。 ロック 行 を スキップ すると step count が ずれて 別の 場所 に
-  //   item が 移動 して しまう ( = 「変な ところ に 移動」 バグ)。 data-sched-canedit
-  //   は 引き続き 「ドラッグ 開始 / ドロップ 受け 可」 の フラグ。
+  // v484 #77 data-sched-day はロック行 (🔒 多日中間 / 終了) にも必ず付ける。
+  //   同日 swap のステップ数計算で 「サーバの全行並び」 と DOM の同日並びを
+  //   一致させるため。 ロック行をスキップすると step count がずれて別の場所に
+  //   item が移動してしまう ( = 「変なところに移動」 バグ)。 data-sched-canedit
+  //   は引き続き 「ドラッグ開始 / ドロップ受け可」 のフラグ。
   const dndAttrs = canEdit
     ? `data-sched-canedit="1" data-sched-day="${escapeHtml(dayKey)}"`
     : `data-sched-day="${escapeHtml(dayKey)}"`;
@@ -2933,8 +2933,8 @@ function openSchedRangeModal(gid) {
 // 居る) はプリセットでチェック済み。
 function renderSchedPairPickerHtml(it) {
   // v399 BUGFIX: day_date=null (ストック item) を 「連結対象」 に出すと
-  // o.day_date.slice(5) が TypeError → モーダルが壊れて 「2 個目以降が 追加できない」
-  // 症状に。 ストック同士を 連結帯で繋ぐ用途は 無いので 候補から 除外。
+  // o.day_date.slice(5) が TypeError → モーダルが壊れて 「2 個目以降が追加できない」
+  // 症状に。 ストック同士を連結帯で繋ぐ用途は無いので候補から除外。
   const others = lastSchedItems.filter(x =>
     Number(x.id) !== Number(it.id) && x.day_date !== null);
   if (!others.length) return '';
@@ -2971,9 +2971,9 @@ function renderSchedPairPickerHtml(it) {
     </details>`;
 }
 
-// v489 #85 タップ で まず 「内容 確認」 を 開く 読み取り 専用 ビュー。 そこから
-//   ✏ 編集 で 既存 の 編集 モーダル へ。 新規 追加 や 編集 モード での 内部 ボタン
-//   は そのまま 編集 モーダル を 直接 開く。
+// v489 #85 タップでまず 「内容確認」 を開く読み取り専用ビュー。 そこから
+//   ✏ 編集で既存の編集モーダルへ。 新規追加や編集モードでの内部ボタン
+//   はそのまま編集モーダルを直接開く。
 function openSchedItemViewModal(gid, it) {
   const root = document.getElementById('gd-sched-modal');
   if (!root) return;
@@ -3039,11 +3039,11 @@ function openSchedItemViewModal(gid, it) {
     close();
     openSchedItemModal(gid, it);
   });
-  // v493 #97 日付を外して 「行きたい場所」 ストックに 戻す。
+  // v493 #97 日付を外して 「行きたい場所」 ストックに戻す。
   document.getElementById('siv-tostock')?.addEventListener('click', async () => {
     try {
       await patch(`/api/groups/${gid}/schedule/${it.id}/relocate`, { day_date: '' });
-      toast('ストックに 戻し ました');
+      toast('ストックに戻しました');
       close();
       await loadSchedule(gid);
     } catch (e) { toast('失敗: ' + e.message); }
@@ -3070,7 +3070,7 @@ function openSchedItemViewModal(gid, it) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('siv-delete').addEventListener('click', async () => {
-    if (!confirm('この予定 を 削除 します か?')) return;
+    if (!confirm('この予定を削除しますか?')) return;
     try {
       await del(`/api/groups/${gid}/schedule/${it.id}`);
       toast('削除しました');
@@ -3100,23 +3100,23 @@ function openSchedItemModal(gid, it) {
         </div>
         ${isNew ? `
         <details class="field" style="margin-top:6px; background:#fffbf0; border-left:3px solid #fcd34d; padding:8px 10px; border-radius:6px">
-          <summary class="bold" style="font-size:13px; cursor:pointer">✨ フリーテキストから AI で 自動入力</summary>
-          <textarea id="sim-ai-text" rows="2" maxlength="2000" placeholder="例: 6/15 12 時から ヤキニク 飲み会、 渋谷駅前 で 2 時間半 / https://example.com" style="width:100%; box-sizing:border-box; margin-top:6px"></textarea>
+          <summary class="bold" style="font-size:13px; cursor:pointer">✨ フリーテキストから AI で自動入力</summary>
+          <textarea id="sim-ai-text" rows="2" maxlength="2000" placeholder="例: 6/15 12 時からヤキニク飲み会、 渋谷駅前で 2 時間半 / https://example.com" style="width:100%; box-sizing:border-box; margin-top:6px"></textarea>
           <div class="row" style="gap:6px; align-items:center; margin-top:4px">
-            <button id="sim-ai-go" class="btn primary" style="padding:2px 12px; font-size:12px">📝 展開して 流し込む</button>
+            <button id="sim-ai-go" class="btn primary" style="padding:2px 12px; font-size:12px">📝 展開して流し込む</button>
             <span id="sim-ai-status" class="hint-sm"></span>
           </div>
         </details>` : ''}
         <label class="field"><span class="lbl">日付 (空欄 = ストックに保存)</span>
           <input type="date" id="sim-date" value="${escapeHtml(it.day_date || '')}">
         </label>
-        <!-- v485 #78 タイトル ラベル 内 の button が input の フォーカス/カーソル
-             を 引っ張って 「カーソル 位置 が ずれる」 と 報告 され た。 button を
-             label 外 に 出し、 row レイアウト で 並べる ことで 解消。 -->
+        <!-- v485 #78 タイトルラベル内の button が input のフォーカス/カーソル
+             を引っ張って 「カーソル位置がずれる」 と報告された。 button を
+             label 外に出し、 row レイアウトで並べることで解消。 -->
         <div class="field">
           <div class="row" style="gap:6px; align-items:center; margin:0 0 4px">
             <span class="lbl" style="margin:0; flex:1">タイトル</span>
-            <button id="sim-place-go" type="button" class="btn" style="padding:1px 8px; font-size:11px; flex:none" title="入力した 場所名で Wikipedia + OSM を 検索して 緯度経度 / 説明 / 画像 を 自動入力">🔍 場所を検索</button>
+            <button id="sim-place-go" type="button" class="btn" style="padding:1px 8px; font-size:11px; flex:none" title="入力した場所名で Wikipedia + OSM を検索して緯度経度 / 説明 / 画像を自動入力">🔍 場所を検索</button>
           </div>
           <input type="text" id="sim-title" maxlength="200" value="${escapeHtml(it.title || '')}" autofocus>
           <span id="sim-place-st" class="hint-sm"></span>
@@ -3135,7 +3135,7 @@ function openSchedItemModal(gid, it) {
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="sim-loc" maxlength="500" value="${escapeHtml(it.location || '')}">
         </label>
-        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピー で貼れる形式)</span>
+        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピーで貼れる形式)</span>
           <input type="text" id="sim-latlng" placeholder="例: 35.6586, 139.7454" value="${it.lat != null && it.lng != null ? it.lat + ',' + it.lng : ''}">
         </label>
         <div class="hint-sm">緯度経度が入っていれば 📍 タップで Google Maps の正確な位置へ。</div>
@@ -3157,7 +3157,7 @@ function openSchedItemModal(gid, it) {
         ${renderSchedPairPickerHtml(it)}
         ${isNew ? '' : `
         <div class="field">
-          <span class="lbl">添付ファイル (PDF / 画像 / 文書 など)</span>
+          <span class="lbl">添付ファイル (PDF / 画像 / 文書など)</span>
           <div id="sim-att-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px"></div>
           <div class="row" style="gap:6px; align-items:center">
             <input type="file" id="sim-att-file" multiple style="font-size:12px">
@@ -3176,13 +3176,13 @@ function openSchedItemModal(gid, it) {
   document.getElementById('sim-close') .addEventListener('click', close);
   document.getElementById('sim-cancel').addEventListener('click', close);
   document.getElementById('sim-overlay').addEventListener('click', e => { if (e.target.id === 'sim-overlay') close(); });
-  // v418 🔍 場所名 から 緯度経度 / 説明 / 画像 を 引っ張る (Wikipedia + Nominatim)
+  // v418 🔍 場所名から緯度経度 / 説明 / 画像を引っ張る (Wikipedia + Nominatim)
   document.getElementById('sim-place-go')?.addEventListener('click', async () => {
     const titleEl = document.getElementById('sim-title');
     const name = titleEl.value.trim();
     const st = document.getElementById('sim-place-st');
     const btn = document.getElementById('sim-place-go');
-    if (!name) { st.textContent = '先に タイトルを 入れてください'; return; }
+    if (!name) { st.textContent = '先にタイトルを入れてください'; return; }
     btn.disabled = true; st.textContent = '検索中…';
     try {
       const r = await post('/api/ai/place_lookup', { name });
@@ -3203,7 +3203,7 @@ function openSchedItemModal(gid, it) {
           parts.push('場所名');
         }
       }
-      // 説明 → メモ (既存に 追記しない、 空のときだけ 入れる)
+      // 説明 → メモ (既存に追記しない、 空のときだけ入れる)
       if (r.description) {
         const memoEl = document.getElementById('sim-memo');
         if (memoEl && !memoEl.value) {
@@ -3211,7 +3211,7 @@ function openSchedItemModal(gid, it) {
           parts.push('説明');
         }
       }
-      // 画像 (既存 image が無い ときだけ プレビュー + URL セット)
+      // 画像 (既存 image が無いときだけプレビュー + URL セット)
       if (r.image_url && !stagedImage) {
         stagedImage = r.image_url;
         const pv = document.getElementById('sim-img-preview');
@@ -3222,8 +3222,8 @@ function openSchedItemModal(gid, it) {
       }
       const src = (r.sources || []).join(' + ');
       st.textContent = parts.length
-        ? `✓ ${parts.join(' / ')} を 流し込みました (${src})`
-        : `(該当 情報なし 〜 ${src})`;
+        ? `✓ ${parts.join(' / ')} を流し込みました (${src})`
+        : `(該当情報なし 〜 ${src})`;
     } catch (e) {
       st.textContent = '失敗: ' + (e.message || e);
     } finally {
@@ -3252,7 +3252,7 @@ function openSchedItemModal(gid, it) {
         const sel = document.getElementById('sim-kind');
         if (sel && [...sel.options].some(o => o.value === f.kind)) sel.value = f.kind;
       }
-      st.textContent = '✓ 流し込み 完了 (内容を 確認して 保存してください)';
+      st.textContent = '✓ 流し込み完了 (内容を確認して保存してください)';
     } catch (e) {
       st.textContent = '失敗: ' + (e.message || e);
     } finally {
@@ -3352,7 +3352,7 @@ function openSchedItemModal(gid, it) {
     };
     if (!body.title)    { toast('タイトルを入れてください'); return; }
     // day_date は null OK (= ストック)
-    // リンク picker: チェック済み 他アイテムをすべて自分と同じ pair_id に揃える。
+    // リンク picker: チェック済み他アイテムをすべて自分と同じ pair_id に揃える。
     // 自分の現 pair_id (it.link_pair_id) は 「外された人」 を NULL に戻すための比較に使う。
     const linkChecks = Array.from(document.querySelectorAll('[data-link-item]'));
     const selectedIds = linkChecks.filter(c => c.checked).map(c => Number(c.dataset.linkItem));
@@ -3381,7 +3381,7 @@ function openSchedItemModal(gid, it) {
             pid = someone?.link_pair_id
               || ('p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36));
           }
-          // 自分 + 選択された全員 に pair_id を伝播。
+          // 自分 + 選択された全員に pair_id を伝播。
           await patch(`/api/groups/${gid}/schedule/${saveId}`, { link_pair_id: pid });
           for (const id of selectedIds) {
             await patch(`/api/groups/${gid}/schedule/${id}`, { link_pair_id: pid });
@@ -3442,7 +3442,7 @@ function openSchedItemModal(gid, it) {
 let chatPollTimer = null;
 let chatVisHandler = null;
 let chatLastId = 0;
-let chatUserScrolled = false; // 上にスクロールして読んでる時は 末尾に勝手に飛ばさない
+let chatUserScrolled = false; // 上にスクロールして読んでる時は末尾に勝手に飛ばさない
 
 function stopChatLoop() {
   if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
@@ -3455,7 +3455,7 @@ function stopChatLoop() {
 function renderChatBubble(msg, prevMsg) {
   const meId = state.me?.id;
   const isMe = Number(msg.user_id) === Number(meId);
-  // 同じ送信者の連続発言は アバター + 名前 を省略してくっつける。
+  // 同じ送信者の連続発言はアバター + 名前を省略してくっつける。
   const samePrev = prevMsg && Number(prevMsg.user_id) === Number(msg.user_id)
     && (Date.parse((msg.created_at || '').replace(' ', 'T')) - Date.parse((prevMsg.created_at || '').replace(' ', 'T'))) < 5 * 60_000;
   const t = (msg.created_at || '').slice(11, 16);   // HH:MM
@@ -3529,14 +3529,14 @@ async function startChatLoop(gid) {
   if (list) {
     list.innerHTML = '';
     list.addEventListener('scroll', () => {
-      // ユーザが上に戻ったら 自動末尾追従を無効化、 末尾近くに戻ったら再有効化。
+      // ユーザが上に戻ったら自動末尾追従を無効化、 末尾近くに戻ったら再有効化。
       const distFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
       chatUserScrolled = distFromBottom > 80;
     });
   }
   await refreshChat(gid);
   // <details> 開いた瞬間に末尾までスクロール (閉じた状態だと scrollHeight が
-  // ゼロなので 初回の auto-scroll が効かないため)。
+  // ゼロなので初回の auto-scroll が効かないため)。
   const card = document.getElementById('gd-chat-card');
   if (card && list) {
     card.addEventListener('toggle', () => {
@@ -3588,7 +3588,7 @@ async function startChatLoop(gid) {
 // (部屋番号・確認コード等) を保持して、 必要に応じて 「スケジュールに反映」 で
 // schedule_items として 2 行 (チェックイン/アウト, 出発/到着) を 1 ペアで生成。
 
-// 空港 / 航空会社 自動補完。 静的 JSON を 1 度だけ fetch して module レベルで持つ。
+// 空港 / 航空会社自動補完。 静的 JSON を 1 度だけ fetch して module レベルで持つ。
 let airportsPromise = null;
 let airlinesPromise = null;
 function loadAirports() {
@@ -3600,7 +3600,7 @@ function loadAirlines() {
   return airlinesPromise;
 }
 
-// 入力された IATA 3 文字を 大文字化して空港 DB から探す。 見つかれば 名前 + 市
+// 入力された IATA 3 文字を大文字化して空港 DB から探す。 見つかれば名前 + 市
 // をヒントとして表示。
 async function setupAirportAutocomplete(inputId, hintId) {
   const input = document.getElementById(inputId);
@@ -3624,7 +3624,7 @@ async function setupAirportAutocomplete(inputId, hintId) {
   refresh();
 }
 
-// 便名 (例 NH771, JL101, CX543) の先頭 1〜3 文字から 航空会社を推定して
+// 便名 (例 NH771, JL101, CX543) の先頭 1〜3 文字から航空会社を推定して
 // airline input が空なら自動補完。 既に airline に値があれば上書きしない。
 async function setupAirlineAutoComplete(numId, airlineId) {
   const num = document.getElementById(numId);
@@ -3649,7 +3649,7 @@ async function setupAirlineAutoComplete(numId, airlineId) {
   num.addEventListener('blur', refresh);
 }
 
-// 航空券 添付ファイル (PDF / 画像 / e-ticket 等) を 持ち主タグ付きで管理。
+// 航空券添付ファイル (PDF / 画像 / e-ticket 等) を持ち主タグ付きで管理。
 // 持ち主はグループメンバーから選択。 同便の複数メンバーのチケットが整理可能。
 async function setupFlightAttachments(gid, fid) {
   const listEl = document.getElementById('fm-att-list');
@@ -3662,14 +3662,14 @@ async function setupFlightAttachments(gid, fid) {
     const g = await get(`/api/groups/${gid}`);
     members = (g.members || []).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'ja'));
   } catch (_) {}
-  // v459 owner は 「未割当 (後で 紐付け)」 を デフォ + 各 行 で 後付け 紐付け 可能 に。
+  // v459 owner は 「未割当 (後で紐付け)」 をデフォ + 各行で後付け紐付け可能に。
   const ownerOptions = (selectedId, includeBlank = true) => {
     const blank = includeBlank ? `<option value="">— 未割当 —</option>` : '';
     return blank + members.map(m =>
       `<option value="${m.id}" ${Number(m.id) === Number(selectedId) ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`
     ).join('');
   };
-  ownerSel.innerHTML = ownerOptions('');  // アップロード時の デフォ = 未割当
+  ownerSel.innerHTML = ownerOptions('');  // アップロード時のデフォ = 未割当
 
   const ICONS = { 'application/pdf': '📕' };
   const renderRow = (a) => {
@@ -3691,7 +3691,7 @@ async function setupFlightAttachments(gid, fid) {
     try {
       const d = await get(`/api/groups/${gid}/flights/${fid}/attachments`);
       const arr = Array.isArray(d?.attachments) ? d.attachments : [];
-      // 未割当 を 上 に。 一目で 「誰か 紐付け してね」 と わかる ように。
+      // 未割当を上に。 一目で 「誰か紐付けしてね」 とわかるように。
       arr.sort((a, b) => {
         if (!a.owner_user_id && b.owner_user_id) return -1;
         if (a.owner_user_id && !b.owner_user_id) return 1;
@@ -3707,7 +3707,7 @@ async function setupFlightAttachments(gid, fid) {
           catch (e) { toast('失敗: ' + e.message); }
         });
       });
-      // v459 未割当 行 の owner ドロップダウン → 選択時 に PATCH で 紐付け
+      // v459 未割当行の owner ドロップダウン → 選択時に PATCH で紐付け
       listEl.querySelectorAll('[data-fatt-owner]').forEach(sel => {
         sel.addEventListener('change', async () => {
           const v = sel.value;
@@ -3723,9 +3723,9 @@ async function setupFlightAttachments(gid, fid) {
     }
   };
   reload();
-  // v459 multi-file upload (D&D 含む). HTMLInputElement.multiple を 有効化、
-  // 選択 された 全ファイル を 順次 アップロード。 owner は 共通 (= ドロップダウン 値)。
-  // 未割当 (空欄) でも 投げる。
+  // v459 multi-file upload (D&D 含む). HTMLInputElement.multiple を有効化、
+  // 選択された全ファイルを順次アップロード。 owner は共通 (= ドロップダウン値)。
+  // 未割当 (空欄) でも投げる。
   fileEl.setAttribute('multiple', 'multiple');
   fileEl.setAttribute('accept', 'application/pdf,image/*');
   fileEl.addEventListener('change', async (ev) => {
@@ -3753,18 +3753,18 @@ async function setupFlightAttachments(gid, fid) {
     }
     fileEl.value = '';
     fileEl.disabled = false;
-    toast(`${ok} 件 アップロード${fail ? ` (失敗 ${fail})` : ''}`);
+    toast(`${ok} 件アップロード${fail ? ` (失敗 ${fail})` : ''}`);
     await reload();
   });
 }
 
-// v354/v357 航空券 e-ticket: 航空会社配布の QR 画像を そのまま アップロード保存。
-// 1 行 = 1 人分。 表示は サムネ → タップで原寸 (新タブ)。
+// v354/v357 航空券 e-ticket: 航空会社配布の QR 画像をそのままアップロード保存。
+// 1 行 = 1 人分。 表示はサムネ → タップで原寸 (新タブ)。
 async function setupFlightEtickets(gid, fid) {
   const listEl = document.getElementById('fm-et-list');
   const ownerSel = document.getElementById('fm-et-owner');
   if (!listEl || !ownerSel) return;
-  // owners は グループメンバー
+  // owners はグループメンバー
   try {
     const g = await get('/api/groups/' + gid);
     ownerSel.innerHTML = (g.members || []).map(m =>
@@ -3780,7 +3780,7 @@ async function setupFlightEtickets(gid, fid) {
       listEl.innerHTML = arr.map(e => {
         const thumb = e.qr_thumb_url || e.qr_image_url;
         const full = e.qr_image_url || e.qr_thumb_url;
-        // 画像があれば サムネタップで原寸 (新タブ)、 無ければ qr_payload 文字を表示。
+        // 画像があればサムネタップで原寸 (新タブ)、 無ければ qr_payload 文字を表示。
         const qrBlock = full
           ? `<a href="${escapeHtml(full)}" target="_blank" rel="noopener" style="display:block; margin-top:6px; text-align:center"><img src="${escapeHtml(thumb)}" alt="QR" style="max-width:180px; max-height:180px; border:1px solid var(--line); border-radius:6px"></a>`
           : (e.qr_payload ? `<div class="mono hint-sm" style="white-space:pre-wrap; word-break:break-all; margin-top:4px">${escapeHtml(e.qr_payload)}</div>` : '');
@@ -3930,7 +3930,7 @@ function openLodgingModal(gid, it) {
           <input type="text" id="lm-name" maxlength="200" value="${escapeHtml(it.name || '')}" autofocus></label>
         <label class="field"><span class="lbl">場所 (任意)</span>
           <input type="text" id="lm-loc" maxlength="500" value="${escapeHtml(it.location || '')}"></label>
-        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピー で貼れる)</span>
+        <label class="field"><span class="lbl">緯度,経度 (任意 — Google Maps から右クリック → コピーで貼れる)</span>
           <input type="text" id="lm-latlng" placeholder="例: 35.6586, 139.7454" value="${it.lat != null && it.lng != null ? it.lat + ',' + it.lng : ''}">
         </label>
         <div class="row" style="gap:6px; flex-wrap:wrap">
@@ -4091,7 +4091,7 @@ function openFlightModal(gid, it) {
           <textarea id="fm-memo" rows="3" maxlength="2000">${escapeHtml(it.memo || '')}</textarea></label>
         ${isNew ? '' : `
         <div class="field">
-          <span class="lbl">チケット添付 (PDF / 画像 / QR スクショ 等)</span>
+          <span class="lbl">チケット添付 (PDF / 画像 / QR スクショ等)</span>
           <div id="fm-att-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px"></div>
           <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
             <label class="hint-sm">持ち主:</label>
@@ -4110,7 +4110,7 @@ function openFlightModal(gid, it) {
                 <label class="hint-sm">持ち主:</label>
                 <select id="fm-et-owner" style="flex:1; min-width:120px; font-size:13px"></select>
               </div>
-              <label class="hint-sm" style="margin-top:6px; display:block">QR 画像 (航空会社アプリやメールから 保存した画像 / スクショ)</label>
+              <label class="hint-sm" style="margin-top:6px; display:block">QR 画像 (航空会社アプリやメールから保存した画像 / スクショ)</label>
               <input type="file" id="fm-et-file" accept="image/*" style="font-size:12px">
               <input type="hidden" id="fm-et-imgurl" value="">
               <input type="hidden" id="fm-et-thumburl" value="">
@@ -4152,7 +4152,7 @@ function openFlightModal(gid, it) {
       await loadSchedule(gid);
     } catch (e) { toast('失敗: ' + e.message); }
   });
-  // 空港 / 航空会社 自動補完。 入力直後に bundled JSON でルックアップ。
+  // 空港 / 航空会社自動補完。 入力直後に bundled JSON でルックアップ。
   setupAirportAutocomplete('fm-depap', 'fm-depap-info');
   setupAirportAutocomplete('fm-arrap', 'fm-arrap-info');
   setupAirlineAutoComplete('fm-num', 'fm-airline');

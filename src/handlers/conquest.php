@@ -1,16 +1,16 @@
 <?php
-// v860 #445 制覇 リスト。 ユーザ が 自由 に 「中野区 の パン屋」 のような 制覇 対象
-// リスト を 作って、 アイテム を 追加 + 自分が 達成 した もの を チェック していく。
+// v860 #445 制覇リスト。 ユーザが自由に 「中野区のパン屋」 のような制覇対象
+// リストを作って、 アイテムを追加 + 自分が達成したものをチェックしていく。
 //
 //   GET    /api/conquest/lists                       一覧 (公開 + 自分)
 //   POST   /api/conquest/lists                       作成 { title, description?, visibility? }
 //   GET    /api/conquest/lists/<id>                  詳細 + items + 自分の visited
 //   PATCH  /api/conquest/lists/<id>                  編集 (owner) { title?, description?, visibility? }
 //   DELETE /api/conquest/lists/<id>                  削除 (owner)
-//   POST   /api/conquest/lists/<id>/items            アイテム 追加 { name, note? }
+//   POST   /api/conquest/lists/<id>/items            アイテム追加 { name, note? }
 //   PATCH  /api/conquest/lists/<id>/items/<itemId>   編集 (owner) { name?, note? }
 //   DELETE /api/conquest/lists/<id>/items/<itemId>   削除 (owner)
-//   POST   /api/conquest/lists/<id>/items/<itemId>/visit  訪問 トグル { comment? }
+//   POST   /api/conquest/lists/<id>/items/<itemId>/visit  訪問トグル { comment? }
 
 declare(strict_types=1);
 
@@ -19,9 +19,9 @@ function route_conquest(PDO $pdo, array $cfg, string $method, array $seg): void 
     $uid = (int)$u['id'];
     $sub = $seg[1] ?? '';
 
-    // v865 #447 json_error は exit せず 単に レスポンス を 書き出す だけ なので、 呼んだ あと
-    //   明示的 に return しないと 後続 が 動いて 多重 レスポンス や Undefined access が 起きる。
-    //   ルータ も 各 ヘルパ も json_error 直後 に return を 添える 必要 あり。
+    // v865 #447 json_error は exit せず単にレスポンスを書き出すだけなので、 呼んだあと
+    //   明示的に return しないと後続が動いて多重レスポンスや Undefined access が起きる。
+    //   ルータも各ヘルパも json_error 直後に return を添える必要あり。
     if ($sub !== 'lists') {
         json_error('not_found', "no conquest route for $sub", 404);
         return;
@@ -72,7 +72,7 @@ function route_conquest(PDO $pdo, array $cfg, string $method, array $seg): void 
 }
 
 function conquest_list_index(PDO $pdo, int $uid): void {
-    // 公開 リスト + 自分 の private (= 一覧 で 自分 用 も 見える)
+    // 公開リスト + 自分の private (= 一覧で自分用も見える)
     $st = $pdo->prepare(
         "SELECT cl.id, cl.title, cl.description, cl.visibility, cl.owner_id,
                 u.display_name AS owner_name, u.avatar_url AS owner_avatar,
@@ -93,8 +93,8 @@ function conquest_list_create(PDO $pdo, int $uid): void {
     $title = trim((string)($body['title'] ?? ''));
     $desc  = trim((string)($body['description'] ?? ''));
     $vis   = (string)($body['visibility'] ?? 'public');
-    if ($title === '') { json_error('bad_request', 'title が 必要', 400); return; }
-    if (mb_strlen($title) > 120) { json_error('bad_request', 'title は 120 文字 まで', 400); return; }
+    if ($title === '') { json_error('bad_request', 'title が必要', 400); return; }
+    if (mb_strlen($title) > 120) { json_error('bad_request', 'title は 120 文字まで', 400); return; }
     if (!in_array($vis, ['public', 'private'], true)) $vis = 'public';
     $pdo->prepare("INSERT INTO conquest_lists (owner_id, title, description, visibility) VALUES (?,?,?,?)")
         ->execute([$uid, $title, $desc ?: null, $vis]);
@@ -111,11 +111,11 @@ function conquest_list_detail(PDO $pdo, int $uid, int $listId): void {
     $list = $st->fetch(PDO::FETCH_ASSOC);
     if (!$list) { json_error('not_found', 'list 不在', 404); return; }
     if ($list['visibility'] === 'private' && (int)$list['owner_id'] !== $uid) {
-        json_error('forbidden', '非公開 リスト', 403);
+        json_error('forbidden', '非公開リスト', 403);
         return;
     }
 
-    // items (with 自分 の visited フラグ)
+    // items (with 自分の visited フラグ)
     $st = $pdo->prepare(
         "SELECT ci.id, ci.name, ci.note, ci.idx, ci.added_by, ci.added_at,
                 au.display_name AS added_by_name,
@@ -147,7 +147,7 @@ function conquest_list_update(PDO $pdo, int $uid, int $listId): void {
     $sets = []; $vals = [];
     if (isset($body['title'])) {
         $t = trim((string)$body['title']);
-        if ($t === '' || mb_strlen($t) > 120) { json_error('bad_request', 'title が 不正', 400); return; }
+        if ($t === '' || mb_strlen($t) > 120) { json_error('bad_request', 'title が不正', 400); return; }
         $sets[] = "title = ?"; $vals[] = $t;
     }
     if (array_key_exists('description', $body)) {
@@ -170,18 +170,18 @@ function conquest_list_delete(PDO $pdo, int $uid, int $listId): void {
 }
 
 function conquest_item_create(PDO $pdo, int $uid, int $listId): void {
-    // 公開 リスト なら 誰でも 追加 OK、 非公開 なら owner のみ
+    // 公開リストなら誰でも追加 OK、 非公開なら owner のみ
     $vis = conquest_visibility_or_404($pdo, $listId);
     if ($vis === null) return;
     if ($vis !== 'public') {
-        if (conquest_owner_of($pdo, $listId) !== $uid) { json_error('forbidden', '所有者 のみ', 403); return; }
+        if (conquest_owner_of($pdo, $listId) !== $uid) { json_error('forbidden', '所有者のみ', 403); return; }
     }
     $body = read_json_body();
     $name = trim((string)($body['name'] ?? ''));
     $note = trim((string)($body['note'] ?? ''));
-    if ($name === '') { json_error('bad_request', 'name が 必要', 400); return; }
-    if (mb_strlen($name) > 160) { json_error('bad_request', 'name は 160 文字 まで', 400); return; }
-    // 次 の idx = max + 1
+    if ($name === '') { json_error('bad_request', 'name が必要', 400); return; }
+    if (mb_strlen($name) > 160) { json_error('bad_request', 'name は 160 文字まで', 400); return; }
+    // 次の idx = max + 1
     $st = $pdo->prepare("SELECT COALESCE(MAX(idx), 0) + 1 FROM conquest_items WHERE list_id = ?");
     $st->execute([$listId]);
     $nextIdx = (int)$st->fetchColumn();
@@ -220,9 +220,9 @@ function conquest_visit_toggle(PDO $pdo, int $uid, int $listId, int $itemId): vo
     if ($vis === null) return;
     if ($vis !== 'public') {
         $own = conquest_owner_of($pdo, $listId);
-        if ($own !== $uid) { json_error('forbidden', '非公開 リスト', 403); return; }
+        if ($own !== $uid) { json_error('forbidden', '非公開リスト', 403); return; }
     }
-    // 既訪? なら 削除、 でなければ 追加
+    // 既訪? なら削除、 でなければ追加
     $st = $pdo->prepare("SELECT 1 FROM conquest_visits WHERE item_id = ? AND user_id = ?");
     $st->execute([$itemId, $uid]);
     if ($st->fetchColumn()) {
@@ -237,9 +237,9 @@ function conquest_visit_toggle(PDO $pdo, int $uid, int $listId, int $itemId): vo
     }
 }
 
-// v865 #447 json_error が exit しない 仕様 のため、 list 不在 時 は null を 返して
-//   caller 側 で return させる 形 に 変更。 caller が null チェック を 忘れる と
-//   レスポンス が 重なる ので、 呼び 出し 側 は 必ず if ($vis === null) return; を 入れる。
+// v865 #447 json_error が exit しない仕様のため、 list 不在時は null を返して
+//   caller 側で return させる形に変更。 caller が null チェックを忘れると
+//   レスポンスが重なるので、 呼び出し側は必ず if ($vis === null) return; を入れる。
 function conquest_visibility_or_404(PDO $pdo, int $listId): ?string {
     $st = $pdo->prepare("SELECT visibility FROM conquest_lists WHERE id = ?");
     $st->execute([$listId]);
@@ -254,11 +254,11 @@ function conquest_owner_of(PDO $pdo, int $listId): int {
     return (int)$st->fetchColumn();
 }
 
-// 所有者 チェック。 不一致 なら json_error を 投げて false を 返す → caller は 必ず
-//   if (!conquest_require_owner(...)) return; の 形 で 使う 必要 あり。
+// 所有者チェック。 不一致なら json_error を投げて false を返す → caller は必ず
+//   if (!conquest_require_owner(...)) return; の形で使う必要あり。
 function conquest_require_owner(PDO $pdo, int $uid, int $listId): bool {
     if (conquest_owner_of($pdo, $listId) !== $uid) {
-        json_error('forbidden', '所有者 のみ 編集 可', 403);
+        json_error('forbidden', '所有者のみ編集可', 403);
         return false;
     }
     return true;

@@ -1,10 +1,10 @@
 <?php
-// v584 1 日 1 回 占い。 引いた占いは その日いっぱい ホームの ポイント ウィジェット に表示。
-//   GET /api/fortune/today    その日の占いを 取得 (未引きなら 新規に 引く)
+// v584 1 日 1 回占い。 引いた占いはその日いっぱいホームのポイントウィジェットに表示。
+//   GET /api/fortune/today    その日の占いを取得 (未引きなら新規に引く)
 declare(strict_types=1);
 
 // 引く時の選択肢 (運勢 + アイコン + 一言)。 30 件くらい用意 (重複 OK)。
-// 結果は idx で保存されるので 増減 自由 (ただし 過去 idx は その日の結果として 残る)。
+// 結果は idx で保存されるので増減自由 (ただし過去 idx はその日の結果として残る)。
 const FORTUNES = [
     ['name' => '大吉', 'icon' => '🌟', 'msg' => '今日動けば何でも当たる。思いついた1つを必ず実行。'],
     ['name' => '大吉', 'icon' => '🌅', 'msg' => '朝の一手が1日を決める。早めに取り掛かろう。'],
@@ -50,11 +50,11 @@ function route_fortune(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no fortune route for $method $sub", 404);
 }
 
-// v814 #408 西洋占星術 (12 星座) を 生年月日 (users.birthday_md, MM-DD) から 引き、 1 日 1 件
-//   メッセージ を deterministic に 選ぶ。 占い 本体 と 並べて 表示 する。
-// v817 #412 これ は 「太陽星座 を 元 に した 簡易 西洋占星術」 で あって、 natal chart
-//   (出生時刻 + 出生地 から 月 / 上昇 宮 / 各 惑星 配置 を 計算 する 本格 ホロスコープ) で は
-//   ありません。 守護 星 / エレメント / 性格 / 当日 相性 星座 まで 出します。
+// v814 #408 西洋占星術 (12 星座) を生年月日 (users.birthday_md, MM-DD) から引き、 1 日 1 件
+//   メッセージを deterministic に選ぶ。 占い本体と並べて表示する。
+// v817 #412 これは 「太陽星座を元にした簡易西洋占星術」 であって、 natal chart
+//   (出生時刻 + 出生地から月 / 上昇宮 / 各惑星配置を計算する本格ホロスコープ) では
+//   ありません。 守護星 / エレメント / 性格 / 当日相性星座まで出します。
 const ZODIAC_SIGNS = [
     ['key'=>'capricorn',   'name'=>'山羊座', 'icon'=>'♑', 'start'=>'12-22', 'end'=>'01-19', 'element'=>'土', 'modality'=>'活動', 'ruler'=>'土星',     'strengths'=>'責任感 / 努力 / 現実的', 'weaknesses'=>'頑固 / 真面目すぎる'],
     ['key'=>'aquarius',    'name'=>'水瓶座', 'icon'=>'♒', 'start'=>'01-20', 'end'=>'02-18', 'element'=>'風', 'modality'=>'不動', 'ruler'=>'天王星',   'strengths'=>'革新的 / 知的 / 自由で独創的', 'weaknesses'=>'距離感 / 気まぐれ'],
@@ -96,12 +96,12 @@ const ZODIAC_MOODS = [
 const ZODIAC_LUCK_COLORS = ['赤','橙','黄','緑','水色','青','藍','紫','桃','白','黒','金'];
 const ZODIAC_LUCK_ITEMS = ['コーヒー','本','花','チョコレート','ノート','ハンカチ','音楽','緑茶','イヤホン','腕時計','メガネ','ペン','ぬいぐるみ','傘'];
 
-// MM-DD 形式 (例 "07-15") の 誕生日 から 12 星座 idx を 返す。 NULL / 形式 不正 は -1。
+// MM-DD 形式 (例 "07-15") の誕生日から 12 星座 idx を返す。 NULL / 形式不正は -1。
 function zodiac_sign_for(?string $birthdayMd): int {
     if (!$birthdayMd || !preg_match('/^(\d{2})-(\d{2})$/', $birthdayMd, $m)) return -1;
     $key = sprintf('%02d-%02d', (int)$m[1], (int)$m[2]);
     foreach (ZODIAC_SIGNS as $idx => $z) {
-        // 山羊座 は 年 を またぐ ので 別 処理
+        // 山羊座は年をまたぐので別処理
         if ($z['start'] <= $z['end']) {
             if ($key >= $z['start'] && $key <= $z['end']) return $idx;
         } else {
@@ -124,7 +124,7 @@ function fortune_today(PDO $pdo, int $uid): void {
         $pdo->prepare("INSERT IGNORE INTO user_daily_fortunes (user_id, date_jst, fortune_idx) VALUES (?,?,?)")
             ->execute([$uid, $today, $idx]);
         $drawnAt = date('Y-m-d H:i:s');
-        // RACE 対策: INSERT IGNORE で 競合した場合は 既存値を SELECT し直す
+        // RACE 対策: INSERT IGNORE で競合した場合は既存値を SELECT し直す
         $st->execute([$uid, $today]);
         $row2 = $st->fetch(PDO::FETCH_ASSOC);
         if ($row2 !== false) {
@@ -134,8 +134,8 @@ function fortune_today(PDO $pdo, int $uid): void {
     }
     $f = FORTUNES[$idx] ?? FORTUNES[0];
 
-    // v814 #408 西洋占星術 (生年月日 が 設定 されて いれば)
-    // v852 #439 出生地 も 一緒に 取って、 ラッキー方位 を 計算
+    // v814 #408 西洋占星術 (生年月日が設定されていれば)
+    // v852 #439 出生地も一緒に取って、 ラッキー方位を計算
     $zodiac = null;
     $bSt = $pdo->prepare("SELECT birthday_md, birth_place FROM users WHERE id=?");
     $bSt->execute([$uid]);
@@ -146,13 +146,13 @@ function fortune_today(PDO $pdo, int $uid): void {
     if ($zIdx >= 0) {
         $z = ZODIAC_SIGNS[$zIdx];
         $epochDay = (int)floor(strtotime($today) / 86400);
-        // 1 日 1 個、 星座 ごと に 違う メッセージ を deterministic に 選ぶ
+        // 1 日 1 個、 星座ごとに違うメッセージを deterministic に選ぶ
         $moodIdx = ($epochDay * 12 + $zIdx) % count(ZODIAC_MOODS);
         $colorIdx = ($epochDay + $zIdx * 7) % count(ZODIAC_LUCK_COLORS);
         $itemIdx = ($epochDay + $zIdx * 5 + 3) % count(ZODIAC_LUCK_ITEMS);
         $luckyNum = 1 + (($epochDay * 17 + $zIdx * 23) % 40);
-        // v817 #412 当日 の 相性 が 良い 星座 (= エレメント の 相性: 火↔風 / 土↔水)。
-        //   毎日 同じ にしない ため、 同 グループ 内 で 1 つ を 日替わり で 選ぶ。
+        // v817 #412 当日の相性が良い星座 (= エレメントの相性: 火↔風 / 土↔水)。
+        //   毎日同じにしないため、 同グループ内で 1 つを日替わりで選ぶ。
         $compatGroup = [];
         if ($z['element'] === '火' || $z['element'] === '風') {
             foreach (ZODIAC_SIGNS as $i => $zz) if ($zz['element'] === '火' || $zz['element'] === '風') if ($i !== $zIdx) $compatGroup[] = $i;
@@ -161,9 +161,9 @@ function fortune_today(PDO $pdo, int $uid): void {
         }
         $compatIdx = $compatGroup[$epochDay % max(1, count($compatGroup))] ?? null;
         $compat = $compatIdx !== null ? ZODIAC_SIGNS[$compatIdx] : null;
-        // v852 #439 出生地 + 当日 + 星座 から ラッキー方位 を deterministic に 決定。
-        //   出生時刻 がない 場合 でも 出生地 が あれば 「あなたの土地に縁のある方位」 という
-        //   占星術的解釈 が できる。 8 方位 (北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西)。
+        // v852 #439 出生地 + 当日 + 星座からラッキー方位を deterministic に決定。
+        //   出生時刻がない場合でも出生地があれば 「あなたの土地に縁のある方位」 という
+        //   占星術的解釈ができる。 8 方位 (北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西)。
         $luckyDir = null;
         if ($birthPlace !== '') {
             $h = crc32($birthPlace . '|' . $today . '|' . $zIdx);

@@ -1,12 +1,12 @@
-// /js/cg2.js — 自作 ゲーム v2 (cg2) runtime。
+// /js/cg2.js — 自作ゲーム v2 (cg2) runtime。
 // 設計 → docs/CUSTOM_GAMES_V2.md
 //
-// 開発者 が import で 受け取る ambient な もの:
+// 開発者が import で受け取る ambient なもの:
 //   players, myID, isHost, sharedValues, localValues, notifyResult, host, p5
 
 import { get, post } from './api.js';
 
-// ── ambient state (framework が gameDidMount で セット) ──
+// ── ambient state (framework が gameDidMount でセット) ──
 const _state = {
   gameId: null,
   kindSlug: null,
@@ -14,7 +14,7 @@ const _state = {
   isHost: false,
   players: [],
   seq: 0,
-  rawShared: {},     // server から 来た 値 (= 真値)
+  rawShared: {},     // server から来た値 (= 真値)
   hostHooks: { start: null, stop: null },
   pendingChanges: {},
   pendingTimer: null,
@@ -23,20 +23,20 @@ const _state = {
   onPlayersChanged: null,
 };
 
-// players は live (= framework が in-place 置換 する)。
+// players は live (= framework が in-place 置換する)。
 export const players = [];
 
-// myID / isHost は ライブ 値 取得 用 の Proxy で 取り扱う ($state を 参照)
+// myID / isHost はライブ値取得用の Proxy で取り扱う ($state を参照)
 export function _setMyID(v) { _state.myID = v; }
 export function _getMyID()   { return _state.myID; }
 
-// JS では `import { myID }` した 瞬間 の binding が ライブ 同期 する のは export const のみ。
-// なので _internal を 通して 関数 経由 で 取れる ように もする が、 開発者 体験 用 に
-// const myID も export する (framework が _bootstrap で値 を 確定 して から JS module を import するので OK)。
+// JS では `import { myID }` した瞬間の binding がライブ同期するのは export const のみ。
+// なので _internal を通して関数経由で取れるようにもするが、 開発者体験用に
+// const myID も export する (framework が _bootstrap で値を確定してから JS module を import するので OK)。
 export let myID = 0;
 export let isHost = false;
 
-// sharedValues は deep Proxy で mutate を 追跡 → server へ 同期。 localValues は 単純 object。
+// sharedValues は deep Proxy で mutate を追跡 → server へ同期。 localValues は単純 object。
 const _sharedRaw = {};
 let _suppressDirty = false;
 function _makeDeepProxy(target) {
@@ -61,17 +61,17 @@ function _makeDeepProxy(target) {
 export const sharedValues = _makeDeepProxy(_sharedRaw);
 export const localValues = {};
 
-// host.start = () => {...}; host.stop = () => {...}; を 受ける 受け皿
+// host.start = () => {...}; host.stop = () => {...}; を受ける受け皿
 export const host = { start: null, stop: null };
 
-// 結果 通知。 host.stop の 中 から 呼ぶ。
+// 結果通知。 host.stop の中から呼ぶ。
 export function notifyResult(text, opts) {
   if (_state.finalized) return;
   _state.finalized = true;
   return post(`/api/cg2/games/${_state.gameId}/finalize`, { text: String(text), opts: opts || {} });
 }
 
-// p5 instance は framework が import('/vendor/p5.min.js') した もの を 公開
+// p5 instance は framework が import('/vendor/p5.min.js') したものを公開
 export let p5 = null;
 export function _setP5(p5lib) { p5 = p5lib; }
 
@@ -81,7 +81,7 @@ function _markDirty() {
   _state.pendingTimer = setTimeout(async () => {
     _state.pendingTimer = null;
     try {
-      // 全文 を 投げる (差分 追跡 が しんどい ので)
+      // 全文を投げる (差分追跡がしんどいので)
       const r = await post(`/api/cg2/games/${_state.gameId}/shared`, {
         values: JSON.parse(JSON.stringify(_internalSharedRaw())),
         replace: true,
@@ -94,12 +94,12 @@ function _markDirty() {
 }
 
 function _internalSharedRaw() {
-  // _sharedRaw を 直接 dump (Proxy を 通さない)
+  // _sharedRaw を直接 dump (Proxy を通さない)
   return JSON.parse(JSON.stringify(_sharedRaw));
 }
 
-// ── 内部: server から 値 が 降って 来た とき に sharedValues に merge ──
-// _suppressDirty 中 は Proxy の set が dirty を 立てない (= server → client は ping-pong しない)
+// ── 内部: server から値が降って来たときに sharedValues に merge ──
+// _suppressDirty 中は Proxy の set が dirty を立てない (= server → client は ping-pong しない)
 function _applyServerValues(values, seq) {
   _state.seq = seq;
   _suppressDirty = true;
@@ -112,7 +112,7 @@ function _applyServerValues(values, seq) {
   _state.rawShared = values || {};
 }
 
-// ── 起動 (framework が cg2_view.js から 呼ぶ) ──
+// ── 起動 (framework が cg2_view.js から呼ぶ) ──
 export async function _bootstrap({ gameId, kindSlug, gameData, kindData, p5lib }) {
   _state.gameId = gameId;
   _state.kindSlug = kindSlug;
@@ -130,19 +130,19 @@ export async function _bootstrap({ gameId, kindSlug, gameData, kindData, p5lib }
   const ver = encodeURIComponent(kindData.updated_at || '');
   const mod = await import(`/api/cg2/kinds/${encodeURIComponent(kindSlug)}/script.js?v=${ver}`);
 
-  // host hooks を 取得 (代入 形式 で 開発者 が host.start = ... と 書く)
+  // host hooks を取得 (代入形式で開発者が host.start = ... と書く)
   _state.hostHooks.start = host.start;
   _state.hostHooks.stop  = host.stop;
 
-  // host だ ったら host.start を 呼んで 初期 sharedValues を server へ
+  // host だったら host.start を呼んで初期 sharedValues を server へ
   if (_state.isHost && (gameData.shared_seq | 0) === 0) {
     if (typeof _state.hostHooks.start === 'function') {
-      _suppressDirty = true;     // host.start 中 の mutate は auto-flush しない (= 手動 で 1 回 POST する)
+      _suppressDirty = true;     // host.start 中の mutate は auto-flush しない (= 手動で 1 回 POST する)
       try { _state.hostHooks.start(); }
       catch (e) { console.error('[cg2] host.start failed', e); _suppressDirty = false; throw e; }
       _suppressDirty = false;
     }
-    // sharedValues に 入って いる もの を server に POST (replace モード)
+    // sharedValues に入っているものを server に POST (replace モード)
     try {
       const r = await post(`/api/cg2/games/${gameId}/shared`, {
         values: _internalSharedRaw(),
@@ -151,7 +151,7 @@ export async function _bootstrap({ gameId, kindSlug, gameData, kindData, p5lib }
       if (r && r.seq) _state.seq = r.seq;
     } catch (e) { console.error('[cg2] initial shared post failed', e); throw e; }
   } else {
-    // non-host: server から 取って くる
+    // non-host: server から取ってくる
     const r = await get(`/api/cg2/games/${gameId}/shared?since=0`);
     if (r && r.values) _applyServerValues(r.values, r.seq || 0);
   }
@@ -179,13 +179,13 @@ function _startPolling() {
       const r = await fetch(`/api/cg2/games/${_state.gameId}/shared?since=${_state.seq}`, {
         headers: { 'X-Requested-With': 'labpay' },
       });
-      if (r.status === 304) return;  // 変更 なし
+      if (r.status === 304) return;  // 変更なし
       if (!r.ok) return;
       const j = await r.json();
       if (j && typeof j.seq === 'number' && j.seq > _state.seq) {
         _applyServerValues(j.values || {}, j.seq);
       }
-      // ended 検知 → host.stop を 呼ぶ (host のみ)
+      // ended 検知 → host.stop を呼ぶ (host のみ)
       if (_state.isHost && !_state.finalized && sharedValues.ended === true) {
         if (typeof _state.hostHooks.stop === 'function') {
           try { _state.hostHooks.stop(); }

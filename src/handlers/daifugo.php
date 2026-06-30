@@ -1,11 +1,11 @@
 <?php
-// v590 大富豪 (シンプル MVP)。 ローカル ルール:
+// v590 大富豪 (シンプル MVP)。 ローカルルール:
 //   - 4 人 (lobby は 2-4 人で開始可)、 ジョーカー 1 + 52 = 53 枚
-//   - 単出し / ペア / 3 枚 / 4 枚 出し OK (同枚数で 上を出す)
-//   - パス 全員 → 場 流れ + 最後に出した人 から
+//   - 単出し / ペア / 3 枚 / 4 枚出し OK (同枚数で上を出す)
+//   - パス全員 → 場流れ + 最後に出した人から
 //   - 上がった順に 1 位 / 2 位 / ... の rank
-//   - ジョーカーは どの強さでも (簡易: 単体 = 最強として扱う)
-//   - 縛り / 革命 / 階段 などの 特殊ルール は 省略 (シンプル MVP)
+//   - ジョーカーはどの強さでも (簡易: 単体 = 最強として扱う)
+//   - 縛り / 革命 / 階段などの特殊ルールは省略 (シンプル MVP)
 //   - 1 ゲーム 1pt 預託、 1 位が pot 総取り
 declare(strict_types=1);
 
@@ -36,7 +36,7 @@ function route_daifugo(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // カード ID = 0-52 (0-12: ♣3-A, 13-25: ♦, 26-38: ♥, 39-51: ♠, 52: Joker)
-// 強さ: 3 が 最弱、 2 が 最強、 ジョーカー が 最強+1
+// 強さ: 3 が最弱、 2 が最強、 ジョーカーが最強+1
 function daifugo_rank_of(int $card): int {
     if ($card === 52) return 14;
     return $card % 13; // 0=3, 12=2
@@ -67,7 +67,7 @@ function daifugo_list(PDO $pdo, int $uid): void {
 }
 
 function daifugo_create(PDO $pdo, int $uid): void {
-    // v632 対象者指定 → 即起動: body.member_ids = [uid, ...] が 渡れば 招待制 で 即 開始
+    // v632 対象者指定 → 即起動: body.member_ids = [uid, ...] が渡れば招待制で即開始
     $body = read_json_body();
     $invitees = $body['member_ids'] ?? null;
     $gid = 0;
@@ -85,7 +85,7 @@ function daifugo_create(PDO $pdo, int $uid): void {
             daifugo_create_with_invitees($pdo, $uid, $gid, $invitees);
         }
     });
-    // 通知 (tx 外、 失敗しても 卓は 残る)
+    // 通知 (tx 外、 失敗しても卓は残る)
     if (is_array($invitees) && count($invitees) > 0) {
         try {
             global $CFG;
@@ -94,7 +94,7 @@ function daifugo_create(PDO $pdo, int $uid): void {
             foreach ($invitees as $iv) {
                 $iv = (int)$iv; if ($iv === $uid) continue;
                 notify_safely($pdo, $CFG, $iv, 'admin_notice',
-                    "🃏 {$by} さん から 大富豪 #{$gid} に 招待 されました (すぐに 開始)",
+                    "🃏 {$by} さんから大富豪 #{$gid} に招待されました (すぐに開始)",
                     'daifugo', $gid);
             }
         } catch (Throwable $_) {}
@@ -112,13 +112,13 @@ function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array
     $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
     $stU->execute($invitees);
     $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
-    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバー が含まれます', 400);
-    // 残高 一括チェック
+    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバーが含まれます', 400);
+    // 残高一括チェック
     foreach ($invitees as $iv) {
         if (Ledger::balanceOfUser($pdo, $iv) < DAIFUGO_FEE) {
             $name = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
             $name->execute([$iv]);
-            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足で 開始不可', $name->fetchColumn()), 400);
+            throw new ApiException('insufficient_balance', sprintf('%s さんのポイント不足で開始不可', $name->fetchColumn()), 400);
         }
     }
     // 着席 + 徴収
@@ -129,11 +129,11 @@ function daifugo_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, array
         $pdo->prepare("UPDATE daifugo_games SET pot_total = pot_total + ? WHERE id=?")->execute([DAIFUGO_FEE, $gid]);
         $seat++;
     }
-    // すぐ 配って 開始 (= daifugo_start の中身を 直接 適用)
+    // すぐ配って開始 (= daifugo_start の中身を直接適用)
     $players = $pdo->prepare("SELECT user_id, seat FROM daifugo_players WHERE game_id=? ORDER BY seat");
     $players->execute([$gid]);
     $players = $players->fetchAll(PDO::FETCH_ASSOC);
-    shuffle($players);   // v665 着席 順 を ランダム に
+    shuffle($players);   // v665 着席順をランダムに
     $deck = range(0, 52);
     shuffle($deck);
     $hands = [];
@@ -191,8 +191,8 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if ($g['status'] !== 'lobby') throw new ApiException('bad_request', 'already started', 400);
         $players = $pdo->query("SELECT user_id, seat FROM daifugo_players WHERE game_id={$gid} ORDER BY seat")->fetchAll(PDO::FETCH_ASSOC);
-        if (count($players) < DAIFUGO_MIN_PLAYERS) throw new ApiException('bad_request', '2 人以上で 開始', 400);
-        shuffle($players);   // v665 着席 順 を ランダム に
+        if (count($players) < DAIFUGO_MIN_PLAYERS) throw new ApiException('bad_request', '2 人以上で開始', 400);
+        shuffle($players);   // v665 着席順をランダムに
         // カード配布
         $deck = range(0, 52);
         shuffle($deck);
@@ -202,7 +202,7 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
         foreach ($deck as $i => $c) $hands[$i % $n][] = $c;
         foreach ($hands as &$h) sort($h);
         unset($h);
-        // ♣3 (= card 0) を持ってる人 が 親 (= 配布 が ランダム なので 親 も 自動的 に ランダム)
+        // ♣3 (= card 0) を持ってる人が親 (= 配布がランダムなので親も自動的にランダム)
         $starter = 0;
         foreach ($hands as $i => $h) if (in_array(0, $h, true)) { $starter = $i; break; }
         $state = [
@@ -212,7 +212,7 @@ function daifugo_start(PDO $pdo, int $uid, int $gid): void {
             'pass_count' => 0,
             'finished_ranks' => [],     // 上がった順 [seat, seat, ...]
             'log' => [],
-            // v595 革命 (4 枚同時出しで 強弱反転) + 8切り (rank=5 = "8" で 場流し)
+            // v595 革命 (4 枚同時出しで強弱反転) + 8切り (rank=5 = "8" で場流し)
             'revolution' => false,
         ];
         for ($i = 0; $i < $n; $i++) {
@@ -243,20 +243,20 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
         if ($state['turn'] !== $myIdx) throw new ApiException('bad_request', 'not your turn', 400);
         $hand = $state['players'][$myIdx]['hand'];
         foreach ($cards as $c) if (!in_array($c, $hand, true)) throw new ApiException('bad_request', 'card not in hand', 400);
-        // 同じ数 (rank) か (ジョーカーは ワイルド)
+        // 同じ数 (rank) か (ジョーカーはワイルド)
         $ranks = array_map('daifugo_rank_of', array_filter($cards, fn($c) => $c !== 52));
-        if (count(array_unique($ranks)) > 1) throw new ApiException('bad_request', '同じ数 のカードを 揃えてください', 400);
+        if (count(array_unique($ranks)) > 1) throw new ApiException('bad_request', '同じ数のカードを揃えてください', 400);
         $playRank = !empty($ranks) ? reset($ranks) : 14; // ジョーカー単体は最強
         $playCount = count($cards);
-        // 直前と 同数 + 強い rank か (v595 革命 で 反転)
+        // 直前と同数 + 強い rank か (v595 革命で反転)
         $last = $state['last_play'];
         $rev = !empty($state['revolution']);
-        if ($last && $last['count'] !== $playCount) throw new ApiException('bad_request', "場と 同じ枚数 ({$last['count']}) で 出してください", 400);
+        if ($last && $last['count'] !== $playCount) throw new ApiException('bad_request', "場と同じ枚数 ({$last['count']}) で出してください", 400);
         if ($last) {
-            if (!$rev && $playRank <= $last['rank']) throw new ApiException('bad_request', '場の カードより 強い数 を 出してください', 400);
-            if ($rev  && $playRank >= $last['rank']) throw new ApiException('bad_request', '革命中: 場の カードより 弱い数 を 出してください', 400);
+            if (!$rev && $playRank <= $last['rank']) throw new ApiException('bad_request', '場のカードより強い数を出してください', 400);
+            if ($rev  && $playRank >= $last['rank']) throw new ApiException('bad_request', '革命中: 場のカードより弱い数を出してください', 400);
         }
-        // 出す → 手札 から 抜く
+        // 出す → 手札から抜く
         $newHand = array_values(array_diff($hand, $cards));
         $state['players'][$myIdx]['hand'] = $newHand;
         $state['last_play'] = ['cards' => $cards, 'by' => $myIdx, 'count' => $playCount, 'rank' => $playRank];
@@ -264,7 +264,7 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
         foreach ($state['players'] as &$p) $p['passed'] = false;
         unset($p);
         $state['log'][] = "{$state['players'][$myIdx]['user_id']} が {$playCount} 枚 (rank " . ($playRank + 3) . ") を出した";
-        // v595 革命: 4 枚同時出し (ジョーカー込みでも 4 枚) で 強弱反転
+        // v595 革命: 4 枚同時出し (ジョーカー込みでも 4 枚) で強弱反転
         if ($playCount >= 4) {
             $state['revolution'] = !$state['revolution'];
             $state['log'][] = $state['revolution'] ? "革命! 強弱反転" : "革命返し! 通常に戻る";
@@ -274,11 +274,11 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
             $state['finished_ranks'][] = $myIdx;
             $state['players'][$myIdx]['rank'] = count($state['finished_ranks']);
         }
-        // v595 8切り: rank=5 (= 「8」) で 場流し + 同じプレイヤーが もう一度
+        // v595 8切り: rank=5 (= 「8」) で場流し + 同じプレイヤーがもう一度
         $isEightCut = in_array(5, $ranks, true);
         if ($isEightCut && !empty($newHand)) {
             $state['last_play'] = null;
-            $state['log'][] = "8切り! 場が流れて 同じプレイヤーから";
+            $state['log'][] = "8切り! 場が流れて同じプレイヤーから";
             $state['turn'] = $myIdx;
         } else {
             // 通常: 次のターン
@@ -291,7 +291,7 @@ function daifugo_play(PDO $pdo, int $uid, int $gid): void {
                 $state['finished_ranks'][] = $idx;
                 $state['players'][$idx]['rank'] = count($state['finished_ranks']);
             }
-            // v612 プレイフィーのみ (= 1位もポイントもらわず、 pot は システム取り)
+            // v612 プレイフィーのみ (= 1位もポイントもらわず、 pot はシステム取り)
             $pdo->prepare("UPDATE daifugo_games SET state_json=?, state_ver=state_ver+1, status='finished', finished_at=NOW() WHERE id=?")
                 ->execute([json_encode($state), $gid]);
             return;
@@ -314,12 +314,12 @@ function daifugo_pass(PDO $pdo, int $uid, int $gid): void {
         foreach ($state['players'] as $i => $p) if ($p['user_id'] === $uid) { $myIdx = $i; break; }
         if ($myIdx === null) throw new ApiException('forbidden', 'not in game', 403);
         if ($state['turn'] !== $myIdx) throw new ApiException('bad_request', 'not your turn', 400);
-        if (!$state['last_play']) throw new ApiException('bad_request', '場に カードがない時は 出さないと 進めません', 400);
+        if (!$state['last_play']) throw new ApiException('bad_request', '場にカードがない時は出さないと進めません', 400);
         $state['players'][$myIdx]['passed'] = true;
         $state['pass_count']++;
         $state['log'][] = "{$state['players'][$myIdx]['user_id']} がパス";
         $state['turn'] = daifugo_next_turn($state, $myIdx);
-        // 直前に 出した人以外 全員 パス → 場 流れ
+        // 直前に出した人以外全員パス → 場流れ
         $activeCount = 0;
         foreach ($state['players'] as $p) if (count($p['hand']) > 0) $activeCount++;
         if ($state['pass_count'] >= $activeCount - 1) {
@@ -328,8 +328,8 @@ function daifugo_pass(PDO $pdo, int $uid, int $gid): void {
             foreach ($state['players'] as &$p) $p['passed'] = false;
             unset($p);
             $state['log'][] = "場が流れた";
-            // 最後に出した人 from log: turn を そこに 戻す
-            // 簡易: 直前 last_play の by を 探す  — clear 済みなので 現在の turn を そのまま 維持
+            // 最後に出した人 from log: turn をそこに戻す
+            // 簡易: 直前 last_play の by を探す  — clear 済みなので現在の turn をそのまま維持
         }
         $pdo->prepare("UPDATE daifugo_games SET state_json=?, state_ver=state_ver+1 WHERE id=?")
             ->execute([json_encode($state), $gid]);
@@ -346,14 +346,14 @@ function daifugo_next_turn(array $state, int $cur): int {
     return $cur;
 }
 
-// v637 投了。 playing 中の 参加者 が 押す と ゲーム終了 (ポイント 戻りません)。
+// v637 投了。 playing 中の参加者が押すとゲーム終了 (ポイント戻りません)。
 function daifugo_resign(PDO $pdo, int $uid, int $gid): void {
     db_tx($pdo, function () use ($pdo, $uid, $gid) {
         $st = $pdo->prepare("SELECT * FROM daifugo_games WHERE id=? FOR UPDATE");
         $st->execute([$gid]);
         $g = $st->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
-        if ($g['status'] !== 'playing') throw new ApiException('bad_request', 'プレイ中 以外 は 投了不可', 400);
+        if ($g['status'] !== 'playing') throw new ApiException('bad_request', 'プレイ中以外は投了不可', 400);
         $stE = $pdo->prepare("SELECT 1 FROM daifugo_players WHERE game_id=? AND user_id=?");
         $stE->execute([$gid, $uid]);
         if (!$stE->fetchColumn()) throw new ApiException('forbidden', '参加者ではない', 403);
@@ -368,11 +368,11 @@ function daifugo_cancel(PDO $pdo, int $uid, int $gid): void {
         $st->execute([$gid]);
         $g = $st->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
-        if ($g['status'] !== 'lobby') throw new ApiException('bad_request', '開始後は キャンセル不可', 400);
+        if ($g['status'] !== 'lobby') throw new ApiException('bad_request', '開始後はキャンセル不可', 400);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         $players = $pdo->query("SELECT user_id FROM daifugo_players WHERE game_id=" . (int)$gid)->fetchAll(PDO::FETCH_COLUMN);
         foreach ($players as $puid) {
-            Ledger::transfer($pdo, 1, (int)$puid, (int)$g['fee'], 'daifugo_refund', 'daifugo', $gid, "大富豪 キャンセル 返金");
+            Ledger::transfer($pdo, 1, (int)$puid, (int)$g['fee'], 'daifugo_refund', 'daifugo', $gid, "大富豪キャンセル返金");
         }
         $pdo->prepare("UPDATE daifugo_games SET status='cancelled', finished_at=NOW(), pot_total=0 WHERE id=?")->execute([$gid]);
     });
@@ -398,7 +398,7 @@ function daifugo_state(PDO $pdo, int $uid, int $gid): void {
     $state = json_decode($g['state_json'], true);
     $mySeat = null;
     foreach ($state['players'] as $i => $p) if ($p['user_id'] === $uid) { $mySeat = $i; break; }
-    // v665 着席 順 が 起家 順 と 違う ので、 uid キー で 情報 を 引く
+    // v665 着席順が起家順と違うので、 uid キーで情報を引く
     $infoByUid = [];
     foreach ($playersInfo as $pi) { $infoByUid[(int)$pi['user_id']] = $pi; }
     // 公開部分のみ

@@ -1,7 +1,7 @@
-// ⭕❌ マルバツ — 自作ゲーム framework の リファレンス サンプル。
+// ⭕❌ マルバツ — 自作ゲーム framework のリファレンスサンプル。
 //
-// sketch() に setup / draw / action の 3 関数 を 渡すだけ で 動く。
-// 詳しい コメント は examples/custom-games/nim.js が 一番 短くて 読みやすい。
+// sketch() に setup / draw / action の 3 関数を渡すだけで動く。
+// 詳しいコメントは examples/custom-games/nim.js が一番短くて読みやすい。
 
 import { sketch, escapeHtml } from '../cg_ui.js';
 
@@ -19,8 +19,8 @@ export const { renderTicTacToe, renderTicTacToeDetail } = (() => {
     },
 
     action(s, me, idx, ctx) {
-      if (s.board[idx] !== 0) throw new Error('そのマスは 既に置かれてる');
-      // ctx.you.role で 「自分が ⭕ (creator) か ❌ (opponent) か」 が わかる
+      if (s.board[idx] !== 0) throw new Error('そのマスは既に置かれてる');
+      // ctx.you.role で 「自分が ⭕ (creator) か ❌ (opponent) か」 がわかる
       const mark = ctx.you?.role === 'creator' ? 1 : 2;
       const board = s.board.slice(); board[idx] = mark;
 

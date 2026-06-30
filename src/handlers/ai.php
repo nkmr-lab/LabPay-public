@@ -1,6 +1,6 @@
 <?php
-// /api/ai/* — OpenAI 経由の 補助機能。 現状は スケジュール フリーフォーム 展開のみ。
-// config/config.php の openai.api_key が 空のときは 503 で 黙って 断る。
+// /api/ai/* — OpenAI 経由の補助機能。 現状はスケジュールフリーフォーム展開のみ。
+// config/config.php の openai.api_key が空のときは 503 で黙って断る。
 
 declare(strict_types=1);
 
@@ -22,14 +22,14 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_translations_list($pdo, $cfg);
         return;
     }
-    // v840 #422 Deep Research / 論文要約 / 論文全訳 結果の ⭐ スター
+    // v840 #422 Deep Research / 論文要約 / 論文全訳結果の ⭐ スター
     //   POST   /api/ai/stars  body { kind, ref_id }  → 付ける (idempotent)
     //   DELETE /api/ai/stars  body { kind, ref_id }  → 外す
     if ($sub === 'stars' && in_array($method, ['POST', 'DELETE'], true) && !isset($seg[2])) {
         ai_stars_toggle($pdo, $cfg, $method);
         return;
     }
-    // v841 #424 同 結果の 🔖 ブックマーク (個人 メモ、 他人には数だけ見える)
+    // v841 #424 同結果の 🔖 ブックマーク (個人メモ、 他人には数だけ見える)
     if ($sub === 'bookmarks' && in_array($method, ['POST', 'DELETE'], true) && !isset($seg[2])) {
         ai_bookmarks_toggle($pdo, $cfg, $method);
         return;
@@ -70,7 +70,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_review_list($pdo, $cfg);
         return;
     }
-    // v748 #359 #360 #361 論文 和訳 要約 (落合メソッド + 図表ピックアップ + 20pt)
+    // v748 #359 #360 #361 論文和訳要約 (落合メソッド + 図表ピックアップ + 20pt)
     if ($sub === 'paper_translate' && $method === 'POST' && !isset($seg[2])) {
         ai_paper_translate($pdo, $cfg);
         return;
@@ -79,7 +79,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_get_shared($pdo, $cfg, (string)$seg[3]);
         return;
     }
-    // v756 #372 みんな の 公開 要約 一覧 (キーワード検索 付き)
+    // v756 #372 みんなの公開要約一覧 (キーワード検索付き)
     if ($sub === 'paper_translate' && $method === 'GET' && ($seg[2] ?? '') === 'shared') {
         ai_paper_translate_shared_list($pdo, $cfg);
         return;
@@ -89,12 +89,12 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_patch($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v758 #377 「やりなおす」 (本人 のみ、 保存 された PDF で 再 処理)
+    // v758 #377 「やりなおす」 (本人のみ、 保存された PDF で再処理)
     if ($sub === 'paper_translate' && $method === 'POST' && isset($seg[2]) && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'redo') {
         ai_paper_translate_redo($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v775 #399 本人 のみ 削除 (履歴 から 消す)
+    // v775 #399 本人のみ削除 (履歴から消す)
     if ($sub === 'paper_translate' && $method === 'DELETE' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
         ai_paper_translate_delete($pdo, $cfg, (int)$seg[2]);
         return;
@@ -103,7 +103,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate_list($pdo, $cfg);
         return;
     }
-    // v583 #225 レジュメ原稿チェック (paper-review の 軽量版、 5pt、 テキスト入力)
+    // v583 #225 レジュメ原稿チェック (paper-review の軽量版、 5pt、 テキスト入力)
     if ($sub === 'resume_check' && $method === 'POST' && !isset($seg[2])) {
         ai_resume_check($pdo, $cfg);
         return;
@@ -116,7 +116,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_resume_check_get($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v613 文字数 / 単語数制限 リライター
+    // v613 文字数 / 単語数制限リライター
     if ($sub === 'rewriter' && $method === 'POST' && !isset($seg[2])) {
         ai_rewriter_run($pdo, $cfg);
         return;
@@ -129,7 +129,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_rewriter_get($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v781 #376 Deep Research (ChatGPT 風 多段 Web 調査)
+    // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
     if ($sub === 'deep_research' && $method === 'POST' && !isset($seg[2])) {
         ai_deep_research($pdo, $cfg);
         return;
@@ -138,12 +138,12 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_deep_research_get_shared($pdo, $cfg, (string)$seg[3]);
         return;
     }
-    // v784 #382 共有 一覧 (q= 検索) — 履歴 list より 先 に 評価 (= 'shared' 文字列 を 数値 と 誤判定 しない)
+    // v784 #382 共有一覧 (q= 検索) — 履歴 list より先に評価 (= 'shared' 文字列を数値と誤判定しない)
     if ($sub === 'deep_research' && $method === 'GET' && ($seg[2] ?? '') === 'shared') {
         ai_deep_research_shared_list($pdo, $cfg);
         return;
     }
-    // v784 #382 共有 ON/OFF toggle (本人 のみ)
+    // v784 #382 共有 ON/OFF toggle (本人のみ)
     if ($sub === 'deep_research' && $method === 'PATCH' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
         ai_deep_research_patch($pdo, $cfg, (int)$seg[2]);
         return;
@@ -156,14 +156,14 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_deep_research_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v788 #386 #387 #388 論文 全訳 (E→J / J→E、 章 ごと + back-translation チェック)
-    // v806 paper_full_translate の エラー row を 同 row で 再 投入 (新規 課金 なし)
+    // v788 #386 #387 #388 論文全訳 (E→J / J→E、 章ごと + back-translation チェック)
+    // v806 paper_full_translate のエラー row を同 row で再投入 (新規課金なし)
     if ($sub === 'paper_full_translate' && $method === 'POST' && isset($seg[2])
         && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
         ai_paper_full_translate_retry($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v806 paper_translate の エラー row を 同 row で 再 投入 (新規 課金 なし)
+    // v806 paper_translate のエラー row を同 row で再投入 (新規課金なし)
     if ($sub === 'paper_translate' && $method === 'POST' && isset($seg[2])
         && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
         ai_paper_translate_retry($pdo, $cfg, (int)$seg[2]);
@@ -193,7 +193,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_full_translate_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
-    // v789 #389 論文 要約 / 全訳 に いいね・ブックマーク・コメント
+    // v789 #389 論文要約 / 全訳にいいね・ブックマーク・コメント
     if (in_array($sub, ['paper_translate', 'paper_full_translate'], true)
         && isset($seg[2]) && ctype_digit((string)$seg[2])
         && ($seg[3] ?? '') === 'react' && $method === 'POST') {
@@ -218,19 +218,19 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_comment_delete($pdo, $cfg, $sub === 'paper_translate' ? 'paper_translate' : 'paper_full_translation', (int)$seg[2], (int)$seg[4]);
         return;
     }
-    // v809 論文 要約 / 全訳 を 時系列 で 合算 した 新着 feed (公開 + 自分)。 ホーム widget +
-    //   /#/papers-recent ページ で 共有。 ?offset=&limit= で ページング。
+    // v809 論文要約 / 全訳を時系列で合算した新着 feed (公開 + 自分)。 ホーム widget +
+    //   /#/papers-recent ページで共有。 ?offset=&limit= でページング。
     if ($sub === 'paper_recent' && $method === 'GET' && !isset($seg[2])) {
         ai_paper_recent_feed($pdo, $cfg);
         return;
     }
-    // v813 #405 要約 row から ペア の 全訳 を 作る (= 保存 済 PDF を 再 利用、 アップロード 不要)
+    // v813 #405 要約 row からペアの全訳を作る (= 保存済 PDF を再利用、 アップロード不要)
     if ($sub === 'paper_full_translate' && $method === 'POST'
         && ($seg[2] ?? '') === 'from_summary' && isset($seg[3]) && ctype_digit((string)$seg[3])) {
         ai_paper_full_translate_from_summary($pdo, $cfg, (int)$seg[3]);
         return;
     }
-    // v813 #405 同 方向 (全訳 row → 要約) も 対称 で 用意
+    // v813 #405 同方向 (全訳 row → 要約) も対称で用意
     if ($sub === 'paper_translate' && $method === 'POST'
         && ($seg[2] ?? '') === 'from_full' && isset($seg[3]) && ctype_digit((string)$seg[3])) {
         ai_paper_translate_from_full($pdo, $cfg, (int)$seg[3]);
@@ -239,16 +239,16 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no ai route for $method $sub", 404);
 }
 
-// v809 論文 要約 + 全訳 の 合算 新着 feed。 公開 中 (is_shared=1, done) の もの と
-//   自分 の もの (status 問わず) を created_at DESC で 合算。 widget (limit=10) と
-//   /#/papers-recent (limit=20, offset=N) の 両方 で 使う。
+// v809 論文要約 + 全訳の合算新着 feed。 公開中 (is_shared=1, done) のものと
+//   自分のもの (status 問わず) を created_at DESC で合算。 widget (limit=10) と
+//   /#/papers-recent (limit=20, offset=N) の両方で使う。
 function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $limit  = max(1, min(50, (int)($_GET['limit']  ?? 10)));
     $offset = max(0, (int)($_GET['offset'] ?? 0));
-    // 公開 or 本人 の 要約 + 全訳 を UNION ALL で 取得、 created_at DESC で ソート、
-    // limit + offset で 切り出す。 件数 多くて も result_json は 軽量 な title だけ 取り出す。
+    // 公開 or 本人の要約 + 全訳を UNION ALL で取得、 created_at DESC でソート、
+    // limit + offset で切り出す。 件数多くても result_json は軽量な title だけ取り出す。
     $sql = "
       SELECT * FROM (
         SELECT 'summary' AS kind,
@@ -284,11 +284,11 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
         if (!empty($r['result_json'])) {
             $j = json_decode((string)$r['result_json'], true);
             if (is_array($j)) {
-                // 要約 は title_ja / 全訳 は title_translated → title_original
+                // 要約は title_ja / 全訳は title_translated → title_original
                 $title = (string)($j['title_ja'] ?? $j['title_translated'] ?? '') ?: null;
                 $titleOrig = (string)($j['title_original'] ?? $j['title_orig'] ?? '') ?: null;
                 if ($title === null && $titleOrig !== null) { $title = $titleOrig; $titleOrig = null; }
-                // v817 #411 要約 / アブスト の 先頭 約 140 字 を snippet と して 添える
+                // v817 #411 要約 / アブストの先頭約 140 字を snippet として添える
                 $snipRaw = (string)($j['summary_one_paragraph'] ?? $j['abstract_ja'] ?? $j['abstract_translated'] ?? $j['abstract'] ?? $j['abstract_original'] ?? '');
                 if ($snipRaw !== '') {
                     $snipRaw = preg_replace('/\s+/u', ' ', trim($snipRaw)) ?? '';
@@ -366,12 +366,12 @@ const REWRITER_COST = 1;
 const REWRITER_MAX_INPUT = 10000;
 const REWRITER_MAX_ITER  = 3;
 
-// 文字数 (スペースあり / なし) と 単語数を サーバ側で 正確にカウント
+// 文字数 (スペースあり / なし) と単語数をサーバ側で正確にカウント
 function ai_count_text(string $s): array {
     $sNoSpace = preg_replace('/\s+/u', '', $s) ?? '';
     $cWithSpace = mb_strlen($s);
     $cNoSpace   = mb_strlen($sNoSpace);
-    // 単語数: 連続する 非空白 を 1 単語 とカウント (英語向け、 日本語は意味なし)
+    // 単語数: 連続する非空白を 1 単語とカウント (英語向け、 日本語は意味なし)
     $words = 0;
     if (preg_match_all('/\S+/u', $s, $m)) $words = count($m[0]);
     return [
@@ -456,10 +456,10 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
                 REWRITER_COST,
             ]);
         $taskId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, REWRITER_COST, 'rewriter', 'rewriter', $taskId, 'リライター 依頼料');
+        Ledger::transfer($pdo, $uid, 1, REWRITER_COST, 'rewriter', 'rewriter', $taskId, 'リライター依頼料');
     });
 
-    // 同期で OpenAI を呼ぶ (最大 REWRITER_MAX_ITER 回 リトライ)
+    // 同期で OpenAI を呼ぶ (最大 REWRITER_MAX_ITER 回リトライ)
     $apiKey = (string)$cfg['openai']['api_key'];
     $model  = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
     try {
@@ -498,7 +498,7 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
         }
         $rwCount = ai_count_text($rewritten);
 
-        // 英文なら 和訳 (原文 + 書き直し)
+        // 英文なら和訳 (原文 + 書き直し)
         $srcTrans = null; $rwTrans = null;
         if ($lang === 'en') {
             $srcTrans = ai_translate_to_jp($text, $apiKey, $model);
@@ -520,8 +520,8 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
         try {
             $pdo->prepare("UPDATE rewriter_tasks SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
                 ->execute([mb_substr($e->getMessage(), 0, 500), $taskId]);
-            // 失敗なら 返金
-            Ledger::transfer($pdo, 1, $uid, REWRITER_COST, 'refund', 'rewriter', $taskId, 'リライター 失敗返金');
+            // 失敗なら返金
+            Ledger::transfer($pdo, 1, $uid, REWRITER_COST, 'refund', 'rewriter', $taskId, 'リライター失敗返金');
         } catch (Throwable $_) {}
         throw new ApiException('server_error', 'リライト失敗: ' . $e->getMessage(), 500);
     }
@@ -565,8 +565,8 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
     return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
-const RESUME_CHECK_COST = 5;        // 旧 互換 (gpt-4.1 想定 の 標準 料金)。
-const RESUME_CHECK_MODELS = [       // v774 #396 モデル 別 価格 (paper_review と 同じ 軸)
+const RESUME_CHECK_COST = 5;        // 旧互換 (gpt-4.1 想定の標準料金)。
+const RESUME_CHECK_MODELS = [       // v774 #396 モデル別価格 (paper_review と同じ軸)
     'gpt-4.1'    => 5,
     'gpt-5-mini' => 8,
     'gpt-5'      => 15,
@@ -587,7 +587,7 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
     unset($r);
     json_response([
         'items'         => $rows,
-        'cost_points'   => RESUME_CHECK_COST,           // 旧 互換
+        'cost_points'   => RESUME_CHECK_COST,           // 旧互換
         'max_chars'     => RESUME_CHECK_MAX_CHARS,
         'models'        => RESUME_CHECK_MODELS,         // v774 #396
         'default_model' => 'gpt-4.1',
@@ -619,7 +619,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
     $uid = (int)$u['id'];
     ai_assert_configured($cfg);
 
-    // v598 PDF (multipart) と テキスト (JSON) の 両対応。 Content-Type で 振り分け。
+    // v598 PDF (multipart) とテキスト (JSON) の両対応。 Content-Type で振り分け。
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
     $isPdf = str_starts_with($contentType, 'multipart/form-data') && isset($_FILES['file']);
 
@@ -653,7 +653,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
     // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
     $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-4.1') : ($body['model'] ?? 'gpt-4.1')));
     if (!isset(RESUME_CHECK_MODELS[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $checkCost = (int)RESUME_CHECK_MODELS[$reqModel];
 
@@ -662,7 +662,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         throw new ApiException('insufficient_balance', sprintf('ポイント不足です (要 %d pt、現在 %d pt)', $checkCost, $bal), 400);
     }
 
-    // PDF なら OpenAI Files API に 先に アップロード (同期で)。 課金は その後
+    // PDF なら OpenAI Files API に先にアップロード (同期で)。 課金はその後
     if ($isPdf) {
         $apiKey = (string)$cfg['openai']['api_key'];
         $fileId = ai_openai_upload_pdf($tmpPdf, $pdfName, $apiKey);
@@ -676,7 +676,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         $pdo->prepare("INSERT INTO resume_checks (user_id, title, input_text, cost_points, status) VALUES (?,?,?,?,'pending')")
             ->execute([$uid, $title, $inputForDb, $checkCost]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $checkCost, 'resume_check', 'resume_check', $checkId, '原稿チェック 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $checkCost, 'resume_check', 'resume_check', $checkId, '原稿チェック依頼料');
     });
 
     json_response_no_exit([
@@ -685,7 +685,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         'status'      => 'pending',
         'cost_points' => $checkCost,
         'model'       => $reqModel,
-        'message'     => '原稿チェック (' . $reqModel . ') を 受付けました。 30秒〜2分 で 結果 が 出ます。',
+        'message'     => '原稿チェック (' . $reqModel . ') を受付けました。 30秒〜2分で結果が出ます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -698,7 +698,7 @@ function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, stri
     try {
         $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
-        $model  = $reqModel;     // v774 #396 ユーザ 指定 モデル
+        $model  = $reqModel;     // v774 #396 ユーザ指定モデル
         $sys = <<<PROMPT
 あなたは学術/業務の短い原稿 (1-2 ページ相当、レジュメ/概要/申請書など) のチェック担当者です。
 論文ほど厳密にはチェックしません。建設的に、著者が次の改稿ですぐ直せる粒度で指摘してください。
@@ -774,85 +774,85 @@ PROMPT;
         try {
             $pdo->prepare("UPDATE resume_checks SET status='error', error_msg = ?, finished_at=NOW() WHERE id = ?")
                 ->execute([mb_substr($e->getMessage(), 0, 500), $checkId]);
-            // エラー時は 課金を返金
+            // エラー時は課金を返金
             $stU = $pdo->prepare("SELECT user_id FROM resume_checks WHERE id = ?");
             $stU->execute([$checkId]);
             $uid = (int)$stU->fetchColumn();
             if ($uid > 0) {
-                Ledger::transfer($pdo, 1, $uid, RESUME_CHECK_COST, 'refund', 'resume_check', $checkId, '原稿チェック 失敗 返金');
+                Ledger::transfer($pdo, 1, $uid, RESUME_CHECK_COST, 'refund', 'resume_check', $checkId, '原稿チェック失敗返金');
             }
         } catch (Throwable $_) {}
     }
 }
 
-const PAPER_REVIEW_COST = 10;       // 旧 互換 (gpt-4.1 想定 の 標準 料金)。 v774 #396 モデル別 価格 へ 移行。
-const PAPER_REVIEW_MODELS = [       // v774 #396 モデル 別 価格 (paper_translate と 同じ 軸)
+const PAPER_REVIEW_COST = 10;       // 旧互換 (gpt-4.1 想定の標準料金)。 v774 #396 モデル別価格へ移行。
+const PAPER_REVIEW_MODELS = [       // v774 #396 モデル別価格 (paper_translate と同じ軸)
     'gpt-4.1'    => 10,
     'gpt-5-mini' => 15,
     'gpt-5'      => 30,
     'o1'         => 50,
 ];
-// v557 #211 拡張: 査読の評価軸を 明示。 貢献の妥当性 / 統計記述の漏れ / 論理の流れ / 章間の一気通貫性 を 徹底チェック。
+// v557 #211 拡張: 査読の評価軸を明示。 貢献の妥当性 / 統計記述の漏れ / 論理の流れ / 章間の一気通貫性を徹底チェック。
 const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
-あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ 経験豊富な査読者です。 与えられた PDF の論文を 入念に読み、 章立てを意識して 日本語で要約し、 続けて指定された会議基準で 厳密な査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。
+あなたは HCI / CSCW 分野で 10 年以上のキャリアを持つ経験豊富な査読者です。 与えられた PDF の論文を入念に読み、 章立てを意識して日本語で要約し、 続けて指定された会議基準で厳密な査読コメントを作ってください。 返答は valid JSON のみ。 説明文や markdown のコードフェンスは付けないこと。
 
 【特に丁寧に検査するチェックリスト】
-1. **貢献の妥当性**: 主張する貢献 (research contribution) が 文献的に新規性があるか、 関連研究との差分が明示されているか、 「これまで誰も解決していなかった」 と言える根拠があるか。 過大な主張・水増しがないか。
-2. **実験/統計の記述漏れ**: 参加者数 N / 被験者属性 / 倫理審査 / インフォームドコンセント / 報酬 / 環境 (機材・実験室・オンライン) / プレテスト / 統計手法 (検定の選択理由 / 効果量 / 多重比較補正 / 仮定検証) / 有意水準 / 信頼区間 / サンプルサイズ計算 / 欠損データ処理 が漏れなく書かれているか。
+1. **貢献の妥当性**: 主張する貢献 (research contribution) が文献的に新規性があるか、 関連研究との差分が明示されているか、 「これまで誰も解決していなかった」 と言える根拠があるか。 過大な主張・水増しがないか。
+2. **実験/統計の記述漏れ**: 参加者数 N / 被験者属性 / 倫理審査 / インフォームドコンセント / 報酬 / 環境 (機材・実験室・オンライン) / プレテスト / 統計手法 (検定の選択理由 / 効果量 / 多重比較補正 / 仮定検証) / 有意水準 / 信頼区間 / サンプルサイズ計算 / 欠損データ処理が漏れなく書かれているか。
 3. **論理的なつながり**: 段落間 / 章間で 「だから何?」 が読者に伝わる接続詞・主張展開になっているか。 唐突に新概念が出る箇所、 結論が飛躍してる箇所がないか。
-4. **背景 → 手法 → 実験 → 結果 → 議論 の一気通貫性**:
+4. **背景 → 手法 → 実験 → 結果 → 議論の一気通貫性**:
    - 背景で挙げた問題が、 手法で解決される設計になっているか
    - 手法で導入した要素が、 実験で正しく評価されているか (条件設計 / 比較対象が適切か)
-   - 実験結果が、 議論・結論で 元の問題に対する回答として 一貫して整理されているか
-   - もし途中で 目的・手段・評価の軸がずれていたら 明示すること
-5. **仮説/問い と 結果 の対応**: Introduction で立てた 仮説 (H1, H2,...) や RQ (RQ1, RQ2,...) が、 Results / Discussion で 1 つ 1 つ明示的に対応づけて議論されているか。 立てた問いが結果で 「答えられた / 答えられなかった」 のどちらかが明確になっているか。
+   - 実験結果が、 議論・結論で元の問題に対する回答として一貫して整理されているか
+   - もし途中で目的・手段・評価の軸がずれていたら明示すること
+5. **仮説/問いと結果の対応**: Introduction で立てた仮説 (H1, H2,...) や RQ (RQ1, RQ2,...) が、 Results / Discussion で 1 つ 1 つ明示的に対応づけて議論されているか。 立てた問いが結果で 「答えられた / 答えられなかった」 のどちらかが明確になっているか。
 6. **用語・編集面の精査**:
-   - 用語の一貫性 (同じ概念に対して 異なる表記がないか、 略語の初出での説明があるか)
+   - 用語の一貫性 (同じ概念に対して異なる表記がないか、 略語の初出での説明があるか)
    - 専門用語の説明不足 (会議の想定読者層を超える専門用語が定義なしで使われていないか)
    - 図表の参照 (全ての Figure / Table が本文中で言及されているか、 言及だけで本文に説明がない図表はないか)
    - 参考文献の妥当性 (存在しなさそうな引用 / 著者名のタイポ / 年号の食い違い / フォーマット不一致がないか)
 
 【strengths / weaknesses に書くべき粒度】
-- 抽象的な感想 (「面白い」「意義深い」 等) は避け、 具体的な節 / 図 / 数値 / 主張 を引用して指摘する
+- 抽象的な感想 (「面白い」「意義深い」 等) は避け、 具体的な節 / 図 / 数値 / 主張を引用して指摘する
 - weaknesses は 「どう直せば accept に近づくか」 の具体的な改稿案を 1 つずつ添える
-- 漏れの指摘は 「何が書かれていないか」 を 章名 + 段落付近で明示
+- 漏れの指摘は 「何が書かれていないか」 を章名 + 段落付近で明示
 
-【改稿案で 安易に薦めてはいけないこと】
-- 「N を増やせば良い」 は 簡単に書きがちだが、 既に分析済の論文に対して N を追加すると **p-hacking (追加分析で 偶然 有意差が出るのを待つ行為) のリスク** がある。 N 増の提案をするなら、 同時に **「事前登録 (pre-registration) を行った上で」 / 「効果量と検出力分析で必要 N を見積もった上で」** 等の安全策を添えること。
-- 単一の追加分析だけでなく、 **複数の分析を組み合わせて提案** すること (例: 統計的検定だけでなく 質的データのコーディング / 事例分析 / 探索的可視化 を 追加で提案)。
+【改稿案で安易に薦めてはいけないこと】
+- 「N を増やせば良い」 は簡単に書きがちだが、 既に分析済の論文に対して N を追加すると **p-hacking (追加分析で偶然有意差が出るのを待つ行為) のリスク** がある。 N 増の提案をするなら、 同時に **「事前登録 (pre-registration) を行った上で」 / 「効果量と検出力分析で必要 N を見積もった上で」** 等の安全策を添えること。
+- 単一の追加分析だけでなく、 **複数の分析を組み合わせて提案** すること (例: 統計的検定だけでなく質的データのコーディング / 事例分析 / 探索的可視化を追加で提案)。
 
-【実験を 追加実施できないケースのための示唆】
+【実験を追加実施できないケースのための示唆】
 - 査読者は 「再実験せよ」 一辺倒の指示を避け、 **代替案** を 1 つ以上添えること:
-  - 既存データの 別角度からの再分析 (例: subgroup analysis / mediating variable / 質的コーディング)
-  - 既出公開データセットを使った 補完的検証
-  - 既存研究との 比較メタ分析的議論
+  - 既存データの別角度からの再分析 (例: subgroup analysis / mediating variable / 質的コーディング)
+  - 既出公開データセットを使った補完的検証
+  - 既存研究との比較メタ分析的議論
   - 制約として 「これは現時点のスナップショット研究であり、 後続研究に X を委ねる」 と limitation 章で明示する戦略
 
 【「こういう分析をすると強くなる」 系の提案】
-- 著者が見落としていそうな 強化分析を 必ず 1〜3 個アイテマイズ:
-  - 例: 効果量の 95% CI、 ベイズ係数、 質的データの 半構造化インタビュー追加、 行動ログの ヒートマップ可視化、 学習曲線の time-series 分析、 個人差を残差で説明、 シミュレーション or 計算モデルでの検証 など
+- 著者が見落としていそうな強化分析を必ず 1〜3 個アイテマイズ:
+  - 例: 効果量の 95% CI、 ベイズ係数、 質的データの半構造化インタビュー追加、 行動ログのヒートマップ可視化、 学習曲線の time-series 分析、 個人差を残差で説明、 シミュレーション or 計算モデルでの検証など
 
 【貢献の独立解釈 (GPT 視点)】
-- 論文中で著者が主張する貢献 (Introduction の bullet "Our contributions are:" や Conclusion の要約) を 一度脇に置き、 **GPT の独立した読解** として「この論文の貢献は本当のところ何か」 を 再列挙してください
+- 論文中で著者が主張する貢献 (Introduction の bullet "Our contributions are:" や Conclusion の要約) を一度脇に置き、 **GPT の独立した読解** として「この論文の貢献は本当のところ何か」 を再列挙してください
 - そのうえで:
   - 著者が主張する貢献 (author_claimed_contributions): 著者が明示的に書いている貢献リスト
-  - GPT が読み取った 貢献候補 (reviewer_perceived_contributions): 論文の中身から GPT が 独立に解釈した 「実質的な貢献」 1〜5 個
-  - ギャップの説明 (contribution_gap_explanation): 「あなたの主張は X だが、 私は この論文の貢献は実は Y だと解釈する。 理由は…」 の自由記述。 著者が見落としている可能性のある貢献 や、 逆に 著者が過大主張している貢献の 検証指摘
-- 著者の主張と GPT の解釈が 完全一致する場合は その旨を明示 (「両者一致、 貢献の主張は妥当」 等)
+  - GPT が読み取った貢献候補 (reviewer_perceived_contributions): 論文の中身から GPT が独立に解釈した 「実質的な貢献」 1〜5 個
+  - ギャップの説明 (contribution_gap_explanation): 「あなたの主張は X だが、 私はこの論文の貢献は実は Y だと解釈する。 理由は…」 の自由記述。 著者が見落としている可能性のある貢献や、 逆に著者が過大主張している貢献の検証指摘
+- 著者の主張と GPT の解釈が完全一致する場合はその旨を明示 (「両者一致、 貢献の主張は妥当」 等)
 
 【主張が強すぎる文章 / 記述がおかしい文章のリライト提案】
-- 過大主張 (「世界初」「決定的に」「絶対に」 等)、 論理飛躍、 曖昧 (「効果的だった」 を 数値で支持していない)、 矛盾、 不適切な比較、 で 問題があれば
-- rewrite_suggestions に 以下 の 形 で 1〜5 件 アイテマイズ:
+- 過大主張 (「世界初」「決定的に」「絶対に」 等)、 論理飛躍、 曖昧 (「効果的だった」 を数値で支持していない)、 矛盾、 不適切な比較、 で問題があれば
+- rewrite_suggestions に以下の形で 1〜5 件アイテマイズ:
   {
-    "original":             "問題のある原文 (原文 ママ、 引用 句 込み)",
-    "original_ja":          "原文 の 日本語 訳 (要約 で なく 訳)",
-    "reason":               "なぜ 問題 か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)",
-    "suggested_rewrite_en": "原文 と 同じ 言語 (= 英語 論文 なら 英語) で の 書き換え 案",
-    "suggested_rewrite_ja": "その 書き換え 案 を 日本語 で 訳した もの"
+    "original":             "問題のある原文 (原文ママ、 引用句込み)",
+    "original_ja":          "原文の日本語訳 (要約でなく訳)",
+    "reason":               "なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾等)",
+    "suggested_rewrite_en": "原文と同じ言語 (= 英語論文なら英語) での書き換え案",
+    "suggested_rewrite_ja": "その書き換え案を日本語で訳したもの"
   }
-- 例: 「世界初」 → 「To our knowledge, this is the first attempt in the field of ...」 + 「我々 の 知る 限り、 ◯◯ の 分野 で 最初 の 試み で ある」
-- 例: 「効果的だった」 → 「Condition A reduced mean response time by X ms compared to B (p<.01, d=0.5), suggesting users tend to prefer A.」 + 「条件 A は B より 平均 反応 時間 が X ms 短く (p<.01, d=0.5)、 ユーザー は A を 好む 傾向 が 示唆 された」
-- 旧 フィールド 名 (suggested_rewrite, original のみ) は 後方 互換 で 残して も OK だが、 上記 5 フィールド を 揃える こと を 優先
+- 例: 「世界初」 → 「To our knowledge, this is the first attempt in the field of ...」 + 「我々の知る限り、 ◯◯ の分野で最初の試みである」
+- 例: 「効果的だった」 → 「Condition A reduced mean response time by X ms compared to B (p<.01, d=0.5), suggesting users tend to prefer A.」 + 「条件 A は B より平均反応時間が X ms 短く (p<.01, d=0.5)、 ユーザーは A を好む傾向が示唆された」
+- 旧フィールド名 (suggested_rewrite, original のみ) は後方互換で残しても OK だが、 上記 5 フィールドを揃えることを優先
 PROMPT;
 
 function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
@@ -881,7 +881,7 @@ function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
         'default_prompt'   => PAPER_REVIEW_DEFAULT_PROMPT,
         'share_target_ids' => $shareIds,
         'share_targets'    => $shareUsers,
-        'cost_points'      => PAPER_REVIEW_COST,        // 旧 互換
+        'cost_points'      => PAPER_REVIEW_COST,        // 旧互換
         'models'           => PAPER_REVIEW_MODELS,      // v774 #396
         'default_model'    => 'gpt-4.1',
     ]);
@@ -936,7 +936,7 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
         'author_name'  => $row['author_name'],
         'author_avatar'=> $row['author_avatar'],
         'pdf_name'     => $row['pdf_name'],
-        'pdf_path'     => $row['pdf_path'],         // v795 アップロード 元 PDF へ の リンク
+        'pdf_path'     => $row['pdf_path'],         // v795 アップロード元 PDF へのリンク
         'target_venue' => $row['target_venue'],
         'strictness'   => $row['strictness'],
         'response_text'=> $row['response_text'],    // v780 #404
@@ -983,11 +983,11 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     if ($venue === '') $venue = 'HCI 系の国際会議 (CHI / UIST / IUI / DIS / CSCW など)';
     $strictness = (string)($_POST['strictness'] ?? 'やや厳しめ');
     if (!in_array($strictness, ['緩め', 'やや厳しめ', '厳しめ'], true)) $strictness = 'やや厳しめ';
-    // v780 #404 オプション: 回答文 (rebuttal / response to reviewers)。 与えられた 場合 は
-    //   論文 査読 + 回答 妥当性 評価 モード に なる。 空 なら 従来 通り の 査読 のみ。
+    // v780 #404 オプション: 回答文 (rebuttal / response to reviewers)。 与えられた場合は
+    //   論文査読 + 回答妥当性評価モードになる。 空なら従来通りの査読のみ。
     $responseText = trim((string)($_POST['response_text'] ?? ''));
     if (mb_strlen($responseText) > 20000) $responseText = mb_substr($responseText, 0, 20000);
-    // v782 #379 回答文 PDF も 同時 に 受け取れる。 テキスト と PDF 両方 ある なら 両方 を GPT に 渡す。
+    // v782 #379 回答文 PDF も同時に受け取れる。 テキストと PDF 両方あるなら両方を GPT に渡す。
     $responsePdfTmp = null;
     $responsePdfName = null;
     if (isset($_FILES['response_pdf']) && is_uploaded_file($_FILES['response_pdf']['tmp_name'])) {
@@ -995,7 +995,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         if ($rf['error'] === UPLOAD_ERR_OK) {
             if ($rf['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '回答 PDF は 30 MB まで', 400);
             $rhead = @file_get_contents($rf['tmp_name'], false, null, 0, 5);
-            if ($rhead !== '%PDF-') throw new ApiException('bad_request', '回答 PDF は PDF ファイル を 指定 して ください', 400);
+            if ($rhead !== '%PDF-') throw new ApiException('bad_request', '回答 PDF は PDF ファイルを指定してください', 400);
             $responsePdfTmp  = $rf['tmp_name'];
             $responsePdfName = (string)($rf['name'] ?? 'rebuttal.pdf');
         }
@@ -1017,7 +1017,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
     $reqModel = trim((string)($_POST['model'] ?? 'gpt-4.1'));
     if (!isset(PAPER_REVIEW_MODELS[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $reviewCost = (int)PAPER_REVIEW_MODELS[$reqModel];
 
@@ -1029,12 +1029,12 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
 
     // v557 #211 非同期化: PDF を OpenAI に upload → record を pending で保存 +
     //   即座にクライアントに share_token を返す。 GPT への chat.completions 呼出は
-    //   fastcgi_finish_request() で クライアント切断後にバックグラウンド実行。
+    //   fastcgi_finish_request() でクライアント切断後にバックグラウンド実行。
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
-    // v795 アップロード された PDF を サーバ にも 保存 (結果 ページ から リンク で 開ける ように)。
-    //   token が この あと 生成 される ので 先 に 作って 流用 する。
+    // v795 アップロードされた PDF をサーバにも保存 (結果ページからリンクで開けるように)。
+    //   token がこのあと生成されるので先に作って流用する。
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_reviews/' . $token . '/original.pdf';
@@ -1046,7 +1046,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     } else {
         @chmod($pdfAbs, 0644);
     }
-    // 回答 PDF も 同じ ように 保存
+    // 回答 PDF も同じように保存
     $responsePdfRel = null;
     if ($responsePdfTmp !== null) {
         $responsePdfRel = '/uploads/paper_reviews/' . $token . '/response.pdf';
@@ -1063,20 +1063,20 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     $sys = $basePrompt .
            "\n\n査読の厳しさは {$strictness} で、 ターゲット会議は {$venue} を想定。";
     if ($hasResponse) {
-        // v780 #404 回答文 が ある とき は 「査読 + 回答 評価」 モード
-        // v782 #379 PDF と text 両方 ある場合 も 同 モード。 PDF は file_id で 添付、 text は user prompt に 埋め込み
-        $sys .= "\n\n【回答文 評価 モード】\n"
-              . "この 依頼 に は 著者 から の 回答文 (rebuttal / 査読 コメント へ の 反論・返答) が 添えられて います。\n"
-              . "通常 の 査読 に 加え、 以下 を 評価 して ください:\n"
-              . "(1) 回答 内容 が 査読 で 指摘 する べき 主要 な 弱み / 記述 漏れ / 論理 飛躍 を カバー して いる か\n"
-              . "(2) 回答 の 主張 が 論文 本文 と 矛盾 して いない か (回答 で 「分析 し直 した」 と 書いて あるが 本文 が 古い まま の よう な 不整合 を 検出)\n"
-              . "(3) 回答 が 「N を 増やす だけ」「再 実験 する だけ」 で 終わって いる など 安直 な 対応 で は ない か (代替 分析 や 限界 明示 への 言及 を 重視)\n"
-              . "(4) 回答 の 文章 自体 に 過大 主張 / 曖昧 / 矛盾 が ない か\n"
-              . "(5) 査読 で 上げた 改稿 案 に 対して 回答 が 過不足 なく 対応 できて いる か (上記 weaknesses と 突き合わせ)\n"
-              . "出力 JSON に 新規 フィールド「response_evaluation」 を 追加 する こと (詳細 は user 指示 の スキーマ 参照)。";
+        // v780 #404 回答文があるときは 「査読 + 回答評価」 モード
+        // v782 #379 PDF と text 両方ある場合も同モード。 PDF は file_id で添付、 text は user prompt に埋め込み
+        $sys .= "\n\n【回答文評価モード】\n"
+              . "この依頼には著者からの回答文 (rebuttal / 査読コメントへの反論・返答) が添えられています。\n"
+              . "通常の査読に加え、 以下を評価してください:\n"
+              . "(1) 回答内容が査読で指摘するべき主要な弱み / 記述漏れ / 論理飛躍をカバーしているか\n"
+              . "(2) 回答の主張が論文本文と矛盾していないか (回答で 「分析し直した」 と書いてあるが本文が古いままのような不整合を検出)\n"
+              . "(3) 回答が 「N を増やすだけ」「再実験するだけ」 で終わっているなど安直な対応ではないか (代替分析や限界明示への言及を重視)\n"
+              . "(4) 回答の文章自体に過大主張 / 曖昧 / 矛盾がないか\n"
+              . "(5) 査読で上げた改稿案に対して回答が過不足なく対応できているか (上記 weaknesses と突き合わせ)\n"
+              . "出力 JSON に新規フィールド「response_evaluation」 を追加すること (詳細は user 指示のスキーマ参照)。";
     }
-    $userPrompt = "添付した PDF の論文を 章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 続けて査読コメントを作ってください。\n\n"
-        . "system prompt のチェックリスト 4 項目 (貢献の妥当性 / 実験統計記述漏れ / 論理的つながり / 背景〜結論 一気通貫性) を 必ず網羅し、 整合性チェック の結果は consistency_check に 4 項目別で残してください。\n\n"
+    $userPrompt = "添付した PDF の論文を章立て (Abstract / Introduction / Related Work / Method / Results / Discussion / Conclusion など) を意識して 1〜2 段落ずつ日本語で要約し、 続けて査読コメントを作ってください。\n\n"
+        . "system prompt のチェックリスト 4 項目 (貢献の妥当性 / 実験統計記述漏れ / 論理的つながり / 背景〜結論一気通貫性) を必ず網羅し、 整合性チェックの結果は consistency_check に 4 項目別で残してください。\n\n"
         . "出力 JSON スキーマ:\n"
         . "{ \"sections\": [{\"title\": \"章タイトル\", \"summary_ja\": \"1〜2 段落の和訳要約\"}, ...],\n"
         . "  \"review\": {\n"
@@ -1086,37 +1086,37 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"contribution_validity\": \"貢献の妥当性に関する評価 (100-300 字)\",\n"
         . "    \"author_claimed_contributions\": [\"著者が論文中で明示的に主張する貢献 (1 件ずつ)\", ...],\n"
         . "    \"reviewer_perceived_contributions\": [\"GPT が論文を読んで独立に解釈した『実質的な貢献』 1〜5 件\", ...],\n"
-        . "    \"contribution_gap_explanation\": \"著者主張 ⇔ GPT 解釈 のギャップ。 一致なら『両者一致』。 ズレがあるなら『あなたの主張は X だが、 私は この論文の貢献は実は Y だと解釈する。 理由は…』 を 200-500 字で自由記述\",\n"
+        . "    \"contribution_gap_explanation\": \"著者主張 ⇔ GPT 解釈のギャップ。 一致なら『両者一致』。 ズレがあるなら『あなたの主張は X だが、 私はこの論文の貢献は実は Y だと解釈する。 理由は…』 を 200-500 字で自由記述\",\n"
         . "    \"missing_descriptions\": [\"漏れている記述項目 (章名 + 該当箇所込み)\", ...],\n"
         . "    \"logical_flow\": \"論理的なつながりの評価、 飛躍箇所の指摘 (100-300 字)\",\n"
         . "    \"consistency_check\": {\n"
-        . "       \"background_to_method\": \"背景→手法 が繋がっているか\",\n"
-        . "       \"method_to_experiment\": \"手法→実験 が繋がっているか\",\n"
-        . "       \"experiment_to_result\": \"実験→結果 が繋がっているか\",\n"
-        . "       \"result_to_discussion\": \"結果→議論→結論 が繋がっているか\"\n"
+        . "       \"background_to_method\": \"背景→手法が繋がっているか\",\n"
+        . "       \"method_to_experiment\": \"手法→実験が繋がっているか\",\n"
+        . "       \"experiment_to_result\": \"実験→結果が繋がっているか\",\n"
+        . "       \"result_to_discussion\": \"結果→議論→結論が繋がっているか\"\n"
         . "    },\n"
-        . "    \"hypothesis_vs_results\": \"立てた仮説/RQ ⇔ 結果 の対応評価。 答えが出てない問いがあれば指摘\",\n"
+        . "    \"hypothesis_vs_results\": \"立てた仮説/RQ ⇔ 結果の対応評価。 答えが出てない問いがあれば指摘\",\n"
         . "    \"editorial_check\": {\n"
         . "      \"terminology_consistency\": \"用語の一貫性、 略語初出説明\",\n"
         . "      \"jargon_explanation\": \"専門用語の説明不足 (会議の想定読者層を超えるもの)\",\n"
-        . "      \"figure_table_references\": \"全ての Figure / Table が 本文で言及・説明されているか\",\n"
+        . "      \"figure_table_references\": \"全ての Figure / Table が本文で言及・説明されているか\",\n"
         . "      \"references_validity\": \"存在しなさそうな引用 / typo / 年号食い違い / フォーマットの不一致\"\n"
         . "    },\n"
         . "    \"strengths\": [\"具体的な強み (節/数値/主張を引用)\", ...],\n"
         . "    \"weaknesses\": [\"具体的な弱み + 直すべき改稿案\", ...],\n"
-        . "    \"strengthening_analyses\": [\"こういう追加分析をすると強くなる、 という提案 (1〜3 個、 効果量CI / 質的補完 / シミュレーション 等の具体例)\", ...],\n"
-        . "    \"alternatives_when_no_reexp\": [\"追加実験ができない場合の代替案 (既存データ再分析 / 公開データ補完 / limitation 明示 等)\", ...],\n"
-        . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"original_ja\":\"原文 の 日本語 訳\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾 等)\", \"suggested_rewrite_en\":\"原文 と 同じ 言語 で の 書き換え 案 (英語 論文 なら 英語)\", \"suggested_rewrite_ja\":\"その 書き換え 案 の 日本語 訳\"}, ...],\n"
-        . "    \"revision_to_accept\": [\"採録に導くために 必要な修正を 優先度順に アイテマイズ (具体的 / 実行可能、 ただし 「N を増やす」 系は p-hacking リスクを添える)\", ...],\n"
+        . "    \"strengthening_analyses\": [\"こういう追加分析をすると強くなる、 という提案 (1〜3 個、 効果量CI / 質的補完 / シミュレーション等の具体例)\", ...],\n"
+        . "    \"alternatives_when_no_reexp\": [\"追加実験ができない場合の代替案 (既存データ再分析 / 公開データ補完 / limitation 明示等)\", ...],\n"
+        . "    \"rewrite_suggestions\": [{\"original\":\"主張が強すぎる or 記述がおかしい原文 (節 + 引用)\", \"original_ja\":\"原文の日本語訳\", \"reason\":\"なぜ問題か (過大主張 / 飛躍 / 曖昧 / 矛盾等)\", \"suggested_rewrite_en\":\"原文と同じ言語での書き換え案 (英語論文なら英語)\", \"suggested_rewrite_ja\":\"その書き換え案の日本語訳\"}, ...],\n"
+        . "    \"revision_to_accept\": [\"採録に導くために必要な修正を優先度順にアイテマイズ (具体的 / 実行可能、 ただし 「N を増やす」 系は p-hacking リスクを添える)\", ...],\n"
         . "    \"comments_to_authors\": \"著者への総合コメント (400〜800 文字)\",\n"
         . ($hasResponse
             ? "    \"response_evaluation\": {\n"
-              . "      \"overall_assessment\": \"回答 全体 の 妥当性 評価 (200〜500 字)。 査読 指摘 に 対して 過不足 なく 対応 できて いる か、 安直 な「N 増 / 再 実験」 で 流して いない か、 論文 本文 と 矛盾 が ない か を 含めて\",\n"
-              . "      \"covered_points\":      [\"回答 が 良く 対応 でき て いる 指摘 (1 件 ずつ)\", ...],\n"
-              . "      \"missing_points\":      [\"査読 で 指摘 すべき に も かかわら ず 回答 が 触れて いない / 不十分 な 論点 (1 件 ずつ + どう 補強 する か の 助言)\", ...],\n"
-              . "      \"inconsistencies\":     [\"回答 と 論文 本文 / 数値 / 主張 と の 矛盾 点 (具体 引用 + どこ と どこ が 矛盾 か)\", ...],\n"
-              . "      \"weak_arguments\":      [\"回答 中 で 主張 が 弱い / 曖昧 / 飛躍 して いる 箇所 (引用 + 改善案)\", ...],\n"
-              . "      \"recommended_revisions_to_response\": [\"回答文 自体 を こう 書き 換える と 査読者 を 説得 し やすい、 と いう 具体 提案 1〜5 件\", ...]\n"
+              . "      \"overall_assessment\": \"回答全体の妥当性評価 (200〜500 字)。 査読指摘に対して過不足なく対応できているか、 安直な「N 増 / 再実験」 で流していないか、 論文本文と矛盾がないかを含めて\",\n"
+              . "      \"covered_points\":      [\"回答が良く対応できている指摘 (1 件ずつ)\", ...],\n"
+              . "      \"missing_points\":      [\"査読で指摘すべきにもかかわらず回答が触れていない / 不十分な論点 (1 件ずつ + どう補強するかの助言)\", ...],\n"
+              . "      \"inconsistencies\":     [\"回答と論文本文 / 数値 / 主張との矛盾点 (具体引用 + どことどこが矛盾か)\", ...],\n"
+              . "      \"weak_arguments\":      [\"回答中で主張が弱い / 曖昧 / 飛躍している箇所 (引用 + 改善案)\", ...],\n"
+              . "      \"recommended_revisions_to_response\": [\"回答文自体をこう書き換えると査読者を説得しやすい、 という具体提案 1〜5 件\", ...]\n"
               . "    },\n"
             : ""
           )
@@ -1124,23 +1124,23 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "  }\n"
         . "}";
     if ($responseText !== '') {
-        $userPrompt .= "\n\n【著者 から の 回答文 (テキスト)】 (これ を 評価 して response_evaluation に 入れる)\n\n"
-                     . "------ ここ から 回答文 ------\n"
+        $userPrompt .= "\n\n【著者からの回答文 (テキスト)】 (これを評価して response_evaluation に入れる)\n\n"
+                     . "------ ここから回答文 ------\n"
                      . $responseText . "\n"
-                     . "------ ここ まで ------\n";
+                     . "------ ここまで ------\n";
     }
     if ($responsePdfTmp !== null) {
-        $userPrompt .= "\n\n【著者 から の 回答文 PDF】 が 添付 されて います (2 つめ の PDF ファイル として)。 1 つめ が 論文 本体、 2 つめ が 回答文 PDF。 両方 を 読んで、 response_evaluation を 作って ください。\n";
+        $userPrompt .= "\n\n【著者からの回答文 PDF】 が添付されています (2 つめの PDF ファイルとして)。 1 つめが論文本体、 2 つめが回答文 PDF。 両方を読んで、 response_evaluation を作ってください。\n";
     }
 
-    // v774 #396 #397 ユーザが 選んだ モデル を 使う。 推論モデル は temperature 非対応
-    // v782 #379 回答 PDF が ある なら OpenAI Files API に も アップ → 2 つめ の file content と して 添付
+    // v774 #396 #397 ユーザが選んだモデルを使う。 推論モデルは temperature 非対応
+    // v782 #379 回答 PDF があるなら OpenAI Files API にもアップ → 2 つめの file content として添付
     $responseFileId = null;
     if ($responsePdfTmp !== null) {
         try {
             $responseFileId = ai_openai_upload_pdf($responsePdfTmp, $responsePdfName, $apiKey);
         } catch (Throwable $e) {
-            // 失敗 しても 査読 本体 は 続行 (text の 回答 だけ で 動く ケース)
+            // 失敗しても査読本体は続行 (text の回答だけで動くケース)
             $responseFileId = null;
             fwrite(STDERR, "[paper_review] response_pdf upload failed: " . $e->getMessage() . "\n");
         }
@@ -1170,10 +1170,10 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
 
     // v557 #211 非同期: pending レコード作成 + 課金 → 即 share_token 返却 →
     //   fastcgi_finish_request() でクライアント切断 → 裏で OpenAI chat 呼出 → 結果更新
-    // v795 token は 前段 で PDF 保存 用 に 生成 済 (= ここ で 再 生成 しない)
+    // v795 token は前段で PDF 保存用に生成済 (= ここで再生成しない)
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $reviewId = 0;
-    // v782 #379 response_text に PDF 添付 マーカ を 追加 (UI で「PDF 添付 されました」 と 出す)
+    // v782 #379 response_text に PDF 添付マーカを追加 (UI で「PDF 添付されました」 と出す)
     $responseTextForDb = $responseText !== '' ? $responseText : null;
     if ($responsePdfTmp !== null) {
         $pdfMarker = "📎 [回答 PDF 添付: " . $responsePdfName . "]";
@@ -1190,7 +1190,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
                 '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $reviewCost, 'paper_review', 'paper_review', $reviewId, '論文査読 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $reviewCost, 'paper_review', 'paper_review', $reviewId, '論文査読依頼料');
     });
 
     // 早期レスポンス
@@ -1298,228 +1298,228 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 }
 
 // ─────────────────────────────────────────────────────────────
-// v748 #359 #360 #361 論文 和訳 要約 (落合メソッド + 図表ピックアップ + 20pt)
+// v748 #359 #360 #361 論文和訳要約 (落合メソッド + 図表ピックアップ + 20pt)
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
-// v773 #395 モデル 一覧 を 整理。 gpt-4o-mini / gpt-4o は 200-300 字 の 短い 要約 しか
-//   出さない ので 論文要約 用途 では 失格 → 削除。 真面目 に 要約 する なら 最低 でも 4.1。
-// v808 #403 価格 調整 + デフォルト を gpt-5 に。
+// v773 #395 モデル一覧を整理。 gpt-4o-mini / gpt-4o は 200-300 字の短い要約しか
+//   出さないので論文要約用途では失格 → 削除。 真面目に要約するなら最低でも 4.1。
+// v808 #403 価格調整 + デフォルトを gpt-5 に。
 const PAPER_TRANSLATE_MODELS = [
-    'gpt-4.1'     => 20,   // 軽量 (短め に なり がち)
-    'gpt-5-mini'  => 30,   // 5 系 軽量
-    'gpt-5'       => 50,   // 5 系 標準 (デフォルト、 高品質)
-    'o1'          => 80,   // o1 推論 モデル (深い 解析)
+    'gpt-4.1'     => 20,   // 軽量 (短めになりがち)
+    'gpt-5-mini'  => 30,   // 5 系軽量
+    'gpt-5'       => 50,   // 5 系標準 (デフォルト、 高品質)
+    'o1'          => 80,   // o1 推論モデル (深い解析)
 ];
 
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
-あなた は 研究論文 を 日本語 で 要約 する アシスタント です。
+あなたは研究論文を日本語で要約するアシスタントです。
 
-# 最重要 ルール (これ を 守れ ない 出力 は ダメ)
+# 最重要ルール (これを守れない出力はダメ)
 
-**detailed_sections の 各 節 の body は 600-1000 字 を 目標。 500 字 未満 は 短すぎ、
-350 字 で 終わらせる の は ダメ。 短すぎる の も 冗長 も 避け、 「論文 の 章 を 読んだ 感」
-が しっかり 残る 適度 な 厚み で 書く。**
+**detailed_sections の各節の body は 600-1000 字を目標。 500 字未満は短すぎ、
+350 字で終わらせるのはダメ。 短すぎるのも冗長も避け、 「論文の章を読んだ感」
+がしっかり残る適度な厚みで書く。**
 
-単純な 機械翻訳 では なく、 「研究論文 として 何が 書かれて いるか」 を 強く 意識して、
-以下 の 順番 で 構造化 した 詳細な 和訳要約 を 作って ください。 全体 で 6000-12000 字 程度 を 目指す。
+単純な機械翻訳ではなく、 「研究論文として何が書かれているか」 を強く意識して、
+以下の順番で構造化した詳細な和訳要約を作ってください。 全体で 6000-12000 字程度を目指す。
 
-# 出力 順番 (= 読者 が 上 から 下 へ 読み 進める 順番)
+# 出力順番 (= 読者が上から下へ読み進める順番)
 
-1. summary_one_paragraph: 1 段落 (300-500 字) の 「まず これ だけ 読めば 概要 が 分かる」 全体要約
-2. rq_hypothesis: 著者 が 立てた リサーチクエスチョン (RQ) と 仮説、 そして それぞれ に対して
-   論文 全体 から 読み取れる 「示唆」 (= こう言える / こう解釈できる / 部分的に こうだ など) を
-   必ず 整理。 「結果」 と 断定 せず、 論文 が 示唆 する 内容 として 書く こと
-3. contributions: 著者 が 「成し遂げた / 明らかにした」 こと を **完了形 / 名詞句** で 列挙。
-   例: × 「説得理論 を 統合 する」 / × 「消費者 の 対処 プロセス の 理解 を 深める」
-       ○ 「説得理論 を 統合 した」 / ○ 「消費者 の 対処 プロセス を 明らかにした」
-   動詞 形 / 目的句 (= 「○○ する こと」) では なく、 「○○ した」「○○ を 提示 した」 と 書く
-4. detailed_sections: 論文 の **実際 の 章 構成 を そのまま 反映** した 章立て 要約 を 作る。
-   論文 内 で 章 タイトル (Abstract / Introduction / Background / Related Work / Theory /
-   Method / Experiment N / Results / Discussion / Conclusion 等) が 明示 されて いる なら、
-   その タイトル を heading に そのまま 採用 (日本語訳 + 必要 なら 原題 併記)。 章 が 細かく
-   分かれて いる なら 5-9 個 で 構成、 各節 600-1000 字 で 2-3 段落 に 分けて 丁寧 に 要約 する。
-   ・ 1 章 を 1 段落 で 雑 に 終わらせ ない (= 元 論文 が 1 章 で 説明 して いる 量 を 1 段落
-     に 圧縮 する のは ダメ)
-   ・ 著者 の 主張 / 数値 / 用語 / 図表 へ の 言及 / 引用文献 名 等 を 残す
-   ・ 論文 の 章 順 に 並べる (時系列 / 論理 を 入れ替え ない)
-   ・ 機械翻訳 ぽい 短文 では なく、 「研究 ノート を 取った 上 で 自分 の 言葉 で 説明」 する 立場 で 書く
-   重要 な 図 や 表 は figure_refs で 引用 し、 ページ番号 + page_region (top/middle/bottom/full)
-   + キャプション の 和訳 + なぜ 重要 か を 添える
-5. experiments: 論文 が 行った 実験 / 調査 を 「**実験N: 何 を 測った / 何 を 操作 した /
-   被験者 N=◯◯ / 期間 / 統制 群 等**」 形式 で 列挙。 **必ず「実験1:」「実験2:」… の prefix
-   で 始める** (論文 原文 が「Study 1」「研究1」 と 書いて いて も、 出力 は 「実験1:」 に 統一
-   する。 UI 側 で 「実験1: 実験の内容」 と 「実験1 の 結果」 を ペア で 表示 する ため、 prefix
-   が 揃って いない と ペアリング 失敗 する)。 **自前 の 実験 が ない 理論 / レビュー 論文
-   でも、 本文 で 引用 した 実証 研究 の 中 から「この 論文 の 主張 を 支える」 もの を 3-7 件
-   ピック して 同 形式 で 列挙 する**: 「(引用) Smith et al. 1989 の 実験: 大学生 N=120 に
-   広告 を 5 種類 提示 し、 説得意図 認識 と 態度 変化 を 測定」 等。 配列 を 空 に する のは
-   「論文 全体 で 実証 研究 へ の 言及 が 一切 ない」 純 理論 論文 のみ。 PKM の ような 理論
-   論文 でも、 関連 する 実証 研究 を 必ず 整理 する こと。
-6. results_summary: 上 の 実験 で 「何 が 分かった か」 を 数値 / 効果量 / d / r / p値 /
-   信頼区間 込み で 整理。 **自前 実験 の 結果 は 必ず「実験1:」「実験2:」… の prefix で 始める**
-   (experiments と 同じ 番号 を 使う こと。 UI 側 で 「実験1」 同士 を ペア に する)。 例:
-   「実験1: 役割×アクセス可能性 の 交互作用 有意 (F(1,89)=4.71, p<.03)、 低 アクセス で 標的 M=5.15 vs
-   観察者 M=4.41、 高 アクセス で 差 なし」「実験1 (引用 Smith et al.): 説得意図 認識 群 は 統制群 比 で
-   態度変化 が 25% 少 (d=0.4, p<.01)」。 引用 研究 の 結果 含 む。 該当 なし なら 空 配列 だが、
-   experiments と セット で 並ぶ こと が ほぼ 必須。
-7. future_work: 著者 が 示した 今後 の 課題 + 読者 観点 で 自然 に 追加 した 方 が 良い 課題
-8. key_references: 参考文献 の 中 で 「この 論文 を 理解 する 上 で 特に 重要、 読者 も 抑え
-   ておく べき」 もの を **必ず 3-7 件** ピックアップ (1 件 や 2 件 で 済ませ ない、 引用 文献
-   が 多い 論文 ほど この 整理 が 価値 を 持つ)
-9. ochiai_method: 最後 に 落合陽一メソッド の 6 項目 で 全体 を 重ね合わせて まとめる
+1. summary_one_paragraph: 1 段落 (300-500 字) の 「まずこれだけ読めば概要が分かる」 全体要約
+2. rq_hypothesis: 著者が立てたリサーチクエスチョン (RQ) と仮説、 そしてそれぞれに対して
+   論文全体から読み取れる 「示唆」 (= こう言える / こう解釈できる / 部分的にこうだなど) を
+   必ず整理。 「結果」 と断定せず、 論文が示唆する内容として書くこと
+3. contributions: 著者が 「成し遂げた / 明らかにした」 ことを **完了形 / 名詞句** で列挙。
+   例: × 「説得理論を統合する」 / × 「消費者の対処プロセスの理解を深める」
+       ○ 「説得理論を統合した」 / ○ 「消費者の対処プロセスを明らかにした」
+   動詞形 / 目的句 (= 「○○ すること」) ではなく、 「○○ した」「○○ を提示した」 と書く
+4. detailed_sections: 論文の **実際の章構成をそのまま反映** した章立て要約を作る。
+   論文内で章タイトル (Abstract / Introduction / Background / Related Work / Theory /
+   Method / Experiment N / Results / Discussion / Conclusion 等) が明示されているなら、
+   そのタイトルを heading にそのまま採用 (日本語訳 + 必要なら原題併記)。 章が細かく
+   分かれているなら 5-9 個で構成、 各節 600-1000 字で 2-3 段落に分けて丁寧に要約する。
+   ・ 1 章を 1 段落で雑に終わらせない (= 元論文が 1 章で説明している量を 1 段落
+     に圧縮するのはダメ)
+   ・著者の主張 / 数値 / 用語 / 図表への言及 / 引用文献名等を残す
+   ・論文の章順に並べる (時系列 / 論理を入れ替えない)
+   ・機械翻訳ぽい短文ではなく、 「研究ノートを取った上で自分の言葉で説明」 する立場で書く
+   重要な図や表は figure_refs で引用し、 ページ番号 + page_region (top/middle/bottom/full)
+   + キャプションの和訳 + なぜ重要かを添える
+5. experiments: 論文が行った実験 / 調査を 「**実験N: 何を測った / 何を操作した /
+   被験者 N=◯◯ / 期間 / 統制群等**」 形式で列挙。 **必ず「実験1:」「実験2:」… の prefix
+   で始める** (論文原文が「Study 1」「研究1」 と書いていても、 出力は 「実験1:」 に統一
+   する。 UI 側で 「実験1: 実験の内容」 と 「実験1 の結果」 をペアで表示するため、 prefix
+   が揃っていないとペアリング失敗する)。 **自前の実験がない理論 / レビュー論文
+   でも、 本文で引用した実証研究の中から「この論文の主張を支える」 ものを 3-7 件
+   ピックして同形式で列挙する**: 「(引用) Smith et al. 1989 の実験: 大学生 N=120 に
+   広告を 5 種類提示し、 説得意図認識と態度変化を測定」 等。 配列を空にするのは
+   「論文全体で実証研究への言及が一切ない」 純理論論文のみ。 PKM のような理論
+   論文でも、 関連する実証研究を必ず整理すること。
+6. results_summary: 上の実験で 「何が分かったか」 を数値 / 効果量 / d / r / p値 /
+   信頼区間込みで整理。 **自前実験の結果は必ず「実験1:」「実験2:」… の prefix で始める**
+   (experiments と同じ番号を使うこと。 UI 側で 「実験1」 同士をペアにする)。 例:
+   「実験1: 役割×アクセス可能性の交互作用有意 (F(1,89)=4.71, p<.03)、 低アクセスで標的 M=5.15 vs
+   観察者 M=4.41、 高アクセスで差なし」「実験1 (引用 Smith et al.): 説得意図認識群は統制群比で
+   態度変化が 25% 少 (d=0.4, p<.01)」。 引用研究の結果含む。 該当なしなら空配列だが、
+   experiments とセットで並ぶことがほぼ必須。
+7. future_work: 著者が示した今後の課題 + 読者観点で自然に追加した方が良い課題
+8. key_references: 参考文献の中で 「この論文を理解する上で特に重要、 読者も抑え
+   ておくべき」 ものを **必ず 3-7 件** ピックアップ (1 件や 2 件で済ませない、 引用文献
+   が多い論文ほどこの整理が価値を持つ)
+9. ochiai_method: 最後に落合陽一メソッドの 6 項目で全体を重ね合わせてまとめる
 
-# detailed_sections の 中身
+# detailed_sections の中身
 
-論文 の 流れ に 沿って 4-7 個 の 節 を 作って ください。 各 節:
-- heading: 節 タイトル (例: 「背景 と 動機」「提案手法: XX」「実験 設定」「結果 と 考察」)
-- body: 節 本文 の 和訳要約 (**600-1000 字、 必ず 2-3 段落 に 分けて 構造化**、
-  数値 / 用語 / 手法名 / 著者 主張 / 実験 設定 / 結果 数字 を 残す。 1 段落 300-500 字 を
-  目安、 各章 を 「研究 ノート を 取った 上 で 自分 の 言葉 で 丁寧 に 説明」 した レベル に。
-  元 論文 で 1 章 が 説明 して いる 内容 を 1 段落 に 圧縮 するな (= 章 が 厚い なら 要約 も
-  厚く)。 機械翻訳 の 短い まとめ や 箇条書き 風 の 詰め込み は ダメ、 段落 で 論理 を つなげて
-  書く。 文字 数 が 少ない の は その 章 を 軽視 して いる 証拠 と 思え)
-- figure_refs: その 節 で 言及 する 重要 な 図 / 表 を 厳選 して 入れる (各 節 0-2 件、 全節
-  合計 で 最大 3 件 まで)。 優先 する のは 「提案 手法 の 中核 を 示す 図」 と 「主たる
-  結果 の 図 / 表 (=効果量 / 比較表 / プロット)」。 補助的 な 図 (背景 イラスト 等) は 省く。
-  page は PDF の 物理ページ番号 (1 始まり) を 正確 に 入れる こと (= サーバ で ページ画像 を
-  紐付ける ので 必須)。 page_region は その 図 / 表 の 中心 が ページ を 縦 3 等分 した うち
-  どこ に あるか を 厳密 に 答える: ページ 上 1/3 内 なら "top"、 中央 1/3 内 なら "middle"、
-  下 1/3 内 なら "bottom"。 図 や 表 が ページ の 大半 を 占める / 跨いで いる / 判断 が
-  不確か な とき は "full" に する (= 全 ページ を そのまま 表示)。
+論文の流れに沿って 4-7 個の節を作ってください。 各節:
+- heading: 節タイトル (例: 「背景と動機」「提案手法: XX」「実験設定」「結果と考察」)
+- body: 節本文の和訳要約 (**600-1000 字、 必ず 2-3 段落に分けて構造化**、
+  数値 / 用語 / 手法名 / 著者主張 / 実験設定 / 結果数字を残す。 1 段落 300-500 字を
+  目安、 各章を 「研究ノートを取った上で自分の言葉で丁寧に説明」 したレベルに。
+  元論文で 1 章が説明している内容を 1 段落に圧縮するな (= 章が厚いなら要約も
+  厚く)。 機械翻訳の短いまとめや箇条書き風の詰め込みはダメ、 段落で論理をつなげて
+  書く。 文字数が少ないのはその章を軽視している証拠と思え)
+- figure_refs: その節で言及する重要な図 / 表を厳選して入れる (各節 0-2 件、 全節
+  合計で最大 3 件まで)。 優先するのは 「提案手法の中核を示す図」 と 「主たる
+  結果の図 / 表 (=効果量 / 比較表 / プロット)」。 補助的な図 (背景イラスト等) は省く。
+  page は PDF の物理ページ番号 (1 始まり) を正確に入れること (= サーバでページ画像を
+  紐付けるので必須)。 page_region はその図 / 表の中心がページを縦 3 等分したうち
+  どこにあるかを厳密に答える: ページ上 1/3 内なら "top"、 中央 1/3 内なら "middle"、
+  下 1/3 内なら "bottom"。 図や表がページの大半を占める / 跨いでいる / 判断が
+  不確かなときは "full" にする (= 全ページをそのまま表示)。
 
-  **重要**: 「Figure N は page X の region Y」 と 書いた なら、 本当 に その page の その
-  region に **絵 / グラフ / 表 が 視覚的 に 存在 する こと** を 自分 で 再 確認 する。 文章
-  だけ の 領域 を 指して は ダメ。 視覚的 な 図 や 表 が 見つから ない なら その figure_refs
-  自体 を 出さ ない (= 配列 から 除外)。 不確か なら region を "full" に する。 「キャプション が
-  下 だから bottom」 等 の 短絡 を しない、 図 の 本体 が ある 位置 で 判定 する。
+  **重要**: 「Figure N は page X の region Y」 と書いたなら、 本当にその page のその
+  region に **絵 / グラフ / 表が視覚的に存在すること** を自分で再確認する。 文章
+  だけの領域を指してはダメ。 視覚的な図や表が見つからないならその figure_refs
+  自体を出さない (= 配列から除外)。 不確かなら region を "full" にする。 「キャプションが
+  下だから bottom」 等の短絡をしない、 図の本体がある位置で判定する。
 
-  **必須 フィールド**: visual_content — 「この 図 / 表 に 視覚的 に 何 が 描かれて いるか」
-  を 50-150 字 で 具体的 に 説明 する。 例: 「3 つ の ボックス (消費者 / 説得者 / 文脈) と 矢印
-  で 構成 された フロー 図」「3 列 × 5 行 の 比較表、 行 は 各 条件、 列 は 反応時間 / エラー率 /
-  満足度」「散布図、 x軸 は 訓練時間、 y軸 は 正答率」 等、 実際 に PDF を 見た 人 にしか 書け
-  ない 具体性 で 書く こと。 「説得知識モデル の 図」 等 タイトル の 焼き直し は 不可。 visual_content が
-  書けない なら、 その figure_refs を 出さ ない (= PDF を 見て いない 証拠)。
+  **必須フィールド**: visual_content — 「この図 / 表に視覚的に何が描かれているか」
+  を 50-150 字で具体的に説明する。 例: 「3 つのボックス (消費者 / 説得者 / 文脈) と矢印
+  で構成されたフロー図」「3 列 × 5 行の比較表、 行は各条件、 列は反応時間 / エラー率 /
+  満足度」「散布図、 x軸は訓練時間、 y軸は正答率」 等、 実際に PDF を見た人にしか書け
+  ない具体性で書くこと。 「説得知識モデルの図」 等タイトルの焼き直しは不可。 visual_content が
+  書けないなら、 その figure_refs を出さない (= PDF を見ていない証拠)。
 
 # トーン
-・ **内容 を そのまま 要約 する 立場 で 書く**。 「論文 で は ◯◯ と 主張 して いる」「著者 は
-  ◯◯ と 説明 して いる」「論文 では ◯◯ と 述べて いる」 等 の **メタ 解説** は 排除 する。
-  「◯◯ で ある」「◯◯ が 生じる」 と 直接 書く。
-  例: × 「論文 で は、 消費者 が 説得 知識 を 発展 させる と 主張 して いる」
-      ○ 「消費者 は 経験 と 観察 を 通じて 説得 知識 を 発展 させる」
-  例: × 「著者 は PKM が 3 つ の 知識 から 成る と 説明 して いる」
-      ○ 「PKM は 3 つ の 知識 (トピック / 説得 / エージェント) から 成る」
-・ 略語 は 初出 で フルスペル + 日本語訳 を 添える
-・ 数値 (実験 N、 効果量、 p 値) は 落とさず 残す
-・ 例外: ハルシネーション 回避 の ため 自分 で 推測 を 加える 場合 のみ「ここ から 推測 すると…」
-  と 明示 する (= 著者 の 主張 と 自分 の 解釈 を 区別)
+・ **内容をそのまま要約する立場で書く**。 「論文では ◯◯ と主張している」「著者は
+  ◯◯ と説明している」「論文では ◯◯ と述べている」 等の **メタ解説** は排除する。
+  「◯◯ である」「◯◯ が生じる」 と直接書く。
+  例: × 「論文では、 消費者が説得知識を発展させると主張している」
+      ○ 「消費者は経験と観察を通じて説得知識を発展させる」
+  例: × 「著者は PKM が 3 つの知識から成ると説明している」
+      ○ 「PKM は 3 つの知識 (トピック / 説得 / エージェント) から成る」
+・略語は初出でフルスペル + 日本語訳を添える
+・数値 (実験 N、 効果量、 p 値) は落とさず残す
+・例外: ハルシネーション回避のため自分で推測を加える場合のみ「ここから推測すると…」
+  と明示する (= 著者の主張と自分の解釈を区別)
 
-# **自然 で 読み やすい 日本語 で 書く** (v777 で 強化)
+# **自然で読みやすい日本語で書く** (v777 で強化)
 
-文章 を 「論文 用語 を 直訳 して 並べた もの」 では なく、 「人 に 説明 する つもり で
-書いた 読み やすい 日本語」 に する こと。 学術 直訳 調 / 名詞止め / 機械的 連結 を 避ける。
+文章を 「論文用語を直訳して並べたもの」 ではなく、 「人に説明するつもりで
+書いた読みやすい日本語」 にすること。 学術直訳調 / 名詞止め / 機械的連結を避ける。
 
-× 名詞 止め に せず、 述語 で 終える:
-  × 「認知容量 は 動機 が 低 アクセス の とき に 決定的 に 働く 示唆」
-  ○ 「認知容量 は、 動機 が 低 アクセス の とき に 決定的 に 働く こと を 示唆 する」
-  × 「忙しい 標的 は 観察者 より 動機 推論 を 行わず、 販売員 を 誠実 と 捉える 傾向 が 示唆」
-  ○ 「忙しい とき は、 観察者 ほど 動機 推論 を しない ため、 販売員 を 誠実 と 捉え やすい」
+× 名詞止めにせず、 述語で終える:
+  × 「認知容量は動機が低アクセスのときに決定的に働く示唆」
+  ○ 「認知容量は、 動機が低アクセスのときに決定的に働くことを示唆する」
+  × 「忙しい標的は観察者より動機推論を行わず、 販売員を誠実と捉える傾向が示唆」
+  ○ 「忙しいときは、 観察者ほど動機推論をしないため、 販売員を誠実と捉えやすい」
 
-× 概念 用語 を そのまま 並べた 翻訳 調 の 質問 文 は ダメ。 RQ や 仮説 は 「具体的 な
-  シーン が 思い 浮かぶ よう な 自然 な 文」 に 言い 換える:
-  × 「消費者 は どの 条件 で 販売員 の 行動 に 潜在的 な 説得動機 を 帰属 し、 説得知識 を 用いる か?」
-  ○ 「消費者 は どんな とき に 販売員 の 行動 を 『売り たくて やって いる』 と 受け取り、
-       説得知識 を 働かせて 警戒 する のだろう か?」
-  × 「認知容量 (標的 / 観察者、 二重課題) は 説得知識 の 使用 に どう 影響 する か?」
-  ○ 「会話 に 集中 して 余裕 が ない 立場 (標的) と、 落ち着いて 見て いる 立場 (観察者) で、
-       説得知識 の 使い 方 は どう 変わる の か?」
+× 概念用語をそのまま並べた翻訳調の質問文はダメ。 RQ や仮説は 「具体的な
+  シーンが思い浮かぶような自然な文」 に言い換える:
+  × 「消費者はどの条件で販売員の行動に潜在的な説得動機を帰属し、 説得知識を用いるか?」
+  ○ 「消費者はどんなときに販売員の行動を 『売りたくてやっている』 と受け取り、
+       説得知識を働かせて警戒するのだろうか?」
+  × 「認知容量 (標的 / 観察者、 二重課題) は説得知識の使用にどう影響するか?」
+  ○ 「会話に集中して余裕がない立場 (標的) と、 落ち着いて見ている立場 (観察者) で、
+       説得知識の使い方はどう変わるのか?」
 
-× 「示唆」「帰属」「想起 容易性」「アクセス 可能性」 など、 専門 用語 を そのまま 並べる だけ
-  に せず、 必要 なら 補足 説明 や 平易 な 言い 換え を 添える (専門 用語 完全 排除 は しない、
-  論文 用語 + 平易 説明 の セット が 望ましい):
-  × 「動機 の 想起 容易性 が 効果 を 調整 する」
-  ○ 「動機 (販売員 が 売り たがって いる こと) が 思い 浮かび やすい か どうか で、 効果 が 変わる」
+× 「示唆」「帰属」「想起容易性」「アクセス可能性」 など、 専門用語をそのまま並べるだけ
+  にせず、 必要なら補足説明や平易な言い換えを添える (専門用語完全排除はしない、
+  論文用語 + 平易説明のセットが望ましい):
+  × 「動機の想起容易性が効果を調整する」
+  ○ 「動機 (販売員が売りたがっていること) が思い浮かびやすいかどうかで、 効果が変わる」
 
-文章 を 1 度 書いた 後、 「これ、 同僚 に 読み 上げて 自然 に 響く か?」 と 自分 で 読み 返し、
-不自然 な 直訳 調 / 名詞 止め / 助詞 の 抜け / 同じ 述語 (「示す」「した」「である」) の
-3 連発 が あれば 言い 換えて から JSON を 出す こと。
-・ **日本語 の 文章 中 に 不要 な 半角 スペース を 絶対 に 入れない こと**。 system prompt
-  の この 説明 文 は 読み やすさ の ため 「どんな もの」 の ような スペース 入り 表記 を
-  使って いる が、 これ は 説明文 の 都合 で、 出力 する JSON の 値 (= 読者 に 見せる 文章)
-  では 普通 の 日本語 表記 = 「どんなもの」「研究の動機」 で 書いて ください。
-  英数字 / 記号 と 日本語 の 境界 だけ 半角 スペース 入れて OK (例: 「PDF を 読む」 はOK、
-  「日本 語」 や 「説 明」 はダメ)
+文章を 1 度書いた後、 「これ、 同僚に読み上げて自然に響くか?」 と自分で読み返し、
+不自然な直訳調 / 名詞止め / 助詞の抜け / 同じ述語 (「示す」「した」「である」) の
+3 連発があれば言い換えてから JSON を出すこと。
+・ **日本語の文章中に不要な半角スペースを絶対に入れないこと**。 system prompt
+  のこの説明文は読みやすさのため 「どんなもの」 のようなスペース入り表記を
+  使っているが、 これは説明文の都合で、 出力する JSON の値 (= 読者に見せる文章)
+  では普通の日本語表記 = 「どんなもの」「研究の動機」 で書いてください。
+  英数字 / 記号と日本語の境界だけ半角スペース入れて OK (例: 「PDF を読む」 はOK、
+  「日本語」 や 「説明」 はダメ)
 
-# ハルシネーション 防止 (重要)
+# ハルシネーション防止 (重要)
 
-各 セクション を 書く 前 に、 PDF の 該当 箇所 を 必ず 確認 して ください。
-書いた 後 も、 数値 / 用語 / 著者 が 主張 した 内容 / 引用 / 結果 / 著者名 / 会議名 等 が
-PDF の 記述 と 一致 して いるか 自分で 再 精査 し、 ズレ が あれば 修正 して から
-JSON を 出力 して ください。 「PDF に そう 書かれて いるか 怪しい が 文脈 上 推測 する」
-部分 は 「論文 から の 推測」 と 明示 する こと。 創作 / 拡大解釈 は 厳禁 です。
-PDF に 書かれて いない 数値 や 主張 を 補完 しない。
+各セクションを書く前に、 PDF の該当箇所を必ず確認してください。
+書いた後も、 数値 / 用語 / 著者が主張した内容 / 引用 / 結果 / 著者名 / 会議名等が
+PDF の記述と一致しているか自分で再精査し、 ズレがあれば修正してから
+JSON を出力してください。 「PDF にそう書かれているか怪しいが文脈上推測する」
+部分は 「論文からの推測」 と明示すること。 創作 / 拡大解釈は厳禁です。
+PDF に書かれていない数値や主張を補完しない。
 
 # 出力 JSON スキーマ
 
 {
-  "title_ja": "論文 タイトル の 日本語訳 (副題 も)",
+  "title_ja": "論文タイトルの日本語訳 (副題も)",
   "title_orig": "原題",
-  "authors": "著者名 (代表 3 名 まで + et al.)",
+  "authors": "著者名 (代表 3 名まで + et al.)",
   "venue": "発表会議 / ジャーナル + 年",
-  "summary_one_paragraph": "1 段落 (300-500 字) の 全体 サマリ",
+  "summary_one_paragraph": "1 段落 (300-500 字) の全体サマリ",
   "rq_hypothesis": {
     "research_questions": [
-      { "rq": "RQ: 質問 文 (RQ が 複数 ある場合 は 「RQ1:」「RQ2:」)",
-        "answer": "論文 から 読み取れる 示唆 (例: 「平均反応時間 が X ms 短縮 された ことから、 …と 言える」 等、 断定 せず 示唆 として 書く)" }
+      { "rq": "RQ: 質問文 (RQ が複数ある場合は 「RQ1:」「RQ2:」)",
+        "answer": "論文から読み取れる示唆 (例: 「平均反応時間が X ms 短縮されたことから、 …と言える」 等、 断定せず示唆として書く)" }
     ],
     "hypotheses": [
-      { "hypothesis": "H: 仮説 文 (仮説 が 複数 ある場合 は 「H1:」「H2:」)",
-        "result":     "示唆: 支持 / 棄却 / 部分支持 + 具体的 な 根拠 (数値 / 効果量 / p 値)、 論文 が 何を 示唆 して いるか の 視点 で 書く" }
+      { "hypothesis": "H: 仮説文 (仮説が複数ある場合は 「H1:」「H2:」)",
+        "result":     "示唆: 支持 / 棄却 / 部分支持 + 具体的な根拠 (数値 / 効果量 / p 値)、 論文が何を示唆しているかの視点で書く" }
     ]
   },
-  "contributions": ["著者 が 主張 する 貢献 1", "貢献 2"],
+  "contributions": ["著者が主張する貢献 1", "貢献 2"],
   "detailed_sections": [
     {
-      "heading": "節 タイトル",
-      "body":    "節 本文 の 和訳要約 (500-900 字、 必要 なら 段落 分け)",
+      "heading": "節タイトル",
+      "body":    "節本文の和訳要約 (500-900 字、 必要なら段落分け)",
       "figure_refs": [
         { "label": "Figure 2", "page": 3, "page_region": "top",
-          "caption_ja": "図 / 表 キャプション の 和訳",
-          "visual_content": "視覚的に 何が 描かれて いるか の 具体的 説明 (50-150 字、 必須)",
-          "why_important": "なぜ 重要 か (50-150 字)" }
+          "caption_ja": "図 / 表キャプションの和訳",
+          "visual_content": "視覚的に何が描かれているかの具体的説明 (50-150 字、 必須)",
+          "why_important": "なぜ重要か (50-150 字)" }
       ]
     }
   ],
   "experiments": [
-    "(引用) Smith et al. 1989 の 実験: 大学生 N=120 に 広告 5 種類 を 提示し、 広告 への 説得 意図 認識 度 と その後 の 態度 変化 を 測定 (要因 内 比較、 性別 を 統制 変数)。 操作: 説得 意図 を 明示 する 文言 の 有無。"
+    "(引用) Smith et al. 1989 の実験: 大学生 N=120 に広告 5 種類を提示し、 広告への説得意図認識度とその後の態度変化を測定 (要因内比較、 性別を統制変数)。 操作: 説得意図を明示する文言の有無。"
   ],
   "results_summary": [
-    "(引用 Smith et al.) 説得 意図 を 認識 した 群 は 統制群 比 で 態度変化 が 25% 少 (d=0.4, p<.01)。 説得知識 が 抵抗力 を 高める 証拠。"
+    "(引用 Smith et al.) 説得意図を認識した群は統制群比で態度変化が 25% 少 (d=0.4, p<.01)。 説得知識が抵抗力を高める証拠。"
   ],
-  "future_work":   ["著者 が 示す 今後 の 課題 1", "(読者 観点) 追加 課題 1"],
+  "future_work":   ["著者が示す今後の課題 1", "(読者観点) 追加課題 1"],
   "key_references": [
-    { "citation":      "[12] や Smith et al. 2024 など 本文 で 参照 されて いる 表記",
-      "title_orig":    "参考文献 の 原題 (英語 など 原文 ママ)",
-      "title_ja":      "原題 の 日本語訳 (短く 意訳 で OK)",
-      "why_important": "この 論文 の 主張 を 理解 する 上で なぜ 必読 か (50-150 字)" }
+    { "citation":      "[12] や Smith et al. 2024 など本文で参照されている表記",
+      "title_orig":    "参考文献の原題 (英語など原文ママ)",
+      "title_ja":      "原題の日本語訳 (短く意訳で OK)",
+      "why_important": "この論文の主張を理解する上でなぜ必読か (50-150 字)" }
   ],
   "ochiai_method": {
-    "what":          "値 は 説明本文 のみ。「1. どんな もの?」 等 の 番号 / 設問 を 先頭 に 入れない (200-400 字)",
-    "vs_prior_work": "値 は 説明本文 のみ (200-400 字)",
-    "key_method":    "値 は 説明本文 のみ (200-400 字)",
-    "validation":    "値 は 説明本文 のみ (200-400 字)",
-    "discussion":    "値 は 説明本文 のみ (100-300 字)",
-    "next_papers":   ["タイトル + 1 行 説明 (各 文字列)"]
+    "what":          "値は説明本文のみ。「1. どんなもの?」 等の番号 / 設問を先頭に入れない (200-400 字)",
+    "vs_prior_work": "値は説明本文のみ (200-400 字)",
+    "key_method":    "値は説明本文のみ (200-400 字)",
+    "validation":    "値は説明本文のみ (200-400 字)",
+    "discussion":    "値は説明本文のみ (100-300 字)",
+    "next_papers":   ["タイトル + 1 行説明 (各文字列)"]
   }
 }
 
-JSON 以外 の 前置き や 解説 は 不要。 JSON のみ を 返却。
+JSON 以外の前置きや解説は不要。 JSON のみを返却。
 PROMPT;
 
 function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // v841 #423 自分の履歴タイルにも 原題 / 著者 / 投稿先 / summary snippet を返す
+    // v841 #423 自分の履歴タイルにも原題 / 著者 / 投稿先 / summary snippet を返す
     $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
@@ -1562,13 +1562,13 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $rows = ai_stars_apply_sort('paper_translate', $rows, $sort);
     json_response([
         'items'        => $rows,
-        'cost_points'  => PAPER_TRANSLATE_COST,        // 旧 互換
-        'models'       => PAPER_TRANSLATE_MODELS,      // v755 #371 モデル別 価格 リスト
-        'default_model'=> 'gpt-5',                     // v808 #403 デフォルト を gpt-5 (50pt) に
+        'cost_points'  => PAPER_TRANSLATE_COST,        // 旧互換
+        'models'       => PAPER_TRANSLATE_MODELS,      // v755 #371 モデル別価格リスト
+        'default_model'=> 'gpt-5',                     // v808 #403 デフォルトを gpt-5 (50pt) に
     ]);
 }
 
-// v756 #372 みんな の 公開 要約 一覧 (is_shared=1)。 q= で キーワード 部分一致 検索 (pdf_name +
+// v756 #372 みんなの公開要約一覧 (is_shared=1)。 q= でキーワード部分一致検索 (pdf_name +
 //   title_ja / title_orig / authors / venue / summary_one_paragraph)。
 function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -1582,7 +1582,7 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
               JOIN users u ON u.id = pt.user_id
              WHERE pt.is_shared = 1 AND pt.status = 'done'";
     if ($q !== '' && mb_strlen($q) <= 100) {
-        // LIKE %q% 検索 (pdf_name + result_json 全体)。 結果セット が 小さい 前提。
+        // LIKE %q% 検索 (pdf_name + result_json 全体)。 結果セットが小さい前提。
         $sql .= " AND (pt.pdf_name LIKE ? OR pt.result_json LIKE ?)";
         $args[] = '%' . $q . '%';
         $args[] = '%' . $q . '%';
@@ -1616,20 +1616,20 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items, 'q' => $q]);
 }
 
-// v756 #372 共有 ON/OFF (本人 のみ)。 body = { is_shared: bool }
+// v756 #372 共有 ON/OFF (本人のみ)。 body = { is_shared: bool }
 function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $body = read_json_body();
     if (!array_key_exists('is_shared', $body)) {
-        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+        throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
     $st = $pdo->prepare("SELECT user_id, status FROM paper_translates WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
-    if ($row['status'] !== 'done') throw new ApiException('bad_request', '要約 完了 後 のみ 共有 切替 可', 400);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '要約完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
     $pdo->prepare("UPDATE paper_translates
                       SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
@@ -1651,7 +1651,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'paper_translate not found', 404);
     $reactions = ai_paper_reactions_summary($pdo, 'paper_translate', (int)$row['id'], $meId);  // v789 #389
-    // v797 同 PDF (= 同 sha256) で 自分 の paper_full_translations row が あれ ば 相互 リンク を 出す
+    // v797 同 PDF (= 同 sha256) で自分の paper_full_translations row があれば相互リンクを出す
     $crossRefs = [];
     if (!empty($row['pdf_sha256']) && (int)$row['user_id'] === $meId) {
         $stX = $pdo->prepare("SELECT share_token, direction, model, status FROM paper_full_translations
@@ -1675,7 +1675,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'author_name'   => $row['author_name'],
         'author_avatar' => $row['author_avatar'],
         'pdf_name'      => $row['pdf_name'],
-        'pdf_path'      => $row['pdf_path'],    // v758 #377 redo 可能 か client が判定
+        'pdf_path'      => $row['pdf_path'],    // v758 #377 redo 可能か client が判定
         'model'         => $row['model'],
         'result'        => json_decode($row['result_json'] ?: 'null', true),
         'status'        => $row['status'] ?? 'done',
@@ -1687,7 +1687,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'is_shared'     => (bool)$row['is_shared'],
         'shared_at'     => $row['shared_at'],
         'reactions'     => $reactions,   // v789 #389
-        'cross_refs'    => $crossRefs,   // v797 同 PDF の 全訳 等
+        'cross_refs'    => $crossRefs,   // v797 同 PDF の全訳等
     ]);
 }
 
@@ -1698,7 +1698,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
 
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
     if (!str_starts_with($contentType, 'multipart/form-data')) {
-        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロード してください', 400);
+        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロードしてください', 400);
     }
     if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
         throw new ApiException('bad_request', 'file (PDF) が必要です', 400);
@@ -1708,28 +1708,28 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
     $tmpPdf = $f['tmp_name'];
     $head = @file_get_contents($tmpPdf, false, null, 0, 5);
-    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイルではありません', 400);
 
-    // v808 #403 デフォルト を gpt-5 に。 未対応 モデル は 400。
+    // v808 #403 デフォルトを gpt-5 に。 未対応モデルは 400。
     $reqModel = trim((string)($_POST['model'] ?? 'gpt-5'));
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
-    // v804 「終わった 瞬間 共有 ON」 オプション
+    // v804 「終わった瞬間共有 ON」 オプション
     $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
 
-    // v797 同 PDF を 識別 する SHA-256 を 算出 (= 横展開 用 / 「同 PDF の 全訳 が ある」 リンク 等)。
-    //   注意: 同 PDF + 同 モデル でも 再 処理 は 別 row + 別 課金 で 行う (要約 と 全訳 で 扱う 軸 が
-    //   違う ので、 「同 ファイル なら 流用」 で 課金 を スキップ する とは しない 方針)。
+    // v797 同 PDF を識別する SHA-256 を算出 (= 横展開用 / 「同 PDF の全訳がある」 リンク等)。
+    //   注意: 同 PDF + 同モデルでも再処理は別 row + 別課金で行う (要約と全訳で扱う軸が
+    //   違うので、 「同ファイルなら流用」 で課金をスキップするとはしない方針)。
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v808 #402 ラボ PI (user_id=3 = 中村) は SYSTEM の 表現 でも あり、 自分 で 自分 に
-    //   ポイント を 払って も 意味 が ない の で 課金 スキップ (cost は そのまま 表示 用 に 保持)。
+    // v808 #402 ラボ PI (user_id=3 = 中村) は SYSTEM の表現でもあり、 自分で自分に
+    //   ポイントを払っても意味がないので課金スキップ (cost はそのまま表示用に保持)。
     $skipCharge = ($uid === 3);
 
     if (!$skipCharge) {
-        // 残高 チェック
+        // 残高チェック
         $bal = Ledger::balanceOfUser($pdo, $uid);
         if ($bal < $cost) {
             throw new ApiException('insufficient_balance',
@@ -1740,16 +1740,16 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
-    // v750 #366 図表 抽出: PDF を ページ単位 JPEG に レンダリング (pdftoppm)。
-    // v757 #375 解像度 を 110 → 160 DPI に bump、 図表 を crop 表示 する 時 の 質 を 上げる。
-    // v758 #377 PDF 本体 も サーバ に 保存 (やりなおす 用)。
-    //   client は figure_refs の page + page_region から この ページ画像 を crop 表示。
+    // v750 #366 図表抽出: PDF をページ単位 JPEG にレンダリング (pdftoppm)。
+    // v757 #375 解像度を 110 → 160 DPI に bump、 図表を crop 表示する時の質を上げる。
+    // v758 #377 PDF 本体もサーバに保存 (やりなおす用)。
+    //   client は figure_refs の page + page_region からこのページ画像を crop 表示。
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pagesRel = '/uploads/paper_pages/' . $token;
     $pagesAbs = $publicDir . $pagesRel;
     @mkdir($pagesAbs, 0775, true);
-    // PDF 本体 を 保存
+    // PDF 本体を保存
     $pdfRel = '/uploads/paper_pdfs/' . $token . '/original.pdf';
     $pdfAbs = $publicDir . $pdfRel;
     @mkdir(dirname($pdfAbs), 0775, true);
@@ -1770,22 +1770,22 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
             foreach (glob($pagesAbs . '/page-*.jpg') ?: [] as $p) @chmod($p, 0644);
             $pagesCount = count(glob($pagesAbs . '/page-*.jpg') ?: []);
         }
-    } catch (Throwable $_) { /* ページレンダリング失敗 は 致命的ではない */ }
+    } catch (Throwable $_) { /* ページレンダリング失敗は致命的ではない */ }
 
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
-    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。";
+    $userPrompt = "添付した PDF の研究論文を、 system prompt の指示に沿って詳細サマリ + 落合メソッドで日本語要約してください。 figure_refs の page 番号は PDF の物理ページ (1 始まり) で正確に。 出力 JSON のみ。";
 
-    // v755 #371 ユーザ が 選んだ モデル を 使う (config の default は 無視)。
-    // v757 #376 ハルシネーション 防止 の self-check を 明示。 temperature を 下げる。
+    // v755 #371 ユーザが選んだモデルを使う (config の default は無視)。
+    // v757 #376 ハルシネーション防止の self-check を明示。 temperature を下げる。
     $model = $reqModel;
-    // v774 #397 gpt-5 / o1 等 の 推論モデル は temperature を 受け付けない。
+    // v774 #397 gpt-5 / o1 等の推論モデルは temperature を受け付けない。
     $payloadArr = [
         'model' => $model,
         'messages' => [
             ['role' => 'system', 'content' => $sys],
             ['role' => 'user', 'content' => [
                 ['type' => 'file', 'file' => ['file_id' => $fileId]],
-                ['type' => 'text', 'text' => $userPrompt . "\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。"],
+                ['type' => 'text', 'text' => $userPrompt . "\n\n書く前と書いた後で、 必ず PDF の該当箇所を再確認し、 数値 / 著者主張 / 結果が一致することを自分で検証してから JSON を出してください。 ハルシネーションは厳禁です。"],
             ]],
         ],
         'response_format' => ['type' => 'json_object'],
@@ -1796,7 +1796,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     }
     $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
-    // $token は すでに 上の pdftoppm セクション で 生成 済み (= ページ画像 dir 用)。
+    // $token はすでに上の pdftoppm セクションで生成済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
@@ -1807,9 +1807,9 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        // v808 #402 ラボ PI は 課金 スキップ (cost は 表示 上 残す が ledger 転送 しない)
+        // v808 #402 ラボ PI は課金スキップ (cost は表示上残すが ledger 転送しない)
         if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約 依頼料');
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
         }
     });
 
@@ -1820,7 +1820,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
         'status'      => 'pending',
         'cost_points' => $cost,
         'model'       => $reqModel,
-        'message'     => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が要約中… (1-4 分、 推論 モデル の 場合 は 3-8 分)。 結果ページを開いておくか、 後で /#/paper-translate/r/' . $token . ' を確認してください。',
+        'message'     => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が要約中… (1-4 分、 推論モデルの場合は 3-8 分)。 結果ページを開いておくか、 後で /#/paper-translate/r/' . $token . ' を確認してください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -1829,7 +1829,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     ai_paper_translate_run_background($pdo, $cfg, $rowId, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
 }
 
-// v775 #399 本人 のみ 履歴 から 削除。 関連 ファイル (pdf / pages / paper_pdfs) も 削除。
+// v775 #399 本人のみ履歴から削除。 関連ファイル (pdf / pages / paper_pdfs) も削除。
 function ai_paper_translate_delete(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -1837,9 +1837,9 @@ function ai_paper_translate_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ削除可', 403);
     $publicDir = '/var/www/labpay/public';
-    // ページ画像 ディレクトリ 削除
+    // ページ画像ディレクトリ削除
     if (!empty($row['pages_dir'])) {
         $abs = $publicDir . $row['pages_dir'];
         if (is_dir($abs)) {
@@ -1857,7 +1857,7 @@ function ai_paper_translate_delete(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v758 #377 既存 row の PDF を 使って 再 処理 (本人 のみ)。 body: { model?: string }
+// v758 #377 既存 row の PDF を使って再処理 (本人のみ)。 body: { model?: string }
 function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -1868,15 +1868,15 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ', 403);
-    if (empty($row['pdf_path'])) throw new ApiException('bad_request', 'PDF 保存 が ない 古い 要約 は やりなおせません', 400);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ', 403);
+    if (empty($row['pdf_path'])) throw new ApiException('bad_request', 'PDF 保存がない古い要約はやりなおせません', 400);
     $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
-    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかりません', 404);
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体が見つかりません', 404);
 
-    // モデル: body で 指定 されたら それ、 なければ 前回 使った モデル、 それも なければ gpt-4o
+    // モデル: body で指定されたらそれ、 なければ前回使ったモデル、 それもなければ gpt-4o
     if ($reqModel === '') $reqModel = (string)($row['model'] ?? 'gpt-4o');
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
     $bal = Ledger::balanceOfUser($pdo, $uid);
@@ -1889,9 +1889,9 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
-    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+    $userPrompt = "添付した PDF の研究論文を、 system prompt の指示に沿って詳細サマリ + 落合メソッドで日本語要約してください。 figure_refs の page 番号は PDF の物理ページ (1 始まり) で正確に。 出力 JSON のみ。\n\n書く前と書いた後で、 必ず PDF の該当箇所を再確認し、 数値 / 著者主張 / 結果が一致することを自分で検証してから JSON を出してください。 ハルシネーションは厳禁です。";
 
-    // v774 #397 推論モデル は temperature 非対応
+    // v774 #397 推論モデルは temperature 非対応
     $payloadArr = [
         'model' => $reqModel,
         'messages' => [
@@ -1912,7 +1912,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
         $pdo->prepare("UPDATE paper_translates SET status='pending', model=?, cost_points=cost_points+? WHERE id=?")
             ->execute([$reqModel, $cost, $id]);
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $id, '論文要約 やりなおし');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $id, '論文要約やりなおし');
     });
 
     json_response_no_exit([
@@ -1921,7 +1921,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
         'status'      => 'pending',
         'model'       => $reqModel,
         'cost_points' => $cost,
-        'message'     => '再 処理 を 開始 しました (' . $reqModel . ')',
+        'message'     => '再処理を開始しました (' . $reqModel . ')',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -1932,71 +1932,71 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     ai_paper_translate_run_background($pdo, $cfg, $id, $token, $fileId, $payload, $apiKey, $pdfName, $uid);
 }
 
-// v777 #401 多段階 要約 の 2 段目: 1 段目 が 出力 した JSON の 日本語 を 「学術 直訳 調」 →
-//   「自然 で 読み やすい 日本語」 に 書き 直す。 数値 / 著者 名 / 固有名詞 / 構造 (キー / 配列 / 文献 番号)
-//   は そのまま、 言い 回し・文末・助詞・冗長表現 だけ を 改善。 安価 で 速い モデル を 使う
-//   (本来 の 要約 と 別 軸 の 「日本語 校正」 タスク な ので 1 件 数 円 で 十分)。
+// v777 #401 多段階要約の 2 段目: 1 段目が出力した JSON の日本語を 「学術直訳調」 →
+//   「自然で読みやすい日本語」 に書き直す。 数値 / 著者名 / 固有名詞 / 構造 (キー / 配列 / 文献番号)
+//   はそのまま、 言い回し・文末・助詞・冗長表現だけを改善。 安価で速いモデルを使う
+//   (本来の要約と別軸の 「日本語校正」 タスクなので 1 件数円で十分)。
 function ai_paper_translate_polish_ja(array $parsed, string $apiKey): ?array {
     $sys = <<<'PROMPT'
-あなた は 日本語 の 文章 校正 アシスタント です。 与えられた JSON は、 別 の AI が 英語 論文 を
-日本語 で 要約 した もの です。 ただし 学術 直訳 調 / 名詞 止め / 不自然 な 連結 が 多く 残って
-います。 これ を 「同僚 に 説明 する つもり で 書いた 読み やすい 日本語」 に 書き 直して
-ください。 同じ JSON スキーマ で 返却 します。
+あなたは日本語の文章校正アシスタントです。 与えられた JSON は、 別の AI が英語論文を
+日本語で要約したものです。 ただし学術直訳調 / 名詞止め / 不自然な連結が多く残って
+います。 これを 「同僚に説明するつもりで書いた読みやすい日本語」 に書き直して
+ください。 同じ JSON スキーマで返却します。
 
-# 必ず 守る ルール (内容 は いじらない、 言い 回し だけ 直す)
+# 必ず守るルール (内容はいじらない、 言い回しだけ直す)
 
-1. **キー / 配列 / オブジェクト 構造 は 一切 変更 しない**。 同じ キー 名、 同じ 配列 長、
-   同じ ネスト で 返却 する。
-2. **数値 / 効果量 / p 値 / d 値 / 信頼区間 / 著者 名 / 年 / 論文 タイトル 原文 / 文献番号 /
-   会議名 / N 値 / セクション 番号 は 一切 変更 しない**。 「F(1,89)=4.71, p<.03」 等 の 数値
-   表記 は コピー して 保持。
-3. **論文 が 主張 して いる 内容 を 改竄 しない**。 「示唆 する」 を 「証明 した」 に 書き 換える
-   等、 強度 を 変える の は 禁止。 「示唆」 が 残って も 「ことを 示唆 する」 に 直す 等、 文末 が
-   自然 に なる よう に 整える だけ。
-4. **新しい 情報 を 加えない**。 元 の JSON に ない 数値 / 解釈 を 追加 する のは ハルシネーション
-   と 同じ。 削る の も 最低限 で OK (重複 削除 は OK、 情報 損失 は ダメ)。
+1. **キー / 配列 / オブジェクト構造は一切変更しない**。 同じキー名、 同じ配列長、
+   同じネストで返却する。
+2. **数値 / 効果量 / p 値 / d 値 / 信頼区間 / 著者名 / 年 / 論文タイトル原文 / 文献番号 /
+   会議名 / N 値 / セクション番号は一切変更しない**。 「F(1,89)=4.71, p<.03」 等の数値
+   表記はコピーして保持。
+3. **論文が主張している内容を改竄しない**。 「示唆する」 を 「証明した」 に書き換える
+   等、 強度を変えるのは禁止。 「示唆」 が残っても 「ことを示唆する」 に直す等、 文末が
+   自然になるように整えるだけ。
+4. **新しい情報を加えない**。 元の JSON にない数値 / 解釈を追加するのはハルシネーション
+   と同じ。 削るのも最低限で OK (重複削除は OK、 情報損失はダメ)。
 
-# 何 を 直す か
+# 何を直すか
 
-A. **名詞 止め の 文末** を 述語 で 終え、 自然 な 文 に する:
-   × 「認知容量 は 動機 が 低 アクセス の とき に 決定的 に 働く 示唆」
-   ○ 「認知容量 は、 動機 が 低 アクセス の とき に 決定的 に 働く こと を 示唆 する」
-   × 「忙しい 標的 は 観察者 より 動機 推論 を 行わず」
-   ○ 「忙しい とき は、 観察者 より 動機 推論 を しない」
+A. **名詞止めの文末** を述語で終え、 自然な文にする:
+   × 「認知容量は動機が低アクセスのときに決定的に働く示唆」
+   ○ 「認知容量は、 動機が低アクセスのときに決定的に働くことを示唆する」
+   × 「忙しい標的は観察者より動機推論を行わず」
+   ○ 「忙しいときは、 観察者より動機推論をしない」
 
-B. **学術 直訳 調 の RQ・仮説** を 「具体的 な シーン が 思い 浮かぶ 自然 な 文」 に 言い 換える
-   (構造 = key 値 の 文字列 は 書き 換えて OK):
-   × 「消費者 は どの 条件 で 販売員 の 行動 に 潜在的 な 説得動機 を 帰属 し、 説得知識 を 用いる か?」
-   ○ 「消費者 は どんな とき に 販売員 の 行動 を 『売り たくて やって いる』 と 受け取り、
-        説得知識 を 働かせて 警戒 する のだろう か?」
+B. **学術直訳調の RQ・仮説** を 「具体的なシーンが思い浮かぶ自然な文」 に言い換える
+   (構造 = key 値の文字列は書き換えて OK):
+   × 「消費者はどの条件で販売員の行動に潜在的な説得動機を帰属し、 説得知識を用いるか?」
+   ○ 「消費者はどんなときに販売員の行動を 『売りたくてやっている』 と受け取り、
+        説得知識を働かせて警戒するのだろうか?」
 
-C. **専門 用語 だけ の 羅列** に は 平易 な 補足 を 添える (用語 を 消す ので は なく、 用語 + 平易
-   説明 の 形 に):
-   × 「動機 の 想起 容易性 が 効果 を 調整 する」
-   ○ 「動機 (販売員 が 売り たがって いる こと) が 思い 浮かび やすい か どうか で、 効果 が 変わる」
+C. **専門用語だけの羅列** には平易な補足を添える (用語を消すのではなく、 用語 + 平易
+   説明の形に):
+   × 「動機の想起容易性が効果を調整する」
+   ○ 「動機 (販売員が売りたがっていること) が思い浮かびやすいかどうかで、 効果が変わる」
 
-D. **同じ 述語 の 3 連発** を 避ける (「示す」「示す」「示す」 や 「した」「した」「した」 が
-   並んだら、 「明らかに した」「確かめた」「裏付け られた」 等 で 変化 を つける)。
+D. **同じ述語の 3 連発** を避ける (「示す」「示す」「示す」 や 「した」「した」「した」 が
+   並んだら、 「明らかにした」「確かめた」「裏付けられた」 等で変化をつける)。
 
-E. **冗長 な メタ 解説** (「論文 では ◯◯ と 主張 して いる」「著者 は ◯◯ と 説明 して いる」)
-   は 削って 直接 書く (「◯◯ で ある」「◯◯ が 生じる」)。
+E. **冗長なメタ解説** (「論文では ◯◯ と主張している」「著者は ◯◯ と説明している」)
+   は削って直接書く (「◯◯ である」「◯◯ が生じる」)。
 
-F. **「・」 や 中点 で つないだ 機械翻訳 風 短文** は 段落 の 中 で 文 に なる よう 接続詞 で
-   つなぐ (「また」「これ に 対し」「その 一方 で」 等)。
+F. **「・」 や中点でつないだ機械翻訳風短文** は段落の中で文になるよう接続詞で
+   つなぐ (「また」「これに対し」「その一方で」 等)。
 
-G. **日本語 の 文中 に 半角 スペース を 入れない**。 「日本 語」「説 明」 等 の 妙 な 切れ目 が
-   あれば 詰める。 英数字 と 日本語 の 境界 は スペース OK。
+G. **日本語の文中に半角スペースを入れない**。 「日本語」「説明」 等の妙な切れ目が
+   あれば詰める。 英数字と日本語の境界はスペース OK。
 
 # 出力
-入力 JSON と 同じ スキーマ で、 上記 観点 で 書き 直した JSON のみ を 返却 して ください。
-JSON 以外 の 前置き / 説明 は 不要。
+入力 JSON と同じスキーマで、 上記観点で書き直した JSON のみを返却してください。
+JSON 以外の前置き / 説明は不要。
 PROMPT;
 
-    $userText = "次 の JSON を 上記 ルール で 校正 して ください。 同じ スキーマ で 返却:\n\n"
+    $userText = "次の JSON を上記ルールで校正してください。 同じスキーマで返却:\n\n"
               . json_encode($parsed, JSON_UNESCAPED_UNICODE);
 
     $payloadArr = [
-        'model' => 'gpt-4.1',  // 校正 タスク は 安く 速く
+        'model' => 'gpt-4.1',  // 校正タスクは安く速く
         'messages' => [
             ['role' => 'system', 'content' => $sys],
             ['role' => 'user',   'content' => $userText],
@@ -2035,10 +2035,10 @@ PROMPT;
     $polished = json_decode($content, true);
     if (!is_array($polished)) throw new RuntimeException('polish: invalid JSON');
 
-    // 安全 弁: トップレベル の 主要 キー が 落ちて いない こと を 確認。 落ちて いたら 元 を 返す。
+    // 安全弁: トップレベルの主要キーが落ちていないことを確認。 落ちていたら元を返す。
     foreach (['title_ja', 'summary_one_paragraph', 'rq_hypothesis', 'detailed_sections'] as $k) {
         if (!array_key_exists($k, $polished) && array_key_exists($k, $parsed)) {
-            return null; // ポリッシュ が 構造 を 壊した → 諦めて 元 を 使う
+            return null; // ポリッシュが構造を壊した → 諦めて元を使う
         }
     }
     return $polished;
@@ -2073,8 +2073,8 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
         $finish  = $j['choices'][0]['finish_reason'] ?? '?';
         $usage   = $j['usage'] ?? [];
         if (!is_string($content) || $content === '') {
-            // v776 #400 reasoning モデル で max_completion_tokens 不足 (= 全部 reasoning に 消費)
-            //   の 切り分け の ため finish_reason + usage を error_msg に 残す。
+            // v776 #400 reasoning モデルで max_completion_tokens 不足 (= 全部 reasoning に消費)
+            //   の切り分けのため finish_reason + usage を error_msg に残す。
             $info = " (finish=$finish";
             if (!empty($usage)) $info .= ", reasoning=" . ($usage['completion_tokens_details']['reasoning_tokens'] ?? '?') . ", completion=" . ($usage['completion_tokens'] ?? '?');
             $info .= ")";
@@ -2083,23 +2083,23 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
         $parsed = json_decode($content, true);
         if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
 
-        // v777 #401 2 段階目: 学術直訳調 を 自然 で 読み やすい 日本語 に 書き直す ポリッシュ。
-        //   失敗 しても 元 の JSON で 続行 (本体 を 落とさ ない)。 別 モデル (gpt-4.1) を 使う
-        //   こと で 安く・速く 仕上げる。 status は processing の まま (ユーザ に は 「要約 中」
-        //   の 一貫 した 見え方)。
+        // v777 #401 2 段階目: 学術直訳調を自然で読みやすい日本語に書き直すポリッシュ。
+        //   失敗しても元の JSON で続行 (本体を落とさない)。 別モデル (gpt-4.1) を使う
+        //   ことで安く・速く仕上げる。 status は processing のまま (ユーザには 「要約中」
+        //   の一貫した見え方)。
         try {
             $polished = ai_paper_translate_polish_ja($parsed, $apiKey);
             if (is_array($polished)) {
                 $parsed = $polished;
             }
         } catch (Throwable $polishE) {
-            // ポリッシュ 失敗 は ログ 残し て 元 JSON で 続行
+            // ポリッシュ失敗はログ残して元 JSON で続行
             fwrite(STDERR, "[paper_translate] polish failed (row $rowId): " . $polishE->getMessage() . "\n");
         }
 
         $pdo->prepare("UPDATE paper_translates SET result_json = ?, status='done', finished_at = NOW() WHERE id = ?")
             ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $rowId]);
-        // v804 auto_share=1 なら 公開 ON に
+        // v804 auto_share=1 なら公開 ON に
         $pdo->prepare("UPDATE paper_translates SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
             ->execute([$rowId]);
 
@@ -2107,7 +2107,7 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             $shortTitle = (string)($parsed['title_ja'] ?? $pdfName);
             $shortTitle = mb_substr($shortTitle, 0, 60);
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "✅ 論文要約 完了: 「{$shortTitle}」 /#/paper-summary/r/{$token}",
+                "✅ 論文要約完了: 「{$shortTitle}」 /#/paper-summary/r/{$token}",
                 'paper_translate', $rowId);
         } catch (Throwable $_) {}
     } catch (Throwable $e) {
@@ -2115,7 +2115,7 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             ->execute([mb_substr($e->getMessage(), 0, 500), $rowId]);
         try {
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "❌ 論文要約 失敗: " . $e->getMessage() . " /#/paper-summary/r/{$token}",
+                "❌ 論文要約失敗: " . $e->getMessage() . " /#/paper-summary/r/{$token}",
                 'paper_translate', $rowId);
         } catch (Throwable $_) {}
     }
@@ -2163,23 +2163,23 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 }
 
 // ============================================================================
-// v781 #376 Deep Research — ChatGPT の Deep Research 機能 を 真似た 多段 Web 調査。
-//   OpenAI Responses API + web_search hosted tool で Web を 横断 検索 し、
-//   構造化 された 調査 レポート (要点 / セクション / 出典) を JSON で 返す。
+// v781 #376 Deep Research — ChatGPT の Deep Research 機能を真似た多段 Web 調査。
+//   OpenAI Responses API + web_search hosted tool で Web を横断検索し、
+//   構造化された調査レポート (要点 / セクション / 出典) を JSON で返す。
 //   コスト: 軽い (gpt-5-mini, 100pt) / 標準 (gpt-5, 250pt) / 深い (gpt-5 + 高 reasoning, 500pt)。
-//   実 token / 検索 回数 は usage_json に 記録 して 後 から 参照 可能。
+//   実 token / 検索回数は usage_json に記録して後から参照可能。
 // ============================================================================
 
-// v783 #380 深さ × モデル 別 ポイント を 実 API コスト ベース で 再計算。
-//   OpenAI Responses API 2026/06 時点 の おおむね の 料金:
+// v783 #380 深さ × モデル別ポイントを実 API コストベースで再計算。
+//   OpenAI Responses API 2026/06 時点のおおむねの料金:
 //     - web_search hosted tool: ~$0.030 per call
 //     - gpt-5-mini: $0.15/1M input、 $1.50/1M output
 //     - gpt-5:      $1.25/1M input、 $10.00/1M output
-//   ざっくり 試算 (1 USD ≈ 150 円、 1 pt = 1 円):
+//   ざっくり試算 (1 USD ≈ 150 円、 1 pt = 1 円):
 //     - light (gpt-5-mini, ~4 検索, 5K in / 3K out): ~$0.13 = 約 20 円
 //     - standard (gpt-5, ~7 検索, 15K in / 10K out): ~$0.33 = 約 50 円
 //     - deep (gpt-5 高 reasoning, ~12 検索, 30K in / 30K out): ~$0.70 = 約 100 円
-//   実 トークン / 検索 数 は usage_json に 残す ので、 実 コスト が ズレ た 場合 は 後 で 調整。
+//   実トークン / 検索数は usage_json に残すので、 実コストがズレた場合は後で調整。
 const DEEP_RESEARCH_TIERS = [
     // v853 価格半額化 (20/50/100 → 10/25/50)
     'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 10, 'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
@@ -2188,60 +2188,60 @@ const DEEP_RESEARCH_TIERS = [
 ];
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
-あなた は 「深く 横断的 に Web を 調べて 整理 して 報告 する」 リサーチ アシスタント です。
-ユーザ から 与えられた リサーチ クエリ に 対して、 web_search ツール を 必要 な だけ 使って
-複数 の 信頼 できる 情報 源 を 横断 し、 以下 の 構造 で 日本語 の 調査 レポート を 作って
+あなたは 「深く横断的に Web を調べて整理して報告する」 リサーチアシスタントです。
+ユーザから与えられたリサーチクエリに対して、 web_search ツールを必要なだけ使って
+複数の信頼できる情報源を横断し、 以下の構造で日本語の調査レポートを作って
 ください。
 
 # 振る舞い
-- 最初 に クエリ を 分解 し、 調べる べき サブ トピック (3-6 個) を 自分 で 立てる
-- それぞれ について web_search を 使い、 一次 情報 / 学術 論文 / 公式 ドキュメント を 優先
-- 1 つ の ソース だけ で 結論 を 出さず、 複数 ソース を 突き合わせて 食い違い も 拾う
-- 引用 は 必ず URL + 短い 出典 名 (例: 「OpenAI 公式 ブログ」「Wikipedia」「Nature 2024」) を
-  そのまま 残す。 出典 を 落とさない
-- 「分から ない / 確認 できない」 は そう 書く。 知らない こと を 創作 しない
-- 用語 は 初出 で 簡潔 に 説明
-- 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 と の 境界 は OK)
+- 最初にクエリを分解し、 調べるべきサブトピック (3-6 個) を自分で立てる
+- それぞれについて web_search を使い、 一次情報 / 学術論文 / 公式ドキュメントを優先
+- 1 つのソースだけで結論を出さず、 複数ソースを突き合わせて食い違いも拾う
+- 引用は必ず URL + 短い出典名 (例: 「OpenAI 公式ブログ」「Wikipedia」「Nature 2024」) を
+  そのまま残す。 出典を落とさない
+- 「分からない / 確認できない」 はそう書く。 知らないことを創作しない
+- 用語は初出で簡潔に説明
+- 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)
 
-# 出力 JSON スキーマ (これ を そのまま 返す)
+# 出力 JSON スキーマ (これをそのまま返す)
 
 {
-  "query_understanding": "ユーザ クエリ を 自分 が どう 理解 し、 何 を 調べる つもり か (100-300 字)",
-  "sub_questions": ["立てた サブ 問い 1", "問い 2", ...],
+  "query_understanding": "ユーザクエリを自分がどう理解し、 何を調べるつもりか (100-300 字)",
+  "sub_questions": ["立てたサブ問い 1", "問い 2", ...],
   "sections": [
     {
-      "heading": "セクション タイトル",
-      "body": "そのセクション の 説明 本文 (400-1000 字、 必要 なら 段落 分け)。 数値 や 主要 用語 は 残す",
+      "heading": "セクションタイトル",
+      "body": "そのセクションの説明本文 (400-1000 字、 必要なら段落分け)。 数値や主要用語は残す",
       "sources": [
-        {"label": "短い 出典 名 (例: 「Smith 2024 (Nature)」)", "url": "https://...",
-         "first_author": "Smith, J. など 第一 著者 名 (論文 の 場合)",
-         "title": "論文 / 記事 タイトル (原文)",
-         "venue": "Nature 2024 / OpenAI 公式 ブログ など 投稿 先 / 媒体"},
+        {"label": "短い出典名 (例: 「Smith 2024 (Nature)」)", "url": "https://...",
+         "first_author": "Smith, J. など第一著者名 (論文の場合)",
+         "title": "論文 / 記事タイトル (原文)",
+         "venue": "Nature 2024 / OpenAI 公式ブログなど投稿先 / 媒体"},
         ...
       ]
     },
     ...
   ],
-  "summary": "全 セクション を 通した 結論 / 重要 ポイント の 要約 (400-800 字)",
-  "key_findings": ["3-7 個 の 重要 発見・主張 を 1 行 ずつ"],
-  "open_questions": ["まだ 残って いる 問い・追加 で 調べる と 良い こと"],
+  "summary": "全セクションを通した結論 / 重要ポイントの要約 (400-800 字)",
+  "key_findings": ["3-7 個の重要発見・主張を 1 行ずつ"],
+  "open_questions": ["まだ残っている問い・追加で調べると良いこと"],
   "all_sources": [
-    {"label": "短い 出典 名", "url": "https://...",
-     "first_author": "第一 著者 名 (論文 の 場合)",
-     "title":        "論文 / 記事 タイトル (原文)",
-     "venue":        "Nature / arXiv / 著者 公式 ブログ など 投稿 先 / 媒体",
-     "why":          "なぜ 参照 した か (50-100 字)"},
+    {"label": "短い出典名", "url": "https://...",
+     "first_author": "第一著者名 (論文の場合)",
+     "title":        "論文 / 記事タイトル (原文)",
+     "venue":        "Nature / arXiv / 著者公式ブログなど投稿先 / 媒体",
+     "why":          "なぜ参照したか (50-100 字)"},
     ...
   ]
 }
 
-# 出典 (sources / all_sources) の 必須 ルール
-論文 を 参照 した 場合 は **first_author + title + venue** を 出来る だけ 埋める。
-URL だけ で 終わら ない 事 (ユーザ が ぱっと 見て 何 の 出典 か 分かる 情報量 を 残す)。
-論文 で ない (ブログ / 公式 ドキュメント / Wikipedia 等) の 場合 は title + venue 中心 で OK、
-first_author は 該当 しない なら 省略 で OK。
+# 出典 (sources / all_sources) の必須ルール
+論文を参照した場合は **first_author + title + venue** を出来るだけ埋める。
+URL だけで終わらない事 (ユーザがぱっと見て何の出典か分かる情報量を残す)。
+論文でない (ブログ / 公式ドキュメント / Wikipedia 等) の場合は title + venue 中心で OK、
+first_author は該当しないなら省略で OK。
 
-JSON 以外 の 前置き / 解説 / markdown コード フェンス は 不要、 JSON のみ を 返却。
+JSON 以外の前置き / 解説 / markdown コードフェンスは不要、 JSON のみを返却。
 PROMPT;
 
 function ai_deep_research_list(PDO $pdo, array $cfg): void {
@@ -2291,10 +2291,10 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'deep_research not found', 404);
-    // v786 #385 まだ 進行中 なら OpenAI に 進捗 を 取り に 行く
+    // v786 #385 まだ進行中なら OpenAI に進捗を取りに行く
     if ($row['status'] === 'processing' && !empty($row['openai_response_id'])) {
         try { $row = ai_deep_research_poll($pdo, $cfg, $row); }
-        catch (Throwable $_) { /* poll 失敗 は 致命的 で は ない */ }
+        catch (Throwable $_) { /* poll 失敗は致命的ではない */ }
     }
     json_response([
         'id'                 => (int)$row['id'],
@@ -2318,20 +2318,20 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     ]);
 }
 
-// v784 #382 共有 ON / OFF (本人 のみ)
+// v784 #382 共有 ON / OFF (本人のみ)
 function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $body = read_json_body();
     if (!array_key_exists('is_shared', $body)) {
-        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+        throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
     $st = $pdo->prepare("SELECT user_id, status FROM deep_researches WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
-    if ($row['status'] !== 'done') throw new ApiException('bad_request', '調査 完了 後 のみ 共有 切替 可', 400);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '調査完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
     $pdo->prepare("UPDATE deep_researches
                       SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
@@ -2340,7 +2340,7 @@ function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'is_shared' => $on]);
 }
 
-// v784 #382 みんな の 共有 Deep Research 一覧。 q= で キーワード 検索 (query_text + result_json 内 LIKE)
+// v784 #382 みんなの共有 Deep Research 一覧。 q= でキーワード検索 (query_text + result_json 内 LIKE)
 function ai_deep_research_shared_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $myUid = (int)$u['id'];
@@ -2392,7 +2392,7 @@ function ai_deep_research_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ削除可', 403);
     $pdo->prepare("DELETE FROM deep_researches WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }
@@ -2404,8 +2404,8 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
 
     $body = read_json_body();
     $query = trim((string)($body['query'] ?? ''));
-    if ($query === '') throw new ApiException('bad_request', 'query が 必要 です', 400);
-    if (mb_strlen($query) > 4000) throw new ApiException('bad_request', 'query は 4000 字 まで', 400);
+    if ($query === '') throw new ApiException('bad_request', 'query が必要です', 400);
+    if (mb_strlen($query) > 4000) throw new ApiException('bad_request', 'query は 4000 字まで', 400);
     $depth = (string)($body['depth'] ?? 'standard');
     if (!isset(DEEP_RESEARCH_TIERS[$depth])) {
         throw new ApiException('bad_request', '未対応 depth: ' . $depth, 400);
@@ -2439,7 +2439,7 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
         'status'      => 'pending',
         'cost_points' => $cost,
         'depth'       => $depth,
-        'message'     => '依頼を受け付けました。 OpenAI (' . $tier['model'] . ' / ' . $depth . ') が 調査中… (深さ により 1-15 分)。',
+        'message'     => '依頼を受け付けました。 OpenAI (' . $tier['model'] . ' / ' . $depth . ') が調査中… (深さにより 1-15 分)。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -2448,14 +2448,14 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
     ai_deep_research_run_background($pdo, $cfg, $rowId, $token, $query, $tier, $apiKey, $uid);
 }
 
-// v786 #385 OpenAI Responses API は web_search + reasoning だと 30 分 超 を 普通 に 使う ため、
-//   従来 の 同期 POST 1 本 だけ だと PHP プロセス が PHP-FPM の request_terminate_timeout に
-//   殺されて 結果 が DB に 入らず status=processing で 永遠 に 残る。 background=true で
-//   投げ て、 結果 ページ アクセス の たび に GET /v1/responses/{id} で 進捗 / 完了 を 取り
-//   行く 方式 に 改修 (= polling)。
+// v786 #385 OpenAI Responses API は web_search + reasoning だと 30 分超を普通に使うため、
+//   従来の同期 POST 1 本だけだと PHP プロセスが PHP-FPM の request_terminate_timeout に
+//   殺されて結果が DB に入らず status=processing で永遠に残る。 background=true で
+//   投げて、 結果ページアクセスのたびに GET /v1/responses/{id} で進捗 / 完了を取り
+//   行く方式に改修 (= polling)。
 function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $query, array $tier, string $apiKey, int $uid): void {
     try {
-        $pdo->prepare("UPDATE deep_researches SET status='processing', progress_text='OpenAI に 依頼 中…' WHERE id = ?")->execute([$rowId]);
+        $pdo->prepare("UPDATE deep_researches SET status='processing', progress_text='OpenAI に依頼中…' WHERE id = ?")->execute([$rowId]);
 
         $payloadArr = [
             'model' => $tier['model'],
@@ -2465,7 +2465,7 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
             ],
             'tools' => [['type' => 'web_search']],
             'max_output_tokens' => (int)$tier['max_tokens'],
-            'background' => true,   // 非同期 化、 response_id だけ 即 返って くる
+            'background' => true,   // 非同期化、 response_id だけ即返ってくる
         ];
         if (preg_match('/^(gpt-5|o1|o3)/', (string)$tier['model'])) {
             $payloadArr['reasoning'] = ['effort' => (string)$tier['effort']];
@@ -2478,7 +2478,7 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
             CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_TIMEOUT => 60,  // background なら 数 秒 で response_id が 返る
+            CURLOPT_TIMEOUT => 60,  // background なら数秒で response_id が返る
         ]);
         $resp = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -2499,8 +2499,8 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
         $pdo->prepare("UPDATE deep_researches
                           SET openai_response_id = ?, progress_text = ?
                         WHERE id = ?")
-            ->execute([$rid, '🌐 Web 検索 を 開始…', $rowId]);
-        // 完了通知 は ポーリング 側 で 発火 (get_shared 内)
+            ->execute([$rid, '🌐 Web 検索を開始…', $rowId]);
+        // 完了通知はポーリング側で発火 (get_shared 内)
     } catch (Throwable $e) {
         $pdo->prepare("UPDATE deep_researches SET status='error', error_msg = ?, finished_at = NOW() WHERE id = ?")
             ->execute([mb_substr($e->getMessage(), 0, 1000), $rowId]);
@@ -2512,11 +2512,11 @@ function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, strin
     }
 }
 
-// v786 #385 OpenAI に 進捗 を 取り に 行く ヘルパ。 status=processing で openai_response_id が
-//   ある 行 を 渡す と、 GET /v1/responses/{id} を 叩いて status を 更新 する。
-//   - completed: result_json + usage_json を 保存 → status='done' → 通知
+// v786 #385 OpenAI に進捗を取りに行くヘルパ。 status=processing で openai_response_id が
+//   ある行を渡すと、 GET /v1/responses/{id} を叩いて status を更新する。
+//   - completed: result_json + usage_json を保存 → status='done' → 通知
 //   - failed:    status='error' → error_msg 保存 → 通知
-//   - その他: progress_text だけ 更新 (web_search 件数 / 状態)
+//   - その他: progress_text だけ更新 (web_search 件数 / 状態)
 function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
     $apiKey = (string)$cfg['openai']['api_key'];
     $rid    = (string)$row['openai_response_id'];
@@ -2532,14 +2532,14 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     if ($resp === false || $status >= 400) {
-        return $row; // poll 失敗 は 致命的 で は ない (次回 retry)
+        return $row; // poll 失敗は致命的ではない (次回 retry)
     }
     $j = json_decode((string)$resp, true);
     if (!is_array($j)) return $row;
 
     $oaStatus = (string)($j['status'] ?? 'in_progress');
 
-    // 進捗 集計
+    // 進捗集計
     $searchCount = 0;
     $reasoningCount = 0;
     $hasMessage = false;
@@ -2566,7 +2566,7 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
             $text = (string)$j['output_text'];
         }
         if ($text === '') {
-            $pdo->prepare("UPDATE deep_researches SET status='error', error_msg='completed だが output_text が 空', finished_at=NOW() WHERE id=?")
+            $pdo->prepare("UPDATE deep_researches SET status='error', error_msg='completed だが output_text が空', finished_at=NOW() WHERE id=?")
                 ->execute([$row['id']]);
             $row['status'] = 'error'; return $row;
         }
@@ -2601,7 +2601,7 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
                 "🔎 Deep Research 完了: 「{$shortQ}」 /#/deep-research/r/{$row['share_token']}",
                 'deep_research', (int)$row['id']);
         } catch (Throwable $_) {}
-        // 行 を 最新化 して 返す
+        // 行を最新化して返す
         $row['status'] = 'done';
         $row['result_json'] = json_encode($parsed, JSON_UNESCAPED_UNICODE);
         $row['usage_json']  = json_encode($usageRec, JSON_UNESCAPED_UNICODE);
@@ -2626,15 +2626,15 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 }
 
 // ============================================================================
-// v788 #386 #387 #388 論文 全訳 — paper-summary と 似た UI で フル 翻訳 を 出す。
-//   章 ごと に 訳 → サンプル 文 を back-translate して 整合 確認 → 用語 統一 + 全体 ポリッシュ。
+// v788 #386 #387 #388 論文全訳 — paper-summary と似た UI でフル翻訳を出す。
+//   章ごとに訳 → サンプル文を back-translate して整合確認 → 用語統一 + 全体ポリッシュ。
 //   direction:
-//     en2ja: 英語 論文 → 日本語 (要約 と 同程度 の コスト)
-//     ja2en: 日本語 論文 → 英語 (5x、 + em-dash 等 GPT-isms 除去)
-//   Responses API + background mode + polling で 長 時間 ジョブ を 安全 に。
+//     en2ja: 英語論文 → 日本語 (要約と同程度のコスト)
+//     ja2en: 日本語論文 → 英語 (5x、 + em-dash 等 GPT-isms 除去)
+//   Responses API + background mode + polling で長時間ジョブを安全に。
 // ============================================================================
 
-// v808 #403 価格 調整 + デフォルト を gpt-5 に。
+// v808 #403 価格調整 + デフォルトを gpt-5 に。
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
     'gpt-5-mini' => 30,
     'gpt-5'      => 50,   // デフォルト
@@ -2647,55 +2647,55 @@ const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x
 ];
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
-あなた は 学術 論文 を **章 ごと に 全訳** する 翻訳 アシスタント です。 添付 された 英語 論文 PDF
-を 全訳 し、 同時 に 各 章 で back-translation で 訳 の 信頼性 を 確認 し、 最後 に 全体 を
-見渡 して 用語 統一 と 自然 さ を 整える ところ まで やって ください。
+あなたは学術論文を **章ごとに全訳** する翻訳アシスタントです。 添付された英語論文 PDF
+を全訳し、 同時に各章で back-translation で訳の信頼性を確認し、 最後に全体を
+見渡して用語統一と自然さを整えるところまでやってください。
 
-# 大切 な ルール
+# 大切なルール
 
-1. **全文 を 訳す** (要約 では ない)。 段落 を 飛ばしたり 圧縮 したり しない。 数式 / 図表 番号 /
-   引用 番号 [12] / 著者名 表記 (Smith et al., 2024) など は そのまま 残す。
-2. **章 (Section) 単位 で 区切って 翻訳** する。 章 タイトル も 「Introduction (はじめに)」 の よう
-   に 原題 + 訳 を 併記。
-3. **back-translation**: 各 章 から 2-3 文 を サンプル として 取って 日本語 → 英語 に 逆 翻訳 し、
-   元 英文 と 突き合わせて 「ズレ が ない か」 を コメント する。 ズレ が あれば 訳 を 修正 し直す。
-4. **用語 統一**: 重要 用語 (proper noun, jargon) は 章 を またいで 同じ 訳語 を 使う。 章 ごと の
-   訳 が 終わった あと、 全体 ポリッシュ で 用語 ブレ を 直す。
-5. **「論文 で は 〜 と 述べて いる」 などの メタ 解説 で 包まない**。 原文 と 同じ 主張 で 直接 訳す。
-6. 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 と の 境界 は OK)。
+1. **全文を訳す** (要約ではない)。 段落を飛ばしたり圧縮したりしない。 数式 / 図表番号 /
+   引用番号 [12] / 著者名表記 (Smith et al., 2024) などはそのまま残す。
+2. **章 (Section) 単位で区切って翻訳** する。 章タイトルも 「Introduction (はじめに)」 のよう
+   に原題 + 訳を併記。
+3. **back-translation**: 各章から 2-3 文をサンプルとして取って日本語 → 英語に逆翻訳し、
+   元英文と突き合わせて 「ズレがないか」 をコメントする。 ズレがあれば訳を修正し直す。
+4. **用語統一**: 重要用語 (proper noun, jargon) は章をまたいで同じ訳語を使う。 章ごとの
+   訳が終わったあと、 全体ポリッシュで用語ブレを直す。
+5. **「論文では 〜 と述べている」 などのメタ解説で包まない**。 原文と同じ主張で直接訳す。
+6. 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)。
 
-# 出力 JSON スキーマ (これ を そのまま 返却)
+# 出力 JSON スキーマ (これをそのまま返却)
 
 {
-  "title_original":    "原 タイトル (英語)",
-  "title_translated":  "日本語 タイトル",
-  "authors":           "著者名 (代表 3 名 まで + et al.)",
-  "venue":             "発表 会議 / ジャーナル + 年",
+  "title_original":    "原タイトル (英語)",
+  "title_translated":  "日本語タイトル",
+  "authors":           "著者名 (代表 3 名まで + et al.)",
+  "venue":             "発表会議 / ジャーナル + 年",
   "language_detected": "en",
   "chapters": [
     {
       "chapter_title_original":   "Introduction",
       "chapter_title_translated": "はじめに",
-      "translation":              "全文 訳 (省略 せず)。 段落 は \n\n で 区切る",
+      "translation":              "全文訳 (省略せず)。 段落は \n\n で区切る",
       "back_translation_samples": [
-        { "ja_translation": "サンプル と して 選んだ 訳文 (1-2 文)",
-          "back_to_en":     "それ を 逆 翻訳 した 英文",
-          "original_en":    "対応 する 原文 (引用)",
-          "notes":          "ズレ や 訂正 の メモ (なし なら 空 文字列)" }
+        { "ja_translation": "サンプルとして選んだ訳文 (1-2 文)",
+          "back_to_en":     "それを逆翻訳した英文",
+          "original_en":    "対応する原文 (引用)",
+          "notes":          "ズレや訂正のメモ (なしなら空文字列)" }
       ],
       "key_terms": [
-        { "original": "term", "translation": "用語 訳", "note": "なぜ こう 訳した か" }
+        { "original": "term", "translation": "用語訳", "note": "なぜこう訳したか" }
       ]
     }
   ],
   "overall_polish": {
-    "terminology_consistency": "全体 で 用語 ブレ を 統一 した メモ (どの 用語 を どう 揃え た か)",
-    "adjustments_made":        ["章 を またいで 修正 した 点 1", "..."],
-    "remaining_concerns":      ["残った 不確か な 訳 / 用語 / 数値 など"]
+    "terminology_consistency": "全体で用語ブレを統一したメモ (どの用語をどう揃えたか)",
+    "adjustments_made":        ["章をまたいで修正した点 1", "..."],
+    "remaining_concerns":      ["残った不確かな訳 / 用語 / 数値など"]
   }
 }
 
-JSON 以外 の 前置き / 解説 / markdown コード フェンス は 不要、 JSON のみ を 返却。
+JSON 以外の前置き / 解説 / markdown コードフェンスは不要、 JSON のみを返却。
 PROMPT;
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_JA2EN = <<<'PROMPT'
@@ -2764,7 +2764,7 @@ function ai_paper_full_translate_models_for(string $direction): array {
 function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // v807 result_json から title 系 も 取り 出して 履歴 表示 を リッチ に
+    // v807 result_json から title 系も取り出して履歴表示をリッチに
     $st = $pdo->prepare("SELECT id, share_token, pdf_name, direction, model, cost_points, status,
                                 created_at, finished_at, is_shared, shared_at, error_msg, result_json
                            FROM paper_full_translations WHERE user_id = ?
@@ -2772,7 +2772,7 @@ function ai_paper_full_translate_list(PDO $pdo, array $cfg): void {
     $st->execute([$uid]);
     $rows = array_map(function ($r) {
         $result = !empty($r['result_json']) ? json_decode((string)$r['result_json'], true) : null;
-        // v841 #423 abstract 系も snippet として返す (= 自分の履歴タイル も みんなと同じ密度に)
+        // v841 #423 abstract 系も snippet として返す (= 自分の履歴タイルもみんなと同じ密度に)
         $snippet = null;
         if (is_array($result)) {
             $raw = (string)($result['abstract_translated'] ?? $result['abstract_original'] ?? $result['abstract'] ?? '');
@@ -2823,13 +2823,13 @@ function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token)
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'paper_full_translation not found', 404);
-    // 進行中 なら OpenAI に 進捗 を 取り に 行く
+    // 進行中なら OpenAI に進捗を取りに行く
     if ($row['status'] === 'processing' && !empty($row['openai_response_id'])) {
         try { $row = ai_paper_full_translate_poll($pdo, $cfg, $row); }
         catch (Throwable $_) {}
     }
     $reactions = ai_paper_reactions_summary($pdo, 'paper_full_translation', (int)$row['id'], $meId);  // v789 #389
-    // v797 同 PDF の 要約 row が あれ ば 相互 リンク を 出す
+    // v797 同 PDF の要約 row があれば相互リンクを出す
     $crossRefs = [];
     if (!empty($row['pdf_sha256']) && (int)$row['user_id'] === $meId) {
         $stX = $pdo->prepare("SELECT share_token, model, status FROM paper_translates
@@ -2920,14 +2920,14 @@ function ai_paper_full_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $uid = (int)$u['id'];
     $body = read_json_body();
     if (!array_key_exists('is_shared', $body)) {
-        throw new ApiException('bad_request', 'is_shared が 必要', 400);
+        throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
     $st = $pdo->prepare("SELECT user_id, status FROM paper_full_translations WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 共有 切替 可', 403);
-    if ($row['status'] !== 'done') throw new ApiException('bad_request', '完了 後 のみ 共有 切替 可', 400);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
+    if ($row['status'] !== 'done') throw new ApiException('bad_request', '完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
     $pdo->prepare("UPDATE paper_full_translations
                       SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
@@ -2943,7 +2943,7 @@ function ai_paper_full_translate_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 削除 可', 403);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ削除可', 403);
     if (!empty($row['pdf_path'])) {
         $abs = '/var/www/labpay/public' . $row['pdf_path'];
         @unlink($abs);
@@ -2960,7 +2960,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
     if (!str_starts_with($contentType, 'multipart/form-data')) {
-        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロード してください', 400);
+        throw new ApiException('bad_request', 'PDF を multipart/form-data でアップロードしてください', 400);
     }
     if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
         throw new ApiException('bad_request', 'file (PDF) が必要です', 400);
@@ -2970,7 +2970,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
     $tmpPdf = $f['tmp_name'];
     $head = @file_get_contents($tmpPdf, false, null, 0, 5);
-    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイル では ありません', 400);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF ファイルではありません', 400);
 
     $direction = (string)($_POST['direction'] ?? 'en2ja');
     if (!in_array($direction, ['en2ja', 'ja2en'], true)) {
@@ -2979,16 +2979,16 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     $models = ai_paper_full_translate_models_for($direction);
     $reqModel = trim((string)($_POST['model'] ?? 'gpt-5'));
     if (!isset($models[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $cost = (int)$models[$reqModel];
-    // v804 「終わった 瞬間 共有 ON」
+    // v804 「終わった瞬間共有 ON」
     $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
 
-    // v797 SHA-256 は 横展開 リンク 用 だけ に 算出 (同 PDF でも 別 ジョブ で 走らせる、 課金 も 別)
+    // v797 SHA-256 は横展開リンク用だけに算出 (同 PDF でも別ジョブで走らせる、 課金も別)
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v808 #402 ラボ PI (user_id=3) は 課金 スキップ
+    // v808 #402 ラボ PI (user_id=3) は課金スキップ
     $skipCharge = ($uid === 3);
     if (!$skipCharge) {
         $bal = Ledger::balanceOfUser($pdo, $uid);
@@ -3001,7 +3001,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
-    // PDF 保存 (削除 時 / 再 表示 時 用)
+    // PDF 保存 (削除時 / 再表示時用)
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
@@ -3014,20 +3014,20 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
             (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
-            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
+            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        // v808 #402 ラボ PI は 課金 スキップ
+        // v808 #402 ラボ PI は課金スキップ
         if (!$skipCharge) {
             Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
-                '論文 全訳 (' . $direction . ') 依頼料');
+                '論文全訳 (' . $direction . ') 依頼料');
         }
     });
 
     json_response_no_exit([
         'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
         'cost_points' => $cost, 'direction' => $direction, 'model' => $reqModel,
-        'message' => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が 全訳 中… (10-30 分)。 結果ページを 開いて おいて も OK、 完了 通知 が 届きます。',
+        'message' => '依頼を受け付けました。 OpenAI (' . $reqModel . ') が全訳中… (10-30 分)。 結果ページを開いておいても OK、 完了通知が届きます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3036,8 +3036,8 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
 }
 
-// v806 エラー row を 同 row で 再 投入 (新規 課金 / 新規 row なし)。 v810 #_stuck status=error の もの
-// に 加え、 status=processing で 30 分 以上 進ま ない もの も 「stale = 詰まって いる」 と 見なし 再 投入 可。
+// v806 エラー row を同 row で再投入 (新規課金 / 新規 row なし)。 v810 #_stuck status=error のもの
+// に加え、 status=processing で 30 分以上進まないものも 「stale = 詰まっている」 と見なし再投入可。
 function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3046,33 +3046,33 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
     $okError = $row['status'] === 'error';
     $okStaleProc = $row['status'] === 'processing'
         && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
         && (time() - strtotime((string)$row['created_at'])) >= 1800;
     if (!$okError && !$okStaleProc) {
-        throw new ApiException('bad_request', '再 実施 は エラー / 30 分 以上 経過 した 処理 中 のみ (現 status: ' . $row['status'] . ')', 400);
+        throw new ApiException('bad_request', '再実施はエラー / 30 分以上経過した処理中のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
-        throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
+        throw new ApiException('bad_request', 'PDF が残っていないので再実施不可', 400);
     }
     $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
-    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体が見つかりません', 404);
 
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
-    // row リセット (新規 課金 なし)
+    // row リセット (新規課金なし)
     $pdo->prepare("UPDATE paper_full_translations
-                      SET status='processing', progress_text='再 投入 中…',
+                      SET status='processing', progress_text='再投入中…',
                           openai_response_id=NULL, error_msg=NULL, result_json=NULL,
                           usage_json=NULL, finished_at=NULL
                     WHERE id=?")->execute([$id]);
 
     json_response_no_exit([
         'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
-        'message' => '再 投入 を 開始 しました (新規 課金 なし)。 結果 ページ で 進捗 を 確認 して ください。',
+        'message' => '再投入を開始しました (新規課金なし)。 結果ページで進捗を確認してください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3082,8 +3082,8 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
         (string)$row['direction'], (string)$row['model'], $apiKey, $uid);
 }
 
-// v806 paper_translate (要約) の エラー row を 同 row で 再 投入 (新規 課金 なし)。
-// v810 #_stuck status=processing で 30 分 以上 進ま ない stale row も 再 投入 可。
+// v806 paper_translate (要約) のエラー row を同 row で再投入 (新規課金なし)。
+// v810 #_stuck status=processing で 30 分以上進まない stale row も再投入可。
 function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3092,26 +3092,26 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人 のみ 再 実施 可', 403);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
     $okError = $row['status'] === 'error';
     $okStaleProc = $row['status'] === 'processing'
         && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
         && (time() - strtotime((string)$row['created_at'])) >= 1800;
     if (!$okError && !$okStaleProc) {
-        throw new ApiException('bad_request', '再 実施 は エラー / 30 分 以上 経過 した 処理 中 のみ (現 status: ' . $row['status'] . ')', 400);
+        throw new ApiException('bad_request', '再実施はエラー / 30 分以上経過した処理中のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
-        throw new ApiException('bad_request', 'PDF が 残って いない の で 再 実施 不可', 400);
+        throw new ApiException('bad_request', 'PDF が残っていないので再実施不可', 400);
     }
     $pdfAbs = '/var/www/labpay/public' . $row['pdf_path'];
-    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体が見つかりません', 404);
 
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
     $reqModel = (string)$row['model'];
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
-    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+    $userPrompt = "添付した PDF の研究論文を、 system prompt の指示に沿って詳細サマリ + 落合メソッドで日本語要約してください。 figure_refs の page 番号は PDF の物理ページ (1 始まり) で正確に。 出力 JSON のみ。\n\n書く前と書いた後で、 必ず PDF の該当箇所を再確認し、 数値 / 著者主張 / 結果が一致することを自分で検証してから JSON を出してください。 ハルシネーションは厳禁です。";
 
     $payloadArr = [
         'model' => $reqModel,
@@ -3137,7 +3137,7 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
 
     json_response_no_exit([
         'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
-        'message' => '再 投入 を 開始 しました (新規 課金 なし)。',
+        'message' => '再投入を開始しました (新規課金なし)。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3146,8 +3146,8 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     ai_paper_translate_run_background($pdo, $cfg, $id, (string)$row['share_token'], $fileId, $payload, $apiKey, (string)$row['pdf_name'], $uid);
 }
 
-// v813 #405 要約 row の 保存 済 PDF を 流用 して ペア の 全訳 row を 新規 作成。
-//   アップロード 不要、 直接 「📑 全訳 を 作る」 ボタン から 呼ぶ。
+// v813 #405 要約 row の保存済 PDF を流用してペアの全訳 row を新規作成。
+//   アップロード不要、 直接 「📑 全訳を作る」 ボタンから呼ぶ。
 function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summaryId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3155,11 +3155,11 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     $st = $pdo->prepare("SELECT * FROM paper_translates WHERE id=?");
     $st->execute([$summaryId]);
     $sumRow = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$sumRow) throw new ApiException('not_found', '要約 row が ありません', 404);
-    if ((int)$sumRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人 の 要約 のみ ペア 全訳 を 作れ ます', 403);
-    if (empty($sumRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が 残って いない の で 全訳 を 作れ ません', 400);
+    if (!$sumRow) throw new ApiException('not_found', '要約 row がありません', 404);
+    if ((int)$sumRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人の要約のみペア全訳を作れます', 403);
+    if (empty($sumRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が残っていないので全訳を作れません', 400);
     $pdfAbs = '/var/www/labpay/public' . $sumRow['pdf_path'];
-    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体が見つかりません', 404);
 
     $body = read_json_body();
     $direction = (string)($body['direction'] ?? 'en2ja');
@@ -3169,7 +3169,7 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     $models = ai_paper_full_translate_models_for($direction);
     $reqModel = trim((string)($body['model'] ?? 'gpt-5'));
     if (!isset($models[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $cost = (int)$models[$reqModel];
     $autoShare = !empty($body['auto_share']) ? 1 : 0;
@@ -3186,7 +3186,7 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, (string)$sumRow['pdf_name'], $apiKey);
 
-    // 保存 用 PDF を 新規 token フォルダ に コピー (paper_full_translations は 自分 の pdf_path を 持つ)
+    // 保存用 PDF を新規 token フォルダにコピー (paper_full_translations は自分の pdf_path を持つ)
     $token = bin2hex(random_bytes(16));
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
@@ -3200,19 +3200,19 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
             (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
-            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に 依頼 中…',?)")
+            VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
         if (!$skipCharge) {
             Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
-                '論文 全訳 (' . $direction . ') 依頼料 (要約 から)');
+                '論文全訳 (' . $direction . ') 依頼料 (要約から)');
         }
     });
 
     json_response_no_exit([
         'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
         'cost_points' => $cost, 'direction' => $direction, 'model' => $reqModel,
-        'message' => 'ペア の 全訳 を 開始 し ました。 結果 ページ で 進捗 を 確認 して ください。',
+        'message' => 'ペアの全訳を開始しました。 結果ページで進捗を確認してください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3221,7 +3221,7 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     ai_paper_full_translate_submit($pdo, $cfg, $rowId, $token, $fileId, $direction, $reqModel, $apiKey, $uid);
 }
 
-// v813 #405 対称: 全訳 row の 保存 済 PDF を 流用 して ペア の 要約 row を 新規 作成。
+// v813 #405 対称: 全訳 row の保存済 PDF を流用してペアの要約 row を新規作成。
 function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3229,16 +3229,16 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     $st = $pdo->prepare("SELECT * FROM paper_full_translations WHERE id=?");
     $st->execute([$fullId]);
     $fullRow = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$fullRow) throw new ApiException('not_found', '全訳 row が ありません', 404);
-    if ((int)$fullRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人 の 全訳 のみ ペア 要約 を 作れ ます', 403);
-    if (empty($fullRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が 残って いない の で 要約 を 作れ ません', 400);
+    if (!$fullRow) throw new ApiException('not_found', '全訳 row がありません', 404);
+    if ((int)$fullRow['user_id'] !== $uid) throw new ApiException('forbidden', '本人の全訳のみペア要約を作れます', 403);
+    if (empty($fullRow['pdf_path'])) throw new ApiException('bad_request', '元 PDF が残っていないので要約を作れません', 400);
     $pdfAbs = '/var/www/labpay/public' . $fullRow['pdf_path'];
-    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体 が 見つかり ません', 404);
+    if (!is_file($pdfAbs)) throw new ApiException('not_found', 'PDF 本体が見つかりません', 404);
 
     $body = read_json_body();
     $reqModel = trim((string)($body['model'] ?? 'gpt-5'));
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
-        throw new ApiException('bad_request', '未対応 モデル: ' . $reqModel, 400);
+        throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
     $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
     $autoShare = !empty($body['auto_share']) ? 1 : 0;
@@ -3276,7 +3276,7 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     } catch (Throwable $_) {}
 
     $sys = PAPER_TRANSLATE_DEFAULT_PROMPT;
-    $userPrompt = "添付 した PDF の 研究論文 を、 system prompt の 指示 に 沿って 詳細 サマリ + 落合メソッド で 日本語 要約 してください。 figure_refs の page 番号 は PDF の 物理ページ (1 始まり) で 正確に。 出力 JSON のみ。\n\n書く 前 と 書いた 後 で、 必ず PDF の 該当 箇所 を 再確認 し、 数値 / 著者 主張 / 結果 が 一致 する こと を 自分 で 検証 して から JSON を 出して ください。 ハルシネーション は 厳禁 です。";
+    $userPrompt = "添付した PDF の研究論文を、 system prompt の指示に沿って詳細サマリ + 落合メソッドで日本語要約してください。 figure_refs の page 番号は PDF の物理ページ (1 始まり) で正確に。 出力 JSON のみ。\n\n書く前と書いた後で、 必ず PDF の該当箇所を再確認し、 数値 / 著者主張 / 結果が一致することを自分で検証してから JSON を出してください。 ハルシネーションは厳禁です。";
 
     $payloadArr = [
         'model' => $reqModel,
@@ -3307,14 +3307,14 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
         if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文 要約 依頼料 (全訳 から)');
+            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料 (全訳から)');
         }
     });
 
     json_response_no_exit([
         'ok' => true, 'id' => $rowId, 'share_token' => $token, 'status' => 'pending',
         'cost_points' => $cost, 'model' => $reqModel,
-        'message' => 'ペア の 要約 を 開始 し ました。 結果 ページ で 進捗 を 確認 して ください。',
+        'message' => 'ペアの要約を開始しました。 結果ページで進捗を確認してください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3330,7 +3330,7 @@ function ai_paper_full_translate_submit(PDO $pdo, array $cfg, int $rowId, string
         $sys = $direction === 'ja2en' ? PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_JA2EN : PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA;
         $userInstruction = $direction === 'ja2en'
             ? "Translate the attached Japanese paper to full English with chapter-by-chapter back-translation, then a polish pass. Return JSON only per the schema."
-            : "添付 の 英語 論文 を 章 ごと に 日本語 で 全訳 + back-translation で 整合 確認 + 用語 統一 と 全体 ポリッシュ まで やって ください。 JSON のみ 返却。";
+            : "添付の英語論文を章ごとに日本語で全訳 + back-translation で整合確認 + 用語統一と全体ポリッシュまでやってください。 JSON のみ返却。";
 
         $payloadArr = [
             'model' => $model,
@@ -3372,19 +3372,19 @@ function ai_paper_full_translate_submit(PDO $pdo, array $cfg, int $rowId, string
         if ($rid === '') throw new RuntimeException('response_id 取得失敗');
 
         $pdo->prepare("UPDATE paper_full_translations SET openai_response_id=?, progress_text=? WHERE id=?")
-            ->execute([$rid, '📑 章 を 切り出し て 翻訳 を 始めて います…', $rowId]);
+            ->execute([$rid, '📑 章を切り出して翻訳を始めています…', $rowId]);
     } catch (Throwable $e) {
         $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
             ->execute([mb_substr($e->getMessage(), 0, 1000), $rowId]);
         try {
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                "❌ 論文 全訳 失敗: " . $e->getMessage() . " /#/paper-translate-full/r/{$token}",
+                "❌ 論文全訳失敗: " . $e->getMessage() . " /#/paper-translate-full/r/{$token}",
                 'paper_full_translation', $rowId);
         } catch (Throwable $_) {}
     }
 }
 
-// Deep Research と 同じ ポーリング 構造 で OpenAI に 状態 を 問い合わせ。
+// Deep Research と同じポーリング構造で OpenAI に状態を問い合わせ。
 function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
     $apiKey = (string)$cfg['openai']['api_key'];
     $rid    = (string)$row['openai_response_id'];
@@ -3423,7 +3423,7 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
         }
         if ($text === '' && isset($j['output_text']) && is_string($j['output_text'])) $text = (string)$j['output_text'];
         if ($text === '') {
-            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg='completed だが output_text が 空', finished_at=NOW() WHERE id=?")
+            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg='completed だが output_text が空', finished_at=NOW() WHERE id=?")
                 ->execute([$row['id']]);
             $row['status'] = 'error'; return $row;
         }
@@ -3452,14 +3452,14 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
                 json_encode($usageRec, JSON_UNESCAPED_UNICODE),
                 $row['id'],
             ]);
-        // v804 auto_share=1 なら 公開 ON に
+        // v804 auto_share=1 なら公開 ON に
         $pdo->prepare("UPDATE paper_full_translations SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
             ->execute([$row['id']]);
         try {
             $title = is_array($parsed) ? (string)($parsed['title_translated'] ?? $parsed['title_original'] ?? $row['pdf_name']) : $row['pdf_name'];
             $title = mb_substr($title, 0, 60);
             notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
-                "📑 論文 全訳 完了: 「{$title}」 /#/paper-translate-full/r/{$row['share_token']}",
+                "📑 論文全訳完了: 「{$title}」 /#/paper-translate-full/r/{$row['share_token']}",
                 'paper_full_translation', (int)$row['id']);
         } catch (Throwable $_) {}
         $row['status'] = 'done';
@@ -3483,7 +3483,7 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
 }
 
 // ============================================================================
-// v789 #389 論文 要約 / 全訳 共通 の いいね・ブックマーク・コメント。
+// v789 #389 論文要約 / 全訳共通のいいね・ブックマーク・コメント。
 //   ref_type は 'paper_translate' (要約) / 'paper_full_translation' (全訳)。
 // ============================================================================
 
@@ -3548,8 +3548,8 @@ function ai_paper_comment_create(PDO $pdo, array $cfg, string $refType, int $ref
     $uid = (int)$u['id'];
     $body = read_json_body();
     $text = trim((string)($body['body'] ?? ''));
-    if ($text === '') throw new ApiException('bad_request', 'body が 必要', 400);
-    if (mb_strlen($text) > 2000) throw new ApiException('bad_request', 'コメント は 2000 字 まで', 400);
+    if ($text === '') throw new ApiException('bad_request', 'body が必要', 400);
+    if (mb_strlen($text) > 2000) throw new ApiException('bad_request', 'コメントは 2000 字まで', 400);
     $table = $refType === 'paper_full_translation' ? 'paper_full_translations' : 'paper_translates';
     $st = $pdo->prepare("SELECT user_id FROM $table WHERE id=?");
     $st->execute([$refId]);
@@ -3558,18 +3558,18 @@ function ai_paper_comment_create(PDO $pdo, array $cfg, string $refType, int $ref
     $ins = $pdo->prepare("INSERT INTO paper_comments (ref_type, ref_id, user_id, body) VALUES (?,?,?,?)");
     $ins->execute([$refType, $refId, $uid, $text]);
     $cid = (int)$pdo->lastInsertId();
-    // 投稿者 が 別人 なら 通知
+    // 投稿者が別人なら通知
     if ($authorUid !== $uid) {
         try {
             $snippet = mb_substr($text, 0, 60);
-            $kindLabel = $refType === 'paper_full_translation' ? '論文 全訳' : '論文 要約';
+            $kindLabel = $refType === 'paper_full_translation' ? '論文全訳' : '論文要約';
             $urlSlug   = $refType === 'paper_full_translation' ? 'paper-translate-full' : 'paper-summary';
-            // ref token を 取って 通知 body に 埋め込み (Slack DM が body 内 URL を 拾う)
+            // ref token を取って通知 body に埋め込み (Slack DM が body 内 URL を拾う)
             $st2 = $pdo->prepare("SELECT share_token FROM $table WHERE id=?");
             $st2->execute([$refId]);
             $token = (string)$st2->fetchColumn();
             notify_safely($pdo, $cfg, $authorUid, 'admin_notice',
-                "💬 {$u['display_name']} さん が あなた の {$kindLabel} に コメント: 「{$snippet}」 /#/{$urlSlug}/r/{$token}",
+                "💬 {$u['display_name']} さんがあなたの {$kindLabel} にコメント: 「{$snippet}」 /#/{$urlSlug}/r/{$token}",
                 $refType === 'paper_full_translation' ? 'paper_full_translation' : 'paper_translate',
                 $refId);
         } catch (Throwable $_) {}
@@ -3585,16 +3585,16 @@ function ai_paper_comment_delete(PDO $pdo, array $cfg, string $refType, int $ref
     $cuid = (int)$st->fetchColumn();
     if (!$cuid) throw new ApiException('not_found', 'comment not found', 404);
     if ($cuid !== $uid && (string)($u['role'] ?? '') !== 'admin') {
-        throw new ApiException('forbidden', '本人 / admin のみ 削除 可', 403);
+        throw new ApiException('forbidden', '本人 / admin のみ削除可', 403);
     }
     $pdo->prepare("DELETE FROM paper_comments WHERE id=?")->execute([$cid]);
     json_response(['ok' => true]);
 }
 
-// 要約 / 全訳 / Deep Research 詳細 ページ の 反応 集計。
+// 要約 / 全訳 / Deep Research 詳細ページの反応集計。
 // v841 #424 paper_reactions を捨てて ai_result_stars + ai_result_bookmarks に統合 (一覧と同じソース)。
-// 後方互換 のため like/my_like/bookmark/my_bookmark の キー名 は そのまま 維持
-// (= フロント の 既存 コード が r.like / r.bookmark を 参照 して も 動く)。
+// 後方互換のため like/my_like/bookmark/my_bookmark のキー名はそのまま維持
+// (= フロントの既存コードが r.like / r.bookmark を参照しても動く)。
 function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $meId): array {
     // ai_result_stars (= ⭐)
     $stS = $pdo->prepare("SELECT COUNT(*) AS n, MAX(user_id=?) AS mine
@@ -3607,7 +3607,7 @@ function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $
     $stB->execute([$meId, $refType, $refId]);
     $rb = $stB->fetch(PDO::FETCH_ASSOC) ?: ['n' => 0, 'mine' => 0];
     $r = [
-        // 新キー (v841 以降の フロント が参照)
+        // 新キー (v841 以降のフロントが参照)
         'star_count'     => (int)$rs['n'],
         'my_starred'     => (int)$rs['mine'] === 1,
         'bookmark_count' => (int)$rb['n'],
@@ -3618,7 +3618,7 @@ function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $
         'bookmark'    => (int)$rb['n'],
         'my_bookmark' => (int)$rb['mine'] === 1,
     ];
-    // コメント 数 も 軽く 取得
+    // コメント数も軽く取得
     $st2 = $pdo->prepare("SELECT COUNT(*) FROM paper_comments WHERE ref_type=? AND ref_id=?");
     $st2->execute([$refType, $refId]);
     $r['comment_count'] = (int)$st2->fetchColumn();
@@ -3627,8 +3627,8 @@ function ai_paper_reactions_summary(PDO $pdo, string $refType, int $refId, int $
 
 // POST /api/ai/short_title { context: "...説明..." }
 //   → { title: "..." }
-// 1 行 5-15 字 の 楽しい 日本語 タイトル を 1 つだけ 返す。 タイマーや ストップウォッチ
-// 作成時の 「タイトル空欄 → 自動生成」 用。 軽い call なので キャッシュなし / 履歴なし。
+// 1 行 5-15 字の楽しい日本語タイトルを 1 つだけ返す。 タイマーやストップウォッチ
+// 作成時の 「タイトル空欄 → 自動生成」 用。 軽い call なのでキャッシュなし / 履歴なし。
 function ai_short_title(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
@@ -3637,7 +3637,7 @@ function ai_short_title(PDO $pdo, array $cfg): void {
     if ($context === '') throw new ApiException('bad_request', 'context required', 400);
     if (mb_strlen($context) > 500) $context = mb_substr($context, 0, 500);
 
-    $sys = "短い 楽しい 日本語 タイトル を 1 つだけ 返してください。 5-15 文字。 絵文字 1 個 まで 添えても OK。 余計な 前置き や 解説は 不要、 タイトル 1 行のみ。 引用符 (「」 等) で 囲まない。";
+    $sys = "短い楽しい日本語タイトルを 1 つだけ返してください。 5-15 文字。 絵文字 1 個まで添えても OK。 余計な前置きや解説は不要、 タイトル 1 行のみ。 引用符 (「」 等) で囲まない。";
 
     $payload = json_encode([
         'model' => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
@@ -3671,7 +3671,7 @@ function ai_short_title(PDO $pdo, array $cfg): void {
     if (!is_string($text) || $text === '') {
         throw new ApiException('upstream_error', 'empty', 502);
     }
-    // 整形: 引用符 除去 / 1 行に / 最大 30 文字
+    // 整形: 引用符除去 / 1 行に / 最大 30 文字
     $title = trim(preg_replace('/[\r\n]+/', ' ', $text));
     $title = preg_replace('/^[「『"\']+|[」』"\']+$/u', '', $title);
     $title = mb_substr($title, 0, 30);
@@ -3680,8 +3680,8 @@ function ai_short_title(PDO $pdo, array $cfg): void {
 
 // POST /api/ai/chat { message, history?: [{role,content},...] }
 //   → { text }
-// 汎用 多言語 対話 (主に 翻訳 用途)。 LabPay 操作には 言及せず、 ユーザーの
-// 入力を そのまま 翻訳 / 解説。
+// 汎用多言語対話 (主に翻訳用途)。 LabPay 操作には言及せず、 ユーザーの
+// 入力をそのまま翻訳 / 解説。
 function ai_chat(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
@@ -3693,29 +3693,29 @@ function ai_chat(PDO $pdo, array $cfg): void {
     $history = array_slice($history, -20);
 
     $sys = <<<SYS
-あなたは 中村さん (日本語話者) のための 多言語 対話・翻訳 アシスタント です。 主な
-用途は 海外出張 (中国、 イタリア など) での 翻訳・コミュニケーション 支援。
+あなたは中村さん (日本語話者) のための多言語対話・翻訳アシスタントです。 主な
+用途は海外出張 (中国、 イタリアなど) での翻訳・コミュニケーション支援。
 
-挙動 ルール:
-- 入力テキストの 言語を 自動判定
-- 日本語で 「○○ を 中国語で」 「これを イタリア語に」 と 言われたら 該当言語へ 翻訳
-- 「翻訳して」 だけ なら 文脈から 最も 妥当な 訳先 (= 日本語 ↔ 外国語) に
-- 外国語が 直接 入力されたら 日本語訳 を 返す + 短い 解説 (発音 / 文化的 ニュアンス / 食べ物なら 何か / 注意事項 など)
-- 一般的な 質問にも 答える (相手先国 の マナー、 注文 の しかた、 通貨 計算 など)
-- 余計な 前置き は 不要、 結果を 直接
+挙動ルール:
+- 入力テキストの言語を自動判定
+- 日本語で 「○○ を中国語で」 「これをイタリア語に」 と言われたら該当言語へ翻訳
+- 「翻訳して」 だけなら文脈から最も妥当な訳先 (= 日本語 ↔ 外国語) に
+- 外国語が直接入力されたら日本語訳を返す + 短い解説 (発音 / 文化的ニュアンス / 食べ物なら何か / 注意事項など)
+- 一般的な質問にも答える (相手先国のマナー、 注文のしかた、 通貨計算など)
+- 余計な前置きは不要、 結果を直接
 
 書式:
-- 翻訳 結果は **太字**
-- 発音 / カナ表記 が 有用 なら 括弧で 添える
-- 補足は その下に 1-2 行
-- 長文は 箇条書き で 整理
+- 翻訳結果は **太字**
+- 発音 / カナ表記が有用なら括弧で添える
+- 補足はその下に 1-2 行
+- 長文は箇条書きで整理
 
 例:
 ユーザー: 「『お会計お願いします』をイタリア語で」
 返答:
 **Il conto, per favore.**
-(イル・コント・ペル・ファヴォーレ / 直訳「勘定書を お願いします」)
-└ レストランで 一般的。 カフェなら "Quanto le devo?" (クアント・レ・デヴォ / いくらですか) も 自然。
+(イル・コント・ペル・ファヴォーレ / 直訳「勘定書をお願いします」)
+└ レストランで一般的。 カフェなら "Quanto le devo?" (クアント・レ・デヴォ / いくらですか) も自然。
 SYS;
 
     $messages = [['role' => 'system', 'content' => $sys]];
@@ -3767,9 +3767,9 @@ SYS;
 
 // POST /api/ai/assistant { message: "...", history?: [{role,content},...] }
 //   → { text: "...操作手順..." }
-// LabPay の 使い方 を 案内する Q&A エージェント (UI ナビゲーション特化)。
-// ユーザー データ (残高 / 履歴 等) には アクセスしない — そこを 答える時は 「設定 →
-// ...」 と 操作手順を 案内するだけ。
+// LabPay の使い方を案内する Q&A エージェント (UI ナビゲーション特化)。
+// ユーザーデータ (残高 / 履歴等) にはアクセスしない — そこを答える時は 「設定 →
+// ...」 と操作手順を案内するだけ。
 function ai_assistant(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
@@ -3778,40 +3778,40 @@ function ai_assistant(PDO $pdo, array $cfg): void {
     if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
     if (mb_strlen($msg) > 2000) throw new ApiException('bad_request', 'message too long', 400);
     $history = is_array($body['history'] ?? null) ? $body['history'] : [];
-    $history = array_slice($history, -10); // 直近 10 ターン だけ 持ち回す
+    $history = array_slice($history, -10); // 直近 10 ターンだけ持ち回す
 
     $sys = <<<SYS
-あなたは LabPay の 使い方 ガイド アシスタント です。 ユーザーの 「○○ したいけど どこ から?」
-「△△ の 情報 見たい」 に、 簡潔な 操作手順 で 答えてください。 ユーザー本人の データ
-(残高 / 履歴 / 通知 等) は 見えない ので、 個別データを 聞かれた場合は 「○○ メニュー
-で 確認 できます」 と 場所を 案内するに 留めること。
+あなたは LabPay の使い方ガイドアシスタントです。 ユーザーの 「○○ したいけどどこから?」
+「△△ の情報見たい」 に、 簡潔な操作手順で答えてください。 ユーザー本人のデータ
+(残高 / 履歴 / 通知等) は見えないので、 個別データを聞かれた場合は 「○○ メニュー
+で確認できます」 と場所を案内するに留めること。
 
-回答 ルール:
-- 太字 (**○○**) で 重要 ボタン名 や メニュー名 を 強調
-- 番号付き リスト で 手順を 並べる
-- 関連 機能 が あれば 末尾に 「関連: ...」 で 1 行 紹介
-- 不明な機能 を 聞かれたら 「LabPay には その機能は ありません」 と 正直に
-- 過度な 前置きや 「お問い合わせ ありがとうございます」 等 は 不要、 答えだけ
+回答ルール:
+- 太字 (**○○**) で重要ボタン名やメニュー名を強調
+- 番号付きリストで手順を並べる
+- 関連機能があれば末尾に 「関連: ...」 で 1 行紹介
+- 不明な機能を聞かれたら 「LabPay にはその機能はありません」 と正直に
+- 過度な前置きや 「お問い合わせありがとうございます」 等は不要、 答えだけ
 
-LabPay の 主な ナビゲーション:
-- **ホーム** (#/): 残高、 クイック ボタン (買う/売る/頼む/送る/翻訳…)、 未対応カード、 今日の予定、 グループ、 募集、 新着 プレイリスト、 参加中タイマー
-- **買う** (#/buy): 商品 一覧 + JAN コード スキャン
+LabPay の主なナビゲーション:
+- **ホーム** (#/): 残高、 クイックボタン (買う/売る/頼む/送る/翻訳…)、 未対応カード、 今日の予定、 グループ、 募集、 新着プレイリスト、 参加中タイマー
+- **買う** (#/buy): 商品一覧 + JAN コードスキャン
 - **売る** (#/sell): 出品
-- **頼む** (#/tasks): タスク作成 (報酬付き 募集 / 指名 / リクエスト) — ホームの 「頼む」 でも
-- **送る** (#/send): 個人間 ポイント 送金
+- **頼む** (#/tasks): タスク作成 (報酬付き募集 / 指名 / リクエスト) — ホームの 「頼む」 でも
+- **送る** (#/send): 個人間ポイント送金
 - **アプリ** (#/apps): ルーレット / 投票 / 点呼 / タイマー / ストップウォッチ / 翻訳 / 待ち合わせ / 飲み会割り勘 / ワリカ電卓 / 請求 / オークション / プレイリスト / ランダム分け / 連絡先 / 重要連絡 / Scrapbox / 関係性グラフ / 運動 / ラボ滞在マップ
-- **グループ** (#/groups): 出張 / 旅行 向け 一時 メンバー枠 + スケジュール + ワリカ + 地図 + 翻訳ログ + チャット
-- **募集** (#/invitations): お昼ご飯 / 飲み会 等 カジュアル集合
-- **実績** (#/achievements): 学業 / 売買 / 滞在 / ラボ運営 など 15 カテゴリ
-- **設定** (#/settings): プロフィール / アバター / タブ並び替え / ホーム上部 クイック ボタン / アプリ表示 / Google Calendar / Zoom 連携 / 端末 (MAC) 登録 / プロフィール (Slack / 電話) / 効果音 / ホーム カード 並び
-- **報告・要望** (#/feedback-admin or トップ ナビ): バグ報告 / 機能要望
-- **通知** (#/notifications): 通知ベル から
+- **グループ** (#/groups): 出張 / 旅行向け一時メンバー枠 + スケジュール + ワリカ + 地図 + 翻訳ログ + チャット
+- **募集** (#/invitations): お昼ご飯 / 飲み会等カジュアル集合
+- **実績** (#/achievements): 学業 / 売買 / 滞在 / ラボ運営など 15 カテゴリ
+- **設定** (#/settings): プロフィール / アバター / タブ並び替え / ホーム上部クイックボタン / アプリ表示 / Google Calendar / Zoom 連携 / 端末 (MAC) 登録 / プロフィール (Slack / 電話) / 効果音 / ホームカード並び
+- **報告・要望** (#/feedback-admin or トップナビ): バグ報告 / 機能要望
+- **通知** (#/notifications): 通知ベルから
 
-特殊 機能 ヒント:
-- **AI 機能**: スケジュール フリーテキスト 展開 (グループ予定追加 modal 上部 「✨」)、 場所名 → 緯度経度+説明+画像 自動入力 (タイトル横 「🔍 場所を検索」)、 画像 翻訳 (#/translate)、 翻訳ログ (グループに 紐づけ可能)
-- **位置共有**: グループ 地図ページ (#/groups/{id}/map) の 「📡 位置共有」 トグル で メンバー全員に 位置を 共有
-- **❤️ 行きたい場所**: グループ スケジュール の 行きたい場所ストック の タイル 右下
-- **ベル / 中間音**: タイマー作成時に 1ベル/2ベル/3ベル 分単位 で 指定
+特殊機能ヒント:
+- **AI 機能**: スケジュールフリーテキスト展開 (グループ予定追加 modal 上部 「✨」)、 場所名 → 緯度経度+説明+画像自動入力 (タイトル横 「🔍 場所を検索」)、 画像翻訳 (#/translate)、 翻訳ログ (グループに紐づけ可能)
+- **位置共有**: グループ地図ページ (#/groups/{id}/map) の 「📡 位置共有」 トグルでメンバー全員に位置を共有
+- **❤️ 行きたい場所**: グループスケジュールの行きたい場所ストックのタイル右下
+- **ベル / 中間音**: タイマー作成時に 1ベル/2ベル/3ベル分単位で指定
 SYS;
 
     $messages = [['role' => 'system', 'content' => $sys]];
@@ -3864,7 +3864,7 @@ SYS;
 // POST /api/ai/place_lookup { name: "東京タワー" }
 //   → { name, lat, lng, display_name, description, image_url, source }
 // 段取り: Nominatim (lat/lng + 表示名) + Wikipedia ja (説明 + 画像 + 補完 coord)。
-// 両方 best-effort。 OpenAI 鍵 不要 (Wiki + OSM のみ)。
+// 両方 best-effort。 OpenAI 鍵不要 (Wiki + OSM のみ)。
 function ai_place_lookup(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -3956,12 +3956,12 @@ function ai_http_get(string $url, string $ua, int $timeout): ?string {
 function ai_assert_configured(array $cfg): void {
     $k = (string)($cfg['openai']['api_key'] ?? '');
     if ($k === '') {
-        throw new ApiException('not_configured', 'OpenAI が 設定されていません (config.openai.api_key)', 503);
+        throw new ApiException('not_configured', 'OpenAI が設定されていません (config.openai.api_key)', 503);
     }
 }
 
 // POST /api/ai/expand_schedule
-//   body: { text: "明日 12 時から 渋谷駅前で ランチ 1 時間半" }
+//   body: { text: "明日 12 時から渋谷駅前でランチ 1 時間半" }
 //   返値: { fields: { title, day_date, start_time, duration_minutes, ... } }
 function ai_expand_schedule(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
@@ -3976,24 +3976,24 @@ function ai_expand_schedule(PDO $pdo, array $cfg): void {
     $dow   = ['日','月','火','水','木','金','土'][(int)(new DateTimeImmutable('now', $tz))->format('w')];
 
     $system = <<<SYS
-あなたは スケジュール 抽出器 です。 ユーザーの 日本語 フリーテキスト から、
-以下の フィールドを 抽出して JSON で 返してください。 該当が 無い フィールドは null。
+あなたはスケジュール抽出器です。 ユーザーの日本語フリーテキストから、
+以下のフィールドを抽出して JSON で返してください。 該当が無いフィールドは null。
 
-本日は {$today} ({$dow})。 「明日」 「来週月曜」 等の 相対日付は 本日 基準で 解釈。
-時刻 が 明示されない 場合は null。 「お昼」 → 12:00、 「夕方」 → 17:00、 「夜」 → 19:00 と 推測。
-場所 (location) は そのまま。 緯度経度 が 含まれて居れば 別途。
+本日は {$today} ({$dow})。 「明日」 「来週月曜」 等の相対日付は本日基準で解釈。
+時刻が明示されない場合は null。 「お昼」 → 12:00、 「夕方」 → 17:00、 「夜」 → 19:00 と推測。
+場所 (location) はそのまま。 緯度経度が含まれて居れば別途。
 
-出力 JSON の フィールド (これ以外 出力しない):
-- title (str, 必須): 短い 1 行 タイトル
+出力 JSON のフィールド (これ以外出力しない):
+- title (str, 必須): 短い 1 行タイトル
 - day_date (str "YYYY-MM-DD" or null): 開始日
 - start_time (str "HH:MM" or null): 開始時刻
 - duration_minutes (int or null): 所要時間 (分)
-- end_date (str "YYYY-MM-DD" or null): 終了日 (複数日 跨ぐ場合)
+- end_date (str "YYYY-MM-DD" or null): 終了日 (複数日跨ぐ場合)
 - end_time (str "HH:MM" or null): 終了時刻
-- location (str or null): 場所 名 (緯度経度 を 含む 場合は memo に 回す)
+- location (str or null): 場所名 (緯度経度を含む場合は memo に回す)
 - memo (str or null): 補足情報
-- url (str or null): http(s):// で 始まる URL があれば
-- kind (str): flight, train, bus, taxi, car, walk, hotel, conf, meeting, meetup, food, fun, other の 中で 最も 適切な もの。 待ち合わせ系 (集合 / 待ち合わせ) は meetup。 食事は food。 観光・遊び は fun。 不明 は other
+- url (str or null): http(s):// で始まる URL があれば
+- kind (str): flight, train, bus, taxi, car, walk, hotel, conf, meeting, meetup, food, fun, other の中で最も適切なもの。 待ち合わせ系 (集合 / 待ち合わせ) は meetup。 食事は food。 観光・遊びは fun。 不明は other
 SYS;
 
     $payload = json_encode([
@@ -4063,9 +4063,9 @@ SYS;
 // POST /api/ai/translate_image
 //   body: { image_url: "https://labpay/uploads/...", hint?: "メニューです" }
 //   返値: { text: "...日本語訳..." }
-// OpenAI Vision (gpt-4o-mini) に 画像を 直接 投げる。 image_url は LabPay 自身の
-// /uploads/ に 限定 (外部 URL は 弾く) → 漏洩リスク最小化。 サーバ側で 一旦 ファイル を
-// 読んで base64 data URL に変換して 送る (OpenAI から 外部 URL fetch を 要求しない)。
+// OpenAI Vision (gpt-4o-mini) に画像を直接投げる。 image_url は LabPay 自身の
+// /uploads/ に限定 (外部 URL は弾く) → 漏洩リスク最小化。 サーバ側で一旦ファイルを
+// 読んで base64 data URL に変換して送る (OpenAI から外部 URL fetch を要求しない)。
 function ai_translate_image(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
@@ -4074,13 +4074,13 @@ function ai_translate_image(PDO $pdo, array $cfg): void {
     if ($imageUrl === '') throw new ApiException('bad_request', 'image_url required', 400);
     $hint = trim((string)($body['hint'] ?? ''));
     if (mb_strlen($hint) > 500) $hint = mb_substr($hint, 0, 500);
-    // v426 グループ 共有 (任意)。 指定時は その グループの メンバー である 必要あり。
+    // v426 グループ共有 (任意)。 指定時はそのグループのメンバーである必要あり。
     $groupId = isset($body['group_id']) && (int)$body['group_id'] > 0 ? (int)$body['group_id'] : null;
     if ($groupId !== null) {
         group_assert_member($pdo, $groupId, (int)$u['id']);
     }
 
-    // 自前 アップロード パス に 限定。 base_url + /uploads/ で 始まる か、 同じ ホスト の
+    // 自前アップロードパスに限定。 base_url + /uploads/ で始まるか、 同じホストの
     // /uploads/ 絶対 path か。
     $base = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
     $rel = null;
@@ -4090,7 +4090,7 @@ function ai_translate_image(PDO $pdo, array $cfg): void {
         $rel = $imageUrl;
     }
     if ($rel === null) {
-        throw new ApiException('bad_request', 'image_url は LabPay の /uploads/ を 指してください', 400);
+        throw new ApiException('bad_request', 'image_url は LabPay の /uploads/ を指してください', 400);
     }
     $docRoot = realpath(__DIR__ . '/../../public');
     if ($docRoot === false) throw new ApiException('server_error', 'public path resolution failed', 500);
@@ -4099,47 +4099,47 @@ function ai_translate_image(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '画像が見つかりません', 400);
     }
     if (filesize($fsPath) > 8 * 1024 * 1024) {
-        throw new ApiException('bad_request', '8MB を 超える 画像は 受け付けません', 400);
+        throw new ApiException('bad_request', '8MB を超える画像は受け付けません', 400);
     }
     $data = file_get_contents($fsPath);
     if ($data === false) throw new ApiException('server_error', 'image read failed', 500);
     $mime = mime_content_type($fsPath) ?: 'image/jpeg';
     if (!preg_match('#^image/#', $mime)) {
-        throw new ApiException('bad_request', '画像 ファイルのみ 受け付けます', 400);
+        throw new ApiException('bad_request', '画像ファイルのみ受け付けます', 400);
     }
     $dataUrl = 'data:' . $mime . ';base64,' . base64_encode($data);
 
     $sysPrompt = <<<SYS
-画像内の 外国語 テキスト (メニュー、 看板、 説明文 など) を 日本語に 翻訳しつつ、
-日本人ユーザーが 「それが何か」 を 理解できるよう 補足説明 も 加えてください。
+画像内の外国語テキスト (メニュー、 看板、 説明文など) を日本語に翻訳しつつ、
+日本人ユーザーが 「それが何か」 を理解できるよう補足説明も加えてください。
 
 書式:
-- まず 翻訳を そのまま 太字 で 示す
-- 直後の 括弧書き ()、 もしくは 翌行の インデントで、 補足説明 を 付ける
-- 補足は: その料理の 国・地域、 主な材料 / 味の傾向 / 食感 / 食べ方、 もしくは 看板なら 文化的背景 や 法的意味
-- 価格 や 数字 は そのまま 保持 (通貨記号 / 単位 含めて)
-- 不明瞭 な 部分は (?) を 付ける
-- メニューなら 各料理を 1 品 1 行 で 整理 (セクション 見出し も 保つ)
+- まず翻訳をそのまま太字で示す
+- 直後の括弧書き ()、 もしくは翌行のインデントで、 補足説明を付ける
+- 補足は: その料理の国・地域、 主な材料 / 味の傾向 / 食感 / 食べ方、 もしくは看板なら文化的背景や法的意味
+- 価格や数字はそのまま保持 (通貨記号 / 単位含めて)
+- 不明瞭な部分は (?) を付ける
+- メニューなら各料理を 1 品 1 行で整理 (セクション見出しも保つ)
 
 例 (メニュー):
 **Mapo Tofu — ¥85**
-└ 麻婆豆腐 (豆腐と 挽き肉を 豆板醤・花椒 で 辛く炒めた 中華 四川料理。 痺れる辛さ)
+└ 麻婆豆腐 (豆腐と挽き肉を豆板醤・花椒で辛く炒めた中華四川料理。 痺れる辛さ)
 
 **Bún chả — 65,000₫**
-└ ブンチャー (米麺 + 炭火焼き 豚 + 甘酸っぱい タレ の ベトナム ハノイ料理)
+└ ブンチャー (米麺 + 炭火焼き豚 + 甘酸っぱいタレのベトナムハノイ料理)
 
 例 (看板):
 **進入禁止**
-└ 関係者以外 入ってはいけません
+└ 関係者以外入ってはいけません
 
-ルール 共通:
-- 元の セクション / リスト 構造は 保つ
-- 余計な 前置き (「これは…」 等) は 不要、 結果のみ
-- 全体を Markdown (見出し / リスト / 太字 OK) で 出力
+ルール共通:
+- 元のセクション / リスト構造は保つ
+- 余計な前置き (「これは…」 等) は不要、 結果のみ
+- 全体を Markdown (見出し / リスト / 太字 OK) で出力
 SYS;
 
     if ($hint !== '') {
-        $sysPrompt .= "\n\nユーザーからの 補足情報: " . $hint;
+        $sysPrompt .= "\n\nユーザーからの補足情報: " . $hint;
     }
 
     $payload = json_encode([
@@ -4147,7 +4147,7 @@ SYS;
         'messages' => [
             ['role' => 'system', 'content' => $sysPrompt],
             ['role' => 'user', 'content' => [
-                ['type' => 'text', 'text' => '画像を 和訳して ください。'],
+                ['type' => 'text', 'text' => '画像を和訳してください。'],
                 ['type' => 'image_url', 'image_url' => ['url' => $dataUrl]],
             ]],
         ],
@@ -4184,7 +4184,7 @@ SYS;
         throw new ApiException('upstream_error', 'OpenAI: empty response', 502);
     }
     $text = trim($text);
-    // v426 DB に 保存。 失敗 (例: 容量不足) しても 結果は 返す。
+    // v426 DB に保存。 失敗 (例: 容量不足) しても結果は返す。
     $tid = null;
     try {
         $ins = $pdo->prepare("INSERT INTO translations (user_id, group_id, image_url, hint, result_text)
@@ -4200,9 +4200,9 @@ SYS;
 }
 
 // GET /api/ai/translations
-//   - mine=1 : 自分の (group_id IS NULL) ログ のみ
-//   - group_id=N: その グループ の ログ (メンバー 必須)
-//   - 引数なし: 自分の + 自分が 所属する グループの 全部 (id DESC 50 件)
+//   - mine=1 : 自分の (group_id IS NULL) ログのみ
+//   - group_id=N: そのグループのログ (メンバー必須)
+//   - 引数なし: 自分の + 自分が所属するグループの全部 (id DESC 50 件)
 function ai_translations_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -4225,7 +4225,7 @@ function ai_translations_list(PDO $pdo, array $cfg): void {
         $st = $pdo->prepare($sql);
         $st->execute([$uid]);
     } else {
-        // 自分の (group_id NULL) + 自分が member の グループの 全部
+        // 自分の (group_id NULL) + 自分が member のグループの全部
         $sql = "SELECT t.*, u.display_name AS user_name, u.avatar_url AS user_avatar_url,
                        g.title AS group_title
                   FROM translations t
@@ -4300,9 +4300,9 @@ function ai_stars_toggle(PDO $pdo, array $cfg, string $method): void {
     $kind = (string)($body['kind'] ?? '');
     $refId = (int)($body['ref_id'] ?? 0);
     if (!in_array($kind, ai_stars_valid_kinds(), true)) {
-        throw new ApiException('bad_request', 'kind が 不正', 400);
+        throw new ApiException('bad_request', 'kind が不正', 400);
     }
-    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が 必要', 400);
+    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が必要', 400);
     // ref の存在確認
     $table = ai_stars_resolve_table($kind);
     $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
@@ -4331,7 +4331,7 @@ function ai_stars_toggle(PDO $pdo, array $cfg, string $method): void {
     ]);
 }
 
-// 結果 list に star_count + my_starred + star_user_names (先頭3名まで) を 追加する。
+// 結果 list に star_count + my_starred + star_user_names (先頭3名まで) を追加する。
 //   items は ['id' => ..., ...] の連想配列の配列で、 in-place に書き換える。
 function ai_stars_enrich(PDO $pdo, string $kind, array &$items, int $myUid): void {
     if (!$items) return;
@@ -4351,7 +4351,7 @@ function ai_stars_enrich(PDO $pdo, string $kind, array &$items, int $myUid): voi
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $byId[(int)$r['ref_id']] = ['count' => (int)$r['n'], 'mine' => (int)$r['mine'] === 1];
     }
-    // 各 ref の star した人 (先頭 3 名、 display_name) も 軽く 取る
+    // 各 ref の star した人 (先頭 3 名、 display_name) も軽く取る
     $st2 = $pdo->prepare("SELECT s.ref_id, u.display_name, u.avatar_url
                             FROM ai_result_stars s JOIN users u ON u.id = s.user_id
                            WHERE s.kind=? AND s.ref_id IN ($place)
@@ -4375,7 +4375,7 @@ function ai_stars_enrich(PDO $pdo, string $kind, array &$items, int $myUid): voi
     unset($it);
 }
 
-// sort=stars のとき、 SQL ORDER BY を star count desc にするための SELECT 句 を 返すヘルパ。
+// sort=stars のとき、 SQL ORDER BY を star count desc にするための SELECT 句を返すヘルパ。
 //   ai.php の各 list クエリで使う想定だが、 副問合せが入る分だけ場合分けが面倒なので、
 //   list 側は単純な「クエリ実行後 PHP 側で sort」 で対応する (件数 100 以下が前提)。
 function ai_stars_apply_sort(string $kind, array $items, string $sort): array {
@@ -4399,9 +4399,9 @@ function ai_bookmarks_toggle(PDO $pdo, array $cfg, string $method): void {
     $kind = (string)($body['kind'] ?? '');
     $refId = (int)($body['ref_id'] ?? 0);
     if (!in_array($kind, ai_stars_valid_kinds(), true)) {
-        throw new ApiException('bad_request', 'kind が 不正', 400);
+        throw new ApiException('bad_request', 'kind が不正', 400);
     }
-    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が 必要', 400);
+    if ($refId <= 0) throw new ApiException('bad_request', 'ref_id が必要', 400);
     $table = ai_stars_resolve_table($kind);
     $st = $pdo->prepare("SELECT id FROM $table WHERE id=?");
     $st->execute([$refId]);

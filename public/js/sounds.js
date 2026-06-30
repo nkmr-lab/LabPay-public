@@ -1,13 +1,13 @@
-// 効果音の 再生・設定 まわり。 API:
+// 効果音の再生・設定まわり。 API:
 //   await preloadSounds()   ログイン直後 1 回呼ぶ。 /api/sounds/my を fetch し、
 //                            event_key → {file_url, volume} を memory に持つ。
 //                            ついでに HTMLAudio を warm up (ブラウザによっては
 //                            最初の play() で 200ms 遅延するため)。
-//   playSound(eventKey)     即時 再生。 mute / clip 未設定なら no-op。
-//                            ブラウザの autoplay 制限のため 必ず 「ユーザ操作の
+//   playSound(eventKey)     即時再生。 mute / clip 未設定なら no-op。
+//                            ブラウザの autoplay 制限のため必ず 「ユーザ操作の
 //                            イベントハンドラ内」 で呼ぶこと (タップ後の click handler 内 OK)。
 //
-// event_key の定義は サーバ側 SOUND_EVENTS と一致させる。
+// event_key の定義はサーバ側 SOUND_EVENTS と一致させる。
 
 import { get } from './api.js';
 
@@ -34,7 +34,7 @@ export async function preloadSounds() {
   }
 }
 
-// 「ユーザ操作」 が直近にあった とき (タップなどから連鎖して呼んだとき) 限定で再生。
+// 「ユーザ操作」 が直近にあったとき (タップなどから連鎖して呼んだとき) 限定で再生。
 // 再生中の重複は OK (HTMLAudio を毎回 new。 連打しても重ねて鳴る)。
 export function playSound(eventKey) {
   const cfg = cache.get(eventKey);
@@ -48,7 +48,7 @@ export function playSound(eventKey) {
   } catch (_) { /* swallow */ }
 }
 
-// 任意の URL を 試聴用に 鳴らす (clip プレビューや 試聴 ボタンから)。
+// 任意の URL を試聴用に鳴らす (clip プレビューや試聴ボタンから)。
 export function previewSoundUrl(url, volume = 0.7) {
   if (!url) return;
   try {
@@ -59,5 +59,5 @@ export function previewSoundUrl(url, volume = 0.7) {
   } catch (_) { /* swallow */ }
 }
 
-// 設定変更 直後に 再 fetch するときの薄ヘルパ。
+// 設定変更直後に再 fetch するときの薄ヘルパ。
 export async function refreshSoundCache() { await preloadSounds(); }

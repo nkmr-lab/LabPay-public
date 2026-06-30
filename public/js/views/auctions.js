@@ -2,9 +2,9 @@
 //   * 出品: タイトル + 説明 + 画像 + 最低価格 + 締切時刻
 //   * 入札: 現在の最高 + 1 以上
 //   * 締切: 自動で settle (lazy 集計、 lazy notify)
-//   * 落札後の 円 移動は無し (LabPay pt は動かない)。 ラボ内 既知 前提で
+//   * 落札後の円移動は無し (LabPay pt は動かない)。 ラボ内既知前提で
 //     連絡先は出さず、 出品者が 「請求を飛ばす」 ボタンで money_requests
-//     を生成 → 落札者に通知 → 落札者は 普通の 請求 UI で 支払い済 をチェック。
+//     を生成 → 落札者に通知 → 落札者は普通の請求 UI で支払い済をチェック。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -13,7 +13,7 @@ import { uploadImage } from '../upload.js';
 import { fmtDateTime, tag, fmtRelative } from '../format.js';
 import { shareToSns } from '../share_to_sns.js';
 
-// remainingText は 共有 fmtRelative に委譲 (取消 / 終了 ラベルは引数で指定)。
+// remainingText は共有 fmtRelative に委譲 (取消 / 終了ラベルは引数で指定)。
 function remainingText(closes_at, settled, cancelled) {
   if (cancelled) return '取消';
   if (settled)   return '終了';
@@ -47,7 +47,7 @@ export async function renderAuctions() {
       const wonBy = a.winner_user_id ? `落札: ${escapeHtml(a.winner_name)} (${a.winning_bid}円)` : '';
       const wonByMe = Number(a.winner_user_id) === meId;
       // v392: 旧コードは const tag = ... tag(...) で TDZ エラー (timers.js と
-      // 同じ パターン)。 import の tag() ヘルパを呼べるよう ローカル名は
+      // 同じパターン)。 import の tag() ヘルパを呼べるようローカル名は
       // statusTag に rename。
       const statusTag = cancelled
         ? tag('muted', '取消')
@@ -115,7 +115,7 @@ export async function renderAuctionNew() {
       </div>
     </div>
   `;
-  // デフォ 締切: 3 日後 18:00
+  // デフォ締切: 3 日後 18:00
   const def = new Date(Date.now() + 3 * 24 * 3600_000);
   def.setHours(18, 0, 0, 0);
   const pad = n => String(n).padStart(2, '0');
@@ -204,9 +204,9 @@ export async function renderAuctionDetail({ params }) {
         : tag('ok', escapeHtml(remainingText(a.closes_at, false, false)));
     const img = a.image_url
       ? `<img src="${escapeHtml(a.image_url)}" alt="" style="display:block; max-width:100%; max-height:240px; border-radius:8px; object-fit:contain; margin:0 auto 8px">` : '';
-    // v392: 連絡先表示は廃止 (ラボ内 既知前提)。 代わりに 落札後に
+    // v392: 連絡先表示は廃止 (ラボ内既知前提)。 代わりに落札後に
     //   - 出品者には 「💸 請求を飛ばす」 ボタン (落札者宛 money_request を生成)
-    //   - 落札者には 「請求が届きしだい [請求] から 支払済 をマーク」 ヒント
+    //   - 落札者には 「請求が届きしだい [請求] から支払済をマーク」 ヒント
     // を出す。
     let chargeBlock = '';
     if (a.settled_at && a.winner_user_id) {
@@ -215,13 +215,13 @@ export async function renderAuctionDetail({ params }) {
           <div class="card" style="background:#fff8e6; margin-top:8px">
             <h4 style="margin:0 0 4px">💸 落札者に請求を飛ばす</h4>
             <div class="meta">${escapeHtml(a.winner_name)} さん宛に ¥${Number(a.winning_bid).toLocaleString()} 円の請求を作成 + 通知します。</div>
-            <button id="aud-charge" class="primary" style="margin-top:6px">💸 ${escapeHtml(a.winner_name)} に ¥${Number(a.winning_bid).toLocaleString()} 円 請求</button>
+            <button id="aud-charge" class="primary" style="margin-top:6px">💸 ${escapeHtml(a.winner_name)} に ¥${Number(a.winning_bid).toLocaleString()} 円請求</button>
           </div>`;
       } else if (d.is_winner) {
         chargeBlock = `
           <div class="card" style="background:#fff8e6; margin-top:8px">
             <h4 style="margin:0 0 4px">🎉 落札しました</h4>
-            <div class="meta">出品者 ${escapeHtml(a.seller_name)} さんから ¥${Number(a.winning_bid).toLocaleString()} 円の請求が届きます。 届きしだい <a href="#/requests">[請求]</a> から 支払い済 をマークしてください。</div>
+            <div class="meta">出品者 ${escapeHtml(a.seller_name)} さんから ¥${Number(a.winning_bid).toLocaleString()} 円の請求が届きます。 届きしだい <a href="#/requests">[請求]</a> から支払い済をマークしてください。</div>
           </div>`;
       }
     }
@@ -240,7 +240,7 @@ export async function renderAuctionDetail({ params }) {
       </div>
       ${chargeBlock}
     `;
-    // 落札者宛 請求 を生成。 creator は呼び出し元 (= 出品者本人) なので
+    // 落札者宛請求を生成。 creator は呼び出し元 (= 出品者本人) なので
     // creator_user_id は省略。
     document.getElementById('aud-charge')?.addEventListener('click', async (ev) => {
       const btn = ev.currentTarget;
@@ -249,7 +249,7 @@ export async function renderAuctionDetail({ params }) {
       try {
         const created = await post('/api/money-requests', {
           title: `🏷 落札: ${a.title}`,
-          memo: `オークション「${a.title}」の 落札 (¥${Number(a.winning_bid).toLocaleString()} 円) の集金です。`,
+          memo: `オークション「${a.title}」の落札 (¥${Number(a.winning_bid).toLocaleString()} 円) の集金です。`,
           recipients: [{ user_id: Number(a.winner_user_id), amount_yen: Number(a.winning_bid) }],
         });
         toast('請求を作成しました');
@@ -264,11 +264,11 @@ export async function renderAuctionDetail({ params }) {
       document.getElementById('aud-amt').min = min;
       document.getElementById('aud-amt').value = min;
       document.getElementById('aud-bid-hint').textContent =
-        `${min}円 以上で入札可能。 入札後の取消はできません。`;
+        `${min}円以上で入札可能。 入札後の取消はできません。`;
       document.getElementById('aud-bid-go').addEventListener('click', async () => {
         const amount = Number(document.getElementById('aud-amt').value);
         if (!(amount > 0)) { toast('金額を入れてください'); return; }
-        if (!confirm(`${amount}円 で入札しますか? (取消不可)`)) return;
+        if (!confirm(`${amount}円で入札しますか? (取消不可)`)) return;
         try { await post(`/api/auctions/${id}/bids`, { amount }); toast('入札しました'); await renderAuctionDetail({ params: { id } }); }
         catch (e) { toast('失敗: ' + e.message); }
       });

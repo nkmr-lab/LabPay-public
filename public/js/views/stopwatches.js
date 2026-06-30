@@ -1,8 +1,8 @@
-// /#/stopwatches — 共有 ストップウォッチ。
+// /#/stopwatches — 共有ストップウォッチ。
 //  - 一覧 / 新規 / 詳細
 //  - status: running / paused / stopped
 //  - 経過秒数 = elapsed_offset_seconds + (running なら server_now - started_at)
-//  - 1 秒 tick で 表示更新 + サーバ 同期 (running 中 5s, それ以外 30s)
+//  - 1 秒 tick で表示更新 + サーバ同期 (running 中 5s, それ以外 30s)
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -19,7 +19,7 @@ function fmtElapsed(sec) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-// v447 ms 精度 (詳細画面 表示用)。 ホーム / 一覧 は 秒精度の fmtElapsed を 継続使用。
+// v447 ms 精度 (詳細画面表示用)。 ホーム / 一覧は秒精度の fmtElapsed を継続使用。
 function fmtElapsedMs(ms) {
   ms = Math.max(0, Math.floor(ms));
   const h = Math.floor(ms / 3600000);
@@ -55,7 +55,7 @@ async function loadList() {
     const d = await get('/api/stopwatches');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = `<div class="empty">まだ ストップウォッチは ありません</div>`;
+      root.innerHTML = `<div class="empty">まだストップウォッチはありません</div>`;
       return;
     }
     root.innerHTML = items.map(s => {
@@ -87,13 +87,13 @@ export async function renderStopwatchNew() {
   const presetMembers = (url.searchParams.get('members') || '')
     .split(',').map(s => Number(s)).filter(Boolean);
   const presetTitle = url.searchParams.get('title') || '';
-  // v441 自分は デフォで 追加。 ?members= で 指定があれば そっち優先 (重複は picker 側で 排除)。
+  // v441 自分はデフォで追加。 ?members= で指定があればそっち優先 (重複は picker 側で排除)。
   const meId = Number(state.me?.id) || 0;
   const initial = presetMembers.length ? presetMembers : (meId ? [meId] : []);
   app.innerHTML = `
     <div class="card">
       <a href="#/stopwatches" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">＋ 新規 ストップウォッチ</h2>
+      <h2 style="margin:6px 0 0">＋ 新規ストップウォッチ</h2>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「ストップウォッチ」)</span>
@@ -127,11 +127,11 @@ export async function renderStopwatchNew() {
     btn.disabled = true;
     let title = document.getElementById('swn-title').value.trim();
     try {
-      // v442 タイトル空欄なら AI に 適当に 付けてもらう
+      // v442 タイトル空欄なら AI に適当に付けてもらう
       if (!title) {
         btn.textContent = '🤖 タイトル生成中…';
         const part = picker ? [...picker.getSelected()].length : 1;
-        const ctx = `共有 ストップウォッチ (カウントアップ計測器) を 今 ${part} 人で 作成します。 用途は たぶん 発表時間・雑談計測・作業セット・実験 など。 ピッタリ な 短いタイトルを 1 つ。`;
+        const ctx = `共有ストップウォッチ (カウントアップ計測器) を今 ${part} 人で作成します。 用途はたぶん発表時間・雑談計測・作業セット・実験など。 ピッタリな短いタイトルを 1 つ。`;
         try {
           const r = await post('/api/ai/short_title', { context: ctx });
           title = r.title || 'ストップウォッチ';
@@ -184,7 +184,7 @@ export async function renderStopwatchDetail({ params }) {
       <div id="swd-parts" class="list"></div>
     </div>
     <div class="card" id="swd-admin" hidden>
-      <button id="swd-del" class="danger">この ストップウォッチを 削除</button>
+      <button id="swd-del" class="danger">このストップウォッチを削除</button>
     </div>
   `;
   await loadDetail(id);
@@ -201,10 +201,10 @@ function stopTickers() {
 }
 
 function startTickers(id) {
-  // v447 50ms tick で ms 表示。 60Hz 完全 同期 までは いらないが、
-  // 20Hz あれば 数字が 滑らかに 進む。
+  // v447 50ms tick で ms 表示。 60Hz 完全同期まではいらないが、
+  // 20Hz あれば数字が滑らかに進む。
   swState.displayTimer = setInterval(() => updateDisplay(), 50);
-  // 5 秒 (running) or 30 秒 (それ以外) で サーバ同期 (ms 列の 再取得 + ラップ反映)
+  // 5 秒 (running) or 30 秒 (それ以外) でサーバ同期 (ms 列の再取得 + ラップ反映)
   const schedule = () => {
     if (swState?.syncTimer) clearInterval(swState.syncTimer);
     if (!swState) return;
@@ -217,7 +217,7 @@ function startTickers(id) {
     }, ms);
   };
   schedule();
-  // home から 離れたら timer 停止 (DOM 消失で 検知)
+  // home から離れたら timer 停止 (DOM 消失で検知)
   const watcher = setInterval(() => {
     if (!document.getElementById('swd-display')) {
       clearInterval(watcher);
@@ -231,12 +231,12 @@ async function loadDetail(id) {
     const clientNowAtSend = Date.now();
     const sw = await get('/api/stopwatches/' + id);
     const clientNowAtRecv = Date.now();
-    // server_now_ms - client_now_at_recv = サーバが クライアント時計より 進んでいる ms 数
+    // server_now_ms - client_now_at_recv = サーバがクライアント時計より進んでいる ms 数
     const serverNowMs = Number(sw.server_now_ms) || Date.parse(sw.server_now);
     swState = swState || {};
     swState.sw = sw;
     swState.clientServerOffsetMs = clientNowAtRecv - serverNowMs;
-    // v447 baseElapsedMs / clientAnchorMs を 持って tick 中は サーバを 叩かず 進める。
+    // v447 baseElapsedMs / clientAnchorMs を持って tick 中はサーバを叩かず進める。
     swState.baseElapsedMs = Number(sw.elapsed_ms) || 0;
     swState.clientAnchorMs = clientNowAtRecv;
     swState.networkRttHalfMs = Math.max(0, Math.floor((clientNowAtRecv - clientNowAtSend) / 2));
@@ -255,8 +255,8 @@ async function loadDetail(id) {
   }
 }
 
-// 現在 表示すべき 経過 ms を 計算 (client 時計 ベース)。 running なら
-// recv 後の 経過分を 足す、 paused/stopped なら baseElapsedMs そのまま。
+// 現在表示すべき経過 ms を計算 (client 時計ベース)。 running なら
+// recv 後の経過分を足す、 paused/stopped なら baseElapsedMs そのまま。
 function currentElapsedMs() {
   const st = swState;
   if (!st || !st.sw) return 0;
@@ -280,7 +280,7 @@ function renderHead(sw) {
   if (sw.is_mine) {
     document.getElementById('swd-admin').hidden = false;
     document.getElementById('swd-del').onclick = async () => {
-      if (!confirm('この ストップウォッチを 削除しますか?')) return;
+      if (!confirm('このストップウォッチを削除しますか?')) return;
       try { await del('/api/stopwatches/' + sw.id); navigate('#/stopwatches'); }
       catch (e) { toast('失敗: ' + e.message); }
     };
@@ -312,20 +312,20 @@ function renderControls(sw, id) {
   };
   resetBtn.onclick = async () => {
     const msg = (sw.laps && sw.laps.length)
-      ? `経過時間を 0 に リセットしますか?\n(ラップ ${sw.laps.length} 件 も 全削除されます)`
-      : '経過時間を 0 に リセットしますか?';
+      ? `経過時間を 0 にリセットしますか?\n(ラップ ${sw.laps.length} 件も全削除されます)`
+      : '経過時間を 0 にリセットしますか?';
     if (!confirm(msg)) return;
     try { await post('/api/stopwatches/' + id + '/reset', {}); await loadDetail(id); }
     catch (e) { toast('失敗: ' + e.message); }
   };
-  // v447 ラップ。 client_elapsed_ms を 送って 「タップ瞬間」 を 正確に 反映。
+  // v447 ラップ。 client_elapsed_ms を送って 「タップ瞬間」 を正確に反映。
   lapBtn.onclick = async () => {
     if (!swState?.sw || swState.sw.status !== 'running') return;
     const clientMs = currentElapsedMs();
     lapBtn.disabled = true;
     try {
       const r = await post('/api/stopwatches/' + id + '/lap', { client_elapsed_ms: clientMs });
-      // 楽観反映: 直近ラップを 即追加して 体感ラグ ゼロに。 5s 後の sync で 整合。
+      // 楽観反映: 直近ラップを即追加して体感ラグゼロに。 5s 後の sync で整合。
       if (swState.sw) {
         swState.sw.laps = swState.sw.laps || [];
         swState.sw.laps.unshift({
@@ -355,12 +355,12 @@ function renderLaps(sw) {
     if (lastEl) lastEl.textContent = '';
     return;
   }
-  // 最新ラップ を ヘッダ 下に 大きめ で 表示。
+  // 最新ラップをヘッダ下に大きめで表示。
   if (lastEl) {
     const last = laps[0];
     lastEl.textContent = `🏁 ラップ ${last.lap_index}  ${fmtElapsedMs(last.split_ms)}  /  累計 ${fmtElapsedMs(last.elapsed_ms)}`;
   }
-  // 最小 split / 最大 split を ハイライト (ラップ 2 件以上で 意味あり)
+  // 最小 split / 最大 split をハイライト (ラップ 2 件以上で意味あり)
   let minSplit = Infinity, maxSplit = -Infinity;
   for (const l of laps) {
     if (l.split_ms < minSplit) minSplit = l.split_ms;

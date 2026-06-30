@@ -1,6 +1,6 @@
 // /#/tierlists — ティア表 (Tier List)。 v549 #210 / v582 5 段階 (S/A/B/C/D) + 画像対応。
-//   起案者がお題 + 候補リスト → 参加者が S/A/B/C/D に振り分け → 提出後 他人の表が見える。
-//   v582 候補に 正方形画像 を 任意 で 設定可能 (アップロード or URL)。
+//   起案者がお題 + 候補リスト → 参加者が S/A/B/C/D に振り分け → 提出後他人の表が見える。
+//   v582 候補に正方形画像を任意で設定可能 (アップロード or URL)。
 
 import { get, post, put, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -58,13 +58,13 @@ export async function renderTierlistNew() {
         <textarea id="tl-desc" maxlength="500" rows="2"></textarea>
       </label>
       <div class="field">
-        <div class="lbl" style="margin-bottom:6px">候補 (任意で 正方形画像 を 各候補に 設定可能)</div>
+        <div class="lbl" style="margin-bottom:6px">候補 (任意で正方形画像を各候補に設定可能)</div>
         <div id="tl-items-list" style="display:flex; flex-direction:column; gap:6px"></div>
         <div class="row" style="gap:6px; margin-top:6px">
           <button id="tl-add-item" class="btn" type="button">+ 候補を追加</button>
-          <button id="tl-bulk-paste" class="btn" type="button" style="font-size:12px">複数行 まとめて 貼付け</button>
+          <button id="tl-bulk-paste" class="btn" type="button" style="font-size:12px">複数行まとめて貼付け</button>
         </div>
-        <div class="hint-sm" style="margin-top:4px">画像 アイコンを タップ で 端末から アップロード (任意)。 候補は 最大 200 件。</div>
+        <div class="hint-sm" style="margin-top:4px">画像アイコンをタップで端末からアップロード (任意)。 候補は最大 200 件。</div>
       </div>
       <div class="row" style="margin-top:10px; gap:6px; justify-content:flex-end">
         <a href="#/tierlists" class="btn">キャンセル</a>
@@ -72,7 +72,7 @@ export async function renderTierlistNew() {
       </div>
     </div>
   `;
-  // 候補リスト の 状態 (UI から 直接 読み出す方式)
+  // 候補リストの状態 (UI から直接読み出す方式)
   const listRoot = document.getElementById('tl-items-list');
   function addItemRow(label = '', imageUrl = null) {
     const i = listRoot.children.length;
@@ -117,7 +117,7 @@ export async function renderTierlistNew() {
         ph.style.display = 'none';
         row.dataset.imageUrl = r.url;
       } catch (e) {
-        toast('画像 アップロード 失敗: ' + (e?.message || e));
+        toast('画像アップロード失敗: ' + (e?.message || e));
         ph.textContent = '🖼';
       }
     });
@@ -130,7 +130,7 @@ export async function renderTierlistNew() {
 
   document.getElementById('tl-add-item').addEventListener('click', () => addItemRow());
   document.getElementById('tl-bulk-paste').addEventListener('click', () => {
-    const txt = prompt('1 行 = 1 候補。 改行区切りで 貼り付けてください');
+    const txt = prompt('1 行 = 1 候補。 改行区切りで貼り付けてください');
     if (!txt) return;
     txt.split(/\r?\n/).map(s => s.trim()).filter(s => s).forEach(s => addItemRow(s));
   });
@@ -158,7 +158,7 @@ export async function renderTierlistNew() {
   });
 }
 
-// Detail: 自分の回答 (編集可) と 集計結果 (他の人の回答が 集約されたもの) を表示
+// Detail: 自分の回答 (編集可) と集計結果 (他の人の回答が集約されたもの) を表示
 export async function renderTierlistDetail({ params }) {
   const tid = Number(params.id);
   const app = document.getElementById('app');
@@ -186,7 +186,7 @@ export async function renderTierlistDetail({ params }) {
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">✏️ あなたの回答</div>
-      <div class="hint-sm" style="margin-bottom:6px">候補 を <b>ドラッグ</b> で 行 を 移動 (タップ で 段階 を 回す こと も でき ます)。 「?」 は 「行って ない / 評価 不能」 の 意味 で 使って ください。</div>
+      <div class="hint-sm" style="margin-bottom:6px">候補を <b>ドラッグ</b> で行を移動 (タップで段階を回すこともできます)。 「?」 は 「行ってない / 評価不能」 の意味で使ってください。</div>
       <div id="tl-board"></div>
       <div class="row" style="gap:6px; margin-top:10px; justify-content:flex-end">
         <button id="tl-save" class="primary"${d.is_closed ? ' disabled' : ''}>${d.my_answer ? '更新を保存' : '回答する'}</button>
@@ -209,7 +209,7 @@ export async function renderTierlistDetail({ params }) {
     });
   }
   document.getElementById('tl-share')?.addEventListener('click', () => {
-    shareToSns(`🎯 ティア表 「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人 回答)`, `#/tierlists/${tid}`);
+    shareToSns(`🎯 ティア表 「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人回答)`, `#/tierlists/${tid}`);
   });
   paintBoard(d, items, tiers, my);
   paintAggregation(d, items, tiers);
@@ -231,8 +231,8 @@ export async function renderTierlistDetail({ params }) {
 function paintBoard(d, items, tiers, my) {
   const board = document.getElementById('tl-board');
   if (!board) return;
-  // v815 #410 サーバ が tiers 末尾 に 「?」 (評価 不能) を 追加 して 返す。 「未」 (未 配置) と
-  //   「?」 (行って ない / 評価 不能) は 別物 として 残す。
+  // v815 #410 サーバが tiers 末尾に 「?」 (評価不能) を追加して返す。 「未」 (未配置) と
+  //   「?」 (行ってない / 評価不能) は別物として残す。
   const slots = [...tiers.map(t => ({ key: t.key, label: t.label, color: t.color })), { key: '', label: '未', color: '#888' }];
   board.innerHTML = slots.map(s => `
     <div class="tl-row" data-tier="${escapeHtml(s.key)}" style="display:flex; gap:6px; align-items:center; margin-bottom:4px; min-height:38px; padding:4px 6px; background:${s.color}22; border-left:4px solid ${s.color}; border-radius:6px">
@@ -259,9 +259,9 @@ function paintBoard(d, items, tiers, my) {
       btn.textContent = it.label;
     }
     if (!d.is_closed) {
-      // v815 #409 ドラッグ アンド ドロップ (pointer events で desktop + touch を 統一)
+      // v815 #409 ドラッグアンドドロップ (pointer events で desktop + touch を統一)
       attachTierChipDnd(btn, it.id, d, items, tiers, my);
-      // 既存 の 「タップ で 段階 を 回す」 動作 も 残す (DnD で 動か なかった 時 = pointertap)
+      // 既存の 「タップで段階を回す」 動作も残す (DnD で動かなかった時 = pointertap)
       btn.addEventListener('click', (ev) => {
         if (btn.dataset.dragged === '1') {
           btn.dataset.dragged = '';
@@ -280,21 +280,21 @@ function paintBoard(d, items, tiers, my) {
   }
 }
 
-// v815 #409 ティア チップ の DnD。 pointer events で desktop / mobile 共通 に。
-//   - pointerdown で ゴースト 要素 を 作って 体感 ドラッグ
-//   - pointermove で elementFromPoint → 最 近 接 の .tl-row を ハイライト
-//   - pointerup で 該当 row の data-tier を my[iid] に 反映 → 再 描画
-//   - 5 px 未満 の 移動 で 終わった ら クリック (= 段階 を 回す) として 扱う
+// v815 #409 ティアチップの DnD。 pointer events で desktop / mobile 共通に。
+//   - pointerdown でゴースト要素を作って体感ドラッグ
+//   - pointermove で elementFromPoint → 最近接の .tl-row をハイライト
+//   - pointerup で該当 row の data-tier を my[iid] に反映 → 再描画
+//   - 5 px 未満の移動で終わったらクリック (= 段階を回す) として扱う
 function attachTierChipDnd(btn, iid, d, items, tiers, my) {
   btn.addEventListener('pointerdown', (ev) => {
-    if (ev.button !== undefined && ev.button !== 0) return; // 左 クリック / 主 ポインタ のみ
+    if (ev.button !== undefined && ev.button !== 0) return; // 左クリック / 主ポインタのみ
     ev.preventDefault();
     const startX = ev.clientX, startY = ev.clientY;
     const rect = btn.getBoundingClientRect();
     const offX = startX - rect.left, offY = startY - rect.top;
     let moved = false;
     let lastTarget = null;
-    // ゴースト (元 を 半透明 に、 cursor 追従 の クローン を body に append)
+    // ゴースト (元を半透明に、 cursor 追従のクローンを body に append)
     const ghost = btn.cloneNode(true);
     ghost.style.position = 'fixed';
     ghost.style.left = rect.left + 'px';
@@ -330,7 +330,7 @@ function attachTierChipDnd(btn, iid, d, items, tiers, my) {
       ghost.remove();
       btn.style.opacity = '';
       if (lastTarget) lastTarget.style.outline = '';
-      if (!moved) return; // click → cycle に 任せる
+      if (!moved) return; // click → cycle に任せる
       btn.dataset.dragged = '1';
       const row = findRow(e.clientX, e.clientY);
       if (!row) return;

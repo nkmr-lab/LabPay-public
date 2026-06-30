@@ -7,8 +7,8 @@ declare(strict_types=1);
 class Notifier {
     private const EMAILABLE_TYPES = ['sale', 'transfer_received', 'task_approved', 'admin_notice'];
 
-    // v656 ref_type + ref_id → アプリ 内 URL fragment。 Slack DM 末尾 に
-    // 「→ https://pay.nkmr.io/#/...」 を 付ける ため。 未対応 type は null。
+    // v656 ref_type + ref_id → アプリ内 URL fragment。 Slack DM 末尾に
+    // 「→ https://pay.nkmr.io/#/...」 を付けるため。 未対応 type は null。
     public static function urlFor(?string $refType, ?int $refId): ?string {
         if (!$refType || !$refId) return null;
         return match ($refType) {
@@ -33,9 +33,9 @@ class Notifier {
             'nomikai'                                => "#/nomikai/{$refId}",
             'roulette'                               => "#/roulette/{$refId}",
             'timer'                                  => "#/timers/{$refId}",
-            'bait_request'                           => "#/bait/{$refId}",  // v780 #374 アルバイト 申請 通知 に URL を 付ける
+            'bait_request'                           => "#/bait/{$refId}",  // v780 #374 アルバイト申請通知に URL を付ける
             // v781 #376 deep_research / v788 #386 paper_full_translation は ref_id が DB row id だが
-            //   URL は share_token な ので urlFor では 解決 でき ない (body に URL を 含めて いる)
+            //   URL は share_token なので urlFor では解決できない (body に URL を含めている)
             default                                  => null,
         };
     }
@@ -49,8 +49,8 @@ class Notifier {
         ?string $refType = null,
         ?int $refId = null
     ): int {
-        // v697 #283 admin が 自分 で 送った feedback の 通知 は 最初 から 既読 に
-        //   して おく (自作 自演 の 受領 通知 は 表示 不要)。 feedback 以外 は 通常 通り。
+        // v697 #283 admin が自分で送った feedback の通知は最初から既読に
+        //   しておく (自作自演の受領通知は表示不要)。 feedback 以外は通常通り。
         $readNow = false;
         if ($refType === 'feedback') {
             try {
@@ -96,8 +96,8 @@ class Notifier {
                 $u->execute([$userId]);
                 $sid = (string)($u->fetchColumn() ?: '');
                 if ($sid !== '') {
-                    // v656 通知 が どの ページ に 対応 する か を URL で 末尾 に 付ける
-                    // (Slack 上 から すぐ 飛べる ように)。 unfurl は 引き続き off の まま。
+                    // v656 通知がどのページに対応するかを URL で末尾に付ける
+                    // (Slack 上からすぐ飛べるように)。 unfurl は引き続き off のまま。
                     $slackText = '[LabPay] ' . $body;
                     $frag = self::urlFor($refType, $refId);
                     if ($frag !== null) {
@@ -119,8 +119,8 @@ class Notifier {
         return $nid;
     }
 
-    // notifications 行だけ作る (Slack DM / メールを 送らない)。 督促のように
-    // 「LabPay の 通知タブ に だけ 出したい」 系の 用途で 使う。
+    // notifications 行だけ作る (Slack DM / メールを送らない)。 督促のように
+    // 「LabPay の通知タブにだけ出したい」 系の用途で使う。
     public static function notifyInApp(
         PDO $pdo,
         int $userId,

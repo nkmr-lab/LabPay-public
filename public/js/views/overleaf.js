@@ -1,11 +1,11 @@
-// /#/overleaf — Overleaf プロジェクト 追跡 (LabPay 内 アプリ)。 教員 admin 限定。
-//   pyoverleaf が 教員 アカウント の 全 共有 プロジェクト を 定期 取得 → 文字数 スナップショット
-//   が DB に積まれる → ここ で 「最近 動き が あった プロジェクト」 を 一覧 表示、 詳細 で 推移 を見る。
+// /#/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。 教員 admin 限定。
+//   pyoverleaf が教員アカウントの全共有プロジェクトを定期取得 → 文字数スナップショット
+//   が DB に積まれる → ここで 「最近動きがあったプロジェクト」 を一覧表示、 詳細で推移を見る。
 //
 // 設計:
-//   - 一覧: 直近 24h / 7d の 文字数 増減 を 出す、 並び順 = 最終 更新 / 24h 増加 / 7d 増加 / 名前
-//   - 詳細: 60 日 chart + 最新 ファイル 別 内訳
-//   - admin が collector を 設定 し て 走らせる 想定。 未 設定 なら 「セット アップ ガイド」 表示。
+//   - 一覧: 直近 24h / 7d の文字数増減を出す、 並び順 = 最終更新 / 24h 増加 / 7d 増加 / 名前
+//   - 詳細: 60 日 chart + 最新ファイル別内訳
+//   - admin が collector を設定して走らせる想定。 未設定なら 「セットアップガイド」 表示。
 
 import { get } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -54,7 +54,7 @@ export async function renderOverleafList() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center">
-        <h2 style="margin:0">📝 Overleaf プロジェクト 追跡</h2>
+        <h2 style="margin:0">📝 Overleaf プロジェクト追跡</h2>
       </div>
       <div id="ovl-status" class="hint" style="margin-top:4px; font-size:11px"></div>
     </div>
@@ -89,7 +89,7 @@ export async function renderOverleafList() {
     const st = document.getElementById('ovl-status');
     if (s.last_run) {
       const tag = s.last_run.ok ? '✓' : '✗';
-      st.innerHTML = `${tag} 最終取得: ${fmtRelative(s.last_run.finished_at || s.last_run.started_at)} ・ プロジェクト ${s.project_count} 件 / snapshot ${s.snapshot_count.toLocaleString()} 件`;
+      st.innerHTML = `${tag} 最終取得: ${fmtRelative(s.last_run.finished_at || s.last_run.started_at)} ・プロジェクト ${s.project_count} 件 / snapshot ${s.snapshot_count.toLocaleString()} 件`;
       if (!s.last_run.ok && s.last_run.error_msg) {
         st.innerHTML += ` <span style="color:#dc2626">(err: ${escapeHtml(s.last_run.error_msg.slice(0,120))})</span>`;
       }
@@ -156,7 +156,7 @@ export async function renderOverleafList() {
               ${escapeHtml(p.name)} ${archTag}
             </div>
             <div class="meta" style="font-size:12px">
-              👤 ${escapeHtml(own)} ・ 最終更新 ${escapeHtml(lastU)}
+              👤 ${escapeHtml(own)} ・最終更新 ${escapeHtml(lastU)}
               ${p.latest ? ` ・ ${p.latest.file_count} ファイル` : ''}
             </div>
             <div style="margin-top:4px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
@@ -185,11 +185,11 @@ export async function renderOverleafDetail({ params }) {
       <div id="ovd-head" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card" id="ovd-chart-card" hidden>
-      <h3 style="margin:0 0 8px">📈 文字数 推移 (直近 60 日)</h3>
+      <h3 style="margin:0 0 8px">📈 文字数推移 (直近 60 日)</h3>
       <div id="ovd-chart"></div>
     </div>
     <div class="card" id="ovd-files-card" hidden>
-      <h3 style="margin:0 0 8px">📂 ファイル別 内訳 (最新 snapshot)</h3>
+      <h3 style="margin:0 0 8px">📂 ファイル別内訳 (最新 snapshot)</h3>
       <div id="ovd-files"></div>
     </div>
   `;
@@ -206,7 +206,7 @@ export async function renderOverleafDetail({ params }) {
   const overleafUrl = `https://www.overleaf.com/project/${encodeURIComponent(p.overleaf_id)}`;
   head.innerHTML = `
     <h2 style="margin:0">${escapeHtml(p.name)}</h2>
-    <div class="meta" style="margin-top:4px">👤 ${escapeHtml(own)} ・ 初回観測 ${escapeHtml(p.first_seen_at || '?')} ・ 最終更新 ${escapeHtml(p.last_remote_updated_at || '?')}</div>
+    <div class="meta" style="margin-top:4px">👤 ${escapeHtml(own)} ・初回観測 ${escapeHtml(p.first_seen_at || '?')} ・最終更新 ${escapeHtml(p.last_remote_updated_at || '?')}</div>
     <div style="margin-top:8px">
       <a class="btn primary" href="${escapeHtml(overleafUrl)}" target="_blank" rel="noopener">↗ Overleaf で開く</a>
     </div>
@@ -269,7 +269,7 @@ function renderHistoryChart(history) {
     yAxis.push(`<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
                 <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="#888">${yv.toLocaleString()}</text>`);
   }
-  // X 軸 ラベル: 日付 (4 箇所)
+  // X 軸ラベル: 日付 (4 箇所)
   const xLabels = [];
   const nTicks = 4;
   for (let i = 0; i <= nTicks; i++) {

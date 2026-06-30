@@ -1,18 +1,18 @@
-// v456 ユーザ設定 を サーバ と 同期 する 軽量ヘルパ。
-// 既存 コード は localStorage.getItem / setItem を 使い続け ている (大改造 を
-// 避ける ため)。 この モジュール は:
-//  - ログイン直後 に サーバの 設定 を 一括取得 → localStorage に 反映
-//    (= 別デバイス で 設定した 内容が 自端末 に 即 効く)
-//  - localStorage.setItem の 横で 100ms debounce で サーバ にも 上げる
-//    (= 自端末 で 設定 変更 → サーバ → 他端末 で 次回ログイン時 に 反映)
+// v456 ユーザ設定をサーバと同期する軽量ヘルパ。
+// 既存コードは localStorage.getItem / setItem を使い続けている (大改造を
+// 避けるため)。 このモジュールは:
+//  - ログイン直後にサーバの設定を一括取得 → localStorage に反映
+//    (= 別デバイスで設定した内容が自端末に即効く)
+//  - localStorage.setItem の横で 100ms debounce でサーバにも上げる
+//    (= 自端末で設定変更 → サーバ → 他端末で次回ログイン時に反映)
 //
-// 同期 対象 は 「labpay-」 で 始まる キー (= LabPay 内 設定)。 他の キー
-// (= 外部ライブラリ 等) は 触らない。
+// 同期対象は 「labpay-」 で始まるキー (= LabPay 内設定)。 他のキー
+// (= 外部ライブラリ等) は触らない。
 //
-// 起動 順: app.js の init で boot() を 呼ぶ → fetch → localStorage 上書き →
-// その後 各 view が localStorage を 読み込む。 「初回 fetch が 終わる 前 に
-// view が 描画 され、 設定が 反映 されない」 race を 避ける ため、 boot は
-// await 可能 (Promise を 返す)。
+// 起動順: app.js の init で boot() を呼ぶ → fetch → localStorage 上書き →
+// その後各 view が localStorage を読み込む。 「初回 fetch が終わる前に
+// view が描画され、 設定が反映されない」 race を避けるため、 boot は
+// await 可能 (Promise を返す)。
 
 import { get, put } from './api.js';
 
@@ -31,9 +31,9 @@ function parseStored(raw) {
   try { return JSON.parse(raw); } catch (_) { return raw; }
 }
 
-// サーバから 全件 取得 → localStorage を 上書き。 既に localStorage に ある
-// キー も サーバ値 で 上書き する (=サーバ が ground truth)。 自端末 で 直近
-// 変更 を 失わ ない ため、 boot 前 に 書かれた pending は flush してから 適用。
+// サーバから全件取得 → localStorage を上書き。 既に localStorage にある
+// キーもサーバ値で上書きする (=サーバが ground truth)。 自端末で直近
+// 変更を失わないため、 boot 前に書かれた pending は flush してから適用。
 export async function bootSettingsSync() {
   if (booted) return;
   booted = true;
@@ -42,14 +42,14 @@ export async function bootSettingsSync() {
     const items = r.items || {};
     for (const k in items) {
       try {
-        // value が object/array なら JSON.stringify、 文字列/数値/bool は そのまま 保存。
+        // value が object/array なら JSON.stringify、 文字列/数値/bool はそのまま保存。
         const v = items[k];
         const stored = (typeof v === 'string') ? v : JSON.stringify(v);
         localStorage.setItem(k, stored);
       } catch (_) {}
     }
-  } catch (_) { /* swallow — offline / 未ログイン 等 */ }
-  // localStorage.setItem を フック して 以後 の 変更 を サーバ に 送る
+  } catch (_) { /* swallow — offline / 未ログイン等 */ }
+  // localStorage.setItem をフックして以後の変更をサーバに送る
   installSetItemHook();
 }
 
@@ -67,7 +67,7 @@ function installSetItemHook() {
   Storage.prototype.removeItem = function (key) {
     origRemove.call(this, key);
     if (this === window.localStorage && shouldSync(key)) {
-      // pending 中 だった 場合 は 一旦 取り消し、 サーバ には null を 上げる
+      // pending 中だった場合は一旦取り消し、 サーバには null を上げる
       pendingWrites.set(key, null);
       scheduleFlush();
     }
@@ -88,13 +88,13 @@ async function flushPending() {
   const batch = {};
   for (const [k, v] of pendingWrites) {
     if (v === null) { batch[k] = null; continue; }
-    // 文字列を 受け取って いる が、 サーバには parse した 形 で 送る (= 再度
-    // 読み出す とき に object/array の まま 受け取れる)。 parse 失敗 なら 生 文字列。
+    // 文字列を受け取っているが、 サーバには parse した形で送る (= 再度
+    // 読み出すときに object/array のまま受け取れる)。 parse 失敗なら生文字列。
     let parsed;
     try { parsed = JSON.parse(v); } catch (_) { parsed = v; }
     batch[k] = parsed;
   }
   pendingWrites.clear();
   try { await put('/api/me/settings', batch); }
-  catch (_) { /* swallow — 次回 fluction で 再試行 されない が、 ローカル には 既に 反映 済み */ }
+  catch (_) { /* swallow — 次回 fluction で再試行されないが、 ローカルには既に反映済み */ }
 }

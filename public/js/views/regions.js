@@ -1,7 +1,7 @@
-// /#/regions — 行った国 / 都道府県 を 登録 + 可視化 (制覇マップ)。
-// v531 #163。 2 タブ (🇯🇵 都道府県 / 🌏 国) で それぞれグリッド表示、
-//   タップで トグル、 進捗バー + 件数表示。 他メンバーの集計 (ラボ全体) も
-//   各セルに 「N 人訪問」 と 控えめに 表示。
+// /#/regions — 行った国 / 都道府県を登録 + 可視化 (制覇マップ)。
+// v531 #163。 2 タブ (🇯🇵 都道府県 / 🌏 国) でそれぞれグリッド表示、
+//   タップでトグル、 進捗バー + 件数表示。 他メンバーの集計 (ラボ全体) も
+//   各セルに 「N 人訪問」 と控えめに表示。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -12,11 +12,11 @@ let visitedSet = null;  // 'kind:code' Set
 let labStats   = { country: {}, prefecture: {} };
 let activeTab  = 'prefecture';
 // v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 47 都道府県 polygon SVG を
-//   /img/jp-prefectures.svg に 配置、 ここ で 1 回 fetch + parse して キャッシュ。
-//   paint() の renderJpMap で cloneNode して 色 を 塗り替える。
-// v864 #442 第三段: 同じ 仕組み で 世界地図 も SVG ベクター 化。 /img/world.svg は
-//   Natural Earth 110m (Public Domain) を Equirectangular で SVG 化 した もの。
-//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と 1:1 で 整合。
+//   /img/jp-prefectures.svg に配置、 ここで 1 回 fetch + parse してキャッシュ。
+//   paint() の renderJpMap で cloneNode して色を塗り替える。
+// v864 #442 第三段: 同じ仕組みで世界地図も SVG ベクター化。 /img/world.svg は
+//   Natural Earth 110m (Public Domain) を Equirectangular で SVG 化したもの。
+//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と 1:1 で整合。
 let cachedJpSvgEl = null;
 let cachedWorldSvgEl = null;
 
@@ -99,8 +99,8 @@ function paint() {
     if (visitedSet.has(`${activeTab}:${it.code}`)) visitedN++;
   }
   const pct = total ? Math.round(visitedN * 100 / total) : 0;
-  // v536 #192 都道府県タブ では 進捗バー の下に スタイライズ Japan マップ を表示。
-  //   v864 #442 国 タブ も Natural Earth 由来 の 世界地図 SVG を 表示。
+  // v536 #192 都道府県タブでは進捗バーの下にスタイライズ Japan マップを表示。
+  //   v864 #442 国タブも Natural Earth 由来の世界地図 SVG を表示。
   const mapBlock = activeTab === 'prefecture' ? renderJpMap() : renderWorldMap();
   document.getElementById('rg-progress').innerHTML = `
     <div class="bold" style="font-size:16px; color:var(--primary)">${visitedN} / ${total} 制覇 (${pct}%)</div>
@@ -109,7 +109,7 @@ function paint() {
     </div>
     ${mapBlock}`;
 
-  // セルを 地方 (region) ごとに セクション分けして 表示
+  // セルを地方 (region) ごとにセクション分けして表示
   const byRegion = {};
   for (const it of items) {
     if (!byRegion[it.region]) byRegion[it.region] = [];
@@ -120,7 +120,7 @@ function paint() {
       const key = `${activeTab}:${it.code}`;
       const visited = visitedSet.has(key);
       const labN = labStats[activeTab]?.[it.code] || 0;
-      const labLine = labN > 0 ? `<div class="hint" style="font-size:10px; margin-top:1px">${labN}人 訪問</div>` : '';
+      const labLine = labN > 0 ? `<div class="hint" style="font-size:10px; margin-top:1px">${labN}人訪問</div>` : '';
       const flag = it.flag ? `${it.flag} ` : '';
       return `
         <div class="rg-cell" data-code="${it.code}"
@@ -161,18 +161,18 @@ function paint() {
   });
 }
 
-// v859 #442 第二段: geolonia/japanese-prefectures (MIT) の 実 polygon SVG を
-//   使って 「本物 の 日本地図」 を 描画。 各 prefecture g に visited 色 を 塗り、
-//   既存 の .rg-map-cell click handler に 乗せて トグル。 SVG は ensureJpSvg で
-//   1 回 fetch 済み、 ここ では cloneNode して 状態 反映 だけ。
+// v859 #442 第二段: geolonia/japanese-prefectures (MIT) の実 polygon SVG を
+//   使って 「本物の日本地図」 を描画。 各 prefecture g に visited 色を塗り、
+//   既存の .rg-map-cell click handler に乗せてトグル。 SVG は ensureJpSvg で
+//   1 回 fetch 済み、 ここでは cloneNode して状態反映だけ。
 function renderJpMap() {
   if (cachedJpSvgEl) return renderJpMapSvg();
   return renderJpMapFallback();
 }
 
-// v864 #442 第三段: Natural Earth 110m (Public Domain) の 世界地図 SVG を 描画。
-//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と 同じ 形式。
-//   既訪 は 濃紫 ベタ塗り、 未訪 は 白塗り + 薄枠、 タップ で トグル。
+// v864 #442 第三段: Natural Earth 110m (Public Domain) の世界地図 SVG を描画。
+//   path id = ISO 3166-1 alpha-2 (例: id="JP")、 LabPay の COUNTRIES.code と同じ形式。
+//   既訪は濃紫ベタ塗り、 未訪は白塗り + 薄枠、 タップでトグル。
 function renderWorldMap() {
   if (!cachedWorldSvgEl) return '';
   const svg = cachedWorldSvgEl.cloneNode(true);
@@ -191,7 +191,7 @@ function renderWorldMap() {
   });
   return `
     <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
-      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🌏 世界地図 (タップで トグル) — 地図 © <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Natural Earth</a> (Public Domain)</div>
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🌏 世界地図 (タップでトグル) — 地図 © <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Natural Earth</a> (Public Domain)</div>
       ${svg.outerHTML}
     </div>`;
 }
@@ -202,8 +202,8 @@ function renderJpMapSvg() {
   svg.removeAttribute('width');
   svg.removeAttribute('height');
   svg.setAttribute('style', 'display:block; width:100%; max-width:560px; margin:0 auto');
-  // 各 都道府県 g に 色 + class + dataset.code を 仕込む。
-  // geolonia は data-code="1" 〜 "47" (ゼロパディング なし)、 LabPay は 'JP-01' 〜 'JP-47'。
+  // 各都道府県 g に色 + class + dataset.code を仕込む。
+  // geolonia は data-code="1" 〜 "47" (ゼロパディングなし)、 LabPay は 'JP-01' 〜 'JP-47'。
   svg.querySelectorAll('g.prefecture').forEach(g => {
     const num = g.getAttribute('data-code');
     if (!num) return;
@@ -218,13 +218,13 @@ function renderJpMapSvg() {
   });
   return `
     <div style="margin-top:14px; padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
-      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (タップで トグル) — 地図 © <a href="https://github.com/geolonia/japanese-prefectures" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Geolonia</a> (MIT)</div>
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (タップでトグル) — 地図 © <a href="https://github.com/geolonia/japanese-prefectures" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline">Geolonia</a> (MIT)</div>
       ${svg.outerHTML}
     </div>`;
 }
 
-// fetch 失敗 時 の 退避 (旧 14×16 ダミー 配置 を 簡素 SVG で 描画)。
-//   通常 は 発火 しない。 オフライン 初回 で SVG キャッシュ が 無い 等。
+// fetch 失敗時の退避 (旧 14×16 ダミー配置を簡素 SVG で描画)。
+//   通常は発火しない。 オフライン初回で SVG キャッシュが無い等。
 function renderJpMapFallback() {
   const SVG_W = 400, SVG_H = 540;
   const CELL_GAP = 26;
@@ -232,9 +232,9 @@ function renderJpMapFallback() {
   const prefMap = Object.fromEntries(PREFECTURES.map(p => [p.code, p]));
   const shortLabel = (name) => name.replace(/[都道府県]$/, '').slice(0, 2);
 
-  // 日本列島 を ざっくり 4 つ の 多角形 + 沖縄 楕円 で 近似。 正確 な 地図 では ない が、
-  // 「海 と 島 の 形 が ある」 ことで 「ベクター な 地図」 として 機能 する。
-  // 後 で 真 の GeoJSON 由来 polygon に 差し替え 予定 (別 バッチ)。
+  // 日本列島をざっくり 4 つの多角形 + 沖縄楕円で近似。 正確な地図ではないが、
+  // 「海と島の形がある」 ことで 「ベクターな地図」 として機能する。
+  // 後で真の GeoJSON 由来 polygon に差し替え予定 (別バッチ)。
   const islandLayer = `
     <path d="M 250 30 Q 295 22, 340 38 Q 372 58, 372 95 Q 352 132, 305 142 Q 252 132, 232 102 Q 232 60, 250 30 Z"
           fill="#fcd6c0" stroke="#d99875" stroke-width="1.2"/>
@@ -264,7 +264,7 @@ function renderJpMapFallback() {
 
   return `
     <div style="margin-top:14px; padding:8px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%); border-radius:10px">
-      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (SVG ベクター — タップで トグル)</div>
+      <div class="hint-sm" style="font-size:11px; text-align:center; margin-bottom:6px; color:#1d4ed8">🗾 日本地図 (SVG ベクター — タップでトグル)</div>
       <svg viewBox="0 0 ${SVG_W} ${SVG_H}" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; max-width:520px; margin:0 auto">
         ${islandLayer}
         ${dots}

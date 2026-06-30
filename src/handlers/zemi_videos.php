@@ -1,5 +1,5 @@
 <?php
-// /api/zemi-videos — ゼミ動画 (URL限定公開のYouTube) を 一覧 + 検索 + 視聴 (v843 #426)。
+// /api/zemi-videos — ゼミ動画 (URL限定公開のYouTube) を一覧 + 検索 + 視聴 (v843 #426)。
 //
 //   GET    /api/zemi-videos                    一覧 (?q=keyword で title/description LIKE 検索)
 //   GET    /api/zemi-videos/<id>               1 件取得
@@ -48,7 +48,7 @@ function route_zemi_videos(PDO $pdo, array $cfg, string $method, array $seg): vo
     throw new ApiException('not_found', "no route for $method", 404);
 }
 
-// YouTube URL から ID を 抽出。 失敗で null。
+// YouTube URL から ID を抽出。 失敗で null。
 //   対応: youtube.com/watch?v=XXX, youtu.be/XXX, youtube.com/embed/XXX, youtube.com/shorts/XXX
 function zemi_videos_extract_youtube_id(string $url): ?string {
     $url = trim($url);
@@ -67,7 +67,7 @@ function zemi_videos_row_to_array(array $r): array {
         'id'           => (int)$r['id'],
         'user_id'      => (int)$r['user_id'],
         'title'        => (string)$r['title'],
-        // v849 #436 YouTube タイトル (登録時に oEmbed で 取得した もの) を 優先 表示 する 用
+        // v849 #436 YouTube タイトル (登録時に oEmbed で取得したもの) を優先表示する用
         'youtube_title'  => $r['youtube_title']  ?? null,
         'youtube_author' => $r['youtube_author'] ?? null,
         'youtube_duration_sec' => isset($r['youtube_duration_sec']) ? (int)$r['youtube_duration_sec'] : null,
@@ -83,8 +83,8 @@ function zemi_videos_row_to_array(array $r): array {
     ];
 }
 
-// v849 #436 YouTube oEmbed API で title + author_name を 取得 (失敗時 null)
-// v855 さらに watch ページから lengthSeconds (動画 長 秒) も スクレイプ で 取得。
+// v849 #436 YouTube oEmbed API で title + author_name を取得 (失敗時 null)
+// v855 さらに watch ページから lengthSeconds (動画長秒) もスクレイプで取得。
 function zemi_videos_fetch_youtube_meta(string $videoId): array {
     $url = 'https://www.youtube.com/oembed?url=' . rawurlencode('https://www.youtube.com/watch?v=' . $videoId) . '&format=json';
     $ch = curl_init($url);
@@ -105,8 +105,8 @@ function zemi_videos_fetch_youtube_meta(string $videoId): array {
             $author = isset($j['author_name']) ? mb_substr((string)$j['author_name'], 0, 200) : null;
         }
     }
-    // 動画 長 (秒) スクレイプ。 watch ページに "lengthSeconds":"NNNN" が出るのでそれを抜く。
-    //   失敗しても null で 戻す (=タイトルだけは取れた状態)。
+    // 動画長 (秒) スクレイプ。 watch ページに "lengthSeconds":"NNNN" が出るのでそれを抜く。
+    //   失敗しても null で戻す (=タイトルだけは取れた状態)。
     $durSec = null;
     $watchUrl = 'https://www.youtube.com/watch?v=' . rawurlencode($videoId);
     $ch2 = curl_init($watchUrl);
@@ -154,7 +154,7 @@ function zemi_videos_list(PDO $pdo, array $cfg): void {
     $st = $pdo->prepare($sql);
     $st->execute($args);
     $items = array_map('zemi_videos_row_to_array', $st->fetchAll(PDO::FETCH_ASSOC));
-    // v854 「途中で止まってる」 と感じないよう、 全件 数も同時に返す
+    // v854 「途中で止まってる」 と感じないよう、 全件数も同時に返す
     $totalAll = (int)$pdo->query("SELECT COUNT(*) FROM zemi_videos")->fetchColumn();
     json_response(['items' => $items, 'q' => $q, 'total_in_db' => $totalAll]);
 }
@@ -184,9 +184,9 @@ function zemi_videos_create(PDO $pdo, int $uid): void {
     }
     $vid = zemi_videos_extract_youtube_id($url);
     if ($vid === null) {
-        throw new ApiException('bad_request', 'YouTube URL が認識できませんでした (youtube.com / youtu.be 形式 か 11 文字の ID)', 400);
+        throw new ApiException('bad_request', 'YouTube URL が認識できませんでした (youtube.com / youtu.be 形式か 11 文字の ID)', 400);
     }
-    // v849 #435 重複防止: 既に同じ youtube_id が登録されていれば そちらを返す
+    // v849 #435 重複防止: 既に同じ youtube_id が登録されていればそちらを返す
     $exist = $pdo->prepare("SELECT id FROM zemi_videos WHERE youtube_id=?");
     $exist->execute([$vid]);
     $existId = (int)$exist->fetchColumn();
@@ -200,8 +200,8 @@ function zemi_videos_create(PDO $pdo, int $uid): void {
         }
         $dateNorm = $date;
     }
-    // v849 #436 YouTube oEmbed で 正式 タイトル + author を 取得 (失敗時 null)
-    // v855 + 動画 長 (秒) も 一緒 に
+    // v849 #436 YouTube oEmbed で正式タイトル + author を取得 (失敗時 null)
+    // v855 + 動画長 (秒) も一緒に
     $meta = zemi_videos_fetch_youtube_meta($vid);
     $st = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, youtube_duration_sec, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?,?)");
     $st->execute([$uid, $title, $meta['title'], $meta['author'], $meta['duration_sec'], ($desc === '' ? null : $desc), $vid, $url, $dateNorm]);
@@ -264,7 +264,7 @@ function zemi_videos_delete(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
 
 // v846 Cosense (nkmr-lab) の 「全体ゼミ」 タグページから YouTube URL を一括取り込み。
 //
-//   1. タグページ /api/pages/<project>/全体ゼミ を取得 → relatedPages.links1hop で
+//   1. タグページ /api/pages/<project>/全体ゼミを取得 → relatedPages.links1hop で
 //      タグが貼られた全ページのタイトル一覧を得る
 //   2. 各ページの本文 (lines) を取得 → YouTube URL を正規表現で抽出
 //   3. 既存の youtube_id と重複しないものを zemi_videos に INSERT
@@ -273,17 +273,17 @@ function zemi_videos_delete(PDO $pdo, int $uid, bool $isAdmin, int $id): void {
 function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
-        throw new ApiException('precondition', 'Scrapboxの鍵 (PAT) が未登録です。 設定 → Cosense連携 で登録してください', 412);
+        throw new ApiException('precondition', 'Scrapboxの鍵 (PAT) が未登録です。 設定 → Cosense連携で登録してください', 412);
     }
     $tag = (string)($_GET['tag'] ?? '全体ゼミ');
     if ($tag === '') $tag = '全体ゼミ';
 
-    // v851 #438 修正: relatedPages.links1hop (= タグページに backlinks してる ページ群) は、
-    //   研究ノートや月報など 「全体ゼミ」 をテキスト中で参照しているだけの ノイズページが大量
-    //   に混じる。 そこから YouTube URL を 拾うと 「踊歌ってみた」 みたいな 個人の音楽動画 が
-    //   ゼミ動画として 登録されてしまう。
-    //   タグページの `links` (= outgoing) を 使い、 「全体ゼミ」 で始まる ページタイトル に
-    //   限定する ことで、 実際の ゼミページ ([全体ゼミ 2026.04.30] みたいなやつ) だけ拾う。
+    // v851 #438 修正: relatedPages.links1hop (= タグページに backlinks してるページ群) は、
+    //   研究ノートや月報など 「全体ゼミ」 をテキスト中で参照しているだけのノイズページが大量
+    //   に混じる。 そこから YouTube URL を拾うと 「踊歌ってみた」 みたいな個人の音楽動画が
+    //   ゼミ動画として登録されてしまう。
+    //   タグページの `links` (= outgoing) を使い、 「全体ゼミ」 で始まるページタイトルに
+    //   限定することで、 実際のゼミページ ([全体ゼミ 2026.04.30] みたいなやつ) だけ拾う。
     $baseUrl = cosense_base($cfg) . '/api/pages/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($tag);
     $res = cosense_http('GET', $baseUrl, ['pat' => $pat]);
     if ($res['status'] !== 200) {
@@ -291,11 +291,11 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
     }
     $tagPage = json_decode($res['body'], true);
     if (!is_array($tagPage)) {
-        throw new ApiException('upstream', 'Cosense レスポンス が JSON ではありません', 502);
+        throw new ApiException('upstream', 'Cosense レスポンスが JSON ではありません', 502);
     }
-    // 候補ページタイトル を 3 系統 から かき集めて、 タグ名で始まるものだけに 絞る。
-    //   (a) page.links (= outgoing。 v1 でも 値は ある)
-    //   (b) page.lines を スキャン して [全体ゼミ XXX] パターンを抜く (= 確実な outgoing)
+    // 候補ページタイトルを 3 系統からかき集めて、 タグ名で始まるものだけに絞る。
+    //   (a) page.links (= outgoing。 v1 でも値はある)
+    //   (b) page.lines をスキャンして [全体ゼミ XXX] パターンを抜く (= 確実な outgoing)
     //   (c) relatedPages.links1hop (= incoming = backlinks。 タグが付いてるページ群)
     //   いずれも 「全体ゼミ XXXX」 で始まるタイトルに限定して dedupe。
     $prefix = $tag;
@@ -303,7 +303,7 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
         if (!is_string($s) || $s === '') return false;
         if (mb_strpos($s, $prefix) !== 0) return false;
         if ($s === $prefix) return false;
-        // 次の文字が空白 / アンダーバー / カッコ / 数字 等で 「全体ゼミの後に何か追記がある」 形のみ採用
+        // 次の文字が空白 / アンダーバー / カッコ / 数字等で 「全体ゼミの後に何か追記がある」 形のみ採用
         return preg_match('/^' . preg_quote($prefix, '/') . '[\s_\-（(\d]/u', $s) === 1;
     };
     $titles = [];
@@ -317,7 +317,7 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
         if (preg_match_all('/\[([^\]]+)\]/u', $t, $mm)) {
             foreach ($mm[1] as $cand) {
                 $cand = trim($cand);
-                // [* xxx] や [/ xxx] 等の 装飾記法 を除外
+                // [* xxx] や [/ xxx] 等の装飾記法を除外
                 if ($cand === '' || preg_match('/^[\*\/\-]/u', $cand)) continue;
                 // [text url] 形式 (URL 入りの装飾) は URL を含むので除外
                 if (preg_match('~https?://~', $cand)) continue;
@@ -366,7 +366,7 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
         // ページの最初の非空行を description として使う (タイトル除外)
         $descLines = [];
         foreach ($lines as $i => $ln) {
-            if ($i === 0) continue; // 1 行目は タイトル
+            if ($i === 0) continue; // 1 行目はタイトル
             $t = trim((string)($ln['text'] ?? ''));
             if ($t === '') continue;
             $descLines[] = $t;
@@ -387,8 +387,8 @@ function zemi_videos_import_from_cosense(PDO $pdo, array $cfg, int $uid): void {
             $seenInThisPage[$vid] = true;
             $existing[$vid] = true;
             try {
-                // v849 #436 import 時も oEmbed で YouTube タイトル を 取得 (= 動画一覧の表示が良くなる)
-                // v855 + 動画 長 (秒) も
+                // v849 #436 import 時も oEmbed で YouTube タイトルを取得 (= 動画一覧の表示が良くなる)
+                // v855 + 動画長 (秒) も
                 $meta = zemi_videos_fetch_youtube_meta($vid);
                 $ins = $pdo->prepare("INSERT INTO zemi_videos (user_id, title, youtube_title, youtube_author, youtube_duration_sec, description, youtube_id, youtube_url, occurred_on) VALUES (?,?,?,?,?,?,?,?,?)");
                 $ins->execute([$uid, mb_substr($title, 0, 300), $meta['title'], $meta['author'], $meta['duration_sec'], $desc, $vid, $url, $occurred]);

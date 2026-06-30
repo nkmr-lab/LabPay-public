@@ -23,9 +23,9 @@ function route_network(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "unknown network kind: $sub", 404);
 }
 
-// 在室共起ネットワーク: 同じ部屋 (room_id) で 同じ 1 時間スロット に 在室が
-// 検出された ユーザー同士に 共起カウントを +1。 ペア (a < b) で 集計し
-// 「件数」 として エッジ重み に。 days で 集計幅 切替 (7 / 30 / 365 / 0=全期間)。
+// 在室共起ネットワーク: 同じ部屋 (room_id) で同じ 1 時間スロットに在室が
+// 検出されたユーザー同士に共起カウントを +1。 ペア (a < b) で集計し
+// 「件数」 としてエッジ重みに。 days で集計幅切替 (7 / 30 / 365 / 0=全期間)。
 function network_presence_cooc(PDO $pdo, array $cfg): void {
     $days = max(0, min(3650, (int)($_GET['days'] ?? 7)));
     $params = [];
@@ -70,7 +70,7 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         }
     }
 
-    // ペア毎の カウント (無向、 a < b)
+    // ペア毎のカウント (無向、 a < b)
     $edges = [];      // "a-b" => count
     $userSet = [];
     foreach ($bucket as $users) {
@@ -94,9 +94,9 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         return;
     }
 
-    // v452 サーバ側 で 閾値 を 適用 せず、 全エッジ + 提案閾値 (75 パーセンタイル)
-    // を 返す。 クライアント が スライダ で 動的 に フィルタ。
-    // (最大 30 ユーザ で 30*29/2 = 435 エッジ ≈ 数 KB、 ペイロード問題なし)。
+    // v452 サーバ側で閾値を適用せず、 全エッジ + 提案閾値 (75 パーセンタイル)
+    // を返す。 クライアントがスライダで動的にフィルタ。
+    // (最大 30 ユーザで 30*29/2 = 435 エッジ ≈ 数 KB、 ペイロード問題なし)。
     $counts = array_values($edges);
     sort($counts, SORT_NUMERIC);
     $n = count($counts);
@@ -114,7 +114,7 @@ function network_presence_cooc(PDO $pdo, array $cfg): void {
         $nodeIds[$b] = true;
     }
 
-    // ノード 解決 (出現する 全ユーザ)
+    // ノード解決 (出現する全ユーザ)
     $uidList = array_keys($nodeIds);
     $place = implode(',', array_fill(0, count($uidList), '?'));
     $stU = $pdo->prepare("SELECT id, display_name, avatar_url FROM users WHERE id IN ($place)");

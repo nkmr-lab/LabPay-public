@@ -1,7 +1,7 @@
 <?php
-// /api/overleaf — Overleaf プロジェクト 追跡 (LabPay 内 アプリ)。
-//   pyoverleaf が DB に snapshot を 入れる → ここ で 集計 して 返す。
-//   現状 admin 限定 (教員 アカウント が cookie 持ってる前提)。
+// /api/overleaf — Overleaf プロジェクト追跡 (LabPay 内アプリ)。
+//   pyoverleaf が DB に snapshot を入れる → ここで集計して返す。
+//   現状 admin 限定 (教員アカウントが cookie 持ってる前提)。
 
 declare(strict_types=1);
 
@@ -26,7 +26,7 @@ function _overleaf_require_admin(PDO $pdo, array $cfg): array {
 function overleaf_list(PDO $pdo, array $cfg): void {
     _overleaf_require_admin($pdo, $cfg);
     // 各 project に対して 「最新 snapshot」 「24h 前 snapshot」 「7d 前 snapshot」 を抽出して
-    // 文字数 + 差分 を返す。 N 件 (最大 100) 想定。
+    // 文字数 + 差分を返す。 N 件 (最大 100) 想定。
     $rows = $pdo->query("
         SELECT p.id, p.overleaf_id, p.name, p.owner_email, p.owner_name,
                p.last_remote_updated_at, p.is_archived, p.is_trashed, p.first_seen_at
@@ -41,13 +41,13 @@ function overleaf_list(PDO $pdo, array $cfg): void {
           FROM overleaf_snapshots
          WHERE project_id = ?
          ORDER BY taken_at DESC LIMIT 1");
-    // 「N 時間 前 (またはそれ以前) の 最新 snapshot」 を返す
+    // 「N 時間前 (またはそれ以前) の最新 snapshot」 を返す
     $stPast = $pdo->prepare("
         SELECT total_char_count, total_char_body, total_jp_char_count, total_word_count, taken_at
           FROM overleaf_snapshots
          WHERE project_id = ? AND taken_at <= (NOW() - INTERVAL ? HOUR)
          ORDER BY taken_at DESC LIMIT 1");
-    // sparkline: 過去 14 日 を 24h 区切り で 14 点 (最新 snapshot を 各 day で 取る)
+    // sparkline: 過去 14 日を 24h 区切りで 14 点 (最新 snapshot を各 day で取る)
     $stSpark = $pdo->prepare("
         SELECT DATE(taken_at) AS d, MAX(total_char_count) AS c
           FROM overleaf_snapshots
@@ -114,7 +114,7 @@ function overleaf_detail(PDO $pdo, array $cfg, int $id): void {
     $stS->execute([$id]);
     $latest = $stS->fetch(PDO::FETCH_ASSOC);
 
-    // 直近 60 日 全 snapshot (chart 用)
+    // 直近 60 日全 snapshot (chart 用)
     $stHist = $pdo->prepare("SELECT id, taken_at, total_char_count, total_char_body, total_word_count, total_jp_char_count
         FROM overleaf_snapshots
         WHERE project_id = ? AND taken_at >= (NOW() - INTERVAL 60 DAY)

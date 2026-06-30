@@ -1,21 +1,21 @@
 // App entry: wires router, loads views, manages global chrome (balance pill, unread badge, logout).
-// v490 #88 起動 速度 改善: 50+ の view モジュール を eager import して いた の を
-//   route 時 の dynamic import() に 変更。 初回 起動 で 必要 な のは shell + login と
-//   home のみ。 これら 2 つ だけ eager、 他 は タップ 時 に 初回 ロード + キャッシュ。
+// v490 #88 起動速度改善: 50+ の view モジュールを eager import していたのを
+//   route 時の dynamic import() に変更。 初回起動で必要なのは shell + login と
+//   home のみ。 これら 2 つだけ eager、 他はタップ時に初回ロード + キャッシュ。
 
 import { route, start, navigate, escapeHtml } from './router.js';
 import { get, post } from './api.js';
 
-// ホット パス 2 つ (起動 直後 必ず 通る) は eager。
+// ホットパス 2 つ (起動直後必ず通る) は eager。
 import { renderLogin } from './views/login.js';
 import { renderHome } from './views/home.js';
 import { preloadSounds } from './sounds.js';
 import { installGlobalAudioUnlock } from './audio_unlock.js';
 import { bootSettingsSync } from './settings_sync.js';
 
-// 遅延 ロード ヘルパー: route 時 に 初回 だけ import する。 import() が 返す
-//   Promise は ブラウザ が キャッシュ する ので、 同じ ページ を 2 回目 開く と
-//   即時 解決。
+// 遅延ロードヘルパー: route 時に初回だけ import する。 import() が返す
+//   Promise はブラウザがキャッシュするので、 同じページを 2 回目開くと
+//   即時解決。
 function lazy(loader, name) {
   return (ctx) => loader().then(m => m[name](ctx));
 }
@@ -77,15 +77,15 @@ export async function refreshMe() {
     // タブの 「グループ」 表示判定。 失敗・遅延しても他の処理を止めないよう
     // fire-and-forget。 結果が遅れて来てもタブが追加で出るだけなので無害。
     refreshHasGroups();
-    // 効果音の解決済み 設定を 1 回だけ pull。 失敗しても他に影響しないよう fire-and-forget。
+    // 効果音の解決済み設定を 1 回だけ pull。 失敗しても他に影響しないよう fire-and-forget。
     preloadSounds();
-    // v448 ページ上の どこか で 最初に 起きた pointerdown / touchstart / keydown
-    // 1 回 で 共有 AudioContext + HTMLAudio を unlock。 以降 setInterval から の
-    // タイマーベル / 効果音 が iOS Safari でも 通る。
+    // v448 ページ上のどこかで最初に起きた pointerdown / touchstart / keydown
+    // 1 回で共有 AudioContext + HTMLAudio を unlock。 以降 setInterval からの
+    // タイマーベル / 効果音が iOS Safari でも通る。
     installGlobalAudioUnlock();
-    // v456 設定 を サーバ から 引いて localStorage に 反映 (デバイス間 同期)。
-    // 直後 に localStorage を 読み込む view が ある ので await。 失敗 しても 黙殺
-    // (オフライン や 未ログイン の フォールバック が きく)。
+    // v456 設定をサーバから引いて localStorage に反映 (デバイス間同期)。
+    // 直後に localStorage を読み込む view があるので await。 失敗しても黙殺
+    // (オフラインや未ログインのフォールバックがきく)。
     await bootSettingsSync();
     return data;
   } catch (e) {
@@ -107,7 +107,7 @@ export async function refreshMe() {
 
 // 自分が入ってるグループの有無を /api/groups で確認してタブ可視を更新。
 // home / groups の各 view で再度叩かれるが、 タブ判定だけは bootstrap で
-// 走らないと初回ページが home 以外の時 タブが出ないので app.js でも呼ぶ。
+// 走らないと初回ページが home 以外の時タブが出ないので app.js でも呼ぶ。
 export async function refreshHasGroups() {
   try {
     const d = await get('/api/groups');
@@ -116,8 +116,8 @@ export async function refreshHasGroups() {
   } catch (_) { /* 取れなければ前回値を保持 */ }
 }
 
-// 直近に見た最大 notification id。 polling で 新着検知に使う。
-// undefined の間 (= 初回ロード前) は 新着 toast を出さない (=スタート時の溜まりを
+// 直近に見た最大 notification id。 polling で新着検知に使う。
+// undefined の間 (= 初回ロード前) は新着 toast を出さない (=スタート時の溜まりを
 // 全部 toast に出してしまわないようにする)。
 let lastSeenNotifId;
 let lastUnread = 0;
@@ -127,7 +127,7 @@ export async function refreshUnread() {
   try {
     const d = await get('/api/notifications/unread_count');
     const newCount = d.unread || 0;
-    // 増加分があれば 直近の未読を取りに行って 「新着通知トースト」 を出す。
+    // 増加分があれば直近の未読を取りに行って 「新着通知トースト」 を出す。
     // 初回ロード時 (lastSeenNotifId 未定) は 「これ以降の追加分だけ」 を toast 対象にしたいので
     // 高水位を立てるだけで toast は鳴らさない。
     if (lastSeenNotifId !== undefined && newCount > lastUnread) {
@@ -250,10 +250,10 @@ function renderChrome() {
   const isAdmin = state.me.role === 'admin';
   adminLink.hidden = !isAdmin;
   if (feedbackAdminLink) feedbackAdminLink.hidden = !isAdmin;
-  // v445 → v464: admin の トップバー は 「通知 / 設定 / 管理 / FB | 機能要望 / バグ報告」。
-  // FB (= 報告・要望、 admin 専用 受信箱) と 機能要望 / バグ報告 (投稿 入口) を
-  // セパレータで 分ける。 機能要望 / バグ報告 は admin にも 表示 (Claude への 指示
-  // チャネル として 使う ため)。
+  // v445 → v464: admin のトップバーは 「通知 / 設定 / 管理 / FB | 機能要望 / バグ報告」。
+  // FB (= 報告・要望、 admin 専用受信箱) と機能要望 / バグ報告 (投稿入口) を
+  // セパレータで分ける。 機能要望 / バグ報告は admin にも表示 (Claude への指示
+  // チャネルとして使うため)。
   // v517 #146 「要望」 「報告」 を統合して 「📝 フィードバック」 1 つに
   const fbLink = document.getElementById('feedback-link');
   const sep    = document.getElementById('topbar-sep');
@@ -272,17 +272,17 @@ function renderChrome() {
 
 // ────────────── タブのカスタマイズ ──────────────────────────────────
 // 表示するタブと並び順を localStorage に保存。 設定の 「タブのカスタマイズ」 で編集。
-// nav#tabs 内の <a data-tab-id="..."> を 保存 order に従って並べ替え + hidden 適用。
+// nav#tabs 内の <a data-tab-id="..."> を保存 order に従って並べ替え + hidden 適用。
 // v497 #103 タブ整理:
 //   - 「購入」 を 「売買」 にrename (販売との合算入口的位置づけ)
 //   - 「食べある記」 (places) をタブとして追加
-//   - DEFAULT_HIDDEN_TABS: 販売 / 競売 / ラボにいる人 を初期非表示
+//   - DEFAULT_HIDDEN_TABS: 販売 / 競売 / ラボにいる人を初期非表示
 //     (販売・競売は能動操作型なのでメニュー深掘りで足りる、 「ラボにいる人」 は
 //      ホームに常設するため重複を避ける)。 ユーザが localStorage で明示設定済み
 //      なら尊重。
 // v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
-//   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。 食べある記・ラボにいる人 は タブから外し
-//   #/apps からアクセスする形に。 全員 デフォルトに戻すため、 layout key を v2 に上げる。
+//   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。 食べある記・ラボにいる人はタブから外し
+//   #/apps からアクセスする形に。 全員デフォルトに戻すため、 layout key を v2 に上げる。
 export const TAB_DEFS = [
   { id: 'home',         title: 'ホーム' },
   { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
@@ -303,7 +303,7 @@ export function readTabLayout() {
   try {
     const raw = localStorage.getItem(TAB_LAYOUT_KEY);
     // v497 #103 ユーザがまだ何も設定していない場合は DEFAULT_HIDDEN_TABS を初期値に。
-    //   既に保存している人は その内容を尊重 (再上書きしない)。
+    //   既に保存している人はその内容を尊重 (再上書きしない)。
     if (raw === null) return { order: [], hidden: [...DEFAULT_HIDDEN_TABS] };
     const j = JSON.parse(raw || '{}');
     return {
@@ -333,7 +333,7 @@ export function applyTabLayout() {
   for (const id of layout.order) {
     if (knownIds.includes(id) && !orderedKnown.includes(id)) orderedKnown.push(id);
   }
-  // layout.order に 無い 新規 ID を canonical で 補完
+  // layout.order に無い新規 ID を canonical で補完
   for (const id of canonical) {
     if (orderedKnown.includes(id)) continue;
     const ci = canonical.indexOf(id);
@@ -344,8 +344,8 @@ export function applyTabLayout() {
     }
     orderedKnown.splice(insertAfter + 1, 0, id);
   }
-  // v642 一旦 全部 detach してから 順番に append。 単純な appendChild の 連発 だと
-  //   ブラウザの 再 layout が 一部 反映されない 報告が あったため 確実に DOM を 再構築。
+  // v642 一旦全部 detach してから順番に append。 単純な appendChild の連発だと
+  //   ブラウザの再 layout が一部反映されない報告があったため確実に DOM を再構築。
   for (const link of links) { if (link.parentNode === nav) nav.removeChild(link); }
   for (const id of orderedKnown) {
     const el = linkMap.get(id);
@@ -438,9 +438,9 @@ document.getElementById('install-close').addEventListener('click', (ev) => {
 });
 
 // ---------- Routes ----------
-// 起動 ホット パス: ログイン / ホーム は eager-import 済み。 残り の view は
-//   lazy() で 初回 アクセス 時 だけ ロード。 module は ブラウザ が キャッシュ する
-//   ので 2 回目 以降 は 即時。
+// 起動ホットパス: ログイン / ホームは eager-import 済み。 残りの view は
+//   lazy() で初回アクセス時だけロード。 module はブラウザがキャッシュする
+//   ので 2 回目以降は即時。
 route('/login',          renderLogin);
 route('',                renderHome);          // #/
 route('/buy',            lazy(() => import('./views/buy.js'), 'renderBuy'));
@@ -449,8 +449,8 @@ route('/history',        lazy(() => import('./views/history.js'), 'renderHistory
 route('/notifications',  lazy(() => import('./views/notifications.js'), 'renderNotifications'));
 route('/admin',          lazy(() => import('./views/admin.js'), 'renderAdmin'));
 route('/feedback-admin',  lazy(() => import('./views/feedback_admin.js'), 'renderFeedbackAdmin'));
-route('/feature-request', lazy(() => import('./views/feedback_user.js'), 'renderFeatureRequest')); // v517 旧経路 互換
-route('/bug-report',      lazy(() => import('./views/feedback_user.js'), 'renderBugReport'));      // v517 旧経路 互換
+route('/feature-request', lazy(() => import('./views/feedback_user.js'), 'renderFeatureRequest')); // v517 旧経路互換
+route('/bug-report',      lazy(() => import('./views/feedback_user.js'), 'renderBugReport'));      // v517 旧経路互換
 route('/feedback',        lazy(() => import('./views/feedback_user.js'), 'renderFeedbackForm'));    // v517 #146 新統合
 route('/settings',       lazy(() => import('./views/settings.js'), 'renderSettings'));
 route('/achievements',   lazy(() => import('./views/achievements.js'), 'renderAchievements'));
@@ -495,7 +495,7 @@ route('/presence',        lazy(() => import('./views/presence.js'), 'renderPrese
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
 route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
 route('/admin/custom-games', lazy(() => import('./views/admin_custom_games.js'), 'renderAdminCustomGames'));
-// v620 自作ゲーム の ユーザ管理 UI + 汎用ディスパッチャ
+// v620 自作ゲームのユーザ管理 UI + 汎用ディスパッチャ
 route('/my-games',           lazy(() => import('./views/my_custom_games.js'), 'renderMyCustomGames'));
 // v634 ⚾ ドラフト
 route('/drafts',             lazy(() => import('./views/drafts.js'), 'renderDrafts'));
@@ -523,7 +523,7 @@ route('/chat',              lazy(() => import('./views/chat.js'), 'renderChat'))
 route('/exercise',        lazy(() => import('./views/exercise.js'), 'renderExercise'));
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
 route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
-// v609 #234 タブ単位の カテゴリ絞り込み
+// v609 #234 タブ単位のカテゴリ絞り込み
 route('/research',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'research' })));
 route('/lab-mgmt',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'lab-mgmt' })));
 route('/contacts',       lazy(() => import('./views/contacts.js'), 'renderContacts'));
@@ -538,25 +538,25 @@ route('/groups/:id/map', lazy(() => import('./views/group_map.js'), 'renderGroup
 route('/groups/:id',     lazy(() => import('./views/groups.js'), 'renderGroupDetail'));
 route('/scrapbox',       lazy(() => import('./views/scrapbox_feed.js'), 'renderScrapboxFeed'));
 route('/random-groups',  lazy(() => import('./views/random_groups.js'), 'renderRandomGroups'));
-// v523 #160 順番決め (発表順 / 当番 など)
+// v523 #160 順番決め (発表順 / 当番など)
 route('/orderings',       lazy(() => import('./views/orderings.js'), 'renderOrderings'));
 route('/orderings/new',   lazy(() => import('./views/orderings.js'), 'renderOrderingNew'));
 route('/orderings/:id',   lazy(() => import('./views/orderings.js'), 'renderOrderingDetail'));
-// v531 #163 行った国 / 都道府県 制覇マップ
+// v531 #163 行った国 / 都道府県制覇マップ
 route('/regions',         lazy(() => import('./views/regions.js'), 'renderRegions'));
-// v860 #445 制覇 リスト (ユーザ自由 リスト + チェック)
+// v860 #445 制覇リスト (ユーザ自由リスト + チェック)
 route('/conquest',         lazy(() => import('./views/conquest.js'), 'renderConquest'));
 route('/conquest/new',     lazy(() => import('./views/conquest.js'), 'renderConquestNew'));
 route('/conquest/:id',     lazy(() => import('./views/conquest.js'), 'renderConquestDetail'));
-// v870 #452 Habit Tracker (個人 / 公開 習慣 の 日 毎 ✓ 入力)
+// v870 #452 Habit Tracker (個人 / 公開習慣の日毎 ✓ 入力)
 route('/habits',           lazy(() => import('./views/habits.js'), 'renderHabits'));
 route('/habits/new',       lazy(() => import('./views/habits.js'), 'renderHabitsNew'));
 route('/habits/:id',       lazy(() => import('./views/habits.js'), 'renderHabitDetail'));
-// v872 #454 早押し クイズ (リアル 現場 で 出題者 + 参加者 で 早押し ボタン)
+// v872 #454 早押しクイズ (リアル現場で出題者 + 参加者で早押しボタン)
 route('/buzzer',           lazy(() => import('./views/buzzer.js'), 'renderBuzzerList'));
 route('/buzzer/new',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerNew'));
 route('/buzzer/:id',       lazy(() => import('./views/buzzer.js'), 'renderBuzzerDetail'));
-// v886 Overleaf プロジェクト 追跡 (教員 admin 限定、 学生 の 論文 執筆 状況 を 可視化)
+// v886 Overleaf プロジェクト追跡 (教員 admin 限定、 学生の論文執筆状況を可視化)
 route('/overleaf',         lazy(() => import('./views/overleaf.js'), 'renderOverleafList'));
 route('/overleaf/:id',     lazy(() => import('./views/overleaf.js'), 'renderOverleafDetail'));
 // v532 #161 体重 / BMI 記録
@@ -574,25 +574,25 @@ route('/shiritori/:id',     lazy(() => import('./views/shiritori.js'), 'renderSh
 route('/tierlists/new',     lazy(() => import('./views/tierlists.js'), 'renderTierlistNew'));
 route('/tierlists/:id',     lazy(() => import('./views/tierlists.js'), 'renderTierlistDetail'));
 route('/tierlists',         lazy(() => import('./views/tierlists.js'), 'renderTierlists'));
-// v550 #206 論文 査読
+// v550 #206 論文査読
 // v552 #211 #212 共有 URL ベース閲覧
 route('/paper-review/r/:token', lazy(() => import('./views/paper_review.js'), 'renderPaperReviewShared'));
 route('/paper-review',      lazy(() => import('./views/paper_review.js'), 'renderPaperReview'));
-// v748 #359 #360 #361 論文 要約 (= paper_translate handler を そのまま 使う)
-// v757 #375 slug を paper-summary に 改名 (和訳ない 論文 も ある ため)、 旧 paper-translate も 互換。
+// v748 #359 #360 #361 論文要約 (= paper_translate handler をそのまま使う)
+// v757 #375 slug を paper-summary に改名 (和訳ない論文もあるため)、 旧 paper-translate も互換。
 route('/paper-summary/r/:token',   lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
 route('/paper-summary',            lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
 route('/paper-translate/r/:token', lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslateShared'));
 route('/paper-translate',          lazy(() => import('./views/paper_translate.js'), 'renderPaperTranslate'));
-// v781 #376 Deep Research (ChatGPT 風 多段 Web 調査)
+// v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
 route('/deep-research/r/:token',   lazy(() => import('./views/deep_research.js'), 'renderDeepResearchShared'));
 route('/deep-research',            lazy(() => import('./views/deep_research.js'), 'renderDeepResearch'));
-// v788 #386 #387 #388 論文 全訳 (要約 で なく フル 翻訳、 章 ごと + back-translation)
+// v788 #386 #387 #388 論文全訳 (要約でなくフル翻訳、 章ごと + back-translation)
 route('/paper-translate-full/r/:token', lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFullShared'));
 route('/paper-translate-full',          lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFull'));
-// v809 論文 要約 + 全訳 の 合算 新着 一覧 (ホーム widget の 「すべて →」 リンク 先)
+// v809 論文要約 + 全訳の合算新着一覧 (ホーム widget の 「すべて →」 リンク先)
 route('/papers-recent',                 lazy(() => import('./views/papers_recent.js'), 'renderPapersRecent'));
-// v804 名言 登録 / 管理
+// v804 名言登録 / 管理
 route('/quotes',                        lazy(() => import('./views/quotes.js'), 'renderQuotes'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
@@ -623,7 +623,7 @@ route('/daifugo',           lazy(() => import('./views/daifugo.js'), 'renderDaif
 route('/score-predictions/new',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionNew'));
 route('/score-predictions/:id',  lazy(() => import('./views/score_predictions.js'), 'renderScorePredictionDetail'));
 route('/score-predictions',      lazy(() => import('./views/score_predictions.js'), 'renderScorePredictions'));
-// v617 #236 マルバツ (自作ゲーム フレームワーク サンプル)
+// v617 #236 マルバツ (自作ゲームフレームワークサンプル)
 route('/tictactoe/:id',     lazy(() => import('./views/tictactoe.js'), 'renderTicTacToeDetail'));
 route('/tictactoe',         lazy(() => import('./views/tictactoe.js'), 'renderTicTacToe'));
 // v568 #223 ito アプリ
@@ -640,7 +640,7 @@ route('/games',             lazy(() => import('./views/games.js'), 'renderGames'
 route('/predictions',         lazy(() => import('./views/predictions.js'), 'renderPredictions'));
 route('/predictions/new',     lazy(() => import('./views/predictions.js'), 'renderPredictionNew'));
 route('/predictions/:id',     lazy(() => import('./views/predictions.js'), 'renderPredictionDetail'));
-// v553 #209 麻雀 Phase 1 (lazy import で 普段は未読み込み、 Phase 2 で重くなる予定)
+// v553 #209 麻雀 Phase 1 (lazy import で普段は未読み込み、 Phase 2 で重くなる予定)
 route('/mahjong/new',       lazy(() => import('./views/mahjong.js'), 'renderMahjongNew'));
 // v556 シミュレータ (内部検証用)
 route('/mahjong/sim',       lazy(() => import('./views/mahjong_sim.js'), 'renderMahjongSim'));
@@ -686,7 +686,7 @@ route('/file-transfers',          lazy(() => import('./views/file_transfers.js')
     renderChrome();
     start();                          // ルート即時 dispatch
     refreshMe().then(() => {          // 裏で再検証
-      // v676 #256 /public-timer は 認証 不要
+      // v676 #256 /public-timer は認証不要
       if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) navigate('#/login');
     });
   } else {

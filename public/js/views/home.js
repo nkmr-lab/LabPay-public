@@ -5,10 +5,10 @@ import { ledgerTypeLabel } from '../labels.js';
 import { coverListItem } from './groups.js';
 import { fmtDate, fmtDateTime, participantChipRow } from '../format.js';
 
-// v445 復活: 端末の今いる場所 (実 OS タイムゾーン) を取り出す ヘルパ。
-// iana   = "Asia/Tokyo" 等。 サーバ に 「自分の今日」 を計算してもらう用。
-// suffix = "+09:00" 等。 datetime-local の文字列に 付けて 正しい ISO に する用。
-// 海外滞在中も そのまま動く (端末 OS の TZ を 拾う)。
+// v445 復活: 端末の今いる場所 (実 OS タイムゾーン) を取り出すヘルパ。
+// iana   = "Asia/Tokyo" 等。 サーバに 「自分の今日」 を計算してもらう用。
+// suffix = "+09:00" 等。 datetime-local の文字列に付けて正しい ISO にする用。
+// 海外滞在中もそのまま動く (端末 OS の TZ を拾う)。
 function localTzInfo() {
   let iana = 'Asia/Tokyo';
   try {
@@ -26,17 +26,17 @@ function localTzInfo() {
 // 残高ヒーロー以外のホームカード一覧 (上から下の表示既定順)。設定の
 // 「ホームのカスタマイズ」 でユーザーごとに並び順・非表示を変えられる。
 // データは localStorage に保存し、サーバ側には送らない。
-// v419 ホーム上部 残高 直下の クイック アクション 列。 v421 アイコン主体に。
-// 表示 ON/OFF は localStorage に 保存。 デフォルト ON は 「お金 回り」 4 つ。
-// (icon, label) は 設定で 区別表示。 ホーム は icon のみ、 設定では 両方。
+// v419 ホーム上部残高直下のクイックアクション列。 v421 アイコン主体に。
+// 表示 ON/OFF は localStorage に保存。 デフォルト ON は 「お金回り」 4 つ。
+// (icon, label) は設定で区別表示。 ホームは icon のみ、 設定では両方。
 export const HOME_ACTIONS = [
-  // 経済 系 (デフォ ON)
+  // 経済系 (デフォ ON)
   { id: 'buy',          url: '#/buy',                title: '買う',         icon: '🛒', defaultVisible: true },
   { id: 'sell',         url: '#/sell',               title: '売る',         icon: '🏷', defaultVisible: true },
   { id: 'request',      url: '#/tasks?new=request',  title: '頼む',         icon: '🙋', defaultVisible: true },
   { id: 'send',         url: '#/send',               title: '送る',         icon: '💸', defaultVisible: true },
-  // アプリ 系 (デフォ OFF)
-  { id: 'translate',    url: '#/translate',          title: '画像 翻訳',     icon: '🌐', defaultVisible: false },
+  // アプリ系 (デフォ OFF)
+  { id: 'translate',    url: '#/translate',          title: '画像翻訳',     icon: '🌐', defaultVisible: false },
   { id: 'rollcalls',    url: '#/rollcalls',          title: '点呼',         icon: '📣', defaultVisible: false },
   { id: 'timers',       url: '#/timers',             title: 'タイマー',     icon: '🛎',  defaultVisible: false },
   { id: 'stopwatches',  url: '#/stopwatches',        title: 'ストップウォッチ', icon: '🕒', defaultVisible: false },
@@ -49,7 +49,7 @@ export const HOME_ACTIONS = [
   { id: 'wari',         url: '#/wari',               title: 'ワリカ電卓',    icon: '🧮', defaultVisible: false },
   { id: 'requests',     url: '#/requests',           title: '請求 (集金)',   icon: '💴', defaultVisible: false },
   { id: 'random-groups', url: '#/random-groups',     title: 'ランダム分け',  icon: '🎲', defaultVisible: false },
-  { id: 'orderings',    url: '#/orderings',          title: '順番決め',      icon: '📋', defaultVisible: false }, // v526 #170 v523 で追加した新アプリも アイコン候補に
+  { id: 'orderings',    url: '#/orderings',          title: '順番決め',      icon: '📋', defaultVisible: false }, // v526 #170 v523 で追加した新アプリもアイコン候補に
   { id: 'regions',      url: '#/regions',            title: '制覇マップ',    icon: '🗺', defaultVisible: false }, // v531 #163
   { id: 'health',       url: '#/health',             title: '体重/BMI',      icon: '⚖️', defaultVisible: false }, // v532 #161
   { id: 'workouts',     url: '#/workouts',           title: '筋トレ',        icon: '💪', defaultVisible: false }, // v533 #162
@@ -77,7 +77,7 @@ export const HOME_ACTIONS = [
   { id: 'activity',     url: '#/activity',           title: 'ラボ滞在マップ', icon: '🗓', defaultVisible: false },
   { id: 'help',         url: '#/help',               title: '操作ガイド AI', icon: '🤖', defaultVisible: true },
   { id: 'chat',         url: '#/chat',               title: 'AI 対話 / 翻訳', icon: '💬', defaultVisible: true },
-  // v580 新規追加アプリも アイコン候補に
+  // v580 新規追加アプリもアイコン候補に
   { id: 'todos',        url: '#/todos',              title: 'TODO',         icon: '📝', defaultVisible: false },
   { id: 'places',       url: '#/places',             title: '食べある記',    icon: '🍴', defaultVisible: false },
   { id: 'sns',          url: '#/sns',                title: 'らぼったー',    icon: '💬', defaultVisible: false },
@@ -85,24 +85,24 @@ export const HOME_ACTIONS = [
   { id: 'ito',          url: '#/ito',                title: 'ito',          icon: '🎲', defaultVisible: false },
   { id: 'jinrou',       url: '#/jinrou',             title: '人狼',         icon: '🐺', defaultVisible: false },
   { id: 'predictions',  url: '#/predictions',        title: '優勝予想',      icon: '🏆', defaultVisible: false },
-  // v592 占い ボタン (押すと balance card 内に 今日の運勢が 表示される)
+  // v592 占いボタン (押すと balance card 内に今日の運勢が表示される)
   { id: 'fortune',      url: '#fortune-toggle',      title: '今日の占い',    icon: '🔮', defaultVisible: true, jsAction: true },
   { id: 'deadlines',    url: '#/meetups?kind=deadline', title: '〆切',      icon: '📌', defaultVisible: false },
   { id: 'feedback',     url: '#/feedback',           title: 'フィードバック', icon: '📝', defaultVisible: false },
-  // 設定 ボタン自身も HOME_ACTIONS 経由で 表示制御。 これを 隠したら 上部ナビの
-  // 「設定」 から 同じ 場所に 辿れる ので 詰まらない。
+  // 設定ボタン自身も HOME_ACTIONS 経由で表示制御。 これを隠したら上部ナビの
+  // 「設定」 から同じ場所に辿れるので詰まらない。
   { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },
 ];
-// v592 ポイント欄 (balance hero card) の 表示要素 ON/OFF。
-//   各要素を localStorage で 個別 toggle。 占い と 実績 は デフォルト OFF。
+// v592 ポイント欄 (balance hero card) の表示要素 ON/OFF。
+//   各要素を localStorage で個別 toggle。 占いと実績はデフォルト OFF。
 export const BALANCE_COMPONENTS = [
   { id: 'clock',     label: '⏰ 時計',          defaultOn: true  },
-  { id: 'points',    label: '💴 残高 ポイント',  defaultOn: true  },
+  { id: 'points',    label: '💴 残高ポイント',  defaultOn: true  },
   { id: 'streak',    label: '🔥 連続ラボイン',  defaultOn: true  },
   { id: 'medals',    label: '🏅 実績 (メダル)', defaultOn: false },
   { id: 'fortune',   label: '🔮 今日の占い',    defaultOn: false },
   { id: 'checkin',   label: '🏠 チェックイン',  defaultOn: true  },
-  { id: 'shortcuts', label: '⚡ ショートカット アイコン', defaultOn: true },
+  { id: 'shortcuts', label: '⚡ ショートカットアイコン', defaultOn: true },
 ];
 const BALANCE_COMP_KEY = 'labpay-balance-components';
 export function isBalanceCompVisible(id) {
@@ -136,33 +136,33 @@ export function setHomeActionVisible(id, v) {
   try { localStorage.setItem(HOME_ACTIONS_KEY, JSON.stringify(j)); } catch (_) {}
 }
 
-// v580 ショートカット ウィジェット 定義。 全アプリへの 簡単なリンクカードを
-//   ホームに 置けるように。 ロジックは持たず、 タイトル + 説明 + 「→ 開く」 だけ。
-//   設定 → ホーム ウィジェット から ON にすると 並びに 現れる。
-// v649 整理: 大量に あった shortcut カードを 「実際に 進行中 / 関連あり」 を 出す
-//   recruiting ウィジェット に 集約 する 方向 に 切替。 残すのは ラボ 個人ツール のみ
-//   (= 日常 で 進捗 確認 したい もの)。 削除した 35 種 は #/apps ハブ から 引き続き 開ける。
+// v580 ショートカットウィジェット定義。 全アプリへの簡単なリンクカードを
+//   ホームに置けるように。 ロジックは持たず、 タイトル + 説明 + 「→ 開く」 だけ。
+//   設定 → ホームウィジェットから ON にすると並びに現れる。
+// v649 整理: 大量にあった shortcut カードを 「実際に進行中 / 関連あり」 を出す
+//   recruiting ウィジェットに集約する方向に切替。 残すのはラボ個人ツールのみ
+//   (= 日常で進捗確認したいもの)。 削除した 35 種は #/apps ハブから引き続き開ける。
 const SHORTCUT_CARDS_DEFS = [
-  { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の 食べある記 から 散歩先 おすすめ' },
-  { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなど を 1 タップ記録' },
-  { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長 を 記録、 BMI 自動計算 + グラフ' },
-  { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内 歩数 ランキング' },
-  { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で 落札' },
+  { id: 'sc-walk',         title: '🚶 散歩',            url: '#/walk',         desc: '現在地周辺の食べある記から散歩先おすすめ' },
+  { id: 'sc-workouts',     title: '💪 筋トレ',          url: '#/workouts',     desc: '腕立て / 腹筋 / プランクなどを 1 タップ記録' },
+  { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長を記録、 BMI 自動計算 + グラフ' },
+  { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内歩数ランキング' },
+  { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で落札' },
 ];
 
 // v497 #103 ホームに置く要素は 「ウィジェット」 と呼ぶ。 設定画面の表示名も変更。
 //   初期表示は 「進行中 / タスク / いる人 + 残高ヒーロー (常時)」 に絞る。
-//   他は 設定 → ホーム ウィジェット から個別ON可能。
-//   v580 SHORTCUT_CARDS_DEFS を 全部 HOME_CARDS に 注入。 ON にすると リンクカードが ホームに 出る。
+//   他は設定 → ホームウィジェットから個別ON可能。
+//   v580 SHORTCUT_CARDS_DEFS を全部 HOME_CARDS に注入。 ON にするとリンクカードがホームに出る。
 export const HOME_CARDS = [
   { id: 'my-timers',      title: '⏱ 進行中' },
   { id: 'pending',        title: '未対応 (投票・点呼・未払い請求)' },
-  // v869 #451 balance ヒーロー (残高 / 時計 / ビンゴ / 占い サマリ) を 並べ替え 対象 に
-  //   追加。 「未対応 の 下 に 張り付いて 別々 に 動かせない」 と の 報告。 隠す ことは
-  //   できない (settings 側 で チェックボックス を disabled)。
-  { id: 'balance',        title: '💰 残高 / 時計 / ビンゴ サマリ (常時 表示)' },
+  // v869 #451 balance ヒーロー (残高 / 時計 / ビンゴ / 占いサマリ) を並べ替え対象に
+  //   追加。 「未対応の下に張り付いて別々に動かせない」 との報告。 隠すことは
+  //   できない (settings 側でチェックボックスを disabled)。
+  { id: 'balance',        title: '💰 残高 / 時計 / ビンゴサマリ (常時表示)' },
   { id: 'groups',         title: 'あなたのグループ' },
-  { id: 'sns',            title: '💬 らぼったー 最新' },
+  { id: 'sns',            title: '💬 らぼったー最新' },
   { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
   { id: 'fresh-listings', title: '新規入荷' },
   { id: 'invitations',    title: '募集' },
@@ -172,7 +172,7 @@ export const HOME_CARDS = [
   { id: 'calendar',       title: '今日の予定' },
   { id: 'my-claims',      title: 'あなたが引き受け中のタスク' },
   { id: 'fresh-tasks',    title: '新規タスク' },
-  { id: 'playlists',      title: '新着 プレイリスト' },
+  { id: 'playlists',      title: '新着プレイリスト' },
   { id: 'todos',          title: '📝 自分の TODO' },
   { id: 'history',        title: '履歴' },
   { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
@@ -180,30 +180,30 @@ export const HOME_CARDS = [
   { id: 'recruiting',     title: '🎯 あなた宛て (投票 / 点呼 / 論文査読 / 原稿チェック)' }, // v641, v644, v649
   { id: 'entertainment',  title: '🎉 娯楽 (ゲーム / 予想 / ドラフト / クイズ)' }, // v649
   { id: 'achievements',   title: '🏅 実績 + 称号' }, // v651
-  { id: 'conf-deadlines', title: '📅 学会 〆切 (近い 順)' }, // v671
+  { id: 'conf-deadlines', title: '📅 学会〆切 (近い順)' }, // v671
   { id: 'it-news',        title: '📰 IT ニュース' },           // v700 #290
   { id: 'screen-shares',  title: '🖼 共有中の画像' },          // v718 #314
-  { id: 'quote',          title: '💬 今日 の 名言 (偉人 / 漫画 / アニメ + ラボ メン 登録)' }, // v796 #396 / v804
-  { id: 'papers-recent',  title: '📑 論文 要約 / 全訳 (新着、 公開 + 自分)' }, // v809
-  // v580 ショートカット ウィジェット (リンクのみ。 全アプリを ホームに 置けるように)。
+  { id: 'quote',          title: '💬 今日の名言 (偉人 / 漫画 / アニメ + ラボメン登録)' }, // v796 #396 / v804
+  { id: 'papers-recent',  title: '📑 論文要約 / 全訳 (新着、 公開 + 自分)' }, // v809
+  // v580 ショートカットウィジェット (リンクのみ。 全アプリをホームに置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
 
 // v514 #131 デフォルト表示 (ユーザ要望に基づく):
 //   進行中 / 未対応 / [ヒーロー = balance, 常時表示] / あなたのグループ / らぼったー /
 //   依頼中 / 新規入荷 / 募集 / 食べある記 (新着) / 重要連絡 (新規 #139)。
-//   他は デフォルト hidden、 設定 → ホーム から個別 ON 可能。
-// v522 #159 「今ラボにいる人」 (presence) を デフォルト表示に追加
+//   他はデフォルト hidden、 設定 → ホームから個別 ON 可能。
+// v522 #159 「今ラボにいる人」 (presence) をデフォルト表示に追加
 const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
-  // v605 ビンゴ ウィジェットは 残高横の サマリで 代替できるので デフォルト OFF に戻す
+  // v605 ビンゴウィジェットは残高横のサマリで代替できるのでデフォルト OFF に戻す
   'recruiting',     // v641 デフォルト ON
   'entertainment',  // v649 デフォルト ON
   'achievements',   // v651 デフォルト ON
   'conf-deadlines', // v671 デフォルト ON
   'screen-shares',  // v718 #314 デフォルト ON
-  'papers-recent',  // v809 論文 要約 / 全訳 新着 デフォルト ON
+  'papers-recent',  // v809 論文要約 / 全訳新着デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -217,11 +217,11 @@ const DEFAULT_ORDER = [
   'my-timers', 'pending', 'balance', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
 ];
-// v592b 新規追加の カード (= ユーザの 保存 order に 含まれない 未知 ID) が
-//   DEFAULT_HIDDEN_HOME_CARDS に 含まれている なら、 hidden に 自動 マージ。
-//   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は 尊重。
-const NEW_DEFAULT_HIDDEN = ['weather', 'bingo', 'quote']; // v605 ビンゴも default OFF に / v809 名言 widget を デフォルト OFF (既存 ユーザ にも 適用)
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent']; // v641, v649, v651, v671 既存ユーザにも 自動表示 / v809 論文 新着 widget を 既存 ユーザ にも デフォルト 表示
+// v592b 新規追加のカード (= ユーザの保存 order に含まれない未知 ID) が
+//   DEFAULT_HIDDEN_HOME_CARDS に含まれているなら、 hidden に自動マージ。
+//   既存ユーザが 「明示的に ON にした」 場合 (= order に含まれる) は尊重。
+const NEW_DEFAULT_HIDDEN = ['weather', 'bingo', 'quote']; // v605 ビンゴも default OFF に / v809 名言 widget をデフォルト OFF (既存ユーザにも適用)
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -229,7 +229,7 @@ export function readHomeLayout() {
     for (const id of NEW_DEFAULT_HIDDEN) {
       if (!orderSet.has(id)) hiddenSet.add(id);
     }
-    // 既存ユーザの 保存 order に入って ない && DEFAULT_SHOWN なら hidden から外す
+    // 既存ユーザの保存 order に入ってない && DEFAULT_SHOWN なら hidden から外す
     for (const id of NEW_DEFAULT_SHOWN) {
       if (!orderSet.has(id)) hiddenSet.delete(id);
     }
@@ -262,8 +262,8 @@ function applyHomeLayout() {
   const layout = readHomeLayout();
   const cards = Array.from(region.querySelectorAll(':scope > [data-card-id]'));
   const knownIds = cards.map(c => c.dataset.cardId);
-  // v520 #155 balance はユーザの 設定 UI で 並び替え対象に出していないため、 ユーザが
-  //   並びをいじると order に含まれず 末尾に行ってしまう問題があった。 balance が
+  // v520 #155 balance はユーザの設定 UI で並び替え対象に出していないため、 ユーザが
+  //   並びをいじると order に含まれず末尾に行ってしまう問題があった。 balance が
   //   order に含まれない場合は、 必ず 'pending' or 'my-timers' の直後 (= 上位) に強制
   //   挿入する。 また balance は隠せない (= hidden 指定があっても無視) ようにする。
   const fixedOrder = [...layout.order];
@@ -284,7 +284,7 @@ function applyHomeLayout() {
     if (el) region.appendChild(el);
   }
   for (const card of cards) {
-    // balance は 常時 表示 (hidden 指定があっても無視)
+    // balance は常時表示 (hidden 指定があっても無視)
     const isHidden = card.dataset.cardId !== 'balance' && layout.hidden.includes(card.dataset.cardId);
     card.classList.toggle('home-card-user-hidden', isHidden);
   }
@@ -293,7 +293,7 @@ function applyHomeLayout() {
 export async function renderHome() {
   if (!state.me) await refreshMe();
   if (!state.me) { navigate('#/login'); return; }
-  // v695 #280 home に 入る たび に recruiting cache を 捨てて 新鮮 な データ で 描き直す。
+  // v695 #280 home に入るたびに recruiting cache を捨てて新鮮なデータで描き直す。
   invalidateRecruitingCache();
 
   const app = document.getElementById('app');
@@ -338,8 +338,8 @@ export async function renderHome() {
     </div>
 
     <div class="card balance-hero" data-card-id="balance">
-      <!-- v527 #168 ポイントの上に 現地時刻 (年月日 + 曜日 + 時分秒)。 定期的に
-           日 / 時 / 分 / 秒 のどれか 1 つが 2 倍フォントサイズに切り替わる演出。 -->
+      <!-- v527 #168 ポイントの上に現地時刻 (年月日 + 曜日 + 時分秒)。 定期的に
+           日 / 時 / 分 / 秒のどれか 1 つが 2 倍フォントサイズに切り替わる演出。 -->
       <div id="home-clock" style="text-align:center; font-variant-numeric:tabular-nums; font-family:system-ui, -apple-system, sans-serif; margin-bottom:6px; line-height:1.2; color:#4a106d; ${isBalanceCompVisible('clock') ? '' : 'display:none'}"></div>
       <div style="display:${isBalanceCompVisible('points') ? 'flex' : 'none'}; align-items:center; gap:10px; justify-content:center; flex-wrap:wrap">
         <a href="#/history" class="balance-line" id="home-balance-link"
@@ -347,18 +347,18 @@ export async function renderHome() {
           <span class="lbl">残高</span>
           <span class="num" id="home-balance">— pt</span>
         </a>
-        <!-- v605 ビンゴ サマリ。 タップで /#/bingo 詳細へ。 データ無いときは 非表示。 -->
+        <!-- v605 ビンゴサマリ。 タップで /#/bingo 詳細へ。 データ無いときは非表示。 -->
         <a id="home-bingo-mini" href="#/bingo"
            style="display:none; text-decoration:none; color:inherit; padding:6px 10px; background:#fafafa; border:1px solid #ddd; border-radius:8px; font-size:13px; line-height:1.2"></a>
       </div>
       <div class="muted" id="streak-line" style="${isBalanceCompVisible('streak') ? '' : 'display:none'}">連続ラボイン — 日 (最長 — 日)</div>
       <a id="home-medals" href="#/achievements" class="home-medals" title="実績" style="${isBalanceCompVisible('medals') ? '' : 'display:none'}"></a>
-      <!-- v584 1 日 1 回 占い → v592 アイコン ボタン から 表示。 普段は 非表示。 -->
+      <!-- v584 1 日 1 回占い → v592 アイコンボタンから表示。 普段は非表示。 -->
       <div id="home-fortune" style="margin-top:8px; padding:8px 12px; background:linear-gradient(90deg, #fef3c7, #fff5d4);
              border-radius:8px; text-align:center; font-size:14px; line-height:1.4; color:#946d00; display:none">
         <span id="home-fortune-text"></span>
       </div>
-      <!-- v600 #231 誕生日 バナー。 当日のみ表示。 -->
+      <!-- v600 #231 誕生日バナー。 当日のみ表示。 -->
       <div id="home-birthday" style="margin-top:8px; padding:10px 14px; background:linear-gradient(135deg, #fce7f3, #fde68a, #c7d2fe);
              border-radius:10px; text-align:center; font-size:15px; line-height:1.5; display:none">
         <div style="font-size:22px">🎂 お誕生日おめでとう! 🎉</div>
@@ -387,7 +387,7 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
-        <a href="#" id="home-cal-refresh" class="hint" style="margin-left:auto" title="cache を 捨てて GCal を 強制再取得">🔄 再取得</a>
+        <a href="#" id="home-cal-refresh" class="hint" style="margin-left:auto" title="cache を捨てて GCal を強制再取得">🔄 再取得</a>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>
@@ -434,7 +434,7 @@ export async function renderHome() {
 
     <div class="card" id="home-pl-card" data-card-id="playlists" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">🎵 新着 プレイリスト</h2>
+        <h2 class="row-title">🎵 新着プレイリスト</h2>
         <a href="#/playlists" class="hint">一覧 →</a>
       </div>
       <div id="home-pl" class="list"><div class="home-skel-bars"></div></div>
@@ -481,7 +481,7 @@ export async function renderHome() {
       <div id="home-bingofit"><div class="hint">読み込み中…</div></div>
     </div>
 
-    <!-- v649 娯楽 ウィジェット (ゲーム / 予想 / ドラフト / クイズ) -->
+    <!-- v649 娯楽ウィジェット (ゲーム / 予想 / ドラフト / クイズ) -->
     <div class="card" id="home-entertainment-card" data-card-id="entertainment" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🎉 娯楽</h2>
@@ -507,10 +507,10 @@ export async function renderHome() {
       <div id="home-ss"></div>
     </div>
 
-    <!-- v671 📅 学会 〆切 (近い 順) -->
+    <!-- v671 📅 学会〆切 (近い順) -->
     <div class="card" id="home-confdl-card" data-card-id="conf-deadlines" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">📅 学会 〆切</h2>
+        <h2 class="row-title">📅 学会〆切</h2>
         <a href="#/conf-deadlines" class="hint" style="margin-left:auto">すべて →</a>
       </div>
       <div id="home-confdl"><div class="hint">読み込み中…</div></div>
@@ -538,18 +538,18 @@ export async function renderHome() {
         <h2 class="row-title">☀️ 今日の空</h2>
         <span class="hint-sm" id="home-weather-loc"></span>
       </div>
-      <div id="home-weather"><div class="hint">位置情報 取得中…</div></div>
+      <div id="home-weather"><div class="hint">位置情報取得中…</div></div>
     </div>
 
-    <!-- v796 #396 今日 の 1 名言 -->
+    <!-- v796 #396 今日の 1 名言 -->
     <div class="card" id="home-quote-card" data-card-id="quote">
       <div id="home-quote"></div>
     </div>
 
-    <!-- v809 論文 要約 / 全訳 新着 (公開 + 自分、 直近 10 件) -->
+    <!-- v809 論文要約 / 全訳新着 (公開 + 自分、 直近 10 件) -->
     <div class="card" id="home-papers-recent-card" data-card-id="papers-recent" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">📑 論文 要約 / 全訳 (新着)</h2>
+        <h2 class="row-title">📑 論文要約 / 全訳 (新着)</h2>
         <a href="#/papers-recent" class="hint" style="margin-left:auto">すべて →</a>
       </div>
       <div id="home-papers-recent" class="list"><div class="home-skel-bars"></div></div>
@@ -557,13 +557,13 @@ export async function renderHome() {
 
     <div class="card" id="home-sns-card" data-card-id="sns" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">💬 らぼったー 最新</h2>
+        <h2 class="row-title">💬 らぼったー最新</h2>
         <a href="#/sns" class="hint">タイムライン →</a>
       </div>
       <div id="home-sns" class="list"><div class="home-skel-bars"></div></div>
-      <!-- v592 投稿 欄: テキスト + 画像 + 現在地。 メンション 補完 は タイムライン側で。 -->
+      <!-- v592 投稿欄: テキスト + 画像 + 現在地。 メンション補完はタイムライン側で。 -->
       <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
-        <textarea id="home-sns-body" maxlength="2000" rows="2" placeholder="いま どうしてる?"
+        <textarea id="home-sns-body" maxlength="2000" rows="2" placeholder="いまどうしてる?"
                   style="width:100%; box-sizing:border-box; resize:vertical; min-height:48px"></textarea>
         <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
           <input type="file" id="home-sns-img" accept="image/*" style="flex:1; min-width:120px; font-size:12px">
@@ -592,13 +592,13 @@ export async function renderHome() {
       <div class="hint" style="font-size:12px; line-height:1.4">${escapeHtml(c.desc)}</div>
     </div>`).join('')}
 
-    <!-- v666 自作 ウィジェット (有効化 されて いる もの を 全部 並べる) -->
+    <!-- v666 自作ウィジェット (有効化されているものを全部並べる) -->
     <div id="home-custom-widgets"></div>
     </div>
   `;
   applyHomeLayout();
   loadCustomWidgets();
-  // v592 占い ボタン (アイコンとして 設置、 押すと balance card 内に トグル表示)
+  // v592 占いボタン (アイコンとして設置、 押すと balance card 内にトグル表示)
   document.querySelectorAll('button[data-home-action]').forEach(btn => {
     if (btn.dataset.bound) return;
     btn.dataset.bound = '1';
@@ -649,8 +649,8 @@ export async function renderHome() {
     { cardId: 'conf-deadlines', fn: renderConfDeadlinesWidget, label: 'confdl' }, // v671
     { cardId: 'it-news',        fn: renderItNewsWidget,        label: 'it-news' }, // v700 #290
     { cardId: 'screen-shares',  fn: renderScreenSharesWidget,  label: 'screen-shares' }, // v718 #314
-    { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日 の 1 名言
-    { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文 要約 / 全訳 新着
+    { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日の 1 名言
+    { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文要約 / 全訳新着
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -665,10 +665,10 @@ export async function renderHome() {
       perfEntries.push({ name, ms: Math.round(dt) });
     }
   };
-  // v509 ユーザ報告: 「実績が表示されるまで グループ / らぼったー が表示されない」
-  //   原因は 残高 → チェックイン → 実績 を直列 await した後でカードを順番に
+  // v509 ユーザ報告: 「実績が表示されるまでグループ / らぼったーが表示されない」
+  //   原因は残高 → チェックイン → 実績を直列 await した後でカードを順番に
   //   呼んでいたため。 ヒーロー 3 つは fire-and-forget (キャッシュから即出るので
-  //   ブロック不要)、 各カードは Promise.all で 並列実行する。 計測のため timed は
+  //   ブロック不要)、 各カードは Promise.all で並列実行する。 計測のため timed は
   //   そのまま噛ませる (resolved 順に perfEntries に追加される)。
   const heroPromise = Promise.all([
     timed('balance', () => refreshFinancials({ silent: false })),
@@ -676,12 +676,12 @@ export async function renderHome() {
     timed('medals',  () => renderMedalsStrip()),
     timed('birthday', () => checkBirthday()),
     timed('bingomini', () => loadBingoMini()),
-    // v592 占いは ボタンで 任意 表示 (普段は 非表示)
+    // v592 占いはボタンで任意表示 (普段は非表示)
   ]);
   const cardPromises = cardsToRender
-    // v644 recruiting widget は ユーザの hidden 設定に 関わらず 常に 実行
-    //   (= アイテムが あれば 表示強制、 なければ 自動で 隠れる)
-    // v654 force-render は 撤去。 ユーザ が 設定 で 隠して も 出続ける 問題 を 防ぐ。
+    // v644 recruiting widget はユーザの hidden 設定に関わらず常に実行
+    //   (= アイテムがあれば表示強制、 なければ自動で隠れる)
+    // v654 force-render は撤去。 ユーザが設定で隠しても出続ける問題を防ぐ。
     .filter(c => !hiddenSet.has(c.cardId))
     .map(c => timed(c.label, c.fn));
   await Promise.all([heroPromise, ...cardPromises]);
@@ -694,7 +694,7 @@ export async function renderHome() {
     for (const e of perfEntries) console.log(`${e.name.padEnd(14)} ${e.ms} ms`);
     console.groupEnd();
   } catch (_) {}
-  // 画面下に admin だけ見える 簡易タイマー (タップで詳細トグル)
+  // 画面下に admin だけ見える簡易タイマー (タップで詳細トグル)
   if (state.me?.role === 'admin') renderHomePerfPill(totalMs, perfEntries);
 
   // Home polling: 1 分ごとに各カードを 「静かに」 リロード。
@@ -744,15 +744,15 @@ function renderHomePerfPill(totalMs, entries) {
 let homePollTimer = null;
 let homeVisHandler = null;
 
-// v527 #168 → v528 #185 ホームの 現地時刻表示。 1 秒更新は そのまま。
+// v527 #168 → v528 #185 ホームの現地時刻表示。 1 秒更新はそのまま。
 //   ただし 「大きく見せる演出」 は 10 分ごとに 1 分間だけ ON にする (= 普段は静か)。
-//   ON 期間中だけ 5 秒ごとに 時 / 分 / 秒 のどれか 1 つを 1.6em に切替。
+//   ON 期間中だけ 5 秒ごとに時 / 分 / 秒のどれか 1 つを 1.6em に切替。
 let homeClockTimer = null;
 let homeClockBigIdx = 0; // 0:hour 1:min 2:sec
 let homeClockBigSwitchAt = 0;
 const HOME_CLOCK_WEEK = ['日','月','火','水','木','金','土'];
 function isHomeClockPerformanceOn() {
-  // 10 分ごと (= each :00, :10, :20, :30, :40, :50) の 直後 1 分間だけ ON
+  // 10 分ごと (= each :00, :10, :20, :30, :40, :50) の直後 1 分間だけ ON
   const now = new Date();
   const min = now.getMinutes();
   return (min % 10) === 0;
@@ -830,7 +830,7 @@ async function doHomePoll() {
     skip('notices')        ? null : renderHomeNotices(), // v514 #139
     skip('todos')          ? null : renderHomeTodos(),
     skip('history')        ? null : renderRecentTx(),
-    skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文 新着 widget
+    skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文新着 widget
   ].filter(Boolean);
   await Promise.allSettled(tasks);
 }
@@ -840,7 +840,7 @@ function startHomePolling() {
   homePollTimer = setInterval(doHomePoll, 60_000);
   homeVisHandler = () => { if (!document.hidden) doHomePoll(); };
   document.addEventListener('visibilitychange', homeVisHandler);
-  // v480 SNS ヒーロー だけ 10 秒 ごと に latest_id で 差分 確認 → 変更時 のみ 取り直す。
+  // v480 SNS ヒーローだけ 10 秒ごとに latest_id で差分確認 → 変更時のみ取り直す。
   startHomeSnsFastPoll();
 }
 
@@ -861,8 +861,8 @@ function startHomeSnsFastPoll() {
       if (homeSnsKnownLatestId === 0) { homeSnsKnownLatestId = lid; return; }
       if (lid > homeSnsKnownLatestId) {
         homeSnsKnownLatestId = lid;
-        // v598 fix: 旧版は 'labpay-content-v1' を 直 open していたが
-        // 実際の SW キャッシュは v3。 invalidateContentCache で 全 vN を なめる。
+        // v598 fix: 旧版は 'labpay-content-v1' を直 open していたが
+        // 実際の SW キャッシュは v3。 invalidateContentCache で全 vN をなめる。
         await invalidateContentCache('/api/posts');
         await renderFreshSns();
       }
@@ -870,7 +870,7 @@ function startHomeSnsFastPoll() {
   }, 10_000);
 }
 
-// v508 残高 / 連続ラボイン も localStorage 経由の SWR キャッシュ。 1) 既に持ってる値で
+// v508 残高 / 連続ラボインも localStorage 経由の SWR キャッシュ。 1) 既に持ってる値で
 //   即描画 (state.balance や前回保存の streak)、 2) 裏で /api/me を取り直して更新。
 const FIN_CACHE_KEY = 'labpay-fin-cache';
 function paintFinancials(me) {
@@ -1030,7 +1030,7 @@ function writeCalCache(items, etags) {
   } catch {}
 }
 
-// 「未対応 / 依頼中」 カード: 自分が応答すべき / 自分が起案した で 未完了の
+// 「未対応 / 依頼中」 カード: 自分が応答すべき / 自分が起案したで未完了の
 // item を kind 横断で集約。 通知を既読にしても消えないよう、 ソースの状態を
 // そのまま見る。 1 分ごとの home polling で再 fetch。
 function fmtDeadlineColored(s) {
@@ -1050,7 +1050,7 @@ function fmtDeadlineColored(s) {
 function renderPendingLikeItems(items, root) {
   const now = Date.now();
   root.innerHTML = items.map(it => {
-    // kind 別の色付きタグで 「投票 / 点呼 / 請求 / タスク」 を 一目で区別。
+    // kind 別の色付きタグで 「投票 / 点呼 / 請求 / タスク」 を一目で区別。
     const tagBg = {
       poll:          '#e3f2fd',
       rollcall:      '#fff3e0',
@@ -1072,7 +1072,7 @@ function renderPendingLikeItems(items, root) {
     }
     const urgentStyle = urgent ? 'background:#fff7e6; border-left:4px solid #ff6b35;' : '';
     const urgentBadge = urgent ? '<span style="display:inline-block; background:#ff6b35; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; margin-right:4px">🔥 24h</span>' : '';
-    // v785 #384 対応 待ち の 人 を アイコン (アバター 重ね) で 横 並び 表示。 最大 6 人、 残りは「+N」
+    // v785 #384 対応待ちの人をアイコン (アバター重ね) で横並び表示。 最大 6 人、 残りは「+N」
     const pending = Array.isArray(it.pending_users) ? it.pending_users : [];
     const pendingHtml = pending.length ? (() => {
       const visible = pending.slice(0, 6);
@@ -1087,7 +1087,7 @@ function renderPendingLikeItems(items, root) {
       const restHtml = rest > 0
         ? `<span style="display:inline-block; margin-left:-6px; padding:0 5px; height:18px; line-height:18px; border-radius:9px; background:#e5e7eb; color:#374151; font-size:10px; font-weight:700; vertical-align:middle; border:1.5px solid #fff; box-shadow:0 0 0 1px #d1d5db">+${rest}</span>`
         : '';
-      return `<div style="margin-top:3px; display:flex; align-items:center; gap:0; flex-wrap:nowrap; min-width:0">${icons}${restHtml}<span style="font-size:11px; color:#6b7280; margin-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">⏳ 対応 待ち</span></div>`;
+      return `<div style="margin-top:3px; display:flex; align-items:center; gap:0; flex-wrap:nowrap; min-width:0">${icons}${restHtml}<span style="font-size:11px; color:#6b7280; margin-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">⏳ 対応待ち</span></div>`;
     })() : '';
     return `
       <a class="list-item" href="${escapeHtml(it.url)}" style="overflow:hidden; ${urgentStyle}">
@@ -1144,8 +1144,8 @@ async function renderPendingKindCard(opts) {
   } catch (_) { card.hidden = true; return; }
   if (!items.length) { card.hidden = true; return; }
   card.hidden = false;
-  // v567 #216 24 時間以内に締切のものは 「🔥 もうすぐ」 タグ付きで 必ず一番上に。
-  //   それ以外は 締切順 (締切なし は末尾)。
+  // v567 #216 24 時間以内に締切のものは 「🔥 もうすぐ」 タグ付きで必ず一番上に。
+  //   それ以外は締切順 (締切なしは末尾)。
   const now = Date.now();
   const isUrgent = (it) => {
     if (!it.deadline_at) return false;
@@ -1170,9 +1170,9 @@ async function renderPendingKindCard(opts) {
       ? `${urgentCount} 件🔥 / ${items.length} 件${opts.label}`
       : `${items.length} 件${opts.label}`;
   }
-  // urgent (24h 以内) の件数だけは デフォルト表示数 を 上回っても 全部出す
+  // urgent (24h 以内) の件数だけはデフォルト表示数を上回っても全部出す
   if (urgentCount > opts.getShown()) opts.setShown(urgentCount);
-  // 5 件ずつ + 「更に読み込み」 で 全件表示まで。
+  // 5 件ずつ + 「更に読み込み」 で全件表示まで。
   const shown = Math.min(opts.getShown(), items.length);
   const slice = items.slice(0, shown);
   renderPendingLikeItems(slice, root);
@@ -1189,13 +1189,13 @@ async function renderPendingKindCard(opts) {
   }
 }
 
-// 「今日の予定」 カードを 全件 / 5 件 に切替えるトグル状態 (セッション内)。
+// 「今日の予定」 カードを全件 / 5 件に切替えるトグル状態 (セッション内)。
 // home polling で再描画されても状態が保たれるよう module-level に置く。
 let calExpanded = false;
 const CAL_DEFAULT_LIMIT = 5;
 
 // 終了後 N 分経過した予定を 「今日の予定」 から消すための設定 (1..1440)。
-// 「2 時間経ったら消したい」 が default。 設定 → Google Calendar 連携 から変更可。
+// 「2 時間経ったら消したい」 が default。 設定 → Google Calendar 連携から変更可。
 const CAL_HIDE_KEY = 'labpay-cal-hide-after-min';
 export function readCalHideAfterMin() {
   const v = Number(localStorage.getItem(CAL_HIDE_KEY));
@@ -1211,10 +1211,10 @@ async function renderCalendarEvents({ force = false } = {}) {
   const card = document.getElementById('home-calendar-card');
   const root = document.getElementById('home-calendar');
   if (!card || !root) return;
-  // v440 カード自体は 必ず 表示 (上位 try/catch で 想定外の throw でも 隠さない)。
-  // 旧仕様だと 早期 throw で 「カレンダーが 消える」 ように 見える 不具合があった。
+  // v440 カード自体は必ず表示 (上位 try/catch で想定外の throw でも隠さない)。
+  // 旧仕様だと早期 throw で 「カレンダーが消える」 ように見える不具合があった。
   card.hidden = false;
-  // v449 🔄 再取得 ボタン (1 回 だけ bind)。 cache を 捨てて etag なし で 再 fetch。
+  // v449 🔄 再取得ボタン (1 回だけ bind)。 cache を捨てて etag なしで再 fetch。
   const refreshBtn = document.getElementById('home-cal-refresh');
   if (refreshBtn && !refreshBtn.dataset.bound) {
     refreshBtn.dataset.bound = '1';
@@ -1242,11 +1242,11 @@ async function renderCalendarEvents({ force = false } = {}) {
         items = cache.items;
       } else {
         const fresh_items = (data && data.items) || [];
-        // v449 「予定が 消える」 対策: cache に あった id が 新応答に 1 件も 居ない
-        // 場合 だけ かなり怪しい (= GCal 側 1 カレンダー の re-fetch 失敗 で 落ちた
-        // 可能性)。 件数が "0 になった" 時 限定で 旧 cache を 維持 (5 分 後 に
-        // もう一度 試す)。 本当に 全部 消えた (= GCal 側 で 削除) ケースは
-        // 🔄 再取得 を 押せば cache を 飛ばして 反映。
+        // v449 「予定が消える」 対策: cache にあった id が新応答に 1 件も居ない
+        // 場合だけかなり怪しい (= GCal 側 1 カレンダーの re-fetch 失敗で落ちた
+        // 可能性)。 件数が "0 になった" 時限定で旧 cache を維持 (5 分後に
+        // もう一度試す)。 本当に全部消えた (= GCal 側で削除) ケースは
+        // 🔄 再取得を押せば cache を飛ばして反映。
         if (cache && Array.isArray(cache.items) && cache.items.length > 0 && fresh_items.length === 0) {
           // keep old items, bump timestamp to avoid hammering
           items = cache.items;
@@ -1259,12 +1259,12 @@ async function renderCalendarEvents({ force = false } = {}) {
     }
   } catch (e) {
     // 未連携 / fetch 失敗 / offline などはここに来る。
-    // cache が残ってればそれを使う、 無ければプレースホルダ表示で カードは出す。
+    // cache が残ってればそれを使う、 無ければプレースホルダ表示でカードは出す。
     const cache = readCalCache();
     if (cache && cache.items && cache.items.length) {
       items = cache.items;
     } else {
-      root.innerHTML = `<div class="empty">予定を取得できませんでした (${escapeHtml(e.message || String(e))})。 <a href="#/settings" class="hint">設定 → Google Calendar 連携</a> を 確認するか、 一度 解除して 連携 し直してみてください。</div>`;
+      root.innerHTML = `<div class="empty">予定を取得できませんでした (${escapeHtml(e.message || String(e))})。 <a href="#/settings" class="hint">設定 → Google Calendar 連携</a> を確認するか、 一度解除して連携し直してみてください。</div>`;
       return;
     }
   }
@@ -1325,7 +1325,7 @@ async function renderCalendarEvents({ force = false } = {}) {
       const isTomorrow   = !isNaN(startMs) && startMs >= tomorrowStartMs;
       return { ...ev, _isPast: isPast, _isInProgress: isInProgress, _isTomorrow: isTomorrow };
     });
-    // 「次の予定」 は 今日の未来で 進行中じゃない最初。 翌日は別扱い。
+    // 「次の予定」 は今日の未来で進行中じゃない最初。 翌日は別扱い。
     const nextIdx = withFlags.findIndex(e => !e._isPast && !e._isInProgress && !e._isTomorrow);
     const eventsHtml = !items.length
       ? `<div class="empty">今日は予定なし</div>`
@@ -1344,7 +1344,7 @@ async function renderCalendarEvents({ force = false } = {}) {
       }
       const isNext = idx === nextIdx;
       // box-shadow:inset で左バーを描く (border-left を使うと content が右に
-      // ずれて他の行と縦が揃わなくなるので)。 優先順位は 過去 → 進行中 → 次 → 翌日。
+      // ずれて他の行と縦が揃わなくなるので)。 優先順位は過去 → 進行中 → 次 → 翌日。
       const styles = [
         'align-items:flex-start',
         'gap:8px',
@@ -1409,8 +1409,8 @@ async function renderCalendarEvents({ force = false } = {}) {
 
 // ──── 「＋ MTG」 modal ─────────────────────────────────────────────────
 // 出先で 「今 30 分後に 30 分の MTG やろう」 を 1 タップで作るための簡易フォーム。
-// 今 / +15 / +30 / +60 分後 のショートカット + タイトル + 長さ + 登録先カレンダー
-// + 「Zoom も付ける」 toggle。 Zoom OFF にすれば 普通の Google Calendar 予定だけ作成。
+// 今 / +15 / +30 / +60 分後のショートカット + タイトル + 長さ + 登録先カレンダー
+// + 「Zoom も付ける」 toggle。 Zoom OFF にすれば普通の Google Calendar 予定だけ作成。
 let CACHED_CALENDARS = null;
 async function getCalendarsCached() {
   if (CACHED_CALENDARS) return CACHED_CALENDARS;
@@ -1528,7 +1528,7 @@ function openMtgModal() {
     const with_zoom   = document.getElementById('mtg-zoom').checked;
     if (!topic)    { errEl.textContent = 'タイトルを入れてください'; return; }
     if (!startRaw) { errEl.textContent = '開始時刻を入れてください'; return; }
-    // datetime-local の値はブラウザ ローカル時刻。 そのまま 「自分の今いる場所」
+    // datetime-local の値はブラウザローカル時刻。 そのまま 「自分の今いる場所」
     // の時刻として扱い、 ISO suffix も実 offset から計算 (海外滞在対応)。
     const tzInfo = localTzInfo();
     const start = startRaw + ':00' + tzInfo.suffix;
@@ -1567,7 +1567,7 @@ async function renderMyGroups() {
       image_thumb_url: g.image_thumb_url, // v511 サーバ側サムネ実在チェック済み
       title:           escapeHtml(g.title),
       members:         g.members || [],
-      chipSize:        'xs',  // v412 上下が あふれる 報告 → 元の xs (18px) に 戻し
+      chipSize:        'xs',  // v412 上下があふれる報告 → 元の xs (18px) に戻し
     })).join('');
   } catch (_) {
     card.hidden = true;
@@ -1599,7 +1599,7 @@ async function renderFreshInvitations() {
       const joined = Number(i.i_joined) === 1 ? ' <span class="tag ok">✓参加</span>' : '';
       const title = `${escapeHtml(i.title)}${joined}`;
       // 発起人アイコン | 参加者アイコン (発起人除く)
-      // v412 上下に あふれる ので 元の xs に 戻す。
+      // v412 上下にあふれるので元の xs に戻す。
       const creatorChip = `<span title="${escapeHtml(i.creator_name)} (発起人)" style="display:inline-flex">${avatarHtml(i.creator_name, i.creator_avatar_url, 'xs')}</span>`;
       const others = (Array.isArray(i.joins) ? i.joins : [])
         .filter(j => Number(j.id) !== Number(i.creator_user_id));
@@ -1637,8 +1637,8 @@ async function renderFreshInvitations() {
   }
 }
 
-// v471 → v480 新着 食べある記 (ホーム カード)。 新規入荷 と 同じ with-cover
-// レイアウト (左 110px の カバー画像 + バッジ) で 3 件 を 大きく 表示。
+// v471 → v480 新着食べある記 (ホームカード)。 新規入荷と同じ with-cover
+// レイアウト (左 110px のカバー画像 + バッジ) で 3 件を大きく表示。
 async function renderFreshPlaces() {
   const card = document.getElementById('home-places-card');
   const root = document.getElementById('home-places');
@@ -1648,7 +1648,7 @@ async function renderFreshPlaces() {
     const items = (d.items || []).slice(0, 3);
     card.hidden = false;
     if (!items.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ お店 なし</div>';
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだお店なし</div>';
       return;
     }
     root.innerHTML = items.map(p => {
@@ -1659,8 +1659,8 @@ async function renderFreshPlaces() {
       const ratingBadge = rating
         ? `<div class="price-badge" style="color:#f59e0b">${rating}</div>`
         : '';
-      // v486 #80 / v487 #82 いいね 数 を 0 件 でも 常時 表示。
-      // v848 #432 足跡 (👣) も 一緒 に 表示。
+      // v486 #80 / v487 #82 いいね数を 0 件でも常時表示。
+      // v848 #432 足跡 (👣) も一緒に表示。
       const likeBit  = ` · ${p.liked_by_me   ? '❤️' : '🤍'}${p.like_count  || 0}`;
       const visitBit = ` · ${p.visited_by_me ? '👣' : '🐾'}${p.visit_count || 0}`;
       const meta = `${cat ? escapeHtml(cat) + ' · ' : ''}💬 ${p.comment_count}${p.avg_rating !== null ? ' · ' + ratingStars(p.avg_rating) : ''}${likeBit}${visitBit}`;
@@ -1688,7 +1688,7 @@ async function renderFreshPlaces() {
     }).join('');
   } catch (_) { card.hidden = true; }
 }
-// places カテゴリ ラベル (renderFreshPlaces で使う 短縮版)
+// places カテゴリラベル (renderFreshPlaces で使う短縮版)
 const CAT_LBL_HOME = { cafe:'☕', lunch:'🍱', dinner:'🍣', bar:'🍺', sweets:'🍰', other:'🍴' };
 function ratingStars(r) {
   if (r === null || r === undefined) return '';
@@ -1696,12 +1696,12 @@ function ratingStars(r) {
   return '⭐'.repeat(full);
 }
 
-// v400 新着 プレイリスト カード。 直近 5 件を「カバー画像 + タイトル + 作者
-// + 曲数 / 👁 / ❤️」 で表示。 ゼロなら カードごと 非表示。
-// v585 ☀️ 今日の空 ウィジェット。
-//   Open-Meteo (天気予報) + 同 API の sunrise/sunset を 表示。
-//   位置は navigator.geolocation で 取得 (localStorage に キャッシュ)。
-//   セカンダリソース: wttr.in (Open-Meteo と 並列で 簡易比較表示)
+// v400 新着プレイリストカード。 直近 5 件を「カバー画像 + タイトル + 作者
+// + 曲数 / 👁 / ❤️」 で表示。 ゼロならカードごと非表示。
+// v585 ☀️ 今日の空ウィジェット。
+//   Open-Meteo (天気予報) + 同 API の sunrise/sunset を表示。
+//   位置は navigator.geolocation で取得 (localStorage にキャッシュ)。
+//   セカンダリソース: wttr.in (Open-Meteo と並列で簡易比較表示)
 const WEATHER_LOC_KEY  = 'labpay-last-coords';
 const WEATHER_CACHE_KEY = 'labpay-weather-cache';
 const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -1716,7 +1716,7 @@ async function getCachedCoords() {
 async function getCoords() {
   const cached = await getCachedCoords();
   if (cached) {
-    // 取れている間に 裏で 最新を 取り直す
+    // 取れている間に裏で最新を取り直す
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(p => {
         try { localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify({ lat: p.coords.latitude, lon: p.coords.longitude, ts: Date.now() })); } catch (_) {}
@@ -1753,12 +1753,12 @@ async function renderWeatherWidget() {
   card.hidden = false;
   const coords = await getCoords();
   if (!coords) {
-    root.innerHTML = '<div class="hint">位置情報の許可が必要です。 ブラウザの位置情報を 許可すると 天気と日の出日の入りが 表示されます。</div>';
+    root.innerHTML = '<div class="hint">位置情報の許可が必要です。 ブラウザの位置情報を許可すると天気と日の出日の入りが表示されます。</div>';
     return;
   }
   loc.textContent = `${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)}`;
   try {
-    // キャッシュ チェック (30 分)
+    // キャッシュチェック (30 分)
     let cached = null;
     try {
       const raw = localStorage.getItem(WEATHER_CACHE_KEY);
@@ -1811,17 +1811,17 @@ async function renderWeatherWidget() {
       <div class="hint-sm" style="text-align:right; padding-top:4px">data: Open-Meteo</div>
     `;
   } catch (e) {
-    root.innerHTML = `<div class="hint">天気取得 失敗: ${escapeHtml(String(e?.message || e))}</div>`;
+    root.innerHTML = `<div class="hint">天気取得失敗: ${escapeHtml(String(e?.message || e))}</div>`;
   }
 }
 
-// v600 #231 誕生日 バナー。 state.me に birthday_md があり 今日 (MM-DD) と一致したら表示。
+// v600 #231 誕生日バナー。 state.me に birthday_md があり今日 (MM-DD) と一致したら表示。
 async function checkBirthday() {
   const box = document.getElementById('home-birthday');
   const msg = document.getElementById('home-birthday-msg');
   if (!box || !msg) return;
-  // v626 v615 以前 の キャッシュ (birthday_md キーを 持たない) でも 当日 反映されるよう
-  //   state.me に key が 無ければ /api/auth/me を 引き直す。 SW SWR 対象外 なので 最新。
+  // v626 v615 以前のキャッシュ (birthday_md キーを持たない) でも当日反映されるよう
+  //   state.me に key が無ければ /api/auth/me を引き直す。 SW SWR 対象外なので最新。
   let md = state.me?.birthday_md;
   let year = state.me?.birthday_year;
   if (state.me && !('birthday_md' in state.me)) {
@@ -1845,8 +1845,8 @@ async function checkBirthday() {
   box.style.display = '';
 }
 
-// v606 残高横に 今週ビンゴの 5x5 ミニ盤を 表示。 タップで /#/bingo へ。
-//   緑=達成、黄=リーチ、灰=未達。 BINGO 中は 外枠を 金赤グラデ で 強調。
+// v606 残高横に今週ビンゴの 5x5 ミニ盤を表示。 タップで /#/bingo へ。
+//   緑=達成、黄=リーチ、灰=未達。 BINGO 中は外枠を金赤グラデで強調。
 async function loadBingoMini() {
   const el = document.getElementById('home-bingo-mini');
   if (!el) return;
@@ -1864,7 +1864,7 @@ async function loadBingoMini() {
       if (missing.length === 1) reachIdxs.add(missing[0]);
     }
     const isBingo = d.bingo_lines > 0;
-    // 外枠 (BINGO 中は 金赤グラデで 強調)
+    // 外枠 (BINGO 中は金赤グラデで強調)
     const wrapStyle = isBingo
       ? 'background:linear-gradient(135deg, #fbbf24, #ef4444); padding:3px; border-radius:6px; border:none'
       : 'background:#fff; padding:3px; border:1px solid #ddd; border-radius:6px';
@@ -1882,13 +1882,13 @@ async function loadBingoMini() {
   } catch (_) { el.style.display = 'none'; }
 }
 
-// v600 #232 今週のビンゴ ウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
-// v649 共通: /api/me/recruiting を 取得 + sec_ahead で 1 週間以上先 を 集約。
+// v600 #232 今週のビンゴウィジェット。 進捗 (X/25) + ビンゴ数 + リーチ数 + 5x5 ミニ表示。
+// v649 共通: /api/me/recruiting を取得 + sec_ahead で 1 週間以上先を集約。
 const ONE_WEEK_SEC = 7 * 86400;
-// v695 #280 home の widget で 使う recruiting cache は per-render (1 hydrate ごと) で 揃える。
-//   従来 は page lifetime で 持って いた ので、 麻雀 を cancel → ホーム に 戻る で 古い data
-//   が 表示 され続けて いた。 renderHome 冒頭 で clear する ことで、 同じ render 内 で の
-//   複数 widget 呼び出し は 共有、 home を 再 描画 する 度 に 必ず フェッチ し直す。
+// v695 #280 home の widget で使う recruiting cache は per-render (1 hydrate ごと) で揃える。
+//   従来は page lifetime で持っていたので、 麻雀を cancel → ホームに戻るで古い data
+//   が表示され続けていた。 renderHome 冒頭で clear することで、 同じ render 内での
+//   複数 widget 呼び出しは共有、 home を再描画する度に必ずフェッチし直す。
 let _recruitingCache = null;
 function invalidateRecruitingCache() { _recruitingCache = null; }
 async function fetchRecruitingItems() {
@@ -1907,13 +1907,13 @@ function tagHtml(tag) {
     vote:     '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
     work:     '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
     pending:  '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏳ 結果待ち</span>',
-    // v739 #352 結果 確定 後 24h は widget に 残す ように なった ので 'finished' tag を 追加
+    // v739 #352 結果確定後 24h は widget に残すようになったので 'finished' tag を追加
     finished: '<span class="tag" style="background:#e5e7eb; color:#374151; font-size:10px">🏁 結果</span>',
   })[tag] || '';
 }
 
 function renderItemRow(it) {
-  // v662 娯楽 等 の 参加者 アバター を 全員 横並び 表示 (折り返し OK)。 AI (kind='bot') は 🤖 で 表示。
+  // v662 娯楽等の参加者アバターを全員横並び表示 (折り返し OK)。 AI (kind='bot') は 🤖 で表示。
   const parts = Array.isArray(it.participants) ? it.participants : [];
   const partsHtml = parts.length ? `
     <div style="display:flex; flex-wrap:wrap; flex-shrink:0; margin-left:6px; max-width:50%; row-gap:2px">
@@ -1940,7 +1940,7 @@ function renderItemRow(it) {
   `;
 }
 
-// 1 週間以上 先 (sec_ahead > 7day) は 「他 N 件」 に 集約
+// 1 週間以上先 (sec_ahead > 7day) は 「他 N 件」 に集約
 function splitByDeadline(items) {
   const soon = [];
   const later = [];
@@ -1951,37 +1951,37 @@ function splitByDeadline(items) {
   return { soon, later };
 }
 
-// v638 / v644 / v649 🎯 あなた宛て ウィジェット (cat='work': 投票 / 点呼 / 論文査読 / 原稿チェック)
+// v638 / v644 / v649 🎯 あなた宛てウィジェット (cat='work': 投票 / 点呼 / 論文査読 / 原稿チェック)
 async function renderRecruitingWidget() {
   await renderCategoryWidget({
     cardId: 'home-recruiting-card', rootId: 'home-recruiting',
     title: '🎯 あなた宛て',
     cat: 'work',
-    emptyMsg: '投票 / 点呼 / 論文査読 / 原稿チェック 関連 は ありません',
+    emptyMsg: '投票 / 点呼 / 論文査読 / 原稿チェック関連はありません',
   });
 }
 
-// v649 🎉 娯楽 ウィジェット (cat='entertainment': ゲーム / 予想 / ドラフト / クイズ)
+// v649 🎉 娯楽ウィジェット (cat='entertainment': ゲーム / 予想 / ドラフト / クイズ)
 async function renderEntertainmentWidget() {
   await renderCategoryWidget({
     cardId: 'home-entertainment-card', rootId: 'home-entertainment',
     title: '🎉 娯楽',
     cat: 'entertainment',
-    emptyMsg: 'ゲーム / 予想 / ドラフト / クイズ 関連 は ありません',
-    showAll: true, // v693 #277 折りたたまず 全件 表示
+    emptyMsg: 'ゲーム / 予想 / ドラフト / クイズ関連はありません',
+    showAll: true, // v693 #277 折りたたまず全件表示
   });
 }
 
-// v652 🏅 実績 widget。 シンプル に: 達成 済 実績 リスト (tier 昇順 = 最 高 tier
-// を 下 に) + 一番 下 に 「最新: 〇〇」 テキスト 1 行 だけ。
-// v666 (feedback #246) 自作 ウィジェット を ホーム に 並べる。
-// 各 widget は import('/api/custom-widgets/{id}/script.js?v={updated}') で 動的 load。
-// render(root) を 呼んで mutate、 meta.refreshSec で 定期 リロード (default 60s)。
+// v652 🏅 実績 widget。 シンプルに: 達成済実績リスト (tier 昇順 = 最高 tier
+// を下に) + 一番下に 「最新: 〇〇」 テキスト 1 行だけ。
+// v666 (feedback #246) 自作ウィジェットをホームに並べる。
+// 各 widget は import('/api/custom-widgets/{id}/script.js?v={updated}') で動的 load。
+// render(root) を呼んで mutate、 meta.refreshSec で定期リロード (default 60s)。
 let _cwTimers = new Map();
 async function loadCustomWidgets() {
   const root = document.getElementById('home-custom-widgets');
   if (!root) return;
-  // 既存 timer を 解除 (home 再描画 で 重複 防止)
+  // 既存 timer を解除 (home 再描画で重複防止)
   for (const t of _cwTimers.values()) clearInterval(t);
   _cwTimers.clear();
   try {
@@ -2001,13 +2001,13 @@ async function loadCustomWidgets() {
       const widgetRoot = document.getElementById('cw-root-' + w.id);
       if (!widgetRoot) continue;
       try {
-        // updated_at を query で 付けて cache busting
+        // updated_at を query で付けて cache busting
         const url = `/api/custom-widgets/${w.id}/script.js?v=${encodeURIComponent(w.updated_at)}`;
         const mod = await import(url);
         const meta = mod.meta || {};
         const refreshSec = Number(meta.refreshSec) > 0 ? Number(meta.refreshSec) : 60;
         const run = async () => {
-          // home から 離れたら timer 解除
+          // home から離れたら timer 解除
           if (!document.getElementById('cw-root-' + w.id)) {
             const t = _cwTimers.get(w.id);
             if (t) { clearInterval(t); _cwTimers.delete(w.id); }
@@ -2020,7 +2020,7 @@ async function loadCustomWidgets() {
         const timer = setInterval(run, refreshSec * 1000);
         _cwTimers.set(w.id, timer);
       } catch (e) {
-        widgetRoot.innerHTML = `<div class="hint" style="color:#c00; font-size:12px">読み込み 失敗: ${escapeHtml(e.message)}</div>`;
+        widgetRoot.innerHTML = `<div class="hint" style="color:#c00; font-size:12px">読み込み失敗: ${escapeHtml(e.message)}</div>`;
       }
     }
   } catch (e) {
@@ -2028,9 +2028,9 @@ async function loadCustomWidgets() {
   }
 }
 
-// v671 (#251) 📅 学会 〆切 widget。 直近 5 件 を 〆切順 で 表示、 あと N 日 を カウントダウン。
-// v700 #290 📰 IT ニュース widget。 server (= /api/news/it) が はてな IT + Hacker News
-//   を 1 時間 cache で 集めて くる。 ホーム で 上位 8 件 を 1 行 = 1 件 で 表示。
+// v671 (#251) 📅 学会〆切 widget。 直近 5 件を〆切順で表示、 あと N 日をカウントダウン。
+// v700 #290 📰 IT ニュース widget。 server (= /api/news/it) がはてな IT + Hacker News
+//   を 1 時間 cache で集めてくる。 ホームで上位 8 件を 1 行 = 1 件で表示。
 async function renderItNewsWidget() {
   const card = document.getElementById('home-itnews-card');
   const root = document.getElementById('home-itnews');
@@ -2040,11 +2040,11 @@ async function renderItNewsWidget() {
     const d = await get('/api/news/it', { limit: 8 });
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="hint" style="font-size:13px">取得 失敗 (ネットワーク または 一時的 な 問題)</div>';
+      root.innerHTML = '<div class="hint" style="font-size:13px">取得失敗 (ネットワークまたは一時的な問題)</div>';
       return;
     }
-    // v704 #293 #295 summary_jp が ある なら タイトル の 下 に 表示。 海外 記事 (HN 等) でも
-    //   日本語 で 出る ので 「中身 を 開かなくて も 概要 が わかる」 状態 に。
+    // v704 #293 #295 summary_jp があるならタイトルの下に表示。 海外記事 (HN 等) でも
+    //   日本語で出るので 「中身を開かなくても概要がわかる」 状態に。
     root.innerHTML = items.map(it => {
       const sum = it.summary_jp
         ? `<div style="font-size:11px; line-height:1.4; color:#555; margin-top:2px; overflow-wrap:anywhere">${escapeHtml(it.summary_jp)}</div>`
@@ -2059,7 +2059,7 @@ async function renderItNewsWidget() {
       </a>`;
     }).join('');
   } catch (e) {
-    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -2103,19 +2103,19 @@ async function renderConfDeadlinesWidget() {
     const d = await get('/api/conf-deadlines/upcoming?limit=8');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="hint" style="font-size:13px">登録 済 の 〆切 は ありません ・ <a href="#/conf-deadlines/new">＋ 登録</a></div>';
+      root.innerHTML = '<div class="hint" style="font-size:13px">登録済の〆切はありません・ <a href="#/conf-deadlines/new">＋ 登録</a></div>';
       return;
     }
     const catIcon = { intl_conf: '🌐', domestic_conf: '🇯🇵', journal: '📰', other: '📋' };
     root.innerHTML = items.map(r => {
       const sec = Number(r.sec_ahead) || 0;
       const days = Math.floor(sec / 86400);
-      // v713 #308 仮 (暫定) 締切 は 「およそ N 日」 表記 (= 数字 を 強調 し すぎない)。 v738 #349 「あと」 を 落とす。
+      // v713 #308 仮 (暫定) 締切は 「およそ N 日」 表記 (= 数字を強調しすぎない)。 v738 #349 「あと」 を落とす。
       const tentative = !!Number(r.nearest_is_tentative);
       const ahead = sec <= 0
-        ? '締切 過ぎ'
+        ? '締切過ぎ'
         : (tentative
-            ? (days >= 1 ? `およそ ${days} 日` : 'もう すぐ')
+            ? (days >= 1 ? `およそ ${days} 日` : 'もうすぐ')
             : (days >= 1 ? `あと ${days} 日` : `あと ${Math.max(1, Math.floor(sec / 3600))} 時間`));
       const color = sec <= 0 ? '#999' : sec < 86400*3 ? '#dc2626' : sec < 86400*14 ? '#ea580c' : '#10b981';
       const loc = r.location ? ` (${escapeHtml(r.location)})` : '';
@@ -2123,10 +2123,10 @@ async function renderConfDeadlinesWidget() {
       const dlLabel = r.nearest_label || r.deadline_label || '';
       const dateShort = String(dlAt).slice(5, 10).replace('-', '/');
       const lblTag = dlLabel ? `<span style="font-size:10px; opacity:0.7; margin-right:2px">[${escapeHtml(dlLabel)}]</span>` : '';
-      // v697 #282 自分 が メンバー (or 起案者) の conf は ⭐ + 黄色 ハイライト
+      // v697 #282 自分がメンバー (or 起案者) の conf は ⭐ + 黄色ハイライト
       const isMine = !!Number(r.is_mine);
       const mineStyle = isMine ? 'background:#fffbeb; border-left:3px solid #f59e0b; padding-left:6px' : '';
-      const mineMark = isMine ? '<span style="font-size:13px; flex:none" title="自分 関連">⭐</span>' : '';
+      const mineMark = isMine ? '<span style="font-size:13px; flex:none" title="自分関連">⭐</span>' : '';
       return `
         <a class="list-item" href="#/conf-deadlines/${r.id}" style="gap:6px; padding:2px 0; align-items:baseline; line-height:1.3; ${mineStyle}">
           ${mineMark}
@@ -2137,7 +2137,7 @@ async function renderConfDeadlinesWidget() {
         </a>`;
     }).join('');
   } catch (e) {
-    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -2145,17 +2145,17 @@ async function renderAchievementsWidget() {
   const card = document.getElementById('home-achievements-card');
   const root = document.getElementById('home-achievements');
   if (!card || !root) return;
-  // v653 force-show しない。 ユーザ が 設定 で 隠して いる 場合 は
-  // applyHomeLayout が .home-card-user-hidden を 付与 して いる ので 触らない。
+  // v653 force-show しない。 ユーザが設定で隠している場合は
+  // applyHomeLayout が .home-card-user-hidden を付与しているので触らない。
   card.hidden = false;
   try {
     const d = await get('/api/me/achievements');
     const items = (d.items || []).filter(it => it.earned);
     if (!items.length) {
-      root.innerHTML = '<div class="hint" style="font-size:13px">まだ 実績 は 獲得 して いません</div>';
+      root.innerHTML = '<div class="hint" style="font-size:13px">まだ実績は獲得していません</div>';
       return;
     }
-    // tier 昇順 (低 → 高)。 同 tier 内 は value 昇順 で 安定。 最新 = 最後 = 最 高 tier。
+    // tier 昇順 (低 → 高)。 同 tier 内は value 昇順で安定。 最新 = 最後 = 最高 tier。
     items.sort((a, b) => (a.earned_tier || 0) - (b.earned_tier || 0) || (a.value || 0) - (b.value || 0));
     const latest = items[items.length - 1];
     const listHtml = items.map(it => {
@@ -2176,7 +2176,7 @@ async function renderAchievementsWidget() {
     root.innerHTML = listHtml +
       `<div class="hint-sm" style="font-size:12px; padding-top:6px; margin-top:4px; border-top:1px solid var(--line)">${latestText}</div>`;
   } catch (e) {
-    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得 失敗: ${escapeHtml(e.message)}</div>`;
+    root.innerHTML = `<div class="hint" style="font-size:12px; color:#c00">取得失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -2184,24 +2184,24 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, show
   const card = document.getElementById(cardId);
   const root = document.getElementById(rootId);
   if (!card || !root) return;
-  // v654 user-hidden class は applyHomeLayout に 任せる (touch しない)。
+  // v654 user-hidden class は applyHomeLayout に任せる (touch しない)。
   card.hidden = false;
   const allItems = await fetchRecruitingItems();
   if (allItems === null) {
     card.querySelector('.row-title').textContent = `${title} (取得失敗)`;
-    root.innerHTML = '<div class="hint" style="font-size:12px; color:#c00">取得 失敗</div>';
+    root.innerHTML = '<div class="hint" style="font-size:12px; color:#c00">取得失敗</div>';
     return;
   }
   const items = allItems.filter(it => it.cat === cat);
   if (!items.length) {
-    card.querySelector('.row-title').textContent = `${title} (現在 なし)`;
+    card.querySelector('.row-title').textContent = `${title} (現在なし)`;
     root.innerHTML = `<div class="hint" style="font-size:12px">${emptyMsg}</div>`;
     return;
   }
   const tagPriority = { active: 0, vote: 1, work: 2, open: 3, pending: 4 };
   items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
   const { soon, later } = splitByDeadline(items);
-  // タイトル に カウント
+  // タイトルにカウント
   const counts = { active: 0, vote: 0, work: 0, open: 0 };
   for (const it of items) counts[it.tag] = (counts[it.tag] || 0) + 1;
   const parts = [];
@@ -2210,14 +2210,14 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, show
   if (counts.vote)   parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
   if (counts.work)   parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
   card.querySelector('.row-title').innerHTML = `${title} ・ ${parts.join(' / ') || ''}`;
-  // v693 #277 showAll=true で 全件 (= soon + later) を 並べる。 既定 は 従来 通り 上位 10 + 他 N 件 hint。
+  // v693 #277 showAll=true で全件 (= soon + later) を並べる。 既定は従来通り上位 10 + 他 N 件 hint。
   let html;
   if (showAll) {
     html = soon.concat(later).map(renderItemRow).join('');
   } else {
     html = soon.slice(0, 10).map(renderItemRow).join('');
     if (later.length) {
-      html += `<div class="hint-sm" style="font-size:12px; padding:6px 0; border-top:1px solid var(--line); margin-top:4px">⏳ 他 <b>${later.length}</b> 件 (1 週間 以上先)</div>`;
+      html += `<div class="hint-sm" style="font-size:12px; padding:6px 0; border-top:1px solid var(--line); margin-top:4px">⏳ 他 <b>${later.length}</b> 件 (1 週間以上先)</div>`;
     }
   }
   root.innerHTML = html;
@@ -2266,7 +2266,7 @@ async function renderBingoWidget() {
   } catch (_) { card.hidden = true; }
 }
 
-// v741 #288 着回しビンゴ widget。 衣類 25 未満なら隠す。 リーチ計算 + 完成ライン 強調。
+// v741 #288 着回しビンゴ widget。 衣類 25 未満なら隠す。 リーチ計算 + 完成ライン強調。
 async function renderBingofitWidget() {
   const card = document.getElementById('home-bingofit-card');
   const root = document.getElementById('home-bingofit');
@@ -2279,7 +2279,7 @@ async function renderBingofitWidget() {
       card.hidden = false;
       root.innerHTML = `
         <a href="#/bingofit/closet" style="display:block; text-decoration:none; color:inherit; padding:8px; background:#fef3c7; border:1px solid #fde68a; border-radius:6px; font-size:13px">
-          あと <b style="color:#92400e">${d.need_items}</b> 着 登録すると 今週の盤が作られます (${d.active_count}/25)
+          あと <b style="color:#92400e">${d.need_items}</b> 着登録すると今週の盤が作られます (${d.active_count}/25)
         </a>`;
       return;
     }
@@ -2326,15 +2326,15 @@ async function renderBingofitWidget() {
   } catch (_) { card.hidden = true; }
 }
 
-// v584 1 日 1 回 占い (サーバから その日 の運勢を 取得)。 同じ日 は 同じ結果。
-//   結果は balance hero card 内に 大きめ に 表示される。
+// v584 1 日 1 回占い (サーバからその日の運勢を取得)。 同じ日は同じ結果。
+//   結果は balance hero card 内に大きめに表示される。
 async function loadDailyFortune() {
   const root = document.getElementById('home-fortune');
   const txt  = document.getElementById('home-fortune-text');
   if (!root || !txt) return;
   try {
     const f = await get('/api/fortune/today');
-    // v814 #408 西洋占星術 (生年月日 が 設定 されて いる 時 だけ 出る)
+    // v814 #408 西洋占星術 (生年月日が設定されている時だけ出る)
     let zHtml = '';
     if (f.zodiac) {
       const z = f.zodiac;
@@ -2363,27 +2363,27 @@ async function renderFreshSns() {
   const root = document.getElementById('home-sns');
   if (!card || !root) return;
   try {
-    // v598 ホーム表示時に SW SWR キャッシュを明示的に剥がして 必ず最新を取得。
-    //   旧コードでは存在しない 'labpay-content-v1' を open していて 無効化されず
+    // v598 ホーム表示時に SW SWR キャッシュを明示的に剥がして必ず最新を取得。
+    //   旧コードでは存在しない 'labpay-content-v1' を open していて無効化されず
     //   ずっと stale (前回ロード時点の投稿) が表示されていた問題対応。
     await invalidateContentCache('/api/posts');
     const d = await get('/api/posts', { limit: 5 });
     const items = d.items || [];
     card.hidden = false;
-    bindHomeSnsComposer(); // composer は 投稿件数 に関わらず 1 回だけ wire
+    bindHomeSnsComposer(); // composer は投稿件数に関わらず 1 回だけ wire
     if (!items.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ 投稿 なし</div>';
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ投稿なし</div>';
       return;
     }
     root.innerHTML = items.map(p => {
       const snipBase = p.body || (p.image_url ? '' : '(無題)');
       const snip = snipBase.length > 120 ? snipBase.slice(0, 120) + '…' : snipBase;
-      // v481 #68 ホーム でも 👍 ❤ ⭐ 3 種 表示 + 縦幅 1.2x。 1.35→1.5 行高、
-      //   min-height 96→116、 padding を 少し 増やし リアクション 見切れ 防止。
-      // v482 #69 画像 有 / 無 で 同じ 高さ (116px) + 上 マージン を 詰める + 時刻 を
-      //   投稿者名 の 横 に。
+      // v481 #68 ホームでも 👍 ❤ ⭐ 3 種表示 + 縦幅 1.2x。 1.35→1.5 行高、
+      //   min-height 96→116、 padding を少し増やしリアクション見切れ防止。
+      // v482 #69 画像有 / 無で同じ高さ (116px) + 上マージンを詰める + 時刻を
+      //   投稿者名の横に。
       // v493 #94 ホームから直接押せるリアクション。 ボタンに data-home-react-* を持たせて、
-      //   bindHomeSnsReactions で クリックハンドラを後から付ける。
+      //   bindHomeSnsReactions でクリックハンドラを後から付ける。
       const counts = p.reaction_counts || { thumb: 0, heart: p.like_count || 0, star: 0 };
       const mine = new Set(p.my_reactions || (p.liked_by_me ? ['heart'] : []));
       const reactBadges = [
@@ -2397,7 +2397,7 @@ async function renderFreshSns() {
       const reactionsLine = `${reactBadges} · 💬 ${p.reply_count}`;
       // v497 #104 端末がJST以外 (旅行中など) でも正しい時刻差が出るように、
       //   サーバ側で TZ付きISO (created_at_iso) を返している。 旧キャッシュからの
-      //   フォールバック として created_at もそのまま見る。
+      //   フォールバックとして created_at もそのまま見る。
       const timeAgo = (s) => {
         if (!s) return '';
         const dt = new Date(String(s).replace(' ', 'T'));
@@ -2409,13 +2409,13 @@ async function renderFreshSns() {
         return `${dt.getMonth()+1}/${dt.getDate()}`;
       };
       const tAgo = timeAgo(p.created_at_iso || p.created_at);
-      // v465 ヒーロー: テキスト が メイン (左) + 画像 が 右端 から 中央 まで
-      // 斜めに 浮き出す。 画像 の 左端 を polygon で 斜め カット (右肩上がり)。
-      // 縦幅 は 通常 行 と 同じ ぐらい (= text-content の 高さ で 決まる、 minHeight)。
-      // アバター は 別途 <img> で 正方形 固定 (avatarHtml が flexbox 内で 横長化
-      // していた のを 回避)。
+      // v465 ヒーロー: テキストがメイン (左) + 画像が右端から中央まで
+      // 斜めに浮き出す。 画像の左端を polygon で斜めカット (右肩上がり)。
+      // 縦幅は通常行と同じぐらい (= text-content の高さで決まる、 minHeight)。
+      // アバターは別途 <img> で正方形固定 (avatarHtml が flexbox 内で横長化
+      // していたのを回避)。
       if (p.image_url) {
-        // v468 .row > * の flex:1 1 auto を 上書き しないと 横長 に 引き伸ばされる
+        // v468 .row > * の flex:1 1 auto を上書きしないと横長に引き伸ばされる
         const avatar = p.avatar_url
           ? `<img src="${escapeHtml(p.avatar_url)}" alt="" loading="lazy" decoding="async" fetchpriority="low" style="flex:none !important; width:22px; height:22px; border-radius:50%; object-fit:cover; aspect-ratio:1/1">`
           : `<div style="flex:none !important; width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; aspect-ratio:1/1">${escapeHtml((p.display_name || '?').trim().charAt(0).toUpperCase())}</div>`;
@@ -2433,7 +2433,7 @@ async function renderFreshSns() {
             </div>
           </a>`;
       }
-      // v482 #69 / v483 #74 文字 のみ も 画像 あり と 同じ 100px 高さ + 投稿者 右横 に 時刻。
+      // v482 #69 / v483 #74 文字のみも画像ありと同じ 100px 高さ + 投稿者右横に時刻。
       return `
         <a class="list-item" href="#/sns/${p.id}" style="align-items:flex-start; gap:6px; min-height:100px; padding:4px 6px">
           ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
@@ -2452,8 +2452,8 @@ async function renderFreshSns() {
   } catch (_) { card.hidden = true; }
 }
 
-// v581 ホーム らぼったー ウィジェット の 投稿欄。 シンプル: テキスト のみ POST。
-//   投稿後は その場で 一覧を 再フェッチ。
+// v581 ホームらぼったーウィジェットの投稿欄。 シンプル: テキストのみ POST。
+//   投稿後はその場で一覧を再フェッチ。
 function bindHomeSnsComposer() {
   const btn  = document.getElementById('home-sns-post');
   const body = document.getElementById('home-sns-body');
@@ -2465,21 +2465,21 @@ function bindHomeSnsComposer() {
   btn.dataset.bound = '1';
   btn.addEventListener('click', async () => {
     const text = body.value.trim();
-    if (!text && !imgIn?.files?.[0]) { toast('本文 または 画像を 入力してください'); return; }
+    if (!text && !imgIn?.files?.[0]) { toast('本文または画像を入力してください'); return; }
     btn.disabled = true; btn.textContent = '送信中…';
     if (status) status.textContent = '';
     try {
       const payload = { body: text };
-      // 画像 アップロード
+      // 画像アップロード
       if (imgIn?.files?.[0]) {
-        if (imgStatus) imgStatus.textContent = '画像 アップロード 中…';
+        if (imgStatus) imgStatus.textContent = '画像アップロード中…';
         const fd = new FormData();
         fd.append('file', imgIn.files[0]);
         const upRes = await fetch('/api/uploads/image', {
           method: 'POST', body: fd, credentials: 'same-origin',
           headers: { 'X-Requested-With': 'labpay' },
         }).then(x => x.json());
-        if (!upRes?.url) throw new Error('画像 アップロード 失敗');
+        if (!upRes?.url) throw new Error('画像アップロード失敗');
         payload.image_url = upRes.url;
         if (imgStatus) imgStatus.textContent = '';
       }
@@ -2491,7 +2491,7 @@ function bindHomeSnsComposer() {
           });
           payload.lat = p.coords.latitude;
           payload.lng = p.coords.longitude;
-        } catch (_) { /* 位置取れなくても 投稿は続行 */ }
+        } catch (_) { /* 位置取れなくても投稿は続行 */ }
       }
       await post('/api/posts', payload);
       body.value = '';
@@ -2514,9 +2514,9 @@ function bindHomeSnsComposer() {
   });
 }
 
-// v493 #94 ホーム らぼったー の リアクション ボタン を 押した 瞬間 サーバに 反映し、
-//   その場で カウントと 色を 更新。 リンク (a 要素) 内の <span> なので
-//   stopPropagation で 親 a のクリック (詳細遷移) を 抑止。
+// v493 #94 ホームらぼったーのリアクションボタンを押した瞬間サーバに反映し、
+//   その場でカウントと色を更新。 リンク (a 要素) 内の <span> なので
+//   stopPropagation で親 a のクリック (詳細遷移) を抑止。
 function bindHomeSnsReactions() {
   document.querySelectorAll('[data-home-react-post]').forEach(el => {
     if (el.dataset.bound) return;
@@ -2546,15 +2546,15 @@ function bindHomeSnsReactions() {
   });
 }
 
-// v796 #396 今日 の 1 名言 (偉人 / 漫画 / アニメ + ラボ メン 登録)。
-// v804 静的 配列 + DB 登録 を 合算 し、 日付 で deterministic に 1 個 選ぶ。
+// v796 #396 今日の 1 名言 (偉人 / 漫画 / アニメ + ラボメン登録)。
+// v804 静的配列 + DB 登録を合算し、 日付で deterministic に 1 個選ぶ。
 async function renderHomeQuote() {
   const card = document.getElementById('home-quote-card');
   const root = document.getElementById('home-quote');
   if (!card || !root) return;
   try {
     const mod = await import('../quotes_daily.js');
-    // DB 登録 を 取って 静的 配列 と 合算
+    // DB 登録を取って静的配列と合算
     let dbItems = [];
     try {
       const d = await get('/api/quotes');
@@ -2570,7 +2570,7 @@ async function renderHomeQuote() {
     const byLine = q._by ? `<div style="font-size:10.5px; color:#9ca3af; margin-top:2px; text-align:right">📝 登録: ${escapeHtml(q._by)} さん</div>` : '';
     root.innerHTML = `
       <div class="row center" style="gap:8px; margin-bottom:4px">
-        <h2 class="row-title" style="margin:0">💬 今日 の 名言</h2>
+        <h2 class="row-title" style="margin:0">💬 今日の名言</h2>
         <span style="flex:1"></span>
         <a href="#/quotes" class="btn" style="font-size:11px; padding:2px 8px">📝 登録 / 管理</a>
       </div>
@@ -2582,8 +2582,8 @@ async function renderHomeQuote() {
   } catch (e) { card.hidden = true; }
 }
 
-// v809 論文 要約 / 全訳 (公開 + 自分) の 直近 10 件 を 時系列 で 表示。
-//   行 タップ で 各 結果 ページ (paper-summary / paper-translate-full) へ。
+// v809 論文要約 / 全訳 (公開 + 自分) の直近 10 件を時系列で表示。
+//   行タップで各結果ページ (paper-summary / paper-translate-full) へ。
 async function renderHomePapersRecent() {
   const card = document.getElementById('home-papers-recent-card');
   const root = document.getElementById('home-papers-recent');
@@ -2593,7 +2593,7 @@ async function renderHomePapersRecent() {
     const items = d.items || [];
     if (!items.length) {
       card.hidden = false;
-      root.innerHTML = '<div class="hint" style="font-size:12px">まだ 1 件 も ありません ・ <a href="#/paper-summary">📑 要約</a> / <a href="#/paper-translate-full">📑 全訳</a> を 試す</div>';
+      root.innerHTML = '<div class="hint" style="font-size:12px">まだ 1 件もありません・ <a href="#/paper-summary">📑 要約</a> / <a href="#/paper-translate-full">📑 全訳</a> を試す</div>';
       return;
     }
     card.hidden = false;
@@ -2601,22 +2601,22 @@ async function renderHomePapersRecent() {
   } catch (_) { card.hidden = true; }
 }
 
-// 1 行 の HTML を 共通化 (widget + 一覧 page で 同じ 見た目)。
-// v817 #411 タイトル の 下 に 原題 (= 日本語 タイトル と 違う 場合 だけ) と
-//   要約 / アブスト の 先頭 数 行 を 追加 で 表示。
+// 1 行の HTML を共通化 (widget + 一覧 page で同じ見た目)。
+// v817 #411 タイトルの下に原題 (= 日本語タイトルと違う場合だけ) と
+//   要約 / アブストの先頭数行を追加で表示。
 export function renderPaperRecentRow(it) {
   const kindIcon = it.kind === 'summary' ? '📑 要約'
                  : (it.direction === 'ja2en' ? '📑 全訳 (日→英)' : '📑 全訳');
   const statusBadge = it.status === 'done'
     ? (it.is_shared ? '<span style="color:#10b981; font-size:10.5px">🌐 公開</span>' : '')
-    : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理 中</span>'
+    : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理中</span>'
     : it.status === 'error' ? '<span style="color:#dc2626; font-size:10.5px">❌ エラー</span>'
     : '';
   const mineBadge = it.is_mine ? '<span style="color:#7b3fa0; font-size:10.5px; font-weight:600">📝 自分</span>' : '';
   const title = it.title || it.pdf_name || '(無題)';
   const url = `#/${it.url_slug}/r/${encodeURIComponent(it.share_token)}`;
   const when = String(it.finished_at || it.created_at || '').slice(5, 16).replace('-', '/').replace(' ', ' ');
-  // 原題 と 翻訳 タイトル が 同じ 時 は 出さ ない
+  // 原題と翻訳タイトルが同じ時は出さない
   const showOrig = it.title_original && it.title_original !== it.title;
   const origLine = showOrig ? `
     <div class="muted" style="font-size:11px; line-height:1.4; margin-top:2px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical">${escapeHtml(it.title_original)}</div>` : '';
@@ -2640,9 +2640,9 @@ export function renderPaperRecentRow(it) {
     </a>`;
 }
 
-// v482 #72 ホーム TODO カード。 未完了 で 締切 が 近い 順 (締切 なし は 末尾)。
+// v482 #72 ホーム TODO カード。 未完了で締切が近い順 (締切なしは末尾)。
 //   最大 5 件。
-// v514 #139 重要連絡 / 学会情報 をホームウィジェットとして表示。 デフォルトは ON。
+// v514 #139 重要連絡 / 学会情報をホームウィジェットとして表示。 デフォルトは ON。
 async function renderHomeNotices() {
   const card = document.getElementById('home-notices-card');
   const root = document.getElementById('home-notices');
@@ -2742,10 +2742,10 @@ async function renderFreshPlaylists() {
   }
 }
 
-// v405 自分が 参加中 (作成 or 招待) の タイマー + ストップウォッチ で 進行中 or
-// 一時停止中 のものを ホームに 強調表示。 ベルが鳴る前に スクリーン off してて
-// 「気づかなかった」 を防ぐ + 共有 ストップウォッチに 戻りやすく。
-// fmtTmDur: タイマー/SW/点呼 用 (秒精度 MM:SS)。
+// v405 自分が参加中 (作成 or 招待) のタイマー + ストップウォッチで進行中 or
+// 一時停止中のものをホームに強調表示。 ベルが鳴る前にスクリーン off してて
+// 「気づかなかった」 を防ぐ + 共有ストップウォッチに戻りやすく。
+// fmtTmDur: タイマー/SW/点呼用 (秒精度 MM:SS)。
 function fmtTmDur(sec) {
   sec = Math.max(0, Math.floor(sec));
   const h = Math.floor(sec / 3600);
@@ -2754,10 +2754,10 @@ function fmtTmDur(sec) {
   const pad = (n) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
-// v451 待ち合わせ / 〆切 用 (秒は 表示 しない、 分単位 で 切り上げ ぽく扱う)。
+// v451 待ち合わせ / 〆切用 (秒は表示しない、 分単位で切り上げぽく扱う)。
 //  < 60 秒  → 「まもなく」
 //  < 60 分  → 「N 分」
-//  < 24 時間 → 「H 時間 M 分」 (分が 0 なら 省略)
+//  < 24 時間 → 「H 時間 M 分」 (分が 0 なら省略)
 //  >= 24 時間 → 「D 日 H 時間」
 function fmtHumanLong(sec) {
   sec = Math.max(0, Math.floor(sec));
@@ -2772,9 +2772,9 @@ function fmtHumanLong(sec) {
   return hRem ? `${d} 日 ${hRem} 時間` : `${d} 日`;
 }
 
-// v445 進行中 カード を 1 秒 ごと に ローカル で 進める。 API 再フェッチ せず
-// data-tick-* 属性 から 残り / 経過 を 計算。 ナビ で カードが DOM から
-// 消えたら interval を 解除 (root.isConnected を 監視)。
+// v445 進行中カードを 1 秒ごとにローカルで進める。 API 再フェッチせず
+// data-tick-* 属性から残り / 経過を計算。 ナビでカードが DOM から
+// 消えたら interval を解除 (root.isConnected を監視)。
 let myActiveTimersTickId = null;
 function updateMyActiveTimersTicks(root) {
   if (!root || !root.isConnected) {
@@ -2813,11 +2813,11 @@ async function renderMyActiveTimers() {
   if (!card || !root) return;
   try {
     const meId = Number(state.me?.id);
-    // v406 点呼 (rollcall) も 「時間制限あり」 なので 合流。 pending API 経由で
-    // 自分が 対応していない 締切付き 点呼を 拾う。
-    // v482 #73 点呼 は /api/me/pending では 「未応答」 だけ なので、 自分 が
-    //   起案者 / 既に 応答済 の 点呼 も ホーム の 進行中 に 出す ため /api/rollcalls
-    //   を 別途 取得。
+    // v406 点呼 (rollcall) も 「時間制限あり」 なので合流。 pending API 経由で
+    // 自分が対応していない締切付き点呼を拾う。
+    // v482 #73 点呼は /api/me/pending では 「未応答」 だけなので、 自分が
+    //   起案者 / 既に応答済の点呼もホームの進行中に出すため /api/rollcalls
+    //   を別途取得。
     const [tm, sw, rc, mu] = await Promise.allSettled([
       get('/api/timers'),
       get('/api/stopwatches'),
@@ -2825,10 +2825,10 @@ async function renderMyActiveTimers() {
       get('/api/meetups'),
     ]);
     const rows = [];
-    // v442 待ち合わせ も 「時間制限あり」 に 合流。 cancelled なし + 未来 (meetup_at > now)
-    // のもの だけ。 v445 tick: countdown、 10 分 切ったら 赤。
+    // v442 待ち合わせも 「時間制限あり」 に合流。 cancelled なし + 未来 (meetup_at > now)
+    // のものだけ。 v445 tick: countdown、 10 分切ったら赤。
     // v450 kind = 'deadline' は 📌 〆切、 'meetup' は 🤝 待ち合わせ。
-    // v650 1 週間以上 先 (= 待ち合わせは 180 日先 まで 可能) は 件数だけ 集約。
+    // v650 1 週間以上先 (= 待ち合わせは 180 日先まで可能) は件数だけ集約。
     const ONE_WEEK_MS = 7 * 86400 * 1000;
     let farMeetups = 0, farDeadlines = 0;
     if (mu.status === 'fulfilled') {
@@ -2847,7 +2847,7 @@ async function renderMyActiveTimers() {
           href: '#/meetups/' + m.id,
           kind: isDeadline ? '📌 〆切' : '🤝 待ち合わせ',
           title: m.title || (isDeadline ? '〆切' : '待ち合わせ'),
-          // v451 ホーム の 待ち合わせ / 〆切 は 「X 時間 Y 分」 表示 (秒なし)。
+          // v451 ホームの待ち合わせ / 〆切は 「X 時間 Y 分」 表示 (秒なし)。
           time: `${fmtHumanLong(remaining)} ${isDeadline ? '残' : '後'}`,
           tick: { mode: 'countdown', targetMs: ts,
                   suffix: isDeadline ? ' 残' : ' 後',
@@ -2862,9 +2862,9 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    // v482 #70 #73 点呼: 自分 が 起案 した もの + 自分 が 対象 (応答済 含む) の
-    //   open な もの を 表示。 起算点 = 「点呼 を 押した 時刻」 (created_at) で
-    //   countup。 応答済 は 「✅」 マーク付き で 区別。
+    // v482 #70 #73 点呼: 自分が起案したもの + 自分が対象 (応答済含む) の
+    //   open なものを表示。 起算点 = 「点呼を押した時刻」 (created_at) で
+    //   countup。 応答済は 「✅」 マーク付きで区別。
     if (rc.status === 'fulfilled') {
       const nowMs = Date.now();
       for (const r of (rc.value.items || [])) {
@@ -2873,7 +2873,7 @@ async function renderMyActiveTimers() {
         const isTarget = Number(r.is_target) === 1 || r.is_target === true;
         if (!isCreator && !isTarget) continue;
         const hasResponded = Number(r.has_responded) === 1 || r.has_responded === true;
-        // v660 (feedback #242) 自分 が 応答 済 の 点呼 は 進行中 から 消す。 起案者 視点 では 引き続き 表示。
+        // v660 (feedback #242) 自分が応答済の点呼は進行中から消す。 起案者視点では引き続き表示。
         if (hasResponded && !isCreator) continue;
         const startedMs = r.created_at ? Date.parse(String(r.created_at).replace(' ', 'T')) : null;
         const elapsed = startedMs ? Math.max(0, Math.floor((nowMs - startedMs) / 1000)) : 0;
@@ -2892,9 +2892,9 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    // タイマー。 v445 running は tick countdown (target は サーバ-クライアント 時刻差を
-    // 引いた client 時間 軸)、 60 秒 切ったら 赤。 v446 paused は tick なし で
-    // 「⏸ 残り MM:SS」 を 静的 表示。
+    // タイマー。 v445 running は tick countdown (target はサーバ-クライアント時刻差を
+    // 引いた client 時間軸)、 60 秒切ったら赤。 v446 paused は tick なしで
+    // 「⏸ 残り MM:SS」 を静的表示。
     if (tm.status === 'fulfilled') {
       const tNow = Date.parse(String(tm.value.server_now).replace(' ', 'T'));
       const tOff = tNow - Date.now();
@@ -2905,14 +2905,14 @@ async function renderMyActiveTimers() {
           const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
           const targetClient = ends - tOff;
           const remaining = Math.max(0, Math.floor((targetClient - Date.now()) / 1000));
-          // v724 #324 発表終了後 (= ends_at 過ぎ) は 質疑 経過 を カウントアップ で 表示。
-          //   running の まま でも ホーム に 残す ように なった ので、 「0:00 残」 に
-          //   貼り付かない ように 質疑時間 N に 切替。
+          // v724 #324 発表終了後 (= ends_at 過ぎ) は質疑経過をカウントアップで表示。
+          //   running のままでもホームに残すようになったので、 「0:00 残」 に
+          //   貼り付かないように質疑時間 N に切替。
           if (remaining === 0) {
             const elapsedSinceEnd = Math.max(0, Math.floor((Date.now() - targetClient) / 1000));
             rows.push({
               href: '#/timers/' + t.id,
-              kind: '🏁 タイマー 質疑',
+              kind: '🏁 タイマー質疑',
               title: t.title,
               time: `質疑 ${fmtTmDur(elapsedSinceEnd)}`,
               tick: { mode: 'countup', baseSec: elapsedSinceEnd, anchorMs: Date.now(), prefix: '質疑 ' },
@@ -2938,12 +2938,12 @@ async function renderMyActiveTimers() {
           const remaining = Math.max(0, Number(t.remaining_seconds) || 0);
           rows.push({
             href: '#/timers/' + t.id,
-            kind: '⏸ タイマー 一時停止',
+            kind: '⏸ タイマー一時停止',
             title: t.title,
             time: `${fmtTmDur(remaining)} 残`,
             tick: null,
             sort: 888888 + remaining,
-            // v725 #329 paused の色を 橙→緑 (赤い感じが目障りとの指摘)。
+            // v725 #329 paused の色を橙→緑 (赤い感じが目障りとの指摘)。
             color: '#0e7c63',
             bg: '#e0f7f1',
             participants: t.participants || [],
@@ -2951,7 +2951,7 @@ async function renderMyActiveTimers() {
         }
       }
     }
-    // ストップウォッチ。 running は 1 秒 ごと 経過秒 +1、 paused は 固定表示。
+    // ストップウォッチ。 running は 1 秒ごと経過秒 +1、 paused は固定表示。
     if (sw.status === 'fulfilled') {
       for (const s of (sw.value.items || [])) {
         if (s.status === 'stopped') continue;  // リセット済は出さない
@@ -2968,10 +2968,10 @@ async function renderMyActiveTimers() {
         });
       }
     }
-    // 前回 の tick interval は 解除。 空でも 解除する。
+    // 前回の tick interval は解除。 空でも解除する。
     if (myActiveTimersTickId) { clearInterval(myActiveTimersTickId); myActiveTimersTickId = null; }
-    // v660 「他 N 件」 だけ の 時 は ウィジェット 自体 を 出さない (= rows 空 なら hide。
-    // farTotal 件 は 集合連絡 ページ から 見える)。
+    // v660 「他 N 件」 だけの時はウィジェット自体を出さない (= rows 空なら hide。
+    // farTotal 件は集合連絡ページから見える)。
     const farTotal = farMeetups + farDeadlines;
     if (!rows.length) { card.hidden = true; root.innerHTML = ''; return; }
     card.hidden = false;
@@ -2983,7 +2983,7 @@ async function renderMyActiveTimers() {
           ? ` data-tick-mode="countdown" data-tick-target-ms="${t.targetMs}" data-tick-suffix="${escapeHtml(t.suffix || '')}"${t.fmt ? ` data-tick-fmt="${escapeHtml(t.fmt)}"` : ''} data-tick-red-below="${t.redBelow || 0}" data-tick-color-red="${t.colorRed || '#c62828'}" data-tick-color-norm="${t.colorNorm || '#1565c0'}"`
           : ` data-tick-mode="countup" data-tick-base-sec="${t.baseSec}" data-tick-anchor-ms="${t.anchorMs}"${t.suffix ? ` data-tick-suffix="${escapeHtml(t.suffix)}"` : ''}`
       ) : '';
-      // v466 関係者 アバター を 重ねて (overlap) 横並び 表示。 最大 5 名。
+      // v466 関係者アバターを重ねて (overlap) 横並び表示。 最大 5 名。
       const parts = Array.isArray(r.participants) ? r.participants : [];
       const partsHtml = parts.length ? `
         <div style="display:flex; margin-right:6px; flex-shrink:0">
@@ -2995,8 +2995,8 @@ async function renderMyActiveTimers() {
               : `<div title="${escapeHtml(p.display_name)}" style="width:22px; height:22px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px; border:2px solid #fff; ${ml}">${escapeHtml(initial)}</div>`;
           }).join('')}
         </div>` : '';
-      // v478 タグ を 時間 の 下 に 配置 し、 タイトル に 横幅 を 渡す (タイトル が
-      // 改行 されない ように)。 左カラム = [時間 + タグ] スタック、 中 = タイトル、 右 = アバター + →。
+      // v478 タグを時間の下に配置し、 タイトルに横幅を渡す (タイトルが
+      // 改行されないように)。 左カラム = [時間 + タグ] スタック、 中 = タイトル、 右 = アバター + →。
       return `
         <a class="list-item" href="${r.href}">
           <div style="display:flex; flex-direction:column; align-items:center; flex:none; min-width:80px; gap:2px">
@@ -3010,12 +3010,12 @@ async function renderMyActiveTimers() {
           <div class="hint">→</div>
         </a>`;
     }).join('');
-    // v650 1 週間先 の 集約 footer (v651 シンプルに 「⏳ 他 N 件」 だけ)
+    // v650 1 週間先の集約 footer (v651 シンプルに 「⏳ 他 N 件」 だけ)
     if (farTotal > 0) {
       root.insertAdjacentHTML('beforeend',
         `<a href="#/meetups" class="hint-sm" style="display:block; padding:6px 0; text-align:center; font-size:12px; color:#7c3aed; margin-top:4px">⏳ 他 ${farTotal} 件</a>`);
     }
-    // ローカル 秒 tick 開始。 root が DOM から 外れたら 自動 停止。
+    // ローカル秒 tick 開始。 root が DOM から外れたら自動停止。
     myActiveTimersTickId = setInterval(() => updateMyActiveTimersTicks(root), 1000);
   } catch (_) {
     card.hidden = true;
@@ -3039,7 +3039,7 @@ async function renderFreshListings() {
     // グループ / 募集と同じ with-cover レイアウト (左 110px の表紙画像) で
     // 新規入荷も大きく見せる。 残数が分かるようメタ行に 「在庫 N」 を入れる。
     root.innerHTML = items.map(l => {
-      // v376 価格 / プレゼントは 画像の左下に absolute オーバーレイ。
+      // v376 価格 / プレゼントは画像の左下に absolute オーバーレイ。
       const priceColor = l.is_gift ? '#b71c50' : 'var(--primary)';
       const priceLabel = l.is_gift ? '🎁' : `${l.price.toLocaleString()} pt`;
       const priceBadge = `<div class="price-badge" style="color:${priceColor}">${priceLabel}</div>`;
@@ -3047,7 +3047,7 @@ async function renderFreshListings() {
       const qtyTag = (typeof l.qty === 'number' && l.qty >= 2) ? ` · 在庫 ${l.qty}` : '';
       // v378 created_at は YYYY-MM-DD だけ (時刻は不要)。
       const when = fmtDate(l.created_at);
-      // v378 出品者は アイコンで (名前は title 属性に)。
+      // v378 出品者はアイコンで (名前は title 属性に)。
       const sellerAvatar = `<span title="${escapeHtml(l.seller_name)}" style="display:inline-flex; vertical-align:middle">${avatarHtml(l.seller_name, l.seller_avatar_url, 'xs')}</span>`;
       const meta = `${sellerAvatar}${l.location ? ' · 📍 ' + escapeHtml(l.location) : ''}${qtyTag} · ${escapeHtml(when)}`;
       const href = `#/product/${encodeURIComponent(l.jan)}`;
@@ -3164,14 +3164,14 @@ async function renderRecentTx() {
 //  - Already checked in:     subtle ✓ message
 //  - Not yet, today is workday: passive message (Wi-Fi scanner handles it)
 //  - Not yet, not workday:   inert message, but still allow optional checkin
-// v508 ヒーロー チェックイン 表示も SWR キャッシュ化。 同じく前回のステータスを
+// v508 ヒーローチェックイン表示も SWR キャッシュ化。 同じく前回のステータスを
 //   即出して、 裏で /api/checkins/status を取り直す。
 const CHECKIN_CACHE_KEY = 'labpay-checkin-status-cache';
 function paintCheckin(status) {
   const root = document.getElementById('checkin-area');
   if (!root || !status) return;
   if (status.checked_in_today) {
-    // v610 「✓ 本日ラボイン済み」 メッセージは 連続ラボイン表示と 重複するので 撤去。
+    // v610 「✓ 本日ラボイン済み」 メッセージは連続ラボイン表示と重複するので撤去。
     //   ボーナス説明 (まだ初心者) のみ表示。
     const veteran = (status.longest_streak || 0) >= 3;
     root.innerHTML = veteran ? '' : bonusRuleHtml(status.bonus_rule);

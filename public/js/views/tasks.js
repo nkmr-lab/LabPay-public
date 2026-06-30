@@ -10,20 +10,20 @@ const GRADES = ['B3', 'B4', 'M1', 'M2', 'D'];
 // 学年の表示順 (上位学年から)。指名 picker のソートと bulk ボタン順に使用。
 const GRADE_ORDER = ['D','M2','M1','B4','B3',''];
 
-// v787 #390 タスク 説明 内 の URL を 別 タブ で 開ける リンク に。 escapeHtml した 後 で URL パターン だけ <a target="_blank"> に 置換。
+// v787 #390 タスク説明内の URL を別タブで開けるリンクに。 escapeHtml した後で URL パターンだけ <a target="_blank"> に置換。
 function linkifyUrlsHtml(escapedText) {
   return String(escapedText).replace(/(https?:\/\/[^\s<>"']+)/g, url =>
     `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline; word-break:break-all">${url}</a>`
   );
 }
 
-// v790 #393 完了 時 入力 欄 spec をパース。 1 行 1 項目、 `key|label|type|options` 形式。
-//   type は text / textarea / select、 options は select 用 の ; 区切り。
-//   label / type 末尾 に「*」 で required。 全 空 → null を 返す。
+// v790 #393 完了時入力欄 spec をパース。 1 行 1 項目、 `key|label|type|options` 形式。
+//   type は text / textarea / select、 options は select 用の ; 区切り。
+//   label / type 末尾に「*」 で required。 全空 → null を返す。
 function parseCompletionFieldsSpec(text) {
   const lines = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   if (!lines.length) return null;
-  if (lines.length > 10) throw new Error('最大 10 個 まで');
+  if (lines.length > 10) throw new Error('最大 10 個まで');
   const out = [];
   const seen = new Set();
   for (const ln of lines) {
@@ -34,15 +34,15 @@ function parseCompletionFieldsSpec(text) {
     const requiredMark = (parts[2] || '').endsWith('*') || (parts[1] || '').endsWith('*');
     if (label.endsWith('*')) label = label.slice(0, -1).trim();
     const optsRaw = parts[3] || '';
-    if (!key || !label) throw new Error(`行「${ln}」: key|label が 必要`);
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(key)) throw new Error(`「${key}」 は 半角英数 _ - 32 字 以内`);
+    if (!key || !label) throw new Error(`行「${ln}」: key|label が必要`);
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(key)) throw new Error(`「${key}」 は半角英数 _ - 32 字以内`);
     if (seen.has(key)) throw new Error(`key 重複: ${key}`);
     seen.add(key);
     if (!['text', 'textarea', 'select'].includes(type)) throw new Error(`type は text / textarea / select のみ`);
     const f = { key, label, type, required: requiredMark };
     if (type === 'select') {
       const opts = optsRaw.split(';').map(s => s.trim()).filter(Boolean);
-      if (!opts.length) throw new Error(`select は ; 区切り の オプション が 必要 (例: OK;NG)`);
+      if (!opts.length) throw new Error(`select は ; 区切りのオプションが必要 (例: OK;NG)`);
       f.options = opts;
     }
     out.push(f);
@@ -50,11 +50,11 @@ function parseCompletionFieldsSpec(text) {
   return out;
 }
 
-// v790 #393 受諾者 の 完了 報告 フォーム に カスタム 入力 欄 を 差し込む HTML
+// v790 #393 受諾者の完了報告フォームにカスタム入力欄を差し込む HTML
 function renderCompletionFieldsForm(fields) {
   if (!Array.isArray(fields) || !fields.length) return '';
   return `<div style="margin-top:8px; padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0">
-    <div class="bold" style="font-size:13px; color:#6b21a8; margin-bottom:4px">📝 完了 時 の 入力 欄</div>
+    <div class="bold" style="font-size:13px; color:#6b21a8; margin-bottom:4px">📝 完了時の入力欄</div>
     ${fields.map(f => {
       const id = 'cf-' + f.key;
       const lbl = escapeHtml(f.label) + (f.required ? ' <span style="color:#dc2626">*</span>' : '');
@@ -81,7 +81,7 @@ function renderCompletionFieldsForm(fields) {
   </div>`;
 }
 
-// v790 #393 完了 報告 フォーム から 値 を 収集 + 簡易 必須 チェック
+// v790 #393 完了報告フォームから値を収集 + 簡易必須チェック
 function collectCompletionFieldsValues(fields) {
   if (!Array.isArray(fields) || !fields.length) return null;
   const out = {};
@@ -90,7 +90,7 @@ function collectCompletionFieldsValues(fields) {
     if (!el) continue;
     const v = (el.value || '').trim();
     if (!v) {
-      if (f.required) throw new Error(`「${f.label}」 は 入力 必須 です`);
+      if (f.required) throw new Error(`「${f.label}」 は入力必須です`);
       continue;
     }
     out[f.key] = v;
@@ -113,14 +113,14 @@ export async function renderTasks() {
         <button id="task-request" class="btn">+ 依頼 (報酬なし)</button>
       </div>
       <p class="muted" style="font-size:12px; margin:8px 0 0">
-        <span class="text-primary">●</span> 自分 が 起案  ·
-        <span style="color:#b54708">●</span> 引き受け 中 / 承認 待ち  ·
+        <span class="text-primary">●</span> 自分が起案  ·
+        <span style="color:#b54708">●</span> 引き受け中 / 承認待ち  ·
         <span style="color:#0e7c63">●</span> 受けられる
       </p>
       <p class="hint-sm" style="margin:6px 0 0">
-        <b>🎯 募集</b> = 報酬付き、 誰 でも 引き受け OK の 公募 型 /
-        <b>👤 割り当て</b> = 報酬付き、 指名 型 /
-        <b>🙏 依頼</b> = 報酬 なし で お願い (善意 で 引き受けて もらう)
+        <b>🎯 募集</b> = 報酬付き、 誰でも引き受け OK の公募型 /
+        <b>👤 割り当て</b> = 報酬付き、 指名型 /
+        <b>🙏 依頼</b> = 報酬なしでお願い (善意で引き受けてもらう)
       </p>
       <label class="hint" style="display:inline-flex; align-items:center; gap:6px; margin-top:8px">
         <input type="checkbox" id="task-show-history" ${showHistory ? 'checked' : ''}>
@@ -145,9 +145,9 @@ export async function renderTasks() {
   if (m) {
     history.replaceState(null, '', '#/tasks');
     toggleCreateForm(m[1]);
-    // ホームからの 遷移で 前画面の スクロール位置 が 引き継がれて 「フォーム途中
-    // からになる」 不具合の 対処 (feedback#11)。 ページ先頭に 戻してから 開いた
-    // フォームの 先頭が 自然に 見える 状態 にする。
+    // ホームからの遷移で前画面のスクロール位置が引き継がれて 「フォーム途中
+    // からになる」 不具合の対処 (feedback#11)。 ページ先頭に戻してから開いた
+    // フォームの先頭が自然に見える状態にする。
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
   await loadList();
@@ -165,7 +165,7 @@ function toggleCreateForm(mode = null) {
   }
   createMode = mode;
   const isAssign = mode === 'assign';
-  const isFree   = mode === 'free';  // 報酬なし リクエスト
+  const isFree   = mode === 'free';  // 報酬なしリクエスト
 
   // 共通フィールド
   const commonTop = `
@@ -189,12 +189,12 @@ function toggleCreateForm(mode = null) {
       </label>
       <label class="field">
         <span class="lbl">📝 完了時の入力欄 (任意・最大 10 個)</span>
-        <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を 並べる。 type は text / textarea / select。 select の オプション は ; 区切り。 末尾 に * を 付ける と 必須。 例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想 アンケート (target=_blank)|text"></textarea>
+        <textarea id="t-cfields" maxlength="2000" rows="4" placeholder="1 行 1 項目で「key|ラベル|type|オプション」 を並べる。 type は text / textarea / select。 select のオプションは ; 区切り。 末尾に * を付けると必須。 例:&#10;user_id|ユーザID|text*&#10;exp_id|実験ID|select|A;B;C;D*&#10;issue|問題点・気づき|textarea&#10;survey_url|↗ 感想アンケート (target=_blank)|text"></textarea>
         <div class="hint-sm" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap">
           <button type="button" class="btn" id="t-cfields-preset-userexp"  style="font-size:11px; padding:2px 8px">↳ サンプル: ユーザID + 実験ID</button>
           <button type="button" class="btn" id="t-cfields-preset-pre"     style="font-size:11px; padding:2px 8px">↳ サンプル: プレ実験 (問題点 + 感想URL)</button>
         </div>
-        <div class="hint-sm">受諾者が完了報告時に埋める欄。 ID 選択 / 自由入力 / 問題報告 などに 使えます (key は半角英数 _- 32 字 以内)。</div>
+        <div class="hint-sm">受諾者が完了報告時に埋める欄。 ID 選択 / 自由入力 / 問題報告などに使えます (key は半角英数 _- 32 字以内)。</div>
       </label>`;
 
   // 報酬欄: 募集型は「報酬 + 募集人数」 2 列、指名型は「報酬」 1 列のみ。
@@ -234,14 +234,14 @@ function toggleCreateForm(mode = null) {
         </span>
       </label>`;
 
-  // 依頼 / 割り当て 共通の picker: 全員/学年/性別 bulk + 個別 chip。
+  // 依頼 / 割り当て共通の picker: 全員/学年/性別 bulk + 個別 chip。
   // 依頼 mode は picked = audience filter (空 OK = 全員)、
   // 割り当て mode は picked = 直接アサイン (1人以上必須)。
   const pickerLabel = isAssign
     ? '割り当てる人 (必須・1 人以上)'
     : '対象 (空欄なら全員 OK / 絞り込みたい時に選ぶ)';
   const pickerHint = isAssign
-    ? '承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認 で支払い。'
+    ? '承諾不要で 「やってください」 状態になり、本人に通知が飛びます。完了したら本人が報告 → あなたが承認で支払い。'
     : 'チェックを入れた人だけが引き受け可能になります。空欄なら学年制限なし。';
   const pickerSection = `
       <div class="field">
@@ -261,7 +261,7 @@ function toggleCreateForm(mode = null) {
         <input type="datetime-local" id="t-deadline">
       </label>`;
 
-  // v749 #363 添付欄 が でかすぎ た ので コンパクト化。 label を 詰めて hint を 1 行 に。
+  // v749 #363 添付欄がでかすぎたのでコンパクト化。 label を詰めて hint を 1 行に。
   const files = `
       <label class="field" style="margin-bottom:6px">
         <span class="lbl" style="font-size:12px">📎 添付 (任意・複数可・1 ファイル 50MB)</span>
@@ -277,8 +277,8 @@ function toggleCreateForm(mode = null) {
     ? `<b>指定した人に直接アサイン</b>します。承諾不要で 「やる人」 として登録され、本人に通知が飛びます。完了報告→承認の流れは募集型と同じ。
        <br>・<b>報酬 × 指名人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`
     : isFree
-    ? `<b>報酬なしで お願い</b>するモードです。 善意で 誰かが 引き受けてくれます。 ESCROW も発生しません。
-       <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて 表示されます。`
+    ? `<b>報酬なしでお願い</b>するモードです。 善意で誰かが引き受けてくれます。 ESCROW も発生しません。
+       <br>・タスクの一覧では 「🙏 リクエスト」 タグが付いて表示されます。`
     : `<b>対象を絞れる募集</b>です。学年指定 (B3/B4/M1/M2/D) または全員に出せる。
        <br>・<b>時間枠で予定調整</b> — 「6/15 11:00-15:00 30分刻み」で枠ごとに 1 人 / 末尾「<b>x3</b>」or「<b>3人</b>」で各枠複数人募集 (v875)。
        <br>・<b>報酬 × 人数の pt が ESCROW</b> に預けられます (取り消し時は未承認分が返金)。`;
@@ -295,7 +295,7 @@ function toggleCreateForm(mode = null) {
       ${isFree || state.me?.role !== 'admin' ? '' : `
         <label class="field" style="display:flex; align-items:center; gap:6px; background:#fef9c3; border:1px dashed #ca8a04; padding:6px 10px; border-radius:6px">
           <input type="checkbox" id="t-fund-system">
-          <span style="font-size:13px"><b>💰 システム持ち出し</b> (adminのみ — 報酬 × 人数 を LabPay公式アカウント から出金する)</span>
+          <span style="font-size:13px"><b>💰 システム持ち出し</b> (adminのみ — 報酬 × 人数を LabPay公式アカウントから出金する)</span>
         </label>`}
       ${deadline}
       ${requestOnly}
@@ -363,7 +363,7 @@ function toggleCreateForm(mode = null) {
   ['t-title','t-desc','t-url','t-reward','t-capacity','t-slots','t-deadline','t-cfields','t-cmsg']
     .forEach(id => document.getElementById(id)?.addEventListener('input', updatePreview));
   updatePreview();
-  // v874 #455 完了 時 入力欄 サンプル の プリセット ボタン
+  // v874 #455 完了時入力欄サンプルのプリセットボタン
   const cfEl = document.getElementById('t-cfields');
   document.getElementById('t-cfields-preset-userexp')?.addEventListener('click', () => {
     if (cfEl) cfEl.value = 'user_id|ユーザID|text*\nexp_id|実験ID|select|A;B;C;D*\nnote|メモ(任意)|textarea';
@@ -466,20 +466,20 @@ async function onCreate() {
   const url = document.getElementById('t-url').value.trim();
   const description = document.getElementById('t-desc').value.trim();
   const completion_message = document.getElementById('t-cmsg').value.trim();
-  // v790 #393 完了 時 入力 欄
+  // v790 #393 完了時入力欄
   let completion_fields = null;
   try { completion_fields = parseCompletionFieldsSpec(document.getElementById('t-cfields')?.value || ''); }
-  catch (e) { toast('完了 時 入力 欄: ' + e.message); restoreBtn(); return; }
-  // 報酬: リクエストモードは 強制 0、 そうでなければ フォームから。
+  catch (e) { toast('完了時入力欄: ' + e.message); restoreBtn(); return; }
+  // 報酬: リクエストモードは強制 0、 そうでなければフォームから。
   const reward = isFree ? 0 : Number(document.getElementById('t-reward').value);
-  // v560 #215 deadline は TZ helper 経由で JST or ローカル を選択可能に
+  // v560 #215 deadline は TZ helper 経由で JST or ローカルを選択可能に
   const deadlineRaw = document.getElementById('t-deadline').value || null;
   const deadline = deadlineRaw ? localDtToIso(deadlineRaw) : null;
   if (!title || !(reward >= 0)) { toast('タイトルを確認してください'); restoreBtn(); return; }
   const files = Array.from(document.getElementById('t-files')?.files || []);
 
   // モード別ペイロード組み立て:
-  // * request: 募集人数 / per-user limit / 時間枠 / 対象学年 を含める
+  // * request: 募集人数 / per-user limit / 時間枠 / 対象学年を含める
   // * assign : assigned_user_ids を含め、capacity は backend が指名人数に強制セット
   let payload = {
     title,
@@ -499,10 +499,10 @@ async function onCreate() {
     payload.capacity = assignedPicked.size; // backend 側でも上書きされるが明示。
   } else {
     const slots_spec = document.getElementById('t-slots').value.trim();
-    // v700 #289 リクエスト モード では t-capacity input が DOM に 無い (rewardRow 側 の
-    //   入力 として 同居 して いた ため、 isFree=true で 「報酬」 行 ごと skip される)。
-    //   結果、 querySelector が null を 返して .value で TypeError → ボタン が
-    //   無反応 に なる bug 修正。 fallback で 1 人 募集 を 既定 に。
+    // v700 #289 リクエストモードでは t-capacity input が DOM に無い (rewardRow 側の
+    //   入力として同居していたため、 isFree=true で 「報酬」 行ごと skip される)。
+    //   結果、 querySelector が null を返して .value で TypeError → ボタンが
+    //   無反応になる bug 修正。 fallback で 1 人募集を既定に。
     const tCapEl = document.getElementById('t-capacity');
     const capacityRaw = tCapEl ? Number(tCapEl.value) : 1;
     const capacity = isFree ? Math.max(1, capacityRaw || 1) : capacityRaw;
@@ -530,7 +530,7 @@ async function onCreate() {
       catch (e) { attachFails++; console.warn('attach failed:', f.name, e); }
     }
     const verb = isAssign ? '割り当てました' : isFree ? 'リクエストを出しました' : '依頼しました';
-    if (attachFails > 0) toast(`作成しました (添付 ${attachFails}件 失敗)`);
+    if (attachFails > 0) toast(`作成しました (添付 ${attachFails}件失敗)`);
     else toast(verb + (files.length ? ` (添付 ${files.length}件)` : ''));
     toggleCreateForm(null);
     await loadList();
@@ -617,7 +617,7 @@ function renderRow(t) {
     borderColor = '#dadbe2';
   }
 
-  // 指名対象 / 完了者 を avatar chips で。 avatar に hover title で名前。
+  // 指名対象 / 完了者を avatar chips で。 avatar に hover title で名前。
   const peopleChip = (u) =>
     `<span title="${escapeHtml(u.display_name)}" style="display:inline-flex; align-items:center; gap:2px">
        ${avatarHtml(u.display_name, u.avatar_url, 'xs')}
@@ -665,7 +665,7 @@ export async function renderTaskDetail({ params }) {
   await loadDetail(id);
 }
 
-let lastLoadedTask = null;   // v790 #393 onReport が completion_fields を 参照 する 用
+let lastLoadedTask = null;   // v790 #393 onReport が completion_fields を参照する用
 async function loadDetail(id) {
   try {
     const t = await get('/api/tasks/' + id);
@@ -718,16 +718,16 @@ async function loadDetail(id) {
           actions = `<button id="claim-btn" class="primary">これを引き受ける</button>`;
         }
       } else if (t.remaining === 0) {
-        actions = `<button class="primary" disabled>定員 に 達して います</button>`;
+        actions = `<button class="primary" disabled>定員に達しています</button>`;
       } else {
-        // v787 #392 指名 型 で 自分 が 対象 外 なら 「指名 対象 外 です」 と 明示 した
-        //   disabled ボタン に。 単純 な 上限 オーバー の 場合 も 同じ ボタン で 統一。
+        // v787 #392 指名型で自分が対象外なら 「指名対象外です」 と明示した
+        //   disabled ボタンに。 単純な上限オーバーの場合も同じボタンで統一。
         const isAssignTaskNotMe = (t.assigned_user_ids?.length || 0) > 0
           && !t.is_assigned_to_me;
-        const label = isAssignTaskNotMe ? '🚫 指名 対象 外 です'
+        const label = isAssignTaskNotMe ? '🚫 指名対象外です'
           : (t.per_user_limit > 0 && myActive.length >= t.per_user_limit)
-            ? '上限 に 達して います'
-            : '対象 外 で 受け られ ません';
+            ? '上限に達しています'
+            : '対象外で受けられません';
         actions = `<button class="primary" disabled>${label}</button>`;
       }
     }
@@ -736,7 +736,7 @@ async function loadDetail(id) {
       actions += `
         <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
           <button id="edit-task">編集</button>
-          <button id="close-task" class="btn">✅ 終了 する</button>
+          <button id="close-task" class="btn">✅ 終了する</button>
           <button id="cancel-task" class="danger">取り消す</button>
         </div>`;
     }
@@ -807,8 +807,8 @@ async function loadDetail(id) {
             <div class="bold" style="font-size:18px">${escapeHtml(t.title)}</div>
             <div class="meta">${escapeHtml(t.requester_name)} · ${t.created_at}</div>
           </div>
-          <button id="task-copy-url" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="URL を コピー">🔗 URL</button>
-          <button id="task-share" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="らぼったー で 共有">💬 共有</button>
+          <button id="task-copy-url" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="URL をコピー">🔗 URL</button>
+          <button id="task-share" class="btn" style="font-size:12px; padding:4px 8px; flex:none" title="らぼったーで共有">💬 共有</button>
         </div>
         ${urlBlock}
         ${t.description ? `<div style="margin-top:10px; white-space:pre-wrap">${linkifyUrlsHtml(escapeHtml(t.description))}</div>` : ''}
@@ -879,7 +879,7 @@ async function loadDetail(id) {
         try { await uploadTaskAttachment(id, f); }
         catch (e) { fails++; console.warn(e); }
       }
-      toast(fails ? `${files.length - fails}件成功 / ${fails}件失敗` : `添付 ${files.length}件 追加`);
+      toast(fails ? `${files.length - fails}件成功 / ${fails}件失敗` : `添付 ${files.length}件追加`);
       await loadDetail(id);
     });
   } catch (e) {
@@ -890,11 +890,11 @@ async function loadDetail(id) {
 // One reported-claim card inside the top pendingAlert: avatar, worker name, notes,
 // and big inline approve/reject buttons so the requester can act immediately.
 function renderReportedClaimCard(c, reward) {
-  // v790 #393 受諾者 が 埋めた completion_data を 表示
+  // v790 #393 受諾者が埋めた completion_data を表示
   const cd = c.completion_data;
   const cdHtml = (cd && typeof cd === 'object' && Object.keys(cd).length) ? `
     <div style="margin-top:4px; padding:8px 10px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px">
-      <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:4px">📝 完了 時 の 入力</div>
+      <div class="bold" style="font-size:12px; color:#6b21a8; margin-bottom:4px">📝 完了時の入力</div>
       ${Object.entries(cd).map(([k, v]) =>
         `<div style="margin-top:3px"><span class="bold">${escapeHtml(k)}:</span> ${escapeHtml(String(v))}</div>`).join('')}
     </div>` : '';
@@ -948,7 +948,7 @@ async function onClaim(taskId, slotId) {
 
 async function onReport(taskId, claimId) {
   const notes = document.getElementById('report-notes')?.value.trim() || null;
-  // v790 #393 task.completion_fields に 基づい て 値 を 集める (loadDetail で 取得 した task object を 参照)
+  // v790 #393 task.completion_fields に基づいて値を集める (loadDetail で取得した task object を参照)
   const fields = lastLoadedTask?.completion_fields || [];
   let completion_data = null;
   try { completion_data = collectCompletionFieldsValues(fields); }
@@ -1080,11 +1080,11 @@ async function onCancelTask(taskId) {
   catch (e) { toast('失敗: ' + e.message); }
 }
 
-// v714 #309 「終了」 = 取消 と 違って 「もう 募集 締切 で OK」 完了 扱い に する。
-//   未承認 capacity 分 は 返金、 進行 中 の claim は cancel 扱い (取消 と 同じ)、
-//   ただし 履歴 上 の status は 'closed'。
+// v714 #309 「終了」 = 取消と違って 「もう募集締切で OK」 完了扱いにする。
+//   未承認 capacity 分は返金、 進行中の claim は cancel 扱い (取消と同じ)、
+//   ただし履歴上の status は 'closed'。
 async function onCloseTask(taskId) {
-  if (!confirm('タスク を 終了 しますか? (= 募集 を 締切 完了 扱い に。 未承認 分 の 報酬 は 返金 されます)')) return;
-  try { const r = await post(`/api/tasks/${taskId}/close`, {}); toast(`終了 しました (${r.refunded}pt 返金)`); await loadDetail(taskId); }
+  if (!confirm('タスクを終了しますか? (= 募集を締切完了扱いに。 未承認分の報酬は返金されます)')) return;
+  try { const r = await post(`/api/tasks/${taskId}/close`, {}); toast(`終了しました (${r.refunded}pt 返金)`); await loadDetail(taskId); }
   catch (e) { toast('失敗: ' + e.message); }
 }

@@ -1,5 +1,5 @@
 // /#/walk — 散歩に行きたくなるアプリ。 v538 #169。
-// 現在地周辺の 食べある記 places から おすすめ散歩先を提案。 未訪を優先 + 距離順
+// 現在地周辺の食べある記 places からおすすめ散歩先を提案。 未訪を優先 + 距離順
 // + ランダム要素 (「✨ 今日のおすすめ」 はサーバ返却 top 数件から自分でランダム抽出)。
 
 import { get, post } from '../api.js';
@@ -19,7 +19,7 @@ export async function renderWalk() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🚶 散歩に行こう</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/walk-mode" style="font-size:12px; padding:4px 10px">📍 散歩モード 開始</a>
+        <a class="btn primary" href="#/walk-mode" style="font-size:12px; padding:4px 10px">📍 散歩モード開始</a>
         <a class="btn" href="#/walk/sessions" style="font-size:12px; padding:4px 8px">履歴</a>
         <select id="wk-radius" style="font-size:12px">
           <option value="500">500m</option>
@@ -31,7 +31,7 @@ export async function renderWalk() {
         <button id="wk-locate" class="btn primary" style="padding:4px 10px; font-size:12px">📍 現在地</button>
       </div>
     </div>
-    <div class="card" id="wk-hero"><div class="muted">「📍 現在地」 を押すと、 周辺の食べある記から 散歩先を提案します。</div></div>
+    <div class="card" id="wk-hero"><div class="muted">「📍 現在地」 を押すと、 周辺の食べある記から散歩先を提案します。</div></div>
     <div class="card" style="padding:0; overflow:hidden">
       <div id="wk-map" style="height:40vh; min-height:240px; width:100%; background:#eef"></div>
     </div>
@@ -110,7 +110,7 @@ function paint() {
   }
   const hero = document.getElementById('wk-hero');
   if (!suggestions.length) {
-    hero.innerHTML = '<div class="empty">この範囲には まだ食べある記がありません。 もっと広い範囲で検索してみてください。</div>';
+    hero.innerHTML = '<div class="empty">この範囲にはまだ食べある記がありません。 もっと広い範囲で検索してみてください。</div>';
     document.getElementById('wk-list').innerHTML = '';
     return;
   }
@@ -172,7 +172,7 @@ function paint() {
     : '<div class="empty" style="font-size:12px">他の候補はありません</div>';
 }
 
-// 進行方位 (北=0、 東=90、 南=180、 西=270) を 矢印文字に変換
+// 進行方位 (北=0、 東=90、 南=180、 西=270) を矢印文字に変換
 function bearingDeg(lat1, lng1, lat2, lng2) {
   const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
   const Δλ = (lng2 - lng1) * Math.PI / 180;

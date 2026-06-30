@@ -1,4 +1,4 @@
-// v635 📝 フリップ クイズ UI。 出題者 = 問題 + 採点、 参加者 = 回答 + 拡大表示。
+// v635 📝 フリップクイズ UI。 出題者 = 問題 + 採点、 参加者 = 回答 + 拡大表示。
 
 import { get, post } from '../api.js';
 import { state, toast } from '../app.js';
@@ -13,12 +13,12 @@ export async function renderQuizzes() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center" style="gap:6px">
-        <h2 style="margin:0">📝 フリップ クイズ</h2>
+        <h2 style="margin:0">📝 フリップクイズ</h2>
         <span style="flex:1"></span>
-        <a href="#/quizzes/new" class="btn primary">＋ 新規 クイズ</a>
+        <a href="#/quizzes/new" class="btn primary">＋ 新規クイズ</a>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        出題者が 1 問 ずつ 問題を 出題 → 参加者が フリップに 回答 → 一斉開示 → 出題者が マルバツ採点 → 集計。
+        出題者が 1 問ずつ問題を出題 → 参加者がフリップに回答 → 一斉開示 → 出題者がマルバツ採点 → 集計。
       </p>
     </div>
     <div id="qz-list"><div class="hint">読み込み中…</div></div>
@@ -27,14 +27,14 @@ export async function renderQuizzes() {
     const d = await get('/api/quizzes');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('qz-list').innerHTML = '<div class="hint">まだ クイズが ありません。</div>';
+      document.getElementById('qz-list').innerHTML = '<div class="hint">まだクイズがありません。</div>';
       return;
     }
     document.getElementById('qz-list').innerHTML = items.map(it => `
       <a class="list-item" href="#/quizzes/${it.id}">
         <div class="grow">
           <div class="bold">${escapeHtml(it.title)} ${it.status !== 'active' ? `<span class="tag muted">${escapeHtml(it.status)}</span>` : ''}</div>
-          <div class="meta">${escapeHtml(it.creator_name)} 起案 ・ ${it.participant_count} 人 ${it.me_in ? '<span class="tag ok">参加中</span>' : ''}</div>
+          <div class="meta">${escapeHtml(it.creator_name)} 起案・ ${it.participant_count} 人 ${it.me_in ? '<span class="tag ok">参加中</span>' : ''}</div>
         </div>
       </a>
     `).join('');
@@ -48,22 +48,22 @@ export async function renderQuizNew() {
   app.innerHTML = `
     <div class="card">
       <a href="#/quizzes" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0">📝 クイズ 新規作成</h2>
+      <h2 style="margin:6px 0">📝 クイズ新規作成</h2>
       <label class="field">
         <span class="lbl">タイトル</span>
-        <input type="text" id="qz-title" maxlength="200" placeholder="例: ラボ クイズ大会">
+        <input type="text" id="qz-title" maxlength="200" placeholder="例: ラボクイズ大会">
       </label>
-      <div class="lbl" style="margin-top:8px">出題 モード</div>
+      <div class="lbl" style="margin-top:8px">出題モード</div>
       <div style="display:flex; gap:8px; margin-bottom:8px">
         <label style="flex:1; padding:10px; border:2px solid #ddd; border-radius:8px; cursor:pointer">
-          <input type="radio" name="qz-mode" value="text" checked> ⌨️ テキスト入力 (問題文を 入力)
+          <input type="radio" name="qz-mode" value="text" checked> ⌨️ テキスト入力 (問題文を入力)
         </label>
         <label style="flex:1; padding:10px; border:2px solid #ddd; border-radius:8px; cursor:pointer">
-          <input type="radio" name="qz-mode" value="verbal"> 🗣️ 口頭 (フリップだけ、 出題は 声で)
+          <input type="radio" name="qz-mode" value="verbal"> 🗣️ 口頭 (フリップだけ、 出題は声で)
         </label>
       </div>
-      <div class="lbl" style="margin-top:8px">参加者 (自分は 自動で 含まれる)</div>
-      <div class="hint-sm" style="font-size:12px; margin-bottom:4px">回答する 人。 自分も 回答可</div>
+      <div class="lbl" style="margin-top:8px">参加者 (自分は自動で含まれる)</div>
+      <div class="hint-sm" style="font-size:12px; margin-bottom:4px">回答する人。 自分も回答可</div>
       <div id="qz-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
       <div id="qz-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:14px">
@@ -83,9 +83,9 @@ export async function renderQuizNew() {
 
   document.getElementById('qz-go').addEventListener('click', async () => {
     const title = document.getElementById('qz-title').value.trim();
-    if (!title) { toast('タイトル を 入れてください'); return; }
+    if (!title) { toast('タイトルを入れてください'); return; }
     const participants = picker ? [...picker.getSelected()] : [];
-    if (participants.length < 1) { toast('参加者 を 1 人以上 選んでください'); return; }
+    if (participants.length < 1) { toast('参加者を 1 人以上選んでください'); return; }
     const btn = document.getElementById('qz-go');
     btn.disabled = true; btn.textContent = '作成中…';
     try {
@@ -106,21 +106,21 @@ export async function renderQuizDetail({ params }) {
   }, POLL_MS);
 }
 
-// v662 #245 polling 用 wrapper。 入力中 の textarea や 採点中 の ⭕❌ を 保護 する
-// ため に skip 判定 を 入れる。 action 後 の 明示 paint(qid) は skip せず 必ず 走る。
+// v662 #245 polling 用 wrapper。 入力中の textarea や採点中の ⭕❌ を保護する
+// ために skip 判定を入れる。 action 後の明示 paint(qid) は skip せず必ず走る。
 async function pollPaint(qid) {
-  // v643 #240 入力中 の textarea / input が あれば polling re-render を skip。
-  // v662 #245 ただし display:none 配下 の textarea (例: 回答 編集 を 開いて 閉じた 後
-  //   や、 初期化時 に focus が 残った 場合) は 「実入力中」 では ない ので skip しない
-  //   (= offsetParent null = 不可視 なら 通常 polling 続行)。
+  // v643 #240 入力中の textarea / input があれば polling re-render を skip。
+  // v662 #245 ただし display:none 配下の textarea (例: 回答編集を開いて閉じた後
+  //   や、 初期化時に focus が残った場合) は 「実入力中」 ではないので skip しない
+  //   (= offsetParent null = 不可視なら通常 polling 続行)。
   const active = document.activeElement;
   if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
       document.getElementById('app')?.contains(active) && active.offsetParent !== null) {
     return;
   }
-  // v662 #245 採点中 (creator が ⭕ を 付けた score-btn が ある) は repaint が
-  //   dataset を リセット する ので skip。 確定 ボタン を 押せば backend 反映 →
-  //   次 の paint で 正式 状態 に なる。
+  // v662 #245 採点中 (creator が ⭕ を付けた score-btn がある) は repaint が
+  //   dataset をリセットするので skip。 確定ボタンを押せば backend 反映 →
+  //   次の paint で正式状態になる。
   const inScoring = Array.from(document.querySelectorAll('.qz-score-btn'))
     .some(b => b.dataset.score === '1');
   if (inScoring) return;
@@ -142,8 +142,8 @@ async function paint(qid) {
     <a href="#/quizzes" class="hint">← 一覧</a>
     <h2 style="margin:6px 0">📝 ${escapeHtml(d.title)}</h2>
     <div class="meta" style="font-size:13px">
-      ${escapeHtml(d.creator_name)} 出題 ・ 第 ${d.current_q} 問 ${phaseBadge(d.status, d.phase)}
-      ${d.total_questions ? ` ・ 過去 ${d.total_questions} 問` : ''}
+      ${escapeHtml(d.creator_name)} 出題・第 ${d.current_q} 問 ${phaseBadge(d.status, d.phase)}
+      ${d.total_questions ? ` ・過去 ${d.total_questions} 問` : ''}
     </div>
   </div>`;
 
@@ -161,7 +161,7 @@ async function paint(qid) {
     body += renderFinished(d, partName);
   }
 
-  // 累積 スコア (常時表示、 1 問でも 終わってれば)
+  // 累積スコア (常時表示、 1 問でも終わってれば)
   if (d.total_questions > 0) {
     const ranking = [...d.participants].sort((a, b) => (d.total_scores[b.uid] || 0) - (d.total_scores[a.uid] || 0));
     body += `<div class="card">
@@ -193,19 +193,19 @@ function renderAsking(d, me) {
     if (d.mode === 'verbal') {
       return `<div class="card">
         <h3 style="margin:0 0 6px">第 ${d.current_q} 問 (🗣️ 口頭モード)</h3>
-        <p class="hint" style="font-size:13px">声で 問題を 出してください。 全員が 聞いたら 下のボタンで 解答受付 を 開始。</p>
-        <button id="qz-ask" class="btn primary" style="margin-top:8px">🗣️ 出題した、 解答受付 開始</button>
-        ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで 終了</button>` : ''}
+        <p class="hint" style="font-size:13px">声で問題を出してください。 全員が聞いたら下のボタンで解答受付を開始。</p>
+        <button id="qz-ask" class="btn primary" style="margin-top:8px">🗣️ 出題した、 解答受付開始</button>
+        ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで終了</button>` : ''}
       </div>`;
     }
     return `<div class="card">
-      <h3 style="margin:0 0 6px">第 ${d.current_q} 問 を 出題</h3>
-      <textarea id="qz-q" rows="3" maxlength="500" placeholder="問題文 を 入力" style="width:100%; box-sizing:border-box; font-size:14px"></textarea>
+      <h3 style="margin:0 0 6px">第 ${d.current_q} 問を出題</h3>
+      <textarea id="qz-q" rows="3" maxlength="500" placeholder="問題文を入力" style="width:100%; box-sizing:border-box; font-size:14px"></textarea>
       <button id="qz-ask" class="btn primary" style="margin-top:8px">出題</button>
-      ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで 終了</button>` : ''}
+      ${d.total_questions > 0 ? `<button id="qz-finish-now" class="btn" style="margin-top:8px; margin-left:6px">ここで終了</button>` : ''}
     </div>`;
   }
-  return `<div class="card"><div class="hint">${d.mode === 'verbal' ? '出題者が 口頭で 問題を 出します…' : '出題者 が 問題 を 入力中…'} (第 ${d.current_q} 問)</div></div>`;
+  return `<div class="card"><div class="hint">${d.mode === 'verbal' ? '出題者が口頭で問題を出します…' : '出題者が問題を入力中…'} (第 ${d.current_q} 問)</div></div>`;
 }
 
 function renderAnswering(d, me, partName) {
@@ -213,30 +213,30 @@ function renderAnswering(d, me, partName) {
   const submittedCount = Object.keys(d.answers || {}).length;
   const total = d.participants.length;
   const qHtml = d.mode === 'verbal' && !d.question
-    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:8px; font-size:13px; color:#92400e">🗣️ 口頭で 出された 問題に 答えてください</div>'
+    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:8px; font-size:13px; color:#92400e">🗣️ 口頭で出された問題に答えてください</div>'
     : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:8px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
     <h3 style="margin:0 0 6px">第 ${d.current_q} 問</h3>
     ${qHtml}`;
   if (d.i_am_participant) {
     if (myAns !== undefined) {
-      html += `<div class="hint">送信済: <b>${escapeHtml(myAns)}</b>。 全員 ${submittedCount}/${total} 人 回答中…</div>
-        <button id="qz-edit-answer" class="btn" style="margin-top:6px; font-size:12px">回答を 変更</button>
+      html += `<div class="hint">送信済: <b>${escapeHtml(myAns)}</b>。 全員 ${submittedCount}/${total} 人回答中…</div>
+        <button id="qz-edit-answer" class="btn" style="margin-top:6px; font-size:12px">回答を変更</button>
         <div id="qz-answer-edit" style="display:none; margin-top:8px">
           <textarea id="qz-a" rows="2" maxlength="200" style="width:100%; box-sizing:border-box">${escapeHtml(myAns)}</textarea>
           <button id="qz-answer" class="btn primary" style="margin-top:6px">送信</button>
         </div>`;
     } else {
-      html += `<div class="hint-sm" style="font-size:12px; margin-bottom:6px">フリップ に 回答 を 書いてください</div>
+      html += `<div class="hint-sm" style="font-size:12px; margin-bottom:6px">フリップに回答を書いてください</div>
         <textarea id="qz-a" rows="2" maxlength="200" placeholder="回答" style="width:100%; box-sizing:border-box; font-size:18px"></textarea>
-        <button id="qz-answer" class="btn primary" style="margin-top:6px">回答 を 送信</button>`;
+        <button id="qz-answer" class="btn primary" style="margin-top:6px">回答を送信</button>`;
     }
   } else {
-    html += `<div class="hint">あなたは 観戦中。 全員 ${submittedCount}/${total} 人 回答中…</div>`;
+    html += `<div class="hint">あなたは観戦中。 全員 ${submittedCount}/${total} 人回答中…</div>`;
   }
   if (d.i_am_creator) {
     html += `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
-      <button id="qz-reveal" class="btn primary">📢 一斉 開示 (${submittedCount}/${total} 回答済)</button>
+      <button id="qz-reveal" class="btn primary">📢 一斉開示 (${submittedCount}/${total} 回答済)</button>
     </div>`;
   }
   html += `</div>`;
@@ -247,12 +247,12 @@ function renderReveal(d, me, partName) {
   const submitted = Object.keys(d.answers || {}).length;
   const total = d.participants.length;
   const qHtml = d.mode === 'verbal' && !d.question
-    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:10px; font-size:13px; color:#92400e">🗣️ 口頭で 出された 問題</div>'
+    ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:10px; font-size:13px; color:#92400e">🗣️ 口頭で出された問題</div>'
     : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; font-size:15px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
-    <h3 style="margin:0 0 6px">📢 第 ${d.current_q} 問 開示</h3>
+    <h3 style="margin:0 0 6px">📢 第 ${d.current_q} 問開示</h3>
     ${qHtml}
-    <div class="hint-sm" style="font-size:12px; margin-bottom:6px">タップで 拡大表示。 全員 ${submitted}/${total} 人 解答</div>
+    <div class="hint-sm" style="font-size:12px; margin-bottom:6px">タップで拡大表示。 全員 ${submitted}/${total} 人解答</div>
     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px">
       ${d.participants.map(p => {
         const ans = d.answers?.[String(p.uid)];
@@ -266,7 +266,7 @@ function renderReveal(d, me, partName) {
   </div>`;
   if (d.i_am_creator) {
     html += `<div class="card">
-      <div class="bold" style="margin-bottom:6px">マルバツ 採点 (タップで トグル)</div>
+      <div class="bold" style="margin-bottom:6px">マルバツ採点 (タップでトグル)</div>
       <div id="qz-score-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px">
         ${d.participants.map(p => `
           <button class="qz-score-btn" data-uid="${p.uid}" data-score="0"
@@ -276,10 +276,10 @@ function renderReveal(d, me, partName) {
           </button>
         `).join('')}
       </div>
-      <button id="qz-confirm-scores" class="btn primary" style="margin-top:10px">採点 確定</button>
+      <button id="qz-confirm-scores" class="btn primary" style="margin-top:10px">採点確定</button>
     </div>`;
   } else {
-    html += `<div class="card"><div class="hint">出題者の 採点 を 待っています…</div></div>`;
+    html += `<div class="card"><div class="hint">出題者の採点を待っています…</div></div>`;
   }
   return html;
 }
@@ -289,7 +289,7 @@ function renderScored(d, me, partName) {
     ? '<div style="padding:10px; background:#fef3c7; border-radius:8px; margin-bottom:10px; font-size:13px; color:#92400e">🗣️ 口頭問題</div>'
     : `<div style="padding:10px; background:#f9fafb; border-radius:8px; margin-bottom:10px; white-space:pre-wrap">${escapeHtml(d.question || '')}</div>`;
   let html = `<div class="card">
-    <h3 style="margin:0 0 6px">第 ${d.current_q} 問 採点結果</h3>
+    <h3 style="margin:0 0 6px">第 ${d.current_q} 問採点結果</h3>
     ${qHtml}
     ${d.participants.map(p => {
       const ans = d.answers?.[String(p.uid)];
@@ -303,23 +303,23 @@ function renderScored(d, me, partName) {
   </div>`;
   if (d.i_am_creator) {
     html += `<div class="card">
-      <button id="qz-next" class="btn primary">次の 問へ</button>
-      <button id="qz-finish" class="btn" style="margin-left:6px">クイズ 終了</button>
+      <button id="qz-next" class="btn primary">次の問へ</button>
+      <button id="qz-finish" class="btn" style="margin-left:6px">クイズ終了</button>
     </div>`;
   } else {
-    html += `<div class="card"><div class="hint">出題者の 次へ 待ち…</div></div>`;
+    html += `<div class="card"><div class="hint">出題者の次へ待ち…</div></div>`;
   }
   return html;
 }
 
 function renderFinished(d, partName) {
   let html = `<div class="card">
-    <h2 style="margin:0 0 6px">🏆 クイズ 終了 — 全 ${d.total_questions} 問</h2>
-    <div class="hint" style="font-size:13px">最終 ランキング:</div>
+    <h2 style="margin:0 0 6px">🏆 クイズ終了 — 全 ${d.total_questions} 問</h2>
+    <div class="hint" style="font-size:13px">最終ランキング:</div>
   </div>`;
   if (d.history && d.history.length) {
     html += `<div class="card">
-      <div class="bold" style="margin-bottom:6px">📜 全 ${d.history.length} 問 振り返り</div>
+      <div class="bold" style="margin-bottom:6px">📜 全 ${d.history.length} 問振り返り</div>
       ${d.history.map((h, idx) => `
         <details style="margin:6px 0; border:1px solid #eee; border-radius:6px">
           <summary style="padding:8px; cursor:pointer; font-weight:600">第 ${idx + 1} 問: ${h.q ? escapeHtml(h.q) : '<span style="color:#92400e">🗣️ 口頭問題</span>'}</summary>
@@ -345,13 +345,13 @@ function wireActions(qid, d, me, partName) {
   document.getElementById('qz-ask')?.addEventListener('click', async () => {
     const ta = document.getElementById('qz-q');
     const q = ta ? ta.value.trim() : '';
-    if (d.mode === 'text' && !q) { toast('問題文 を 入れてください'); return; }
+    if (d.mode === 'text' && !q) { toast('問題文を入れてください'); return; }
     try { await post('/api/quizzes/' + qid + '/ask', { question: q }); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('qz-answer')?.addEventListener('click', async () => {
     const a = document.getElementById('qz-a').value.trim();
-    if (!a) { toast('回答 を 入れてください'); return; }
+    if (!a) { toast('回答を入れてください'); return; }
     try { await post('/api/quizzes/' + qid + '/answer', { answer: a }); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
@@ -359,7 +359,7 @@ function wireActions(qid, d, me, partName) {
     document.getElementById('qz-answer-edit').style.display = '';
   });
   document.getElementById('qz-reveal')?.addEventListener('click', async () => {
-    if (!confirm('一斉開示しますか? まだ 未回答 の 人 も いますが OK ?')) return;
+    if (!confirm('一斉開示しますか? まだ未回答の人もいますが OK ?')) return;
     try { await post('/api/quizzes/' + qid + '/reveal', {}); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
@@ -376,23 +376,23 @@ function wireActions(qid, d, me, partName) {
     catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('qz-finish')?.addEventListener('click', async () => {
-    if (!confirm('クイズ を 終了 しますか?')) return;
+    if (!confirm('クイズを終了しますか?')) return;
     try { await post('/api/quizzes/' + qid + '/finish', {}); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('qz-finish-now')?.addEventListener('click', async () => {
-    if (!confirm('ここで クイズ を 終了 しますか?')) return;
+    if (!confirm('ここでクイズを終了しますか?')) return;
     try { await post('/api/quizzes/' + qid + '/finish', {}); paint(qid); }
     catch (e) { toast('失敗: ' + e.message); }
   });
 
-  // フリップ タップで 拡大表示
+  // フリップタップで拡大表示
   document.querySelectorAll('.qz-flip').forEach(b => b.addEventListener('click', () => {
     const name = b.dataset.name; const ans = b.dataset.ans;
     showFlipModal(name, ans);
   }));
 
-  // 採点 ボタン トグル
+  // 採点ボタントグル
   document.querySelectorAll('.qz-score-btn').forEach(b => b.addEventListener('click', () => {
     const cur = Number(b.dataset.score);
     const next = cur === 1 ? 0 : 1;
@@ -410,9 +410,9 @@ function showFlipModal(name, ans) {
   overlay.style.cssText = 'position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; padding:20px; cursor:pointer';
   overlay.innerHTML = `
     <div style="background:#fff; border-radius:16px; max-width:560px; width:100%; padding:24px; text-align:center">
-      <div style="font-size:13px; color:#666; margin-bottom:12px">${escapeHtml(name)} さんの 回答</div>
+      <div style="font-size:13px; color:#666; margin-bottom:12px">${escapeHtml(name)} さんの回答</div>
       <div style="font-size:36px; font-weight:700; word-break:break-word; line-height:1.4">${escapeHtml(ans) || '<span style="color:#999">(未回答)</span>'}</div>
-      <div class="hint-sm" style="margin-top:16px; font-size:11px; color:#888">タップで 閉じる</div>
+      <div class="hint-sm" style="margin-top:16px; font-size:11px; color:#888">タップで閉じる</div>
     </div>
   `;
   document.body.appendChild(overlay);

@@ -1,16 +1,16 @@
 <?php
-// v872 #454 早押し クイズ。 リアル 現場 (ゼミ 等) で 出題者 が 口頭 で 出題、
-// 参加者 が スマホ で 「ボタン」 を タップ → 1 番 早かった 人 が 回答権 (緑) +
-// 他 の 人 は 順位 と 「1 位 と の 差」 が 表示 (赤)。 出題者 が 「次 へ」 で
-// 全員 早押し モード に 戻る。
+// v872 #454 早押しクイズ。 リアル現場 (ゼミ等) で出題者が口頭で出題、
+// 参加者がスマホで 「ボタン」 をタップ → 1 番早かった人が回答権 (緑) +
+// 他の人は順位と 「1 位との差」 が表示 (赤)。 出題者が 「次へ」 で
+// 全員早押しモードに戻る。
 //
 //   GET    /api/buzzer/sessions                  active 一覧
 //   POST   /api/buzzer/sessions                  作成 { title }
-//   GET    /api/buzzer/sessions/<id>             詳細 (現在 ラウンド + タップ ランキング)
-//   POST   /api/buzzer/sessions/<id>/new-round   起案者 が 「次 へ」 (round_no++)
-//   POST   /api/buzzer/sessions/<id>/tap         { elapsed_ms } 自分 の 早押し を 送信
-//   POST   /api/buzzer/sessions/<id>/end         起案者 が 終了
-//   GET    /api/buzzer/sessions/<id>/poll        軽量 ポーリング (round_no + taps だけ)
+//   GET    /api/buzzer/sessions/<id>             詳細 (現在ラウンド + タップランキング)
+//   POST   /api/buzzer/sessions/<id>/new-round   起案者が 「次へ」 (round_no++)
+//   POST   /api/buzzer/sessions/<id>/tap         { elapsed_ms } 自分の早押しを送信
+//   POST   /api/buzzer/sessions/<id>/end         起案者が終了
+//   GET    /api/buzzer/sessions/<id>/poll        軽量ポーリング (round_no + taps だけ)
 
 declare(strict_types=1);
 
@@ -87,9 +87,9 @@ function buzzer_tap(PDO $pdo, int $uid, int $sid): void {
     $st->execute([$sid]);
     $s = $st->fetch(PDO::FETCH_ASSOC);
     if (!$s) { json_error('not_found', 'session 不在', 404); return; }
-    if ($s['status'] !== 'active') { json_error('bad_request', '終了 済', 400); return; }
+    if ($s['status'] !== 'active') { json_error('bad_request', '終了済', 400); return; }
     $round = (int)$s['round_no'];
-    if ($round < 1) { json_error('bad_request', 'まだ ラウンド 開始 されて いません', 400); return; }
+    if ($round < 1) { json_error('bad_request', 'まだラウンド開始されていません', 400); return; }
     $body = read_json_body();
     $elapsed = (int)($body['elapsed_ms'] ?? 0);
     if ($elapsed < 0 || $elapsed > 600000) { json_error('bad_request', 'elapsed_ms 不正', 400); return; }

@@ -8,13 +8,13 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v886';
-// アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
-// 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
+const CACHE_NAME = 'labpay-shell-v887';
+// アップロード画像 (固定 URL = ファイル名ハッシュ) は cache-first に
+// 別キャッシュで永続化。 シェルを更新しても画像は落ちない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
 // グループ / 食べある記 / SNS / 重要連絡 / Scrapbox の GET を stale-while-revalidate
-// 別キャッシュ で 保持。 オフライン や 通信 遅延 時 でも 直前 の 内容 を 即 表示、
-// 裏で 新鮮版 を 取得。 ledger 系 (送金 / 残高) は 含めない。
+// 別キャッシュで保持。 オフラインや通信遅延時でも直前の内容を即表示、
+// 裏で新鮮版を取得。 ledger 系 (送金 / 残高) は含めない。
 // v534 #189 古い stale な /api/groups* キャッシュが renderer を壊している可能性があるので
 //   コンテンツキャッシュを v3 に bump (activate で v2 が削除される → 次回 fetch が全部
 //   ネット直行)。
@@ -46,8 +46,8 @@ const PRECACHE_URLS = [
 
 function isSwrContentPath(pathname) {
   if (!pathname.startsWith('/api/')) return false;
-  // posts/latest_id は ポーリング 用 軽量 endpoint なので 必ず ネット 行く (キャッシュ
-  // 不要 だし、 古い id を 返すと 更新検出 が 遅れる)。
+  // posts/latest_id はポーリング用軽量 endpoint なので必ずネット行く (キャッシュ
+  // 不要だし、 古い id を返すと更新検出が遅れる)。
   if (pathname === '/api/posts/latest_id') return false;
   return (
     pathname === '/api/groups'  || pathname.startsWith('/api/groups/') ||
@@ -75,7 +75,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    // シェル の 古い キャッシュ は 削除、 画像 / コンテンツ キャッシュ は 保持。
+    // シェルの古いキャッシュは削除、 画像 / コンテンツキャッシュは保持。
     await Promise.all(keys
       .filter(k => k !== CACHE_NAME && k !== IMG_CACHE_NAME && k !== CONTENT_CACHE_NAME)
       .map(k => caches.delete(k)));
@@ -112,7 +112,7 @@ async function swrShell(req) {
 }
 
 // v517 #147 #148 #149 #150 mutation (POST/PATCH/DELETE) の成功後に、 関連リソースの
-//   SWR キャッシュを一括破棄。 これにより クライアント側で個別に invalidate を呼ばず
+//   SWR キャッシュを一括破棄。 これによりクライアント側で個別に invalidate を呼ばず
 //   とも、 「投稿 → 一覧で反映されない」 「フィード追加 → 反映されない」 「らぼったー
 //   削除 → 残ってる」 などのリロード必要問題を SW レベルで根治する。
 //   破棄ロジック: mutation のパス第一セグメント (e.g. /api/posts/123/likes → 'posts')
@@ -132,7 +132,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // v517 mutation API 成功後にキャッシュ破棄。 GET 以外の /api/* リクエストを
-  //   ハイジャックして、 サーバ応答が 2xx なら 同じトップセグメントの SWR キャッシュ
+  //   ハイジャックして、 サーバ応答が 2xx なら同じトップセグメントの SWR キャッシュ
   //   をパージする。 ledger 系 (送金 / 残高) は SWR 対象外なので影響なし。
   if (req.method !== 'GET' && url.pathname.startsWith('/api/')) {
     event.respondWith((async () => {
@@ -179,7 +179,7 @@ self.addEventListener('fetch', (event) => {
   // API (それ以外): ledger source of truth. Always go to network; never cache.
   if (url.pathname.startsWith('/api/')) return;
 
-  // /uploads/ 配下 の 画像 は cache-first (ファイル名がハッシュで一意なので不変)。
+  // /uploads/ 配下の画像は cache-first (ファイル名がハッシュで一意なので不変)。
   if (url.origin === self.location.origin && url.pathname.startsWith('/uploads/')) {
     event.respondWith((async () => {
       const cache = await caches.open(IMG_CACHE_NAME);
@@ -200,7 +200,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // v506 シェル (HTML / CSS / JS / 静的ファイル) は stale-while-revalidate。
-  //   旧コードは network-first だったので、 モバイル網で毎回 数秒の往復待ちが発生していた。
+  //   旧コードは network-first だったので、 モバイル網で毎回数秒の往復待ちが発生していた。
   //   SWR にすることで前回のキャッシュから即返り、 裏で新版を取り直す。 デプロイ時に
   //   CACHE_NAME を bump → 旧 shell が activate で破棄 → 次回アクセスで新版が降りる。
   if (url.origin === self.location.origin) {

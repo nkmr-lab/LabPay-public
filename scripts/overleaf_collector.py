@@ -2,27 +2,27 @@
 # v886 LabPay Overleaf project tracker — periodic snapshot collector.
 #
 # 役割:
-#   pyoverleaf で 教員 Overleaf アカウント (cookie 認証) に login →
-#   全 共有 プロジェクト 一覧 + 各 .tex ファイル 取得 → 文字数 を 集計 →
-#   labpay の MariaDB の overleaf_* テーブル に snapshot として 投入。
+#   pyoverleaf で教員 Overleaf アカウント (cookie 認証) に login →
+#   全共有プロジェクト一覧 + 各 .tex ファイル取得 → 文字数を集計 →
+#   labpay の MariaDB の overleaf_* テーブルに snapshot として投入。
 #
 # セットアップ (production = pay.nkmr.io):
-#   1) venv を 用意:
+#   1) venv を用意:
 #        sudo mkdir -p /var/www/labpay/.venv-overleaf
 #        sudo chown apache:apache /var/www/labpay/.venv-overleaf
 #        sudo -u apache python3 -m venv /var/www/labpay/.venv-overleaf
 #        sudo -u apache /var/www/labpay/.venv-overleaf/bin/pip install pyoverleaf pymysql
-#   2) cookie 設定 — /var/www/labpay/config/config.php に overleaf.olauth_cookie を 追加:
+#   2) cookie 設定 — /var/www/labpay/config/config.php に overleaf.olauth_cookie を追加:
 #        'overleaf' => [
 #          'olauth_cookie' => '<長い hex 文字列>',  // ブラウザ DevTools > Cookies > overleaf.com > overleaf_session の値
 #        ],
-#      cookie 取得 手順:
-#        - chrome で overleaf.com に login (中村 アカウント)
+#      cookie 取得手順:
+#        - chrome で overleaf.com に login (中村アカウント)
 #        - DevTools > Application > Cookies > https://www.overleaf.com
-#        - 「overleaf_session」 の Value を コピー (s%3A... で 始まる 長い 文字列)
-#   3) 初回 手動 実行:
+#        - 「overleaf_session」 の Value をコピー (s%3A... で始まる長い文字列)
+#   3) 初回手動実行:
 #        sudo -u apache /var/www/labpay/.venv-overleaf/bin/python /var/www/labpay/scripts/overleaf_collector.py
-#   4) systemd timer (/etc/systemd/system/labpay-overleaf.service + .timer) で 1 時間 おき に 自動 実行:
+#   4) systemd timer (/etc/systemd/system/labpay-overleaf.service + .timer) で 1 時間おきに自動実行:
 #        --- labpay-overleaf.service ---
 #        [Unit]
 #        Description=LabPay Overleaf project snapshot collector
@@ -42,11 +42,11 @@
 #        sudo systemctl daemon-reload
 #        sudo systemctl enable --now labpay-overleaf.timer
 #
-# 文字数 カウント方式:
-#   - total_char_count: ファイル の 文字数 (mb 単位、 改行 込み)
-#   - total_char_body : % コメント 行 と \\command{} 引数 を 簡易 除いた 本文 文字数
+# 文字数カウント方式:
+#   - total_char_count: ファイルの文字数 (mb 単位、 改行込み)
+#   - total_char_body : % コメント行と \\command{} 引数を簡易除いた本文文字数
 #   - total_jp_char_count: 漢字 (一-鿿) + ひらがな (぀-ゟ) + カタカナ (゠-ヿ) のみ
-#   - total_word_count: 空白 区切り word 数 (本文 文字列 から)
+#   - total_word_count: 空白区切り word 数 (本文文字列から)
 
 import os
 import re
@@ -60,8 +60,8 @@ LABPAY_ROOT = '/var/www/labpay'
 CONFIG_PATH = os.path.join(LABPAY_ROOT, 'config', 'config.php')
 
 def parse_labpay_config(path):
-    """config.php を 簡易 PHP パース (return [...] 形式 限定)。 必要な キー だけ 取り出す。"""
-    # PHP を 起動 して JSON で 吐かせる の が 一番 確実。
+    """config.php を簡易 PHP パース (return [...] 形式限定)。 必要なキーだけ取り出す。"""
+    # PHP を起動して JSON で吐かせるのが一番確実。
     import subprocess
     php_snippet = (
         "<?php $c = require '%s'; "
@@ -70,20 +70,20 @@ def parse_labpay_config(path):
     r = subprocess.run(['php', '-r', php_snippet], capture_output=True, text=True, check=True)
     return json.loads(r.stdout)
 
-# ---- 文字数 カウンタ ----
-RE_COMMENT  = re.compile(r'(?<!\\)%[^\n]*')          # 行 末 まで の % コメント (\\% は エスケープ)
-RE_TEX_CMD  = re.compile(r'\\[a-zA-Z@]+\*?')         # \section, \emph 等 (引数 は 残す)
+# ---- 文字数カウンタ ----
+RE_COMMENT  = re.compile(r'(?<!\\)%[^\n]*')          # 行末までの % コメント (\\% はエスケープ)
+RE_TEX_CMD  = re.compile(r'\\[a-zA-Z@]+\*?')         # \section, \emph 等 (引数は残す)
 RE_BRACKETS = re.compile(r'\[[^\]\n]*\]')            # [optional] 引数
 RE_JP       = re.compile(r'[一-鿿぀-ゟ゠-ヿ]')
 RE_WS       = re.compile(r'\s+')
 
 def count_chars(content: str) -> dict:
     total = len(content)
-    # body = comment 除去 + cmd 名 除去 + [optional] 除去 した もの の 文字数
+    # body = comment 除去 + cmd 名除去 + [optional] 除去したものの文字数
     no_comment = RE_COMMENT.sub('', content)
     no_cmd     = RE_TEX_CMD.sub('', no_comment)
     no_opt     = RE_BRACKETS.sub('', no_cmd)
-    # 中 の '{' '}' は 残す が、 視覚 的 ノイズ が 多い ので 落とす
+    # 中の '{' '}' は残すが、 視覚的ノイズが多いので落とす
     body = no_opt.replace('{', '').replace('}', '').replace('$', '')
     body_chars = sum(1 for ch in body if not ch.isspace())
     jp_chars = len(RE_JP.findall(body))
@@ -102,7 +102,7 @@ def main():
     ovl_cfg = cfg.get('overleaf') or {}
     cookie = ovl_cfg.get('olauth_cookie') or os.environ.get('OVERLEAF_OLAUTH_COOKIE')
     if not cookie:
-        print("ERROR: overleaf.olauth_cookie が config.php に 未設定 (or env OVERLEAF_OLAUTH_COOKIE)", file=sys.stderr)
+        print("ERROR: overleaf.olauth_cookie が config.php に未設定 (or env OVERLEAF_OLAUTH_COOKIE)", file=sys.stderr)
         sys.exit(2)
 
     # DB 接続
@@ -119,7 +119,7 @@ def main():
         autocommit=False,
     )
 
-    # collector_run row を 先 に 作って 進捗 を 残す
+    # collector_run row を先に作って進捗を残す
     with conn.cursor() as cur:
         cur.execute("INSERT INTO overleaf_collector_runs (started_at) VALUES (NOW())")
         run_id = cur.lastrowid
@@ -158,7 +158,7 @@ def main():
     print(f"✓ done: {projects_seen} projects")
 
 def _upsert_project(conn, p):
-    """overleaf_projects に upsert して project_id を 返す。"""
+    """overleaf_projects に upsert して project_id を返す。"""
     last_remote = getattr(p, 'last_updated', None) or getattr(p, 'lastUpdated', None)
     if isinstance(last_remote, datetime):
         last_remote = last_remote.strftime('%Y-%m-%d %H:%M:%S')
@@ -190,8 +190,8 @@ def _upsert_project(conn, p):
         return cur.fetchone()[0]
 
 def _take_snapshot(conn, api, p, proj_id):
-    """1 project の 全 .tex を 取得 して snapshot を 1 件 作成。"""
-    # ファイル ツリー を 取得 — pyoverleaf API 経由 で project の files を 列挙。
+    """1 project の全 .tex を取得して snapshot を 1 件作成。"""
+    # ファイルツリーを取得 — pyoverleaf API 経由で project の files を列挙。
     project_io = api.project(p.id) if hasattr(api, 'project') else None
     file_entries = []
     if project_io and hasattr(project_io, 'walk_files'):
@@ -204,7 +204,7 @@ def _take_snapshot(conn, api, p, proj_id):
             if path.endswith('.tex'):
                 file_entries.append((path, path))
     else:
-        raise RuntimeError("pyoverleaf API に walk_files / project_files が 見つかりません — version 違い かも")
+        raise RuntimeError("pyoverleaf API に walk_files / project_files が見つかりません — version 違いかも")
 
     if not file_entries:
         return  # 本文 .tex 無し → snapshot しない

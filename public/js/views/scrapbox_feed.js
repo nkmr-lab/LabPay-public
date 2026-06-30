@@ -23,7 +23,7 @@ export async function renderScrapboxFeed() {
     <div class="card">
       <a href="#/apps" class="hint">← アプリ</a>
       <div class="row center">
-        <h2 class="row-title">Scrapbox 研究ノート フィード</h2>
+        <h2 class="row-title">Scrapbox 研究ノートフィード</h2>
         <select id="sb-feed-range" style="max-width:120px">
           ${RANGES.map(r => `<option value="${r.key}" ${r.key === saved ? 'selected' : ''}>${r.label}</option>`).join('')}
         </select>

@@ -55,7 +55,7 @@ async function refreshList() {
     const d = await get('/api/bingofit/items');
     renderItems(d);
   } catch (e) {
-    document.getElementById('bf-list').innerHTML = `<div style="color:#c00; padding:12px">取得 失敗: ${escapeHtml(String(e))}</div>`;
+    document.getElementById('bf-list').innerHTML = `<div style="color:#c00; padding:12px">取得失敗: ${escapeHtml(String(e))}</div>`;
   }
 }
 
@@ -72,8 +72,8 @@ function renderItems(d) {
       </div>`;
     return;
   }
-  // v741 「最近 着てない 服」 サジェスト。 14 日以上 着てない (or 一度も) アクティブ衣類 を 5 件 まで。
-  //   研究 (BingoFit) の 効果 検証 部分: 眠ってる 服 を 見せて 「次 これ 着てみない?」 を 促す。
+  // v741 「最近着てない服」 サジェスト。 14 日以上着てない (or 一度も) アクティブ衣類を 5 件まで。
+  //   研究 (BingoFit) の効果検証部分: 眠ってる服を見せて 「次これ着てみない?」 を促す。
   const suggestions = active
     .filter(i => i.days_since_worn === null || i.days_since_worn >= 14)
     .sort((a, b) => {
@@ -84,13 +84,13 @@ function renderItems(d) {
     .slice(0, 5);
   const sugHtml = suggestions.length === 0 ? '' : `
     <div style="background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #fde68a; border-radius:10px; padding:10px 12px; margin-bottom:12px">
-      <div style="font-weight:600; font-size:13px; color:#92400e; margin-bottom:6px">💤 最近 着てない 服 (今週 着てみよう)</div>
+      <div style="font-weight:600; font-size:13px; color:#92400e; margin-bottom:6px">💤 最近着てない服 (今週着てみよう)</div>
       <div style="display:flex; gap:6px; overflow-x:auto">
         ${suggestions.map(i => `
           <div style="flex:none; text-align:center">
             <img src="${escapeHtml(i.image_url_transparent || i.image_url || '')}" alt="${escapeHtml(i.label||'')}" loading="lazy"
                  style="width:54px; height:54px; object-fit:contain; background:#fff; border-radius:6px; padding:2px">
-            <div style="font-size:9px; color:#92400e; margin-top:2px">${i.days_since_worn === null ? '未着用' : i.days_since_worn + ' 日 前'}</div>
+            <div style="font-size:9px; color:#92400e; margin-top:2px">${i.days_since_worn === null ? '未着用' : i.days_since_worn + ' 日前'}</div>
           </div>
         `).join('')}
       </div>
@@ -112,7 +112,7 @@ function itemCard(it) {
   const isFailed = it.bg_status === 'failed';
   const archived = it.archived;
   const bg = isDone ? 'linear-gradient(135deg,#fafaf5,#ede4f3)' : '#f3f4f6';
-  // v741 「N 日前に着た」 / 「14 日以上 着てない」 バッジ
+  // v741 「N 日前に着た」 / 「14 日以上着てない」 バッジ
   let wornBadge = '';
   if (!archived && it.days_since_worn !== null) {
     const d = it.days_since_worn;
@@ -140,7 +140,7 @@ async function onAddClick() {
   const category = document.getElementById('bf-cat').value;
   const btn = document.getElementById('bf-add-btn');
   btn.disabled = true;
-  btn.textContent = 'アップロード 中...';
+  btn.textContent = 'アップロード中...';
   try {
     const fd = new FormData();
     fd.append('file', file);
@@ -154,7 +154,7 @@ async function onAddClick() {
     await refreshList();
     startPollIfPending();
   } catch (e) {
-    toast('追加 失敗: ' + (e?.message || e));
+    toast('追加失敗: ' + (e?.message || e));
   } finally {
     btn.disabled = false;
     btn.textContent = '登録する';
@@ -164,7 +164,7 @@ async function onAddClick() {
 async function editItem(id, items) {
   const it = items.find(x => x.id === id);
   if (!it) return;
-  // ミニ モーダル (label / category 編集 + アーカイブ / 復活 / 再切り抜き)
+  // ミニモーダル (label / category 編集 + アーカイブ / 復活 / 再切り抜き)
   const newLabel = prompt('ラベル (空でも OK)', it.label || '');
   if (newLabel === null) return;
   const action = prompt(`カテゴリ: top/bottom/outer/shoes/other
@@ -186,7 +186,7 @@ async function editItem(id, items) {
     }
     await refreshList();
   } catch (e) {
-    toast('更新 失敗: ' + (e?.message || e));
+    toast('更新失敗: ' + (e?.message || e));
   }
 }
 

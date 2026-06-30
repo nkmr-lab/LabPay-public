@@ -14,9 +14,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        // v600 #228 streak が 切れているなら 表示用に 0 にする。
-        //   last_checkin_date が 今日 or 昨日 ならそのまま。 それより前なら 0。
-        //   (DB の current_streak は そのまま 保存しておく — 次回 checkin の 計算に使う)
+        // v600 #228 streak が切れているなら表示用に 0 にする。
+        //   last_checkin_date が今日 or 昨日ならそのまま。 それより前なら 0。
+        //   (DB の current_streak はそのまま保存しておく — 次回 checkin の計算に使う)
         if ($streak['last_checkin_date']) {
             $today = (new DateTimeImmutable('now', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
             $yest  = (new DateTimeImmutable('yesterday', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
@@ -104,7 +104,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'phone_number = NULL';
             } else {
                 $ph = trim((string)$ph);
-                // 数字 / + / - / 半角スペース / 丸括弧 のみ許容。 長さ 5..50。
+                // 数字 / + / - / 半角スペース / 丸括弧のみ許容。 長さ 5..50。
                 if (!preg_match('/^[0-9+\-\s()]{5,50}$/', $ph)) {
                     throw new ApiException('bad_request', 'phone_number は数字 / + / - / 空白 / () のみ、 5〜50 文字', 400);
                 }
@@ -136,13 +136,13 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 }
             }
         }
-        // v477 PayPay ID (100 字) + 振り込み 口座 メモ (500 字)
+        // v477 PayPay ID (100 字) + 振り込み口座メモ (500 字)
         if (array_key_exists('paypay_id', $body)) {
             $pp = $body['paypay_id'];
             if ($pp === null || trim((string)$pp) === '') $sets[] = 'paypay_id = NULL';
             else {
                 $pp = trim((string)$pp);
-                if (mb_strlen($pp) > 100) throw new ApiException('bad_request', 'paypay_id は 100 文字 まで', 400);
+                if (mb_strlen($pp) > 100) throw new ApiException('bad_request', 'paypay_id は 100 文字まで', 400);
                 $sets[] = 'paypay_id = ?'; $params[] = $pp;
             }
         }
@@ -151,7 +151,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($bi === null || trim((string)$bi) === '') $sets[] = 'bank_info = NULL';
             else {
                 $bi = trim((string)$bi);
-                if (mb_strlen($bi) > 500) throw new ApiException('bad_request', 'bank_info は 500 文字 まで', 400);
+                if (mb_strlen($bi) > 500) throw new ApiException('bad_request', 'bank_info は 500 文字まで', 400);
                 $sets[] = 'bank_info = ?'; $params[] = $bi;
             }
         }
@@ -180,8 +180,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'birthday_year = ?'; $params[] = $by;
             }
         }
-        // v852 #439 出生地 (西洋占星術の補助。 出生時間がない人でも 緯度経度 / 都市名 が
-        //   あれば 大まかな ラッキー方位 を 出せる)。 自由テキスト 100 文字まで。
+        // v852 #439 出生地 (西洋占星術の補助。 出生時間がない人でも緯度経度 / 都市名が
+        //   あれば大まかなラッキー方位を出せる)。 自由テキスト 100 文字まで。
         if (array_key_exists('birth_place', $body)) {
             $bp = $body['birth_place'];
             if ($bp === null) {
@@ -470,7 +470,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
 
         $joinUrl = ''; $passcode = ''; $meeting = null;
         if ($withZoom) {
-            // Zoom の start_time は 「その TZ における ローカル時刻」 (Z なし)。
+            // Zoom の start_time は 「その TZ におけるローカル時刻」 (Z なし)。
             $zoomStart  = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
             $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
             $meeting = Zoom::createMeeting($zoomAccess, [
@@ -504,7 +504,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (ApiException $e) {
             if ($e->errCode === 'calendar_scope') {
                 throw new ApiException('calendar_scope',
-                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携 から 再連携 してください', 403);
+                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携から再連携してください', 403);
             }
             throw $e;
         }
@@ -601,7 +601,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (ApiException $e) {
             if ($e->errCode === 'calendar_scope') {
                 throw new ApiException('calendar_scope',
-                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携 から 再連携 してください', 403);
+                    'Google Calendar に書き込み権限がありません。 設定 → Google Calendar 連携から再連携してください', 403);
             }
             throw $e;
         }
@@ -623,14 +623,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // v638 娯楽 募集中 + v640 参加中 アグリゲータ。
-    //   「自分が 未参加 で 募集中」 + 「自分が 参加中で 進行中」 の 娯楽 を まとめて返す。
-    //   item.tag: 'open' = 募集中 (まだ join 可)、 'active' = 自分が 参加中 で進行中
+    // v638 娯楽募集中 + v640 参加中アグリゲータ。
+    //   「自分が未参加で募集中」 + 「自分が参加中で進行中」 の娯楽をまとめて返す。
+    //   item.tag: 'open' = 募集中 (まだ join 可)、 'active' = 自分が参加中で進行中
     if ($sub === 'recruiting' && $method === 'GET') {
         $uid = (int)$u['id'];
         $items = [];
 
-        // ───── 自分が 参加中 の active ゲーム ─────
+        // ───── 自分が参加中の active ゲーム ─────
         try {
             $st = $pdo->prepare("SELECT g.id, uc.display_name AS by_name FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status IN ('mine_setup','playing') AND (g.creator_user_id=? OR g.opponent_user_id=?)
@@ -716,7 +716,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                             'by' => $r['by_name'], 'fee' => '', 'url' => '#/cg/' . $r['game_kind'] . '/' . (int)$r['id']];
             }
         } catch (Throwable $_) {}
-        // ───── 募集中 (自分が 未参加 で join 可能) ─────
+        // ───── 募集中 (自分が未参加で join 可能) ─────
         try {
             $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by_name
                                    FROM othello_games g JOIN users uc ON uc.id=g.creator_user_id
@@ -729,7 +729,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🃏 大富豪 (lobby で 自分が 未参加)
+            // 🃏 大富豪 (lobby で自分が未参加)
             $st = $pdo->prepare("SELECT g.id, g.fee, uc.display_name AS by_name,
                                         (SELECT COUNT(*) FROM daifugo_players p WHERE p.game_id=g.id) AS pn
                                    FROM daifugo_games g JOIN users uc ON uc.id=g.creator_user_id
@@ -743,7 +743,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🀄 麻雀 (lobby で 自分が 未参加)
+            // 🀄 麻雀 (lobby で自分が未参加)
             $st = $pdo->prepare("SELECT g.id, g.buy_in, uc.display_name AS by_name,
                                         (SELECT COUNT(*) FROM mahjong_players p WHERE p.game_id=g.id) AS pn
                                    FROM mahjong_games g JOIN users uc ON uc.id=g.creator_user_id
@@ -783,7 +783,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 🎮 custom_games (waiting、 自分が 未参加)
+            // 🎮 custom_games (waiting、 自分が未参加)
             $st = $pdo->prepare("SELECT g.id, g.game_kind, g.fee, uc.display_name AS by_name, k.display_name AS kind_name, k.icon
                                    FROM custom_games g JOIN users uc ON uc.id=g.creator_user_id
                                    LEFT JOIN custom_game_kinds k ON k.kind=g.game_kind
@@ -799,7 +799,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // ⚾ ドラフト (active で 自分が participant に 含まれてて 招待された)
+            // ⚾ ドラフト (active で自分が participant に含まれてて招待された)
             $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by_name
                                    FROM drafts g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='active' AND g.creator_user_id <> ?
@@ -812,7 +812,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 📝 フリップ クイズ (active で 自分が participant)
+            // 📝 フリップクイズ (active で自分が participant)
             $st = $pdo->prepare("SELECT g.id, g.title, uc.display_name AS by_name
                                    FROM quizzes g JOIN users uc ON uc.id=g.creator_user_id
                                   WHERE g.status='active' AND g.creator_user_id <> ?
@@ -826,9 +826,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (Throwable $_) {}
         try {
             // 🏆 優勝予想 (predictions_games)
-            //   締切前 で 自分が 未提出 → 'open' (募集中)
-            //   締切前 で 自分が 提出済 → 'active' (進行中)
-            //   v694 #278 締切後 で 結果 未確定 (status open/closed) → 'pending' (締切済 結果待ち)
+            //   締切前で自分が未提出 → 'open' (募集中)
+            //   締切前で自分が提出済 → 'active' (進行中)
+            //   v694 #278 締切後で結果未確定 (status open/closed) → 'pending' (締切済結果待ち)
             $st = $pdo->prepare("SELECT g.id, g.title, g.deadline_at, g.fee, g.status, uc.display_name AS by_name,
                                         TIMESTAMPDIFF(SECOND, NOW(), g.deadline_at) AS sec_ahead,
                                         EXISTS (SELECT 1 FROM predictions_entries pe WHERE pe.game_id=g.id AND pe.user_id=?) AS me_in
@@ -851,10 +851,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (Throwable $_) {}
         try {
             // 🎯 勝敗予測 (score_pred_games)
-            // v739 #352 結果 確定 後 も 24 時間 は widget に 残す ように 修正。 旧版 は
-            //   status='finished' に なった 瞬間 widget から 消えて 「自分 の 結果 を
-            //   見返せ ない」 状態 だった。 finished_at >= NOW() - 24h で 残し つつ
-            //   tag='finished' + 結果 スコア + 自分 の 払戻 を title に 入れる。
+            // v739 #352 結果確定後も 24 時間は widget に残すように修正。 旧版は
+            //   status='finished' になった瞬間 widget から消えて 「自分の結果を
+            //   見返せない」 状態だった。 finished_at >= NOW() - 24h で残しつつ
+            //   tag='finished' + 結果スコア + 自分の払戻を title に入れる。
             $st = $pdo->prepare("SELECT g.id, g.title, g.team_home, g.team_away, g.deadline_at, g.fee, g.status,
                                         g.actual_home, g.actual_away, g.finished_at,
                                         uc.display_name AS by_name,
@@ -892,9 +892,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
 
-        // ───── v644 追加: あなた宛て の その他 アクション ─────
+        // ───── v644 追加: あなた宛てのその他アクション ─────
         try {
-            // 📊 投票 (未投票 で 締切前)
+            // 📊 投票 (未投票で締切前)
             $st = $pdo->prepare("SELECT p.id, p.title, p.deadline_at, uc.display_name AS by_name,
                                         CASE WHEN p.deadline_at IS NULL THEN NULL
                                              ELSE TIMESTAMPDIFF(SECOND, NOW(), p.deadline_at) END AS sec_ahead
@@ -912,7 +912,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 📄 論文査読 (自分が 起案、 pending / processing 中)
+            // 📄 論文査読 (自分が起案、 pending / processing 中)
             $st = $pdo->prepare("SELECT id, pdf_name, status FROM paper_reviews
                                   WHERE user_id=? AND status IN ('pending','processing')
                                   ORDER BY id DESC LIMIT 3");
@@ -924,7 +924,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 📝 原稿チェック (自分が 起案、 pending / processing 中)
+            // 📝 原稿チェック (自分が起案、 pending / processing 中)
             $st = $pdo->prepare("SELECT id, title, status FROM resume_checks
                                   WHERE user_id=? AND status IN ('pending','processing')
                                   ORDER BY id DESC LIMIT 3");
@@ -936,7 +936,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
         try {
-            // 📣 点呼 (open で 自分 未応答 = roll_call_targets.responded_at IS NULL)
+            // 📣 点呼 (open で自分未応答 = roll_call_targets.responded_at IS NULL)
             $st = $pdo->prepare("SELECT r.id, r.title, r.deadline_at, uc.display_name AS by_name,
                                         CASE WHEN r.deadline_at IS NULL THEN NULL
                                              ELSE TIMESTAMPDIFF(SECOND, NOW(), r.deadline_at) END AS sec_ahead
@@ -954,8 +954,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             }
         } catch (Throwable $_) {}
 
-        // v660 (feedback #243) 娯楽 item (active/open) に 参加者 アバター 用 データ を 付与。
-        // kind 別 に 最大 6 名 まで。 fetch 失敗 は 無視 して 元のまま。
+        // v660 (feedback #243) 娯楽 item (active/open) に参加者アバター用データを付与。
+        // kind 別に最大 6 名まで。 fetch 失敗は無視して元のまま。
         foreach ($items as &$it) {
             if (($it['cat'] ?? '') !== 'entertainment') continue;
             $iid = (int)preg_replace('/\D+/', '', (string)($it['url'] ?? ''));
@@ -1063,7 +1063,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // v483 #76 AI 称号。 GET = キャッシュ + 新鮮さ チェック、 POST = 生成 & 保存。
+    // v483 #76 AI 称号。 GET = キャッシュ + 新鮮さチェック、 POST = 生成 & 保存。
     if ($sub === 'achievements_title' && $method === 'GET') {
         $sum = Achievements::earnedSummary($pdo, (int)$u['id']);
         $stT = $pdo->prepare("SELECT achievements_title, achievements_title_hash, achievements_title_at FROM users WHERE id=?");
@@ -1080,18 +1080,18 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     if ($sub === 'achievements_title' && $method === 'POST') {
-        // AI 生成。 OpenAI が 未設定 なら 503。
+        // AI 生成。 OpenAI が未設定なら 503。
         if (empty($cfg['openai']['api_key'] ?? null)) {
-            throw new ApiException('not_configured', 'AI 称号 生成 は OpenAI 未設定 で 利用 不可', 503);
+            throw new ApiException('not_configured', 'AI 称号生成は OpenAI 未設定で利用不可', 503);
         }
         $sum = Achievements::earnedSummary($pdo, (int)$u['id']);
         if ($sum['count'] === 0) {
-            throw new ApiException('no_achievements', 'まだ 実績 が ない ので 称号 を 付けられません', 400);
+            throw new ApiException('no_achievements', 'まだ実績がないので称号を付けられません', 400);
         }
         $name = (string)($u['display_name'] ?? 'この人');
         $achievementsText = implode("\n", $sum['lines']);
-        $sys = "ラボ内 ツール の 実績 一覧 から、 その人 を 形容 する 「カッコイイ 称号」 を 1 つ だけ 生成 して ください。 8-22 文字、 漢字 / カタカナ / 英語 混在 OK、 絵文字 1-2 個 添えて OK。 ラノベ や 二つ名 風 に カッコ良く。 例: 「黄昏 の 点呼マスター 🌅」 「ラボ DJ の 不眠 王 🎧」 「現場 を 統べる オークションキング 👑」。 称号 だけ 1 行、 引用符 や 前置き は 不要。";
-        $userPrompt = "対象: {$name}\n獲得 実績:\n{$achievementsText}\n\nこの人 に カッコイイ 称号 を 1 つ。";
+        $sys = "ラボ内ツールの実績一覧から、 その人を形容する 「カッコイイ称号」 を 1 つだけ生成してください。 8-22 文字、 漢字 / カタカナ / 英語混在 OK、 絵文字 1-2 個添えて OK。 ラノベや二つ名風にカッコ良く。 例: 「黄昏の点呼マスター 🌅」 「ラボ DJ の不眠王 🎧」 「現場を統べるオークションキング 👑」。 称号だけ 1 行、 引用符や前置きは不要。";
+        $userPrompt = "対象: {$name}\n獲得実績:\n{$achievementsText}\n\nこの人にカッコイイ称号を 1 つ。";
 
         $payload = json_encode([
             'model'    => (string)($cfg['openai']['model'] ?? 'gpt-4o-mini'),
@@ -1245,9 +1245,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         //   * 化石デバイスがあるケース: 24h+ の行は除外されるので、その古い
         //     start_at は拾われない
         $openStart = null; $openEnd = null; $isFresh = false;
-        // v344 bug fix: presence_seen に 数日前の 化石行が残っていた場合 (= scanner
-        // が close し損ねた行)、 MIN(session_start_at) がそれを拾って 開セッション
-        // の start が 数日前にズレ、 今日の貢献が異常に大きく出ていた (中村のケース
+        // v344 bug fix: presence_seen に数日前の化石行が残っていた場合 (= scanner
+        // が close し損ねた行)、 MIN(session_start_at) がそれを拾って開セッション
+        // の start が数日前にズレ、 今日の貢献が異常に大きく出ていた (中村のケース
         // で 17.6h)。 last_seen_at が 6 時間以内の行のみ MIN/MAX 対象にすることで
         // 化石を排除。 isFresh (10 分以内) はそのまま据え置き。
         $stOpen = $pdo->prepare("SELECT MIN(session_start_at) AS s, MAX(last_seen_at) AS e
@@ -1348,16 +1348,16 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // GET /api/me/presence_band?days=7
-    // 自分の 過去 N 日 (デフォ 7) の 10 分単位 在室記録。 cells は 「ある 10 分
-    // スロット で 何分 / どの部屋」 を sparse に 返す。 草グリッドが 1 日単位
-    // なのに対し、 これは 「いつ どこにいたか」 を 細かく見るための 帯グラフ用。
+    // 自分の過去 N 日 (デフォ 7) の 10 分単位在室記録。 cells は 「ある 10 分
+    // スロットで何分 / どの部屋」 を sparse に返す。 草グリッドが 1 日単位
+    // なのに対し、 これは 「いつどこにいたか」 を細かく見るための帯グラフ用。
     if ($sub === 'presence_band' && $method === 'GET') {
         $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
         $days = max(1, min(31, (int)($_GET['days'] ?? 7)));
         $end   = new DateTimeImmutable('tomorrow midnight', $tz);
         $start = $end->modify("-{$days} days");
 
-        // closed sessions + currently-open (presence_seen) を 統一して 列挙。
+        // closed sessions + currently-open (presence_seen) を統一して列挙。
         $sessions = [];
         $stS = $pdo->prepare("
             SELECT room_id, started_at AS s, ended_at AS e
@@ -1383,8 +1383,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $stR = $pdo->query("SELECT id, display_name FROM rooms ORDER BY id");
         $rooms = $stR->fetchAll(PDO::FETCH_ASSOC);
 
-        // 各 セッションを 10 分単位で 加算。 同じ slot に 複数部屋が 混じれば
-        // 各 (slot, room) ペアを 出す (フロントが 「主な部屋」 を選ぶ)。
+        // 各セッションを 10 分単位で加算。 同じ slot に複数部屋が混じれば
+        // 各 (slot, room) ペアを出す (フロントが 「主な部屋」 を選ぶ)。
         $startTs = $start->getTimestamp();
         $endTs   = $end->getTimestamp();
         $cells = []; // "YYYY-MM-DD|slot|room_id" => minutes_in_slot
@@ -1393,7 +1393,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $eTs = min(strtotime((string)$sess['e']), $endTs);
             if ($eTs <= $sTs) continue;
             $rid = (string)$sess['room_id'];
-            // 10 分 (600 秒) 単位で 走査
+            // 10 分 (600 秒) 単位で走査
             $bucketStart = (int)floor($sTs / 600) * 600;
             for ($t = $bucketStart; $t < $eTs; $t += 600) {
                 $slotS = $t;
@@ -1448,7 +1448,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     // ─── Google Calendar ──────────────────────────────────────────────
-    // 連携状態を返す + 一覧 / 選択保存 / events / 解除 を担当。
+    // 連携状態を返す + 一覧 / 選択保存 / events / 解除を担当。
     if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'GET') {
         $st = $pdo->prepare('SELECT calendar_connected_at, calendar_selected_ids
                              FROM users WHERE id=?');
@@ -1672,7 +1672,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '📊',
             ];
         }
-        // rollcalls (v482 #70 created_at = 「点呼 を 押した 時刻」 を 返す)
+        // rollcalls (v482 #70 created_at = 「点呼を押した時刻」 を返す)
         $stR = $pdo->prepare("
             SELECT r.id, r.title, r.deadline_at, r.created_at, u.display_name AS creator_name
               FROM roll_calls r
@@ -1736,7 +1736,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '✅',
             ];
         }
-        // 指名タスクで まだ claim していないもの。
+        // 指名タスクでまだ claim していないもの。
         // assigned_user_ids は CSV (例: "5,10,12") なので FIND_IN_SET で判定。
         $stD = $pdo->prepare("
             SELECT t.id, t.title, t.deadline AS deadline_at, t.reward, u.display_name AS requester_name
@@ -1760,8 +1760,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '👉',
             ];
         }
-        // v819 #413 アルバイト 申請 (bait) の 未 処理 assignment も pending widget に
-        //   出す。 自分 が worker で status='pending' (= まだ 申請 して いない) の もの。
+        // v819 #413 アルバイト申請 (bait) の未処理 assignment も pending widget に
+        //   出す。 自分が worker で status='pending' (= まだ申請していない) のもの。
         $stB = $pdo->prepare("
             SELECT a.id AS assignment_id, a.bait_request_id, a.hours,
                    r.title, r.period, u.display_name AS requester_name
@@ -1792,7 +1792,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // 「自分が依頼している (起案している) もの」 一覧。 起案者として 締切前 + まだ
+    // 「自分が依頼している (起案している) もの」 一覧。 起案者として締切前 + まだ
     // 全員が応答していない polls / rollcalls / money_requests を返す。
     if ($sub === 'asking' && $method === 'GET') {
         $items = [];
@@ -1863,7 +1863,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '💸',
             ];
         }
-        // tasks: 自分が依頼 (requester) で、 まだ approved 件数 < 必要数 のもの。
+        // tasks: 自分が依頼 (requester) で、 まだ approved 件数 < 必要数のもの。
         // 承認待ち (reported) があれば 「承認まち」 を強調。
         $stT = $pdo->prepare("
             SELECT t.id, t.title, t.deadline AS deadline_at,
@@ -1877,7 +1877,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $reported = (int)$r['reported_n'];
             $claimed  = (int)$r['claimed_n'];
-            $sub = $reported > 0 ? "{$reported} 件 承認まち" : ($claimed > 0 ? "{$claimed} 件 進行中" : '受諾まち');
+            $sub = $reported > 0 ? "{$reported} 件承認まち" : ($claimed > 0 ? "{$claimed} 件進行中" : '受諾まち');
             $items[] = [
                 'kind' => 'task',
                 'kind_label' => 'タスク',
@@ -1889,8 +1889,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'icon' => '✅',
             ];
         }
-        // v785 #384 各 item に「対応 待ち の 人」 (アイコン 表示 用) を 追加。 kind 別 に
-        //   pending な users を 一括 取得 し、 item に merge。 1 item あたり 最大 10 人。
+        // v785 #384 各 item に「対応待ちの人」 (アイコン表示用) を追加。 kind 別に
+        //   pending な users を一括取得し、 item に merge。 1 item あたり最大 10 人。
         $pollIds  = []; $rcIds    = []; $mrIds    = []; $taskIds  = [];
         foreach ($items as $it) {
             if ($it['kind'] === 'poll')          $pollIds[]  = $it['id'];
@@ -1936,7 +1936,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             foreach ($st as $r) $addPending('money_request', (int)$r['request_id'], $r);
         }
         if ($taskIds) {
-            // task は claimed / reported な assignee を 「対応 待ち」 と みなす
+            // task は claimed / reported な assignee を 「対応待ち」 とみなす
             $in = implode(',', array_fill(0, count($taskIds), '?'));
             $st = $pdo->prepare("SELECT tc.task_id, u.id, u.display_name, u.avatar_url, tc.status
                                    FROM task_claims tc JOIN users u ON u.id = tc.user_id
@@ -1957,10 +1957,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
-    // v456 ユーザ設定 サーバ同期 (デバイス間 共有 用)。
+    // v456 ユーザ設定サーバ同期 (デバイス間共有用)。
     //  GET    /api/me/settings           → 全件 { key: parsedValue, ... }
     //  PUT    /api/me/settings           body: { key: value, ... } 一括 upsert
-    //  DELETE /api/me/settings/{key}     1 件 削除
+    //  DELETE /api/me/settings/{key}     1 件削除
     if ($sub === 'settings' && ($seg[2] ?? '') === '' && $method === 'GET') {
         $st = $pdo->prepare("SELECT k, v FROM user_settings WHERE user_id=?");
         $st->execute([(int)$u['id']]);
@@ -2090,7 +2090,7 @@ function route_users(PDO $pdo, array $cfg, string $method, array $seg): void {
         $rows = $stU->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $uid = (int)$r['id'];
-            // 番号は admin / 自分 / 同グループメンバー だけ参照可
+            // 番号は admin / 自分 / 同グループメンバーだけ参照可
             if (!($isAdmin || isset($sameGroupSet[$uid]))) {
                 $r['phone_number'] = null;
             }

@@ -1,6 +1,6 @@
 <?php
-// v549 #210 ティア表。 起案者が お題 + 候補リスト を作成、 参加者が S/A/B/C/D/F に
-//   振り分け、 提出後 他人の表が見える。
+// v549 #210 ティア表。 起案者がお題 + 候補リストを作成、 参加者が S/A/B/C/D/F に
+//   振り分け、 提出後他人の表が見える。
 //   GET    /api/tierlists                自分が起案 or 1件以上回答した一覧 + 公開済み
 //   POST   /api/tierlists                { title, description?, items[], tiers? }
 //   GET    /api/tierlists/:id            詳細 (items + tiers + 自分の回答 + 全員回答 +
@@ -10,7 +10,7 @@
 //   POST   /api/tierlists/:id/close      起案者のみ (締切る)
 declare(strict_types=1);
 
-// v582 5 段階 (S/A/B/C/D) に変更。 既存データの F に振られた候補は データ層では
+// v582 5 段階 (S/A/B/C/D) に変更。 既存データの F に振られた候補はデータ層では
 //   残るが UI 側で C 扱いされる (TIER_DEFAULT に F が無い)。
 const TIER_DEFAULT = [
     ['key' => 'S', 'label' => 'S', 'color' => '#ff6b6b'],
@@ -20,12 +20,12 @@ const TIER_DEFAULT = [
     ['key' => 'D', 'label' => 'D', 'color' => '#6bb4ff'],
 ];
 
-// v815 #410 「?」 評価 不能 (= 行って ない / 知ら ない) tier を 全 tier list に 強制 付与。
-//   新規 / 既存 問わず 適用 する ため、 detail / answer の 読み出し 時 に append する。
+// v815 #410 「?」 評価不能 (= 行ってない / 知らない) tier を全 tier list に強制付与。
+//   新規 / 既存問わず適用するため、 detail / answer の読み出し時に append する。
 function tier_with_unknown(array $tiers): array {
     $tiers = array_values($tiers);
     foreach ($tiers as $t) {
-        if (($t['key'] ?? '') === '?') return $tiers; // 既に ある
+        if (($t['key'] ?? '') === '?') return $tiers; // 既にある
     }
     $tiers[] = ['key' => '?', 'label' => '?', 'color' => '#9ca3af'];
     return $tiers;
@@ -112,7 +112,7 @@ function tierlists_detail(PDO $pdo, int $uid, int $tid): void {
     if (!$t) throw new ApiException('not_found', 'tierlist not found', 404);
     $items = json_decode($t['items_json'] ?: '[]', true) ?: [];
     $tiers = json_decode($t['tiers_json'] ?: 'null', true) ?: TIER_DEFAULT;
-    // v815 #410 「?」 評価 不能 tier を 常 に 末尾 に 追加
+    // v815 #410 「?」 評価不能 tier を常に末尾に追加
     $tiers = tier_with_unknown($tiers);
 
     $stA = $pdo->prepare("SELECT a.user_id, a.assignments_json, a.updated_at, u.display_name, u.avatar_url
@@ -132,7 +132,7 @@ function tierlists_detail(PDO $pdo, int $uid, int $tid): void {
         if ((int)$r['user_id'] === $uid) $myAnswer = $a;
         else $answers[] = $a;
     }
-    // 集計: item ごとに 各 tier に何人入れたか
+    // 集計: item ごとに各 tier に何人入れたか
     $agg = [];
     foreach ($items as $it) {
         $agg[$it['id']] = [];
@@ -176,7 +176,7 @@ function tierlists_answer(PDO $pdo, array $cfg, int $uid, int $tid): void {
     if ($t['is_closed']) throw new ApiException('bad_request', '締切られています', 400);
     $items = json_decode($t['items_json'] ?: '[]', true) ?: [];
     $tiers = json_decode($t['tiers_json'] ?: 'null', true) ?: TIER_DEFAULT;
-    // v815 #410 「?」 を 受け入れる ように
+    // v815 #410 「?」 を受け入れるように
     $tiers = tier_with_unknown($tiers);
     $itemIds = array_flip(array_column($items, 'id'));
     $tierKeys = array_flip(array_column($tiers, 'key'));

@@ -1,11 +1,11 @@
-// 画像アップロード UI の 共通配線。 各 view で
+// 画像アップロード UI の共通配線。 各 view で
 //   <input type="file" id="X-file"> + <input type="hidden" id="X-url"> +
 //   <img id="X-preview" hidden> + <div id="X-status"></div>
-// を 自前で wire up していたパターンを 1 関数に。
+// を自前で wire up していたパターンを 1 関数に。
 //
 // 使い方:
 //   import { setupImagePicker } from '../image_picker.js';
-//   setupImagePicker('image');   // → 上記 ID prefix 'image' で 自動配線
+//   setupImagePicker('image');   // → 上記 ID prefix 'image' で自動配線
 //   setupImagePicker('nj-image', { onUploaded: (data) => {...} });
 
 import { uploadImage } from './upload.js';
@@ -13,8 +13,8 @@ import { uploadImage } from './upload.js';
 export function setupImagePicker(prefix, opts = {}) {
   const {
     onUploaded = null,
-    // ID prefix の 後ろに -file / -url / -preview / -status / _file / _url / _preview / _status
-    // どちらの命名スタイルでも 拾える。
+    // ID prefix の後ろに -file / -url / -preview / -status / _file / _url / _preview / _status
+    // どちらの命名スタイルでも拾える。
     fileSelector    = `#${prefix}-file,#${prefix}_file`,
     urlSelector     = `#${prefix}-url,#${prefix}_url,#${prefix}-image_url,#${prefix}image_url`,
     previewSelector = `#${prefix}-preview,#${prefix}_preview,#${prefix}-image_preview,#${prefix}image_preview`,

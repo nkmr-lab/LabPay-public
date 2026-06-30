@@ -1,4 +1,4 @@
-// /#/chat — 汎用 多言語 対話 / 翻訳 チャット (主に 海外出張 用)。
+// /#/chat — 汎用多言語対話 / 翻訳チャット (主に海外出張用)。
 // 履歴は localStorage に保存 (端末ローカル / 直近 50 件)。
 
 import { post } from '../api.js';
@@ -15,7 +15,7 @@ function saveHistory(arr) {
   try { localStorage.setItem(HIST_KEY, JSON.stringify(arr.slice(-HIST_MAX))); } catch {}
 }
 
-// 入力欄に プリセット 文を 流し込む 「クイック ボタン」。
+// 入力欄にプリセット文を流し込む 「クイックボタン」。
 const QUICKS = [
   { label: '🇨🇳 中国語に',  prefix: 'これを中国語(簡体字)で: ' },
   { label: '🇮🇹 伊語に',    prefix: 'これをイタリア語で: ' },
@@ -27,7 +27,7 @@ const QUICKS = [
   { label: '🍽 注文したい', prefix: '注文する時のフレーズ: ' },
 ];
 
-// Markdown を 軽く描画 (太字 / 改行のみ。 安全のため innerHTML は escapeHtml 後の文字列に対して限定的に置換)。
+// Markdown を軽く描画 (太字 / 改行のみ。 安全のため innerHTML は escapeHtml 後の文字列に対して限定的に置換)。
 function renderMarkdownSafe(s) {
   // まず HTML エスケープ → 太字 → 改行
   let html = escapeHtml(s);
@@ -57,7 +57,7 @@ export async function renderChat() {
       <div style="padding:8px; background:#fff; border-top:1px solid var(--line)">
         <div class="row" style="gap:6px; align-items:flex-end">
           <textarea id="chat-input" rows="2" maxlength="4000"
-            placeholder="日本語 / 外国語 どちらでも。 例: 「すみません、トイレはどこですか？を中国語で」"
+            placeholder="日本語 / 外国語どちらでも。 例: 「すみません、トイレはどこですか？を中国語で」"
             style="flex:1; resize:none; min-height:48px; max-height:200px; font-size:14px"></textarea>
           <button id="chat-send" class="primary" style="padding:8px 16px">送信</button>
         </div>
@@ -77,7 +77,7 @@ export async function renderChat() {
   const renderLog = () => {
     if (!history.length) {
       log.innerHTML = `
-        <div class="hint" style="font-size:12px; color:#555">↓ 上の クイック ボタンで 始めるか、 自由に 入力 してください</div>`;
+        <div class="hint" style="font-size:12px; color:#555">↓ 上のクイックボタンで始めるか、 自由に入力してください</div>`;
       return;
     }
     log.innerHTML = history.map(m => {
@@ -124,15 +124,15 @@ export async function renderChat() {
 
   sendBtn.addEventListener('click', onSend);
   input.addEventListener('keydown', (ev) => {
-    // v463 IME 変換確定 の Enter は keyCode=229 / isComposing=true。 これらを 除外
-    // しないと 日本語 入力 で 変換確定 する たびに 送信 されてしまう。
+    // v463 IME 変換確定の Enter は keyCode=229 / isComposing=true。 これらを除外
+    // しないと日本語入力で変換確定するたびに送信されてしまう。
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
       ev.preventDefault();
       onSend();
     }
   });
   document.getElementById('chat-clear').addEventListener('click', () => {
-    if (!confirm('会話履歴を 消しますか?')) return;
+    if (!confirm('会話履歴を消しますか?')) return;
     history = [];
     saveHistory(history);
     renderLog();
@@ -143,7 +143,7 @@ export async function renderChat() {
       const cur = input.value.trim();
       input.value = q.prefix + cur;
       input.focus();
-      // カーソルを 末尾へ
+      // カーソルを末尾へ
       try { input.setSelectionRange(input.value.length, input.value.length); } catch {}
     });
   });

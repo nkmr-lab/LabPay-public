@@ -79,7 +79,7 @@ class Zoom {
     }
 
     // 取り出した token が期限切れなら refresh して DB に保存、 最新の access_token を返す。
-    // Zoom は refresh するたびに 新しい refresh_token も返してくる (rotate 方式) ので
+    // Zoom は refresh するたびに新しい refresh_token も返してくる (rotate 方式) ので
     // 古いのを残さないよう必ず両方更新。
     public static function ensureValidAccessToken(PDO $pdo, array $cfg, int $userId): string {
         $st = $pdo->prepare('SELECT zoom_access_token, zoom_refresh_token, zoom_token_expires_at
@@ -99,7 +99,7 @@ class Zoom {
         try {
             $data = self::refreshAccessToken($cfg, (string)$row['zoom_refresh_token']);
         } catch (ApiException $e) {
-            // refresh_token が失効してたら DB をクリアして 再連携を促す。
+            // refresh_token が失効してたら DB をクリアして再連携を促す。
             self::disconnect($pdo, $userId);
             throw new ApiException('zoom_reauth', 'Zoom 再連携が必要です (refresh 失敗)', 409);
         }

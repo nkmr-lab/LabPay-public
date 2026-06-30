@@ -1,8 +1,8 @@
-// v586 フライト 応援 アプリ (完全オフライン)。
-//   出発時刻 と 到着時刻 を 入力すると、 全体の 何% 進んだか / 残り時間 /
-//   経過時間 を 大きく可視化。 機内 (ネット無し) で 動く前提。
-//   設定は localStorage に 保存 (= ブラウザ閉じても 復元)。
-//   Wake Lock API で 画面が 消えないように。
+// v586 フライト応援アプリ (完全オフライン)。
+//   出発時刻と到着時刻を入力すると、 全体の何% 進んだか / 残り時間 /
+//   経過時間を大きく可視化。 機内 (ネット無し) で動く前提。
+//   設定は localStorage に保存 (= ブラウザ閉じても復元)。
+//   Wake Lock API で画面が消えないように。
 
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
@@ -70,8 +70,8 @@ function renderSetup(app) {
     <div class="card">
       <h2 style="margin:0 0 6px">✈️ フライト応援</h2>
       <p class="hint" style="font-size:13px">
-        出発 と 到着 を 入力すると、 進捗 / 残り時間 を 大きく 可視化します。
-        オフライン 対応 (機内で動きます)。 画面は 自動で 消えません。
+        出発と到着を入力すると、 進捗 / 残り時間を大きく可視化します。
+        オフライン対応 (機内で動きます)。 画面は自動で消えません。
       </p>
       <label style="display:block; margin-top:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">出発 (現地時刻)</div>
@@ -97,10 +97,10 @@ function renderSetup(app) {
   document.getElementById('fl-start').addEventListener('click', () => {
     const dep = document.getElementById('fl-dep').value;
     const arr = document.getElementById('fl-arr').value;
-    if (!dep || !arr) { toast('出発 と 到着 を 入力してください'); return; }
+    if (!dep || !arr) { toast('出発と到着を入力してください'); return; }
     const depMs = new Date(dep.replace(' ', 'T')).getTime();
     const arrMs = new Date(arr.replace(' ', 'T')).getTime();
-    if (!(arrMs > depMs)) { toast('到着は 出発より後 にしてください'); return; }
+    if (!(arrMs > depMs)) { toast('到着は出発より後にしてください'); return; }
     const cfg = {
       dep: depMs,
       arr: arrMs,
@@ -156,7 +156,7 @@ function renderProgress(app, cfg) {
     </div>
   `;
   document.getElementById('fl-end').addEventListener('click', () => {
-    if (!confirm('フライト 応援を 終了しますか?')) return;
+    if (!confirm('フライト応援を終了しますか?')) return;
     releaseWakeLock();
     clearConfig();
     renderFlight();
@@ -176,19 +176,19 @@ function renderProgress(app, cfg) {
 }
 
 const ENCOURAGE_MESSAGES = [
-  { pct: [0, 10],   msg: ['🌟 出発おつかれさま!', '✈️ 良いフライトを', '🛫 安全運航 で 行きましょう'] },
-  { pct: [10, 25],  msg: ['📚 本を 開く 時間', '🎧 お気に入りの 曲 を', '😴 一旦 眠るのも 良いかも'] },
-  { pct: [25, 50],  msg: ['💪 半分前 まで 来ました', '🍽 機内食 を楽しんで', '☕ 水分 補給 を 忘れずに'] },
-  { pct: [50, 65],  msg: ['🎉 折り返し!', '✨ 後半戦 スタート', '🌍 もう半分 来ました'] },
-  { pct: [65, 85],  msg: ['🏁 ラスト 1/3', '🌟 もう少し!', '✈️ もうすぐ 到着 です'] },
-  { pct: [85, 99],  msg: ['🛬 着陸態勢 へ', '🎊 もう ほぼ 到着!', '⛰ 街並み が 見えてくる頃'] },
-  { pct: [99, 1000], msg: ['🎉 到着 おめでとうございます!', '🛬 着陸 完了'] },
+  { pct: [0, 10],   msg: ['🌟 出発おつかれさま!', '✈️ 良いフライトを', '🛫 安全運航で行きましょう'] },
+  { pct: [10, 25],  msg: ['📚 本を開く時間', '🎧 お気に入りの曲を', '😴 一旦眠るのも良いかも'] },
+  { pct: [25, 50],  msg: ['💪 半分前まで来ました', '🍽 機内食を楽しんで', '☕ 水分補給を忘れずに'] },
+  { pct: [50, 65],  msg: ['🎉 折り返し!', '✨ 後半戦スタート', '🌍 もう半分来ました'] },
+  { pct: [65, 85],  msg: ['🏁 ラスト 1/3', '🌟 もう少し!', '✈️ もうすぐ到着です'] },
+  { pct: [85, 99],  msg: ['🛬 着陸態勢へ', '🎊 もうほぼ到着!', '⛰ 街並みが見えてくる頃'] },
+  { pct: [99, 1000], msg: ['🎉 到着おめでとうございます!', '🛬 着陸完了'] },
 ];
 
 function pickEncourage(pct) {
   for (const e of ENCOURAGE_MESSAGES) {
     if (pct >= e.pct[0] && pct < e.pct[1]) {
-      const i = Math.floor(Date.now() / 60000) % e.msg.length; // 1 分 ごとに ローテ
+      const i = Math.floor(Date.now() / 60000) % e.msg.length; // 1 分ごとにローテ
       return e.msg[i];
     }
   }

@@ -13,8 +13,8 @@ declare(strict_types=1);
 
 // 既知イベント。 追加するときはここに 1 行 + sound_event_defaults INSERT IGNORE で済む。
 const SOUND_EVENTS = [
-    'payment'       => ['label' => '決済 (送金 / 購入 成功時)'],
-    'roulette_spin' => ['label' => 'ルーレット 回転開始時'],
+    'payment'       => ['label' => '決済 (送金 / 購入成功時)'],
+    'roulette_spin' => ['label' => 'ルーレット回転開始時'],
 ];
 const SOUND_UPLOAD_MAX_BYTES = 2 * 1024 * 1024; // 2 MB / clip
 const SOUND_UPLOAD_MIMES = [
@@ -156,11 +156,11 @@ function sounds_default_patch(PDO $pdo, array $cfg, string $key): void {
 }
 
 // ── user prefs ──────────────────────────────────────────────────
-// 各イベントについて 解決された (resolve された) 値を返す。
+// 各イベントについて解決された (resolve された) 値を返す。
 //   resolved = mode === 'mute' ? muted
 //           : mode === 'custom' ? (custom clip + volume)
 //           : (admin の default clip + volume)
-// clip URL も同時に返すので フロントは fetch 1 回で再生できる。
+// clip URL も同時に返すのでフロントは fetch 1 回で再生できる。
 function sounds_my_get(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];

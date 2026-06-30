@@ -155,7 +155,7 @@ function nomikai_create(PDO $pdo, array $cfg): void {
     // Notify every participant of their share (skip the creator themselves).
     foreach ($norm as $n) {
         if ($n['user_id'] === (int)$u['id']) continue;
-        $body = "🍻 飲み会「{$title}」分担: {$n['amount_yen']}円 を {$u['display_name']} さんへ";
+        $body = "🍻 飲み会「{$title}」分担: {$n['amount_yen']}円を {$u['display_name']} さんへ";
         notify_safely($pdo, $cfg, $n['user_id'], 'admin_notice', $body, 'nomikai', $sid);
     }
     json_response(['ok' => true, 'id' => $sid]);

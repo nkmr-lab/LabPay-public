@@ -1,6 +1,6 @@
 // /#/help — LabPay 操作ガイド AI アシスタント。
-// 「○○ したいんだけど どう操作する?」 に 答える Q&A チャット。
-// 会話履歴は localStorage に保存 (端末ローカル)、 サーバには 都度送信。
+// 「○○ したいんだけどどう操作する?」 に答える Q&A チャット。
+// 会話履歴は localStorage に保存 (端末ローカル)、 サーバには都度送信。
 
 import { post } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -28,7 +28,7 @@ export async function renderHelp() {
       <div style="padding:8px; background:#fff; border-top:1px solid var(--line)">
         <div class="row" style="gap:6px; align-items:flex-end">
           <textarea id="help-input" rows="1" maxlength="2000"
-            placeholder="例: グループの 地図モード って どこから 開く?"
+            placeholder="例: グループの地図モードってどこから開く?"
             style="flex:1; resize:none; min-height:36px; max-height:120px; font-size:14px"></textarea>
           <button id="help-send" class="primary" style="padding:6px 14px">送信</button>
         </div>
@@ -45,19 +45,19 @@ export async function renderHelp() {
 
   let history = loadHistory();
 
-  // 例示 質問: 履歴ゼロ なら 出す。
+  // 例示質問: 履歴ゼロなら出す。
   const examples = [
-    'グループの 地図モード って どこから 開く?',
-    '画像 翻訳 って どこ?',
-    'タイマー の ベルを 3 回 鳴らしたい',
-    '行きたい場所 を 追加するには?',
-    '残高 を 確認するには?',
+    'グループの地図モードってどこから開く?',
+    '画像翻訳ってどこ?',
+    'タイマーのベルを 3 回鳴らしたい',
+    '行きたい場所を追加するには?',
+    '残高を確認するには?',
   ];
 
   const renderLog = () => {
     if (history.length === 0) {
       log.innerHTML = `
-        <div class="hint" style="font-size:12px; color:#555">こんなことが 聞けます ↓</div>
+        <div class="hint" style="font-size:12px; color:#555">こんなことが聞けます ↓</div>
         <div class="row" style="gap:4px; flex-wrap:wrap">
           ${examples.map((q, i) => `<button data-ex-q="${i}" class="btn" style="padding:2px 8px; font-size:11px">${escapeHtml(q)}</button>`).join('')}
         </div>`;
@@ -95,7 +95,7 @@ export async function renderHelp() {
     try {
       const r = await post('/api/ai/assistant', {
         message: text,
-        history: history.slice(0, -2),  // 最後 2 件 (user 質問 + 考え中) を 除く
+        history: history.slice(0, -2),  // 最後 2 件 (user 質問 + 考え中) を除く
       });
       history[history.length - 1] = { role: 'assistant', content: r.text || '(空応答)' };
       saveHistory(history);
@@ -111,14 +111,14 @@ export async function renderHelp() {
 
   sendBtn.addEventListener('click', onSend);
   input.addEventListener('keydown', (ev) => {
-    // v463 IME 変換確定 の Enter (keyCode=229 / isComposing=true) を 除外。
+    // v463 IME 変換確定の Enter (keyCode=229 / isComposing=true) を除外。
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
       ev.preventDefault();
       onSend();
     }
   });
   document.getElementById('help-clear').addEventListener('click', () => {
-    if (!confirm('会話履歴を 消しますか?')) return;
+    if (!confirm('会話履歴を消しますか?')) return;
     history = [];
     saveHistory(history);
     renderLog();

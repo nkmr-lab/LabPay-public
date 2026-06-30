@@ -1,6 +1,6 @@
 // /#/activity — ラボ滞在 (自分の集計) + ラボ活動マップ (全員のヒートマップ)。
 // 上半分: 「あなたの今日のラボ滞在」 + 年度の草グリッド。
-// 下半分: 部屋ごとの 曜日 × 時間 ヒートマップ。
+// 下半分: 部屋ごとの曜日 × 時間ヒートマップ。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -38,7 +38,7 @@ export async function renderActivity() {
       <div id="presence-summary" class="hint">読み込み中…</div>
     </div>
 
-    <!-- ===== v397 1 週間 10 分単位 在室帯 ===== -->
+    <!-- ===== v397 1 週間 10 分単位在室帯 ===== -->
     <div class="card">
       <div class="row center" style="margin-bottom:6px">
         <h3 class="row-title">直近 1 週間 / 10 分単位</h3>
@@ -60,9 +60,9 @@ export async function renderActivity() {
             <option value="${w.days}" ${w.days === savedDays ? 'selected' : ''}>${w.label}</option>
           `).join('')}
         </select>
-        <select id="act-mode" style="max-width:140px" title="表示 モード">
-          <option value="avg">曜日 別 平均</option>
-          <option value="daily">全 日程 (日 × 時)</option>
+        <select id="act-mode" style="max-width:140px" title="表示モード">
+          <option value="avg">曜日別平均</option>
+          <option value="daily">全日程 (日 × 時)</option>
         </select>
       </div>
     </div>
@@ -76,14 +76,14 @@ export async function renderActivity() {
     localStorage.setItem('labpay-activity-days', e.target.value);
     loadHeatmap();
   });
-  // v699 #286 表示 モード (avg / daily)
+  // v699 #286 表示モード (avg / daily)
   const savedMode = localStorage.getItem('labpay-activity-mode') || 'avg';
   document.getElementById('act-mode').value = savedMode;
   document.getElementById('act-mode').addEventListener('change', e => {
     localStorage.setItem('labpay-activity-mode', e.target.value);
     loadHeatmap();
   });
-  // v397 1 週間 10 分 帯 (個人)
+  // v397 1 週間 10 分帯 (個人)
   const bandDays = Number(localStorage.getItem('labpay-band-days') || 7);
   const bandSel = document.getElementById('band-days');
   if (bandSel) {
@@ -98,8 +98,8 @@ export async function renderActivity() {
   await loadHeatmap();
 }
 
-// v397 個人の 「いつ どこにいたか」 10 分 帯。 days 行 × 144 セル/日。
-// 部屋ごとに 色付け (順番で palette を 割り当て)。
+// v397 個人の 「いつどこにいたか」 10 分帯。 days 行 × 144 セル/日。
+// 部屋ごとに色付け (順番で palette を割り当て)。
 const BAND_ROOM_PALETTE = [
   ['#bfdbfe', '#3b82f6', '#1d4ed8'],   // blue
   ['#fed7aa', '#f97316', '#c2410c'],   // orange
@@ -135,7 +135,7 @@ async function renderPresenceBand() {
     // 部屋 id → 色 idx
     const roomIdx = new Map(rooms.map((r, i) => [r.id, i]));
     const roomName = new Map(rooms.map(r => [r.id, r.display_name]));
-    // (date, slot) で 主の room を 決める (一番 分が 長い 部屋を 採用)
+    // (date, slot) で主の room を決める (一番分が長い部屋を採用)
     const byCell = new Map(); // "date|slot" => {roomId, minutes}
     for (const c of cells) {
       const k = `${c.date}|${c.slot}`;
@@ -189,7 +189,7 @@ async function renderPresenceBand() {
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; align-items:center">
         ${roomLegend}
-        <span class="muted" style="font-size:11px; margin-left:auto">薄 → 濃 = その 10 分 のうち 1～10 分</span>
+        <span class="muted" style="font-size:11px; margin-left:auto">薄 → 濃 = その 10 分のうち 1～10 分</span>
       </div>
     `;
   } catch (e) {
@@ -310,7 +310,7 @@ async function loadHeatmap() {
   }
 }
 
-// v699 #286 全日程 mode 用 の カード
+// v699 #286 全日程 mode 用のカード
 function renderRoomCardDaily(room, globalMax, dates) {
   const hourLabels = HOURS.map(h => h % 3 === 0
     ? `<div class="hm-h-label">${h}</div>`
@@ -332,7 +332,7 @@ function renderRoomCardDaily(room, globalMax, dates) {
   }).join('');
   return `
     <div class="card">
-      <h3 style="margin:0 0 8px">${escapeHtml(room.display_name)} <span class="hint-sm">(${room.id}) ・ 全 ${dates.length} 日</span></h3>
+      <h3 style="margin:0 0 8px">${escapeHtml(room.display_name)} <span class="hint-sm">(${room.id}) ・全 ${dates.length} 日</span></h3>
       <div class="hm-grid" style="overflow-x:auto">
         <div class="hm-row hm-head">
           <div class="hm-d-label"></div>

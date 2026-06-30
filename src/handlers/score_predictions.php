@@ -1,6 +1,6 @@
 <?php
-// v609 #235 勝敗予測。 試合 (X vs Y) のスコアを 予想 → 完璧に当てた人が pot 総取り。
-//   山分け前に 5% 場代。 誰も当たらなければ 全員に フィー返金。
+// v609 #235 勝敗予測。 試合 (X vs Y) のスコアを予想 → 完璧に当てた人が pot 総取り。
+//   山分け前に 5% 場代。 誰も当たらなければ全員にフィー返金。
 //   Ledger type は predictions と同じ 'mahjong_buyin'/'mahjong_payout'/'mahjong_refund' を流用。
 declare(strict_types=1);
 
@@ -30,9 +30,9 @@ function route_score_predictions(PDO $pdo, array $cfg, string $method, array $se
     json_error('not_found', "no score_predictions route", 404);
 }
 
-// v866 #448 起案者 が タイトル / チーム名 / 試合日時 / 〆切 / フィー を 後 から
-//   編集 可能 に。 fee は 予想者 が 既に いれば 変更 不可 (返金 ロジック が ややこしく
-//   なるため)。 status が finished / cancelled なら 一切 編集 不可。
+// v866 #448 起案者がタイトル / チーム名 / 試合日時 / 〆切 / フィーを後から
+//   編集可能に。 fee は予想者が既にいれば変更不可 (返金ロジックがややこしく
+//   なるため)。 status が finished / cancelled なら一切編集不可。
 function sp_edit(PDO $pdo, int $uid, int $gid): void {
     $st = $pdo->prepare("SELECT creator_user_id, status FROM score_pred_games WHERE id=?");
     $st->execute([$gid]);
@@ -136,7 +136,7 @@ function sp_detail(PDO $pdo, int $uid, int $gid): void {
     $stMe->execute([$gid, $uid]);
     $me = $stMe->fetch(PDO::FETCH_ASSOC);
 
-    // 締切後 or finished なら 全エントリ 公開
+    // 締切後 or finished なら全エントリ公開
     $deadlinePassed = !empty($g['deadline_at']) && strtotime((string)$g['deadline_at']) < time();
     $reveal = $g['status'] !== 'open' || $deadlinePassed;
 
@@ -229,7 +229,7 @@ function sp_create(PDO $pdo, array $cfg, int $uid): void {
             $deadlineAt = $dt->format('Y-m-d H:i:s');
         } catch (Throwable $_) {}
     }
-    // v610 起案時 通知対象 user_id 配列 (任意)
+    // v610 起案時通知対象 user_id 配列 (任意)
     $notifyIds = [];
     if (isset($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
         $notifyIds = array_values(array_unique(array_map('intval',
@@ -243,9 +243,9 @@ function sp_create(PDO $pdo, array $cfg, int $uid): void {
             ->execute([$uid, $title, $home, $away, $matchAt, $deadlineAt, $fee]);
         $gameId = (int)$pdo->lastInsertId();
     });
-    // 起案時 通知
+    // 起案時通知
     foreach ($notifyIds as $nuid) {
-        $msg = "🎯 「{$home} vs {$away}」 のスコア予想 受付開始! フィー {$fee}pt";
+        $msg = "🎯 「{$home} vs {$away}」 のスコア予想受付開始! フィー {$fee}pt";
         notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'score_pred', $gameId);
     }
     json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
@@ -312,13 +312,13 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         if (!$g) throw new ApiException('not_found', 'not found', 404);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['open','closed'], true)) throw new ApiException('bad_request', '既に終了', 400);
-        // 完全一致した エントリ群を 取得
+        // 完全一致したエントリ群を取得
         $stW = $pdo->prepare("SELECT user_id FROM score_pred_entries WHERE game_id = ? AND guess_home = ? AND guess_away = ?");
         $stW->execute([$gid, $home, $away]);
         $winners = array_map('intval', $stW->fetchAll(PDO::FETCH_COLUMN));
         $pot = (int)$g['pot_total'];
         if (empty($winners)) {
-            // v737 #347 全員外れ: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を 各自に返金。
+            // v737 #347 全員外れ: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を各自に返金。
             //   旧版は full refund で system 取り分ゼロになっていた。
             $stAll = $pdo->prepare("SELECT user_id FROM score_pred_entries WHERE game_id = ?");
             $stAll->execute([$gid]);
@@ -350,9 +350,9 @@ function sp_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         }
         $pdo->prepare("UPDATE score_pred_games SET status='finished', actual_home=?, actual_away=?, finished_at=NOW() WHERE id = ?")
             ->execute([$home, $away, $gid]);
-        // v739 #352 通知 を 1 人ずつ パーソナライズ。 旧版 は スコア だけ で 「自分 が
-        // 当たった か / 何 pt 戻った か」 が 分から なかった ので、 自分 の 予想 + 払戻
-        // を 末尾 に 付ける。
+        // v739 #352 通知を 1 人ずつパーソナライズ。 旧版はスコアだけで 「自分が
+        // 当たったか / 何 pt 戻ったか」 が分からなかったので、 自分の予想 + 払戻
+        // を末尾に付ける。
         $stAll = $pdo->prepare("SELECT user_id, guess_home, guess_away, payout, is_winner
                                   FROM score_pred_entries WHERE game_id = ?");
         $stAll->execute([$gid]);

@@ -1,12 +1,12 @@
 // /#/sns — シンプル SNS (旧 Twitter 風)。
-// フォロー なし、 全員 が 全投稿 を 見る。 テキスト + 画像 + 位置 + @メンション。
-// 返信 (parent_id)、 いいね (toggle) のみ。 リポスト なし。
+// フォローなし、 全員が全投稿を見る。 テキスト + 画像 + 位置 + @メンション。
+// 返信 (parent_id)、 いいね (toggle) のみ。 リポストなし。
 
 import { get, post, del, invalidateContentCache } from '../api.js';
 import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
-import { openImageLightbox as openSharedLightbox } from '../lightbox.js';  // v785 #383 回転 付き lightbox
+import { openImageLightbox as openSharedLightbox } from '../lightbox.js';  // v785 #383 回転付き lightbox
 
 function fmtRelative(s) {
   if (!s) return '';
@@ -92,11 +92,11 @@ async function readExifGps(file) {
 }
 
 // v548 #207 JPEG クライアント縮小 + EXIF 保持。 ファイルが閾値超えなら canvas で
-//   リサイズ → toBlob (JPEG q=0.85) → 元の APP1 EXIF ブロックを 再注入。 オリジナル
-//   EXIF (Orientation / GPS / 撮影日時 等) を全部保持しつつ サイズだけ落とす。
+//   リサイズ → toBlob (JPEG q=0.85) → 元の APP1 EXIF ブロックを再注入。 オリジナル
+//   EXIF (Orientation / GPS / 撮影日時等) を全部保持しつつサイズだけ落とす。
 //   閾値: 3 MB 超 OR 長辺 3000px 超。 縮小後の長辺は 2400px。
 //   非 JPEG (PNG/WebP/HEIC) はそのまま (resize する場合 EXIF は元から無い or 失われる
-//   ので 不可逆になりリスク)、 ユーザーのオリジナルを尊重して passthrough。
+//   ので不可逆になりリスク)、 ユーザーのオリジナルを尊重して passthrough。
 const RESIZE_BYTE_THRESHOLD = 3 * 1024 * 1024;
 const RESIZE_MAX_DIM = 2400;
 async function maybeResizeJpegPreserveExif(file) {
@@ -125,7 +125,7 @@ async function maybeResizeJpegPreserveExif(file) {
     ctx.drawImage(img, 0, 0, nw, nh);
     const resizedBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
     if (!resizedBlob) return file;
-    // EXIF (APP1) を抽出して 縮小 JPEG の SOI 直後に注入
+    // EXIF (APP1) を抽出して縮小 JPEG の SOI 直後に注入
     const merged = await injectExifAppBlock(file, resizedBlob);
     return new File([merged || resizedBlob], file.name.replace(/(\.[^.]*)?$/, '_resized.jpg'), { type: 'image/jpeg' });
   } finally {
@@ -163,19 +163,19 @@ async function injectExifAppBlock(originalFile, resizedBlob) {
 }
 
 function renderBodyHtml(body) {
-  // v467→v468 @mention は SNS 検索 / @LabPay 案内 へ リンク 化。 URL は 新タブ。
+  // v467→v468 @mention は SNS 検索 / @LabPay 案内へリンク化。 URL は新タブ。
   let s = escapeHtml(body || '');
   s = s.replace(/@([\p{L}\p{N}_\-\.]{1,40})/gu, (_, name) =>
     `<a href="#/sns" class="hint" style="color:var(--primary); font-weight:600; text-decoration:none">@${escapeHtml(name)}</a>`);
   s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   // v571 LabPay 内ハッシュリンク (/#/ito など) をクリック可能化。 すでに http リンク化
-  //   された後なので 純粋な /#/ or #/ で始まる URL のみマッチ。
+  //   された後なので純粋な /#/ or #/ で始まる URL のみマッチ。
   s = s.replace(/(^|[\s])(\/?#\/[A-Za-z0-9_\-\/:?=&%\.]+)/g, (_, pre, url) =>
     `${pre}<a href="${url.replace(/^\//, '')}" style="color:var(--primary); font-weight:600">${url}</a>`);
   return s.replace(/\n/g, '<br>');
 }
 
-// v480 リアクション 3 種。 押し てる / 押し てない の 配色 だけ 変える。
+// v480 リアクション 3 種。 押してる / 押してないの配色だけ変える。
 const REACTIONS = [
   { kind: 'thumb', icon: '👍', activeColor: '#2563eb' },
   { kind: 'heart', icon: '❤️', activeColor: '#e11d48' },
@@ -200,7 +200,7 @@ function postCard(p, opts = {}) {
   const isAdmin = state.me?.role === 'admin';
   const authorIsSystem = p.author_kind === 'system';
   const canDelete = isMine || (isAdmin && authorIsSystem);
-  // v785 #383 投稿 画像 を 90° 回転 する 権限 (投稿者 or admin)
+  // v785 #383 投稿画像を 90° 回転する権限 (投稿者 or admin)
   const canRotImage = !!p.image_url && (isMine || isAdmin);
   const replyHash = opts.skipReplyHash ? '' : `#/sns/${p.id}`;
   // v736 #346 投稿者本人 / admin は位置情報だけを削除できる
@@ -208,7 +208,7 @@ function postCard(p, opts = {}) {
   const loc = (p.lat !== null && p.lng !== null)
     ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>${canClearLoc ? `<button class="btn" data-clear-loc="${p.id}" title="位置情報だけを削除" style="font-size:10px; padding:0 5px; line-height:1.6">📍✕</button>` : ''}`
     : '';
-  // v525 #180 アバター + 投稿者名を タップ で その人のだけに絞り込み (?user=ID)
+  // v525 #180 アバター + 投稿者名をタップでその人のだけに絞り込み (?user=ID)
   return `
     <div class="list-item" style="align-items:flex-start; gap:8px" data-post-id="${p.id}">
       <a href="#/sns?user=${p.user_id}" style="text-decoration:none; flex:none">${avatarHtml(p.display_name, p.avatar_url, 'sm')}</a>
@@ -233,14 +233,14 @@ let postsState = { items: [], beforeId: 0, loading: false, atEnd: false };
 let postsPollTimer = null;
 let postsKnownLatestId = 0;
 
-// v598 fix: 旧版は 'labpay-content-v1' を 直 open していたが 実際の SW キャッシュは v3。
-//   invalidateContentCache (api.js) で labpay-content-* を 全部 invalidate する 方式に変更。
+// v598 fix: 旧版は 'labpay-content-v1' を直 open していたが実際の SW キャッシュは v3。
+//   invalidateContentCache (api.js) で labpay-content-* を全部 invalidate する方式に変更。
 async function invalidatePostsCache() {
   await invalidateContentCache('/api/posts');
 }
 
-// v480 自動 更新: 10 秒 ごと に /api/posts/latest_id だけ 叩いて、 値 が
-//   大きくなって たら 一覧 を 取り直す。 タブ 非アクティブ 時 は 停止。
+// v480 自動更新: 10 秒ごとに /api/posts/latest_id だけ叩いて、 値が
+//   大きくなってたら一覧を取り直す。 タブ非アクティブ時は停止。
 function startPostsPolling() {
   stopPostsPolling();
   postsPollTimer = setInterval(async () => {
@@ -268,9 +268,9 @@ window.addEventListener('hashchange', () => {
 });
 
 export async function renderPosts({ query } = {}) {
-  // v598 SNS ページを開いた瞬間に SW SWR キャッシュを 明示的に invalidate。
+  // v598 SNS ページを開いた瞬間に SW SWR キャッシュを明示的に invalidate。
   //   これがないと 「らぼったーが古い」 (= 前回キャッシュ表示 → 裏で fetch → 次回反映)
-  //   になりがち。 invalidate しておけば 初回 get がそのままネットへ抜けて 必ず最新。
+  //   になりがち。 invalidate しておけば初回 get がそのままネットへ抜けて必ず最新。
   await invalidatePostsCache();
   // v525 #180 user パラメータで投稿者絞り込み (?user=ID)。 絞り込み中は composer 非表示
   //   + 解除ボタン + 「@name の投稿のみ」 ヘッダ。
@@ -319,8 +319,8 @@ export async function renderPosts({ query } = {}) {
   }
 }
 
-// v525 #167 タイムラインで下方向スワイプ (touchstart→touchmove) で 明示再読込。
-//   ページ上部 (scrollTop === 0) からの 60px 以上の下スワイプで トリガ。
+// v525 #167 タイムラインで下方向スワイプ (touchstart→touchmove) で明示再読込。
+//   ページ上部 (scrollTop === 0) からの 60px 以上の下スワイプでトリガ。
 function setupPullToRefresh() {
   const list = document.getElementById('po-list');
   if (!list) return;
@@ -331,11 +331,11 @@ function setupPullToRefresh() {
     if (!indicator) {
       indicator = document.createElement('div');
       indicator.style.cssText = 'text-align:center; font-size:13px; padding:8px; color:var(--primary); transition:opacity 0.2s';
-      indicator.textContent = '↓ 引っ張って 更新';
+      indicator.textContent = '↓ 引っ張って更新';
       list.parentNode.insertBefore(indicator, list);
     }
     indicator.style.opacity = Math.min(1, pct);
-    indicator.textContent = pct >= 1 ? '↻ 離して 更新' : '↓ 引っ張って 更新';
+    indicator.textContent = pct >= 1 ? '↻ 離して更新' : '↓ 引っ張って更新';
   };
   const hideIndicator = () => { if (indicator) { indicator.remove(); indicator = null; } };
   list.addEventListener('touchstart', (ev) => {
@@ -354,7 +354,7 @@ function setupPullToRefresh() {
   list.addEventListener('touchend', async () => {
     if (triggered) {
       hideIndicator();
-      // ヘッダの 「読み込み中…」 を 表示してから 全件 reset
+      // ヘッダの 「読み込み中…」 を表示してから全件 reset
       const tmp = document.createElement('div');
       tmp.className = 'muted';
       tmp.style.cssText = 'text-align:center; padding:8px';
@@ -374,7 +374,7 @@ export async function renderPostDetail({ params }) {
   const id = Number(params.id);
   const app = document.getElementById('app');
   // v539 #196 返信 0 件時は 「💬 返信 (0)」 ヘッダごと隠す + 返信入力 UI (composer)
-  //   を 返信一覧の下 に配置 (= 返信を読んでから返事を書く 自然な順序)。
+  //   を返信一覧の下に配置 (= 返信を読んでから返事を書く自然な順序)。
   app.innerHTML = `
     <div class="card">
       <a href="#/sns" class="hint">← タイムライン</a>
@@ -401,7 +401,7 @@ export async function renderPostDetail({ params }) {
       document.getElementById('po-reply-count').textContent = replyCount;
       document.getElementById('po-replies').innerHTML = d.replies.map(r => postCard(r, { skipReplyHash: true })).join('');
     } else {
-      card.hidden = true; // 「💬 返信 (0)」 + 「まだ 返信 なし」 は出さない
+      card.hidden = true; // 「💬 返信 (0)」 + 「まだ返信なし」 は出さない
     }
     bindRowHandlers();
   } catch (e) {
@@ -436,7 +436,7 @@ function renderReactors(reactors) {
 }
 
 function composerHtml(parentId) {
-  const placeholder = parentId ? '返信を 書く…' : 'いま どうしてる?  @ で メンション (補完あり)。 LabPay へ 機能要望 / バグ報告 する 時は @LabPay 付けてね';
+  const placeholder = parentId ? '返信を書く…' : 'いまどうしてる?  @ でメンション (補完あり)。 LabPay へ機能要望 / バグ報告する時は @LabPay 付けてね';
   return `
     <div class="card" style="position:relative">
       <textarea id="po-body" maxlength="2000" rows="3" placeholder="${escapeHtml(placeholder)}"></textarea>
@@ -444,7 +444,7 @@ function composerHtml(parentId) {
       <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
         <input type="file" id="po-img" accept="image/*" style="flex:1; min-width:140px">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
-          <input type="checkbox" id="po-loc"> 📍 現在地 を 添付
+          <input type="checkbox" id="po-loc"> 📍 現在地を添付
         </label>
         <button id="po-submit" class="primary" style="margin-left:auto" data-parent="${parentId || ''}">投稿</button>
       </div>
@@ -452,7 +452,7 @@ function composerHtml(parentId) {
     </div>`;
 }
 
-// v467 @ 補完 用 メンバー キャッシュ (タブ ライフタイム)。
+// v467 @ 補完用メンバーキャッシュ (タブライフタイム)。
 let mentionCandidates = null;
 async function loadMentionCandidates() {
   if (mentionCandidates) return mentionCandidates;
@@ -462,7 +462,7 @@ async function loadMentionCandidates() {
     mentionCandidates = users
       .filter(u => u.display_name)
       .map(u => ({ id: u.id, name: u.display_name, avatar: u.avatar_url }));
-    // LabPay 公式 アカウント が API 上に いない 場合 でも 候補 に 出す
+    // LabPay 公式アカウントが API 上にいない場合でも候補に出す
     if (!mentionCandidates.some(u => u.name === 'LabPay')) {
       mentionCandidates.unshift({ id: 0, name: 'LabPay', avatar: null });
     }
@@ -481,7 +481,7 @@ function bindMentionAutocomplete() {
   const refresh = () => {
     const v = ta.value;
     const pos = ta.selectionStart;
-    // カーソル 前 の 直近 「@xxx」 を 拾う (空白 で 区切られる)
+    // カーソル前の直近 「@xxx」 を拾う (空白で区切られる)
     const head = v.slice(0, pos);
     const m = head.match(/(?:^|\s)@([\p{L}\p{N}_\-\.]{0,40})$/u);
     if (!m) { close(); return; }
@@ -497,7 +497,7 @@ function bindMentionAutocomplete() {
           : `<div style="flex:none; width:20px; height:20px; border-radius:50%; background:#ede4f3; color:#4a106d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11px">${escapeHtml((c.name || '?').charAt(0).toUpperCase())}</div>`}
         <span style="font-size:13px">@${escapeHtml(c.name)}</span>
       </div>`).join('');
-    // v468 textarea の 直下 に 出す。 height を 動的 に。
+    // v468 textarea の直下に出す。 height を動的に。
     pop.style.top = (ta.offsetTop + ta.offsetHeight + 2) + 'px';
     pop.style.display = 'block';
     pop.querySelectorAll('[data-mi]').forEach(el => {
@@ -537,10 +537,10 @@ function bindMentionAutocomplete() {
 let composerImageUrl = null;
 let composerCoords = null;
 // v537 #195 画像 EXIF GPS は 「現在地」 (geolocation) より優先。 画像から取得した GPS は
-//   別変数で保持し、 submit 時に EXIF があれば そちらを採用 (= 後から locChk を ON にして
-//   geolocation で composerCoords が入っても 上書きされない)。
+//   別変数で保持し、 submit 時に EXIF があればそちらを採用 (= 後から locChk を ON にして
+//   geolocation で composerCoords が入っても上書きされない)。
 let composerImageExifCoords = null;
-// v482 #69 位置情報 ON/OFF を 永続化 (一度 ON にしたら 以降 ON、 OFF にしたら 以降 OFF)。
+// v482 #69 位置情報 ON/OFF を永続化 (一度 ON にしたら以降 ON、 OFF にしたら以降 OFF)。
 const PO_LOC_PREF_KEY = 'labpay-sns-loc-pref';
 function readLocPref() {
   try { return localStorage.getItem(PO_LOC_PREF_KEY) === 'on'; } catch { return false; }
@@ -555,14 +555,14 @@ function bindComposer(parentId) {
   bindMentionAutocomplete();  // v467 @ 補完
   const imgInput = document.getElementById('po-img');
   const imgStatus = document.getElementById('po-img-status');
-  // v485 #79 アップロード 中 は 投稿 ボタン を disable する (待たず 押すと 画像 が
-  //   付与 されない 問題 を 防ぐ)。 完了 か 失敗 で 元に 戻す。
+  // v485 #79 アップロード中は投稿ボタンを disable する (待たず押すと画像が
+  //   付与されない問題を防ぐ)。 完了か失敗で元に戻す。
   const submitBtn = document.getElementById('po-submit');
-  // v860 #446 file input change と クリップボード paste 双方 から 同じ アップロード
-  //   フロー を 呼べる よう に 共通 関数 化。
+  // v860 #446 file input change とクリップボード paste 双方から同じアップロード
+  //   フローを呼べるように共通関数化。
   const uploadComposerImage = async (f) => {
     if (!f) { composerImageUrl = null; imgStatus.textContent = ''; return; }
-    imgStatus.textContent = '⏳ アップロード 中…';
+    imgStatus.textContent = '⏳ アップロード中…';
     if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
     composerImageExifCoords = null;
     readExifGps(f).then(gps => {
@@ -576,7 +576,7 @@ function bindComposer(parentId) {
       const resized = await maybeResizeJpegPreserveExif(f);
       if (resized !== f) {
         uploadFile = resized;
-        imgStatus.textContent = `⏳ 縮小して アップロード中… (${(f.size / 1024 / 1024).toFixed(1)} MB → ${(resized.size / 1024 / 1024).toFixed(1)} MB)`;
+        imgStatus.textContent = `⏳ 縮小してアップロード中… (${(f.size / 1024 / 1024).toFixed(1)} MB → ${(resized.size / 1024 / 1024).toFixed(1)} MB)`;
       }
     } catch (_) {}
     const fd = new FormData();
@@ -592,7 +592,7 @@ function bindComposer(parentId) {
         throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
       composerImageUrl = j.url || j.path;
-      imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード 完了</span>`;
+      imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
     } catch (e) {
       imgStatus.textContent = '失敗: ' + (e?.message || e);
     } finally {
@@ -600,10 +600,10 @@ function bindComposer(parentId) {
     }
   };
   imgInput?.addEventListener('change', () => uploadComposerImage(imgInput.files[0]));
-  // v860 #446 クリップボード (画像) を textarea に paste で アップロード。
-  //   Win の 「Print Screen + Snipping Tool」 や Mac の ⌘+Shift+4 で 撮った
-  //   スクショ を 直接 貼り 付けら れる。 画像 type で 拾えれば preventDefault して
-  //   テキスト として は 入れない。 ファイル名 は clipboard-<ts>.<ext> で 仮 命名。
+  // v860 #446 クリップボード (画像) を textarea に paste でアップロード。
+  //   Win の 「Print Screen + Snipping Tool」 や Mac の ⌘+Shift+4 で撮った
+  //   スクショを直接貼り付けられる。 画像 type で拾えれば preventDefault して
+  //   テキストとしては入れない。 ファイル名は clipboard-<ts>.<ext> で仮命名。
   const taBody = document.getElementById('po-body');
   taBody?.addEventListener('paste', async (ev) => {
     const items = ev.clipboardData?.items || [];
@@ -614,13 +614,13 @@ function bindComposer(parentId) {
         ev.preventDefault();
         const ext = ((blob.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
         const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
-        toast('📋 クリップボード 画像 を アップロード 中…');
+        toast('📋 クリップボード画像をアップロード中…');
         await uploadComposerImage(file);
         return;
       }
     }
   });
-  // v482 #69 起動時 に 前回 の 設定 を 復元。 ON だった なら 自動 で 位置 取得。
+  // v482 #69 起動時に前回の設定を復元。 ON だったなら自動で位置取得。
   const locChk = document.getElementById('po-loc');
   if (locChk && readLocPref()) {
     locChk.checked = true;
@@ -635,19 +635,19 @@ function bindComposer(parentId) {
   document.getElementById('po-loc')?.addEventListener('change', (ev) => {
     writeLocPref(ev.target.checked);
     if (!ev.target.checked) { composerCoords = null; return; }
-    if (!navigator.geolocation) { toast('位置情報 未対応'); ev.target.checked = false; return; }
+    if (!navigator.geolocation) { toast('位置情報未対応'); ev.target.checked = false; return; }
     navigator.geolocation.getCurrentPosition(
       (p) => { composerCoords = { lat: p.coords.latitude, lng: p.coords.longitude };
-               toast(`📍 位置 を 添付 (±${Math.round(p.coords.accuracy)}m)`); },
-      (e) => { toast('位置 取得 失敗'); ev.target.checked = false; composerCoords = null; },
+               toast(`📍 位置を添付 (±${Math.round(p.coords.accuracy)}m)`); },
+      (e) => { toast('位置取得失敗'); ev.target.checked = false; composerCoords = null; },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
   });
   document.getElementById('po-submit')?.addEventListener('click', async () => {
     const body = document.getElementById('po-body').value.trim();
-    if (!body && !composerImageUrl) { toast('本文 か 画像 が 必要 です'); return; }
-    // v537 #195 EXIF GPS が画像にあれば 必ず優先 (geolocation で composerCoords が
-    //   設定されていても上書き)。 写真の位置 = 撮影地 を 投稿位置として正確に。
+    if (!body && !composerImageUrl) { toast('本文か画像が必要です'); return; }
+    // v537 #195 EXIF GPS が画像にあれば必ず優先 (geolocation で composerCoords が
+    //   設定されていても上書き)。 写真の位置 = 撮影地を投稿位置として正確に。
     const finalCoords = composerImageExifCoords || composerCoords;
     const payload = {
       body,
@@ -659,14 +659,14 @@ function bindComposer(parentId) {
     try {
       const r = await post('/api/posts', payload);
       toast('投稿しました');
-      // v480 SW の SWR キャッシュ に 古い /api/posts が 残ってる と 次回 ホーム 等で
-      //   1 拍 遅れる ので、 自分 が 投稿した タイミング で 強制 削除。
+      // v480 SW の SWR キャッシュに古い /api/posts が残ってると次回ホーム等で
+      //   1 拍遅れるので、 自分が投稿したタイミングで強制削除。
       await invalidatePostsCache();
       document.getElementById('po-body').value = '';
       document.getElementById('po-img').value = '';
-      // v482 #69 位置情報 ON/OFF は 永続 設定 なので、 投稿後 も リセット しない。
-      //   ただし 添付 された 座標 は 新しい 投稿 では 取り直し たい ので、 ON なら
-      //   再 取得 する。
+      // v482 #69 位置情報 ON/OFF は永続設定なので、 投稿後もリセットしない。
+      //   ただし添付された座標は新しい投稿では取り直したいので、 ON なら
+      //   再取得する。
       composerImageUrl = null; composerCoords = null;
       const locChk = document.getElementById('po-loc');
       if (locChk && locChk.checked && navigator.geolocation) {
@@ -694,7 +694,7 @@ async function loadMore(reset = false) {
     const items = d.items || [];
     if (reset) {
       postsState.items = items;
-      document.getElementById('po-list').innerHTML = items.map(p => postCard(p)).join('') || '<div class="empty">まだ 投稿 なし</div>';
+      document.getElementById('po-list').innerHTML = items.map(p => postCard(p)).join('') || '<div class="empty">まだ投稿なし</div>';
     } else {
       postsState.items.push(...items);
       const html = items.map(p => postCard(p)).join('');
@@ -703,9 +703,9 @@ async function loadMore(reset = false) {
     if (items.length) postsState.beforeId = items[items.length - 1].id;
     if (items.length < 30) {
       postsState.atEnd = true;
-      document.getElementById('po-more').innerHTML = '<span class="muted">これ で 全部 です</span>';
+      document.getElementById('po-more').innerHTML = '<span class="muted">これで全部です</span>';
     } else {
-      document.getElementById('po-more').innerHTML = '<button class="btn" id="po-load-next">もっと 見る</button>';
+      document.getElementById('po-more').innerHTML = '<button class="btn" id="po-load-next">もっと見る</button>';
       document.getElementById('po-load-next').addEventListener('click', () => loadMore());
     }
     bindRowHandlers();
@@ -713,15 +713,15 @@ async function loadMore(reset = false) {
   postsState.loading = false;
 }
 
-// v492 #92 画像 タップ で 全画面 ライトボックス を 開く。 別タブ で 開いて 戻れない
-//   問題 を 回避。 × ボタン / 背景 タップ / Esc で 閉じる。 body スクロール ロック。
+// v492 #92 画像タップで全画面ライトボックスを開く。 別タブで開いて戻れない
+//   問題を回避。 × ボタン / 背景タップ / Esc で閉じる。 body スクロールロック。
 function openImageLightbox(src) {
   const old = document.getElementById('po-lightbox');
   if (old) old.remove();
   const box = document.createElement('div');
   box.id = 'po-lightbox';
   box.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; cursor:zoom-out';
-  // v526 #179 画像が大きい場合 lightbox 表示までに 体感数秒空くので、 ローディング
+  // v526 #179 画像が大きい場合 lightbox 表示までに体感数秒空くので、 ローディング
   //   表示 + 進行率 (XMLHttpRequest progress) を仕込む。 オリジナル画像を XHR で取って
   //   blob → object URL に。 fetch でもいいが progress 取れる XHR を採用。
   box.innerHTML = `
@@ -778,13 +778,13 @@ function openImageLightbox(src) {
     close();
   });
   box.addEventListener('click', (ev) => {
-    // 画像 自体 を タップ し ても 閉じる (拡大 オーバーレイ の 通例)。
+    // 画像自体をタップしても閉じる (拡大オーバーレイの通例)。
     if (ev.target.id !== 'po-lb-close') close();
   });
 }
 
 function bindRowHandlers() {
-  // v541 #197 投稿カードの「余白」をタップしたら 返信モード (= 詳細ページへ遷移)
+  // v541 #197 投稿カードの「余白」をタップしたら返信モード (= 詳細ページへ遷移)
   //   インタラクティブな要素 (a / button / data-zoom-src / data-react-post) は除外。
   document.querySelectorAll('[data-post-id]').forEach(row => {
     if (row.dataset.boundReply) return;
@@ -803,7 +803,7 @@ function bindRowHandlers() {
     el.addEventListener('click', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      // v785 #383 投稿者 / admin なら 共有 lightbox の onRotate を 渡す (サーバ で 画像 上書き 保存)
+      // v785 #383 投稿者 / admin なら共有 lightbox の onRotate を渡す (サーバで画像上書き保存)
       const postId = el.dataset.rotPostId;
       if (postId) {
         openSharedLightbox(el.dataset.zoomSrc, {
@@ -826,7 +826,7 @@ function bindRowHandlers() {
         const r = method === 'post'
           ? await post(`/api/posts/${id}/reaction?kind=${kind}`, {})
           : await del(`/api/posts/${id}/reaction?kind=${kind}`);
-        // 押し てる kind の セット を 受け取って 該当 行 の 3 ボタン を 全部 再描画。
+        // 押してる kind のセットを受け取って該当行の 3 ボタンを全部再描画。
         const row = el.closest('[data-post-id]');
         if (!row) return;
         const mine = new Set(r.my_reactions || []);
@@ -846,7 +846,7 @@ function bindRowHandlers() {
     if (el.dataset.bound) return;
     el.dataset.bound = '1';
     el.addEventListener('click', async () => {
-      if (!confirm('この 投稿 を 削除 しますか?')) return;
+      if (!confirm('この投稿を削除しますか?')) return;
       try {
         await del(`/api/posts/${el.dataset.delPost}`);
         // v499 #110 SW の content cache (/api/posts*) に消したはずの行が残ると
@@ -868,7 +868,7 @@ function bindRowHandlers() {
         await del(`/api/posts/${el.dataset.clearLoc}/location`);
         await invalidatePostsCache();
         toast('位置情報を削除しました');
-        // 該当行の loc 部分を消す: 「📍 地図」 と 自身を non-render
+        // 該当行の loc 部分を消す: 「📍 地図」 と自身を non-render
         const row = el.closest('[data-post-id]');
         if (row) {
           row.querySelectorAll('a[href^="https://maps.google.com"]').forEach(a => a.remove());

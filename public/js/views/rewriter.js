@@ -1,4 +1,4 @@
-// v613 文字数 / 単語数制限リライター。 アブスト・リバッタル の 文字数制限と戦うための ツール。
+// v613 文字数 / 単語数制限リライター。 アブスト・リバッタルの文字数制限と戦うためのツール。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -11,7 +11,7 @@ export async function renderRewriter() {
       <h2 style="margin:0">✂️ 文字数・単語数リライター</h2>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
         アブストやリバッタルなど、 文字数・単語数の上限と戦うためのツール。
-        GPT の自己カウントは間違うので、 サーバ側で正確にカウントして 超過時は再依頼します (最大3回)。
+        GPT の自己カウントは間違うので、 サーバ側で正確にカウントして超過時は再依頼します (最大3回)。
         <b>1回 1pt</b>。 失敗時は自動返金。
       </p>
     </div>
@@ -25,8 +25,8 @@ export async function renderRewriter() {
         <label style="flex:1">
           <div class="bold" style="font-size:13px; margin-bottom:4px">制限のモード</div>
           <select id="rw-mode" class="input">
-            <option value="chars_no_space">スペースなし 文字数</option>
-            <option value="chars_with_space">スペース込み 文字数</option>
+            <option value="chars_no_space">スペースなし文字数</option>
+            <option value="chars_with_space">スペース込み文字数</option>
             <option value="words">英単語数</option>
           </select>
         </label>
@@ -91,7 +91,7 @@ async function renderRewriterList() {
           <div class="meta" style="font-size:12px">
             ${modeLabel(it.target_mode)} 上限 ${it.target_count} →
             ${it.status === 'done'
-              ? `${countForMode(it, it.target_mode)} (${it.iterations}回 試行)`
+              ? `${countForMode(it, it.target_mode)} (${it.iterations}回試行)`
               : statusBadge(it.status)}
             ・ ${escapeHtml(it.created_at)}
           </div>
@@ -119,7 +119,7 @@ function statusBadge(s) {
   return '';
 }
 
-// 単純な 単語レベル diff (LCS ベース)。 共通部分は 灰色、 削除は 赤、 追加は 緑で 表示
+// 単純な単語レベル diff (LCS ベース)。 共通部分は灰色、 削除は赤、 追加は緑で表示
 function wordDiff(a, b) {
   const aw = a.match(/\S+|\s+/g) || [];
   const bw = b.match(/\S+|\s+/g) || [];
@@ -191,13 +191,13 @@ export async function renderRewriterDetail({ params }) {
       <a href="#/rewriter" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">✂️ リライト結果</h2>
       <div style="font-size:13px">
-        モード: <b>${modeLabel(d.target_mode)}</b> ・ 上限: <b>${target}</b> ・ 結果: <b style="color:${success ? '#15803d' : '#dc2626'}">${overTarget}</b> ${success ? '✓' : '⚠️'}
-        ${d.iterations > 1 ? ` ・ 試行 ${d.iterations} 回` : ''}
+        モード: <b>${modeLabel(d.target_mode)}</b> ・上限: <b>${target}</b> ・結果: <b style="color:${success ? '#15803d' : '#dc2626'}">${overTarget}</b> ${success ? '✓' : '⚠️'}
+        ${d.iterations > 1 ? ` ・試行 ${d.iterations} 回` : ''}
       </div>
       <div class="hint-sm" style="margin-top:4px">
         元: ${d.source_chars_no_space}文字 (スペースなし) / ${d.source_chars_with_space}文字 (込み) / ${d.source_words}単語
         → 書き直し: ${d.rewritten_chars_no_space}文字 / ${d.rewritten_chars_with_space}文字 / ${d.rewritten_words}単語
-        ${d.detected_lang === 'en' ? ' ・ 言語: 英文' : ' ・ 言語: 日本語'}
+        ${d.detected_lang === 'en' ? ' ・言語: 英文' : ' ・言語: 日本語'}
       </div>
     </div>
 

@@ -1,8 +1,8 @@
-// /#/sns/map — 自分の らぼったー 投稿のうち 位置情報がついているものを 地図に
-// プロット。 マップを動かす (= 表示中エリアを変える) と 下の一覧が それに合わせて
-// 自動で絞り込まれる (= 食べある記の マップビューと 同じ思想)。
+// /#/sns/map — 自分のらぼったー投稿のうち位置情報がついているものを地図に
+// プロット。 マップを動かす (= 表示中エリアを変える) と下の一覧がそれに合わせて
+// 自動で絞り込まれる (= 食べある記のマップビューと同じ思想)。
 //
-// v530 #181 実装。 自分が らぼったー で 投稿した場所 一覧 + 地図インターフェース。
+// v530 #181 実装。 自分がらぼったーで投稿した場所一覧 + 地図インターフェース。
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -50,8 +50,8 @@ export async function renderPostsMap() {
     attribution: '&copy; OpenStreetMap', maxZoom: 19,
   }).addTo(map);
 
-  // v535 #191 「📍 現在地」 ボタン (地図右上)。 geolocation で 現在地に setView。
-  //   サイズ/ズームは変えず 位置だけ移す。
+  // v535 #191 「📍 現在地」 ボタン (地図右上)。 geolocation で現在地に setView。
+  //   サイズ/ズームは変えず位置だけ移す。
   const locCtl = L.control({ position: 'topright' });
   locCtl.onAdd = () => {
     const div = L.DomUtil.create('div', 'leaflet-bar');
@@ -73,7 +73,7 @@ export async function renderPostsMap() {
   };
   locCtl.addTo(map);
 
-  // 前回 view が無い (= 初回) の時だけ 全マーカーが収まるよう fitBounds する。 ある時は
+  // 前回 view が無い (= 初回) の時だけ全マーカーが収まるよう fitBounds する。 ある時は
   //   保存した位置を尊重する (= ユーザ意図を維持)。
   const hadSavedView = localStorage.getItem('labpay-postsmap-view') !== null;
 
@@ -90,7 +90,7 @@ export async function renderPostsMap() {
 
   if (!items.length) {
     document.getElementById('pm-list').innerHTML =
-      '<div class="empty">位置情報付きの投稿はまだありません。 投稿時に 📍 をオンにすると ここに出ます。</div>';
+      '<div class="empty">位置情報付きの投稿はまだありません。 投稿時に 📍 をオンにするとここに出ます。</div>';
     return;
   }
 
@@ -98,8 +98,8 @@ export async function renderPostsMap() {
   for (const p of items) {
     const lat = Number(p.lat), lng = Number(p.lng);
     if (!isFinite(lat) || !isFinite(lng)) continue;
-    // v535 #194 写真がある場合は サムネ画像を マーカーアイコンとして表示
-    //   (グループ地図 / 食べある記 と同様の見せ方)
+    // v535 #194 写真がある場合はサムネ画像をマーカーアイコンとして表示
+    //   (グループ地図 / 食べある記と同様の見せ方)
     const imgSrc = p.image_thumb_url || p.image_url;
     let marker;
     if (imgSrc) {
@@ -112,7 +112,7 @@ export async function renderPostsMap() {
       marker = L.marker([lat, lng], { icon }).addTo(map);
     } else {
       // v542 #198 画像なしのマーカーが真っ白で寂しいので、 アバター画像 or
-      //   本文先頭の絵文字を 入れた divIcon で描画。 ユーザ色 (display_name hash で
+      //   本文先頭の絵文字を入れた divIcon で描画。 ユーザ色 (display_name hash で
       //   背景色を決定) で 「誰の投稿か」 も一目で分かる。
       const firstEmoji = extractFirstEmoji(p.body || '');
       const userColor  = colorFromName(p.display_name || '');
@@ -132,7 +132,7 @@ export async function renderPostsMap() {
     m.bindPopup(() => {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'min-width:200px; max-width:260px; font-size:13px';
-      // v534 #190 写真があれば サムネで表示 (タップで詳細へ)
+      // v534 #190 写真があればサムネで表示 (タップで詳細へ)
       const imgSrc = p.image_thumb_url || p.image_url;
       const imgBlock = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="" loading="lazy" decoding="async" style="display:block; width:100%; max-height:160px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
@@ -147,13 +147,13 @@ export async function renderPostsMap() {
     markersByPid.set(p.id, m);
   }
 
-  // v535 #191 初回 (= 保存 view 無し) のみ 全マーカー fitBounds、 保存 view 有りなら
+  // v535 #191 初回 (= 保存 view 無し) のみ全マーカー fitBounds、 保存 view 有りなら
   //   ユーザ意図を維持。
   if (!hadSavedView) {
     const group = L.featureGroup([...markersByPid.values()]);
     if (group.getLayers().length) map.fitBounds(group.getBounds().pad(0.2));
   }
-  // 移動・ズーム変更時に view を localStorage 保存 (次回 復元用)
+  // 移動・ズーム変更時に view を localStorage 保存 (次回復元用)
   const saveView = () => {
     try {
       const c = map.getCenter();
@@ -196,7 +196,7 @@ export async function renderPostsMap() {
   boundsCheckbox.addEventListener('change', refreshList);
 }
 
-// v542 #198 本文の先頭から 絵文字 (Unicode Emoji_Presentation 範囲) を 1 つ抽出。
+// v542 #198 本文の先頭から絵文字 (Unicode Emoji_Presentation 範囲) を 1 つ抽出。
 //   なければ '' を返す。 シンプルなヒューリスティック (完璧網羅は不要)。
 function extractFirstEmoji(s) {
   if (!s) return '';
@@ -204,7 +204,7 @@ function extractFirstEmoji(s) {
   const m = s.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}](\u{FE0F})?/u);
   return m ? m[0] : '';
 }
-// 文字列を 簡易 hash → HSL カラー (パステル系) に。 同じ名前は同じ色。
+// 文字列を簡易 hash → HSL カラー (パステル系) に。 同じ名前は同じ色。
 function colorFromName(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;

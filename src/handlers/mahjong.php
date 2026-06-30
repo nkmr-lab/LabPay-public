@@ -1,11 +1,11 @@
 <?php
-// v553 #209 麻雀 Phase 1: 4人卓の 賭けプール + 結果分配 (実ゲームは外部、 結果だけ申告)。
+// v553 #209 麻雀 Phase 1: 4人卓の賭けプール + 結果分配 (実ゲームは外部、 結果だけ申告)。
 //   GET    /api/mahjong/games               一覧 (lobby + playing + 直近 finished)
 //   POST   /api/mahjong/games               { title?, buy_in? } 新規 (起案者は自動参加 = 50pt 預託)
 //   GET    /api/mahjong/games/:id           詳細 (players + pot + status)
 //   POST   /api/mahjong/games/:id/join      参加 (50pt 預託)
 //   POST   /api/mahjong/games/:id/leave     脱退 (lobby 中のみ、 50pt 返金)
-//   POST   /api/mahjong/games/:id/start     開始 (4人 揃って 起案者のみ。 playing 状態へ)
+//   POST   /api/mahjong/games/:id/start     開始 (4人揃って起案者のみ。 playing 状態へ)
 //   POST   /api/mahjong/games/:id/report    結果報告 { ranks: { user_id: rank } } 起案者のみ
 //   POST   /api/mahjong/games/:id/cancel    キャンセル (lobby/reporting のみ、 全員返金)
 
@@ -14,7 +14,7 @@ declare(strict_types=1);
 const MAHJONG_DEFAULT_BUYIN  = 50;
 const MAHJONG_RAKE_PCT       = 5;
 const MAHJONG_SEATS          = 4;
-// rank → 配分 % (場代抜き後の 残り 95% を、 50/30/15/0 で配る)
+// rank → 配分 % (場代抜き後の残り 95% を、 50/30/15/0 で配る)
 const MAHJONG_RANK_PCT       = [1 => 50, 2 => 30, 3 => 15, 4 => 0];
 
 function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -48,7 +48,7 @@ function route_mahjong(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no mahjong route for $method", 404);
 }
 
-// v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は 練習モード化。
+// v578 feedback#224: AI 弱すぎ + ポイント farming 防止のため AI 麻雀は練習モード化。
 //   エントリーフィー 5pt (v624 から、 払い出し 0 = 純粋な練習料金)。
 const MAHJONG_AI_BUYIN = 5;
 
@@ -60,7 +60,7 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
     if (count($botIds) < 3) throw new ApiException('not_configured', 'AI bot users 未設定', 500);
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $botIds, &$gameId) {
-        // v623 練習モードでも 1pt の プレイフィー (SYSTEM へ)
+        // v623 練習モードでも 1pt のプレイフィー (SYSTEM へ)
         if (MAHJONG_AI_BUYIN > 0) {
             mahjong_assert_balance($pdo, $uid, MAHJONG_AI_BUYIN);
         }
@@ -79,7 +79,7 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
         $stPL = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id = ? ORDER BY seat_order");
         $stPL->execute([$gameId]);
         $playerUids = array_map('intval', $stPL->fetchAll(PDO::FETCH_COLUMN));
-        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
+        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親をランダムに
         MahjongEngine::drawForTurn($state);
         $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
             ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gameId]);
@@ -91,7 +91,7 @@ function mahjong_ai_new(PDO $pdo, array $cfg, int $uid): void {
 
 // AI 自動進行: turn が bot のときに AI ロジックで進める。 人間の番 or 終局で停止。
 // v566 #222 maxIter で 1 step ずつに制限可。 state polling から呼ぶ時は 1〜2 で
-//   緩やかに 1人ずつ進む。 action 直後 (人間のアクション後) は 多めに走らせて 人間の
+//   緩やかに 1人ずつ進む。 action 直後 (人間のアクション後) は多めに走らせて人間の
 //   次の番まで進める。
 function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
     for ($i = 0; $i < $maxIter; $i++) {
@@ -143,7 +143,7 @@ function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
             $progressed = true;
         }
         else if ($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance') {
-            // 鳴き/ロン候補をループ。 人間が候補に居れば 人間のアクション待ちで停止
+            // 鳴き/ロン候補をループ。 人間が候補に居れば人間のアクション待ちで停止
             $discarder = $state['last_discarded']['by'] ?? null;
             $allHandled = true;
             for ($s = 0; $s < 4; $s++) {
@@ -196,10 +196,10 @@ function mahjong_autoplay_ai(PDO $pdo, int $gid, int $maxIter = 200): void {
     }
 }
 
-// AI 卓の終局: pot は人間が払った 5pt のみ。 配分は 順位ベースで:
+// AI 卓の終局: pot は人間が払った 5pt のみ。 配分は順位ベースで:
 //   1位: 5pt × 4 = 20pt (= pot × 4 倍) — 簡略のため 5pt 出した相手の AI 3 体は仮想 pot を出した扱いで、 結果分配。
 //   実際は: 人間が 1位 → +15pt (= 4回分の戻り) / 2位 → +0pt / 3位 → -2pt / 4位 → -5pt 等
-// 簡略: 人間の最終 vs 25000 点 の差分を pt 換算 (4000点 = 1pt) で 直接 ledger 動かす
+// 簡略: 人間の最終 vs 25000 点の差分を pt 換算 (4000点 = 1pt) で直接 ledger 動かす
 function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn): void {
     // 人間 (seat 0) の最終スコア
     $humanSeat = 0;
@@ -218,7 +218,7 @@ function mahjong_finalize_payout_ai(PDO $pdo, int $gid, array $state, int $buyIn
     usort($scores, fn($a, $b) => $b['score'] - $a['score']);
     $rank = 1;
     foreach ($scores as $j => $sc) if ($sc['idx'] === $humanSeat) { $rank = $j + 1; break; }
-    // v578 feedback#224: AI 麻雀は 練習モード。 順位は記録するが ポイント払い出しは 0。
+    // v578 feedback#224: AI 麻雀は練習モード。 順位は記録するがポイント払い出しは 0。
     $payout = 0;
     $pdo->prepare("UPDATE mahjong_players SET result_rank = ?, payout = 0 WHERE game_id = ? AND user_id = ?")
         ->execute([$rank, $gid, $humanUid]);
@@ -259,10 +259,10 @@ function mahjong_sim(PDO $pdo, array $cfg): void {
     ]);
 }
 
-// AI で 1 半荘 走らせる (簡易、 sim_mahjong.php と同等)
+// AI で 1 半荘走らせる (簡易、 sim_mahjong.php と同等)
 function mahjong_sim_one_hanchan(): array {
     $playerUids = [101, 102, 103, 104];
-    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
+    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親をランダムに
     MahjongEngine::drawForTurn($state);
     $events = ['tsumo' => 0, 'ron' => 0, 'ryukyoku' => 0, 'kyoku' => 0, 'naki' => 0, 'riichi' => 0, 'steps' => 0];
     $maxSteps = 8000;
@@ -422,7 +422,7 @@ function mahjong_create(PDO $pdo, array $cfg, int $uid): void {
     if ($title === '') $title = null;
     $buyIn = (int)($body['buy_in'] ?? MAHJONG_DEFAULT_BUYIN);
     if ($buyIn < 1 || $buyIn > 10000) throw new ApiException('bad_request', 'buy_in は 1〜10000', 400);
-    // v632 対象者指定 → 即起動: body.member_ids = [uid×3] が 渡れば 4 人 揃えて 即 開始
+    // v632 対象者指定 → 即起動: body.member_ids = [uid×3] が渡れば 4 人揃えて即開始
     $invitees = $body['member_ids'] ?? null;
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $title, $buyIn, $invitees, &$gameId) {
@@ -432,7 +432,7 @@ function mahjong_create(PDO $pdo, array $cfg, int $uid): void {
         $gameId = (int)$pdo->lastInsertId();
         mahjong_insert_player($pdo, $gameId, $uid, 0);
         mahjong_deposit($pdo, $gameId, $uid, $buyIn);
-        // 招待制: 3 人 揃って 全員から 一括徴収 + start
+        // 招待制: 3 人揃って全員から一括徴収 + start
         if (is_array($invitees) && count($invitees) > 0) {
             mahjong_create_with_invitees($pdo, $uid, $gameId, $buyIn, $invitees);
         }
@@ -445,7 +445,7 @@ function mahjong_create(PDO $pdo, array $cfg, int $uid): void {
             $stP->execute([$gameId, $uid]);
             foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
                 notify_safely($pdo, $cfg, (int)$pid, 'admin_notice',
-                    "🀄 {$by} さん から 麻雀卓 #{$gameId} に 招待 されました (4 人揃って 即開始、 {$buyIn}pt 預託済)",
+                    "🀄 {$by} さんから麻雀卓 #{$gameId} に招待されました (4 人揃って即開始、 {$buyIn}pt 預託済)",
                     'mahjong', $gameId);
             }
         } catch (Throwable $_) {}
@@ -458,18 +458,18 @@ function mahjong_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $
     $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid));
     $needed = MAHJONG_SEATS - 1;
     if (count($invitees) !== $needed) {
-        throw new ApiException('bad_request', sprintf('麻雀は あと %d 人 必要', $needed), 400);
+        throw new ApiException('bad_request', sprintf('麻雀はあと %d 人必要', $needed), 400);
     }
     $place = implode(',', array_fill(0, count($invitees), '?'));
     $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
     $stU->execute($invitees);
     $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
-    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバー が含まれます', 400);
+    if (count($valid) !== count($invitees)) throw new ApiException('bad_request', '無効なメンバーが含まれます', 400);
     foreach ($invitees as $iv) {
         if (Ledger::balanceOfUser($pdo, $iv) < $buyIn) {
             $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
             $stN->execute([$iv]);
-            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
+            throw new ApiException('insufficient_balance', sprintf('%s さんのポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
         }
     }
     $seat = 1;
@@ -478,11 +478,11 @@ function mahjong_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $
         mahjong_deposit($pdo, $gid, $iv, $buyIn);
         $seat++;
     }
-    // 4 人 揃って start
+    // 4 人揃って start
     $stP = $pdo->prepare("SELECT user_id FROM mahjong_players WHERE game_id=? ORDER BY seat_order");
     $stP->execute([$gid]);
     $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
-    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
+    $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親をランダムに
     MahjongEngine::drawForTurn($state);
     $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id=?")
         ->execute([json_encode($state, JSON_UNESCAPED_UNICODE), $gid]);
@@ -515,7 +515,7 @@ function mahjong_join(PDO $pdo, array $cfg, int $uid, int $gid): void {
                 $remaining = MAHJONG_SEATS - ($cnt + 1);
                 $msg = $remaining > 0
                     ? "🀄 {$name} が麻雀卓 #{$gid} に参加 (残り {$remaining} 席)"
-                    : "🀄 {$name} が参加して 麻雀卓 #{$gid} が満卓に! 起案者は 「開始」 を押してください";
+                    : "🀄 {$name} が参加して麻雀卓 #{$gid} が満卓に! 起案者は 「開始」 を押してください";
                 notify_safely($pdo, $CFG, (int)$other, 'admin_notice', $msg, 'mahjong', $gid);
             } catch (Throwable $_) {}
         }
@@ -549,7 +549,7 @@ function mahjong_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $playerUids = array_map('intval', $stP->fetchAll(PDO::FETCH_COLUMN));
         if (count($playerUids) !== MAHJONG_SEATS) throw new ApiException('bad_request', '4人揃ってから開始してください', 400);
         // v554 Phase 2: 実ゲーム状態を初期化
-        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親 を ランダム に
+        $state = MahjongEngine::newGame($playerUids, null, random_int(0, count($playerUids) - 1));   // v665 親をランダムに
         // 親 (turn=0) に最初のツモ
         MahjongEngine::drawForTurn($state);
         $pdo->prepare("UPDATE mahjong_games SET status='playing', started_at=NOW(), state_json=?, state_ver=state_ver+1 WHERE id = ?")
@@ -583,7 +583,7 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
     $players = $stPa->fetchAll(PDO::FETCH_ASSOC);
 
     $state = $g['state_json'] ? json_decode($g['state_json'], true) : null;
-    // 公開可能な状態を構成 (deck は完全に隠す、 他人の hand は サイズだけ)
+    // 公開可能な状態を構成 (deck は完全に隠す、 他人の hand はサイズだけ)
     $pub = null;
     if ($state) {
         $pubPlayers = [];
@@ -598,14 +598,14 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
                 'score'      => $p['score'],
             ];
         }
-        // v565 リクエストユーザーが ツモ/ロン/リーチ 可能か判定して flag を付ける
+        // v565 リクエストユーザーがツモ/ロン/リーチ可能か判定して flag を付ける
         $canTsumo = false; $canRon = false; $canRiichi = false;
         if ($mySeat !== null) {
             if ($state['awaiting'] === 'discard' && $state['turn'] === $mySeat) {
                 $tCheck = MahjongEngine::tryTsumo($state, $mySeat);
                 $canTsumo = !empty($tCheck['ok']);
                 $rCheck = MahjongEngine::declareRiichi($state, $mySeat);
-                // declareRiichi は state を変えてしまうので 副作用なし版で判定したい
+                // declareRiichi は state を変えてしまうので副作用なし版で判定したい
                 // 簡易: 既に riichi 済みなら不可、 そうでなく hand の形状で判定
                 // ここでは tryRiichi の結果のみ参考。 state 変更を巻き戻す
                 if (!empty($rCheck['ok'])) {
@@ -806,7 +806,7 @@ function mahjong_apply_win(array &$state, int $winnerIdx, ?int $loserIdx, array 
         $state['players'][$loserIdx]['score'] -= $pay;
         $state['players'][$winnerIdx]['score'] += $pay;
     }
-    // リーチ棒を 和了者へ
+    // リーチ棒を和了者へ
     $state['players'][$winnerIdx]['score'] += $state['riichi_pot'];
     $state['riichi_pot'] = 0;
     $state['phase'] = 'kyoku_end';
@@ -900,13 +900,13 @@ function mahjong_report(PDO $pdo, array $cfg, int $uid, int $gid): void {
             }
             $seenRanks[$cleaned[$pid]] = $pid;
         }
-        if (count($seenRanks) !== 4) throw new ApiException('bad_request', '1〜4 位 全部割り当ててください', 400);
+        if (count($seenRanks) !== 4) throw new ApiException('bad_request', '1〜4 位全部割り当ててください', 400);
 
         $pot = (int)$g['pot_total'];
         $rakePct = (int)$g['rake_pct'];
         $rake = (int)floor($pot * $rakePct / 100);
         // 場代をシステムへ
-        if ($rake > 0) Ledger::transfer($pdo, 1, 1, 0, 'mahjong_rake', 'mahjong', $gid, '麻雀 場代 ' . $rake . 'pt 徴収'); // (1→1 は no-op、 実質 pot だけ残す)
+        if ($rake > 0) Ledger::transfer($pdo, 1, 1, 0, 'mahjong_rake', 'mahjong', $gid, '麻雀場代 ' . $rake . 'pt 徴収'); // (1→1 は no-op、 実質 pot だけ残す)
         // 配分計算 (端数は 1位に上乗せ)
         $payouts = [];
         $allocated = 0;
@@ -952,9 +952,9 @@ function mahjong_cancel(PDO $pdo, int $uid, int $gid): void {
         $g = mahjong_lock_game($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['lobby','playing','reporting'], true)) throw new ApiException('bad_request', '既に終了しています', 400);
-        // 人間 プレイヤー のみ に buy_in 返金。 v694 #279 AI bot は accounts row が ない ので
-        //   Ledger::transfer が "account row missing" で 失敗 する。 そもそも bot は buy_in を
-        //   払って いない ので 返金 対象 外。
+        // 人間プレイヤーのみに buy_in 返金。 v694 #279 AI bot は accounts row がないので
+        //   Ledger::transfer が "account row missing" で失敗する。 そもそも bot は buy_in を
+        //   払っていないので返金対象外。
         $buyIn = (int)$g['buy_in'];
         if ($buyIn > 0) {
             $stP = $pdo->prepare("SELECT p.user_id FROM mahjong_players p JOIN users u ON u.id = p.user_id

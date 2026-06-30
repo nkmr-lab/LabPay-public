@@ -1,9 +1,9 @@
 <?php
-// /api/posts — シンプル SNS (Twitter 風)。 全員 が 全投稿 を 見る (フォロー なし)。
-//  - body / image_url / lat / lng を 投稿
-//  - parent_id で 返信 (スレッド)
-//  - いいね は post_likes (PK = post_id + user_id) で トグル
-//  - @display_name で メンション → 通知
+// /api/posts — シンプル SNS (Twitter 風)。 全員が全投稿を見る (フォローなし)。
+//  - body / image_url / lat / lng を投稿
+//  - parent_id で返信 (スレッド)
+//  - いいねは post_likes (PK = post_id + user_id) でトグル
+//  - @display_name でメンション → 通知
 
 declare(strict_types=1);
 
@@ -11,8 +11,8 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { posts_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { posts_create($pdo, $cfg); return; }
-    // v480 軽量 ポーリング: 最新 投稿 id だけ 返す。 これより 大きい id を 持つ
-    //   投稿 が ある なら クライアント が 一覧 を 取り直す。 DB 1 クエリ で 終わる。
+    // v480 軽量ポーリング: 最新投稿 id だけ返す。 これより大きい id を持つ
+    //   投稿があるならクライアントが一覧を取り直す。 DB 1 クエリで終わる。
     if ($sub === 'latest_id' && $method === 'GET') { posts_latest_id($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
@@ -21,13 +21,13 @@ function route_posts(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''       && $method === 'DELETE') { posts_delete($pdo, $cfg, $id); return; }
         // v736 #346 投稿後に位置情報だけを削除 (投稿者または admin)
         if ($next === 'location' && $method === 'DELETE') { posts_clear_location($pdo, $cfg, $id); return; }
-        // v480 旧 /like (引数 なし = ❤️ 単一) → /reaction?kind=thumb|heart|star に 統一。
-        //   後方互換: /like POST/DELETE は kind='heart' として 扱う。
+        // v480 旧 /like (引数なし = ❤️ 単一) → /reaction?kind=thumb|heart|star に統一。
+        //   後方互換: /like POST/DELETE は kind='heart' として扱う。
         if ($next === 'like'     && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, 'heart', true);  return; }
         if ($next === 'like'     && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, 'heart', false); return; }
         if ($next === 'reaction' && $method === 'POST')   { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), true);  return; }
         if ($next === 'reaction' && $method === 'DELETE') { posts_reaction_toggle($pdo, $cfg, $id, posts_kind_param(), false); return; }
-        // v785 #383 投稿 画像 を 90° 回転 (投稿者 / admin のみ)。 places と 同じく サーバ 側 で 上書き 保存。
+        // v785 #383 投稿画像を 90° 回転 (投稿者 / admin のみ)。 places と同じくサーバ側で上書き保存。
         if ($next === 'rotate-image' && $method === 'POST') { posts_rotate_image($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no posts route for $method $sub", 404);
@@ -51,8 +51,8 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
     if (!$rows) return [];
     $ids = array_map(fn($r) => (int)$r['id'], $rows);
     $place = implode(',', array_fill(0, count($ids), '?'));
-    // v480 リアクション 集計: kind 別 count + 自分が押した kind の セット。
-    //   like_count / liked_by_me は ❤ ハート の 件数 / 自分 状態 として 後方互換 を 残す。
+    // v480 リアクション集計: kind 別 count + 自分が押した kind のセット。
+    //   like_count / liked_by_me は ❤ ハートの件数 / 自分状態として後方互換を残す。
     $stL = $pdo->prepare("SELECT post_id, kind, COUNT(*) AS n,
                               SUM(user_id=?) AS mine
                          FROM post_likes WHERE post_id IN ($place) GROUP BY post_id, kind");
@@ -65,7 +65,7 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
         $reactions[$pid]['counts'][$k] = (int)$r['n'];
         if ((int)$r['mine'] > 0) $reactions[$pid]['mine'][] = $k;
     }
-    // 返信数 集計
+    // 返信数集計
     $stR = $pdo->prepare("SELECT parent_id, COUNT(*) AS n FROM posts WHERE parent_id IN ($place) GROUP BY parent_id");
     $stR->execute($ids);
     $replies = [];
@@ -97,7 +97,7 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             'created_at'      => $r['created_at'],
             // v497 #104 旅行中などタイムゾーンが端末≠サーバ (JST) の時、 クライアントの
             //   new Date('YYYY-MM-DD HH:MM:SS') は端末ローカルとして解釈してしまい
-            //   「結構前の投稿が たった今」 になる。 TZ付きISOで返して曖昧さをなくす。
+            //   「結構前の投稿がたった今」 になる。 TZ付きISOで返して曖昧さをなくす。
             'created_at_iso'  => $r['created_at'] ? (new DateTimeImmutable((string)$r['created_at']))->format('c') : null,
             // 後方互換: like = heart。
             'like_count'      => $heartN,
@@ -126,7 +126,7 @@ function posts_list(PDO $pdo, array $cfg): void {
         $where .= " AND p.parent_id = ?";
         $args[] = $parentId;
     } else {
-        // タイムライン = parent_id IS NULL の トップレベル のみ
+        // タイムライン = parent_id IS NULL のトップレベルのみ
         $where .= " AND p.parent_id IS NULL";
     }
     if ($beforeId > 0) {
@@ -151,7 +151,7 @@ function posts_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
-// v465 LabPay 公式 アカウント (system user) を 取得 / 作成。
+// v465 LabPay 公式アカウント (system user) を取得 / 作成。
 function labpay_account_id(PDO $pdo): int {
     static $cached = null;
     if ($cached !== null) return $cached;
@@ -180,16 +180,16 @@ function posts_create(PDO $pdo, array $cfg): void {
     if ($lat !== null && ($lat < -90 || $lat > 90))   throw new ApiException('bad_request', 'lat 範囲外', 400);
     if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
     if ($text === '' && $imageUrl === '') {
-        throw new ApiException('bad_request', '本文 か 画像 が 必要', 400);
+        throw new ApiException('bad_request', '本文か画像が必要', 400);
     }
     if ($parentId !== null) {
         $st = $pdo->prepare("SELECT 1 FROM posts WHERE id=?");
         $st->execute([$parentId]);
-        if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先 投稿 が ありません', 404);
+        if (!$st->fetchColumn()) throw new ApiException('not_found', '返信先投稿がありません', 404);
     }
-    // v465 → v477 @LabPay メンション or LabPay 投稿 への 返信 → 自動的に feedback 起票。
-    // admin 投稿 なら 即 approved。 「#バグ」 ハッシュタグ で kind='bug'、 それ以外 (default) は 'feature'。
-    // i フラグ で 大文字小文字 を 無視 (@labpay も 拾う)。
+    // v465 → v477 @LabPay メンション or LabPay 投稿への返信 → 自動的に feedback 起票。
+    // admin 投稿なら即 approved。 「#バグ」 ハッシュタグで kind='bug'、 それ以外 (default) は 'feature'。
+    // i フラグで大文字小文字を無視 (@labpay も拾う)。
     $linkedFeedbackId = null;
     $shouldCreateFb = false;
     $fbBody = '';
@@ -197,7 +197,7 @@ function posts_create(PDO $pdo, array $cfg): void {
         $fbBody = mb_substr(trim(preg_replace('/@LabPay\s*/iu', '', $text)), 0, 4000);
         if ($fbBody !== '') $shouldCreateFb = true;
     }
-    // v477 LabPay 投稿 への 返信 も feedback 扱い (本文 から @LabPay が なくても)。
+    // v477 LabPay 投稿への返信も feedback 扱い (本文から @LabPay がなくても)。
     if (!$shouldCreateFb && $parentId !== null && $text !== '') {
         $stChk = $pdo->prepare("SELECT u.id FROM posts p
                                   JOIN users u ON u.id = p.user_id
@@ -232,12 +232,12 @@ function posts_create(PDO $pdo, array $cfg): void {
                        $imageUrl !== '' ? $imageUrl : null,
                        $lat, $lng, $parentId, $linkedFeedbackId]);
         $pid = (int)$pdo->lastInsertId();
-        // @メンション 抽出 (display_name の 前方一致 で 簡易)
+        // @メンション抽出 (display_name の前方一致で簡易)
         if ($text !== '' && preg_match_all('/@([\p{L}\p{N}_\-\.]{1,40})/u', $text, $m)) {
             $names = array_unique($m[1]);
             if ($names) {
                 $place = implode(',', array_fill(0, count($names), '?'));
-                // v465 system (=LabPay) も 含めて メンション 解決
+                // v465 system (=LabPay) も含めてメンション解決
                 $stU = $pdo->prepare("SELECT id, display_name FROM users
                                        WHERE display_name IN ($place) AND kind IN ('human','system') LIMIT 50");
                 $stU->execute($names);
@@ -251,7 +251,7 @@ function posts_create(PDO $pdo, array $cfg): void {
             }
         }
     });
-    // 通知: メンション / 返信先 ユーザ
+    // 通知: メンション / 返信先ユーザ
     $snip = mb_substr($text !== '' ? $text : '(画像のみ)', 0, 80);
     $notifTargets = $mentioned;
     if ($parentId !== null) {
@@ -280,7 +280,7 @@ function posts_detail(PDO $pdo, array $cfg, int $id): void {
                           WHERE p.id = ?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '投稿が ありません', 404);
+    if (!$row) throw new ApiException('not_found', '投稿がありません', 404);
     $post = posts_serialize_rows($pdo, [$row], (int)$u['id'])[0];
     // 返信
     $stR = $pdo->prepare("SELECT p.id, p.user_id, p.body, p.image_url, p.lat, p.lng, p.parent_id, p.created_at,
@@ -335,7 +335,7 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT p.user_id, u.kind FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '投稿が ありません', 404);
+    if (!$row) throw new ApiException('not_found', '投稿がありません', 404);
     $cuid = (int)$row['user_id'];
     $authorIsSystem = (string)($row['kind'] ?? '') === 'system';
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
@@ -346,13 +346,13 @@ function posts_delete(PDO $pdo, array $cfg, int $id): void {
     $isAuthor = $cuid === (int)$u['id'];
     $canDelete = $isAuthor || ($isAdmin && $authorIsSystem);
     if (!$canDelete) {
-        throw new ApiException('forbidden', '投稿者本人 または admin (system 投稿のみ) しか削除できません', 403);
+        throw new ApiException('forbidden', '投稿者本人または admin (system 投稿のみ) しか削除できません', 403);
     }
     $pdo->prepare("DELETE FROM posts WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }
 
-// v785 #383 投稿 画像 を 90° 回転 し、 サーバ 側 で 上書き 保存。 投稿者 or admin のみ。
+// v785 #383 投稿画像を 90° 回転し、 サーバ側で上書き保存。 投稿者 or admin のみ。
 function posts_rotate_image(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -360,12 +360,12 @@ function posts_rotate_image(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT user_id, image_url FROM posts WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '投稿 が ありません', 404);
+    if (!$row) throw new ApiException('not_found', '投稿がありません', 404);
     $isAuthor = (int)$row['user_id'] === (int)$u['id'];
     $isAdmin  = (string)($u['role'] ?? '') === 'admin';
-    if (!$isAuthor && !$isAdmin) throw new ApiException('forbidden', '投稿者 または admin のみ 回転可', 403);
+    if (!$isAuthor && !$isAdmin) throw new ApiException('forbidden', '投稿者または admin のみ回転可', 403);
     $url = (string)($row['image_url'] ?? '');
-    if ($url === '') throw new ApiException('bad_request', '画像 が ありません', 400);
+    if ($url === '') throw new ApiException('bad_request', '画像がありません', 400);
     rotate_image_file_inplace(_places_url_to_path($url), $degrees);
     json_response(['ok' => true]);
 }
@@ -375,7 +375,7 @@ function posts_reaction_toggle(PDO $pdo, array $cfg, int $id, string $kind, bool
     $st = $pdo->prepare("SELECT user_id, body FROM posts WHERE id=?");
     $st->execute([$id]);
     $post = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$post) throw new ApiException('not_found', '投稿 が ありません', 404);
+    if (!$post) throw new ApiException('not_found', '投稿がありません', 404);
     if ($on) {
         $stIns = $pdo->prepare("INSERT IGNORE INTO post_likes (post_id, user_id, kind, created_at)
                                  VALUES (?, ?, ?, NOW())");
@@ -394,7 +394,7 @@ function posts_reaction_toggle(PDO $pdo, array $cfg, int $id, string $kind, bool
         $pdo->prepare("DELETE FROM post_likes WHERE post_id=? AND user_id=? AND kind=?")
             ->execute([$id, (int)$u['id'], $kind]);
     }
-    // 全 kind 件数 + 自分 が 押した kind を 返す。
+    // 全 kind 件数 + 自分が押した kind を返す。
     $stC = $pdo->prepare("SELECT kind, COUNT(*) AS n,
                               SUM(user_id=?) AS mine
                          FROM post_likes WHERE post_id=? GROUP BY kind");

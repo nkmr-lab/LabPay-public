@@ -1,6 +1,6 @@
-// /#/translate — 画像 (メニュー / 看板 / 説明文 など) を 和訳。
-// 写真 を 撮る or 選ぶ → /api/uploads で アップ → /api/ai/translate_image → 結果表示。
-// v426 翻訳 ログ: 自分専用 (group_id NULL) or グループ 共有 を 選んで 保存 → 履歴 下部に表示。
+// /#/translate — 画像 (メニュー / 看板 / 説明文など) を和訳。
+// 写真を撮る or 選ぶ → /api/uploads でアップ → /api/ai/translate_image → 結果表示。
+// v426 翻訳ログ: 自分専用 (group_id NULL) or グループ共有を選んで保存 → 履歴下部に表示。
 
 import { get, post, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -22,7 +22,7 @@ export async function renderTranslate({ query } = {}) {
   const presetGroupId = Number(query?.group_id || 0) || null;
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">🌐 画像 和訳</h2>
+      <h2 style="margin:0">🌐 画像和訳</h2>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">写真 (各 8MB まで、 複数選択可)</span>
@@ -37,7 +37,7 @@ export async function renderTranslate({ query } = {}) {
         <select id="tr-group" style="max-width:280px">
           <option value="">自分のみ (非公開)</option>
         </select>
-        <span class="hint-sm">グループを選ぶと そのメンバー全員 が翻訳結果を閲覧できます。</span>
+        <span class="hint-sm">グループを選ぶとそのメンバー全員が翻訳結果を閲覧できます。</span>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="tr-go" class="primary" disabled>🌐 和訳する</button>
@@ -49,7 +49,7 @@ export async function renderTranslate({ query } = {}) {
       <div class="row center">
         <h3 class="row-title">📚 翻訳ログ</h3>
         <select id="tr-flt" style="max-width:200px">
-          <option value="all">すべて (自分 + 参加 グループ)</option>
+          <option value="all">すべて (自分 + 参加グループ)</option>
           <option value="mine">自分のみ</option>
         </select>
       </div>
@@ -157,11 +157,11 @@ export async function renderTranslate({ query } = {}) {
 // markdown 風出力を CSS スタイリング HTML に変換
 function formatTranslationOutput(text) {
   if (!text) return '<div class="muted">(空の応答)</div>';
-  // セキュリティ: 一度 escapeHtml した上で 軽量 markdown を解釈
+  // セキュリティ: 一度 escapeHtml した上で軽量 markdown を解釈
   let s = escapeHtml(text);
   // **bold** → <strong>
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:var(--primary, #4a106d)">$1</strong>');
-  // 行頭 「└ ...」 を 補足説明スタイルに
+  // 行頭 「└ ...」 を補足説明スタイルに
   const lines = s.split('\n');
   let html = '<div style="font-family:system-ui, sans-serif; line-height:1.7; font-size:14px">';
   for (const ln of lines) {
@@ -199,7 +199,7 @@ async function loadHistory() {
     const d = await get('/api/ai/translations', params);
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = `<div class="empty">まだ 翻訳 ログは ありません</div>`;
+      root.innerHTML = `<div class="empty">まだ翻訳ログはありません</div>`;
       return;
     }
     root.innerHTML = items.map(t => {
@@ -238,7 +238,7 @@ async function loadHistory() {
     root.querySelectorAll('[data-rm-tr]').forEach(b => {
       b.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        if (!confirm('この 翻訳 ログを 削除しますか?')) return;
+        if (!confirm('この翻訳ログを削除しますか?')) return;
         try { await del('/api/ai/translations/' + b.dataset.rmTr); await loadHistory(); }
         catch (e) { toast('失敗: ' + e.message); }
       });

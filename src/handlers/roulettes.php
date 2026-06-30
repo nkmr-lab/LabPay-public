@@ -25,7 +25,7 @@ function route_roulettes(PDO $pdo, array $cfg, string $method, array $seg): void
 // GET /api/roulettes/tags — admin が config テーブルにカンマ区切りで持つ
 // 共通タグの list を返す。 ユーザはこれを localStorage の個人タグとマージして
 // 表示する (ハイブリッド方式)。
-// POST /api/roulettes/{id}/notify — client が ホイール停止後に呼ぶ。
+// POST /api/roulettes/{id}/notify — client がホイール停止後に呼ぶ。
 // 起案者 (= creator) のみ送信可。 多重防止のため notified_at が既にあれば no-op。
 function roulettes_notify(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
@@ -57,7 +57,7 @@ function roulettes_notify(PDO $pdo, array $cfg, int $id): void {
     $rewardOthersSuffix = $reward > 0 ? " (賞金 {$reward}pt)" : '';
     foreach ($ids as $uid) {
         $body = ((int)$uid === $winnerId)
-            ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
+            ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中からあなたが選ばれました!{$rewardWinnerSuffix}"
             : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}";
         notify_safely($pdo, $cfg, (int)$uid, 'admin_notice', $body, 'roulette', $id);
     }
@@ -195,7 +195,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
                 'display_name' => $idToName[$uid] ?? '',
                 'is_winner'    => $uid === $winnerId,
                 'body'         => $uid === $winnerId
-                    ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中から あなた が選ばれました!{$rewardWinnerSuffix}"
+                    ? "🎯 ルーレット「{$title}」で " . count($ids) . "人の中からあなたが選ばれました!{$rewardWinnerSuffix}"
                     : "🎰 ルーレット「{$title}」の結果: " . count($ids) . "人の中から {$winnerName} さんが選ばれました{$rewardOthersSuffix}",
             ];
         }
@@ -241,7 +241,7 @@ function roulettes_spin(PDO $pdo, array $cfg): void {
         return [$rouletteId, $ledgerId];
     });
 
-    // 通知は ホイール停止後 (= client が POST /announce する) に遅延。 ここでは送らない。
+    // 通知はホイール停止後 (= client が POST /announce する) に遅延。 ここでは送らない。
     // (アニメーション中に通知が飛んで 「答えバレ」 を起こさないため。)
     $winnerName = $idToName[$winnerId] ?? 'someone';
     json_response([

@@ -1,5 +1,5 @@
-// /#/fortune — 1 日 1 回 占い 単独 ページ (v671 #250)。
-// /api/fortune/today を 引いて 大きく 表示。 同じ 日 は 同じ 結果 (= server 側 で 固定)。
+// /#/fortune — 1 日 1 回占い単独ページ (v671 #250)。
+// /api/fortune/today を引いて大きく表示。 同じ日は同じ結果 (= server 側で固定)。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -40,7 +40,7 @@ export async function renderFortune() {
             <div style="font-size:60px; line-height:1; margin-bottom:6px">${escapeHtml(z.icon || '')}</div>
             <div style="font-size:22px; font-weight:700; color:#6b21a8">${escapeHtml(z.name || '')}</div>
             <div style="font-size:12.5px; color:#9333ea; margin-top:2px">
-              ${escapeHtml(z.element || '')}の${escapeHtml(z.modality || '')}宮 ・ 守護星: ${escapeHtml(z.ruler || '')}
+              ${escapeHtml(z.element || '')}の${escapeHtml(z.modality || '')}宮・守護星: ${escapeHtml(z.ruler || '')}
             </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0; font-size:12.5px">

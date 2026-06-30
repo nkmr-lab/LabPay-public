@@ -20,15 +20,15 @@ class Ledger {
         'daifugo_buyin','daifugo_payout','daifugo_refund',
         // v613 リライター (文字数 / 単語数制限)
         'rewriter',
-        // v617 自作ゲーム フレームワーク (v621 場代 = play_fee に 簡素化、 90% 提供者 / 10% SYSTEM)
-        //   buyin/payout/refund/rake は 互換 のため allowlist に残すが v621 以降は emit しない
+        // v617 自作ゲームフレームワーク (v621 場代 = play_fee に簡素化、 90% 提供者 / 10% SYSTEM)
+        //   buyin/payout/refund/rake は互換のため allowlist に残すが v621 以降は emit しない
         'custom_game_buyin','custom_game_payout','custom_game_refund','custom_game_rake',
         'custom_game_play_fee',
-        // v623 絵しりとり プレイフィー 2pt/人
+        // v623 絵しりとりプレイフィー 2pt/人
         'shiritori_buyin',
-        // v805 論文 系 を 個別 に (= 取引 履歴 で 「論文 査読料」 と 一括 表示 さ れて いた もの を 分割)
-        'paper_translate',       // 論文 要約 料
-        'paper_full_translate',  // 論文 全訳 料
+        // v805 論文系を個別に (= 取引履歴で 「論文査読料」 と一括表示されていたものを分割)
+        'paper_translate',       // 論文要約料
+        'paper_full_translate',  // 論文全訳料
         'deep_research',         // Deep Research 料
     ];
 

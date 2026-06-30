@@ -1,17 +1,17 @@
 <?php
-// /api/bait — アルバイト申請 依頼 (#244)。
-// 依頼 (bait_requests) と 各 worker への assignment (bait_assignments) を 管理。
+// /api/bait — アルバイト申請依頼 (#244)。
+// 依頼 (bait_requests) と各 worker への assignment (bait_assignments) を管理。
 //
-// 依頼者: 時間 (小数点) + 対象者 + 用途 で 依頼 を 作成、 進捗 確認 + 未処理者 催促。
-// 受け取った 側 (worker): 自分宛て の 依頼 リスト を 月別 で 見て、 申請 処理 後 に done に。
+// 依頼者: 時間 (小数点) + 対象者 + 用途で依頼を作成、 進捗確認 + 未処理者催促。
+// 受け取った側 (worker): 自分宛ての依頼リストを月別で見て、 申請処理後に done に。
 
 declare(strict_types=1);
 
 function route_bait(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
-    // v823 #416 list / detail の 優先 順 が 逆 で 「/api/bait/requests/<id>」 まで list に
-    //   食われ て いた (= detail が 「{items: ...}」 を 返し client で r.title undefined)。
-    //   先 に detail 系 を チェック して 残った 場合 のみ list に 落とす。
+    // v823 #416 list / detail の優先順が逆で 「/api/bait/requests/<id>」 まで list に
+    //   食われていた (= detail が 「{items: ...}」 を返し client で r.title undefined)。
+    //   先に detail 系をチェックして残った場合のみ list に落とす。
     if ($sub === 'requests' && ctype_digit((string)($seg[2] ?? ''))) {
         $rid = (int)$seg[2];
         $next = $seg[3] ?? '';
@@ -53,7 +53,7 @@ function bait_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
 
-// ─── MY ASSIGNMENTS (worker 視点 で 月別 で 全部 見える) ────────────
+// ─── MY ASSIGNMENTS (worker 視点で月別で全部見える) ────────────
 function bait_my_assignments(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -108,7 +108,7 @@ function bait_create(PDO $pdo, array $cfg): void {
     $stU = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id IN ($in) AND kind='human'");
     $stU->execute($uids);
     if ((int)$stU->fetchColumn() !== count($uids)) {
-        throw new ApiException('bad_request', '存在 しない user_id が 含まれて います', 400);
+        throw new ApiException('bad_request', '存在しない user_id が含まれています', 400);
     }
     $rid = 0;
     db_tx($pdo, function () use ($pdo, $u, $title, $period, $notes, $normalized, &$rid) {
@@ -120,11 +120,11 @@ function bait_create(PDO $pdo, array $cfg): void {
             $stA->execute([$rid, $a['user_id'], $a['hours']]);
         }
     });
-    // 通知 (各 worker に 「アルバイト 申請 が 来ました」)
+    // 通知 (各 worker に 「アルバイト申請が来ました」)
     foreach ($normalized as $a) {
         try {
             Notifier::notify($pdo, $cfg, $a['user_id'], 'admin_notice',
-                "💼 アルバイト 申請 が 届きました: 「{$title}」 ({$a['hours']} h) / 期間 {$period}",
+                "💼 アルバイト申請が届きました: 「{$title}」 ({$a['hours']} h) / 期間 {$period}",
                 'bait_request', $rid);
         } catch (Throwable $_) {}
     }
@@ -140,7 +140,7 @@ function bait_detail(PDO $pdo, array $cfg, int $rid): void {
                           WHERE r.id=?");
     $st->execute([$rid]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$r) throw new ApiException('not_found', '依頼 が ありません', 404);
+    if (!$r) throw new ApiException('not_found', '依頼がありません', 404);
     $isReq = (int)$r['requester_user_id'] === $uid;
     $stA = $pdo->prepare("SELECT a.id, a.worker_user_id, a.hours, a.status, a.processed_at, a.worker_note,
                                  u.display_name AS worker_name, u.avatar_url, u.grade
@@ -160,7 +160,7 @@ function bait_detail(PDO $pdo, array $cfg, int $rid): void {
         if ((int)$a['worker_user_id'] === $uid) $isWorker = true;
     }
     if (!$isReq && !$isWorker) {
-        throw new ApiException('forbidden', '依頼者 か 対象者 のみ 閲覧 可', 403);
+        throw new ApiException('forbidden', '依頼者か対象者のみ閲覧可', 403);
     }
     json_response([
         'request' => [
@@ -189,7 +189,7 @@ function bait_detail(PDO $pdo, array $cfg, int $rid): void {
     ]);
 }
 
-// ─── WORKER: 自分 の assignment を done / undone に ──────────────
+// ─── WORKER: 自分の assignment を done / undone に ──────────────
 function bait_assignment_done(PDO $pdo, array $cfg, int $aid, bool $done): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -199,9 +199,9 @@ function bait_assignment_done(PDO $pdo, array $cfg, int $aid, bool $done): void 
     $st = $pdo->prepare("SELECT worker_user_id, bait_request_id FROM bait_assignments WHERE id=?");
     $st->execute([$aid]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', 'assignment が ありません', 404);
+    if (!$row) throw new ApiException('not_found', 'assignment がありません', 404);
     if ((int)$row['worker_user_id'] !== $uid) {
-        throw new ApiException('forbidden', '自分 の assignment のみ 更新 可', 403);
+        throw new ApiException('forbidden', '自分の assignment のみ更新可', 403);
     }
     if ($done) {
         $pdo->prepare("UPDATE bait_assignments SET status='done', processed_at=NOW(), worker_note=? WHERE id=?")
@@ -213,16 +213,16 @@ function bait_assignment_done(PDO $pdo, array $cfg, int $aid, bool $done): void 
     json_response(['ok' => true]);
 }
 
-// ─── REMIND (依頼者 が 未処理者 に 催促) ──────────────────────
+// ─── REMIND (依頼者が未処理者に催促) ──────────────────────
 function bait_remind(PDO $pdo, array $cfg, int $rid): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT title, period, requester_user_id FROM bait_requests WHERE id=?");
     $st->execute([$rid]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$r) throw new ApiException('not_found', '依頼 が ありません', 404);
+    if (!$r) throw new ApiException('not_found', '依頼がありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$r['requester_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '依頼者 のみ 催促 可', 403);
+        throw new ApiException('forbidden', '依頼者のみ催促可', 403);
     }
     $stP = $pdo->prepare("SELECT worker_user_id, hours FROM bait_assignments WHERE bait_request_id=? AND status='pending'");
     $stP->execute([$rid]);
@@ -231,7 +231,7 @@ function bait_remind(PDO $pdo, array $cfg, int $rid): void {
     foreach ($pending as $p) {
         try {
             Notifier::notify($pdo, $cfg, (int)$p['worker_user_id'], 'admin_notice',
-                "💼 アルバイト 申請 まだ です: 「{$r['title']}」 ({$p['hours']} h) / 期間 {$r['period']}",
+                "💼 アルバイト申請まだです: 「{$r['title']}」 ({$p['hours']} h) / 期間 {$r['period']}",
                 'bait_request', $rid);
             $sent++;
         } catch (Throwable $_) {}
@@ -239,16 +239,16 @@ function bait_remind(PDO $pdo, array $cfg, int $rid): void {
     json_response(['ok' => true, 'sent' => $sent, 'pending' => count($pending)]);
 }
 
-// ─── CLOSE (依頼 自体 を 完了 マーク) ─────────────────────────
+// ─── CLOSE (依頼自体を完了マーク) ─────────────────────────
 function bait_close(PDO $pdo, array $cfg, int $rid): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT requester_user_id, closed_at FROM bait_requests WHERE id=?");
     $st->execute([$rid]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$r) throw new ApiException('not_found', '依頼 が ありません', 404);
+    if (!$r) throw new ApiException('not_found', '依頼がありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$r['requester_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '依頼者 のみ クローズ 可', 403);
+        throw new ApiException('forbidden', '依頼者のみクローズ可', 403);
     }
     if ($r['closed_at']) { json_response(['ok' => true, 'already' => true]); return; }
     $pdo->prepare("UPDATE bait_requests SET closed_at=NOW() WHERE id=?")->execute([$rid]);
@@ -261,10 +261,10 @@ function bait_delete(PDO $pdo, array $cfg, int $rid): void {
     $st = $pdo->prepare("SELECT requester_user_id FROM bait_requests WHERE id=?");
     $st->execute([$rid]);
     $reqId = (int)$st->fetchColumn();
-    if (!$reqId) throw new ApiException('not_found', '依頼 が ありません', 404);
+    if (!$reqId) throw new ApiException('not_found', '依頼がありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($reqId !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '依頼者 のみ 削除 可', 403);
+        throw new ApiException('forbidden', '依頼者のみ削除可', 403);
     }
     $pdo->prepare("DELETE FROM bait_requests WHERE id=?")->execute([$rid]);
     json_response(['ok' => true]);

@@ -1,9 +1,9 @@
 <?php
 // v576 優勝予想アプリ。 ワールドカップ等の順位を予想 → 答え合わせで配分。
-//   1位のみ予想 (predict_count=1) / 1-2位 / 1-4位 で 答え合わせ。
-//   スコア = 順位重み [5, 3, 2, 1] (1位から順) の一致した分の合計 (= 予想ランキング 表示用)。
-//   payout: 1位を 的中させた人 で 山分け (場代 5%)。
-//     - 的中者複数 → pot × 95% を 均等分配 (端数は 早く参加した人)
+//   1位のみ予想 (predict_count=1) / 1-2位 / 1-4位で答え合わせ。
+//   スコア = 順位重み [5, 3, 2, 1] (1位から順) の一致した分の合計 (= 予想ランキング表示用)。
+//   payout: 1位を的中させた人で山分け (場代 5%)。
+//     - 的中者複数 → pot × 95% を均等分配 (端数は早く参加した人)
 //     - 的中者ゼロ → 全員にフィー返金
 //   v576c 山分けモデル (旧: スコア比例) に変更、 重みも [5,3,2,1] に。
 declare(strict_types=1);
@@ -12,9 +12,9 @@ const PREDICTIONS_DEFAULT_FEE = 50;
 const PREDICTIONS_MIN_FEE = 10;
 const PREDICTIONS_MAX_FEE = 100;
 const PREDICTIONS_RAKE_PCT = 5;
-// v664 順位の 一致重み (= 位置 ピッタリ 的中 で 加算)。 配列 の i 番目 = (i+1) 位 の 重み。
-//   旧: [5,3,2,1] / 新: [4,3,2,1] (1位 を -1)
-//   加えて 「順位 無関係 で top-N 集合 に 入って いる 国」 1 件 ごと に +1 点 を 別途 加算。
+// v664 順位の一致重み (= 位置ピッタリ的中で加算)。 配列の i 番目 = (i+1) 位の重み。
+//   旧: [5,3,2,1] / 新: [4,3,2,1] (1位を -1)
+//   加えて 「順位無関係で top-N 集合に入っている国」 1 件ごとに +1 点を別途加算。
 const PREDICTIONS_SCORE_WEIGHTS = [4, 3, 2, 1];
 
 function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -63,7 +63,7 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
         if (mb_strlen($d) > 2000) throw new ApiException('bad_request', '説明は 2000 文字まで', 400);
         $sets[] = 'description=?'; $args[] = ($d === '' ? null : $d);
     }
-    // v871 #453 〆切 を 起案者 が 後 から 変更 可能 に。 空 で 渡せば NULL (= 締切 なし)。
+    // v871 #453 〆切を起案者が後から変更可能に。 空で渡せば NULL (= 締切なし)。
     if (array_key_exists('deadline_at', $body)) {
         $v = trim((string)$body['deadline_at']);
         if ($v === '') {
@@ -75,21 +75,21 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
                 $sets[] = 'deadline_at=?';
                 $args[] = $dt->format('Y-m-d H:i:s');
             } catch (Throwable $_) {
-                throw new ApiException('bad_request', 'deadline_at 形式 不正', 400);
+                throw new ApiException('bad_request', 'deadline_at 形式不正', 400);
             }
         }
     }
-    // v871 #453 候補 (例: 対象 国) と 予想 件数 (上位 N 位) を 編集 可能 に。 ただし
-    //   既に エントリー が ある なら 順位 整合性 が 壊れる ので 変更 不可。
+    // v871 #453 候補 (例: 対象国) と予想件数 (上位 N 位) を編集可能に。 ただし
+    //   既にエントリーがあるなら順位整合性が壊れるので変更不可。
     if (array_key_exists('candidates', $body) || array_key_exists('predict_count', $body)) {
         $entryCount = (int)$pdo->query("SELECT COUNT(*) FROM predictions_entries WHERE game_id=$gid")->fetchColumn();
         if ($entryCount > 0) {
-            throw new ApiException('bad_request', 'すでに予想者がいるため候補 / 予想件数 は変更できません', 400);
+            throw new ApiException('bad_request', 'すでに予想者がいるため候補 / 予想件数は変更できません', 400);
         }
         if (array_key_exists('candidates', $body)) {
             $cands = $body['candidates'];
             if (!is_array($cands) || count($cands) < 2) {
-                throw new ApiException('bad_request', '候補 は 2 件 以上 必要', 400);
+                throw new ApiException('bad_request', '候補は 2 件以上必要', 400);
             }
             $clean = [];
             foreach ($cands as $c) {
@@ -99,7 +99,7 @@ function predictions_patch(PDO $pdo, int $uid, int $gid): void {
                 }
                 $clean[] = $s;
             }
-            if (count($clean) > 100) throw new ApiException('bad_request', '候補 は 100 件 まで', 400);
+            if (count($clean) > 100) throw new ApiException('bad_request', '候補は 100 件まで', 400);
             $sets[] = 'candidates_json=?';
             $args[] = json_encode($clean, JSON_UNESCAPED_UNICODE);
         }
@@ -155,10 +155,10 @@ function predictions_detail(PDO $pdo, int $uid, int $gid): void {
     $me = $stMe->fetch(PDO::FETCH_ASSOC);
     $myRanks = $me ? json_decode($me['ranks_json'] ?: '[]', true) : null;
 
-    // 全員の予想 を 公開するか?
-    //   締切後 (deadline_at < now) または status != 'open' なら 開示。
-    //   = 「受付中で 締切前」 のときだけ 他人の予想を 隠す (自分の予想で 引っ張られないように)。
-    //   v577 仕様変更: 結果開示 (finalize) を 待たずに、 締切を過ぎたら すぐ 全員分を開示。
+    // 全員の予想を公開するか?
+    //   締切後 (deadline_at < now) または status != 'open' なら開示。
+    //   = 「受付中で締切前」 のときだけ他人の予想を隠す (自分の予想で引っ張られないように)。
+    //   v577 仕様変更: 結果開示 (finalize) を待たずに、 締切を過ぎたらすぐ全員分を開示。
     $deadlinePassed = !empty($g['deadline_at']) && strtotime((string)$g['deadline_at']) < time();
     $revealRanks = ($g['status'] !== 'open') || $deadlinePassed;
     $entries = [];
@@ -260,7 +260,7 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
             $deadlineAt = $dt->format('Y-m-d H:i:s');
         } catch (Throwable $_) {}
     }
-    // v610 起案時に 通知を 飛ばす対象 user_id 配列 (任意)。
+    // v610 起案時に通知を飛ばす対象 user_id 配列 (任意)。
     $notifyIds = [];
     if (isset($body['notify_user_ids']) && is_array($body['notify_user_ids'])) {
         $notifyIds = array_values(array_unique(array_map('intval',
@@ -275,9 +275,9 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
                        json_encode($cleanCandidates, JSON_UNESCAPED_UNICODE), $deadlineAt]);
         $gameId = (int)$pdo->lastInsertId();
     });
-    // v610 起案時 通知 (1 通ずつ swallow)
+    // v610 起案時通知 (1 通ずつ swallow)
     foreach ($notifyIds as $nuid) {
-        $msg = "🏆 「{$title}」 の優勝予想 受付開始! フィー {$fee}pt、 {$predictCount}位まで予想";
+        $msg = "🏆 「{$title}」 の優勝予想受付開始! フィー {$fee}pt、 {$predictCount}位まで予想";
         notify_safely($pdo, $cfg, (int)$nuid, 'admin_notice', $msg, 'prediction', $gameId);
     }
     json_response(['ok' => true, 'id' => $gameId, 'notified' => count($notifyIds)]);
@@ -365,11 +365,11 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
             $usedActual[] = $r;
             $cleanActual[] = $r;
         }
-        // v664 全参加者 の score 計算:
-        //   (1) 順位 無関係 で top-N 集合 (= 4位 以内) に 入って いる 国 1 件 ごと に +1 点
-        //   (2) 順位 ピッタリ 的中 は さらに 重み (1位 +4 / 2位 +3 / 3位 +2 / 4位 +1)
-        // 配分: 最高点 を 取った 人 全員 で 山分け (5% rake を 控除 した 後)。
-        //   全員 が 0 点 だった ら 誰も 何も 当てて ない の で 全員 に フィー 返金。
+        // v664 全参加者の score 計算:
+        //   (1) 順位無関係で top-N 集合 (= 4位以内) に入っている国 1 件ごとに +1 点
+        //   (2) 順位ピッタリ的中はさらに重み (1位 +4 / 2位 +3 / 3位 +2 / 4位 +1)
+        // 配分: 最高点を取った人全員で山分け (5% rake を控除した後)。
+        //   全員が 0 点だったら誰も何も当ててないので全員にフィー返金。
         $stE = $pdo->prepare("SELECT user_id, ranks_json, created_at FROM predictions_entries WHERE game_id = ? ORDER BY created_at ASC, user_id ASC");
         $stE->execute([$gid]);
         $entries = $stE->fetchAll(PDO::FETCH_ASSOC);
@@ -377,10 +377,10 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         foreach ($entries as $e) {
             $puid = (int)$e['user_id'];
             $userRanks = json_decode($e['ranks_json'] ?: '[]', true) ?: [];
-            // (1) 集合 一致 点 (= ユーザ 予想 と 実際 top-N の 重なり 個数)
+            // (1) 集合一致点 (= ユーザ予想と実際 top-N の重なり個数)
             $setMatch = count(array_intersect($userRanks, $cleanActual));
             $score = $setMatch;
-            // (2) 順位 ピッタリ 的中 ボーナス
+            // (2) 順位ピッタリ的中ボーナス
             for ($i = 0; $i < $predictCount; $i++) {
                 if (isset($userRanks[$i]) && isset($cleanActual[$i]) && $userRanks[$i] === $cleanActual[$i]) {
                     $w = PREDICTIONS_SCORE_WEIGHTS[$i] ?? 1;
@@ -393,19 +393,19 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $payoutByUid = [];
         $maxScore = $scoreByUid ? max($scoreByUid) : 0;
         if ($maxScore <= 0) {
-            // v737 #347 全員 0 点: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を 各自に返金。
+            // v737 #347 全員 0 点: 場代 (= 5%) 分を rake として system に残し、 残り (95%) を各自に返金。
             //   旧版は full refund で system 取り分ゼロになっていた。
             $fee = (int)$g['fee'];
             $rakePer = (int)floor($fee * PREDICTIONS_RAKE_PCT / 100);
             $refund = max(0, $fee - $rakePer);
             foreach ($scoreByUid as $puid => $_) {
                 if ($refund > 0) {
-                    Ledger::transfer($pdo, 1, $puid, $refund, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 全員 0 点 で 返金 (場代 {$rakePer}pt 差引)");
+                    Ledger::transfer($pdo, 1, $puid, $refund, 'mahjong_refund', 'predictions', $gid, "予想 #{$gid} 全員 0 点で返金 (場代 {$rakePer}pt 差引)");
                 }
                 $payoutByUid[$puid] = $refund;
             }
         } else {
-            // 最高点 を 取った 人 全員 (登録 順 で 端数 上乗せ)
+            // 最高点を取った人全員 (登録順で端数上乗せ)
             $topWinners = [];
             foreach ($entries as $e) {
                 $puid = (int)$e['user_id'];
@@ -419,12 +419,12 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
             foreach ($topWinners as $idx => $puid) {
                 $amount = $share + ($idx === 0 ? $remainder : 0);
                 if ($amount > 0) {
-                    Ledger::transfer($pdo, 1, $puid, $amount, 'mahjong_payout', 'predictions', $gid, "予想 #{$gid} 最高点 山分け");
+                    Ledger::transfer($pdo, 1, $puid, $amount, 'mahjong_payout', 'predictions', $gid, "予想 #{$gid} 最高点山分け");
                 }
                 $payoutByUid[$puid] = $amount;
             }
         }
-        // 全員 score + payout を 記録
+        // 全員 score + payout を記録
         foreach ($scoreByUid as $puid => $sc) {
             $payout = $payoutByUid[$puid] ?? 0;
             $pdo->prepare("UPDATE predictions_entries SET score = ?, payout = ? WHERE game_id = ? AND user_id = ?")

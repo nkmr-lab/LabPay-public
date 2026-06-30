@@ -59,11 +59,11 @@ function highlightTab() {
 let lastDispatchHash = null;
 let lastDispatchAt = 0;
 
-// v836 「アプリ」 と判定されない navigation/系統 系 ルート。 これら以外は全部 フルスクリーン化。
+// v836 「アプリ」 と判定されない navigation/系統系ルート。 これら以外は全部フルスクリーン化。
 const NON_FULLSCREEN_TOP_PARTS = new Set([
   '',                // ホーム
   'groups',          // グループ (タブ)
-  // v844 #427 sns (らぼったー) は タブ ではあるが、 投稿スレッドを 大きく見たいので fullscreen 化
+  // v844 #427 sns (らぼったー) はタブではあるが、 投稿スレッドを大きく見たいので fullscreen 化
   'buy', 'sell', 'sellers',
   'requests-hub',
   'auctions',
@@ -162,12 +162,12 @@ async function dispatch() {
   // (e.g. body[data-view="home"] for the fill-bottom layout) can target it.
   document.body.dataset.view = (target.filter(Boolean).join('-') || 'home');
   // v836 アプリ系の画面は基本的にフルスクリーンモード (上部バー・タブを隠す + ✕で戻る)。
-  //   タブナビ + 設定 + 通知 + 履歴 + 管理 + ログイン 等 の navigation/系統 系は除外。
+  //   タブナビ + 設定 + 通知 + 履歴 + 管理 + ログイン等の navigation/系統系は除外。
   applyFullscreenMode(target[0] || '', prevHash);
   // v515 #142 タブ切替直後に「読み込み中」 プレースホルダ + nav ハイライトを即更新
   //   する (= ユーザがタップした瞬間に画面が反応する)。 各 view の renderer が
-  //   app.innerHTML を上書きすれば プレースホルダは消える。 dynamic import の
-  //   完了を待たずに 画面が動くので 「反応が遅い」 感覚が大幅に減る。
+  //   app.innerHTML を上書きすればプレースホルダは消える。 dynamic import の
+  //   完了を待たずに画面が動くので 「反応が遅い」 感覚が大幅に減る。
   highlightTab();
   const appPlaceholder = document.getElementById('app');
   if (appPlaceholder) {

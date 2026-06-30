@@ -93,9 +93,9 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
             $me = Auth::currentUser($pdo, $cfg);
             if ($me) $meId = (int)$me['id'];
         } catch (Throwable $e) { /* anonymous OK */ }
-        // v526 #172 旧クエリは 行ごとに per-seller の SUM(qty) と per-jan の EXISTS の
+        // v526 #172 旧クエリは行ごとに per-seller の SUM(qty) と per-jan の EXISTS の
         //   2 つの相関サブクエリがあり、 200 件 × N seller の N+1 問題になっていた。
-        //   per-seller / per-jan の集計を 派生テーブルで先に出してから JOIN で参照。
+        //   per-seller / per-jan の集計を派生テーブルで先に出してから JOIN で参照。
         $sql = "
             SELECT l.id, l.jan, l.seller_user_id, l.price, l.is_gift, l.qty, l.status,
                    l.location, l.display_name, l.created_at, l.updated_at,

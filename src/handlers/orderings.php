@@ -1,6 +1,6 @@
 <?php
-// v523 #160 順番決め (発表順 / 当番割など)。 ルーレットの 全員順列版。
-//   POST /api/orderings        — タイトル + メンバー指定で 順番を決定 (CSPRNG シャッフル)
+// v523 #160 順番決め (発表順 / 当番割など)。 ルーレットの全員順列版。
+//   POST /api/orderings        — タイトル + メンバー指定で順番を決定 (CSPRNG シャッフル)
 //                                 → 結果を保存 + 全員に通知 (ref_type='ordering')
 //   GET  /api/orderings        — 自分が起案 or メンバーに含まれているものの最近 50 件
 //   GET  /api/orderings/:id    — 詳細 (順番付きメンバー)
@@ -21,7 +21,7 @@ function route_orderings(PDO $pdo, array $cfg, string $method, array $seg): void
 }
 
 function orderings_list(PDO $pdo, int $uid): void {
-    // 自分が起案 or 自分が結果に入ってる ものだけ。 50 件まで。
+    // 自分が起案 or 自分が結果に入ってるものだけ。 50 件まで。
     $st = $pdo->prepare("
         SELECT DISTINCT o.id, o.title, o.creator_user_id, o.created_at,
                uc.display_name AS creator_name,
@@ -81,7 +81,7 @@ function orderings_create(PDO $pdo, array $cfg, int $uid): void {
     });
 
     // 通知 (各メンバーに自分の順番を伝える)。 自分が含まれていても 「自分が起案した順番決め」 を
-    //   通知するのは少し冗長なので起案者 = メンバー の場合は通知不要 (起案者自身は 画面で結果を見るので)。
+    //   通知するのは少し冗長なので起案者 = メンバーの場合は通知不要 (起案者自身は画面で結果を見るので)。
     $cfg2 = $GLOBALS['CFG'] ?? $cfg;
     $stNm = $pdo->prepare("SELECT display_name FROM users WHERE id IN ($place)");
     $stNm->execute($memberIds);

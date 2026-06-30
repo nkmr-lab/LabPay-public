@@ -319,8 +319,8 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
                 }
                 $sw = imagesx($src); $sh = imagesy($src);
                 // v598 サムネ品質改善: 320px → 640px、JPEG 82 → 90。
-                // PC で らぼったー ウィジェット の 画像が 荒く見えていた問題対応。
-                // ファイルサイズ 影響: linear 4x (面積)、JPEG 圧縮で 実質 2-3x 増。
+                // PC でらぼったーウィジェットの画像が荒く見えていた問題対応。
+                // ファイルサイズ影響: linear 4x (面積)、JPEG 圧縮で実質 2-3x 増。
                 $maxDim = 640;
                 $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
                 $tw = max(1, (int)round($sw * $ratio));
@@ -346,11 +346,11 @@ function save_uploaded_file(array $f, string $subDir, int $maxBytes, array $mime
     ];
 }
 
-// 既存画像 URL から サムネ URL を推定するヘルパ。 サムネが実在すればそのURL、
-// 存在しなければ オリジナル URL を返す。 v494 サブディレクトリ
-// (/uploads/products/<hash>.jpg) と 絶対 URL (https://.../uploads/...) の両方に対応。
+// 既存画像 URL からサムネ URL を推定するヘルパ。 サムネが実在すればそのURL、
+// 存在しなければオリジナル URL を返す。 v494 サブディレクトリ
+// (/uploads/products/<hash>.jpg) と絶対 URL (https://.../uploads/...) の両方に対応。
 function thumb_url_for(string $imageUrl): string {
-    // 絶対 URL なら パス成分だけ取り出す。 同一ホスト前提。
+    // 絶対 URL ならパス成分だけ取り出す。 同一ホスト前提。
     $path = $imageUrl;
     if (preg_match('#^https?://[^/]+(/.*)$#', $imageUrl, $m)) {
         $path = $m[1];
@@ -369,8 +369,8 @@ function thumb_url_for(string $imageUrl): string {
 // to pull conversation history. Returns the decoded JSON array. Throws on
 // transport failure or {ok:false}; callers may catch and report.
 // Bot Token lives in $cfg['slack']['bot_token'] (production config only).
-// v794 Slack Web API GET。 第 4 引数 で token override (= 別 アプリ の bot token を 使い たい
-//   場合 用、 例 え ば Scrapbox Reader の bot token)。 省略 時 は 既定 の slack.bot_token。
+// v794 Slack Web API GET。 第 4 引数で token override (= 別アプリの bot token を使いたい
+//   場合用、 例えば Scrapbox Reader の bot token)。 省略時は既定の slack.bot_token。
 function slack_api_get(array $cfg, string $endpoint, array $params = [], ?string $tokenOverride = null): array {
     $tok = $tokenOverride !== null && $tokenOverride !== ''
         ? $tokenOverride
@@ -396,7 +396,7 @@ function slack_api_get(array $cfg, string $endpoint, array $params = [], ?string
 }
 
 // Slack Web API POST (chat.postMessage 等)。 JSON body + Bearer。
-// v794 第 4 引数 で token override (上 と 同様)。
+// v794 第 4 引数で token override (上と同様)。
 function slack_api_post(array $cfg, string $endpoint, array $body, ?string $tokenOverride = null): array {
     $tok = $tokenOverride !== null && $tokenOverride !== ''
         ? $tokenOverride
@@ -475,9 +475,9 @@ function notify_admins(PDO $pdo, array $cfg, string $type, string $body,
 // ---------------- Slack notifications (incoming webhook) ----------------
 // Fire-and-forget POST to Slack. Silently no-ops when slack.webhook_url is empty,
 // and swallows all errors — Slack being down must never break a listing/scan/etc.
-// v456 link 引数 を 追加。 渡すと 本文末尾に LabPay の 該当 URL を 追記する
-// (Slack 上 で 「どこ に 行けば 良い か」 が 一目で 分かる ように)。
-//   $link は フラグメント (例: "#/feedback-admin") か、 もしくは 完全URL。
+// v456 link 引数を追加。 渡すと本文末尾に LabPay の該当 URL を追記する
+// (Slack 上で 「どこに行けば良いか」 が一目で分かるように)。
+//   $link はフラグメント (例: "#/feedback-admin") か、 もしくは完全URL。
 function slack_notify(array $cfg, string $text, ?array $blocks = null, ?string $link = null): void {
     $url = (string)($cfg['slack']['webhook_url'] ?? '');
     if ($url === '') return;
@@ -584,7 +584,7 @@ require_once __DIR__ . '/handlers/screen_shares.php';
 require_once __DIR__ . '/handlers/file_transfers.php';
 require_once __DIR__ . '/handlers/zemi_videos.php';  // v843 #426 ゼミ動画
 require_once __DIR__ . '/handlers/share.php';        // v853 共有 (タイトル+URL をメンバーに送信)
-require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇 リスト (ユーザ作成)
+require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇リスト (ユーザ作成)
 require_once __DIR__ . '/handlers/habits.php';       // v870 #452 Habit Tracker
-require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押し クイズ
-require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト 追跡
+require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押しクイズ
+require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト追跡

@@ -67,12 +67,12 @@ export async function renderSell() {
       <p class="muted" style="margin:0">バーコードを読み取って新規出品します。バーコードが無い商品は下の「バーコードが無い商品を出品」を使ってください。</p>
       <div style="background:#fff8e6; border-left:4px solid var(--warn); padding:10px 12px; border-radius:8px; margin-top:10px; font-size:13px; line-height:1.6">
         💡 <span class="bold">価格のヒント</span><br>
-        ・1pt ≈ 1円 換算が目安です<br>
+        ・1pt ≈ 1円換算が目安です<br>
         ・売れた時に <span class="bold">5%</span> が手数料として差し引かれるので、仕入れ値 + 手数料を考慮した値付けがオススメ<br>
         ・<span class="bold">20pt 未満</span> の出品は手数料がかかりません (端数切捨てで 0pt)
       </div>
       <div style="margin-top:10px; padding:8px 12px; font-size:13px; color:#c62828; font-weight:700">
-        🚫 研究室の 商品の 転売は やめてね！
+        🚫 研究室の商品の転売はやめてね！
       </div>
     </div>
 
@@ -288,8 +288,8 @@ function showPreview(prefix, src) {
 // Unified submit for both JAN and no-JAN flows. `kind` is 'jan' or 'no_jan'.
 // JAN flow: register the product under the scanned JAN, then list it.
 // no-JAN flow: ask the server to mint a synthetic JAN, then list under it.
-// 出品プレビュー: 出品しないまま 「購入画面 一覧 / 詳細 で どう見えるか」 を
-// モーダルで表示。 buy.js の tile + product.js の購入カード を 寄せて作る。
+// 出品プレビュー: 出品しないまま 「購入画面一覧 / 詳細でどう見えるか」 を
+// モーダルで表示。 buy.js の tile + product.js の購入カードを寄せて作る。
 function openSellPreview(kind) {
   const p = kind === 'jan' ? '' : 'nj-';
   const name = document.getElementById(p + 'name')?.value?.trim() || '';
@@ -301,9 +301,9 @@ function openSellPreview(kind) {
   const location = readLocation(p);
   const expiresAt = document.getElementById(p + 'expires_at')?.value || '';
   const completionMsg = document.getElementById(p + 'completion_message')?.value?.trim() || '';
-  if (!name) { toast('商品名 を入れてください'); return; }
-  if (!isGift && !(price > 0)) { toast('価格 を入れてください'); return; }
-  if (!(qty > 0)) { toast('数量 を入れてください'); return; }
+  if (!name) { toast('商品名を入れてください'); return; }
+  if (!isGift && !(price > 0)) { toast('価格を入れてください'); return; }
+  if (!(qty > 0)) { toast('数量を入れてください'); return; }
   const titleForBuyer = displayName || name;
   const initial = (name || '?').trim().charAt(0).toUpperCase();
   const sellerName = state.me?.display_name || '自分';
@@ -352,9 +352,9 @@ function openSellPreview(kind) {
     title: '👀 プレビュー',
     bodyHtml: `
       <p class="hint" style="font-size:12px; margin:0 0 6px">出品はまだ実行されていません。 以下の見た目になります:</p>
-      <h4 style="margin:10px 0 6px; font-size:13px">購入 一覧 (タイル)</h4>
+      <h4 style="margin:10px 0 6px; font-size:13px">購入一覧 (タイル)</h4>
       ${tileHtml}
-      <h4 style="margin:14px 0 6px; font-size:13px">購入 詳細</h4>
+      <h4 style="margin:14px 0 6px; font-size:13px">購入詳細</h4>
       ${detailHtml}`,
   });
 }

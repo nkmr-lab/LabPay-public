@@ -57,7 +57,7 @@ export async function api(method, path, { body, query, withIdempotency = false }
 
   if (res.status === 401) {
     // Avoid bouncing during the OAuth completion redirect.
-    // v679 #259 公開 タイマー は 認証 不要 で 表示 する ので 401 で login に 飛ばさ ない
+    // v679 #259 公開タイマーは認証不要で表示するので 401 で login に飛ばさない
     if (location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) {
       location.hash = '#/login';
     }
@@ -71,10 +71,10 @@ export async function api(method, path, { body, query, withIdempotency = false }
   return data;
 }
 
-// v598 SW の SWR コンテンツ キャッシュ (labpay-content-vN) を path prefix で
-//   一括 invalidate するヘルパ。 SW を bump して キャッシュ名が変わっても
-//   labpay-content-* を全部なめるので 自動追従する。
-//   呼び出し例: invalidateContentCache('/api/posts') — 投稿 直後/新着検知 直後 に。
+// v598 SW の SWR コンテンツキャッシュ (labpay-content-vN) を path prefix で
+//   一括 invalidate するヘルパ。 SW を bump してキャッシュ名が変わっても
+//   labpay-content-* を全部なめるので自動追従する。
+//   呼び出し例: invalidateContentCache('/api/posts') — 投稿直後/新着検知直後に。
 export async function invalidateContentCache(pathPrefix) {
   if (!('caches' in window)) return;
   try {

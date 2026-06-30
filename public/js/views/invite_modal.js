@@ -1,12 +1,12 @@
-// v632 「対象者 指定 → 即起動」 用 の 共通モーダル。
-//   各ゲーム の 「＋ 新規卓」 ボタンから 呼ぶ。
+// v632 「対象者指定 → 即起動」 用の共通モーダル。
+//   各ゲームの 「＋ 新規卓」 ボタンから呼ぶ。
 //
 //   showInviteModal({
-//     title:       '🃏 大富豪 新規卓',
-//     description: 'プレイフィー 2pt。 全員 同意済で 即開始。',
-//     minPick:     1,            // 最少 招待人数 (= max_players - 1)
-//     maxPick:     3,            // 最大 招待人数
-//     allowPublic: true,         // 「公開卓 で 立てる」 ボタン を 出すか
+//     title:       '🃏 大富豪新規卓',
+//     description: 'プレイフィー 2pt。 全員同意済で即開始。',
+//     minPick:     1,            // 最少招待人数 (= max_players - 1)
+//     maxPick:     3,            // 最大招待人数
+//     allowPublic: true,         // 「公開卓で立てる」 ボタンを出すか
 //   })
 //   ⇒ 戻り値: { kind: 'public' } | { kind: 'invite', memberIds: [uid,...] } | null (cancel)
 
@@ -36,13 +36,13 @@ export async function showInviteModal(opts) {
         </div>
         <div style="flex:1; overflow:auto; padding:14px 18px">
           ${description ? `<p class="hint" style="margin:0 0 10px; font-size:13px">${escapeHtml(description)}</p>` : ''}
-          <div class="bold" style="font-size:13px; margin-bottom:6px">対象者 を 選ぶ (${minPick}〜${maxPick} 人)</div>
+          <div class="bold" style="font-size:13px; margin-bottom:6px">対象者を選ぶ (${minPick}〜${maxPick} 人)</div>
           <div id="im-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
           <div id="im-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
         </div>
         <div style="padding:12px 18px; border-top:1px solid #eee; display:flex; gap:8px; justify-content:flex-end">
-          ${allowPublic ? '<button id="im-public" class="btn">公開卓 で 立てる</button>' : ''}
-          <button id="im-invite" class="btn primary">対象者で 即開始</button>
+          ${allowPublic ? '<button id="im-public" class="btn">公開卓で立てる</button>' : ''}
+          <button id="im-invite" class="btn primary">対象者で即開始</button>
         </div>
       </div>
     `;
@@ -67,8 +67,8 @@ export async function showInviteModal(opts) {
     document.getElementById('im-public')?.addEventListener('click', () => { cleanup(); resolve({ kind: 'public' }); });
     document.getElementById('im-invite').addEventListener('click', () => {
       const ids = picker ? [...picker.getSelected()] : [];
-      if (ids.length < minPick) { alert(`${minPick} 人 以上 選んでください`); return; }
-      if (ids.length > maxPick) { alert(`${maxPick} 人 まで`); return; }
+      if (ids.length < minPick) { alert(`${minPick} 人以上選んでください`); return; }
+      if (ids.length > maxPick) { alert(`${maxPick} 人まで`); return; }
       cleanup(); resolve({ kind: 'invite', memberIds: ids });
     });
   });

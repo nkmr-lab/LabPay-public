@@ -41,8 +41,8 @@ function route_presence(PDO $pdo, array $cfg, string $method, array $seg): void 
 function presence_heatmap(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $days = max(1, min(365, (int)($_GET['days'] ?? 7)));
-    // v699 #286 mode=daily で 全 日程 別 (= N 日 × 24 時間) の matrix を 返す。 default は
-    //   従来 通り 曜日 別 平均 (avg)。
+    // v699 #286 mode=daily で全日程別 (= N 日 × 24 時間) の matrix を返す。 default は
+    //   従来通り曜日別平均 (avg)。
     $mode = ($_GET['mode'] ?? 'avg') === 'daily' ? 'daily' : 'avg';
     $tz = new DateTimeZone((string)($cfg['app']['timezone'] ?? 'Asia/Tokyo'));
     $end   = new DateTimeImmutable('tomorrow midnight', $tz); // exclusive upper bound
@@ -77,7 +77,7 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
     $endTs   = $end->getTimestamp();
 
     if ($mode === 'daily') {
-        // v699 #286 N 行 (日付) × 24 列 の matrix。 日付 文字列 を 行 キー に。
+        // v699 #286 N 行 (日付) × 24 列の matrix。 日付文字列を行キーに。
         $dateList = [];
         for ($t = $startTs; $t < $endTs; $t += 86400) {
             $dateList[] = date('Y-m-d', $t);
@@ -129,7 +129,7 @@ function presence_heatmap(PDO $pdo, array $cfg): void {
         return;
     }
 
-    // ─── 従来 の 曜日 別 平均 mode ───
+    // ─── 従来の曜日別平均 mode ───
     // bucket[room][weekday(0=Sun..6=Sat)][hour(0..23)] = set of user_ids
     // PHP 0=Sun..6=Sat (date('w')); UI converts to Mon-first labels.
     $bucket = [];
@@ -197,8 +197,8 @@ function presence_is_excluded_mac(string $mac): bool {
     return false;
 }
 
-// v686 #270 仮想 マシン の MAC を 検知。 これら は 物理 デバイス と 違って 常時 稼働
-// の Host 上 で 走る ので 「ずっと いる」 状態 に なる → 在室 判定 が 壊れる。 OUI 一覧:
+// v686 #270 仮想マシンの MAC を検知。 これらは物理デバイスと違って常時稼働
+// の Host 上で走るので 「ずっといる」 状態になる → 在室判定が壊れる。 OUI 一覧:
 //   - 00:15:5d  Microsoft Hyper-V
 //   - 00:50:56  VMware ESXi
 //   - 00:0c:29  VMware Workstation
@@ -376,12 +376,12 @@ function presence_devices_list(PDO $pdo, array $cfg): void {
     $st = $pdo->prepare('SELECT id, mac, label, created_at FROM presence_devices WHERE user_id=? ORDER BY id');
     $st->execute([$u['id']]);
     $items = $st->fetchAll();
-    // v686 #270 既存 登録 に も VM MAC 警告 を 付ける。 削除 す べき か は ユーザ 判断。
+    // v686 #270 既存登録にも VM MAC 警告を付ける。 削除すべきかはユーザ判断。
     foreach ($items as &$r) {
         $vm = presence_vm_kind((string)$r['mac']);
         $r['vm_kind'] = $vm;
         $r['warning'] = $vm
-            ? "⚠️ これ は $vm の 仮想 NIC の MAC です。 物理 デバイス じゃ ない ので 「ずっと いる」 状態 に なって 在室 判定 が 壊れます。 削除 を 推奨"
+            ? "⚠️ これは $vm の仮想 NIC の MAC です。 物理デバイスじゃないので 「ずっといる」 状態になって在室判定が壊れます。 削除を推奨"
             : null;
     }
     unset($r);
@@ -397,11 +397,11 @@ function presence_devices_add(PDO $pdo, array $cfg): void {
     if ($mac === null) throw new ApiException('bad_request', 'invalid MAC address', 400);
     if (presence_is_excluded_mac($mac))
         throw new ApiException('bad_request', 'broadcast/multicast MACs not allowed', 400);
-    // v686 #270 VM の MAC は 登録 不可 (常時 稼働 で 「ずっと いる」 状態 に なる)。
+    // v686 #270 VM の MAC は登録不可 (常時稼働で 「ずっといる」 状態になる)。
     $vm = presence_vm_kind($mac);
     if ($vm !== null) {
         throw new ApiException('vm_mac',
-            "これ は $vm の 仮想 NIC の MAC です。 物理 デバイス (スマホ / ノート PC) の MAC を 登録 して ください。 仮想 NIC は ホスト が 起動 中 ずっと 同じ MAC を 出し続ける ので 「ずっと ラボに いる」 と 誤判定 されて しまいます。",
+            "これは $vm の仮想 NIC の MAC です。 物理デバイス (スマホ / ノート PC) の MAC を登録してください。 仮想 NIC はホストが起動中ずっと同じ MAC を出し続けるので 「ずっとラボにいる」 と誤判定されてしまいます。",
             400);
     }
 
@@ -459,7 +459,7 @@ function presence_unregistered_macs(PDO $pdo, array $cfg): void {
     $rows = $st->fetchAll();
     foreach ($rows as &$r) {
         $vm = presence_vm_kind((string)$r['mac']);
-        $r['hint'] = $vm ? "⚠️ $vm の VM (登録 不可)" : presence_mac_hint((string)$r['mac']);
+        $r['hint'] = $vm ? "⚠️ $vm の VM (登録不可)" : presence_mac_hint((string)$r['mac']);
         $r['is_vm'] = (bool)$vm;
     }
     unset($r);

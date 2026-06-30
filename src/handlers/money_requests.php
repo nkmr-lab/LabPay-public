@@ -52,13 +52,13 @@ function money_requests_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
 
-// v658 自分 が creator (= 受取側) の 請求 のうち、 未払 い 受取人 を
-// 人 別 に 合算。 同じ 人 が 複数 の 請求 で 払って ない 場合 は
-// 一行 に まとめて 「user X: 合計 ¥Y (N 件)」 と 返す。
+// v658 自分が creator (= 受取側) の請求のうち、 未払い受取人を
+// 人別に合算。 同じ人が複数の請求で払ってない場合は
+// 一行にまとめて 「user X: 合計 ¥Y (N 件)」 と返す。
 function money_requests_unpaid_summary(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // 自分が creator (or created_by) の 請求 で、 受取人 が 未払い の もの。
-    // 削除済 請求 (closed_at) は 除外。 自分 が 自分 宛て (creator==recipient) も 除外。
+    // 自分が creator (or created_by) の請求で、 受取人が未払いのもの。
+    // 削除済請求 (closed_at) は除外。 自分が自分宛て (creator==recipient) も除外。
     $st = $pdo->prepare("
         SELECT mr.id   AS request_id,
                mr.title,
@@ -77,7 +77,7 @@ function money_requests_unpaid_summary(PDO $pdo, array $cfg): void {
          ORDER BY mrr.user_id, mr.id");
     $st->execute([(int)$u['id'], (int)$u['id']]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    // 人 別 集計
+    // 人別集計
     $perUser = [];
     foreach ($rows as $r) {
         $uid = (int)$r['user_id'];
@@ -100,7 +100,7 @@ function money_requests_unpaid_summary(PDO $pdo, array $cfg): void {
             'amount_yen' => (int)$r['amount_yen'],
         ];
     }
-    // 合計額 降順
+    // 合計額降順
     usort($perUser, fn($a, $b) => $b['total_yen'] - $a['total_yen']);
     json_response(['items' => array_values($perUser)]);
 }
@@ -116,11 +116,11 @@ function money_requests_create(PDO $pdo, array $cfg): void {
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
     $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
-    // 任意: adhoc_groups の 精算サマリ 「請求一括生成」 から呼ばれた場合に
-    // どのグループ由来かを 記録する。 これがあると groups.js の 精算モーダル
-    // で 「この送金プランは もう支払い済」 を 表示できる。 FK は ON DELETE
-    // SET NULL なので、 後でグループを消しても 請求は残る。 不正な ID を
-    // 渡されたら FK 違反で 落ちるので 別途 存在 check はしない。
+    // 任意: adhoc_groups の精算サマリ 「請求一括生成」 から呼ばれた場合に
+    // どのグループ由来かを記録する。 これがあると groups.js の精算モーダル
+    // で 「この送金プランはもう支払い済」 を表示できる。 FK は ON DELETE
+    // SET NULL なので、 後でグループを消しても請求は残る。 不正な ID を
+    // 渡されたら FK 違反で落ちるので別途存在 check はしない。
     $sourceGroupId = isset($body['source_group_id']) && (int)$body['source_group_id'] > 0
         ? (int)$body['source_group_id'] : null;
 

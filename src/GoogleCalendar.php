@@ -333,9 +333,9 @@ class GoogleCalendar {
     }
 
     // event の description / location から Zoom / Meet URL を抽出。
-    // v400 以前は 任意の URL を hit させていたが、 description に Slack / 論文
-    // URL を 貼っただけで 「📹 参加する」 ボタンが 出る 誤検出が あったので、
-    // 既知の ビデオ会議 ドメインに 限定。
+    // v400 以前は任意の URL を hit させていたが、 description に Slack / 論文
+    // URL を貼っただけで 「📹 参加する」 ボタンが出る誤検出があったので、
+    // 既知のビデオ会議ドメインに限定。
     public static function extractMeetingUrl(array $event): ?string {
         $eps = $event['conferenceData']['entryPoints'] ?? [];
         foreach ($eps as $ep) {
@@ -345,7 +345,7 @@ class GoogleCalendar {
         }
         $haystack = trim((string)($event['location'] ?? '') . "\n" . (string)($event['description'] ?? ''));
         if ($haystack === '') return null;
-        // 既知の video meeting URL パターン。 サブドメイン あり。
+        // 既知の video meeting URL パターン。 サブドメインあり。
         $pattern = '#https?://(?:[a-z0-9-]+\.)*'
                  . '(?:zoom\.us|zoom-x\.com|meet\.google\.com|hangouts\.google\.com'
                  . '|teams\.microsoft\.com|teams\.live\.com|webex\.com|webex\.zoom\.us'

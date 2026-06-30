@@ -1,4 +1,4 @@
-// /#/history — 取引履歴 + ポイント残高 時系列 グラフ (v812 #404)。
+// /#/history — 取引履歴 + ポイント残高時系列グラフ (v812 #404)。
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { ledgerTypeLabel } from '../labels.js';
@@ -12,7 +12,7 @@ export async function renderHistory() {
     </div>
     <div id="hist-chart-card" class="card" hidden>
       <div class="row center" style="margin-bottom:4px">
-        <h3 class="row-title" style="margin:0">📈 ポイント 残高 の 推移</h3>
+        <h3 class="row-title" style="margin:0">📈 ポイント残高の推移</h3>
         <span id="hist-chart-range" class="hint-sm" style="margin-left:auto"></span>
       </div>
       <div id="hist-chart" style="margin-top:6px"></div>
@@ -21,7 +21,7 @@ export async function renderHistory() {
   `;
 
   try {
-    // 残高 + 取引 を 並列 取得。 残高 は /api/me の balance field。
+    // 残高 + 取引を並列取得。 残高は /api/me の balance field。
     const [meResp, tx] = await Promise.all([
       get('/api/me'),
       get('/api/me/transactions', { limit: 200 }),
@@ -38,21 +38,21 @@ export async function renderHistory() {
   }
 }
 
-// items は 新しい 順 (created_at DESC)。 「今 の 残高」 から 逆 算 して 各 取引 後 の 残高
-// 系列 を 作り、 SVG ライン チャート で 描画。
+// items は新しい順 (created_at DESC)。 「今の残高」 から逆算して各取引後の残高
+// 系列を作り、 SVG ラインチャートで描画。
 function renderBalanceChart(items, currentBalance) {
   const card = document.getElementById('hist-chart-card');
   const root = document.getElementById('hist-chart');
   const rangeEl = document.getElementById('hist-chart-range');
   if (!card || !root || !items?.length) return;
 
-  // 新しい 順 → 古い 順 に 並べ 替えて、 各 取引 後 の 残高 を 累積
+  // 新しい順 → 古い順に並べ替えて、 各取引後の残高を累積
   const asc = items.slice().reverse();
   const totalSigned = asc.reduce((s, t) => s + (Number(t.signed_amount) || 0), 0);
-  // 古い 方 の 起点 残高 = 現 残高 - これ から 起きる 全 取引 の 合計
+  // 古い方の起点残高 = 現残高 - これから起きる全取引の合計
   let bal = currentBalance - totalSigned;
   const series = [];
-  // 起点 ポイント (一番 古い 取引 の 直前) も 入れる
+  // 起点ポイント (一番古い取引の直前) も入れる
   if (asc[0]?.created_at) {
     series.push({ t: parseTs(asc[0].created_at), v: bal });
   }
@@ -80,17 +80,17 @@ function renderBalanceChart(items, currentBalance) {
 
   // line path
   const path = series.map((p, i) => (i === 0 ? 'M' : 'L') + sx(p.t).toFixed(1) + ',' + sy(p.v).toFixed(1)).join(' ');
-  // area path (下 を 塗る)
+  // area path (下を塗る)
   const area = path + ` L${sx(xMax).toFixed(1)},${(H - padB).toFixed(1)} L${sx(xMin).toFixed(1)},${(H - padB).toFixed(1)} Z`;
 
-  // Y 軸 目盛 (4 段、 整数 寄り)
+  // Y 軸目盛 (4 段、 整数寄り)
   const yTicks = niceTicks(yLo, yHi, 4);
   const yLines = yTicks.map(v => {
     const y = sy(v);
     return `<line x1="${padL}" x2="${W - padR}" y1="${y}" y2="${y}" stroke="#e5e7eb" stroke-width="1"/>
             <text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#6b7280">${Math.round(v).toLocaleString()}</text>`;
   }).join('');
-  // X 軸 (両端 + 中央 の 日付)
+  // X 軸 (両端 + 中央の日付)
   const fmtX = (ms) => {
     const d = new Date(ms);
     const m = d.getMonth() + 1, dd = d.getDate();
@@ -102,7 +102,7 @@ function renderBalanceChart(items, currentBalance) {
     return `<text x="${x}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#6b7280">${fmtX(t)}</text>`;
   }).join('');
 
-  // 現在 値 ドット
+  // 現在値ドット
   const last = series[series.length - 1];
   const lastX = sx(last.t), lastY = sy(last.v);
 
@@ -125,7 +125,7 @@ function parseTs(s) {
   return new Date(String(s).replace(' ', 'T') + '+09:00').getTime();
 }
 
-// Y 軸 の キリの 良い 目盛 を 出す (1, 2, 5 × 10^n)。
+// Y 軸のキリの良い目盛を出す (1, 2, 5 × 10^n)。
 function niceTicks(lo, hi, n) {
   const range = hi - lo;
   if (range <= 0) return [lo];

@@ -33,7 +33,7 @@ export async function renderMoneyRequests() {
       <div style="margin-top:10px"></div>
       <label class="field">
         <span class="lbl">タイトル</span>
-        <input type="text" id="mr-title" maxlength="200" placeholder="例: 学会参加費 集金">
+        <input type="text" id="mr-title" maxlength="200" placeholder="例: 学会参加費集金">
       </label>
       <label class="field">
         <span class="lbl">メモ (任意)</span>
@@ -77,7 +77,7 @@ export async function renderMoneyRequests() {
     </div>
 
     <div id="mr-unpaid-people-card" class="card" hidden>
-      <h3>👥 未払い人 別 合算 (あなたが 受取側)</h3>
+      <h3>👥 未払い人別合算 (あなたが受取側)</h3>
       <div id="mr-unpaid-people-summary" class="muted" style="font-size:13px; margin-bottom:6px"></div>
       <div id="mr-unpaid-people-list" class="list"></div>
     </div>
@@ -343,8 +343,8 @@ async function loadList() {
   }
 }
 
-// v658 自分 が creator (受取側) の 請求 で、 受取人 別 に 未払 い 合算 を 表示。
-// 同じ 人 が 複数 の 請求 で 払って ない 場合 を 一行 に まとめる。
+// v658 自分が creator (受取側) の請求で、 受取人別に未払い合算を表示。
+// 同じ人が複数の請求で払ってない場合を一行にまとめる。
 async function loadUnpaidPeopleSummary() {
   const card = document.getElementById('mr-unpaid-people-card');
   const sum  = document.getElementById('mr-unpaid-people-summary');
@@ -356,7 +356,7 @@ async function loadUnpaidPeopleSummary() {
     if (!items.length) { card.hidden = true; return; }
     card.hidden = false;
     const grand = items.reduce((s, x) => s + Number(x.total_yen || 0), 0);
-    sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${grand.toLocaleString()}</span> (${items.length} 人 / 未払 い)`;
+    sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${grand.toLocaleString()}</span> (${items.length} 人 / 未払い)`;
     list.innerHTML = items.map(p => {
       const reqLines = p.requests.map(r =>
         `<div style="font-size:12px; color:var(--muted); padding-left:6px">└ <a href="#/requests/${r.request_id}">${escapeHtml(r.title)}</a> ¥${Number(r.amount_yen).toLocaleString()}</div>`
@@ -367,7 +367,7 @@ async function loadUnpaidPeopleSummary() {
             ${avatarHtml(p.display_name, p.avatar_url, 'sm')}
             <div style="flex:1; min-width:0">
               <div class="bold">${escapeHtml(p.display_name)} ${p.grade ? `<span class="muted" style="font-size:10px">[${escapeHtml(p.grade)}]</span>` : ''}</div>
-              <div class="meta">${p.request_count} 件 未払 い</div>
+              <div class="meta">${p.request_count} 件未払い</div>
             </div>
             <div class="bold" style="font-size:15px; color:#b54708; flex:none">¥${Number(p.total_yen).toLocaleString()}</div>
           </div>
@@ -380,9 +380,9 @@ async function loadUnpaidPeopleSummary() {
   }
 }
 
-// v651 未払い 請求 (自分が 受取人、 未払い) を 集めて 合算 表示。 集金 が
-// 重なる時 期 (合宿、 学会、 OB会) に 「合計 で 今いくら 払う 予定 だっけ」 を
-// 一目 で 把握 できる ように。
+// v651 未払い請求 (自分が受取人、 未払い) を集めて合算表示。 集金が
+// 重なる時期 (合宿、 学会、 OB会) に 「合計で今いくら払う予定だっけ」 を
+// 一目で把握できるように。
 function renderPendingSummary(items, meId) {
   const card = document.getElementById('mr-pending-card');
   const sum  = document.getElementById('mr-pending-summary');
@@ -393,7 +393,7 @@ function renderPendingSummary(items, meId) {
   if (!mine.length) { card.hidden = true; return; }
   card.hidden = false;
   const total = mine.reduce((s, r) => s + Number(r.my_amount || 0), 0);
-  sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${total.toLocaleString()}</span> (${mine.length} 件 / 受取人 別)`;
+  sum.innerHTML = `<span class="bold" style="font-size:15px; color:#b54708">合計 ¥${total.toLocaleString()}</span> (${mine.length} 件 / 受取人別)`;
   list.innerHTML = mine.map(r => `
     <a class="list-item" href="#/requests/${r.id}">
       <div class="grow" style="min-width:0">

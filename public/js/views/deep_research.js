@@ -1,5 +1,5 @@
 // /#/deep-research — Deep Research。
-//   v840 #422 依頼フォームを <details> で 折りたたみ、 過去結果をタイル表示、 ⭐ スター + 並び替え。
+//   v840 #422 依頼フォームを <details> で折りたたみ、 過去結果をタイル表示、 ⭐ スター + 並び替え。
 
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -20,7 +20,7 @@ export async function renderDeepResearch() {
     <div class="card page-header">
       <h2 style="margin:0">🔎 Deep Research</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        クエリを入力すると、 OpenAI が Web を横断検索して 構造化レポート + 出典 を日本語で返します。
+        クエリを入力すると、 OpenAI が Web を横断検索して構造化レポート + 出典を日本語で返します。
       </p>
     </div>
     <details class="card" id="dr-form" style="margin-top:8px">
@@ -105,7 +105,7 @@ async function loadHistory() {
     let items = d.items || [];
     if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
 
-    // 履歴が空 (初回) なら form を開く、 ある なら閉じる
+    // 履歴が空 (初回) なら form を開く、 あるなら閉じる
     setFormOpen('dr-form', items.length === 0);
 
     ctlRoot.innerHTML = viewControlsHtml({
@@ -317,7 +317,7 @@ async function refreshShared(token) {
         <div class="card"><div class="muted">❌ 調査失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div></div>`;
       return;
     }
-    // v853 📤 共有 ダイアログ (タイトル+URL コピー / らぼったー / メンバーに送る)
+    // v853 📤 共有ダイアログ (タイトル+URL コピー / らぼったー / メンバーに送る)
     document.getElementById('dr-share-dialog')?.addEventListener('click', () => {
       const titleShort = (d.query_text || '').slice(0, 80);
       shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token);
@@ -344,7 +344,7 @@ function renderRichText(text) {
   if (text == null) return '';
   const s = String(text);
   const out = [];
-  // 1) markdown [label](url) を マッチして 分解、 それ以外の text は escape
+  // 1) markdown [label](url) をマッチして分解、 それ以外の text は escape
   const re = /\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s\])]+)/g;
   let last = 0, m;
   while ((m = re.exec(s)) !== null) {
@@ -352,7 +352,7 @@ function renderRichText(text) {
     if (m[1] && m[2]) {
       out.push(`<a href="${escapeHtml(m[2])}" target="_blank" rel="noopener" style="color:#0284c7">${escapeHtml(m[1])}</a>`);
     } else if (m[3]) {
-      // bare URL — 末尾 のピリオド / カンマ / 全角句読点 はリンクから外す
+      // bare URL — 末尾のピリオド / カンマ / 全角句読点はリンクから外す
       let url = m[3];
       let tail = '';
       while (url && /[.,。、!?!?]$/.test(url)) { tail = url.slice(-1) + tail; url = url.slice(0, -1); }
@@ -372,7 +372,7 @@ function paintResult(d) {
     ${u.total_tokens || u.search_count ? `
       <div class="card" style="background:#faf5ff">
         <div style="font-size:12px; color:#6b21a8">
-          📊 使用量: 入力 ${u.input_tokens || 0} tok ・ 出力 ${u.output_tokens || 0} tok ・ 合計 ${u.total_tokens || 0} tok ・ Web 検索 ${u.search_count || 0} 回
+          📊 使用量: 入力 ${u.input_tokens || 0} tok ・出力 ${u.output_tokens || 0} tok ・合計 ${u.total_tokens || 0} tok ・ Web 検索 ${u.search_count || 0} 回
         </div>
       </div>` : ''}
 

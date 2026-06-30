@@ -1,7 +1,7 @@
 <?php
-// /api/chat — Slack 風 チャット (#248)。
-// 3 つ の 固定 チャンネル (重要 / 連絡 / 相談) + 1対1 DM。
-// room_key = 'ch:{slug}' or 'dm:{small_uid}-{big_uid}' で 一元 管理。
+// /api/chat — Slack 風チャット (#248)。
+// 3 つの固定チャンネル (重要 / 連絡 / 相談) + 1対1 DM。
+// room_key = 'ch:{slug}' or 'dm:{small_uid}-{big_uid}' で一元管理。
 
 declare(strict_types=1);
 
@@ -12,7 +12,7 @@ function route_chat(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === 'rooms' && $method === 'GET' && ($seg[2] ?? '') === '') { chat_rooms_list($pdo, $cfg); return; }
     if ($sub === 'rooms' && ($seg[2] ?? '') !== '') {
-        // v670 path_segments は URL decode しない ので、 ch%3Aimportant のまま 来る → 明示 decode
+        // v670 path_segments は URL decode しないので、 ch%3Aimportant のまま来る → 明示 decode
         $roomKey = urldecode((string)$seg[2]);
         $action  = $seg[3] ?? '';
         if ($action === 'messages' && $method === 'GET')  { chat_messages_list($pdo, $cfg, $roomKey); return; }
@@ -37,7 +37,7 @@ function chat_parse_room(string $roomKey): array {
         $rest = substr($roomKey, 3);
         if (!preg_match('/^(\d+)-(\d+)$/', $rest, $m)) throw new ApiException('bad_request', 'invalid dm room', 400);
         $a = (int)$m[1]; $b = (int)$m[2];
-        if ($a >= $b) throw new ApiException('bad_request', 'dm uid 順 が 不正 (小→大)', 400);
+        if ($a >= $b) throw new ApiException('bad_request', 'dm uid 順が不正 (小→大)', 400);
         return ['type' => 'dm', 'a' => $a, 'b' => $b];
     }
     throw new ApiException('bad_request', 'unknown room', 400);
@@ -52,11 +52,11 @@ function chat_assert_access(PDO $pdo, int $myUid, array $room): void {
     if ($room['type'] === 'ch') {
         $st = $pdo->prepare("SELECT 1 FROM chat_channels WHERE slug = ?");
         $st->execute([$room['slug']]);
-        if (!$st->fetchColumn()) throw new ApiException('not_found', 'チャンネル が ありません', 404);
+        if (!$st->fetchColumn()) throw new ApiException('not_found', 'チャンネルがありません', 404);
         return;
     }
     if ($room['type'] === 'dm') {
-        if ($myUid !== $room['a'] && $myUid !== $room['b']) throw new ApiException('forbidden', 'この DM の 参加者 では ありません', 403);
+        if ($myUid !== $room['a'] && $myUid !== $room['b']) throw new ApiException('forbidden', 'この DM の参加者ではありません', 403);
         return;
     }
 }
@@ -67,7 +67,7 @@ function chat_rooms_list(PDO $pdo, array $cfg): void {
     $uid = (int)$u['id'];
     $rooms = [];
 
-    // channels (= 全員 が 入る)
+    // channels (= 全員が入る)
     $stC = $pdo->query("SELECT slug, name, icon, description, sort_order FROM chat_channels ORDER BY sort_order ASC");
     $channelSlugs = [];
     foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $c) {
@@ -82,7 +82,7 @@ function chat_rooms_list(PDO $pdo, array $cfg): void {
         ];
     }
 
-    // DM = 自分 が 参加 した もの の room_key 一覧 (chat_messages から)
+    // DM = 自分が参加したものの room_key 一覧 (chat_messages から)
     $stD = $pdo->prepare("SELECT DISTINCT room_key FROM chat_messages
                           WHERE room_key LIKE 'dm:%'
                             AND (room_key LIKE CONCAT('dm:', ?, '-%') OR room_key LIKE CONCAT('dm:%-', ?))
@@ -104,7 +104,7 @@ function chat_rooms_list(PDO $pdo, array $cfg): void {
         ];
     }
 
-    // 各 room の 最新 msg + unread count を 付与
+    // 各 room の最新 msg + unread count を付与
     foreach ($rooms as &$r) {
         $stL = $pdo->prepare("SELECT id, sender_user_id, body, created_at FROM chat_messages
                                 WHERE room_key = ? AND deleted_at IS NULL
@@ -163,15 +163,15 @@ function chat_messages_send(PDO $pdo, array $cfg, string $roomKey): void {
     chat_assert_access($pdo, $uid, $room);
     $body = read_json_body();
     $text = trim((string)($body['body'] ?? ''));
-    if ($text === '') throw new ApiException('bad_request', '本文 が 空', 400);
-    if (mb_strlen($text) > CHAT_MAX_BODY_LEN) throw new ApiException('bad_request', '本文 が 長すぎ', 400);
+    if ($text === '') throw new ApiException('bad_request', '本文が空', 400);
+    if (mb_strlen($text) > CHAT_MAX_BODY_LEN) throw new ApiException('bad_request', '本文が長すぎ', 400);
     $pdo->prepare("INSERT INTO chat_messages (room_key, sender_user_id, body) VALUES (?,?,?)")
         ->execute([$roomKey, $uid, $text]);
     $msgId = (int)$pdo->lastInsertId();
-    // 自分 は 自動 既読
+    // 自分は自動既読
     chat_set_read($pdo, $uid, $roomKey, $msgId);
 
-    // 通知 (DM の 相手 のみ。 channel は 通知 しない = うるさい ので)
+    // 通知 (DM の相手のみ。 channel は通知しない = うるさいので)
     if ($room['type'] === 'dm') {
         $otherUid = $room['a'] === $uid ? $room['b'] : $room['a'];
         $snippet = mb_substr($text, 0, 80);
@@ -181,7 +181,7 @@ function chat_messages_send(PDO $pdo, array $cfg, string $roomKey): void {
                 'chat', $msgId);
         } catch (Throwable $_) {}
     } elseif ($room['type'] === 'ch' && $room['slug'] === 'important') {
-        // 重要 チャンネル は 全員 に 通知 (Slack 風 @channel 相当)
+        // 重要チャンネルは全員に通知 (Slack 風 @channel 相当)
         $snippet = mb_substr($text, 0, 80);
         try {
             $stU = $pdo->query("SELECT id FROM users WHERE kind='human'");
@@ -223,14 +223,14 @@ function chat_message_delete(PDO $pdo, array $cfg, int $msgId): void {
     $st = $pdo->prepare("SELECT sender_user_id FROM chat_messages WHERE id = ?");
     $st->execute([$msgId]);
     $senderUid = (int)$st->fetchColumn();
-    if (!$senderUid) throw new ApiException('not_found', 'メッセージ が ありません', 404);
+    if (!$senderUid) throw new ApiException('not_found', 'メッセージがありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ($senderUid !== (int)$u['id'] && !$isAdmin) throw new ApiException('forbidden', '送信者 のみ', 403);
+    if ($senderUid !== (int)$u['id'] && !$isAdmin) throw new ApiException('forbidden', '送信者のみ', 403);
     $pdo->prepare("UPDATE chat_messages SET deleted_at = NOW() WHERE id = ?")->execute([$msgId]);
     json_response(['ok' => true]);
 }
 
-// ─── 全 unread 集計 (= ホーム / トップバー 用) ─
+// ─── 全 unread 集計 (= ホーム / トップバー用) ─
 function chat_unread_total(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];

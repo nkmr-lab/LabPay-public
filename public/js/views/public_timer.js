@@ -1,5 +1,5 @@
-// /#/public-timer/:id — 認証 不要 で 表示 する 公開 タイマー (#256)。
-// タブレット を 演台 に 置いて 学会 / 論文紹介 で 使う 想定。 残り 時間 を 大きく 表示。
+// /#/public-timer/:id — 認証不要で表示する公開タイマー (#256)。
+// タブレットを演台に置いて学会 / 論文紹介で使う想定。 残り時間を大きく表示。
 
 import { escapeHtml } from '../router.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
@@ -23,7 +23,7 @@ function fmt(sec) {
 }
 
 async function fetchState(id) {
-  // 認証 不要 で 直接 取得 (X-Requested-With も 不要、 GET なので CSRF 対象 外)
+  // 認証不要で直接取得 (X-Requested-With も不要、 GET なので CSRF 対象外)
   const r = await fetch(`/api/timers/${encodeURIComponent(id)}/public`, {
     headers: { 'X-Requested-With': 'labpay' },
   });
@@ -34,8 +34,8 @@ async function fetchState(id) {
 export async function renderPublicTimer({ params }) {
   stopAll();
   const id = Number(params.id);
-  // v678 #258 公開 タイマー の とき は topbar / tabs (LabPay の メニュー) を 隠す。
-  //   タブレット に 開いて 演台 に 置く 用 途 で メニュー は 邪魔。
+  // v678 #258 公開タイマーのときは topbar / tabs (LabPay のメニュー) を隠す。
+  //   タブレットに開いて演台に置く用途でメニューは邪魔。
   const topbar = document.getElementById('topbar');
   const tabs   = document.getElementById('tabs');
   if (topbar) topbar.hidden = true;
@@ -44,8 +44,8 @@ export async function renderPublicTimer({ params }) {
   app.innerHTML = `
     <style>
       /* v685 #268 横が切れる bug 修正。 style.css の main#app { max-width:720px; padding:14px;
-       * overflow-x:hidden } が 100vw を 削って いた。 公開 タイマー では viewport 全幅 を 使う ため
-       * 親 #app の 制約 を override。 */
+       * overflow-x:hidden } が 100vw を削っていた。 公開タイマーでは viewport 全幅を使うため
+       * 親 #app の制約を override。 */
       body { background:#0b0b0d !important; color:#fff; margin:0 }
       main#app { max-width:none !important; padding:0 !important; margin:0 !important;
                  width:100vw !important; overflow:visible !important }
@@ -53,8 +53,8 @@ export async function renderPublicTimer({ params }) {
                  min-height:100vh; width:100vw; box-sizing:border-box; padding:1vw;
                  font-family:Inter, system-ui, sans-serif; overflow:hidden }
       #pt-title { font-size:clamp(16px, 3vw, 32px); margin-bottom:8px; opacity:0.85; text-align:center }
-      /* 5 文字 (MM:SS) or 6 文字 (+MM:SS) を 想定。 monospace digit width ≈ 0.6em で
-       * 6 文字 だと 約 3.6em 必要。 viewport 横 100vw / 3.6 ≈ 27vw が 上限。 安全 マージン 取って 26vw。 */
+      /* 5 文字 (MM:SS) or 6 文字 (+MM:SS) を想定。 monospace digit width ≈ 0.6em で
+       * 6 文字だと約 3.6em 必要。 viewport 横 100vw / 3.6 ≈ 27vw が上限。 安全マージン取って 26vw。 */
       #pt-time { font-size:min(26vw, 80vh); font-weight:900; font-family:ui-monospace, Menlo, monospace;
                  line-height:1; letter-spacing:-0.04em; transition:color 0.2s;
                  white-space:nowrap; text-align:center; width:100%; max-width:100vw }
@@ -75,7 +75,7 @@ export async function renderPublicTimer({ params }) {
       <div class="bell-row" id="pt-bells"></div>
     </div>
   `;
-  // v683 #266 タブレット を 演台 に 置く 想定 なので 常時 wake lock を 取得
+  // v683 #266 タブレットを演台に置く想定なので常時 wake lock を取得
   acquireWakeLock('public-timer');
   try {
     const d = await fetchState(id);
@@ -85,9 +85,9 @@ export async function renderPublicTimer({ params }) {
       _serverOffsetMs = sn - Date.now();
     }
     render();
-    // 1 秒 で 表示 を 更新
+    // 1 秒で表示を更新
     _tickTimer = setInterval(render, 1000);
-    // 5 秒 ごと に server から 状態 を 再 fetch (操作 が 別 端末 で あった とき も 追従)
+    // 5 秒ごとに server から状態を再 fetch (操作が別端末であったときも追従)
     _pollTimer = setInterval(async () => {
       try {
         const d2 = await fetchState(id);
@@ -101,13 +101,13 @@ export async function renderPublicTimer({ params }) {
   } catch (e) {
     document.getElementById('pt-title').textContent = 'エラー: ' + e.message;
   }
-  // ページ 離脱 で 背景 + chrome を 戻す + wake lock 解放
+  // ページ離脱で背景 + chrome を戻す + wake lock 解放
   window.addEventListener('hashchange', () => {
     if (!location.hash.includes('/public-timer/' + id)) {
       stopAll();
       releaseWakeLock('public-timer');
       document.body.style.background = '';
-      // v678 #258 ログイン 済 なら chrome を 戻す (renderChrome が 再 dispatch 時 に 呼ぶ)
+      // v678 #258 ログイン済なら chrome を戻す (renderChrome が再 dispatch 時に呼ぶ)
       const topbar = document.getElementById('topbar');
       const tabs   = document.getElementById('tabs');
       if (topbar) topbar.hidden = false;
@@ -121,10 +121,10 @@ function render() {
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
 
-  // v684 #267 3 フェーズ 表示:
+  // v684 #267 3 フェーズ表示:
   //   ① 発表終了 (= end_bell) まで: カウントダウン
-  //   ② 発表終了 〜 最後 の ベル: 0:00 から 上 に カウント
-  //   ③ 最後 の ベル を 越えたら 「+MM:SS」 超過
+  //   ② 発表終了 〜 最後のベル: 0:00 から上にカウント
+  //   ③ 最後のベルを越えたら 「+MM:SS」 超過
   const allBells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
   const bells = allBells.filter(b => b !== null && b !== undefined && b > 0);
   const maxBellSec = bells.length ? Math.max(...bells) : 0;
@@ -146,7 +146,7 @@ function render() {
       if (remain <= 30) color = '#ef4444';
       else if (remain <= 60) color = '#f59e0b';
     } else if (elapsed < maxBellSec) {
-      // ② 発表終了 後、 最後 の ベル まで は 0:00 から カウントアップ
+      // ② 発表終了後、 最後のベルまでは 0:00 からカウントアップ
       // v726 #331 質疑帯は鮮やかな黄色で目立たせる。
       displayText = fmt(Math.floor(elapsed - endBellSec));
       color = '#facc15';
@@ -172,7 +172,7 @@ function render() {
   })();
   document.getElementById('pt-status').textContent = statusLabel;
 
-  // ベル 位置 表示 (= 現在 通過 した もの は ハイライト)
+  // ベル位置表示 (= 現在通過したものはハイライト)
   document.getElementById('pt-bells').innerHTML = bells.map((b, i) => {
     const isEnd = (i + 1) === t.end_bell_index;
     const cur = elapsed >= b;
@@ -182,7 +182,7 @@ function render() {
 
   // v728 #336 プログレスバー: 合計 = 最後のベル (= visualEndSec) 100%。
   //   発表終了帯 (青) / 質疑帯 (橙) で背景色分け、 ベル位置に縦線 (最後のベルは端なので除外)。
-  //   経過バーの色は フェーズ (発表中: 青 / 質疑: 黄 / 超過: 赤) に追従。
+  //   経過バーの色はフェーズ (発表中: 青 / 質疑: 黄 / 超過: 赤) に追従。
   const visualEndSec = Math.max(maxBellSec, endBellSec);
   const barBg = document.getElementById('pt-bar-bg');
   const barFill = document.getElementById('pt-bar-fill');

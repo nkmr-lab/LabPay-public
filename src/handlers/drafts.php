@@ -1,21 +1,21 @@
 <?php
-// v634 ⚾ ドラフト ハンドラ。 プロ野球風 順番指名 + くじ抽選。
+// v634 ⚾ ドラフトハンドラ。 プロ野球風順番指名 + くじ抽選。
 //
 // state_json の形:
 // {
-//   "round": 1,                              // 現 ラウンド (1 から)
+//   "round": 1,                              // 現ラウンド (1 から)
 //   "phase": "picking",                      // picking / reveal / lottery / lottery_reveal / finished
-//   "pending": [uid, uid, ...],              // この round で 指名 まだ の uid
-//   "submitted": { "uid": cand, ... },       // この round で 自分の希望を 出した分 (= 公開前は 自分の しか 見えない)
-//   "confirmed": {                           // 確定した 指名 (累積)
-//      "1": { "uid": cand, ... },           //   round 1 の 確定
+//   "pending": [uid, uid, ...],              // この round で指名まだの uid
+//   "submitted": { "uid": cand, ... },       // この round で自分の希望を出した分 (= 公開前は自分のしか見えない)
+//   "confirmed": {                           // 確定した指名 (累積)
+//      "1": { "uid": cand, ... },           //   round 1 の確定
 //      "2": { ... },
 //      ...
 //   },
 //   "lottery": null or {
 //      "candidate": cand,
 //      "contenders": [uid, ...],            // 競合した人
-//      "winning_stick": k,                  // 勝ち くじ の index (公開前は 自分の draw のみ 返す)
+//      "winning_stick": k,                  // 勝ちくじの index (公開前は自分の draw のみ返す)
 //      "draws": { "uid": stick_index, ... },
 //   }
 // }
@@ -72,23 +72,23 @@ function drafts_create(PDO $pdo, array $cfg, int $uid): void {
     $participants = $body['participants'] ?? [];
     if (!is_array($participants) || count($participants) < 2) throw new ApiException('bad_request', '参加者 2 人以上', 400);
 
-    // 参加者 (creator を 必ず含める)
+    // 参加者 (creator を必ず含める)
     $participants = array_values(array_unique(array_map('intval', $participants)));
     if (!in_array($uid, $participants, true)) array_unshift($participants, $uid);
     $place = implode(',', array_fill(0, count($participants), '?'));
     $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
     $stU->execute($participants);
     $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
-    if (count($valid) !== count($participants)) throw new ApiException('bad_request', '無効な 参加者', 400);
+    if (count($valid) !== count($participants)) throw new ApiException('bad_request', '無効な参加者', 400);
 
-    // 候補 (user mode は uid 配列、 text mode は 文字列 配列)
+    // 候補 (user mode は uid 配列、 text mode は文字列配列)
     if ($targetType === 'user') {
         $candidates = array_values(array_unique(array_map('intval', $candidates)));
         $place2 = implode(',', array_fill(0, count($candidates), '?'));
         $stC = $pdo->prepare("SELECT id FROM users WHERE id IN ($place2) AND kind='human'");
         $stC->execute($candidates);
         $vc = array_map(fn($r) => (int)$r['id'], $stC->fetchAll(PDO::FETCH_ASSOC));
-        if (count($vc) !== count($candidates)) throw new ApiException('bad_request', '無効な 候補ユーザ', 400);
+        if (count($vc) !== count($candidates)) throw new ApiException('bad_request', '無効な候補ユーザ', 400);
     } else {
         $candidates = array_values(array_filter(array_map(fn($c) => trim((string)$c), $candidates), fn($s) => $s !== ''));
         $candidates = array_values(array_unique($candidates));
@@ -108,19 +108,19 @@ function drafts_create(PDO $pdo, array $cfg, int $uid): void {
         ->execute([$uid, $title, $targetType, json_encode($candidates, JSON_UNESCAPED_UNICODE),
                    json_encode($participants), json_encode($state, JSON_UNESCAPED_UNICODE)]);
     $did = (int)$pdo->lastInsertId();
-    // 参加者 (自分以外) に 通知
+    // 参加者 (自分以外) に通知
     $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
     $stN->execute([$uid]); $byName = (string)$stN->fetchColumn();
     foreach ($participants as $pid) {
         if ($pid === $uid) continue;
         try { notify_safely($pdo, $cfg, $pid, 'admin_notice',
-            "⚾ {$byName} さんから 「{$title}」 ドラフト に 参加 を 招待 されました", 'drafts', $did); }
+            "⚾ {$byName} さんから 「{$title}」 ドラフトに参加を招待されました", 'drafts', $did); }
         catch (Throwable $_) {}
     }
     json_response(['ok' => true, 'id' => $did]);
 }
 
-// 詳細 取得 (per-user filtering: 自分の submitted のみ 公開前 は 見える)
+// 詳細取得 (per-user filtering: 自分の submitted のみ公開前は見える)
 function drafts_get(PDO $pdo, int $uid, int $did): void {
     $st = $pdo->prepare("SELECT d.*, uc.display_name AS creator_name FROM drafts d JOIN users uc ON uc.id=d.creator_user_id WHERE d.id=?");
     $st->execute([$did]);
@@ -130,7 +130,7 @@ function drafts_get(PDO $pdo, int $uid, int $did): void {
     $participants = json_decode($g['participants_json'], true) ?: [];
     $state = json_decode($g['state_json'], true) ?: [];
 
-    // 候補 / 参加者 の 表示名 を 引いておく (user mode の 候補 + 参加者 一覧)
+    // 候補 / 参加者の表示名を引いておく (user mode の候補 + 参加者一覧)
     $needIds = array_unique(array_merge(array_map('intval', $participants),
         $g['target_type'] === 'user' ? array_map('intval', $candidates) : []));
     $names = [];
@@ -150,12 +150,12 @@ function drafts_get(PDO $pdo, int $uid, int $did): void {
     // per-user フィルタ
     $isCreator = (int)$g['creator_user_id'] === $uid;
     $phase = $state['phase'] ?? 'picking';
-    // submitted: picking 中は 自分の しか 返さない。 reveal 以降は 全員。
+    // submitted: picking 中は自分のしか返さない。 reveal 以降は全員。
     $submitted = $state['submitted'] ?? [];
     if ($phase === 'picking') {
         $submitted = isset($submitted[(string)$uid]) ? [(string)$uid => $submitted[(string)$uid]] : [];
     }
-    // lottery: lottery 中は 自分の draw + winning_stick 隠す。 reveal で 全部見せる。
+    // lottery: lottery 中は自分の draw + winning_stick 隠す。 reveal で全部見せる。
     $lottery = $state['lottery'];
     if ($lottery) {
         if ($phase === 'lottery') {
@@ -208,31 +208,31 @@ function drafts_pick(PDO $pdo, int $uid, int $did): void {
     db_tx($pdo, function () use ($pdo, $uid, $did, $value) {
         $g = drafts_lock($pdo, $did);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'picking') throw new ApiException('bad_request', '今は 提出フェーズ ではない', 400);
+        if ($state['phase'] !== 'picking') throw new ApiException('bad_request', '今は提出フェーズではない', 400);
         $pending = array_map('intval', $state['pending'] ?? []);
-        if (!in_array($uid, $pending, true)) throw new ApiException('forbidden', 'あなたは 今 指名 する番ではない', 403);
+        if (!in_array($uid, $pending, true)) throw new ApiException('forbidden', 'あなたは今指名する番ではない', 403);
 
-        // value の 有効性: 候補 に 含まれて、 自分が まだ 確定で 取ってない こと
+        // value の有効性: 候補に含まれて、 自分がまだ確定で取ってないこと
         $candidates = json_decode($g['candidates_json'], true) ?: [];
         $candValues = array_map(fn($c) => $g['target_type'] === 'user' ? (int)$c : (string)$c, $candidates);
         $pickVal = $g['target_type'] === 'user' ? (int)$value : (string)$value;
         if (!in_array($pickVal, $candValues, $g['target_type'] === 'user')) {
             throw new ApiException('bad_request', '候補外', 400);
         }
-        // 既に 確定したもの か?
+        // 既に確定したものか?
         $confirmed = $state['confirmed'] ?? [];
         $myConfirmed = [];
         foreach ($confirmed as $rd => $byUser) {
             if (isset($byUser[(string)$uid])) $myConfirmed[] = $byUser[(string)$uid];
         }
         if (in_array($pickVal, $myConfirmed, $g['target_type'] === 'user')) {
-            throw new ApiException('bad_request', 'それは 既に 確定済', 400);
+            throw new ApiException('bad_request', 'それは既に確定済', 400);
         }
-        // 他人が 既に 確定で 取った もの は ?
+        // 他人が既に確定で取ったものは ?
         foreach ($confirmed as $rd => $byUser) {
             foreach ($byUser as $puid => $picked) {
                 if ((int)$puid !== $uid && (string)$picked === (string)$pickVal) {
-                    throw new ApiException('bad_request', 'それは 他の人が 確定済', 400);
+                    throw new ApiException('bad_request', 'それは他の人が確定済', 400);
                 }
             }
         }
@@ -240,7 +240,7 @@ function drafts_pick(PDO $pdo, int $uid, int $did): void {
         $submitted = $state['submitted'] ?? [];
         $submitted[(string)$uid] = $pickVal;
         $state['submitted'] = $submitted;
-        // 全員 出した?
+        // 全員出した?
         $allSubmitted = true;
         foreach ($pending as $pu) if (!isset($submitted[(string)$pu])) { $allSubmitted = false; break; }
         if ($allSubmitted) $state['phase'] = 'reveal';
@@ -249,27 +249,27 @@ function drafts_pick(PDO $pdo, int $uid, int $did): void {
     json_response(['ok' => true]);
 }
 
-// くじを 引く
+// くじを引く
 function drafts_draw(PDO $pdo, int $uid, int $did): void {
     $body = read_json_body();
     $stick = (int)($body['stick'] ?? -1);
     db_tx($pdo, function () use ($pdo, $uid, $did, $stick) {
         $g = drafts_lock($pdo, $did);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'lottery') throw new ApiException('bad_request', '今は くじ引きフェーズ ではない', 400);
+        if ($state['phase'] !== 'lottery') throw new ApiException('bad_request', '今はくじ引きフェーズではない', 400);
         $lottery = $state['lottery'];
         $contenders = array_map('intval', $lottery['contenders']);
         if (!in_array($uid, $contenders, true)) throw new ApiException('forbidden', '対象ではない', 403);
-        if (isset($lottery['draws'][(string)$uid])) throw new ApiException('bad_request', '既に 引いた', 400);
+        if (isset($lottery['draws'][(string)$uid])) throw new ApiException('bad_request', '既に引いた', 400);
         $n = count($contenders);
         if ($stick < 0 || $stick >= $n) throw new ApiException('bad_request', 'stick は 0..N-1', 400);
-        // 同じ stick を 他人が 引いていたら NG
+        // 同じ stick を他人が引いていたら NG
         foreach ($lottery['draws'] as $u => $s) {
-            if ((int)$s === $stick) throw new ApiException('bad_request', 'その くじは 既に 取られた', 400);
+            if ((int)$s === $stick) throw new ApiException('bad_request', 'そのくじは既に取られた', 400);
         }
         $lottery['draws'][(string)$uid] = $stick;
         $state['lottery'] = $lottery;
-        // 全員 引いた?
+        // 全員引いた?
         if (count($lottery['draws']) === $n) {
             $state['phase'] = 'lottery_reveal';
         }
@@ -278,7 +278,7 @@ function drafts_draw(PDO $pdo, int $uid, int $did): void {
     json_response(['ok' => true]);
 }
 
-// creator が 「次へ」 押す。 reveal や lottery_reveal から 進める。
+// creator が 「次へ」 押す。 reveal や lottery_reveal から進める。
 function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
     db_tx($pdo, function () use ($pdo, $cfg, $uid, $did) {
         $g = drafts_lock($pdo, $did);
@@ -290,14 +290,14 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
         $isUser = $g['target_type'] === 'user';
 
         if ($phase === 'reveal') {
-            // 集計: 候補ごとに 誰が 出したか
+            // 集計: 候補ごとに誰が出したか
             $byCandidate = [];
             foreach ($state['submitted'] as $u => $v) {
                 $key = (string)$v;
                 $byCandidate[$key] = $byCandidate[$key] ?? [];
                 $byCandidate[$key][] = (int)$u;
             }
-            // 単独 = 確定、 競合 = 後で くじ
+            // 単独 = 確定、 競合 = 後でくじ
             $round = (int)$state['round'];
             $confirmed = $state['confirmed'] ?? [];
             $confirmed[(string)$round] = $confirmed[(string)$round] ?? [];
@@ -320,11 +320,11 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
                     'contenders' => $contenders,
                     'winning_stick' => random_int(0, count($contenders) - 1),
                     'draws' => new \stdClass(),
-                    'remaining_contests' => array_slice($stillContested, 1, null, true), // 残りの 競合
+                    'remaining_contests' => array_slice($stillContested, 1, null, true), // 残りの競合
                 ];
                 $state['phase'] = 'lottery';
             } else {
-                // 競合 なし → 次の picking or 次 round
+                // 競合なし → 次の picking or 次 round
                 drafts_advance_after_round_pick($state, $participants, $candidates, $isUser);
             }
         }
@@ -342,7 +342,7 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
                 $confirmed[(string)$round][(string)$winnerUid] = $lottery['candidate'];
             }
             $state['confirmed'] = $confirmed;
-            // 残り 競合 が あれば 次の くじへ
+            // 残り競合があれば次のくじへ
             $remaining = $lottery['remaining_contests'] ?? [];
             if (count($remaining) > 0) {
                 $firstKey = array_keys($remaining)[0];
@@ -362,14 +362,14 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
             }
         }
         else {
-            throw new ApiException('bad_request', '今は 進められない phase', 400);
+            throw new ApiException('bad_request', '今は進められない phase', 400);
         }
         drafts_save($pdo, $did, $state);
         if ($state['phase'] === 'finished') {
             $pdo->prepare("UPDATE drafts SET status='finished', finished_at=NOW() WHERE id=?")->execute([$did]);
             try {
                 foreach ($participants as $p) {
-                    notify_safely($pdo, $cfg, $p, 'admin_notice', "⚾ ドラフト 「{$g['title']}」 終了。 結果を 確認してください", 'drafts', $did);
+                    notify_safely($pdo, $cfg, $p, 'admin_notice', "⚾ ドラフト 「{$g['title']}」 終了。 結果を確認してください", 'drafts', $did);
                 }
             } catch (Throwable $_) {}
         }
@@ -377,25 +377,25 @@ function drafts_advance(PDO $pdo, array $cfg, int $uid, int $did): void {
     json_response(['ok' => true]);
 }
 
-// くじ の 確定 / 競合なし の あと の round 進行 を 決める
+// くじの確定 / 競合なしのあとの round 進行を決める
 function drafts_advance_after_round_pick(array &$state, array $participants, array $candidates, bool $isUser): void {
     $round = (int)$state['round'];
     $confirmed = $state['confirmed'][(string)$round] ?? [];
-    // この round で 確定 した uid
+    // この round で確定した uid
     $picked = array_keys($confirmed);
-    // この round で まだ 確定 してない 参加者 = ハズレた 人 → もう一度 picking
+    // この round でまだ確定してない参加者 = ハズレた人 → もう一度 picking
     $stillPending = [];
     foreach ($participants as $p) {
         if (!isset($confirmed[(string)$p])) $stillPending[] = $p;
     }
     if (count($stillPending) > 0) {
-        // 1 人 だけ なら 残り候補から 自動確定? いや、 仕様 通り picking させる (1 人なら 即確定)
+        // 1 人だけなら残り候補から自動確定? いや、 仕様通り picking させる (1 人なら即確定)
         $state['phase'] = 'picking';
         $state['pending'] = $stillPending;
         return;
     }
-    // 全員 確定 → 次 round へ
-    // 残り候補 を 計算
+    // 全員確定 → 次 round へ
+    // 残り候補を計算
     $allConfirmed = [];
     foreach ($state['confirmed'] as $rd => $byUser) {
         foreach ($byUser as $u => $v) $allConfirmed[] = $isUser ? (int)$v : (string)$v;
@@ -405,9 +405,9 @@ function drafts_advance_after_round_pick(array &$state, array $participants, arr
         $allConfirmed
     ));
     if (count($remaining) < 1 || count($remaining) < count($participants)) {
-        // 候補が 参加者 数 を 下回ったら 終了 (= 全員が 次 round で 取れない)
-        // ただし 残り >= 1 なら 「もう 1 round 走らせて 取れる人だけ 取る」 でも 良い。
-        // ここでは 「全員 取れる」 という 公平性 優先 で 終了。
+        // 候補が参加者数を下回ったら終了 (= 全員が次 round で取れない)
+        // ただし残り >= 1 なら 「もう 1 round 走らせて取れる人だけ取る」 でも良い。
+        // ここでは 「全員取れる」 という公平性優先で終了。
         $state['phase'] = 'finished';
         return;
     }

@@ -1,7 +1,7 @@
-// /#/paper-translate — v748 #359-#361 / v750 #365-#367 論文 和訳 要約。
-//   PDF を OpenAI Files API 経由で GPT-4o に直接読ませ、 論文構造に沿った 詳細サマリ +
-//   重要 図表 (ページ画像 を pdftoppm で 抽出 表示) + 最後 に 落合メソッド の 6 項目 で
-//   全体 を 重ね合わせて まとめる。 結果は share_token で URL 共有可能。
+// /#/paper-translate — v748 #359-#361 / v750 #365-#367 論文和訳要約。
+//   PDF を OpenAI Files API 経由で GPT-4o に直接読ませ、 論文構造に沿った詳細サマリ +
+//   重要図表 (ページ画像を pdftoppm で抽出表示) + 最後に落合メソッドの 6 項目で
+//   全体を重ね合わせてまとめる。 結果は share_token で URL 共有可能。
 
 import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -12,9 +12,9 @@ import { shareDialog } from '../share_to_sns.js';
 let sharedPollTimer = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
 
-// v762 #381 既存 result_json に 入って いる 日本語 中 の 不要 な スペース を 取り除く
-//   defensive helper。 日本語文字 (ひらがな / カタカナ / 漢字) どうし の 間 の 半角 スペース
-//   を 1 個 ずつ 削除。 英数字 / 記号 と 日本語 の 境界 スペース は 残す。
+// v762 #381 既存 result_json に入っている日本語中の不要なスペースを取り除く
+//   defensive helper。 日本語文字 (ひらがな / カタカナ / 漢字) どうしの間の半角スペース
+//   を 1 個ずつ削除。 英数字 / 記号と日本語の境界スペースは残す。
 const JA_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]/;
 function stripJaSpaces(s) {
   if (!s || typeof s !== 'string') return s;
@@ -46,7 +46,7 @@ export async function renderPaperTranslate() {
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい論文要約を依頼</summary>
       <p class="hint" style="font-size:13px; margin:8px 0">
         論文 PDF をアップすると、 全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
-        今後の課題 → 落合メソッドまとめ という順番で構造化して返します。 全体 1500-2500 字 (≒ 3-5 分で読める分量)。
+        今後の課題 → 落合メソッドまとめという順番で構造化して返します。 全体 1500-2500 字 (≒ 3-5 分で読める分量)。
       </p>
       <label class="field">
         <span class="lbl">🤖 モデル (高いほど高品質)</span>
@@ -62,13 +62,13 @@ export async function renderPaperTranslate() {
       </label>
       <label class="field" style="display:flex; align-items:center; gap:6px; margin-top:4px">
         <input type="checkbox" id="pt-auto-share">
-        <span style="font-size:13px">🌐 完了 と 同時 に 公開 ON に する (= みんな の 検索 に 載せる)</span>
+        <span style="font-size:13px">🌐 完了と同時に公開 ON にする (= みんなの検索に載せる)</span>
       </label>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
-        <legend style="font-size:12px; color:#6b7280">📑📑 同時 に 全訳 も 走らせる (任意)</legend>
+        <legend style="font-size:12px; color:#6b7280">📑📑 同時に全訳も走らせる (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px">
           <input type="checkbox" id="pt-also-full">
-          全訳 (章 ごと + back-translation) も 一緒 に 開始
+          全訳 (章ごと + back-translation) も一緒に開始
         </label>
         <div id="pt-also-full-opts" style="margin-top:6px; display:none">
           <label class="field" style="margin:4px 0">
@@ -79,7 +79,7 @@ export async function renderPaperTranslate() {
             </select>
           </label>
           <label class="field" style="margin:4px 0">
-            <span class="lbl" style="font-size:11px">全訳 モデル</span>
+            <span class="lbl" style="font-size:11px">全訳モデル</span>
             <select id="pt-ft-model" style="font-size:12px"></select>
             <div class="hint-sm" id="pt-ft-cost-info" style="font-size:11px; margin-top:2px"></div>
           </label>
@@ -90,7 +90,7 @@ export async function renderPaperTranslate() {
       </div>
     </details>
     <div id="pt-result"></div>
-    <!-- v756 #372 自分 の 履歴 と みんな の 公開 一覧 を タブ で 切替 -->
+    <!-- v756 #372 自分の履歴とみんなの公開一覧をタブで切替 -->
     <div class="card" style="margin-top:8px">
       <div class="row" style="gap:6px; margin-bottom:8px; align-items:center">
         <button id="pt-tab-mine"   class="btn primary" data-tab="mine"   style="font-size:13px">📜 自分の履歴</button>
@@ -109,20 +109,20 @@ export async function renderPaperTranslate() {
     const f = fileInput.files[0];
     if (!f) { fileStatus.textContent = ''; btn.disabled = true; return; }
     if (f.type !== 'application/pdf' && !/\.pdf$/i.test(f.name)) {
-      fileStatus.innerHTML = '<span style="color:#dc2626">PDF ファイル を 選んで ください</span>';
+      fileStatus.innerHTML = '<span style="color:#dc2626">PDF ファイルを選んでください</span>';
       btn.disabled = true; return;
     }
     if (f.size > 30 * 1024 * 1024) {
-      fileStatus.innerHTML = '<span style="color:#dc2626">30 MB を 超えて います</span>';
+      fileStatus.innerHTML = '<span style="color:#dc2626">30 MB を超えています</span>';
       btn.disabled = true; return;
     }
     fileStatus.innerHTML = stripJaSpaces(`<span style="color:#15803d">✓ ${escapeHtml(f.name)} (${(f.size / 1024 / 1024).toFixed(1)} MB)</span>`);
     btn.disabled = false;
   });
   btn.addEventListener('click', go);
-  // v796 #398 「同時 に 全訳 も」 トグル + 全訳 モデル ロード
+  // v796 #398 「同時に全訳も」 トグル + 全訳モデルロード
   setupAlsoFullTranslate();
-  // v756 #372 タブ 切替 + 検索
+  // v756 #372 タブ切替 + 検索
   let curTab = 'mine';
   let searchTimer = null;
   const tabMine   = document.getElementById('pt-tab-mine');
@@ -142,7 +142,7 @@ export async function renderPaperTranslate() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
   });
-  await loadHistory();    // history 取得 と 同時 に models / cost を ロード
+  await loadHistory();    // history 取得と同時に models / cost をロード
 }
 
 function updateModelInfo(d) {
@@ -165,7 +165,7 @@ function updateModelInfo(d) {
   refresh();
 }
 
-// v796 #398 全訳 オプション の セット アップ
+// v796 #398 全訳オプションのセットアップ
 let ftSettingsCache = null;
 async function setupAlsoFullTranslate() {
   const toggle = document.getElementById('pt-also-full');
@@ -178,7 +178,7 @@ async function setupAlsoFullTranslate() {
     opts.style.display = toggle.checked ? '' : 'none';
     if (toggle.checked && !ftSettingsCache) {
       try { ftSettingsCache = await get('/api/ai/paper_full_translate'); }
-      catch (e) { toast('全訳 設定 読込 失敗: ' + e.message); return; }
+      catch (e) { toast('全訳設定読込失敗: ' + e.message); return; }
       rebuildFtModels();
     }
   });
@@ -195,7 +195,7 @@ async function setupAlsoFullTranslate() {
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const m = modSel.value;
     const pt = models[m] || 0;
-    info.textContent = `全訳 ${pt}pt (要約 + 全訳 を 同時 課金)`;
+    info.textContent = `全訳 ${pt}pt (要約 + 全訳を同時課金)`;
   }
   dirSel.addEventListener('change', rebuildFtModels);
   modSel.addEventListener('change', refreshCost);
@@ -204,13 +204,13 @@ async function setupAlsoFullTranslate() {
 async function go() {
   const fileInput = document.getElementById('pt-file');
   const f = fileInput.files[0];
-  if (!f) { toast('PDF を 選んで ください'); return; }
+  if (!f) { toast('PDF を選んでください'); return; }
   const btn = document.getElementById('pt-go');
   const oldText = btn.textContent;
   btn.disabled = true; btn.textContent = '送信中…';
-  // v796 #397 ユーザ が 既に 他 ページ へ 移って いる 場合 は location.hash を 触らない (= 強制 引き 戻し 防止)
+  // v796 #397 ユーザが既に他ページへ移っている場合は location.hash を触らない (= 強制引き戻し防止)
   const startedHash = location.hash;
-  // v796 #398 同時 全訳 オプション
+  // v796 #398 同時全訳オプション
   const alsoFull = document.getElementById('pt-also-full')?.checked;
   const ftDir   = document.getElementById('pt-ft-direction')?.value;
   const ftModel = document.getElementById('pt-ft-model')?.value;
@@ -219,7 +219,7 @@ async function go() {
     fd.append('file', f);
     const model = document.getElementById('pt-model')?.value || 'gpt-4o';
     fd.append('model', model);
-    // v804 完了 と 同時 に 公開 ON
+    // v804 完了と同時に公開 ON
     if (document.getElementById('pt-auto-share')?.checked) fd.append('auto_share', '1');
     const resp = await fetch('/api/ai/paper_translate', {
       method: 'POST', body: fd, credentials: 'same-origin',
@@ -230,11 +230,11 @@ async function go() {
       const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    // v797 同 PDF + 同 モデル の 既存 row を 流用 した 場合 は 別 メッセージ
-    if (j.deduped) toast('🔁 同じ PDF の 要約 が 既に あった の で 流用 しま した (課金 なし)');
-    else            toast('要約 開始 (' + (j.model || model) + ')');
+    // v797 同 PDF + 同モデルの既存 row を流用した場合は別メッセージ
+    if (j.deduped) toast('🔁 同じ PDF の要約が既にあったので流用しました (課金なし)');
+    else            toast('要約開始 (' + (j.model || model) + ')');
 
-    // v796 #398 全訳 も 同時 開始 する なら ここ で 2 本目 を 投げる (同じ PDF を 別 アップロード)
+    // v796 #398 全訳も同時開始するならここで 2 本目を投げる (同じ PDF を別アップロード)
     let ftToken = null;
     if (alsoFull && ftDir && ftModel) {
       try {
@@ -248,21 +248,21 @@ async function go() {
         const j2 = await r2.json().catch(() => ({}));
         if (!r2.ok) throw new Error(j2?.error?.message || j2?.error || ('HTTP ' + r2.status));
         ftToken = j2.share_token;
-        // v797 全訳 側 も dedup 流用 した か どうか で メッセージ を 分ける
-        if (j2.deduped) toast('🔁 全訳 も 既存 row を 流用 (課金 なし)');
-        else             toast('全訳 も 開始 (' + (j2.model || ftModel) + ')');
+        // v797 全訳側も dedup 流用したかどうかでメッセージを分ける
+        if (j2.deduped) toast('🔁 全訳も既存 row を流用 (課金なし)');
+        else             toast('全訳も開始 (' + (j2.model || ftModel) + ')');
       } catch (e2) {
-        toast('全訳 開始 失敗: ' + e2.message + ' (要約 は 走って ます)');
+        toast('全訳開始失敗: ' + e2.message + ' (要約は走ってます)');
       }
     }
 
-    // v796 #397 await が 解決 した 時点 で ユーザ が paper-summary から 離れて いた ら 移動 しない
+    // v796 #397 await が解決した時点でユーザが paper-summary から離れていたら移動しない
     if (location.hash === startedHash || location.hash.startsWith('#/paper-summary')) {
       location.hash = '#/paper-summary/r/' + j.share_token;
-      // 全訳 も 同時 開始 した なら 履歴 で 確認 できる よう に トースト で 案内
-      if (ftToken) toast('全訳 は /#/paper-translate-full/r/' + ftToken + ' で 進捗 確認');
+      // 全訳も同時開始したなら履歴で確認できるようにトーストで案内
+      if (ftToken) toast('全訳は /#/paper-translate-full/r/' + ftToken + ' で進捗確認');
     } else {
-      toast('裏 で 処理 中。 通知 が 届いたら 結果 ページ を 開いて ください');
+      toast('裏で処理中。 通知が届いたら結果ページを開いてください');
     }
   } catch (e) {
     toast('失敗: ' + e.message);
@@ -278,7 +278,7 @@ async function loadHistory() {
     let items = d.items || [];
     if (viewState.mineOnly_mine) items = items.filter(r => r.my_starred);
 
-    // 履歴が空 (初回) なら form を 開く、 ある なら 閉じる
+    // 履歴が空 (初回) なら form を開く、 あるなら閉じる
     setFormOpen('pt-form', (d.items || []).length === 0);
 
     const ctlRoot = document.getElementById('pt-controls');
@@ -396,7 +396,7 @@ async function loadSharedList(q) {
   }
 }
 
-// /#/paper-summary/r/:token  個別 結果ページ。
+// /#/paper-summary/r/:token  個別結果ページ。
 export async function renderPaperTranslateShared() {
   const token = decodeURIComponent(location.hash.split('/').pop() || '');
   const app = document.getElementById('app');
@@ -406,8 +406,8 @@ export async function renderPaperTranslateShared() {
 
 async function refreshShared(token, app) {
   if (!app) app = document.getElementById('app');
-  // v798 ユーザ が 既に 別 ページ に 移って いる なら 何 も 触らず、 タイマー を 自殺 させる
-  //   (= 10 秒 ごと の 「要約 中… 」 表示 で 強制 引き 戻し に なる の を 防ぐ)。
+  // v798 ユーザが既に別ページに移っているなら何も触らず、 タイマーを自殺させる
+  //   (= 10 秒ごとの 「要約中… 」 表示で強制引き戻しになるのを防ぐ)。
   if (!location.hash.includes('/paper-summary/r/' + token)
    && !location.hash.includes('/paper-translate/r/' + token)) {
     if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
@@ -415,24 +415,24 @@ async function refreshShared(token, app) {
   }
   try {
     const d = await get('/api/ai/paper_translate/r/' + encodeURIComponent(token));
-    // v798 fetch 中 に ユーザ が 移動 した 可能性 を もう 一度 確認
+    // v798 fetch 中にユーザが移動した可能性をもう一度確認
     if (!location.hash.includes('/paper-summary/r/' + token)
      && !location.hash.includes('/paper-translate/r/' + token)) {
       if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
       return;
     }
     if (d.status === 'pending' || d.status === 'processing') {
-      // v810 30 分 以上 処理 中 = 詰まって る 可能性 (PHP プロセス が タイム アウト で 死んだ)。
-      //   本人 に は 「再 投入」 ボタン を 出す。
+      // v810 30 分以上処理中 = 詰まってる可能性 (PHP プロセスがタイムアウトで死んだ)。
+      //   本人には 「再投入」 ボタンを出す。
       const myUid = Number(state.me?.id) || 0;
       const isOwner = myUid && myUid === Number(d.author_id);
       const ageMin = d.created_at ? Math.round((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
       const isStale = ageMin >= 30;
       const staleBanner = (isStale && isOwner && d.pdf_path) ? `
         <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
-          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分 処理 中。 サーバ プロセス が 途中 で 死んだ 可能性 が あります。</div>
-          <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で 再 投入 し ます (新規 課金 なし)。</p>
-          <button id="pt-retry-stale" class="primary">🔁 再 投入 (新規 課金 なし)</button>
+          <div class="bold" style="color:#9a3412">⏳ もう ${ageMin} 分処理中。 サーバプロセスが途中で死んだ可能性があります。</div>
+          <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同 PDF で再投入します (新規課金なし)。</p>
+          <button id="pt-retry-stale" class="primary">🔁 再投入 (新規課金なし)</button>
         </div>` : '';
       app.innerHTML = stripJaSpaces(`
         <div class="card page-header">
@@ -440,22 +440,22 @@ async function refreshShared(token, app) {
           <div class="meta">${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}</div>
         </div>
         <div class="card">
-          <div class="bold" style="font-size:16px; color:var(--primary)">🤖 OpenAI が 要約中…</div>
+          <div class="bold" style="font-size:16px; color:var(--primary)">🤖 OpenAI が要約中…</div>
           <p class="hint" style="font-size:13px; margin-top:6px">
-            通常 1-4 分 で 完了 します。 このページ を 閉じて も 大丈夫 です (完了 通知 が 届きます)。<br>
-            10 秒 ごと に 自動更新。
+            通常 1-4 分で完了します。 このページを閉じても大丈夫です (完了通知が届きます)。<br>
+            10 秒ごとに自動更新。
           </p>
         </div>
         ${staleBanner}
       `);
       document.getElementById('pt-retry-stale')?.addEventListener('click', async (ev) => {
         const btn = ev.currentTarget;
-        btn.disabled = true; btn.textContent = '⏳ 再 投入 中…';
+        btn.disabled = true; btn.textContent = '⏳ 再投入中…';
         try {
           await post('/api/ai/paper_translate/' + d.id + '/retry', {});
-          toast('再 投入 を 開始 しました');
+          toast('再投入を開始しました');
           refreshShared(token, app);
-        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再 投入 (新規 課金 なし)'; }
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再投入 (新規課金なし)'; }
       });
       if (!sharedPollTimer) sharedPollTimer = setInterval(() => refreshShared(token, app), 10000);
       return;
@@ -467,22 +467,22 @@ async function refreshShared(token, app) {
       app.innerHTML = stripJaSpaces(`
         <div class="card">
           <div class="muted">❌ 要約失敗: ${escapeHtml(d.error_msg || '不明なエラー')}</div>
-          ${isOwner && d.pdf_path ? `<div style="margin-top:10px"><button id="pt-retry" class="primary">🔁 再 実施 (新規 課金 なし)</button></div>` : ''}
+          ${isOwner && d.pdf_path ? `<div style="margin-top:10px"><button id="pt-retry" class="primary">🔁 再実施 (新規課金なし)</button></div>` : ''}
         </div>`);
       document.getElementById('pt-retry')?.addEventListener('click', async (ev) => {
         const btn = ev.currentTarget;
-        btn.disabled = true; btn.textContent = '⏳ 再 投入 中…';
+        btn.disabled = true; btn.textContent = '⏳ 再投入中…';
         try {
           await post('/api/ai/paper_translate/' + d.id + '/retry', {});
-          toast('再 投入 を 開始 しました');
+          toast('再投入を開始しました');
           refreshShared(token, app);
-        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再 実施 (新規 課金 なし)'; }
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再実施 (新規課金なし)'; }
       });
       return;
     }
     paintResult(d, token);
   } catch (e) {
-    // v798 エラー 時 も 滞在 確認 して から 表示
+    // v798 エラー時も滞在確認してから表示
     if (location.hash.includes('/paper-summary/r/' + token) || location.hash.includes('/paper-translate/r/' + token)) {
       app.innerHTML = stripJaSpaces(`<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`);
     }
@@ -490,7 +490,7 @@ async function refreshShared(token, app) {
 }
 
 async function paintResult(d, token) {
-  // v762 #381 既存 result_json の 日本語 中 の 不要 な 半角 スペース を 取り除いて から 描画
+  // v762 #381 既存 result_json の日本語中の不要な半角スペースを取り除いてから描画
   const r = stripJaSpacesDeep(d.result || {});
   const app = document.getElementById('app');
   const shareUrl = location.origin + '/#/paper-summary/r/' + token;
@@ -510,8 +510,8 @@ async function paintResult(d, token) {
       </div>
       <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
-        <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL を コピー</button>
-        ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を 開く</a>` : ''}
+        <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL をコピー</button>
+        ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
         ${isOwner ? `
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
@@ -565,21 +565,21 @@ async function paintResult(d, token) {
       toast('コピーしました');
     } catch (_) { toast(shareUrl); }
   });
-  // v813 #405 ペア の 全訳 を 作る ボタン
+  // v813 #405 ペアの全訳を作るボタン
   bindMakeFullTranslate(d);
-  // v758 #377 やりなおす (本人 のみ、 保存 PDF で 再 処理 + 再課金)
+  // v758 #377 やりなおす (本人のみ、 保存 PDF で再処理 + 再課金)
   document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
-    if (!confirm('保存 された PDF で 同じ モデル で 再 処理 します (再 課金 されます)。 続行 しますか?')) return;
+    if (!confirm('保存された PDF で同じモデルで再処理します (再課金されます)。 続行しますか?')) return;
     btn.disabled = true; const old = btn.textContent; btn.textContent = '🔁 開始中…';
     try {
       const r = await post('/api/ai/paper_translate/' + d.id + '/redo', {});
-      toast('再 処理 を 開始 しました (' + (r.model || '') + ')');
-      // status=pending に なった ので polling 状態 を 表示 し直す
+      toast('再処理を開始しました (' + (r.model || '') + ')');
+      // status=pending になったので polling 状態を表示し直す
       await refreshShared(token, document.getElementById('app'));
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
-  // v756 #372 公開 ON/OFF toggle (本人 のみ)
+  // v756 #372 公開 ON/OFF toggle (本人のみ)
   document.getElementById('pt-share-toggle')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     const wasOn = btn.dataset.on === '1';
@@ -593,7 +593,7 @@ async function paintResult(d, token) {
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; }
   });
-  // 画像 タップ で lightbox (戻る ボタン で 閉じる)
+  // 画像タップで lightbox (戻るボタンで閉じる)
   document.querySelectorAll('[data-pt-zoom]').forEach(el => {
     el.addEventListener('click', async (ev) => {
       ev.preventDefault();
@@ -603,8 +603,8 @@ async function paintResult(d, token) {
   });
 }
 
-// v813 #406 cross_refs を 「📑 全訳 へ」 ボタン に 簡素化 + #405 ペア が 無い 場合 は
-//   「📑 全訳 を 作る」 ボタン を 出す (本人 + PDF 保存 済 + status=done な とき)。
+// v813 #406 cross_refs を 「📑 全訳へ」 ボタンに簡素化 + #405 ペアが無い場合は
+//   「📑 全訳を作る」 ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
 function renderPaperCrossRefsAndCreate(d) {
   const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
   const myUid = Number(state.me?.id || 0);
@@ -614,17 +614,17 @@ function renderPaperCrossRefsAndCreate(d) {
   if (!refs.length && !canCreate) return '';
   const refBtns = refs.map(x => `
     <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; margin-right:6px">
-      ${x.kind === 'paper_full_translation' ? '📑 全訳 へ' : '📄 要約 へ'}
+      ${x.kind === 'paper_full_translation' ? '📑 全訳へ' : '📄 要約へ'}
     </a>`).join('');
   const createBtn = canCreate ? `
-    <button class="btn primary" id="pt-make-full" style="font-size:12px; padding:3px 10px">📑 全訳 を 作る</button>` : '';
+    <button class="btn primary" id="pt-make-full" style="font-size:12px; padding:3px 10px">📑 全訳を作る</button>` : '';
   return `
     <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
       ${refBtns}${createBtn}
     </div>`;
 }
 
-// 「📑 全訳 を 作る」 ボタン の クリック ハンドラ。 paintResult 後 に bind。
+// 「📑 全訳を作る」 ボタンのクリックハンドラ。 paintResult 後に bind。
 async function bindMakeFullTranslate(d) {
   const btn = document.getElementById('pt-make-full');
   if (!btn || btn.dataset.bound) return;
@@ -632,7 +632,7 @@ async function bindMakeFullTranslate(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で 論文 全訳 を 開始 します。 課金 は ポイント 残高 から (中村 PI は 無料)。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。 課金はポイント残高から (中村 PI は無料)。</p>
       <label class="field"><span class="lbl">方向</span>
         <select id="mft-dir" style="font-size:13px">
           <option value="en2ja" selected>英 → 日 (en2ja)</option>
@@ -647,10 +647,10 @@ async function bindMakeFullTranslate(d) {
         </select>
       </label>
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
-        <input type="checkbox" id="mft-auto-share"> 🌐 完了 と 同時 に 公開 ON
+        <input type="checkbox" id="mft-auto-share"> 🌐 完了と同時に公開 ON
       </label>`;
     openModal({
-      title: '📑 全訳 を 作る',
+      title: '📑 全訳を作る',
       bodyHtml: html,
       buttons: [
         { label: 'キャンセル', onClick: (close) => close() },
@@ -661,7 +661,7 @@ async function bindMakeFullTranslate(d) {
           try {
             const j = await post(`/api/ai/paper_full_translate/from_summary/${d.id}`, { direction, model, auto_share });
             close();
-            toast('📑 全訳 を 開始 しました');
+            toast('📑 全訳を開始しました');
             if (j?.share_token) location.hash = '#/paper-translate-full/r/' + encodeURIComponent(j.share_token);
           } catch (e) { toast('失敗: ' + (e?.message || e)); }
         }},
@@ -670,9 +670,9 @@ async function bindMakeFullTranslate(d) {
   });
 }
 
-// v759 #378 pdftoppm は 総ページ数 の 桁 に 合わせて 0 パディング する。
-//   例: 32 ページ なら page-01.jpg / page-02.jpg ... 100 ページ なら page-001.jpg。
-//   pagesCount を 使って 桁数 を 求めて 同じ パディング を 入れる。
+// v759 #378 pdftoppm は総ページ数の桁に合わせて 0 パディングする。
+//   例: 32 ページなら page-01.jpg / page-02.jpg ... 100 ページなら page-001.jpg。
+//   pagesCount を使って桁数を求めて同じパディングを入れる。
 function pageImgUrl(pagesDir, page, pagesCount) {
   if (!pagesDir) return null;
   const digits = Math.max(1, String(Number(pagesCount) || page || 1).length);
@@ -712,9 +712,9 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v767 #385 crop は GPT region の 精度 が 安定 しない ので 廃止。 全 ページ を そのまま
-  //   サムネ 表示 + click で lightbox。 region は label の 補足 表示 に だけ 使う。
-  const wrap = 220;       // box 幅 (ページ 全体 を 含める)
+  // v767 #385 crop は GPT region の精度が安定しないので廃止。 全ページをそのまま
+  //   サムネ表示 + click で lightbox。 region は label の補足表示にだけ使う。
+  const wrap = 220;       // box 幅 (ページ全体を含める)
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
@@ -735,18 +735,18 @@ function renderFigure(fig, pagesDir, pagesCount) {
 function renderOchiai(o) {
   if (!o || typeof o !== 'object') return '';
   const sections = [
-    ['what',          '1. どんな もの?',                '🧩'],
-    ['vs_prior_work', '2. 先行研究 と 比べて すごい点',  '🆚'],
-    ['key_method',    '3. 技術 / 手法 の キモ',         '🔧'],
-    ['validation',    '4. どう 検証 した?',              '✅'],
-    ['discussion',    '5. 議論 は ある?',                '💬'],
+    ['what',          '1. どんなもの?',                '🧩'],
+    ['vs_prior_work', '2. 先行研究と比べてすごい点',  '🆚'],
+    ['key_method',    '3. 技術 / 手法のキモ',         '🔧'],
+    ['validation',    '4. どう検証した?',              '✅'],
+    ['discussion',    '5. 議論はある?',                '💬'],
   ];
   let html = '<div class="card" style="background:#fafaf5; border:1px dashed #d4b8e0"><div class="bold" style="color:var(--primary); margin-bottom:6px; font-size:15px">📚 落合メソッドでまとめ</div><div class="hint-sm" style="font-size:11px; margin-bottom:8px">論文全体を6項目で重ね合わせ</div>';
   for (const [key, label, icon] of sections) {
     let txt = (o[key] || '').toString().trim();
     if (!txt) continue;
-    // v756 #374 GPT が 値 の 先頭 に 「1. どんなもの?」 等 の 設問 を 繰り返して 入れる ことが
-    //   ある ので、 先頭 が ラベル と 同じ 設問 で 始まる 場合 は 取り除く (重複表示 防止)。
+    // v756 #374 GPT が値の先頭に 「1. どんなもの?」 等の設問を繰り返して入れることが
+    //   あるので、 先頭がラベルと同じ設問で始まる場合は取り除く (重複表示防止)。
     txt = txt.replace(/^\s*\d+\.\s*[^\n]{0,40}[?？]\s*/, '').trim();
     html += `
       <div style="margin-bottom:10px">
@@ -758,7 +758,7 @@ function renderOchiai(o) {
   if (next.length) {
     html += `
       <div style="margin-bottom:6px">
-        <div class="bold" style="font-size:13px; color:#4a106d">🔖 6. 次に 読む べき 論文</div>
+        <div class="bold" style="font-size:13px; color:#4a106d">🔖 6. 次に読むべき論文</div>
         <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px; line-height:1.7">
           ${next.map(s => `<li>${escapeHtml(String(s))}</li>`).join('')}
         </ul>
@@ -768,13 +768,13 @@ function renderOchiai(o) {
   return html;
 }
 
-// v753 RQ と 仮説 + それぞれ の 結果 を ペア 表示。 旧 schema (文字列 配列) も fallback 表示。
-// v764 #382 1 個 だけ の とき は「RQ1」 → 「RQ」、「H1」 → 「H」 に 自動変換。
+// v753 RQ と仮説 + それぞれの結果をペア表示。 旧 schema (文字列配列) も fallback 表示。
+// v764 #382 1 個だけのときは「RQ1」 → 「RQ」、「H1」 → 「H」 に自動変換。
 function normalizeQLabel(s, prefix, isSingle) {
-  // prefix 例: "RQ" / "H"。 GPT が「RQ1: ...」「RQ：…」 や 単に「1. …」 で 来る場合 を 正規化。
+  // prefix 例: "RQ" / "H"。 GPT が「RQ1: ...」「RQ：…」 や単に「1. …」 で来る場合を正規化。
   if (typeof s !== 'string') return s;
   let txt = s.trim();
-  // 数字 + コロン or 数字 + ピリオド の 接頭辞 を 検出 + 取り除く
+  // 数字 + コロン or 数字 + ピリオドの接頭辞を検出 + 取り除く
   const m = txt.match(new RegExp(`^${prefix}(\\d+)?\\s*[:：.]?\\s*(.*)$`, 'i')) || txt.match(/^(\d+)\s*[:：.]?\s*(.*)$/);
   let body = txt;
   if (m) {
@@ -791,8 +791,8 @@ function renderRqHypothesis(rh) {
   if (!rqs.length && !hys.length) return '';
   const rqSingle = rqs.length === 1;
   const hySingle = hys.length === 1;
-  // v768 #387 「💡 示唆:」 ラベル は 廃止 (GPT が 値 の 先頭 にも「示唆:」 を 書く 場合 が あり
-  //   「💡 示唆: 示唆: …」 に なって しまう ため)。 値 の 先頭 の 「示唆:」「結果:」 等 も strip。
+  // v768 #387 「💡 示唆:」 ラベルは廃止 (GPT が値の先頭にも「示唆:」 を書く場合があり
+  //   「💡 示唆: 示唆: …」 になってしまうため)。 値の先頭の 「示唆:」「結果:」 等も strip。
   const stripPrefix = (s) => String(s || '').replace(/^\s*(示唆|結果|答え)\s*[:：]\s*/u, '').trim();
   const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');
@@ -820,12 +820,12 @@ function renderRqHypothesis(rh) {
     </div>`;
 }
 
-// v772 #392 実験 と 結果 を 研究名 (例: "Kirmani & Wright 1989") で 自動 ペアリング 表示。
-//   experiments と results_summary の 各 文 から 「Author Year」 を 抽出 → 同じ key で 紐付け。
+// v772 #392 実験と結果を研究名 (例: "Kirmani & Wright 1989") で自動ペアリング表示。
+//   experiments と results_summary の各文から 「Author Year」 を抽出 → 同じ key で紐付け。
 function studyKey(s) {
   const str = String(s).replace(/^\s*\(?\s*引用\s*\)?[\s)]*/, '');
-  // 西暦 (1900-2099) を 探して、 先頭 から 西暦 + 直後 の 閉じ括弧 まで を 研究名 と みなす。
-  //   著者名 に 「Smith, A. (1989)」 等 の パターン が ある ので 括弧 内 の 年 も 含める。
+  // 西暦 (1900-2099) を探して、 先頭から西暦 + 直後の閉じ括弧までを研究名とみなす。
+  //   著者名に 「Smith, A. (1989)」 等のパターンがあるので括弧内の年も含める。
   const m = str.match(/(?:19|20)\d{2}/);
   if (!m) return null;
   let end = m.index + m[0].length;
@@ -838,14 +838,14 @@ function stripStudyKey(s, key) {
     const escaped = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     str = str.replace(new RegExp('^' + escaped + '\\s*'), '');
   }
-  // 残った 「)」「の実験:」「の結果:」「:」 等 の 接続 文字 を 除去
+  // 残った 「)」「の実験:」「の結果:」「:」 等の接続文字を除去
   str = str.replace(/^[)）]+\s*/, '').replace(/^の?(実験|研究|結果)[\s:：]*/, '').replace(/^[:：]\s*/, '').trim();
   return str;
 }
-// v778 #402 自前実験 を「実験N」 単位 で ペア リング する 用 の キー 抽出。
-//   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」 等 を 全部 「実験1」 に 正規化。
-// v779 #403 結果側 は 「実験1 (引用 X):」 の よう に「実験1 + 空白 + (引用 X)」 形 が 多い ため、
-//   「実験1」 の 後 が 「:」 で なくて も 数字 で 終わって いれば キー と 認める (look-ahead で 非数字)。
+// v778 #402 自前実験を「実験N」 単位でペアリングする用のキー抽出。
+//   「研究1：...」「実験1: ...」「Study 1: ...」「Experiment 1 - ...」 等を全部 「実験1」 に正規化。
+// v779 #403 結果側は 「実験1 (引用 X):」 のように「実験1 + 空白 + (引用 X)」 形が多いため、
+//   「実験1」 の後が 「:」 でなくても数字で終わっていればキーと認める (look-ahead で非数字)。
 function ownExpKey(s) {
   const str = String(s).trim();
   const norm = str.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
@@ -854,12 +854,12 @@ function ownExpKey(s) {
   return '実験' + m[1];
 }
 function stripOwnExpKey(s) {
-  // 先頭 の 「研究1：」「実験1:」「Study 1 -」「実験1 (引用 X):」 等 を 取り除いて 本文 だけ 返す。
-  // 数字 の 後 に 「:」 が ある なら そこまで、 なければ 数字 + 直後 の 空白 を 取る。
+  // 先頭の 「研究1：」「実験1:」「Study 1 -」「実験1 (引用 X):」 等を取り除いて本文だけ返す。
+  // 数字の後に 「:」 があるならそこまで、 なければ数字 + 直後の空白を取る。
   return String(s).replace(/^(?:研究|実験|Study|Experiment|Exp\.?)\s*[0-9０-９]+\s*[:：・\-]?\s*/i, '').trim();
 }
-// v779 #403 「(引用)」「(引用 X)」「(引用 X 19xx)」 が 本文 中 に 含まれて いる か。 全 要素 が
-//   引用 なら 「参考 に した 実験」 ラベル に 切り替える。
+// v779 #403 「(引用)」「(引用 X)」「(引用 X 19xx)」 が本文中に含まれているか。 全要素が
+//   引用なら 「参考にした実験」 ラベルに切り替える。
 function isCitedItem(s) {
   return /\(\s*引用/.test(String(s));
 }
@@ -881,7 +881,7 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (!isCited(rs)) { own.ress.push(rs); continue; }
     const k = studyKey(rs); if (k) addCited(k, 'res', rs); else own.ress.push(rs);
   }
-  // v778 #402 自前 実験 を 「実験N」 で ペア リング (insertion order を 保つ)
+  // v778 #402 自前実験を 「実験N」 でペアリング (insertion order を保つ)
   const ownPairs = new Map();
   const ownUnkeyedExps = [];
   const ownUnkeyedRess = [];
@@ -898,9 +898,9 @@ function renderExperimentsBlock(expsRaw, resRaw) {
     if (k) addOwnPair(k, 'res', rs); else ownUnkeyedRess.push(rs);
   }
 
-  // v779 #403 ペア の 中身 を 見て 「引用 比率」 を 判定。 全 ペア (or 全 体) が 引用 なら
-  //   「📚 この論文 が 参考 に した 実験」 ラベル に 切り替える。 自前 と 引用 が 混在 する
-  //   場合 は デフォルト の 「🔬 この論文 で 行った 実験」 を 使い、 引用 / 自前 を 個別 タグ で 区別。
+  // v779 #403 ペアの中身を見て 「引用比率」 を判定。 全ペア (or 全体) が引用なら
+  //   「📚 この論文が参考にした実験」 ラベルに切り替える。 自前と引用が混在する
+  //   場合はデフォルトの 「🔬 この論文で行った実験」 を使い、 引用 / 自前を個別タグで区別。
   const allBodies = [...ownPairs.values()].flatMap(p => [p.exp, p.res].filter(Boolean));
   const citedCount = allBodies.filter(isCitedItem).length;
   const isAllCited = ownPairs.size > 0 && citedCount === allBodies.length;
@@ -944,12 +944,12 @@ function renderExperimentsBlock(expsRaw, resRaw) {
           }).join('')}
         </div>
       </div>`;
-    // 「実験N」 形式 で 拾え なかった 残り は 補足 リスト に
+    // 「実験N」 形式で拾えなかった残りは補足リストに
     html += renderListSection('🔬 その他の実験記述', ownUnkeyedExps);
     html += renderListSection('📊 その他の結果記述', ownUnkeyedRess);
   } else {
-    // 全部 「実験N」 で 拾え なかった → 従来 の リスト 表示。 配列 全体 が 引用 中心 なら
-    //   ヘッダ を 「参考 に した 実験」 に 切り替える。
+    // 全部 「実験N」 で拾えなかった → 従来のリスト表示。 配列全体が引用中心なら
+    //   ヘッダを 「参考にした実験」 に切り替える。
     const fallbackAllCited = own.exps.length > 0 && own.exps.every(isCitedItem);
     html += renderListSection(
       fallbackAllCited ? '📚 この論文が参考にした実験' : '🔬 この論文で行った実験',
@@ -981,7 +981,7 @@ function renderExperimentsBlock(expsRaw, resRaw) {
   return html;
 }
 
-// v757 #375 参考文献 で 特に 重要 な もの。 v759 #378 原題 + 和訳 を 分けて 表示。
+// v757 #375 参考文献で特に重要なもの。 v759 #378 原題 + 和訳を分けて表示。
 function renderKeyReferences(refs) {
   if (!Array.isArray(refs) || !refs.length) return '';
   return `
@@ -1016,4 +1016,4 @@ function renderListSection(title, list) {
     </div>`;
 }
 
-// v750 #366 旧 renderFigures は 詳細サマリ 内 の figure_refs に 統合 された ので 撤去。
+// v750 #366 旧 renderFigures は詳細サマリ内の figure_refs に統合されたので撤去。

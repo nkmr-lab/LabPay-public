@@ -5,8 +5,8 @@ import { get, post, del } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
 
-// v747 #358 ローカル時刻 (= ブラウザ の タイムゾーン) で 今日 を 計算 する ヘルパ。
-//   toISOString() は UTC ベース なので JST の 朝 (UTC 前日) に ズレ が 出ていた。
+// v747 #358 ローカル時刻 (= ブラウザのタイムゾーン) で今日を計算するヘルパ。
+//   toISOString() は UTC ベースなので JST の朝 (UTC 前日) にズレが出ていた。
 function todayLocal() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -47,7 +47,7 @@ export async function renderHealth() {
         <input type="date" id="hl-date" style="font-size:13px; padding:2px 6px">
         <button id="hl-date-today" type="button" class="btn" style="font-size:11px; padding:2px 8px">今日</button>
       </div>
-      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。 体重は 0.1kg 単位。 日付 を 変えれば 過去 日 の 記録 も 追加 可能。 ※ 個人ツール、 他のメンバーには見えません。</div>
+      <div class="hint-sm" style="margin-top:4px; font-size:11px">どれか 1 つ入っていれば記録できます。 体重は 0.1kg 単位。 日付を変えれば過去日の記録も追加可能。 ※ 個人ツール、 他のメンバーには見えません。</div>
     </div>
     <div class="card">
       <div class="bold" style="margin-bottom:6px">📈 推移</div>
@@ -60,9 +60,9 @@ export async function renderHealth() {
   `;
   document.getElementById('hl-days').addEventListener('change', refresh);
   document.getElementById('hl-save').addEventListener('click', save);
-  // v690 #274 日付 入力 を 今日 に 初期化 + 「今日」 ボタン
-  // v747 #358 toISOString は UTC ベース なので JST の 朝 (UTC 前日) は「今日」が 前日扱い に なる
-  //   bug を 修正。 ローカル時刻で 計算 (= 単純 に YYYY-MM-DD を 組み立て)。
+  // v690 #274 日付入力を今日に初期化 + 「今日」 ボタン
+  // v747 #358 toISOString は UTC ベースなので JST の朝 (UTC 前日) は「今日」が前日扱いになる
+  //   bug を修正。 ローカル時刻で計算 (= 単純に YYYY-MM-DD を組み立て)。
   const dateEl = document.getElementById('hl-date');
   const setToday = () => { dateEl.value = todayLocal(); };
   setToday();
@@ -92,9 +92,9 @@ async function save() {
   const m = document.getElementById('hl-memo').value.trim();
   const dStr = document.getElementById('hl-date').value.trim();
   if (!w && !h && !b) { toast('1 つは入力してください'); return; }
-  // v690 #274 日付 を 過去 日 で 指定 する 場合 は その日 の 23:59:59 で 送る
-  //   (server で DateTime parse 通る)。 今日 の 場合 は recorded_at を 渡さず NOW() に 任せる。
-  // v747 #358 todayStr は ローカル時刻 で 計算 (UTC ベース だと JST 朝 に 別日 と 比較 が ズレる)。
+  // v690 #274 日付を過去日で指定する場合はその日の 23:59:59 で送る
+  //   (server で DateTime parse 通る)。 今日の場合は recorded_at を渡さず NOW() に任せる。
+  // v747 #358 todayStr はローカル時刻で計算 (UTC ベースだと JST 朝に別日と比較がズレる)。
   const todayStr = todayLocal();
   const payload = {
     weight_kg: w || null,
@@ -111,7 +111,7 @@ async function save() {
     document.getElementById('hl-bf').value = '';
     document.getElementById('hl-memo').value = '';
     document.getElementById('hl-date').value = todayStr;
-    toast(dStr === todayStr ? '記録しました' : `${dStr} の 記録 として 保存 しました`);
+    toast(dStr === todayStr ? '記録しました' : `${dStr} の記録として保存しました`);
     await refresh();
   } catch (e) { toast('失敗: ' + e.message); }
 }
@@ -178,13 +178,13 @@ function paintList(items) {
   });
 }
 
-// 体重の折れ線グラフ。 SVG で 軽量に。 d3 を使わない。
+// 体重の折れ線グラフ。 SVG で軽量に。 d3 を使わない。
 function paintChart(items) {
   const root = document.getElementById('hl-chart');
   if (!root) return;
   const weighted = items.filter(r => r.weight_kg != null);
   if (weighted.length < 2) {
-    root.innerHTML = '<div class="muted" style="font-size:12px; padding:6px">体重を 2 件以上記録すると 折れ線グラフが出ます</div>';
+    root.innerHTML = '<div class="muted" style="font-size:12px; padding:6px">体重を 2 件以上記録すると折れ線グラフが出ます</div>';
     return;
   }
   const w = Math.max(280, Math.min(720, weighted.length * 18 + 60));

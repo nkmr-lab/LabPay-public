@@ -1,7 +1,7 @@
-// /#/paper-review — 論文 PDF を OpenAI Files API に直接渡して 章別和訳要約 + 査読 (v552 #206 #211 #212)。
+// /#/paper-review — 論文 PDF を OpenAI Files API に直接渡して章別和訳要約 + 査読 (v552 #206 #211 #212)。
 //   - 査読 1 回ごとに 10pt (システム宛て)
 //   - 結果は DB 保存 → share_token で URL 共有
-//   - 起案者が事前設定した system prompt と 共有対象 user (= 主著/共著等) を尊重
+//   - 起案者が事前設定した system prompt と共有対象 user (= 主著/共著等) を尊重
 
 import { get, put } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -14,17 +14,17 @@ export async function renderPaperReview() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">📄 論文 査読</h2>
+      <h2 style="margin:0">📄 論文査読</h2>
     </div>
     <details class="card" style="padding:0">
       <summary style="cursor:pointer; padding:10px 14px; font-weight:700; font-size:14px; color:var(--primary)">
-        ⚙️ 査読プロンプト + 共有対象 <span style="font-weight:400; font-size:12px; color:#6b21a8">(クリック で 開閉)</span>
+        ⚙️ 査読プロンプト + 共有対象 <span style="font-weight:400; font-size:12px; color:#6b21a8">(クリックで開閉)</span>
       </summary>
       <div id="pr-settings-wrap" style="padding:0 14px 14px"><div class="muted">読み込み中…</div></div>
     </details>
     <div class="card">
       <p class="hint" style="font-size:13px; margin:0 0 8px">
-        論文の PDF をアップロードすると、 OpenAI に直接読ませて 章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
+        論文の PDF をアップロードすると、 OpenAI に直接読ませて章立てを意識した和訳要約 + 指定基準での査読コメントを返します (図表・式も解釈可能)。
         ターゲット会議が空欄なら 「HCI 系国際会議」 想定。
         <strong>1 回につき 10pt がシステムに支払われます</strong>。
       </p>
@@ -52,10 +52,10 @@ export async function renderPaperReview() {
       </label>
       <label class="field">
         <span class="lbl">🗨️ 著者の回答文 / リバトル (任意 — テキスト or PDF)</span>
-        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。 PDF アップロード でも OK。"></textarea>
+        <textarea id="pr-response" rows="5" maxlength="20000" placeholder="査読コメントへの回答 (rebuttal) を貼ると、 査読 + 回答の妥当性も評価するモードになります。 空欄なら通常の査読のみ。 PDF アップロードでも OK。"></textarea>
         <input type="file" id="pr-response-pdf" accept="application/pdf,.pdf" style="margin-top:6px">
         <div class="hint-sm" id="pr-response-pdf-status" style="font-size:11px; margin-top:4px"></div>
-        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、 査読指摘 が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないか まで評価します。 両方 入れたら 両方 参照。</div>
+        <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、 査読指摘が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないかまで評価します。 両方入れたら両方参照。</div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pr-go" class="primary" disabled>📄 査読開始</button>
@@ -107,7 +107,7 @@ export async function renderPaperReview() {
 async function loadSettings() {
   try { cachedSettings = await get('/api/ai/paper_review/settings'); }
   catch (e) { document.getElementById('pr-settings-wrap').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`; return; }
-  // v774 #396 モデル ドロップダウン を 埋める
+  // v774 #396 モデルドロップダウンを埋める
   const sel = document.getElementById('pr-model');
   const info = document.getElementById('pr-model-info');
   const btn = document.getElementById('pr-go');
@@ -203,10 +203,10 @@ async function go() {
     fd.append('strictness', strictness);
     const model = document.getElementById('pr-model')?.value || 'gpt-4.1';
     fd.append('model', model);
-    // v780 #404 任意 の 回答文 (rebuttal)。 空 なら 送らない (= 通常 の 査読 モード)
+    // v780 #404 任意の回答文 (rebuttal)。 空なら送らない (= 通常の査読モード)
     const responseText = (document.getElementById('pr-response')?.value || '').trim();
     if (responseText !== '') fd.append('response_text', responseText);
-    // v782 #379 PDF 回答文 (textarea と 同時 添付 も OK、 GPT に 両方 渡る)
+    // v782 #379 PDF 回答文 (textarea と同時添付も OK、 GPT に両方渡る)
     const respPdf = document.getElementById('pr-response-pdf')?.files?.[0];
     if (respPdf) {
       if (respPdf.size > 30 * 1024 * 1024) { toast('回答文 PDF は 30 MB まで'); btn.disabled = false; btn.textContent = '📄 査読開始'; return; }
@@ -263,8 +263,8 @@ async function refreshShared(token) {
         <div class="meta" style="font-size:12px">対象会議: ${escapeHtml(d.target_venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
         ${d.pdf_path || d.response_pdf_path ? `
           <div style="margin-top:6px; font-size:13px; display:flex; gap:10px; flex-wrap:wrap">
-            ${d.pdf_path ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener">📄 元 PDF を 開く ↗</a>` : ''}
-            ${d.response_pdf_path ? `<a href="${escapeHtml(d.response_pdf_path)}" target="_blank" rel="noopener">📎 回答 PDF を 開く ↗</a>` : ''}
+            ${d.pdf_path ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener">📄 元 PDF を開く ↗</a>` : ''}
+            ${d.response_pdf_path ? `<a href="${escapeHtml(d.response_pdf_path)}" target="_blank" rel="noopener">📎 回答 PDF を開く ↗</a>` : ''}
           </div>` : ''}
       </div>
       <div id="pr-result"></div>
@@ -324,7 +324,7 @@ function paint(d, shareToken, isShared) {
 
       ${r.response_evaluation ? `
       <div style="margin-top:10px; padding:10px 14px; background:#f5f3ff; border:2px solid #6b21a8; border-radius:8px">
-        <div class="bold" style="color:#6b21a8; font-size:14px">🧐 回答文の妥当性 評価</div>
+        <div class="bold" style="color:#6b21a8; font-size:14px">🧐 回答文の妥当性評価</div>
         ${r.response_evaluation.overall_assessment ? `
           <div style="font-size:13px; padding:8px 10px; background:#fff; border-radius:6px; white-space:pre-wrap; margin-top:6px; line-height:1.7">${escapeHtml(r.response_evaluation.overall_assessment)}</div>` : ''}
         ${r.response_evaluation.covered_points && r.response_evaluation.covered_points.length ? `
@@ -373,7 +373,7 @@ function paint(d, shareToken, isShared) {
             </div>` : ''}
           ${r.reviewer_perceived_contributions && r.reviewer_perceived_contributions.length ? `
             <div style="padding:8px 12px; background:#dcfce7; border-left:3px solid #15803d; border-radius:0 6px 6px 0">
-              <div class="bold" style="color:#15803d; font-size:12px">🤖 GPT が読み取った 貢献候補</div>
+              <div class="bold" style="color:#15803d; font-size:12px">🤖 GPT が読み取った貢献候補</div>
               <ul style="margin:4px 0 0 0; padding-left:20px; font-size:13px">
                 ${r.reviewer_perceived_contributions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
               </ul>
@@ -418,7 +418,7 @@ function paint(d, shareToken, isShared) {
 
       ${r.hypothesis_vs_results ? `
       <div style="margin-top:8px">
-        <div class="bold" style="color:#9333ea">❓ 仮説/問い ⇔ 結果 の対応</div>
+        <div class="bold" style="color:#9333ea">❓ 仮説/問い ⇔ 結果の対応</div>
         <div style="font-size:13px; padding:6px 10px; background:#faf5ff; border-radius:6px; white-space:pre-wrap; margin-top:4px">${escapeHtml(r.hypothesis_vs_results)}</div>
       </div>` : ''}
 
@@ -459,13 +459,13 @@ function paint(d, shareToken, isShared) {
         <div class="bold" style="color:#b91c1c">✍️ 主張が強すぎる / 記述がおかしい箇所のリライト案</div>
         <div style="font-size:13px; margin-top:4px">
           ${r.rewrite_suggestions.map(s => {
-            // v795 新形式 (en + ja) と 旧 形式 (suggested_rewrite のみ) の 両対応
+            // v795 新形式 (en + ja) と旧形式 (suggested_rewrite のみ) の両対応
             const enRw = s.suggested_rewrite_en || '';
             const jaRw = s.suggested_rewrite_ja || s.suggested_rewrite || '';
             return `
             <div style="padding:8px 12px; background:#fef2f2; border-left:3px solid #b91c1c; border-radius:0 6px 6px 0; margin-bottom:8px">
               <div style="margin-bottom:4px"><span class="bold" style="color:#b91c1c">原文:</span> 「${escapeHtml(s.original || '')}」</div>
-              ${s.original_ja ? `<div style="margin-bottom:4px; font-size:12.5px; color:#374151"><span class="bold">原文 訳:</span> ${escapeHtml(s.original_ja)}</div>` : ''}
+              ${s.original_ja ? `<div style="margin-bottom:4px; font-size:12.5px; color:#374151"><span class="bold">原文訳:</span> ${escapeHtml(s.original_ja)}</div>` : ''}
               ${s.reason ? `<div style="margin-bottom:4px; font-size:12px"><span class="bold">理由:</span> ${escapeHtml(s.reason)}</div>` : ''}
               ${enRw ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px; margin-bottom:4px"><span class="bold" style="color:#15803d">提案 (英文):</span> ${escapeHtml(enRw)}</div>` : ''}
               ${jaRw ? `<div style="padding:6px 10px; background:#dcfce7; border-radius:4px"><span class="bold" style="color:#15803d">提案 (和訳):</span> ${escapeHtml(jaRw)}</div>` : ''}

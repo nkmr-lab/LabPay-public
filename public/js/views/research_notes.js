@@ -1,6 +1,6 @@
-// /#/research-notes — Cosense 研究ノート ビューア + エディタ。
+// /#/research-notes — Cosense 研究ノートビューア + エディタ。
 //   v834: フルスクリーン表示 + ✕で閉じる、 GitHub風ヒートカレンダー、 localStorage キャッシュ +
-//   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンド プリフェッチ。
+//   ETag (304) によるかしこい再取得、 前月/次月をバックグラウンドプリフェッチ。
 import { post, patch } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { toast } from '../app.js';
@@ -33,7 +33,7 @@ export async function renderResearchNotes() {
       <div id="rn-status" hidden>
         <div class="muted">読み込み中…</div>
       </div>
-      <!-- v853 PC では 左カレンダー + 右セクション の 2 列、 モバイル では 縦並び -->
+      <!-- v853 PC では左カレンダー + 右セクションの 2 列、 モバイルでは縦並び -->
       <div id="rn-body" hidden class="rn-layout">
         <div id="rn-calendar-wrap" class="rn-cal-pane">
           <div id="rn-calendar"></div>
@@ -99,12 +99,12 @@ async function loadInitial() {
     const r = await fetchEtagged('/api/cosense/research-note/days?count=2', 'days');
     const d = r.data;
     if (d.has_handle === false) {
-      // 名前未設定 (= LabPay の表示名が空) — 鍵 + 名前 を同時設定できる inline UI を出す
+      // 名前未設定 (= LabPay の表示名が空) — 鍵 + 名前を同時設定できる inline UI を出す
       renderInlineSetup({ noHandle: true, message: d.message || '' });
       return;
     }
     if (!d.cookie_present) {
-      // v839 PAT 未設定 — 設定画面に飛ばすのではなく、 ここで inline で 設定 してもらう
+      // v839 PAT 未設定 — 設定画面に飛ばすのではなく、 ここで inline で設定してもらう
       renderInlineSetup({ noHandle: false, message: '' });
       return;
     }
@@ -123,7 +123,7 @@ async function loadInitial() {
   }
 }
 
-// v839 鍵 (PAT) 未設定の場合、 アプリ内でその場で 設定できる UI。
+// v839 鍵 (PAT) 未設定の場合、 アプリ内でその場で設定できる UI。
 //   設定画面と同じ内容を inline で出す。 保存後に loadInitial を呼び直してノート本体に遷移。
 function renderInlineSetup(opts) {
   const statusEl = document.getElementById('rn-status');
@@ -138,7 +138,7 @@ function renderInlineSetup(opts) {
       </p>
 
       <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
-        <div class="bold" style="color:#0284c7; margin-bottom:4px">鍵 ってなに?</div>
+        <div class="bold" style="color:#0284c7; margin-bottom:4px">鍵ってなに?</div>
         Scrapbox のログインの代わりになる、 長いランダムな文字列です。 scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、 LabPay が 「あなたとして」 読み書きできるようになります。 パスワードより安全 (鍵単体でいつでも取り消せる) で、 期限が来ても自分で作り直せます。
       </div>
 
@@ -378,7 +378,7 @@ function paintCalendar(ym, data) {
   const headerRow = ['日','月','火','水','木','金','土'].map((w, i) =>
     `<div style="text-align:center; font-size:12px; padding:4px 0; color:${i === 0 ? '#dc2626' : (i === 6 ? '#0284c7' : '#6b7280')}">${w}</div>`
   ).join('');
-  // v853 calMode === 'week' なら 選択日 の 週 (日曜始まり) の 7 日 だけ。 month は 従来の 5-6 週
+  // v853 calMode === 'week' なら選択日の週 (日曜始まり) の 7 日だけ。 month は従来の 5-6 週
   let cells;
   if (stateLocal.calMode === 'week') {
     const sel = parseDateKey(stateLocal.selectedDate || `${yy}.${String(mm).padStart(2, '0')}.01`);
@@ -404,7 +404,7 @@ function paintCalendar(ym, data) {
     while (cells.length % 7 !== 0) cells.push(null);
   }
   // v838/v853 セル: 日数字を見やすいサイズに (≥900px で 17px → 20px)、 行数バッジは撤去
-  //   preview は wide では引き続き複数行で表示。 week モードでは セル がさらに大きい。
+  //   preview は wide では引き続き複数行で表示。 week モードではセルがさらに大きい。
   const cellHtml = cells.map(c => {
     if (!c) return '<div></div>';
     const dayInfo = days[c.date] || { line_count: 0, char_count: 0, preview: '' };
@@ -608,7 +608,7 @@ function renderScrapboxInline(s) {
 }
 
 function renderBracket(inside) {
-  // [* 見出し] の場合に中に URL が含まれていたら 画像表示も検討する
+  // [* 見出し] の場合に中に URL が含まれていたら画像表示も検討する
   const heading = inside.match(/^(\*+)\s+(.+)$/);
   if (heading) {
     const stars = heading[1].length;

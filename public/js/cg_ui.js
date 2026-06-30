@@ -1,18 +1,18 @@
 // LabPay 自作ゲーム framework 共通 UI ヘルパー (v626 〜)。
-//   各 kind の JS が ロビー / 待ち / 参加 / 終了 を 毎回 書かなくて 済むように、
-//   よく使う 部品を ここに 集約。 ゲームロジック (盤面描画 + applyMove) だけ
-//   各 kind が 書けば 動くのが ゴール。
+//   各 kind の JS がロビー / 待ち / 参加 / 終了を毎回書かなくて済むように、
+//   よく使う部品をここに集約。 ゲームロジック (盤面描画 + applyMove) だけ
+//   各 kind が書けば動くのがゴール。
 //
 //   絶対パスで import:  import { ... } from '/js/cg_ui.js';
-//   ビルトイン (tictactoe など) からは 相対パスでも OK:  '../cg_ui.js';
+//   ビルトイン (tictactoe など) からは相対パスでも OK:  '../cg_ui.js';
 
 import { get, post } from '/js/api.js';
 import { state, toast } from '/js/app.js';
 import { navigate, escapeHtml } from '/js/router.js';
 
-// 起案時の API へ POST。 initial_state は kind 側が 用意。
+// 起案時の API へ POST。 initial_state は kind 側が用意。
 //   成功で /#/cg/<kind>/<id> へ navigate。 ビルトイン (旧 import パス) は
-//   detailPath を 渡せる: ({ kind, initialState, detailPath: '#/tictactoe' })
+//   detailPath を渡せる: ({ kind, initialState, detailPath: '#/tictactoe' })
 export async function startGame({ kind, initialState, detailPath }) {
   try {
     const r = await post(`/api/custom-games/${kind}/games`, { initial_state: initialState });
@@ -20,7 +20,7 @@ export async function startGame({ kind, initialState, detailPath }) {
   } catch (e) { toast('失敗: ' + (e?.message || e)); }
 }
 
-// 一覧 (Lobby) を 1 行で 描画。 row は {id, creator_name, status, winner_name, my_turn?}
+// 一覧 (Lobby) を 1 行で描画。 row は {id, creator_name, status, winner_name, my_turn?}
 //   detailPath はビルトインの場合 '#/tictactoe' などを渡す。
 export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
   const app = document.getElementById('app');
@@ -41,13 +41,13 @@ export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
     const items = d.items || [];
     const root = document.getElementById('cg-list');
     if (!items.length) {
-      root.innerHTML = '<div class="hint">対戦卓 がありません。 「＋ 新規卓」 で 始めましょう。</div>';
+      root.innerHTML = '<div class="hint">対戦卓がありません。 「＋ 新規卓」 で始めましょう。</div>';
       return;
     }
     root.innerHTML = items.map(g => `
       <a href="${dp}/${g.id}" class="list-item">
         <div class="grow">
-          <div class="bold">${escapeHtml(g.creator_name)} の卓 ・ ${escapeHtml(g.status)}</div>
+          <div class="bold">${escapeHtml(g.creator_name)} の卓・ ${escapeHtml(g.status)}</div>
           <div class="meta">${g.winner_name ? `🎉 ${escapeHtml(g.winner_name)} の勝ち` : (g.status === 'finished' ? '🤝 引分' : '')}</div>
         </div>
       </a>
@@ -57,7 +57,7 @@ export async function renderLobby({ kind, title, hint, detailPath, onNew }) {
   }
 }
 
-// 詳細画面 の 共通 ステータスカード を 返す (HTML 文字列)。 盤面とは 分けて 上か下に配置。
+// 詳細画面の共通ステータスカードを返す (HTML 文字列)。 盤面とは分けて上か下に配置。
 //   d は GET /api/custom-games/:kind/games/:id のレスポンス。
 //   onJoinState は join 時の new_state を返す純粋関数 (state, meId) => newState。
 export function statusCardHtml(d, meId, { joinLabel } = {}) {
@@ -67,17 +67,17 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
   if (d.status === 'waiting') {
     if (meId === d.creator_user_id) {
       const joinedCount = players.length;
-      const waitingFor = players.length ? `(${joinedCount} 人 参加中、 開始まで あと ${Math.max(0, /* approx */ 2 - joinedCount)} 人 以上)` : '';
+      const waitingFor = players.length ? `(${joinedCount} 人参加中、 開始まであと ${Math.max(0, /* approx */ 2 - joinedCount)} 人以上)` : '';
       return `<div class="card">
-        <div class="hint">相手 を 待っています。 ${waitingFor} 開始前なので 料金は まだ 払われていません。</div>
+        <div class="hint">相手を待っています。 ${waitingFor} 開始前なので料金はまだ払われていません。</div>
         <button data-cg-action="cancel" class="btn" style="margin-top:6px; color:#c00">キャンセル</button>
       </div>`;
     }
     if (meJoined) {
-      return `<div class="card"><div class="hint">参加済み。 全員 揃うまで お待ち下さい。</div></div>`;
+      return `<div class="card"><div class="hint">参加済み。 全員揃うまでお待ち下さい。</div></div>`;
     }
     return `<div class="card">
-      <div class="hint">対戦に 参加しますか? 全員 揃った時に プレイフィー ${fee}pt が 各人から 徴収されます。</div>
+      <div class="hint">対戦に参加しますか? 全員揃った時にプレイフィー ${fee}pt が各人から徴収されます。</div>
       <button data-cg-action="join" class="btn primary" style="margin-top:6px">${escapeHtml(joinLabel || '参加する')}</button>
     </div>`;
   }
@@ -85,23 +85,23 @@ export function statusCardHtml(d, meId, { joinLabel } = {}) {
   if (d.status === 'finished') {
     let result;
     if (d.winner_user_id === null) result = '🤝 引分';
-    else if (d.winner_user_id === meId) result = '🎉 あなたの 勝ち!';
+    else if (d.winner_user_id === meId) result = '🎉 あなたの勝ち!';
     else if (players.length === 1) result = '👏 終了';                        // ソロ
-    else result = '😢 あなたの 負け';
+    else result = '😢 あなたの負け';
     return `<div class="card"><h3 style="margin:0">${result}</h3></div>`;
   }
-  // playing — 投了 ボタン も 添える (= 参加者 なら 常時 出す)
+  // playing — 投了ボタンも添える (= 参加者なら常時出す)
   const meIsPlayer = players.some(p => p.uid === meId);
   const resignBtn = meIsPlayer
-    ? `<button data-cg-action="resign" class="btn" style="margin-top:6px; font-size:11px; color:#c00">🏳 投了 (ポイント 戻りません)</button>`
+    ? `<button data-cg-action="resign" class="btn" style="margin-top:6px; font-size:11px; color:#c00">🏳 投了 (ポイント戻りません)</button>`
     : '';
   return d.my_turn
-    ? `<div class="card"><div class="bold">あなたの番。 盤面を タップ。</div>${resignBtn}</div>`
-    : `<div class="card"><div class="hint">相手の番を 待っています…</div>${resignBtn}</div>`;
+    ? `<div class="card"><div class="bold">あなたの番。 盤面をタップ。</div>${resignBtn}</div>`
+    : `<div class="card"><div class="hint">相手の番を待っています…</div>${resignBtn}</div>`;
 }
 
-// statusCard 内 の data-cg-action="join"/"cancel" を 配線する ヘルパー。
-//   joinState(d, meId) => 新 state を 計算する 関数。
+// statusCard 内の data-cg-action="join"/"cancel" を配線するヘルパー。
+//   joinState(d, meId) => 新 state を計算する関数。
 export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAfter }) {
   document.querySelector('[data-cg-action="cancel"]')?.addEventListener('click', async () => {
     if (!confirm('キャンセルしますか?')) return;
@@ -111,7 +111,7 @@ export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAf
     } catch (e) { toast('失敗: ' + (e?.message || e)); }
   });
   document.querySelector('[data-cg-action="resign"]')?.addEventListener('click', async () => {
-    if (!confirm('🏳 投了 しますか? (= ゲーム終了、 ポイント 戻りません)')) return;
+    if (!confirm('🏳 投了しますか? (= ゲーム終了、 ポイント戻りません)')) return;
     try {
       await post(`/api/custom-games/${kind}/games/${gid}/resign`, {});
       onAfter?.();
@@ -127,8 +127,8 @@ export function wireStatusCard({ kind, gid, d, meId, joinState, detailPath, onAf
   });
 }
 
-// 詳細 polling を 抽象化: paint 関数を 一定間隔で 呼び、 ノードが 消えたら 自動停止。
-//   guardSelector に data 属性などを 与えると DOM 検出で 自動 unmount。
+// 詳細 polling を抽象化: paint 関数を一定間隔で呼び、 ノードが消えたら自動停止。
+//   guardSelector に data 属性などを与えると DOM 検出で自動 unmount。
 export function startPolling({ paint, ms = 2500, guardSelector }) {
   let timer = null;
   const tick = () => {
@@ -142,7 +142,7 @@ export function startPolling({ paint, ms = 2500, guardSelector }) {
   return () => { if (timer) { clearInterval(timer); timer = null; } };
 }
 
-// applyMove の 結果を そのまま サーバに 投げる ヘルパー。
+// applyMove の結果をそのままサーバに投げるヘルパー。
 //   res = { state, finished, winner_user_id, turn_user_id }
 export async function submitMove({ kind, gid, res }) {
   await post(`/api/custom-games/${kind}/games/${gid}/move`, {
@@ -153,7 +153,7 @@ export async function submitMove({ kind, gid, res }) {
   });
 }
 
-// kind 詳細を取得 (共通ラッパー、 失敗時は 一覧へ戻る hint を 表示)。
+// kind 詳細を取得 (共通ラッパー、 失敗時は一覧へ戻る hint を表示)。
 export async function fetchDetail({ kind, gid, detailPath }) {
   try {
     return await get(`/api/custom-games/${kind}/games/${gid}`);
@@ -164,13 +164,13 @@ export async function fetchDetail({ kind, gid, detailPath }) {
   }
 }
 
-// re-export 便利系 (kind 側 が import 1 行で 済むように)
+// re-export 便利系 (kind 側が import 1 行で済むように)
 export { state, toast, navigate, escapeHtml };
 
 // ───────────────────────────────────────────────────────────────
 // v628 defineGame: 全部入りラッパー。
-//   kind 作者は ロジック (initialState / applyMove) と 盤面描画 (renderBoard) だけ
-//   書けば 終わり。 ロビー / 待ち / 参加 / 終了 / polling / submit / 取得 は 全部 自動。
+//   kind 作者はロジック (initialState / applyMove) と盤面描画 (renderBoard) だけ
+//   書けば終わり。 ロビー / 待ち / 参加 / 終了 / polling / submit / 取得は全部自動。
 //
 //   使い方:
 //     export const { renderList, renderDetail } = defineGame({
@@ -179,7 +179,7 @@ export { state, toast, navigate, escapeHtml };
 //       hint:  '説明',
 //       initialState: (uid) => ({ ..., creator_uid: uid, opponent_uid: 0, turn_user_id: uid }),
 //       applyMove:    (s, uid, move) => ({ state, finished, winner_user_id, turn_user_id }),
-//       // 盤面描画。 ボタン や マスに data-move="..." (JSON) を つけると 自動配線。
+//       // 盤面描画。 ボタンやマスに data-move="..." (JSON) をつけると自動配線。
 //       renderBoard:  (s, ctx) => `<div>... <button data-move="0">...</button> ...</div>`,
 //     });
 //
@@ -225,8 +225,8 @@ export function defineGame(spec) {
       ${statusCardHtml(d, meId)}
     `;
     wireStatusCard({ kind, gid, d, meId, joinState: joinTransition, detailPath: dp, onAfter: () => paint(gid) });
-    // data-move 属性を 持つ 要素 を 自動配線。 値は そのまま move として applyMove に渡る。
-    //   数値1個 なら 整数、 JSON っぽければ パース、 それ以外は 文字列。
+    // data-move 属性を持つ要素を自動配線。 値はそのまま move として applyMove に渡る。
+    //   数値1個なら整数、 JSON っぽければパース、 それ以外は文字列。
     document.querySelectorAll(`[data-cg-gid="cg-${kind}-${gid}"] [data-move]`).forEach(b => {
       b.addEventListener('click', async () => {
         try {
@@ -235,7 +235,7 @@ export function defineGame(spec) {
           if (raw.startsWith('{') || raw.startsWith('[')) move = JSON.parse(raw);
           else if (/^-?\d+$/.test(raw)) move = Number(raw);
           else move = raw;
-          // v630 sketch が ctx 構築のため d を 参照できるように 4 引数で渡す
+          // v630 sketch が ctx 構築のため d を参照できるように 4 引数で渡す
           const res = applyMove(d.state, meId, move, d);
           await submitMove({ kind, gid, res });
           paint(gid);
@@ -248,29 +248,29 @@ export function defineGame(spec) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// v631 sketch(): Processing / p5.js 風の 高レベル API。
+// v631 sketch(): Processing / p5.js 風の高レベル API。
 //
-//   書く 関数は **3 つ だけ で 足ります** (ターン制 ゲーム なら これで十分):
+//   書く関数は **3 つだけで足ります** (ターン制ゲームならこれで十分):
 //
-//     setup(meId)               ── ゲーム開始時に 1 回 だけ 呼ばれる。
-//                                   ゲーム固有 の 初期 state を return する。
+//     setup(meId)               ── ゲーム開始時に 1 回だけ呼ばれる。
+//                                   ゲーム固有の初期 state を return する。
 //
-//     draw(state, ctx)          ── 画面を 描く 時に 呼ばれる (state が 変わる たび)。
-//                                   HTML 文字列 を return する (盤面でも 文字 でも OK)。
-//                                   自分の番が 来たら、 ボタン に <button data-move="X">
-//                                   を 入れておくと、 タップで action() が 呼ばれる。
+//     draw(state, ctx)          ── 画面を描く時に呼ばれる (state が変わるたび)。
+//                                   HTML 文字列を return する (盤面でも文字でも OK)。
+//                                   自分の番が来たら、 ボタンに <button data-move="X">
+//                                   を入れておくと、 タップで action() が呼ばれる。
 //
-//     action(state, me, move)   ── 自分が ボタンを 押した時 に 呼ばれる。
+//     action(state, me, move)   ── 自分がボタンを押した時に呼ばれる。
 //                                   第3引数 move は data-move="X" の X
-//                                   (整数 / 文字 / JSON を 自動判定 して 渡る)。
+//                                   (整数 / 文字 / JSON を自動判定して渡る)。
 //                                   { state: 新state, finished?: bool, winner?: 'me'|'opponent'|null }
-//                                   を return する。 手番は LabPay が 自動で 相手に 移す。
+//                                   を return する。 手番は LabPay が自動で相手に移す。
 //
-//   呼び出し 順序 を 図で 示すと:
+//   呼び出し順序を図で示すと:
 //
 //      [起案者が ＋新規卓]
 //         │
-//         ▼ setup(me)             1 回 だけ
+//         ▼ setup(me)             1 回だけ
 //       state ──→ DB
 //                         [自分の画面] (polling 2.5s)         [相手の画面]
 //                              │                                     │
@@ -280,39 +280,39 @@ export function defineGame(spec) {
 //                              ▼ ボタンタップ
 //                       action(state, me, move)
 //                              │
-//                              ▼ サーバに 送信
-//                       新 state ─────────────────────────→  相手の draw も 更新
+//                              ▼ サーバに送信
+//                       新 state ─────────────────────────→  相手の draw も更新
 //
-//   ctx (draw / action / start の最後の引数) に 渡されるもの:
+//   ctx (draw / action / start の最後の引数) に渡されるもの:
 //     ctx.me        - 自分の uid (number)
 //     ctx.you       - { uid, name, seat, role: 'creator' | 'opponent' }  自分
-//     ctx.opponent  - 相手 (2 人式 で waiting 中は null)
-//     ctx.players   - 全員の 配列 (着席順)。 各要素 {uid, name, seat, role}
+//     ctx.opponent  - 相手 (2 人式で waiting 中は null)
+//     ctx.players   - 全員の配列 (着席順)。 各要素 {uid, name, seat, role}
 //     ctx.seat      - 自分の seat (0..N-1)
 //     ctx.turn      - 手番の uid (number、 終了時は null)
 //     ctx.myTurn    - 自分の手番か (boolean)
-//     ctx.winner    - 勝者の uid (number、 引分 / 進行中 は null)
+//     ctx.winner    - 勝者の uid (number、 引分 / 進行中は null)
 //     ctx.status    - 'waiting' | 'playing' | 'finished' | 'cancelled'
 //
 //   action() の return:
 //     {
-//       state:    新しい ゲーム固有 state (必須)
-//       finished: true なら 終了 (省略可、 default false)
+//       state:    新しいゲーム固有 state (必須)
+//       finished: true なら終了 (省略可、 default false)
 //       winner:   'me' | 'opponent' | <uid> | null
 //                  'me' = 自分の勝ち、 'opponent' = 相手の勝ち、 null = 引分。
-//                  finished=false なら 無視されます。
-//       next:     次の手番 uid (省略時 framework が 自動 rotation)
+//                  finished=false なら無視されます。
+//       next:     次の手番 uid (省略時 framework が自動 rotation)
 //     }
 // ───────────────────────────────────────────────────────────────
 export function sketch(spec) {
   const { kind, title, hint, detailPath, setup, draw } = spec;
-  // v631 action() に 改名 (旧 play() は 後方互換 で 受け付け)
+  // v631 action() に改名 (旧 play() は後方互換で受け付け)
   const action = spec.action || spec.play;
-  if (!action) throw new Error('sketch: action(state, me, move) を 渡してください');
+  if (!action) throw new Error('sketch: action(state, me, move) を渡してください');
   // spec.players: 1 (ソロ) / 2 / 4。 デフォルト 2。
-  //   1 → opponent 概念なし、 status='waiting' を 飛ばして 即 playing (server側 処理)
-  //   2 → 既存 (turn は 相手 と トグル)
-  //   4 → players 配列 を 順に rotation
+  //   1 → opponent 概念なし、 status='waiting' を飛ばして即 playing (server側処理)
+  //   2 → 既存 (turn は相手とトグル)
+  //   4 → players 配列を順に rotation
   const playerCount = spec.players === 1 ? 1 : spec.players === 4 ? 4 : 2;
 
   return defineGame({
@@ -321,14 +321,14 @@ export function sketch(spec) {
     initialState(uid) {
       return {
         creator_uid: uid,
-        opponent_uid: 0,                       // 2 人式の 後方互換
+        opponent_uid: 0,                       // 2 人式の後方互換
         turn_user_id: uid,
-        g: setup(uid),                          // ユーザの ゲーム固有 state は g に
+        g: setup(uid),                          // ユーザのゲーム固有 state は g に
       };
     },
 
     applyMove(s, uid, move, d) {
-      // ctx を action() にも 渡す (= draw と 同じ 形)。 N 人卓 で seat / players が 取れる。
+      // ctx を action() にも渡す (= draw と同じ形)。 N 人卓で seat / players が取れる。
       const ctx = buildCtx(s, { meId: uid, d: d || { players: [], creator_name: '', opponent_name: '' }, myTurn: true, status: 'playing' });
       const res = action(s.g, uid, move, ctx);
       if (!res || !res.state) throw new Error('action() は { state, ... } を return してください');
@@ -340,11 +340,11 @@ export function sketch(spec) {
         else if (typeof res.winner === 'number') winner = res.winner;
         else                                  winner = null;
       }
-      // 次の手番: play() が next を 返せば その uid、 なければ framework が 自動 rotation。
+      // 次の手番: play() が next を返せばその uid、 なければ framework が自動 rotation。
       let next = null;
       if (!finished) {
         if (typeof res.next === 'number') next = res.next;
-        else if (playerCount === 1)       next = uid;             // ソロは ずっと 自分
+        else if (playerCount === 1)       next = uid;             // ソロはずっと自分
         else if (playerCount === 2)       next = uid === s.creator_uid ? s.opponent_uid : s.creator_uid;
         else {                                                    // 4 人 rotation
           const list = (ctx.players || []).map(p => p.uid);
@@ -368,7 +368,7 @@ export function sketch(spec) {
     },
 
     joinTransition(s, oppUid) {
-      // 2 人式: opponent_uid を 入れる (旧 UI 互換)。 4 人式は サーバの players_json 任せ。
+      // 2 人式: opponent_uid を入れる (旧 UI 互換)。 4 人式はサーバの players_json 任せ。
       if (playerCount === 2) return { ...s, opponent_uid: oppUid };
       return s;
     },

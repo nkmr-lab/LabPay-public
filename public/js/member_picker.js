@@ -1,5 +1,5 @@
-// 共有 メンバー選択 picker。 各 view が ad-hoc で書いていた 「全員 / 学年 / 性別」 bulk +
-// 個別 chip + 選択数 ラベル を 1 箇所に集約。
+// 共有メンバー選択 picker。 各 view が ad-hoc で書いていた 「全員 / 学年 / 性別」 bulk +
+// 個別 chip + 選択数ラベルを 1 箇所に集約。
 //
 // 使い方:
 //   import { createMemberPicker } from '../member_picker.js';
@@ -9,8 +9,8 @@
 //     countLabel:    document.getElementById('xxx-count'),  // 任意
 //     initial:       [12, 34, ...],         // 初期選択 (任意)
 //     poolIds:       [1, 2, 3, ...],        // 「これらの user_id のみ表示」 (任意。 グループ
-//                                              内などで member を 制限したい時に使う)
-//     showGenderBulk: true,                  // 男 / 女 ボタンを出すか (デフォ true)
+//                                              内などで member を制限したい時に使う)
+//     showGenderBulk: true,                  // 男 / 女ボタンを出すか (デフォ true)
 //     excludeIds:    [meId],                 // 表示しない user_id (発起人を picker から外す等)
 //     onChange:      (selectedSet) => {...}  // 任意 (変化のたびに呼ぶ)
 //   });
@@ -48,7 +48,7 @@ export async function createMemberPicker(opts = {}) {
   } = opts;
   if (!chipsContainer) throw new Error('member_picker: chipsContainer 必須');
 
-  // メンバーリスト 取得 → pool / exclude で 絞り込み → 学年 → 50 音順 でソート。
+  // メンバーリスト取得 → pool / exclude で絞り込み → 学年 → 50 音順でソート。
   const u = await get('/api/users');
   let users = u.items || [];
   if (Array.isArray(poolIds) && poolIds.length) {
@@ -85,7 +85,7 @@ export async function createMemberPicker(opts = {}) {
     });
   }
 
-  // chips (.rl-chip スタイルを 共有)
+  // chips (.rl-chip スタイルを共有)
   function chipHtml(x) {
     return `
       <span class="rl-chip" data-uid="${x.id}">

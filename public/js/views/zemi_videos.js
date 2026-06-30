@@ -1,6 +1,6 @@
 // /#/zemi-videos — ゼミ動画 (URL限定公開のYouTube) を一覧 + 検索 + 視聴。 v843 #426
 //   一覧画面: 検索ボックス + 「+ 動画を追加」 (折りたたみ) + タイルグリッド (サムネ + タイトル + 説明)
-//   詳細画面 /#/zemi-videos/<id>: 上部に YouTube embed を 大きく + 詳細メタ + 削除/編集 (本人)
+//   詳細画面 /#/zemi-videos/<id>: 上部に YouTube embed を大きく + 詳細メタ + 削除/編集 (本人)
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -14,12 +14,12 @@ export async function renderZemiVideos() {
     <div class="card page-header">
       <h2 style="margin:0">🎥 ゼミ動画</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        ラボの YouTube (URL限定公開) に上げてあるゼミ動画を キーワードで検索 + ここから直接視聴。
+        ラボの YouTube (URL限定公開) に上げてあるゼミ動画をキーワードで検索 + ここから直接視聴。
       </p>
     </div>
     <div class="card">
       <div class="row" style="gap:6px; align-items:center; margin-bottom:8px">
-        <input type="search" id="zv-q" placeholder="🔍 タイトル / 説明 で検索 (空欄で全件)" maxlength="100"
+        <input type="search" id="zv-q" placeholder="🔍 タイトル / 説明で検索 (空欄で全件)" maxlength="100"
                style="flex:1; font-size:14px; padding:4px 8px; border:1px solid #d1d5db; border-radius:4px">
         <button id="zv-q-go">検索</button>
       </div>
@@ -33,7 +33,7 @@ export async function renderZemiVideos() {
         </label>
         <label class="field">
           <span class="lbl">📝 タイトル</span>
-          <input type="text" id="zv-title" maxlength="300" placeholder="例: 2026.06.20 ゼミ / 〇〇 さん 中間発表">
+          <input type="text" id="zv-title" maxlength="300" placeholder="例: 2026.06.20 ゼミ / 〇〇 さん中間発表">
         </label>
         <label class="field">
           <span class="lbl">📅 開催日 (任意)</span>
@@ -83,7 +83,7 @@ async function loadList() {
       return;
     }
     const totalAll = d.total_in_db || items.length;
-    const head = `<div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">${items.length} / 全 ${totalAll} 件 表示中${lastQuery ? ' (検索: 「' + escapeHtml(lastQuery) + '」)' : ''}</div>`;
+    const head = `<div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">${items.length} / 全 ${totalAll} 件表示中${lastQuery ? ' (検索: 「' + escapeHtml(lastQuery) + '」)' : ''}</div>`;
     root.innerHTML = head + `<div class="ai-tile-grid">${items.map(renderTile).join('')}</div>`;
   } catch (e) {
     root.innerHTML = `<div class="muted">取得失敗: ${escapeHtml(e.message)}</div>`;
@@ -102,7 +102,7 @@ function formatDuration(sec) {
 }
 
 function renderTile(it) {
-  // v849 #436 YouTube タイトル を優先 (登録時 oEmbed で 取得した正式タイトル)
+  // v849 #436 YouTube タイトルを優先 (登録時 oEmbed で取得した正式タイトル)
   const display = it.youtube_title || it.title;
   const sub = it.youtube_title && it.title && it.youtube_title !== it.title ? it.title : '';
   const dur = formatDuration(it.youtube_duration_sec);
@@ -168,7 +168,7 @@ export async function renderZemiVideoDetail({ params }) {
   const myUid = Number(state.me?.id || 0);
   const isOwner = myUid > 0 && Number(d.user_id) === myUid;
   const isAdmin = (state.me?.role === 'admin');
-  // v849 #436 YouTube タイトル優先 表示
+  // v849 #436 YouTube タイトル優先表示
   const displayTitle = d.youtube_title || d.title;
   const subTitle = d.youtube_title && d.title && d.youtube_title !== d.title ? d.title : '';
   app.innerHTML = `
@@ -180,7 +180,7 @@ export async function renderZemiVideoDetail({ params }) {
       <div class="meta" style="font-size:13px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name || '')}
         ${d.occurred_on ? ' ・ 📅 ' + escapeHtml(d.occurred_on) : ''}
-        ・ 登録 ${escapeHtml(d.created_at || '')}
+        ・登録 ${escapeHtml(d.created_at || '')}
       </div>
     </div>
     <div class="card" style="padding:0; overflow:hidden">

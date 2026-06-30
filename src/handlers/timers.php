@@ -1,7 +1,7 @@
 <?php
-// /api/timers — 共有タイマー。 参加者全員で 同じカウントダウンを見る。
+// /api/timers — 共有タイマー。 参加者全員で同じカウントダウンを見る。
 // サーバが started_at / ends_at の真実を持つ。 detail は server_now を返し、
-// client が ローカル時計とのオフセットを取って カウントダウン表示する。
+// client がローカル時計とのオフセットを取ってカウントダウン表示する。
 
 declare(strict_types=1);
 
@@ -16,8 +16,8 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'public' && $method === 'GET')    { timers_public_detail($pdo, $cfg, $id); return; } // v676 #256
         if ($next === ''       && $method === 'DELETE') { timers_delete($pdo, $cfg, $id); return; }
         if ($next === 'cancel' && $method === 'PATCH')  { timers_cancel($pdo, $cfg, $id); return; }
-        // v446 paused-default model: ▶ 開始 / ⏸ 一時停止 / ↻ リセット を 追加。
-        // 参加者 (含 起案者) なら 押せる。 共有 タイマー だから 全員が 操作可。
+        // v446 paused-default model: ▶ 開始 / ⏸ 一時停止 / ↻ リセットを追加。
+        // 参加者 (含起案者) なら押せる。 共有タイマーだから全員が操作可。
         if ($next === 'start'  && $method === 'PATCH')  { timers_start($pdo, $cfg, $id); return; }
         if ($next === 'pause'  && $method === 'PATCH')  { timers_pause($pdo, $cfg, $id); return; }
         if ($next === 'reset'  && $method === 'PATCH')  { timers_reset($pdo, $cfg, $id); return; }
@@ -25,7 +25,7 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no timers route for $method $sub", 404);
 }
 
-// v446 参加者 (含 起案者) 判定 ヘルパ。 start/pause/reset は 全員 押せる。
+// v446 参加者 (含起案者) 判定ヘルパ。 start/pause/reset は全員押せる。
 function timers_assert_member(PDO $pdo, array $u, int $id, array $row): void {
     if ((int)$row['creator_user_id'] === (int)$u['id']) return;
     $st = $pdo->prepare("SELECT 1 FROM timer_participants WHERE timer_id=? AND user_id=?");
@@ -36,17 +36,17 @@ function timers_assert_member(PDO $pdo, array $u, int $id, array $row): void {
 }
 
 function timers_autoclose(PDO $pdo): void {
-    // 1) 終了時刻 過ぎ かつ repeat 残あり → 次サイクルへスライド (started/ends + dur)
+    // 1) 終了時刻過ぎかつ repeat 残あり → 次サイクルへスライド (started/ends + dur)
     $pdo->exec("UPDATE timers
                    SET started_at = ends_at,
                        ends_at    = DATE_ADD(ends_at, INTERVAL duration_seconds SECOND),
                        repeat_idx = repeat_idx + 1
                  WHERE status='running' AND ends_at <= NOW()
                    AND repeat_max > 0 AND repeat_idx < repeat_max");
-    // 2) 終了時刻 過ぎ かつ repeat 切れ / 無 → 完了に。
-    // v724 #324 「ends_at <= NOW()」 では 発表終了 (= end bell) で done に なって
-    //   しまい、 質疑 / 超過 中 も ホーム / 一覧 から 消える の が 違和感。
-    //   ベル の 中 で 一番 遅い もの まで は running の まま 残す。
+    // 2) 終了時刻過ぎかつ repeat 切れ / 無 → 完了に。
+    // v724 #324 「ends_at <= NOW()」 では発表終了 (= end bell) で done になって
+    //   しまい、 質疑 / 超過中もホーム / 一覧から消えるのが違和感。
+    //   ベルの中で一番遅いものまでは running のまま残す。
     $pdo->exec("UPDATE timers SET status='done', closed_at=NOW()
                  WHERE status='running' AND started_at IS NOT NULL
                    AND DATE_ADD(started_at, INTERVAL GREATEST(
@@ -61,7 +61,7 @@ function timers_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     timers_autoclose($pdo);
     $uid = (int)$u['id'];
-    // v446 remaining_seconds (paused 用) を 含めて 返す。 並び順は
+    // v446 remaining_seconds (paused 用) を含めて返す。 並び順は
     // running → paused → done → cancelled で、 同 status 内は created_at 新しい順。
     $st = $pdo->prepare("
         SELECT t.id, t.title, t.duration_seconds, t.remaining_seconds,
@@ -78,8 +78,8 @@ function timers_list(PDO $pdo, array $cfg): void {
          LIMIT 100");
     $st->execute([$uid, $uid, $uid]);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
-    // v466 関係者 アバター を 同梱 (各 timer の 参加者 最大 5 名)。 ホームカード で
-    // 「誰の タイマー か」 を 一目で 分かる ように。
+    // v466 関係者アバターを同梱 (各 timer の参加者最大 5 名)。 ホームカードで
+    // 「誰のタイマーか」 を一目で分かるように。
     $ids = array_map(fn($r) => (int)$r['id'], $items);
     $partsByTimer = [];
     if ($ids) {
@@ -130,10 +130,10 @@ function timers_create(PDO $pdo, array $cfg): void {
         }
         $bells[] = $iv;
     }
-    // v449 end_bell_index = 1/2/3 で 「発表終了 タイミング」 を 指定。
-    // 採用 されると duration_seconds は その ベル 値 になり、 他の ベル は
-    // 前 (= 中間警告) でも 後 (= 質疑時間 通知) でも OK。
-    // 旧 client (end_bell_index 無し) は duration_seconds を 自分で 送る legacy 経路。
+    // v449 end_bell_index = 1/2/3 で 「発表終了タイミング」 を指定。
+    // 採用されると duration_seconds はそのベル値になり、 他のベルは
+    // 前 (= 中間警告) でも後 (= 質疑時間通知) でも OK。
+    // 旧 client (end_bell_index 無し) は duration_seconds を自分で送る legacy 経路。
     $endBellIdx = null;
     if (isset($body['end_bell_index']) && $body['end_bell_index'] !== '' && $body['end_bell_index'] !== null) {
         $endBellIdx = (int)$body['end_bell_index'];
@@ -142,7 +142,7 @@ function timers_create(PDO $pdo, array $cfg): void {
         }
         $endVal = $bells[$endBellIdx - 1];
         if ($endVal === null || $endVal < 5) {
-            throw new ApiException('bad_request', "{$endBellIdx}鈴 を 5 秒 以上 で 設定して ください (発表終了 として 選択中)", 400);
+            throw new ApiException('bad_request', "{$endBellIdx}鈴を 5 秒以上で設定してください (発表終了として選択中)", 400);
         }
         $dur = $endVal;
     } else {
@@ -150,11 +150,11 @@ function timers_create(PDO $pdo, array $cfg): void {
         if ($dur < 5 || $dur > 86400) {
             throw new ApiException('bad_request', 'duration_seconds 5..86400', 400);
         }
-        // legacy: ベル は duration 未満 のみ
+        // legacy: ベルは duration 未満のみ
         foreach (['bell1','bell2','bell3'] as $idx => $k) {
             $iv = $bells[$idx];
             if ($iv !== null && $iv >= $dur) {
-                throw new ApiException('bad_request', "{$k}_seconds は duration 未満 (end_bell_index で 終了ベル を 選ぶと 制限なし)", 400);
+                throw new ApiException('bad_request', "{$k}_seconds は duration 未満 (end_bell_index で終了ベルを選ぶと制限なし)", 400);
             }
         }
     }
@@ -175,8 +175,8 @@ function timers_create(PDO $pdo, array $cfg): void {
     if ((int)$stU->fetchColumn() !== count($participantIds)) {
         throw new ApiException('bad_request', '存在しない user_id が含まれます', 400);
     }
-    // v446 paused-default model: 作成時は paused から 始まる。 started_at / ends_at
-    // は NULL、 remaining_seconds = duration_seconds。 ▶ 開始 で running に。
+    // v446 paused-default model: 作成時は paused から始まる。 started_at / ends_at
+    // は NULL、 remaining_seconds = duration_seconds。 ▶ 開始で running に。
     $tid = 0;
     db_tx($pdo, function () use ($pdo, $u, $title, $dur, $participantIds, $bells, $endBellIdx, $repeatMax, &$tid) {
         $ins = $pdo->prepare("INSERT INTO timers
@@ -191,19 +191,19 @@ function timers_create(PDO $pdo, array $cfg): void {
         $stP = $pdo->prepare("INSERT INTO timer_participants (timer_id, user_id) VALUES (?, ?)");
         foreach ($participantIds as $uid) $stP->execute([$tid, $uid]);
     });
-    // 通知 (自分以外の参加者へ)。 paused で 作成 した と 伝わる ように 文言調整。
+    // 通知 (自分以外の参加者へ)。 paused で作成したと伝わるように文言調整。
     foreach ($participantIds as $uid) {
         if ((int)$uid === (int)$u['id']) continue;
         try {
             Notifier::notify($pdo, $cfg, (int)$uid, 'timer',
-                "⏱️ タイマー作成: 「{$title}」 (" . timer_fmt_short($dur) . ") — ▶ 開始 待ち",
+                "⏱️ タイマー作成: 「{$title}」 (" . timer_fmt_short($dur) . ") — ▶ 開始待ち",
                 'timer', $tid);
         } catch (Throwable $_) { /* swallow */ }
     }
     json_response(['id' => $tid]);
 }
 
-// v446 ▶ 開始 — paused → running。 remaining_seconds から ends_at を 計算。
+// v446 ▶ 開始 — paused → running。 remaining_seconds から ends_at を計算。
 function timers_start(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, status, duration_seconds, remaining_seconds FROM timers WHERE id=?");
@@ -213,14 +213,14 @@ function timers_start(PDO $pdo, array $cfg, int $id): void {
     timers_assert_member($pdo, $u, $id, $row);
     if ((string)$row['status'] === 'running') { json_response(['ok' => true, 'already' => 'running']); return; }
     if ((string)$row['status'] !== 'paused') {
-        throw new ApiException('bad_state', "status={$row['status']} からは開始できません (リセット 後に 開始)", 400);
+        throw new ApiException('bad_state', "status={$row['status']} からは開始できません (リセット後に開始)", 400);
     }
     $remain = (int)($row['remaining_seconds'] ?? 0);
     if ($remain <= 0) $remain = (int)$row['duration_seconds'];
-    // v725 #330 一時停止 → 再生 で「最初に戻る」 bug 修正。
-    //   旧: started_at = NOW なので、 ベル の オフセット (= started_at + bellN) も リセット
-    //       されて 「ベル も 経過 も 最初から」 に 戻って 見えた。
-    //   新: started_at = NOW − 既に経過した秒数。 elapsed の 計算 が 連続 する。
+    // v725 #330 一時停止 → 再生で「最初に戻る」 bug 修正。
+    //   旧: started_at = NOW なので、 ベルのオフセット (= started_at + bellN) もリセット
+    //       されて 「ベルも経過も最初から」 に戻って見えた。
+    //   新: started_at = NOW − 既に経過した秒数。 elapsed の計算が連続する。
     $alreadyElapsed = max(0, (int)$row['duration_seconds'] - $remain);
     $started = date('Y-m-d H:i:s', time() - $alreadyElapsed);
     $ends    = date('Y-m-d H:i:s', time() + $remain);
@@ -230,7 +230,7 @@ function timers_start(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v446 ⏸ 一時停止 — running → paused。 残り秒数 を 保存。
+// v446 ⏸ 一時停止 — running → paused。 残り秒数を保存。
 function timers_pause(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, status, ends_at FROM timers WHERE id=?");
@@ -240,7 +240,7 @@ function timers_pause(PDO $pdo, array $cfg, int $id): void {
     timers_assert_member($pdo, $u, $id, $row);
     if ((string)$row['status'] === 'paused') { json_response(['ok' => true, 'already' => 'paused']); return; }
     if ((string)$row['status'] !== 'running') {
-        throw new ApiException('bad_state', "status={$row['status']} からは 一時停止 できません", 400);
+        throw new ApiException('bad_state', "status={$row['status']} からは一時停止できません", 400);
     }
     $endsTs = $row['ends_at'] ? strtotime((string)$row['ends_at']) : time();
     $remain = max(0, $endsTs - time());
@@ -251,7 +251,7 @@ function timers_pause(PDO $pdo, array $cfg, int $id): void {
 }
 
 // v446 ↻ リセット — どの状態 (running / paused / done / cancelled) からでも
-// remaining_seconds を duration_seconds に 戻して paused に。 repeat_idx も 0 に戻す。
+// remaining_seconds を duration_seconds に戻して paused に。 repeat_idx も 0 に戻す。
 function timers_reset(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, duration_seconds, status FROM timers WHERE id=?");
@@ -273,8 +273,8 @@ function timer_fmt_short(int $sec): string {
     return "{$sec}秒";
 }
 
-// v676 #256 公開 タイマー: 認証 なし で 誰でも 取得 できる (= タブレット 等 に 表示 する 用)。
-// 学会 タイマー は public OK と 割り切る (参加者 / アバター 等 個人 情報 は 返さない)。
+// v676 #256 公開タイマー: 認証なしで誰でも取得できる (= タブレット等に表示する用)。
+// 学会タイマーは public OK と割り切る (参加者 / アバター等個人情報は返さない)。
 function timers_public_detail(PDO $pdo, array $cfg, int $id): void {
     timers_autoclose($pdo);
     $st = $pdo->prepare("SELECT id, title, duration_seconds, remaining_seconds,
@@ -285,7 +285,7 @@ function timers_public_detail(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $t = $st->fetch(PDO::FETCH_ASSOC);
     if (!$t) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
-    // server_now を つけて client が 時刻差 を 補正 できる ように
+    // server_now をつけて client が時刻差を補正できるように
     json_response([
         'timer' => [
             'id'                => (int)$t['id'],
@@ -340,7 +340,7 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
             'creator_user_id'   => (int)$t['creator_user_id'],
             'creator_name'      => $t['creator_name'],
             'duration_seconds'  => (int)$t['duration_seconds'],
-            // v446 paused 時に 残り を 持ち越す。 running/done/cancelled では NULL のまま。
+            // v446 paused 時に残りを持ち越す。 running/done/cancelled では NULL のまま。
             'remaining_seconds' => isset($t['remaining_seconds']) ? (int)$t['remaining_seconds'] : null,
             'bell1_seconds'     => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
             'bell2_seconds'     => isset($t['bell2_seconds']) ? (int)$t['bell2_seconds'] : null,
@@ -376,9 +376,9 @@ function timers_cancel(PDO $pdo, array $cfg, int $id): void {
     if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ停止可', 403);
     }
-    // v413 done 状態 (自動 autoclose / 終了 跨いだ) でも 停止 を 受理。
-    // 「超過カウントを ローカル表示で 止めたい」 場合に 起案者が 押して
-    // cancelled に 倒せるように。 cancelled に 既になっている時のみ no-op。
+    // v413 done 状態 (自動 autoclose / 終了跨いだ) でも停止を受理。
+    // 「超過カウントをローカル表示で止めたい」 場合に起案者が押して
+    // cancelled に倒せるように。 cancelled に既になっている時のみ no-op。
     if ((string)$row['status'] === 'cancelled') {
         json_response(['ok' => true, 'already' => true]); return;
     }
@@ -396,7 +396,7 @@ function timers_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    // v458 soft-delete: サーバ側 は 残し UI から だけ 消す (分析用)
+    // v458 soft-delete: サーバ側は残し UI からだけ消す (分析用)
     $pdo->prepare("UPDATE timers SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }

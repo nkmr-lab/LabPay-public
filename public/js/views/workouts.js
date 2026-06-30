@@ -67,7 +67,7 @@ export async function renderWorkouts() {
       const p = PRESET_EXERCISES[Number(b.dataset.preset)];
       document.getElementById('wk-exercise').value = p.name;
       if (!document.getElementById('wk-reps').value) document.getElementById('wk-reps').value = p.defaultReps;
-      // 自重系は ウェイト クリア
+      // 自重系はウェイトクリア
       if (!p.hasWeight) document.getElementById('wk-weight').value = '';
       activeExercise = p.name;
       document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('primary', x === b));
@@ -232,7 +232,7 @@ async function loadFriends() {
         <span style="display:inline-flex; flex:none">${avatarHtml(f.display_name, f.avatar_url, 'sm')}</span>
         <div class="grow">
           <div class="bold">${escapeHtml(f.display_name)}</div>
-          <div class="meta">${f.they_added_me ? '<span class="tag ok">相互フォロー</span>' : '<span class="tag warn">申請中 (相手が追加すれば 相互に)</span>'}</div>
+          <div class="meta">${f.they_added_me ? '<span class="tag ok">相互フォロー</span>' : '<span class="tag warn">申請中 (相手が追加すれば相互に)</span>'}</div>
         </div>
         <button class="btn danger" data-rm="${f.id}" style="font-size:11px; padding:2px 8px">解除</button>
       </div>

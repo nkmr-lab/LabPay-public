@@ -1,4 +1,4 @@
-// /#/orderings — 順番決め (発表順 / 当番割 など)。
+// /#/orderings — 順番決め (発表順 / 当番割など)。
 // v523 #160 ルーレット (1 人選ぶ) の全員順列版。 タイトル + メンバー指定 → 並び替え
 //   結果を保存 + 各メンバーに通知。 詳細ページで順番を 1 人ずつめくる演出。
 //
@@ -29,7 +29,7 @@ export async function renderOrderings() {
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('ord-list').innerHTML =
-        '<div class="empty">まだ 順番決め はありません。 「＋ 新規」 から作成してください。</div>';
+        '<div class="empty">まだ順番決めはありません。 「＋ 新規」 から作成してください。</div>';
       return;
     }
     document.getElementById('ord-list').innerHTML = items.map(o => {
@@ -57,8 +57,8 @@ export async function renderOrderingNew() {
       <a href="#/orderings" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">📋 順番決め — 新規</h2>
       <div style="margin-top:8px">
-        <label style="display:block; font-size:13px; margin-bottom:4px">タイトル (例: 「卒研 発表順」)</label>
-        <input type="text" id="ord-title" maxlength="200" placeholder="例: 卒業研究 発表順" style="width:100%; box-sizing:border-box">
+        <label style="display:block; font-size:13px; margin-bottom:4px">タイトル (例: 「卒研発表順」)</label>
+        <input type="text" id="ord-title" maxlength="200" placeholder="例: 卒業研究発表順" style="width:100%; box-sizing:border-box">
       </div>
       <div style="margin-top:10px">
         <label style="display:block; font-size:13px; margin-bottom:4px">メンバーを選択</label>
@@ -150,7 +150,7 @@ export async function renderOrderingDetail({ params }) {
   });
   if (canDelete) {
     document.getElementById('ord-del').addEventListener('click', async () => {
-      if (!confirm('この 順番決め を削除しますか? (元には戻せません)')) return;
+      if (!confirm('この順番決めを削除しますか? (元には戻せません)')) return;
       try { await del('/api/orderings/' + id); navigate('#/orderings'); }
       catch (e) { toast('失敗: ' + e.message); }
     });

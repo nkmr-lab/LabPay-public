@@ -1,7 +1,7 @@
 <?php
 // /api/polls — 投票 (polls)。
 // 個人の票はデフォルト非公開。 起案者 / 締切後 / open visibility のときだけ
-// 全体集計が見える。 「誰が何に入れたか」 は どの設定でも他者には見せない
+// 全体集計が見える。 「誰が何に入れたか」 はどの設定でも他者には見せない
 // (起案者にも個別の票は見せず、 集計のみ)。
 
 declare(strict_types=1);
@@ -34,7 +34,7 @@ function polls_autoclose(PDO $pdo): void {
 function polls_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     polls_autoclose($pdo);
-    // 自分が対象 (poll_voters) または 自分が起案者の投票を新しい順に。
+    // 自分が対象 (poll_voters) または自分が起案者の投票を新しい順に。
     $st = $pdo->prepare("
         SELECT p.id, p.title, p.deadline_at, p.multi_select, p.visibility, p.status,
                p.created_at, p.closed_at,
@@ -189,7 +189,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
         $stT->execute([$id]);
         $tallies = [];
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) $tallies[(int)$r['option_id']] = (int)$r['n'];
-        // v710 #302 各 option ごと に 誰 が 投票 した か を 公開 (tally と 同じ 可視性)。
+        // v710 #302 各 option ごとに誰が投票したかを公開 (tally と同じ可視性)。
         $stOV = $pdo->prepare("SELECT pv.option_id, pv.user_id, u.display_name, u.avatar_url
                                  FROM poll_votes pv
                                  JOIN users u ON u.id = pv.user_id
@@ -206,7 +206,7 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
                 'avatar_url'   => $r['avatar_url'],
             ];
         }
-        // 自由記述本文は 起案者だけに渡す (誰が書いたかも含めて参照したいのは起案者のみ)。
+        // 自由記述本文は起案者だけに渡す (誰が書いたかも含めて参照したいのは起案者のみ)。
         // 一般の対象者には 「他人の自由記述」 を出さない方針。 自分自身の自由記述は
         // my_free_text 経由で別途返している。
         if (!empty($poll['allow_free_text']) && $isCreator) {

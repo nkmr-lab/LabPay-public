@@ -1,9 +1,9 @@
 <?php
 // /api/todos — 個人 TODO リスト。
-// GET    /api/todos             → 自分の 全件 (未完 + 完了)
+// GET    /api/todos             → 自分の全件 (未完 + 完了)
 // POST   /api/todos {body}      → 追加
-// PATCH  /api/todos/:id {done}  → 完了 ↔ 未完了 トグル
-// PATCH  /api/todos/:id {body}  → 本文 編集
+// PATCH  /api/todos/:id {done}  → 完了 ↔ 未完了トグル
+// PATCH  /api/todos/:id {body}  → 本文編集
 // DELETE /api/todos/:id         → 削除
 
 declare(strict_types=1);
@@ -60,11 +60,11 @@ function todos_normalize_due_at($raw): ?string {
        ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
        ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw)
        ?: DateTime::createFromFormat('Y-m-d', $raw);
-    if (!$dt) throw new ApiException('bad_request', 'due_at は ISO 日時 か YYYY-MM-DD', 400);
+    if (!$dt) throw new ApiException('bad_request', 'due_at は ISO 日時か YYYY-MM-DD', 400);
     return $dt->format('Y-m-d H:i:s');
 }
 
-// v483 #75 url / notes / partner の バリデーション。
+// v483 #75 url / notes / partner のバリデーション。
 function todos_normalize_extras(array $body, PDO $pdo): array {
     $out = [];
     if (array_key_exists('url', $body)) {
@@ -118,7 +118,7 @@ function todos_create(PDO $pdo, int $uid): void {
 function todos_patch(PDO $pdo, int $uid, int $id): void {
     $st = $pdo->prepare("SELECT 1 FROM user_todos WHERE id=? AND user_id=?");
     $st->execute([$id, $uid]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', 'todo が ありません', 404);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'todo がありません', 404);
     $body = read_json_body();
     $sets = []; $args = [];
     if (array_key_exists('done', $body)) {

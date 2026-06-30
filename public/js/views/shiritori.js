@@ -1,5 +1,5 @@
 // /#/shiritori — 絵しりとり (Phase 1)。 v540 #171。
-//   メンバー選択 → ゲーム作成 → 順番に描いて タイトル + 直前の予想を入力 → 終了。
+//   メンバー選択 → ゲーム作成 → 順番に描いてタイトル + 直前の予想を入力 → 終了。
 //   AI 予想 / 最終当て / アニメ再生は Phase 2 で。
 
 import { get, post } from '../api.js';
@@ -61,7 +61,7 @@ export async function renderShiritoriNew() {
           <input type="number" id="sh-rounds" min="1" max="10" value="2" style="width:100%; box-sizing:border-box">
         </label>
       </div>
-      <div class="hint" style="font-size:12px; margin-top:6px">⏱ 1 ターン 30 秒 固定 ・ プレイフィー 1 人 2pt (初めて 自分の番を 投稿した 時に 徴収)</div>
+      <div class="hint" style="font-size:12px; margin-top:6px">⏱ 1 ターン 30 秒固定・プレイフィー 1 人 2pt (初めて自分の番を投稿した時に徴収)</div>
       <div style="margin-top:10px">
         <label style="display:block; font-size:13px; margin-bottom:4px">メンバー (自分は自動で含まれます)</label>
         <div id="sh-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
@@ -88,7 +88,7 @@ export async function renderShiritoriNew() {
   document.getElementById('sh-go').addEventListener('click', async () => {
     const title = document.getElementById('sh-title').value.trim();
     if (!title) { toast('タイトルを入れてください'); return; }
-    const time   = 30; // v580 固定 (秒数指定UI を 撤去)
+    const time   = 30; // v580 固定 (秒数指定UI を撤去)
     const rounds = Number(document.getElementById('sh-rounds').value) || 2;
     const ids = picker ? [...picker.getSelected()] : [];
     if (ids.length < 1) { toast('1 人以上選んでください'); return; }
@@ -106,8 +106,8 @@ export async function renderShiritoriNew() {
   });
 }
 
-// 絵しりとりのゲーム本体。 現在のターンが自分なら キャンバス + タイマー、 他人なら
-//   「○○さんが描いてます」 + 過去の絵 (直近 2 枚)。 終了したら 全描画一覧。
+// 絵しりとりのゲーム本体。 現在のターンが自分ならキャンバス + タイマー、 他人なら
+//   「○○さんが描いてます」 + 過去の絵 (直近 2 枚)。 終了したら全描画一覧。
 let canvasState = null;
 export async function renderShiritoriDetail({ params }) {
   const gid = Number(params.id);
@@ -166,7 +166,7 @@ function paintWaitingTurn(root, g) {
   root.innerHTML = `
     <div class="card">
       <div class="bold" style="margin-bottom:6px">⏳ ${escapeHtml(cur ? cur.display_name : '?')} さんが描いています…</div>
-      <div class="hint-sm">あなたの番が来たら ホームの通知 が届きます。 このページをリロードしてください。</div>
+      <div class="hint-sm">あなたの番が来たらホームの通知が届きます。 このページをリロードしてください。</div>
     </div>
     ${last2.length ? `<div class="card">
       <div class="bold" style="margin-bottom:6px">最新 ${last2.length} 枚</div>

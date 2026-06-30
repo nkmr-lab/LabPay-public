@@ -1,32 +1,32 @@
-// /#/games — 娯楽ハブ。 LabPay 内の ゲーム / ランダム系アプリを 1 箇所にまとめて表示。
-// v571 #タブ追加 (v573 で 「娯楽」 にリネーム)。 lazy import なので 普段は読み込まれない。
+// /#/games — 娯楽ハブ。 LabPay 内のゲーム / ランダム系アプリを 1 箇所にまとめて表示。
+// v571 #タブ追加 (v573 で 「娯楽」 にリネーム)。 lazy import なので普段は読み込まれない。
 
 import { escapeHtml } from '../router.js';
 
 const GAMES = [
   { id: 'mahjong',   icon: '🀄', name: '麻雀',         url: '#/mahjong',
-    desc: '4 人 50pt 賭けプール で 本格麻雀 (門前/鳴き/役判定/連荘/半荘)。 終了時に順位別 payout',
+    desc: '4 人 50pt 賭けプールで本格麻雀 (門前/鳴き/役判定/連荘/半荘)。 終了時に順位別 payout',
     badge: '賭けプール 50pt' },
   { id: 'ito',       icon: '🎲', name: 'ito',          url: '#/ito',
     desc: '協力ゲーム。 各自に 1-100 配布 → お題に沿った表現 → 全員の数字を開示',
     badge: 'プレイフィー 1pt' },
   { id: 'jinrou',    icon: '🐺', name: '人狼',         url: '#/jinrou',
-    desc: '4-16 人。 役職配布 (人狼/占い/騎士/村人) → 夜 + 昼 で 勝敗',
+    desc: '4-16 人。 役職配布 (人狼/占い/騎士/村人) → 夜 + 昼で勝敗',
     badge: 'プレイフィー 2pt' },
   { id: 'shiritori', icon: '🎨', name: '絵しりとり',   url: '#/shiritori',
-    desc: 'タイムリミット付きキャンバスで 順番に絵を描く。 1 つ前の絵を当てる',
+    desc: 'タイムリミット付きキャンバスで順番に絵を描く。 1 つ前の絵を当てる',
     badge: 'プレイフィー 2pt' },
   { id: 'tierlists', icon: '🎯', name: 'ティア表',     url: '#/tierlists',
-    desc: 'お題 + 候補リスト で みんなで S/A/B/C/D/F 6 段階の ティア分け' },
+    desc: 'お題 + 候補リストでみんなで S/A/B/C/D/F 6 段階のティア分け' },
   { id: 'regions',   icon: '🗺', name: '制覇マップ',   url: '#/regions',
     desc: '行った国・都道府県をタップで登録 → 進捗バー (X/47都道府県やX/100+国) + ラボ内の集計' },
   { id: 'playlists', icon: '🎵', name: 'プレイリスト', url: '#/playlists',
     desc: 'YouTube/Spotify URLをまとめて紹介。⭐評価+コメント+❤️お気に入り+ジャンル+シャッフル再生' },
   { id: 'predictions', icon: '🏆', name: '優勝予想',   url: '#/predictions',
-    desc: 'W 杯 / スポーツ大会 / 学会 best paper など 順位を予想して 参加フィー を山分け',
+    desc: 'W 杯 / スポーツ大会 / 学会 best paper など順位を予想して参加フィーを山分け',
     badge: 'プレイフィー 10-100pt' },
   { id: 'score-predictions', icon: '🎯', name: '勝敗予測', url: '#/score-predictions',
-    desc: '試合のスコアを完璧に当てた人が 山分け',
+    desc: '試合のスコアを完璧に当てた人が山分け',
     badge: 'プレイフィー 10-100pt' },
   { id: 'othello',   icon: '💣', name: '地雷オセロ',  url: '#/othello',
     desc: '通常オセロ + 各自 1 か所地雷 (踏むと 3x3 反転)',
@@ -35,7 +35,7 @@ const GAMES = [
     desc: '2-4 人、 単出し / ペア / N 枚出し + 革命 + 8切り',
     badge: 'プレイフィー 2pt' },
   { id: 'tictactoe', icon: '⭕', name: 'マルバツ',     url: '#/tictactoe',
-    desc: '3x3 マルバツ。 縦/横/斜め 3 つ並べたら勝ち。 自作ゲーム フレームワークの サンプル',
+    desc: '3x3 マルバツ。 縦/横/斜め 3 つ並べたら勝ち。 自作ゲームフレームワークのサンプル',
     badge: 'プレイフィー 1pt' },
   // v603 娯楽カテゴリへ追加 (apps cat='game' と同期)
   { id: 'sns',       icon: '💬', name: 'らぼったー',  url: '#/sns',
@@ -44,14 +44,14 @@ const GAMES = [
     desc: 'お店情報をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー' },
   { id: 'flight',    icon: '✈️', name: 'フライト応援', url: '#/flight',
     desc: '長いフライトの進捗 (%) / 残り時間を大きく可視化。完全オフライン' },
-  // v637 lab-mgmt から 娯楽 へ 移動
+  // v637 lab-mgmt から娯楽へ移動
   { id: 'drafts',    icon: '⚾', name: 'ドラフト',    url: '#/drafts',
-    desc: 'プロ野球風 順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を 揃えて 1 位、 2 位 と 順番指名。 競合は くじ で 決着' },
+    desc: 'プロ野球風順番指名 + くじ抽選。 参加者と候補 (人 or 自由入力) を揃えて 1 位、 2 位と順番指名。 競合はくじで決着' },
   { id: 'quizzes',   icon: '📝', name: 'フリップクイズ', url: '#/quizzes',
-    desc: '出題 → 参加者 フリップ 記述回答 → 一斉開示 (タップで 拡大) → ⭕❌ 採点 → ランキング 集計' },
-  // v672 #252 占い を 娯楽 タブ に も。 v816 #408 西洋占星術 (12 星座) を 追加
-  { id: 'fortune',   icon: '🔮', name: '今日 の 占い + ♈ 西洋占星術', url: '#/fortune',
-    desc: '1 日 1 回 だけ 引ける 運勢 + 誕生日 から 12 星座 占い (ラッキー カラー / アイテム / ナンバー 付き)' },
+    desc: '出題 → 参加者フリップ記述回答 → 一斉開示 (タップで拡大) → ⭕❌ 採点 → ランキング集計' },
+  // v672 #252 占いを娯楽タブにも。 v816 #408 西洋占星術 (12 星座) を追加
+  { id: 'fortune',   icon: '🔮', name: '今日の占い + ♈ 西洋占星術', url: '#/fortune',
+    desc: '1 日 1 回だけ引ける運勢 + 誕生日から 12 星座占い (ラッキーカラー / アイテム / ナンバー付き)' },
   // v837 cat='game' の APPS に揃える (apps.js との同期漏れ修正)
   { id: 'cg2',       icon: '🎮', name: '自作ゲームv2 (cg2)', url: '#/cg2',
     desc: 'p5.jsベースの准リアルタイムmultiplayerフレームワーク。マルバツ/ニム/ライツアウト/すごろくのサンプル付き' },
@@ -59,12 +59,12 @@ const GAMES = [
     desc: '手持ちの服を25着以上登録すると、日曜始まりの5x5ビンゴ盤が自動生成。着た服を盤面から開けてラインが揃えばビンゴ' },
   { id: 'bingo',     icon: '🎰', name: 'ビンゴ (週次)', url: '#/bingo',
     desc: '毎週5x5ビンゴカードが自動生成。平日の行動(ラボイン/らぼったー投稿/麻雀/オセロ/食べある記など)が自動カウント' },
-  // v860 #445 ユーザ自由 制覇 リスト
-  { id: 'conquest',  icon: '🏁', name: '制覇 リスト',   url: '#/conquest',
-    desc: '街 の パン屋 / ラーメン屋 / 温泉地 など 自分 だけ の 制覇 対象 リスト を 作って、 達成 したら チェック。 公開 すれば みんな で アイテム を 育てられる' },
-  // v872 #454 早押し クイズ (リアル現場)
-  { id: 'buzzer',    icon: '⚡', name: '早押し クイズ', url: '#/buzzer',
-    desc: 'リアル現場 (ゼミ / 飲み会 等) で 出題者 が 口頭 出題 → 参加者 が スマホ で 早押し ボタン。 1 位 緑 / 他 赤 + 1 位 と の 差 を ms で 表示' },
+  // v860 #445 ユーザ自由制覇リスト
+  { id: 'conquest',  icon: '🏁', name: '制覇リスト',   url: '#/conquest',
+    desc: '街のパン屋 / ラーメン屋 / 温泉地など自分だけの制覇対象リストを作って、 達成したらチェック。 公開すればみんなでアイテムを育てられる' },
+  // v872 #454 早押しクイズ (リアル現場)
+  { id: 'buzzer',    icon: '⚡', name: '早押しクイズ', url: '#/buzzer',
+    desc: 'リアル現場 (ゼミ / 飲み会等) で出題者が口頭出題 → 参加者がスマホで早押しボタン。 1 位緑 / 他赤 + 1 位との差を ms で表示' },
 ];
 
 const CATEGORIES = [
@@ -86,9 +86,9 @@ const GAME_CATEGORY = {
   ito:           'party',
   jinrou:        'party',
   shiritori:     'party',
-  tierlists:     'collect', // v600 #229 ティア表は 集める/制覇カテゴリへ (好きな物を分類する系)
+  tierlists:     'collect', // v600 #229 ティア表は集める/制覇カテゴリへ (好きな物を分類する系)
   regions:       'collect',
-  playlists:     'collect', // v600 #230 プレイリストは 集める/制覇 (音楽コレクション)
+  playlists:     'collect', // v600 #230 プレイリストは集める/制覇 (音楽コレクション)
   sns:           'community', // v603
   places:        'community', // v603
   flight:        'solo',      // v603
@@ -98,8 +98,8 @@ const GAME_CATEGORY = {
   cg2:           'gamble',    // v837
   bingofit:      'collect',   // v837
   bingo:         'collect',   // v837
-  conquest:      'collect',   // v873 #445 ユーザ自由 制覇 リスト も 「集める / 制覇する」 へ
-  buzzer:        'party',     // v873 #454 早押し クイズ は パーティー へ
+  conquest:      'collect',   // v873 #445 ユーザ自由制覇リストも 「集める / 制覇する」 へ
+  buzzer:        'party',     // v873 #454 早押しクイズはパーティーへ
 };
 
 export function renderGames() {

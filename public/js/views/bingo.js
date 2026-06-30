@@ -1,11 +1,11 @@
-// v588 ビンゴ。 週次 5x5、 自動判定、 リーチ / ビンゴ で 演出。
+// v588 ビンゴ。 週次 5x5、 自動判定、 リーチ / ビンゴで演出。
 // v845 #429 マス目タップで該当アプリへ遷移できるように。
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 import { state, toast } from '../app.js';
 
-// マスの type → 該当 アプリ の URL マップ。 対応するアプリ がないものは null (リンクなし)。
+// マスの type → 該当アプリの URL マップ。 対応するアプリがないものは null (リンクなし)。
 const CELL_TYPE_TO_URL = {
   checkin:         '#/',
   checkin_streak:  '#/',
@@ -67,26 +67,26 @@ export async function renderBingo(ctx) {
         ${isPast ? `<a href="#/bingo" class="btn" style="font-size:12px">今週へ</a>` : ''}
       </div>
       ${isPast ? '' : `<p class="hint" style="margin:6px 0 0; font-size:13px">
-        週次 5x5 マス。 毎週 日曜 0:00 リセット → 土曜 23:59 終了。
-        平日 (月-金) の 行動 が 自動 カウント。 自分の カード だけ 見えます。
+        週次 5x5 マス。 毎週日曜 0:00 リセット → 土曜 23:59 終了。
+        平日 (月-金) の行動が自動カウント。 自分のカードだけ見えます。
       </p>`}
       <p style="margin:8px 0 0; font-size:13px">
-        ${isPast ? '対象週' : '今週'}: <b>${escapeHtml(d.week_start)}</b> 開始 ・
-        ビンゴ数: <b style="font-size:18px; color:${isBingo ? '#dc2626' : '#888'}">${d.bingo_lines}</b> 本 ・
+        ${isPast ? '対象週' : '今週'}: <b>${escapeHtml(d.week_start)}</b> 開始・
+        ビンゴ数: <b style="font-size:18px; color:${isBingo ? '#dc2626' : '#888'}">${d.bingo_lines}</b> 本・
         達成: ${d.completed.length} / 25
-        ${d.first_bingo_at ? ` ・ 初ビンゴ: ${escapeHtml(d.first_bingo_at)}` : ''}
+        ${d.first_bingo_at ? ` ・初ビンゴ: ${escapeHtml(d.first_bingo_at)}` : ''}
       </p>
     </div>
 
     ${isBingo ? `
       <div id="bingo-banner" class="card" style="background:linear-gradient(135deg, #f59e0b, #ef4444, #ec4899); color:#fff; text-align:center; padding:18px; animation:bingoPulse 2s ease-in-out infinite">
         <div style="font-size:36px; font-weight:900; text-shadow:0 2px 8px rgba(0,0,0,0.3)">🎉 BINGO! 🎉</div>
-        <div style="font-size:18px; margin-top:4px">${d.bingo_lines} 本 達成中</div>
+        <div style="font-size:18px; margin-top:4px">${d.bingo_lines} 本達成中</div>
       </div>
       <style>@keyframes bingoPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.02); } }</style>
     ` : (reachLines.length > 0 ? `
       <div class="card" style="background:#fef3c7; color:#946d00; text-align:center; padding:12px">
-        <div style="font-size:22px; font-weight:800">⚡ リーチ! あと 1 マス で ビンゴ × ${reachLines.length}</div>
+        <div style="font-size:22px; font-weight:800">⚡ リーチ! あと 1 マスでビンゴ × ${reachLines.length}</div>
       </div>
     ` : '')}
 
@@ -131,32 +131,32 @@ export async function renderBingo(ctx) {
       <h3 style="margin:0 0 6px">🏆 リーダーボード (今週)</h3>
       <div style="display:flex; gap:14px; flex-wrap:wrap">
         <div style="flex:1; min-width:200px">
-          <div class="bold" style="font-size:13px; color:#946d00">🥇 ビンゴ 一番乗り</div>
+          <div class="bold" style="font-size:13px; color:#946d00">🥇 ビンゴ一番乗り</div>
           ${(lb.earliest || []).length ? (lb.earliest.map((r, i) => `
             <div style="display:flex; gap:6px; align-items:center; padding:4px 0">
               <span style="font-size:16px">${['🥇','🥈','🥉'][i]}</span>
               <span class="bold">${escapeHtml(r.display_name)}</span>
               <span class="hint-sm">${escapeHtml(r.first_bingo_at)}</span>
-            </div>`).join('')) : '<div class="hint-sm">まだ誰も ビンゴ なし</div>'}
+            </div>`).join('')) : '<div class="hint-sm">まだ誰もビンゴなし</div>'}
         </div>
         <div style="flex:1; min-width:200px">
-          <div class="bold" style="font-size:13px; color:#946d00">🔥 ライン数 ランキング</div>
+          <div class="bold" style="font-size:13px; color:#946d00">🔥 ライン数ランキング</div>
           ${(lb.most_lines || []).length ? (lb.most_lines.map((r, i) => `
             <div style="display:flex; gap:6px; align-items:center; padding:4px 0">
               <span style="font-size:16px">${['🥇','🥈','🥉'][i]}</span>
               <span class="bold">${escapeHtml(r.display_name)}</span>
               <span class="hint-sm">${r.bingo_lines} 本</span>
-            </div>`).join('')) : '<div class="hint-sm">まだ ランキング なし</div>'}
+            </div>`).join('')) : '<div class="hint-sm">まだランキングなし</div>'}
         </div>
       </div>
     </div>`}
   `;
 
-  // 新規達成 / 新規ビンゴ の 演出
+  // 新規達成 / 新規ビンゴの演出
   if (d.newly_bingoed) {
     triggerBingoCelebration();
   } else if ((d.newly_completed || []).length > 0) {
-    toast('🎯 マス 達成! 残り ' + (25 - d.completed.length));
+    toast('🎯 マス達成! 残り ' + (25 - d.completed.length));
   }
 }
 

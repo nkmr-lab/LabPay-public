@@ -1,7 +1,7 @@
 <?php
-// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 v648 で 180 日 以内 に 拡張 (元 31 日)。
-// 起案時に 自分以外の参加者へ push 通知。 タイマーや点呼と違って 応答ボタンは無く、
-// 「集合する場所を 1 つ決めて 全員に同期する」 のが目的。
+// /api/meetups — 「次の待ち合わせ」 機能。 集合時刻 + 場所 + メンバー。 v648 で 180 日以内に拡張 (元 31 日)。
+// 起案時に自分以外の参加者へ push 通知。 タイマーや点呼と違って応答ボタンは無く、
+// 「集合する場所を 1 つ決めて全員に同期する」 のが目的。
 
 declare(strict_types=1);
 
@@ -17,15 +17,15 @@ function route_meetups(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''        && $method === 'PATCH')  { meetups_edit($pdo, $cfg, $id);   return; }
         if ($next === 'cancel'  && $method === 'PATCH')  { meetups_cancel($pdo, $cfg, $id); return; }
         if ($next === 'participants' && $method === 'POST') { meetups_add_participants($pdo, $cfg, $id); return; }
-        // v482 #71 メッセージ シェア
+        // v482 #71 メッセージシェア
         if ($next === 'messages' && $method === 'GET')   { meetups_messages_list($pdo, $cfg, $id);   return; }
         if ($next === 'messages' && $method === 'POST')  { meetups_messages_create($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no meetups route for $method $sub", 404);
 }
 
-// v482 #71 待ち合わせ への シェア メッセージ (例: 「5 分 遅れます」 「先 に 中 に
-//   入って ます」)。 参加者 と 起案者 のみ 閲覧 / 投稿 可。
+// v482 #71 待ち合わせへのシェアメッセージ (例: 「5 分遅れます」 「先に中に
+//   入ってます」)。 参加者と起案者のみ閲覧 / 投稿可。
 function meetups_messages_assert_visible(PDO $pdo, int $meetupId, int $userId): array {
     $st = $pdo->prepare("SELECT id, creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
     $st->execute([$meetupId]);
@@ -35,7 +35,7 @@ function meetups_messages_assert_visible(PDO $pdo, int $meetupId, int $userId): 
         $stP = $pdo->prepare("SELECT 1 FROM meetup_participants WHERE meetup_id=? AND user_id=?");
         $stP->execute([$meetupId, $userId]);
         if (!$stP->fetchColumn()) {
-            throw new ApiException('forbidden', '参加者 のみ 閲覧 / 投稿 可', 403);
+            throw new ApiException('forbidden', '参加者のみ閲覧 / 投稿可', 403);
         }
     }
     return $m;
@@ -67,13 +67,13 @@ function meetups_messages_create(PDO $pdo, array $cfg, int $meetupId): void {
     $m = meetups_messages_assert_visible($pdo, $meetupId, (int)$u['id']);
     $body = read_json_body();
     $text = trim((string)($body['body'] ?? ''));
-    if ($text === '') throw new ApiException('bad_request', '本文 が 必要', 400);
+    if ($text === '') throw new ApiException('bad_request', '本文が必要', 400);
     if (mb_strlen($text) > 1000) $text = mb_substr($text, 0, 1000);
     $pdo->prepare("INSERT INTO meetup_messages (meetup_id, user_id, body, created_at)
                    VALUES (?, ?, ?, NOW())")
         ->execute([$meetupId, (int)$u['id'], $text]);
     $msgId = (int)$pdo->lastInsertId();
-    // 通知: 起案者 + 全 参加者 (自分 除く)
+    // 通知: 起案者 + 全参加者 (自分除く)
     $isDeadline = ((string)($m['kind'] ?? 'meetup')) === 'deadline';
     $icon = $isDeadline ? '📌' : '🤝';
     $stN = $pdo->prepare("SELECT DISTINCT user_id FROM (
@@ -93,7 +93,7 @@ function meetups_messages_create(PDO $pdo, array $cfg, int $meetupId): void {
     json_response(['id' => $msgId, 'ok' => true]);
 }
 
-// v468 編集 (起案者 + admin) — title / location / meetup_at / kind を 部分更新。
+// v468 編集 (起案者 + admin) — title / location / meetup_at / kind を部分更新。
 function meetups_edit(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
@@ -136,7 +136,7 @@ function meetups_edit(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true]);
 }
 
-// v468 参加者 追加。 既存 メンバー は INSERT IGNORE で 重複 排除。
+// v468 参加者追加。 既存メンバーは INSERT IGNORE で重複排除。
 function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id, title, kind FROM meetups WHERE id=? AND deleted_at IS NULL");
@@ -144,11 +144,11 @@ function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', '見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    // 起案者 / admin / 既参加 のいずれか は 追加 可能。
+    // 起案者 / admin / 既参加のいずれかは追加可能。
     if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
         $stChk = $pdo->prepare("SELECT 1 FROM meetup_participants WHERE meetup_id=? AND user_id=?");
         $stChk->execute([$id, (int)$u['id']]);
-        if (!$stChk->fetchColumn()) throw new ApiException('forbidden', '関係者 のみ 参加者を追加できます', 403);
+        if (!$stChk->fetchColumn()) throw new ApiException('forbidden', '関係者のみ参加者を追加できます', 403);
     }
     $body = read_json_body();
     $newIds = $body['member_ids'] ?? [];
@@ -168,7 +168,7 @@ function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
         $stIns->execute([$id, $uid]);
         if ($stIns->rowCount() > 0) $added++;
     }
-    // 通知 (追加 された 人 だけ)
+    // 通知 (追加された人だけ)
     $isDeadline = ((string)($row['kind'] ?? 'meetup')) === 'deadline';
     $icon = $isDeadline ? '📌' : '🤝';
     $label = $isDeadline ? '〆切' : '待ち合わせ';
@@ -176,7 +176,7 @@ function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
         if ((int)$uid === (int)$u['id']) continue;
         try {
             Notifier::notify($pdo, $cfg, (int)$uid, 'meetup',
-                "{$icon} {$label} に 追加 されました: 「{$row['title']}」",
+                "{$icon} {$label} に追加されました: 「{$row['title']}」",
                 'meetup', $id);
         } catch (Throwable $_) { /* swallow */ }
     }
@@ -186,7 +186,7 @@ function meetups_add_participants(PDO $pdo, array $cfg, int $id): void {
 function meetups_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // v450 ?kind=meetup|deadline で 絞り込み。 未指定 = 両方。
+    // v450 ?kind=meetup|deadline で絞り込み。 未指定 = 両方。
     $kindFilter = (string)($_GET['kind'] ?? '');
     $where = "(m.creator_user_id = ? OR EXISTS(SELECT 1 FROM meetup_participants p WHERE p.meetup_id=m.id AND p.user_id=?))";
     $args = [$uid, $uid];
@@ -205,8 +205,8 @@ function meetups_list(PDO $pdo, array $cfg): void {
          LIMIT 100");
     $st->execute($args);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
-    // v466 関係者 アバター を 同梱 (最大 5 名)。 ホーム の 進行中 カード で 「誰の
-    // 待ち合わせ / 〆切 か」 を 顔で 把握 する 用。
+    // v466 関係者アバターを同梱 (最大 5 名)。 ホームの進行中カードで 「誰の
+    // 待ち合わせ / 〆切か」 を顔で把握する用。
     $ids = array_map(fn($r) => (int)$r['id'], $items);
     $parts = [];
     if ($ids) {
@@ -250,7 +250,7 @@ function meetups_create(PDO $pdo, array $cfg): void {
     $raw = (string)($body['meetup_at'] ?? '');
     // v527 #166 クライアントが ISO 8601 UTC (e.g. 2026-06-11T11:30:00.000Z) を送って
     //   くる場合がある (海外滞在中のユーザがローカル時間で意図した時刻を渡す)。
-    //   既存の Y-m-d\TH:i 形式も そのまま受ける。
+    //   既存の Y-m-d\TH:i 形式もそのまま受ける。
     $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
        ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
        ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
@@ -267,7 +267,7 @@ function meetups_create(PDO $pdo, array $cfg): void {
     if ($whenTs <= time() + 30) {
         throw new ApiException('bad_request', ($isDeadline ? '〆切時刻' : '集合時刻') . 'は今より先に', 400);
     }
-    // v450 〆切は 365 日まで、 待ち合わせは v648 で 180 日 (半年) まで に 拡張。
+    // v450 〆切は 365 日まで、 待ち合わせは v648 で 180 日 (半年) までに拡張。
     $maxAhead = $isDeadline ? 365 * 86400 : 180 * 86400;
     $maxLabel = $isDeadline ? '365 日' : '180 日';
     if ($whenTs > time() + $maxAhead) {
@@ -296,7 +296,7 @@ function meetups_create(PDO $pdo, array $cfg): void {
         $stP = $pdo->prepare("INSERT INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)");
         foreach ($memberIds as $uid) $stP->execute([$mid, $uid]);
     });
-    // 通知 文言 を kind で 切り替え。 〆切 は 月日 + 時刻 まで 載せた 方が 一目で分かる。
+    // 通知文言を kind で切り替え。 〆切は月日 + 時刻まで載せた方が一目で分かる。
     $icon  = $isDeadline ? '📌' : '🤝';
     $label = $isDeadline ? '〆切' : '待ち合わせ';
     $whenShort = $isDeadline ? date('n/j H:i', strtotime($when)) : substr($when, 11, 5);
@@ -400,7 +400,7 @@ function meetups_delete(PDO $pdo, array $cfg, int $id): void {
     if ($cid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '起案者または admin のみ削除可', 403);
     }
-    // v458 soft-delete: 分析用 に サーバ側 残す
+    // v458 soft-delete: 分析用にサーバ側残す
     $pdo->prepare("UPDATE meetups SET deleted_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
 }

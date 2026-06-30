@@ -1,5 +1,5 @@
 <?php
-// /api/playlists — 音楽 / 動画 プレイリスト。 YouTube / Spotify URL + メモ + 並び順。
+// /api/playlists — 音楽 / 動画プレイリスト。 YouTube / Spotify URL + メモ + 並び順。
 // 1 プレイリストに N アイテム、 アイテムごとに 1-5 評価 + コメント、 プレイリスト
 // 全体に ❤️ like。
 
@@ -35,7 +35,7 @@ function route_playlists(PDO $pdo, array $cfg, string $method, array $seg): void
 }
 
 // ─── URL parser ─────────────────────────────────────────
-// YouTube / Spotify / direct video / その他 を 識別、 サムネ URL も 解決。
+// YouTube / Spotify / direct video / その他を識別、 サムネ URL も解決。
 function playlists_parse_url(string $url): array {
     $url = trim($url);
     $m = [];
@@ -102,7 +102,7 @@ function playlists_list(PDO $pdo, array $cfg): void {
     $creator = isset($_GET['creator']) ? (int)$_GET['creator'] : 0;
     $limit   = max(1, min(100, (int)($_GET['limit'] ?? 50)));
 
-    // 公開 + 自分の private のみ 見せる。
+    // 公開 + 自分の private のみ見せる。
     $where  = '(p.visibility = \'public\' OR p.creator_user_id = ?)';
     $params = [$u['id']];
     if ($mine)   { $where .= ' AND p.creator_user_id = ?';            $params[] = $u['id']; }
@@ -168,8 +168,8 @@ function playlists_create(PDO $pdo, array $cfg): void {
 function playlists_detail(PDO $pdo, array $cfg, int $pid): void {
     $u = Auth::requireUser($pdo, $cfg);
     playlists_assert_readable($pdo, $pid, (int)$u['id']);
-    // 閲覧数 を 自分以外の閲覧時に +1。 同一 user が連打しても 自作品は カウント
-    // しない (作者の自己閲覧を 弾く)。
+    // 閲覧数を自分以外の閲覧時に +1。 同一 user が連打しても自作品はカウント
+    // しない (作者の自己閲覧を弾く)。
     $pdo->prepare("UPDATE playlists SET view_count = view_count + 1
                    WHERE id = ? AND creator_user_id <> ?")
         ->execute([$pid, $u['id']]);
@@ -286,7 +286,7 @@ function playlists_toggle_like(PDO $pdo, array $cfg, int $pid): void {
 }
 
 // ─── ITEM add ────────────────────────────────────────────
-// メモ: items の 追加は 作成者だけ。 アイテム評価は 全員可能。
+// メモ: items の追加は作成者だけ。 アイテム評価は全員可能。
 function playlists_item_add(PDO $pdo, array $cfg, int $pid): void {
     $u = Auth::requireUser($pdo, $cfg);
     playlists_assert_creator($pdo, $pid, (int)$u['id']);

@@ -1,6 +1,6 @@
 // v560 #213 #215 #218 タイムゾーン helper
 //   海外滞在中に 「日本時間で 〜 に集合」 と設定したいケースに対応。
-//   datetime-local は ブラウザのローカル TZ で解釈されるため、 ユーザに 「JST で設定 / ローカルで設定」 を選ばせる。
+//   datetime-local はブラウザのローカル TZ で解釈されるため、 ユーザに 「JST で設定 / ローカルで設定」 を選ばせる。
 //   デフォルト = JST (中村研究室メイン用途)。
 //   設定は localStorage.labpay-tz-mode に 'jst' / 'local' で永続化。
 
@@ -67,7 +67,7 @@ export function bindTzToggle(id = 'tz-mode', onChange = null) {
     el.addEventListener('change', () => {
       if (el.checked) {
         setTzMode(el.value);
-        // 親要素の表示を更新するため 一度 自身を再描画 (簡略: caller が onChange で再描画)
+        // 親要素の表示を更新するため一度自身を再描画 (簡略: caller が onChange で再描画)
         if (onChange) onChange(el.value);
       }
     });

@@ -1,15 +1,15 @@
-// Screen Wake Lock helper. タイマー / ストップウォッチ 実行中に スクリーンが
-// スリープしないように 取得し、 終了 / 一時停止 / ページ離脱 で 解放する。
+// Screen Wake Lock helper. タイマー / ストップウォッチ実行中にスクリーンが
+// スリープしないように取得し、 終了 / 一時停止 / ページ離脱で解放する。
 //
 // 仕様:
-//  - navigator.wakeLock.request('screen') を 持続中 acquire
-//  - ページが visibilityhidden で OS が 自動解放するため、 visible に戻ったら 再取得
-//  - 「持続中フラグ」 を 内部で 持って、 release() が 来たら 取らない
+//  - navigator.wakeLock.request('screen') を持続中 acquire
+//  - ページが visibilityhidden で OS が自動解放するため、 visible に戻ったら再取得
+//  - 「持続中フラグ」 を内部で持って、 release() が来たら取らない
 //
-// 単一インスタンス。 acquire(key) で 同じ key 同士 は ノーオプ、 別 key も 重複呼びは
-// 直近の key だけ 有効 (旧 key の sentinel は そっと release)。
+// 単一インスタンス。 acquire(key) で同じ key 同士はノーオプ、 別 key も重複呼びは
+// 直近の key だけ有効 (旧 key の sentinel はそっと release)。
 //
-// 失敗 (未対応 / NotAllowedError / フォーカス なし) は silently swallow。
+// 失敗 (未対応 / NotAllowedError / フォーカスなし) は silently swallow。
 
 let _sentinel = null;
 let _activeKey = null;
@@ -21,7 +21,7 @@ async function _request() {
   try {
     _sentinel = await navigator.wakeLock.request('screen');
     _sentinel.addEventListener('release', () => {
-      // OS / ブラウザ が 解放した。 _activeKey が セットなら 後で 再取得 試みる。
+      // OS / ブラウザが解放した。 _activeKey がセットなら後で再取得試みる。
     });
     return _sentinel;
   } catch (_) {
@@ -40,8 +40,8 @@ function _ensureVisListener() {
   document.addEventListener('visibilitychange', _visListener);
 }
 
-// acquire('timer-123' など key) で 「この対象が 動いている間 ON」 を 表現。
-// 同じ key で 連続呼んでも 重複取得 しない。 別 key で 呼んだら 旧 key は 上書き。
+// acquire('timer-123' など key) で 「この対象が動いている間 ON」 を表現。
+// 同じ key で連続呼んでも重複取得しない。 別 key で呼んだら旧 key は上書き。
 export async function acquireWakeLock(key) {
   _activeKey = key;
   _ensureVisListener();
@@ -49,7 +49,7 @@ export async function acquireWakeLock(key) {
 }
 
 export async function releaseWakeLock(key) {
-  // 別 key で acquire されている場合は 黙って 無視 (まだ 別ターゲットが 動いている)
+  // 別 key で acquire されている場合は黙って無視 (まだ別ターゲットが動いている)
   if (key !== null && _activeKey !== key) return;
   _activeKey = null;
   if (_sentinel && !_sentinel.released) {

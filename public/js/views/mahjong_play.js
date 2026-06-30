@@ -1,11 +1,11 @@
-// v554 #209 麻雀 Phase 2 ゲーム本体 UI。 lazy import で 普段は読み込まない。
+// v554 #209 麻雀 Phase 2 ゲーム本体 UI。 lazy import で普段は読み込まない。
 //   polling (2 秒) で /api/mahjong/games/:id/state を取得 → 再描画。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { toast } from '../app.js';
 
-// v585 麻雀の 鳴き / アガリ 宣言時 に 音声合成 (チー / ポン / カン / リーチ / ロン / ツモ)。
+// v585 麻雀の鳴き / アガリ宣言時に音声合成 (チー / ポン / カン / リーチ / ロン / ツモ)。
 //   Web Speech API (browser 内蔵)。 ファイル不要、 ja-JP voice。
 //   音声 OFF にしたい場合は localStorage('labpay-mahjong-mute') = '1'。
 function speakMahjong(text) {
@@ -57,8 +57,8 @@ function windName(t) { return ['東','南','西','北'][t - 27] ?? '?'; }
 export async function renderMahjongPlay({ params }) {
   const gid = Number(params.id);
   curGid = gid;
-  // v670 麻雀 は 横向き 表示 が 見やすい。 lock を 試みる (= フルスクリーン or PWA のみ 効く)。
-  // 失敗 した 場合 は CSS の portrait media query で 「横にして」 バナー を 出す。
+  // v670 麻雀は横向き表示が見やすい。 lock を試みる (= フルスクリーン or PWA のみ効く)。
+  // 失敗した場合は CSS の portrait media query で 「横にして」 バナーを出す。
   try { screen.orientation?.lock?.('landscape'); } catch (_) { /* unsupported */ }
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -68,7 +68,7 @@ export async function renderMahjongPlay({ params }) {
       }
     </style>
     <div id="mj-rotate-banner" style="display:none; align-items:center; gap:8px; padding:10px 14px; background:#fde68a; color:#92400e; border-radius:8px; margin-bottom:10px; font-weight:600">
-      🔄 麻雀 は 横向き で 見やすい です — 端末 を 横 に してください
+      🔄 麻雀は横向きで見やすいです — 端末を横にしてください
     </div>
     <div class="card page-header">
       <a href="#/mahjong/${gid}" class="hint">← 卓詳細</a>
@@ -83,8 +83,8 @@ export async function renderMahjongPlay({ params }) {
     </div>
     <div class="card" id="mj-log"></div>
     <div class="card" id="mj-exit-card" hidden>
-      <button id="mj-exit" class="btn danger" style="width:100%">🚪 対局 を 終了 (全員 返金)</button>
-      <div class="hint-sm" style="font-size:11px; margin-top:4px">途中 で 終了 すると 卓 が キャンセル され、 buy-in は 全員 に 返金 されます。</div>
+      <button id="mj-exit" class="btn danger" style="width:100%">🚪 対局を終了 (全員返金)</button>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">途中で終了すると卓がキャンセルされ、 buy-in は全員に返金されます。</div>
     </div>
   `;
   document.getElementById('mj-exit')?.addEventListener('click', exitGame);
@@ -95,7 +95,7 @@ export async function renderMahjongPlay({ params }) {
   window.addEventListener('hashchange', () => {
     if (!location.hash.includes('/mahjong/' + gid)) {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      // v670 麻雀 から 離れたら orientation lock を 解除
+      // v670 麻雀から離れたら orientation lock を解除
       try { screen.orientation?.unlock?.(); } catch (_) {}
     }
   }, { once: true });
@@ -108,7 +108,7 @@ async function refresh() {
     lastVer = d.state_ver;
     curState = d;
     paint();
-    // v692 #276 起案者 (= AI 戦 では 自分) には 「終了」 ボタン を 出す。 playing / lobby / reporting で 押せる。
+    // v692 #276 起案者 (= AI 戦では自分) には 「終了」 ボタンを出す。 playing / lobby / reporting で押せる。
     const exitCard = document.getElementById('mj-exit-card');
     if (exitCard) {
       const canExit = d.is_creator && ['lobby','playing','reporting'].includes(d.status);
@@ -122,12 +122,12 @@ async function refresh() {
 
 async function exitGame() {
   if (!curGid) return;
-  if (!confirm('対局 を 終了 して キャンセル しますか? (buy-in は 全員 に 返金 されます)')) return;
+  if (!confirm('対局を終了してキャンセルしますか? (buy-in は全員に返金されます)')) return;
   try {
     await post(`/api/mahjong/games/${curGid}/cancel`, {});
-    toast('対局 を 終了 しました');
+    toast('対局を終了しました');
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    // 卓 詳細 (= キャンセル 済 状態) に 戻す
+    // 卓詳細 (= キャンセル済状態) に戻す
     location.hash = '#/mahjong/' + curGid;
   } catch (e) {
     toast('失敗: ' + e.message);
@@ -207,7 +207,7 @@ function paint() {
     const myP = s.players[me];
     const myHand = myP.hand || [];
     const sortedTiles = [...myHand].sort((a, b) => a - b);
-    // 自摸牌 (もし 14 枚あれば 最後 = 自摸)
+    // 自摸牌 (もし 14 枚あれば最後 = 自摸)
     const tsumoTile = (sortedTiles.length === 14 && isMyTurn && inDiscardPhase) ? sortedTiles[sortedTiles.length - 1] : null;
     // 自分の副露
     const myMeldsHtml = (myP.melds || []).map(m => {
@@ -338,7 +338,7 @@ async function doAction(type) {
     await refresh();
   } catch (e) {
     // v564 polling と AI 自動進行のレースで 「あなたの番ではありません」 が出るが、
-    //   ユーザーには表示せず 黙って state を再取得する (UI が古かっただけ)
+    //   ユーザーには表示せず黙って state を再取得する (UI が古かっただけ)
     if (/番ではありません|今は.*できません/.test(e.message)) {
       await refresh();
       return;

@@ -1,7 +1,7 @@
 // /#/ito — ito ゲーム Phase 1。 v568 #223。
-//   2 人以上で プレイフィー 1pt、 各自に 1-100 の数字、 お題に沿って 表現を入力、
-//   起案者が公開ボタンで 全員の数字 + 表現を 開示、 pot は全員に等分配。
-//   実プレイは 「数字を直接言わずに 表現で 大小を推測してもらう」 協力ゲーム。
+//   2 人以上でプレイフィー 1pt、 各自に 1-100 の数字、 お題に沿って表現を入力、
+//   起案者が公開ボタンで全員の数字 + 表現を開示、 pot は全員に等分配。
+//   実プレイは 「数字を直接言わずに表現で大小を推測してもらう」 協力ゲーム。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -24,8 +24,8 @@ export async function renderIto() {
         <a class="btn primary" href="#/ito/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        2 人以上で プレイフィー 1pt → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
-        数字を直接言わずに 「強い動物の強さ」 などのお題で 表現の妙を楽しむ協力ゲーム。
+        2 人以上でプレイフィー 1pt → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
+        数字を直接言わずに 「強い動物の強さ」 などのお題で表現の妙を楽しむ協力ゲーム。
       </div>
     </div>
     <div id="ito-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -34,7 +34,7 @@ export async function renderIto() {
     const d = await get('/api/ito/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('ito-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立てて メンバーを集めましょう。</div>';
+      document.getElementById('ito-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立ててメンバーを集めましょう。</div>';
       return;
     }
     document.getElementById('ito-list').innerHTML = items.map(g => {
@@ -84,7 +84,7 @@ export async function renderItoNew() {
       </div>
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px">
         <input type="checkbox" id="ito-instant" checked>
-        対象者で 即開始 (全員から 一括徴収 + 数字配布 + 即 input phase)
+        対象者で即開始 (全員から一括徴収 + 数字配布 + 即 input phase)
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/ito" class="btn">キャンセル</a>
@@ -152,7 +152,7 @@ function paintItoDetail(g) {
   const canReveal = g.is_creator && g.status === 'input' && g.all_expressed;
   const showSorted = g.status === 'finished' || g.status === 'reveal';
 
-  // 数字公開ありなら 小さい順に並び替えて表示
+  // 数字公開ありなら小さい順に並び替えて表示
   let playersForDisplay = [...g.players];
   if (showSorted) {
     playersForDisplay.sort((a, b) => (a.number ?? 999) - (b.number ?? 999));

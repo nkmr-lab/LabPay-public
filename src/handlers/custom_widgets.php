@@ -1,11 +1,11 @@
 <?php
-// /api/custom-widgets — 自作 ウィジェット (#246)。
-// ユーザ が JS を 書いて 登録 → ホーム に 表示 する 簡易 widget。
-// 自分専用 (= owner) のみ。 共有 や stream は フェーズ 2 以降。
+// /api/custom-widgets — 自作ウィジェット (#246)。
+// ユーザが JS を書いて登録 → ホームに表示する簡易 widget。
+// 自分専用 (= owner) のみ。 共有や stream はフェーズ 2 以降。
 
 declare(strict_types=1);
 
-const CW_MAX_JS_BYTES = 100_000;   // 1 ウィジェット 最大 100KB
+const CW_MAX_JS_BYTES = 100_000;   // 1 ウィジェット最大 100KB
 
 function route_custom_widgets(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
@@ -64,7 +64,7 @@ function cw_update(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('description', $body)) { $sets[] = 'description = ?'; $args[] = mb_substr((string)$body['description'], 0, 500); }
     if (array_key_exists('js_body', $body))     {
         $js = (string)$body['js_body'];
-        if (strlen($js) > CW_MAX_JS_BYTES) throw new ApiException('bad_request', 'JS が 大きすぎ ます', 400);
+        if (strlen($js) > CW_MAX_JS_BYTES) throw new ApiException('bad_request', 'JS が大きすぎます', 400);
         $sets[] = 'js_body = ?'; $args[] = $js;
     }
     if (array_key_exists('enabled', $body))     { $sets[] = 'enabled = ?';     $args[] = ((int)$body['enabled']) ? 1 : 0; }
@@ -101,11 +101,11 @@ function cw_validate(array $body): array {
     $name = trim((string)($body['name'] ?? ''));
     if ($name === '' || mb_strlen($name) > 80) throw new ApiException('bad_request', 'name 1..80', 400);
     $icon = trim((string)($body['icon'] ?? '🧩'));
-    if (mb_strlen($icon) > 8) throw new ApiException('bad_request', 'icon は 8 文字 まで', 400);
+    if (mb_strlen($icon) > 8) throw new ApiException('bad_request', 'icon は 8 文字まで', 400);
     if ($icon === '') $icon = '🧩';
     $desc = isset($body['description']) ? mb_substr((string)$body['description'], 0, 500) : null;
     $js = (string)($body['js_body'] ?? '');
     if ($js === '') throw new ApiException('bad_request', 'js_body 必須', 400);
-    if (strlen($js) > CW_MAX_JS_BYTES) throw new ApiException('bad_request', 'JS が 大きすぎ ます', 400);
+    if (strlen($js) > CW_MAX_JS_BYTES) throw new ApiException('bad_request', 'JS が大きすぎます', 400);
     return [$name, $icon, $desc, $js];
 }

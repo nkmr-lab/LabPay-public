@@ -1,6 +1,6 @@
-// /#/habits — Habit Tracker。 個人 ごと に 「毎日 論文 を 読む」 など の 習慣 を 登録、
-//   日 毎 達成 を ✓ で 入力、 連続記録 (streak) と 60 日 カレンダー で 可視化。 公開
-//   リスト は ラボメン 全員 が 見えて 達成 数 で 比較 できる。 v870 #452。
+// /#/habits — Habit Tracker。 個人ごとに 「毎日論文を読む」 などの習慣を登録、
+//   日毎達成を ✓ で入力、 連続記録 (streak) と 60 日カレンダーで可視化。 公開
+//   リストはラボメン全員が見えて達成数で比較できる。 v870 #452。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -19,7 +19,7 @@ export async function renderHabits() {
         <a class="btn primary" href="#/habits/new">＋ 新しい習慣</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
-        毎日 論文 を 読む / 早起き / 運動 など、 自分 の 習慣 を 登録 して 日 毎 ✓ で 積み上げ。 公開 すれば ラボ メン 全員 が 達成 状況 を 確認 できて 励まし 合えます。
+        毎日論文を読む / 早起き / 運動など、 自分の習慣を登録して日毎 ✓ で積み上げ。 公開すればラボメン全員が達成状況を確認できて励まし合えます。
       </div>
     </div>
     <div id="hb-list"><div class="muted">読込中…</div></div>`;
@@ -29,7 +29,7 @@ export async function renderHabits() {
     if (!items.length) {
       document.getElementById('hb-list').innerHTML = `
         <div class="card center muted">
-          まだ 習慣 が ありません。 「＋ 新しい習慣」 から 始め よう。
+          まだ習慣がありません。 「＋ 新しい習慣」 から始めよう。
         </div>`;
       return;
     }
@@ -39,7 +39,7 @@ export async function renderHabits() {
         ? '<span class="tag muted">🔒 非公開</span>'
         : '<span class="tag ok">🌐 公開</span>';
       const todayBtn = it.done_today
-        ? `<button class="btn primary" data-toggle="${it.id}" style="background:#15803d; border-color:#15803d">✅ 今日 達成 済</button>`
+        ? `<button class="btn primary" data-toggle="${it.id}" style="background:#15803d; border-color:#15803d">✅ 今日達成済</button>`
         : `<button class="btn" data-toggle="${it.id}">⬜ 今日 ✓ する</button>`;
       const youTag = it.is_mine ? '<span class="tag" style="background:#ede4f3; color:#4a106d">自分</span>' : '';
       return `
@@ -49,7 +49,7 @@ export async function renderHabits() {
             <div style="flex:1; min-width:0">
               <div class="bold" style="font-size:15px">${escapeHtml(it.emoji || '✅')} <a href="#/habits/${it.id}" style="color:inherit">${escapeHtml(it.title)}</a> ${visTag} ${youTag}</div>
               <div class="muted" style="font-size:12px">
-                ${escapeHtml(it.owner_name || '')} ・ 目標 週 ${it.target_per_week} 日 ・ 通算 ${it.done_total} 回
+                ${escapeHtml(it.owner_name || '')} ・目標週 ${it.target_per_week} 日・通算 ${it.done_total} 回
               </div>
               ${it.description ? `<div style="font-size:13px; margin-top:4px; white-space:pre-wrap; max-height:3.2em; overflow:hidden">${escapeHtml(it.description)}</div>` : ''}
               <div style="margin-top:6px">
@@ -76,7 +76,7 @@ export async function renderHabits() {
       });
     });
   } catch (e) {
-    document.getElementById('hb-list').innerHTML = `<div class="card muted">読み込み 失敗: ${escapeHtml(e.message)}</div>`;
+    document.getElementById('hb-list').innerHTML = `<div class="card muted">読み込み失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -85,21 +85,21 @@ export async function renderHabitsNew() {
   app.innerHTML = `
     <div class="card page-header">
       <a href="#/habits" class="btn">← 一覧</a>
-      <h2 style="margin:6px 0 0">＋ 新しい 習慣</h2>
+      <h2 style="margin:6px 0 0">＋ 新しい習慣</h2>
     </div>
     <div class="card">
       <label style="font-size:13px">絵文字 (任意)</label>
       <input id="hb-emoji" type="text" maxlength="4" value="✅" style="width:80px; padding:8px; margin-top:4px; font-size:18px; text-align:center">
-      <label style="font-size:13px; margin-top:10px; display:block">タイトル <span class="muted">(例: 毎日 論文 を 1 本 読む)</span></label>
+      <label style="font-size:13px; margin-top:10px; display:block">タイトル <span class="muted">(例: 毎日論文を 1 本読む)</span></label>
       <input id="hb-title" type="text" maxlength="160" style="width:100%; padding:8px; margin-top:4px">
       <label style="font-size:13px; margin-top:10px; display:block">説明 (任意)</label>
       <textarea id="hb-desc" rows="3" style="width:100%; padding:8px; margin-top:4px"></textarea>
-      <label style="font-size:13px; margin-top:10px; display:block">週 の 目標 日数 (1 〜 7)</label>
+      <label style="font-size:13px; margin-top:10px; display:block">週の目標日数 (1 〜 7)</label>
       <input id="hb-tpw" type="number" min="1" max="7" value="7" style="width:80px; padding:8px; margin-top:4px">
-      <label style="font-size:13px; margin-top:10px; display:block">公開 設定</label>
+      <label style="font-size:13px; margin-top:10px; display:block">公開設定</label>
       <select id="hb-vis" style="padding:8px; margin-top:4px">
-        <option value="public">🌐 公開 (ラボ 全員 に 達成 状況 が 見える)</option>
-        <option value="private">🔒 非公開 (自分 だけ)</option>
+        <option value="public">🌐 公開 (ラボ全員に達成状況が見える)</option>
+        <option value="private">🔒 非公開 (自分だけ)</option>
       </select>
       <div style="margin-top:14px">
         <button id="hb-create" class="primary">作成</button>
@@ -111,10 +111,10 @@ export async function renderHabitsNew() {
     const emoji = document.getElementById('hb-emoji').value.trim();
     const tpw   = parseInt(document.getElementById('hb-tpw').value, 10) || 7;
     const vis   = document.getElementById('hb-vis').value;
-    if (!title) { toast('タイトル を 入れてください'); return; }
+    if (!title) { toast('タイトルを入れてください'); return; }
     try {
       const r = await post('/api/habits', { title, description: desc, emoji, target_per_week: tpw, visibility: vis });
-      toast('作成 しました');
+      toast('作成しました');
       navigate('#/habits/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -125,9 +125,9 @@ export async function renderHabitDetail({ id }) {
   app.innerHTML = `<div class="muted">読込中…</div>`;
   let h;
   try { h = await get('/api/habits/' + id); }
-  catch (e) { app.innerHTML = `<div class="card muted">読み込み 失敗: ${escapeHtml(e.message)}</div>`; return; }
+  catch (e) { app.innerHTML = `<div class="card muted">読み込み失敗: ${escapeHtml(e.message)}</div>`; return; }
   if (!h || !Array.isArray(h.my_checkins)) {
-    app.innerHTML = `<div class="card muted">読み込み 失敗: 無効 な レスポンス</div>`;
+    app.innerHTML = `<div class="card muted">読み込み失敗: 無効なレスポンス</div>`;
     return;
   }
   const visTag = h.visibility === 'private'
@@ -135,7 +135,7 @@ export async function renderHabitDetail({ id }) {
     : '<span class="tag ok">🌐 公開</span>';
   const checked = new Set(h.my_checkins);
   const doneToday = checked.has(today());
-  // 60 日 カレンダー (古い → 新しい)
+  // 60 日カレンダー (古い → 新しい)
   const cells = [];
   for (let i = 59; i >= 0; i--) {
     const d = new Date();
@@ -152,26 +152,26 @@ export async function renderHabitDetail({ id }) {
       <a href="#/habits" class="btn">← 一覧</a>
       <h2 style="margin:6px 0 0">${escapeHtml(h.emoji || '✅')} ${escapeHtml(h.title)} ${visTag}</h2>
       <div class="muted" style="font-size:12px; margin-top:4px">
-        ${avatarHtml(h.owner_name, h.owner_avatar, 'sm')} ${escapeHtml(h.owner_name || '')} ・ 目標 週 ${h.target_per_week} 日
+        ${avatarHtml(h.owner_name, h.owner_avatar, 'sm')} ${escapeHtml(h.owner_name || '')} ・目標週 ${h.target_per_week} 日
       </div>
       ${h.description ? `<div style="white-space:pre-wrap; margin-top:8px">${escapeHtml(h.description)}</div>` : ''}
       <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap">
-        <button id="hb-toggle" class="primary" style="${doneToday ? 'background:#15803d; border-color:#15803d' : ''}">${doneToday ? '✅ 今日 達成 済 (もう一度 押して 取消)' : '⬜ 今日 を ✓ する'}</button>
+        <button id="hb-toggle" class="primary" style="${doneToday ? 'background:#15803d; border-color:#15803d' : ''}">${doneToday ? '✅ 今日達成済 (もう一度押して取消)' : '⬜ 今日を ✓ する'}</button>
         ${h.is_mine ? `<button id="hb-del" class="btn danger">🗑 削除</button>` : ''}
       </div>
     </div>
     <div class="card">
-      <div class="bold" style="margin-bottom:6px">📊 自分 の 記録</div>
+      <div class="bold" style="margin-bottom:6px">📊 自分の記録</div>
       <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap">
-        <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_streak}</div><div class="hint-sm">🔥 連続 日数</div></div>
-        <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_done_60d}</div><div class="hint-sm">60 日 で 達成</div></div>
+        <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_streak}</div><div class="hint-sm">🔥 連続日数</div></div>
+        <div><div style="font-size:24px; font-weight:700; color:var(--primary)">${h.my_done_60d}</div><div class="hint-sm">60 日で達成</div></div>
       </div>
-      <div class="hint-sm" style="margin-top:10px; font-size:11px">直近 60 日 (右端 が 今日、 緑 は 達成)</div>
+      <div class="hint-sm" style="margin-top:10px; font-size:11px">直近 60 日 (右端が今日、 緑は達成)</div>
       <div style="display:grid; grid-template-columns:repeat(20, 1fr); gap:3px; margin-top:6px">${cells.join('')}</div>
     </div>
     ${h.visibility === 'public' && (h.others || []).length ? `
       <div class="card">
-        <div class="bold" style="margin-bottom:6px">🏆 ラボ メン の 達成 (60 日)</div>
+        <div class="bold" style="margin-bottom:6px">🏆 ラボメンの達成 (60 日)</div>
         ${h.others.map(o => `
           <div class="row" style="padding:6px 0; gap:8px; align-items:center; border-top:1px solid var(--line)">
             ${avatarHtml(o.display_name, o.avatar_url, 'sm')}
@@ -188,8 +188,8 @@ export async function renderHabitDetail({ id }) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('hb-del')?.addEventListener('click', async () => {
-    if (!confirm('この 習慣 を 削除 します (記録 も 全部 消えます)。 いいですか?')) return;
-    try { await del('/api/habits/' + id); toast('削除 しました'); navigate('#/habits'); }
+    if (!confirm('この習慣を削除します (記録も全部消えます)。 いいですか?')) return;
+    try { await del('/api/habits/' + id); toast('削除しました'); navigate('#/habits'); }
     catch (e) { toast('失敗: ' + e.message); }
   });
 }

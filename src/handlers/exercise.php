@@ -1,9 +1,9 @@
 <?php
 // /api/exercise — 運動 (歩数) セッション。 端末側で DeviceMotion を読んで
-// 歩数 をカウント → 終了時に 1 セッション分を POST。
+// 歩数をカウント → 終了時に 1 セッション分を POST。
 // Routes:
-//   GET    /api/exercise            自分の セッション履歴 + 集計
-//   POST   /api/exercise            セッション 記録
+//   GET    /api/exercise            自分のセッション履歴 + 集計
+//   POST   /api/exercise            セッション記録
 //   DELETE /api/exercise/:id        セッション削除 (自分のみ)
 //   GET    /api/exercise/leaderboard  みんなの今週 step 合計
 
@@ -44,12 +44,12 @@ function exercise_create(PDO $pdo, array $cfg): void {
     $body = read_json_body();
     $stepCount = max(0, (int)($body['step_count'] ?? 0));
     $duration = max(0, (int)($body['duration_seconds'] ?? 0));
-    // 不正/誤検出対策: 1 秒あたり 6 歩超は 弾く (走っても 4 歩/秒くらい)。
+    // 不正/誤検出対策: 1 秒あたり 6 歩超は弾く (走っても 4 歩/秒くらい)。
     if ($duration > 0 && $stepCount / max(1, $duration) > 6) {
         throw new ApiException('bad_request', '歩数が異常に多い (検出ノイズ?)', 400);
     }
     if ($stepCount === 0 && $duration === 0) {
-        throw new ApiException('bad_request', '歩数 / 時間 ともに 0', 400);
+        throw new ApiException('bad_request', '歩数 / 時間ともに 0', 400);
     }
     $startedRaw = (string)($body['started_at'] ?? '');
     $endedRaw   = (string)($body['ended_at'] ?? '');

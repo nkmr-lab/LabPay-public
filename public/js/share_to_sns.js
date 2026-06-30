@@ -1,10 +1,10 @@
-// v585 ワンボタンで らぼったー (SNS) に 投稿する 汎用 ヘルパ。
+// v585 ワンボタンでらぼったー (SNS) に投稿する汎用ヘルパ。
 //   引数: title (投稿冒頭メッセージ) と hashUrl ('#/predictions/1' など)。
-//   POST /api/posts で 「{title}\n\n{hashUrl}」 形式で 投げる。
-//   既存の posts renderer (v562) が #/ で 始まる URL を 自動 リンク化 するので、
-//   投稿された 文章中に URL を 書くと そのまま タップで 該当 ページに ジャンプ。
+//   POST /api/posts で 「{title}\n\n{hashUrl}」 形式で投げる。
+//   既存の posts renderer (v562) が #/ で始まる URL を自動リンク化するので、
+//   投稿された文章中に URL を書くとそのままタップで該当ページにジャンプ。
 //
-// v616 #237 prompt() ベース から モーダル UI に 改修。
+// v616 #237 prompt() ベースからモーダル UI に改修。
 //   テキスト編集 textarea + 「現在地添付」 チェック + 「らぼったーに投稿」/「キャンセル」 ボタン。
 
 import { post } from './api.js';
@@ -32,7 +32,7 @@ export async function shareToSns(title, hashUrl) {
             <input type="checkbox" id="ssm-loc"> 📍 現在地を添付
           </label>
           <div class="hint-sm" style="font-size:11px">
-            #/ で始まる URL は タップで該当ページにジャンプ できます (例: ${escapeHtml(url)})
+            #/ で始まる URL はタップで該当ページにジャンプできます (例: ${escapeHtml(url)})
           </div>
         </div>
         <div style="padding:12px 16px; border-top:1px solid #eee; display:flex; gap:8px; justify-content:flex-end">
@@ -73,10 +73,10 @@ export async function shareToSns(title, hashUrl) {
   });
 }
 
-// v709 #301 ラボ 全体 で 共有 する 用 (Slack / DM 等 LabPay 外 へ 貼れる) の
-//   絶対 URL を クリップボード に コピー する。 base = location.origin (例:
+// v709 #301 ラボ全体で共有する用 (Slack / DM 等 LabPay 外へ貼れる) の
+//   絶対 URL をクリップボードにコピーする。 base = location.origin (例:
 //   https://pay.nkmr.io)、 hashUrl は '#/invitations/123' / '#/tasks/45' 形式。
-//   失敗 (HTTPS 外 / 権限 拒否 等) は textarea fallback で 救う。
+//   失敗 (HTTPS 外 / 権限拒否等) は textarea fallback で救う。
 export async function copyShareUrl(hashUrl) {
   const url = hashUrl.startsWith('#') ? hashUrl : '#' + hashUrl;
   const fullUrl = location.origin + '/' + url;
@@ -92,14 +92,14 @@ export async function copyShareUrl(hashUrl) {
       document.execCommand('copy');
       ta.remove();
     }
-    toast('URL を コピー しました: ' + fullUrl);
+    toast('URL をコピーしました: ' + fullUrl);
   } catch (e) {
-    toast('コピー 失敗: ' + (e?.message || e));
+    toast('コピー失敗: ' + (e?.message || e));
   }
 }
 
-// 既存 view から シェア ボタンを 簡単に 生成 する ヘルパ。
-//   ボタン要素を 親に append し、 クリックで shareToSns を 呼ぶ。
+// 既存 view からシェアボタンを簡単に生成するヘルパ。
+//   ボタン要素を親に append し、 クリックで shareToSns を呼ぶ。
 export function makeShareButton(title, hashUrl, label = '💬 らぼったーで共有') {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -111,7 +111,7 @@ export function makeShareButton(title, hashUrl, label = '💬 らぼったーで
 }
 
 // v853 統合シェアダイアログ。 3 系統を 1 つのモーダルにまとめる。
-//   (1) 📋 タイトル + URL をコピー (Slack 等に貼り付け 用)
+//   (1) 📋 タイトル + URL をコピー (Slack 等に貼り付け用)
 //   (2) 💬 らぼったーに投稿
 //   (3) 👤 メンバーに送る (admin_notice で URL を相手に送信)
 export async function shareDialog(title, hashUrl) {
@@ -141,7 +141,7 @@ export async function shareDialog(title, hashUrl) {
           <div id="sd-user-list" style="max-height:160px; overflow:auto; border:1px solid #e5e7eb; border-radius:6px; padding:4px"><div class="muted" style="font-size:12px">読み込み中…</div></div>
           <textarea id="sd-msg" placeholder="一言メッセージ (任意)" rows="2" maxlength="500" style="width:100%; box-sizing:border-box; margin-top:6px; font-size:13px"></textarea>
           <div class="row" style="gap:6px; justify-content:flex-end; margin-top:6px">
-            <button id="sd-send" class="btn primary" style="font-size:13px" disabled>選択 0 人 に送る</button>
+            <button id="sd-send" class="btn primary" style="font-size:13px" disabled>選択 0 人に送る</button>
           </div>
         </div>
       </div>
@@ -184,7 +184,7 @@ export async function shareDialog(title, hashUrl) {
   const selected = new Set();
   let allUsers = [];
   const refreshSendLabel = () => {
-    sendBtn.textContent = `選択 ${selected.size} 人 に送る`;
+    sendBtn.textContent = `選択 ${selected.size} 人に送る`;
     sendBtn.disabled = selected.size === 0;
   };
   const renderUsers = () => {
@@ -228,7 +228,7 @@ export async function shareDialog(title, hashUrl) {
   });
 }
 
-// view から ボタン 1 つで shareDialog を 開ける ヘルパ
+// view からボタン 1 つで shareDialog を開けるヘルパ
 export function makeShareDialogButton(title, hashUrl, label = '📤 共有') {
   const btn = document.createElement('button');
   btn.type = 'button';

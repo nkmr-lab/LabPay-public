@@ -1,6 +1,6 @@
 // v840 Deep Research / 論文要約 / 論文全訳 / papers-recent 共通の ⭐ スター UI ヘルパ。
 //   各 view は starButtonHtml() でタイル内に星ボタンを置き、 bindStarButtons() でクリックを束ね、
-//   viewControlsHtml() + bindViewControls() で 「スター付きだけ」 + 並び順 を 出す。
+//   viewControlsHtml() + bindViewControls() で 「スター付きだけ」 + 並び順を出す。
 //
 //   star kind 一覧 (server と一致):
 //     'deep_research' / 'paper_translate' / 'paper_full_translation'
@@ -60,7 +60,7 @@ export function bindStarButtons(root, onChange) {
   });
 }
 
-// v841 🔖 ブックマーク (star と同型 + 別エンドポイント)。 タイル / 詳細 / リスト で共通。
+// v841 🔖 ブックマーク (star と同型 + 別エンドポイント)。 タイル / 詳細 / リストで共通。
 export function bookmarkButtonHtml({ kind, refId, count = 0, mine = false }) {
   return `<button type="button" class="ai-bookmark-btn${mine ? ' on' : ''}"
     data-bm-kind="${escapeHtml(kind)}" data-bm-ref="${Number(refId)}"
@@ -110,7 +110,7 @@ export function bindBookmarkButtons(root, onChange) {
   });
 }
 
-// 並び順 + 「自分のスターのみ」 トグル の 共通 UI。
+// 並び順 + 「自分のスターのみ」 トグルの共通 UI。
 //   options.id   : 一意なID (CSS衝突避け)
 //   options.sort : 'new' | 'stars' (現在値)
 //   options.mineOnly : boolean (自分のスター付きだけ表示するかの現在値)
@@ -145,7 +145,7 @@ export function bindViewControls(rootEl, onChange) {
   sortEl?.addEventListener('change', () => onChange({ mineOnly: !!mineEl?.checked, sort: sortEl.value }));
 }
 
-// アプリ起動時にデフォルト閉、 ボタンで開く、 投稿後また閉じる が出来る フォーム折りたたみの helper。
+// アプリ起動時にデフォルト閉、 ボタンで開く、 投稿後また閉じるが出来るフォーム折りたたみの helper。
 //   <details id="..."> ... </details> の open 属性をプログラム的に切替えるだけ。
 export function setFormOpen(detailsId, open) {
   const el = document.getElementById(detailsId);

@@ -28,7 +28,7 @@ export async function renderContacts() {
   `;
   try {
     // v494 #99 #100 一般の /api/users からは phone_number を除外。 専用エンドポイント
-    //   /api/users/contacts なら admin/自分/同グループメンバー のみ phone を含む。
+    //   /api/users/contacts なら admin/自分/同グループメンバーのみ phone を含む。
     const d = await get('/api/users/contacts');
     const users = [...(d.items || [])].sort((a, b) => {
       const gd = gradeRank(a.grade) - gradeRank(b.grade);
@@ -44,7 +44,7 @@ export async function renderContacts() {
       const phoneRow = phone
         ? `<a href="${escapeHtml(telHref(phone))}" class="bold" style="color:var(--primary)" onclick="event.stopPropagation()">📞 ${escapeHtml(phone)}</a>`
         : `<span class="muted" style="font-size:12px">未登録</span>`;
-      // 行全体を 公開プロフィールへの link に。 電話タップだけは stopPropagation で
+      // 行全体を公開プロフィールへの link に。 電話タップだけは stopPropagation で
       // tel: 直行 (プロフィールへは行かない)。
       return `
         <a class="list-item" href="#/users/${u.id}" style="gap:10px; align-items:center; text-decoration:none; color:inherit">

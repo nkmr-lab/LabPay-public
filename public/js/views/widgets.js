@@ -1,5 +1,5 @@
-// /#/widgets — ウィジェット センター (#246)。
-// 自作 widget を 登録 / 編集 / 有効化 / 削除。
+// /#/widgets — ウィジェットセンター (#246)。
+// 自作 widget を登録 / 編集 / 有効化 / 削除。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -9,7 +9,7 @@ const SAMPLE_CLOCK = `import { me, html } from '/js/widgets_api.js';
 
 export const meta = {
   name: '🕐 時計',
-  description: '現在 時刻 を 表示',
+  description: '現在時刻を表示',
   refreshSec: 1,
 };
 
@@ -33,7 +33,7 @@ const SAMPLE_BALANCE = `import { get, html } from '/js/widgets_api.js';
 
 export const meta = {
   name: '💰 残高',
-  description: 'あなた の 残高 を 表示',
+  description: 'あなたの残高を表示',
   refreshSec: 60,
 };
 
@@ -43,19 +43,19 @@ export async function render(root) {
     const bal = me.balance ?? 0;
     root.innerHTML = \`
       <div style="text-align:center; padding:12px">
-        <div class="hint-sm">あなた の 残高</div>
+        <div class="hint-sm">あなたの残高</div>
         <div style="font-size:32px; font-weight:700; color:#7c3aed">\${bal.toLocaleString()} pt</div>
       </div>
     \`;
   } catch (e) {
-    root.innerHTML = \`<div class="hint">取得 失敗: \${html(e.message)}</div>\`;
+    root.innerHTML = \`<div class="hint">取得失敗: \${html(e.message)}</div>\`;
   }
 }
 `;
 
 const SAMPLES = [
-  { label: '🕐 時計 (1 秒 更新)',     code: SAMPLE_CLOCK },
-  { label: '💰 残高 (60 秒 更新)',    code: SAMPLE_BALANCE },
+  { label: '🕐 時計 (1 秒更新)',     code: SAMPLE_CLOCK },
+  { label: '💰 残高 (60 秒更新)',    code: SAMPLE_BALANCE },
 ];
 
 export async function renderWidgets() {
@@ -63,16 +63,16 @@ export async function renderWidgets() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center">
-        <h2 style="margin:0">🧩 ウィジェット センター</h2>
-        <a class="btn primary" href="#/widgets/new">＋ 新規 ウィジェット</a>
+        <h2 style="margin:0">🧩 ウィジェットセンター</h2>
+        <a class="btn primary" href="#/widgets/new">＋ 新規ウィジェット</a>
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
-        自作 ウィジェット を 登録 して ホーム に 出せます。
-        JS を 書いて render(root) で 描画 する だけ。 詳細 は 「＋ 新規」 から サンプル を 見て ください。
+        自作ウィジェットを登録してホームに出せます。
+        JS を書いて render(root) で描画するだけ。 詳細は 「＋ 新規」 からサンプルを見てください。
       </p>
     </div>
     <div class="card">
-      <h3>あなた の ウィジェット</h3>
+      <h3>あなたのウィジェット</h3>
       <div id="cw-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
@@ -85,7 +85,7 @@ async function loadList() {
     const d = await get('/api/custom-widgets');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="empty">まだ ウィジェット は ありません。 「＋ 新規」 から 作成 してください</div>';
+      root.innerHTML = '<div class="empty">まだウィジェットはありません。 「＋ 新規」 から作成してください</div>';
       return;
     }
     root.innerHTML = items.map(w => `
@@ -94,7 +94,7 @@ async function loadList() {
         <div class="grow" style="min-width:0">
           <div class="bold">${escapeHtml(w.name)} ${w.enabled ? '<span class="tag ok">有効</span>' : '<span class="tag muted">無効</span>'}</div>
           ${w.description ? `<div class="meta">${escapeHtml(w.description)}</div>` : ''}
-          <div class="meta">JS ${w.js_size} bytes ・ 更新 ${escapeHtml(w.updated_at)}</div>
+          <div class="meta">JS ${w.js_size} bytes ・更新 ${escapeHtml(w.updated_at)}</div>
         </div>
         <div class="row" style="gap:6px; flex:none">
           <button class="btn cw-toggle" data-id="${w.id}" data-enabled="${w.enabled ? 1 : 0}">${w.enabled ? '無効化' : '有効化'}</button>
@@ -106,15 +106,15 @@ async function loadList() {
     root.querySelectorAll('.cw-toggle').forEach(b => b.addEventListener('click', async () => {
       try {
         await patch('/api/custom-widgets/' + b.dataset.id, { enabled: b.dataset.enabled === '1' ? 0 : 1 });
-        toast(b.dataset.enabled === '1' ? '無効化 しました' : '有効化 しました');
+        toast(b.dataset.enabled === '1' ? '無効化しました' : '有効化しました');
         await loadList();
       } catch (e) { toast('失敗: ' + e.message); }
     }));
     root.querySelectorAll('.cw-del').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('この ウィジェット を 削除 しますか?')) return;
+      if (!confirm('このウィジェットを削除しますか?')) return;
       try {
         await del('/api/custom-widgets/' + b.dataset.id);
-        toast('削除 しました');
+        toast('削除しました');
         await loadList();
       } catch (e) { toast('失敗: ' + e.message); }
     }));
@@ -136,8 +136,8 @@ async function renderWidgetForm(id) {
   const isEdit = id != null && !Number.isNaN(id);
   app.innerHTML = `
     <div class="card">
-      <a href="#/widgets" class="hint">← ウィジェット センター</a>
-      <h2 style="margin:6px 0">${isEdit ? '✏️ 編集' : '＋ 新規 ウィジェット'}</h2>
+      <a href="#/widgets" class="hint">← ウィジェットセンター</a>
+      <h2 style="margin:6px 0">${isEdit ? '✏️ 編集' : '＋ 新規ウィジェット'}</h2>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">名前</span>
@@ -147,10 +147,10 @@ async function renderWidgetForm(id) {
         <input type="text" id="cw-icon" maxlength="4" placeholder="🧩">
       </label>
       <label class="field"><span class="lbl">説明 (任意)</span>
-        <input type="text" id="cw-desc" maxlength="500" placeholder="ウィジェット の 説明">
+        <input type="text" id="cw-desc" maxlength="500" placeholder="ウィジェットの説明">
       </label>
       ${isEdit ? '' : `
-      <label class="field"><span class="lbl">サンプル から 取り込む</span>
+      <label class="field"><span class="lbl">サンプルから取り込む</span>
         <select id="cw-sample">
           <option value="">-- 選択 --</option>
           ${SAMPLES.map((s, i) => `<option value="${i}">${escapeHtml(s.label)}</option>`).join('')}
@@ -160,9 +160,9 @@ async function renderWidgetForm(id) {
         <textarea id="cw-js" rows="20" style="width:100%; box-sizing:border-box; font-family:Consolas,Menlo,monospace; font-size:13px" placeholder="export const meta = { name: '...' };&#10;export function render(root) { ... }"></textarea>
       </label>
       <p class="hint" style="font-size:12px">
-        💡 開発者 向け: <code>import { me, get, post, html } from '/js/widgets_api.js'</code> で API が 使えます。
+        💡 開発者向け: <code>import { me, get, post, html } from '/js/widgets_api.js'</code> で API が使えます。
         <code>export const meta = { name, description?, refreshSec? }</code> と
-        <code>export function render(root)</code> を 書いて ください。
+        <code>export function render(root)</code> を書いてください。
       </p>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/widgets" class="btn">キャンセル</a>
@@ -178,7 +178,7 @@ async function renderWidgetForm(id) {
       document.getElementById('cw-icon').value = w.icon || '';
       document.getElementById('cw-desc').value = w.description || '';
       document.getElementById('cw-js').value = w.js_body || '';
-    } catch (e) { toast('取得 失敗: ' + e.message); return; }
+    } catch (e) { toast('取得失敗: ' + e.message); return; }
   } else {
     const sel = document.getElementById('cw-sample');
     sel?.addEventListener('change', () => {
@@ -186,11 +186,11 @@ async function renderWidgetForm(id) {
       if (!Number.isFinite(idx) || sel.value === '') return;
       const s = SAMPLES[idx];
       document.getElementById('cw-js').value = s.code;
-      // 名前 / アイコン も 推測 して 入れる
+      // 名前 / アイコンも推測して入れる
       const m = /name:\s*['"`]([^'"`]+)['"`]/.exec(s.code);
       if (m && !document.getElementById('cw-name').value) {
         document.getElementById('cw-name').value = m[1];
-        // 先頭 の 絵文字 を icon に
+        // 先頭の絵文字を icon に
         const em = m[1].match(/^(\p{Emoji}+)/u);
         if (em && !document.getElementById('cw-icon').value) document.getElementById('cw-icon').value = em[1];
       }
@@ -202,15 +202,15 @@ async function renderWidgetForm(id) {
     const icon = document.getElementById('cw-icon').value.trim() || '🧩';
     const desc = document.getElementById('cw-desc').value.trim() || null;
     const js   = document.getElementById('cw-js').value;
-    if (!name)   { toast('名前 必須'); return; }
+    if (!name)   { toast('名前必須'); return; }
     if (!js)     { toast('JS 必須'); return; }
     try {
       if (isEdit) {
         await patch('/api/custom-widgets/' + id, { name, icon, description: desc, js_body: js });
-        toast('保存 しました');
+        toast('保存しました');
       } else {
         await post('/api/custom-widgets', { name, icon, description: desc, js_body: js });
-        toast('登録 しました');
+        toast('登録しました');
       }
       navigate('#/widgets');
     } catch (e) { toast('失敗: ' + e.message); }

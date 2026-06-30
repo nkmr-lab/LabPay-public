@@ -1,7 +1,7 @@
 // /#/timers — 共有タイマー。 参加者全員に同じカウントダウンを見せる。
-// 同期戦略: server から server_now を毎回受け取って ローカル時計とのオフセットを
+// 同期戦略: server から server_now を毎回受け取ってローカル時計とのオフセットを
 // 計算 → 自前で 1 秒刻みでカウントダウン。 開始直後は頻繁 (3s) に再 sync して
-// ズレを早めに正す。 残りが少なくなるほど精度が大事なので 終盤も 3s。
+// ズレを早めに正す。 残りが少なくなるほど精度が大事なので終盤も 3s。
 // 中盤は 15s に間引く。
 
 import { get, post, patch, del } from '../api.js';
@@ -11,9 +11,9 @@ import { tag, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
 
-// v448 学会タイマー の ベル は ルーレット の 境界通過音 / 終了音 と 同じ
-// オシレータ生成 を 共有モジュール 経由で 使用。 MP3 不要、 設定 不要、 ユーザ
-// クリップ 割当 不要。 audio_unlock の install で 任意の タップ 直後 から 通る。
+// v448 学会タイマーのベルはルーレットの境界通過音 / 終了音と同じ
+// オシレータ生成を共有モジュール経由で使用。 MP3 不要、 設定不要、 ユーザ
+// クリップ割当不要。 audio_unlock の install で任意のタップ直後から通る。
 import { playBoundaryTick, playEndDing, unlockAudio } from '../audio_unlock.js';
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
@@ -22,8 +22,8 @@ const gradeRank = g => {
   return i < 0 ? GRADE_ORDER.length : i;
 };
 
-// v449 学会タイマー プリセット。 「1鈴 / 2鈴 / 3鈴 / 終了」 を 一括 埋め。
-// 終了 = end_bell_index (1/2/3)。 単位は 分。
+// v449 学会タイマープリセット。 「1鈴 / 2鈴 / 3鈴 / 終了」 を一括埋め。
+// 終了 = end_bell_index (1/2/3)。 単位は分。
 const ACADEMIC_PRESETS = [
   // v727 #334 論文紹介を先頭に + end:3 だった bug を end:2 に修正 (= 2鈴 5分が発表終了)
   { label: '論文紹介 (4/5/10、 2鈴=発表終了)', bells: [4, 5, 10], end: 2 },
@@ -68,8 +68,8 @@ export async function renderTimers() {
     const serverOffset = Date.parse(String(d.server_now).replace(' ', 'T')) - Date.now();
     document.getElementById('tm-list').innerHTML = items.map(t => {
       const isMine = Number(t.creator_user_id) === Number(state.me?.id);
-      // v446 paused を 追加。 running は ends_at から 残りを 計算、 paused は
-      // remaining_seconds を そのまま 表示。
+      // v446 paused を追加。 running は ends_at から残りを計算、 paused は
+      // remaining_seconds をそのまま表示。
       let statusTag;
       if (t.status === 'running') {
         const ends = Date.parse(String(t.ends_at).replace(' ', 'T'));
@@ -107,31 +107,31 @@ export async function renderTimerNew({ query } = {}) {
     .split(',').map(Number).filter(Boolean);
   const presetTitle = String(query?.title || '').trim();
   const lockMembers = presetMembers.length > 0;
-  // v441 自分を デフォで 追加 (?members= 指定があれば そちら 優先)
+  // v441 自分をデフォで追加 (?members= 指定があればそちら優先)
   const meId = Number(state.me?.id) || 0;
   const initialMembers = lockMembers ? presetMembers : (meId ? [meId] : []);
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
       <a href="#/timers" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">学会タイマー を 作成</h2>
+      <h2 style="margin:6px 0 0">学会タイマーを作成</h2>
       <p class="hint-sm" style="margin:4px 0 0">
-        1鈴 / 2鈴 / 3鈴 の 時刻 を 分単位 (小数可) で 指定し、 そのうち どれを 「発表終了」
-        とするか 選んで ください。 終了 = 終了音 (チーン)、 他は 中間 ベル (キン)。 終了の
-        後 ろ に 置いた ベル は 質疑時間 終了 などの 案内 に 使えます。
+        1鈴 / 2鈴 / 3鈴の時刻を分単位 (小数可) で指定し、 そのうちどれを 「発表終了」
+        とするか選んでください。 終了 = 終了音 (チーン)、 他は中間ベル (キン)。 終了の
+        後ろに置いたベルは質疑時間終了などの案内に使えます。
       </p>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">タイトル (任意 / 空欄なら 「タイマー」)</span>
         <input type="text" id="tmn-title" maxlength="200" placeholder="例: 一般発表 / ポモドーロ" value="${escapeHtml(presetTitle)}" autofocus>
       </label>
-      <span class="lbl">プリセット (タップで 一括 埋め)</span>
+      <span class="lbl">プリセット (タップで一括埋め)</span>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin:4px 0 10px">
         ${ACADEMIC_PRESETS.map((p, i) => `
           <button class="btn" data-preset-idx="${i}">${escapeHtml(p.label)}</button>
         `).join('')}
       </div>
-      <span class="lbl">ベル 設定 (空欄 = ベル なし)</span>
+      <span class="lbl">ベル設定 (空欄 = ベルなし)</span>
       <div style="display:grid; grid-template-columns:auto auto 1fr auto auto; gap:6px 8px; align-items:center; margin:6px 0">
         <label style="white-space:nowrap"><input type="radio" name="tmn-end" value="1"> 終了</label>
         <span class="bold">1鈴</span>
@@ -160,7 +160,7 @@ export async function renderTimerNew({ query } = {}) {
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
         <details id="tmn-picker-details" open style="margin-top:4px">
           <summary id="tmn-picker-summary" style="cursor:pointer; padding:4px 0; font-size:13px; user-select:none">
-            👥 <span id="tmn-picker-count">0</span> 人 選択中 — タップで 一覧 表示 / 非表示
+            👥 <span id="tmn-picker-count">0</span> 人選択中 — タップで一覧表示 / 非表示
           </summary>
           ${lockMembers ? '' : `<div id="tmn-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin:6px 0"></div>`}
           <div id="tmn-members" class="row" style="gap:6px; flex-wrap:wrap"></div>
@@ -172,7 +172,7 @@ export async function renderTimerNew({ query } = {}) {
       </div>
     </div>
   `;
-  // v449 プリセット を 押すと 3 つの ベル時刻 + end radio が 一括 埋まる。
+  // v449 プリセットを押すと 3 つのベル時刻 + end radio が一括埋まる。
   document.querySelectorAll('[data-preset-idx]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -187,10 +187,10 @@ export async function renderTimerNew({ query } = {}) {
     });
   });
 
-  // v383 picker が allUsers + selected を 内部で管理。 ここは preset の seed 用のみ。
+  // v383 picker が allUsers + selected を内部で管理。 ここは preset の seed 用のみ。
   // v383 共有 member_picker
-  // v677 #257 選択 後 は picker を 折り畳む。 onChange で 件数 を summary に 反映、
-  //   最初の 1 回 (初期表示) 以外 で 選択 が 変わったら details を 自動 close。
+  // v677 #257 選択後は picker を折り畳む。 onChange で件数を summary に反映、
+  //   最初の 1 回 (初期表示) 以外で選択が変わったら details を自動 close。
   let picker = null;
   let autoCollapseDone = false;
   const updateSummary = (sel) => {
@@ -206,7 +206,7 @@ export async function renderTimerNew({ query } = {}) {
       showGenderBulk: false,
       onChange: (sel) => {
         updateSummary(sel);
-        // 1 人 以上 選んだ 状態 で 変化 が あったら 自動 で 畳む (= 1 回 だけ)
+        // 1 人以上選んだ状態で変化があったら自動で畳む (= 1 回だけ)
         if (!autoCollapseDone && sel.size > 0) {
           autoCollapseDone = true;
           const d = document.getElementById('tmn-picker-details');
@@ -215,7 +215,7 @@ export async function renderTimerNew({ query } = {}) {
       },
     });
     updateSummary(picker.getSelected());
-    // 初期 メンバー が ある なら 最初 から 畳んで おく
+    // 初期メンバーがあるなら最初から畳んでおく
     if (initialMembers.length > 0) {
       const d = document.getElementById('tmn-picker-details');
       if (d) d.open = false;
@@ -228,8 +228,8 @@ export async function renderTimerNew({ query } = {}) {
   document.getElementById('tmn-save').addEventListener('click', async () => {
     const btn = document.getElementById('tmn-save');
     let title = document.getElementById('tmn-title').value.trim();
-    // v449 学会タイマー モデル: ベル時刻 を 分単位 (小数可) で 受け、 end_bell_index で
-    // 「発表終了」 を 指定。 duration_seconds は サーバ側で end_bell の 値 から 自動 算出。
+    // v449 学会タイマーモデル: ベル時刻を分単位 (小数可) で受け、 end_bell_index で
+    // 「発表終了」 を指定。 duration_seconds はサーバ側で end_bell の値から自動算出。
     const toSec = (id) => {
       const v = parseFloat(document.getElementById(id).value);
       if (!Number.isFinite(v) || v <= 0) return null;
@@ -242,11 +242,11 @@ export async function renderTimerNew({ query } = {}) {
     const endBellIdx = endRadio ? Number(endRadio.value) : 3;
     const endBellVal = [bell1, bell2, bell3][endBellIdx - 1];
     if (endBellVal === null) {
-      toast(`「終了」 に 選んだ ${endBellIdx}鈴 の 時刻 を 入れて ください`);
+      toast(`「終了」 に選んだ ${endBellIdx}鈴の時刻を入れてください`);
       return;
     }
     if (endBellVal < 5) {
-      toast(`${endBellIdx}鈴 (= 終了) は 5 秒 以上 に して ください`);
+      toast(`${endBellIdx}鈴 (= 終了) は 5 秒以上にしてください`);
       return;
     }
     btn.disabled = true;
@@ -254,7 +254,7 @@ export async function renderTimerNew({ query } = {}) {
       btn.textContent = '🤖 タイトル生成中…';
       const part = picker ? [...picker.getSelected()].length : 1;
       const endMin = Math.round(endBellVal / 60 * 10) / 10;
-      const ctx = `共有 学会タイマー を 今 ${part} 人で 開始します。 発表終了 は ${endMin} 分後。 用途は たぶん 学会発表・ゼミ・ライトニングトーク・ポモドーロ など。 ピッタリな 短いタイトルを 1 つ。`;
+      const ctx = `共有学会タイマーを今 ${part} 人で開始します。 発表終了は ${endMin} 分後。 用途はたぶん学会発表・ゼミ・ライトニングトーク・ポモドーロなど。 ピッタリな短いタイトルを 1 つ。`;
       try {
         const r = await post('/api/ai/short_title', { context: ctx });
         title = r.title || 'タイマー';
@@ -274,7 +274,7 @@ export async function renderTimerNew({ query } = {}) {
         end_bell_index: endBellIdx,
         repeat_max: repeatMax,
       });
-      toast('タイマーを作成しました — ▶ 開始 を 押して カウントダウン');
+      toast('タイマーを作成しました — ▶ 開始を押してカウントダウン');
       navigate('#/timers/' + r.id);
     } catch (e) {
       toast('失敗: ' + e.message);
@@ -285,9 +285,9 @@ export async function renderTimerNew({ query } = {}) {
 
 let tmTickTimer = null;
 let tmSyncTimer = null;
-// v408 「ちょうど 0 になった 瞬間」 を 1 回 だけ 鳴らす ための フラグ。
-// resync で 復活して しまうので 必要。 リピート で サーバが 次サイクル に
-// 切替えたら tmLastCycleIdx 変化で 再 false 化 (下の loadTimerDetail で 処理)。
+// v408 「ちょうど 0 になった瞬間」 を 1 回だけ鳴らすためのフラグ。
+// resync で復活してしまうので必要。 リピートでサーバが次サイクルに
+// 切替えたら tmLastCycleIdx 変化で再 false 化 (下の loadTimerDetail で処理)。
 let tmEndFiredOnce = false;
 // v411 表示モード: 'remain' (カウントダウン / 超過は +N) or 'elapsed' (カウントアップ)
 let tmDisplayMode = (() => {
@@ -297,11 +297,11 @@ let tmDisplayMode = (() => {
 let tmOffsetMs = 0;   // server_now_ms - client_now_at_recv_ms (= server からの遅延補正)
 let tmEndsMs = 0;
 let tmStartedMs = 0;
-let tmClosedMs = 0;         // v453 cancelled/done 時の closed_at (停止時 経過 計算 用)
+let tmClosedMs = 0;         // v453 cancelled/done 時の closed_at (停止時経過計算用)
 let tmDurationSec = 0;
-let tmRemainingSec = 0;     // v446 paused 時の 残り秒数 (running/done では未使用)
-let tmBells = [];           // [秒, ...] 開始からの 秒数 (非 null だけ、 終了ベル含む)
-let tmEndBellSec = null;    // v449 終了ベル の 秒数 (= duration)。 これは ding 専用なので tick loop からは 除外。
+let tmRemainingSec = 0;     // v446 paused 時の残り秒数 (running/done では未使用)
+let tmBells = [];           // [秒, ...] 開始からの秒数 (非 null だけ、 終了ベル含む)
+let tmEndBellSec = null;    // v449 終了ベルの秒数 (= duration)。 これは ding 専用なので tick loop からは除外。
 let tmBellsFired = new Set();
 let tmRepeatMax = 0;
 let tmRepeatIdx = 0;
@@ -325,13 +325,13 @@ export async function renderTimerDetail({ params }) {
     </div>
     <div class="card" id="tmd-display-card" style="text-align:center; position:relative">
       <div class="row" style="gap:6px; justify-content:flex-end; position:absolute; top:6px; right:6px">
-        <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で 鳴る か 確認)">🔊 試聴</button>
-        <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に 時間を 見せる)">🖥 フル</button>
-        <button id="tmd-public" class="btn" style="font-size:11px; padding:2px 8px" title="認証 不要 の 公開 URL を コピー (タブレット に 開いて 演台 に 置く)">🔗 公開 URL</button>
+        <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で鳴るか確認)">🔊 試聴</button>
+        <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に時間を見せる)">🖥 フル</button>
+        <button id="tmd-public" class="btn" style="font-size:11px; padding:2px 8px" title="認証不要の公開 URL をコピー (タブレットに開いて演台に置く)">🔗 公開 URL</button>
       </div>
       <button id="tmd-fs-exit" type="button">✕ 終了</button>
       <div id="tmd-title-fs" class="hint-sm" hidden></div>
-      <div id="tmd-count" title="タップで カウントダウン ⇄ カウントアップ"
+      <div id="tmd-count" title="タップでカウントダウン ⇄ カウントアップ"
            style="font-size:clamp(96px, 22vw, 180px); font-weight:800; font-variant-numeric:tabular-nums; line-height:1; margin:18px 0 6px; cursor:pointer; user-select:none; letter-spacing:-0.04em">--:--</div>
       <div id="tmd-mode" class="hint-sm" style="margin-top:-4px; margin-bottom:4px">残り時間</div>
       <div id="tmd-elapsed" class="hint-sm">経過 -- / 合計 --</div>
@@ -350,7 +350,7 @@ export async function renderTimerDetail({ params }) {
         <button id="tmd-pause" class="btn"     hidden>⏸ 一時停止</button>
         <button id="tmd-reset" class="btn"     hidden>↻ リセット</button>
       </div>
-      <p class="hint-sm" style="margin:6px 0 0">操作は 参加者 全員 (起案者 含む) が 可能。</p>
+      <p class="hint-sm" style="margin:6px 0 0">操作は参加者全員 (起案者含む) が可能。</p>
     </div>
     <div class="card" id="tmd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
@@ -364,59 +364,59 @@ export async function renderTimerDetail({ params }) {
   // 1 秒刻みで表示更新 (offset とサーバの終了時刻から計算)
   tmTickTimer = setInterval(() => tickTimer(), 1000);
   tickTimer();
-  // v411 タップで 残り ⇄ 経過 切替
+  // v411 タップで残り ⇄ 経過切替
   document.getElementById('tmd-count')?.addEventListener('click', () => {
     tmDisplayMode = tmDisplayMode === 'remain' ? 'elapsed' : 'remain';
     try { localStorage.setItem('labpay-tm-display', tmDisplayMode); } catch (_) {}
     tickTimer();
   });
-  // v453 試聴 — 「鳴らない」 訴え の 1 次切り分け 用。 click 内 で 鳴らす ので
-  // 必ず unlock 済み の 状態で 走る。 鳴らない なら 端末側 (silent / volume / etc) 問題。
+  // v453 試聴 — 「鳴らない」 訴えの 1 次切り分け用。 click 内で鳴らすので
+  // 必ず unlock 済みの状態で走る。 鳴らないなら端末側 (silent / volume / etc) 問題。
   document.getElementById('tmd-test-bell')?.addEventListener('click', () => {
     unlockAudio();
     playBoundaryTick();
     setTimeout(() => playEndDing(), 600);
   });
-  // v453 → v455 フルスクリーン — 学会タイマー で 発表者 に 時間 を 見せる。
-  // 「🖥 フル」 → 全画面化、 「✕ 終了」 / ESC で 解除。
+  // v453 → v455 フルスクリーン — 学会タイマーで発表者に時間を見せる。
+  // 「🖥 フル」 → 全画面化、 「✕ 終了」 / ESC で解除。
   document.getElementById('tmd-fs')?.addEventListener('click', () => {
     enterTimerFullscreen();
   });
   document.getElementById('tmd-fs-exit')?.addEventListener('click', () => {
     exitTimerFullscreen();
   });
-  // v676 #256 公開 URL: 認証 不要 ・ タブレット で 演台 に 置く 用 (タップ で クリップボード コピー)
+  // v676 #256 公開 URL: 認証不要・タブレットで演台に置く用 (タップでクリップボードコピー)
   document.getElementById('tmd-public')?.addEventListener('click', async () => {
     const url = location.origin + '/#/public-timer/' + id;
     try {
       await navigator.clipboard?.writeText?.(url);
-      toast('公開 URL を コピー しました: ' + url);
+      toast('公開 URL をコピーしました: ' + url);
     } catch (_) {
-      prompt('この URL を コピー して タブレット で 開いて ください:', url);
+      prompt('この URL をコピーしてタブレットで開いてください:', url);
     }
   });
 }
 
-// v455 真の フルスクリーン (Fullscreen API + CSS フォールバック)。
-// iOS Safari は 通常 要素 に は Fullscreen API を 認め ない ので 黒くなる だけに
-// なる 問題 が あった → CSS で position:fixed + inset:0 + z-index で 全画面 を
-// 模す ように。 Fullscreen API が 通る Chrome / Edge では 両方 適用 (害なし)。
+// v455 真のフルスクリーン (Fullscreen API + CSS フォールバック)。
+// iOS Safari は通常要素には Fullscreen API を認めないので黒くなるだけに
+// なる問題があった → CSS で position:fixed + inset:0 + z-index で全画面を
+// 模すように。 Fullscreen API が通る Chrome / Edge では両方適用 (害なし)。
 function enterTimerFullscreen() {
   const card = document.getElementById('tmd-display-card');
   if (!card) return;
   card.classList.add('tmd-fs-on');
-  // ブラウザネイティブ の Fullscreen が 使えるなら 使う (chrome 等)。 iOS は 拒否 で
-  // 黙って 通る (CSS フォールバック だけ で 機能 する)。
+  // ブラウザネイティブの Fullscreen が使えるなら使う (chrome 等)。 iOS は拒否で
+  // 黙って通る (CSS フォールバックだけで機能する)。
   const req = card.requestFullscreen || card.webkitRequestFullscreen;
   if (req) {
     try { req.call(card).catch(() => {}); } catch (_) {}
   }
-  // 外側 から ESC や OS の フルスクリーン解除 が 走ったら CSS の class も 外す。
+  // 外側から ESC や OS のフルスクリーン解除が走ったら CSS の class も外す。
   const handler = () => {
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      // CSS class は そのまま 残す? — ユーザ が 終了 ボタン を 押した と 同義
-      // に 扱う のが 自然。 残すと iOS の "黒い まま" になる。
-      // ここでは class も 外して 通常 表示 に 戻す。
+      // CSS class はそのまま残す? — ユーザが終了ボタンを押したと同義
+      // に扱うのが自然。 残すと iOS の "黒いまま" になる。
+      // ここでは class も外して通常表示に戻す。
       card.classList.remove('tmd-fs-on');
       document.removeEventListener('fullscreenchange', handler);
       document.removeEventListener('webkitfullscreenchange', handler);
@@ -440,15 +440,15 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     const d = await get('/api/timers/' + id);
     const t = d.timer;
     tmOffsetMs    = Date.parse(String(d.server_now).replace(' ', 'T')) - recvMs;
-    // v446 paused は started_at/ends_at が NULL。 NaN を 避けるため 三項で 0 に。
+    // v446 paused は started_at/ends_at が NULL。 NaN を避けるため三項で 0 に。
     tmEndsMs      = t.ends_at    ? Date.parse(String(t.ends_at).replace(' ', 'T'))    : 0;
     tmStartedMs   = t.started_at ? Date.parse(String(t.started_at).replace(' ', 'T')) : 0;
     tmClosedMs    = t.closed_at  ? Date.parse(String(t.closed_at).replace(' ', 'T'))  : 0;
     tmDurationSec = t.duration_seconds;
     tmRemainingSec = Math.max(0, Number(t.remaining_seconds) || 0);
     tmStatus      = t.status;
-    // ベル / リピート 情報 (resync 時も更新)。 v449 end_bell_index で 指定された
-    // ベル は ding 専用 として 別途 持ち、 tick loop からは 除外。
+    // ベル / リピート情報 (resync 時も更新)。 v449 end_bell_index で指定された
+    // ベルは ding 専用として別途持ち、 tick loop からは除外。
     const bellArr = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
     tmBells       = bellArr.filter(Number.isFinite);
     tmEndBellSec  = (t.end_bell_index && bellArr[t.end_bell_index - 1])
@@ -456,18 +456,18 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
     tmRepeatMax   = t.repeat_max || 0;
     tmRepeatIdx   = t.repeat_idx || 0;
     if (!isResync) tmBellsFired = new Set();
-    // v405 running 中は スクリーンを 起こし続ける
-    // v683 #266 done でも 超過 視覚 表示 が 続く ので wake lock を 保持
+    // v405 running 中はスクリーンを起こし続ける
+    // v683 #266 done でも超過視覚表示が続くので wake lock を保持
     if (tmStatus === 'running' || tmStatus === 'done') acquireWakeLock('timer');
     else releaseWakeLock('timer');
-    // サイクルが進んだら fired をリセット (リピート 2 周目で 再度鳴らす)
+    // サイクルが進んだら fired をリセット (リピート 2 周目で再度鳴らす)
     if (tmLastCycleIdx !== tmRepeatIdx) {
       tmBellsFired = new Set();
       tmLastCycleIdx = tmRepeatIdx;
-      tmEndFiredOnce = false;  // v408 サイクル切替で 終了音も 再有効化
+      tmEndFiredOnce = false;  // v408 サイクル切替で終了音も再有効化
     }
     if (!isResync) {
-      // v449 ベル の 一覧 (1鈴/2鈴/3鈴 + 終了印) を ヘッダに 表示。
+      // v449 ベルの一覧 (1鈴/2鈴/3鈴 + 終了印) をヘッダに表示。
       const bellArrForDisplay = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
       const bellLine = bellArrForDisplay
         .map((sec, i) => sec ? `${i + 1}鈴 ${fmtDuration(sec)}${t.end_bell_index === (i + 1) ? ' 🏁終了' : ''}` : null)
@@ -479,10 +479,10 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       `;
       document.getElementById('tmd-pcount').textContent = d.participants.length;
       document.getElementById('tmd-participants').innerHTML = d.participants.map(participantPill).join('');
-      // v446 start/pause/reset は 参加者 (含 起案者) なら 押せる。
+      // v446 start/pause/reset は参加者 (含起案者) なら押せる。
       if (d.is_participant || d.is_creator) {
         document.getElementById('tmd-start').addEventListener('click', async () => {
-          unlockAudio();  // v453 明示 unlock 「鳴らない」 対策 (グローバル unlock の バックアップ)
+          unlockAudio();  // v453 明示 unlock 「鳴らない」 対策 (グローバル unlock のバックアップ)
           try { await patch(`/api/timers/${id}/start`, {}); toast('開始しました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
           catch (e) { toast('失敗: ' + e.message); }
         });
@@ -491,7 +491,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
           catch (e) { toast('失敗: ' + e.message); }
         });
         document.getElementById('tmd-reset').addEventListener('click', async () => {
-          if (!confirm('タイマーを 元の長さ に 戻しますか?')) return;
+          if (!confirm('タイマーを元の長さに戻しますか?')) return;
           try { await patch(`/api/timers/${id}/reset`, {}); toast('リセットしました'); await loadTimerDetail(id, { isResync: true }); tickTimer(); }
           catch (e) { toast('失敗: ' + e.message); }
         });
@@ -506,14 +506,14 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
         });
       }
     }
-    // v446 ボタン 表示の 出し分けは resync でも 走らせる (status 変化を 反映)。
+    // v446 ボタン表示の出し分けは resync でも走らせる (status 変化を反映)。
     const btnStart = document.getElementById('tmd-start');
     const btnPause = document.getElementById('tmd-pause');
     const btnReset = document.getElementById('tmd-reset');
     if (btnStart && btnPause && btnReset) {
       btnStart.hidden = !(tmStatus === 'paused');
       btnPause.hidden = !(tmStatus === 'running');
-      // リセット は 削除以外 全状態 で 押せる (running / paused / done / cancelled)。
+      // リセットは削除以外全状態で押せる (running / paused / done / cancelled)。
       btnReset.hidden = false;
     }
     // 次の sync をスケジューリング。 残りが少ない時 + 開始直後は頻繁に。
@@ -552,15 +552,15 @@ function tickTimer() {
   const stEl    = document.getElementById('tmd-status');
   if (!countEl) { stopTimerLoops(); return; }
   const now = Date.now() + tmOffsetMs;
-  // ベル 発火: 経過秒 が ベル設定値 を 越えたら 1 回 鳴らす。
-  // v449 終了ベル (= duration と 同一) は ding 専用 なので tick loop から 除外。
-  // running / done どちら でも 鳴らす (= 終了 後 の 質疑時間 ベル も 通る)。
-  // paused 中 は started_at が null なので tmStartedMs=0、 elapsed が 巨大 になる
+  // ベル発火: 経過秒がベル設定値を越えたら 1 回鳴らす。
+  // v449 終了ベル (= duration と同一) は ding 専用なので tick loop から除外。
+  // running / done どちらでも鳴らす (= 終了後の質疑時間ベルも通る)。
+  // paused 中は started_at が null なので tmStartedMs=0、 elapsed が巨大になる
   // → status guard で skip。
   if ((tmStatus === 'running' || tmStatus === 'done') && tmBells.length && tmStartedMs) {
     const elapsed = Math.floor((now - tmStartedMs) / 1000);
     for (const b of tmBells) {
-      if (b === tmEndBellSec) continue;            // 終了ベル は ding 側で 鳴る
+      if (b === tmEndBellSec) continue;            // 終了ベルは ding 側で鳴る
       if (elapsed >= b && !tmBellsFired.has(b)) {
         tmBellsFired.add(b);
         playBoundaryTick();
@@ -568,8 +568,8 @@ function tickTimer() {
     }
   }
   if (tmStatus === 'cancelled') {
-    // v453 停止時 の 経過秒 を 残す — 「何分何秒 で 止めたか」 が 重要な 記録 になる。
-    // closed_at - started_at で 復元。 progress バー も そのまま 残す。
+    // v453 停止時の経過秒を残す — 「何分何秒で止めたか」 が重要な記録になる。
+    // closed_at - started_at で復元。 progress バーもそのまま残す。
     let stoppedSec = 0;
     if (tmStartedMs && tmClosedMs) {
       stoppedSec = Math.max(0, Math.floor((tmClosedMs - tmStartedMs) / 1000));
@@ -579,17 +579,17 @@ function tickTimer() {
     const pct = tmDurationSec ? Math.min(100, (stoppedSec / tmDurationSec) * 100) : 0;
     barEl.style.width = pct.toFixed(1) + '%';
     barEl.style.background = '#888';
-    elEl.textContent = `停止時 経過 ${fmtDuration(stoppedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
-    stEl.textContent = `⏹ ${fmtDuration(stoppedSec)} で 停止 — ↻ リセット で 戻せます`;
+    elEl.textContent = `停止時経過 ${fmtDuration(stoppedSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
+    stEl.textContent = `⏹ ${fmtDuration(stoppedSec)} で停止 — ↻ リセットで戻せます`;
     return;
   }
-  // v446 paused: 残り を 固定表示。 tick で 減らさない。
+  // v446 paused: 残りを固定表示。 tick で減らさない。
   if (tmStatus === 'paused') {
     const modeEl = document.getElementById('tmd-mode');
     countEl.textContent = fmtDuration(tmRemainingSec);
     // v725 #329 paused の数字色を橙 #e65100 → 落ち着いた緑 #0e7c63 に。 赤い感じが気を引きすぎるため。
     countEl.style.color = '#0e7c63';
-    if (modeEl) modeEl.textContent = '⏸ 一時停止中 — ▶ 開始 を 押すと カウントダウン';
+    if (modeEl) modeEl.textContent = '⏸ 一時停止中 — ▶ 開始を押すとカウントダウン';
     elEl.textContent = `残り ${fmtDuration(tmRemainingSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
     const usedSec = Math.max(0, tmDurationSec - tmRemainingSec);
     const pct = tmDurationSec ? Math.min(100, (usedSec / tmDurationSec) * 100) : 0;
@@ -598,11 +598,11 @@ function tickTimer() {
     stEl.textContent = '';
     return;
   }
-  // v684 #267 3 フェーズ 表示:
-  //   ① 発表終了 (= end_bell) まで: 通常 の カウントダウン
-  //   ② 発表終了 〜 最後 の ベル: カウントアップ モード では そのまま 経過、 カウントダウン
-  //      モード では 0:00 から 上 に カウント (= 質疑 時間 等 の 経過)
-  //   ③ 最後 の ベル を 越えたら 「+MM:SS 超過」
+  // v684 #267 3 フェーズ表示:
+  //   ① 発表終了 (= end_bell) まで: 通常のカウントダウン
+  //   ② 発表終了 〜 最後のベル: カウントアップモードではそのまま経過、 カウントダウン
+  //      モードでは 0:00 から上にカウント (= 質疑時間等の経過)
+  //   ③ 最後のベルを越えたら 「+MM:SS 超過」
   const maxBellSec    = tmBells.length ? Math.max(...tmBells) : 0;
   const endBellSec    = (tmEndBellSec ?? tmDurationSec) || 0;
   const visualEndSec  = Math.max(maxBellSec, endBellSec);
@@ -620,28 +620,28 @@ function tickTimer() {
       countEl.textContent = fmtDuration(elapsedSec);
       countEl.style.color = '';
     }
-    if (modeEl) modeEl.textContent = '↑ 経過時間 (タップで 残り時間)';
+    if (modeEl) modeEl.textContent = '↑ 経過時間 (タップで残り時間)';
   } else if (isOver) {
     countEl.textContent = '+' + fmtDuration(Math.floor(elapsed - maxBellSec)) + ' 超過';
     countEl.style.color = '#c62828';
-    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで経過時間)';
   } else if (isPastEnd) {
-    // ② 発表終了 後、 最後 の ベル まで は 0:00 から 上 に カウント
+    // ② 発表終了後、 最後のベルまでは 0:00 から上にカウント
     // v726 #331 質疑帯は黄色 (#ca8a04 amber) で発表中と区別。
     countEl.textContent = fmtDuration(Math.floor(elapsed - endBellSec));
     countEl.style.color = '#ca8a04';
-    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで経過時間)';
   } else {
     countEl.textContent = fmtDuration(remainToEndSec);
     countEl.style.color = remainToEndSec === 0 ? 'var(--primary)'
                         : remainToEndSec < 10 ? '#c62828'
                         : '';
-    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで 経過時間)';
+    if (modeEl) modeEl.textContent = '↓ 残り時間 (タップで経過時間)';
   }
   elEl.textContent = `経過 ${fmtDuration(elapsedSec)} / 合計 ${fmtDuration(visualEndSec)}`;
-  // v726 #326 プログレスバー再設計: 合計 = 最後のベル位置 を 100%。
-  //   発表終了までは ベース色 (primary)、 質疑帯 (発表終了〜最後のベル) は橙系、 超過は赤。
-  //   背景に縦線で 一鈴 / 二鈴 / 発表終了 を示す (= tickStyle inline gradient で表示)。
+  // v726 #326 プログレスバー再設計: 合計 = 最後のベル位置を 100%。
+  //   発表終了まではベース色 (primary)、 質疑帯 (発表終了〜最後のベル) は橙系、 超過は赤。
+  //   背景に縦線で一鈴 / 二鈴 / 発表終了を示す (= tickStyle inline gradient で表示)。
   const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
   if (isOver) barEl.style.background = '#c62828';
@@ -666,19 +666,19 @@ function tickTimer() {
         `linear-gradient(to right, #dbeafe 0%, #dbeafe ${endPct}%, #fef3c7 ${endPct}%, #fef3c7 100%)`;
     }
   }
-  // 発表終了 ベル の ding は elapsed が endBellSec を 跨いだ 瞬間 で 1 回 のみ。
+  // 発表終了ベルの ding は elapsed が endBellSec を跨いだ瞬間で 1 回のみ。
   if (remainToEndSec === 0 && tmStatus === 'running' && !tmEndFiredOnce) {
     tmEndFiredOnce = true;
     if (tmRepeatMax > 0 && tmRepeatIdx < tmRepeatMax) {
-      stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目 切替中…`;
+      stEl.textContent = `🔁 リピート ${tmRepeatIdx + 1}/${tmRepeatMax} 回目切替中…`;
     } else {
       stEl.textContent = '🎉 終了!';
       playEndDing();
-      // v683 #266 終了 後 も 表示 を 続ける ので wake lock は 解放 しない
+      // v683 #266 終了後も表示を続けるので wake lock は解放しない
     }
   } else if (tmStatus === 'done') {
     if (isOver) {
-      stEl.textContent = `🎉 終了 + 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過 中`;
+      stEl.textContent = `🎉 終了 + 超過 ${fmtDuration(Math.floor(elapsed - maxBellSec))} 経過中`;
     } else if (isPastEnd) {
       stEl.textContent = `🎉 終了 — 質疑 ${fmtDuration(Math.floor(elapsed - endBellSec))}`;
     } else {

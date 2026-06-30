@@ -1,4 +1,4 @@
-// v590 大富豪 (MVP)。 単出し / ペア / N 枚出し のみ、 革命なし、 シンプル ルール。
+// v590 大富豪 (MVP)。 単出し / ペア / N 枚出しのみ、 革命なし、 シンプルルール。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -39,8 +39,8 @@ export async function renderDaifugo() {
   document.getElementById('df-new').addEventListener('click', async () => {
     const { showInviteModal } = await import('./invite_modal.js');
     const res = await showInviteModal({
-      title: '🃏 大富豪 新規卓',
-      description: 'プレイフィー 2pt。 「対象者で 即開始」 なら 全員から 即 徴収 + 通知 + 即 配牌。',
+      title: '🃏 大富豪新規卓',
+      description: 'プレイフィー 2pt。 「対象者で即開始」 なら全員から即徴収 + 通知 + 即配牌。',
       minPick: 1, maxPick: 3,        // 自分 + 1〜3 人 = 2〜4 人
       allowPublic: true,
     });
@@ -54,11 +54,11 @@ export async function renderDaifugo() {
   try {
     const d = await get('/api/daifugo/games');
     const items = d.items || [];
-    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓 がありません。 「＋ 新規卓」 で 始めましょう。</div>'; return; }
+    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓がありません。 「＋ 新規卓」 で始めましょう。</div>'; return; }
     document.getElementById('df-list').innerHTML = items.map(g => `
       <a class="list-item" href="#/daifugo/${g.id}">
         <div class="grow">
-          <div class="bold">${escapeHtml(g.creator_name)} の卓 ・ ${g.player_count} 人参加 ${g.me_in && g.status !== 'finished' && g.status !== 'cancelled' ? '<span class="tag ok">参加中</span>' : ''}</div>
+          <div class="bold">${escapeHtml(g.creator_name)} の卓・ ${g.player_count} 人参加 ${g.me_in && g.status !== 'finished' && g.status !== 'cancelled' ? '<span class="tag ok">参加中</span>' : ''}</div>
           <div class="meta">${g.status} / pot ${g.pot_total}pt</div>
         </div>
       </a>
@@ -89,7 +89,7 @@ async function paintDaifugo(gid) {
       <div class="card" data-df-gid="${gid}">
         <a href="#/daifugo" class="hint">← 一覧</a>
         <h2 style="margin:6px 0">🃏 大富豪 #${gid} (ロビー)</h2>
-        <p class="hint">参加者: ${d.players.length} / 4 (2 人以上で 開始可)</p>
+        <p class="hint">参加者: ${d.players.length} / 4 (2 人以上で開始可)</p>
         ${d.players.map(p => `<div class="list-item"><div class="grow"><div class="bold">座 ${p.seat + 1}: ${escapeHtml(p.display_name)}</div></div></div>`).join('')}
         <div style="display:flex; gap:6px; margin-top:8px">
           ${meIn ? '' : `<button id="df-join" class="btn primary">参加 (2pt)</button>`}
@@ -100,7 +100,7 @@ async function paintDaifugo(gid) {
       </div>
     `;
     document.getElementById('df-share')?.addEventListener('click', () => {
-      shareToSns(`🃏 大富豪 卓 #${gid} 募集中 (${d.players.length}/4、 プレイフィー 2pt)`, `#/daifugo/${gid}`);
+      shareToSns(`🃏 大富豪卓 #${gid} 募集中 (${d.players.length}/4、 プレイフィー 2pt)`, `#/daifugo/${gid}`);
     });
     document.getElementById('df-join')?.addEventListener('click', async () => {
       try { await post(`/api/daifugo/games/${gid}/join`, {}); paintDaifugo(gid); } catch (e) { toast('失敗: ' + e.message); }
@@ -109,7 +109,7 @@ async function paintDaifugo(gid) {
       try { await post(`/api/daifugo/games/${gid}/start`, {}); paintDaifugo(gid); } catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('df-cancel')?.addEventListener('click', async () => {
-      if (!confirm('キャンセルしますか? (全員 返金)')) return;
+      if (!confirm('キャンセルしますか? (全員返金)')) return;
       try { await post(`/api/daifugo/games/${gid}/cancel`, {}); navigate('#/daifugo'); } catch (e) { toast('失敗: ' + e.message); }
     });
     return;
@@ -146,8 +146,8 @@ async function paintDaifugo(gid) {
         <div style="display:flex; gap:6px; flex-wrap:wrap; padding:8px; background:#dbeafe; border-radius:6px">
           ${d.last_play.cards.map(c => `<div style="padding:8px 12px; background:#fff; border-radius:6px; font-size:20px; min-width:48px; text-align:center">${cardLabel(c)}</div>`).join('')}
         </div>
-        <div class="hint-sm" style="margin-top:4px">座 ${d.last_play.by + 1} が ${d.last_play.count} 枚 出した</div>
-      ` : '<div class="hint">場 は 空です (好きな枚数で 出せる)</div>'}
+        <div class="hint-sm" style="margin-top:4px">座 ${d.last_play.by + 1} が ${d.last_play.count} 枚出した</div>
+      ` : '<div class="hint">場は空です (好きな枚数で出せる)</div>'}
     </div>
 
     ${d.status === 'finished' ? `
@@ -158,18 +158,18 @@ async function paintDaifugo(gid) {
 
     ${d.status === 'playing' && d.my_seat !== null && myRank === null ? `
     <div class="card">
-      <h3 style="margin:0 0 6px">あなたの手札 (タップで 選択)</h3>
+      <h3 style="margin:0 0 6px">あなたの手札 (タップで選択)</h3>
       <div id="df-hand" style="display:flex; gap:4px; flex-wrap:wrap; padding:6px">
         ${myHand.map(c => `<button class="df-card" data-c="${c}" style="padding:8px 10px; border:2px solid #ccc; background:#fff; border-radius:6px; font-size:18px; min-width:48px; cursor:pointer">${cardLabel(c)}</button>`).join('')}
       </div>
       ${d.my_turn ? `
         <div style="display:flex; gap:6px; margin-top:10px">
-          <button id="df-play" class="btn primary">選んだ カード を 出す</button>
+          <button id="df-play" class="btn primary">選んだカードを出す</button>
           ${d.last_play ? `<button id="df-pass" class="btn">パス</button>` : ''}
         </div>
-        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で 出す。 同じ数字を 揃えて 複数枚 出せる。</div>
-      ` : '<div class="hint" style="margin-top:8px">相手の番 を 待っています…</div>'}
-      <button id="df-resign" class="btn" style="margin-top:8px; font-size:11px; color:#c00">🏳 投了 (ポイント 戻りません)</button>
+        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で出す。 同じ数字を揃えて複数枚出せる。</div>
+      ` : '<div class="hint" style="margin-top:8px">相手の番を待っています…</div>'}
+      <button id="df-resign" class="btn" style="margin-top:8px; font-size:11px; color:#c00">🏳 投了 (ポイント戻りません)</button>
     </div>` : ''}
 
     ${d.log && d.log.length ? `
@@ -189,7 +189,7 @@ async function paintDaifugo(gid) {
       });
     });
     document.getElementById('df-play')?.addEventListener('click', async () => {
-      if (!selected.size) { toast('カードを 選んでください'); return; }
+      if (!selected.size) { toast('カードを選んでください'); return; }
       try { await post(`/api/daifugo/games/${gid}/play`, { cards: [...selected] }); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
@@ -198,7 +198,7 @@ async function paintDaifugo(gid) {
       catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('df-resign')?.addEventListener('click', async () => {
-      if (!confirm('🏳 投了 しますか? (= ゲーム終了、 ポイント 戻りません)')) return;
+      if (!confirm('🏳 投了しますか? (= ゲーム終了、 ポイント戻りません)')) return;
       try { await post(`/api/daifugo/games/${gid}/resign`, {}); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });

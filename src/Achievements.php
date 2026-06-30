@@ -7,11 +7,11 @@ declare(strict_types=1);
 
 class Achievements {
     // Each tier: ['count' => threshold, 'label' => display, 'medal' => icon].
-    // 各カテゴリで 段位名は 「軽い」 → 「極端」 に エスカレートする。 medal は 段位の
-    // 視覚的 強さを 統一 (🥉/🥈/🥇/💎) で 揃える。 ラベルだけ category 固有。
+    // 各カテゴリで段位名は 「軽い」 → 「極端」 にエスカレートする。 medal は段位の
+    // 視覚的強さを統一 (🥉/🥈/🥇/💎) で揃える。 ラベルだけ category 固有。
     public const DEFS = [
         'checkin_total' => [
-            'title' => 'ラボイン マスター',
+            'title' => 'ラボインマスター',
             'desc'  => '通算でラボインした日数',
             'unit'  => '日',
             'icon'  => '📅',
@@ -145,7 +145,7 @@ class Achievements {
         // ── v351 追加 ──
         'night_use' => [
             'title' => '夜間ラボ族',
-            'desc'  => '23:00〜25:00 に ラボにいた日数',
+            'desc'  => '23:00〜25:00 にラボにいた日数',
             'unit'  => '日',
             'icon'  => '🌙',
             'tiers' => [
@@ -157,7 +157,7 @@ class Achievements {
         ],
         'early_bird' => [
             'title' => '早起きラボイン',
-            'desc'  => '泊まりじゃなく 朝 7:00〜8:30 にラボにいた日数',
+            'desc'  => '泊まりじゃなく朝 7:00〜8:30 にラボにいた日数',
             'unit'  => '日',
             'icon'  => '🌅',
             'tiers' => [
@@ -169,7 +169,7 @@ class Achievements {
         ],
         'opener' => [
             'title' => 'ラボのオープナー',
-            'desc'  => 'その日 最初にラボに入った日数 (前夜泊まりが居ない日に限る)',
+            'desc'  => 'その日最初にラボに入った日数 (前夜泊まりが居ない日に限る)',
             'unit'  => '日',
             'icon'  => '🔓',
             'tiers' => [
@@ -181,7 +181,7 @@ class Achievements {
         ],
         'closer' => [
             'title' => 'ラボのクローザー',
-            'desc'  => 'その日 最後にラボを出た日数 (その夜の泊まりが居ない日に限る)',
+            'desc'  => 'その日最後にラボを出た日数 (その夜の泊まりが居ない日に限る)',
             'unit'  => '日',
             'icon'  => '🌃',
             'tiers' => [
@@ -191,176 +191,176 @@ class Achievements {
                 ['count' => 50, 'label' => '闇に消えた最終者',     'medal' => '💎'],
             ],
         ],
-        // v473 → v474 食べある記 (places アプリ) 関連 実績。 閾値 を 5/10/50/200 に。
+        // v473 → v474 食べある記 (places アプリ) 関連実績。 閾値を 5/10/50/200 に。
         'places_added' => [
-            'title' => '食べある記 投稿者',
-            'desc'  => '食べある記 に 登録 した 店 の 数',
+            'title' => '食べある記投稿者',
+            'desc'  => '食べある記に登録した店の数',
             'unit'  => '店',
             'icon'  => '🍴',
             'tiers' => [
-                ['count' => 5,   'label' => '食べある記 デビュー', 'medal' => '🥉'],
-                ['count' => 10,  'label' => 'グルメ リポーター',   'medal' => '🥈'],
+                ['count' => 5,   'label' => '食べある記デビュー', 'medal' => '🥉'],
+                ['count' => 10,  'label' => 'グルメリポーター',   'medal' => '🥈'],
                 ['count' => 50,  'label' => '食通',                 'medal' => '🥇'],
-                ['count' => 200, 'label' => '中野 食べ尽くし',     'medal' => '💎'],
+                ['count' => 200, 'label' => '中野食べ尽くし',     'medal' => '💎'],
             ],
         ],
         'places_reviewed' => [
-            'title' => '口コミの 達人',
-            'desc'  => '食べある記 で 書いた 口コミ の 数',
+            'title' => '口コミの達人',
+            'desc'  => '食べある記で書いた口コミの数',
             'unit'  => '件',
             'icon'  => '💬',
             'tiers' => [
-                ['count' => 5,   'label' => '口コミ 初心者',       'medal' => '🥉'],
-                ['count' => 10,  'label' => 'マメな レビュアー',   'medal' => '🥈'],
+                ['count' => 5,   'label' => '口コミ初心者',       'medal' => '🥉'],
+                ['count' => 10,  'label' => 'マメなレビュアー',   'medal' => '🥈'],
                 ['count' => 50,  'label' => 'グルメ評論家',         'medal' => '🥇'],
-                ['count' => 200, 'label' => '食 の 賢者',           'medal' => '💎'],
+                ['count' => 200, 'label' => '食の賢者',           'medal' => '💎'],
             ],
         ],
-        // v480 アクティビティ系 実績
+        // v480 アクティビティ系実績
         'rollcalls_created' => [
             'title' => '点呼隊長',
-            'desc'  => '点呼 を 起案 した 回数',
+            'desc'  => '点呼を起案した回数',
             'unit'  => '回',
             'icon'  => '📣',
             'tiers' => [
-                ['count' => 1,   'label' => 'みんな いる？',         'medal' => '🥉'],
+                ['count' => 1,   'label' => 'みんないる？',         'medal' => '🥉'],
                 ['count' => 10,  'label' => '出席係',                 'medal' => '🥈'],
                 ['count' => 50,  'label' => '点呼マスター',           'medal' => '🥇'],
-                ['count' => 200, 'label' => 'ラボの 総監督',         'medal' => '💎'],
+                ['count' => 200, 'label' => 'ラボの総監督',         'medal' => '💎'],
             ],
         ],
         'sns_posts' => [
             'title' => 'つぶやき魔',
-            'desc'  => 'ラボ SNS に 投稿 した 数',
+            'desc'  => 'ラボ SNS に投稿した数',
             'unit'  => '投稿',
             'icon'  => '💬',
             'tiers' => [
-                ['count' => 5,   'label' => 'たまの 一言',           'medal' => '🥉'],
+                ['count' => 5,   'label' => 'たまの一言',           'medal' => '🥉'],
                 ['count' => 30,  'label' => 'おしゃべり',             'medal' => '🥈'],
-                ['count' => 100, 'label' => 'タイムライン の 主',     'medal' => '🥇'],
-                ['count' => 500, 'label' => 'つぶやき 教祖',         'medal' => '💎'],
+                ['count' => 100, 'label' => 'タイムラインの主',     'medal' => '🥇'],
+                ['count' => 500, 'label' => 'つぶやき教祖',         'medal' => '💎'],
             ],
         ],
         'sns_reactions_received' => [
-            'title' => 'ラボの 人気者',
-            'desc'  => '自分の SNS 投稿 に つけられた リアクション 数',
+            'title' => 'ラボの人気者',
+            'desc'  => '自分の SNS 投稿につけられたリアクション数',
             'unit'  => '個',
             'icon'  => '❤️',
             'tiers' => [
                 ['count' => 5,   'label' => 'チラ見せ',               'medal' => '🥉'],
-                ['count' => 30,  'label' => 'みんなの 注目',           'medal' => '🥈'],
-                ['count' => 100, 'label' => 'ラボの 推し',             'medal' => '🥇'],
+                ['count' => 30,  'label' => 'みんなの注目',           'medal' => '🥈'],
+                ['count' => 100, 'label' => 'ラボの推し',             'medal' => '🥇'],
                 ['count' => 500, 'label' => 'バズり師',                'medal' => '💎'],
             ],
         ],
         'auctions_won' => [
             'title' => '落札王',
-            'desc'  => 'オークション で 落札 した 回数',
+            'desc'  => 'オークションで落札した回数',
             'unit'  => '回',
             'icon'  => '🏷',
             'tiers' => [
-                ['count' => 1,   'label' => '初 落札',                'medal' => '🥉'],
-                ['count' => 5,   'label' => '入札 中毒',              'medal' => '🥈'],
+                ['count' => 1,   'label' => '初落札',                'medal' => '🥉'],
+                ['count' => 5,   'label' => '入札中毒',              'medal' => '🥈'],
                 ['count' => 20,  'label' => '落札王',                 'medal' => '🥇'],
-                ['count' => 50,  'label' => '競売 のドン',            'medal' => '💎'],
+                ['count' => 50,  'label' => '競売のドン',            'medal' => '💎'],
             ],
         ],
         'timers_created' => [
-            'title' => '時間 管理人',
-            'desc'  => 'タイマー を 起案 した 数 (= 学会発表 タイマー / ポモドーロ など)',
+            'title' => '時間管理人',
+            'desc'  => 'タイマーを起案した数 (= 学会発表タイマー / ポモドーロなど)',
             'unit'  => '本',
             'icon'  => '⏱',
             'tiers' => [
-                ['count' => 3,   'label' => 'たまの ポモドーロ',     'medal' => '🥉'],
-                ['count' => 20,  'label' => 'タイム キーパー',       'medal' => '🥈'],
-                ['count' => 80,  'label' => '時間 管理人',           'medal' => '🥇'],
-                ['count' => 300, 'label' => '時を 操る 者',           'medal' => '💎'],
+                ['count' => 3,   'label' => 'たまのポモドーロ',     'medal' => '🥉'],
+                ['count' => 20,  'label' => 'タイムキーパー',       'medal' => '🥈'],
+                ['count' => 80,  'label' => '時間管理人',           'medal' => '🥇'],
+                ['count' => 300, 'label' => '時を操る者',           'medal' => '💎'],
             ],
         ],
         'playlists_created' => [
             'title' => 'ラボ DJ',
-            'desc'  => 'プレイリスト を 作成 した 数',
+            'desc'  => 'プレイリストを作成した数',
             'unit'  => '枚',
             'icon'  => '🎵',
             'tiers' => [
-                ['count' => 1,   'label' => '初 プレイリスト',       'medal' => '🥉'],
+                ['count' => 1,   'label' => '初プレイリスト',       'medal' => '🥉'],
                 ['count' => 5,   'label' => '選曲家',                 'medal' => '🥈'],
                 ['count' => 20,  'label' => 'ラボ DJ',                'medal' => '🥇'],
-                ['count' => 50,  'label' => 'ヘッドホン 教祖',       'medal' => '💎'],
+                ['count' => 50,  'label' => 'ヘッドホン教祖',       'medal' => '💎'],
             ],
         ],
-        // v622 ビンゴ 実績
+        // v622 ビンゴ実績
         'bingo_lines_total' => [
-            'title' => 'ビンゴ 職人',
-            'desc'  => '通算 ビンゴ ライン数 (横 / 縦 / 斜め の 合計、 週 を またいで 加算)',
+            'title' => 'ビンゴ職人',
+            'desc'  => '通算ビンゴライン数 (横 / 縦 / 斜めの合計、 週をまたいで加算)',
             'unit'  => 'ライン',
             'icon'  => '🎯',
             'tiers' => [
-                ['count' => 1,   'label' => '初 ビンゴ',           'medal' => '🥉'],
+                ['count' => 1,   'label' => '初ビンゴ',           'medal' => '🥉'],
                 ['count' => 5,   'label' => '揃え上手',             'medal' => '🥈'],
-                ['count' => 20,  'label' => 'ビンゴ 職人',          'medal' => '🥇'],
-                ['count' => 50,  'label' => 'ビンゴ の 化身',       'medal' => '💎'],
+                ['count' => 20,  'label' => 'ビンゴ職人',          'medal' => '🥇'],
+                ['count' => 50,  'label' => 'ビンゴの化身',       'medal' => '💎'],
             ],
         ],
         'bingo_weeks_won' => [
-            'title' => '週末 ビンゴ ハンター',
-            'desc'  => 'ビンゴ を 1 ライン以上 達成 した 週 の 数',
+            'title' => '週末ビンゴハンター',
+            'desc'  => 'ビンゴを 1 ライン以上達成した週の数',
             'unit'  => '週',
             'icon'  => '🗓',
             'tiers' => [
-                ['count' => 1,   'label' => 'ビンゴ デビュー',     'medal' => '🥉'],
-                ['count' => 4,   'label' => '月イチ ビンゴ',       'medal' => '🥈'],
-                ['count' => 12,  'label' => '3 ヶ月 ビンゴ',       'medal' => '🥇'],
-                ['count' => 30,  'label' => '半年 級 ビンゴ',      'medal' => '💎'],
+                ['count' => 1,   'label' => 'ビンゴデビュー',     'medal' => '🥉'],
+                ['count' => 4,   'label' => '月イチビンゴ',       'medal' => '🥈'],
+                ['count' => 12,  'label' => '3 ヶ月ビンゴ',       'medal' => '🥇'],
+                ['count' => 30,  'label' => '半年級ビンゴ',      'medal' => '💎'],
             ],
         ],
         // v741 #288 BingoFit (着回しビンゴ) 実績
         'bingofit_lines_total' => [
-            'title' => '着回し ビンゴ 職人',
-            'desc'  => '着回しビンゴ の 通算 ライン数',
+            'title' => '着回しビンゴ職人',
+            'desc'  => '着回しビンゴの通算ライン数',
             'unit'  => 'ライン',
             'icon'  => '👕',
             'tiers' => [
-                ['count' => 1,   'label' => '初 着回しビンゴ',      'medal' => '🥉'],
-                ['count' => 5,   'label' => '揃える ファッション', 'medal' => '🥈'],
-                ['count' => 20,  'label' => '着回し マスター',      'medal' => '🥇'],
-                ['count' => 50,  'label' => 'ワードローブ の 化身','medal' => '💎'],
+                ['count' => 1,   'label' => '初着回しビンゴ',      'medal' => '🥉'],
+                ['count' => 5,   'label' => '揃えるファッション', 'medal' => '🥈'],
+                ['count' => 20,  'label' => '着回しマスター',      'medal' => '🥇'],
+                ['count' => 50,  'label' => 'ワードローブの化身','medal' => '💎'],
             ],
         ],
         'bingofit_weeks_won' => [
-            'title' => '着回し 週次 ハンター',
-            'desc'  => '着回しビンゴ を 1 ライン以上 達成 した 週 の 数',
+            'title' => '着回し週次ハンター',
+            'desc'  => '着回しビンゴを 1 ライン以上達成した週の数',
             'unit'  => '週',
             'icon'  => '🗓',
             'tiers' => [
-                ['count' => 1,   'label' => '着回し デビュー',     'medal' => '🥉'],
-                ['count' => 4,   'label' => '月イチ 着回し',       'medal' => '🥈'],
-                ['count' => 12,  'label' => '3 ヶ月 着回し',       'medal' => '🥇'],
-                ['count' => 30,  'label' => '半年 級 着回し',      'medal' => '💎'],
+                ['count' => 1,   'label' => '着回しデビュー',     'medal' => '🥉'],
+                ['count' => 4,   'label' => '月イチ着回し',       'medal' => '🥈'],
+                ['count' => 12,  'label' => '3 ヶ月着回し',       'medal' => '🥇'],
+                ['count' => 30,  'label' => '半年級着回し',      'medal' => '💎'],
             ],
         ],
         'bingofit_full_houses' => [
-            'title' => 'フルハウス キング',
-            'desc'  => '着回しビンゴ で 25 マス すべて 開けた 週 の 数 (毎日 違う服)',
+            'title' => 'フルハウスキング',
+            'desc'  => '着回しビンゴで 25 マスすべて開けた週の数 (毎日違う服)',
             'unit'  => '週',
             'icon'  => '🌟',
             'tiers' => [
-                ['count' => 1,  'label' => '初 フルハウス',    'medal' => '🥉'],
-                ['count' => 3,  'label' => 'フルハウス 常連',  'medal' => '🥈'],
-                ['count' => 10, 'label' => 'フルハウス マスター', 'medal' => '🥇'],
-                ['count' => 25, 'label' => 'クローゼット の 神','medal' => '💎'],
+                ['count' => 1,  'label' => '初フルハウス',    'medal' => '🥉'],
+                ['count' => 3,  'label' => 'フルハウス常連',  'medal' => '🥈'],
+                ['count' => 10, 'label' => 'フルハウスマスター', 'medal' => '🥇'],
+                ['count' => 25, 'label' => 'クローゼットの神','medal' => '💎'],
             ],
         ],
         'bingofit_items_active' => [
-            'title' => 'クローゼット の 厚み',
-            'desc'  => '着回しビンゴ に 登録 された アクティブ 衣類 数',
+            'title' => 'クローゼットの厚み',
+            'desc'  => '着回しビンゴに登録されたアクティブ衣類数',
             'unit'  => '着',
             'icon'  => '🧥',
             'tiers' => [
                 ['count' => 10, 'label' => 'ミニマリスト',     'medal' => '🥉'],
-                ['count' => 25, 'label' => '盤 が 作れる ライン', 'medal' => '🥈'],
-                ['count' => 40, 'label' => 'おしゃれ さん',    'medal' => '🥇'],
-                ['count' => 50, 'label' => '満員 クローゼット','medal' => '💎'],
+                ['count' => 25, 'label' => '盤が作れるライン', 'medal' => '🥈'],
+                ['count' => 40, 'label' => 'おしゃれさん',    'medal' => '🥇'],
+                ['count' => 50, 'label' => '満員クローゼット','medal' => '💎'],
             ],
         ],
     ];
@@ -422,7 +422,7 @@ class Achievements {
 
         // ── v351 (v356 で SQL 修正) ──
         // 夜間ラボ族: 夜 N (= 日付 N の 23:00 〜 N+1 の 01:00) に
-        // ユーザの session が overlap する 夜 N の数。
+        // ユーザの session が overlap する夜 N の数。
         // MariaDB は INTERVAL の単位混合不可 (INTERVAL 8 HOUR + INTERVAL 30 MINUTE NG) →
         // 全部 INTERVAL N MINUTE に統一。 23h=1380, 25h=1500, 08:30=510, 07h=420, 02h=120, 05h=300。
         $st = $pdo->prepare("
@@ -441,7 +441,7 @@ class Achievements {
         $out['night_use'] = (int)$st->fetchColumn();
 
         // 早起き: D 07:00〜D 08:30 に presence あり AND D 02:00〜D 05:00 に presence なし
-        // (= 泊まりじゃなく 朝来た日)。 全部 INTERVAL N MINUTE。
+        // (= 泊まりじゃなく朝来た日)。 全部 INTERVAL N MINUTE。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT d) FROM (
               SELECT DATE(ps.started_at) AS d FROM presence_sessions ps
@@ -459,12 +459,12 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['early_bird'] = (int)$st->fetchColumn();
 
-        // オープナー: DATE(start) D について min(start) を取る user が 自分 AND 自分が
-        // その日 0:00 を またぐセッションを 持っていない (= 自分が泊まりでなく 朝来た)。
+        // オープナー: DATE(start) D について min(start) を取る user が自分 AND 自分が
+        // その日 0:00 をまたぐセッションを持っていない (= 自分が泊まりでなく朝来た)。
         // v390 旧版は presence_sessions (閉じた) だけ見ていたが、 まだラボに居る人
-        //      (今朝来て まだ session が閉じてない人) は presence_seen に open で
-        //      残っていて 拾えなかった → UNION で 両方見るように。
-        //      presence_seen の session_start_at を s、 last_seen_at を e として 扱う。
+        //      (今朝来てまだ session が閉じてない人) は presence_seen に open で
+        //      残っていて拾えなかった → UNION で両方見るように。
+        //      presence_seen の session_start_at を s、 last_seen_at を e として扱う。
         $allSessionsSql = "
             SELECT user_id, started_at AS s, ended_at AS e
               FROM presence_sessions WHERE user_id IS NOT NULL
@@ -488,9 +488,9 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['opener'] = (int)$st->fetchColumn();
 
-        // クローザー: DATE(end) D について max(end) を 取る user が 自分 AND 自分が
-        // その夜 (D+1 00:00:00) を またぐセッションを 持っていない (= 自分が
-        // 泊まりでなく 退社した)。 max(end) は 「閉じた end / 開きの last_seen」 を 両方 見る。
+        // クローザー: DATE(end) D について max(end) を取る user が自分 AND 自分が
+        // その夜 (D+1 00:00:00) をまたぐセッションを持っていない (= 自分が
+        // 泊まりでなく退社した)。 max(end) は 「閉じた end / 開きの last_seen」 を両方見る。
         $st = $pdo->prepare("
             SELECT COUNT(DISTINCT days.d) FROM (
               SELECT DATE(e) AS d, MAX(e) AS m FROM ({$allSessionsSql}) AS a2
@@ -507,7 +507,7 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['closer'] = (int)$st->fetchColumn();
 
-        // v473 食べある記 関連
+        // v473 食べある記関連
         $st = $pdo->prepare('SELECT COUNT(*) FROM places WHERE creator_user_id = ?');
         $st->execute([$userId]);
         $out['places_added'] = (int)$st->fetchColumn();
@@ -532,7 +532,7 @@ class Achievements {
         $st->execute([$userId, $userId]);
         $out['sns_reactions_received'] = (int)$st->fetchColumn();
 
-        // 落札 — auctions テーブル に winner_user_id 列 が ある と 仮定。 列が 無い 場合 は 0。
+        // 落札 — auctions テーブルに winner_user_id 列があると仮定。 列が無い場合は 0。
         try {
             $st = $pdo->prepare('SELECT COUNT(*) FROM auctions WHERE winner_user_id = ?');
             $st->execute([$userId]);
@@ -589,7 +589,7 @@ class Achievements {
             $out['bingofit_lines_total'] = $linesSum;
             $out['bingofit_weeks_won']   = $weeksWon;
             $out['bingofit_full_houses'] = $fullHouses;
-        } catch (Throwable $_) { /* swallow — テーブル無い 環境 で 0 のまま */ }
+        } catch (Throwable $_) { /* swallow — テーブル無い環境で 0 のまま */ }
 
         return $out;
     }
@@ -638,8 +638,8 @@ class Achievements {
         return $out;
     }
 
-    // v483 #76 AI 称号 生成 用。 現在 獲得 中 の tier ラベル を 1 行 ずつ 並べ
-    //   ハッシュ + プロンプト 用 テキスト を 返す。
+    // v483 #76 AI 称号生成用。 現在獲得中の tier ラベルを 1 行ずつ並べ
+    //   ハッシュ + プロンプト用テキストを返す。
     public static function earnedSummary(PDO $pdo, int $userId): array {
         $report = self::reportFor($pdo, $userId);
         $lines = [];

@@ -1,13 +1,13 @@
 <?php
-// v870 #452 Habit Tracker。 個人 ごと に 習慣 を 登録、 日 毎 達成 を ✓ で 入力。
-//   GET    /api/habits                      一覧 (公開 + 自分 の private)、 各 件 に 今日 達成 と
-//                                           直近 7 日 streak、 月達成 数 を 同梱
+// v870 #452 Habit Tracker。 個人ごとに習慣を登録、 日毎達成を ✓ で入力。
+//   GET    /api/habits                      一覧 (公開 + 自分の private)、 各件に今日達成と
+//                                           直近 7 日 streak、 月達成数を同梱
 //   POST   /api/habits                      作成 { title, description?, emoji?, target_per_week?, visibility? }
-//   GET    /api/habits/<id>                 詳細 + 直近 60 日 の カレンダー、 streak、 自分 + 他人 の
-//                                           月達成 数 (公開 リスト の とき)
+//   GET    /api/habits/<id>                 詳細 + 直近 60 日のカレンダー、 streak、 自分 + 他人の
+//                                           月達成数 (公開リストのとき)
 //   PATCH  /api/habits/<id>                 編集 (owner)
 //   DELETE /api/habits/<id>                 削除 (owner)
-//   POST   /api/habits/<id>/checkin         { date?='YYYY-MM-DD' default today, note? } 達成 入力
+//   POST   /api/habits/<id>/checkin         { date?='YYYY-MM-DD' default today, note? } 達成入力
 //   DELETE /api/habits/<id>/checkin?date=Y-M-D 取消
 
 declare(strict_types=1);
@@ -106,18 +106,18 @@ function habits_detail(PDO $pdo, int $uid, int $habitId): void {
     $myDates = [];
     foreach ($my as $r) $myDates[$r['date']] = $r['note'] ?? '';
 
-    // streak: 今日 から 過去 へ 連続 達成 日数
+    // streak: 今日から過去へ連続達成日数
     $streak = 0;
     for ($i = 0; ; $i++) {
         $d = date('Y-m-d', strtotime("-$i days"));
         if (!isset($myDates[$d])) {
-            if ($i === 0) break; // 今日 未 達成 なら 連続 ゼロ
+            if ($i === 0) break; // 今日未達成なら連続ゼロ
             break;
         }
         $streak++;
     }
 
-    // 公開 リスト なら 全員 の 過去 60 日 達成 数 を 集計
+    // 公開リストなら全員の過去 60 日達成数を集計
     $others = [];
     if ($h['visibility'] === 'public') {
         $st = $pdo->prepare(
@@ -188,7 +188,7 @@ function habits_delete(PDO $pdo, int $uid, int $habitId): void {
 }
 
 function habits_checkin(PDO $pdo, int $uid, int $habitId): void {
-    // 公開 / 自分 の 習慣 に check 入力 (= 公開 なら 誰でも 自分 の 達成 を 入れられる)。
+    // 公開 / 自分の習慣に check 入力 (= 公開なら誰でも自分の達成を入れられる)。
     $vis = $pdo->prepare("SELECT visibility, owner_id FROM habits WHERE id=?");
     $vis->execute([$habitId]);
     $row = $vis->fetch(PDO::FETCH_ASSOC);
@@ -197,7 +197,7 @@ function habits_checkin(PDO $pdo, int $uid, int $habitId): void {
 
     $body = read_json_body();
     $date = trim((string)($body['date'] ?? date('Y-m-d')));
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { json_error('bad_request', 'date 形式 不正', 400); return; }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { json_error('bad_request', 'date 形式不正', 400); return; }
     $note = trim((string)($body['note'] ?? ''));
     $pdo->prepare("INSERT INTO habit_checkins (habit_id, user_id, date, note) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE note=VALUES(note)")
         ->execute([$habitId, $uid, $date, $note ?: null]);
@@ -206,7 +206,7 @@ function habits_checkin(PDO $pdo, int $uid, int $habitId): void {
 
 function habits_checkin_remove(PDO $pdo, int $uid, int $habitId): void {
     $date = trim((string)($_GET['date'] ?? date('Y-m-d')));
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { json_error('bad_request', 'date 形式 不正', 400); return; }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { json_error('bad_request', 'date 形式不正', 400); return; }
     $pdo->prepare("DELETE FROM habit_checkins WHERE habit_id=? AND user_id=? AND date=?")
         ->execute([$habitId, $uid, $date]);
     json_response(['ok' => true]);

@@ -1,7 +1,7 @@
 <?php
 // /api/places — お店情報 (タイトル + 住所 + lat/lng + 紹介文) + 口コミ。
-// 食べログ的な 共有。 ラボメンバー 誰でも 投稿可、 削除は 投稿者 + admin。
-// 画像は /api/uploads/image で 先 に 上げ、 返ってきた URL を image_url に。
+// 食べログ的な共有。 ラボメンバー誰でも投稿可、 削除は投稿者 + admin。
+// 画像は /api/uploads/image で先に上げ、 返ってきた URL を image_url に。
 
 declare(strict_types=1);
 
@@ -9,11 +9,11 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
     if ($sub === '' && $method === 'GET')  { places_list($pdo, $cfg);   return; }
     if ($sub === '' && $method === 'POST') { places_create($pdo, $cfg); return; }
-    // v471 URL (tabelog / Retty) から JSON-LD で 店名 / 住所 / 緯度経度 を 取得
+    // v471 URL (tabelog / Retty) から JSON-LD で店名 / 住所 / 緯度経度を取得
     if ($sub === 'import_url' && $method === 'POST') { places_import_url($pdo, $cfg); return; }
     // v719 #315 キーワードから tabelog URL を引いてくる
     if ($sub === 'search_url' && $method === 'POST') { places_search_url($pdo, $cfg); return; }
-    // v731 #340 admin が 1 click で tabelog URL を 自動補完 (1 回 最大 10 件、 繰返 して 全件)
+    // v731 #340 admin が 1 click で tabelog URL を自動補完 (1 回最大 10 件、 繰返して全件)
     if ($sub === 'backfill_tabelog_urls' && $method === 'POST') { places_backfill_tabelog($pdo, $cfg); return; }
     if (ctype_digit((string)$sub)) {
         $id = (int)$sub;
@@ -21,9 +21,9 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === ''         && $method === 'GET')    { places_detail($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'DELETE') { places_delete($pdo, $cfg, $id); return; }
         if ($next === ''         && $method === 'PATCH')  { places_edit($pdo, $cfg, $id);   return; }
-        // v761 #380 rotate-image を 先 に マッチ させる (旧版 では POST /comments が
-        //   先 に places_comment_create に 食われて 「本文 / 画像 / 評価 のどれか は 必要」
-        //   エラー が 返って いた bug)。
+        // v761 #380 rotate-image を先にマッチさせる (旧版では POST /comments が
+        //   先に places_comment_create に食われて 「本文 / 画像 / 評価のどれかは必要」
+        //   エラーが返っていた bug)。
         if ($next === 'comments' && ctype_digit((string)($seg[3] ?? '')) && ($seg[4] ?? '') === 'rotate-image' && $method === 'POST') {
             places_comment_rotate_image($pdo, $cfg, $id, (int)$seg[3]);
             return;
@@ -37,7 +37,7 @@ function route_places(PDO $pdo, array $cfg, string $method, array $seg): void {
             places_hero_rotate_image($pdo, $cfg, $id);
             return;
         }
-        // v486 #80 いいね トグル
+        // v486 #80 いいねトグル
         if ($next === 'like' && $method === 'POST')   { places_like_toggle($pdo, $cfg, $id, true);  return; }
         if ($next === 'like' && $method === 'DELETE') { places_like_toggle($pdo, $cfg, $id, false); return; }
         // v529 #164 行った (足跡) トグル
@@ -51,7 +51,7 @@ function places_visit_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
     $st->execute([$id]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店 が ありません', 404);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店がありません', 404);
     if ($on) {
         $pdo->prepare("INSERT IGNORE INTO place_visits (place_id, user_id, visited_at) VALUES (?, ?, NOW())")
             ->execute([$id, (int)$u['id']]);
@@ -68,7 +68,7 @@ function places_like_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
     $st->execute([$id]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店 が ありません', 404);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店がありません', 404);
     if ($on) {
         $pdo->prepare("INSERT IGNORE INTO place_likes (place_id, user_id, created_at)
                        VALUES (?, ?, NOW())")
@@ -85,10 +85,10 @@ function places_like_toggle(PDO $pdo, array $cfg, int $id, bool $on): void {
 function places_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $meId = (int)$u['id'];
-    // v478 image_url (メイン写真) を 追加。 cover_image は image_url 優先 → 最新 review。
-    // v486 #80 いいね カウント + 自分 が 押したか。
-    // v885 last_activity_at = 場所の作成 or 最終 口コミ投稿 のうち最新。
-    //   フロント側で「新着順」 ビューを出すために使う (口コミが新たに付いた店も 新着 扱い)。
+    // v478 image_url (メイン写真) を追加。 cover_image は image_url 優先 → 最新 review。
+    // v486 #80 いいねカウント + 自分が押したか。
+    // v885 last_activity_at = 場所の作成 or 最終口コミ投稿のうち最新。
+    //   フロント側で「新着順」 ビューを出すために使う (口コミが新たに付いた店も新着扱い)。
     $st = $pdo->prepare("
         SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
@@ -123,7 +123,7 @@ function places_list(PDO $pdo, array $cfg): void {
         $r['liked_by_me']     = (bool)$r['liked_by_me'];
         $r['visit_count']     = (int)$r['visit_count'];
         $r['visited_by_me']   = (bool)$r['visited_by_me'];
-        // v478 cover_image: 店のメイン画像 を 優先、 なければ 最新の レビュー画像
+        // v478 cover_image: 店のメイン画像を優先、 なければ最新のレビュー画像
         $r['cover_image'] = $r['image_url'] ?: $r['latest_image'];
         // v503 #127 タイル表示は重いオリジナル画像を使っていたので、 サムネ URL を
         //   別フィールドで返す (実在しなければ原画像 fallback)。
@@ -152,7 +152,7 @@ function places_create(PDO $pdo, array $cfg): void {
     if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
     $imageUrl = isset($body['image_url']) ? trim((string)$body['image_url']) : '';
     if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
-    // v722 #318 元 URL (tabelog / Retty 等) を そのまま 保存。
+    // v722 #318 元 URL (tabelog / Retty 等) をそのまま保存。
     $sourceUrl = isset($body['source_url']) ? trim((string)$body['source_url']) : '';
     if ($sourceUrl !== '' && !preg_match('#^https?://#', $sourceUrl)) $sourceUrl = '';
     if (mb_strlen($sourceUrl) > 500) $sourceUrl = mb_substr($sourceUrl, 0, 500);
@@ -184,7 +184,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $p = $st->fetch(PDO::FETCH_ASSOC);
     if (!$p) throw new ApiException('not_found', '見つかりません', 404);
-    // v486 #80 いいね 集計
+    // v486 #80 いいね集計
     $stL = $pdo->prepare("SELECT COUNT(*) FROM place_likes WHERE place_id=?");
     $stL->execute([$id]);
     $likeCount = (int)$stL->fetchColumn();
@@ -207,8 +207,8 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
          ORDER BY c.created_at DESC");
     $stC->execute([$id]);
     $comments = array_map(function ($r) {
-        // v716 #311 image_urls (JSON 配列) を 返す。 旧 単数 image_url も そのまま 返して
-        //   旧 client 互換 を 維持。
+        // v716 #311 image_urls (JSON 配列) を返す。 旧単数 image_url もそのまま返して
+        //   旧 client 互換を維持。
         $urls = [];
         if (!empty($r['image_urls'])) {
             $decoded = json_decode((string)$r['image_urls'], true);
@@ -259,7 +259,7 @@ function places_detail(PDO $pdo, array $cfg, int $id): void {
     ]);
 }
 
-// v472 編集 (起案者 + admin)。 title / category / address / lat / lng / description を 部分更新。
+// v472 編集 (起案者 + admin)。 title / category / address / lat / lng / description を部分更新。
 function places_edit(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT creator_user_id FROM places WHERE id=?");
@@ -343,11 +343,11 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
     $st->execute([$placeId]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店が 見つかりません', 404);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店が見つかりません', 404);
     $body = read_json_body();
     $bodyText = trim((string)($body['body'] ?? ''));
     if (mb_strlen($bodyText) > 4000) $bodyText = mb_substr($bodyText, 0, 4000);
-    // v716 #311 複数 画像 対応。 image_urls (配列) を 受理、 image_url (旧 互換) は 先頭 を 入れる。
+    // v716 #311 複数画像対応。 image_urls (配列) を受理、 image_url (旧互換) は先頭を入れる。
     $imageUrls = [];
     if (isset($body['image_urls']) && is_array($body['image_urls'])) {
         foreach ($body['image_urls'] as $u_) {
@@ -358,7 +358,7 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
             if (count($imageUrls) >= 10) break;
         }
     }
-    // 単数 image_url (旧 client) も 受理 して 配列 に 統合
+    // 単数 image_url (旧 client) も受理して配列に統合
     $singleUrl = trim((string)($body['image_url'] ?? ''));
     if ($singleUrl !== '') {
         if (mb_strlen($singleUrl) > 500) $singleUrl = mb_substr($singleUrl, 0, 500);
@@ -372,7 +372,7 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
         if ($rating < 1 || $rating > 5) throw new ApiException('bad_request', 'rating 1..5', 400);
     }
     if ($bodyText === '' && !$imageUrls && $rating === null) {
-        throw new ApiException('bad_request', '本文 / 画像 / 評価 の どれか は 必要', 400);
+        throw new ApiException('bad_request', '本文 / 画像 / 評価のどれかは必要', 400);
     }
     $ins = $pdo->prepare("INSERT INTO place_comments
         (place_id, user_id, body, image_url, image_urls, rating, created_at)
@@ -390,7 +390,7 @@ function places_comment_delete(PDO $pdo, array $cfg, int $placeId, int $commentI
     $st = $pdo->prepare("SELECT user_id FROM place_comments WHERE id=? AND place_id=?");
     $st->execute([$commentId, $placeId]);
     $cuid = (int)$st->fetchColumn();
-    if (!$cuid) throw new ApiException('not_found', '口コミ が 見つかりません', 404);
+    if (!$cuid) throw new ApiException('not_found', '口コミが見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($cuid !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '投稿者または admin のみ削除可', 403);
@@ -399,9 +399,9 @@ function places_comment_delete(PDO $pdo, array $cfg, int $placeId, int $commentI
     json_response(['ok' => true]);
 }
 
-// v471 URL (tabelog.com / retty.me) → 店名 / 住所 / 緯度経度 を 抽出。
-// JSON-LD の Restaurant / FoodEstablishment / LocalBusiness ノード が
-// あれば 採用 (両サイト とも schema.org の geo を 持っている)。
+// v471 URL (tabelog.com / retty.me) → 店名 / 住所 / 緯度経度を抽出。
+// JSON-LD の Restaurant / FoodEstablishment / LocalBusiness ノードが
+// あれば採用 (両サイトとも schema.org の geo を持っている)。
 // fallback: og:title / og:description のみ。
 function places_import_url(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
@@ -417,7 +417,7 @@ function places_import_url(PDO $pdo, array $cfg): void {
     foreach ($allowed as $h) {
         if ($host === $h || str_ends_with($host, '.' . $h)) { $ok = true; break; }
     }
-    if (!$ok) throw new ApiException('bad_request', 'tabelog / Retty / hotpepper のみ 対応', 400);
+    if (!$ok) throw new ApiException('bad_request', 'tabelog / Retty / hotpepper のみ対応', 400);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -431,7 +431,7 @@ function places_import_url(PDO $pdo, array $cfg): void {
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     if (!$html || $code !== 200) {
-        throw new ApiException('fetch_failed', "ページ取得 失敗 (HTTP {$code})", 502);
+        throw new ApiException('fetch_failed', "ページ取得失敗 (HTTP {$code})", 502);
     }
 
     $title = ''; $address = ''; $lat = null; $lng = null; $desc = '';
@@ -440,10 +440,10 @@ function places_import_url(PDO $pdo, array $cfg): void {
     // 1) JSON-LD
     if (preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
         foreach ($m[1] as $raw) {
-            // v751 #369 tabelog の Restaurant JSON-LD は HTML entity が ない 生 JSON。
-            //   html_entity_decode を 通すと 「&quot;」 が ない 文字列も 何故か 壊れる ケース
-            //   が ある (=「￥」 等 の 特殊 文字 が 影響) ので、 まず raw で decode を 試して
-            //   失敗 した 時だけ html_entity_decode を fallback。
+            // v751 #369 tabelog の Restaurant JSON-LD は HTML entity がない生 JSON。
+            //   html_entity_decode を通すと 「&quot;」 がない文字列も何故か壊れるケース
+            //   がある (=「￥」 等の特殊文字が影響) ので、 まず raw で decode を試して
+            //   失敗した時だけ html_entity_decode を fallback。
             $j = json_decode($raw, true);
             if (!is_array($j)) {
                 $j = json_decode(html_entity_decode($raw, ENT_QUOTES|ENT_HTML5, 'UTF-8'), true);
@@ -488,7 +488,7 @@ function places_import_url(PDO $pdo, array $cfg): void {
                         $hours = implode("\n", array_filter($lines, fn($x) => trim($x) !== ''));
                     }
                 }
-                if ($title !== '' && $lat !== null) break 2;  // 取れたら 抜ける
+                if ($title !== '' && $lat !== null) break 2;  // 取れたら抜ける
             }
         }
     }
@@ -551,8 +551,8 @@ function places_search_url(PDO $pdo, array $cfg): void {
     ]);
 }
 
-// v731 #340 source_url が 空 の place を 一度 に 最大 10 件 まで 探して 自動 で 入れる。
-//   admin 限定。 タイトル (+ 住所 先頭) で tabelog 検索 → 1 件 目 の URL を 採用。
+// v731 #340 source_url が空の place を一度に最大 10 件まで探して自動で入れる。
+//   admin 限定。 タイトル (+ 住所先頭) で tabelog 検索 → 1 件目の URL を採用。
 function places_backfill_tabelog(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     if ((string)($u['role'] ?? '') !== 'admin') {
@@ -560,7 +560,7 @@ function places_backfill_tabelog(PDO $pdo, array $cfg): void {
     }
     $body = read_json_body();
     $batch = max(1, min(10, (int)($body['limit'] ?? 10)));
-    // 未補完 件数
+    // 未補完件数
     $totalLeft = (int)$pdo->query("SELECT COUNT(*) FROM places
                                      WHERE source_url IS NULL OR source_url = ''")->fetchColumn();
     $st = $pdo->prepare("SELECT id, title, address FROM places
@@ -595,21 +595,21 @@ function places_backfill_tabelog(PDO $pdo, array $cfg): void {
     ]);
 }
 
-// v752 #370 画像 を 90°/180°/270° 回転 して 同じ ファイル パス に 上書き 保存。
-//   thumb.jpg が 横に あれば 同 角度 で 回転。 client は URL に ?v=ts を 付けて cache bust。
-//   失敗 系 (GD 無し / mime 非対応 / 書き込み 不可) は ApiException で 400 / 500 返す。
+// v752 #370 画像を 90°/180°/270° 回転して同じファイルパスに上書き保存。
+//   thumb.jpg が横にあれば同角度で回転。 client は URL に ?v=ts を付けて cache bust。
+//   失敗系 (GD 無し / mime 非対応 / 書き込み不可) は ApiException で 400 / 500 返す。
 function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
     $degrees = ((int)$degrees) % 360;
     if (!in_array($degrees, [90, 180, 270], true)) {
         throw new ApiException('bad_request', 'degrees は 90 / 180 / 270 のみ', 400);
     }
     if (!function_exists('imagecreatefromstring')) {
-        throw new ApiException('not_supported', 'GD 拡張 が ない ので 回転できません', 500);
+        throw new ApiException('not_supported', 'GD 拡張がないので回転できません', 500);
     }
     $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
-    // 先頭 が '/' で 始まる public 配下 の path に 限定
+    // 先頭が '/' で始まる public 配下の path に限定
     if (!preg_match('#^/uploads/#', $imageUrlPath)) {
-        throw new ApiException('bad_request', 'uploads/ 以下 の path のみ', 400);
+        throw new ApiException('bad_request', 'uploads/ 以下の path のみ', 400);
     }
     $abs = $publicDir . $imageUrlPath;
     if (!is_file($abs)) throw new ApiException('not_found', 'image not found: ' . $imageUrlPath, 404);
@@ -618,7 +618,7 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
         $raw = @file_get_contents($path);
         if ($raw === false) throw new ApiException('io_error', 'read failed', 500);
         $src = @imagecreatefromstring($raw);
-        if (!$src) throw new ApiException('bad_request', '画像 として 読めません', 400);
+        if (!$src) throw new ApiException('bad_request', '画像として読めません', 400);
         // v883 #456 EXIF orientation を先に適用してから user の rotate を重ねる。
         //   iPhone 縦撮影 (EXIF=6) の画像は元ファイルに EXIF orientation tag が残ったまま
         //   pixel データは横倒し → ブラウザは EXIF を見て縦表示。サーバ rotate は EXIF
@@ -635,28 +635,28 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
             elseif ($ori === 8)  { $r = imagerotate($src,   90, 0); imagedestroy($src); $src = $r; }
             // 鏡像 (2/4/5/7) は稀なのでスキップ
         }
-        // imagerotate は 反時計回り 角度 を 取る (90 = 反時計 90°)。
-        //   ユーザ 期待 = 時計回り 90° なら -90 を 渡す。 ここ では「右 (時計回り) 90°」 を 標準 と する。
+        // imagerotate は反時計回り角度を取る (90 = 反時計 90°)。
+        //   ユーザ期待 = 時計回り 90° なら -90 を渡す。 ここでは「右 (時計回り) 90°」 を標準とする。
         $rotated = imagerotate($src, -$degrees, 0);
         imagedestroy($src);
         if (!$rotated) throw new ApiException('io_error', 'rotate failed', 500);
-        // 拡張子 を 見て 保存形式 を 決める (jpg/jpeg/png/webp/gif)
+        // 拡張子を見て保存形式を決める (jpg/jpeg/png/webp/gif)
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         $ok = false;
         if ($ext === 'jpg' || $ext === 'jpeg') $ok = imagejpeg($rotated, $path, 90);
         elseif ($ext === 'png') $ok = imagepng($rotated, $path);
         elseif ($ext === 'webp' && function_exists('imagewebp')) $ok = imagewebp($rotated, $path, 90);
         elseif ($ext === 'gif') $ok = imagegif($rotated, $path);
-        else throw new ApiException('bad_request', '対応外 拡張子: ' . $ext, 400);
+        else throw new ApiException('bad_request', '対応外拡張子: ' . $ext, 400);
         imagedestroy($rotated);
         if (!$ok) throw new ApiException('io_error', 'save failed', 500);
         @chmod($path, 0644);
     };
     $rotate($abs);
-    // thumb があれば 同 角度 で 回す (save_uploaded_file が 作る .thumb.jpg)
+    // thumb があれば同角度で回す (save_uploaded_file が作る .thumb.jpg)
     $thumb = preg_replace('/\.[^.]+$/', '', $abs) . '.thumb.jpg';
     if (is_file($thumb) && is_writable($thumb)) {
-        try { $rotate($thumb); } catch (Throwable $_) { /* thumb 失敗 は 致命的ではない */ }
+        try { $rotate($thumb); } catch (Throwable $_) { /* thumb 失敗は致命的ではない */ }
     }
 }
 
@@ -667,13 +667,13 @@ function places_hero_rotate_image(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT creator_user_id, image_url FROM places WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', 'お店 が ありません', 404);
+    if (!$row) throw new ApiException('not_found', 'お店がありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '起案者 / admin のみ 回転 可', 403);
+        throw new ApiException('forbidden', '起案者 / admin のみ回転可', 403);
     }
     $url = (string)$row['image_url'];
-    if ($url === '') throw new ApiException('bad_request', '画像が ありません', 400);
+    if ($url === '') throw new ApiException('bad_request', '画像がありません', 400);
     rotate_image_file_inplace(_places_url_to_path($url), $degrees);
     json_response(['ok' => true]);
 }
@@ -686,10 +686,10 @@ function places_comment_rotate_image(PDO $pdo, array $cfg, int $placeId, int $co
     $st = $pdo->prepare("SELECT user_id, image_url, image_urls FROM place_comments WHERE id=? AND place_id=?");
     $st->execute([$commentId, $placeId]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '口コミ が ありません', 404);
+    if (!$row) throw new ApiException('not_found', '口コミがありません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '投稿者 / admin のみ 回転 可', 403);
+        throw new ApiException('forbidden', '投稿者 / admin のみ回転可', 403);
     }
     $urls = [];
     if (!empty($row['image_urls'])) {
@@ -702,7 +702,7 @@ function places_comment_rotate_image(PDO $pdo, array $cfg, int $placeId, int $co
     json_response(['ok' => true]);
 }
 
-// /uploads/.../xxx.jpg または https://host/uploads/.../xxx.jpg を /uploads/.../xxx.jpg に 正規化
+// /uploads/.../xxx.jpg または https://host/uploads/.../xxx.jpg を /uploads/.../xxx.jpg に正規化
 function _places_url_to_path(string $url): string {
     if (preg_match('#^https?://[^/]+(/.*)$#', $url, $m)) return $m[1];
     if (str_starts_with($url, '/')) return $url;

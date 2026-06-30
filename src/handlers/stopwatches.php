@@ -1,9 +1,9 @@
 <?php
-// /api/stopwatches — 共有 ストップウォッチ (カウントアップ)。
+// /api/stopwatches — 共有ストップウォッチ (カウントアップ)。
 //   - status: running / paused / stopped
 //   - 経過時間 = elapsed_offset_seconds + (running なら NOW - started_at)
-//   - participants = 表示権限 (creator + 招待した メンバー)
-//   - 操作権限: 開始/停止/リセット は creator も participants も 全員 可
+//   - participants = 表示権限 (creator + 招待したメンバー)
+//   - 操作権限: 開始/停止/リセットは creator も participants も全員可
 
 declare(strict_types=1);
 
@@ -21,8 +21,8 @@ function route_stopwatches(PDO $pdo, array $cfg, string $method, array $seg): vo
         if ($op === 'start' && $method === 'POST') { stopwatches_start($pdo, $cfg, $id); return; }
         if ($op === 'pause' && $method === 'POST') { stopwatches_pause($pdo, $cfg, $id); return; }
         if ($op === 'reset' && $method === 'POST') { stopwatches_reset($pdo, $cfg, $id); return; }
-        // v447 ラップ。 client が 観測した 累計 ms を 送ってくる (タップ瞬間 を 正確に
-        // 反映 するため)。 サーバは バリデーション (prev_lap 以上 / 現在 elapsed_ms 以下)
+        // v447 ラップ。 client が観測した累計 ms を送ってくる (タップ瞬間を正確に
+        // 反映するため)。 サーバはバリデーション (prev_lap 以上 / 現在 elapsed_ms 以下)
         // 後 insert。
         if ($op === 'lap'   && $method === 'POST') { stopwatches_lap($pdo, $cfg, $id);   return; }
     }
@@ -44,9 +44,9 @@ function stopwatches_assert_access(PDO $pdo, int $id, int $userId): array {
     return $sw;
 }
 
-// v447 ms 精度 で 計算。 ms が primary、 秒は floor 後方互換用。
-// running 中: elapsed_offset_ms + (now_ms - started_at_ms)。 started_at_ms が 落ちて
-// いる 古いデータ では started_at (秒精度) に フォールバック。
+// v447 ms 精度で計算。 ms が primary、 秒は floor 後方互換用。
+// running 中: elapsed_offset_ms + (now_ms - started_at_ms)。 started_at_ms が落ちて
+// いる古いデータでは started_at (秒精度) にフォールバック。
 function stopwatch_elapsed_ms(array $sw): int {
     $base = (int)($sw['elapsed_offset_ms'] ?? 0);
     if (!$base && (int)($sw['elapsed_offset_seconds'] ?? 0) > 0) {
@@ -57,7 +57,7 @@ function stopwatch_elapsed_ms(array $sw): int {
         if (!empty($sw['started_at_ms'])) {
             $base += max(0, $nowMs - (int)$sw['started_at_ms']);
         } elseif (!empty($sw['started_at'])) {
-            // 旧データ 用 フォールバック (秒精度)
+            // 旧データ用フォールバック (秒精度)
             $base += max(0, ($nowMs - strtotime((string)$sw['started_at']) * 1000));
         }
     }
@@ -69,7 +69,7 @@ function stopwatch_elapsed(array $sw): int {
 
 function stopwatches_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // 自分が creator または participant の もの。 v447 ms 列 も 返す。
+    // 自分が creator または participant のもの。 v447 ms 列も返す。
     $st = $pdo->prepare("
         SELECT DISTINCT s.id, s.title, s.status,
                s.started_at, s.started_at_ms,
@@ -113,7 +113,7 @@ function stopwatches_create(PDO $pdo, array $cfg): void {
     $partIds = $body['participant_ids'] ?? [];
     if (!is_array($partIds)) $partIds = [];
     $partIds = array_values(array_unique(array_filter(array_map('intval', $partIds))));
-    // creator 自身は participants に 入れる (重複なら DUP KEY で 弾く)
+    // creator 自身は participants に入れる (重複なら DUP KEY で弾く)
     $partIds[] = (int)$u['id'];
     $partIds = array_values(array_unique($partIds));
     // 存在チェック
@@ -231,20 +231,20 @@ function stopwatches_reset(PDO $pdo, array $cfg, int $id): void {
                               started_at=NULL, started_at_ms=NULL,
                               ended_at=NOW()
                         WHERE id=?")->execute([$id]);
-        // v447 ラップ も 0 戻し に 合わせ 全削除。
+        // v447 ラップも 0 戻しに合わせ全削除。
         $pdo->prepare("DELETE FROM stopwatch_laps WHERE stopwatch_id=?")->execute([$id]);
     });
     json_response(['ok' => true]);
 }
 
-// v447 ラップ 記録。 動作中 のみ 受付。 client_elapsed_ms が 付いて 来たら
-// 「タップ瞬間 を 正確に」 用に それ を 採用 (送信遅延 を 補正)。 妥当性:
-// 0 以上 / 直前ラップ 以上 / サーバ算定 elapsed_ms + 200ms 以下 (改竄防止)。
+// v447 ラップ記録。 動作中のみ受付。 client_elapsed_ms が付いて来たら
+// 「タップ瞬間を正確に」 用にそれを採用 (送信遅延を補正)。 妥当性:
+// 0 以上 / 直前ラップ以上 / サーバ算定 elapsed_ms + 200ms 以下 (改竄防止)。
 function stopwatches_lap(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $sw = stopwatches_assert_access($pdo, $id, (int)$u['id']);
     if ($sw['status'] !== 'running') {
-        throw new ApiException('bad_state', '動作中 のみ ラップ 可能 です', 400);
+        throw new ApiException('bad_state', '動作中のみラップ可能です', 400);
     }
     $body = read_json_body();
     $serverElapsedMs = stopwatch_elapsed_ms($sw);

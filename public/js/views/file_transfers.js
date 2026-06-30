@@ -1,5 +1,5 @@
 // /#/file-transfers — v733 #342 相手指定のファイル送受信。
-//   送信: 宛先 + ファイル (PDF / Word / Excel / 画像 / zip / txt 等 最大 50MB) + 任意メッセージ
+//   送信: 宛先 + ファイル (PDF / Word / Excel / 画像 / zip / txt 等最大 50MB) + 任意メッセージ
 //   受信: 一覧でファイル名 / 送信者 / 大きさ / ダウンロード回数を表示、 即ダウンロード可。
 
 import { get, post, del } from '../api.js';
@@ -26,25 +26,25 @@ export async function renderFileTransfers() {
     <div class="card">
       <h3 style="margin:0 0 6px">＋ 新規送信</h3>
       <div class="field">
-        <span class="lbl">宛先 (複数選択 可)</span>
+        <span class="lbl">宛先 (複数選択可)</span>
         <div id="ft-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
         <div id="ft-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
       <div class="field">
-        <span class="lbl">ファイル (複数選択 / フォルダ / ドラッグ&ドロップ 可)</span>
+        <span class="lbl">ファイル (複数選択 / フォルダ / ドラッグ&ドロップ可)</span>
         <div id="ft-drop" style="border:2px dashed #9ca3af; border-radius:10px; padding:18px; text-align:center; background:#fafafa; cursor:pointer; transition:background 0.15s, border-color 0.15s">
           <div style="font-size:32px; margin-bottom:4px">📂</div>
-          <div style="font-size:13px; color:#374151">ここに ファイル / フォルダ を ドロップ</div>
-          <div style="font-size:11px; color:#6b7280; margin-top:4px">または タップで 選ぶ (複数 OK)</div>
+          <div style="font-size:13px; color:#374151">ここにファイル / フォルダをドロップ</div>
+          <div style="font-size:11px; color:#6b7280; margin-top:4px">またはタップで選ぶ (複数 OK)</div>
           <input type="file" id="ft-files" multiple hidden>
           <input type="file" id="ft-folder" webkitdirectory directory multiple hidden>
           <div class="row" style="gap:6px; margin-top:8px; justify-content:center">
-            <button type="button" id="ft-pick-files" class="btn" style="font-size:12px; padding:4px 10px">📄 ファイル を 選ぶ</button>
-            <button type="button" id="ft-pick-folder" class="btn" style="font-size:12px; padding:4px 10px">📁 フォルダ を 選ぶ</button>
+            <button type="button" id="ft-pick-files" class="btn" style="font-size:12px; padding:4px 10px">📄 ファイルを選ぶ</button>
+            <button type="button" id="ft-pick-folder" class="btn" style="font-size:12px; padding:4px 10px">📁 フォルダを選ぶ</button>
           </div>
         </div>
         <div id="ft-selected" style="margin-top:8px"></div>
-        <span class="hint-sm" style="font-size:11px">複数 ファイル は zip に まとめ られて 送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 100MB 上限</span>
+        <span class="hint-sm" style="font-size:11px">複数ファイルは zip にまとめられて送信。 PDF / Word / Excel / 画像 / zip / txt 等、 合計 100MB 上限</span>
       </div>
       <label class="field"><span class="lbl">メッセージ (任意)</span>
         <textarea id="ft-body" rows="2" maxlength="2000" placeholder="例: 査読お願いします"></textarea>
@@ -62,7 +62,7 @@ export async function renderFileTransfers() {
       <div id="ft-sent"><div class="hint">読み込み中…</div></div>
     </div>
   `;
-  // v742 #353 複数選択 可 の 共通 member picker に 差し替え。
+  // v742 #353 複数選択可の共通 member picker に差し替え。
   const { createMemberPicker } = await import('../member_picker.js');
   let picker = null;
   try {
@@ -75,9 +75,9 @@ export async function renderFileTransfers() {
     });
   } catch (e) { console.error('[ft] picker init failed:', e); }
 
-  // v743 #354 ファイル選択 を ドラッグ&ドロップ + 複数選択 に 対応。
+  // v743 #354 ファイル選択をドラッグ&ドロップ + 複数選択に対応。
   //   保持構造: { file: File, relPath: string }[]
-  //   relPath は フォルダドロップ時 のみ "folder/sub/file.txt" 形式、 単独 file は file.name。
+  //   relPath はフォルダドロップ時のみ "folder/sub/file.txt" 形式、 単独 file は file.name。
   const selectedFiles = [];
   function renderSelected() {
     const root = document.getElementById('ft-selected');
@@ -96,7 +96,7 @@ export async function renderFileTransfers() {
             </div>
           `).join('')}
         </div>
-        <button type="button" id="ft-clear" class="btn" style="font-size:11px; padding:2px 8px; margin-top:6px">全部 クリア</button>
+        <button type="button" id="ft-clear" class="btn" style="font-size:11px; padding:2px 8px; margin-top:6px">全部クリア</button>
       </div>`;
     root.querySelectorAll('[data-ft-rm]').forEach(b => b.addEventListener('click', () => {
       selectedFiles.splice(Number(b.dataset.ftRm), 1); renderSelected();
@@ -121,7 +121,7 @@ export async function renderFileTransfers() {
   fInput.addEventListener('change', () => { addFiles(fInput.files); fInput.value = ''; });
   dInput.addEventListener('change', () => { addFiles(dInput.files); dInput.value = ''; });
 
-  // ドロップゾーン本体タップでもファイル選択 (ボタン以外を タップ した時)
+  // ドロップゾーン本体タップでもファイル選択 (ボタン以外をタップした時)
   const drop = document.getElementById('ft-drop');
   drop.addEventListener('click', (ev) => {
     if (ev.target.closest('button')) return;     // ボタンクリックは別ハンドラ
@@ -143,7 +143,7 @@ export async function renderFileTransfers() {
     ev.preventDefault();
     const items = ev.dataTransfer?.items;
     if (items && items.length && items[0].webkitGetAsEntry) {
-      // ディレクトリ も 含めて 再帰 で 拾う
+      // ディレクトリも含めて再帰で拾う
       const entries = [];
       for (let i = 0; i < items.length; i++) {
         const e = items[i].webkitGetAsEntry?.();
@@ -163,11 +163,11 @@ export async function renderFileTransfers() {
   document.getElementById('ft-send').addEventListener('click', async () => {
     const selected = picker ? [...picker.getSelected()] : [];
     const body = document.getElementById('ft-body').value.trim();
-    if (!selected.length) { toast('宛先を 1 人以上 選んで ください'); return; }
-    if (selectedFiles.length === 0) { toast('ファイル を 選んで ください'); return; }
+    if (!selected.length) { toast('宛先を 1 人以上選んでください'); return; }
+    if (selectedFiles.length === 0) { toast('ファイルを選んでください'); return; }
     const fd = new FormData();
     if (selectedFiles.length === 1 && !selectedFiles[0].relPath.includes('/')) {
-      // 単一 ファイル (フォルダ階層なし) → 旧 file 互換 で 送る (= zip し ない、 原 形 で 保存)
+      // 単一ファイル (フォルダ階層なし) → 旧 file 互換で送る (= zip しない、 原形で保存)
       fd.append('file', selectedFiles[0].file);
     } else {
       const paths = [];
@@ -204,7 +204,7 @@ export async function renderFileTransfers() {
   await loadList();
 }
 
-// FileSystemEntry を 再帰 で 走査 して 全 File を all[] に push (path 付き)
+// FileSystemEntry を再帰で走査して全 File を all[] に push (path 付き)
 async function walkEntry(entry, prefix, all) {
   if (entry.isFile) {
     await new Promise((resolve) => entry.file((f) => {
@@ -213,7 +213,7 @@ async function walkEntry(entry, prefix, all) {
     }, () => resolve()));
   } else if (entry.isDirectory) {
     const reader = entry.createReader();
-    // readEntries は 1 回で 全部 返さない 仕様 なので ループ
+    // readEntries は 1 回で全部返さない仕様なのでループ
     while (true) {
       const batch = await new Promise((res) => reader.readEntries(res, () => res([])));
       if (!batch || batch.length === 0) break;
@@ -230,7 +230,7 @@ async function loadList() {
     const meId = Number(state.me?.id);
     const recv = items.filter(it => it.recipient_user_id === meId);
     const sent = items.filter(it => it.sender_user_id    === meId);
-    // v742 #353 送信側は batch_id ごとに 1 枚にまとめる (= 複数受信者送信の 1 アクションを 1 行で 表示)。
+    // v742 #353 送信側は batch_id ごとに 1 枚にまとめる (= 複数受信者送信の 1 アクションを 1 行で表示)。
     const sentGrouped = groupByBatch(sent);
     document.getElementById('ft-recv').innerHTML = recv.length
       ? recv.map(renderRecvRow).join('')
@@ -248,7 +248,7 @@ async function loadList() {
     document.querySelectorAll('[data-ft-del-batch]').forEach(b => {
       b.addEventListener('click', async () => {
         const ids = b.dataset.ftDelBatch.split(',');
-        if (!confirm(`この送信 (${ids.length} 人宛) を全部 削除しますか?`)) return;
+        if (!confirm(`この送信 (${ids.length} 人宛) を全部削除しますか?`)) return;
         try {
           await Promise.all(ids.map(id => del('/api/file-transfers/' + id)));
           toast('削除しました'); await loadList();
@@ -283,7 +283,7 @@ function renderRecvRow(it) {
     </div>`;
 }
 
-// 1 つの送信アクション (= 同じ batch) を 1 ブロックで 表示。 受信者 1 人なら 旧 UI に近い。
+// 1 つの送信アクション (= 同じ batch) を 1 ブロックで表示。 受信者 1 人なら旧 UI に近い。
 function renderSentGroup(rows) {
   const head = rows[0];
   const ids = rows.map(r => r.id);
@@ -293,14 +293,14 @@ function renderSentGroup(rows) {
         <div style="flex:none">📦</div>
         <div class="grow" style="min-width:0">
           <div class="bold">${escapeHtml(head.original_name)} <span class="hint-sm" style="font-size:11px; opacity:0.7">${fmtBytes(head.file_size)}</span></div>
-          <div class="meta">${rows.length} 人 宛 · ${escapeHtml(head.sent_at)}</div>
+          <div class="meta">${rows.length} 人宛 · ${escapeHtml(head.sent_at)}</div>
           ${head.body ? `<div style="white-space:pre-wrap; font-size:13px; margin-top:4px">${escapeHtml(head.body)}</div>` : ''}
         </div>
       </div>
       <div style="width:100%; padding-left:24px; display:flex; flex-direction:column; gap:4px">
         ${rows.map(r => {
           const dl = r.download_count > 0
-            ? `<span class="tag ok">✓ ${r.download_count} 回 DL ・ 初回 ${escapeHtml(String(r.first_downloaded_at || ''))}</span>`
+            ? `<span class="tag ok">✓ ${r.download_count} 回 DL ・初回 ${escapeHtml(String(r.first_downloaded_at || ''))}</span>`
             : `<span class="tag warn">未ダウンロード</span>`;
           return `
             <div style="display:flex; gap:6px; align-items:center; font-size:12px">
@@ -311,8 +311,8 @@ function renderSentGroup(rows) {
             </div>`;
         }).join('')}
         <div style="display:flex; gap:6px; margin-top:4px">
-          <a href="/api/file-transfers/${head.id}/download" class="btn" style="font-size:12px; padding:2px 8px">⬇️ 内容 確認</a>
-          ${rows.length > 1 ? `<button class="btn danger" style="font-size:12px; padding:2px 8px" data-ft-del-batch="${ids.join(',')}">全員 分 削除</button>` : ''}
+          <a href="/api/file-transfers/${head.id}/download" class="btn" style="font-size:12px; padding:2px 8px">⬇️ 内容確認</a>
+          ${rows.length > 1 ? `<button class="btn danger" style="font-size:12px; padding:2px 8px" data-ft-del-batch="${ids.join(',')}">全員分削除</button>` : ''}
         </div>
       </div>
     </div>`;

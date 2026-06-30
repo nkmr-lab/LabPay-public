@@ -1,4 +1,4 @@
-// /#/meetups — 次の待ち合わせ。 集合時刻 + 場所 + メンバー を 全員に同期する軽量機能。
+// /#/meetups — 次の待ち合わせ。 集合時刻 + 場所 + メンバーを全員に同期する軽量機能。
 // タイマー的に 「あと N 分で」 の表示はするが、 個別応答は無し (シンプル)。
 
 import { get, post, patch, del } from '../api.js';
@@ -10,7 +10,7 @@ import { createMemberPicker } from '../member_picker.js';
 import { localDtToIso, isoToLocalDt, tzToggleHtml, bindTzToggle } from '../tz_helper.js';
 import { copyShareUrl } from '../share_to_sns.js';
 
-// 場所文字列から 緯度,経度 を拾う。
+// 場所文字列から緯度,経度を拾う。
 //   * "35.6586,139.7454" / "35.6586, 139.7454" / "35.6586 139.7454"
 //   * "(35.6586, 139.7454) 駅前ホテル" / "lat:35.65 lng:139.74"
 // 範囲: 緯度 [-90, 90], 経度 [-180, 180]。 駅名や住所文字が混在しても
@@ -32,7 +32,7 @@ const gradeRank = g => {
 };
 
 // 残り時間文字列 (集合済 / まもなく / あと N 分 ...)。 fmtRelative とは独自ラベルなので残置。
-// v450 kind=deadline は 「集合済」 → 「期限超過」、 長期 (>= 1 日) では 日単位 表示。
+// v450 kind=deadline は 「集合済」 → 「期限超過」、 長期 (>= 1 日) では日単位表示。
 function fmtRemaining(s, kind = 'meetup') {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
@@ -51,7 +51,7 @@ function fmtClock(s) {
   if (!s) return '';
   return String(s).slice(11, 16);
 }
-// 〆切 など 1 日 以上 先 の場合は 月日 も 含めた 表示。
+// 〆切など 1 日以上先の場合は月日も含めた表示。
 function fmtClockOrDate(s) {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
@@ -71,13 +71,13 @@ export async function renderMeetups({ query } = {}) {
   const kindFilter = (query?.kind === 'meetup' || query?.kind === 'deadline') ? query.kind : '';
   const meta = kindFilter ? KIND_META[kindFilter] : null;
   const app = document.getElementById('app');
-  // v450 タイトル + サブ + 「＋ 新規」 を フィルタ により 切替。 フィルタ なし は 両方表示。
+  // v450 タイトル + サブ + 「＋ 新規」 をフィルタにより切替。 フィルタなしは両方表示。
   const headerTitle = meta ? `${meta.icon} ${meta.label}` : '🤝 待ち合わせ / 📌 〆切';
   const headerSub = meta?.label === '〆切'
-    ? '〆切時刻 + 対象者 を 一発で全員に通知。 365 日先 まで 設定可。'
+    ? '〆切時刻 + 対象者を一発で全員に通知。 365 日先まで設定可。'
     : meta?.label === '待ち合わせ'
-      ? '集合時刻 + 場所 + メンバー を 一発で全員に通知。 180 日先 まで。'
-      : '集合時刻 / 〆切時刻 を 全員に通知 (タブで 切替)。';
+      ? '集合時刻 + 場所 + メンバーを一発で全員に通知。 180 日先まで。'
+      : '集合時刻 / 〆切時刻を全員に通知 (タブで切替)。';
   const tabBtn = (k, txt) => {
     const active = (kindFilter === k) || (!kindFilter && k === '');
     return `<a class="btn ${active ? 'primary' : ''}" href="#/meetups${k ? `?kind=${k}` : ''}">${txt}</a>`;
@@ -143,8 +143,8 @@ export async function renderMeetupNew({ query } = {}) {
   const presetLoc = String(query?.location || '').trim();
   // when は "2026-06-04T18:30" の ISO 文字列を受け取り、 24h を超えるなら無視。
   const presetWhenRaw = String(query?.when || '').trim();
-  // 〆切 は 場所欄 を 隠す (使いたい時 は details 内で 出す)。
-  // プリセット は 〆切 は 長めの 期間 を ラインナップ。
+  // 〆切は場所欄を隠す (使いたい時は details 内で出す)。
+  // プリセットは〆切は長めの期間をラインナップ。
   const presets = isDeadline
     ? [
         { label: '今日 23:59',      special: 'today2359' },
@@ -170,7 +170,7 @@ export async function renderMeetupNew({ query } = {}) {
     </div>
     <div class="card">
       <label class="field"><span class="lbl">タイトル (任意)</span>
-        <input type="text" id="mun-title" maxlength="200" placeholder="${isDeadline ? '例: スライド 提出 / 申込 締切' : '例: ランチ集合'}" value="${escapeHtml(presetTitle)}">
+        <input type="text" id="mun-title" maxlength="200" placeholder="${isDeadline ? '例: スライド提出 / 申込締切' : '例: ランチ集合'}" value="${escapeHtml(presetTitle)}">
       </label>
       ${isDeadline ? `
       <details style="margin:8px 0">
@@ -201,11 +201,11 @@ export async function renderMeetupNew({ query } = {}) {
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/meetups${isDeadline ? '?kind=deadline' : ''}" class="btn">キャンセル</a>
-        <button id="mun-save" class="primary">${km.icon} ${isDeadline ? '〆切を 通知' : '集合連絡'}</button>
+        <button id="mun-save" class="primary">${km.icon} ${isDeadline ? '〆切を通知' : '集合連絡'}</button>
       </div>
     </div>
   `;
-  // プリセット時刻ボタン: 現在時刻 + N 分 に datetime-local を埋める。
+  // プリセット時刻ボタン: 現在時刻 + N 分に datetime-local を埋める。
   const whenEl = document.getElementById('mun-when');
   const remEl = document.getElementById('mun-rem');
   const pad = n => String(n).padStart(2, '0');
@@ -239,13 +239,13 @@ export async function renderMeetupNew({ query } = {}) {
   });
   whenEl.addEventListener('input', syncRem);
   // v560 #213 TZ toggle: 切替時に preset / 既存値の表示を再計算するため reload-relative
-  //   な計算をするより、 ボタンを再 click して埋め直す方が確実なので 簡略実装
+  //   な計算をするより、 ボタンを再 click して埋め直す方が確実なので簡略実装
   bindTzToggle('mun-tz', () => {
-    // 切替後は フォームの値が JST/ローカル どちらの解釈に変わるので、 ユーザーが手動で
+    // 切替後はフォームの値が JST/ローカルどちらの解釈に変わるので、 ユーザーが手動で
     //   合わせ直す前提 (ヒント文だけ更新)
     syncRem();
   });
-  // URL 経由の preset 時刻を 優先 (期限内かつ 未来 なら 採用)。
+  // URL 経由の preset 時刻を優先 (期限内かつ未来なら採用)。
   let usedPreset = false;
   const maxAheadMs = (isDeadline ? 365 : 180) * 86400_000;
   if (presetWhenRaw) {
@@ -256,10 +256,10 @@ export async function renderMeetupNew({ query } = {}) {
       usedPreset = true;
     }
   }
-  if (!usedPreset) applyPreset(presets[0]); // デフォは 先頭プリセット
+  if (!usedPreset) applyPreset(presets[0]); // デフォは先頭プリセット
 
-  // v383 共有 member_picker を 使用。 lockMembers の時は poolIds で 表示を制限、
-  //       bulk ボタンは 出さない (= グループ内 メンバーから選ぶだけ)。
+  // v383 共有 member_picker を使用。 lockMembers の時は poolIds で表示を制限、
+  //       bulk ボタンは出さない (= グループ内メンバーから選ぶだけ)。
   let picker = null;
   try {
     picker = await createMemberPicker({
@@ -287,7 +287,7 @@ export async function renderMeetupNew({ query } = {}) {
       const r = await post('/api/meetups', {
         kind, title, location, meetup_at: whenUtc, member_ids: memberIds,
       });
-      toast(isDeadline ? '〆切を 通知しました' : '待ち合わせを連絡しました');
+      toast(isDeadline ? '〆切を通知しました' : '待ち合わせを連絡しました');
       navigate('#/meetups/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -324,12 +324,12 @@ export async function renderMeetupDetail({ params }) {
       </div>
       <div id="mud-edit-form" hidden style="margin-top:8px"></div>
     </div>
-    <!-- v482 #71 シェア メッセージ。 「少し 遅れます」 「もう 入って ます」 等 -->
+    <!-- v482 #71 シェアメッセージ。 「少し遅れます」 「もう入ってます」 等 -->
     <div class="card" id="mud-msg-card">
       <h3 style="margin:0 0 6px">💬 メッセージ (<span id="mud-mn">0</span>)</h3>
       <div id="mud-msgs" class="list" style="margin-bottom:8px"><div class="muted">読み込み中…</div></div>
       <div class="row" style="gap:6px">
-        <input type="text" id="mud-msg-body" maxlength="1000" placeholder="少し 遅れます / 先 に 中 に 入って ます 等" style="flex:1">
+        <input type="text" id="mud-msg-body" maxlength="1000" placeholder="少し遅れます / 先に中に入ってます等" style="flex:1">
         <button id="mud-msg-send" class="primary">送信</button>
       </div>
     </div>
@@ -355,7 +355,7 @@ export async function renderMeetupDetail({ params }) {
       const dt = new Date(String(m.meetup_at).replace(' ', 'T'));
       const pad = n => String(n).padStart(2, '0');
       if (whenEl) {
-        // 〆切 / 待ち合わせ いずれ も 表示は HH:MM。 日付 が 違う 場合 のみ 月/日 も。
+        // 〆切 / 待ち合わせいずれも表示は HH:MM。 日付が違う場合のみ月/日も。
         const now = new Date();
         const sameDay = now.toDateString() === dt.toDateString();
         whenEl.textContent = sameDay
@@ -403,7 +403,7 @@ export async function renderMeetupDetail({ params }) {
     }
     document.getElementById('mud-pn').textContent = d.participants.length;
     document.getElementById('mud-parts').innerHTML = d.participants.map(participantPill).join('');
-    // v468 ＋追加 ボタン (関係者 全員 が 押せる — 起案者 + 既参加メンバー + admin)
+    // v468 ＋追加ボタン (関係者全員が押せる — 起案者 + 既参加メンバー + admin)
     const meId = Number(state.me?.id);
     const isParticipant = (d.participants || []).some(p => Number(p.user_id) === meId);
     const canAddMember = d.is_creator || isParticipant || state.me?.role === 'admin';
@@ -428,7 +428,7 @@ export async function renderMeetupDetail({ params }) {
             bulkContainer: document.getElementById('mud-add-bulk'),
             chipsContainer: document.getElementById('mud-add-members'),
             initial: [],
-            excludeIds: existingIds,   // 既参加 は 候補 から 除外
+            excludeIds: existingIds,   // 既参加は候補から除外
             showGenderBulk: false,
           });
         } catch (e) {
@@ -437,10 +437,10 @@ export async function renderMeetupDetail({ params }) {
         document.getElementById('mud-add-cancel').onclick = () => { form.hidden = true; };
         document.getElementById('mud-add-save').onclick = async () => {
           const ids = picker ? [...picker.getSelected()] : [];
-          if (!ids.length) { toast('追加する メンバー を 選んでください'); return; }
+          if (!ids.length) { toast('追加するメンバーを選んでください'); return; }
           try {
             const r = await post(`/api/meetups/${id}/participants`, { member_ids: ids });
-            toast(`${r.added} 人 追加しました`);
+            toast(`${r.added} 人追加しました`);
             form.hidden = true;
             await renderMeetupDetail({ params: { id } });
           } catch (e) { toast('失敗: ' + e.message); }
@@ -482,7 +482,7 @@ export async function renderMeetupDetail({ params }) {
           const title = document.getElementById('mud-edit-title').value.trim();
           const loc   = document.getElementById('mud-edit-loc').value.trim();
           const whenLocal = document.getElementById('mud-edit-when').value;
-          if (!whenLocal) { toast(`${km.timeLabel}を 入れて ください`); return; }
+          if (!whenLocal) { toast(`${km.timeLabel}を入れてください`); return; }
           // v560 #213 TZ helper 経由
           const when = localDtToIso(whenLocal);
           try {
@@ -504,12 +504,12 @@ export async function renderMeetupDetail({ params }) {
         catch (e) { toast('失敗: ' + e.message); }
       });
     }
-    // v482 #71 シェア メッセージ
+    // v482 #71 シェアメッセージ
     await loadMeetupMessages(id);
     document.getElementById('mud-msg-send').addEventListener('click', async () => {
       const input = document.getElementById('mud-msg-body');
       const text = input.value.trim();
-      if (!text) { toast('本文 を 入れて ください'); return; }
+      if (!text) { toast('本文を入れてください'); return; }
       try {
         await post(`/api/meetups/${id}/messages`, { body: text });
         input.value = '';
@@ -535,7 +535,7 @@ async function loadMeetupMessages(meetupId) {
     const items = d.items || [];
     document.getElementById('mud-mn').textContent = items.length;
     if (!items.length) {
-      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだ メッセージ なし</div>';
+      root.innerHTML = '<div class="empty" style="padding:6px; font-size:12px">まだメッセージなし</div>';
       return;
     }
     root.innerHTML = items.map(m => {

@@ -1,4 +1,4 @@
-// /#/papers-recent — v809 論文要約 + 全訳 を時系列で全件一覧。
+// /#/papers-recent — v809 論文要約 + 全訳を時系列で全件一覧。
 //   v840 タイル表示 + ⭐ スター + 並び替え + 「自分のスター付きだけ」 フィルタ対応。
 
 import { get } from '../api.js';
@@ -10,16 +10,16 @@ let viewState = { sort: 'new', mineOnly: false };
 
 export async function renderPapersRecent() {
   const app = document.getElementById('app');
-  // v856 #441 PC のフルスクリーンだと 横幅が広すぎて タイルが巨大化する問題を 修正。
-  //   max-width:1400px の センター揃え コンテナ で 囲んで サイズ感を 統一。
+  // v856 #441 PC のフルスクリーンだと横幅が広すぎてタイルが巨大化する問題を修正。
+  //   max-width:1400px のセンター揃えコンテナで囲んでサイズ感を統一。
   app.innerHTML = `
     <div style="max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box">
       <div class="card page-header">
-        <h2 style="margin:0">📑 論文 要約 / 全訳 (新着)</h2>
+        <h2 style="margin:0">📑 論文要約 / 全訳 (新着)</h2>
       </div>
       <div class="card">
         <p class="hint" style="font-size:13px; margin:0 0 8px">
-          公開中のもの + 自分のもの を時系列で表示。 タップで各結果ページへ。
+          公開中のもの + 自分のものを時系列で表示。 タップで各結果ページへ。
         </p>
         <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:12px; margin-bottom:8px">
           <a href="#/paper-summary" class="btn">📑 要約を新規作成</a>
@@ -73,7 +73,7 @@ async function loadMore() {
     bindStarButtons(gridEl);
     bindBookmarkButtons(gridEl);
     offset += items.length;
-    // 更新 (filtered の場合 件数 表示は filter 適用後 / 全 acc 中)
+    // 更新 (filtered の場合件数表示は filter 適用後 / 全 acc 中)
     const controls = document.getElementById('papers-recent-controls');
     if (controls) {
       controls.innerHTML = viewControlsHtml({ id: 'pr-vc', sort: viewState.sort, mineOnly: viewState.mineOnly, total: filtered.length });
@@ -85,7 +85,7 @@ async function loadMore() {
     }
     statusEl.textContent = viewState.mineOnly
       ? `${filtered.length} 件 (スター付き / 全 ${acc.length} 件)`
-      : `${acc.length} 件 表示中`;
+      : `${acc.length} 件表示中`;
     if (d.has_more) {
       moreEl.innerHTML = '<button class="btn primary" id="papers-recent-more-btn">もっと読み込む (+20)</button>';
       document.getElementById('papers-recent-more-btn')?.addEventListener('click', loadMore);
@@ -110,7 +110,7 @@ function renderTile(it) {
       <div class="ai-tile-head">
         ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
         <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
-        <span style="margin-left:auto; font-size:11px">${directionMark}${escapeHtml(kindLabel)}${it.is_shared ? ' ・ 🌐' : (it.is_mine ? ' ・ 自分' : '')}</span>
+        <span style="margin-left:auto; font-size:11px">${directionMark}${escapeHtml(kindLabel)}${it.is_shared ? ' ・ 🌐' : (it.is_mine ? ' ・自分' : '')}</span>
       </div>
       <div class="ai-tile-title">${escapeHtml(title)}</div>
       ${it.title_original && it.title_original !== title ? `<div style="font-size:11.5px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_original)}</div>` : ''}

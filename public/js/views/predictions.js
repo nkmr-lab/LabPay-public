@@ -32,9 +32,9 @@ export async function renderPredictions() {
       <div class="card page-header">
         <h2 style="margin:0">🏆 優勝予想</h2>
         <p class="hint" style="margin:6px 0 0; font-size:13px">
-          W 杯 や スポーツ大会、 学会 best paper など 「順位」 を 予想して 参加フィー を 山分け。
-          配分は <b>1位 的中者で 山分け</b> (場代 5% のみ システム取り)。
-          ランキング表示の スコアは 1位=5 / 2位=3 / 3位=2 / 4位=1 の 一致和。
+          W 杯やスポーツ大会、 学会 best paper など 「順位」 を予想して参加フィーを山分け。
+          配分は <b>1位的中者で山分け</b> (場代 5% のみシステム取り)。
+          ランキング表示のスコアは 1位=5 / 2位=3 / 3位=2 / 4位=1 の一致和。
         </p>
         <p style="margin:8px 0 0">
           <a class="btn primary" href="#/predictions/new">＋ 予想を起案する</a>
@@ -49,11 +49,11 @@ export async function renderPredictions() {
           </div>
           <div class="meta" style="font-size:12px">
             起案: ${escapeHtml(g.creator_name)} ・
-            参加 ${g.entry_count} 人 ・
-            ${g.predict_count}位まで予想 ・
+            参加 ${g.entry_count} 人・
+            ${g.predict_count}位まで予想・
             フィー ${g.fee}pt ・
             プール ${g.pot_total}pt
-            ${g.deadline_at ? ` ・ 締切 ${escapeHtml(g.deadline_at)}` : ''}
+            ${g.deadline_at ? ` ・締切 ${escapeHtml(g.deadline_at)}` : ''}
           </div>
         </a>
       `).join('') : `
@@ -68,13 +68,13 @@ export async function renderPredictions() {
 export async function renderPredictionNew() {
   const { createMemberPicker } = await import('../member_picker.js');
   const app = document.getElementById('app');
-  // 候補は textarea で 1 行 = 1 候補 (絵文字 + 名前 を スペース区切り)
+  // 候補は textarea で 1 行 = 1 候補 (絵文字 + 名前をスペース区切り)
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 10px">🏆 予想を起案する</h2>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル</div>
-        <input id="pn-title" class="input" placeholder="例: 2026 ワールドカップ 優勝予想" maxlength="200">
+        <input id="pn-title" class="input" placeholder="例: 2026 ワールドカップ優勝予想" maxlength="200">
       </label>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">説明 (任意)</div>
@@ -100,7 +100,7 @@ export async function renderPredictionNew() {
       </label>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">候補リスト (1 行 = 1 候補)</div>
-        <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) は スペース区切り で 任意。 例: <code>🇧🇷 ブラジル</code></p>
+        <p class="hint" style="font-size:12px; margin:0 0 4px">先頭の絵文字 (旗 / アイコン) はスペース区切りで任意。 例: <code>🇧🇷 ブラジル</code></p>
         <textarea id="pn-candidates" class="input" rows="12" placeholder="🇧🇷 ブラジル&#10;🇦🇷 アルゼンチン&#10;🇫🇷 フランス&#10;…"></textarea>
       </label>
       <div style="margin-bottom:10px">
@@ -139,7 +139,7 @@ export async function renderPredictionNew() {
       return { id: `c${i}`, name: line, flag: null };
     });
     if (candidates.length < count + 1) {
-      toast(`候補が少ないです。 ${count + 1} 個以上 入れてください`); return;
+      toast(`候補が少ないです。 ${count + 1} 個以上入れてください`); return;
     }
     const body = { title, fee, predict_count: count, candidates };
     if (desc) body.description = desc;
@@ -193,7 +193,7 @@ function renderDetailHtml(g) {
        style="display:flex; align-items:center; gap:8px; padding:6px 10px;
               border:2px dashed var(--line); border-radius:8px; margin:4px 0; min-height:36px">
        <span style="font-size:18px; width:32px">${medalFor(i)}</span>
-       <span class="slot-content" style="flex:1; color:#999">タップで 下から選択</span>
+       <span class="slot-content" style="flex:1; color:#999">タップで下から選択</span>
        <button class="slot-clear" type="button"
          style="background:none; border:none; color:#c00; cursor:pointer; font-size:18px"
          hidden>×</button>
@@ -215,7 +215,7 @@ function renderDetailHtml(g) {
       predictArea = `
         <div class="card">
           <h3 style="margin:0 0 4px">予想を入力する</h3>
-          <p class="hint" style="margin:0 0 8px; font-size:12px">参加フィー ${g.fee}pt を 支払って 予想を 提出します。 締切前なら 何度でも 変更可能。</p>
+          <p class="hint" style="margin:0 0 8px; font-size:12px">参加フィー ${g.fee}pt を支払って予想を提出します。 締切前なら何度でも変更可能。</p>
           <div id="pred-slots">${slotsHtml}</div>
           <div style="margin:10px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
           <div id="pred-cands">${candidatesHtml}</div>
@@ -226,13 +226,13 @@ function renderDetailHtml(g) {
     predictArea = `
       <div class="card">
         <h3 style="margin:0 0 4px">締切済み</h3>
-        <p class="hint" style="margin:0">起案者が 結果を 開示するのを 待ちましょう。</p>
+        <p class="hint" style="margin:0">起案者が結果を開示するのを待ちましょう。</p>
       </div>`;
   } else if (g.status === 'cancelled') {
     predictArea = `
       <div class="card">
         <h3 style="margin:0 0 4px">キャンセル済</h3>
-        <p class="hint" style="margin:0">参加フィーは 全員に返金されました。</p>
+        <p class="hint" style="margin:0">参加フィーは全員に返金されました。</p>
       </div>`;
   }
 
@@ -261,7 +261,7 @@ function renderDetailHtml(g) {
   const creatorBlock = (g.is_creator && (g.status === 'open' || g.status === 'closed')) ? `
     <div class="card">
       <h3 style="margin:0 0 4px">起案者メニュー</h3>
-      <p class="hint" style="margin:0 0 8px; font-size:12px">受付を締め切ったら 結果を開示できます。 まだ誰も参加していない場合は キャンセルもできます。</p>
+      <p class="hint" style="margin:0 0 8px; font-size:12px">受付を締め切ったら結果を開示できます。 まだ誰も参加していない場合はキャンセルもできます。</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap">
         ${g.status === 'open' ? `<button class="btn" id="pred-close">受付を締め切る</button>` : ''}
         <button class="btn primary" id="pred-open-finalize">結果を開示する…</button>
@@ -272,11 +272,11 @@ function renderDetailHtml(g) {
         <div id="pred-actual-slots">${slotsHtml.replace(/class="pred-slot"/g, 'class="pred-actual-slot"').replace(/data-i="(\d+)"/g, 'data-i="$1" data-mode="actual"')}</div>
         <div style="margin:8px 0 6px"><div class="bold" style="font-size:13px">候補から選ぶ</div></div>
         <div id="pred-actual-cands">${candidatesHtml.replace(/class="pred-cand"/g, 'class="pred-actual-cand"')}</div>
-        <button class="btn primary" id="pred-finalize" style="margin-top:10px">結果を確定して 配分する</button>
+        <button class="btn primary" id="pred-finalize" style="margin-top:10px">結果を確定して配分する</button>
       </div>
     </div>` : '';
 
-  // ranks が 入っているか で 公開状態を 判定 (サーバ側で 締切後は ranks を埋めて返す)。
+  // ranks が入っているかで公開状態を判定 (サーバ側で締切後は ranks を埋めて返す)。
   const ranksRevealed = (g.entries || []).some(e => Array.isArray(e.ranks));
   const entriesBlock = (g.entries && g.entries.length) ? `
     <div class="card">
@@ -293,14 +293,14 @@ function renderDetailHtml(g) {
            </div>`
         : `<div style="border-top:1px solid var(--line); padding:6px 0">
              <span class="bold">${escapeHtml(e.display_name)}</span>
-             <span class="meta" style="font-size:12px"> ・ 予想は締切後に公開</span>
+             <span class="meta" style="font-size:12px"> ・予想は締切後に公開</span>
            </div>`
       ).join('')}
     </div>` : '';
 
-  // v582 #226 締切までの カウントダウン (締切 が ある時 だけ 出す)。
-  // v689 #273 締切 が 既に 過ぎて いれば 「締切終了」 を シンプル に 表示。 status badge も
-  //   server が 「open」 の まま でも 視覚 的 には 「締切済」 に 下げる。
+  // v582 #226 締切までのカウントダウン (締切がある時だけ出す)。
+  // v689 #273 締切が既に過ぎていれば 「締切終了」 をシンプルに表示。 status badge も
+  //   server が 「open」 のままでも視覚的には 「締切済」 に下げる。
   const deadlinePassed = g.deadline_at
     && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
   const effectiveStatus = (g.status === 'open' && deadlinePassed) ? 'closed' : g.status;
@@ -316,9 +316,9 @@ function renderDetailHtml(g) {
          ⏳ 締切まで <b id="pred-cd-text">計算中…</b>
          <span class="hint-sm" style="margin-left:6px">(${escapeHtml(g.deadline_at)})</span>
        </div>`);
-  // v848 #431 起案者は タイトル / 説明 を 編集できる (open / closed 中のみ)
+  // v848 #431 起案者はタイトル / 説明を編集できる (open / closed 中のみ)
   const canEdit = g.is_creator && (g.status === 'open' || g.status === 'closed');
-  // v871 #453 〆切 / 候補 / 予想 件数 も 編集 可能 に (候補 と 件数 は エントリー 0 件 の とき だけ)。
+  // v871 #453 〆切 / 候補 / 予想件数も編集可能に (候補と件数はエントリー 0 件のときだけ)。
   const fmtLocal = (s) => s ? String(s).replace(' ', 'T').slice(0, 16) : '';
   const hasEntries = (g.entries || []).length > 0;
   const editForm = canEdit ? `
@@ -330,16 +330,16 @@ function renderDetailHtml(g) {
       <label class="field"><span class="lbl">説明 (任意)</span>
         <textarea id="pred-edit-desc" rows="3" maxlength="2000"></textarea>
       </label>
-      <label class="field"><span class="lbl">〆切 日時 (任意)</span>
+      <label class="field"><span class="lbl">〆切日時 (任意)</span>
         <input type="datetime-local" id="pred-edit-deadline">
       </label>
       <label class="field">
         <span class="lbl">候補 (1 行 1 件、 例: 日本 / ブラジル / アルゼンチン…)</span>
-        ${hasEntries ? '<div class="hint-sm" style="color:#c00">※ すでに 予想者 が いる ので 候補 は 変更 できません</div>' : ''}
+        ${hasEntries ? '<div class="hint-sm" style="color:#c00">※ すでに予想者がいるので候補は変更できません</div>' : ''}
         <textarea id="pred-edit-cands" rows="4" ${hasEntries ? 'disabled' : ''}>${escapeHtml((g.candidates || []).map(c => c.name).join('\n'))}</textarea>
       </label>
-      <label class="field"><span class="lbl">予想 する 上位 順位 数 (1-50)
-        ${hasEntries ? '<span class="hint-sm" style="color:#c00"> ※ 予想者 が いる ので 変更 不可</span>' : ''}
+      <label class="field"><span class="lbl">予想する上位順位数 (1-50)
+        ${hasEntries ? '<span class="hint-sm" style="color:#c00"> ※ 予想者がいるので変更不可</span>' : ''}
       </span>
         <input type="number" id="pred-edit-pc" min="1" max="50" value="${g.predict_count}" ${hasEntries ? 'disabled' : ''} style="width:100px">
       </label>
@@ -353,12 +353,12 @@ function renderDetailHtml(g) {
       <div style="display:flex; align-items:center; gap:8px">
         <h2 style="margin:0; flex:1" id="pred-title-display">${escapeHtml(g.title)}</h2>
         <span id="pred-status-badge">${statusBadge(effectiveStatus)}</span>
-        ${canEdit ? '<button id="pred-edit-btn" class="btn" style="font-size:12px; padding:4px 8px" title="タイトル / 説明 を編集">✏️</button>' : ''}
+        ${canEdit ? '<button id="pred-edit-btn" class="btn" style="font-size:12px; padding:4px 8px" title="タイトル / 説明を編集">✏️</button>' : ''}
         <button id="pred-share" class="btn" style="font-size:12px; padding:4px 8px" title="らぼったーで共有">💬 共有</button>
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
         起案: ${escapeHtml(g.creator_name)} ・
-        ${g.predict_count}位まで予想 ・
+        ${g.predict_count}位まで予想・
         フィー ${g.fee}pt ・
         プール ${g.pot_total}pt
       </p>
@@ -388,8 +388,8 @@ function startPredCountdown() {
     if (!root2) { clearInterval(predCountdownTimer); predCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      // v689 #273 「⏳ 締切まで 締切超過 ⛔」 だと 重ね表示 で 変 だった → root 全体 を
-      //   「⏰ 締切終了」 に 置き換え。 status badge も 「受付中」 のまま なら 「締切済」 に 下げる。
+      // v689 #273 「⏳ 締切まで締切超過 ⛔」 だと重ね表示で変だった → root 全体を
+      //   「⏰ 締切終了」 に置き換え。 status badge も 「受付中」 のままなら 「締切済」 に下げる。
       root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
@@ -416,9 +416,9 @@ function startPredCountdown() {
 function wireDetail(g) {
   startPredCountdown();
   document.getElementById('pred-share')?.addEventListener('click', () => {
-    shareToSns(`🏆 「${g.title}」 の 優勝予想 を 受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
+    shareToSns(`🏆 「${g.title}」 の優勝予想を受付中! フィー ${g.fee}pt`, `#/predictions/${g.id}`);
   });
-  // v848 #431 起案者によるタイトル / 説明 編集
+  // v848 #431 起案者によるタイトル / 説明編集
   const editBtn   = document.getElementById('pred-edit-btn');
   const editForm  = document.getElementById('pred-edit-form');
   const titleDsp  = document.getElementById('pred-title-display');
@@ -442,21 +442,21 @@ function wireDetail(g) {
     const d = (descInp?.value  || '').trim();
     if (!t) { toast('タイトルを入れてください'); return; }
     const payload = { title: t, description: d, deadline_at: deadlineInp?.value || '' };
-    // v871 #453 候補 / 予想件数 は entries が 0 のとき (disabled でない とき) だけ 送る
+    // v871 #453 候補 / 予想件数は entries が 0 のとき (disabled でないとき) だけ送る
     if (candsInp && !candsInp.disabled) {
       const arr = candsInp.value.split('\n').map(s => s.trim()).filter(Boolean);
-      if (arr.length < 2) { toast('候補 は 2 件 以上 必要'); return; }
+      if (arr.length < 2) { toast('候補は 2 件以上必要'); return; }
       payload.candidates = arr;
     }
     if (pcInp && !pcInp.disabled) {
       const pc = parseInt(pcInp.value, 10);
-      if (isNaN(pc) || pc < 1 || pc > 50) { toast('予想 件数 は 1-50'); return; }
+      if (isNaN(pc) || pc < 1 || pc > 50) { toast('予想件数は 1-50'); return; }
       payload.predict_count = pc;
     }
     try {
       await patch(`/api/predictions/games/${g.id}`, payload);
       toast('保存しました');
-      // 候補 / 件数 を 変えた 場合 は 描画 を 再 取得 した方 が 早い
+      // 候補 / 件数を変えた場合は描画を再取得した方が早い
       if (payload.candidates || payload.predict_count || payload.deadline_at !== (g.deadline_at || '')) {
         renderPredictionDetail({ params: { id: g.id } });
         return;
@@ -486,7 +486,7 @@ function wireDetail(g) {
             content.style.color = 'var(--text)';
             clear.hidden = false;
           } else {
-            content.textContent = 'タップで 下から選択';
+            content.textContent = 'タップで下から選択';
             content.style.color = '#999';
             clear.hidden = true;
           }
@@ -511,7 +511,7 @@ function wireDetail(g) {
         const cid = b.dataset.cid;
         if (picked.includes(cid)) return;
         const idx = picked.findIndex(x => x === null);
-        if (idx < 0) { toast('全部 埋まっています。 不要なものを × で消してください'); return; }
+        if (idx < 0) { toast('全部埋まっています。 不要なものを × で消してください'); return; }
         picked[idx] = cid;
         refresh();
       });
@@ -531,7 +531,7 @@ function wireDetail(g) {
   // 起案者メニュー
   if (g.is_creator && (g.status === 'open' || g.status === 'closed')) {
     document.getElementById('pred-close')?.addEventListener('click', async () => {
-      if (!confirm('受付を 締め切りますか? (まだ 結果開示 ではありません)')) return;
+      if (!confirm('受付を締め切りますか? (まだ結果開示ではありません)')) return;
       try {
         await post(`/api/predictions/games/${g.id}/close`, {});
         toast('締め切りました');
@@ -539,7 +539,7 @@ function wireDetail(g) {
       } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
     document.getElementById('pred-cancel')?.addEventListener('click', async () => {
-      if (!confirm('キャンセルすると 全員のフィーが 返金され 予想は破棄されます。 よろしいですか?')) return;
+      if (!confirm('キャンセルすると全員のフィーが返金され予想は破棄されます。 よろしいですか?')) return;
       try {
         await post(`/api/predictions/games/${g.id}/cancel`, {});
         toast('キャンセルしました');
@@ -565,7 +565,7 @@ function wireDetail(g) {
             content.style.color = 'var(--text)';
             clear.hidden = false;
           } else {
-            content.textContent = 'タップで 下から選択';
+            content.textContent = 'タップで下から選択';
             content.style.color = '#999';
             clear.hidden = true;
           }
@@ -597,10 +597,10 @@ function wireDetail(g) {
       refresh();
       document.getElementById('pred-finalize').addEventListener('click', async () => {
         if (actual.some(x => !x)) { toast('全 ' + g.predict_count + ' 位を埋めてください'); return; }
-        if (!confirm('結果を確定して 配分しますか? この操作は取り消せません')) return;
+        if (!confirm('結果を確定して配分しますか? この操作は取り消せません')) return;
         try {
           await post(`/api/predictions/games/${g.id}/finalize`, { actual });
-          toast('結果を開示し 配分しました');
+          toast('結果を開示し配分しました');
           renderPredictionDetail({ params: { id: g.id } });
         } catch (e) { toast('失敗: ' + (e?.message || e)); }
       });

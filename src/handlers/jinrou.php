@@ -110,7 +110,7 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
         }
     }
 
-    // 占い結果 (自分が占い師なら、 自分が占ったターゲットの 役を取得)
+    // 占い結果 (自分が占い師なら、 自分が占ったターゲットの役を取得)
     $inspectResults = [];
     if ($myRole === 'seer') {
         $stI = $pdo->prepare("SELECT a.target_user_id, a.round_no, p.role AS target_role
@@ -158,8 +158,8 @@ function jinrou_create(PDO $pdo, array $cfg, int $uid): void {
     if ($buyIn < 1 || $buyIn > 100) throw new ApiException('bad_request', 'buy_in 1-100', 400);
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) $memberIds = [];
-    // v632 instant_start = 全員 即着席 + 一括徴収 + 役職配布 + status='night' に。
-    //   人狼 は 4 人以上 必要 なので 自分 + 3 人 以上 招待 されてれば 即開始可。
+    // v632 instant_start = 全員即着席 + 一括徴収 + 役職配布 + status='night' に。
+    //   人狼は 4 人以上必要なので自分 + 3 人以上招待されてれば即開始可。
     $instant = !empty($body['instant_start']) && count($memberIds) >= 3;
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $buyIn, $memberIds, $instant, &$gameId) {
@@ -179,7 +179,7 @@ function jinrou_create(PDO $pdo, array $cfg, int $uid): void {
         if ($mid === $uid || $mid <= 0) continue;
         try {
             $msg = $instant
-                ? "🐺 人狼 開始! 役職が 配布されました ({$buyIn}pt 預託済)"
+                ? "🐺 人狼開始! 役職が配布されました ({$buyIn}pt 預託済)"
                 : "🐺 人狼ゲームに招待されました ({$buyIn}pt)";
             notify_safely($pdo, $CFG, $mid, 'admin_notice', $msg, 'jinrou', $gameId);
         } catch (Throwable $_) {}
@@ -187,12 +187,12 @@ function jinrou_create(PDO $pdo, array $cfg, int $uid): void {
     json_response(['ok' => true, 'id' => $gameId]);
 }
 
-// v632 instant_start: 招待者を 全員 着席 + 一括徴収 + 役職配布 + 'night' へ
+// v632 instant_start: 招待者を全員着席 + 一括徴収 + 役職配布 + 'night' へ
 function jinrou_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $buyIn, array $invitees): void {
     $invitees = array_values(array_unique(array_map('intval', $invitees)));
     $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid && $u > 0));
     $n = 1 + count($invitees);
-    if ($n < 4) throw new ApiException('bad_request', '人狼は 4 人以上 (自分 + 3 人 以上)', 400);
+    if ($n < 4) throw new ApiException('bad_request', '人狼は 4 人以上 (自分 + 3 人以上)', 400);
     if ($n > 16) throw new ApiException('bad_request', '16 人まで', 400);
     $place = implode(',', array_fill(0, count($invitees), '?'));
     $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
@@ -203,7 +203,7 @@ function jinrou_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $b
         if (Ledger::balanceOfUser($pdo, $iv) < $buyIn) {
             $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
             $stN->execute([$iv]);
-            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
+            throw new ApiException('insufficient_balance', sprintf('%s さんのポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
         }
     }
     foreach ($invitees as $iv) {
@@ -253,7 +253,7 @@ function jinrou_leave(PDO $pdo, int $uid, int $gid): void {
         if ((int)$g['creator_user_id'] === $uid) throw new ApiException('bad_request', '起案者は脱退不可 (キャンセルしてください)', 400);
         $pdo->prepare("DELETE FROM jinrou_players WHERE game_id = ? AND user_id = ?")->execute([$gid, $uid]);
         $buyIn = (int)$g['buy_in'];
-        Ledger::transfer($pdo, 1, $uid, $buyIn, 'mahjong_refund', 'jinrou', $gid, '人狼 脱退返金');
+        Ledger::transfer($pdo, 1, $uid, $buyIn, 'mahjong_refund', 'jinrou', $gid, '人狼脱退返金');
         $pdo->prepare("UPDATE jinrou_games SET pot_total = pot_total - ? WHERE id = ?")->execute([$buyIn, $gid]);
     });
     json_response(['ok' => true]);
@@ -271,10 +271,10 @@ function jinrou_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
         if ($n < 4) throw new ApiException('bad_request', '4 人以上で開始 (人狼1 + 占い1 + 騎士1 + 村人1 が最低構成)', 400);
         if ($n > 16) throw new ApiException('bad_request', '16 人まで', 400);
         // 役職構成: 人数別 (シンプル)
-        //   4-5人 → 人狼1 占い1 騎士1 村人 残り
-        //   6-8人 → 人狼2 占い1 騎士1 村人 残り
-        //   9-12人 → 人狼3 占い1 騎士1 村人 残り
-        //   13-16人 → 人狼4 占い1 騎士1 村人 残り
+        //   4-5人 → 人狼1 占い1 騎士1 村人残り
+        //   6-8人 → 人狼2 占い1 騎士1 村人残り
+        //   9-12人 → 人狼3 占い1 騎士1 村人残り
+        //   13-16人 → 人狼4 占い1 騎士1 村人残り
         $wolfCount = $n <= 5 ? 1 : ($n <= 8 ? 2 : ($n <= 12 ? 3 : 4));
         $roles = [];
         for ($i = 0; $i < $wolfCount; $i++) $roles[] = 'wolf';
@@ -350,7 +350,7 @@ function jinrou_advance(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $phase = $g['status'];
 
         if ($phase === 'night') {
-            // 人狼の襲撃 (多数決、 同点は ランダム)
+            // 人狼の襲撃 (多数決、 同点はランダム)
             $stA = $pdo->prepare("SELECT target_user_id FROM jinrou_actions WHERE game_id = ? AND round_no = ? AND phase = 'night' AND action_type = 'attack'");
             $stA->execute([$gid, $round]);
             $attacks = array_filter(array_map('intval', $stA->fetchAll(PDO::FETCH_COLUMN)), fn($x) => $x > 0);
@@ -457,7 +457,7 @@ function jinrou_cancel(PDO $pdo, int $uid, int $gid): void {
         $g = jinrou_lock($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['lobby','night','day'], true)) throw new ApiException('bad_request', '既に終了', 400);
-        // lobby のみ参加者に返金 (ゲーム開始後は プレイフィーとして徴収済)
+        // lobby のみ参加者に返金 (ゲーム開始後はプレイフィーとして徴収済)
         if ($g['status'] === 'lobby') {
             $stP = $pdo->prepare("SELECT user_id FROM jinrou_players WHERE game_id = ?");
             $stP->execute([$gid]);

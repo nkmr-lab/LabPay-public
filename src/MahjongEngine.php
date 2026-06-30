@@ -3,7 +3,7 @@
 //   連荘 / テンパイ料 / リーチ棒持ち越し / 平和両面待ち判定。
 //
 //   牌コード: 0-8=萬1-9、 9-17=筒1-9、 18-26=索1-9、 27=東 28=南 29=西 30=北、 31=白 32=發 33=中
-//   赤ドラは 別 flag 配列 で 管理 (各プレイヤーの hand + 副露 に対して 赤フラグを別管理)
+//   赤ドラは別 flag 配列で管理 (各プレイヤーの hand + 副露に対して赤フラグを別管理)
 //   状態は state_json で 1 セル保存、 state_ver で楽観ロック (polling)。
 declare(strict_types=1);
 
@@ -15,7 +15,7 @@ final class MahjongEngine {
     const HAND_SIZE = 13;
     const WANPAI = 14;
     const RIICHI_BO = 1000;
-    const TENPAI_POT = 3000; // 流局時 ノーテン罰符 (分配)
+    const TENPAI_POT = 3000; // 流局時ノーテン罰符 (分配)
 
     const T_E = 27; const T_S = 28; const T_W = 29; const T_N = 30;
     const T_HAKU = 31; const T_HATSU = 32; const T_CHUN = 33;
@@ -49,7 +49,7 @@ final class MahjongEngine {
                 'discard_reds' => 0,
                 'melds'      => [],         // 副露 (鳴き)
                 'riichi'     => false,
-                'ippatsu'    => false,      // 一発 (リーチ後の 一巡内、 鳴き無し)
+                'ippatsu'    => false,      // 一発 (リーチ後の一巡内、 鳴き無し)
                 'double_riichi' => false,
                 'score'      => $carryScores ? (int)$carryScores[$idx] : 25000,
                 'declared'   => false,
@@ -83,7 +83,7 @@ final class MahjongEngine {
             'naki_passed'        => [],            // [seat, ...] 既にパスした seat
             'log'                => [],
             'game_winners'       => [],
-            'is_first_round'     => true,           // 一巡目 (国士無双 / 天和 などの判定に必要)
+            'is_first_round'     => true,           // 一巡目 (国士無双 / 天和などの判定に必要)
             'is_player_first_turn' => array_fill(0, self::SEATS, true),
         ];
     }
@@ -146,7 +146,7 @@ final class MahjongEngine {
         if ($chances) {
             $st['awaiting'] = 'naki_window';
         } else {
-            $st['awaiting'] = 'ron_chance'; // 即 ロン受付 (全 seat 任意)
+            $st['awaiting'] = 'ron_chance'; // 即ロン受付 (全 seat 任意)
         }
         $st['log'][] = ['type' => 'discard', 'by' => $playerIdx, 'tile' => $tile];
         return ['ok' => true];
@@ -239,7 +239,7 @@ final class MahjongEngine {
         foreach ($st['players'] as &$pp) $pp['ippatsu'] = false;
         unset($pp);
         if ($type === 'minkan') {
-            // 嶺上開花のため 王牌から 1 枚補充
+            // 嶺上開花のため王牌から 1 枚補充
             self::drawFromDeadWall($st, $playerIdx);
             $st['awaiting'] = 'discard';
         }
@@ -348,7 +348,7 @@ final class MahjongEngine {
         if ($p['riichi']) return ['ok' => false, 'msg' => '既にリーチ済'];
         if (!self::isMenzen($p)) return ['ok' => false, 'msg' => '門前 (鳴き無し) でないとリーチ不可'];
         if ($p['score'] < self::RIICHI_BO) return ['ok' => false, 'msg' => '1000 点未満ではリーチ不可'];
-        if (self::wallRemaining($st) < 4) return ['ok' => false, 'msg' => '残り山 4 枚未満 でリーチ不可'];
+        if (self::wallRemaining($st) < 4) return ['ok' => false, 'msg' => '残り山 4 枚未満でリーチ不可'];
         if (!self::isTenpai($p['hand'], $p['melds'])) return ['ok' => false, 'msg' => 'テンパイしていません'];
         $p['riichi'] = true;
         $p['ippatsu'] = true;
@@ -404,7 +404,7 @@ final class MahjongEngine {
 
     public static function findWinForms(array $hand14, int $meldCount = 0): array {
         $forms = [];
-        // 七対子 / 国士は 完全門前 (副露 0) のみ
+        // 七対子 / 国士は完全門前 (副露 0) のみ
         if ($meldCount === 0) {
             if (self::isChiitoitsu($hand14)) $forms[] = ['kind' => 'chiitoitsu'];
             if (self::isKokushi($hand14)) $forms[] = ['kind' => 'kokushi'];
@@ -677,11 +677,11 @@ final class MahjongEngine {
                 $list[] = '三色同刻'; $han += 2; break;
             }
         }
-        // 対々和: 全 刻子
+        // 対々和: 全刻子
         $allKotsu = true;
         foreach ($allMelds as $m) if ($m['kind'] !== 'kotsu') { $allKotsu = false; break; }
         if ($allKotsu) { $list[] = '対々和'; $han += 2; }
-        // 三暗刻 (form 内の刻子で 暗刻 数)
+        // 三暗刻 (form 内の刻子で暗刻数)
         $ankoCount = 0;
         foreach ($formMelds as $m) if ($m['kind'] === 'kotsu') $ankoCount++;
         foreach ($melds as $m) if ($m['type'] === 'ankan') $ankoCount++;
@@ -694,25 +694,25 @@ final class MahjongEngine {
         // 混老頭: 全 yaochuu
         $allYaochuu = true;
         foreach ([0,8,9,17,18,26,27,28,29,30,31,32,33] as $yt) {
-            // 全 tiles が yaochuu のみ で構成されている?
+            // 全 tiles が yaochuu のみで構成されている?
         }
         $onlyYaochuu = true;
         for ($i = 0; $i < self::TYPES; $i++) {
             if ($cnt[$i] > 0 && !in_array($i, [0,8,9,17,18,26,27,28,29,30,31,32,33], true)) { $onlyYaochuu = false; break; }
         }
         if ($onlyYaochuu) { $list[] = '混老頭'; $han += 2; }
-        // 純全帯么九 / 混全帯么九 簡略 skip
+        // 純全帯么九 / 混全帯么九簡略 skip
 
         return ['list' => $list, 'han' => $han, 'is_yakuman' => false];
     }
 
     private static function isPinfu(array $form, array $exposedMelds, int $roundWind, int $seatWind, ?int $winTile): bool {
-        // 門前 + 全 順子 + 役牌でない雀頭 + 両面待ち
+        // 門前 + 全順子 + 役牌でない雀頭 + 両面待ち
         if (count($exposedMelds) > 0) return false;
         $pair = $form['pair'];
         if (in_array($pair, [self::T_HAKU, self::T_HATSU, self::T_CHUN, $roundWind, $seatWind], true)) return false;
         foreach ($form['melds'] as $m) if ($m['kind'] !== 'shuntsu') return false;
-        // 両面待ち: winTile が 順子のどれかの端 (n, n+1 → n+2 か n-1 を引いた) かつ 端でない
+        // 両面待ち: winTile が順子のどれかの端 (n, n+1 → n+2 か n-1 を引いた) かつ端でない
         if ($winTile === null) return true; // ツモなら tsumo 計算なので両面待ちは省略 (簡略)
         foreach ($form['melds'] as $m) {
             $base = $m['tile'];

@@ -1,5 +1,5 @@
 // /#/random-groups — メンバーから N 個のチームをランダム生成。
-// 学年 / 性別 を「できるだけ均等」に配慮するオプション付き (バケット分け
+// 学年 / 性別を「できるだけ均等」に配慮するオプション付き (バケット分け
 // → 各バケット内シャッフル → ラウンドロビンで分配)。純粋なローカル計算で、
 // DB には書き込まない。結果は「このメンバーでグループ一括作成」で
 // 「グループ1」 「グループ2」 … という名前で順に実体化できる。
@@ -32,7 +32,7 @@ export async function renderRandomGroups() {
       <h3>条件</h3>
       <label class="field">
         <span class="lbl">名前 (空欄なら日付で自動)</span>
-        <input type="text" id="rg-title" maxlength="200" placeholder="例: 新歓 班分け">
+        <input type="text" id="rg-title" maxlength="200" placeholder="例: 新歓班分け">
       </label>
       <label class="field">
         <span class="lbl">グループ数</span>
@@ -72,7 +72,7 @@ export async function renderRandomGroups() {
   document.getElementById('rg-copy').addEventListener('click', () => onCopyResult());
 }
 
-// v612 分けた瞬間に 自動通知。 押し直し なくても 即届く
+// v612 分けた瞬間に自動通知。 押し直しなくても即届く
 async function autoNotifyAfterShuffle() {
   if (!lastResult) return;
   const title = lastTitle || autoTitle();
@@ -83,7 +83,7 @@ async function autoNotifyAfterShuffle() {
   } catch (e) { toast('通知失敗: ' + (e?.message || e)); }
 }
 
-// v612 結果を テキストで コピー (Scrapbox 貼付け 用)
+// v612 結果をテキストでコピー (Scrapbox 貼付け用)
 function groupsAsText() {
   if (!lastResult) return '';
   const title = lastTitle || autoTitle();
@@ -200,14 +200,14 @@ function shuffle(arr) {
   return a;
 }
 
-// Phase 1: bucket → round-robin で 大まかに均等に配置。
+// Phase 1: bucket → round-robin で大まかに均等に配置。
 // Phase 2: ランダム 2-swap を 200 回試行し、 不均衡スコアが下がる時だけ
 // 採用する貪欲法で安定解に近づける。 何の attribute を考えるかは
 // considerGrade / considerGender / 常に size でカウント。
 function partition(members, numGroups, considerGrade, considerGender) {
   const groups = phase1Initial(members, numGroups, considerGrade, considerGender);
   if (!considerGrade && !considerGender) {
-    // size の変動だけなら round-robin で完璧均等。 swap 最適化 不要。
+    // size の変動だけなら round-robin で完璧均等。 swap 最適化不要。
     return groups;
   }
   return phase2Swap(groups, considerGrade, considerGender, 200);
@@ -238,7 +238,7 @@ function phase1Initial(members, numGroups, considerGrade, considerGender) {
   return groups;
 }
 
-// 全 group × 全 attribute 値 のカウントが平均にどれだけ近いかを 2 乗誤差で
+// 全 group × 全 attribute 値のカウントが平均にどれだけ近いかを 2 乗誤差で
 // 評価。 小さいほど均等。 size の変動も常に評価に含める。
 function imbalanceScore(groups, considerGrade, considerGender) {
   let score = 0;
@@ -298,7 +298,7 @@ async function runShuffle() {
   lastTitle = document.getElementById('rg-title').value.trim() || autoTitle();
   renderResult(groups, lastTitle);
   document.getElementById('rg-reshuffle').disabled = false;
-  // v612 分けた瞬間に 自動で 全員に通知
+  // v612 分けた瞬間に自動で全員に通知
   await autoNotifyAfterShuffle();
 }
 
@@ -334,7 +334,7 @@ async function onNotifyAll(reSend = false) {
   if (!lastResult) { toast('まず分けてください'); return; }
   const title = lastTitle || autoTitle();
   const total = lastResult.reduce((s, g) => s + g.length, 0);
-  if (reSend && !confirm(`「${title}」 の結果を ${total} 人に もう一度 通知しますか?`)) return;
+  if (reSend && !confirm(`「${title}」 の結果を ${total} 人にもう一度通知しますか?`)) return;
   const groups = lastResult.map(g => g.map(m => m.id));
   try {
     const r = await post('/api/random-groups/notify', { title, groups });

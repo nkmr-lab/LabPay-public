@@ -1,6 +1,6 @@
-// /#/chat-rooms — Slack 風 チャット (#248)。 3 固定 チャンネル (重要 / 連絡 / 相談) + 1対1 DM。
-// 軽 polling (2 秒) で 既存 メッセージ を 増分 取得。
-// (既存 /chat は AI 翻訳 用 なので 別パス)
+// /#/chat-rooms — Slack 風チャット (#248)。 3 固定チャンネル (重要 / 連絡 / 相談) + 1対1 DM。
+// 軽 polling (2 秒) で既存メッセージを増分取得。
+// (既存 /chat は AI 翻訳用なので別パス)
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -16,7 +16,7 @@ function stopPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
 }
 
-// ─── /#/chat-rooms (ルーム 一覧、 Slack 風 サイドバー) ─
+// ─── /#/chat-rooms (ルーム一覧、 Slack 風サイドバー) ─
 // v726 #328 タブ UI に統一したので、 ここを訪れたら最初のチャンネルへ自動遷移。
 export async function renderChatRooms() {
   stopPoll();
@@ -34,7 +34,7 @@ export async function renderChatRooms() {
     <div class="card" style="background:#3f0e40; color:#fff; padding:14px">
       <h2 style="margin:0; font-size:20px">💬 LabPay チャット</h2>
       <p style="font-size:12px; margin:4px 0 0; opacity:0.85">
-        チャンネル + DM。 「🚨 重要」 への 投稿 は 全員 に 通知 されます。
+        チャンネル + DM。 「🚨 重要」 への投稿は全員に通知されます。
       </p>
     </div>
     <div class="card" style="padding:0">
@@ -44,7 +44,7 @@ export async function renderChatRooms() {
       <div id="ch-dms"></div>
       <div style="padding:10px 14px; border-top:1px solid var(--line); display:flex; gap:6px; align-items:center">
         <select id="ch-new-dm" style="flex:1">
-          <option value="">＋ 新規 DM (相手 を 選ぶ)</option>
+          <option value="">＋ 新規 DM (相手を選ぶ)</option>
         </select>
         <button id="ch-new-dm-go" class="btn primary" style="flex:none">開く</button>
       </div>
@@ -58,7 +58,7 @@ export async function renderChatRooms() {
     document.getElementById('ch-channels').innerHTML = channels.map(r => roomRow(r)).join('');
     document.getElementById('ch-dms').innerHTML = dms.length
       ? dms.map(r => roomRow(r)).join('')
-      : '<div style="padding:8px 14px; color:#888; font-size:12px">まだ DM は ありません</div>';
+      : '<div style="padding:8px 14px; color:#888; font-size:12px">まだ DM はありません</div>';
   } catch (e) {
     document.getElementById('ch-channels').innerHTML = `<div class="muted" style="padding:14px">${escapeHtml(e.message)}</div>`;
   }
@@ -66,7 +66,7 @@ export async function renderChatRooms() {
     const u = await get('/api/users');
     const sel = document.getElementById('ch-new-dm');
     const meId = Number(state.me?.id);
-    sel.innerHTML = '<option value="">＋ 新規 DM (相手 を 選ぶ)</option>' +
+    sel.innerHTML = '<option value="">＋ 新規 DM (相手を選ぶ)</option>' +
       (u.items || []).filter(x => x.id !== meId).map(x =>
         `<option value="${x.id}">${escapeHtml(x.display_name)}${x.grade ? ` [${escapeHtml(x.grade)}]` : ''}</option>`).join('');
     document.getElementById('ch-new-dm-go').addEventListener('click', () => {
@@ -94,10 +94,10 @@ function roomRow(r) {
     </a>`;
 }
 
-// ─── /#/chat-rooms/:roomKey (メッセージ ストリーム) ─
+// ─── /#/chat-rooms/:roomKey (メッセージストリーム) ─
 // v726 #328 layout 改修:
 //   (a) チャンネル / DM 選択をタブ的に上部に並べる + 未読件数バッジ。
-//   (b) 入力欄を viewport 下に固定 (旧版は card 内 flex 末尾で スクロール先にあった)。
+//   (b) 入力欄を viewport 下に固定 (旧版は card 内 flex 末尾でスクロール先にあった)。
 export async function renderChatRoom({ params }) {
   stopPoll();
   _currentRoom = decodeURIComponent(params.roomKey);
@@ -111,7 +111,7 @@ export async function renderChatRoom({ params }) {
         <div class="muted">読み込み中…</div>
       </div>
       <div style="border-top:1px solid var(--line); padding:8px 10px; background:#fafafa; display:flex; gap:6px; align-items:flex-end; flex:none">
-        <textarea id="cr-input" rows="2" maxlength="4000" placeholder="メッセージ を 入力 (Ctrl+Enter で 送信)" style="flex:1; box-sizing:border-box; resize:none; min-height:36px; max-height:140px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
+        <textarea id="cr-input" rows="2" maxlength="4000" placeholder="メッセージを入力 (Ctrl+Enter で送信)" style="flex:1; box-sizing:border-box; resize:none; min-height:36px; max-height:140px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
         <button id="cr-send" class="btn primary" style="flex:none">送信</button>
       </div>
     </div>
@@ -147,7 +147,7 @@ export async function renderChatRoom({ params }) {
       try {
         const u = await get('/api/users');
         const other = (u.items || []).find(x => x.id === otherUid);
-        if (other) headHtml = `💬 ${escapeHtml(other.display_name)} と の DM`;
+        if (other) headHtml = `💬 ${escapeHtml(other.display_name)} との DM`;
       } catch (_) {}
     }
     document.getElementById('cr-head').innerHTML = headHtml || `<span class="muted">${escapeHtml(_currentRoom)}</span>`;
@@ -186,7 +186,7 @@ async function loadMessages(scrollToBottom = false) {
   const items = d.items || [];
   if (!items.length) {
     if (_lastMsgId === 0) {
-      stream.innerHTML = '<div class="muted">まだ メッセージ が ありません</div>';
+      stream.innerHTML = '<div class="muted">まだメッセージがありません</div>';
     }
     return;
   }
@@ -204,7 +204,7 @@ async function loadMessages(scrollToBottom = false) {
     if (b.dataset.bound) return;
     b.dataset.bound = '1';
     b.addEventListener('click', async () => {
-      if (!confirm('この メッセージ を 削除 しますか?')) return;
+      if (!confirm('このメッセージを削除しますか?')) return;
       try {
         await del('/api/chat/messages/' + b.dataset.mid);
         b.closest('.cm-row')?.remove();
@@ -213,11 +213,11 @@ async function loadMessages(scrollToBottom = false) {
   });
 }
 
-// v670 Slack 風 メッセージ 表示: 全 メッセージ 左寄せ、 アバター + 名前 + 時刻 を ヘッダ に、
-// 削除 ボタン は hover で 出る (.cm-row:hover .cm-del で 表示)。
+// v670 Slack 風メッセージ表示: 全メッセージ左寄せ、 アバター + 名前 + 時刻をヘッダに、
+// 削除ボタンは hover で出る (.cm-row:hover .cm-del で表示)。
 function renderMsg(m, meId) {
   if (m.deleted_at) {
-    return `<div class="cm-row" style="font-size:12px; color:#999; padding:4px 0; font-style:italic">(削除 された メッセージ)</div>`;
+    return `<div class="cm-row" style="font-size:12px; color:#999; padding:4px 0; font-style:italic">(削除されたメッセージ)</div>`;
   }
   const mine = Number(m.sender_user_id) === meId;
   const time = String(m.created_at).slice(11, 16);
@@ -235,7 +235,7 @@ function renderMsg(m, meId) {
       ${mine ? `<button class="cm-del" data-mid="${m.id}" style="position:absolute; top:6px; right:0; opacity:0; background:#fff; border:1px solid #ddd; border-radius:4px; padding:2px 8px; font-size:11px; color:#666; cursor:pointer; transition:opacity 0.1s">🗑 削除</button>` : ''}
     </div>`;
 }
-// hover で 削除 ボタン 表示
+// hover で削除ボタン表示
 if (typeof document !== 'undefined' && !document.getElementById('cm-hover-style')) {
   const s = document.createElement('style');
   s.id = 'cm-hover-style';

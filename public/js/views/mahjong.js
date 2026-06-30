@@ -1,5 +1,5 @@
-// /#/mahjong — 麻雀 Phase 1: 賭けプール + 結果分配 (v553 #209)。 実ゲームは外部 (雀魂 等)。
-//   lazy import で 普段は読み込まれない (apps から 開いた時だけ)。 Phase 2 で実ゲーム化時に重くなる予定。
+// /#/mahjong — 麻雀 Phase 1: 賭けプール + 結果分配 (v553 #209)。 実ゲームは外部 (雀魂等)。
+//   lazy import で普段は読み込まれない (apps から開いた時だけ)。 Phase 2 で実ゲーム化時に重くなる予定。
 
 import { get, post } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
@@ -18,13 +18,13 @@ export async function renderMahjong() {
         <a class="btn primary" href="#/mahjong/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        4 人で 50pt 預けて 1〜4 位申告で 自動分配 (50/30/15/0% + 場代 5%)。 実ゲームは 雀魂 / 紙麻雀 で。
+        4 人で 50pt 預けて 1〜4 位申告で自動分配 (50/30/15/0% + 場代 5%)。 実ゲームは雀魂 / 紙麻雀で。
       </div>
     </div>
     <div id="mj-list" class="list"><div class="muted">読み込み中…</div></div>
   `;
   document.getElementById('mj-ai').addEventListener('click', async () => {
-    if (!confirm('AI 3 体と 練習対戦 を 始めますか? (プレイフィー 5pt)')) return;
+    if (!confirm('AI 3 体と練習対戦を始めますか? (プレイフィー 5pt)')) return;
     const btn = document.getElementById('mj-ai');
     btn.disabled = true; btn.textContent = '起動中…';
     try {
@@ -70,7 +70,7 @@ export async function renderMahjongNew() {
       <h2 style="margin:6px 0">🀄 麻雀 — 新規卓</h2>
       <label class="field">
         <span class="lbl">タイトル (任意)</span>
-        <input type="text" id="mj-title" maxlength="200" placeholder="例: ラボ麻雀 第3回">
+        <input type="text" id="mj-title" maxlength="200" placeholder="例: ラボ麻雀第3回">
       </label>
       <label class="field">
         <span class="lbl">参加料 (buy-in)</span>
@@ -78,13 +78,13 @@ export async function renderMahjongNew() {
         <div class="hint-sm">4 人で 4 × buy-in = pot。 場代 5% 引いた残りを 50/30/15/0% で配ります。</div>
       </label>
       <div style="margin-top:10px">
-        <span class="lbl" style="font-weight:600">対象者 を 指定 (任意、 3 人 選ぶと 即開始)</span>
+        <span class="lbl" style="font-weight:600">対象者を指定 (任意、 3 人選ぶと即開始)</span>
         <div id="mj-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin:6px 0"></div>
         <div id="mj-chips" class="row" style="gap:6px; flex-wrap:wrap"></div>
       </div>
       <div class="hint-sm" style="margin-top:8px; color:var(--muted)">
-        起案者は 自動的に 参加 (buy-in は 即徴収)。 対象者 指定 で 3 人 選ぶと、
-        全員から 一括徴収 + 通知 + 即 開始。 指定なし なら 公開卓 で 募集。
+        起案者は自動的に参加 (buy-in は即徴収)。 対象者指定で 3 人選ぶと、
+        全員から一括徴収 + 通知 + 即開始。 指定なしなら公開卓で募集。
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/mahjong" class="btn">キャンセル</a>
@@ -109,7 +109,7 @@ export async function renderMahjongNew() {
     const title = document.getElementById('mj-title').value.trim();
     const buyIn = Number(document.getElementById('mj-buyin').value) || 50;
     const ids = picker ? [...picker.getSelected()] : [];
-    if (ids.length > 0 && ids.length !== 3) { toast('対象者は 3 人 ちょうど、 または 指定なし'); return; }
+    if (ids.length > 0 && ids.length !== 3) { toast('対象者は 3 人ちょうど、 または指定なし'); return; }
     const btn = document.getElementById('mj-go');
     btn.disabled = true; btn.textContent = '作成中…';
     try {
@@ -199,7 +199,7 @@ function paintDetail(g) {
 
     ${g.status === 'playing' ? `<div class="card">
       <div class="bold">対局中 🀄</div>
-      <p class="hint">雀魂 / 紙麻雀 等で半荘終わったら 起案者が 「結果を報告」 を押して 1〜4位を入力してください。</p>
+      <p class="hint">雀魂 / 紙麻雀等で半荘終わったら起案者が 「結果を報告」 を押して 1〜4位を入力してください。</p>
     </div>` : ''}
 
     ${g.status === 'finished' ? `<div class="card">

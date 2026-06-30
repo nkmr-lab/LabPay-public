@@ -47,7 +47,7 @@ export async function renderProduct({ params }) {
     root.querySelectorAll('button[data-consume]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const lid = Number(btn.dataset.consume);
-        if (!confirm('在庫を 1 個 自分用に減らしますか? (ポイント移動なし)')) return;
+        if (!confirm('在庫を 1 個自分用に減らしますか? (ポイント移動なし)')) return;
         btn.disabled = true;
         try {
           const res = await post(`/api/listings/${lid}/consume`, { qty: 1 });

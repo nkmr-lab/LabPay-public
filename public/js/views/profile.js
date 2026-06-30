@@ -1,6 +1,6 @@
-// /#/users/:id — 公開プロフィール ビュー。
+// /#/users/:id — 公開プロフィールビュー。
 // 表示項目: avatar / display_name / grade / 趣味 / 推し / Scrapbox。
-// 編集は出来ない (= 設定ページ で 自分のだけ 編集)。
+// 編集は出来ない (= 設定ページで自分のだけ編集)。
 
 import { get } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
@@ -41,7 +41,7 @@ export async function renderUserProfile({ params }) {
       ${section('❤️ 推し', p.favorites)}
       ${(p.paypay_id || p.bank_info) ? `
         <div style="margin-top:14px">
-          <div class="bold" style="margin-bottom:4px">💴 外部 送金 先</div>
+          <div class="bold" style="margin-bottom:4px">💴 外部送金先</div>
           <div style="background:#faf7fd; padding:10px; border-radius:8px; font-size:14px">
             ${p.paypay_id ? `
               <div style="margin-bottom:6px; font-size:13px">
@@ -56,13 +56,13 @@ export async function renderUserProfile({ params }) {
               </div>` : ''}
             ${!isMe ? `
               <div class="row" style="gap:6px; margin-top:6px; justify-content:flex-end">
-                <a href="#/send?to=${p.id}" class="btn primary" style="font-size:13px">💸 LabPay で 送金</a>
+                <a href="#/send?to=${p.id}" class="btn primary" style="font-size:13px">💸 LabPay で送金</a>
               </div>` : ''}
           </div>
         </div>
       ` : ''}
       ${(!p.hobbies && !p.favorites && !p.paypay_id && !p.bank_info)
-        ? '<div class="hint" style="margin-top:14px; text-align:center">まだ 何も 登録されていません</div>'
+        ? '<div class="hint" style="margin-top:14px; text-align:center">まだ何も登録されていません</div>'
         : ''}
       ${isMe
         ? '<div class="row" style="margin-top:14px; justify-content:center"><a href="#/settings" class="btn primary">設定で編集</a></div>'

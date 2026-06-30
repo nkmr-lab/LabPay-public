@@ -1,7 +1,7 @@
 <?php
-// /api/auctions — オークション MVP。 出品 + 入札 + lazy settle。 落札後の 円 移動は無し。
+// /api/auctions — オークション MVP。 出品 + 入札 + lazy settle。 落札後の円移動は無し。
 // Routes:
-//   GET    /api/auctions                  自分の関連 + 進行中の 一覧
+//   GET    /api/auctions                  自分の関連 + 進行中の一覧
 //   POST   /api/auctions                  出品作成
 //   GET    /api/auctions/:id              詳細 (lazy settle 含む)
 //   POST   /api/auctions/:id/bids         入札
@@ -25,8 +25,8 @@ function route_auctions(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no auctions route for $method $sub", 404);
 }
 
-// 締切過ぎでまだ settle されてないオークションを その場で確定。 高 traffic でない
-// 前提なので cron 不要。 落札者 + 出品者 に通知。
+// 締切過ぎでまだ settle されてないオークションをその場で確定。 高 traffic でない
+// 前提なので cron 不要。 落札者 + 出品者に通知。
 function auctions_maybe_settle(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT id, seller_user_id, title, closes_at, settled_at, cancelled_at
                            FROM auctions WHERE id = ?");
@@ -70,7 +70,7 @@ function auctions_maybe_settle(PDO $pdo, array $cfg, int $id): void {
 function auctions_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // 締切過ぎ + 未 settle を まとめて lazy settle (極小コスト)。
+    // 締切過ぎ + 未 settle をまとめて lazy settle (極小コスト)。
     $stExp = $pdo->prepare("SELECT id FROM auctions
                             WHERE settled_at IS NULL AND cancelled_at IS NULL
                               AND closes_at <= NOW() LIMIT 50");
@@ -179,7 +179,7 @@ function auctions_bid(PDO $pdo, array $cfg, int $id): void {
     $amount = isset($body['amount']) ? max(0, (int)$body['amount']) : 0;
     if ($amount <= 0) throw new ApiException('bad_request', '入札額は 1 以上', 400);
 
-    // ロック取って 競合を防ぐ (高 traffic でないので楽観でも良いが MVP として真面目に)
+    // ロック取って競合を防ぐ (高 traffic でないので楽観でも良いが MVP として真面目に)
     db_tx($pdo, function () use ($pdo, $cfg, $u, $id, $amount) {
         $st = $pdo->prepare("SELECT seller_user_id, title, min_price, closes_at,
                                     cancelled_at, settled_at FROM auctions WHERE id=? FOR UPDATE");
@@ -191,7 +191,7 @@ function auctions_bid(PDO $pdo, array $cfg, int $id): void {
         if (strtotime((string)$a['closes_at']) <= time()) throw new ApiException('bad_request', '締切超過', 400);
         if ((int)$a['seller_user_id'] === (int)$u['id']) throw new ApiException('bad_request', '自分の出品に入札できません', 400);
         if ($amount < (int)$a['min_price']) {
-            throw new ApiException('bad_request', "最低 {$a['min_price']}円 から", 400);
+            throw new ApiException('bad_request', "最低 {$a['min_price']}円から", 400);
         }
         $stT = $pdo->prepare("SELECT bidder_user_id, amount FROM auction_bids
                               WHERE auction_id = ? ORDER BY amount DESC, id ASC LIMIT 1");
@@ -199,7 +199,7 @@ function auctions_bid(PDO $pdo, array $cfg, int $id): void {
         $top = $stT->fetch(PDO::FETCH_ASSOC);
         if ($top && $amount <= (int)$top['amount']) {
             throw new ApiException('bad_request',
-                "現在の最高入札 {$top['amount']}円 より高い額が必要", 400);
+                "現在の最高入札 {$top['amount']}円より高い額が必要", 400);
         }
         $pdo->prepare("INSERT INTO auction_bids (auction_id, bidder_user_id, amount, created_at)
                        VALUES (?,?,?, NOW())")

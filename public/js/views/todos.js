@@ -1,5 +1,5 @@
-// /#/todos — 個人 TODO リスト。 自分用の やる こと メモ。 サーバ保存 で 端末間 共有。
-// v482 #72 締切 (due_at) サポート + ホーム カード で 直近 締切 を ハイライト。
+// /#/todos — 個人 TODO リスト。 自分用のやることメモ。 サーバ保存で端末間共有。
+// v482 #72 締切 (due_at) サポート + ホームカードで直近締切をハイライト。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -20,7 +20,7 @@ export async function renderTodos() {
     </div>
     <div id="td-list-open" class="list"></div>
     <details class="card" id="td-done-card" hidden>
-      <summary style="cursor:pointer; font-weight:700">✓ 完了 した もの (<span id="td-done-count">0</span>)</summary>
+      <summary style="cursor:pointer; font-weight:700">✓ 完了したもの (<span id="td-done-count">0</span>)</summary>
       <div id="td-list-done" class="list" style="margin-top:8px"></div>
     </details>
   `;
@@ -79,7 +79,7 @@ async function reload() {
     const done = items.filter(t =>  t.done);
     document.getElementById('td-list-open').innerHTML = open.length
       ? open.map(rowHtml).join('')
-      : '<div class="empty">未完了 の TODO は ありません 🎉</div>';
+      : '<div class="empty">未完了の TODO はありません 🎉</div>';
     document.getElementById('td-list-done').innerHTML = done.map(rowHtml).join('');
     const dc = document.getElementById('td-done-card');
     if (dc) {
@@ -95,7 +95,7 @@ function rowHtml(t) {
   const dueLabel = t.due_at && !isDone
     ? `<span style="color:${dueColor(t.due_at)}; font-weight:600">⏰ ${escapeHtml(fmtDue(t.due_at))}</span> · `
     : '';
-  // v483 #75 url / 相手 / 詳細 を 表示。
+  // v483 #75 url / 相手 / 詳細を表示。
   const urlLine = t.url
     ? `<div class="meta" style="font-size:12px"><a href="${escapeHtml(t.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 ${escapeHtml(t.url.length > 60 ? t.url.slice(0, 60) + '…' : t.url)}</a></div>`
     : '';
@@ -116,7 +116,7 @@ function rowHtml(t) {
         <div class="meta" style="font-size:11px">${dueLabel}${escapeHtml(t.created_at || '')}${t.done_at ? ' · 完了 ' + escapeHtml(t.done_at) : ''}</div>
       </div>
       <button data-td-detail class="btn" style="flex:none; font-size:11px; padding:2px 6px" title="詳細 (URL / 相手 / メモ)">📋</button>
-      <button data-td-due class="btn" style="flex:none; font-size:11px; padding:2px 6px" title="締切 設定">⏰</button>
+      <button data-td-due class="btn" style="flex:none; font-size:11px; padding:2px 6px" title="締切設定">⏰</button>
       <button data-td-edit class="btn" style="flex:none; font-size:11px; padding:2px 6px">✏</button>
       <button data-td-del class="btn danger" style="flex:none; font-size:11px; padding:2px 6px">×</button>
     </div>`;
@@ -130,13 +130,13 @@ function bindRows() {
       catch (e) { toast('失敗: ' + e.message); }
     });
     row.querySelector('[data-td-del]')?.addEventListener('click', async () => {
-      if (!confirm('この TODO を 削除しますか?')) return;
+      if (!confirm('この TODO を削除しますか?')) return;
       try { await del(`/api/todos/${id}`); await reload(); }
       catch (e) { toast('失敗: ' + e.message); }
     });
     row.querySelector('[data-td-due]')?.addEventListener('click', async () => {
       // 簡易: prompt で YYYY-MM-DD HH:MM、 空 = クリア。
-      const v = prompt('締切 を YYYY-MM-DD HH:MM で 入力 (空 で クリア):');
+      const v = prompt('締切を YYYY-MM-DD HH:MM で入力 (空でクリア):');
       if (v == null) return;
       try {
         await patch(`/api/todos/${id}`, { due_at: v.trim() || null });
@@ -146,7 +146,7 @@ function bindRows() {
     row.querySelector('[data-td-edit]')?.addEventListener('click', () => {
       const bodyEl = row.querySelector('[data-td-body]');
       const cur = bodyEl.textContent;
-      const v = prompt('TODO を 編集:', cur);
+      const v = prompt('TODO を編集:', cur);
       if (v == null) return;
       const nv = v.trim();
       if (!nv) return;
@@ -158,14 +158,14 @@ function bindRows() {
   });
 }
 
-// v483 #75 詳細 編集 パネル (url / 相手 / 詳細 / 締切)。 行 の 下 に 差し込む。
+// v483 #75 詳細編集パネル (url / 相手 / 詳細 / 締切)。 行の下に差し込む。
 let openDetailFor = null;
 async function openDetailPanel(id) {
-  // 既に 同じ ID で 開いて たら 閉じる トグル
+  // 既に同じ ID で開いてたら閉じるトグル
   document.querySelectorAll('[data-td-detail-panel]').forEach(p => p.remove());
   if (openDetailFor === id) { openDetailFor = null; return; }
   openDetailFor = id;
-  // 現在 値 を 取得 (再 GET より row dataset 使う方が ラク だが ここは シンプル に 再取得)
+  // 現在値を取得 (再 GET より row dataset 使う方がラクだがここはシンプルに再取得)
   let cur = {};
   try {
     const d = await get('/api/todos');
@@ -173,10 +173,10 @@ async function openDetailPanel(id) {
   } catch (_) {}
   const row = document.querySelector(`[data-td-id="${id}"]`);
   if (!row) return;
-  // ラボ メンバー 一覧 (相手 選択 用)
+  // ラボメンバー一覧 (相手選択用)
   let users = [];
   try { const r = await get('/api/users'); users = (r.items || r || []).filter(u => u.display_name); } catch (_) {}
-  const opts = ['<option value="">- ラボ メンバー から 選ぶ -</option>',
+  const opts = ['<option value="">- ラボメンバーから選ぶ -</option>',
     ...users.map(u => `<option value="${u.id}" ${Number(cur.partner_user_id) === Number(u.id) ? 'selected' : ''}>${escapeHtml(u.display_name)}</option>`)].join('');
   const dueLocal = cur.due_at ? String(cur.due_at).replace(' ', 'T').slice(0,16) : '';
   const panel = document.createElement('div');
@@ -187,17 +187,17 @@ async function openDetailPanel(id) {
     <label class="field"><span class="lbl">🔗 URL</span>
       <input type="url" data-d-url maxlength="500" placeholder="https://…" value="${escapeHtml(cur.url || '')}">
     </label>
-    <label class="field"><span class="lbl">👤 相手 (ラボ メンバー)</span>
+    <label class="field"><span class="lbl">👤 相手 (ラボメンバー)</span>
       <select data-d-partner>${opts}</select>
     </label>
-    <label class="field"><span class="lbl">👤 相手 (ラボ 外 / 自由 入力)</span>
-      <input type="text" data-d-partner-label maxlength="120" placeholder="例: 田中 先生、 〇〇社 ○○ 様" value="${escapeHtml(cur.partner_label || '')}">
+    <label class="field"><span class="lbl">👤 相手 (ラボ外 / 自由入力)</span>
+      <input type="text" data-d-partner-label maxlength="120" placeholder="例: 田中先生、 〇〇社 ○○ 様" value="${escapeHtml(cur.partner_label || '')}">
     </label>
     <label class="field"><span class="lbl">⏰ 締切</span>
       <input type="datetime-local" data-d-due value="${escapeHtml(dueLocal)}">
     </label>
     <label class="field"><span class="lbl">📝 詳細 / メモ</span>
-      <textarea data-d-notes maxlength="5000" rows="4" placeholder="補足、 メモ、 リンク 詳細 等">${escapeHtml(cur.notes || '')}</textarea>
+      <textarea data-d-notes maxlength="5000" rows="4" placeholder="補足、 メモ、 リンク詳細等">${escapeHtml(cur.notes || '')}</textarea>
     </label>
     <div class="row" style="gap:6px; justify-content:flex-end">
       <button data-d-cancel class="btn">閉じる</button>

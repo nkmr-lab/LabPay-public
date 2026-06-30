@@ -1,4 +1,4 @@
-// v619 自作ゲーム kind 管理 (admin)。 DB から 登録された kind を 編集 + 新規登録 + 無効化。
+// v619 自作ゲーム kind 管理 (admin)。 DB から登録された kind を編集 + 新規登録 + 無効化。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -15,8 +15,8 @@ export async function renderAdminCustomGames() {
       <a href="#/admin" class="hint">← 管理</a>
       <h2 style="margin:6px 0">🎮 自作ゲーム kind 管理</h2>
       <p class="hint" style="font-size:13px">
-        custom_game_kinds テーブル の 内容を 編集。 ここで 新規 kind を 登録すると、
-        対応する JS ファイル (デフォルト <code>/js/views/{kind}.js</code>) が あれば
+        custom_game_kinds テーブルの内容を編集。 ここで新規 kind を登録すると、
+        対応する JS ファイル (デフォルト <code>/js/views/{kind}.js</code>) があれば
         すぐに /api/custom-games/list に出現します。 詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
       </p>
     </div>
@@ -82,7 +82,7 @@ async function loadKinds() {
           <button class="btn acg-toggle" data-kind="${escapeHtml(k.kind)}" data-active="${k.is_active ? 1 : 0}" style="font-size:11px; padding:2px 8px">${k.is_active ? '無効化' : '有効化'}</button>
         </div>
         <div class="hint-sm" style="font-size:12px">${escapeHtml(k.description)}</div>
-        <div class="hint-sm" style="font-size:11px">module: <code>${escapeHtml(k.js_module_url)}</code>${k.created_by_name ? ` ・ 登録者: ${escapeHtml(k.created_by_name)}` : ''}</div>
+        <div class="hint-sm" style="font-size:11px">module: <code>${escapeHtml(k.js_module_url)}</code>${k.created_by_name ? ` ・登録者: ${escapeHtml(k.created_by_name)}` : ''}</div>
       </div>
     `).join('');
     root.querySelectorAll('.acg-toggle').forEach(b => {

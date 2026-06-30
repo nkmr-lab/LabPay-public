@@ -1,5 +1,5 @@
 // /#/notices — 重要連絡 + 学会情報。 シンプルなリスト (タイトル + 本文 + URL)。
-// カテゴリ切替 タブ。 ピン留めしたものは上に。
+// カテゴリ切替タブ。 ピン留めしたものは上に。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -101,7 +101,7 @@ export async function renderNoticeForm({ params, query } = {}) {
   };
   if (editId) {
     try {
-      // detail GET が無いので list を category なしで取って 該当 id をピックアップ。
+      // detail GET が無いので list を category なしで取って該当 id をピックアップ。
       const d = await get('/api/notices');
       const found = (d.items || []).find(x => Number(x.id) === editId);
       if (found) {

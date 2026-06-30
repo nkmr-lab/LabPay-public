@@ -1,6 +1,6 @@
-// 共有 モーダル ヘルパ。 各 view で 「position:fixed; inset:0; background:rgba(0,0,0,0.5);
-// z-index:9999; display:flex; ...」 の オーバーレイ + 「白い カード + × ボタン + 中身」 を
-// 書いていたが、 13 箇所くらいで コピペ されていた。 ここに集約。
+// 共有モーダルヘルパ。 各 view で 「position:fixed; inset:0; background:rgba(0,0,0,0.5);
+// z-index:9999; display:flex; ...」 のオーバーレイ + 「白いカード + × ボタン + 中身」 を
+// 書いていたが、 13 箇所くらいでコピペされていた。 ここに集約。
 //
 // 使い方:
 //   import { openModal } from '../modal.js';
@@ -14,12 +14,12 @@
 //     maxWidth: 480,    // 任意
 //     onClose: () => {} // 任意
 //   });
-//   m.root          // 中身の DOM (= 中の白カード)。 querySelector で 中身を取り出せる
+//   m.root          // 中身の DOM (= 中の白カード)。 querySelector で中身を取り出せる
 //   m.close()        // 閉じる
 //   m.setBusy(true)  // 保存中の disabled
 //
-// content か bodyHtml の どちらかを 指定 (content は DOM element、 bodyHtml は string)。
-// buttons を 省略すれば 右上 × だけ。
+// content か bodyHtml のどちらかを指定 (content は DOM element、 bodyHtml は string)。
+// buttons を省略すれば右上 × だけ。
 
 let zCounter = 9990;
 
@@ -109,7 +109,7 @@ export function openModal(opts = {}) {
   return api;
 }
 
-// 「キャンセル + 確定」 の 2 ボタン モーダルの 薄いラッパ。
+// 「キャンセル + 確定」 の 2 ボタンモーダルの薄いラッパ。
 // async function 内で `const ok = await confirmModal({...}); if (!ok) return;`
 export function confirmModal({ title, message, okLabel = 'OK', cancelLabel = 'キャンセル', danger = false } = {}) {
   return new Promise(resolve => {

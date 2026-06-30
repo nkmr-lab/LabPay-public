@@ -9,9 +9,9 @@ import { state, toast } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
 
 const ROLE_LABELS = {
-  villager: { name: '村人', icon: '👨‍🌾', desc: '昼の投票で 人狼を追放することが目標', color: '#666' },
-  wolf:     { name: '人狼', icon: '🐺', desc: '夜に襲撃、 仲間と協力して 村人を全滅させる', color: '#dc2626' },
-  seer:     { name: '占い師', icon: '🔮', desc: '夜に 1 人占って 人狼かどうか分かる', color: '#7c3aed' },
+  villager: { name: '村人', icon: '👨‍🌾', desc: '昼の投票で人狼を追放することが目標', color: '#666' },
+  wolf:     { name: '人狼', icon: '🐺', desc: '夜に襲撃、 仲間と協力して村人を全滅させる', color: '#dc2626' },
+  seer:     { name: '占い師', icon: '🔮', desc: '夜に 1 人占って人狼かどうか分かる', color: '#7c3aed' },
   knight:   { name: '騎士', icon: '🛡', desc: '夜に 1 人護衛、 人狼の襲撃から守る', color: '#15803d' },
 };
 
@@ -25,7 +25,7 @@ export async function renderJinrou() {
         <a class="btn primary" href="#/jinrou/new">＋ 新規卓</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        4-16 人で プレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人 で決着。
+        4-16 人でプレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。
       </div>
     </div>
     <div id="jr-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -34,7 +34,7 @@ export async function renderJinrou() {
     const d = await get('/api/jinrou/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('jr-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立てて メンバーを集めましょう (4 人以上必要)。</div>';
+      document.getElementById('jr-list').innerHTML = '<div class="empty">卓がありません。 「＋ 新規卓」 から立ててメンバーを集めましょう (4 人以上必要)。</div>';
       return;
     }
     document.getElementById('jr-list').innerHTML = items.map(g => {
@@ -69,7 +69,7 @@ export async function renderJinrouNew() {
       <a href="#/jinrou" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">🐺 人狼 — 新規卓</h2>
       <p class="hint" style="font-size:13px">
-        4 人以上で開始可能。 役職構成は 人数で自動調整 (4-5人: 人狼1 / 占い1 / 騎士1 / 残り村人、 6-8人: 人狼2、 9-12人: 人狼3、 13-16人: 人狼4)。
+        4 人以上で開始可能。 役職構成は人数で自動調整 (4-5人: 人狼1 / 占い1 / 騎士1 / 残り村人、 6-8人: 人狼2、 9-12人: 人狼3、 13-16人: 人狼4)。
       </p>
       <label class="field">
         <span class="lbl">プレイフィー (pt 1 人あたり)</span>
@@ -82,7 +82,7 @@ export async function renderJinrouNew() {
       </div>
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px">
         <input type="checkbox" id="jr-instant" checked>
-        対象者で 即開始 (3 人以上 招待で 全員から 一括徴収 + 役職配布 + 即 night phase)
+        対象者で即開始 (3 人以上招待で全員から一括徴収 + 役職配布 + 即 night phase)
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:10px">
         <a href="#/jinrou" class="btn">キャンセル</a>

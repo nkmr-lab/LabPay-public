@@ -1,10 +1,10 @@
-// /#/groups/:id/map — グループのスケジュールに登録された lat/lng を マップ表示。
+// /#/groups/:id/map — グループのスケジュールに登録された lat/lng をマップ表示。
 // v428 拡張:
-//   - 地図の center + zoom を group_id 別 localStorage で 復元
+//   - 地図の center + zoom を group_id 別 localStorage で復元
 //   - 「📍 自分の位置へ」 ボタン (現在地に flyTo)
-//   - 「📡 位置共有」 トグル: ON で 自分の位置を 30s 毎に POST、 メンバー全員 表示
-//   - マーカーが 画像URL ありの 場合は サムネ アイコン
-//   - ポップアップ に 画像 + タイトル + メモ
+//   - 「📡 位置共有」 トグル: ON で自分の位置を 30s 毎に POST、 メンバー全員表示
+//   - マーカーが画像URL ありの場合はサムネアイコン
+//   - ポップアップに画像 + タイトル + メモ
 
 import { get, post, del as apiDel } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -48,16 +48,16 @@ function clearCustomOrder(gid)  { rmKey(ORDER_KEY(gid)); }
 function loadLinePref() { return localStorage.getItem(LINE_KEY) !== '0'; }
 function saveLinePref(on) { try { localStorage.setItem(LINE_KEY, on ? '1' : '0'); } catch {} }
 
-// 各 user_id を 色相 ホイールに 振り分け (avatar が 無い ときの 円の色)
+// 各 user_id を色相ホイールに振り分け (avatar が無いときの円の色)
 function userColor(uid) {
   const h = (uid * 137.508) % 360;
   return `hsl(${h.toFixed(0)}, 70%, 50%)`;
 }
 
-// グループマップ用 内部 state (1 ページ生存期間)。
+// グループマップ用内部 state (1 ページ生存期間)。
 let mapState = null;
 function teardownMap() {
-  // v437 トップ バー/タブ の 復活
+  // v437 トップバー/タブの復活
   try { document.body.classList.remove('group-map-fullscreen'); } catch (_) {}
   if (!mapState) return;
   if (mapState.watchId !== null) navigator.geolocation.clearWatch(mapState.watchId);
@@ -71,7 +71,7 @@ export async function renderGroupMap({ params }) {
   teardownMap();
   const id = String(params.id);
   const app = document.getElementById('app');
-  // v437 地図モードは 上の トップバー + タブ列 を 隠して 広く 取る。
+  // v437 地図モードは上のトップバー + タブ列を隠して広く取る。
   document.body.classList.add('group-map-fullscreen');
   app.innerHTML = `
     <div class="card" style="padding:6px 10px; margin:0">
@@ -133,10 +133,10 @@ export async function renderGroupMap({ params }) {
     orderedIds = naturalOrder.map(it => Number(it.id));
   }
 
-  // v437 線で結ぶ / 並び順リセット は 撤去。 lineOn は 常に false 固定。
+  // v437 線で結ぶ / 並び順リセットは撤去。 lineOn は常に false 固定。
   const lineOn = false;
 
-  // 地図 init (1 回だけ)。 保存された view を 優先、 無ければ 地点に fitBounds。
+  // 地図 init (1 回だけ)。 保存された view を優先、 無ければ地点に fitBounds。
   const savedView = loadJSON(VIEW_KEY(id), null);
   const map = L.map('gm-map', { zoomControl: true });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -155,7 +155,7 @@ export async function renderGroupMap({ params }) {
   const memberLayer = L.layerGroup().addTo(map);
   const lineLayer   = L.layerGroup().addTo(map);
 
-  // mapState を 初期化 (teardown 用)
+  // mapState を初期化 (teardown 用)
   mapState = {
     gid: id, map, L, memberLayer,
     watchId: null,
@@ -189,7 +189,7 @@ export async function renderGroupMap({ params }) {
     const img = it.image_url
       ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:100%; max-width:240px; max-height:170px; object-fit:cover; border-radius:6px; margin-bottom:6px">`
       : '';
-    // v432 popup の 情報量 を 増やす。 時刻範囲 (start-end) / URL リンク / 追加者名 / メモ 300 字。
+    // v432 popup の情報量を増やす。 時刻範囲 (start-end) / URL リンク / 追加者名 / メモ 300 字。
     const time = (() => {
       const s = (it.start_time || '').slice(0, 5);
       const e = (it.end_time || '').slice(0, 5);
@@ -215,9 +215,9 @@ export async function renderGroupMap({ params }) {
       </div>`;
   };
 
-  // v433 markers / lines は 全件、 list は 「表示中エリアのみ」 toggle で
-  // map.getBounds() フィルタ → moveend/zoomend で 即 再描画。 1 画面で
-  // 地図と 連動する 検索 UI。
+  // v433 markers / lines は全件、 list は 「表示中エリアのみ」 toggle で
+  // map.getBounds() フィルタ → moveend/zoomend で即再描画。 1 画面で
+  // 地図と連動する検索 UI。
   const drawMarkersAndLines = () => {
     markerLayer.clearLayers();
     lineLayer.clearLayers();
@@ -239,7 +239,7 @@ export async function renderGroupMap({ params }) {
   const renderList = () => {
     const items = orderedIds.map(x => byId.get(x)).filter(Boolean);
     const boundsOnly = document.getElementById('gm-bounds-only')?.checked;
-    const visIdxs = items.map((_, i) => i);  // 全 index (絶対番号 = 元の 並び順)
+    const visIdxs = items.map((_, i) => i);  // 全 index (絶対番号 = 元の並び順)
     const filteredIdxs = boundsOnly
       ? (() => {
           let b;
@@ -265,7 +265,7 @@ export async function renderGroupMap({ params }) {
     if (!listEl) return;
     if (!filteredIdxs.length) {
       listEl.innerHTML = boundsOnly
-        ? '<div class="empty" style="padding:6px">表示中エリアに 地点なし。 地図を 動かしてください。</div>'
+        ? '<div class="empty" style="padding:6px">表示中エリアに地点なし。 地図を動かしてください。</div>'
         : '<div class="empty" style="padding:6px">地点なし</div>';
       return;
     }
@@ -291,7 +291,7 @@ export async function renderGroupMap({ params }) {
           <a href="https://maps.google.com/?q=${Number(it.lat)},${Number(it.lng)}" target="_blank" rel="noopener" class="btn" style="padding:2px 8px; font-size:11px; color:var(--primary)" onclick="event.stopPropagation()">Maps</a>
         </div>`;
     }).join('');
-    // 行 タップで 該当 マーカー の popup を 開く + 中心へ flyTo
+    // 行タップで該当マーカーの popup を開く + 中心へ flyTo
     listEl.querySelectorAll('[data-pin-id]').forEach(row => {
       row.addEventListener('click', (ev) => {
         if (ev.target.closest('button,a')) return;
@@ -300,7 +300,7 @@ export async function renderGroupMap({ params }) {
         if (!it) return;
         const latlng = [Number(it.lat), Number(it.lng)];
         map.flyTo(latlng, Math.max(map.getZoom(), 15), { duration: 0.5 });
-        // popup を 開く: marker レイヤから 同 latlng の マーカーを 探す
+        // popup を開く: marker レイヤから同 latlng のマーカーを探す
         markerLayer.eachLayer(m => {
           const ll = m.getLatLng?.();
           if (ll && Math.abs(ll.lat - latlng[0]) < 1e-6 && Math.abs(ll.lng - latlng[1]) < 1e-6) {
@@ -329,38 +329,38 @@ export async function renderGroupMap({ params }) {
     renderList();
   };
 
-  // 地図の 移動 / ズーム で 「表示中エリアのみ」 ON の 時 list を 再描画。
-  // v435 toggle 状態 に かかわらず moveend/zoomend で 必ず renderList (内部で
-  // checkbox を 読んで 分岐するので 二重判定 不要 / 早期 return を 避ける)。
+  // 地図の移動 / ズームで 「表示中エリアのみ」 ON の時 list を再描画。
+  // v435 toggle 状態にかかわらず moveend/zoomend で必ず renderList (内部で
+  // checkbox を読んで分岐するので二重判定不要 / 早期 return を避ける)。
   map.on('moveend zoomend', () => renderList());
   document.getElementById('gm-bounds-only')?.addEventListener('change', renderList);
 
   // v437 「自分の位置へ」 (flyTo のみ / 共有はしない)
   document.getElementById('gm-locate').addEventListener('click', () => {
-    if (!navigator.geolocation) { toast('この端末は 位置情報 に 対応していません'); return; }
+    if (!navigator.geolocation) { toast('この端末は位置情報に対応していません'); return; }
     navigator.geolocation.getCurrentPosition(
       (p) => {
         map.flyTo([p.coords.latitude, p.coords.longitude], 16, { duration: 0.8 });
         renderOwnDot(L, memberLayer, p.coords.latitude, p.coords.longitude, p.coords.accuracy);
       },
-      (err) => toast('位置取得 失敗: ' + (err.message || err.code)),
+      (err) => toast('位置取得失敗: ' + (err.message || err.code)),
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
     );
   });
 
-  // v456: 単発 共有 ボタン (📌) を 廃止。 ON/OFF トグル のみ で 統一 (要望#22)。
+  // v456: 単発共有ボタン (📌) を廃止。 ON/OFF トグルのみで統一 (要望#22)。
 
-  // 位置共有 トグル
+  // 位置共有トグル
   const shareToggle = document.getElementById('gm-share-toggle');
   shareToggle.checked = mapState.sharing;
   const updateShareStatus = (msg) => {
     document.getElementById('gm-share-st').textContent = msg;
   };
   const startSharing = () => {
-    if (!navigator.geolocation) { toast('位置情報 未対応'); shareToggle.checked = false; return; }
+    if (!navigator.geolocation) { toast('位置情報未対応'); shareToggle.checked = false; return; }
     mapState.sharing = true;
     try { localStorage.setItem(SHARE_KEY(id), '1'); } catch {}
-    updateShareStatus('📡 共有 開始しています…');
+    updateShareStatus('📡 共有開始しています…');
     const ping = (lat, lng, acc) => post(`/api/groups/${id}/locations`, { lat, lng, accuracy: acc });
     mapState.watchId = navigator.geolocation.watchPosition(
       (p) => {
@@ -369,10 +369,10 @@ export async function renderGroupMap({ params }) {
         ping(lat, lng, accuracy).catch(() => {});
         updateShareStatus(`📡 共有中 (精度 ±${Math.round(accuracy)}m)`);
       },
-      (err) => updateShareStatus('位置 取得 エラー: ' + (err.message || err.code)),
+      (err) => updateShareStatus('位置取得エラー: ' + (err.message || err.code)),
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 }
     );
-    // 安全網: 30 秒に 1 回 強制 ping (watchPosition が 沈黙する 端末向け)
+    // 安全網: 30 秒に 1 回強制 ping (watchPosition が沈黙する端末向け)
     mapState.pingTimer = setInterval(() => {
       if (mapState?.ownPos) ping(mapState.ownPos.lat, mapState.ownPos.lng, mapState.ownPos.accuracy).catch(() => {});
     }, 30000);
@@ -383,7 +383,7 @@ export async function renderGroupMap({ params }) {
     if (mapState.watchId !== null) { navigator.geolocation.clearWatch(mapState.watchId); mapState.watchId = null; }
     if (mapState.pingTimer) { clearInterval(mapState.pingTimer); mapState.pingTimer = null; }
     apiDel(`/api/groups/${id}/locations`).catch(() => {});
-    updateShareStatus('共有 停止');
+    updateShareStatus('共有停止');
   };
   shareToggle.addEventListener('change', (e) => {
     if (e.target.checked) startSharing();
@@ -391,7 +391,7 @@ export async function renderGroupMap({ params }) {
   });
   if (mapState.sharing) startSharing();
 
-  // メンバー位置 ポーリング (20 秒)
+  // メンバー位置ポーリング (20 秒)
   const pollMembers = async () => {
     try {
       const r = await get(`/api/groups/${id}/locations`);
@@ -412,13 +412,13 @@ export async function renderGroupMap({ params }) {
     redraw();
   } else {
     document.getElementById('gm-info').textContent =
-      '緯度経度が登録された予定はまだありません。 「📍 自分の位置へ」 や 「位置共有」 は 使えます。';
+      '緯度経度が登録された予定はまだありません。 「📍 自分の位置へ」 や 「位置共有」 は使えます。';
   }
 }
 
 function renderOwnDot(L, layer, lat, lng, accuracy) {
-  // own dot は member マーカーと 別管理 (上書きは pollMembers で 自動的に 行われる)
-  // ここでは ボタン押下 時の 瞬間 表示用 ピン だけ。
+  // own dot は member マーカーと別管理 (上書きは pollMembers で自動的に行われる)
+  // ここではボタン押下時の瞬間表示用ピンだけ。
   layer.eachLayer(l => { if (l._ownDot) layer.removeLayer(l); });
   const m = L.circleMarker([lat, lng], { radius: 7, color: '#0e7c63', fillColor: '#3fc3a3', fillOpacity: 0.9, weight: 2 });
   m._ownDot = true;
@@ -435,10 +435,10 @@ function drawMemberMarkers(L, layer, items) {
       ? `background:#fff center/cover no-repeat url('${cssUrl(it.avatar_url)}')`
       : `background:${color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px`;
     const dotClass = it.is_me ? 'border:3px solid #0e7c63' : `border:3px solid ${color}`;
-    // v486 #81 サーバ で 計算 した seconds_ago を 優先。 旅行 中 (端末 TZ ≠ JST) で
-    //   Date.parse が ローカル 解釈 して しまう 「-3500 秒前」 等 の バグ を 回避。
-    //   updated_at_iso (タイムゾーン 付き ISO) を 2 番手 fallback、 旧 updated_at は
-    //   最終 fallback として 残す。
+    // v486 #81 サーバで計算した seconds_ago を優先。 旅行中 (端末 TZ ≠ JST) で
+    //   Date.parse がローカル解釈してしまう 「-3500 秒前」 等のバグを回避。
+    //   updated_at_iso (タイムゾーン付き ISO) を 2 番手 fallback、 旧 updated_at は
+    //   最終 fallback として残す。
     let since;
     if (typeof it.seconds_ago === 'number') {
       since = Math.max(0, Math.floor(it.seconds_ago));
@@ -451,7 +451,7 @@ function drawMemberMarkers(L, layer, items) {
               : since < 3600 ? `${Math.floor(since/60)}分前`
               : since < 86400 ? `${Math.floor(since/3600)}時間前`
               : `${Math.floor(since/86400)}日前`;
-    // v437 マーカー の 下に 名前 + 観測時刻 を 常時表示
+    // v437 マーカーの下に名前 + 観測時刻を常時表示
     const labelBg = it.is_me ? '#0e7c63' : color;
     const html = `
       <div style="display:flex; flex-direction:column; align-items:center">

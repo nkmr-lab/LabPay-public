@@ -45,12 +45,12 @@ export async function renderSettings() {
         <textarea id="profile-favorites" rows="3" maxlength="1000" placeholder="例: 〇〇 (アニメ) / △△ (バンド) / □□ (アイドル)"></textarea>
       </label>
       <label class="field">
-        <span class="lbl">💴 PayPay ID (送金 用、 他のメンバーから 見えます)</span>
-        <input type="text" id="profile-paypay" maxlength="100" placeholder="例: yourid1234 (PayPay 内 で 検索 できる ID)">
+        <span class="lbl">💴 PayPay ID (送金用、 他のメンバーから見えます)</span>
+        <input type="text" id="profile-paypay" maxlength="100" placeholder="例: yourid1234 (PayPay 内で検索できる ID)">
       </label>
       <label class="field">
-        <span class="lbl">🏦 銀行口座 メモ (送金 用、 他のメンバーから 見えます)</span>
-        <textarea id="profile-bank" rows="3" maxlength="500" placeholder="例: ○○銀行 ○○支店 普通 1234567 ヤマダ タロウ"></textarea>
+        <span class="lbl">🏦 銀行口座メモ (送金用、 他のメンバーから見えます)</span>
+        <textarea id="profile-bank" rows="3" maxlength="500" placeholder="例: ○○銀行 ○○支店普通 1234567 ヤマダタロウ"></textarea>
       </label>
       <div class="row" style="gap:6px; align-items:flex-end">
         <label class="field" style="flex:1">
@@ -63,7 +63,7 @@ export async function renderSettings() {
         </label>
       </div>
       <label class="field">
-        <span class="lbl">📍 出生地 (任意、 西洋占星術のラッキー方位に使用) <span class="hint-sm">— 都市名 or 都道府県 で OK (出生時間は不要)</span></span>
+        <span class="lbl">📍 出生地 (任意、 西洋占星術のラッキー方位に使用) <span class="hint-sm">— 都市名 or 都道府県で OK (出生時間は不要)</span></span>
         <input type="text" id="profile-birth-place" maxlength="100" placeholder="例: 神戸市 / 兵庫県 / 東京">
       </label>
       <div class="row" style="gap:6px">
@@ -73,14 +73,14 @@ export async function renderSettings() {
       </div>
     </div>
 
-    <!-- v818 設定 カード の 並び を 整理 (プロフィール → ホーム ウィジェット → タブ →
-         クイック ボタン → 通知 → Google Calendar → 自分 の 端末 → 自動 検出 → 自作 ゲーム
-         → ポイント 表示欄 → 効果音 → その他) -->
+    <!-- v818 設定カードの並びを整理 (プロフィール → ホームウィジェット → タブ →
+         クイックボタン → 通知 → Google Calendar → 自分の端末 → 自動検出 → 自作ゲーム
+         → ポイント表示欄 → 効果音 → その他) -->
 
     <div class="card">
-      <h3>ホーム ウィジェット</h3>
+      <h3>ホームウィジェット</h3>
       <p class="hint">
-        ホームに置く ウィジェット (進行中・タスク・いる人 など) と並び順を変えられます。
+        ホームに置くウィジェット (進行中・タスク・いる人など) と並び順を変えられます。
         チェックを外すと非表示。 ↑ ↓ で順番を入れ替え。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-layout-list" class="list" style="margin-top:6px"></div>
@@ -96,10 +96,10 @@ export async function renderSettings() {
     </div>
 
     <div class="card" id="home-actions">
-      <h3>ホーム上部の クイック ボタン</h3>
+      <h3>ホーム上部のクイックボタン</h3>
       <p class="hint">
-        ホーム画面の 残高 直下に 並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
-        必要なものだけ ON に。 設定は このブラウザ にのみ 保存されます。
+        ホーム画面の残高直下に並ぶ 「買う / 売る / 頼む / 送る…」 のセット。
+        必要なものだけ ON に。 設定はこのブラウザにのみ保存されます。
       </p>
       <div id="home-actions-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -179,7 +179,7 @@ export async function renderSettings() {
       <div style="background:#f0f9ff; border-left:4px solid #0284c7; padding:8px 12px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; line-height:1.7">
         <div class="bold" style="color:#0284c7; margin-bottom:4px">🔑 Personal Access Token (PAT) ってなに?</div>
         Scrapbox にログインするためのパスワードの代わりになる、長いランダムな文字列です。
-        scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、LabPay は その鍵を使って「あなたとして」 Scrapbox に読み書きできます。
+        scrapbox.io で自分用に 1 つ発行して LabPay に貼っておくと、LabPay はその鍵を使って「あなたとして」 Scrapbox に読み書きできます。
         パスワードより安全 (scrapbox のログイン情報自体を LabPay に渡さなくていい、鍵単体はいつでも取り消せる) で、期限が来ても自分で作り直せます。
       </div>
 
@@ -216,19 +216,19 @@ export async function renderSettings() {
     </div>
 
     <div class="card">
-      <h3>🎮 自作ゲーム を 登録</h3>
+      <h3>🎮 自作ゲームを登録</h3>
       <p class="hint">
-        自分で 書いた 2 人対戦 ゲーム を LabPay に 追加できます。 JS ファイル を アップロード で OK
-        (場代 % を設定 すれば pot から 提供者特典 が 入ります)。
+        自分で書いた 2 人対戦ゲームを LabPay に追加できます。 JS ファイルをアップロードで OK
+        (場代 % を設定すれば pot から提供者特典が入ります)。
       </p>
-      <a href="#/my-games" class="btn">🎮 自作ゲーム 管理</a>
+      <a href="#/my-games" class="btn">🎮 自作ゲーム管理</a>
     </div>
 
     <div class="card" id="balance-comp">
       <h3>ポイント表示欄 (ホーム残高カード) の要素</h3>
       <p class="hint">
-        時計 / 残高 / 連続ラボイン / 実績メダル / 占い / チェックイン / ショートカット を ON/OFF。
-        占い と 実績 は デフォルト OFF。
+        時計 / 残高 / 連続ラボイン / 実績メダル / 占い / チェックイン / ショートカットを ON/OFF。
+        占いと実績はデフォルト OFF。
       </p>
       <div id="balance-comp-list" class="list" style="margin-top:6px"></div>
     </div>
@@ -236,7 +236,7 @@ export async function renderSettings() {
     <div class="card">
       <h3>効果音</h3>
       <p class="hint">
-        決済 / ルーレット などで鳴らす音。 admin 規定値を使う / 自分で選ぶ / 無音 から選べます。
+        決済 / ルーレットなどで鳴らす音。 admin 規定値を使う / 自分で選ぶ / 無音から選べます。
         音源そのものは admin が登録します。
       </p>
       <div id="sound-prefs"><div class="muted">読み込み中…</div></div>
@@ -248,9 +248,9 @@ export async function renderSettings() {
     </div>
   `;
 
-  // v525 #175 各カテゴリ (h2 が無い card) を デフォルト折りたたみに変換。
+  // v525 #175 各カテゴリ (h2 が無い card) をデフォルト折りたたみに変換。
   //   先頭の h2「設定」 カードはそのまま、 各 .card で 「:scope > h3」 を持つものを
-  //   <details>/<summary> に変換 して default closed に。
+  //   <details>/<summary> に変換して default closed に。
   for (const card of document.querySelectorAll('#app > .card')) {
     const h3 = card.querySelector(':scope > h3');
     if (!h3) continue;
@@ -327,7 +327,7 @@ export async function renderSettings() {
   // v497 #103 アプリ表示設定撤去 (全部表示する方針)。 関数呼び出しも削除。
   renderHomeActionsEditor();
   renderBalanceCompEditor();
-  // v419b URL ?focus=home-actions の 場合は 該当 カードへ スクロール + 短時間 強調
+  // v419b URL ?focus=home-actions の場合は該当カードへスクロール + 短時間強調
   try {
     const q = new URLSearchParams(location.hash.split('?')[1] || '');
     const focus = q.get('focus');
@@ -464,11 +464,11 @@ function renderHomeLayoutEditor() {
     const visible = !hiddenSet.has(id);
     const isFirst = idx === 0;
     const isLast  = idx === orderedIds.length - 1;
-    // v869 #451 balance は 隠せない (= 設定 上 で チェック ボックス を disable + ヒント 表示)。
+    // v869 #451 balance は隠せない (= 設定上でチェックボックスを disable + ヒント表示)。
     const cantHide = (id === 'balance');
     return `
       <div class="list-item" data-card-id="${escapeHtml(id)}" style="gap:6px; align-items:center">
-        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:${cantHide ? 'default' : 'pointer'}" ${cantHide ? 'title="常時 表示 ・ 非表示 にはできません"' : ''}>
+        <label style="display:inline-flex; align-items:center; gap:8px; flex:1; cursor:${cantHide ? 'default' : 'pointer'}" ${cantHide ? 'title="常時表示・非表示にはできません"' : ''}>
           <input type="checkbox" class="hl-show" ${visible ? 'checked' : ''} ${cantHide ? 'disabled' : ''}>
           <span class="bold">${escapeHtml(card.title)}</span>
         </label>
@@ -484,10 +484,10 @@ function renderHomeLayoutEditor() {
       const set = new Set(l.hidden);
       if (ev.target.checked) set.delete(id); else set.add(id);
       l.hidden = [...set];
-      // v652 toggle 時 は 必ず 現在 の 全 id を order に 保存。 これで
+      // v652 toggle 時は必ず現在の全 id を order に保存。 これで
       // readHomeLayout() の NEW_DEFAULT_SHOWN auto-show merge() が
-      // 「order に 既に いる」 と 判断 して ユーザ の チェック 解除 を
-      // 上書き しなく なる (= チェック 外して も 反映 される)。
+      // 「order に既にいる」 と判断してユーザのチェック解除を
+      // 上書きしなくなる (= チェック外しても反映される)。
       l.order = orderedIds.slice();
       writeHomeLayout(l);
       renderHomeLayoutEditor();
@@ -571,7 +571,7 @@ function moveTab(id, delta, currentOrder) {
   renderTabLayoutEditor();
 }
 
-// v419 ホーム クイック ボタン 表示 設定
+// v419 ホームクイックボタン表示設定
 function renderBalanceCompEditor() {
   const root = document.getElementById('balance-comp-list');
   if (!root) return;
@@ -618,8 +618,8 @@ function renderHomeActionsEditor() {
 }
 
 // ---------------- アプリ表示 (/#/apps) ----------------
-// 各 app id について 表示 / 非表示 を localStorage に保存。 設定値が無ければ defaultVisible。
-// v444: 通知 軸 カテゴリ ごと に セクション 見出し付き で 並べる。
+// 各 app id について表示 / 非表示を localStorage に保存。 設定値が無ければ defaultVisible。
+// v444: 通知軸カテゴリごとにセクション見出し付きで並べる。
 function renderAppsVisEditor() {
   const root = document.getElementById('apps-vis-list');
   if (!root) return;
@@ -655,7 +655,7 @@ function renderAppsVisEditor() {
 
 // ---------------- Google Calendar ----------------
 // 連携状態を /api/me/calendar で取得し、未連携なら 「連携する」 ボタン
-// (Google OAuth incremental authz)、連携済みなら calendar 一覧 + toggle + 解除 を出す。
+// (Google OAuth incremental authz)、連携済みなら calendar 一覧 + toggle + 解除を出す。
 async function loadCalendar() {
   const root = document.getElementById('cal-section');
   if (!root) return;
@@ -689,7 +689,7 @@ async function loadCalendar() {
     let cals;
     try { cals = await get('/api/me/calendar/calendars'); }
     catch (e) {
-      // 401/409 で 再連携を促されたら 「連携する」 に戻ったような表示に。
+      // 401/409 で再連携を促されたら 「連携する」 に戻ったような表示に。
       document.getElementById('cal-list').innerHTML =
         `<div class="muted">${escapeHtml(e.message)}</div>`;
       return;
@@ -891,8 +891,8 @@ async function onLogoutFromSettings() {
   navigate('#/login');
 }
 
-// 効果音 設定 セクション: イベントごとに 規定 / 自分で選ぶ / 無音 の 3 モード切替。
-// custom の時だけ clip dropdown + 音量 slider を露出。 変更は その場で PATCH。
+// 効果音設定セクション: イベントごとに規定 / 自分で選ぶ / 無音の 3 モード切替。
+// custom の時だけ clip dropdown + 音量 slider を露出。 変更はその場で PATCH。
 async function loadSoundPrefs() {
   const root = document.getElementById('sound-prefs');
   if (!root) return;
@@ -935,7 +935,7 @@ async function loadSoundPrefs() {
         <button class="btn" data-sp-preview="${it.event_key}">▶ 試聴</button>
       </div>`;
     }).join('');
-    // 現在の pref_clip_id を 反映
+    // 現在の pref_clip_id を反映
     items.forEach(it => {
       if (it.mode === 'custom' && it.pref_clip_id) {
         const sel = root.querySelector(`[data-sp-clip="${it.event_key}"]`);
@@ -1006,7 +1006,7 @@ async function load() {
     const data = await get('/api/presence/devices');
     const root = document.getElementById('dev-list');
     // v524 #173 #177 ページ遷移中に async が解決すると root が null になることがある
-    //   ので 防御。 古い render の async 処理を捨てる形。
+    //   ので防御。 古い render の async 処理を捨てる形。
     if (!root) return;
     if (!data.items.length) {
       root.innerHTML = `<div class="empty">まだ登録されていません</div>`;
@@ -1102,11 +1102,11 @@ async function loadUnregistered() {
       const borderStyle = isMine
         ? `border-left:4px solid #f2c700; background:#fffdf4`
         : (isFresh ? `border-left:4px solid ${rc}` : `border-left:4px solid ${rc}33`);
-      // v686 #270 VM の MAC は 登録 不可 (API 側 で 弾く)。 button を 出さない。
+      // v686 #270 VM の MAC は登録不可 (API 側で弾く)。 button を出さない。
       const claimBtnCls = isMine ? 'primary' : 'primary';
       const claimBtnTxt = isMine ? 'これは私 ✓' : 'これは私';
       const claimBtnHtml = x.is_vm
-        ? '<span class="tag" style="font-size:10px; color:#c62828">登録 不可</span>'
+        ? '<span class="tag" style="font-size:10px; color:#c62828">登録不可</span>'
         : `<button data-claim="${escapeHtml(x.mac)}" class="${claimBtnCls}">${claimBtnTxt}</button>`;
       // Show 最終観測 only when it's different from 初観測 (single-shot observations
       // would otherwise duplicate the same timestamp twice).

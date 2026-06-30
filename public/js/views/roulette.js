@@ -230,7 +230,7 @@ async function loadMembers() {
       .join('');
     const bulkRoot = document.getElementById('rl-bulk');
     // メンバーが 5 人以下なら bulk select の出番はないので隠す
-    // (全員・学年・部屋 を出しても結局個別チェックが速い)。
+    // (全員・学年・部屋を出しても結局個別チェックが速い)。
     if (ALL_USERS.length <= 5) {
       bulkRoot.innerHTML = '';
       bulkRoot.style.display = 'none';
@@ -394,7 +394,7 @@ async function onSpin() {
   spinning = true;
   document.getElementById('rl-spin').disabled = true;
   document.getElementById('rl-result').textContent = '';
-  // 効果音 (各自が 設定 で 上書き可)。 click 直後なので autoplay 制限に引っかからない。
+  // 効果音 (各自が設定で上書き可)。 click 直後なので autoplay 制限に引っかからない。
   playSound('roulette_spin');
 
   try {
@@ -468,8 +468,8 @@ async function onSpin() {
       spinning = false;
       if (!r.dry_run) {
         loadHistory();
-        // 「答えバレ」 防止のため 通知は wheelStopped を待ってから。 transitionend が
-        // 既に来ていれば即時、 まだなら 待ってから 1 回だけ送る。 最大 4 秒で諦め。
+        // 「答えバレ」 防止のため通知は wheelStopped を待ってから。 transitionend が
+        // 既に来ていれば即時、 まだなら待ってから 1 回だけ送る。 最大 4 秒で諦め。
         const doNotify = () => post(`/api/roulettes/${r.id}/notify`, {}).catch(() => {});
         if (wheelStopped) {
           doNotify();
@@ -529,7 +529,7 @@ export async function renderRouletteResult({ params }) {
         ${Number(meId) === Number(r.winner_user_id) ? ' <span class="tag">あなた</span>' : ''}
       </div>
       <div class="muted" style="font-size:13px; margin-top:4px">候補 ${r.members.length} 人${prizeText}</div>`;
-    // 描画前に wcard を 表示 にしておく (drawStaticWheel が万一 throw しても
+    // 描画前に wcard を表示にしておく (drawStaticWheel が万一 throw しても
     // ホイールカードが 「たたまれて見えない」 状態にならないように)。
     wcard.hidden = false;
     drawStaticWheel(r);

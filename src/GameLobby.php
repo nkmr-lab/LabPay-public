@@ -1,13 +1,13 @@
 <?php
-// v571 リファクタ: ゲーム共通の 預託 / プレイフィー / 返金 ロジックをまとめる。
-//   mahjong / ito / jinrou が 同じパターン (起案 → 参加 → buy_in 預託 → 開始 → ... →
-//   終了 or cancel) を持っているので、 残高チェック / Ledger 送金 / pot 更新 を 1 か所に。
+// v571 リファクタ: ゲーム共通の預託 / プレイフィー / 返金ロジックをまとめる。
+//   mahjong / ito / jinrou が同じパターン (起案 → 参加 → buy_in 預託 → 開始 → ... →
+//   終了 or cancel) を持っているので、 残高チェック / Ledger 送金 / pot 更新を 1 か所に。
 //
 //   特性別の 2 モデル:
-//     A. プール型 (mahjong): 預託 → 終了時に 順位別 payout で戻る (一部は場代)
+//     A. プール型 (mahjong): 預託 → 終了時に順位別 payout で戻る (一部は場代)
 //     B. フィー型 (ito / jinrou): 預託 → 終了時に戻さない (lobby 中の cancel/leave のみ返金)
 //
-//   どちらも lobby 中の leave/cancel は 全額返金。
+//   どちらも lobby 中の leave/cancel は全額返金。
 declare(strict_types=1);
 
 final class GameLobby {

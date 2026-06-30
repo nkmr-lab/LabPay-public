@@ -4,7 +4,7 @@
 // 1/rate を返す。snapshot 用途なのでキャッシュは持たない (1 セッションに
 // 数回程度の呼び出ししか発生しない)。
 //
-// 内部関数 fx_rate_to_jpy() は ワリカの POST で rate_to_jpy が省略された
+// 内部関数 fx_rate_to_jpy() はワリカの POST で rate_to_jpy が省略された
 // 時にサーバー側で同じ値を snapshot するためにも使われる。
 
 declare(strict_types=1);

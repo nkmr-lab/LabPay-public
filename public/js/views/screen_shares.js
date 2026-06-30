@@ -9,7 +9,7 @@ export async function renderScreenShares() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">🖼 一時画像 共有</h2>
+      <h2 style="margin:0">🖼 一時画像共有</h2>
       <p class="hint" style="font-size:13px; margin-top:6px">
         ラボ全体 or グループ宛に画像 (+ 短文) を投げて、 期限内はみんなにすぐ表示されます。
         スマホで写真を撮って共有、 PC で画面ショットを撮って共有、 等。
@@ -30,7 +30,7 @@ export async function renderScreenShares() {
         <div class="row" style="gap:8px; margin-bottom:6px; flex-wrap:wrap">
           <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="all" checked> 📢 ラボ全体</label>
           <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="group"> 👥 グループ</label>
-          <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="users"> 👤 個人 (複数 選択 可)</label>
+          <label style="font-size:13px"><input type="radio" name="ss-target-mode" value="users"> 👤 個人 (複数選択可)</label>
         </div>
         <select id="ss-group" hidden style="margin-bottom:6px"></select>
         <div id="ss-users-wrap" hidden>
@@ -76,8 +76,8 @@ async function loadGroups() {
   } catch (_) { /* グループ取得失敗は致命的でない */ }
 }
 
-// v742 #353 宛先モード (全体 / グループ / 個人) で UI を 出し分け。
-//   個人モード では 共通 member picker を 遅延 ロード。
+// v742 #353 宛先モード (全体 / グループ / 個人) で UI を出し分け。
+//   個人モードでは共通 member picker を遅延ロード。
 let _userPicker = null;
 async function wireTargetMode() {
   const grpSel = document.getElementById('ss-group');
@@ -143,7 +143,7 @@ function wireUploader() {
       groupId = Number(gv);
     } else if (mode === 'users') {
       const sel = _userPicker ? [..._userPicker.getSelected()] : [];
-      if (!sel.length) { toast('宛先を 1 人以上 選んで ください'); return; }
+      if (!sel.length) { toast('宛先を 1 人以上選んでください'); return; }
       targetUserIds = sel;
     }
     const expires = Number(document.getElementById('ss-expires').value) || 60;
@@ -177,7 +177,7 @@ async function loadActive() {
       return;
     }
     root.innerHTML = items.map(s => {
-      // v742 #353 個人 (複数) 宛 を 表示
+      // v742 #353 個人 (複数) 宛を表示
       let target;
       if (s.target_user_names && s.target_user_names.length) {
         target = `👤 ${s.target_user_names.map(escapeHtml).join(' / ')}`;

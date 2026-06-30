@@ -1,7 +1,7 @@
 <?php
-// v538 #169 散歩に行きたくなるアプリ。 現在地 (lat/lng) を受けて、 周辺の 食べある記
-//   places から おすすめ散歩先を提案する。 未訪 (足跡なし) を優先 + ランダムシャッフル
-//   + 距離計算 (haversine)。 仲間に頼らない 個人向けの「ちょい散歩」 を後押し。
+// v538 #169 散歩に行きたくなるアプリ。 現在地 (lat/lng) を受けて、 周辺の食べある記
+//   places からおすすめ散歩先を提案する。 未訪 (足跡なし) を優先 + ランダムシャッフル
+//   + 距離計算 (haversine)。 仲間に頼らない個人向けの「ちょい散歩」 を後押し。
 //
 //   GET /api/walk/suggestions?lat=&lng=&radius=2000   半径 m (default 2000m)
 
@@ -62,7 +62,7 @@ function route_walk(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['items' => array_slice($out, 0, 20)]);
         return;
     }
-    // v589 散歩 セッション (歩いた軌跡を 記録)
+    // v589 散歩セッション (歩いた軌跡を記録)
     if ($sub === 'sessions' && $method === 'POST' && !isset($seg[2])) {
         walk_session_start($pdo, $uid);
         return;

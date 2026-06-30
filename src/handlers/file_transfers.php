@@ -1,8 +1,8 @@
 <?php
 // v733 #342 相手指定のファイル送受信機能。
-//   - 送信時にファイル + メッセージ + 受信者 を指定
+//   - 送信時にファイル + メッセージ + 受信者を指定
 //   - 受信者がダウンロードすると download_count + first_downloaded_at が記録される
-//   - 既存の原稿チェック / 査読 などは file_transfers.id を参照することで連携可能 (今後)
+//   - 既存の原稿チェック / 査読などは file_transfers.id を参照することで連携可能 (今後)
 
 const FT_MIME_ALLOW = [
     'application/pdf' => 'pdf',
@@ -79,9 +79,9 @@ function ft_list(PDO $pdo, array $cfg): void {
 
 function ft_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // v742 #353 複数 受信者 対応。 recipient_user_ids[] が 来たら 配列、 旧 互換 で
-    //   recipient_user_id 単数 も 受ける。 1 ファイルアップロード = 同じ batch_id で
-    //   N 行 INSERT (= 受信者ごと に download 状況 を 個別 に 持つ)。
+    // v742 #353 複数受信者対応。 recipient_user_ids[] が来たら配列、 旧互換で
+    //   recipient_user_id 単数も受ける。 1 ファイルアップロード = 同じ batch_id で
+    //   N 行 INSERT (= 受信者ごとに download 状況を個別に持つ)。
     $recipientIds = [];
     if (isset($_POST['recipient_user_ids']) && is_array($_POST['recipient_user_ids'])) {
         foreach ($_POST['recipient_user_ids'] as $rid) {
@@ -98,7 +98,7 @@ function ft_create(PDO $pdo, array $cfg): void {
     foreach ($recipientIds as $r) {
         if ($r === $meId) throw new ApiException('bad_request', '自分には送れません', 400);
     }
-    // 全員 humans であることを 確認
+    // 全員 humans であることを確認
     $place = implode(',', array_fill(0, count($recipientIds), '?'));
     $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE kind='human' AND id IN ($place)");
     $chk->execute($recipientIds);
@@ -109,7 +109,7 @@ function ft_create(PDO $pdo, array $cfg): void {
     if ($body === '') $body = null;
 
     // v735 #345 フォルダ送信対応: files[] が来たら zip にまとめる。
-    //   単一 file (旧 互換) は従来通り save_uploaded_file。
+    //   単一 file (旧互換) は従来通り save_uploaded_file。
     if (!empty($_FILES['files']) && is_array($_FILES['files']['tmp_name'] ?? null)) {
         if (!class_exists('ZipArchive')) {
             throw new ApiException('not_supported', 'サーバに ZipArchive がありません (PHP zip 拡張未導入)', 500);
@@ -134,8 +134,8 @@ function ft_create(PDO $pdo, array $cfg): void {
             $mb = (int)round(FT_MAX_BYTES / 1024 / 1024);
             throw new ApiException('too_large', "合計サイズが {$mb}MB を超えています", 413);
         }
-        // root folder の名前を decide。 v743 #354 フォルダ なし (= 単純 複数 ファイル) なら
-        //   'files.zip' に。 フォルダ ドロップなら 最初のパス先頭を採用。
+        // root folder の名前を decide。 v743 #354 フォルダなし (= 単純複数ファイル) なら
+        //   'files.zip' に。 フォルダドロップなら最初のパス先頭を採用。
         $hasFolderStruct = false;
         foreach ($paths as $p) {
             if (is_string($p) && str_contains($p, '/')) { $hasFolderStruct = true; break; }
@@ -190,8 +190,8 @@ function ft_create(PDO $pdo, array $cfg): void {
         $size    = (int)$saved['size'];
     }
 
-    // batch_id = 「同じ送信アクション」 を 識別 する 値。 一括 INSERT 後 に 一番 古い id
-    //   を batch_id として 全行 に書き戻す (= UI 側で 同一 batch をまとめて 表示)。
+    // batch_id = 「同じ送信アクション」 を識別する値。 一括 INSERT 後に一番古い id
+    //   を batch_id として全行に書き戻す (= UI 側で同一 batch をまとめて表示)。
     $ins = $pdo->prepare("INSERT INTO file_transfers
         (sender_user_id, recipient_user_id, file_path, original_name, file_size, mime_type, body, sent_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
@@ -212,7 +212,7 @@ function ft_create(PDO $pdo, array $cfg): void {
         $rid = $recipientIds[$i];
         try {
             notify_safely($pdo, $cfg, $rid, 'admin_notice',
-                "📦 {$u['display_name']} さんから ファイル 「{$originalName}」 が届きました",
+                "📦 {$u['display_name']} さんからファイル 「{$originalName}」 が届きました",
                 'file_transfer', $rowId);
         } catch (Throwable $_) {}
     }
@@ -255,7 +255,7 @@ function ft_delete(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("SELECT sender_user_id, recipient_user_id FROM file_transfers WHERE id=? AND deleted_at IS NULL");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', 'ファイル が 見つかりません', 404);
+    if (!$row) throw new ApiException('not_found', 'ファイルが見つかりません', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$row['sender_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '送信者または admin のみ削除可', 403);

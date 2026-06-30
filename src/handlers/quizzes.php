@@ -1,14 +1,14 @@
 <?php
-// v635 📝 フリップ クイズ ハンドラ。
+// v635 📝 フリップクイズハンドラ。
 //
 // state machine:
-//   asking     - 出題者が 問題文 を 入力中 (参加者は 待機)
-//   answering  - 参加者 が フリップ に 回答中 (各自 の 回答は 公開前 隠す)
-//   reveal     - 全員 の 回答を 一斉開示 (タップ で 拡大表示)
-//   scored     - 出題者 が マルバツ 採点済、 次の問 へ ボタン
-//   finished   - 終了 (集計 表示)
+//   asking     - 出題者が問題文を入力中 (参加者は待機)
+//   answering  - 参加者がフリップに回答中 (各自の回答は公開前隠す)
+//   reveal     - 全員の回答を一斉開示 (タップで拡大表示)
+//   scored     - 出題者がマルバツ採点済、 次の問へボタン
+//   finished   - 終了 (集計表示)
 //
-// 累積 集計 = history[] に 各問の {q, answers, scores} が 残る。
+// 累積集計 = history[] に各問の {q, answers, scores} が残る。
 
 declare(strict_types=1);
 
@@ -61,13 +61,13 @@ function quizzes_create(PDO $pdo, array $cfg, int $uid): void {
     $participants = $body['participants'] ?? [];
     if (!is_array($participants) || count($participants) < 1) throw new ApiException('bad_request', '参加者 1 人以上', 400);
     $participants = array_values(array_unique(array_map('intval', $participants)));
-    // creator も 自動で 参加者 に 入れる (= 解答者 でもある)
+    // creator も自動で参加者に入れる (= 解答者でもある)
     if (!in_array($uid, $participants, true)) array_unshift($participants, $uid);
     $place = implode(',', array_fill(0, count($participants), '?'));
     $stU = $pdo->prepare("SELECT id FROM users WHERE id IN ($place) AND kind='human'");
     $stU->execute($participants);
     $valid = array_map(fn($r) => (int)$r['id'], $stU->fetchAll(PDO::FETCH_ASSOC));
-    if (count($valid) !== count($participants)) throw new ApiException('bad_request', '無効な 参加者', 400);
+    if (count($valid) !== count($participants)) throw new ApiException('bad_request', '無効な参加者', 400);
 
     $state = [
         'current_q' => 1,
@@ -85,7 +85,7 @@ function quizzes_create(PDO $pdo, array $cfg, int $uid): void {
     foreach ($participants as $pid) {
         if ($pid === $uid) continue;
         try { notify_safely($pdo, $cfg, $pid, 'admin_notice',
-            "📝 {$byName} さん から クイズ 「{$title}」 に 招待 されました", 'quizzes', $qid); }
+            "📝 {$byName} さんからクイズ 「{$title}」 に招待されました", 'quizzes', $qid); }
         catch (Throwable $_) {}
     }
     json_response(['ok' => true, 'id' => $qid]);
@@ -99,7 +99,7 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
     $participants = json_decode($g['participants_json'], true) ?: [];
     $state = json_decode($g['state_json'], true) ?: [];
 
-    // 名前 解決
+    // 名前解決
     $names = [];
     if ($participants) {
         $place = implode(',', array_fill(0, count($participants), '?'));
@@ -109,14 +109,14 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
     }
     $participantList = array_map(fn($p) => ['uid' => (int)$p, 'name' => ($names[(int)$p] ?? 'user#'.$p)], $participants);
 
-    // per-user フィルタ: answering 中 は 自分の 回答 だけ 返す
+    // per-user フィルタ: answering 中は自分の回答だけ返す
     $phase = $state['phase'] ?? 'asking';
     $answers = $state['answers'] ?? [];
     if ($phase === 'answering') {
         $answers = isset($answers[(string)$uid]) ? [(string)$uid => $answers[(string)$uid]] : [];
     }
 
-    // 累積 集計 (history から 各 uid の 正解数)
+    // 累積集計 (history から各 uid の正解数)
     $totalScores = [];
     foreach ($participants as $p) $totalScores[(string)$p] = 0;
     foreach ($state['history'] ?? [] as $h) {
@@ -148,8 +148,8 @@ function quizzes_get(PDO $pdo, int $uid, int $qid): void {
     ]);
 }
 
-// 出題者 が 問題文 を 出題 (asking → answering)
-//   verbal モード では question が 空でも OK (= 「口頭で 出題、 解答開始」)
+// 出題者が問題文を出題 (asking → answering)
+//   verbal モードでは question が空でも OK (= 「口頭で出題、 解答開始」)
 function quizzes_ask(PDO $pdo, int $uid, int $qid): void {
     $body = read_json_body();
     $question = trim((string)($body['question'] ?? ''));
@@ -158,12 +158,12 @@ function quizzes_ask(PDO $pdo, int $uid, int $qid): void {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'asking') throw new ApiException('bad_request', '今は 出題フェーズ ではない', 400);
+        if ($state['phase'] !== 'asking') throw new ApiException('bad_request', '今は出題フェーズではない', 400);
         $mode = $g['mode'] ?? 'text';
         if ($mode === 'text' && $question === '') {
-            throw new ApiException('bad_request', '問題文 を 入力してください (口頭モード で 作成すると テキスト不要)', 400);
+            throw new ApiException('bad_request', '問題文を入力してください (口頭モードで作成するとテキスト不要)', 400);
         }
-        $state['question'] = $question;   // verbal モード なら 空文字列で OK
+        $state['question'] = $question;   // verbal モードなら空文字列で OK
         $state['answers'] = new \stdClass();
         $state['phase'] = 'answering';
         quizzes_save($pdo, $qid, $state);
@@ -171,7 +171,7 @@ function quizzes_ask(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 参加者 が 回答 提出
+// 参加者が回答提出
 function quizzes_answer(PDO $pdo, int $uid, int $qid): void {
     $body = read_json_body();
     $answer = trim((string)($body['answer'] ?? ''));
@@ -179,7 +179,7 @@ function quizzes_answer(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid, $answer) {
         $g = quizzes_lock($pdo, $qid);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'answering') throw new ApiException('bad_request', '今は 回答フェーズ ではない', 400);
+        if ($state['phase'] !== 'answering') throw new ApiException('bad_request', '今は回答フェーズではない', 400);
         $participants = array_map('intval', json_decode($g['participants_json'], true) ?: []);
         if (!in_array($uid, $participants, true)) throw new ApiException('forbidden', '参加者ではない', 403);
         $state['answers'][(string)$uid] = $answer;
@@ -188,20 +188,20 @@ function quizzes_answer(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 出題者 が 「開示」 → reveal phase へ (= 全員 出揃ってなくても 強制開示可能)
+// 出題者が 「開示」 → reveal phase へ (= 全員出揃ってなくても強制開示可能)
 function quizzes_reveal(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid) {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'answering') throw new ApiException('bad_request', '今は 回答中 ではない', 400);
+        if ($state['phase'] !== 'answering') throw new ApiException('bad_request', '今は回答中ではない', 400);
         $state['phase'] = 'reveal';
         quizzes_save($pdo, $qid, $state);
     });
     json_response(['ok' => true]);
 }
 
-// 出題者 が マルバツ 採点 (= scores オブジェクトを そのまま 受付)
+// 出題者がマルバツ採点 (= scores オブジェクトをそのまま受付)
 function quizzes_score(PDO $pdo, int $uid, int $qid): void {
     $body = read_json_body();
     $scores = $body['scores'] ?? null;
@@ -210,7 +210,7 @@ function quizzes_score(PDO $pdo, int $uid, int $qid): void {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'reveal') throw new ApiException('bad_request', '今は 開示後 ではない', 400);
+        if ($state['phase'] !== 'reveal') throw new ApiException('bad_request', '今は開示後ではない', 400);
         $participants = array_map('intval', json_decode($g['participants_json'], true) ?: []);
         $clean = [];
         foreach ($scores as $u => $s) {
@@ -225,13 +225,13 @@ function quizzes_score(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 次の 問へ (history に push、 phase を asking に 戻す)
+// 次の問へ (history に push、 phase を asking に戻す)
 function quizzes_next(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid) {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
-        if ($state['phase'] !== 'scored') throw new ApiException('bad_request', '採点後 のみ 次へ', 400);
+        if ($state['phase'] !== 'scored') throw new ApiException('bad_request', '採点後のみ次へ', 400);
         $history = $state['history'] ?? [];
         $history[] = [
             'q'       => $state['question'],
@@ -249,13 +249,13 @@ function quizzes_next(PDO $pdo, int $uid, int $qid): void {
     json_response(['ok' => true]);
 }
 
-// 終了 (= scored の あと、 出題者 が 「ここで 終わる」 を 押した時)
+// 終了 (= scored のあと、 出題者が 「ここで終わる」 を押した時)
 function quizzes_finish(PDO $pdo, int $uid, int $qid): void {
     db_tx($pdo, function () use ($pdo, $uid, $qid) {
         $g = quizzes_lock($pdo, $qid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '出題者のみ', 403);
         $state = json_decode($g['state_json'], true);
-        // 採点 済 なら 現問 も history に 追加
+        // 採点済なら現問も history に追加
         if ($state['phase'] === 'scored') {
             $history = $state['history'] ?? [];
             $history[] = [

@@ -44,8 +44,8 @@ async function loadAdminZoom() {
 }
 
 // ---------------- Admin: MAC 未登録ユーザー督促 ----------------
-// presence_devices に 1 件も無い human user を一覧化し、 デフォ 全員選択で
-// 「MAC 登録 してね」 DM を 一斉送信。 チェックを 外せば 個別 除外可能。
+// presence_devices に 1 件も無い human user を一覧化し、 デフォ全員選択で
+// 「MAC 登録してね」 DM を一斉送信。 チェックを外せば個別除外可能。
 async function loadMacReminder() {
   const root = document.getElementById('mac-rem-list');
   if (!root) return;
@@ -54,7 +54,7 @@ async function loadMacReminder() {
     const r = await get('/api/admin/users_without_mac');
     const items = r.items || [];
     if (!items.length) {
-      root.innerHTML = `<div class="empty">✨ MAC 未登録 user は 0 人 (全員 登録済み)</div>`;
+      root.innerHTML = `<div class="empty">✨ MAC 未登録 user は 0 人 (全員登録済み)</div>`;
       const cntEl = document.getElementById('mac-rem-count');
       if (cntEl) cntEl.textContent = '0';
       return;
@@ -88,12 +88,12 @@ async function onMacReminderSend() {
   const uids = [...document.querySelectorAll('.mac-rem-chk:checked')]
     .map(cb => Number(cb.dataset.uid));
   if (!uids.length) { toast('送信先が 0 人です'); return; }
-  if (!confirm(`${uids.length} 人に MAC 登録 督促 通知 (アプリ内) を送信します。 よろしいですか?`)) return;
+  if (!confirm(`${uids.length} 人に MAC 登録督促通知 (アプリ内) を送信します。 よろしいですか?`)) return;
   const btn = document.getElementById('mac-rem-send');
   btn.disabled = true;
   try {
     const r = await post('/api/admin/users_without_mac/notify', { body, user_ids: uids });
-    toast(`${r.recipients} 人に 送信しました`);
+    toast(`${r.recipients} 人に送信しました`);
     await loadMacReminder();
   } catch (e) {
     toast('失敗: ' + e.message);
@@ -170,7 +170,7 @@ export async function renderAdmin() {
       <div class="muted" style="font-size:11px; margin-top:8px">
         Admin 以外の保有量が増えすぎたらインフレ気味、減りすぎたら手数料/還流不足の目安。
       </div>
-      <!-- v803 SYSTEM / ESCROW 収支 ダッシュボード を 一番 上 に 統合 -->
+      <!-- v803 SYSTEM / ESCROW 収支ダッシュボードを一番上に統合 -->
       <div class="sep" style="margin:14px 0 8px"></div>
       <h4 style="margin:4px 0 6px">SYSTEM / ESCROW 収支</h4>
       <div id="dash" class="muted">読み込み中…</div>
@@ -185,8 +185,8 @@ export async function renderAdmin() {
     </div>
 
     <div class="card">
-      <h3 style="margin:0">Slack 通知 診断</h3>
-      <p class="hint">「Notifier slack DM failed」 が増えてる時の調査用。 bot token と スコープを確認。</p>
+      <h3 style="margin:0">Slack 通知診断</h3>
+      <p class="hint">「Notifier slack DM failed」 が増えてる時の調査用。 bot token とスコープを確認。</p>
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
         <button id="sld-check" class="btn">⚙ 接続確認 (auth.test)</button>
         <button id="sld-send"  class="btn primary">✉ テスト DM 送信</button>
@@ -253,17 +253,17 @@ export async function renderAdmin() {
       <p class="hint">
         在室判定 (presence) 用の MAC アドレスを 1 件も登録していない人に、 まとめて
         「登録してね」 と **アプリ内通知 (LabPay の 🔔 通知タブ)** を送ります (Slack DM
-        は 送りません)。 デフォは MAC 未登録 全員、 チェックを外せば 個別 除外 もできます。
+        は送りません)。 デフォは MAC 未登録全員、 チェックを外せば個別除外もできます。
       </p>
       <div id="mac-rem-list" class="muted" style="margin-top:6px">読み込み中…</div>
       <label class="field" style="margin-top:8px">
         <span class="lbl">メッセージ本文</span>
         <textarea id="mac-rem-body" maxlength="1000" rows="4"
-          placeholder="例: 在室判定の精度向上のため、設定 → 端末 から PC / スマホ の MAC アドレス登録をお願いします (5 秒で終わります)。"></textarea>
+          placeholder="例: 在室判定の精度向上のため、設定 → 端末から PC / スマホの MAC アドレス登録をお願いします (5 秒で終わります)。"></textarea>
       </label>
       <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
         <button id="mac-rem-send" class="primary">選択中の <span id="mac-rem-count">0</span> 人に送る</button>
-        <button id="mac-rem-reload" class="btn">一覧 再読込</button>
+        <button id="mac-rem-reload" class="btn">一覧再読込</button>
       </div>
     </div>
 
@@ -276,11 +276,11 @@ export async function renderAdmin() {
       <h4 style="margin:10px 0 4px">Zoom 連携</h4>
       <div id="zoom-section"><div class="muted">読み込み中…</div></div>
       <div class="sep" style="margin:14px 0 6px"></div>
-      <!-- v803 Scrapbox 名簿 は 普段 触らない の で 折りたたみ デフォルト 閉 -->
+      <!-- v803 Scrapbox 名簿は普段触らないので折りたたみデフォルト閉 -->
       <details>
-        <summary style="cursor:pointer; font-weight:700; font-size:14px; margin:6px 0">📚 Scrapbox 名簿 (タップ で 開く)</summary>
+        <summary style="cursor:pointer; font-weight:700; font-size:14px; margin:6px 0">📚 Scrapbox 名簿 (タップで開く)</summary>
         <p class="hint-sm" style="margin-top:6px">
-          各メンバー の Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
+          各メンバーの Slack #scrapbox 通知に出る表示名を 1 つだけ登録。 空欄保存で未設定に戻る。
           他メンバーに既に紐づいてる名前を登録すると steal される。
         </p>
         <div id="sb-roster" class="list" style="margin-top:6px"><div class="muted">読み込み中…</div></div>
@@ -289,7 +289,7 @@ export async function renderAdmin() {
 
     <details class="card collapsible-form">
       <summary>詳細管理 (普段触らない設定など)</summary>
-      <!-- v803 管理ダッシュボード は 上 の 「流通ポイント」 カード に 統合 した の で 削除 -->
+      <!-- v803 管理ダッシュボードは上の 「流通ポイント」 カードに統合したので削除 -->
       <h3 style="margin-top:10px">許可リスト</h3>
       <div id="allow" class="muted">読み込み中…</div>
       <details style="margin-top:8px">
@@ -568,7 +568,7 @@ function renderSupply(d) {
         <div class="supply-sub">${d.admin_count}人 / 平均 ${fmt(adminAvg)} pt</div>
       </div>
       <div class="supply-cell supply-member">
-        <div class="supply-label">一般 保有</div>
+        <div class="supply-label">一般保有</div>
         <div class="supply-value">${fmt(d.held_by_members)}</div>
         <div class="supply-sub">${d.member_count}人 / 平均 ${fmt(memberAvg)} pt</div>
       </div>
@@ -602,18 +602,18 @@ function renderSystemFlowTable(title, items, total, color) {
 function renderDashboard(d) {
   const el = document.getElementById('dash');
   if (!el) return;
-  // v802 SYSTEM の 「ユーザ 直接 やり取り」 と 「ESCROW 経由」 を 分けて、 戻り は 直接 だけ で 計算
-  const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ 直接 (=「戻り」 集計 対象)',
+  // v802 SYSTEM の 「ユーザ直接やり取り」 と 「ESCROW 経由」 を分けて、 戻りは直接だけで計算
+  const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ直接 (=「戻り」 集計対象)',
                                               d.system_income_user,    d.system_income_user_total    || 0, '#15803d');
-  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、 戻り に は 入れない)',
+  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、 戻りには入れない)',
                                               d.system_income_escrow,  d.system_income_escrow_total  || 0, '#0891b2');
-  const outUserHtml   = renderSystemFlowTable('💸 SYSTEM 支出: ユーザ 直接 (= 配布)',
+  const outUserHtml   = renderSystemFlowTable('💸 SYSTEM 支出: ユーザ直接 (= 配布)',
                                               d.system_outflow_user,   d.system_outflow_user_total   || 0, '#b45309');
-  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、 戻り に は 入れない)',
+  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、 戻りには入れない)',
                                               d.system_outflow_escrow, d.system_outflow_escrow_total || 0, '#7c3aed');
-  const escInHtml     = renderSystemFlowTable('📥 ESCROW に 入った 内訳 (預け入れ)',
+  const escInHtml     = renderSystemFlowTable('📥 ESCROW に入った内訳 (預け入れ)',
                                               d.escrow_income_by_type,  d.escrow_income_total  || 0, '#0891b2');
-  const escOutHtml    = renderSystemFlowTable('📤 ESCROW から 出た 内訳 (精算 / 返金)',
+  const escOutHtml    = renderSystemFlowTable('📤 ESCROW から出た内訳 (精算 / 返金)',
                                               d.escrow_outflow_by_type, d.escrow_outflow_total || 0, '#7c3aed');
   const netReturn = d.system_net_user || 0;
   el.innerHTML = `
@@ -622,18 +622,18 @@ function renderDashboard(d) {
           <th>ESCROW残高</th><td class="right mono">${d.escrow_balance.toLocaleString()}</td></tr>
       <tr><th>総発行 (initial+checkin)</th><td class="right mono">${d.total_minted.toLocaleString()}</td>
           <th>手数料 (fee のみ)</th><td class="right mono">${d.total_fees.toLocaleString()}</td></tr>
-      <tr><th>SYSTEM 収入 (ユーザ 直接)</th><td class="right mono" style="color:#15803d">${(d.system_income_user_total || 0).toLocaleString()}</td>
-          <th>SYSTEM 支出 (ユーザ 直接)</th><td class="right mono" style="color:#b45309">${(d.system_outflow_user_total || 0).toLocaleString()}</td></tr>
-      <tr><th>SYSTEM 戻り (直接 のみ)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
+      <tr><th>SYSTEM 収入 (ユーザ直接)</th><td class="right mono" style="color:#15803d">${(d.system_income_user_total || 0).toLocaleString()}</td>
+          <th>SYSTEM 支出 (ユーザ直接)</th><td class="right mono" style="color:#b45309">${(d.system_outflow_user_total || 0).toLocaleString()}</td></tr>
+      <tr><th>SYSTEM 戻り (直接のみ)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
           <th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td></tr>
       <tr><th>SYSTEM 収入 (ESCROW 経由)</th><td class="right mono" style="color:#0891b2">${(d.system_income_escrow_total || 0).toLocaleString()}</td>
           <th>SYSTEM 支出 (ESCROW へ)</th><td class="right mono" style="color:#7c3aed">${(d.system_outflow_escrow_total || 0).toLocaleString()}</td></tr>
-      <tr><th>ESCROW 累計 預入</th><td class="right mono" style="color:#0891b2">${(d.escrow_income_total || 0).toLocaleString()}</td>
-          <th>ESCROW 累計 払出</th><td class="right mono" style="color:#7c3aed">${(d.escrow_outflow_total || 0).toLocaleString()}</td></tr>
+      <tr><th>ESCROW 累計預入</th><td class="right mono" style="color:#0891b2">${(d.escrow_income_total || 0).toLocaleString()}</td>
+          <th>ESCROW 累計払出</th><td class="right mono" style="color:#7c3aed">${(d.escrow_outflow_total || 0).toLocaleString()}</td></tr>
       <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
           <th>取引数</th><td class="right mono">${d.purchase_count.toLocaleString()}</td></tr>
       <tr><th>うち Admin 保有</th><td class="right mono">${d.held_by_admins.toLocaleString()}</td>
-          <th>うち 一般 保有</th><td class="right mono">${d.held_by_members.toLocaleString()}</td></tr>
+          <th>うち一般保有</th><td class="right mono">${d.held_by_members.toLocaleString()}</td></tr>
       <tr><th>商品マスタ数</th><td class="right mono">${d.product_count.toLocaleString()}</td>
           <th>稼働中出品</th><td class="right mono">${d.listings_active.toLocaleString()}</td></tr>
       <tr><th>有効許可ユーザー</th><td class="right mono">${d.allowlist_active.toLocaleString()}</td>

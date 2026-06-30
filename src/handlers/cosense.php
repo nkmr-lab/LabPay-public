@@ -1,18 +1,18 @@
 <?php
-// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 v839 以降、 認証は 各ユーザの PAT
+// /api/cosense — Cosense (旧 Scrapbox) v2 REST API 連携。 v839 以降、 認証は各ユーザの PAT
 //   (Personal Access Token, ヘッダ x-personal-access-token) のみ。 legacy connect.sid cookie
 //   経路は撤廃済み (鍵だけで十分なため、 設定を一本化)。
 //
-//   研究 ノート ページ 名 規則 (https://github.com/nkmr-lab/scrapbox-helper-for-nkmrlab):
+//   研究ノートページ名規則 (https://github.com/nkmr-lab/scrapbox-helper-for-nkmrlab):
 //     Page 名: YYYY.MM_研究ノート_<scrapbox_handle>
-//     日付 ヘッダ: [*( YYYY.MM.DD ...)]
+//     日付ヘッダ: [*( YYYY.MM.DD ...)]
 //
-//   GET  /api/cosense/research-note?ym=YYYY.MM    今月 / 指定 月 の 自分 の ページ
-//   GET  /api/cosense/research-note/days?count=2  直近 N 日 セクション 抽出 (今日 / 昨日)
-//   POST /api/cosense/research-note/append        今日 セクション に 追記
-//   GET  /api/cosense/page?title=...              任意 ページ
-//   GET  /api/cosense/me/status                   自分 の PAT 設定 状況
-//   PATCH /api/cosense/me/pat     {pat:"..."}     自分 の PAT を 設定
+//   GET  /api/cosense/research-note?ym=YYYY.MM    今月 / 指定月の自分のページ
+//   GET  /api/cosense/research-note/days?count=2  直近 N 日セクション抽出 (今日 / 昨日)
+//   POST /api/cosense/research-note/append        今日セクションに追記
+//   GET  /api/cosense/page?title=...              任意ページ
+//   GET  /api/cosense/me/status                   自分の PAT 設定状況
+//   PATCH /api/cosense/me/pat     {pat:"..."}     自分の PAT を設定
 declare(strict_types=1);
 
 function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
@@ -28,7 +28,7 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'append') {
         cosense_research_note_append($pdo, $cfg, $uid); return;
     }
-    // v830 #editable 当日セクションを丸ごとロード + 差分保存 する 2 endpoint
+    // v830 #editable 当日セクションを丸ごとロード + 差分保存する 2 endpoint
     if ($sub === 'research-note' && $method === 'GET' && ($seg[2] ?? '') === 'section') {
         cosense_research_note_section_get($pdo, $cfg, $uid); return;
     }
@@ -68,10 +68,10 @@ function cosense_user_pat(PDO $pdo, int $uid): ?string {
     $c = trim((string)($st->fetchColumn() ?: ''));
     return $c !== '' ? $c : null;
 }
-// v825 Cosense page 名 に 使う handle。 優先 順:
-//   1) users.cosense_page_handle (個別 設定、 例: 「中村聡史」)
-//   2) users.display_name (LabPay 表示名、 通常 これ が Cosense 表示名 と 同じ)
-//   3) user_scrapbox_handles.scrapbox_name (Slack 同期 用、 英語 名 の こと も ある)
+// v825 Cosense page 名に使う handle。 優先順:
+//   1) users.cosense_page_handle (個別設定、 例: 「中村聡史」)
+//   2) users.display_name (LabPay 表示名、 通常これが Cosense 表示名と同じ)
+//   3) user_scrapbox_handles.scrapbox_name (Slack 同期用、 英語名のこともある)
 function cosense_user_handle(PDO $pdo, int $uid): ?string {
     $st = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
     $st->execute([$uid]);
@@ -117,7 +117,7 @@ function cosense_http(string $method, string $url, array $opts = []): array {
     return ['status' => $status, 'body' => (string)$resp, 'err' => $err];
 }
 
-// v2 API で ページ を 取得 (json)。 PAT 必須。 構造: { title, lines: [{id, text}], ... }
+// v2 API でページを取得 (json)。 PAT 必須。 構造: { title, lines: [{id, text}], ... }
 function cosense_v2_get_page(array $cfg, string $title, string $pat): array {
     $url = cosense_base($cfg) . '/api/pages/v2/' . rawurlencode(cosense_project($cfg))
          . '/' . rawurlencode($title);
@@ -129,7 +129,7 @@ function cosense_v2_get_page(array $cfg, string $title, string $pat): array {
     return ['ok' => false, 'status' => $res['status'], 'err' => $res['body']];
 }
 
-// v2 API で preview → submit して commit する。 changes は 配列。
+// v2 API で preview → submit して commit する。 changes は配列。
 function cosense_v2_commit(array $cfg, string $pat, ?string $pageId, array $changes): array {
     $base = cosense_base($cfg) . '/api/pages/v2/' . rawurlencode(cosense_project($cfg));
     $previewBody = $pageId !== null
@@ -150,7 +150,7 @@ function cosense_v2_commit(array $cfg, string $pat, ?string $pageId, array $chan
     return ['ok' => true, 'commitId' => $sj['commitId'] ?? null, 'page' => $sj['page'] ?? null];
 }
 
-// PAT 経由で ページ text を ロード (v2 lines → text に 復元)。 PAT 未登録なら source='none'。
+// PAT 経由でページ text をロード (v2 lines → text に復元)。 PAT 未登録なら source='none'。
 function cosense_load_page_text(PDO $pdo, array $cfg, int $uid, string $title): array {
     $pageUrl = cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title);
     $pat = cosense_user_pat($pdo, $uid);
@@ -166,7 +166,7 @@ function cosense_load_page_text(PDO $pdo, array $cfg, int $uid, string $title): 
         }
         return ['source' => 'v2-pat', 'status' => 200, 'text' => $text, 'page' => $r['page'], 'page_url' => $pageUrl];
     }
-    // PAT で 失敗 (404 等) → 空 として 扱う
+    // PAT で失敗 (404 等) → 空として扱う
     return ['source' => 'v2-pat', 'status' => $r['status'], 'text' => null, 'page' => null,
             'page_url' => $pageUrl, 'err' => $r['err'] ?? null];
 }
@@ -176,7 +176,7 @@ function cosense_load_page_text(PDO $pdo, array $cfg, int $uid, string $title): 
 function cosense_my_research_note(PDO $pdo, array $cfg, int $uid): void {
     $handle = cosense_user_handle($pdo, $uid);
     if ($handle === null) {
-        json_response(['has_handle' => false, 'message' => 'Scrapbox handle 未 登録 (admin 経由 で 登録 を)']);
+        json_response(['has_handle' => false, 'message' => 'Scrapbox handle 未登録 (admin 経由で登録を)']);
         return;
     }
     $ym = (string)($_GET['ym'] ?? date('Y.m'));
@@ -200,7 +200,7 @@ function cosense_my_research_note(PDO $pdo, array $cfg, int $uid): void {
 function cosense_my_research_note_days(PDO $pdo, array $cfg, int $uid): void {
     $handle = cosense_user_handle($pdo, $uid);
     if ($handle === null) {
-        json_response(['has_handle' => false, 'message' => 'Scrapbox handle 未 登録 (admin 経由 で 登録 を)']);
+        json_response(['has_handle' => false, 'message' => 'Scrapbox handle 未登録 (admin 経由で登録を)']);
         return;
     }
     $count = max(1, min(31, (int)($_GET['count'] ?? 2)));
@@ -285,15 +285,15 @@ function cosense_page_text(PDO $pdo, array $cfg, int $uid): void {
 
 // POST /api/cosense/research-note/append
 //   body = { date: "YYYY.MM.DD", text: "本文" }
-//   today なら 当月 ページ、 yesterday なら 当月 or 先月 を 自動 判定 して append。
+//   today なら当月ページ、 yesterday なら当月 or 先月を自動判定して append。
 function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
-        throw new ApiException('precondition', 'Cosense PAT が 未 登録 で す。 設定 → Cosense 連携 で 登録 して ください', 412);
+        throw new ApiException('precondition', 'Cosense PAT が未登録です。 設定 → Cosense 連携で登録してください', 412);
     }
     $handle = cosense_user_handle($pdo, $uid);
     if ($handle === null) {
-        throw new ApiException('precondition', 'Scrapbox handle 未 登録 (admin 経由 で 登録 を)', 412);
+        throw new ApiException('precondition', 'Scrapbox handle 未登録 (admin 経由で登録を)', 412);
     }
     $body = read_json_body();
     $date = trim((string)($body['date'] ?? ''));
@@ -307,7 +307,7 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     $ym = $m[1] . '.' . $m[2];
     $title = $ym . '_研究ノート_' . $handle;
 
-    // ページ を 取得 して lines + pageId を 取り出す
+    // ページを取得して lines + pageId を取り出す
     $r = cosense_v2_get_page($cfg, $title, $pat);
     $existsPage = $r['ok'];
     $pageId = $existsPage ? ($r['page']['id'] ?? null) : null;
@@ -338,11 +338,11 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
         }
     }
 
-    // 入力 text を 行 分解 + 各 行 に id を 振る
+    // 入力 text を行分解 + 各行に id を振る
     $bodyLines = preg_split('/\r?\n/', $text);
     $changes = [];
     $makeLineId = function (): string {
-        // Cosense の lineId は ランダム 16進。 12 byte = 24 桁 hex。
+        // Cosense の lineId はランダム 16進。 12 byte = 24 桁 hex。
         return bin2hex(random_bytes(12));
     };
 
@@ -365,7 +365,7 @@ function cosense_research_note_append(PDO $pdo, array $cfg, int $uid): void {
     }
 
     if ($pageId === null && $existsPage) {
-        throw new ApiException('internal', 'pageId が 取れ ません でした', 500);
+        throw new ApiException('internal', 'pageId が取れませんでした', 500);
     }
 
     $c = cosense_v2_commit($cfg, $pat, $pageId, $changes);
@@ -410,7 +410,7 @@ function cosense_send_json_etagged(array $resp): void {
 // ───────── editable section (v830) ─────────
 
 // 指定日のセクション (= [*( YYYY.MM.DD ...)] ヘッダの直下から、次の日付ヘッダの直前まで) を
-//   ヘッダを除く本文行だけの配列 + テキスト形式 で返す。 textarea のロード元。
+//   ヘッダを除く本文行だけの配列 + テキスト形式で返す。 textarea のロード元。
 function cosense_research_note_section_get(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
@@ -449,8 +449,8 @@ function cosense_research_note_section_get(PDO $pdo, array $cfg, int $uid): void
 }
 
 // 指定日のセクション本文を新しい text で置き換える (= 差分のみコミット)。
-//   body = { date: "YYYY.MM.DD", text: "改行区切り の 新 本文" }
-//   text の各行は そのまま Cosense に書き込まれる (=リード スペース等もユーザー入力をそのまま使用)。
+//   body = { date: "YYYY.MM.DD", text: "改行区切りの新本文" }
+//   text の各行はそのまま Cosense に書き込まれる (=リードスペース等もユーザー入力をそのまま使用)。
 function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
@@ -552,7 +552,7 @@ function cosense_research_note_section_replace(PDO $pdo, array $cfg, int $uid): 
     ]);
 }
 
-// 指定日の セクション を $allLines から探す。
+// 指定日のセクションを $allLines から探す。
 // 返り値: [headerIdx, headerLineId, nextAnchorId, bodyLines]
 //   headerIdx     : ヘッダ行のインデックス。 見つからなければ -1
 //   headerLineId  : ヘッダ行の id (null も可)
@@ -605,7 +605,7 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
     $allLines = $existsPage ? ($r['page']['lines'] ?? []) : [];
 
     // 全日付セクションを集計
-    // v838 #422 PC向けに preview (各日の本文 先頭 2 行 連結 / 最大 80 文字) も返す。
+    // v838 #422 PC向けに preview (各日の本文先頭 2 行連結 / 最大 80 文字) も返す。
     //   カレンダーのセル内に直接 「3 lines: 論文要約 + ミーティング」 のように表示する用。
     $days = [];
     $curDate = null;
@@ -659,7 +659,7 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
 
 function cosense_me_status(PDO $pdo, array $cfg, int $uid): void {
     $pat = cosense_user_pat($pdo, $uid);
-    // page handle の 内訳 (どこ から 来て いる か)
+    // page handle の内訳 (どこから来ているか)
     $stu = $pdo->prepare("SELECT cosense_page_handle, display_name FROM users WHERE id=?");
     $stu->execute([$uid]);
     $r = $stu->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -727,8 +727,8 @@ function cosense_me_set_page_handle(PDO $pdo, int $uid): void {
     $body = read_json_body();
     $h = trim((string)($body['handle'] ?? ''));
     if ($h !== '') {
-        if (mb_strlen($h) > 100) throw new ApiException('bad_request', 'handle は 100 文字 以内', 400);
-        if (preg_match('/[\/\\\\\\r\\n\\t]/u', $h)) throw new ApiException('bad_request', '/ \\ 改行 タブ は 使えません', 400);
+        if (mb_strlen($h) > 100) throw new ApiException('bad_request', 'handle は 100 文字以内', 400);
+        if (preg_match('/[\/\\\\\\r\\n\\t]/u', $h)) throw new ApiException('bad_request', '/ \\ 改行タブは使えません', 400);
     } else {
         $h = null;
     }

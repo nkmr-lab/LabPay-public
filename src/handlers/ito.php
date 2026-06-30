@@ -2,7 +2,7 @@
 // v568 #223 ito ゲーム (協力ゲーム: 1-100 の数字を表現で当てる)。
 //   1. lobby: 起案者がお題 + メンバー選択 + 1pt 預託 → 参加者も 1pt 預託
 //   2. input: 各自に 1-100 の数字 (重複なし) が配布 → お題に沿って表現を入力
-//   3. reveal: 全員入力したら 数字を 公開 (小さい順)、 全員で並び順を当てる
+//   3. reveal: 全員入力したら数字を公開 (小さい順)、 全員で並び順を当てる
 //   4. finished: 結果表示 + pot 分配 (全員で割り勘戻し: 1pt × N → 全員 1pt 戻し、 場代 0)
 
 declare(strict_types=1);
@@ -72,7 +72,7 @@ function ito_detail(PDO $pdo, int $uid, int $gid): void {
     foreach ($stP->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $isMe = ((int)$r['user_id'] === $uid);
         if ($isMe) $myNumber = $r['number'] !== null ? (int)$r['number'] : null;
-        // reveal/finished 以降は 数字を全員に公開、 それ以前は自分のだけ
+        // reveal/finished 以降は数字を全員に公開、 それ以前は自分のだけ
         $showNum = ($g['status'] === 'reveal' || $g['status'] === 'finished');
         $players[] = [
             'user_id'      => (int)$r['user_id'],
@@ -112,7 +112,7 @@ function ito_create(PDO $pdo, array $cfg, int $uid): void {
     if ($buyIn < 1 || $buyIn > 100) throw new ApiException('bad_request', 'buy_in 1-100', 400);
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) $memberIds = [];
-    // v632 instant_start = 全員 即着席 + 一括徴収 + 数字配布 + status='input' に。
+    // v632 instant_start = 全員即着席 + 一括徴収 + 数字配布 + status='input' に。
     $instant = !empty($body['instant_start']) && count($memberIds) > 0;
     $gameId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $theme, $buyIn, $memberIds, $instant, &$gameId) {
@@ -132,7 +132,7 @@ function ito_create(PDO $pdo, array $cfg, int $uid): void {
         if ($mid === $uid || $mid <= 0) continue;
         try {
             $msg = $instant
-                ? "🎲 ito 「{$theme}」 開始! あなたに 数字が 配布されました ({$buyIn}pt 預託済)"
+                ? "🎲 ito 「{$theme}」 開始! あなたに数字が配布されました ({$buyIn}pt 預託済)"
                 : "🎲 ito 「{$theme}」 に招待されました ({$buyIn}pt)";
             notify_safely($pdo, $CFG, $mid, 'admin_notice', $msg, 'ito', $gameId);
         } catch (Throwable $_) {}
@@ -140,7 +140,7 @@ function ito_create(PDO $pdo, array $cfg, int $uid): void {
     json_response(['ok' => true, 'id' => $gameId]);
 }
 
-// v632 instant_start: 招待者を 全員 着席 + 一括徴収 + 数字配布 + 'input' へ
+// v632 instant_start: 招待者を全員着席 + 一括徴収 + 数字配布 + 'input' へ
 function ito_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $buyIn, array $invitees): void {
     $invitees = array_values(array_unique(array_map('intval', $invitees)));
     $invitees = array_values(array_filter($invitees, fn($u) => $u !== $creatorUid && $u > 0));
@@ -154,14 +154,14 @@ function ito_create_with_invitees(PDO $pdo, int $creatorUid, int $gid, int $buyI
         if (Ledger::balanceOfUser($pdo, $iv) < $buyIn) {
             $stN = $pdo->prepare("SELECT display_name FROM users WHERE id=?");
             $stN->execute([$iv]);
-            throw new ApiException('insufficient_balance', sprintf('%s さんの ポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
+            throw new ApiException('insufficient_balance', sprintf('%s さんのポイント不足 (要 %dpt)', $stN->fetchColumn(), $buyIn), 400);
         }
     }
     foreach ($invitees as $iv) {
         $pdo->prepare("INSERT INTO ito_players (game_id, user_id) VALUES (?, ?)")->execute([$gid, $iv]);
         ito_deposit($pdo, $gid, $iv, $buyIn);
     }
-    // 数字 配布 + status='input' (= ito_start の core 部分)
+    // 数字配布 + status='input' (= ito_start の core 部分)
     $n = 1 + count($invitees);
     if ($n > ITO_MAX_NUMBER) throw new ApiException('bad_request', '参加者多すぎ', 400);
     $pool = range(1, ITO_MAX_NUMBER);
@@ -215,7 +215,7 @@ function ito_start(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $n = (int)$stC->fetchColumn();
         if ($n < 2) throw new ApiException('bad_request', '2 人以上で開始してください', 400);
         if ($n > ITO_MAX_NUMBER) throw new ApiException('bad_request', '参加者多すぎ', 400);
-        // 1-100 から重複なし N 個を ランダム割当て
+        // 1-100 から重複なし N 個をランダム割当て
         $pool = range(1, ITO_MAX_NUMBER);
         shuffle($pool);
         $picks = array_slice($pool, 0, $n);
@@ -265,7 +265,7 @@ function ito_reveal(PDO $pdo, array $cfg, int $uid, int $gid): void {
         $stE->execute([$gid]);
         $ne = (int)$stE->fetchColumn();
         if ($ne < $n) throw new ApiException('bad_request', '全員の入力が揃っていません (' . $ne . '/' . $n . ')', 400);
-        // v569 #223 修正: ito はプレイフィー (戻さない)、 pot は そのままシステムに残る
+        // v569 #223 修正: ito はプレイフィー (戻さない)、 pot はそのままシステムに残る
         $pdo->prepare("UPDATE ito_games SET status='finished', finished_at=NOW() WHERE id = ?")->execute([$gid]);
     });
     // 全員に開示通知

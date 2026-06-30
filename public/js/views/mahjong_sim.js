@@ -1,5 +1,5 @@
-// /#/mahjong/sim — 麻雀エンジン シミュレータ実行ページ。 v556 #209。
-//   1〜30 半荘走らせて 結果 + 整合性 を表示 (= 内部検証用 ツール、 lazy import)。
+// /#/mahjong/sim — 麻雀エンジンシミュレータ実行ページ。 v556 #209。
+//   1〜30 半荘走らせて結果 + 整合性を表示 (= 内部検証用ツール、 lazy import)。
 
 import { post } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -10,9 +10,9 @@ export function renderMahjongSim() {
   app.innerHTML = `
     <div class="card page-header">
       <a href="#/mahjong" class="hint">← 麻雀</a>
-      <h2 style="margin:6px 0">🧪 麻雀エンジン シミュレータ</h2>
+      <h2 style="margin:6px 0">🧪 麻雀エンジンシミュレータ</h2>
       <p class="hint" style="font-size:13px; margin:0">
-        4 AI で N 半荘 を 走らせて、 点数合計 100000 不変 / 全 8 局完走 を検証します。
+        4 AI で N 半荘を走らせて、 点数合計 100000 不変 / 全 8 局完走を検証します。
         AI は簡易ルール (字牌優先打牌、 鳴き 50%、 ロン即宣言)。
       </p>
     </div>
@@ -33,7 +33,7 @@ export function renderMahjongSim() {
 async function go() {
   const n = Number(document.getElementById('sim-n').value) || 5;
   const btn = document.getElementById('sim-go');
-  btn.disabled = true; btn.textContent = `${n} 半荘 走行中…`;
+  btn.disabled = true; btn.textContent = `${n} 半荘走行中…`;
   const root = document.getElementById('sim-result');
   root.innerHTML = '<div class="card"><div class="muted">⏳ AI が打ち合い中… (1 半荘 ≒ 0.5-2 秒)</div></div>';
   try {
@@ -62,10 +62,10 @@ function paint(d) {
     <div class="card">
       <div class="bold" style="font-size:16px; color:var(--primary)">📊 結果サマリ</div>
       <div style="margin-top:6px; font-size:14px">
-        <div>${ok}/${total} 半荘 整合性 OK · 実行 ${d.elapsed_s} 秒</div>
+        <div>${ok}/${total} 半荘整合性 OK · 実行 ${d.elapsed_s} 秒</div>
         <div class="meta">合計 ${sumKyoku} 局 · ツモ ${sumTsumo} · ロン ${sumRon} · 流局 ${sumRyu} · 鳴き ${sumNaki} · リーチ宣言 ${sumRiichi}</div>
       </div>
-      ${ok === total ? '<div style="margin-top:8px; padding:6px 12px; background:#dcfce7; color:#15803d; border-radius:6px; font-size:13px">✅ 全 ' + total + ' 半荘で 点数合計 100000 不変 / 全 8 局完走</div>' :
+      ${ok === total ? '<div style="margin-top:8px; padding:6px 12px; background:#dcfce7; color:#15803d; border-radius:6px; font-size:13px">✅ 全 ' + total + ' 半荘で点数合計 100000 不変 / 全 8 局完走</div>' :
        '<div style="margin-top:8px; padding:6px 12px; background:#fecaca; color:#b91c1c; border-radius:6px; font-size:13px">⚠️ ' + (total - ok) + ' 半荘で異常 (下記参照)</div>'}
     </div>
     <div class="card">

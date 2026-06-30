@@ -1,8 +1,8 @@
-// v620 自作ゲーム の ユーザ向け 管理画面。 各ユーザが /#/my-games で
-//   - 自分の kind を 新規登録 / 編集 / 無効化
-//   - JS module を ファイルアップロード で DB に格納 (サーバの 書き込み権限不要)
-//   - 場代 (provider_share_pct) で 提供者 (= 自分) に pot の 一部が 入る
-//   admin は 全 kind を 編集可能 (admin_custom_games.js と 同等の権限)。
+// v620 自作ゲームのユーザ向け管理画面。 各ユーザが /#/my-games で
+//   - 自分の kind を新規登録 / 編集 / 無効化
+//   - JS module をファイルアップロードで DB に格納 (サーバの書き込み権限不要)
+//   - 場代 (provider_share_pct) で提供者 (= 自分) に pot の一部が入る
+//   admin は全 kind を編集可能 (admin_custom_games.js と同等の権限)。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -22,10 +22,10 @@ export async function renderMyCustomGames() {
   app.innerHTML = `
     <div class="card">
       <a href="#/settings" class="hint">← 設定</a>
-      <h2 style="margin:6px 0">🎮 自作ゲーム 登録</h2>
+      <h2 style="margin:6px 0">🎮 自作ゲーム登録</h2>
       <p class="hint" style="font-size:13px">
-        自分で 書いた ゲーム を LabPay に 追加できます。 JS ファイル を アップロード して DB に格納。
-        参加者が 払う 「場代」 は <b>提供者 (自分) に 90%、 SYSTEM に 10%</b> 入ります (fee=0 なら 無料)。
+        自分で書いたゲームを LabPay に追加できます。 JS ファイルをアップロードして DB に格納。
+        参加者が払う 「場代」 は <b>提供者 (自分) に 90%、 SYSTEM に 10%</b> 入ります (fee=0 なら無料)。
         詳細は <a href="https://github.com/nkmr-lab/LabPay/blob/main/docs/CUSTOM_GAMES.md" target="_blank">docs/CUSTOM_GAMES.md</a>。
       </p>
     </div>
@@ -38,13 +38,13 @@ export async function renderMyCustomGames() {
           <input id="mcg-icon" maxlength="20" placeholder="例: 🔲" style="width:100%"></label>
         <label><div class="bold" style="font-size:13px">表示名</div>
           <input id="mcg-name" maxlength="80" placeholder="例: 🔲 ドット&ボックス" style="width:100%"></label>
-        <label><div class="bold" style="font-size:13px">場代 (pt) — 各プレイヤーが プレイ毎に 払う (0 で 無料)</div>
+        <label><div class="bold" style="font-size:13px">場代 (pt) — 各プレイヤーがプレイ毎に払う (0 で無料)</div>
           <input id="mcg-fee" type="number" min="0" max="100" value="1" style="width:100%"></label>
         <label><div class="bold" style="font-size:13px">プレイヤー数</div>
           <select id="mcg-maxp" style="width:100%">
             <option value="1">1 人 (ソロ)</option>
-            <option value="2" selected>2 人 対戦</option>
-            <option value="4">4 人 対戦</option>
+            <option value="2" selected>2 人対戦</option>
+            <option value="4">4 人対戦</option>
           </select></label>
         <span></span>
       </div>
@@ -52,10 +52,10 @@ export async function renderMyCustomGames() {
         <textarea id="mcg-desc" rows="2" maxlength="500" style="width:100%; box-sizing:border-box"></textarea></label>
       <div style="margin-top:10px; padding:8px; background:#fafafa; border-radius:6px; border:1px solid #e5e7eb">
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
-          <div class="bold" style="font-size:13px">JS ソース (直接書く OR ファイル 添付)</div>
+          <div class="bold" style="font-size:13px">JS ソース (直接書く OR ファイル添付)</div>
           <span style="flex:1"></span>
           <select id="mcg-tpl" style="font-size:12px">
-            <option value="">テンプレート 読み込み…</option>
+            <option value="">テンプレート読み込み…</option>
             <option value="lights">🟦 ライツアウト [1 人] パズル</option>
             <option value="nim">🪙 ニム [2 人] 最小例</option>
             <option value="tictactoe">⭕❌ マルバツ [2 人] 3x3 盤</option>
@@ -65,10 +65,10 @@ export async function renderMyCustomGames() {
           </select>
           <input id="mcg-jsfile" type="file" accept=".js,.mjs,text/javascript" style="font-size:12px; max-width:170px">
         </div>
-        <textarea id="mcg-jssrc" rows="14" placeholder="defineGame({ kind, ... }) で 書く。 上の「テンプレート 読み込み…」 から ひな型を 入れられます。"
+        <textarea id="mcg-jssrc" rows="14" placeholder="defineGame({ kind, ... }) で書く。 上の「テンプレート読み込み…」 からひな型を入れられます。"
           style="width:100%; box-sizing:border-box; margin-top:6px; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; line-height:1.4; white-space:pre"></textarea>
         <div class="hint-sm" style="font-size:11px; margin-top:4px">
-          空のままでも 登録 OK (= プレースホルダ kind だけ作成。 後で 「JS 更新」 から差し替え)。 最大 ${MAX_JS_KB}KB。
+          空のままでも登録 OK (= プレースホルダ kind だけ作成。 後で 「JS 更新」 から差し替え)。 最大 ${MAX_JS_KB}KB。
         </div>
       </div>
       <div style="margin-top:8px">
@@ -81,18 +81,18 @@ export async function renderMyCustomGames() {
     </div>
   `;
   document.getElementById('mcg-create').addEventListener('click', () => createKind(isAdmin));
-  // テンプレ 読み込み (textarea に挿入)
+  // テンプレ読み込み (textarea に挿入)
   document.getElementById('mcg-tpl').addEventListener('change', async (ev) => {
     const k = ev.target.value;
     if (!k) return;
     const ta = document.getElementById('mcg-jssrc');
-    if (ta.value.trim() && !confirm('textarea の 内容を 置き換えます。 OK?')) { ev.target.value = ''; return; }
+    if (ta.value.trim() && !confirm('textarea の内容を置き換えます。 OK?')) { ev.target.value = ''; return; }
     try {
       ta.value = await loadTemplate(k);
-    } catch (e) { toast('テンプレ 読込失敗: ' + (e?.message || e)); }
+    } catch (e) { toast('テンプレ読込失敗: ' + (e?.message || e)); }
     ev.target.value = '';
   });
-  // ファイルを 選んだら textarea に 流し込む (アップロード一発でも OK)
+  // ファイルを選んだら textarea に流し込む (アップロード一発でも OK)
   document.getElementById('mcg-jsfile').addEventListener('change', async (ev) => {
     try {
       const src = await readJsFile(ev.target);
@@ -102,8 +102,8 @@ export async function renderMyCustomGames() {
   await loadKinds(me.id, isAdmin);
 }
 
-// テンプレ: 簡素な ひな型 + 既存サンプル (GitHub raw 経由)。
-//   オフライン時は フォールバック inline 文字列を返す。
+// テンプレ: 簡素なひな型 + 既存サンプル (GitHub raw 経由)。
+//   オフライン時はフォールバック inline 文字列を返す。
 async function loadTemplate(key) {
   if (key === 'blank') return BLANK_TEMPLATE;
   const url = {
@@ -119,25 +119,25 @@ async function loadTemplate(key) {
   return await r.text();
 }
 
-const BLANK_TEMPLATE = `// 新規 自作ゲーム — 3 関数 を 書くだけ で 動く。
+const BLANK_TEMPLATE = `// 新規自作ゲーム — 3 関数を書くだけで動く。
 //
-//   setup()            ゲーム開始時 に 1 回 だけ 呼ばれる → 初期 state を return
-//   draw(state, ctx)   画面を 描く時 に 呼ばれる         → HTML を return
-//                      (ボタンに data-move="X" を 入れれば タップで action が 呼ばれる)
+//   setup()            ゲーム開始時に 1 回だけ呼ばれる → 初期 state を return
+//   draw(state, ctx)   画面を描く時に呼ばれる         → HTML を return
+//                      (ボタンに data-move="X" を入れればタップで action が呼ばれる)
 //   action(state, me, move)
-//                      ボタン を 押した時 に 呼ばれる    → { state, finished?, winner? } を return
+//                      ボタンを押した時に呼ばれる    → { state, finished?, winner? } を return
 //                      winner: 'me' (自分の勝ち) / 'opponent' / null (引分) / uid
 
 import { sketch } from '/js/cg_ui.js';
 
 export const { renderList, renderDetail } = sketch({
-  kind:    'CHANGE_ME',          // ← 上の フォームの kind と 同じ にする
+  kind:    'CHANGE_ME',          // ← 上のフォームの kind と同じにする
   title:   '🎲 マイゲーム',
-  hint:    'ルール の 1 行 説明',
+  hint:    'ルールの 1 行説明',
   players: 2,                    // 1 (ソロ) / 2 / 4
 
   setup() {
-    return { n: 10 };            // 0 まで 減らしたら 終わる ゲーム の 例
+    return { n: 10 };            // 0 まで減らしたら終わるゲームの例
   },
 
   draw(s, ctx) {
@@ -151,7 +151,7 @@ export const { renderList, renderDetail } = sketch({
   action(s, me, move) {
     const n = s.n - 1;
     if (n <= 0) return { state: { n }, finished: true, winner: 'me' };
-    return { state: { n } };     // 手番は LabPay が 自動で 相手に 移す
+    return { state: { n } };     // 手番は LabPay が自動で相手に移す
   },
 });
 `;
@@ -207,7 +207,7 @@ async function loadKinds(myUid, isAdmin) {
         <div class="hint-sm" style="font-size:11px">
           module: <code>${escapeHtml(k.js_module_url)}</code>
           ${k.has_js_source ? '・<span class="tag ok">DB 格納</span>' : '・<span class="tag muted">未アップロード</span>'}
-          ${k.created_by_name ? ` ・ 登録者: ${escapeHtml(k.created_by_name)}` : ''}
+          ${k.created_by_name ? ` ・登録者: ${escapeHtml(k.created_by_name)}` : ''}
         </div>
       </div>
     `).join('');
@@ -245,7 +245,7 @@ async function loadKinds(myUid, isAdmin) {
       b.addEventListener('click', async () => {
         const kind = b.dataset.kind;
         const cur = parseInt(b.dataset.fee, 10) || 0;
-        const v = prompt('場代 (pt) — 0〜100。 プレイ毎に 各プレイヤーが 払う 額 (90% 自分、 10% SYSTEM)。', String(cur));
+        const v = prompt('場代 (pt) — 0〜100。 プレイ毎に各プレイヤーが払う額 (90% 自分、 10% SYSTEM)。', String(cur));
         if (v === null) return;
         const fee = parseInt(v, 10);
         if (Number.isNaN(fee) || fee < 0 || fee > 100) { toast('0〜100 の数値で'); return; }

@@ -1,6 +1,6 @@
 <?php
 // v740 BingoFit (feedback #288) 衣類着回しビンゴ。
-//   5x5 盤、 日曜 00:00 (JST) 始まり 週次サイクル (既存 bingo に合わせた)。
+//   5x5 盤、 日曜 00:00 (JST) 始まり週次サイクル (既存 bingo に合わせた)。
 //   衣類画像は /api/uploads/image で先にアップ → 返ってきた URL を image_url で渡して POST /items。
 //   背景透過 PNG (image_url_transparent) は cron worker (scripts/bingofit_worker.php) が
 //   非同期で生成。 done になるまで closet UI は「🪄 切り抜き中」 バッジ表示。
@@ -50,7 +50,7 @@ function route_bingofit(PDO $pdo, array $cfg, string $method, array $seg): void 
 
 // ── 衣類 ──────────────────────────────────────────────────────
 function bingofit_items_list(PDO $pdo, int $uid): void {
-    // v741 last_worn_at + days_since_worn を 付ける (「最近着てない服」 表示 用)。
+    // v741 last_worn_at + days_since_worn を付ける (「最近着てない服」 表示用)。
     $st = $pdo->prepare("SELECT id, label, category, image_url, image_url_transparent, bg_status, bg_error,
                                 archived_at, created_at, last_worn_at,
                                 CASE WHEN last_worn_at IS NULL THEN NULL
@@ -156,7 +156,7 @@ function bingofit_items_retry_bg(PDO $pdo, int $uid, int $iid): void {
 
 // ── 盤 ────────────────────────────────────────────────────────
 function bingofit_week_start_jst(): string {
-    // 既存 bingo と同じく 日曜 (JST) を週始まり に。
+    // 既存 bingo と同じく日曜 (JST) を週始まりに。
     $d = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
     $dow = (int)$d->format('w'); // 0=Sun
     $d->modify('-' . $dow . ' days');
@@ -173,7 +173,7 @@ function bingofit_board_get(PDO $pdo, int $uid): void {
     $board = $st->fetch(PDO::FETCH_ASSOC);
 
     if (!$board && $isCurrent) {
-        // 今週の盤を生成 (active items 25 未満なら 盤を作らず登録誘導)。
+        // 今週の盤を生成 (active items 25 未満なら盤を作らず登録誘導)。
         $stI = $pdo->prepare("SELECT id FROM bingofit_items WHERE user_id=? AND archived_at IS NULL");
         $stI->execute([$uid]);
         $itemIds = array_map('intval', $stI->fetchAll(PDO::FETCH_COLUMN));
@@ -189,7 +189,7 @@ function bingofit_board_get(PDO $pdo, int $uid): void {
             ]);
             return;
         }
-        // crc32(user . week) で 決定論的シャッフル → 25 件抽出
+        // crc32(user . week) で決定論的シャッフル → 25 件抽出
         mt_srand((int)crc32($uid . '_' . $week));
         shuffle($itemIds);
         $cells = array_slice($itemIds, 0, BINGOFIT_BOARD_CELLS);
@@ -284,7 +284,7 @@ function bingofit_cell_open(PDO $pdo, int $uid, int $idx, bool $open): void {
     if ($open) {
         $pdo->prepare("INSERT INTO bingofit_cell_opens (board_id, cell_index) VALUES (?,?) ON DUPLICATE KEY UPDATE opened_at=opened_at")
             ->execute([$bid, $idx]);
-        // v741 該当 item の last_worn_at を 更新 (「最近 着てない 服」 サジェスト 用)。
+        // v741 該当 item の last_worn_at を更新 (「最近着てない服」 サジェスト用)。
         $cellsArr = json_decode($row['cells_json'], true) ?: [];
         $itemId = (int)($cellsArr[$idx] ?? 0);
         if ($itemId > 0) {

@@ -1,8 +1,8 @@
-// v583 #225 レジュメ原稿チェック — 1-2 ページ短原稿 向け 軽量査読 (5pt)。
+// v583 #225 レジュメ原稿チェック — 1-2 ページ短原稿向け軽量査読 (5pt)。
 //   /#/resume-check       一覧 + 新規入力
 //   /#/resume-check/:id   詳細
 //
-// paper-review より 軽い (テキスト入力 / 短文 / より速い)。
+// paper-review より軽い (テキスト入力 / 短文 / より速い)。
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -24,7 +24,7 @@ export async function renderResumeCheck() {
     <div class="card">
       <label style="display:block; margin-bottom:8px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル (任意)</div>
-        <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿 第1稿">
+        <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿第1稿">
       </label>
       <div class="bold" style="font-size:13px; margin-bottom:4px">原稿 PDF (10 MB まで)</div>
       <input id="rc-pdf" type="file" accept="application/pdf" class="input">
@@ -73,7 +73,7 @@ async function renderResumeCheckList() {
     const d = await get('/api/ai/resume_check');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="hint">まだ チェック履歴がありません</div>';
+      root.innerHTML = '<div class="hint">まだチェック履歴がありません</div>';
       return;
     }
     root.innerHTML = items.map(it => `

@@ -1,6 +1,6 @@
 // /#/admin/sounds — 効果音の規定値 (admin 用)。
 //   * 上段: clip upload + 一覧 (試聴 / 削除)
-//   * 下段: イベントごとに 規定 clip + 音量
+//   * 下段: イベントごとに規定 clip + 音量
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml } from '../router.js';
@@ -47,7 +47,7 @@ export async function renderAdminSounds() {
 
     <div class="card">
       <h3 style="margin:0">イベントごとの規定値</h3>
-      <p class="hint">「— なし —」 を選ぶと 既定では無音。 各ユーザは 「設定」 から個別に上書き可。</p>
+      <p class="hint">「— なし —」 を選ぶと既定では無音。 各ユーザは 「設定」 から個別に上書き可。</p>
       <div id="snd-defaults"><div class="muted">読み込み中…</div></div>
     </div>
   `;

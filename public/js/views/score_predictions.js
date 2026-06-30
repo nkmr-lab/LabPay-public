@@ -32,7 +32,7 @@ export async function renderScorePredictions() {
           誰も完璧に当てなければ全員にフィー返金。
         </p>
         <p style="margin:8px 0 0">
-          <a class="btn primary" href="#/score-predictions/new">＋ 試合を 起案する</a>
+          <a class="btn primary" href="#/score-predictions/new">＋ 試合を起案する</a>
         </p>
       </div>
       ${items.length ? items.map(g => `
@@ -45,11 +45,11 @@ export async function renderScorePredictions() {
           <div class="meta" style="font-size:12px">${escapeHtml(g.title)}</div>
           <div class="meta" style="font-size:12px">
             起案: ${escapeHtml(g.creator_name)} ・
-            参加 ${g.entry_count} 人 ・
+            参加 ${g.entry_count} 人・
             フィー ${g.fee}pt ・
             プール ${g.pot_total}pt
-            ${g.actual_home !== null ? ` ・ 結果 ${g.actual_home}-${g.actual_away}` : ''}
-            ${g.deadline_at ? ` ・ 締切 ${escapeHtml(g.deadline_at)}` : ''}
+            ${g.actual_home !== null ? ` ・結果 ${g.actual_home}-${g.actual_away}` : ''}
+            ${g.deadline_at ? ` ・締切 ${escapeHtml(g.deadline_at)}` : ''}
           </div>
         </a>
       `).join('') : `
@@ -69,7 +69,7 @@ export async function renderScorePredictionNew() {
       <h2 style="margin:0 0 10px">🎯 勝敗予測を起案する</h2>
       <label style="display:block; margin-bottom:10px">
         <div class="bold" style="font-size:13px; margin-bottom:4px">試合の概要 (タイトル)</div>
-        <input id="spn-title" class="input" placeholder="例: W杯 決勝 日本 vs ブラジル" maxlength="200">
+        <input id="spn-title" class="input" placeholder="例: W杯決勝日本 vs ブラジル" maxlength="200">
       </label>
       <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px">
         <label style="flex:1">
@@ -93,7 +93,7 @@ export async function renderScorePredictionNew() {
         </label>
       </div>
       <label style="display:block; margin-bottom:10px">
-        <div class="bold" style="font-size:13px; margin-bottom:4px">予想 締切 (任意、試合開始と同じが普通)</div>
+        <div class="bold" style="font-size:13px; margin-bottom:4px">予想締切 (任意、試合開始と同じが普通)</div>
         <input id="spn-deadline" class="input" type="datetime-local">
       </label>
       <div style="margin-bottom:10px">
@@ -156,7 +156,7 @@ function startSpCountdown() {
     if (!document.getElementById('sp-countdown')) { clearInterval(spCountdownTimer); spCountdownTimer = null; return; }
     const diff = target - Date.now();
     if (diff <= 0) {
-      // v689 #273 「⏳ 締切まで 締切超過 ⛔」 だと 重ね 表示 で 変 だった → 「⏰ 締切終了」 だけ に。
+      // v689 #273 「⏳ 締切まで締切超過 ⛔」 だと重ね表示で変だった → 「⏰ 締切終了」 だけに。
       root.innerHTML = '⏰ 締切終了';
       root.style.background = 'linear-gradient(90deg, #fee2e2, #fecaca)';
       root.style.borderLeftColor = '#dc2626';
@@ -190,7 +190,7 @@ export async function renderScorePredictionDetail(ctx) {
 
 function paintSpDetail(g) {
   const app = document.getElementById('app');
-  // v689 #273 締切 が 過ぎて いれば シンプル に 「締切終了」 を 表示。
+  // v689 #273 締切が過ぎていればシンプルに 「締切終了」 を表示。
   const deadlinePassed = g.deadline_at
     && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
   const countdownBlock = !g.deadline_at || g.status !== 'open' ? '' : (deadlinePassed
@@ -250,8 +250,8 @@ function paintSpDetail(g) {
       </div>
     </div>` : '';
 
-  // v866 #448 起案者 が タイトル / チーム名 / 試合日時 / 〆切 / フィー を 後 から
-  //   編集 でき る。 fee は エントリー が ある と 変更 不可 (サーバ で 弾く)。
+  // v866 #448 起案者がタイトル / チーム名 / 試合日時 / 〆切 / フィーを後から
+  //   編集できる。 fee はエントリーがあると変更不可 (サーバで弾く)。
   const fmtForLocal = (s) => {
     if (!s) return '';
     // 「2026-06-27 19:00:00」 形式 → 「2026-06-27T19:00」
@@ -280,13 +280,13 @@ function paintSpDetail(g) {
             <input id="sp-edit-away" type="text" maxlength="80" value="${escapeHtml(g.team_away || '')}" style="width:100%; padding:6px; border:1px solid var(--line); border-radius:6px">
           </label>
         </div>
-        <label style="display:block; font-size:13px; margin-top:6px">試合 日時 (任意)</label>
+        <label style="display:block; font-size:13px; margin-top:6px">試合日時 (任意)</label>
         <input id="sp-edit-match" type="datetime-local" value="${fmtForLocal(g.match_at)}" style="padding:6px; border:1px solid var(--line); border-radius:6px">
-        <label style="display:block; font-size:13px; margin-top:6px">〆切 日時 (任意)</label>
+        <label style="display:block; font-size:13px; margin-top:6px">〆切日時 (任意)</label>
         <input id="sp-edit-deadline" type="datetime-local" value="${fmtForLocal(g.deadline_at)}" style="padding:6px; border:1px solid var(--line); border-radius:6px">
         <label style="display:block; font-size:13px; margin-top:6px">
           フィー (pt)
-          ${g.entries && g.entries.length ? '<span class="hint-sm" style="color:#c00"> ※ すでに 予想者 が いる ので 変更 不可</span>' : ''}
+          ${g.entries && g.entries.length ? '<span class="hint-sm" style="color:#c00"> ※ すでに予想者がいるので変更不可</span>' : ''}
         </label>
         <input id="sp-edit-fee" type="number" min="1" max="500" value="${g.fee}" ${g.entries && g.entries.length ? 'disabled' : ''} style="padding:6px; border:1px solid var(--line); border-radius:6px; width:120px">
         <div style="margin-top:10px; display:flex; gap:8px">
@@ -295,7 +295,7 @@ function paintSpDetail(g) {
         </div>
       </div>
       <div id="sp-finalize-form" hidden style="margin-top:12px; padding:10px; border:1px solid var(--line); border-radius:8px">
-        <div class="bold" style="margin-bottom:6px">最終 スコア</div>
+        <div class="bold" style="margin-bottom:6px">最終スコア</div>
         <div style="display:flex; gap:8px; align-items:center; justify-content:center; margin:6px 0">
           <input id="sp-fin-home" type="number" min="0" max="99" value="0" style="width:70px; font-size:32px; text-align:center; border:2px solid #ddd; border-radius:8px; padding:4px">
           <span style="font-size:24px; color:#888">-</span>
@@ -319,7 +319,7 @@ function paintSpDetail(g) {
            </div>`
         : `<div style="border-top:1px solid var(--line); padding:6px 0">
              <span class="bold">${escapeHtml(e.display_name)}</span>
-             <span class="meta" style="font-size:12px"> ・ 予想は締切後に公開</span>
+             <span class="meta" style="font-size:12px"> ・予想は締切後に公開</span>
            </div>`
       ).join('')}
     </div>` : '';
@@ -333,8 +333,8 @@ function paintSpDetail(g) {
       </div>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
         ${escapeHtml(g.title)}<br>
-        起案: ${escapeHtml(g.creator_name)} ・ フィー ${g.fee}pt ・ プール ${g.pot_total}pt
-        ${g.match_at ? ` ・ 試合 ${escapeHtml(g.match_at)}` : ''}
+        起案: ${escapeHtml(g.creator_name)} ・フィー ${g.fee}pt ・プール ${g.pot_total}pt
+        ${g.match_at ? ` ・試合 ${escapeHtml(g.match_at)}` : ''}
       </p>
       ${countdownBlock}
     </div>
@@ -365,7 +365,7 @@ function paintSpDetail(g) {
 
   if (g.is_creator && (g.status === 'open' || g.status === 'closed')) {
     document.getElementById('sp-close')?.addEventListener('click', async () => {
-      if (!confirm('受付を 締め切りますか?')) return;
+      if (!confirm('受付を締め切りますか?')) return;
       try { await post(`/api/score_predictions/games/${g.id}/close`, {}); renderScorePredictionDetail({ params: { id: g.id } }); }
       catch (e) { toast('失敗: ' + (e?.message || e)); }
     });
@@ -378,7 +378,7 @@ function paintSpDetail(g) {
       const form = document.getElementById('sp-finalize-form');
       form.hidden = !form.hidden;
     });
-    // v866 #448 編集 フォーム
+    // v866 #448 編集フォーム
     document.getElementById('sp-open-edit')?.addEventListener('click', () => {
       const form = document.getElementById('sp-edit-form');
       form.hidden = !form.hidden;
@@ -397,11 +397,11 @@ function paintSpDetail(g) {
       const feeEl = document.getElementById('sp-edit-fee');
       if (feeEl && !feeEl.disabled) payload.fee = parseInt(feeEl.value, 10);
       if (!payload.title || !payload.team_home || !payload.team_away) {
-        toast('タイトル / チーム名 を 入力 してください'); return;
+        toast('タイトル / チーム名を入力してください'); return;
       }
       try {
         await patch(`/api/score_predictions/games/${g.id}`, payload);
-        toast('✏️ 編集 を 保存 しました');
+        toast('✏️ 編集を保存しました');
         renderScorePredictionDetail({ params: { id: g.id } });
       } catch (e) { toast('失敗: ' + (e?.message || e)); }
     });

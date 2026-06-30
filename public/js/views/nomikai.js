@@ -307,7 +307,7 @@ function updatePreviewTotal(arr) {
   const el = document.getElementById('nm-preview-total');
   if (!el) return;
   const total = arr._total;
-  // ソフドリ割引が指定されてるのに 飲み手 0 / ソフドリ 0 で適用不能なケースは
+  // ソフドリ割引が指定されてるのに飲み手 0 / ソフドリ 0 で適用不能なケースは
   // ユーザに分かるように 「適用不能」 を明示。
   let sdHint = '';
   if (arr._sdDiscount > 0) {
@@ -419,7 +419,7 @@ export async function renderNomikaiDetail({ params }) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
-      <a href="#/nomikai" class="hint">← 飲み会割り勘 一覧</a>
+      <a href="#/nomikai" class="hint">← 飲み会割り勘一覧</a>
       <div id="nm-detail" class="muted" style="margin-top:6px">読み込み中…</div>
     </div>
     <div class="card">

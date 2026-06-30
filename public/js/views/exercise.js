@@ -1,5 +1,5 @@
-// /#/exercise — ポケットに入れて 歩数を カウント。 DeviceMotion API を使う 簡易歩数計。
-// iOS 13+ は DeviceMotionEvent.requestPermission() の 明示許可が必要なので、
+// /#/exercise — ポケットに入れて歩数をカウント。 DeviceMotion API を使う簡易歩数計。
+// iOS 13+ は DeviceMotionEvent.requestPermission() の明示許可が必要なので、
 // 「開始」 ボタン (ユーザ操作) を起点に request → listen 開始。
 // 検出: accelerationIncludingGravity の magnitude を 200ms 窓で smoothing し、
 // 閾値 2.0 m/s² を超え、 前回検出から 250ms 以上経っていれば 1 歩としてカウント。
@@ -27,7 +27,7 @@ function stopSession() {
 }
 
 async function requestMotionPermission() {
-  // iOS 13+ は requestPermission を実装。 Android Chrome / デスクトップは 未実装で
+  // iOS 13+ は requestPermission を実装。 Android Chrome / デスクトップは未実装で
   // 直接 listen で OK。
   if (typeof DeviceMotionEvent !== 'undefined'
       && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -118,7 +118,7 @@ async function toggle() {
     btn.textContent = '開始';
     btn.classList.remove('danger'); btn.classList.add('primary');
     if (steps === 0 && duration < 5) {
-      toast('歩数 0 / 短すぎなので 保存しません');
+      toast('歩数 0 / 短すぎなので保存しません');
       stepCount = 0;
       document.getElementById('ex-count').textContent = '0';
       document.getElementById('ex-elapsed').textContent = '0:00';
@@ -131,7 +131,7 @@ async function toggle() {
         started_at: started.toISOString().slice(0, 19),
         ended_at: ended.toISOString().slice(0, 19),
       });
-      toast(`${steps} 歩 / ${duration}秒 を記録`);
+      toast(`${steps} 歩 / ${duration}秒を記録`);
       stepCount = 0;
       document.getElementById('ex-count').textContent = '0';
       document.getElementById('ex-elapsed').textContent = '0:00';

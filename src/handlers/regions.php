@@ -3,7 +3,7 @@
 //   GET    /api/regions/visited            自分が記録した {kind, code} の一覧
 //   POST   /api/regions/visit              { kind, code } を記録 (INSERT IGNORE)
 //   DELETE /api/regions/visit?kind=...&code=...  解除
-//   GET    /api/regions/stats              ラボ全体の 国別 / 都道府県別 訪問者数 (匿名集計)
+//   GET    /api/regions/stats              ラボ全体の国別 / 都道府県別訪問者数 (匿名集計)
 
 declare(strict_types=1);
 

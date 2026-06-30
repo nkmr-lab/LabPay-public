@@ -24,7 +24,7 @@ export async function renderMyPurchases() {
       sumEl.hidden = false;
       sumEl.innerHTML = `
         <div style="font-size:13px">
-          表示中 <b>${items.length}</b> 件 ・ 合計 <b>${(d.total_spent_in_window || 0).toLocaleString()}</b> pt 支払い
+          表示中 <b>${items.length}</b> 件・合計 <b>${(d.total_spent_in_window || 0).toLocaleString()}</b> pt 支払い
         </div>`;
     }
     const root = document.getElementById('mp-list');
