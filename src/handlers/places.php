@@ -613,6 +613,22 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
         if ($raw === false) throw new ApiException('io_error', 'read failed', 500);
         $src = @imagecreatefromstring($raw);
         if (!$src) throw new ApiException('bad_request', '画像 として 読めません', 400);
+        // v883 #456 EXIF orientation を先に適用してから user の rotate を重ねる。
+        //   iPhone 縦撮影 (EXIF=6) の画像は元ファイルに EXIF orientation tag が残ったまま
+        //   pixel データは横倒し → ブラウザは EXIF を見て縦表示。サーバ rotate は EXIF
+        //   無視で pixel rotate するため、初回 click が EXIF rotation を相殺してしまい
+        //   「1 回押しても動かず、2 回押すと 180° 回転」 という挙動になっていた。
+        //   先に EXIF orientation 通り pixel を回しておけば、保存時に EXIF が落ちる
+        //   (imagejpeg 等は EXIF を保存しない) ので、以降の回転は user の入力通り素直に重なる。
+        $ext0 = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (($ext0 === 'jpg' || $ext0 === 'jpeg') && function_exists('exif_read_data')) {
+            $exif = @exif_read_data($path);
+            $ori = isset($exif['Orientation']) ? (int)$exif['Orientation'] : 1;
+            if ($ori === 3)      { $r = imagerotate($src, 180, 0); imagedestroy($src); $src = $r; }
+            elseif ($ori === 6)  { $r = imagerotate($src,  -90, 0); imagedestroy($src); $src = $r; }
+            elseif ($ori === 8)  { $r = imagerotate($src,   90, 0); imagedestroy($src); $src = $r; }
+            // 鏡像 (2/4/5/7) は稀なのでスキップ
+        }
         // imagerotate は 反時計回り 角度 を 取る (90 = 反時計 90°)。
         //   ユーザ 期待 = 時計回り 90° なら -90 を 渡す。 ここ では「右 (時計回り) 90°」 を 標準 と する。
         $rotated = imagerotate($src, -$degrees, 0);

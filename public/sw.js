@@ -8,7 +8,7 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v882';
+const CACHE_NAME = 'labpay-shell-v883';
 // アップロード 画像 (固定 URL = ファイル名 ハッシュ) は cache-first に
 // 別キャッシュ で 永続化。 シェル を 更新 しても 画像 は 落ち ない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
@@ -141,6 +141,12 @@ self.addEventListener('fetch', (event) => {
         const m = url.pathname.match(/^\/api\/([^/]+)/);
         if (m) {
           await invalidateContentByPrefix('/api/' + m[1]);
+        }
+        // v883 #456 rotate-image エンドポイント (places/posts) の POST が成功したら
+        //   IMG_CACHE 全消しで /uploads/ 配下の古いキャッシュを切り落とす。
+        //   個別 URL 特定するより全消しの方が確実、 画像は次回 fetch でまた埋まる。
+        if (url.pathname.includes('/rotate-image')) {
+          try { await caches.delete(IMG_CACHE_NAME); } catch (_) {}
         }
       }
       return resp;
