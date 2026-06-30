@@ -107,6 +107,8 @@ export const APPS = [
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文 全訳', desc: '要約 で なく **章 ごと の フル 翻訳**。 各 章 を 訳 → 2-3 文 サンプル を back-translation で 整合 確認 → 用語 統一 + 全体 ポリッシュ。 英→日 (gpt-5-mini 25 / gpt-5 60 / o1 100 pt) と 日→英 (5x、 em-dash 等 GPT-isms 除去 込み) の 双方向 対応。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究 ノート の 今日 / 昨日 を ロード + 編集 リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究 ノート (Cosense)', desc: 'nkmr-lab Cosense の 「YYYY.MM_研究ノート_<handle>」 ページ を 直接 ロード し、 今日 / 昨日 の 日付 セクション を 抽出 表示。 書く 時 は Cosense を 開いて 編集。 admin 側 で session cookie 設定 必須。', defaultVisible: true },
+  // v886 Overleaf プロジェクト 追跡 (教員 admin 限定)
+  { id: 'overleaf',     cat: 'research', url: '#/overleaf',     title: '📝 Overleaf 追跡',  desc: '教員アカウントで共有されてる全Overleafプロジェクトの文字数推移を可視化。 pyoverleafで定期取得、 24h/7d差分や60日推移、 ファイル別内訳。 admin限定 (教員アカウントのcookieが必要)。', defaultVisible: true },
   { id: 'zemi-videos', cat: 'lab-mgmt', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。 誰でも 動画URL + タイトル + 説明 を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、 機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
@@ -166,6 +168,7 @@ const CATEGORY_ORDER = {
   // v792 #396 研究用 は AI で 研究 を 直接 進める もの だけ
   research: [
     'research-notes', // v821 Cosense 連携
+    'overleaf',       // v886 Overleaf 追跡
     'deep-research',
     'paper-summary',
     'paper-translate-full',

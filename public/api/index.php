@@ -105,6 +105,7 @@ $routes = [
     'conquest'       => 'route_conquest',    // v860 #445 制覇 リスト (ユーザ作成)
     'habits'         => 'route_habits',      // v870 #452 Habit Tracker
     'buzzer'         => 'route_buzzer',      // v872 #454 早押し クイズ
+    'overleaf'       => 'route_overleaf',    // v886 Overleaf プロジェクト 追跡
 ];
 
 try {

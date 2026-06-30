@@ -587,3 +587,4 @@ require_once __DIR__ . '/handlers/share.php';        // v853 共有 (タイト�
 require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇 リスト (ユーザ作成)
 require_once __DIR__ . '/handlers/habits.php';       // v870 #452 Habit Tracker
 require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押し クイズ
+require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト 追跡
