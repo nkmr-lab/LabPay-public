@@ -40,11 +40,11 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 
 主要カテゴリ:
 
-- 🔬 **研究用** (v792 で AI で 研究 を 直接 進める もの に 絞り 込み) — **🔎 Deep Research** / **📑 論文要約** / **📑 論文全訳** / **📝 原稿チェック** / **📄 論文査読** / **✂️ 文字数 リライター**
+- 🔬 **研究用** (v792 で AI で 研究 を 直接 進める もの に 絞り 込み) — **🔎 Deep Research** / **📑 論文要約** / **📑 論文全訳** / **📝 原稿チェック** / **📄 論文査読** / **✂️ 文字数 リライター** / **📝 研究 ノート (Cosense)** / **📝 Overleaf 更新状況**
 - 🏢 **研究室運営サポート** (v793 で 2 サブ ブロック に 分割表示) — **🏫 ゼミ・研究会・学会 サポート** (タイマー / ストップウォッチ / 順番決め / ランダムグループ / イベント・出張用グループ / ルーレット / どこ行くルーレット) + **🏢 研究室 運営** (投票 / チャット / ファイル / 一時画像 / 〆切 / 学会〆切 / 重要連絡 / 点呼 / 待ち合わせ / 飲み会割り勘 / 集金 / **💼 アルバイト申請**)
 - 💴 **売買** — 販売 / 購入 / オークション
-- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ / **🎰 着回し ビンゴ** (着る服 5x5)
-- 💪 **健康** — 体重 BMI / 筋トレ / 散歩 / 運動
+- 🎮 **ゲーム / 娯楽** — 麻雀 / 大富豪 / 地雷オセロ / 優勝予想 / 勝敗予測 / ito / 人狼 / 絵しりとり / ティア表 / ビンゴ / ⭕❌ マルバツ + 自作ゲーム (各ユーザが 設定から JS を アップロードして 追加可能) / **📝 フリップクイズ** (出題 → フリップ 回答 → 採点) / **⚾ ドラフト** (プロ野球 風 順番 指名 + くじ抽選) / **⚡ 早押し クイズ** (現場 で ms 差 判定) / **🏁 制覇 リスト** (パン屋 / 温泉 等 ユーザ 作成) / らぼったー / 食べある記 / フライト応援 / プレイリスト / 制覇マップ / **🎰 着回し ビンゴ** (着る服 5x5) / **🎥 ゼミ動画** (YouTube 限定公開 検索)
+- 💪 **健康** — 体重 BMI / 筋トレ / 散歩 / 運動 / **📓 Habit Tracker** (自分 の 習慣 を 日 毎 ✓ で 積み上げ + 60 日 カレンダー + streak)
 - 🤖 **AI** — 翻訳 / チャット / 操作ガイド AI / **🏅 実績 称号** (AI が 獲得 実績 から ラノベ 風 称号 を 1 行 生成) / **💬 今日 の 名言** (デフォルト OFF、 偉人 / 漫画 / アニメ 名言 を 日 単位 で 1 件、 ラボメン による 名言 登録 可)
 - 🧩 **拡張** — **ウィジェット センター** (自作 ウィジェット を 登録 → ホーム に 表示。 JS で `render(root)` を 書く だけ。 詳細 → [docs/CUSTOM_WIDGETS.md](docs/CUSTOM_WIDGETS.md))
 
@@ -113,6 +113,12 @@ LabPay は **使い切りの軽さ** を最優先に設計されています:
 | 🗺 制覇マップ (regions) | 行った国 (UN 加盟 193 + 主要地域 = 201) + 都道府県 (47) を タップで登録。 進捗バー + ラボ内集計 |
 | 🔮 1 日 1 回 占い (fortune) | 30 種の運勢 (大吉 / 中吉 / 小吉 / 末吉 / 凶 + ジョーク系)、 1 日 1 引き 固定。 ホーム残高エリアの 🔮 アイコンで 表示切替 |
 | 🎂 誕生日 (birthday_md) | 設定 → プロフィールで MM-DD + 西暦任意 を登録。 当日のみ ホームに 🎂 バナー表示 (年齢付き可) |
+| 📝 研究 ノート (Cosense / research-notes) | nkmr-lab Cosense の 「YYYY.MM_研究ノート_<handle>」 ページ を 直接 ロード し、 今日 / 昨日 の 日付 セクション を 抽出 表示。 書く 時 は Cosense を 開いて 編集。 ユーザ ごとに 自分 の PAT (Personal Access Token) を 設定 → 自分 の 編集 履歴 が 反映 (admin 限定 だった cookie 方式 から ユーザ ごと PAT に 変更 で 安定 化) |
+| 🎥 ゼミ 動画 (zemi-videos) | YouTube の 限定公開 ゼミ 動画 を タイトル / 説明 で キーワード 検索 + その場 で 視聴。 誰でも 動画 URL + タイトル + 説明 を 登録 可。 重複 防止 + YT API で タイトル / 再生 時間 を 自動 補完 |
+| 🏁 制覇 リスト (conquest) | 街 の パン屋、 ラーメン屋、 温泉地 など、 自分 だけ の 制覇 対象 リスト を 作って、 達成 したら チェック。 公開 すれば みんな で アイテム を 育てられる |
+| 📓 Habit Tracker (habits) | 毎日 論文 を 読む / 早起き / 運動 など 自分 の 習慣 を 登録 して、 日 毎 ✓ で 積み上げ。 連続記録 (streak) と 60 日 カレンダー で 可視化。 公開 すれば ラボ メン 全員 が 達成 状況 を 見られる |
+| ⚡ 早押し クイズ (buzzer) | リアル現場 (ゼミ / 飲み会 等) で クイズ を 出題 → 参加者 が スマホ で 早押し。 タップ し た 順 で 順位 が 決まり、 1 位 は 緑 で 回答権、 他 は 赤 + 1 位 と の 差 が ms で 表示。 800ms ポーリング で 順位 リアル タイム |
+| 📝 Overleaf 更新状況 (overleaf) | 教員 アカウント で 共有 されてる 全 Overleaf プロジェクト の 文字数 推移 を ラボ メン 全員 で 可視化。 24h / 7d 差分 + sparkline、 複数 プロジェクト の 推移 比較 グラフ、 60 日 履歴、 ファイル 別 内訳。 メイン .tex (`\documentclass` で 検出) のみ 集計 で サンプル / 過去 ファイル を 除外。 絞り込み プリセット (ResearchProgressReport / MasterThesis2026 / BachelorThesis2026) + URL slug (`?filter=...&mode=chart`) で 共有 可能。 1か月 以上 更新 なし は グラフ から 除外 し て 一覧 で 折りたたみ。 hover ツールチップ で 名前 + 値 + 日付。 v896 で 「変更 が 無い プロジェクト は .tex DL を スキップ」 最適化 (250 件 中 ~5 件 だけ 実 DL) |
 
 ### ラボ活動の可視化
 
@@ -250,6 +256,8 @@ LabPay/
 │   ├── run_migration.php    ← マイグレーション適用 (app config 共用)
 │   ├── backup.sh            ← mysqldump バックアップ
 │   └── make_icons.py        ← PWA アイコン生成 (Pillow)
+├── scripts/                 ← その他バックエンド スクリプト
+│   └── overleaf_collector.py ← 📝 Overleaf 更新状況 collector (systemd timer から 1h おき 起動、 venv + pyoverleaf + cookie 必要)
 └── docs/
     ├── INSTALL.md           ← 本番サーバ導入手順 (学生向け)
     ├── HACKATHON.md         ← LabPay API でハック作る人向け
@@ -561,6 +569,23 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | 165 | 2026‑06‑23 | ledger.type に paper_translate / paper_full_translate / deep_research (取引 履歴 で 個別 表示) |
 | — | 2026‑06‑17 | (migrations フォルダ 外) bait_requests + bait_assignments (アルバイト 申請) |
 | — | 2026‑06‑17 | (migrations フォルダ 外) custom_widgets (自作 ウィジェット) |
+| 166 | 2026‑06‑24 | adhoc_group_files (グループに 画像 / 音声 / ドキュメント 添付) |
+| 167 | 2026‑06‑25 | users.cosense_cookie (Cosense session cookie 連携、 170 で drop) |
+| 168 | 2026‑06‑25 | users.cosense_pat (Cosense PAT に切替 — 安定運用に) |
+| 169 | 2026‑06‑25 | users.cosense_page_handle (研究ノート ページ 名 解決) |
+| 170 | 2026‑06‑25 | drop users.cosense_cookie (PAT に 移行 完了) |
+| 171 | 2026‑06‑26 | ai_result_stars (paper-summary / paper-translate-full / deep-research に ⭐ 評価) |
+| 172 | 2026‑06‑26 | ai_result_bookmarks (AI 結果 に 🔖 ブックマーク) |
+| 173 | 2026‑06‑26 | zemi_videos (🎥 ゼミ動画 = YouTube 限定公開 を キーワード 検索 + その場 視聴) |
+| 174 | 2026‑06‑26 | zemi_videos UNIQUE + yt_title (重複 防止 + YT タイトル 自動 取得) |
+| 175 | 2026‑06‑26 | users.birth_place (出身地 — プロフィール 公開 項目) |
+| 176 | 2026‑06‑26 | zemi_videos.duration_sec (再生 時間 秒、 ソート 用) |
+| 177 | 2026‑06‑27 | conquest_lists + conquest_items + conquest_checks (🏁 制覇 リスト — ユーザ 作成 の パン屋 / 温泉 等 を 達成 チェック) |
+| 178 | 2026‑06‑28 | habits + habit_days (📓 Habit Tracker — 日 毎 ✓ + 60 日 カレンダー + streak) |
+| 179 | 2026‑06‑29 | buzzer_sessions + buzzer_taps (⚡ 早押し クイズ — 現場 で 800ms ポーリング、 タップ 順 で ms 差 表示) |
+| 180 | 2026‑06‑29 | tasks.funded_by_system (admin が タスク 起案 時 に 「💰 システム 持ち出し」 オプション — エスクロー が SYSTEM 口座 から 出る) |
+| 181 | 2026‑06‑30 | overleaf_projects + overleaf_snapshots + overleaf_file_snapshots + overleaf_collector_runs (📝 Overleaf 更新状況 — pyoverleaf で 教員 アカウント の 全 共有 プロジェクト の 文字数 推移 を 1 時間 おき スナップショット) |
+| 182 | 2026‑06‑30 | overleaf_snapshots.main_file_path + main_char_count_* (主 .tex を `\documentclass` で 検出、 過去 ファイル / サンプル を 集計 対象 外 に) |
 
 ---
 
@@ -571,8 +596,10 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 | `/etc/cron.d/labpay-scrapbox` | `59 23 * * *` | Scrapbox-via-Slack 当日分集計 → pt 配布 |
 | `/etc/cron.d/labpay-backup` | `30 3 * * *` | `mysqldump --single-transaction` バックアップ (30 日保持) |
 | `/etc/cron.d/certbot` | (certbot 自動生成) | Let's Encrypt 証明書更新 |
+| `systemd: labpay-overleaf.timer` | `OnUnitActiveSec=1h` | 📝 Overleaf 更新状況 collector — pyoverleaf で 教員 アカウント の 全 プロジェクト の 文字数 を スナップショット。 v896 の last_updated ETag 的 skip 最適化で 変更 が 無い プロジェクト は .tex DL を 完全 省略 (典型 250 件 中 5 件 程度 だけ 実 DL) |
 
 各部屋 scanner の cron / Task Scheduler 設定は [bin/README.md](bin/README.md) 参照。
+Overleaf collector の セットアップ 手順 (venv + cookie + systemd unit) は [scripts/overleaf_collector.py](scripts/overleaf_collector.py) 冒頭 コメント 参照。
 
 ---
 
