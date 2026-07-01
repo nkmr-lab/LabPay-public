@@ -50,6 +50,16 @@ function tasks_sweep_expired(PDO $pdo, array $cfg): void {
     }
 }
 
+// v909 #464 タスク エスクロー の 返金先 は funded_by_system=1 なら SYSTEM、 それ以外は依頼者。
+//   ボランティア募集 (システム 持ち出し) が 期限切れで キャンセルされた 際、 起案者 (中村) に
+//   14000pt が 戻ってしまう バグ が あった。 SYSTEM から出た金 は SYSTEM に返る のが正しい。
+function _tasks_refund_account(PDO $pdo, array $task): int {
+    if ((int)($task['funded_by_system'] ?? 0) === 1) {
+        return Ledger::accountIdByCode($pdo, 'SYSTEM');
+    }
+    return Ledger::accountIdForUser($pdo, (int)$task['requester_user_id']);
+}
+
 function tasks_auto_expire_one(PDO $pdo, array $cfg, int $taskId): void {
     $pdo->beginTransaction();
     $title = ''; $requesterId = 0; $refund = 0;
@@ -62,9 +72,9 @@ function tasks_auto_expire_one(PDO $pdo, array $cfg, int $taskId): void {
         $approved = tasks_approved_count($pdo, $taskId);
         $refund   = ((int)$task['capacity'] - $approved) * (int)$task['reward'];
         if ($refund > 0) {
-            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
-            $userAcc = Ledger::accountIdForUser($pdo, (int)$task['requester_user_id']);
-            Ledger::transfer($pdo, $escAcc, $userAcc, $refund, 'refund',
+            $escAcc     = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $refundAcc  = _tasks_refund_account($pdo, $task);  // v909 #464
+            Ledger::transfer($pdo, $escAcc, $refundAcc, $refund, 'refund',
                 'task', $taskId, "タスク「{$task['title']}」期限切れ返金");
         }
         $pdo->prepare("UPDATE tasks SET status='cancelled', closed_at=NOW() WHERE id=?")->execute([$taskId]);
@@ -824,17 +834,18 @@ function tasks_update(PDO $pdo, array $cfg, int $taskId): void {
         }
 
         // Escrow settlement: pay only on the *unpaid* slots; approved slots are already settled.
+        // v909 #464 funded_by_system=1 のタスクは SYSTEM ⇄ ESCROW で差額処理。
         $oldUnpaid = (int)$task['reward'] * ((int)$task['capacity'] - $approved);
         $newUnpaid = $newReward * ($newCap - $approved);
         $delta = $newUnpaid - $oldUnpaid;
         if ($delta !== 0) {
-            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
-            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $funderAcc = _tasks_refund_account($pdo, $task);
+            $escAcc    = Ledger::accountIdByCode($pdo, 'ESCROW');
             if ($delta > 0) {
-                Ledger::transfer($pdo, $userAcc, $escAcc, $delta, 'deposit',
+                Ledger::transfer($pdo, $funderAcc, $escAcc, $delta, 'deposit',
                     'task', $taskId, "タスク「{$newTitle}」変更による追加預け");
             } else {
-                Ledger::transfer($pdo, $escAcc, $userAcc, -$delta, 'refund',
+                Ledger::transfer($pdo, $escAcc, $funderAcc, -$delta, 'refund',
                     'task', $taskId, "タスク「{$newTitle}」変更による差額返金");
             }
         }
@@ -1055,9 +1066,9 @@ function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
         $approved = tasks_approved_count($pdo, $taskId);
         $refund   = ((int)$task['capacity'] - $approved) * (int)$task['reward'];
         if ($refund > 0) {
-            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
-            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
-            Ledger::transfer($pdo, $escAcc, $userAcc, $refund, 'refund',
+            $escAcc     = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $refundAcc  = _tasks_refund_account($pdo, $task);  // v909 #464
+            Ledger::transfer($pdo, $escAcc, $refundAcc, $refund, 'refund',
                 'task', $taskId, "タスク「{$task['title']}」終了返金");
         }
         $pdo->prepare("UPDATE tasks SET status='closed', closed_at=NOW() WHERE id=?")->execute([$taskId]);
@@ -1094,9 +1105,9 @@ function tasks_cancel(PDO $pdo, array $cfg, int $taskId): void {
         $approved = tasks_approved_count($pdo, $taskId);
         $refund   = ((int)$task['capacity'] - $approved) * (int)$task['reward'];
         if ($refund > 0) {
-            $escAcc  = Ledger::accountIdByCode($pdo, 'ESCROW');
-            $userAcc = Ledger::accountIdForUser($pdo, (int)$u['id']);
-            Ledger::transfer($pdo, $escAcc, $userAcc, $refund, 'refund',
+            $escAcc     = Ledger::accountIdByCode($pdo, 'ESCROW');
+            $refundAcc  = _tasks_refund_account($pdo, $task);  // v909 #464
+            Ledger::transfer($pdo, $escAcc, $refundAcc, $refund, 'refund',
                 'task', $taskId, "タスク「{$task['title']}」取消返金");
         }
 
