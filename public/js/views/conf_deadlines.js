@@ -207,8 +207,11 @@ export async function renderConfDeadlineForm({ params } = {}) {
             <input type="text" id="cd-deadline-label" maxlength="50" placeholder="種別を入力 (例: アブスト)" style="display:none; margin-top:4px">
           </label>
           <label style="flex:2; min-width:180px"><span class="lbl" style="font-size:11px">日時</span>
-            <input type="datetime-local" id="cd-deadline" required>
-            <div class="hint-sm" style="font-size:10px">時刻未指定 (= 日付のみ) なら自動で 23:59 になります</div>
+            <div class="row" style="gap:4px">
+              <input type="date" id="cd-deadline-date" required style="flex:2; min-width:130px">
+              <input type="time" id="cd-deadline-time" value="23:59" style="flex:1; min-width:90px">
+            </div>
+            <div class="hint-sm" style="font-size:10px">時刻はデフォルト 23:59 (締切のほとんど)。 変えたい時だけ変更を。</div>
           </label>
         </div>
         <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px; margin-top:4px">
@@ -266,7 +269,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
         </select>
         <input type="text" class="cd-ex-label" maxlength="50" placeholder="種別入力" style="display:none; margin-top:3px; font-size:12px">
       </div>
-      <input type="datetime-local" class="cd-ex-dt" style="flex:2; min-width:180px; font-size:12px">
+      <div style="flex:2; min-width:180px; display:flex; gap:3px">
+        <input type="date" class="cd-ex-date" style="flex:2; min-width:120px; font-size:12px">
+        <input type="time" class="cd-ex-time" value="23:59" style="flex:1; min-width:80px; font-size:12px">
+      </div>
       <label style="display:inline-flex; gap:4px; align-items:center; font-size:11px">
         <input type="checkbox" class="cd-ex-aoe"> AOE
       </label>
@@ -287,13 +293,14 @@ export async function renderConfDeadlineForm({ params } = {}) {
         txt.value = lbl;
         txt.style.display = '';
       }
-      const dt = String(initial.deadline_at || '').replace(' ', 'T').slice(0, 16);
-      if (initial.is_aoe) {
-        row.querySelector('.cd-ex-aoe').checked = true;
-        row.querySelector('.cd-ex-dt').value = jstStrToAoeStr(initial.deadline_at);
-      } else {
-        row.querySelector('.cd-ex-dt').value = dt;
-      }
+      // v908 date+time 分離。 datetime-local を YYYY-MM-DDTHH:MM に整形して 分割。
+      const dtRaw = initial.is_aoe
+        ? jstStrToAoeStr(initial.deadline_at)
+        : String(initial.deadline_at || '').replace(' ', 'T').slice(0, 16);
+      const [d16, t16] = dtRaw.split('T');
+      row.querySelector('.cd-ex-date').value = d16 || '';
+      row.querySelector('.cd-ex-time').value = t16 || '23:59';
+      if (initial.is_aoe) row.querySelector('.cd-ex-aoe').checked = true;
       if (initial.is_tentative) row.querySelector('.cd-ex-tentative').checked = true;
     }
     row.querySelector('.cd-ex-label-sel').addEventListener('change', e => {
@@ -308,26 +315,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
   });
 
   // v712 #306 + v713 #307 入力補助:
-  //   (a) datetime-local の日付部分が変わったら (= calendar 選択) 時刻を強制で 23:59 に。
-  //       締切はほぼ必ず 23:59 なので、 browser が「今の時間」を入れてくるのを上書き。
-  //       ユーザが時刻部分だけ変えた場合 (= 23:59 以外にした) は触らない。
+  //   (v908 #463) datetime-local を date+time 分離に変更 したので、 force2359 系ロジックは
+  //       もう不要。 time の default が既に 23:59 なので日付を選ぶだけで登録できる。
   //   (b) カテゴリが国際会議 (intl_conf) になったら AOE checkbox を既定 ON に。
   //   (c) 会期開始日を選んだら終了日 input の min を開始日にセット。
-  const lastDate = new WeakMap();
-  const force2359OnDateChange = (el) => {
-    if (!el || !el.value) return;
-    const newDate = el.value.slice(0, 10);
-    const prevDate = lastDate.get(el) || '';
-    if (newDate && newDate !== prevDate) {
-      el.value = newDate + 'T23:59';
-    }
-    lastDate.set(el, newDate);
-  };
-  const dlEl = document.getElementById('cd-deadline');
-  dlEl.addEventListener('input', () => force2359OnDateChange(dlEl));
-  extrasRoot.addEventListener('input', e => {
-    if (e.target.classList?.contains('cd-ex-dt')) force2359OnDateChange(e.target);
-  });
   // v791 #394 メイン締切種別 select、「その他」だけテキストボックス
   const dlLblSel = document.getElementById('cd-deadline-label-sel');
   const dlLblTxt = document.getElementById('cd-deadline-label');
@@ -385,12 +376,13 @@ export async function renderConfDeadlineForm({ params } = {}) {
       }
       document.getElementById('cd-deadline-aoe').checked = !!Number(r.deadline_is_aoe);
       document.getElementById('cd-deadline-tentative').checked = !!Number(r.deadline_is_tentative);
-      if (Number(r.deadline_is_aoe)) {
-        document.getElementById('cd-deadline').value = jstStrToAoeStr(r.deadline_at);
-      } else {
-        document.getElementById('cd-deadline').value = (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
-      }
-      lastDate.set(dlEl, dlEl.value.slice(0, 10));
+      // v908 date+time 分離。 datetime-local を YYYY-MM-DDTHH:MM に整形して 分割。
+      const dlRaw = Number(r.deadline_is_aoe)
+        ? jstStrToAoeStr(r.deadline_at)
+        : (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
+      const [dPart, tPart] = dlRaw.split('T');
+      document.getElementById('cd-deadline-date').value = dPart || '';
+      document.getElementById('cd-deadline-time').value = tPart || '23:59';
       parseExtra(r.extra_deadlines).forEach(addExtraRow);
       if (r.notification_at) document.getElementById('cd-notification').value = (r.notification_at || '').replace(' ', 'T').slice(0, 16);
       if (r.event_start) {
@@ -409,8 +401,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
   }
   document.getElementById('cd-save').addEventListener('click', async () => {
     const isAoe = document.getElementById('cd-deadline-aoe').checked;
-    // v791 #394 日付のみなら 23:59 に補完
-    const dlInput = ensureTimeIso(document.getElementById('cd-deadline').value);
+    // v908 date + time を結合。 date 空なら空文字返す (下のバリデーションで蹴られる)。
+    const mainD = document.getElementById('cd-deadline-date').value;
+    const mainT = document.getElementById('cd-deadline-time').value || '23:59';
+    const dlInput = mainD ? (mainD + 'T' + mainT) : '';
     const deadlineJst = isAoe ? aoeStrToJstStr(dlInput) : dlInput;
     // v791 #394 種別: select の「申込 / 原稿」 → そのまま、「その他」 → テキスト値
     const dlLblSelVal = dlLblSel.value;
@@ -422,7 +416,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
       const selVal = row.querySelector('.cd-ex-label-sel').value;
       const txtVal = row.querySelector('.cd-ex-label').value.trim();
       const lbl = selVal === '__other__' ? (txtVal || '締切') : selVal;
-      const dt = ensureTimeIso(row.querySelector('.cd-ex-dt').value);  // v791 #394
+      // v908 date + time 分離。 date が空なら extra 行はスキップ。
+      const exD = row.querySelector('.cd-ex-date').value;
+      const exT = row.querySelector('.cd-ex-time').value || '23:59';
+      const dt = exD ? (exD + 'T' + exT) : '';
       const aoe = row.querySelector('.cd-ex-aoe').checked;
       const tentative = row.querySelector('.cd-ex-tentative').checked;
       if (!dt) return;
