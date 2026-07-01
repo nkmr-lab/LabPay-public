@@ -427,6 +427,14 @@ function paintCalendar(ym, data) {
         ${preview ? `<div class="rn-day-preview" style="font-size:11px; color:${subCol}; line-height:1.35; margin-top:3px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; word-break:break-word">${escapeHtml(preview)}</div>` : ''}
       </button>`;
   }).join('');
+  // v910 #463 ページ未作成なら 「自動生成する」 ボタンを出す。 exists_page===false の月だけ表示。
+  const pageExists = data ? data.exists_page !== false : true;  // データ未取得 (骨組みのみ) では隠す
+  const createBtnHtml = (!pageExists && stateLocal.canWrite) ? `
+    <div class="card" style="margin-top:8px; background:#fef3c7; border-left:4px solid #f59e0b; padding:8px 12px; font-size:12px">
+      <div style="margin-bottom:6px">📄 <b>${ym}</b> の研究ノートページはまだ作成されていません。</div>
+      <button id="rn-create-monthly" class="btn primary" style="padding:4px 10px; font-size:12px">🆕 ${ym} の研究ノートを自動生成する</button>
+      <div class="hint-sm" style="margin-top:4px">シンプルな初期テンプレで作成。 日ごとのセクションは後から編集で追加されます。</div>
+    </div>` : '';
   root.innerHTML = `
     <div class="row" style="margin-bottom:6px; gap:6px; align-items:center">
       <button id="rn-cal-prev" class="btn" style="padding:3px 8px">←</button>
@@ -437,7 +445,8 @@ function paintCalendar(ym, data) {
     <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px">
       ${headerRow}
       ${cellHtml}
-    </div>`;
+    </div>
+    ${createBtnHtml}`;
   // バインド
   root.querySelectorAll('[data-rn-day]').forEach(btn => {
     btn.addEventListener('click', () => switchDate(btn.getAttribute('data-rn-day')));
@@ -445,6 +454,26 @@ function paintCalendar(ym, data) {
   document.getElementById('rn-cal-prev').addEventListener('click', () => switchMonth(-1));
   document.getElementById('rn-cal-next').addEventListener('click', () => switchMonth(+1));
   document.getElementById('rn-cal-today').addEventListener('click', () => switchDate(todayJstKey()));
+  document.getElementById('rn-create-monthly')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '作成中…';
+    try {
+      const r = await post('/api/cosense/research-note/create-monthly', { ym });
+      if (r.already_exists) toast('既に存在していました');
+      else if (r.created) toast('✅ 作成しました');
+      else toast('失敗: ' + (r.reason || 'unknown'));
+      // キャッシュ破棄して 再取得
+      cacheRemove('month:' + ym);
+      stateLocal.monthData = {};
+      await renderCalendar(ym);
+    } catch (e) {
+      toast('失敗: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  });
 }
 
 function updateCalendarSelection() {

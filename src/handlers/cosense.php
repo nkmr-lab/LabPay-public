@@ -39,6 +39,10 @@ function route_cosense(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'research-note' && $method === 'GET' && ($seg[2] ?? '') === 'month') {
         cosense_research_note_month_stats($pdo, $cfg, $uid); return;
     }
+    // v910 #463 指定年月の研究ノートページを自動生成 (無ければ初期テンプレで作成)
+    if ($sub === 'research-note' && $method === 'POST' && ($seg[2] ?? '') === 'create-monthly') {
+        cosense_research_note_create_monthly($pdo, $cfg, $uid); return;
+    }
     if ($sub === 'page' && $method === 'GET') {
         cosense_page_text($pdo, $cfg, $uid); return;
     }
@@ -652,6 +656,71 @@ function cosense_research_note_month_stats(PDO $pdo, array $cfg, int $uid): void
         'page_url' => cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title),
         'exists_page' => $existsPage,
         'days' => (object)$days, // 空オブジェクト保証
+    ]);
+}
+
+// v910 #463 指定年月の研究ノートページを 「無ければ 初期テンプレ で作成」 する。
+//   既存の セクション エディタ でも 「保存 時 に 未作成 なら 作成」 動作 は している が、
+//   ユーザ が 「先に 月 の 骨格 だけ 作りたい」 「未来 の 月 を 先取り 用意 したい」 を
+//   1 タップ でできるように。 既に あれば no-op (already_exists=true) で 返す。
+function cosense_research_note_create_monthly(PDO $pdo, array $cfg, int $uid): void {
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition', 'Scrapbox の鍵が未登録です', 412);
+    }
+    $handle = cosense_user_handle($pdo, $uid);
+    if ($handle === null) {
+        throw new ApiException('precondition', '研究ノートの名前 (handle) が未設定', 412);
+    }
+    $body = read_json_body();
+    $ym = trim((string)($body['ym'] ?? ''));
+    if (!preg_match('/^(20\d{2})\.(\d{2})$/', $ym, $m)) {
+        throw new ApiException('bad_request', 'ym は YYYY.MM 形式', 400);
+    }
+    $title = $ym . '_研究ノート_' . $handle;
+    $pageUrl = cosense_base($cfg) . '/' . rawurlencode(cosense_project($cfg)) . '/' . rawurlencode($title);
+    // 既存チェック
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    if ($r['ok']) {
+        json_response([
+            'ok' => true,
+            'already_exists' => true,
+            'title' => $title,
+            'page_url' => $pageUrl,
+        ]);
+        return;
+    }
+    // 新規作成: シンプルな初期テンプレ。 実際の日別セクションは 従来通り セクション エディタ から追記。
+    $makeLineId = fn () => bin2hex(random_bytes(12));
+    $yyyy = $m[1]; $mm = $m[2];
+    $templateLines = [
+        $title,
+        '',
+        sprintf('[* %s年%s月の研究ノート]', $yyyy, $mm),
+        '',
+        '(このページは LabPay の 「研究ノート」 アプリ から自動生成されました。 日ごとのセクションは 各日を選んで 編集 → 保存 で自動追記されます。)',
+    ];
+    $changes = [];
+    foreach ($templateLines as $t) {
+        $changes[] = ['_insert' => '_end', 'lines' => ['id' => $makeLineId(), 'text' => $t]];
+    }
+    $c = cosense_v2_commit($cfg, $pat, null, $changes);
+    if (!$c['ok']) {
+        json_response_no_exit([
+            'ok' => false,
+            'stage' => $c['stage'] ?? 'unknown',
+            'status' => $c['status'] ?? null,
+            'body' => $c['body'] ?? null,
+            'reason' => '作成に失敗しました (Scrapbox API エラー)',
+        ], 502);
+        return;
+    }
+    json_response([
+        'ok' => true,
+        'created' => true,
+        'title' => $title,
+        'commitId' => $c['commitId'] ?? null,
+        'page_url' => $pageUrl,
     ]);
 }
 
