@@ -36,16 +36,16 @@ export async function renderDeepResearch() {
           <select id="dr-depth"><option value="">読み込み中…</option></select>
           <div class="hint-sm" id="dr-cost-info" style="font-size:12px; margin-top:4px; color:#6b21a8"></div>
         </label>
-        <label class="field" style="display:flex; align-items:center; gap:6px; margin-top:4px">
-          <input type="checkbox" id="dr-auto-share">
-          <span style="font-size:13px">🌐 完了と同時に公開 ON にする (= みんなの検索に載せる)</span>
-        </label>
-        <!-- v914 共有=半額割引 の 注意書き -->
-        <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:8px 10px; font-size:12px; color:#166534; margin:4px 0">
-          🎁 <b>共有すると 半額 になります!</b>
-          Deep Research の 結果を 研究室 全体で 共有すると 誰かの 参考になる 資産です。
-          ラボ 全体に還元してくれるなら 半額割引、 自分だけで抱えるなら 表示価格 (基本額) の 設計。
-          あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
+        <!-- v916 共有=半額割引 を もっと目立たせる。 チェックボックスに 「ON で 半額!」 を 直書き。 -->
+        <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
+            <input type="checkbox" id="dr-auto-share" style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
+            <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で 半額 になります!</span>
+          </label>
+          <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
+            完了と同時に 公開 ON にする (= みんなの検索に 載せる)。 研究室 全体で 共有すると 誰かの 参考になる 資産 なので、 共有 なら 半額割引。<br>
+            あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
+          </div>
         </div>
         <div class="row" style="gap:6px; justify-content:flex-end">
           <button id="dr-go" class="primary" disabled>🔎 調査開始</button>
@@ -94,8 +94,9 @@ async function loadSettings() {
   const btn = document.getElementById('dr-go');
   if (sel && cachedSettings.tiers) {
     const def = cachedSettings.default_depth || 'standard';
+    // v916 選択肢 に 「共有なら Xpt」 を 明記 (画面で 見えるまま 比較 できるように)
     sel.innerHTML = Object.entries(cachedSettings.tiers).map(([k, t]) =>
-      `<option value="${escapeHtml(k)}" ${k === def ? 'selected' : ''}>${escapeHtml(t.label)} — ${t.cost}pt</option>`).join('');
+      `<option value="${escapeHtml(k)}" ${k === def ? 'selected' : ''}>${escapeHtml(t.label)} — ${t.cost}pt (🎁 共有なら ${Math.floor(Number(t.cost) / 2)}pt)</option>`).join('');
     const refresh = () => {
       const k = sel.value;
       const t = cachedSettings.tiers[k];
