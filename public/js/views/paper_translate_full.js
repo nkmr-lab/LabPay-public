@@ -46,12 +46,12 @@ export async function renderPaperTranslateFull() {
         <input type="checkbox" id="pft-auto-share">
         <span style="font-size:13px">🌐 完了と同時に公開 ON にする</span>
       </label>
-      <!-- v913 共有=基本額 / 非共有=倍額 の 注意書き -->
-      <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-size:12px; color:#78350f; margin:4px 0">
-        💡 <b>共有すると 表示価格そのまま、 共有しないと 倍額 かかります。</b>
-        論文全訳は 研究室 全体で 共有すると 誰かの 参考になる 資産です。
-        ラボ 全体に還元してくれるなら 基本額、 自分だけで抱えるなら 倍額 の 設計です。
-        あとから 公開 ON にすると 半額 返金 / OFF に戻すと 倍額分 追加課金 されます。
+      <!-- v914 共有=半額割引 の 注意書き -->
+      <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:8px 10px; font-size:12px; color:#166534; margin:4px 0">
+        🎁 <b>共有すると 半額 になります!</b>
+        論文全訳を 研究室 全体で 共有すると 誰かの 参考になる 資産です。
+        ラボ 全体に還元してくれるなら 半額割引、 自分だけで抱えるなら 表示価格 (基本額) の 設計。
+        あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
       </div>
       <!-- v798 同時に要約も走らせるオプション -->
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
@@ -141,13 +141,13 @@ function bindEvents() {
     const models = dir.value === 'ja2en' ? settings.models_ja2en : settings.models_en2ja;
     const m = sel.value;
     const base = models[m] || 0;
-    // v913 非共有 は 倍額
+    // v914 共有 で 半額割引
     const shared = !!document.getElementById('pft-auto-share')?.checked;
-    const pt = shared ? base : base * 2;
+    const pt = shared ? Math.floor(base / 2) : base;
     if (info) {
       info.innerHTML = `選択中: ${escapeHtml(m)} ・ ${pt}pt (${dir.value === 'ja2en' ? '日→英' : '英→日'})` +
-        (shared ? ' <span style="color:#15803d">(公開 ON、 基本額)</span>'
-                : ` <span style="color:#dc2626">(非公開、 倍額 = 基本 ${base}pt × 2)</span>`);
+        (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
+                : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
     }
     btn.textContent = `📑 全訳開始 (${pt}pt)`;
   }
@@ -189,12 +189,12 @@ async function setupAlsoSummary() {
     const models = summarySettingsCache.models || {};
     const m = modSel.value;
     const base = models[m] || 0;
-    // v913 同じ auto_share チェックボックスを 全訳 と 要約 の 両方に適用
+    // v914 同じ auto_share チェックボックスを 全訳 と 要約 の 両方に適用、 共有=半額
     const shared = !!document.getElementById('pft-auto-share')?.checked;
-    const pt = shared ? base : base * 2;
+    const pt = shared ? Math.floor(base / 2) : base;
     info.innerHTML = `要約 ${pt}pt` +
-      (shared ? ' <span style="color:#15803d">(公開 ON、 基本額)</span>'
-              : ` <span style="color:#dc2626">(非公開、 倍額 = 基本 ${base}pt × 2)</span>`);
+      (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
+              : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
   }
   modSel.addEventListener('change', refreshCost);
   document.getElementById('pft-auto-share')?.addEventListener('change', refreshCost);
@@ -520,7 +520,7 @@ async function refresh(token) {
       const t = d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文全訳';
       shareDialog('📑 論文全訳: ' + t, '#/paper-translate-full/r/' + token);
     });
-    // v913 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
+    // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
     document.getElementById('pft-share-toggle')?.addEventListener('click', async (ev) => {
       const btn = ev.currentTarget;
       const wasOn = btn.dataset.on === '1';
@@ -528,8 +528,8 @@ async function refresh(token) {
         const paid = Number(d.cost_points || 0);
         const half = Math.floor(paid / 2);
         const msg = wasOn
-          ? `非公開に戻すと 倍額分 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`
-          : `公開 ON にすると 半額分 ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`;
+          ? `非公開に戻すと 半額割引 が 停止 して 差額 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`
+          : `🎁 公開 ON にすると 半額割引 が 発動 して ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`;
         if (!confirm(msg)) return;
       }
       btn.disabled = true;

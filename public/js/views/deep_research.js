@@ -40,12 +40,12 @@ export async function renderDeepResearch() {
           <input type="checkbox" id="dr-auto-share">
           <span style="font-size:13px">🌐 完了と同時に公開 ON にする (= みんなの検索に載せる)</span>
         </label>
-        <!-- v913 共有=基本額 / 非共有=倍額 の 注意書き -->
-        <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-size:12px; color:#78350f; margin:4px 0">
-          💡 <b>共有すると 表示価格そのまま、 共有しないと 倍額 かかります。</b>
-          Deep Research の 結果は 研究室 全体で 共有すると 誰かの 参考になる 資産です。
-          ラボ 全体に還元してくれるなら 基本額、 自分だけで抱えるなら 倍額 の 設計です。
-          あとから 公開 ON にすると 半額 返金 / OFF に戻すと 倍額分 追加課金 されます。
+        <!-- v914 共有=半額割引 の 注意書き -->
+        <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:8px 10px; font-size:12px; color:#166534; margin:4px 0">
+          🎁 <b>共有すると 半額 になります!</b>
+          Deep Research の 結果を 研究室 全体で 共有すると 誰かの 参考になる 資産です。
+          ラボ 全体に還元してくれるなら 半額割引、 自分だけで抱えるなら 表示価格 (基本額) の 設計。
+          あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
         </div>
         <div class="row" style="gap:6px; justify-content:flex-end">
           <button id="dr-go" class="primary" disabled>🔎 調査開始</button>
@@ -99,14 +99,14 @@ async function loadSettings() {
     const refresh = () => {
       const k = sel.value;
       const t = cachedSettings.tiers[k];
-      // v913 非共有 は 倍額
+      // v914 共有 で 半額割引
       const shared = !!document.getElementById('dr-auto-share')?.checked;
       const base = Number(t.cost) || 0;
-      const pt = shared ? base : base * 2;
+      const pt = shared ? Math.floor(base / 2) : base;
       if (info) {
         info.innerHTML = `選択中: ${escapeHtml(t.label)} ・ 1 回 ${pt}pt (深さにより 1-15 分)` +
-          (shared ? ' <span style="color:#15803d">(公開 ON、 基本額)</span>'
-                  : ` <span style="color:#dc2626">(非公開、 倍額 = 基本 ${base}pt × 2)</span>`);
+          (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
+                  : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
       }
       if (btn) btn.textContent = `🔎 調査開始 (${pt}pt)`;
     };
@@ -344,15 +344,15 @@ async function refreshShared(token) {
       const titleShort = (d.query_text || '').slice(0, 80);
       shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token);
     });
-    // v913 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
+    // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
     document.getElementById('dr-share-toggle')?.addEventListener('change', async (e) => {
       const newOn = e.target.checked;
       if (d.share_priced) {
         const paid = Number(d.cost_points || 0);
         const half = Math.floor(paid / 2);
         const msg = newOn
-          ? `公開 ON にすると 半額分 ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`
-          : `非公開に戻すと 倍額分 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`;
+          ? `🎁 公開 ON にすると 半額割引 が 発動 して ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`
+          : `非公開に戻すと 半額割引 が 停止 して 差額 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`;
         if (!confirm(msg)) {
           e.target.checked = !newOn;
           return;

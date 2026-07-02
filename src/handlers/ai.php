@@ -1302,11 +1302,11 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
-// v913 「共有=基本額、 非共有=倍額」 モデル。 論文要約 / 全訳 / DeepResearch 共通。
-//   研究成果 (要約 / 全訳 / 調査) を ラボ 全体に還元してくれるなら基本額、
-//   自分だけで抱えるなら 倍額を払う設計。 半額割引ではなく、 非共有を 倍額 と 表現。
+// v914 「非共有=基本額、 共有=半額」 モデル (v913 の 「共有=基本額 / 非共有=倍額」 を 数式は 同じ ratio に 保ったまま
+//   ポジティブな フレーミングに 言い換え + 実価格 も 半減)。 論文要約 / 全訳 / DeepResearch 共通。
+//   研究成果を ラボ 全体に還元してくれるなら 半額 に なる、 という 前向きな 表現。 base = モデル定数 (表示価格 = 非共有 の 価格)。
 function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
-    return $willShare ? $baseCost : $baseCost * 2;
+    return $willShare ? intdiv($baseCost, 2) : $baseCost;
 }
 
 // v773 #395 モデル一覧を整理。 gpt-4o-mini / gpt-4o は 200-300 字の短い要約しか
@@ -1643,11 +1643,12 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'is_shared' => $on]);
 }
 
-// v913 共有 toggle 差額処理 の 共通ロジック (3 機能 共通)。
+// v913 共有 toggle 差額処理 の 共通ロジック (3 機能 共通)。 v914 で フレーミングを 「共有=半額割引」 に 反転。
 //   share_priced=0 (旧 row / 中村 PI) の場合 は 差額処理 スキップ、 単に is_shared を フリップ するだけ。
-//   share_priced=1 の場合:
-//     - 非共有 (2x paid) → 共有 (1x): cost_points / 2 を SYSTEM → user に 返金、 cost_points を 半額 に。
-//     - 共有 (1x paid) → 非共有 (2x): cost_points と 同額 を user → SYSTEM に 追加課金、 cost_points を 倍額 に。
+//   share_priced=1 の場合 (v914 モデル: shared paid = base/2、 unshared paid = base):
+//     - 非共有 (base paid) → 共有 (base/2): paid / 2 を SYSTEM → user に 返金 (半額割引 発動)、 cost_points を 半額 に。
+//     - 共有 (base/2 paid) → 非共有 (base): paid と 同額 を user → SYSTEM に 追加課金 (半額割引 停止)、 cost_points を 倍額 に。
+//   ratio は v913 と 同じ 1:2 なので、 差額 計算 (±cost_points/2) は そのまま。 変わったのは 名目 base の 意味と ラベル。
 function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, int $rowId, int $uid, array $row, bool $on): void {
     $curShared = (int)($row['is_shared'] ?? 0) === 1;
     if ($curShared === $on) {
@@ -1668,27 +1669,27 @@ function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, 
         return;
     }
     if ($on) {
-        // 非共有 → 共有: 差額 返金 = paidCost / 2 (paidCost = 2*base だったので、 base 分 戻る)
+        // 非共有 → 共有: 半額割引 発動 → 差額 返金 = paidCost / 2 (paidCost = base だったので、 base/2 分 戻る)
         $delta = intdiv($paidCost, 2);
         $newCost = $paidCost - $delta;
         db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
             if ($delta > 0) {
-                Ledger::transfer($pdo, 1, $uid, $delta, 'refund', $refType, $rowId, '共有 ON にしたため 半額 返金');
+                Ledger::transfer($pdo, 1, $uid, $delta, 'refund', $refType, $rowId, '共有 ON にしたため 半額割引 返金');
             }
             $pdo->prepare("UPDATE {$table} SET is_shared=1, shared_at=NOW(), cost_points=? WHERE id=?")
                 ->execute([$newCost, $rowId]);
         });
     } else {
-        // 共有 → 非共有: 差額 追加課金 = paidCost (paidCost = base だったので、 もう 1 base 分 追加)
+        // 共有 → 非共有: 半額割引 停止 → 差額 追加課金 = paidCost (paidCost = base/2 だったので、 もう base/2 分 追加 で base に)
         $delta = $paidCost;
         $bal = Ledger::balanceOfUser($pdo, $uid);
         if ($bal < $delta) {
             throw new ApiException('insufficient_balance',
-                sprintf('非共有にするには 追加 %d pt 必要 (現在 %d pt)。 共有のままなら 追加課金なし。', $delta, $bal), 400);
+                sprintf('非共有 に戻すには 追加 %d pt 必要 (現在 %d pt)。 共有のままなら 追加課金なし。', $delta, $bal), 400);
         }
         $newCost = $paidCost + $delta;
         db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
-            Ledger::transfer($pdo, $uid, 1, $delta, 'upcharge', $refType, $rowId, '非共有に戻したため 倍額分 追加課金');
+            Ledger::transfer($pdo, $uid, 1, $delta, 'upcharge', $refType, $rowId, '非共有 に戻したため 半額割引 停止 (差額 追加課金)');
             $pdo->prepare("UPDATE {$table} SET is_shared=0, shared_at=NULL, cost_points=? WHERE id=?")
                 ->execute([$newCost, $rowId]);
         });
