@@ -64,6 +64,13 @@ export async function renderPaperTranslate() {
         <input type="checkbox" id="pt-auto-share">
         <span style="font-size:13px">🌐 完了と同時に公開 ON にする (= みんなの検索に載せる)</span>
       </label>
+      <!-- v913 共有=基本額 / 非共有=倍額 の 注意書き -->
+      <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-size:12px; color:#78350f; margin:4px 0">
+        💡 <b>共有すると 表示価格そのまま、 共有しないと 倍額 かかります。</b>
+        論文要約は 研究室 全体で 共有すると 誰かの 参考になる 資産です。
+        ラボ 全体に還元してくれるなら 基本額、 自分だけで抱えるなら 倍額 の 設計です。
+        あとから 公開 ON にすると 半額 返金 / OFF に戻すと 倍額分 追加課金 されます。
+      </div>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
         <legend style="font-size:12px; color:#6b7280">📑📑 同時に全訳も走らせる (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px">
@@ -154,14 +161,20 @@ function updateModelInfo(d) {
   sel.innerHTML = Object.entries(models).map(([m, pt]) =>
     `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`
   ).join('');
+  const autoShare = document.getElementById('pt-auto-share');
   const refresh = () => {
     const m = sel.value;
-    const pt = models[m] || 20;
-    info.textContent = `選択中: ${m} ・ 1 回 ${pt}pt`;
+    const base = models[m] || 20;
+    const shared = !!autoShare?.checked;
+    const pt = shared ? base : base * 2;  // v913 非共有 は 倍額
+    info.innerHTML = `選択中: ${escapeHtml(m)} ・ 1 回 ${pt}pt` +
+      (shared ? ' <span style="color:#15803d">(公開 ON、 基本額)</span>'
+              : ` <span style="color:#dc2626">(非公開、 倍額 = 基本 ${base}pt × 2)</span>`);
     const btn = document.getElementById('pt-go');
     if (btn) btn.textContent = `📑 要約を作る (${pt}pt)`;
   };
   sel.addEventListener('change', refresh);
+  autoShare?.addEventListener('change', refresh);
   refresh();
 }
 
@@ -194,11 +207,17 @@ async function setupAlsoFullTranslate() {
     if (!ftSettingsCache) return;
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const m = modSel.value;
-    const pt = models[m] || 0;
-    info.textContent = `全訳 ${pt}pt (要約 + 全訳を同時課金)`;
+    const base = models[m] || 0;
+    // v913 同じ auto_share チェックボックスを 要約 と 全訳 の 両方に適用
+    const shared = !!document.getElementById('pt-auto-share')?.checked;
+    const pt = shared ? base : base * 2;
+    info.innerHTML = `全訳 ${pt}pt` +
+      (shared ? ' <span style="color:#15803d">(公開 ON、 基本額)</span>'
+              : ` <span style="color:#dc2626">(非公開、 倍額 = 基本 ${base}pt × 2)</span>`);
   }
   dirSel.addEventListener('change', rebuildFtModels);
   modSel.addEventListener('change', refreshCost);
+  document.getElementById('pt-auto-share')?.addEventListener('change', refreshCost);
 }
 
 async function go() {
@@ -242,6 +261,8 @@ async function go() {
         fd2.append('file', f);
         fd2.append('direction', ftDir);
         fd2.append('model', ftModel);
+        // v913 同じ 「公開 ON」 判定を 全訳側にも 引き継ぐ (両方 とも 基本額 or 両方 とも 倍額)
+        if (document.getElementById('pt-auto-share')?.checked) fd2.append('auto_share', '1');
         const r2 = await fetch('/api/ai/paper_full_translate', {
           method: 'POST', body: fd2, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' },
         });
@@ -580,9 +601,19 @@ async function paintResult(d, token) {
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
   // v756 #372 公開 ON/OFF toggle (本人のみ)
+  // v913 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
   document.getElementById('pt-share-toggle')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     const wasOn = btn.dataset.on === '1';
+    const shared = !!d.share_priced;
+    if (shared) {
+      const paid = Number(d.cost_points || 0);
+      const half = Math.floor(paid / 2);
+      const msg = wasOn
+        ? `非公開に戻すと 倍額分 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`
+        : `公開 ON にすると 半額分 ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`;
+      if (!confirm(msg)) return;
+    }
     btn.disabled = true;
     try {
       const r = await patch('/api/ai/paper_translate/' + d.id, { is_shared: !wasOn });

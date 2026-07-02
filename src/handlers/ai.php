@@ -1302,6 +1302,13 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
+// v913 「共有=基本額、 非共有=倍額」 モデル。 論文要約 / 全訳 / DeepResearch 共通。
+//   研究成果 (要約 / 全訳 / 調査) を ラボ 全体に還元してくれるなら基本額、
+//   自分だけで抱えるなら 倍額を払う設計。 半額割引ではなく、 非共有を 倍額 と 表現。
+function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
+    return $willShare ? $baseCost : $baseCost * 2;
+}
+
 // v773 #395 モデル一覧を整理。 gpt-4o-mini / gpt-4o は 200-300 字の短い要約しか
 //   出さないので論文要約用途では失格 → 削除。真面目に要約するなら最低でも 4.1。
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
@@ -1617,6 +1624,7 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
 }
 
 // v756 #372 共有 ON/OFF (本人のみ)。 body = { is_shared: bool }
+// v913 共有=基本額 / 非共有=倍額 モデル: share_priced=1 の row は toggle 時に 差額を Ledger 経由 で 追加課金/返金 する。
 function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -1624,18 +1632,67 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     if (!array_key_exists('is_shared', $body)) {
         throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
-    $st = $pdo->prepare("SELECT user_id, status FROM paper_translates WHERE id=?");
+    $st = $pdo->prepare("SELECT user_id, status, is_shared, share_priced, cost_points FROM paper_translates WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
     if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
     if ($row['status'] !== 'done') throw new ApiException('bad_request', '要約完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
-    $pdo->prepare("UPDATE paper_translates
-                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
-                    WHERE id = ?")
-        ->execute([$on ? 1 : 0, $id]);
+    _ai_apply_share_toggle_delta($pdo, 'paper_translates', 'paper_translate', $id, $uid, $row, $on);
     json_response(['ok' => true, 'is_shared' => $on]);
+}
+
+// v913 共有 toggle 差額処理 の 共通ロジック (3 機能 共通)。
+//   share_priced=0 (旧 row / 中村 PI) の場合 は 差額処理 スキップ、 単に is_shared を フリップ するだけ。
+//   share_priced=1 の場合:
+//     - 非共有 (2x paid) → 共有 (1x): cost_points / 2 を SYSTEM → user に 返金、 cost_points を 半額 に。
+//     - 共有 (1x paid) → 非共有 (2x): cost_points と 同額 を user → SYSTEM に 追加課金、 cost_points を 倍額 に。
+function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, int $rowId, int $uid, array $row, bool $on): void {
+    $curShared = (int)($row['is_shared'] ?? 0) === 1;
+    if ($curShared === $on) {
+        // 変化なし (念のため冪等に UPDATE だけ)
+        $pdo->prepare("UPDATE {$table} SET is_shared=?, shared_at=" . ($on ? "COALESCE(shared_at, NOW())" : "NULL") . " WHERE id=?")
+            ->execute([$on ? 1 : 0, $rowId]);
+        return;
+    }
+    $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
+    $paidCost = (int)($row['cost_points'] ?? 0);
+    $isPi = ($uid === 3);  // v808 #402 中村 PI は そもそも 課金ゼロ、 差額処理 も なし
+    // 旧 row / PI / 未課金 の場合、 表示切替のみ
+    if (!$sharePriced || $isPi || $paidCost <= 0) {
+        $pdo->prepare("UPDATE {$table}
+                          SET is_shared=?, shared_at=" . ($on ? "NOW()" : "NULL") . "
+                        WHERE id=?")
+            ->execute([$on ? 1 : 0, $rowId]);
+        return;
+    }
+    if ($on) {
+        // 非共有 → 共有: 差額 返金 = paidCost / 2 (paidCost = 2*base だったので、 base 分 戻る)
+        $delta = intdiv($paidCost, 2);
+        $newCost = $paidCost - $delta;
+        db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
+            if ($delta > 0) {
+                Ledger::transfer($pdo, 1, $uid, $delta, 'refund', $refType, $rowId, '共有 ON にしたため 半額 返金');
+            }
+            $pdo->prepare("UPDATE {$table} SET is_shared=1, shared_at=NOW(), cost_points=? WHERE id=?")
+                ->execute([$newCost, $rowId]);
+        });
+    } else {
+        // 共有 → 非共有: 差額 追加課金 = paidCost (paidCost = base だったので、 もう 1 base 分 追加)
+        $delta = $paidCost;
+        $bal = Ledger::balanceOfUser($pdo, $uid);
+        if ($bal < $delta) {
+            throw new ApiException('insufficient_balance',
+                sprintf('非共有にするには 追加 %d pt 必要 (現在 %d pt)。 共有のままなら 追加課金なし。', $delta, $bal), 400);
+        }
+        $newCost = $paidCost + $delta;
+        db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
+            Ledger::transfer($pdo, $uid, 1, $delta, 'upcharge', $refType, $rowId, '非共有に戻したため 倍額分 追加課金');
+            $pdo->prepare("UPDATE {$table} SET is_shared=0, shared_at=NULL, cost_points=? WHERE id=?")
+                ->execute([$newCost, $rowId]);
+        });
+    }
 }
 
 function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): void {
@@ -1644,6 +1701,7 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     $st = $pdo->prepare("SELECT pt.id, pt.user_id, pt.pdf_name, pt.pdf_path, pt.pdf_sha256, pt.model, pt.result_json, pt.status,
                                 pt.error_msg, pt.created_at, pt.finished_at,
                                 pt.pages_count, pt.pages_dir, pt.is_shared, pt.shared_at,
+                                pt.cost_points, pt.share_priced,
                                 u.display_name AS author_name, u.avatar_url AS author_avatar
                            FROM paper_translates pt JOIN users u ON u.id = pt.user_id
                           WHERE pt.share_token = ?");
@@ -1686,6 +1744,8 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'pages_dir'     => $row['pages_dir'],
         'is_shared'     => (bool)$row['is_shared'],
         'shared_at'     => $row['shared_at'],
+        'cost_points'   => (int)$row['cost_points'],   // v913 toggle 差額 UI 用
+        'share_priced'  => (int)($row['share_priced'] ?? 0) === 1,  // v913
         'reactions'     => $reactions,   // v789 #389
         'cross_refs'    => $crossRefs,   // v797 同 PDF の全訳等
     ]);
@@ -1715,9 +1775,11 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    $baseCost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
     // v804 「終わった瞬間共有 ON」オプション
     $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
+    // v913 共有すると基本額、 非共有だと倍額。 auto_share の意思決定を そのまま cost に反映。
+    $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     // v797 同 PDF を識別する SHA-256 を算出 (= 横展開用 / 「同 PDF の全訳がある」リンク等)。
     //   注意: 同 PDF + 同モデルでも再処理は別 row + 別課金で行う (要約と全訳で扱う軸が
@@ -1801,8 +1863,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $rowId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share)
-            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)")
+            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share, share_priced)
+            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,1)")
             ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfSha, $sys, 'null', $cost,
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
@@ -1878,7 +1940,12 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    $baseCost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    // v913 share_priced=1 (新プライシング) の row は 現 is_shared に応じて 基本 or 倍額。
+    //   share_priced=0 (旧 row) は 従来通り 基本額のまま。
+    $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
+    $isShared = (bool)($row['is_shared'] ?? 0);
+    $cost = $sharePriced ? _ai_share_priced_cost($baseCost, $isShared) : $baseCost;
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -2283,7 +2350,7 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT dr.id, dr.user_id, dr.share_token, dr.query_text, dr.model, dr.depth,
                                  dr.openai_response_id, dr.progress_text,
-                                 dr.cost_points, dr.status, dr.result_json, dr.usage_json,
+                                 dr.cost_points, dr.share_priced, dr.status, dr.result_json, dr.usage_json,
                                  dr.error_msg, dr.created_at, dr.finished_at, dr.is_shared, dr.shared_at,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM deep_researches dr JOIN users u ON u.id = dr.user_id
@@ -2315,10 +2382,12 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
         'finished_at'        => $row['finished_at'],
         'is_shared'          => (bool)$row['is_shared'],
         'shared_at'          => $row['shared_at'],
+        'share_priced'       => (int)($row['share_priced'] ?? 0) === 1,  // v913
     ]);
 }
 
 // v784 #382 共有 ON / OFF (本人のみ)
+// v913 差額 追加課金/返金 は _ai_apply_share_toggle_delta 経由。
 function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -2326,17 +2395,14 @@ function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
     if (!array_key_exists('is_shared', $body)) {
         throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
-    $st = $pdo->prepare("SELECT user_id, status FROM deep_researches WHERE id=?");
+    $st = $pdo->prepare("SELECT user_id, status, is_shared, share_priced, cost_points FROM deep_researches WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
     if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
     if ($row['status'] !== 'done') throw new ApiException('bad_request', '調査完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
-    $pdo->prepare("UPDATE deep_researches
-                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
-                    WHERE id = ?")
-        ->execute([$on ? 1 : 0, $id]);
+    _ai_apply_share_toggle_delta($pdo, 'deep_researches', 'deep_research', $id, $uid, $row, $on);
     json_response(['ok' => true, 'is_shared' => $on]);
 }
 
@@ -2411,7 +2477,10 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', '未対応 depth: ' . $depth, 400);
     }
     $tier = DEEP_RESEARCH_TIERS[$depth];
-    $cost = (int)$tier['cost'];
+    $baseCost = (int)$tier['cost'];
+    // v913 「終わった瞬間 共有 ON」 (paper_translate と同じ pattern)。 共有=基本額 / 非共有=倍額
+    $autoShare = !empty($body['auto_share']) ? 1 : 0;
+    $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
@@ -2423,11 +2492,11 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
     $token = bin2hex(random_bytes(16));
 
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $query, $tier, $depth, $cost, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $query, $tier, $depth, $cost, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO deep_researches
-            (user_id, share_token, query_text, model, depth, cost_points, status)
-            VALUES (?,?,?,?,?,?,'pending')")
-            ->execute([$uid, $token, $query, $tier['model'], $depth, $cost]);
+            (user_id, share_token, query_text, model, depth, cost_points, share_priced, auto_share, status)
+            VALUES (?,?,?,?,?,?,1,?,'pending')")
+            ->execute([$uid, $token, $query, $tier['model'], $depth, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
         Ledger::transfer($pdo, $uid, 1, $cost, 'deep_research', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
     });
@@ -2595,6 +2664,9 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
                 json_encode($usageRec, JSON_UNESCAPED_UNICODE),
                 $row['id'],
             ]);
+        // v913 auto_share=1 なら 公開 ON に (paper_translate と同じ pattern)
+        $pdo->prepare("UPDATE deep_researches SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
+            ->execute([(int)$row['id']]);
         try {
             $shortQ = mb_substr((string)$row['query_text'], 0, 60);
             notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
@@ -2868,6 +2940,7 @@ function ai_paper_full_translate_get_shared(PDO $pdo, array $cfg, string $token)
         'finished_at'        => $row['finished_at'],
         'is_shared'          => (bool)$row['is_shared'],
         'shared_at'          => $row['shared_at'],
+        'share_priced'       => (int)($row['share_priced'] ?? 0) === 1,  // v913 toggle 差額 UI 用
     ]);
 }
 
@@ -2915,6 +2988,7 @@ function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items, 'q' => $q]);
 }
 
+// v913 差額 追加課金/返金 は _ai_apply_share_toggle_delta 経由。
 function ai_paper_full_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -2922,17 +2996,14 @@ function ai_paper_full_translate_patch(PDO $pdo, array $cfg, int $id): void {
     if (!array_key_exists('is_shared', $body)) {
         throw new ApiException('bad_request', 'is_shared が必要', 400);
     }
-    $st = $pdo->prepare("SELECT user_id, status FROM paper_full_translations WHERE id=?");
+    $st = $pdo->prepare("SELECT user_id, status, is_shared, share_priced, cost_points FROM paper_full_translations WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
     if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ共有切替可', 403);
     if ($row['status'] !== 'done') throw new ApiException('bad_request', '完了後のみ共有切替可', 400);
     $on = (bool)$body['is_shared'];
-    $pdo->prepare("UPDATE paper_full_translations
-                      SET is_shared = ?, shared_at = " . ($on ? "NOW()" : "NULL") . "
-                    WHERE id = ?")
-        ->execute([$on ? 1 : 0, $id]);
+    _ai_apply_share_toggle_delta($pdo, 'paper_full_translations', 'paper_full_translate', $id, $uid, $row, $on);
     json_response(['ok' => true, 'is_shared' => $on]);
 }
 
@@ -2981,9 +3052,11 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     if (!isset($models[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $cost = (int)$models[$reqModel];
+    $baseCost = (int)$models[$reqModel];
     // v804 「終わった瞬間共有 ON」
     $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
+    // v913 共有=基本額 / 非共有=倍額
+    $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     // v797 SHA-256 は横展開リンク用だけに算出 (同 PDF でも別ジョブで走らせる、課金も別)
     $pdfSha = hash_file('sha256', $tmpPdf);
@@ -3171,8 +3244,10 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     if (!isset($models[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $cost = (int)$models[$reqModel];
+    $baseCost = (int)$models[$reqModel];
     $autoShare = !empty($body['auto_share']) ? 1 : 0;
+    // v913 共有=基本額 / 非共有=倍額
+    $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     $skipCharge = ($uid === 3);
     if (!$skipCharge) {
@@ -3240,8 +3315,10 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $cost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
+    $baseCost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
     $autoShare = !empty($body['auto_share']) ? 1 : 0;
+    // v913 共有=基本額 / 非共有=倍額
+    $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     $skipCharge = ($uid === 3);
     if (!$skipCharge) {
@@ -3300,8 +3377,8 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     $rowId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
-            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share)
-            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?)")
+            (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share, share_priced)
+            VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,1)")
             ->execute([$uid, $token, $fileId, mb_substr($pdfName, 0, 255), $pdfSha, $sys, 'null', $cost,
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
