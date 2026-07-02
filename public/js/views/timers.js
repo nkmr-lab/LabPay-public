@@ -665,9 +665,56 @@ function tickTimer() {
   //   背景に縦線で一鈴 / 二鈴 / 発表終了を示す (= tickStyle inline gradient で表示)。
   const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
-  if (isOver) barEl.style.background = '#c62828';
-  else if (isPastEnd) barEl.style.background = '#f59e0b';
-  else barEl.style.background = 'var(--primary)';
+  // v917 「発表終了 後は 全部 黄色に なってしまう / ベル区切り が 消える」 修正 (ユーザ報告)。
+  //   従来: bar 全体を 1 色 (primary → 発表終了で 一気に 全部 orange → 超過で 全部 red) に 塗ってた。
+  //     視覚的に 「発表中の 進捗 (=青)」 が 質疑帯 に 入った 瞬間 消えて 混乱。
+  //   修正: bar 内部を multi-color gradient に。 0 → endBell は primary、 endBell → maxBell は orange、
+  //     maxBell → tip は red。 加えて ベル区切り 縦線 (parent の 背景 で 描いていた もの) を bar coord に 再マップして
+  //     bar の 上にも 重ねる → 進捗が 塗り 潰しても 区切り が 消えない。
+  {
+    const primaryCol = 'var(--primary)';
+    const orangeCol  = '#f59e0b';
+    const redCol     = '#c62828';
+    const barWidthSec = Math.min(elapsedSec, visualEndSec);
+    let colorGradient;
+    if (barWidthSec <= 0) {
+      colorGradient = `${primaryCol} 0%, ${primaryCol} 100%`;
+    } else if (!isPastEnd) {
+      // 発表中: 全部 primary
+      colorGradient = `${primaryCol} 0%, ${primaryCol} 100%`;
+    } else if (!isOver) {
+      // 質疑帯: primary (0 → endBell in bar coord) + orange (残り)
+      const endInBar = Math.min(100, (endBellSec / barWidthSec) * 100);
+      colorGradient = `${primaryCol} 0%, ${primaryCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${endInBar.toFixed(2)}%, ${orangeCol} 100%`;
+    } else {
+      // 超過: primary + orange + red (bar は 100% 幅 = visualEndSec)
+      const endInBar = Math.min(100, (endBellSec / visualEndSec) * 100);
+      const maxInBar = Math.min(100, (maxBellSec / visualEndSec) * 100);
+      if (maxInBar >= 99.5) {
+        // maxBell == visualEnd の 一般ケース: red 区間 は ゼロ (bar 上に 超過 は 出ない、 数字 だけが 赤に)
+        colorGradient = `${primaryCol} 0%, ${primaryCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${endInBar.toFixed(2)}%, ${orangeCol} 100%`;
+      } else {
+        colorGradient = `${primaryCol} 0%, ${primaryCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${maxInBar.toFixed(2)}%, ${redCol} ${maxInBar.toFixed(2)}%, ${redCol} 100%`;
+      }
+    }
+    // ベル区切り縦線 を bar 内部 に 再マップ。 bar の 幅 = barWidthSec に 対する 相対位置。
+    const barTicks = [];
+    if (tmBells && tmBells.length && barWidthSec > 0) {
+      for (const b of tmBells) {
+        if (b > 0 && b < barWidthSec) barTicks.push((b / barWidthSec) * 100);
+      }
+    }
+    const tickLines = barTicks.map(p =>
+      `transparent ${(p - 0.4).toFixed(2)}%, #1e293b ${(p - 0.4).toFixed(2)}%, #1e293b ${(p + 0.4).toFixed(2)}%, transparent ${(p + 0.4).toFixed(2)}%`
+    ).join(', ');
+    if (tickLines) {
+      barEl.style.background =
+        `linear-gradient(to right, ${tickLines}),` +
+        `linear-gradient(to right, ${colorGradient})`;
+    } else {
+      barEl.style.background = `linear-gradient(to right, ${colorGradient})`;
+    }
+  }
   // 背景: 発表終了で切替 + ベル位置に縦線。
   const bgEl = barEl.parentElement;
   if (bgEl && visualEndSec) {
