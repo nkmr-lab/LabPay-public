@@ -317,6 +317,8 @@ export async function renderPollDetail({ params }) {
         <a id="pd-edit" class="btn" href="#/polls/${id}/edit">✏️ 編集</a>
         <button id="pd-remind" class="btn">📣 未投票者に催促</button>
         <button id="pd-close" class="btn">締切る</button>
+        <!-- v912 選択肢に投票した人でグループを作る (締切後のみ enabled) -->
+        <button id="pd-mkgroup" class="btn" style="background:#f3e8ff; color:#7b3fa0" hidden>🏘 この投票結果でグループ作成</button>
         <button id="pd-del"   class="danger">削除</button>
       </div>
     </div>
@@ -484,11 +486,77 @@ async function loadPollDetail(id) {
           navigate('#/polls');
         } catch (e) { toast('失敗: ' + e.message); }
       });
+      // v912 「この投票結果でグループ作成」— 締切後のみ有効に。 締切前は隠す。
+      const mkgroupBtn = document.getElementById('pd-mkgroup');
+      if (mkgroupBtn) {
+        mkgroupBtn.hidden = isOpen;
+        mkgroupBtn.addEventListener('click', () => openCreateGroupDialog(id, p, d.options));
+      }
     }
   } catch (e) {
     document.getElementById('pd-head').innerHTML =
       `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// v912 選択肢に投票した人でグループ作成 ダイアログ (起案者専用、 締切後のみ)。
+async function openCreateGroupDialog(pollId, poll, options) {
+  const { openModal } = await import('../modal.js');
+  const defaultTitle = poll.title;
+  const bodyHtml = `
+    <div style="font-size:13px; color:#666; margin-bottom:8px">
+      🏘 選ばれた選択肢に投票した人を集めて グループを作ります (起案者も自動で入ります)。<br>
+      複数選ぶと union (両方に投票した人は 1 度だけ)。
+    </div>
+    <div class="field">
+      <div class="lbl">📊 含める選択肢</div>
+      <div id="cg-opts" style="max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:4px; padding:6px">
+        ${options.map(o => `
+          <label style="display:flex; gap:6px; align-items:center; padding:2px 0; cursor:pointer">
+            <input type="checkbox" name="cg-opt" value="${o.id}" style="cursor:pointer">
+            <span>${escapeHtml(o.label)}</span>
+            <span class="muted" style="font-size:11px; margin-left:auto">${o.count != null ? o.count + '票' : ''}</span>
+          </label>`).join('')}
+      </div>
+    </div>
+    <label class="field">
+      <span class="lbl">🏷 グループ名 (省略時は自動生成)</span>
+      <input type="text" id="cg-title" maxlength="200" placeholder="${escapeHtml(defaultTitle)} / ...">
+    </label>
+    <label class="field">
+      <span class="lbl">📝 説明 (任意)</span>
+      <textarea id="cg-desc" rows="2" maxlength="5000" placeholder="このグループの目的、集合場所、日時など"></textarea>
+    </label>
+    <div class="hint-sm" style="color:#7b3fa0; font-size:11px">
+      ⚠️ 投票のプライバシー: グループ作成でメンバー名が相互に見えるため、 選ばれた人は 「この選択肢に投票した人」 と暗黙的に分かります。
+    </div>
+  `;
+  openModal({
+    title: '🏘 投票結果でグループ作成',
+    bodyHtml,
+    buttons: [
+      { label: 'キャンセル', kind: 'ghost', onClick: (close) => close() },
+      {
+        label: '🏘 作成する',
+        kind: 'primary',
+        onClick: async (close) => {
+          const optIds = Array.from(document.querySelectorAll('input[name="cg-opt"]:checked'))
+            .map(el => Number(el.value)).filter(Number.isFinite);
+          if (!optIds.length) { toast('選択肢を 1 つ以上選んでください'); return; }
+          const title = document.getElementById('cg-title').value.trim();
+          const description = document.getElementById('cg-desc').value.trim() || null;
+          try {
+            const r = await post(`/api/polls/${pollId}/create-group`, { option_ids: optIds, title, description });
+            close();
+            toast(`✅ グループ作成 (${r.member_count}人)`);
+            navigate('#/groups/' + (r.slug || r.group_id));
+          } catch (e) {
+            toast('失敗: ' + e.message);
+          }
+        }
+      }
+    ]
+  });
 }
 
 // 集計セクションだけを描画 (URL コピーや投票 UI を触らないので入力フォーカスを壊さない)。

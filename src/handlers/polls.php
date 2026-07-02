@@ -21,6 +21,8 @@ function route_polls(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'vote'   && $method === 'POST')  { polls_vote($pdo, $cfg, $id); return; }
         if ($next === 'close'  && $method === 'PATCH') { polls_close($pdo, $cfg, $id); return; }
         if ($next === 'remind' && $method === 'POST')  { polls_remind($pdo, $cfg, $id); return; }
+        // v912 選択肢に投票した人でグループを作る (起案者専用、締切後のみ)
+        if ($next === 'create-group' && $method === 'POST') { polls_create_group($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no polls route for $method $sub", 404);
 }
@@ -494,6 +496,104 @@ function polls_close(PDO $pdo, array $cfg, int $id): void {
     }
     $pdo->prepare("UPDATE polls SET status='closed', closed_at=NOW() WHERE id=?")->execute([$id]);
     json_response(['ok' => true]);
+}
+
+// v912 選択肢に投票した人を集めて ad-hoc グループを作成する。
+//   起案者専用 + 締切後 のみ。 選択肢複数指定可 (複数選ぶと union、 「行きたい人 + 検討中の人」 で1グループ)。
+//   voter プライバシー: この操作でグループが作られる = メンバー名がグループ内で相互に見えるようになる
+//   ので、 起案者は暗黙的に voter を知る。 締切後 かつ 起案者専用 でリスクを抑える。
+function polls_create_group(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT id, creator_user_id, title, status FROM polls WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $poll = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$poll['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみグループ化できます', 403);
+    }
+    polls_autoclose($pdo);  // 締切過ぎてれば close 済にする
+    // 再度 status を取得
+    $st2 = $pdo->prepare("SELECT status FROM polls WHERE id=?");
+    $st2->execute([$id]);
+    $status = (string)$st2->fetchColumn();
+    if ($status !== 'closed') {
+        throw new ApiException('conflict', '締切後のみグループ化できます (open 中は不可)', 409);
+    }
+    $body = read_json_body();
+    $optIds = array_values(array_unique(array_filter(array_map('intval', (array)($body['option_ids'] ?? [])))));
+    if (!$optIds) throw new ApiException('bad_request', 'option_ids が空', 400);
+    // option が このpoll のものか検証
+    $place = implode(',', array_fill(0, count($optIds), '?'));
+    $stO = $pdo->prepare("SELECT id, label FROM poll_options WHERE poll_id=? AND id IN ($place)");
+    $stO->execute(array_merge([$id], $optIds));
+    $optRows = $stO->fetchAll(PDO::FETCH_ASSOC);
+    if (count($optRows) !== count($optIds)) {
+        throw new ApiException('bad_request', 'この投票に属さない option_id が含まれています', 400);
+    }
+    // voter 収集
+    $stV = $pdo->prepare("SELECT DISTINCT user_id FROM poll_votes WHERE poll_id=? AND option_id IN ($place)");
+    $stV->execute(array_merge([$id], $optIds));
+    $voterIds = array_map('intval', array_column($stV->fetchAll(PDO::FETCH_ASSOC), 'user_id'));
+    if (!$voterIds) {
+        throw new ApiException('conflict', '選ばれた選択肢に投票した人がいません', 409);
+    }
+    // タイトル
+    $title = trim((string)($body['title'] ?? ''));
+    if ($title === '') {
+        // 「投票タイトル - 選択肢名の union」 を自動生成
+        $optLabels = array_map(fn($r) => (string)$r['label'], $optRows);
+        $title = (string)$poll['title'] . ' / ' . implode(' + ', $optLabels);
+    }
+    if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200);
+    // description / slug / image
+    $description = isset($body['description']) ? mb_substr((string)$body['description'], 0, 5000) : null;
+    $slug = null;
+    if (!empty($body['slug'])) {
+        $s = trim((string)$body['slug']);
+        if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $s) || ctype_digit($s)) {
+            throw new ApiException('bad_request', 'slug 形式不正', 400);
+        }
+        $check = $pdo->prepare("SELECT 1 FROM adhoc_groups WHERE slug = ?");
+        $check->execute([$s]);
+        if ($check->fetchColumn()) throw new ApiException('conflict', "slug 重複: $s", 409);
+        $slug = $s;
+    }
+    // 起案者も入れる
+    $memberIds = array_values(array_unique(array_merge($voterIds, [(int)$u['id']])));
+
+    // adhoc_groups + members に INSERT (groups_create と同じ形。 外部関数呼び出しでは
+    // Auth::requireUser を二度実行になり冪等性が微妙なので、 直接 INSERT で 一元処理)。
+    $pdo->beginTransaction();
+    try {
+        $ins = $pdo->prepare("INSERT INTO adhoc_groups (slug, creator_user_id, title, description)
+            VALUES (?, ?, ?, ?)");
+        $ins->execute([$slug, (int)$u['id'], $title, $description]);
+        $gid = (int)$pdo->lastInsertId();
+        $insM = $pdo->prepare("INSERT INTO adhoc_group_members (group_id, user_id) VALUES (?, ?)");
+        foreach ($memberIds as $uid) {
+            $insM->execute([$gid, $uid]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack(); throw $e;
+    }
+    // 新メンバーに通知 (起案者は除外)
+    foreach ($voterIds as $uid) {
+        if ($uid === (int)$u['id']) continue;
+        try {
+            notify_safely($pdo, $cfg, $uid, 'admin_notice',
+                "🏘 投票「{$poll['title']}」の結果からグループ「{$title}」に追加されました",
+                'group', $gid);
+        } catch (Throwable $_) {}
+    }
+    json_response([
+        'ok' => true,
+        'group_id' => $gid,
+        'slug' => $slug,
+        'member_count' => count($memberIds),
+        'voter_count' => count($voterIds),
+    ]);
 }
 
 function polls_delete(PDO $pdo, array $cfg, int $id): void {
