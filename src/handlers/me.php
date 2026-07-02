@@ -276,7 +276,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $unit = (int)$r['unit_price'];
             $fee  = (int)$r['fee'];
             $qty  = (int)$r['qty'];
-            $line = $unit * $qty + $fee;
+            // v918 fb#466 「300pt の 商品 なのに 315pt 引かれた」 → 表示バグ 修正。
+            //   実際は Money::split で buyer_pay = price なので 買い手は unit_price そのまま 払う (fee は unit の 中 に 含まれる、
+            //   売り手 が 285pt 受取 + SYSTEM が 15pt 手数料)。 line_total に + $fee を 足す のは 二重計上。
+            $line = $unit * $qty;
             $totalSpent += $line;
             $items[] = [
                 'id'             => (int)$r['id'],
