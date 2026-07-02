@@ -285,6 +285,7 @@ export async function renderTimerNew({ query } = {}) {
 
 let tmTickTimer = null;
 let tmSyncTimer = null;
+let tmVisHandler = null;  // v915 タブ 可視化 時に 即 sync する リスナ の 参照 (剥がす 用)
 // v408 「ちょうど 0 になった瞬間」を 1 回だけ鳴らすためのフラグ。
 // resync で復活してしまうので必要。リピートでサーバが次サイクルに
 // 切替えたら tmLastCycleIdx 変化で再 false 化 (下の loadTimerDetail で処理)。
@@ -311,6 +312,8 @@ let tmStatus = 'running';
 function stopTimerLoops() {
   if (tmTickTimer) { clearInterval(tmTickTimer); tmTickTimer = null; }
   if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
+  // v915 visibilitychange リスナ を 剥がす (別ページ に 遷移した時 の 漏れ 防止)。
+  if (tmVisHandler) { document.removeEventListener('visibilitychange', tmVisHandler); tmVisHandler = null; }
   // v405 wake lock release
   releaseWakeLock('timer');
 }
@@ -364,6 +367,17 @@ export async function renderTimerDetail({ params }) {
   // 1 秒刻みで表示更新 (offset とサーバの終了時刻から計算)
   tmTickTimer = setInterval(() => tickTimer(), 1000);
   tickTimer();
+  // v915 タブ が visible に 戻った 瞬間に 即 sync (background 中の 遅延を 一度に 追いつく)。
+  //   これで 「他人が リセットしたのに 自分の 端末は 数秒 遅れる」 も 短縮。 renderTimerDetail が
+  //   再エントリー されても 二重登録 防止のため 名前付きで、 stopTimerLoops で 剥がす。
+  if (tmVisHandler) document.removeEventListener('visibilitychange', tmVisHandler);
+  tmVisHandler = () => {
+    if (document.hidden) return;
+    if (!document.getElementById('tmd-count')) return;
+    if (tmStatus === 'cancelled') return;
+    loadTimerDetail(id, { isResync: true }).catch(() => {});
+  };
+  document.addEventListener('visibilitychange', tmVisHandler);
   // v411 タップで残り ⇄ 経過切替
   document.getElementById('tmd-count')?.addEventListener('click', () => {
     tmDisplayMode = tmDisplayMode === 'remain' ? 'elapsed' : 'remain';
@@ -527,11 +541,18 @@ function pickSyncIntervalMs() {
   const now = Date.now() + tmOffsetMs;
   const since = (now - tmStartedMs) / 1000;
   const remaining = (tmEndsMs - now) / 1000;
-  if (tmStatus !== 'running') return 0;
-  if (remaining <= 0) return 0;
-  if (since < 30) return 3_000;       // 開始直後 30 秒は 3 秒間隔 (ズレ補正)
-  if (remaining < 30) return 3_000;   // 終了直前 30 秒も 3 秒間隔 (精度大事)
-  return 15_000;                      // それ以外は 15 秒間隔
+  // v915 「タイマー超過中や paused 中に 他人が リセットした のを 拾えず、 自分の端末だけ 延々 超過表示 が進む」
+  //   問題を修正 (ユーザ報告)。 cancelled 以外は 全部 定期 sync に。 これで 誰かが reset/start/pause した
+  //   のを 数秒 内に 全端末が 検知して 追随する。
+  if (tmStatus === 'cancelled') return 0;    // 中止済 は 変化しない (削除しか ない)
+  // ユーザ要望: 停止中 / リセット後 は 「他人が スタートしたら すぐ 把握」 したいので 1s ポーリング。
+  if (tmStatus === 'paused')    return 1_000;
+  if (tmStatus === 'done')      return 1_000;  // done 状態 も 誰かが reset → paused に 遷移する 可能性
+  // running 中:
+  if (remaining <= 0)  return 3_000;  // 超過中 は 3 秒 (他人リセット 追随 + 遅れ ずれ 補正)
+  if (since < 30)      return 3_000;  // 開始直後 30 秒 は 3 秒 (ズレ補正)
+  if (remaining < 30)  return 3_000;  // 終了直前 30 秒 も 3 秒 (精度大事)
+  return 15_000;                      // それ以外 は 15 秒
 }
 
 function scheduleSyncNext(id) {
