@@ -38,11 +38,26 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
 
 // ---------- helpers ----------
 
-// Cancel any open task whose deadline has passed. Refunds unused escrow to requester
-// and marks pending claims cancelled. Called at the top of list/detail to keep state fresh.
+// v911 #465 「タスクの締切と実施は別」 対応。
+//   従来: deadline (応募締切) が過ぎた時点で auto-cancel + escrow 返金 + 全 claim 取消。
+//     ボランティア募集のように「募集 締切=応募終了、 実施は後日」 のタスクだと 応募終了と同時に
+//     全員 の 割当 が キャンセルされてしまう バグに なっていた (task#19、 応募 7/1・実施 8/6-7)。
+//   修正後: スロット (task_slots) を持つタスクは 「最終 slot ended_at」 と task.deadline の
+//     両方が過ぎるまで auto-cancel しない。 slot が無い タスクは従来通り deadline だけで判定。
 function tasks_sweep_expired(PDO $pdo, array $cfg): void {
-    $st = $pdo->query("SELECT id FROM tasks
-        WHERE status='open' AND deadline IS NOT NULL AND deadline < NOW()");
+    $st = $pdo->query("
+        SELECT t.id
+          FROM tasks t
+          LEFT JOIN (
+            SELECT task_id, MAX(ended_at) AS max_end
+              FROM task_slots
+             GROUP BY task_id
+          ) s ON s.task_id = t.id
+         WHERE t.status='open'
+           AND t.deadline IS NOT NULL
+           AND t.deadline < NOW()
+           AND (s.max_end IS NULL OR s.max_end < NOW())
+    ");
     $ids = array_column($st->fetchAll(), 'id');
     foreach ($ids as $id) {
         try { tasks_auto_expire_one($pdo, $cfg, (int)$id); }
