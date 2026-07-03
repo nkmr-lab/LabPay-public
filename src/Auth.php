@@ -128,10 +128,13 @@ class Auth {
             $firstLogin = false;
             if ($userRow) {
                 $userId = (int)$userRow['id'];
-                // Sync role/display_name/grade from allowlist (allowlist is authoritative)
+                // v919 fb#467 「名前を 設定 しても 毎回 nakamura.satoshi に 戻る」 修正。
+                //   従来: 毎ログインで display_name も allowlist から 上書き していたため、 PATCH /api/me で 変えても
+                //   次のログインで リセット。 権限 (role/grade) は allowlist authoritative の まま、 表示名は 本人が
+                //   PATCH /api/me で 変えられる ので、 ここでは 同期しない (初回登録時 は 下の INSERT で 使う)。
                 $upd = $pdo->prepare('UPDATE users
-                    SET display_name=?, role=?, grade=?, last_login_at=NOW() WHERE id=?');
-                $upd->execute([$al['display_name'], $al['role'], $al['grade'] ?? null, $userId]);
+                    SET role=?, grade=?, last_login_at=NOW() WHERE id=?');
+                $upd->execute([$al['role'], $al['grade'] ?? null, $userId]);
             } else {
                 $ins = $pdo->prepare('INSERT INTO users (email, display_name, role, kind, grade, last_login_at)
                     VALUES (?,?,?,?,?,NOW())');

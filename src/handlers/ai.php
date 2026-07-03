@@ -1161,7 +1161,10 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
             ['role' => 'user', 'content' => $userContent],
         ],
         'response_format' => ['type' => 'json_object'],
-        'max_completion_tokens' => 8000,
+        // v919 fb#468 gpt-5 で 「empty content」 で 失敗 の 報告。 gpt-5 / o1 は 推論トークン が
+        //   max_completion_tokens に 食い込む ので、 8000 だと 査読本文 を 吐く 前に 打ち切られる。
+        //   paper_translate と 同じ 24000 に 引き上げ。
+        'max_completion_tokens' => 24000,
     ];
     if (!preg_match('/^(gpt-5|o1|o3)/', $model)) {
         $payloadArr['temperature'] = 0.3;
@@ -1250,7 +1253,15 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
         }
         $j = json_decode((string)$resp, true);
         $content = $j['choices'][0]['message']['content'] ?? null;
-        if (!is_string($content) || $content === '') throw new RuntimeException('empty content');
+        if (!is_string($content) || $content === '') {
+            // v919 fb#468 デバッグ 目的 で finish_reason と usage を エラー文 に 含める
+            //   (「length で 打ち切り」 が 明示 されれば すぐ max_completion_tokens 不足 と 分かる)。
+            $finish = $j['choices'][0]['finish_reason'] ?? 'unknown';
+            $usage = $j['usage'] ?? [];
+            $totalT = (int)($usage['total_tokens'] ?? 0);
+            $reasonT = (int)(($usage['completion_tokens_details']['reasoning_tokens'] ?? 0));
+            throw new RuntimeException("empty content (finish={$finish}, total={$totalT}, reasoning={$reasonT})");
+        }
         $parsed = json_decode($content, true);
         if (!is_array($parsed)) throw new RuntimeException('invalid JSON');
 
