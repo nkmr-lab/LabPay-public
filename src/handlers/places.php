@@ -182,6 +182,19 @@ function places_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($phone) > 50) $phone = mb_substr($phone, 0, 50);
     $hours = isset($body['hours']) ? trim((string)$body['hours']) : '';
     if (mb_strlen($hours) > 2000) $hours = mb_substr($hours, 0, 2000);
+    // v920 同一 source_url が 既に 登録済 なら 拒否 (二重登録防止 の 最終砦、
+    //   通常は フロント で 事前に 気づく が、 直接 POST や race 対策)。
+    //   force=1 が 明示的に 送られたら 通す (別支店 など 意図的 な 場合)。
+    if ($sourceUrl !== '' && empty($body['force'])) {
+        $stDup = $pdo->prepare("SELECT id, title FROM places WHERE source_url = ? LIMIT 1");
+        $stDup->execute([$sourceUrl]);
+        if ($ex = $stDup->fetch(PDO::FETCH_ASSOC)) {
+            throw new ApiException('duplicate',
+                "同じ URL の 店 が すでに 登録済 「{$ex['title']}」 (id={$ex['id']})。 別支店 として 登録する なら force=1 を 付けて 再送信 して ください。",
+                409,
+                ['existing_id' => (int)$ex['id'], 'existing_title' => $ex['title']]);
+        }
+    }
     $ins = $pdo->prepare("INSERT INTO places
         (title, category, address, lat, lng, description, source_url, phone, hours, image_url, creator_user_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
@@ -365,9 +378,11 @@ function places_delete(PDO $pdo, array $cfg, int $id): void {
 
 function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT 1 FROM places WHERE id=?");
+    // v921 通知 用に 起案者 と 店名 も 一緒に 引く。
+    $st = $pdo->prepare("SELECT creator_user_id, title FROM places WHERE id=?");
     $st->execute([$placeId]);
-    if (!$st->fetchColumn()) throw new ApiException('not_found', 'お店が見つかりません', 404);
+    $placeRow = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$placeRow) throw new ApiException('not_found', 'お店が見つかりません', 404);
     $body = read_json_body();
     $bodyText = trim((string)($body['body'] ?? ''));
     if (mb_strlen($bodyText) > 4000) $bodyText = mb_substr($bodyText, 0, 4000);
@@ -406,7 +421,21 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
         $imageUrl !== '' ? $imageUrl : null,
         $imageUrlsJson,
         $rating]);
-    json_response(['id' => (int)$pdo->lastInsertId()]);
+    $commentId = (int)$pdo->lastInsertId();
+    // v921 店 の 起案者 (投稿者本人 以外) に 通知。 「自分が 登録した 店 に 誰か が レビュー」 が 見えるように。
+    $creatorId = (int)$placeRow['creator_user_id'];
+    if ($creatorId > 0 && $creatorId !== (int)$u['id']) {
+        try {
+            $short = $bodyText !== '' ? mb_substr($bodyText, 0, 40) : '';
+            $star  = $rating !== null ? str_repeat('⭐', $rating) . ' ' : '';
+            $imgMark = !empty($imageUrls) ? ' 📷' : '';
+            $tail = $short !== '' ? "「{$short}" . (mb_strlen((string)$bodyText) > 40 ? '…' : '') . "」" : '';
+            notify_safely($pdo, $cfg, $creatorId, 'admin_notice',
+                "📍 {$u['display_name']} が「{$placeRow['title']}」にレビュー投稿 {$star}{$imgMark}{$tail} /#/places/{$placeId}",
+                'place_comment', $commentId);
+        } catch (Throwable $_) {}
+    }
+    json_response(['id' => $commentId]);
 }
 
 function places_comment_delete(PDO $pdo, array $cfg, int $placeId, int $commentId): void {
@@ -433,15 +462,16 @@ function places_import_url(PDO $pdo, array $cfg): void {
     $url = trim((string)($body['url'] ?? ''));
     if ($url === '') throw new ApiException('bad_request', 'url 必要', 400);
     if (!preg_match('#^https?://#', $url)) throw new ApiException('bad_request', 'http(s) URL のみ', 400);
-    // ホワイトリスト: tabelog / Retty / hotpepper / Google Maps (短縮)
+    // ホワイトリスト: tabelog / Retty / hotpepper / Google Maps (短縮) / v921 TripAdvisor 対応
     $host = parse_url($url, PHP_URL_HOST) ?? '';
     $allowed = ['tabelog.com', 'retty.me', 'hotpepper.jp', 'goo.gl', 'maps.google.com',
-                'maps.app.goo.gl', 'g.co'];
+                'maps.app.goo.gl', 'g.co',
+                'tripadvisor.com', 'tripadvisor.jp', 'tripadvisor.co.jp'];
     $ok = false;
     foreach ($allowed as $h) {
         if ($host === $h || str_ends_with($host, '.' . $h)) { $ok = true; break; }
     }
-    if (!$ok) throw new ApiException('bad_request', 'tabelog / Retty / hotpepper のみ対応', 400);
+    if (!$ok) throw new ApiException('bad_request', 'tabelog / Retty / hotpepper / TripAdvisor のみ対応', 400);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -524,15 +554,36 @@ function places_import_url(PDO $pdo, array $cfg): void {
         $desc = trim($mm[1]);
     }
 
+    // v920 同一 URL の 店 が 既に 登録済 か チェック (ユーザ要望)。 見つかったら
+    //   existing_place を 返して、 フロント で 「もう 登録 されて いる」 と 案内 する。
+    $existingPlace = null;
+    $stDup = $pdo->prepare("SELECT p.id, p.title, p.category, p.address, p.image_url, p.creator_user_id,
+                                   u.display_name AS creator_name
+                              FROM places p
+                              LEFT JOIN users u ON u.id = p.creator_user_id
+                             WHERE p.source_url = ? LIMIT 1");
+    $stDup->execute([$url]);
+    if ($r = $stDup->fetch(PDO::FETCH_ASSOC)) {
+        $existingPlace = [
+            'id'           => (int)$r['id'],
+            'title'        => $r['title'],
+            'category'     => $r['category'],
+            'address'      => $r['address'],
+            'image_url'    => $r['image_url'],
+            'creator_name' => $r['creator_name'],
+        ];
+    }
+
     json_response([
-        'title'       => $title,
-        'address'     => $address,
-        'lat'         => $lat,
-        'lng'         => $lng,
-        'description' => $desc,
-        'phone'       => $phone,
-        'hours'       => $hours,
-        'source_url'  => $url,
+        'title'          => $title,
+        'address'        => $address,
+        'lat'            => $lat,
+        'lng'            => $lng,
+        'description'    => $desc,
+        'phone'          => $phone,
+        'hours'          => $hours,
+        'source_url'     => $url,
+        'existing_place' => $existingPlace,
     ]);
 }
 

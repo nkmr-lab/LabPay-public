@@ -360,6 +360,11 @@ export async function renderPlacesMap() {
         </label>
         <span id="pm-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
+      <!-- v921 住所 / 地名 検索 (OpenStreetMap Nominatim)。 地図 を そこ に 移動 する だけ、 登録は しない。 -->
+      <div class="row center" style="gap:6px; margin-top:6px; flex-wrap:wrap">
+        <input type="text" id="pm-search" placeholder="🔍 住所 / 地名 で 検索 (例: 中野駅、 東京都新宿区西新宿)" style="flex:1; min-width:200px; padding:4px 8px; font-size:12px; border:1px solid #d1d5db; border-radius:4px">
+        <button id="pm-search-btn" class="btn" style="padding:2px 10px; font-size:12px">検索</button>
+      </div>
     </div>
     <div class="card" style="padding:0; overflow:hidden; margin:6px 0">
       <div id="pm-map" style="height:55vh; min-height:340px; width:100%; background:#eef"></div>
@@ -401,6 +406,42 @@ export async function renderPlacesMap() {
   };
   map.on('moveend', persistView);
   map.on('zoomend', persistView);
+
+  // v921 住所検索: Nominatim (OpenStreetMap) の 公開 geocode 使用。
+  //   結果 の 上位 1 件 に map を fly させる。 マーカー は 一時的に 追加 して 3 秒 で 消す。
+  const searchInput = document.getElementById('pm-search');
+  const searchBtn = document.getElementById('pm-search-btn');
+  let searchMarker = null;
+  const doGeoSearch = async () => {
+    const q = searchInput.value.trim();
+    if (!q) { toast('住所 / 地名 を 入れて'); return; }
+    searchBtn.disabled = true;
+    const oldTxt = searchBtn.textContent;
+    searchBtn.textContent = '…';
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=ja`, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const arr = await resp.json();
+      if (!arr.length) { toast('見つからなかった (別の 表記 で 試して)'); return; }
+      const hit = arr[0];
+      const lat = Number(hit.lat), lng = Number(hit.lon);
+      map.flyTo([lat, lng], 15, { duration: 0.8 });
+      // 一時マーカー を 3 秒 表示 して 消す
+      if (searchMarker) map.removeLayer(searchMarker);
+      searchMarker = L.marker([lat, lng]).addTo(map)
+        .bindPopup('🔍 ' + (hit.display_name || q)).openPopup();
+      setTimeout(() => { if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; } }, 8000);
+    } catch (e) {
+      toast('検索失敗: ' + (e?.message || e));
+    } finally {
+      searchBtn.disabled = false;
+      searchBtn.textContent = oldTxt;
+    }
+  };
+  searchBtn?.addEventListener('click', doGeoSearch);
+  searchInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doGeoSearch(); } });
 
   let items = [];
   try {
@@ -526,13 +567,15 @@ export async function renderPlaceNew() {
         </div>
         <span class="hint-sm" style="font-size:11px" id="pln-search-status">tabelog の検索結果から店舗 URL を取得して下の欄に入れます</span>
       </label>
-      <label class="field"><span class="lbl">🔗 URL から自動取得 (tabelog / Retty / hotpepper)</span>
+      <label class="field"><span class="lbl">🔗 URL から自動取得 (tabelog / Retty / hotpepper / TripAdvisor)</span>
         <div class="row" style="gap:6px">
-          <input type="url" id="pln-import-url" placeholder="https://tabelog.com/..." style="flex:1">
+          <input type="url" id="pln-import-url" placeholder="https://tabelog.com/... または https://www.tripadvisor.jp/..." style="flex:1">
           <button id="pln-import-btn" class="btn primary">取得</button>
         </div>
         <span class="hint-sm" style="font-size:11px" id="pln-import-status">店名 / 住所 / 緯度経度を下に自動入力します</span>
       </label>
+      <!-- v921 同一 URL の 店 が 既に 登録済 なら ここに 警告バナー -->
+      <div id="pln-dup-warn" hidden></div>
       <label class="field"><span class="lbl">お店の名前 *</span>
         <input type="text" id="pln-title" maxlength="200" placeholder="例: 〇〇カフェ" autofocus>
       </label>
@@ -669,6 +712,34 @@ export async function renderPlaceNew() {
         if (r.hours && !document.getElementById('pln-hours').value.trim()) {
           document.getElementById('pln-hours').value = r.hours;
         }
+        // v921 同一 URL の 店 が すでに 登録済 の 場合 警告バナー を 出す
+        //   (「別支店 等 意図的に」 は 続行 可、 それ以外 は 場所詳細 に 飛べる)。
+        const dupEl = document.getElementById('pln-dup-warn');
+        if (r.existing_place) {
+          const ep = r.existing_place;
+          dupEl.hidden = false;
+          dupEl.innerHTML = `
+            <div style="background:linear-gradient(135deg, #fef3c7, #fde68a); border:2px solid #f59e0b; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(245,158,11,0.2)">
+              <div style="font-size:16px; font-weight:700; color:#78350f; margin-bottom:6px">⚠️ この 店 は 既に 登録 されて います!</div>
+              <div style="font-size:13px; color:#78350f; line-height:1.6">
+                「<b>${escapeHtml(ep.title)}</b>」 (登録: ${escapeHtml(ep.creator_name || '?')}, ${escapeHtml(ep.category || '')})<br>
+                ${ep.address ? '📍 ' + escapeHtml(ep.address) + '<br>' : ''}
+              </div>
+              <div class="row" style="gap:6px; margin-top:8px">
+                <a href="#/places/${ep.id}" class="btn primary" style="font-size:13px">📍 場所詳細 を 見る</a>
+                <button id="pln-dup-force" class="btn" style="font-size:13px">別支店 として 続行</button>
+              </div>
+            </div>`;
+          document.getElementById('pln-dup-force')?.addEventListener('click', () => {
+            dupEl.hidden = true;
+            document.getElementById('pln-save').dataset.force = '1';
+            toast('別支店 として 登録 します');
+          });
+        } else {
+          dupEl.hidden = true;
+          dupEl.innerHTML = '';
+          document.getElementById('pln-save').dataset.force = '';
+        }
         status.innerHTML = `<span style="color:#0e7c63">✓ 取得完了</span>`;
       } catch (e) {
         status.innerHTML = `<span style="color:#c62828">失敗: ${escapeHtml(e.message)}</span>`;
@@ -685,7 +756,7 @@ export async function renderPlaceNew() {
     const lng = document.getElementById('pln-lng').value;
     const desc = document.getElementById('pln-desc').value.trim();
     try {
-      const r = await post('/api/places', {
+      const payload = {
         title, category: cat, address: addr,
         lat: lat !== '' ? Number(lat) : null,
         lng: lng !== '' ? Number(lng) : null,
@@ -694,7 +765,10 @@ export async function renderPlaceNew() {
         phone: document.getElementById('pln-phone').value.trim() || null,
         hours: document.getElementById('pln-hours').value.trim() || null,
         image_url: plnImageUrl || '',
-      });
+      };
+      // v921 「別支店 として 続行」 が 押されて いれば force=1 で サーバー の 二重登録 拒否 を バイパス
+      if (document.getElementById('pln-save').dataset.force === '1') payload.force = 1;
+      const r = await post('/api/places', payload);
       toast('登録しました');
       navigate('#/places/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); }
