@@ -7,6 +7,7 @@ import { escapeHtml, navigate, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { openImageLightbox } from '../lightbox.js';
+import { shareToSns } from '../share_to_sns.js';
 
 const CATEGORIES = [
   { id: '',       label: '指定なし' },
@@ -788,6 +789,21 @@ async function loadPlace(id) {
               style="font-size:13px; padding:4px 12px; ${p.visited_by_me ? 'background:#dcfce7; color:#15803d; border-color:#15803d' : ''}">
         ${p.visited_by_me ? '👣' : '🐾'} <span id="pld-visit-n">${p.visit_count || 0}</span>
       </button>`;
+    // v920 「🗺 ここに行く」 = Google Maps ナビ を 開く。 座標 が あれば lat/lng 直、 なければ 住所 fallback。
+    //   モバイル は Google Maps アプリ に、 PC は ブラウザ 地図 に 自動遷移。
+    const goBtn = (p.lat != null && p.lng != null) || p.address ? `
+      <button id="pld-go" class="btn"
+              title="Google Maps で ナビ 開始"
+              style="font-size:13px; padding:4px 12px; background:#dbeafe; color:#1e40af; border-color:#1e40af">
+        🗺 ここに行く
+      </button>` : '';
+    // v920 「📣 一緒に行く人 募集」 = 場所リンク付き で らぼったー に 投稿。 モーダル で 本文編集 可能。
+    const recruitBtn = `
+      <button id="pld-recruit" class="btn"
+              title="らぼったー に 「一緒に行こう」 投稿"
+              style="font-size:13px; padding:4px 12px; background:#fef3c7; color:#78350f; border-color:#78350f">
+        📣 一緒に行く人 募集
+      </button>`;
     // v722 #318 source_url (tabelog 等) を表示。
     const srcUrlBlock = p.source_url
       ? `<div class="meta" style="margin-top:4px"><a href="${escapeHtml(p.source_url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 ${escapeHtml(p.source_url)} ↗</a></div>`
@@ -810,8 +826,23 @@ async function loadPlace(id) {
       ${ratingLine}
       ${p.description ? `<div style="margin-top:8px; font-size:14px">${linkifyText(p.description)}</div>` : ''}
       <div class="meta" style="margin-top:6px">起案 ${escapeHtml(p.creator_name)} · ${escapeHtml(p.created_at || '')}</div>
-      <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap">${likeBtn}${visitBtn}</div>
+      <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap">${likeBtn}${visitBtn}${goBtn}${recruitBtn}</div>
     `;
+    // v920 「🗺 ここに行く」 ハンドラ
+    document.getElementById('pld-go')?.addEventListener('click', () => {
+      const dest = (p.lat != null && p.lng != null)
+        ? `${p.lat},${p.lng}`
+        : encodeURIComponent(p.address || p.title);
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+      window.open(url, '_blank', 'noopener');
+    });
+    // v920 「📣 一緒に行く人 募集」 ハンドラ — 場所詳細 URL 付き で らぼったー 投稿ダイアログ を 開く
+    document.getElementById('pld-recruit')?.addEventListener('click', async () => {
+      const cat = CATEGORIES.find(c => c.id === p.category)?.label || '';
+      const title = `🍽 ${p.title}${cat ? ' (' + cat + ')' : ''}、 誰か 一緒に 行きませんか?` +
+        (p.address ? `\n📍 ${p.address}` : '');
+      await shareToSns(title, `#/places/${p.id}`);
+    });
     document.getElementById('pld-like')?.addEventListener('click', async () => {
       const btn = document.getElementById('pld-like');
       const wasLiked = btn.dataset.liked === '1';
