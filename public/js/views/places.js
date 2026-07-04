@@ -122,6 +122,11 @@ export async function renderPlaces() {
         <div id="pl-map" style="height:100%; width:100%"></div>
         <button id="pl-locate" class="btn" title="現在地に移動"
           style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
+        <!-- v922 住所 / 地名 検索 (OpenStreetMap Nominatim)。 地図 の 左上 オーバーレイ、 モバイル でも 見える 位置。 -->
+        <div style="position:absolute; top:8px; left:8px; z-index:500; display:flex; gap:4px; background:#fff; padding:4px 6px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.2); max-width:calc(100% - 130px)">
+          <input type="text" id="pl-search" placeholder="🔍 住所 / 地名 で 検索" style="flex:1; min-width:120px; padding:3px 6px; font-size:12px; border:1px solid #d1d5db; border-radius:4px">
+          <button id="pl-search-btn" class="btn" style="padding:2px 8px; font-size:12px">検索</button>
+        </div>
       </div>
       <div id="pl-list-wrap">
         <div id="pl-list"><div class="muted">読み込み中…</div></div>
@@ -163,6 +168,40 @@ export async function renderPlaces() {
       { timeout: 6000, enableHighAccuracy: true }
     );
   });
+  // v922 住所 / 地名 検索 (Nominatim)。 上位 1 件 に flyTo + 一時マーカー 8 秒。
+  const plSearchInput = document.getElementById('pl-search');
+  const plSearchBtn = document.getElementById('pl-search-btn');
+  let plSearchMarker = null;
+  const doPlSearch = async () => {
+    if (!map || !L) { toast('地図未初期化'); return; }
+    const q = plSearchInput.value.trim();
+    if (!q) { toast('住所 / 地名 を 入れて'); return; }
+    plSearchBtn.disabled = true;
+    const oldTxt = plSearchBtn.textContent;
+    plSearchBtn.textContent = '…';
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=ja`, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const arr = await resp.json();
+      if (!arr.length) { toast('見つからなかった (別の 表記 で 試して)'); return; }
+      const hit = arr[0];
+      const lat = Number(hit.lat), lng = Number(hit.lon);
+      map.flyTo([lat, lng], 15, { duration: 0.8 });
+      if (plSearchMarker) map.removeLayer(plSearchMarker);
+      plSearchMarker = L.marker([lat, lng]).addTo(map)
+        .bindPopup('🔍 ' + (hit.display_name || q)).openPopup();
+      setTimeout(() => { if (plSearchMarker) { map.removeLayer(plSearchMarker); plSearchMarker = null; } }, 8000);
+    } catch (e) {
+      toast('検索失敗: ' + (e?.message || e));
+    } finally {
+      plSearchBtn.disabled = false;
+      plSearchBtn.textContent = oldTxt;
+    }
+  };
+  plSearchBtn?.addEventListener('click', doPlSearch);
+  plSearchInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doPlSearch(); } });
 
   let allItems = [];
   try {
