@@ -122,9 +122,9 @@ export async function renderPlaces() {
         <div id="pl-map" style="height:100%; width:100%"></div>
         <button id="pl-locate" class="btn" title="現在地に移動"
           style="position:absolute; top:8px; right:8px; z-index:500; background:#fff; padding:6px 10px; font-size:12px; box-shadow:0 1px 4px rgba(0,0,0,0.2)">📍 現在地</button>
-        <!-- v923 住所 / 地名 検索 (OpenStreetMap Nominatim)。 leaflet の +/- ズーム と
-             📍 現在地 ボタン の 下 (top:60px) に 全幅 で 配置、 ぶつからない。 -->
-        <div style="position:absolute; top:56px; left:8px; right:8px; z-index:500; display:flex; gap:4px; background:#fff; padding:4px 6px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.2); max-width:420px">
+        <!-- v924 住所 / 地名 検索 (OpenStreetMap Nominatim)。 zoom を 下 に 移動 したので 左上 が 空いた。
+             📍 現在地 (右上) と 干渉 しない よう right:120px。 -->
+        <div style="position:absolute; top:8px; left:8px; right:120px; z-index:500; display:flex; gap:4px; background:#fff; padding:4px 6px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.2); max-width:420px">
           <input type="text" id="pl-search" placeholder="🔍 住所 / 地名 で 検索" style="flex:1; min-width:0; padding:3px 6px; font-size:12px; border:1px solid #d1d5db; border-radius:4px">
           <button id="pl-search-btn" class="btn" style="padding:2px 8px; font-size:12px">検索</button>
         </div>
@@ -140,7 +140,9 @@ export async function renderPlaces() {
   let L = null, map = null;
   try { L = await loadLeaflet(); } catch (_) {}
   if (L) {
-    map = L.map('pl-map', { zoomControl: true }).setView([35.7, 139.66], 13);
+    // v924 検索ボックス と かぶらない よう zoom を bottomleft に 移動 (デフォルト は topleft)
+    map = L.map('pl-map', { zoomControl: false }).setView([35.7, 139.66], 13);
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
     try {
       const raw = localStorage.getItem(MAP_VIEW_KEY);
       if (raw) {
