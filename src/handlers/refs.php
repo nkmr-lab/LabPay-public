@@ -22,6 +22,9 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_endnote' && $method === 'POST') { refs_import_endnote($pdo, $cfg); return; }
     // v930: 参考文献 リスト 生成 (複数 ref に 対して 一括 CSL 引用)
     if ($sub === 'bibliography'   && $method === 'POST') { refs_bibliography($pdo, $cfg);   return; }
+    // v931: Semantic Scholar 連携
+    if ($sub === 'ss_search'      && $method === 'POST') { refs_ss_search($pdo, $cfg);      return; }
+    if ($sub === 'ss_recommend'   && $method === 'POST') { refs_ss_recommend($pdo, $cfg);   return; }
     // v928 track B
     if ($sub === 'collections') {
         $subid = $seg[2] ?? '';
@@ -77,6 +80,10 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
         }
         // v929: citation (CSL) + highlights
         if ($next === 'citation'   && $method === 'GET')    { refs_citation($pdo, $cfg, $id); return; }
+        // v931: Semantic Scholar 個別 endpoint
+        if ($next === 'ss_references' && $method === 'GET')  { refs_ss_references($pdo, $cfg, $id);  return; }
+        if ($next === 'ss_citations'  && $method === 'GET')  { refs_ss_citations($pdo, $cfg, $id);   return; }
+        if ($next === 'ss_enrich'     && $method === 'POST') { refs_ss_enrich($pdo, $cfg, $id);      return; }
         if ($next === 'highlights' && $method === 'GET')    { refs_highlights_list($pdo, $cfg, $id); return; }
         if ($next === 'highlights' && $method === 'POST')   { refs_highlights_add($pdo, $cfg, $id); return; }
         if ($next === 'highlights' && ctype_digit((string)($seg[3] ?? '')) && $method === 'PATCH') {
@@ -425,6 +432,7 @@ function refs_list(PDO $pdo, array $cfg): void {
 
     $sql = "SELECT r.id, r.doi, r.arxiv_id, r.title, r.authors_json, r.year, r.venue,
                    r.url, r.pdf_path, r.tags_json, r.added_by_user_id, r.created_at, r.deleted_at,
+                   r.citation_count,
                    u.display_name AS added_by_name, u.avatar_url AS added_by_avatar,
                    n.status AS my_status, n.note AS my_note
               FROM refs r
@@ -473,6 +481,7 @@ function refs_list(PDO $pdo, array $cfg): void {
         $r['year']            = $r['year'] !== null ? (int)$r['year'] : null;
         $r['added_by_user_id'] = (int)$r['added_by_user_id'];
         $r['my_status']       = $r['my_status'] ?: 'unread';
+        $r['citation_count']  = isset($r['citation_count']) && $r['citation_count'] !== null ? (int)$r['citation_count'] : null;
         return $r;
     }, $st->fetchAll(PDO::FETCH_ASSOC));
 
@@ -623,6 +632,9 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         'arxiv_id'         => $r['arxiv_id'],
         'title'            => $r['title'],
         'item_type'        => $r['item_type'] ?? 'article',
+        'semantic_scholar_id' => $r['semantic_scholar_id'] ?? null,
+        'citation_count'   => $r['citation_count'] !== null ? (int)$r['citation_count'] : null,
+        'reference_count'  => $r['reference_count'] !== null ? (int)$r['reference_count'] : null,
         'authors'          => $r['authors_json'] ? (json_decode((string)$r['authors_json'], true) ?: []) : [],
         'year'             => $r['year'] !== null ? (int)$r['year'] : null,
         'venue'            => $r['venue'],
@@ -1884,14 +1896,19 @@ function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
         $url = trim((string)($it['url'] ?? ''));
         if ($url !== '' && !preg_match('#^https?://#', $url)) $url = '';
         $ins = $pdo->prepare("INSERT INTO refs
-            (doi, arxiv_id, title, item_type, authors_json, year, venue, abstract, url, tags_json, extra_json, added_by_user_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+            (doi, arxiv_id, semantic_scholar_id, title, item_type, authors_json, year, venue, abstract,
+             citation_count, reference_count, url, tags_json, extra_json, added_by_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         $ins->execute([
-            $doi ?: null, $arxiv ?: null, mb_substr($title, 0, 1000), $itemType,
+            $doi ?: null, $arxiv ?: null,
+            !empty($it['ss_id']) ? (string)$it['ss_id'] : null,
+            mb_substr($title, 0, 1000), $itemType,
             json_encode($authors, JSON_UNESCAPED_UNICODE),
             !empty($it['year']) ? (int)$it['year'] : null,
             !empty($it['venue']) ? mb_substr((string)$it['venue'], 0, 500) : null,
             !empty($it['abstract']) ? (string)$it['abstract'] : null,
+            isset($it['citation_count'])  ? (int)$it['citation_count']  : null,
+            isset($it['reference_count']) ? (int)$it['reference_count'] : null,
             $url ?: null,
             $tags ? json_encode($tags, JSON_UNESCAPED_UNICODE) : null,
             $extraJson,
@@ -2167,6 +2184,268 @@ function _refs_citation_science(array $r, array $authors, int $num): string {
     $year = !empty($r['year']) ? ' (' . (int)$r['year'] . ')' : '';
     $tail = ($vol ? ' **' . $vol . '**' : '') . ($pages ? ', ' . $pages : '') . $year;
     return "$num. $auth, $title$venue$tail.";
+}
+
+// ─────────────────────────────────────────────────────
+// v931: Semantic Scholar 連携
+//   https://api.semanticscholar.org/graph/v1
+//   認証 不要 (key 有れば レート上限 up)、 5000 req / 5 min。
+// ─────────────────────────────────────────────────────
+
+// 汎用 GET 呼び出し (key 有れば x-api-key ヘッダ 付ける)。
+function _refs_ss_get(string $url, array $cfg): array {
+    $ch = curl_init($url);
+    $headers = ['Accept: application/json'];
+    $key = (string)($cfg['semantic_scholar']['api_key'] ?? '');
+    if ($key !== '') $headers[] = 'x-api-key: ' . $key;
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_USERAGENT => 'LabPay/1.0 (labpay@nkmr.io)',
+    ]);
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return [(int)$code, is_string($body) ? $body : ''];
+}
+
+function _refs_ss_post(string $url, array $payload, array $cfg): array {
+    $ch = curl_init($url);
+    $headers = ['Accept: application/json', 'Content-Type: application/json'];
+    $key = (string)($cfg['semantic_scholar']['api_key'] ?? '');
+    if ($key !== '') $headers[] = 'x-api-key: ' . $key;
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_USERAGENT => 'LabPay/1.0 (labpay@nkmr.io)',
+    ]);
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return [(int)$code, is_string($body) ? $body : ''];
+}
+
+// SS の paper node を local な meta shape に 変換。
+function _refs_ss_paper_to_meta(array $p): array {
+    $authors = [];
+    foreach ((array)($p['authors'] ?? []) as $a) {
+        if (!empty($a['name'])) $authors[] = ['name' => (string)$a['name']];
+    }
+    $ext = (array)($p['externalIds'] ?? []);
+    $doi = (string)($ext['DOI'] ?? '');
+    $arx = (string)($ext['ArXiv'] ?? '');
+    $venue = (string)($p['venue'] ?? '');
+    return [
+        'ss_id'          => (string)($p['paperId'] ?? ''),
+        'title'          => (string)($p['title'] ?? ''),
+        'authors'        => $authors,
+        'year'           => isset($p['year']) ? (int)$p['year'] : null,
+        'venue'          => $venue,
+        'abstract'       => (string)($p['abstract'] ?? ''),
+        'doi'            => $doi,
+        'arxiv_id'       => $arx,
+        'url'            => (string)($p['url'] ?? ($doi ? 'https://doi.org/' . $doi : '')),
+        'citation_count' => isset($p['citationCount']) ? (int)$p['citationCount'] : null,
+        'reference_count'=> isset($p['referenceCount']) ? (int)$p['referenceCount'] : null,
+        'is_open_access' => (bool)($p['isOpenAccess'] ?? false),
+    ];
+}
+
+// Semantic Scholar 検索 (キーワード + 任意 年 / venue フィルタ)。
+function refs_ss_search(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $q = trim((string)($body['query'] ?? ''));
+    if ($q === '') throw new ApiException('bad_request', 'query 必要', 400);
+    if (mb_strlen($q) > 200) $q = mb_substr($q, 0, 200);
+    $limit = min(50, max(5, (int)($body['limit'] ?? 20)));
+    $year = (int)($body['year'] ?? 0);
+    $venue = trim((string)($body['venue'] ?? ''));
+    $fields = 'paperId,title,authors,year,venue,abstract,externalIds,citationCount,referenceCount,isOpenAccess,url';
+    $url = 'https://api.semanticscholar.org/graph/v1/paper/search?query=' . urlencode($q)
+         . '&limit=' . $limit . '&fields=' . urlencode($fields);
+    if ($year > 0) $url .= '&year=' . $year;
+    if ($venue !== '') $url .= '&venue=' . urlencode($venue);
+    [$code, $rawBody] = _refs_ss_get($url, $cfg);
+    if ($code === 429) throw new ApiException('rate_limited', 'Semantic Scholar rate limit — 少し 待ってから 再試行', 429);
+    if ($code !== 200) throw new ApiException('upstream_error', 'Semantic Scholar HTTP ' . $code, 502);
+    $j = json_decode((string)$rawBody, true);
+    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス 不正', 502);
+    $items = [];
+    $seen = [];
+    foreach ((array)($j['data'] ?? []) as $p) {
+        $m = _refs_ss_paper_to_meta((array)$p);
+        // 既存 refs に あるか チェック (DOI / arXiv / ss_id で)
+        $existingId = null;
+        if ($m['doi'] !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
+            $st->execute([_refs_normalize_doi($m['doi'])]);
+            $existingId = (int)$st->fetchColumn() ?: null;
+        }
+        if (!$existingId && $m['arxiv_id'] !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE arxiv_id = ? LIMIT 1");
+            $st->execute([$m['arxiv_id']]);
+            $existingId = (int)$st->fetchColumn() ?: null;
+        }
+        if (!$existingId && $m['ss_id'] !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE semantic_scholar_id = ? LIMIT 1");
+            $st->execute([$m['ss_id']]);
+            $existingId = (int)$st->fetchColumn() ?: null;
+        }
+        $m['existing_ref_id'] = $existingId;
+        $items[] = $m;
+    }
+    json_response([
+        'items' => $items,
+        'total' => (int)($j['total'] ?? count($items)),
+    ]);
+}
+
+// References (この 論文 が 引用 して いる 論文 一覧)
+function refs_ss_references(PDO $pdo, array $cfg, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id, title FROM refs WHERE id = ?");
+    $st->execute([$refId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    $ssRef = _refs_ss_paper_id_from_ref($r);
+    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が ない と Semantic Scholar 検索 できません', 400);
+    $fields = 'paperId,title,authors,year,venue,externalIds,citationCount,url';
+    $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($ssRef) . '/references?limit=100&fields=' . urlencode($fields);
+    [$code, $rawBody] = _refs_ss_get($url, $cfg);
+    if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
+    if ($code === 404) throw new ApiException('not_found', 'この 論文 は Semantic Scholar に 見つかりません', 404);
+    if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
+    $j = json_decode((string)$rawBody, true);
+    $items = [];
+    foreach ((array)($j['data'] ?? []) as $ent) {
+        $cited = $ent['citedPaper'] ?? null;
+        if (!$cited) continue;
+        $m = _refs_ss_paper_to_meta((array)$cited);
+        $m['existing_ref_id'] = _refs_ss_find_existing($pdo, $m);
+        $items[] = $m;
+    }
+    json_response(['items' => $items]);
+}
+
+// Citations (この 論文 を 引用 して いる 論文 一覧)
+function refs_ss_citations(PDO $pdo, array $cfg, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id, title FROM refs WHERE id = ?");
+    $st->execute([$refId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    $ssRef = _refs_ss_paper_id_from_ref($r);
+    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が ない と 検索 できません', 400);
+    $fields = 'paperId,title,authors,year,venue,externalIds,citationCount,url';
+    $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($ssRef) . '/citations?limit=100&fields=' . urlencode($fields);
+    [$code, $rawBody] = _refs_ss_get($url, $cfg);
+    if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
+    if ($code === 404) throw new ApiException('not_found', 'この 論文 は SS に 見つかりません', 404);
+    if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
+    $j = json_decode((string)$rawBody, true);
+    $items = [];
+    foreach ((array)($j['data'] ?? []) as $ent) {
+        $citing = $ent['citingPaper'] ?? null;
+        if (!$citing) continue;
+        $m = _refs_ss_paper_to_meta((array)$citing);
+        $m['existing_ref_id'] = _refs_ss_find_existing($pdo, $m);
+        $items[] = $m;
+    }
+    json_response(['items' => $items]);
+}
+
+// ref から SS paper ID を 生成 する ヘルパ (ss_id / DOI / arXiv の 順で)。
+function _refs_ss_paper_id_from_ref(array $r): ?string {
+    if (!empty($r['semantic_scholar_id'])) return (string)$r['semantic_scholar_id'];
+    if (!empty($r['doi']))                 return 'DOI:' . (string)$r['doi'];
+    if (!empty($r['arxiv_id']))            return 'ARXIV:' . (string)$r['arxiv_id'];
+    return null;
+}
+
+function _refs_ss_find_existing(PDO $pdo, array $m): ?int {
+    if (!empty($m['doi'])) {
+        $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
+        $st->execute([_refs_normalize_doi($m['doi'])]);
+        $id = (int)$st->fetchColumn();
+        if ($id) return $id;
+    }
+    if (!empty($m['arxiv_id'])) {
+        $st = $pdo->prepare("SELECT id FROM refs WHERE arxiv_id = ? LIMIT 1");
+        $st->execute([$m['arxiv_id']]);
+        $id = (int)$st->fetchColumn();
+        if ($id) return $id;
+    }
+    if (!empty($m['ss_id'])) {
+        $st = $pdo->prepare("SELECT id FROM refs WHERE semantic_scholar_id = ? LIMIT 1");
+        $st->execute([$m['ss_id']]);
+        $id = (int)$st->fetchColumn();
+        if ($id) return $id;
+    }
+    return null;
+}
+
+// Recommend: 与えられた ref_ids 相当 の 論文 に 「似た」 論文 を SS が おすすめ。
+function refs_ss_recommend(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $refIds = [];
+    foreach ((array)($body['ref_ids'] ?? []) as $x) if (ctype_digit((string)$x)) $refIds[] = (int)$x;
+    if (!$refIds) throw new ApiException('bad_request', 'ref_ids 必要', 400);
+    if (count($refIds) > 100) $refIds = array_slice($refIds, 0, 100);
+    $place = implode(',', array_fill(0, count($refIds), '?'));
+    $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id FROM refs WHERE id IN ($place)");
+    $st->execute($refIds);
+    $positives = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $pid = _refs_ss_paper_id_from_ref($r);
+        if ($pid) $positives[] = $pid;
+    }
+    if (!$positives) throw new ApiException('bad_request', '選んだ refs に DOI / arXiv / ss_id が 1 つも なくて SS で 引けません', 400);
+    $limit = min(50, max(5, (int)($body['limit'] ?? 20)));
+    $fields = 'paperId,title,authors,year,venue,abstract,externalIds,citationCount,url';
+    $url = 'https://api.semanticscholar.org/recommendations/v1/papers?limit=' . $limit . '&fields=' . urlencode($fields);
+    [$code, $rawBody] = _refs_ss_post($url, ['positivePaperIds' => $positives], $cfg);
+    if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
+    if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
+    $j = json_decode((string)$rawBody, true);
+    $items = [];
+    foreach ((array)($j['recommendedPapers'] ?? []) as $p) {
+        $m = _refs_ss_paper_to_meta((array)$p);
+        $m['existing_ref_id'] = _refs_ss_find_existing($pdo, $m);
+        $items[] = $m;
+    }
+    json_response(['items' => $items]);
+}
+
+// Enrich: 既存 ref に citation_count / reference_count / semantic_scholar_id を SS から 取って 埋める。
+function refs_ss_enrich(PDO $pdo, array $cfg, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id FROM refs WHERE id = ?");
+    $st->execute([$refId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    $pid = _refs_ss_paper_id_from_ref($r);
+    if (!$pid) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が 必要', 400);
+    $fields = 'paperId,citationCount,referenceCount';
+    $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($pid) . '?fields=' . urlencode($fields);
+    [$code, $rawBody] = _refs_ss_get($url, $cfg);
+    if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
+    if ($code === 404) throw new ApiException('not_found', '未発見', 404);
+    if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
+    $j = json_decode((string)$rawBody, true);
+    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス 不正', 502);
+    $ssId = (string)($j['paperId'] ?? '');
+    $cnt  = isset($j['citationCount'])  ? (int)$j['citationCount']  : null;
+    $rcnt = isset($j['referenceCount']) ? (int)$j['referenceCount'] : null;
+    $pdo->prepare("UPDATE refs SET semantic_scholar_id = COALESCE(?, semantic_scholar_id),
+                                    citation_count = ?, reference_count = ? WHERE id = ?")
+        ->execute([$ssId ?: null, $cnt, $rcnt, $refId]);
+    json_response(['ok' => true, 'citation_count' => $cnt, 'reference_count' => $rcnt, 'semantic_scholar_id' => $ssId]);
 }
 
 // ACM SIG 系: 番号 参照、 会議 論文 向け、 Author. Year. Title. In Venue.

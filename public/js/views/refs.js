@@ -339,6 +339,7 @@ function renderTile(it) {
   if (it.doi)      idBadges.push('DOI');
   if (it.arxiv_id) idBadges.push('arXiv');
   if (it.pdf_path) idBadges.push('📄 PDF');
+  if (it.citation_count != null) idBadges.push(`🔗 ${it.citation_count}`);
   const idHtml = idBadges.length ? `<span class="hint-sm" style="font-size:10px; margin-left:6px">${idBadges.join(' · ')}</span>` : '';
   return `
     <a class="list-item" href="#/refs/${it.id}" style="display:block; padding:10px 12px; border-bottom:1px solid #f3f4f6; text-decoration:none; color:inherit">
@@ -380,6 +381,7 @@ export async function renderRefsNew() {
         <button class="btn rf-tab"         data-tab="zotero"  style="font-size:13px">🔷 Zotero</button>
         <button class="btn rf-tab"         data-tab="csljson" style="font-size:13px">📄 CSL-JSON</button>
         <button class="btn rf-tab"         data-tab="endnote" style="font-size:13px">📚 EndNote XML</button>
+        <button class="btn rf-tab"         data-tab="ss"      style="font-size:13px">🔬 Semantic Scholar</button>
         <button class="btn rf-tab"         data-tab="manual"  style="font-size:13px">手動 入力</button>
       </div>
 
@@ -480,6 +482,25 @@ export async function renderRefsNew() {
           <button id="rf-do-csljson" class="btn primary">🔽 CSL-JSON として import</button>
         </div>
         <div id="rf-csl-result" style="margin-top:8px; font-size:13px"></div>
+      </div>
+
+      <!-- Semantic Scholar 検索 -->
+      <div id="rf-tab-ss" class="rf-tab-panel" hidden>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">
+          <a href="https://www.semanticscholar.org" target="_blank" rel="noopener" style="color:var(--primary)">Semantic Scholar</a> の 200M+ 論文 データベース を キーワード 検索。 結果 から 「＋ 追加」 で refs に。 認証 不要。
+        </div>
+        <label class="field"><span class="lbl">🔍 キーワード</span>
+          <input type="text" id="rf-ss-q" placeholder="例: eye tracking mixed reality">
+        </label>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label style="flex:1; min-width:100px"><span class="lbl" style="font-size:11px">年 (任意)</span><input type="number" id="rf-ss-year" min="1900" max="2100"></label>
+          <label style="flex:2; min-width:120px"><span class="lbl" style="font-size:11px">venue (任意)</span><input type="text" id="rf-ss-venue" placeholder="例: CHI"></label>
+          <label style="flex:1; min-width:80px"><span class="lbl" style="font-size:11px">件数</span><input type="number" id="rf-ss-limit" min="5" max="50" value="20"></label>
+        </div>
+        <div class="row" style="gap:6px">
+          <button id="rf-do-ss-search" class="btn primary">🔬 検索</button>
+        </div>
+        <div id="rf-ss-results" style="margin-top:8px; font-size:13px"></div>
       </div>
 
       <!-- EndNote XML -->
@@ -792,8 +813,95 @@ export async function renderRefsNew() {
   document.getElementById('rf-do-endnote').addEventListener('click', () =>
     doBulkFile('import_endnote', 'rf-en-file', 'rf-en-result', 'rf-do-endnote', '🔽 EndNote XML として import'));
 
-  // v927 bookmarklet から の 遷移: `#/refs/new?url=https://...&title=...`
-  //   hash router は ?url を そのまま 残す ので、 手動 で parse。
+  // v931 Semantic Scholar 検索
+  document.getElementById('rf-do-ss-search').addEventListener('click', async () => {
+    const query = document.getElementById('rf-ss-q').value.trim();
+    if (!query) { toast('キーワード を'); return; }
+    const year = Number(document.getElementById('rf-ss-year').value) || 0;
+    const venue = document.getElementById('rf-ss-venue').value.trim();
+    const limit = Number(document.getElementById('rf-ss-limit').value) || 20;
+    const btn = document.getElementById('rf-do-ss-search');
+    btn.disabled = true; btn.textContent = '⏳ 検索中…';
+    try {
+      const r = await post('/api/refs/ss_search', { query, year, venue, limit });
+      renderSsResults('rf-ss-results', r.items || [], r.total || 0);
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '🔬 検索'; }
+  });
+
+  // v927/v931 bookmarklet or Semantic Scholar から の hash param 処理
+  applyRefsNewHashParams();
+}
+
+// v931 Semantic Scholar 検索結果 の 描画 (共通、 各 item に 「＋追加」 ボタン)。
+function renderSsResults(elId, items, total) {
+  const el = document.getElementById(elId);
+  if (!items.length) { el.innerHTML = '<span class="muted">該当なし</span>'; return; }
+  el.innerHTML = `
+    <div class="bold" style="font-size:13px; margin-bottom:6px">✅ ${items.length} 件 (SS 全体 ${total} 件)</div>
+    ${items.map((m, i) => renderSsCard(m, i)).join('')}
+  `;
+  el.querySelectorAll('.rf-ss-add').forEach(b => {
+    b.addEventListener('click', async () => {
+      const idx = Number(b.dataset.i);
+      const m = items[idx];
+      if (!m) return;
+      b.disabled = true; b.textContent = '⏳';
+      try {
+        const r = await post('/api/refs', {
+          title: m.title,
+          doi: m.doi || '',
+          arxiv_id: m.arxiv_id || '',
+          authors: (m.authors || []).map(a => a.name).filter(Boolean),
+          year: m.year || '',
+          venue: m.venue || '',
+          abstract: m.abstract || '',
+          url: m.url || '',
+          extra: {},
+        });
+        // ss_id と citation_count を enrich で 埋める
+        try { await post('/api/refs/' + r.id + '/ss_enrich', {}); } catch (_) {}
+        b.textContent = '✅';
+        m.existing_ref_id = r.id;
+        toast('追加');
+      } catch (e) {
+        toast('失敗: ' + e.message);
+        b.disabled = false; b.textContent = '＋ 追加';
+      }
+    });
+  });
+}
+
+function renderSsCard(m, idx) {
+  const authors = (m.authors || []).map(a => a.name).filter(Boolean);
+  const authShort = authors.length > 3 ? authors.slice(0, 3).join(', ') + ` et al. (${authors.length})` : authors.join(', ');
+  const cc = m.citation_count != null ? `<span title="被引用数" style="color:#7b3fa0">🔗 ${m.citation_count}</span>` : '';
+  const rc = m.reference_count != null ? `<span class="hint-sm" title="参考文献数">📚 ${m.reference_count}</span>` : '';
+  const oa = m.is_open_access ? '<span style="color:#15803d" title="Open Access">🆓</span>' : '';
+  const ext = [
+    m.doi ? `<a href="https://doi.org/${escapeHtml(m.doi)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px">DOI</a>` : '',
+    m.arxiv_id ? `<a href="https://arxiv.org/abs/${escapeHtml(m.arxiv_id)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px">arXiv</a>` : '',
+    m.url ? `<a href="${escapeHtml(m.url)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px">🔗</a>` : '',
+  ].filter(Boolean).join(' · ');
+  const btnHtml = m.existing_ref_id
+    ? `<a href="#/refs/${m.existing_ref_id}" class="btn" style="font-size:11px; padding:2px 8px; background:#dcfce7; color:#166534; border-color:#166534">✅ 既に あり → 開く</a>`
+    : `<button class="btn primary rf-ss-add" data-i="${idx}" style="font-size:11px; padding:2px 8px">＋ 追加</button>`;
+  return `
+    <div style="padding:8px 10px; border-bottom:1px solid #f3f4f6">
+      <div class="bold" style="font-size:13px; line-height:1.4">${escapeHtml(m.title || '(no title)')}</div>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:2px">
+        ${escapeHtml(authShort)}${m.year ? ' · ' + m.year : ''}${m.venue ? ' · ' + escapeHtml(m.venue) : ''}
+      </div>
+      ${m.abstract ? `<div style="font-size:12px; color:#4b5563; margin-top:4px; max-height:60px; overflow:hidden">${escapeHtml((m.abstract || '').slice(0, 300))}${m.abstract.length > 300 ? '…' : ''}</div>` : ''}
+      <div class="row" style="gap:6px; margin-top:4px; align-items:center; flex-wrap:wrap">
+        ${cc} ${rc} ${oa} ${ext}
+        <span style="margin-left:auto">${btnHtml}</span>
+      </div>
+    </div>`;
+}
+
+// v927/v931 bookmarklet + SS から の 遷移 用 の hash param 処理 (単独 関数、 renderRefsNew から 呼ぶ)。
+function applyRefsNewHashParams() {
   const hash = location.hash || '';
   const qStart = hash.indexOf('?');
   if (qStart >= 0) {
@@ -954,8 +1062,14 @@ export async function renderRefsBibliography() {
         </label>
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end">
+        <button id="rfb-recommend" class="btn" style="background:#fef3c7; color:#78350f; border-color:#78350f">🎯 SS で 関連論文 おすすめ</button>
         <button id="rfb-gen" class="btn primary">📚 生成</button>
       </div>
+    </div>
+    <!-- v931 SS 推薦 結果 -->
+    <div id="rfb-rec-result" class="card" hidden>
+      <div class="bold" style="font-size:13px; margin-bottom:6px; color:#78350f">🔬 Semantic Scholar が おすすめ する 論文</div>
+      <div id="rfb-rec-list"></div>
     </div>
     <div id="rfb-result" class="card" hidden>
       <div class="row center" style="gap:6px; margin-bottom:6px">
@@ -1010,6 +1124,63 @@ export async function renderRefsBibliography() {
   document.getElementById('rfb-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(document.getElementById('rfb-out').value); toast('コピー'); }
     catch { toast('失敗'); }
+  });
+  // v931 SS 推薦
+  document.getElementById('rfb-recommend').addEventListener('click', async () => {
+    // まず ref_ids を 集める
+    const activeTab = document.querySelector('.rfb-tab.primary')?.dataset.tab || 'collection';
+    let refIds = [];
+    if (activeTab === 'ids') {
+      refIds = document.getElementById('rfb-ids-input').value.split(/[,\s]+/).map(s => Number(s.trim())).filter(Boolean);
+    } else if (activeTab === 'collection') {
+      const cid = Number(document.getElementById('rfb-col-select').value);
+      if (!cid) { toast('コレクション を'); return; }
+      const cd = await get('/api/refs?collection_id=' + cid + '&limit=100');
+      refIds = (cd.items || []).map(x => x.id);
+    } else {
+      const tag = document.getElementById('rfb-tag-input').value.trim();
+      if (!tag) { toast('タグ を'); return; }
+      const td = await get('/api/refs?tag=' + encodeURIComponent(tag) + '&limit=100');
+      refIds = (td.items || []).map(x => x.id);
+    }
+    if (!refIds.length) { toast('種 に する refs が ない'); return; }
+    const btn = document.getElementById('rfb-recommend');
+    btn.disabled = true; btn.textContent = '⏳ SS に 問い 合わせ中…';
+    try {
+      const r = await post('/api/refs/ss_recommend', { ref_ids: refIds, limit: 30 });
+      const items = r.items || [];
+      const box = document.getElementById('rfb-rec-result');
+      const list = document.getElementById('rfb-rec-list');
+      box.hidden = false;
+      if (!items.length) { list.innerHTML = '<span class="muted">おすすめ 0 件</span>'; }
+      else {
+        list.innerHTML = items.map((m, i) => renderSsCard(m, i)).join('');
+        list.querySelectorAll('.rf-ss-add').forEach(b => {
+          b.addEventListener('click', async () => {
+            const idx = Number(b.dataset.i);
+            const m = items[idx];
+            if (!m) return;
+            b.disabled = true; b.textContent = '⏳';
+            try {
+              const rr = await post('/api/refs', {
+                title: m.title, doi: m.doi || '', arxiv_id: m.arxiv_id || '',
+                authors: (m.authors || []).map(a => a.name).filter(Boolean),
+                year: m.year || '', venue: m.venue || '', abstract: m.abstract || '',
+                url: m.url || '', extra: {},
+              });
+              try { await post('/api/refs/' + rr.id + '/ss_enrich', {}); } catch (_) {}
+              b.textContent = '✅ 追加';
+              m.existing_ref_id = rr.id;
+            } catch (e) {
+              toast('失敗: ' + e.message);
+              b.disabled = false; b.textContent = '＋ 追加';
+            }
+          });
+        });
+      }
+      toast(`🎯 ${items.length} 件 おすすめ`);
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '🎯 SS で 関連論文 おすすめ'; }
   });
 }
 
@@ -1240,6 +1411,27 @@ function paintDetail(id, d) {
       <div class="hint-sm" style="font-size:11px; color:#7f1d1d; margin-top:4px">削除 したのは ${escapeHtml(d.deleted_at)}。 完全削除 は admin のみ 可 (再度 「🗑 削除」 で 実行)。</div>
     </div>` : '';
 
+  // v931 Semantic Scholar 連携 カード (この 論文 の 参考文献 / 被引用 / enrichment)
+  const canSs = !!(d.doi || d.arxiv_id || d.semantic_scholar_id);
+  const ccBadge = d.citation_count != null ? `<span style="color:#7b3fa0; font-size:12px">🔗 被引用 ${d.citation_count}</span>` : '';
+  const rcBadge = d.reference_count != null ? `<span class="hint-sm" style="font-size:11px">📚 参考文献 ${d.reference_count}</span>` : '';
+  const ssCard = canSs ? `
+    <div class="card" style="background:linear-gradient(135deg, #fef3c7, #fde68a); border:1px solid #f59e0b">
+      <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="bold" style="font-size:13px; color:#78350f">🔬 Semantic Scholar</div>
+        ${ccBadge} ${rcBadge}
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="rf-ss-refs"     class="btn" style="font-size:12px; padding:3px 10px">📚 参考文献 を 見る</button>
+        <button id="rf-ss-cites"    class="btn" style="font-size:12px; padding:3px 10px">🔗 被引用 論文 を 見る</button>
+        <button id="rf-ss-enrich"   class="btn" style="font-size:12px; padding:3px 10px">🔄 被引用数 を 更新</button>
+      </div>
+      <div id="rf-ss-panel" style="margin-top:8px"></div>
+    </div>` : `
+    <div class="card" style="background:#f9fafb; border:1px dashed #d1d5db">
+      <div class="hint-sm" style="font-size:12px">🔬 Semantic Scholar 連携 は DOI か arXiv ID が 登録 されて いる 論文 のみ 有効。</div>
+    </div>`;
+
   // v929 highlights (PDF から の 引用 + comment、 簡易 実装)
   const hlCard = `
     <div class="card">
@@ -1263,7 +1455,7 @@ function paintDetail(id, d) {
       <div id="rf-att-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
     </div>`;
 
-  document.getElementById('rf-d-body').innerHTML = trashBanner + abstractBlock + aiCard + colsCard + relatedCard + attCard + hlCard + myBlock + othersBlock;
+  document.getElementById('rf-d-body').innerHTML = trashBanner + abstractBlock + aiCard + ssCard + colsCard + relatedCard + attCard + hlCard + myBlock + othersBlock;
   loadAttachments(id);
   loadRelated(id);
   loadHighlights(id);
@@ -1299,6 +1491,57 @@ function paintDetail(id, d) {
       });
       toast('追加');
       loadHighlights(id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+
+  // v931 Semantic Scholar
+  const showSsPanel = async (endpoint, label) => {
+    const panel = document.getElementById('rf-ss-panel');
+    panel.innerHTML = `<span class="muted">${label} を 取得中…</span>`;
+    try {
+      const r = await get('/api/refs/' + id + '/' + endpoint);
+      const items = r.items || [];
+      if (!items.length) { panel.innerHTML = `<span class="muted">${label}: 0 件</span>`; return; }
+      panel.innerHTML = `<div class="bold" style="font-size:12px; margin-bottom:6px; color:#78350f">${label} (${items.length} 件)</div>`;
+      panel.innerHTML += items.slice(0, 30).map((m, i) => renderSsCard(m, i)).join('');
+      if (items.length > 30) panel.innerHTML += `<div class="muted" style="font-size:11px; margin-top:4px">…他 ${items.length - 30} 件 は 省略</div>`;
+      // 「＋追加」 ボタン 束ね
+      panel.querySelectorAll('.rf-ss-add').forEach(b => {
+        b.addEventListener('click', async () => {
+          const idx = Number(b.dataset.i);
+          const m = items[idx];
+          if (!m) return;
+          b.disabled = true; b.textContent = '⏳';
+          try {
+            const rr = await post('/api/refs', {
+              title: m.title, doi: m.doi || '', arxiv_id: m.arxiv_id || '',
+              authors: (m.authors || []).map(a => a.name).filter(Boolean),
+              year: m.year || '', venue: m.venue || '', abstract: m.abstract || '',
+              url: m.url || '', extra: {},
+            });
+            try { await post('/api/refs/' + rr.id + '/ss_enrich', {}); } catch (_) {}
+            // また、 現 ref と の 関連 を 自動 で 追加 (bidirectional)
+            try { await post('/api/refs/' + id + '/relations', { ref_id: rr.id, kind: 'related' }); } catch (_) {}
+            b.textContent = '✅ 追加 + 関連';
+            m.existing_ref_id = rr.id;
+            loadRelated(id);
+          } catch (e) {
+            toast('失敗: ' + e.message);
+            b.disabled = false; b.textContent = '＋ 追加';
+          }
+        });
+      });
+    } catch (e) {
+      panel.innerHTML = `<span class="muted" style="color:#c62828">失敗: ${escapeHtml(e.message)}</span>`;
+    }
+  };
+  document.getElementById('rf-ss-refs')?.addEventListener('click', () => showSsPanel('ss_references', '📚 参考文献'));
+  document.getElementById('rf-ss-cites')?.addEventListener('click', () => showSsPanel('ss_citations', '🔗 被引用 論文'));
+  document.getElementById('rf-ss-enrich')?.addEventListener('click', async () => {
+    try {
+      const r = await post('/api/refs/' + id + '/ss_enrich', {});
+      toast(`✅ 被引用 ${r.citation_count || 0} / 参考文献 ${r.reference_count || 0}`);
+      renderRefsDetail({ params: { id } });
     } catch (e) { toast('失敗: ' + e.message); }
   });
   // v928 track B: コレクション add/remove
