@@ -65,6 +65,7 @@ function mdToHtml(src) {
 let listState = {
   q: '', tag: '', year: 0, status: '', sort: 'new',
   collection_id: 0, uncategorized: false, trash: false,
+  fulltext_q: '',
 };
 
 function authorsShort(authors) {
@@ -84,6 +85,7 @@ export async function renderRefs() {
         <h2 style="margin:0; flex:1">📚 文献管理 <span style="font-size:11px; color:#9ca3af; font-weight:normal">Zotero 的、 ラボ共有</span></h2>
         <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋ 文献を 追加</a>
         <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="BibTeX 一括 ダウンロード">⬇ BibTeX</button>
+        <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献 リスト を CSL style で 一括生成">📚 参考文献</a>
         <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱 切替">🗑</button>
       </div>
     </div>
@@ -105,6 +107,7 @@ export async function renderRefs() {
     <div class="card">
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <input type="search" id="rf-q" placeholder="🔍 タイトル / 著者 / 抄録 / 会議名" style="flex:1; min-width:180px; padding:4px 8px; font-size:13px; border:1px solid #d1d5db; border-radius:4px" value="${escapeHtml(listState.q)}">
+        <input type="search" id="rf-ftq" placeholder="🔍 PDF 全文" style="width:140px; padding:4px 8px; font-size:13px; border:1px solid #a78bfa; border-radius:4px" title="PDF 添付 済 refs の 本文 検索" value="${escapeHtml(listState.fulltext_q)}">
         <select id="rf-status" style="font-size:12px; padding:2px 6px">
           <option value="">🎯 状態 全部</option>
           <option value="unread" ${listState.status==='unread'?'selected':''}>未読</option>
@@ -134,6 +137,11 @@ export async function renderRefs() {
     listState.q = e.target.value;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(loadList, 250);
+  });
+  document.getElementById('rf-ftq').addEventListener('input', e => {
+    listState.fulltext_q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadList, 350);
   });
   document.getElementById('rf-status').addEventListener('change', e => { listState.status = e.target.value; loadList(); });
   document.getElementById('rf-year').addEventListener('change', e => { listState.year = Number(e.target.value) || 0; loadList(); });
@@ -304,6 +312,7 @@ async function loadList() {
   if (listState.collection_id) params.set('collection_id', listState.collection_id);
   if (listState.uncategorized) params.set('uncategorized', '1');
   if (listState.trash)  params.set('trash', '1');
+  if (listState.fulltext_q) params.set('fulltext_q', listState.fulltext_q);
   try {
     const d = await get('/api/refs?' + params.toString());
     document.getElementById('rf-count').textContent = `${d.total || 0} 件`;
@@ -444,9 +453,17 @@ export async function renderRefsNew() {
             <input type="text" id="rf-zt-group" placeholder="例: 67890">
           </label>
         </div>
-        <label class="field"><span class="lbl">🔢 一度 に 取る 件数 (最大 200)</span>
-          <input type="number" id="rf-zt-limit" min="10" max="200" value="100" style="width:120px">
+        <label class="field"><span class="lbl">🔢 1 ページ 分 の 件数 (最大 100)</span>
+          <input type="number" id="rf-zt-limit" min="10" max="100" value="100" style="width:120px">
         </label>
+        <div class="row" style="gap:6px; flex-wrap:wrap">
+          <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px">
+            <input type="checkbox" id="rf-zt-fetch-all" checked> 🔁 全件 取得 (ページング 自動 追随)
+          </label>
+          <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px">
+            <input type="checkbox" id="rf-zt-sync-pdfs"> 📄 PDF 添付 も 同期 (時間 かかる)
+          </label>
+        </div>
         <div class="row" style="gap:6px">
           <button id="rf-do-zotero" class="btn primary">🔽 Zotero から import</button>
         </div>
@@ -732,14 +749,22 @@ export async function renderRefsNew() {
     const user_id = document.getElementById('rf-zt-user').value.trim();
     const group_id = document.getElementById('rf-zt-group').value.trim();
     const limit = Number(document.getElementById('rf-zt-limit').value) || 100;
+    const fetch_all = document.getElementById('rf-zt-fetch-all').checked;
+    const sync_pdfs = document.getElementById('rf-zt-sync-pdfs').checked;
     if (!api_key) { toast('API Key を'); return; }
     if (!user_id && !group_id) { toast('user_id か group_id を'); return; }
     const btn = document.getElementById('rf-do-zotero');
-    btn.disabled = true; btn.textContent = '⏳ Zotero と 通信中…';
+    btn.disabled = true;
+    btn.textContent = fetch_all ? '⏳ Zotero 全件 取得中… (数分 かかります)' : '⏳ Zotero と 通信中…';
     try {
-      const j = await post('/api/refs/import_zotero', { api_key, user_id, group_id, limit });
+      const j = await post('/api/refs/import_zotero', {
+        api_key, user_id, group_id, limit, fetch_all, sync_pdfs,
+      });
       renderBulkResult('rf-zt-result', j);
-      toast(`✅ ${j.added} 件 追加`);
+      let extra = '';
+      if (j.zotero_total != null) extra += ` (Zotero 側 全 ${j.zotero_total} 件、 ${j.fetched_pages} ページ 取得)`;
+      if (sync_pdfs) extra += ` / 📄 PDF 同期: ${j.pdf_synced} 件 追加、 ${j.pdf_skipped} skip、 ${j.pdf_errors} error`;
+      toast(`✅ ${j.added} 件 追加${extra}`);
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '🔽 Zotero から import'; }
   });
@@ -885,6 +910,109 @@ async function loadRelated(refId) {
   }
 }
 
+// v930 参考文献 リスト 生成 ページ
+export async function renderRefsBibliography() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/refs" class="hint">← 一覧</a>
+      <h2 style="margin:6px 0 0">📚 参考文献 リスト を 生成</h2>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">複数 の 文献 を 選んで、 まとめ て CSL style で 引用 生成。 論文 の 参考文献 セクション 作成 に。</div>
+    </div>
+    <div class="card">
+      <label class="field"><span class="lbl">📄 style</span>
+        <select id="rfb-style" style="font-size:13px">
+          <option value="apa">APA 7</option>
+          <option value="mla">MLA 9</option>
+          <option value="chicago">Chicago</option>
+          <option value="ieee">IEEE</option>
+          <option value="nature">Nature</option>
+          <option value="science">Science</option>
+          <option value="acm">ACM SIG</option>
+        </select>
+      </label>
+      <div class="row" style="gap:6px; margin-bottom:8px; flex-wrap:wrap">
+        <button class="btn primary rfb-tab" data-tab="collection" style="font-size:13px">📁 コレクション から</button>
+        <button class="btn rfb-tab" data-tab="tag" style="font-size:13px">🏷 タグ から</button>
+        <button class="btn rfb-tab" data-tab="ids" style="font-size:13px">✍ ID 直接指定</button>
+      </div>
+      <div id="rfb-panel-collection" class="rfb-panel">
+        <label class="field"><span class="lbl">📁 コレクション を 選択</span>
+          <select id="rfb-col-select" style="font-size:13px">
+            <option value="">読み込み中…</option>
+          </select>
+        </label>
+      </div>
+      <div id="rfb-panel-tag" class="rfb-panel" hidden>
+        <label class="field"><span class="lbl">🏷 タグ を 入力</span>
+          <input type="text" id="rfb-tag-input" placeholder="例: HCI">
+        </label>
+      </div>
+      <div id="rfb-panel-ids" class="rfb-panel" hidden>
+        <label class="field"><span class="lbl">🔢 ref ID を カンマ 区切り で 入力</span>
+          <textarea id="rfb-ids-input" rows="3" placeholder="例: 12, 45, 67, 89"></textarea>
+        </label>
+      </div>
+      <div class="row" style="gap:6px; justify-content:flex-end">
+        <button id="rfb-gen" class="btn primary">📚 生成</button>
+      </div>
+    </div>
+    <div id="rfb-result" class="card" hidden>
+      <div class="row center" style="gap:6px; margin-bottom:6px">
+        <div class="bold" style="font-size:13px">結果 (<span id="rfb-count">0</span> 件)</div>
+        <button id="rfb-copy" class="btn primary" style="font-size:11px; padding:2px 8px; margin-left:auto">📋 全部 コピー</button>
+      </div>
+      <textarea id="rfb-out" readonly style="width:100%; box-sizing:border-box; min-height:300px; font-family:monospace; font-size:12px"></textarea>
+    </div>
+  `;
+  document.querySelectorAll('.rfb-tab').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.rfb-tab').forEach(x => x.classList.remove('primary'));
+      b.classList.add('primary');
+      document.querySelectorAll('.rfb-panel').forEach(p => p.hidden = true);
+      document.getElementById('rfb-panel-' + b.dataset.tab).hidden = false;
+    });
+  });
+  // コレクション ロード
+  try {
+    const d = await get('/api/refs/collections');
+    const sel = document.getElementById('rfb-col-select');
+    sel.innerHTML = (d.items || []).map(c =>
+      `<option value="${c.id}">${c.icon || '📁'} ${escapeHtml(c.name)} (${c.ref_count})</option>`
+    ).join('') || '<option value="">なし</option>';
+  } catch (_) {}
+  document.getElementById('rfb-gen').addEventListener('click', async () => {
+    const style = document.getElementById('rfb-style').value;
+    let payload = { style };
+    const activeTab = document.querySelector('.rfb-tab.primary')?.dataset.tab || 'collection';
+    if (activeTab === 'collection') {
+      payload.collection_id = Number(document.getElementById('rfb-col-select').value);
+      if (!payload.collection_id) { toast('コレクション を'); return; }
+    } else if (activeTab === 'tag') {
+      payload.tag = document.getElementById('rfb-tag-input').value.trim();
+      if (!payload.tag) { toast('タグ を'); return; }
+    } else {
+      const raw = document.getElementById('rfb-ids-input').value;
+      payload.ref_ids = raw.split(/[,\s]+/).map(s => Number(s.trim())).filter(Boolean);
+      if (!payload.ref_ids.length) { toast('ID を'); return; }
+    }
+    const btn = document.getElementById('rfb-gen');
+    btn.disabled = true; btn.textContent = '⏳ 生成中…';
+    try {
+      const r = await post('/api/refs/bibliography', payload);
+      document.getElementById('rfb-result').hidden = false;
+      document.getElementById('rfb-count').textContent = r.count || 0;
+      document.getElementById('rfb-out').value = r.bibliography || '';
+      toast('✅ 生成 完了 (' + (r.count || 0) + ' 件)');
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '📚 生成'; }
+  });
+  document.getElementById('rfb-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(document.getElementById('rfb-out').value); toast('コピー'); }
+    catch { toast('失敗'); }
+  });
+}
+
 // v927 bookmarklet 生成 ページ
 export async function renderRefsBookmarklet() {
   const app = document.getElementById('app');
@@ -962,6 +1090,9 @@ function paintDetail(id, d) {
         <option value="mla">MLA 9</option>
         <option value="chicago">Chicago</option>
         <option value="ieee">IEEE</option>
+        <option value="nature">Nature</option>
+        <option value="science">Science</option>
+        <option value="acm">ACM SIG</option>
       </select>
     </div>`;
 

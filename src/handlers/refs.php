@@ -20,6 +20,8 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_zotero'  && $method === 'POST') { refs_import_zotero($pdo, $cfg);  return; }
     if ($sub === 'import_csljson' && $method === 'POST') { refs_import_csljson($pdo, $cfg); return; }
     if ($sub === 'import_endnote' && $method === 'POST') { refs_import_endnote($pdo, $cfg); return; }
+    // v930: 参考文献 リスト 生成 (複数 ref に 対して 一括 CSL 引用)
+    if ($sub === 'bibliography'   && $method === 'POST') { refs_bibliography($pdo, $cfg);   return; }
     // v928 track B
     if ($sub === 'collections') {
         $subid = $seg[2] ?? '';
@@ -418,6 +420,9 @@ function refs_list(PDO $pdo, array $cfg): void {
     $collectionId = (int)($_GET['collection_id'] ?? 0);
     $uncategorized = (int)($_GET['uncategorized'] ?? 0) === 1;
 
+    // v930 fulltext 検索
+    $ftQ = trim((string)($_GET['fulltext_q'] ?? ''));
+
     $sql = "SELECT r.id, r.doi, r.arxiv_id, r.title, r.authors_json, r.year, r.venue,
                    r.url, r.pdf_path, r.tags_json, r.added_by_user_id, r.created_at, r.deleted_at,
                    u.display_name AS added_by_name, u.avatar_url AS added_by_avatar,
@@ -429,6 +434,10 @@ function refs_list(PDO $pdo, array $cfg): void {
     $args = [$uid];
     if ($trash)  $sql .= " AND r.deleted_at IS NOT NULL";
     else         $sql .= " AND r.deleted_at IS NULL";
+    if ($ftQ !== '' && mb_strlen($ftQ) <= 200) {
+        $sql .= " AND r.`fulltext` LIKE ?";
+        $args[] = '%' . $ftQ . '%';
+    }
     if ($collectionId > 0) {
         $sql .= " AND EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id AND ci.collection_id = ?)";
         $args[] = $collectionId;
@@ -474,6 +483,10 @@ function refs_list(PDO $pdo, array $cfg): void {
     $cargs = [$uid];
     if ($trash)  $countSql .= " AND r.deleted_at IS NOT NULL";
     else         $countSql .= " AND r.deleted_at IS NULL";
+    if ($ftQ !== '' && mb_strlen($ftQ) <= 200) {
+        $countSql .= " AND r.`fulltext` LIKE ?";
+        $cargs[] = '%' . $ftQ . '%';
+    }
     if ($collectionId > 0) {
         $countSql .= " AND EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id AND ci.collection_id = ?)";
         $cargs[] = $collectionId;
@@ -805,9 +818,25 @@ function refs_attach_pdf(PDO $pdo, array $cfg, int $id): void {
         $oldAbs = $publicDir . $r['pdf_path'];
         if (is_file($oldAbs)) @unlink($oldAbs);
     }
-    $pdo->prepare("UPDATE refs SET pdf_path = ?, pdf_sha256 = ? WHERE id = ?")
-        ->execute([$rel, $sha, $id]);
-    json_response(['ok' => true, 'pdf_path' => $rel, 'pdf_sha256' => $sha]);
+    // v930 PDF から fulltext を 抽出 して 保存 (全文検索 用)
+    $fulltext = _refs_extract_pdf_fulltext($abs);
+    $pdo->prepare("UPDATE refs SET pdf_path = ?, pdf_sha256 = ?, `fulltext` = ? WHERE id = ?")
+        ->execute([$rel, $sha, $fulltext, $id]);
+    json_response(['ok' => true, 'pdf_path' => $rel, 'pdf_sha256' => $sha, 'fulltext_chars' => mb_strlen((string)$fulltext)]);
+}
+
+// v930 pdftotext で PDF 全ページ を text 抽出 (fulltext 検索 用)。
+function _refs_extract_pdf_fulltext(string $absPath): ?string {
+    if (!is_file($absPath)) return null;
+    $txtOut = sys_get_temp_dir() . '/refs_ft_' . uniqid() . '.txt';
+    $cmd = sprintf('pdftotext -layout %s %s 2>&1', escapeshellarg($absPath), escapeshellarg($txtOut));
+    exec($cmd, $out, $rc);
+    if ($rc !== 0 || !is_file($txtOut)) return null;
+    $text = (string)file_get_contents($txtOut);
+    @unlink($txtOut);
+    // MEDIUMTEXT 上限 (~16 MB) の 範囲 に 抑える。 通常 論文 の PDF は 100KB 以下 に なる。
+    if (strlen($text) > 8 * 1024 * 1024) $text = substr($text, 0, 8 * 1024 * 1024);
+    return $text !== '' ? $text : null;
 }
 
 // ─────────────────────────────────────────────────────
@@ -1876,53 +1905,283 @@ function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
     return ['added' => $added, 'skipped' => $skipped, 'total' => count($items), 'results' => $results];
 }
 
-// Zotero API: users/USER_ID/items or groups/GROUP_ID/items。 API key 認証、 ページング 対応。
+// Zotero API: users/USER_ID/items or groups/GROUP_ID/items。 API key 認証。
+//   v930 対応: fetch_all=1 で 全ページ ループ、 sync_pdfs=1 で 各 item の PDF attachment も 同期。
 function refs_import_zotero(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
     $body = read_json_body();
     $apiKey  = trim((string)($body['api_key'] ?? ''));
     $userId  = trim((string)($body['user_id'] ?? ''));
     $groupId = trim((string)($body['group_id'] ?? ''));
-    $limit   = min(200, max(10, (int)($body['limit'] ?? 100)));  // 一度 に 取る 上限 (再度 呼び 出しで 追加取得 も 可)
+    $limit   = min(100, max(10, (int)($body['limit'] ?? 100)));  // Zotero 標準 の 1 ページ 上限 は 100
+    $fetchAll = !empty($body['fetch_all']);
+    $syncPdfs = !empty($body['sync_pdfs']);
+    $maxItems = min(5000, max(50, (int)($body['max_items'] ?? 2000)));  // safety cap
     if ($apiKey === '') throw new ApiException('bad_request', 'api_key 必要 (https://www.zotero.org/settings/keys で 発行)', 400);
     if ($userId === '' && $groupId === '') throw new ApiException('bad_request', 'user_id か group_id が 必要', 400);
     $base = $groupId !== '' ? "https://api.zotero.org/groups/{$groupId}/items"
                             : "https://api.zotero.org/users/{$userId}/items";
-    $url = $base . '?limit=' . $limit . '&format=json&include=csljson,data';
+
+    $collectedItems = [];      // meta rows
+    $itemKeyToIndex = [];      // Zotero key → collectedItems index (PDF sync 用)
+    $start = 0;
+    $totalReported = null;
+    while (true) {
+        $url = $base . '?limit=' . $limit . '&start=' . $start . '&format=json&include=csljson,data';
+        [$httpCode, $rawBody, $headerBlob] = _refs_zotero_curl($url, $apiKey);
+        if ($httpCode === 403) throw new ApiException('forbidden', 'Zotero API: 認証失敗 (api_key / user_id 確認)', 403);
+        if ($httpCode !== 200 || !$rawBody) throw new ApiException('upstream_error', 'Zotero API HTTP ' . $httpCode, 502);
+        $arr = json_decode((string)$rawBody, true);
+        if (!is_array($arr)) throw new ApiException('upstream_error', 'Zotero レスポンス 不正', 502);
+        // Total-Results ヘッダ
+        if ($totalReported === null && preg_match('/Total-Results:\s*(\d+)/i', $headerBlob, $m)) {
+            $totalReported = (int)$m[1];
+        }
+        foreach ($arr as $entry) {
+            $csl = $entry['csljson'] ?? null;
+            $data = $entry['data'] ?? null;
+            if (!$csl) continue;
+            $type = (string)($csl['type'] ?? '');
+            if (in_array($type, ['attachment', 'note'], true)) continue;
+            $it = _refs_csljson_to_local($csl);
+            if (is_array($data) && !empty($data['tags'])) {
+                foreach ($data['tags'] as $t) $it['tags'][] = (string)($t['tag'] ?? '');
+            }
+            $key = is_array($data) ? (string)($data['key'] ?? '') : '';
+            $collectedItems[] = $it;
+            if ($key !== '') $itemKeyToIndex[$key] = count($collectedItems) - 1;
+        }
+        if (!$fetchAll) break;
+        if (count($arr) < $limit) break;  // これ が 最後 の ページ
+        if (count($collectedItems) >= $maxItems) break;
+        $start += $limit;
+    }
+
+    // insert
+    $res = _refs_insert_batch($pdo, $uid, $collectedItems);
+
+    // v930 PDF attachment 同期 (fetch_all + sync_pdfs 有効時)
+    $pdfSynced = 0; $pdfSkipped = 0; $pdfErrors = 0;
+    if ($syncPdfs && !empty($res['results'])) {
+        // added / dup 両方 対象 (dup も 「PDF 未添付」 なら 補完 する 価値 あり)
+        foreach ($res['results'] as $r) {
+            if (!in_array($r['status'], ['added', 'dup'], true)) continue;
+            $refId = $r['status'] === 'added' ? (int)$r['id'] : (int)$r['existing_id'];
+            if (!$refId) continue;
+            // どの Zotero item から 来たか 逆引き … は していない ので、 tag で 拾う: title 一致 で
+            // itemKeyToIndex を 使う のは insertBatch 内 で 順序 が 保たれる 前提 に なる が、 dup も skip
+            // されて index が ずれる。 そこ で items 配列 の index を 使わず、 title で 逆引き する。
+            $title = (string)($r['title'] ?? '');
+            if ($title === '') continue;
+            // 対応 Zotero key を 探す
+            $matchedKey = null;
+            foreach ($itemKeyToIndex as $k => $i) {
+                if (($collectedItems[$i]['title'] ?? '') === $title) { $matchedKey = $k; break; }
+            }
+            if (!$matchedKey) { $pdfSkipped++; continue; }
+            // 既に refs.pdf_path が ある なら skip
+            $stChk = $pdo->prepare("SELECT pdf_path FROM refs WHERE id = ?");
+            $stChk->execute([$refId]);
+            $existingPdf = (string)$stChk->fetchColumn();
+            if ($existingPdf !== '') { $pdfSkipped++; continue; }
+            // Zotero children (attachments) 取得
+            $childrenUrl = $base . '/' . $matchedKey . '/children?format=json';
+            [$ccode, $cbody] = _refs_zotero_curl($childrenUrl, $apiKey);
+            if ($ccode !== 200 || !$cbody) { $pdfErrors++; continue; }
+            $children = json_decode((string)$cbody, true);
+            if (!is_array($children)) { $pdfErrors++; continue; }
+            // PDF attachment を 探す (contentType application/pdf)
+            $attKey = null;
+            foreach ($children as $child) {
+                $d = $child['data'] ?? [];
+                if (($d['itemType'] ?? '') === 'attachment' &&
+                    ($d['contentType'] ?? '') === 'application/pdf') {
+                    $attKey = (string)($d['key'] ?? ''); break;
+                }
+            }
+            if (!$attKey) { $pdfSkipped++; continue; }
+            // PDF file download
+            $fileUrl = ($groupId !== ''
+                ? "https://api.zotero.org/groups/{$groupId}/items/{$attKey}/file"
+                : "https://api.zotero.org/users/{$userId}/items/{$attKey}/file");
+            [$fcode, $fbody] = _refs_zotero_curl_binary($fileUrl, $apiKey);
+            if ($fcode !== 200 || !$fbody) { $pdfErrors++; continue; }
+            // 保存
+            $sha = hash('sha256', $fbody);
+            $rel = '/uploads/refs/' . substr($sha, 0, 2) . '/' . $sha . '.pdf';
+            $abs = '/var/www/labpay/public' . $rel;
+            @mkdir(dirname($abs), 0775, true);
+            if (file_put_contents($abs, $fbody) === false) { $pdfErrors++; continue; }
+            @chmod($abs, 0644);
+            // fulltext 抽出
+            $ft = _refs_extract_pdf_fulltext($abs);
+            $pdo->prepare("UPDATE refs SET pdf_path = ?, pdf_sha256 = ?, `fulltext` = ? WHERE id = ?")
+                ->execute([$rel, $sha, $ft, $refId]);
+            $pdfSynced++;
+        }
+    }
+    $res['fetched_pages'] = $fetchAll ? ceil(count($collectedItems) / $limit) : 1;
+    $res['zotero_total'] = $totalReported;
+    $res['pdf_synced'] = $pdfSynced;
+    $res['pdf_skipped'] = $pdfSkipped;
+    $res['pdf_errors'] = $pdfErrors;
+    json_response($res);
+}
+
+// Zotero API 用 の curl ヘルパ (header と body を 分離)。
+function _refs_zotero_curl(string $url, string $apiKey): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 30,
+        CURLOPT_HEADER => true,
         CURLOPT_HTTPHEADER => [
             'Zotero-API-Key: ' . $apiKey,
             'Zotero-API-Version: 3',
         ],
         CURLOPT_USERAGENT => 'LabPay/1.0',
     ]);
-    $resp = curl_exec($ch);
+    $full = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    curl_close($ch);
+    if ($full === false) return [0, '', ''];
+    $headerBlob = substr((string)$full, 0, $headerSize);
+    $body = substr((string)$full, $headerSize);
+    return [(int)$code, $body, $headerBlob];
+}
+
+// Zotero PDF ダウンロード 用 (binary、 header 分離 不要)。
+function _refs_zotero_curl_binary(string $url, string $apiKey): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 60,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTPHEADER => [
+            'Zotero-API-Key: ' . $apiKey,
+            'Zotero-API-Version: 3',
+        ],
+        CURLOPT_USERAGENT => 'LabPay/1.0',
+    ]);
+    $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($code === 403) throw new ApiException('forbidden', 'Zotero API: 認証失敗 (api_key / user_id 確認)', 403);
-    if ($code !== 200 || !$resp) throw new ApiException('upstream_error', 'Zotero API HTTP ' . $code, 502);
-    $arr = json_decode((string)$resp, true);
-    if (!is_array($arr)) throw new ApiException('upstream_error', 'Zotero レスポンス 不正', 502);
-    $items = [];
-    foreach ($arr as $entry) {
-        $csl = $entry['csljson'] ?? null;
-        $data = $entry['data'] ?? null;
-        if (!$csl) continue;
-        // attachment や note は skip
-        $type = (string)($csl['type'] ?? '');
-        if (in_array($type, ['attachment', 'note'], true)) continue;
-        $it = _refs_csljson_to_local($csl);
-        // Zotero data の tags を マージ
-        if (is_array($data) && !empty($data['tags'])) {
-            foreach ($data['tags'] as $t) $it['tags'][] = (string)($t['tag'] ?? '');
-        }
-        $items[] = $it;
+    return [(int)$code, $body === false ? '' : (string)$body];
+}
+
+// ─────────────────────────────────────────────────────
+// v930: 参考文献 リスト 生成 (bibliography、 複数 ref を CSL style で 一括)
+// ─────────────────────────────────────────────────────
+
+function refs_bibliography(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $style = strtolower((string)($body['style'] ?? 'apa'));
+    $ids = [];
+    if (!empty($body['ref_ids']) && is_array($body['ref_ids'])) {
+        foreach ($body['ref_ids'] as $x) if (ctype_digit((string)$x)) $ids[] = (int)$x;
+    } elseif (!empty($body['collection_id'])) {
+        // collection 全 refs を 拾う
+        $cid = (int)$body['collection_id'];
+        $st = $pdo->prepare("SELECT ci.ref_id FROM ref_collection_items ci
+                              JOIN refs r ON r.id = ci.ref_id
+                             WHERE ci.collection_id = ? AND r.deleted_at IS NULL
+                          ORDER BY r.year DESC, r.id DESC");
+        $st->execute([$cid]);
+        foreach ($st as $row) $ids[] = (int)$row['ref_id'];
+    } elseif (!empty($body['tag'])) {
+        $tag = trim((string)$body['tag']);
+        $st = $pdo->prepare("SELECT id FROM refs WHERE deleted_at IS NULL AND tags_json LIKE ?
+                              ORDER BY year DESC, id DESC");
+        $st->execute(['%"' . str_replace('"', '', $tag) . '"%']);
+        foreach ($st as $row) $ids[] = (int)$row['id'];
     }
-    $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
-    json_response($res);
+    if (!$ids) throw new ApiException('bad_request', 'ref_ids か collection_id か tag が 必要', 400);
+    if (count($ids) > 500) $ids = array_slice($ids, 0, 500);
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $st = $pdo->prepare("SELECT * FROM refs WHERE id IN ($place)");
+    $st->execute($ids);
+    // 元の 順序 を 維持
+    $rowsById = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $rowsById[(int)$r['id']] = $r;
+    $lines = [];
+    $num = 1;
+    foreach ($ids as $id) {
+        if (!isset($rowsById[$id])) continue;
+        $r = $rowsById[$id];
+        $authors = $r['authors_json'] ? (json_decode((string)$r['authors_json'], true) ?: []) : [];
+        $lines[] = match ($style) {
+            'mla'      => _refs_citation_mla($r, $authors),
+            'chicago'  => _refs_citation_chicago($r, $authors),
+            'ieee'     => _refs_citation_ieee($r, $authors, $num),
+            'nature'   => _refs_citation_nature($r, $authors, $num),
+            'science'  => _refs_citation_science($r, $authors, $num),
+            'acm'      => _refs_citation_acm($r, $authors, $num),
+            default    => _refs_citation_apa($r, $authors),
+        };
+        $num++;
+    }
+    json_response(['style' => $style, 'count' => count($lines), 'bibliography' => implode("\n\n", $lines)]);
+}
+
+// v930 追加 CSL styles
+
+// Nature 系: 番号 参照、 authors comma、 太字 vol。
+function _refs_citation_nature(array $r, array $authors, int $num): string {
+    $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
+    // Nature: 「Surname, F. M.」 スタイル
+    $names = array_map(function ($n) {
+        $parts = explode(' ', $n);
+        $family = array_pop($parts);
+        $initials = implode(' ', array_map(fn($p) => mb_substr($p, 0, 1) . '.', $parts));
+        return trim($family . ', ' . $initials);
+    }, $names);
+    $auth = count($names) > 5 ? $names[0] . ' et al.' : implode(', ', $names);
+    $title = rtrim((string)$r['title'], '.');
+    $venue = $r['venue'] ? ' *' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $vol = $ex['volume'] ?? '';
+    $pages = $ex['pages'] ?? '';
+    $year = !empty($r['year']) ? '(' . (int)$r['year'] . ')' : '';
+    $tail = ($vol ? ' **' . $vol . '**' : '') . ($pages ? ', ' . $pages : '') . ' ' . $year;
+    return "$num. $auth $title.$venue$tail.";
+}
+
+// Science 系: 番号 参照、 vol., pp., year
+function _refs_citation_science(array $r, array $authors, int $num): string {
+    $names = array_map(function ($a) {
+        $n = (string)($a['name'] ?? '');
+        $parts = explode(' ', $n);
+        $family = array_pop($parts);
+        $initials = implode('. ', array_map(fn($p) => mb_substr($p, 0, 1), $parts));
+        return trim($initials . '. ' . $family);
+    }, $authors);
+    $auth = count($names) > 5 ? $names[0] . ' et al.' : implode(', ', $names);
+    $title = '"' . rtrim((string)$r['title'], '.') . '"';
+    $venue = $r['venue'] ? ' *' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $vol = $ex['volume'] ?? '';
+    $pages = $ex['pages'] ?? '';
+    $year = !empty($r['year']) ? ' (' . (int)$r['year'] . ')' : '';
+    $tail = ($vol ? ' **' . $vol . '**' : '') . ($pages ? ', ' . $pages : '') . $year;
+    return "$num. $auth, $title$venue$tail.";
+}
+
+// ACM SIG 系: 番号 参照、 会議 論文 向け、 Author. Year. Title. In Venue.
+function _refs_citation_acm(array $r, array $authors, int $num): string {
+    $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
+    if (count($names) === 1) $auth = $names[0];
+    elseif (count($names) <= 3) $auth = implode(', ', array_slice($names, 0, -1)) . ', and ' . end($names);
+    else $auth = $names[0] . ' et al.';
+    $year = !empty($r['year']) ? (int)$r['year'] : 'n.d.';
+    $title = rtrim((string)$r['title'], '.');
+    $venue = $r['venue'] ? ' In *' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $pages = !empty($ex['pages']) ? ', ' . $ex['pages'] : '';
+    $doi = !empty($r['doi']) ? '. https://doi.org/' . $r['doi'] : '';
+    return "[$num] $auth. $year. $title.$venue$pages.$doi";
 }
 
 // CSL-JSON: Zotero / Mendeley / Papers の 共通 export 形式。
