@@ -311,6 +311,9 @@ function paint(d, shareToken, isShared) {
   const shareUrl = shareToken ? (location.origin + '/#/paper-review/r/' + shareToken) : '';
   document.getElementById('pr-result').innerHTML = `
     <div class="card">
+      <div class="row no-print" style="gap:6px; justify-content:flex-end; margin-bottom:6px">
+        <button id="pr-pdf" class="btn" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
+      </div>
       <div class="bold" style="font-size:16px; color:var(--primary)">🎯 査読結果</div>
       <div class="meta" style="font-size:12px; margin-bottom:8px">対象会議: ${escapeHtml(d.venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
       ${r.decision ? `<div style="font-size:18px; font-weight:700; padding:6px 12px; background:${decColor}22; color:${decColor}; border-left:5px solid ${decColor}; border-radius:6px; display:inline-block">${escapeHtml(r.decision)}${r.score ? ` (Score ${r.score}/5)` : ''}${r.confidence ? ` (Confidence ${r.confidence}/5)` : ''}</div>` : ''}
@@ -533,6 +536,12 @@ function paint(d, shareToken, isShared) {
       navigator.clipboard?.writeText(shareUrl).then(() => toast('コピーしました'), () => toast('コピー失敗'));
     });
   }
+  // v933 PDF 出力
+  document.getElementById('pr-pdf')?.addEventListener('click', async () => {
+    const { printAsPdf } = await import('../print_helpers.js');
+    const title = d.sections?.[0]?.title || d.venue || '査読';
+    printAsPdf(`査読 (${d.venue || 'venue'}) - ${title}`);
+  });
 }
 
 function decisionColor(d) {

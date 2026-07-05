@@ -434,8 +434,9 @@ async function refresh(token) {
     const sharedTag = (isShared && !isOwner) ? '<span class="tag ok" style="font-size:11px; margin-left:6px">🌐 公開全訳</span>' : '';
     const header = `
       <div class="card">
-        <div class="row" style="gap:6px; align-items:center">
+        <div class="row no-print" style="gap:6px; align-items:center">
           <a href="#/paper-translate-full" class="hint" style="flex:1">← 論文全訳</a>
+          <button id="pft-pdf" class="btn" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
           <button id="pft-share-dialog" class="btn primary" style="font-size:12px; padding:3px 10px">📤 共有</button>
         </div>
         <h2 style="margin:6px 0; font-size:17px">📑 ${escapeHtml(d.result?.title_translated || d.result?.title_original || d.pdf_name)}
@@ -518,6 +519,11 @@ async function refresh(token) {
       return;
     }
     // v807 button-style 公開切替
+    // v933 PDF 出力
+    document.getElementById('pft-pdf')?.addEventListener('click', async () => {
+      const { printAsPdf } = await import('../print_helpers.js');
+      printAsPdf(`全訳 - ${d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文'}`);
+    });
     document.getElementById('pft-share-dialog')?.addEventListener('click', () => {
       const t = d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文全訳';
       shareDialog('📑 論文全訳: ' + t, '#/paper-translate-full/r/' + token);

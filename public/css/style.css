@@ -1008,3 +1008,32 @@ a.list-item { text-decoration: none; color: inherit; }
   .rn-layout { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr); gap: 16px; align-items: start; }
   .rn-cal-pane { position: sticky; top: 8px; margin-bottom: 0; }
 }
+
+/* v933 — 印刷 CSS: AI 結果ページ (要約 / 全訳 / 査読 / Deep Research) を
+   Ctrl+P → 「PDF として 保存」 で きれい に 出せる ように。 .no-print 要素 は 印刷時 に 消える。 */
+@media print {
+  #topbar, #tabs, #install-banner, #toast, #splash, .no-print {
+    display: none !important;
+  }
+  html, body { background: #fff !important; color: #000 !important; }
+  main#app { max-width: none !important; margin: 0 !important; padding: 8px 12px !important; }
+  .card {
+    background: #fff !important;
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    margin: 6px 0 !important;
+    padding: 8px 12px !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  a { color: #000 !important; text-decoration: underline !important; }
+  img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; break-inside: avoid; }
+  h1, h2, h3, h4 { page-break-after: avoid; break-after: avoid; color: #000 !important; }
+  button, .btn:not(.print-keep), input, textarea, select {
+    display: none !important;
+  }
+  /* 詳細ページ の 「ヘッダ + 本文」 だけ 残す (share / comment / similar 系 は .no-print で 消す) */
+  .meta { color: #444 !important; }
+  /* 印刷モード 中 だけ 本文 の max-width を 広く (通常時 の 中央寄せ は 邪魔) */
+  body.printing main#app > * { max-width: none !important; }
+}

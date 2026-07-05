@@ -531,9 +531,10 @@ async function paintResult(d, token) {
       <div class="meta" style="font-size:11px; margin-top:6px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
       </div>
-      <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+      <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
         <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL をコピー</button>
+        <button class="btn" id="pt-pdf" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 ダイアログ で 「PDF として 保存」">📥 PDF に する</button>
         ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
         ${isOwner ? `
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
@@ -579,6 +580,11 @@ async function paintResult(d, token) {
       }
     } catch (_) { /* fall through */ }
   }
+  // v933 PDF 出力 (ブラウザ の 印刷 → 「PDF として 保存」)
+  document.getElementById('pt-pdf')?.addEventListener('click', async () => {
+    const { printAsPdf } = await import('../print_helpers.js');
+    printAsPdf(`要約 - ${r.title_ja || r.title_en || d.pdf_name || '論文'}`);
+  });
   document.getElementById('pt-share-dialog')?.addEventListener('click', () => {
     shareDialog('📑 論文要約: ' + (r.title_ja || d.pdf_name), '#/paper-summary/r/' + d.share_token);
   });
