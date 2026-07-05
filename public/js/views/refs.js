@@ -11,6 +11,7 @@ const STATUS_COLOR = { unread: '#9ca3af', reading: '#f59e0b', read: '#15803d' };
 
 let listState = {
   q: '', tag: '', year: 0, status: '', sort: 'new',
+  collection_id: 0, uncategorized: false, trash: false,
 };
 
 function authorsShort(authors) {
@@ -30,7 +31,23 @@ export async function renderRefs() {
         <h2 style="margin:0; flex:1">📚 文献管理 <span style="font-size:11px; color:#9ca3af; font-weight:normal">Zotero 的、 ラボ共有</span></h2>
         <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋ 文献を 追加</a>
         <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="BibTeX 一括 ダウンロード">⬇ BibTeX</button>
+        <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱 切替">🗑</button>
       </div>
+    </div>
+    <!-- v928 track B: コレクション サイドバー (縦 スクロール chip) -->
+    <div class="card" id="rf-cols-card">
+      <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="bold" style="font-size:12px">📁 コレクション</div>
+        <button id="rf-col-new" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 新規</button>
+      </div>
+      <div id="rf-cols-list" class="row" style="gap:4px; flex-wrap:wrap"></div>
+    </div>
+    <!-- v928 track B: 保存した 検索 -->
+    <div class="card" id="rf-ss-card" hidden>
+      <div class="row center" style="gap:6px; margin-bottom:6px">
+        <div class="bold" style="font-size:12px">🔎 保存した 検索</div>
+      </div>
+      <div id="rf-ss-list" class="row" style="gap:4px; flex-wrap:wrap"></div>
     </div>
     <div class="card">
       <div class="row center" style="gap:6px; flex-wrap:wrap">
@@ -47,8 +64,10 @@ export async function renderRefs() {
           <option value="year"  ${listState.sort==='year'  ?'selected':''}>年 降順</option>
           <option value="title" ${listState.sort==='title' ?'selected':''}>タイトル順</option>
         </select>
+        <button id="rf-save-search" class="btn" style="font-size:11px; padding:2px 8px" title="今 の 条件 を 保存">💾</button>
         <span id="rf-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
+      <div id="rf-cur-filter" class="hint-sm" style="font-size:11px; margin-top:4px; color:#7b3fa0"></div>
       <div id="rf-tags" class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap"></div>
     </div>
     <div id="rf-list" class="card"><div class="muted">読み込み中…</div></div>
@@ -66,8 +85,134 @@ export async function renderRefs() {
   document.getElementById('rf-status').addEventListener('change', e => { listState.status = e.target.value; loadList(); });
   document.getElementById('rf-year').addEventListener('change', e => { listState.year = Number(e.target.value) || 0; loadList(); });
   document.getElementById('rf-sort').addEventListener('change', e => { listState.sort = e.target.value; loadList(); });
-  await loadTagsChips();
+  // v928 track B
+  document.getElementById('rf-toggle-trash').addEventListener('click', () => {
+    listState.trash = !listState.trash;
+    document.getElementById('rf-toggle-trash').classList.toggle('primary', listState.trash);
+    updateCurFilterHint();
+    loadList();
+  });
+  document.getElementById('rf-col-new').addEventListener('click', async () => {
+    const name = prompt('コレクション 名 (例: HCI 論文、 CHI2026 送り 用 等)');
+    if (!name) return;
+    const icon = prompt('絵文字 (省略で 📁)', '📁') || '📁';
+    try { await post('/api/refs/collections', { name, icon }); await loadCollectionsChips(); toast('作成'); }
+    catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.getElementById('rf-save-search').addEventListener('click', async () => {
+    const name = prompt('この 検索条件 に 名前 を');
+    if (!name) return;
+    try {
+      await post('/api/refs/saved_searches', { name, filter: {
+        q: listState.q, tag: listState.tag, year: listState.year, status: listState.status,
+        sort: listState.sort, collection_id: listState.collection_id,
+        uncategorized: listState.uncategorized, trash: listState.trash,
+      } });
+      await loadSavedSearchesChips();
+      toast('保存 完了');
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  await Promise.all([loadTagsChips(), loadCollectionsChips(), loadSavedSearchesChips()]);
+  updateCurFilterHint();
   await loadList();
+}
+
+function updateCurFilterHint() {
+  const el = document.getElementById('rf-cur-filter');
+  if (!el) return;
+  const parts = [];
+  if (listState.trash) parts.push('🗑 ゴミ箱');
+  if (listState.collection_id) {
+    const btn = document.querySelector('.rf-col-chip[data-cid="'+listState.collection_id+'"]');
+    parts.push('📁 ' + (btn?.dataset.name || 'コレクション #' + listState.collection_id));
+  }
+  if (listState.uncategorized) parts.push('📁 未分類');
+  el.textContent = parts.join(' · ');
+}
+
+async function loadCollectionsChips() {
+  const root = document.getElementById('rf-cols-list');
+  if (!root) return;
+  try {
+    const d = await get('/api/refs/collections');
+    const items = d.items || [];
+    if (!items.length) { root.innerHTML = '<span class="muted" style="font-size:11px">まだ ありません</span>'; return; }
+    const meId = Number(state.me?.id || 0);
+    const isAdmin = state.me?.role === 'admin';
+    // 「未分類」 chip + 各 collection chip
+    let html = `<button class="btn rf-col-chip" data-cid="0" style="font-size:11px; padding:2px 8px; ${listState.uncategorized&&!listState.collection_id?'background:#a855f7; color:#fff':''}">📁 未分類</button>`;
+    html += items.map(c => {
+      const active = c.id === listState.collection_id;
+      return `<button class="btn rf-col-chip" data-cid="${c.id}" data-name="${escapeHtml(c.name)}" style="font-size:11px; padding:2px 8px; ${active?'background:#a855f7; color:#fff; border-color:#a855f7':''}">
+        ${c.icon || '📁'} ${escapeHtml(c.name)} <span class="hint-sm">(${c.ref_count})</span>
+        ${(c.owner_user_id === meId || isAdmin) ? `<span class="rf-col-del" data-cid="${c.id}" style="margin-left:4px; opacity:0.5; cursor:pointer">✕</span>` : ''}
+      </button>`;
+    }).join('');
+    root.innerHTML = html;
+    root.querySelectorAll('.rf-col-chip').forEach(b => {
+      b.addEventListener('click', (ev) => {
+        if (ev.target.classList.contains('rf-col-del')) return;
+        const cid = Number(b.dataset.cid);
+        if (cid === 0) {
+          listState.uncategorized = !listState.uncategorized;
+          listState.collection_id = 0;
+        } else {
+          if (listState.collection_id === cid) { listState.collection_id = 0; }
+          else { listState.collection_id = cid; listState.uncategorized = false; }
+        }
+        loadCollectionsChips(); updateCurFilterHint(); loadList();
+      });
+    });
+    root.querySelectorAll('.rf-col-del').forEach(x => {
+      x.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!confirm('この コレクション を 削除? (中の 文献 は 残ります)')) return;
+        try { await del('/api/refs/collections/' + x.dataset.cid); await loadCollectionsChips(); toast('削除'); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (_) {}
+}
+
+async function loadSavedSearchesChips() {
+  const card = document.getElementById('rf-ss-card');
+  const root = document.getElementById('rf-ss-list');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/refs/saved_searches');
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.map(s => `
+      <button class="btn rf-ss-chip" data-id="${s.id}" data-filter='${escapeHtml(JSON.stringify(s.filter||{}))}' style="font-size:11px; padding:2px 8px; background:#e0e7ff; color:#3730a3; border-color:#3730a3">
+        🔎 ${escapeHtml(s.name)}
+        <span class="rf-ss-del" data-id="${s.id}" style="margin-left:4px; opacity:0.5; cursor:pointer">✕</span>
+      </button>`).join('');
+    root.querySelectorAll('.rf-ss-chip').forEach(b => {
+      b.addEventListener('click', (ev) => {
+        if (ev.target.classList.contains('rf-ss-del')) return;
+        const f = JSON.parse(b.dataset.filter || '{}');
+        Object.assign(listState, {
+          q: f.q||'', tag: f.tag||'', year: f.year||0, status: f.status||'',
+          sort: f.sort||'new', collection_id: f.collection_id||0,
+          uncategorized: !!f.uncategorized, trash: !!f.trash,
+        });
+        // input 値 も 更新
+        document.getElementById('rf-q').value = listState.q;
+        document.getElementById('rf-status').value = listState.status;
+        document.getElementById('rf-year').value = listState.year || '';
+        document.getElementById('rf-sort').value = listState.sort;
+        loadCollectionsChips(); loadTagsChips(); updateCurFilterHint(); loadList();
+      });
+    });
+    root.querySelectorAll('.rf-ss-del').forEach(x => {
+      x.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        try { await del('/api/refs/saved_searches/' + x.dataset.id); await loadSavedSearchesChips(); toast('削除'); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (_) {}
 }
 
 async function loadTagsChips() {
@@ -103,6 +248,9 @@ async function loadList() {
   if (listState.year)   params.set('year', listState.year);
   if (listState.status) params.set('status', listState.status);
   if (listState.sort)   params.set('sort', listState.sort);
+  if (listState.collection_id) params.set('collection_id', listState.collection_id);
+  if (listState.uncategorized) params.set('uncategorized', '1');
+  if (listState.trash)  params.set('trash', '1');
   try {
     const d = await get('/api/refs?' + params.toString());
     document.getElementById('rf-count').textContent = `${d.total || 0} 件`;
@@ -473,6 +621,34 @@ async function loadAttachments(refId) {
   }
 }
 
+// v928 track B: 関連 論文 の 表示 + 削除。
+async function loadRelated(refId) {
+  const el = document.getElementById('rf-rel-list');
+  if (!el) return;
+  try {
+    const d = await get('/api/refs/' + refId + '/relations');
+    const items = d.items || [];
+    if (!items.length) { el.innerHTML = '<span class="muted">まだ ありません</span>'; return; }
+    el.innerHTML = items.map(r => `
+      <div class="list-item" style="padding:6px 0; border-bottom:1px solid #f3f4f6; display:flex; gap:6px; align-items:center">
+        <a href="#/refs/${r.other_id}" style="flex:1; color:var(--primary); text-decoration:none; font-size:13px">
+          🔗 ${escapeHtml(r.title)}${r.year ? ' (' + r.year + ')' : ''}
+        </a>
+        ${r.note ? `<span class="hint-sm" style="font-size:11px; color:#6b7280">${escapeHtml(r.note)}</span>` : ''}
+        <button class="btn danger rf-rel-del" data-oid="${r.other_id}" style="font-size:11px; padding:2px 6px">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('.rf-rel-del').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('関連 を 外す?')) return;
+        try { await del('/api/refs/' + refId + '/relations/' + b.dataset.oid); toast('外しました'); loadRelated(refId); }
+        catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<span class="muted">${escapeHtml(e.message)}</span>`;
+  }
+}
+
 // v927 bookmarklet 生成 ページ
 export async function renderRefsBookmarklet() {
   const app = document.getElementById('app');
@@ -642,6 +818,39 @@ function paintDetail(id, d) {
       </div>`
     );
 
+  // v928 track B: この refs が 所属 する collections + 追加/削除
+  const colsHtml = (d.collections || []).map(c =>
+    `<span class="tag rf-col-tag" data-cid="${c.id}" style="background:#ede9fe; color:#5b21b6; font-size:11px; padding:2px 6px; border-radius:8px; cursor:pointer">${c.icon || '📁'} ${escapeHtml(c.name)} <span class="rf-col-rem" data-cid="${c.id}" style="opacity:0.5">✕</span></span>`
+  ).join(' ');
+  const colsCard = `
+    <div class="card">
+      <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="bold" style="font-size:13px">📁 コレクション</div>
+        <button id="rf-col-add-btn" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 追加</button>
+      </div>
+      <div id="rf-cols-of-ref" class="row" style="gap:4px; flex-wrap:wrap">${colsHtml || '<span class="muted" style="font-size:12px">未分類</span>'}</div>
+    </div>`;
+
+  // v928 track B: 関連 論文 (related items)
+  const relatedCard = `
+    <div class="card">
+      <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="bold" style="font-size:13px">🔗 関連 論文</div>
+        <button id="rf-rel-add" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 追加</button>
+      </div>
+      <div id="rf-rel-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
+    </div>`;
+
+  // v928 track B: trash に 入って いる 場合 の 復元 バナー
+  const trashBanner = d.deleted_at ? `
+    <div class="card" style="background:#fef2f2; border:2px solid #dc2626">
+      <div class="row center" style="gap:6px">
+        <div class="bold" style="color:#7f1d1d">🗑 この 文献 は ゴミ箱 に あります</div>
+        <button id="rf-restore" class="btn primary" style="font-size:12px; margin-left:auto">↩ 復元</button>
+      </div>
+      <div class="hint-sm" style="font-size:11px; color:#7f1d1d; margin-top:4px">削除 したのは ${escapeHtml(d.deleted_at)}。 完全削除 は admin のみ 可 (再度 「🗑 削除」 で 実行)。</div>
+    </div>` : '';
+
   // v927 添付ファイル (attachments、 主 PDF 以外の 補足資料 / スライド 等)
   const attCard = `
     <div class="card">
@@ -655,8 +864,50 @@ function paintDetail(id, d) {
       <div id="rf-att-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
     </div>`;
 
-  document.getElementById('rf-d-body').innerHTML = abstractBlock + aiCard + attCard + myBlock + othersBlock;
+  document.getElementById('rf-d-body').innerHTML = trashBanner + abstractBlock + aiCard + colsCard + relatedCard + attCard + myBlock + othersBlock;
   loadAttachments(id);
+  loadRelated(id);
+  // v928 track B: コレクション add/remove
+  document.getElementById('rf-col-add-btn')?.addEventListener('click', async () => {
+    try {
+      const dc = await get('/api/refs/collections');
+      const items = dc.items || [];
+      if (!items.length) { toast('コレクション なし。 一覧 で 「＋ 新規」 で 作って'); return; }
+      const opts = items.map((c, i) => `${i+1}. ${c.icon || '📁'} ${c.name}`).join('\n');
+      const pick = prompt('番号 で 選択:\n' + opts);
+      if (!pick) return;
+      const idx = Number(pick) - 1;
+      if (idx < 0 || idx >= items.length) { toast('番号 不正'); return; }
+      await post('/api/refs/collections/' + items[idx].id + '/refs/' + id, {});
+      toast('追加');
+      renderRefsDetail({ params: { id } });
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  document.querySelectorAll('.rf-col-rem').forEach(x => {
+    x.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      try { await del('/api/refs/collections/' + x.dataset.cid + '/refs/' + id); toast('外しました'); renderRefsDetail({ params: { id } }); }
+      catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+  // v928 track B: related add
+  document.getElementById('rf-rel-add')?.addEventListener('click', async () => {
+    const refIdStr = prompt('関連 する 文献 の ID を 入力 (数字)');
+    if (!refIdStr) return;
+    const otherId = Number(refIdStr);
+    if (!otherId || otherId === id) { toast('ID 不正'); return; }
+    const note = prompt('メモ (任意)') || '';
+    try {
+      await post('/api/refs/' + id + '/relations', { ref_id: otherId, kind: 'related', note });
+      toast('関連 追加');
+      loadRelated(id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+  // v928 track B: trash restore
+  document.getElementById('rf-restore')?.addEventListener('click', async () => {
+    try { await post('/api/refs/' + id + '/restore', {}); toast('復元'); renderRefsDetail({ params: { id } }); }
+    catch (e) { toast('失敗: ' + e.message); }
+  });
   document.getElementById('rf-att-file')?.addEventListener('change', async () => {
     const f = document.getElementById('rf-att-file').files?.[0];
     if (!f) return;

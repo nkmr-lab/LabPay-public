@@ -16,6 +16,33 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_bibtex' && $method === 'POST') { refs_import_bibtex($pdo, $cfg); return; }
     if ($sub === 'import_ris'    && $method === 'POST') { refs_import_ris($pdo, $cfg);    return; }
     if ($sub === 'extract_pdf'   && $method === 'POST') { refs_extract_pdf($pdo, $cfg);   return; }
+    // v928 track B
+    if ($sub === 'collections') {
+        $subid = $seg[2] ?? '';
+        if ($subid === '' && $method === 'GET')  { refs_collections_list($pdo, $cfg);   return; }
+        if ($subid === '' && $method === 'POST') { refs_collections_create($pdo, $cfg); return; }
+        if (ctype_digit((string)$subid)) {
+            $cid = (int)$subid;
+            $subnext = $seg[3] ?? '';
+            if ($subnext === '' && $method === 'GET')    { refs_collection_detail($pdo, $cfg, $cid); return; }
+            if ($subnext === '' && $method === 'PATCH')  { refs_collection_edit($pdo, $cfg, $cid);   return; }
+            if ($subnext === '' && $method === 'DELETE') { refs_collection_delete($pdo, $cfg, $cid); return; }
+            if ($subnext === 'refs' && ctype_digit((string)($seg[4] ?? '')) && $method === 'POST') {
+                refs_collection_add_ref($pdo, $cfg, $cid, (int)$seg[4]); return;
+            }
+            if ($subnext === 'refs' && ctype_digit((string)($seg[4] ?? '')) && $method === 'DELETE') {
+                refs_collection_remove_ref($pdo, $cfg, $cid, (int)$seg[4]); return;
+            }
+        }
+    }
+    if ($sub === 'saved_searches') {
+        $subid = $seg[2] ?? '';
+        if ($subid === '' && $method === 'GET')    { refs_saved_searches_list($pdo, $cfg);   return; }
+        if ($subid === '' && $method === 'POST')   { refs_saved_searches_create($pdo, $cfg); return; }
+        if (ctype_digit((string)$subid) && $method === 'DELETE') {
+            refs_saved_search_delete($pdo, $cfg, (int)$subid); return;
+        }
+    }
     if ($sub === 'tags'         && $method === 'GET')  { refs_tags($pdo, $cfg);         return; }
     if ($sub === 'export' && ($seg[2] ?? '') === 'bibtex' && $method === 'GET') {
         refs_export_bibtex($pdo, $cfg); return;
@@ -34,6 +61,13 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'attachments' && $method === 'POST')  { refs_attachments_upload($pdo, $cfg, $id); return; }
         if ($next === 'attachments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
             refs_attachments_delete($pdo, $cfg, $id, (int)$seg[3]); return;
+        }
+        // v928 track B: soft-delete restore + related items
+        if ($next === 'restore'    && $method === 'POST')   { refs_restore($pdo, $cfg, $id); return; }
+        if ($next === 'relations'  && $method === 'GET')    { refs_relations_list($pdo, $cfg, $id); return; }
+        if ($next === 'relations'  && $method === 'POST')   { refs_relations_add($pdo, $cfg, $id); return; }
+        if ($next === 'relations' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
+            refs_relations_remove($pdo, $cfg, $id, (int)$seg[3]); return;
         }
     }
     throw new ApiException('not_found', 'route not found', 404);
@@ -362,9 +396,13 @@ function refs_list(PDO $pdo, array $cfg): void {
     $sort   = (string)($_GET['sort'] ?? 'new');       // new | year | title
     $limit  = min(200, max(1, (int)($_GET['limit'] ?? 50)));
     $offset = max(0, (int)($_GET['offset'] ?? 0));
+    // v928 track B: trash view + collection filter
+    $trash = (int)($_GET['trash'] ?? 0) === 1;
+    $collectionId = (int)($_GET['collection_id'] ?? 0);
+    $uncategorized = (int)($_GET['uncategorized'] ?? 0) === 1;
 
     $sql = "SELECT r.id, r.doi, r.arxiv_id, r.title, r.authors_json, r.year, r.venue,
-                   r.url, r.pdf_path, r.tags_json, r.added_by_user_id, r.created_at,
+                   r.url, r.pdf_path, r.tags_json, r.added_by_user_id, r.created_at, r.deleted_at,
                    u.display_name AS added_by_name, u.avatar_url AS added_by_avatar,
                    n.status AS my_status, n.note AS my_note
               FROM refs r
@@ -372,6 +410,14 @@ function refs_list(PDO $pdo, array $cfg): void {
               LEFT JOIN ref_notes n ON n.ref_id = r.id AND n.user_id = ?
              WHERE 1=1";
     $args = [$uid];
+    if ($trash)  $sql .= " AND r.deleted_at IS NOT NULL";
+    else         $sql .= " AND r.deleted_at IS NULL";
+    if ($collectionId > 0) {
+        $sql .= " AND EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id AND ci.collection_id = ?)";
+        $args[] = $collectionId;
+    } elseif ($uncategorized) {
+        $sql .= " AND NOT EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id)";
+    }
     if ($q !== '' && mb_strlen($q) <= 200) {
         $sql .= " AND (r.title LIKE ? OR r.abstract LIKE ? OR r.authors_json LIKE ? OR r.venue LIKE ?)";
         $like = '%' . $q . '%';
@@ -409,6 +455,14 @@ function refs_list(PDO $pdo, array $cfg): void {
                  LEFT JOIN ref_notes n ON n.ref_id = r.id AND n.user_id = ?
                  WHERE 1=1";
     $cargs = [$uid];
+    if ($trash)  $countSql .= " AND r.deleted_at IS NOT NULL";
+    else         $countSql .= " AND r.deleted_at IS NULL";
+    if ($collectionId > 0) {
+        $countSql .= " AND EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id AND ci.collection_id = ?)";
+        $cargs[] = $collectionId;
+    } elseif ($uncategorized) {
+        $countSql .= " AND NOT EXISTS (SELECT 1 FROM ref_collection_items ci WHERE ci.ref_id = r.id)";
+    }
     if ($q !== '' && mb_strlen($q) <= 200) {
         $countSql .= " AND (r.title LIKE ? OR r.abstract LIKE ? OR r.authors_json LIKE ? OR r.venue LIKE ?)";
         $like = '%' . $q . '%'; array_push($cargs, $like, $like, $like, $like);
@@ -526,6 +580,13 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         }
     }
 
+    // v928 track B: この refs が 所属 する collections
+    $stC = $pdo->prepare("SELECT c.id, c.name, c.icon FROM ref_collections c
+                            JOIN ref_collection_items ci ON ci.collection_id = c.id
+                           WHERE ci.ref_id = ? ORDER BY c.name");
+    $stC->execute([$id]);
+    $collections = $stC->fetchAll(PDO::FETCH_ASSOC);
+
     json_response([
         'id'               => (int)$r['id'],
         'doi'              => $r['doi'],
@@ -544,10 +605,12 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         'added_by_name'    => $r['added_by_name'],
         'added_by_avatar'  => $r['added_by_avatar'],
         'created_at'       => $r['created_at'],
+        'deleted_at'       => $r['deleted_at'] ?? null,
         'my'               => ['note' => $mine['note'], 'status' => $mine['status'] ?: 'unread'],
         'others_notes'     => $othersNotes,
         'status_counts'    => $statusCounts,
         'links'            => $links,
+        'collections'      => $collections,
     ]);
 }
 
@@ -602,7 +665,7 @@ function refs_edit(PDO $pdo, array $cfg, int $id): void {
 
 function refs_delete(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT added_by_user_id, pdf_path FROM refs WHERE id = ?");
+    $st = $pdo->prepare("SELECT added_by_user_id, deleted_at FROM refs WHERE id = ?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
@@ -610,12 +673,37 @@ function refs_delete(PDO $pdo, array $cfg, int $id): void {
     if ((int)$r['added_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '登録者 or admin のみ 削除可', 403);
     }
-    // PDF 実体 も 削除 (他 で 参照 して なければ)
-    if (!empty($r['pdf_path'])) {
-        $abs = '/var/www/labpay/public' . $r['pdf_path'];
-        if (is_file($abs)) @unlink($abs);
+    // v928 track B: 既に trash に 入って いる 時 は 完全 削除 (hard delete)。 それ 以外 は soft delete。
+    if (!empty($r['deleted_at'])) {
+        // 完全削除 は admin だけ 許可
+        if (!$isAdmin) throw new ApiException('forbidden', 'trash 内 の 完全削除 は admin のみ', 403);
+        $stF = $pdo->prepare("SELECT pdf_path FROM refs WHERE id = ?");
+        $stF->execute([$id]);
+        $pdf = (string)$stF->fetchColumn();
+        if ($pdf !== '') {
+            $abs = '/var/www/labpay/public' . $pdf;
+            if (is_file($abs)) @unlink($abs);
+        }
+        $pdo->prepare("DELETE FROM refs WHERE id = ?")->execute([$id]);
+        json_response(['ok' => true, 'action' => 'purged']);
+        return;
     }
-    $pdo->prepare("DELETE FROM refs WHERE id = ?")->execute([$id]);
+    $pdo->prepare("UPDATE refs SET deleted_at = NOW() WHERE id = ?")->execute([$id]);
+    json_response(['ok' => true, 'action' => 'trashed']);
+}
+
+// v928 track B: trash から 復元
+function refs_restore(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT added_by_user_id FROM refs WHERE id = ? AND deleted_at IS NOT NULL");
+    $st->execute([$id]);
+    $addedBy = (int)$st->fetchColumn();
+    if (!$addedBy) throw new ApiException('not_found', 'trash 内 に 存在せず', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($addedBy !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '登録者 or admin のみ 復元可', 403);
+    }
+    $pdo->prepare("UPDATE refs SET deleted_at = NULL WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
 }
 
@@ -1151,3 +1239,230 @@ function refs_attachments_delete(PDO $pdo, array $cfg, int $refId, int $attId): 
     $pdo->prepare("DELETE FROM ref_attachments WHERE id = ?")->execute([$attId]);
     json_response(['ok' => true]);
 }
+
+// ─────────────────────────────────────────────────────
+// v928 track B: Collections (フォルダ 階層)
+// ─────────────────────────────────────────────────────
+
+function refs_collections_list(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    // 各 collection の refs 件数 も 一緒に 返す (deleted 除外)
+    $st = $pdo->query("
+        SELECT c.id, c.name, c.description, c.parent_id, c.icon, c.owner_user_id, c.created_at,
+               u.display_name AS owner_name,
+               (SELECT COUNT(*) FROM ref_collection_items ci JOIN refs r ON r.id = ci.ref_id
+                 WHERE ci.collection_id = c.id AND r.deleted_at IS NULL) AS ref_count
+          FROM ref_collections c LEFT JOIN users u ON u.id = c.owner_user_id
+      ORDER BY COALESCE(c.parent_id, 0), c.sort_order, c.name");
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function refs_collections_create(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $name = trim((string)($body['name'] ?? ''));
+    if ($name === '') throw new ApiException('bad_request', 'name 必要', 400);
+    if (mb_strlen($name) > 200) $name = mb_substr($name, 0, 200);
+    $desc = trim((string)($body['description'] ?? ''));
+    $parentId = isset($body['parent_id']) && $body['parent_id'] !== '' ? (int)$body['parent_id'] : null;
+    $icon = trim((string)($body['icon'] ?? '📁'));
+    if (mb_strlen($icon) > 5) $icon = mb_substr($icon, 0, 5);
+    if ($parentId) {
+        $st = $pdo->prepare("SELECT id FROM ref_collections WHERE id = ?");
+        $st->execute([$parentId]);
+        if (!$st->fetchColumn()) throw new ApiException('bad_request', 'parent_id 不正', 400);
+    }
+    $ins = $pdo->prepare("INSERT INTO ref_collections
+        (name, description, parent_id, icon, owner_user_id) VALUES (?,?,?,?,?)");
+    $ins->execute([$name, $desc ?: null, $parentId, $icon ?: '📁', (int)$u['id']]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function refs_collection_detail(PDO $pdo, array $cfg, int $cid): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT c.*, u.display_name AS owner_name
+                          FROM ref_collections c LEFT JOIN users u ON u.id = c.owner_user_id
+                         WHERE c.id = ?");
+    $st->execute([$cid]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'コレクション なし', 404);
+    json_response($r);
+}
+
+function refs_collection_edit(PDO $pdo, array $cfg, int $cid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT owner_user_id FROM ref_collections WHERE id = ?");
+    $st->execute([$cid]);
+    $ownerId = (int)$st->fetchColumn();
+    if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($ownerId !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '作成者 or admin のみ 編集可', 403);
+    }
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('name', $body)) {
+        $t = trim((string)$body['name']);
+        if ($t === '') throw new ApiException('bad_request', 'name 空 不可', 400);
+        $sets[] = 'name = ?'; $args[] = mb_substr($t, 0, 200);
+    }
+    if (array_key_exists('description', $body)) {
+        $sets[] = 'description = ?'; $args[] = trim((string)$body['description']) ?: null;
+    }
+    if (array_key_exists('parent_id', $body)) {
+        $p = $body['parent_id'];
+        $sets[] = 'parent_id = ?'; $args[] = $p === '' || $p === null ? null : (int)$p;
+    }
+    if (array_key_exists('icon', $body)) {
+        $ic = trim((string)$body['icon']);
+        $sets[] = 'icon = ?'; $args[] = mb_substr($ic, 0, 5) ?: '📁';
+    }
+    if (!$sets) { json_response(['ok' => true]); return; }
+    $args[] = $cid;
+    $pdo->prepare("UPDATE ref_collections SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+    json_response(['ok' => true]);
+}
+
+function refs_collection_delete(PDO $pdo, array $cfg, int $cid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT owner_user_id FROM ref_collections WHERE id = ?");
+    $st->execute([$cid]);
+    $ownerId = (int)$st->fetchColumn();
+    if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($ownerId !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '作成者 or admin のみ 削除可', 403);
+    }
+    // 子 collection が あれば 拒否 (先に 移動 して 貰う)
+    $stC = $pdo->prepare("SELECT COUNT(*) FROM ref_collections WHERE parent_id = ?");
+    $stC->execute([$cid]);
+    if ((int)$stC->fetchColumn() > 0) {
+        throw new ApiException('conflict', 'サブフォルダ が 残って います。 先に 移動 or 削除 して ください', 409);
+    }
+    $pdo->prepare("DELETE FROM ref_collections WHERE id = ?")->execute([$cid]);
+    json_response(['ok' => true]);
+}
+
+function refs_collection_add_ref(PDO $pdo, array $cfg, int $cid, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $ex1 = $pdo->prepare("SELECT 1 FROM ref_collections WHERE id = ?");
+    $ex1->execute([$cid]);
+    if (!$ex1->fetchColumn()) throw new ApiException('not_found', 'コレクション なし', 404);
+    $ex2 = $pdo->prepare("SELECT 1 FROM refs WHERE id = ? AND deleted_at IS NULL");
+    $ex2->execute([$refId]);
+    if (!$ex2->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    $ins = $pdo->prepare("INSERT IGNORE INTO ref_collection_items (collection_id, ref_id, added_by_user_id)
+                          VALUES (?, ?, ?)");
+    $ins->execute([$cid, $refId, (int)$u['id']]);
+    json_response(['ok' => true]);
+}
+
+function refs_collection_remove_ref(PDO $pdo, array $cfg, int $cid, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    $pdo->prepare("DELETE FROM ref_collection_items WHERE collection_id = ? AND ref_id = ?")
+        ->execute([$cid, $refId]);
+    json_response(['ok' => true]);
+}
+
+// ─────────────────────────────────────────────────────
+// v928 track B: Saved searches (個人 別)
+// ─────────────────────────────────────────────────────
+
+function refs_saved_searches_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT id, name, filter_json, created_at FROM ref_saved_searches
+                          WHERE owner_user_id = ? ORDER BY id DESC");
+    $st->execute([(int)$u['id']]);
+    $items = array_map(function ($r) {
+        $r['filter'] = json_decode((string)$r['filter_json'], true) ?: [];
+        unset($r['filter_json']);
+        return $r;
+    }, $st->fetchAll(PDO::FETCH_ASSOC));
+    json_response(['items' => $items]);
+}
+
+function refs_saved_searches_create(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $name = trim((string)($body['name'] ?? ''));
+    if ($name === '') throw new ApiException('bad_request', 'name 必要', 400);
+    if (mb_strlen($name) > 200) $name = mb_substr($name, 0, 200);
+    $filter = $body['filter'] ?? [];
+    if (!is_array($filter)) $filter = [];
+    // 保存 する field を 限定 (信頼できる key のみ)
+    $keep = ['q','tag','year','status','sort','collection_id','uncategorized','trash'];
+    $safe = [];
+    foreach ($keep as $k) if (isset($filter[$k])) $safe[$k] = $filter[$k];
+    $ins = $pdo->prepare("INSERT INTO ref_saved_searches (owner_user_id, name, filter_json)
+                          VALUES (?, ?, ?)");
+    $ins->execute([(int)$u['id'], $name, json_encode($safe, JSON_UNESCAPED_UNICODE)]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function refs_saved_search_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT owner_user_id FROM ref_saved_searches WHERE id = ?");
+    $st->execute([$id]);
+    $ownerId = (int)$st->fetchColumn();
+    if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
+    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    $pdo->prepare("DELETE FROM ref_saved_searches WHERE id = ?")->execute([$id]);
+    json_response(['ok' => true]);
+}
+
+// ─────────────────────────────────────────────────────
+// v928 track B: Related items (双方向 リンク)
+// ─────────────────────────────────────────────────────
+
+function refs_relations_list(PDO $pdo, array $cfg, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    // A 側 も B 側 も 両方 拾う (どちら 経由 で 登録 されていても 同 じ 関係 と 見なす)
+    $st = $pdo->prepare("
+        (SELECT rr.b_ref_id AS other_id, rr.kind, rr.note, rr.created_at, rr.created_by_user_id,
+                r.title, r.year, r.venue
+           FROM ref_relations rr JOIN refs r ON r.id = rr.b_ref_id
+          WHERE rr.a_ref_id = ? AND r.deleted_at IS NULL)
+        UNION
+        (SELECT rr.a_ref_id AS other_id, rr.kind, rr.note, rr.created_at, rr.created_by_user_id,
+                r.title, r.year, r.venue
+           FROM ref_relations rr JOIN refs r ON r.id = rr.a_ref_id
+          WHERE rr.b_ref_id = ? AND r.deleted_at IS NULL)
+        ORDER BY created_at DESC LIMIT 50");
+    $st->execute([$refId, $refId]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function refs_relations_add(PDO $pdo, array $cfg, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $otherId = (int)($body['ref_id'] ?? 0);
+    if ($otherId <= 0 || $otherId === $refId) throw new ApiException('bad_request', 'ref_id 不正', 400);
+    $kind = (string)($body['kind'] ?? 'related');
+    if (!in_array($kind, ['related','cites','same_topic'], true)) $kind = 'related';
+    $note = trim((string)($body['note'] ?? '')) ?: null;
+    if ($note && mb_strlen($note) > 500) $note = mb_substr($note, 0, 500);
+    // 正規化: 小さい ID を a に (二重登録 防止)
+    $a = min($refId, $otherId);
+    $b = max($refId, $otherId);
+    $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id IN (?, ?) AND deleted_at IS NULL");
+    $ex->execute([$a, $b]);
+    if ($ex->rowCount() < 2) {
+        // rowCount は SELECT で 使えない ので 別 方法 で
+    }
+    $stC = $pdo->prepare("SELECT COUNT(*) FROM refs WHERE id IN (?, ?) AND deleted_at IS NULL");
+    $stC->execute([$a, $b]);
+    if ((int)$stC->fetchColumn() < 2) throw new ApiException('not_found', '文献 が 存在せず', 404);
+    $ins = $pdo->prepare("INSERT IGNORE INTO ref_relations (a_ref_id, b_ref_id, kind, note, created_by_user_id)
+                          VALUES (?, ?, ?, ?, ?)");
+    $ins->execute([$a, $b, $kind, $note, (int)$u['id']]);
+    json_response(['ok' => true]);
+}
+
+function refs_relations_remove(PDO $pdo, array $cfg, int $refId, int $otherId): void {
+    Auth::requireUser($pdo, $cfg);
+    $a = min($refId, $otherId);
+    $b = max($refId, $otherId);
+    $pdo->prepare("DELETE FROM ref_relations WHERE a_ref_id = ? AND b_ref_id = ?")->execute([$a, $b]);
+    json_response(['ok' => true]);
+}
+
