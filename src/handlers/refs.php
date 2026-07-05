@@ -16,6 +16,10 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_bibtex' && $method === 'POST') { refs_import_bibtex($pdo, $cfg); return; }
     if ($sub === 'import_ris'    && $method === 'POST') { refs_import_ris($pdo, $cfg);    return; }
     if ($sub === 'extract_pdf'   && $method === 'POST') { refs_extract_pdf($pdo, $cfg);   return; }
+    // v929: Zotero API 直接 + CSL-JSON + EndNote XML の 追加 import
+    if ($sub === 'import_zotero'  && $method === 'POST') { refs_import_zotero($pdo, $cfg);  return; }
+    if ($sub === 'import_csljson' && $method === 'POST') { refs_import_csljson($pdo, $cfg); return; }
+    if ($sub === 'import_endnote' && $method === 'POST') { refs_import_endnote($pdo, $cfg); return; }
     // v928 track B
     if ($sub === 'collections') {
         $subid = $seg[2] ?? '';
@@ -68,6 +72,16 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'relations'  && $method === 'POST')   { refs_relations_add($pdo, $cfg, $id); return; }
         if ($next === 'relations' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
             refs_relations_remove($pdo, $cfg, $id, (int)$seg[3]); return;
+        }
+        // v929: citation (CSL) + highlights
+        if ($next === 'citation'   && $method === 'GET')    { refs_citation($pdo, $cfg, $id); return; }
+        if ($next === 'highlights' && $method === 'GET')    { refs_highlights_list($pdo, $cfg, $id); return; }
+        if ($next === 'highlights' && $method === 'POST')   { refs_highlights_add($pdo, $cfg, $id); return; }
+        if ($next === 'highlights' && ctype_digit((string)($seg[3] ?? '')) && $method === 'PATCH') {
+            refs_highlights_edit($pdo, $cfg, $id, (int)$seg[3]); return;
+        }
+        if ($next === 'highlights' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
+            refs_highlights_delete($pdo, $cfg, $id, (int)$seg[3]); return;
         }
     }
     throw new ApiException('not_found', 'route not found', 404);
@@ -369,19 +383,22 @@ function refs_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($url) > 1000) $url = mb_substr($url, 0, 1000);
     $authorsJson = _refs_authors_from_body($body);
     $tagsJson = _refs_tags_from_body($body);
+    // v929: item_type + extra_json (type別 field: isbn, publisher, edition, thesis_type, pages, volume, issue, editor 等)
+    $itemType = _refs_normalize_item_type((string)($body['item_type'] ?? 'article'));
+    $extraJson = _refs_extra_from_body($body);
 
     $st = $pdo->prepare("INSERT INTO refs
-        (doi, arxiv_id, title, authors_json, year, venue, abstract, url, tags_json, added_by_user_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?)");
+        (doi, arxiv_id, title, item_type, authors_json, year, venue, abstract, url, tags_json, extra_json, added_by_user_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     $st->execute([
-        $doi ?: null, $arxivId ?: null, $title, $authorsJson,
+        $doi ?: null, $arxivId ?: null, $title, $itemType, $authorsJson,
         $year, $venue ?: null, $abstract ?: null, $url ?: null,
-        $tagsJson, (int)$u['id'],
+        $tagsJson, $extraJson, (int)$u['id'],
     ]);
     $refId = (int)$pdo->lastInsertId();
     // BibTeX を あらかじめ 焼き込む (後で 参照 楽)。
     $row = $pdo->query("SELECT * FROM refs WHERE id = " . $refId)->fetch(PDO::FETCH_ASSOC);
-    $bibtex = _refs_generate_bibtex($row);
+    $bibtex = _refs_generate_bibtex_v2($row);
     $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([$bibtex, $refId]);
     json_response(['ok' => true, 'id' => $refId]);
 }
@@ -592,6 +609,7 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         'doi'              => $r['doi'],
         'arxiv_id'         => $r['arxiv_id'],
         'title'            => $r['title'],
+        'item_type'        => $r['item_type'] ?? 'article',
         'authors'          => $r['authors_json'] ? (json_decode((string)$r['authors_json'], true) ?: []) : [],
         'year'             => $r['year'] !== null ? (int)$r['year'] : null,
         'venue'            => $r['venue'],
@@ -601,6 +619,7 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         'pdf_sha256'       => $r['pdf_sha256'],
         'bibtex'           => $r['bibtex'],
         'tags'             => $r['tags_json'] ? (json_decode((string)$r['tags_json'], true) ?: []) : [],
+        'extra'            => (!empty($r['extra_json'])) ? (json_decode((string)$r['extra_json'], true) ?: []) : [],
         'added_by_user_id' => (int)$r['added_by_user_id'],
         'added_by_name'    => $r['added_by_name'],
         'added_by_avatar'  => $r['added_by_avatar'],
@@ -654,12 +673,19 @@ function refs_edit(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('authors', $body)) {
         $sets[] = 'authors_json = ?'; $args[] = _refs_authors_from_body($body);
     }
+    // v929: item_type + extra_json
+    if (array_key_exists('item_type', $body)) {
+        $sets[] = 'item_type = ?'; $args[] = _refs_normalize_item_type((string)$body['item_type']);
+    }
+    if (array_key_exists('extra', $body) || array_key_exists('extra_json', $body)) {
+        $sets[] = 'extra_json = ?'; $args[] = _refs_extra_from_body($body);
+    }
     if (!$sets) { json_response(['ok' => true]); return; }
     $args[] = $id;
     $pdo->prepare("UPDATE refs SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
     // bibtex を 再生成
     $r = $pdo->query("SELECT * FROM refs WHERE id = " . (int)$id)->fetch(PDO::FETCH_ASSOC);
-    $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex($r), $id]);
+    $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex_v2($r), $id]);
     json_response(['ok' => true]);
 }
 
@@ -996,7 +1022,7 @@ function refs_import_bibtex(PDO $pdo, array $cfg): void {
         ]);
         $refId = (int)$pdo->lastInsertId();
         $row = $pdo->query("SELECT * FROM refs WHERE id = $refId")->fetch(PDO::FETCH_ASSOC);
-        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex($row), $refId]);
+        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex_v2($row), $refId]);
         $added++; $results[] = ['status' => 'added', 'id' => $refId, 'title' => $title];
     }
     json_response(['added' => $added, 'skipped' => $skipped, 'total' => count($parsed), 'results' => $results]);
@@ -1046,7 +1072,7 @@ function refs_import_ris(PDO $pdo, array $cfg): void {
         ]);
         $refId = (int)$pdo->lastInsertId();
         $row = $pdo->query("SELECT * FROM refs WHERE id = $refId")->fetch(PDO::FETCH_ASSOC);
-        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex($row), $refId]);
+        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex_v2($row), $refId]);
         $added++; $results[] = ['status' => 'added', 'id' => $refId, 'title' => $title];
     }
     json_response(['added' => $added, 'skipped' => $skipped, 'total' => count($parsed), 'results' => $results]);
@@ -1465,4 +1491,556 @@ function refs_relations_remove(PDO $pdo, array $cfg, int $refId, int $otherId): 
     $pdo->prepare("DELETE FROM ref_relations WHERE a_ref_id = ? AND b_ref_id = ?")->execute([$a, $b]);
     json_response(['ok' => true]);
 }
+
+// ─────────────────────────────────────────────────────
+// v929 helpers: item_type + extra_json
+// ─────────────────────────────────────────────────────
+
+const REFS_ITEM_TYPES = ['article','book','book_chapter','thesis','conference','patent','dataset','preprint','web','misc'];
+
+function _refs_normalize_item_type(string $s): string {
+    $s = strtolower(trim($s));
+    // Zotero / crossref の 別名 を マップ
+    $map = [
+        'journal-article' => 'article',
+        'journalArticle'  => 'article',
+        'proceedings-article' => 'conference',
+        'conferencePaper' => 'conference',
+        'inproceedings'   => 'conference',
+        'inbook'          => 'book_chapter',
+        'bookSection'     => 'book_chapter',
+        'phdthesis'       => 'thesis',
+        'mastersthesis'   => 'thesis',
+        'webpage'         => 'web',
+        'website'         => 'web',
+        'report'          => 'misc',
+    ];
+    if (isset($map[$s])) $s = $map[$s];
+    return in_array($s, REFS_ITEM_TYPES, true) ? $s : 'article';
+}
+
+function _refs_extra_from_body(array $body): ?string {
+    $extra = $body['extra'] ?? ($body['extra_json'] ?? null);
+    if (is_string($extra) && $extra !== '') { $tmp = json_decode($extra, true); if (is_array($tmp)) $extra = $tmp; }
+    if (!is_array($extra)) return null;
+    // 許可 field (Zotero の CSL 由来 と BibTeX 由来 を 主要 だけ 抜粋)
+    $allowed = ['isbn','issn','publisher','edition','pages','volume','issue','number','series','address',
+                'chapter','editor','thesis_type','institution','school','patent_number','application_number',
+                'howpublished','organization','note','month','language'];
+    $safe = [];
+    foreach ($allowed as $k) {
+        if (isset($extra[$k]) && $extra[$k] !== '' && $extra[$k] !== null) {
+            $v = is_scalar($extra[$k]) ? mb_substr((string)$extra[$k], 0, 500) : $extra[$k];
+            $safe[$k] = $v;
+        }
+    }
+    return $safe ? json_encode($safe, JSON_UNESCAPED_UNICODE) : null;
+}
+
+// BibTeX 型 を item_type から 決める。
+function _refs_bibtex_type(string $itemType): string {
+    return [
+        'article'      => 'article',
+        'book'         => 'book',
+        'book_chapter' => 'inbook',
+        'thesis'       => 'phdthesis',
+        'conference'   => 'inproceedings',
+        'patent'       => 'patent',
+        'dataset'      => 'misc',
+        'preprint'     => 'misc',
+        'web'          => 'misc',
+        'misc'         => 'misc',
+    ][$itemType] ?? 'article';
+}
+
+// v929: _refs_generate_bibtex を item_type + extra 対応 に アップグレード。
+//   (既存 関数 を 上書き)
+function _refs_generate_bibtex_v2(array $r): string {
+    $itemType = (string)($r['item_type'] ?? 'article');
+    $bibType  = _refs_bibtex_type($itemType);
+    $keyBase  = 'ref';
+    if (!empty($r['authors_json'])) {
+        $arr = json_decode((string)$r['authors_json'], true);
+        if (is_array($arr) && !empty($arr[0]['name'])) {
+            $last = (string)$arr[0]['name'];
+            if (strpos($last, ' ') !== false) $last = substr($last, strrpos($last, ' ') + 1);
+            $keyBase = preg_replace('/[^A-Za-z]/', '', $last) ?: 'ref';
+        }
+    }
+    $year = (int)($r['year'] ?? 0);
+    $key = strtolower($keyBase) . ($year ?: '') . (int)$r['id'];
+    $lines = ['@' . $bibType . '{' . $key . ','];
+    $esc = fn($s) => str_replace(['{', '}'], ['\{', '\}'], (string)$s);
+    if (!empty($r['title']))    $lines[] = '  title = {' . $esc($r['title']) . '},';
+    if (!empty($r['authors_json'])) {
+        $arr = json_decode((string)$r['authors_json'], true);
+        if (is_array($arr)) {
+            $names = array_map(fn($a) => (string)($a['name'] ?? ''), $arr);
+            $names = array_filter($names, fn($n) => $n !== '');
+            if ($names) $lines[] = '  author = {' . $esc(implode(' and ', $names)) . '},';
+        }
+    }
+    if (!empty($r['year']))     $lines[] = '  year = {' . (int)$r['year'] . '},';
+    // venue field: item_type で 名前 変える (BibTeX 慣習)
+    if (!empty($r['venue'])) {
+        $venueField = $bibType === 'inproceedings' ? 'booktitle'
+                   : ($bibType === 'inbook' ? 'booktitle'
+                   : ($bibType === 'phdthesis' ? 'school'
+                   : 'journal'));
+        $lines[] = '  ' . $venueField . ' = {' . $esc($r['venue']) . '},';
+    }
+    // extra field を BibTeX 化
+    if (!empty($r['extra_json'])) {
+        $ex = json_decode((string)$r['extra_json'], true) ?: [];
+        $map = [
+            'isbn'=>'isbn', 'issn'=>'issn', 'publisher'=>'publisher', 'edition'=>'edition',
+            'pages'=>'pages', 'volume'=>'volume', 'issue'=>'number', 'number'=>'number',
+            'series'=>'series', 'address'=>'address', 'chapter'=>'chapter', 'editor'=>'editor',
+            'institution'=>'institution', 'school'=>'school',
+            'organization'=>'organization', 'note'=>'note', 'month'=>'month',
+            'patent_number'=>'number',
+        ];
+        foreach ($map as $ek => $bk) {
+            if (isset($ex[$ek]) && $ex[$ek] !== '') {
+                $lines[] = '  ' . $bk . ' = {' . $esc((string)$ex[$ek]) . '},';
+            }
+        }
+    }
+    if (!empty($r['doi']))      $lines[] = '  doi = {' . $esc($r['doi']) . '},';
+    if (!empty($r['arxiv_id'])) $lines[] = '  eprint = {' . $esc($r['arxiv_id']) . '},';
+    if (!empty($r['url']))      $lines[] = '  url = {' . $esc($r['url']) . '},';
+    $lines[] = '}';
+    return implode("\n", $lines);
+}
+
+// ─────────────────────────────────────────────────────
+// v929: CSL 引用 生成 (APA / MLA / Chicago / IEEE)
+// ─────────────────────────────────────────────────────
+
+function _refs_author_short(array $a): string {
+    $name = (string)($a['name'] ?? '');
+    if ($name === '') return '';
+    $parts = explode(' ', $name);
+    if (count($parts) < 2) return $name;
+    $family = array_pop($parts);
+    $initial = mb_substr(implode(' ', $parts), 0, 1) . '.';
+    return $family . ', ' . $initial;
+}
+function _refs_author_family(array $a): string {
+    $name = (string)($a['name'] ?? '');
+    $parts = explode(' ', $name);
+    return end($parts) ?: $name;
+}
+
+function _refs_citation_apa(array $r, array $authors): string {
+    // APA 7: Author, A. A. (Year). Title. Venue, volume(issue), pages. https://doi.org/...
+    $names = array_map('_refs_author_short', $authors);
+    if (count($names) === 1)      $auth = $names[0];
+    elseif (count($names) === 2)  $auth = $names[0] . ' & ' . $names[1];
+    elseif (count($names) <= 20)  $auth = implode(', ', array_slice($names, 0, -1)) . ', & ' . end($names);
+    else                          $auth = implode(', ', array_slice($names, 0, 19)) . ', ... ' . end($names);
+    $year = !empty($r['year']) ? '(' . (int)$r['year'] . ')' : '(n.d.)';
+    $title = rtrim((string)$r['title'], '.');
+    $venue = $r['venue'] ?? '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $vol = $ex['volume'] ?? ''; $iss = $ex['issue'] ?? $ex['number'] ?? ''; $pages = $ex['pages'] ?? '';
+    $volPart = ($vol !== '') ? " *{$vol}*" . ($iss !== '' ? "({$iss})" : '') : '';
+    $pagePart = ($pages !== '') ? ", {$pages}" : '';
+    $doi = !empty($r['doi']) ? ' https://doi.org/' . $r['doi'] : (!empty($r['url']) ? ' ' . $r['url'] : '');
+    return trim("$auth $year. $title. *$venue*$volPart$pagePart.$doi");
+}
+
+function _refs_citation_mla(array $r, array $authors): string {
+    // MLA 9: Author. "Title." Venue, vol. X, no. Y, Year, pp. pages.
+    $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
+    if (count($names) === 1) $auth = $names[0];
+    elseif (count($names) === 2) $auth = $names[0] . ' and ' . $names[1];
+    elseif (count($names) > 0)   $auth = $names[0] . ', et al.';
+    else                         $auth = '';
+    $title = '"' . rtrim((string)$r['title'], '.') . '."';
+    $venue = $r['venue'] ? '*' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $vol = $ex['volume'] ?? ''; $iss = $ex['issue'] ?? $ex['number'] ?? ''; $pages = $ex['pages'] ?? '';
+    $year = !empty($r['year']) ? (string)(int)$r['year'] : '';
+    $parts = array_filter([
+        $auth,
+        $title,
+        $venue,
+        $vol !== '' ? 'vol. ' . $vol : '',
+        $iss !== '' ? 'no. ' . $iss : '',
+        $year,
+        $pages !== '' ? 'pp. ' . $pages : '',
+    ]);
+    return implode(', ', $parts) . '.';
+}
+
+function _refs_citation_chicago(array $r, array $authors): string {
+    // Chicago (author-date): Author. Year. "Title." Venue vol (issue): pages.
+    $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
+    if (count($names) === 1) $auth = $names[0];
+    elseif (count($names) <= 3) $auth = implode(', ', array_slice($names, 0, -1)) . ', and ' . end($names);
+    else $auth = $names[0] . ', et al.';
+    $year = !empty($r['year']) ? (int)$r['year'] : 'n.d.';
+    $title = '"' . rtrim((string)$r['title'], '.') . '."';
+    $venue = $r['venue'] ? ' *' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $vol = $ex['volume'] ?? ''; $iss = $ex['issue'] ?? $ex['number'] ?? ''; $pages = $ex['pages'] ?? '';
+    $tail = ($vol !== '' ? ' ' . $vol : '') . ($iss !== '' ? ' (' . $iss . ')' : '');
+    $tail .= $pages !== '' ? ': ' . $pages : '';
+    $doi = !empty($r['doi']) ? '. https://doi.org/' . $r['doi'] : '';
+    return "$auth. $year. $title$venue$tail.$doi";
+}
+
+function _refs_citation_ieee(array $r, array $authors, int $num = 1): string {
+    // IEEE: [N] A. Author, B. Author, and C. Author, "Title," Venue, vol. X, no. Y, pp. Z, Year.
+    $names = array_map(function ($a) {
+        $n = (string)($a['name'] ?? '');
+        if ($n === '') return '';
+        $parts = explode(' ', $n);
+        $family = array_pop($parts);
+        $initial = implode(' ', array_map(fn($p) => mb_substr($p, 0, 1) . '.', $parts));
+        return trim($initial . ' ' . $family);
+    }, $authors);
+    $auth = '';
+    if (count($names) === 1) $auth = $names[0];
+    elseif (count($names) <= 6) $auth = implode(', ', array_slice($names, 0, -1)) . ', and ' . end($names);
+    else $auth = $names[0] . ' et al.';
+    $title = '"' . rtrim((string)$r['title'], '.') . ',"';
+    $venue = $r['venue'] ? ' *' . $r['venue'] . '*' : '';
+    $ex = !empty($r['extra_json']) ? (json_decode((string)$r['extra_json'], true) ?: []) : [];
+    $parts = array_filter([
+        $ex['volume'] ?? '' ? 'vol. ' . $ex['volume'] : '',
+        $ex['issue']  ?? $ex['number'] ?? '' ? 'no. ' . ($ex['issue'] ?? $ex['number']) : '',
+        $ex['pages']  ?? '' ? 'pp. ' . $ex['pages'] : '',
+        !empty($r['year']) ? (string)(int)$r['year'] : '',
+    ]);
+    return "[$num] $auth, $title$venue, " . implode(', ', $parts) . '.';
+}
+
+function refs_citation(PDO $pdo, array $cfg, int $id): void {
+    Auth::requireUser($pdo, $cfg);
+    $style = strtolower((string)($_GET['style'] ?? 'apa'));
+    $st = $pdo->prepare("SELECT * FROM refs WHERE id = ?");
+    $st->execute([$id]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    $authors = $r['authors_json'] ? (json_decode((string)$r['authors_json'], true) ?: []) : [];
+    $out = match ($style) {
+        'mla'     => _refs_citation_mla($r, $authors),
+        'chicago' => _refs_citation_chicago($r, $authors),
+        'ieee'    => _refs_citation_ieee($r, $authors),
+        default   => _refs_citation_apa($r, $authors),
+    };
+    json_response(['style' => $style, 'citation' => $out]);
+}
+
+// ─────────────────────────────────────────────────────
+// v929: highlights (PDF ハイライト、 簡易 実装 = page + quote + comment + color)
+// ─────────────────────────────────────────────────────
+
+function refs_highlights_list(PDO $pdo, array $cfg, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    // 自分 の 全 highlight + 他人 の 共有 highlight
+    $st = $pdo->prepare("SELECT h.id, h.page, h.quote_text, h.comment, h.color, h.is_shared,
+                                h.user_id, h.created_at, h.updated_at,
+                                u.display_name, u.avatar_url
+                           FROM ref_highlights h JOIN users u ON u.id = h.user_id
+                          WHERE h.ref_id = ? AND (h.user_id = ? OR h.is_shared = 1)
+                       ORDER BY COALESCE(h.page, 0), h.id");
+    $st->execute([$refId, $uid]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function refs_highlights_add(PDO $pdo, array $cfg, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id = ?");
+    $ex->execute([$refId]);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    $body = read_json_body();
+    $page = isset($body['page']) && $body['page'] !== '' ? (int)$body['page'] : null;
+    $quote = trim((string)($body['quote_text'] ?? ''));
+    $comment = trim((string)($body['comment'] ?? ''));
+    $color = (string)($body['color'] ?? 'yellow');
+    if (!in_array($color, ['yellow','red','green','blue','purple'], true)) $color = 'yellow';
+    $isShared = isset($body['is_shared']) ? (int)!!$body['is_shared'] : 1;
+    if ($quote === '' && $comment === '') throw new ApiException('bad_request', 'quote か comment が 必要', 400);
+    $ins = $pdo->prepare("INSERT INTO ref_highlights
+        (ref_id, user_id, page, quote_text, comment, color, is_shared) VALUES (?,?,?,?,?,?,?)");
+    $ins->execute([$refId, (int)$u['id'], $page, $quote ?: null, $comment ?: null, $color, $isShared]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+}
+
+function refs_highlights_edit(PDO $pdo, array $cfg, int $refId, int $hid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT user_id FROM ref_highlights WHERE id = ? AND ref_id = ?");
+    $st->execute([$hid, $refId]);
+    $ownerId = (int)$st->fetchColumn();
+    if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
+    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人 のみ 編集可', 403);
+    $body = read_json_body();
+    $sets = []; $args = [];
+    if (array_key_exists('page', $body))       { $sets[] = 'page = ?';       $args[] = $body['page'] === '' ? null : (int)$body['page']; }
+    if (array_key_exists('quote_text', $body)) { $sets[] = 'quote_text = ?'; $args[] = trim((string)$body['quote_text']) ?: null; }
+    if (array_key_exists('comment', $body))    { $sets[] = 'comment = ?';    $args[] = trim((string)$body['comment']) ?: null; }
+    if (array_key_exists('color', $body)) {
+        $c = (string)$body['color'];
+        if (!in_array($c, ['yellow','red','green','blue','purple'], true)) $c = 'yellow';
+        $sets[] = 'color = ?'; $args[] = $c;
+    }
+    if (array_key_exists('is_shared', $body))  { $sets[] = 'is_shared = ?';  $args[] = (int)!!$body['is_shared']; }
+    if (!$sets) { json_response(['ok' => true]); return; }
+    $args[] = $hid;
+    $pdo->prepare("UPDATE ref_highlights SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+    json_response(['ok' => true]);
+}
+
+function refs_highlights_delete(PDO $pdo, array $cfg, int $refId, int $hid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT user_id FROM ref_highlights WHERE id = ? AND ref_id = ?");
+    $st->execute([$hid, $refId]);
+    $ownerId = (int)$st->fetchColumn();
+    if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ($ownerId !== (int)$u['id'] && !$isAdmin) throw new ApiException('forbidden', '本人 or admin のみ 削除可', 403);
+    $pdo->prepare("DELETE FROM ref_highlights WHERE id = ?")->execute([$hid]);
+    json_response(['ok' => true]);
+}
+
+// ─────────────────────────────────────────────────────
+// v929: 世の中 の 文献管理 システム から の import
+//   - Zotero API 直接連携 (最強)
+//   - CSL-JSON ファイル (Zotero / Mendeley / Papers ネイティブ)
+//   - EndNote XML (Mendeley / EndNote export)
+// ─────────────────────────────────────────────────────
+
+// _refs_insert_shared: 型別 の 一括 insert ヘルパ。
+//   $items: [ {doi?, arxiv_id?, title, item_type, authors: [{name}], year, venue, abstract, url, tags: [], extra: {}} ]
+function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
+    $added = 0; $skipped = 0; $results = [];
+    foreach ($items as $it) {
+        $title = trim((string)($it['title'] ?? ''));
+        if ($title === '') { $skipped++; $results[] = ['status' => 'skip', 'reason' => 'title なし']; continue; }
+        $doi = $it['doi'] ?? '';
+        if ($doi !== '') $doi = _refs_normalize_doi((string)$doi);
+        if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
+        $arxiv = null;
+        if (!empty($it['arxiv_id'])) $arxiv = _refs_normalize_arxiv((string)$it['arxiv_id']);
+        // 既存 チェック
+        if ($doi !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
+            $st->execute([$doi]);
+            if ($ex = (int)$st->fetchColumn()) { $skipped++; $results[] = ['status'=>'dup','existing_id'=>$ex,'title'=>$title]; continue; }
+        }
+        if ($arxiv) {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE arxiv_id = ? LIMIT 1");
+            $st->execute([$arxiv]);
+            if ($ex = (int)$st->fetchColumn()) { $skipped++; $results[] = ['status'=>'dup','existing_id'=>$ex,'title'=>$title]; continue; }
+        }
+        $itemType = _refs_normalize_item_type((string)($it['item_type'] ?? 'article'));
+        $authors  = [];
+        foreach ((array)($it['authors'] ?? []) as $a) {
+            if (is_string($a) && trim($a) !== '') $authors[] = ['name' => trim($a)];
+            elseif (is_array($a) && !empty($a['name'])) $authors[] = ['name' => trim((string)$a['name'])];
+        }
+        $tags = [];
+        foreach ((array)($it['tags'] ?? []) as $t) {
+            $t = trim((string)$t); if ($t !== '') $tags[] = $t;
+        }
+        $extraJson = null;
+        if (!empty($it['extra']) && is_array($it['extra'])) {
+            $safe = _refs_extra_from_body(['extra' => $it['extra']]);
+            $extraJson = $safe;
+        }
+        $url = trim((string)($it['url'] ?? ''));
+        if ($url !== '' && !preg_match('#^https?://#', $url)) $url = '';
+        $ins = $pdo->prepare("INSERT INTO refs
+            (doi, arxiv_id, title, item_type, authors_json, year, venue, abstract, url, tags_json, extra_json, added_by_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+        $ins->execute([
+            $doi ?: null, $arxiv ?: null, mb_substr($title, 0, 1000), $itemType,
+            json_encode($authors, JSON_UNESCAPED_UNICODE),
+            !empty($it['year']) ? (int)$it['year'] : null,
+            !empty($it['venue']) ? mb_substr((string)$it['venue'], 0, 500) : null,
+            !empty($it['abstract']) ? (string)$it['abstract'] : null,
+            $url ?: null,
+            $tags ? json_encode($tags, JSON_UNESCAPED_UNICODE) : null,
+            $extraJson,
+            $uid,
+        ]);
+        $refId = (int)$pdo->lastInsertId();
+        $row = $pdo->query("SELECT * FROM refs WHERE id = $refId")->fetch(PDO::FETCH_ASSOC);
+        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex_v2($row), $refId]);
+        $added++; $results[] = ['status' => 'added', 'id' => $refId, 'title' => $title];
+    }
+    return ['added' => $added, 'skipped' => $skipped, 'total' => count($items), 'results' => $results];
+}
+
+// Zotero API: users/USER_ID/items or groups/GROUP_ID/items。 API key 認証、 ページング 対応。
+function refs_import_zotero(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $apiKey  = trim((string)($body['api_key'] ?? ''));
+    $userId  = trim((string)($body['user_id'] ?? ''));
+    $groupId = trim((string)($body['group_id'] ?? ''));
+    $limit   = min(200, max(10, (int)($body['limit'] ?? 100)));  // 一度 に 取る 上限 (再度 呼び 出しで 追加取得 も 可)
+    if ($apiKey === '') throw new ApiException('bad_request', 'api_key 必要 (https://www.zotero.org/settings/keys で 発行)', 400);
+    if ($userId === '' && $groupId === '') throw new ApiException('bad_request', 'user_id か group_id が 必要', 400);
+    $base = $groupId !== '' ? "https://api.zotero.org/groups/{$groupId}/items"
+                            : "https://api.zotero.org/users/{$userId}/items";
+    $url = $base . '?limit=' . $limit . '&format=json&include=csljson,data';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'Zotero-API-Key: ' . $apiKey,
+            'Zotero-API-Version: 3',
+        ],
+        CURLOPT_USERAGENT => 'LabPay/1.0',
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code === 403) throw new ApiException('forbidden', 'Zotero API: 認証失敗 (api_key / user_id 確認)', 403);
+    if ($code !== 200 || !$resp) throw new ApiException('upstream_error', 'Zotero API HTTP ' . $code, 502);
+    $arr = json_decode((string)$resp, true);
+    if (!is_array($arr)) throw new ApiException('upstream_error', 'Zotero レスポンス 不正', 502);
+    $items = [];
+    foreach ($arr as $entry) {
+        $csl = $entry['csljson'] ?? null;
+        $data = $entry['data'] ?? null;
+        if (!$csl) continue;
+        // attachment や note は skip
+        $type = (string)($csl['type'] ?? '');
+        if (in_array($type, ['attachment', 'note'], true)) continue;
+        $it = _refs_csljson_to_local($csl);
+        // Zotero data の tags を マージ
+        if (is_array($data) && !empty($data['tags'])) {
+            foreach ($data['tags'] as $t) $it['tags'][] = (string)($t['tag'] ?? '');
+        }
+        $items[] = $it;
+    }
+    $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
+    json_response($res);
+}
+
+// CSL-JSON: Zotero / Mendeley / Papers の 共通 export 形式。
+function _refs_csljson_to_local(array $csl): array {
+    $authors = [];
+    foreach ((array)($csl['author'] ?? []) as $a) {
+        if (is_array($a)) {
+            $name = trim(((string)($a['given'] ?? '')) . ' ' . ((string)($a['family'] ?? '')));
+            if ($name === '' && !empty($a['literal'])) $name = (string)$a['literal'];
+            if ($name !== '') $authors[] = ['name' => $name];
+        }
+    }
+    $year = null;
+    if (isset($csl['issued']['date-parts'][0][0])) $year = (int)$csl['issued']['date-parts'][0][0];
+    $extra = [];
+    foreach (['ISBN'=>'isbn','ISSN'=>'issn','publisher'=>'publisher','edition'=>'edition',
+              'page'=>'pages','volume'=>'volume','issue'=>'issue','collection-title'=>'series',
+              'publisher-place'=>'address'] as $ck => $lk) {
+        if (!empty($csl[$ck])) $extra[$lk] = (string)$csl[$ck];
+    }
+    $tags = [];
+    // CSL: keyword は space or comma 区切り 文字列
+    if (!empty($csl['keyword'])) {
+        foreach (preg_split('/[;,]/', (string)$csl['keyword']) as $t) {
+            $t = trim($t); if ($t !== '') $tags[] = $t;
+        }
+    }
+    return [
+        'doi'       => $csl['DOI'] ?? '',
+        'title'     => (string)($csl['title'] ?? ''),
+        'item_type' => (string)($csl['type'] ?? 'article'),
+        'authors'   => $authors,
+        'year'      => $year,
+        'venue'     => (string)($csl['container-title'] ?? $csl['event'] ?? ''),
+        'abstract'  => (string)($csl['abstract'] ?? ''),
+        'url'       => (string)($csl['URL'] ?? ''),
+        'tags'      => $tags,
+        'extra'     => $extra,
+    ];
+}
+
+function refs_import_csljson(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $content = '';
+    if (isset($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+        $content = (string)file_get_contents($_FILES['file']['tmp_name']);
+    } else {
+        $body = read_json_body();
+        $content = (string)($body['csljson'] ?? '');
+    }
+    if ($content === '') throw new ApiException('bad_request', 'file か csljson 本文 が 必要', 400);
+    if (strlen($content) > 10 * 1024 * 1024) throw new ApiException('bad_request', '10MB まで', 400);
+    $arr = json_decode($content, true);
+    if (!is_array($arr)) throw new ApiException('bad_request', 'CSL-JSON パース失敗', 400);
+    // 単体 object か 配列 か 両方 対応
+    if (isset($arr['title']) || isset($arr['author'])) $arr = [$arr];
+    $items = [];
+    foreach ($arr as $csl) {
+        if (!is_array($csl)) continue;
+        $items[] = _refs_csljson_to_local($csl);
+    }
+    if (!$items) throw new ApiException('bad_request', 'エントリ が 0 件', 400);
+    $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
+    json_response($res);
+}
+
+// EndNote XML: Mendeley / EndNote export の 標準 XML。
+function refs_import_endnote(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $content = '';
+    if (isset($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+        $content = (string)file_get_contents($_FILES['file']['tmp_name']);
+    } else {
+        $body = read_json_body();
+        $content = (string)($body['xml'] ?? '');
+    }
+    if ($content === '') throw new ApiException('bad_request', 'file か xml 本文 が 必要', 400);
+    if (strlen($content) > 20 * 1024 * 1024) throw new ApiException('bad_request', '20MB まで', 400);
+    libxml_use_internal_errors(true);
+    $xml = @simplexml_load_string($content);
+    if (!$xml) throw new ApiException('bad_request', 'XML パース失敗', 400);
+    // 標準 EndNote XML の 構造: <xml><records><record>...</record></records></xml>
+    $records = $xml->xpath('//record');
+    if (!$records) $records = $xml->xpath('//records/record');
+    if (!$records) throw new ApiException('bad_request', 'record 要素 なし', 400);
+    $items = [];
+    foreach ($records as $rec) {
+        $title = trim((string)($rec->titles->title ?? ''));
+        if ($title === '') continue;
+        $authors = [];
+        foreach ($rec->contributors->authors->author ?? [] as $a) {
+            $n = trim((string)$a);
+            if ($n !== '') $authors[] = $n;
+        }
+        $year = (int)($rec->dates->year ?? 0) ?: null;
+        $venue = trim((string)($rec->{'secondary-title'} ?? $rec->titles->{'secondary-title'} ?? ''));
+        $abstract = trim((string)($rec->abstract ?? ''));
+        $doi = trim((string)($rec->{'electronic-resource-num'} ?? ''));
+        $url = trim((string)($rec->{'urls'}->{'related-urls'}->url ?? ''));
+        $extra = [];
+        foreach (['isbn'=>'isbn','pages'=>'pages','volume'=>'volume','number'=>'issue','publisher'=>'publisher'] as $xk => $lk) {
+            $v = trim((string)$rec->{$xk});
+            if ($v !== '') $extra[$lk] = $v;
+        }
+        // EndNote type 番号 → item_type ざっくり
+        $typeNum = (int)($rec['ref-type'] ?? 0);
+        $typeMap = [17 => 'article', 6 => 'book', 5 => 'book_chapter', 32 => 'thesis',
+                    10 => 'conference', 25 => 'patent', 12 => 'web'];
+        $itemType = $typeMap[$typeNum] ?? 'article';
+        $items[] = [
+            'title' => $title, 'authors' => $authors, 'year' => $year, 'venue' => $venue,
+            'abstract' => $abstract, 'doi' => $doi, 'url' => $url, 'tags' => [],
+            'item_type' => $itemType, 'extra' => $extra,
+        ];
+    }
+    if (!$items) throw new ApiException('bad_request', 'エントリ が 0 件', 400);
+    $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
+    json_response($res);
+}
+
 
