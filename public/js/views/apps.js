@@ -105,6 +105,8 @@ export const APPS = [
   { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。クエリを投げると OpenAI が web_search を必要なだけ使って複数ソースを横断検索 → サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL 一覧を構造化して返します。深さ 3 段階 (軽い gpt-5-mini 20pt / 標準 gpt-5 50pt / 深い gpt-5 高 reasoning 100pt)。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5-mini 25 / gpt-5 60 / o1 100 pt) と日→英 (5x、 em-dash 等 GPT-isms 除去込み) の双方向対応。', defaultVisible: true },
+  // v925 文献管理 (Zotero-like)
+  { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero っぽい 文献 (paper reference) 管理。 DOI / arXiv ID / URL を 入れると crossref / arxiv API から metadata (title / authors / year / venue / abstract) を 自動取得。 PDF 添付、 タグ、 BibTeX 出力、 検索 (title / 著者 / 抄録 / 会議)、 タグ 絞り込み、 年 絞り込み、 読状態 (未読/読中/既読)、 自分 の note を 共有 (誰か が 読んだ 感想 / 気づき を みんな で 見られる)。 ラボ全員 で 共有、 起案者 / admin のみ 編集。 同 PDF SHA なら 既存 の paper_translate / paper_full_translate と 相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)
@@ -172,6 +174,7 @@ const CATEGORY_ORDER = {
     'deep-research',
     'paper-summary',
     'paper-translate-full',
+    'refs',
     'resume-check',
     'paper-review',
     'rewriter',

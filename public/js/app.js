@@ -487,6 +487,10 @@ route('/places',          lazy(() => import('./views/places.js'), 'renderPlaces'
 route('/places/new',      lazy(() => import('./views/places.js'), 'renderPlaceNew'));
 route('/places/map',      lazy(() => import('./views/places.js'), 'renderPlacesMap'));
 route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDetail'));
+// v925 文献管理 (Zotero-like、 ラボ 共有)
+route('/refs',            lazy(() => import('./views/refs.js'), 'renderRefs'));
+route('/refs/new',        lazy(() => import('./views/refs.js'), 'renderRefsNew'));
+route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetail'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 // v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
 route('/sns/map',         lazy(() => import('./views/posts_map.js'), 'renderPostsMap'));
