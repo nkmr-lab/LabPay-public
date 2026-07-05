@@ -37,7 +37,7 @@ class Auth {
             'path'     => '/',
             'secure'   => (bool)($cfg['app']['cookie_secure'] ?? true),
             'httponly' => true,
-            'samesite' => $cfg['app']['cookie_samesite'] ?? 'Lax',
+            'samesite' => $cfg['app']['cookie_samesite'] ?? 'None',  // v932 別サブドメイン (*.nkmr.io) から の fetch で cookie を 送る ため
         ];
         setcookie($name, $sid, $opts);
     }
@@ -49,7 +49,7 @@ class Auth {
             'path'     => '/',
             'secure'   => (bool)($cfg['app']['cookie_secure'] ?? true),
             'httponly' => true,
-            'samesite' => $cfg['app']['cookie_samesite'] ?? 'Lax',
+            'samesite' => $cfg['app']['cookie_samesite'] ?? 'None',  // v932 別サブドメイン (*.nkmr.io) から の fetch で cookie を 送る ため
         ];
         setcookie($name, '', $opts);
     }

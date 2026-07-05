@@ -23,8 +23,24 @@ if (strpos($uri, $prefix) === 0) {
 if ($path === '' || $path === false) $path = '/';
 $seg = path_segments($path);
 
-// CORS is intentionally not configured: same-origin only.
-// Always JSON.
+// v932 CORS: `*.nkmr.io` (と 例外 で 明示 リスト) は 許可。 中村さん の 完全 コントロール 下 の ドメイン のみ。
+//   preflight (OPTIONS) は 認証 前 に 早期 返却 する 必要 が ある ので この 位置。
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOriginRe = '#^https://[a-z0-9][a-z0-9-]*\.nkmr\.io$#i';
+if ($origin !== '' && preg_match($allowedOriginRe, $origin)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
+    header('Access-Control-Max-Age: 600');   // preflight を 10 分 キャッシュ
+    header('Vary: Origin');                  // CDN / 中間 キャッシュ 汚染 防止
+    if ($method === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+}
+
+// Always JSON (OPTIONS より 後、 通常 dispatch より 前)。
 header('Content-Type: application/json; charset=utf-8');
 
 // Dispatch table — URL 第1セグメント → route_* 関数。新しいリソースは
