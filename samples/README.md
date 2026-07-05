@@ -1,10 +1,10 @@
 # LabPay API サンプル
 
-LabPay の API を使った 「超短い」 サンプルスクリプト集です。 1 ファイル 1 目的、
-20〜30 行で完結します。 何かを作りたい人はここから 1 個 コピーして書き換えるのが
+LabPay の API を使った「超短い」サンプルスクリプト集です。 1 ファイル 1 目的、
+20〜30 行で完結します。何かを作りたい人はここから 1 個コピーして書き換えるのが
 おすすめです。
 
-API のフルリファレンスは [docs/api.md](../docs/api.md)、 認証や CSRF などの
+API のフルリファレンスは [docs/api.md](../docs/api.md)、認証や CSRF などの
 仕組みは [docs/HACKATHON.md](../docs/HACKATHON.md) を見てください。
 
 ## セットアップ
@@ -24,8 +24,8 @@ export LABPAY_EMAIL=you@example.ac.jp
 
 ### 🌐 ブラウザ Vanilla JS (samples/web/)
 
-ファイルを `pay.nkmr.io` 配下に置けば そのまま動きます (LabPay にログイン中の
-Cookie がそのまま使えるので 認証コード不要)。 1 ファイル 1 機能、 ~40 行:
+ファイルを `pay.nkmr.io` 配下に置けばそのまま動きます (LabPay にログイン中の
+Cookie がそのまま使えるので認証コード不要)。 1 ファイル 1 機能、 ~40 行:
 
 | ファイル | 内容 |
 |---|---|
@@ -56,7 +56,7 @@ python3 samples/01_my_balance.py
 
 1. `requests.Session()` を作る (Cookie が自動で保持される)
 2. `POST /api/auth/dev-login` でログイン → Cookie が立つ
-3. 以後 同じ session で `GET / POST` を叩く
+3. 以後同じ session で `GET / POST` を叩く
 
 変更系 (POST/PATCH/DELETE) は **`X-Requested-With: labpay`** ヘッダ必須です
 (CSRF ガード)。
@@ -65,12 +65,12 @@ python3 samples/01_my_balance.py
 
 - **`401 Unauthorized`**: `LABPAY_EMAIL` が主催者の allowlist に入ってない
 - **`403 csrf`**: 変更系で `X-Requested-With` 忘れ
-- **CORS エラー** (ブラウザのみ): LabPay は同一オリジン専用。 Python など
-  サーバサイドなら無関係
+- **CORS エラー** (ブラウザのみ): LabPay は `*.nkmr.io` サブドメイン全許可 (v932+)。
+  それ以外のドメインから叩く場合は Bearer 認証を使うか、サーバサイド (Python 等) 経由で
 
 ## おまけ
 
-- もし 「こういうエンドポイント欲しい」 みたいなのがあれば GitHub Issues か
+- もし「こういうエンドポイント欲しい」みたいなのがあれば GitHub Issues か
   主催者まで
-- 各 .py の冒頭コメントに 「これで何ができるか」 を 1 行書いてあるので
-  ファイル一覧をざっと眺めると インスピレーション湧くかも
+- 各 .py の冒頭コメントに「これで何ができるか」を 1 行書いてあるので
+  ファイル一覧をざっと眺めるとインスピレーション湧くかも

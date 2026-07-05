@@ -1,122 +1,122 @@
 # 自作ゲーム v2 framework (cg2) 設計
 
-> **ステータス**: **実装 完了 (v667 で 稼働)**。 `/api/cg2` 系 endpoint + `public/js/cg2.js` framework + `/#/cg2/{slug}` 動線 が 動いて います。 サンプル 4 件 は `docs/cg2_sample_*.js` に 用意 済 で、 実装 チーム が 各 kind に 登録 可能。
-> **エンドポイント 一覧**: [api.md#apicg2-自作ゲーム-v2](api.md) を 参照。
+> **ステータス**: **実装完了 (v667 で稼働)**。 `/api/cg2` 系 endpoint + `public/js/cg2.js` framework + `/#/cg2/{slug}` 動線が動いています。サンプル 4 件は `docs/cg2_sample_*.js` に用意済で、実装チームが各 kind に登録可能。
+> **エンドポイント一覧**: [api.md#apicg2-自作ゲーム-v2](api.md) を参照。
 
-LabPay の v1 自作ゲーム framework (cg_ui / custom_games) を 全面 再設計 した もの。
-**p5.js で 描画**、 **共有 state を 自動 同期** する 「准 リアルタイム」 multiplayer の 仕組み。
+LabPay の v1 自作ゲーム framework (cg_ui / custom_games) を全面再設計したもの。
+**p5.js で描画**、 **共有 state を自動同期** する「准リアルタイム」 multiplayer の仕組み。
 
-## v1 と v2 の 違い
+## v1 と v2 の違い
 
 | | v1 (cg_ui) | v2 (cg2) |
 |---|---|---|
-| 描画 | HTML を 返す `draw(state, ctx)` | p5.js instance mode の `sketch(p)` |
-| state | `applyMove(state, uid, move)` の 純 関数 で 遷移 | `sharedValues` を 直接 mutate (auto-sync) |
-| 引数 | reduce / draw に 4 引数 ずつ | ほぼ なし (state は ambient) |
-| 同期 | turn-based、 1 手 = POST + polling | 准 リアルタイム (500ms 差分 polling) |
+| 描画 | HTML を返す `draw(state, ctx)` | p5.js instance mode の `sketch(p)` |
+| state | `applyMove(state, uid, move)` の純関数で遷移 | `sharedValues` を直接 mutate (auto-sync) |
+| 引数 | reduce / draw に 4 引数ずつ | ほぼなし (state は ambient) |
+| 同期 | turn-based、 1 手 = POST + polling | 准リアルタイム (500ms 差分 polling) |
 | 終了 | action の return で `finished: true, winner: ...` | `sharedValues.ended = true` → host.stop |
 | ライフサイクル | setup / action / draw | host.start / host.stop + p5 setup / draw / event |
-| AI | turn-based の `aiMove` | 唯一 の 人間 が ローカル で 動かす (mixed なし) |
+| AI | turn-based の `aiMove` | 唯一の人間がローカルで動かす (mixed なし) |
 | 観戦者 | あり | なし |
 
-## 開発者 が 書く 1 ファイル (最小)
+## 開発者が書く 1 ファイル (最小)
 
 ```js
 import { players, myID, isHost, sharedValues, localValues, notifyResult, host } from '/js/cg2.js';
 
-// host だけ で 1 回 (起案者 の ブラウザ で)。 sharedValues 初期化。
+// host だけで 1 回 (起案者のブラウザで)。 sharedValues 初期化。
 host.start = () => {
   sharedValues.cells = Array(9).fill(null);
-  sharedValues.order = [...players].map(p => p.uid).sort(() => Math.random() - 0.5);  // 先手 後攻 ランダム
+  sharedValues.order = [...players].map(p => p.uid).sort(() => Math.random() - 0.5);  // 先手後攻ランダム
   sharedValues.turnUid = sharedValues.order[0];
   sharedValues.ended = false;
 };
 
-// host だけ で 1 回 (sharedValues.ended = true で 呼ばれる)。 結果 を 1 回 notify。
+// host だけで 1 回 (sharedValues.ended = true で呼ばれる)。結果を 1 回 notify。
 host.stop = () => {
   if (sharedValues.winnerUid) {
     const w = players.find(p => p.uid === sharedValues.winnerUid);
-    notifyResult(`${w.name} の 勝ち`, { winnerUid: w.uid });
+    notifyResult(`${w.name} の勝ち`, { winnerUid: w.uid });
   } else {
     notifyResult('引き分け');
   }
 };
 
-// 全 client で p5 sketch。 framework が hostStart 完了 + 同期 完了 を 待って から new p5(sketch) する。
+// 全 client で p5 sketch。 framework が hostStart 完了 + 同期完了を待ってから new p5(sketch) する。
 export default function sketch(p) {
   p.setup = () => p.createCanvas(300, 300);
   p.draw = () => {
-    // sharedValues / localValues / players / myID を 自由 に 読む
+    // sharedValues / localValues / players / myID を自由に読む
   };
   p.mousePressed = () => {
     if (sharedValues.turnUid !== myID) return;
-    // sharedValues を mutate → 自動 同期
+    // sharedValues を mutate → 自動同期
     sharedValues.cells[clickedCell] = myID;
     if (didWin()) {
       sharedValues.winnerUid = myID;
-      sharedValues.ended = true;     // ← framework が 検知 して host.stop へ
+      sharedValues.ended = true;     // ← framework が検知して host.stop へ
     }
   };
 }
 ```
 
-書く 関数 は **`host.start` + `host.stop` + `sketch` (p5 instance) の 3 つ**。
+書く関数は **`host.start` + `host.stop` + `sketch` (p5 instance) の 3 つ**。
 
-## framework が 提供 する もの (`/js/cg2.js`)
+## framework が提供するもの (`/js/cg2.js`)
 
 | 名前 | 内容 |
 |---|---|
-| `players` | 参加者 配列 `[{uid, name, is_ai}, ...]` (= system 管理) |
-| `myID`    | 自分 の uid (数値)。 名前 等 は `players.find(p => p.uid === myID).name` で 引く |
-| `isHost`  | 自分 が 起案者 か どうか (boolean) |
-| `sharedValues` | 共有 state。 mutate する と auto-sync (deep Proxy)、 ロック なし 最終 書き込み 勝ち |
-| `localValues`  | 個人 state。 sync しない、 揮発 (リロード で 消える) |
-| `notifyResult(text, opts?)` | 結果 通知。 `host.stop` の 中 でのみ 呼ぶ |
-| `host` | `host.start = ...`, `host.stop = ...` を 代入 する 受け皿 |
+| `players` | 参加者配列 `[{uid, name, is_ai}, ...]` (= system 管理) |
+| `myID`    | 自分の uid (数値)。名前等は `players.find(p => p.uid === myID).name` で引く |
+| `isHost`  | 自分が起案者かどうか (boolean) |
+| `sharedValues` | 共有 state。 mutate すると auto-sync (deep Proxy)、ロックなし最終書き込み勝ち |
+| `localValues`  | 個人 state。 sync しない、揮発 (リロードで消える) |
+| `notifyResult(text, opts?)` | 結果通知。 `host.stop` の中でのみ呼ぶ |
+| `host` | `host.start = ...`, `host.stop = ...` を代入する受け皿 |
 
 ## ライフサイクル
 
 ```
-host が ページ を 開く
+host がページを開く
   ↓
-framework が host.start() を 呼ぶ        ← sharedValues 初期化
+framework が host.start() を呼ぶ        ← sharedValues 初期化
   ↓
 framework が server に sharedValues を POST
   ↓
 host で new p5(sketch, container)         ← setup() → draw() ループ
   ↓
-他 の player が ページ を 開く
+他の player がページを開く
   ↓
 framework が server から sharedValues を pull
   ↓
-sharedValues が 揃う まで 「待機中…」 表示
+sharedValues が揃うまで「待機中…」表示
   ↓
 non-host で new p5(sketch, container)     ← setup() → draw() ループ
 
-(プレイ 中: 各 client で sharedValues mutate → 500ms 差分 同期)
+(プレイ中: 各 client で sharedValues mutate → 500ms 差分同期)
 
-sharedValues.ended = true を 立てる
+sharedValues.ended = true を立てる
   ↓
-framework が 検知 → host で host.stop() を 呼ぶ
+framework が検知 → host で host.stop() を呼ぶ
   ↓
-host.stop の 中 で notifyResult を 1 回 呼ぶ
+host.stop の中で notifyResult を 1 回呼ぶ
   ↓
-framework が 場代 配分 / 通知 / 履歴 記録 を 実行
+framework が場代配分 / 通知 / 履歴記録を実行
 ```
 
-## host の 定義
+## host の定義
 
-- **host = 起案者 で 確定** (= ゲーム を 作った 人)
-- host が 途中 で 抜けたら **ゲーム 終了** (= host.stop で 強制 終了)
+- **host = 起案者で確定** (= ゲームを作った人)
+- host が途中で抜けたら **ゲーム終了** (= host.stop で強制終了)
 
-## CPU 戦 の 扱い
+## CPU 戦の扱い
 
-- 「Player x 2 + CPU x 2」 みたい な ミックス は **不可**
-- CPU が いる 場合 は **人間 は 1 人** だけ (= host)
-- AI は **唯一 の 人間 = host の ブラウザ** で ローカル に 計算 する
+- 「Player x 2 + CPU x 2」みたいなミックスは **不可**
+- CPU がいる場合は **人間は 1 人** だけ (= host)
+- AI は **唯一の人間 = host のブラウザ** でローカルに計算する
 - 例 (マルバツ):
   ```js
-  // sketch の draw 内 で:
+  // sketch の draw 内で:
   const cur = players.find(p => p.uid === sharedValues.turnUid);
   if (cur && cur.is_ai && isHost && !localValues.aiThinking) {
     localValues.aiThinking = true;
@@ -129,9 +129,9 @@ framework が 場代 配分 / 通知 / 履歴 記録 を 実行
   }
   ```
 
-## 順番 の ランダム 化
+## 順番のランダム化
 
-`host.start` で `sharedValues.order` に シャッフル した uid 配列 を 入れる。 これ で 「先手 が 起案者 と は 限ら ない」 が 全 ゲーム で 統一 的 に 実現:
+`host.start` で `sharedValues.order` にシャッフルした uid 配列を入れる。これで「先手が起案者とは限らない」が全ゲームで統一的に実現:
 
 ```js
 host.start = () => {
@@ -146,59 +146,59 @@ const nextTurn = () => {
 };
 ```
 
-## sharedValues の 同期 方式
+## sharedValues の同期方式
 
 - **polling 500ms + 差分**
-- POST `/api/cg2/games/{id}/shared` body: `{changes: {key: value, ...}}` (差分 のみ)
+- POST `/api/cg2/games/{id}/shared` body: `{changes: {key: value, ...}}` (差分のみ)
 - GET `/api/cg2/games/{id}/shared?since={seq}` → 200 (変更) / 304 (なし)
-- **ロック なし**、 最終 書き込み 勝ち
-- ゲーム ロジック 側 で 「同じ key を 2 人 が 同時 に 書か ない」 設計 (= セル 別 key で 分ける 等) で 回避
+- **ロックなし**、最終書き込み勝ち
+- ゲームロジック側で「同じ key を 2 人が同時に書かない」設計 (= セル別 key で分ける等) で回避
 
-## 「結果 通知」 = `notifyResult(text, opts?)`
+## 「結果通知」 = `notifyResult(text, opts?)`
 
 ```js
 notifyResult('時間切れ - 引き分け');
-notifyResult(`${winner.name} の 勝ち`, { winnerUid: 42 });
-notifyResult('全員 完走', { ranking: [{uid: 42, rank: 1}, ...] });
+notifyResult(`${winner.name} の勝ち`, { winnerUid: 42 });
+notifyResult('全員完走', { ranking: [{uid: 42, rank: 1}, ...] });
 ```
 
-- `text` (必須): Slack / 通知 / 履歴 で 表示 する 文字列
-- `opts.winnerUid` (任意): 集計 用 単一 勝者
-- `opts.ranking` (任意): 集計 用 順位 表
+- `text` (必須): Slack / 通知 / 履歴で表示する文字列
+- `opts.winnerUid` (任意): 集計用単一勝者
+- `opts.ranking` (任意): 集計用順位表
 
 ## サンプル (docs/cg2_sample_*.js)
 
-| ファイル | ゲーム | プレイヤー | 確認 ポイント |
+| ファイル | ゲーム | プレイヤー | 確認ポイント |
 |---|---|---|---|
-| [cg2_sample_tictactoe.js](cg2_sample_tictactoe.js) | マルバツ | 2 人 (CPU 戦 対応) | order shuffle、 myID、 isHost で AI 駆動 |
-| [cg2_sample_nim.js](cg2_sample_nim.js) | ニム (misère) | 2 人 (CPU 戦 対応) | 必勝 戦略 AI、 ボタン UI |
-| [cg2_sample_lights_out.js](cg2_sample_lights_out.js) | ライツアウト | 1 人 (ソロ) | order / turnUid 不要、 sharedValues は 「自分専用 だが 持続」 |
-| [cg2_sample_sugoroku.js](cg2_sample_sugoroku.js) | すごろく | 4 人 (CPU 戦 対応) | 着席 順 shuffle、 トラック 描画 |
+| [cg2_sample_tictactoe.js](cg2_sample_tictactoe.js) | マルバツ | 2 人 (CPU 戦対応) | order shuffle、 myID、 isHost で AI 駆動 |
+| [cg2_sample_nim.js](cg2_sample_nim.js) | ニム (misère) | 2 人 (CPU 戦対応) | 必勝戦略 AI、ボタン UI |
+| [cg2_sample_lights_out.js](cg2_sample_lights_out.js) | ライツアウト | 1 人 (ソロ) | order / turnUid 不要、 sharedValues は「自分専用だが持続」 |
+| [cg2_sample_sugoroku.js](cg2_sample_sugoroku.js) | すごろく | 4 人 (CPU 戦対応) | 着席順 shuffle、トラック描画 |
 
-## 既存 4 ゲーム の 移植
+## 既存 4 ゲームの移植
 
-実装 着手 時 に v1 の 既存 サンプル (マルバツ / ニム / ライツアウト / すごろく) を v2 で **差し替え**。 v1 cg_ui は しばらく 並走 → 全部 v2 移行 で 撤去。
+実装着手時に v1 の既存サンプル (マルバツ / ニム / ライツアウト / すごろく) を v2 で **差し替え**。 v1 cg_ui はしばらく並走 → 全部 v2 移行で撤去。
 
-## 設定 (= JS の 外 に 持つ もの)
+## 設定 (= JS の外に持つもの)
 
-JS で **書か ない** もの = `custom_game_kinds` 行 で 設定 する:
-- 人数 上限 / 下限
-- 募集 方法 (公開 / 招待 / 部屋番号 等)
-- 場代 金額
-- 場代 配分 比率 (提供者 / SYSTEM)
+JS で **書かない** もの = `custom_game_kinds` 行で設定する:
+- 人数上限 / 下限
+- 募集方法 (公開 / 招待 / 部屋番号等)
+- 場代金額
+- 場代配分比率 (提供者 / SYSTEM)
 
-開発者 は 「参加者 / 共有 情報 / 結果」 の 3 点 だけ JS で 書く。 募集 や 課金 は framework 側 に 寄せる。
+開発者は「参加者 / 共有情報 / 結果」の 3 点だけ JS で書く。募集や課金は framework 側に寄せる。
 
-## なぜ こう なった か (経緯 メモ)
+## なぜこうなったか (経緯メモ)
 
-- v1 cg_ui の `sketch({setup, draw, action, players})` で 引数 が 多い / 複雑 という 不満
-- 「他 の ゲーム 基盤 (boardgame.io / Colyseus 等) は どう してる?」 という 議論 から
-- → 関数 を 4 必須 + 2 optional → さらに 「state は ambient で 良い」 → 引数 を ほぼ 消す
-- → reduce / render が 浮く 名前 → p5 そのまま 使えば 良い (= setup / draw)
-- → host だけ で 違う のは 初期化 と 終了 だけ → host.start / host.stop の 2 つ
-- → state も global 的 に 扱える から 引数 不要
+- v1 cg_ui の `sketch({setup, draw, action, players})` で引数が多い / 複雑という不満
+- 「他のゲーム基盤 (boardgame.io / Colyseus 等) はどうしてる?」という議論から
+- → 関数を 4 必須 + 2 optional → さらに「state は ambient で良い」 → 引数をほぼ消す
+- → reduce / render が浮く名前 → p5 そのまま使えば良い (= setup / draw)
+- → host だけで違うのは初期化と終了だけ → host.start / host.stop の 2 つ
+- → state も global 的に扱えるから引数不要
 
-最終 確定 API は 「host だけ 2 + 全員 で p5 sketch」 の シンプル な 形 に 落ち着いた。
+最終確定 API は「host だけ 2 + 全員で p5 sketch」のシンプルな形に落ち着いた。
 
 ## API endpoint 一覧 (v667 実装)
 
@@ -209,19 +209,19 @@ JS で **書か ない** もの = `custom_game_kinds` 行 で 設定 する:
 | GET  | `/api/cg2/kinds/{slug}/script.js`        | JS module 配信 (認証不要、 dynamic import 用) |
 | PATCH| `/api/cg2/kinds/{slug}`                  | 更新 (登録者 / admin) |
 | DELETE | `/api/cg2/kinds/{slug}`                | 削除 (登録者 / admin) |
-| GET  | `/api/cg2/kinds/{slug}/games`            | その kind の 卓一覧 |
-| POST | `/api/cg2/kinds/{slug}/games`            | 卓 起案 |
-| GET  | `/api/cg2/games/{id}`                    | 卓 詳細 |
+| GET  | `/api/cg2/kinds/{slug}/games`            | その kind の卓一覧 |
+| POST | `/api/cg2/kinds/{slug}/games`            | 卓起案 |
+| GET  | `/api/cg2/games/{id}`                    | 卓詳細 |
 | POST | `/api/cg2/games/{id}/join`               | 参加 |
-| POST | `/api/cg2/games/{id}/add-ai`             | AI プレイヤー 追加 |
-| POST | `/api/cg2/games/{id}/start`              | 開始 (= host.start() を キック する 合図) |
-| POST | `/api/cg2/games/{id}/cancel`             | ロビー キャンセル |
-| POST | `/api/cg2/games/{id}/finalize`           | 終了 通知 (`{winner_user_id?, notify_text}`) |
-| GET  | `/api/cg2/games/{id}/shared?since={seq}` | 共有 state 差分 取得 (500ms polling) |
-| POST | `/api/cg2/games/{id}/shared`             | 共有 state 差分 更新 (`{changes: {...}}`) |
+| POST | `/api/cg2/games/{id}/add-ai`             | AI プレイヤー追加 |
+| POST | `/api/cg2/games/{id}/start`              | 開始 (= host.start() をキックする合図) |
+| POST | `/api/cg2/games/{id}/cancel`             | ロビーキャンセル |
+| POST | `/api/cg2/games/{id}/finalize`           | 終了通知 (`{winner_user_id?, notify_text}`) |
+| GET  | `/api/cg2/games/{id}/shared?since={seq}` | 共有 state 差分取得 (500ms polling) |
+| POST | `/api/cg2/games/{id}/shared`             | 共有 state 差分更新 (`{changes: {...}}`) |
 
 ## 関連
 
-- v1 framework: [CUSTOM_GAMES.md](CUSTOM_GAMES.md) (現行 動作 中、 turn-based)
+- v1 framework: [CUSTOM_GAMES.md](CUSTOM_GAMES.md) (現行動作中、 turn-based)
 - v1 サンプル: `examples/custom-games/`
 - v2 サンプル: `docs/cg2_sample_*.js`

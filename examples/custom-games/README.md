@@ -1,86 +1,86 @@
-# 自作ゲーム サンプル
+# 自作ゲームサンプル
 
-LabPay の **自作ゲーム framework** (v619 〜) で 使える サンプル。 ここの `.js` を
-ローカルに 落として、 自分の LabPay の `設定 → 🎮 自作ゲーム 管理` (= `/#/my-games`) から
-そのまま アップロード すれば 動きます。 PHP / SQL の 変更は 不要、 サーバ への ssh も
-必要なし (JS は DB に 格納されて `/api/custom-games/kinds/:kind/script.js` で 配信)。
+LabPay の **自作ゲーム framework** (v619 〜) で使えるサンプル。ここの `.js` を
+ローカルに落として、自分の LabPay の `設定 → 🎮 自作ゲーム管理` (= `/#/my-games`) から
+そのままアップロードすれば動きます。 PHP / SQL の変更は不要、サーバへの ssh も
+必要なし (JS は DB に格納されて `/api/custom-games/kinds/:kind/script.js` で配信)。
 
-詳細な 仕組み は [docs/CUSTOM_GAMES.md](../../docs/CUSTOM_GAMES.md)。
+詳細な仕組みは [docs/CUSTOM_GAMES.md](../../docs/CUSTOM_GAMES.md)。
 
-## サンプル一覧 — プレイヤー数 別
+## サンプル一覧 — プレイヤー数別
 
-`sketch({ players: 1 | 2 | 4, ... })` で 1 人 / 2 人 / 4 人 用 を 切替。
-登録時の フォーム で 「プレイヤー数」 を 揃えて 選択。
+`sketch({ players: 1 | 2 | 4, ... })` で 1 人 / 2 人 / 4 人用を切替。
+登録時のフォームで「プレイヤー数」を揃えて選択。
 
 ### 1 人用 (ソロ)
 | ファイル | 内容 | 推奨 kind | 行数 |
 |---|---|---|---|
-| [lights_out.js](lights_out.js) | 🟦 ライツアウト 3×3。 タップ で マス + 上下左右 が 反転。 全部 OFF で クリア。 起案 直後 から playing 開始、 join 不要 | `lights-out` | ~55 |
+| [lights_out.js](lights_out.js) | 🟦 ライツアウト 3×3。タップでマス + 上下左右が反転。全部 OFF でクリア。起案直後から playing 開始、 join 不要 | `lights-out` | ~55 |
 
 ### 2 人用 (対戦)
 | ファイル | 内容 | 推奨 kind | 行数 |
 |---|---|---|---|
-| [nim.js](nim.js) | 🪙 ニム (石取り、 misère)。 盤面ナシ、 21 個から 1〜3 個取り、 最後を取った人が 負け。 **2 人用の 最小例** | `nim` | ~55 |
-| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、 縦/横/斜め に 4 つ並べたら 勝ち | `connect-four` | ~75 |
-| (built-in) ⭕❌ [tictactoe.js](../../public/js/views/tictactoe.js) | 3×3 マルバツ。 `/#/tictactoe` で 動作 | `tictactoe` | ~55 |
+| [nim.js](nim.js) | 🪙 ニム (石取り、 misère)。盤面ナシ、 21 個から 1〜3 個取り、最後を取った人が負け。 **2 人用の最小例** | `nim` | ~55 |
+| [connect_four.js](connect_four.js) | 🟦 四目並べ。 6×7 盤、縦/横/斜めに 4 つ並べたら勝ち | `connect-four` | ~75 |
+| (built-in) ⭕❌ [tictactoe.js](../../public/js/views/tictactoe.js) | 3×3 マルバツ。 `/#/tictactoe` で動作 | `tictactoe` | ~55 |
 
 ### 4 人用 (順番回し)
 | ファイル | 内容 | 推奨 kind | 行数 |
 |---|---|---|---|
-| [sugoroku.js](sugoroku.js) | 🎲 すごろく。 順番に サイコロ を 振り、 30 マス 目 に 一番乗り で 勝ち。 4 人 揃ったら 自動で playing | `sugoroku` | ~55 |
+| [sugoroku.js](sugoroku.js) | 🎲 すごろく。順番にサイコロを振り、 30 マス目に一番乗りで勝ち。 4 人揃ったら自動で playing | `sugoroku` | ~55 |
 
-## 登録の 手順 (例: 四目並べ)
+## 登録の手順 (例: 四目並べ)
 
-1. このリポジトリの [connect_four.js](connect_four.js) を ローカルに 保存
-2. LabPay → 設定 → 🎮 自作ゲーム 管理 → 新規 kind 登録 で 入力:
-   - **kind**: `connect-four` (← この slug は コード 中の `const KIND = 'connect-four'` と 一致させる)
+1. このリポジトリの [connect_four.js](connect_four.js) をローカルに保存
+2. LabPay → 設定 → 🎮 自作ゲーム管理 → 新規 kind 登録で入力:
+   - **kind**: `connect-four` (← この slug はコード中の `const KIND = 'connect-four'` と一致させる)
    - **表示名**: 🟦 四目並べ
-   - **説明**: 6×7 盤、 縦/横/斜め に 4 つ並べたら 勝ち
+   - **説明**: 6×7 盤、縦/横/斜めに 4 つ並べたら勝ち
    - **icon**: 🟦
    - **プレイフィー**: 1 (pt)
    - **JS ファイル**: 保存した `connect_four.js` を選択
-3. 登録ボタン → `/#/cg/connect-four` で 一覧、 `/#/cg/connect-four/:id` で 詳細
-4. 他の人を 誘って 対戦 (場代 90% が 提供者 = あなた に 入る)
+3. 登録ボタン → `/#/cg/connect-four` で一覧、 `/#/cg/connect-four/:id` で詳細
+4. 他の人を誘って対戦 (場代 90% が提供者 = あなたに入る)
 
-## 新ゲームを 自分で 書く
+## 新ゲームを自分で書く
 
-LabPay → 設定 → 🎮 自作ゲーム 管理 (`/#/my-games`) で:
-1. フォーム上部 で kind / 表示名 / icon / フィー を 入力
-2. 「テンプレート 読み込み」 ドロップダウン から **🪙 ニム** や **⭕❌ マルバツ** を 選ぶ → textarea に 既存サンプル の JS が 入る
-3. その場で 編集 (盤面 や applyMove を 自分の ゲーム に 書き換える)
-4. 「登録」 ボタン → DB に 入って 即動作
+LabPay → 設定 → 🎮 自作ゲーム管理 (`/#/my-games`) で:
+1. フォーム上部で kind / 表示名 / icon / フィーを入力
+2. 「テンプレート読み込み」ドロップダウンから **🪙 ニム** や **⭕❌ マルバツ** を選ぶ → textarea に既存サンプルの JS が入る
+3. その場で編集 (盤面や applyMove を自分のゲームに書き換える)
+4. 「登録」ボタン → DB に入って即動作
 
-ローカル に エディタを 開かなくても、 ファイルを アップロード しなくても OK。
-ファイル添付 や 「空テンプレート」 も 同じ場所 から 選べます。
+ローカルにエディタを開かなくても、ファイルをアップロードしなくても OK。
+ファイル添付や「空テンプレート」も同じ場所から選べます。
 
-### 押さえる ポイント — 3 関数 だけ で 足ります
+### 押さえるポイント — 3 関数だけで足ります
 
 ```js
 import { sketch } from '/js/cg_ui.js';
 
 export const { renderList, renderDetail } = sketch({
-  kind:    'mygame',                  // 登録時の kind と 同じ
+  kind:    'mygame',                  // 登録時の kind と同じ
   title:   '🎲 マイゲーム',
   hint:    'ルールの 1 行説明',
   players: 2,                          // 1 (ソロ) / 2 / 4
 
-  // ① 開始時 に 1 回だけ → 初期 state
+  // ① 開始時に 1 回だけ → 初期 state
   setup() { return { /* 自由 */ }; },
 
-  // ② 画面 を 描く → HTML を return
-  //    自分の番で <button data-move="X"> を 入れれば、 タップで ③ が 呼ばれる
+  // ② 画面を描く → HTML を return
+  //    自分の番で <button data-move="X"> を入れれば、タップで ③ が呼ばれる
   draw(state, ctx) { return '<div>...</div>'; },
 
-  // ③ 自分が ボタン を 押した時 → 新しい state
-  //    winner: 'me' / 'opponent' / null (引分) / uid。 未終了なら 省略 OK。
-  //    手番は LabPay が 自動で 相手に 移します。
+  // ③ 自分がボタンを押した時 → 新しい state
+  //    winner: 'me' / 'opponent' / null (引分) / uid。未終了なら省略 OK。
+  //    手番は LabPay が自動で相手に移します。
   action(state, me, move) {
     return { state: /* 新state */, finished: true, winner: 'me' };
   },
 });
 ```
 
-### 呼び出し の 流れ
+### 呼び出しの流れ
 
 ```
 [起案者が ＋新規卓]
@@ -90,15 +90,15 @@ export const { renderList, renderDetail } = sketch({
                          [自分の画面] (2.5 秒ごと polling)    [相手の画面]
                               │                                    │
                               ▼ draw(state, ctx)                   ▼ draw(state, ctx)
-                              │  画面を 描く
-                              ▼ ボタン タップ
+                              │  画面を描く
+                              ▼ ボタンタップ
                        action(state, me, move)
                               │
                               ▼ サーバに送信 → 新 state
-                                            ↑___________________相手側にも 反映
+                                            ↑___________________相手側にも反映
 ```
 
-### ctx (draw の 第2引数) に 渡るもの
+### ctx (draw の第2引数) に渡るもの
 
 | プロパティ | 内容 |
 |---|---|
@@ -113,9 +113,9 @@ export const { renderList, renderDetail } = sketch({
 
 ### 共通 UI ヘルパー: `/js/cg_ui.js`
 
-v626 から、 ロビー / 待ち / 参加 / 終了 の カードや 一覧 一行 は LabPay 側で 用意した
-ヘルパー が 引き受けます。 v628 では さらに `defineGame()` で 全部 ラップ できる
-ように なって、 サンプルが **~45-75 行** に 収まります。
+v626 から、ロビー / 待ち / 参加 / 終了のカードや一覧一行は LabPay 側で用意した
+ヘルパーが引き受けます。 v628 ではさらに `defineGame()` で全部ラップできる
+ようになって、サンプルが **~45-75 行** に収まります。
 
 ```js
 import {
@@ -123,19 +123,19 @@ import {
   renderLobby,       // ＋ 新規卓 + 卓一覧
   startGame,         // 起案 + 詳細へ navigate
   fetchDetail,       // 詳細 GET + エラー時の戻りリンク
-  statusCardHtml,    // waiting / playing / finished の カード HTML
-  wireStatusCard,    // 上の join / cancel ボタン 配線
-  startPolling,      // 詳細ページ の 自動 polling (DOM が 消えたら 自動停止)
-  submitMove,        // applyMove の 結果を POST
+  statusCardHtml,    // waiting / playing / finished のカード HTML
+  wireStatusCard,    // 上の join / cancel ボタン配線
+  startPolling,      // 詳細ページの自動 polling (DOM が消えたら自動停止)
+  submitMove,        // applyMove の結果を POST
 } from '/js/cg_ui.js';
 ```
 
-つまり kind 側 は
+つまり kind 側は
 
 ```js
 const KIND = 'mygame';
 function initialState(uid)         { /* 盤面 + uid */ }
-function applyMove(s, userId, move) { /* 純 JS で 次の state */ }
+function applyMove(s, userId, move) { /* 純 JS で次の state */ }
 
 export function renderList() {
   return renderLobby({ kind: KIND, title: '🎲 マイゲーム', onNew: ... });
@@ -151,16 +151,16 @@ async function paint(gid) {
     ${statusCardHtml(d, Number(state.me?.id))}
   `;
   wireStatusCard({ kind: KIND, gid, d, meId, onAfter: () => paint(gid) });
-  // 盤面の クリックで applyMove → submitMove
+  // 盤面のクリックで applyMove → submitMove
 }
 ```
 
-これだけ。 共通カードの 見た目を 揃えたければ そのまま、 凝りたければ `statusCardHtml` を 使わずに 自分で 書いても OK。
+これだけ。共通カードの見た目を揃えたければそのまま、凝りたければ `statusCardHtml` を使わずに自分で書いても OK。
 
-## import パス の 注意
+## import パスの注意
 
-ユーザ アップロード JS は `/api/custom-games/kinds/:kind/script.js` から 配信されます。
-LabPay の helper を 取り込む 時は **絶対パス** を 使ってください (相対パスは 404 になります):
+ユーザアップロード JS は `/api/custom-games/kinds/:kind/script.js` から配信されます。
+LabPay の helper を取り込む時は **絶対パス** を使ってください (相対パスは 404 になります):
 
 ```js
 // ✅
