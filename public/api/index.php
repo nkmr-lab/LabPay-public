@@ -98,6 +98,7 @@ $routes = [
     'meetups'        => 'route_meetups',
     'places'         => 'route_places',
     'refs'           => 'route_refs',        // v925 文献管理
+    'kanban'         => 'route_kanban',      // v934 かんばん ボード
     'posts'          => 'route_posts',
     'todos'          => 'route_todos',
     'sounds'         => 'route_sounds',

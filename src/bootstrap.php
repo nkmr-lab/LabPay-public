@@ -561,6 +561,7 @@ require_once __DIR__ . '/handlers/notices.php';
 require_once __DIR__ . '/handlers/meetups.php';
 require_once __DIR__ . '/handlers/places.php';
 require_once __DIR__ . '/handlers/refs.php';  // v925 文献管理 (Zotero-like)
+require_once __DIR__ . '/handlers/kanban.php'; // v934 かんばん ボード (Trello-like)
 require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';

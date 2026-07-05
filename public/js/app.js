@@ -495,6 +495,9 @@ route('/refs/bookmarklet', lazy(() => import('./views/refs.js'), 'renderRefsBook
 // v930 参考文献 リスト 生成 ページ
 route('/refs/bibliography', lazy(() => import('./views/refs.js'), 'renderRefsBibliography'));
 route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetail'));
+// v934 かんばん ボード (Trello-like、 ラボ 共有)
+route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
+route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 // v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
 route('/sns/map',         lazy(() => import('./views/posts_map.js'), 'renderPostsMap'));
