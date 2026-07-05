@@ -74,6 +74,15 @@ export async function renderDeepResearch() {
   await loadHistory();
   await loadSharedList('');
   document.getElementById('dr-go').addEventListener('click', go);
+  // v926 refs 詳細 の 「🔎 関連 論文 を 探す」 から の prefill を 拾って textarea に セット。
+  try {
+    const prefill = sessionStorage.getItem('labpay.dr.prefill');
+    if (prefill) {
+      const el = document.getElementById('dr-query');
+      if (el) { el.value = prefill; el.focus(); }
+      sessionStorage.removeItem('labpay.dr.prefill');
+    }
+  } catch (_) {}
   document.getElementById('dr-shared-go').addEventListener('click', () => {
     viewState.lastQuery = (document.getElementById('dr-shared-q').value || '').trim();
     loadSharedList(viewState.lastQuery);

@@ -443,20 +443,76 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
     $statusCounts = ['unread' => 0, 'reading' => 0, 'read' => 0];
     foreach ($stS as $row) $statusCounts[$row['status']] = (int)$row['n'];
 
-    // 相互 リンク: 同 PDF SHA の paper_translate / paper_review が あれば 出す
+    // v926 相互 リンク 拡張: 同 PDF SHA の paper_translate / paper_full / paper_review を
+    //   ラボ全員 の 分 まで 拾う (共有 済 or 自分 の)。 status=done は 「開く」、 processing は 「進行中」。
+    //   これ で 「A さん が 既に 要約 済 の 論文」 が refs 詳細 に 出て 二重処理 防止。
     $links = [];
     if (!empty($r['pdf_sha256'])) {
-        $stPT = $pdo->prepare("SELECT id, share_token FROM paper_translates
-                                WHERE pdf_sha256 = ? AND user_id = ? AND status='done' LIMIT 1");
-        $stPT->execute([$r['pdf_sha256'], $uid]);
-        if ($pt = $stPT->fetch(PDO::FETCH_ASSOC)) {
-            $links[] = ['kind' => 'paper_translate', 'label' => '要約 (自分)', 'url' => '#/paper-summary/r/' . $pt['share_token']];
+        // paper_translate (要約)
+        $stPT = $pdo->prepare("SELECT pt.id, pt.share_token, pt.status, pt.user_id, pt.is_shared, pt.model,
+                                       u.display_name AS runner_name, u.avatar_url AS runner_avatar
+                                  FROM paper_translates pt LEFT JOIN users u ON u.id = pt.user_id
+                                 WHERE pt.pdf_sha256 = ?
+                                   AND (pt.user_id = ? OR pt.is_shared = 1)
+                                   AND pt.status IN ('done','processing','pending')
+                              ORDER BY (pt.user_id = ?) DESC, pt.id DESC LIMIT 5");
+        $stPT->execute([$r['pdf_sha256'], $uid, $uid]);
+        foreach ($stPT->fetchAll(PDO::FETCH_ASSOC) as $pt) {
+            $links[] = [
+                'kind'         => 'paper_translate',
+                'label'        => '要約',
+                'url'          => '#/paper-summary/r/' . $pt['share_token'],
+                'status'       => $pt['status'],
+                'model'        => $pt['model'],
+                'is_mine'      => ((int)$pt['user_id'] === $uid),
+                'runner_name'  => $pt['runner_name'],
+                'runner_avatar'=> $pt['runner_avatar'],
+            ];
         }
-        $stPF = $pdo->prepare("SELECT id, share_token FROM paper_full_translations
-                                WHERE pdf_sha256 = ? AND user_id = ? AND status='done' LIMIT 1");
-        $stPF->execute([$r['pdf_sha256'], $uid]);
-        if ($pf = $stPF->fetch(PDO::FETCH_ASSOC)) {
-            $links[] = ['kind' => 'paper_full_translate', 'label' => '全訳 (自分)', 'url' => '#/paper-translate-full/r/' . $pf['share_token']];
+        // paper_full_translate (全訳)
+        $stPF = $pdo->prepare("SELECT pft.id, pft.share_token, pft.status, pft.user_id, pft.is_shared,
+                                       pft.model, pft.direction,
+                                       u.display_name AS runner_name, u.avatar_url AS runner_avatar
+                                  FROM paper_full_translations pft LEFT JOIN users u ON u.id = pft.user_id
+                                 WHERE pft.pdf_sha256 = ?
+                                   AND (pft.user_id = ? OR pft.is_shared = 1)
+                                   AND pft.status IN ('done','processing','pending')
+                              ORDER BY (pft.user_id = ?) DESC, pft.id DESC LIMIT 5");
+        $stPF->execute([$r['pdf_sha256'], $uid, $uid]);
+        foreach ($stPF->fetchAll(PDO::FETCH_ASSOC) as $pf) {
+            $links[] = [
+                'kind'         => 'paper_full_translate',
+                'label'        => '全訳 (' . ($pf['direction'] === 'ja2en' ? '日→英' : '英→日') . ')',
+                'url'          => '#/paper-translate-full/r/' . $pf['share_token'],
+                'status'       => $pf['status'],
+                'model'        => $pf['model'],
+                'is_mine'      => ((int)$pf['user_id'] === $uid),
+                'runner_name'  => $pf['runner_name'],
+                'runner_avatar'=> $pf['runner_avatar'],
+            ];
+        }
+        // paper_review (査読): pdf_path が refs.pdf_path と 一致 で 追う。 paper_reviews は
+        //   pdf_sha256 列 を 持って ない ので パス 一致 で 拾う (どちら も /uploads/refs/... 参照)。
+        if (!empty($r['pdf_path'])) {
+            $stPR = $pdo->prepare("SELECT pr.id, pr.share_token, pr.status, pr.user_id,
+                                           pr.target_venue,
+                                           u.display_name AS runner_name, u.avatar_url AS runner_avatar
+                                      FROM paper_reviews pr LEFT JOIN users u ON u.id = pr.user_id
+                                     WHERE pr.pdf_path = ? AND pr.user_id = ?
+                                       AND pr.status IN ('done','processing','pending')
+                                  ORDER BY pr.id DESC LIMIT 3");
+            $stPR->execute([$r['pdf_path'], $uid]);
+            foreach ($stPR->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+                $links[] = [
+                    'kind'         => 'paper_review',
+                    'label'        => '査読 (' . $pr['target_venue'] . ')',
+                    'url'          => '#/paper-review/r/' . $pr['share_token'],
+                    'status'       => $pr['status'],
+                    'is_mine'      => true,
+                    'runner_name'  => $pr['runner_name'],
+                    'runner_avatar'=> $pr['runner_avatar'],
+                ];
+            }
         }
     }
 

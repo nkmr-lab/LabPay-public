@@ -426,13 +426,49 @@ function paintDetail(id, d) {
     ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:6px">💬 ラボメン の note</div>${othersHtml}</div>`
     : '';
 
-  // 相互 リンク
-  const linksBlock = (d.links || []).length
-    ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:6px">🔗 同 PDF の 関連 (自分 の 過去 作業)</div>
-        <div class="row" style="gap:6px; flex-wrap:wrap">${(d.links).map(l => `<a class="btn" href="${escapeHtml(l.url)}" style="font-size:12px; padding:3px 10px">${escapeHtml(l.label)}</a>`).join('')}</div></div>`
-    : '';
+  // v926 相互 リンク: kind 別 に 「済」 「進行中」 を 分けて 表示。 ラボメン の 分も 拾う。
+  const linkKinds = { paper_translate: [], paper_full_translate: [], paper_review: [] };
+  for (const l of (d.links || [])) {
+    if (linkKinds[l.kind]) linkKinds[l.kind].push(l);
+  }
+  const linkChip = l => {
+    const status = l.status || 'done';
+    const bg = status === 'done' ? '#dcfce7' : status === 'processing' ? '#fef3c7' : '#e0e7ff';
+    const col = status === 'done' ? '#166534' : status === 'processing' ? '#78350f' : '#3730a3';
+    const stLbl = status === 'done' ? '済' : status === 'processing' ? '進行中' : '待機';
+    const runner = l.is_mine ? '' : ` <span style="opacity:0.7">by ${escapeHtml(l.runner_name || '?')}</span>`;
+    return `<a class="btn" href="${escapeHtml(l.url)}" style="font-size:12px; padding:3px 10px; background:${bg}; color:${col}; border-color:${col}">
+      ${escapeHtml(l.label)} (${stLbl})${runner}
+    </a>`;
+  };
 
-  document.getElementById('rf-d-body').innerHTML = abstractBlock + myBlock + othersBlock + linksBlock;
+  // v926 LabPay AI 連携 カード: refs に PDF が あれば 4 種類 の 処理 を キック 可能。
+  const hasPdf = !!d.pdf_path;
+  const aiCard = hasPdf ? `
+    <div class="card" style="background:linear-gradient(135deg, #ede9fe, #ddd6fe); border:2px solid #a78bfa; border-radius:10px">
+      <div class="row center" style="gap:6px; margin-bottom:8px; flex-wrap:wrap">
+        <div class="bold" style="font-size:14px; color:#5b21b6">🤖 この 論文 を LabPay AI に かける</div>
+      </div>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="rf-ai-summary"  class="btn primary" style="font-size:12px; padding:4px 10px">📑 要約する</button>
+        <button id="rf-ai-fulltrans" class="btn primary" style="font-size:12px; padding:4px 10px">📑 全訳する</button>
+        <button id="rf-ai-review"   class="btn primary" style="font-size:12px; padding:4px 10px">📄 査読する</button>
+        <button id="rf-ai-dr"       class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連 論文 を 探す</button>
+      </div>
+      ${linkKinds.paper_translate.length ? `<div style="margin-top:8px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">要約</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_translate.map(linkChip).join('')}</div></div>` : ''}
+      ${linkKinds.paper_full_translate.length ? `<div style="margin-top:6px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">全訳</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_full_translate.map(linkChip).join('')}</div></div>` : ''}
+      ${linkKinds.paper_review.length ? `<div style="margin-top:6px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">査読</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_review.map(linkChip).join('')}</div></div>` : ''}
+    </div>` : (
+      // PDF が 無い とき: Deep Research だけ できる (query base で 動く の で)
+      `<div class="card" style="background:#f3f4f6; border:1px dashed #9ca3af">
+        <div class="hint-sm" style="font-size:12px">📎 PDF を 添付 する と 要約 / 全訳 / 査読 が 実行 できます。 関連 論文 検索 は PDF なし でも 可 ↓</div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button id="rf-ai-dr" class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連 論文 を 探す (Deep Research)</button>
+        </div>
+      </div>`
+    );
+
+  document.getElementById('rf-d-body').innerHTML = abstractBlock + aiCard + myBlock + othersBlock;
 
   // ── ハンドラ ──
   document.getElementById('rf-bibtex-btn')?.addEventListener('click', async () => {
@@ -480,5 +516,81 @@ function paintDetail(id, d) {
       await patch('/api/refs/' + id + '/note', { note });
       toast('note 保存');
     } catch (e) { toast('失敗: ' + e.message); }
+  });
+
+  // v926 LabPay AI 連携 ハンドラ。 refs.pdf_path から blob を fetch して 既存 の
+  //   /api/ai/paper_translate / paper_full_translate / paper_review に POST する。
+  //   結果 の share_token は 次回 refs 詳細 で pdf_sha256 一致 で 自動 表示 される。
+  const fetchPdfBlob = async () => {
+    if (!d.pdf_path) throw new Error('PDF が 添付 されて いません');
+    const resp = await fetch(d.pdf_path, { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error('PDF 取得 失敗 HTTP ' + resp.status);
+    return await resp.blob();
+  };
+  const pdfName = () => {
+    const t = (d.title || 'paper').replace(/[^\w\-一-龯ぁ-んァ-ン]/g, '_').slice(0, 80);
+    return t + '.pdf';
+  };
+  const runAiPost = async (endpoint, extraFields = {}) => {
+    const btn = document.getElementById(endpoint === '/api/ai/paper_translate' ? 'rf-ai-summary'
+              : endpoint === '/api/ai/paper_full_translate' ? 'rf-ai-fulltrans' : 'rf-ai-review');
+    const oldTxt = btn.textContent;
+    btn.disabled = true; btn.textContent = '⏳ 送信中…';
+    try {
+      const blob = await fetchPdfBlob();
+      const fd = new FormData();
+      fd.append('file', new File([blob], pdfName(), { type: 'application/pdf' }));
+      for (const [k, v] of Object.entries(extraFields)) fd.append(k, v);
+      const resp = await fetch(endpoint, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
+      const url = endpoint.includes('paper_full') ? '#/paper-translate-full/r/' + j.share_token
+                : endpoint.includes('paper_review') ? '#/paper-review/r/' + j.share_token
+                : '#/paper-summary/r/' + j.share_token;
+      toast('開始! 完了 通知 が 届きます');
+      window.open(url, '_blank');
+      // refs 詳細 を リフレッシュ (「進行中」 が 出る)
+      renderRefsDetail({ params: { id } });
+    } catch (e) {
+      toast('失敗: ' + e.message);
+      btn.disabled = false; btn.textContent = oldTxt;
+    }
+  };
+
+  document.getElementById('rf-ai-summary')?.addEventListener('click', async () => {
+    if (!confirm('要約 を 開始 します。 モデル は gpt-5 (共有 で 25pt / 非共有 で 50pt)。 続行?')) return;
+    await runAiPost('/api/ai/paper_translate', { model: 'gpt-5', auto_share: '1' });
+  });
+  document.getElementById('rf-ai-fulltrans')?.addEventListener('click', async () => {
+    const dir = confirm('英→日 で 全訳 しますか? [OK=英→日 / キャンセル=別の モデル で]') ? 'en2ja' : null;
+    if (!dir) { toast('全訳 は /#/paper-translate-full から 直接 起動 して ください'); return; }
+    if (!confirm('全訳 を 開始 (' + dir + ' / gpt-5 / 共有 30pt 予定)。 続行?')) return;
+    await runAiPost('/api/ai/paper_full_translate', { direction: dir, model: 'gpt-5', auto_share: '1' });
+  });
+  document.getElementById('rf-ai-review')?.addEventListener('click', async () => {
+    const venue = prompt('査読 の target 会議 名', d.venue || 'CHI');
+    if (!venue) return;
+    const strictness = prompt('厳しさ: soft / normal / strict', 'normal') || 'normal';
+    if (!confirm(`査読 開始 (${venue} / ${strictness} / gpt-5 30pt)。 続行?`)) return;
+    await runAiPost('/api/ai/paper_review', {
+      target_venue: venue, strictness, model: 'gpt-5',
+    });
+  });
+  // Deep Research: PDF 不要、 タイトル + 抄録 を prefill query に して /#/deep-research へ 遷移
+  document.getElementById('rf-ai-dr')?.addEventListener('click', () => {
+    const q = `以下 の 論文 に 関連 する 最近 (2024-2026) の 論文 を 3-5 本 探して 短く 紹介 して ください。\n\n` +
+              `タイトル: ${d.title}\n` +
+              (d.year ? `年: ${d.year}\n` : '') +
+              (d.venue ? `会議 / 誌: ${d.venue}\n` : '') +
+              (d.abstract ? `\n抄録:\n${(d.abstract || '').slice(0, 500)}` : '');
+    try { sessionStorage.setItem('labpay.dr.prefill', q); } catch (_) {}
+    navigate('#/deep-research');
+    setTimeout(() => {
+      const el = document.getElementById('dr-query');
+      if (el) { el.value = q; el.focus(); }
+    }, 500);
   });
 }
