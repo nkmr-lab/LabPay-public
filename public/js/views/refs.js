@@ -156,12 +156,17 @@ export async function renderRefsNew() {
     <div class="card">
       <a href="#/refs" class="hint">← 一覧</a>
       <h2 style="margin:6px 0 0">📚 文献 を 追加</h2>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">
+        📖 <a href="#/refs/bookmarklet" style="color:var(--primary)">ブラウザ 用 bookmarklet を 作る</a> — 論文 ページ で 1 click 追加
+      </div>
     </div>
     <div class="card">
-      <div class="row" style="gap:6px; margin-bottom:8px">
-        <button class="btn primary rf-tab" data-tab="doi"   style="font-size:13px">DOI</button>
-        <button class="btn rf-tab"         data-tab="arxiv" style="font-size:13px">arXiv</button>
-        <button class="btn rf-tab"         data-tab="url"   style="font-size:13px">URL</button>
+      <div class="row" style="gap:6px; margin-bottom:8px; flex-wrap:wrap">
+        <button class="btn primary rf-tab" data-tab="doi"    style="font-size:13px">DOI</button>
+        <button class="btn rf-tab"         data-tab="arxiv"  style="font-size:13px">arXiv</button>
+        <button class="btn rf-tab"         data-tab="url"    style="font-size:13px">URL</button>
+        <button class="btn rf-tab"         data-tab="pdf"    style="font-size:13px">📄 PDF から</button>
+        <button class="btn rf-tab"         data-tab="import" style="font-size:13px">📥 BibTeX/RIS</button>
         <button class="btn rf-tab"         data-tab="manual" style="font-size:13px">手動 入力</button>
       </div>
 
@@ -193,6 +198,30 @@ export async function renderRefsNew() {
         <div class="row" style="gap:6px; justify-content:flex-end">
           <button id="rf-fetch-url" class="btn primary">🔍 metadata 取得</button>
         </div>
+      </div>
+
+      <!-- PDF から 抽出 -->
+      <div id="rf-tab-pdf" class="rf-tab-panel" hidden>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">PDF を アップロード → pdftotext で 抽出 → DOI/arXiv 検出 or OpenAI で metadata 抽出。 gpt-5-mini を 使う (~5pt 相当)。</div>
+        <label class="field"><span class="lbl">📄 PDF ファイル</span>
+          <input type="file" id="rf-pdf-input" accept="application/pdf,.pdf">
+        </label>
+        <div class="row" style="gap:6px; justify-content:flex-end">
+          <button id="rf-fetch-pdf" class="btn primary">🔍 metadata 抽出</button>
+        </div>
+      </div>
+
+      <!-- BibTeX / RIS 一括 import -->
+      <div id="rf-tab-import" class="rf-tab-panel" hidden>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">Zotero / Mendeley 等 から export した .bib または .ris を 一括 追加。 同 DOI は skip。</div>
+        <label class="field"><span class="lbl">📥 .bib or .ris ファイル</span>
+          <input type="file" id="rf-bulk-file" accept=".bib,.bibtex,.ris,text/plain">
+        </label>
+        <div class="row" style="gap:6px">
+          <button id="rf-do-bibtex" class="btn primary">🔽 BibTeX として import</button>
+          <button id="rf-do-ris"    class="btn primary">🔽 RIS として import</button>
+        </div>
+        <div id="rf-bulk-result" style="margin-top:8px; font-size:13px"></div>
       </div>
 
       <!-- 手動 -->
@@ -327,6 +356,151 @@ export async function renderRefsNew() {
       navigate('#/refs/' + r.id);
     } catch (e) { toast('登録 失敗: ' + e.message); }
   });
+
+  // v927 track A: PDF から metadata 抽出
+  document.getElementById('rf-fetch-pdf')?.addEventListener('click', async () => {
+    const f = document.getElementById('rf-pdf-input').files?.[0];
+    if (!f) { toast('PDF を 選んで'); return; }
+    if (f.size > 30 * 1024 * 1024) { toast('30MB まで'); return; }
+    const btn = document.getElementById('rf-fetch-pdf');
+    btn.disabled = true; btn.textContent = '⏳ 抽出中…';
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const resp = await fetch('/api/refs/extract_pdf', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
+      showDup(j.existing || null);
+      fillFormFromMeta(j.meta || {});
+      const methodLabel = j.method === 'pdf_doi_crossref' ? 'PDF から DOI 発見 + crossref'
+                       : j.method === 'pdf_arxiv_api'    ? 'PDF から arXiv ID 発見 + arxiv API'
+                       :                                   'OpenAI が 先頭 テキスト から 抽出';
+      toast(`抽出 完了 (${methodLabel})、 内容 確認 して 「登録」`);
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '🔍 metadata 抽出'; }
+  });
+
+  // v927 track A: BibTeX / RIS 一括 import
+  const doBulk = async (endpoint) => {
+    const f = document.getElementById('rf-bulk-file').files?.[0];
+    if (!f) { toast('ファイル を 選んで'); return; }
+    if (f.size > 5 * 1024 * 1024) { toast('5MB まで'); return; }
+    const btn = document.getElementById(endpoint === 'import_bibtex' ? 'rf-do-bibtex' : 'rf-do-ris');
+    btn.disabled = true; btn.textContent = '⏳ 処理中…';
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const resp = await fetch('/api/refs/' + endpoint, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
+      const res = document.getElementById('rf-bulk-result');
+      res.innerHTML = `
+        <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px; color:#166534">
+          <div class="bold">✅ ${j.added} 件 追加、 ${j.skipped} 件 skip (計 ${j.total} 件)</div>
+          <div style="margin-top:6px; max-height:200px; overflow:auto; font-size:12px">
+            ${(j.results || []).map(r =>
+              r.status === 'added'
+                ? `<a href="#/refs/${r.id}" style="display:block; color:#166534; text-decoration:underline">✅ ${escapeHtml(r.title || 'no title')}</a>`
+                : r.status === 'dup'
+                  ? `<a href="#/refs/${r.existing_id}" style="display:block; color:#78350f">⏭ 既存: ${escapeHtml(r.title || 'no title')}</a>`
+                  : `<div style="color:#7f1d1d">⚠ skip: ${escapeHtml(r.reason || '')}</div>`
+            ).join('')}
+          </div>
+          <a href="#/refs" class="btn primary" style="font-size:12px; margin-top:6px">📖 一覧 で 確認</a>
+        </div>`;
+    } catch (e) { toast('失敗: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = endpoint === 'import_bibtex' ? '🔽 BibTeX として import' : '🔽 RIS として import'; }
+  };
+  document.getElementById('rf-do-bibtex').addEventListener('click', () => doBulk('import_bibtex'));
+  document.getElementById('rf-do-ris')   .addEventListener('click', () => doBulk('import_ris'));
+
+  // v927 bookmarklet から の 遷移: `#/refs/new?url=https://...&title=...`
+  //   hash router は ?url を そのまま 残す ので、 手動 で parse。
+  const hash = location.hash || '';
+  const qStart = hash.indexOf('?');
+  if (qStart >= 0) {
+    const qs = new URLSearchParams(hash.slice(qStart + 1));
+    const urlParam = qs.get('url');
+    const titleParam = qs.get('title');
+    if (urlParam) {
+      // URL タブ に 自動 切替 + 値 セット + 自動 fetch
+      const urlTab = document.querySelector('.rf-tab[data-tab="url"]');
+      urlTab?.click();
+      const urlInput = document.getElementById('rf-url');
+      if (urlInput) urlInput.value = urlParam;
+      if (titleParam) document.getElementById('rf-f-title').value = titleParam;
+      setTimeout(() => document.getElementById('rf-fetch-url')?.click(), 100);
+    }
+  }
+}
+
+// v927 添付ファイル 一覧 の 読み込み + 描画。
+async function loadAttachments(refId) {
+  const el = document.getElementById('rf-att-list');
+  if (!el) return;
+  try {
+    const d = await get('/api/refs/' + refId + '/attachments');
+    const items = d.items || [];
+    const meId = Number(state.me?.id || 0);
+    if (!items.length) { el.innerHTML = '<span class="muted">まだ 追加なし</span>'; return; }
+    const kindEmoji = { pdf: '📄', supplement: '📎', slides: '🖼', video: '🎞', image: '🖼', other: '📁' };
+    el.innerHTML = items.map(a => `
+      <div class="list-item" style="padding:6px 0; border-bottom:1px solid #f3f4f6; display:flex; gap:8px; align-items:center">
+        <span style="font-size:16px">${kindEmoji[a.kind] || '📁'}</span>
+        <a href="${escapeHtml(a.path)}" target="_blank" rel="noopener" style="flex:1; color:var(--primary); text-decoration:none; font-size:13px; word-break:break-all">${escapeHtml(a.filename)}</a>
+        <span class="hint-sm" style="font-size:11px">${((a.size_bytes||0)/1024).toFixed(0)} KB · ${escapeHtml(a.uploaded_by_name || '?')}</span>
+        ${(a.uploaded_by_user_id === meId || state.me?.role === 'admin')
+          ? `<button class="btn danger rf-att-del" data-id="${a.id}" style="font-size:11px; padding:2px 6px">🗑</button>` : ''}
+      </div>`).join('');
+    el.querySelectorAll('.rf-att-del').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('削除?')) return;
+        try {
+          await del('/api/refs/' + refId + '/attachments/' + b.dataset.id);
+          toast('削除 完了');
+          loadAttachments(refId);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<span class="muted">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+// v927 bookmarklet 生成 ページ
+export async function renderRefsBookmarklet() {
+  const app = document.getElementById('app');
+  const origin = location.origin;
+  const bmCode = `javascript:(function(){var u=encodeURIComponent(location.href);var t=encodeURIComponent(document.title||'');window.open('${origin}/#/refs/new?url='+u+'&title='+t,'_blank');})();`;
+  app.innerHTML = `
+    <div class="card">
+      <a href="#/refs/new" class="hint">← 追加 に 戻る</a>
+      <h2 style="margin:6px 0 0">📖 refs Bookmarklet</h2>
+      <div class="hint-sm" style="font-size:12px; margin-top:4px">論文 ページ を 開いた まま 1 クリック で LabPay に 追加。</div>
+    </div>
+    <div class="card">
+      <div class="bold" style="font-size:14px; margin-bottom:6px">1. 下の リンク を ブラウザ の ブックマーク バー に ドラッグ</div>
+      <a href="${bmCode}" style="display:inline-block; padding:8px 16px; background:#a855f7; color:#fff; text-decoration:none; border-radius:6px; font-weight:700">📖 refs に 追加</a>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:6px">ドラッグ が うまく いか ない 時 は 下の コード を コピー して ブックマーク の URL 欄 に 貼り 付け:</div>
+      <textarea readonly style="width:100%; box-sizing:border-box; font-family:monospace; font-size:11px; margin-top:4px; height:80px">${escapeHtml(bmCode)}</textarea>
+    </div>
+    <div class="card">
+      <div class="bold" style="font-size:14px; margin-bottom:6px">2. 使い方</div>
+      <ol style="font-size:13px; line-height:1.8">
+        <li>tabelog みたい に <b>論文 の 出版社 ページ</b> (ACM DL / IEEE / arXiv / Nature 等) を 開く</li>
+        <li>ブックマーク バー の 「📖 refs に 追加」 を クリック</li>
+        <li>LabPay が 新規 タブ で 開き、 URL 自動 fetch → DOI/arXiv 抽出 → metadata が 埋まる</li>
+        <li>タグ を 付けて 「登録」</li>
+      </ol>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280">対応 サイト: DOI or arXiv ID を URL に 含む 論文 ページ。 認識 できない 場合 は 「URL」 タブ に URL だけ 埋まった 状態 で 手動 補完 する 形 に。</div>
+    </div>
+  `;
 }
 
 // ─── 詳細 ─────────────────────────────────────────────
@@ -468,7 +642,43 @@ function paintDetail(id, d) {
       </div>`
     );
 
-  document.getElementById('rf-d-body').innerHTML = abstractBlock + aiCard + myBlock + othersBlock;
+  // v927 添付ファイル (attachments、 主 PDF 以外の 補足資料 / スライド 等)
+  const attCard = `
+    <div class="card">
+      <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
+        <div class="bold" style="font-size:13px">📎 添付ファイル</div>
+        <label class="btn primary" style="font-size:12px; padding:3px 10px; margin-left:auto; cursor:pointer">
+          ＋ 追加
+          <input type="file" id="rf-att-file" hidden>
+        </label>
+      </div>
+      <div id="rf-att-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
+    </div>`;
+
+  document.getElementById('rf-d-body').innerHTML = abstractBlock + aiCard + attCard + myBlock + othersBlock;
+  loadAttachments(id);
+  document.getElementById('rf-att-file')?.addEventListener('change', async () => {
+    const f = document.getElementById('rf-att-file').files?.[0];
+    if (!f) return;
+    if (f.size > 30 * 1024 * 1024) { toast('30MB まで'); return; }
+    const kind = f.type.startsWith('image/') ? 'image'
+              : f.type === 'application/pdf' ? 'supplement'
+              : (/\.(pptx?|key)$/i.test(f.name) ? 'slides'
+              : (f.type.startsWith('video/') ? 'video' : 'other'));
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('kind', kind);
+    try {
+      const resp = await fetch('/api/refs/' + id + '/attachments', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
+      toast('添付 完了');
+      loadAttachments(id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
 
   // ── ハンドラ ──
   document.getElementById('rf-bibtex-btn')?.addEventListener('click', async () => {

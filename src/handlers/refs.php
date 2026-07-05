@@ -12,6 +12,10 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_doi'   && $method === 'POST') { refs_import_doi($pdo, $cfg);   return; }
     if ($sub === 'import_arxiv' && $method === 'POST') { refs_import_arxiv($pdo, $cfg); return; }
     if ($sub === 'import_url'   && $method === 'POST') { refs_import_url($pdo, $cfg);   return; }
+    // v927 track A
+    if ($sub === 'import_bibtex' && $method === 'POST') { refs_import_bibtex($pdo, $cfg); return; }
+    if ($sub === 'import_ris'    && $method === 'POST') { refs_import_ris($pdo, $cfg);    return; }
+    if ($sub === 'extract_pdf'   && $method === 'POST') { refs_extract_pdf($pdo, $cfg);   return; }
     if ($sub === 'tags'         && $method === 'GET')  { refs_tags($pdo, $cfg);         return; }
     if ($sub === 'export' && ($seg[2] ?? '') === 'bibtex' && $method === 'GET') {
         refs_export_bibtex($pdo, $cfg); return;
@@ -25,6 +29,12 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'note'       && $method === 'PATCH')  { refs_note_set($pdo, $cfg, $id); return; }
         if ($next === 'attach_pdf' && $method === 'POST')   { refs_attach_pdf($pdo, $cfg, $id); return; }
         if ($next === 'bibtex'     && $method === 'GET')    { refs_bibtex_single($pdo, $cfg, $id); return; }
+        // v927 追加 添付
+        if ($next === 'attachments' && $method === 'GET')   { refs_attachments_list($pdo, $cfg, $id); return; }
+        if ($next === 'attachments' && $method === 'POST')  { refs_attachments_upload($pdo, $cfg, $id); return; }
+        if ($next === 'attachments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
+            refs_attachments_delete($pdo, $cfg, $id, (int)$seg[3]); return;
+        }
     }
     throw new ApiException('not_found', 'route not found', 404);
 }
@@ -737,4 +747,407 @@ function refs_tags(PDO $pdo, array $cfg): void {
     $out = [];
     foreach ($counts as $t => $c) $out[] = ['tag' => $t, 'count' => $c];
     json_response(['tags' => $out]);
+}
+
+// ─────────────────────────────────────────────────────
+// v927 track A: BibTeX / RIS ファイル 一括 import
+// ─────────────────────────────────────────────────────
+
+// ざっくり BibTeX パーサ (ネスト braces 対応、 主要 field を 拾う)。
+//   Zotero や Mendeley の 標準 export で 動く 想定。 個別 の 難解 pattern は 諦める。
+function _refs_parse_bibtex(string $content): array {
+    $entries = [];
+    // @type{key, field = {value}, field = "value", ...} を 抽出
+    if (!preg_match_all('/@(\w+)\s*\{\s*([^,\s]+)\s*,(.*?)\n\s*\}\s*(?=@|\z)/is', $content, $m, PREG_SET_ORDER)) {
+        // 最後 の エントリ は `\n}` の 後 に 何も 無い ケース も 拾う
+        preg_match_all('/@(\w+)\s*\{\s*([^,\s]+)\s*,(.+)/is', $content, $m, PREG_SET_ORDER);
+    }
+    foreach ($m as $ent) {
+        $type = strtolower($ent[1]);
+        if ($type === 'string' || $type === 'preamble' || $type === 'comment') continue;
+        $key  = $ent[2];
+        $bodyRaw = $ent[3];
+        $fields = [];
+        // field = { ... } または field = "..." または field = value を 拾う。
+        //   ネスト braces に 弱いが 標準 export で は 大体 動く。
+        $len = strlen($bodyRaw); $i = 0;
+        while ($i < $len) {
+            // field 名
+            if (!preg_match('/\G([\s,]*)(\w+)\s*=\s*/A', $bodyRaw, $mm, 0, $i)) break;
+            $i += strlen($mm[0]);
+            $name = strtolower($mm[2]);
+            // 値: {..} / ".." / 素値
+            if ($i >= $len) break;
+            $c = $bodyRaw[$i];
+            $val = '';
+            if ($c === '{') {
+                $depth = 0; $start = $i;
+                while ($i < $len) {
+                    $ch = $bodyRaw[$i];
+                    if ($ch === '{') $depth++;
+                    elseif ($ch === '}') { $depth--; if ($depth === 0) { $i++; break; } }
+                    $i++;
+                }
+                $val = substr($bodyRaw, $start + 1, $i - $start - 2);
+            } elseif ($c === '"') {
+                $i++; $start = $i;
+                while ($i < $len && $bodyRaw[$i] !== '"') $i++;
+                $val = substr($bodyRaw, $start, $i - $start);
+                if ($i < $len) $i++;
+            } else {
+                preg_match('/\G([^,\s]+)/A', $bodyRaw, $mm2, 0, $i);
+                $val = $mm2[1] ?? '';
+                $i += strlen($val);
+            }
+            // 掃除
+            $val = preg_replace('/\s+/', ' ', $val);
+            $val = str_replace(['{', '}', '\\&', '\\%', '\\_'], ['', '', '&', '%', '_'], $val);
+            $fields[$name] = trim($val);
+        }
+        $entries[] = ['type' => $type, 'key' => $key, 'fields' => $fields];
+    }
+    return $entries;
+}
+
+// RIS: 行 ベース。 TY = 開始、 ER = 終端。 AU / TI / PY / JO / DO / N2 (abstract) など。
+function _refs_parse_ris(string $content): array {
+    $entries = [];
+    $cur = null;
+    foreach (preg_split("/\r\n|\r|\n/", $content) as $line) {
+        if (preg_match('/^([A-Z0-9]{2})\s+-\s+(.*)$/', $line, $m)) {
+            $tag = $m[1]; $val = trim($m[2]);
+            if ($tag === 'TY') { $cur = ['type' => strtolower($val), 'authors' => [], 'fields' => []]; continue; }
+            if ($tag === 'ER') { if ($cur) $entries[] = $cur; $cur = null; continue; }
+            if (!$cur) continue;
+            if ($tag === 'AU' || $tag === 'A1') { $cur['authors'][] = $val; continue; }
+            if ($tag === 'TI' || $tag === 'T1') $cur['fields']['title'] = $val;
+            elseif ($tag === 'PY' || $tag === 'Y1') $cur['fields']['year'] = (int)substr($val, 0, 4);
+            elseif ($tag === 'JO' || $tag === 'JF' || $tag === 'JA' || $tag === 'T2') $cur['fields']['venue'] = $val;
+            elseif ($tag === 'DO')  $cur['fields']['doi'] = $val;
+            elseif ($tag === 'UR')  $cur['fields']['url'] = $val;
+            elseif ($tag === 'N2' || $tag === 'AB') $cur['fields']['abstract'] = $val;
+            elseif ($tag === 'KW') { $cur['fields']['keywords'][] = $val; }
+        }
+    }
+    if ($cur) $entries[] = $cur;
+    return $entries;
+}
+
+// BibTeX の 生 authors 文字列 「A and B and C」 を [{name}, ...] に。
+function _refs_split_bibtex_authors(string $raw): array {
+    $parts = preg_split('/\s+and\s+/i', $raw);
+    $out = [];
+    foreach ($parts as $p) {
+        $p = trim($p);
+        if ($p === '') continue;
+        // 「Family, Given」 → 「Given Family」 に 正規化
+        if (strpos($p, ',') !== false) {
+            [$family, $given] = array_map('trim', explode(',', $p, 2));
+            $p = ($given !== '' ? $given . ' ' : '') . $family;
+        }
+        $out[] = ['name' => $p];
+    }
+    return $out;
+}
+
+function refs_import_bibtex(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    // multipart or text body
+    $content = '';
+    if (isset($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+        $content = (string)file_get_contents($_FILES['file']['tmp_name']);
+    } else {
+        $body = read_json_body();
+        $content = (string)($body['bibtex'] ?? '');
+    }
+    if ($content === '') throw new ApiException('bad_request', 'file か bibtex 本文 が 必要', 400);
+    if (strlen($content) > 5 * 1024 * 1024) throw new ApiException('bad_request', '5MB まで', 400);
+
+    $parsed = _refs_parse_bibtex($content);
+    if (!$parsed) throw new ApiException('bad_request', 'BibTeX エントリ が 見つからなかった', 400);
+
+    $added = 0; $skipped = 0; $results = [];
+    foreach ($parsed as $ent) {
+        $f = $ent['fields'];
+        $title = $f['title'] ?? '';
+        if ($title === '') { $skipped++; $results[] = ['status' => 'skip', 'reason' => 'title なし']; continue; }
+        $doi = isset($f['doi']) ? _refs_normalize_doi($f['doi']) : '';
+        if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
+        $arxiv = isset($f['eprint']) ? _refs_normalize_arxiv($f['eprint']) : null;
+        // 既存 チェック
+        if ($doi !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
+            $st->execute([$doi]);
+            if ($ex = (int)$st->fetchColumn()) {
+                $skipped++; $results[] = ['status' => 'dup', 'existing_id' => $ex, 'title' => $title]; continue;
+            }
+        }
+        $authors = !empty($f['author']) ? _refs_split_bibtex_authors($f['author']) : [];
+        $year = isset($f['year']) ? (int)$f['year'] : null;
+        $venue = $f['journal'] ?? $f['booktitle'] ?? '';
+        $url = $f['url'] ?? '';
+        if ($url !== '' && !preg_match('#^https?://#', $url)) $url = '';
+        $abstract = $f['abstract'] ?? '';
+        $tags = [];
+        if (!empty($f['keywords'])) {
+            foreach (preg_split('/[;,]/', (string)$f['keywords']) as $t) {
+                $t = trim($t); if ($t !== '') $tags[] = $t;
+            }
+        }
+        $ins = $pdo->prepare("INSERT INTO refs
+            (doi, arxiv_id, title, authors_json, year, venue, abstract, url, tags_json, added_by_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?)");
+        $ins->execute([
+            $doi ?: null, $arxiv ?: null, $title,
+            json_encode($authors, JSON_UNESCAPED_UNICODE),
+            $year ?: null, $venue ?: null, $abstract ?: null,
+            $url ?: null,
+            $tags ? json_encode($tags, JSON_UNESCAPED_UNICODE) : null,
+            $uid,
+        ]);
+        $refId = (int)$pdo->lastInsertId();
+        $row = $pdo->query("SELECT * FROM refs WHERE id = $refId")->fetch(PDO::FETCH_ASSOC);
+        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex($row), $refId]);
+        $added++; $results[] = ['status' => 'added', 'id' => $refId, 'title' => $title];
+    }
+    json_response(['added' => $added, 'skipped' => $skipped, 'total' => count($parsed), 'results' => $results]);
+}
+
+function refs_import_ris(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $content = '';
+    if (isset($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+        $content = (string)file_get_contents($_FILES['file']['tmp_name']);
+    } else {
+        $body = read_json_body();
+        $content = (string)($body['ris'] ?? '');
+    }
+    if ($content === '') throw new ApiException('bad_request', 'file か ris 本文 が 必要', 400);
+    if (strlen($content) > 5 * 1024 * 1024) throw new ApiException('bad_request', '5MB まで', 400);
+
+    $parsed = _refs_parse_ris($content);
+    if (!$parsed) throw new ApiException('bad_request', 'RIS エントリ が 見つからなかった', 400);
+
+    $added = 0; $skipped = 0; $results = [];
+    foreach ($parsed as $ent) {
+        $f = $ent['fields'];
+        $title = $f['title'] ?? '';
+        if ($title === '') { $skipped++; continue; }
+        $doi = isset($f['doi']) ? _refs_normalize_doi($f['doi']) : '';
+        if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
+        if ($doi !== '') {
+            $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
+            $st->execute([$doi]);
+            if ($ex = (int)$st->fetchColumn()) { $skipped++; $results[] = ['status' => 'dup', 'existing_id' => $ex]; continue; }
+        }
+        $authors = array_map(fn($n) => ['name' => trim($n)], $ent['authors']);
+        $tags = $f['keywords'] ?? [];
+        $ins = $pdo->prepare("INSERT INTO refs
+            (doi, title, authors_json, year, venue, abstract, url, tags_json, added_by_user_id)
+            VALUES (?,?,?,?,?,?,?,?,?)");
+        $ins->execute([
+            $doi ?: null, $title,
+            json_encode($authors, JSON_UNESCAPED_UNICODE),
+            !empty($f['year']) ? (int)$f['year'] : null,
+            $f['venue'] ?? null, $f['abstract'] ?? null,
+            (!empty($f['url']) && preg_match('#^https?://#', $f['url'])) ? $f['url'] : null,
+            $tags ? json_encode($tags, JSON_UNESCAPED_UNICODE) : null,
+            $uid,
+        ]);
+        $refId = (int)$pdo->lastInsertId();
+        $row = $pdo->query("SELECT * FROM refs WHERE id = $refId")->fetch(PDO::FETCH_ASSOC);
+        $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex($row), $refId]);
+        $added++; $results[] = ['status' => 'added', 'id' => $refId, 'title' => $title];
+    }
+    json_response(['added' => $added, 'skipped' => $skipped, 'total' => count($parsed), 'results' => $results]);
+}
+
+// ─────────────────────────────────────────────────────
+// v927 track A: PDF から metadata 抽出 (pdftotext + crossref + OpenAI)
+// ─────────────────────────────────────────────────────
+
+function refs_extract_pdf(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    if (!str_starts_with($contentType, 'multipart/form-data')) {
+        throw new ApiException('bad_request', 'multipart/form-data で 送って', 400);
+    }
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file (PDF) が 必要', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '30MB まで', 400);
+    $tmp = $f['tmp_name'];
+    $head = @file_get_contents($tmp, false, null, 0, 5);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF で ない', 400);
+
+    // pdftotext で 先頭 2 ページ を テキスト化
+    $txtOut = sys_get_temp_dir() . '/refs_pdftxt_' . uniqid() . '.txt';
+    $cmd = sprintf('pdftotext -f 1 -l 2 -layout %s %s 2>&1',
+        escapeshellarg($tmp), escapeshellarg($txtOut));
+    exec($cmd, $out, $rc);
+    $text = '';
+    if ($rc === 0 && is_file($txtOut)) {
+        $text = (string)file_get_contents($txtOut);
+        @unlink($txtOut);
+    }
+    if ($text === '') throw new ApiException('server_error', 'PDF から テキスト を 抽出 できなかった', 500);
+
+    // 1) 本文 から DOI を 検出 → crossref
+    if (preg_match('#\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)\b#', $text, $m)) {
+        $doi = _refs_normalize_doi(rtrim($m[1], '.,)'));
+        $meta = _refs_fetch_crossref($doi);
+        if ($meta) {
+            // 既存 チェック
+            $st = $pdo->prepare("SELECT id, title FROM refs WHERE doi = ? LIMIT 1");
+            $st->execute([$doi]);
+            $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+            json_response([
+                'method'   => 'pdf_doi_crossref',
+                'meta'     => $meta,
+                'existing' => $existing ?: null,
+            ]);
+            return;
+        }
+    }
+    // 2) arxiv ID を 検出
+    if (preg_match('#\b(?:arXiv[:\s]*)?([0-9]{4}\.[0-9]{4,6})(v\d+)?\b#i', $text, $m)) {
+        $id = $m[1] . ($m[2] ?? '');
+        $meta = _refs_fetch_arxiv($id);
+        if ($meta) {
+            $st = $pdo->prepare("SELECT id, title FROM refs WHERE arxiv_id = ? LIMIT 1");
+            $st->execute([$id]);
+            $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+            json_response([
+                'method'   => 'pdf_arxiv_api',
+                'meta'     => $meta,
+                'existing' => $existing ?: null,
+            ]);
+            return;
+        }
+    }
+    // 3) OpenAI に 「先頭 テキスト から metadata を JSON で 抽出」 させる
+    $head = mb_substr($text, 0, 4000);
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $payload = [
+        'model' => 'gpt-5-mini',
+        'messages' => [
+            ['role' => 'system', 'content' => '研究論文 の 先頭 部分 の テキスト を 受け取り、 metadata を JSON で 返します。 keys: title (string), authors (array of string), year (int or null), venue (string or null), abstract (string or null), doi (string or null)。 見つからない 項目 は null。 出力 は JSON のみ、 コメント不要。'],
+            ['role' => 'user', 'content' => "以下 の テキスト から metadata を 抽出:\n\n" . $head],
+        ],
+        'response_format' => ['type' => 'json_object'],
+        'max_completion_tokens' => 4000,
+    ];
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!$resp || $code >= 400) throw new ApiException('upstream_error', 'OpenAI HTTP ' . $code, 502);
+    $j = json_decode((string)$resp, true);
+    $content = $j['choices'][0]['message']['content'] ?? '';
+    $parsed = json_decode((string)$content, true);
+    if (!is_array($parsed)) throw new ApiException('upstream_error', 'OpenAI が JSON を 返さなかった', 502);
+    // authors を array of {name} に 正規化
+    $authors = [];
+    foreach ((array)($parsed['authors'] ?? []) as $a) {
+        if (is_string($a) && trim($a) !== '') $authors[] = ['name' => trim($a)];
+    }
+    $meta = [
+        'title'    => (string)($parsed['title'] ?? ''),
+        'authors'  => $authors,
+        'year'     => isset($parsed['year']) && $parsed['year'] !== null ? (int)$parsed['year'] : null,
+        'venue'    => (string)($parsed['venue'] ?? ''),
+        'abstract' => (string)($parsed['abstract'] ?? ''),
+        'doi'      => (string)($parsed['doi'] ?? ''),
+    ];
+    // 既存 チェック (DOI 有り なら)
+    $existing = null;
+    if ($meta['doi'] !== '') {
+        $doi2 = _refs_normalize_doi($meta['doi']);
+        $st = $pdo->prepare("SELECT id, title FROM refs WHERE doi = ? LIMIT 1");
+        $st->execute([$doi2]);
+        $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+    json_response([
+        'method'   => 'pdf_openai_extract',
+        'meta'     => $meta,
+        'existing' => $existing,
+    ]);
+}
+
+// ─────────────────────────────────────────────────────
+// v927 track A: ref_attachments (複数 添付)
+// ─────────────────────────────────────────────────────
+
+function refs_attachments_list(PDO $pdo, array $cfg, int $refId): void {
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT a.id, a.kind, a.path, a.sha256, a.filename, a.mime, a.size_bytes,
+                                a.caption, a.uploaded_by_user_id, a.created_at,
+                                u.display_name AS uploaded_by_name, u.avatar_url AS uploaded_by_avatar
+                           FROM ref_attachments a LEFT JOIN users u ON u.id = a.uploaded_by_user_id
+                          WHERE a.ref_id = ? ORDER BY a.id DESC");
+    $st->execute([$refId]);
+    json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
+function refs_attachments_upload(PDO $pdo, array $cfg, int $refId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id = ?");
+    $ex->execute([$refId]);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file が 必要', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '30MB まで', 400);
+    $kind = (string)($_POST['kind'] ?? 'other');
+    if (!in_array($kind, ['pdf','supplement','slides','video','image','other'], true)) $kind = 'other';
+    $caption = trim((string)($_POST['caption'] ?? ''));
+    if (mb_strlen($caption) > 500) $caption = mb_substr($caption, 0, 500);
+    $tmp = $f['tmp_name'];
+    $sha = hash_file('sha256', $tmp);
+    $origName = (string)$f['name'];
+    $ext = pathinfo($origName, PATHINFO_EXTENSION);
+    if (mb_strlen($ext) > 8) $ext = '';
+    $ext = preg_replace('/[^A-Za-z0-9]/', '', $ext);
+    $rel = '/uploads/refs/attachments/' . substr($sha, 0, 2) . '/' . $sha . ($ext ? '.' . strtolower($ext) : '');
+    $publicDir = '/var/www/labpay/public';
+    $abs = $publicDir . $rel;
+    @mkdir(dirname($abs), 0775, true);
+    if (!copy($tmp, $abs)) throw new ApiException('server_error', '保存失敗', 500);
+    @chmod($abs, 0644);
+    $mime = (string)($f['type'] ?? '');
+    $ins = $pdo->prepare("INSERT INTO ref_attachments
+        (ref_id, kind, path, sha256, filename, mime, size_bytes, caption, uploaded_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $ins->execute([$refId, $kind, $rel, $sha, mb_substr($origName, 0, 255),
+                   $mime ?: null, (int)$f['size'], $caption ?: null, (int)$u['id']]);
+    json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'path' => $rel]);
+}
+
+function refs_attachments_delete(PDO $pdo, array $cfg, int $refId, int $attId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT path, uploaded_by_user_id FROM ref_attachments WHERE id = ? AND ref_id = ?");
+    $st->execute([$attId, $refId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$r['uploaded_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', 'アップロード者 or admin のみ 削除可', 403);
+    }
+    $abs = '/var/www/labpay/public' . $r['path'];
+    if (is_file($abs)) @unlink($abs);
+    $pdo->prepare("DELETE FROM ref_attachments WHERE id = ?")->execute([$attId]);
+    json_response(['ok' => true]);
 }

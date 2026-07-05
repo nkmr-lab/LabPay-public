@@ -490,6 +490,8 @@ route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDe
 // v925 文献管理 (Zotero-like、 ラボ 共有)
 route('/refs',            lazy(() => import('./views/refs.js'), 'renderRefs'));
 route('/refs/new',        lazy(() => import('./views/refs.js'), 'renderRefsNew'));
+// v927 bookmarklet 生成 ページ (/:id より 先 に 登録、 順序 注意)
+route('/refs/bookmarklet', lazy(() => import('./views/refs.js'), 'renderRefsBookmarklet'));
 route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetail'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 // v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
