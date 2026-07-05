@@ -2,6 +2,9 @@
 
 自作クライアント向けのリファレンス。全エンドポイントは JSON、同一オリジン Cookie 認証 (`labpay_sid`)。
 
+> 現行バージョン: **v931** (最終大幅更新)。
+> 変更点は git log と `public/js/version_history.js` を参照。
+
 ## 共通ルール
 
 - **認証**: ブラウザで `GET /api/auth/login` (Google) もしくは `POST /api/auth/dev-login` を済ませると `labpay_sid` Cookie が立つ。以降は `fetch(url, { credentials: 'same-origin' })` で OK
@@ -11,7 +14,8 @@
   ```json
   { "error": { "code": "insufficient_funds", "message": "...", "details": { ... } } }
   ```
-- **exposure 設定**で無効化されている機能は `403 feature_disabled`
+- **exposure 設定** で無効化されている機能は `403 feature_disabled`
+- **ルーティング**: `public/api/index.php` の dispatch table が第1セグメント → `route_XXX` に振り分け。以降の path は各ハンドラ内の `if` 分岐で method + sub-segments を判定する二段階ルーティング
 
 ---
 
@@ -31,15 +35,17 @@
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET   | `/api/me`                | 残高 + streak + `avatar_url` / `scrapbox_username` / `grade` 含む |
-| PATCH | `/api/me`                | プロフィール更新: `{ display_name?, avatar_url?, scrapbox_username? }` |
+| GET   | `/api/me`                | 残高 + streak + `avatar_url` / `scrapbox_username` / `grade` / `birthday_md` / `hobbies` / `favorites` 含む |
+| PATCH | `/api/me`                | プロフィール更新: `{ display_name?, avatar_url?, scrapbox_username?, birthday_md?, hobbies?, favorites?, slack_member_id? }` |
 | GET   | `/api/me/transactions?limit=&offset=` | 取引履歴 (購入/販売/手数料/来室/送金/タスク報酬/取消 全部) |
 | GET   | `/api/me/listings?status=` | 自分の出品 |
 | GET   | `/api/me/achievements`   | 実績 15軸 × 4段階の獲得状況・進捗 |
-| GET   | `/api/me/presence_summary` | 自分のラボ滞在時間 (today/week/month/total minutes + 現在開いてるセッションの開始時刻) |
-| GET   | `/api/me/scrapbox_handles` | 自分が申告した Scrapbox 表示名一覧 + 直近30日の獲得 pt サマリー |
-| POST  | `/api/me/scrapbox_handles` | `{ handle: "..." }` を申告 (既に他人が持っていた場合は奪取される — 自己責任) |
-| DELETE| `/api/me/scrapbox_handles/{handle}` | 自分の handle を解除 |
+| GET   | `/api/me/presence_summary` | ラボ滞在時間 (today/week/month/total minutes) |
+| GET   | `/api/me/scrapbox_handles` | 申告した Scrapbox 表示名一覧 + 直近 30 日の獲得 pt |
+| POST  | `/api/me/scrapbox_handles` | `{ handle }` 申告 (既存 handle は奪取される) |
+| DELETE| `/api/me/scrapbox_handles/{handle}` | 解除 |
+| GET   | `/api/me/lab_settings`   | 自分の ホーム / タブ 表示設定 (v600 台) |
+| PATCH | `/api/me/lab_settings`   | 上書き保存 |
 
 GET `/api/me` 応答例:
 
@@ -50,7 +56,7 @@ GET `/api/me` 応答例:
     "role": "admin", "kind": "human",
     "avatar_url": "/uploads/products/abc123.jpg",
     "scrapbox_username": "nakamura-satoshi",
-    "grade": "M2"
+    "grade": "M2", "birthday_md": "01-15"
   },
   "balance": 1010,
   "streak": { "current_streak": 1, "longest_streak": 1, "last_checkin_date": "2026-05-31" }
@@ -63,7 +69,8 @@ GET `/api/me` 応答例:
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET | `/api/users?q=` | 人間ユーザの軽量ディレクトリ (送金・タスクの受取人選択用)。`{id, display_name, avatar_url, grade}` |
+| GET | `/api/users?q=` | 人間ユーザの軽量ディレクトリ。`{id, display_name, avatar_url, grade}` |
+| GET | `/api/users/{id}/profile` | 公開プロフィール (display_name / avatar / grade / hobbies / favorites / scrapbox_username) |
 
 ---
 
@@ -76,73 +83,33 @@ GET `/api/me` 応答例:
 | POST   | `/api/products`               | `{ jan, name, image_url? }` JAN 登録/更新 (8-20桁数字に自動正規化) |
 | POST   | `/api/products/no_jan`        | `{ name, image_url? }` バーコード無し商品 — 合成 JAN を自動発行 |
 
-GET `/api/products/{jan}` で外部 API ヒット時の応答:
-
-```json
-{
-  "jan": "4902102159975",
-  "name": "コカ・コーラ 500ml ペット …",
-  "image_url": "https://thumbnail.image.rakuten.co.jp/...",
-  "source": "api", "pending": true, "confidence": "low"
-}
-```
-`confidence`: `high` = JAN がレスポンスに含まれる確実な一致 / `low` = テキスト検索一致 (要確認)
-
 ---
 
 ## 出品 `/api/listings`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/listings?jan=&limit=`   | 販売中一覧 (安い順) |
-| GET    | `/api/listings/{id}`          | 個別 |
-| POST   | `/api/listings`               | `{ jan, price, qty }` 出品 |
-| PATCH  | `/api/listings/{id}`          | `{ price?, qty?, status? }` |
-| DELETE | `/api/listings/{id}`          | 取り下げ (`status='withdrawn'`) |
-| DELETE | `/api/listings/{id}?hard=1`   | **完全削除** (購入実績無い場合のみ。あれば 409) |
+| GET    | `/api/listings?status=on_sale&q=` | 一覧 (jan / 出品者 / 価格 / 画像 / タグ) |
+| POST   | `/api/listings`                   | `{ jan, price, qty, description?, image_url?, tags?[], location?, closes_at? }` |
+| GET    | `/api/listings/{id}`              | 詳細 |
+| PATCH  | `/api/listings/{id}`              | 編集 (出品者 or admin) |
+| DELETE | `/api/listings/{id}`              | 取下げ |
 
 ---
 
 ## 購入 `/api/purchases`
 
-```http
-POST /api/purchases
-X-Requested-With: labpay
-Content-Type: application/json
-
-{ "listing_id": 123, "idempotency_key": "9b3d..." }
-```
-
-応答:
-```json
-{
-  "purchase_id": 42, "listing_id": 123, "product_name": "...",
-  "unit_price": 130, "seller_take": 124, "fee": 6,
-  "new_balance": 870, "qty_remaining": 0
-}
-```
-
-エラー: `insufficient_funds` (402), `self_purchase` (400), `not_available` (409)
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/purchases` | `{ listing_id, idempotency_key }` 実行。 残高不足で 402 |
 
 ---
 
 ## 送金 `/api/transfers`
 
-```http
-POST /api/transfers
-X-Requested-With: labpay
-Content-Type: application/json
-
-{ "to_user_id": 5, "amount": 50, "memo": "ありがとう", "idempotency_key": "..." }
-```
-
-応答:
-```json
-{ "transfer_id": 7, "to_user_id": 5, "to_name": "...",
-  "amount": 50, "memo": "ありがとう", "new_balance": 820 }
-```
-
-QR コードの URI 仕様 (フロントで使用): `labpay:transfer?to=<user_id>&name=<URLエンコード名>`
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/transfers` | `{ to_user_id, amount, memo?, idempotency_key }` |
 
 ---
 
@@ -150,33 +117,9 @@ QR コードの URI 仕様 (フロントで使用): `labpay:transfer?to=<user_id
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET  | `/api/checkins/status` | 本日の状態確認 + ボーナス式パラメータ |
-| POST | `/api/checkins`        | 手動チェックイン (本番では Wi-Fi 自動。テスト/フォールバック用) |
-
-`/api/checkins/status` 応答例:
-```json
-{
-  "checked_in_today": true,
-  "points_today": 12,
-  "current_streak": 3,
-  "longest_streak": 12,
-  "today_is_workday": true,
-  "bonus_rule": {
-    "base": 10, "per_day": 1, "cap": 10, "divisor": 1,
-    "max_total": 20, "days_to_max": 11
-  }
-}
-```
-
-POST `/api/checkins` 応答:
-```json
-{
-  "already_checked_in": false, "points": 12, "awarded_today": 12,
-  "current_streak": 3, "longest_streak": 12, "new_balance": 1012
-}
-```
-
-> 通常は presence scanner が登録 MAC を観測した瞬間にサーバ側で自動チェックインされるので、明示的に呼ぶ必要は少ない。
+| POST | `/api/checkins` | 手動チェックイン (1 日 1 回) |
+| GET  | `/api/checkins/today` | 今日の状況 |
+| GET  | `/api/checkins/history` | 履歴 |
 
 ---
 
@@ -184,38 +127,18 @@ POST `/api/checkins` 応答:
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/tasks?filter=available\|mine\|active` | 一覧 |
-| POST   | `/api/tasks`                         | 出題 (下記参照) |
-| GET    | `/api/tasks/{id}`                    | 詳細 (`my_claims` 含む。依頼者は `claims` も) |
-| PATCH  | `/api/tasks/{id}`                    | 依頼者のみ編集。報酬/人数変更時はエスクロー自動精算 |
-| POST   | `/api/tasks/{id}/cancel`             | 依頼者: 取消 + 未承認分返金 |
-| POST   | `/api/tasks/{id}/claim`              | 受諾宣言 |
-| POST   | `/api/tasks/{id}/claims/{cid}/report` | `{ notes? }` 完了報告 |
-| POST   | `/api/tasks/{id}/claims/{cid}/approve` | 依頼者: 承認 → 報酬支払 |
-| POST   | `/api/tasks/{id}/claims/{cid}/reject`  | 依頼者: 却下 |
-| POST   | `/api/tasks/{id}/attachments`        | 依頼者: ファイル添付 (multipart `file`、~50MB / PDF・docx・画像等) |
-| GET    | `/api/tasks/{id}/attachments/{aid}`  | 添付 download (元のファイル名で) |
-| DELETE | `/api/tasks/{id}/attachments/{aid}`  | 依頼者または uploader: 添付削除 |
-
-POST `/api/tasks` body:
-```json
-{
-  "title": "...", "description": "...",
-  "reward": 10, "capacity": 3,
-  "per_user_limit": 1,            // 0=無制限
-  "deadline": "2026-06-30 18:00:00", // 任意。空なら無期限
-  "audience_grades": ["B3","B4"],  // 任意。空なら全員
-  "slots_spec": "6/15 11:00-15:00 30分刻み"   // 任意。指定すると capacity が自動算出される
-}
-```
-
-タスク詳細 (`GET /api/tasks/{id}`) は `slots[]` (時間枠) と `attachments[]` (添付ファイル) を含みます。
-
-タスクの状態遷移:
-- 作成時 `status='open'`、エスクローに `reward × capacity` 預け入れ
-- 承認累計が `capacity` 到達 → 自動で `closed`
-- `deadline` 経過 → リスト/詳細 API がアクセスされた瞬間に自動取消 + 未承認分返金
-- ledger では `deposit` (預け) / `task_reward` (支払) / `refund` (返金) の3種で記録
+| GET    | `/api/tasks?status=&scope=` | 一覧 (open/claimed/reported/approved/closed/cancelled) |
+| POST   | `/api/tasks`                | 新規募集 (深い body、 slots_spec / assigned_user_ids / funded_by_system 等) |
+| GET    | `/api/tasks/{id}`           | 詳細 (claims / slots 含む) |
+| PATCH  | `/api/tasks/{id}`           | 編集 |
+| DELETE | `/api/tasks/{id}`           | 削除 |
+| POST   | `/api/tasks/{id}/claim`     | 手を挙げる |
+| POST   | `/api/tasks/{id}/unclaim`   | 取消 |
+| POST   | `/api/tasks/{id}/report`    | 完了報告 (details 入力) |
+| POST   | `/api/tasks/{id}/approve`   | 承認 → 支払 |
+| POST   | `/api/tasks/{id}/reject`    | 差戻し |
+| POST   | `/api/tasks/{id}/close`     | 締める |
+| POST   | `/api/tasks/{id}/cancel`    | 起案取消 (エスクロー 返金) |
 
 ---
 
@@ -223,26 +146,9 @@ POST `/api/tasks` body:
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/presence`                       | 部屋ごとの「今いる人」(直近 N 分内に登録 MAC が観測された人) |
-| GET    | `/api/presence/heatmap?days=7`        | 部屋 × 曜日 × 時間 の平均在室人数行列 (7-365 日) |
-| GET    | `/api/presence/devices`               | 自分の登録 MAC 一覧 |
-| POST   | `/api/presence/devices`               | `{ mac, label? }` MAC 登録 |
-| DELETE | `/api/presence/devices/{id}`          | 削除 |
-| GET    | `/api/presence/unregistered_macs`     | 直近観測の未登録 MAC (自分のを見つけるため。OUI ヒントと「NEW」候補付き) |
-| POST   | `/api/presence/scan`                  | Scanner 専用 (Bearer token 認証)。`{ room_id, observations: [{mac, ip}] }` |
-
-`/api/presence/heatmap` 応答:
-```json
-{
-  "days": 7, "range_from": "...", "range_to": "...",
-  "days_of_week": [1,1,1,1,1,1,1],  // Sun..Sat 各曜日が何日分含まれるか
-  "rooms": [
-    { "id": "10F", "display_name": "10階研究室",
-      "matrix": [[0,...24 hours], ..., 7 weekdays] }
-  ]
-}
-```
-`matrix[w][h]` は Sun=0..Sat=6 / 0..23 時の平均同時在室人数 (距 distinct user)。
+| GET  | `/api/presence/now`     | 現在 誰が居るか (最終検知 5 分 以内) |
+| POST | `/api/presence/scan`    | Scanner が Bearer 認証 で 送信 (`{ room_id, observations: [{mac, ip}] }`) |
+| GET  | `/api/presence/sessions?date=` | 全員の滞在セッション |
 
 ---
 
@@ -250,12 +156,9 @@ POST `/api/tasks` body:
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET   | `/api/notifications?unread=1&limit=` | 通知一覧 |
-| GET   | `/api/notifications/unread_count`    | 未読数 (バッジ用) |
-| PATCH | `/api/notifications/{id}/read`       | 既読 |
-| PATCH | `/api/notifications/read_all`        | 全既読 |
-
-通知 `type`: `sale`, `sold_out`, `transfer_received`, `task_claimed`, `task_reported`, `task_approved`, `task_cancelled`, `task_expired`, `admin_notice`
+| GET   | `/api/notifications?unread=1` | 一覧 |
+| POST  | `/api/notifications/read`     | `{ ids: [...] }` 既読 |
+| POST  | `/api/notifications/read-all` | 全既読 |
 
 ---
 
@@ -263,166 +166,522 @@ POST `/api/tasks` body:
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET | `/api/sellers/{user_id}/stats` | 累計販売数・取扱高 |
+| GET | `/api/sellers/{user_id}` | 評価 / トラブル履歴 |
 
 ---
 
 ## 画像アップロード `/api/uploads`
 
-```http
-POST /api/uploads/image
-X-Requested-With: labpay
-Content-Type: multipart/form-data
-
-(file=<image>)
-```
-
-応答:
-```json
-{ "url": "https://pay.../uploads/products/abc123.jpg",
-  "path": "/uploads/products/abc123.jpg",
-  "mime": "image/jpeg", "size": 12345 }
-```
-
-最大 8MB、`image/jpeg|png|gif|webp|heic|heif` のみ。
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/uploads/image` | `multipart/form-data` (file)。 JPEG/PNG/HEIC 対応、 最大 15MB、 EXIF 回転補正 済 URL 返却 |
 
 ---
 
 ## 管理者 `/api/admin`
 
-`role=admin` のみ。それ以外は 403。
+要 admin role。
 
 ### 許可リスト
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/allowlist`           | 一覧 |
-| POST   | `/api/admin/allowlist`           | `{ email, display_name, role, active }` |
-| DELETE | `/api/admin/allowlist/{email}`   | 無効化 (`active=0`) |
+| GET / POST / PATCH / DELETE | `/api/admin/allowlist(/...)` | 許可 email + 表示名 + grade 管理 |
 
 ### ユーザ
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/users`               | 全ユーザ + 残高 |
+| GET / POST / PATCH | `/api/admin/users(/...)` | ユーザ一覧 + 個別編集 (grade / role / active) |
 
 ### 経済操作
 | Method | Path | 説明 |
 |---|---|---|
-| POST   | `/api/admin/issue`               | `{ to_user_id, amount, memo? }` SYSTEM → ユーザ発行 |
-| POST   | `/api/admin/reversal`            | `{ ledger_id, memo? }` 逆仕訳 (purchase は fee 行も自動取消) |
+| POST | `/api/admin/grant`  | `{ user_id, amount, memo }` 手動配布 |
+| POST | `/api/admin/refund` | 逆仕訳 |
 
 ### 設定
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/config`              | DB ランタイム設定一覧 |
-| PATCH  | `/api/admin/config`              | `fee_rate / initial_points / checkin_base / streak_bonus_* / presence_window_minutes / geo_default_radius_m / scrapbox_*` 等 |
+| GET / PATCH | `/api/admin/settings` | fee_rate / initial_points / dev_login_enabled 等 |
 
 ### 統計
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/dashboard`           | 総発行量・SYSTEM/ESCROW 残高・取扱高 等 (1 round-trip) |
+| GET | `/api/admin/stats` | 総売上 / 手数料 / 発行 pt / ユーザ数 |
 
 ### お知らせ
 | Method | Path | 説明 |
 |---|---|---|
-| POST   | `/api/admin/broadcast`           | `{ body }` 全員に通知 |
+| POST | `/api/admin/broadcast` | 全員に通知 |
 
-### 部屋 (scanner)
+### 部屋 / 在室機材 (scanner)
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/rooms`               | 一覧 |
-| POST   | `/api/admin/rooms`               | `{ id, display_name }` 作成 → **scanner_token を一度だけ返す** |
-| PATCH  | `/api/admin/rooms/{id}`          | `{ display_name?, lat?, lng?, geo_radius_m? }` |
-| DELETE | `/api/admin/rooms/{id}`          | 削除 |
-| POST   | `/api/admin/rooms/{id}/rotate_token` | 新トークン発行 (旧は失効) |
-
-### 在室機材登録
-| Method | Path | 説明 |
-|---|---|---|
-| GET    | `/api/admin/presence_infrastructure`        | 一覧 (プリンタ・PC 等の登録) |
-| POST   | `/api/admin/presence_infrastructure`        | `{ mac, label, kind? }` ← 未登録 MAC リストから除外される |
-| DELETE | `/api/admin/presence_infrastructure/{mac}`  | 削除 |
+| GET / POST / PATCH / DELETE | `/api/admin/rooms(/...)` | 部屋 CRUD + 位置 (lat/lng/半径) + scanner token 発行 |
+| GET / POST / DELETE         | `/api/admin/mac_registrations` | MAC ↔ user_id 紐付け |
 
 ### カレンダー
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/admin/holidays?year=`          | 国民の祝日一覧 |
-| POST   | `/api/admin/holidays/sync`           | 内閣府 CSV から再取得 |
-| GET    | `/api/admin/calendar_overrides?year=` | ラボ独自の `lab_closed` / `lab_open` |
-| POST   | `/api/admin/calendar_overrides`      | `{ override_date, kind, label? }` (`kind` = `lab_closed`/`lab_open`) |
-| DELETE | `/api/admin/calendar_overrides/{date}` | 解除 |
+| GET / PATCH | `/api/admin/calendar/oauth` | Google Calendar 認可トークン管理 |
+| GET / POST  | `/api/admin/calendar/filters` | 表示フィルタ |
 
 ### Scrapbox 同期 (Slack ブリッジ)
 | Method | Path | 説明 |
 |---|---|---|
-| POST   | `/api/admin/scrapbox_slack/sync`     | `{ day?, dry_run? }` Slack の `#scrapbox` から指定日分を集計 (cron が日次自動実行) |
-| GET    | `/api/admin/slack_diag`              | Slack bot の `auth.test` → team / user_id を返す (scope 確認用) |
-| POST   | `/api/admin/slack_diag/test`         | 自分宛に test DM を送信。 `missing_scope` 等エラー時は対処 hint を返す |
+| GET  | `/api/admin/scrapbox/sync/status` | 同期状況 |
+| POST | `/api/admin/scrapbox/sync/backfill` | 過去分再取得 |
 
 ---
 
-## 小道具 (v270 以降に追加された各 API)
-
-### 募集 `/api/invitations`
+## Wishlist `/api/wishlist`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/invitations?status=open|all`    | 一覧。 各 item に `joins[]` (参加者) も同梱 |
-| POST   | `/api/invitations`                    | `{title, starts_at?, signup_closes_at?, location?, capacity?, image_url?, description?, pre_join_user_ids?}` 作成時に 発起人が 自動 join。 `starts_at` は `Y-m-d` (時刻なし) も可 |
-| GET    | `/api/invitations/{id}`               | 詳細 |
-| PATCH  | `/api/invitations/{id}`               | 編集 (`reopen: true` で 終了済を再開) |
-| DELETE | `/api/invitations/{id}`               | 取消 |
-| POST   | `/api/invitations/{id}/joins`         | 参加表明 |
-| DELETE | `/api/invitations/{id}/joins`         | 取消 |
+| GET    | `/api/wishlist`               | 一覧 |
+| POST   | `/api/wishlist`               | `{ jan, name, price?, note? }` |
+| PATCH  | `/api/wishlist/{id}`          | 編集 |
+| DELETE | `/api/wishlist/{id}`          | 削除 |
 
-### 投票 `/api/polls`, 点呼 `/api/rollcalls`, タイマー `/api/timers`
+---
 
-各々 `GET 一覧 / POST 作成 / GET 詳細 / PATCH 編集 / DELETE / POST {id}/vote (or respond, or cancel)` の標準形。 詳細は `src/handlers/polls.php` 等。 タイマーは `{bell1_seconds?, bell2_seconds?, bell3_seconds?, repeat_max?}` で 中間ベル + リピート可。
-
-### 待ち合わせ `/api/meetups`
+## 募集 `/api/invitations`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/meetups`                        | 自分関連の 一覧 |
-| POST   | `/api/meetups`                        | `{title, location, meetup_at, member_ids[]}` 集合時刻 24h 以内 |
-| GET    | `/api/meetups/{id}`                   | 詳細 + 参加者 |
-| PATCH  | `/api/meetups/{id}/cancel`            | 取消 (起案者または admin) |
-| DELETE | `/api/meetups/{id}`                   | 削除 |
+| GET / POST / PATCH / DELETE | `/api/invitations(/...)` | 学会/遠征などの寄付募集。 `feat_actions` で オンライン説明会/懇親会 追加可 |
+| POST | `/api/invitations/{id}/join` | 参加 |
+| POST | `/api/invitations/{id}/donate` | 寄付 (`{amount}`) |
 
-### オークション `/api/auctions`
+---
 
-| Method | Path | 説明 |
-|---|---|---|
-| GET    | `/api/auctions`                       | 一覧 (lazy settle 込み)。 単位は **円** |
-| POST   | `/api/auctions`                       | `{title, description?, image_url?, min_price, closes_at}` 締切 1分〜14日先 |
-| GET    | `/api/auctions/{id}`                  | 詳細 + 入札履歴。 落札後は seller/winner に連絡先表示 |
-| POST   | `/api/auctions/{id}/bids`             | `{amount}` 現在最高 +1 以上必須。 自分の出品には不可 |
-| PATCH  | `/api/auctions/{id}/cancel`           | 取消 (seller / admin) |
-| DELETE | `/api/auctions/{id}`                  | 削除 |
-
-### 運動 (歩数) `/api/exercise`
+## 投票 `/api/polls`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/exercise`                       | 自分の sessions + today/this_week/this_month/lifetime |
-| POST   | `/api/exercise`                       | `{step_count, duration_seconds, started_at, ended_at}` (1 セッション 30 分まで、 6 歩/秒超は弾く) |
-| DELETE | `/api/exercise/{id}`                  | 削除 |
-| GET    | `/api/exercise/leaderboard`           | 今週合計 トップ 30 |
+| GET    | `/api/polls`             | 一覧 |
+| POST   | `/api/polls`             | 作成 (options / deadline / visibility=creator/open/after_deadline / multi_select / allow_revote / allow_free_text) |
+| GET    | `/api/polls/{id}`        | 詳細 (集計は visibility 次第で 表示) |
+| PATCH  | `/api/polls/{id}`        | 編集 |
+| DELETE | `/api/polls/{id}`        | 削除 |
+| POST   | `/api/polls/{id}/vote`   | 投票 |
+| PATCH  | `/api/polls/{id}/close`  | 締切 |
+| POST   | `/api/polls/{id}/remind` | 未投票者に督促 |
+| POST   | `/api/polls/{id}/create-group` | v912 投票結果からグループ作成 |
 
-### 効果音 `/api/sounds`
+## 点呼 `/api/rollcalls`
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET    | `/api/sounds/clips`                   | 全 clip 一覧 |
-| POST   | `/api/sounds/clips`                   | audio upload (admin、 mp3/ogg/wav/m4a、 2MB まで) |
-| DELETE | `/api/sounds/clips/{id}`              | 削除 (admin) |
-| GET    | `/api/sounds/defaults`                | event 規定値一覧 |
-| PATCH  | `/api/sounds/defaults/{event_key}`    | 規定値変更 (admin) |
-| GET    | `/api/sounds/my`                      | 自分の上書き + 解決済 (再生に必要な file_url + volume) |
-| PATCH  | `/api/sounds/my/{event_key}`          | `{mode: default|custom|mute, clip_id?, volume?}` |
+| GET / POST / PATCH / DELETE | `/api/rollcalls(/...)` | 出欠確認 (deadline + 対象者 list) |
+| POST | `/api/rollcalls/{id}/respond` | 応答 |
+| PATCH | `/api/rollcalls/{id}/close` | 締切 |
+| POST | `/api/rollcalls/{id}/remind` | 未応答者に督促 |
 
-### グループ `/api/groups` (ad-hoc + スケジュール + 宿泊 + 航空券 + e-ticket)
+## タイマー `/api/timers`
 
-詳細は `src/handlers/adhoc_groups.php` 内 dispatch を参照。 主要:
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / DELETE | `/api/timers(/...)` | 学会タイマー (発表時間 + ベル 3 段 + repeat) |
+| GET  | `/api/timers/{id}/public` | 認証不要 の 公開表示用 (v676) |
+| PATCH | `/api/timers/{id}/start` | 開始 |
+| PATCH | `/api/timers/{id}/pause` | 一時停止 |
+| PATCH | `/api/timers/{id}/reset` | リセット |
+| PATCH | `/api/timers/{id}/cancel` | 中止 |
+
+## お知らせ `/api/notices`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / PATCH / DELETE | `/api/notices(/...)` | 学会案内 / ラボ通達 |
+
+## 待ち合わせ `/api/meetups`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH / DELETE | `/api/meetups(/...)` | `{title, location, meetup_at, member_ids[]}` 集合 |
+| PATCH | `/api/meetups/{id}/cancel` | 取消 |
+| POST  | `/api/meetups/{id}/participants` | 参加者追加 |
+| GET / POST | `/api/meetups/{id}/messages` | シェアメッセージ |
+
+---
+
+## 食べある記 `/api/places`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/places`         | お店一覧 (地図モード / 新着モード) |
+| POST   | `/api/places`         | 作成 (title / category / lat / lng / phone / hours / source_url) |
+| POST   | `/api/places/import_url` | tabelog / Retty / hotpepper / TripAdvisor URL → JSON-LD 抽出 (v921 TripAdvisor 対応) |
+| POST   | `/api/places/search_url` | キーワードから tabelog URL 検索 |
+| POST   | `/api/places/backfill_tabelog_urls` | admin: URL 一括補完 |
+| GET    | `/api/places/{id}`    | 詳細 |
+| PATCH  | `/api/places/{id}`    | 編集 |
+| DELETE | `/api/places/{id}`    | 削除 |
+| POST   | `/api/places/{id}/comments` | 口コミ投稿 (v921 で 起案者 に レビュー通知) |
+| DELETE | `/api/places/{id}/comments/{cid}` | 削除 |
+| POST   | `/api/places/{id}/comments/{cid}/rotate-image` | 画像回転 |
+| POST   | `/api/places/{id}/rotate-image` | ヒーロー画像回転 |
+| POST/DELETE | `/api/places/{id}/like`  | いいね ❤ |
+| POST/DELETE | `/api/places/{id}/visit` | 訪問 👣 |
+
+---
+
+## らぼったー (SNS) `/api/posts`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/posts`             | タイムライン (`?since_id` / `?until_id` で 双方向) |
+| POST   | `/api/posts`             | 投稿 (text + image + lat/lng + mentions + reply_to) |
+| GET    | `/api/posts/latest_id`   | 軽量ポーリング用 max id |
+| GET    | `/api/posts/{id}`        | 詳細 (返信ツリー含む) |
+| DELETE | `/api/posts/{id}`        | 削除 |
+| DELETE | `/api/posts/{id}/location` | 位置だけ削除 (v736) |
+| POST/DELETE | `/api/posts/{id}/like` | (旧) heart |
+| POST   | `/api/posts/{id}/reaction?kind=thumb\|heart\|star` | 付与 |
+| DELETE | `/api/posts/{id}/reaction?kind=...` | 解除 |
+| POST   | `/api/posts/{id}/rotate-image` | 画像回転 |
+
+## TODO `/api/todos`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / PATCH / DELETE | `/api/todos(/...)` | 個人 TODO (body / due / url / notes / partner) |
+
+## 効果音 `/api/sounds`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/sounds/clips`   | 全 clip 一覧 |
+| POST | `/api/sounds/clips`   | audio upload (admin、 mp3/ogg/wav/m4a、 2MB) |
+| DELETE | `/api/sounds/clips/{id}` | 削除 (admin) |
+| GET  | `/api/sounds/defaults`| event 規定値一覧 |
+| PATCH| `/api/sounds/defaults/{event_key}` | 規定値変更 (admin) |
+| GET  | `/api/sounds/my`      | 自分の上書き + 解決済み |
+| PATCH| `/api/sounds/my/{event_key}` | `{mode: default\|custom\|mute, clip_id?, volume?}` |
+
+## オークション `/api/auctions`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / DELETE | `/api/auctions(/...)` | 単位は **円** |
+| POST  | `/api/auctions/{id}/bids`  | `{amount}` 現最高 +1 以上 |
+| PATCH | `/api/auctions/{id}/cancel`| 出品取消 |
+
+## 運動 (歩数) `/api/exercise`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/exercise`             | 自分の sessions + today/this_week/this_month/lifetime |
+| POST | `/api/exercise`             | `{step_count, duration_seconds, started_at, ended_at}` (1 セッション 30 分まで、 6 歩/秒超は弾く) |
+| DELETE | `/api/exercise/{id}`      | 削除 |
+| GET  | `/api/exercise/leaderboard` | 今週合計 トップ 30 |
+
+## プレイリスト `/api/playlists`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH / DELETE | `/api/playlists(/...)` | YouTube / Spotify URL コレクション |
+| POST | `/api/playlists/{id}/like` | ❤ トグル |
+| POST | `/api/playlists/{id}/items` | 曲追加 |
+| PATCH/DELETE | `/api/playlists/{id}/items/{iid}` | 編集/削除 |
+| PATCH | `/api/playlists/{id}/items/{iid}/move` | 並べ替え |
+| POST/DELETE | `/api/playlists/{id}/items/{iid}/rating` | ⭐ 評価 |
+
+## ストップウォッチ `/api/stopwatches`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / DELETE | `/api/stopwatches(/...)` | 共有 ラップタイム |
+| POST | `/api/stopwatches/{id}/start` | 開始 |
+| POST | `/api/stopwatches/{id}/pause` | 停止 |
+| POST | `/api/stopwatches/{id}/reset` | リセット |
+| POST | `/api/stopwatches/{id}/lap`   | ラップ記録 |
+
+---
+
+## AI 系 `/api/ai`
+
+大きく 4 系統 + ヘルパ。 全て OpenAI Files API + chat.completions / Responses API 経由、 非同期 + share_token パターン。
+
+### 論文要約 (paper_translate, v748+)
+
+要約 (落合メソッド + 図表 inline)。 モデル別 pt (gpt-5-mini 30 / gpt-5 50 / o1 80)。 v914 で 「共有=半額、 非共有=基本額」 プライシング (auto_share フラグ)。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/paper_translate` | 開始 (multipart PDF + model + auto_share) |
+| GET  | `/api/ai/paper_translate` | 履歴一覧 |
+| GET  | `/api/ai/paper_translate/r/{token}` | 共有取得 (認証必要、 中身は 全員 read 可) |
+| GET  | `/api/ai/paper_translate/shared?q=` | 公開要約 一覧 (v756) |
+| PATCH| `/api/ai/paper_translate/{id}` | 共有 toggle (`{is_shared}`, v914 で 差額 課金/返金) |
+| POST | `/api/ai/paper_translate/{id}/redo` | やり直し (別モデル で 再要約、 保存 PDF 使用) |
+| POST | `/api/ai/paper_translate/{id}/retry` | エラー再投入 (v806) |
+| DELETE | `/api/ai/paper_translate/{id}` | 削除 |
+| POST | `/api/ai/paper_translate/from_full/{id}` | 全訳 row から 要約 pair を 作る (v813) |
+| POST | `/api/ai/paper_translate/{id}/react`   | ❤ toggle |
+| GET/POST/DELETE | `/api/ai/paper_translate/{id}/comments(/...)` | コメント |
+
+### 論文全訳 (paper_full_translate, v788+)
+
+章ごと full translation + back-translation 整合確認。 英→日 (gpt-5 60pt 等) と 日→英 (5x 料金)。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/paper_full_translate` | 開始 (`{direction: en2ja\|ja2en, model, auto_share}`) |
+| GET  | `/api/ai/paper_full_translate` | 履歴 |
+| GET  | `/api/ai/paper_full_translate/r/{token}` | 取得 |
+| GET  | `/api/ai/paper_full_translate/shared?q=` | 公開一覧 |
+| PATCH| `/api/ai/paper_full_translate/{id}` | 共有 toggle |
+| DELETE | `/api/ai/paper_full_translate/{id}` | 削除 |
+| POST | `/api/ai/paper_full_translate/{id}/retry` | 再投入 |
+| POST | `/api/ai/paper_full_translate/from_summary/{id}` | 要約 row から 全訳 pair (v798) |
+| POST | `/api/ai/paper_full_translate/{id}/react` | ❤ toggle |
+| GET/POST/DELETE | `/api/ai/paper_full_translate/{id}/comments(/...)` | コメント |
+
+### 論文査読 (paper_review, v550+)
+
+Accept/Reject + 強み/弱み/著者へのコメント。 target_venue + strictness 指定。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/paper_review` | 開始 (multipart PDF + target_venue + strictness + model + response_text/pdf?) |
+| GET  | `/api/ai/paper_review` | 履歴 |
+| GET  | `/api/ai/paper_review/r/{token}` | 取得 |
+| GET  | `/api/ai/paper_review/settings` | プロンプト設定 |
+| PUT  | `/api/ai/paper_review/settings` | 設定保存 |
+
+### Deep Research (deep_research, v781+)
+
+Web 横断 多段 調査。 gpt-5-mini (light 10pt) / gpt-5 (standard 25pt / deep 50pt)。 background=true で 非同期。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/deep_research` | 開始 (`{query, depth, auto_share}`) |
+| GET  | `/api/ai/deep_research` | 履歴 |
+| GET  | `/api/ai/deep_research/r/{token}` | 取得 |
+| GET  | `/api/ai/deep_research/shared?q=` | 公開一覧 |
+| PATCH| `/api/ai/deep_research/{id}` | 共有 toggle |
+| DELETE | `/api/ai/deep_research/{id}` | 削除 |
+
+### 原稿チェック / リライター (v583, v613)
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/resume_check` | レジュメ / 概要 チェック (5pt、 PDF 必須 v612+) |
+| GET / GET :id | `/api/ai/resume_check(/{id})` | 履歴 / 個別 |
+| POST | `/api/ai/rewriter`     | 文字数リライター (1pt、 サーバ側 カウント + 最大 3 回 再依頼) |
+| GET / GET :id | `/api/ai/rewriter(/{id})` | 履歴 / 個別 |
+
+### チャット / アシスタント / 短タイトル
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/ai/chat`         | チャット |
+| POST | `/api/ai/assistant`    | 一般 アシスタント |
+| POST | `/api/ai/short_title`  | タイトル AI 命名 |
+| POST | `/api/ai/expand_schedule` | 予定 フリーフォーム 展開 |
+| POST | `/api/ai/translate_image` | 画像 翻訳 |
+| POST | `/api/ai/place_lookup` | 店名等 情報検索 |
+| GET / DELETE | `/api/ai/translations(/{id})` | 翻訳履歴 |
+
+### スター / ブックマーク (v789+)
+
+各 AI 結果 (paper_translate / paper_full / deep_research / rewriter 等) を `kind + ref_id` で ⭐ / 🔖。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST/DELETE | `/api/ai/stars`     | `{kind, ref_id}` |
+| POST/DELETE | `/api/ai/bookmarks` | 同上 |
+
+### 新着 feed
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/ai/paper_recent?sort=new\|stars` | v809 要約 + 全訳 合算 新着 |
+
+---
+
+## 予測系
+
+### 優勝予想 (v580+) `/api/predictions`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH | `/api/predictions/games(/...)` | 順位予想 (1位のみ / 1-2位 / 1-4位) |
+| POST | `/api/predictions/games/{id}/predict` | 予想 |
+| POST | `/api/predictions/games/{id}/close` | 締切 |
+| POST | `/api/predictions/games/{id}/finalize` | 結果 (山分け + 場代 5%) |
+| POST | `/api/predictions/games/{id}/cancel` | 取消 |
+
+### 勝敗予測 (v610+) `/api/score_predictions`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH | `/api/score_predictions/games(/...)` | スコア予想 (例 3-2) |
+| POST | `/api/score_predictions/games/{id}/predict` | 予想 |
+| POST | `/api/score_predictions/games/{id}/close` | 締切 |
+| POST | `/api/score_predictions/games/{id}/finalize` | 結果 (完全的中 山分け + 場代 5%) |
+| POST | `/api/score_predictions/games/{id}/cancel` | 取消 |
+
+---
+
+## 占い `/api/fortune`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/fortune/today` | 今日の運勢 + 星座 (user × date で 一意) |
+
+---
+
+## ゲーム系
+
+### `/api/mahjong` 麻雀
+
+賭けプール + 実ゲーム (門前/鳴き/役判定/連荘/半荘) + AI 対戦。
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET/POST/GET :id/POST :id/{join,leave,start,cancel,call,discard,riichi,tsumo,ron,pass} | `/api/mahjong/games(/...)` | 全ライフサイクル |
+| POST | `/api/mahjong/sim` | 賭けプール のみ シミュレート |
+| POST | `/api/mahjong/ai/new` | AI 対戦作成 |
+
+### `/api/ito` ito 協力
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/ito/games(/...)` | 一覧 / 作成 / 詳細 |
+| POST | `/api/ito/games/{id}/{join,leave,start,express,reveal,cancel}` | ライフサイクル |
+
+### `/api/jinrou` 人狼
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/jinrou/games(/...)` | |
+| POST | `/api/jinrou/games/{id}/{join,leave,start,action,advance,cancel}` | 夜/昼 action + フェーズ進行 |
+
+### `/api/daifugo` 大富豪
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/daifugo/games(/...)` | 革命 + 8切り + ジョーカー |
+| POST | `/api/daifugo/games/{id}/{join,start,play,pass,cancel,resign}` | プレイフィー 1pt |
+
+### `/api/othello` 地雷オセロ
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/othello/games(/...)` | 各自 1 地雷 (3x3 反転) |
+| POST | `/api/othello/games/{id}/{join,mines,move,pass,cancel,resign}` | |
+| POST | `/api/othello/ai/new` | AI 対戦 |
+
+### `/api/shiritori` 絵しりとり
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/shiritori/games(/...)` | 時間制限 キャンバス + ストローク記録 |
+| POST | `/api/shiritori/games/{id}/{join,draw,submit,skip,cancel}` | |
+
+### `/api/tierlists` ティア表
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/tierlists`     | 一覧 / 作成 (お題 + 候補) |
+| GET / PUT / DELETE | `/api/tierlists/{id}` | 詳細 / 回答保存 / 削除 |
+
+### `/api/bingo` 週次ビンゴ
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/bingo/me` | 今週の自分カード |
+| GET | `/api/bingo/leaderboard` | 今週リーダーボード |
+| GET | `/api/bingo/history` | 過去 12 週 |
+| GET | `/api/bingo/week/{date}` | 過去週閲覧 |
+
+### `/api/bingofit` 服 ビンゴ (v815+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/bingofit/items` | 衣類一覧 / 追加 |
+| PATCH / DELETE | `/api/bingofit/items/{id}` | 編集 / ソフト削除 |
+| POST | `/api/bingofit/items/{id}/retry-bg` | 背景透過再試行 |
+| GET | `/api/bingofit/board?week=` | 今週 or 過去週の盤 |
+| POST / DELETE | `/api/bingofit/board/cells/{idx}/open` | マス開ける / 取消 |
+| GET | `/api/bingofit/history` | 過去 12 週 |
+
+### `/api/quizzes` フリップクイズ (v655+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/quizzes` | 一覧 / 作成 |
+| GET  | `/api/quizzes/{id}` | 詳細 |
+| POST | `/api/quizzes/{id}/{ask,answer,reveal,score,next,finish,cancel}` | ライフサイクル |
+
+### `/api/buzzer` 早押しクイズ (v872)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/buzzer/sessions` | 一覧 / 作成 |
+| GET  | `/api/buzzer/sessions/{id}` | 詳細 (現在 round + ranking) |
+| POST | `/api/buzzer/sessions/{id}/new-round` | 起案者「次へ」 |
+| POST | `/api/buzzer/sessions/{id}/tap`  | 早押し送信 (ローカル ms 計測) |
+| POST | `/api/buzzer/sessions/{id}/end`  | 終了 |
+| GET  | `/api/buzzer/sessions/{id}/poll` | 800ms ポーリング |
+
+### `/api/drafts` ドラフト
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id | `/api/drafts(/...)` | 起案 / 一覧 |
+| POST | `/api/drafts/{id}/{pick,draw,advance,cancel}` | 指名 / くじ / ラウンド進行 |
+
+### `/api/custom-games` 自作ゲーム v1
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/custom-games/list` | 有効な kind 一覧 |
+| GET / POST | `/api/custom-games/kinds` | 全 kind (含 disabled) / 登録 |
+| GET  | `/api/custom-games/kinds/{kind}/script.js` | JS 配信 (認証不要) |
+| PATCH / DELETE | `/api/custom-games/kinds/{kind}` | 編集 / 無効化 |
+| GET / POST | `/api/custom-games/{kind}/games`      | 卓一覧 / 起案 |
+| GET  | `/api/custom-games/{kind}/games/{id}` | 詳細 |
+| POST | `/api/custom-games/{kind}/games/{id}/{join,move,cancel,resign}` | |
+
+### `/api/cg2` 自作ゲーム v2
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/cg2/kinds` | kind 一覧 / 新規 |
+| GET  | `/api/cg2/kinds/{slug}/script.js` | JS 配信 (認証不要) |
+| PATCH / DELETE | `/api/cg2/kinds/{slug}` | 更新 / 削除 |
+| GET / POST | `/api/cg2/kinds/{slug}/games` | 卓 |
+| GET  | `/api/cg2/games/{id}` | 詳細 |
+| POST | `/api/cg2/games/{id}/{join,add-ai,start,cancel,finalize}` | |
+| GET / POST | `/api/cg2/games/{id}/shared` | 共有状態取得 / 更新 |
+
+### `/api/custom-widgets` 自作ウィジェット
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH / DELETE | `/api/custom-widgets(/...)` | |
+| GET  | `/api/custom-widgets/{id}/script.js` | JS 配信 |
+
+### `/api/bait` 釣り依頼
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / DELETE | `/api/bait/requests(/...)` | 起案 側 |
+| POST | `/api/bait/requests/{id}/remind` | 督促 |
+| PATCH | `/api/bait/requests/{id}/close` | 締める |
+| GET  | `/api/bait/my-assignments` | worker 視点 |
+| PATCH | `/api/bait/assignments/{aid}/{done,undone}` | 完了 / 取消 |
+
+---
+
+## グループ・チャット・共有
+
+### `/api/groups` (ad-hoc + スケジュール + 宿泊 + 航空券 + e-ticket)
+
+主要 (詳細は `src/handlers/adhoc_groups.php` 内 dispatch を参照):
 
 - `GET / POST / GET :id / PATCH :id / DELETE :id (close)` 通常 CRUD
 - `DELETE :id/hard_delete` 完全削除 (closed_at セット済のみ)
@@ -434,76 +693,276 @@ Content-Type: multipart/form-data
 - `GET/POST :id/lodgings`, `PATCH/DELETE :id/lodgings/:lid`, `POST :id/lodgings/:lid/sync` スケジュール反映
 - `GET/POST :id/flights`, `PATCH/DELETE :id/flights/:fid`, `POST :id/flights/:fid/sync`
 - `GET/POST/DELETE :id/flights/:fid/attachments` 添付 PDF / 画像
-- `GET/POST/DELETE :id/flights/:fid/etickets` 航空券 e-ticket (画像 + 座席 + 予約番号 + メモ)
+- `GET/POST/DELETE :id/flights/:fid/etickets` 航空券 e-ticket
 - `GET/POST :id/chats`, `DELETE :id/chats/:mid` チャット
-- `GET/POST :id/schedule`, `PATCH/DELETE :id/schedule/:itemId`, `PATCH :id/schedule/:itemId/move (up/down)`, `PATCH :id/schedule/:itemId/relocate (cross-day DnD)`
+- `GET/POST :id/schedule`, `PATCH/DELETE :id/schedule/:itemId`, `PATCH :id/schedule/:itemId/move (up/down)`, `PATCH :id/schedule/:itemId/relocate` (cross-day DnD)
 - `GET/POST/DELETE :id/schedule/:itemId/attachments`
 
-### 公開プロフィール `/api/users/{id}/profile`
+### `/api/chat` ラボ内 チャット
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET | `/api/users/{id}/profile` | 公開プロフィール (display_name / avatar / grade / hobbies / favorites / scrapbox_username) |
+| GET  | `/api/chat/rooms`                    | ルーム一覧 (channel + DM) |
+| GET  | `/api/chat/rooms/{roomKey}/messages` | メッセージ取得 |
+| POST | `/api/chat/rooms/{roomKey}/messages` | 送信 |
+| PATCH| `/api/chat/rooms/{roomKey}/read`     | 既読 |
+| DELETE | `/api/chat/messages/{id}`          | メッセージ削除 |
+| GET  | `/api/chat/unread`                   | 未読合計 |
 
-### 食べある記 / らぼったー / プレイリスト / 制覇マップ / 体重BMI / 筋トレ / 散歩
-
-| Method | Path | 説明 |
-|---|---|---|
-| GET / POST / PATCH / DELETE | `/api/places(/...)` | 🍴 お店の共有、 ⭐評価 / 👣 行った / ❤️ いいね / 口コミ + 画像 / カテゴリ |
-| GET / POST / PATCH / DELETE | `/api/posts(/...)` | 💬 らぼったー (テキスト + 画像 + 位置 + @メンション + 返信 + 👍❤⭐ リアクション) |
-| GET / POST / PATCH / DELETE | `/api/playlists(/...)` | 🎵 プレイリスト (YouTube/Spotify URL + ⭐評価) |
-| GET / POST / DELETE | `/api/regions/visit` / `visited` / `stats` | 🗺 行った国・都道府県 (ISO 3166-1 + JP-NN) |
-| GET / POST / DELETE | `/api/health(/...)` | ⚖️ 体重 / 身長 / BMI (個人時系列) |
-| GET / POST / DELETE | `/api/workouts(/...)` | 💪 筋トレ + `/friends` で 仲間の様子 |
-| GET / POST | `/api/walk/suggestions` `/walk/sessions(/...)` | 🚶 散歩おすすめ + 軌跡 GPS 記録 |
-
-### ゲーム系: 麻雀 / ito / 人狼 / 大富豪 / 地雷オセロ / 絵しりとり / ティア表
+### `/api/screen-shares` 画面共有 broadcast
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET / POST | `/api/mahjong/(games(/...)|sim|ai/new)` | 🀄 麻雀 賭けプール + 実ゲーム (門前/鳴き/役判定/連荘/半荘) + AI 対戦 (練習モード) |
-| GET / POST | `/api/ito/games(/...)` | 🎲 ito 協力 (1-100 の数字 + お題で表現) |
-| GET / POST | `/api/jinrou/games(/...)` | 🐺 人狼 役職配布 / 夜 (襲撃・占い・護衛) / 昼 (投票で追放) |
-| GET / POST | `/api/daifugo/games(/...)` | 🃏 大富豪 (革命 + 8 切り + ジョーカー)、 プレイフィー 1pt |
-| GET / POST | `/api/othello/games(/...)` | 💣 地雷オセロ、 各自 1 地雷 (3x3 反転)、 プレイフィー 1pt |
-| GET / POST | `/api/shiritori/games(/...)` | 🎨 絵しりとり (時間制限つき キャンバス + ストローク記録) |
-| GET / POST / PUT | `/api/tierlists(/...)` | 🎯 ティア表 S/A/B/C/D 振り分け (5 段階) |
-| GET / POST | `/api/bingo/(me|leaderboard|history|week/{date})` | 🎰 週次 5x5 ビンゴ (平日行動 自動判定) |
+| GET    | `/api/screen-shares/active` | 現在アクティブな共有 |
+| POST   | `/api/screen-shares`        | 作成 (image+body, expires_at) |
+| DELETE | `/api/screen-shares/{id}`   | 起案者 / admin が dismiss |
 
-### 予測系: 優勝予想 / 勝敗予測
+### `/api/file-transfers` ファイル送信
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET / POST | `/api/predictions/games(/...)` | 🏆 順位予想 (1位のみ / 1-2位 / 1-4位)。 完全的中で 山分け + 場代 5% |
-| POST | `/api/predictions/games/{id}/predict` `/close` `/finalize` `/cancel` | 予想 / 締切 / 結果開示 / キャンセル |
-| GET / POST | `/api/score_predictions/games(/...)` | 🎯 スコア予想 (例: 3-2)。 完全的中で 山分け + 場代 5% |
+| GET    | `/api/file-transfers` | 送受信一覧 |
+| POST   | `/api/file-transfers` | 送信 (multipart, 複数受信者) |
+| GET    | `/api/file-transfers/{id}/download` | DL |
+| DELETE | `/api/file-transfers/{id}` | 削除 |
 
-### AI 系: 論文査読 / 原稿チェック / リライター / 翻訳 / チャット
-
-| Method | Path | 説明 |
-|---|---|---|
-| POST (multipart) | `/api/ai/paper_review` | 📄 論文査読 PDF (10pt)、 OpenAI Files API + chat.completions、 非同期 + share_token |
-| GET / PUT | `/api/ai/paper_review/(settings|r/{token})` | プロンプト編集 + 共有 URL |
-| POST (multipart or JSON) | `/api/ai/resume_check` | 📝 短原稿チェック (5pt、 PDF 必須 v612〜)。 6項目スコア + リライト案 |
-| GET / POST | `/api/ai/rewriter(/{id})` | ✂️ 文字数 / 単語数 制限リライター (1pt)。 サーバ側カウント + 最大 3 回 再依頼 |
-| POST | `/api/ai/short_title` | タイトル AI 命名 |
-| (chat / translate / help は フロント直で OpenAI 呼出、 履歴は別 API) | | |
-
-### 1 日 1 回 占い / 誕生日 / フィードバック
+### `/api/share` タイトル+URL 共有 (v853)
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET | `/api/fortune/today` | 🔮 今日の運勢 (30 種、 user × date で 一意) |
-| GET / PATCH | `/api/me` (`birthday_md` / `birthday_year`) | 🎂 誕生日 (MM-DD + 西暦任意) |
-| GET / POST / PATCH | `/api/feedback(/...)` | バグ報告 / 機能要望、 claude_status workflow、 admin 返信 + Slack 通知 |
+| POST | `/api/share/notify-users` | タイトル+URL を指定ユーザに 共有通知 |
 
-### 順番決め / ランダムグループ / どこ行く ルーレット
+---
+
+## Scrapbox / Cosense
+
+### `/api/scrapbox` Slack ブリッジ経由 の Scrapbox feed
 
 | Method | Path | 説明 |
 |---|---|---|
-| GET / POST | `/api/orderings(/...)` | 📋 順番決め (CSPRNG + 演出 + コピー機能) |
-| POST | `/api/random-groups/notify` | 🎲 ランダムグループ → 分けた瞬間に 全員通知 |
-| (`text-roulette` は サーバ未保存、 端末内ツール) | | |
+| GET | `/api/scrapbox/updates?since=` | 最近の更新 (project 別) |
+| GET | `/api/scrapbox/handles` | handle map (Scrapbox 表示名 ↔ user_id) |
+| POST | `/api/scrapbox/awards/backfill` | admin: 過去 pt 遡及配布 |
+
+### `/api/cosense` Cosense (旧 Scrapbox) 直接連携 (v821+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/cosense/research-note?ym=YYYY-MM` | 研究ノート ページ 取得 (v825+ セクションエディタ) |
+| POST | `/api/cosense/research-note/section` | セクション 保存 |
+| POST | `/api/cosense/research-note/create-monthly` | v910 未作成月 の 自動生成 |
+| GET  | `/api/cosense/pages/{title}` | 任意ページ 取得 |
+| GET/POST | `/api/cosense/admin/cookie` | admin: connect.sid |
+
+---
+
+## 研究支援
+
+### `/api/refs` 文献管理 (Zotero-like、v925+)
+
+大幅拡張。 主な機能: import (DOI/arXiv/URL/PDF/BibTeX/RIS/Zotero API/CSL-JSON/EndNote XML/Semantic Scholar 検索)、 note (Markdown + 共有)、 読状態、 コレクション、 タグ、 trash、 saved searches、 related items、 添付、 highlights、 CSL 引用 7 style、 bibliography 一括生成、 SS references/citations/recommend、 PDF fulltext 検索、 refs 詳細から LabPay AI (要約/全訳/査読/DR) を キック 等。
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET    | `/api/refs?q=&tag=&year=&status=&sort=&trash=&collection_id=&uncategorized=&fulltext_q=` | 一覧 (LabPay 側 全 filter) |
+| POST   | `/api/refs`                    | 新規作成 (title 必須、 doi/arxiv_id/item_type/authors/year/venue/abstract/url/tags/extra、 force=1 で 二重登録 バイパス) |
+| POST   | `/api/refs/import_doi`         | DOI → crossref metadata |
+| POST   | `/api/refs/import_arxiv`       | arXiv ID → arxiv API |
+| POST   | `/api/refs/import_url`         | URL から DOI / arXiv 抽出 |
+| POST   | `/api/refs/import_bibtex`      | BibTeX ファイル / テキスト 一括 import |
+| POST   | `/api/refs/import_ris`         | RIS 一括 import |
+| POST   | `/api/refs/extract_pdf`        | PDF → pdftotext → DOI 検出 or OpenAI で metadata 抽出 |
+| POST   | `/api/refs/import_zotero`      | Zotero API 直接連携 (api_key + user_id/group_id、 fetch_all + sync_pdfs 可) |
+| POST   | `/api/refs/import_csljson`     | CSL-JSON ファイル |
+| POST   | `/api/refs/import_endnote`     | EndNote XML |
+| POST   | `/api/refs/bibliography`       | 複数 ref を CSL style で 一括 引用 (`{ref_ids or collection_id or tag, style}`) |
+| POST   | `/api/refs/ss_search`          | Semantic Scholar 検索 (`{query, year?, venue?, limit}`) |
+| POST   | `/api/refs/ss_recommend`       | SS レコメンド (`{ref_ids, limit}`) |
+| GET    | `/api/refs/tags`               | タグ一覧 + count |
+| GET    | `/api/refs/export/bibtex?tag=` | BibTeX 一括 ダウンロード |
+| GET / POST | `/api/refs/collections`    | コレクション一覧 / 作成 |
+| GET / PATCH / DELETE | `/api/refs/collections/{cid}` | 詳細 / 編集 / 削除 |
+| POST / DELETE | `/api/refs/collections/{cid}/refs/{rid}` | ref を コレクションに 追加 / 除外 |
+| GET / POST | `/api/refs/saved_searches` | 保存済 検索 |
+| DELETE | `/api/refs/saved_searches/{sid}` | 削除 |
+| GET    | `/api/refs/{id}`               | 詳細 (links 含む、 SHA 一致 で ラボ全員 の paper_translate/full/review を 相互リンク) |
+| PATCH  | `/api/refs/{id}`               | 編集 |
+| DELETE | `/api/refs/{id}`               | ソフト 削除 (二度目 で hard delete、 hard は admin のみ) |
+| PATCH  | `/api/refs/{id}/note`          | 自分 note + 読状態 upsert |
+| POST   | `/api/refs/{id}/attach_pdf`    | 主 PDF 添付 (SHA256 で 同定 + pdftotext で fulltext 抽出) |
+| GET    | `/api/refs/{id}/bibtex`        | 個別 BibTeX (text/plain) |
+| GET / POST | `/api/refs/{id}/attachments`  | 補足添付 (kind = pdf/supplement/slides/video/image/other) |
+| DELETE | `/api/refs/{id}/attachments/{aid}` | 削除 |
+| POST   | `/api/refs/{id}/restore`       | trash から 復元 |
+| GET / POST | `/api/refs/{id}/relations` | 関連 論文 (bidirectional) |
+| DELETE | `/api/refs/{id}/relations/{rid}` | 関連 解除 |
+| GET    | `/api/refs/{id}/citation?style=apa\|mla\|chicago\|ieee\|nature\|science\|acm` | 単体 引用 生成 |
+| GET    | `/api/refs/{id}/ss_references` | SS: この 論文 の 参考文献 |
+| GET    | `/api/refs/{id}/ss_citations`  | SS: この 論文 の 被引用 |
+| POST   | `/api/refs/{id}/ss_enrich`     | SS から citation_count / reference_count / ss_id を 焼き込む |
+| GET / POST | `/api/refs/{id}/highlights`| PDF ハイライト (page + quote + comment + color) |
+| PATCH / DELETE | `/api/refs/{id}/highlights/{hid}` | 編集 / 削除 |
+
+### `/api/overleaf` Overleaf プロジェクト追跡 (v886+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/overleaf/projects`      | プロジェクト一覧 (delta_24h/7d + sparkline) |
+| GET  | `/api/overleaf/projects/{id}` | 詳細 (60日 history + per-file 内訳) |
+| GET  | `/api/overleaf/status`        | collector 状態 |
+| GET / POST | `/api/overleaf/admin/cookie`  | admin: overleaf_session2 cookie 管理 |
+| POST | `/api/overleaf/admin/verify`  | admin: cookie 検証 |
+| POST | `/api/overleaf/admin/run`     | admin: collector 即時実行 |
+| GET  | `/api/overleaf/admin/runs`    | admin: 実行履歴 |
+
+### `/api/conquest` 制覇リスト (v860+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/conquest/lists` | 一覧 / 作成 |
+| GET / PATCH / DELETE | `/api/conquest/lists/{id}` | 詳細 + items / 編集 / 削除 |
+| POST | `/api/conquest/lists/{id}/items` | アイテム追加 |
+| PATCH / DELETE | `/api/conquest/lists/{id}/items/{iid}` | 編集 / 削除 |
+| POST | `/api/conquest/lists/{id}/items/{iid}/visit` | 訪問トグル |
+
+### `/api/habits` Habit Tracker (v870+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/habits` | 一覧 / 作成 |
+| GET / PATCH / DELETE | `/api/habits/{id}` | 詳細 (60日 カレンダー) / 編集 / 削除 |
+| POST / DELETE | `/api/habits/{id}/checkin?date=YYYY-MM-DD` | 達成入力 / 取消 |
+
+### `/api/zemi-videos` ゼミ動画 (v843+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/zemi-videos?q=` | 一覧 |
+| POST | `/api/zemi-videos`    | 新規登録 |
+| POST | `/api/zemi-videos/import-from-cosense` | admin: Cosense タグ から 一括 import |
+| GET / PATCH / DELETE | `/api/zemi-videos/{id}` | 個別 |
+
+### `/api/conf-deadlines` 学会 〆切 (v580+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/conf-deadlines` | 一覧 / 追加 |
+| GET  | `/api/conf-deadlines/upcoming` | 直近 upcoming |
+| GET / PATCH / DELETE | `/api/conf-deadlines/{id}` | 個別 |
+| POST | `/api/conf-deadlines/{id}/members` | メンバー追加 |
+| POST | `/api/conf-deadlines/{id}/join` | 自分を追加 |
+| POST | `/api/conf-deadlines/{id}/leave` | 自分を除外 |
+| DELETE | `/api/conf-deadlines/{id}/members/{uid}` | メンバー除外 |
+
+### `/api/news` IT ニュース
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/news/it`         | はてなIT + HackerNews |
+| GET  | `/api/news/history`    | 履歴 |
+| POST | `/api/news/summarize`  | 1 件 GPT 要約 |
+
+---
+
+## 名言 `/api/quotes` (v804+)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/quotes` | 一覧 / 追加 |
+| DELETE | `/api/quotes/{id}` | 削除 |
+
+---
+
+## 送金請求 `/api/money-requests`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/money-requests` | 請求一覧 / 作成 |
+| GET  | `/api/money-requests/unpaid-summary` | 未払サマリ |
+| GET / PATCH / DELETE | `/api/money-requests/{id}` | 詳細 / 編集 / 締める |
+| PATCH | `/api/money-requests/{id}/pay`   | 支払い済 |
+| PATCH | `/api/money-requests/{id}/unpay` | 支払い取消 |
+
+---
+
+## 小道具 (utility)
+
+### `/api/fx` 為替
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/fx?from=USD&to=JPY` | 直近 exchangerate.host キャッシュ |
+
+### `/api/network` 内部ネットワーク
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/network/status` | 学内 LAN / VPN 状態 |
+
+### `/api/random-groups` ランダムグループ
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/random-groups/notify` | 分けた瞬間 全員通知 |
+
+### `/api/orderings` 順番決め
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/orderings(/...)` | CSPRNG + 演出 + コピー |
+
+### `/api/regions` 行った 国 / 都道府県
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/regions/visited` | 訪問済 |
+| POST | `/api/regions/visit`   | 追加 (`{code}` ISO 3166-1 or JP-NN) |
+| GET  | `/api/regions/stats`   | ラボ全体 統計 |
+
+### `/api/health` 体重 / BMI
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / DELETE | `/api/health(/...)` | 個人 時系列 |
+
+### `/api/workouts` 筋トレ
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/workouts` | 個人セット 記録 |
+| GET  | `/api/workouts/friends` | 仲間の様子 |
+
+### `/api/walk` 散歩
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET  | `/api/walk/suggestions` | おすすめ ルート |
+| GET / POST | `/api/walk/sessions(/...)` | GPS 軌跡 記録 |
+
+### `/api/nomikai` 飲み会 精算
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST / GET :id / PATCH / DELETE | `/api/nomikai(/...)` | 参加者 + 会費 + ソフドリ 割引 |
+
+### `/api/roulettes` ルーレット / どこ 行く
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/roulettes`     | ラボ用 gacha (v385+) |
+| POST | `/api/roulettes/{id}/spin` | 実行 |
+
+---
+
+## フィードバック `/api/feedback`
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/feedback` | 一覧 (自分の分) / 投稿 |
+| PATCH | `/api/feedback/{id}` | 起案者 が 追記 |
+| GET  | `/api/feedback/admin`  | admin 用 全件 |
+| PATCH | `/api/feedback/admin/{id}` | admin 応答 + Slack 通知 |
+| GET  | `/api/feedback/claude_queue` | claude-cron 用 (approved の 件数) |
 
 ---
 
@@ -548,4 +1007,31 @@ curl -s -H "Authorization: Bearer $TOKEN" \
      -X POST \
      -d '{"room_id":"10F","observations":[{"mac":"aa:bb:cc:dd:ee:ff","ip":"192.168.50.10"}]}' \
      https://pay.example.ac.jp/api/presence/scan
+```
+
+## サンプル: refs に DOI で追加 → 要約 まで 一気通貫
+
+```bash
+# 1. DOI で metadata 取得
+curl -s -c $C -b $C \
+  -H "Content-Type: application/json" -H "X-Requested-With: labpay" \
+  -X POST -d '{"doi":"10.1145/3313831.3376234"}' \
+  https://pay.example.ac.jp/api/refs/import_doi
+# → { "meta": {...}, "existing": null }
+
+# 2. refs 保存
+REF_ID=$(curl -s -c $C -b $C \
+  -H "Content-Type: application/json" -H "X-Requested-With: labpay" \
+  -X POST -d @meta.json \
+  https://pay.example.ac.jp/api/refs | jq -r .id)
+
+# 3. PDF 添付
+curl -s -c $C -b $C -H "X-Requested-With: labpay" \
+  -F "file=@paper.pdf" \
+  https://pay.example.ac.jp/api/refs/$REF_ID/attach_pdf
+
+# 4. 要約を キック (refs 詳細 の 「📑 要約する」 ボタン相当)
+curl -s -c $C -b $C -H "X-Requested-With: labpay" \
+  -F "file=@paper.pdf" -F "model=gpt-5" -F "auto_share=1" \
+  https://pay.example.ac.jp/api/ai/paper_translate
 ```
