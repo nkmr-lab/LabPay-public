@@ -84,7 +84,7 @@ export async function renderRefs() {
       <div class="row center" style="gap:8px; flex-wrap:wrap">
         <h2 style="margin:0; flex:1">📚 文献管理 <span style="font-size:11px; color:#9ca3af; font-weight:normal">Zotero 的、 ラボ共有</span></h2>
         <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋ 文献を 追加</a>
-        <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="BibTeX 一括 ダウンロード">⬇ BibTeX</button>
+        <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="現在 の 絞り込み 対象 全件 の BibTeX を クリップボード に コピー">📋 BibTeX コピー</button>
         <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献 リスト を CSL style で 一括生成">📚 参考文献</a>
         <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱 切替">🗑</button>
       </div>
@@ -128,9 +128,17 @@ export async function renderRefs() {
     </div>
     <div id="rf-list" class="card"><div class="muted">読み込み中…</div></div>
   `;
-  document.getElementById('rf-export').addEventListener('click', () => {
+  document.getElementById('rf-export').addEventListener('click', async () => {
+    // v935 ダウンロード 保存 じゃ なく クリップボード へ (BibTeX は Overleaf 貼り 付け が 主用途)
     const t = listState.tag ? `?tag=${encodeURIComponent(listState.tag)}` : '';
-    window.location.href = '/api/refs/export/bibtex' + t;
+    try {
+      const resp = await fetch('/api/refs/export/bibtex' + t, { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      const entries = (text.match(/@\w+\s*\{/g) || []).length;
+      await navigator.clipboard.writeText(text);
+      toast(`📋 ${entries} 件 の BibTeX を コピー`);
+    } catch (e) { toast('失敗: ' + e.message); }
   });
   let searchTimer = null;
   document.getElementById('rf-q').addEventListener('input', e => {
@@ -324,17 +332,32 @@ async function loadList() {
       return;
     }
     root.innerHTML = items.map(it => renderTile(it)).join('');
+    // v935 タイル 内 の タグ chip クリック で フィルタ 発火 (親 <a> の navigate を 止める)
+    root.querySelectorAll('.rf-tile-tag').forEach(b => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const t = b.dataset.tag;
+        listState.tag = (listState.tag === t) ? '' : t;
+        loadTagsChips();
+        loadList();
+        // scroll to top
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {}
+      });
+    });
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 }
 
 function renderTile(it) {
+  // v935 タグ chip を button 化 + data-tag で 拾える ように。 親 <a> の navigate を stopPropagation で 止める。
+  //   flex:0 0 auto で 引き伸ばされ ない よう に (.row > * が flex:1 1 auto を 効かせる ので inline style で 上書き)。
   const tagsHtml = (it.tags || []).map(t =>
-    `<span class="tag" style="background:#f3e8ff; color:#7b3fa0; font-size:11px; padding:1px 6px; border-radius:8px">${escapeHtml(t)}</span>`
+    `<button class="tag rf-tile-tag" data-tag="${escapeHtml(t)}" style="flex:0 0 auto; background:#f3e8ff; color:#7b3fa0; font-size:11px; padding:1px 6px; border-radius:8px; border:none; cursor:pointer; font-family:inherit; line-height:1.4">${escapeHtml(t)}</button>`
   ).join(' ');
   const st = it.my_status || 'unread';
-  const stChip = `<span style="background:${STATUS_COLOR[st]}; color:#fff; font-size:10px; padding:1px 6px; border-radius:8px">${STATUS_LABEL[st]}</span>`;
+  const stChip = `<span style="flex:0 0 auto; background:${STATUS_COLOR[st]}; color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; line-height:1.4">${STATUS_LABEL[st]}</span>`;
   const idBadges = [];
   if (it.doi)      idBadges.push('DOI');
   if (it.arxiv_id) idBadges.push('arXiv');

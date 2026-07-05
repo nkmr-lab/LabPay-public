@@ -1037,3 +1037,13 @@ a.list-item { text-decoration: none; color: inherit; }
   /* 印刷モード 中 だけ 本文 の max-width を 広く (通常時 の 中央寄せ は 邪魔) */
   body.printing main#app > * { max-width: none !important; }
 }
+
+/* v935 refs (文献管理): PC で 両端 いっぱい は 見にくい ので max-width 制限。
+   fullscreen mode でも 効かせる ため子要素 に かける。 */
+@media (min-width: 900px) {
+  body[data-view^="refs"] main#app > * {
+    max-width: 1000px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
