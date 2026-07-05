@@ -1,6 +1,15 @@
 # LabPay ハッカソン参加者ガイド
 
+> **現行バージョン: v931**。 v615 以降 に 大量 の 新機能 (refs / Overleaf / Deep Research / Semantic Scholar / conquest / habits / buzzer / zemi-videos / paper_review / paper_translate / paper_full 等) が 追加 済。 endpoint 一覧 は [api.md](api.md) で。
+
 LabPay の API を使って何か作ろうとしている人向けのガイドです。LabPay 自体の仕組みやデプロイ方法は気にせず、**「外部クライアントとして」** 何ができるかにフォーカスします。
+
+**ハック の 選択肢**:
+- **外部 クライアント** — Python / Node.js / Bash から API 叩いて 賭け bot / 通知 / 自動化
+- **ホーム ウィジェット** — [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) 参照。 JS 1 ファイル で ホーム に 自分専用 カード が 生える
+- **自作 ゲーム v1** — [CUSTOM_GAMES.md](CUSTOM_GAMES.md) 参照。 turn-based で 2 人対戦 の カスタム ゲーム。 マルバツ 系
+- **自作 ゲーム v2** — [CUSTOM_GAMES_V2.md](CUSTOM_GAMES_V2.md) 参照。 p5.js + 共有 state の 準リアルタイム multiplayer
+- **文献管理 拡張** — refs (v925+) は Zotero-like で 拡張性 が 高い。 SS 検索 / DOI 追加 / 要約 一気通貫 の pipeline が 作りやすい
 
 ## このドキュメントの構成
 
@@ -59,6 +68,28 @@ LabPay は学内ポイントの台帳・タスク市場・在室データを持�
 - **アブスト字数 警告** — Scrapbox の新規ノート保存時に `/api/ai/rewriter` で字数チェック、 超過なら警告
 - **学会情報の自動集約** — `/api/notices` カテゴリ `conference` を RSS / API に流す
 
+### 「文献管理」系 (v925+ refs、 一番 拡張性 高い)
+- **DOI ペースト → 全部 やる bot** — Slack で DOI 投げたら `/api/refs/import_doi` → `/api/refs` に 追加 → PDF 見つけて `/api/refs/{id}/attach_pdf` → `/api/refs/{id}/ss_enrich` で 被引用数 埋め → 完了 通知
+- **今週の 新着 論文 push** — 定期的に `/api/refs/ss_recommend` を コレクション「今年の CHI」 に 対して 呼び、 出た おすすめ を Slack に
+- **要約 pipeline** — refs に PDF 添付 された ら 自動 で `/api/ai/paper_translate` を 走らせ、 完了 通知 + refs.pdf_sha256 経由 で 相互 リンク
+- **Zotero → LabPay 同期 cron** — 定期的に `/api/refs/import_zotero` (fetch_all=1, sync_pdfs=1) を 走らせ、 個人 Zotero の 変更 を ラボ に 反映
+- **被引用数 更新 job** — 全 refs に 対して `/api/refs/{id}/ss_enrich` を 週 1 で 回して 最新 の citation_count に
+- **参考文献 セクション 自動生成** — Overleaf の main.tex を 監視、 コレクション から `/api/refs/bibliography` で BibTeX 生成 → GitHub に PR
+
+### 「Overleaf 追跡」系 (v886+)
+- **執筆 進捗 Slack bot** — `/api/overleaf/projects` を 定期 取得 → 24h delta を Slack に「今日 の 進捗: 中村 +342 字」
+- **絶不調 検知** — 1 週間 動きが 無い ラボメン に 「大丈夫?」 push
+- **投稿間近 追い込み ゲージ** — refs.venue + 学会 締切 を 突き合わせて 進捗 バー を LINE bot に
+
+### 「Deep Research」系 (v781+)
+- **論文 サーベイ 自動化** — キーワード 定期 で `/api/ai/deep_research` を 深さ standard で 25pt 消費 して 走らせ、 結果 を Slack に summary post
+- **競合 リサーチ** — 「refs コレクション X に 対して 最新 の 関連 論文 を 探す」 を cron で 週 1 実行
+
+### 「ゲーミフィケーション」系 追加 (v860-v872)
+- **habit 応援 bot** — `/api/habits` の streak が 途切れそう な 人 に 応援 メッセージ
+- **conquest 制覇 通知** — 誰か が list を 完全 制覇 したら 全員 に celebration
+- **早押し クイズ ホスト bot** — `/api/buzzer/sessions` を 立てて 全員 集めて 出題
+
 ---
 
 ## API の基本
@@ -116,10 +147,34 @@ curl -c /tmp/labpay.cookies \
 curl -b /tmp/labpay.cookies https://pay.nkmr.io/api/me
 ```
 
-### CORS について
+### CORS / サブドメイン について
 
-LabPay は **同一オリジン専用** に絞られています。 詳しくは下の「サンプル
-クライアント → 別オリジンからの開発時」 を参照。
+LabPay は **同一オリジン専用** (= `https://pay.nkmr.io`) に絞られています。 別 サブドメイン (例: `https://hackathon.nkmr.io`) から fetch すると **Cookie は 送られず、 CORS で ブロック** されます:
+
+- Cookie `labpay_sid` は `Domain` 未指定 → `pay.nkmr.io` の host に 固定
+- `SameSite=Lax` → 別サブドメイン の fetch/XHR で cookie が 送られない
+- `Access-Control-Allow-Origin` ヘッダ は 出て いない
+
+**回避策 4 つ**:
+
+| # | 方法 | 場面 |
+|---|---|---|
+| ① | **Bearer 認証** (`Authorization: Bearer <sid>`) | Python / Node / Bash など サーバー・CLI から 叩く場合。 cookie 不要、 CSRF ヘッダも 不要。 一番 楽 |
+| ② | **カスタム ウィジェット** ([CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md)) | ブラウザ で 動かす UI なら pay.nkmr.io の ホーム 内 に 直接 生やす |
+| ③ | **CORS 開放 + Cookie Domain 拡張** | 管理者 に `.nkmr.io` に Cookie Domain 拡張 + `hackathon.nkmr.io` を CORS allowlist に 追加 を 依頼。 セキュリティ 影響 大 なので 相談 必須 |
+| ④ | **サブパス 相乗り** | admin に 「`pay.nkmr.io/hack/xxx/` に static 置かせて」 と 頼む。 同一 オリジン 扱い に なる |
+
+Bearer 認証 で セッション ID を 得る 方法:
+```bash
+# dev-login で Cookie を 貰った 直後、 セッション ID を 取り出す
+SID=$(curl -s -c - -H 'X-Requested-With: labpay' -H 'Content-Type: application/json' \
+     -d '{"email":"you@example.ac.jp"}' \
+     https://pay.nkmr.io/api/auth/dev-login | awk '/labpay_sid/ {print $NF}')
+echo $SID  # 32 文字 hex
+
+# 以降 は Bearer で 叩ける (Cookie 不要、 別 サブドメイン からも OK)
+curl -H "Authorization: Bearer $SID" https://pay.nkmr.io/api/me
+```
 
 ---
 
@@ -212,6 +267,59 @@ GET /api/presence
 ```
 
 ポーリング推奨間隔: **60 秒以上** (頻度上げてもサーバ側のスナップショットは 1 分単位で更新される)。
+
+### 文献管理 (refs、 v925+) — 一番 拡張性 高い
+
+DOI から metadata 取得 → refs に 追加 → 要約 まで の pipeline:
+
+```http
+# 1. DOI から metadata 取得
+POST /api/refs/import_doi     { "doi": "10.1145/3313831.3376234" }
+# → { "meta": { "title": "...", "authors": [...], "year": 2020, ... }, "existing": null }
+
+# 2. refs に 保存
+POST /api/refs                { "title": "...", "doi": "...", "authors": [...], ... }
+# → { "ok": true, "id": 42 }
+
+# 3. PDF 添付 (multipart)
+POST /api/refs/42/attach_pdf  [file=paper.pdf]
+# → { "ok": true, "pdf_path": "/uploads/refs/xx/xxxx.pdf", "pdf_sha256": "..." }
+
+# 4. 要約 キック (PDF 再送)
+POST /api/ai/paper_translate  [file=paper.pdf, model=gpt-5, auto_share=1]
+# → { "share_token": "...", "message": "要約中..." }
+
+# 5. Semantic Scholar で 被引用数 埋め
+POST /api/refs/42/ss_enrich   {}
+# → { "citation_count": 234, "reference_count": 45 }
+
+# 6. bibliography 一括 生成
+POST /api/refs/bibliography   { "collection_id": 1, "style": "apa" }
+# → { "bibliography": "Nakamura, S. (2020). ..." }
+```
+
+### AI 呼び出し (v750+)
+
+```http
+# 論文 要約 (multipart PDF + model + auto_share フラグ)
+POST /api/ai/paper_translate     [file, model=gpt-5, auto_share=1]
+
+# Deep Research (query base)
+POST /api/ai/deep_research       { "query": "eye tracking...", "depth": "standard", "auto_share": 1 }
+
+# 原稿 チェック
+POST /api/ai/resume_check        [file] (5pt)
+
+# 文字数 リライター
+POST /api/ai/rewriter            { "text": "...", "max_chars": 500 }
+```
+
+### Overleaf 追跡 (v886+)
+
+```http
+GET /api/overleaf/projects       # 全 プロジェクト の 24h/7d delta + sparkline
+GET /api/overleaf/projects/{id}  # 60 日 履歴 + per-file 内訳
+```
 
 ### 活動ヒートマップ
 

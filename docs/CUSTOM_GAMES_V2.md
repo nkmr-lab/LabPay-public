@@ -1,6 +1,7 @@
 # 自作ゲーム v2 framework (cg2) 設計
 
-> **ステータス**: 設計 確定 / 実装 未着手 (2026-06-17 時点)。 サンプル 4 件 は docs/cg2_sample_*.js に 用意 済。
+> **ステータス**: **実装 完了 (v667 で 稼働)**。 `/api/cg2` 系 endpoint + `public/js/cg2.js` framework + `/#/cg2/{slug}` 動線 が 動いて います。 サンプル 4 件 は `docs/cg2_sample_*.js` に 用意 済 で、 実装 チーム が 各 kind に 登録 可能。
+> **エンドポイント 一覧**: [api.md#apicg2-自作ゲーム-v2](api.md) を 参照。
 
 LabPay の v1 自作ゲーム framework (cg_ui / custom_games) を 全面 再設計 した もの。
 **p5.js で 描画**、 **共有 state を 自動 同期** する 「准 リアルタイム」 multiplayer の 仕組み。
@@ -199,8 +200,28 @@ JS で **書か ない** もの = `custom_game_kinds` 行 で 設定 する:
 
 最終 確定 API は 「host だけ 2 + 全員 で p5 sketch」 の シンプル な 形 に 落ち着いた。
 
+## API endpoint 一覧 (v667 実装)
+
+| Method | Path | 用途 |
+|---|---|---|
+| GET  | `/api/cg2/kinds`                         | kind (ゲーム種類) 一覧 |
+| POST | `/api/cg2/kinds`                         | 新規 kind 登録 (JS + 設定) |
+| GET  | `/api/cg2/kinds/{slug}/script.js`        | JS module 配信 (認証不要、 dynamic import 用) |
+| PATCH| `/api/cg2/kinds/{slug}`                  | 更新 (登録者 / admin) |
+| DELETE | `/api/cg2/kinds/{slug}`                | 削除 (登録者 / admin) |
+| GET  | `/api/cg2/kinds/{slug}/games`            | その kind の 卓一覧 |
+| POST | `/api/cg2/kinds/{slug}/games`            | 卓 起案 |
+| GET  | `/api/cg2/games/{id}`                    | 卓 詳細 |
+| POST | `/api/cg2/games/{id}/join`               | 参加 |
+| POST | `/api/cg2/games/{id}/add-ai`             | AI プレイヤー 追加 |
+| POST | `/api/cg2/games/{id}/start`              | 開始 (= host.start() を キック する 合図) |
+| POST | `/api/cg2/games/{id}/cancel`             | ロビー キャンセル |
+| POST | `/api/cg2/games/{id}/finalize`           | 終了 通知 (`{winner_user_id?, notify_text}`) |
+| GET  | `/api/cg2/games/{id}/shared?since={seq}` | 共有 state 差分 取得 (500ms polling) |
+| POST | `/api/cg2/games/{id}/shared`             | 共有 state 差分 更新 (`{changes: {...}}`) |
+
 ## 関連
 
-- v1 framework: [CUSTOM_GAMES.md](CUSTOM_GAMES.md) (= 現行 動作 中)
+- v1 framework: [CUSTOM_GAMES.md](CUSTOM_GAMES.md) (現行 動作 中、 turn-based)
 - v1 サンプル: `examples/custom-games/`
 - v2 サンプル: `docs/cg2_sample_*.js`

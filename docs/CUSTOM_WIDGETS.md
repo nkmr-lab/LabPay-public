@@ -3,6 +3,8 @@
 LabPay の ホーム に 自分 専用 の 小さな ウィジェット を 追加 できる 仕組み。 v666 から。
 JS を 1 ファイル 書いて DB に 登録 する だけ で、 ホーム に カード として 表示 されます。
 
+> **API endpoint**: `/api/custom-widgets` 系。 詳細 は [api.md](api.md) を 参照。 全 API endpoint 一覧 も 同 doc。
+
 ```
 ユーザ が 設定 → 🧩 ウィジェット センター (/#/widgets) で 新規 登録
    │
@@ -108,6 +110,7 @@ export async function render(root) {
 
 ## アイデア (= こんな ウィジェット 作れる)
 
+### 定番
 - **今 ラボ に いる 人** — `/api/presence` を 呼んで アバター で 並べる
 - **直近 の SNS 投稿** — `/api/posts?limit=3` を 呼んで 3 件 表示
 - **誕生日 カウントダウン** — `me.birthday_md` + 残 日 数
@@ -115,6 +118,17 @@ export async function render(root) {
 - **天気** — 外部 API (取得 元 が CORS 許可 して いれば)
 - **ToDo の 残り** — `/api/me/todos` の 未完 件数 だけ
 - **OB の 誕生日** — 別ユーザ の メタ を 集計
+
+### v615 以降 で 新登場 の API を 活用
+- **📚 refs 読中 一覧** — `/api/refs?status=reading&limit=5` で 今 読んで る 論文 の カード
+- **🔬 SS の おすすめ 論文** — 「今日 の 論文」 として `/api/refs/ss_recommend` を 週 1 実行 → 結果 の 上位 1 件 を 表示
+- **📖 Overleaf 執筆 進捗** — `/api/overleaf/projects` の 24h delta を 「今日 の 執筆量」 として グラフ で
+- **📄 論文要約 の 新着** — `/api/ai/paper_recent` で 全員 の 公開要約 を stream
+- **🎯 habit 今日 の 達成 率** — `/api/habits` の 未達成 だけ 出して チェック UI
+- **🔎 Deep Research 進捗** — `/api/ai/deep_research/{id}/r/{token}` を polling で 「まだ 走ってる 分」 の 進捗
+- **📅 学会 締切** — `/api/conf-deadlines/upcoming` を 残 日数 順 に
+- **🏁 conquest 制覇 率** — `/api/conquest/lists` の 自分 の 進行率 を バー で
+- **⏱ タイマー 一覧** — `/api/timers` で 今 動いてる やつ を 大きく 表示
 
 何 を 作って も OK。 自分 専用 なので 完成度 は 問われ ない、 雑 で 良い。
 
