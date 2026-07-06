@@ -105,6 +105,7 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                    u.display_name AS seller_name,
                    u.avatar_url   AS seller_avatar_url,
                    COALESCE(ss.seller_sales, 0) AS seller_sales,
+                   COALESCE(js.jan_sales, 0) AS jan_sales,
                    COALESCE(ib.i_bought_before, 0) AS i_bought_before
               FROM listings l
               JOIN products p ON p.jan = l.jan
@@ -113,6 +114,10 @@ function route_listings(PDO $pdo, array $cfg, string $method, array $seg): void 
                 SELECT seller_user_id, COALESCE(SUM(qty),0) AS seller_sales
                   FROM purchases GROUP BY seller_user_id
               ) ss ON ss.seller_user_id = l.seller_user_id
+         LEFT JOIN (
+                SELECT jan, COALESCE(SUM(qty),0) AS jan_sales
+                  FROM purchases GROUP BY jan
+              ) js ON js.jan = l.jan
          LEFT JOIN (
                 SELECT DISTINCT jan, 1 AS i_bought_before FROM purchases WHERE buyer_user_id = ?
               ) ib ON ib.jan = l.jan

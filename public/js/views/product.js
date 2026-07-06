@@ -216,7 +216,7 @@ function renderListingRow(l) {
         ${avatarHtml(l.seller_name, l.seller_avatar_url, 'md')}
         <div>
           <div class="bold">${escapeHtml(l.seller_name)} · ${priceTag}</div>
-          <div class="meta">在庫 ${l.qty} · 累計販売 ${l.seller_sales ?? 0}</div>
+          <div class="meta">在庫 ${l.qty} · この商品 通算${l.jan_sales ?? 0}個 · 売主通算${l.seller_sales ?? 0}個</div>
           ${dnameLine}
           ${locLine}
           ${chainLine}
