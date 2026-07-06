@@ -95,6 +95,16 @@ export async function renderRefs() {
         <div class="bold" style="font-size:12px">📁 コレクション</div>
         <button id="rf-col-new" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 新規</button>
       </div>
+      <!-- v937 fb#472: 二連 prompt() で 詰まる ケース (モバイル Safari 等) を 潰す ため
+           インライン フォーム に 差し替え。 hidden 開始、 「＋ 新規」 で toggle。 -->
+      <div id="rf-col-form" hidden style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center">
+        <input type="text" id="rf-col-name" placeholder="コレクション名 (例: HCI論文、 CHI2026送り用)"
+               style="flex:1; min-width:180px; padding:4px 8px; font-size:13px; border:1px solid #d1d5db; border-radius:4px">
+        <input type="text" id="rf-col-icon" placeholder="📁" value="📁" maxlength="4"
+               style="width:60px; padding:4px 8px; font-size:16px; text-align:center; border:1px solid #d1d5db; border-radius:4px">
+        <button id="rf-col-create" class="btn primary" style="font-size:12px; padding:4px 10px">作成</button>
+        <button id="rf-col-cancel" class="btn" style="font-size:12px; padding:4px 10px">キャンセル</button>
+      </div>
       <div id="rf-cols-list" class="row" style="gap:4px; flex-wrap:wrap"></div>
     </div>
     <!-- v928 track B: 保存した 検索 -->
@@ -161,13 +171,30 @@ export async function renderRefs() {
     updateCurFilterHint();
     loadList();
   });
-  document.getElementById('rf-col-new').addEventListener('click', async () => {
-    const name = prompt('コレクション 名 (例: HCI 論文、 CHI2026 送り 用 等)');
-    if (!name) return;
-    const icon = prompt('絵文字 (省略で 📁)', '📁') || '📁';
-    try { await post('/api/refs/collections', { name, icon }); await loadCollectionsChips(); toast('作成'); }
-    catch (e) { toast('失敗: ' + e.message); }
+  // v937 fb#472 二連 prompt() が モバイル で 詰まる 件 の 修正。 インライン フォーム トグル に。
+  const colForm = document.getElementById('rf-col-form');
+  const colNameInput = document.getElementById('rf-col-name');
+  document.getElementById('rf-col-new').addEventListener('click', () => {
+    colForm.hidden = !colForm.hidden;
+    if (!colForm.hidden) { colNameInput.value = ''; colNameInput.focus(); }
   });
+  document.getElementById('rf-col-cancel').addEventListener('click', () => {
+    colForm.hidden = true;
+  });
+  const submitCol = async () => {
+    const name = colNameInput.value.trim();
+    if (!name) { toast('名前を入力してください'); colNameInput.focus(); return; }
+    const icon = document.getElementById('rf-col-icon').value.trim() || '📁';
+    try {
+      await post('/api/refs/collections', { name, icon });
+      colForm.hidden = true;
+      colNameInput.value = '';
+      await loadCollectionsChips();
+      toast('コレクション作成');
+    } catch (e) { toast('失敗: ' + e.message); }
+  };
+  document.getElementById('rf-col-create').addEventListener('click', submitCol);
+  colNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitCol(); });
   document.getElementById('rf-save-search').addEventListener('click', async () => {
     const name = prompt('この 検索条件 に 名前 を');
     if (!name) return;
