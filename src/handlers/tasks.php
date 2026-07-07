@@ -407,8 +407,10 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     // Attachments. The download URL goes through /api/tasks/{id}/attachments/{att_id}
     // (not the raw /uploads path) so we can attribute hits and could later gate on
     // task visibility — currently all logged-in users can see all tasks anyway.
+    // v938.1 hotfix: 校閲連携 (v935 未反映) の review_url/review_updated_at 列は
+    // production では migration 191 未適用のため SELECT から除外。 migration 適用後に戻す。
     $stA = $pdo->prepare("
-        SELECT id, filename, size_bytes, mime, uploaded_by_user_id, created_at, review_url, review_updated_at
+        SELECT id, filename, size_bytes, mime, uploaded_by_user_id, created_at
           FROM task_attachments
          WHERE task_id = ? ORDER BY id");
     $stA->execute([$taskId]);
