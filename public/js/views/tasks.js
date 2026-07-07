@@ -765,6 +765,13 @@ async function loadDetail(id) {
                 ${escapeHtml(a.filename)}
               </a>
               <div class="meta">${formatBytes(a.size_bytes)} · ${escapeHtml(a.mime)}</div>
+              ${a.mime === 'application/pdf' ? `
+              <div class="row" style="gap:10px; margin-top:4px; font-size:13px">
+                <a href="/api/tasks/${t.id}/attachments/${a.id}/review" target="_blank" rel="noopener"
+                   style="color:var(--primary)">🖊 校閲する</a>
+                ${a.review_url ? `<a href="${escapeHtml(a.review_url)}" target="_blank" rel="noopener"
+                   style="color:#0a7d3b">✅ 校閲結果を見る</a>` : ''}
+              </div>` : ''}
             </div>
             ${canEditAtt
               ? `<button class="danger" data-att-del="${a.id}" title="削除">削除</button>`
@@ -815,7 +822,11 @@ async function loadDetail(id) {
         ${attBlock}
         <div class="sep"></div>
         <div>
-          <div>報酬: <span class=" bold text-primary">${t.reward}pt</span> × ${t.capacity}人 (残 ${t.remaining}人)</div>
+          <div>報酬: <span class=" bold text-primary">${t.reward}pt</span> × ${t.capacity}人
+            <span style="color:#7b3fa0; font-weight:600">残 ${t.remaining}人</span>
+            ${t.pending_count > 0 ? ` · 希望中 ${t.pending_count}人` : ''}
+            ${t.approved_count > 0 ? ` · 承認済 ${t.approved_count}人` : ''}
+          </div>
           <div class="meta">
             ${t.per_user_limit === 0 ? '各自無制限' : `各自 ${t.per_user_limit} 回まで`}
             ${t.audience_grades ? ` · 対象: ${escapeHtml(t.audience_grades)}` : ''}
@@ -852,7 +863,9 @@ async function loadDetail(id) {
     document.getElementById('task-share')?.addEventListener('click', () => {
       const label = t.is_free ? 'リクエスト' : 'タスク';
       const reward = t.is_free ? '' : ` ${t.reward}pt`;
-      shareToSns(`🎯 ${label} 「${t.title}」${reward} (残 ${t.remaining}人)`, `#/tasks/${t.id}`);
+      // v938 share text も active ベースの残人数を反映
+      const shareCount = t.remaining > 0 ? `残 ${t.remaining}人` : `募集終了 (希望 ${t.pending_count + t.approved_count}人)`;
+      shareToSns(`🎯 ${label} 「${t.title}」${reward} (${shareCount})`, `#/tasks/${t.id}`);
     });
     document.getElementById('claim-btn')?.addEventListener('click', () => onClaim(id, selectedSlotId));
     document.getElementById('report-btn')?.addEventListener('click', e => onReport(id, e.currentTarget.dataset.claim));

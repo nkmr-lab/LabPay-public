@@ -19,10 +19,20 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($id > 0 && ($seg[2] ?? '') === 'attachments' && $method === 'POST' && !isset($seg[3])) {
         task_attachments_upload($pdo, $cfg, $id); return;
     }
-    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && $method === 'DELETE') {
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && !isset($seg[4]) && $method === 'DELETE') {
         task_attachments_delete($pdo, $cfg, $id, (int)$seg[3]); return;
     }
-    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && $method === 'GET') {
+    // 校閲(pr.nkmr.io)連携: /review(302で pr へ) / /pull(トークンでPDF配信) / /review-result(結果URL返却)
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && ($seg[4] ?? '') === 'review' && $method === 'GET') {
+        task_attachments_review($pdo, $cfg, $id, (int)$seg[3]); return;
+    }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && ($seg[4] ?? '') === 'pull' && $method === 'GET') {
+        task_attachments_pull($pdo, $cfg, $id, (int)$seg[3]); return;
+    }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && ($seg[4] ?? '') === 'review-result' && $method === 'POST') {
+        task_attachments_review_result($pdo, $cfg, $id, (int)$seg[3]); return;
+    }
+    if ($id > 0 && ($seg[2] ?? '') === 'attachments' && isset($seg[3]) && !isset($seg[4]) && $method === 'GET') {
         task_attachments_download($pdo, $cfg, $id, (int)$seg[3]); return;
     }
     if ($id > 0 && ($seg[2] ?? '') === 'claims' && isset($seg[3])) {
@@ -339,6 +349,14 @@ function tasks_approved_count(PDO $pdo, int $taskId): int {
     return (int)$st->fetchColumn();
 }
 
+// v938 ユーザ要望: 残人数は「希望を出した人ベース」で減らす、 rejected されたら戻す。
+// pending = claimed + reported (承認待ち)。 approved と合わせて active = capacity から差し引く。
+function tasks_pending_count(PDO $pdo, int $taskId): int {
+    $st = $pdo->prepare("SELECT COUNT(*) FROM task_claims WHERE task_id=? AND status IN ('claimed','reported')");
+    $st->execute([$taskId]);
+    return (int)$st->fetchColumn();
+}
+
 // Pull task row + requester info + claim summary, for display.
 function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): array {
     $st = $pdo->prepare("
@@ -349,7 +367,9 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     $row = $st->fetch();
     if (!$row) throw new ApiException('not_found', "task $taskId not found", 404);
     $row['approved_count'] = tasks_approved_count($pdo, $taskId);
-    $row['remaining']      = max(0, (int)$row['capacity'] - $row['approved_count']);
+    $row['pending_count']  = tasks_pending_count($pdo, $taskId);
+    // v938 remaining は active (approved + pending) ベースで計算。
+    $row['remaining']      = max(0, (int)$row['capacity'] - (int)$row['approved_count'] - (int)$row['pending_count']);
     if ($forUserId !== null) {
         // v790 #393 completion_data_json も返す (受諾者が完了報告時に埋めた値)
         $st2 = $pdo->prepare("SELECT id, status, slot_id, reported_at, approved_at, notes, completion_data_json, created_at
@@ -388,7 +408,7 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
     // (not the raw /uploads path) so we can attribute hits and could later gate on
     // task visibility — currently all logged-in users can see all tasks anyway.
     $stA = $pdo->prepare("
-        SELECT id, filename, size_bytes, mime, uploaded_by_user_id, created_at
+        SELECT id, filename, size_bytes, mime, uploaded_by_user_id, created_at, review_url, review_updated_at
           FROM task_attachments
          WHERE task_id = ? ORDER BY id");
     $stA->execute([$taskId]);
@@ -492,6 +512,109 @@ function task_attachments_download(PDO $pdo, array $cfg, int $taskId, int $attId
     exit;
 }
 
+// ---------- 校閲 (pr.nkmr.io) 連携 ----------
+// 添付PDFを pr.nkmr.io の校閲モードへ渡す。トークンは LabPay が発行・検証するだけで、
+// pr との共有秘密は不要。署名鍵は DB config に遅延生成 (pr_review_secret)。
+const REVIEW_PR_BASE = 'https://pr.nkmr.io';
+
+function review_secret(PDO $pdo): string {
+    $s = cfg_get($pdo, 'pr_review_secret', null);
+    if (!$s) { $s = bin2hex(random_bytes(32)); cfg_set($pdo, 'pr_review_secret', $s); }
+    return (string)$s;
+}
+function review_sign(PDO $pdo, string $payload): string {
+    $raw = hash_hmac('sha256', $payload, review_secret($pdo), true);
+    return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');   // base64url
+}
+function review_verify(PDO $pdo, string $payload, string $sig): bool {
+    return hash_equals(review_sign($pdo, $payload), $sig);
+}
+function review_load_pdf_att(PDO $pdo, int $taskId, int $attId): array {
+    $st = $pdo->prepare("SELECT * FROM task_attachments WHERE id=? AND task_id=?");
+    $st->execute([$attId, $taskId]);
+    $att = $st->fetch();
+    if (!$att) throw new ApiException('not_found', 'attachment not found', 404);
+    if (($att['mime'] ?? '') !== 'application/pdf') {
+        throw new ApiException('not_pdf', '校閲できるのはPDFのみです', 400);
+    }
+    return $att;
+}
+
+// GET /api/tasks/{id}/attachments/{att}/review  — 本人確認して pr へ 302。
+function task_attachments_review(PDO $pdo, array $cfg, int $taskId, int $attId): void {
+    Auth::requireUser($pdo, $cfg);   // ログイン中の研究室メンバーのみ
+    $att = review_load_pdf_att($pdo, $taskId, $attId);
+
+    $now  = time();
+    $pExp = $now + 900;              // プルURLは15分
+    $cExp = $now + 6 * 3600;         // 結果返却は6時間
+    $pSig = review_sign($pdo, "pull:$taskId:$attId:$pExp");
+    $cSig = review_sign($pdo, "cb:$taskId:$attId:$cExp");
+
+    $base    = rtrim((string)($cfg['app']['base_url'] ?? 'https://pay.nkmr.io'), '/');
+    $pullUrl = "$base/api/tasks/$taskId/attachments/$attId/pull?exp=$pExp&sig=$pSig";
+    $cbUrl   = "$base/api/tasks/$taskId/attachments/$attId/review-result";
+    $cbt     = "$cExp.$cSig";
+    $title   = (string)($att['filename'] ?? 'document.pdf');
+
+    $dest = REVIEW_PR_BASE . '/?src=' . rawurlencode($pullUrl)
+          . '&title=' . rawurlencode($title)
+          . '&cb='    . rawurlencode($cbUrl)
+          . '&cbt='   . rawurlencode($cbt);
+
+    if (!headers_sent()) { header_remove('Content-Type'); }
+    header('Location: ' . $dest, true, 302);
+    exit;
+}
+
+// GET /api/tasks/{id}/attachments/{att}/pull?exp&sig — ログイン不要、署名検証でPDF inline配信。
+function task_attachments_pull(PDO $pdo, array $cfg, int $taskId, int $attId): void {
+    $exp = (int)($_GET['exp'] ?? 0);
+    $sig = (string)($_GET['sig'] ?? '');
+    if ($exp < time()) throw new ApiException('expired', 'link expired', 403);
+    if (!review_verify($pdo, "pull:$taskId:$attId:$exp", $sig)) {
+        throw new ApiException('bad_sig', 'invalid signature', 403);
+    }
+    $att = review_load_pdf_att($pdo, $taskId, $attId);
+
+    $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
+    $path = $publicDir . '/uploads/tasks/' . $taskId . '/' . $att['stored_name'];
+    if (!is_file($path)) throw new ApiException('gone', 'file missing on disk', 410);
+
+    if (!headers_sent()) { header_remove('Content-Type'); }
+    header('Content-Type: application/pdf');
+    header('Content-Length: ' . (int)$att['size_bytes']);
+    header('Content-Disposition: inline; filename="review.pdf"');
+    readfile($path);
+    exit;
+}
+
+// POST /api/tasks/{id}/attachments/{att}/review-result  — ログイン不要、cbt検証で結果URLを保存。
+function task_attachments_review_result(PDO $pdo, array $cfg, int $taskId, int $attId): void {
+    $body = read_json_body();
+    $cbt       = (string)($body['cbt'] ?? '');
+    $resultUrl = trim((string)($body['resultUrl'] ?? ''));
+
+    $parts = explode('.', $cbt, 2);
+    if (count($parts) !== 2) throw new ApiException('bad_token', 'invalid cbt', 403);
+    [$exp, $sig] = $parts;
+    if ((int)$exp < time()) throw new ApiException('expired', 'token expired', 403);
+    if (!review_verify($pdo, "cb:$taskId:$attId:" . (int)$exp, $sig)) {
+        throw new ApiException('bad_sig', 'invalid signature', 403);
+    }
+    // 結果URLは pr.nkmr.io のみ許可
+    if (strtolower((string)(parse_url($resultUrl, PHP_URL_SCHEME) ?: '')) !== 'https'
+        || strtolower((string)(parse_url($resultUrl, PHP_URL_HOST) ?: '')) !== 'pr.nkmr.io') {
+        throw new ApiException('bad_url', 'result url must be https pr.nkmr.io', 400);
+    }
+    review_load_pdf_att($pdo, $taskId, $attId);   // 存在確認 (PDFであること)
+
+    $upd = $pdo->prepare("UPDATE task_attachments SET review_url=?, review_updated_at=NOW()
+                           WHERE id=? AND task_id=?");
+    $upd->execute([$resultUrl, $attId, $taskId]);
+    json_response(['ok' => true]);
+}
+
 function task_attachments_delete(PDO $pdo, array $cfg, int $taskId, int $attId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT a.*, t.requester_user_id
@@ -564,7 +687,8 @@ function tasks_list(PDO $pdo, array $cfg): void {
     }
 
     foreach ($rows as &$r) {
-        $r['remaining']   = max(0, (int)$r['capacity'] - (int)$r['approved_count']);
+        // v938 remaining は active (approved + pending) ベース。 rejected は戻る。
+        $r['remaining']   = max(0, (int)$r['capacity'] - (int)$r['approved_count'] - (int)$r['pending_count']);
         $r['is_mine']     = ((int)$r['requester_user_id'] === $uid);
         $myActive = (int)$r['my_active_count'];
         $perLimit = (int)$r['per_user_limit'];
@@ -907,8 +1031,12 @@ function tasks_claim(PDO $pdo, array $cfg, int $taskId): void {
             throw new ApiException('audience', '対象外の学年です', 403);
         }
 
+        // v938 定員到達判定を active (approved + pending) ベースに。
+        // 既に「希望を出した」人が capacity に達していたら新規希望は受け付けない。
+        // rejected されたら active が減って再び受け付け可能になる。
         $approved = tasks_approved_count($pdo, $taskId);
-        if ($approved >= (int)$task['capacity'])
+        $pending  = tasks_pending_count($pdo, $taskId);
+        if ($approved + $pending >= (int)$task['capacity'])
             throw new ApiException('full', '定員到達済みです', 409);
 
         $myActive = tasks_user_active_claim_count($pdo, $taskId, (int)$u['id']);
