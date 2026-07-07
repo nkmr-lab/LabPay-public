@@ -105,8 +105,10 @@ export const APPS = [
   { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。クエリを投げると OpenAI が web_search を必要なだけ使って複数ソースを横断検索 → サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL 一覧を構造化して返します。深さ 3 段階 (軽い gpt-5-mini 20pt / 標準 gpt-5 50pt / 深い gpt-5 高 reasoning 100pt)。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5-mini 25 / gpt-5 60 / o1 100 pt) と日→英 (5x、 em-dash 等 GPT-isms 除去込み) の双方向対応。', defaultVisible: true },
+  // v942 公開投票 (誰でも 投票)
+  { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開 URL または 4 桁コードで 誰でも投票できる汎用アンケート (SNS シェア可、 LabPay ログイン不要)。 タイトル + 選択肢 (複数行テキスト、 2〜50 個) + 締切で作成、 単一/複数選択 + 任意で自由記述、 集計の見え方は「常に公開」「締切後に公開」「起案者のみ」から選択。 起案者ダッシュボードで棒グラフ集計 + 自由記述一覧を見られる。 「4 桁コード」 は pay.nkmr.io/#/public で入力して飛べる。 外部イベント来場者に投票してもらう / SNS で意見を募る等に。', defaultVisible: true },
   // v941 合同研究会用投票
-  { id: 'joint-events', cat: 'research', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v942 で追加予定。', defaultVisible: true },
+  { id: 'joint-events', cat: 'research', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v943 で追加予定。', defaultVisible: true },
   // v934 かんばん (Trello-like)
   { id: 'kanban', cat: 'lab-mgmt', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)

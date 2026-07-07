@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <title>公開投票</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+           color:#111827; background:#f7f5fb; line-height:1.5; padding:16px;
+           max-width:640px; margin:0 auto }
+    h1 { font-size:20px; margin:12px 0 4px }
+    .card { background:#fff; border-radius:8px; padding:14px 16px; margin:10px 0; box-shadow:0 1px 3px rgba(0,0,0,0.06) }
+    .muted { color:#6b7280; font-size:13px }
+    .meta { color:#6b7280; font-size:12px }
+    .opt { border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; margin:6px 0; cursor:pointer;
+           background:#fff; transition:all 0.15s; display:flex; align-items:center; gap:10px }
+    .opt:hover { border-color:#7b3fa0; background:#faf5ff }
+    .opt.on { border-color:#7b3fa0; background:#f3e8ff; border-width:2px; padding:9px 11px }
+    .opt.closed { cursor:not-allowed; opacity:0.7 }
+    .opt .lbl { flex:1 }
+    .opt .cnt { color:#7b3fa0; font-weight:600; font-family:ui-monospace,monospace }
+    .bar { position:relative; width:100%; height:6px; background:#f3f4f6; border-radius:3px; margin-top:4px }
+    .bar > span { position:absolute; left:0; top:0; height:100%; background:#a855f7; border-radius:3px }
+    button { background:#7b3fa0; color:#fff; border:none; padding:10px 20px; border-radius:6px;
+             font-size:14px; cursor:pointer; font-family:inherit }
+    button:hover { background:#6b21a8 }
+    button:disabled { background:#d1d5db; cursor:not-allowed }
+    input[type=text], textarea { width:100%; padding:8px; font-size:14px; border:1px solid #d1d5db; border-radius:6px;
+                                  font-family:inherit }
+    textarea { min-height:60px; resize:vertical }
+    .banner { padding:10px 14px; border-radius:6px; margin:10px 0; font-size:13px }
+    .banner-info    { background:#dbeafe; color:#1e40af }
+    .banner-success { background:#d1fae5; color:#065f46 }
+    .banner-warn    { background:#fef3c7; color:#92400e }
+    #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+             background:#111; color:#fff; padding:10px 16px; border-radius:6px; font-size:13px;
+             opacity:0; transition:opacity 0.2s; pointer-events:none; z-index:100; max-width:90% }
+    #toast.show { opacity:0.95 }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="muted">読み込み中…</div></div>
+  <div id="toast"></div>
+  <script>
+'use strict';
+
+const t = new URLSearchParams(location.search).get('t') || '';
+if (!t) {
+  document.getElementById('app').innerHTML = '<div class="banner banner-warn">URL に token (?t=...) がありません。</div>';
+} else {
+  loadPoll();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let d = null;         // full response
+let myVotes = new Set(); // Set<number>
+let myFreeText = '';
+let myName = '';
+
+async function loadPoll() {
+  try {
+    const res = await fetch('/api/public-polls/public/' + encodeURIComponent(t), { credentials: 'same-origin' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
+    }
+    d = await res.json();
+    myVotes = new Set(d.my_votes || []);
+    myFreeText = d.my_free_text || '';
+    myName = localStorage.getItem('pp_name_' + t) || '';
+    render();
+  } catch (e) {
+    document.getElementById('app').innerHTML =
+      `<div class="banner banner-warn">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function render() {
+  const p = d.poll;
+  const closed = p.status === 'closed';
+  const showTally = d.tally_visible;
+  const totalCnt = showTally ? Object.values(d.tallies || {}).reduce((a, b) => a + b, 0) : 0;
+
+  const optsHtml = d.options.map(o => {
+    const on = myVotes.has(o.id);
+    const cnt = showTally ? (d.tallies[o.id] || 0) : null;
+    const pct = totalCnt > 0 ? Math.round((cnt / totalCnt) * 100) : 0;
+    return `
+      <div class="opt ${on ? 'on' : ''} ${closed ? 'closed' : ''}" data-oid="${o.id}">
+        <div class="lbl">${esc(o.label)}</div>
+        ${showTally ? `<div class="cnt">${cnt}票 (${pct}%)</div>` : ''}
+        ${showTally ? `<div class="bar" style="width:60px"><span style="width:${pct}%"></span></div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <h1>${esc(p.title)}</h1>
+    <div class="meta">
+      ${p.multi_select ? '複数選択可' : '単一選択'} · 締切 ${esc(String(p.deadline_at).slice(0, 16))}
+      ${closed ? ' · <span style="color:#059669">締切済</span>' : ''}
+    </div>
+    ${p.body ? `<div style="margin:8px 0; white-space:pre-wrap">${esc(p.body)}</div>` : ''}
+
+    ${closed ? '<div class="banner banner-info">投票は締め切られました。</div>' : ''}
+
+    <div class="card">
+      <div class="meta" style="margin-bottom:6px">選択肢</div>
+      ${optsHtml}
+    </div>
+
+    ${p.allow_free_text ? `
+      <div class="card">
+        <div class="meta" style="margin-bottom:6px">自由記述 (任意)</div>
+        <textarea id="ft" maxlength="2000" ${closed ? 'disabled' : ''}>${esc(myFreeText)}</textarea>
+      </div>
+    ` : ''}
+
+    ${closed ? '' : `
+      <div class="card">
+        <div class="meta" style="margin-bottom:6px">お名前 (任意)</div>
+        <input type="text" id="voter-name" maxlength="100" placeholder="山田太郎" value="${esc(myName)}">
+      </div>
+      <div style="text-align:center; margin:14px 0">
+        <button id="submit-btn">投票する</button>
+      </div>
+    `}
+
+    ${showTally && d.free_texts && d.free_texts.length ? `
+      <div class="card">
+        <div class="meta" style="margin-bottom:6px">自由記述 一覧 (${d.free_texts.length} 件)</div>
+        ${d.free_texts.map(ft => `
+          <div style="border-top:1px solid #e5e7eb; padding:6px 0; font-size:13px">
+            ${ft.voter_name ? `<div style="font-weight:600; color:#7b3fa0">${esc(ft.voter_name)}</div>` : ''}
+            <div style="white-space:pre-wrap">${esc(ft.free_text)}</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+  `;
+
+  if (closed) return;
+  wireOpts();
+  document.getElementById('submit-btn').addEventListener('click', submitVote);
+  const nameEl = document.getElementById('voter-name');
+  if (nameEl) nameEl.addEventListener('change', e => {
+    myName = e.target.value.trim();
+    localStorage.setItem('pp_name_' + t, myName);
+  });
+}
+
+function wireOpts() {
+  document.querySelectorAll('.opt').forEach(el => {
+    if (el.classList.contains('closed')) return;
+    el.addEventListener('click', () => {
+      const oid = Number(el.dataset.oid);
+      if (d.poll.multi_select) {
+        if (myVotes.has(oid)) myVotes.delete(oid);
+        else myVotes.add(oid);
+      } else {
+        myVotes.clear();
+        myVotes.add(oid);
+      }
+      // 選択状態だけ更新 (集計は保存後に再取得)
+      document.querySelectorAll('.opt').forEach(o => {
+        o.classList.toggle('on', myVotes.has(Number(o.dataset.oid)));
+      });
+    });
+  });
+}
+
+async function submitVote() {
+  const freeText = d.poll.allow_free_text ? (document.getElementById('ft')?.value || '').trim() : '';
+  const nameEl = document.getElementById('voter-name');
+  const voterName = nameEl ? nameEl.value.trim() : '';
+  if (myVotes.size === 0 && !freeText) {
+    toast(d.poll.allow_free_text ? '選択肢を選ぶか、自由記述を書いてください' : '選択肢を選んでください');
+    return;
+  }
+  try {
+    const res = await fetch('/api/public-polls/public/' + encodeURIComponent(t) + '/vote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'labpay' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        option_ids: [...myVotes],
+        free_text: freeText || null,
+        voter_name: voterName || null,
+      }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
+    }
+    toast('投票しました');
+    myFreeText = freeText;
+    await loadPoll();
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+  </script>
+</body>
+</html>

@@ -504,6 +504,10 @@ route('/joint-events/new',      lazy(() => import('./views/joint.js'), 'renderJo
 route('/joint-events/:id',      lazy(() => import('./views/joint.js'), 'renderJointDetail'));
 // v941 公開機能 短縮 コード ゲートウェイ (未認証 でも 開ける)
 route('/public',                lazy(() => import('./views/public_gateway.js'), 'renderPublicGateway'));
+// v942 公開投票 (誰でも 投票)
+route('/public-polls',          lazy(() => import('./views/public_polls.js'), 'renderPublicPollsList'));
+route('/public-polls/new',      lazy(() => import('./views/public_polls.js'), 'renderPublicPollNew'));
+route('/public-polls/:id',      lazy(() => import('./views/public_polls.js'), 'renderPublicPollDetail'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 // v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
 route('/sns/map',         lazy(() => import('./views/posts_map.js'), 'renderPostsMap'));
