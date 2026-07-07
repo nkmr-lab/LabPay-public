@@ -27,18 +27,25 @@ function route_polls(PDO $pdo, array $cfg, string $method, array $seg): void {
     json_error('not_found', "no polls route for $method $sub", 404);
 }
 
-// 締切過ぎたら自動 close。詳細 / 一覧の前に呼んで一貫した状態にする。
+// 締切過ぎたら自動 close、公開開始時刻を迎えたら scheduled → open へ遷移。
+// 詳細 / 一覧の前に呼んで一貫した状態にする。
 function polls_autoclose(PDO $pdo): void {
     $pdo->exec("UPDATE polls SET status='closed', closed_at=NOW()
                  WHERE status='open' AND deadline_at <= NOW()");
+    // v940 scheduled → open (公開開始時刻到達)
+    $pdo->exec("UPDATE polls SET status='open'
+                 WHERE status='scheduled' AND opens_at IS NOT NULL AND opens_at <= NOW()");
 }
 
 function polls_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     polls_autoclose($pdo);
     // 自分が対象 (poll_voters) または自分が起案者の投票を新しい順に。
+    // v940 scheduled は起案者にしか見せない。 voter として呼ばれても隠す (公開前に
+    // 「対象になっている」ことすら漏らさない = public timer 的な事前告知にしたければ
+    // 起案者が別途チャンネル等で連絡する運用)。
     $st = $pdo->prepare("
-        SELECT p.id, p.title, p.deadline_at, p.multi_select, p.visibility, p.status,
+        SELECT p.id, p.title, p.deadline_at, p.opens_at, p.multi_select, p.visibility, p.status,
                p.created_at, p.closed_at,
                p.creator_user_id, u.display_name AS creator_name,
                EXISTS(SELECT 1 FROM poll_voters pv2 WHERE pv2.poll_id=p.id AND pv2.user_id=? AND pv2.voted_at IS NOT NULL) AS has_voted,
@@ -49,7 +56,8 @@ function polls_list(PDO $pdo, array $cfg): void {
           JOIN users u ON u.id = p.creator_user_id
          WHERE p.deleted_at IS NULL
            AND (p.creator_user_id = ?
-            OR EXISTS(SELECT 1 FROM poll_voters pv WHERE pv.poll_id=p.id AND pv.user_id=?))
+            OR (p.status <> 'scheduled'
+                AND EXISTS(SELECT 1 FROM poll_voters pv WHERE pv.poll_id=p.id AND pv.user_id=?)))
          ORDER BY (p.status='open') DESC, p.deadline_at DESC, p.id DESC
          LIMIT 200");
     $st->execute([(int)$u['id'], (int)$u['id'], (int)$u['id'], (int)$u['id']]);
@@ -75,6 +83,20 @@ function polls_create(PDO $pdo, array $cfg): void {
     $deadline = $dt->format('Y-m-d H:i:s');
     if (strtotime($deadline) <= time() + 30) {
         throw new ApiException('bad_request', '締切は現在より先に', 400);
+    }
+    // v940 公開開始時刻 (省略 = 今すぐ公開)。
+    $opensAt = null;
+    $opensRaw = trim((string)($body['opens_at'] ?? ''));
+    if ($opensRaw !== '') {
+        $ot = DateTime::createFromFormat('Y-m-d\TH:i', $opensRaw)
+           ?: DateTime::createFromFormat('Y-m-d H:i', $opensRaw)
+           ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $opensRaw)
+           ?: DateTime::createFromFormat('Y-m-d H:i:s', $opensRaw);
+        if (!$ot) throw new ApiException('bad_request', 'opens_at は ISO 形式の日時', 400);
+        $opensAt = $ot->format('Y-m-d H:i:s');
+        if (strtotime($opensAt) >= strtotime($deadline)) {
+            throw new ApiException('bad_request', '公開開始は締切より前に', 400);
+        }
     }
     $multi = !empty($body['multi_select']) ? 1 : 0;
     $allowRevote   = array_key_exists('allow_revote', $body)   ? (!empty($body['allow_revote'])   ? 1 : 0) : 1;
@@ -114,27 +136,33 @@ function polls_create(PDO $pdo, array $cfg): void {
     if ((int)$stU->fetchColumn() !== count($voterIds)) {
         throw new ApiException('bad_request', '存在しない user_id が含まれます', 400);
     }
+    // v940 opens_at が未来なら status='scheduled'、通知は open 遷移後に voter が
+    //   自身で気付く形 (ここでは飛ばさない)。 即公開の従来動作は変わらず。
+    $initialStatus = ($opensAt !== null && strtotime($opensAt) > time() + 30) ? 'scheduled' : 'open';
     $pollId = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $bodyText, $deadline, $multi, $vis, $allowRevote, $allowFreeText, $cleanOpts, $voterIds, &$pollId) {
-        $ins = $pdo->prepare("INSERT INTO polls (title, body, creator_user_id, deadline_at, multi_select, visibility, allow_revote, allow_free_text, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())");
-        $ins->execute([$title, $bodyText, (int)$u['id'], $deadline, $multi, $vis, $allowRevote, $allowFreeText]);
+    db_tx($pdo, function () use ($pdo, $u, $title, $bodyText, $deadline, $opensAt, $multi, $vis, $allowRevote, $allowFreeText, $cleanOpts, $voterIds, $initialStatus, &$pollId) {
+        $ins = $pdo->prepare("INSERT INTO polls (title, body, creator_user_id, deadline_at, opens_at, multi_select, visibility, allow_revote, allow_free_text, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        $ins->execute([$title, $bodyText, (int)$u['id'], $deadline, $opensAt, $multi, $vis, $allowRevote, $allowFreeText, $initialStatus]);
         $pollId = (int)$pdo->lastInsertId();
         $stO = $pdo->prepare("INSERT INTO poll_options (poll_id, label, sort_order) VALUES (?, ?, ?)");
         foreach ($cleanOpts as $i => $label) $stO->execute([$pollId, $label, $i]);
         $stV = $pdo->prepare("INSERT INTO poll_voters (poll_id, user_id) VALUES (?, ?)");
         foreach ($voterIds as $uid) $stV->execute([$pollId, $uid]);
     });
-    // 通知: 自分以外の対象者に「投票してください」を送る。
-    foreach ($voterIds as $uid) {
-        if ((int)$uid === (int)$u['id']) continue;
-        try {
-            Notifier::notify($pdo, $cfg, (int)$uid, 'poll',
-                "📊 投票: 「{$title}」 (締切 " . substr($deadline, 0, 16) . ")",
-                'poll', $pollId);
-        } catch (Throwable $_) { /* 通知失敗で create を壊さない */ }
+    // 通知: 即公開のときだけ voter に飛ばす。 scheduled は open 遷移時に飛ばさない
+    //   (「予告なく届く」を避け、起案者が公開時刻に合わせて自ら告知する運用)。
+    if ($initialStatus === 'open') {
+        foreach ($voterIds as $uid) {
+            if ((int)$uid === (int)$u['id']) continue;
+            try {
+                Notifier::notify($pdo, $cfg, (int)$uid, 'poll',
+                    "📊 投票: 「{$title}」 (締切 " . substr($deadline, 0, 16) . ")",
+                    'poll', $pollId);
+            } catch (Throwable $_) { /* 通知失敗で create を壊さない */ }
+        }
     }
-    json_response(['id' => $pollId]);
+    json_response(['id' => $pollId, 'status' => $initialStatus]);
 }
 
 function polls_detail(PDO $pdo, array $cfg, int $id): void {
@@ -148,6 +176,10 @@ function polls_detail(PDO $pdo, array $cfg, int $id): void {
     $poll = $st->fetch(PDO::FETCH_ASSOC);
     if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
     $isCreator = (int)$poll['creator_user_id'] === (int)$u['id'];
+    // v940 公開前 (scheduled) は起案者以外には「見つかりません」で隠す。
+    if ((string)$poll['status'] === 'scheduled' && !$isCreator) {
+        throw new ApiException('not_found', '投票が見つかりません', 404);
+    }
     // 対象者リスト + 自分が対象か。
     $stV = $pdo->prepare("SELECT pv.user_id, pv.voted_at, u.display_name, u.avatar_url, u.grade
                            FROM poll_voters pv
@@ -275,6 +307,9 @@ function polls_vote(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $poll = $st->fetch(PDO::FETCH_ASSOC);
     if (!$poll) throw new ApiException('not_found', '投票が見つかりません', 404);
+    if ((string)$poll['status'] === 'scheduled') {
+        throw new ApiException('not_open', 'まだ公開されていません', 400);
+    }
     if ((string)$poll['status'] !== 'open') throw new ApiException('closed', '締め切られた投票には投票できません', 400);
     if (empty($poll['multi_select']) && count($optionIds) > 1) {
         throw new ApiException('bad_request', '単一選択の投票です', 400);
@@ -385,6 +420,20 @@ function polls_update(PDO $pdo, array $cfg, int $id): void {
            ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
         if (!$dt) throw new ApiException('bad_request', 'deadline_at は ISO 日時', 400);
         $sets[] = 'deadline_at = ?'; $args[] = $dt->format('Y-m-d H:i:s');
+    }
+    // v940 公開開始時刻の編集 (scheduled 中のみ意味あり、 空文字で null 化)。
+    if (array_key_exists('opens_at', $body)) {
+        $raw = trim((string)$body['opens_at']);
+        if ($raw === '') {
+            $sets[] = 'opens_at = NULL, status = IF(status = \'scheduled\', \'open\', status)';
+        } else {
+            $ot = DateTime::createFromFormat('Y-m-d\TH:i', $raw)
+               ?: DateTime::createFromFormat('Y-m-d H:i', $raw)
+               ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $raw)
+               ?: DateTime::createFromFormat('Y-m-d H:i:s', $raw);
+            if (!$ot) throw new ApiException('bad_request', 'opens_at は ISO 日時', 400);
+            $sets[] = 'opens_at = ?'; $args[] = $ot->format('Y-m-d H:i:s');
+        }
     }
     $multiNow = (int)$poll['multi_select'];
     if (array_key_exists('multi_select', $body)) {

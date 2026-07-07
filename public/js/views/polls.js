@@ -60,18 +60,23 @@ export async function renderPolls() {
     }
     document.getElementById('polls-list').innerHTML = items.map(p => {
       const closed = p.status === 'closed';
+      const scheduled = p.status === 'scheduled'; // v940
       const youCreated = Number(p.creator_user_id) === Number(state.me?.id);
       const tags = [];
-      if (closed) tags.push(tag('muted', '締切済'));
+      if (scheduled) tags.push('<span class="tag" style="background:#e0f2fe; color:#0369a1">🕒 公開予定</span>');
+      else if (closed) tags.push(tag('muted', '締切済'));
       else        tags.push('<span class="tag" style="background:#e3f2fd; color:#1565c0">受付中</span>');
-      if (p.is_voter && !p.has_voted && !closed) tags.push('<span class="tag" style="background:#fff3e0; color:#e65100">未投票</span>');
-      if (p.is_voter && p.has_voted) tags.push(tag('ok', '投票済'));
+      if (!scheduled && p.is_voter && !p.has_voted && !closed) tags.push('<span class="tag" style="background:#fff3e0; color:#e65100">未投票</span>');
+      if (!scheduled && p.is_voter && p.has_voted) tags.push(tag('ok', '投票済'));
       if (youCreated) tags.push('<span class="tag">主催</span>');
+      const timeMeta = scheduled && p.opens_at
+        ? `公開 ${escapeHtml(fmtDeadline(p.opens_at))} · 締切 ${escapeHtml(fmtDeadline(p.deadline_at))}`
+        : `締切 ${escapeHtml(fmtDeadline(p.deadline_at))}`;
       return `
         <a class="list-item" href="#/polls/${p.id}">
           <div class="grow" style="min-width:0">
             <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title)}</div>
-            <div class="meta">${tags.join(' ')} · 締切 ${escapeHtml(fmtDeadline(p.deadline_at))} · 起案 ${escapeHtml(p.creator_name)}</div>
+            <div class="meta">${tags.join(' ')} · ${timeMeta} · 起案 ${escapeHtml(p.creator_name)}</div>
             <div class="meta">${p.voted_count}/${p.voter_count} 人が投票${p.multi_select ? ' · 複数選択可' : ''}</div>
           </div>
         </a>`;
@@ -95,6 +100,10 @@ function pollFormCardHtml(initial, isEdit) {
       </label>
       <label class="field"><span class="lbl">締切</span>
         <input type="datetime-local" id="pn-deadline" value="${escapeHtml(initial.deadline || '')}">
+      </label>
+      <label class="field"><span class="lbl">公開開始 (省略で今すぐ公開)</span>
+        <input type="datetime-local" id="pn-opens" value="${escapeHtml(initial.opensAt || '')}">
+        <div class="hint-sm">未来日時を入れると、その時刻まで対象者にも隠されます (起案者のみ「公開予定」で見える)</div>
       </label>
       <label style="display:flex; align-items:center; gap:10px; margin:4px 0">
         <span class="switch"><input type="checkbox" id="pn-multi" ${initial.multi ? 'checked' : ''}><span class="slider"></span></span>
@@ -173,6 +182,7 @@ async function wirePollForm(initial, isEdit, onSave, opts = {}) {
     const title = document.getElementById('pn-title').value.trim();
     const body  = document.getElementById('pn-body').value.trim();
     const deadline = document.getElementById('pn-deadline').value;
+    const opensAt = document.getElementById('pn-opens').value; // v940 未入力なら空文字
     const multi = document.getElementById('pn-multi').checked;
     const allowRevote = document.getElementById('pn-revote').checked;
     const allowFreeText = document.getElementById('pn-ft').checked;
@@ -182,11 +192,13 @@ async function wirePollForm(initial, isEdit, onSave, opts = {}) {
     if (!title) { toast('タイトル必須'); return; }
     if (!deadline) { toast('締切必須'); return; }
     if (opts.length < 2) { toast('選択肢を 2 つ以上'); return; }
+    if (opensAt && opensAt >= deadline) { toast('公開開始は締切より前に'); return; }
     const voterIds = picker ? [...picker.getSelected()] : [];
     if (!voterIds.length) { toast('対象者を 1 人以上'); return; }
     try {
       await onSave({
-        title, body, deadline_at: deadline, multi_select: multi,
+        title, body, deadline_at: deadline, opens_at: opensAt,
+        multi_select: multi,
         allow_revote: allowRevote, allow_free_text: allowFreeText,
         visibility: vis, options: opts, voter_ids: voterIds,
       });
@@ -246,11 +258,13 @@ export async function renderPollEdit({ params }) {
     document.getElementById('pe-status').textContent = '';
     // datetime-local 用に「YYYY-MM-DDTHH:MM」へ。
     const dl = String(d.poll.deadline_at || '').slice(0, 16).replace(' ', 'T');
+    const oa = String(d.poll.opens_at || '').slice(0, 16).replace(' ', 'T');
     const initial = {
       id,
       title: d.poll.title,
       body: d.poll.body || '',
       deadline: dl,
+      opensAt: oa,
       multi: !!d.poll.multi_select,
       allowRevote: !!d.poll.allow_revote,
       allowFreeText: !!d.poll.allow_free_text,
@@ -356,17 +370,23 @@ async function loadPollDetail(id) {
     const d = await get('/api/polls/' + id);
     const p = d.poll;
     const isOpen = p.status === 'open';
+    const isScheduled = p.status === 'scheduled'; // v940
     const isCreator = d.is_creator;
     const head = document.getElementById('pd-head');
+    const statusLabel = isScheduled ? '🕒 公開予定 (起案者のみ表示)' : (isOpen ? '受付中' : '締切済');
     head.innerHTML = `
       <div class="row center" style="gap:8px">
         <h2 style="margin:6px 0 0; flex:1">${escapeHtml(p.title)}</h2>
         <button id="pd-copy-url" class="btn" style="font-size:12px; padding:4px 8px">🔗 URL</button>
       </div>
       <div class="meta">
-        起案 ${escapeHtml(p.creator_name)} · ${isOpen ? '受付中' : '締切済'} ·
+        起案 ${escapeHtml(p.creator_name)} · ${statusLabel} ·
         ${p.multi_select ? '複数選択可' : '単一選択'} · ${escapeHtml(VIS_LABEL[p.visibility] || p.visibility)}
       </div>
+      ${isScheduled && p.opens_at ? `
+        <div class="meta" style="background:#e0f2fe; color:#0369a1; padding:6px 10px; border-radius:6px; margin-top:6px">
+          🕒 公開開始: ${escapeHtml(fmtDeadline(p.opens_at))} まで対象者には見えません
+        </div>` : ''}
       <div id="pd-deadline" class="meta" data-deadline="${escapeHtml(p.deadline_at)}">
         締切 ${escapeHtml(fmtDeadline(p.deadline_at))}
       </div>
