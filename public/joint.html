@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <title>合同研究会 投票</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+           color:#111827; background:#f7f5fb; line-height:1.5; padding:16px;
+           max-width:640px; margin:0 auto }
+    h1 { font-size:20px; margin:12px 0 4px }
+    h2 { font-size:16px; margin:20px 0 8px; color:#4a106d }
+    .card { background:#fff; border-radius:8px; padding:14px 16px; margin:10px 0; box-shadow:0 1px 3px rgba(0,0,0,0.06) }
+    .muted { color:#6b7280; font-size:13px }
+    .meta { color:#6b7280; font-size:12px }
+    .presenter { border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; margin:8px 0; cursor:pointer;
+                 transition: all 0.15s ease; background:#fff }
+    .presenter:hover { border-color:#7b3fa0; background:#faf5ff }
+    .presenter.selected { border-color:#7b3fa0; background:#f3e8ff; border-width:2px; padding:9px 11px }
+    .presenter.disabled { opacity:0.4; cursor:not-allowed; background:#f9fafb }
+    .presenter.disabled:hover { border-color:#e5e7eb; background:#f9fafb }
+    .best { border-color:#f59e0b; background:#fef3c7 }
+    .best::before { content:"🏆 優秀発表 "; color:#b45309; font-weight:700 }
+    .aff-chip { display:inline-block; font-size:11px; padding:2px 8px; border-radius:12px; margin-right:6px }
+    .aff-host  { background:#dbeafe; color:#1e40af }
+    .aff-guest { background:#fce7f3; color:#9d174d }
+    .aff-select { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 }
+    .aff-select label { flex:1; min-width:100px; padding:10px; border:2px solid #e5e7eb; border-radius:8px;
+                        cursor:pointer; text-align:center; background:#fff; font-size:14px }
+    .aff-select label.on { border-color:#7b3fa0; background:#f3e8ff; color:#4a106d; font-weight:600 }
+    .aff-select input { display:none }
+    button { background:#7b3fa0; color:#fff; border:none; padding:10px 18px; border-radius:6px;
+             font-size:14px; cursor:pointer; font-family:inherit }
+    button:hover { background:#6b21a8 }
+    button:disabled { background:#d1d5db; cursor:not-allowed }
+    input[type=text] { width:100%; padding:8px; font-size:14px; border:1px solid #d1d5db; border-radius:6px }
+    #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+             background:#111; color:#fff; padding:10px 16px; border-radius:6px; font-size:13px;
+             opacity:0; transition:opacity 0.2s; pointer-events:none; z-index:100; max-width:90% }
+    #toast.show { opacity:0.95 }
+    .banner { padding:10px 14px; border-radius:6px; margin:10px 0; font-size:13px }
+    .banner-info    { background:#dbeafe; color:#1e40af }
+    .banner-success { background:#d1fae5; color:#065f46 }
+    .banner-warn    { background:#fef3c7; color:#92400e }
+    .voted-mark { font-size:12px; color:#059669; margin-left:6px }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="muted">読み込み中…</div></div>
+  <div id="toast"></div>
+  <script>
+'use strict';
+
+const t = new URLSearchParams(location.search).get('t') || '';
+if (!t) {
+  document.getElementById('app').innerHTML = '<div class="banner banner-warn">URL に token (?t=...) がありません。</div>';
+} else {
+  loadEvent();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let evData = null;
+let myAff = null;      // 'host' | 'guest' | 'other'
+let myName = '';       // optional voter name
+
+async function loadEvent() {
+  try {
+    const res = await fetch('/api/joint-events/public/' + encodeURIComponent(t), { credentials: 'same-origin' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
+    }
+    evData = await res.json();
+    // localStorage で 過去 の 選択 を 復元
+    myAff = localStorage.getItem('joint_aff_' + t) || null;
+    myName = localStorage.getItem('joint_name_' + t) || '';
+    render();
+  } catch (e) {
+    document.getElementById('app').innerHTML =
+      `<div class="banner banner-warn">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function render() {
+  const finalized = !!evData.finalized_at;
+  document.getElementById('app').innerHTML = `
+    <h1>${esc(evData.title)}</h1>
+    <div class="meta">${esc(evData.host_lab)} × ${esc(evData.guest_lab)}${
+      evData.starts_at ? ' · ' + esc(evData.starts_at.slice(0, 16)) : ''
+    }</div>
+    ${evData.description ? `<div style="margin:8px 0; white-space:pre-wrap">${esc(evData.description)}</div>` : ''}
+    ${finalized ? `<div class="banner banner-success">🏆 投票は締め切られました。優秀発表者が確定しています。</div>` : ''}
+
+    ${finalized ? '' : `
+      <div class="card">
+        <div style="font-weight:600; font-size:14px; margin-bottom:6px">あなたの所属を選んでください</div>
+        <div class="aff-select" id="aff-picker">
+          <label data-aff="host"><input type="radio" name="aff" value="host">${esc(evData.host_lab)}</label>
+          <label data-aff="guest"><input type="radio" name="aff" value="guest">${esc(evData.guest_lab)}</label>
+          <label data-aff="other"><input type="radio" name="aff" value="other">外部・その他</label>
+        </div>
+        <div style="font-size:12px; color:#6b7280; margin-top:4px">
+          ${esc(evData.host_lab)} の方は ${esc(evData.guest_lab)} の発表に、${esc(evData.guest_lab)} の方は ${esc(evData.host_lab)} の発表に、外部の方は両方に投票できます。
+        </div>
+        <div style="margin-top:10px">
+          <div class="meta" style="margin-bottom:4px">お名前 (任意、集計参考用)</div>
+          <input type="text" id="voter-name" maxlength="100" placeholder="山田太郎" value="${esc(myName)}">
+        </div>
+      </div>
+    `}
+
+    <div id="sessions">
+      ${evData.sessions.map(renderSession).join('')}
+    </div>
+  `;
+
+  if (!finalized) wireAff();
+  wireVote();
+}
+
+function wireAff() {
+  document.querySelectorAll('#aff-picker label').forEach(lbl => {
+    if (myAff === lbl.dataset.aff) {
+      lbl.classList.add('on');
+      lbl.querySelector('input').checked = true;
+    }
+    lbl.addEventListener('click', () => {
+      myAff = lbl.dataset.aff;
+      localStorage.setItem('joint_aff_' + t, myAff);
+      document.querySelectorAll('#aff-picker label').forEach(o => o.classList.toggle('on', o === lbl));
+      render(); // 選択後 は 対応 プレゼンター が active に
+    });
+  });
+  const nameEl = document.getElementById('voter-name');
+  if (nameEl) nameEl.addEventListener('change', e => {
+    myName = e.target.value.trim();
+    localStorage.setItem('joint_name_' + t, myName);
+  });
+}
+
+function renderSession(s) {
+  const finalized = !!evData.finalized_at;
+  const myVote = (evData.my_votes || {})[s.id] || null;
+  return `
+    <h2>${esc(s.name)}${myVote ? '<span class="voted-mark">✓ 投票済 (タップで変更)</span>' : ''}</h2>
+    ${s.starts_at ? `<div class="meta">${esc(s.starts_at.slice(0, 16))}${s.ends_at ? ' - ' + esc(s.ends_at.slice(11, 16)) : ''}</div>` : ''}
+    ${s.presenters.map(p => renderPresenter(s.id, p, myVote, finalized)).join('') || '<div class="muted">発表者が登録されていません</div>'}
+  `;
+}
+
+function renderPresenter(sessionId, p, myVote, finalized) {
+  const isMine = myVote === p.id;
+  const isBest = finalized && p.is_best;
+  // 投票可否: finalized なら全部 disable。 aff 未選択なら全部 disable。 aff='host' なら guest しか投票不可、逆も同じ。
+  let disabled = finalized || !myAff;
+  if (!disabled && myAff === 'host'  && p.affiliation !== 'guest') disabled = true;
+  if (!disabled && myAff === 'guest' && p.affiliation !== 'host')  disabled = true;
+  const cls = ['presenter', isMine ? 'selected' : '', isBest ? 'best' : '', disabled ? 'disabled' : ''].filter(Boolean).join(' ');
+  const affLabel = p.affiliation === 'host' ? evData.host_lab : evData.guest_lab;
+  const affClass = p.affiliation === 'host' ? 'aff-host' : 'aff-guest';
+  return `
+    <div class="${cls}" data-sid="${sessionId}" data-pid="${p.id}" data-disabled="${disabled ? '1' : '0'}">
+      <div><span class="aff-chip ${affClass}">${esc(affLabel)}</span><b>${esc(p.name)}</b></div>
+      ${p.title ? `<div style="font-size:13px; margin-top:2px">${esc(p.title)}</div>` : ''}
+      ${p.abstract ? `<div class="meta" style="margin-top:4px; white-space:pre-wrap">${esc(p.abstract)}</div>` : ''}
+    </div>
+  `;
+}
+
+function wireVote() {
+  document.querySelectorAll('.presenter').forEach(el => {
+    if (el.dataset.disabled === '1') return;
+    el.addEventListener('click', async () => {
+      if (!myAff) { toast('先に所属を選んでください'); return; }
+      const sid = Number(el.dataset.sid);
+      const pid = Number(el.dataset.pid);
+      try {
+        const res = await fetch('/api/joint-events/public/' + encodeURIComponent(t) + '/vote', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'labpay',
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            session_id: sid,
+            presenter_id: pid,
+            affiliation: myAff,
+            voter_name: myName || null,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          throw new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
+        }
+        evData.my_votes = evData.my_votes || {};
+        evData.my_votes[sid] = pid;
+        toast('投票しました');
+        render();
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
+  });
+}
+  </script>
+</body>
+</html>

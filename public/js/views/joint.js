@@ -1,0 +1,357 @@
+// /#/joint-events — 合同研究会用投票 (v941)。
+// 起案者 (中村さん想定) が event を作成 → session → presenter を登録し、
+// 公開 URL (と 4 桁 コード) を 外部 に 共有、 終了後に 集計 + 優秀 発表者 を 確定。
+// 外部 参加者 の 投票 UI は /public/joint.html (別 HTML)。
+
+import { get, post, patch, del } from '../api.js';
+import { escapeHtml, navigate } from '../router.js';
+import { state, toast } from '../app.js';
+
+const AFF_LABEL = { host: 'ホスト', guest: 'ゲスト' };
+
+// ---------- 一覧 ----------
+
+export async function renderJointList() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center">
+        <h2 style="margin:0">🎪 合同研究会 投票</h2>
+        <a href="#/joint-events/new" class="btn primary">＋ 新規</a>
+      </div>
+      <p class="hint-sm" style="margin:8px 0 0">
+        合同研究会で セッションごとに 相手ラボの発表に投票してもらい、
+        セッション別優秀発表者を決めるための機能。
+        外部参加者も 4 桁コード or 公開 URL で 匿名投票可。
+      </p>
+    </div>
+    <div id="jl-list"><div class="muted">読み込み中…</div></div>
+  `;
+  try {
+    const d = await get('/api/joint-events');
+    const items = d.items || [];
+    if (!items.length) {
+      document.getElementById('jl-list').innerHTML =
+        '<div class="card muted">まだ event がありません。 「＋ 新規」 から作ってください。</div>';
+      return;
+    }
+    document.getElementById('jl-list').innerHTML = items.map(e => `
+      <a class="list-item" href="#/joint-events/${e.id}" style="text-decoration:none; color:inherit">
+        <div class="grow" style="min-width:0">
+          <div class="bold" style="font-size:15px">${escapeHtml(e.title)}</div>
+          <div class="meta">${escapeHtml(e.host_lab)} × ${escapeHtml(e.guest_lab)}
+            ${e.starts_at ? ' · ' + escapeHtml(String(e.starts_at).slice(0, 16)) : ''}
+            ${e.finalized_at ? ' · <span style="color:#059669">🏆 確定済</span>' : ''}
+          </div>
+          <div class="meta">
+            ${e.session_count} session · ${e.presenter_count} 発表 · ${e.vote_count} 票
+          </div>
+        </div>
+      </a>
+    `).join('');
+  } catch (e) {
+    document.getElementById('jl-list').innerHTML =
+      `<div class="muted">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- 新規作成 ----------
+
+export async function renderJointNew() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin:0 0 10px">🎪 合同研究会 event を作成</h2>
+      <label class="field"><span class="lbl">タイトル</span>
+        <input type="text" id="jn-title" maxlength="300" placeholder="例: 中村研 × 山田研 合同研究会 2026 秋">
+      </label>
+      <label class="field"><span class="lbl">説明 (任意)</span>
+        <textarea id="jn-desc" rows="3" maxlength="5000" placeholder="日時 / 場所 / 注意事項など"></textarea>
+      </label>
+      <div class="row" style="gap:8px">
+        <label class="field" style="flex:1"><span class="lbl">ホストラボ名</span>
+          <input type="text" id="jn-host" maxlength="100" value="中村研">
+        </label>
+        <label class="field" style="flex:1"><span class="lbl">ゲストラボ名</span>
+          <input type="text" id="jn-guest" maxlength="100" placeholder="例: 山田研">
+        </label>
+      </div>
+      <div class="row" style="gap:8px">
+        <label class="field" style="flex:1"><span class="lbl">開始日時 (任意)</span>
+          <input type="datetime-local" id="jn-starts">
+        </label>
+        <label class="field" style="flex:1"><span class="lbl">終了日時 (任意)</span>
+          <input type="datetime-local" id="jn-ends">
+        </label>
+      </div>
+      <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+        <a href="#/joint-events" class="btn">キャンセル</a>
+        <button id="jn-save" class="primary">作成</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('jn-save').addEventListener('click', async () => {
+    const title = document.getElementById('jn-title').value.trim();
+    const host  = document.getElementById('jn-host').value.trim();
+    const guest = document.getElementById('jn-guest').value.trim();
+    const desc  = document.getElementById('jn-desc').value.trim();
+    const starts = document.getElementById('jn-starts').value || null;
+    const ends   = document.getElementById('jn-ends').value || null;
+    if (!title) return toast('タイトル必須');
+    if (!host || !guest) return toast('両ラボ名を入力してください');
+    try {
+      const d = await post('/api/joint-events', {
+        title, description: desc, host_lab: host, guest_lab: guest,
+        starts_at: starts, ends_at: ends,
+      });
+      toast('作成しました');
+      navigate('#/joint-events/' + d.id);
+    } catch (e) { toast('失敗: ' + e.message); }
+  });
+}
+
+// ---------- 詳細 ----------
+
+export async function renderJointDetail({ params }) {
+  const id = Number(params.id);
+  const app = document.getElementById('app');
+  app.innerHTML = `<div class="card muted">読み込み中…</div>`;
+  try {
+    const d = await get('/api/joint-events/' + id);
+    renderJointDetailInto(app, d);
+  } catch (e) {
+    app.innerHTML = `<div class="card muted">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderJointDetailInto(app, d) {
+  const finalized = !!d.finalized_at;
+  const publicUrl = `${location.origin}/public/joint.html?t=${d.public_token}`;
+  const shortUrl  = d.public_code ? `${location.origin}/#/public` : null;
+  app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; gap:8px">
+        <div class="grow">
+          <h2 style="margin:0">🎪 ${escapeHtml(d.title)}</h2>
+          <div class="meta">${escapeHtml(d.host_lab)} × ${escapeHtml(d.guest_lab)}${
+            d.starts_at ? ' · ' + escapeHtml(String(d.starts_at).slice(0, 16)) : ''
+          }${finalized ? ' · <span style="color:#059669">🏆 確定済</span>' : ''}</div>
+        </div>
+        <div class="row" style="gap:4px; flex-wrap:wrap">
+          <button id="jd-edit"   class="btn" style="font-size:12px; padding:4px 8px">✏️ 編集</button>
+          <button id="jd-delete" class="btn" style="font-size:12px; padding:4px 8px; color:#dc2626">🗑</button>
+        </div>
+      </div>
+      ${d.description ? `<div style="margin-top:8px; white-space:pre-wrap">${escapeHtml(d.description)}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <div class="bold" style="margin-bottom:6px">📢 外部への共有</div>
+      ${d.public_code ? `
+        <div style="background:#fef3c7; padding:10px 14px; border-radius:6px; margin-bottom:8px">
+          <div style="font-size:12px; color:#92400e; margin-bottom:2px">4 桁 コード (pay.nkmr.io/#/public で入力)</div>
+          <div style="font-family:ui-monospace,monospace; font-size:32px; letter-spacing:8px; font-weight:700; color:#92400e">${escapeHtml(d.public_code)}</div>
+        </div>
+      ` : ''}
+      <div style="font-size:12px; color:#6b7280; margin-bottom:2px">直接 URL (SNS 貼り付け 用)</div>
+      <div class="row" style="gap:6px">
+        <input type="text" id="jd-url" readonly value="${escapeHtml(publicUrl)}"
+               style="flex:1; padding:6px 10px; font-size:12px; font-family:ui-monospace,monospace;
+                      background:#f9fafb; border:1px solid #d1d5db; border-radius:4px">
+        <button id="jd-copy" class="btn" style="font-size:12px; padding:4px 10px">📋 コピー</button>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">
+        QR コード出力は v942 で 追加予定。 いまは URL コピー + 4 桁コード配布でお願いします。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px">
+        <div class="bold">📅 セッション</div>
+        <button id="jd-add-session" class="btn primary" style="font-size:12px; padding:4px 10px">＋ セッション追加</button>
+      </div>
+      <div id="jd-sessions">
+        ${(d.sessions || []).map(s => renderSessionCard(s)).join('') || '<div class="muted">まだセッションがありません</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px">
+        <div class="bold">📊 集計 / 優秀発表者確定</div>
+        <div class="row" style="gap:4px">
+          <button id="jd-results" class="btn" style="font-size:12px; padding:4px 10px">集計を見る</button>
+          <button id="jd-finalize" class="btn ${finalized ? '' : 'primary'}" style="font-size:12px; padding:4px 10px">
+            ${finalized ? '再確定' : '🏆 確定'}
+          </button>
+        </div>
+      </div>
+      <div id="jd-results-view" class="hint-sm">「集計を見る」で 現在の投票数と最多得票者を確認 → 「確定」で 各セッションの優秀発表者を決定します。</div>
+    </div>
+  `;
+
+  document.getElementById('jd-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      toast('コピーしました');
+    } catch { toast('コピー失敗'); }
+  });
+  document.getElementById('jd-edit').addEventListener('click', () => openEditEvent(d));
+  document.getElementById('jd-delete').addEventListener('click', () => onDeleteEvent(d.id));
+  document.getElementById('jd-add-session').addEventListener('click', () => openAddSession(d.id));
+  document.querySelectorAll('[data-add-presenter]').forEach(b =>
+    b.addEventListener('click', () => openAddPresenter(d.id, Number(b.dataset.addPresenter))));
+  document.querySelectorAll('[data-edit-session]').forEach(b =>
+    b.addEventListener('click', () => openEditSession(d.id, Number(b.dataset.editSession))));
+  document.querySelectorAll('[data-del-session]').forEach(b =>
+    b.addEventListener('click', () => onDeleteSession(d.id, Number(b.dataset.delSession))));
+  document.querySelectorAll('[data-edit-presenter]').forEach(b =>
+    b.addEventListener('click', () => openEditPresenter(d.id, Number(b.dataset.editPresenter))));
+  document.querySelectorAll('[data-del-presenter]').forEach(b =>
+    b.addEventListener('click', () => onDeletePresenter(d.id, Number(b.dataset.delPresenter))));
+  document.getElementById('jd-results').addEventListener('click', () => loadResults(d.id));
+  document.getElementById('jd-finalize').addEventListener('click', () => onFinalize(d.id));
+}
+
+function renderSessionCard(s) {
+  return `
+    <div style="border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px; margin-bottom:8px">
+      <div class="row" style="justify-content:space-between; align-items:flex-start">
+        <div class="grow">
+          <div class="bold">${escapeHtml(s.name)}</div>
+          ${s.starts_at ? `<div class="meta">${escapeHtml(String(s.starts_at).slice(0, 16))}${s.ends_at ? ' - ' + escapeHtml(String(s.ends_at).slice(11, 16)) : ''}</div>` : ''}
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="btn" style="font-size:11px; padding:2px 6px" data-add-presenter="${s.id}">＋ 発表者</button>
+          <button class="btn" style="font-size:11px; padding:2px 6px" data-edit-session="${s.id}">✏️</button>
+          <button class="btn" style="font-size:11px; padding:2px 6px; color:#dc2626" data-del-session="${s.id}">🗑</button>
+        </div>
+      </div>
+      ${(s.presenters || []).length ? `
+        <div style="margin-top:8px">
+          ${s.presenters.map(p => `
+            <div class="row" style="gap:6px; padding:4px 0; align-items:flex-start">
+              <span class="tag" style="background:${p.affiliation === 'host' ? '#dbeafe' : '#fce7f3'}; color:${p.affiliation === 'host' ? '#1e40af' : '#9d174d'}; font-size:10px">
+                ${escapeHtml(p.affiliation === 'host' ? 'host' : 'guest')}
+              </span>
+              <div class="grow">
+                <b>${escapeHtml(p.name)}</b>
+                ${p.is_best ? ' <span style="color:#b45309">🏆 優秀</span>' : ''}
+                ${p.title ? `<div class="meta">${escapeHtml(p.title)}</div>` : ''}
+              </div>
+              <button class="btn" style="font-size:11px; padding:2px 6px" data-edit-presenter="${p.id}">✏️</button>
+              <button class="btn" style="font-size:11px; padding:2px 6px; color:#dc2626" data-del-presenter="${p.id}">🗑</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<div class="muted" style="font-size:12px; margin-top:6px">発表者未登録</div>'}
+    </div>
+  `;
+}
+
+// ---------- モーダル的な inline form (シンプル prompt で MVP) ----------
+
+async function openEditEvent(d) {
+  const title = prompt('タイトル', d.title);
+  if (title === null) return;
+  try { await patch('/api/joint-events/' + d.id, { title }); toast('更新'); refresh(d.id); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onDeleteEvent(id) {
+  if (!confirm('この event を削除しますか? (紐付く session / presenter / 投票 も全て消えます)')) return;
+  try { await del('/api/joint-events/' + id); toast('削除'); navigate('#/joint-events'); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function openAddSession(eventId) {
+  const name = prompt('セッション名 (例: Session A、 招待講演 1)');
+  if (!name) return;
+  try {
+    await post('/api/joint-events/' + eventId + '/sessions', { name });
+    toast('追加'); refresh(eventId);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function openEditSession(eventId, sid) {
+  const name = prompt('セッション名');
+  if (!name) return;
+  try { await patch('/api/joint-events/sessions/' + sid, { name }); toast('更新'); refresh(eventId); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onDeleteSession(eventId, sid) {
+  if (!confirm('このセッションを削除しますか? (発表者・投票も消えます)')) return;
+  try { await del('/api/joint-events/sessions/' + sid); toast('削除'); refresh(eventId); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function openAddPresenter(eventId, sid) {
+  const name = prompt('発表者名');
+  if (!name) return;
+  const aff = prompt('所属 (host または guest)', 'host');
+  if (!['host', 'guest'].includes(aff)) return toast('host / guest のいずれか');
+  const title = prompt('発表タイトル (任意)', '') || '';
+  try {
+    await post(`/api/joint-events/${eventId}/sessions/${sid}/presenters`,
+      { name, affiliation: aff, title });
+    toast('追加'); refresh(eventId);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function openEditPresenter(eventId, pid) {
+  const name = prompt('発表者名');
+  if (!name) return;
+  try { await patch('/api/joint-events/presenters/' + pid, { name }); toast('更新'); refresh(eventId); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onDeletePresenter(eventId, pid) {
+  if (!confirm('この発表者を削除しますか?')) return;
+  try { await del('/api/joint-events/presenters/' + pid); toast('削除'); refresh(eventId); }
+  catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function refresh(eventId) {
+  const d = await get('/api/joint-events/' + eventId);
+  renderJointDetailInto(document.getElementById('app'), d);
+}
+
+// ---------- 集計 / 確定 ----------
+
+async function loadResults(id) {
+  const box = document.getElementById('jd-results-view');
+  box.innerHTML = '<span class="muted">集計中…</span>';
+  try {
+    const r = await get('/api/joint-events/' + id + '/results');
+    box.innerHTML = (r.sessions || []).map(s => {
+      const sorted = [...(s.presenters || [])].sort((a, b) =>
+        (b.votes?.total || 0) - (a.votes?.total || 0));
+      const top = sorted[0];
+      return `
+        <div style="border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px">
+          <div class="bold" style="font-size:13px">${escapeHtml(s.name)}</div>
+          ${sorted.length ? sorted.map((p, i) => `
+            <div class="row" style="gap:8px; padding:2px 0; font-size:13px">
+              <span style="width:24px; text-align:right">${i + 1}.</span>
+              <span class="grow">${escapeHtml(p.name)}</span>
+              <span style="font-family:ui-monospace,monospace">${p.votes?.total || 0} 票</span>
+              <span class="meta">(${p.votes?.host || 0}/${p.votes?.guest || 0}/${p.votes?.other || 0})</span>
+              ${top === p && (p.votes?.total || 0) > 0 ? '<span style="color:#059669">🏆</span>' : ''}
+            </div>
+          `).join('') : '<div class="muted">発表者なし</div>'}
+        </div>
+      `;
+    }).join('') + `<div class="hint-sm" style="margin-top:8px">内訳: (host投票数 / guest投票数 / その他)</div>`;
+  } catch (e) {
+    box.innerHTML = `<span style="color:#dc2626">失敗: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+async function onFinalize(id) {
+  if (!confirm('各セッションの最多得票者を優秀発表者として確定します。 (同票時は sort_order 順の先着)\n再確定は可能です。よろしいですか?')) return;
+  try {
+    await post('/api/joint-events/' + id + '/finalize', {});
+    toast('確定しました 🏆');
+    refresh(id);
+  } catch (e) { toast('失敗: ' + e.message); }
+}

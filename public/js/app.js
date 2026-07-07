@@ -498,6 +498,12 @@ route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetai
 // v934 かんばん ボード (Trello-like、 ラボ 共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
 route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
+// v941 合同研究会用投票
+route('/joint-events',          lazy(() => import('./views/joint.js'), 'renderJointList'));
+route('/joint-events/new',      lazy(() => import('./views/joint.js'), 'renderJointNew'));
+route('/joint-events/:id',      lazy(() => import('./views/joint.js'), 'renderJointDetail'));
+// v941 公開機能 短縮 コード ゲートウェイ (未認証 でも 開ける)
+route('/public',                lazy(() => import('./views/public_gateway.js'), 'renderPublicGateway'));
 route('/sns',             lazy(() => import('./views/posts.js'), 'renderPosts'));
 // v530 #181 /sns/map は /sns/:id より先に登録 ("map" を id 扱いされないように)
 route('/sns/map',         lazy(() => import('./views/posts_map.js'), 'renderPostsMap'));
@@ -699,11 +705,11 @@ route('/file-transfers',          lazy(() => import('./views/file_transfers.js')
     start();                          // ルート即時 dispatch
     refreshMe().then(() => {          // 裏で再検証
       // v676 #256 /public-timer は認証不要
-      if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) navigate('#/login');
+      if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && location.hash !== '#/public') navigate('#/login');
     });
   } else {
     await refreshMe();
-    if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) {
+    if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && location.hash !== '#/public') {
       navigate('#/login');
     } else if (state.me && location.hash === '#/login') {
       navigate('#/');
