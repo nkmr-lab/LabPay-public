@@ -227,6 +227,31 @@ class Auth {
         return $payload;
     }
 
+    // v951 usage ビーコン: NKMRID cookie が あれば auth.nkmr.io の /?action=event に
+    //   POST で 「pay.nkmr.io を 使いました」 を 記録。 usage.nkmr.io で 統計 に 出す 用。
+    //   fire-and-forget (1s timeout)、 失敗 しても LabPay の 動作 に 影響 なし。
+    public static function ssoUsageBeacon(array $cfg, string $feature = ''): void {
+        if (empty($cfg['auth']['sso_enabled'])) return;
+        $cookieName = (string)($cfg['auth']['sso_cookie_name'] ?? 'NKMRID');
+        $tok = $_COOKIE[$cookieName] ?? '';
+        if (!is_string($tok) || $tok === '' || substr_count($tok, '.') !== 1) return;
+        $base = rtrim((string)($cfg['auth']['sso_auth_url'] ?? 'https://auth.nkmr.io'), '/');
+        $ch = curl_init($base . '/?action=event');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 1,           // fire-and-forget
+            CURLOPT_CONNECTTIMEOUT => 1,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query([
+                'app'     => 'pay.nkmr.io',
+                'feature' => $feature,
+            ]),
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok],
+        ]);
+        @curl_exec($ch);
+        curl_close($ch);
+    }
+
     // ------------- OAuth helpers (旧 Google 直: SSO 無効時 の fallback) -------------
 
     public static function oauthAuthorizeUrl(array $cfg, string $state): string {

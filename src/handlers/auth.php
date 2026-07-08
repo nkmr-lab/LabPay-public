@@ -9,6 +9,9 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'me' && $method === 'GET') {
         $u = Auth::currentUser($pdo, $cfg);
         if (!$u) { json_error('unauthorized', 'not logged in', 401); return; }
+        // v951 usage.nkmr.io に 「pay.nkmr.io を 使いました」 の ビーコン を 飛ばす。
+        //   SPA 起動 と 定期 refresh で 叩かれる ので 実質 セッション 頻度 で 記録。
+        Auth::ssoUsageBeacon($cfg);
         $accId = Ledger::accountIdForUser($pdo, $u['id']);
         $bal = Ledger::balanceOf($pdo, $accId);
         // v615 birthday_md / birthday_year も同梱 (state.me で誕生日バナー判定するため)
