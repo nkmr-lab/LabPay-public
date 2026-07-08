@@ -19,7 +19,7 @@ function route_joint_events(PDO $pdo, array $cfg, string $method, array $seg): v
     if ($sub === 'public') {
         $token = $seg[2] ?? '';
         $tail  = $seg[3] ?? '';
-        if ($token === '' || !ctype_alnum($token) || strlen($token) !== 32) {
+        if ($token === '' || !ctype_alnum($token) || strlen($token) < 8 || strlen($token) > 32) {
             throw new ApiException('bad_request', 'token 不正', 400);
         }
         if ($tail === '' && $method === 'GET')  { joint_public_get($pdo, $cfg, $token); return; }
@@ -208,7 +208,9 @@ function joint_events_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($desc) > 5000) $desc = mb_substr($desc, 0, 5000);
     $startsAt = joint_parse_dt($body['starts_at'] ?? null);
     $endsAt   = joint_parse_dt($body['ends_at']   ?? null);
-    $token = bin2hex(random_bytes(16));
+    // v945 URL が 長すぎる ユーザ 指摘 対応。 32 桁 → 8 桁 (32bit) に 短縮。
+    //   soft privacy (URL 共有 前提) なので 32bit で 十分。
+    $token = bin2hex(random_bytes(4));
 
     $ins = $pdo->prepare("INSERT INTO joint_events
         (creator_user_id, title, description, host_lab, guest_lab, public_token, starts_at, ends_at)
@@ -275,7 +277,9 @@ function joint_event_delete(PDO $pdo, array $cfg, int $id): void {
 function joint_event_rotate_token(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     joint_require_event_owner($pdo, $id, (int)$u['id']);
-    $token = bin2hex(random_bytes(16));
+    // v945 URL が 長すぎる ユーザ 指摘 対応。 32 桁 → 8 桁 (32bit) に 短縮。
+    //   soft privacy (URL 共有 前提) なので 32bit で 十分。
+    $token = bin2hex(random_bytes(4));
     $pdo->prepare("UPDATE joint_events SET public_token = ? WHERE id = ?")->execute([$token, $id]);
     json_response(['public_token' => $token]);
 }

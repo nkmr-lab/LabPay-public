@@ -694,6 +694,16 @@ route('/news',                    lazy(() => import('./views/news.js'), 'renderN
 route('/screen-shares',           lazy(() => import('./views/screen_shares.js'), 'renderScreenShares')); // v718 #314
 route('/file-transfers',          lazy(() => import('./views/file_transfers.js'), 'renderFileTransfers')); // v733 #342
 
+// v945 /#/public は 未認証 でも 開ける。 query (`?c=1234`) や trailing slash が 付いても
+//   拒否 され ない よう prefix 判定 + 直後 の 文字 が 「 / ? 空文字 」 なら true。
+function isPublicGatewayHash(hash) {
+  if (hash === '#/public') return true;
+  if (hash === '#/public/') return true;
+  if (hash.startsWith('#/public?')) return true;
+  if (hash.startsWith('#/public/?')) return true;
+  return false;
+}
+
 // ---------- Boot ----------
 // v498 #108 起動高速化: 前回の /api/auth/me をキャッシュから即 hydrate して chrome と
 //   ルートを並行で立ち上げる。サーバ再検証は裏で。失敗 (401など) すれば clearMeCache +
@@ -709,11 +719,11 @@ route('/file-transfers',          lazy(() => import('./views/file_transfers.js')
     start();                          // ルート即時 dispatch
     refreshMe().then(() => {          // 裏で再検証
       // v676 #256 /public-timer は認証不要
-      if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && location.hash !== '#/public') navigate('#/login');
+      if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && !isPublicGatewayHash(location.hash)) navigate('#/login');
     });
   } else {
     await refreshMe();
-    if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && location.hash !== '#/public') {
+    if (!state.me && location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/') && !isPublicGatewayHash(location.hash)) {
       navigate('#/login');
     } else if (state.me && location.hash === '#/login') {
       navigate('#/');

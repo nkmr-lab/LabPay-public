@@ -17,7 +17,7 @@ function route_public_polls(PDO $pdo, array $cfg, string $method, array $seg): v
     if ($sub === 'public') {
         $token = $seg[2] ?? '';
         $tail  = $seg[3] ?? '';
-        if ($token === '' || !ctype_alnum($token) || strlen($token) !== 32) {
+        if ($token === '' || !ctype_alnum($token) || strlen($token) < 8 || strlen($token) > 32) {
             throw new ApiException('bad_request', 'token 不正', 400);
         }
         if ($tail === '' && $method === 'GET')    { pp_public_get($pdo, $cfg, $token); return; }
@@ -163,7 +163,8 @@ function pp_create(PDO $pdo, array $cfg): void {
     }
 
     $initialStatus = ($opensAt !== null && strtotime($opensAt) > time() + 30) ? 'scheduled' : 'open';
-    $token = bin2hex(random_bytes(16));
+    // v945 URL 短縮。 32 桁 → 8 桁 (32bit)。 4 桁 コード と 併用 なので 十分。
+    $token = bin2hex(random_bytes(4));
     $pollId = 0;
 
     db_tx($pdo, function () use ($pdo, $u, $title, $desc, $token, $opensAt, $deadline, $multi, $allowFreeText, $vis, $initialStatus, $clean, &$pollId) {
