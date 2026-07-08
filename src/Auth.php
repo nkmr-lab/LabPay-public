@@ -192,7 +192,42 @@ class Auth {
         ];
     }
 
-    // ------------- OAuth helpers -------------
+    // ------------- SSO (auth.nkmr.io) -------------
+    // v950 統合認証: auth.nkmr.io で 発行 された Ed25519 署名 cookie (NKMRID) を 検証 する。
+    //   Google OAuth を LabPay 単体 で 持たない ことで 生態系 (mojirage/poster/file 等) と
+    //   統一 + client credential 管理 面 削減。 payload: {email, user, name, kana, iat, exp}。
+    //   cookie は .nkmr.io 全 subdomain 共有 なので pay.nkmr.io で 直接 読める。
+
+    public static function ssoAuthorizeUrl(array $cfg): string {
+        $return = rtrim((string)$cfg['app']['base_url'], '/') . '/api/auth/callback';
+        $base   = rtrim((string)($cfg['auth']['sso_auth_url'] ?? 'https://auth.nkmr.io'), '/');
+        return $base . '/?action=sso&return=' . urlencode($return);
+    }
+
+    public static function ssoVerifyCookie(array $cfg): ?array {
+        $cookieName = (string)($cfg['auth']['sso_cookie_name'] ?? 'NKMRID');
+        $tok = $_COOKIE[$cookieName] ?? '';
+        if (!is_string($tok) || $tok === '' || substr_count($tok, '.') !== 1) return null;
+        // pay.nkmr.io の PHP に sodium 拡張が無い ので、 auth.nkmr.io の
+        //   /?action=verify に token を Bearer で 渡して 検証。 auth 側 が JSON で
+        //   authenticated:true と email/user/name を 返せば OK。 拡張追加 なし で 動く。
+        $base = rtrim((string)($cfg['auth']['sso_auth_url'] ?? 'https://auth.nkmr.io'), '/');
+        $ch = curl_init($base . '/?action=verify&app=pay.nkmr.io');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok],
+        ]);
+        $res = curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($res === false || $http !== 200) return null;
+        $payload = json_decode((string)$res, true);
+        if (!is_array($payload) || empty($payload['authenticated']) || empty($payload['email'])) return null;
+        return $payload;
+    }
+
+    // ------------- OAuth helpers (旧 Google 直: SSO 無効時 の fallback) -------------
 
     public static function oauthAuthorizeUrl(array $cfg, string $state): string {
         $redirect = rtrim((string)$cfg['app']['base_url'], '/') . '/api/auth/callback';

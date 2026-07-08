@@ -33,11 +33,16 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     if ($sub === 'login' && $method === 'GET') {
+        // v950 auth.nkmr.io 統合。 SSO 有効 なら 全アプリ 共通 の 認証 に 移譲。
+        if (!empty($cfg['auth']['sso_enabled'])) {
+            header('Location: ' . Auth::ssoAuthorizeUrl($cfg), true, 302);
+            return;
+        }
         if (empty($cfg['auth']['google_oauth_enabled'])) {
             json_error('oauth_disabled', 'use POST /api/auth/dev-login instead', 400);
             return;
         }
-        // Generate state and stash it in a short-lived signed cookie (no PHP session needed).
+        // 旧 Google OAuth fallback: state cookie でハンドシェイク
         $state = bin2hex(random_bytes(16));
         $opts = [
             'expires'  => time() + 600,
@@ -53,6 +58,21 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     if ($sub === 'callback' && $method === 'GET') {
+        // v950 SSO: NKMRID cookie を Ed25519 で 検証。 auth.nkmr.io が return= で
+        //   飛ばして きた 直後 なので cookie は 既に .nkmr.io 全体 に 設定 済み。
+        if (!empty($cfg['auth']['sso_enabled'])) {
+            $payload = Auth::ssoVerifyCookie($cfg);
+            if (!$payload) {
+                // cookie が 無い / 期限切れ / 署名 NG → SSO に 戻して やり直し
+                header('Location: ' . Auth::ssoAuthorizeUrl($cfg), true, 302);
+                return;
+            }
+            Auth::completeLogin($pdo, $cfg, (string)$payload['email']);
+            $home = rtrim((string)$cfg['app']['base_url'], '/') . '/#/';
+            header('Location: ' . $home, true, 302);
+            return;
+        }
+        // 旧 Google OAuth fallback
         $code  = $_GET['code']  ?? '';
         $state = $_GET['state'] ?? '';
         $cookieState = $_COOKIE['labpay_oauth_state'] ?? '';
@@ -60,13 +80,11 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
             json_error('oauth_state', 'invalid OAuth state', 400);
             return;
         }
-        // Clear state cookie
         setcookie('labpay_oauth_state', '', ['expires' => time() - 3600, 'path' => '/']);
 
         $info = Auth::oauthExchange($cfg, (string)$code);
-        $res = Auth::completeLogin($pdo, $cfg, $info['email']);
+        Auth::completeLogin($pdo, $cfg, $info['email']);
 
-        // Redirect to SPA home
         $home = rtrim((string)$cfg['app']['base_url'], '/') . '/#/';
         header('Location: ' . $home, true, 302);
         return;
