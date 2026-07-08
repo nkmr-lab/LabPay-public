@@ -179,7 +179,7 @@ function pp_create(PDO $pdo, array $cfg): void {
         foreach ($clean as $i => $lbl) $stO->execute([$pollId, $lbl, $i]);
     });
     $code = public_codes_allocate($pdo, 'public-poll', $pollId,
-                '/public/public_polls.html?t=' . $token, (int)$u['id']);
+                '/public_polls.html?t=' . $token, (int)$u['id']);
     json_response(['id' => $pollId, 'public_token' => $token, 'public_code' => $code, 'status' => $initialStatus]);
 }
 

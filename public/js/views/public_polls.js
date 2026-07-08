@@ -1,6 +1,6 @@
 // /#/public-polls — 公開投票 (v942)。
 // 起案者 SPA。 title + 選択肢 (複数行 テキスト) + 締切 で 作り、 公開 URL + 4 桁 コード を 共有。
-// 外部 参加者 (未 login) は /public/public_polls.html?t=xxx で 匿名 投票。
+// 外部 参加者 (未 login) は /public_polls.html?t=xxx で 匿名 投票。
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
@@ -166,7 +166,7 @@ function renderDetailInto(app, id, d) {
   const p = d.poll;
   const closed = p.status === 'closed';
   const scheduled = p.status === 'scheduled';
-  const publicUrl = `${location.origin}/public/public_polls.html?t=${p.public_token}`;
+  const publicUrl = `${location.origin}/public_polls.html?t=${p.public_token}`;
   const totalCnt = Object.values(d.tallies || {}).reduce((a, b) => a + b, 0);
 
   const optsHtml = (d.options || []).map(o => {

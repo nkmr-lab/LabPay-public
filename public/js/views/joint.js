@@ -126,7 +126,7 @@ export async function renderJointDetail({ params }) {
 
 function renderJointDetailInto(app, d) {
   const finalized = !!d.finalized_at;
-  const publicUrl = `${location.origin}/public/joint.html?t=${d.public_token}`;
+  const publicUrl = `${location.origin}/joint.html?t=${d.public_token}`;
   const shortUrl  = d.public_code ? `${location.origin}/#/public` : null;
   app.innerHTML = `
     <div class="card">

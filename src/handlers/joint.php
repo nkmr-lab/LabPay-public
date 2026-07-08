@@ -217,8 +217,8 @@ function joint_events_create(PDO $pdo, array $cfg): void {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     $ins->execute([(int)$u['id'], $title, $desc ?: null, $host, $guest, $token, $startsAt, $endsAt]);
     $eventId = (int)$pdo->lastInsertId();
-    // 4 桁 短縮 コード を 割当 (/public/joint.html?t=xxx へ 飛ばす)
-    $code = public_codes_allocate($pdo, 'joint', $eventId, '/public/joint.html?t=' . $token, (int)$u['id']);
+    // 4 桁 短縮 コード を 割当 (/joint.html?t=xxx へ 飛ばす)
+    $code = public_codes_allocate($pdo, 'joint', $eventId, '/joint.html?t=' . $token, (int)$u['id']);
     json_response(['id' => $eventId, 'public_token' => $token, 'public_code' => $code]);
 }
 
