@@ -60,7 +60,11 @@ function route_joint_events(PDO $pdo, array $cfg, string $method, array $seg): v
         if ($next === 'sessions' && ctype_digit((string)($seg[3] ?? ''))) {
             $sid = (int)$seg[3];
             $next2 = $seg[4] ?? '';
-            if ($next2 === 'presenters' && $method === 'POST') {
+            $next3 = $seg[5] ?? '';
+            if ($next2 === 'presenters' && $next3 === 'bulk' && $method === 'POST') {
+                joint_presenter_bulk_create($pdo, $cfg, $sid); return;
+            }
+            if ($next2 === 'presenters' && $next3 === '' && $method === 'POST') {
                 joint_presenter_create($pdo, $cfg, $sid); return;
             }
         }
@@ -338,6 +342,51 @@ function joint_presenter_create(PDO $pdo, array $cfg, int $sessionId): void {
         (session_id, name, affiliation, title, abstract, sort_order) VALUES (?, ?, ?, ?, ?, ?)");
     $ins->execute([$sessionId, $name, $aff, $title ?: null, $abs ?: null, $sortOrder]);
     json_response(['id' => (int)$pdo->lastInsertId()]);
+}
+
+// v943 1 行 1 発表者 の テキスト を まとめて 追加。 既存 発表者 は 触らず 純粋 に append。
+//   body: {affiliation: 'host'|'guest', entries: ['名前', '名前: 発表タイトル', ...]}
+//   entries の 各 行 は 「name」 か 「name: title」 (最初 の コロン で split)。
+function joint_presenter_bulk_create(PDO $pdo, array $cfg, int $sessionId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    joint_require_session_owner($pdo, $sessionId, (int)$u['id']);
+    $body = read_json_body();
+    $aff = (string)($body['affiliation'] ?? '');
+    if (!in_array($aff, ['host','guest'], true)) {
+        throw new ApiException('bad_request', "affiliation は host/guest", 400);
+    }
+    $entries = $body['entries'] ?? [];
+    if (!is_array($entries)) throw new ApiException('bad_request', 'entries 配列', 400);
+    if (count($entries) > 100) throw new ApiException('bad_request', 'entries 100 個まで', 400);
+
+    // 既存 sort_order の 最大 を 取って その 続き から 追加
+    $st = $pdo->prepare("SELECT COALESCE(MAX(sort_order), -1) FROM joint_presenters WHERE session_id = ?");
+    $st->execute([$sessionId]);
+    $baseOrder = (int)$st->fetchColumn() + 1;
+
+    $created = [];
+    db_tx($pdo, function () use ($pdo, $sessionId, $aff, $entries, $baseOrder, &$created) {
+        $ins = $pdo->prepare("INSERT INTO joint_presenters
+            (session_id, name, affiliation, title, sort_order) VALUES (?, ?, ?, ?, ?)");
+        $i = 0;
+        foreach ($entries as $line) {
+            $line = trim((string)$line);
+            if ($line === '') continue;
+            // 「name: title」 形式 (最初 の コロン で split)。 半角 / 全角 コロン どちら も 対応。
+            $name = $line; $title = null;
+            if (preg_match('/^(.+?)\s*[：:]\s*(.+)$/u', $line, $m)) {
+                $name  = trim($m[1]);
+                $title = trim($m[2]);
+            }
+            if ($name === '') continue;
+            if (mb_strlen($name)  > 200) $name  = mb_substr($name, 0, 200);
+            if ($title !== null && mb_strlen($title) > 300) $title = mb_substr($title, 0, 300);
+            $ins->execute([$sessionId, $name, $aff, $title, $baseOrder + $i]);
+            $created[] = (int)$pdo->lastInsertId();
+            $i++;
+        }
+    });
+    json_response(['ok' => true, 'created' => $created]);
 }
 
 function joint_presenter_update(PDO $pdo, array $cfg, int $pid): void {

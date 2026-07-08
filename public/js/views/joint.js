@@ -198,8 +198,24 @@ function renderJointDetailInto(app, d) {
   document.getElementById('jd-edit').addEventListener('click', () => openEditEvent(d));
   document.getElementById('jd-delete').addEventListener('click', () => onDeleteEvent(d.id));
   document.getElementById('jd-add-session').addEventListener('click', () => openAddSession(d.id));
+  // v943 「＋ 発表者 まとめて」 → 該当 session の bulk フォームを toggle
   document.querySelectorAll('[data-add-presenter]').forEach(b =>
-    b.addEventListener('click', () => openAddPresenter(d.id, Number(b.dataset.addPresenter))));
+    b.addEventListener('click', () => {
+      const sid = Number(b.dataset.addPresenter);
+      const form = document.getElementById('bulk-' + sid);
+      if (form) {
+        form.hidden = !form.hidden;
+        if (!form.hidden) document.getElementById('bulk-ta-' + sid)?.focus();
+      }
+    }));
+  document.querySelectorAll('[data-bulk-cancel]').forEach(b =>
+    b.addEventListener('click', () => {
+      const sid = Number(b.dataset.bulkCancel);
+      const form = document.getElementById('bulk-' + sid);
+      if (form) form.hidden = true;
+    }));
+  document.querySelectorAll('[data-bulk-save]').forEach(b =>
+    b.addEventListener('click', () => onBulkSavePresenters(d.id, Number(b.dataset.bulkSave))));
   document.querySelectorAll('[data-edit-session]').forEach(b =>
     b.addEventListener('click', () => openEditSession(d.id, Number(b.dataset.editSession))));
   document.querySelectorAll('[data-del-session]').forEach(b =>
@@ -221,9 +237,25 @@ function renderSessionCard(s) {
           ${s.starts_at ? `<div class="meta">${escapeHtml(String(s.starts_at).slice(0, 16))}${s.ends_at ? ' - ' + escapeHtml(String(s.ends_at).slice(11, 16)) : ''}</div>` : ''}
         </div>
         <div class="row" style="gap:4px">
-          <button class="btn" style="font-size:11px; padding:2px 6px" data-add-presenter="${s.id}">＋ 発表者</button>
+          <button class="btn" style="font-size:11px; padding:2px 6px" data-add-presenter="${s.id}">＋ 発表者 まとめて</button>
           <button class="btn" style="font-size:11px; padding:2px 6px" data-edit-session="${s.id}">✏️</button>
           <button class="btn" style="font-size:11px; padding:2px 6px; color:#dc2626" data-del-session="${s.id}">🗑</button>
+        </div>
+      </div>
+      <!-- v943 発表者 まとめて 追加 フォーム (デフォルト hidden、 「＋ 発表者 まとめて」 で toggle) -->
+      <div id="bulk-${s.id}" hidden style="margin-top:8px; padding:8px 10px; background:#faf5ff; border-radius:6px; border:1px dashed #a78bfa">
+        <div class="meta" style="margin-bottom:4px">
+          発表者を 1 行 1 人 で 貼り付け (「名前」 または 「名前: 発表タイトル」 形式)
+        </div>
+        <div class="row" style="gap:8px; margin-bottom:6px; align-items:center">
+          <label style="font-size:12px"><input type="radio" name="aff-${s.id}" value="host" checked> ホスト</label>
+          <label style="font-size:12px"><input type="radio" name="aff-${s.id}" value="guest"> ゲスト</label>
+        </div>
+        <textarea id="bulk-ta-${s.id}" rows="5" style="width:100%; font-size:13px; padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit"
+                  placeholder="中村太郎&#10;中村次郎: PDF の 効率的 な 校閲 手法&#10;中村三郎"></textarea>
+        <div class="row" style="gap:4px; justify-content:flex-end; margin-top:6px">
+          <button class="btn" style="font-size:12px; padding:4px 10px" data-bulk-cancel="${s.id}">キャンセル</button>
+          <button class="btn primary" style="font-size:12px; padding:4px 10px" data-bulk-save="${s.id}">追加</button>
         </div>
       </div>
       ${(s.presenters || []).length ? `
@@ -285,16 +317,21 @@ async function onDeleteSession(eventId, sid) {
   catch (e) { toast('失敗: ' + e.message); }
 }
 
-async function openAddPresenter(eventId, sid) {
-  const name = prompt('発表者名');
-  if (!name) return;
-  const aff = prompt('所属 (host または guest)', 'host');
-  if (!['host', 'guest'].includes(aff)) return toast('host / guest のいずれか');
-  const title = prompt('発表タイトル (任意)', '') || '';
+// v943 テキストエリアに 1 行 1 発表者 を貼り付けて まとめて 追加。 既存 は 触らない。
+async function onBulkSavePresenters(eventId, sid) {
+  const ta = document.getElementById('bulk-ta-' + sid);
+  const text = (ta?.value || '').trim();
+  if (!text) { toast('発表者を入力してください'); ta?.focus(); return; }
+  const affEl = document.querySelector(`input[name="aff-${sid}"]:checked`);
+  const affiliation = affEl?.value || 'host';
+  const entries = text.split(/\r?\n/).map(s => s.trim()).filter(s => s.length);
+  if (!entries.length) { toast('発表者を入力してください'); return; }
+  if (entries.length > 100) { toast('最大 100 人まで'); return; }
   try {
-    await post(`/api/joint-events/${eventId}/sessions/${sid}/presenters`,
-      { name, affiliation: aff, title });
-    toast('追加'); refresh(eventId);
+    const r = await post(`/api/joint-events/${eventId}/sessions/${sid}/presenters/bulk`,
+      { affiliation, entries });
+    toast(`${(r.created || []).length} 人追加`);
+    refresh(eventId);
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
