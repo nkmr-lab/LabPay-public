@@ -74,6 +74,7 @@ function esc(s) {
 let evData = null;
 let myAff = null;      // 'host' | 'guest' | 'other'
 let myName = '';       // optional voter name
+let openSid = null;    // v949 展開中 の session id (accordion、 最初 は 1 つ目 が 開く)
 
 async function loadEvent() {
   try {
@@ -86,6 +87,10 @@ async function loadEvent() {
     // localStorage で 過去 の 選択 を 復元
     myAff = localStorage.getItem('joint_aff_' + t) || null;
     myName = localStorage.getItem('joint_name_' + t) || '';
+    // v949 accordion: デフォルト は 1 つ目 の session を 開く
+    if (openSid === null && evData.sessions && evData.sessions.length) {
+      openSid = evData.sessions[0].id;
+    }
     render();
   } catch (e) {
     document.getElementById('app').innerHTML =
@@ -153,10 +158,20 @@ function wireAff() {
 function renderSession(s) {
   const finalized = !!evData.finalized_at;
   const myVote = (evData.my_votes || {})[s.id] || null;
+  const isOpen = openSid === s.id;
+  const chevron = isOpen ? '▾' : '▸';
   return `
-    <h2>${esc(s.name)}${myVote ? '<span class="voted-mark">✓ 投票済 (タップで変更)</span>' : ''}</h2>
-    ${s.starts_at ? `<div class="meta">${esc(s.starts_at.slice(0, 16))}${s.ends_at ? ' - ' + esc(s.ends_at.slice(11, 16)) : ''}</div>` : ''}
-    ${s.presenters.map(p => renderPresenter(s.id, p, myVote, finalized)).join('') || '<div class="muted">発表者が登録されていません</div>'}
+    <div class="session-block" data-session-id="${s.id}">
+      <h2 class="session-head" data-toggle-sid="${s.id}" style="cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none">
+        <span style="color:#9ca3af; width:16px; text-align:center; font-size:14px">${chevron}</span>
+        <span style="flex:1">${esc(s.name)}</span>
+        ${myVote ? '<span class="voted-mark">✓ 投票済</span>' : ''}
+      </h2>
+      ${isOpen ? `
+        ${s.starts_at ? `<div class="meta">${esc(s.starts_at.slice(0, 16))}${s.ends_at ? ' - ' + esc(s.ends_at.slice(11, 16)) : ''}</div>` : ''}
+        ${s.presenters.map(p => renderPresenter(s.id, p, myVote, finalized)).join('') || '<div class="muted">発表者が登録されていません</div>'}
+      ` : ''}
+    </div>
   `;
 }
 
@@ -180,6 +195,14 @@ function renderPresenter(sessionId, p, myVote, finalized) {
 }
 
 function wireVote() {
+  // v949 session accordion: header クリックで 開閉切替 (常に 1 つ だけ 開く)
+  document.querySelectorAll('[data-toggle-sid]').forEach(el => {
+    el.addEventListener('click', () => {
+      const sid = Number(el.dataset.toggleSid);
+      openSid = (openSid === sid) ? null : sid;
+      render();
+    });
+  });
   document.querySelectorAll('.presenter').forEach(el => {
     if (el.dataset.disabled === '1') return;
     el.addEventListener('click', async () => {
