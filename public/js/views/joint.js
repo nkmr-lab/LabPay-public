@@ -355,37 +355,60 @@ async function refresh(eventId) {
 
 // ---------- 集計 / 確定 ----------
 
+// v947 研究室単位でまとめて表示 (ユーザ要望)。 各 session を host / guest の 2 列に分けて
+//   それぞれで順位付け → 「どちらの研究室で 誰が 1 位か」 が 一目でわかる。
 async function loadResults(id) {
   const box = document.getElementById('jd-results-view');
   box.innerHTML = '<span class="muted">集計中…</span>';
   try {
     const r = await get('/api/joint-events/' + id + '/results');
+    const hostLab  = r.host_lab  || 'ホスト';
+    const guestLab = r.guest_lab || 'ゲスト';
+
+    const renderLabGroup = (presenters, labName, bgColor, textColor) => {
+      const sorted = [...presenters].sort((a, b) => (b.votes?.total || 0) - (a.votes?.total || 0));
+      if (!sorted.length) return `<div class="muted" style="font-size:12px">${escapeHtml(labName)} 発表なし</div>`;
+      const topVotes = sorted[0]?.votes?.total || 0;
+      return `
+        <div style="margin-top:6px">
+          <div style="display:inline-block; background:${bgColor}; color:${textColor}; font-size:11px; padding:2px 8px; border-radius:8px; font-weight:600; margin-bottom:4px">
+            ${escapeHtml(labName)}
+          </div>
+          ${sorted.map((p, i) => {
+            const total = p.votes?.total || 0;
+            const isTop = total > 0 && total === topVotes;
+            return `
+              <div class="row" style="gap:8px; padding:2px 0; font-size:13px">
+                <span style="width:24px; text-align:right">${i + 1}.</span>
+                <span class="grow">${escapeHtml(p.name)}</span>
+                <span style="font-family:ui-monospace,monospace">${total} 票</span>
+                <span class="meta">(${p.votes?.host || 0}/${p.votes?.guest || 0}/${p.votes?.other || 0})</span>
+                ${isTop ? '<span style="color:#059669">🏆</span>' : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    };
+
     box.innerHTML = (r.sessions || []).map(s => {
-      const sorted = [...(s.presenters || [])].sort((a, b) =>
-        (b.votes?.total || 0) - (a.votes?.total || 0));
-      const top = sorted[0];
+      const hostPresenters  = (s.presenters || []).filter(p => p.affiliation === 'host');
+      const guestPresenters = (s.presenters || []).filter(p => p.affiliation === 'guest');
       return `
         <div style="border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px">
           <div class="bold" style="font-size:13px">${escapeHtml(s.name)}</div>
-          ${sorted.length ? sorted.map((p, i) => `
-            <div class="row" style="gap:8px; padding:2px 0; font-size:13px">
-              <span style="width:24px; text-align:right">${i + 1}.</span>
-              <span class="grow">${escapeHtml(p.name)}</span>
-              <span style="font-family:ui-monospace,monospace">${p.votes?.total || 0} 票</span>
-              <span class="meta">(${p.votes?.host || 0}/${p.votes?.guest || 0}/${p.votes?.other || 0})</span>
-              ${top === p && (p.votes?.total || 0) > 0 ? '<span style="color:#059669">🏆</span>' : ''}
-            </div>
-          `).join('') : '<div class="muted">発表者なし</div>'}
+          ${renderLabGroup(hostPresenters,  hostLab,  '#dbeafe', '#1e40af')}
+          ${renderLabGroup(guestPresenters, guestLab, '#fce7f3', '#9d174d')}
         </div>
       `;
-    }).join('') + `<div class="hint-sm" style="margin-top:8px">内訳: (host投票数 / guest投票数 / その他)</div>`;
+    }).join('') + `<div class="hint-sm" style="margin-top:8px">内訳: (${escapeHtml(hostLab)} からの票 / ${escapeHtml(guestLab)} からの票 / 外部)</div>`;
   } catch (e) {
     box.innerHTML = `<span style="color:#dc2626">失敗: ${escapeHtml(e.message)}</span>`;
   }
 }
 
 async function onFinalize(id) {
-  if (!confirm('各セッションの最多得票者を優秀発表者として確定します。 (同票時は sort_order 順の先着)\n再確定は可能です。よろしいですか?')) return;
+  if (!confirm('各セッションで 研究室ごとに 1 位 (計 2 名 / セッション) を優秀発表者として確定します。 (同票時は sort_order 順の先着)\n再確定は可能です。よろしいですか?')) return;
   try {
     await post('/api/joint-events/' + id + '/finalize', {});
     toast('確定しました 🏆');

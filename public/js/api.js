@@ -58,7 +58,10 @@ export async function api(method, path, { body, query, withIdempotency = false }
   if (res.status === 401) {
     // Avoid bouncing during the OAuth completion redirect.
     // v679 #259 公開タイマーは認証不要で表示するので 401 で login に飛ばさない
-    if (location.hash !== '#/login' && !location.hash.startsWith('#/public-timer/')) {
+    // v947 /#/public ゲートウェイも同じく認証不要 (?c=xxx / trailing slash 含む)
+    const h = location.hash;
+    const isPubGw = h === '#/public' || h === '#/public/' || h.startsWith('#/public?') || h.startsWith('#/public/?');
+    if (h !== '#/login' && !h.startsWith('#/public-timer/') && !isPubGw) {
       location.hash = '#/login';
     }
   }

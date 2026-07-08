@@ -483,6 +483,8 @@ function joint_event_finalize(PDO $pdo, array $cfg, int $id): void {
     $sessions->execute([$id]);
     $sids = array_map(fn($r) => (int)$r['id'], $sessions->fetchAll(PDO::FETCH_ASSOC));
 
+    // v947 各 session で host / guest それぞれの 1 位 を is_best に (2 賞 / セッション)。
+    //   overrides は {session_id: {host: pid, guest: pid}} 形式で 個別 上書き 可。
     db_tx($pdo, function () use ($pdo, $id, $sids, $overrides) {
         // 一旦 全 presenter の is_best を 0 に (再 finalize 対応)。
         $pdo->prepare("UPDATE joint_presenters p
@@ -490,30 +492,33 @@ function joint_event_finalize(PDO $pdo, array $cfg, int $id): void {
                           SET p.is_best = 0
                         WHERE s.event_id = ?")->execute([$id]);
         foreach ($sids as $sid) {
-            $bestPid = null;
-            if (isset($overrides[$sid]) || isset($overrides[(string)$sid])) {
-                $ov = (int)($overrides[$sid] ?? $overrides[(string)$sid]);
-                // presenter が本当にこの session のものか検証
-                $chk = $pdo->prepare("SELECT id FROM joint_presenters WHERE id = ? AND session_id = ?");
-                $chk->execute([$ov, $sid]);
-                if ($chk->fetchColumn()) $bestPid = $ov;
-            }
-            if ($bestPid === null) {
-                // 最多得票 (同票 first)
-                $stB = $pdo->prepare("
-                    SELECT p.id, COUNT(v.id) AS cnt
-                      FROM joint_presenters p
-                 LEFT JOIN joint_votes v ON v.presenter_id = p.id AND v.session_id = ?
-                     WHERE p.session_id = ?
-                     GROUP BY p.id
-                     ORDER BY cnt DESC, p.sort_order, p.id
-                     LIMIT 1");
-                $stB->execute([$sid, $sid]);
-                $r = $stB->fetch(PDO::FETCH_ASSOC);
-                if ($r && (int)$r['cnt'] > 0) $bestPid = (int)$r['id'];
-            }
-            if ($bestPid !== null) {
-                $pdo->prepare("UPDATE joint_presenters SET is_best = 1 WHERE id = ?")->execute([$bestPid]);
+            foreach (['host', 'guest'] as $aff) {
+                $bestPid = null;
+                // overrides: {session_id: {host: pid, guest: pid}} or {session_id: pid} (旧互換)
+                if (isset($overrides[$sid][$aff])) $bestPid = (int)$overrides[$sid][$aff];
+                else if (isset($overrides[(string)$sid][$aff])) $bestPid = (int)$overrides[(string)$sid][$aff];
+                if ($bestPid !== null) {
+                    $chk = $pdo->prepare("SELECT id FROM joint_presenters WHERE id = ? AND session_id = ? AND affiliation = ?");
+                    $chk->execute([$bestPid, $sid, $aff]);
+                    if (!$chk->fetchColumn()) $bestPid = null;
+                }
+                if ($bestPid === null) {
+                    // 最多得票 (同票 first)
+                    $stB = $pdo->prepare("
+                        SELECT p.id, COUNT(v.id) AS cnt
+                          FROM joint_presenters p
+                     LEFT JOIN joint_votes v ON v.presenter_id = p.id AND v.session_id = ?
+                         WHERE p.session_id = ? AND p.affiliation = ?
+                         GROUP BY p.id
+                         ORDER BY cnt DESC, p.sort_order, p.id
+                         LIMIT 1");
+                    $stB->execute([$sid, $sid, $aff]);
+                    $r = $stB->fetch(PDO::FETCH_ASSOC);
+                    if ($r && (int)$r['cnt'] > 0) $bestPid = (int)$r['id'];
+                }
+                if ($bestPid !== null) {
+                    $pdo->prepare("UPDATE joint_presenters SET is_best = 1 WHERE id = ?")->execute([$bestPid]);
+                }
             }
         }
         $pdo->prepare("UPDATE joint_events SET finalized_at = NOW() WHERE id = ?")->execute([$id]);
