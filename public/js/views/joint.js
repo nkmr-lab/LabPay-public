@@ -365,6 +365,9 @@ async function loadResults(id) {
     const hostLab  = r.host_lab  || 'ホスト';
     const guestLab = r.guest_lab || 'ゲスト';
 
+    // v948 テーブル 気持ち悪い + 🏆 で 横幅 ズレ 問題 修正:
+    //   - CSS Grid で 列幅 固定 (rank / name / votes / breakdown / trophy)
+    //   - trophy 列 は 常時 20px 予約、 無い 行 は 空白 で 埋める
     const renderLabGroup = (presenters, labName, bgColor, textColor) => {
       const sorted = [...presenters].sort((a, b) => (b.votes?.total || 0) - (a.votes?.total || 0));
       if (!sorted.length) return `<div class="muted" style="font-size:12px">${escapeHtml(labName)} 発表なし</div>`;
@@ -378,12 +381,12 @@ async function loadResults(id) {
             const total = p.votes?.total || 0;
             const isTop = total > 0 && total === topVotes;
             return `
-              <div class="row" style="gap:8px; padding:2px 0; font-size:13px">
-                <span style="width:24px; text-align:right">${i + 1}.</span>
-                <span class="grow">${escapeHtml(p.name)}</span>
-                <span style="font-family:ui-monospace,monospace">${total} 票</span>
-                <span class="meta">(${p.votes?.host || 0}/${p.votes?.guest || 0}/${p.votes?.other || 0})</span>
-                ${isTop ? '<span style="color:#059669">🏆</span>' : ''}
+              <div style="display:grid; grid-template-columns: 24px minmax(0,1fr) 48px 60px 20px; column-gap:8px; align-items:baseline; padding:2px 0; font-size:13px">
+                <span style="text-align:right; color:#9ca3af">${i + 1}.</span>
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.name)}</span>
+                <span style="font-family:ui-monospace,monospace; text-align:right">${total} 票</span>
+                <span class="meta" style="text-align:right; font-family:ui-monospace,monospace; font-size:11px">(${p.votes?.host || 0}/${p.votes?.guest || 0}/${p.votes?.other || 0})</span>
+                <span style="text-align:center; color:#059669">${isTop ? '🏆' : ''}</span>
               </div>
             `;
           }).join('')}
