@@ -328,9 +328,14 @@ async function refreshShared(token) {
     `;
     app.innerHTML = header;
     if (d.status === 'pending' || d.status === 'processing') {
+      // v952 経過時間を「⏳ Web を横断調査中…」の右側に表示 (ユーザ要望)
+      const drAgeMin = d.created_at ? Math.floor((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
       document.getElementById('dr-result').innerHTML = `
         <div class="card">
-          <div class="bold" style="font-size:16px; color:var(--primary)">⏳ Web を横断調査中…</div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+            <div class="bold" style="font-size:16px; color:var(--primary)">⏳ Web を横断調査中…</div>
+            <span style="margin-left:auto; font-size:12px; color:#6b7280; font-family:ui-monospace,monospace">経過 ${drAgeMin} 分</span>
+          </div>
           <p class="hint" style="font-size:13px; margin-top:6px">
             深さにより 1-30 分程度かかります。このページを閉じても大丈夫 (完了したら通知が届きます)。<br>
             10 秒ごとに自動更新。
