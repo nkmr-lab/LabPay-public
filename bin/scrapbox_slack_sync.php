@@ -186,7 +186,9 @@ class ScrapboxSlackSync {
 
             try {
                 $ownPart = $ownNoteEdits > 0 ? " (自身ノート ✓)" : '';
-                Notifier::notify($this->pdo, $this->cfg, $uid, 'admin_notice',
+                // v959 fb#476 admin_notice → scrapbox_reward に 分離、 これで 「reward」
+                //   カテゴリ に 入って ユーザ が Slack を OFF に できる ように なる。
+                Notifier::notify($this->pdo, $this->cfg, $uid, 'scrapbox_reward',
                     "Scrapbox 寄稿 {$totalEdits} 件で +{$pts}pt{$ownPart} ({$day})",
                     'scrapbox', null);
             } catch (Throwable $e) { /* swallow */ }

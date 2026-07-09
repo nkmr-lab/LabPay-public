@@ -357,6 +357,40 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     // pt を出す。既に今日もらってる / 未読がある場合は no-op (silent OK)。
     // フロント側は通知バッジが 0 になるたびに ping する想定で、冪等を確保する
     // ため (user_id, awarded_on) PK で衝突したら「もう貰った」扱い。
+    // v959 fb#476 通知の Slack 配信 を カテゴリ別 に ON/OFF 設定。
+    //   GET   /api/me/notify-slack → {categories: [...], prefs: {cat: bool, ...}}
+    //   PATCH /api/me/notify-slack body: {cat: bool, ...} 一括 upsert
+    if ($sub === 'notify-slack' && $method === 'GET') {
+        $cats = Notifier::categories();
+        $st = $pdo->prepare("SELECT category, enabled FROM user_notify_slack_prefs WHERE user_id = ?");
+        $st->execute([(int)$u['id']]);
+        $prefs = [];
+        foreach ($cats as $c) $prefs[$c['key']] = true;   // default ON
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $prefs[$r['category']] = (int)$r['enabled'] === 1;
+        }
+        json_response(['categories' => $cats, 'prefs' => $prefs]);
+        return;
+    }
+    if ($sub === 'notify-slack' && $method === 'PATCH') {
+        $body = read_json_body();
+        if (!is_array($body)) throw new ApiException('bad_request', 'body 不正', 400);
+        $validKeys = array_column(Notifier::categories(), 'key');
+        db_tx($pdo, function () use ($pdo, $u, $body, $validKeys) {
+            $ins = $pdo->prepare("
+                INSERT INTO user_notify_slack_prefs (user_id, category, enabled)
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)");
+            foreach ($body as $cat => $val) {
+                if (!in_array($cat, $validKeys, true)) continue;
+                $enabled = $val ? 1 : 0;
+                $ins->execute([(int)$u['id'], (string)$cat, $enabled]);
+            }
+        });
+        json_response(['ok' => true]);
+        return;
+    }
+
     if ($sub === 'app-open-reward' && $method === 'POST') {
         $st = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id=? AND read_at IS NULL');
         $st->execute([$u['id']]);

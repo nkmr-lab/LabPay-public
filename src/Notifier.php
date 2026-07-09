@@ -7,6 +7,91 @@ declare(strict_types=1);
 class Notifier {
     private const EMAILABLE_TYPES = ['sale', 'transfer_received', 'task_approved', 'admin_notice'];
 
+    // v959 fb#476 通知 type → カテゴリ (Slack ON/OFF 設定 の 粒度)。
+    //   money: 金 が 動く / 動いた → 見逃せない
+    //   action: 自分 の 対応 待ち → 見逃せない
+    //   social: SNS / group / 飲み会 → コミュニケーション 系
+    //   utility: 自動 発生 系 (タイマー / 点呼 / MAC 未登録 リマインダー 等)
+    //   game: 遊び 系 (麻雀 / 予想 / オークション 等)
+    //   reward: ポイント 受け取り 系 (寄稿 ボーナス 等) — Slack だと 溜まって うざい
+    //   admin: admin_notice / feedback 返信 等
+    //   その他 未 分類 は 'admin' 扱い。
+    private const TYPE_CATEGORY = [
+        // money
+        'sale'              => 'money',
+        'sold_out'          => 'money',
+        'transfer_received' => 'money',
+        'task_approved'     => 'money',
+        'purchase'          => 'money',
+        'money_request'     => 'money',
+        // action
+        'task'          => 'action',
+        'task_claimed'  => 'action',
+        'task_my_claim' => 'action',
+        'task_reported' => 'action',
+        'task_cancelled'=> 'action',
+        'task_expired'  => 'action',
+        'poll'          => 'action',
+        'meetup'        => 'action',
+        'invitation'    => 'action',
+        'bait_request'  => 'action',
+        'drafts'        => 'action',
+        'feedback'      => 'action',
+        // social
+        'post'       => 'social',
+        'group_post' => 'social',
+        'group'      => 'social',
+        'nomikai'    => 'social',
+        'share'      => 'social',
+        // utility (自動 発生 系)
+        'timer'          => 'utility',
+        'rollcall'       => 'utility',
+        'random_groups'  => 'utility',
+        'mac_reminder'   => 'utility',
+        'roulette'       => 'utility',
+        // game
+        'auction'    => 'game',
+        'prediction' => 'game',
+        'score_pred' => 'game',
+        'mahjong'    => 'game',
+        'jinrou'     => 'game',
+        'ito'        => 'game',
+        // reward
+        'scrapbox_reward' => 'reward',
+        // admin
+        'admin_notice' => 'admin',
+    ];
+
+    public static function categoryFor(string $type): string {
+        return self::TYPE_CATEGORY[$type] ?? 'admin';
+    }
+
+    // v959 全 カテゴリ 一覧 + 表示 用 情報 (UI で 使う)。
+    public static function categories(): array {
+        return [
+            ['key' => 'money',   'label' => '💰 金銭関係',   'desc' => '購入・売れた・送金受取・タスク承認・支払請求'],
+            ['key' => 'action',  'label' => '🎯 対応要',     'desc' => 'タスク・投票・集会・招待・アルバイト申請・フィードバック'],
+            ['key' => 'social',  'label' => '📢 社交',       'desc' => 'らぼったー・グループ・飲み会・共有'],
+            ['key' => 'game',    'label' => '🎮 ゲーム',     'desc' => '麻雀・人狼・it・予想・オークション'],
+            ['key' => 'utility', 'label' => '⏰ 自動発生',   'desc' => 'タイマー・点呼・ランダムグループ・MAC 未登録リマインダー・ルーレット'],
+            ['key' => 'reward',  'label' => '🏆 ポイント',   'desc' => 'Scrapbox 寄稿ボーナス 等 の 定期報酬'],
+            ['key' => 'admin',   'label' => '📣 お知らせ',   'desc' => '管理者からのお知らせ・その他'],
+        ];
+    }
+
+    // v959 Slack DM を 送って よい か? user_notify_slack_prefs に 明示 OFF が あれば false。
+    public static function isSlackEnabledForCategory(PDO $pdo, int $userId, string $category): bool {
+        try {
+            $st = $pdo->prepare("SELECT enabled FROM user_notify_slack_prefs WHERE user_id = ? AND category = ?");
+            $st->execute([$userId, $category]);
+            $r = $st->fetchColumn();
+            if ($r === false) return true;  // 明示 設定 なし = default ON
+            return (int)$r === 1;
+        } catch (Throwable $_) {
+            return true;  // テーブル 無い / エラー は default ON で fallback
+        }
+    }
+
     // v656 ref_type + ref_id → アプリ内 URL fragment。 Slack DM 末尾に
     // 「→ https://pay.nkmr.io/#/...」を付けるため。未対応 type は null。
     public static function urlFor(?string $refType, ?int $refId): ?string {
@@ -90,8 +175,10 @@ class Notifier {
 
         // Slack DM (本人が slack_member_id を登録している場合のみ)
         // bot_token と member id がそろっていれば chat.postMessage で DM を 1 通。
+        // v959 fb#476 ユーザ の Slack 通知設定 (カテゴリ別 ON/OFF) を チェック して skip 可。
         try {
-            if (!empty($cfg['slack']['bot_token'])) {
+            if (!empty($cfg['slack']['bot_token'])
+                && self::isSlackEnabledForCategory($pdo, $userId, self::categoryFor($type))) {
                 $u = $pdo->prepare('SELECT slack_member_id FROM users WHERE id=?');
                 $u->execute([$userId]);
                 $sid = (string)($u->fetchColumn() ?: '');

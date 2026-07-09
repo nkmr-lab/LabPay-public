@@ -111,6 +111,14 @@ export async function renderSettings() {
       </p>
       <button id="notif-perm" class="primary">🔔 ブラウザ通知を有効にする</button>
       <span id="notif-perm-status" class="hint-sm" style="margin-left:8px"></span>
+      <!-- v959 fb#476 Slack 通知 の カテゴリ 別 ON/OFF -->
+      <div class="sep" style="margin:14px 0 10px"></div>
+      <h3 style="margin:0">Slack DM の通知種別</h3>
+      <p class="hint" style="margin:6px 0 6px">
+        Slack member ID を設定してる場合、 どのカテゴリを Slack DM でも受け取るか選べます。
+        LabPay 内の通知は常に届きます。 OFF にしても LabPay を開けば普通に見られます。
+      </p>
+      <div id="notify-slack-prefs"><div class="muted">読み込み中…</div></div>
     </div>
 
     <div class="card">
@@ -322,6 +330,8 @@ export async function renderSettings() {
   document.getElementById('profile-clear-avatar')?.addEventListener('click', onProfileClearAvatar);
   document.getElementById('profile-avatar-file')?.addEventListener('change', onAvatarFile);
   document.getElementById('logout-from-settings')?.addEventListener('click', onLogoutFromSettings);
+  // v959 fb#476 Slack DM の カテゴリ 別 ON/OFF
+  loadNotifySlackPrefs();
   renderHomeLayoutEditor();
   renderTabLayoutEditor();
   // v497 #103 アプリ表示設定撤去 (全部表示する方針)。関数呼び出しも削除。
@@ -1161,6 +1171,43 @@ async function loadUnregistered() {
     });
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// v959 fb#476 Slack DM の カテゴリ 別 ON/OFF。
+async function loadNotifySlackPrefs() {
+  const root = document.getElementById('notify-slack-prefs');
+  if (!root) return;
+  try {
+    const d = await get('/api/me/notify-slack');
+    const cats = d.categories || [];
+    const prefs = d.prefs || {};
+    root.innerHTML = cats.map(c => {
+      const on = prefs[c.key] !== false;
+      return `
+        <label style="display:flex; align-items:flex-start; gap:10px; padding:8px 4px; border-top:1px solid #f3f4f6">
+          <span class="switch"><input type="checkbox" data-nsp-cat="${escapeHtml(c.key)}" ${on ? 'checked' : ''}><span class="slider"></span></span>
+          <span style="flex:1; min-width:0">
+            <div class="bold" style="font-size:13px">${escapeHtml(c.label)}</div>
+            <div class="hint-sm">${escapeHtml(c.desc)}</div>
+          </span>
+        </label>`;
+    }).join('');
+    root.querySelectorAll('input[data-nsp-cat]').forEach(inp => {
+      inp.addEventListener('change', async (ev) => {
+        const cat = ev.target.dataset.nspCat;
+        const val = ev.target.checked;
+        try {
+          await patch('/api/me/notify-slack', { [cat]: val });
+          toast(val ? `📩 ${cat} を Slack に配信` : `🔕 ${cat} は Slack 送らない`);
+        } catch (e) {
+          ev.target.checked = !val;
+          toast('失敗: ' + e.message);
+        }
+      });
+    });
+  } catch (e) {
+    root.innerHTML = `<div class="muted">読み込み失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
