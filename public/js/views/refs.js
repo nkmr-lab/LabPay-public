@@ -82,7 +82,7 @@ export async function renderRefs() {
   app.innerHTML = `
     <div class="card page-header">
       <div class="row center" style="gap:8px; flex-wrap:wrap">
-        <h2 style="margin:0; flex:1">📚 文献管理 <span style="font-size:11px; color:#9ca3af; font-weight:normal">Zotero 的、 ラボ共有</span></h2>
+        <h2 style="margin:0; flex:1">📚 文献管理</h2>
         <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋ 文献を 追加</a>
         <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="現在 の 絞り込み 対象 全件 の BibTeX を クリップボード に コピー">📋 BibTeX コピー</button>
         <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献 リスト を CSL style で 一括生成">📚 参考文献</a>

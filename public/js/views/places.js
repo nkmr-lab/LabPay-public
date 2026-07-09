@@ -161,6 +161,12 @@ export async function renderPlaces() {
     };
     map.on('moveend', persistView);
     map.on('zoomend', persistView);
+    // v958 fb#475 ダブルタップ / ダブルクリック で タップ 位置 中心 に 2 レベル ズームイン
+    //   (Leaflet デフォルト は 1 レベル + 中心維持 で 使いにくい との 指摘)
+    map.doubleClickZoom.disable();  // デフォルト の 1 レベル ズーム を 停止
+    map.on('dblclick', (e) => {
+      map.setView(e.latlng, Math.min(map.getMaxZoom(), map.getZoom() + 2));
+    });
   }
   document.getElementById('pl-locate').addEventListener('click', () => {
     if (!map) { toast('地図未初期化'); return; }
@@ -448,6 +454,11 @@ export async function renderPlacesMap() {
   };
   map.on('moveend', persistView);
   map.on('zoomend', persistView);
+  // v958 fb#475 ダブルタップ で タップ 位置 中心 に 2 レベル ズームイン
+  map.doubleClickZoom.disable();
+  map.on('dblclick', (e) => {
+    map.setView(e.latlng, Math.min(map.getMaxZoom(), map.getZoom() + 2));
+  });
 
   // v921 住所検索: Nominatim (OpenStreetMap) の 公開 geocode 使用。
   //   結果 の 上位 1 件 に map を fly させる。 マーカー は 一時的に 追加 して 3 秒 で 消す。
@@ -1000,6 +1011,11 @@ async function loadPlace(id) {
           attribution: '&copy; OpenStreetMap', maxZoom: 19,
         }).addTo(map);
         L.marker([p.lat, p.lng]).addTo(map).bindPopup(escapeHtml(p.title));
+        // v958 fb#475 ダブルタップ で 2 レベル ズームイン
+        map.doubleClickZoom.disable();
+        map.on('dblclick', (e) => {
+          map.setView(e.latlng, Math.min(map.getMaxZoom(), map.getZoom() + 2));
+        });
         mapBox._pldMap = map;
       } catch (_) {}
     }
