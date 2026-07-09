@@ -954,16 +954,20 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-view-controls .ai-vc-total { margin-left: auto; color: #6b7280; font-size: 12px; }
 .ai-view-controls select { font-size: 13px; padding: 2px 6px; }
 
-.ai-tile-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
-@media (min-width: 720px)  { .ai-tile-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1200px) { .ai-tile-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1600px) { .ai-tile-grid { grid-template-columns: repeat(4, 1fr); } }
+/* v952 minmax(0,1fr) にしないと grid item の min-content が 1fr を無視して
+   右端 に はみ出す (長い 著者名 / 会議名 が 折り返さない 場合 の 予防)。 */
+.ai-tile-grid { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px)  { .ai-tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .ai-tile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1600px) { .ai-tile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .ai-tile {
   display: flex; flex-direction: column;
   padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
   background: #fff; text-decoration: none; color: inherit;
   transition: box-shadow 0.15s;
   min-height: 110px;
+  min-width: 0;   /* v952 flex/grid 子 が 内容 幅 に 引きずられる の を 止める */
+  overflow: hidden;
 }
 .ai-tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #c4b5fd; }
 .ai-tile .ai-tile-head {

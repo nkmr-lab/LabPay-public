@@ -3521,8 +3521,16 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
         elseif (preg_match('/(\{.*\})/s', $text, $m)) $jsonText = $m[1];
         $parsed = json_decode($jsonText, true);
         if (!is_array($parsed)) {
-            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg='invalid JSON in output', finished_at=NOW() WHERE id=?")
-                ->execute([$row['id']]);
+            // v952 OCR 由来 の 生 制御文字 (\x00-\x08, \x0B, \x0C, \x0E-\x1F) が
+            //   JSON string 内 に 残る と invalid。 \n \r \t 以外 の 制御文字 を
+            //   空白 に 置換 して 再 parse。
+            $cleaned = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', ' ', $jsonText);
+            $parsed = json_decode((string)$cleaned, true);
+        }
+        if (!is_array($parsed)) {
+            $errDetail = 'invalid JSON in output: ' . json_last_error_msg();
+            $pdo->prepare("UPDATE paper_full_translations SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
+                ->execute([$errDetail, $row['id']]);
             $row['status'] = 'error'; return $row;
         }
         $usage = $j['usage'] ?? [];
