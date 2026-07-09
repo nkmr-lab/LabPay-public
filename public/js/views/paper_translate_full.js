@@ -107,6 +107,14 @@ export async function renderPaperTranslateFull() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
   });
+  // v955 hash に ?q=<keyword> が 付いていたら shared タブ に 切り替えて 検索実行
+  const hashQ = (location.hash.match(/\?q=([^&]+)/) || [])[1];
+  if (hashQ) {
+    const kw = decodeURIComponent(hashQ);
+    searchEl.value = kw;
+    switchTab('shared');
+    return;
+  }
   await loadHistory();   // 初期は自分の履歴
 }
 
@@ -571,13 +579,39 @@ async function paint(d) {
         <div style="font-size:12px; color:#6b21a8">📊 使用量: ${u.input_tokens||0} in / ${u.output_tokens||0} out / 計 ${u.total_tokens||0} tok ・章 ${u.chapters_count||0} 本</div>
       </div>` : ''}
 
-    ${Array.isArray(r.chapters) && r.chapters.length ? `
-      <div class="card">
-        <div class="bold" style="color:var(--primary); font-size:15px; margin-bottom:6px">📚 章別翻訳</div>
-        <div style="display:flex; flex-direction:column; gap:14px">
-          ${r.chapters.map((ch, i) => renderChapter(ch, i, d.direction)).join('')}
-        </div>
-      </div>` : ''}
+    ${(() => {
+      // v955 論文本体と無関係のボイラープレート章 (CCS Concepts / ACM
+      //   Reference Format / Permission / Copyright / References / Front matter
+      //   等) を除外。 代わりに 上部に:
+      //     - 著者カード (Front matter から parse)
+      //     - キーワードタグ (Keywords 章から parse、 タップで検索)
+      //   を出す。
+      if (!Array.isArray(r.chapters) || !r.chapters.length) return '';
+      const authors = parseAuthorsFromChapters(r.chapters);
+      const kws = extractKeywordsFromChapters(r.chapters);
+      const filtered = r.chapters.filter(ch => !isBoilerplateChapter(ch));
+      let out = renderAuthorCards(authors);
+      if (kws.length) {
+        out += `
+          <div class="card" style="background:#faf5ff">
+            <div class="bold" style="color:#7b3fa0; font-size:13px; margin-bottom:6px">🏷 キーワード</div>
+            <div class="row" style="gap:6px; flex-wrap:wrap">
+              ${kws.map(kw => `<button data-pft-kw="${escapeHtml(kw)}" class="btn" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 10px; border:1px solid #d8b4fe; border-radius:12px; cursor:pointer">${escapeHtml(kw)}</button>`).join('')}
+            </div>
+            <div class="hint-sm" style="margin-top:6px">タップで公開全訳から関連論文を検索</div>
+          </div>`;
+      }
+      if (filtered.length) {
+        out += `
+          <div class="card">
+            <div class="bold" style="color:var(--primary); font-size:15px; margin-bottom:6px">📚 章別翻訳</div>
+            <div style="display:flex; flex-direction:column; gap:14px">
+              ${filtered.map((ch, i) => renderChapter(ch, i, d.direction)).join('')}
+            </div>
+          </div>`;
+      }
+      return out;
+    })()}
 
     <div id="pft-interactions-slot"></div>
 
@@ -615,6 +649,16 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
+  // v955 キーワードタグ の クリック → 公開全訳 一覧 の 検索 に 飛ばす
+  document.querySelectorAll('[data-pft-kw]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const q = String(b.dataset.pftKw || '').trim();
+      if (!q) return;
+      // #/paper-translate-full?q=<keyword> で 一覧 側 が pick up
+      location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
+    });
+  });
 }
 
 // v813 #406 cross_refs を「📄 要約へ」ボタンに簡素化 + #405 ペアの要約が無い場合は
@@ -675,6 +719,82 @@ async function bindMakeSummary(d) {
       ],
     });
   });
+}
+
+// v955 論文本体と無関係のボイラープレート章を判定 (章別翻訳から除外)。
+//   Front matter は 上部 の 著者カード で 別出しにする ので ここでは 除外。
+function isBoilerplateChapter(ch) {
+  const t = String(ch?.chapter_title_original || '').trim().toLowerCase();
+  return /^(ccs (concept|categorie)|keywords?|acm reference format|permission|copyright|references|bibliography|acknowledg?ments?|appendix|front matter|title page)/.test(t);
+}
+
+// v955 Keywords 章 (もしあれば) から カンマ / 「;」 区切り の キーワード を 抽出。
+function extractKeywordsFromChapters(chapters) {
+  const kwCh = chapters.find(c => /^keywords?/i.test(String(c?.chapter_title_original || '').trim()));
+  if (!kwCh) return [];
+  let text = String(kwCh.translation || '');
+  text = text.replace(/^\s*keywords?\s*[:：]?\s*/i, '').trim();
+  return text.split(/[,;、・；]+/).map(s => s.trim()).filter(s => s.length && s.length <= 60).slice(0, 20);
+}
+
+// v955 Front matter 章 の 訳 テキスト から 著者ブロック を パース。
+//   ブロック は 空行区切り、 email が ある もの を 著者 と 判定、 name / affiliation / email を 抽出。
+function parseAuthorsFromChapters(chapters) {
+  const fmCh = chapters.find(c => /^(front matter|title page)/i.test(String(c?.chapter_title_original || '').trim()));
+  if (!fmCh) return [];
+  const text = String(fmCh.translation || '');
+  const blocks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
+  const authors = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const emailIdx = lines.findIndex(l => /[\w.+-]+@[\w-]+\.[\w-]+/.test(l));
+    if (emailIdx < 0) continue;
+    const emailMatch = lines[emailIdx].match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
+    if (!emailMatch) continue;
+    // 名前 は 最初 の 行 (英字 / 記号 で 「, 」 を 含ま ない ような 短い もの)。
+    const name = lines[0];
+    if (name.length > 80) continue;   // タイトル行が紛れた
+    if (/\.$/.test(name)) continue;   // 文っぽいもの (References 等) を 除外
+    const affiliation = lines.slice(1, emailIdx).join(', ').replace(/,\s*,/g, ',').replace(/,\s*$/, '');
+    authors.push({ name, affiliation, email: emailMatch[0] });
+  }
+  // 上限 30 で 打ち切り (安全策)
+  return authors.slice(0, 30);
+}
+
+// v955 名前から 決定的に 色 と イニシャル を 生成 (顔画像 の 代替、 外部 API なし)。
+function initialsAvatar(name) {
+  const clean = String(name || '').trim();
+  if (!clean) return { initials: '?', color: '#9ca3af' };
+  const parts = clean.split(/\s+/).filter(Boolean);
+  const initials = (parts[0]?.[0] || '') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] || '') : '');
+  // ハッシュ から 色 (パステル系 の 色相 だけ 変える)
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  return { initials: initials.toUpperCase().slice(0, 2), color: `hsl(${hue}, 55%, 55%)` };
+}
+
+function renderAuthorCards(authors) {
+  if (!authors.length) return '';
+  return `
+    <div class="card">
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px">
+        ${authors.map(a => {
+          const av = initialsAvatar(a.name);
+          return `
+            <div style="display:flex; gap:10px; padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; min-width:0">
+              <div style="flex:none; width:38px; height:38px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
+              <div style="flex:1; min-width:0; font-size:12px">
+                <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.name)}</div>
+                ${a.affiliation ? `<div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(a.affiliation)}">${escapeHtml(a.affiliation)}</div>` : ''}
+                ${a.email ? `<a href="mailto:${escapeHtml(a.email)}" style="font-size:11px; color:#7b3fa0; text-decoration:none">${escapeHtml(a.email)}</a>` : ''}
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 function renderChapter(ch, idx, direction) {
