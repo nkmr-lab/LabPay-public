@@ -321,6 +321,8 @@ async function loadHistory() {
       const showOrig = it.title_orig && it.title_orig !== title;
       const summary = it.summary_one_paragraph || '';
       const statusIcon = it.status === 'done' ? '📑' : it.status === 'error' ? '❌' : '⏳';
+      // v954 thumbnail: 最初の figure_ref の page + region をサムネ表示
+      const thumbHtml = renderTileThumb(it.thumb);
       return `
         <a class="ai-tile" href="#/paper-summary/r/${escapeHtml(it.share_token)}">
           <div class="ai-tile-head">
@@ -328,9 +330,14 @@ async function loadHistory() {
             ${it.is_shared ? '<span style="color:#15803d">🌐</span>' : ''}
             <span style="margin-left:auto; font-size:11px">${escapeHtml(it.status || '')}</span>
           </div>
-          <div class="ai-tile-title">${escapeHtml(title)}</div>
-          ${showOrig ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_orig)}</div>` : ''}
-          ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+          <div style="display:flex; gap:8px; align-items:flex-start; margin-top:2px">
+            ${thumbHtml}
+            <div style="flex:1; min-width:0">
+              <div class="ai-tile-title">${escapeHtml(title)}</div>
+              ${showOrig ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_orig)}</div>` : ''}
+              ${meta ? `<div style="font-size:11px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>` : ''}
+            </div>
+          </div>
           ${summary ? `<div class="ai-tile-snippet">${escapeHtml(summary)}</div>` : ''}
           <div class="ai-tile-foot">
             <span>${escapeHtml(it.created_at || '')}</span>
@@ -742,6 +749,24 @@ function renderDetailedSections(sections, pagesDir, pagesCount) {
     </div>`;
 }
 
+// v954 リスト タイル 用 の 図 サムネ (fig=null なら 空 文字列)。 詳細ページ の renderFigure と 同じ
+//   background-position 方式 で region を 切り抜き、 タイル 内 に 64x80 の 小 サムネ 表示。
+function renderTileThumb(thumb) {
+  if (!thumb || !thumb.url) return '';
+  const w = 64, h = 80;
+  const region = String(thumb.region || 'full').toLowerCase();
+  const bgPos = region === 'top'    ? 'center top'
+              : region === 'middle' ? 'center center'
+              : region === 'bottom' ? 'center bottom'
+              : 'center top';
+  if (region === 'full') {
+    return `<img src="${escapeHtml(thumb.url)}" loading="lazy"
+              style="flex:none; width:${w}px; height:${h}px; object-fit:contain; background:#fff; border:1px solid #e5e7eb; border-radius:4px"
+              alt="thumb">`;
+  }
+  return `<div style="flex:none; width:${w}px; height:${h}px; background:#fff url('${escapeHtml(thumb.url)}') no-repeat ${bgPos}/100% auto; border:1px solid #e5e7eb; border-radius:4px"></div>`;
+}
+
 function renderFigure(fig, pagesDir, pagesCount) {
   const label = (fig && fig.label) ? String(fig.label) : '';
   const cap = (fig && fig.caption_ja) ? String(fig.caption_ja) : '';
@@ -751,16 +776,27 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const region = (fig && fig.page_region) ? String(fig.page_region).toLowerCase() : 'full';
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
-  // v767 #385 crop は GPT region の精度が安定しないので廃止。全ページをそのまま
-  //   サムネ表示 + click で lightbox。 region は label の補足表示にだけ使う。
-  const wrap = 220;       // box 幅 (ページ全体を含める)
+  // v954 crop 復活: background-image + background-position で region 位置を表示。
+  //   region=full なら 全体、 top/middle/bottom は 該当 3 分の 1 部分を 表示。
+  //   タップ で lightbox に 元 の フル ページ を 表示 (region の 精度 が 微妙 でも
+  //   本体 は 見れる)。
+  const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
+  const cropHeight = region === 'full' ? 320 : 180;   // top/middle/bottom は 縦 短め
+  const bgPos = region === 'top'    ? 'center top'
+              : region === 'middle' ? 'center center'
+              : region === 'bottom' ? 'center bottom'
+              : 'center top';
+  // full は object-fit で 全体 を 縮小、 それ 以外 は background で 該当領域 を クロップ
+  const imgElement = region === 'full'
+    ? `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:${cropHeight}px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`
+    : `<div style="width:${wrap}px; height:${cropHeight}px; background:#fff url('${escapeHtml(imgUrl)}') no-repeat ${bgPos}/100% auto; border:1px solid #ddd; border-radius:4px"></div>`;
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
         <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; cursor:zoom-in">
-          <img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:340px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">
-          <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで拡大</div>
+          ${imgElement}
+          <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
         <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}</div>

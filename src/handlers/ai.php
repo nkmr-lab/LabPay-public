@@ -1534,11 +1534,36 @@ PDF に書かれていない数値や主張を補完しない。
 JSON 以外の前置きや解説は不要。 JSON のみを返却。
 PROMPT;
 
+// v954 result_json + pages_dir から サムネ画像 情報 を 抽出。
+//   詳細サマリ の 各 section の figure_refs を 舐めて 最初 に 見つかった 図 の page + region を 使う。
+//   図 の 頭 に 表紙 の Figure 1 が 出やすい 論文 で は 見た目 が わかりやすい。
+function _ai_extract_thumb(array $j, string $pagesDir, int $pagesCount): ?array {
+    if ($pagesDir === '' || $pagesCount <= 0) return null;
+    $firstFig = null;
+    // detailed_sections[].figure_refs[]
+    foreach (($j['detailed_sections'] ?? []) as $sec) {
+        if (isset($sec['figure_refs']) && is_array($sec['figure_refs']) && count($sec['figure_refs']) > 0) {
+            $firstFig = $sec['figure_refs'][0];
+            break;
+        }
+    }
+    if (!$firstFig) return null;
+    $page   = (int)($firstFig['page'] ?? 0);
+    $region = strtolower((string)($firstFig['page_region'] ?? 'full'));
+    if ($page < 1 || $page > $pagesCount) return null;
+    // /uploads/paper_pages/<token>/page-1.jpg  (0 埋め幅は pages_count 依存)
+    $pad = strlen((string)$pagesCount);   // e.g. 12 pages → pad=2、 page-01.jpg
+    if ($pad < 1) $pad = 1;
+    $url = rtrim($pagesDir, '/') . '/page-' . str_pad((string)$page, $pad, '0', STR_PAD_LEFT) . '.jpg';
+    return ['url' => $url, 'region' => $region, 'page' => $page];
+}
+
 function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     // v841 #423 自分の履歴タイルにも原題 / 著者 / 投稿先 / summary snippet を返す
-    $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at
+    // v954 pages_dir / pages_count + 最初の figure_ref から サムネ用の 画像 URL + region を 返す
+    $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at, pages_dir, pages_count
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
     $rows = [];
@@ -1548,6 +1573,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
         $authors = null;
         $venue = null;
         $summary = null;
+        $thumb = null;   // v954
         if (!empty($r['result_json'])) {
             $j = json_decode((string)$r['result_json'], true);
             if (is_array($j)) {
@@ -1556,6 +1582,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
                 $authors = !empty($j['authors']) ? (string)$j['authors'] : null;
                 $venue = !empty($j['venue']) ? (string)$j['venue'] : null;
                 $summary = !empty($j['summary_one_paragraph']) ? (string)$j['summary_one_paragraph'] : null;
+                $thumb = _ai_extract_thumb($j, (string)$r['pages_dir'], (int)$r['pages_count']);
             }
         }
         $rows[] = [
@@ -1567,6 +1594,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
             'authors'     => $authors,
             'venue'       => $venue,
             'summary_one_paragraph' => $summary,
+            'thumb'       => $thumb,   // v954 { url, region }
             'status'      => $r['status'],
             'is_shared'   => (bool)$r['is_shared'],
             'shared_at'   => $r['shared_at'],
