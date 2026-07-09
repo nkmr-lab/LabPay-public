@@ -533,7 +533,6 @@ async function paintResult(d, token) {
     <div class="card page-header">
       <h2 style="margin:0; font-size:18px">📑 ${escapeHtml(r.title_ja || d.pdf_name)}</h2>
       ${r.title_orig ? `<div class="meta" style="font-size:13px; opacity:0.8; margin-top:2px">原題: ${escapeHtml(r.title_orig)}</div>` : ''}
-      ${r.authors ? `<div class="meta" style="font-size:13px; margin-top:2px">👥 ${escapeHtml(r.authors)}</div>` : ''}
       ${r.venue ? `<div class="meta" style="font-size:13px; margin-top:2px">📍 ${escapeHtml(r.venue)}</div>` : ''}
       <div class="meta" style="font-size:11px; margin-top:6px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
@@ -553,6 +552,8 @@ async function paintResult(d, token) {
       </div>
       ${renderPaperCrossRefsAndCreate(d)}
     </div>
+
+    ${ptRenderAuthorCards(r.authors)}
 
     ${r.summary_one_paragraph ? `
     <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
@@ -765,6 +766,47 @@ function renderTileThumb(thumb) {
               alt="thumb">`;
   }
   return `<div style="flex:none; width:${w}px; height:${h}px; background:#fff url('${escapeHtml(thumb.url)}') no-repeat ${bgPos}/100% auto; border:1px solid #e5e7eb; border-radius:4px"></div>`;
+}
+
+// v955 要約側でも 著者カード を 出したい。 r.authors は 文字列 (「Kelly Mack, Emma McDonnell, ...」)
+//   なので split して 名前 のみ の 簡易カード。 全訳側 (paper_translate_full.js) と同じ
+//   avatar / card スタイル に 揃える。
+function ptParseAuthorsFromString(s) {
+  if (!s || typeof s !== 'string') return [];
+  const cleaned = s
+    .replace(/,\s*and\s+/gi, ', ')   // "A, B, and C" → "A, B, C"
+    .replace(/\s+and\s+/gi, ', ')    // "A and B"    → "A, B"
+    .replace(/\bet al\.?/gi, '');    // 「et al.」 は 落とす
+  return cleaned.split(/[,;、]/)
+    .map(x => x.trim())
+    .filter(x => x.length > 1 && x.length <= 80);
+}
+function ptInitialsAvatar(name) {
+  const clean = String(name || '').trim();
+  if (!clean) return { initials: '?', color: '#9ca3af' };
+  const parts = clean.split(/\s+/).filter(Boolean);
+  const initials = (parts[0]?.[0] || '') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] || '') : '');
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  return { initials: initials.toUpperCase().slice(0, 2), color: `hsl(${hash % 360}, 55%, 55%)` };
+}
+function ptRenderAuthorCards(authorsStr) {
+  const authors = ptParseAuthorsFromString(authorsStr);
+  if (!authors.length) return '';
+  return `
+    <div class="card">
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:8px">
+        ${authors.map(a => {
+          const av = ptInitialsAvatar(a);
+          return `
+            <div style="display:flex; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; align-items:center; min-width:0">
+              <div style="flex:none; width:32px; height:32px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
+              <div class="bold" style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a)}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 function renderFigure(fig, pagesDir, pagesCount) {

@@ -574,11 +574,6 @@ async function paint(d) {
         ${r.venue            ? `<div style="font-size:12px; color:#6b7280">${escapeHtml(r.venue)}</div>` : ''}
       </div>` : ''}
 
-    ${u.total_tokens || u.chapters_count ? `
-      <div class="card" style="background:#faf5ff">
-        <div style="font-size:12px; color:#6b21a8">📊 使用量: ${u.input_tokens||0} in / ${u.output_tokens||0} out / 計 ${u.total_tokens||0} tok ・章 ${u.chapters_count||0} 本</div>
-      </div>` : ''}
-
     ${(() => {
       // v955 論文本体と無関係のボイラープレート章 (CCS Concepts / ACM
       //   Reference Format / Permission / Copyright / References / Front matter
@@ -634,6 +629,11 @@ async function paint(d) {
           <div style="margin-top:6px"><span class="bold" style="font-size:12.5px; color:#a16207">⚠ 残った懸念:</span>
             <ul style="margin:3px 0 0 0; padding-left:20px; font-size:13px">${r.overall_polish.remaining_concerns.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
           </div>` : ''}
+      </div>` : ''}
+
+    ${u.total_tokens || u.chapters_count ? `
+      <div class="hint-sm" style="text-align:right; margin-top:8px; padding:4px 8px; font-size:11px; color:#9ca3af">
+        📊 ${u.input_tokens||0} in / ${u.output_tokens||0} out / 計 ${u.total_tokens||0} tok ・章 ${u.chapters_count||0} 本
       </div>` : ''}
   `;
   // v789 #389 いいね・ブックマーク・コメント
