@@ -149,6 +149,15 @@ export async function renderPaperTranslate() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
   });
+  // v957 hash に ?q=<keyword> が 付いていたら shared タブ に 切り替えて 検索実行
+  //   (詳細ページ の 著者 / キーワード クリック から 飛んで来る 用)
+  const hashQ = (location.hash.match(/\?q=([^&]+)/) || [])[1];
+  if (hashQ) {
+    const kw = decodeURIComponent(hashQ);
+    searchEl.value = kw;
+    switchTab('shared');
+    return;
+  }
   await loadHistory();    // history 取得と同時に models / cost をロード
 }
 
@@ -648,6 +657,15 @@ async function paintResult(d, token) {
       openImageLightbox(el.dataset.ptZoom);
     });
   });
+  // v957 著者カード の クリック → 公開要約一覧 の 検索 に 飛ばす
+  document.querySelectorAll('[data-pt-author]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const q = String(b.dataset.ptAuthor || '').trim();
+      if (!q) return;
+      location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
+    });
+  });
 }
 
 // v813 #406 cross_refs を「📑 全訳へ」ボタンに簡素化 + #405 ペアが無い場合は
@@ -795,15 +813,15 @@ function ptRenderAuthorCards(authorsStr) {
   if (!authors.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者</div>
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">タップで公開要約から関連論文を検索</span></div>
       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:8px">
         ${authors.map(a => {
           const av = ptInitialsAvatar(a);
           return `
-            <div style="display:flex; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; align-items:center; min-width:0">
+            <button data-pt-author="${escapeHtml(a)}" style="display:flex; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; align-items:center; min-width:0; cursor:pointer; text-align:left; font-family:inherit">
               <div style="flex:none; width:32px; height:32px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
               <div class="bold" style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a)}</div>
-            </div>`;
+            </button>`;
         }).join('')}
       </div>
     </div>`;

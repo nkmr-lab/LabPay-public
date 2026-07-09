@@ -649,13 +649,12 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
-  // v955 キーワードタグ の クリック → 公開全訳 一覧 の 検索 に 飛ばす
-  document.querySelectorAll('[data-pft-kw]').forEach(b => {
+  // v955/v957 キーワード / 著者名 の クリック → 公開全訳 一覧 の 検索 に 飛ばす
+  document.querySelectorAll('[data-pft-kw], [data-pft-author]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
-      const q = String(b.dataset.pftKw || '').trim();
+      const q = String(b.dataset.pftKw || b.dataset.pftAuthor || '').trim();
       if (!q) return;
-      // #/paper-translate-full?q=<keyword> で 一覧 側 が pick up
       location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
     });
   });
@@ -737,28 +736,47 @@ function extractKeywordsFromChapters(chapters) {
   return text.split(/[,;、・；]+/).map(s => s.trim()).filter(s => s.length && s.length <= 60).slice(0, 20);
 }
 
-// v955 Front matter 章 の 訳 テキスト から 著者ブロック を パース。
-//   ブロック は 空行区切り、 email が ある もの を 著者 と 判定、 name / affiliation / email を 抽出。
+// v955/v957 Front matter 章 の 訳 テキスト から 著者ブロック を パース。
+//   フォーマット 2 種類:
+//     (a) 1 行 「Name（所属, email）」形式 (半角/全角 括弧 両方 対応、 gpt-5 v953+)
+//     (b) 空行区切りブロック 「Name\n所属\n国\nemail」 形式 (旧 gpt-5)
+//   (a) を 先に 試して、 見つから なかったら (b) に fallback。
 function parseAuthorsFromChapters(chapters) {
   const fmCh = chapters.find(c => /^(front matter|title page)/i.test(String(c?.chapter_title_original || '').trim()));
   if (!fmCh) return [];
   const text = String(fmCh.translation || '');
-  const blocks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
   const authors = [];
+
+  // (a) 1 行 括弧 パターン
+  for (const line of text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)) {
+    const m = line.match(/^([^（(]{2,80})\s*[（(]\s*(.+?)\s*[)）]\s*$/);
+    if (!m) continue;
+    const name = m[1].trim();
+    const rest = m[2];
+    const emailMatch = rest.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
+    if (!emailMatch) continue;
+    if (/^(figure|table|abstract|keywords?)\b/i.test(name)) continue;
+    const affiliation = rest.replace(emailMatch[0], '')
+      .replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^,\s*/, '').trim();
+    authors.push({ name, affiliation, email: emailMatch[0] });
+  }
+  if (authors.length) return authors.slice(0, 30);
+
+  // (b) 空行区切り ブロック (旧 format) fallback
+  const blocks = text.split(/\n\s*\n+/).map(b => b.trim()).filter(Boolean);
   for (const block of blocks) {
     const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const emailIdx = lines.findIndex(l => /[\w.+-]+@[\w-]+\.[\w-]+/.test(l));
     if (emailIdx < 0) continue;
     const emailMatch = lines[emailIdx].match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
     if (!emailMatch) continue;
-    // 名前 は 最初 の 行 (英字 / 記号 で 「, 」 を 含ま ない ような 短い もの)。
     const name = lines[0];
-    if (name.length > 80) continue;   // タイトル行が紛れた
-    if (/\.$/.test(name)) continue;   // 文っぽいもの (References 等) を 除外
+    if (name.length > 80) continue;
+    if (/\.$/.test(name)) continue;
+    if (/^(figure|table|abstract|keywords?)\b/i.test(name)) continue;
     const affiliation = lines.slice(1, emailIdx).join(', ').replace(/,\s*,/g, ',').replace(/,\s*$/, '');
     authors.push({ name, affiliation, email: emailMatch[0] });
   }
-  // 上限 30 で 打ち切り (安全策)
   return authors.slice(0, 30);
 }
 
@@ -779,7 +797,7 @@ function renderAuthorCards(authors) {
   if (!authors.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者</div>
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">名前タップで公開全訳から他論文を検索</span></div>
       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px">
         ${authors.map(a => {
           const av = initialsAvatar(a.name);
@@ -787,7 +805,7 @@ function renderAuthorCards(authors) {
             <div style="display:flex; gap:10px; padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; min-width:0">
               <div style="flex:none; width:38px; height:38px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
               <div style="flex:1; min-width:0; font-size:12px">
-                <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.name)}</div>
+                <button data-pft-author="${escapeHtml(a.name)}" class="bold" style="font-size:13px; background:none; border:none; padding:0; color:#7b3fa0; cursor:pointer; text-align:left; font-family:inherit; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.name)}</button>
                 ${a.affiliation ? `<div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(a.affiliation)}">${escapeHtml(a.affiliation)}</div>` : ''}
                 ${a.email ? `<a href="mailto:${escapeHtml(a.email)}" style="font-size:11px; color:#7b3fa0; text-decoration:none">${escapeHtml(a.email)}</a>` : ''}
               </div>
