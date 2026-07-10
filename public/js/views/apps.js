@@ -109,6 +109,13 @@ export const APPS = [
   { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開 URL または 4 桁コードで 誰でも投票できる汎用アンケート (SNS シェア可、 LabPay ログイン不要)。 タイトル + 選択肢 (複数行テキスト、 2〜50 個) + 締切で作成、 単一/複数選択 + 任意で自由記述、 集計の見え方は「常に公開」「締切後に公開」「起案者のみ」から選択。 起案者ダッシュボードで棒グラフ集計 + 自由記述一覧を見られる。 「4 桁コード」 は pay.nkmr.io/#/public で入力して飛べる。 外部イベント来場者に投票してもらう / SNS で意見を募る等に。', defaultVisible: true },
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
   { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v943 で追加予定。', defaultVisible: true },
+  // v960 外部ツール ポータル (LabPay を ハブ に して 別 アプリ に 飛ぶ)
+  { id: 'poster-maker',   cat: 'lab-mgmt', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
+    desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。 顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。 新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
+  { id: 'file-browser',   cat: 'lab-mgmt', url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
+    desc: 'ラボ NFS / VPS 上のファイルをブラウザで一覧・編集・アップロード・ダウンロード。 VS Code Remote がメモリ枯渇するときの代替。 Google 認証で保護、 realpath で閉じ込め済。', defaultVisible: true },
+  { id: 'db-admin',       cat: 'lab-mgmt', url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
+    desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
   { id: 'kanban', cat: 'lab-mgmt', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
@@ -220,13 +227,20 @@ export async function renderApps(ctx = {}) {
   const filteredCats = filterCat
     ? APP_CATEGORIES.filter(c => c.id === filterCat)
     : APP_CATEGORIES;
-  const renderItemRow = (a) => `
-    <a class="list-item" href="${a.url}">
+  // v960 外部URL (https://…) は 別タブ で 開く よう target=_blank + rel、
+  //   タイトル 末尾 に ↗ を 付けて 見分け が つく ように。 SPA 内 リンク は 従来 通り。
+  const renderItemRow = (a) => {
+    const isExternal = /^https?:\/\//.test(a.url);
+    const attr = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
+    const arrow = isExternal ? '↗' : '→';
+    return `
+    <a class="list-item" href="${a.url}"${attr}>
       <div class="grow">
-        <div class="bold">${escapeHtml(a.title)} →</div>
+        <div class="bold">${escapeHtml(a.title)} ${arrow}</div>
         <div class="meta">${escapeHtml(a.desc)}</div>
       </div>
     </a>`;
+  };
   const sectionsHtml = filteredCats.map(c => {
     let items = visible.filter(a => a.cat === c.id);
     // 指定があれば並び替え
