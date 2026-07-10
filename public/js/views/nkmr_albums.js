@@ -155,11 +155,17 @@ function render() {
   lookupThumbs(collectVisibleUrls());
 }
 
+// v970.7 セクション ラベル: データ は カレンダー 年 (1-12月) で 束ねて いる ので、
+//   4 桁 数字 なら 「N年」 表示 に (「年度」 だと 4-3 月 の 期待 に なるが 実 データ は
+//   カレンダー 年 なので 混乱 する との 中村さん 指摘)。 それ以外 (過去のもの 等) は そのまま。
+function sectionLabel(t) {
+  return /^\d{4}$/.test(t) ? `${t}年` : t;
+}
 function renderSectionCard(sec) {
   return `
     <div class="card">
       <div style="display:flex; align-items:center; gap:8px">
-        <div class="bold" style="flex:1; font-size:15px">${escapeHtml(sec.title)}</div>
+        <div class="bold" style="flex:1; font-size:15px">${escapeHtml(sectionLabel(sec.title))}</div>
         <span class="hint-sm">${sec.albums.length} 件</span>
       </div>
       <div class="nkm-tile-grid">${sec.albums.map(renderAlbumTile).join('')}</div>
