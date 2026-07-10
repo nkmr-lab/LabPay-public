@@ -149,6 +149,13 @@ function album_thumbs_try_fetch(PDO $pdo, string $url, string $hash): bool {
         return false;
     }
 
+    // v965 Google Photos CDN の URL 末尾 「=w<W>-h<H>」 で サイズ 指定 可能。
+    //   default og:image は =w600-h315-p-k で ~80KB。 表示 は 64x48 (retina 3x で ~192px) なので
+    //   =w192-h144-p-k-no に すれば ~14KB に なる (実 測)。 CSS で さらに 縮小 されて 表示。
+    if (preg_match('#^(https://[^=?]+)#', $ogUrl, $mat) && strpos($ogUrl, 'googleusercontent.com') !== false) {
+        $ogUrl = $mat[1] . '=w192-h144-p-k-no';
+    }
+
     // 画像 ダウンロード
     $ch = curl_init($ogUrl);
     curl_setopt_array($ch, [
