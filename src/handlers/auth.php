@@ -9,29 +9,28 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'me' && $method === 'GET') {
         $u = Auth::currentUser($pdo, $cfg);
         if (!$u) { json_error('unauthorized', 'not logged in', 401); return; }
-        // v951 usage.nkmr.io に 「pay.nkmr.io を 使いました」 の ビーコン を 飛ばす。
-        //   SPA 起動 と 定期 refresh で 叩かれる ので 実質 セッション 頻度 で 記録。
-        Auth::ssoUsageBeacon($cfg);
         $accId = Ledger::accountIdForUser($pdo, $u['id']);
         $bal = Ledger::balanceOf($pdo, $accId);
-        // v615 birthday_md / birthday_year も同梱 (state.me で誕生日バナー判定するため)
         $av = $pdo->prepare('SELECT avatar_url, birthday_md, birthday_year FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']    = $row['avatar_url']    ?? null;
         $u['birthday_md']   = $row['birthday_md']   ?? null;
         $u['birthday_year'] = $row['birthday_year'] ?? null;
-        // Mac-registration flag drives a home-screen onboarding banner: the
-        // user can't be auto-detected at all until at least one MAC is
-        // attached to their account.
         $stMac = $pdo->prepare('SELECT COUNT(*) FROM presence_devices WHERE user_id=?');
         $stMac->execute([$u['id']]);
         $hasMac = (int)$stMac->fetchColumn() > 0;
-        // in_lab is the buy-button gate: client greys out 購入 when false.
-        // Defined in purchases.php (loaded by bootstrap).
         json_response(['user' => $u, 'balance' => $bal,
             'in_lab' => user_is_in_lab($pdo, (int)$u['id']),
             'has_registered_mac' => $hasMac]);
+        // v963 レスポンス を 先に 返して から beacon。 従来 は beacon が
+        //   json_response の 前 に あり、 auth.nkmr.io が 少し 遅い と /api/auth/me
+        //   全体 が 遅延、 SPA 起動 が「重い」感じ に なって いた。
+        //   fastcgi_finish_request で client 側 は 即 レスポンス 受け取り、
+        //   PHP は 裏 で beacon を 送信 (1s タイムアウト の fire-and-forget)。
+        if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+        @ignore_user_abort(true);
+        Auth::ssoUsageBeacon($cfg);
         return;
     }
 
