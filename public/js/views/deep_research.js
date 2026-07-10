@@ -330,6 +330,20 @@ async function refreshShared(token) {
     if (d.status === 'pending' || d.status === 'processing') {
       // v952 経過時間を「⏳ Web を横断調査中…」の右側に表示 (ユーザ要望)
       const drAgeMin = d.created_at ? Math.floor((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
+      // v968 gpt-5 deep tier は 5-10 分 無反応 後 に 一気 に 進む こと が ある ので
+      //   最初 の 数分 は 冷静 に 待つ よう 案内、 10 分 超で stale と 見なして 再投入 ボタン。
+      const isOwnerDR = state.me?.id && Number(d.author_id) === Number(state.me.id);
+      const isStaleDR = drAgeMin >= 10;
+      const warmupHint = drAgeMin < 5 && (d.progress_text || '').includes('0 回')
+        ? `<div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:0 6px 6px 0; font-size:12.5px">
+             💡 gpt-5 (deep) は 最初 の 5-10 分 は 「0 回 / 0 段」 のまま 無反応 で 待たされる こと が あります (OpenAI 側 の キュー / warmup)。 いきなり 一気 に 進む ので しばらく お待ちください。
+           </div>` : '';
+      const staleBannerDR = (isStaleDR && isOwnerDR) ? `
+        <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
+          <div class="bold" style="color:#9a3412">⏳ もう ${drAgeMin} 分経過。 OpenAI 側で完全に詰まっているかもしれません。</div>
+          <p class="hint" style="font-size:12.5px; margin:6px 0 8px">同じ質問で再投入します (新規課金なし)。</p>
+          <button id="dr-retry-stale" class="primary">🔁 再投入 (新規課金なし)</button>
+        </div>` : '';
       document.getElementById('dr-result').innerHTML = `
         <div class="card">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
@@ -340,12 +354,23 @@ async function refreshShared(token) {
             深さにより 1-30 分程度かかります。このページを閉じても大丈夫 (完了したら通知が届きます)。<br>
             10 秒ごとに自動更新。
           </p>
+          ${warmupHint}
           ${d.progress_text ? `
             <div style="margin-top:10px; padding:10px 14px; background:#f0f9ff; border-left:4px solid #0284c7; border-radius:0 6px 6px 0">
               <div class="bold" style="font-size:13px; color:#0284c7">📡 現在の状況</div>
               <div style="font-size:13.5px; margin-top:4px">${escapeHtml(d.progress_text)}</div>
             </div>` : ''}
-        </div>`;
+        </div>
+        ${staleBannerDR}`;
+      document.getElementById('dr-retry-stale')?.addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        btn.disabled = true; btn.textContent = '⏳ 再投入中…';
+        try {
+          await post('/api/ai/deep_research/' + d.id + '/retry', {});
+          toast('再投入を開始しました');
+          refreshShared(token);
+        } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '🔁 再投入 (新規課金なし)'; }
+      });
       if (!pollTimer) pollTimer = setInterval(() => refreshShared(token), 10000);
       return;
     }

@@ -130,6 +130,12 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
+    // v968 stale (10 分 以上 進捗 なし) row を 同 row で 再投入 (新規課金 なし)
+    if ($sub === 'deep_research' && $method === 'POST' && isset($seg[2])
+        && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
+        ai_deep_research_retry($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     if ($sub === 'deep_research' && $method === 'POST' && !isset($seg[2])) {
         ai_deep_research($pdo, $cfg);
         return;
@@ -2562,6 +2568,49 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
 //   殺されて結果が DB に入らず status=processing で永遠に残る。 background=true で
 //   投げて、結果ページアクセスのたびに GET /v1/responses/{id} で進捗 / 完了を取り
 //   行く方式に改修 (= polling)。
+// v968 fb-ish 「進まない」 対応。 status=error or (processing で 10 分 以上 進捗 なし) の
+//   row を 同 row で 再 submit。 新規 課金 なし、 openai_response_id を リセット して 再開。
+function ai_deep_research_retry(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+    $st = $pdo->prepare("SELECT * FROM deep_researches WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
+    $okError = $row['status'] === 'error';
+    $okStaleProc = $row['status'] === 'processing'
+        && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
+        && (time() - strtotime((string)$row['created_at'])) >= 600;   // 10 min
+    if (!$okError && !$okStaleProc) {
+        throw new ApiException('bad_request',
+            '再実施はエラー / 10 分以上経過した処理中のみ (現 status: ' . $row['status'] . ')', 400);
+    }
+    if (empty($row['depth']) || !isset(DEEP_RESEARCH_TIERS[$row['depth']])) {
+        throw new ApiException('bad_request', 'depth 情報が壊れているので再実施不可', 400);
+    }
+    $tier = DEEP_RESEARCH_TIERS[$row['depth']];
+    $apiKey = (string)$cfg['openai']['api_key'];
+
+    $pdo->prepare("UPDATE deep_researches
+                      SET status='processing', progress_text='再投入中…',
+                          openai_response_id=NULL, error_msg=NULL, result_json=NULL,
+                          usage_json=NULL, finished_at=NULL, created_at=NOW()
+                    WHERE id=?")->execute([$id]);
+
+    json_response_no_exit([
+        'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
+        'message' => '再投入しました (新規課金なし)。 数分お待ちください。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(120);
+
+    ai_deep_research_run_background($pdo, $cfg, $id, (string)$row['share_token'],
+        (string)$row['query_text'], $tier, $apiKey, $uid);
+}
+
 function ai_deep_research_run_background(PDO $pdo, array $cfg, int $rowId, string $token, string $query, array $tier, string $apiKey, int $uid): void {
     try {
         $pdo->prepare("UPDATE deep_researches SET status='processing', progress_text='OpenAI に依頼中…' WHERE id = ?")->execute([$rowId]);

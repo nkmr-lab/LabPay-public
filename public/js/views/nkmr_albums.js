@@ -496,7 +496,8 @@ async function kickoffThumbFetch(sections) {
   if (!urls.length) return;
   thumbFetchInProgress = true;
   try {
-    const r = await post('/api/album-thumbs', { urls: urls.slice(0, 100), fetch_max: 3 });
+    // v968 fetch_max 10、 一度 に 10 件 fetch。 呼び出し 回数 が 減り 全体 は 2-3 倍 速く なる。
+    const r = await post('/api/album-thumbs', { urls: urls.slice(0, 100), fetch_max: 10 });
     const thumbs = r.thumbs || {};
     let changed = 0;
     for (const [u, v] of Object.entries(thumbs)) {
@@ -507,9 +508,10 @@ async function kickoffThumbFetch(sections) {
     }
     // DOM だけ 差し替え (再 render は 重い ので img を 直接 更新)
     if (changed > 0) applyThumbToDom();
-    // まだ 未取得 の URL が あって、 今回 数件 fetch できた なら、 続きを 呼ぶ
+    // まだ 未取得 の URL が あって、 今回 数件 fetch できた なら、 続きを 呼ぶ (200ms delay 廃止、 即座 に 次へ)
     if (r.fetched > 0 && urls.some(u => thumbCache[u] === undefined)) {
-      setTimeout(() => { thumbFetchInProgress = false; kickoffThumbFetch(sections); }, 200);
+      thumbFetchInProgress = false;
+      kickoffThumbFetch(sections);
       return;
     }
   } catch (_) { /* silent */ }

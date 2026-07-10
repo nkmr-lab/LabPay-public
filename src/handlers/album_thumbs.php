@@ -80,7 +80,9 @@ function album_thumbs_batch(PDO $pdo, array $cfg): void {
     $body = read_json_body();
     $urls = $body['urls'] ?? [];
     if (!is_array($urls)) throw new ApiException('bad_request', 'urls 配列', 400);
-    $fetchMax = min(5, max(0, (int)($body['fetch_max'] ?? 3)));
+    // v968 fetch_max を 3 → 10 に 引き上げ (元 は 保守的 過ぎ)。 1 件 ~1-2s なので 10 件 ~10-20s、
+    //   FastCGI で 30-60s 猶予 が ある ので 問題 なし。
+    $fetchMax = min(15, max(0, (int)($body['fetch_max'] ?? 10)));
 
     $urls = array_values(array_unique(array_filter(array_map('strval', $urls))));
     if (count($urls) > 300) $urls = array_slice($urls, 0, 300);
