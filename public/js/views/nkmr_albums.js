@@ -93,11 +93,44 @@ function extractSortKey(title) {
   return '';
 }
 
+// v970.8 年度 (4-3 月) で 束ね直す。 タイトル 先頭 の YYYY.MM.DD から:
+//   月 が 4-12 → 年度 = YYYY
+//   月 が 1-3  → 年度 = YYYY - 1
+//   日付 不明 は DB の section (「過去のもの」 等) を そのまま。
+function fiscalYearOf(album) {
+  const dm = String(album.title || '').match(/^(\d{4})\.(\d{2})/);
+  if (dm) {
+    const y = parseInt(dm[1], 10);
+    const m = parseInt(dm[2], 10);
+    return `${m >= 4 ? y : y - 1}年度`;
+  }
+  // section が 4 桁 数字 なら それ を そのまま 年度 に (年度 と 見なす)
+  if (/^\d{4}$/.test(String(album.section || ''))) return `${album.section}年度`;
+  return String(album.section || '中村研アルバム');
+}
+
 async function fetchAlbums() {
   const r = await get('/api/nkmr-albums');
-  sections = (r.sections || []).map(sec => ({
-    title: sec.title,
-    albums: (sec.albums || []).map(a => ({ ...a, sortKey: extractSortKey(a.title) })),
+  const all = (r.sections || []).flatMap(sec =>
+    (sec.albums || []).map(a => ({ ...a, section: sec.title, sortKey: extractSortKey(a.title) }))
+  );
+  // 年度 で 束ね直す
+  const grouped = {};
+  for (const a of all) {
+    const fy = fiscalYearOf(a);
+    (grouped[fy] ||= []).push(a);
+  }
+  // 順序: 「YYYY年度」 は 数値 降順、 それ以外 (「過去のもの」 「中村研アルバム」 等) は 末尾
+  const keys = Object.keys(grouped).sort((a, b) => {
+    const na = a.match(/^(\d{4})年度$/), nb = b.match(/^(\d{4})年度$/);
+    if (na && nb) return parseInt(nb[1]) - parseInt(na[1]);
+    if (na) return -1;
+    if (nb) return 1;
+    return a.localeCompare(b);
+  });
+  sections = keys.map(k => ({
+    title: k,
+    albums: grouped[k].slice().sort((a, b) => (b.sortKey || '').localeCompare(a.sortKey || '')),
   }));
 }
 
