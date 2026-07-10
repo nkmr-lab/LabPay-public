@@ -15,6 +15,20 @@ let sections = [];       // API 応答 の sections
 let sortMode = 'section';  // section | new | old | location
 let locFilter = 'all';     // all | jp | overseas (場所別 mode 用)
 let showAddForm = false;
+let cachedJpSvg = null;    // v970.10 Geolonia SVG (regions.js と 共有 の /img/jp-prefectures.svg)
+
+// 都道府県 → JIS X 0401 番号 (Geolonia SVG の data-code に 一致 する 1-47)
+const PREF_TO_JIS = {
+  '北海道': 1, '青森県': 2, '岩手県': 3, '宮城県': 4, '秋田県': 5, '山形県': 6, '福島県': 7,
+  '茨城県': 8, '栃木県': 9, '群馬県': 10, '埼玉県': 11, '千葉県': 12, '東京都': 13, '神奈川県': 14,
+  '新潟県': 15, '富山県': 16, '石川県': 17, '福井県': 18, '山梨県': 19, '長野県': 20,
+  '岐阜県': 21, '静岡県': 22, '愛知県': 23, '三重県': 24, '滋賀県': 25, '京都府': 26, '大阪府': 27,
+  '兵庫県': 28, '奈良県': 29, '和歌山県': 30,
+  '鳥取県': 31, '島根県': 32, '岡山県': 33, '広島県': 34, '山口県': 35,
+  '徳島県': 36, '香川県': 37, '愛媛県': 38, '高知県': 39,
+  '福岡県': 40, '佐賀県': 41, '長崎県': 42, '熊本県': 43,
+  '大分県': 44, '宮崎県': 45, '鹿児島県': 46, '沖縄県': 47,
+};
 
 // ─── 都道府県 マップ (場所別 の 国内 グループ化 用) ──────────────
 // キー: タイトル 中 に 現れ得る 場所 語 / 都市 名、 値: 都道府県 名。
@@ -232,6 +246,29 @@ const PREF_ORDER = [
 ];
 const PREF_ORDER_INDEX = Object.fromEntries(PREF_ORDER.map((p, i) => [p, i]));
 
+// v970.10 国外 の 並び 順 (東 アジア → 大洋州 → 北米 → 中南米 → ヨーロッパ → その他)
+const COUNTRY_ORDER = [
+  // 東 アジア
+  '韓国', '中国', '台湾', '香港',
+  // 東南 アジア
+  'タイ', 'ベトナム', 'フィリピン', 'マレーシア', 'インドネシア', 'カンボジア', 'ミャンマー',
+  // 南 アジア
+  'インド',
+  // 中央 アジア
+  'キプロス',
+  // 大洋州
+  'オーストラリア', 'ニュージーランド',
+  // 北米
+  'アメリカ', 'カナダ',
+  // 中米 / 南米
+  'メキシコ', 'ブラジル', 'ペルー', 'アルゼンチン',
+  // ヨーロッパ (北 / 中 / 東 / 南)
+  'デンマーク', 'ドイツ', 'イギリス', 'フランス', 'ポルトガル', 'スペイン', 'ギリシャ', 'イタリア',
+  // アフリカ / 中東
+  'エジプト', '南アフリカ',
+];
+const COUNTRY_ORDER_INDEX = Object.fromEntries(COUNTRY_ORDER.map((c, i) => [c, i]));
+
 function renderByLocation() {
   const flat = sections.flatMap(s => s.albums);
   const groups = {};
@@ -263,13 +300,30 @@ function renderByLocation() {
       if (ia !== ib) return ia - ib;
       return a.localeCompare(b);
     }
-    if (ca === 2) return groups[b].length - groups[a].length;
+    if (ca === 2) {
+      // v970.10 国外 は 大陸 順 に (日本 から 近い 順 に 東 → 西 → 遠隔)
+      const ra = COUNTRY_ORDER_INDEX[a.replace(/^✈\s+/, '')] ?? 999;
+      const rb = COUNTRY_ORDER_INDEX[b.replace(/^✈\s+/, '')] ?? 999;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    }
     return 0;
   });
-  return keys.map(k => {
+  // v970.10 国内 モード (all / jp) で は 上部 に 日本 白地図 (choropleth) を 出す。
+  //   都道府県 別 の アルバム 数 で 色分け、 タップ で 該当 セクション に スクロール。
+  let mapBlock = '';
+  if (locFilter !== 'overseas') {
+    const prefCounts = {};
+    for (const [k, arr] of Object.entries(groups)) {
+      if (PREF_TO_JIS[k]) prefCounts[k] = arr.length;
+    }
+    mapBlock = renderJpChoropleth(prefCounts);
+  }
+  const cards = keys.map(k => {
     const arr = groups[k].slice().sort((a, b) => (b.sortKey || '').localeCompare(a.sortKey || ''));
+    const anchor = PREF_TO_JIS[k] ? ` data-nkm-anchor="${PREF_TO_JIS[k]}"` : '';
     return `
-      <div class="card">
+      <div class="card"${anchor}>
         <div style="display:flex; align-items:center; gap:8px">
           <div class="bold" style="flex:1; font-size:14px">${escapeHtml(k)}</div>
           <span class="hint-sm">${arr.length} 件</span>
@@ -277,6 +331,86 @@ function renderByLocation() {
         <div class="nkm-tile-grid">${arr.map(renderAlbumTile).join('')}</div>
       </div>`;
   }).join('');
+  return mapBlock + cards;
+}
+
+// v970.10 都道府県 別 アルバム 数 を 色分け した 日本 地図 (Geolonia の SVG を 使い回し)。
+//   色 スケール (アルバム 数): 0=薄グレー、 1-2=薄紫、 3-5=紫、 6-10=濃紫、 11+=最濃紫
+function renderJpChoropleth(prefCounts) {
+  if (!cachedJpSvg) {
+    // 初回 は 非同期 fetch し、 完了 後 に 再 render (place-holder を 返す)
+    ensureJpSvgAsync();
+    return `<div class="card" id="nkm-jp-map-placeholder" style="text-align:center; color:#9ca3af; padding:20px">🗾 日本地図 を 読み込み中…</div>`;
+  }
+  const svg = cachedJpSvg.cloneNode(true);
+  svg.removeAttribute('class');
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  svg.setAttribute('style', 'display:block; width:100%; max-width:560px; margin:0 auto');
+
+  const maxCount = Math.max(...Object.values(prefCounts), 1);
+  const colorFor = (n) => {
+    if (!n) return '#f3f4f6';
+    if (n <= 2)  return '#ede4f3';
+    if (n <= 5)  return '#c4a3d6';
+    if (n <= 10) return '#7b3fa0';
+    return '#4a106d';
+  };
+  svg.querySelectorAll('g.prefecture').forEach(g => {
+    const code = parseInt(g.getAttribute('data-code') || '0', 10);
+    const prefName = Object.keys(PREF_TO_JIS).find(k => PREF_TO_JIS[k] === code) || '';
+    const n = prefCounts[prefName] || 0;
+    g.setAttribute('fill', colorFor(n));
+    g.setAttribute('stroke', n ? '#4a106d' : '#c0c0c0');
+    g.setAttribute('stroke-width', n ? '1' : '0.6');
+    g.style.cursor = n ? 'pointer' : 'default';
+    if (n) {
+      g.classList.add('nkm-map-cell');
+      g.setAttribute('data-nkm-map-code', String(code));
+      g.setAttribute('data-nkm-map-count', String(n));
+    }
+    // tooltip
+    const title = g.querySelector('title');
+    if (title) title.textContent = prefName ? `${prefName} — ${n} 件` : title.textContent;
+  });
+
+  const legendItems = [
+    ['#f3f4f6', '0'],
+    ['#ede4f3', '1-2'],
+    ['#c4a3d6', '3-5'],
+    ['#7b3fa0', '6-10'],
+    ['#4a106d', '11+'],
+  ];
+  return `
+    <div class="card" style="padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%)">
+      <div class="hint-sm" style="text-align:center; margin-bottom:4px; color:#1d4ed8">
+        🗾 都道府県 別 アルバム 分布 (最大 ${maxCount} 件) — タップ で 一覧 に スクロール
+      </div>
+      ${svg.outerHTML}
+      <div style="display:flex; gap:6px; justify-content:center; margin-top:6px; font-size:10.5px; color:#374151">
+        ${legendItems.map(([c, l]) => `
+          <span style="display:inline-flex; align-items:center; gap:3px">
+            <span style="width:12px; height:12px; background:${c}; border:1px solid #6b7280; display:inline-block"></span>${l}
+          </span>`).join('')}
+      </div>
+    </div>`;
+}
+
+let jpSvgFetching = false;
+async function ensureJpSvgAsync() {
+  if (cachedJpSvg || jpSvgFetching) return;
+  jpSvgFetching = true;
+  try {
+    const r = await fetch('/img/jp-prefectures.svg', { cache: 'force-cache' });
+    if (!r.ok) return;
+    const text = await r.text();
+    const wrap = document.createElement('div');
+    wrap.innerHTML = text;
+    cachedJpSvg = wrap.querySelector('svg');
+    // 再 render (map placeholder を 差し替え)
+    if (typeof render === 'function') render();
+  } catch (_) {}
+  jpSvgFetching = false;
 }
 
 function renderAlbumTile(a) {
@@ -375,6 +509,15 @@ function attachHandlers() {
   });
   app.querySelectorAll('[data-nkm-locfilter]').forEach(b => {
     b.addEventListener('click', () => { locFilter = b.dataset.nkmLocfilter; render(); });
+  });
+  // v970.10 choropleth 地図 の 都道府県 タップ で 該当 セクション に スクロール
+  app.querySelectorAll('.nkm-map-cell').forEach(g => {
+    g.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const code = g.getAttribute('data-nkm-map-code');
+      const target = app.querySelector(`[data-nkm-anchor="${code}"]`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   });
   const addBtn = app.querySelector('[data-nkm-add]');
   if (addBtn) addBtn.addEventListener('click', () => {
