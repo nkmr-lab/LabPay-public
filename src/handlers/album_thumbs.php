@@ -35,7 +35,16 @@ function album_thumbs_serve(PDO $pdo, array $cfg, string $hash): void {
     $st->execute([$hash]);
     $fn = $st->fetchColumn();
     if (!$fn) throw new ApiException('not_found', 'no thumb', 404);
-    $path = ALBUM_THUMBS_DIR . '/' . $fn;
+    // v966 ?size=large で 大きい版 (=w600-h315、 ~80KB) を返す。 デフォルト は 小 (~14KB)。
+    $size = (string)($_GET['size'] ?? 'small');
+    $file = $fn;
+    if ($size === 'large') {
+        $lg = preg_replace('/\.jpg$/', '_lg.jpg', $fn);
+        $lgPath = ALBUM_THUMBS_DIR . '/' . $lg;
+        if (is_file($lgPath)) $file = $lg;
+        // 大きい版 が 未生成 なら small で fallback
+    }
+    $path = ALBUM_THUMBS_DIR . '/' . $file;
     if (!is_file($path)) throw new ApiException('not_found', 'file missing', 404);
     header_remove('Cache-Control');
     header('Cache-Control: private, max-age=86400');   // 1 日
@@ -149,15 +158,49 @@ function album_thumbs_try_fetch(PDO $pdo, string $url, string $hash): bool {
         return false;
     }
 
-    // v965 Google Photos CDN の URL 末尾 「=w<W>-h<H>」 で サイズ 指定 可能。
-    //   default og:image は =w600-h315-p-k で ~80KB。 表示 は 64x48 (retina 3x で ~192px) なので
-    //   =w192-h144-p-k-no に すれば ~14KB に なる (実 測)。 CSS で さらに 縮小 されて 表示。
-    if (preg_match('#^(https://[^=?]+)#', $ogUrl, $mat) && strpos($ogUrl, 'googleusercontent.com') !== false) {
-        $ogUrl = $mat[1] . '=w192-h144-p-k-no';
+    // v966 Google Photos CDN の URL 末尾 「=w<W>-h<H>」 で サイズ 指定 可能。
+    //   小 (=w192-h144-p-k-no、 ~14KB): サムネ 表示 用。
+    //   大 (=w600-h315-p-k-no、 ~80KB): 将来 の プレビュー / モーダル 表示 用。
+    //   両方 DL して 保存 (デフォルト は 小 を 返す、 ?size=large で 大 を 返す)。
+    $isGoogle = preg_match('#^(https://[^=?]+)#', $ogUrl, $mat)
+              && strpos($ogUrl, 'googleusercontent.com') !== false;
+    $smallUrl = $isGoogle ? ($mat[1] . '=w192-h144-p-k-no') : $ogUrl;
+    $largeUrl = $isGoogle ? ($mat[1] . '=w600-h315-p-k-no') : null;
+
+    // 小 画像 DL
+    $img = album_thumbs_download($smallUrl);
+    if ($img === null) {
+        $pdo->prepare("UPDATE album_thumbs SET error_msg = ? WHERE url_hash = ?")
+            ->execute(['small image DL failed', $hash]);
+        return false;
+    }
+    $fn = $hash . '.jpg';
+    $path = ALBUM_THUMBS_DIR . '/' . $fn;
+    if (@file_put_contents($path, $img) === false) {
+        $pdo->prepare("UPDATE album_thumbs SET error_msg = ? WHERE url_hash = ?")
+            ->execute(['file write failed', $hash]);
+        return false;
+    }
+    @chmod($path, 0640);
+
+    // 大 画像 も DL (失敗 しても 小 だけ 保存 済 なので OK、 エラー は 無視)
+    if ($largeUrl !== null) {
+        $imgLg = album_thumbs_download($largeUrl);
+        if ($imgLg !== null) {
+            $lgFn = $hash . '_lg.jpg';
+            $lgPath = ALBUM_THUMBS_DIR . '/' . $lgFn;
+            if (@file_put_contents($lgPath, $imgLg) !== false) @chmod($lgPath, 0640);
+        }
     }
 
-    // 画像 ダウンロード
-    $ch = curl_init($ogUrl);
+    $pdo->prepare("UPDATE album_thumbs SET thumb_filename = ?, error_msg = NULL WHERE url_hash = ?")
+        ->execute([$fn, $hash]);
+    return true;
+}
+
+// 単発 の 画像 DL ヘルパ。 成功 で バイナリ、 失敗 で null。
+function album_thumbs_download(string $url): ?string {
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
@@ -166,24 +209,8 @@ function album_thumbs_try_fetch(PDO $pdo, string $url, string $hash): bool {
         CURLOPT_CONNECTTIMEOUT => 5,
     ]);
     $img = curl_exec($ch);
-    $imgHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($img === false || $imgHttp !== 200 || !is_string($img) || strlen($img) < 500) {
-        $pdo->prepare("UPDATE album_thumbs SET error_msg = ? WHERE url_hash = ?")
-            ->execute(['image download failed http=' . $imgHttp, $hash]);
-        return false;
-    }
-
-    // 保存
-    $fn = $hash . '.jpg';
-    $path = ALBUM_THUMBS_DIR . '/' . $fn;
-    if (@file_put_contents($path, $img) === false) {
-        $pdo->prepare("UPDATE album_thumbs SET error_msg = ? WHERE url_hash = ?")
-            ->execute(['file write failed', $hash]);
-        return false;
-    }
-    @chmod($path, 0640);   // web 直接 読み は 期待 しない (endpoint 経由)
-    $pdo->prepare("UPDATE album_thumbs SET thumb_filename = ?, error_msg = NULL WHERE url_hash = ?")
-        ->execute([$fn, $hash]);
-    return true;
+    if ($img === false || $http !== 200 || !is_string($img) || strlen($img) < 500) return null;
+    return $img;
 }
