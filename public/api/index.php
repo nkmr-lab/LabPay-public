@@ -103,6 +103,7 @@ $routes = [
     'public-codes'   => 'route_public_codes',// v941 公開機能 の 4 桁 短縮 コード
     'public-polls'   => 'route_public_polls',// v942 公開投票 (誰でも 投票)
     'album-thumbs'   => 'route_album_thumbs',// v964 Google Photos アルバム サムネ キャッシュ
+    'nkmr-albums'    => 'route_nkmr_albums', // v970 中村研 アルバム DB CRUD
     'posts'          => 'route_posts',
     'todos'          => 'route_todos',
     'sounds'         => 'route_sounds',

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-  <!-- v969 fb#469 & #471 iOS Safari 対策: input focus 時 の auto-zoom を 抑止。
+  <!-- v970 fb#469 & #471 iOS Safari 対策: input focus 時 の auto-zoom を 抑止。
        maximum-scale=1 は 現代 iOS では accessibility の ため ユーザ 手動 の ピンチズーム は
        依然 効く (Apple は accessibility 目的 で user gesture を 尊重)、 focus zoom だけ 止まる。 -->
   <meta name="theme-color" content="#4a106d">
@@ -23,7 +23,7 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <a href="#/" class="brand">LabPay <span class="brand-version" id="brand-version" style="cursor:pointer" title="バージョン履歴">v969</span></a>
+    <a href="#/" class="brand">LabPay <span class="brand-version" id="brand-version" style="cursor:pointer" title="バージョン履歴">v970</span></a>
     <script type="module">
       import { showVersionHistory } from '/js/version_history.js';
       document.getElementById('brand-version')?.addEventListener('click', (ev) => {
@@ -63,7 +63,7 @@
        (app.innerHTML = ... が走ると消える) -->
   <main id="app">
     <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
-      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v969</span></div>
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v970</span></div>
       <div style="font-size:12px; color:#666; margin-top:8px" id="splash-updated">最終更新: 取得中…</div>
       <div style="margin-top:30px">
         <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>
@@ -89,7 +89,7 @@
         // v911 #378 新 シェル が deploy された 時 に 自動 リロード し 新 app.js / 新 ルート
         //   を 取り込む。 初回 install で SW の controller が 付く ケース で 無限 ループ に
         //   なら ない よう、 既に controller が ある = 既存 セッション の 時 だけ reload。
-        // v969 従来 は SW 更新 が 走った 瞬間 に 即 location.reload() して 「他 メニュー
+        // v970 従来 は SW 更新 が 走った 瞬間 に 即 location.reload() して 「他 メニュー
         //   に 移動 した 直後 に 戻される / 重い」 症状 が あった。 修正:
         //   (a) 初期 ハッシュ (= 移動前) だった 場合 のみ reload。 既に 移動 済 なら reload
         //       せず、 タブ 切替 で 隠れた タイミング に defer。

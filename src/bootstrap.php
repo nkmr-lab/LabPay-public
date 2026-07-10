@@ -566,6 +566,7 @@ require_once __DIR__ . '/handlers/public_codes.php'; // v941 公開機能 の �
 require_once __DIR__ . '/handlers/joint.php'; // v941 合同研究会用投票
 require_once __DIR__ . '/handlers/public_polls.php'; // v942 公開投票 (誰でも 投票)
 require_once __DIR__ . '/handlers/album_thumbs.php'; // v964 Google Photos サムネ キャッシュ
+require_once __DIR__ . '/handlers/nkmr_albums.php';  // v970 中村研 アルバム CRUD
 require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';

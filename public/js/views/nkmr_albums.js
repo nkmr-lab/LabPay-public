@@ -1,520 +1,209 @@
-// v961 中村研 Google Photos アルバム集 (#/albums)。
-//   raw テキスト を parse して 年別 セクション + 各 アルバム リンク を 表示。
-//   データ更新 は 下の RAW を 差し替える だけ で OK (Cosense 側 の 記法 と 同じ)。
+// v970 中村研 アルバム。 v969 まで の RAW ハードコード → DB 化 + 追加 / 編集 / 削除。
+//   /api/nkmr-albums から fetch、 タイル 表示、 「年度別 / 新しい順 / 古い順 / 場所別」 の
+//   4 sort、 場所別 では 「🇯🇵 国内 (都道府県) / ✈ 国外 (国) / 🌏 すべて」 で フィルタ、
+//   認証済 なら 誰でも 追加 可、 自分 (or admin) の レコード だけ 編集 / 削除。
 
 import { escapeHtml } from '../router.js';
-import { post } from '../api.js';
+import { get, post, patch, del } from '../api.js';
+import { state } from '../app.js';
 
-// v964 サムネ キャッシュ (メモリ内、 タブ 開いてる 間 は 保持)。 { url: '/api/album-thumbs/photo/<hash>' | null }
-const thumbCache = {};
+// メモリ 内 キャッシュ (タブ 切替 で リセット)
+const thumbCache = {};   // { url: '/api/album-thumbs/photo/<hash>' | null }
+const countCache = {};   // { url: number | null }
 
-// ─── 生 データ (Cosense の 記法 と 同じ、 [(* YYYY] で 年 区切り、 [title url] が 各 アルバム) ─────────
-const RAW = String.raw`
-中村研アルバム
+let sections = [];       // API 応答 の sections
+let sortMode = 'section';  // section | new | old | location
+let locFilter = 'all';     // all | jp | overseas (場所別 mode 用)
+let showAddForm = false;
 
- [中村研2025年度 日常 https://photos.google.com/share/REDACTED]
- [中村研2024年度 日常 https://photos.google.com/share/REDACTED]
- [中村研2023年度 日常 https://photos.google.com/share/REDACTED]
+// ─── 都道府県 マップ (場所別 の 国内 グループ化 用) ──────────────
+// キー: タイトル 中 に 現れ得る 場所 語 / 都市 名、 値: 都道府県 名。
+// 都道府県 名 自体 (「東京」 「京都」 …) を キー にも 入れて 素通し 対応。
+const PREF_MAP = {
+  '沖縄': '沖縄県', '那覇': '沖縄県', '石垣島': '沖縄県', '宮古島': '沖縄県',
+  '北海道': '北海道', '札幌': '北海道', '函館': '北海道', '苗場': '新潟県',
+  '定山渓': '北海道', '奄美大島': '鹿児島県', '鹿児島': '鹿児島県',
+  '福岡': '福岡県', '博多': '福岡県', '北九州': '福岡県',
+  '長崎': '長崎県', '大分': '大分県', '別府': '大分県', '愛媛': '愛媛県',
+  '高知': '高知県', '愛知': '愛知県', '名古屋': '愛知県', '静岡': '静岡県', '浜松': '静岡県',
+  '京都': '京都府', '大阪': '大阪府', '兵庫': '兵庫県', '神戸': '兵庫県', '淡路島': '兵庫県',
+  '奈良': '奈良県', '和歌山': '和歌山県', '滋賀': '滋賀県', '米原': '滋賀県',
+  '三重': '三重県', '鳥羽': '三重県', '岐阜': '岐阜県', '高山': '岐阜県',
+  '東京': '東京都', '中野': '東京都', '明治大学': '東京都', '芝浦': '東京都',
+  '国士舘': '東京都', '筑波': '茨城県', '茨城': '茨城県',
+  '神奈川': '神奈川県', '横浜': '神奈川県',
+  '千葉': '千葉県', '白浜': '千葉県', '幕張': '千葉県', '埼玉': '埼玉県', '群馬': '群馬県',
+  '長野': '長野県', '八ヶ岳': '長野県', '長浜': '滋賀県',
+  '福井': '福井県', '石川': '石川県', '金沢': '石川県', '富山': '富山県',
+  '新潟': '新潟県', '山形': '山形県', '福島': '福島県', '猪苗代': '福島県',
+  '仙台': '宮城県', '宮城': '宮城県', '青森': '青森県', '岩手': '岩手県', '秋田': '秋田県',
+  '栃木': '栃木県', '日光': '栃木県', '鬼怒川': '栃木県',
+  '山梨': '山梨県', '富士Q': '山梨県', '富士急': '山梨県',
+  '広島': '広島県', '岡山': '岡山県', '山口': '山口県', '下関': '山口県',
+  '徳島': '徳島県', '香川': '香川県', '高松': '香川県',
+  '宮崎': '宮崎県', '熊本': '熊本県', '佐賀': '佐賀県',
+};
 
-[(* 2026]
- [2026年度 日常 https://photos.google.com/share/REDACTED]
- [2026.01.09 未踏、DC1、WISSおめでとう＆学振、CHIお疲れ飲み会 https://photos.google.com/share/REDACTED]
- [2026.01.13-16 HCI216@宮古島（中川、木下、宮本、能宗、村上、高野、巻野） https://photos.google.com/share/REDACTED]
- [2026.01.21-24 CN/DCC宮古島（畑中・大石・渡邊・津田・新嶌・金谷・加藤＋福井） https://photos.google.com/share/REDACTED]
- [2026.01.31 卒論発表会およびB3/M1/M2/D1進捗発表会 https://photos.google.com/share/REDACTED]
- [2026.02.07 山﨑郁未さん結婚式 https://photos.google.com/share/REDACTED]
- [2026.02.12 修論発表会および打ち上げ https://photos.google.com/share/REDACTED]
- [2026.02.28-03.02 SIGMUS＠名古屋工業大学（小川・金谷） https://photos.google.com/share/REDACTED]
- [2026.03.03-05 インタラクション2026 https://photos.google.com/share/REDACTED]
- [2026.03.09-11 CN/HCI研究会芝浦工大（福井、飯田、重松、鳩貝、徳原、野島） https://photos.google.com/share/REDACTED]
- [2026.03.11 萩原さんのバイト先訪問（小松、大石、萩原） https://photos.google.com/share/REDACTED]
- [2026.03.14-19 MVE研究会＠沖縄（會田、熊谷、関口） https://photos.google.com/share/REDACTED]
- [2026.03.26 卒業式＋学位授与式 https://photos.google.com/share/REDACTED]
- [2026.03.26 卒業式＋学位授与式 by wtnb先生 https://photos.google.com/share/REDACTED]
- [2026.03.27 卒業生が暴れる会＋追いコン https://photos.google.com/share/REDACTED]
- [2026.04.06 新歓 https://photos.google.com/share/REDACTED]
- 🇪🇸 [2026.04.11-19 CHI2026バルセロナ（三山・中川） https://photos.google.com/share/REDACTED]
- [2026.05.09 競馬 https://photos.google.com/share/REDACTED]
- [2026.05.17 牧結婚報告 https://photos.google.com/share/REDACTED]
- [2026.05.21 崔明根さん講演及び大江戸ビール祭り https://photos.google.com/share/REDACTED]
- [2026.05.28 栗林さん講演およびビール https://photos.google.com/share/REDACTED]
- [2026.06.05 菊池研とのバレーボール https://photos.google.com/share/REDACTED]
- 🇮🇹 [2026.06.07-06.14 AVI2026 ベネチア（宮崎・中川） https://photos.google.com/share/REDACTED]
- [2026.07.08 伊藤研究室との合同研究会 https://photos.google.com/share/REDACTED]
-
-[(* 2025]
- [2025年度 日常 https://photos.google.com/share/REDACTED]
- [2025.01.13-16 HCI211沖縄（村上、津田、能宗、田中、三山、大石、関口） https://photos.google.com/share/REDACTED]
- [2025.01.22-24 CN研究会＠奄美大島（萩原、飯田、福井） https://photos.google.com/share/REDACTED]
- [2025.02.12 修論発表会および打ち上げ https://photos.google.com/share/REDACTED]
- [2025.02.25 SUBARUさん4年間の打ち上げ https://photos.google.com/share/REDACTED]
- [2025.03.02-04 インタラクション2025東京（木下、関口、金谷、宮本、能宗） https://photos.google.com/share/REDACTED]
- [2025.03.05-07 HCI212/CN125東京（たかく、たかの、あおき、きのした、とくはら） https://photos.google.com/share/REDACTED]
- [2025.03.17-19 EC研究会＠京都（櫻井、小川、渡邉、重松、宮崎、鳩貝、新嶌） https://photos.google.com/share/REDACTED]
- [2025.03.18-19 長崎大学教育学部付属小学校での実験（會田、津田） https://photos.google.com/share/REDACTED]
- [2025.03.24 M2富士急 https://photos.google.com/share/REDACTED]
- [2025.03.28 卒業生が好き勝手やる会および追いコン https://photos.google.com/share/REDACTED]
- [2025.04.11 新歓 https://photos.google.com/share/REDACTED]
- [2025.04.28-05.01 CHI2025 at 横浜（関口、中川、木下） https://photos.google.com/share/REDACTED]
- [2025.05.16-18 研究室合宿 in 白浜 https://photos.google.com/share/REDACTED]
- [2025.05.23- 大江戸ビール祭り https://photos.google.com/share/REDACTED]
- [2025.05.23-24 掛川花鳥園＋浜松市動物園（中川・高野） https://photos.google.com/share/REDACTED]
- [2025.05.30-06.03 HCS研沖縄（宮本、金谷、木下） https://photos.google.com/share/REDACTED]
- [2025.06.19 伊藤研究室との合同研究会（+栗原研） https://photos.google.com/share/REDACTED]
- 🇵🇹 [2025.06.29-07.06 ICAD2025ポルト・コインブラ・リスボン（大石） https://photos.google.com/share/REDACTED]
- [2025.07.10 新D1交流会（関口、中川、他） https://photos.google.com/share/REDACTED]
- [2025.07.12 大学院入試および打ち上げ（B4） https://photos.google.com/share/REDACTED]
- [2025.07.19 OBOGとバーベキュー https://photos.google.com/share/REDACTED]
- [2025.07.24 大掃除とビアガーデン https://photos.google.com/share/REDACTED]
- [2025.08.11 豊橋総合動植物公園 のんほいパークと、浜松湖体験学習施設ウォット https://photos.google.com/share/REDACTED]
- [2025.08.21 第19回ドクター中松（関西大学松下研との合同研究会） in 明治大学中野キャンパス https://photos.google.com/share/REDACTED]
- [2025.08.26 米原市・ワコム・筑波大学・明治大学契約締結式（米原市役所） https://photos.google.com/share/REDACTED]
- [2025.08.28-29 パイロットさんハッカソン https://photos.google.com/share/REDACTED]
- [2025.09.02-05 HCI214＠北海道科学大学（菅生・三山・中川・ゲスト金谷） https://photos.google.com/share/REDACTED]
- [2025.09.09-12 KES2025 at Osaka, Japan（小林、萩原） https://photos.google.com/share/REDACTED]
- [2025.10.09-13 サンシャイン水族館 実証実験 https://photos.google.com/share/REDACTED]
- [2025.11.03-04 関西大学との合同研究会 in 関西大学とその前後 https://photos.google.com/share/REDACTED]
- [2025.11.03-04 B2京都合宿 https://photos.google.com/share/REDACTED]
- [2025.11.13-15 EC研究会 in 高知（小林） https://photos.google.com/share/REDACTED]
- 🇮🇩 [2025.11.03-09 CollabTech2025 in Depok, Indonesia（萩原、福井、飯田） https://photos.google.com/share/REDACTED]
- [2025.11.06-12 掛川花鳥園での実証実験（中川） https://photos.google.com/share/REDACTED]
- [2025.11.25-27 HCI215@淡路島（木下、三山、宮崎、田中、成瀬、江森、伊藤、関口） https://photos.google.com/share/REDACTED]
- 🇦🇺 [2025.11.28-12.04 OzCHI2025 in Sydney（小川、小林、渡邉） https://photos.google.com/share/REDACTED]
- [2025.12.03-05 WISS2025＠北海道定山渓（中川、関口、瀬崎） https://photos.google.com/share/REDACTED]
- 🇲🇾 [2025.12.08-13 ACM Multimedia Asia 2025 クアラルンプール（重松、鳩貝、中川） https://photos.google.com/share/REDACTED]
- [2025.12.09-13 HCGシンポジウム2025 in 北九州（萩原） https://photos.google.com/share/REDACTED]
-
-[(* 2024]
- [2024年度 日常 https://photos.google.com/share/REDACTED]
- [2024.01.15-18 HCI206沖縄那覇（植木、青木、高野、小林、渡邉） https://photos.google.com/share/REDACTED]
- [2024.01.19 パイロットさん懇親会 https://photos.google.com/share/REDACTED]
- [2024.01.20-24 CN研究会＠伊豆大島（小松原・畑中・高久・木下・古賀・福井） https://photos.google.com/share/REDACTED]
- [2024.01.23-24 兵庫県警（関口渡邉大石萩原） https://photos.google.com/share/REDACTED]
- [2024.01.27 卒論・B3M1M2進捗発表会＆打ち上げ https://photos.google.com/share/REDACTED]
- [2024.02.07 NEC第8回および打ち上げ https://photos.google.com/share/REDACTED]
- [2024.02.08 B3新年会 https://photos.google.com/share/REDACTED]
- [2024.02.08、16、29 NEC最終成果物作成会 https://photos.google.com/share/REDACTED]
- [2024.03.05 ハッカソンと一部の人で打ち上げ https://photos.google.com/share/REDACTED]
- [2023.03.10-11 鳥羽、名古屋、南知多の水族館巡り（中川） https://photos.google.com/share/REDACTED]
- [2024.03.12-15 MVE沖縄（青木、鳩貝、飯田） https://photos.google.com/share/REDACTED]
- [2024.03.16 長崎ペンギン水族館 https://photos.google.com/share/REDACTED]
- [2024.03.22 春休み中間ゼミ・卒業生が好き勝手やる会・追いコン https://photos.google.com/share/REDACTED]
- [2024.04.04 顔合わせとガイダンス https://photos.google.com/share/REDACTED]
- [2024.04.12 新歓 at 食堂 https://photos.google.com/share/REDACTED]
- [2024.04.19 多目的室でバレーボール https://photos.google.com/share/REDACTED]
- [2024.05.02 研究アイディア出し会と運動会 https://photos.google.com/share/REDACTED]
- [2024.05.10-12 研究室合宿 in 秩父 https://photos.google.com/share/REDACTED]
- [2024.05.12-16 HCS研沖縄（中川、松田、徳原、三山） https://photos.google.com/share/REDACTED]
- [2024.05.22, 24, 29 クラフトビール祭り https://photos.google.com/share/REDACTED]
- 🇮🇹 [2024.06.01-09 AVI2024ミラノ・ジェノバ（中川・松田） https://photos.google.com/share/REDACTED]
- [2024.07.02 すみだ水族館実験 https://photos.google.com/share/REDACTED]
- [2024.07.11 お茶の水女子大学伊藤研との合同研究会と懇親会 https://photos.google.com/share/REDACTED]
- [2024.07.13 大学院入試及び打ち上げ https://photos.google.com/share/REDACTED]
- [2024.07.21-24 HCI209北海道（木下） https://photos.google.com/share/REDACTED]
- [2023.07.26 小松原および卒業生 https://photos.google.com/share/REDACTED]
- [2024.08.01 中野区役所とのアイディアソン https://photos.google.com/share/REDACTED]
- [2024.08.02-03 オープンキャンパス https://photos.google.com/share/REDACTED]
- [2024.08.07-08 ハッカソン Sponsored By パイロットさん https://photos.google.com/share/REDACTED]
- [2024.08.21 サンシャイン水族館下調べ https://photos.google.com/share/REDACTED]
- [2024.08.22 松下研究室との合同研究会 https://photos.google.com/share/REDACTED]
- [2024.08.23-25 HCS研＠兵庫県立大学（萩原、小林、金谷、宮本）とちょっと小松原 https://photos.google.com/share/REDACTED]
- [2024.09.01-04 エンタテイメントコンピューティング2024 at 北海道情報大学（中川） https://photos.google.com/share/REDACTED]
- [2024.09.07 土屋駿貴くん、久保田夏美さん結婚式および披露宴、そして二次会 https://photos.google.com/share/REDACTED]
- 🇪🇸 [2024.09.09-17 KES2024 & CollabTech2024 in Spain （高野・櫻井・中川・木下・田中） https://photos.google.com/share/REDACTED]
- [2024.09.24 B4親睦会 in 富士Q https://photos.google.com/share/REDACTED]
- [2024.09.27 東京ゲームショー2024幕張メッセ https://photos.google.com/share/REDACTED]
- [2024.09.30 夏の終わりのビアガーデン https://photos.google.com/share/REDACTED]
- [2024.10.15 ギガクリスタ10周年イベント https://photos.google.com/share/REDACTED]
- [2024.10.15-21 サンシャイン水族館実証実験（中川ほか） https://photos.google.com/share/REDACTED]
- [2024.11.04-06 関西大学との合同研究会および関西でのフィールドワーク https://photos.google.com/share/REDACTED]
- [2024.12.10-13 WISS前泊とWISS2024苗場（関口） https://photos.google.com/share/REDACTED]
- [2024.12.10-13 HCGシンポジウム2024金沢（あいた、なるせ、萩原） https://photos.google.com/share/REDACTED]
- [2024.12.20 卒論修論提出および忘年会 https://photos.google.com/share/REDACTED]
-
-[(* 2023]
- [2023.01.15-18 HCI201＠石垣島（B2+B4+萩原大石渡邉小川+植木伊藤横山） https://photos.google.com/share/REDACTED]
- [2023.01.23-25 GN研究会＠南あわじ（髙久、畑中、古賀） https://photos.google.com/share/REDACTED]
- [2023.01.28 卒論発表会兼、B3/M1/M2進捗発表会、んでもって打ち上げ https://photos.google.com/share/REDACTED]
- [2023.02.12 修論諮問会と打ち上げ＠845 https://photos.google.com/share/REDACTED]
- [2023.03.11 ニュースアプリ配信打ち上げ at tsuiteru（関口、中川） https://photos.google.com/share/REDACTED]
- [2023.03.12-13 コミック工学研究会 at 大阪（伊藤、櫻井、濱野） https://photos.google.com/share/REDACTED]
- [2023.03.13-15 HCI研@国士舘大学（船崎、松田、小川） https://photos.google.com/share/REDACTED]
- [2023.03.14-17 MVE研@那覇市（福井、髙久） https://photos.google.com/share/REDACTED]
- [2023.03.26 明治大学卒業式・学位授与式 https://photos.google.com/share/REDACTED]
- [2023.04.06 中村研初回ゼミ＋お菓子会＋飲み会 https://photos.google.com/share/REDACTED]
- [2023.05.11 瀬崎・松田ケーキ対決 https://photos.google.com/share/REDACTED]
- [2023.05.14-17 HCS 5月研究会＠沖縄（中川、松田、木下、渡邉） https://photos.google.com/share/REDACTED]
- [2023.05.19-21 研究室合宿＠伊豆高原 https://photos.google.com/share/REDACTED]
- [2023.06.05 ビアガーデン https://photos.google.com/share/REDACTED]
- [2023.06.09 運動会（大縄跳び） https://photos.google.com/share/REDACTED]
- [2023.06.15 お茶大伊藤研との合同研究会 https://photos.google.com/share/REDACTED]
- [2023.06.30 バレーボール大会 https://photos.google.com/share/REDACTED]
- [2023.07.03 ショートビアガーデン https://photos.google.com/share/REDACTED]
- [2023.07.08 大学院入試終わりのBBQ（B4 only） https://photos.google.com/share/REDACTED]
- 🇩🇰 [2023.07.23-30 HCII2023@コペンハーゲン（木下、中川、関口、青木ゆ、山﨑、植木、小松原） https://photos.google.com/share/REDACTED]
- [2023.08.02-03 オープンキャンパス https://photos.google.com/share/REDACTED]
- [2023.08.06-10 北海道情報大学湯村研・伊藤研との合同研究会＆HCI204@北海道（たくさん） https://photos.google.com/share/REDACTED]
- [2023.08.28 パイロットさんアイディアソン https://photos.google.com/share/REDACTED]
- [2023.08.29 関西大学松下研との合同研究会 https://photos.google.com/share/REDACTED]
- 🇬🇷 [2023.09.04-11 KES2023 at アテネ（高久、青木と、娘） https://photos.google.com/share/REDACTED]
- [2023.09.10-12 HCS研究会 in 愛媛（植木、青木ゆ、徳原、三山、瀬崎） https://photos.google.com/share/REDACTED]
- [2023.09.19 パイロットさんアイディアソン2日目 https://photos.google.com/share/REDACTED]
- [2023.10.05 NECさんとの共同研究キックオフ https://photos.google.com/share/REDACTED]
- [2023.10.13 すみだ水族館実験大会 https://photos.google.com/share/REDACTED]
- [2023.10.13 SUBARUさん（松田、中川ほか） https://photos.google.com/share/REDACTED]
- [2023.11.02 サンシャイン水族館とNECアイディアソン https://photos.google.com/share/REDACTED]
- [2023.11.05-07 B2京都合宿 https://photos.google.com/share/REDACTED]
- [2023.11.05-07 ドクター中松＠六甲＆京都合宿（B3+B4+M1+小松原） https://photos.google.com/share/REDACTED]
- [2023.11.16 AdobeMax講演 https://photos.google.com/share/REDACTED]
- [2023.11.20-22 HCI205 in 淡路島（中川、重松、大石、小林） https://photos.google.com/share/REDACTED]
- [2023.11.29 警視庁へ遠足 https://photos.google.com/share/REDACTED]
- [2023.11.29-12.01 WISS2023@八ヶ岳（関口、古賀） https://photos.google.com/share/REDACTED]
- [2023.12.01-07 OzCHI2023@Wellington（山﨑、中川、福井） https://photos.google.com/share/REDACTED]
- [2023.12.10-13 HCGシンポジウム2023@北九州（中村りょうた、櫻井、宮崎） https://photos.google.com/share/REDACTED]
- [2023.11.27-12.16 色んな県の県警本部訪問 https://photos.google.com/share/REDACTED]
- [2023.12.16 OBとの忘年会 https://photos.google.com/share/REDACTED]
- [2023.12.22 卒論修論締め切りと忘年会 https://photos.google.com/share/REDACTED]
-
-[(* 2022]
- [2022.03.06-08 京都アイディアソン合宿 https://photos.google.com/share/REDACTED]
- [2022.03.26 卒業式 https://photos.google.com/share/REDACTED]
- [2022.04.19 SUBARU https://photos.google.com/share/REDACTED]
- [2022.05.14 4期生修了おめでとさん会 https://photos.google.com/share/REDACTED]
- [2022.06.01 すみだ水族館 https://photos.google.com/share/REDACTED]
- [2022.06.02 中村研運動会 https://photos.google.com/share/REDACTED]
- [2022.06.03-05 鬼怒川合宿 https://photos.google.com/share/REDACTED]
- [2022.06.08 サンシャイン水族館 https://photos.google.com/share/REDACTED]
- [2022.07.07 お茶の水女子大学伊藤研究室との合同研究会 https://photos.google.com/share/REDACTED]
- [2022.08.08-12 中村研夏ハッカソン https://photos.google.com/share/REDACTED]
- 🇨🇦 [2022.08.19-24 MANPU2022 モントリオール（櫻井一人旅） https://photos.google.com/share/REDACTED]
- [2022.08.20-25 HCI研＠小樽（M2+小松原+青木ゆ） https://photos.google.com/share/REDACTED]
- [2022.08.31-09.03 エンタテイメントコンピュティング2022（藤原・濱野・小松原） https://photos.google.com/share/REDACTED]
- 🇮🇹 [2022.09.05-13 KES2022 at イタリアベローナ・ミラノ・コモ湖（松田） https://photos.google.com/share/REDACTED]
- [2022.11.04-06 ドクター中松（関西大学松下研との合同研究会）（横山＋B3～M1） at 関西大学 https://photos.google.com/share/REDACTED]
- [2022.11.07-09 HCI200淡路島夢舞台（横山、梶田、山﨑、高野、松田、木下） https://photos.google.com/share/REDACTED]
- [2022.11.17 首腰肩のケアのワークショップ（まにわ先生）と運動会@多目的室 https://photos.google.com/share/REDACTED]
- [2022.11.23 スマートフォンアプリコンテスト https://photos.google.com/share/REDACTED]
- 🇦🇺 [2022.11.28-12.04 OzCHI2022 キャンベラ・シドニー（梶田、中川、中村） https://photos.google.com/share/REDACTED]
- [2022.12.13-16 HCGシンポジウム2022@高松（りょうた、植木、小林） https://photos.google.com/share/REDACTED]
- [2022.12.16 卒論修論締め切りと打ち上げ https://photos.google.com/share/REDACTED]
- [2022.12.22 年末運動会 https://photos.google.com/share/REDACTED]
-
-[(* 2021]
- [2021.03.26-卒業式 https://photos.google.com/share/REDACTED]
- [2021.03.26 学位授与式 https://photos.google.com/share/REDACTED]
- [2021.03.26 3期生修了おめでとさん会＠カタリナ https://photos.google.com/share/REDACTED]
- [2021.11.30-12.01 HCI195@淡路島 https://photos.google.com/share/REDACTED]
-
-[(* 2020]
- [2020.01.14-17 HCI186＠石垣島（髙橋、佐々木、古市、細谷、田村） https://photos.google.com/share/REDACTED]
- [2020.01.22-01.25 GN研究会 隠岐島（菅野・斎藤光・樋川・徳久） https://photos.google.com/share/REDACTED]
- [2020.02.12 2期生修論お疲れさん会 https://photos.google.com/share/REDACTED]
- [2020.03.23-卒業式 https://photos.google.com/share/REDACTED]
- [2020.12.07-10 HCI研＠淡路島（山﨑・青木・植木） https://photos.google.com/share/REDACTED]
-
-[(* 2019]
- 🇬🇷 [2019.01.07-14 MMM2019＠ギリシャ（田村，斉藤） https://photos.google.com/share/REDACTED]
- [2019.01.20-26 HCI181 ＆ DCC GN106＠石垣島（細谷，佐々木，松井，新納，徳久，田島，高橋，土屋，今城） https://photos.google.com/share/REDACTED]
- [2019.01.31 卒論提出完了！（B4） https://photos.google.com/share/REDACTED]
- [2019.02.01 修士論文発表会および打ち上げの腕相撲大会 in 鳥貴族（M2） https://photos.google.com/share/REDACTED]
- [2019.02.02 卒論発表会・修論報告会・B2/B3/M1進捗報告会および懇親会 https://photos.google.com/share/REDACTED]
- [2019.02.09 修士論文印刷版提出 https://photos.google.com/share/REDACTED]
- [2019.02.26 中野区長から賞状をもらう（土屋・白鳥・田島） https://photos.google.com/share/REDACTED]
- [2019.03.04-06 DEIM2019@ハウステンボス https://photos.google.com/share/REDACTED]
- [2019.03.21 1期生追いコン https://photos.google.com/share/REDACTED]
- [2019.03.26 卒業式（修士1期生&学士3期生） https://photos.google.com/share/REDACTED]
- [2019.04.16 新歓＠炙谷 https://photos.google.com/share/REDACTED]
- [2019.05.04 中村研1期生を招いて＠中村家 https://photos.google.com/share/REDACTED]
- [2019.05.15-18 HCS2019@沖縄（梶田、杉本、伊藤、濱野、築館、川島、一平、野中、細谷、阿部、徳久、山浦） https://photos.google.com/share/REDACTED]
- [2019.05.16-17 HCS研究会＠那覇 https://photos.google.com/share/REDACTED]
- [2019.05.21 聖マリアンナ医科大学調査 https://photos.google.com/share/REDACTED]
- [2019.05.24-26 研究室合宿 in 猪苗代（レイクサイド磐光） https://photos.google.com/share/REDACTED]
- [2019.06.29 お茶の水女子大学伊藤貴之研究室との合同研究会 https://photos.google.com/share/REDACTED]
- [2019.07.10 B2懇親会 https://photos.google.com/share/REDACTED]
- [2019.07.19 グループホームあさがやでのシステム検証 https://photos.google.com/share/REDACTED]
- [2019.07.21-24 HCI184＠札幌（山浦・又吉・二宮・横山・徳久） https://photos.google.com/share/REDACTED]
- [2019.07.30 中村研前期打ち上げ＠ばらえ亭 https://photos.google.com/share/REDACTED]
- [2018.08.05-09 ACCEL集中ハッカソン https://photos.google.com/share/REDACTED]
- [2019.08.06-07 ACCELリーダー合宿＠つくば https://photos.google.com/share/REDACTED]
- [2019.08.20-21 オープンキャンパス2019 https://photos.google.com/share/REDACTED]
- [2019.08.26 中村研・松下研合同研究会（明治大学） https://photos.google.com/share/REDACTED]
- 🇨🇾 [2019.08.30-09.08 INTERACT2019＠キプロス（佐々木・細谷・古市・中村） https://photos.google.com/share/REDACTED]
- [2019.09.02-05 HIS2019＠京都（濱野・船﨑・菅野・山浦） https://photos.google.com/share/REDACTED]
- 🇹🇼 [2019.09.17-21 関西大学・国立曁南国際大学・南開科技大學合同ワークショップ＠台湾（M1+M2+野中） https://photos.google.com/share/REDACTED]
- [2019.09.19-22 EC2019@福岡 https://photos.google.com/share/REDACTED]
- [2019.09.20-22 EC2019@福岡(藤原・南里・古市・木頃) https://photos.google.com/share/REDACTED]
- [2019.09.25-27 WISS2019@長野（樋川・又吉） https://photos.google.com/share/REDACTED]
- [2019.10.25-27 第2回コミック工学@函館（阿部・松山・二宮） https://photos.google.com/share/REDACTED]
- [2019.11.06~11.07 中松研究会＠関西大（学部生＋徳久） https://photos.google.com/share/REDACTED]
- [2019.11.07 ドクター中松 https://photos.google.com/share/REDACTED]
- 🇵🇪 [2019.11.09-16 ICEC-JCSG2019 in ペルー・アレキパ（徳久，野中） https://photos.google.com/share/REDACTED]
- [2019.12.10-12.11 SIGHCI185@淡路島（神山、山浦、船﨑、梶田、伊藤、瀬戸） https://photos.google.com/share/REDACTED]
- [2019.12.20 卒論・修論締め切りと忘年会 https://photos.google.com/share/REDACTED]
-
-[(* 2018]
- [2018.01.21-23 SIGHCI176@琉球大学（斉藤、佐々木、佐藤、新納、松井） https://photos.google.com/share/REDACTED]
- [2018.02.01 宮下研中村研合同発表会 https://photos.google.com/share/REDACTED]
- [2018.02.13 M1飲み会＠ぢどりや https://photos.google.com/share/REDACTED]
- [2018.02.27 修士・修士進学組第進捗報告会打ち上げ＠炙谷 https://photos.google.com/share/REDACTED]
- [2018.03.13 白鳥裕士山下記念賞授賞式 https://photos.google.com/share/REDACTED]
- [2018.03.16 SIGEC47＠電気通信大学（斉藤、佐藤、牧） https://photos.google.com/share/REDACTED]
- [2018.03.16 Inkathon(又吉) https://photos.google.com/share/REDACTED]
- [2018.03.16-17 情報処理学会HCI研究会（山浦，阿部，福地）＆学生奨励賞表彰式（松井）＠明治大学 https://photos.google.com/share/REDACTED]
- [2018.03.19-20 SIGGN104＠筑波大学（樋川，松田） https://photos.google.com/share/REDACTED]
- [2018.03.24 中村研2017年度謝恩会_さらば福地翼,久保田夏美 https://photos.google.com/share/REDACTED]
- [2018.03.26 学位授与式・謝恩会（2期生B4） https://photos.google.com/share/REDACTED]
- [2018.04.23 中村研新歓B3・B4・M1・M2＠炙谷 https://photos.google.com/share/REDACTED]
- [2018.05.20-23 HCS研究会＠沖縄（高橋，田島，大野） https://photos.google.com/share/REDACTED]
- [2018.05.25-27 ゼミ合宿@千葉県白浜 https://photos.google.com/share/REDACTED]
- 🇮🇹 [2018.05.28-06.03 AVI2018 in イタリアローマ・チヴィタなど（松田、又吉） https://photos.google.com/share/REDACTED]
- [2018.06.05-08 JSAI2018@鹿児島（佐藤、牧、斉藤） https://photos.google.com/share/REDACTED]
- [2018.06.14-15@東大 HCI178（佐々木、徳久） https://photos.google.com/share/REDACTED]
- [2018.06.23 お茶の水女子大学伊藤貴之研究室との合同研究会＠明治大学 https://photos.google.com/share/REDACTED]
- [2018.07.03 ビアガーデン https://photos.google.com/share/REDACTED]
- 🇺🇸 [2018.07.16-22 HCII2018＠ラスベガス（樋川，山浦，牧，光） https://photos.google.com/share/REDACTED]
- [2018.07.31 修士論文中間報告会・打ち上げ（M2・阿部・B3）＠炙谷 https://photos.google.com/share/REDACTED]
- [2018.08.06-08.10 ACCEL集中ハッカソン https://photos.google.com/share/REDACTED]
- [2018.08.20-21 SIGHCI179@京都（田島、細谷、山浦） https://photos.google.com/share/REDACTED]
- [2018.08.21-22 オープンキャンパス https://photos.google.com/share/REDACTED]
- [2018.09.04-07 HIS2018（今城・いっぺい・新納）@筑波 https://photos.google.com/share/REDACTED]
- 🇵🇹 [2018.09.04-10 ポルトガル・リスボン・シントラ・ロカ岬（土屋・白鳥・佐々木） https://photos.google.com/share/REDACTED]
- [2018.09.13-15 B2合宿＠京都鍵屋荘 https://photos.google.com/share/REDACTED]
- [2018.09.22-24 VIP2018 https://photos.google.com/share/REDACTED]
- [2018.11.03-05 関西大合同合宿 https://photos.google.com/share/REDACTED]
- [2018.12.04-05 HCI180@淡路島（松山、桑原、田島、高橋） https://photos.google.com/share/REDACTED]
- [2018.12.26 GN/DCC投稿打ち上げ https://photos.google.com/share/REDACTED]
- [2018.12.21-22 EC50@函館（阿部・野中・古市） https://photos.google.com/share/REDACTED]
-
-[(* 2017]
- [2017.01.22-24 SIGHCI171@石垣島（前島・松井・松田） https://photos.google.com/share/REDACTED]
- [2017.01.28 卒論合同発表会 https://photos.google.com/share/REDACTED]
- [2017.02.16 中村研B2打ち上げ＠塩ホルモンさとう https://photos.google.com/share/REDACTED]
- [2017.02.27 久保田夏美学生奨励賞 https://photos.google.com/share/REDACTED]
- [2017.03.10-11 GN101@玉川大学（佐藤・田村・新納） https://goo.gl/photos/REDACTED]
- 🇨🇾 [2017.03.12-17 IUI2017キプロス・ロンドン（中村） https://photos.google.com/share/REDACTED]
- [2017.03.22 中村研2016年度お疲れさま会＋謝恩会（中村・B4・B3）＠中野 https://photos.google.com/share/REDACTED]
- [2017.03.26 学位授与式・謝恩会（1期生B4） https://photos.google.com/share/REDACTED]
- [2017.04.07 新B1（5期生） https://photos.google.com/share/REDACTED]
- [2017.04.14-15 ACCEL合宿＠伊東 https://photos.google.com/share/REDACTED]
- [2017.04.17 中村研新歓B3・B4・M1＠めりはり屋 https://photos.google.com/share/REDACTED]
- [2017.04.27 中村研B1，B2，B3，B4，M1懇親会（中野キャンパス） https://photos.google.com/share/REDACTED]
- [2017.05.12-14 ゼミ合宿@那須 https://goo.gl/photos/REDACTED]
- [2017.05.14-18 HCS研究会@沖縄（土屋、久保田） https://goo.gl/photos/REDACTED]
- [2017.05.23-26 JSAI2017@名古屋（牧・斉藤絢） https://goo.gl/photos/REDACTED]
- [2017.05.30 中村研1年次の三期生＠ツイテル https://photos.google.com/share/REDACTED]
- [2017.06.17 津田塾とのハッカソン https://photos.google.com/share/REDACTED]
- 🇵🇹 [2017.06.18-25 INTETAIN2017@マディラ島（新納・中村） https://photos.google.com/share/REDACTED]
- [2017.06.22 第2回nkmr研釣り大会@奥多摩 https://goo.gl/photos/REDACTED]
- [2017.06.25 中村研・伊藤研合同研究会＠お茶の水女子大学 https://goo.gl/photos/REDACTED]
- [2017.07.07-08 WI2研究会＠京都大学（又吉、斉藤、中村） https://goo.gl/photos/REDACTED]
- [2017.07.14 富士急ハイランド https://photos.google.com/share/REDACTED]
- [2017.07.25-26 はこだて未来大学（中村、斉藤） https://photos.google.com/share/REDACTED]
- [2017.08-09 CVIM209@札幌（上西・前島・阿部・土屋・今城） https://photos.google.com/share/REDACTED]
- [2017.08.22-23 オープンキャンパスと打ち上げ https://photos.google.com/share/REDACTED]
- [2017.08.23-24 HCI174研究会＠京都（佐々木、田島、松田） https://goo.gl/photos/REDACTED]
- [2017.08.28-30 ドクター中松＠関西大学（B3、B4、M1） https://photos.google.com/share/REDACTED]
- [2017.08.31-09.01 イノベーションジャパン＠ビッグサイト（中村、久保田、又吉） https://photos.google.com/share/REDACTED]
- [2017.09.15-17 VIP2017 https://photos.google.com/share/REDACTED]
- [2017.09.16-18 EC2017@仙台（松田、松井、佐藤） https://photos.google.com/share/REDACTED]
- [2017.11.01-02 SIGHCI175@淡路島（松井、神山、山浦、福地、高橋） https://photos.google.com/share/REDACTED]
- [2017.11.11-12 Songleハッカソン https://photos.google.com/share/REDACTED]
- [2017.11.15 中村研B1懇親会 https://photos.google.com/share/REDACTED]
- 🇦🇺 [2017.11.27-12.04 OzCHI2017 at Brisbane（田島） https://photos.google.com/share/REDACTED]
- 🇰🇭 [2017.12.10-15 ACIS2017 at プノンペン（牧） https://photos.google.com/share/REDACTED]
- [2017.12.19 肉会＠新中野かぶり（稲見先生，簗瀬さん，又吉） https://photos.google.com/share/REDACTED]
- [2017.12.20 忘年会＆卒論初稿お疲れさん会＠炙谷＆門田ビル（B3, B4, M1） https://photos.google.com/share/REDACTED]
-
-[(* 2016]
- [2016.02.09 中村研・宮下研合同研究発表会 https://goo.gl/photos/REDACTED]
- [2016.02.22 B2＆B3合同飲み会＠青鋼 https://goo.gl/photos/REDACTED]
- [2016.02.29-03.02 DEIM2016＠博多（中村・今城・白鳥・土屋・田島・前島） https://goo.gl/photos/REDACTED]
- [2016.03.22-24 中村研究室 冬の遊び合宿（B3）＠群馬県片品村 https://photos.google.com/share/REDACTED]
- [2016.05.06 中村研究室B1～B4懇親会＠中野キャンパス https://goo.gl/photos/REDACTED]
- [2016.06.04-05 中村研究室B3_B4 研究着手合宿＠伊東山喜旅館 https://photos.google.com/share/REDACTED]
- [2016.06.06-09 JSAI2016＠福岡（新納） https://goo.gl/photos/REDACTED]
- [2016.06.15 中村先生誕生祭@研究室 https://photos.google.com/share/REDACTED]
- [2016.06.25 中村研・伊藤研合同研究会＠中野キャンパス https://goo.gl/photos/REDACTED]
- [2016.07.02 津田塾稲葉ゼミ・栗原ゼミとのアイディアソン・ハッカソン＠中野キャンパス https://goo.gl/photos/REDACTED]
- [2016.07.13 大学院入試お疲れさん会＠青鋼 https://photos.google.com/share/REDACTED]
- [2016.08.10-11 上越教育大学（中村・鈴木・新納・斉藤・久保田） https://goo.gl/photos/REDACTED]
- [2016.08.27 OngaCRESTシンポジウム＠明治大学中野キャンパス https://photos.google.com/share/REDACTED]
- [2016.08.29-30 SIGHCI169＠下関（山浦・斉藤・久保田・福地・樋川） https://photos.google.com/share/REDACTED]
- [2016.09.01 ドクター中松@明治大学中野キャンパス https://goo.gl/photos/REDACTED]
- [2016.09.02 サテライトオフィス探しのための内見 https://goo.gl/photos/REDACTED]
- [2016.09.12 BBQ@吉祥寺 https://photos.google.com/share/REDACTED]
- [2016.09.13 高円寺南・門田ビル内見 https://goo.gl/photos/REDACTED]
- [2016.09.17-19 中村研究室B2 夏合宿＠京都鍵屋荘（B2） https://goo.gl/photos/REDACTED]
- [2016.09.24 中村研・栗原研合同研究会@中野キャンパス https://goo.gl/photos/REDACTED]
- [2016.10.29-31 はこだて未来大学での合同研究会（B3＆B4） https://photos.google.com/share/REDACTED]
- [2016.11.05 門田ビル新居記念飲み会 https://photos.google.com/share/REDACTED]
- [2016.11.18-19 グループウェアとネットワークサービスワークショップ2016（阿部、今城、土屋） https://goo.gl/photos/REDACTED]
- 🇲🇽 [2016.12.04-08 MANPU2016 @ メキシコ・カンクン・チェチェンイッツァ （中村・久保田・新納） https://goo.gl/photos/REDACTED]
- [2016.12.14-16 WISS2016＠長浜（中村、樋川、久保田、福地、田島、新納、又吉、萩原） https://goo.gl/photos/REDACTED]
- [2016.12.22 中村研究室忘年会（B3＆B4）＠青鋼 https://photos.google.com/share/REDACTED]
-
-[(* 2015]
- [2015.03.10 中村研究室打ち上げ飲み会 https://goo.gl/photos/REDACTED]
- [2015.04.14 B3新歓＠塩ホルモンさとう https://goo.gl/photos/REDACTED]
- [2015.04.28 中村研究室 B1~B3合同新歓 https://goo.gl/photos/REDACTED]
- [2015.05.23-24 B3スタートアップ伊東合宿 https://goo.gl/photos/REDACTED]
- [2015.07.12 アイディアソン＋ハッカソン with 津田塾稲葉研究室、栗原研究室 https://goo.gl/photos/REDACTED]
- [2015.08.19-20 明治大学オープンキャンパス https://goo.gl/photos/REDACTED]
- [2015.08.24 ドクター中松＠明治大学中野キャンパス https://goo.gl/photos/REDACTED]
- [2015.08.31-09.02 音楽情報処理研究会 SIGMUS108（中村・大野・土屋） https://goo.gl/photos/REDACTED]
- [2015.09.18-20 中村研究室B2 京都夏合宿（2015） https://goo.gl/photos/REDACTED]
- [2015.09.24-28 エンタテイメントコンピューティング2015＠札幌（中村・佐藤・田村・新納・牧・松井・松田・鈴木先生） https://goo.gl/photos/REDACTED]
- [2015.10.02-03 SIGGN96（グループウェアとネットワークサービス研究会）＠岐阜高山（中村・土屋・白鳥・田島） https://goo.gl/photos/REDACTED]
- [2015.10.03-04 OngaCREST合宿＠浜名湖（中村・宮下・大野・松田・新納） https://goo.gl/photos/REDACTED]
- [2015.10.12 中村研究室B3 夏休みの諸々の投稿・発表おつかれさん会＆これから投稿頑張ってね懇親会（Tsuiteruポイント精算会） https://goo.gl/photos/REDACTED]
- [2015.11.01-03 B3京都合宿（三都物語）鍵屋荘研究会、ドクター中松＠関西大、SIGGRAPH ASIA＠神戸 https://goo.gl/photos/REDACTED]
- [2015.11.02 ドクター中松＠関西大学 https://goo.gl/photos/REDACTED]
- [2015.11.26 丈ちゃん（中村・牧・新納・松田） https://goo.gl/photos/REDACTED]
- [2015.11.29-12.03 HCI165回研究会＋WISS2015＠別府（中村，神山） https://goo.gl/photos/REDACTED]
- [2015.12.16-12-18 HCGシンポジウム2015（中村・松田） https://goo.gl/photos/REDACTED]
-
-[(* 過去のもの]
- [2010.11.05 ドクター中松（初回）関西大学 https://photos.google.com/share/REDACTED]
- [2011.11.20 ドクター中松（第2回） at 京都大学 https://photos.google.com/share/REDACTED]
- [2012.11.24 第3回ドクター中松 at 京都リサーチパーク＆鍵屋荘 https://photos.google.com/share/REDACTED]
-`;
-
-// ─── Parse: 「[(* SECTION]」 で 区切って、 各 セクション 内 の 「[title url]」 行 を 抽出 ────────
-// v969 タイトル 先頭 の YYYY.MM.DD (or YYYY.MM) を 日付 として 抽出。 セクション 順 用 の
-//       row index も 保持 (RAW 内 の 元 の 並び を 保つ ため の tie-break)。
-function parseAlbums(raw) {
-  const sections = [];
-  let cur = { title: '中村研アルバム', albums: [] };
-  sections.push(cur);
-  const lines = raw.split(/\r?\n/);
-  const secRe   = /^\[\(\*\s*(.+?)\s*\]/;
-  const albumRe = /\[(.+?)\s+(https?:\/\/\S+?)\]/;
-  let idx = 0;
-  for (const line of lines) {
-    const sm = line.match(secRe);
-    if (sm) {
-      cur = { title: sm[1], albums: [] };
-      sections.push(cur);
-      continue;
-    }
-    const am = line.match(albumRe);
-    if (am) {
-      const flagMatch = line.match(/^\s*([\p{Emoji_Presentation}\u{1F1E6}-\u{1F1FF}]+)/u);
-      const flag = flagMatch ? flagMatch[1] : '';
-      const title = am[1];
-      // 日付 抽出: 2026.07.08 / 2026.07 / 2026 (数字 の 先頭 パターン)
-      // 「YYYY.MM.DD」 → sortKey = 'YYYY-MM-DD'
-      // 「YYYY.MM」    → 'YYYY-MM-01'
-      // 「YYYY年度 日常」 の ような 汎用 は 'YYYY-00-00' として セクション 冒頭 相当
-      let sortKey = '';
-      const dm = title.match(/^(\d{4})\.(\d{2})(?:\.(\d{2}))?/);
-      if (dm) {
-        sortKey = `${dm[1]}-${dm[2]}-${dm[3] || '01'}`;
-      } else {
-        const ym = title.match(/(\d{4})\s*年度/);
-        if (ym) sortKey = `${ym[1]}-00-00`;
-      }
-      cur.albums.push({ title, url: am[2], flag, sortKey, idx: idx++ });
-    }
-  }
-  return sections.filter(s => s.albums.length);
+// 国旗 絵文字 (regional indicator) → ISO2 → 表示 用 国名
+function flagToCountry(flag) {
+  if (!flag) return null;
+  // regional indicator 2 文字 の 場合
+  const codes = Array.from(flag).map(ch => ch.codePointAt(0)).filter(cp => cp >= 0x1F1E6 && cp <= 0x1F1FF);
+  if (codes.length < 2) return null;
+  const iso = String.fromCharCode(0x41 + (codes[0] - 0x1F1E6)) + String.fromCharCode(0x41 + (codes[1] - 0x1F1E6));
+  const map = { US:'アメリカ', IT:'イタリア', PT:'ポルトガル', ES:'スペイン', CY:'キプロス',
+                DK:'デンマーク', GR:'ギリシャ', ID:'インドネシア', MY:'マレーシア', AU:'オーストラリア',
+                KH:'カンボジア', PE:'ペルー', CA:'カナダ', TW:'台湾', MX:'メキシコ', NZ:'ニュージーランド',
+                DE:'ドイツ', FR:'フランス', UK:'イギリス', GB:'イギリス', CN:'中国', KR:'韓国',
+                IN:'インド', TH:'タイ', VN:'ベトナム', PH:'フィリピン', BR:'ブラジル', AR:'アルゼンチン' };
+  return map[iso] || iso;
 }
 
-// UI 状態 (メモリ 保持、 タブ 切替 で リセット)
-let openState = null;   // { [sectionTitle]: bool }
-let sortMode  = 'section';  // 'section' | 'new' | 'old'
-// v969 サムネ 追加分 の 情報 (photo_count)
-const countCache = {};   // { url: N | null }
+// タイトル/location 文字列 から 都道府県 名 を 推定 (国内 の 場合)
+function guessPrefecture(album) {
+  const candidates = [album.location, album.title].filter(Boolean);
+  for (const cand of candidates) {
+    for (const key of Object.keys(PREF_MAP)) {
+      if (cand.indexOf(key) >= 0) return PREF_MAP[key];
+    }
+  }
+  return '(場所不明)';
+}
+
+// タイトル 先頭 の YYYY.MM.DD → sortKey
+function extractSortKey(title) {
+  const dm = title.match(/^(\d{4})\.(\d{2})(?:\.(\d{2}))?/);
+  if (dm) return `${dm[1]}-${dm[2]}-${dm[3] || '01'}`;
+  const ym = title.match(/(\d{4})\s*年度/);
+  if (ym) return `${ym[1]}-00-00`;
+  return '';
+}
+
+async function fetchAlbums() {
+  const r = await get('/api/nkmr-albums');
+  sections = (r.sections || []).map(sec => ({
+    title: sec.title,
+    albums: (sec.albums || []).map(a => ({ ...a, sortKey: extractSortKey(a.title) })),
+  }));
+}
 
 export async function renderNkmrAlbums() {
   const app = document.getElementById('app');
-  const sections = parseAlbums(RAW);
-  if (openState === null) {
-    openState = {};
-    sections.slice(0, 3).forEach(s => { openState[s.title] = true; });
+  app.innerHTML = `<div class="card">📸 中村研アルバム を 読み込み中…</div>`;
+  try {
+    await fetchAlbums();
+  } catch (e) {
+    app.innerHTML = `<div class="card">⚠ 読み込み 失敗: ${escapeHtml(e.message || String(e))}</div>`;
+    return;
   }
-  const totalAlbums = sections.reduce((n, s) => n + s.albums.length, 0);
-
-  const render = () => {
-    const isFlat = sortMode !== 'section';
-    let flatAlbums = null;
-    if (isFlat) {
-      flatAlbums = sections.flatMap(s => s.albums.map(a => ({ ...a, _sec: s.title })));
-      flatAlbums.sort((a, b) => {
-        // 日付 なし は 末尾 (新しい順) or 先頭 (古い順)? 情報 少ない ので 末尾 に。
-        const ka = a.sortKey || '0000-00-00';
-        const kb = b.sortKey || '0000-00-00';
-        if (ka === kb) return a.idx - b.idx;
-        return sortMode === 'new' ? kb.localeCompare(ka) : ka.localeCompare(kb);
-      });
-    }
-
-    app.innerHTML = `
-      <div class="card">
-        <h2 style="margin:0">📸 中村研アルバム</h2>
-        <div class="hint-sm" style="margin-top:6px">
-          Google Photos で管理してる中村研の写真アルバム集 (${totalAlbums} 件)。
-          タイル をタップで Google Photos が別タブで開きます。
-          サムネ / 写真枚数 は 30 分毎 に バックグラウンド で 自動取得 されます。
-        </div>
-        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
-          <button data-nkm-sort="section" class="${sortMode==='section' ? 'primary' : ''}"
-                  style="font-size:12px; padding:4px 10px">年度 別</button>
-          <button data-nkm-sort="new" class="${sortMode==='new' ? 'primary' : ''}"
-                  style="font-size:12px; padding:4px 10px">新しい順</button>
-          <button data-nkm-sort="old" class="${sortMode==='old' ? 'primary' : ''}"
-                  style="font-size:12px; padding:4px 10px">古い順</button>
-        </div>
-      </div>
-      ${isFlat ? renderFlat(flatAlbums) : sections.map(sec => renderSection(sec)).join('')}
-    `;
-    // 開閉 ハンドラ (セクション 表示 の 時 だけ)
-    app.querySelectorAll('[data-nkm-sec]').forEach(h => {
-      h.addEventListener('click', () => {
-        const t = h.dataset.nkmSec;
-        openState[t] = !openState[t];
-        render();
-      });
-    });
-    app.querySelectorAll('[data-nkm-sort]').forEach(b => {
-      b.addEventListener('click', () => {
-        sortMode = b.dataset.nkmSort;
-        render();
-      });
-    });
-    // v969 表示中 URL の サムネ / 写真枚数 を DB キャッシュ から 引く (fetch 動作 なし、 即返却)
-    lookupThumbs(currentVisibleUrls());
-  };
-
-  const renderSection = (sec) => {
-    const isOpen = !!openState[sec.title];
-    const chev = isOpen ? '▾' : '▸';
-    return `
-      <div class="card">
-        <div data-nkm-sec="${escapeHtml(sec.title)}"
-             style="cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none">
-          <span style="color:#9ca3af; width:16px; text-align:center">${chev}</span>
-          <div class="bold" style="flex:1; font-size:15px">${escapeHtml(sec.title)}</div>
-          <span class="hint-sm">${sec.albums.length} 件</span>
-        </div>
-        ${isOpen ? `<div class="nkm-tile-grid">${sec.albums.map(a => renderAlbumTile(a)).join('')}</div>` : ''}
-      </div>
-    `;
-  };
-
-  const renderFlat = (albums) => `
-    <div class="card">
-      <div class="nkm-tile-grid">${albums.map(a => renderAlbumTile(a)).join('')}</div>
-    </div>
-  `;
-
   render();
 }
 
-// v969 タイル 表示。 CSS Grid の auto-fill で 画面幅 に 応じて 段数 が 変わる。
-//   サムネ 上、 タイトル (改行 可)、 flag + 写真枚数 バッジ、 で 縦 スタック。
+function render() {
+  const app = document.getElementById('app');
+  const totalAlbums = sections.reduce((n, s) => n + s.albums.length, 0);
+
+  let content = '';
+  if (sortMode === 'location') content = renderByLocation();
+  else if (sortMode !== 'section') content = renderFlat();
+  else content = sections.map(renderSectionCard).join('');
+
+  const editingAlbum = editingId ? sections.flatMap(s => s.albums).find(x => x.id === editingId) : null;
+
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin:0">📸 中村研アルバム</h2>
+      <div class="hint-sm" style="margin-top:6px">
+        Google Photos で管理してる中村研の写真アルバム (${totalAlbums} 件)。
+        タイル をタップで Google Photos が別タブで開きます。
+        サムネ / 写真枚数 は バックグラウンド で 自動取得、
+        追加 / 編集 / 削除 は 誰でも 可 (削除 は 追加した本人 のみ)。
+      </div>
+      <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
+        <button data-nkm-sort="section"  class="${sortMode==='section' ?'primary':''}" style="font-size:12px; padding:4px 10px">年度 別</button>
+        <button data-nkm-sort="new"      class="${sortMode==='new'     ?'primary':''}" style="font-size:12px; padding:4px 10px">新しい順</button>
+        <button data-nkm-sort="old"      class="${sortMode==='old'     ?'primary':''}" style="font-size:12px; padding:4px 10px">古い順</button>
+        <button data-nkm-sort="location" class="${sortMode==='location'?'primary':''}" style="font-size:12px; padding:4px 10px">場所別</button>
+        <span style="flex:1"></span>
+        <button data-nkm-add class="primary" style="font-size:12px; padding:4px 10px">${showAddForm && !editingAlbum ? '× 閉じる' : '＋ 追加'}</button>
+      </div>
+      ${sortMode === 'location' ? `
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
+          <button data-nkm-locfilter="all"      class="${locFilter==='all'     ?'primary':''}" style="font-size:11px; padding:2px 8px">🌏 すべて</button>
+          <button data-nkm-locfilter="jp"       class="${locFilter==='jp'      ?'primary':''}" style="font-size:11px; padding:2px 8px">🇯🇵 国内</button>
+          <button data-nkm-locfilter="overseas" class="${locFilter==='overseas'?'primary':''}" style="font-size:11px; padding:2px 8px">✈ 国外</button>
+        </div>` : ''}
+    </div>
+    ${showAddForm ? renderAddForm(editingAlbum) : ''}
+    ${content}
+  `;
+  attachHandlers();
+  lookupThumbs(collectVisibleUrls());
+}
+
+function renderSectionCard(sec) {
+  return `
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:8px">
+        <div class="bold" style="flex:1; font-size:15px">${escapeHtml(sec.title)}</div>
+        <span class="hint-sm">${sec.albums.length} 件</span>
+      </div>
+      <div class="nkm-tile-grid">${sec.albums.map(renderAlbumTile).join('')}</div>
+    </div>`;
+}
+
+function renderFlat() {
+  const flat = sections.flatMap(s => s.albums);
+  flat.sort((a, b) => {
+    const ka = a.sortKey || '0000-00-00';
+    const kb = b.sortKey || '0000-00-00';
+    if (ka === kb) return a.sort_order - b.sort_order;
+    return sortMode === 'new' ? kb.localeCompare(ka) : ka.localeCompare(kb);
+  });
+  return `<div class="card"><div class="nkm-tile-grid">${flat.map(renderAlbumTile).join('')}</div></div>`;
+}
+
+function renderByLocation() {
+  const flat = sections.flatMap(s => s.albums);
+  const groups = {};
+  for (const a of flat) {
+    const country = flagToCountry(a.flag);
+    if (country) {
+      if (locFilter === 'jp') continue;
+      const key = `✈ ${country}`;
+      (groups[key] ||= []).push(a);
+    } else {
+      if (locFilter === 'overseas') continue;
+      const pref = guessPrefecture(a);
+      (groups[pref] ||= []).push(a);
+    }
+  }
+  // 各 グループ 内 は 新しい順、 グループ 順 は 件数 多い順 (「(場所不明)」 は 末尾)
+  const keys = Object.keys(groups).sort((a, b) => {
+    if (a === '(場所不明)') return 1;
+    if (b === '(場所不明)') return -1;
+    return groups[b].length - groups[a].length;
+  });
+  return keys.map(k => {
+    const arr = groups[k].slice().sort((a, b) => (b.sortKey || '').localeCompare(a.sortKey || ''));
+    return `
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:8px">
+          <div class="bold" style="flex:1; font-size:14px">${escapeHtml(k)}</div>
+          <span class="hint-sm">${arr.length} 件</span>
+        </div>
+        <div class="nkm-tile-grid">${arr.map(renderAlbumTile).join('')}</div>
+      </div>`;
+  }).join('');
+}
+
 function renderAlbumTile(a) {
-  const thumbUrl = thumbCache[a.url];    // undefined = 未問合せ、 null = 未取得 / 失敗、 string = URL
-  const count    = countCache[a.url];    // undefined / null / number
+  const thumbUrl = thumbCache[a.url];
+  const count    = countCache[a.url];
+  const isOwner  = state.me?.id && Number(a.created_by) === Number(state.me.id);
+  const isAdmin  = state.me?.role === 'admin';
+  const canEdit  = isOwner || isAdmin;
+
   const thumbNode = thumbUrl
     ? `<img src="${escapeHtml(thumbUrl)}" loading="lazy" class="nkm-thumb"
             style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
@@ -526,14 +215,18 @@ function renderAlbumTile(a) {
     : '';
   const flagChip = a.flag
     ? `<span style="position:absolute; left:6px; top:6px; font-size:14px;
-                    background:rgba(0,0,0,0.4); border-radius:4px; padding:0 4px">${a.flag}</span>`
+                    background:rgba(0,0,0,0.4); border-radius:4px; padding:0 4px">${escapeHtml(a.flag)}</span>`
     : '';
+  const menu = canEdit ? `
+    <button data-nkm-edit="${a.id}" title="編集"
+            style="position:absolute; right:6px; top:6px; background:rgba(0,0,0,0.5); color:#fff;
+                   border:0; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer">⋯</button>` : '';
   return `
     <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
        data-nkm-url="${escapeHtml(a.url)}" class="nkm-tile"
        style="display:block; text-decoration:none; color:inherit; border-radius:6px; overflow:hidden;
-              background:#fff; border:1px solid #e5e7eb">
-      <div style="position:relative">${thumbNode}${flagChip}${countBadge}</div>
+              background:#fff; border:1px solid #e5e7eb; position:relative">
+      <div style="position:relative">${thumbNode}${flagChip}${countBadge}${menu}</div>
       <div style="padding:6px 8px 8px; font-size:12px; line-height:1.35; color:#374151;
                   display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden">
         ${escapeHtml(a.title)}
@@ -541,13 +234,134 @@ function renderAlbumTile(a) {
     </a>`;
 }
 
-function currentVisibleUrls() {
-  return Array.from(document.querySelectorAll('[data-nkm-url]'))
-              .map(a => a.dataset.nkmUrl);
+function renderAddForm(editingAlbum = null) {
+  const secs = sections.map(s => s.title).filter(t => /^\d{4}$/.test(t));
+  const defaultSec = editingAlbum?.section
+                  || (secs[0] || String(new Date().getFullYear()));
+  const suggest = secs.filter(t => t !== defaultSec).slice(0, 4);
+  const a = editingAlbum || {};
+  return `
+    <div class="card" style="background:#f9fafb; border:1px solid #ede4f3">
+      <div class="bold" style="margin-bottom:8px">${editingAlbum ? '✏ 編集' : '➕ 新規追加'}</div>
+      <div style="display:grid; gap:8px">
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px">
+          <span style="width:80px; color:#6b7280">セクション</span>
+          <input id="nkm-form-section" type="text" value="${escapeHtml(a.section || defaultSec)}"
+                 placeholder="2026 等" style="flex:1; padding:4px 6px" maxlength="60">
+        </label>
+        ${suggest.length ? `<div style="margin-left:86px; font-size:11px; color:#6b7280">
+          候補: ${suggest.map(t => `<button data-nkm-sec-suggest="${escapeHtml(t)}" style="font-size:11px; padding:1px 6px; margin:0 2px">${escapeHtml(t)}</button>`).join('')}
+        </div>` : ''}
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px">
+          <span style="width:80px; color:#6b7280">タイトル</span>
+          <input id="nkm-form-title" type="text" value="${escapeHtml(a.title || '')}"
+                 placeholder="YYYY.MM.DD 内容 (例: 2026.07.08 伊藤研合同研究会)"
+                 style="flex:1; padding:4px 6px" maxlength="200">
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px">
+          <span style="width:80px; color:#6b7280">URL</span>
+          <input id="nkm-form-url" type="url" value="${escapeHtml(a.url || '')}"
+                 placeholder="https://photos.app.goo.gl/..." style="flex:1; padding:4px 6px" maxlength="500">
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px">
+          <span style="width:80px; color:#6b7280">場所</span>
+          <input id="nkm-form-location" type="text" value="${escapeHtml(a.location || '')}"
+                 placeholder="沖縄 / 京都 / イタリア 等 (省略可)" style="flex:1; padding:4px 6px" maxlength="80">
+        </label>
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px">
+          <span style="width:80px; color:#6b7280">国旗</span>
+          <input id="nkm-form-flag" type="text" value="${escapeHtml(a.flag || '')}"
+                 placeholder="🇮🇹 等 (海外 のみ)" style="flex:1; padding:4px 6px" maxlength="20">
+        </label>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:6px">
+        <button id="nkm-form-save" class="primary" style="padding:5px 14px">${editingAlbum ? '保存' : '追加'}</button>
+        <button id="nkm-form-cancel" style="padding:5px 14px">キャンセル</button>
+        ${editingAlbum ? `<span style="flex:1"></span>
+          <button id="nkm-form-delete" style="padding:5px 14px; color:#b91c1c">🗑 削除</button>` : ''}
+      </div>
+    </div>`;
 }
 
-// v969 バックグラウンド fetch は cron 側 に 移した ので、 ここでは DB キャッシュ の 「引き」 のみ。
-//   未取得 URL は cron が 埋める まで 待つ (次 の 表示 時 に 反映)。
+let editingId = null;
+function attachHandlers() {
+  const app = document.getElementById('app');
+  app.querySelectorAll('[data-nkm-sort]').forEach(b => {
+    b.addEventListener('click', () => { sortMode = b.dataset.nkmSort; render(); });
+  });
+  app.querySelectorAll('[data-nkm-locfilter]').forEach(b => {
+    b.addEventListener('click', () => { locFilter = b.dataset.nkmLocfilter; render(); });
+  });
+  const addBtn = app.querySelector('[data-nkm-add]');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    editingId = null; showAddForm = !showAddForm; render();
+  });
+  app.querySelectorAll('[data-nkm-edit]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      editingId = Number(b.dataset.nkmEdit);
+      showAddForm = true;
+      render();
+    });
+  });
+  app.querySelectorAll('[data-nkm-sec-suggest]').forEach(b => {
+    b.addEventListener('click', () => {
+      const inp = document.getElementById('nkm-form-section');
+      if (inp) inp.value = b.dataset.nkmSecSuggest;
+    });
+  });
+  const saveBtn = app.querySelector('#nkm-form-save');
+  if (saveBtn) saveBtn.addEventListener('click', () => submitForm(editingId));
+  const cancelBtn = app.querySelector('#nkm-form-cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { showAddForm = false; editingId = null; render(); });
+  const delBtn = app.querySelector('#nkm-form-delete');
+  if (delBtn) delBtn.addEventListener('click', () => submitDelete(editingId));
+
+}
+
+async function submitForm(id) {
+  const body = {
+    section : document.getElementById('nkm-form-section').value.trim(),
+    title   : document.getElementById('nkm-form-title').value.trim(),
+    url     : document.getElementById('nkm-form-url').value.trim(),
+    location: document.getElementById('nkm-form-location').value.trim(),
+    flag    : document.getElementById('nkm-form-flag').value.trim(),
+  };
+  if (!body.section || !body.title || !body.url) {
+    alert('セクション / タイトル / URL は 必須');
+    return;
+  }
+  try {
+    if (id) {
+      await patch('/api/nkmr-albums/' + id, body);
+    } else {
+      await post('/api/nkmr-albums', body);
+    }
+    editingId = null; showAddForm = false;
+    await fetchAlbums();
+    render();
+  } catch (e) {
+    alert('保存 失敗: ' + (e.message || String(e)));
+  }
+}
+
+async function submitDelete(id) {
+  if (!id) return;
+  if (!confirm('この アルバム 登録 を 削除 しますか?\n(Google Photos 側 は 影響 なし、 一覧 から 消える だけ)')) return;
+  try {
+    await del('/api/nkmr-albums/' + id);
+    editingId = null; showAddForm = false;
+    await fetchAlbums();
+    render();
+  } catch (e) {
+    alert('削除 失敗: ' + (e.message || String(e)));
+  }
+}
+
+function collectVisibleUrls() {
+  return Array.from(document.querySelectorAll('[data-nkm-url]')).map(a => a.dataset.nkmUrl);
+}
+
 let lookupInProgress = false;
 async function lookupThumbs(urls) {
   if (lookupInProgress) return;
@@ -571,7 +385,6 @@ function applyThumbToDom() {
   document.querySelectorAll('[data-nkm-url]').forEach(a => {
     const url = a.dataset.nkmUrl;
     const t = thumbCache[url];
-    // サムネ 差し替え
     if (t) {
       const cur = a.querySelector('img.nkm-thumb');
       if (!cur) {
@@ -587,7 +400,6 @@ function applyThumbToDom() {
         }
       }
     }
-    // 写真枚数 バッジ
     const c = countCache[url];
     if (typeof c === 'number' && c > 0) {
       const wrap = a.querySelector('div[style*="position:relative"]');
@@ -602,7 +414,7 @@ function applyThumbToDom() {
   });
 }
 
-// v969 タイル グリッド CSS を 一度 だけ 差し込む
+// タイル グリッド CSS を 一度 だけ 差し込む
 if (typeof document !== 'undefined' && !document.getElementById('nkm-tile-grid-style')) {
   const s = document.createElement('style');
   s.id = 'nkm-tile-grid-style';

@@ -14,30 +14,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/handlers/album_thumbs.php';   // album_thumbs_try_fetch
 
-const ALBUMS_JS       = __DIR__ . '/../public/js/views/nkmr_albums.js';
 const MAX_PER_RUN     = 30;   // 1 回 の 実行 で 最大 fetch 件数
 const RETRY_ERROR_DAYS= 7;    // error の 再挑戦 間隔
 
 function main(): void {
     global $PDO;
 
-    if (!is_file(ALBUMS_JS)) {
-        fwrite(STDERR, "[album_thumbs_cron] ALBUMS_JS not found: " . ALBUMS_JS . "\n");
-        exit(1);
-    }
-    $raw = @file_get_contents(ALBUMS_JS);
-    if ($raw === false) {
-        fwrite(STDERR, "[album_thumbs_cron] read failed\n");
-        exit(1);
-    }
-
-    // 抽出: [title url] の url 部分 (photos.app.goo.gl / photos.google.com / goo.gl/photos)
-    if (!preg_match_all('/\[[^\]]+?\s+(https?:\/\/(?:photos\.app\.goo\.gl|photos\.google\.com|goo\.gl\/photos)[^\s\]]+)\]/', $raw, $m)) {
-        echo "[" . date('Y-m-d H:i:s') . "] no URLs matched\n";
+    // v970 URL 一覧 は nkmr_albums テーブル から 取る (旧: nkmr_albums.js の RAW を parse)。
+    $urls = $PDO->query("SELECT DISTINCT url FROM nkmr_albums")->fetchAll(PDO::FETCH_COLUMN);
+    if (!$urls) {
+        echo "[" . date('Y-m-d H:i:s') . "] no albums in nkmr_albums table\n";
         return;
     }
-    $urls = array_values(array_unique($m[1]));
-    echo "[" . date('Y-m-d H:i:s') . "] extracted " . count($urls) . " unique URLs\n";
+    echo "[" . date('Y-m-d H:i:s') . "] " . count($urls) . " unique URLs in DB\n";
 
     // 既 fetch / 最近 の error は スキップ、 残り のみ 実行 対象。
     // v969 photo_count が NULL の 行 (v969 で 追加 された 列) は count-only backfill 対象 に。
