@@ -61,9 +61,11 @@ function nkmr_albums_list(PDO $pdo, array $cfg): void {
     }
     // section を 「数字 4 桁 (降順) → 数字なし (末尾)」 で 並べ替え
     uksort($grouped, function ($a, $b) {
-        $an = preg_match('/^\d{4}$/', $a) ? (int)$a : -1;
-        $bn = preg_match('/^\d{4}$/', $b) ? (int)$b : -1;
-        if ($an === $bn) return strcmp($a, $b);
+        // PHP は 「2026」 等 の 数字 だけ の キー を int に 変換 する ので (string) キャスト 必須
+        $sa = (string)$a; $sb = (string)$b;
+        $an = preg_match('/^\d{4}$/', $sa) ? (int)$sa : -1;
+        $bn = preg_match('/^\d{4}$/', $sb) ? (int)$sb : -1;
+        if ($an === $bn) return strcmp($sa, $sb);
         return $bn - $an;   // 大きい 年度 が 先
     });
     $sections = [];
