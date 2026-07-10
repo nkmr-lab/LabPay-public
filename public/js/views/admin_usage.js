@@ -41,6 +41,7 @@ const AI_LABEL = {
   'paper_summary':   '📑 論文要約',
   'paper_translate': '📑 論文全訳',
   'deep_research':   '🔎 Deep Research',
+  'paper_review':    '🖊 論文査読',
 };
 
 export async function renderAdminUsage() {

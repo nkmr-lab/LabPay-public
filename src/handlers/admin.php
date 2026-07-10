@@ -863,23 +863,30 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
              LIMIT 20
         ")->fetchAll(PDO::FETCH_ASSOC);
 
-        // (4) AI 系 の 直接 集計 (専用 テーブル)
+        // (4) AI 系 の 直接 集計 (専用 テーブル)。 テーブル 名 は 実 DB に 合わせる。
         $ai = [];
         foreach ([
-            'paper_summary'  => ['paper_summaries',   'author_id'],
-            'paper_translate'=> ['paper_translations','author_id'],
-            'deep_research'  => ['deep_researches',   'author_id'],
+            'paper_summary'  => ['paper_translates',        'user_id'],
+            'paper_translate'=> ['paper_full_translations', 'user_id'],
+            'deep_research'  => ['deep_researches',         'user_id'],
+            'paper_review'   => ['paper_reviews',           'user_id'],
         ] as $key => [$table, $userCol]) {
-            $r = $pdo->query("
-                SELECT COUNT(*) AS runs,
-                       COUNT(DISTINCT $userCol) AS users,
-                       SUM(status='done') AS done_count,
-                       SUM(status='error') AS error_count,
-                       SUM(status='processing' OR status='pending') AS pending_count
-                  FROM $table
-                 WHERE created_at >= $since
-            ")->fetch(PDO::FETCH_ASSOC);
-            $ai[$key] = $r;
+            try {
+                $r = $pdo->query("
+                    SELECT COUNT(*) AS runs,
+                           COUNT(DISTINCT $userCol) AS users,
+                           SUM(status='done') AS done_count,
+                           SUM(status='error') AS error_count,
+                           SUM(status='processing' OR status='pending') AS pending_count
+                      FROM $table
+                     WHERE created_at >= $since
+                ")->fetch(PDO::FETCH_ASSOC);
+                $ai[$key] = $r;
+            } catch (Throwable $e) {
+                // テーブル が 未 作成 の 場合 (新規 環境) は 0 で 埋める
+                $ai[$key] = ['runs' => 0, 'users' => 0, 'done_count' => 0,
+                             'error_count' => 0, 'pending_count' => 0];
+            }
         }
 
         // (5) 全体 サマリ
