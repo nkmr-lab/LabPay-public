@@ -379,13 +379,16 @@ const RAW = String.raw`
 `;
 
 // ─── Parse: 「[(* SECTION]」 で 区切って、 各 セクション 内 の 「[title url]」 行 を 抽出 ────────
+// v969 タイトル 先頭 の YYYY.MM.DD (or YYYY.MM) を 日付 として 抽出。 セクション 順 用 の
+//       row index も 保持 (RAW 内 の 元 の 並び を 保つ ため の tie-break)。
 function parseAlbums(raw) {
   const sections = [];
-  let cur = { title: '中村研アルバム', albums: [] };   // 冒頭 (セクション header なし の 3 件) 用
+  let cur = { title: '中村研アルバム', albums: [] };
   sections.push(cur);
   const lines = raw.split(/\r?\n/);
   const secRe   = /^\[\(\*\s*(.+?)\s*\]/;
   const albumRe = /\[(.+?)\s+(https?:\/\/\S+?)\]/;
+  let idx = 0;
   for (const line of lines) {
     const sm = line.match(secRe);
     if (sm) {
@@ -395,17 +398,32 @@ function parseAlbums(raw) {
     }
     const am = line.match(albumRe);
     if (am) {
-      // 行頭 の 🇮🇹 等 の 国旗 を 検出、 タイトル 前 に 付与
       const flagMatch = line.match(/^\s*([\p{Emoji_Presentation}\u{1F1E6}-\u{1F1FF}]+)/u);
       const flag = flagMatch ? flagMatch[1] : '';
-      cur.albums.push({ title: am[1], url: am[2], flag });
+      const title = am[1];
+      // 日付 抽出: 2026.07.08 / 2026.07 / 2026 (数字 の 先頭 パターン)
+      // 「YYYY.MM.DD」 → sortKey = 'YYYY-MM-DD'
+      // 「YYYY.MM」    → 'YYYY-MM-01'
+      // 「YYYY年度 日常」 の ような 汎用 は 'YYYY-00-00' として セクション 冒頭 相当
+      let sortKey = '';
+      const dm = title.match(/^(\d{4})\.(\d{2})(?:\.(\d{2}))?/);
+      if (dm) {
+        sortKey = `${dm[1]}-${dm[2]}-${dm[3] || '01'}`;
+      } else {
+        const ym = title.match(/(\d{4})\s*年度/);
+        if (ym) sortKey = `${ym[1]}-00-00`;
+      }
+      cur.albums.push({ title, url: am[2], flag, sortKey, idx: idx++ });
     }
   }
   return sections.filter(s => s.albums.length);
 }
 
-// アコーディオン 開閉 状態 (メモリ 上、 タブ 切替 で リセット)。 デフォルト は 最新 2 セクション 開く。
+// UI 状態 (メモリ 保持、 タブ 切替 で リセット)
 let openState = null;   // { [sectionTitle]: bool }
+let sortMode  = 'section';  // 'section' | 'new' | 'old'
+// v969 サムネ 追加分 の 情報 (photo_count)
+const countCache = {};   // { url: N | null }
 
 export async function renderNkmrAlbums() {
   const app = document.getElementById('app');
@@ -417,18 +435,39 @@ export async function renderNkmrAlbums() {
   const totalAlbums = sections.reduce((n, s) => n + s.albums.length, 0);
 
   const render = () => {
+    const isFlat = sortMode !== 'section';
+    let flatAlbums = null;
+    if (isFlat) {
+      flatAlbums = sections.flatMap(s => s.albums.map(a => ({ ...a, _sec: s.title })));
+      flatAlbums.sort((a, b) => {
+        // 日付 なし は 末尾 (新しい順) or 先頭 (古い順)? 情報 少ない ので 末尾 に。
+        const ka = a.sortKey || '0000-00-00';
+        const kb = b.sortKey || '0000-00-00';
+        if (ka === kb) return a.idx - b.idx;
+        return sortMode === 'new' ? kb.localeCompare(ka) : ka.localeCompare(kb);
+      });
+    }
+
     app.innerHTML = `
       <div class="card">
         <h2 style="margin:0">📸 中村研アルバム</h2>
         <div class="hint-sm" style="margin-top:6px">
           Google Photos で管理してる中村研の写真アルバム集 (${totalAlbums} 件)。
-          タイトルをタップで開閉、 サムネ / アルバム名タップで Google Photos が別タブで開きます。
-          サムネは開いた順に取得します (Google Photos の og:image を fetch)。
+          タイル をタップで Google Photos が別タブで開きます。
+          サムネ / 写真枚数 は 30 分毎 に バックグラウンド で 自動取得 されます。
+        </div>
+        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
+          <button data-nkm-sort="section" class="${sortMode==='section' ? 'primary' : ''}"
+                  style="font-size:12px; padding:4px 10px">年度 別</button>
+          <button data-nkm-sort="new" class="${sortMode==='new' ? 'primary' : ''}"
+                  style="font-size:12px; padding:4px 10px">新しい順</button>
+          <button data-nkm-sort="old" class="${sortMode==='old' ? 'primary' : ''}"
+                  style="font-size:12px; padding:4px 10px">古い順</button>
         </div>
       </div>
-      ${sections.map(sec => renderSection(sec)).join('')}
+      ${isFlat ? renderFlat(flatAlbums) : sections.map(sec => renderSection(sec)).join('')}
     `;
-    // 開閉ハンドラ
+    // 開閉 ハンドラ (セクション 表示 の 時 だけ)
     app.querySelectorAll('[data-nkm-sec]').forEach(h => {
       h.addEventListener('click', () => {
         const t = h.dataset.nkmSec;
@@ -436,8 +475,14 @@ export async function renderNkmrAlbums() {
         render();
       });
     });
-    // v964 開いてる セクション の URL 一覧 を サーバ に POST、 未取得 は 3 件/リクエスト で 進める
-    kickoffThumbFetch(sections);
+    app.querySelectorAll('[data-nkm-sort]').forEach(b => {
+      b.addEventListener('click', () => {
+        sortMode = b.dataset.nkmSort;
+        render();
+      });
+    });
+    // v969 表示中 URL の サムネ / 写真枚数 を DB キャッシュ から 引く (fetch 動作 なし、 即返却)
+    lookupThumbs(currentVisibleUrls());
   };
 
   const renderSection = (sec) => {
@@ -451,102 +496,124 @@ export async function renderNkmrAlbums() {
           <div class="bold" style="flex:1; font-size:15px">${escapeHtml(sec.title)}</div>
           <span class="hint-sm">${sec.albums.length} 件</span>
         </div>
-        ${isOpen ? `
-          <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px">
-            ${sec.albums.map(a => renderAlbumRow(a)).join('')}
-          </div>` : ''}
+        ${isOpen ? `<div class="nkm-tile-grid">${sec.albums.map(a => renderAlbumTile(a)).join('')}</div>` : ''}
       </div>
     `;
   };
 
+  const renderFlat = (albums) => `
+    <div class="card">
+      <div class="nkm-tile-grid">${albums.map(a => renderAlbumTile(a)).join('')}</div>
+    </div>
+  `;
+
   render();
 }
 
-function renderAlbumRow(a) {
-  const thumbUrl = thumbCache[a.url];   // undefined = 未問合せ、 null = 取れなかった、 string = URL
-  const thumbCell = thumbUrl
-    ? `<img src="${escapeHtml(thumbUrl)}" loading="lazy"
-              style="flex:none; width:64px; height:48px; object-fit:cover; border-radius:4px; background:#eee">`
-    : `<div style="flex:none; width:64px; height:48px; border-radius:4px; background:#f3f4f6; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:20px">📷</div>`;
+// v969 タイル 表示。 CSS Grid の auto-fill で 画面幅 に 応じて 段数 が 変わる。
+//   サムネ 上、 タイトル (改行 可)、 flag + 写真枚数 バッジ、 で 縦 スタック。
+function renderAlbumTile(a) {
+  const thumbUrl = thumbCache[a.url];    // undefined = 未問合せ、 null = 未取得 / 失敗、 string = URL
+  const count    = countCache[a.url];    // undefined / null / number
+  const thumbNode = thumbUrl
+    ? `<img src="${escapeHtml(thumbUrl)}" loading="lazy" class="nkm-thumb"
+            style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
+    : `<div class="nkm-thumb" style="width:100%; aspect-ratio: 4/3; background:#f3f4f6; display:flex;
+             align-items:center; justify-content:center; color:#9ca3af; font-size:26px">📷</div>`;
+  const countBadge = (typeof count === 'number' && count > 0)
+    ? `<span style="background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:2px 6px;
+                    border-radius:8px; position:absolute; right:6px; bottom:6px">📷 ${count}</span>`
+    : '';
+  const flagChip = a.flag
+    ? `<span style="position:absolute; left:6px; top:6px; font-size:14px;
+                    background:rgba(0,0,0,0.4); border-radius:4px; padding:0 4px">${a.flag}</span>`
+    : '';
   return `
     <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
-       data-nkm-url="${escapeHtml(a.url)}"
-       style="display:flex; gap:8px; padding:4px 6px; text-decoration:none; color:inherit; border-left:2px solid #ede4f3; border-radius:0 4px 4px 0; align-items:center">
-      ${thumbCell}
-      <div style="flex:1; min-width:0; display:flex; align-items:baseline; gap:6px">
-        ${a.flag ? `<span style="flex:none">${a.flag}</span>` : ''}
-        <span style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.title)}</span>
+       data-nkm-url="${escapeHtml(a.url)}" class="nkm-tile"
+       style="display:block; text-decoration:none; color:inherit; border-radius:6px; overflow:hidden;
+              background:#fff; border:1px solid #e5e7eb">
+      <div style="position:relative">${thumbNode}${flagChip}${countBadge}</div>
+      <div style="padding:6px 8px 8px; font-size:12px; line-height:1.35; color:#374151;
+                  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden">
+        ${escapeHtml(a.title)}
       </div>
-      <span style="flex:none; color:#9ca3af; font-size:11px">↗</span>
     </a>`;
 }
 
-// v964 開いてる セクション の URL リスト を サーバ に POST、 サーバ が キャッシュ + 未取得 数 件 の
-//   同期 fetch を こなして 返して くれる。 うち fetched > 0 なら もう 一度 呼び出して 続き を 取る。
-let thumbFetchInProgress = false;
-async function kickoffThumbFetch(sections) {
-  if (thumbFetchInProgress) return;
-  const urls = [];
-  for (const sec of sections) {
-    if (!isSectionOpen(sec)) continue;
-    for (const a of sec.albums) {
-      if (thumbCache[a.url] === undefined) urls.push(a.url);
-    }
-  }
-  if (!urls.length) return;
-  thumbFetchInProgress = true;
-  try {
-    // v968 fetch_max 10、 一度 に 10 件 fetch。 呼び出し 回数 が 減り 全体 は 2-3 倍 速く なる。
-    const r = await post('/api/album-thumbs', { urls: urls.slice(0, 100), fetch_max: 10 });
-    const thumbs = r.thumbs || {};
-    let changed = 0;
-    for (const [u, v] of Object.entries(thumbs)) {
-      if (thumbCache[u] !== v) {
-        thumbCache[u] = v;
-        changed++;
-      }
-    }
-    // DOM だけ 差し替え (再 render は 重い ので img を 直接 更新)
-    if (changed > 0) applyThumbToDom();
-    // まだ 未取得 の URL が あって、 今回 数件 fetch できた なら、 続きを 呼ぶ (200ms delay 廃止、 即座 に 次へ)
-    if (r.fetched > 0 && urls.some(u => thumbCache[u] === undefined)) {
-      thumbFetchInProgress = false;
-      kickoffThumbFetch(sections);
-      return;
-    }
-  } catch (_) { /* silent */ }
-  thumbFetchInProgress = false;
+function currentVisibleUrls() {
+  return Array.from(document.querySelectorAll('[data-nkm-url]'))
+              .map(a => a.dataset.nkmUrl);
 }
 
-function isSectionOpen(sec) {
-  // openState は module scope で 保持 されて ない ので DOM 見る (open している 見出し は アコーディオン
-  //   の 中身 が レンダリング されて いる)。 シンプル に data-nkm-sec の 直後 の div 存在 で 判定。
-  const head = document.querySelector(`[data-nkm-sec="${cssEscape(sec.title)}"]`);
-  if (!head) return false;
-  return head.parentElement && head.parentElement.querySelector('[data-nkm-url]') !== null;
+// v969 バックグラウンド fetch は cron 側 に 移した ので、 ここでは DB キャッシュ の 「引き」 のみ。
+//   未取得 URL は cron が 埋める まで 待つ (次 の 表示 時 に 反映)。
+let lookupInProgress = false;
+async function lookupThumbs(urls) {
+  if (lookupInProgress) return;
+  const needAsk = urls.filter(u => thumbCache[u] === undefined || countCache[u] === undefined);
+  if (!needAsk.length) return;
+  lookupInProgress = true;
+  try {
+    const r = await post('/api/album-thumbs', { urls: needAsk.slice(0, 300) });
+    const thumbs = r.thumbs || {};
+    const counts = r.counts || {};
+    for (const u of needAsk) {
+      thumbCache[u] = (u in thumbs) ? thumbs[u] : null;
+      countCache[u] = (u in counts) ? counts[u] : null;
+    }
+    applyThumbToDom();
+  } catch (_) { /* silent */ }
+  lookupInProgress = false;
 }
 
 function applyThumbToDom() {
   document.querySelectorAll('[data-nkm-url]').forEach(a => {
     const url = a.dataset.nkmUrl;
     const t = thumbCache[url];
-    if (!t) return;
-    // 既に img が 入ってる か 判定
-    const img = a.querySelector('img[data-nkm-thumb], img');
-    const placeholder = a.querySelector('div[style*="📷"], div');
-    if (img && img.src && img.src.includes('/api/album-thumbs/photo/')) return;   // 既反映
-    // 置換 (最初の子=サムネセル)
-    const first = a.firstElementChild;
-    if (!first) return;
-    const newImg = document.createElement('img');
-    newImg.src = t;
-    newImg.loading = 'lazy';
-    newImg.dataset.nkmThumb = '1';
-    newImg.style.cssText = 'flex:none; width:64px; height:48px; object-fit:cover; border-radius:4px; background:#eee';
-    a.replaceChild(newImg, first);
+    // サムネ 差し替え
+    if (t) {
+      const cur = a.querySelector('img.nkm-thumb');
+      if (!cur) {
+        const wrap = a.querySelector('div[style*="position:relative"]');
+        const oldPh = wrap?.querySelector('div.nkm-thumb');
+        if (wrap && oldPh) {
+          const img = document.createElement('img');
+          img.src = t;
+          img.loading = 'lazy';
+          img.className = 'nkm-thumb';
+          img.style.cssText = 'width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block';
+          wrap.replaceChild(img, oldPh);
+        }
+      }
+    }
+    // 写真枚数 バッジ
+    const c = countCache[url];
+    if (typeof c === 'number' && c > 0) {
+      const wrap = a.querySelector('div[style*="position:relative"]');
+      if (wrap && !wrap.querySelector('[data-nkm-count]')) {
+        const badge = document.createElement('span');
+        badge.dataset.nkmCount = '1';
+        badge.textContent = `📷 ${c}`;
+        badge.style.cssText = 'background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; position:absolute; right:6px; bottom:6px';
+        wrap.appendChild(badge);
+      }
+    }
   });
 }
 
-function cssEscape(s) {
-  return String(s).replace(/["\\]/g, '\\$&');
+// v969 タイル グリッド CSS を 一度 だけ 差し込む
+if (typeof document !== 'undefined' && !document.getElementById('nkm-tile-grid-style')) {
+  const s = document.createElement('style');
+  s.id = 'nkm-tile-grid-style';
+  s.textContent = `
+    .nkm-tile-grid { margin-top:8px; display:grid;
+                     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                     gap:10px; }
+    @media (max-width: 480px) {
+      .nkm-tile-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    }
+    .nkm-tile:active { transform: scale(0.98); }
+  `;
+  document.head.appendChild(s);
 }
