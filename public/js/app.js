@@ -498,6 +498,8 @@ route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetai
 // v934 かんばん ボード (Trello-like、 ラボ 共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
 route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
+// v961 中村研 アルバム集
+route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 // v941 合同研究会用投票
 route('/joint-events',          lazy(() => import('./views/joint.js'), 'renderJointList'));
 route('/joint-events/new',      lazy(() => import('./views/joint.js'), 'renderJointNew'));

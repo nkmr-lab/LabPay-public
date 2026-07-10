@@ -369,8 +369,11 @@ function paintAggregation(d, items, tiers) {
 function paintOthers(d, items, tiers) {
   const root = document.getElementById('tl-others');
   if (!root) return;
+  // v961 「?」 (評価不能) は 他人 の 回答 では 表示 しない (ユーザ 要望)。 通常 の
+  //   S/A/B/C/D 列 だけ 見える。
+  const visibleTiers = tiers.filter(t => t.key !== '?');
   root.innerHTML = d.other_answers.map(a => {
-    const lines = tiers.map(t => {
+    const lines = visibleTiers.map(t => {
       const labels = items.filter(it => (a.assignments[it.id]) === t.key).map(it => escapeHtml(it.label));
       if (!labels.length) return '';
       return `<div style="font-size:12px; padding:2px 0"><span style="display:inline-block; min-width:24px; color:${t.color}; font-weight:700; text-align:center">${escapeHtml(t.label)}</span> ${labels.join(' · ')}</div>`;

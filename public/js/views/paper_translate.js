@@ -842,7 +842,10 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   本体 は 見れる)。
   const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
-  const cropHeight = region === 'full' ? 320 : 180;   // top/middle/bottom は 縦 短め
+  // v961 v954 で cropHeight=180 だと ページ 全体 の 63% が 見えて 「全体 出て しまう」 問題 に
+  //   なって いた ので、 100px に 縮小。 A4 / US Letter (縦横比 1.3-1.4) を 220px 幅 で 表示 する と
+  //   画像 高 は 285-310px なので 100 は 約 1/3 (32-35%) に なる。
+  const cropHeight = region === 'full' ? 320 : 100;
   const bgPos = region === 'top'    ? 'center top'
               : region === 'middle' ? 'center center'
               : region === 'bottom' ? 'center bottom'

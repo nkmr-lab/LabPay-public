@@ -187,7 +187,9 @@ function paintChart(items) {
     root.innerHTML = '<div class="muted" style="font-size:12px; padding:6px">体重を 2 件以上記録すると折れ線グラフが出ます</div>';
     return;
   }
-  const w = Math.max(280, Math.min(720, weighted.length * 18 + 60));
+  // v961 モバイル で 横 が 切れる 問題: SVG は 固定 幅 で 書くが viewBox + max-width で
+  //   コンテナ に fit させる。 画面幅 に 関係 なく 常に 表示 領域 全部 が 見える。
+  const w = Math.max(320, Math.min(720, weighted.length * 18 + 60));
   const h = 180;
   const pad = { l: 40, r: 10, t: 10, b: 24 };
   const innerW = w - pad.l - pad.r;
@@ -213,7 +215,8 @@ function paintChart(items) {
     <text x="${pad.l - 4}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="#888">${v}</text>`).join('');
   const dots = pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="#7b3fa0"/>`).join('');
   root.innerHTML = `
-    <svg width="${w}" height="${h}" style="display:block">
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet"
+         style="width:100%; max-width:${w}px; height:auto; display:block">
       ${yMarks}
       <path d="${path}" stroke="#7b3fa0" stroke-width="2" fill="none"/>
       ${dots}
