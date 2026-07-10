@@ -181,6 +181,7 @@ export async function renderAdmin() {
       <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px">
         <a href="#/admin/sounds" class="btn">🔊 効果音の規定値</a>
         <a href="#/admin/custom-games" class="btn">🎮 自作ゲーム kind 管理</a>
+        <a href="#/admin/usage" class="btn">📊 利用統計</a>
       </div>
     </div>
 

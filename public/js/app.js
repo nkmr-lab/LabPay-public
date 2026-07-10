@@ -518,6 +518,7 @@ route('/presence',        lazy(() => import('./views/presence.js'), 'renderPrese
 route('/todos',           lazy(() => import('./views/todos.js'), 'renderTodos'));
 route('/admin/sounds',    lazy(() => import('./views/admin_sounds.js'), 'renderAdminSounds'));
 route('/admin/custom-games', lazy(() => import('./views/admin_custom_games.js'), 'renderAdminCustomGames'));
+route('/admin/usage',     lazy(() => import('./views/admin_usage.js'), 'renderAdminUsage'));    // v971 fb#478 利用統計
 // v620 自作ゲームのユーザ管理 UI + 汎用ディスパッチャ
 route('/my-games',           lazy(() => import('./views/my_custom_games.js'), 'renderMyCustomGames'));
 // v634 ⚾ ドラフト

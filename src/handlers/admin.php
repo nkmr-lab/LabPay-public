@@ -782,5 +782,141 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // ----- v971 usage: /admin/usage/summary?days=7|30 -----
+    //   activity_log + AI 系 テーブル を 集計 して 利用統計 を 返す。
+    if ($sub === 'usage' && ($seg[2] ?? '') === 'summary' && $method === 'GET') {
+        $days = max(1, min(90, (int)($_GET['days'] ?? 30)));
+        $since = "NOW() - INTERVAL $days DAY";
+
+        // ノイズ ポーリング endpoint (「使ってる」 の 判定 に は 含めない)。
+        //   presence/scan は POS scanner の 30 秒 tick、 他 は SPA の 定期 refresh。
+        $noise = ['/presence/scan','/posts/latest_id','/notifications/unread_count',
+                  '/me','/me/pending','/me/settings','/presence','/notices',
+                  '/timers','/rollcalls','/meetups','/stopwatches',
+                  '/groups','/invitations','/ai/paper_recent','/me/asking',
+                  '/me/achievements','/places','/listings','/posts'];
+        $noiseIn = "'" . implode("','", array_map(fn($x) => str_replace("'", "''", $x), $noise)) . "'";
+
+        // (1) feature 別 (top-level path segment) の DAU/WAU/MAU 相当 と hit 数
+        $features = $pdo->query("
+            SELECT
+                CASE
+                    WHEN path LIKE '/ai/%'         THEN 'ai'
+                    WHEN path LIKE '/kanban/%'     THEN 'kanban'
+                    WHEN path LIKE '/refs/%'       THEN 'refs'
+                    WHEN path LIKE '/polls%'       THEN 'polls'
+                    WHEN path LIKE '/public-polls%' THEN 'public-polls'
+                    WHEN path LIKE '/joint-events%' THEN 'joint-events'
+                    WHEN path LIKE '/quotes%'      THEN 'quotes'
+                    WHEN path LIKE '/nkmr-albums%' THEN 'nkmr-albums'
+                    WHEN path LIKE '/tabearuki%' OR path LIKE '/places%' THEN 'places'
+                    WHEN path LIKE '/tier%'        THEN 'tier'
+                    WHEN path LIKE '/purchases%'   THEN 'purchases'
+                    WHEN path LIKE '/sell%' OR path LIKE '/listings%' THEN 'sell'
+                    WHEN path LIKE '/health%'      THEN 'health'
+                    WHEN path LIKE '/walk%'        THEN 'walk'
+                    WHEN path LIKE '/workouts%'    THEN 'workouts'
+                    WHEN path LIKE '/exercise%'    THEN 'exercise'
+                    WHEN path LIKE '/sns%'         THEN 'sns'
+                    WHEN path LIKE '/predictions%' THEN 'predictions'
+                    WHEN path LIKE '/quizzes%'     THEN 'quizzes'
+                    WHEN path LIKE '/games%' OR path LIKE '/tictactoe%' OR path LIKE '/buzzer%' THEN 'games'
+                    WHEN path LIKE '/timers%' OR path LIKE '/stopwatches%' THEN 'timers'
+                    WHEN path LIKE '/overleaf%'    THEN 'overleaf'
+                    WHEN path LIKE '/scrapbox%' OR path LIKE '/cosense%' THEN 'cosense'
+                    WHEN path LIKE '/zoom%'        THEN 'zoom'
+                    WHEN path LIKE '/notices%'     THEN 'notices'
+                    ELSE 'other'
+                END AS feature,
+                COUNT(*) AS hits,
+                COUNT(DISTINCT user_id) AS unique_users
+              FROM activity_log
+             WHERE created_at >= $since
+               AND path NOT IN ($noiseIn)
+               AND user_id IS NOT NULL
+             GROUP BY feature
+             ORDER BY unique_users DESC, hits DESC
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        // (2) 日別 の DAU (直近 30 日)
+        $dau = $pdo->query("
+            SELECT DATE(created_at) AS d, COUNT(DISTINCT user_id) AS n
+              FROM activity_log
+             WHERE created_at >= NOW() - INTERVAL 30 DAY
+               AND user_id IS NOT NULL
+             GROUP BY d
+             ORDER BY d
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        // (3) top users (直近 $days 日)
+        $topUsers = $pdo->query("
+            SELECT a.user_id, u.display_name,
+                   COUNT(*) AS hits,
+                   COUNT(DISTINCT DATE(a.created_at)) AS active_days
+              FROM activity_log a
+              LEFT JOIN users u ON u.id = a.user_id
+             WHERE a.created_at >= $since
+               AND a.user_id IS NOT NULL
+               AND a.path NOT IN ($noiseIn)
+             GROUP BY a.user_id
+             ORDER BY hits DESC
+             LIMIT 20
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        // (4) AI 系 の 直接 集計 (専用 テーブル)
+        $ai = [];
+        foreach ([
+            'paper_summary'  => ['paper_summaries',   'author_id'],
+            'paper_translate'=> ['paper_translations','author_id'],
+            'deep_research'  => ['deep_researches',   'author_id'],
+        ] as $key => [$table, $userCol]) {
+            $r = $pdo->query("
+                SELECT COUNT(*) AS runs,
+                       COUNT(DISTINCT $userCol) AS users,
+                       SUM(status='done') AS done_count,
+                       SUM(status='error') AS error_count,
+                       SUM(status='processing' OR status='pending') AS pending_count
+                  FROM $table
+                 WHERE created_at >= $since
+            ")->fetch(PDO::FETCH_ASSOC);
+            $ai[$key] = $r;
+        }
+
+        // (5) 全体 サマリ
+        $summary = $pdo->query("
+            SELECT
+                COUNT(DISTINCT DATE(created_at)) AS active_days_seen,
+                COUNT(DISTINCT user_id)          AS active_users,
+                COUNT(*)                          AS total_hits
+              FROM activity_log
+             WHERE created_at >= $since
+               AND user_id IS NOT NULL
+               AND path NOT IN ($noiseIn)
+        ")->fetch(PDO::FETCH_ASSOC);
+
+        // (6) top 30 raw paths (admin の 参考、 ノイズ 除去 後)
+        $topPaths = $pdo->query("
+            SELECT path, method, COUNT(*) AS n, COUNT(DISTINCT user_id) AS users
+              FROM activity_log
+             WHERE created_at >= $since
+               AND user_id IS NOT NULL
+               AND path NOT IN ($noiseIn)
+             GROUP BY path, method
+             ORDER BY n DESC
+             LIMIT 30
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        json_response([
+            'days' => $days,
+            'summary' => $summary,
+            'features' => $features,
+            'dau_30d' => $dau,
+            'top_users' => $topUsers,
+            'ai' => $ai,
+            'top_paths' => $topPaths,
+        ]);
+        return;
+    }
+
     json_error('not_found', "no admin route for $method $sub", 404);
 }
