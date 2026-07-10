@@ -2651,7 +2651,8 @@ async function renderHomeNkmrAlbums() {
             ? `<img src="${escapeHtml(t)}" loading="lazy" style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
             : `<div style="width:100%; aspect-ratio: 4/3; background:#f3f4f6; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:22px">📷</div>`;
           const flag = a.flag ? `<span style="position:absolute; left:4px; top:4px; font-size:12px; background:rgba(0,0,0,0.4); border-radius:3px; padding:0 3px">${escapeHtml(a.flag)}</span>` : '';
-          const cnt = (typeof c === 'number' && c > 0) ? `<span style="position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,0.55); color:#fff; font-size:9.5px; padding:1px 5px; border-radius:6px">📷 ${c}</span>` : '';
+          // v970.6 fb#479: 298 以上 は Google Photos の 初期 HTML 上限 に 触れて いて 実 count 不明 なので 「300+」 と 表示。
+          const cnt = (typeof c === 'number' && c > 0) ? `<span style="position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,0.55); color:#fff; font-size:9.5px; padding:1px 5px; border-radius:6px">📷 ${c >= 298 ? '300+' : c}</span>` : '';
           return `
             <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
                style="display:block; text-decoration:none; color:inherit; border-radius:6px; overflow:hidden; background:#fff; border:1px solid #e5e7eb">

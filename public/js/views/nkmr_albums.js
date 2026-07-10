@@ -251,9 +251,11 @@ function renderAlbumTile(a) {
             style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
     : `<div class="nkm-thumb" style="width:100%; aspect-ratio: 4/3; background:#f3f4f6; display:flex;
              align-items:center; justify-content:center; color:#9ca3af; font-size:26px">📷</div>`;
+  // v970.6 fb#479: Google Photos の 初期 HTML は ~300 枚 で 頭打ち に なる (lazy load 上限)。
+  //   実 count が それ 以上 の アルバム は 「300+」 と 表示 して 誤解 を 防ぐ。
   const countBadge = (typeof count === 'number' && count > 0)
     ? `<span style="background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:2px 6px;
-                    border-radius:8px; position:absolute; right:6px; bottom:6px">📷 ${count}</span>`
+                    border-radius:8px; position:absolute; right:6px; bottom:6px">📷 ${count >= 298 ? '300+' : count}</span>`
     : '';
   const flagChip = a.flag
     ? `<span style="position:absolute; left:6px; top:6px; font-size:14px;
