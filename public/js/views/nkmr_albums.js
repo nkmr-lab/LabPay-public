@@ -411,7 +411,8 @@ async function lookupThumbs(urls) {
   if (!needAsk.length) return;
   lookupInProgress = true;
   try {
-    const r = await post('/api/album-thumbs', { urls: needAsk.slice(0, 300) });
+    // v970.4 上限 を 300 → 1000 に (DB 素引き なので 一括 で 安全)。
+    const r = await post('/api/album-thumbs', { urls: needAsk.slice(0, 1000) });
     const thumbs = r.thumbs || {};
     const counts = r.counts || {};
     for (const u of needAsk) {

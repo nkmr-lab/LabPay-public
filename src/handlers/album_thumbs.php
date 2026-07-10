@@ -84,7 +84,9 @@ function album_thumbs_batch(PDO $pdo, array $cfg): void {
     if (!is_array($urls)) throw new ApiException('bad_request', 'urls 配列', 400);
 
     $urls = array_values(array_unique(array_filter(array_map('strval', $urls))));
-    if (count($urls) > 300) $urls = array_slice($urls, 0, 300);
+    // v970.4 上限 を 300 → 1000 に (DB 素引き のみ なので 安全)。
+    //   従来 300 で アルバム 334 件 の うち 下位 34 件 の サムネ が 落ちて 「表示 されない」 と 誤解 された。
+    if (count($urls) > 1000) $urls = array_slice($urls, 0, 1000);
 
     // v969 DB キャッシュ を 素引き するだけ。 同期 fetch は 廃止。
     //   未取得 URL は cron (bin/album_thumbs_cron.php) が 差分 で 埋める。
