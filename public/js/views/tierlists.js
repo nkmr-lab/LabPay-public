@@ -192,14 +192,16 @@ export async function renderTierlistDetail({ params }) {
         <button id="tl-save" class="primary"${d.is_closed ? ' disabled' : ''}>${d.my_answer ? '更新を保存' : '回答する'}</button>
       </div>
     </div>
-    <div class="card">
-      <div class="bold" style="margin-bottom:6px">📊 集計 (全員 = ${d.answer_count} 人)</div>
-      <div id="tl-agg"></div>
-    </div>
     ${d.other_answers.length ? `<div class="card">
       <div class="bold" style="margin-bottom:6px">👥 他の人の回答</div>
       <div id="tl-others" class="list"></div>
     </div>` : ''}
+    <!-- v962 📊 集計 は ページ下部 に 移動 (ユーザ 要望)。 まず 自分 の 回答 + 他人 の 回答 が
+         見えて、 最後 に 総合 集計 で 締める 流れ に。 -->
+    <div class="card">
+      <div class="bold" style="margin-bottom:6px">📊 集計 (全員 = ${d.answer_count} 人)</div>
+      <div id="tl-agg"></div>
+    </div>
   `;
   if (d.is_creator && !d.is_closed) {
     document.getElementById('tl-close').addEventListener('click', async () => {
