@@ -46,10 +46,31 @@ function album_thumbs_serve(PDO $pdo, array $cfg, string $hash): void {
     }
     $path = ALBUM_THUMBS_DIR . '/' . $file;
     if (!is_file($path)) throw new ApiException('not_found', 'file missing', 404);
+
+    // v967 conditional GET + immutable。 hash が 変わら ない 限り 中身 は 不変 なので、
+    //   304 応答 と immutable キャッシュ で ブラウザ の 再 fetch を 完全 に 抑止。
+    $mtime = filemtime($path);
+    $size  = filesize($path);
+    $etag  = '"' . dechex($mtime) . '-' . dechex($size) . '"';
+
+    $ifNoneMatch    = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+    $ifModSince     = $_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '';
+    $ifModSinceTs   = $ifModSince ? strtotime($ifModSince) : 0;
+    $matchesEtag    = ($ifNoneMatch !== '' && $ifNoneMatch === $etag);
+    $matchesModSince= ($ifModSinceTs > 0 && $ifModSinceTs >= $mtime);
+
     header_remove('Cache-Control');
-    header('Cache-Control: private, max-age=86400');   // 1 日
+    header('Cache-Control: private, max-age=2592000, immutable');   // 30 日、 再検証も 無し
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+
+    if ($matchesEtag || $matchesModSince) {
+        http_response_code(304);
+        exit;
+    }
+
     header('Content-Type: image/jpeg');
-    header('Content-Length: ' . filesize($path));
+    header('Content-Length: ' . $size);
     readfile($path);
     exit;
 }
