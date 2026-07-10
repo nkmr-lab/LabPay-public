@@ -13,7 +13,7 @@ const countCache = {};   // { url: number | null }
 
 let sections = [];       // API 応答 の sections
 let sortMode = 'section';  // section | new | old | location
-let locFilter = 'all';     // all | jp | overseas (場所別 mode 用)
+let locFilter = 'jp';      // v970.11 jp | overseas (場所別 mode 用、 「すべて」 は 廃止 して 国内 デフォルト)
 let showAddForm = false;
 let cachedJpSvg = null;    // v970.10 Geolonia SVG (regions.js と 共有 の /img/jp-prefectures.svg)
 
@@ -191,7 +191,6 @@ function render() {
       </div>
       ${sortMode === 'location' ? `
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
-          <button data-nkm-locfilter="all"      class="${locFilter==='all'     ?'primary':''}" style="font-size:11px; padding:2px 8px">🌏 すべて</button>
           <button data-nkm-locfilter="jp"       class="${locFilter==='jp'      ?'primary':''}" style="font-size:11px; padding:2px 8px">🇯🇵 国内</button>
           <button data-nkm-locfilter="overseas" class="${locFilter==='overseas'?'primary':''}" style="font-size:11px; padding:2px 8px">✈ 国外</button>
         </div>` : ''}
