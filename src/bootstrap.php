@@ -565,6 +565,7 @@ require_once __DIR__ . '/handlers/kanban.php'; // v934 かんばん ボード (T
 require_once __DIR__ . '/handlers/public_codes.php'; // v941 公開機能 の 短縮 コード
 require_once __DIR__ . '/handlers/joint.php'; // v941 合同研究会用投票
 require_once __DIR__ . '/handlers/public_polls.php'; // v942 公開投票 (誰でも 投票)
+require_once __DIR__ . '/handlers/album_thumbs.php'; // v964 Google Photos サムネ キャッシュ
 require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';

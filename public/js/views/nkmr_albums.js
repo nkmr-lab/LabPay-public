@@ -3,6 +3,10 @@
 //   データ更新 は 下の RAW を 差し替える だけ で OK (Cosense 側 の 記法 と 同じ)。
 
 import { escapeHtml } from '../router.js';
+import { post } from '../api.js';
+
+// v964 サムネ キャッシュ (メモリ内、 タブ 開いてる 間 は 保持)。 { url: '/api/album-thumbs/photo/<hash>' | null }
+const thumbCache = {};
 
 // ─── 生 データ (Cosense の 記法 と 同じ、 [(* YYYY] で 年 区切り、 [title url] が 各 アルバム) ─────────
 const RAW = String.raw`
@@ -418,7 +422,8 @@ export async function renderNkmrAlbums() {
         <h2 style="margin:0">📸 中村研アルバム</h2>
         <div class="hint-sm" style="margin-top:6px">
           Google Photos で管理してる中村研の写真アルバム集 (${totalAlbums} 件)。
-          タイトルをタップで開閉、 アルバム名タップで Google Photos が別タブで開きます。
+          タイトルをタップで開閉、 サムネ / アルバム名タップで Google Photos が別タブで開きます。
+          サムネは開いた順に取得します (Google Photos の og:image を fetch)。
         </div>
       </div>
       ${sections.map(sec => renderSection(sec)).join('')}
@@ -431,6 +436,8 @@ export async function renderNkmrAlbums() {
         render();
       });
     });
+    // v964 開いてる セクション の URL 一覧 を サーバ に POST、 未取得 は 3 件/リクエスト で 進める
+    kickoffThumbFetch(sections);
   };
 
   const renderSection = (sec) => {
@@ -445,18 +452,99 @@ export async function renderNkmrAlbums() {
           <span class="hint-sm">${sec.albums.length} 件</span>
         </div>
         ${isOpen ? `
-          <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px">
-            ${sec.albums.map(a => `
-              <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
-                 style="display:flex; gap:6px; padding:6px 8px; text-decoration:none; color:inherit; border-left:2px solid #ede4f3; border-radius:0 4px 4px 0; align-items:baseline">
-                ${a.flag ? `<span style="flex:none">${a.flag}</span>` : ''}
-                <span style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis">${escapeHtml(a.title)}</span>
-                <span style="flex:none; color:#9ca3af; font-size:11px">↗</span>
-              </a>`).join('')}
+          <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px">
+            ${sec.albums.map(a => renderAlbumRow(a)).join('')}
           </div>` : ''}
       </div>
     `;
   };
 
   render();
+}
+
+function renderAlbumRow(a) {
+  const thumbUrl = thumbCache[a.url];   // undefined = 未問合せ、 null = 取れなかった、 string = URL
+  const thumbCell = thumbUrl
+    ? `<img src="${escapeHtml(thumbUrl)}" loading="lazy"
+              style="flex:none; width:64px; height:48px; object-fit:cover; border-radius:4px; background:#eee">`
+    : `<div style="flex:none; width:64px; height:48px; border-radius:4px; background:#f3f4f6; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:20px">📷</div>`;
+  return `
+    <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
+       data-nkm-url="${escapeHtml(a.url)}"
+       style="display:flex; gap:8px; padding:4px 6px; text-decoration:none; color:inherit; border-left:2px solid #ede4f3; border-radius:0 4px 4px 0; align-items:center">
+      ${thumbCell}
+      <div style="flex:1; min-width:0; display:flex; align-items:baseline; gap:6px">
+        ${a.flag ? `<span style="flex:none">${a.flag}</span>` : ''}
+        <span style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.title)}</span>
+      </div>
+      <span style="flex:none; color:#9ca3af; font-size:11px">↗</span>
+    </a>`;
+}
+
+// v964 開いてる セクション の URL リスト を サーバ に POST、 サーバ が キャッシュ + 未取得 数 件 の
+//   同期 fetch を こなして 返して くれる。 うち fetched > 0 なら もう 一度 呼び出して 続き を 取る。
+let thumbFetchInProgress = false;
+async function kickoffThumbFetch(sections) {
+  if (thumbFetchInProgress) return;
+  const urls = [];
+  for (const sec of sections) {
+    if (!isSectionOpen(sec)) continue;
+    for (const a of sec.albums) {
+      if (thumbCache[a.url] === undefined) urls.push(a.url);
+    }
+  }
+  if (!urls.length) return;
+  thumbFetchInProgress = true;
+  try {
+    const r = await post('/api/album-thumbs', { urls: urls.slice(0, 100), fetch_max: 3 });
+    const thumbs = r.thumbs || {};
+    let changed = 0;
+    for (const [u, v] of Object.entries(thumbs)) {
+      if (thumbCache[u] !== v) {
+        thumbCache[u] = v;
+        changed++;
+      }
+    }
+    // DOM だけ 差し替え (再 render は 重い ので img を 直接 更新)
+    if (changed > 0) applyThumbToDom();
+    // まだ 未取得 の URL が あって、 今回 数件 fetch できた なら、 続きを 呼ぶ
+    if (r.fetched > 0 && urls.some(u => thumbCache[u] === undefined)) {
+      setTimeout(() => { thumbFetchInProgress = false; kickoffThumbFetch(sections); }, 200);
+      return;
+    }
+  } catch (_) { /* silent */ }
+  thumbFetchInProgress = false;
+}
+
+function isSectionOpen(sec) {
+  // openState は module scope で 保持 されて ない ので DOM 見る (open している 見出し は アコーディオン
+  //   の 中身 が レンダリング されて いる)。 シンプル に data-nkm-sec の 直後 の div 存在 で 判定。
+  const head = document.querySelector(`[data-nkm-sec="${cssEscape(sec.title)}"]`);
+  if (!head) return false;
+  return head.parentElement && head.parentElement.querySelector('[data-nkm-url]') !== null;
+}
+
+function applyThumbToDom() {
+  document.querySelectorAll('[data-nkm-url]').forEach(a => {
+    const url = a.dataset.nkmUrl;
+    const t = thumbCache[url];
+    if (!t) return;
+    // 既に img が 入ってる か 判定
+    const img = a.querySelector('img[data-nkm-thumb], img');
+    const placeholder = a.querySelector('div[style*="📷"], div');
+    if (img && img.src && img.src.includes('/api/album-thumbs/photo/')) return;   // 既反映
+    // 置換 (最初の子=サムネセル)
+    const first = a.firstElementChild;
+    if (!first) return;
+    const newImg = document.createElement('img');
+    newImg.src = t;
+    newImg.loading = 'lazy';
+    newImg.dataset.nkmThumb = '1';
+    newImg.style.cssText = 'flex:none; width:64px; height:48px; object-fit:cover; border-radius:4px; background:#eee';
+    a.replaceChild(newImg, first);
+  });
+}
+
+function cssEscape(s) {
+  return String(s).replace(/["\\]/g, '\\$&');
 }
