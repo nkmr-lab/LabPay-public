@@ -176,6 +176,21 @@ function renderFlat() {
   return `<div class="card"><div class="nkm-tile-grid">${flat.map(renderAlbumTile).join('')}</div></div>`;
 }
 
+// v970.3 場所別 の 都道府県 は 北 → 南 の 地理 順、 東京都 は ありふれてる ので 末尾 手前 に、
+//   国外 は 件数 順、 場所不明 は 最後 (ユーザ 要望)。
+const PREF_ORDER = [
+  '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+  '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '神奈川県',
+  '新潟県', '富山県', '石川県', '福井県',
+  '山梨県', '長野県', '岐阜県', '静岡県', '愛知県',
+  '三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+  '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+  '徳島県', '香川県', '愛媛県', '高知県',
+  '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
+  // 「東京都」 は 敢えて 抜いて 末尾 手前 に 配置
+];
+const PREF_ORDER_INDEX = Object.fromEntries(PREF_ORDER.map((p, i) => [p, i]));
+
 function renderByLocation() {
   const flat = sections.flatMap(s => s.albums);
   const groups = {};
@@ -191,11 +206,25 @@ function renderByLocation() {
       (groups[pref] ||= []).push(a);
     }
   }
-  // 各 グループ 内 は 新しい順、 グループ 順 は 件数 多い順 (「(場所不明)」 は 末尾)
+  // カテゴリ: 0=都道府県 (北→南)、 1=東京都、 2=国外、 3=場所不明。
+  //   カテゴリ 内 では: 都道府県 は PREF_ORDER、 国外 は 件数 DESC、 場所不明 は 単一。
+  const catOf = (k) => {
+    if (k === '(場所不明)') return 3;
+    if (k === '東京都')     return 1;
+    if (k.startsWith('✈ ')) return 2;
+    return 0;
+  };
   const keys = Object.keys(groups).sort((a, b) => {
-    if (a === '(場所不明)') return 1;
-    if (b === '(場所不明)') return -1;
-    return groups[b].length - groups[a].length;
+    const ca = catOf(a), cb = catOf(b);
+    if (ca !== cb) return ca - cb;
+    if (ca === 0) {
+      const ia = PREF_ORDER_INDEX[a] ?? 999;
+      const ib = PREF_ORDER_INDEX[b] ?? 999;
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b);
+    }
+    if (ca === 2) return groups[b].length - groups[a].length;
+    return 0;
   });
   return keys.map(k => {
     const arr = groups[k].slice().sort((a, b) => (b.sortKey || '').localeCompare(a.sortKey || ''));
