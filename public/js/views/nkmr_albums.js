@@ -72,6 +72,38 @@ const PREF_MAP = {
   '島根': '島根県', '隠岐島': '島根県', '隠岐': '島根県',
 };
 
+// v970.12 タイトル 内 の 国 名 / 都市 名 キーワード → 国 名 (国外 グループ の 副 目的地 検出 用)。
+//   例: 「(香港経由)」 の アルバム を 香港 の セクション にも 出す。
+const COUNTRY_MAP = {
+  '韓国': '韓国', 'ソウル': '韓国',
+  '中国': '中国', '北京': '中国', '上海': '中国', '香港': '香港',
+  '台湾': '台湾', '台北': '台湾',
+  'タイ': 'タイ', 'バンコク': 'タイ',
+  'ベトナム': 'ベトナム', 'ハノイ': 'ベトナム', 'ホーチミン': 'ベトナム',
+  'フィリピン': 'フィリピン', 'マニラ': 'フィリピン',
+  'マレーシア': 'マレーシア', 'クアラルンプール': 'マレーシア',
+  'インドネシア': 'インドネシア', 'Depok': 'インドネシア',
+  'カンボジア': 'カンボジア', 'プノンペン': 'カンボジア',
+  'インド': 'インド',
+  'キプロス': 'キプロス',
+  'オーストラリア': 'オーストラリア', 'Sydney': 'オーストラリア', 'Brisbane': 'オーストラリア', 'キャンベラ': 'オーストラリア',
+  'ニュージーランド': 'ニュージーランド', 'Wellington': 'ニュージーランド',
+  'アメリカ': 'アメリカ', 'ラスベガス': 'アメリカ',
+  'カナダ': 'カナダ', 'モントリオール': 'カナダ',
+  'メキシコ': 'メキシコ', 'カンクン': 'メキシコ',
+  'ブラジル': 'ブラジル', 'サンパウロ': 'ブラジル',
+  'ペルー': 'ペルー', 'アレキパ': 'ペルー',
+  'アルゼンチン': 'アルゼンチン', 'ブエノスアイレス': 'アルゼンチン',
+  'デンマーク': 'デンマーク', 'コペンハーゲン': 'デンマーク',
+  'ドイツ': 'ドイツ',
+  'イギリス': 'イギリス', 'ロンドン': 'イギリス',
+  'フランス': 'フランス', 'パリ': 'フランス',
+  'ポルトガル': 'ポルトガル', 'リスボン': 'ポルトガル', 'ポルト': 'ポルトガル',
+  'スペイン': 'スペイン', 'バルセロナ': 'スペイン', 'マドリード': 'スペイン', 'Spain': 'スペイン',
+  'ギリシャ': 'ギリシャ', 'アテネ': 'ギリシャ',
+  'イタリア': 'イタリア', 'ローマ': 'イタリア', 'ミラノ': 'イタリア', 'ベネチア': 'イタリア', 'ジェノバ': 'イタリア', 'ベローナ': 'イタリア',
+};
+
 // 国旗 絵文字 (regional indicator) → ISO2 → 表示 用 国名
 function flagToCountry(flag) {
   if (!flag) return null;
@@ -87,17 +119,29 @@ function flagToCountry(flag) {
   return map[iso] || iso;
 }
 
-// タイトル/location 文字列 から 都道府県 名 を 推定 (国内 の 場合)。
-// v970.5 中村さん 「それ以外 は 全部 東京」 → fallback を 東京都 に。
-function guessPrefecture(album) {
+// v970.12 タイトル/location から 複数 都道府県 を 抽出 (中村さん 「複数県を訪問している場合は、
+//   国内の場所で出す時、 それぞれの場所で登場させて欲しい」)。 マッチ 無し は 東京都 fallback。
+//   注意: 「東京都」 が 「京都」 を 部分文字列 として 含む ので、 その ケース を 除外 する
+//   ため 前後 の 「東」 「京」 「府」 を 見て 誤検出 を 抑える。
+function guessPrefectures(album) {
   const candidates = [album.location, album.title].filter(Boolean);
+  const found = new Set();
   for (const cand of candidates) {
-    for (const key of Object.keys(PREF_MAP)) {
-      if (cand.indexOf(key) >= 0) return PREF_MAP[key];
+    for (const [key, val] of Object.entries(PREF_MAP)) {
+      let pos = 0;
+      while ((pos = cand.indexOf(key, pos)) >= 0) {
+        // 「京都」 が 「東京都」 の 内部 に ある 場合 は skip
+        const skip = key === '京都' && pos > 0 && cand[pos - 1] === '東';
+        if (!skip) { found.add(val); break; }
+        pos += key.length;
+      }
     }
   }
-  return '東京都';
+  if (found.size === 0) return ['東京都'];
+  return Array.from(found);
 }
+// 単数 版 は 一部 の 呼び出し 元 で 使うので 残す
+function guessPrefecture(album) { return guessPrefectures(album)[0]; }
 
 // タイトル 先頭 の YYYY.MM.DD → sortKey
 function extractSortKey(title) {
@@ -275,12 +319,19 @@ function renderByLocation() {
     const country = flagToCountry(a.flag);
     if (country) {
       if (locFilter === 'jp') continue;
-      const key = `✈ ${country}`;
-      (groups[key] ||= []).push(a);
+      // v970.12 flag 由来 の 主 目的地 + タイトル 内 の 副 目的地 (経由 地) も 追加。
+      const countries = new Set([country]);
+      const searchText = String(a.title || '') + ' ' + String(a.location || '');
+      for (const [kw, c] of Object.entries(COUNTRY_MAP)) {
+        if (searchText.indexOf(kw) >= 0) countries.add(c);
+      }
+      for (const c of countries) (groups[`✈ ${c}`] ||= []).push(a);
     } else {
       if (locFilter === 'overseas') continue;
-      const pref = guessPrefecture(a);
-      (groups[pref] ||= []).push(a);
+      // 複数 都道府県 に またがる アルバム は 各 都道府県 の セクション に 登場 させる
+      for (const pref of guessPrefectures(a)) {
+        (groups[pref] ||= []).push(a);
+      }
     }
   }
   // カテゴリ: 0=都道府県 (北→南)、 1=東京都 (ありふれてる ので 末尾 手前)、 2=国外。
