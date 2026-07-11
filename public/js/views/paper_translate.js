@@ -584,6 +584,8 @@ async function paintResult(d, token) {
 
     ${renderOchiai(r.ochiai_method || r.ochiai)}
 
+    ${renderFactCheck(r.fact_check)}
+
     <div id="pt-interactions-slot"></div>
   `);
   // v789 #389 いいね・ブックマーク・コメント
@@ -867,6 +869,68 @@ function renderFigure(fig, pagesDir, pagesCount) {
         ${visual ? `<div style="margin-top:3px"><b>👁 視覚要素:</b> ${escapeHtml(visual)}</div>` : ''}
         ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
       </div>
+    </div>`;
+}
+
+// v972 要約の自己検証 (back-translation + 引用実在性)。 fact_check が無いエントリは非表示。
+function renderFactCheck(fc) {
+  if (!fc || typeof fc !== 'object') return '';
+  const issues = Array.isArray(fc.issues) ? fc.issues : [];
+  const suspSources = Array.isArray(fc.suspicious_citations) ? fc.suspicious_citations : [];
+  const clean = fc.verified === true && issues.length === 0 && suspSources.length === 0;
+  const verifiedSecs = Array.isArray(fc.verified_sections) ? fc.verified_sections : [];
+  const barColor = clean ? '#15803d' : '#dc2626';
+  const bgColor  = clean ? '#f0fdf4' : '#fef2f2';
+  const issueTypeLabel = {
+    number_mismatch:        '🔢 数値の誤り',
+    term_wrong:             '📖 用語の誤り',
+    claim_distortion:       '↔ 主張の曲解',
+    out_of_scope_addition:  '➕ 範囲外の追加',
+    omission:               '📉 落とし',
+    over_summarization:     '📏 過剰要約',
+    other:                  '❓ その他',
+  };
+  const citTypeLabel = {
+    author_error:         '👤 著者名の誤り',
+    title_not_found:      '📕 タイトルが存在しない疑い',
+    bibinfo_error:        '📅 書誌情報の誤り',
+    venue_year_mismatch:  '🗓 会議と年のずれ',
+    possibly_hallucinated:'🤖 実在しない可能性 (ハルシネーション疑い)',
+    other:                '❓ その他',
+  };
+  const confColor = { high: '#dc2626', medium: '#ea580c', low: '#a16207' };
+  return `
+    <div class="card" style="margin-top:12px">
+      <div class="bold" style="color:${barColor}">🔍 back-translation + 引用実在性の自己検証</div>
+      <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
+        ${clean
+          ? '要約と原文の突合、および引用文献の実在性で問題は見つかりませんでした。'
+          : `要約に <span class="bold">${issues.length}</span> 件の懸念、 引用文献に <span class="bold">${suspSources.length}</span> 件の疑いあり。 下記を確認してください。`}
+      </div>
+      ${verifiedSecs.length ? `
+        <div style="font-size:11.5px; color:#15803d; margin-top:4px">
+          ✓ 検証済セクション: ${verifiedSecs.map(s => escapeHtml(s)).join(' / ')}
+        </div>` : ''}
+      ${issues.map(i => `
+        <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
+            <span class="bold" style="color:#dc2626">${issueTypeLabel[i.issue_type] || i.issue_type || '⚠'}</span>
+            <span style="font-size:11px; padding:1px 6px; border-radius:4px; background:${confColor[i.confidence] || '#9ca3af'}; color:#fff">${i.confidence || 'medium'}</span>
+            ${i.section ? `<span style="font-size:11px; color:#6b7280; font-family:ui-monospace, monospace">${escapeHtml(i.section)}</span>` : ''}
+          </div>
+          ${i.explanation ? `<div style="margin-top:4px">${escapeHtml(i.explanation)}</div>` : ''}
+          ${i.suggested_fix ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 修正案: ${escapeHtml(i.suggested_fix)}</div>` : ''}
+        </div>`).join('')}
+      ${suspSources.map(s => `
+        <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
+            <span class="bold" style="color:#dc2626">${citTypeLabel[s.issue_type] || s.issue_type || '⚠ 引用の疑問点'}</span>
+            <span style="font-size:11px; padding:1px 6px; border-radius:4px; background:${confColor[s.confidence] || '#9ca3af'}; color:#fff">${s.confidence || 'medium'}</span>
+          </div>
+          ${s.citation ? `<div style="margin-top:4px; font-family:ui-monospace, monospace; font-size:11.5px; padding:4px 8px; background:#fff5f5; border-radius:4px; white-space:pre-wrap">${escapeHtml(s.citation)}</div>` : ''}
+          ${s.explanation ? `<div style="margin-top:4px">${escapeHtml(s.explanation)}</div>` : ''}
+          ${s.suggested_fix ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 修正案: ${escapeHtml(s.suggested_fix)}</div>` : ''}
+        </div>`).join('')}
     </div>`;
 }
 

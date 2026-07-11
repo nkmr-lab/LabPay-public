@@ -1497,7 +1497,7 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
   英数字 / 記号と日本語の境界だけ半角スペース入れて OK (例: 「PDF を読む」はOK、
   「日本語」や「説明」はダメ)
 
-# ハルシネーション防止 (重要)
+# ハルシネーション防止 (最重要)
 
 各セクションを書く前に、 PDF の該当箇所を必ず確認してください。
 書いた後も、数値 / 用語 / 著者が主張した内容 / 引用 / 結果 / 著者名 / 会議名等が
@@ -1505,6 +1505,35 @@ PDF の記述と一致しているか自分で再精査し、ズレがあれば�
 JSON を出力してください。「PDF にそう書かれているか怪しいが文脈上推測する」
 部分は「論文からの推測」と明示すること。創作 / 拡大解釈は厳禁です。
 PDF に書かれていない数値や主張を補完しない。
+
+# バックトランスレーション検証 (v971.4 新設、最重要)
+
+要約を書き終えたあと、以下を必ず実施してください:
+
+**Step 1: 各セクションを英訳し直して原文と突合**
+- summary_one_paragraph、 rq_hypothesis、 contributions、 detailed_sections の body、
+  experiments、 results_summary、 ochiai_method の 6 項目を、 一度自分で英語 (原文言語) に
+  back-translate する。 back-translate した文と PDF 原文を突き合わせ、以下の 5 種類の
+  不一致を洗い出す:
+  1. **数値の誤り**: p値 / 効果量 / N / % / 年 / 件数などが原文と違う
+  2. **用語の誤り**: 論文で使っていない専門用語を使っている、 概念名を誤っている
+  3. **主張の曲解**: 著者が言っていない主張を要約が書いている、 断定 / 推測を混同している
+  4. **範囲外の追加**: 論文本文にない情報 (LLMの一般知識で補完した箇所) を要約に混ぜている
+  5. **落とし / 過剰要約**: 論文の重要な結論 / 制約 / 反例が要約から抜けている
+
+**Step 2: 引用文献の実在性検証** (paper_review と同じ厳しさで)
+- key_references に列挙する参考文献 1 件ずつについて:
+  - 著者名の綴り / 順序 / 人数が原論文の references と一致しているか
+  - タイトルの実在性 (あなたの知識でそのタイトル + 著者 + 年の組み合わせが実在する見込みか)
+  - 会議名 / ジャーナル名 / 巻号 / 年の整合性
+- 疑わしいものは fact_check.suspicious_citations に列挙する。 存在しない可能性が高い引用
+  (LLM ハルシネーション疑い) を特に警戒。
+
+**Step 3: fact_check セクションに整理**
+- 上記 Step 1-2 で見つかった問題を fact_check フィールドに整理する。
+- 問題が無ければ verified 表示、 あれば各アイテムを issue_type と confidence 付きで列挙。
+
+「back-translate して問題無しと確認済み」と自分に言い切れるまで JSON を出さないこと。
 
 # 出力 JSON スキーマ
 
@@ -1557,6 +1586,28 @@ PDF に書かれていない数値や主張を補完しない。
     "validation":    "値は説明本文のみ (200-400 字)",
     "discussion":    "値は説明本文のみ (100-300 字)",
     "next_papers":   ["タイトル + 1 行説明 (各文字列)"]
+  },
+  "fact_check": {
+    "verified": "true/false。 back-translate 検証と引用実在性検証で問題が全く無ければ true、 何らかの疑問が残れば false",
+    "verified_sections": ["問題無しと確認できたセクション名の配列 (例: 'summary_one_paragraph', 'contributions')"],
+    "issues": [
+      {
+        "section": "問題が見つかった要約セクション名 (例: 'detailed_sections[2].body', 'experiments[0]')",
+        "issue_type": "number_mismatch / term_wrong / claim_distortion / out_of_scope_addition / omission / over_summarization / other",
+        "explanation": "何が問題かの具体的説明。 back-translate 突合の結果、 原文には X と書かれているが要約には Y と書いてしまった 等",
+        "confidence": "high / medium / low",
+        "suggested_fix": "推奨する修正内容。 自分で修正できるなら、 その差分を要約側にも反映済にする"
+      }
+    ],
+    "suspicious_citations": [
+      {
+        "citation":    "key_references の中の疑わしい 1 件 (原文 or citation string)",
+        "issue_type":  "author_error / title_not_found / bibinfo_error / venue_year_mismatch / possibly_hallucinated / other",
+        "explanation": "何が怪しいか (綴り違い / 会議と年のズレ / タイトルの実在確認取れず 等)",
+        "confidence":  "high / medium / low",
+        "suggested_fix": "推測される正しい引用形。分からなければ null"
+      }
+    ]
   }
 }
 
@@ -2376,6 +2427,54 @@ const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
 URL だけで終わらない事 (ユーザがぱっと見て何の出典か分かる情報量を残す)。
 論文でない (ブログ / 公式ドキュメント / Wikipedia 等) の場合は title + venue 中心で OK、
 first_author は該当しないなら省略で OK。
+
+# 引用文献の実在性再精査 (v972 追加、最重要)
+
+all_sources に載せる 1 件ずつ について、必ず以下を再精査してください:
+
+**Step 1: 引用そのものの実在確認**
+- URL が実際にアクセスできる形か (typo が無いか、 web_search 結果でヒットしたか)
+- 論文の場合、 first_author + title + venue + year の組み合わせで **実在する論文か** を
+  自分の知識と web_search 結果で二重チェック。 「それっぽいが実在しない可能性がある」
+  ハルシネーションを警戒する。
+- web_search でヒットしなかった、 または結果と一致しないタイトルは絶対に載せない。
+
+**Step 2: 著者リスト / タイトル / 書誌情報のミス混入チェック**
+- 著者名の綴りが正しいか (typo は LLM ハルシネーションの典型)
+- 論文タイトルの単語の抜け・言い換え・意訳化がないか (原文ママを維持)
+- 会議名 / ジャーナル名 / 巻号 / 年が整合しているか
+- 発表年と venue の存在が矛盾しないか (未来の年、 実在しない会議名など)
+
+**Step 3: 疑わしい出典は fact_check.suspicious_sources に列挙**
+- 疑わしい出典は all_sources に載せずに **fact_check.suspicious_sources に隔離** して、
+  なぜ怪しいか (author_error / title_not_found / bibinfo_error / venue_year_mismatch /
+  possibly_hallucinated / url_broken 等) を明示する。 「確信持てなければ載せない」を徹底。
+- 一次情報にたどり着けなかった主張は body 内でも「未確認 / 一次情報未到達」と明示する。
+
+「本当に存在する」と自分で言い切れない出典は絶対に all_sources に含めない。
+
+# 出力 JSON スキーマの拡張 (fact_check フィールド追加)
+
+上述の sections / summary / key_findings / open_questions / all_sources に加えて、
+最後に fact_check フィールドを必ず入れる:
+
+  "fact_check": {
+    "verified": "true/false。 全出典の実在性が確認できたなら true、 1 件でも疑わしければ false",
+    "verified_source_count": "実在確認できた出典の件数 (整数)",
+    "suspicious_sources": [
+      {
+        "label":       "疑わしい出典の label (元の short name)",
+        "url":         "URL があれば",
+        "first_author": "疑わしい著者名 (該当あれば)",
+        "title":       "疑わしいタイトル (該当あれば)",
+        "venue":       "疑わしい venue (該当あれば)",
+        "issue_type":  "author_error / title_not_found / bibinfo_error / venue_year_mismatch / possibly_hallucinated / url_broken / other",
+        "explanation": "なぜ怪しいか具体的に (綴り違い / 会議と年のズレ / 検索でヒットせず 等)",
+        "confidence":  "high / medium / low",
+        "suggested_fix": "推測される正しい出典形。 分からなければ null"
+      }
+    ]
+  }
 
 JSON 以外の前置き / 解説 / markdown コードフェンスは不要、 JSON のみを返却。
 PROMPT;

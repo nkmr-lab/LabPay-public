@@ -526,7 +526,53 @@ function paintResult(d) {
             </div>`).join('')}
         </div>
       </div>` : ''}
+
+    ${renderDrFactCheck(r.fact_check)}
   `;
+}
+
+// v972 Deep Research の出典実在性の自己検証。
+function renderDrFactCheck(fc) {
+  if (!fc || typeof fc !== 'object') return '';
+  const susp = Array.isArray(fc.suspicious_sources) ? fc.suspicious_sources : [];
+  const clean = fc.verified === true && susp.length === 0;
+  const verifiedCount = Number(fc.verified_source_count) || 0;
+  const barColor = clean ? '#15803d' : '#dc2626';
+  const bgColor  = clean ? '#f0fdf4' : '#fef2f2';
+  const typeLabel = {
+    author_error:         '👤 著者名の誤り',
+    title_not_found:      '📕 タイトルが存在しない疑い',
+    bibinfo_error:        '📅 書誌情報の誤り',
+    venue_year_mismatch:  '🗓 会議と年のずれ',
+    possibly_hallucinated:'🤖 実在しない可能性 (ハルシネーション疑い)',
+    url_broken:           '🔗 URL が到達不能',
+    other:                '❓ その他',
+  };
+  const confColor = { high: '#dc2626', medium: '#ea580c', low: '#a16207' };
+  return `
+    <div class="card">
+      <div class="bold" style="color:${barColor}">🔍 出典実在性の自己検証</div>
+      <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
+        ${clean
+          ? `全 ${verifiedCount} 件の出典で実在性を確認しました。 疑わしい出典はありません。`
+          : `実在確認済 ${verifiedCount} 件、 疑わしい出典 <span class="bold">${susp.length}</span> 件。 下記を確認してください。`}
+      </div>
+      ${susp.map(s => `
+        <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
+            <span class="bold" style="color:#dc2626">${typeLabel[s.issue_type] || s.issue_type || '⚠'}</span>
+            <span style="font-size:11px; padding:1px 6px; border-radius:4px; background:${confColor[s.confidence] || '#9ca3af'}; color:#fff">${s.confidence || 'medium'}</span>
+            ${s.label ? `<span style="font-size:11px; color:#6b7280">${escapeHtml(s.label)}</span>` : ''}
+          </div>
+          ${(s.first_author || s.title || s.venue) ? `
+            <div style="margin-top:4px; font-size:12px">
+              ${s.first_author ? `<b>${escapeHtml(s.first_author)}</b> ` : ''}${s.title ? escapeHtml(s.title) : ''}${s.venue ? ` <span style="color:#6b7280">${escapeHtml(s.venue)}</span>` : ''}
+            </div>` : ''}
+          ${s.url ? `<div style="margin-top:3px; font-size:11.5px"><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(s.url)}</a></div>` : ''}
+          ${s.explanation ? `<div style="margin-top:4px">${escapeHtml(s.explanation)}</div>` : ''}
+          ${s.suggested_fix ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 修正案: ${escapeHtml(s.suggested_fix)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
 }
 
 function renderSourceMeta(src, asBlock = false) {
