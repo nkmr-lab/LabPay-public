@@ -1709,8 +1709,9 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     $html = @file_get_contents($tmp);
     @unlink($tmp);
     if (!$html) return null;
-    if (!preg_match('/<page[^>]*height="([\d.]+)"/', $html, $mp)) return null;
-    $pageH = (float)$mp[1];
+    if (!preg_match('/<page[^>]*width="([\d.]+)"[^>]*height="([\d.]+)"/', $html, $mp)) return null;
+    $pageW = (float)$mp[1];
+    $pageH = (float)$mp[2];
 
     if (preg_match('/^(Figure|Fig\.?|図)\s*(\d+)/i', trim($label), $lm)) {
         $isTable = false; $num = $lm[2];
@@ -1721,14 +1722,35 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     }
     $candKw = $isTable ? ['Table', 'Tbl', '表'] : ['Figure', 'Fig', '図'];
 
+    // v997 段組判定: page 内 全 word の x 中心 を binning。 2 山 なら 2 段組、 1 山 なら 1 段組。
+    //   段組の中央線 (2 段組時) を割り出す。
+    if (!preg_match_all(
+        '#<word\s+xMin="([\d.]+)"\s+yMin="([\d.]+)"\s+xMax="([\d.]+)"\s+yMax="([\d.]+)"[^>]*>([^<]*)</word>#s',
+        $html, $allWs, PREG_SET_ORDER)) return null;
+    $centers = array_map(fn($w) => ((float)$w[1] + (float)$w[3]) / 2, $allWs);
+    $isTwoCol = false; $colMid = $pageW / 2;
+    if (count($centers) >= 30) {
+        // 2 段組 は 中央 付近 に word がほとんど無い ため、 中央 20% の 範囲 の word 密度 を チェック
+        $midBandLo = $pageW * 0.42; $midBandHi = $pageW * 0.58;
+        $midCount = 0;
+        foreach ($centers as $c) if ($c >= $midBandLo && $c <= $midBandHi) $midCount++;
+        if ($midCount / count($centers) < 0.05) {
+            $isTwoCol = true;
+            // 実際 の 段中央 は 中央 帯 の 中心
+            $colMid = ($midBandLo + $midBandHi) / 2;
+        }
+    }
+
     if (!preg_match_all('#<line[^>]*>(.*?)</line>#s', $html, $lines, PREG_SET_ORDER)) return null;
-    $bestY = null;
+    $bestY = null; $bestXMin = null; $bestXMax = null;
     foreach ($lines as $lm2) {
         if (!preg_match_all(
             '#<word\s+xMin="([\d.]+)"\s+yMin="([\d.]+)"\s+xMax="([\d.]+)"\s+yMax="([\d.]+)"[^>]*>([^<]*)</word>#s',
             $lm2[1], $ws, PREG_SET_ORDER)) continue;
         $words = array_map(fn($w) => [
-            'y0' => (float)$w[2], 't' => trim($w[5]),
+            'x0' => (float)$w[1], 'y0' => (float)$w[2],
+            'x1' => (float)$w[3], 'y1' => (float)$w[4],
+            't'  => trim($w[5]),
         ], $ws);
         for ($i = 0; $i < count($words) - 1; $i++) {
             $t = $words[$i]['t'];
@@ -1737,14 +1759,37 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
             $nextNum = rtrim($next, '.:');
             if ($nextNum === (string)$num) {
                 $y = $words[$i]['y0'];
-                if ($bestY === null || $y < $bestY) $bestY = $y;
+                if ($bestY === null || $y < $bestY) {
+                    $bestY = $y;
+                    // line 全体 の x 範囲 (= キャプション全体) を 取る
+                    $bestXMin = min(array_column($words, 'x0'));
+                    $bestXMax = max(array_column($words, 'x1'));
+                }
                 break;
             }
         }
     }
     if ($bestY === null) return null;
 
-    $H = $pageH * 0.55;   // crop 高 = ページ の 55% を 目安
+    // v997 段組判定 に 応じて crop の x 範囲 を 決定
+    //   キャプション幅 が page の 60% 超 → ぶち抜き (段組を跨ぐ)、 x = ページ全幅 (5%-95%)
+    //   それ 未満 で 2 段組 → 該当段のみ、 左段 or 右段 を キャプション中心 で 判定
+    //   1 段組 → ページ全幅 (5%-95%)
+    $captionMid = ($bestXMin + $bestXMax) / 2;
+    $captionW   = $bestXMax - $bestXMin;
+    $spansFullWidth = ($captionW >= $pageW * 0.6);
+    if ($spansFullWidth || !$isTwoCol) {
+        $xMin = $pageW * 0.05; $xMax = $pageW * 0.95;
+    } else {
+        // 2 段組 & 段内 caption
+        if ($captionMid < $colMid) {
+            $xMin = $pageW * 0.05; $xMax = $colMid - $pageW * 0.02;
+        } else {
+            $xMin = $colMid + $pageW * 0.02; $xMax = $pageW * 0.95;
+        }
+    }
+
+    $H = $pageH * 0.55;
     $margin = 15;
     if ($isTable) {
         $y0 = max(0.0, $bestY - $margin);
@@ -1754,6 +1799,8 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
         $y0 = max(0.0, $y1 - $H);
     }
     return [
+        'crop_x_pct' => round(($xMin / $pageW) * 100, 1),
+        'crop_w_pct' => round((($xMax - $xMin) / $pageW) * 100, 1),
         'crop_y_pct' => round(($y0 / $pageH) * 100, 1),
         'crop_h_pct' => round((($y1 - $y0) / $pageH) * 100, 1),
     ];
@@ -1771,6 +1818,8 @@ function ai_augment_figure_crops(array $parsed, ?string $pdfPath): array {
             if ($label === '' || $page < 1) continue;
             $crop = ai_find_caption_crop($pdfPath, $page, $label);
             if ($crop) {
+                $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_x_pct'] = $crop['crop_x_pct'] ?? 5;
+                $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_w_pct'] = $crop['crop_w_pct'] ?? 90;
                 $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_y_pct'] = $crop['crop_y_pct'];
                 $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_h_pct'] = $crop['crop_h_pct'];
             }

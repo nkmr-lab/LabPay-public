@@ -850,20 +850,26 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   無ければ 全ページ 表示 (v995 の fallback、 region 推定 の 不精度 は 使わない)。
   const cropYPct = Number(fig?.crop_y_pct);
   const cropHPct = Number(fig?.crop_h_pct);
+  // v997 段組対応: crop_x_pct / crop_w_pct が あれば 該当 段 だけ 切り取る
+  const cropXPct = Number.isFinite(Number(fig?.crop_x_pct)) ? Number(fig.crop_x_pct) : 5;
+  const cropWPct = Number.isFinite(Number(fig?.crop_w_pct)) ? Number(fig.crop_w_pct) : 90;
   const hasCrop = Number.isFinite(cropYPct) && Number.isFinite(cropHPct) && cropHPct > 0;
   let imgElement;
   if (hasCrop) {
-    // A4 aspect 1.32 で 220 幅 なら 全ページ 292px 相当。 cropHPct% を 表示 高 に。
-    // bg-size は 縦 を 100/cropHPct 倍 (fullPage 相当) に、 bg-position-y は
-    // cropYPct / (100 - cropHPct) * 100 で 該当 window に 揃える。
-    const displayH = Math.round(wrap * 1.32 * (cropHPct / 100));
-    const bgSizeH  = (100 / (cropHPct / 100)).toFixed(1);   // e.g. 55% → 181.8%
-    const bgPosY   = (100 - cropHPct > 0 ? cropYPct * 100 / (100 - cropHPct) : 0).toFixed(1);
+    // wrap は 表示幅 (crop 領域 の 表示幅)。 A4 aspect 1.32 で crop 領域 の 実 高さ は
+    //   pageH * cropHPct/100、 幅 は pageW * cropWPct/100。 wrap 幅 に 合わせて 高さ 計算。
+    // 実 aspect = (cropHPct*pageH) / (cropWPct*pageW) = cropHPct/cropWPct * 1.32
+    const displayH = Math.round(wrap * 1.32 * cropHPct / cropWPct);
+    // bg-size: 幅 を 100/(cropWPct/100)% = 100*100/cropWPct 倍、 高 も 同様。
+    const bgSizeW = (10000 / cropWPct).toFixed(1);
+    const bgSizeH = (10000 / cropHPct).toFixed(1);
+    const bgPosX  = (100 - cropWPct > 0 ? cropXPct * 100 / (100 - cropWPct) : 0).toFixed(1);
+    const bgPosY  = (100 - cropHPct > 0 ? cropYPct * 100 / (100 - cropHPct) : 0).toFixed(1);
     imgElement = `<div style="width:${wrap}px; height:${displayH}px;
       background-image: url('${escapeHtml(imgUrl)}');
       background-repeat: no-repeat;
-      background-position: center ${bgPosY}%;
-      background-size: 100% ${bgSizeH}%;
+      background-position: ${bgPosX}% ${bgPosY}%;
+      background-size: ${bgSizeW}% ${bgSizeH}%;
       background-color:#fff; border:1px solid #ddd; border-radius:4px"></div>`;
   } else {
     imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:320px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
