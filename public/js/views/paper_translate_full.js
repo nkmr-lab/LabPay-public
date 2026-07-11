@@ -453,7 +453,6 @@ async function refresh(token) {
           ${sharedTag}
         </h2>
         ${d.result?.title_original && d.result?.title_translated ? `<div class="meta" style="font-size:13px; opacity:0.8; margin-top:2px">原題: ${escapeHtml(d.result.title_original)}</div>` : ''}
-        ${d.result?.authors ? `<div class="meta" style="font-size:13px; margin-top:2px">👥 ${escapeHtml(d.result.authors)}</div>` : ''}
         ${d.result?.venue   ? `<div class="meta" style="font-size:13px; margin-top:2px">📍 ${escapeHtml(d.result.venue)}</div>` : ''}
         <div class="meta" style="font-size:11px; margin-top:6px">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼・
@@ -570,21 +569,19 @@ async function paint(d) {
       <div class="card">
         ${r.title_translated ? `<div class="bold" style="font-size:16px; color:var(--primary)">${escapeHtml(r.title_translated)}</div>` : ''}
         ${r.title_original   ? `<div style="font-size:13px; color:#6b7280; margin-top:2px">${escapeHtml(r.title_original)}</div>` : ''}
-        ${r.authors          ? `<div style="font-size:12.5px; margin-top:4px">${escapeHtml(r.authors)}</div>` : ''}
         ${r.venue            ? `<div style="font-size:12px; color:#6b7280">${escapeHtml(r.venue)}</div>` : ''}
       </div>` : ''}
 
     ${(() => {
-      // v955 論文本体と無関係のボイラープレート章 (CCS Concepts / ACM
-      //   Reference Format / Permission / Copyright / References / Front matter
-      //   等) を除外。 代わりに 上部に:
-      //     - 著者カード (Front matter から parse)
-      //     - キーワードタグ (Keywords 章から parse、 タップで検索)
-      //   を出す。
+      // v992 著者カードは r.authors 文字列を第一ソースに (要約 view と統一)。
+      //   Front matter parse (affiliation/email 付き) は r.authors が拾えたら merge、
+      //   完全に空なら fallback として単独で使う。 これで従来の「r.authors のヘッダ表示」と
+      //   「Front matter 由来カード」の 2 ブロック重複を解消。 「責任著者」ラベル問題も
+      //   Front matter 単独時に出ていた変な訳語 (Corresponding author の直訳) が消える。
       if (!Array.isArray(r.chapters) || !r.chapters.length) return '';
-      const authors = parseAuthorsFromChapters(r.chapters);
       const kws = extractKeywordsFromChapters(r.chapters);
       const filtered = r.chapters.filter(ch => !isBoilerplateChapter(ch));
+      const authors = mergeAuthors(r.authors, r.chapters);
       let out = renderAuthorCards(authors);
       if (kws.length) {
         out += `
@@ -741,6 +738,38 @@ function extractKeywordsFromChapters(chapters) {
 //     (a) 1 行 「Name（所属, email）」形式 (半角/全角 括弧 両方 対応、 gpt-5 v953+)
 //     (b) 空行区切りブロック 「Name\n所属\n国\nemail」 形式 (旧 gpt-5)
 //   (a) を 先に 試して、 見つから なかったら (b) に fallback。
+// v992 r.authors 文字列 (再精査済で全著者フルネーム) を主ソースにし、
+//   Front matter parse で affiliation / email を merge (名前一致で)。
+//   r.authors が空なら Front matter 単独 fallback。
+function mergeAuthors(authorsStr, chapters) {
+  const fromStr = parseAuthorsFromString(authorsStr);
+  const fromFm  = parseAuthorsFromChapters(chapters || []);
+  if (!fromStr.length) return fromFm;
+  if (!fromFm.length)  return fromStr;
+  // 名前一致で affiliation / email を merge (surname か fullname の含有で緩め判定)
+  return fromStr.map(a => {
+    const cmp = a.name.toLowerCase();
+    const fm = fromFm.find(f => {
+      const fn = f.name.toLowerCase();
+      return fn === cmp || fn.includes(cmp) || cmp.includes(fn);
+    });
+    return fm ? { ...a, affiliation: fm.affiliation, email: fm.email } : a;
+  });
+}
+
+// 「Kelly Mack, Emma McDonnell, Dhruv Jain, ...」 形式を分解して [{name}, ...]。
+function parseAuthorsFromString(s) {
+  if (!s || typeof s !== 'string') return [];
+  const cleaned = s
+    .replace(/,\s*and\s+/gi, ', ')
+    .replace(/\s+and\s+/gi, ', ')
+    .replace(/\bet al\.?/gi, '');
+  return cleaned.split(/[,;、]/)
+    .map(x => x.trim())
+    .filter(x => x.length > 1 && x.length <= 80)
+    .map(name => ({ name, affiliation: '', email: '' }));
+}
+
 function parseAuthorsFromChapters(chapters) {
   const fmCh = chapters.find(c => /^(front matter|title page)/i.test(String(c?.chapter_title_original || '').trim()));
   if (!fmCh) return [];
