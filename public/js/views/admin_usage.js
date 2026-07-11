@@ -9,7 +9,7 @@ let period = 30;    // 7 or 30 日
 
 // 機能 名 の 表示 用 マップ (path prefix → 表示 名)
 const FEATURE_LABEL = {
-  'ai': '🤖 AI (要約 / 全訳 / DR)',
+  'ai': '🤖 AI (要約・全訳・DR)',
   'kanban': '📋 かんばん',
   'refs': '📚 文献管理',
   'polls': '🗳 投票',
@@ -21,7 +21,7 @@ const FEATURE_LABEL = {
   'tier': '🎯 ティア表',
   'purchases': '💴 購入',
   'sell': '🏷 販売',
-  'health': '⚖ 体重 / BMI',
+  'health': '⚖ 体重・BMI',
   'walk': '🚶 散歩',
   'workouts': '💪 筋トレ',
   'exercise': '🏃 運動 (歩数)',
@@ -46,13 +46,13 @@ const AI_LABEL = {
 
 export async function renderAdminUsage() {
   const app = document.getElementById('app');
-  app.innerHTML = `<div class="card">📊 利用統計 を 読み込み中…</div>`;
+  app.innerHTML = `<div class="card">📊 利用統計を読み込み中…</div>`;
   try {
     const d = await get('/api/admin/usage/summary', { days: period });
     app.innerHTML = renderPage(d);
     attachHandlers();
   } catch (e) {
-    app.innerHTML = `<div class="card">⚠ 読み込み 失敗: ${escapeHtml(e.message || String(e))}</div>`;
+    app.innerHTML = `<div class="card">⚠ 読み込み失敗: ${escapeHtml(e.message || String(e))}</div>`;
   }
 }
 
@@ -63,44 +63,44 @@ function renderPage(d) {
       <div class="row center" style="gap:8px">
         <h2 style="margin:0">📊 利用統計</h2>
         <span style="flex:1"></span>
-        <button data-usage-period="7"  class="${period===7  ? 'primary' : ''}" style="font-size:12px; padding:4px 10px">直近 7 日</button>
-        <button data-usage-period="30" class="${period===30 ? 'primary' : ''}" style="font-size:12px; padding:4px 10px">直近 30 日</button>
+        <button data-usage-period="7"  class="${period===7  ? 'primary' : ''}" style="font-size:12px; padding:4px 10px">直近7日</button>
+        <button data-usage-period="30" class="${period===30 ? 'primary' : ''}" style="font-size:12px; padding:4px 10px">直近30日</button>
       </div>
       <div class="hint-sm" style="margin-top:6px">
-        activity_log から 集計。 SPA の 定期 polling 系 (unread_count / latest_id / me 等) と POS scanner tick は
-        「使ってる」 の 判定 から 除外 済み。 「機能 別」 は path prefix → カテゴリ の 分類。
+        activity_logから集計。SPAの定期polling系 (unread_count / latest_id / me 等) と POS scanner tickは
+        「使ってる」の判定から除外済み。「機能別」は path prefix → カテゴリの分類。
       </div>
       <div style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:8px">
-        ${statCard('👤 アクティブ ユーザ', s.active_users || 0)}
-        ${statCard('📅 アクティブ 日数', s.active_days_seen || 0)}
-        ${statCard('📊 有効 アクション', (s.total_hits || 0).toLocaleString())}
+        ${statCard('👤 アクティブユーザ', s.active_users || 0)}
+        ${statCard('📅 アクティブ日数', s.active_days_seen || 0)}
+        ${statCard('📊 有効アクション', (s.total_hits || 0).toLocaleString())}
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 6px">📈 DAU (直近 30 日)</h3>
+      <h3 style="margin:0 0 6px">📈 DAU (直近30日)</h3>
       ${renderDauChart(d.dau_30d || [])}
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 6px">🤖 AI 機能 の 呼び出し (直近 ${period} 日)</h3>
+      <h3 style="margin:0 0 6px">🤖 AI機能の呼び出し (直近${period}日)</h3>
       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px">
         ${Object.entries(d.ai || {}).map(([k, a]) => renderAiCard(k, a)).join('')}
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 6px">🧩 機能 別 (直近 ${period} 日、 ユニーク ユーザ 数 順)</h3>
+      <h3 style="margin:0 0 6px">🧩 機能別 (直近${period}日、ユニークユーザ数順)</h3>
       ${renderFeaturesTable(d.features || [])}
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 6px">🏆 トップ ユーザ (直近 ${period} 日)</h3>
+      <h3 style="margin:0 0 6px">🏆 トップユーザ (直近${period}日)</h3>
       ${renderUsersTable(d.top_users || [])}
     </div>
 
     <details class="card">
-      <summary style="cursor:pointer; font-weight:600">🔍 トップ 30 raw path (参考、 ノイズ除去 後)</summary>
+      <summary style="cursor:pointer; font-weight:600">🔍 トップ30 raw path (参考、ノイズ除去後)</summary>
       ${renderPathsTable(d.top_paths || [])}
     </details>
   `;
@@ -125,7 +125,7 @@ function renderAiCard(key, a) {
     <div style="border:1px solid #e5e7eb; border-radius:6px; padding:10px 12px">
       <div style="font-size:13px; font-weight:600">${AI_LABEL[key] || key}</div>
       <div style="margin-top:4px; font-size:22px; font-weight:700; color:#4a106d">${runs}</div>
-      <div style="font-size:11px; color:#6b7280">${users} 人 が 利用</div>
+      <div style="font-size:11px; color:#6b7280">${users}人が利用</div>
       <div style="margin-top:6px; font-size:11px; color:#374151">
         <span style="color:#10b981">✓ ${done}</span>
          · <span style="color:#dc2626">✗ ${err}</span>
@@ -136,7 +136,7 @@ function renderAiCard(key, a) {
 }
 
 function renderFeaturesTable(features) {
-  if (!features.length) return `<div class="hint-sm">データ なし</div>`;
+  if (!features.length) return `<div class="hint-sm">データなし</div>`;
   const maxUsers = Math.max(...features.map(f => +f.unique_users), 1);
   return `
     <div style="display:grid; grid-template-columns: minmax(0, 1fr) 60px 100px; gap:6px 12px; align-items:center; font-size:13px">
@@ -160,7 +160,7 @@ function renderFeaturesTable(features) {
 }
 
 function renderUsersTable(users) {
-  if (!users.length) return `<div class="hint-sm">データ なし</div>`;
+  if (!users.length) return `<div class="hint-sm">データなし</div>`;
   return `
     <div style="display:grid; grid-template-columns: 24px minmax(0, 1fr) 60px 60px; gap:6px 10px; align-items:center; font-size:13px">
       <div style="font-weight:600; color:#6b7280; font-size:11px">#</div>
@@ -177,7 +177,7 @@ function renderUsersTable(users) {
 }
 
 function renderPathsTable(paths) {
-  if (!paths.length) return `<div class="hint-sm">データ なし</div>`;
+  if (!paths.length) return `<div class="hint-sm">データなし</div>`;
   return `
     <div style="display:grid; grid-template-columns: 40px minmax(0,1fr) 60px 60px; gap:4px 10px; align-items:center; font-size:12px; margin-top:8px">
       <div style="font-weight:600; color:#6b7280">method</div>
@@ -195,7 +195,7 @@ function renderPathsTable(paths) {
 
 // SVG line chart for DAU (last 30 days)
 function renderDauChart(dau) {
-  if (!dau.length) return `<div class="hint-sm">データ なし</div>`;
+  if (!dau.length) return `<div class="hint-sm">データなし</div>`;
   const W = 640, H = 140, PAD_L = 30, PAD_R = 8, PAD_T = 10, PAD_B = 20;
   const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
   const maxN = Math.max(...dau.map(x => +x.n), 1);

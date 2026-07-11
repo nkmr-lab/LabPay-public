@@ -215,11 +215,11 @@ async function fetchAlbums() {
 
 export async function renderNkmrAlbums() {
   const app = document.getElementById('app');
-  app.innerHTML = `<div class="card">📸 中村研アルバム を 読み込み中…</div>`;
+  app.innerHTML = `<div class="card">📸 中村研アルバムを読み込み中…</div>`;
   try {
     await fetchAlbums();
   } catch (e) {
-    app.innerHTML = `<div class="card">⚠ 読み込み 失敗: ${escapeHtml(e.message || String(e))}</div>`;
+    app.innerHTML = `<div class="card">⚠ 読み込み失敗: ${escapeHtml(e.message || String(e))}</div>`;
     return;
   }
   render();
@@ -240,13 +240,12 @@ function render() {
     <div class="card">
       <h2 style="margin:0">📸 中村研アルバム</h2>
       <div class="hint-sm" style="margin-top:6px">
-        Google Photos で管理してる中村研の写真アルバム (${totalAlbums} 件)。
-        タイル をタップで Google Photos が別タブで開きます。
-        サムネ / 写真枚数 は バックグラウンド で 自動取得、
-        追加 / 編集 / 削除 は 誰でも 可 (削除 は 追加した本人 のみ)。
+        Google Photosで管理してる中村研の写真アルバム (${totalAlbums}件)。
+        タイルをタップでGoogle Photosが別タブで開きます。
+        サムネ・写真枚数はバックグラウンドで自動取得、追加・編集・削除は誰でも可 (削除は追加した本人のみ)。
       </div>
       <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
-        <button data-nkm-sort="section"  class="${sortMode==='section' ?'primary':''}" style="font-size:12px; padding:4px 10px">年度 別</button>
+        <button data-nkm-sort="section"  class="${sortMode==='section' ?'primary':''}" style="font-size:12px; padding:4px 10px">年度別</button>
         <button data-nkm-sort="new"      class="${sortMode==='new'     ?'primary':''}" style="font-size:12px; padding:4px 10px">新しい順</button>
         <button data-nkm-sort="old"      class="${sortMode==='old'     ?'primary':''}" style="font-size:12px; padding:4px 10px">古い順</button>
         <button data-nkm-sort="location" class="${sortMode==='location'?'primary':''}" style="font-size:12px; padding:4px 10px">場所別</button>
@@ -411,7 +410,7 @@ function renderJpChoropleth(prefCounts) {
   if (!cachedJpSvg) {
     // 初回 は 非同期 fetch し、 完了 後 に 再 render (place-holder を 返す)
     ensureJpSvgAsync();
-    return `<div class="card" id="nkm-jp-map-placeholder" style="text-align:center; color:#9ca3af; padding:20px">🗾 日本地図 を 読み込み中…</div>`;
+    return `<div class="card" id="nkm-jp-map-placeholder" style="text-align:center; color:#9ca3af; padding:20px">🗾 日本地図を読み込み中…</div>`;
   }
   const svg = cachedJpSvg.cloneNode(true);
   svg.removeAttribute('class');
@@ -442,7 +441,7 @@ function renderJpChoropleth(prefCounts) {
     }
     // tooltip
     const title = g.querySelector('title');
-    if (title) title.textContent = prefName ? `${prefName} — ${n} 件` : title.textContent;
+    if (title) title.textContent = prefName ? `${prefName} — ${n}件` : title.textContent;
   });
 
   const legendItems = [
@@ -455,7 +454,7 @@ function renderJpChoropleth(prefCounts) {
   return `
     <div class="card" style="padding:10px; background:linear-gradient(180deg, #bee5fb 0%, #e8f4fd 100%)">
       <div class="hint-sm" style="text-align:center; margin-bottom:4px; color:#1d4ed8">
-        🗾 都道府県 別 アルバム 分布 (最大 ${maxCount} 件) — タップ で 一覧 に スクロール
+        🗾 都道府県別アルバム分布 (最大 ${maxCount} 件) — タップで一覧にスクロール
       </div>
       ${svg.outerHTML}
       <div style="display:flex; gap:6px; justify-content:center; margin-top:6px; font-size:10.5px; color:#374151">
@@ -536,7 +535,7 @@ function renderAddForm(editingAlbum = null) {
         <label style="display:flex; gap:6px; align-items:center; font-size:12px">
           <span style="width:80px; color:#6b7280">セクション</span>
           <input id="nkm-form-section" type="text" value="${escapeHtml(a.section || defaultSec)}"
-                 placeholder="2026 等" style="flex:1; padding:4px 6px" maxlength="60">
+                 placeholder="2026等" style="flex:1; padding:4px 6px" maxlength="60">
         </label>
         ${suggest.length ? `<div style="margin-left:86px; font-size:11px; color:#6b7280">
           候補: ${suggest.map(t => `<button data-nkm-sec-suggest="${escapeHtml(t)}" style="font-size:11px; padding:1px 6px; margin:0 2px">${escapeHtml(t)}</button>`).join('')}
@@ -555,12 +554,12 @@ function renderAddForm(editingAlbum = null) {
         <label style="display:flex; gap:6px; align-items:center; font-size:12px">
           <span style="width:80px; color:#6b7280">場所</span>
           <input id="nkm-form-location" type="text" value="${escapeHtml(a.location || '')}"
-                 placeholder="沖縄 / 京都 / イタリア 等 (省略可)" style="flex:1; padding:4px 6px" maxlength="80">
+                 placeholder="沖縄・京都・イタリア等 (省略可)" style="flex:1; padding:4px 6px" maxlength="80">
         </label>
         <label style="display:flex; gap:6px; align-items:center; font-size:12px">
           <span style="width:80px; color:#6b7280">国旗</span>
           <input id="nkm-form-flag" type="text" value="${escapeHtml(a.flag || '')}"
-                 placeholder="🇮🇹 等 (海外 のみ)" style="flex:1; padding:4px 6px" maxlength="20">
+                 placeholder="🇮🇹等 (海外のみ)" style="flex:1; padding:4px 6px" maxlength="20">
         </label>
       </div>
       <div style="margin-top:10px; display:flex; gap:6px">
@@ -626,7 +625,7 @@ async function submitForm(id) {
     flag    : document.getElementById('nkm-form-flag').value.trim(),
   };
   if (!body.section || !body.title || !body.url) {
-    alert('セクション / タイトル / URL は 必須');
+    alert('セクション・タイトル・URLは必須です');
     return;
   }
   try {
@@ -639,20 +638,20 @@ async function submitForm(id) {
     await fetchAlbums();
     render();
   } catch (e) {
-    alert('保存 失敗: ' + (e.message || String(e)));
+    alert('保存失敗: ' + (e.message || String(e)));
   }
 }
 
 async function submitDelete(id) {
   if (!id) return;
-  if (!confirm('この アルバム 登録 を 削除 しますか?\n(Google Photos 側 は 影響 なし、 一覧 から 消える だけ)')) return;
+  if (!confirm('このアルバム登録を削除しますか？\n(Google Photos側は影響なし、一覧から消えるだけ)')) return;
   try {
     await del('/api/nkmr-albums/' + id);
     editingId = null; showAddForm = false;
     await fetchAlbums();
     render();
   } catch (e) {
-    alert('削除 失敗: ' + (e.message || String(e)));
+    alert('削除失敗: ' + (e.message || String(e)));
   }
 }
 
