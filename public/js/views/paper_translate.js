@@ -844,13 +844,30 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   本体 は 見れる)。
   const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
-  // v995 LLM の region 推定 (top/middle/bottom) が 実際 の 図/表 の 位置 と 頻繁 に
-  //   ズレる (中村さん 指摘: Table 1 が top なのに bottom 判定、 Figure 全部 失敗 等)。
-  //   3 段階 の 粒度 では 精度 の 限界 に 達した ので、 詳細 view では 常に 全ページ を
-  //   表示 する 方針 に 変更。 タップ で lightbox の 拡大 表示 は 従来通り。
-  //   region_hint は タイル サムネ の 一覧 用 に は 残す (小さいので ズレ が 目立たない)。
-  const cropHeight = 320;
-  const imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:${cropHeight}px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
+  // v996 中村さんアイデア: 図 は 下 に キャプション、 表 は 上 に キャプション あるので、
+  //   pdftotext -bbox-layout で キャプション の y 座標 を 特定 して 精密 crop 可能。
+  //   crop_y_pct / crop_h_pct が result_json に 付与 されて いれば それ を 使う (精密)。
+  //   無ければ 全ページ 表示 (v995 の fallback、 region 推定 の 不精度 は 使わない)。
+  const cropYPct = Number(fig?.crop_y_pct);
+  const cropHPct = Number(fig?.crop_h_pct);
+  const hasCrop = Number.isFinite(cropYPct) && Number.isFinite(cropHPct) && cropHPct > 0;
+  let imgElement;
+  if (hasCrop) {
+    // A4 aspect 1.32 で 220 幅 なら 全ページ 292px 相当。 cropHPct% を 表示 高 に。
+    // bg-size は 縦 を 100/cropHPct 倍 (fullPage 相当) に、 bg-position-y は
+    // cropYPct / (100 - cropHPct) * 100 で 該当 window に 揃える。
+    const displayH = Math.round(wrap * 1.32 * (cropHPct / 100));
+    const bgSizeH  = (100 / (cropHPct / 100)).toFixed(1);   // e.g. 55% → 181.8%
+    const bgPosY   = (100 - cropHPct > 0 ? cropYPct * 100 / (100 - cropHPct) : 0).toFixed(1);
+    imgElement = `<div style="width:${wrap}px; height:${displayH}px;
+      background-image: url('${escapeHtml(imgUrl)}');
+      background-repeat: no-repeat;
+      background-position: center ${bgPosY}%;
+      background-size: 100% ${bgSizeH}%;
+      background-color:#fff; border:1px solid #ddd; border-radius:4px"></div>`;
+  } else {
+    imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:320px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
+  }
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `

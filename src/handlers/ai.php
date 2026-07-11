@@ -1694,6 +1694,91 @@ PROMPT;
 // v954 result_json + pages_dir から サムネ画像 情報 を 抽出。
 //   詳細サマリ の 各 section の figure_refs を 舐めて 最初 に 見つかった 図 の page + region を 使う。
 //   図 の 頭 に 表紙 の Figure 1 が 出やすい 論文 で は 見た目 が わかりやすい。
+// v996 論文の図/表の crop 領域をキャプション位置から特定 (中村さん指摘)。
+//   Figure は 図の 下に キャプション、 Table は 表の 上に キャプション がある。
+//   pdftotext -bbox-layout で page 内 word bbox を 取り、 「Figure N」 「Table N」 の
+//   ペア を 探し、 y 座標 から crop 領域 (y%, h%) を 算出。
+//   従来 の LLM の 3段階 region 推定 (top/middle/bottom) より 遥かに 精度 が 高い。
+function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?array {
+    if (!is_file($pdfPath)) return null;
+    $tmp = tempnam(sys_get_temp_dir(), 'bbox_') . '.html';
+    $cmd = sprintf('pdftotext -bbox-layout -f %d -l %d %s %s 2>&1',
+        $pageNum, $pageNum, escapeshellarg($pdfPath), escapeshellarg($tmp));
+    exec($cmd, $out, $rc);
+    if ($rc !== 0 || !is_file($tmp)) return null;
+    $html = @file_get_contents($tmp);
+    @unlink($tmp);
+    if (!$html) return null;
+    if (!preg_match('/<page[^>]*height="([\d.]+)"/', $html, $mp)) return null;
+    $pageH = (float)$mp[1];
+
+    if (preg_match('/^(Figure|Fig\.?|図)\s*(\d+)/i', trim($label), $lm)) {
+        $isTable = false; $num = $lm[2];
+    } elseif (preg_match('/^(Table|Tbl\.?|表)\s*(\d+)/i', trim($label), $lm)) {
+        $isTable = true;  $num = $lm[2];
+    } else {
+        return null;
+    }
+    $candKw = $isTable ? ['Table', 'Tbl', '表'] : ['Figure', 'Fig', '図'];
+
+    if (!preg_match_all('#<line[^>]*>(.*?)</line>#s', $html, $lines, PREG_SET_ORDER)) return null;
+    $bestY = null;
+    foreach ($lines as $lm2) {
+        if (!preg_match_all(
+            '#<word\s+xMin="([\d.]+)"\s+yMin="([\d.]+)"\s+xMax="([\d.]+)"\s+yMax="([\d.]+)"[^>]*>([^<]*)</word>#s',
+            $lm2[1], $ws, PREG_SET_ORDER)) continue;
+        $words = array_map(fn($w) => [
+            'y0' => (float)$w[2], 't' => trim($w[5]),
+        ], $ws);
+        for ($i = 0; $i < count($words) - 1; $i++) {
+            $t = $words[$i]['t'];
+            if (!in_array(rtrim($t, '.:'), $candKw, true)) continue;
+            $next = ltrim($words[$i + 1]['t']);
+            $nextNum = rtrim($next, '.:');
+            if ($nextNum === (string)$num) {
+                $y = $words[$i]['y0'];
+                if ($bestY === null || $y < $bestY) $bestY = $y;
+                break;
+            }
+        }
+    }
+    if ($bestY === null) return null;
+
+    $H = $pageH * 0.55;   // crop 高 = ページ の 55% を 目安
+    $margin = 15;
+    if ($isTable) {
+        $y0 = max(0.0, $bestY - $margin);
+        $y1 = min($pageH, $y0 + $H);
+    } else {
+        $y1 = min($pageH, $bestY + $margin + 20);
+        $y0 = max(0.0, $y1 - $H);
+    }
+    return [
+        'crop_y_pct' => round(($y0 / $pageH) * 100, 1),
+        'crop_h_pct' => round((($y1 - $y0) / $pageH) * 100, 1),
+    ];
+}
+
+// v996 result_json の 各 figure_refs に crop_y_pct / crop_h_pct を 付与 (可能なら)。
+//   PDF が 手元 に 無い / 該当 キャプション が 見つから ない 場合 は そのまま (未付与)。
+//   フロント は 付与 されて いれば 精密 crop、 なければ 従来 の region 表示 or 全ページ に fallback。
+function ai_augment_figure_crops(array $parsed, ?string $pdfPath): array {
+    if (!$pdfPath || !is_file($pdfPath)) return $parsed;
+    foreach (($parsed['detailed_sections'] ?? []) as $si => $sec) {
+        foreach (($sec['figure_refs'] ?? []) as $fi => $fr) {
+            $label = (string)($fr['label'] ?? '');
+            $page  = (int)($fr['page'] ?? 0);
+            if ($label === '' || $page < 1) continue;
+            $crop = ai_find_caption_crop($pdfPath, $page, $label);
+            if ($crop) {
+                $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_y_pct'] = $crop['crop_y_pct'];
+                $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_h_pct'] = $crop['crop_h_pct'];
+            }
+        }
+    }
+    return $parsed;
+}
+
 function _ai_extract_thumb(array $j, string $pagesDir, int $pagesCount): ?array {
     if ($pagesDir === '' || $pagesCount <= 0) return null;
     $firstFig = null;
@@ -2361,6 +2446,14 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             fwrite(STDERR, "[paper_translate] polish failed (row $rowId): " . $polishE->getMessage() . "\n");
         }
 
+        // v996 各 figure_refs に キャプション座標 由来 の crop_y_pct / crop_h_pct を付与
+        try {
+            $pdfRelForCrop = $pdo->prepare("SELECT pdf_path FROM paper_translates WHERE id = ?");
+            $pdfRelForCrop->execute([$rowId]);
+            $pdfRelStr = (string)$pdfRelForCrop->fetchColumn();
+            $pdfAbsForCrop = $pdfRelStr ? '/var/www/labpay/public' . $pdfRelStr : null;
+            $parsed = ai_augment_figure_crops($parsed, $pdfAbsForCrop);
+        } catch (Throwable $_) { /* pdftotext 失敗しても本体は続行 */ }
         $pdo->prepare("UPDATE paper_translates SET result_json = ?, status='done', finished_at = NOW() WHERE id = ?")
             ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $rowId]);
         // v804 auto_share=1 なら公開 ON に
