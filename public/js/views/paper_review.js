@@ -441,6 +441,8 @@ function paint(d, shareToken, isShared) {
         </div>
       </div>` : ''}
 
+      ${r.citations_check ? renderCitationsCheck(r.citations_check) : ''}
+
       ${r.strengths && r.strengths.length ? `
       <div style="margin-top:12px">
         <div class="bold" style="color:#15803d">✅ Strengths</div>
@@ -542,6 +544,46 @@ function paint(d, shareToken, isShared) {
     const title = d.sections?.[0]?.title || d.venue || '査読';
     printAsPdf(`査読 (${d.venue || 'venue'}) - ${title}`);
   });
+}
+
+// v971.3 引用文献の妥当性チェック (中村さん要望)。
+//   suspicious_citations があれば警告色で表示、なければ「妥当性確認済」の緑バナー。
+function renderCitationsCheck(cc) {
+  const total = Number(cc.total_citations) || 0;
+  const verified = Number(cc.verified_count) || 0;
+  const suspicious = Array.isArray(cc.suspicious_citations) ? cc.suspicious_citations : [];
+  const issueLabel = {
+    author_error:         '👤 著者名の誤り',
+    title_not_found:      '📕 タイトルが存在しない疑い',
+    bibinfo_error:        '📅 書誌情報の誤り',
+    venue_year_mismatch:  '🗓 会議と年のずれ',
+    body_mismatch:        '↔ 本文引用との不一致',
+    format_inconsistent:  '📐 フォーマット不統一',
+    possibly_hallucinated:'🤖 実在しない可能性 (ハルシネーション疑い)',
+    other:                '❓ その他',
+  };
+  const confColor = { high: '#dc2626', medium: '#ea580c', low: '#a16207' };
+  const barColor = suspicious.length ? '#dc2626' : '#15803d';
+  const bgColor  = suspicious.length ? '#fef2f2' : '#f0fdf4';
+  return `
+    <div style="margin-top:12px">
+      <div class="bold" style="color:${barColor}">📚 参考文献の検証</div>
+      <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
+        合計 ${total} 件中、 妥当性が確認できた引用は ${verified} 件、 疑わしい引用は <span class="bold">${suspicious.length}</span> 件。
+      </div>
+      ${suspicious.map(s => `
+        <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
+            <span class="bold" style="color:#dc2626">${issueLabel[s.issue_type] || s.issue_type || '⚠ 疑問点'}</span>
+            <span style="font-size:11px; padding:1px 6px; border-radius:4px; background:${confColor[s.confidence] || '#9ca3af'}; color:#fff">${s.confidence || 'medium'}</span>
+          </div>
+          ${s.original_citation ? `
+            <div style="margin-top:4px; font-family:ui-monospace, monospace; font-size:11.5px; padding:4px 8px; background:#fff5f5; border-radius:4px; white-space:pre-wrap">${escapeHtml(s.original_citation)}</div>` : ''}
+          ${s.cited_as ? `<div style="margin-top:3px; font-size:11px; color:#6b7280">本文中: ${escapeHtml(s.cited_as)}</div>` : ''}
+          ${s.explanation ? `<div style="margin-top:4px">${escapeHtml(s.explanation)}</div>` : ''}
+          ${s.suggested_fix ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 修正案: ${escapeHtml(s.suggested_fix)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
 }
 
 function decisionColor(d) {

@@ -816,7 +816,16 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
    - 用語の一貫性 (同じ概念に対して異なる表記がないか、略語の初出での説明があるか)
    - 専門用語の説明不足 (会議の想定読者層を超える専門用語が定義なしで使われていないか)
    - 図表の参照 (全ての Figure / Table が本文中で言及されているか、言及だけで本文に説明がない図表はないか)
-   - 参考文献の妥当性 (存在しなさそうな引用 / 著者名のタイポ / 年号の食い違い / フォーマット不一致がないか)
+
+7. **参考文献の徹底検証 (最重要)**:
+   本文で引用している文献1件ずつについて、以下を厳しくチェック:
+   - **著者リスト**: 著者名の綴り、順序、人数が正しいか。実在しそうな著者名か。共著者の抜けがないか
+   - **タイトル**: 論文タイトルが実在するか、typo・単語の抜け・言い換えがないか。あなたの知識で「そのタイトルの論文は本当に存在するか?」を評価
+   - **書誌情報**: 会議名 / ジャーナル名の綴り、開催年、巻号、ページ番号、DOI が整合しているか。venueと年の組み合わせが実在するか (例: CHI 2020 は開催されている、CHI 2050 は未来なので疑わしい)
+   - **本文引用との対応**: 本文で "[Smith et al. 2019]" と書かれているのに、参考文献側では別の著者・年になっていないか
+   - **フォーマット**: 提出先会議のスタイル (ACM Reference Format / APA / IEEE 等) に沿っているか、混在していないか
+   - **AIハルシネーション疑惑**: LLM生成の論文にありがちな「それっぽいが実在しないタイトル」「著者名の綴りが微妙にずれる」パターンを注視
+   問題があれば必ず citations_check.suspicious_citations に列挙 (issue_type と修正案付き)。 問題なさそうな引用は verified_count だけ計上して個別列挙は不要
 
 【strengths / weaknesses に書くべき粒度】
 - 抽象的な感想 (「面白い」「意義深い」等) は避け、具体的な節 / 図 / 数値 / 主張を引用して指摘する
@@ -1106,7 +1115,21 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "      \"terminology_consistency\": \"用語の一貫性、略語初出説明\",\n"
         . "      \"jargon_explanation\": \"専門用語の説明不足 (会議の想定読者層を超えるもの)\",\n"
         . "      \"figure_table_references\": \"全ての Figure / Table が本文で言及・説明されているか\",\n"
-        . "      \"references_validity\": \"存在しなさそうな引用 / typo / 年号食い違い / フォーマットの不一致\"\n"
+        . "      \"references_validity\": \"参考文献の全体所感 (詳細は citations_check に)\"\n"
+        . "    },\n"
+        . "    \"citations_check\": {\n"
+        . "      \"total_citations\": \"本文で引用されている文献の総数 (整数)\",\n"
+        . "      \"verified_count\": \"あなたの知識・整合性チェックで妥当と判定できた引用の数 (整数)\",\n"
+        . "      \"suspicious_citations\": [\n"
+        . "        {\n"
+        . "          \"original_citation\": \"参考文献 リスト からの原文 (著者・年・タイトル・書誌情報 の 生の 文字列)\",\n"
+        . "          \"cited_as\": \"本文中 での 引用 表現 (例: '[Smith et al. 2019]' や '(3)')。 分からなければ空文字\",\n"
+        . "          \"issue_type\": \"author_error / title_not_found / bibinfo_error / venue_year_mismatch / body_mismatch / format_inconsistent / possibly_hallucinated / other のいずれか\",\n"
+        . "          \"explanation\": \"何が問題かの具体的説明 (綴りのどこがおかしい・実在しないと判定した理由・年と会議のズレ・本文との不一致 等)\",\n"
+        . "          \"confidence\": \"suspicion の 確度 (high / medium / low)。 存在確認 が 出来ない だけ の 低確度 は low\",\n"
+        . "          \"suggested_fix\": \"考えられる正しい引用形。分からなければ null\"\n"
+        . "        }, ...\n"
+        . "      ]\n"
         . "    },\n"
         . "    \"strengths\": [\"具体的な強み (節/数値/主張を引用)\", ...],\n"
         . "    \"weaknesses\": [\"具体的な弱み + 直すべき改稿案\", ...],\n"
