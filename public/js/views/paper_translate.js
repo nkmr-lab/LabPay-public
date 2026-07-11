@@ -844,10 +844,11 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   本体 は 見れる)。
   const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
-  // v961 v954 で cropHeight=180 だと ページ 全体 の 63% が 見えて 「全体 出て しまう」 問題 に
-  //   なって いた ので、 100px に 縮小。 A4 / US Letter (縦横比 1.3-1.4) を 220px 幅 で 表示 する と
-  //   画像 高 は 285-310px なので 100 は 約 1/3 (32-35%) に なる。
-  const cropHeight = region === 'full' ? 320 : 100;
+  // v994 v961 の 100px は 図が大きめ (~40-60%) だと 見切れて 「切り出し失敗」 に なる ので、
+  //   150px (~52%) に 拡張。 A4 (縦横比 1.32) を 220px 幅 で 表示 する と 画像 高 は
+  //   ~292px なので 150 は 約 52%、 LLM の region 推定 が ±1/3 ずれても 図の 本体 が 収まる。
+  //   region_hint の 精度 が 微妙 でも タップ で lightbox に 全ページ 表示 されるので 補足 可能。
+  const cropHeight = region === 'full' ? 320 : 150;
   const bgPos = region === 'top'    ? 'center top'
               : region === 'middle' ? 'center center'
               : region === 'bottom' ? 'center bottom'
