@@ -441,6 +441,8 @@ function paint(d, shareToken, isShared) {
         </div>
       </div>` : ''}
 
+      ${r.statistical_validity ? renderStatisticalValidity(r.statistical_validity) : ''}
+
       ${r.citations_check ? renderCitationsCheck(r.citations_check) : ''}
 
       ${r.strengths && r.strengths.length ? `
@@ -544,6 +546,44 @@ function paint(d, shareToken, isShared) {
     const title = d.sections?.[0]?.title || d.venue || '査読';
     printAsPdf(`査読 (${d.venue || 'venue'}) - ${title}`);
   });
+}
+
+// v993 統計指標の妥当性 (中村さん要望)。 全体スコア + 個別 issue リスト。
+function renderStatisticalValidity(sv) {
+  const score = Number(sv.score) || 0;
+  const overall = String(sv.overall_comment || '');
+  const issues = Array.isArray(sv.issues) ? sv.issues : [];
+  const barColor = score >= 4 ? '#15803d' : score >= 3 ? '#a16207' : '#dc2626';
+  const bgColor  = score >= 4 ? '#f0fdf4' : score >= 3 ? '#fefce8' : '#fef2f2';
+  const scoreLabel = ['要大幅改稿','多数の重大問題','中程度の問題','ほぼ妥当','妥当'][Math.max(0, Math.min(4, score - 1))] || '';
+  const typeLabel = {
+    wrong_test:            '🎯 検定選択の誤り',
+    assumption_violated:   '📏 仮定の不検証',
+    no_effect_size:        '📐 効果量なし',
+    no_correction:         '➗ 多重比較補正なし',
+    wrong_model:           '🧮 モデル選択の誤り',
+    inconsistent_reporting:'⚠ 報告の内的不整合',
+    misinterpretation:     '🔄 統計解釈の誤り',
+    p_hacking:             '🎣 p-hacking疑い',
+    harking:               '🔮 HARKing疑い',
+    small_n:               '📉 サンプル過小',
+    lickert_mean:          '📊 リッカート尺度の平均化',
+    no_ci:                 '📏 信頼区間なし',
+    other:                 '❓ その他',
+  };
+  return `
+    <div style="margin-top:12px">
+      <div class="bold" style="color:${barColor}">📊 統計指標の妥当性 <span style="color:#6b7280; font-weight:400; font-size:11.5px">score: ${score}/5 ${scoreLabel}</span></div>
+      ${overall ? `
+        <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px; white-space:pre-wrap">${escapeHtml(overall)}</div>` : ''}
+      ${issues.map(i => `
+        <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+          <div class="bold" style="color:#dc2626">${typeLabel[i.issue_type] || i.issue_type || '⚠ 統計上の問題'}</div>
+          ${i.location ? `<div style="margin-top:3px; font-size:11.5px; color:#6b7280; font-family:ui-monospace, monospace">${escapeHtml(i.location)}</div>` : ''}
+          ${i.explanation ? `<div style="margin-top:4px">${escapeHtml(i.explanation)}</div>` : ''}
+          ${i.suggestion ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 改善案: ${escapeHtml(i.suggestion)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
 }
 
 // v971.3 引用文献の妥当性チェック (中村さん要望)。

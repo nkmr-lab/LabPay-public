@@ -730,6 +730,10 @@ function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, stri
 - 日本語の接続詞 (「しかし」「したがって」「そして」等が変じゃないか)
 - 表記揺れ (用語/数字書式/記号の一貫性)
 - 引用文献 (あれば: 表記の妥当性/存在しなさそう/typo)
+- **統計指標の妥当性 (数値/統計が原稿に含まれる場合、 v993)**: N の 妥当性、
+  効果量 の 併記、 検定 の 選択 (対応 の 有無 / 分布 の 前提)、 多重比較 補正 の
+  必要性、 「有意差」 と 「実質的意味」 の 混同、 リッカート 尺度 の 平均値 化、
+  信頼区間 の 有無 等。 統計 の 記述 が 一切 無い 原稿 なら スコア 5 で スキップ。
 PROMPT;
         $userPromptText = "出力 JSON スキーマ:\n"
             . "{ \"summary_one_line\": \"1行で全体講評\",\n"
@@ -740,6 +744,7 @@ PROMPT;
             . "  \"japanese_connectives\": {\"score\": 1-5, \"comment\": \"接続詞の適切さ\", \"issues\": [{\"original\": \"原文の問題箇所\", \"suggested\": \"こう書き直すと良い\"}, ...]},\n"
             . "  \"terminology_consistency\": {\"score\": 1-5, \"comment\": \"表記揺れの有無\", \"variations\": [\"揺れている表記 (例: 「ユーザ」と「ユーザー」)\", ...]},\n"
             . "  \"citations_check\": {\"score\": 1-5, \"comment\": \"引用の問題点 (引用が無ければ 'なし')\", \"issues\": [\"具体的な引用問題\", ...]},\n"
+            . "  \"statistical_validity\": {\"score\": 1-5, \"comment\": \"統計手法・指標・解釈の妥当性 (統計記述が無ければ 'なし' + score=5)\", \"issues\": [{\"location\": \"問題箇所\", \"issue_type\": \"wrong_test / no_effect_size / no_correction / small_n / misinterpretation / lickert_mean / no_ci / other\", \"explanation\": \"何が問題か\", \"suggestion\": \"改善案\"}, ...]},\n"
             . "  \"rewrite_suggestions\": [{\"original\": \"原文の該当箇所\", \"reason\": \"なぜ問題か\", \"suggested_rewrite\": \"こう書き直すと良い\"}, ...],\n"
             . "  \"comments_to_author\": \"著者への総合コメント (200-500字、励まし + 優先度付きの改善提案)\"\n"
             . "}\n\n"
@@ -832,7 +837,52 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
    - 専門用語の説明不足 (会議の想定読者層を超える専門用語が定義なしで使われていないか)
    - 図表の参照 (全ての Figure / Table が本文中で言及されているか、言及だけで本文に説明がない図表はないか)
 
-7. **参考文献の徹底検証 (最重要)**:
+7. **統計指標の妥当性 (v993 最重要)**:
+   単に「N=◯◯」「p<.05」と書いてあることだけでは不十分。 選ばれた統計手法・指標・
+   モデル・報告が本当にその研究デザインとデータに適切かを 1 件ずつ厳しく評価する:
+   - **検定選択の妥当性**: データ型 (連続 / 順序 / 名義)、 分布 (正規性)、 群数、
+     対応の有無、 反復測定の有無に対して選ばれた検定が適切か。 独立 t 検定 を
+     反復測定 に 使って いる、 一元配置 ANOVA を 二要因データ に 使って いる、
+     等の 明らかな 誤選択 を 検出。
+   - **仮定の検証**: 正規性 (Shapiro-Wilk / Q-Q プロット)、 等分散性 (Levene)、
+     球面性 (Mauchly)、 独立性 が 適切に 検証 されて いるか。 検証 も せず に
+     パラメトリック 検定 を 使って いない か。
+   - **効果量**: Cohen's d / η² / r / OR / RR 等の効果量が報告されて いるか。
+     p 値 だけで 「効果 が ある」 と 結論付けて いない か。 効果量 の 解釈
+     (small / medium / large) が 実質的意味 に 沿って いるか。
+   - **サンプルサイズ の 妥当性**: 事前に 検出力 分析 (a priori power analysis) で
+     必要 N を 見積もった か。 事後 検出力 (post-hoc power) の 記述 (低検出力 を
+     解釈 で 補足 して いるか)。 極端 に 小さい N (n<10 per group) で 有意差 を
+     謳って いない か。
+   - **多重比較補正**: 複数 検定 (仮説 が 複数 / 群 が 3+ / 変数 が 複数) に対して
+     Bonferroni / Holm / FDR / Tukey HSD 等 の 補正 が 適用 されて いるか。
+     補正 なしで 「p<.05」 を 積み重ねて 有意差 を 主張 して いない か。
+   - **モデル選択**: ネスト構造 (被験者内・被験者間) / 反復測定 / 個人差 が
+     ある データ に、 混合効果 モデル (mixed effects / GLMM) を 使う べき 場面 で
+     単純 な ANOVA / t 検定 を 使って いない か。 縦断 データ に 横断 分析 を
+     適用 して いない か。
+   - **報告の内的整合性**: t / F / χ² 値 と df と p 値 が 内部 で 整合 して いるか。
+     「F(2, 47) = 4.5, p = .04」 の ような 誤記 (df に対して F 値 が 実際の p 値と
+     ずれる)。 手計算 可能 な チェック は 実施 する。
+   - **解釈 の 妥当性**: 有意差 (statistical significance) を 意義 (practical
+     significance) と 混同 して いない か。 「有意」 → 「効果がある」、 「n.s.」 →
+     「効果がない」 の 誤解釈 (第 II 種 の 誤り の 軽視)。 HARKing (Hypothesizing
+     After Results are Known: 結果 を 見てから 仮説 を 書き換える) や p-hacking
+     (試行錯誤 で 有意 に なる 組み合わせ を 探す) の 兆候。
+   - **信頼区間 / ベイズ因子**: 点推定 だけで なく 95%CI が 報告 されて いるか。
+     ベイズ 分析 (Bayes Factor) が あれば その 解釈 が 適切か。 CI が 「効果 なし」
+     を 含む のに 「効果あり」 と 主張 して いない か。
+   - **非パラメトリック 代替**: 分布 の 前提 が 満たされ ない のに 強引 に
+     パラメトリック 検定 を 使って いない か (Mann-Whitney / Wilcoxon /
+     Kruskal-Wallis 等 の 代替 を 検討 すべき か)。
+   - **質的 データ の 扱い**: リッカート 尺度 (順序 尺度) を 平均値 で 扱って いる か
+     (代替: 中央値 + IQR、 順序 プロビット、 累積 ロジット 等)。
+   問題 が あれば statistical_validity.issues に 「locationは 具体 の 章 + 引用 箇所」
+   「issue_type は wrong_test / assumption_violated / no_effect_size / no_correction
+   / wrong_model / inconsistent_reporting / misinterpretation / p_hacking / harking
+   / small_n / other から 選ぶ」 「suggestion は 具体的 な 改善案」 で 列挙。
+
+8. **参考文献の徹底検証 (最重要)**:
    本文で引用している文献1件ずつについて、以下を厳しくチェック:
    - **著者リスト**: 著者名の綴り、順序、人数が正しいか。実在しそうな著者名か。共著者の抜けがないか
    - **タイトル**: 論文タイトルが実在するか、typo・単語の抜け・言い換えがないか。あなたの知識で「そのタイトルの論文は本当に存在するか?」を評価
@@ -1131,6 +1181,18 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "      \"jargon_explanation\": \"専門用語の説明不足 (会議の想定読者層を超えるもの)\",\n"
         . "      \"figure_table_references\": \"全ての Figure / Table が本文で言及・説明されているか\",\n"
         . "      \"references_validity\": \"参考文献の全体所感 (詳細は citations_check に)\"\n"
+        . "    },\n"
+        . "    \"statistical_validity\": {\n"
+        . "      \"score\": \"1-5 の整数 (1=多数の重大な問題、 5=妥当)\",\n"
+        . "      \"overall_comment\": \"統計手法選択・報告・解釈の全体所感 (200-500 字)\",\n"
+        . "      \"issues\": [\n"
+        . "        {\n"
+        . "          \"location\":    \"問題箇所 (章名 + 具体引用、 例: '4.2 Results, Study 1'、 '「F(2,47)=4.5」 の 記述')\",\n"
+        . "          \"issue_type\":  \"wrong_test / assumption_violated / no_effect_size / no_correction / wrong_model / inconsistent_reporting / misinterpretation / p_hacking / harking / small_n / lickert_mean / no_ci / other のいずれか\",\n"
+        . "          \"explanation\": \"何が問題か具体的に (どの検定を、 なぜ、 どんな データ に 使って いる か 等)\",\n"
+        . "          \"suggestion\":  \"具体的な改善案 (例: '対応 のある t 検定 に 変更'、 'ベイズ 因子 も 併記'、 'Bonferroni 補正 を 適用'、 '事前登録 と 検出力 分析 を 追加' 等)\"\n"
+        . "        }\n"
+        . "      ]\n"
         . "    },\n"
         . "    \"citations_check\": {\n"
         . "      \"total_citations\": \"本文で引用されている文献の総数 (整数)\",\n"

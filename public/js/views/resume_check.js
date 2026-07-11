@@ -151,6 +151,34 @@ async function loadAndPaint(id) {
   // done
   const r = d.result || {};
   const scoreColor = (s) => s >= 4 ? '#15803d' : s === 3 ? '#946d00' : '#b91c1c';
+  // v993 統計指標の妥当性 (中村さん要望)。 issues 構造が他と違う (location + issue_type +
+  //   explanation + suggestion) ので別ハンドラ。 統計記述がない原稿は score=5 で「なし」表示。
+  const renderStatValidity = (sv) => {
+    if (!sv) return '';
+    const score = Number(sv.score) || 0;
+    const issues = Array.isArray(sv.issues) ? sv.issues : [];
+    const typeLabel = {
+      wrong_test:'🎯 検定選択の誤り', no_effect_size:'📐 効果量なし', no_correction:'➗ 多重比較補正なし',
+      small_n:'📉 サンプル過小', misinterpretation:'🔄 統計解釈の誤り', lickert_mean:'📊 リッカート平均化',
+      no_ci:'📏 信頼区間なし', other:'❓ その他',
+    };
+    return `
+      <div style="margin-top:12px; padding:10px; background:#fafafa; border-radius:8px">
+        <div style="display:flex; align-items:center; gap:8px">
+          <b style="font-size:14px">📊 統計指標の妥当性</b>
+          <span style="color:${scoreColor(score)}; font-weight:700">${score}/5</span>
+        </div>
+        <div style="font-size:13px; margin-top:4px; line-height:1.5">${escapeHtml(sv.comment || '')}</div>
+        ${issues.map(i => `
+          <div style="margin-top:6px; padding:6px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
+            <div class="bold" style="color:#dc2626">${typeLabel[i.issue_type] || i.issue_type || '⚠'}</div>
+            ${i.location ? `<div style="margin-top:3px; font-size:11.5px; color:#6b7280; font-family:ui-monospace, monospace">${escapeHtml(i.location)}</div>` : ''}
+            ${i.explanation ? `<div style="margin-top:4px">${escapeHtml(i.explanation)}</div>` : ''}
+            ${i.suggestion ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 ${escapeHtml(i.suggestion)}</div>` : ''}
+          </div>`).join('')}
+      </div>`;
+  };
+
   const renderScored = (key, label) => {
     const v = r[key];
     if (!v) return '';
@@ -193,6 +221,7 @@ async function loadAndPaint(id) {
     ${renderScored('japanese_connectives',    '✍️ 日本語の接続詞')}
     ${renderScored('terminology_consistency', '📐 表記の一貫性')}
     ${renderScored('citations_check',         '📑 引用')}
+    ${renderStatValidity(r.statistical_validity)}
     ${Array.isArray(r.rewrite_suggestions) && r.rewrite_suggestions.length ? `
       <div class="card">
         <h3 style="margin:0 0 6px">✏️ リライト案</h3>
