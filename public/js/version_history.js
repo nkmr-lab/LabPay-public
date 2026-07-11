@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v991', d: '2026-07-11', s: '🐛✕ 2件修正 (中村さん指摘)。 (1) バージョン履歴で v935 説明中の 「<a>」 が本物のアンカータグとして解釈されて、 そこから全部がリンク化する事故 → 説明文を escapeHtml で 逃がすように 修正。 (2) ✕ ボタンナビゲーション改善: 研究タブ → DR結果ページで✕を押すと研究タブに戻る問題を修正。 詳細ページ (#/deep-research/r/xxx や #/paper-summary/r/xxx や #/kanban/123 等) では まず 1階層上 (アプリの一覧) に戻し、 一覧で もう一度✕を押すと fsEntryHash に戻す。' },
   { v: 'v990', d: '2026-07-11', s: '🔢 share_token を 32文字→6桁hex に短縮 (中村さん「IDが長すぎる、6桁で十分」) + 論文要約プロンプトの著者リストを「3名+et al.」から「全著者フルネーム列挙」に変更 (id=af478b6c で著者リストが3名で切れていた件)。 ai_gen_short_token(PDO, table) 新設: 該当テーブル で 重複チェック + 最大100回リトライ、 万一衝突なら16文字にfallback。 paper_review / paper_translate / paper_full_translation / deep_research の6箇所すべて置換。 既存の長いtokenはVARCHARカラムでそのまま動作。' },
   { v: 'v989', d: '2026-07-11', s: '🔍📚 論文要約とDeep Researchに自己検証を追加 (中村さん要望「バックトランスレーション強化 / 嘘の調査 / DeepResearchも文献の実在再精査」)。 (1) 論文要約: system promptに「バックトランスレーション検証」セクション新設、 要約後に自分で英訳し直して原文と突合、 数値の誤り / 用語の誤り / 主張の曲解 / 範囲外の追加 / 落とし / 過剰要約 の6種類を洗い出す。 key_referencesも実在性検証。 fact_check {verified, verified_sections, issues[], suspicious_citations[]} を追加、 renderFactCheck() で緑バナーor赤警告カード表示。 (2) Deep Research: 引用文献の実在性再精査セクション新設。 all_sources 1件ずつ URL到達性・著者綴り・タイトル実在性・venue/年整合・AIハルシネーション疑いを web_search + 自己知識で二重チェック、 疑わしければ suspicious_sources に隔離。 renderDrFactCheck() で警告カード表示 (issue_type: author_error / title_not_found / bibinfo_error / venue_year_mismatch / possibly_hallucinated / url_broken)。' },
   { v: 'v988', d: '2026-07-11', s: '🖊 論文査読に引用文献の徹底検証を追加 (中村さん要望「著者、タイトル、書誌情報からしっかりチェック」)。 system promptに「参考文献の徹底検証 (最重要)」セクション新設: 著者リストの綴り/順序/人数、 タイトルの実在性 (LLM知識で判定)、 書誌情報の会議名/年/巻号/DOI整合、 本文引用との対応、 フォーマット統一、 AIハルシネーション疑惑を明示的にチェック。 出力JSONに citations_check (total_citations / verified_count / suspicious_citations[]) を追加、 paper_review.js に renderCitationsCheck() で疑わしい引用がゼロなら緑バナー、 あれば赤の警告カード (👤 著者誤り / 📕 タイトル不在 / 🤖 ハルシネーション疑い 等)。' },
@@ -421,6 +422,15 @@ export const VERSION_HISTORY = [
   { v: 'v575', d: '2026-06-12', s: 'AI 麻雀 + 麻雀ターン管理修正 + 各種細かい改善' },
 ];
 
+// v991 v.s (説明文) を innerHTML に直接埋め込むと 「<a>」 「<name>」 等 の 説明用
+//   バーテキストが 本物の HTML タグとして 解釈 され、 v935 の 「<a>」 以降 全部が
+//   リンク化 する 事故 が 起きた (中村さん指摘)。 escapeHtml で 逃がす。
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 export function showVersionHistory() {
   // 既存モーダルがあれば閉じる
   document.getElementById('vh-modal')?.remove();
@@ -440,7 +450,7 @@ export function showVersionHistory() {
               <span style="font-weight:700; color:#4a106d; font-family:ui-monospace, monospace">${v.v}</span>
               <span style="font-size:11px; color:#999; font-variant-numeric:tabular-nums">${v.d}</span>
             </div>
-            <div style="font-size:13px; line-height:1.5; margin-top:2px">${v.s}</div>
+            <div style="font-size:13px; line-height:1.5; margin-top:2px">${escapeHtml(v.s)}</div>
           </div>
         `).join('')}
         <div style="padding:14px 0; text-align:center; font-size:12px; color:#888">

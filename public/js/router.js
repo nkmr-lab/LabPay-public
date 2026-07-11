@@ -93,7 +93,17 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
 //   代わりに、フルスクリーンに「入った瞬間」の前の hash を覚えておいて、そこに直接戻す。
 //   入る前の hash が分からない場合は /#/apps (アプリ一覧) に戻す。
 let fsEntryHash = null;
+// v991 中村さん指摘「研究タブ→DR結果→✕で研究タブに戻ってしまう。 一覧に戻ってほしい」。
+//   詳細ページ (#/deep-research/r/xxx や #/paper-summary/r/xxx や #/kanban/123 等) で ✕ を
+//   押した場合はまず 1 階層上 (= アプリの一覧) に戻す。 その後、 一覧で もう一度 ✕ を押す
+//   と fsEntryHash (= アプリに入る前の画面) or /#/apps に戻す。
 function closeFullscreen() {
+  const cur = location.hash || '';
+  const detailMatch = cur.match(/^(#\/[^/]+)\/.+$/);
+  if (detailMatch && detailMatch[1] !== fsEntryHash) {
+    location.hash = detailMatch[1];
+    return;
+  }
   if (fsEntryHash && fsEntryHash !== location.hash) {
     location.hash = fsEntryHash;
   } else {
