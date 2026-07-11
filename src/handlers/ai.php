@@ -373,6 +373,21 @@ const REWRITER_MAX_INPUT = 10000;
 const REWRITER_MAX_ITER  = 3;
 
 // 文字数 (スペースあり / なし) と単語数をサーバ側で正確にカウント
+// v972 論文要約・全訳・査読・Deep Research の share_token を 32 文字 → 6 文字 hex に 短縮。
+//   衝突 は SHA2-256 相当 の 検定 で 極めて 稀 (24bit = 16M 空間、 数百件 なら 実用上 皆無) だが、
+//   万一 に 備え 該当 テーブル で 重複 チェック + 最大 100 回 リトライ、 それでも 衝突 なら
+//   長い token に fallback。 既存 の 長い token は そのまま 動作 (VARCHAR で 揃えて ある)。
+function ai_gen_short_token(PDO $pdo, string $table): string {
+    for ($i = 0; $i < 100; $i++) {
+        $t = bin2hex(random_bytes(3));   // 6 hex chars
+        $st = $pdo->prepare("SELECT 1 FROM $table WHERE share_token = ? LIMIT 1");
+        $st->execute([$t]);
+        if (!$st->fetchColumn()) return $t;
+    }
+    // 衝突 が 続いた 場合 の fallback (16 chars)
+    return bin2hex(random_bytes(8));
+}
+
 function ai_count_text(string $s): array {
     $sNoSpace = preg_replace('/\s+/u', '', $s) ?? '';
     $cWithSpace = mb_strlen($s);
@@ -1050,7 +1065,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
 
     // v795 アップロードされた PDF をサーバにも保存 (結果ページからリンクで開けるように)。
     //   token がこのあと生成されるので先に作って流用する。
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'paper_reviews');
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_reviews/' . $token . '/original.pdf';
     $pdfAbs = $publicDir . $pdfRel;
@@ -1540,7 +1555,7 @@ PDF に書かれていない数値や主張を補完しない。
 {
   "title_ja": "論文タイトルの日本語訳 (副題も)",
   "title_orig": "原題",
-  "authors": "著者名 (代表 3 名まで + et al.)",
+  "authors": "著者名 (論文の全著者をカンマ区切りで列挙。 3 名までに省略しない、 et al. で省略もしない。 3 人でも 15 人でも全員フルネームで並べる)",
   "venue": "発表会議 / ジャーナル + 年",
   "summary_one_paragraph": "1 段落 (300-500 字) の全体サマリ",
   "rq_hypothesis": {
@@ -1926,7 +1941,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // v757 #375 解像度を 110 → 160 DPI に bump、図表を crop 表示する時の質を上げる。
     // v758 #377 PDF 本体もサーバに保存 (やりなおす用)。
     //   client は figure_refs の page + page_region からこのページ画像を crop 表示。
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'paper_translates');
     $publicDir = '/var/www/labpay/public';
     $pagesRel = '/uploads/paper_pages/' . $token;
     $pagesAbs = $publicDir . $pagesRel;
@@ -2657,7 +2672,7 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'deep_researches');
 
     $rowId = 0;
     db_tx($pdo, function () use ($pdo, $uid, $token, $query, $tier, $depth, $cost, $autoShare, &$rowId) {
@@ -3303,7 +3318,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     $fileId = ai_openai_upload_pdf($tmpPdf, (string)($f['name'] ?? 'paper.pdf'), $apiKey);
 
     // PDF 保存 (削除時 / 再表示時用)
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'paper_full_translations');
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
     $pdfAbs = $publicDir . $pdfRel;
@@ -3490,7 +3505,7 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     $fileId = ai_openai_upload_pdf($pdfAbs, (string)$sumRow['pdf_name'], $apiKey);
 
     // 保存用 PDF を新規 token フォルダにコピー (paper_full_translations は自分の pdf_path を持つ)
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'paper_full_translations');
     $publicDir = '/var/www/labpay/public';
     $pdfRel = '/uploads/paper_full_translations/' . $token . '/original.pdf';
     $pdfAbsNew = $publicDir . $pdfRel;
@@ -3560,7 +3575,7 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, (string)$fullRow['pdf_name'], $apiKey);
 
-    $token = bin2hex(random_bytes(16));
+    $token = ai_gen_short_token($pdo, 'paper_translates');
     $publicDir = '/var/www/labpay/public';
     $pagesRel = '/uploads/paper_pages/' . $token;
     $pagesAbs = $publicDir . $pagesRel;
