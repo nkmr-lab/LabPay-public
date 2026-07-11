@@ -844,19 +844,13 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   本体 は 見れる)。
   const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
-  // v994 v961 の 100px は 図が大きめ (~40-60%) だと 見切れて 「切り出し失敗」 に なる ので、
-  //   150px (~52%) に 拡張。 A4 (縦横比 1.32) を 220px 幅 で 表示 する と 画像 高 は
-  //   ~292px なので 150 は 約 52%、 LLM の region 推定 が ±1/3 ずれても 図の 本体 が 収まる。
-  //   region_hint の 精度 が 微妙 でも タップ で lightbox に 全ページ 表示 されるので 補足 可能。
-  const cropHeight = region === 'full' ? 320 : 150;
-  const bgPos = region === 'top'    ? 'center top'
-              : region === 'middle' ? 'center center'
-              : region === 'bottom' ? 'center bottom'
-              : 'center top';
-  // full は object-fit で 全体 を 縮小、 それ 以外 は background で 該当領域 を クロップ
-  const imgElement = region === 'full'
-    ? `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:${cropHeight}px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`
-    : `<div style="width:${wrap}px; height:${cropHeight}px; background:#fff url('${escapeHtml(imgUrl)}') no-repeat ${bgPos}/100% auto; border:1px solid #ddd; border-radius:4px"></div>`;
+  // v995 LLM の region 推定 (top/middle/bottom) が 実際 の 図/表 の 位置 と 頻繁 に
+  //   ズレる (中村さん 指摘: Table 1 が top なのに bottom 判定、 Figure 全部 失敗 等)。
+  //   3 段階 の 粒度 では 精度 の 限界 に 達した ので、 詳細 view では 常に 全ページ を
+  //   表示 する 方針 に 変更。 タップ で lightbox の 拡大 表示 は 従来通り。
+  //   region_hint は タイル サムネ の 一覧 用 に は 残す (小さいので ズレ が 目立たない)。
+  const cropHeight = 320;
+  const imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:${cropHeight}px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
