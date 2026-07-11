@@ -85,9 +85,13 @@ export async function renderPublicTimer({ params }) {
       _serverOffsetMs = sn - Date.now();
     }
     render();
-    // 1 秒で表示を更新
-    _tickTimer = setInterval(render, 1000);
-    // 5 秒ごとに server から状態を再 fetch (操作が別端末であったときも追従)
+    _tickTimer = setInterval(() => {
+      render();
+      // v971.1 「画面 が スリープ してしまう」 対策: OS が sentinel を 解放 して いた 場合、
+      //   毎 tick 見に行って 再取得 (acquire は cheap — 既に 保持 中 なら 即 return)。
+      if (document.visibilityState === 'visible') acquireWakeLock('public-timer');
+    }, 1000);
+    // v971.1 poll を 5s → 2s に (「更新頻度 低い、 もう少し 上げて」)
     _pollTimer = setInterval(async () => {
       try {
         const d2 = await fetchState(id);
@@ -97,7 +101,7 @@ export async function renderPublicTimer({ params }) {
           _serverOffsetMs = sn - Date.now();
         }
       } catch (_) {}
-    }, 5000);
+    }, 2000);
   } catch (e) {
     document.getElementById('pt-title').textContent = 'エラー: ' + e.message;
   }
