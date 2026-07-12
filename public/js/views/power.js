@@ -158,6 +158,147 @@ function calc_chi_squared(alpha, w, df, mode, N, powerTarget) {
   }
 }
 
+// ---------------- 効果量 ヘルパー ----------------
+// 中村さん指摘「効果量は先行研究の平均SDから計算するか、 パイロット、 メタ分析、 分野の
+//   慣習で決めるのが望ましい。 ここをなんとか支援できないか」→ 先行研究 / パイロット の
+//   値 を 入れて 効果量 を 逆算 する 補助 UI。 検定 タイプ 別 に 現実的 な 入力 セット を 出す。
+function renderEffectHelper() {
+  if (state.test === 't2') {
+    return `
+      <details class="card" style="background:#f9fafb; padding:8px 12px">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 先行研究の平均・SD から Cohen's d を計算 (独立 2 群)</summary>
+        <div class="hint-sm" style="margin-top:4px">計算式: <code>d = |M₁ − M₂| / √((SD₁² + SD₂²) / 2)</code></div>
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px">
+          <label class="field"><span class="lbl">群 1 の 平均 M₁</span><input type="number" id="eh-m1" step="any"></label>
+          <label class="field"><span class="lbl">群 1 の SD₁</span><input type="number" id="eh-sd1" step="any" min="0.0001"></label>
+          <label class="field"><span class="lbl">群 2 の 平均 M₂</span><input type="number" id="eh-m2" step="any"></label>
+          <label class="field"><span class="lbl">群 2 の SD₂</span><input type="number" id="eh-sd2" step="any" min="0.0001"></label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button data-eh-calc="t2" class="btn primary" style="font-size:12px">→ d を計算して 効果量欄に入れる</button>
+          <span id="eh-out" class="hint-sm"></span>
+        </div>
+      </details>`;
+  }
+  if (state.test === 'tp' || state.test === 't1') {
+    return `
+      <details class="card" style="background:#f9fafb; padding:8px 12px">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 先行研究 の 平均・SD から Cohen's d を計算 (対応あり / 1 標本)</summary>
+        <div class="hint-sm" style="margin-top:4px">計算式: <code>d = |差分の 平均| / SD</code>。 対応あり なら 「差分の 平均・差分の SD」、 1 標本 なら 「観測平均 − 基準値」 と 観測 SD。</div>
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px">
+          <label class="field"><span class="lbl">平均 (差 or 観測 − 基準)</span><input type="number" id="eh-m" step="any"></label>
+          <label class="field"><span class="lbl">SD (差 or 観測)</span><input type="number" id="eh-sd" step="any" min="0.0001"></label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button data-eh-calc="tp" class="btn primary" style="font-size:12px">→ d を計算して 効果量欄に入れる</button>
+          <span id="eh-out" class="hint-sm"></span>
+        </div>
+      </details>`;
+  }
+  if (state.test === 'anova') {
+    return `
+      <details class="card" style="background:#f9fafb; padding:8px 12px">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 群平均 + 群内 SD から Cohen's f を計算</summary>
+        <div class="hint-sm" style="margin-top:4px">計算式: <code>f = σ_between / σ_within</code>。 σ_between は 群平均の 母標準偏差 (n で 割る 版)、 σ_within は 群内 共通 SD。</div>
+        <div style="display:grid; gap:8px; margin-top:8px">
+          <label class="field"><span class="lbl">群平均 (カンマ区切り、 例: 3.2, 4.1, 5.0)</span>
+            <input type="text" id="eh-means" placeholder="3.2, 4.1, 5.0">
+          </label>
+          <label class="field"><span class="lbl">群内 共通 SD (プールされた SD 相当)</span>
+            <input type="number" id="eh-sdw" step="any" min="0.0001">
+          </label>
+          <div class="hint-sm">別ルート: partial η² から <code>f = √(η² / (1 − η²))</code>。 η² が 分かる 場合 は 下の 入力。</div>
+          <label class="field"><span class="lbl">partial η² (0-1) から でも OK</span>
+            <input type="number" id="eh-eta2" step="0.01" min="0" max="0.99">
+          </label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button data-eh-calc="anova" class="btn primary" style="font-size:12px">→ f を計算して 効果量欄に入れる</button>
+          <span id="eh-out" class="hint-sm"></span>
+        </div>
+      </details>`;
+  }
+  if (state.test === 'corr') {
+    return `
+      <details class="card" style="background:#f9fafb; padding:8px 12px">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 決定係数 R² から r を計算</summary>
+        <div class="hint-sm" style="margin-top:4px">計算式: <code>r = √R²</code>。 効果量 r そのものを 入れる 方が 直感的 な ケース も 多い ので、 併用推奨。</div>
+        <div style="display:grid; gap:8px; margin-top:8px">
+          <label class="field"><span class="lbl">R² (決定係数、 0-1)</span>
+            <input type="number" id="eh-r2" step="0.01" min="0" max="0.99">
+          </label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button data-eh-calc="corr" class="btn primary" style="font-size:12px">→ r を計算して 効果量欄に入れる</button>
+          <span id="eh-out" class="hint-sm"></span>
+        </div>
+      </details>`;
+  }
+  if (state.test === 'chi2') {
+    return `
+      <details class="card" style="background:#f9fafb; padding:8px 12px">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 期待比率 と 想定比率 から Cohen's w を計算</summary>
+        <div class="hint-sm" style="margin-top:4px">計算式: <code>w = √(Σ ((p_i − p_i₀)² / p_i₀))</code>。 p_i₀ が 帰無時 の 期待比率、 p_i が 想定 (対立) の 比率。 それぞれ カンマ区切りで 同じ 長さ、 合計 1 に なる ように。</div>
+        <div style="display:grid; gap:8px; margin-top:8px">
+          <label class="field"><span class="lbl">帰無時 の 比率 p₀ (カンマ区切り、 例: 0.5, 0.5)</span>
+            <input type="text" id="eh-p0" placeholder="0.5, 0.5">
+          </label>
+          <label class="field"><span class="lbl">想定 の 比率 p (カンマ区切り、 例: 0.6, 0.4)</span>
+            <input type="text" id="eh-p1" placeholder="0.6, 0.4">
+          </label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px">
+          <button data-eh-calc="chi2" class="btn primary" style="font-size:12px">→ w を計算して 効果量欄に入れる</button>
+          <span id="eh-out" class="hint-sm"></span>
+        </div>
+      </details>`;
+  }
+  return '';
+}
+
+function computeEffectFromHelper(kind) {
+  const setEff = (v) => {
+    state.effect = Math.round(v * 1000) / 1000;
+    const el = document.getElementById('pw-effect');
+    if (el) el.value = state.effect;
+    document.getElementById('eh-out').textContent = `→ 効果量 = ${state.effect}`;
+  };
+  const num = (id) => parseFloat(document.getElementById(id)?.value);
+  const csv = (id) => (document.getElementById(id)?.value || '').split(/[,、\s]+/).map(s => parseFloat(s)).filter(n => !isNaN(n));
+
+  if (kind === 't2') {
+    const m1 = num('eh-m1'), sd1 = num('eh-sd1'), m2 = num('eh-m2'), sd2 = num('eh-sd2');
+    if ([m1, sd1, m2, sd2].some(v => isNaN(v)) || sd1 <= 0 || sd2 <= 0) return alert('4 つ の 値 を 入れて ください (SD は 正)');
+    const sd_pooled = Math.sqrt((sd1 * sd1 + sd2 * sd2) / 2);
+    setEff(Math.abs(m1 - m2) / sd_pooled);
+  } else if (kind === 'tp') {
+    const m = num('eh-m'), sd = num('eh-sd');
+    if (isNaN(m) || isNaN(sd) || sd <= 0) return alert('平均 と SD を 入れて ください');
+    setEff(Math.abs(m) / sd);
+  } else if (kind === 'anova') {
+    const eta2 = num('eh-eta2');
+    if (!isNaN(eta2) && eta2 > 0 && eta2 < 1) { setEff(Math.sqrt(eta2 / (1 - eta2))); return; }
+    const means = csv('eh-means'), sdw = num('eh-sdw');
+    if (means.length < 2 || isNaN(sdw) || sdw <= 0) return alert('群平均 (2 個 以上) と 群内 SD を 入れる か、 η² を 入れて ください');
+    const grand = means.reduce((a, b) => a + b, 0) / means.length;
+    const sigmaBetween = Math.sqrt(means.reduce((s, x) => s + (x - grand) * (x - grand), 0) / means.length);
+    setEff(sigmaBetween / sdw);
+  } else if (kind === 'corr') {
+    const r2 = num('eh-r2');
+    if (isNaN(r2) || r2 < 0 || r2 > 1) return alert('R² (0-1) を 入れて ください');
+    setEff(Math.sqrt(r2));
+  } else if (kind === 'chi2') {
+    const p0 = csv('eh-p0'), p1 = csv('eh-p1');
+    if (p0.length !== p1.length || p0.length < 2) return alert('比率を 同じ 長さ の カンマ区切り で 2 個以上');
+    const w = Math.sqrt(p0.reduce((s, p, i) => {
+      if (p <= 0) return s;
+      const d = p1[i] - p;
+      return s + (d * d) / p;
+    }, 0));
+    setEff(w);
+  }
+}
+
 // ---------------- UI ----------------
 
 const TESTS = [
@@ -216,11 +357,13 @@ function render() {
           <input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}">
         </label>
         ${['t2','tp','t1','corr'].includes(state.test) ? `
-          <label class="field"><span class="lbl">両側 / 片側</span>
+          <label class="field">
+            <span class="lbl">仮説の方向</span>
             <select id="pw-tails">
-              <option value="2" ${state.tails==2?'selected':''}>両側</option>
-              <option value="1" ${state.tails==1?'selected':''}>片側</option>
+              <option value="2" ${state.tails==2?'selected':''}>◇ 差があるかどうか (両側)</option>
+              <option value="1" ${state.tails==1?'selected':''}>▶ どちらが 大 / 小 と 決めている (片側)</option>
             </select>
+            <div class="hint-sm" style="margin-top:2px; font-size:11px">「A と B は違うはず」→ 両側 / 「A の方が B より大きい」→ 片側 (片側の方が必要 n は 少し 少なく なる が、 想定と 逆方向 の 差 は 検出しなく なる)</div>
           </label>` : ''}
         ${state.mode==='a_priori' ? `
           <label class="field"><span class="lbl">目標検定力 1 - β</span>
@@ -246,6 +389,8 @@ function render() {
         <span class="hint-sm">目安:</span>
         ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
       </div>
+
+      ${renderEffectHelper()}
 
       <div class="row" style="margin-top:12px">
         <button id="pw-calc" class="btn primary" style="padding:8px 24px; font-size:14px">🧮 計算</button>
@@ -275,6 +420,10 @@ function render() {
       state.effect = parseFloat(b.dataset.pwEff);
       document.getElementById('pw-effect').value = state.effect;
     });
+  });
+  // v1024b 効果量ヘルパー (先行研究 の 値 から 効果量 を 逆算)
+  document.querySelectorAll('[data-eh-calc]').forEach(b => {
+    b.addEventListener('click', () => computeEffectFromHelper(b.dataset.ehCalc));
   });
   document.getElementById('pw-calc').addEventListener('click', doCalc);
 }
@@ -308,10 +457,207 @@ function doCalc() {
   renderResult(out, t);
 }
 
+// ---------------- グラフ ----------------
+
+// 検定 タイプ / 現在 状態 から (z_alpha, ncp, n) の 3 つ組 を 返す。
+//   G*Power 相当の 「H0: 標準正規 N(0,1) vs H1: N(ncp, 1)」 の 対比 で 描く。
+function currentDistStats() {
+  const alpha = state.alpha;
+  const tails = ['t2','tp','t1','corr'].includes(state.test) ? state.tails : 1;
+  const za = qnorm(1 - alpha / tails);
+  let ncp, n;
+  if (state.test === 't2') {
+    n = state.n_per_group;
+    ncp = state.effect * Math.sqrt(n / 2);
+  } else if (state.test === 'tp' || state.test === 't1') {
+    n = state.n_total;
+    ncp = state.effect * Math.sqrt(n);
+  } else if (state.test === 'anova') {
+    n = state.n_total;
+    ncp = Math.sqrt(n * state.effect * state.effect);   // √λ
+  } else if (state.test === 'corr') {
+    n = state.n_total;
+    const z_r = 0.5 * Math.log((1 + Math.abs(state.effect)) / (1 - Math.abs(state.effect)));
+    ncp = n > 3 ? z_r * Math.sqrt(n - 3) : 0;
+  } else if (state.test === 'chi2') {
+    n = state.n_total;
+    ncp = Math.sqrt(n * state.effect * state.effect);
+  }
+  return { za, ncp, n, tails };
+}
+
+// 標準正規 密度
+function dnorm(z) { return Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI); }
+
+// 分布プロット (H0 vs H1、 α/β/power 領域を色分け)
+function renderDistPlot() {
+  const { za, ncp, tails } = currentDistStats();
+  if (!isFinite(ncp) || ncp <= 0) return '';
+  const W = 620, H = 260, PL = 40, PR = 20, PT = 20, PB = 40;
+  const xMin = -4, xMax = Math.max(6, ncp + 4);
+  const xToPx = (x) => PL + (x - xMin) / (xMax - xMin) * (W - PL - PR);
+  const yMax = 0.42;   // dnorm(0) ≈ 0.399、 上余白 for label
+  const yToPx = (y) => PT + (1 - y / yMax) * (H - PT - PB);
+  // 密度サンプル
+  const N = 200;
+  const h0Points = [], h1Points = [];
+  for (let i = 0; i <= N; i++) {
+    const x = xMin + (i / N) * (xMax - xMin);
+    h0Points.push([x, dnorm(x)]);
+    h1Points.push([x, dnorm(x - ncp)]);
+  }
+  const toPath = (pts) => 'M ' + pts.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+  // 領域塗り (path with fill、 baseline を 加える 閉じたパス)
+  const areaPath = (pts, filterFn) => {
+    const filtered = pts.filter(([x]) => filterFn(x));
+    if (!filtered.length) return '';
+    const seg = filtered.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+    const [x0] = filtered[0], [xE] = filtered[filtered.length - 1];
+    return `M ${xToPx(x0).toFixed(1)} ${yToPx(0).toFixed(1)} L ${seg} L ${xToPx(xE).toFixed(1)} ${yToPx(0).toFixed(1)} Z`;
+  };
+  // α 領域: H0 の 右 (両側 なら 左 も)
+  const alphaPathR = areaPath(h0Points, x => x >= za);
+  const alphaPathL = tails === 2 ? areaPath(h0Points, x => x <= -za) : '';
+  // power 領域: H1 の 右 (critical より右)
+  const powerPath = areaPath(h1Points, x => x >= za);
+  // β 領域: H1 の 左 (critical より左)
+  const betaPath  = areaPath(h1Points, x => x <= za);
+
+  // 軸 tick
+  const ticks = [];
+  for (let t = Math.ceil(xMin); t <= xMax; t++) {
+    ticks.push(`<line x1="${xToPx(t)}" y1="${H - PB}" x2="${xToPx(t)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                <text x="${xToPx(t)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${t}</text>`);
+  }
+
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📊 分布プロット (H0 vs H1)</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <!-- 軸 -->
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          ${ticks.join('')}
+          <!-- β 領域 (灰) -->
+          <path d="${betaPath}" fill="#9ca3af44" stroke="none"/>
+          <!-- power 領域 (緑) -->
+          <path d="${powerPath}" fill="#05966944" stroke="none"/>
+          <!-- α 領域 (赤) -->
+          <path d="${alphaPathR}" fill="#dc262666" stroke="none"/>
+          ${alphaPathL ? `<path d="${alphaPathL}" fill="#dc262666" stroke="none"/>` : ''}
+          <!-- H0 curve (青) -->
+          <path d="${toPath(h0Points)}" fill="none" stroke="#2563eb" stroke-width="1.8"/>
+          <!-- H1 curve (橙) -->
+          <path d="${toPath(h1Points)}" fill="none" stroke="#ea580c" stroke-width="1.8"/>
+          <!-- critical 線 -->
+          <line x1="${xToPx(za)}" y1="${PT}" x2="${xToPx(za)}" y2="${H - PB}" stroke="#111" stroke-dasharray="4,3" stroke-width="1"/>
+          <text x="${xToPx(za) + 4}" y="${PT + 12}" font-size="11" fill="#111">critical = ${za.toFixed(2)}</text>
+          ${tails === 2 ? `<line x1="${xToPx(-za)}" y1="${PT}" x2="${xToPx(-za)}" y2="${H - PB}" stroke="#111" stroke-dasharray="4,3" stroke-width="1"/>` : ''}
+          <!-- H1 ncp 位置 -->
+          <line x1="${xToPx(ncp)}" y1="${yToPx(dnorm(0))}" x2="${xToPx(ncp)}" y2="${H - PB}" stroke="#ea580c" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.5"/>
+          <text x="${xToPx(ncp) + 4}" y="${yToPx(dnorm(0)) - 4}" font-size="11" fill="#ea580c">ncp = ${ncp.toFixed(2)}</text>
+          <!-- 凡例 -->
+          <g transform="translate(${W - PR - 130}, ${PT})">
+            <rect x="0" y="0" width="130" height="72" fill="#fff" stroke="#e5e7eb" rx="4"/>
+            <line x1="6" y1="14" x2="24" y2="14" stroke="#2563eb" stroke-width="2"/>
+            <text x="28" y="17" font-size="10.5" fill="#111">H0 (帰無)</text>
+            <line x1="6" y1="30" x2="24" y2="30" stroke="#ea580c" stroke-width="2"/>
+            <text x="28" y="33" font-size="10.5" fill="#111">H1 (対立)</text>
+            <rect x="6" y="40" width="18" height="8" fill="#dc262666"/><text x="28" y="47" font-size="10" fill="#111">α (型 I 誤)</text>
+            <rect x="6" y="52" width="18" height="8" fill="#9ca3af44"/><text x="28" y="59" font-size="10" fill="#111">β (型 II 誤)</text>
+            <rect x="6" y="64" width="18" height="8" fill="#05966944"/><text x="28" y="71" font-size="10" fill="#111">検定力</text>
+          </g>
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">青が H0 (効果なし)、 橙が H1 (想定効果あり) の分布。 縦点線 が 有意水準 α に対応する 臨界値。 橙が 臨界値より右に はみ出す 面積 が 検定力 (緑)、 臨界値より左に 残る 面積 が β (灰)。</div>
+    </div>`;
+}
+
+// 検定力カーブ (n を 変えた 時 の power)
+function renderPowerCurve() {
+  const t = TESTS.find(x => x.id === state.test);
+  const nowN = state.test === 't2' ? state.n_per_group : state.n_total;
+  // n 範囲: 6 〜 max(200, nowN×2)
+  const nMax = Math.max(200, nowN * 2);
+  const nMin = 4;
+  const steps = 80;
+  const points = [];
+  for (let i = 0; i < steps; i++) {
+    const n = Math.round(nMin + (nMax - nMin) * (i / (steps - 1)));
+    let p;
+    try {
+      if (state.test === 't2')    p = calc_ttest_two_sample(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
+      if (state.test === 'tp' || state.test === 't1') p = calc_ttest_paired(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
+      if (state.test === 'anova') p = calc_anova(state.alpha, state.effect, state.k, 'post_hoc', n, 0.8).power;
+      if (state.test === 'corr')  p = calc_correlation(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
+      if (state.test === 'chi2')  p = calc_chi_squared(state.alpha, state.effect, state.df, 'post_hoc', n, 0.8).power;
+    } catch (_) { p = 0; }
+    if (!isFinite(p)) p = 0;
+    points.push([n, p]);
+  }
+  const W = 620, H = 240, PL = 40, PR = 20, PT = 20, PB = 40;
+  const xToPx = (x) => PL + (x - nMin) / (nMax - nMin) * (W - PL - PR);
+  const yToPx = (y) => PT + (1 - y) * (H - PT - PB);
+  const path = 'M ' + points.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+  // y = 0.8 line
+  const y80 = yToPx(0.8);
+  // 現在 n の 点
+  let curP = 0;
+  try {
+    if (state.test === 't2')    curP = calc_ttest_two_sample(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
+    if (state.test === 'tp' || state.test === 't1') curP = calc_ttest_paired(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
+    if (state.test === 'anova') curP = calc_anova(state.alpha, state.effect, state.k, 'post_hoc', nowN, 0.8).power;
+    if (state.test === 'corr')  curP = calc_correlation(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
+    if (state.test === 'chi2')  curP = calc_chi_squared(state.alpha, state.effect, state.df, 'post_hoc', nowN, 0.8).power;
+  } catch (_) {}
+  // x ticks
+  const xticks = [];
+  const nTicks = 8;
+  for (let i = 0; i <= nTicks; i++) {
+    const n = Math.round(nMin + (nMax - nMin) * (i / nTicks));
+    xticks.push(`<line x1="${xToPx(n)}" y1="${H - PB}" x2="${xToPx(n)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                 <text x="${xToPx(n)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${n}</text>`);
+  }
+  const yticks = [];
+  for (let p of [0, 0.2, 0.4, 0.6, 0.8, 1.0]) {
+    yticks.push(`<line x1="${PL - 4}" y1="${yToPx(p)}" x2="${PL}" y2="${yToPx(p)}" stroke="#6b7280"/>
+                 <text x="${PL - 6}" y="${yToPx(p) + 3}" text-anchor="end" font-size="10" fill="#6b7280">${p.toFixed(1)}</text>`);
+  }
+  const xLabel = state.test === 't2' ? '各群 n' : '全体 N';
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📈 検定力カーブ (${xLabel} vs 検定力)</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H - PB}" stroke="#374151"/>
+          ${xticks.join('')}
+          ${yticks.join('')}
+          <!-- 検定力 0.8 のライン -->
+          <line x1="${PL}" y1="${y80}" x2="${W - PR}" y2="${y80}" stroke="#059669" stroke-dasharray="4,3" stroke-width="1"/>
+          <text x="${W - PR - 4}" y="${y80 - 4}" font-size="10" fill="#059669" text-anchor="end">power = 0.8</text>
+          <!-- power カーブ -->
+          <path d="${path}" fill="none" stroke="#7b3fa0" stroke-width="2"/>
+          <!-- 現在 n の 点 -->
+          <circle cx="${xToPx(nowN)}" cy="${yToPx(curP)}" r="5" fill="#7b3fa0"/>
+          <text x="${xToPx(nowN) + 8}" y="${yToPx(curP) + 4}" font-size="11" fill="#7b3fa0">現在 n=${nowN}, ${(curP * 100).toFixed(0)}%</text>
+          <text x="${PL - 30}" y="${(PT + H - PB) / 2}" transform="rotate(-90, ${PL - 30}, ${(PT + H - PB) / 2})" font-size="11" fill="#374151" text-anchor="middle">検定力 (1-β)</text>
+          <text x="${(PL + W - PR) / 2}" y="${H - 6}" font-size="11" fill="#374151" text-anchor="middle">${xLabel}</text>
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">n を 増やすと 検定力 が どう 上がる か。 緑の点線 は 慣習的な 目標 (0.8)。 現在 n の 検定力 を 紫の点 で 表示。</div>
+    </div>`;
+}
+
 function renderResult(out, t) {
   const root = document.getElementById('pw-result');
   if (!out) return;
   if (out.error) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(out.error)}</div>`; return; }
+  // A priori の 場合 は 計算 結果 の n を state に 反映 して グラフ を 描く
+  if (state.mode === 'a_priori') {
+    if (state.test === 't2')    state.n_per_group = out.n_per_group;
+    else                        state.n_total     = out.n_total;
+  }
   const tailStr = state.tails === 2 ? '両側' : '片側';
   const args = `α=${state.alpha}, ${state.tails === 2 || !['t2','tp','t1','corr'].includes(state.test) ? tailStr : tailStr}, ${t.eff}=${state.effect}`;
   const extraArgs = state.test === 'anova' ? `, k=${state.k}` : (state.test === 'chi2' ? `, df=${state.df}` : '');
@@ -339,6 +685,8 @@ function renderResult(out, t) {
         ${p < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 効果があってもそれを検出できず 「型 II 過誤」 が起きる可能性が高めです。</div>' : ''}
       </div>`;
   }
+  // v1024b グラフ (G*Power 相当): 分布プロット + 検定力カーブ
+  root.insertAdjacentHTML('beforeend', renderDistPlot() + renderPowerCurve());
 }
 
 function clampFloat(v, lo, hi) {
