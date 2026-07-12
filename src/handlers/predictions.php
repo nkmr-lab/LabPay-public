@@ -231,8 +231,11 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
     $predictCount = (int)($body['predict_count'] ?? 1);
     if (!in_array($predictCount, [1, 2, 4], true)) throw new ApiException('bad_request', 'predict_count は 1, 2, 4', 400);
     $candidates = $body['candidates'] ?? [];
-    if (!is_array($candidates) || count($candidates) < $predictCount + 1) {
-        throw new ApiException('bad_request', '候補は predict_count + 1 個以上', 400);
+    // v1008 候補 == predict_count でも 受け付ける (中村さん要望「ベスト4 の 中の 順位を
+    //   完璧に予想したひとにポイントを配分」)。 候補=predict_count なら 集合は 全員一致
+    //   に なるので、 順位を どれだけ 正確に 当てられるか の 勝負 に なる (score_weights [4,3,2,1] で 差)。
+    if (!is_array($candidates) || count($candidates) < $predictCount) {
+        throw new ApiException('bad_request', '候補は predict_count 個以上', 400);
     }
     if (count($candidates) > 200) throw new ApiException('bad_request', '候補は 200 個まで', 400);
     $cleanCandidates = [];
@@ -249,7 +252,7 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
             'flag' => isset($c['flag']) ? mb_substr((string)$c['flag'], 0, 16) : null,
         ];
     }
-    if (count($cleanCandidates) < $predictCount + 1) {
+    if (count($cleanCandidates) < $predictCount) {
         throw new ApiException('bad_request', '有効な候補が足りない', 400);
     }
     $deadlineAt = null;

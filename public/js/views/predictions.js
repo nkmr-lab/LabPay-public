@@ -147,8 +147,9 @@ export async function renderPredictionNew() {
       if (m) return { id: `c${i}`, name: m[2], flag: m[1] };
       return { id: `c${i}`, name: line, flag: null };
     });
-    if (candidates.length < count + 1) {
-      toast(`候補が少ないです。 ${count + 1} 個以上入れてください`); return;
+    // v1008 count と 同数 も 受け付ける (ベスト4 順位当て モード)。
+    if (candidates.length < count) {
+      toast(`候補が少ないです。 ${count} 個以上入れてください`); return;
     }
     const body = { title, fee, predict_count: count, candidates };
     if (desc) body.description = desc;
