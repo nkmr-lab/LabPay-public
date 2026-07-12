@@ -456,13 +456,13 @@ async function refresh(token) {
         <div class="meta" style="font-size:11px; margin-top:6px">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at || '')}
         </div>
+        <!-- v1020 「一覧へ」廃止 (✕で戻れる)、 要約へボタンも横並びに -->
         <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
           <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
           ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
+          ${renderFullCrossRefsAndCreate(d)}
           ${shareButton}
-          <a class="btn" href="#/paper-translate-full" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
         </div>
-        ${renderFullCrossRefsAndCreate(d)}
       </div>
       <div id="pft-r"></div>`;
     app.innerHTML = header;
@@ -669,16 +669,14 @@ function renderFullCrossRefsAndCreate(d) {
   const hasSummary = refs.some(x => x.kind === 'paper_translate');
   const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasSummary;
   if (!refs.length && !canCreate) return '';
+  // v1020 中村さん指摘 → 独立カード廃止、 生ボタンHTMLだけ返す (呼び出し側の row に混ぜ込む)
   const refBtns = refs.map(x => `
-    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; margin-right:6px">
+    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">
       ${x.kind === 'paper_translate' ? '📄 要約へ' : '📑 全訳へ'}
     </a>`).join('');
   const createBtn = canCreate ? `
-    <button class="btn primary" id="pft-make-summary" style="font-size:12px; padding:3px 10px">📄 要約を作る</button>` : '';
-  return `
-    <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
-      ${refBtns}${createBtn}
-    </div>`;
+    <button class="btn" id="pft-make-summary" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">📄 要約を作る</button>` : '';
+  return refBtns + createBtn;
 }
 
 async function bindMakeSummary(d) {

@@ -548,19 +548,18 @@ async function paintResult(d, token) {
       <div class="meta" style="font-size:11px; margin-top:6px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
       </div>
+      <!-- v1020 中村さん指摘「共有URLをコピーは共有モーダルにあるからいらない」「一覧へも不要 (✕で戻れる)」「全訳へボタンも横並びで」 -->
       <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
-        <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL をコピー</button>
         ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
+        ${renderPaperCrossRefsAndCreate(d)}
         ${isOwner ? `
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
         ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (再課金)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
-        <a class="btn" href="#/paper-summary" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
       </div>
-      ${renderPaperCrossRefsAndCreate(d)}
     </div>
 
     ${ptRenderAuthorCards(r.authors)}
@@ -610,12 +609,7 @@ async function paintResult(d, token) {
       { pdfTitle: `要約 - ${r.title_ja || r.title_en || d.pdf_name || '論文'}` }
     );
   });
-  document.getElementById('pt-copy')?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast('コピーしました');
-    } catch (_) { toast(shareUrl); }
-  });
+  // v1020 pt-copy 削除 (共有モーダルにコピー機能があるため)
   // v813 #405 ペアの全訳を作るボタン
   bindMakeFullTranslate(d);
   // v758 #377 やりなおす (本人のみ、保存 PDF で再処理 + 再課金)
@@ -693,16 +687,16 @@ function renderPaperCrossRefsAndCreate(d) {
   const hasFull = refs.some(x => x.kind === 'paper_full_translation');
   const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasFull;
   if (!refs.length && !canCreate) return '';
+  // v1020 中村さん指摘「共有とか本のPDFを開くとかのボタンの並びの下に、 全訳へとか
+  //   要約へみたいなボタンがあるけど、 そのまま横並びで提示して欲しい」→ 独立カードを
+  //   廃止して、 生ボタンHTMLだけ返す (呼び出し側の row にそのまま混ぜ込む)。
   const refBtns = refs.map(x => `
-    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; margin-right:6px">
+    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">
       ${x.kind === 'paper_full_translation' ? '📑 全訳へ' : '📄 要約へ'}
     </a>`).join('');
   const createBtn = canCreate ? `
-    <button class="btn primary" id="pt-make-full" style="font-size:12px; padding:3px 10px">📑 全訳を作る</button>` : '';
-  return `
-    <div style="margin-top:8px; padding:6px 10px; background:#f0f9ff; border-left:3px solid #0284c7; border-radius:0 6px 6px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
-      ${refBtns}${createBtn}
-    </div>`;
+    <button class="btn" id="pt-make-full" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">📑 全訳を作る</button>` : '';
+  return refBtns + createBtn;
 }
 
 // 「📑 全訳を作る」ボタンのクリックハンドラ。 paintResult 後に bind。
@@ -1048,11 +1042,15 @@ function renderRqHypothesis(rh) {
     ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#a16207; border:1px solid #fde68a; margin-left:6px">p.${p}</span>`
     : '';
   // v1018 中村さん指摘「RQは、 RQ 自体の 原文も 示してね」→ 折り畳みを 廃止 して 常に 表示。
-  //   RQ / 仮説 それぞれの 原文 (英語論文なら英語) を Georgia 系 の 引用フォント で 直接 見せる。
+  // v1020 中村さん再要望「仮説とRQは、 和訳の下に、 原文 (英語) も 示して欲しい」→
+  //   「原文:」ラベルを添えて、 何が英語原文なのか一目で分かる形に。
   const origBlock = (orig, color) => {
     const s = String(orig || '').trim();
     if (!s) return '';
-    return `<div style="margin-top:6px; padding:6px 10px; background:#fff; border-left:2px solid ${color}; border-radius:0 4px 4px 0; font-size:12px; line-height:1.65; font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap; color:#374151">${escapeHtml(s)}</div>`;
+    return `<div style="margin-top:6px">
+      <div style="font-size:10.5px; color:${color}; font-weight:600; margin-bottom:2px">📄 原文</div>
+      <div style="padding:6px 10px; background:#fff; border-left:2px solid ${color}; border-radius:0 4px 4px 0; font-size:12px; line-height:1.65; font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap; color:#374151">${escapeHtml(s)}</div>
+    </div>`;
   };
   const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');
