@@ -1165,7 +1165,6 @@ function renderLMM3Blocks() {
     })}
     ${stepBlock({ title: '⑩ 刺激数 (両条件で同じ)', desc: '各参加者が見る刺激の数 (両条件で各 1 回)。増やすと残差平均化で検定力上がる。', body: `<input type="number" id="lmm3-ns" step="1" min="1" value="${p.n_stimuli}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑪ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="lmm3-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり謝金 (円)', desc: '0 でコスト非表示。', body: `<input type="number" id="lmm3-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% 誤差。', body: `<input type="number" id="lmm3-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1207,6 +1206,54 @@ function renderCohenGuideInline() {
         <div class="hint-sm" style="margin-top:4px">効果量は先行研究の平均 SD から計算するか、パイロット、メタ分析、分野の慣習で決めるのが望ましい。「中」は決定に困った時の便宜的な選択。</div>
       </div>
     </details>`;
+}
+
+// v1053 予算試算 helpers (全検定共通)
+function costPerParticipant() {
+  const b = state.budget;
+  const base = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
+  return b.crowd_mode === 'crowdsource' ? base * b.crowd_multiplier : base;
+}
+function renderBudgetBlock() {
+  const b = state.budget;
+  const per = costPerParticipant();
+  const perNoCrowd = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
+  return stepBlock({
+    title: '💰 予算試算 (1 人あたり参加費)',
+    desc: '実験時間 × 時給 × 1.10 (税金分) で 1 人あたりの参加費を試算。 クラウドソーシングを選ぶと 利用料込みで 概ね 2 倍。 総予算は 「必要 N × 1 人あたり」 で 結果カードに表示されます。',
+    body: `<div style="display:grid; gap:8px; grid-template-columns: repeat(2, minmax(140px, 220px))">
+             <label class="field"><span class="lbl">実験時間 (時間/人)</span>
+               <input type="number" id="bud-hours" step="0.25" min="0.1" value="${b.hours_per_participant}" style="width:100%">
+             </label>
+             <label class="field"><span class="lbl">時給 (円/時間)</span>
+               <input type="number" id="bud-rate" step="50" min="0" value="${b.rate_per_hour}" style="width:100%">
+             </label>
+             <label class="field" style="grid-column:span 2"><span class="lbl">参加形式</span>
+               <select id="bud-mode" style="width:100%">
+                 <option value="inhouse" ${b.crowd_mode==='inhouse'?'selected':''}>👥 対面 / 学内 (時間 × 時給 × 1.10)</option>
+                 <option value="crowdsource" ${b.crowd_mode==='crowdsource'?'selected':''}>🌐 クラウドソーシング (× 2 倍、 利用料込み)</option>
+               </select>
+             </label>
+           </div>
+           <div class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px; display:inline-block">
+             ⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b>
+             ${b.crowd_mode === 'crowdsource' ? `<span style="color:#666">(内訳: 対面相当 ¥${Math.round(perNoCrowd).toLocaleString()} × ${b.crowd_multiplier})</span>` : `<span style="color:#666">(内訳: ${b.hours_per_participant} 時間 × ¥${b.rate_per_hour} × ${b.tax_multiplier})</span>`}
+           </div>`,
+  });
+}
+function renderBudgetSummary(participantCount, label = '必要') {
+  const per = costPerParticipant();
+  const total = per * participantCount;
+  const b = state.budget;
+  const modeLabel = b.crowd_mode === 'crowdsource' ? 'クラウドソーシング' : '対面/学内';
+  return `
+    <div class="card" style="background:#fef7ed; border-left:4px solid #ea580c">
+      <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${modeLabel}、 ${label} ${participantCount} 名)</div>
+      <div style="font-size:22px; line-height:1.5"><b>¥${Math.round(total).toLocaleString()}</b></div>
+      <div class="hint-sm" style="margin-top:6px">1 人あたり ¥${Math.round(per).toLocaleString()} × ${participantCount} 名 = ¥${Math.round(total).toLocaleString()}</div>
+      <div class="hint-sm" style="margin-top:2px">${b.hours_per_participant} 時間 × ¥${b.rate_per_hour}/時 × ${b.tax_multiplier} (税金)${b.crowd_mode === 'crowdsource' ? ` × ${b.crowd_multiplier} (クラウド利用料込み)` : ''}</div>
+      <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで ¥${Math.round(total * 1.10).toLocaleString()} が 実務的な 予算目安。</div>
+    </div>`;
 }
 
 // v1050 ベイズ (JZS BF10) ステップブロック
@@ -1264,7 +1311,6 @@ function renderBayesBlocks() {
       desc: '逐次デザイン で これ以上 n を増やしても 判断できない場合 は 打ち切り。 200 が 実用的な目安。',
       body: `<input type="number" id="bay-nmax" step="10" min="10" max="500" value="${p.n_max}" style="width:120px">`,
     }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="bay-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。 逐次モードは 1 iter で 平均 20-100 回 BF 計算するので Poisson より遅い。', body: `<input type="number" id="bay-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1315,7 +1361,6 @@ function renderNBBlocks() {
     ${stepBlock({ title: '⑨ 参加者間 SD (log スケール)', desc: '参加者ごとのカウントの個人差 (log スケール)。', body: `<input type="number" id="nb-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑩ 各条件の試行 (期間) 数', desc: '各条件で 1 参加者が繰り返す試行 or 観測期間の数。', body: `<input type="number" id="nb-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑪ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="nb-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり謝金 (円)', desc: '0 でコスト非表示。', body: `<input type="number" id="nb-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。 NB は Gamma-Poisson の 2 段階サンプリングで Poisson より少し重い。', body: `<input type="number" id="nb-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1354,7 +1399,6 @@ function renderOrdinalBlocks() {
     ${stepBlock({ title: '⑧ 参加者間 SD (latent scale)', desc: '参加者ごとの 傾向 の 個人差 (latent scale)。 0.5 で 中程度、1.0 で 顕著な個人差。', body: `<input type="number" id="ord-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑨ 各条件 の 試行 (項目) 数', desc: '各条件で 1 参加者が 答える 項目数。 リッカート は 尺度合計 が多いので 1-3 で十分な場合も。', body: `<input type="number" id="ord-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="ord-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="ord-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%、5000 で ~1.5% 誤差。', body: `<input type="number" id="ord-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1392,7 +1436,6 @@ function renderPoissonBlocks() {
     ${stepBlock({ title: '⑧ 参加者間 SD (log スケール)', desc: '参加者ごとのカウントの個人差 (log スケール)。 0.5 で中程度、 1.0 でかなり大きい個人差。', body: `<input type="number" id="pois-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑨ 各条件の試行 (期間) 数', desc: '各条件で 1 参加者が繰り返す試行 or 観測期間の数 (例: 5 回セッション = 5)。増やすと個々の λ 推定が精確になり検定力↑。', body: `<input type="number" id="pois-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="pois-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり謝金 (円)', desc: '0 でコスト非表示。', body: `<input type="number" id="pois-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% 誤差。', body: `<input type="number" id="pois-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1428,7 +1471,6 @@ function renderGLMMBlocks() {
     ${stepBlock({ title: '⑧ 参加者間 SD (log-odds)', desc: '参加者の個人差 (log-odds スケール)。 0.5 = 中程度、 1.0 で顕著な個人差。', body: `<input type="number" id="glmm-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑨ 各条件の試行数', desc: '各条件で 1 参加者が繰り返す試行数。増やすと個々の確率推定が精確になり検定力上がる。', body: `<input type="number" id="glmm-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="glmm-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
-    ${stepBlock({ title: '💰 1 人あたり謝金 (円)', desc: '0 でコスト非表示。', body: `<input type="number" id="glmm-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% 誤差。', body: `<input type="number" id="glmm-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1485,12 +1527,6 @@ function renderLMMBlocks() {
       desc: '手元 or 予定の参加者数。',
       body: `<input type="number" id="lmm-np" step="1" min="3" value="${p.n_participants}" style="width:120px">`,
     }) : ''}
-
-    ${stepBlock({
-      title: '💰 1 人あたり謝金 (円、 0 でコスト非表示)',
-      desc: '参加者 1 人あたりの謝金 or 実験費用。入れると戦略比較テーブルに想定費用も表示されます。',
-      body: `<input type="number" id="lmm-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円`,
-    })}
 
     ${stepBlock({
       title: '⚙ シミュレーション反復数 (iterations)',
@@ -1559,6 +1595,18 @@ const state = {
   df: 1,             // χ² 自由度
   rho: 0.5,          // v1041 反復測定 ANOVA の測定間相関
   epsilon: 1.0,      // v1041 反復測定 ANOVA の球面性補正 (1 = 補正なし)
+  // v1053 予算試算 (全検定共通) — 中村さん指示:
+  //   「実験に必要な時間を入力したら、その時間 × 1250 円/時間 で 実験参加にかかる
+  //   お金が計算でき、そこから 必要な予算が決まる。 なお、 さらに その額 × 1.1 倍
+  //   (税金分) が必要となる。 クラウドソーシングの場合は 利用料も含めて 概ね 2 倍
+  //   程度の経費が必要」
+  budget: {
+    hours_per_participant: 1.0,   // 1 人あたり実験時間 (時間)
+    rate_per_hour: 1250,          // 時給 (円/時間)、 デフォルト 中村研の 標準
+    tax_multiplier: 1.10,         // 税金分 (1.10 = 10%)
+    crowd_mode: 'inhouse',        // 'inhouse' (対面/学内) or 'crowdsource'
+    crowd_multiplier: 2.0,        // クラウドソーシング 総合倍率 (利用料込み)
+  },
   // v1028 中村さん提案「実測ベースで平均 / SD から d を導く方が直感的」
   //   dataType: 'continuous' | 'likert5' | 'likert7' | 'percentage' | 'binary'
   //   rawA, rawB: それぞれの群の { mean, sd }
@@ -1693,7 +1741,7 @@ function applyLoaded(d) {
   ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
   });
-  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t'].forEach(k => {
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','budget'].forEach(k => {
     if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
@@ -1711,6 +1759,7 @@ function currentConfig() {
     k: state.k, df: state.df,
     // v1031/1032 sim モデルも config に含める
     lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t,
+    budget: state.budget,
     dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
 }
@@ -1861,6 +1910,8 @@ function render() {
     ${state.test === 'glmm_nb' ? renderNBBlocks() : ''}
     ${state.test === 'bayes_t' ? renderBayesBlocks() : ''}
 
+    ${renderBudgetBlock()}
+
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
     </div>
@@ -1987,6 +2038,28 @@ function render() {
         if (elDer) elDer.textContent = `⇒ 導出 RR = ${(r1/r0).toFixed(2)}`;
       }
     });
+  });
+
+  // v1053 予算試算 の 入力変化で 即再描画 (「⇒ 1 人あたり参加費」 を 更新するため)
+  ['bud-hours', 'bud-rate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => {
+      syncFormToState();
+      // 予算ブロックだけ innerHTML 差し替え (フォーカスが 抜けない)
+      // → 実装コスト削減のため 「⇒ …」 部分だけ差し替え
+      const per = costPerParticipant();
+      const b = state.budget;
+      const perNoCrowd = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
+      const hintEl = document.querySelector('#bud-hours')?.closest('.card')?.querySelector('.hint-sm[style*="eef2ff"]');
+      if (hintEl) {
+        hintEl.innerHTML = `⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b> ${b.crowd_mode === 'crowdsource' ? `<span style="color:#666">(内訳: 対面相当 ¥${Math.round(perNoCrowd).toLocaleString()} × ${b.crowd_multiplier})</span>` : `<span style="color:#666">(内訳: ${b.hours_per_participant} 時間 × ¥${b.rate_per_hour} × ${b.tax_multiplier})</span>`}`;
+      }
+    });
+  });
+  const bModeEl = document.getElementById('bud-mode');
+  if (bModeEl) bModeEl.addEventListener('change', () => {
+    syncFormToState();
+    render();  // モード切替 は 全再描画で OK (数の 変化が 目立つほうが 良い)
   });
 
   // v1050 ベイズ (BF10) プリセット
@@ -2397,6 +2470,13 @@ function syncFormToState() {
   const effEl = document.getElementById('pw-effect');
   if (alphaEl) state.alpha  = clampFloat(alphaEl.value, 0.001, 0.5);
   if (effEl)   state.effect = clampFloat(effEl.value, 0.001, 10);
+  // v1053 予算試算
+  const bHoursEl = document.getElementById('bud-hours');
+  const bRateEl = document.getElementById('bud-rate');
+  const bModeEl = document.getElementById('bud-mode');
+  if (bHoursEl) state.budget.hours_per_participant = Math.max(0.05, parseFloat(bHoursEl.value) || 1);
+  if (bRateEl)  state.budget.rate_per_hour = Math.max(0, Math.round(parseFloat(bRateEl.value) || 0));
+  if (bModeEl)  state.budget.crowd_mode = bModeEl.value;
   if (['t2','tp','t1','corr'].includes(state.test)) {
     const tailsEl = document.getElementById('pw-tails');
     if (tailsEl) state.tails = parseInt(tailsEl.value, 10);
@@ -2697,7 +2777,10 @@ function renderBayesResult(res, p, t) {
         <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#dcfce7; border-left:3px solid #059669">💡 逐次ベイズ (Sequential BF) は 「n を増やしながら BF10 が閾値を超えたら止める」 対称停止規則。 期待 n は 固定検定より 20-40% 小さい (Schönbrodt et al. 2017)。 α 補正不要 (ベイズは 標本サイズ に依存しない)。</div>
       </div>`;
   }
-  root.innerHTML = card;
+  // v1053 予算試算 (固定モードは n、 逐次モードは 平均停止 n を 参加者数として)
+  const budgetParticipants = p.mode_bayes === 'fixed' ? p.n : Math.ceil(res.mean_n);
+  const budgetLabel = p.mode_bayes === 'fixed' ? '設定' : '平均';
+  root.innerHTML = card + renderBudgetSummary(budgetParticipants, budgetLabel);
 }
 
 // v1049 負の二項 GLMM 計算
@@ -2858,7 +2941,10 @@ function renderLMMResult(res, t) {
   }
   const strategyCard = renderLMMStrategyTable(res, t, kind);
   const narrativeCard = renderNarrativeCard(res, t, kind);   // v1033
-  root.innerHTML = mainCard + strategyCard + narrativeCard;
+  // v1053 予算試算 (LMM/GLMM 系にも)
+  const budgetParticipants = res.mode === 'a_priori' ? res.n_required : res.params.n_p;
+  const budgetCard = renderBudgetSummary(budgetParticipants, res.mode === 'a_priori' ? '必要' : '現在');
+  root.innerHTML = mainCard + budgetCard + strategyCard + narrativeCard;
   // v1033 コピーボタン wire (data-copy-payload の参照先 script は同 root 内)
   root.querySelectorAll('[data-copy-payload]').forEach(b => {
     b.addEventListener('click', async () => {
@@ -3385,12 +3471,17 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
   const baseN = res.mode === 'a_priori' ? res.n_required : p.n_p;
   const baseT = kind === 'lmm3' ? p.n_stim : p.n_trials;
   const trialLabel = kind === 'lmm3' ? '刺激' : '試行';
-  const costPerParticipant = (kind === 'glmm' ? state.glmm.cost_per_participant
+  // v1053 グローバル 予算試算 (実験時間 × 時給 × 税金 × 参加形式) を優先。
+  //   従来の cost_per_participant フィールドは 後方互換のため 残すが、 予算 block が
+  //   0 以外 の 値を返す限り そちら (グローバル) を採用。
+  const globalCost = costPerParticipant();
+  const oldCost = (kind === 'glmm' ? state.glmm.cost_per_participant
                             : kind === 'glmm_poisson' ? state.glmm_poisson.cost_per_participant
                             : kind === 'glmm_ordinal' ? state.glmm_ordinal.cost_per_participant
                             : kind === 'glmm_nb' ? state.glmm_nb.cost_per_participant
                             : kind === 'lmm3' ? state.lmm3.cost_per_participant
                             : state.lmm.cost_per_participant) ?? 0;
+  const perParticipantCost = globalCost > 0 ? globalCost : oldCost;
   const strategies = [
     { label: '現在', n_p: baseN, n_t: baseT },
     { label: '参加者 +25%', n_p: Math.ceil(baseN * 1.25), n_t: baseT },
@@ -3410,11 +3501,11 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
   const rows = strategies.map(st => {
     const power = runSim(st.n_p, st.n_t).power;
     const N_obs = st.n_p * st.n_t * 2;
-    const cost = costPerParticipant * st.n_p;
+    const cost = perParticipantCost * st.n_p;
     return { ...st, power, N_obs, cost };
   });
-  const costLabel = costPerParticipant > 0 ? '<th style="padding:6px 10px; text-align:right">推定費用</th>' : '';
-  const costCell = (r) => costPerParticipant > 0 ? `<td style="padding:6px 10px; text-align:right">¥${r.cost.toLocaleString()}</td>` : '';
+  const costLabel = perParticipantCost > 0 ? '<th style="padding:6px 10px; text-align:right">推定費用</th>' : '';
+  const costCell = (r) => perParticipantCost > 0 ? `<td style="padding:6px 10px; text-align:right">¥${Math.round(r.cost).toLocaleString()}</td>` : '';
   return `
     <div class="card">
       <div class="bold" style="margin-bottom:8px">📋 参加者 vs 試行の効率比較</div>
@@ -3935,7 +4026,8 @@ function renderResult(out, t) {
         <div style="font-size:22px; line-height:1.55">${nMsg}</div>
         <div class="hint-sm" style="margin-top:8px">検定力 1-β = ${state.power} を得るため。 ${args}${extraArgs}</div>
         <div class="hint-sm" style="margin-top:4px; color:#a16207">脱落・除外を見込んで <b>${Math.ceil(baseParticipants * 1.10)}</b> 名募集する等の余裕を持たせるとよいです。</div>
-      </div>`;
+      </div>
+      ${renderBudgetSummary(baseParticipants, '必要')}`;
   } else {
     const p = out.power;
     const pctColor = p >= 0.8 ? '#059669' : (p >= 0.6 ? '#a16207' : '#dc2626');
@@ -3954,13 +4046,16 @@ function renderResult(out, t) {
     } else {
       nDisplay = `n = ${state.n_total}`;
     }
+    // Post hoc 用 の 参加者数 (現在の n)
+    const currentParticipants = state.test === 't2' ? state.n_per_group * 2 : state.n_total;
     resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (Post hoc)</div>
         <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(p * 100).toFixed(1)}%</b></div>
         <div class="hint-sm" style="margin-top:8px">現在の ${nDisplay} で効果量が想定通りなら上記の確率で有意になります。 ${args}${extraArgs}</div>
         ${p < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 効果があってもそれを検出できず「型 II 過誤」が起きる可能性が高めです。</div>' : ''}
-      </div>`;
+      </div>
+      ${renderBudgetSummary(currentParticipants, '現在')}`;
   }
   // v1027 直感的プロット (2 群 or k 群 or 散布図 or 比率棒) を主役に、従来の
   //   G*Power 型検定統計量プロットはその下に残す (中村さん指示「G*Power の
