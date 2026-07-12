@@ -357,11 +357,17 @@ function findLMMnParticipants(params, targetPower) {
 }
 
 // ---------------- v1028 データ タイプ + 実測ベース入力 ----------------
+// v1034 中村さん指摘「予想SD とか 直感的 じゃない」→ データ 型別 に
+//   「集中/普通/広い/二極」 の SD プリセット を 用意して 直感的 に。
 const DATA_TYPES = [
-  { id: 'likert7',     label: 'リッカート 7 段階 (1-7)',       meanRange: [1, 7],    sdRange: [0.3, 3],   step: 0.1 },
-  { id: 'likert5',     label: 'リッカート 5 段階 (1-5)',       meanRange: [1, 5],    sdRange: [0.2, 2],   step: 0.1 },
-  { id: 'continuous',  label: '連続値 (反応時間 / スコア 等)',  meanRange: [null, null], sdRange: [0.0001, null], step: 0.01 },
-  { id: 'percentage',  label: '割合 (0-100%)',                meanRange: [0, 100],  sdRange: [0.01, 50], step: 0.1 },
+  { id: 'likert7',    label: 'リッカート 7 段階 (1-7)',       meanRange: [1, 7],    sdRange: [0.3, 3],   step: 0.1,
+    sdPresets: [['集中 (SD≈0.8)', 0.8], ['普通 (SD≈1.2)', 1.2], ['広め (SD≈1.8)', 1.8], ['二極 (SD≈2.5)', 2.5]] },
+  { id: 'likert5',    label: 'リッカート 5 段階 (1-5)',       meanRange: [1, 5],    sdRange: [0.2, 2],   step: 0.1,
+    sdPresets: [['集中 (SD≈0.6)', 0.6], ['普通 (SD≈0.9)', 0.9], ['広め (SD≈1.3)', 1.3], ['二極 (SD≈2.0)', 2.0]] },
+  { id: 'continuous', label: '連続値 (反応時間 / スコア 等)',  meanRange: [null, null], sdRange: [0.0001, null], step: 0.01,
+    sdPresets: null },   // 単位 が 分から ない ので プリセット無し
+  { id: 'percentage', label: '割合 (0-100%)',                meanRange: [0, 100],  sdRange: [0.01, 50], step: 0.1,
+    sdPresets: [['集中 (SD≈5)', 5], ['普通 (SD≈15)', 15], ['広め (SD≈25)', 25]] },
 ];
 function dtDef() { return DATA_TYPES.find(x => x.id === state.dataType) || DATA_TYPES[0]; }
 
@@ -374,7 +380,18 @@ function derivedDFromRaw() {
     const pooled = Math.sqrt((sdA * sdA + sdB * sdB) / 2);
     return Math.abs(mA - mB) / pooled;
   }
-  if (state.test === 'tp' || state.test === 't1') {
+  if (state.test === 'tp') {
+    // v1034 対応 t 検定 も 2 手法 の M/SD + 相関 r で 入力。
+    //   d_paired = |M_A − M_B| / SD_diff、 SD_diff = √(SD_A² + SD_B² − 2·r·SD_A·SD_B)
+    const { mean: mA, sd: sdA } = state.rawA;
+    const { mean: mB, sd: sdB } = state.rawB;
+    const r = state.pairedR;
+    if ([mA, mB, sdA, sdB, r].some(v => !isFinite(v)) || sdA <= 0 || sdB <= 0) return null;
+    const varDiff = sdA * sdA + sdB * sdB - 2 * r * sdA * sdB;
+    if (varDiff <= 0) return null;
+    return Math.abs(mA - mB) / Math.sqrt(varDiff);
+  }
+  if (state.test === 't1') {
     const { mean: m, sd } = state.rawDiff;
     if (!isFinite(m) || !isFinite(sd) || sd <= 0) return null;
     return Math.abs(m) / sd;
@@ -418,6 +435,15 @@ function renderRawInputs() {
       </select>
     </label>
     <div id="raw-range-hint" class="hint-sm" style="font-size:11px; margin-top:2px">${escapeHtml(rangeHintText())}</div>`;
+  // v1034 SD プリセット (集中 / 普通 / 広め / 二極) — データ 型別 に
+  const sdPresetHtml = (targetId) => {
+    if (!dt.sdPresets) return '';
+    return `<div class="row" style="gap:4px; margin-top:4px; flex-wrap:wrap">
+      <span class="hint-sm" style="align-self:center; font-size:10.5px">SD 目安:</span>
+      ${dt.sdPresets.map(([lb, v]) => `<button data-sd-preset="${targetId}:${v}" class="btn" style="font-size:10.5px; padding:1px 6px">${escapeHtml(lb)}</button>`).join('')}
+    </div>`;
+  };
+
   const twoGroupInputs = `
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px">
       <div style="padding:8px; background:#eff6ff; border-radius:6px; border-left:3px solid #2563eb">
@@ -425,38 +451,58 @@ function renderRawInputs() {
         <label class="field" style="margin-bottom:6px"><span class="lbl">予想 平均</span>
           <input type="number" id="raw-mA" step="${dt.step}" value="${state.rawA.mean}">
         </label>
-        <label class="field"><span class="lbl">予想 SD</span>
+        <label class="field"><span class="lbl">予想 SD (回答 の 散らばり)</span>
           <input type="number" id="raw-sA" step="${dt.step}" min="0.0001" value="${state.rawA.sd}">
         </label>
+        ${sdPresetHtml('raw-sA')}
       </div>
       <div style="padding:8px; background:#fff7ed; border-radius:6px; border-left:3px solid #ea580c">
         <div class="bold" style="color:#ea580c; font-size:12px; margin-bottom:4px">👥 手法 B / 群 B</div>
         <label class="field" style="margin-bottom:6px"><span class="lbl">予想 平均</span>
           <input type="number" id="raw-mB" step="${dt.step}" value="${state.rawB.mean}">
         </label>
-        <label class="field"><span class="lbl">予想 SD</span>
+        <label class="field"><span class="lbl">予想 SD (回答 の 散らばり)</span>
           <input type="number" id="raw-sB" step="${dt.step}" min="0.0001" value="${state.rawB.sd}">
         </label>
+        ${sdPresetHtml('raw-sB')}
       </div>
     </div>`;
-  const diffInputs = `
+  // v1034 中村さん指摘「対応 t 検定 も 差分 じゃなく 2 手法 で やった 方が わかりやすい」
+  //   → t2 と 同じ 2 カラム の 「手法 A / 手法 B」 UI に + 「同じ 参加者 が やる ので
+  //   相関 r」 の 入力 を 追加。 d_paired = |M_A−M_B| / √(SD_A²+SD_B²−2·r·SD_A·SD_B)。
+  const pairedInputs = twoGroupInputs + `
+    <div style="padding:8px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0; margin-top:10px">
+      <div class="bold" style="color:#7b3fa0; font-size:12px; margin-bottom:4px">🔗 手法 A と B の 相関 r (同じ 参加者 が 両手法 やる ので)</div>
+      <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+        <input type="number" id="raw-r" step="0.05" min="-0.99" max="0.99" value="${state.pairedR}" style="width:100px">
+        <button data-pw-pairedr="0.3" class="btn" style="font-size:10.5px; padding:1px 6px">弱い 0.3</button>
+        <button data-pw-pairedr="0.5" class="btn" style="font-size:10.5px; padding:1px 6px">典型 0.5</button>
+        <button data-pw-pairedr="0.7" class="btn" style="font-size:10.5px; padding:1px 6px">強い 0.7</button>
+      </div>
+      <div class="hint-sm" style="margin-top:4px; font-size:11px">高い ほど 差の SD が 小さく なり d が 大きく 出ます (対応 t の 利点)。 反応時間 等 の 客観指標 は 0.6-0.8、 主観評価 は 0.3-0.6 が 目安。</div>
+    </div>`;
+  const t1Inputs = `
     <div style="padding:8px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0; margin-top:8px">
-      <div class="bold" style="color:#7b3fa0; font-size:12px; margin-bottom:4px">${state.test==='tp' ? '📎 差 (Before − After 等)' : '👤 観測 − 基準'}</div>
+      <div class="bold" style="color:#7b3fa0; font-size:12px; margin-bottom:4px">👤 観測 − 基準</div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
-        <label class="field"><span class="lbl">予想 平均</span>
+        <label class="field"><span class="lbl">予想 平均 (観測 − 基準値)</span>
           <input type="number" id="raw-mD" step="${dt.step}" value="${state.rawDiff.mean}">
         </label>
-        <label class="field"><span class="lbl">予想 SD</span>
+        <label class="field"><span class="lbl">予想 SD (観測 の 散らばり)</span>
           <input type="number" id="raw-sD" step="${dt.step}" min="0.0001" value="${state.rawDiff.sd}">
         </label>
       </div>
+      ${sdPresetHtml('raw-sD')}
     </div>`;
+  const inputBlock = state.test === 't2' ? twoGroupInputs
+                   : state.test === 'tp' ? pairedInputs
+                   : t1Inputs;
   return `
     <details class="card" style="background:#fafaf5; border-left:4px solid #ede4f3">
       <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🎯 予想データ (平均 + SD) から 効果量 を 導く</summary>
-      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れて、 グラフ で 手ごたえ を 確認 → 「この値で 予想効果量を 求める」 ボタン で 効果量欄 に 反映 します。</div>
+      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れて、 グラフ で 手ごたえ を 確認 → 「この値で 予想効果量を 求める」 ボタン で 効果量欄 に 反映 します。 SD が 直感的 で ない 場合 は 「集中 / 普通 / 広め」 の 目安 ボタン から。</div>
       ${dtSelect}
-      ${state.test === 't2' ? twoGroupInputs : diffInputs}
+      ${inputBlock}
       <!-- ライブ preview グラフ (正規分布) -->
       <div id="raw-preview" style="margin-top:10px">${renderRawPreviewSVG()}</div>
       <div class="row" style="gap:6px; margin-top:8px; align-items:center; flex-wrap:wrap">
@@ -485,11 +531,12 @@ function renderRawPreviewSVG() {
     return Math.exp(-(z * z) / 2) / (sd * Math.sqrt(2 * Math.PI));
   };
   let curves = [];   // { mu, sd, color, label }
-  if (state.test === 't2') {
+  if (state.test === 't2' || state.test === 'tp') {
+    // v1034 対応 t 検定 も 2 手法 表示
     curves.push({ mu: state.rawA.mean, sd: state.rawA.sd, color: '#2563eb', label: '手法 A' });
     curves.push({ mu: state.rawB.mean, sd: state.rawB.sd, color: '#ea580c', label: '手法 B' });
   } else {
-    curves.push({ mu: state.rawDiff.mean, sd: state.rawDiff.sd, color: '#7b3fa0', label: state.test === 'tp' ? '差の分布' : '(観測 − 基準) の 分布' });
+    curves.push({ mu: state.rawDiff.mean, sd: state.rawDiff.sd, color: '#7b3fa0', label: '(観測 − 基準) の 分布' });
   }
   // 有効性チェック
   if (curves.some(c => !isFinite(c.mu) || !isFinite(c.sd) || c.sd <= 0)) {
@@ -537,7 +584,7 @@ function renderRawPreviewSVG() {
        <text x="${xToPx(0) + 3}" y="${PT + 10}" font-size="10" fill="#111">差なし (0)</text>` : '';
   // 手法差 (2 標本 の みつ) の 帯
   let diffMark = '';
-  if (state.test === 't2' && isFinite(state.rawA.mean) && isFinite(state.rawB.mean)) {
+  if ((state.test === 't2' || state.test === 'tp') && isFinite(state.rawA.mean) && isFinite(state.rawB.mean)) {
     const yBand = yToPx(dnormAt(0,0,1)) * 0.4;
     diffMark = `<line x1="${xToPx(state.rawA.mean)}" y1="${yBand - 4}" x2="${xToPx(state.rawB.mean)}" y2="${yBand - 4}" stroke="#111" stroke-width="1.2" marker-end="url(#raw-arr)"/>
                 <line x1="${xToPx(state.rawB.mean)}" y1="${yBand - 4}" x2="${xToPx(state.rawA.mean)}" y2="${yBand - 4}" stroke="#111" stroke-width="1.2" marker-end="url(#raw-arr)"/>
@@ -839,6 +886,8 @@ const state = {
   rawA: { mean: 4.0, sd: 1.2 },
   rawB: { mean: 4.6, sd: 1.2 },
   rawDiff: { mean: 0.6, sd: 1.2 },
+  // v1034 対応 t 検定 用 の 2 手法 の 相関 (同じ 参加者で 両手法 やる ので 相関 が 出る)
+  pairedR: 0.5,
   // v1031 LMM (2 レベル) — 参加者内条件差
   lmm: {
     n_participants: 24,
@@ -970,13 +1019,14 @@ function render() {
 
     ${stepBlock({
       title: '③ 有意水準 α',
-      desc: '「偶然の 差」 を 「本当に 差」 と 誤って 判定してしまう 上限 (型 I 過誤)。 通常 0.05 (5%)。 厳しくする なら 0.01。',
-      body: `<input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}" style="width:120px">
-             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
-               <button class="btn" data-pw-alpha="0.05" style="font-size:11px; padding:2px 8px">0.05 (通常)</button>
-               <button class="btn" data-pw-alpha="0.01" style="font-size:11px; padding:2px 8px">0.01 (厳しめ)</button>
-               <button class="btn" data-pw-alpha="0.001" style="font-size:11px; padding:2px 8px">0.001 (非常に厳しめ)</button>
-             </div>`,
+      desc: '本来「差なし」なのに「差あり」と誤判定してしまう上限 (型I過誤)。正規分布でいうと、平均から中心±約2SDより外側に来る確率が5%、±約2.58SDより外側が1%、±約3.29SDより外側が0.1%。慣習的には 0.05 が標準、多重比較や高い信頼性が要る場面では 0.01 や 0.001。',
+      // v1035 中村さん指示「プリセットの下に入力欄」で導線を分かりやすく
+      body: `<div class="row" style="gap:4px; flex-wrap:wrap">
+               <button class="btn" data-pw-alpha="0.05" style="font-size:11px; padding:2px 8px">0.05 (通常、±2SD)</button>
+               <button class="btn" data-pw-alpha="0.01" style="font-size:11px; padding:2px 8px">0.01 (厳しめ、±2.58SD)</button>
+               <button class="btn" data-pw-alpha="0.001" style="font-size:11px; padding:2px 8px">0.001 (非常に厳しめ、±3.29SD)</button>
+             </div>
+             <input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}" style="width:120px; margin-top:6px">`,
     })}
 
     ${['t2','tp','t1','corr'].includes(state.test) ? stepBlock({
@@ -990,13 +1040,14 @@ function render() {
 
     ${state.mode==='a_priori' ? stepBlock({
       title: '⑤ 目標検定力 1 − β',
-      desc: '「本当に 効果 が あった とき、 それを 有意 と 検出できる 確率」。 通常 0.80 (80%)。 厳しくする なら 0.90 or 0.95 (必要 n が 増える)。',
-      body: `<input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px">
-             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
-               <button class="btn" data-pw-power="0.8" style="font-size:11px; padding:2px 8px">0.80 (通常)</button>
-               <button class="btn" data-pw-power="0.9" style="font-size:11px; padding:2px 8px">0.90 (厳しめ)</button>
-               <button class="btn" data-pw-power="0.95" style="font-size:11px; padding:2px 8px">0.95 (非常に厳しめ)</button>
-             </div>`,
+      desc: '本当に効果があるとき、それを有意と検出できる確率 (β = 見逃し率)。0.80 だと 5 回に 1 回は本当の差を見逃す、0.90 で 10 回に 1 回、0.95 で 20 回に 1 回。α との関係で「必要な効果量とサンプル数のバランス」を決める指標で、慣習的には 0.80。厳しめの誌や事前登録では 0.90 以上を求めることもある。',
+      // v1035 プリセットの下に入力欄
+      body: `<div class="row" style="gap:4px; flex-wrap:wrap">
+               <button class="btn" data-pw-power="0.8" style="font-size:11px; padding:2px 8px">0.80 (通常、見逃し 20%)</button>
+               <button class="btn" data-pw-power="0.9" style="font-size:11px; padding:2px 8px">0.90 (厳しめ、見逃し 10%)</button>
+               <button class="btn" data-pw-power="0.95" style="font-size:11px; padding:2px 8px">0.95 (非常に厳しめ、見逃し 5%)</button>
+             </div>
+             <input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px; margin-top:6px">`,
     }) : stepBlock({
       title: '⑤ サンプルサイズ',
       desc: state.test === 't2' ? '手元 or 予定の 各群 の サンプルサイズ n。' : '手元 or 予定の 全体 サンプルサイズ N。',
@@ -1016,19 +1067,20 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${state.test !== 'lmm_within' ? stepBlock({
+    ${!['lmm_within','lmm_crossed','glmm_logit'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
-      desc: '検出したい 効果の 大きさ を 標準化 した 値。 先行研究 / パイロット / 分野の慣習 で 決めます。 下の 補助 で 平均・SD から 逆算 も 可。',
-      body: `<input type="number" id="pw-effect" step="0.01" min="0.01" value="${state.effect}" style="width:120px">
-             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+      desc: '検出したい 効果の 大きさ を 標準化 した 値。 先行研究 / パイロット / 分野の慣習 で 決めます。 目安 で 決め打ち、 実測 データ から 導く、 先行研究 の 値 から 計算する の 3 通り が 使えます。',
+      // v1035 中村さん指示「目安 の 下 に、 効果量 の グループ の 中 に、 予想データ から と
+      //   先行研究の～ を 配置、 その さらに 下 に 効果量 の 入力欄」
+      body: `<div class="row" style="gap:4px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
                ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
-             </div>`,
+             </div>
+             ${renderRawInputs()}
+             ${renderEffectHelper()}
+             <div class="hint-sm" style="font-size:11px; margin-top:8px; color:#7b3fa0; font-weight:600">効果量 (直接 入力 or 上の 補助 で 反映):</div>
+             <input type="number" id="pw-effect" step="0.01" min="0.01" value="${state.effect}" style="width:120px; margin-top:2px">`,
     }) : ''}
-
-    <!-- 効果量 補助 (2 種、 同じ サイズ で) -->
-    ${state.test !== 'lmm_within' ? renderRawInputs() : ''}
-    ${state.test !== 'lmm_within' ? renderEffectHelper() : ''}
 
     ${state.test === 'lmm_within' ? renderLMMBlocks() : ''}
     ${state.test === 'lmm_crossed' ? renderLMM3Blocks() : ''}
@@ -1126,7 +1178,7 @@ function render() {
     if (box) box.textContent = '';
   });
   const rawInputChanged = () => {
-    if (state.test === 't2') {
+    if (state.test === 't2' || state.test === 'tp') {
       const mA = parseFloat(document.getElementById('raw-mA')?.value);
       const sA = parseFloat(document.getElementById('raw-sA')?.value);
       const mB = parseFloat(document.getElementById('raw-mB')?.value);
@@ -1135,7 +1187,11 @@ function render() {
       if (!isNaN(sA)) state.rawA.sd = sA;
       if (!isNaN(mB)) state.rawB.mean = mB;
       if (!isNaN(sB)) state.rawB.sd = sB;
-    } else if (['tp','t1'].includes(state.test)) {
+      if (state.test === 'tp') {
+        const r = parseFloat(document.getElementById('raw-r')?.value);
+        if (!isNaN(r)) state.pairedR = Math.max(-0.99, Math.min(0.99, r));
+      }
+    } else if (state.test === 't1') {
       const m = parseFloat(document.getElementById('raw-mD')?.value);
       const s = parseFloat(document.getElementById('raw-sD')?.value);
       if (!isNaN(m)) state.rawDiff.mean = m;
@@ -1147,8 +1203,26 @@ function render() {
     const box = document.getElementById('raw-derived-box');
     if (box) box.textContent = '';
   };
-  ['raw-mA','raw-sA','raw-mB','raw-sB','raw-mD','raw-sD'].forEach(id => {
+  ['raw-mA','raw-sA','raw-mB','raw-sB','raw-mD','raw-sD','raw-r'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', rawInputChanged);
+  });
+  // v1034 SD プリセット / pairedR プリセット
+  document.querySelectorAll('[data-sd-preset]').forEach(b => {
+    b.addEventListener('click', () => {
+      const [targetId, val] = String(b.dataset.sdPreset).split(':');
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      el.value = val;
+      rawInputChanged();
+    });
+  });
+  document.querySelectorAll('[data-pw-pairedr]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.pairedR = parseFloat(b.dataset.pwPairedr);
+      const el = document.getElementById('raw-r');
+      if (el) el.value = state.pairedR;
+      rawInputChanged();
+    });
   });
   document.getElementById('raw-apply')?.addEventListener('click', () => {
     // 最新の form 値を state に反映
