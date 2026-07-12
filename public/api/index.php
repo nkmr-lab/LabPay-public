@@ -106,6 +106,7 @@ $routes = [
     'nkmr-albums'    => 'route_nkmr_albums', // v970 中村研 アルバム DB CRUD
     'expenses'       => 'route_expenses',    // v1002 個人家計簿
     'authors'        => 'route_authors',     // v1004 著者ページ
+    'power'          => 'route_power',       // v1026 サンプルサイズ / 検定力 の 保存 + 共有
     'posts'          => 'route_posts',
     'todos'          => 'route_todos',
     'sounds'         => 'route_sounds',

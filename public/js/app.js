@@ -552,6 +552,7 @@ route('/pomodoro',        lazy(() => import('./views/pomodoro.js'), 'renderPomod
 route('/exp-plan',        lazy(() => import('./views/exp_plan.js'), 'renderExpPlan'));    // v1023 🧪 実験計画書チェック
 route('/exp-plan/:id',    lazy(() => import('./views/exp_plan.js'), 'renderExpPlanDetail'));
 route('/power',           lazy(() => import('./views/power.js'), 'renderPower'));            // v1024 📐 サンプルサイズ / 検定力
+route('/power/r/:token',  lazy(() => import('./views/power.js'), 'renderPowerShared'));     // v1026 共有 URL
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
 route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
 // v609 #234 タブ単位のカテゴリ絞り込み

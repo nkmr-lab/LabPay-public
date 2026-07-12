@@ -569,6 +569,7 @@ require_once __DIR__ . '/handlers/album_thumbs.php'; // v964 Google Photos サ�
 require_once __DIR__ . '/handlers/nkmr_albums.php';  // v970 中村研 アルバム CRUD
 require_once __DIR__ . '/handlers/expenses.php';     // v1002 個人家計簿
 require_once __DIR__ . '/handlers/authors.php';      // v1004 著者ページ
+require_once __DIR__ . '/handlers/power.php';        // v1026 サンプルサイズ / 検定力 の 保存 + 共有
 require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';

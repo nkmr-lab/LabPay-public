@@ -21,6 +21,9 @@
 //     ベース に 拡張予定 (中村さん ビジョン)。
 
 import { escapeHtml } from '../router.js';
+import { get, post, patch, del } from '../api.js';
+import { toast } from '../app.js';
+import { shareDialog } from '../share_to_sns.js';
 
 // ---------------- 正規分布 CDF / PPF ----------------
 
@@ -321,10 +324,53 @@ const state = {
   n_total: 60,
   k: 3,              // ANOVA 群数
   df: 1,             // χ² 自由度
+  // v1026 保存 / 共有 メタ
+  loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
+  loaded_name: '',
+  loaded_is_shared: false,
+  loaded_share_token: null,
+  loaded_owner_name: null,   // 他人の共有をロード中の owner
 };
 
 export function renderPower() {
   render();
+  loadSavedList();
+}
+
+// v1026 共有 URL 経由 (/#/power/r/{token}) からロード
+export async function renderPowerShared({ params }) {
+  try {
+    const d = await get('/api/power/r/' + encodeURIComponent(params.token));
+    applyLoaded(d);
+    render();
+    loadSavedList();
+    // 自動で計算実行して結果表示
+    setTimeout(doCalc, 30);
+  } catch (e) {
+    document.getElementById('app').innerHTML =
+      `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function applyLoaded(d) {
+  const cfg = d.config || {};
+  ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df'].forEach(k => {
+    if (k in cfg) state[k] = cfg[k];
+  });
+  state.loaded_id = d.id;
+  state.loaded_name = d.name;
+  state.loaded_is_shared = !!d.is_shared;
+  state.loaded_share_token = d.share_token;
+  state.loaded_owner_name = d.is_owner ? null : d.owner_name;
+}
+
+function currentConfig() {
+  return {
+    test: state.test, mode: state.mode, alpha: state.alpha, tails: state.tails,
+    effect: state.effect, power: state.power,
+    n_per_group: state.n_per_group, n_total: state.n_total,
+    k: state.k, df: state.df,
+  };
 }
 
 function render() {
@@ -332,8 +378,16 @@ function render() {
   const t = TESTS.find(x => x.id === state.test);
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">📐 サンプルサイズ / 検定力</h2>
+      <h2 style="margin:0">📐 サンプルサイズ / 検定力 ${state.loaded_name ? `<span class="hint-sm" style="font-size:13px; margin-left:8px; color:#7b3fa0">📁 ${escapeHtml(state.loaded_name)}${state.loaded_owner_name ? ' (by ' + escapeHtml(state.loaded_owner_name) + ')' : ''}</span>` : ''}</h2>
       <div class="hint-sm" style="margin-top:4px">古典的 G*Power 相当の A priori (必要 n) / Post hoc (検定力) を計算します。 正規近似ベース (G*Power の非心分布計算と数%差)。 v1025+ で LMM/GLMM シミュレーション、 参加者/刺激/試行の比較、 コスト直結を予定。</div>
+      <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+        <button id="pw-save" class="btn primary" style="font-size:12px; padding:3px 10px">💾 保存 ${state.loaded_id ? '(更新)' : '(名前を付けて)'}</button>
+        ${state.loaded_id ? `
+          <button id="pw-share" class="btn" style="font-size:12px; padding:3px 10px">📤 共有</button>
+          <button id="pw-new" class="btn" style="font-size:12px; padding:3px 10px">🆕 新規</button>
+          ${state.loaded_owner_name ? '' : `<button id="pw-delete" class="btn danger" style="font-size:12px; padding:3px 10px">🗑 削除</button>`}
+        ` : ''}
+      </div>
     </div>
 
     <div class="card">
@@ -399,6 +453,11 @@ function render() {
 
     <div id="pw-result"></div>
 
+    <div class="card" id="pw-saved-list-card" hidden>
+      <div class="bold" style="margin-bottom:6px">📚 保存 済 の 分析</div>
+      <div id="pw-saved-list" class="hint-sm">読み込み中…</div>
+    </div>
+
     <details class="card">
       <summary style="cursor:pointer; font-weight:600">📖 効果量の目安 (Cohen)</summary>
       <div style="margin-top:8px; font-size:13px; line-height:1.9">
@@ -426,24 +485,139 @@ function render() {
     b.addEventListener('click', () => computeEffectFromHelper(b.dataset.ehCalc));
   });
   document.getElementById('pw-calc').addEventListener('click', doCalc);
+  // v1026 保存 / 共有 / 削除 / 新規
+  document.getElementById('pw-save')?.addEventListener('click', onSave);
+  document.getElementById('pw-share')?.addEventListener('click', onShare);
+  document.getElementById('pw-delete')?.addEventListener('click', onDelete);
+  document.getElementById('pw-new')?.addEventListener('click', () => {
+    if (!confirm('新規の 分析を 開始 します。 現在の 分析設定 は 未保存 なら 失われます。 続けますか?')) return;
+    Object.assign(state, {
+      test: 't2', mode: 'a_priori', alpha: 0.05, tails: 2, effect: 0.5, power: 0.8,
+      n_per_group: 30, n_total: 60, k: 3, df: 1,
+      loaded_id: 0, loaded_name: '', loaded_is_shared: false, loaded_share_token: null, loaded_owner_name: null,
+    });
+    location.hash = '#/power';
+    render(); loadSavedList();
+  });
+}
+
+async function onSave() {
+  // 現在の form の 値 を state に 反映してから保存
+  syncFormToState();
+  const isUpdate = state.loaded_id > 0 && !state.loaded_owner_name;
+  const defaultName = state.loaded_name || `${TESTS.find(x => x.id === state.test).label} - ${new Date().toLocaleString('ja-JP').replace(/\//g,'-').slice(0,16)}`;
+  const name = prompt(isUpdate ? '名前を編集 (現在の設定で上書き保存)' : '分析の名前を入力', defaultName);
+  if (!name || !name.trim()) return;
+  try {
+    if (isUpdate) {
+      await patch('/api/power/' + state.loaded_id, { name: name.trim(), config: currentConfig() });
+      state.loaded_name = name.trim();
+      toast('💾 更新しました');
+    } else {
+      const r = await post('/api/power', { name: name.trim(), config: currentConfig() });
+      state.loaded_id = r.id;
+      state.loaded_name = name.trim();
+      state.loaded_is_shared = false;
+      state.loaded_share_token = null;
+      state.loaded_owner_name = null;
+      toast('💾 保存しました');
+    }
+    render(); loadSavedList();
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onShare() {
+  if (!state.loaded_id) return;
+  try {
+    if (!state.loaded_is_shared) {
+      const r = await post('/api/power/' + state.loaded_id + '/share', {});
+      state.loaded_is_shared = true;
+      state.loaded_share_token = r.share_token;
+    }
+    const url = '#/power/r/' + state.loaded_share_token;
+    shareDialog(`📐 ${state.loaded_name}`, url, {
+      pdfTitle: `検定力分析 - ${state.loaded_name}`,
+    });
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function onDelete() {
+  if (!state.loaded_id) return;
+  if (!confirm(`「${state.loaded_name}」を削除しますか?`)) return;
+  try {
+    await del('/api/power/' + state.loaded_id);
+    toast('削除しました');
+    state.loaded_id = 0; state.loaded_name = ''; state.loaded_is_shared = false;
+    state.loaded_share_token = null; state.loaded_owner_name = null;
+    location.hash = '#/power';
+    render(); loadSavedList();
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+
+async function loadSavedList() {
+  const card = document.getElementById('pw-saved-list-card');
+  const root = document.getElementById('pw-saved-list');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/power');
+    const items = d.items || [];
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.map(it => `
+      <div style="display:flex; gap:6px; align-items:center; padding:4px 0; border-bottom:1px solid #f3f4f6">
+        <button data-pw-load="${it.id}" class="btn ${state.loaded_id === it.id ? 'primary' : ''}" style="flex:1; text-align:left; font-size:13px; padding:4px 8px">
+          ${it.is_shared ? '🌐 ' : ''}${escapeHtml(it.name)}
+          <span class="hint-sm" style="font-size:10px; color:#9ca3af"> · ${escapeHtml(it.updated_at)}</span>
+        </button>
+      </div>`).join('');
+    root.querySelectorAll('[data-pw-load]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const id = Number(b.dataset.pwLoad);
+        try {
+          const dd = await get('/api/power/' + id);
+          applyLoaded(dd);
+          render(); loadSavedList();
+          setTimeout(doCalc, 30);
+        } catch (e) { toast('失敗: ' + e.message); }
+      });
+    });
+  } catch (_) { card.hidden = true; }
+}
+
+// 現在の フォーム 値 を state に 反映 (保存前に呼ぶ)
+function syncFormToState() {
+  const alphaEl = document.getElementById('pw-alpha');
+  const effEl = document.getElementById('pw-effect');
+  if (alphaEl) state.alpha  = clampFloat(alphaEl.value, 0.001, 0.5);
+  if (effEl)   state.effect = clampFloat(effEl.value, 0.001, 10);
+  if (['t2','tp','t1','corr'].includes(state.test)) {
+    const tailsEl = document.getElementById('pw-tails');
+    if (tailsEl) state.tails = parseInt(tailsEl.value, 10);
+  }
+  if (state.mode === 'a_priori') {
+    const pEl = document.getElementById('pw-power');
+    if (pEl) state.power = clampFloat(pEl.value, 0.5, 0.999);
+  } else {
+    const nEl = document.getElementById('pw-n');
+    if (nEl) {
+      const nVal = parseInt(nEl.value, 10);
+      if (state.test === 't2') state.n_per_group = Math.max(2, nVal);
+      else                     state.n_total = Math.max(2, nVal);
+    }
+  }
+  if (state.test === 'anova') {
+    const kEl = document.getElementById('pw-k');
+    if (kEl) state.k = Math.max(2, parseInt(kEl.value, 10));
+  }
+  if (state.test === 'chi2') {
+    const dfEl = document.getElementById('pw-df');
+    if (dfEl) state.df = Math.max(1, parseInt(dfEl.value, 10));
+  }
 }
 
 function doCalc() {
   const t = TESTS.find(x => x.id === state.test);
-  state.alpha  = clampFloat(document.getElementById('pw-alpha').value, 0.001, 0.5);
-  state.effect = clampFloat(document.getElementById('pw-effect').value, 0.001, 10);
-  state.tails  = ['t2','tp','t1','corr'].includes(state.test)
-    ? parseInt(document.getElementById('pw-tails').value, 10) : 2;
-  if (state.mode === 'a_priori') {
-    state.power = clampFloat(document.getElementById('pw-power').value, 0.5, 0.999);
-  } else {
-    const nEl = document.getElementById('pw-n');
-    const nVal = parseInt(nEl.value, 10);
-    if (state.test === 't2') state.n_per_group = Math.max(2, nVal);
-    else                     state.n_total = Math.max(2, nVal);
-  }
-  if (state.test === 'anova') state.k  = Math.max(2, parseInt(document.getElementById('pw-k').value, 10));
-  if (state.test === 'chi2')  state.df = Math.max(1, parseInt(document.getElementById('pw-df').value, 10));
+  syncFormToState();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
