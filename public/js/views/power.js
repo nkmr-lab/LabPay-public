@@ -161,6 +161,103 @@ function calc_chi_squared(alpha, w, df, mode, N, powerTarget) {
   }
 }
 
+// ---------------- v1031 シミュレーションベース (LMM 2 レベル) ----------------
+//
+// モデル (参加者内 条件差、 balanced design):
+//   y_pti = μ + β × x_pti + u_p + ε_pti
+//     u_p    ~ N(0, σ_p²)   参加者 ランダム 切片
+//     ε_pti  ~ N(0, σ_e²)   残差 (試行 レベル)
+//     x_pti  ∈ {0, 1}       条件 (被験者内、 n_trials 回 ずつ)
+//
+// 検定: 参加者ごとの 条件差 (mean_diff_p) を 集めて 1 標本 t 検定 (paired equivalent)。
+//   Var(mean_diff_p) = 2 × σ_e² / n_trials  →  SE = √( (2 σ_e² / n_trials) / n_p )
+//   df = n_p − 1、 t = mean_of_diffs / SE。 |t| > t_crit で 有意 と 判定。
+//
+// 検定力 = P(有意) を Monte Carlo で 経験推定 (iterations 回 生成 & 検定)。
+
+function randn() {
+  // Box-Muller
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// t 分布 CDF の 近似 (df >= 4 で 3-4 桁程度)
+function pt(t, df) {
+  if (df >= 100) return pnorm(t);
+  if (df < 1) df = 1;
+  // Cornish-Fisher 系 近似 (Fisher 1935)
+  const g = df;
+  const z = t * (1 - 1 / (4 * g)) / Math.sqrt(1 + (t * t) / (2 * g));
+  return pnorm(z);
+}
+// t 分布 の 上側 α 点 (逆関数、 二分探索)
+function qt(p, df) {
+  if (df >= 100) return qnorm(p);
+  if (p <= 0.5) return -qt(1 - p, df);
+  let lo = 0, hi = 50, mid = 2;
+  for (let i = 0; i < 60; i++) {
+    mid = (lo + hi) / 2;
+    if (pt(mid, df) < p) lo = mid; else hi = mid;
+  }
+  return mid;
+}
+
+// LMM シミュレーション: iterations 回 で empirical 検定力 を計算
+function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, alpha, iterations, tails = 2 }) {
+  if (n_p < 3 || n_trials < 1) return { power: 0 };
+  let sig = 0;
+  const t_crit = qt(1 - alpha / tails, n_p - 1);
+  for (let it = 0; it < iterations; it++) {
+    // 参加者ごと の 条件差 の 平均 を 集計
+    const diffs = new Array(n_p);
+    for (let p = 0; p < n_p; p++) {
+      // 参加者 切片 は キャンセル する ので 実 計算 不要 (差 の 平均 = 条件効果 + 残差平均)
+      let sum = 0;
+      for (let tt = 0; tt < n_trials; tt++) {
+        const eps1 = sd_e * randn();
+        const eps0 = sd_e * randn();
+        sum += (beta + eps1) - eps0;
+      }
+      diffs[p] = sum / n_trials;
+    }
+    // 1 標本 t 検定 on diffs (H0: mean = 0)
+    const mean = diffs.reduce((s, v) => s + v, 0) / n_p;
+    const varSum = diffs.reduce((s, v) => s + (v - mean) * (v - mean), 0);
+    const sd = Math.sqrt(varSum / (n_p - 1));
+    const se = sd / Math.sqrt(n_p);
+    if (se <= 0) continue;
+    const t = mean / se;
+    const isSig = tails === 2 ? Math.abs(t) > t_crit : t > t_crit;
+    if (isSig) sig++;
+  }
+  const powerEst = sig / iterations;
+  // 95% Wilson CI for proportion
+  const zCrit = 1.96;
+  const denom = 1 + zCrit * zCrit / iterations;
+  const center = (powerEst + zCrit * zCrit / (2 * iterations)) / denom;
+  const halfW = zCrit * Math.sqrt(powerEst * (1 - powerEst) / iterations + zCrit * zCrit / (4 * iterations * iterations)) / denom;
+  const ci = [Math.max(0, center - halfW), Math.min(1, center + halfW)];
+  return { power: powerEst, ci, iterations, method: 'monte_carlo' };
+}
+
+// LMM で 目標検定力 を 達成する n_participants を 二分探索 (n_trials 固定)
+function findLMMnParticipants(params, targetPower) {
+  const cap = 500;
+  // n の 単調性 (増やせば 検定力 上がる) を利用
+  let lo = 3, hi = cap;
+  const powerAt = (n) => simulateLMM({ ...params, n_p: n, iterations: Math.min(params.iterations, 500) }).power;
+  // 先に hi で 検定力 が 十分か 確認
+  if (powerAt(hi) < targetPower) return { n: cap, over: true };
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (powerAt(mid) >= targetPower) hi = mid;
+    else lo = mid;
+  }
+  return { n: hi, over: false };
+}
+
 // ---------------- v1028 データ タイプ + 実測ベース入力 ----------------
 const DATA_TYPES = [
   { id: 'likert7',     label: 'リッカート 7 段階 (1-7)',       meanRange: [1, 7],    sdRange: [0.3, 3],   step: 0.1 },
@@ -506,6 +603,61 @@ function computeEffectFromHelper(kind) {
   }
 }
 
+// v1031 LMM-specific ステップブロック
+function renderLMMBlocks() {
+  const p = state.lmm;
+  const mode = state.mode;
+  return `
+    ${stepBlock({
+      title: '⑥ 条件効果 β (raw 単位)',
+      desc: '2 条件 の 平均差 の 期待値 (outcome の 生 単位、 例: 反応時間 なら ms、 リッカート なら 点)。 Cohen d と 対応するなら β ≒ d × σ_residual。',
+      body: `<input type="number" id="lmm-beta" step="0.05" value="${p.beta}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-lmm-beta="0.2" style="font-size:11px; padding:2px 8px">小 0.2</button>
+               <button class="btn" data-lmm-beta="0.5" style="font-size:11px; padding:2px 8px">中 0.5</button>
+               <button class="btn" data-lmm-beta="0.8" style="font-size:11px; padding:2px 8px">大 0.8</button>
+             </div>`,
+    })}
+
+    ${stepBlock({
+      title: '⑦ 参加者間 SD (σ_participant)',
+      desc: '参加者ごと の 平均的 な 高低 の ばらつき (random intercept SD)。 大きい ほど 「個人差 が 大きく、 条件効果 が 見えにくい」。 通常 σ_residual と 同程度 か やや 小さめ。',
+      body: `<input type="number" id="lmm-sdp" step="0.05" min="0.001" value="${p.sd_participant}" style="width:120px">`,
+    })}
+
+    ${stepBlock({
+      title: '⑧ 残差 SD (σ_residual)',
+      desc: '同じ 参加者 の 同じ 条件 内 での 試行間 ばらつき。 大きい ほど 各試行 が noisy で、 検定力 は 下がる。',
+      body: `<input type="number" id="lmm-sde" step="0.05" min="0.001" value="${p.sd_residual}" style="width:120px">`,
+    })}
+
+    ${stepBlock({
+      title: '⑨ 各参加者・各条件 の 試行数',
+      desc: '1 人 が 各条件 で 繰り返す 回数。 増やすと 参加者内 の ばらつき を 平均化 でき、 検定力 が 上がる (残差 が 効いてる 場合)。',
+      body: `<input type="number" id="lmm-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">`,
+    })}
+
+    ${mode === 'post_hoc' ? stepBlock({
+      title: '⑩ 参加者数 n_p (Post hoc)',
+      desc: '手元 or 予定 の 参加者数。',
+      body: `<input type="number" id="lmm-np" step="1" min="3" value="${p.n_participants}" style="width:120px">`,
+    }) : ''}
+
+    ${stepBlock({
+      title: '💰 1 人 あたり 謝金 (円、 0 で コスト非表示)',
+      desc: '参加者 1 人 あたり の 謝金 or 実験費用。 入れると 戦略比較テーブル に 想定費用 も 表示 されます。',
+      body: `<input type="number" id="lmm-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円`,
+    })}
+
+    ${stepBlock({
+      title: '⚙ シミュレーション 反復数 (iterations)',
+      desc: '大きい ほど 精度 が 上がる が 時間 が かかる。 目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% の 誤差。',
+      body: `<input type="number" id="lmm-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">`,
+    })}
+  `;
+}
+
 // ---------------- UI ヘルパー ----------------
 
 // v1030 中村さん指示 「一気に値を設定する 感じ に なってる けど、 ひとつずつ 入力
@@ -528,6 +680,9 @@ const TESTS = [
   { id: 'anova', label: '📊 一元配置 ANOVA',              eff: 'f',        effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'corr',  label: '🔗 Pearson 相関',                eff: 'r',        effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
   { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
+  // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
+  { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差', eff: 'beta',
+    effGuide: [['小 β=0.2', 0.2], ['中 β=0.5', 0.5], ['大 β=0.8', 0.8]] },
 ];
 
 const state = {
@@ -549,6 +704,19 @@ const state = {
   rawA: { mean: 4.0, sd: 1.2 },
   rawB: { mean: 4.6, sd: 1.2 },
   rawDiff: { mean: 0.6, sd: 1.2 },
+  // v1031 LMM (2 レベル) — 参加者内条件差
+  lmm: {
+    n_participants: 24,
+    n_trials: 20,           // 各参加者、 各条件 の 試行数
+    beta: 0.5,              // 条件効果 (outcome の raw 単位)
+    sd_participant: 1.0,    // 参加者間 SD (random intercept)
+    sd_residual: 1.0,       // 残差 SD (trial-level)
+    iterations: 1000,
+    cost_per_participant: 1500,  // v1032 1 人 あたり 謝金 (円)、 0 で非表示
+    last_power: null,
+    last_ci: null,
+    last_details: null,
+  },
   // v1026 保存 / 共有 メタ
   loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
   loaded_name: '',
@@ -683,7 +851,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${stepBlock({
+    ${state.test !== 'lmm_within' ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい 効果の 大きさ を 標準化 した 値。 先行研究 / パイロット / 分野の慣習 で 決めます。 下の 補助 で 平均・SD から 逆算 も 可。',
       body: `<input type="number" id="pw-effect" step="0.01" min="0.01" value="${state.effect}" style="width:120px">
@@ -691,11 +859,13 @@ function render() {
                <span class="hint-sm" style="align-self:center">目安:</span>
                ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
              </div>`,
-    })}
+    }) : ''}
 
     <!-- 効果量 補助 (2 種、 同じ サイズ で) -->
-    ${renderRawInputs()}
-    ${renderEffectHelper()}
+    ${state.test !== 'lmm_within' ? renderRawInputs() : ''}
+    ${state.test !== 'lmm_within' ? renderEffectHelper() : ''}
+
+    ${state.test === 'lmm_within' ? renderLMMBlocks() : ''}
 
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
@@ -728,6 +898,14 @@ function render() {
     b.addEventListener('click', () => {
       state.effect = parseFloat(b.dataset.pwEff);
       document.getElementById('pw-effect').value = state.effect;
+    });
+  });
+  // v1031 LMM β プリセット
+  document.querySelectorAll('[data-lmm-beta]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.lmm.beta = parseFloat(b.dataset.lmmBeta);
+      const el = document.getElementById('lmm-beta');
+      if (el) el.value = state.lmm.beta;
     });
   });
   // v1030 α と 検定力 の プリセットボタン
@@ -932,11 +1110,33 @@ function syncFormToState() {
     const dfEl = document.getElementById('pw-df');
     if (dfEl) state.df = Math.max(1, parseInt(dfEl.value, 10));
   }
+  // v1031 LMM
+  if (state.test === 'lmm_within') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.lmm;
+    p.beta          = num('lmm-beta',  p.beta);
+    p.sd_participant= Math.max(0.0001, num('lmm-sdp',   p.sd_participant));
+    p.sd_residual   = Math.max(0.0001, num('lmm-sde',   p.sd_residual));
+    p.n_trials      = Math.max(1, Math.round(num('lmm-nt', p.n_trials)));
+    p.iterations    = Math.max(100, Math.min(20000, Math.round(num('lmm-iter', p.iterations))));
+    p.cost_per_participant = Math.max(0, Math.round(num('lmm-cost', p.cost_per_participant)));
+    if (state.mode === 'post_hoc') {
+      p.n_participants = Math.max(3, Math.round(num('lmm-np', p.n_participants)));
+    }
+  }
 }
 
 function doCalc() {
   const t = TESTS.find(x => x.id === state.test);
   syncFormToState();
+
+  // v1031 LMM は 別 の 計算 パス (シミュレーション)
+  if (state.test === 'lmm_within') return doCalcLMM();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -948,6 +1148,137 @@ function doCalc() {
     if (state.test === 'chi2')  out = calc_chi_squared(state.alpha, state.effect, state.df, state.mode, N, state.power);
   } catch (e) { out = { error: e.message }; }
   renderResult(out, t);
+}
+
+// v1031 LMM シミュレーション計算 (中村さんビジョンの中核 の 一角)
+function doCalcLMM() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.lmm;
+  const params = {
+    n_p: p.n_participants,
+    n_trials: p.n_trials,
+    beta: p.beta,
+    sd_p: p.sd_participant,
+    sd_e: p.sd_residual,
+    alpha: state.alpha,
+    iterations: p.iterations,
+    tails: state.tails,
+  };
+  // 計算前 に プレビュー
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション 実行中… (${p.iterations.toLocaleString()} 回)</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const res = findLMMnParticipants(params, state.power);
+        // 見つけた n で 本 シミュ (完全 iterations で 精度確認)
+        const conf = simulateLMM({ ...params, n_p: res.n });
+        state.lmm.last_power = conf.power;
+        state.lmm.last_ci = conf.ci;
+        state.lmm.last_details = { ...params, n_p: res.n, target: state.power, over: res.over };
+        renderLMMResult({ mode: 'a_priori', n_required: res.n, over: res.over, verify_power: conf.power, ci: conf.ci, params }, t);
+      } else {
+        const res = simulateLMM(params);
+        state.lmm.last_power = res.power;
+        state.lmm.last_ci = res.ci;
+        state.lmm.last_details = { ...params };
+        renderLMMResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params }, t);
+      }
+    } catch (e) {
+      root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`;
+    }
+  }, 20);
+}
+
+// v1031 LMM 結果 描画
+function renderLMMResult(res, t) {
+  const root = document.getElementById('pw-result');
+  const p = res.params;
+  const paramLine = `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
+  let mainCard;
+  if (res.mode === 'a_priori') {
+    const N_total = res.n_required * p.n_trials * 2;
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要な 参加者数 (LMM シミュベース)</div>
+        <div style="font-size:26px; line-height:1.5">参加者 n_p = <b>${res.n_required}</b> ${res.over ? '<span style="color:#dc2626">(500 で 頭打ち — 目標到達 せず)</span>' : ''}</div>
+        <div class="hint-sm" style="margin-top:8px">検証: この n_p で 検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b> [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</div>
+        <div class="hint-sm" style="margin-top:4px">全観測数: ${res.n_required} 参加者 × ${p.n_trials} 試行 × 2 条件 = <b>${N_total}</b> obs</div>
+        <div class="hint-sm" style="margin-top:4px; color:#a16207">脱落・除外 10% を見込むなら <b>${Math.ceil(res.n_required * 1.10)}</b> 名 募集 が 目安。</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+      </div>`;
+  } else {
+    const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる 検定力 (LMM シミュベース)</div>
+        <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> <span style="font-size:14px; color:#6b7280">[95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</span></div>
+        <div class="hint-sm" style="margin-top:8px">${p.n_p} 参加者 × ${p.n_trials} 試行 × 2 条件 = ${p.n_p * p.n_trials * 2} obs</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+        ${res.power < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 参加者・試行数 の 増強 を 検討。</div>' : ''}
+      </div>`;
+  }
+  const strategyCard = renderLMMStrategyTable(res, t);
+  root.innerHTML = mainCard + strategyCard;
+}
+
+// v1032 参加者 vs 試行 の 戦略比較 テーブル (中村さんビジョン中核)
+function renderLMMStrategyTable(res, t) {
+  const p = res.params;
+  const baseN = res.mode === 'a_priori' ? res.n_required : p.n_p;
+  const baseT = p.n_trials;
+  const costPerParticipant = state.lmm.cost_per_participant ?? 0;
+  const strategies = [
+    { label: '現在', n_p: baseN, n_trials: baseT },
+    { label: '参加者 +25%', n_p: Math.ceil(baseN * 1.25), n_trials: baseT },
+    { label: '参加者 +50%', n_p: Math.ceil(baseN * 1.50), n_trials: baseT },
+    { label: '試行 +50%', n_p: baseN, n_trials: Math.ceil(baseT * 1.50) },
+    { label: '試行 +100%', n_p: baseN, n_trials: baseT * 2 },
+    { label: '両方 +25%', n_p: Math.ceil(baseN * 1.25), n_trials: Math.ceil(baseT * 1.25) },
+  ];
+  const rows = strategies.map(st => {
+    const power = simulateLMM({
+      n_p: st.n_p, n_trials: st.n_trials,
+      beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e,
+      alpha: p.alpha, iterations: 500, tails: p.tails,
+    }).power;
+    const N_obs = st.n_p * st.n_trials * 2;
+    const cost = costPerParticipant * st.n_p;
+    return { ...st, power, N_obs, cost };
+  });
+  const costLabel = costPerParticipant > 0 ? '<th style="padding:6px 10px; text-align:right">推定 費用</th>' : '';
+  const costCell = (r) => costPerParticipant > 0 ? `<td style="padding:6px 10px; text-align:right">¥${r.cost.toLocaleString()}</td>` : '';
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📋 参加者 vs 試行 の 効率 比較</div>
+      <div class="hint-sm" style="margin-bottom:6px">「参加者を 増やすべきか、 試行数を 増やすべきか」 を LMM シミュ で 直接 比較。 混合効果 モデル では 同じ意味 に なりません (参加者間 SD と 残差 SD の 比 で 変わる)。</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%; font-size:13px; border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:1.5px solid #d1d5db; color:#374151">
+              <th style="padding:6px 10px; text-align:left">戦略</th>
+              <th style="padding:6px 10px; text-align:right">参加者 n_p</th>
+              <th style="padding:6px 10px; text-align:right">試行 / 条件</th>
+              <th style="padding:6px 10px; text-align:right">総 obs</th>
+              <th style="padding:6px 10px; text-align:right">検定力</th>
+              ${costLabel}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr style="border-bottom:1px solid #f3f4f6">
+                <td style="padding:6px 10px">${escapeHtml(r.label)}</td>
+                <td style="padding:6px 10px; text-align:right">${r.n_p}</td>
+                <td style="padding:6px 10px; text-align:right">${r.n_trials}</td>
+                <td style="padding:6px 10px; text-align:right">${r.N_obs.toLocaleString()}</td>
+                <td style="padding:6px 10px; text-align:right; color:${r.power >= 0.8 ? '#059669' : (r.power >= 0.6 ? '#a16207' : '#dc2626')}"><b>${(r.power * 100).toFixed(0)}%</b></td>
+                ${costCell(r)}
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">iterations=500 の 簡易シミュ (± 4% 程度の誤差)。 コスト表示 は 「1 人 あたり 謝金」 (下の 設定) で 出ます。</div>
+    </div>`;
 }
 
 // ---------------- グラフ ----------------
