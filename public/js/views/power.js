@@ -423,6 +423,108 @@ function simulatePoissonGLMM({ n_p, n_trials, baseline_rate, rr, sd_p, alpha, it
   return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_poisson_glmm' };
 }
 
+// v1050 JZS Bayes Factor BF10 for 1-sample / paired t-test (Rouder et al. 2009)。
+//   BF10 = (H1 の周辺尤度) / (H0 の周辺尤度)。 δ (真の effect size) に Cauchy(0, r) 事前分布。
+//   BF10 ≥ 3 で moderate evidence for H1、 ≥ 10 で strong、 ≥ 30 で very strong。
+//   逆に BF10 ≤ 1/3 で moderate for H0、 ≤ 1/10 で strong for H0。
+//   実装: g = δ²/σ² の inverse-gamma 混合を 対数変換 + Simpson 則で積分。
+function jzsBF10(t, n, r = 1/Math.sqrt(2)) {
+  const df = n - 1;
+  if (df <= 0) return NaN;
+  // 数値積分 (log-space Simpson's rule)
+  const g_min_log = Math.log(1e-6);
+  const g_max_log = Math.log(500);
+  const N = 400;
+  const dh = (g_max_log - g_min_log) / N;
+  const integrand = (g) => {
+    const A = 1 + n * g;
+    // 対応 t 検定・1 標本 t 検定 の JZS 分子 integrand
+    return Math.pow(A, -0.5)
+         * Math.pow(1 + t * t / (A * df), -(df + 1) / 2)
+         * Math.pow(g, -1.5)
+         * Math.exp(-(r * r) / (2 * g))
+         * r / Math.sqrt(2 * Math.PI);
+  };
+  let sum = 0;
+  for (let i = 0; i <= N; i++) {
+    const lg = g_min_log + i * dh;
+    const g = Math.exp(lg);
+    const w = (i === 0 || i === N) ? 1 : (i % 2 === 0 ? 2 : 4);
+    sum += w * integrand(g) * g;  // × g for log-space Jacobian
+  }
+  const numerator = sum * dh / 3;
+  const denom = Math.pow(1 + t * t / df, -(df + 1) / 2);
+  return numerator / denom;
+}
+
+// v1050 ベイズ (BF10) ベース サンプルサイズシミュ。
+//   固定 n モード: n 名を固定して、各 iter で BF10 が閾値を超える割合 = 「検出確率」
+//   逐次モード (SBF): 各 iter で n を 3 から増やしながら BF10 が 閾値 or 1/閾値 に
+//     到達したら止める → 平均 n / 分布 を返す (対称停止規則)。
+function simulateBayesBF({ n, d, bf_threshold = 3, alpha_ignored, iterations, mode = 'fixed', n_max = 200, r = 1/Math.sqrt(2), tails = 2 }) {
+  // 対応 t / 1 標本 t の想定 (paired design が主用途)
+  if (mode === 'fixed') {
+    if (n < 3) return { power: 0 };
+    let hit = 0, negHit = 0, none = 0;
+    const bfs = [];
+    for (let it = 0; it < iterations; it++) {
+      // n 個の観測 (差スコア) を N(d, 1) から
+      let sum = 0, sq = 0;
+      for (let i = 0; i < n; i++) {
+        const y = d + randn();
+        sum += y; sq += y * y;
+      }
+      const mean = sum / n;
+      const variance = (sq - n * mean * mean) / (n - 1);
+      const t = mean / Math.sqrt(variance / n);
+      const bf = jzsBF10(t, n, r);
+      bfs.push(bf);
+      if (bf >= bf_threshold) hit++;
+      else if (bf <= 1 / bf_threshold) negHit++;
+      else none++;
+    }
+    return {
+      power: hit / iterations,
+      p_h0_supported: negHit / iterations,
+      p_inconclusive: none / iterations,
+      median_bf: bfs.sort((a,b) => a - b)[Math.floor(bfs.length / 2)],
+      iterations,
+      method: 'monte_carlo_bayes_fixed',
+    };
+  } else {
+    // 逐次 (SBF) モード: 対称停止 (BF ≥ K → H1 採択、BF ≤ 1/K → H0 採択、途中は継続)
+    const stopped_n = [];
+    let hit = 0, negHit = 0, cap = 0;
+    for (let it = 0; it < iterations; it++) {
+      const buf = [];
+      let stopped = false;
+      for (let cur = 1; cur <= n_max; cur++) {
+        buf.push(d + randn());
+        if (cur < 3) continue;
+        const mean = buf.reduce((s, v) => s + v, 0) / cur;
+        const varN = buf.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (cur - 1);
+        const t = mean / Math.sqrt(varN / cur);
+        const bf = jzsBF10(t, cur, r);
+        if (bf >= bf_threshold) { hit++; stopped_n.push(cur); stopped = true; break; }
+        if (bf <= 1 / bf_threshold) { negHit++; stopped_n.push(cur); stopped = true; break; }
+      }
+      if (!stopped) { cap++; stopped_n.push(n_max); }
+    }
+    stopped_n.sort((a, b) => a - b);
+    const mean_n = stopped_n.reduce((s, v) => s + v, 0) / stopped_n.length;
+    const median_n = stopped_n[Math.floor(stopped_n.length / 2)];
+    const p10 = stopped_n[Math.floor(stopped_n.length * 0.1)];
+    const p90 = stopped_n[Math.floor(stopped_n.length * 0.9)];
+    return {
+      power: hit / iterations,  // H1 採択率
+      p_h0_supported: negHit / iterations,
+      p_capped: cap / iterations,
+      mean_n, median_n, p10_n: p10, p90_n: p90,
+      iterations, method: 'monte_carlo_bayes_sequential',
+    };
+  }
+}
+
 // v1049 負の二項 GLMM (過分散カウント、参加者内条件差) シミュレーション。
 //   モデル: log(E[Y]) = β0 + β1·x + u_p, Y ~ NB(μ, θ), u_p ~ N(0, σ_p²)
 //   Var(Y) = μ + μ²/θ (θ = "size" 分散パラメータ、 Poisson は θ → ∞)。
@@ -1049,6 +1151,66 @@ function renderCohenGuideInline() {
     </details>`;
 }
 
+// v1050 ベイズ (JZS BF10) ステップブロック
+function renderBayesBlocks() {
+  const p = state.bayes_t;
+  return `
+    ${stepBlock({
+      title: '⑥ 参加者数 n (対応 t / 差スコア数)',
+      desc: '各参加者の差スコアの数。 逐次モードでは 初期値として使う (上限は下で設定)。',
+      body: `<input type="number" id="bay-n" step="1" min="3" value="${p.n}" style="width:120px">`,
+    })}
+    ${stepBlock({
+      title: '⑦ 効果量 d (Cohen d)',
+      desc: '想定する 標準化平均差。 頻度論と同じ流儀。',
+      body: `<input type="number" id="bay-d" step="0.05" min="0.01" value="${p.d}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-bay-d="0.2" style="font-size:11px; padding:2px 8px">小 0.2</button>
+               <button class="btn" data-bay-d="0.5" style="font-size:11px; padding:2px 8px">中 0.5</button>
+               <button class="btn" data-bay-d="0.8" style="font-size:11px; padding:2px 8px">大 0.8</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑧ BF10 の閾値 K',
+      desc: '「BF10 ≥ K で H1 支持」 と 判断する 閾値。 Jeffreys の目安: 3 = moderate、10 = strong、30 = very strong。 逐次モードは 対称停止 で BF ≤ 1/K なら H0 支持。',
+      body: `<input type="number" id="bay-bf" step="0.5" min="1.5" value="${p.bf_threshold}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-bay-bf="3" style="font-size:11px; padding:2px 8px">3 (moderate)</button>
+               <button class="btn" data-bay-bf="10" style="font-size:11px; padding:2px 8px">10 (strong)</button>
+               <button class="btn" data-bay-bf="30" style="font-size:11px; padding:2px 8px">30 (very strong)</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑨ Cauchy 事前分布 の スケール r',
+      desc: 'δ (effect size) に対する Cauchy(0, r) 事前分布。 Rouder の推奨は r = 1/√2 ≈ 0.707 (medium)。 大きい効果を予想するなら 1.0、 小さいなら 0.5。',
+      body: `<input type="number" id="bay-r" step="0.05" min="0.1" max="2" value="${p.prior_r}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-bay-r="0.5" style="font-size:11px; padding:2px 8px">狭 0.5</button>
+               <button class="btn" data-bay-r="0.707" style="font-size:11px; padding:2px 8px">中 1/√2</button>
+               <button class="btn" data-bay-r="1.0" style="font-size:11px; padding:2px 8px">広 1.0</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑩ モード',
+      desc: '固定 = ⑥ の n で 検出確率を計算。 逐次 = n を 3 から 上限まで 増やしながら BF が 閾値 or 1/閾値 に達したら止める デザイン (SBF, Schönbrodt et al. 2017)。 α 補正不要。',
+      body: `<select id="bay-mode" style="width:100%">
+              <option value="fixed" ${p.mode_bayes==='fixed'?'selected':''}>🎯 固定 n (⑥ の n で 検出確率)</option>
+              <option value="sequential" ${p.mode_bayes==='sequential'?'selected':''}>📈 逐次 (SBF) — 平均 n を求める</option>
+             </select>`,
+    })}
+    ${p.mode_bayes === 'sequential' ? stepBlock({
+      title: '⑪ 逐次モード の 上限 n_max',
+      desc: '逐次デザイン で これ以上 n を増やしても 判断できない場合 は 打ち切り。 200 が 実用的な目安。',
+      body: `<input type="number" id="bay-nmax" step="10" min="10" max="500" value="${p.n_max}" style="width:120px">`,
+    }) : ''}
+    ${stepBlock({ title: '💰 1 人あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="bay-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
+    ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。 逐次モードは 1 iter で 平均 20-100 回 BF 計算するので Poisson より遅い。', body: `<input type="number" id="bay-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
+  `;
+}
+
 // v1049 負の二項 GLMM ステップブロック (Poisson とほぼ同じ + θ)
 function renderNBBlocks() {
   const p = state.glmm_nb;
@@ -1321,6 +1483,9 @@ const TESTS = [
   // v1049 負の二項 GLMM (過分散カウント、参加者内)
   { id: 'glmm_nb', label: '📈 負の二項 GLMM — 過分散カウント の参加者内効果', eff: 'rr',
     effGuide: [['小 RR=1.3', 1.3], ['中 RR=1.5', 1.5], ['大 RR=2.0', 2.0]] },
+  // v1050 ベイズ (JZS BF10) ベース サンプルサイズ (対応 t / 1 標本 t)
+  { id: 'bayes_t', label: '☯ ベイズ (JZS BF10) — 対応 t 検定 の サンプルサイズ', eff: 'd',
+    effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
 ];
 
 const state = {
@@ -1426,6 +1591,17 @@ const state = {
     iterations: 1000,
     cost_per_participant: 1500,
   },
+  // v1050 ベイズ (JZS BF10)
+  bayes_t: {
+    n: 24,
+    d: 0.5,
+    bf_threshold: 3,       // BF10 の閾値 (3=moderate, 10=strong)
+    prior_r: 0.707,        // Cauchy 事前分布 のスケール r (デフォルト 1/√2 ≈ 0.707)
+    mode_bayes: 'fixed',   // 'fixed' or 'sequential'
+    n_max: 200,            // sequential mode の 上限
+    iterations: 1000,
+    cost_per_participant: 1500,
+  },
   // v1026 保存 / 共有メタ
   loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
   loaded_name: '',
@@ -1459,7 +1635,7 @@ function applyLoaded(d) {
   ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
   });
-  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb'].forEach(k => {
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t'].forEach(k => {
     if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
@@ -1476,7 +1652,7 @@ function currentConfig() {
     n_per_group: state.n_per_group, n_total: state.n_total,
     k: state.k, df: state.df,
     // v1031/1032 sim モデルも config に含める
-    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb,
+    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t,
     dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
 }
@@ -1514,7 +1690,7 @@ function render() {
              ${renderTestWizard()}`,
     })}
 
-    ${stepBlock({
+    ${state.test !== 'bayes_t' ? stepBlock({
       title: '③ 有意水準 α',
       desc: '本来「差なし」なのに「差あり」と誤判定してしまう上限 (型I過誤)。正規分布でいうと、平均から中心±約2SDより外側に来る確率が5%、±約2.58SDより外側が1%、±約3.29SDより外側が0.1%。慣習的には 0.05 が標準、多重比較や高い信頼性が要る場面では 0.01 や 0.001。',
       // v1035 中村さん指示「プリセットの下に入力欄」で導線を分かりやすく
@@ -1524,7 +1700,7 @@ function render() {
                <button class="btn" data-pw-alpha="0.001" style="font-size:11px; padding:2px 8px">0.001 (非常に厳しめ、±3.29SD)</button>
              </div>
              <input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}" style="width:120px; margin-top:6px">`,
-    })}
+    }) : ''}
 
     ${['t2','tp','t1','corr'].includes(state.test) ? stepBlock({
       title: '④ 仮説の方向',
@@ -1535,7 +1711,7 @@ function render() {
              </select>`,
     }) : ''}
 
-    ${state.mode==='a_priori' ? stepBlock({
+    ${state.test === 'bayes_t' ? '' : state.mode==='a_priori' ? stepBlock({
       title: '⑤ 目標検定力 1 − β',
       desc: '本当に効果があるとき、それを有意と検出できる確率 (β = 見逃し率)。0.80 だと 5 回に 1 回は本当の差を見逃す、0.90 で 10 回に 1 回、0.95 で 20 回に 1 回。α との関係で「必要な効果量とサンプル数のバランス」を決める指標で、慣習的には 0.80。厳しめの誌や事前登録では 0.90 以上を求めることもある。',
       // v1035 プリセットの下に入力欄
@@ -1592,7 +1768,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test) ? stepBlock({
+    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい効果の大きさを標準化した値。先行研究 / パイロット / 分野の慣習で決めます。目安で決め打ち、実測データから導く、先行研究の値から計算するの 3 通りが使えます。',
       // v1035 中村さん指示「目安の下に、効果量のグループの中に、予想データからと
@@ -1614,6 +1790,7 @@ function render() {
     ${state.test === 'glmm_poisson' ? renderPoissonBlocks() : ''}
     ${state.test === 'glmm_ordinal' ? renderOrdinalBlocks() : ''}
     ${state.test === 'glmm_nb' ? renderNBBlocks() : ''}
+    ${state.test === 'bayes_t' ? renderBayesBlocks() : ''}
 
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
@@ -1741,6 +1918,33 @@ function render() {
         if (elDer) elDer.textContent = `⇒ 導出 RR = ${(r1/r0).toFixed(2)}`;
       }
     });
+  });
+
+  // v1050 ベイズ (BF10) プリセット
+  document.querySelectorAll('[data-bay-d]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.bayes_t.d = parseFloat(b.dataset.bayD);
+      const el = document.getElementById('bay-d');
+      if (el) el.value = state.bayes_t.d;
+    });
+  });
+  document.querySelectorAll('[data-bay-bf]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.bayes_t.bf_threshold = parseFloat(b.dataset.bayBf);
+      const el = document.getElementById('bay-bf');
+      if (el) el.value = state.bayes_t.bf_threshold;
+    });
+  });
+  document.querySelectorAll('[data-bay-r]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.bayes_t.prior_r = parseFloat(b.dataset.bayR);
+      const el = document.getElementById('bay-r');
+      if (el) el.value = state.bayes_t.prior_r;
+    });
+  });
+  document.getElementById('bay-mode')?.addEventListener('change', (e) => {
+    state.bayes_t.mode_bayes = e.target.value;
+    render();
   });
 
   // v1049 負の二項 GLMM プリセット
@@ -2239,6 +2443,25 @@ function syncFormToState() {
       p.n_participants = Math.max(3, Math.round(num('pois-np', p.n_participants)));
     }
   }
+  // v1050 ベイズ (JZS BF10)
+  if (state.test === 'bayes_t') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.bayes_t;
+    p.n              = Math.max(3, Math.round(num('bay-n', p.n)));
+    p.d              = num('bay-d', p.d);
+    p.bf_threshold   = Math.max(1.5, num('bay-bf', p.bf_threshold));
+    p.prior_r        = Math.max(0.1, num('bay-r', p.prior_r));
+    p.n_max          = Math.max(10, Math.min(500, Math.round(num('bay-nmax', p.n_max))));
+    p.iterations     = Math.max(100, Math.min(20000, Math.round(num('bay-iter', p.iterations))));
+    p.cost_per_participant = Math.max(0, Math.round(num('bay-cost', p.cost_per_participant)));
+    const modeEl = document.getElementById('bay-mode');
+    if (modeEl) p.mode_bayes = modeEl.value;
+  }
   // v1049 負の二項 GLMM
   if (state.test === 'glmm_nb') {
     const num = (id, fallback) => {
@@ -2292,6 +2515,7 @@ function doCalc() {
   if (state.test === 'glmm_poisson') return doCalcPoissonGLMM();
   if (state.test === 'glmm_ordinal') return doCalcOrdinalGLMM();
   if (state.test === 'glmm_nb') return doCalcNBGLMM();
+  if (state.test === 'bayes_t') return doCalcBayesT();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -2359,6 +2583,54 @@ function doCalcGLMM() {
 }
 
 // v1043 Poisson GLMM 計算
+// v1050 ベイズ (JZS BF10) 計算 + 専用結果レンダラー
+function doCalcBayesT() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.bayes_t;
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション実行中… (${p.iterations.toLocaleString()} 回、ベイズ ${p.mode_bayes === 'sequential' ? '(逐次)' : '(固定 n)'})</div></div>`;
+  setTimeout(() => {
+    try {
+      const params = {
+        n: p.n, d: p.d, bf_threshold: p.bf_threshold, r: p.prior_r,
+        iterations: p.iterations, mode: p.mode_bayes, n_max: p.n_max,
+      };
+      const res = simulateBayesBF(params);
+      renderBayesResult(res, p, t);
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
+}
+
+function renderBayesResult(res, p, t) {
+  const root = document.getElementById('pw-result');
+  const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
+  let card;
+  if (p.mode_bayes === 'fixed') {
+    card = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">☯ ベイズ検出確率 (固定 n = ${p.n})</div>
+        <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> の確率で BF10 ≥ ${p.bf_threshold} (H1 支持)</div>
+        <div class="hint-sm" style="margin-top:8px">H0 支持 (BF10 ≤ 1/${p.bf_threshold}): <b>${(res.p_h0_supported * 100).toFixed(1)}%</b>、 判断不能 (曖昧領域): <b>${(res.p_inconclusive * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">Median BF10 across simulations: <b>${res.median_bf.toFixed(2)}</b></div>
+        <div class="hint-sm" style="margin-top:4px">α=${p.d} (Cohen d), Cauchy 事前 r=${p.prior_r}, iters=${p.iterations.toLocaleString()}</div>
+        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#fef3c7; border-left:3px solid #a16207">💡 ベイズ検定は 頻度論のような 「有意/非有意」 の二分ではなく、 「H1 支持 / H0 支持 / 判断不能」 の三分。 判断不能率が高いなら n を増やすと 決定率↑。</div>
+      </div>`;
+  } else {
+    const stopN = `平均 ${res.mean_n.toFixed(1)} (median ${res.median_n}, 10-90% 区間 ${res.p10_n}-${res.p90_n})`;
+    card = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">☯ 逐次ベイズデザイン (SBF、上限 ${p.n_max})</div>
+        <div style="font-size:22px; line-height:1.4">停止 n: <b>${stopN}</b></div>
+        <div class="hint-sm" style="margin-top:8px">BF10 ≥ ${p.bf_threshold} (H1 採択) で 停止: <b>${(res.power * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">BF10 ≤ 1/${p.bf_threshold} (H0 採択) で 停止: <b>${(res.p_h0_supported * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">上限 ${p.n_max} で 打ち切り (未収束): <b>${(res.p_capped * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">Cohen d=${p.d}, Cauchy 事前 r=${p.prior_r}, iters=${p.iterations.toLocaleString()}</div>
+        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#dcfce7; border-left:3px solid #059669">💡 逐次ベイズ (Sequential BF) は 「n を増やしながら BF10 が閾値を超えたら止める」 対称停止規則。 期待 n は 固定検定より 20-40% 小さい (Schönbrodt et al. 2017)。 α 補正不要 (ベイズは 標本サイズ に依存しない)。</div>
+      </div>`;
+  }
+  root.innerHTML = card;
+}
+
 // v1049 負の二項 GLMM 計算
 function doCalcNBGLMM() {
   const t = TESTS.find(x => x.id === state.test);
@@ -2963,6 +3235,19 @@ function renderTestSpecificGuide() {
         <li>Maximal model 推奨: (1 + condition | participant) + (1 + condition | stimulus) → 収束しないなら段階的に削減 (Barr et al. 2013 / Bates et al. 2015)。</li>
         <li>Keep it maximal vs parsimonious の議論あり。REML + Satterthwaite で t 検定。</li>
         <li>結果報告に random effect variance と ICC も (participant, stimulus 別で) 含める。</li>
+      </ol>`,
+    },
+    bayes_t: {
+      title: '☯ ベイズ (JZS BF10) 対応 t 検定 の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>R: <code>BayesFactor::ttestBF(x, y, paired = TRUE, rscale = "medium")</code> or <code>rscale = 0.707</code>。 rscale は Cauchy 事前の スケール r。</li>
+        <li>Python: <code>pingouin.bayesfactor_ttest(t, nx, ny=None, paired=True, r=0.707)</code>。</li>
+        <li>報告: BF10 (H1 vs H0)、 median posterior effect size、 95% HDI (highest density interval)。</li>
+        <li>Jeffreys の目安 (BF10): 1-3 anecdotal / 3-10 moderate / 10-30 strong / 30-100 very strong / >100 extreme。 逆に 1/3-1/10 は moderate for H0。</li>
+        <li>報告例: "The Bayesian paired t-test yielded BF10 = 8.4 (moderate evidence for H1; median δ = 0.62, 95% HDI [0.23, 1.01])."</li>
+        <li>逐次デザイン (SBF, Schönbrodt et al. 2017): n を増やしながら BF10 を監視、 閾値 (例: K=10) を超えたら 停止。 α 補正不要 (ベイズは 標本サイズ依存 の 過誤率制御 が 不要)。 期待 n は 固定 t 検定 より 20-40% 小さい。</li>
+        <li>事前分布 の 選び方: 中立なら r = 1/√2 ≈ 0.707 (medium)、 小さな効果を想定するなら r = 0.5 (narrow)、 大きな効果 or 情報事前がないなら r = 1.0 (wide)。</li>
+        <li>Bayes-frequentist の 比較: 頻度論の 「有意/非有意」 vs ベイズの 「H1 支持 / H0 支持 / 判断不能」。 ベイズは 「効果なし」 も 直接支持できる (頻度論では 「有意でない=効果なし」 と 断定できない)。</li>
       </ol>`,
     },
     glmm_nb: {
@@ -3589,7 +3874,7 @@ function renderSensitivityCurve() {
                  : "Cohen's d";
   const effUnit = state.test === 'glmm_logit' ? 'OR' : (state.test === 'glmm_poisson' || state.test === 'glmm_nb') ? 'RR' : '';
   let currentEff, effRange, points;
-  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test);
+  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t'].includes(state.test);
   if (isSim) {
     // sim 系: 効果量スキャン
     if (state.test === 'glmm_logit') {
