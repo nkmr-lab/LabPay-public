@@ -1038,22 +1038,23 @@ function render() {
          させて いく のが 良い」→ 各パラメータ を 独立した ステップブロック に (title +
          短い 説明 + 入力)。 Post hoc の 場合 は 目標検定力 の 代わりに サンプルサイズ を出す。 -->
     ${stepBlock({
-      title: '① 検定の種類',
+      title: '① モード',
+      desc: 'これから 実験する 場合 は A priori、 実験後 で n が 決まっている 場合 は Post hoc。',
+      // v1038 中村さん指示「リストボックスから指定する形式が良い」
+      // v1040 中村さん指示「検定の種類より前に、モードがあるべき」→ ① モード / ② 検定の種類 に入れ替え
+      body: `<select id="pw-mode" style="width:100%">
+              <option value="a_priori" ${state.mode==='a_priori'?'selected':''}>🎯 A priori: これから 実験する 場合 (必要 n 数 を 求める)</option>
+              <option value="post_hoc" ${state.mode==='post_hoc'?'selected':''}>🔍 Post hoc: 実験後 に n 数 から 検定力 を 求める 場合</option>
+             </select>`,
+    })}
+
+    ${stepBlock({
+      title: '② 検定の種類',
       desc: 'どの 統計検定 を 使う 予定か。 選ぶ ものに 応じて 必要な 入力項目 が 変わります。 迷ったら 下の 「🧭 選択ウィザード」 に答えていくと 自動で 選ばれます。',
       body: `<select id="pw-test" style="width:100%">
               ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
              </select>
              ${renderTestWizard()}`,
-    })}
-
-    ${stepBlock({
-      title: '② モード',
-      desc: 'これから 実験する 場合 は A priori、 実験後 で n が 決まっている 場合 は Post hoc。',
-      // v1038 中村さん指示「リストボックスから指定する形式が良い」
-      body: `<select id="pw-mode" style="width:100%">
-              <option value="a_priori" ${state.mode==='a_priori'?'selected':''}>🎯 A priori: これから 実験する 場合 (必要 n 数 を 求める)</option>
-              <option value="post_hoc" ${state.mode==='post_hoc'?'selected':''}>🔍 Post hoc: 実験後 に n 数 から 検定力 を 求める 場合</option>
-             </select>`,
     })}
 
     ${stepBlock({
@@ -1818,15 +1819,28 @@ function renderTestWizard() {
   let inferred = null;
   let inferredNote = '';
   const s = w.scale, g = w.groups, r = w.related, n = w.normal, c = w.complex;
-  if (s === 'continuous') {
-    if (c === 'complex' || c === 'crossed') {
+  if (s === 'continuous' || s === 'ordinal') {
+    // リッカート等 の 順序尺度 は 「中央付近 が 山型 なら t/ANOVA で 近似可、 厳密には
+    //   順序ロジット GLMM が 望ましい」 の 注記 を 付ける。
+    const ordSfx = s === 'ordinal' ? ' (リッカート等 は 中央付近が 山型 なら これで 近似 OK、 厳密には 順序ロジット GLMM が 望ましい)' : '';
+    if (s === 'continuous' && (c === 'complex' || c === 'crossed')) {
       inferred = c === 'crossed' ? 'lmm_crossed' : 'lmm_within';
       inferredNote = c === 'crossed' ? '参加者 × 刺激 の 交差ランダム効果 → LMM 3-level' : '複雑デザイン → LMM (参加者内)';
-    } else if (g === '2' && r === 'paired' && n === 'yes') { inferred = 'tp'; inferredNote = '2 群、 対応あり、 正規性 OK → 対応 t 検定'; }
-    else if (g === '2' && r === 'indep' && n === 'yes')   { inferred = 't2';  inferredNote = '2 群、 独立、 正規性 OK → 2 標本 t 検定'; }
-    else if (g === '1' && n === 'yes')                     { inferred = 't1';  inferredNote = '1 群 (基準値比較)、 正規性 OK → 1 標本 t 検定'; }
-    else if (g === '3plus' && n === 'yes')                 { inferred = 'anova'; inferredNote = '3 群以上、 正規性 OK → 一元配置 ANOVA'; }
-    else if (n === 'no')                                    { inferredNote = '正規性 NG → ノンパラ検定 が 推奨 (Mann-Whitney / Wilcoxon / Kruskal-Wallis)。 このアプリ は 正規近似ベース なので 参考値 として t/ANOVA で 計算 も 可'; }
+    } else if (g === '2' && r === 'paired' && n === 'yes') { inferred = 'tp'; inferredNote = '2 群、 対応あり、 正規性 OK → 対応のある t 検定' + ordSfx; }
+    else if (g === '2' && r === 'indep' && n === 'yes')   { inferred = 't2';  inferredNote = '2 群、 独立、 正規性 OK → 対応のない t 検定' + ordSfx; }
+    else if (g === '1' && n === 'yes')                     { inferred = 't1';  inferredNote = '1 群 (基準値との比較)、 正規性 OK → 1 標本 t 検定' + ordSfx; }
+    else if (g === '3plus' && r === 'indep' && n === 'yes'){ inferred = 'anova'; inferredNote = '3 群以上、 独立、 正規性 OK → 一元配置 ANOVA' + ordSfx; }
+    else if (g === '3plus' && r === 'paired' && n === 'yes'){ inferred = 'anova'; inferredNote = '3 群以上、 対応 (反復測定)、 正規性 OK → 反復測定 ANOVA (このアプリは 未対応、 参考値 として 一元配置 ANOVA)' + ordSfx; }
+    else if (g === '3plus' && n === 'yes' && !r)          { inferredNote = 'Q3 (群 の 関係) も 選んで ください'; }
+    else if (n === 'no') {
+      const npMap = {
+        '1':     'Wilcoxon 符号順位検定 (中央値と 基準値の 比較)',
+        '2':     r === 'paired' ? 'Wilcoxon 符号順位検定 (対応)' : 'Mann-Whitney U 検定 (独立)',
+        '3plus': r === 'paired' ? 'Friedman 検定' : 'Kruskal-Wallis 検定',
+      };
+      const npName = npMap[g] || 'ノンパラ検定 (Mann-Whitney / Wilcoxon / Kruskal-Wallis)';
+      inferredNote = `正規分布 に 近くない → ${npName} が 推奨。 このアプリ は 正規近似ベース なので 参考値 として ${g === '3plus' ? 'ANOVA' : 't 検定'} で 計算 も 可`;
+    }
   } else if (s === 'relation') {
     inferred = 'corr'; inferredNote = '2 変数 の 関係 → Pearson 相関 (順位なら Spearman、 順位も概ね同じ 検定力)';
   } else if (s === 'binary_within') {
