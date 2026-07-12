@@ -109,8 +109,8 @@ export const APPS = [
   { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開 URL または 4 桁コードで 誰でも投票できる汎用アンケート (SNS シェア可、 LabPay ログイン不要)。 タイトル + 選択肢 (複数行テキスト、 2〜50 個) + 締切で作成、 単一/複数選択 + 任意で自由記述、 集計の見え方は「常に公開」「締切後に公開」「起案者のみ」から選択。 起案者ダッシュボードで棒グラフ集計 + 自由記述一覧を見られる。 「4 桁コード」 は pay.nkmr.io/#/public で入力して飛べる。 外部イベント来場者に投票してもらう / SNS で意見を募る等に。', defaultVisible: true },
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
   { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v943 で追加予定。', defaultVisible: true },
-  // v961 中村研 Google Photos アルバム集
-  { id: 'nkmr-albums',    cat: 'lab-mgmt', url: '#/albums', title: '📸 中村研アルバム',
+  // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽 に移動
+  { id: 'nkmr-albums',    cat: 'games', url: '#/albums', title: '📸 中村研アルバム',
     desc: '中村研 の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。 年別に折りたたみ、 学会 / 合宿 / 飲み会 / 卒業式 等 200+ 件の思い出。 各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
   // v960 外部ツール ポータル (LabPay を ハブ に して 別 アプリ に 飛ぶ)
   { id: 'poster-maker',   cat: 'lab-mgmt', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
