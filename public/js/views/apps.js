@@ -104,7 +104,7 @@ export const APPS = [
   // v1023 実験計画書チェック (Scrapbox 形式の実験計画書を精査)
   { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。 gpt-5 で 1 回 20pt。', defaultVisible: true },
   // v1024 サンプルサイズ / 検定力 (G*Power ベースライン)
-  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 2 標本 / 対応 / 1 標本 t 検定、 一元配置 ANOVA、 Pearson 相関、 χ² に対応。 効果量の Cohen 基準もワンタップ。 認証不要・無料。 v1025+ で LMM/GLMM シミュ + コスト直結を予定。', defaultVisible: true },
+  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 2 標本 / 対応 / 1 標本 t 検定、 一元配置 ANOVA、 Pearson 相関、 χ² に対応。 効果量の Cohen 基準もワンタップ。 無料。 v1025+ で LMM/GLMM シミュ + コスト直結を予定。', defaultVisible: true },
   { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標の妥当性を一通り見ます。モデル選択: gpt-5-mini 10pt (デフォルト) / gpt-5 15pt / o1 25pt。論文ほど厳密ではない軽量版。', defaultVisible: true },
   // v613 文字数・単語数リライター
   { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (10pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを色付きdiffで表示。', defaultVisible: true },
