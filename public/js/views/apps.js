@@ -121,6 +121,9 @@ export const APPS = [
   { id: 'db-admin',       cat: 'lab-mgmt', url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
     desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
+  // v1002 個人家計簿
+  { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
+    desc: '個人の支出を記録。 手動追加 or 領収書を撮影して OpenAI Vision で 店名/日付/金額/カテゴリを自動抽出。 月別 + カテゴリ別合計 + 明細一覧。 全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
   { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero っぽい 文献 (paper reference) 管理。 DOI / arXiv ID / URL を 入れると crossref / arxiv API から metadata (title / authors / year / venue / abstract) を 自動取得。 PDF 添付、 タグ、 BibTeX 出力、 検索 (title / 著者 / 抄録 / 会議)、 タグ 絞り込み、 年 絞り込み、 読状態 (未読/読中/既読)、 自分 の note を 共有 (誰か が 読んだ 感想 / 気づき を みんな で 見られる)。 ラボ全員 で 共有、 起案者 / admin のみ 編集。 同 PDF SHA なら 既存 の paper_translate / paper_full_translate と 相互リンク。', defaultVisible: true },

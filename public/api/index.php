@@ -104,6 +104,7 @@ $routes = [
     'public-polls'   => 'route_public_polls',// v942 公開投票 (誰でも 投票)
     'album-thumbs'   => 'route_album_thumbs',// v964 Google Photos アルバム サムネ キャッシュ
     'nkmr-albums'    => 'route_nkmr_albums', // v970 中村研 アルバム DB CRUD
+    'expenses'       => 'route_expenses',    // v1002 個人家計簿
     'posts'          => 'route_posts',
     'todos'          => 'route_todos',
     'sounds'         => 'route_sounds',
