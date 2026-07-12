@@ -292,6 +292,7 @@ export const TAB_DEFS = [
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
   { id: 'research',     title: '研究' },
+  { id: 'shared',       title: '共有' },
   { id: 'lab-mgmt',     title: '運営' },
   { id: 'games',        title: '娯楽' },
   { id: 'apps',         title: 'アプリ' },

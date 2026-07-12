@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1000', d: '2026-07-12', s: '🎊 v1000 到達! + 設定 の タブ カスタマイズ に 共有 を追加 (中村さん指摘)。 app.js の TAB_DEFS に shared を追加 (研究 と 運営 の間)、 設定 → タブのカスタマイズ で 表示/並び替え が できる ように。' },
   { v: 'v999', d: '2026-07-12', s: '📤 共有タブを新設、 10 アプリを移動 (中村さん指摘)。 index.html のタブ列に 「共有」 を追加 (研究 と 運営 の間)、 APP_CATEGORIES に shared を追加、 /#/shared ルートで apps.js の cat=shared 絞り込みに、 router.js の NON_FULLSCREEN_TOP_PARTS にも shared を追加。 移動した 10 アプリ: 中村研アルバム、 ゼミ動画、 チャット、 ファイル送受信、 一時画像共有、 〆切、 学会〆切、 重要連絡、 メンバー紹介ポスター作成、 かんばん。' },
   { v: 'v998', d: '2026-07-12', s: '🎮 中村研アルバム を 運営 → 娯楽 カテゴリに移動 (中村さん指摘)。 apps.js の nkmr-albums の cat を lab-mgmt → games に変更。' },
   { v: 'v997', d: '2026-07-11', s: '📐 論文要約の図切り出しに 2 段組対応を追加 (中村さん指摘「2 段組の時、 ぶち抜きの図表と、 段落だけにある図表がある」)。 pdftotext bbox で page 内 word の x 中心を binning、 中央帯 (page x=42-58%) の word 密度が 5% 未満なら 2 段組と判定。 caption の x 幅が page の 60% 超なら ぶち抜き (全幅 crop)、 それ未満で 2 段組なら caption の x 中心がどちらの段にあるか見て 該当段のみ crop。 crop_x_pct / crop_w_pct を figure_refs に付与、 フロントで background-position + size の x 軸も調整。 backfill で 25 rows / 69 figures を再更新。' },
