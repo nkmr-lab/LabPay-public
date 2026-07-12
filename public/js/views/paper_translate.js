@@ -551,7 +551,6 @@ async function paintResult(d, token) {
       <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
         <button class="btn" id="pt-copy" style="font-size:12px; padding:3px 10px">🔗 共有 URL をコピー</button>
-        <button class="btn" id="pt-pdf" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 ダイアログ で 「PDF として 保存」">📥 PDF に する</button>
         ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
         ${isOwner ? `
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
@@ -603,13 +602,13 @@ async function paintResult(d, token) {
       }
     } catch (_) { /* fall through */ }
   }
-  // v933 PDF 出力 (ブラウザ の 印刷 → 「PDF として 保存」)
-  document.getElementById('pt-pdf')?.addEventListener('click', async () => {
-    const { printAsPdf } = await import('../print_helpers.js');
-    printAsPdf(`要約 - ${r.title_ja || r.title_en || d.pdf_name || '論文'}`);
-  });
+  // v1018 「PDFにする」ボタンは共有モーダル内に移動
   document.getElementById('pt-share-dialog')?.addEventListener('click', () => {
-    shareDialog('📑 論文要約: ' + (r.title_ja || d.pdf_name), '#/paper-summary/r/' + d.share_token);
+    shareDialog(
+      '📑 論文要約: ' + (r.title_ja || d.pdf_name),
+      '#/paper-summary/r/' + d.share_token,
+      { pdfTitle: `要約 - ${r.title_ja || r.title_en || d.pdf_name || '論文'}` }
+    );
   });
   document.getElementById('pt-copy')?.addEventListener('click', async () => {
     try {
@@ -1048,13 +1047,12 @@ function renderRqHypothesis(rh) {
   const pageBadgeAmber = (p) => (typeof p === 'number' && p > 0)
     ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#a16207; border:1px solid #fde68a; margin-left:6px">p.${p}</span>`
     : '';
+  // v1018 中村さん指摘「RQは、 RQ 自体の 原文も 示してね」→ 折り畳みを 廃止 して 常に 表示。
+  //   RQ / 仮説 それぞれの 原文 (英語論文なら英語) を Georgia 系 の 引用フォント で 直接 見せる。
   const origBlock = (orig, color) => {
     const s = String(orig || '').trim();
     if (!s) return '';
-    return `<details style="margin-top:6px">
-      <summary style="cursor:pointer; font-size:11px; color:${color}">📄 原文を見る</summary>
-      <div style="margin-top:4px; padding:6px 10px; background:#fff; border:1px dashed ${color}; border-radius:4px; font-size:12px; line-height:1.65; font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap">${escapeHtml(s)}</div>
-    </details>`;
+    return `<div style="margin-top:6px; padding:6px 10px; background:#fff; border-left:2px solid ${color}; border-radius:0 4px 4px 0; font-size:12px; line-height:1.65; font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap; color:#374151">${escapeHtml(s)}</div>`;
   };
   const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');

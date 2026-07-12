@@ -458,7 +458,6 @@ async function refresh(token) {
         </div>
         <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
           <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
-          <button class="btn" id="pft-pdf" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
           ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
           ${shareButton}
           <a class="btn" href="#/paper-translate-full" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
@@ -526,14 +525,11 @@ async function refresh(token) {
       return;
     }
     // v807 button-style 公開切替
-    // v933 PDF 出力
-    document.getElementById('pft-pdf')?.addEventListener('click', async () => {
-      const { printAsPdf } = await import('../print_helpers.js');
-      printAsPdf(`全訳 - ${d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文'}`);
-    });
+    // v1018 「PDFにする」ボタンは共有モーダル内に移動
     document.getElementById('pft-share-dialog')?.addEventListener('click', () => {
       const t = d.result?.title_translated || d.result?.title_original || d.pdf_name || '論文全訳';
-      shareDialog('📑 論文全訳: ' + t, '#/paper-translate-full/r/' + token);
+      shareDialog('📑 論文全訳: ' + t, '#/paper-translate-full/r/' + token,
+        { pdfTitle: `全訳 - ${t}` });
     });
     // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
     document.getElementById('pft-share-toggle')?.addEventListener('click', async (ev) => {

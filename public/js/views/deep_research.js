@@ -310,7 +310,6 @@ async function refreshShared(token) {
       <div class="card">
         <div class="row no-print" style="gap:6px; align-items:center">
           <a href="#/deep-research" class="hint" style="flex:1">← Deep Research</a>
-          <button id="dr-pdf" class="btn" style="font-size:12px; padding:4px 8px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
           <button id="dr-share-dialog" class="btn" style="font-size:12px; padding:4px 8px">📤 共有</button>
         </div>
         <h2 style="margin:6px 0">🔎 Deep Research
@@ -381,15 +380,12 @@ async function refreshShared(token) {
       return;
     }
     // v853 📤 共有ダイアログ (タイトル+URL コピー / らぼったー / メンバーに送る)
-    // v933 PDF 出力
-    document.getElementById('dr-pdf')?.addEventListener('click', async () => {
-      const { printAsPdf } = await import('../print_helpers.js');
-      const shortQ = (d.query_text || 'query').slice(0, 60);
-      printAsPdf(`Deep Research - ${shortQ}`);
-    });
+    // v1018 「PDFにする」ボタンは共有モーダル内に移動
     document.getElementById('dr-share-dialog')?.addEventListener('click', () => {
       const titleShort = (d.query_text || '').slice(0, 80);
-      shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token);
+      const shortQ = (d.query_text || 'query').slice(0, 60);
+      shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token,
+        { pdfTitle: `Deep Research - ${shortQ}` });
     });
     // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
     document.getElementById('dr-share-toggle')?.addEventListener('change', async (e) => {

@@ -114,7 +114,11 @@ export function makeShareButton(title, hashUrl, label = '💬 らぼったーで
 //   (1) 📋 タイトル + URL をコピー (Slack 等に貼り付け用)
 //   (2) 💬 らぼったーに投稿
 //   (3) 👤 メンバーに送る (admin_notice で URL を相手に送信)
-export async function shareDialog(title, hashUrl) {
+export async function shareDialog(title, hashUrl, opts = {}) {
+  // v1018 opts.pdfTitle: 指定 された 場合、 モーダル 内 に 「📥 PDF に する」 ボタンを
+  //   表示し、 押すと printAsPdf(pdfTitle) を 実行 + モーダルを閉じる。 中村さん要望
+  //   「PDFにする は、 共有 を押したあとに提示される モーダルに 示そう」。
+  const pdfTitle = String(opts.pdfTitle || '').trim();
   const { get, post } = await import('./api.js');
   const url = hashUrl.startsWith('#') ? hashUrl : '#' + hashUrl;
   const fullUrl = location.origin + '/' + url;
@@ -135,6 +139,7 @@ export async function shareDialog(title, hashUrl) {
         </div>
         <button id="sd-copy" class="btn primary" style="text-align:left">📋 タイトル + URL をコピー <span class="hint-sm" style="font-size:11px">(Slack 等に貼り付け)</span></button>
         <button id="sd-sns" class="btn" style="text-align:left">💬 らぼったーに投稿</button>
+        ${pdfTitle ? `<button id="sd-pdf" class="btn" style="text-align:left" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する <span class="hint-sm" style="font-size:11px">(ブラウザの印刷ダイアログで 「PDF として保存」)</span></button>` : ''}
         <div style="border-top:1px solid #eee; padding-top:10px">
           <div style="font-weight:600; margin-bottom:6px">👤 メンバーに送る</div>
           <input type="search" id="sd-uq" placeholder="メンバー名で検索" style="width:100%; box-sizing:border-box; font-size:13px; padding:4px 8px; border:1px solid #d1d5db; border-radius:4px; margin-bottom:6px">
@@ -175,6 +180,16 @@ export async function shareDialog(title, hashUrl) {
   document.getElementById('sd-sns').addEventListener('click', () => {
     closeModal();
     shareToSns(title, hashUrl);
+  });
+
+  // v1018 (2.5) PDF に する (opts.pdfTitle 指定時 のみ)。 モーダルを閉じてから
+  //   window.print を呼ぶ (モーダルが 印刷対象 に含まれない ように)。
+  document.getElementById('sd-pdf')?.addEventListener('click', async () => {
+    closeModal();
+    const { printAsPdf } = await import('./print_helpers.js');
+    // モーダル DOM が 消える の を 待って から 印刷 (次 tick で 充分)
+    await new Promise(r => setTimeout(r, 30));
+    printAsPdf(pdfTitle);
   });
 
   // (3) メンバーに送る — ユーザ一覧を /api/users から取得
