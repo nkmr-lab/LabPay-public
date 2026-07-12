@@ -764,13 +764,56 @@ function renderLMM3Blocks() {
   `;
 }
 
+// v1037 GLMM の p₀ ⇔ p₁ ⇔ OR 相互換算 (中村さん指摘「p₁ も 入力させたい、 OR で表現するんだっけ？」)
+function orFromProbs(p0, p1) {
+  const eps = 1e-6;
+  const p0c = Math.min(Math.max(p0, eps), 1 - eps);
+  const p1c = Math.min(Math.max(p1, eps), 1 - eps);
+  return (p1c / (1 - p1c)) / (p0c / (1 - p0c));
+}
+function probFromBaseAndOR(p0, or) {
+  const eps = 1e-6;
+  const p0c = Math.min(Math.max(p0, eps), 1 - eps);
+  const odds0 = p0c / (1 - p0c);
+  const odds1 = odds0 * or;
+  return odds1 / (1 + odds1);
+}
+function renderGLMMDerivedOR() {
+  const p = state.glmm;
+  const or = orFromProbs(p.baseline_p, p.proposed_p);
+  const rr = p.proposed_p / p.baseline_p;
+  const size = or >= 3.0 ? '大' : or >= 1.7 ? '中' : or >= 1.3 ? '小' : or > 1 ? '極小' : or === 1 ? 'なし' : '負 (反対向き)';
+  return `⇒ 導出 OR = ${or.toFixed(2)} <span style="color:#666">(${size}, リスク比 RR = ${rr.toFixed(2)})</span>`;
+}
+
 // v1032 Logistic GLMM ステップブロック
 function renderGLMMBlocks() {
   const p = state.glmm;
   const mode = state.mode;
   return `
-    ${stepBlock({ title: '⑥ 帰無時 (x=0) の 確率', desc: 'ベースライン条件 の 想定 「正答率」 「反応率」 等 (0-1)。', body: `<input type="number" id="glmm-p0" step="0.05" min="0.01" max="0.99" value="${p.baseline_p}" style="width:120px">` })}
-    ${stepBlock({ title: '⑦ オッズ比 OR (効果量)', desc: '対立条件 の オッズ / ベースライン の オッズ。 β = log(OR)。 効果 大 = OR 大。', body: `<input type="number" id="glmm-or" step="0.1" min="0.01" value="${p.or}" style="width:120px"> <span class="hint-sm">目安:</span> <button class="btn" data-glmm-or="1.5" style="font-size:11px; padding:2px 8px">小 1.5</button> <button class="btn" data-glmm-or="2.0" style="font-size:11px; padding:2px 8px">中 2.0</button> <button class="btn" data-glmm-or="3.0" style="font-size:11px; padding:2px 8px">大 3.0</button>` })}
+    ${stepBlock({
+      title: '⑥ ベースライン条件 (x=0) の 想定 正答率 p₀',
+      desc: '既存手法 or 対照条件 での 想定 「正答率」 「成功率」 「反応率」 等 (0-1)。',
+      body: `<input type="number" id="glmm-p0" step="0.05" min="0.01" max="0.99" value="${p.baseline_p}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-glmm-p0="0.3" style="font-size:11px; padding:2px 8px">難 30%</button>
+               <button class="btn" data-glmm-p0="0.5" style="font-size:11px; padding:2px 8px">中 50%</button>
+               <button class="btn" data-glmm-p0="0.7" style="font-size:11px; padding:2px 8px">易 70%</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑦ 提案条件 (x=1) の 想定 正答率 p₁',
+      desc: '提案手法 での 想定 正答率。 p₀ と セットで OR = (p₁/(1−p₁)) / (p₀/(1−p₀)) を 自動計算。 効果量目安のボタンは 現在の p₀ を基点に OR で換算して p₁ に反映。',
+      body: `<input type="number" id="glmm-p1" step="0.05" min="0.01" max="0.99" value="${p.proposed_p}" style="width:120px">
+             <div id="glmm-or-derived" class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#eef2ff; border-radius:6px; display:inline-block">${renderGLMMDerivedOR()}</div>
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">効果量 (OR) 目安:</span>
+               <button class="btn" data-glmm-or="1.5" style="font-size:11px; padding:2px 8px">小 OR 1.5</button>
+               <button class="btn" data-glmm-or="2.0" style="font-size:11px; padding:2px 8px">中 OR 2.0</button>
+               <button class="btn" data-glmm-or="3.0" style="font-size:11px; padding:2px 8px">大 OR 3.0</button>
+             </div>`,
+    })}
     ${stepBlock({ title: '⑧ 参加者間 SD (log-odds)', desc: '参加者の 個人差 (log-odds スケール)。 0.5 = 中程度、 1.0 で 顕著な 個人差。', body: `<input type="number" id="glmm-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑨ 各条件 の 試行数', desc: '各条件 で 1 参加者 が 繰り返す 試行数。 増やすと 個々の 確率推定 が 精確 に なり 検定力 上がる。', body: `<input type="number" id="glmm-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="glmm-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
@@ -920,7 +963,8 @@ const state = {
     n_participants: 24,
     n_trials: 20,
     baseline_p: 0.5,     // 帰無条件 (x=0) の 正答率
-    or: 2.0,             // 効果量 (odds ratio、 β1 = log(or))
+    proposed_p: 0.67,    // v1037 提案条件 (x=1) の 正答率 (OR=2 で 0.5→0.67)
+    or: 2.0,             // 効果量 (odds ratio、 β1 = log(or)) — proposed_p/baseline_p から 自動導出も可
     sd_participant: 0.5, // 参加者間 変動 (log-odds スケール)
     iterations: 1000,
     cost_per_participant: 1500,
@@ -1137,12 +1181,46 @@ function render() {
       if (el) el.value = state.lmm3.beta;
     });
   });
-  // v1032 GLMM OR プリセット
+  // v1037 GLMM p₀ プリセット (難/中/易)
+  document.querySelectorAll('[data-glmm-p0]').forEach(b => {
+    b.addEventListener('click', () => {
+      const newP0 = parseFloat(b.dataset.glmmP0);
+      const currentOR = orFromProbs(state.glmm.baseline_p, state.glmm.proposed_p);
+      state.glmm.baseline_p = newP0;
+      state.glmm.proposed_p = probFromBaseAndOR(newP0, currentOR);
+      const elP0 = document.getElementById('glmm-p0');
+      const elP1 = document.getElementById('glmm-p1');
+      const elDer = document.getElementById('glmm-or-derived');
+      if (elP0) elP0.value = state.glmm.baseline_p;
+      if (elP1) elP1.value = state.glmm.proposed_p.toFixed(3);
+      if (elDer) elDer.innerHTML = renderGLMMDerivedOR();
+    });
+  });
+  // v1037 GLMM OR プリセット (p₁ に反映)
   document.querySelectorAll('[data-glmm-or]').forEach(b => {
     b.addEventListener('click', () => {
-      state.glmm.or = parseFloat(b.dataset.glmmOr);
-      const el = document.getElementById('glmm-or');
-      if (el) el.value = state.glmm.or;
+      const or = parseFloat(b.dataset.glmmOr);
+      state.glmm.or = or;
+      state.glmm.proposed_p = probFromBaseAndOR(state.glmm.baseline_p, or);
+      const elP1 = document.getElementById('glmm-p1');
+      const elDer = document.getElementById('glmm-or-derived');
+      if (elP1) elP1.value = state.glmm.proposed_p.toFixed(3);
+      if (elDer) elDer.innerHTML = renderGLMMDerivedOR();
+    });
+  });
+  // v1037 p₀ / p₁ の生入力が変わったら 導出 OR ラベルを更新
+  ['glmm-p0', 'glmm-p1'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const p0 = parseFloat(document.getElementById('glmm-p0')?.value);
+      const p1 = parseFloat(document.getElementById('glmm-p1')?.value);
+      if (isFinite(p0) && isFinite(p1) && p0 > 0 && p0 < 1 && p1 > 0 && p1 < 1) {
+        state.glmm.baseline_p = p0;
+        state.glmm.proposed_p = p1;
+        const elDer = document.getElementById('glmm-or-derived');
+        if (elDer) elDer.innerHTML = renderGLMMDerivedOR();
+      }
     });
   });
   // v1030 α と 検定力 の プリセットボタン
@@ -1418,7 +1496,10 @@ function syncFormToState() {
     };
     const p = state.glmm;
     p.baseline_p     = Math.max(0.01, Math.min(0.99, num('glmm-p0',  p.baseline_p)));
-    p.or             = Math.max(0.01, num('glmm-or', p.or));
+    p.proposed_p     = Math.max(0.01, Math.min(0.99, num('glmm-p1',  p.proposed_p)));
+    // v1037 OR は p₀ と p₁ から 逆算 (UI の source of truth は 2 つの 確率)。
+    //   ⑵ (p₀,p₁) → OR: OR = (p₁/(1-p₁)) / (p₀/(1-p₀))
+    p.or = orFromProbs(p.baseline_p, p.proposed_p);
     p.sd_participant = Math.max(0, num('glmm-sdp', p.sd_participant));
     p.n_trials       = Math.max(1, Math.round(num('glmm-nt',  p.n_trials)));
     p.iterations     = Math.max(100, Math.min(20000, Math.round(num('glmm-iter', p.iterations))));
@@ -1548,7 +1629,7 @@ function renderLMMResult(res, t) {
   const paramLine = kind === 'lmm3'
     ? `α=${p.alpha}, β=${p.beta}, σ_p=${p.sd_p}, σ_stim=${p.sd_s}, σ_e=${p.sd_e}, ${p.n_stim} 刺激 × 2 条件, iters=${p.iterations.toLocaleString()}`
     : kind === 'glmm'
-      ? `α=${p.alpha}, OR=${p.or}, baseline_p=${p.baseline_p}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
+      ? `α=${p.alpha}, p₀=${p.baseline_p}, p₁=${(state.glmm.proposed_p ?? probFromBaseAndOR(p.baseline_p, p.or)).toFixed(3)}, OR=${p.or.toFixed(2)}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
       : `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
   const perParticipantTrials = kind === 'lmm3' ? p.n_stim * 2 : p.n_trials * 2;
   let mainCard;
@@ -1620,7 +1701,7 @@ function renderNarrativeCard(res, t, kind) {
     rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\nn_p <- ${n_p}; n_s <- ${nS}\nsim_data <- expand.grid(p = 1:n_p, s = 1:n_s, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p] + rnorm(n_s, 0, ${p.sd_s.toFixed(3)})[sim_data$s] + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + (1 | p) + (1 | s), data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
     pyCode = `# Python (statsmodels) — approximated (statsmodels does not support crossed random effects directly)\n# Use pymer4 or rpy2 for full lme4 semantics.\nimport numpy as np\nnp.random.seed(42)\nn_p, n_s, iters = ${n_p}, ${nS}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_s, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_s.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nfrom scipy.stats import ttest_1samp\nsig = 0\nfor _ in range(iters):\n    diffs = []\n    for p in range(n_p):\n        diff = 0.0\n        for s in range(n_s):\n            diff += (beta + np.random.normal(0, sd_e) - np.random.normal(0, sd_e))\n        diffs.append(diff / n_s)\n    t, pv = ttest_1samp(diffs, 0.0)\n    if pv < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
   } else if (kind === 'glmm') {
-    narrative = `A simulation-based power analysis was conducted for a within-subject binary outcome analyzed with a logistic mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from logit(P(y=1)) = β0 + β1·x + u_p, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²). The baseline probability was ${p.baseline_p}, the odds ratio was OR = ${p.or} (β1 = log(OR) = ${Math.log(p.or).toFixed(3)}), and each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    narrative = `A simulation-based power analysis was conducted for a within-subject binary outcome analyzed with a logistic mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from logit(P(y=1)) = β0 + β1·x + u_p, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²). The baseline probability was p₀ = ${p.baseline_p} and the proposed-condition probability was p₁ ≈ ${(state.glmm.proposed_p ?? probFromBaseAndOR(p.baseline_p, p.or)).toFixed(3)}, corresponding to an odds ratio of OR = ${p.or.toFixed(2)} (β1 = log(OR) = ${Math.log(p.or).toFixed(3)}). Each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
     rCode = `# R (lme4)\nlibrary(lme4)\nset.seed(42)\nn_p <- ${n_p}; n_t <- ${p.n_trials}; iters <- ${Math.min(p.iterations, 1000)}\nb0 <- log(${p.baseline_p} / (1 - ${p.baseline_p})); b1 <- log(${p.or}); sd_p <- ${p.sd_p.toFixed(3)}; alpha <- ${p.alpha}\nsig <- 0\nfor (i in 1:iters) {\n  u <- rnorm(n_p, 0, sd_p)\n  df <- expand.grid(p = 1:n_p, t = 1:n_t, x = c(0, 1))\n  df$eta <- b0 + b1 * df$x + u[df$p]\n  df$y <- rbinom(nrow(df), 1, plogis(df$eta))\n  m <- glmer(y ~ x + (1 | p), data = df, family = binomial)\n  pv <- summary(m)$coefficients['x','Pr(>|z|)']\n  if (!is.na(pv) && pv < alpha) sig <- sig + 1\n}\ncat(sprintf('Power ≈ %.1f%%\\n', 100 * sig / iters))  # expected ≈ ${(power*100).toFixed(1)}%`;
     pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.api as sm, pandas as pd\nnp.random.seed(42)\nn_p, n_t, iters = ${n_p}, ${p.n_trials}, ${Math.min(p.iterations, 1000)}\nb0 = np.log(${p.baseline_p} / (1 - ${p.baseline_p})); b1 = np.log(${p.or}); sd_p = ${p.sd_p.toFixed(3)}; alpha = ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for p in range(n_p):\n        for t in range(n_t):\n            for x in (0, 1):\n                pi = 1 / (1 + np.exp(-(b0 + b1*x + u[p])))\n                rows.append((p, x, 1 if np.random.rand() < pi else 0))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = sm.GEE.from_formula('y ~ x', groups='p', data=df, family=sm.families.Binomial()).fit()\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
   } else {
