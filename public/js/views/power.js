@@ -423,6 +423,89 @@ function simulatePoissonGLMM({ n_p, n_trials, baseline_rate, rr, sd_p, alpha, it
   return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_poisson_glmm' };
 }
 
+// v1049 負の二項 GLMM (過分散カウント、参加者内条件差) シミュレーション。
+//   モデル: log(E[Y]) = β0 + β1·x + u_p, Y ~ NB(μ, θ), u_p ~ N(0, σ_p²)
+//   Var(Y) = μ + μ²/θ (θ = "size" 分散パラメータ、 Poisson は θ → ∞)。
+//   実装: Poisson-Gamma 混合 で サンプル。 λ ~ Gamma(shape=θ, scale=μ/θ)、 Y ~ Poisson(λ)。
+//   これで E[Y] = μ、 Var(Y) = μ + μ²/θ (過分散)。
+function gammaSample(shape) {
+  // Marsaglia-Tsang: shape ≥ 1 は 標準の 3-step アルゴリズム、 0 < shape < 1 は Ahrens-Dieter
+  if (shape >= 1) {
+    const d = shape - 1/3, c = 1 / Math.sqrt(9 * d);
+    while (true) {
+      let x, v;
+      do { x = randn(); v = 1 + c * x; } while (v <= 0);
+      v = v * v * v;
+      const u = Math.random();
+      if (u < 1 - 0.0331 * x * x * x * x) return d * v;
+      if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+  } else {
+    // Ahrens-Dieter GS
+    const b = (shape + Math.E) / Math.E;
+    while (true) {
+      const u = Math.random(), p = b * u;
+      if (p <= 1) {
+        const x = Math.pow(p, 1 / shape);
+        if (Math.random() <= Math.exp(-x)) return x;
+      } else {
+        const x = -Math.log((b - p) / shape);
+        if (Math.random() <= Math.pow(x, shape - 1)) return x;
+      }
+    }
+  }
+}
+function simulateNBGLMM({ n_p, n_trials, baseline_rate, rr, theta, sd_p, alpha, iterations, tails = 2 }) {
+  if (n_p < 3 || n_trials < 1 || baseline_rate <= 0 || rr <= 0 || theta <= 0) return { power: 0 };
+  const beta0 = Math.log(baseline_rate);
+  const beta1 = Math.log(rr);
+  let sig = 0;
+  const t_crit = qt(1 - alpha / tails, n_p - 1);
+  // Poisson sample (小 λ は 逆変換、 大 λ は 正規近似)
+  const poissonSample = (lam) => {
+    if (lam < 30) {
+      const L = Math.exp(-lam);
+      let k = 0, p = 1;
+      do { k++; p *= Math.random(); } while (p > L);
+      return k - 1;
+    }
+    return Math.max(0, Math.round(lam + Math.sqrt(lam) * randn()));
+  };
+  for (let it = 0; it < iterations; it++) {
+    const diffs = new Array(n_p);
+    for (let p = 0; p < n_p; p++) {
+      const u = sd_p * randn();
+      const mu0 = Math.exp(beta0 + u);
+      const mu1 = Math.exp(beta0 + beta1 + u);
+      let sum0 = 0, sum1 = 0;
+      for (let t = 0; t < n_trials; t++) {
+        // NB2: λ ~ Gamma(shape=θ, scale=μ/θ)、 Y ~ Poisson(λ)
+        const lam0 = gammaSample(theta) * (mu0 / theta);
+        const lam1 = gammaSample(theta) * (mu1 / theta);
+        sum0 += poissonSample(lam0);
+        sum1 += poissonSample(lam1);
+      }
+      const m0 = sum0 / n_trials;
+      const m1 = sum1 / n_trials;
+      diffs[p] = Math.log(m1 + 0.5) - Math.log(m0 + 0.5);
+    }
+    const mean = diffs.reduce((s, v) => s + v, 0) / n_p;
+    const varSum = diffs.reduce((s, v) => s + (v - mean) * (v - mean), 0);
+    const sd = Math.sqrt(varSum / (n_p - 1));
+    const se = sd / Math.sqrt(n_p);
+    if (se <= 0) continue;
+    const t = mean / se;
+    const isSig = tails === 2 ? Math.abs(t) > t_crit : t > t_crit;
+    if (isSig) sig++;
+  }
+  const powerEst = sig / iterations;
+  const zCrit = 1.96;
+  const denom = 1 + zCrit * zCrit / iterations;
+  const center = (powerEst + zCrit * zCrit / (2 * iterations)) / denom;
+  const halfW = zCrit * Math.sqrt(powerEst * (1 - powerEst) / iterations + zCrit * zCrit / (4 * iterations * iterations)) / denom;
+  return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_nb_glmm' };
+}
+
 // v1048 順序ロジット GLMM (リッカート等の順序尺度、参加者内条件差) シミュレーション。
 //   モデル (latent normal approach):
 //     latent_y = u_p + β·x + ε, ε ~ N(0, 1), u_p ~ N(0, σ_p²)
@@ -966,6 +1049,57 @@ function renderCohenGuideInline() {
     </details>`;
 }
 
+// v1049 負の二項 GLMM ステップブロック (Poisson とほぼ同じ + θ)
+function renderNBBlocks() {
+  const p = state.glmm_nb;
+  const mode = state.mode;
+  const rr = p.proposed_rate / p.baseline_rate;
+  const rrSize = rr >= 2.0 ? '大' : rr >= 1.5 ? '中' : rr >= 1.2 ? '小' : rr > 1 ? '極小' : rr === 1 ? 'なし' : '負 (減少)';
+  const varMult = (p.baseline_rate + p.baseline_rate * p.baseline_rate / p.theta) / p.baseline_rate;
+  return `
+    ${stepBlock({
+      title: '⑥ ベースライン条件 (x=0) の想定平均回数 λ₀',
+      desc: 'ベースライン条件で単位期間 (1 試行) あたり何回発生するかの想定平均。',
+      body: `<input type="number" id="nb-r0" step="0.5" min="0.1" value="${p.baseline_rate}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-nb-r0="2" style="font-size:11px; padding:2px 8px">稀 λ=2</button>
+               <button class="btn" data-nb-r0="5" style="font-size:11px; padding:2px 8px">中 λ=5</button>
+               <button class="btn" data-nb-r0="15" style="font-size:11px; padding:2px 8px">多 λ=15</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑦ 提案条件 (x=1) の想定平均回数 λ₁',
+      desc: 'λ₀ と セットで RR = λ₁ / λ₀ を自動計算。',
+      body: `<input type="number" id="nb-r1" step="0.5" min="0.01" value="${p.proposed_rate}" style="width:120px">
+             <div id="nb-rr-derived" class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#eef2ff; border-radius:6px; display:inline-block">⇒ 導出 RR = ${rr.toFixed(2)} <span style="color:#666">(${rrSize})</span></div>
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">効果量 (RR) 目安:</span>
+               <button class="btn" data-nb-rr="1.3" style="font-size:11px; padding:2px 8px">小 RR 1.3</button>
+               <button class="btn" data-nb-rr="1.5" style="font-size:11px; padding:2px 8px">中 RR 1.5</button>
+               <button class="btn" data-nb-rr="2.0" style="font-size:11px; padding:2px 8px">大 RR 2.0</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑧ 過分散パラメータ θ (size)',
+      desc: `Var(Y) = μ + μ²/θ の θ。 大きいほど Poisson に近い、 小さいほど過分散が深刻。 <b>現在の分散比 (Var/μ) ≈ ${varMult.toFixed(2)}</b> (Poisson なら 1.0)。 データが 「Var = 2 × μ」 程度なら θ ≈ μ、 「Var = 5 × μ」 なら θ ≈ μ/4。`,
+      body: `<input type="number" id="nb-theta" step="0.5" min="0.1" max="100" value="${p.theta}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-nb-theta="1" style="font-size:11px; padding:2px 8px">深刻 θ=1</button>
+               <button class="btn" data-nb-theta="3" style="font-size:11px; padding:2px 8px">中 θ=3</button>
+               <button class="btn" data-nb-theta="10" style="font-size:11px; padding:2px 8px">軽微 θ=10</button>
+               <button class="btn" data-nb-theta="100" style="font-size:11px; padding:2px 8px">ほぼ Poisson θ=100</button>
+             </div>`,
+    })}
+    ${stepBlock({ title: '⑨ 参加者間 SD (log スケール)', desc: '参加者ごとのカウントの個人差 (log スケール)。', body: `<input type="number" id="nb-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
+    ${stepBlock({ title: '⑩ 各条件の試行 (期間) 数', desc: '各条件で 1 参加者が繰り返す試行 or 観測期間の数。', body: `<input type="number" id="nb-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
+    ${mode === 'post_hoc' ? stepBlock({ title: '⑪ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="nb-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
+    ${stepBlock({ title: '💰 1 人あたり謝金 (円)', desc: '0 でコスト非表示。', body: `<input type="number" id="nb-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
+    ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。 NB は Gamma-Poisson の 2 段階サンプリングで Poisson より少し重い。', body: `<input type="number" id="nb-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
+  `;
+}
+
 // v1048 順序ロジット GLMM ステップブロック
 function renderOrdinalBlocks() {
   const p = state.glmm_ordinal;
@@ -1184,6 +1318,9 @@ const TESTS = [
   // v1048 順序ロジット GLMM (リッカート等の順序尺度、参加者内)
   { id: 'glmm_ordinal', label: '📶 順序ロジット GLMM — リッカート等の順序尺度 の参加者内効果', eff: 'd',
     effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
+  // v1049 負の二項 GLMM (過分散カウント、参加者内)
+  { id: 'glmm_nb', label: '📈 負の二項 GLMM — 過分散カウント の参加者内効果', eff: 'rr',
+    effGuide: [['小 RR=1.3', 1.3], ['中 RR=1.5', 1.5], ['大 RR=2.0', 2.0]] },
 ];
 
 const state = {
@@ -1275,6 +1412,20 @@ const state = {
     iterations: 1000,
     cost_per_participant: 1500,
   },
+  // v1049 負の二項 GLMM: 過分散カウント、参加者内条件差
+  //   モデル: log(E[Y]) = β0 + β1·x + u_p, Y ~ NB(μ, θ)
+  //   Var(Y) = μ + μ²/θ (θ は size 分散パラメータ、 Poisson は θ → ∞)
+  glmm_nb: {
+    n_participants: 24,
+    n_trials: 20,
+    baseline_rate: 5.0,
+    proposed_rate: 7.5,
+    rr: 1.5,
+    theta: 3.0,            // 過分散パラメータ (小 = 深刻な過分散、 大 = Poisson に近い)
+    sd_participant: 0.5,
+    iterations: 1000,
+    cost_per_participant: 1500,
+  },
   // v1026 保存 / 共有メタ
   loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
   loaded_name: '',
@@ -1308,7 +1459,7 @@ function applyLoaded(d) {
   ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
   });
-  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal'].forEach(k => {
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb'].forEach(k => {
     if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
@@ -1325,7 +1476,7 @@ function currentConfig() {
     n_per_group: state.n_per_group, n_total: state.n_total,
     k: state.k, df: state.df,
     // v1031/1032 sim モデルも config に含める
-    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal,
+    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb,
     dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
 }
@@ -1441,7 +1592,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal'].includes(state.test) ? stepBlock({
+    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい効果の大きさを標準化した値。先行研究 / パイロット / 分野の慣習で決めます。目安で決め打ち、実測データから導く、先行研究の値から計算するの 3 通りが使えます。',
       // v1035 中村さん指示「目安の下に、効果量のグループの中に、予想データからと
@@ -1462,6 +1613,7 @@ function render() {
     ${state.test === 'glmm_logit'  ? renderGLMMBlocks() : ''}
     ${state.test === 'glmm_poisson' ? renderPoissonBlocks() : ''}
     ${state.test === 'glmm_ordinal' ? renderOrdinalBlocks() : ''}
+    ${state.test === 'glmm_nb' ? renderNBBlocks() : ''}
 
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
@@ -1586,6 +1738,55 @@ function render() {
         state.glmm_poisson.proposed_rate = r1;
         state.glmm_poisson.rr = r1 / r0;
         const elDer = document.getElementById('pois-rr-derived');
+        if (elDer) elDer.textContent = `⇒ 導出 RR = ${(r1/r0).toFixed(2)}`;
+      }
+    });
+  });
+
+  // v1049 負の二項 GLMM プリセット
+  document.querySelectorAll('[data-nb-r0]').forEach(b => {
+    b.addEventListener('click', () => {
+      const newR0 = parseFloat(b.dataset.nbR0);
+      const curRR = state.glmm_nb.proposed_rate / state.glmm_nb.baseline_rate;
+      state.glmm_nb.baseline_rate = newR0;
+      state.glmm_nb.proposed_rate = newR0 * curRR;
+      const elR0 = document.getElementById('nb-r0');
+      const elR1 = document.getElementById('nb-r1');
+      const elDer = document.getElementById('nb-rr-derived');
+      if (elR0) elR0.value = state.glmm_nb.baseline_rate;
+      if (elR1) elR1.value = state.glmm_nb.proposed_rate.toFixed(3);
+      if (elDer) elDer.textContent = `⇒ 導出 RR = ${curRR.toFixed(2)}`;
+    });
+  });
+  document.querySelectorAll('[data-nb-rr]').forEach(b => {
+    b.addEventListener('click', () => {
+      const rr = parseFloat(b.dataset.nbRr);
+      state.glmm_nb.rr = rr;
+      state.glmm_nb.proposed_rate = state.glmm_nb.baseline_rate * rr;
+      const elR1 = document.getElementById('nb-r1');
+      const elDer = document.getElementById('nb-rr-derived');
+      if (elR1) elR1.value = state.glmm_nb.proposed_rate.toFixed(3);
+      if (elDer) elDer.textContent = `⇒ 導出 RR = ${rr.toFixed(2)}`;
+    });
+  });
+  document.querySelectorAll('[data-nb-theta]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.glmm_nb.theta = parseFloat(b.dataset.nbTheta);
+      const el = document.getElementById('nb-theta');
+      if (el) el.value = state.glmm_nb.theta;
+    });
+  });
+  ['nb-r0', 'nb-r1'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const r0 = parseFloat(document.getElementById('nb-r0')?.value);
+      const r1 = parseFloat(document.getElementById('nb-r1')?.value);
+      if (isFinite(r0) && isFinite(r1) && r0 > 0 && r1 > 0) {
+        state.glmm_nb.baseline_rate = r0;
+        state.glmm_nb.proposed_rate = r1;
+        state.glmm_nb.rr = r1 / r0;
+        const elDer = document.getElementById('nb-rr-derived');
         if (elDer) elDer.textContent = `⇒ 導出 RR = ${(r1/r0).toFixed(2)}`;
       }
     });
@@ -2038,6 +2239,27 @@ function syncFormToState() {
       p.n_participants = Math.max(3, Math.round(num('pois-np', p.n_participants)));
     }
   }
+  // v1049 負の二項 GLMM
+  if (state.test === 'glmm_nb') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.glmm_nb;
+    p.baseline_rate  = Math.max(0.01, num('nb-r0', p.baseline_rate));
+    p.proposed_rate  = Math.max(0.01, num('nb-r1', p.proposed_rate));
+    p.rr = p.proposed_rate / p.baseline_rate;
+    p.theta          = Math.max(0.01, num('nb-theta', p.theta));
+    p.sd_participant = Math.max(0, num('nb-sdp', p.sd_participant));
+    p.n_trials       = Math.max(1, Math.round(num('nb-nt', p.n_trials)));
+    p.iterations     = Math.max(100, Math.min(20000, Math.round(num('nb-iter', p.iterations))));
+    p.cost_per_participant = Math.max(0, Math.round(num('nb-cost', p.cost_per_participant)));
+    if (state.mode === 'post_hoc') {
+      p.n_participants = Math.max(3, Math.round(num('nb-np', p.n_participants)));
+    }
+  }
   // v1048 順序ロジット GLMM
   if (state.test === 'glmm_ordinal') {
     const num = (id, fallback) => {
@@ -2069,6 +2291,7 @@ function doCalc() {
   if (state.test === 'glmm_logit')  return doCalcGLMM();
   if (state.test === 'glmm_poisson') return doCalcPoissonGLMM();
   if (state.test === 'glmm_ordinal') return doCalcOrdinalGLMM();
+  if (state.test === 'glmm_nb') return doCalcNBGLMM();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -2136,6 +2359,31 @@ function doCalcGLMM() {
 }
 
 // v1043 Poisson GLMM 計算
+// v1049 負の二項 GLMM 計算
+function doCalcNBGLMM() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.glmm_nb;
+  const params = {
+    n_p: p.n_participants, n_trials: p.n_trials,
+    baseline_rate: p.baseline_rate, rr: p.rr, theta: p.theta, sd_p: p.sd_participant,
+    alpha: state.alpha, iterations: p.iterations, tails: state.tails,
+  };
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション実行中… (${p.iterations.toLocaleString()} 回、負の二項 GLMM)</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const res = findSimNParticipants(simulateNBGLMM, params, state.power);
+        const conf = simulateNBGLMM({ ...params, n_p: res.n });
+        renderLMMResult({ mode: 'a_priori', n_required: res.n, over: res.over, verify_power: conf.power, ci: conf.ci, params, kind: 'glmm_nb' }, t);
+      } else {
+        const res = simulateNBGLMM(params);
+        renderLMMResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params, kind: 'glmm_nb' }, t);
+      }
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
+}
+
 // v1048 順序ロジット GLMM 計算
 function doCalcOrdinalGLMM() {
   const t = TESTS.find(x => x.id === state.test);
@@ -2239,6 +2487,8 @@ function renderLMMResult(res, t) {
         ? `α=${p.alpha}, λ₀=${p.baseline_rate}, λ₁=${(p.baseline_rate*p.rr).toFixed(2)}, RR=${p.rr.toFixed(2)}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
       : kind === 'glmm_ordinal'
         ? `α=${p.alpha}, K=${p.k_cat}, d=${p.d}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
+      : kind === 'glmm_nb'
+        ? `α=${p.alpha}, λ₀=${p.baseline_rate}, λ₁=${(p.baseline_rate*p.rr).toFixed(2)}, RR=${p.rr.toFixed(2)}, θ=${p.theta}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
         : `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}${(p.sd_slope||0) > 0 ? ', σ_slope=' + p.sd_slope : ''}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
   const perParticipantTrials = kind === 'lmm3' ? p.n_stim * 2 : p.n_trials * 2;
   let mainCard;
@@ -2255,7 +2505,7 @@ function renderLMMResult(res, t) {
       </div>`;
   } else {
     const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
-    const label = kind === 'glmm' ? 'Logistic GLMM' : kind === 'glmm_poisson' ? 'Poisson GLMM' : kind === 'glmm_ordinal' ? '順序ロジット GLMM' : (kind === 'lmm3' ? 'LMM 3-level' : 'LMM');
+    const label = kind === 'glmm' ? 'Logistic GLMM' : kind === 'glmm_poisson' ? 'Poisson GLMM' : kind === 'glmm_nb' ? '負の二項 GLMM' : kind === 'glmm_ordinal' ? '順序ロジット GLMM' : (kind === 'lmm3' ? 'LMM 3-level' : 'LMM');
     mainCard = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (${label} シミュベース)</div>
@@ -2332,6 +2582,11 @@ function renderNarrativeCard(res, t, kind) {
     narrative = `A simulation-based power analysis was conducted for a within-subject count outcome analyzed with a Poisson mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from log(E[Y]) = β0 + β1·x + u_p with Y ~ Poisson(exp(η)) and u_p ~ N(0, ${p.sd_p.toFixed(2)}²). The baseline rate was λ₀ = ${r0} counts per trial and the proposed-condition rate was λ₁ ≈ ${r1.toFixed(2)}, corresponding to a rate ratio of RR = ${p.rr.toFixed(2)} (β1 = log(RR) = ${Math.log(p.rr).toFixed(3)}). Each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
     rCode = `# R (lme4)\nlibrary(lme4)\nset.seed(42)\nn_p <- ${n_p}; n_t <- ${p.n_trials}; iters <- ${Math.min(p.iterations, 1000)}\nb0 <- log(${r0}); b1 <- log(${p.rr}); sd_p <- ${p.sd_p.toFixed(3)}; alpha <- ${p.alpha}\nsig <- 0\nfor (i in 1:iters) {\n  u <- rnorm(n_p, 0, sd_p)\n  df <- expand.grid(p = 1:n_p, t = 1:n_t, x = c(0, 1))\n  df$eta <- b0 + b1 * df$x + u[df$p]\n  df$y <- rpois(nrow(df), exp(df$eta))\n  m <- glmer(y ~ x + (1 | p), data = df, family = poisson)\n  pv <- summary(m)$coefficients['x','Pr(>|z|)']\n  if (!is.na(pv) && pv < alpha) sig <- sig + 1\n}\ncat(sprintf('Power ≈ %.1f%%\\n', 100 * sig / iters))  # expected ≈ ${(power*100).toFixed(1)}%`;
     pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.api as sm, pandas as pd\nnp.random.seed(42)\nn_p, n_t, iters = ${n_p}, ${p.n_trials}, ${Math.min(p.iterations, 1000)}\nb0 = np.log(${r0}); b1 = np.log(${p.rr}); sd_p = ${p.sd_p.toFixed(3)}; alpha = ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for pi_ in range(n_p):\n        for t in range(n_t):\n            for x in (0, 1):\n                lam = np.exp(b0 + b1*x + u[pi_])\n                rows.append((pi_, x, np.random.poisson(lam)))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = sm.GEE.from_formula('y ~ x', groups='p', data=df, family=sm.families.Poisson()).fit()\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
+  } else if (kind === 'glmm_nb') {
+    const r0 = p.baseline_rate, r1 = p.baseline_rate * p.rr;
+    narrative = `A simulation-based power analysis was conducted for a within-subject overdispersed count outcome analyzed with a negative binomial mixed-effects model (NB2 parameterization). For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from log(E[Y]) = β0 + β1·x + u_p with Y ~ NB(μ, θ) so that Var(Y) = μ + μ²/θ. The dispersion parameter was θ = ${p.theta} (variance inflation factor ≈ ${(1 + p.baseline_rate / p.theta).toFixed(2)} × mean at baseline). The baseline rate was λ₀ = ${r0} and the proposed-condition rate was λ₁ ≈ ${r1.toFixed(2)}, corresponding to a rate ratio of RR = ${p.rr.toFixed(2)}. Each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (glmmTMB — 推奨、lme4 だと NB は遅い)\nlibrary(glmmTMB)\nset.seed(42)\nn_p <- ${n_p}; n_t <- ${p.n_trials}; iters <- ${Math.min(p.iterations, 500)}\nb0 <- log(${r0}); b1 <- log(${p.rr}); theta <- ${p.theta}; sd_p <- ${p.sd_p.toFixed(3)}; alpha <- ${p.alpha}\nsig <- 0\nfor (i in 1:iters) {\n  u <- rnorm(n_p, 0, sd_p)\n  df <- expand.grid(p = 1:n_p, t = 1:n_t, x = c(0, 1))\n  mu <- exp(b0 + b1 * df$x + u[df$p])\n  df$y <- rnbinom(nrow(df), mu = mu, size = theta)\n  m <- try(glmmTMB(y ~ x + (1 | p), data = df, family = nbinom2), silent = TRUE)\n  if (!inherits(m, 'try-error')) {\n    pv <- summary(m)$coefficients$cond['x', 'Pr(>|z|)']\n    if (!is.na(pv) && pv < alpha) sig <- sig + 1\n  }\n}\ncat(sprintf('Power ≈ %.1f%%\\n', 100 * sig / iters))  # expected ≈ ${(power*100).toFixed(1)}%`;
+    pyCode = `# Python (statsmodels GEE) — NB は statsmodels の GEE でも近似可\nimport numpy as np, statsmodels.api as sm, pandas as pd\nnp.random.seed(42)\nn_p, n_t, iters = ${n_p}, ${p.n_trials}, ${Math.min(p.iterations, 500)}\nb0 = np.log(${r0}); b1 = np.log(${p.rr}); theta = ${p.theta}; sd_p = ${p.sd_p.toFixed(3)}; alpha = ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for pi_ in range(n_p):\n        for t in range(n_t):\n            for x in (0, 1):\n                mu = np.exp(b0 + b1*x + u[pi_])\n                # Gamma-Poisson mixture で NB サンプル\n                lam = np.random.gamma(shape=theta, scale=mu/theta)\n                rows.append((pi_, x, np.random.poisson(lam)))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = sm.GEE.from_formula('y ~ x', groups='p', data=df, family=sm.families.NegativeBinomial()).fit()\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
   } else if (kind === 'glmm_ordinal') {
     const K = p.k_cat, log_or = p.d * Math.PI / Math.sqrt(3);
     narrative = `A simulation-based power analysis was conducted for a within-subject ${K}-point ordinal (Likert-like) outcome. Following a cumulative link (proportional odds) model, we simulated a latent normal variable y* = β·x + u_p + ε with u_p ~ N(0, ${p.sd_p.toFixed(2)}²) and ε ~ N(0, 1), then discretized into K equal-probability categories using thresholds θ_j = Φ⁻¹(j/K). The standardized effect on the latent scale was d = ${p.d} (Cohen d equivalent), corresponding to a log-odds effect β = d·π/√3 ≈ ${log_or.toFixed(3)} and an odds ratio of ${Math.exp(log_or).toFixed(2)} per one-category shift (Chinn, 2000). For each of ${p.iterations.toLocaleString()} simulated datasets, each participant contributed ${p.n_trials} responses per condition. Analysis was performed as a paired mean-difference test on participant-level category-value means; this is conservative relative to a proper POM analysis (which recovers an additional ~5-15% efficiency). Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
@@ -2439,7 +2694,7 @@ function renderTestWizard() {
   } else if (s === 'binary_within') {
     inferred = 'glmm_logit'; inferredNote = '2 値アウトカム、参加者内 → Logistic GLMM';
   } else if (s === 'count_within') {
-    inferred = 'glmm_poisson'; inferredNote = '回数アウトカム、参加者内 → Poisson GLMM (過分散なら負の二項に切替、このアプリは Poisson で概算)';
+    inferred = 'glmm_poisson'; inferredNote = '回数アウトカム、参加者内 → Poisson GLMM が第一候補。分散 >> 平均 (過分散) なら 📈 負の二項 GLMM に切替を推奨。';
   } else if (s === 'categorical') {
     inferred = 'chi2'; inferredNote = 'カテゴリ独立 or 適合度 → χ² 検定 (期待度数 <5 なら Fisher に切替)';
   }
@@ -2604,7 +2859,7 @@ function renderStatFlowchartSVG() {
 ━━━ 回数 (カウント) ━━━
   │
   ├─ 平均 ≈ 分散  → Poisson GLMM (このアプリで対応)
-  ├─ 分散 >> 平均 → 負の二項 GLMM (過分散、未対応 v1049+)
+  ├─ 分散 >> 平均 → 負の二項 GLMM (過分散、このアプリで対応)
   └─ ゼロが大量  → Zero-inflated Poisson / NB
 
 ━━━ 順序尺度 (リッカート等) ━━━
@@ -2710,6 +2965,18 @@ function renderTestSpecificGuide() {
         <li>結果報告に random effect variance と ICC も (participant, stimulus 別で) 含める。</li>
       </ol>`,
     },
+    glmm_nb: {
+      title: '📈 負の二項 GLMM (過分散カウント) の実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>まず Poisson を試す: <code>glmer(y ~ x + (1 | p), family = poisson)</code>。 <code>performance::check_overdispersion(m)</code> で 過分散を検定。 p<.05 なら NB に切り替え。</li>
+        <li>R: <code>glmmTMB(y ~ x + (1 | p), family = nbinom2)</code>。 NB2 パラメータ化 (分散 = μ + μ²/θ) が 現代の標準。 NB1 (分散 = μ × φ) は 特殊ケース。</li>
+        <li>過分散パラメータ θ (別名 size, k, r) の 推定値を報告。 θ が 小さい (例: 0.5-2) ほど過分散が深刻。</li>
+        <li>効果量: レート比 RR = exp(β1)。 過分散でも 解釈は Poisson と同じ。 SE は Poisson より広くなる (適切に不確実性を反映)。</li>
+        <li>報告例: "RR = 1.68, 95%CI [1.15, 2.46], z = 2.71, p = .007, θ̂ = 2.4 (Poisson 検定より 12% 広い CI, 過分散を適切に取り込んだ結果)"</li>
+        <li>ゼロ過剰なら zero-inflated NB: <code>glmmTMB(y ~ x + (1 | p), ziformula = ~1, family = nbinom2)</code>。</li>
+        <li>Poisson で SE 過小評価 の兆候 (Wald 検定が過剰有意) が出るのは 過分散の警告。 分散安定性は 「NB → Poisson の再検討」 より 先に。</li>
+      </ol>`,
+    },
     glmm_ordinal: {
       title: '📶 順序ロジット GLMM (リッカート等) の実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
@@ -2765,6 +3032,7 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
   const costPerParticipant = (kind === 'glmm' ? state.glmm.cost_per_participant
                             : kind === 'glmm_poisson' ? state.glmm_poisson.cost_per_participant
                             : kind === 'glmm_ordinal' ? state.glmm_ordinal.cost_per_participant
+                            : kind === 'glmm_nb' ? state.glmm_nb.cost_per_participant
                             : kind === 'lmm3' ? state.lmm3.cost_per_participant
                             : state.lmm.cost_per_participant) ?? 0;
   const strategies = [
@@ -2780,6 +3048,7 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
     if (kind === 'glmm') return simulateGLMM({ n_p, n_trials: n_t, baseline_p: p.baseline_p, or: p.or, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
     if (kind === 'glmm_poisson') return simulatePoissonGLMM({ n_p, n_trials: n_t, baseline_rate: p.baseline_rate, rr: p.rr, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
     if (kind === 'glmm_ordinal') return simulateOrdinalGLMM({ n_p, n_trials: n_t, k_cat: p.k_cat, d: p.d, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
+    if (kind === 'glmm_nb') return simulateNBGLMM({ n_p, n_trials: n_t, baseline_rate: p.baseline_rate, rr: p.rr, theta: p.theta, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
     return simulateLMM({ n_p, n_trials: n_t, beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e, sd_slope: p.sd_slope || 0, alpha: p.alpha, iterations: 500, tails: p.tails });
   };
   const rows = strategies.map(st => {
@@ -3315,11 +3584,12 @@ function renderSensitivityCurve() {
                  : state.test === 'lmm_within' || state.test === 'lmm_crossed' ? '固定効果 β'
                  : state.test === 'glmm_logit' ? '効果量 OR'
                  : state.test === 'glmm_poisson' ? '効果量 RR'
+                 : state.test === 'glmm_nb' ? '効果量 RR'
                  : state.test === 'glmm_ordinal' ? "Cohen's d (latent)"
                  : "Cohen's d";
-  const effUnit = state.test === 'glmm_logit' ? 'OR' : state.test === 'glmm_poisson' ? 'RR' : '';
+  const effUnit = state.test === 'glmm_logit' ? 'OR' : (state.test === 'glmm_poisson' || state.test === 'glmm_nb') ? 'RR' : '';
   let currentEff, effRange, points;
-  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal'].includes(state.test);
+  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test);
   if (isSim) {
     // sim 系: 効果量スキャン
     if (state.test === 'glmm_logit') {
@@ -3328,6 +3598,10 @@ function renderSensitivityCurve() {
       effRange = [1.0, eMax];
     } else if (state.test === 'glmm_poisson') {
       currentEff = state.glmm_poisson.rr;
+      const eMax = Math.max(3, currentEff * 3);
+      effRange = [1.0, eMax];
+    } else if (state.test === 'glmm_nb') {
+      currentEff = state.glmm_nb.rr;
       const eMax = Math.max(3, currentEff * 3);
       effRange = [1.0, eMax];
     } else if (state.test === 'glmm_ordinal') {
@@ -3365,6 +3639,10 @@ function renderSensitivityCurve() {
         } else if (state.test === 'glmm_ordinal') {
           const p = state.glmm_ordinal;
           const r = simulateOrdinalGLMM({ n_p: nowN, n_trials: p.n_trials, k_cat: p.k_cat, d: e, sd_p: p.sd_participant, alpha: state.alpha, iterations: 100, tails: state.tails });
+          power = r.power;
+        } else if (state.test === 'glmm_nb') {
+          const p = state.glmm_nb;
+          const r = simulateNBGLMM({ n_p: nowN, n_trials: p.n_trials, baseline_rate: p.baseline_rate, rr: e, theta: p.theta, sd_p: p.sd_participant, alpha: state.alpha, iterations: 100, tails: state.tails });
           power = r.power;
         }
       } catch (_) { power = 0; }
@@ -3415,6 +3693,7 @@ function renderSensitivityCurve() {
     glmm_logit:  [[1.5, '小'], [2.0, '中'], [3.0, '大']],
     glmm_poisson: [[1.3, '小'], [1.5, '中'], [2.0, '大']],
     glmm_ordinal: [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    glmm_nb: [[1.3, '小'], [1.5, '中'], [2.0, '大']],
   }[state.test] || [];
   const benchMarks = benchmarks.filter(([v]) => v >= effRange[0] && v <= effRange[1]).map(([v, label]) =>
     `<line x1="${xToPx(v)}" y1="${PT}" x2="${xToPx(v)}" y2="${H - PB}" stroke="#d4d4d4" stroke-dasharray="2 2"/>
