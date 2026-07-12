@@ -174,12 +174,10 @@ const CATEGORY_SUBGROUPS = {
   'lab-mgmt': [
     { label: '🏫 ゼミ・研究会・学会サポート',
       hint:  '発表順 / タイマー / 一時グループ / くじなど。ゼミや研究会、学会出張で使う。',
-      ids: ['timers', 'stopwatches', 'orderings', 'random-groups', 'groups', 'roulette', 'text-roulette', 'zemi-videos'] },
+      ids: ['timers', 'stopwatches', 'orderings', 'random-groups', 'groups', 'roulette', 'text-roulette'] },
     { label: '🏢 研究室運営サポート',
-      hint:  '投票 / 連絡 / 締切 / 割り勘 / 集金 / アルバイトなど、研究室の運営と合意形成。',
-      ids: ['polls', 'chat-rooms', 'file-transfers', 'screen-shares',
-            'deadlines', 'conf-deadlines', 'notices',
-            'rollcalls', 'meetups', 'nomikai', 'requests', 'bait'] },
+      hint:  '投票 / 締切 / 割り勘 / 集金 / アルバイトなど、研究室の運営と合意形成。',
+      ids: ['polls', 'rollcalls', 'meetups', 'nomikai', 'requests', 'bait'] },
   ],
 };
 
@@ -203,20 +201,26 @@ const CATEGORY_ORDER = {
     'orderings', 'random-groups',
     'groups',                       // イベント・出張用グループ作成
     'roulette', 'text-roulette',
-    'zemi-videos',                  // v843 ゼミ動画 (YouTube limited)
     // ── 研究室運営サポート ──
     'polls',                        // 投票・アンケート
-    'chat-rooms',                   // チャット (重要 / 連絡 / 相談 / DM)
-    'file-transfers',               // ファイル送受信
-    'screen-shares',                // 一時画像共有
-    'deadlines',                    // 〆切
-    'conf-deadlines',               // 学会〆切
-    'notices',                      // 重要連絡 / 学会情報
     'rollcalls',                    // 点呼
     'meetups',                      // 待ち合わせ
     'nomikai',                      // 飲み会割り勘
     'requests',                     // 請求 (集金)
     'bait',                         // アルバイト申請
+  ],
+  // v1001 共有 タブ (中村さん指定 順)
+  'shared': [
+    'nkmr-albums',                  // 📸 中村研アルバム (最上位)
+    'zemi-videos',                  // 🎥 ゼミ動画
+    'chat-rooms',                   // 💬 チャット
+    'file-transfers',               // 📦 ファイル送受信
+    'screen-shares',                // 🖼 一時画像共有
+    'deadlines',                    // 📌 〆切
+    'conf-deadlines',               // 📅 学会〆切
+    'notices',                      // 📢 重要連絡 / 学会情報
+    'poster-maker',                 // 📇 メンバー紹介ポスター作成
+    'kanban',                       // 📋 かんばん
   ],
 };
 
