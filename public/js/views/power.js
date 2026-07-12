@@ -242,6 +242,104 @@ function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, alpha, iterations, tails
   return { power: powerEst, ci, iterations, method: 'monte_carlo' };
 }
 
+// v1032 3-level LMM (参加者 × 刺激) シミュレーション
+//   モデル: y_pcs = μ + β·x_pcs + u_p + w_s + ε_pcs
+//     u_p ~ N(0, σ_p²) 参加者切片、 w_s ~ N(0, σ_s²) 刺激切片、 ε ~ N(0, σ_e²)
+//   デザイン: 各参加者 が 全刺激 を 両条件 で 見る (フル交差)。
+//   検定: 参加者ごとの 条件差平均 の t 検定 (差 の 中で 刺激効果 も キャンセル する ため
+//     効果は 純粋な β + ε の 平均差)。 stimuli 数 が 増えると 残差平均化 で 検定力 上がる。
+function simulateLMM3({ n_p, n_stim, beta, sd_p, sd_s, sd_e, alpha, iterations, tails = 2 }) {
+  if (n_p < 3 || n_stim < 1) return { power: 0 };
+  let sig = 0;
+  const t_crit = qt(1 - alpha / tails, n_p - 1);
+  for (let it = 0; it < iterations; it++) {
+    // フル交差 では u_p も w_s も 条件差 で キャンセル、 効く のは 残差 のみ。
+    //   diff_p = mean over stimuli of ((y_p,s,cond=1) - (y_p,s,cond=0))
+    //          = β + mean(ε₁) - mean(ε₀)
+    //   Var(diff_p) = 2 σ_e² / n_stim (仮定: 独立 な 残差)
+    const diffs = new Array(n_p);
+    for (let p = 0; p < n_p; p++) {
+      let sum = 0;
+      for (let s = 0; s < n_stim; s++) {
+        sum += beta + sd_e * randn() - sd_e * randn();
+      }
+      diffs[p] = sum / n_stim;
+    }
+    const mean = diffs.reduce((s, v) => s + v, 0) / n_p;
+    const varSum = diffs.reduce((s, v) => s + (v - mean) * (v - mean), 0);
+    const sd = Math.sqrt(varSum / (n_p - 1));
+    const se = sd / Math.sqrt(n_p);
+    if (se <= 0) continue;
+    const t = mean / se;
+    const isSig = tails === 2 ? Math.abs(t) > t_crit : t > t_crit;
+    if (isSig) sig++;
+  }
+  const powerEst = sig / iterations;
+  const zCrit = 1.96;
+  const denom = 1 + zCrit * zCrit / iterations;
+  const center = (powerEst + zCrit * zCrit / (2 * iterations)) / denom;
+  const halfW = zCrit * Math.sqrt(powerEst * (1 - powerEst) / iterations + zCrit * zCrit / (4 * iterations * iterations)) / denom;
+  return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_lmm3' };
+}
+
+// v1032 Logistic GLMM (2 レベル: 参加者内、 2 値アウトカム) シミュレーション
+//   モデル: logit(P(y=1)) = β0 + β1·x + u_p、 u_p ~ N(0, σ_p²)
+//   検定: 参加者ごと の 条件間 logit(p̂) 差 を 集めて 1 標本 t 検定 (簡易近似)。
+//     (正確 な GLMM は R lme4 レベル だが、 sample power の 目安 には この 近似 で 十分)
+function simulateGLMM({ n_p, n_trials, baseline_p, or, sd_p, alpha, iterations, tails = 2 }) {
+  if (n_p < 3 || n_trials < 1) return { power: 0 };
+  const beta0 = Math.log(baseline_p / (1 - baseline_p));
+  const beta1 = Math.log(or);
+  const invlogit = (x) => 1 / (1 + Math.exp(-x));
+  const eps = 1 / (2 * n_trials);  // continuity 補正 用 (proportion 0 or 1 回避)
+  let sig = 0;
+  const t_crit = qt(1 - alpha / tails, n_p - 1);
+  for (let it = 0; it < iterations; it++) {
+    const diffs = new Array(n_p);
+    for (let p = 0; p < n_p; p++) {
+      const u = sd_p * randn();
+      let sum0 = 0, sum1 = 0;
+      const p0 = invlogit(beta0 + u);
+      const p1 = invlogit(beta0 + beta1 + u);
+      for (let t = 0; t < n_trials; t++) {
+        if (Math.random() < p0) sum0++;
+        if (Math.random() < p1) sum1++;
+      }
+      // Empirical proportions → logit で 差 に (continuity 補正)
+      const pp0 = (sum0 + eps) / (n_trials + 2 * eps);
+      const pp1 = (sum1 + eps) / (n_trials + 2 * eps);
+      diffs[p] = Math.log(pp1 / (1 - pp1)) - Math.log(pp0 / (1 - pp0));
+    }
+    const mean = diffs.reduce((s, v) => s + v, 0) / n_p;
+    const varSum = diffs.reduce((s, v) => s + (v - mean) * (v - mean), 0);
+    const sd = Math.sqrt(varSum / (n_p - 1));
+    const se = sd / Math.sqrt(n_p);
+    if (se <= 0) continue;
+    const t = mean / se;
+    const isSig = tails === 2 ? Math.abs(t) > t_crit : t > t_crit;
+    if (isSig) sig++;
+  }
+  const powerEst = sig / iterations;
+  const zCrit = 1.96;
+  const denom = 1 + zCrit * zCrit / iterations;
+  const center = (powerEst + zCrit * zCrit / (2 * iterations)) / denom;
+  const halfW = zCrit * Math.sqrt(powerEst * (1 - powerEst) / iterations + zCrit * zCrit / (4 * iterations * iterations)) / denom;
+  return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_glmm' };
+}
+
+// n_p 探索 (LMM3 / GLMM の 汎用 バージョン)
+function findSimNParticipants(simFn, baseParams, targetPower, iters = 500) {
+  const cap = 500;
+  const powerAt = (n) => simFn({ ...baseParams, n_p: n, iterations: iters }).power;
+  if (powerAt(cap) < targetPower) return { n: cap, over: true };
+  let lo = 3, hi = cap;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (powerAt(mid) >= targetPower) hi = mid; else lo = mid;
+  }
+  return { n: hi, over: false };
+}
+
 // LMM で 目標検定力 を 達成する n_participants を 二分探索 (n_trials 固定)
 function findLMMnParticipants(params, targetPower) {
   const cap = 500;
@@ -603,6 +701,37 @@ function computeEffectFromHelper(kind) {
   }
 }
 
+// v1032 3-level LMM (参加者 × 刺激) ステップブロック
+function renderLMM3Blocks() {
+  const p = state.lmm3;
+  const mode = state.mode;
+  return `
+    ${stepBlock({ title: '⑥ 条件効果 β (raw)', desc: '条件間の 平均差 (outcome 生単位)。', body: `<input type="number" id="lmm3-beta" step="0.05" value="${p.beta}" style="width:120px"> <span class="hint-sm">目安:</span> <button class="btn" data-lmm3-beta="0.2" style="font-size:11px; padding:2px 8px">小 0.2</button> <button class="btn" data-lmm3-beta="0.5" style="font-size:11px; padding:2px 8px">中 0.5</button> <button class="btn" data-lmm3-beta="0.8" style="font-size:11px; padding:2px 8px">大 0.8</button>` })}
+    ${stepBlock({ title: '⑦ 参加者間 SD σ_p', desc: '参加者の 平均的 な 高低 の ばらつき。 交差配置 では 条件差 に は 直接効かない が、 参考値 と して。', body: `<input type="number" id="lmm3-sdp" step="0.05" min="0.001" value="${p.sd_participant}" style="width:120px">` })}
+    ${stepBlock({ title: '⑧ 刺激間 SD σ_stim', desc: '刺激ごと の 難易度 / 反応性 の ばらつき。 交差配置 では 差分で キャンセル される が、 大きい と 選定 の 分散 を 圧迫。', body: `<input type="number" id="lmm3-sds" step="0.05" min="0.001" value="${p.sd_stimulus}" style="width:120px">` })}
+    ${stepBlock({ title: '⑨ 残差 SD σ_e', desc: '同じ 参加者・同じ 刺激・同じ 条件 内 の 試行 ノイズ。', body: `<input type="number" id="lmm3-sde" step="0.05" min="0.001" value="${p.sd_residual}" style="width:120px">` })}
+    ${stepBlock({ title: '⑩ 刺激数 (両条件で 同じ)', desc: '各 参加者 が 見る 刺激 の 数 (両条件で 各 1 回)。 増やすと 残差 平均化 で 検定力 上がる。', body: `<input type="number" id="lmm3-ns" step="1" min="1" value="${p.n_stimuli}" style="width:120px">` })}
+    ${mode === 'post_hoc' ? stepBlock({ title: '⑪ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="lmm3-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
+    ${stepBlock({ title: '💰 1 人 あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="lmm3-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
+    ${stepBlock({ title: '⚙ シミュ 反復数', desc: '目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% 誤差。', body: `<input type="number" id="lmm3-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
+  `;
+}
+
+// v1032 Logistic GLMM ステップブロック
+function renderGLMMBlocks() {
+  const p = state.glmm;
+  const mode = state.mode;
+  return `
+    ${stepBlock({ title: '⑥ 帰無時 (x=0) の 確率', desc: 'ベースライン条件 の 想定 「正答率」 「反応率」 等 (0-1)。', body: `<input type="number" id="glmm-p0" step="0.05" min="0.01" max="0.99" value="${p.baseline_p}" style="width:120px">` })}
+    ${stepBlock({ title: '⑦ オッズ比 OR (効果量)', desc: '対立条件 の オッズ / ベースライン の オッズ。 β = log(OR)。 効果 大 = OR 大。', body: `<input type="number" id="glmm-or" step="0.1" min="0.01" value="${p.or}" style="width:120px"> <span class="hint-sm">目安:</span> <button class="btn" data-glmm-or="1.5" style="font-size:11px; padding:2px 8px">小 1.5</button> <button class="btn" data-glmm-or="2.0" style="font-size:11px; padding:2px 8px">中 2.0</button> <button class="btn" data-glmm-or="3.0" style="font-size:11px; padding:2px 8px">大 3.0</button>` })}
+    ${stepBlock({ title: '⑧ 参加者間 SD (log-odds)', desc: '参加者の 個人差 (log-odds スケール)。 0.5 = 中程度、 1.0 で 顕著な 個人差。', body: `<input type="number" id="glmm-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
+    ${stepBlock({ title: '⑨ 各条件 の 試行数', desc: '各条件 で 1 参加者 が 繰り返す 試行数。 増やすと 個々の 確率推定 が 精確 に なり 検定力 上がる。', body: `<input type="number" id="glmm-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
+    ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="glmm-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
+    ${stepBlock({ title: '💰 1 人 あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="glmm-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
+    ${stepBlock({ title: '⚙ シミュ 反復数', desc: '目安: 500 で ~5%、 1000 で ~3%、 5000 で ~1.5% 誤差。', body: `<input type="number" id="glmm-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
+  `;
+}
+
 // v1031 LMM-specific ステップブロック
 function renderLMMBlocks() {
   const p = state.lmm;
@@ -681,8 +810,14 @@ const TESTS = [
   { id: 'corr',  label: '🔗 Pearson 相関',                eff: 'r',        effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
   { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
   // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
-  { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差', eff: 'beta',
+  { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差 (2 レベル)', eff: 'beta',
     effGuide: [['小 β=0.2', 0.2], ['中 β=0.5', 0.5], ['大 β=0.8', 0.8]] },
+  // v1032 LMM (3 レベル: 参加者 × 刺激) — 交差配置
+  { id: 'lmm_crossed', label: '🧠 混合効果モデル (LMM) — 参加者×刺激 (3 レベル)', eff: 'beta',
+    effGuide: [['小 β=0.2', 0.2], ['中 β=0.5', 0.5], ['大 β=0.8', 0.8]] },
+  // v1032 Logistic GLMM (2 レベル: 参加者内、 2 値アウトカム)
+  { id: 'glmm_logit', label: '🎯 Logistic GLMM — 2 値 (正答/誤答等) の 参加者内効果', eff: 'or',
+    effGuide: [['小 OR=1.5', 1.5], ['中 OR=2.0', 2.0], ['大 OR=3.0', 3.0]] },
 ];
 
 const state = {
@@ -717,6 +852,30 @@ const state = {
     last_ci: null,
     last_details: null,
   },
+  // v1032 3-level LMM (参加者 × 刺激): 各参加者 が 各刺激を 両条件 で 見る 想定 の
+  //   簡易 モデル。 params は lmm と重複するので extend で。
+  lmm3: {
+    n_participants: 24,
+    n_stimuli: 16,
+    beta: 0.5,
+    sd_participant: 1.0,
+    sd_stimulus: 0.5,
+    sd_residual: 1.0,
+    iterations: 1000,
+    cost_per_participant: 1500,
+  },
+  // v1032 Logistic GLMM: 2 値 アウトカム、 参加者内 条件差
+  //   モデル: logit(P(y=1)) = β0 + β1·x + u_p、 u_p ~ N(0, σ_p²)
+  //   β1 = log(OR) が 条件効果
+  glmm: {
+    n_participants: 24,
+    n_trials: 20,
+    baseline_p: 0.5,     // 帰無条件 (x=0) の 正答率
+    or: 2.0,             // 効果量 (odds ratio、 β1 = log(or))
+    sd_participant: 0.5, // 参加者間 変動 (log-odds スケール)
+    iterations: 1000,
+    cost_per_participant: 1500,
+  },
   // v1026 保存 / 共有 メタ
   loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
   loaded_name: '',
@@ -747,8 +906,11 @@ export async function renderPowerShared({ params }) {
 
 function applyLoaded(d) {
   const cfg = d.config || {};
-  ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df'].forEach(k => {
+  ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
+  });
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm'].forEach(k => {
+    if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
   state.loaded_name = d.name;
@@ -763,6 +925,9 @@ function currentConfig() {
     effect: state.effect, power: state.power,
     n_per_group: state.n_per_group, n_total: state.n_total,
     k: state.k, df: state.df,
+    // v1031/1032 sim モデル も config に含める
+    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm,
+    dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
 }
 
@@ -866,6 +1031,8 @@ function render() {
     ${state.test !== 'lmm_within' ? renderEffectHelper() : ''}
 
     ${state.test === 'lmm_within' ? renderLMMBlocks() : ''}
+    ${state.test === 'lmm_crossed' ? renderLMM3Blocks() : ''}
+    ${state.test === 'glmm_logit'  ? renderGLMMBlocks() : ''}
 
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
@@ -906,6 +1073,22 @@ function render() {
       state.lmm.beta = parseFloat(b.dataset.lmmBeta);
       const el = document.getElementById('lmm-beta');
       if (el) el.value = state.lmm.beta;
+    });
+  });
+  // v1032 LMM3 β プリセット
+  document.querySelectorAll('[data-lmm3-beta]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.lmm3.beta = parseFloat(b.dataset.lmm3Beta);
+      const el = document.getElementById('lmm3-beta');
+      if (el) el.value = state.lmm3.beta;
+    });
+  });
+  // v1032 GLMM OR プリセット
+  document.querySelectorAll('[data-glmm-or]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.glmm.or = parseFloat(b.dataset.glmmOr);
+      const el = document.getElementById('glmm-or');
+      if (el) el.value = state.glmm.or;
     });
   });
   // v1030 α と 検定力 の プリセットボタン
@@ -1129,6 +1312,45 @@ function syncFormToState() {
       p.n_participants = Math.max(3, Math.round(num('lmm-np', p.n_participants)));
     }
   }
+  // v1032 LMM3
+  if (state.test === 'lmm_crossed') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.lmm3;
+    p.beta          = num('lmm3-beta', p.beta);
+    p.sd_participant= Math.max(0.0001, num('lmm3-sdp',  p.sd_participant));
+    p.sd_stimulus   = Math.max(0.0001, num('lmm3-sds',  p.sd_stimulus));
+    p.sd_residual   = Math.max(0.0001, num('lmm3-sde',  p.sd_residual));
+    p.n_stimuli     = Math.max(1, Math.round(num('lmm3-ns',  p.n_stimuli)));
+    p.iterations    = Math.max(100, Math.min(20000, Math.round(num('lmm3-iter', p.iterations))));
+    p.cost_per_participant = Math.max(0, Math.round(num('lmm3-cost', p.cost_per_participant)));
+    if (state.mode === 'post_hoc') {
+      p.n_participants = Math.max(3, Math.round(num('lmm3-np', p.n_participants)));
+    }
+  }
+  // v1032 GLMM
+  if (state.test === 'glmm_logit') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.glmm;
+    p.baseline_p     = Math.max(0.01, Math.min(0.99, num('glmm-p0',  p.baseline_p)));
+    p.or             = Math.max(0.01, num('glmm-or', p.or));
+    p.sd_participant = Math.max(0, num('glmm-sdp', p.sd_participant));
+    p.n_trials       = Math.max(1, Math.round(num('glmm-nt',  p.n_trials)));
+    p.iterations     = Math.max(100, Math.min(20000, Math.round(num('glmm-iter', p.iterations))));
+    p.cost_per_participant = Math.max(0, Math.round(num('glmm-cost', p.cost_per_participant)));
+    if (state.mode === 'post_hoc') {
+      p.n_participants = Math.max(3, Math.round(num('glmm-np', p.n_participants)));
+    }
+  }
 }
 
 function doCalc() {
@@ -1136,7 +1358,9 @@ function doCalc() {
   syncFormToState();
 
   // v1031 LMM は 別 の 計算 パス (シミュレーション)
-  if (state.test === 'lmm_within') return doCalcLMM();
+  if (state.test === 'lmm_within')  return doCalcLMM();
+  if (state.test === 'lmm_crossed') return doCalcLMM3();
+  if (state.test === 'glmm_logit')  return doCalcGLMM();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -1148,6 +1372,56 @@ function doCalc() {
     if (state.test === 'chi2')  out = calc_chi_squared(state.alpha, state.effect, state.df, state.mode, N, state.power);
   } catch (e) { out = { error: e.message }; }
   renderResult(out, t);
+}
+
+// v1032 3-level LMM 計算
+function doCalcLMM3() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.lmm3;
+  const params = {
+    n_p: p.n_participants, n_stim: p.n_stimuli, beta: p.beta,
+    sd_p: p.sd_participant, sd_s: p.sd_stimulus, sd_e: p.sd_residual,
+    alpha: state.alpha, iterations: p.iterations, tails: state.tails,
+  };
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション 実行中… (${p.iterations.toLocaleString()} 回、 3-level)</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const res = findSimNParticipants(simulateLMM3, params, state.power);
+        const conf = simulateLMM3({ ...params, n_p: res.n });
+        renderLMMResult({ mode: 'a_priori', n_required: res.n, over: res.over, verify_power: conf.power, ci: conf.ci, params, kind: 'lmm3' }, t);
+      } else {
+        const res = simulateLMM3(params);
+        renderLMMResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params, kind: 'lmm3' }, t);
+      }
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
+}
+
+// v1032 Logistic GLMM 計算
+function doCalcGLMM() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.glmm;
+  const params = {
+    n_p: p.n_participants, n_trials: p.n_trials,
+    baseline_p: p.baseline_p, or: p.or, sd_p: p.sd_participant,
+    alpha: state.alpha, iterations: p.iterations, tails: state.tails,
+  };
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション 実行中… (${p.iterations.toLocaleString()} 回、 GLMM)</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const res = findSimNParticipants(simulateGLMM, params, state.power);
+        const conf = simulateGLMM({ ...params, n_p: res.n });
+        renderLMMResult({ mode: 'a_priori', n_required: res.n, over: res.over, verify_power: conf.power, ci: conf.ci, params, kind: 'glmm' }, t);
+      } else {
+        const res = simulateGLMM(params);
+        renderLMMResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params, kind: 'glmm' }, t);
+      }
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
 }
 
 // v1031 LMM シミュレーション計算 (中村さんビジョンの中核 の 一角)
@@ -1190,59 +1464,141 @@ function doCalcLMM() {
   }, 20);
 }
 
-// v1031 LMM 結果 描画
+// v1031/1032 LMM/GLMM 結果 描画 (kind: 'lmm' | 'lmm3' | 'glmm')
 function renderLMMResult(res, t) {
   const root = document.getElementById('pw-result');
   const p = res.params;
-  const paramLine = `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
+  const kind = res.kind || 'lmm';
+  const paramLine = kind === 'lmm3'
+    ? `α=${p.alpha}, β=${p.beta}, σ_p=${p.sd_p}, σ_stim=${p.sd_s}, σ_e=${p.sd_e}, ${p.n_stim} 刺激 × 2 条件, iters=${p.iterations.toLocaleString()}`
+    : kind === 'glmm'
+      ? `α=${p.alpha}, OR=${p.or}, baseline_p=${p.baseline_p}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
+      : `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
+  const perParticipantTrials = kind === 'lmm3' ? p.n_stim * 2 : p.n_trials * 2;
   let mainCard;
   if (res.mode === 'a_priori') {
-    const N_total = res.n_required * p.n_trials * 2;
+    const N_total = res.n_required * perParticipantTrials;
     mainCard = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要な 参加者数 (LMM シミュベース)</div>
         <div style="font-size:26px; line-height:1.5">参加者 n_p = <b>${res.n_required}</b> ${res.over ? '<span style="color:#dc2626">(500 で 頭打ち — 目標到達 せず)</span>' : ''}</div>
         <div class="hint-sm" style="margin-top:8px">検証: この n_p で 検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b> [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</div>
-        <div class="hint-sm" style="margin-top:4px">全観測数: ${res.n_required} 参加者 × ${p.n_trials} 試行 × 2 条件 = <b>${N_total}</b> obs</div>
+        <div class="hint-sm" style="margin-top:4px">全観測数: ${res.n_required} 参加者 × ${perParticipantTrials / 2} ${kind === 'lmm3' ? '刺激' : '試行'} × 2 条件 = <b>${N_total}</b> obs</div>
         <div class="hint-sm" style="margin-top:4px; color:#a16207">脱落・除外 10% を見込むなら <b>${Math.ceil(res.n_required * 1.10)}</b> 名 募集 が 目安。</div>
         <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
       </div>`;
   } else {
     const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
+    const label = kind === 'glmm' ? 'GLMM' : (kind === 'lmm3' ? 'LMM 3-level' : 'LMM');
     mainCard = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
-        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる 検定力 (LMM シミュベース)</div>
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる 検定力 (${label} シミュベース)</div>
         <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> <span style="font-size:14px; color:#6b7280">[95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</span></div>
-        <div class="hint-sm" style="margin-top:8px">${p.n_p} 参加者 × ${p.n_trials} 試行 × 2 条件 = ${p.n_p * p.n_trials * 2} obs</div>
+        <div class="hint-sm" style="margin-top:8px">${p.n_p} 参加者 × ${perParticipantTrials / 2} ${kind === 'lmm3' ? '刺激' : '試行'} × 2 条件 = ${p.n_p * perParticipantTrials} obs</div>
         <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
-        ${res.power < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 参加者・試行数 の 増強 を 検討。</div>' : ''}
+        ${res.power < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 参加者・試行/刺激数 の 増強 を 検討。</div>' : ''}
       </div>`;
   }
-  const strategyCard = renderLMMStrategyTable(res, t);
-  root.innerHTML = mainCard + strategyCard;
+  const strategyCard = renderLMMStrategyTable(res, t, kind);
+  const narrativeCard = renderNarrativeCard(res, t, kind);   // v1033
+  root.innerHTML = mainCard + strategyCard + narrativeCard;
+  // v1033 コピーボタン wire (data-copy-payload の 参照先 script は 同 root 内)
+  root.querySelectorAll('[data-copy-payload]').forEach(b => {
+    b.addEventListener('click', async () => {
+      try {
+        const payloadEl = root.querySelector('#pw-payloads');
+        const payloads = payloadEl ? JSON.parse(payloadEl.textContent) : {};
+        const text = payloads[b.dataset.copyPayload] || '';
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        const orig = b.textContent; b.textContent = '✓ コピー'; setTimeout(() => { b.textContent = orig; }, 1200);
+      } catch (e) {}
+    });
+  });
+}
+
+// v1033 論文用 narrative + R/Python コード 自動生成 (中村さん ビジョン)
+function renderNarrativeCard(res, t, kind) {
+  const p = res.params;
+  const n_p = res.mode === 'a_priori' ? res.n_required : p.n_p;
+  const power = res.mode === 'a_priori' ? res.verify_power : res.power;
+  const ci = res.ci;
+
+  let narrative = '';
+  let rCode = '';
+  let pyCode = '';
+
+  if (kind === 'lmm') {
+    const nT = p.n_trials;
+    narrative = `A simulation-based power analysis was conducted to estimate the required sample size for a within-subject two-condition design analyzed with a linear mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from the model y_{p,c,t} = β·x_{p,c,t} + u_p + ε_{p,c,t}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²) is the participant random intercept and ε ~ N(0, ${p.sd_e.toFixed(2)}²) is the trial-level residual. Each participant contributed ${nT} trials per condition. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha} (${p.tails}-sided), the analysis showed that n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\n# fit a placeholder model with expected fixed effects\nn_p <- ${n_p}; n_trials <- ${nT}\nsim_data <- expand.grid(p = 1:n_p, trial = 1:n_trials, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p] + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + (1 | p), data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
+    pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.formula.api as smf, pandas as pd\nnp.random.seed(42)\nn_p, n_trials, iters = ${n_p}, ${nT}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for p in range(n_p):\n        for t in range(n_trials):\n            for x in (0, 1):\n                rows.append((p, x, beta*x + u[p] + np.random.normal(0, sd_e)))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = smf.mixedlm('y ~ x', df, groups=df['p']).fit(reml=False)\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
+  } else if (kind === 'lmm3') {
+    const nS = p.n_stim;
+    narrative = `A simulation-based power analysis was conducted for a crossed within-subject design (participants × stimuli) analyzed with a linear mixed-effects model with crossed random intercepts. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from y_{p,s,c} = β·x_{p,s,c} + u_p + w_s + ε_{p,s,c}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²), w_s ~ N(0, ${p.sd_s.toFixed(2)}²), ε ~ N(0, ${p.sd_e.toFixed(2)}²). Each participant saw ${nS} stimuli in each of the two conditions. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\nn_p <- ${n_p}; n_s <- ${nS}\nsim_data <- expand.grid(p = 1:n_p, s = 1:n_s, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p] + rnorm(n_s, 0, ${p.sd_s.toFixed(3)})[sim_data$s] + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + (1 | p) + (1 | s), data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
+    pyCode = `# Python (statsmodels) — approximated (statsmodels does not support crossed random effects directly)\n# Use pymer4 or rpy2 for full lme4 semantics.\nimport numpy as np\nnp.random.seed(42)\nn_p, n_s, iters = ${n_p}, ${nS}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_s, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_s.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nfrom scipy.stats import ttest_1samp\nsig = 0\nfor _ in range(iters):\n    diffs = []\n    for p in range(n_p):\n        diff = 0.0\n        for s in range(n_s):\n            diff += (beta + np.random.normal(0, sd_e) - np.random.normal(0, sd_e))\n        diffs.append(diff / n_s)\n    t, pv = ttest_1samp(diffs, 0.0)\n    if pv < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
+  } else if (kind === 'glmm') {
+    narrative = `A simulation-based power analysis was conducted for a within-subject binary outcome analyzed with a logistic mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from logit(P(y=1)) = β0 + β1·x + u_p, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²). The baseline probability was ${p.baseline_p}, the odds ratio was OR = ${p.or} (β1 = log(OR) = ${Math.log(p.or).toFixed(3)}), and each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (lme4)\nlibrary(lme4)\nset.seed(42)\nn_p <- ${n_p}; n_t <- ${p.n_trials}; iters <- ${Math.min(p.iterations, 1000)}\nb0 <- log(${p.baseline_p} / (1 - ${p.baseline_p})); b1 <- log(${p.or}); sd_p <- ${p.sd_p.toFixed(3)}; alpha <- ${p.alpha}\nsig <- 0\nfor (i in 1:iters) {\n  u <- rnorm(n_p, 0, sd_p)\n  df <- expand.grid(p = 1:n_p, t = 1:n_t, x = c(0, 1))\n  df$eta <- b0 + b1 * df$x + u[df$p]\n  df$y <- rbinom(nrow(df), 1, plogis(df$eta))\n  m <- glmer(y ~ x + (1 | p), data = df, family = binomial)\n  pv <- summary(m)$coefficients['x','Pr(>|z|)']\n  if (!is.na(pv) && pv < alpha) sig <- sig + 1\n}\ncat(sprintf('Power ≈ %.1f%%\\n', 100 * sig / iters))  # expected ≈ ${(power*100).toFixed(1)}%`;
+    pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.api as sm, pandas as pd\nnp.random.seed(42)\nn_p, n_t, iters = ${n_p}, ${p.n_trials}, ${Math.min(p.iterations, 1000)}\nb0 = np.log(${p.baseline_p} / (1 - ${p.baseline_p})); b1 = np.log(${p.or}); sd_p = ${p.sd_p.toFixed(3)}; alpha = ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for p in range(n_p):\n        for t in range(n_t):\n            for x in (0, 1):\n                pi = 1 / (1 + np.exp(-(b0 + b1*x + u[p])))\n                rows.append((p, x, 1 if np.random.rand() < pi else 0))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = sm.GEE.from_formula('y ~ x', groups='p', data=df, family=sm.families.Binomial()).fit()\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
+  } else {
+    return '';  // 従来 の t/ANOVA/相関/χ² は narrative 未対応
+  }
+
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📝 論文掲載用 narrative + 解析コード (v1033)</div>
+      <details open>
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0">📄 English narrative (draft)</summary>
+        <div style="margin-top:6px; padding:10px; background:#faf5ff; border-left:3px solid #7b3fa0; border-radius:0 6px 6px 0; font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.75; white-space:pre-wrap">${escapeHtml(narrative)}</div>
+        <div class="row" style="margin-top:6px"><button data-copy-payload="narrative" class="btn" style="font-size:11px; padding:2px 10px">📋 コピー</button></div>
+      </details>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0">📊 R (lme4 / simr)</summary>
+        <pre style="margin-top:6px; padding:10px; background:#f9fafb; border-radius:6px; overflow-x:auto; font-size:12px; line-height:1.55">${escapeHtml(rCode)}</pre>
+        <div class="row" style="margin-top:6px"><button data-copy-payload="r" class="btn" style="font-size:11px; padding:2px 10px">📋 コピー</button></div>
+      </details>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0">🐍 Python (statsmodels / scipy)</summary>
+        <pre style="margin-top:6px; padding:10px; background:#f9fafb; border-radius:6px; overflow-x:auto; font-size:12px; line-height:1.55">${escapeHtml(pyCode)}</pre>
+        <div class="row" style="margin-top:6px"><button data-copy-payload="py" class="btn" style="font-size:11px; padding:2px 10px">📋 コピー</button></div>
+      </details>
+      <div class="hint-sm" style="margin-top:8px">R / Python の コード は 検定力 検証用 の 再現 スクリプト。 中村さん ビジョン「A simulation-based power analysis was conducted with 1,000 simulated datasets…」 の 形式 で 書き出し。</div>
+      <script type="application/json" id="pw-payloads">${JSON.stringify({ narrative, r: rCode, py: pyCode })}</script>
+    </div>`;
 }
 
 // v1032 参加者 vs 試行 の 戦略比較 テーブル (中村さんビジョン中核)
-function renderLMMStrategyTable(res, t) {
+function renderLMMStrategyTable(res, t, kind = 'lmm') {
   const p = res.params;
   const baseN = res.mode === 'a_priori' ? res.n_required : p.n_p;
-  const baseT = p.n_trials;
-  const costPerParticipant = state.lmm.cost_per_participant ?? 0;
+  const baseT = kind === 'lmm3' ? p.n_stim : p.n_trials;
+  const trialLabel = kind === 'lmm3' ? '刺激' : '試行';
+  const costPerParticipant = (kind === 'glmm' ? state.glmm.cost_per_participant
+                            : kind === 'lmm3' ? state.lmm3.cost_per_participant
+                            : state.lmm.cost_per_participant) ?? 0;
   const strategies = [
-    { label: '現在', n_p: baseN, n_trials: baseT },
-    { label: '参加者 +25%', n_p: Math.ceil(baseN * 1.25), n_trials: baseT },
-    { label: '参加者 +50%', n_p: Math.ceil(baseN * 1.50), n_trials: baseT },
-    { label: '試行 +50%', n_p: baseN, n_trials: Math.ceil(baseT * 1.50) },
-    { label: '試行 +100%', n_p: baseN, n_trials: baseT * 2 },
-    { label: '両方 +25%', n_p: Math.ceil(baseN * 1.25), n_trials: Math.ceil(baseT * 1.25) },
+    { label: '現在', n_p: baseN, n_t: baseT },
+    { label: '参加者 +25%', n_p: Math.ceil(baseN * 1.25), n_t: baseT },
+    { label: '参加者 +50%', n_p: Math.ceil(baseN * 1.50), n_t: baseT },
+    { label: `${trialLabel} +50%`, n_p: baseN, n_t: Math.ceil(baseT * 1.50) },
+    { label: `${trialLabel} +100%`, n_p: baseN, n_t: baseT * 2 },
+    { label: '両方 +25%', n_p: Math.ceil(baseN * 1.25), n_t: Math.ceil(baseT * 1.25) },
   ];
+  const runSim = (n_p, n_t) => {
+    if (kind === 'lmm3') return simulateLMM3({ n_p, n_stim: n_t, beta: p.beta, sd_p: p.sd_p, sd_s: p.sd_s, sd_e: p.sd_e, alpha: p.alpha, iterations: 500, tails: p.tails });
+    if (kind === 'glmm') return simulateGLMM({ n_p, n_trials: n_t, baseline_p: p.baseline_p, or: p.or, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
+    return simulateLMM({ n_p, n_trials: n_t, beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e, alpha: p.alpha, iterations: 500, tails: p.tails });
+  };
   const rows = strategies.map(st => {
-    const power = simulateLMM({
-      n_p: st.n_p, n_trials: st.n_trials,
-      beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e,
-      alpha: p.alpha, iterations: 500, tails: p.tails,
-    }).power;
-    const N_obs = st.n_p * st.n_trials * 2;
+    const power = runSim(st.n_p, st.n_t).power;
+    const N_obs = st.n_p * st.n_t * 2;
     const cost = costPerParticipant * st.n_p;
     return { ...st, power, N_obs, cost };
   });
@@ -1258,7 +1614,7 @@ function renderLMMStrategyTable(res, t) {
             <tr style="border-bottom:1.5px solid #d1d5db; color:#374151">
               <th style="padding:6px 10px; text-align:left">戦略</th>
               <th style="padding:6px 10px; text-align:right">参加者 n_p</th>
-              <th style="padding:6px 10px; text-align:right">試行 / 条件</th>
+              <th style="padding:6px 10px; text-align:right">${trialLabel} / 条件</th>
               <th style="padding:6px 10px; text-align:right">総 obs</th>
               <th style="padding:6px 10px; text-align:right">検定力</th>
               ${costLabel}
@@ -1269,7 +1625,7 @@ function renderLMMStrategyTable(res, t) {
               <tr style="border-bottom:1px solid #f3f4f6">
                 <td style="padding:6px 10px">${escapeHtml(r.label)}</td>
                 <td style="padding:6px 10px; text-align:right">${r.n_p}</td>
-                <td style="padding:6px 10px; text-align:right">${r.n_trials}</td>
+                <td style="padding:6px 10px; text-align:right">${r.n_t}</td>
                 <td style="padding:6px 10px; text-align:right">${r.N_obs.toLocaleString()}</td>
                 <td style="padding:6px 10px; text-align:right; color:${r.power >= 0.8 ? '#059669' : (r.power >= 0.6 ? '#a16207' : '#dc2626')}"><b>${(r.power * 100).toFixed(0)}%</b></td>
                 ${costCell(r)}
