@@ -893,9 +893,9 @@ function stepBlock({ title, desc, body }) {
 // ---------------- UI ----------------
 
 const TESTS = [
-  { id: 't2',    label: '📏 2 標本 t 検定 (独立)',        eff: 'd',        effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
-  { id: 'tp',    label: '📎 対応のある t 検定',           eff: 'd',        effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
-  { id: 't1',    label: '👤 1 標本 t 検定',              eff: 'd',        effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
+  { id: 't2',    label: '📏 対応のない t 検定 (2 標本 t 検定: 独立)', eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
+  { id: 'tp',    label: '📎 対応のある t 検定',                       eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
+  { id: 't1',    label: '👤 1 標本 t 検定 (基準値との比較)',         eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
   { id: 'anova', label: '📊 一元配置 ANOVA',              eff: 'f',        effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'corr',  label: '🔗 Pearson 相関',                eff: 'r',        effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
   { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
@@ -1860,10 +1860,11 @@ function renderTestWizard() {
             ${opt('related', 'paired', '対応 (同じ 参加者、 前後 or 条件)')}
           </div>` : ''}
         ${['continuous','ordinal'].includes(s) && g ? `
-          <div><b>Q4. 正規性 は？ (Shapiro-Wilk or Q-Q プロット で 検証、 n>=30 なら 緩く OK)</b></div>
+          <div><b>Q4. データ の 分布 は 正規分布 に 近い？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">「ヒストグラムを描いたら 富士山型 (左右対称の山形) に なる」 で OK。 判断に迷ったら 参加者 n が 30 以上 なら 中心極限定理で 緩く OK。 リッカート 尺度 は 中央付近 が 山 なら OK、 端に 集中 する 場合 は NG。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-            ${opt('normal', 'yes', '✅ 満たす or n>=30')}
-            ${opt('normal', 'no', '❌ 満たさない')}
+            ${opt('normal', 'yes', '✅ 正規分布 に 近い (or n が 30 以上)')}
+            ${opt('normal', 'no', '❌ 山型 でなく 偏った 分布')}
           </div>` : ''}
         ${['continuous'].includes(s) && g && r ? `
           <div><b>Q5. デザイン は 単純？</b></div>
@@ -1995,7 +1996,7 @@ function renderStatFlowchartSVG() {
 function renderTestSpecificGuide() {
   const guides = {
     t2: {
-      title: '📎 2 標本 t 検定 (独立) の 実施フロー',
+      title: '📏 対応のない t 検定 (2 標本 t 検定: 独立) の 実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
         <li>正規性チェック: 群ごとに Shapiro-Wilk 検定 or Q-Q プロット。n>=30 なら CLT で頑健、緩めに OK。</li>
         <li>等分散チェック: Levene 検定 (F 検定は正規性に鋭敏なので Levene を推奨)。</li>
@@ -2016,7 +2017,7 @@ function renderTestSpecificGuide() {
       </ol>`,
     },
     t1: {
-      title: '👤 1 標本 t 検定 の 実施フロー',
+      title: '👤 1 標本 t 検定 (基準値との比較) の 実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
         <li>観測値の正規性を Shapiro-Wilk で確認。n>=30 なら緩く OK。</li>
         <li>H0: 母平均 = μ_0 (基準値)、H1: ≠ μ_0 で 1 標本 t 検定。</li>
