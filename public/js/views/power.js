@@ -1781,9 +1781,20 @@ function render() {
              <input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px; margin-top:6px">`,
     }) : stepBlock({
       title: '⑤ サンプルサイズ',
-      desc: state.test === 't2' ? '手元 or 予定の 1 手法あたりの参加者数 n (各群 or 各条件)。' : '手元 or 予定の全体参加者数 N。',
+      desc: state.test === 't2' ? '手元 or 予定の 1 手法あたりの参加者数 n (各群 or 各条件)。 全体は 2n 名。'
+          : state.test === 'anova' ? '手元 or 予定の 全体参加者数 N (各手法 約 N/k 名)。'
+          : state.test === 'tp' ? '手元 or 予定の 参加者数 (全員が 2 手法すべてを 試す)。 全観測数は N × 2。'
+          : state.test === 'rmanova' ? `手元 or 予定の 参加者数 (全員が k=${state.k} 手法すべてを 試す)。 全観測数は N × k。`
+          : state.test === 't1' ? '手元 or 予定の 参加者数 N (基準値と比較)。'
+          : '手元 or 予定の 全体参加者数 N。',
       body: `<input type="number" id="pw-n" step="1" min="2" value="${state.test==='t2' ? state.n_per_group : state.n_total}" style="width:120px">
-             <div class="hint-sm" style="margin-top:6px">${state.test === 't2' ? '1 手法あたりの参加者数 (全体は自動で 2n)' : '全体参加者数'}</div>`,
+             <div class="hint-sm" style="margin-top:6px">${
+               state.test === 't2' ? '1 手法あたりの参加者数 (全体は自動で 2n)'
+               : state.test === 'tp' ? '参加者数 (全観測数 = 参加者数 × 2 手法)'
+               : state.test === 'rmanova' ? `参加者数 (全観測数 = 参加者数 × ${state.k} 手法)`
+               : state.test === 't1' ? '参加者数'
+               : '全体参加者数'
+             }</div>`,
     })}
 
     ${state.test==='anova' ? stepBlock({
@@ -3881,28 +3892,73 @@ function renderResult(out, t) {
   //   タイミング依存で追記がスキップされる事例あり。結果カード + 分布プロット +
   //   検定力カーブを 1 つの文字列にまとめて一度に innerHTML でセット、再計算のたび
   //   に全部綺麗に描き直す。
+  // v1052 中村さん指摘「対応あり t 検定で n が奇数のことがあって気持ち悪い。 手法で
+  //   まず必要な n があって、その手法数分ではないか。 分散分析で k=3 の時も同様。」
+  //   → 検定タイプ別に 「参加者数 × 手法数 = 全観測数」 を 明示的に表示。
+  //   対応あり/反復測定 では 参加者数がベースで、全観測数 = 参加者数 × k。
+  //   独立系 (2 標本 t、 一元 ANOVA) では 各手法あたりの参加者数がベースで、
+  //   全体 N = 各手法 n × 手法数。
   let resultHtml = '';
   if (state.mode === 'a_priori') {
-    const nMsg = state.test === 't2'
-      ? `各群 n = <b>${out.n_per_group}</b> (全体 N = ${out.n_total})`
-      : state.test === 'anova'
-        ? `全体 N = <b>${out.n_total}</b> (各群 n ≈ ${out.n_per_group})`
-        : `全体 N = <b>${out.n_total}</b>`;
+    let nMsg = '';
+    if (state.test === 't2') {
+      // 独立 2 手法
+      nMsg = `各手法の参加者数 n = <b>${out.n_per_group}</b> 名 × 2 手法 = 全体 <b>${out.n_total}</b> 名`;
+    } else if (state.test === 'tp') {
+      // 対応あり 2 手法 (同じ参加者)
+      const n_p = out.n_total;
+      nMsg = `参加者数 <b>${n_p}</b> 名 × 2 手法 = 全観測数 <b>${n_p * 2}</b>`;
+    } else if (state.test === 't1') {
+      // 1 標本 (基準値と比較)
+      nMsg = `参加者数 <b>${out.n_total}</b> 名`;
+    } else if (state.test === 'anova') {
+      // 独立 k 手法
+      nMsg = `各手法の参加者数 n = <b>${out.n_per_group}</b> 名 × ${state.k} 手法 = 全体 <b>${out.n_total}</b> 名`;
+    } else if (state.test === 'rmanova') {
+      // 反復測定 k 手法
+      const n_p = out.n_total;
+      nMsg = `参加者数 <b>${n_p}</b> 名 × ${state.k} 手法 (or 条件・時点) = 全観測数 <b>${n_p * state.k}</b>`;
+    } else if (state.test === 'chi2') {
+      nMsg = `全体 N = <b>${out.n_total}</b>`;
+    } else if (state.test === 'corr') {
+      nMsg = `参加者数 <b>${out.n_total}</b> 名`;
+    } else {
+      nMsg = `全体 N = <b>${out.n_total}</b>`;
+    }
+    // 募集人数 目安 (脱落 10% 見込み)
+    const baseParticipants = state.test === 't2' ? out.n_total   // 独立 2 手法: 全体 N = 参加者総数
+                          : state.test === 'anova' ? out.n_total // 独立 k 手法: 全体 N = 参加者総数
+                          : out.n_total;                          // 対応あり/1 標本: 参加者数 = n_total
     resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要サンプルサイズ (A priori)</div>
-        <div style="font-size:26px; line-height:1.5">${nMsg}</div>
+        <div style="font-size:22px; line-height:1.55">${nMsg}</div>
         <div class="hint-sm" style="margin-top:8px">検定力 1-β = ${state.power} を得るため。 ${args}${extraArgs}</div>
-        <div class="hint-sm" style="margin-top:4px; color:#a16207">脱落・除外を見込んで <b>${Math.ceil((state.test === 't2' ? out.n_total : out.n_total) * 1.10)}</b> 名募集する等の余裕を持たせるとよいです。</div>
+        <div class="hint-sm" style="margin-top:4px; color:#a16207">脱落・除外を見込んで <b>${Math.ceil(baseParticipants * 1.10)}</b> 名募集する等の余裕を持たせるとよいです。</div>
       </div>`;
   } else {
     const p = out.power;
     const pctColor = p >= 0.8 ? '#059669' : (p >= 0.6 ? '#a16207' : '#dc2626');
+    // Post hoc: 現在の n の表示
+    let nDisplay = '';
+    if (state.test === 't2') {
+      nDisplay = `各手法 n = ${state.n_per_group} 名 (全体 ${state.n_per_group * 2} 名)`;
+    } else if (state.test === 'tp') {
+      nDisplay = `参加者 ${state.n_total} 名 × 2 手法 = ${state.n_total * 2} 観測`;
+    } else if (state.test === 't1') {
+      nDisplay = `参加者 ${state.n_total} 名`;
+    } else if (state.test === 'anova') {
+      nDisplay = `全体 ${state.n_total} 名 (各手法 約 ${Math.round(state.n_total / state.k)} 名)`;
+    } else if (state.test === 'rmanova') {
+      nDisplay = `参加者 ${state.n_total} 名 × ${state.k} 手法 = ${state.n_total * state.k} 観測`;
+    } else {
+      nDisplay = `n = ${state.n_total}`;
+    }
     resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (Post hoc)</div>
         <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(p * 100).toFixed(1)}%</b></div>
-        <div class="hint-sm" style="margin-top:8px">現在の n で効果量が想定通りなら上記の確率で有意になります。 ${args}${extraArgs}, n=${state.test === 't2' ? state.n_per_group : state.n_total}</div>
+        <div class="hint-sm" style="margin-top:8px">現在の ${nDisplay} で効果量が想定通りなら上記の確率で有意になります。 ${args}${extraArgs}</div>
         ${p < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 効果があってもそれを検出できず「型 II 過誤」が起きる可能性が高めです。</div>' : ''}
       </div>`;
   }
