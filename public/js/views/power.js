@@ -1097,6 +1097,8 @@ function render() {
       <div id="pw-saved-list" class="hint-sm">読み込み中…</div>
     </div>
 
+    ${renderAnalysisGuide()}
+
     <details class="card">
       <summary style="cursor:pointer; font-weight:600">📖 効果量の目安 (Cohen)</summary>
       <div style="margin-top:8px; font-size:13px; line-height:1.9">
@@ -1104,7 +1106,7 @@ function render() {
         <div><b>Cohen's f</b> (ANOVA): 0.10 (小) / 0.25 (中) / 0.40 (大)</div>
         <div><b>Pearson r</b> (相関): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
         <div><b>Cohen's w</b> (χ²): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
-        <div class="hint-sm" style="margin-top:6px">効果量は先行研究の平均SDから計算するか、 パイロット、 メタ分析、 分野の慣習で決めるのが望ましい。 「中」は 決定に困った時の便宜的な選択。</div>
+        <div class="hint-sm" style="margin-top:6px">効果量は先行研究の平均SDから計算するか、パイロット、メタ分析、分野の慣習で決めるのが望ましい。「中」は決定に困った時の便宜的な選択。</div>
       </div>
     </details>
   `;
@@ -1646,6 +1648,219 @@ function renderNarrativeCard(res, t, kind) {
       <div class="hint-sm" style="margin-top:8px">R / Python の コード は 検定力 検証用 の 再現 スクリプト。 中村さん ビジョン「A simulation-based power analysis was conducted with 1,000 simulated datasets…」 の 形式 で 書き出し。</div>
       <script type="application/json" id="pw-payloads">${JSON.stringify({ narrative, r: rCode, py: pyCode })}</script>
     </div>`;
+}
+
+// v1036 統計手法選択フローチャート + 事前処理 + 検定別ガイド
+//   中村さん指示「実際に分析で利用するべき手法や、事前処理の方法もどこかに明記」
+//     + 「どの統計使うべきかみたいなフローチャートあったよね? アレは配置しておくとわかりやすい」
+function renderAnalysisGuide() {
+  const currentGuide = renderTestSpecificGuide();
+  return `
+    <details class="card" style="border-left:4px solid #059669">
+      <summary style="cursor:pointer; font-weight:600; color:#059669; font-size:14.5px">🧭 分析ガイド (フローチャート + 事前処理 + 検定別)</summary>
+      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">実験終了後、実際に何を使うべきか。統計手法選択のフローチャート、事前処理のチェックリスト、選んだ検定に応じた個別ガイドを載せています。</div>
+
+      <details open style="margin-top:8px; padding:8px 12px; background:#f0fdf4; border-radius:6px">
+        <summary style="cursor:pointer; font-weight:600; color:#059669">📊 統計手法選択フローチャート</summary>
+        <div style="margin-top:8px; overflow-x:auto">
+          ${renderStatFlowchartSVG()}
+        </div>
+      </details>
+
+      <details style="margin-top:8px; padding:8px 12px; background:#f0fdf4; border-radius:6px">
+        <summary style="cursor:pointer; font-weight:600; color:#059669">🧹 事前処理チェックリスト (実験終了後、統計にかける前)</summary>
+        <div style="margin-top:8px; font-size:13px; line-height:1.8">
+          <ol style="margin:0; padding-left:20px">
+            <li><b>データクリーニング</b>: タイポ、単位の統一、負値・範囲外値の確認。生 CSV を保存してから 前処理版を別ファイルに。</li>
+            <li><b>欠損値</b> (Missing Data): 発生機構を分類。MCAR (完全ランダム欠損) ならリストワイズ削除で OK。MAR (観測変数で説明可) や MNAR は多重代入 (mice, MICE) を検討。欠損率 5% 以下ならほぼ問題なし、20% 超は要注意。</li>
+            <li><b>外れ値</b> (Outlier): まず箱ひげ図・散布図で目視。数値的には Mahalanobis 距離、Cook's distance、|z| > 3。参加者レベルで「明らかにタスクを理解していない」等の理由が特定できたら除外の根拠に。無条件切り捨ては hacking の疑いあり。</li>
+            <li><b>正規性</b> (Normality): Shapiro-Wilk 検定 or Q-Q プロット。n が大きい場合 (30+) は CLT で t 検定は頑健。歪度・尖度が大きい場合は log / ランク / Box-Cox 変換 or ノンパラ検定に切り替え。</li>
+            <li><b>等分散性</b> (Homoscedasticity): Levene 検定 or Bartlett 検定。違反時は Welch 補正 t 検定 (t2 のデフォルトを Welch に) や Games-Howell (ANOVA 事後)。</li>
+            <li><b>独立性</b>: 同じ参加者から複数観測している場合は独立でない → 対応 t / 反復測定 ANOVA / LMM に。無理に独立モデルにすると α が膨らむ。</li>
+            <li><b>球面性</b> (Sphericity, 反復測定 ANOVA): Mauchly 検定。違反時は Greenhouse-Geisser or Huynh-Feldt 補正 df を使う。</li>
+            <li><b>変数変換</b>: 反応時間は log や 1/RT で正規化しやすい。パーセントデータは logit や arcsin 変換で分散を安定化。</li>
+            <li><b>参加者除外基準</b>: 前登録 (pre-registration) or 分析前に文書化。「タスクを理解していなかった (post-task questionnaire で明示)」「機材トラブル」等の客観基準で。</li>
+            <li><b>多重比較補正</b>: post-hoc 比較や複数指標同時分析は Bonferroni (厳しめ)、Holm、FDR (Benjamini-Hochberg) 等。事前登録された仮説検定は補正不要が慣習。</li>
+          </ol>
+        </div>
+      </details>
+
+      ${currentGuide}
+
+      <details style="margin-top:8px; padding:8px 12px; background:#f0fdf4; border-radius:6px">
+        <summary style="cursor:pointer; font-weight:600; color:#059669">📖 参考文献</summary>
+        <div style="margin-top:8px; font-size:12.5px; line-height:1.75">
+          <ul style="margin:0; padding-left:20px">
+            <li>Cohen, J. (1988). <i>Statistical power analysis for the behavioral sciences</i> (2nd ed.). Erlbaum.</li>
+            <li>Faul, F., et al. (2009). Statistical power analyses using G*Power 3.1. <i>Behavior Research Methods, 41</i>, 1149-1160.</li>
+            <li>Brysbaert, M. (2019). How many participants do we have to include in properly powered experiments? <i>Journal of Cognition, 2</i>(1), 16.</li>
+            <li>Green, P., & MacLeod, C. J. (2016). SIMR: an R package for power analysis of generalized linear mixed models by simulation. <i>Methods in Ecology and Evolution, 7</i>(4), 493-498.</li>
+            <li>Westfall, J., Kenny, D. A., & Judd, C. M. (2014). Statistical power and optimal design in experiments in which samples of participants respond to samples of stimuli. <i>Journal of Experimental Psychology: General, 143</i>(5), 2020-2045.</li>
+          </ul>
+        </div>
+      </details>
+    </details>
+  `;
+}
+
+// 統計手法選択の 大分類フローチャート (SVG)
+function renderStatFlowchartSVG() {
+  return `
+<pre style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size:12px; line-height:1.5; background:#fff; padding:10px 12px; border-radius:6px; border:1px solid #d1fae5; overflow-x:auto; margin:0">
+【従属変数のスケールは？】
+
+━━━ 連続 or 順序尺度 ━━━
+  │
+  ├─ 【比較する群の数】
+  │   ├─ 1 群 (基準値 との比較)
+  │   │   └─ 正規性 OK  → 1 標本 t 検定
+  │   │      正規性 NG → Wilcoxon 符号順位検定
+  │   │
+  │   ├─ 2 群
+  │   │   ├─ 独立 (別 参加者)
+  │   │   │   ├─ 正規性 + 等分散 OK → 2 標本 t 検定
+  │   │   │   ├─ 正規性 OK / 等分散 NG → Welch t 検定
+  │   │   │   └─ 正規性 NG → Mann-Whitney U 検定
+  │   │   └─ 対応 (同じ 参加者)
+  │   │       ├─ 差の正規性 OK → 対応 t 検定
+  │   │       └─ 差の正規性 NG → Wilcoxon 符号順位検定
+  │   │
+  │   └─ 3 群以上
+  │       ├─ 独立
+  │       │   ├─ 正規性 + 等分散 → 一元配置 ANOVA
+  │       │   └─ 正規性 NG → Kruskal-Wallis
+  │       └─ 対応
+  │           ├─ 球面性 OK → 反復測定 ANOVA
+  │           ├─ 球面性 NG → GG or HF 補正 反復測定 ANOVA
+  │           └─ 正規性 NG → Friedman 検定
+  │
+  ├─ 【複雑デザイン (2 要因以上、 参加者 × 刺激 交差、 unbalanced 等)】
+  │   → LMM (lme4::lmer) / GLMM (lme4::glmer)
+  │      + emmeans で 事後 対比
+  │
+  └─ 【関係の強さ】
+      ├─ 2 変数の直線関係    → Pearson 相関 r
+      ├─ 順位の関係           → Spearman ρ / Kendall τ
+      └─ 予測 / 因果効果      → 線形回帰 / 重回帰 / MLR
+                                (交絡変数を モデル に投入)
+
+━━━ 名義尺度 (カテゴリ) ━━━
+  │
+  ├─ 【1 変数の分布】
+  │   └─ カテゴリ観測数 → χ² 適合度検定
+  │
+  ├─ 【2 変数の連関】
+  │   ├─ 大きな標本 → χ² 独立性検定
+  │   ├─ 期待度数 <5 のセル あり → Fisher 直接確率検定
+  │   └─ 対応あり (Before/After 2値) → McNemar 検定
+  │
+  └─ 【2 値アウトカム の 予測】
+      → ロジスティック回帰 / GLMM (family=binomial)
+</pre>`;
+}
+
+function renderTestSpecificGuide() {
+  const guides = {
+    t2: {
+      title: '📎 2 標本 t 検定 (独立) の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>正規性チェック: 群ごとに Shapiro-Wilk 検定 or Q-Q プロット。n>=30 なら CLT で頑健、緩めに OK。</li>
+        <li>等分散チェック: Levene 検定 (F 検定は正規性に鋭敏なので Levene を推奨)。</li>
+        <li>等分散 → Student t 検定 / 不等分散 → Welch t 検定 (デフォルトを Welch にする現代慣習も広まっている)。</li>
+        <li>効果量: Cohen's d = (M_1 − M_2) / SD_pooled。SD_pooled は √(((n_1-1)SD_1² + (n_2-1)SD_2²)/(n_1+n_2-2))。95%CI も併記。</li>
+        <li>報告例: "M_1 = 4.6 (SD = 1.2), M_2 = 4.0 (SD = 1.3), t(46) = 2.31, p = .025, d = 0.48 [0.06, 0.90]."</li>
+        <li>ノンパラ代替: Mann-Whitney U (両群の分布形状が近い前提での中央値差の検定として)。</li>
+      </ol>`,
+    },
+    tp: {
+      title: '📎 対応のある t 検定 の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>差 (X_1 − X_2) を計算し、その正規性を Shapiro-Wilk で確認。歪度が大きい場合は Wilcoxon 符号順位検定に。</li>
+        <li>対応 t 検定を実行 (paired t-test)。</li>
+        <li>効果量: d_z = M_diff / SD_diff (Cohen's d for paired)。d_av (平均 SD で標準化) を併記する派も。</li>
+        <li>報告例: "参加者は方式 B (M = 4.6, SD = 1.2) を方式 A (M = 4.0, SD = 1.3) より高く評価した、t(23) = 3.12, p = .005, d_z = 0.64 [0.20, 1.07]."</li>
+        <li>ノンパラ代替: Wilcoxon 符号順位検定。差にゼロが多い場合は Sign 検定。</li>
+      </ol>`,
+    },
+    t1: {
+      title: '👤 1 標本 t 検定 の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>観測値の正規性を Shapiro-Wilk で確認。n>=30 なら緩く OK。</li>
+        <li>H0: 母平均 = μ_0 (基準値)、H1: ≠ μ_0 で 1 標本 t 検定。</li>
+        <li>効果量: d = (M_obs - μ_0) / SD_obs。95%CI と併記。</li>
+        <li>ノンパラ代替: Wilcoxon 符号順位検定 (中央値と基準値の比較)。</li>
+      </ol>`,
+    },
+    anova: {
+      title: '📊 一元配置 ANOVA の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>各群の正規性 (Shapiro-Wilk)、等分散性 (Levene) を確認。</li>
+        <li>ANOVA を実行し、有意なら事後検定 (Tukey HSD が定番、群サイズ不揃いなら Bonferroni or Games-Howell)。</li>
+        <li>効果量: η² (SS_between / SS_total)、partial η² (mixed で標準)、ω² (バイアス補正)。Cohen's f も。</li>
+        <li>報告例: "F(2, 45) = 5.24, p = .009, η² = .19, 90%CI [.03, .34]. Tukey HSD: 群 A > 群 C (p = .007)、他ペアは n.s."</li>
+        <li>ノンパラ代替: Kruskal-Wallis 検定 → Dunn の事後比較。</li>
+        <li>反復測定なら: rmANOVA (Mauchly で球面性、違反時は GG/HF 補正)。もしくは LMM (lmer(dv ~ cond + (1|p))) に移行を推奨。</li>
+      </ol>`,
+    },
+    corr: {
+      title: '🔗 Pearson 相関 の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>散布図で外れ値と非線形性を目視。Pearson は直線関係のみ捉えられる。</li>
+        <li>両変数の正規性を Shapiro-Wilk で。歪度が大きい場合は Spearman ρ (順位相関) に。</li>
+        <li>効果量そのものが r。95%CI は Fisher z 変換経由で。</li>
+        <li>報告例: "r(38) = .42, p = .007, 95%CI [.12, .65]."</li>
+        <li>因果を語りたいなら回帰 (交絡変数を統制)。相関だけでは因果は言えない。</li>
+      </ol>`,
+    },
+    chi2: {
+      title: '⁉ χ² 検定 の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>クロス表を作り、各セルの期待度数を確認。1 つでも期待度数 <5 なら Fisher 直接確率検定に切り替え。</li>
+        <li>χ² 適合度 (1 変数) or χ² 独立性 (2 変数) を判定。</li>
+        <li>効果量: 適合度は Cohen's w、独立性は Cramer's V (2×2 なら φ)。</li>
+        <li>報告例: "χ²(2) = 8.24, p = .016, V = .18."</li>
+        <li>2×2 対応データ (Before/After binary) は McNemar 検定。</li>
+      </ol>`,
+    },
+    lmm_within: {
+      title: '🧠 LMM 2 レベル (参加者内) の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>R では lme4::lmer(dv ~ condition + (1 | participant))、Python は statsmodels.MixedLM。</li>
+        <li>REML=TRUE で分散成分を推定 (デフォルト)。固定効果の検定は Satterthwaite 近似 df (lmerTest パッケージ) を推奨。</li>
+        <li>特異解 (singular fit) 警告が出たら random slope を落とすか PCA prior。</li>
+        <li>効果量: fixed effect coef / residual SD (standardized β) 、または partial R² (r2glmm::r2beta)。</li>
+        <li>報告例: "The fixed effect of condition was significant, β = 0.48, SE = 0.15, t(23.2) = 3.20, p = .004 (Satterthwaite)."</li>
+      </ol>`,
+    },
+    lmm_crossed: {
+      title: '🧠 LMM 3 レベル (参加者×刺激) の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>lme4::lmer(dv ~ condition + (1 | participant) + (1 | stimulus))。交差ランダム効果。</li>
+        <li>Maximal model 推奨: (1 + condition | participant) + (1 + condition | stimulus) → 収束しないなら段階的に削減 (Barr et al. 2013 / Bates et al. 2015)。</li>
+        <li>Keep it maximal vs parsimonious の議論あり。REML + Satterthwaite で t 検定。</li>
+        <li>結果報告に random effect variance と ICC も (participant, stimulus 別で) 含める。</li>
+      </ol>`,
+    },
+    glmm_logit: {
+      title: '🎯 Logistic GLMM の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>lme4::glmer(dv ~ condition + (1 | participant), family = binomial)。参加者内 2 値アウトカム。</li>
+        <li>optimizer='bobyqa' or 'Nelder_Mead' で収束を改善。分離 (complete separation) が起きたら bglmer (blme パッケージ) で弱情報事前分布を。</li>
+        <li>効果量: オッズ比 OR = exp(β)。95%CI は Wald か profile likelihood。</li>
+        <li>報告例: "OR = 2.04, 95%CI [1.32, 3.15], z = 3.11, p = .002."</li>
+        <li>参加者ランダム切片の分散 σ² も報告。ICC (VPC) = σ²_p / (σ²_p + π²/3)。</li>
+      </ol>`,
+    },
+  };
+  const g = guides[state.test];
+  if (!g) return '';
+  return `
+    <details open style="margin-top:8px; padding:8px 12px; background:#f0fdf4; border-radius:6px">
+      <summary style="cursor:pointer; font-weight:600; color:#059669">${g.title} (現在選択中の検定)</summary>
+      <div style="margin-top:6px; font-size:13px; line-height:1.75">
+        ${g.body}
+      </div>
+    </details>`;
 }
 
 // v1032 参加者 vs 試行 の 戦略比較 テーブル (中村さんビジョン中核)
