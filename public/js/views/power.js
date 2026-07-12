@@ -661,13 +661,19 @@ function renderResult(out, t) {
   const tailStr = state.tails === 2 ? '両側' : '片側';
   const args = `α=${state.alpha}, ${state.tails === 2 || !['t2','tp','t1','corr'].includes(state.test) ? tailStr : tailStr}, ${t.eff}=${state.effect}`;
   const extraArgs = state.test === 'anova' ? `, k=${state.k}` : (state.test === 'chi2' ? `, df=${state.df}` : '');
+  // v1025b 中村さん指摘「計算し直したときに、 グラフが作り変えられない」→ 従来は
+  //   root.innerHTML → insertAdjacentHTML の 2 段構え で グラフ を 追記 していたが、
+  //   タイミング 依存 で 追記 が スキップ される 事例あり。 結果カード + 分布プロット +
+  //   検定力カーブ を 1 つの 文字列に まとめて 一度に innerHTML で セット、 再計算のたび
+  //   に 全部 綺麗に 描き直す。
+  let resultHtml = '';
   if (state.mode === 'a_priori') {
     const nMsg = state.test === 't2'
       ? `各群 n = <b>${out.n_per_group}</b> (全体 N = ${out.n_total})`
       : state.test === 'anova'
         ? `全体 N = <b>${out.n_total}</b> (各群 n ≈ ${out.n_per_group})`
         : `全体 N = <b>${out.n_total}</b>`;
-    root.innerHTML = `
+    resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要サンプルサイズ (A priori)</div>
         <div style="font-size:26px; line-height:1.5">${nMsg}</div>
@@ -677,7 +683,7 @@ function renderResult(out, t) {
   } else {
     const p = out.power;
     const pctColor = p >= 0.8 ? '#059669' : (p >= 0.6 ? '#a16207' : '#dc2626');
-    root.innerHTML = `
+    resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (Post hoc)</div>
         <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(p * 100).toFixed(1)}%</b></div>
@@ -685,8 +691,7 @@ function renderResult(out, t) {
         ${p < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 効果があってもそれを検出できず 「型 II 過誤」 が起きる可能性が高めです。</div>' : ''}
       </div>`;
   }
-  // v1024b グラフ (G*Power 相当): 分布プロット + 検定力カーブ
-  root.insertAdjacentHTML('beforeend', renderDistPlot() + renderPowerCurve());
+  root.innerHTML = resultHtml + renderDistPlot() + renderPowerCurve();
 }
 
 function clampFloat(v, lo, hi) {
