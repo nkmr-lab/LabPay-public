@@ -30,6 +30,8 @@ class Ledger {
         'paper_translate',       // 論文要約料
         'paper_full_translate',  // 論文全訳料
         'deep_research',         // Deep Research 料
+        // v1023 実験計画書チェック
+        'exp_plan_check',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

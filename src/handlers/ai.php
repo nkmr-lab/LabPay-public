@@ -116,6 +116,23 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_resume_check_get($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v1023 実験計画書チェック (Scrapbox テキスト入力、 20pt/回)
+    if ($sub === 'exp_plan' && $method === 'POST' && !isset($seg[2])) {
+        ai_exp_plan_check($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'exp_plan' && $method === 'GET' && !isset($seg[2])) {
+        ai_exp_plan_check_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'exp_plan' && $method === 'GET' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_exp_plan_check_get($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
+    if ($sub === 'exp_plan' && $method === 'DELETE' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_exp_plan_check_delete($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     // v613 文字数 / 単語数制限リライター
     if ($sub === 'rewriter' && $method === 'POST' && !isset($seg[2])) {
         ai_rewriter_run($pdo, $cfg);
@@ -932,6 +949,256 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 - 例: 「効果的だった」 → 「Condition A reduced mean response time by X ms compared to B (p<.01, d=0.5), suggesting users tend to prefer A.」 + 「条件 A は B より平均反応時間が X ms 短く (p<.01, d=0.5)、ユーザーは A を好む傾向が示唆された」
 - 旧フィールド名 (suggested_rewrite, original のみ) は後方互換で残しても OK だが、上記 5 フィールドを揃えることを優先
 PROMPT;
+
+// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式の実験計画書を精査、 RQ / 仮説 の書き方、
+//   仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを 特に重視」)。 1 回 20pt 定額。
+const EXP_PLAN_CHECK_COST = 20;
+const EXP_PLAN_CHECK_MAX_CHARS = 40000;
+const EXP_PLAN_CHECK_MODEL = 'gpt-5';
+
+const EXP_PLAN_CHECK_SYSTEM_PROMPT = <<<'PROMPT'
+あなたは HCI / 認知心理 / 情報行動 分野で 経験豊富な 実験計画レビュアー です。 与えられた
+Scrapbox 形式で書かれた 実験計画書 を 精査 し、 構造化された JSON で 返してください。
+返答 は valid JSON のみ、 markdown コードフェンス や 前置き は 一切 なし。
+
+# 重視して 精査 する 観点 (この順で 網羅)
+
+1. **RQ の 書き方**
+   - RQ が 明確 に 書かれているか (曖昧 な 「〜について 検討する」 で 終わって いないか)
+   - 検証可能 (testable) か、 測定可能 な 概念に 落ちて いるか
+   - スコープ が 明示 されているか (対象、 タスク、 条件、 母集団)
+   - 「調べる / 検討する」 で 終わって いる 発散型 RQ は 減点
+
+2. **仮説 の 書き方**
+   - RQ を どう 定量的 に 検証する 仮説 に 落として いるか
+   - 「H1: 条件 A の 反応時間 は B より 短い」 のように **方向 + 対象 + 変量** が
+     明示 されているか
+   - 「〇〇 が 変わる」 だけの 曖昧 な 表現 は 減点
+   - 帰無仮説 (H0) と 対立仮説 (H1) の 対応 (書いて あれば 加点、 なければ 減点しない)
+
+3. **仮説 と 実験 の 対応**
+   - 各仮説 に 対して、 それを 検証する 実験 が 明確 に 対応づいて いるか
+   - 実験 が どの 仮説 を どう 検証する のか、 対応関係 が 読み取れるか
+   - 仮説 に 対応 する 実験 が 抜けて いないか、 逆に 実験 が どの 仮説 も 検証 して
+     いない ケース が 無いか
+
+4. **仮説 検証 に 適した データ を 取って いるか**
+   - 依存変数 (dependent variable) が 仮説 を 直接 検証 する 指標 に なっているか
+   - 反応時間 / 正答率 / 主観評価 / 生理指標 / 眼球運動 / ログ etc. の 選択 が 妥当 か
+   - リッカート 尺度 の 妥当性 (5 段階 or 7 段階、 中立点 の 扱い)
+   - 客観指標 と 主観指標 の 組合せ が 適切 か
+   - データ 取得 の タイミング / 頻度 が 適切 か
+   - 交絡変数 (confounder) の 統制 は 十分 か
+
+5. **統計手法**
+   - 検定 の 選択 が データ 型 / 分布 / 対応 の 有無 / 反復測定 に 合っているか
+   - 仮説 の 方向性 が ある なら 片側 検定 か 両側 検定 か
+   - 前提 の 検証 (正規性 / 等分散性 / 球面性 / 独立性) が 記述 されているか
+   - 多重比較 補正 (Bonferroni / Holm / FDR) の 予定 が あるか
+   - 効果量 (d / η² / r) の 報告 予定 が あるか
+   - 混合効果モデル (LMM / GLMM) が 妥当 な 場合 に 反映 されているか
+   - 交互作用 検定 が 必要 な とき に 反映 されているか
+
+6. **サンプルサイズ**
+   - 事前 power analysis の 記述 が あるか
+   - α (通常 0.05)、 β (通常 0.20)、 想定効果量 (d = 0.5 等) が 明示 されているか
+   - 想定効果量 の 根拠 (先行研究 / メタ分析 / パイロット) が あるか
+   - 参加者数 が 実施 可能 な 範囲 で 適切 か
+   - 被験者内 / 被験者間 / 混合 デザイン の 別 が 明確 か
+   - 脱落 / 除外 の 予定率 が 加味 されているか
+
+7. **その他 (概観)**
+   - 倫理審査 / インフォームドコンセント / 報酬 の 記述
+   - タスク の カウンターバランス (ラテン方陣 等)
+   - パイロット / 事前登録 (pre-registration) の 意向
+   - 期間、 場所、 機材
+
+# 出力 JSON スキーマ
+
+{
+  "summary_one_line": "1 行 で 全体 講評 (60-100 字)",
+  "overall_score": 1-5 の 整数,
+  "rq_review":                  { "score": 1-5, "notes": "評価の要点 (100-300 字)", "issues": [{"issue": "...", "suggestion": "...", "severity": "high|med|low"}, ...] },
+  "hypothesis_review":          { "score": 1-5, "notes": "...", "issues": [...] },
+  "hypothesis_experiment_link": { "score": 1-5, "notes": "...", "issues": [...] },
+  "data_appropriateness":       { "score": 1-5, "notes": "...", "issues": [...] },
+  "statistics":                 { "score": 1-5, "notes": "...", "issues": [...] },
+  "sample_size":                { "score": 1-5, "notes": "...", "issues": [...] },
+  "other_notes": ["補足 の 気づき 1", "..."],
+  "top_priority_fixes":  ["最も 優先度 高い 修正 提案 1 (最大 5 件)", "..."]
+}
+
+## ルール
+- score の 5 は 「投稿可能 レベル」、 3 は 「大きな 修正が 要る」、 1 は 「白紙 に 近い」
+- issues の severity は "high" = 実験成立 に 直接 影響、 "med" = 結果 の 説得力 に 影響、
+  "low" = より 良く なる 提案
+- 「良い 点」 は notes に 書いて、 issues は 課題 だけ に 絞る
+- 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 との 境界 は OK)
+- 曖昧 に 「〜と 思われる」 で 逃げず、 具体的 な 提案 を 書く
+PROMPT;
+
+function ai_exp_plan_check_list(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT id, title, status, cost_points, model, created_at, finished_at,
+                                LEFT(input_text, 120) AS input_head
+                           FROM experiment_plan_checks WHERE user_id = ? ORDER BY id DESC LIMIT 40");
+    $st->execute([$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) { $r['id'] = (int)$r['id']; $r['cost_points'] = (int)$r['cost_points']; }
+    unset($r);
+    json_response([
+        'items'         => $rows,
+        'cost_points'   => EXP_PLAN_CHECK_COST,
+        'max_chars'     => EXP_PLAN_CHECK_MAX_CHARS,
+    ]);
+}
+
+function ai_exp_plan_check_get(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT * FROM experiment_plan_checks WHERE id = ? AND user_id = ?");
+    $st->execute([$id, $uid]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'not found', 404);
+    json_response([
+        'id'          => (int)$r['id'],
+        'title'       => $r['title'],
+        'input_text'  => $r['input_text'],
+        'result'      => $r['result_json'] ? json_decode($r['result_json'], true) : null,
+        'cost_points' => (int)$r['cost_points'],
+        'model'       => $r['model'],
+        'status'      => $r['status'],
+        'error_msg'   => $r['error_msg'],
+        'created_at'  => $r['created_at'],
+        'finished_at' => $r['finished_at'],
+    ]);
+}
+
+function ai_exp_plan_check(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    ai_assert_configured($cfg);
+
+    $body = read_json_body();
+    $text = trim((string)require_field($body, 'text'));
+    $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : null;
+    if ($title === '') $title = null;
+
+    $len = mb_strlen($text);
+    if ($len < 100) {
+        throw new ApiException('bad_request', '実験計画書が短すぎます (100 文字以上)', 400);
+    }
+    if ($len > EXP_PLAN_CHECK_MAX_CHARS) {
+        throw new ApiException('bad_request',
+            sprintf('実験計画書が長すぎます (上限 %d 文字、 現在 %d 文字)', EXP_PLAN_CHECK_MAX_CHARS, $len), 400);
+    }
+    // タイトル 未指定 なら 先頭行 (# や [[]] を 剥がして 60 文字) から 自動抽出
+    if ($title === null) {
+        $firstLine = trim(strtok($text, "\n") ?: '');
+        $firstLine = trim(preg_replace('/^#+\s*/', '', $firstLine));
+        $firstLine = trim(str_replace(['[', ']', '#'], '', $firstLine));
+        if ($firstLine !== '') $title = mb_substr($firstLine, 0, 60);
+    }
+
+    $cost = EXP_PLAN_CHECK_COST;
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+    }
+
+    $checkId = 0;
+    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $cost, &$checkId) {
+        $pdo->prepare("INSERT INTO experiment_plan_checks (user_id, title, input_text, cost_points, model, status)
+                       VALUES (?,?,?,?,?,'pending')")
+            ->execute([$uid, $title, $text, $cost, EXP_PLAN_CHECK_MODEL]);
+        $checkId = (int)$pdo->lastInsertId();
+        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId, '実験計画書チェック 依頼料');
+    });
+
+    json_response_no_exit([
+        'ok'          => true,
+        'id'          => $checkId,
+        'status'      => 'pending',
+        'cost_points' => $cost,
+        'model'       => EXP_PLAN_CHECK_MODEL,
+        'message'     => '実験計画書 チェック (' . EXP_PLAN_CHECK_MODEL . ') を 受け付けました。 30 秒 〜 2 分 で 結果 が 出ます。',
+    ]);
+    if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+    @ignore_user_abort(true);
+    @set_time_limit(300);
+
+    ai_exp_plan_check_run_background($pdo, $cfg, $checkId, $text);
+}
+
+function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text): void {
+    try {
+        $pdo->prepare("UPDATE experiment_plan_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
+        $apiKey = (string)$cfg['openai']['api_key'];
+        $userMessage = "以下の Scrapbox 形式で書かれた実験計画書 を、 system prompt の 観点で 精査 して ください。 (Scrapbox の [[ ]] は 内部リンク、 # は タグ、 行頭 の 半角 スペース は インデント。 記法 は 無視 して 中身 を 評価 して 良い)\n\n" . $text;
+
+        $payloadArr = [
+            'model' => EXP_PLAN_CHECK_MODEL,
+            'messages' => [
+                ['role' => 'system', 'content' => EXP_PLAN_CHECK_SYSTEM_PROMPT],
+                ['role' => 'user',   'content' => $userMessage],
+            ],
+            'response_format' => ['type' => 'json_object'],
+            'max_completion_tokens' => 16000,
+        ];
+        // gpt-5 系 は temperature 非対応
+        if (!preg_match('/^(gpt-5|o1|o3)/', EXP_PLAN_CHECK_MODEL)) {
+            $payloadArr['temperature'] = 0.2;
+        }
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+
+        $resp = ai_openai_call($payload, $apiKey);
+        $content = $resp['choices'][0]['message']['content'] ?? '';
+        $parsed = json_decode($content, true);
+        if (!is_array($parsed)) {
+            throw new RuntimeException('LLM の JSON を parse できません: ' . mb_substr((string)$content, 0, 300));
+        }
+        $pdo->prepare("UPDATE experiment_plan_checks
+                          SET result_json = ?, status='done', finished_at = NOW(), error_msg = NULL
+                        WHERE id = ?")
+            ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $checkId]);
+        // 完了通知
+        try {
+            $stR = $pdo->prepare("SELECT user_id, title FROM experiment_plan_checks WHERE id = ?");
+            $stR->execute([$checkId]);
+            $row = $stR->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                $t = mb_substr((string)($row['title'] ?? '実験計画書'), 0, 60);
+                notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
+                    "🧪 実験計画書 チェック 完了: 「{$t}」",
+                    'exp_plan_check', $checkId);
+            }
+        } catch (Throwable $_) {}
+    } catch (Throwable $e) {
+        $msg = mb_substr($e->getMessage(), 0, 500);
+        $pdo->prepare("UPDATE experiment_plan_checks SET status='error', error_msg = ? WHERE id = ?")
+            ->execute([$msg, $checkId]);
+        // 失敗時は 返金
+        try {
+            $stR = $pdo->prepare("SELECT user_id, cost_points FROM experiment_plan_checks WHERE id = ?");
+            $stR->execute([$checkId]);
+            $row = $stR->fetch(PDO::FETCH_ASSOC);
+            if ($row && (int)$row['cost_points'] > 0) {
+                Ledger::transfer($pdo, 1, (int)$row['user_id'], (int)$row['cost_points'],
+                    'refund', 'experiment_plan_check', $checkId, '実験計画書チェック 失敗 返金');
+            }
+        } catch (Throwable $_) {}
+    }
+}
+
+function ai_exp_plan_check_delete(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("DELETE FROM experiment_plan_checks WHERE id = ? AND user_id = ?");
+    $st->execute([$id, $uid]);
+    json_response(['ok' => true, 'deleted' => $st->rowCount()]);
+}
 
 function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
