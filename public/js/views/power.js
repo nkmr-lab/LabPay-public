@@ -283,7 +283,12 @@ function rangeHintText() {
 //   描画。 効果量 表示 は しない (「値を まず 見て、 それから 求める」フロー)。
 function renderRawPreviewSVG() {
   const W = 600, H = 200, PL = 34, PR = 16, PT = 12, PB = 32;
-  const dnormAt = (x, mu, sd) => Math.exp(-((x - mu) / sd) ** 2 / 2) / (sd * Math.sqrt(2 * Math.PI));
+  // v1029b unary - と ** の 混在 は SyntaxError (「Unary operator used immediately
+  //   before exponentiation expression」) に なる の で、 明示 括弧 + 中間 変数 で 回避。
+  const dnormAt = (x, mu, sd) => {
+    const z = (x - mu) / sd;
+    return Math.exp(-(z * z) / 2) / (sd * Math.sqrt(2 * Math.PI));
+  };
   let curves = [];   // { mu, sd, color, label }
   if (state.test === 't2') {
     curves.push({ mu: state.rawA.mean, sd: state.rawA.sd, color: '#2563eb', label: '手法 A' });
