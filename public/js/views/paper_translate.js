@@ -566,6 +566,8 @@ async function paintResult(d, token) {
 
     ${ptRenderAuthorCards(r.authors)}
 
+    ${ptRenderKeywords(r.keywords)}
+
     ${r.summary_one_paragraph ? `
     <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
       <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 まず全体要約</div>
@@ -668,6 +670,15 @@ async function paintResult(d, token) {
       const q = String(b.dataset.ptAuthor || '').trim();
       if (!q) return;
       location.hash = '#/authors/' + encodeURIComponent(q);
+    });
+  });
+  // v1005 キーワード の クリック → 公開要約 の 検索
+  document.querySelectorAll('[data-pt-kw]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const q = String(b.dataset.ptKw || '').trim();
+      if (!q) return;
+      location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
     });
   });
   // v1004 著者アバター Gravatar への 動的 差し替え
@@ -814,6 +825,22 @@ function ptInitialsAvatar(name) {
   for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
   return { initials: initials.toUpperCase().slice(0, 2), color: `hsl(${hash % 360}, 55%, 55%)` };
 }
+// v1005 中村さん要望「要約にもキーワードが欲しい」。 全訳 view と同スタイルで、
+//   タップで公開要約一覧の検索 (#/paper-summary?q=…) に飛ぶ。
+function ptRenderKeywords(kws) {
+  if (!Array.isArray(kws)) return '';
+  const list = kws.map(k => String(k || '').trim()).filter(Boolean);
+  if (!list.length) return '';
+  return `
+    <div class="card" style="background:#faf5ff">
+      <div class="bold" style="color:#7b3fa0; font-size:13px; margin-bottom:6px">🏷 キーワード</div>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        ${list.map(kw => `<button data-pt-kw="${escapeHtml(kw)}" class="btn" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 10px; border:1px solid #d8b4fe; border-radius:12px; cursor:pointer">${escapeHtml(kw)}</button>`).join('')}
+      </div>
+      <div class="hint-sm" style="margin-top:6px">タップで公開要約から関連論文を検索</div>
+    </div>`;
+}
+
 function ptRenderAuthorCards(authorsStr) {
   const authors = ptParseAuthorsFromString(authorsStr);
   if (!authors.length) return '';
