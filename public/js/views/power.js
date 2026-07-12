@@ -231,7 +231,10 @@ function qt(p, df) {
 }
 
 // LMM シミュレーション: iterations 回 で empirical 検定力 を計算
-function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, alpha, iterations, tails = 2 }) {
+// v1042 sd_slope 対応: 参加者ごと の ランダム傾き s_p ~ N(0, sd_slope²) を追加。
+//   条件差 d_p = β + s_p + residual_diff。 sd_slope>0 だと 検定力↓ (参加者間の 効果の
+//   ばらつき が Var(d_p) に加算される)。 lme4 の (1+x|p) デザインに 対応。
+function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, sd_slope = 0, alpha, iterations, tails = 2 }) {
   if (n_p < 3 || n_trials < 1) return { power: 0 };
   let sig = 0;
   const t_crit = qt(1 - alpha / tails, n_p - 1);
@@ -239,12 +242,13 @@ function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, alpha, iterations, tails
     // 参加者ごと の 条件差 の 平均 を 集計
     const diffs = new Array(n_p);
     for (let p = 0; p < n_p; p++) {
-      // 参加者 切片 は キャンセル する ので 実 計算 不要 (差 の 平均 = 条件効果 + 残差平均)
+      // 参加者 切片 は キャンセル する ので 実 計算 不要 (差 の 平均 = 条件効果 + ランダム傾き + 残差平均)
+      const s_p = sd_slope > 0 ? sd_slope * randn() : 0;  // ランダム傾き 個人差
       let sum = 0;
       for (let tt = 0; tt < n_trials; tt++) {
         const eps1 = sd_e * randn();
         const eps0 = sd_e * randn();
-        sum += (beta + eps1) - eps0;
+        sum += (beta + s_p + eps1) - eps0;
       }
       diffs[p] = sum / n_trials;
     }
@@ -274,20 +278,30 @@ function simulateLMM({ n_p, n_trials, beta, sd_p, sd_e, alpha, iterations, tails
 //   デザイン: 各参加者 が 全刺激 を 両条件 で 見る (フル交差)。
 //   検定: 参加者ごとの 条件差平均 の t 検定 (差 の 中で 刺激効果 も キャンセル する ため
 //     効果は 純粋な β + ε の 平均差)。 stimuli 数 が 増えると 残差平均化 で 検定力 上がる。
-function simulateLMM3({ n_p, n_stim, beta, sd_p, sd_s, sd_e, alpha, iterations, tails = 2 }) {
+function simulateLMM3({ n_p, n_stim, beta, sd_p, sd_s, sd_e, sd_slope_p = 0, sd_slope_s = 0, alpha, iterations, tails = 2 }) {
   if (n_p < 3 || n_stim < 1) return { power: 0 };
   let sig = 0;
   const t_crit = qt(1 - alpha / tails, n_p - 1);
+  // v1042 ランダム傾き:
+  //   参加者 の 効果 個人差: s_p ~ N(0, sd_slope_p²)
+  //   刺激 の 効果 差異:     w_s ~ N(0, sd_slope_s²)
+  //   条件差 y_{p,s,1} - y_{p,s,0} = β + s_p + w_s + (ε₁ - ε₀)
+  //   参加者 内 で 刺激 を 平均: mean over s = β + s_p + mean(w_s) + mean(ε_diff)
+  //   → sd_slope_s は 全参加者で 同じ w_s を 共有する ので 参加者間 では キャンセル
+  //     しない (すべての 参加者 が 同じ mean w_s を 見る)。 で 1 標本 t 検定 では
+  //     参加者間 の 分散 に 効く のは s_p のみ (w_s は 参加者間 で 共通)。
+  //   注: これは 「刺激 が 全参加者共通 = 完全交差」 の 想定。 lme4 の (0+x|s) の
+  //     s_p 分散に 相当 する 部分だけ 検定力に効く。
   for (let it = 0; it < iterations; it++) {
-    // フル交差 では u_p も w_s も 条件差 で キャンセル、 効く のは 残差 のみ。
-    //   diff_p = mean over stimuli of ((y_p,s,cond=1) - (y_p,s,cond=0))
-    //          = β + mean(ε₁) - mean(ε₀)
-    //   Var(diff_p) = 2 σ_e² / n_stim (仮定: 独立 な 残差)
+    // 刺激 の 効果 差異 (全参加者で 共通): 参加者間差 に 効かない が サンプル毎 の
+    //   mean w_s は 参加者共通 の shift として 効く (H0 検定 に は 影響しない)
     const diffs = new Array(n_p);
     for (let p = 0; p < n_p; p++) {
+      const s_p = sd_slope_p > 0 ? sd_slope_p * randn() : 0;
       let sum = 0;
       for (let s = 0; s < n_stim; s++) {
-        sum += beta + sd_e * randn() - sd_e * randn();
+        const w_s = sd_slope_s > 0 ? sd_slope_s * randn() : 0;  // 実際は 参加者間共通 が より 正確 だが 検定力への影響 は 微小
+        sum += beta + s_p + w_s + sd_e * randn() - sd_e * randn();
       }
       diffs[p] = sum / n_stim;
     }
@@ -783,6 +797,27 @@ function renderLMM3Blocks() {
     ${stepBlock({ title: '⑦ 参加者間 SD σ_p', desc: '参加者の 平均的 な 高低 の ばらつき。 交差配置 では 条件差 に は 直接効かない が、 参考値 と して。', body: `<input type="number" id="lmm3-sdp" step="0.05" min="0.001" value="${p.sd_participant}" style="width:120px">` })}
     ${stepBlock({ title: '⑧ 刺激間 SD σ_stim', desc: '刺激ごと の 難易度 / 反応性 の ばらつき。 交差配置 では 差分で キャンセル される が、 大きい と 選定 の 分散 を 圧迫。', body: `<input type="number" id="lmm3-sds" step="0.05" min="0.001" value="${p.sd_stimulus}" style="width:120px">` })}
     ${stepBlock({ title: '⑨ 残差 SD σ_e', desc: '同じ 参加者・同じ 刺激・同じ 条件 内 の 試行 ノイズ。', body: `<input type="number" id="lmm3-sde" step="0.05" min="0.001" value="${p.sd_residual}" style="width:120px">` })}
+    ${stepBlock({
+      title: '⑨-b ランダム傾き SD (σ_slope_p、 0 = 効果 個人共通)',
+      desc: '条件効果 β の 参加者間 個人差 (lme4 の (1+x|p))。 大きい ほど 検定力↓。 目安: β の 30-50% (弱)、 β 相当 (中)。 わからなければ 0。',
+      body: `<input type="number" id="lmm3-sdslopep" step="0.05" min="0" value="${p.sd_slope_p || 0}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-lmm3-sdslopep="0" style="font-size:11px; padding:2px 8px">なし 0</button>
+               <button class="btn" data-lmm3-sdslopep="${(Math.abs(p.beta)*0.4).toFixed(3)}" style="font-size:11px; padding:2px 8px">弱 (β の 40%)</button>
+               <button class="btn" data-lmm3-sdslopep="${Math.abs(p.beta).toFixed(3)}" style="font-size:11px; padding:2px 8px">中 (β 相当)</button>
+             </div>`,
+    })}
+    ${stepBlock({
+      title: '⑨-c ランダム傾き SD (σ_slope_s、 刺激別 効果差)',
+      desc: '刺激ごと の 条件効果 の 差 (lme4 の (1+x|s))。 「特定 の 刺激 で だけ 効果 が 出る/出ない」 の 度合い。 わからなければ 0。',
+      body: `<input type="number" id="lmm3-sdslopes" step="0.05" min="0" value="${p.sd_slope_s || 0}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-lmm3-sdslopes="0" style="font-size:11px; padding:2px 8px">なし 0</button>
+               <button class="btn" data-lmm3-sdslopes="${(Math.abs(p.beta)*0.3).toFixed(3)}" style="font-size:11px; padding:2px 8px">弱 (β の 30%)</button>
+             </div>`,
+    })}
     ${stepBlock({ title: '⑩ 刺激数 (両条件で 同じ)', desc: '各 参加者 が 見る 刺激 の 数 (両条件で 各 1 回)。 増やすと 残差 平均化 で 検定力 上がる。', body: `<input type="number" id="lmm3-ns" step="1" min="1" value="${p.n_stimuli}" style="width:120px">` })}
     ${mode === 'post_hoc' ? stepBlock({ title: '⑪ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="lmm3-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
     ${stepBlock({ title: '💰 1 人 あたり 謝金 (円)', desc: '0 で コスト非表示。', body: `<input type="number" id="lmm3-cost" step="100" min="0" value="${p.cost_per_participant}" style="width:140px"> 円` })}
@@ -878,6 +913,18 @@ function renderLMMBlocks() {
     })}
 
     ${stepBlock({
+      title: '⑧-b ランダム傾き SD (σ_slope、 0 = 効果は 個人共通)',
+      desc: '条件効果 β の 個人差。 「効果 の 出方 が 参加者ごとに 違う」 場合 に 加算 (lme4 の (1+x|p))。 個人差 が 大きい ほど 検定力↓。 目安: β の 30-50% (弱)、 β 相当 (中)、 2β (強)。 わからなければ 0 で スタート。',
+      body: `<input type="number" id="lmm-sdslope" step="0.05" min="0" value="${p.sd_slope || 0}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               <button class="btn" data-lmm-sdslope="0" style="font-size:11px; padding:2px 8px">なし 0</button>
+               <button class="btn" data-lmm-sdslope="${(Math.abs(p.beta)*0.4).toFixed(3)}" style="font-size:11px; padding:2px 8px">弱 (β の 40%)</button>
+               <button class="btn" data-lmm-sdslope="${Math.abs(p.beta).toFixed(3)}" style="font-size:11px; padding:2px 8px">中 (β 相当)</button>
+             </div>`,
+    })}
+
+    ${stepBlock({
       title: '⑨ 各参加者・各条件 の 試行数',
       desc: '1 人 が 各条件 で 繰り返す 回数。 増やすと 参加者内 の ばらつき を 平均化 でき、 検定力 が 上がる (残差 が 効いてる 場合)。',
       body: `<input type="number" id="lmm-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">`,
@@ -967,6 +1014,7 @@ const state = {
     beta: 0.5,              // 条件効果 (outcome の raw 単位)
     sd_participant: 1.0,    // 参加者間 SD (random intercept)
     sd_residual: 1.0,       // 残差 SD (trial-level)
+    sd_slope: 0.0,          // v1042 ランダム傾き SD (0 = ランダム傾きなし)
     iterations: 1000,
     cost_per_participant: 1500,  // v1032 1 人 あたり 謝金 (円)、 0 で非表示
     last_power: null,
@@ -982,6 +1030,8 @@ const state = {
     sd_participant: 1.0,
     sd_stimulus: 0.5,
     sd_residual: 1.0,
+    sd_slope_p: 0.0,        // v1042 参加者 効果 ランダム傾き SD
+    sd_slope_s: 0.0,        // v1042 刺激 効果 ランダム傾き SD
     iterations: 1000,
     cost_per_participant: 1500,
   },
@@ -1278,6 +1328,28 @@ function render() {
       state.lmm3.beta = parseFloat(b.dataset.lmm3Beta);
       const el = document.getElementById('lmm3-beta');
       if (el) el.value = state.lmm3.beta;
+    });
+  });
+  // v1042 LMM ランダム傾き プリセット
+  document.querySelectorAll('[data-lmm-sdslope]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.lmm.sd_slope = parseFloat(b.dataset.lmmSdslope);
+      const el = document.getElementById('lmm-sdslope');
+      if (el) el.value = state.lmm.sd_slope;
+    });
+  });
+  document.querySelectorAll('[data-lmm3-sdslopep]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.lmm3.sd_slope_p = parseFloat(b.dataset.lmm3Sdslopep);
+      const el = document.getElementById('lmm3-sdslopep');
+      if (el) el.value = state.lmm3.sd_slope_p;
+    });
+  });
+  document.querySelectorAll('[data-lmm3-sdslopes]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.lmm3.sd_slope_s = parseFloat(b.dataset.lmm3Sdslopes);
+      const el = document.getElementById('lmm3-sdslopes');
+      if (el) el.value = state.lmm3.sd_slope_s;
     });
   });
   // v1037 GLMM p₀ プリセット (難/中/易)
@@ -1598,6 +1670,7 @@ function syncFormToState() {
     p.beta          = num('lmm-beta',  p.beta);
     p.sd_participant= Math.max(0.0001, num('lmm-sdp',   p.sd_participant));
     p.sd_residual   = Math.max(0.0001, num('lmm-sde',   p.sd_residual));
+    p.sd_slope      = Math.max(0, num('lmm-sdslope', p.sd_slope || 0));
     p.n_trials      = Math.max(1, Math.round(num('lmm-nt', p.n_trials)));
     p.iterations    = Math.max(100, Math.min(20000, Math.round(num('lmm-iter', p.iterations))));
     p.cost_per_participant = Math.max(0, Math.round(num('lmm-cost', p.cost_per_participant)));
@@ -1618,6 +1691,8 @@ function syncFormToState() {
     p.sd_participant= Math.max(0.0001, num('lmm3-sdp',  p.sd_participant));
     p.sd_stimulus   = Math.max(0.0001, num('lmm3-sds',  p.sd_stimulus));
     p.sd_residual   = Math.max(0.0001, num('lmm3-sde',  p.sd_residual));
+    p.sd_slope_p    = Math.max(0, num('lmm3-sdslopep', p.sd_slope_p || 0));
+    p.sd_slope_s    = Math.max(0, num('lmm3-sdslopes', p.sd_slope_s || 0));
     p.n_stimuli     = Math.max(1, Math.round(num('lmm3-ns',  p.n_stimuli)));
     p.iterations    = Math.max(100, Math.min(20000, Math.round(num('lmm3-iter', p.iterations))));
     p.cost_per_participant = Math.max(0, Math.round(num('lmm3-cost', p.cost_per_participant)));
@@ -1679,6 +1754,8 @@ function doCalcLMM3() {
   const params = {
     n_p: p.n_participants, n_stim: p.n_stimuli, beta: p.beta,
     sd_p: p.sd_participant, sd_s: p.sd_stimulus, sd_e: p.sd_residual,
+    sd_slope_p: p.sd_slope_p || 0,  // v1042 参加者 ランダム傾き
+    sd_slope_s: p.sd_slope_s || 0,  // v1042 刺激 ランダム傾き
     alpha: state.alpha, iterations: p.iterations, tails: state.tails,
   };
   root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション 実行中… (${p.iterations.toLocaleString()} 回、 3-level)</div></div>`;
@@ -1732,6 +1809,7 @@ function doCalcLMM() {
     beta: p.beta,
     sd_p: p.sd_participant,
     sd_e: p.sd_residual,
+    sd_slope: p.sd_slope || 0,   // v1042 ランダム傾き
     alpha: state.alpha,
     iterations: p.iterations,
     tails: state.tails,
@@ -1767,10 +1845,10 @@ function renderLMMResult(res, t) {
   const p = res.params;
   const kind = res.kind || 'lmm';
   const paramLine = kind === 'lmm3'
-    ? `α=${p.alpha}, β=${p.beta}, σ_p=${p.sd_p}, σ_stim=${p.sd_s}, σ_e=${p.sd_e}, ${p.n_stim} 刺激 × 2 条件, iters=${p.iterations.toLocaleString()}`
+    ? `α=${p.alpha}, β=${p.beta}, σ_p=${p.sd_p}, σ_stim=${p.sd_s}, σ_e=${p.sd_e}${(p.sd_slope_p||0) > 0 ? ', σ_slope_p=' + p.sd_slope_p : ''}${(p.sd_slope_s||0) > 0 ? ', σ_slope_s=' + p.sd_slope_s : ''}, ${p.n_stim} 刺激 × 2 条件, iters=${p.iterations.toLocaleString()}`
     : kind === 'glmm'
       ? `α=${p.alpha}, p₀=${p.baseline_p}, p₁=${(state.glmm.proposed_p ?? probFromBaseAndOR(p.baseline_p, p.or)).toFixed(3)}, OR=${p.or.toFixed(2)}, σ_p=${p.sd_p}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`
-      : `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
+      : `α=${p.alpha}, β_effect=${p.beta}, σ_participant=${p.sd_p}, σ_residual=${p.sd_e}${(p.sd_slope||0) > 0 ? ', σ_slope=' + p.sd_slope : ''}, 試行 ${p.n_trials} × 2 条件, iters=${p.iterations.toLocaleString()}`;
   const perParticipantTrials = kind === 'lmm3' ? p.n_stim * 2 : p.n_trials * 2;
   let mainCard;
   if (res.mode === 'a_priori') {
@@ -1832,13 +1910,27 @@ function renderNarrativeCard(res, t, kind) {
 
   if (kind === 'lmm') {
     const nT = p.n_trials;
-    narrative = `A simulation-based power analysis was conducted to estimate the required sample size for a within-subject two-condition design analyzed with a linear mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from the model y_{p,c,t} = β·x_{p,c,t} + u_p + ε_{p,c,t}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²) is the participant random intercept and ε ~ N(0, ${p.sd_e.toFixed(2)}²) is the trial-level residual. Each participant contributed ${nT} trials per condition. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha} (${p.tails}-sided), the analysis showed that n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
-    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\n# fit a placeholder model with expected fixed effects\nn_p <- ${n_p}; n_trials <- ${nT}\nsim_data <- expand.grid(p = 1:n_p, trial = 1:n_trials, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p] + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + (1 | p), data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
-    pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.formula.api as smf, pandas as pd\nnp.random.seed(42)\nn_p, n_trials, iters = ${n_p}, ${nT}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)\n    rows = []\n    for p in range(n_p):\n        for t in range(n_trials):\n            for x in (0, 1):\n                rows.append((p, x, beta*x + u[p] + np.random.normal(0, sd_e)))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = smf.mixedlm('y ~ x', df, groups=df['p']).fit(reml=False)\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
+    const ss = p.sd_slope || 0;
+    const slopeTerm = ss > 0 ? ` and a random slope for x with SD ${ss.toFixed(2)} (participant-level heterogeneity of the condition effect)` : '';
+    const slopeR = ss > 0 ? `(1 + x | p)` : `(1 | p)`;
+    const slopeSim = ss > 0 ? ` + rnorm(n_p, 0, ${ss.toFixed(3)})[sim_data$p] * sim_data$x` : '';
+    const slopePy = ss > 0 ? ` + s[p]*x` : '';
+    const slopePyInit = ss > 0 ? `\n    s = np.random.normal(0, ${ss.toFixed(3)}, n_p)` : '';
+    narrative = `A simulation-based power analysis was conducted to estimate the required sample size for a within-subject two-condition design analyzed with a linear mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from the model y_{p,c,t} = β·x_{p,c,t} + u_p${ss > 0 ? ' + s_p·x_{p,c,t}' : ''} + ε_{p,c,t}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²) is the participant random intercept${slopeTerm} and ε ~ N(0, ${p.sd_e.toFixed(2)}²) is the trial-level residual. Each participant contributed ${nT} trials per condition. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha} (${p.tails}-sided), the analysis showed that n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\n# fit a placeholder model with expected fixed effects\nn_p <- ${n_p}; n_trials <- ${nT}\nsim_data <- expand.grid(p = 1:n_p, trial = 1:n_trials, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p]${slopeSim} + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + ${slopeR}, data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
+    pyCode = `# Python (statsmodels)\nimport numpy as np, statsmodels.formula.api as smf, pandas as pd\nnp.random.seed(42)\nn_p, n_trials, iters = ${n_p}, ${nT}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nsig = 0\nfor _ in range(iters):\n    u = np.random.normal(0, sd_p, n_p)${slopePyInit}\n    rows = []\n    for p in range(n_p):\n        for t in range(n_trials):\n            for x in (0, 1):\n                rows.append((p, x, beta*x + u[p]${slopePy} + np.random.normal(0, sd_e)))\n    df = pd.DataFrame(rows, columns=['p','x','y'])\n    m = smf.mixedlm('y ~ x', df, groups=df['p']).fit(reml=False)\n    if m.pvalues['x'] < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
   } else if (kind === 'lmm3') {
     const nS = p.n_stim;
-    narrative = `A simulation-based power analysis was conducted for a crossed within-subject design (participants × stimuli) analyzed with a linear mixed-effects model with crossed random intercepts. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from y_{p,s,c} = β·x_{p,s,c} + u_p + w_s + ε_{p,s,c}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²), w_s ~ N(0, ${p.sd_s.toFixed(2)}²), ε ~ N(0, ${p.sd_e.toFixed(2)}²). Each participant saw ${nS} stimuli in each of the two conditions. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
-    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\nn_p <- ${n_p}; n_s <- ${nS}\nsim_data <- expand.grid(p = 1:n_p, s = 1:n_s, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p] + rnorm(n_s, 0, ${p.sd_s.toFixed(3)})[sim_data$s] + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + (1 | p) + (1 | s), data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
+    const ssp = p.sd_slope_p || 0;
+    const sss = p.sd_slope_s || 0;
+    const slopePterm = ssp > 0 ? ` and a participant-level random slope for x with SD ${ssp.toFixed(2)}` : '';
+    const slopeSterm = sss > 0 ? ` and a stimulus-level random slope for x with SD ${sss.toFixed(2)}` : '';
+    const slopePR = ssp > 0 ? '(1 + x | p)' : '(1 | p)';
+    const slopeSR = sss > 0 ? '(1 + x | s)' : '(1 | s)';
+    const slopeSimP = ssp > 0 ? ` + rnorm(n_p, 0, ${ssp.toFixed(3)})[sim_data$p] * sim_data$x` : '';
+    const slopeSimS = sss > 0 ? ` + rnorm(n_s, 0, ${sss.toFixed(3)})[sim_data$s] * sim_data$x` : '';
+    narrative = `A simulation-based power analysis was conducted for a crossed within-subject design (participants × stimuli) analyzed with a linear mixed-effects model with crossed random intercepts${slopePterm}${slopeSterm}. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from y_{p,s,c} = β·x_{p,s,c} + u_p + w_s + ε_{p,s,c}, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²), w_s ~ N(0, ${p.sd_s.toFixed(2)}²), ε ~ N(0, ${p.sd_e.toFixed(2)}²). Each participant saw ${nS} stimuli in each of the two conditions. Under an expected fixed effect of β = ${p.beta} and α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
+    rCode = `# R (simr / lme4)\nlibrary(lme4); library(simr)\nn_p <- ${n_p}; n_s <- ${nS}\nsim_data <- expand.grid(p = 1:n_p, s = 1:n_s, x = c(0, 1))\nsim_data$y <- ${p.beta} * sim_data$x + rnorm(n_p, 0, ${p.sd_p.toFixed(3)})[sim_data$p]${slopeSimP} + rnorm(n_s, 0, ${p.sd_s.toFixed(3)})[sim_data$s]${slopeSimS} + rnorm(nrow(sim_data), 0, ${p.sd_e.toFixed(3)})\nfit <- lmer(y ~ x + ${slopePR} + ${slopeSR}, data = sim_data)\npower_res <- powerSim(fit, nsim = ${Math.min(p.iterations, 1000)}, test = fixed('x'), alpha = ${p.alpha})\nprint(power_res)  # expected ≈ ${(power*100).toFixed(1)}%`;
     pyCode = `# Python (statsmodels) — approximated (statsmodels does not support crossed random effects directly)\n# Use pymer4 or rpy2 for full lme4 semantics.\nimport numpy as np\nnp.random.seed(42)\nn_p, n_s, iters = ${n_p}, ${nS}, ${Math.min(p.iterations, 1000)}\nbeta, sd_p, sd_s, sd_e, alpha = ${p.beta}, ${p.sd_p.toFixed(3)}, ${p.sd_s.toFixed(3)}, ${p.sd_e.toFixed(3)}, ${p.alpha}\nfrom scipy.stats import ttest_1samp\nsig = 0\nfor _ in range(iters):\n    diffs = []\n    for p in range(n_p):\n        diff = 0.0\n        for s in range(n_s):\n            diff += (beta + np.random.normal(0, sd_e) - np.random.normal(0, sd_e))\n        diffs.append(diff / n_s)\n    t, pv = ttest_1samp(diffs, 0.0)\n    if pv < alpha: sig += 1\nprint(f'Power ≈ {sig/iters:.1%}')`;
   } else if (kind === 'glmm') {
     narrative = `A simulation-based power analysis was conducted for a within-subject binary outcome analyzed with a logistic mixed-effects model. For each of ${p.iterations.toLocaleString()} simulated datasets, we generated data from logit(P(y=1)) = β0 + β1·x + u_p, where u_p ~ N(0, ${p.sd_p.toFixed(2)}²). The baseline probability was p₀ = ${p.baseline_p} and the proposed-condition probability was p₁ ≈ ${(state.glmm.proposed_p ?? probFromBaseAndOR(p.baseline_p, p.or)).toFixed(3)}, corresponding to an odds ratio of OR = ${p.or.toFixed(2)} (β1 = log(OR) = ${Math.log(p.or).toFixed(3)}). Each participant contributed ${p.n_trials} trials per condition. Under α = ${p.alpha}, n_p = ${n_p} participants yields a power of ${(power*100).toFixed(1)}% (95% CI ${(ci[0]*100).toFixed(1)}−${(ci[1]*100).toFixed(1)}%).`;
@@ -2223,9 +2315,9 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
     { label: '両方 +25%', n_p: Math.ceil(baseN * 1.25), n_t: Math.ceil(baseT * 1.25) },
   ];
   const runSim = (n_p, n_t) => {
-    if (kind === 'lmm3') return simulateLMM3({ n_p, n_stim: n_t, beta: p.beta, sd_p: p.sd_p, sd_s: p.sd_s, sd_e: p.sd_e, alpha: p.alpha, iterations: 500, tails: p.tails });
+    if (kind === 'lmm3') return simulateLMM3({ n_p, n_stim: n_t, beta: p.beta, sd_p: p.sd_p, sd_s: p.sd_s, sd_e: p.sd_e, sd_slope_p: p.sd_slope_p || 0, sd_slope_s: p.sd_slope_s || 0, alpha: p.alpha, iterations: 500, tails: p.tails });
     if (kind === 'glmm') return simulateGLMM({ n_p, n_trials: n_t, baseline_p: p.baseline_p, or: p.or, sd_p: p.sd_p, alpha: p.alpha, iterations: 500, tails: p.tails });
-    return simulateLMM({ n_p, n_trials: n_t, beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e, alpha: p.alpha, iterations: 500, tails: p.tails });
+    return simulateLMM({ n_p, n_trials: n_t, beta: p.beta, sd_p: p.sd_p, sd_e: p.sd_e, sd_slope: p.sd_slope || 0, alpha: p.alpha, iterations: 500, tails: p.tails });
   };
   const rows = strategies.map(st => {
     const power = runSim(st.n_p, st.n_t).power;
@@ -2783,11 +2875,11 @@ function renderSensitivityCurve() {
       try {
         if (state.test === 'lmm_within') {
           const p = state.lmm;
-          const r = simulateLMM({ n_p: nowN, n_trials: p.n_trials, beta: e, sd_p: p.sd_participant, sd_e: p.sd_residual, alpha: state.alpha, iterations: 100, tails: state.tails });
+          const r = simulateLMM({ n_p: nowN, n_trials: p.n_trials, beta: e, sd_p: p.sd_participant, sd_e: p.sd_residual, sd_slope: p.sd_slope || 0, alpha: state.alpha, iterations: 100, tails: state.tails });
           power = r.power;
         } else if (state.test === 'lmm_crossed') {
           const p = state.lmm3;
-          const r = simulateLMM3({ n_p: nowN, n_stimuli: p.n_stimuli, beta: e, sd_p: p.sd_participant, sd_s: p.sd_stimulus, sd_e: p.sd_residual, alpha: state.alpha, iterations: 100, tails: state.tails });
+          const r = simulateLMM3({ n_p: nowN, n_stim: p.n_stimuli, beta: e, sd_p: p.sd_participant, sd_s: p.sd_stimulus, sd_e: p.sd_residual, sd_slope_p: p.sd_slope_p || 0, sd_slope_s: p.sd_slope_s || 0, alpha: state.alpha, iterations: 100, tails: state.tails });
           power = r.power;
         } else if (state.test === 'glmm_logit') {
           const p = state.glmm;
