@@ -161,7 +161,112 @@ function calc_chi_squared(alpha, w, df, mode, N, powerTarget) {
   }
 }
 
-// ---------------- 効果量 ヘルパー ----------------
+// ---------------- v1028 データ タイプ + 実測ベース入力 ----------------
+const DATA_TYPES = [
+  { id: 'likert7',     label: 'リッカート 7 段階 (1-7)',       meanRange: [1, 7],    sdRange: [0.3, 3],   step: 0.1 },
+  { id: 'likert5',     label: 'リッカート 5 段階 (1-5)',       meanRange: [1, 5],    sdRange: [0.2, 2],   step: 0.1 },
+  { id: 'continuous',  label: '連続値 (反応時間 / スコア 等)',  meanRange: [null, null], sdRange: [0.0001, null], step: 0.01 },
+  { id: 'percentage',  label: '割合 (0-100%)',                meanRange: [0, 100],  sdRange: [0.01, 50], step: 0.1 },
+];
+function dtDef() { return DATA_TYPES.find(x => x.id === state.dataType) || DATA_TYPES[0]; }
+
+// 実測 → d を 導出
+function derivedDFromRaw() {
+  if (state.test === 't2') {
+    const { mean: mA, sd: sdA } = state.rawA;
+    const { mean: mB, sd: sdB } = state.rawB;
+    if ([mA, mB, sdA, sdB].some(v => !isFinite(v)) || sdA <= 0 || sdB <= 0) return null;
+    const pooled = Math.sqrt((sdA * sdA + sdB * sdB) / 2);
+    return Math.abs(mA - mB) / pooled;
+  }
+  if (state.test === 'tp' || state.test === 't1') {
+    const { mean: m, sd } = state.rawDiff;
+    if (!isFinite(m) || !isFinite(sd) || sd <= 0) return null;
+    return Math.abs(m) / sd;
+  }
+  return null;
+}
+
+// d を 「小/中/大」ラベルに
+function dLabel(d) {
+  if (d < 0.2) return '極小';
+  if (d < 0.35) return '小 (d≈0.2)';
+  if (d < 0.65) return '中 (d≈0.5)';
+  if (d < 1.0) return '大 (d≈0.8)';
+  return '極大';
+}
+
+function renderRawInputs() {
+  if (!['t2','tp','t1'].includes(state.test)) return '';
+  const dt = dtDef();
+  const [mMin, mMax] = dt.meanRange;
+  const [sdMin, sdMax] = dt.sdRange;
+  const derived = derivedDFromRaw();
+  const dtSelect = `
+    <label class="field">
+      <span class="lbl">📏 データ の 種類</span>
+      <select id="pw-dtype">
+        ${DATA_TYPES.map(x => `<option value="${x.id}" ${x.id===state.dataType?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
+      </select>
+    </label>`;
+  const rangeHint = `平均 ${mMin ?? '−∞'} 〜 ${mMax ?? '∞'} / SD ${sdMin} 〜 ${sdMax ?? '∞'}`;
+  const twoGroupInputs = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px">
+      <div style="padding:8px; background:#eff6ff; border-radius:6px; border-left:3px solid #2563eb">
+        <div class="bold" style="color:#2563eb; font-size:12px; margin-bottom:4px">👤 手法 A / 群 A</div>
+        <label class="field" style="margin-bottom:6px"><span class="lbl">予想 平均</span>
+          <input type="number" id="raw-mA" step="${dt.step}" value="${state.rawA.mean}">
+        </label>
+        <label class="field"><span class="lbl">予想 SD</span>
+          <input type="number" id="raw-sA" step="${dt.step}" min="0.0001" value="${state.rawA.sd}">
+        </label>
+      </div>
+      <div style="padding:8px; background:#fff7ed; border-radius:6px; border-left:3px solid #ea580c">
+        <div class="bold" style="color:#ea580c; font-size:12px; margin-bottom:4px">👥 手法 B / 群 B</div>
+        <label class="field" style="margin-bottom:6px"><span class="lbl">予想 平均</span>
+          <input type="number" id="raw-mB" step="${dt.step}" value="${state.rawB.mean}">
+        </label>
+        <label class="field"><span class="lbl">予想 SD</span>
+          <input type="number" id="raw-sB" step="${dt.step}" min="0.0001" value="${state.rawB.sd}">
+        </label>
+      </div>
+    </div>`;
+  const diffInputs = `
+    <div style="padding:8px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0; margin-top:8px">
+      <div class="bold" style="color:#7b3fa0; font-size:12px; margin-bottom:4px">${state.test==='tp' ? '📎 差 (Before − After 等)' : '👤 観測 − 基準'}</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+        <label class="field"><span class="lbl">予想 平均</span>
+          <input type="number" id="raw-mD" step="${dt.step}" value="${state.rawDiff.mean}">
+        </label>
+        <label class="field"><span class="lbl">予想 SD</span>
+          <input type="number" id="raw-sD" step="${dt.step}" min="0.0001" value="${state.rawDiff.sd}">
+        </label>
+      </div>
+    </div>`;
+  const derivedBox = derived === null
+    ? '<div class="hint-sm" style="margin-top:8px; color:#a16207">値を 全部 入れると 効果量 d が 出ます</div>'
+    : `<div class="card" style="margin-top:8px; background:linear-gradient(90deg, #ede4f333, #fff); border-left:4px solid #7b3fa0">
+         <div style="font-size:15px">→ 予想効果量 <b style="color:#7b3fa0">d = ${derived.toFixed(3)}</b> <span style="color:#6b7280">(${dLabel(derived)})</span></div>
+         <div class="hint-sm" style="margin-top:2px">これを 下の 「効果量」 欄 に 自動反映 して 計算 します。</div>
+       </div>`;
+  // v1028 中村さん指示 「今の方法を残しておいても良い。 ただ、 オプションで
+  //   そういうのが 欲しい」 → 上の 効果量 直接入力 は そのまま残し、 これは
+  //   折り畳み <details> で オプション 提供。
+  return `
+    <details class="card" style="background:#fafaf5; border:1px solid #f3f4f6">
+      <summary style="cursor:pointer; font-weight:600">🎯 (オプション) 予想データ (平均 + SD) から 効果量 を 導く</summary>
+      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れると 効果量 d を 自動計算 して 上の 効果量欄 に 反映 します。 データ 型 に 応じて 妥当な 範囲 を 案内。</div>
+      ${dtSelect}
+      <div class="hint-sm" style="font-size:11px; margin-top:2px">目安: ${escapeHtml(rangeHint)}</div>
+      ${state.test === 't2' ? twoGroupInputs : diffInputs}
+      ${derivedBox}
+      <div class="row" style="gap:6px; margin-top:8px">
+        <button id="raw-apply" class="btn primary" style="font-size:12px">→ この d を 効果量欄に 入れる</button>
+      </div>
+    </details>`;
+}
+
+// ---------------- 効果量 ヘルパー (旧: 詳しい人向け) ----------------
 // 中村さん指摘「効果量は先行研究の平均SDから計算するか、 パイロット、 メタ分析、 分野の
 //   慣習で決めるのが望ましい。 ここをなんとか支援できないか」→ 先行研究 / パイロット の
 //   値 を 入れて 効果量 を 逆算 する 補助 UI。 検定 タイプ 別 に 現実的 な 入力 セット を 出す。
@@ -324,6 +429,14 @@ const state = {
   n_total: 60,
   k: 3,              // ANOVA 群数
   df: 1,             // χ² 自由度
+  // v1028 中村さん提案「実測ベース で 平均 / SD から d を 導く 方が 直感的」
+  //   dataType: 'continuous' | 'likert5' | 'likert7' | 'percentage' | 'binary'
+  //   rawA, rawB: それぞれ の 群 の { mean, sd }
+  //   rawDiff:    対応あり / 1 標本 の 差分 { mean, sd }
+  dataType: 'likert7',
+  rawA: { mean: 4.0, sd: 1.2 },
+  rawB: { mean: 4.6, sd: 1.2 },
+  rawDiff: { mean: 0.6, sd: 1.2 },
   // v1026 保存 / 共有 メタ
   loaded_id: 0,       // 現在ロード中の power_analyses.id (0 = 新規)
   loaded_name: '',
@@ -445,6 +558,7 @@ function render() {
       </div>
 
       ${renderEffectHelper()}
+      ${renderRawInputs()}
 
       <div class="row" style="margin-top:12px">
         <button id="pw-calc" class="btn primary" style="padding:8px 24px; font-size:14px">🧮 計算</button>
@@ -483,6 +597,41 @@ function render() {
   // v1024b 効果量ヘルパー (先行研究 の 値 から 効果量 を 逆算)
   document.querySelectorAll('[data-eh-calc]').forEach(b => {
     b.addEventListener('click', () => computeEffectFromHelper(b.dataset.ehCalc));
+  });
+  // v1028 実測ベース 入力 → d 自動導出
+  const dtypeSel = document.getElementById('pw-dtype');
+  if (dtypeSel) dtypeSel.addEventListener('change', (e) => { state.dataType = e.target.value; render(); });
+  const rawUpdate = () => {
+    if (state.test === 't2') {
+      const mA = parseFloat(document.getElementById('raw-mA')?.value);
+      const sA = parseFloat(document.getElementById('raw-sA')?.value);
+      const mB = parseFloat(document.getElementById('raw-mB')?.value);
+      const sB = parseFloat(document.getElementById('raw-sB')?.value);
+      if (!isNaN(mA)) state.rawA.mean = mA;
+      if (!isNaN(sA)) state.rawA.sd = sA;
+      if (!isNaN(mB)) state.rawB.mean = mB;
+      if (!isNaN(sB)) state.rawB.sd = sB;
+    } else if (['tp','t1'].includes(state.test)) {
+      const m = parseFloat(document.getElementById('raw-mD')?.value);
+      const s = parseFloat(document.getElementById('raw-sD')?.value);
+      if (!isNaN(m)) state.rawDiff.mean = m;
+      if (!isNaN(s)) state.rawDiff.sd = s;
+    }
+    // 派生 d の 表示 だけ 更新 (再 render まで やる と 入力 中に focus 抜ける)
+    const derived = derivedDFromRaw();
+    // 上書き は しない (ユーザが 明示的 に ボタン を 押した ときのみ 適用) — dLabel 表示だけ 更新
+  };
+  ['raw-mA','raw-sA','raw-mB','raw-sB','raw-mD','raw-sD'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', rawUpdate);
+  });
+  document.getElementById('raw-apply')?.addEventListener('click', () => {
+    rawUpdate();
+    const d = derivedDFromRaw();
+    if (d === null) return;
+    state.effect = Math.round(d * 1000) / 1000;
+    const el = document.getElementById('pw-effect');
+    if (el) el.value = state.effect;
+    render();
   });
   document.getElementById('pw-calc').addEventListener('click', doCalc);
   // v1026 保存 / 共有 / 削除 / 新規
