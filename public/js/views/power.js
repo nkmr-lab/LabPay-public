@@ -63,81 +63,147 @@ function qnorm(p) {
 
 // ---------------- 検定別の計算 ----------------
 
+// v1051 中村さん指摘「N が思った以上に小さく出ることがある」への修正:
+//   従来は z_{α/2} で critical value を近似していたが、 df が小さいと t_crit > z なので
+//   必要 n を 過少評価 していた (paired/1-sample t で -6%、d=0.5 で 32 vs G*Power 34)。
+//   → 正解: qt(1-α/tails, n-1) を使う。 non-central t 分布 は 「平均 ncp、 分散 1 の
+//   正規分布」 で 近似 (Owen 系近似で df 補正、 大きな df では ほぼ正確)。
+//
 // 2 標本 t 検定 (独立、等分散、群サイズ等しい)。 tails: 1 or 2。
-// A priori: n_per_group を返す。 Post hoc: power を返す。
 function calc_ttest_two_sample(alpha, effect_d, tails, mode, nPerGroup, powerTarget) {
-  const za = qnorm(1 - alpha / tails);
+  const compute_power = (nPer) => {
+    if (nPer < 2) return 0;
+    const df = 2 * nPer - 2;
+    const t_crit = qt(1 - alpha / tails, df);
+    // non-central t の 検定力の 近似 (Johnson-Welch)。
+    // ncp = d × √(n/2)、 大きな df で non-central t は N(ncp, 1)。
+    const ncp = effect_d * Math.sqrt(nPer / 2);
+    // 分散 補正: √(1 + ncp²/(2×df)) を SD に掛ける (df 補正)。
+    const sd_ncp = Math.sqrt(1 + (ncp * ncp) / (2 * df));
+    const p_upper = pnorm((ncp - t_crit) / sd_ncp);
+    const p_lower = tails === 2 ? pnorm((-ncp - t_crit) / sd_ncp) : 0;
+    return Math.max(0, Math.min(1, p_upper + p_lower));
+  };
   if (mode === 'a_priori') {
-    const zb = qnorm(powerTarget);
-    // n_per_group = 2 * (z_a + z_b)^2 / d^2 (等分散、等 n)
-    const n = 2 * Math.pow(za + zb, 2) / (effect_d * effect_d);
-    return { n_per_group: Math.ceil(n), n_total: Math.ceil(n) * 2 };
+    let lo = 2, hi = 100000;
+    if (compute_power(hi) < powerTarget) return { n_per_group: hi, n_total: hi * 2 };
+    while (hi - lo > 1) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (compute_power(mid) < powerTarget) lo = mid; else hi = mid;
+    }
+    return { n_per_group: hi, n_total: hi * 2 };
   } else {
-    // power = Φ(d * sqrt(n/2) - z_a)  (片側部分)
-    const ncp = effect_d * Math.sqrt(nPerGroup / 2);
-    const p = pnorm(ncp - za) + (tails === 2 ? pnorm(-ncp - za) : 0);
-    return { power: Math.max(0, Math.min(1, p)) };
+    return { power: compute_power(nPerGroup) };
   }
 }
 
 // 対応のある t 検定 / 1 標本 t 検定 (共通式)。 tails: 1 or 2。
 function calc_ttest_paired(alpha, effect_d, tails, mode, n, powerTarget) {
-  const za = qnorm(1 - alpha / tails);
+  const compute_power = (nN) => {
+    if (nN < 2) return 0;
+    const df = nN - 1;
+    const t_crit = qt(1 - alpha / tails, df);
+    const ncp = effect_d * Math.sqrt(nN);
+    const sd_ncp = Math.sqrt(1 + (ncp * ncp) / (2 * df));
+    const p_upper = pnorm((ncp - t_crit) / sd_ncp);
+    const p_lower = tails === 2 ? pnorm((-ncp - t_crit) / sd_ncp) : 0;
+    return Math.max(0, Math.min(1, p_upper + p_lower));
+  };
   if (mode === 'a_priori') {
-    const zb = qnorm(powerTarget);
-    const nn = Math.pow(za + zb, 2) / (effect_d * effect_d);
-    return { n_total: Math.ceil(nn) };
+    let lo = 2, hi = 100000;
+    if (compute_power(hi) < powerTarget) return { n_total: hi };
+    while (hi - lo > 1) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (compute_power(mid) < powerTarget) lo = mid; else hi = mid;
+    }
+    return { n_total: hi };
   } else {
-    const ncp = effect_d * Math.sqrt(n);
-    const p = pnorm(ncp - za) + (tails === 2 ? pnorm(-ncp - za) : 0);
-    return { power: Math.max(0, Math.min(1, p)) };
+    return { power: compute_power(n) };
   }
 }
 
+// Wilson-Hilferty (1931) による χ² と 非心 χ² の 正規変換。 (X/(df+λ))^(1/3) が
+//   平均 1-2(df+2λ)/(9(df+λ)²)、 分散 2(df+2λ)/(9(df+λ)²) の 正規分布に 従う。
+function wilsonHilferty_chiCrit(df, alpha) {
+  // χ²_{α, df} の 上側 α 分位点
+  const a = 2 / (9 * df);
+  return df * Math.pow(1 - a + qnorm(1 - alpha) * Math.sqrt(a), 3);
+}
+function wilsonHilferty_ncChiPower(chi_crit, df, lambda) {
+  // 非心 χ²(df, λ) が chi_crit を 超える確率
+  const denom = df + lambda;
+  if (denom <= 0) return 0;
+  const y = Math.pow(chi_crit / denom, 1 / 3);
+  const mu = 1 - 2 * (df + 2 * lambda) / (9 * denom * denom);
+  const sigma_sq = 2 * (df + 2 * lambda) / (9 * denom * denom);
+  const sigma = Math.sqrt(Math.max(1e-12, sigma_sq));
+  return 1 - pnorm((y - mu) / sigma);
+}
+
 // 一元配置 ANOVA。 k = 群数、 f = Cohen's f 効果量。
-//   古典的な近似: N_total ≈ (z_a + z_b)^2 * (1 + (k-1)/2) / f^2
-//   より精確 (Cohen 1988): 非心 F を使う。ここでは簡易に λ = f² × N を使い、
-//   critical F ≈ (z_a + √(2*(k-1)))^2 / (2*(k-1)) から逆算。
-//   MVP: 正規近似版 N = ((z_a + z_b)² × k) / f²  (k 群、各群 n = N/k を想定)。
+//   v1051 修正: 従来 (z_a+z_b)² × k / f² だと k=3, f=0.25, power=0.8 で N=297 と過大。
+//   非心 F 分布 は df2 が 大きい 極限 で 非心 χ²(k-1, λ) / (k-1) に 収束。 λ = N × f²。
+//   Wilson-Hilferty (1931) + 有限 df2 補正 で G*Power と 数% 差。
 function calc_anova(alpha, effect_f, k, mode, N, powerTarget) {
-  const za = qnorm(1 - alpha);
+  const df1 = k - 1;
+  const chi_crit_inf = wilsonHilferty_chiCrit(df1, alpha);
+  // F(df1, df2) > χ²(df1)/df1 for finite df2 (F は 常に 上に振れる)。
+  //   F_crit(df1, df2) ≈ χ²_crit × (1 + 2/df2 × (df1+2)/df1) の 1 次補正 で
+  //   G*Power の 非心 F と 数% 差 まで 詰められる。
+  const compute_power = (Nt) => {
+    if (Nt < k + 1) return 0;
+    const df2 = Math.max(1, Nt - k);
+    const correction = 1 + (2 / df2) * (df1 + 2) / df1;
+    const chi_crit_adj = chi_crit_inf * correction;
+    const lambda = Nt * effect_f * effect_f;
+    return wilsonHilferty_ncChiPower(chi_crit_adj, df1, lambda);
+  };
   if (mode === 'a_priori') {
-    const zb = qnorm(powerTarget);
-    // λ = N × f²、検定力 ≈ Φ(√λ - z_a × √(1 + ...))
-    // シンプル近似: N = ((z_a + z_b)² × k) / f²  (k でスケール)
-    const Ntot = Math.pow(za + zb, 2) * k / (effect_f * effect_f);
-    return { n_per_group: Math.ceil(Ntot / k), n_total: Math.ceil(Ntot / k) * k };
+    let lo = k, hi = 1000000;
+    if (compute_power(hi) < powerTarget) return { n_per_group: Math.ceil(hi / k), n_total: Math.ceil(hi / k) * k };
+    while (hi - lo > 1) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (compute_power(mid) < powerTarget) lo = mid; else hi = mid;
+    }
+    return { n_per_group: Math.ceil(hi / k), n_total: Math.ceil(hi / k) * k };
   } else {
-    // λ = N × f² ; power ≈ Φ(√λ - z_a)
-    const lambda = N * effect_f * effect_f;
-    const p = pnorm(Math.sqrt(lambda) - za);
-    return { power: Math.max(0, Math.min(1, p)) };
+    return { power: compute_power(N) };
   }
 }
 
 // v1041 反復測定 ANOVA (within-factor、 1 群、 k 測定/条件)。
-//   G*Power と同じ非心 F 型の公式の正規近似:
+//   G*Power と同じ非心 F 型の公式:
 //     λ = n × k × f² / (1 - ρ) × ε
-//     df1 = (k-1) × ε, df2 = (n-1) × (k-1) × ε
+//     df1 = (k-1) × ε
 //   ρ: 測定間相関 (0-1、デフォルト 0.5)。高いほど個人差がキャンセルされて検定力↑
 //   ε: 球面性補正 (0 < ε ≤ 1、デフォルト 1)。 Greenhouse-Geisser / Huynh-Feldt で補正
 //     する場合は 0.5 - 0.9 程度に。
-//   参加者内デザインでは ρ が 0.5 でも独立 ANOVA より 2 倍近く検定力↑ になるため、
-//   独立 ANOVA と同じ f を想定した場合の必要 n は大幅に少ない。
+//   v1051 修正: 独立 ANOVA と 同じ Wilson-Hilferty + 有限 df2 補正 で 高精度化。
 function calc_rmanova(alpha, effect_f, k, rho, epsilon, mode, N, powerTarget) {
   const rho_c = Math.max(0.001, Math.min(0.999, rho));
   const eps_c = Math.max(0.001, Math.min(1.0, epsilon));
-  const factor = k / (1 - rho_c) * eps_c;  // f² にかかる係数
-  const za = qnorm(1 - alpha);
+  const factor = k / (1 - rho_c) * eps_c;
+  const df1 = Math.max(1, (k - 1) * eps_c);
+  const chi_crit_inf = wilsonHilferty_chiCrit(df1, alpha);
+  const compute_power = (Nt) => {
+    if (Nt < 3) return 0;
+    // rmANOVA の df2 = (n-1) × (k-1) × ε ≈ (Nt-1) × df1
+    const df2 = Math.max(1, (Nt - 1) * (k - 1) * eps_c);
+    const correction = 1 + (2 / df2) * (df1 + 2) / df1;
+    const chi_crit_adj = chi_crit_inf * correction;
+    const lambda = Nt * effect_f * effect_f * factor;
+    return wilsonHilferty_ncChiPower(chi_crit_adj, df1, lambda);
+  };
   if (mode === 'a_priori') {
-    const zb = qnorm(powerTarget);
-    // λ = N × factor × f²、検定力 ≈ Φ(√λ - z_α)  ← 独立 ANOVA と同じ正規近似
-    const n = Math.pow(za + zb, 2) / (effect_f * effect_f * factor);
-    return { n_total: Math.max(3, Math.ceil(n)) };
+    let lo = 3, hi = 100000;
+    if (compute_power(hi) < powerTarget) return { n_total: hi };
+    while (hi - lo > 1) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (compute_power(mid) < powerTarget) lo = mid; else hi = mid;
+    }
+    return { n_total: hi };
   } else {
-    const lambda = N * effect_f * effect_f * factor;
-    const p = pnorm(Math.sqrt(lambda) - za);
-    return { power: Math.max(0, Math.min(1, p)) };
+    return { power: compute_power(N) };
   }
 }
 
@@ -162,28 +228,20 @@ function calc_correlation(alpha, r, tails, mode, n, powerTarget) {
 // χ² 検定。 df 指定、効果量 w (Cohen's w)。 λ = N × w²、検定力 ≈ Φ((√(2λ) - √(2 × df_c)))
 //   ここでは df_c = df_null + λ 近似で正規化する簡易版。
 function calc_chi_squared(alpha, w, df, mode, N, powerTarget) {
-  // critical χ² を正規近似で: χ²_{α, df} ≈ df + √(2 × df) × z_α + 追加項 (ここでは略)
-  const chi_crit = df + Math.sqrt(2 * df) * qnorm(1 - alpha);
+  // v1051 Wilson-Hilferty 変換 で 高精度化 (従来 は df + √(2df) × z_α だった)
+  const chi_crit = wilsonHilferty_chiCrit(df, alpha);
   if (mode === 'a_priori') {
-    // 目標 power から λ を逆算 (正規化近似): power = 1 - Φ((chi_crit - (df+λ)) / √(2(df + 2λ)))
-    //   これを λ について数値解。
-    const target = powerTarget;
-    // λ 探索: 二分探索
-    let lo = 0, hi = 1000, mid;
+    let lo = 0, hi = 5000, mid;
     for (let iter = 0; iter < 60; iter++) {
       mid = (lo + hi) / 2;
-      const denom = Math.sqrt(2 * (df + 2 * mid));
-      const p = 1 - pnorm((chi_crit - (df + mid)) / denom);
-      if (p < target) lo = mid; else hi = mid;
+      const p = wilsonHilferty_ncChiPower(chi_crit, df, mid);
+      if (p < powerTarget) lo = mid; else hi = mid;
     }
     const lambda = mid;
-    const N = lambda / (w * w);
-    return { n_total: Math.ceil(N) };
+    return { n_total: Math.ceil(lambda / (w * w)) };
   } else {
     const lambda = N * w * w;
-    const denom = Math.sqrt(2 * (df + 2 * lambda));
-    const p = 1 - pnorm((chi_crit - (df + lambda)) / denom);
-    return { power: Math.max(0, Math.min(1, p)) };
+    return { power: wilsonHilferty_ncChiPower(chi_crit, df, lambda) };
   }
 }
 
@@ -1723,20 +1781,20 @@ function render() {
              <input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px; margin-top:6px">`,
     }) : stepBlock({
       title: '⑤ サンプルサイズ',
-      desc: state.test === 't2' ? '手元 or 予定の各群のサンプルサイズ n。' : '手元 or 予定の全体サンプルサイズ N。',
+      desc: state.test === 't2' ? '手元 or 予定の 1 手法あたりの参加者数 n (各群 or 各条件)。' : '手元 or 予定の全体参加者数 N。',
       body: `<input type="number" id="pw-n" step="1" min="2" value="${state.test==='t2' ? state.n_per_group : state.n_total}" style="width:120px">
-             <div class="hint-sm" style="margin-top:6px">${state.test === 't2' ? '各群 n の値 (全体 N は自動で 2n)' : '全体 N の値'}</div>`,
+             <div class="hint-sm" style="margin-top:6px">${state.test === 't2' ? '1 手法あたりの参加者数 (全体は自動で 2n)' : '全体参加者数'}</div>`,
     })}
 
     ${state.test==='anova' ? stepBlock({
-      title: '⑤-a 群数 k',
-      desc: 'ANOVA で比較する群の数 (例: 3 条件なら k=3)。',
+      title: '⑤-a 比較する手法 (or 群・条件) の数 k',
+      desc: 'ANOVA で比較する手法・群・条件の数。例: 「提案 A・従来 B・比較 C」 の 3 手法なら k=3。',
       body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
     }) : ''}
 
     ${state.test==='rmanova' ? stepBlock({
-      title: '⑤-a 測定回数 k',
-      desc: '同じ参加者で繰り返す測定 (条件 or 時点) の数 (例: 3 条件なら k=3、前中後なら k=3)。',
+      title: '⑤-a 測定回数 (手法・条件・時点の数) k',
+      desc: '同じ参加者で繰り返す測定の数。例: 「提案 A・従来 B・比較 C の 3 手法をすべて 試す」 なら k=3、「前・中・後の 3 時点で 測る」 なら k=3。',
       body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
     }) : ''}
 
@@ -2984,14 +3042,16 @@ function renderTestWizard() {
           ${opt('scale', 'relation', '2 変数の関係 (相関)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
-          <div><b>Q2. 比較する群の数？</b></div>
+          <div><b>Q2. 比較する手法 (or 条件・群) の数？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">検証する手法 (提案手法・比較手法) の数を選んでください。「提案 A と 従来 B の 2 つを比較」なら 2、「A・B・C・D の 4 手法を比較」なら 3 以上。 群/条件/水準 と 呼び方は違いますが 実質同じ意味。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-            ${opt('groups', '1', '1 群 (基準値との比較)')}
-            ${opt('groups', '2', '2 群')}
-            ${opt('groups', '3plus', '3 群以上')}
+            ${opt('groups', '1', '1 手法 (基準値との比較)')}
+            ${opt('groups', '2', '2 手法')}
+            ${opt('groups', '3plus', '3 手法以上')}
           </div>` : ''}
         ${['continuous','ordinal'].includes(s) && ['2','3plus'].includes(g) ? `
-          <div><b>Q3. 群の関係？</b></div>
+          <div><b>Q3. 手法 (or 条件) 間の関係？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">「別々の参加者に それぞれ 1 手法を試してもらう」 なら 独立。「同じ 参加者に すべての 手法を 順番に 試してもらう」 なら 対応 (被験者内デザイン)。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('related', 'indep', '独立 (別の参加者)')}
             ${opt('related', 'paired', '対応 (同じ参加者、前後 or 条件)')}
