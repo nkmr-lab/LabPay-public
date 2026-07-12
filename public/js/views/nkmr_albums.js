@@ -6,6 +6,7 @@
 import { escapeHtml } from '../router.js';
 import { get, post, patch, del } from '../api.js';
 import { state } from '../app.js';
+import { openModal } from '../modal.js';
 
 // メモリ 内 キャッシュ (タブ 切替 で リセット)
 const thumbCache = {};   // { url: '/api/album-thumbs/photo/<hash>' | null }
@@ -131,16 +132,19 @@ function flagToCountry(flag) {
 // v970.13 タイトル 内 の 括弧 (…) は 大抵 参加 者 名 リスト。 「福井、飯田、…」 の 名前
 //   だけ の 括弧 は 場所 検出 から 除外。 一方 「佐賀県警、…」 の ように 「県 / 都 / 府」
 //   マーカー を 含む 括弧 は 場所 情報 として 残す。
+// v1011 中村さん 「場所 が 明示的に 記述 されて いる 場合 は、 タイトル では なく その 場所
+//   を 優先。 場所 は カンマ or ・ or 、 で 複数 記述 可」。 → location あり なら title は 見ない、
+//   location を [,、・] で 分割 して 複数 場所 に する。
 function scanTargetsFor(album) {
-  const targets = [];
   const loc = String(album.location || '').trim();
-  if (loc) targets.push(loc);
+  if (loc) {
+    return loc.split(/\s*[,、・]\s*/u).map(s => s.trim()).filter(Boolean);
+  }
   let title = String(album.title || '');
   title = title.replace(/[（(]([^）)]*)[）)]/gu, (_, inner) => {
     return /[県都府]/.test(inner) ? inner : '';
   });
-  targets.push(title);
-  return targets;
+  return [title];
 }
 
 // v970.12 タイトル/location から 複数 都道府県 を 抽出。 マッチ 無し は 東京都 fallback。
@@ -234,8 +238,6 @@ function render() {
   else if (sortMode !== 'section') content = renderFlat();
   else content = sections.map(renderSectionCard).join('');
 
-  const editingAlbum = editingId ? sections.flatMap(s => s.albums).find(x => x.id === editingId) : null;
-
   app.innerHTML = `
     <div class="card">
       <h2 style="margin:0">📸 中村研アルバム</h2>
@@ -250,7 +252,7 @@ function render() {
         <button data-nkm-sort="old"      class="${sortMode==='old'     ?'primary':''}" style="font-size:12px; padding:4px 10px">古い順</button>
         <button data-nkm-sort="location" class="${sortMode==='location'?'primary':''}" style="font-size:12px; padding:4px 10px">場所別</button>
         <span style="flex:1"></span>
-        <button data-nkm-add class="primary" style="font-size:12px; padding:4px 10px">${showAddForm && !editingAlbum ? '× 閉じる' : '＋ 追加'}</button>
+        <button data-nkm-add class="primary" style="font-size:12px; padding:4px 10px">${showAddForm ? '× 閉じる' : '＋ 追加'}</button>
       </div>
       ${sortMode === 'location' ? `
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
@@ -258,7 +260,7 @@ function render() {
           <button data-nkm-locfilter="overseas" class="${locFilter==='overseas'?'primary':''}" style="font-size:11px; padding:2px 8px">✈ 国外</button>
         </div>` : ''}
     </div>
-    ${showAddForm ? renderAddForm(editingAlbum) : ''}
+    ${showAddForm ? renderAddForm(null) : ''}
     ${content}
   `;
   attachHandlers();
@@ -596,9 +598,10 @@ function attachHandlers() {
   app.querySelectorAll('[data-nkm-edit]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault(); ev.stopPropagation();
-      editingId = Number(b.dataset.nkmEdit);
-      showAddForm = true;
-      render();
+      // v1011 中村さん指摘「編集で上に移動するのは気持ち悪い」→ modal 化
+      const id = Number(b.dataset.nkmEdit);
+      const album = sections.flatMap(s => s.albums).find(x => x.id === id);
+      if (album) openEditModal(album);
     });
   });
   app.querySelectorAll('[data-nkm-sec-suggest]').forEach(b => {
@@ -639,6 +642,69 @@ async function submitForm(id) {
     render();
   } catch (e) {
     alert('保存失敗: ' + (e.message || String(e)));
+  }
+}
+
+// v1011 中村さん指摘 「編集で 上に 移動する のは 気持ち悪い」 → modal 編集。
+//   renderAddForm の 中身 を そのまま modal に 差し込み、 save/cancel/delete を
+//   modal 内 で 処理する。 追加フォーム (画面上部) は 従来通り (「＋ 追加」 用)。
+function openEditModal(album) {
+  const modal = openModal({
+    title: '✏ 編集: ' + escapeHtml(album.title || ''),
+    bodyHtml: renderAddForm(album),
+    maxWidth: 560,
+    buttons: [],
+  });
+  const root = modal.root;
+  // renderAddForm が返す card の 中 の フォーム 要素 を そのまま 使う。
+  root.querySelector('#nkm-form-section-suggest');
+  root.querySelectorAll('[data-nkm-sec-suggest]').forEach(b => {
+    b.addEventListener('click', () => {
+      const inp = root.querySelector('#nkm-form-section');
+      if (inp) inp.value = b.dataset.nkmSecSuggest;
+    });
+  });
+  root.querySelector('#nkm-form-save')?.addEventListener('click', async () => {
+    modal.setBusy(true);
+    try { await submitFormFromRoot(root, album.id); modal.close(); }
+    catch (_) { modal.setBusy(false); }
+  });
+  root.querySelector('#nkm-form-cancel')?.addEventListener('click', () => modal.close());
+  root.querySelector('#nkm-form-delete')?.addEventListener('click', async () => {
+    if (!confirm('このアルバム登録を削除しますか？\n(Google Photos側は影響なし、 一覧から消えるだけ)')) return;
+    modal.setBusy(true);
+    try {
+      await del('/api/nkmr-albums/' + album.id);
+      await fetchAlbums();
+      render();
+      modal.close();
+    } catch (e) {
+      alert('削除失敗: ' + (e.message || String(e)));
+      modal.setBusy(false);
+    }
+  });
+}
+
+// modal 側 で 呼ぶ submitForm 変種 (id 付き 前提、 body は root scope から 取る)。
+async function submitFormFromRoot(root, id) {
+  const body = {
+    section : root.querySelector('#nkm-form-section').value.trim(),
+    title   : root.querySelector('#nkm-form-title').value.trim(),
+    url     : root.querySelector('#nkm-form-url').value.trim(),
+    location: root.querySelector('#nkm-form-location').value.trim(),
+    flag    : root.querySelector('#nkm-form-flag').value.trim(),
+  };
+  if (!body.section || !body.title || !body.url) {
+    alert('セクション・タイトル・URLは必須です');
+    throw new Error('validation');
+  }
+  try {
+    await patch('/api/nkmr-albums/' + id, body);
+    await fetchAlbums();
+    render();
+  } catch (e) {
+    alert('保存失敗: ' + (e.message || String(e)));
+    throw e;
   }
 }
 
