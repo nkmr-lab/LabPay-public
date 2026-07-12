@@ -714,7 +714,7 @@ async function bindMakeFullTranslate(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。課金はポイント残高から (中村 PI は無料)。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。 課金はポイント残高から。</p>
       <label class="field"><span class="lbl">方向</span>
         <select id="mft-dir" style="font-size:13px">
           <option value="en2ja" selected>英 → 日 (en2ja)</option>
@@ -723,9 +723,9 @@ async function bindMakeFullTranslate(d) {
       </label>
       <label class="field"><span class="lbl">モデル</span>
         <select id="mft-model" style="font-size:13px">
-          <option value="gpt-5-mini">gpt-5-mini (30pt / ja2en 150pt)</option>
-          <option value="gpt-5" selected>gpt-5 (50pt / ja2en 250pt)</option>
-          <option value="o1">o1 (80pt / ja2en 400pt)</option>
+          <option value="gpt-5-mini">gpt-5-mini (38pt / ja2en 188pt)</option>
+          <option value="gpt-5" selected>gpt-5 (63pt / ja2en 313pt)</option>
+          <option value="o1">o1 (100pt / ja2en 500pt)</option>
         </select>
       </label>
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">

@@ -112,7 +112,7 @@ async function loadSettings() {
   const info = document.getElementById('pr-model-info');
   const btn = document.getElementById('pr-go');
   if (sel && cachedSettings.models) {
-    const def = cachedSettings.default_model || 'gpt-4.1';
+    const def = cachedSettings.default_model || 'gpt-5';
     sel.innerHTML = Object.entries(cachedSettings.models).map(([m, pt]) =>
       `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} (${pt}pt)</option>`).join('');
     const refresh = () => {
@@ -201,7 +201,7 @@ async function go() {
     fd.append('file', f);
     fd.append('target_venue', venue);
     fd.append('strictness', strictness);
-    const model = document.getElementById('pr-model')?.value || 'gpt-4.1';
+    const model = document.getElementById('pr-model')?.value || 'gpt-5';
     fd.append('model', model);
     // v780 #404 任意の回答文 (rebuttal)。空なら送らない (= 通常の査読モード)
     const responseText = (document.getElementById('pr-response')?.value || '').trim();

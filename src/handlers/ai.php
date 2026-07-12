@@ -586,10 +586,9 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
     return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
-const RESUME_CHECK_COST = 5;        // 旧互換 (gpt-4.1 想定の標準料金)。
-const RESUME_CHECK_MODELS = [       // v774 #396 モデル別価格 (paper_review と同じ軸)
-    'gpt-4.1'    => 5,
-    'gpt-5-mini' => 8,
+const RESUME_CHECK_COST = 10;       // v1010 5 → 10 (中村さん 「原稿チェックは 5pt → 10pt」)
+const RESUME_CHECK_MODELS = [       // v774 #396 モデル別価格 / v1010 gpt-4.1 削除、 baseline 10pt に
+    'gpt-5-mini' => 10,
     'gpt-5'      => 15,
     'o1'         => 25,
 ];
@@ -611,7 +610,7 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
         'cost_points'   => RESUME_CHECK_COST,           // 旧互換
         'max_chars'     => RESUME_CHECK_MAX_CHARS,
         'models'        => RESUME_CHECK_MODELS,         // v774 #396
-        'default_model' => 'gpt-4.1',
+        'default_model' => 'gpt-5-mini',   // v1010 gpt-4.1 削除に伴い gpt-5-mini (最安 10pt) を デフォルトに
     ]);
 }
 
@@ -671,8 +670,8 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         }
     }
 
-    // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
-    $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-4.1') : ($body['model'] ?? 'gpt-4.1')));
+    // v774 #396 モデル選択 + 動的価格。 v1010 gpt-4.1 削除に伴い default gpt-5-mini
+    $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-5-mini') : ($body['model'] ?? 'gpt-5-mini')));
     if (!isset(RESUME_CHECK_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
@@ -715,7 +714,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
     ai_resume_check_run_background($pdo, $cfg, $checkId, $text, $fileId, $reqModel);
 }
 
-function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null, string $reqModel = 'gpt-4.1'): void {
+function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null, string $reqModel = 'gpt-5-mini'): void {
     try {
         $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
@@ -812,8 +811,7 @@ PROMPT;
 }
 
 const PAPER_REVIEW_COST = 10;       // 旧互換 (gpt-4.1 想定の標準料金)。 v774 #396 モデル別価格へ移行。
-const PAPER_REVIEW_MODELS = [       // v774 #396 モデル別価格 (paper_translate と同じ軸)
-    'gpt-4.1'    => 10,
+const PAPER_REVIEW_MODELS = [       // v774 #396 モデル別価格 / v1010 gpt-4.1 削除
     'gpt-5-mini' => 15,
     'gpt-5'      => 30,
     'o1'         => 50,
@@ -963,7 +961,7 @@ function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
         'share_targets'    => $shareUsers,
         'cost_points'      => PAPER_REVIEW_COST,        // 旧互換
         'models'           => PAPER_REVIEW_MODELS,      // v774 #396
-        'default_model'    => 'gpt-4.1',
+        'default_model'    => 'gpt-5',     // v1010 中村さん 「論文査読 の デフォルト は gpt-5 で よい」
     ]);
 }
 
@@ -1094,8 +1092,8 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
     }
     $shareIds = array_filter($shareIds, fn($x) => $x > 0 && $x !== $uid);
 
-    // v774 #396 モデル選択 + 動的価格 (default gpt-4.1)
-    $reqModel = trim((string)($_POST['model'] ?? 'gpt-4.1'));
+    // v774 #396 モデル選択 + 動的価格。 v1010 gpt-4.1 削除に伴い default gpt-5
+    $reqModel = trim((string)($_POST['model'] ?? 'gpt-5'));
     if (!isset(PAPER_REVIEW_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
@@ -1430,10 +1428,10 @@ function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
 //   出さないので論文要約用途では失格 → 削除。真面目に要約するなら最低でも 4.1。
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
 const PAPER_TRANSLATE_MODELS = [
-    'gpt-4.1'     => 20,   // 軽量 (短めになりがち)
-    'gpt-5-mini'  => 30,   // 5 系軽量
-    'gpt-5'       => 50,   // 5 系標準 (デフォルト、高品質)
-    'o1'          => 80,   // o1 推論モデル (深い解析)
+    // v1010 中村さん 「論文要約 も 1.25 倍、 gpt-4.1 は 削除」
+    'gpt-5-mini'  => 38,   // 5 系軽量 (30 × 1.25)
+    'gpt-5'       => 63,   // 5 系標準 (デフォルト) (50 × 1.25)
+    'o1'          => 100,  // o1 推論モデル (深い解析) (80 × 1.25)
 ];
 
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
@@ -3147,15 +3145,16 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 // ============================================================================
 
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
+// v1010 中村さん 「論文全訳 も 1.25 倍」。 gpt-4.1 は 既に 無い。
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
-    'gpt-5-mini' => 30,
-    'gpt-5'      => 50,   // デフォルト
-    'o1'         => 80,
+    'gpt-5-mini' => 38,   // 30 × 1.25
+    'gpt-5'      => 63,   // 50 × 1.25 (デフォルト)
+    'o1'         => 100,  // 80 × 1.25
 ];
 const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x
-    'gpt-5-mini' => 150,
-    'gpt-5'      => 250,  // デフォルト
-    'o1'         => 400,
+    'gpt-5-mini' => 188,  // 150 × 1.25
+    'gpt-5'      => 313,  // 250 × 1.25 (デフォルト)
+    'o1'         => 500,  // 400 × 1.25
 ];
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'

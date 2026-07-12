@@ -692,13 +692,12 @@ async function bindMakeSummary(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で論文要約を開始します。課金はポイント残高から (中村 PI は無料)。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文要約を開始します。 課金はポイント残高から。</p>
       <label class="field"><span class="lbl">モデル</span>
         <select id="mfs-model" style="font-size:13px">
-          <option value="gpt-4.1">gpt-4.1 (20pt)</option>
-          <option value="gpt-5-mini">gpt-5-mini (30pt)</option>
-          <option value="gpt-5" selected>gpt-5 (50pt)</option>
-          <option value="o1">o1 (80pt)</option>
+          <option value="gpt-5-mini">gpt-5-mini (38pt)</option>
+          <option value="gpt-5" selected>gpt-5 (63pt)</option>
+          <option value="o1">o1 (100pt)</option>
         </select>
       </label>
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
