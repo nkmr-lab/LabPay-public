@@ -5,6 +5,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 
 const STATUS_LABEL = { unread: '未読', reading: '読中', read: '既読' };
 const STATUS_COLOR = { unread: '#9ca3af', reading: '#f59e0b', read: '#15803d' };
@@ -75,9 +76,66 @@ function authorsShort(authors) {
   return names.slice(0, 3).join(', ') + `, et al. (${names.length}人)`;
 }
 
+// v1006 中村さん要望「(refs 詳細に) 要約 と 同型 の 著者リスト を 付けて 欲しい」。
+//   paper_translate.js の ptRenderAuthorCards と 揃えた 見た目、 タップで
+//   #/authors/{name} (著者ページ) に 遷移。
+function rfRenderAuthorCards(authors) {
+  if (!Array.isArray(authors) || !authors.length) return '';
+  return `
+    <div class="card" style="margin-top:10px">
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">タップで著者ページ</span></div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px">
+        ${authors.map(a => {
+          const name  = String(a?.name  || '').trim();
+          if (!name) return '';
+          const aff   = String(a?.affiliation || '').trim();
+          const email = String(a?.email || '').trim();
+          return `
+            <div style="display:flex; gap:10px; padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; min-width:0">
+              ${renderAuthorAvatar({ name, email }, { size: 38 })}
+              <div style="flex:1; min-width:0; font-size:12px">
+                <button data-rf-author="${escapeHtml(name)}" class="bold" style="font-size:13px; background:none; border:none; padding:0; color:#7b3fa0; cursor:pointer; text-align:left; font-family:inherit; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(name)}</button>
+                ${aff   ? `<div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(aff)}">${escapeHtml(aff)}</div>` : ''}
+                ${email ? `<a href="mailto:${escapeHtml(email)}" style="font-size:11px; color:#7b3fa0; text-decoration:none">${escapeHtml(email)}</a>` : ''}
+              </div>
+            </div>`;
+        }).filter(Boolean).join('')}
+      </div>
+    </div>`;
+}
+
+// v1006 タグ / 著者 の クリック ハンドラ。 paintDetail の 差し込み 直後 に 呼ぶ。
+function rfBindClickables() {
+  document.querySelectorAll('[data-rf-tag]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const t = String(b.dataset.rfTag || '').trim();
+      if (!t) return;
+      location.hash = '#/refs?tag=' + encodeURIComponent(t);
+    });
+  });
+  document.querySelectorAll('[data-rf-author]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const q = String(b.dataset.rfAuthor || '').trim();
+      if (!q) return;
+      location.hash = '#/authors/' + encodeURIComponent(q);
+    });
+  });
+  mountAuthorAvatars(document.getElementById('app'));
+}
+
 // ─── 一覧 ─────────────────────────────────────────────
 
 export async function renderRefs() {
+  // v1006 URL の ?tag=<t> ?q=<q> を listState に取り込む (詳細ページから
+  //   キーワード chip をタップしてジャンプ してきた場合)。
+  const qStart = (location.hash || '').indexOf('?');
+  if (qStart !== -1) {
+    const qs = new URLSearchParams((location.hash || '').slice(qStart + 1));
+    const t = qs.get('tag'); if (t) listState.tag = t;
+    const q = qs.get('q');   if (q) listState.q = q;
+  }
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
@@ -1277,6 +1335,7 @@ export async function renderRefsDetail({ params }) {
     <div id="rf-d-body"></div>
   `;
   try {
+    await initLabUsersCache();     // v1006 著者アバター 用
     const d = await get('/api/refs/' + id);
     paintDetail(id, d);
   } catch (e) {
@@ -1294,8 +1353,10 @@ function paintDetail(id, d) {
   if (d.doi)      idLinks.push(`<a href="https://doi.org/${escapeHtml(d.doi)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 DOI: ${escapeHtml(d.doi)}</a>`);
   if (d.arxiv_id) idLinks.push(`<a href="https://arxiv.org/abs/${escapeHtml(d.arxiv_id)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 arXiv: ${escapeHtml(d.arxiv_id)}</a>`);
   if (d.url && d.url !== `https://doi.org/${d.doi}`) idLinks.push(`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 出版社 リンク</a>`);
+  // v1006 タグ を クリック 可能に (中村さん要望「論文ページ に ある キーワード も クリック 可能に」)。
+  //   #/refs?tag=<t> に 遷移 → renderRefs 側 の URL パラメータ 読み取りで tag フィルタが 効く。
   const tagsHtml = (d.tags || []).map(t =>
-    `<span class="tag" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 8px; border-radius:10px">${escapeHtml(t)}</span>`
+    `<button data-rf-tag="${escapeHtml(t)}" class="tag" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 8px; border-radius:10px; border:1px solid #d8b4fe; cursor:pointer; font-family:inherit">${escapeHtml(t)}</button>`
   ).join(' ');
   const pdfBlock = d.pdf_path
     ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" class="btn" style="font-size:12px; padding:3px 10px">📄 PDF を 開く</a>`
@@ -1320,7 +1381,7 @@ function paintDetail(id, d) {
   document.getElementById('rf-d-head').innerHTML = `
     <h2 style="margin:6px 0 0; font-size:18px; line-height:1.4">${escapeHtml(d.title)}</h2>
     <div class="meta" style="margin-top:4px">
-      ${escapeHtml(authorsShort(d.authors))}${d.year ? ' · <b>' + d.year + '</b>' : ''}${d.venue ? ' · ' + escapeHtml(d.venue) : ''}
+      ${d.year ? '<b>' + d.year + '</b>' : ''}${d.year && d.venue ? ' · ' : ''}${d.venue ? escapeHtml(d.venue) : ''}
     </div>
     ${idLinks.length ? '<div class="meta" style="margin-top:6px; display:flex; gap:12px; flex-wrap:wrap">' + idLinks.join(' ') + '</div>' : ''}
     <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
@@ -1338,7 +1399,9 @@ function paintDetail(id, d) {
     <div class="meta" style="margin-top:6px; font-size:11px">
       登録: ${avatarHtml(d.added_by_name, d.added_by_avatar, 'xs')} ${escapeHtml(d.added_by_name || '?')} · ${escapeHtml(d.created_at || '')}
     </div>
+    ${rfRenderAuthorCards(d.authors)}
   `;
+  rfBindClickables();
 
   const abstractBlock = d.abstract
     ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:4px">抄録</div><div style="font-size:13px; line-height:1.7; white-space:pre-wrap">${escapeHtml(d.abstract)}</div></div>`

@@ -76,8 +76,8 @@ function initialsAvatarSpec(name) {
 }
 
 // 同期 render: まず ラボメンバー 一致 を 試して 見つかれば <img> で 出す、 無ければ initials。
-//   email が あって 未解決 の 場合 は data-avatar-email 属性 に メール を 埋め、
-//   mountAuthorAvatars() が 後で Gravatar を fetch して 差し替える。
+//   email or name を data-au-* 属性 に 埋めて、 mountAuthorAvatars() が
+//   (1) 手動 アップロード 済 の author photo (v1006) → (2) Gravatar の順で 試す。
 export function renderAuthorAvatar(author, opts = {}) {
   const size = opts.size ?? 38;
   const name = author?.name || '';
@@ -89,41 +89,78 @@ export function renderAuthorAvatar(author, opts = {}) {
     return `<img class="avatar-au" src="${escapeHtml(labAv)}" alt="" loading="lazy" decoding="async"
               style="${commonStyle}; object-fit:cover; background:${spec.color}">`;
   }
-  if (email) {
-    // Gravatar を 試す ; onerror で initials に fallback
-    return `<span class="avatar-au" data-au-email="${escapeHtml(email)}"
-              style="${commonStyle}; color:#fff; font-weight:700; font-size:${Math.round(size * 0.4)}px; font-family:system-ui, sans-serif; background:${spec.color}">${escapeHtml(spec.initials)}</span>`;
-  }
-  return `<span class="avatar-au"
+  // initials に data-au-name (+ email) を 添えて、 mount 時に 手動 photo / Gravatar を 試す
+  const nameAttr  = name  ? ` data-au-name="${escapeHtml(name)}"`   : '';
+  const emailAttr = email ? ` data-au-email="${escapeHtml(email)}"` : '';
+  return `<span class="avatar-au"${nameAttr}${emailAttr}
             style="${commonStyle}; color:#fff; font-weight:700; font-size:${Math.round(size * 0.4)}px; font-family:system-ui, sans-serif; background:${spec.color}">${escapeHtml(spec.initials)}</span>`;
 }
 
-// DOM 挿入後に呼ぶ: data-au-email 付き の initials avatar を Gravatar に 差し替え (成功時のみ)。
+// v1006 手動 アップロード 済 の 顔画像 を bulk lookup で 一気に 取る (per-name request 回避)。
+async function fetchManualPhotos(names) {
+  const uniq = Array.from(new Set(names.filter(Boolean))).slice(0, 200);
+  if (!uniq.length) return {};
+  try {
+    // API は カンマ 区切り name リストを 受ける。 name 自体 は encodeURIComponent 済。
+    const q = uniq.map(n => encodeURIComponent(n)).join(',');
+    const r = await fetch('/api/authors/photos?names=' + q, { credentials: 'same-origin' });
+    if (!r.ok) return {};
+    const d = await r.json();
+    return d?.photos || {};
+  } catch (_) { return {}; }
+}
+
+// swap する helper (initials span → img)。 URL が 有効 なら 差し替え。
+function swapToImg(node, url) {
+  if (!url || !node.isConnected) return false;
+  const size = parseInt(node.style.width, 10) || 38;
+  const bg   = node.style.background || '';
+  const img = document.createElement('img');
+  img.className = 'avatar-au';
+  img.src = url;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.alt = '';
+  img.style.cssText = `width:${size}px; height:${size}px; border-radius:50%; flex:none; object-fit:cover; background:${bg}`;
+  node.replaceWith(img);
+  return true;
+}
+
+// URL が 実際 に ロード できるか テスト
+function testImageLoad(url) {
+  return new Promise((res) => {
+    const im = new Image();
+    im.onload  = () => res(true);
+    im.onerror = () => res(false);
+    im.src = url;
+  });
+}
+
+// DOM 挿入後に呼ぶ: initials avatar に 埋まった name/email から (1) 手動photo → (2) Gravatar を 試して 差し替え。
 export async function mountAuthorAvatars(root = document) {
-  const nodes = root.querySelectorAll('[data-au-email]');
+  const nodes = Array.from(root.querySelectorAll('.avatar-au[data-au-name], .avatar-au[data-au-email]'))
+    .filter(n => n.tagName === 'SPAN');   // 既に img に なった もの は 除外
+  if (!nodes.length) return;
+
+  const names = nodes.map(n => n.getAttribute('data-au-name') || '').filter(Boolean);
+  const photoMap = await fetchManualPhotos(names);
+
   for (const n of nodes) {
-    const email = n.getAttribute('data-au-email');
-    if (!email) continue;
-    const url = await gravatarUrl(email, 80);
-    if (!url) continue;
-    // ロード テスト (404 なら 差し替え しない)
-    const ok = await new Promise((res) => {
-      const im = new Image();
-      im.onload  = () => res(true);
-      im.onerror = () => res(false);
-      im.src = url;
-    });
-    if (!ok) continue;
-    // 差し替え
-    const size = parseInt(n.style.width, 10) || 38;
-    const bg   = n.style.background || '';
-    const img = document.createElement('img');
-    img.className = 'avatar-au';
-    img.src = url;
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.alt = '';
-    img.style.cssText = `width:${size}px; height:${size}px; border-radius:50%; flex:none; object-fit:cover; background:${bg}`;
-    n.replaceWith(img);
+    const name  = n.getAttribute('data-au-name')  || '';
+    const email = n.getAttribute('data-au-email') || '';
+    // (1) 手動 アップロード 済
+    if (name && photoMap[name]) {
+      const ok = await testImageLoad(photoMap[name]);
+      if (ok) { swapToImg(n, photoMap[name]); continue; }
+    }
+    // (2) Gravatar (email がある 場合のみ)
+    if (email) {
+      const url = await gravatarUrl(email, 80);
+      if (url && await testImageLoad(url)) {
+        swapToImg(n, url);
+        continue;
+      }
+    }
+    // (3) fallback: initials のまま
   }
 }

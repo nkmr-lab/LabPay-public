@@ -2,10 +2,12 @@
 //   著者ページに移動して、 その著者の情報が見えつつ、 辿れるようにして欲しい」
 //   「名前の表記揺れがあることがあるので、 複数の表記を受け付ける仕組みも
 //   必要かもしれない」)。
+// v1006 プロフィール画像 を 明示 アップロード 可能に。
 
 import { escapeHtml } from '../router.js';
-import { get } from '../api.js';
+import { get, post, del } from '../api.js';
 import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
+import { toast } from '../app.js';
 
 export async function renderAuthor({ params }) {
   const app = document.getElementById('app');
@@ -20,22 +22,38 @@ export async function renderAuthor({ params }) {
     app.innerHTML = `<div class="card">⚠ ${escapeHtml(e.message || String(e))}</div>`;
     return;
   }
+  paint(app, name, d);
+}
+
+function paint(app, name, d) {
   const papers = d.papers || [];
   const variants = (d.name_variants || []).filter(v => v && v !== name);
   const affil = (d.affiliations || [])[0] || null;
   const email = (d.emails || [])[0] || null;
-  const scholarUrl = 'https://scholar.google.com/scholar?q=' + encodeURIComponent('author:"' + name + '"');
-  const dblpUrl    = 'https://dblp.org/search?q=' + encodeURIComponent(name);
+  const photoUrl = d.photo_url || null;
+  const scholarUrl  = 'https://scholar.google.com/scholar?q=' + encodeURIComponent('author:"' + name + '"');
+  const dblpUrl     = 'https://dblp.org/search?q=' + encodeURIComponent(name);
   const semanticUrl = 'https://www.semanticscholar.org/search?q=' + encodeURIComponent(name) + '&sort=relevance';
+
+  // v1006 表示アバターは photo_url があれば それを 優先、 無ければ 既存の
+  //   ラボメンバー/Gravatar/initials fallback (renderAuthorAvatar) に流す。
+  const avatarHtml = photoUrl
+    ? `<img class="avatar-au" src="${escapeHtml(photoUrl)}" alt="" style="width:72px; height:72px; border-radius:50%; flex:none; object-fit:cover; border:2px solid #f3e8ff">`
+    : renderAuthorAvatar({ name, email }, { size: 72 });
 
   app.innerHTML = `
     <div class="card page-header">
       <div style="display:flex; gap:14px; align-items:center">
-        ${renderAuthorAvatar({ name, email }, { size: 72 })}
+        <div id="au-avatar-slot" style="flex:none">${avatarHtml}</div>
         <div style="flex:1; min-width:0">
           <h2 style="margin:0; font-size:20px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(name)}</h2>
           ${affil ? `<div class="meta" style="font-size:12.5px; margin-top:2px; color:#6b7280">${escapeHtml(affil)}</div>` : ''}
           ${email ? `<div class="meta" style="font-size:12px; margin-top:2px"><a href="mailto:${escapeHtml(email)}" style="color:#7b3fa0; text-decoration:none">✉ ${escapeHtml(email)}</a></div>` : ''}
+          <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+            <button id="au-photo-upload" class="btn" style="font-size:11px; padding:2px 10px">📷 プロフィール画像 を ${photoUrl ? '差し替え' : '設定'}</button>
+            ${photoUrl ? `<button id="au-photo-delete" class="btn danger" style="font-size:11px; padding:2px 10px">🗑 画像 を 削除</button>` : ''}
+            <input type="file" id="au-photo-file" accept="image/jpeg,image/png,image/webp" hidden>
+          </div>
         </div>
       </div>
       ${variants.length ? `
@@ -60,6 +78,50 @@ export async function renderAuthor({ params }) {
     </div>
   `;
   mountAuthorAvatars(app);
+  bindPhotoUI(app, name);
+}
+
+function bindPhotoUI(app, name) {
+  const btn = document.getElementById('au-photo-upload');
+  const file = document.getElementById('au-photo-file');
+  const delBtn = document.getElementById('au-photo-delete');
+  if (btn && file) {
+    btn.addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { toast('5MB 以内 でお願いします'); return; }
+      const fd = new FormData();
+      fd.append('image', f, f.name);
+      btn.disabled = true;
+      try {
+        const resp = await fetch('/api/authors/' + encodeURIComponent(name) + '/photo', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
+          body: fd,
+        });
+        const d = await resp.json();
+        if (!resp.ok || !d.ok) throw new Error(d?.error?.message || 'HTTP ' + resp.status);
+        toast('プロフィール画像を設定しました');
+        renderAuthor({ params: { name: encodeURIComponent(name) } });
+      } catch (e) {
+        toast('失敗: ' + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      if (!confirm('プロフィール画像を削除しますか?')) return;
+      try {
+        await del('/api/authors/' + encodeURIComponent(name) + '/photo');
+        toast('削除しました');
+      } catch (e) { toast('失敗: ' + e.message); }
+      renderAuthor({ params: { name: encodeURIComponent(name) } });
+    });
+  }
 }
 
 function renderPaperRow(p) {

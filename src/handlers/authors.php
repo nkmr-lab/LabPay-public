@@ -14,10 +14,26 @@
 declare(strict_types=1);
 
 function route_authors(PDO $pdo, array $cfg, string $method, array $seg): void {
-    if (($seg[1] ?? '') === '' || $method !== 'GET') {
+    // GET /api/authors/photos?names=a,b,c → 顔画像 の bulk lookup (v1006)
+    if (($seg[1] ?? '') === 'photos' && $method === 'GET') {
+        authors_photos_bulk($pdo, $cfg);
+        return;
+    }
+    if (($seg[1] ?? '') === '') {
         throw new ApiException('not_found', 'authors requires name', 404);
     }
     $name = rawurldecode((string)$seg[1]);
+
+    // v1006 GET /api/authors/{name}/photo は 従来通り photo_url を含む 情報返却
+    // POST /api/authors/{name}/photo → 手動 アップロード
+    // DELETE /api/authors/{name}/photo → 削除
+    if (($seg[2] ?? '') === 'photo') {
+        if ($method === 'POST')   { authors_photo_upload($pdo, $cfg, $name); return; }
+        if ($method === 'DELETE') { authors_photo_delete($pdo, $cfg, $name); return; }
+        throw new ApiException('method_not_allowed', 'use POST or DELETE for /photo', 405);
+    }
+
+    if ($method !== 'GET') throw new ApiException('method_not_allowed', 'author routes are GET', 405);
     authors_get($pdo, $cfg, $name);
 }
 
@@ -91,13 +107,140 @@ function authors_get(PDO $pdo, array $cfg, string $name): void {
         array_reverse(usort_by_date($papers)),
         0, 100
     ));
+    $photo = authors_photo_lookup($pdo, $target);   // v1006 手動 アップロード 済 なら 返す
     json_response([
         'name'          => $target,
         'name_variants' => array_values(array_unique(array_map(fn($p) => $p['matched_name'], $papers))),
         'affiliations'  => array_values(array_unique($affiliations)),
         'emails'        => array_values(array_unique($emails)),
+        'photo_url'     => $photo,
         'papers'        => $papers,
     ]);
+}
+
+// v1006 name_key: 表記揺れを 1 つに 畳む key。 name_variants で 生成する variant
+//   のうち 「first last」 or 「last, first」 の 短縮 前 を 選ぶ (=  最も 正規化 の 種
+//   に なる form)。 保存 / lookup で 同じ 関数 を 使う。
+function authors_photo_name_key(string $name): string {
+    return authors_normalize_name($name);
+}
+
+function authors_photo_lookup(PDO $pdo, string $name): ?string {
+    $key = authors_photo_name_key($name);
+    if ($key === '') return null;
+    $st = $pdo->prepare("SELECT photo_path FROM author_photos WHERE name_key = ? LIMIT 1");
+    $st->execute([$key]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    return $row && $row['photo_path'] ? (string)$row['photo_path'] : null;
+}
+
+// v1006 GET /api/authors/photos?names=a,b,c → { photos: {name: url|null, ...} }
+function authors_photos_bulk(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $raw = (string)($_GET['names'] ?? '');
+    if ($raw === '') { json_response(['photos' => new stdClass()]); return; }
+    $names = array_values(array_filter(array_map('trim', explode(',', $raw)), fn($s) => $s !== ''));
+    if (!$names) { json_response(['photos' => new stdClass()]); return; }
+    // 200 上限 で 保護
+    $names = array_slice($names, 0, 200);
+    $keys = array_map('authors_photo_name_key', $names);
+    $placeholders = implode(',', array_fill(0, count($keys), '?'));
+    $st = $pdo->prepare("SELECT name_key, photo_path FROM author_photos WHERE name_key IN ($placeholders) AND photo_path IS NOT NULL");
+    $st->execute($keys);
+    $byKey = [];
+    foreach ($st as $row) $byKey[(string)$row['name_key']] = (string)$row['photo_path'];
+    $out = [];
+    foreach ($names as $i => $n) {
+        $k = $keys[$i];
+        $out[$n] = $byKey[$k] ?? null;
+    }
+    json_response(['photos' => $out]);
+}
+
+// v1006 POST /api/authors/{name}/photo (multipart form: image=...)
+//   認証必須。 誰でも 更新可 (LabPay 内部 SNS の 精神)、 uploaded_by_user_id を残す。
+function authors_photo_upload(PDO $pdo, array $cfg, string $name): void {
+    $me = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$me['id'];
+    $key = authors_photo_name_key($name);
+    if ($key === '') throw new ApiException('bad_request', 'name is empty', 400);
+    if (!isset($_FILES['image']) || ($_FILES['image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new ApiException('bad_request', 'image ファイル が 添付 されていません', 400);
+    }
+    $tmp  = $_FILES['image']['tmp_name'];
+    $size = (int)($_FILES['image']['size'] ?? 0);
+    if ($size <= 0 || $size > 5 * 1024 * 1024) {
+        throw new ApiException('bad_request', 'ファイルサイズは 5MB まで', 400);
+    }
+    $info = @getimagesize($tmp);
+    if (!$info || !in_array($info['mime'] ?? '', ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        throw new ApiException('bad_request', 'JPEG / PNG / WebP のみ 受け付けます', 400);
+    }
+    $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$info['mime']];
+
+    // 保存先 (無ければ 作る)。 sha1(name_key + rand) で ハッシュ ファイル名。
+    $dir = realpath(__DIR__ . '/../../public');
+    if ($dir === false) throw new RuntimeException('public dir not found');
+    $subdir = $dir . '/uploads/author_photos';
+    if (!is_dir($subdir)) {
+        if (!@mkdir($subdir, 0755, true) && !is_dir($subdir)) {
+            throw new RuntimeException('failed to mkdir ' . $subdir);
+        }
+    }
+    $hash = substr(sha1($key . '|' . bin2hex(random_bytes(6))), 0, 20);
+    $fname = $hash . '.' . $ext;
+    $dest = $subdir . '/' . $fname;
+    if (!@move_uploaded_file($tmp, $dest)) {
+        throw new RuntimeException('failed to save uploaded image');
+    }
+    @chmod($dest, 0644);
+    $publicPath = '/uploads/author_photos/' . $fname;
+
+    // 既存 photo は 上書き削除
+    $prev = null;
+    $st = $pdo->prepare("SELECT photo_path FROM author_photos WHERE name_key = ? LIMIT 1");
+    $st->execute([$key]);
+    if ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+        $prev = (string)$row['photo_path'];
+    }
+
+    // upsert
+    $sql = "INSERT INTO author_photos (name_key, name_original, photo_path, source, uploaded_by_user_id)
+                 VALUES (?, ?, ?, 'manual', ?)
+             ON DUPLICATE KEY UPDATE
+                 name_original = VALUES(name_original),
+                 photo_path    = VALUES(photo_path),
+                 source        = 'manual',
+                 uploaded_by_user_id = VALUES(uploaded_by_user_id)";
+    $pdo->prepare($sql)->execute([$key, $name, $publicPath, $uid]);
+
+    if ($prev && $prev !== $publicPath) {
+        $prevFs = $dir . $prev;
+        if (is_file($prevFs)) @unlink($prevFs);
+    }
+
+    json_response(['ok' => true, 'photo_url' => $publicPath]);
+}
+
+// v1006 DELETE /api/authors/{name}/photo
+function authors_photo_delete(PDO $pdo, array $cfg, string $name): void {
+    Auth::requireUser($pdo, $cfg);
+    $key = authors_photo_name_key($name);
+    if ($key === '') throw new ApiException('bad_request', 'name is empty', 400);
+    $st = $pdo->prepare("SELECT photo_path FROM author_photos WHERE name_key = ? LIMIT 1");
+    $st->execute([$key]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { json_response(['ok' => true, 'removed' => false]); return; }
+    $prev = (string)($row['photo_path'] ?? '');
+    $pdo->prepare("DELETE FROM author_photos WHERE name_key = ?")->execute([$key]);
+    if ($prev !== '') {
+        $dir = realpath(__DIR__ . '/../../public');
+        if ($dir !== false) {
+            $prevFs = $dir . $prev;
+            if (is_file($prevFs)) @unlink($prevFs);
+        }
+    }
+    json_response(['ok' => true, 'removed' => true]);
 }
 
 // 検索用 の LIKE トークン (最も 特定性 高い 部分文字列 を 使う。 目的 は 「対象を含む row を絞る」)。
