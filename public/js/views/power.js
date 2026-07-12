@@ -903,6 +903,23 @@ function renderGLMMDerivedOR() {
   return `⇒ 導出 OR = ${or.toFixed(2)} <span style="color:#666">(${size}, リスク比 RR = ${rr.toFixed(2)})</span>`;
 }
 
+// v1045 fb#482 効果量 の 目安表 を 効果量セクション内 の 目安ボタン の 下 に 配置
+//   (中村さん指摘「効果量の目安 という 一番下 に あるやつは、 効果量セクション の ボタン
+//   の 下 に 配置して」)。 折り畳み で 検定別 の 早見表 + 選び方 の 一言 を 出す。
+function renderCohenGuideInline() {
+  return `
+    <details style="margin-top:6px; padding:6px 10px; background:#faf5ff; border-radius:6px">
+      <summary style="cursor:pointer; font-weight:600; font-size:12px; color:#7b3fa0">📖 効果量の目安 (Cohen) — 検定別 早見表</summary>
+      <div style="margin-top:6px; font-size:12.5px; line-height:1.85">
+        <div><b>Cohen's d</b> (t 検定): 0.2 (小) / 0.5 (中) / 0.8 (大)</div>
+        <div><b>Cohen's f</b> (ANOVA/rmANOVA): 0.10 (小) / 0.25 (中) / 0.40 (大)</div>
+        <div><b>Pearson r</b> (相関): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
+        <div><b>Cohen's w</b> (χ²): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
+        <div class="hint-sm" style="margin-top:4px">効果量 は 先行研究 の 平均 SD から 計算するか、 パイロット、 メタ分析、 分野 の 慣習 で 決める のが 望ましい。 「中」 は 決定に 困った時 の 便宜的 な 選択。</div>
+      </div>
+    </details>`;
+}
+
 // v1043 Poisson GLMM ステップブロック
 function renderPoissonBlocks() {
   const p = state.glmm_poisson;
@@ -1333,6 +1350,7 @@ function render() {
                <span class="hint-sm" style="align-self:center">目安:</span>
                ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
              </div>
+             ${renderCohenGuideInline()}
              ${renderRawInputs()}
              ${renderEffectHelper()}
              <div class="hint-sm" style="font-size:11px; margin-top:8px; color:#7b3fa0; font-weight:600">効果量 (直接 入力 or 上の 補助 で 反映):</div>
@@ -1358,17 +1376,6 @@ function render() {
     ${renderSaveShareButtons('bot')}
 
     ${renderAnalysisGuide()}
-
-    <details class="card">
-      <summary style="cursor:pointer; font-weight:600">📖 効果量の目安 (Cohen)</summary>
-      <div style="margin-top:8px; font-size:13px; line-height:1.9">
-        <div><b>Cohen's d</b> (t 検定): 0.2 (小) / 0.5 (中) / 0.8 (大)</div>
-        <div><b>Cohen's f</b> (ANOVA): 0.10 (小) / 0.25 (中) / 0.40 (大)</div>
-        <div><b>Pearson r</b> (相関): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
-        <div><b>Cohen's w</b> (χ²): 0.10 (小) / 0.30 (中) / 0.50 (大)</div>
-        <div class="hint-sm" style="margin-top:6px">効果量は先行研究の平均SDから計算するか、パイロット、メタ分析、分野の慣習で決めるのが望ましい。「中」は決定に困った時の便宜的な選択。</div>
-      </div>
-    </details>
   `;
 
   document.getElementById('pw-test').addEventListener('change', (e) => { state.test = e.target.value; render(); });
