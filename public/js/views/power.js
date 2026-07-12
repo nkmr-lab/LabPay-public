@@ -663,6 +663,231 @@ function currentDistStats() {
 // 標準正規 密度
 function dnorm(z) { return Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI); }
 
+// v1027 中村さん指摘「2 手法を比べてるのに 効果なし vs 効果あり の分布が並ぶのが気持ち悪い。
+//   2 手法の間に どういう差があるか の方が直感的」→ 各検定タイプ に 「2 群の生分布 (or 相当)」
+//   の 直感的プロット を 追加、 従来の H0/H1 検定統計量プロット は details で折り畳み。
+function renderIntuitivePlot() {
+  if (state.test === 't2' || state.test === 'tp' || state.test === 't1') return renderTwoGroupPlot();
+  if (state.test === 'anova') return renderMultiGroupPlot();
+  if (state.test === 'corr')  return renderScatterPlot();
+  if (state.test === 'chi2')  return renderProportionsPlot();
+  return '';
+}
+
+// 2 群の生分布: μ_A=0, σ=1、 μ_B=d の 正規分布 を 重ね書き。 効果量 d = 群間差 / SD。
+function renderTwoGroupPlot() {
+  const d = state.effect;
+  if (!isFinite(d) || d <= 0) return '';
+  const W = 620, H = 260, PL = 40, PR = 20, PT = 20, PB = 40;
+  const xMin = -4, xMax = Math.max(6, d + 4);
+  const xToPx = (x) => PL + (x - xMin) / (xMax - xMin) * (W - PL - PR);
+  const yMax = 0.42;
+  const yToPx = (y) => PT + (1 - y / yMax) * (H - PT - PB);
+  const N = 200;
+  const ptsA = [], ptsB = [];
+  for (let i = 0; i <= N; i++) {
+    const x = xMin + (i / N) * (xMax - xMin);
+    ptsA.push([x, dnorm(x)]);
+    ptsB.push([x, dnorm(x - d)]);
+  }
+  const toPath = (pts) => 'M ' + pts.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+  // 重なり領域 = min(A, B)
+  const overlapPts = ptsA.map(([x, yA], i) => [x, Math.min(yA, ptsB[i][1])]);
+  const overlapArea = 'M ' + overlapPts.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ') +
+                      ` L ${xToPx(xMax).toFixed(1)} ${yToPx(0).toFixed(1)} L ${xToPx(xMin).toFixed(1)} ${yToPx(0).toFixed(1)} Z`;
+  // x-軸 tick
+  const ticks = [];
+  for (let t = Math.ceil(xMin); t <= xMax; t++) {
+    ticks.push(`<line x1="${xToPx(t)}" y1="${H - PB}" x2="${xToPx(t)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                <text x="${xToPx(t)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${t}σ</text>`);
+  }
+  // 群平均を 縦破線
+  const grpA = 0, grpB = d;
+  // 平均間の 矢印
+  const arrowY = yToPx(dnorm(0)) - 12;
+  const label = state.test === 't2' ? ['群 A', '群 B'] : (state.test === 'tp' ? ['ベースライン', '差の 平均'] : ['基準値', '観測平均']);
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📊 群の分布 (Cohen's d = ${d.toFixed(2)})</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          ${ticks.join('')}
+          <!-- 重なり (灰) -->
+          <path d="${overlapArea}" fill="#9ca3af55" stroke="none"/>
+          <!-- A 曲線 (青) + 内部塗り 薄青 -->
+          <path d="${toPath(ptsA)} L ${xToPx(xMax).toFixed(1)} ${yToPx(0).toFixed(1)} L ${xToPx(xMin).toFixed(1)} ${yToPx(0).toFixed(1)} Z" fill="#2563eb22"/>
+          <path d="${toPath(ptsA)}" fill="none" stroke="#2563eb" stroke-width="2"/>
+          <!-- B 曲線 (橙) + 内部塗り 薄橙 -->
+          <path d="${toPath(ptsB)} L ${xToPx(xMax).toFixed(1)} ${yToPx(0).toFixed(1)} L ${xToPx(xMin).toFixed(1)} ${yToPx(0).toFixed(1)} Z" fill="#ea580c22"/>
+          <path d="${toPath(ptsB)}" fill="none" stroke="#ea580c" stroke-width="2"/>
+          <!-- 平均線 -->
+          <line x1="${xToPx(grpA)}" y1="${yToPx(dnorm(0))}" x2="${xToPx(grpA)}" y2="${H - PB}" stroke="#2563eb" stroke-dasharray="3,3" stroke-width="1"/>
+          <line x1="${xToPx(grpB)}" y1="${yToPx(dnorm(0))}" x2="${xToPx(grpB)}" y2="${H - PB}" stroke="#ea580c" stroke-dasharray="3,3" stroke-width="1"/>
+          <!-- 差の矢印 -->
+          <line x1="${xToPx(grpA)}" y1="${arrowY}" x2="${xToPx(grpB)}" y2="${arrowY}" stroke="#111" stroke-width="1.2" marker-end="url(#pw-arr)"/>
+          <line x1="${xToPx(grpB)}" y1="${arrowY}" x2="${xToPx(grpA)}" y2="${arrowY}" stroke="#111" stroke-width="1.2" marker-end="url(#pw-arr)"/>
+          <text x="${xToPx((grpA + grpB) / 2)}" y="${arrowY - 4}" text-anchor="middle" font-size="11" fill="#111">差 = ${d.toFixed(2)} σ</text>
+          <defs><marker id="pw-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+          <!-- 凡例 -->
+          <g transform="translate(${W - PR - 130}, ${PT})">
+            <rect x="0" y="0" width="130" height="52" fill="#fff" stroke="#e5e7eb" rx="4"/>
+            <line x1="6" y1="14" x2="24" y2="14" stroke="#2563eb" stroke-width="2"/><text x="28" y="17" font-size="10.5" fill="#111">${escapeHtml(label[0])} (μ=0)</text>
+            <line x1="6" y1="30" x2="24" y2="30" stroke="#ea580c" stroke-width="2"/><text x="28" y="33" font-size="10.5" fill="#111">${escapeHtml(label[1])} (μ=${d.toFixed(2)}σ)</text>
+            <rect x="6" y="40" width="18" height="8" fill="#9ca3af55"/><text x="28" y="47" font-size="10" fill="#111">重なり</text>
+          </g>
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">2 群 の 分布 (横軸 は SD 単位)。 重なりが 小さい ほど、 群間差が 大きく 検出しやすい。 d=0.2 で 約 92% 重なり、 d=0.5 で 約 80%、 d=0.8 で 約 69%。</div>
+    </div>`;
+}
+
+// ANOVA: k 群の分布を重ね書き
+function renderMultiGroupPlot() {
+  const f = state.effect;
+  const k = state.k;
+  if (!isFinite(f) || f <= 0 || k < 2) return '';
+  // 群平均を σ=1 上で 対称に配置: mean_i = f × (i - (k-1)/2) × √(k / (k-1)) など。
+  //   簡易: mean_i を [-a, a] 等間隔、 σ_between = a × √(k / (k-1)) を f に合わせる
+  //   → a = f × √((k-1) / k)。 実際は f² = σ_between² / σ²、 σ_between² = Σ(μ_i - μ̄)²/k。
+  //   等間隔 μ_i = (i - (k-1)/2) × step、 σ_between² = step² × (k²-1)/12
+  //   → step = f × √(12/(k²-1))
+  const step = f * Math.sqrt(12 / (k * k - 1));
+  const means = Array.from({length: k}, (_, i) => (i - (k - 1) / 2) * step);
+  const W = 620, H = 260, PL = 40, PR = 20, PT = 20, PB = 40;
+  const xMax = Math.max(4, means[k-1] + 4), xMin = -xMax;
+  const xToPx = (x) => PL + (x - xMin) / (xMax - xMin) * (W - PL - PR);
+  const yMax = 0.42;
+  const yToPx = (y) => PT + (1 - y / yMax) * (H - PT - PB);
+  const colors = ['#2563eb','#ea580c','#059669','#a855f7','#dc2626','#eab308','#0891b2','#db2777'];
+  const N = 200;
+  let curves = '';
+  let legends = '';
+  for (let g = 0; g < k; g++) {
+    const c = colors[g % colors.length];
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const x = xMin + (i / N) * (xMax - xMin);
+      pts.push([x, dnorm(x - means[g])]);
+    }
+    const p = 'M ' + pts.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+    curves += `<path d="${p} L ${xToPx(xMax).toFixed(1)} ${yToPx(0).toFixed(1)} L ${xToPx(xMin).toFixed(1)} ${yToPx(0).toFixed(1)} Z" fill="${c}22" stroke="none"/>`;
+    curves += `<path d="${p}" fill="none" stroke="${c}" stroke-width="1.6"/>`;
+    curves += `<line x1="${xToPx(means[g])}" y1="${yToPx(dnorm(0))}" x2="${xToPx(means[g])}" y2="${H - PB}" stroke="${c}" stroke-dasharray="3,3" stroke-width="0.8"/>`;
+    legends += `<line x1="6" y1="${14 + g * 12}" x2="24" y2="${14 + g * 12}" stroke="${c}" stroke-width="2"/><text x="28" y="${17 + g * 12}" font-size="10" fill="#111">群 ${g + 1} (μ=${means[g].toFixed(2)}σ)</text>`;
+  }
+  const ticks = [];
+  for (let t = Math.ceil(xMin); t <= xMax; t++) {
+    ticks.push(`<line x1="${xToPx(t)}" y1="${H - PB}" x2="${xToPx(t)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                <text x="${xToPx(t)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${t}σ</text>`);
+  }
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📊 ${k} 群の分布 (Cohen's f = ${f.toFixed(2)})</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          ${ticks.join('')}
+          ${curves}
+          <g transform="translate(${W - PR - 130}, ${PT})">
+            <rect x="0" y="0" width="130" height="${8 + k * 12}" fill="#fff" stroke="#e5e7eb" rx="4"/>
+            ${legends}
+          </g>
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">${k} 群 (横軸 SD 単位)。 平均間隔 の 広がり (σ_between) が 大きい ほど f も 大きく、 差を 検出しやすい。 f=0.1 (小) は 群平均 の 差 が 群内 SD の 1/10 程度、 f=0.4 (大) は 40% 程度。</div>
+    </div>`;
+}
+
+// 相関: n 点 の 散布図 (擬似データ)、 想定 r で 線を引く
+function renderScatterPlot() {
+  const r = state.effect;
+  const n = state.n_total;
+  if (!isFinite(r) || Math.abs(r) >= 1) return '';
+  const nPts = Math.min(n, 200);
+  // 擬似データ: 決定的な seed から 疑似 gaussian を 生成
+  const pts = [];
+  let seed = 42;
+  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const gauss = () => Math.sqrt(-2 * Math.log(rand() || 1e-9)) * Math.cos(2 * Math.PI * rand());
+  for (let i = 0; i < nPts; i++) {
+    const x = gauss();
+    const y = r * x + Math.sqrt(1 - r * r) * gauss();
+    pts.push([x, y]);
+  }
+  const W = 620, H = 260, PL = 40, PR = 20, PT = 20, PB = 40;
+  const xMin = -3, xMax = 3, yMin = -3, yMax = 3;
+  const xToPx = (x) => PL + (x - xMin) / (xMax - xMin) * (W - PL - PR);
+  const yToPx = (y) => PT + (1 - (y - yMin) / (yMax - yMin)) * (H - PT - PB);
+  const dots = pts.map(([x, y]) => `<circle cx="${xToPx(x).toFixed(1)}" cy="${yToPx(y).toFixed(1)}" r="2.2" fill="#7b3fa0" opacity="0.55"/>`).join('');
+  // 回帰線: y = r × x
+  const line = `<line x1="${xToPx(xMin)}" y1="${yToPx(r * xMin)}" x2="${xToPx(xMax)}" y2="${yToPx(r * xMax)}" stroke="#dc2626" stroke-width="1.6"/>`;
+  const ticks = [];
+  for (let t = xMin; t <= xMax; t++) {
+    ticks.push(`<line x1="${xToPx(t)}" y1="${H - PB}" x2="${xToPx(t)}" y2="${H - PB + 4}" stroke="#6b7280"/><text x="${xToPx(t)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${t}</text>`);
+    ticks.push(`<line x1="${PL - 4}" y1="${yToPx(t)}" x2="${PL}" y2="${yToPx(t)}" stroke="#6b7280"/><text x="${PL - 6}" y="${yToPx(t) + 3}" text-anchor="end" font-size="10" fill="#6b7280">${t}</text>`);
+  }
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📊 散布図 (r = ${r.toFixed(2)}、 n = ${n} の 擬似データ)</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H - PB}" stroke="#374151"/>
+          ${ticks.join('')}
+          ${dots}
+          ${line}
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">想定 r で 生成した 擬似散布図。 実際の データ が こういう ばらつき方 に なる 想定。 r=0.1 (小) は 直線が ほぼ 見えない、 r=0.5 (大) で ようやく 傾向 が 目視 で 分かる。</div>
+    </div>`;
+}
+
+// chi²: 帰無 と 想定 の 比率 を 棒グラフで
+function renderProportionsPlot() {
+  // 効果量 w からは具体的な p 値組が復元できないので、 df+1 個の 均等 帰無 と 想定 (w に対応)
+  const w = state.effect;
+  const df = state.df;
+  const k = df + 1;  // df = k - 1 と仮定
+  if (!isFinite(w) || w <= 0 || k < 2 || k > 20) return '';
+  const p0 = Array(k).fill(1 / k);
+  // 想定: 対称に 1 群を +Δ、 対称に他を -Δ/(k-1)。 w² = Σ(p-p0)²/p0
+  // シンプル: 1 群だけ +Δ、 残りは -Δ/(k-1)
+  // w² = Δ²/p0 + (k-1) × (Δ/(k-1))²/p0 = Δ²/p0 × (1 + 1/(k-1)) = Δ² × k / ((k-1) × p0)
+  // p0 = 1/k → w² = Δ² × k² / (k-1) → Δ = w × √((k-1)/k²) = w × √(k-1)/k
+  const delta = w * Math.sqrt(k - 1) / k;
+  const p1 = p0.map((v, i) => i === 0 ? v + delta : v - delta / (k - 1));
+  const W = 620, H = 240, PL = 40, PR = 20, PT = 20, PB = 40;
+  const barW = (W - PL - PR) / k;
+  const yMax = Math.max(...p0, ...p1) * 1.3;
+  const yToPx = (y) => PT + (1 - y / yMax) * (H - PT - PB);
+  let bars = '';
+  for (let i = 0; i < k; i++) {
+    const x0 = PL + i * barW;
+    const bw = (barW - 8) / 2;
+    bars += `<rect x="${x0 + 4}" y="${yToPx(p0[i])}" width="${bw}" height="${(H - PB) - yToPx(p0[i])}" fill="#2563eb" opacity="0.7"/>`;
+    bars += `<rect x="${x0 + 4 + bw}" y="${yToPx(p1[i])}" width="${bw}" height="${(H - PB) - yToPx(p1[i])}" fill="#ea580c" opacity="0.7"/>`;
+    bars += `<text x="${x0 + barW / 2}" y="${H - PB + 14}" text-anchor="middle" font-size="10" fill="#6b7280">カテゴリ ${i + 1}</text>`;
+  }
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:8px">📊 比率の分布 (Cohen's w = ${w.toFixed(2)}、 ${k} カテゴリ)</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H - PB}" stroke="#374151"/>
+          ${bars}
+          <g transform="translate(${W - PR - 120}, ${PT})">
+            <rect x="0" y="0" width="120" height="34" fill="#fff" stroke="#e5e7eb" rx="4"/>
+            <rect x="6" y="6" width="14" height="10" fill="#2563eb" opacity="0.7"/><text x="24" y="15" font-size="10" fill="#111">帰無 (均等)</text>
+            <rect x="6" y="20" width="14" height="10" fill="#ea580c" opacity="0.7"/><text x="24" y="29" font-size="10" fill="#111">想定 (偏り)</text>
+          </g>
+        </svg>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">帰無 (等分布) と 想定 (w に相当する偏り) の 比較例。 実際は 効果量 w に 対応する 分布 の 選び方 は 複数ある が、 「1 カテゴリ に 偏る」 パターン を 表示。</div>
+    </div>`;
+}
+
 // 分布プロット (H0 vs H1、 α/β/power 領域を色分け)
 function renderDistPlot() {
   const { za, ncp, tails } = currentDistStats();
@@ -706,7 +931,7 @@ function renderDistPlot() {
 
   return `
     <div class="card">
-      <div class="bold" style="margin-bottom:8px">📊 分布プロット (H0 vs H1)</div>
+      <div class="bold" style="margin-bottom:8px">📈 検定統計量 の 分布 (H0 vs H1) — G*Power 型</div>
       <div style="width:100%; overflow-x:auto">
         <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
           <!-- 軸 -->
@@ -743,7 +968,7 @@ function renderDistPlot() {
           </g>
         </svg>
       </div>
-      <div class="hint-sm" style="margin-top:6px">青が H0 (効果なし)、 橙が H1 (想定効果あり) の分布。 縦点線 が 有意水準 α に対応する 臨界値。 橙が 臨界値より右に はみ出す 面積 が 検定力 (緑)、 臨界値より左に 残る 面積 が β (灰)。</div>
+      <div class="hint-sm" style="margin-top:6px"><b>これは「検定 で 計算する t 値 等 の 統計量 の 分布」</b>で、 群 の 生分布 では ない。 青が H0 (効果なし と 仮定)、 橙が H1 (想定効果 が 本当に あった 場合)。 縦点線 が α に対応する 臨界値、 橙が 臨界値より右に はみ出す 面積 が 検定力 (緑)、 臨界値より左に 残る 面積 が β (灰)。 実際の 群の 分布は 上の 「群の分布」プロット で。</div>
     </div>`;
 }
 
@@ -865,7 +1090,10 @@ function renderResult(out, t) {
         ${p < 0.8 ? '<div class="hint-sm" style="margin-top:4px; color:#a16207">💡 検定力 80% 未満: 効果があってもそれを検出できず 「型 II 過誤」 が起きる可能性が高めです。</div>' : ''}
       </div>`;
   }
-  root.innerHTML = resultHtml + renderDistPlot() + renderPowerCurve();
+  // v1027 直感的プロット (2 群 or k 群 or 散布図 or 比率棒) を 主役に、 従来の
+  //   G*Power 型 検定統計量プロット は その 下 に 残す (中村さん指示「G*Power の
+  //   やつも 残しておいて 良い、 2 群の 分布も やっぱり欲しい」)。
+  root.innerHTML = resultHtml + renderIntuitivePlot() + renderDistPlot() + renderPowerCurve();
 }
 
 function clampFloat(v, lo, hi) {
