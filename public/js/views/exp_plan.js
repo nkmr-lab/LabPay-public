@@ -227,8 +227,20 @@ function renderIssue(iss, color) {
   const severity = String(iss?.severity || '').toLowerCase();
   const sevColor = severity === 'high' ? '#dc2626' : (severity === 'med' ? '#a16207' : '#0891b2');
   const sevLabel = ({high: '🚨 高', med: '⚠ 中', low: 'ℹ 低'})[severity] || severity;
+  // v1044 中村さん指摘「RQ や 仮説 の 書き方 を 指摘してくれるのは 良いが、 オリジナルが
+  //   何だったかが 示されて いなくて 参照が 面倒。 原文は これだった よ を 示して」
+  //   → issue の 上 に 計画書 の 原文 を Georgia 系 で 引用表示。 該当なし の 場合 は
+  //   薄グレーで 「(該当記述なし)」 のみ。
+  const quote = (iss?.quote || '').trim();
+  const isNoQuote = quote === '(該当記述なし)' || quote === '' || quote === '(なし)';
+  const quoteBlock = quote
+    ? (isNoQuote
+        ? `<div style="font-size:11.5px; color:#9ca3af; font-style:italic; margin-bottom:4px">📄 計画書 の 原文: (該当記述なし)</div>`
+        : `<div style="font-size:12px; padding:5px 9px; margin-bottom:6px; background:#f9fafb; border-left:2px solid #9ca3af; font-family: Georgia, 'Times New Roman', serif; line-height:1.55; color:#4b5563">📄 原文: ${escapeHtml(quote)}</div>`)
+    : '';
   return `
     <div style="padding:8px 10px; background:#fff; border-left:3px solid ${sevColor}; border-radius:0 6px 6px 0">
+      ${quoteBlock}
       <div style="display:flex; gap:6px; align-items:baseline; flex-wrap:wrap">
         ${sevLabel ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:${sevColor}22; color:${sevColor}">${escapeHtml(sevLabel)}</span>` : ''}
         <div class="bold" style="font-size:13px">${escapeHtml(iss?.issue || '')}</div>
