@@ -548,6 +548,7 @@ route('/translate',         lazy(() => import('./views/translate.js'), 'renderTr
 route('/help',              lazy(() => import('./views/help.js'), 'renderHelp'));
 route('/chat',              lazy(() => import('./views/chat.js'), 'renderChat'));
 route('/exercise',        lazy(() => import('./views/exercise.js'), 'renderExercise'));
+route('/pomodoro',        lazy(() => import('./views/pomodoro.js'), 'renderPomodoro'));   // v1019 🍅 ポモドーロタイマー
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
 route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
 // v609 #234 タブ単位のカテゴリ絞り込み

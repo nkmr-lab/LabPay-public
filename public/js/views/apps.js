@@ -124,6 +124,9 @@ export const APPS = [
     desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
   // v1002 個人家計簿
+  // v1019 🍅 ポモドーロタイマー (個人の集中管理)
+  { id: 'pomodoro',       cat: 'health', url: '#/pomodoro',      title: '🍅 ポモドーロタイマー',
+    desc: '集中25分 → 小休憩5分 を 繰り返す 集中法。 4 セット目 の 後 は 大休憩15分。 タスクラベル、 完了時 チャイム + ブラウザ通知、 集中中 は 画面 sleep 抑止、 日次実績 グラフ、 duration カスタマイズ 可。 個人の作業効率アップに。', defaultVisible: true },
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。 手動追加 or 領収書を撮影して OpenAI Vision で 店名/日付/金額/カテゴリを自動抽出。 月別 + カテゴリ別合計 + 明細一覧。 全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
