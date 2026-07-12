@@ -770,7 +770,10 @@ function applyThumbToDom() {
       if (wrap && !wrap.querySelector('[data-nkm-count]')) {
         const badge = document.createElement('span');
         badge.dataset.nkmCount = '1';
-        badge.textContent = `📷 ${c}`;
+        // v1015 中村さん指摘「300+ の 表記 消えてる」→ lazy 描画側 に も 298+ で 「300+」 表記を戻す
+        //   (v970.6 の initial render 側 に は 残って いたが、 実データ は lookupThumbs 後に
+        //   applyThumbToDom で 挿入 される ので こちら が 実質 表示 コード)
+        badge.textContent = `📷 ${c >= 298 ? '300+' : c}`;
         badge.style.cssText = 'background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; position:absolute; right:6px; bottom:6px';
         wrap.appendChild(badge);
       }
