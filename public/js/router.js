@@ -69,6 +69,7 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
   'auctions',
   'research',        // 研究タブ
   'lab-mgmt',        // 運営タブ
+  'shared',          // v999 共有 タブ
   'games',           // 娯楽タブ
   'apps',            // アプリ一覧
   'achievements',

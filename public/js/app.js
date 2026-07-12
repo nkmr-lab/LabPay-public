@@ -550,6 +550,7 @@ route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
 // v609 #234 タブ単位のカテゴリ絞り込み
 route('/research',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'research' })));
 route('/lab-mgmt',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'lab-mgmt' })));
+route('/shared',         (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'shared' })));    // v999 共有 タブ
 route('/contacts',       lazy(() => import('./views/contacts.js'), 'renderContacts'));
 route('/requests-hub',   lazy(() => import('./views/requests_hub.js'), 'renderRequestsHub'));
 route('/wari',           lazy(() => import('./views/wari.js'), 'renderWari'));

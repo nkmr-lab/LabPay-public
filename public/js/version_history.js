@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v999', d: '2026-07-12', s: '📤 共有タブを新設、 10 アプリを移動 (中村さん指摘)。 index.html のタブ列に 「共有」 を追加 (研究 と 運営 の間)、 APP_CATEGORIES に shared を追加、 /#/shared ルートで apps.js の cat=shared 絞り込みに、 router.js の NON_FULLSCREEN_TOP_PARTS にも shared を追加。 移動した 10 アプリ: 中村研アルバム、 ゼミ動画、 チャット、 ファイル送受信、 一時画像共有、 〆切、 学会〆切、 重要連絡、 メンバー紹介ポスター作成、 かんばん。' },
   { v: 'v998', d: '2026-07-12', s: '🎮 中村研アルバム を 運営 → 娯楽 カテゴリに移動 (中村さん指摘)。 apps.js の nkmr-albums の cat を lab-mgmt → games に変更。' },
   { v: 'v997', d: '2026-07-11', s: '📐 論文要約の図切り出しに 2 段組対応を追加 (中村さん指摘「2 段組の時、 ぶち抜きの図表と、 段落だけにある図表がある」)。 pdftotext bbox で page 内 word の x 中心を binning、 中央帯 (page x=42-58%) の word 密度が 5% 未満なら 2 段組と判定。 caption の x 幅が page の 60% 超なら ぶち抜き (全幅 crop)、 それ未満で 2 段組なら caption の x 中心がどちらの段にあるか見て 該当段のみ crop。 crop_x_pct / crop_w_pct を figure_refs に付与、 フロントで background-position + size の x 軸も調整。 backfill で 25 rows / 69 figures を再更新。' },
   { v: 'v996', d: '2026-07-11', s: '🎯 論文要約の図切り出しをキャプション位置ベースの精密 crop に (中村さんアイデア「図は下にキャプション、 表は上にキャプション」)。 pdftotext -bbox-layout で PDF ページ内の word bbox を取得、 「Figure N」 「Table N」 のペアを探して y 座標を特定、 Figure は キャプション上に本体があるので crop 上端 = caption_y - pageH*0.55、 Table は下に本体があるので crop 下端 = caption_y + pageH*0.55。 crop_y_pct / crop_h_pct を figure_refs に付与、 フロントで background-position + background-size で該当領域を精密表示。 新規要約 は 保存 時 hook で 自動付与、 既存 は backfill script で 一括更新。 crop 情報が無い figure_refs は v995 の 全ページ表示 に fallback。' },

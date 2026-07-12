@@ -12,7 +12,8 @@ import { escapeHtml } from '../router.js';
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
   { id: 'research',  label: '🔬 研究用',                  hint: '論文要約 / 全訳 / 査読 / 原稿チェック / リライター / Deep Research など、 AI を使って研究を直接進めるもの。' },
-  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・チャット・締切・集金など)。' },
+  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・請求・待ち合わせ など)。' },
+  { id: 'shared',    label: '📤 共有',                    hint: 'ラボメンバーで情報や成果物を共有するもの (アルバム・ゼミ動画・チャット・ファイル送受信・締切・重要連絡・かんばん など)。' },
   { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。販売・購入・オークション。' },
   { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応通知を出すジャンル。' },
   { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
@@ -38,20 +39,20 @@ export const APPS = [
   { id: 'bait',          cat: 'lab-mgmt', url: '#/bait',          title: '💼 アルバイト申請', desc: '実験協力などで学生にアルバイトを依頼。時間 (小数) + 対象者を指定して送ると、受け取った側は月別で全部見えて処理済マーク。依頼者は進捗確認 + 未処理者催促可。', defaultVisible: true },
   { id: 'widgets',       cat: 'lab-mgmt', url: '#/widgets',       title: '🧩 ウィジェットセンター', desc: '自作ウィジェットを登録してホームに表示。 JS で render(root) を書くだけ。サンプルも用意 (時計 / 残高)。', defaultVisible: true },
   { id: 'cg2',           cat: 'game', url: '#/cg2',           title: '🎮 自作ゲーム v2 (cg2)', desc: 'p5.js で描画する准リアルタイム multiplayer framework。 sharedValues 自動同期 + host.start / host.stop のライフサイクル + CPU 戦対応。サンプル: マルバツ / ニム / ライツアウト / すごろく。', defaultVisible: true },
-  { id: 'chat-rooms',    cat: 'lab-mgmt', url: '#/chat-rooms', title: '💬 チャット (重要 / 連絡 / 相談 + DM)', desc: 'Slack 風チャット。 3 つのチャンネル + 1対1 DM。 2 秒 polling で准リアルタイム。「重要」への投稿は全員に通知が飛ぶ。', defaultVisible: true },
+  { id: 'chat-rooms',    cat: 'shared', url: '#/chat-rooms', title: '💬 チャット (重要 / 連絡 / 相談 + DM)', desc: 'Slack 風チャット。 3 つのチャンネル + 1対1 DM。 2 秒 polling で准リアルタイム。「重要」への投稿は全員に通知が飛ぶ。', defaultVisible: true },
   // v734 #344 新規追加機能の登録 (v718 / v733 で実装したが apps 一覧に入れ忘れていたもの)
-  { id: 'screen-shares', cat: 'lab-mgmt', url: '#/screen-shares', title: '🖼 一時画像共有',  desc: 'ラボ全体 or 自分のグループ宛に画像 + ひとことを投げて 15 分〜24 時間の間ホームに大きく表示。「とにかく今これ見て」用。', defaultVisible: true },
-  { id: 'file-transfers', cat: 'lab-mgmt', url: '#/file-transfers', title: '📦 ファイル送受信', desc: '相手を指定してファイル (PDF / Word / Excel / 画像 / zip / txt 等最大 50MB) を送れる。受信者のダウンロード回数と初回ダウンロード時刻を記録。', defaultVisible: true },
+  { id: 'screen-shares', cat: 'shared', url: '#/screen-shares', title: '🖼 一時画像共有',  desc: 'ラボ全体 or 自分のグループ宛に画像 + ひとことを投げて 15 分〜24 時間の間ホームに大きく表示。「とにかく今これ見て」用。', defaultVisible: true },
+  { id: 'file-transfers', cat: 'shared', url: '#/file-transfers', title: '📦 ファイル送受信', desc: '相手を指定してファイル (PDF / Word / Excel / 画像 / zip / txt 等最大 50MB) を送れる。受信者のダウンロード回数と初回ダウンロード時刻を記録。', defaultVisible: true },
   // v740 #288 BingoFit
   { id: 'bingofit',      cat: 'game',     url: '#/bingofit/closet', title: '👕 着回しビンゴ (BingoFit)', desc: '手持ちの服を 25 着以上登録すると、日曜始まりの 5x5 ビンゴ盤が自動生成。着た服を盤面から開けて、ラインが揃えばビンゴ。背景は自動で透過処理されます。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
-  { id: 'deadlines',     cat: 'lab-mgmt', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
+  { id: 'deadlines',     cat: 'shared', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'lab-mgmt', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
   { id: 'auctions',      cat: 'trade',  url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。締切時刻に最高額入札者が落札。落札後は出品者が「請求を飛ばす」ボタンから請求機能で集金 (連絡先はラボ内既知前提なので表示しない)。', defaultVisible: true },
   { id: 'nomikai',       cat: 'lab-mgmt', url: '#/nomikai',       title: '🍶 飲み会割り勘',    desc: '新歓・送別会などの一回精算用。学年傾斜 + 飲酒/ソフドリで割って通知。', defaultVisible: true },
 
   // 🟡 inform — 全員に届くお知らせ
-  { id: 'notices',       cat: 'lab-mgmt', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。カテゴリで切替。全メンバーが投稿可、投稿者 + admin が編集/削除。', defaultVisible: true },
+  { id: 'notices',       cat: 'shared', url: '#/notices',       title: '📢 重要連絡 / 学会情報', desc: 'タイトル + 本文 + URL でピン留め可能。カテゴリで切替。全メンバーが投稿可、投稿者 + admin が編集/削除。', defaultVisible: true },
   { id: 'groups',        cat: 'lab-mgmt', url: '#/groups',        title: '👥 イベント・出張用グループ作成', desc: '学会・出張・イベントなど一時的な括り。ワリカや一斉連絡に使う。自分の入ってるグループはホームから直接アクセス。', defaultVisible: true },
 
   // 🟢 tool — その場で結論が出る道具 (通知なし)
@@ -110,24 +111,24 @@ export const APPS = [
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
   { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v943 で追加予定。', defaultVisible: true },
   // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽 に移動
-  { id: 'nkmr-albums',    cat: 'games', url: '#/albums', title: '📸 中村研アルバム',
+  { id: 'nkmr-albums',    cat: 'shared', url: '#/albums', title: '📸 中村研アルバム',
     desc: '中村研 の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。 年別に折りたたみ、 学会 / 合宿 / 飲み会 / 卒業式 等 200+ 件の思い出。 各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
   // v960 外部ツール ポータル (LabPay を ハブ に して 別 アプリ に 飛ぶ)
-  { id: 'poster-maker',   cat: 'lab-mgmt', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
+  { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。 顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。 新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'lab-mgmt', url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
     desc: 'ラボ NFS / VPS 上のファイルをブラウザで一覧・編集・アップロード・ダウンロード。 VS Code Remote がメモリ枯渇するときの代替。 Google 認証で保護、 realpath で閉じ込め済。', defaultVisible: true },
   { id: 'db-admin',       cat: 'lab-mgmt', url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
     desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
-  { id: 'kanban', cat: 'lab-mgmt', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
+  { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
   { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero っぽい 文献 (paper reference) 管理。 DOI / arXiv ID / URL を 入れると crossref / arxiv API から metadata (title / authors / year / venue / abstract) を 自動取得。 PDF 添付、 タグ、 BibTeX 出力、 検索 (title / 著者 / 抄録 / 会議)、 タグ 絞り込み、 年 絞り込み、 読状態 (未読/読中/既読)、 自分 の note を 共有 (誰か が 読んだ 感想 / 気づき を みんな で 見られる)。 ラボ全員 で 共有、 起案者 / admin のみ 編集。 同 PDF SHA なら 既存 の paper_translate / paper_full_translate と 相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)
   { id: 'overleaf',     cat: 'research', url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウントで共有されてる全Overleafプロジェクトの文字数推移をラボメンバー全員で可視化。24h/7d差分やsparkline、複数プロジェクトの推移比較グラフ、60日履歴、ファイル別内訳。1か月以上更新なしのプロジェクトはグラフから除外。', defaultVisible: true },
-  { id: 'zemi-videos', cat: 'lab-mgmt', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。誰でも動画URL + タイトル + 説明を登録できる。', defaultVisible: true },
+  { id: 'zemi-videos', cat: 'shared', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。誰でも動画URL + タイトル + 説明を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
@@ -137,7 +138,7 @@ export const APPS = [
   // v570 #223 人狼 (v574 から game カテゴリへ)
   { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人でプレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。', defaultVisible: true },
   { id: 'fortune',       cat: 'game',   url: '#/fortune',        title: '🔮 今日の占い + ♈ 西洋占星術',  desc: '1 日 1 回だけ引ける運勢 (大吉 / 中吉 / 凶等 30 種)。設定 → プロフィールで誕生日を登録すると 12 星座占い (メッセージ + ラッキーカラー / アイテム / ナンバー) も一緒に表示。同じ日は同じ結果、翌日 0:00 で更新。ホームの残高エリア 🔮 アイコンからも引ける。', defaultVisible: true },
-  { id: 'conf-deadlines',cat: 'lab-mgmt',url: '#/conf-deadlines', title: '📅 学会〆切',    desc: '国際会議 / 国内研究会 / 論文誌の投稿〆切を登録 + 一覧。誰でも登録可、全員閲覧可。〆切順表示 + あと N 日のカウントダウン。', defaultVisible: true },
+  { id: 'conf-deadlines',cat: 'shared',url: '#/conf-deadlines', title: '📅 学会〆切',    desc: '国際会議 / 国内研究会 / 論文誌の投稿〆切を登録 + 一覧。誰でも登録可、全員閲覧可。〆切順表示 + あと N 日のカウントダウン。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
   { id: 'predictions',   cat: 'game',   url: '#/predictions',    title: '🏆 優勝予想',       desc: 'ワールドカップやスポーツ大会、大学受験・学会 best paper など「順位」を予想して参加フィーで景品を山分け。 1位のみ / 1-2位 / 1-4位を起案ごとに設定可能。', defaultVisible: true },
   // v609 #235 勝敗予測 (試合のスコアを当てる)
