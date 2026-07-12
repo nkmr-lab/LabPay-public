@@ -115,6 +115,32 @@ function calc_anova(alpha, effect_f, k, mode, N, powerTarget) {
   }
 }
 
+// v1041 反復測定 ANOVA (within-factor、 1 群、 k 測定/条件)。
+//   G*Power と 同じ 非心 F 型 の 公式 の 正規近似:
+//     λ = n × k × f² / (1 - ρ) × ε
+//     df1 = (k-1) × ε, df2 = (n-1) × (k-1) × ε
+//   ρ: 測定間 相関 (0-1、 デフォルト 0.5)。 高いほど 個人差 が キャンセル されて 検定力↑
+//   ε: 球面性補正 (0 < ε ≤ 1、 デフォルト 1)。 Greenhouse-Geisser / Huynh-Feldt で 補正
+//     する 場合 は 0.5 - 0.9 程度 に。
+//   参加者 内 デザインでは ρ が 0.5 でも 独立 ANOVA より 2 倍近く 検定力↑ になる ため、
+//   独立 ANOVA と 同じ f を 想定した場合 の 必要 n は 大幅に 少ない。
+function calc_rmanova(alpha, effect_f, k, rho, epsilon, mode, N, powerTarget) {
+  const rho_c = Math.max(0.001, Math.min(0.999, rho));
+  const eps_c = Math.max(0.001, Math.min(1.0, epsilon));
+  const factor = k / (1 - rho_c) * eps_c;  // f² に かかる 係数
+  const za = qnorm(1 - alpha);
+  if (mode === 'a_priori') {
+    const zb = qnorm(powerTarget);
+    // λ = N × factor × f²、 検定力 ≈ Φ(√λ - z_α)  ← 独立 ANOVA と 同じ 正規近似
+    const n = Math.pow(za + zb, 2) / (effect_f * effect_f * factor);
+    return { n_total: Math.max(3, Math.ceil(n)) };
+  } else {
+    const lambda = N * effect_f * effect_f * factor;
+    const p = pnorm(Math.sqrt(lambda) - za);
+    return { power: Math.max(0, Math.min(1, p)) };
+  }
+}
+
 // Pearson 相関 (H0: ρ=0)。 Fisher z 変換 で 近似:
 //   z_r = 0.5 × ln((1+r)/(1-r)), SE(z_r) = 1/√(n-3)
 function calc_correlation(alpha, r, tails, mode, n, powerTarget) {
@@ -644,7 +670,7 @@ function renderEffectHelper() {
         </div>
       </details>`;
   }
-  if (state.test === 'anova') {
+  if (state.test === 'anova' || state.test === 'rmanova') {
     return `
       <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
         <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 群平均 + 群内 SD から Cohen's f を計算</summary>
@@ -896,6 +922,7 @@ const TESTS = [
   { id: 't2',    label: '📏 対応のない t 検定 (2 標本 t 検定: 独立)', eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
   { id: 'tp',    label: '📎 対応のある t 検定',                       eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
   { id: 't1',    label: '👤 1 標本 t 検定 (基準値との比較)',         eff: 'd', effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
+  { id: 'rmanova', label: '🔁 反復測定 ANOVA (対応 3 群以上)',       eff: 'f', effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'anova', label: '📊 一元配置 ANOVA',              eff: 'f',        effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'corr',  label: '🔗 Pearson 相関',                eff: 'r',        effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
   { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
@@ -919,8 +946,10 @@ const state = {
   power: 0.8,
   n_per_group: 30,
   n_total: 60,
-  k: 3,              // ANOVA 群数
+  k: 3,              // ANOVA 群数 / 反復測定 の 測定回数
   df: 1,             // χ² 自由度
+  rho: 0.5,          // v1041 反復測定 ANOVA の 測定間 相関
+  epsilon: 1.0,      // v1041 反復測定 ANOVA の 球面性補正 (1 = 補正なし)
   // v1028 中村さん提案「実測ベース で 平均 / SD から d を 導く 方が 直感的」
   //   dataType: 'continuous' | 'likert5' | 'likert7' | 'percentage' | 'binary'
   //   rawA, rawB: それぞれ の 群 の { mean, sd }
@@ -1101,6 +1130,34 @@ function render() {
       body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
     }) : ''}
 
+    ${state.test==='rmanova' ? stepBlock({
+      title: '⑤-a 測定 回数 k',
+      desc: '同じ 参加者 で 繰り返す 測定 (条件 or 時点) の 数 (例: 3 条件 なら k=3、 前中後 なら k=3)。',
+      body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
+    }) : ''}
+
+    ${state.test==='rmanova' ? stepBlock({
+      title: '⑤-b 測定間 相関 ρ',
+      desc: '同じ 参加者 の 異なる 測定間 の 想定 相関。 高い ほど 個人差 が キャンセル されて 検定力↑。 反応時間 系 は 0.6-0.8、 主観評価 系 は 0.3-0.6 が 目安。 わからなければ 0.5。',
+      body: `<div class="row" style="gap:4px; flex-wrap:wrap">
+               <button class="btn" data-pw-rho="0.3" style="font-size:11px; padding:2px 8px">弱 0.3</button>
+               <button class="btn" data-pw-rho="0.5" style="font-size:11px; padding:2px 8px">典型 0.5</button>
+               <button class="btn" data-pw-rho="0.7" style="font-size:11px; padding:2px 8px">強 0.7</button>
+             </div>
+             <input type="number" id="pw-rho" step="0.05" min="0" max="0.99" value="${state.rho}" style="width:120px; margin-top:6px">`,
+    }) : ''}
+
+    ${state.test==='rmanova' ? stepBlock({
+      title: '⑤-c 球面性補正 ε (デフォルト 1.0)',
+      desc: '反復測定 の 球面性仮定 が 崩れる 時 の 補正。 Mauchly 検定 で 有意 なら Greenhouse-Geisser (0.5-0.8) or Huynh-Feldt (0.7-0.9) を。 わからなければ 1.0 (補正なし) で。',
+      body: `<div class="row" style="gap:4px; flex-wrap:wrap">
+               <button class="btn" data-pw-eps="1.0" style="font-size:11px; padding:2px 8px">1.0 (補正なし)</button>
+               <button class="btn" data-pw-eps="0.75" style="font-size:11px; padding:2px 8px">0.75 (GG 典型)</button>
+               <button class="btn" data-pw-eps="0.5" style="font-size:11px; padding:2px 8px">0.5 (深刻な違反)</button>
+             </div>
+             <input type="number" id="pw-eps" step="0.05" min="0.01" max="1" value="${state.epsilon}" style="width:120px; margin-top:6px">`,
+    }) : ''}
+
     ${state.test==='chi2' ? stepBlock({
       title: '⑤-a 自由度 df',
       desc: 'χ² 検定 の 自由度 (適合度 検定: カテゴリ数 − 1、 独立性 検定: (行数−1)×(列数−1))。',
@@ -1185,6 +1242,21 @@ function render() {
   // v1038 モード を リストボックス化
   document.getElementById('pw-mode')?.addEventListener('change', (e) => {
     state.mode = e.target.value; render();
+  });
+  // v1041 反復測定 ANOVA の ρ / ε プリセット
+  document.querySelectorAll('[data-pw-rho]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.rho = parseFloat(b.dataset.pwRho);
+      const el = document.getElementById('pw-rho');
+      if (el) el.value = state.rho;
+    });
+  });
+  document.querySelectorAll('[data-pw-eps]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.epsilon = parseFloat(b.dataset.pwEps);
+      const el = document.getElementById('pw-eps');
+      if (el) el.value = state.epsilon;
+    });
   });
   document.querySelectorAll('[data-pw-eff]').forEach(b => {
     b.addEventListener('click', () => {
@@ -1502,6 +1574,14 @@ function syncFormToState() {
     const kEl = document.getElementById('pw-k');
     if (kEl) state.k = Math.max(2, parseInt(kEl.value, 10));
   }
+  if (state.test === 'rmanova') {
+    const kEl = document.getElementById('pw-k');
+    if (kEl) state.k = Math.max(2, parseInt(kEl.value, 10));
+    const rhoEl = document.getElementById('pw-rho');
+    if (rhoEl) state.rho = Math.max(0, Math.min(0.99, parseFloat(rhoEl.value) || 0.5));
+    const epsEl = document.getElementById('pw-eps');
+    if (epsEl) state.epsilon = Math.max(0.01, Math.min(1, parseFloat(epsEl.value) || 1));
+  }
   if (state.test === 'chi2') {
     const dfEl = document.getElementById('pw-df');
     if (dfEl) state.df = Math.max(1, parseInt(dfEl.value, 10));
@@ -1584,6 +1664,7 @@ function doCalc() {
     if (state.test === 't2')    out = calc_ttest_two_sample(state.alpha, state.effect, state.tails, state.mode, N, state.power);
     if (state.test === 'tp' || state.test === 't1') out = calc_ttest_paired(state.alpha, state.effect, state.tails, state.mode, N, state.power);
     if (state.test === 'anova') out = calc_anova(state.alpha, state.effect, state.k, state.mode, N, state.power);
+    if (state.test === 'rmanova') out = calc_rmanova(state.alpha, state.effect, state.k, state.rho, state.epsilon, state.mode, N, state.power);
     if (state.test === 'corr')  out = calc_correlation(state.alpha, state.effect, state.tails, state.mode, N, state.power);
     if (state.test === 'chi2')  out = calc_chi_squared(state.alpha, state.effect, state.df, state.mode, N, state.power);
   } catch (e) { out = { error: e.message }; }
@@ -1830,7 +1911,7 @@ function renderTestWizard() {
     else if (g === '2' && r === 'indep' && n === 'yes')   { inferred = 't2';  inferredNote = '2 群、 独立、 正規性 OK → 対応のない t 検定' + ordSfx; }
     else if (g === '1' && n === 'yes')                     { inferred = 't1';  inferredNote = '1 群 (基準値との比較)、 正規性 OK → 1 標本 t 検定' + ordSfx; }
     else if (g === '3plus' && r === 'indep' && n === 'yes'){ inferred = 'anova'; inferredNote = '3 群以上、 独立、 正規性 OK → 一元配置 ANOVA' + ordSfx; }
-    else if (g === '3plus' && r === 'paired' && n === 'yes'){ inferred = 'anova'; inferredNote = '3 群以上、 対応 (反復測定)、 正規性 OK → 反復測定 ANOVA (このアプリは 未対応、 参考値 として 一元配置 ANOVA)' + ordSfx; }
+    else if (g === '3plus' && r === 'paired' && n === 'yes'){ inferred = 'rmanova'; inferredNote = '3 群以上、 対応 (反復測定)、 正規性 OK → 反復測定 ANOVA' + ordSfx; }
     else if (g === '3plus' && n === 'yes' && !r)          { inferredNote = 'Q3 (群 の 関係) も 選んで ください'; }
     else if (n === 'no') {
       const npMap = {
@@ -1978,8 +2059,8 @@ function renderStatFlowchartSVG() {
   │       │   ├─ 正規性 + 等分散 → 一元配置 ANOVA
   │       │   └─ 正規性 NG → Kruskal-Wallis
   │       └─ 対応
-  │           ├─ 球面性 OK → 反復測定 ANOVA
-  │           ├─ 球面性 NG → GG or HF 補正 反復測定 ANOVA
+  │           ├─ 球面性 OK → 反復測定 ANOVA (このアプリで対応)
+  │           ├─ 球面性 NG → GG or HF 補正 反復測定 ANOVA (このアプリで ε 指定可)
   │           └─ 正規性 NG → Friedman 検定
   │
   ├─ 【複雑デザイン (2 要因以上、 参加者 × 刺激 交差、 unbalanced 等)】
@@ -2037,6 +2118,19 @@ function renderTestSpecificGuide() {
         <li>H0: 母平均 = μ_0 (基準値)、H1: ≠ μ_0 で 1 標本 t 検定。</li>
         <li>効果量: d = (M_obs - μ_0) / SD_obs。95%CI と併記。</li>
         <li>ノンパラ代替: Wilcoxon 符号順位検定 (中央値と基準値の比較)。</li>
+      </ol>`,
+    },
+    rmanova: {
+      title: '🔁 反復測定 ANOVA (対応 3 群以上) の 実施フロー',
+      body: `<ol style="margin:6px 0; padding-left:20px">
+        <li>各条件 (時点) の 分布 の 正規性 (Shapiro-Wilk) を 確認。 参加者内 デザインなので 独立性 は 気にしなくて OK。</li>
+        <li>Mauchly の 球面性検定: 有意 (p<.05) なら 球面性違反、 df を Greenhouse-Geisser (ε ≈ 0.5-0.8) or Huynh-Feldt (ε ≈ 0.7-0.9) で 補正。 3 条件 以下では 球面性は 自動的に成立するので 補正不要。</li>
+        <li>rmANOVA を 実行 (R: <code>aov(y ~ cond + Error(p/cond))</code> or <code>afex::aov_ez</code>、 SPSS の GLM Repeated Measures)。</li>
+        <li>効果量: partial η² (SS_effect / (SS_effect + SS_error)) が 定番、 generalized η²_G (Bakeman 2005) も。 Cohen's f = √(η²/(1-η²)) で 変換可。</li>
+        <li>事後検定: Bonferroni or Holm 補正で ペア比較。 対応 t 検定 を m=k(k-1)/2 個 実行、 補正 α = 0.05/m。</li>
+        <li>報告例: "F(2, 46) = 6.24, p = .004, η²_p = .21, 90%CI [.05, .36], Greenhouse-Geisser ε = 0.87. Bonferroni 事後: 時点 1 vs 時点 3 (p = .008)、 他 n.s."</li>
+        <li>ノンパラ代替: Friedman 検定 → Nemenyi or Bonferroni-Wilcoxon で事後比較。</li>
+        <li>より柔軟なら LMM (lmer(y ~ cond + (1|p))) に 移行推奨。 unbalanced や 欠損値 に強く、 現代の標準。</li>
       </ol>`,
     },
     anova: {
@@ -2192,6 +2286,12 @@ function currentDistStats() {
   } else if (state.test === 'anova') {
     n = state.n_total;
     ncp = Math.sqrt(n * state.effect * state.effect);   // √λ
+  } else if (state.test === 'rmanova') {
+    n = state.n_total;
+    const rho_c = Math.max(0.001, Math.min(0.999, state.rho));
+    const eps_c = Math.max(0.001, Math.min(1, state.epsilon));
+    const factor = state.k / (1 - rho_c) * eps_c;
+    ncp = Math.sqrt(n * state.effect * state.effect * factor);
   } else if (state.test === 'corr') {
     n = state.n_total;
     const z_r = 0.5 * Math.log((1 + Math.abs(state.effect)) / (1 - Math.abs(state.effect)));
@@ -2211,7 +2311,7 @@ function dnorm(z) { return Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI); }
 //   の 直感的プロット を 追加、 従来の H0/H1 検定統計量プロット は details で折り畳み。
 function renderIntuitivePlot() {
   if (state.test === 't2' || state.test === 'tp' || state.test === 't1') return renderTwoGroupPlot();
-  if (state.test === 'anova') return renderMultiGroupPlot();
+  if (state.test === 'anova' || state.test === 'rmanova') return renderMultiGroupPlot();
   if (state.test === 'corr')  return renderScatterPlot();
   if (state.test === 'chi2')  return renderProportionsPlot();
   return '';
@@ -2531,6 +2631,7 @@ function renderPowerCurve() {
       if (state.test === 't2')    p = calc_ttest_two_sample(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
       if (state.test === 'tp' || state.test === 't1') p = calc_ttest_paired(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
       if (state.test === 'anova') p = calc_anova(state.alpha, state.effect, state.k, 'post_hoc', n, 0.8).power;
+      if (state.test === 'rmanova') p = calc_rmanova(state.alpha, state.effect, state.k, state.rho, state.epsilon, 'post_hoc', n, 0.8).power;
       if (state.test === 'corr')  p = calc_correlation(state.alpha, state.effect, state.tails, 'post_hoc', n, 0.8).power;
       if (state.test === 'chi2')  p = calc_chi_squared(state.alpha, state.effect, state.df, 'post_hoc', n, 0.8).power;
     } catch (_) { p = 0; }
@@ -2549,6 +2650,7 @@ function renderPowerCurve() {
     if (state.test === 't2')    curP = calc_ttest_two_sample(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
     if (state.test === 'tp' || state.test === 't1') curP = calc_ttest_paired(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
     if (state.test === 'anova') curP = calc_anova(state.alpha, state.effect, state.k, 'post_hoc', nowN, 0.8).power;
+    if (state.test === 'rmanova') curP = calc_rmanova(state.alpha, state.effect, state.k, state.rho, state.epsilon, 'post_hoc', nowN, 0.8).power;
     if (state.test === 'corr')  curP = calc_correlation(state.alpha, state.effect, state.tails, 'post_hoc', nowN, 0.8).power;
     if (state.test === 'chi2')  curP = calc_chi_squared(state.alpha, state.effect, state.df, 'post_hoc', nowN, 0.8).power;
   } catch (_) {}
@@ -2602,7 +2704,9 @@ function renderResult(out, t) {
   }
   const tailStr = state.tails === 2 ? '両側' : '片側';
   const args = `α=${state.alpha}, ${state.tails === 2 || !['t2','tp','t1','corr'].includes(state.test) ? tailStr : tailStr}, ${t.eff}=${state.effect}`;
-  const extraArgs = state.test === 'anova' ? `, k=${state.k}` : (state.test === 'chi2' ? `, df=${state.df}` : '');
+  const extraArgs = state.test === 'anova' ? `, k=${state.k}`
+                  : state.test === 'rmanova' ? `, k=${state.k}, ρ=${state.rho}, ε=${state.epsilon}`
+                  : state.test === 'chi2' ? `, df=${state.df}` : '';
   // v1025b 中村さん指摘「計算し直したときに、 グラフが作り変えられない」→ 従来は
   //   root.innerHTML → insertAdjacentHTML の 2 段構え で グラフ を 追記 していたが、
   //   タイミング 依存 で 追記 が スキップ される 事例あり。 結果カード + 分布プロット +
@@ -2650,7 +2754,7 @@ function renderSensitivityCurve() {
   const nowN = state.test === 't2' ? state.n_per_group : state.n_total;
   const t = TESTS.find(x => x.id === state.test);
   if (!t) return '';
-  const effLabel = state.test === 'anova' ? "Cohen's f"
+  const effLabel = state.test === 'anova' || state.test === 'rmanova' ? "Cohen's f"
                  : state.test === 'corr' ? "Pearson r"
                  : state.test === 'chi2' ? "Cohen's w"
                  : state.test === 'lmm_within' || state.test === 'lmm_crossed' ? '固定効果 β'
@@ -2709,6 +2813,7 @@ function renderSensitivityCurve() {
         if (state.test === 't2')    power = calc_ttest_two_sample(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
         else if (state.test === 'tp' || state.test === 't1') power = calc_ttest_paired(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
         else if (state.test === 'anova') power = calc_anova(state.alpha, e, state.k, 'post_hoc', nowN, 0.8).power;
+        else if (state.test === 'rmanova') power = calc_rmanova(state.alpha, e, state.k, state.rho, state.epsilon, 'post_hoc', nowN, 0.8).power;
         else if (state.test === 'corr')  power = calc_correlation(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
         else if (state.test === 'chi2')  power = calc_chi_squared(state.alpha, e, state.df, 'post_hoc', nowN, 0.8).power;
       } catch (_) { power = 0; }
@@ -2729,6 +2834,7 @@ function renderSensitivityCurve() {
     tp:    [[0.2, '小'], [0.5, '中'], [0.8, '大']],
     t1:    [[0.2, '小'], [0.5, '中'], [0.8, '大']],
     anova: [[0.10, '小'], [0.25, '中'], [0.40, '大']],
+    rmanova: [[0.10, '小'], [0.25, '中'], [0.40, '大']],
     corr:  [[0.10, '小'], [0.30, '中'], [0.50, '大']],
     chi2:  [[0.10, '小'], [0.30, '中'], [0.50, '大']],
     lmm_within:  [[0.2, '小'], [0.5, '中'], [0.8, '大']],
