@@ -196,31 +196,33 @@ function dLabel(d) {
   return '極大';
 }
 
-function renderDerivedInner(d) {
-  if (d === null) {
-    return '<div class="hint-sm" style="color:#a16207">値を 全部 入れると 効果量 d が 出ます</div>';
-  }
-  return `
-    <div class="card" style="background:linear-gradient(90deg, #ede4f333, #fff); border-left:4px solid #7b3fa0; margin:0">
-      <div style="font-size:15px">→ 予想効果量 <b style="color:#7b3fa0">d = ${d.toFixed(3)}</b> <span style="color:#6b7280">(${dLabel(d)})</span></div>
-      <div class="hint-sm" style="margin-top:2px">「→ この d を 効果量欄に 入れる」 ボタン で 上の 効果量欄 に 反映 して 「🧮 計算」。</div>
-    </div>`;
+// v1029 「ボタン を 押した ときのみ 表示」 に変更、 プレース は raw-derived-box の
+//   textContent へ 一言だけ 反映 (「→ d = 0.500 (中)」)。
+function renderDerivedLabel(d) {
+  if (d === null) return '';
+  return `→ d = ${d.toFixed(3)} (${dLabel(d)})`;
 }
 
+// v1029 中村さん指摘「手法A、 手法Bのそれぞれの平均と、 SDを入力したら、 それに応じて
+//   どんなグラフになるか (正規分布の場合に) というのを 示してあげて。 で、 その後
+//   予想効果量を求めて。 だから、 この値で 予想効果量を求める みたいなボタンを 用意する
+//   とよいのかな。 いま、 データの種類を選んだ時点で 何か走るので変」→
+//     - dtype 変更で render() (全再描画) するのを やめ、 dtype 依存の 範囲hint と
+//       preview グラフ だけ 差し替える (フォーカス が 抜けない)
+//     - 平均 / SD 変化 で ライブ preview グラフ を 更新 (2 群の 正規分布 or 差の分布)
+//     - 予想 d の 値 は 「この値で 予想効果量を求める」 ボタン を 押した ときのみ
+//       表示 + 効果量欄 に 反映
 function renderRawInputs() {
   if (!['t2','tp','t1'].includes(state.test)) return '';
   const dt = dtDef();
-  const [mMin, mMax] = dt.meanRange;
-  const [sdMin, sdMax] = dt.sdRange;
-  const derived = derivedDFromRaw();
   const dtSelect = `
     <label class="field">
       <span class="lbl">📏 データ の 種類</span>
       <select id="pw-dtype">
         ${DATA_TYPES.map(x => `<option value="${x.id}" ${x.id===state.dataType?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
       </select>
-    </label>`;
-  const rangeHint = `平均 ${mMin ?? '−∞'} 〜 ${mMax ?? '∞'} / SD ${sdMin} 〜 ${sdMax ?? '∞'}`;
+    </label>
+    <div id="raw-range-hint" class="hint-sm" style="font-size:11px; margin-top:2px">${escapeHtml(rangeHintText())}</div>`;
   const twoGroupInputs = `
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px">
       <div style="padding:8px; background:#eff6ff; border-radius:6px; border-left:3px solid #2563eb">
@@ -254,25 +256,108 @@ function renderRawInputs() {
         </label>
       </div>
     </div>`;
-  // v1028b 中村さん指摘「予想効果量の値が 変化しない」→ 入力中は 再 render すると focus が
-  //   抜ける ので、 この derivedBox を id 付きで 出しておいて rawUpdate で 中身だけ 更新する。
-  const derivedInner = renderDerivedInner(derived);
-  const derivedBox = `<div id="raw-derived-box" style="margin-top:8px">${derivedInner}</div>`;
-  // v1028 中村さん指示 「今の方法を残しておいても良い。 ただ、 オプションで
-  //   そういうのが 欲しい」 → 上の 効果量 直接入力 は そのまま残し、 これは
-  //   折り畳み <details> で オプション 提供。
   return `
     <details class="card" style="background:#fafaf5; border:1px solid #f3f4f6">
       <summary style="cursor:pointer; font-weight:600">🎯 (オプション) 予想データ (平均 + SD) から 効果量 を 導く</summary>
-      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れると 効果量 d を 自動計算 して 上の 効果量欄 に 反映 します。 データ 型 に 応じて 妥当な 範囲 を 案内。</div>
+      <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れて、 グラフ で 手ごたえ を 確認 → 「この値で 予想効果量を 求める」 ボタン で 効果量欄 に 反映 します。</div>
       ${dtSelect}
-      <div class="hint-sm" style="font-size:11px; margin-top:2px">目安: ${escapeHtml(rangeHint)}</div>
       ${state.test === 't2' ? twoGroupInputs : diffInputs}
-      ${derivedBox}
-      <div class="row" style="gap:6px; margin-top:8px">
-        <button id="raw-apply" class="btn primary" style="font-size:12px">→ この d を 効果量欄に 入れる</button>
+      <!-- ライブ preview グラフ (正規分布) -->
+      <div id="raw-preview" style="margin-top:10px">${renderRawPreviewSVG()}</div>
+      <div class="row" style="gap:6px; margin-top:8px; align-items:center; flex-wrap:wrap">
+        <button id="raw-apply" class="btn primary" style="font-size:12px">→ この値で 予想効果量を 求める (効果量欄に 入れる)</button>
+        <span id="raw-derived-box" class="hint-sm"></span>
       </div>
     </details>`;
+}
+
+// dtype 依存の 範囲 hint 文字列
+function rangeHintText() {
+  const dt = dtDef();
+  const [mMin, mMax] = dt.meanRange;
+  const [sdMin, sdMax] = dt.sdRange;
+  return `目安: 平均 ${mMin ?? '−∞'} 〜 ${mMax ?? '∞'} / SD ${sdMin} 〜 ${sdMax ?? '∞'}`;
+}
+
+// v1029 ライブ preview: 平均 / SD から 正規分布 を 2 本 (2 標本) or 1 本 (対応/1 標本)
+//   描画。 効果量 表示 は しない (「値を まず 見て、 それから 求める」フロー)。
+function renderRawPreviewSVG() {
+  const W = 600, H = 200, PL = 34, PR = 16, PT = 12, PB = 32;
+  const dnormAt = (x, mu, sd) => Math.exp(-((x - mu) / sd) ** 2 / 2) / (sd * Math.sqrt(2 * Math.PI));
+  let curves = [];   // { mu, sd, color, label }
+  if (state.test === 't2') {
+    curves.push({ mu: state.rawA.mean, sd: state.rawA.sd, color: '#2563eb', label: '手法 A' });
+    curves.push({ mu: state.rawB.mean, sd: state.rawB.sd, color: '#ea580c', label: '手法 B' });
+  } else {
+    curves.push({ mu: state.rawDiff.mean, sd: state.rawDiff.sd, color: '#7b3fa0', label: state.test === 'tp' ? '差の分布' : '(観測 − 基準) の 分布' });
+  }
+  // 有効性チェック
+  if (curves.some(c => !isFinite(c.mu) || !isFinite(c.sd) || c.sd <= 0)) {
+    return `<div class="hint-sm" style="text-align:center; color:#a16207; padding:20px 0">値を 全部 入れると グラフ が 出ます</div>`;
+  }
+  // x 範囲: 全曲線の平均 ± 4 SD を 覆う
+  let xMin = Math.min(...curves.map(c => c.mu - 4 * c.sd));
+  let xMax = Math.max(...curves.map(c => c.mu + 4 * c.sd));
+  // 差の分布の場合は 0 を必ず含める (0 = 差なし の基準)
+  if (state.test !== 't2') {
+    xMin = Math.min(xMin, -1 * curves[0].sd);
+    xMax = Math.max(xMax, curves[0].sd);
+  }
+  const pad = (xMax - xMin) * 0.05;
+  xMin -= pad; xMax += pad;
+  const yMax = Math.max(...curves.map(c => dnormAt(c.mu, c.mu, c.sd))) * 1.15;
+  const xToPx = (x) => PL + (x - xMin) / (xMax - xMin) * (W - PL - PR);
+  const yToPx = (y) => PT + (1 - y / yMax) * (H - PT - PB);
+  const N = 200;
+  let svgCurves = '';
+  let legends = '';
+  curves.forEach((c, i) => {
+    const pts = [];
+    for (let j = 0; j <= N; j++) {
+      const x = xMin + (j / N) * (xMax - xMin);
+      pts.push([x, dnormAt(x, c.mu, c.sd)]);
+    }
+    const linePath = 'M ' + pts.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+    const fillPath = linePath + ` L ${xToPx(xMax).toFixed(1)} ${yToPx(0).toFixed(1)} L ${xToPx(xMin).toFixed(1)} ${yToPx(0).toFixed(1)} Z`;
+    svgCurves += `<path d="${fillPath}" fill="${c.color}22" stroke="none"/>`;
+    svgCurves += `<path d="${linePath}" fill="none" stroke="${c.color}" stroke-width="1.8"/>`;
+    // 平均線
+    svgCurves += `<line x1="${xToPx(c.mu)}" y1="${yToPx(dnormAt(c.mu, c.mu, c.sd))}" x2="${xToPx(c.mu)}" y2="${H - PB}" stroke="${c.color}" stroke-dasharray="3,3" stroke-width="1"/>`;
+    legends += `<line x1="6" y1="${14 + i * 14}" x2="24" y2="${14 + i * 14}" stroke="${c.color}" stroke-width="2"/><text x="28" y="${17 + i * 14}" font-size="10.5" fill="#111">${escapeHtml(c.label)} (μ=${c.mu.toFixed(2)}, σ=${c.sd.toFixed(2)})</text>`;
+  });
+  // x 軸 tick (5 分割)
+  const ticks = [];
+  for (let i = 0; i <= 5; i++) {
+    const x = xMin + (i / 5) * (xMax - xMin);
+    ticks.push(`<line x1="${xToPx(x)}" y1="${H - PB}" x2="${xToPx(x)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                <text x="${xToPx(x)}" y="${H - PB + 15}" text-anchor="middle" font-size="10" fill="#6b7280">${x.toFixed(1)}</text>`);
+  }
+  // 差の分布 の 0 (基準線)
+  const zeroMark = state.test !== 't2' ? `<line x1="${xToPx(0)}" y1="${PT}" x2="${xToPx(0)}" y2="${H - PB}" stroke="#111" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.4"/>
+       <text x="${xToPx(0) + 3}" y="${PT + 10}" font-size="10" fill="#111">差なし (0)</text>` : '';
+  // 手法差 (2 標本 の みつ) の 帯
+  let diffMark = '';
+  if (state.test === 't2' && isFinite(state.rawA.mean) && isFinite(state.rawB.mean)) {
+    const yBand = yToPx(dnormAt(0,0,1)) * 0.4;
+    diffMark = `<line x1="${xToPx(state.rawA.mean)}" y1="${yBand - 4}" x2="${xToPx(state.rawB.mean)}" y2="${yBand - 4}" stroke="#111" stroke-width="1.2" marker-end="url(#raw-arr)"/>
+                <line x1="${xToPx(state.rawB.mean)}" y1="${yBand - 4}" x2="${xToPx(state.rawA.mean)}" y2="${yBand - 4}" stroke="#111" stroke-width="1.2" marker-end="url(#raw-arr)"/>
+                <text x="${xToPx((state.rawA.mean + state.rawB.mean) / 2)}" y="${yBand - 8}" text-anchor="middle" font-size="11" fill="#111">|M_A − M_B| = ${Math.abs(state.rawA.mean - state.rawB.mean).toFixed(2)}</text>`;
+  }
+  return `
+    <div style="width:100%; overflow-x:auto">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+        <defs><marker id="raw-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>
+        <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+        ${ticks.join('')}
+        ${zeroMark}
+        ${svgCurves}
+        ${diffMark}
+        <g transform="translate(${W - PR - 175}, ${PT})">
+          <rect x="0" y="0" width="175" height="${8 + curves.length * 14}" fill="#fff" stroke="#e5e7eb" rx="4"/>
+          ${legends}
+        </g>
+      </svg>
+    </div>`;
 }
 
 // ---------------- 効果量 ヘルパー (旧: 詳しい人向け) ----------------
@@ -607,10 +692,23 @@ function render() {
   document.querySelectorAll('[data-eh-calc]').forEach(b => {
     b.addEventListener('click', () => computeEffectFromHelper(b.dataset.ehCalc));
   });
-  // v1028 実測ベース 入力 → d 自動導出
+  // v1029 実測ベース 入力
+  //   - dtype 変更: 全体 render は せず、 range hint + preview だけ 差し替え (フォーカス残す)
+  //   - 平均 / SD 変更: preview グラフ を 差し替え (d の 表示 は しない)
+  //   - 「この値で 予想効果量を 求める」ボタン: d を計算 → 効果量欄に反映 → 一言だけ表示
   const dtypeSel = document.getElementById('pw-dtype');
-  if (dtypeSel) dtypeSel.addEventListener('change', (e) => { state.dataType = e.target.value; render(); });
-  const rawUpdate = () => {
+  if (dtypeSel) dtypeSel.addEventListener('change', (e) => {
+    state.dataType = e.target.value;
+    const rh = document.getElementById('raw-range-hint');
+    if (rh) rh.textContent = rangeHintText();
+    // preview 更新
+    const pv = document.getElementById('raw-preview');
+    if (pv) pv.innerHTML = renderRawPreviewSVG();
+    // 前回のボタン結果 (derived label) はクリア
+    const box = document.getElementById('raw-derived-box');
+    if (box) box.textContent = '';
+  });
+  const rawInputChanged = () => {
     if (state.test === 't2') {
       const mA = parseFloat(document.getElementById('raw-mA')?.value);
       const sA = parseFloat(document.getElementById('raw-sA')?.value);
@@ -626,22 +724,28 @@ function render() {
       if (!isNaN(m)) state.rawDiff.mean = m;
       if (!isNaN(s)) state.rawDiff.sd = s;
     }
-    // 派生 d の 表示 だけ 更新 (再 render まで やる と 入力 中に focus 抜ける)
-    const derived = derivedDFromRaw();
+    const pv = document.getElementById('raw-preview');
+    if (pv) pv.innerHTML = renderRawPreviewSVG();
+    // 前回のボタン結果 (derived label) はクリア (値が変わったので stale)
     const box = document.getElementById('raw-derived-box');
-    if (box) box.innerHTML = renderDerivedInner(derived);
+    if (box) box.textContent = '';
   };
   ['raw-mA','raw-sA','raw-mB','raw-sB','raw-mD','raw-sD'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', rawUpdate);
+    document.getElementById(id)?.addEventListener('input', rawInputChanged);
   });
   document.getElementById('raw-apply')?.addEventListener('click', () => {
-    rawUpdate();
+    // 最新の form 値を state に反映
+    rawInputChanged();
     const d = derivedDFromRaw();
-    if (d === null) return;
+    const box = document.getElementById('raw-derived-box');
+    if (d === null) {
+      if (box) { box.textContent = '値を 全部 入れて ください (SD は正の値)'; box.style.color = '#a16207'; }
+      return;
+    }
     state.effect = Math.round(d * 1000) / 1000;
     const el = document.getElementById('pw-effect');
     if (el) el.value = state.effect;
-    render();
+    if (box) { box.innerHTML = `<b style="color:#7b3fa0">${escapeHtml(renderDerivedLabel(d))}</b> を 効果量欄に 入れました。 「🧮 計算」 で 続きへ`; box.style.color = ''; }
   });
   document.getElementById('pw-calc').addEventListener('click', doCalc);
   // v1026 保存 / 共有 / 削除 / 新規
