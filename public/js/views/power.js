@@ -360,10 +360,10 @@ function render() {
           <label class="field">
             <span class="lbl">仮説の方向</span>
             <select id="pw-tails">
-              <option value="2" ${state.tails==2?'selected':''}>◇ 差があるかどうか (両側)</option>
-              <option value="1" ${state.tails==1?'selected':''}>▶ どちらが 大 / 小 と 決めている (片側)</option>
+              <option value="2" ${state.tails==2?'selected':''}>両側: 差があるかを判定</option>
+              <option value="1" ${state.tails==1?'selected':''}>片側: 想定の大小差を判定</option>
             </select>
-            <div class="hint-sm" style="margin-top:2px; font-size:11px">「A と B は違うはず」→ 両側 / 「A の方が B より大きい」→ 片側 (片側の方が必要 n は 少し 少なく なる が、 想定と 逆方向 の 差 は 検出しなく なる)</div>
+            <div class="hint-sm" style="margin-top:2px; font-size:11px">片側は 必要 n が 少し 少なく なる が、 想定と 逆方向 の 差 は 検出しなくなる。</div>
           </label>` : ''}
         ${state.mode==='a_priori' ? `
           <label class="field"><span class="lbl">目標検定力 1 - β</span>
