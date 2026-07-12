@@ -22,6 +22,8 @@ export const APP_CATEGORIES = [
   { id: 'health',    label: '💪 健康 / 運動',             hint: '体・運動の記録。個人ツール中心。' },
   { id: 'ai',        label: '🤖 個人ツール (AI / 計算)',   hint: '自分用の会話 / 翻訳 / 計算。通知は出さない。' },
   { id: 'archive',   label: '📚 ラボの情報・蓄積',         hint: '受動的に参照する静的・蓄積系。通知は出さない。' },
+  // v1016 中村さん要望「ファイルブラウザ / DB / ウィジェットセンターをアプリタブの中に」
+  { id: 'tools',     label: '🧰 ツール',                   hint: 'ファイル操作 / DB / 自作ウィジェット拡張など、 LabPay の運用や自分の作業を支える汎用ツール。' },
 ];
 
 export const APPS = [
@@ -37,7 +39,7 @@ export const APPS = [
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
   { id: 'requests',      cat: 'lab-mgmt', url: '#/requests',      title: '💴 請求 (集金)',     desc: 'メンバーから集金。全員同額 or 人ごと指定、支払い方法 (現金/PayPay/銀行/立替) のチェック付き。', defaultVisible: true },
   { id: 'bait',          cat: 'lab-mgmt', url: '#/bait',          title: '💼 アルバイト申請', desc: '実験協力などで学生にアルバイトを依頼。時間 (小数) + 対象者を指定して送ると、受け取った側は月別で全部見えて処理済マーク。依頼者は進捗確認 + 未処理者催促可。', defaultVisible: true },
-  { id: 'widgets',       cat: 'lab-mgmt', url: '#/widgets',       title: '🧩 ウィジェットセンター', desc: '自作ウィジェットを登録してホームに表示。 JS で render(root) を書くだけ。サンプルも用意 (時計 / 残高)。', defaultVisible: true },
+  { id: 'widgets',       cat: 'tools',    url: '#/widgets',       title: '🧩 ウィジェットセンター', desc: '自作ウィジェットを登録してホームに表示。 JS で render(root) を書くだけ。サンプルも用意 (時計 / 残高)。', defaultVisible: true },
   { id: 'cg2',           cat: 'game', url: '#/cg2',           title: '🎮 自作ゲーム v2 (cg2)', desc: 'p5.js で描画する准リアルタイム multiplayer framework。 sharedValues 自動同期 + host.start / host.stop のライフサイクル + CPU 戦対応。サンプル: マルバツ / ニム / ライツアウト / すごろく。', defaultVisible: true },
   { id: 'chat-rooms',    cat: 'shared', url: '#/chat-rooms', title: '💬 チャット (重要 / 連絡 / 相談 + DM)', desc: 'Slack 風チャット。 3 つのチャンネル + 1対1 DM。 2 秒 polling で准リアルタイム。「重要」への投稿は全員に通知が飛ぶ。', defaultVisible: true },
   // v734 #344 新規追加機能の登録 (v718 / v733 で実装したが apps 一覧に入れ忘れていたもの)
@@ -116,9 +118,9 @@ export const APPS = [
   // v960 外部ツール ポータル (LabPay を ハブ に して 別 アプリ に 飛ぶ)
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。 顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。 新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
-  { id: 'file-browser',   cat: 'lab-mgmt', url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
+  { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
     desc: 'ラボ NFS / VPS 上のファイルをブラウザで一覧・編集・アップロード・ダウンロード。 VS Code Remote がメモリ枯渇するときの代替。 Google 認証で保護、 realpath で閉じ込め済。', defaultVisible: true },
-  { id: 'db-admin',       cat: 'lab-mgmt', url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
+  { id: 'db-admin',       cat: 'tools',    url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
     desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
   // v1002 個人家計簿
@@ -211,6 +213,12 @@ const CATEGORY_ORDER = {
     'nomikai',                      // 飲み会割り勘
     'requests',                     // 請求 (集金)
     'bait',                         // アルバイト申請
+  ],
+  // v1016 🧰 ツール カテゴリ の 並び順
+  'tools': [
+    'widgets',                      // 🧩 ウィジェットセンター
+    'file-browser',                 // 🗄 ファイルブラウザ
+    'db-admin',                     // 🗃 phpMyAdmin
   ],
   // v1001 共有 タブ (中村さん指定 順)
   'shared': [
