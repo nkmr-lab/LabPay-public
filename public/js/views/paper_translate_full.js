@@ -6,6 +6,7 @@
 
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
+import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 import { shareDialog } from '../share_to_sns.js';
@@ -563,6 +564,7 @@ async function paint(d) {
   const r = d.result || {};
   const u = d.usage || {};
   const root = document.getElementById('pft-r');
+  await initLabUsersCache();   // v1004 著者アバター 用
   //   v1003 冒頭 の タイトル 重複 表示 は 削除 (header で 既に 出て いる)。
   //   代わりに 要約 側 と 同様 に 著者カード を 一番先 に 出す。
   root.innerHTML = `
@@ -640,15 +642,26 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
-  // v955/v957 キーワード / 著者名 の クリック → 公開全訳 一覧 の 検索 に 飛ばす
-  document.querySelectorAll('[data-pft-kw], [data-pft-author]').forEach(b => {
+  // v955 キーワード の クリック → 公開全訳 一覧 の 検索 に、
+  // v1004 著者名 の クリック → 著者ページ (/#/authors/{name}) に。
+  document.querySelectorAll('[data-pft-kw]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
-      const q = String(b.dataset.pftKw || b.dataset.pftAuthor || '').trim();
+      const q = String(b.dataset.pftKw || '').trim();
       if (!q) return;
       location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
     });
   });
+  document.querySelectorAll('[data-pft-author]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const q = String(b.dataset.pftAuthor || '').trim();
+      if (!q) return;
+      location.hash = '#/authors/' + encodeURIComponent(q);
+    });
+  });
+  // v1004 著者アバター Gravatar への 動的 差し替え
+  mountAuthorAvatars(document.getElementById('app'));
 }
 
 // v813 #406 cross_refs を「📄 要約へ」ボタンに簡素化 + #405 ペアの要約が無い場合は
@@ -820,20 +833,17 @@ function renderAuthorCards(authors) {
   if (!authors.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">名前タップで公開全訳から他論文を検索</span></div>
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">タップで著者ページ (LabPay 内の他論文 / Google Scholar 等)</span></div>
       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:8px">
-        ${authors.map(a => {
-          const av = initialsAvatar(a.name);
-          return `
-            <div style="display:flex; gap:10px; padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; min-width:0">
-              <div style="flex:none; width:38px; height:38px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
-              <div style="flex:1; min-width:0; font-size:12px">
-                <button data-pft-author="${escapeHtml(a.name)}" class="bold" style="font-size:13px; background:none; border:none; padding:0; color:#7b3fa0; cursor:pointer; text-align:left; font-family:inherit; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.name)}</button>
-                ${a.affiliation ? `<div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(a.affiliation)}">${escapeHtml(a.affiliation)}</div>` : ''}
-                ${a.email ? `<a href="mailto:${escapeHtml(a.email)}" style="font-size:11px; color:#7b3fa0; text-decoration:none">${escapeHtml(a.email)}</a>` : ''}
-              </div>
-            </div>`;
-        }).join('')}
+        ${authors.map(a => `
+          <div style="display:flex; gap:10px; padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; min-width:0">
+            ${renderAuthorAvatar({ name: a.name, email: a.email }, { size: 38 })}
+            <div style="flex:1; min-width:0; font-size:12px">
+              <button data-pft-author="${escapeHtml(a.name)}" class="bold" style="font-size:13px; background:none; border:none; padding:0; color:#7b3fa0; cursor:pointer; text-align:left; font-family:inherit; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a.name)}</button>
+              ${a.affiliation ? `<div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${escapeHtml(a.affiliation)}">${escapeHtml(a.affiliation)}</div>` : ''}
+              ${a.email ? `<a href="mailto:${escapeHtml(a.email)}" style="font-size:11px; color:#7b3fa0; text-decoration:none">${escapeHtml(a.email)}</a>` : ''}
+            </div>
+          </div>`).join('')}
       </div>
     </div>`;
 }

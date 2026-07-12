@@ -5,6 +5,7 @@
 
 import { get, patch, post, del } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
+import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 import { shareDialog } from '../share_to_sns.js';
@@ -532,6 +533,7 @@ async function paintResult(d, token) {
   // v762 #381 既存 result_json の日本語中の不要な半角スペースを取り除いてから描画
   const r = stripJaSpacesDeep(d.result || {});
   const app = document.getElementById('app');
+  await initLabUsersCache();   // v1004 著者アバター 用
   const shareUrl = location.origin + '/#/paper-summary/r/' + token;
   const pagesDir = d.pages_dir || null;
   const pagesCount = d.pages_count || 0;
@@ -659,15 +661,17 @@ async function paintResult(d, token) {
       openImageLightbox(el.dataset.ptZoom);
     });
   });
-  // v957 著者カード の クリック → 公開要約一覧 の 検索 に 飛ばす
+  // v1004 著者カード の クリック → 著者ページ に 移動 (中村さん指摘「上に論文要約 と出るのは変」)。
   document.querySelectorAll('[data-pt-author]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
       const q = String(b.dataset.ptAuthor || '').trim();
       if (!q) return;
-      location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
+      location.hash = '#/authors/' + encodeURIComponent(q);
     });
   });
+  // v1004 著者アバター Gravatar への 動的 差し替え
+  mountAuthorAvatars(document.getElementById('app'));
 }
 
 // v813 #406 cross_refs を「📑 全訳へ」ボタンに簡素化 + #405 ペアが無い場合は
@@ -815,16 +819,13 @@ function ptRenderAuthorCards(authorsStr) {
   if (!authors.length) return '';
   return `
     <div class="card">
-      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">タップで公開要約から関連論文を検索</span></div>
+      <div class="bold" style="color:var(--primary); font-size:13px; margin-bottom:8px">👥 著者 <span class="hint-sm" style="font-weight:normal">タップで著者ページ (LabPay 内の他論文 / Google Scholar 等)</span></div>
       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:8px">
-        ${authors.map(a => {
-          const av = ptInitialsAvatar(a);
-          return `
-            <button data-pt-author="${escapeHtml(a)}" style="display:flex; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; align-items:center; min-width:0; cursor:pointer; text-align:left; font-family:inherit">
-              <div style="flex:none; width:32px; height:32px; border-radius:50%; background:${av.color}; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; font-family:system-ui, sans-serif">${escapeHtml(av.initials)}</div>
-              <div class="bold" style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a)}</div>
-            </button>`;
-        }).join('')}
+        ${authors.map(a => `
+          <button data-pt-author="${escapeHtml(a)}" style="display:flex; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; align-items:center; min-width:0; cursor:pointer; text-align:left; font-family:inherit">
+            ${renderAuthorAvatar({ name: a }, { size: 32 })}
+            <div class="bold" style="flex:1; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(a)}</div>
+          </button>`).join('')}
       </div>
     </div>`;
 }

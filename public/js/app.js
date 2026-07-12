@@ -502,6 +502,7 @@ route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderK
 // v961 中村研 アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿
+route('/authors/:name',         lazy(() => import('./views/author.js'), 'renderAuthor'));         // v1004 著者ページ
 // v941 合同研究会用投票
 route('/joint-events',          lazy(() => import('./views/joint.js'), 'renderJointList'));
 route('/joint-events/new',      lazy(() => import('./views/joint.js'), 'renderJointNew'));
