@@ -196,6 +196,17 @@ function dLabel(d) {
   return '極大';
 }
 
+function renderDerivedInner(d) {
+  if (d === null) {
+    return '<div class="hint-sm" style="color:#a16207">値を 全部 入れると 効果量 d が 出ます</div>';
+  }
+  return `
+    <div class="card" style="background:linear-gradient(90deg, #ede4f333, #fff); border-left:4px solid #7b3fa0; margin:0">
+      <div style="font-size:15px">→ 予想効果量 <b style="color:#7b3fa0">d = ${d.toFixed(3)}</b> <span style="color:#6b7280">(${dLabel(d)})</span></div>
+      <div class="hint-sm" style="margin-top:2px">「→ この d を 効果量欄に 入れる」 ボタン で 上の 効果量欄 に 反映 して 「🧮 計算」。</div>
+    </div>`;
+}
+
 function renderRawInputs() {
   if (!['t2','tp','t1'].includes(state.test)) return '';
   const dt = dtDef();
@@ -243,12 +254,10 @@ function renderRawInputs() {
         </label>
       </div>
     </div>`;
-  const derivedBox = derived === null
-    ? '<div class="hint-sm" style="margin-top:8px; color:#a16207">値を 全部 入れると 効果量 d が 出ます</div>'
-    : `<div class="card" style="margin-top:8px; background:linear-gradient(90deg, #ede4f333, #fff); border-left:4px solid #7b3fa0">
-         <div style="font-size:15px">→ 予想効果量 <b style="color:#7b3fa0">d = ${derived.toFixed(3)}</b> <span style="color:#6b7280">(${dLabel(derived)})</span></div>
-         <div class="hint-sm" style="margin-top:2px">これを 下の 「効果量」 欄 に 自動反映 して 計算 します。</div>
-       </div>`;
+  // v1028b 中村さん指摘「予想効果量の値が 変化しない」→ 入力中は 再 render すると focus が
+  //   抜ける ので、 この derivedBox を id 付きで 出しておいて rawUpdate で 中身だけ 更新する。
+  const derivedInner = renderDerivedInner(derived);
+  const derivedBox = `<div id="raw-derived-box" style="margin-top:8px">${derivedInner}</div>`;
   // v1028 中村さん指示 「今の方法を残しておいても良い。 ただ、 オプションで
   //   そういうのが 欲しい」 → 上の 効果量 直接入力 は そのまま残し、 これは
   //   折り畳み <details> で オプション 提供。
@@ -619,7 +628,8 @@ function render() {
     }
     // 派生 d の 表示 だけ 更新 (再 render まで やる と 入力 中に focus 抜ける)
     const derived = derivedDFromRaw();
-    // 上書き は しない (ユーザが 明示的 に ボタン を 押した ときのみ 適用) — dLabel 表示だけ 更新
+    const box = document.getElementById('raw-derived-box');
+    if (box) box.innerHTML = renderDerivedInner(derived);
   };
   ['raw-mA','raw-sA','raw-mB','raw-sB','raw-mD','raw-sD'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', rawUpdate);
