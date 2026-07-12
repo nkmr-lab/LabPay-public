@@ -1903,7 +1903,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         // tasks: 自分が依頼 (requester) で、まだ approved 件数 < 必要数のもの。
         // 承認待ち (reported) があれば「承認まち」を強調。
         $stT = $pdo->prepare("
-            SELECT t.id, t.title, t.deadline AS deadline_at,
+            SELECT t.id, t.title, t.deadline AS deadline_at, t.assigned_user_ids,
                    (SELECT COUNT(*) FROM task_claims tc1 WHERE tc1.task_id=t.id AND tc1.status='approved') AS approved_n,
                    (SELECT COUNT(*) FROM task_claims tc2 WHERE tc2.task_id=t.id AND tc2.status='reported') AS reported_n,
                    (SELECT COUNT(*) FROM task_claims tc3 WHERE tc3.task_id=t.id AND tc3.status='claimed') AS claimed_n
@@ -1914,7 +1914,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $reported = (int)$r['reported_n'];
             $claimed  = (int)$r['claimed_n'];
-            $sub = $reported > 0 ? "{$reported} 件承認まち" : ($claimed > 0 ? "{$claimed} 件進行中" : '受諾まち');
+            // v1022 中村さん指摘「タスクとして指名しているものは、 受諾まちというのは
+            //   ちょっと変。 作業完了まち ではないか?」→ 指名タスクは "作業完了まち"、
+            //   通常タスクは従来通り "受諾まち"。
+            $isNominated = !empty($r['assigned_user_ids']);
+            $waitLabel = $isNominated ? '作業完了まち' : '受諾まち';
+            $sub = $reported > 0 ? "{$reported} 件承認まち" : ($claimed > 0 ? "{$claimed} 件進行中" : $waitLabel);
             $items[] = [
                 'kind' => 'task',
                 'kind_label' => 'タスク',

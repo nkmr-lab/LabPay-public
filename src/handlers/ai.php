@@ -2287,18 +2287,9 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    $baseCost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
-    // v913 share_priced=1 (新プライシング) の row は 現 is_shared に応じて 基本 or 倍額。
-    //   share_priced=0 (旧 row) は 従来通り 基本額のまま。
-    $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
-    $isShared = (bool)($row['is_shared'] ?? 0);
-    $cost = $sharePriced ? _ai_share_priced_cost($baseCost, $isShared) : $baseCost;
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < $cost) {
-        throw new ApiException('insufficient_balance',
-            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
-    }
-
+    // v1022 fb#480 中村さん指摘「要約とか全訳のやりなおしは、 どちらかというとシステム
+    //   の問題の可能性があるので、 課金はしないで」→ redo は 課金なし に変更。
+    //   (残高チェック も 撤廃、 Ledger::transfer も 削除)。
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
@@ -2323,18 +2314,16 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     }
     $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
-    db_tx($pdo, function () use ($pdo, $uid, $id, $reqModel, $cost) {
-        $pdo->prepare("UPDATE paper_translates SET status='pending', model=?, cost_points=cost_points+? WHERE id=?")
-            ->execute([$reqModel, $cost, $id]);
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $id, '論文要約やりなおし');
-    });
+    // v1022 fb#480 redo は 課金なし
+    $pdo->prepare("UPDATE paper_translates SET status='pending', model=? WHERE id=?")
+        ->execute([$reqModel, $id]);
 
     json_response_no_exit([
         'ok'          => true,
         'id'          => $id,
         'status'      => 'pending',
         'model'       => $reqModel,
-        'cost_points' => $cost,
+        'cost_points' => 0,
         'message'     => '再処理を開始しました (' . $reqModel . ')',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();

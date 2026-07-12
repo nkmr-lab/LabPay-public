@@ -109,9 +109,9 @@ export const APPS = [
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3文サンプルをback-translationで整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5 63pt / o1 100pt) と日→英 (5x、gpt-5 313pt / o1 500pt、em-dash等GPT-isms除去込み) の双方向対応。共有ONで半額。', defaultVisible: true },
   // v942 公開投票 (誰でも 投票)
-  { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開 URL または 4 桁コードで 誰でも投票できる汎用アンケート (SNS シェア可、 LabPay ログイン不要)。 タイトル + 選択肢 (複数行テキスト、 2〜50 個) + 締切で作成、 単一/複数選択 + 任意で自由記述、 集計の見え方は「常に公開」「締切後に公開」「起案者のみ」から選択。 起案者ダッシュボードで棒グラフ集計 + 自由記述一覧を見られる。 「4 桁コード」 は pay.nkmr.io/#/public で入力して飛べる。 外部イベント来場者に投票してもらう / SNS で意見を募る等に。', defaultVisible: true },
+  { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開URL or 4桁コードで誰でも投票できる汎用アンケート (LabPayログイン不要、SNSシェア可)。単一/複数選択 + 任意で自由記述、集計公開タイミングも選択可。外部イベント来場者やSNS向け。', defaultVisible: true },
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
-  { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッションごとに相手ラボの発表に投票してもらい、セッション別優秀発表者を決める。 外部参加者も 4 桁コード or 公開 URL (`/public/joint.html?t=xxx`) で 匿名投票可 (LabPay ログイン不要)。 起案者は event → session → presenter を登録、 終了後に集計 + 優秀確定 (最多得票を自動 pick、 再確定可)。 投票者は所属を選んでから相手ラボの発表だけに投票する (クロスラボ制約)。 QR コードは v943 で追加予定。', defaultVisible: true },
+  { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッション別優秀発表者を投票で決める。外部参加者も4桁コード or 公開URLで匿名投票可 (LabPayログイン不要)。投票者は所属を選び、相手ラボの発表だけに投票 (クロスラボ制約)。', defaultVisible: true },
   // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽 に移動
   { id: 'nkmr-albums',    cat: 'shared', url: '#/albums', title: '📸 中村研アルバム',
     desc: '中村研 の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。 年別に折りたたみ、 学会 / 合宿 / 飲み会 / 卒業式 等 200+ 件の思い出。 各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
@@ -131,7 +131,7 @@ export const APPS = [
     desc: '個人の支出を記録。 手動追加 or 領収書を撮影して OpenAI Vision で 店名/日付/金額/カテゴリを自動抽出。 月別 + カテゴリ別合計 + 明細一覧。 全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
-  { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero っぽい 文献 (paper reference) 管理。 DOI / arXiv ID / URL を 入れると crossref / arxiv API から metadata (title / authors / year / venue / abstract) を 自動取得。 PDF 添付、 タグ、 BibTeX 出力、 検索 (title / 著者 / 抄録 / 会議)、 タグ 絞り込み、 年 絞り込み、 読状態 (未読/読中/既読)、 自分 の note を 共有 (誰か が 読んだ 感想 / 気づき を みんな で 見られる)。 ラボ全員 で 共有、 起案者 / admin のみ 編集。 同 PDF SHA なら 既存 の paper_translate / paper_full_translate と 相互リンク。', defaultVisible: true },
+  { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero的な文献管理。DOI/arXiv ID/URLからmetadata (title/authors/year/venue/abstract) を自動取得。PDF添付、タグ、BibTeX出力、検索・絞り込み、読状態、自分のnoteをラボ全員で共有。要約/全訳と相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)

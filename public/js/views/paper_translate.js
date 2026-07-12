@@ -557,7 +557,7 @@ async function paintResult(d, token) {
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
-        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (再課金)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
+        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (v1022 以降 課金なし)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
       </div>
     </div>
@@ -612,10 +612,11 @@ async function paintResult(d, token) {
   // v1020 pt-copy 削除 (共有モーダルにコピー機能があるため)
   // v813 #405 ペアの全訳を作るボタン
   bindMakeFullTranslate(d);
-  // v758 #377 やりなおす (本人のみ、保存 PDF で再処理 + 再課金)
+  // v758 #377 やりなおす (本人のみ、保存 PDF で再処理)
+  // v1022 fb#480 中村さん指摘「システムの問題の可能性があるので、 課金はしないで」→ 課金なし に変更
   document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
-    if (!confirm('保存された PDF で同じモデルで再処理します (再課金されます)。続行しますか?')) return;
+    if (!confirm('保存された PDF で同じモデルで再処理します (課金なし)。続行しますか?')) return;
     btn.disabled = true; const old = btn.textContent; btn.textContent = '🔁 開始中…';
     try {
       const r = await post('/api/ai/paper_translate/' + d.id + '/redo', {});
