@@ -1041,22 +1041,43 @@ function renderRqHypothesis(rh) {
   // v768 #387 「💡 示唆:」ラベルは廃止 (GPT が値の先頭にも「示唆:」を書く場合があり
   //   「💡 示唆: 示唆: …」になってしまうため)。値の先頭の「示唆:」「結果:」等も strip。
   const stripPrefix = (s) => String(s || '').replace(/^\s*(示唆|結果|答え)\s*[:：]\s*/u, '').trim();
+  // v1017 中村さん要望「何ページ目にあるかも明記、 RQ / 仮説 の 書き方の 勉強に なるため 原文も」
+  const pageBadge = (p) => (typeof p === 'number' && p > 0)
+    ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#4f46e5; border:1px solid #c7d2fe; margin-left:6px">p.${p}</span>`
+    : '';
+  const pageBadgeAmber = (p) => (typeof p === 'number' && p > 0)
+    ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#a16207; border:1px solid #fde68a; margin-left:6px">p.${p}</span>`
+    : '';
+  const origBlock = (orig, color) => {
+    const s = String(orig || '').trim();
+    if (!s) return '';
+    return `<details style="margin-top:6px">
+      <summary style="cursor:pointer; font-size:11px; color:${color}">📄 原文を見る</summary>
+      <div style="margin-top:4px; padding:6px 10px; background:#fff; border:1px dashed ${color}; border-radius:4px; font-size:12px; line-height:1.65; font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap">${escapeHtml(s)}</div>
+    </details>`;
+  };
   const rqHtml = rqs.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.rq || '');
     const label = normalizeQLabel(raw, 'RQ', rqSingle);
-    const ans = (typeof item === 'object' && item?.answer) ? stripPrefix(item.answer) : '';
+    const ans  = (typeof item === 'object' && item?.answer)   ? stripPrefix(item.answer) : '';
+    const page = (typeof item === 'object') ? Number(item?.page) : 0;
+    const orig = (typeof item === 'object') ? item?.original : '';
     return `<div style="padding:8px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 6px 6px 0; margin-bottom:6px">
-      <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(label)}</div>
+      <div class="bold" style="font-size:13px; color:#4f46e5">❓ ${escapeHtml(label)}${pageBadge(page)}</div>
       ${ans ? `<div style="font-size:13px; margin-top:4px">${escapeHtml(ans)}</div>` : ''}
+      ${origBlock(orig, '#4f46e5')}
     </div>`;
   }).join('');
   const hyHtml = hys.map((item) => {
     const raw = typeof item === 'string' ? item : (item?.hypothesis || '');
     const label = normalizeQLabel(raw, 'H', hySingle);
-    const res = (typeof item === 'object' && item?.result) ? stripPrefix(item.result) : '';
+    const res  = (typeof item === 'object' && item?.result)   ? stripPrefix(item.result) : '';
+    const page = (typeof item === 'object') ? Number(item?.page) : 0;
+    const orig = (typeof item === 'object') ? item?.original : '';
     return `<div style="padding:8px 12px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0; margin-bottom:6px">
-      <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(label)}</div>
+      <div class="bold" style="font-size:13px; color:#a16207">💡 ${escapeHtml(label)}${pageBadgeAmber(page)}</div>
       ${res ? `<div style="font-size:13px; margin-top:4px">${escapeHtml(res)}</div>` : ''}
+      ${origBlock(orig, '#a16207')}
     </div>`;
   }).join('');
   return `
