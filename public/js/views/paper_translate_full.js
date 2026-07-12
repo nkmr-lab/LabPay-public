@@ -440,26 +440,25 @@ async function refresh(token) {
         ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
       </button>` : '';
     const sharedTag = (isShared && !isOwner) ? '<span class="tag ok" style="font-size:11px; margin-left:6px">🌐 公開全訳</span>' : '';
+    // v1003 中村さん指摘「要約と全訳で 冒頭 の 論文情報 / 著者情報 の 出し方 が違う」→ 統一。
+    //   要約 (paper_translate.js) の paintResult 冒頭 に 合わせて タイトル → 原題 → venue →
+    //   依頼者 meta → ボタン row の 順 に。
     const header = `
-      <div class="card">
-        <div class="row no-print" style="gap:6px; align-items:center">
-          <a href="#/paper-translate-full" class="hint" style="flex:1">← 論文全訳</a>
-          <button id="pft-pdf" class="btn" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
-          <button id="pft-share-dialog" class="btn primary" style="font-size:12px; padding:3px 10px">📤 共有</button>
-        </div>
-        <h2 style="margin:6px 0; font-size:17px">📑 ${escapeHtml(d.result?.title_translated || d.result?.title_original || d.pdf_name)}
+      <div class="card page-header">
+        <h2 style="margin:0; font-size:18px">📑 ${escapeHtml(d.result?.title_translated || d.result?.title_original || d.pdf_name)}
           ${d.status === 'pending' || d.status === 'processing' ? '<span class="tag warn">処理中</span>' : ''}
           ${d.status === 'error' ? '<span class="tag" style="background:#fecaca; color:#b91c1c">エラー</span>' : ''}
           ${sharedTag}
         </h2>
         ${d.result?.title_original && d.result?.title_translated ? `<div class="meta" style="font-size:13px; opacity:0.8; margin-top:2px">原題: ${escapeHtml(d.result.title_original)}</div>` : ''}
-        ${d.result?.venue   ? `<div class="meta" style="font-size:13px; margin-top:2px">📍 ${escapeHtml(d.result.venue)}</div>` : ''}
+        ${d.result?.venue ? `<div class="meta" style="font-size:13px; margin-top:2px">📍 ${escapeHtml(d.result.venue)}</div>` : ''}
         <div class="meta" style="font-size:11px; margin-top:6px">
-          ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼・
-          ${escapeHtml(d.direction)} ・ ${escapeHtml(d.model || '')} ・ ${d.cost_points}pt ・ ${escapeHtml(d.created_at || '')}
+          ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at || '')}
         </div>
-        <div class="row" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-          ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📥 元の PDF を開く</a>` : ''}
+        <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
+          <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
+          <button class="btn" id="pft-pdf" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
+          ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
           ${shareButton}
           <a class="btn" href="#/paper-translate-full" style="font-size:12px; padding:3px 10px">← 一覧へ</a>
         </div>
@@ -564,14 +563,9 @@ async function paint(d) {
   const r = d.result || {};
   const u = d.usage || {};
   const root = document.getElementById('pft-r');
+  //   v1003 冒頭 の タイトル 重複 表示 は 削除 (header で 既に 出て いる)。
+  //   代わりに 要約 側 と 同様 に 著者カード を 一番先 に 出す。
   root.innerHTML = `
-    ${r.title_original || r.title_translated ? `
-      <div class="card">
-        ${r.title_translated ? `<div class="bold" style="font-size:16px; color:var(--primary)">${escapeHtml(r.title_translated)}</div>` : ''}
-        ${r.title_original   ? `<div style="font-size:13px; color:#6b7280; margin-top:2px">${escapeHtml(r.title_original)}</div>` : ''}
-        ${r.venue            ? `<div style="font-size:12px; color:#6b7280">${escapeHtml(r.venue)}</div>` : ''}
-      </div>` : ''}
-
     ${(() => {
       // v992 著者カードは r.authors 文字列を第一ソースに (要約 view と統一)。
       //   Front matter parse (affiliation/email 付き) は r.authors が拾えたら merge、

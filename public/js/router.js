@@ -94,15 +94,18 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
 //   代わりに、フルスクリーンに「入った瞬間」の前の hash を覚えておいて、そこに直接戻す。
 //   入る前の hash が分からない場合は /#/apps (アプリ一覧) に戻す。
 let fsEntryHash = null;
-// v991 中村さん指摘「研究タブ→DR結果→✕で研究タブに戻ってしまう。 一覧に戻ってほしい」。
-//   詳細ページ (#/deep-research/r/xxx や #/paper-summary/r/xxx や #/kanban/123 等) で ✕ を
-//   押した場合はまず 1 階層上 (= アプリの一覧) に戻す。 その後、 一覧で もう一度 ✕ を押す
-//   と fsEntryHash (= アプリに入る前の画面) or /#/apps に戻す。
+// v1003 中村さん指摘「本当は、 その前のページに戻ってほしい」→ history.back() ベースに。
+//   v842 は「食べある記 で ✕ を何回も押す羽目」 を 理由 に history.back を 捨てた が、
+//   多くのケース (研究タブ→論文→アイテム→著者→✕) では history.back の方が自然。
+//   fsEntryHash より 前 に 戻ら ない よう ガード: fs 突入 後 の hash 遷移 数 を カウント、
+//   ✕ 毎 に -1、 0 に なったら 直接 fsEntryHash に jump (それ以上 は 履歴 を 消費しない)。
+let fsInnerNavCount = 0;
+let fsBackFlag = false;    // v1003 我々 が 発行 した history.back() の フラグ
 function closeFullscreen() {
-  const cur = location.hash || '';
-  const detailMatch = cur.match(/^(#\/[^/]+)\/.+$/);
-  if (detailMatch && detailMatch[1] !== fsEntryHash) {
-    location.hash = detailMatch[1];
+  if (fsInnerNavCount > 0) {
+    fsInnerNavCount--;
+    fsBackFlag = true;
+    history.back();
     return;
   }
   if (fsEntryHash && fsEntryHash !== location.hash) {
@@ -137,8 +140,14 @@ function applyFullscreenMode(topPart, prevHash) {
   //   状態で内部 hash 遷移しただけの時は entryHash を上書きしない (= 元の戻り先を保つ)。
   if (fs && !wasFs) {
     fsEntryHash = (prevHash && prevHash !== location.hash) ? prevHash : null;
+    fsInnerNavCount = 0;    // v1003 fs 突入時 は カウント リセット
   } else if (!fs) {
     fsEntryHash = null;
+    fsInnerNavCount = 0;
+  } else if (fs && wasFs) {
+    // fs 継続中 の 内部 遷移 → カウント +1、 ただし 我々 の history.back() 直後 は skip
+    if (fsBackFlag) fsBackFlag = false;
+    else fsInnerNavCount++;
   }
   document.body.classList.toggle('app-fullscreen', fs);
   // 閉じる ✕ ボタンを動的に生成 / 撤去
