@@ -1,6 +1,6 @@
-// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式で書かれた実験計画書 を チェック。
-//   RQ / 仮説 の 書き方、 仮説と実験 の 対応、 データ の 適切さ、 統計手法、 サンプルサイズ を
-//   特に 重視」)。 20pt / 回 flat、 gpt-5 で 精査。
+// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式で書かれた実験計画書をチェック。
+//   RQ / 仮説の書き方、仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを
+//   特に重視」)。 20pt / 回 flat、 gpt-5 で精査。
 
 import { escapeHtml } from '../router.js';
 import { get, post, del } from '../api.js';
@@ -13,23 +13,23 @@ export async function renderExpPlan() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🧪 実験計画書チェック</h2>
-      <div class="hint-sm" style="margin-top:4px">Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズ を特に重視して構造化レポートを返します。 1 回 20pt。</div>
+      <div class="hint-sm" style="margin-top:4px">Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを特に重視して構造化レポートを返します。 1 回 20pt。</div>
     </div>
 
     <div class="card">
       <label class="field">
-        <span class="lbl">タイトル (任意、 未指定なら本文の先頭行から自動)</span>
+        <span class="lbl">タイトル (任意、未指定なら本文の先頭行から自動)</span>
         <input type="text" id="epc-title" maxlength="200" placeholder="例: 眉毛対称ガイドの主観評価実験">
       </label>
       <label class="field">
-        <span class="lbl">実験計画書 (Scrapbox 形式で貼付、 100 文字以上 〜 ${MAX_CHARS} 文字まで)</span>
+        <span class="lbl">実験計画書 (Scrapbox 形式で貼付、 100 文字以上〜 ${MAX_CHARS} 文字まで)</span>
         <textarea id="epc-text" rows="18" placeholder="例:
-[[RQ1]] 眉毛対称ガイドは、 描画時間を短縮するか?
-  H1: 対称ガイドあり条件は、 なし条件より 描画時間が短い
-  H2: 対称ガイドあり条件は、 対称度スコアが 高い
+[[RQ1]] 眉毛対称ガイドは、描画時間を短縮するか?
+  H1: 対称ガイドあり条件は、なし条件より描画時間が短い
+  H2: 対称ガイドあり条件は、対称度スコアが高い
 
 [[実験1]] 参加者内比較
-  参加者: 大学生 24 名 (18-24 歳、 描画経験 5 年以内)
+  参加者: 大学生 24 名 (18-24 歳、描画経験 5 年以内)
   条件: 対称ガイドあり / なし
   タスク: 与えられた顔画像に対して眉毛を描く (10 分)
   ...
@@ -72,7 +72,7 @@ async function onSubmit() {
   const text  = document.getElementById('epc-text').value.trim();
   if (!text || text.length < 100) { toast('実験計画書が短すぎます (100 文字以上)'); return; }
   if (text.length > MAX_CHARS)    { toast(`長すぎます (${MAX_CHARS} 文字まで)`); return; }
-  if (!confirm(`実験計画書チェックを 依頼します (20pt)。 続けますか?`)) return;
+  if (!confirm(`実験計画書チェックを依頼します (20pt)。続けますか?`)) return;
   const btn = document.getElementById('epc-submit');
   btn.disabled = true; btn.textContent = '⏳ 依頼中…';
   try {
@@ -90,7 +90,7 @@ async function loadList() {
   try {
     const d = await get('/api/ai/exp_plan');
     const items = d.items || [];
-    if (!items.length) { root.innerHTML = '<div class="hint-sm">まだ 依頼した チェックは ありません。</div>'; return; }
+    if (!items.length) { root.innerHTML = '<div class="hint-sm">まだ依頼したチェックはありません。</div>'; return; }
     root.innerHTML = items.map(it => `
       <a class="list-item" href="#/exp-plan/${it.id}" style="display:flex; gap:8px; padding:8px 10px; border-bottom:1px solid #f3f4f6; text-decoration:none; color:inherit">
         <div style="flex:1; min-width:0">
@@ -154,7 +154,7 @@ function paint(d, app) {
       <div class="card">
         <div class="bold" style="color:var(--primary)">${d.status === 'error' ? '❌ 失敗' : '⏳ 精査中…'}</div>
         ${d.error_msg ? `<div class="hint-sm" style="color:#dc2626; margin-top:6px; white-space:pre-wrap">${escapeHtml(d.error_msg)}</div>` : ''}
-        ${d.status !== 'error' ? '<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 30 秒 〜 2 分で完了予定。</div>' : ''}
+        ${d.status !== 'error' ? '<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 30 秒〜 2 分で完了予定。</div>' : ''}
       </div>` : ''}
 
     ${isReady && r.summary_one_line ? `
@@ -192,7 +192,7 @@ function paint(d, app) {
     </details>
   `;
   document.getElementById('epc-del')?.addEventListener('click', async () => {
-    if (!confirm('この チェック 結果 を 削除 しますか?')) return;
+    if (!confirm('このチェック結果を削除しますか?')) return;
     try {
       await del('/api/ai/exp_plan/' + d.id);
       toast('削除しました');
@@ -227,15 +227,15 @@ function renderIssue(iss, color) {
   const severity = String(iss?.severity || '').toLowerCase();
   const sevColor = severity === 'high' ? '#dc2626' : (severity === 'med' ? '#a16207' : '#0891b2');
   const sevLabel = ({high: '🚨 高', med: '⚠ 中', low: 'ℹ 低'})[severity] || severity;
-  // v1044 中村さん指摘「RQ や 仮説 の 書き方 を 指摘してくれるのは 良いが、 オリジナルが
-  //   何だったかが 示されて いなくて 参照が 面倒。 原文は これだった よ を 示して」
-  //   → issue の 上 に 計画書 の 原文 を Georgia 系 で 引用表示。 該当なし の 場合 は
-  //   薄グレーで 「(該当記述なし)」 のみ。
+  // v1044 中村さん指摘「RQ や仮説の書き方を指摘してくれるのは良いが、オリジナルが
+  //   何だったかが示されていなくて参照が面倒。原文はこれだったよを示して」
+  //   → issue の上に計画書の原文を Georgia 系で引用表示。該当なしの場合は
+  //   薄グレーで「(該当記述なし)」のみ。
   const quote = (iss?.quote || '').trim();
   const isNoQuote = quote === '(該当記述なし)' || quote === '' || quote === '(なし)';
   const quoteBlock = quote
     ? (isNoQuote
-        ? `<div style="font-size:11.5px; color:#9ca3af; font-style:italic; margin-bottom:4px">📄 計画書 の 原文: (該当記述なし)</div>`
+        ? `<div style="font-size:11.5px; color:#9ca3af; font-style:italic; margin-bottom:4px">📄 計画書の原文: (該当記述なし)</div>`
         : `<div style="font-size:12px; padding:5px 9px; margin-bottom:6px; background:#f9fafb; border-left:2px solid #9ca3af; font-family: Georgia, 'Times New Roman', serif; line-height:1.55; color:#4b5563">📄 原文: ${escapeHtml(quote)}</div>`)
     : '';
   return `

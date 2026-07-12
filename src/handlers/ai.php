@@ -147,7 +147,7 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
     // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
-    // v968 stale (10 分 以上 進捗 なし) row を 同 row で 再投入 (新規課金 なし)
+    // v968 stale (10 分以上進捗なし) row を同 row で再投入 (新規課金なし)
     if ($sub === 'deep_research' && $method === 'POST' && isset($seg[2])
         && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'retry') {
         ai_deep_research_retry($pdo, $cfg, (int)$seg[2]);
@@ -385,15 +385,15 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     ]);
 }
 
-const REWRITER_COST = 10;   // v1009 1 → 10 (中村さん「リライトは さすがに 安すぎだな」)
+const REWRITER_COST = 10;   // v1009 1 → 10 (中村さん「リライトはさすがに安すぎだな」)
 const REWRITER_MAX_INPUT = 10000;
 const REWRITER_MAX_ITER  = 3;
 
 // 文字数 (スペースあり / なし) と単語数をサーバ側で正確にカウント
-// v972 論文要約・全訳・査読・Deep Research の share_token を 32 文字 → 6 文字 hex に 短縮。
-//   衝突 は SHA2-256 相当 の 検定 で 極めて 稀 (24bit = 16M 空間、 数百件 なら 実用上 皆無) だが、
-//   万一 に 備え 該当 テーブル で 重複 チェック + 最大 100 回 リトライ、 それでも 衝突 なら
-//   長い token に fallback。 既存 の 長い token は そのまま 動作 (VARCHAR で 揃えて ある)。
+// v972 論文要約・全訳・査読・Deep Research の share_token を 32 文字 → 6 文字 hex に短縮。
+//   衝突は SHA2-256 相当の検定で極めて稀 (24bit = 16M 空間、数百件なら実用上皆無) だが、
+//   万一に備え該当テーブルで重複チェック + 最大 100 回リトライ、それでも衝突なら
+//   長い token に fallback。既存の長い token はそのまま動作 (VARCHAR で揃えてある)。
 function ai_gen_short_token(PDO $pdo, string $table): string {
     for ($i = 0; $i < 100; $i++) {
         $t = bin2hex(random_bytes(3));   // 6 hex chars
@@ -401,7 +401,7 @@ function ai_gen_short_token(PDO $pdo, string $table): string {
         $st->execute([$t]);
         if (!$st->fetchColumn()) return $t;
     }
-    // 衝突 が 続いた 場合 の fallback (16 chars)
+    // 衝突が続いた場合の fallback (16 chars)
     return bin2hex(random_bytes(8));
 }
 
@@ -603,7 +603,7 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
     return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
-const RESUME_CHECK_COST = 10;       // v1010 5 → 10 (中村さん 「原稿チェックは 5pt → 10pt」)
+const RESUME_CHECK_COST = 10;       // v1010 5 → 10 (中村さん「原稿チェックは 5pt → 10pt」)
 const RESUME_CHECK_MODELS = [       // v774 #396 モデル別価格 / v1010 gpt-4.1 削除、 baseline 10pt に
     'gpt-5-mini' => 10,
     'gpt-5'      => 15,
@@ -627,7 +627,7 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
         'cost_points'   => RESUME_CHECK_COST,           // 旧互換
         'max_chars'     => RESUME_CHECK_MAX_CHARS,
         'models'        => RESUME_CHECK_MODELS,         // v774 #396
-        'default_model' => 'gpt-5-mini',   // v1010 gpt-4.1 削除に伴い gpt-5-mini (最安 10pt) を デフォルトに
+        'default_model' => 'gpt-5-mini',   // v1010 gpt-4.1 削除に伴い gpt-5-mini (最安 10pt) をデフォルトに
     ]);
 }
 
@@ -746,10 +746,10 @@ function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, stri
 - 日本語の接続詞 (「しかし」「したがって」「そして」等が変じゃないか)
 - 表記揺れ (用語/数字書式/記号の一貫性)
 - 引用文献 (あれば: 表記の妥当性/存在しなさそう/typo)
-- **統計指標の妥当性 (数値/統計が原稿に含まれる場合、 v993)**: N の 妥当性、
-  効果量 の 併記、 検定 の 選択 (対応 の 有無 / 分布 の 前提)、 多重比較 補正 の
-  必要性、 「有意差」 と 「実質的意味」 の 混同、 リッカート 尺度 の 平均値 化、
-  信頼区間 の 有無 等。 統計 の 記述 が 一切 無い 原稿 なら スコア 5 で スキップ。
+- **統計指標の妥当性 (数値/統計が原稿に含まれる場合、 v993)**: N の妥当性、
+  効果量の併記、検定の選択 (対応の有無 / 分布の前提)、多重比較補正の
+  必要性、「有意差」と「実質的意味」の混同、リッカート尺度の平均値化、
+  信頼区間の有無等。統計の記述が一切無い原稿ならスコア 5 でスキップ。
 PROMPT;
         $userPromptText = "出力 JSON スキーマ:\n"
             . "{ \"summary_one_line\": \"1行で全体講評\",\n"
@@ -853,49 +853,49 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
    - 図表の参照 (全ての Figure / Table が本文中で言及されているか、言及だけで本文に説明がない図表はないか)
 
 7. **統計指標の妥当性 (v993 最重要)**:
-   単に「N=◯◯」「p<.05」と書いてあることだけでは不十分。 選ばれた統計手法・指標・
+   単に「N=◯◯」「p<.05」と書いてあることだけでは不十分。選ばれた統計手法・指標・
    モデル・報告が本当にその研究デザインとデータに適切かを 1 件ずつ厳しく評価する:
-   - **検定選択の妥当性**: データ型 (連続 / 順序 / 名義)、 分布 (正規性)、 群数、
-     対応の有無、 反復測定の有無に対して選ばれた検定が適切か。 独立 t 検定 を
-     反復測定 に 使って いる、 一元配置 ANOVA を 二要因データ に 使って いる、
-     等の 明らかな 誤選択 を 検出。
-   - **仮定の検証**: 正規性 (Shapiro-Wilk / Q-Q プロット)、 等分散性 (Levene)、
-     球面性 (Mauchly)、 独立性 が 適切に 検証 されて いるか。 検証 も せず に
-     パラメトリック 検定 を 使って いない か。
-   - **効果量**: Cohen's d / η² / r / OR / RR 等の効果量が報告されて いるか。
-     p 値 だけで 「効果 が ある」 と 結論付けて いない か。 効果量 の 解釈
-     (small / medium / large) が 実質的意味 に 沿って いるか。
-   - **サンプルサイズ の 妥当性**: 事前に 検出力 分析 (a priori power analysis) で
-     必要 N を 見積もった か。 事後 検出力 (post-hoc power) の 記述 (低検出力 を
-     解釈 で 補足 して いるか)。 極端 に 小さい N (n<10 per group) で 有意差 を
-     謳って いない か。
-   - **多重比較補正**: 複数 検定 (仮説 が 複数 / 群 が 3+ / 変数 が 複数) に対して
-     Bonferroni / Holm / FDR / Tukey HSD 等 の 補正 が 適用 されて いるか。
-     補正 なしで 「p<.05」 を 積み重ねて 有意差 を 主張 して いない か。
-   - **モデル選択**: ネスト構造 (被験者内・被験者間) / 反復測定 / 個人差 が
-     ある データ に、 混合効果 モデル (mixed effects / GLMM) を 使う べき 場面 で
-     単純 な ANOVA / t 検定 を 使って いない か。 縦断 データ に 横断 分析 を
-     適用 して いない か。
-   - **報告の内的整合性**: t / F / χ² 値 と df と p 値 が 内部 で 整合 して いるか。
-     「F(2, 47) = 4.5, p = .04」 の ような 誤記 (df に対して F 値 が 実際の p 値と
-     ずれる)。 手計算 可能 な チェック は 実施 する。
-   - **解釈 の 妥当性**: 有意差 (statistical significance) を 意義 (practical
-     significance) と 混同 して いない か。 「有意」 → 「効果がある」、 「n.s.」 →
-     「効果がない」 の 誤解釈 (第 II 種 の 誤り の 軽視)。 HARKing (Hypothesizing
-     After Results are Known: 結果 を 見てから 仮説 を 書き換える) や p-hacking
-     (試行錯誤 で 有意 に なる 組み合わせ を 探す) の 兆候。
-   - **信頼区間 / ベイズ因子**: 点推定 だけで なく 95%CI が 報告 されて いるか。
-     ベイズ 分析 (Bayes Factor) が あれば その 解釈 が 適切か。 CI が 「効果 なし」
-     を 含む のに 「効果あり」 と 主張 して いない か。
-   - **非パラメトリック 代替**: 分布 の 前提 が 満たされ ない のに 強引 に
-     パラメトリック 検定 を 使って いない か (Mann-Whitney / Wilcoxon /
-     Kruskal-Wallis 等 の 代替 を 検討 すべき か)。
-   - **質的 データ の 扱い**: リッカート 尺度 (順序 尺度) を 平均値 で 扱って いる か
-     (代替: 中央値 + IQR、 順序 プロビット、 累積 ロジット 等)。
-   問題 が あれば statistical_validity.issues に 「locationは 具体 の 章 + 引用 箇所」
+   - **検定選択の妥当性**: データ型 (連続 / 順序 / 名義)、分布 (正規性)、群数、
+     対応の有無、反復測定の有無に対して選ばれた検定が適切か。独立 t 検定を
+     反復測定に使っている、一元配置 ANOVA を二要因データに使っている、
+     等の明らかな誤選択を検出。
+   - **仮定の検証**: 正規性 (Shapiro-Wilk / Q-Q プロット)、等分散性 (Levene)、
+     球面性 (Mauchly)、独立性が適切に検証されているか。検証もせずに
+     パラメトリック検定を使っていないか。
+   - **効果量**: Cohen's d / η² / r / OR / RR 等の効果量が報告されているか。
+     p 値だけで「効果がある」と結論付けていないか。効果量の解釈
+     (small / medium / large) が実質的意味に沿っているか。
+   - **サンプルサイズの妥当性**: 事前に検出力分析 (a priori power analysis) で
+     必要 N を見積もったか。事後検出力 (post-hoc power) の記述 (低検出力を
+     解釈で補足しているか)。極端に小さい N (n<10 per group) で有意差を
+     謳っていないか。
+   - **多重比較補正**: 複数検定 (仮説が複数 / 群が 3+ / 変数が複数) に対して
+     Bonferroni / Holm / FDR / Tukey HSD 等の補正が適用されているか。
+     補正なしで「p<.05」を積み重ねて有意差を主張していないか。
+   - **モデル選択**: ネスト構造 (被験者内・被験者間) / 反復測定 / 個人差が
+     あるデータに、混合効果モデル (mixed effects / GLMM) を使うべき場面で
+     単純な ANOVA / t 検定を使っていないか。縦断データに横断分析を
+     適用していないか。
+   - **報告の内的整合性**: t / F / χ² 値と df と p 値が内部で整合しているか。
+     「F(2, 47) = 4.5, p = .04」のような誤記 (df に対して F 値が実際の p 値と
+     ずれる)。手計算可能なチェックは実施する。
+   - **解釈の妥当性**: 有意差 (statistical significance) を意義 (practical
+     significance) と混同していないか。「有意」 → 「効果がある」、「n.s.」 →
+     「効果がない」の誤解釈 (第 II 種の誤りの軽視)。 HARKing (Hypothesizing
+     After Results are Known: 結果を見てから仮説を書き換える) や p-hacking
+     (試行錯誤で有意になる組み合わせを探す) の兆候。
+   - **信頼区間 / ベイズ因子**: 点推定だけでなく 95%CI が報告されているか。
+     ベイズ分析 (Bayes Factor) があればその解釈が適切か。 CI が「効果なし」
+     を含むのに「効果あり」と主張していないか。
+   - **非パラメトリック代替**: 分布の前提が満たされないのに強引に
+     パラメトリック検定を使っていないか (Mann-Whitney / Wilcoxon /
+     Kruskal-Wallis 等の代替を検討すべきか)。
+   - **質的データの扱い**: リッカート尺度 (順序尺度) を平均値で扱っているか
+     (代替: 中央値 + IQR、順序プロビット、累積ロジット等)。
+   問題があれば statistical_validity.issues に「locationは具体の章 + 引用箇所」
    「issue_type は wrong_test / assumption_violated / no_effect_size / no_correction
    / wrong_model / inconsistent_reporting / misinterpretation / p_hacking / harking
-   / small_n / other から 選ぶ」 「suggestion は 具体的 な 改善案」 で 列挙。
+   / small_n / other から選ぶ」「suggestion は具体的な改善案」で列挙。
 
 8. **参考文献の徹底検証 (最重要)**:
    本文で引用している文献1件ずつについて、以下を厳しくチェック:
@@ -905,7 +905,7 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
    - **本文引用との対応**: 本文で "[Smith et al. 2019]" と書かれているのに、参考文献側では別の著者・年になっていないか
    - **フォーマット**: 提出先会議のスタイル (ACM Reference Format / APA / IEEE 等) に沿っているか、混在していないか
    - **AIハルシネーション疑惑**: LLM生成の論文にありがちな「それっぽいが実在しないタイトル」「著者名の綴りが微妙にずれる」パターンを注視
-   問題があれば必ず citations_check.suspicious_citations に列挙 (issue_type と修正案付き)。 問題なさそうな引用は verified_count だけ計上して個別列挙は不要
+   問題があれば必ず citations_check.suspicious_citations に列挙 (issue_type と修正案付き)。問題なさそうな引用は verified_count だけ計上して個別列挙は不要
 
 【strengths / weaknesses に書くべき粒度】
 - 抽象的な感想 (「面白い」「意義深い」等) は避け、具体的な節 / 図 / 数値 / 主張を引用して指摘する
@@ -950,133 +950,133 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 - 旧フィールド名 (suggested_rewrite, original のみ) は後方互換で残しても OK だが、上記 5 フィールドを揃えることを優先
 PROMPT;
 
-// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式の実験計画書を精査、 RQ / 仮説 の書き方、
-//   仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを 特に重視」)。 1 回 20pt 定額。
+// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式の実験計画書を精査、 RQ / 仮説の書き方、
+//   仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを特に重視」)。 1 回 20pt 定額。
 const EXP_PLAN_CHECK_COST = 20;
 const EXP_PLAN_CHECK_MAX_CHARS = 40000;
 const EXP_PLAN_CHECK_MODEL = 'gpt-5';
 
 const EXP_PLAN_CHECK_SYSTEM_PROMPT = <<<'PROMPT'
-あなたは HCI / 認知心理 / 情報行動 / 教育研究 / ユーザ研究 分野 の 統計学 と 研究方法論 の
-実験計画 レビュアー です。 与えられた Scrapbox 形式の 実験計画書 を 精査 し、 構造化された
-JSON で 返してください。 返答 は valid JSON のみ、 markdown コードフェンス や 前置き は
-一切 なし。
+あなたは HCI / 認知心理 / 情報行動 / 教育研究 / ユーザ研究分野の統計学と研究方法論の
+実験計画レビュアーです。与えられた Scrapbox 形式の実験計画書を精査し、構造化された
+JSON で返してください。返答は valid JSON のみ、 markdown コードフェンスや前置きは
+一切なし。
 
 # 基本原則
 
-1. 計画書 に 書かれて いない 情報 を 推測 して 存在する かの ように 扱わない。 不足時 は
-   quote に "(該当記述なし)" と 明記 し、 issue で 「〜が 書かれて いない」 と 指摘。
-2. 「統計的 に 有意 で ない」 を 「差 が ない / 効果 が ない」 と 同一視 しない。 効果量、
-   信頼区間、 測定 の 信頼性、 デザイン 上 の 妥当性 も 併せて 見る。
-3. 必要以上 に 高度 な 統計手法 を 勧め ない。 研究目的 に 対して 最も 単純 で 妥当 な
-   方法 を 優先。
-4. 断定 しすぎ ない。 最終判断 は 専門家 の 確認 が 前提。 複数 の 妥当 な 案 が ある 場合 は
-   一つに 断定 せず 選択肢 を 示す。
-5. 単に 「もっと 補正 しろ」 と 機械的 に 全検定 を 一 family にせず、 検証的 か 探索的 か
-   に 応じて family を 分ける 可能性 も 検討。
+1. 計画書に書かれていない情報を推測して存在するかのように扱わない。不足時は
+   quote に "(該当記述なし)" と明記し、 issue で「〜が書かれていない」と指摘。
+2. 「統計的に有意でない」を「差がない / 効果がない」と同一視しない。効果量、
+   信頼区間、測定の信頼性、デザイン上の妥当性も併せて見る。
+3. 必要以上に高度な統計手法を勧めない。研究目的に対して最も単純で妥当な
+   方法を優先。
+4. 断定しすぎない。最終判断は専門家の確認が前提。複数の妥当な案がある場合は
+   一つに断定せず選択肢を示す。
+5. 単に「もっと補正しろ」と機械的に全検定を一 family にせず、検証的か探索的か
+   に応じて family を分ける可能性も検討。
 
-# 重視して 精査 する 観点 (この順で 網羅)
+# 重視して精査する観点 (この順で網羅)
 
-1. **RQ の 書き方**
-   - RQ が 明確 に 書かれているか (曖昧 な 「〜について 検討する」 で 終わって いないか)
-   - 検証可能 (testable) か、 測定可能 な 概念に 落ちて いるか
-   - スコープ が 明示 されているか (対象、 タスク、 条件、 母集団)
-   - 「調べる / 検討する」 で 終わって いる 発散型 RQ は 減点
+1. **RQ の書き方**
+   - RQ が明確に書かれているか (曖昧な「〜について検討する」で終わっていないか)
+   - 検証可能 (testable) か、測定可能な概念に落ちているか
+   - スコープが明示されているか (対象、タスク、条件、母集団)
+   - 「調べる / 検討する」で終わっている発散型 RQ は減点
 
-2. **仮説 の 書き方**
-   - RQ を どう 定量的 に 検証する 仮説 に 落として いるか
-   - 「H1: 条件 A の 反応時間 は B より 短い」 のように **方向 + 対象 + 変量** が
-     明示 されているか
-   - 「〇〇 が 変わる」 だけの 曖昧 な 表現 は 減点
-   - 帰無仮説 (H0) と 対立仮説 (H1) の 対応 (書いて あれば 加点、 なければ 減点しない)
+2. **仮説の書き方**
+   - RQ をどう定量的に検証する仮説に落としているか
+   - 「H1: 条件 A の反応時間は B より短い」のように **方向 + 対象 + 変量** が
+     明示されているか
+   - 「〇〇が変わる」だけの曖昧な表現は減点
+   - 帰無仮説 (H0) と対立仮説 (H1) の対応 (書いてあれば加点、なければ減点しない)
 
-3. **仮説 と 実験 の 対応**
-   - 各仮説 に 対して、 それを 検証する 実験 が 明確 に 対応づいて いるか
-   - 実験 が どの 仮説 を どう 検証する のか、 対応関係 が 読み取れるか
-   - 仮説 に 対応 する 実験 が 抜けて いないか、 逆に 実験 が どの 仮説 も 検証 して
-     いない ケース が 無いか
+3. **仮説と実験の対応**
+   - 各仮説に対して、それを検証する実験が明確に対応づいているか
+   - 実験がどの仮説をどう検証するのか、対応関係が読み取れるか
+   - 仮説に対応する実験が抜けていないか、逆に実験がどの仮説も検証して
+     いないケースが無いか
 
-4. **仮説 検証 に 適した データ を 取って いるか**
-   - 依存変数 (dependent variable) が 仮説 を 直接 検証 する 指標 に なっているか
-   - 反応時間 / 正答率 / 主観評価 / 生理指標 / 眼球運動 / ログ etc. の 選択 が 妥当 か
-   - リッカート 尺度 の 妥当性 (5 段階 or 7 段階、 中立点 の 扱い)
-   - 客観指標 と 主観指標 の 組合せ が 適切 か
-   - データ 取得 の タイミング / 頻度 が 適切 か
-   - 交絡変数 (confounder) の 統制 は 十分 か
+4. **仮説検証に適したデータを取っているか**
+   - 依存変数 (dependent variable) が仮説を直接検証する指標になっているか
+   - 反応時間 / 正答率 / 主観評価 / 生理指標 / 眼球運動 / ログ etc. の選択が妥当か
+   - リッカート尺度の妥当性 (5 段階 or 7 段階、中立点の扱い)
+   - 客観指標と主観指標の組合せが適切か
+   - データ取得のタイミング / 頻度が適切か
+   - 交絡変数 (confounder) の統制は十分か
 
 5. **統計手法**
-   - 検定 の 選択 が データ 型 / 分布 / 対応 の 有無 / 反復測定 に 合っているか
-   - 仮説 の 方向性 が ある なら 片側 検定 か 両側 検定 か
-   - 前提 の 検証 (正規性 / 等分散性 / 球面性 / 独立性) が 記述 されているか
-   - 効果量 (d / η² / r / OR / RR / partial η²) の 報告 予定 が あるか
-   - 信頼区間 の 併記 予定 が あるか
-   - 混合効果モデル (LMM / GLMM) が 妥当 な 場合 に 反映 されているか
-   - 交互作用 検定 が 必要 な とき に 反映 されているか
-   - 単一 の Likert 項目 は 順序尺度 として 扱う 予定 か。 複数項目 尺度 の 場合 は 尺度化
-     の 根拠 (既存尺度 / 事前 定義) が あるか
-   - 反応時間 は 歪み / 外れ値 / 変換 の 想定 が 記述 されているか
+   - 検定の選択がデータ型 / 分布 / 対応の有無 / 反復測定に合っているか
+   - 仮説の方向性があるなら片側検定か両側検定か
+   - 前提の検証 (正規性 / 等分散性 / 球面性 / 独立性) が記述されているか
+   - 効果量 (d / η² / r / OR / RR / partial η²) の報告予定があるか
+   - 信頼区間の併記予定があるか
+   - 混合効果モデル (LMM / GLMM) が妥当な場合に反映されているか
+   - 交互作用検定が必要なときに反映されているか
+   - 単一の Likert 項目は順序尺度として扱う予定か。複数項目尺度の場合は尺度化
+     の根拠 (既存尺度 / 事前定義) があるか
+   - 反応時間は歪み / 外れ値 / 変換の想定が記述されているか
 
-5.5. **多重性 の 確認** (これは 統計手法 の 中でも 特に 落とし穴 なので 独立に 見る)
-   - **A. 条件間 多重比較**: 3 条件 以上 で 全ペア (Tukey) / 対照条件 対比 (Dunnett) /
-     少数 の 事前 対比 (計画対比 + Holm) / 順序 or 線形 傾向 の どれ が 研究目的 に 合うか
-   - **B. 複数評価指標**: 操作時間、 エラー率、 満足度 等 を 別々 に 検定 する 場合、
-     各指標 内 で ANOVA を やって いても 指標間 の 多重性 は 残る。 主要 / 副次 / 探索的
-     の 区別 と 「どれ か 一つ でも 有意 なら 提案手法 に 効果 あり」 と するなら 共通
-     family として 補正 が 必要
-   - **C. 多数 の 事前 仮説**: 事前登録 は 後付け仮説 は 減らす が、 20 個 事前 に 出して
-     2 個 だけ 有意 で 「2 個 実証」 と 主張 する のは 不可。 主要 / 副次 / 探索的 の
-     位置づけ を 明示 し、 検証的 に は FWER (Holm 等)、 探索的 に は FDR (BH) の 使い分け
-   - **D. 他 の 多重性**: 複数時点 検定、 単純主効果 検定、 下位集団分析、 モデル 選択、
-     除外基準 の 事後変更、 変数変換 の 選択、 中間解析、 有意 結果 のみ 報告 の 可能性
-   - **family の 定義** が 単に 指標名 で 機械的 で なく、 「同じ 研究上 の 主張 に 貢献 する
-     か」 「どれ か 有意 なら 同じ 結論 に なる か」 で 分けられて いるか
+5.5. **多重性の確認** (これは統計手法の中でも特に落とし穴なので独立に見る)
+   - **A. 条件間多重比較**: 3 条件以上で全ペア (Tukey) / 対照条件対比 (Dunnett) /
+     少数の事前対比 (計画対比 + Holm) / 順序 or 線形傾向のどれが研究目的に合うか
+   - **B. 複数評価指標**: 操作時間、エラー率、満足度等を別々に検定する場合、
+     各指標内で ANOVA をやっていても指標間の多重性は残る。主要 / 副次 / 探索的
+     の区別と「どれか一つでも有意なら提案手法に効果あり」とするなら共通
+     family として補正が必要
+   - **C. 多数の事前仮説**: 事前登録は後付け仮説は減らすが、 20 個事前に出して
+     2 個だけ有意で「2 個実証」と主張するのは不可。主要 / 副次 / 探索的の
+     位置づけを明示し、検証的には FWER (Holm 等)、探索的には FDR (BH) の使い分け
+   - **D. 他の多重性**: 複数時点検定、単純主効果検定、下位集団分析、モデル選択、
+     除外基準の事後変更、変数変換の選択、中間解析、有意結果のみ報告の可能性
+   - **family の定義** が単に指標名で機械的でなく、「同じ研究上の主張に貢献する
+     か」「どれか有意なら同じ結論になるか」で分けられているか
 
 6. **サンプルサイズ**
-   - 事前 power analysis の 記述 が あるか
-   - α (通常 0.05)、 β (通常 0.20)、 想定効果量 (d = 0.5 等) が 明示 されているか
-   - 想定効果量 の 根拠 (先行研究 / メタ分析 / パイロット) が あるか
-   - 参加者数 が 実施 可能 な 範囲 で 適切 か
-   - 被験者内 / 被験者間 / 混合 デザイン の 別 が 明確 か
-   - 脱落 / 除外 の 予定率 が 加味 されているか
+   - 事前 power analysis の記述があるか
+   - α (通常 0.05)、 β (通常 0.20)、想定効果量 (d = 0.5 等) が明示されているか
+   - 想定効果量の根拠 (先行研究 / メタ分析 / パイロット) があるか
+   - 参加者数が実施可能な範囲で適切か
+   - 被験者内 / 被験者間 / 混合デザインの別が明確か
+   - 脱落 / 除外の予定率が加味されているか
 
-7. **結果 の 解釈方針**
-   - 主要仮説 を 支持 する と 判断 する 条件 (「p<.05 なら 有効」 のような 単純化 だけ で なく、
-     効果量 と 信頼区間 も 込みで 判断 する 予定 か)
-   - 複数 主要指標 の うち 「すべて」 が 有意 なら OK か 「いずれか 一つ」 で OK か
-   - 補正前 / 補正後 の p 値 の 扱い の 明示
-   - 探索的 結果 の 表現 (「探索的 所見 で ある」 と 明記 する 予定 か)
-   - 有意 で ない 結果 を 「効果 なし」 と 断定 しない 予定 か
-   - 仮説 と 逆方向 の 有意差 の 扱い
+7. **結果の解釈方針**
+   - 主要仮説を支持すると判断する条件 (「p<.05 なら有効」のような単純化だけでなく、
+     効果量と信頼区間も込みで判断する予定か)
+   - 複数主要指標のうち「すべて」が有意なら OK か「いずれか一つ」で OK か
+   - 補正前 / 補正後の p 値の扱いの明示
+   - 探索的結果の表現 (「探索的所見である」と明記する予定か)
+   - 有意でない結果を「効果なし」と断定しない予定か
+   - 仮説と逆方向の有意差の扱い
 
 8. **その他 (概観)**
-   - 倫理審査 / インフォームドコンセント / 報酬 の 記述
-   - タスク の カウンターバランス (ラテン方陣 等)
-   - パイロット / 事前登録 (pre-registration) の 意向
-   - 期間、 場所、 機材
+   - 倫理審査 / インフォームドコンセント / 報酬の記述
+   - タスクのカウンターバランス (ラテン方陣等)
+   - パイロット / 事前登録 (pre-registration) の意向
+   - 期間、場所、機材
 
 # 出力 JSON スキーマ
 
 {
-  "summary_one_line": "1 行 で 全体 講評 (60-100 字)",
-  "overall_score": 1-5 の 整数,
-  "rq_review":                  { "score": 1-5, "notes": "評価の要点 (100-300 字)", "issues": [{"quote": "計画書の原文をそのまま短く引用 (30-120字、 省略は「...」で)", "issue": "その原文の 何が 問題か", "suggestion": "どう直せば 良いか の 具体案", "severity": "high|med|low"}, ...] },
+  "summary_one_line": "1 行で全体講評 (60-100 字)",
+  "overall_score": 1-5 の整数,
+  "rq_review":                  { "score": 1-5, "notes": "評価の要点 (100-300 字)", "issues": [{"quote": "計画書の原文をそのまま短く引用 (30-120字、省略は「...」で)", "issue": "その原文の何が問題か", "suggestion": "どう直せば良いかの具体案", "severity": "high|med|low"}, ...] },
   "hypothesis_review":          { "score": 1-5, "notes": "...", "issues": [...] },
   "hypothesis_experiment_link": { "score": 1-5, "notes": "...", "issues": [...] },
   "data_appropriateness":       { "score": 1-5, "notes": "...", "issues": [...] },
   "statistics":                 { "score": 1-5, "notes": "...", "issues": [...] },
   "sample_size":                { "score": 1-5, "notes": "...", "issues": [...] },
-  "other_notes": ["補足 の 気づき 1", "..."],
-  "top_priority_fixes":  ["最も 優先度 高い 修正 提案 1 (最大 5 件)", "..."]
+  "other_notes": ["補足の気づき 1", "..."],
+  "top_priority_fixes":  ["最も優先度高い修正提案 1 (最大 5 件)", "..."]
 }
 
 ## ルール
-- score の 5 は 「投稿可能 レベル」、 3 は 「大きな 修正が 要る」、 1 は 「白紙 に 近い」
-- issues の severity は "high" = 実験成立 に 直接 影響、 "med" = 結果 の 説得力 に 影響、
-  "low" = より 良く なる 提案
-- **各 issue には 必ず quote (計画書 の 原文 の 直接引用) を 入れる**。 提出者 が 「どこ の 話 か」 を 即座 に 特定 できる ように、 該当箇所 を そのまま (改変せず) 30-120 字 で 抜粋。 長い 場合 は 「...」 で 省略可。 該当箇所 が 「そもそも 書いて いない」 場合 は quote に "(該当記述なし)" と書く。
-- 「良い 点」 は notes に 書いて、 issues は 課題 だけ に 絞る
-- 日本語 の 文中 に 不要 な 半角 スペース を 入れない (英数字 / 記号 との 境界 は OK)
-- 曖昧 に 「〜と 思われる」 で 逃げず、 具体的 な 提案 を 書く
+- score の 5 は「投稿可能レベル」、 3 は「大きな修正が要る」、 1 は「白紙に近い」
+- issues の severity は "high" = 実験成立に直接影響、 "med" = 結果の説得力に影響、
+  "low" = より良くなる提案
+- **各 issue には必ず quote (計画書の原文の直接引用) を入れる**。提出者が「どこの話か」を即座に特定できるように、該当箇所をそのまま (改変せず) 30-120 字で抜粋。長い場合は「...」で省略可。該当箇所が「そもそも書いていない」場合は quote に "(該当記述なし)" と書く。
+- 「良い点」は notes に書いて、 issues は課題だけに絞る
+- 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)
+- 曖昧に「〜と思われる」で逃げず、具体的な提案を書く
 PROMPT;
 
 function ai_exp_plan_check_list(PDO $pdo, array $cfg): void {
@@ -1133,9 +1133,9 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
     }
     if ($len > EXP_PLAN_CHECK_MAX_CHARS) {
         throw new ApiException('bad_request',
-            sprintf('実験計画書が長すぎます (上限 %d 文字、 現在 %d 文字)', EXP_PLAN_CHECK_MAX_CHARS, $len), 400);
+            sprintf('実験計画書が長すぎます (上限 %d 文字、現在 %d 文字)', EXP_PLAN_CHECK_MAX_CHARS, $len), 400);
     }
-    // タイトル 未指定 なら 先頭行 (# や [[]] を 剥がして 60 文字) から 自動抽出
+    // タイトル未指定なら先頭行 (# や [[]] を剥がして 60 文字) から自動抽出
     if ($title === null) {
         $firstLine = trim(strtok($text, "\n") ?: '');
         $firstLine = trim(preg_replace('/^#+\s*/', '', $firstLine));
@@ -1147,7 +1147,7 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
-            sprintf('ポイント不足 (要 %d pt、 現在 %d pt)', $cost, $bal), 400);
+            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
     }
 
     $checkId = 0;
@@ -1156,7 +1156,7 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
                        VALUES (?,?,?,?,?,'pending')")
             ->execute([$uid, $title, $text, $cost, EXP_PLAN_CHECK_MODEL]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId, '実験計画書チェック 依頼料');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId, '実験計画書チェック依頼料');
     });
 
     json_response_no_exit([
@@ -1165,7 +1165,7 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
         'status'      => 'pending',
         'cost_points' => $cost,
         'model'       => EXP_PLAN_CHECK_MODEL,
-        'message'     => '実験計画書 チェック (' . EXP_PLAN_CHECK_MODEL . ') を 受け付けました。 30 秒 〜 2 分 で 結果 が 出ます。',
+        'message'     => '実験計画書チェック (' . EXP_PLAN_CHECK_MODEL . ') を受け付けました。 30 秒〜 2 分で結果が出ます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -1178,7 +1178,7 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
     try {
         $pdo->prepare("UPDATE experiment_plan_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
-        $userMessage = "以下の Scrapbox 形式で書かれた実験計画書 を、 system prompt の 観点で 精査 して ください。 (Scrapbox の [[ ]] は 内部リンク、 # は タグ、 行頭 の 半角 スペース は インデント。 記法 は 無視 して 中身 を 評価 して 良い)\n\n" . $text;
+        $userMessage = "以下の Scrapbox 形式で書かれた実験計画書を、 system prompt の観点で精査してください。 (Scrapbox の [[ ]] は内部リンク、 # はタグ、行頭の半角スペースはインデント。記法は無視して中身を評価して良い)\n\n" . $text;
 
         $payloadArr = [
             'model' => EXP_PLAN_CHECK_MODEL,
@@ -1189,7 +1189,7 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
             'response_format' => ['type' => 'json_object'],
             'max_completion_tokens' => 16000,
         ];
-        // gpt-5 系 は temperature 非対応
+        // gpt-5 系は temperature 非対応
         if (!preg_match('/^(gpt-5|o1|o3)/', EXP_PLAN_CHECK_MODEL)) {
             $payloadArr['temperature'] = 0.2;
         }
@@ -1213,7 +1213,7 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
             if ($row) {
                 $t = mb_substr((string)($row['title'] ?? '実験計画書'), 0, 60);
                 notify_safely($pdo, $cfg, (int)$row['user_id'], 'admin_notice',
-                    "🧪 実験計画書 チェック 完了: 「{$t}」",
+                    "🧪 実験計画書チェック完了: 「{$t}」",
                     'exp_plan_check', $checkId);
             }
         } catch (Throwable $_) {}
@@ -1221,14 +1221,14 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
         $msg = mb_substr($e->getMessage(), 0, 500);
         $pdo->prepare("UPDATE experiment_plan_checks SET status='error', error_msg = ? WHERE id = ?")
             ->execute([$msg, $checkId]);
-        // 失敗時は 返金
+        // 失敗時は返金
         try {
             $stR = $pdo->prepare("SELECT user_id, cost_points FROM experiment_plan_checks WHERE id = ?");
             $stR->execute([$checkId]);
             $row = $stR->fetch(PDO::FETCH_ASSOC);
             if ($row && (int)$row['cost_points'] > 0) {
                 Ledger::transfer($pdo, 1, (int)$row['user_id'], (int)$row['cost_points'],
-                    'refund', 'experiment_plan_check', $checkId, '実験計画書チェック 失敗 返金');
+                    'refund', 'experiment_plan_check', $checkId, '実験計画書チェック失敗返金');
             }
         } catch (Throwable $_) {}
     }
@@ -1270,7 +1270,7 @@ function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
         'share_targets'    => $shareUsers,
         'cost_points'      => PAPER_REVIEW_COST,        // 旧互換
         'models'           => PAPER_REVIEW_MODELS,      // v774 #396
-        'default_model'    => 'gpt-5',     // v1010 中村さん 「論文査読 の デフォルト は gpt-5 で よい」
+        'default_model'    => 'gpt-5',     // v1010 中村さん「論文査読のデフォルトは gpt-5 でよい」
     ]);
 }
 
@@ -1338,7 +1338,7 @@ function ai_paper_review_get_shared(PDO $pdo, array $cfg, string $token): void {
 
 // v550 #206 論文章立て和訳要約 + 査読アプリ。
 //   POST /api/ai/paper_review { text, target_venue?, strictness? }
-//   text: 論文の本文 (英語 or 日本語、 〜 30000 文字)
+//   text: 論文の本文 (英語 or 日本語、〜 30000 文字)
 //   target_venue: 「CHI」等。空なら HCI 系全般
 //   strictness: 「緩め」「やや厳しめ」(default)「厳しめ」
 //   返値: { sections: [{title, summary_ja}, ...], review: {decision, score, strengths,
@@ -1494,10 +1494,10 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "      \"overall_comment\": \"統計手法選択・報告・解釈の全体所感 (200-500 字)\",\n"
         . "      \"issues\": [\n"
         . "        {\n"
-        . "          \"location\":    \"問題箇所 (章名 + 具体引用、 例: '4.2 Results, Study 1'、 '「F(2,47)=4.5」 の 記述')\",\n"
+        . "          \"location\":    \"問題箇所 (章名 + 具体引用、例: '4.2 Results, Study 1'、 '「F(2,47)=4.5」の記述')\",\n"
         . "          \"issue_type\":  \"wrong_test / assumption_violated / no_effect_size / no_correction / wrong_model / inconsistent_reporting / misinterpretation / p_hacking / harking / small_n / lickert_mean / no_ci / other のいずれか\",\n"
-        . "          \"explanation\": \"何が問題か具体的に (どの検定を、 なぜ、 どんな データ に 使って いる か 等)\",\n"
-        . "          \"suggestion\":  \"具体的な改善案 (例: '対応 のある t 検定 に 変更'、 'ベイズ 因子 も 併記'、 'Bonferroni 補正 を 適用'、 '事前登録 と 検出力 分析 を 追加' 等)\"\n"
+        . "          \"explanation\": \"何が問題か具体的に (どの検定を、なぜ、どんなデータに使っているか等)\",\n"
+        . "          \"suggestion\":  \"具体的な改善案 (例: '対応のある t 検定に変更'、 'ベイズ因子も併記'、 'Bonferroni 補正を適用'、 '事前登録と検出力分析を追加' 等)\"\n"
         . "        }\n"
         . "      ]\n"
         . "    },\n"
@@ -1506,11 +1506,11 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "      \"verified_count\": \"あなたの知識・整合性チェックで妥当と判定できた引用の数 (整数)\",\n"
         . "      \"suspicious_citations\": [\n"
         . "        {\n"
-        . "          \"original_citation\": \"参考文献 リスト からの原文 (著者・年・タイトル・書誌情報 の 生の 文字列)\",\n"
-        . "          \"cited_as\": \"本文中 での 引用 表現 (例: '[Smith et al. 2019]' や '(3)')。 分からなければ空文字\",\n"
+        . "          \"original_citation\": \"参考文献リストからの原文 (著者・年・タイトル・書誌情報の生の文字列)\",\n"
+        . "          \"cited_as\": \"本文中での引用表現 (例: '[Smith et al. 2019]' や '(3)')。分からなければ空文字\",\n"
         . "          \"issue_type\": \"author_error / title_not_found / bibinfo_error / venue_year_mismatch / body_mismatch / format_inconsistent / possibly_hallucinated / other のいずれか\",\n"
-        . "          \"explanation\": \"何が問題かの具体的説明 (綴りのどこがおかしい・実在しないと判定した理由・年と会議のズレ・本文との不一致 等)\",\n"
-        . "          \"confidence\": \"suspicion の 確度 (high / medium / low)。 存在確認 が 出来ない だけ の 低確度 は low\",\n"
+        . "          \"explanation\": \"何が問題かの具体的説明 (綴りのどこがおかしい・実在しないと判定した理由・年と会議のズレ・本文との不一致等)\",\n"
+        . "          \"confidence\": \"suspicion の確度 (high / medium / low)。存在確認が出来ないだけの低確度は low\",\n"
         . "          \"suggested_fix\": \"考えられる正しい引用形。分からなければ null\"\n"
         . "        }, ...\n"
         . "      ]\n"
@@ -1574,9 +1574,9 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
             ['role' => 'user', 'content' => $userContent],
         ],
         'response_format' => ['type' => 'json_object'],
-        // v919 fb#468 gpt-5 で 「empty content」 で 失敗 の 報告。 gpt-5 / o1 は 推論トークン が
-        //   max_completion_tokens に 食い込む ので、 8000 だと 査読本文 を 吐く 前に 打ち切られる。
-        //   paper_translate と 同じ 24000 に 引き上げ。
+        // v919 fb#468 gpt-5 で「empty content」で失敗の報告。 gpt-5 / o1 は推論トークンが
+        //   max_completion_tokens に食い込むので、 8000 だと査読本文を吐く前に打ち切られる。
+        //   paper_translate と同じ 24000 に引き上げ。
         'max_completion_tokens' => 24000,
     ];
     if (!preg_match('/^(gpt-5|o1|o3)/', $model)) {
@@ -1667,8 +1667,8 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
         $j = json_decode((string)$resp, true);
         $content = $j['choices'][0]['message']['content'] ?? null;
         if (!is_string($content) || $content === '') {
-            // v919 fb#468 デバッグ 目的 で finish_reason と usage を エラー文 に 含める
-            //   (「length で 打ち切り」 が 明示 されれば すぐ max_completion_tokens 不足 と 分かる)。
+            // v919 fb#468 デバッグ目的で finish_reason と usage をエラー文に含める
+            //   (「length で打ち切り」が明示されればすぐ max_completion_tokens 不足と分かる)。
             $finish = $j['choices'][0]['finish_reason'] ?? 'unknown';
             $usage = $j['usage'] ?? [];
             $totalT = (int)($usage['total_tokens'] ?? 0);
@@ -1726,9 +1726,9 @@ function ai_paper_review_run_background(PDO $pdo, array $cfg, int $reviewId, str
 // ─────────────────────────────────────────────────────────────
 const PAPER_TRANSLATE_COST = 20;
 
-// v914 「非共有=基本額、 共有=半額」 モデル (v913 の 「共有=基本額 / 非共有=倍額」 を 数式は 同じ ratio に 保ったまま
-//   ポジティブな フレーミングに 言い換え + 実価格 も 半減)。 論文要約 / 全訳 / DeepResearch 共通。
-//   研究成果を ラボ 全体に還元してくれるなら 半額 に なる、 という 前向きな 表現。 base = モデル定数 (表示価格 = 非共有 の 価格)。
+// v914 「非共有=基本額、共有=半額」モデル (v913 の「共有=基本額 / 非共有=倍額」を数式は同じ ratio に保ったまま
+//   ポジティブなフレーミングに言い換え + 実価格も半減)。論文要約 / 全訳 / DeepResearch 共通。
+//   研究成果をラボ全体に還元してくれるなら半額になる、という前向きな表現。 base = モデル定数 (表示価格 = 非共有の価格)。
 function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
     return $willShare ? intdiv($baseCost, 2) : $baseCost;
 }
@@ -1737,8 +1737,8 @@ function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
 //   出さないので論文要約用途では失格 → 削除。真面目に要約するなら最低でも 4.1。
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
 const PAPER_TRANSLATE_MODELS = [
-    // v1010 中村さん「論文要約 も 1.25 倍、 gpt-4.1 は 削除」
-    // v1012 中村さん「mini は 精度が出ないので 削除」
+    // v1010 中村さん「論文要約も 1.25 倍、 gpt-4.1 は削除」
+    // v1012 中村さん「mini は精度が出ないので削除」
     'gpt-5'       => 63,   // 5 系標準 (デフォルト) (50 × 1.25)
     'o1'          => 100,  // o1 推論モデル (深い解析) (80 × 1.25)
 ];
@@ -1761,12 +1761,12 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 2. rq_hypothesis: 著者が立てたリサーチクエスチョン (RQ) と仮説、そしてそれぞれに対して
    論文全体から読み取れる「示唆」 (= こう言える / こう解釈できる / 部分的にこうだなど) を
    必ず整理。「結果」と断定せず、論文が示唆する内容として書くこと。
-   **v1017 追加ルール**: 各 RQ / 仮説 に `page` (何ページ目に書かれているか、 PDF 物理ページ
-   の 1 始まり) と `original` (RQ / 仮説の原文をそのまま抜き出す、 意訳せず 、 論文が英語なら
-   英語のまま、 日本語なら日本語のまま) を **必ず** つける。 これは読者が RQ / 仮説の
-   書き方そのものを学ぶ用途で重要。 論文本文中に「RQ1: ...」 「Our hypothesis is that ...」
-   等と 明示 されている 場合 は その 文を 抜き出す。 明示されて いない (= 分野 が 仮説
-   駆動 で ない 等) の 稀な 場合 のみ original は 空文字列 で よい。
+   **v1017 追加ルール**: 各 RQ / 仮説に `page` (何ページ目に書かれているか、 PDF 物理ページ
+   の 1 始まり) と `original` (RQ / 仮説の原文をそのまま抜き出す、意訳せず、論文が英語なら
+   英語のまま、日本語なら日本語のまま) を **必ず** つける。これは読者が RQ / 仮説の
+   書き方そのものを学ぶ用途で重要。論文本文中に「RQ1: ...」「Our hypothesis is that ...」
+   等と明示されている場合はその文を抜き出す。明示されていない (= 分野が仮説
+   駆動でない等) の稀な場合のみ original は空文字列でよい。
 3. contributions: 著者が「成し遂げた / 明らかにした」ことを **完了形 / 名詞句** で列挙。
    例: × 「説得理論を統合する」 / × 「消費者の対処プロセスの理解を深める」
        ○ 「説得理論を統合した」 / ○ 「消費者の対処プロセスを明らかにした」
@@ -1840,18 +1840,18 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
 
 # keywords (v1005 追加)
 
-論文の中核キーワードを 5-10 個、 短い名詞句で列挙する。 検索・分類・関連論文探索
-に使うので、 以下の 3 種類が混ざるように選ぶ:
+論文の中核キーワードを 5-10 個、短い名詞句で列挙する。検索・分類・関連論文探索
+に使うので、以下の 3 種類が混ざるように選ぶ:
 
-1. 論文著者が明示している keyword (原文が英語なら原文ママ、 論文冒頭の
+1. 論文著者が明示している keyword (原文が英語なら原文ママ、論文冒頭の
    Keywords/Index Terms/CCS Concepts 節に書かれているもの)
 2. 手法・技術・アルゴリズム名 (例: 「深層強化学習」「GLMM」「拡散モデル」)
 3. トピック領域・現象・応用領域 (例: 「教材デザイン」「ステレオ視差」「HCI」)
 
-各 keyword は 30 字以下、 日本語 or 原文 (英語) どちらでも可。 日本語の中に不要な
-半角スペースを入れない。 略語のみ (「CNN」だけ、 「GLMM」だけ) はやや弱いので、
-可能なら和語や短い併記を含める (「畳み込みニューラルネット (CNN)」等)。 論文の
-主題を一言で捉える中核 keyword を先頭に、 派生・下位トピックを後ろに並べる。
+各 keyword は 30 字以下、日本語 or 原文 (英語) どちらでも可。日本語の中に不要な
+半角スペースを入れない。略語のみ (「CNN」だけ、「GLMM」だけ) はやや弱いので、
+可能なら和語や短い併記を含める (「畳み込みニューラルネット (CNN)」等)。論文の
+主題を一言で捉える中核 keyword を先頭に、派生・下位トピックを後ろに並べる。
 
 # トーン
 ・ **内容をそのまま要約する立場で書く**。「論文では ◯◯ と主張している」「著者は
@@ -1917,12 +1917,12 @@ PDF に書かれていない数値や主張を補完しない。
 
 **Step 1: 各セクションを英訳し直して原文と突合**
 - summary_one_paragraph、 rq_hypothesis、 contributions、 detailed_sections の body、
-  experiments、 results_summary、 ochiai_method の 6 項目を、 一度自分で英語 (原文言語) に
+  experiments、 results_summary、 ochiai_method の 6 項目を、一度自分で英語 (原文言語) に
   back-translate する。 back-translate した文と PDF 原文を突き合わせ、以下の 5 種類の
   不一致を洗い出す:
   1. **数値の誤り**: p値 / 効果量 / N / % / 年 / 件数などが原文と違う
-  2. **用語の誤り**: 論文で使っていない専門用語を使っている、 概念名を誤っている
-  3. **主張の曲解**: 著者が言っていない主張を要約が書いている、 断定 / 推測を混同している
+  2. **用語の誤り**: 論文で使っていない専門用語を使っている、概念名を誤っている
+  3. **主張の曲解**: 著者が言っていない主張を要約が書いている、断定 / 推測を混同している
   4. **範囲外の追加**: 論文本文にない情報 (LLMの一般知識で補完した箇所) を要約に混ぜている
   5. **落とし / 過剰要約**: 論文の重要な結論 / 制約 / 反例が要約から抜けている
 
@@ -1931,12 +1931,12 @@ PDF に書かれていない数値や主張を補完しない。
   - 著者名の綴り / 順序 / 人数が原論文の references と一致しているか
   - タイトルの実在性 (あなたの知識でそのタイトル + 著者 + 年の組み合わせが実在する見込みか)
   - 会議名 / ジャーナル名 / 巻号 / 年の整合性
-- 疑わしいものは fact_check.suspicious_citations に列挙する。 存在しない可能性が高い引用
+- 疑わしいものは fact_check.suspicious_citations に列挙する。存在しない可能性が高い引用
   (LLM ハルシネーション疑い) を特に警戒。
 
 **Step 3: fact_check セクションに整理**
 - 上記 Step 1-2 で見つかった問題を fact_check フィールドに整理する。
-- 問題が無ければ verified 表示、 あれば各アイテムを issue_type と confidence 付きで列挙。
+- 問題が無ければ verified 表示、あれば各アイテムを issue_type と confidence 付きで列挙。
 
 「back-translate して問題無しと確認済み」と自分に言い切れるまで JSON を出さないこと。
 
@@ -1954,7 +1954,7 @@ PDF に書かれていない数値や主張を補完しない。
       { "rq": "RQ: 質問文 (RQ が複数ある場合は「RQ1:」「RQ2:」)",
         "answer": "論文から読み取れる示唆 (例: 「平均反応時間が X ms 短縮されたことから、 …と言える」等、断定せず示唆として書く)",
         "page":     3,
-        "original": "論文本文にある英語の原文 (RQ の書き方の勉強のため、意訳せず原文ママ、複数行なら改行込みで)。 v1017 追加、 必ず入れる (見つからない稀な場合のみ空文字列可)" }
+        "original": "論文本文にある英語の原文 (RQ の書き方の勉強のため、意訳せず原文ママ、複数行なら改行込みで)。 v1017 追加、必ず入れる (見つからない稀な場合のみ空文字列可)" }
     ],
     "hypotheses": [
       { "hypothesis": "H: 仮説文 (仮説が複数ある場合は「H1:」「H2:」)",
@@ -1998,22 +1998,22 @@ PDF に書かれていない数値や主張を補完しない。
     "next_papers":   ["タイトル + 1 行説明 (各文字列)"]
   },
   "fact_check": {
-    "verified": "true/false。 back-translate 検証と引用実在性検証で問題が全く無ければ true、 何らかの疑問が残れば false",
+    "verified": "true/false。 back-translate 検証と引用実在性検証で問題が全く無ければ true、何らかの疑問が残れば false",
     "verified_sections": ["問題無しと確認できたセクション名の配列 (例: 'summary_one_paragraph', 'contributions')"],
     "issues": [
       {
         "section": "問題が見つかった要約セクション名 (例: 'detailed_sections[2].body', 'experiments[0]')",
         "issue_type": "number_mismatch / term_wrong / claim_distortion / out_of_scope_addition / omission / over_summarization / other",
-        "explanation": "何が問題かの具体的説明。 back-translate 突合の結果、 原文には X と書かれているが要約には Y と書いてしまった 等",
+        "explanation": "何が問題かの具体的説明。 back-translate 突合の結果、原文には X と書かれているが要約には Y と書いてしまった等",
         "confidence": "high / medium / low",
-        "suggested_fix": "推奨する修正内容。 自分で修正できるなら、 その差分を要約側にも反映済にする"
+        "suggested_fix": "推奨する修正内容。自分で修正できるなら、その差分を要約側にも反映済にする"
       }
     ],
     "suspicious_citations": [
       {
         "citation":    "key_references の中の疑わしい 1 件 (原文 or citation string)",
         "issue_type":  "author_error / title_not_found / bibinfo_error / venue_year_mismatch / possibly_hallucinated / other",
-        "explanation": "何が怪しいか (綴り違い / 会議と年のズレ / タイトルの実在確認取れず 等)",
+        "explanation": "何が怪しいか (綴り違い / 会議と年のズレ / タイトルの実在確認取れず等)",
         "confidence":  "high / medium / low",
         "suggested_fix": "推測される正しい引用形。分からなければ null"
       }
@@ -2024,14 +2024,14 @@ PDF に書かれていない数値や主張を補完しない。
 JSON 以外の前置きや解説は不要。 JSON のみを返却。
 PROMPT;
 
-// v954 result_json + pages_dir から サムネ画像 情報 を 抽出。
-//   詳細サマリ の 各 section の figure_refs を 舐めて 最初 に 見つかった 図 の page + region を 使う。
-//   図 の 頭 に 表紙 の Figure 1 が 出やすい 論文 で は 見た目 が わかりやすい。
+// v954 result_json + pages_dir からサムネ画像情報を抽出。
+//   詳細サマリの各 section の figure_refs を舐めて最初に見つかった図の page + region を使う。
+//   図の頭に表紙の Figure 1 が出やすい論文では見た目がわかりやすい。
 // v996 論文の図/表の crop 領域をキャプション位置から特定 (中村さん指摘)。
-//   Figure は 図の 下に キャプション、 Table は 表の 上に キャプション がある。
-//   pdftotext -bbox-layout で page 内 word bbox を 取り、 「Figure N」 「Table N」 の
-//   ペア を 探し、 y 座標 から crop 領域 (y%, h%) を 算出。
-//   従来 の LLM の 3段階 region 推定 (top/middle/bottom) より 遥かに 精度 が 高い。
+//   Figure は図の下にキャプション、 Table は表の上にキャプションがある。
+//   pdftotext -bbox-layout で page 内 word bbox を取り、「Figure N」「Table N」の
+//   ペアを探し、 y 座標から crop 領域 (y%, h%) を算出。
+//   従来の LLM の 3段階 region 推定 (top/middle/bottom) より遥かに精度が高い。
 function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?array {
     if (!is_file($pdfPath)) return null;
     $tmp = tempnam(sys_get_temp_dir(), 'bbox_') . '.html';
@@ -2055,7 +2055,7 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     }
     $candKw = $isTable ? ['Table', 'Tbl', '表'] : ['Figure', 'Fig', '図'];
 
-    // v997 段組判定: page 内 全 word の x 中心 を binning。 2 山 なら 2 段組、 1 山 なら 1 段組。
+    // v997 段組判定: page 内全 word の x 中心を binning。 2 山なら 2 段組、 1 山なら 1 段組。
     //   段組の中央線 (2 段組時) を割り出す。
     if (!preg_match_all(
         '#<word\s+xMin="([\d.]+)"\s+yMin="([\d.]+)"\s+xMax="([\d.]+)"\s+yMax="([\d.]+)"[^>]*>([^<]*)</word>#s',
@@ -2063,13 +2063,13 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     $centers = array_map(fn($w) => ((float)$w[1] + (float)$w[3]) / 2, $allWs);
     $isTwoCol = false; $colMid = $pageW / 2;
     if (count($centers) >= 30) {
-        // 2 段組 は 中央 付近 に word がほとんど無い ため、 中央 20% の 範囲 の word 密度 を チェック
+        // 2 段組は中央付近に word がほとんど無いため、中央 20% の範囲の word 密度をチェック
         $midBandLo = $pageW * 0.42; $midBandHi = $pageW * 0.58;
         $midCount = 0;
         foreach ($centers as $c) if ($c >= $midBandLo && $c <= $midBandHi) $midCount++;
         if ($midCount / count($centers) < 0.05) {
             $isTwoCol = true;
-            // 実際 の 段中央 は 中央 帯 の 中心
+            // 実際の段中央は中央帯の中心
             $colMid = ($midBandLo + $midBandHi) / 2;
         }
     }
@@ -2094,7 +2094,7 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
                 $y = $words[$i]['y0'];
                 if ($bestY === null || $y < $bestY) {
                     $bestY = $y;
-                    // line 全体 の x 範囲 (= キャプション全体) を 取る
+                    // line 全体の x 範囲 (= キャプション全体) を取る
                     $bestXMin = min(array_column($words, 'x0'));
                     $bestXMax = max(array_column($words, 'x1'));
                 }
@@ -2104,9 +2104,9 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     }
     if ($bestY === null) return null;
 
-    // v997 段組判定 に 応じて crop の x 範囲 を 決定
-    //   キャプション幅 が page の 60% 超 → ぶち抜き (段組を跨ぐ)、 x = ページ全幅 (5%-95%)
-    //   それ 未満 で 2 段組 → 該当段のみ、 左段 or 右段 を キャプション中心 で 判定
+    // v997 段組判定に応じて crop の x 範囲を決定
+    //   キャプション幅が page の 60% 超 → ぶち抜き (段組を跨ぐ)、 x = ページ全幅 (5%-95%)
+    //   それ未満で 2 段組 → 該当段のみ、左段 or 右段をキャプション中心で判定
     //   1 段組 → ページ全幅 (5%-95%)
     $captionMid = ($bestXMin + $bestXMax) / 2;
     $captionW   = $bestXMax - $bestXMin;
@@ -2139,9 +2139,9 @@ function ai_find_caption_crop(string $pdfPath, int $pageNum, string $label): ?ar
     ];
 }
 
-// v996 result_json の 各 figure_refs に crop_y_pct / crop_h_pct を 付与 (可能なら)。
-//   PDF が 手元 に 無い / 該当 キャプション が 見つから ない 場合 は そのまま (未付与)。
-//   フロント は 付与 されて いれば 精密 crop、 なければ 従来 の region 表示 or 全ページ に fallback。
+// v996 result_json の各 figure_refs に crop_y_pct / crop_h_pct を付与 (可能なら)。
+//   PDF が手元に無い / 該当キャプションが見つからない場合はそのまま (未付与)。
+//   フロントは付与されていれば精密 crop、なければ従来の region 表示 or 全ページに fallback。
 function ai_augment_figure_crops(array $parsed, ?string $pdfPath): array {
     if (!$pdfPath || !is_file($pdfPath)) return $parsed;
     foreach (($parsed['detailed_sections'] ?? []) as $si => $sec) {
@@ -2186,7 +2186,7 @@ function ai_paper_translate_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     // v841 #423 自分の履歴タイルにも原題 / 著者 / 投稿先 / summary snippet を返す
-    // v954 pages_dir / pages_count + 最初の figure_ref から サムネ用の 画像 URL + region を 返す
+    // v954 pages_dir / pages_count + 最初の figure_ref からサムネ用の画像 URL + region を返す
     $st = $pdo->prepare("SELECT id, share_token, pdf_name, result_json, status, is_shared, shared_at, created_at, finished_at, pages_dir, pages_count
                           FROM paper_translates WHERE user_id = ? ORDER BY id DESC LIMIT 30");
     $st->execute([$uid]);
@@ -2287,7 +2287,7 @@ function ai_paper_translate_shared_list(PDO $pdo, array $cfg): void {
 }
 
 // v756 #372 共有 ON/OFF (本人のみ)。 body = { is_shared: bool }
-// v913 共有=基本額 / 非共有=倍額 モデル: share_priced=1 の row は toggle 時に 差額を Ledger 経由 で 追加課金/返金 する。
+// v913 共有=基本額 / 非共有=倍額モデル: share_priced=1 の row は toggle 時に差額を Ledger 経由で追加課金/返金する。
 function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -2306,12 +2306,12 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'is_shared' => $on]);
 }
 
-// v913 共有 toggle 差額処理 の 共通ロジック (3 機能 共通)。 v914 で フレーミングを 「共有=半額割引」 に 反転。
-//   share_priced=0 (旧 row) の場合 は 差額処理 スキップ、 単に is_shared を フリップ するだけ。
+// v913 共有 toggle 差額処理の共通ロジック (3 機能共通)。 v914 でフレーミングを「共有=半額割引」に反転。
+//   share_priced=0 (旧 row) の場合は差額処理スキップ、単に is_shared をフリップするだけ。
 //   share_priced=1 の場合 (v914 モデル: shared paid = base/2、 unshared paid = base):
-//     - 非共有 (base paid) → 共有 (base/2): paid / 2 を SYSTEM → user に 返金 (半額割引 発動)、 cost_points を 半額 に。
-//     - 共有 (base/2 paid) → 非共有 (base): paid と 同額 を user → SYSTEM に 追加課金 (半額割引 停止)、 cost_points を 倍額 に。
-//   ratio は v913 と 同じ 1:2 なので、 差額 計算 (±cost_points/2) は そのまま。 変わったのは 名目 base の 意味と ラベル。
+//     - 非共有 (base paid) → 共有 (base/2): paid / 2 を SYSTEM → user に返金 (半額割引発動)、 cost_points を半額に。
+//     - 共有 (base/2 paid) → 非共有 (base): paid と同額を user → SYSTEM に追加課金 (半額割引停止)、 cost_points を倍額に。
+//   ratio は v913 と同じ 1:2 なので、差額計算 (±cost_points/2) はそのまま。変わったのは名目 base の意味とラベル。
 // v1007 中村 PI 免除を廃止 (「LabPay ポイントが余るようになってきたから普通に支払い発生する形式に」)。
 function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, int $rowId, int $uid, array $row, bool $on): void {
     $curShared = (int)($row['is_shared'] ?? 0) === 1;
@@ -2323,7 +2323,7 @@ function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, 
     }
     $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
     $paidCost = (int)($row['cost_points'] ?? 0);
-    // 旧 row (v913 以前 で share_priced=0) や 未課金 (paidCost=0、 過去 の 中村 PI 免除分 等) は 表示切替のみ
+    // 旧 row (v913 以前で share_priced=0) や未課金 (paidCost=0、過去の中村 PI 免除分等) は表示切替のみ
     if (!$sharePriced || $paidCost <= 0) {
         $pdo->prepare("UPDATE {$table}
                           SET is_shared=?, shared_at=" . ($on ? "NOW()" : "NULL") . "
@@ -2332,27 +2332,27 @@ function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, 
         return;
     }
     if ($on) {
-        // 非共有 → 共有: 半額割引 発動 → 差額 返金 = paidCost / 2 (paidCost = base だったので、 base/2 分 戻る)
+        // 非共有 → 共有: 半額割引発動 → 差額返金 = paidCost / 2 (paidCost = base だったので、 base/2 分戻る)
         $delta = intdiv($paidCost, 2);
         $newCost = $paidCost - $delta;
         db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
             if ($delta > 0) {
-                Ledger::transfer($pdo, 1, $uid, $delta, 'refund', $refType, $rowId, '共有 ON にしたため 半額割引 返金');
+                Ledger::transfer($pdo, 1, $uid, $delta, 'refund', $refType, $rowId, '共有 ON にしたため半額割引返金');
             }
             $pdo->prepare("UPDATE {$table} SET is_shared=1, shared_at=NOW(), cost_points=? WHERE id=?")
                 ->execute([$newCost, $rowId]);
         });
     } else {
-        // 共有 → 非共有: 半額割引 停止 → 差額 追加課金 = paidCost (paidCost = base/2 だったので、 もう base/2 分 追加 で base に)
+        // 共有 → 非共有: 半額割引停止 → 差額追加課金 = paidCost (paidCost = base/2 だったので、もう base/2 分追加で base に)
         $delta = $paidCost;
         $bal = Ledger::balanceOfUser($pdo, $uid);
         if ($bal < $delta) {
             throw new ApiException('insufficient_balance',
-                sprintf('非共有 に戻すには 追加 %d pt 必要 (現在 %d pt)。 共有のままなら 追加課金なし。', $delta, $bal), 400);
+                sprintf('非共有に戻すには追加 %d pt 必要 (現在 %d pt)。共有のままなら追加課金なし。', $delta, $bal), 400);
         }
         $newCost = $paidCost + $delta;
         db_tx($pdo, function () use ($pdo, $table, $refType, $rowId, $uid, $delta, $newCost) {
-            Ledger::transfer($pdo, $uid, 1, $delta, 'upcharge', $refType, $rowId, '非共有 に戻したため 半額割引 停止 (差額 追加課金)');
+            Ledger::transfer($pdo, $uid, 1, $delta, 'upcharge', $refType, $rowId, '非共有に戻したため半額割引停止 (差額追加課金)');
             $pdo->prepare("UPDATE {$table} SET is_shared=0, shared_at=NULL, cost_points=? WHERE id=?")
                 ->execute([$newCost, $rowId]);
         });
@@ -2442,7 +2442,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     $baseCost = (int)PAPER_TRANSLATE_MODELS[$reqModel];
     // v804 「終わった瞬間共有 ON」オプション
     $autoShare = !empty($_POST['auto_share']) ? 1 : 0;
-    // v913 共有すると基本額、 非共有だと倍額。 auto_share の意思決定を そのまま cost に反映。
+    // v913 共有すると基本額、非共有だと倍額。 auto_share の意思決定をそのまま cost に反映。
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
     // v797 同 PDF を識別する SHA-256 を算出 (= 横展開用 / 「同 PDF の全訳がある」リンク等)。
@@ -2450,8 +2450,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     //   違うので、「同ファイルなら流用」で課金をスキップするとはしない方針)。
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v1007 中村さん要望 「LabPay ポイント が 余る ように なってきた から、 普通に 支払い
-    //   発生 する 形式 にして 良いかな」 で PI 免除 撤廃。 全員 一律 で 残高 チェック。
+    // v1007 中村さん要望「LabPay ポイントが余るようになってきたから、普通に支払い
+    //   発生する形式にして良いかな」で PI 免除撤廃。全員一律で残高チェック。
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -2596,9 +2596,9 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     if (!isset(PAPER_TRANSLATE_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
-    // v1022 fb#480 中村さん指摘「要約とか全訳のやりなおしは、 どちらかというとシステム
-    //   の問題の可能性があるので、 課金はしないで」→ redo は 課金なし に変更。
-    //   (残高チェック も 撤廃、 Ledger::transfer も 削除)。
+    // v1022 fb#480 中村さん指摘「要約とか全訳のやりなおしは、どちらかというとシステム
+    //   の問題の可能性があるので、課金はしないで」→ redo は課金なしに変更。
+    //   (残高チェックも撤廃、 Ledger::transfer も削除)。
     $apiKey = (string)$cfg['openai']['api_key'];
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
@@ -2623,7 +2623,7 @@ function ai_paper_translate_redo(PDO $pdo, array $cfg, int $id): void {
     }
     $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
-    // v1022 fb#480 redo は 課金なし
+    // v1022 fb#480 redo は課金なし
     $pdo->prepare("UPDATE paper_translates SET status='pending', model=? WHERE id=?")
         ->execute([$reqModel, $id]);
 
@@ -2809,7 +2809,7 @@ function ai_paper_translate_run_background(PDO $pdo, array $cfg, int $rowId, str
             fwrite(STDERR, "[paper_translate] polish failed (row $rowId): " . $polishE->getMessage() . "\n");
         }
 
-        // v996 各 figure_refs に キャプション座標 由来 の crop_y_pct / crop_h_pct を付与
+        // v996 各 figure_refs にキャプション座標由来の crop_y_pct / crop_h_pct を付与
         try {
             $pdfRelForCrop = $pdo->prepare("SELECT pdf_path FROM paper_translates WHERE id = ?");
             $pdfRelForCrop->execute([$rowId]);
@@ -2902,9 +2902,9 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //   実トークン / 検索数は usage_json に残すので、実コストがズレた場合は後で調整。
 const DEEP_RESEARCH_TIERS = [
     // v853 価格半額化 (20/50/100 → 10/25/50)
-    // v1009 中村さん「Deep Research が ちと 安すぎる、 2倍 で 良い、 深い で 共有 なら 50pt が 妥当」
-    //   → 元 (v853 前) の 20/50/100 に 戻す。 共有時 は 半額 (10/25/50)。
-    // v1012 中村さん「mini は 精度が出ないので light も gpt-5 (effort=low) に」
+    // v1009 中村さん「Deep Research がちと安すぎる、 2倍で良い、深いで共有なら 50pt が妥当」
+    //   → 元 (v853 前) の 20/50/100 に戻す。共有時は半額 (10/25/50)。
+    // v1012 中村さん「mini は精度が出ないので light も gpt-5 (effort=low) に」
     'light'    => ['model' => 'gpt-5',      'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5 low, ~4 検索)'],
     'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
     'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
@@ -2966,25 +2966,25 @@ first_author は該当しないなら省略で OK。
 
 # 引用文献の実在性再精査 (v972 追加、最重要)
 
-all_sources に載せる 1 件ずつ について、必ず以下を再精査してください:
+all_sources に載せる 1 件ずつについて、必ず以下を再精査してください:
 
 **Step 1: 引用そのものの実在確認**
 - URL が実際にアクセスできる形か (typo が無いか、 web_search 結果でヒットしたか)
 - 論文の場合、 first_author + title + venue + year の組み合わせで **実在する論文か** を
-  自分の知識と web_search 結果で二重チェック。 「それっぽいが実在しない可能性がある」
+  自分の知識と web_search 結果で二重チェック。「それっぽいが実在しない可能性がある」
   ハルシネーションを警戒する。
-- web_search でヒットしなかった、 または結果と一致しないタイトルは絶対に載せない。
+- web_search でヒットしなかった、または結果と一致しないタイトルは絶対に載せない。
 
 **Step 2: 著者リスト / タイトル / 書誌情報のミス混入チェック**
 - 著者名の綴りが正しいか (typo は LLM ハルシネーションの典型)
 - 論文タイトルの単語の抜け・言い換え・意訳化がないか (原文ママを維持)
 - 会議名 / ジャーナル名 / 巻号 / 年が整合しているか
-- 発表年と venue の存在が矛盾しないか (未来の年、 実在しない会議名など)
+- 発表年と venue の存在が矛盾しないか (未来の年、実在しない会議名など)
 
 **Step 3: 疑わしい出典は fact_check.suspicious_sources に列挙**
 - 疑わしい出典は all_sources に載せずに **fact_check.suspicious_sources に隔離** して、
   なぜ怪しいか (author_error / title_not_found / bibinfo_error / venue_year_mismatch /
-  possibly_hallucinated / url_broken 等) を明示する。 「確信持てなければ載せない」を徹底。
+  possibly_hallucinated / url_broken 等) を明示する。「確信持てなければ載せない」を徹底。
 - 一次情報にたどり着けなかった主張は body 内でも「未確認 / 一次情報未到達」と明示する。
 
 「本当に存在する」と自分で言い切れない出典は絶対に all_sources に含めない。
@@ -2995,7 +2995,7 @@ all_sources に載せる 1 件ずつ について、必ず以下を再精査し�
 最後に fact_check フィールドを必ず入れる:
 
   "fact_check": {
-    "verified": "true/false。 全出典の実在性が確認できたなら true、 1 件でも疑わしければ false",
+    "verified": "true/false。全出典の実在性が確認できたなら true、 1 件でも疑わしければ false",
     "verified_source_count": "実在確認できた出典の件数 (整数)",
     "suspicious_sources": [
       {
@@ -3005,9 +3005,9 @@ all_sources に載せる 1 件ずつ について、必ず以下を再精査し�
         "title":       "疑わしいタイトル (該当あれば)",
         "venue":       "疑わしい venue (該当あれば)",
         "issue_type":  "author_error / title_not_found / bibinfo_error / venue_year_mismatch / possibly_hallucinated / url_broken / other",
-        "explanation": "なぜ怪しいか具体的に (綴り違い / 会議と年のズレ / 検索でヒットせず 等)",
+        "explanation": "なぜ怪しいか具体的に (綴り違い / 会議と年のズレ / 検索でヒットせず等)",
         "confidence":  "high / medium / low",
-        "suggested_fix": "推測される正しい出典形。 分からなければ null"
+        "suggested_fix": "推測される正しい出典形。分からなければ null"
       }
     ]
   }
@@ -3091,7 +3091,7 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
 }
 
 // v784 #382 共有 ON / OFF (本人のみ)
-// v913 差額 追加課金/返金 は _ai_apply_share_toggle_delta 経由。
+// v913 差額追加課金/返金は _ai_apply_share_toggle_delta 経由。
 function ai_deep_research_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3182,7 +3182,7 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
     }
     $tier = DEEP_RESEARCH_TIERS[$depth];
     $baseCost = (int)$tier['cost'];
-    // v913 「終わった瞬間 共有 ON」 (paper_translate と同じ pattern)。 共有=基本額 / 非共有=倍額
+    // v913 「終わった瞬間共有 ON」 (paper_translate と同じ pattern)。共有=基本額 / 非共有=倍額
     $autoShare = !empty($body['auto_share']) ? 1 : 0;
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
@@ -3226,8 +3226,8 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
 //   殺されて結果が DB に入らず status=processing で永遠に残る。 background=true で
 //   投げて、結果ページアクセスのたびに GET /v1/responses/{id} で進捗 / 完了を取り
 //   行く方式に改修 (= polling)。
-// v968 fb-ish 「進まない」 対応。 status=error or (processing で 10 分 以上 進捗 なし) の
-//   row を 同 row で 再 submit。 新規 課金 なし、 openai_response_id を リセット して 再開。
+// v968 fb-ish 「進まない」対応。 status=error or (processing で 10 分以上進捗なし) の
+//   row を同 row で再 submit。新規課金なし、 openai_response_id をリセットして再開。
 function ai_deep_research_retry(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3259,7 +3259,7 @@ function ai_deep_research_retry(PDO $pdo, array $cfg, int $id): void {
 
     json_response_no_exit([
         'ok' => true, 'id' => $id, 'share_token' => $row['share_token'], 'status' => 'processing',
-        'message' => '再投入しました (新規課金なし)。 数分お待ちください。',
+        'message' => '再投入しました (新規課金なし)。数分お待ちください。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
@@ -3411,7 +3411,7 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
                 json_encode($usageRec, JSON_UNESCAPED_UNICODE),
                 $row['id'],
             ]);
-        // v913 auto_share=1 なら 公開 ON に (paper_translate と同じ pattern)
+        // v913 auto_share=1 なら公開 ON に (paper_translate と同じ pattern)
         $pdo->prepare("UPDATE deep_researches SET is_shared=1, shared_at=NOW() WHERE id=? AND auto_share=1 AND is_shared=0")
             ->execute([(int)$row['id']]);
         try {
@@ -3454,8 +3454,8 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 // ============================================================================
 
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
-// v1010 中村さん「論文全訳 も 1.25 倍」。 gpt-4.1 は 既に 無い。
-// v1012 中村さん「mini は 精度が出ないので 削除」
+// v1010 中村さん「論文全訳も 1.25 倍」。 gpt-4.1 は既に無い。
+// v1012 中村さん「mini は精度が出ないので削除」
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
     'gpt-5'      => 63,   // 50 × 1.25 (デフォルト)
     'o1'         => 100,  // 80 × 1.25
@@ -3470,11 +3470,11 @@ const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
 を全訳し、同時に各章で back-translation で訳の信頼性を確認し、最後に全体を
 見渡して用語統一と自然さを整えるところまでやってください。
 
-# 【最重要】"translation" フィールドは必ず 日本語 で出力する
+# 【最重要】"translation" フィールドは必ず日本語で出力する
 
 `chapters[i].translation` フィールドの中身は 100% 日本語で書いてください。
 **英語をそのまま貼り付けることは絶対に禁止** です。
-元の英文は入力 PDF 側にあるので出力に含める必要はありません。 訳文のみ出力してください。
+元の英文は入力 PDF 側にあるので出力に含める必要はありません。訳文のみ出力してください。
 
 たとえ以下の場合でも訳します:
 - 参考文献リスト (References) → 著者名は原綴のまま、タイトル / 説明部分は日本語で
@@ -3497,7 +3497,7 @@ const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
    元英文と突き合わせて「ズレがないか」をコメントする。ズレがあれば訳を修正し直す。
 4. **用語統一**: 重要用語 (proper noun, jargon) は章をまたいで同じ訳語を使う。章ごとの
    訳が終わったあと、全体ポリッシュで用語ブレを直す。
-5. **「論文では 〜 と述べている」などのメタ解説で包まない**。原文と同じ主張で直接訳す。
+5. **「論文では〜と述べている」などのメタ解説で包まない**。原文と同じ主張で直接訳す。
 6. 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)。
 
 # 出力 JSON スキーマ (これをそのまま返却)
@@ -3752,7 +3752,7 @@ function ai_paper_full_translate_shared_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items, 'q' => $q]);
 }
 
-// v913 差額 追加課金/返金 は _ai_apply_share_toggle_delta 経由。
+// v913 差額追加課金/返金は _ai_apply_share_toggle_delta 経由。
 function ai_paper_full_translate_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -3825,7 +3825,7 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     // v797 SHA-256 は横展開リンク用だけに算出 (同 PDF でも別ジョブで走らせる、課金も別)
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v1007 中村 PI 免除 撤廃、 全員 一律 で 残高 チェック。
+    // v1007 中村 PI 免除撤廃、全員一律で残高チェック。
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -4007,7 +4007,7 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     // v913 共有=基本額 / 非共有=倍額
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
-    // v1007 中村 PI 免除 撤廃、 全員 一律。
+    // v1007 中村 PI 免除撤廃、全員一律。
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -4074,7 +4074,7 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     // v913 共有=基本額 / 非共有=倍額
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
-    // v1007 中村 PI 免除 撤廃、 全員 一律。
+    // v1007 中村 PI 免除撤廃、全員一律。
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -4259,9 +4259,9 @@ function ai_paper_full_translate_poll(PDO $pdo, array $cfg, array $row): array {
         elseif (preg_match('/(\{.*\})/s', $text, $m)) $jsonText = $m[1];
         $parsed = json_decode($jsonText, true);
         if (!is_array($parsed)) {
-            // v952 OCR 由来 の 生 制御文字 (\x00-\x08, \x0B, \x0C, \x0E-\x1F) が
-            //   JSON string 内 に 残る と invalid。 \n \r \t 以外 の 制御文字 を
-            //   空白 に 置換 して 再 parse。
+            // v952 OCR 由来の生制御文字 (\x00-\x08, \x0B, \x0C, \x0E-\x1F) が
+            //   JSON string 内に残ると invalid。 \n \r \t 以外の制御文字を
+            //   空白に置換して再 parse。
             $cleaned = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', ' ', $jsonText);
             $parsed = json_decode((string)$cleaned, true);
         }
