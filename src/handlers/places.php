@@ -728,11 +728,36 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
         @chmod($path, 0644);
     };
     $rotate($abs);
-    // thumb があれば同角度で回す (save_uploaded_file が作る .thumb.jpg)
-    $thumb = preg_replace('/\.[^.]+$/', '', $abs) . '.thumb.jpg';
-    if (is_file($thumb) && is_writable($thumb)) {
-        try { $rotate($thumb); } catch (Throwable $_) { /* thumb 失敗は致命的ではない */ }
-    }
+    // v1021 中村さん指摘「口コミの画像は回転したのに、 お店リストで見える画像は回転していない」
+    //   → 従来は 主 と thumb を 独立に 同じ 角度で 回していたが、 EXIF orientation の 処理タイミング
+    //   や upload 側 での 事前 EXIF 補正 と ズレて、 主 と thumb の 縦横 が 逆に なる ケース が
+    //   発生していた。 修正: rotate 後の 主 から thumb を 再生成 (save_uploaded_file と 同じ
+    //   ロジック で 640px 縮小)。 これで 常に 主 と thumb が 同じ 向き / 縦横 に 揃う。
+    _regenerate_thumb_from_main($abs);
+}
+
+function _regenerate_thumb_from_main(string $mainAbs): void {
+    if (!is_file($mainAbs)) return;
+    $thumbAbs = preg_replace('/\.[^.]+$/', '', $mainAbs) . '.thumb.jpg';
+    // 既存 thumb が 書き込み 可 か 新規作成 可 か
+    if (is_file($thumbAbs) && !is_writable($thumbAbs)) return;
+    $dir = dirname($thumbAbs);
+    if (!is_dir($dir) || !is_writable($dir)) return;
+    try {
+        $raw = @file_get_contents($mainAbs);
+        $src = $raw ? @imagecreatefromstring($raw) : false;
+        if (!$src) return;
+        $sw = imagesx($src); $sh = imagesy($src);
+        $maxDim = 640;
+        $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
+        $tw = max(1, (int)round($sw * $ratio));
+        $th = max(1, (int)round($sh * $ratio));
+        $thumb = imagecreatetruecolor($tw, $th);
+        imagecopyresampled($thumb, $src, 0, 0, 0, 0, $tw, $th, $sw, $sh);
+        imagejpeg($thumb, $thumbAbs, 90);
+        @chmod($thumbAbs, 0644);
+        imagedestroy($thumb); imagedestroy($src);
+    } catch (Throwable $_) { /* thumb 生成失敗 は 致命的 では ない */ }
 }
 
 function places_hero_rotate_image(PDO $pdo, array $cfg, int $id): void {

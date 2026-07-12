@@ -1010,7 +1010,24 @@ async function loadPlace(id) {
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap', maxZoom: 19,
         }).addTo(map);
-        L.marker([p.lat, p.lng]).addTo(map).bindPopup(escapeHtml(p.title));
+        // v1021 中村さん要望「たべあるきのお店ページで、 地図とセットでピンが立つけど、
+        //   そのピンの位置に写真を出して。 ある場合は」→ list ページ と 同型 の 写真マーカー を出す。
+        //   優先: place.image_thumb_url (hero サムネ) → image_url (hero) → 最新口コミの画像。
+        const heroImg = p.image_thumb_url || p.image_url
+                     || (d.comments || []).find(c => (c.image_urls || []).length || c.image_url)?.image_urls?.[0]
+                     || (d.comments || []).find(c => c.image_url)?.image_url
+                     || null;
+        if (heroImg) {
+          const icon = L.divIcon({
+            className: 'pl-img-marker',
+            html: `<div style="width:56px; height:56px; border-radius:10px; overflow:hidden; border:3px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.4); background:#fff"><img src="${escapeHtml(heroImg)}" alt="" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover"></div>`,
+            iconSize: [56, 56],
+            iconAnchor: [28, 28],
+          });
+          L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(escapeHtml(p.title));
+        } else {
+          L.marker([p.lat, p.lng]).addTo(map).bindPopup(escapeHtml(p.title));
+        }
         // v958 fb#475 ダブルタップ で 2 レベル ズームイン
         map.doubleClickZoom.disable();
         map.on('dblclick', (e) => {
