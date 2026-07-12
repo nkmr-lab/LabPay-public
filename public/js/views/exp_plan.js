@@ -37,9 +37,10 @@ export async function renderExpPlan() {
           style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px"></textarea>
         <div id="epc-count" class="hint-sm" style="text-align:right; margin-top:2px">0 / ${MAX_CHARS} 字</div>
       </label>
-      <div class="row" style="gap:6px; margin-top:4px">
+      <div class="row" style="gap:6px; margin-top:4px; flex-wrap:wrap">
         <button id="epc-submit" class="btn primary">🧪 精査を依頼 (20pt)</button>
         <button id="epc-clear" class="btn">クリア</button>
+        <button id="epc-scrapbox" class="btn" title="Scrapbox のページ URL からタイトル + 本文を取り込みます (PAT 設定が必要)">🔗 Scrapboxから取り込む</button>
       </div>
     </div>
 
@@ -64,7 +65,38 @@ export async function renderExpPlan() {
     document.getElementById('epc-title').value = '';
     ta.value = ''; updateCount();
   });
+  document.getElementById('epc-scrapbox').addEventListener('click', onFetchScrapbox);
   loadList();
+}
+
+// v1047 Scrapbox URL → タイトル+本文 自動取り込み (中村さん要望「実験計画書は
+//   Scrapbox にあるので、Scrapbox の URL を与えても良いようにしても良いかも」)。
+async function onFetchScrapbox() {
+  const url = prompt('Scrapbox のページ URL を入力してください\n例: https://scrapbox.io/nkmr-lab/眉毛対称ガイドの実験計画');
+  if (!url || !url.trim()) return;
+  const btn = document.getElementById('epc-scrapbox');
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ 取得中…';
+  try {
+    const r = await post('/api/ai/exp_plan/fetch_scrapbox', { url: url.trim() });
+    const titleEl = document.getElementById('epc-title');
+    const ta = document.getElementById('epc-text');
+    // 既存本文があれば上書き確認
+    if (ta.value.trim() && !confirm('現在の本文を Scrapbox の内容で上書きしますか?')) return;
+    if (!titleEl.value.trim()) titleEl.value = r.title || '';
+    ta.value = r.text || '';
+    ta.dispatchEvent(new Event('input'));
+    toast(`Scrapbox から取り込みました (${r.chars} 字)`);
+  } catch (e) {
+    const msg = e.message || String(e);
+    if (msg.includes('PAT') || msg.includes('412')) {
+      if (confirm('Scrapbox の PAT が未登録です。設定ページに移動しますか?')) location.hash = '#/settings';
+    } else {
+      toast('取得失敗: ' + msg);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 }
 
 async function onSubmit() {

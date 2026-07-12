@@ -133,6 +133,11 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_exp_plan_check_delete($pdo, $cfg, (int)$seg[2]);
         return;
     }
+    // v1047 Scrapbox URL → ページテキスト取得 (認証済ユーザの PAT 経由)
+    if ($sub === 'exp_plan' && $method === 'POST' && ($seg[2] ?? null) === 'fetch_scrapbox') {
+        ai_exp_plan_fetch_scrapbox($pdo, $cfg);
+        return;
+    }
     // v613 文字数 / 単語数制限リライター
     if ($sub === 'rewriter' && $method === 'POST' && !isset($seg[2])) {
         ai_rewriter_run($pdo, $cfg);
@@ -1240,6 +1245,58 @@ function ai_exp_plan_check_delete(PDO $pdo, array $cfg, int $id): void {
     $st = $pdo->prepare("DELETE FROM experiment_plan_checks WHERE id = ? AND user_id = ?");
     $st->execute([$id, $uid]);
     json_response(['ok' => true, 'deleted' => $st->rowCount()]);
+}
+
+// v1047 Scrapbox URL → ページテキスト取得 (中村さん要望「実験計画書は Scrapbox に
+//   あるので、Scrapbox の URL を与えても良いようにしても良いかも。 Scrapbox の Cookie
+//   が設定されている場合だけれど」)。 既存の cosense v2 PAT 経路を使い回す (各ユーザ
+//   個別 PAT。 未登録なら 412 でエラーメッセージ)。 URL は
+//   https://scrapbox.io/{project}/{title} 形式を想定。
+function ai_exp_plan_fetch_scrapbox(PDO $pdo, array $cfg): void {
+    require_once __DIR__ . '/cosense.php';
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+
+    $body = read_json_body();
+    $url = trim((string)require_field($body, 'url'));
+    if ($url === '') {
+        throw new ApiException('bad_request', 'url が空です', 400);
+    }
+    if (!preg_match('#^https?://(?:scrapbox\.io|cosen\.se)/([^/?#]+)/([^?#]+)#', $url, $m)) {
+        throw new ApiException('bad_request', 'Scrapbox の URL 形式が違います (例: https://scrapbox.io/nkmr-lab/ページ名)', 400);
+    }
+    $project = urldecode($m[1]);
+    $title = urldecode($m[2]);
+    $configured = cosense_project($cfg);
+    if ($project !== $configured) {
+        throw new ApiException('bad_request',
+            "対応プロジェクトは {$configured} のみ (指定: {$project})。 別プロジェクトから取り込むには本文を手動でコピー&ペーストしてください。", 400);
+    }
+    $pat = cosense_user_pat($pdo, $uid);
+    if ($pat === null) {
+        throw new ApiException('precondition',
+            'Scrapbox PAT が未登録です。設定 → Scrapbox で登録してから再試行してください。', 412);
+    }
+    $r = cosense_v2_get_page($cfg, $title, $pat);
+    if (!$r['ok']) {
+        $status = (int)($r['status'] ?? 0);
+        if ($status === 404) {
+            throw new ApiException('not_found', "Scrapbox にページが見つかりません: {$title}", 404);
+        }
+        throw new ApiException('upstream',
+            "Scrapbox から取得失敗 (HTTP {$status}): {$title}", 502);
+    }
+    $lines = $r['page']['lines'] ?? [];
+    $text = '';
+    foreach ($lines as $ln) {
+        $text .= ($text === '' ? '' : "\n") . (string)($ln['text'] ?? '');
+    }
+    json_response([
+        'title' => $title,
+        'text'  => $text,
+        'url'   => $url,
+        'chars' => mb_strlen($text),
+    ]);
 }
 
 function ai_paper_review_settings_get(PDO $pdo, array $cfg): void {
