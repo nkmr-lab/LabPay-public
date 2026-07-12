@@ -155,9 +155,10 @@ function route_purchases(PDO $pdo, array $cfg, string $method, array $seg): void
 
     // Fire notifications AFTER commit. Failures must not propagate.
     try {
+        // v1013 中村さん要望「〜が〜で売れました → 〜が〜に〜で売れました (誰に売れたか欲しい)」
         $body = $notify['isGift']
             ? "{$notify['buyerName']} が「{$notify['productName']}」をもらいました"
-            : "{$notify['productName']} が {$notify['sellerTake']}pt で売れました（手数料 {$notify['fee']}pt）";
+            : "{$notify['productName']} が {$notify['buyerName']} に {$notify['sellerTake']}pt で売れました（手数料 {$notify['fee']}pt）";
         Notifier::notify($pdo, $cfg, $notify['sellerId'], 'sale', $body,
             'purchase', $notify['purchaseId']);
         if ($notify['newQty'] === 0) {
