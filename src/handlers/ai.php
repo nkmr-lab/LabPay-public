@@ -1990,11 +1990,12 @@ function ai_paper_translate_patch(PDO $pdo, array $cfg, int $id): void {
 }
 
 // v913 共有 toggle 差額処理 の 共通ロジック (3 機能 共通)。 v914 で フレーミングを 「共有=半額割引」 に 反転。
-//   share_priced=0 (旧 row / 中村 PI) の場合 は 差額処理 スキップ、 単に is_shared を フリップ するだけ。
+//   share_priced=0 (旧 row) の場合 は 差額処理 スキップ、 単に is_shared を フリップ するだけ。
 //   share_priced=1 の場合 (v914 モデル: shared paid = base/2、 unshared paid = base):
 //     - 非共有 (base paid) → 共有 (base/2): paid / 2 を SYSTEM → user に 返金 (半額割引 発動)、 cost_points を 半額 に。
 //     - 共有 (base/2 paid) → 非共有 (base): paid と 同額 を user → SYSTEM に 追加課金 (半額割引 停止)、 cost_points を 倍額 に。
 //   ratio は v913 と 同じ 1:2 なので、 差額 計算 (±cost_points/2) は そのまま。 変わったのは 名目 base の 意味と ラベル。
+// v1007 中村 PI 免除を廃止 (「LabPay ポイントが余るようになってきたから普通に支払い発生する形式に」)。
 function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, int $rowId, int $uid, array $row, bool $on): void {
     $curShared = (int)($row['is_shared'] ?? 0) === 1;
     if ($curShared === $on) {
@@ -2005,9 +2006,8 @@ function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, 
     }
     $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
     $paidCost = (int)($row['cost_points'] ?? 0);
-    $isPi = ($uid === 3);  // v808 #402 中村 PI は そもそも 課金ゼロ、 差額処理 も なし
-    // 旧 row / PI / 未課金 の場合、 表示切替のみ
-    if (!$sharePriced || $isPi || $paidCost <= 0) {
+    // 旧 row (v913 以前 で share_priced=0) や 未課金 (paidCost=0、 過去 の 中村 PI 免除分 等) は 表示切替のみ
+    if (!$sharePriced || $paidCost <= 0) {
         $pdo->prepare("UPDATE {$table}
                           SET is_shared=?, shared_at=" . ($on ? "NOW()" : "NULL") . "
                         WHERE id=?")
@@ -2133,17 +2133,12 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     //   違うので、「同ファイルなら流用」で課金をスキップするとはしない方針)。
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v808 #402 ラボ PI (user_id=3 = 中村) は SYSTEM の表現でもあり、自分で自分に
-    //   ポイントを払っても意味がないので課金スキップ (cost はそのまま表示用に保持)。
-    $skipCharge = ($uid === 3);
-
-    if (!$skipCharge) {
-        // 残高チェック
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $cost) {
-            throw new ApiException('insufficient_balance',
-                sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
-        }
+    // v1007 中村さん要望 「LabPay ポイント が 余る ように なってきた から、 普通に 支払い
+    //   発生 する 形式 にして 良いかな」 で PI 免除 撤廃。 全員 一律 で 残高 チェック。
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -2208,7 +2203,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
     // $token はすでに上の pdftoppm セクションで生成済み (= ページ画像 dir 用)。
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
             (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share, share_priced)
             VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,1)")
@@ -2216,10 +2211,7 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        // v808 #402 ラボ PI は課金スキップ (cost は表示上残すが ledger 転送しない)
-        if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
-        }
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
     });
 
     json_response_no_exit([
@@ -3524,14 +3516,11 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
     // v797 SHA-256 は横展開リンク用だけに算出 (同 PDF でも別ジョブで走らせる、課金も別)
     $pdfSha = hash_file('sha256', $tmpPdf);
 
-    // v808 #402 ラボ PI (user_id=3) は課金スキップ
-    $skipCharge = ($uid === 3);
-    if (!$skipCharge) {
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $cost) {
-            throw new ApiException('insufficient_balance',
-                sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
-        }
+    // v1007 中村 PI 免除 撤廃、 全員 一律 で 残高 チェック。
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -3547,17 +3536,14 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 
     $pdfName = (string)($f['name'] ?? 'paper.pdf');
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
             (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        // v808 #402 ラボ PI は課金スキップ
-        if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
-                '論文全訳 (' . $direction . ') 依頼料');
-        }
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+            '論文全訳 (' . $direction . ') 依頼料');
     });
 
     json_response_no_exit([
@@ -3712,13 +3698,11 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     // v913 共有=基本額 / 非共有=倍額
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
-    $skipCharge = ($uid === 3);
-    if (!$skipCharge) {
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $cost) {
-            throw new ApiException('insufficient_balance',
-                sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
-        }
+    // v1007 中村 PI 免除 撤廃、 全員 一律。
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -3735,16 +3719,14 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
     $pdfName = (string)$sumRow['pdf_name'];
     $pdfSha = (string)$sumRow['pdf_sha256'];
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, $skipCharge, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $pdfName, $direction, $reqModel, $cost, $pdfRel, $pdfSha, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_full_translations
             (user_id, share_token, pdf_path, pdf_name, pdf_sha256, direction, model, cost_points, status, progress_text, auto_share)
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
-                '論文全訳 (' . $direction . ') 依頼料 (要約から)');
-        }
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+            '論文全訳 (' . $direction . ') 依頼料 (要約から)');
     });
 
     json_response_no_exit([
@@ -3783,13 +3765,11 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     // v913 共有=基本額 / 非共有=倍額
     $cost = _ai_share_priced_cost($baseCost, (bool)$autoShare);
 
-    $skipCharge = ($uid === 3);
-    if (!$skipCharge) {
-        $bal = Ledger::balanceOfUser($pdo, $uid);
-        if ($bal < $cost) {
-            throw new ApiException('insufficient_balance',
-                sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
-        }
+    // v1007 中村 PI 免除 撤廃、 全員 一律。
+    $bal = Ledger::balanceOfUser($pdo, $uid);
+    if ($bal < $cost) {
+        throw new ApiException('insufficient_balance',
+            sprintf('ポイント不足 (要 %d pt、現在 %d pt)', $cost, $bal), 400);
     }
 
     $apiKey = (string)$cfg['openai']['api_key'];
@@ -3838,7 +3818,7 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
     $pdfName = (string)$fullRow['pdf_name'];
     $pdfSha = (string)$fullRow['pdf_sha256'];
     $rowId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, $skipCharge, &$rowId) {
+    db_tx($pdo, function () use ($pdo, $uid, $token, $fileId, $pdfName, $sys, $pagesCount, $pagesRel, $pdfRel, $pdfSha, $reqModel, $cost, $autoShare, &$rowId) {
         $pdo->prepare("INSERT INTO paper_translates
             (user_id, share_token, file_id, pdf_name, pdf_sha256, prompt_used, result_json, cost_points, status, pages_count, pages_dir, pdf_path, model, auto_share, share_priced)
             VALUES (?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,1)")
@@ -3846,9 +3826,7 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        if (!$skipCharge) {
-            Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料 (全訳から)');
-        }
+        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料 (全訳から)');
     });
 
     json_response_no_exit([
