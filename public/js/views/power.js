@@ -257,8 +257,8 @@ function renderRawInputs() {
       </div>
     </div>`;
   return `
-    <details class="card" style="background:#fafaf5; border:1px solid #f3f4f6">
-      <summary style="cursor:pointer; font-weight:600">🎯 (オプション) 予想データ (平均 + SD) から 効果量 を 導く</summary>
+    <details class="card" style="background:#fafaf5; border-left:4px solid #ede4f3">
+      <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🎯 予想データ (平均 + SD) から 効果量 を 導く</summary>
       <div class="hint-sm" style="margin-top:6px; margin-bottom:6px">先行研究 or パイロット の 平均 と SD を 入れて、 グラフ で 手ごたえ を 確認 → 「この値で 予想効果量を 求める」 ボタン で 効果量欄 に 反映 します。</div>
       ${dtSelect}
       ${state.test === 't2' ? twoGroupInputs : diffInputs}
@@ -372,8 +372,8 @@ function renderRawPreviewSVG() {
 function renderEffectHelper() {
   if (state.test === 't2') {
     return `
-      <details class="card" style="background:#f9fafb; padding:8px 12px">
-        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 先行研究の平均・SD から Cohen's d を計算 (独立 2 群)</summary>
+      <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 先行研究の平均・SD から Cohen's d を計算 (独立 2 群)</summary>
         <div class="hint-sm" style="margin-top:4px">計算式: <code>d = |M₁ − M₂| / √((SD₁² + SD₂²) / 2)</code></div>
         <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px">
           <label class="field"><span class="lbl">群 1 の 平均 M₁</span><input type="number" id="eh-m1" step="any"></label>
@@ -389,8 +389,8 @@ function renderEffectHelper() {
   }
   if (state.test === 'tp' || state.test === 't1') {
     return `
-      <details class="card" style="background:#f9fafb; padding:8px 12px">
-        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 先行研究 の 平均・SD から Cohen's d を計算 (対応あり / 1 標本)</summary>
+      <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 先行研究 の 平均・SD から Cohen's d を計算 (対応あり / 1 標本)</summary>
         <div class="hint-sm" style="margin-top:4px">計算式: <code>d = |差分の 平均| / SD</code>。 対応あり なら 「差分の 平均・差分の SD」、 1 標本 なら 「観測平均 − 基準値」 と 観測 SD。</div>
         <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px">
           <label class="field"><span class="lbl">平均 (差 or 観測 − 基準)</span><input type="number" id="eh-m" step="any"></label>
@@ -404,8 +404,8 @@ function renderEffectHelper() {
   }
   if (state.test === 'anova') {
     return `
-      <details class="card" style="background:#f9fafb; padding:8px 12px">
-        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 群平均 + 群内 SD から Cohen's f を計算</summary>
+      <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 群平均 + 群内 SD から Cohen's f を計算</summary>
         <div class="hint-sm" style="margin-top:4px">計算式: <code>f = σ_between / σ_within</code>。 σ_between は 群平均の 母標準偏差 (n で 割る 版)、 σ_within は 群内 共通 SD。</div>
         <div style="display:grid; gap:8px; margin-top:8px">
           <label class="field"><span class="lbl">群平均 (カンマ区切り、 例: 3.2, 4.1, 5.0)</span>
@@ -427,8 +427,8 @@ function renderEffectHelper() {
   }
   if (state.test === 'corr') {
     return `
-      <details class="card" style="background:#f9fafb; padding:8px 12px">
-        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 決定係数 R² から r を計算</summary>
+      <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 決定係数 R² から r を計算</summary>
         <div class="hint-sm" style="margin-top:4px">計算式: <code>r = √R²</code>。 効果量 r そのものを 入れる 方が 直感的 な ケース も 多い ので、 併用推奨。</div>
         <div style="display:grid; gap:8px; margin-top:8px">
           <label class="field"><span class="lbl">R² (決定係数、 0-1)</span>
@@ -443,8 +443,8 @@ function renderEffectHelper() {
   }
   if (state.test === 'chi2') {
     return `
-      <details class="card" style="background:#f9fafb; padding:8px 12px">
-        <summary style="cursor:pointer; font-weight:600; font-size:13px">🧮 期待比率 と 想定比率 から Cohen's w を計算</summary>
+      <details class="card" style="background:#f9fafb; border-left:4px solid #ede4f3">
+        <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:14px">🧮 期待比率 と 想定比率 から Cohen's w を計算</summary>
         <div class="hint-sm" style="margin-top:4px">計算式: <code>w = √(Σ ((p_i − p_i₀)² / p_i₀))</code>。 p_i₀ が 帰無時 の 期待比率、 p_i が 想定 (対立) の 比率。 それぞれ カンマ区切りで 同じ 長さ、 合計 1 に なる ように。</div>
         <div style="display:grid; gap:8px; margin-top:8px">
           <label class="field"><span class="lbl">帰無時 の 比率 p₀ (カンマ区切り、 例: 0.5, 0.5)</span>
@@ -504,6 +504,19 @@ function computeEffectFromHelper(kind) {
     }, 0));
     setEff(w);
   }
+}
+
+// ---------------- UI ヘルパー ----------------
+
+// v1030 中村さん指示 「一気に値を設定する 感じ に なってる けど、 ひとつずつ 入力
+//   させて いく のが 良い」→ 各パラメータ を 独立した ステップブロック 化。
+function stepBlock({ title, desc, body }) {
+  return `
+    <div class="card" style="border-left:4px solid #ede4f3">
+      <div class="bold" style="color:#7b3fa0; font-size:14.5px; margin-bottom:3px">${escapeHtml(title)}</div>
+      <div class="hint-sm" style="margin-bottom:8px; line-height:1.5">${desc}</div>
+      ${body}
+    </div>`;
 }
 
 // ---------------- UI ----------------
@@ -602,66 +615,90 @@ function render() {
       </div>
     </div>
 
-    <div class="card">
-      <label class="field">
-        <span class="lbl">検定の種類</span>
-        <select id="pw-test" style="width:100%">
-          ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
-        </select>
-      </label>
+    <!-- v1030 中村さん指示 「一気に値を設定する 感じ に なってる けど、 ひとつずつ 入力
+         させて いく のが 良い」→ 各パラメータ を 独立した ステップブロック に (title +
+         短い 説明 + 入力)。 Post hoc の 場合 は 目標検定力 の 代わりに サンプルサイズ を出す。 -->
+    ${stepBlock({
+      title: '① 検定の種類',
+      desc: 'どの 統計検定 を 使う 予定か。 選ぶ ものに 応じて 必要な 入力項目 が 変わります。',
+      body: `<select id="pw-test" style="width:100%">
+              ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
+             </select>`,
+    })}
 
-      <label class="field">
-        <span class="lbl">モード</span>
-        <div class="row" style="gap:6px; flex-wrap:wrap">
-          <button data-pw-mode="a_priori" class="btn ${state.mode==='a_priori'?'primary':''}" style="font-size:12px; padding:4px 10px">🎯 A priori (必要 n)</button>
-          <button data-pw-mode="post_hoc" class="btn ${state.mode==='post_hoc'?'primary':''}" style="font-size:12px; padding:4px 10px">🔍 Post hoc (検定力)</button>
-        </div>
-      </label>
+    ${stepBlock({
+      title: '② モード',
+      desc: 'A priori: これから 実験する 場合。 効果量 と 目標検定力 を 決めて、 必要な n を 算出。 / Post hoc: 手元の n で どれくらい 検出力 が あるかを 事後確認。',
+      body: `<div class="row" style="gap:6px; flex-wrap:wrap">
+              <button data-pw-mode="a_priori" class="btn ${state.mode==='a_priori'?'primary':''}" style="font-size:13px; padding:5px 14px">🎯 A priori (必要 n を求める)</button>
+              <button data-pw-mode="post_hoc" class="btn ${state.mode==='post_hoc'?'primary':''}" style="font-size:13px; padding:5px 14px">🔍 Post hoc (検定力を求める)</button>
+             </div>`,
+    })}
 
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px">
-        <label class="field"><span class="lbl">有意水準 α</span>
-          <input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}">
-        </label>
-        ${['t2','tp','t1','corr'].includes(state.test) ? `
-          <label class="field">
-            <span class="lbl">仮説の方向</span>
-            <select id="pw-tails">
+    ${stepBlock({
+      title: '③ 有意水準 α',
+      desc: '「偶然の 差」 を 「本当に 差」 と 誤って 判定してしまう 上限 (型 I 過誤)。 通常 0.05 (5%)。 厳しくする なら 0.01。',
+      body: `<input type="number" id="pw-alpha" step="0.005" min="0.001" max="0.5" value="${state.alpha}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <button class="btn" data-pw-alpha="0.05" style="font-size:11px; padding:2px 8px">0.05 (通常)</button>
+               <button class="btn" data-pw-alpha="0.01" style="font-size:11px; padding:2px 8px">0.01 (厳しめ)</button>
+               <button class="btn" data-pw-alpha="0.001" style="font-size:11px; padding:2px 8px">0.001 (非常に厳しめ)</button>
+             </div>`,
+    })}
+
+    ${['t2','tp','t1','corr'].includes(state.test) ? stepBlock({
+      title: '④ 仮説の方向',
+      desc: '両側: どちらが 大きい かは 決めて いない、 差が あれば 検出。 / 片側: どちらが 大きい か 事前に 決めて いる (逆方向 の 差 は 検出 しない、 その分 必要 n は 少し 少ない)。',
+      body: `<select id="pw-tails" style="max-width:280px">
               <option value="2" ${state.tails==2?'selected':''}>両側: 差があるかを判定</option>
               <option value="1" ${state.tails==1?'selected':''}>片側: 想定の大小差を判定</option>
-            </select>
-            <div class="hint-sm" style="margin-top:2px; font-size:11px">片側は 必要 n が 少し 少なく なる が、 想定と 逆方向 の 差 は 検出しなくなる。</div>
-          </label>` : ''}
-        ${state.mode==='a_priori' ? `
-          <label class="field"><span class="lbl">目標検定力 1 - β</span>
-            <input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}">
-          </label>` : `
-          <label class="field"><span class="lbl">${state.test==='t2'?'各群のサンプルサイズ n':'全体サンプルサイズ N'}</span>
-            <input type="number" id="pw-n" step="1" min="2" value="${state.test==='t2' ? state.n_per_group : state.n_total}">
-          </label>`}
-        ${state.test==='anova' ? `
-          <label class="field"><span class="lbl">群 数 k</span>
-            <input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}">
-          </label>` : ''}
-        ${state.test==='chi2' ? `
-          <label class="field"><span class="lbl">自由度 df</span>
-            <input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}">
-          </label>` : ''}
-        <label class="field"><span class="lbl">効果量 (${t.eff})</span>
-          <input type="number" id="pw-effect" step="0.01" min="0.01" value="${state.effect}">
-        </label>
-      </div>
+             </select>`,
+    }) : ''}
 
-      <div class="row" style="gap:6px; margin-top:4px; flex-wrap:wrap">
-        <span class="hint-sm">目安:</span>
-        ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
-      </div>
+    ${state.mode==='a_priori' ? stepBlock({
+      title: '⑤ 目標検定力 1 − β',
+      desc: '「本当に 効果 が あった とき、 それを 有意 と 検出できる 確率」。 通常 0.80 (80%)。 厳しくする なら 0.90 or 0.95 (必要 n が 増える)。',
+      body: `<input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <button class="btn" data-pw-power="0.8" style="font-size:11px; padding:2px 8px">0.80 (通常)</button>
+               <button class="btn" data-pw-power="0.9" style="font-size:11px; padding:2px 8px">0.90 (厳しめ)</button>
+               <button class="btn" data-pw-power="0.95" style="font-size:11px; padding:2px 8px">0.95 (非常に厳しめ)</button>
+             </div>`,
+    }) : stepBlock({
+      title: '⑤ サンプルサイズ',
+      desc: state.test === 't2' ? '手元 or 予定の 各群 の サンプルサイズ n。' : '手元 or 予定の 全体 サンプルサイズ N。',
+      body: `<input type="number" id="pw-n" step="1" min="2" value="${state.test==='t2' ? state.n_per_group : state.n_total}" style="width:120px">
+             <div class="hint-sm" style="margin-top:6px">${state.test === 't2' ? '各群 n の 値 (全体 N は 自動 で 2n)' : '全体 N の 値'}</div>`,
+    })}
 
-      ${renderEffectHelper()}
-      ${renderRawInputs()}
+    ${state.test==='anova' ? stepBlock({
+      title: '⑤-a 群 数 k',
+      desc: 'ANOVA で 比較する 群 の 数 (例: 3 条件 なら k=3)。',
+      body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
+    }) : ''}
 
-      <div class="row" style="margin-top:12px">
-        <button id="pw-calc" class="btn primary" style="padding:8px 24px; font-size:14px">🧮 計算</button>
-      </div>
+    ${state.test==='chi2' ? stepBlock({
+      title: '⑤-a 自由度 df',
+      desc: 'χ² 検定 の 自由度 (適合度 検定: カテゴリ数 − 1、 独立性 検定: (行数−1)×(列数−1))。',
+      body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
+    }) : ''}
+
+    ${stepBlock({
+      title: '⑥ 効果量 (' + t.eff + ')',
+      desc: '検出したい 効果の 大きさ を 標準化 した 値。 先行研究 / パイロット / 分野の慣習 で 決めます。 下の 補助 で 平均・SD から 逆算 も 可。',
+      body: `<input type="number" id="pw-effect" step="0.01" min="0.01" value="${state.effect}" style="width:120px">
+             <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+               <span class="hint-sm" style="align-self:center">目安:</span>
+               ${t.effGuide.map(([lb, v]) => `<button data-pw-eff="${v}" class="btn" style="font-size:11px; padding:2px 8px">${escapeHtml(lb)}</button>`).join('')}
+             </div>`,
+    })}
+
+    <!-- 効果量 補助 (2 種、 同じ サイズ で) -->
+    ${renderRawInputs()}
+    ${renderEffectHelper()}
+
+    <div class="card" style="text-align:center">
+      <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
     </div>
 
     <div id="pw-result"></div>
@@ -691,6 +728,20 @@ function render() {
     b.addEventListener('click', () => {
       state.effect = parseFloat(b.dataset.pwEff);
       document.getElementById('pw-effect').value = state.effect;
+    });
+  });
+  // v1030 α と 検定力 の プリセットボタン
+  document.querySelectorAll('[data-pw-alpha]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.alpha = parseFloat(b.dataset.pwAlpha);
+      document.getElementById('pw-alpha').value = state.alpha;
+    });
+  });
+  document.querySelectorAll('[data-pw-power]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.power = parseFloat(b.dataset.pwPower);
+      const el = document.getElementById('pw-power');
+      if (el) el.value = state.power;
     });
   });
   // v1024b 効果量ヘルパー (先行研究 の 値 から 効果量 を 逆算)
