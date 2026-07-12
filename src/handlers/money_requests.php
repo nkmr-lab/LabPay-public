@@ -21,6 +21,9 @@ function route_money_requests(PDO $pdo, array $cfg, string $method, array $seg):
         if ($next === '' && $method === 'DELETE') { money_requests_close($pdo, $cfg, $id);  return; }
         if ($next === 'pay'    && $method === 'PATCH') { money_requests_pay  ($pdo, $cfg, $id); return; }
         if ($next === 'unpay'  && $method === 'PATCH') { money_requests_unpay($pdo, $cfg, $id); return; }
+        // v1009 LabPay 500pt 部分支払 (請求者が opt-in した ときだけ)
+        if ($next === 'pay-labpay'   && $method === 'PATCH') { money_requests_pay_labpay  ($pdo, $cfg, $id); return; }
+        if ($next === 'unpay-labpay' && $method === 'PATCH') { money_requests_unpay_labpay($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no money-requests route for $method $sub", 404);
 }
@@ -115,6 +118,9 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         throw new ApiException('bad_request', 'title length 1..200', 400);
     }
     $memo = isset($body['memo']) ? mb_substr((string)$body['memo'], 0, 5000) : null;
+    // v1009 LabPay 500pt 部分支払 の opt-in (デフォルト=無効)。 有効時は amount>=500 の
+    //   受取人 のみ 500pt LabPay 送金 で 部分払 が できる。
+    $allowLabpayPt = !empty($body['allow_labpay']) ? 500 : 0;
     $dryRun = !empty($body['dry_run']);  // true なら DB に作らず、通知本文だけ previews[] で返す
     // 任意: adhoc_groups の精算サマリ「請求一括生成」から呼ばれた場合に
     // どのグループ由来かを記録する。これがあると groups.js の精算モーダル
@@ -206,10 +212,10 @@ function money_requests_create(PDO $pdo, array $cfg): void {
         return;
     }
 
-    $rid = db_tx($pdo, function () use ($pdo, $creatorId, $u, $title, $memo, $rows, $sourceGroupId) {
+    $rid = db_tx($pdo, function () use ($pdo, $creatorId, $u, $title, $memo, $allowLabpayPt, $rows, $sourceGroupId) {
         $st = $pdo->prepare("INSERT INTO money_requests
-            (creator_user_id, created_by_user_id, source_group_id, title, memo) VALUES (?,?,?,?,?)");
-        $st->execute([$creatorId, (int)$u['id'], $sourceGroupId, $title, $memo]);
+            (creator_user_id, created_by_user_id, source_group_id, title, memo, allow_labpay_pt) VALUES (?,?,?,?,?,?)");
+        $st->execute([$creatorId, (int)$u['id'], $sourceGroupId, $title, $memo, $allowLabpayPt]);
         $rid = (int)$pdo->lastInsertId();
         $st = $pdo->prepare("INSERT INTO money_request_recipients (request_id, user_id, amount_yen) VALUES (?,?,?)");
         foreach ($rows as $r) $st->execute([$rid, $r['user_id'], $r['amount_yen']]);
@@ -257,6 +263,7 @@ function money_requests_detail(PDO $pdo, array $cfg, int $id): void {
     $stR = $pdo->prepare("
         SELECT rr.id, rr.user_id, rr.amount_yen, rr.paid_at, rr.paid_method,
                rr.paid_proxy_user_id, rr.paid_note,
+               rr.labpay_pt, rr.labpay_at,
                u.display_name, u.avatar_url, u.grade,
                up.display_name AS proxy_name
           FROM money_request_recipients rr
@@ -313,6 +320,10 @@ function money_requests_patch(PDO $pdo, array $cfg, int $id): void {
         $m = ($body['memo'] === null || $body['memo'] === '')
             ? null : mb_substr((string)$body['memo'], 0, 5000);
         $sets[] = 'memo = ?'; $args[] = $m;
+    }
+    // v1009 allow_labpay の後付け 切替 (LabPay 部分支払 の 許可)
+    if (array_key_exists('allow_labpay', $body)) {
+        $sets[] = 'allow_labpay_pt = ?'; $args[] = !empty($body['allow_labpay']) ? 500 : 0;
     }
     if ($sets) {
         $args[] = $id;
@@ -423,4 +434,86 @@ function money_requests_unpay(PDO $pdo, array $cfg, int $id): void {
         SET paid_at=NULL, paid_method=NULL, paid_proxy_user_id=NULL, paid_note=NULL
         WHERE id=?")->execute([$rid]);
     json_response(['ok' => true]);
+}
+
+// v1009 LabPay 500pt 部分支払: 受取人 が LabPay pt を 500 (allow_labpay_pt の 値) だけ
+//   請求者 に 送金 して、 残額 を 現金 等 で 別途 支払 する。 現金完了 (paid_at) との
+//   両立 前提。 冪等 で は なく 「まだ 部分払 して いない 人 だけ 走らせる」 モデル。
+function money_requests_pay_labpay(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $row = money_requests_load_recipient_for_labpay($pdo, $id, $uid);
+    if ((int)$row['allow_labpay_pt'] <= 0) {
+        throw new ApiException('bad_request', 'この請求は LabPay 部分支払を許可していません', 400);
+    }
+    $ptToTransfer = (int)$row['allow_labpay_pt'];
+    if ((int)$row['amount_yen'] < $ptToTransfer) {
+        throw new ApiException('bad_request', "請求額が {$ptToTransfer} pt 未満なので部分支払は使えません", 400);
+    }
+    if ($row['labpay_at'] !== null) {
+        throw new ApiException('conflict', 'すでに LabPay で 部分支払 済み です', 409);
+    }
+    if ($row['paid_at'] !== null) {
+        throw new ApiException('conflict', 'すでに 全額 支払 済み です', 409);
+    }
+    $creatorId = (int)$row['creator_user_id'];
+    if ($creatorId === $uid) {
+        throw new ApiException('bad_request', '自分から自分への LabPay 送金 は 意味ありません', 400);
+    }
+
+    db_tx($pdo, function () use ($pdo, $uid, $creatorId, $ptToTransfer, $row, $id) {
+        Ledger::transfer($pdo, $uid, $creatorId, $ptToTransfer, 'transfer', 'money_request', $id,
+            "「{$row['title']}」LabPay 部分支払");
+        $pdo->prepare("UPDATE money_request_recipients
+            SET labpay_pt = ?, labpay_at = NOW()
+            WHERE id = ?")->execute([$ptToTransfer, (int)$row['id']]);
+    });
+
+    // 請求者へ 通知: 「LabPay {N}pt 受領。 残 ¥Y を 現金 で」
+    $rest = (int)$row['amount_yen'] - $ptToTransfer;
+    $msg = "💠 「{$row['title']}」: {$u['display_name']} から LabPay {$ptToTransfer}pt 受領 (残 ¥"
+         . number_format($rest) . " は 現金 等 で 予定)";
+    notify_safely($pdo, $cfg, $creatorId, 'admin_notice', $msg, 'money_request', $id);
+    json_response(['ok' => true, 'labpay_pt' => $ptToTransfer, 'remaining_yen' => $rest]);
+}
+
+// v1009 LabPay 部分支払 の 取消 (受取人 が 誤って 押した とき 用)。 現金 が まだ
+//   支払われて いない 限り 取り消せる。 Ledger は 逆方向 の transfer で 相殺。
+function money_requests_unpay_labpay(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $row = money_requests_load_recipient_for_labpay($pdo, $id, $uid);
+    if ($row['labpay_at'] === null || (int)$row['labpay_pt'] <= 0) {
+        throw new ApiException('bad_request', 'LabPay 部分支払 の 記録 が ありません', 400);
+    }
+    if ($row['paid_at'] !== null) {
+        throw new ApiException('bad_request', 'すでに 全額 支払完了 の 記録 が ある ので 取り消せません (先に 支払完了 を 未払いに 戻して ください)', 400);
+    }
+    $creatorId = (int)$row['creator_user_id'];
+    $pt = (int)$row['labpay_pt'];
+
+    db_tx($pdo, function () use ($pdo, $uid, $creatorId, $pt, $row, $id) {
+        Ledger::transfer($pdo, $creatorId, $uid, $pt, 'refund', 'money_request', $id,
+            "「{$row['title']}」LabPay 部分支払 取消");
+        $pdo->prepare("UPDATE money_request_recipients
+            SET labpay_pt = 0, labpay_at = NULL
+            WHERE id = ?")->execute([(int)$row['id']]);
+    });
+
+    $msg = "↩️ 「{$row['title']}」: {$u['display_name']} が LabPay {$pt}pt 部分支払 を 取消";
+    notify_safely($pdo, $cfg, $creatorId, 'admin_notice', $msg, 'money_request', $id);
+    json_response(['ok' => true]);
+}
+
+function money_requests_load_recipient_for_labpay(PDO $pdo, int $id, int $uid): array {
+    $st = $pdo->prepare("
+        SELECT rr.id, rr.amount_yen, rr.paid_at, rr.labpay_pt, rr.labpay_at,
+               r.title, r.creator_user_id, r.allow_labpay_pt
+          FROM money_request_recipients rr
+          JOIN money_requests r ON r.id = rr.request_id
+         WHERE rr.request_id = ? AND rr.user_id = ?");
+    $st->execute([$id, $uid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'あなた宛の請求が見つかりません', 404);
+    return $row;
 }

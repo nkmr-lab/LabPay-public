@@ -56,6 +56,15 @@ export async function renderMoneyRequests() {
         <div id="mr-amount-area" style="margin-top:8px"></div>
       </div>
 
+      <!-- v1009 LabPay 500pt 部分支払 の 許可 (opt-in、 デフォルト 無効) -->
+      <label class="field" style="display:flex; align-items:flex-start; gap:8px; margin-top:4px">
+        <input type="checkbox" id="mr-allow-labpay" style="margin-top:3px">
+        <div>
+          <div>💠 LabPay 500pt での 部分支払 を 許可 する</div>
+          <div class="hint-sm" style="margin-top:2px">受取人 は 「500pt LabPay 送金 + 残 現金」 か 「全額 現金」 の どちらか を 選べます。 (¥500 以上 の 請求 のみ)</div>
+        </div>
+      </label>
+
       <div id="mr-preview-total" class="muted" style="font-size:13px; margin-bottom:6px"></div>
       <div id="mr-preview-list" class="list" style="margin-bottom:8px" hidden></div>
       <div class="row" style="gap:6px">
@@ -301,9 +310,10 @@ async function onCreate() {
   if (!title) { toast('タイトルを入れてください'); return; }
   const recipients = buildRecipients();
   if (!recipients.length) { toast('対象者と金額を入れてください'); return; }
+  const allowLabpay = !!document.getElementById('mr-allow-labpay')?.checked;
   if (!confirm(`${recipients.length} 人に請求を送ります。よろしいですか?`)) return;
   try {
-    const r = await post('/api/money-requests', { title, memo, recipients });
+    const r = await post('/api/money-requests', { title, memo, recipients, allow_labpay: allowLabpay });
     toast('作成しました');
     navigate('#/requests/' + r.id);
   } catch (e) { toast('失敗: ' + e.message); }
@@ -446,9 +456,22 @@ async function loadDetail(id) {
         <div style="margin-top:8px; padding:8px 10px; background:#faf6ff; border-left:3px solid var(--primary); border-radius:6px; font-size:13px">
           振込先 (${escapeHtml(r.creator_name)} さん): ${settle}
         </div>` : ''}
-      ${myRow ? `
+      ${myRow ? (() => {
+        // v1009 LabPay 部分支払 の 状態 と 表示
+        const lpAllow = Number(r.allow_labpay_pt || 0);
+        const lpDone  = !!myRow.labpay_at;
+        const lpPt    = Number(myRow.labpay_pt || 0);
+        const cashRemain = Math.max(0, Number(myRow.amount_yen) - (lpDone ? lpPt : 0));
+        const canLabpay = !myRow.paid_at && !lpDone && lpAllow > 0
+                          && Number(myRow.amount_yen) >= lpAllow
+                          && Number(state.balance ?? 0) >= lpAllow;
+        return `
         <div style="margin-top:8px; padding:8px 10px; background:#fff8e6; border-radius:6px">
           <div class="bold">あなたの支払額: ¥${Number(myRow.amount_yen).toLocaleString()}</div>
+          ${lpDone ? `
+            <div class="meta" style="margin-top:2px; color:#7b3fa0">💠 LabPay ${lpPt}pt 送金済 (${escapeHtml(myRow.labpay_at)}) · 残 ¥${cashRemain.toLocaleString()} を 現金 等 で</div>
+            ${!myRow.paid_at ? `<div class="row" style="margin-top:4px; gap:6px; flex-wrap:wrap"><button id="mr-unpay-labpay" class="btn" style="padding:2px 8px; font-size:12px">↩️ LabPay 送金 を 取消</button></div>` : ''}
+          ` : ''}
           ${myRow.paid_at
             ? `<div class="meta">✅ 支払い済 (${escapeHtml(METHOD_LABEL[myRow.paid_method] || myRow.paid_method)}) · ${escapeHtml(myRow.paid_at)}</div>
                <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
@@ -462,12 +485,17 @@ async function loadDetail(id) {
                  <button data-pay="proxy">他の人に立替えてもらった</button>
                </div>`
             : `<div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
-                 <button data-pay="cash"   class="primary">現金で払った</button>
+                 ${canLabpay ? `<button id="mr-pay-labpay" class="btn" style="background:#7b3fa0; color:#fff; padding:4px 10px; font-size:13px">💠 LabPay ${lpAllow}pt + 残 ¥${(Number(myRow.amount_yen) - lpAllow).toLocaleString()}</button>` : ''}
+                 ${lpDone ? `<button data-pay="cash"   class="primary">残 ¥${cashRemain.toLocaleString()} を 現金で払った</button>` : `<button data-pay="cash"   class="primary">現金で払った</button>`}
                  <button data-pay="paypay">PayPay で払った</button>
                  <button data-pay="bank">銀行振込で払った</button>
                  <button data-pay="proxy">他の人に立替えてもらった</button>
-               </div>`}
-        </div>` : ''}
+               </div>
+               ${!lpDone && lpAllow > 0 && Number(myRow.amount_yen) < lpAllow ? `<div class="hint-sm" style="color:#a16207; margin-top:4px">請求額 が ${lpAllow}pt 未満 のため LabPay 部分支払 は 使えません</div>` : ''}
+               ${!lpDone && lpAllow > 0 && Number(myRow.amount_yen) >= lpAllow && Number(state.balance ?? 0) < lpAllow ? `<div class="hint-sm" style="color:#a16207; margin-top:4px">LabPay 残高 が ${lpAllow}pt 不足 (現在 ${Number(state.balance ?? 0)}pt) のため LabPay 部分支払 は 使えません</div>` : ''}
+              `}
+        </div>`;
+      })() : ''}
       ${canManage ? `<div style="margin-top:8px"><button id="mr-close" class="danger">この請求を削除する</button></div>` : ''}
     `;
 
@@ -502,6 +530,9 @@ async function loadDetail(id) {
       b.addEventListener('click', () => onPay(id, b.dataset.pay, r));
     });
     document.getElementById('mr-unpay')?.addEventListener('click', () => onUnpay(id));
+    // v1009 LabPay 500pt 部分支払
+    document.getElementById('mr-pay-labpay')?.addEventListener('click', () => onPayLabpay(id, r));
+    document.getElementById('mr-unpay-labpay')?.addEventListener('click', () => onUnpayLabpay(id));
     document.getElementById('mr-correct')?.addEventListener('click', () => {
       // 訂正ボタン: 隠れていた method picker を出すだけ。タップ後は data-pay の
       // 通常フローで /pay を再呼び出し → backend が paid_at の有無で訂正/新規を分岐。
@@ -612,4 +643,26 @@ async function onUnpay(id) {
   if (!confirm('支払い済を取り消しますか?')) return;
   try { await patch(`/api/money-requests/${id}/unpay`, {}); toast('取消しました'); await loadDetail(id); }
   catch (e) { toast('失敗: ' + e.message); }
+}
+
+// v1009 LabPay 500pt 部分支払
+async function onPayLabpay(id, r) {
+  const pt = Number(r.allow_labpay_pt || 500);
+  if (!confirm(`LabPay ${pt}pt を 送金 します。 残額 は 別途 現金 等 で 支払って ください。 続けますか?`)) return;
+  try {
+    await patch(`/api/money-requests/${id}/pay-labpay`, {});
+    toast(`💠 LabPay ${pt}pt 送金 しました`);
+    // 残高 更新 の ため /api/me を 引き直す (state.balance が UI で 使われている)
+    try { const me = await get('/api/me'); if (me?.balance != null) state.balance = me.balance; } catch (_) {}
+    await loadDetail(id);
+  } catch (e) { toast('失敗: ' + e.message); }
+}
+async function onUnpayLabpay(id) {
+  if (!confirm('LabPay の 部分支払 を 取り消します。 (pt は 返金 されます)')) return;
+  try {
+    await patch(`/api/money-requests/${id}/unpay-labpay`, {});
+    toast('取消しました');
+    try { const me = await get('/api/me'); if (me?.balance != null) state.balance = me.balance; } catch (_) {}
+    await loadDetail(id);
+  } catch (e) { toast('失敗: ' + e.message); }
 }

@@ -368,7 +368,7 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     ]);
 }
 
-const REWRITER_COST = 1;
+const REWRITER_COST = 10;   // v1009 1 → 10 (中村さん「リライトは さすがに 安すぎだな」)
 const REWRITER_MAX_INPUT = 10000;
 const REWRITER_MAX_ITER  = 3;
 
@@ -2596,9 +2596,11 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //   実トークン / 検索数は usage_json に残すので、実コストがズレた場合は後で調整。
 const DEEP_RESEARCH_TIERS = [
     // v853 価格半額化 (20/50/100 → 10/25/50)
-    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 10, 'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
-    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 25, 'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
-    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 50, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
+    // v1009 中村さん「Deep Research が ちと 安すぎる、 2倍 で 良い、 深い で 共有 なら 50pt が 妥当」
+    //   → 元 (v853 前) の 20/50/100 に 戻す。 共有時 は 半額 (10/25/50)。
+    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
+    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
+    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
 ];
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'
