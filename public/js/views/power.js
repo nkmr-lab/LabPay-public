@@ -1031,14 +1031,7 @@ function render() {
     <div class="card page-header">
       <h2 style="margin:0">📐 サンプルサイズ / 検定力 ${state.loaded_name ? `<span class="hint-sm" style="font-size:13px; margin-left:8px; color:#7b3fa0">📁 ${escapeHtml(state.loaded_name)}${state.loaded_owner_name ? ' (by ' + escapeHtml(state.loaded_owner_name) + ')' : ''}</span>` : ''}</h2>
       <div class="hint-sm" style="margin-top:4px">古典的 G*Power 相当の A priori (必要 n) / Post hoc (検定力) を計算します。 正規近似ベース (G*Power の非心分布計算と数%差)。 v1025+ で LMM/GLMM シミュレーション、 参加者/刺激/試行の比較、 コスト直結を予定。</div>
-      <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <button id="pw-save" class="btn primary" style="font-size:12px; padding:3px 10px">💾 保存 ${state.loaded_id ? '(更新)' : '(名前を付けて)'}</button>
-        ${state.loaded_id ? `
-          <button id="pw-share" class="btn" style="font-size:12px; padding:3px 10px">📤 共有</button>
-          <button id="pw-new" class="btn" style="font-size:12px; padding:3px 10px">🆕 新規</button>
-          ${state.loaded_owner_name ? '' : `<button id="pw-delete" class="btn danger" style="font-size:12px; padding:3px 10px">🗑 削除</button>`}
-        ` : ''}
-      </div>
+      ${renderSaveShareButtons('top')}
     </div>
 
     <!-- v1030 中村さん指示 「一気に値を設定する 感じ に なってる けど、 ひとつずつ 入力
@@ -1046,19 +1039,21 @@ function render() {
          短い 説明 + 入力)。 Post hoc の 場合 は 目標検定力 の 代わりに サンプルサイズ を出す。 -->
     ${stepBlock({
       title: '① 検定の種類',
-      desc: 'どの 統計検定 を 使う 予定か。 選ぶ ものに 応じて 必要な 入力項目 が 変わります。',
+      desc: 'どの 統計検定 を 使う 予定か。 選ぶ ものに 応じて 必要な 入力項目 が 変わります。 迷ったら 下の 「🧭 選択ウィザード」 に答えていくと 自動で 選ばれます。',
       body: `<select id="pw-test" style="width:100%">
               ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
-             </select>`,
+             </select>
+             ${renderTestWizard()}`,
     })}
 
     ${stepBlock({
       title: '② モード',
-      desc: 'A priori: これから 実験する 場合。 効果量 と 目標検定力 を 決めて、 必要な n を 算出。 / Post hoc: 手元の n で どれくらい 検出力 が あるかを 事後確認。',
-      body: `<div class="row" style="gap:6px; flex-wrap:wrap">
-              <button data-pw-mode="a_priori" class="btn ${state.mode==='a_priori'?'primary':''}" style="font-size:13px; padding:5px 14px">🎯 A priori (必要 n を求める)</button>
-              <button data-pw-mode="post_hoc" class="btn ${state.mode==='post_hoc'?'primary':''}" style="font-size:13px; padding:5px 14px">🔍 Post hoc (検定力を求める)</button>
-             </div>`,
+      desc: 'これから 実験する 場合 は A priori、 実験後 で n が 決まっている 場合 は Post hoc。',
+      // v1038 中村さん指示「リストボックスから指定する形式が良い」
+      body: `<select id="pw-mode" style="width:100%">
+              <option value="a_priori" ${state.mode==='a_priori'?'selected':''}>🎯 A priori: これから 実験する 場合 (必要 n 数 を 求める)</option>
+              <option value="post_hoc" ${state.mode==='post_hoc'?'selected':''}>🔍 Post hoc: 実験後 に n 数 から 検定力 を 求める 場合</option>
+             </select>`,
     })}
 
     ${stepBlock({
@@ -1141,6 +1136,8 @@ function render() {
       <div id="pw-saved-list" class="hint-sm">読み込み中…</div>
     </div>
 
+    ${renderSaveShareButtons('bot')}
+
     ${renderAnalysisGuide()}
 
     <details class="card">
@@ -1156,8 +1153,37 @@ function render() {
   `;
 
   document.getElementById('pw-test').addEventListener('change', (e) => { state.test = e.target.value; render(); });
+  // v1038 選択ウィザードのボタン
+  document.querySelectorAll('[data-wz]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.wizard = state.wizard || {};
+      state.wizard[b.dataset.wz] = b.dataset.wzVal;
+      // 上位を変えたら下位はリセット
+      if (b.dataset.wz === 'scale')   state.wizard.groups = state.wizard.related = state.wizard.normal = state.wizard.complex = '';
+      if (b.dataset.wz === 'groups')  state.wizard.related = state.wizard.normal = state.wizard.complex = '';
+      if (b.dataset.wz === 'related') state.wizard.normal = state.wizard.complex = '';
+      if (b.dataset.wz === 'normal')  state.wizard.complex = '';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-wz-apply]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.test = b.dataset.wzApply;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-wz-reset]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '' };
+      render();
+    });
+  });
   document.querySelectorAll('[data-pw-mode]').forEach(b => {
     b.addEventListener('click', () => { state.mode = b.dataset.pwMode; render(); });
+  });
+  // v1038 モード を リストボックス化
+  document.getElementById('pw-mode')?.addEventListener('change', (e) => {
+    state.mode = e.target.value; render();
   });
   document.querySelectorAll('[data-pw-eff]').forEach(b => {
     b.addEventListener('click', () => {
@@ -1319,20 +1345,52 @@ function render() {
     if (box) { box.innerHTML = `<b style="color:#7b3fa0">${escapeHtml(renderDerivedLabel(d))}</b> を 効果量欄に 入れました。 「🧮 計算」 で 続きへ`; box.style.color = ''; }
   });
   document.getElementById('pw-calc').addEventListener('click', doCalc);
-  // v1026 保存 / 共有 / 削除 / 新規
-  document.getElementById('pw-save')?.addEventListener('click', onSave);
-  document.getElementById('pw-share')?.addEventListener('click', onShare);
-  document.getElementById('pw-delete')?.addEventListener('click', onDelete);
-  document.getElementById('pw-new')?.addEventListener('click', () => {
-    if (!confirm('新規の 分析を 開始 します。 現在の 分析設定 は 未保存 なら 失われます。 続けますか?')) return;
-    Object.assign(state, {
-      test: 't2', mode: 'a_priori', alpha: 0.05, tails: 2, effect: 0.5, power: 0.8,
-      n_per_group: 30, n_total: 60, k: 3, df: 1,
-      loaded_id: 0, loaded_name: '', loaded_is_shared: false, loaded_share_token: null, loaded_owner_name: null,
+  // v1038 保存 / 共有 / 削除 / 新規 (top と bottom の 両方 の ボタン に 貼る)
+  document.querySelectorAll('[data-pw-btn]').forEach(b => {
+    b.addEventListener('click', () => {
+      const kind = b.dataset.pwBtn;
+      if (kind === 'save') return onSave();
+      if (kind === 'share') return onShareOrSaveThenShare();
+      if (kind === 'delete') return onDelete();
+      if (kind === 'new') {
+        if (!confirm('新規の 分析を 開始 します。 現在の 分析設定 は 未保存 なら 失われます。 続けますか?')) return;
+        Object.assign(state, {
+          test: 't2', mode: 'a_priori', alpha: 0.05, tails: 2, effect: 0.5, power: 0.8,
+          n_per_group: 30, n_total: 60, k: 3, df: 1,
+          loaded_id: 0, loaded_name: '', loaded_is_shared: false, loaded_share_token: null, loaded_owner_name: null,
+        });
+        location.hash = '#/power';
+        render(); loadSavedList();
+      }
     });
-    location.hash = '#/power';
-    render(); loadSavedList();
   });
+}
+
+// v1038 未保存でも 共有 ボタン を 押せる。 未保存 なら 「保存 → 共有」 の 2 段フロー。
+async function onShareOrSaveThenShare() {
+  if (!state.loaded_id) {
+    // 未保存: 名前を促して 保存 → 共有 モーダルへ
+    if (!confirm('共有 する には まず 分析を 保存する 必要が あります。 続けて 保存 → 共有 しますか?')) return;
+    syncFormToState();
+    const defaultName = `${TESTS.find(x => x.id === state.test).label} - ${new Date().toLocaleString('ja-JP').replace(/\//g,'-').slice(0,16)}`;
+    const name = prompt('分析の名前を入力', defaultName);
+    if (!name || !name.trim()) return;
+    try {
+      const r = await post('/api/power', { name: name.trim(), config: currentConfig() });
+      state.loaded_id = r.id;
+      state.loaded_name = name.trim();
+      state.loaded_share_token = r.share_token || null;
+      state.loaded_is_shared = false;
+      state.loaded_owner_name = null;
+      toast('保存 しました。 共有 モーダル を 開きます');
+      render(); loadSavedList();
+      return onShare();
+    } catch (e) {
+      alert('保存 に 失敗: ' + (e.message || e));
+    }
+    return;
+  }
+  return onShare();
 }
 
 async function onSave() {
@@ -1729,6 +1787,100 @@ function renderNarrativeCard(res, t, kind) {
       <div class="hint-sm" style="margin-top:8px">R / Python の コード は 検定力 検証用 の 再現 スクリプト。 中村さん ビジョン「A simulation-based power analysis was conducted with 1,000 simulated datasets…」 の 形式 で 書き出し。</div>
       <script type="application/json" id="pw-payloads">${JSON.stringify({ narrative, r: rCode, py: pyCode })}</script>
     </div>`;
+}
+
+// v1038 保存/共有 ボタン (中村さん要望「保存ボタンだけじゃなく、共有ボタンも欲しい。
+//   保存と共有ボタンは、画面下部にも配置して欲しい (2 箇所にあるイメージ)」)。 top / bottom
+//   両方で 同じ ボタン列を使うので、 ID は 位置ごとに サフィックス で 区別 (pw-save-top /
+//   pw-save-bottom) して イベントを 両方 に 貼る。 共有 は 保存前 でも 表示 し、 押した時 に
+//   未保存 なら 「先に 名前 を つけて 保存 → 共有」 の 二段フローに 誘導する。
+function renderSaveShareButtons(pos) {
+  const suf = pos === 'top' ? 'top' : 'bot';
+  return `
+    <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap" data-pw-btns="${pos}">
+      <button data-pw-btn="save" id="pw-save-${suf}" class="btn primary" style="font-size:12px; padding:3px 10px">💾 保存 ${state.loaded_id ? '(更新)' : '(名前を付けて)'}</button>
+      <button data-pw-btn="share" id="pw-share-${suf}" class="btn" style="font-size:12px; padding:3px 10px">📤 共有</button>
+      ${state.loaded_id ? `
+        <button data-pw-btn="new" id="pw-new-${suf}" class="btn" style="font-size:12px; padding:3px 10px">🆕 新規</button>
+        ${state.loaded_owner_name ? '' : `<button data-pw-btn="delete" id="pw-delete-${suf}" class="btn danger" style="font-size:12px; padding:3px 10px">🗑 削除</button>`}
+      ` : ''}
+    </div>`;
+}
+
+// v1038 検定選択ウィザード (中村さん要望「検定の種類を選ぶ過程も、フローチャートか、
+//   選択肢ベースで選べるようにするとよいのかなぁ？」)。 4-5 個 の 選択肢 に 答えて
+//   いくと、 分析ガイド のフローチャートを 対話的に 辿った結果 の 検定 が 自動で 選ばれる。
+//   選択の途中結果と 適用ロジック を UI に表示。
+function renderTestWizard() {
+  const w = state.wizard || (state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '' });
+  const opt = (id, val, label) => `<button class="btn" data-wz="${id}" data-wz-val="${val}" style="font-size:11px; padding:3px 8px; ${w[id]===val?'background:#7b3fa0; color:#fff':''}">${label}</button>`;
+  // 決定ロジック
+  let inferred = null;
+  let inferredNote = '';
+  const s = w.scale, g = w.groups, r = w.related, n = w.normal, c = w.complex;
+  if (s === 'continuous') {
+    if (c === 'complex' || c === 'crossed') {
+      inferred = c === 'crossed' ? 'lmm_crossed' : 'lmm_within';
+      inferredNote = c === 'crossed' ? '参加者 × 刺激 の 交差ランダム効果 → LMM 3-level' : '複雑デザイン → LMM (参加者内)';
+    } else if (g === '2' && r === 'paired' && n === 'yes') { inferred = 'tp'; inferredNote = '2 群、 対応あり、 正規性 OK → 対応 t 検定'; }
+    else if (g === '2' && r === 'indep' && n === 'yes')   { inferred = 't2';  inferredNote = '2 群、 独立、 正規性 OK → 2 標本 t 検定'; }
+    else if (g === '1' && n === 'yes')                     { inferred = 't1';  inferredNote = '1 群 (基準値比較)、 正規性 OK → 1 標本 t 検定'; }
+    else if (g === '3plus' && n === 'yes')                 { inferred = 'anova'; inferredNote = '3 群以上、 正規性 OK → 一元配置 ANOVA'; }
+    else if (n === 'no')                                    { inferredNote = '正規性 NG → ノンパラ検定 が 推奨 (Mann-Whitney / Wilcoxon / Kruskal-Wallis)。 このアプリ は 正規近似ベース なので 参考値 として t/ANOVA で 計算 も 可'; }
+  } else if (s === 'relation') {
+    inferred = 'corr'; inferredNote = '2 変数 の 関係 → Pearson 相関 (順位なら Spearman、 順位も概ね同じ 検定力)';
+  } else if (s === 'binary_within') {
+    inferred = 'glmm_logit'; inferredNote = '2 値 アウトカム、 参加者内 → Logistic GLMM';
+  } else if (s === 'categorical') {
+    inferred = 'chi2'; inferredNote = 'カテゴリ独立 or 適合度 → χ² 検定 (期待度数 <5 なら Fisher に切替)';
+  }
+  return `
+    <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
+      <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード (迷ったら)</summary>
+      <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
+        <div><b>Q1. 従属変数 の スケール は？</b></div>
+        <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+          ${opt('scale', 'continuous', '連続値 (RT, 得点, 濃度 等)')}
+          ${opt('scale', 'ordinal', '順序尺度 (リッカート)')}
+          ${opt('scale', 'binary_within', '2 値 (正答/誤答、 同じ参加者)')}
+          ${opt('scale', 'categorical', '名義 (カテゴリ、 群 比較)')}
+          ${opt('scale', 'relation', '2 変数 の 関係 (相関)')}
+        </div>
+        ${['continuous','ordinal'].includes(s) ? `
+          <div><b>Q2. 比較する 群 の 数？</b></div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('groups', '1', '1 群 (基準値との比較)')}
+            ${opt('groups', '2', '2 群')}
+            ${opt('groups', '3plus', '3 群以上')}
+          </div>` : ''}
+        ${['continuous','ordinal'].includes(s) && ['2','3plus'].includes(g) ? `
+          <div><b>Q3. 群 の 関係？</b></div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('related', 'indep', '独立 (別の 参加者)')}
+            ${opt('related', 'paired', '対応 (同じ 参加者、 前後 or 条件)')}
+          </div>` : ''}
+        ${['continuous','ordinal'].includes(s) && g ? `
+          <div><b>Q4. 正規性 は？ (Shapiro-Wilk or Q-Q プロット で 検証、 n>=30 なら 緩く OK)</b></div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('normal', 'yes', '✅ 満たす or n>=30')}
+            ${opt('normal', 'no', '❌ 満たさない')}
+          </div>` : ''}
+        ${['continuous'].includes(s) && g && r ? `
+          <div><b>Q5. デザイン は 単純？</b></div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('complex', 'simple', '単純 (1 要因、 balanced)')}
+            ${opt('complex', 'complex', '複雑 (参加者内、 複数試行)')}
+            ${opt('complex', 'crossed', '参加者 × 刺激 の 交差')}
+          </div>` : ''}
+        ${inferred ? `
+          <div style="margin-top:8px; padding:8px 12px; background:#dcfce7; border-left:3px solid #059669; border-radius:0 6px 6px 0">
+            <div style="color:#059669"><b>⇒ 推奨: ${escapeHtml((TESTS.find(x=>x.id===inferred)||{label:inferred}).label)}</b></div>
+            <div class="hint-sm" style="margin-top:2px">${inferredNote}</div>
+            <button data-wz-apply="${inferred}" class="btn primary" style="font-size:12px; padding:3px 10px; margin-top:6px">この検定を 選ぶ</button>
+          </div>` : (inferredNote ? `<div style="margin-top:8px; padding:6px 10px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0" class="hint-sm">${inferredNote}</div>` : '')}
+        ${(s || g || r || n || c) ? `<div style="margin-top:6px"><button data-wz-reset="1" class="btn" style="font-size:11px; padding:2px 8px">↺ リセット</button></div>` : ''}
+      </div>
+    </details>`;
 }
 
 // v1036 統計手法選択フローチャート + 事前処理 + 検定別ガイド
@@ -2469,7 +2621,151 @@ function renderResult(out, t) {
   // v1027 直感的プロット (2 群 or k 群 or 散布図 or 比率棒) を 主役に、 従来の
   //   G*Power 型 検定統計量プロット は その 下 に 残す (中村さん指示「G*Power の
   //   やつも 残しておいて 良い、 2 群の 分布も やっぱり欲しい」)。
-  root.innerHTML = resultHtml + renderIntuitivePlot() + renderDistPlot() + renderPowerCurve();
+  root.innerHTML = resultHtml + renderIntuitivePlot() + renderDistPlot() + renderPowerCurve() + renderSensitivityCurve();
+}
+
+// v1038 感度分析: 効果量 を 範囲 スキャン → 検定力 カーブ (中村さん要望「感度分析」)。
+//   G*Power にはない、 中村研では 必要な機能。 効果量 (d/f/r/w) を ±3× 範囲で 15 点 スキャン、
+//   各点で 現在 n の 検定力 を 計算 → SVG カーブ。 現在 の 効果量位置 を 縦点線 で 強調、
+//   検定力 0.8 の 水平点線 も。 従来 の 「⑤ n を 変えた 時の カーブ」 と 「⑥ 効果量 を 変えた
+//   時の カーブ」 の 2 本立て を そろえた 形。
+//   sim系 (LMM/LMM3/GLMM) は 効果量スキャン が 重い → シミュ 100 回 に 減らして 15 点 (合計
+//   ~1500 iters、 数秒) で 描く。
+function renderSensitivityCurve() {
+  const nowN = state.test === 't2' ? state.n_per_group : state.n_total;
+  const t = TESTS.find(x => x.id === state.test);
+  if (!t) return '';
+  const effLabel = state.test === 'anova' ? "Cohen's f"
+                 : state.test === 'corr' ? "Pearson r"
+                 : state.test === 'chi2' ? "Cohen's w"
+                 : state.test === 'lmm_within' || state.test === 'lmm_crossed' ? '固定効果 β'
+                 : state.test === 'glmm_logit' ? '効果量 OR'
+                 : "Cohen's d";
+  const effUnit = state.test === 'glmm_logit' ? 'OR' : '';
+  let currentEff, effRange, points;
+  const isSim = ['lmm_within','lmm_crossed','glmm_logit'].includes(state.test);
+  if (isSim) {
+    // sim 系: 効果量スキャン
+    if (state.test === 'glmm_logit') {
+      currentEff = state.glmm.or;
+      const eMax = Math.max(4, currentEff * 3);
+      effRange = [1.0, eMax];
+    } else {
+      currentEff = state.test === 'lmm_within' ? state.lmm.beta : state.lmm3.beta;
+      const eMax = Math.max(1.0, Math.abs(currentEff) * 3);
+      effRange = [0, eMax];
+    }
+    // 15 点 × iterations=100 で ~1500 sim
+    const steps = 15;
+    points = [];
+    for (let i = 0; i < steps; i++) {
+      const e = effRange[0] + (effRange[1] - effRange[0]) * (i / (steps - 1));
+      let power;
+      try {
+        if (state.test === 'lmm_within') {
+          const p = state.lmm;
+          const r = simulateLMM({ n_p: nowN, n_trials: p.n_trials, beta: e, sd_p: p.sd_participant, sd_e: p.sd_residual, alpha: state.alpha, iterations: 100, tails: state.tails });
+          power = r.power;
+        } else if (state.test === 'lmm_crossed') {
+          const p = state.lmm3;
+          const r = simulateLMM3({ n_p: nowN, n_stimuli: p.n_stimuli, beta: e, sd_p: p.sd_participant, sd_s: p.sd_stimulus, sd_e: p.sd_residual, alpha: state.alpha, iterations: 100, tails: state.tails });
+          power = r.power;
+        } else if (state.test === 'glmm_logit') {
+          const p = state.glmm;
+          const r = simulateGLMM({ n_p: nowN, n_trials: p.n_trials, baseline_p: p.baseline_p, or: e, sd_p: p.sd_participant, alpha: state.alpha, iterations: 100, tails: state.tails });
+          power = r.power;
+        }
+      } catch (_) { power = 0; }
+      if (!isFinite(power)) power = 0;
+      points.push([e, power]);
+    }
+  } else {
+    // 解析系: 高速で 40 点 スキャン
+    currentEff = state.effect;
+    const eMax = Math.max(currentEff * 3, state.test === 'corr' ? 0.9 : state.test === 'chi2' ? 0.9 : 1.5);
+    const eMin = 0.01;
+    effRange = [eMin, eMax];
+    const steps = 40;
+    points = [];
+    for (let i = 0; i < steps; i++) {
+      const e = eMin + (eMax - eMin) * (i / (steps - 1));
+      let power;
+      try {
+        if (state.test === 't2')    power = calc_ttest_two_sample(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
+        else if (state.test === 'tp' || state.test === 't1') power = calc_ttest_paired(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
+        else if (state.test === 'anova') power = calc_anova(state.alpha, e, state.k, 'post_hoc', nowN, 0.8).power;
+        else if (state.test === 'corr')  power = calc_correlation(state.alpha, e, state.tails, 'post_hoc', nowN, 0.8).power;
+        else if (state.test === 'chi2')  power = calc_chi_squared(state.alpha, e, state.df, 'post_hoc', nowN, 0.8).power;
+      } catch (_) { power = 0; }
+      if (!isFinite(power)) power = 0;
+      points.push([e, power]);
+    }
+  }
+  const W = 620, H = 240, PL = 42, PR = 20, PT = 20, PB = 40;
+  const xToPx = (x) => PL + (x - effRange[0]) / (effRange[1] - effRange[0]) * (W - PL - PR);
+  const yToPx = (y) => PT + (1 - y) * (H - PT - PB);
+  const path = 'M ' + points.map(([x, y]) => `${xToPx(x).toFixed(1)} ${yToPx(y).toFixed(1)}`).join(' L ');
+  const y80 = yToPx(0.8);
+  // 現在 の 効果量 位置 の 縦点線
+  const curX = xToPx(currentEff);
+  // 目安ライン (小/中/大) — 検定によって異なる
+  const benchmarks = {
+    t2:    [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    tp:    [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    t1:    [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    anova: [[0.10, '小'], [0.25, '中'], [0.40, '大']],
+    corr:  [[0.10, '小'], [0.30, '中'], [0.50, '大']],
+    chi2:  [[0.10, '小'], [0.30, '中'], [0.50, '大']],
+    lmm_within:  [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    lmm_crossed: [[0.2, '小'], [0.5, '中'], [0.8, '大']],
+    glmm_logit:  [[1.5, '小'], [2.0, '中'], [3.0, '大']],
+  }[state.test] || [];
+  const benchMarks = benchmarks.filter(([v]) => v >= effRange[0] && v <= effRange[1]).map(([v, label]) =>
+    `<line x1="${xToPx(v)}" y1="${PT}" x2="${xToPx(v)}" y2="${H - PB}" stroke="#d4d4d4" stroke-dasharray="2 2"/>
+     <text x="${xToPx(v)}" y="${PT + 12}" text-anchor="middle" font-size="9" fill="#9ca3af">${label}(${v})</text>`
+  ).join('');
+  // 「80% 到達に必要な 効果量」 逆算 (点列 線形補間)
+  let effAt80 = null;
+  for (let i = 1; i < points.length; i++) {
+    const [x0, y0] = points[i - 1], [x1, y1] = points[i];
+    if (y0 <= 0.8 && y1 >= 0.8 && y1 !== y0) {
+      effAt80 = x0 + (0.8 - y0) / (y1 - y0) * (x1 - x0);
+      break;
+    }
+  }
+  const xticks = [];
+  const nTicks = 6;
+  for (let i = 0; i <= nTicks; i++) {
+    const e = effRange[0] + (effRange[1] - effRange[0]) * (i / nTicks);
+    xticks.push(`<line x1="${xToPx(e)}" y1="${H - PB}" x2="${xToPx(e)}" y2="${H - PB + 4}" stroke="#6b7280"/>
+                 <text x="${xToPx(e)}" y="${H - PB + 16}" text-anchor="middle" font-size="10" fill="#6b7280">${e.toFixed(2)}</text>`);
+  }
+  const yticks = [];
+  for (let p of [0, 0.2, 0.4, 0.6, 0.8, 1.0]) {
+    yticks.push(`<line x1="${PL - 4}" y1="${yToPx(p)}" x2="${PL}" y2="${yToPx(p)}" stroke="#6b7280"/>
+                 <text x="${PL - 6}" y="${yToPx(p) + 3}" text-anchor="end" font-size="10" fill="#6b7280">${p.toFixed(1)}</text>`);
+  }
+  return `
+    <div class="card">
+      <div class="bold" style="margin-bottom:4px">📉 感度分析 (効果量 ${effLabel} を 変えた 時の 検定力)</div>
+      <div class="hint-sm" style="margin-bottom:8px">現在の n (${nowN}) を保ったまま、 効果量 ${effLabel} を 変えたら 検定力が どう動くか。 「想定していた効果量が 実は 小さかったら…」 のリスクを 可視化 (G*Power にはない)。${isSim ? ' シミュ 100×15 点。' : ''}${effAt80 ? ` <b style="color:#7b3fa0">検定力 80% に必要な ${effLabel} ≈ ${effAt80.toFixed(3)}${effUnit ? ' ' + effUnit : ''}</b>` : ''}</div>
+      <div style="width:100%; overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; height:auto; display:block; margin:0 auto">
+          <line x1="${PL}" y1="${H - PB}" x2="${W - PR}" y2="${H - PB}" stroke="#374151"/>
+          <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H - PB}" stroke="#374151"/>
+          ${xticks.join('')}
+          ${yticks.join('')}
+          ${benchMarks}
+          <line x1="${PL}" y1="${y80}" x2="${W - PR}" y2="${y80}" stroke="#059669" stroke-dasharray="4 3" opacity="0.7"/>
+          <text x="${W - PR - 4}" y="${y80 - 4}" text-anchor="end" font-size="10" fill="#059669">目標 0.8</text>
+          <path d="${path}" fill="none" stroke="#7b3fa0" stroke-width="2"/>
+          <line x1="${curX}" y1="${PT}" x2="${curX}" y2="${H - PB}" stroke="#dc2626" stroke-dasharray="3 3" opacity="0.9"/>
+          <text x="${curX}" y="${PT - 4}" text-anchor="middle" font-size="10" fill="#dc2626">現在 ${currentEff}${effUnit ? ' ' + effUnit : ''}</text>
+          <text x="${PL + (W - PL - PR)/2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="#374151">効果量 ${effLabel}</text>
+          <text x="12" y="${PT + (H - PT - PB)/2}" transform="rotate(-90 12 ${PT + (H - PT - PB)/2})" text-anchor="middle" font-size="11" fill="#374151">検定力</text>
+        </svg>
+      </div>
+    </div>`;
 }
 
 function clampFloat(v, lo, hi) {
