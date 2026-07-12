@@ -1428,8 +1428,8 @@ function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
 //   出さないので論文要約用途では失格 → 削除。真面目に要約するなら最低でも 4.1。
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
 const PAPER_TRANSLATE_MODELS = [
-    // v1010 中村さん 「論文要約 も 1.25 倍、 gpt-4.1 は 削除」
-    'gpt-5-mini'  => 38,   // 5 系軽量 (30 × 1.25)
+    // v1010 中村さん「論文要約 も 1.25 倍、 gpt-4.1 は 削除」
+    // v1012 中村さん「mini は 精度が出ないので 削除」
     'gpt-5'       => 63,   // 5 系標準 (デフォルト) (50 × 1.25)
     'o1'          => 100,  // o1 推論モデル (深い解析) (80 × 1.25)
 ];
@@ -2596,7 +2596,8 @@ const DEEP_RESEARCH_TIERS = [
     // v853 価格半額化 (20/50/100 → 10/25/50)
     // v1009 中村さん「Deep Research が ちと 安すぎる、 2倍 で 良い、 深い で 共有 なら 50pt が 妥当」
     //   → 元 (v853 前) の 20/50/100 に 戻す。 共有時 は 半額 (10/25/50)。
-    'light'    => ['model' => 'gpt-5-mini', 'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5-mini, ~4 検索)'],
+    // v1012 中村さん「mini は 精度が出ないので light も gpt-5 (effort=low) に」
+    'light'    => ['model' => 'gpt-5',      'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5 low, ~4 検索)'],
     'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
     'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
 ];
@@ -3145,14 +3146,13 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 // ============================================================================
 
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
-// v1010 中村さん 「論文全訳 も 1.25 倍」。 gpt-4.1 は 既に 無い。
+// v1010 中村さん「論文全訳 も 1.25 倍」。 gpt-4.1 は 既に 無い。
+// v1012 中村さん「mini は 精度が出ないので 削除」
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
-    'gpt-5-mini' => 38,   // 30 × 1.25
     'gpt-5'      => 63,   // 50 × 1.25 (デフォルト)
     'o1'         => 100,  // 80 × 1.25
 ];
 const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x
-    'gpt-5-mini' => 188,  // 150 × 1.25
     'gpt-5'      => 313,  // 250 × 1.25 (デフォルト)
     'o1'         => 500,  // 400 × 1.25
 ];

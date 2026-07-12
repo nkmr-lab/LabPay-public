@@ -11,7 +11,7 @@ import { escapeHtml } from '../router.js';
 
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
-  { id: 'research',  label: '🔬 研究用',                  hint: '論文要約 / 全訳 / 査読 / 原稿チェック / リライター / Deep Research など、 AI を使って研究を直接進めるもの。' },
+  { id: 'research',  label: '🔬 研究用',                  hint: '論文要約 / 全訳 / 査読 / 原稿チェック / リライター / Deep Researchなど、AIを使って研究を直接進めるもの。' },
   { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・請求・待ち合わせ など)。' },
   { id: 'shared',    label: '📤 共有',                    hint: 'ラボメンバーで情報や成果物を共有するもの (アルバム・ゼミ動画・チャット・ファイル送受信・締切・重要連絡・かんばん など)。' },
   { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。販売・購入・オークション。' },
@@ -95,17 +95,17 @@ export const APPS = [
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リストでみんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
-  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文本文を貼ると章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント) を返します。ターゲット会議と査読の厳しさを指定可。', defaultVisible: true },
+  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文PDFを渡すと章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント + 引用文献の実在性検証 + 統計指標の妥当性分析) を返します。ターゲット会議と査読の厳しさを指定可。モデル選択: gpt-5-mini 15pt / gpt-5 30pt (デフォルト) / o1 50pt。', defaultVisible: true },
   // v748 #359 #360 #361 論文和訳要約 (落合メソッド)
-  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約 (自動翻訳)', desc: '論文 PDF を読ませて、全体要約 → RQ・仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) → 今後の課題 → 押さえておくべき参考文献 → 落合メソッドまとめ、という順番で構造化して 3-5 分 (1500-2500 字) で返します。モデル選択可 (gpt-4o-mini 5pt 〜 o1 120pt)、デフォルト gpt-4o 20pt。公開 ON でみんなが検索 / 閲覧可能', defaultVisible: true },
+  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文PDFを読ませて、全体要約 → RQ・仮説 + 結果 → 主張する貢献 → キーワード → 章立て要約 (重要図表inline) → 今後の課題 → 押さえておくべき参考文献 → 落合メソッドまとめ、という順番で構造化して3-5分で返します。back-translation + 引用実在性の自己検証つき。モデル選択: gpt-5 63pt (デフォルト) / o1 100pt。共有ONで半額 + みんなが検索・閲覧可能。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け軽量版、 5pt)
-  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック (5pt)。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を一通り見ます。論文ほど厳密ではない軽量版。', defaultVisible: true },
+  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標の妥当性を一通り見ます。モデル選択: gpt-5-mini 10pt (デフォルト) / gpt-5 15pt / o1 25pt。論文ほど厳密ではない軽量版。', defaultVisible: true },
   // v613 文字数・単語数リライター
-  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (1pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを色付きdiff で表示。', defaultVisible: true },
+  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (10pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを色付きdiffで表示。', defaultVisible: true },
   // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
-  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。クエリを投げると OpenAI が web_search を必要なだけ使って複数ソースを横断検索 → サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL 一覧を構造化して返します。深さ 3 段階 (軽い gpt-5-mini 20pt / 標準 gpt-5 50pt / 深い gpt-5 高 reasoning 100pt)。', defaultVisible: true },
+  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPTのDeep Researchを真似た多段Web調査。クエリを投げるとOpenAIがweb_searchを必要なだけ使って複数ソースを横断検索 → サブ問い分解 + セクション別調査 + 全体まとめ + 出典URL一覧を構造化して返します。引用文献の実在性を自己検証。深さ3段階 (軽い gpt-5 low 20pt / 標準 gpt-5 50pt / 深い gpt-5 高reasoning 100pt)。共有ONで半額。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
-  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5-mini 25 / gpt-5 60 / o1 100 pt) と日→英 (5x、 em-dash 等 GPT-isms 除去込み) の双方向対応。', defaultVisible: true },
+  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3文サンプルをback-translationで整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5 63pt / o1 100pt) と日→英 (5x、gpt-5 313pt / o1 500pt、em-dash等GPT-isms除去込み) の双方向対応。共有ONで半額。', defaultVisible: true },
   // v942 公開投票 (誰でも 投票)
   { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開 URL または 4 桁コードで 誰でも投票できる汎用アンケート (SNS シェア可、 LabPay ログイン不要)。 タイトル + 選択肢 (複数行テキスト、 2〜50 個) + 締切で作成、 単一/複数選択 + 任意で自由記述、 集計の見え方は「常に公開」「締切後に公開」「起案者のみ」から選択。 起案者ダッシュボードで棒グラフ集計 + 自由記述一覧を見られる。 「4 桁コード」 は pay.nkmr.io/#/public で入力して飛べる。 外部イベント来場者に投票してもらう / SNS で意見を募る等に。', defaultVisible: true },
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)

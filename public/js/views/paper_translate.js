@@ -723,7 +723,6 @@ async function bindMakeFullTranslate(d) {
       </label>
       <label class="field"><span class="lbl">モデル</span>
         <select id="mft-model" style="font-size:13px">
-          <option value="gpt-5-mini">gpt-5-mini (38pt / ja2en 188pt)</option>
           <option value="gpt-5" selected>gpt-5 (63pt / ja2en 313pt)</option>
           <option value="o1">o1 (100pt / ja2en 500pt)</option>
         </select>

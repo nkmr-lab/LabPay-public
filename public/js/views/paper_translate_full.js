@@ -695,7 +695,6 @@ async function bindMakeSummary(d) {
       <p style="font-size:13px; margin:0 0 8px">この PDF で論文要約を開始します。 課金はポイント残高から。</p>
       <label class="field"><span class="lbl">モデル</span>
         <select id="mfs-model" style="font-size:13px">
-          <option value="gpt-5-mini">gpt-5-mini (38pt)</option>
           <option value="gpt-5" selected>gpt-5 (63pt)</option>
           <option value="o1">o1 (100pt)</option>
         </select>
