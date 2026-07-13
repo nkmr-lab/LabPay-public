@@ -1262,25 +1262,34 @@ function methodsBreakdownNote() {
   if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が 両手法を試す)`;
   return `× ${m} 手法`;
 }
-function costPerParticipant() {
+// v1056 中村さん指摘「本人に支払う額 と 実際にかかる総額 は 分けたほうが良い。 1.1 倍
+//   は 予算的な問題、 クラウドソーシングの × 2 も予算的な問題。 本人に支払うのは × 1」
+function participantPaymentPer() {
+  // 本人 が 受け取る 額 = 実験時間 × 手法数 × 時給 (税金や 手数料は 含まない)
   const b = state.budget;
-  const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
   const hoursPerMethod = b.minutes_per_participant / 60;
   const methods = methodsPerParticipant();
-  return hoursPerMethod * methods * b.rate_per_hour * mode.mult;
+  return hoursPerMethod * methods * b.rate_per_hour;
+}
+function costPerParticipant() {
+  // 研究者側 の 予算 (実費) = 本人への支払 × 参加形式の倍率 (税金 or 利用料込み)
+  const b = state.budget;
+  const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
+  return participantPaymentPer() * mode.mult;
 }
 function renderBudgetBlock() {
   const b = state.budget;
-  const per = costPerParticipant();
+  const pay = participantPaymentPer();
+  const cost = costPerParticipant();
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
   const methods = methodsPerParticipant();
   const totalMinutes = b.minutes_per_participant * methods;
   const totalHours = totalMinutes / 60;
-  const baseYen = totalHours * b.rate_per_hour;
   const isLmm = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test);
+  const overhead = cost - pay;
   return stepBlock({
-    title: '💰 予算試算 (1 人あたり参加費)',
-    desc: `実験時間 (分/人・<b>1 手法あたり</b>) × 手法数 × 時給 × 参加形式の倍率 で 試算。 対応系 (対応 t、 反復測定 ANOVA、 ベイズ 対応 t) は 1 人が 全手法を試すので 手法数を 自動で 掛けます。${isLmm ? ' <span style="color:#a16207">⚠ LMM/GLMM は 試行数 × 2 条件 が 別軸にあるので、 ここには 「1 人の 全実験時間」 を 直接 入力してください (手法倍率は × 1)。</span>' : ''}`,
+    title: '💰 予算試算 (1 人あたり)',
+    desc: `実験時間 (分/人・<b>1 手法あたり</b>) × 手法数 × 時給 で 「本人への支払額」、 それに 参加形式の倍率 (税金 or 利用料) を 掛けて 「予算 (実費)」 を 試算。 対応系 (対応 t、 反復測定 ANOVA、 ベイズ 対応 t) は 1 人が 全手法を試すので 手法数を 自動で 掛けます。${isLmm ? ' <span style="color:#a16207">⚠ LMM/GLMM は 試行数 × 2 条件 が 別軸にあるので、 ここには 「1 人の 全実験時間」 を 直接 入力してください (手法倍率は × 1)。</span>' : ''}`,
     body: `<div style="display:grid; gap:8px; grid-template-columns: repeat(2, minmax(140px, 220px))">
              <label class="field"><span class="lbl">実験時間 (分/人・1 手法)</span>
                <input type="number" id="bud-min" step="5" min="1" value="${b.minutes_per_participant}" style="width:100%">
@@ -1294,30 +1303,44 @@ function renderBudgetBlock() {
                </select>
              </label>
            </div>
-           <div class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px; display:inline-block">
-             ⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b>
-             <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>
+           <div id="bud-summary" class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px">
+             <div>👤 本人への支払 (× 1): <b style="color:#059669">¥${Math.round(pay).toLocaleString()}</b>
+               <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時)</span></div>
+             <div style="margin-top:4px">💼 予算 (実費、 研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
+               <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払 と 同額 (Amazon ギフト券は 税金対象外)'})</span></div>
            </div>`,
   });
 }
 function renderBudgetSummary(participantCount, label = '必要') {
-  const per = costPerParticipant();
-  const total = per * participantCount;
+  const pay = participantPaymentPer();
+  const cost = costPerParticipant();
+  const totalPay = pay * participantCount;
+  const totalCost = cost * participantCount;
   const b = state.budget;
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
   const methods = methodsPerParticipant();
   const totalMinutes = b.minutes_per_participant * methods;
   const totalHours = totalMinutes / 60;
-  const breakdown = methods > 1
-    ? `${b.minutes_per_participant} 分/手法 × ${methods} 手法 = ${totalMinutes} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}`
-    : `${b.minutes_per_participant} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}`;
+  const timePart = methods > 1
+    ? `${b.minutes_per_participant} 分/手法 × ${methods} 手法 = ${totalMinutes} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時`
+    : `${b.minutes_per_participant} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時`;
   return `
     <div class="card" style="background:#fef7ed; border-left:4px solid #ea580c">
       <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${mode.label.replace(/^[^\s]+ /, '')}、 ${label} ${participantCount} 名${methods > 1 ? ' × ' + methods + ' 手法' : ''})</div>
-      <div style="font-size:22px; line-height:1.5"><b>¥${Math.round(total).toLocaleString()}</b></div>
-      <div class="hint-sm" style="margin-top:6px">1 人あたり ¥${Math.round(per).toLocaleString()} × ${participantCount} 名 = ¥${Math.round(total).toLocaleString()}</div>
-      <div class="hint-sm" style="margin-top:2px">${breakdown}</div>
-      <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで ¥${Math.round(total * 1.10).toLocaleString()} が 実務的な 予算目安。</div>
+      <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr; margin-top:6px">
+        <div style="padding:8px 12px; background:#ecfdf5; border-radius:6px; border-left:3px solid #059669">
+          <div style="font-size:12px; color:#059669; font-weight:600">👤 本人への支払 合計 (× 1)</div>
+          <div style="font-size:20px; font-weight:700; color:#065f46; margin-top:2px">¥${Math.round(totalPay).toLocaleString()}</div>
+          <div class="hint-sm" style="margin-top:2px; color:#065f46">¥${Math.round(pay).toLocaleString()} × ${participantCount} 名</div>
+        </div>
+        <div style="padding:8px 12px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0">
+          <div style="font-size:12px; color:#7b3fa0; font-weight:600">💼 予算 (実費、 研究者負担)</div>
+          <div style="font-size:20px; font-weight:700; color:#4a106d; margin-top:2px">¥${Math.round(totalCost).toLocaleString()}</div>
+          <div class="hint-sm" style="margin-top:2px; color:#4a106d">¥${Math.round(cost).toLocaleString()} × ${participantCount} 名 (${mode.mult_note})</div>
+        </div>
+      </div>
+      <div class="hint-sm" style="margin-top:6px">${timePart}</div>
+      <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで 予算目安 ¥${Math.round(totalCost * 1.10).toLocaleString()}。</div>
     </div>`;
 }
 
@@ -1853,11 +1876,13 @@ function render() {
 
     ${stepBlock({
       title: '② 検定の種類',
-      desc: 'どの統計検定を使う予定か。選ぶものに応じて必要な入力項目が変わります。迷ったら下の「🧭 選択ウィザード」に答えていくと自動で選ばれます。',
-      body: `<select id="pw-test" style="width:100%">
+      desc: 'どの統計検定を使う予定か。選ぶものに応じて必要な入力項目が変わります。迷ったら 「🧭 選択ウィザード」 に答えて 決めることもできます (使わずに 下のリストから 直接選んでも OK)。',
+      // v1056 中村さん指示「選択ウィザードを上に、下に自分で選択するリストを配置。 上下入れ替える。 ウィザードは使っても使わなくても良い」
+      body: `${renderTestWizard()}
+             <div class="hint-sm" style="margin-top:12px; margin-bottom:4px; font-weight:600; color:#7b3fa0">📋 直接 検定を選ぶ:</div>
+             <select id="pw-test" style="width:100%">
               ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
-             </select>
-             ${renderTestWizard()}`,
+             </select>`,
     })}
 
     ${state.test !== 'bayes_t' ? stepBlock({
@@ -2173,20 +2198,27 @@ function render() {
     });
   });
 
-  // v1053/v1054 予算試算 の 入力変化で 「⇒ 1 人あたり参加費」 だけ 即差し替え
+  // v1053/v1054/v1055/v1056 予算試算 の 入力変化で サマリ部分だけ 即差し替え
   //   (input のフォーカスが 抜けないように 全再描画は しない)
   ['bud-min', 'bud-rate'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => {
       syncFormToState();
-      const per = costPerParticipant();
+      const pay = participantPaymentPer();
+      const cost = costPerParticipant();
       const b = state.budget;
       const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
-      const hours = b.minutes_per_participant / 60;
-      const baseYen = hours * b.rate_per_hour;
-      const hintEl = document.querySelector('#bud-min')?.closest('.card')?.querySelector('.hint-sm[style*="eef2ff"]');
-      if (hintEl) {
-        hintEl.innerHTML = `⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b> <span style="color:#666">(${b.minutes_per_participant} 分 = ${hours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>`;
+      const methods = methodsPerParticipant();
+      const totalMinutes = b.minutes_per_participant * methods;
+      const totalHours = totalMinutes / 60;
+      const overhead = cost - pay;
+      const summary = document.getElementById('bud-summary');
+      if (summary) {
+        summary.innerHTML = `
+          <div>👤 本人への支払 (× 1): <b style="color:#059669">¥${Math.round(pay).toLocaleString()}</b>
+            <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時)</span></div>
+          <div style="margin-top:4px">💼 予算 (実費、 研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
+            <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払 と 同額 (Amazon ギフト券は 税金対象外)'})</span></div>`;
       }
     });
   });
