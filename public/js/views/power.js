@@ -1876,7 +1876,7 @@ function render() {
 
     ${stepBlock({
       title: '② 検定の種類',
-      desc: 'どの統計検定を使う予定か。選ぶものに応じて必要な入力項目が変わります。迷ったら 「🧭 選択ウィザード」 に答えて 決めることもできます (使わずに 下のリストから 直接選んでも OK)。',
+      desc: 'どの統計検定を使う予定か。選ぶものに応じて必要な入力項目が変わります。',
       // v1056 中村さん指示「選択ウィザードを上に、下に自分で選択するリストを配置。 上下入れ替える。 ウィザードは使っても使わなくても良い」
       body: `${renderTestWizard()}
              <div class="hint-sm" style="margin-top:12px; margin-bottom:4px; font-weight:600; color:#7b3fa0">📋 直接 検定を選ぶ:</div>
@@ -3283,13 +3283,17 @@ function renderTestWizard() {
       }
     }
   } else if (s === 'relation') {
-    inferred = 'corr'; inferredNote = '2 変数の関係 → Pearson 相関 (順位なら Spearman、順位も概ね同じ検定力)';
+    inferred = 'corr'; inferredNote = '2 つの値の連動を見る → Pearson 相関 (順位の類似なら Spearman、検定力はほぼ同じ)';
   } else if (s === 'binary_within') {
     inferred = 'glmm_logit'; inferredNote = '2 値アウトカム、参加者内 → Logistic GLMM';
   } else if (s === 'count_within') {
     inferred = 'glmm_poisson'; inferredNote = '回数アウトカム、参加者内 → Poisson GLMM が第一候補。分散 >> 平均 (過分散) なら 📈 負の二項 GLMM に切替を推奨。';
-  } else if (s === 'categorical') {
-    inferred = 'chi2'; inferredNote = 'カテゴリ独立 or 適合度 → χ² 検定 (期待度数 <5 なら Fisher に切替)';
+  } else if (s === 'categorical_dist') {
+    inferred = 'chi2';
+    inferredNote = '1 種類のカテゴリ の 分布の偏りを見る → ⁉ χ² 適合度検定 (df = カテゴリ数 − 1、 例: 3 択なら df=2)';
+  } else if (s === 'categorical_assoc') {
+    inferred = 'chi2';
+    inferredNote = '2 種類のカテゴリ の 関連を見る → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、 例: 2×3 なら df=2)。 期待度数 <5 のセルがあれば Fisher 直接確率検定に。';
   }
   return `
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
@@ -3302,8 +3306,9 @@ function renderTestWizard() {
           ${opt('scale', 'ordinal', '順序尺度 (リッカート 5/7 段階 等)')}
           ${opt('scale', 'binary_within', '2 値 (正答/誤答、成功/失敗、同じ参加者)')}
           ${opt('scale', 'count_within', '回数 (エラー数、発言回数、同じ参加者)')}
-          ${opt('scale', 'categorical', '名義 (カテゴリ選択、群比較)')}
-          ${opt('scale', 'relation', '2 変数の関係を見たい (相関)')}
+          ${opt('scale', 'categorical_dist', '1 種類のカテゴリ の 分布 の 偏り (例: サイコロが公平か)')}
+          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリ の 関連 (例: 性別 × 選択科目 に 関係があるか)')}
+          ${opt('scale', 'relation', '関係を見たい (身長と体重、勉強時間と成績 等の 連動)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
           <div><b>Q2. 比較する手法 (or 条件・群) の数？</b></div>
