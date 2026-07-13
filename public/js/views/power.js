@@ -65,9 +65,9 @@ function qnorm(p) {
 
 // v1051 中村さん指摘「N が思った以上に小さく出ることがある」への修正:
 //   従来は z_{α/2} で critical value を近似していたが、 df が小さいと t_crit > z なので
-//   必要 n を 過少評価 していた (paired/1-sample t で -6%、d=0.5 で 32 vs G*Power 34)。
-//   → 正解: qt(1-α/tails, n-1) を使う。 non-central t 分布 は 「平均 ncp、 分散 1 の
-//   正規分布」 で 近似 (Owen 系近似で df 補正、 大きな df では ほぼ正確)。
+//   必要 n を過少評価していた (paired/1-sample t で -6%、d=0.5 で 32 vs G*Power 34)。
+//   → 正解: qt(1-α/tails, n-1) を使う。 non-central t 分布は「平均 ncp、分散 1 の
+//   正規分布」で近似 (Owen 系近似で df 補正、大きな df ではほぼ正確)。
 //
 // 2 標本 t 検定 (独立、等分散、群サイズ等しい)。 tails: 1 or 2。
 function calc_ttest_two_sample(alpha, effect_d, tails, mode, nPerGroup, powerTarget) {
@@ -75,10 +75,10 @@ function calc_ttest_two_sample(alpha, effect_d, tails, mode, nPerGroup, powerTar
     if (nPer < 2) return 0;
     const df = 2 * nPer - 2;
     const t_crit = qt(1 - alpha / tails, df);
-    // non-central t の 検定力の 近似 (Johnson-Welch)。
-    // ncp = d × √(n/2)、 大きな df で non-central t は N(ncp, 1)。
+    // non-central t の検定力の近似 (Johnson-Welch)。
+    // ncp = d × √(n/2)、大きな df で non-central t は N(ncp, 1)。
     const ncp = effect_d * Math.sqrt(nPer / 2);
-    // 分散 補正: √(1 + ncp²/(2×df)) を SD に掛ける (df 補正)。
+    // 分散補正: √(1 + ncp²/(2×df)) を SD に掛ける (df 補正)。
     const sd_ncp = Math.sqrt(1 + (ncp * ncp) / (2 * df));
     const p_upper = pnorm((ncp - t_crit) / sd_ncp);
     const p_lower = tails === 2 ? pnorm((-ncp - t_crit) / sd_ncp) : 0;
@@ -122,15 +122,15 @@ function calc_ttest_paired(alpha, effect_d, tails, mode, n, powerTarget) {
   }
 }
 
-// Wilson-Hilferty (1931) による χ² と 非心 χ² の 正規変換。 (X/(df+λ))^(1/3) が
-//   平均 1-2(df+2λ)/(9(df+λ)²)、 分散 2(df+2λ)/(9(df+λ)²) の 正規分布に 従う。
+// Wilson-Hilferty (1931) による χ² と非心 χ² の正規変換。 (X/(df+λ))^(1/3) が
+//   平均 1-2(df+2λ)/(9(df+λ)²)、分散 2(df+2λ)/(9(df+λ)²) の正規分布に従う。
 function wilsonHilferty_chiCrit(df, alpha) {
-  // χ²_{α, df} の 上側 α 分位点
+  // χ²_{α, df} の上側 α 分位点
   const a = 2 / (9 * df);
   return df * Math.pow(1 - a + qnorm(1 - alpha) * Math.sqrt(a), 3);
 }
 function wilsonHilferty_ncChiPower(chi_crit, df, lambda) {
-  // 非心 χ²(df, λ) が chi_crit を 超える確率
+  // 非心 χ²(df, λ) が chi_crit を超える確率
   const denom = df + lambda;
   if (denom <= 0) return 0;
   const y = Math.pow(chi_crit / denom, 1 / 3);
@@ -142,14 +142,14 @@ function wilsonHilferty_ncChiPower(chi_crit, df, lambda) {
 
 // 一元配置 ANOVA。 k = 群数、 f = Cohen's f 効果量。
 //   v1051 修正: 従来 (z_a+z_b)² × k / f² だと k=3, f=0.25, power=0.8 で N=297 と過大。
-//   非心 F 分布 は df2 が 大きい 極限 で 非心 χ²(k-1, λ) / (k-1) に 収束。 λ = N × f²。
-//   Wilson-Hilferty (1931) + 有限 df2 補正 で G*Power と 数% 差。
+//   非心 F 分布は df2 が大きい極限で非心 χ²(k-1, λ) / (k-1) に収束。 λ = N × f²。
+//   Wilson-Hilferty (1931) + 有限 df2 補正で G*Power と数% 差。
 function calc_anova(alpha, effect_f, k, mode, N, powerTarget) {
   const df1 = k - 1;
   const chi_crit_inf = wilsonHilferty_chiCrit(df1, alpha);
-  // F(df1, df2) > χ²(df1)/df1 for finite df2 (F は 常に 上に振れる)。
-  //   F_crit(df1, df2) ≈ χ²_crit × (1 + 2/df2 × (df1+2)/df1) の 1 次補正 で
-  //   G*Power の 非心 F と 数% 差 まで 詰められる。
+  // F(df1, df2) > χ²(df1)/df1 for finite df2 (F は常に上に振れる)。
+  //   F_crit(df1, df2) ≈ χ²_crit × (1 + 2/df2 × (df1+2)/df1) の 1 次補正で
+  //   G*Power の非心 F と数% 差まで詰められる。
   const compute_power = (Nt) => {
     if (Nt < k + 1) return 0;
     const df2 = Math.max(1, Nt - k);
@@ -178,7 +178,7 @@ function calc_anova(alpha, effect_f, k, mode, N, powerTarget) {
 //   ρ: 測定間相関 (0-1、デフォルト 0.5)。高いほど個人差がキャンセルされて検定力↑
 //   ε: 球面性補正 (0 < ε ≤ 1、デフォルト 1)。 Greenhouse-Geisser / Huynh-Feldt で補正
 //     する場合は 0.5 - 0.9 程度に。
-//   v1051 修正: 独立 ANOVA と 同じ Wilson-Hilferty + 有限 df2 補正 で 高精度化。
+//   v1051 修正: 独立 ANOVA と同じ Wilson-Hilferty + 有限 df2 補正で高精度化。
 function calc_rmanova(alpha, effect_f, k, rho, epsilon, mode, N, powerTarget) {
   const rho_c = Math.max(0.001, Math.min(0.999, rho));
   const eps_c = Math.max(0.001, Math.min(1.0, epsilon));
@@ -225,14 +225,14 @@ function calc_correlation(alpha, r, tails, mode, n, powerTarget) {
   }
 }
 
-// v1063 fb#484 Fisher 直接確率検定 (2×2) の 検定力シミュ (中村さん指摘「Fisher は
-//   シミュレーション 必要なら、 やってはどうか？」)。 対照群 と 処置群 の 2×2 で、
-//   Fisher exact test を Monte Carlo で 走らせ 有意になる 割合 = 検定力。
-//   モデル: 対照 n1 名 が 陽性率 p0、 処置 n2 名 が 陽性率 p1 (or p0 × OR に換算)。
-//   Fisher exact test (両側): 行合計・列合計 を 固定した 時の 超幾何分布 で 極端 な
-//   配置の 確率 の 合計を 出す。 大 n では χ² と 数% 差 の 精確検定。
+// v1063 fb#484 Fisher 直接確率検定 (2×2) の検定力シミュ (中村さん指摘「Fisher は
+//   シミュレーション必要なら、やってはどうか？」)。対照群と処置群の 2×2 で、
+//   Fisher exact test を Monte Carlo で走らせ有意になる割合 = 検定力。
+//   モデル: 対照 n1 名が陽性率 p0、処置 n2 名が陽性率 p1 (or p0 × OR に換算)。
+//   Fisher exact test (両側): 行合計・列合計を固定した時の超幾何分布で極端な
+//   配置の確率の合計を出す。大 n では χ² と数% 差の精確検定。
 function logGamma(x) {
-  // Stirling 系列 (x ≥ 0.5 で 精度 良い)
+  // Stirling 系列 (x ≥ 0.5 で精度良い)
   if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
   x -= 1;
   const g = 7;
@@ -248,7 +248,7 @@ function logChoose(n, k) {
   return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1);
 }
 function fisherExactP(a, b, c, d) {
-  // 2×2 table [[a,b],[c,d]]、 両側 p 値 (extreme tail アプローチ)。
+  // 2×2 table [[a,b],[c,d]]、両側 p 値 (extreme tail アプローチ)。
   const n = a + b + c + d;
   const r1 = a + b, r2 = c + d;
   const c1 = a + c, c2 = b + d;
@@ -266,7 +266,7 @@ function simulateFisher2x2({ n_per_group, p0, p1, alpha, iterations, tails = 2 }
   if (n_per_group < 2) return { power: 0 };
   let sig = 0;
   const binom = (n, p) => {
-    // 二項サンプル (n<200 は 逆変換、 大は 正規近似)
+    // 二項サンプル (n<200 は逆変換、大は正規近似)
     if (n < 200) {
       let x = 0;
       for (let i = 0; i < n; i++) if (Math.random() < p) x++;
@@ -275,8 +275,8 @@ function simulateFisher2x2({ n_per_group, p0, p1, alpha, iterations, tails = 2 }
     return Math.max(0, Math.min(n, Math.round(n * p + Math.sqrt(n * p * (1 - p)) * randn())));
   };
   for (let it = 0; it < iterations; it++) {
-    const a = binom(n_per_group, p0);   // 対照群 の 陽性
-    const c = binom(n_per_group, p1);   // 処置群 の 陽性
+    const a = binom(n_per_group, p0);   // 対照群の陽性
+    const c = binom(n_per_group, p1);   // 処置群の陽性
     const b = n_per_group - a;
     const d = n_per_group - c;
     const p = fisherExactP(a, b, c, d);
@@ -290,18 +290,18 @@ function simulateFisher2x2({ n_per_group, p0, p1, alpha, iterations, tails = 2 }
   return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_fisher_2x2' };
 }
 
-// v1063 fb#483 Spearman 順位相関 の 検定力。 Pearson の 検定力公式を使い、
+// v1063 fb#483 Spearman 順位相関の検定力。 Pearson の検定力公式を使い、
 //   ARE ≈ 0.912 (asymptotic relative efficiency to Pearson under bivariate normal;
-//   Kendall 1938) で 補正。 実効 n_effective = n × 0.912 → 必要 n は 1/0.912 ≈ 1.10 倍。
-//   実分析では ρ_S の 値を 報告 (Spearman は 順位ベース、 単調 な 非線形にも 頑健)。
+//   Kendall 1938) で補正。実効 n_effective = n × 0.912 → 必要 n は 1/0.912 ≈ 1.10 倍。
+//   実分析では ρ_S の値を報告 (Spearman は順位ベース、単調な非線形にも頑健)。
 function calc_spearman(alpha, rho, tails, mode, n, powerTarget) {
   const ARE = 0.912;
   if (mode === 'a_priori') {
-    // Pearson で 必要 n を 出してから 1/ARE 倍
+    // Pearson で必要 n を出してから 1/ARE 倍
     const base = calc_correlation(alpha, rho, tails, 'a_priori', 0, powerTarget);
     return { n_total: Math.ceil(base.n_total / ARE) };
   } else {
-    // Pearson 側 の 検定力を、 実効 n × ARE で 計算
+    // Pearson 側の検定力を、実効 n × ARE で計算
     const nEff = n * ARE;
     return calc_correlation(alpha, rho, tails, 'post_hoc', nEff, powerTarget);
   }
@@ -310,7 +310,7 @@ function calc_spearman(alpha, rho, tails, mode, n, powerTarget) {
 // χ² 検定。 df 指定、効果量 w (Cohen's w)。 λ = N × w²、検定力 ≈ Φ((√(2λ) - √(2 × df_c)))
 //   ここでは df_c = df_null + λ 近似で正規化する簡易版。
 function calc_chi_squared(alpha, w, df, mode, N, powerTarget) {
-  // v1051 Wilson-Hilferty 変換 で 高精度化 (従来 は df + √(2df) × z_α だった)
+  // v1051 Wilson-Hilferty 変換で高精度化 (従来は df + √(2df) × z_α だった)
   const chi_crit = wilsonHilferty_chiCrit(df, alpha);
   if (mode === 'a_priori') {
     let lo = 0, hi = 5000, mid;
@@ -567,7 +567,7 @@ function simulatePoissonGLMM({ n_p, n_trials, baseline_rate, rr, sd_p, alpha, it
 //   BF10 = (H1 の周辺尤度) / (H0 の周辺尤度)。 δ (真の effect size) に Cauchy(0, r) 事前分布。
 //   BF10 ≥ 3 で moderate evidence for H1、 ≥ 10 で strong、 ≥ 30 で very strong。
 //   逆に BF10 ≤ 1/3 で moderate for H0、 ≤ 1/10 で strong for H0。
-//   実装: g = δ²/σ² の inverse-gamma 混合を 対数変換 + Simpson 則で積分。
+//   実装: g = δ²/σ² の inverse-gamma 混合を対数変換 + Simpson 則で積分。
 function jzsBF10(t, n, r = 1/Math.sqrt(2)) {
   const df = n - 1;
   if (df <= 0) return NaN;
@@ -578,7 +578,7 @@ function jzsBF10(t, n, r = 1/Math.sqrt(2)) {
   const dh = (g_max_log - g_min_log) / N;
   const integrand = (g) => {
     const A = 1 + n * g;
-    // 対応 t 検定・1 標本 t 検定 の JZS 分子 integrand
+    // 対応 t 検定・1 標本 t 検定の JZS 分子 integrand
     return Math.pow(A, -0.5)
          * Math.pow(1 + t * t / (A * df), -(df + 1) / 2)
          * Math.pow(g, -1.5)
@@ -597,10 +597,10 @@ function jzsBF10(t, n, r = 1/Math.sqrt(2)) {
   return numerator / denom;
 }
 
-// v1050 ベイズ (BF10) ベース サンプルサイズシミュ。
+// v1050 ベイズ (BF10) ベースサンプルサイズシミュ。
 //   固定 n モード: n 名を固定して、各 iter で BF10 が閾値を超える割合 = 「検出確率」
-//   逐次モード (SBF): 各 iter で n を 3 から増やしながら BF10 が 閾値 or 1/閾値 に
-//     到達したら止める → 平均 n / 分布 を返す (対称停止規則)。
+//   逐次モード (SBF): 各 iter で n を 3 から増やしながら BF10 が閾値 or 1/閾値に
+//     到達したら止める → 平均 n / 分布を返す (対称停止規則)。
 function simulateBayesBF({ n, d, bf_threshold = 3, alpha_ignored, iterations, mode = 'fixed', n_max = 200, r = 1/Math.sqrt(2), tails = 2 }) {
   // 対応 t / 1 標本 t の想定 (paired design が主用途)
   if (mode === 'fixed') {
@@ -668,10 +668,10 @@ function simulateBayesBF({ n, d, bf_threshold = 3, alpha_ignored, iterations, mo
 // v1049 負の二項 GLMM (過分散カウント、参加者内条件差) シミュレーション。
 //   モデル: log(E[Y]) = β0 + β1·x + u_p, Y ~ NB(μ, θ), u_p ~ N(0, σ_p²)
 //   Var(Y) = μ + μ²/θ (θ = "size" 分散パラメータ、 Poisson は θ → ∞)。
-//   実装: Poisson-Gamma 混合 で サンプル。 λ ~ Gamma(shape=θ, scale=μ/θ)、 Y ~ Poisson(λ)。
+//   実装: Poisson-Gamma 混合でサンプル。 λ ~ Gamma(shape=θ, scale=μ/θ)、 Y ~ Poisson(λ)。
 //   これで E[Y] = μ、 Var(Y) = μ + μ²/θ (過分散)。
 function gammaSample(shape) {
-  // Marsaglia-Tsang: shape ≥ 1 は 標準の 3-step アルゴリズム、 0 < shape < 1 は Ahrens-Dieter
+  // Marsaglia-Tsang: shape ≥ 1 は標準の 3-step アルゴリズム、 0 < shape < 1 は Ahrens-Dieter
   if (shape >= 1) {
     const d = shape - 1/3, c = 1 / Math.sqrt(9 * d);
     while (true) {
@@ -703,7 +703,7 @@ function simulateNBGLMM({ n_p, n_trials, baseline_rate, rr, theta, sd_p, alpha, 
   const beta1 = Math.log(rr);
   let sig = 0;
   const t_crit = qt(1 - alpha / tails, n_p - 1);
-  // Poisson sample (小 λ は 逆変換、 大 λ は 正規近似)
+  // Poisson sample (小 λ は逆変換、大 λ は正規近似)
   const poissonSample = (lam) => {
     if (lam < 30) {
       const L = Math.exp(-lam);
@@ -754,7 +754,7 @@ function simulateNBGLMM({ n_p, n_trials, baseline_rate, rr, theta, sd_p, alpha, 
 //     観測 y = k (k=1..K) if θ_{k-1} < latent_y ≤ θ_k
 //     θ_j = qnorm(j/K) で K 個均等確率カテゴリに分ける (baseline 分布は均等仮定)
 //   β = Cohen d 相当 (latent scale)。 log(OR) = d × π/√3 ≒ 1.81 × d の対応 (Chinn 2000)。
-//   検定: 参加者ごとの条件間平均値差で 1 標本 t 検定。 これは適切な cumulative link
+//   検定: 参加者ごとの条件間平均値差で 1 標本 t 検定。これは適切な cumulative link
 //     model (POM) より 5-15% 効率が落ちる保守的な近似。「厳しめの見積もり」として使える。
 function simulateOrdinalGLMM({ n_p, n_trials, k_cat, d, sd_p, alpha, iterations, tails = 2 }) {
   if (n_p < 3 || n_trials < 1 || k_cat < 3) return { power: 0 };
@@ -1290,15 +1290,15 @@ function renderCohenGuideInline() {
     </details>`;
 }
 
-// v1055 ρ (測定間相関) の パイロットデータからの 自動計算 ヘルパー
-//   中村さん指摘「ρ の 求め方が わからない」 への対応。 パイロットや 先行研究データが
-//   あれば その 2 列 (手法 A, 手法 B) の Pearson 相関を 直接 計算して 入れられる。
+// v1055 ρ (測定間相関) のパイロットデータからの自動計算ヘルパー
+//   中村さん指摘「ρ の求め方がわからない」への対応。パイロットや先行研究データが
+//   あればその 2 列 (手法 A, 手法 B) の Pearson 相関を直接計算して入れられる。
 function renderRhoHelper() {
   return `
     <details style="margin-top:8px; padding:8px 12px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0">
       <summary style="cursor:pointer; font-weight:600; font-size:12.5px; color:#7b3fa0">🧮 パイロットデータから ρ を計算する</summary>
       <div style="margin-top:8px; font-size:12.5px; line-height:1.7">
-        <div>2 条件 の 各参加者 の 値を 貼り付け (各行 1 名、 空白 or カンマ区切り or 改行区切り)。 Pearson 相関を 計算します。</div>
+        <div>2 条件の各参加者の値を貼り付け (各行 1 名、空白 or カンマ区切り or 改行区切り)。 Pearson 相関を計算します。</div>
         <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr; margin-top:8px">
           <label class="field"><span class="lbl">手法 A の値 (各行 1 参加者)</span>
             <textarea id="rho-a" rows="6" placeholder="例:&#10;123&#10;145&#10;98&#10;..." style="width:100%; font-family:monospace; font-size:12px"></textarea>
@@ -1316,7 +1316,7 @@ function renderRhoHelper() {
 }
 
 // v1053/v1054/v1055 予算試算 helpers (全検定共通)
-//   参加形式ごとの 総合倍率:
+//   参加形式ごとの総合倍率:
 //     inhouse (研究室内対面、アルバイト報告書): × 1.10 (税金分)
 //     outside (研究室外対面、Amazon ギフト券): × 1.00 (ギフト券は税金対象外)
 //     crowdsource (クラウドソーシング、利用料込み): × 2.00
@@ -1325,36 +1325,36 @@ const BUDGET_MODES = {
   outside:     { label: '🎁 研究室外対面 (Amazon ギフト券)',  mult: 1.00, mult_note: '× 1.00 (ギフト券は税金対象外)' },
   crowdsource: { label: '🌐 クラウドソーシング (利用料込み)',  mult: 2.00, mult_note: '× 2.00 (利用料込みで概ね 2 倍)' },
 };
-// v1055 中村さん指摘「参加者 8 名 × 3 手法だから」 → 実験時間は 1 手法あたり と 解釈し、
-//   対応系 (同じ参加者が 複数手法を試す) では 手法数を掛ける。
+// v1055 中村さん指摘「参加者 8 名 × 3 手法だから」 → 実験時間は 1 手法あたりと解釈し、
+//   対応系 (同じ参加者が複数手法を試す) では手法数を掛ける。
 function methodsPerParticipant() {
   const t = state.test;
   if (t === 'tp' || t === 'bayes_t') return 2;
   if (t === 'rmanova') return state.k;
-  // LMM/GLMM 系 も 参加者内 2 条件だが、 「1 人あたりの 全実験時間」 を 別途 想定するため
-  //   ここでは 手法倍率は 1 とし、 hint で 「試行時間 も 込みで 入力してください」 と誘導
+  // LMM/GLMM 系も参加者内 2 条件だが、「1 人あたりの全実験時間」を別途想定するため
+  //   ここでは手法倍率は 1 とし、 hint で「試行時間も込みで入力してください」と誘導
   return 1;
 }
 function methodsBreakdownNote() {
   const t = state.test;
   const m = methodsPerParticipant();
   if (m === 1) return '';
-  if (t === 'rmanova') return `× ${state.k} 手法 (rmANOVA、 1 人が 全 ${state.k} 手法を試す)`;
-  if (t === 'tp')      return `× 2 手法 (対応 t、 1 人が 両手法を試す)`;
-  if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が 両手法を試す)`;
+  if (t === 'rmanova') return `× ${state.k} 手法 (rmANOVA、 1 人が全 ${state.k} 手法を試す)`;
+  if (t === 'tp')      return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
+  if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
   return `× ${m} 手法`;
 }
-// v1056 中村さん指摘「本人に支払う額 と 実際にかかる総額 は 分けたほうが良い。 1.1 倍
-//   は 予算的な問題、 クラウドソーシングの × 2 も予算的な問題。 本人に支払うのは × 1」
+// v1056 中村さん指摘「本人に支払う額と実際にかかる総額は分けたほうが良い。 1.1 倍
+//   は予算的な問題、クラウドソーシングの × 2 も予算的な問題。本人に支払うのは × 1」
 function participantPaymentPer() {
-  // 本人 が 受け取る 額 = 実験時間 × 手法数 × 時給 (税金や 手数料は 含まない)
+  // 本人が受け取る額 = 実験時間 × 手法数 × 時給 (税金や手数料は含まない)
   const b = state.budget;
   const hoursPerMethod = b.minutes_per_participant / 60;
   const methods = methodsPerParticipant();
   return hoursPerMethod * methods * b.rate_per_hour;
 }
 function costPerParticipant() {
-  // 研究者側 の 予算 (実費) = 本人への支払 × 参加形式の倍率 (税金 or 利用料込み)
+  // 研究者側の予算 (実費) = 本人への支払 × 参加形式の倍率 (税金 or 利用料込み)
   const b = state.budget;
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
   return participantPaymentPer() * mode.mult;
@@ -1371,7 +1371,7 @@ function renderBudgetBlock() {
   const overhead = cost - pay;
   return stepBlock({
     title: '💰 予算試算 (1 人あたり)',
-    desc: `実験時間 (分/人・<b>1 手法あたり</b>) × 手法数 × 時給 で 「本人への支払額」、 それに 参加形式の倍率 (税金 or 利用料) を 掛けて 「予算 (実費)」 を 試算。 対応系 (対応 t、 反復測定 ANOVA、 ベイズ 対応 t) は 1 人が 全手法を試すので 手法数を 自動で 掛けます。${isLmm ? ' <span style="color:#a16207">⚠ LMM/GLMM は 試行数 × 2 条件 が 別軸にあるので、 ここには 「1 人の 全実験時間」 を 直接 入力してください (手法倍率は × 1)。</span>' : ''}`,
+    desc: `実験時間 (分/人・<b>1 手法あたり</b>) × 手法数 × 時給で「本人への支払額」、それに参加形式の倍率 (税金 or 利用料) を掛けて「予算 (実費)」を試算。対応系 (対応 t、反復測定 ANOVA、ベイズ対応 t) は 1 人が全手法を試すので手法数を自動で掛けます。${isLmm ? ' <span style="color:#a16207">⚠ LMM/GLMM は試行数 × 2 条件が別軸にあるので、ここには「1 人の全実験時間」を直接入力してください (手法倍率は × 1)。</span>' : ''}`,
     body: `<div style="display:grid; gap:8px; grid-template-columns: repeat(2, minmax(140px, 220px))">
              <label class="field"><span class="lbl">実験時間 (分/人・1 手法)</span>
                <input type="number" id="bud-min" step="5" min="1" value="${b.minutes_per_participant}" style="width:100%">
@@ -1388,8 +1388,8 @@ function renderBudgetBlock() {
            <div id="bud-summary" class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px">
              <div>👤 本人への支払 (× 1): <b style="color:#059669">¥${Math.round(pay).toLocaleString()}</b>
                <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時)</span></div>
-             <div style="margin-top:4px">💼 予算 (実費、 研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
-               <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払 と 同額 (Amazon ギフト券は 税金対象外)'})</span></div>
+             <div style="margin-top:4px">💼 予算 (実費、研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
+               <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払と同額 (Amazon ギフト券は税金対象外)'})</span></div>
            </div>`,
   });
 }
@@ -1411,18 +1411,18 @@ function renderBudgetSummary(participantCount, label = '必要') {
       <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${mode.label.replace(/^[^\s]+ /, '')}、 ${label} ${participantCount} 名${methods > 1 ? ' × ' + methods + ' 手法' : ''})</div>
       <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr; margin-top:6px">
         <div style="padding:8px 12px; background:#ecfdf5; border-radius:6px; border-left:3px solid #059669">
-          <div style="font-size:12px; color:#059669; font-weight:600">👤 本人への支払 合計 (× 1)</div>
+          <div style="font-size:12px; color:#059669; font-weight:600">👤 本人への支払合計 (× 1)</div>
           <div style="font-size:20px; font-weight:700; color:#065f46; margin-top:2px">¥${Math.round(totalPay).toLocaleString()}</div>
           <div class="hint-sm" style="margin-top:2px; color:#065f46">¥${Math.round(pay).toLocaleString()} × ${participantCount} 名</div>
         </div>
         <div style="padding:8px 12px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0">
-          <div style="font-size:12px; color:#7b3fa0; font-weight:600">💼 予算 (実費、 研究者負担)</div>
+          <div style="font-size:12px; color:#7b3fa0; font-weight:600">💼 予算 (実費、研究者負担)</div>
           <div style="font-size:20px; font-weight:700; color:#4a106d; margin-top:2px">¥${Math.round(totalCost).toLocaleString()}</div>
           <div class="hint-sm" style="margin-top:2px; color:#4a106d">¥${Math.round(cost).toLocaleString()} × ${participantCount} 名 (${mode.mult_note})</div>
         </div>
       </div>
       <div class="hint-sm" style="margin-top:6px">${timePart}</div>
-      <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで 予算目安 ¥${Math.round(totalCost * 1.10).toLocaleString()}。</div>
+      <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで予算目安 ¥${Math.round(totalCost * 1.10).toLocaleString()}。</div>
     </div>`;
 }
 
@@ -1433,23 +1433,23 @@ function renderFisherBlocks() {
   const or = ((p.p1 / (1 - p.p1)) / (p.p0 / (1 - p.p0))) || 1;
   return `
     ${stepBlock({
-      title: '⑥ 対照群 の 想定 陽性率 p₀',
-      desc: '対照条件 の 「陽性」 (成功/正答/有意反応 等) の 割合。',
+      title: '⑥ 対照群の想定陽性率 p₀',
+      desc: '対照条件の「陽性」 (成功/正答/有意反応等) の割合。',
       body: `<input type="number" id="fisher-p0" step="0.05" min="0.01" max="0.99" value="${p.p0}" style="width:120px">`,
     })}
     ${stepBlock({
-      title: '⑦ 処置群 の 想定 陽性率 p₁',
-      desc: `処置条件 の 陽性率。 p₀ と の 差 が 効果量。 <b>現在: |p₁ − p₀| = ${Math.abs(p.p1 - p.p0).toFixed(2)}、 オッズ比 ${or.toFixed(2)}</b>。`,
+      title: '⑦ 処置群の想定陽性率 p₁',
+      desc: `処置条件の陽性率。 p₀ との差が効果量。 <b>現在: |p₁ − p₀| = ${Math.abs(p.p1 - p.p0).toFixed(2)}、オッズ比 ${or.toFixed(2)}</b>。`,
       body: `<input type="number" id="fisher-p1" step="0.05" min="0.01" max="0.99" value="${p.p1}" style="width:120px">`,
     })}
     ${mode === 'post_hoc' ? stepBlock({
-      title: '⑧ 各群 の 参加者数 n',
-      desc: '対照群 と 処置群 の 各群 の 参加者数 (等サンプルサイズ 想定)。',
+      title: '⑧ 各群の参加者数 n',
+      desc: '対照群と処置群の各群の参加者数 (等サンプルサイズ想定)。',
       body: `<input type="number" id="fisher-n" step="1" min="2" value="${p.n_per_group}" style="width:120px">`,
     }) : ''}
     ${stepBlock({
-      title: '⚙ シミュ 反復数',
-      desc: 'Fisher exact の Monte Carlo。 A priori は 二分探索の 各点で 300 iters を 走らせるので 少し時間がかかります。 目安: 2000 で ~2%、 5000 で ~1.5% 誤差。',
+      title: '⚙ シミュ反復数',
+      desc: 'Fisher exact の Monte Carlo。 A priori は二分探索の各点で 300 iters を走らせるので少し時間がかかります。目安: 2000 で ~2%、 5000 で ~1.5% 誤差。',
       body: `<input type="number" id="fisher-iter" step="500" min="500" max="20000" value="${p.iterations}" style="width:140px">`,
     })}
   `;
@@ -1461,12 +1461,12 @@ function renderBayesBlocks() {
   return `
     ${stepBlock({
       title: '⑥ 参加者数 n (対応 t / 差スコア数)',
-      desc: '各参加者の差スコアの数。 逐次モードでは 初期値として使う (上限は下で設定)。',
+      desc: '各参加者の差スコアの数。逐次モードでは初期値として使う (上限は下で設定)。',
       body: `<input type="number" id="bay-n" step="1" min="3" value="${p.n}" style="width:120px">`,
     })}
     ${stepBlock({
       title: '⑦ 効果量 d (Cohen d)',
-      desc: '想定する 標準化平均差。 頻度論と同じ流儀。',
+      desc: '想定する標準化平均差。頻度論と同じ流儀。',
       body: `<input type="number" id="bay-d" step="0.05" min="0.01" value="${p.d}" style="width:120px">
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
@@ -1477,7 +1477,7 @@ function renderBayesBlocks() {
     })}
     ${stepBlock({
       title: '⑧ BF10 の閾値 K',
-      desc: '「BF10 ≥ K で H1 支持」 と 判断する 閾値。 Jeffreys の目安: 3 = moderate、10 = strong、30 = very strong。 逐次モードは 対称停止 で BF ≤ 1/K なら H0 支持。',
+      desc: '「BF10 ≥ K で H1 支持」と判断する閾値。 Jeffreys の目安: 3 = moderate、10 = strong、30 = very strong。逐次モードは対称停止で BF ≤ 1/K なら H0 支持。',
       body: `<input type="number" id="bay-bf" step="0.5" min="1.5" value="${p.bf_threshold}" style="width:120px">
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
@@ -1487,8 +1487,8 @@ function renderBayesBlocks() {
              </div>`,
     })}
     ${stepBlock({
-      title: '⑨ Cauchy 事前分布 の スケール r',
-      desc: 'δ (effect size) に対する Cauchy(0, r) 事前分布。 Rouder の推奨は r = 1/√2 ≈ 0.707 (medium)。 大きい効果を予想するなら 1.0、 小さいなら 0.5。',
+      title: '⑨ Cauchy 事前分布のスケール r',
+      desc: 'δ (effect size) に対する Cauchy(0, r) 事前分布。 Rouder の推奨は r = 1/√2 ≈ 0.707 (medium)。大きい効果を予想するなら 1.0、小さいなら 0.5。',
       body: `<input type="number" id="bay-r" step="0.05" min="0.1" max="2" value="${p.prior_r}" style="width:120px">
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
@@ -1499,18 +1499,18 @@ function renderBayesBlocks() {
     })}
     ${stepBlock({
       title: '⑩ モード',
-      desc: '固定 = ⑥ の n で 検出確率を計算。 逐次 = n を 3 から 上限まで 増やしながら BF が 閾値 or 1/閾値 に達したら止める デザイン (SBF, Schönbrodt et al. 2017)。 α 補正不要。',
+      desc: '固定 = ⑥ の n で検出確率を計算。逐次 = n を 3 から上限まで増やしながら BF が閾値 or 1/閾値に達したら止めるデザイン (SBF, Schönbrodt et al. 2017)。 α 補正不要。',
       body: `<select id="bay-mode" style="width:100%">
-              <option value="fixed" ${p.mode_bayes==='fixed'?'selected':''}>🎯 固定 n (⑥ の n で 検出確率)</option>
+              <option value="fixed" ${p.mode_bayes==='fixed'?'selected':''}>🎯 固定 n (⑥ の n で検出確率)</option>
               <option value="sequential" ${p.mode_bayes==='sequential'?'selected':''}>📈 逐次 (SBF) — 平均 n を求める</option>
              </select>`,
     })}
     ${p.mode_bayes === 'sequential' ? stepBlock({
-      title: '⑪ 逐次モード の 上限 n_max',
-      desc: '逐次デザイン で これ以上 n を増やしても 判断できない場合 は 打ち切り。 200 が 実用的な目安。',
+      title: '⑪ 逐次モードの上限 n_max',
+      desc: '逐次デザインでこれ以上 n を増やしても判断できない場合は打ち切り。 200 が実用的な目安。',
       body: `<input type="number" id="bay-nmax" step="10" min="10" max="500" value="${p.n_max}" style="width:120px">`,
     }) : ''}
-    ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。 逐次モードは 1 iter で 平均 20-100 回 BF 計算するので Poisson より遅い。', body: `<input type="number" id="bay-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
+    ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%。逐次モードは 1 iter で平均 20-100 回 BF 計算するので Poisson より遅い。', body: `<input type="number" id="bay-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
 
@@ -1535,7 +1535,7 @@ function renderNBBlocks() {
     })}
     ${stepBlock({
       title: '⑦ 提案条件 (x=1) の想定平均回数 λ₁',
-      desc: 'λ₀ と セットで RR = λ₁ / λ₀ を自動計算。',
+      desc: 'λ₀ とセットで RR = λ₁ / λ₀ を自動計算。',
       body: `<input type="number" id="nb-r1" step="0.5" min="0.01" value="${p.proposed_rate}" style="width:120px">
              <div id="nb-rr-derived" class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#eef2ff; border-radius:6px; display:inline-block">⇒ 導出 RR = ${rr.toFixed(2)} <span style="color:#666">(${rrSize})</span></div>
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
@@ -1547,7 +1547,7 @@ function renderNBBlocks() {
     })}
     ${stepBlock({
       title: '⑧ 過分散パラメータ θ (size)',
-      desc: `Var(Y) = μ + μ²/θ の θ。 大きいほど Poisson に近い、 小さいほど過分散が深刻。 <b>現在の分散比 (Var/μ) ≈ ${varMult.toFixed(2)}</b> (Poisson なら 1.0)。 データが 「Var = 2 × μ」 程度なら θ ≈ μ、 「Var = 5 × μ」 なら θ ≈ μ/4。`,
+      desc: `Var(Y) = μ + μ²/θ の θ。大きいほど Poisson に近い、小さいほど過分散が深刻。 <b>現在の分散比 (Var/μ) ≈ ${varMult.toFixed(2)}</b> (Poisson なら 1.0)。データが「Var = 2 × μ」程度なら θ ≈ μ、「Var = 5 × μ」なら θ ≈ μ/4。`,
       body: `<input type="number" id="nb-theta" step="0.5" min="0.1" max="100" value="${p.theta}" style="width:120px">
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
@@ -1572,8 +1572,8 @@ function renderOrdinalBlocks() {
   const or = Math.exp(log_or);
   return `
     ${stepBlock({
-      title: '⑥ リッカート等 の カテゴリ数 K',
-      desc: '順序尺度 の 段階数 (例: 「全く思わない〜非常に思う」 の 5 段階なら K=5)。',
+      title: '⑥ リッカート等のカテゴリ数 K',
+      desc: '順序尺度の段階数 (例: 「全く思わない〜非常に思う」の 5 段階なら K=5)。',
       body: `<input type="number" id="ord-k" step="1" min="3" max="11" value="${p.k_cat}" style="width:120px">
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
                <span class="hint-sm" style="align-self:center">目安:</span>
@@ -1585,7 +1585,7 @@ function renderOrdinalBlocks() {
     })}
     ${stepBlock({
       title: '⑦ 効果量 d (Cohen d 相当、latent scale)',
-      desc: '想定する 条件間差の 大きさ (連続 t 検定 の Cohen d と同じ流儀で 標準化)。 log(OR) = d × π/√3 ≈ 1.81·d の対応 (Chinn 2000)。 リッカート の 平均差 (7 段階で 0.5) の 標準化 に相当。',
+      desc: '想定する条件間差の大きさ (連続 t 検定の Cohen d と同じ流儀で標準化)。 log(OR) = d × π/√3 ≈ 1.81·d の対応 (Chinn 2000)。リッカートの平均差 (7 段階で 0.5) の標準化に相当。',
       body: `<input type="number" id="ord-d" step="0.05" min="0.01" value="${p.d}" style="width:120px">
              <div id="ord-or-derived" class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#eef2ff; border-radius:6px; display:inline-block">⇒ 導出 OR ≈ ${or.toFixed(2)} (β = log OR ≈ ${log_or.toFixed(3)})</div>
              <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
@@ -1595,9 +1595,9 @@ function renderOrdinalBlocks() {
                <button class="btn" data-ord-d="0.8" style="font-size:11px; padding:2px 8px">大 0.8</button>
              </div>`,
     })}
-    ${stepBlock({ title: '⑧ 参加者間 SD (latent scale)', desc: '参加者ごとの 傾向 の 個人差 (latent scale)。 0.5 で 中程度、1.0 で 顕著な個人差。', body: `<input type="number" id="ord-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
-    ${stepBlock({ title: '⑨ 各条件 の 試行 (項目) 数', desc: '各条件で 1 参加者が 答える 項目数。 リッカート は 尺度合計 が多いので 1-3 で十分な場合も。', body: `<input type="number" id="ord-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
-    ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の 参加者数。', body: `<input type="number" id="ord-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
+    ${stepBlock({ title: '⑧ 参加者間 SD (latent scale)', desc: '参加者ごとの傾向の個人差 (latent scale)。 0.5 で中程度、1.0 で顕著な個人差。', body: `<input type="number" id="ord-sdp" step="0.05" min="0" value="${p.sd_participant}" style="width:120px">` })}
+    ${stepBlock({ title: '⑨ 各条件の試行 (項目) 数', desc: '各条件で 1 参加者が答える項目数。リッカートは尺度合計が多いので 1-3 で十分な場合も。', body: `<input type="number" id="ord-nt" step="1" min="1" value="${p.n_trials}" style="width:120px">` })}
+    ${mode === 'post_hoc' ? stepBlock({ title: '⑩ 参加者数 n_p', desc: '手元 or 予定の参加者数。', body: `<input type="number" id="ord-np" step="1" min="3" value="${p.n_participants}" style="width:120px">` }) : ''}
     ${stepBlock({ title: '⚙ シミュ反復数', desc: '目安: 500 で ~5%、1000 で ~3%、5000 で ~1.5% 誤差。', body: `<input type="number" id="ord-iter" step="100" min="100" max="20000" value="${p.iterations}" style="width:140px">` })}
   `;
 }
@@ -1757,10 +1757,10 @@ const TESTS = [
   { id: 'rmanova', label: '🔁 反復測定 ANOVA (対応 3 群以上)',       eff: 'f', effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'anova', label: '📊 一元配置 ANOVA',              eff: 'f',        effGuide: [['小 f=0.10', 0.10], ['中 f=0.25', 0.25], ['大 f=0.40', 0.40]] },
   { id: 'corr',      label: '🔗 Pearson 相関',                   eff: 'r', effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
-  // v1063 fb#483 中村さん: 順位の類似は Spearman で 求める (Pearson とは 別で 表示)
+  // v1063 fb#483 中村さん: 順位の類似は Spearman で求める (Pearson とは別で表示)
   { id: 'corr_sp',   label: '🔗 Spearman 順位相関 (ρ)',           eff: 'r', effGuide: [['小 ρ=0.10', 0.10], ['中 ρ=0.30', 0.30], ['大 ρ=0.50', 0.50]] },
   { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
-  // v1063 fb#484 Fisher 直接確率検定 (2×2、 少数観測 向き) の Monte Carlo シミュベース
+  // v1063 fb#484 Fisher 直接確率検定 (2×2、少数観測向き) の Monte Carlo シミュベース
   { id: 'fisher_2x2', label: '⁉ Fisher 直接確率検定 (2×2、シミュベース)', eff: 'p_diff',
     effGuide: [['小 |p1-p0|=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
   // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
@@ -1776,13 +1776,13 @@ const TESTS = [
   { id: 'glmm_poisson', label: '📊 Poisson GLMM — 回数 (エラー数/発言数等) の参加者内効果', eff: 'rr',
     effGuide: [['小 RR=1.3', 1.3], ['中 RR=1.5', 1.5], ['大 RR=2.0', 2.0]] },
   // v1048 順序ロジット GLMM (リッカート等の順序尺度、参加者内)
-  { id: 'glmm_ordinal', label: '📶 順序ロジット GLMM — リッカート等の順序尺度 の参加者内効果', eff: 'd',
+  { id: 'glmm_ordinal', label: '📶 順序ロジット GLMM — リッカート等の順序尺度の参加者内効果', eff: 'd',
     effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
   // v1049 負の二項 GLMM (過分散カウント、参加者内)
-  { id: 'glmm_nb', label: '📈 負の二項 GLMM — 過分散カウント の参加者内効果', eff: 'rr',
+  { id: 'glmm_nb', label: '📈 負の二項 GLMM — 過分散カウントの参加者内効果', eff: 'rr',
     effGuide: [['小 RR=1.3', 1.3], ['中 RR=1.5', 1.5], ['大 RR=2.0', 2.0]] },
-  // v1050 ベイズ (JZS BF10) ベース サンプルサイズ (対応 t / 1 標本 t)
-  { id: 'bayes_t', label: '☯ ベイズ (JZS BF10) — 対応 t 検定 の サンプルサイズ', eff: 'd',
+  // v1050 ベイズ (JZS BF10) ベースサンプルサイズ (対応 t / 1 標本 t)
+  { id: 'bayes_t', label: '☯ ベイズ (JZS BF10) — 対応 t 検定のサンプルサイズ', eff: 'd',
     effGuide: [['小 d=0.2', 0.2], ['中 d=0.5', 0.5], ['大 d=0.8', 0.8]] },
 ];
 
@@ -1800,13 +1800,13 @@ const state = {
   rho: 0.5,          // v1041 反復測定 ANOVA の測定間相関
   epsilon: 1.0,      // v1041 反復測定 ANOVA の球面性補正 (1 = 補正なし)
   // v1053 予算試算 (全検定共通)
-  //   v1054 中村さん指示で 「実験時間 を 分単位 に」 + 参加形式 を 3 つに拡張:
+  //   v1054 中村さん指示で「実験時間を分単位に」 + 参加形式を 3 つに拡張:
   //     - 研究室内対面 (アルバイト報告書、税金分 × 1.10)
   //     - 研究室外対面 (Amazon ギフト券、× 1.00)
   //     - クラウドソーシング (利用料込み × 2.00)
   budget: {
     minutes_per_participant: 60,  // 1 人あたり実験時間 (分)
-    rate_per_hour: 1250,          // 時給 (円/時間)、 デフォルト 中村研の 標準
+    rate_per_hour: 1250,          // 時給 (円/時間)、デフォルト中村研の標準
     mode: 'inhouse',              // 'inhouse' | 'outside' | 'crowdsource'
   },
   // v1028 中村さん提案「実測ベースで平均 / SD から d を導く方が直感的」
@@ -1894,7 +1894,7 @@ const state = {
     baseline_rate: 5.0,
     proposed_rate: 7.5,
     rr: 1.5,
-    theta: 3.0,            // 過分散パラメータ (小 = 深刻な過分散、 大 = Poisson に近い)
+    theta: 3.0,            // 過分散パラメータ (小 = 深刻な過分散、大 = Poisson に近い)
     sd_participant: 0.5,
     iterations: 1000,
     cost_per_participant: 1500,
@@ -1902,8 +1902,8 @@ const state = {
   // v1063 fb#484 Fisher 直接確率検定 (2×2)
   fisher_2x2: {
     n_per_group: 30,
-    p0: 0.3,          // 対照群 陽性率
-    p1: 0.5,          // 処置群 陽性率
+    p0: 0.3,          // 対照群陽性率
+    p1: 0.5,          // 処置群陽性率
     iterations: 2000,
   },
   // v1050 ベイズ (JZS BF10)
@@ -1911,9 +1911,9 @@ const state = {
     n: 24,
     d: 0.5,
     bf_threshold: 3,       // BF10 の閾値 (3=moderate, 10=strong)
-    prior_r: 0.707,        // Cauchy 事前分布 のスケール r (デフォルト 1/√2 ≈ 0.707)
+    prior_r: 0.707,        // Cauchy 事前分布のスケール r (デフォルト 1/√2 ≈ 0.707)
     mode_bayes: 'fixed',   // 'fixed' or 'sequential'
-    n_max: 200,            // sequential mode の 上限
+    n_max: 200,            // sequential mode の上限
     iterations: 1000,
     cost_per_participant: 1500,
   },
@@ -2000,9 +2000,9 @@ function render() {
     ${stepBlock({
       title: '② 検定の種類',
       desc: 'どの統計検定を使う予定か。選ぶものに応じて必要な入力項目が変わります。',
-      // v1056 中村さん指示「選択ウィザードを上に、下に自分で選択するリストを配置。 上下入れ替える。 ウィザードは使っても使わなくても良い」
+      // v1056 中村さん指示「選択ウィザードを上に、下に自分で選択するリストを配置。上下入れ替える。ウィザードは使っても使わなくても良い」
       body: `${renderTestWizard()}
-             <div class="hint-sm" style="margin-top:12px; margin-bottom:4px; font-weight:600; color:#7b3fa0">📋 直接 検定を選ぶ:</div>
+             <div class="hint-sm" style="margin-top:12px; margin-bottom:4px; font-weight:600; color:#7b3fa0">📋 直接検定を選ぶ:</div>
              <select id="pw-test" style="width:100%">
               ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
              </select>`,
@@ -2041,12 +2041,12 @@ function render() {
              <input type="number" id="pw-power" step="0.01" min="0.5" max="0.999" value="${state.power}" style="width:120px; margin-top:6px">`,
     }) : stepBlock({
       title: '⑤ サンプルサイズ',
-      desc: state.test === 't2' ? '手元 or 予定の 1 手法あたりの参加者数 n (各群 or 各条件)。 全体は 2n 名。'
-          : state.test === 'anova' ? '手元 or 予定の 全体参加者数 N (各手法 約 N/k 名)。'
-          : state.test === 'tp' ? '手元 or 予定の 参加者数 (全員が 2 手法すべてを 試す)。 全観測数は N × 2。'
-          : state.test === 'rmanova' ? `手元 or 予定の 参加者数 (全員が k=${state.k} 手法すべてを 試す)。 全観測数は N × k。`
-          : state.test === 't1' ? '手元 or 予定の 参加者数 N (基準値と比較)。'
-          : '手元 or 予定の 全体参加者数 N。',
+      desc: state.test === 't2' ? '手元 or 予定の 1 手法あたりの参加者数 n (各群 or 各条件)。全体は 2n 名。'
+          : state.test === 'anova' ? '手元 or 予定の全体参加者数 N (各手法約 N/k 名)。'
+          : state.test === 'tp' ? '手元 or 予定の参加者数 (全員が 2 手法すべてを試す)。全観測数は N × 2。'
+          : state.test === 'rmanova' ? `手元 or 予定の参加者数 (全員が k=${state.k} 手法すべてを試す)。全観測数は N × k。`
+          : state.test === 't1' ? '手元 or 予定の参加者数 N (基準値と比較)。'
+          : '手元 or 予定の全体参加者数 N。',
       body: `<input type="number" id="pw-n" step="1" min="2" value="${state.test==='t2' ? state.n_per_group : state.n_total}" style="width:120px">
              <div class="hint-sm" style="margin-top:6px">${
                state.test === 't2' ? '1 手法あたりの参加者数 (全体は自動で 2n)'
@@ -2059,34 +2059,34 @@ function render() {
 
     ${state.test==='anova' ? stepBlock({
       title: '⑤-a 比較する手法 (or 群・条件) の数 k',
-      desc: 'ANOVA で比較する手法・群・条件の数。例: 「提案 A・従来 B・比較 C」 の 3 手法なら k=3。',
+      desc: 'ANOVA で比較する手法・群・条件の数。例: 「提案 A・従来 B・比較 C」の 3 手法なら k=3。',
       body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
     }) : ''}
 
     ${state.test==='rmanova' ? stepBlock({
       title: '⑤-a 測定回数 (手法・条件・時点の数) k',
-      desc: '同じ参加者で繰り返す測定の数。例: 「提案 A・従来 B・比較 C の 3 手法をすべて 試す」 なら k=3、「前・中・後の 3 時点で 測る」 なら k=3。',
+      desc: '同じ参加者で繰り返す測定の数。例: 「提案 A・従来 B・比較 C の 3 手法をすべて試す」なら k=3、「前・中・後の 3 時点で測る」なら k=3。',
       body: `<input type="number" id="pw-k" step="1" min="2" max="20" value="${state.k}" style="width:120px">`,
     }) : ''}
 
     ${state.test==='rmanova' ? stepBlock({
       title: '⑤-b 測定間相関 ρ',
-      desc: `<div>同じ参加者の 異なる 測定間の 想定相関。 「A が速い人は B でも速い」 「A で高評価する人は B でも高評価」 の 度合い。 <b>高いほど 個人差が キャンセル されて 検定力↑</b>。</div>
+      desc: `<div>同じ参加者の異なる測定間の想定相関。「A が速い人は B でも速い」「A で高評価する人は B でも高評価」の度合い。 <b>高いほど個人差がキャンセルされて検定力↑</b>。</div>
         <details style="margin-top:6px; padding:6px 10px; background:#f9fafb; border-radius:6px">
           <summary style="cursor:pointer; font-size:12px; color:#7b3fa0"><b>📖 求め方の詳細</b></summary>
           <div style="margin-top:6px; font-size:12px; line-height:1.75">
-            <div><b>1. パイロットデータから 実測</b> (最も 正確): 各参加者の 手法 A の値 と 手法 B の値 の <code>Pearson 相関係数</code>。 R なら <code>cor(A, B)</code>、 Excel なら <code>CORREL(A列, B列)</code>。 下の 🧮 ヘルパー でも 計算可。</div>
-            <div style="margin-top:4px"><b>2. 先行研究から</b>: 同じ課題の 論文で <b>ICC</b> (級内相関、Intraclass Correlation) or <b>test-retest reliability</b> が 報告されて いる ことが 多い。 それを ρ として 採用。</div>
-            <div style="margin-top:4px"><b>3. 分野の 典型値</b> (パイロットも 先行研究も 無い場合):</div>
+            <div><b>1. パイロットデータから実測</b> (最も正確): 各参加者の手法 A の値と手法 B の値の <code>Pearson 相関係数</code>。 R なら <code>cor(A, B)</code>、 Excel なら <code>CORREL(A列, B列)</code>。下の 🧮 ヘルパーでも計算可。</div>
+            <div style="margin-top:4px"><b>2. 先行研究から</b>: 同じ課題の論文で <b>ICC</b> (級内相関、Intraclass Correlation) or <b>test-retest reliability</b> が報告されていることが多い。それを ρ として採用。</div>
+            <div style="margin-top:4px"><b>3. 分野の典型値</b> (パイロットも先行研究も無い場合):</div>
             <ul style="margin:2px 0; padding-left:22px">
-              <li>反応時間系 (RT, Stroop, フランカー 等): ρ ≈ <b>0.6-0.8</b> (個人差 安定)</li>
-              <li>主観評価 (Likert, SD 法): ρ ≈ <b>0.3-0.6</b> (個人差 中程度)</li>
+              <li>反応時間系 (RT, Stroop, フランカー等): ρ ≈ <b>0.6-0.8</b> (個人差安定)</li>
+              <li>主観評価 (Likert, SD 法): ρ ≈ <b>0.3-0.6</b> (個人差中程度)</li>
               <li>正答率 (認知課題): ρ ≈ <b>0.5-0.7</b></li>
-              <li>生理指標 (HR, GSR): ρ ≈ <b>0.5-0.8</b> (トレイト成分が 強い)</li>
-              <li>気分・状態 (state PANAS 等): ρ ≈ <b>0.2-0.4</b> (状態は 変動)</li>
+              <li>生理指標 (HR, GSR): ρ ≈ <b>0.5-0.8</b> (トレイト成分が強い)</li>
+              <li>気分・状態 (state PANAS 等): ρ ≈ <b>0.2-0.4</b> (状態は変動)</li>
             </ul>
-            <div style="margin-top:4px"><b>4. 迷ったら</b>: ρ = 0.5 (中間) が 安全。 分野が わからない ときの デフォルト。</div>
-            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ρ を 高めに 見積もる と 必要 n が 少なく 出るので、 保守的に 見積もる (小さめ) の が 安全。</div>
+            <div style="margin-top:4px"><b>4. 迷ったら</b>: ρ = 0.5 (中間) が安全。分野がわからないときのデフォルト。</div>
+            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ρ を高めに見積もると必要 n が少なく出るので、保守的に見積もる (小さめ) のが安全。</div>
           </div>
         </details>`,
       body: `<div class="row" style="gap:4px; flex-wrap:wrap">
@@ -2102,15 +2102,15 @@ function render() {
 
     ${state.test==='rmanova' ? stepBlock({
       title: '⑤-c 球面性補正 ε (デフォルト 1.0)',
-      desc: `<div>反復測定 の 球面性 (sphericity) 仮定 = 「どの 2 測定の 差 も 分散が 等しい」。 崩れる と Type I 過誤が 膨らむ ので、 df を 縮めて 補正。</div>
+      desc: `<div>反復測定の球面性 (sphericity) 仮定 = 「どの 2 測定の差も分散が等しい」。崩れると Type I 過誤が膨らむので、 df を縮めて補正。</div>
         <details style="margin-top:6px; padding:6px 10px; background:#f9fafb; border-radius:6px">
           <summary style="cursor:pointer; font-size:12px; color:#7b3fa0"><b>📖 求め方の詳細</b></summary>
           <div style="margin-top:6px; font-size:12px; line-height:1.75">
-            <div><b>1. 実データ 分析後</b>: R の <code>afex::aov_ez</code> や SPSS の GLM Repeated Measures を 走らせると Mauchly 検定 の p 値 と ε の 推定値 (Greenhouse-Geisser ε̂ / Huynh-Feldt ε̂) が 出力される ので それを 採用。</div>
-            <div style="margin-top:4px"><b>2. 事前見積もり</b> (パイロットデータや 先行研究): 分散共分散行列 を計算して ε̂ を求める (R の <code>ez::ezANOVA</code> 等)。 実務的には 2 測定 (k=2) なら ε = 1.0 (球面性は 自動成立)、 3 測定なら 0.7-0.9、 4 測定以上で 逸脱しやすく 0.5-0.8 も 珍しくない。</div>
-            <div style="margin-top:4px"><b>3. 保守的な デフォルト</b>: 心配なら ε = 0.75 (GG 典型値) で 見積もる と 安全。 ε=1 で 計算した n は 球面性違反時 に 検定力不足 になる 可能性。</div>
-            <div style="margin-top:4px"><b>4. 迷ったら</b>: k=2 なら 1.0 で 確定。 k=3 なら 0.9、 k=4+ なら 0.75。</div>
-            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ε を 小さく 見積もる と 必要 n が 多く 出る (保守的)。 大きめ に すると 甘い 見積もり。</div>
+            <div><b>1. 実データ分析後</b>: R の <code>afex::aov_ez</code> や SPSS の GLM Repeated Measures を走らせると Mauchly 検定の p 値と ε の推定値 (Greenhouse-Geisser ε̂ / Huynh-Feldt ε̂) が出力されるのでそれを採用。</div>
+            <div style="margin-top:4px"><b>2. 事前見積もり</b> (パイロットデータや先行研究): 分散共分散行列を計算して ε̂ を求める (R の <code>ez::ezANOVA</code> 等)。実務的には 2 測定 (k=2) なら ε = 1.0 (球面性は自動成立)、 3 測定なら 0.7-0.9、 4 測定以上で逸脱しやすく 0.5-0.8 も珍しくない。</div>
+            <div style="margin-top:4px"><b>3. 保守的なデフォルト</b>: 心配なら ε = 0.75 (GG 典型値) で見積もると安全。 ε=1 で計算した n は球面性違反時に検定力不足になる可能性。</div>
+            <div style="margin-top:4px"><b>4. 迷ったら</b>: k=2 なら 1.0 で確定。 k=3 なら 0.9、 k=4+ なら 0.75。</div>
+            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ε を小さく見積もると必要 n が多く出る (保守的)。大きめにすると甘い見積もり。</div>
           </div>
         </details>`,
       body: `<div class="row" style="gap:4px; flex-wrap:wrap">
@@ -2207,7 +2207,7 @@ function render() {
   document.getElementById('pw-mode')?.addEventListener('change', (e) => {
     state.mode = e.target.value; render();
   });
-  // v1055 ρ (測定間相関) をパイロットデータから 自動計算
+  // v1055 ρ (測定間相関) をパイロットデータから自動計算
   const rhoCalcBtn = document.getElementById('rho-calc');
   if (rhoCalcBtn) rhoCalcBtn.addEventListener('click', () => {
     const parse = (s) => s.split(/[\s,\t]+/).map(x => parseFloat(x)).filter(x => isFinite(x));
@@ -2216,11 +2216,11 @@ function render() {
     const resEl = document.getElementById('rho-result');
     if (!resEl) return;
     if (a.length < 3 || b.length < 3) {
-      resEl.innerHTML = '<span style="color:#dc2626">両方に 3 名以上の 値が 必要です</span>';
+      resEl.innerHTML = '<span style="color:#dc2626">両方に 3 名以上の値が必要です</span>';
       return;
     }
     if (a.length !== b.length) {
-      resEl.innerHTML = `<span style="color:#dc2626">A (${a.length}) と B (${b.length}) の 名数が 揃って いません</span>`;
+      resEl.innerHTML = `<span style="color:#dc2626">A (${a.length}) と B (${b.length}) の名数が揃っていません</span>`;
       return;
     }
     const n = a.length;
@@ -2325,8 +2325,8 @@ function render() {
     });
   });
 
-  // v1053/v1054/v1055/v1056 予算試算 の 入力変化で サマリ部分だけ 即差し替え
-  //   (input のフォーカスが 抜けないように 全再描画は しない)
+  // v1053/v1054/v1055/v1056 予算試算の入力変化でサマリ部分だけ即差し替え
+  //   (input のフォーカスが抜けないように全再描画はしない)
   ['bud-min', 'bud-rate'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => {
@@ -2344,15 +2344,15 @@ function render() {
         summary.innerHTML = `
           <div>👤 本人への支払 (× 1): <b style="color:#059669">¥${Math.round(pay).toLocaleString()}</b>
             <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時)</span></div>
-          <div style="margin-top:4px">💼 予算 (実費、 研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
-            <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払 と 同額 (Amazon ギフト券は 税金対象外)'})</span></div>`;
+          <div style="margin-top:4px">💼 予算 (実費、研究者負担): <b style="color:#7b3fa0">¥${Math.round(cost).toLocaleString()}</b>
+            <span style="color:#666">(${overhead > 0 ? '本人支払 + ¥' + Math.round(overhead).toLocaleString() + ' 上乗せ (' + mode.mult_note + ')' : '本人支払と同額 (Amazon ギフト券は税金対象外)'})</span></div>`;
       }
     });
   });
   const bModeEl = document.getElementById('bud-mode');
   if (bModeEl) bModeEl.addEventListener('change', () => {
     syncFormToState();
-    render();  // モード切替 は 全再描画で OK (総額 の 差 が 見える)
+    render();  // モード切替は全再描画で OK (総額の差が見える)
   });
 
   // v1050 ベイズ (BF10) プリセット
@@ -3041,7 +3041,7 @@ function doCalcGLMM() {
 }
 
 // v1043 Poisson GLMM 計算
-// v1063 fb#484 Fisher 直接確率検定 (2×2) の 計算 + 専用結果レンダラー
+// v1063 fb#484 Fisher 直接確率検定 (2×2) の計算 + 専用結果レンダラー
 function doCalcFisher2x2() {
   const t = TESTS.find(x => x.id === state.test);
   const root = document.getElementById('pw-result');
@@ -3051,7 +3051,7 @@ function doCalcFisher2x2() {
   setTimeout(() => {
     try {
       if (state.mode === 'a_priori') {
-        // 二分探索で 必要 n
+        // 二分探索で必要 n
         const target = state.power;
         const runPower = (n_pg) => simulateFisher2x2({ n_per_group: n_pg, p0: p.p0, p1: p.p1, alpha: state.alpha, iterations: 300, tails: state.tails }).power;
         let lo = 3, hi = 500;
@@ -3081,9 +3081,9 @@ function renderFisherResult(res, t) {
     const nTotal = res.n_required * 2;
     mainCard = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
-        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要サンプルサイズ (Fisher 2×2、 シミュベース)</div>
-        <div style="font-size:22px; line-height:1.55">各群 <b>${res.n_required}</b> 名 × 2 群 = 全体 <b>${nTotal}</b> 名 ${res.over ? '<span style="color:#dc2626">(500 で 頭打ち — 目標未達)</span>' : ''}</div>
-        <div class="hint-sm" style="margin-top:8px">検証: この n で 検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b>${res.ci[0] !== null ? ` [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]` : ''}</div>
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要サンプルサイズ (Fisher 2×2、シミュベース)</div>
+        <div style="font-size:22px; line-height:1.55">各群 <b>${res.n_required}</b> 名 × 2 群 = 全体 <b>${nTotal}</b> 名 ${res.over ? '<span style="color:#dc2626">(500 で頭打ち — 目標未達)</span>' : ''}</div>
+        <div class="hint-sm" style="margin-top:8px">検証: この n で検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b>${res.ci[0] !== null ? ` [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]` : ''}</div>
         <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
       </div>`;
   } else {
@@ -3127,10 +3127,10 @@ function renderBayesResult(res, p, t) {
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">☯ ベイズ検出確率 (固定 n = ${p.n})</div>
         <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> の確率で BF10 ≥ ${p.bf_threshold} (H1 支持)</div>
-        <div class="hint-sm" style="margin-top:8px">H0 支持 (BF10 ≤ 1/${p.bf_threshold}): <b>${(res.p_h0_supported * 100).toFixed(1)}%</b>、 判断不能 (曖昧領域): <b>${(res.p_inconclusive * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:8px">H0 支持 (BF10 ≤ 1/${p.bf_threshold}): <b>${(res.p_h0_supported * 100).toFixed(1)}%</b>、判断不能 (曖昧領域): <b>${(res.p_inconclusive * 100).toFixed(1)}%</b></div>
         <div class="hint-sm" style="margin-top:4px">Median BF10 across simulations: <b>${res.median_bf.toFixed(2)}</b></div>
         <div class="hint-sm" style="margin-top:4px">α=${p.d} (Cohen d), Cauchy 事前 r=${p.prior_r}, iters=${p.iterations.toLocaleString()}</div>
-        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#fef3c7; border-left:3px solid #a16207">💡 ベイズ検定は 頻度論のような 「有意/非有意」 の二分ではなく、 「H1 支持 / H0 支持 / 判断不能」 の三分。 判断不能率が高いなら n を増やすと 決定率↑。</div>
+        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#fef3c7; border-left:3px solid #a16207">💡 ベイズ検定は頻度論のような「有意/非有意」の二分ではなく、「H1 支持 / H0 支持 / 判断不能」の三分。判断不能率が高いなら n を増やすと決定率↑。</div>
       </div>`;
   } else {
     const stopN = `平均 ${res.mean_n.toFixed(1)} (median ${res.median_n}, 10-90% 区間 ${res.p10_n}-${res.p90_n})`;
@@ -3138,14 +3138,14 @@ function renderBayesResult(res, p, t) {
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
         <div class="bold" style="color:#7b3fa0; margin-bottom:8px">☯ 逐次ベイズデザイン (SBF、上限 ${p.n_max})</div>
         <div style="font-size:22px; line-height:1.4">停止 n: <b>${stopN}</b></div>
-        <div class="hint-sm" style="margin-top:8px">BF10 ≥ ${p.bf_threshold} (H1 採択) で 停止: <b>${(res.power * 100).toFixed(1)}%</b></div>
-        <div class="hint-sm" style="margin-top:4px">BF10 ≤ 1/${p.bf_threshold} (H0 採択) で 停止: <b>${(res.p_h0_supported * 100).toFixed(1)}%</b></div>
-        <div class="hint-sm" style="margin-top:4px">上限 ${p.n_max} で 打ち切り (未収束): <b>${(res.p_capped * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:8px">BF10 ≥ ${p.bf_threshold} (H1 採択) で停止: <b>${(res.power * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">BF10 ≤ 1/${p.bf_threshold} (H0 採択) で停止: <b>${(res.p_h0_supported * 100).toFixed(1)}%</b></div>
+        <div class="hint-sm" style="margin-top:4px">上限 ${p.n_max} で打ち切り (未収束): <b>${(res.p_capped * 100).toFixed(1)}%</b></div>
         <div class="hint-sm" style="margin-top:4px">Cohen d=${p.d}, Cauchy 事前 r=${p.prior_r}, iters=${p.iterations.toLocaleString()}</div>
-        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#dcfce7; border-left:3px solid #059669">💡 逐次ベイズ (Sequential BF) は 「n を増やしながら BF10 が閾値を超えたら止める」 対称停止規則。 期待 n は 固定検定より 20-40% 小さい (Schönbrodt et al. 2017)。 α 補正不要 (ベイズは 標本サイズ に依存しない)。</div>
+        <div class="hint-sm" style="margin-top:6px; padding:6px 10px; background:#dcfce7; border-left:3px solid #059669">💡 逐次ベイズ (Sequential BF) は「n を増やしながら BF10 が閾値を超えたら止める」対称停止規則。期待 n は固定検定より 20-40% 小さい (Schönbrodt et al. 2017)。 α 補正不要 (ベイズは標本サイズに依存しない)。</div>
       </div>`;
   }
-  // v1053 予算試算 (固定モードは n、 逐次モードは 平均停止 n を 参加者数として)
+  // v1053 予算試算 (固定モードは n、逐次モードは平均停止 n を参加者数として)
   const budgetParticipants = p.mode_bayes === 'fixed' ? p.n : Math.ceil(res.mean_n);
   const budgetLabel = p.mode_bayes === 'fixed' ? '設定' : '平均';
   root.innerHTML = card + renderBudgetSummary(budgetParticipants, budgetLabel);
@@ -3438,7 +3438,7 @@ function renderSaveShareButtons(pos) {
 //   選択の途中結果と適用ロジックを UI に表示。
 function renderTestWizard() {
   const w = state.wizard || (state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '', relation_type: '', assoc_expected: '' });
-  // 後方互換: 古い state に これらの キーが なくても OK
+  // 後方互換: 古い state にこれらのキーがなくても OK
   if (w.relation_type === undefined) w.relation_type = '';
   if (w.assoc_expected === undefined) w.assoc_expected = '';
   const opt = (id, val, label) => `<button class="btn" data-wz="${id}" data-wz-val="${val}" style="font-size:11px; padding:3px 8px; ${w[id]===val?'background:#7b3fa0; color:#fff':''}">${label}</button>`;
@@ -3447,10 +3447,10 @@ function renderTestWizard() {
   let inferredNote = '';
   const s = w.scale, g = w.groups, r = w.related, n = w.normal, c = w.complex;
   const rt = w.relation_type, ae = w.assoc_expected;
-  // v1048 順序尺度で 2 群参加者内なら 順序ロジット GLMM を第一提案
+  // v1048 順序尺度で 2 群参加者内なら順序ロジット GLMM を第一提案
   if (s === 'ordinal' && g === '2' && r === 'paired') {
     inferred = 'glmm_ordinal';
-    inferredNote = 'リッカート等の順序尺度 (2 条件、参加者内) → 📶 順序ロジット GLMM を推奨。 このアプリの機能で 直接 扱えます。';
+    inferredNote = 'リッカート等の順序尺度 (2 条件、参加者内) → 📶 順序ロジット GLMM を推奨。このアプリの機能で直接扱えます。';
   } else if (s === 'continuous' || s === 'ordinal') {
     // リッカート等の順序尺度は「中央付近が山型なら t/ANOVA で近似可、厳密には
     //   順序ロジット GLMM が望ましい」の注記を付ける。
@@ -3489,16 +3489,16 @@ function renderTestWizard() {
       }
     }
   } else if (s === 'relation') {
-    // v1061 中村さん指摘: Pearson vs Spearman は 何を知りたいかで 選ばせる。 検定力は
-    //   ほぼ同じだが、 分析の 意味が違うので 明示的に。
+    // v1061 中村さん指摘: Pearson vs Spearman は何を知りたいかで選ばせる。検定力は
+    //   ほぼ同じだが、分析の意味が違うので明示的に。
     if (rt === 'pearson') {
       inferred = 'corr';
-      inferredNote = '2 つの値の 直線的な連動 → 🔗 Pearson 相関 r。 「値そのもの が どれくらい 一緒に 上下するか」 を 見る。 外れ値の影響を 受けやすい。 データの分布が 正規に近い時に 最適。';
+      inferredNote = '2 つの値の直線的な連動 → 🔗 Pearson 相関 r。「値そのものがどれくらい一緒に上下するか」を見る。外れ値の影響を受けやすい。データの分布が正規に近い時に最適。';
     } else if (rt === 'spearman') {
       inferred = 'corr_sp';
-      inferredNote = '2 つの値の 順位の類似 → 🔗 Spearman 順位相関 ρ。 「大小関係が 一致するか」 だけを 見るので 外れ値や 非線形 (単調) 関係 に 強い。 検定力は Pearson と ほぼ同じで、 ARE ≈ 0.912 の 補正で 必要 n は Pearson の 約 1.10 倍。';
+      inferredNote = '2 つの値の順位の類似 → 🔗 Spearman 順位相関 ρ。「大小関係が一致するか」だけを見るので外れ値や非線形 (単調) 関係に強い。検定力は Pearson とほぼ同じで、 ARE ≈ 0.912 の補正で必要 n は Pearson の約 1.10 倍。';
     } else {
-      inferredNote = 'Q2 で 「直線的な連動」 か 「順位の類似」 かを 選んでください';
+      inferredNote = 'Q2 で「直線的な連動」か「順位の類似」かを選んでください';
     }
   } else if (s === 'binary_within') {
     inferred = 'glmm_logit'; inferredNote = '2 値アウトカム、参加者内 → Logistic GLMM';
@@ -3506,37 +3506,37 @@ function renderTestWizard() {
     inferred = 'glmm_poisson'; inferredNote = '回数アウトカム、参加者内 → Poisson GLMM が第一候補。分散 >> 平均 (過分散) なら 📈 負の二項 GLMM に切替を推奨。';
   } else if (s === 'categorical_dist') {
     inferred = 'chi2';
-    inferredNote = '1 種類のカテゴリ の 分布の偏りを見る → ⁉ χ² 適合度検定 (df = カテゴリ数 − 1、 例: 3 択なら df=2)';
+    inferredNote = '1 種類のカテゴリの分布の偏りを見る → ⁉ χ² 適合度検定 (df = カテゴリ数 − 1、例: 3 択なら df=2)';
   } else if (s === 'categorical_assoc') {
-    // v1061 中村さん指摘: 「期待度数 <5 なら Fisher」 だけでは わからないので 選ばせる。
+    // v1061 中村さん指摘: 「期待度数 <5 なら Fisher」だけではわからないので選ばせる。
     if (ae === 'large') {
       inferred = 'chi2';
-      inferredNote = '2 種類のカテゴリ の 関連 (期待度数 全セル ≥5) → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、 例: 2×3 なら df=2)。 このアプリで対応。';
+      inferredNote = '2 種類のカテゴリの関連 (期待度数全セル ≥5) → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、例: 2×3 なら df=2)。このアプリで対応。';
     } else if (ae === 'small') {
       inferred = 'fisher_2x2';
-      inferredNote = '2 種類のカテゴリ の 関連 (期待度数 <5 のセルあり、 少数観測) → ⁉ Fisher 直接確率検定 (2×2、 シミュベース) を 推奨。 このアプリで 対応可能 (Monte Carlo で 数千回 シミュ、 数秒)。 3×2 以上 は 別途 χ² で 概算を。';
+      inferredNote = '2 種類のカテゴリの関連 (期待度数 <5 のセルあり、少数観測) → ⁉ Fisher 直接確率検定 (2×2、シミュベース) を推奨。このアプリで対応可能 (Monte Carlo で数千回シミュ、数秒)。 3×2 以上は別途 χ² で概算を。';
     } else {
-      inferredNote = 'Q2 で 「期待度数の 見込み」 を 選んでください';
+      inferredNote = 'Q2 で「期待度数の見込み」を選んでください';
     }
   }
   return `
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g || rt || ae) ? 'open' : ''}>
       <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード</summary>
       <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
-        <div><b>Q1. 差を測定したい 数値 (従属変数) の 特性は？</b></div>
-        <div class="hint-sm" style="margin-bottom:4px">実験で 「手法間の差」 を 見たい 数値の 性質を選んでください。 <b>「同じ参加者で 複数回」</b> = 1 人が 同じ課題を 何回か 繰り返す (反応時間 100 試行、 正誤 20 問 等)、 <b>「1 人 1 回」</b> = 各人 1 個の 値だけ 記録。</div>
+        <div><b>Q1. 差を測定したい数値 (従属変数) の特性は？</b></div>
+        <div class="hint-sm" style="margin-bottom:4px">実験で「手法間の差」を見たい数値の性質を選んでください。 <b>「同じ参加者で複数回」</b> = 1 人が同じ課題を何回か繰り返す (反応時間 100 試行、正誤 20 問等)、 <b>「1 人 1 回」</b> = 各人 1 個の値だけ記録。</div>
         <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-          ${opt('scale', 'continuous', '連続値 (反応時間、所要時間、選択率、得点 など)')}
-          ${opt('scale', 'ordinal', '順序尺度 (リッカート尺度、形容詞対 での 評価 など)')}
-          ${opt('scale', 'binary_within', '2 値 の系列 (成功/失敗、正誤 を 同じ参加者で 複数回)')}
-          ${opt('scale', 'count_within', '回数 の 系列 (エラー数、発言回数 を 同じ参加者で 複数回)')}
-          ${opt('scale', 'categorical_dist', '1 種類のカテゴリ の 分布の偏り (1 人 1 回だけ の 成功/失敗 の 集計、 選択肢 A/B/C から どれを 選ぶかの 偏り、 会議の 話者ごとの 発言回数、 サイコロの出目 など)')}
-          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリ の 関連 (性別 × 選択科目、群 × 正誤 など)')}
-          ${opt('scale', 'relation', '関係を見たい (身長と体重、勉強時間と成績 等の 連動)')}
+          ${opt('scale', 'continuous', '連続値 (反応時間、所要時間、選択率、得点など)')}
+          ${opt('scale', 'ordinal', '順序尺度 (リッカート尺度、形容詞対での評価など)')}
+          ${opt('scale', 'binary_within', '2 値の系列 (成功/失敗、正誤を同じ参加者で複数回)')}
+          ${opt('scale', 'count_within', '回数の系列 (エラー数、発言回数を同じ参加者で複数回)')}
+          ${opt('scale', 'categorical_dist', '1 種類のカテゴリの分布の偏り (1 人 1 回だけの成功/失敗の集計、選択肢 A/B/C からどれを選ぶかの偏り、会議の話者ごとの発言回数、サイコロの出目など)')}
+          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリの関連 (性別 × 選択科目、群 × 正誤など)')}
+          ${opt('scale', 'relation', '関係を見たい (身長と体重、勉強時間と成績等の連動)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
           <div><b>Q2. 比較する手法 (or 条件・群) の数？</b></div>
-          <div class="hint-sm" style="margin-bottom:4px">検証する手法 (提案手法・比較手法) の数を選んでください。「提案 A と 従来 B の 2 つを比較」なら 2、「A・B・C・D の 4 手法を比較」なら 3 以上。 群/条件/水準 と 呼び方は違いますが 実質同じ意味。</div>
+          <div class="hint-sm" style="margin-bottom:4px">検証する手法 (提案手法・比較手法) の数を選んでください。「提案 A と従来 B の 2 つを比較」なら 2、「A・B・C・D の 4 手法を比較」なら 3 以上。群/条件/水準と呼び方は違いますが実質同じ意味。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('groups', '1', '1 手法 (基準値との比較)')}
             ${opt('groups', '2', '2 手法')}
@@ -3544,7 +3544,7 @@ function renderTestWizard() {
           </div>` : ''}
         ${['continuous','ordinal'].includes(s) && ['2','3plus'].includes(g) ? `
           <div><b>Q3. 手法 (or 条件) 間の関係？</b></div>
-          <div class="hint-sm" style="margin-bottom:4px">「別々の参加者に それぞれ 1 手法を試してもらう」 なら 独立。「同じ 参加者に すべての 手法を 順番に 試してもらう」 なら 対応 (被験者内デザイン)。</div>
+          <div class="hint-sm" style="margin-bottom:4px">「別々の参加者にそれぞれ 1 手法を試してもらう」なら独立。「同じ参加者にすべての手法を順番に試してもらう」なら対応 (被験者内デザイン)。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('related', 'indep', '独立 (別の参加者)')}
             ${opt('related', 'paired', '対応 (同じ参加者、前後 or 条件)')}
@@ -3565,35 +3565,35 @@ function renderTestWizard() {
           </div>` : ''}
         ${s === 'relation' ? `
           <div><b>Q2. 何を知りたい？</b></div>
-          <div class="hint-sm" style="margin-bottom:4px">「値そのものが 一緒に上下する」 か 「大小関係だけ 一致する」 か で 選ぶ 検定が 変わります。</div>
+          <div class="hint-sm" style="margin-bottom:4px">「値そのものが一緒に上下する」か「大小関係だけ一致する」かで選ぶ検定が変わります。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-            ${opt('relation_type', 'pearson', '直線的な連動 (身長と体重、時給と月収 等 の 比例っぽい 関係)')}
-            ${opt('relation_type', 'spearman', '順位の類似 (成績順位 の 一致、 満足度順 の 対応 等、 単調だが 直線とは 限らない)')}
+            ${opt('relation_type', 'pearson', '直線的な連動 (身長と体重、時給と月収等の比例っぽい関係)')}
+            ${opt('relation_type', 'spearman', '順位の類似 (成績順位の一致、満足度順の対応等、単調だが直線とは限らない)')}
           </div>` : ''}
         ${s === 'categorical_assoc' ? `
-          <div><b>Q2. 期待度数の見込み は？</b></div>
+          <div><b>Q2. 期待度数の見込みは？</b></div>
           <div class="hint-sm" style="margin-bottom:6px">
-            <div><b>クロス表とは</b>: 2 種類のカテゴリを 行 × 列 で並べた 表。 例 「性別 (男/女) × 好き嫌い (好き/嫌い/どちら)」 なら 2 行 × 3 列 = <b>6 セル</b> の 表。 各セル は 「行と列 が 交差する 1 マス」 (男×好き / 男×嫌い / 男×どちら / 女×好き / 女×嫌い / 女×どちら)。</div>
+            <div><b>クロス表とは</b>: 2 種類のカテゴリを行 × 列で並べた表。例「性別 (男/女) × 好き嫌い (好き/嫌い/どちら)」なら 2 行 × 3 列 = <b>6 セル</b> の表。各セルは「行と列が交差する 1 マス」 (男×好き / 男×嫌い / 男×どちら / 女×好き / 女×嫌い / 女×どちら)。</div>
             <details style="margin-top:6px; padding:6px 10px; background:#fff; border-radius:4px">
-              <summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📊 具体例 (n=60、 男 30・女 30、 好き嫌いは 均等 と 想定した場合の 期待度数)</summary>
+              <summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📊 具体例 (n=60、男 30・女 30、好き嫌いは均等と想定した場合の期待度数)</summary>
               <pre style="font-family:'SF Mono', Menlo, Consolas, monospace; font-size:11px; margin:6px 0 0; overflow-x:auto">
-             好き    嫌い   どちら  合計
+             好き嫌いどちら合計
       男     10      10      10    30
       女     10      10      10    30
       合計   20      20      20    60
 
 期待度数 = n × (行合計/n) × (列合計/n) = n × 行比率 × 列比率
-男×好き の 期待 = 60 × (30/60) × (20/60) = 60 × 0.5 × 0.333 = 10
+男×好きの期待 = 60 × (30/60) × (20/60) = 60 × 0.5 × 0.333 = 10
 全セル 10 人 ≥ 5 → χ² 独立性検定が使える ✓
 
-例2: n=20 で 3 カテゴリ の 場合、 各セル 期待 ≈ 20/9 ≈ 2.2 で 5 未満
-    → Fisher 直接確率検定 が 本来 推奨
+例2: n=20 で 3 カテゴリの場合、各セル期待 ≈ 20/9 ≈ 2.2 で 5 未満
+    → Fisher 直接確率検定が本来推奨
               </pre>
             </details>
-            <div style="margin-top:6px">1 つでも 期待度数 &lt; 5 の セルが あれば 本来は Fisher。 n が 十分大きい (30 以上) or カテゴリ数 が 少ない なら 大標本と 見なして OK。</div>
+            <div style="margin-top:6px">1 つでも期待度数 &lt; 5 のセルがあれば本来は Fisher。 n が十分大きい (30 以上) or カテゴリ数が少ないなら大標本と見なして OK。</div>
           </div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-            ${opt('assoc_expected', 'large', '大標本 (全セル 期待度数 ≥5 見込み)')}
+            ${opt('assoc_expected', 'large', '大標本 (全セル期待度数 ≥5 見込み)')}
             ${opt('assoc_expected', 'small', '少数観測 (< 5 のセルあり見込み、 Fisher 想定)')}
           </div>` : ''}
         ${inferred ? `
@@ -3664,10 +3664,10 @@ function renderAnalysisGuide() {
 function renderStatFlowchartSVG() {
   return `
 <pre style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size:12px; line-height:1.5; background:#fff; padding:10px 12px; border-radius:6px; border:1px solid #d1fae5; overflow-x:auto; margin:0">
-【差を測定したい変数 (従属変数) の 数値の特性は？】
+【差を測定したい変数 (従属変数) の数値の特性は？】
 (ウィザード Q1 の 6 択に対応)
 
-━━━ ① 連続値 (反応時間、得点、濃度 等) ━━━
+━━━ ① 連続値 (反応時間、得点、濃度等) ━━━
   │
   ├─ 【比較する手法 (or 条件・群) の数】
   │   ├─ 1 手法 (基準値との比較)
@@ -3694,45 +3694,45 @@ function renderStatFlowchartSVG() {
   │
   └─ 【複雑デザイン (2 要因以上、参加者 × 刺激交差、 unbalanced 等)】
       ├─ 参加者内 2 条件 → 🧠 LMM 2 レベル  [このアプリで対応]
-      ├─ 参加者 × 刺激 交差 → 🧠 LMM 3 レベル  [このアプリで対応]
+      ├─ 参加者 × 刺激交差 → 🧠 LMM 3 レベル  [このアプリで対応]
       └─ さらに複雑 → LMM/GLMM (lme4::lmer / glmer) + emmeans
 
-━━━ ② 順序尺度 (リッカート 5/7 段階 等) ━━━
+━━━ ② 順序尺度 (リッカート 5/7 段階等) ━━━
   │
   ├─ 参加者内 2 条件 → 📶 順序ロジット GLMM  [このアプリで対応]
   ├─ 参加者内 3+ 条件 → 累積ロジット + participant random intercept
   ├─ 独立 → Cumulative link model / Mann-Whitney U / Kruskal-Wallis
-  └─ 近似 OK なら → t/ANOVA/rmANOVA でも 概算可 (中央付近が 山型なら)
+  └─ 近似 OK なら → t/ANOVA/rmANOVA でも概算可 (中央付近が山型なら)
 
-━━━ ③ 2 値 の 系列 (成功/失敗、正誤 を 同じ参加者で 複数回) ━━━
+━━━ ③ 2 値の系列 (成功/失敗、正誤を同じ参加者で複数回) ━━━
   │
   ├─ 参加者内 2 条件 → 🎯 Logistic GLMM  [このアプリで対応]
   └─ 対応 Before/After (1 対) → McNemar 検定
-  (※ 1 人 1 回だけの 2 値は ⑤ 1 種類のカテゴリの 分布の偏り 側で 集計)
+  (※ 1 人 1 回だけの 2 値は ⑤ 1 種類のカテゴリの分布の偏り側で集計)
 
-━━━ ④ 回数 の 系列 (エラー数、発言回数 を 同じ参加者で 複数回) ━━━
+━━━ ④ 回数の系列 (エラー数、発言回数を同じ参加者で複数回) ━━━
   │
   ├─ 平均 ≈ 分散  → 📊 Poisson GLMM  [このアプリで対応]
   ├─ 分散 >> 平均 → 📈 負の二項 GLMM  [このアプリで対応]
   └─ ゼロが大量  → Zero-inflated Poisson / NB
 
-━━━ ⑤ 1 種類のカテゴリ の 分布 の 偏り ━━━
-   (1 人 1 回だけ の 成功/失敗 の 集計、 選択肢 A/B/C の 選好、
-    会議 の 話者ごとの 発言回数、 サイコロの出目、 好きな色の アンケート など)
+━━━ ⑤ 1 種類のカテゴリの分布の偏り ━━━
+   (1 人 1 回だけの成功/失敗の集計、選択肢 A/B/C の選好、
+    会議の話者ごとの発言回数、サイコロの出目、好きな色のアンケートなど)
   │
-  └─ 期待分布 (均等 or 想定比) との ズレ → ⁉ χ² 適合度検定  [このアプリで対応]
+  └─ 期待分布 (均等 or 想定比) とのズレ → ⁉ χ² 適合度検定  [このアプリで対応]
 
-━━━ ⑥ 2 種類のカテゴリ の 関連 ━━━
-   (性別 × 選択科目、群 × 正誤 など)
+━━━ ⑥ 2 種類のカテゴリの関連 ━━━
+   (性別 × 選択科目、群 × 正誤など)
   │
   ├─ 大きな標本 → ⁉ χ² 独立性検定  [このアプリで対応 (df 指定)]
   ├─ 期待度数 <5 のセルあり → Fisher 直接確率検定
   └─ 対応あり Before/After 2×2 → McNemar 検定
 
-  ★ ⑤ と ⑥ は どちらも χ² の 家族 (数学的には 同じツール):
-    ⑤ は 「観測分布は 想定 (均等等) と 一致するか？」
-    ⑥ は 「変数 A と B は 独立か？」
-    研究の 問いが 違うだけ で、 計算は 同じ df ベースの χ²。
+  ★ ⑤ と ⑥ はどちらも χ² の家族 (数学的には同じツール):
+    ⑤ は「観測分布は想定 (均等等) と一致するか？」
+    ⑥ は「変数 A と B は独立か？」
+    研究の問いが違うだけで、計算は同じ df ベースの χ²。
 
 ━━━ ⑦ 関係を見たい (連動) ━━━
   │
@@ -3740,9 +3740,9 @@ function renderStatFlowchartSVG() {
   ├─ 順位の関係   → Spearman ρ / Kendall τ
   └─ 予測 / 因果  → 線形回帰 / 重回帰 (交絡変数をモデルに投入)
 
-━━━ ⑧ ベイズ推論 (頻度論の代わりに 事後分布で 判定) ━━━
+━━━ ⑧ ベイズ推論 (頻度論の代わりに事後分布で判定) ━━━
   │
-  └─ 対応 t 検定 → ☯ ベイズ (JZS BF10) 対応 t  [このアプリで対応、 固定 n / 逐次 SBF]
+  └─ 対応 t 検定 → ☯ ベイズ (JZS BF10) 対応 t  [このアプリで対応、固定 n / 逐次 SBF]
 </pre>`;
 }
 
@@ -3842,39 +3842,39 @@ function renderTestSpecificGuide() {
       </ol>`,
     },
     bayes_t: {
-      title: '☯ ベイズ (JZS BF10) 対応 t 検定 の 実施フロー',
+      title: '☯ ベイズ (JZS BF10) 対応 t 検定の実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
-        <li>R: <code>BayesFactor::ttestBF(x, y, paired = TRUE, rscale = "medium")</code> or <code>rscale = 0.707</code>。 rscale は Cauchy 事前の スケール r。</li>
+        <li>R: <code>BayesFactor::ttestBF(x, y, paired = TRUE, rscale = "medium")</code> or <code>rscale = 0.707</code>。 rscale は Cauchy 事前のスケール r。</li>
         <li>Python: <code>pingouin.bayesfactor_ttest(t, nx, ny=None, paired=True, r=0.707)</code>。</li>
         <li>報告: BF10 (H1 vs H0)、 median posterior effect size、 95% HDI (highest density interval)。</li>
-        <li>Jeffreys の目安 (BF10): 1-3 anecdotal / 3-10 moderate / 10-30 strong / 30-100 very strong / >100 extreme。 逆に 1/3-1/10 は moderate for H0。</li>
+        <li>Jeffreys の目安 (BF10): 1-3 anecdotal / 3-10 moderate / 10-30 strong / 30-100 very strong / >100 extreme。逆に 1/3-1/10 は moderate for H0。</li>
         <li>報告例: "The Bayesian paired t-test yielded BF10 = 8.4 (moderate evidence for H1; median δ = 0.62, 95% HDI [0.23, 1.01])."</li>
-        <li>逐次デザイン (SBF, Schönbrodt et al. 2017): n を増やしながら BF10 を監視、 閾値 (例: K=10) を超えたら 停止。 α 補正不要 (ベイズは 標本サイズ依存 の 過誤率制御 が 不要)。 期待 n は 固定 t 検定 より 20-40% 小さい。</li>
-        <li>事前分布 の 選び方: 中立なら r = 1/√2 ≈ 0.707 (medium)、 小さな効果を想定するなら r = 0.5 (narrow)、 大きな効果 or 情報事前がないなら r = 1.0 (wide)。</li>
-        <li>Bayes-frequentist の 比較: 頻度論の 「有意/非有意」 vs ベイズの 「H1 支持 / H0 支持 / 判断不能」。 ベイズは 「効果なし」 も 直接支持できる (頻度論では 「有意でない=効果なし」 と 断定できない)。</li>
+        <li>逐次デザイン (SBF, Schönbrodt et al. 2017): n を増やしながら BF10 を監視、閾値 (例: K=10) を超えたら停止。 α 補正不要 (ベイズは標本サイズ依存の過誤率制御が不要)。期待 n は固定 t 検定より 20-40% 小さい。</li>
+        <li>事前分布の選び方: 中立なら r = 1/√2 ≈ 0.707 (medium)、小さな効果を想定するなら r = 0.5 (narrow)、大きな効果 or 情報事前がないなら r = 1.0 (wide)。</li>
+        <li>Bayes-frequentist の比較: 頻度論の「有意/非有意」 vs ベイズの「H1 支持 / H0 支持 / 判断不能」。ベイズは「効果なし」も直接支持できる (頻度論では「有意でない=効果なし」と断定できない)。</li>
       </ol>`,
     },
     glmm_nb: {
       title: '📈 負の二項 GLMM (過分散カウント) の実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
-        <li>まず Poisson を試す: <code>glmer(y ~ x + (1 | p), family = poisson)</code>。 <code>performance::check_overdispersion(m)</code> で 過分散を検定。 p<.05 なら NB に切り替え。</li>
-        <li>R: <code>glmmTMB(y ~ x + (1 | p), family = nbinom2)</code>。 NB2 パラメータ化 (分散 = μ + μ²/θ) が 現代の標準。 NB1 (分散 = μ × φ) は 特殊ケース。</li>
-        <li>過分散パラメータ θ (別名 size, k, r) の 推定値を報告。 θ が 小さい (例: 0.5-2) ほど過分散が深刻。</li>
-        <li>効果量: レート比 RR = exp(β1)。 過分散でも 解釈は Poisson と同じ。 SE は Poisson より広くなる (適切に不確実性を反映)。</li>
+        <li>まず Poisson を試す: <code>glmer(y ~ x + (1 | p), family = poisson)</code>。 <code>performance::check_overdispersion(m)</code> で過分散を検定。 p<.05 なら NB に切り替え。</li>
+        <li>R: <code>glmmTMB(y ~ x + (1 | p), family = nbinom2)</code>。 NB2 パラメータ化 (分散 = μ + μ²/θ) が現代の標準。 NB1 (分散 = μ × φ) は特殊ケース。</li>
+        <li>過分散パラメータ θ (別名 size, k, r) の推定値を報告。 θ が小さい (例: 0.5-2) ほど過分散が深刻。</li>
+        <li>効果量: レート比 RR = exp(β1)。過分散でも解釈は Poisson と同じ。 SE は Poisson より広くなる (適切に不確実性を反映)。</li>
         <li>報告例: "RR = 1.68, 95%CI [1.15, 2.46], z = 2.71, p = .007, θ̂ = 2.4 (Poisson 検定より 12% 広い CI, 過分散を適切に取り込んだ結果)"</li>
         <li>ゼロ過剰なら zero-inflated NB: <code>glmmTMB(y ~ x + (1 | p), ziformula = ~1, family = nbinom2)</code>。</li>
-        <li>Poisson で SE 過小評価 の兆候 (Wald 検定が過剰有意) が出るのは 過分散の警告。 分散安定性は 「NB → Poisson の再検討」 より 先に。</li>
+        <li>Poisson で SE 過小評価の兆候 (Wald 検定が過剰有意) が出るのは過分散の警告。分散安定性は「NB → Poisson の再検討」より先に。</li>
       </ol>`,
     },
     glmm_ordinal: {
       title: '📶 順序ロジット GLMM (リッカート等) の実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
-        <li>R: <code>ordinal::clmm(y ~ x + (1 | p), data = df)</code> で 累積ロジット (proportional odds) モデル。 y は ordered factor に。</li>
-        <li>比例オッズ仮定の検証: <code>ordinal::nominal_test(m)</code> で 各予測子の比例オッズ性を検定。 有意なら partial POM (<code>clm(..., nominal = ~x)</code>) or 多項ロジット を検討。</li>
-        <li>効果量: 「1 カテゴリ上に上がるオッズ比」 OR = exp(β)。 潜在変数スケールで解釈するなら Cohen d 相当は d ≈ β · √3/π ≈ β/1.81。</li>
+        <li>R: <code>ordinal::clmm(y ~ x + (1 | p), data = df)</code> で累積ロジット (proportional odds) モデル。 y は ordered factor に。</li>
+        <li>比例オッズ仮定の検証: <code>ordinal::nominal_test(m)</code> で各予測子の比例オッズ性を検定。有意なら partial POM (<code>clm(..., nominal = ~x)</code>) or 多項ロジットを検討。</li>
+        <li>効果量: 「1 カテゴリ上に上がるオッズ比」 OR = exp(β)。潜在変数スケールで解釈するなら Cohen d 相当は d ≈ β · √3/π ≈ β/1.81。</li>
         <li>報告例: "OR = 1.85, 95%CI [1.24, 2.76], z = 3.02, p = .003 (proportional odds 仮定は非有意, p = .21)"</li>
-        <li>ノンパラ代替: Wilcoxon 符号順位検定 (対応) / Mann-Whitney U (独立) / Kruskal-Wallis (独立 3+ 群) / Friedman (対応 3+ 群)。 これらは 順位を使うだけで 効果量が スケール依存 に なりやすいので、 clmm を 優先推奨。</li>
-        <li>7 段階以上の Likert で 中央付近が山型なら、 t 検定でも 数% の効率損失で 済む。 3-5 段階だと clmm の 恩恵が 大きい。</li>
+        <li>ノンパラ代替: Wilcoxon 符号順位検定 (対応) / Mann-Whitney U (独立) / Kruskal-Wallis (独立 3+ 群) / Friedman (対応 3+ 群)。これらは順位を使うだけで効果量がスケール依存になりやすいので、 clmm を優先推奨。</li>
+        <li>7 段階以上の Likert で中央付近が山型なら、 t 検定でも数% の効率損失で済む。 3-5 段階だと clmm の恩恵が大きい。</li>
         <li>Python: statsmodels に clmm 相当は無いので、R の ordinal パッケージを rpy2 or pymer4 経由で。</li>
       </ol>`,
     },
@@ -3918,9 +3918,9 @@ function renderLMMStrategyTable(res, t, kind = 'lmm') {
   const baseN = res.mode === 'a_priori' ? res.n_required : p.n_p;
   const baseT = kind === 'lmm3' ? p.n_stim : p.n_trials;
   const trialLabel = kind === 'lmm3' ? '刺激' : '試行';
-  // v1053 グローバル 予算試算 (実験時間 × 時給 × 税金 × 参加形式) を優先。
-  //   従来の cost_per_participant フィールドは 後方互換のため 残すが、 予算 block が
-  //   0 以外 の 値を返す限り そちら (グローバル) を採用。
+  // v1053 グローバル予算試算 (実験時間 × 時給 × 税金 × 参加形式) を優先。
+  //   従来の cost_per_participant フィールドは後方互換のため残すが、予算 block が
+  //   0 以外の値を返す限りそちら (グローバル) を採用。
   const globalCost = costPerParticipant();
   const oldCost = (kind === 'glmm' ? state.glmm.cost_per_participant
                             : kind === 'glmm_poisson' ? state.glmm_poisson.cost_per_participant
@@ -4433,11 +4433,11 @@ function renderResult(out, t) {
   //   タイミング依存で追記がスキップされる事例あり。結果カード + 分布プロット +
   //   検定力カーブを 1 つの文字列にまとめて一度に innerHTML でセット、再計算のたび
   //   に全部綺麗に描き直す。
-  // v1052 中村さん指摘「対応あり t 検定で n が奇数のことがあって気持ち悪い。 手法で
-  //   まず必要な n があって、その手法数分ではないか。 分散分析で k=3 の時も同様。」
-  //   → 検定タイプ別に 「参加者数 × 手法数 = 全観測数」 を 明示的に表示。
-  //   対応あり/反復測定 では 参加者数がベースで、全観測数 = 参加者数 × k。
-  //   独立系 (2 標本 t、 一元 ANOVA) では 各手法あたりの参加者数がベースで、
+  // v1052 中村さん指摘「対応あり t 検定で n が奇数のことがあって気持ち悪い。手法で
+  //   まず必要な n があって、その手法数分ではないか。分散分析で k=3 の時も同様。」
+  //   → 検定タイプ別に「参加者数 × 手法数 = 全観測数」を明示的に表示。
+  //   対応あり/反復測定では参加者数がベースで、全観測数 = 参加者数 × k。
+  //   独立系 (2 標本 t、一元 ANOVA) では各手法あたりの参加者数がベースで、
   //   全体 N = 各手法 n × 手法数。
   let resultHtml = '';
   if (state.mode === 'a_priori') {
@@ -4466,7 +4466,7 @@ function renderResult(out, t) {
     } else {
       nMsg = `全体 N = <b>${out.n_total}</b>`;
     }
-    // 募集人数 目安 (脱落 10% 見込み)
+    // 募集人数目安 (脱落 10% 見込み)
     const baseParticipants = state.test === 't2' ? out.n_total   // 独立 2 手法: 全体 N = 参加者総数
                           : state.test === 'anova' ? out.n_total // 独立 k 手法: 全体 N = 参加者総数
                           : out.n_total;                          // 対応あり/1 標本: 参加者数 = n_total
@@ -4490,13 +4490,13 @@ function renderResult(out, t) {
     } else if (state.test === 't1') {
       nDisplay = `参加者 ${state.n_total} 名`;
     } else if (state.test === 'anova') {
-      nDisplay = `全体 ${state.n_total} 名 (各手法 約 ${Math.round(state.n_total / state.k)} 名)`;
+      nDisplay = `全体 ${state.n_total} 名 (各手法約 ${Math.round(state.n_total / state.k)} 名)`;
     } else if (state.test === 'rmanova') {
       nDisplay = `参加者 ${state.n_total} 名 × ${state.k} 手法 = ${state.n_total * state.k} 観測`;
     } else {
       nDisplay = `n = ${state.n_total}`;
     }
-    // Post hoc 用 の 参加者数 (現在の n)
+    // Post hoc 用の参加者数 (現在の n)
     const currentParticipants = state.test === 't2' ? state.n_per_group * 2 : state.n_total;
     resultHtml = `
       <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">

@@ -61,15 +61,15 @@ export async function renderPaperTranslate() {
         <input type="file" id="pt-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
       </label>
-      <!-- v916 共有=半額割引 を もっと目立たせる。 チェックボックスに 「ON で 半額!」 を 直書き。 -->
+      <!-- v916 共有=半額割引をもっと目立たせる。チェックボックスに「ON で半額!」を直書き。 -->
       <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
           <input type="checkbox" id="pt-auto-share" style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で 半額 になります!</span>
+          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で半額になります!</span>
         </label>
         <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
-          完了と同時に 公開 ON にする (= みんなの検索に 載せる)。 研究室 全体で 共有すると 誰かの 参考になる 資産 なので、 共有 なら 半額割引。<br>
-          あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
+          完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>
+          あとから公開 ON にすると半額分返金 / 公開 OFF に戻すと半額割引分追加課金されます。
         </div>
       </div>
       <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
@@ -150,9 +150,9 @@ export async function renderPaperTranslate() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
   });
-  // v957 hash に ?q=<keyword> が 付いていたら shared タブ に 切り替えて 検索実行
-  //   (詳細ページ の 著者 / キーワード クリック から 飛んで来る 用)
-  // v1066 fb#486 hash に ?pdfurl=<url> があれば 「URL から PDF 取得して 要約」 banner を表示
+  // v957 hash に ?q=<keyword> が付いていたら shared タブに切り替えて検索実行
+  //   (詳細ページの著者 / キーワードクリックから飛んで来る用)
+  // v1066 fb#486 hash に ?pdfurl=<url> があれば「URL から PDF 取得して要約」 banner を表示
   const qParam = location.hash.includes('?') ? new URLSearchParams(location.hash.slice(location.hash.indexOf('?') + 1)) : new URLSearchParams();
   const hashQ = qParam.get('q');
   const hashPdfUrl = qParam.get('pdfurl');
@@ -162,33 +162,33 @@ export async function renderPaperTranslate() {
   if (hashQ) {
     searchEl.value = hashQ;
     switchTab('shared');
-    if (!hashPdfUrl) return;   // pdfurl 併記時は 履歴も 見せる ため fall-through
+    if (!hashPdfUrl) return;   // pdfurl 併記時は履歴も見せるため fall-through
   }
   await loadHistory();    // history 取得と同時に models / cost をロード
 }
 
-// v1066 fb#486 DeepResearch から の 「?pdfurl=...」 の 場合、 result カード の 前 に
-//   「🔗 URL から PDF を 取得して 新規要約」 の banner を 出す。 押すと fetch → File 化 →
-//   既存 の paper_translate multipart POST に 流し込む。
+// v1066 fb#486 DeepResearch からの「?pdfurl=...」の場合、 result カードの前に
+//   「🔗 URL から PDF を取得して新規要約」の banner を出す。押すと fetch → File 化 →
+//   既存の paper_translate multipart POST に流し込む。
 function renderPdfUrlBanner(pdfUrl, titleQuery) {
   const target = document.getElementById('pt-result');
   if (!target) return;
   target.innerHTML = `
     <div class="card" style="border:2px dashed var(--primary); background:#faf5ff">
-      <div class="bold" style="color:var(--primary); font-size:14px; margin-bottom:6px">🔎 DeepResearch から の 論文</div>
+      <div class="bold" style="color:var(--primary); font-size:14px; margin-bottom:6px">🔎 DeepResearch からの論文</div>
       <div style="font-size:12.5px; margin-bottom:6px">
         <b>URL:</b> <a href="${escapeHtml(pdfUrl)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(pdfUrl)}</a>
-        ${titleQuery ? `<div style="margin-top:2px"><b>タイトル で 既存検索:</b> ${escapeHtml(titleQuery)} — 下の 履歴/公開一覧 で 該当を 確認</div>` : ''}
+        ${titleQuery ? `<div style="margin-top:2px"><b>タイトルで既存検索:</b> ${escapeHtml(titleQuery)} — 下の履歴/公開一覧で該当を確認</div>` : ''}
       </div>
-      <div class="hint-sm" style="margin-bottom:8px">既存 の 要約 が 無ければ、 下 の ボタン で PDF を 取得して 新規要約 を 作れます。</div>
+      <div class="hint-sm" style="margin-bottom:8px">既存の要約が無ければ、下のボタンで PDF を取得して新規要約を作れます。</div>
       <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
-        <button id="pt-fromurl-go" class="btn primary" style="font-size:12.5px">🔗 この URL から PDF を 取得して 要約を 作る</button>
+        <button id="pt-fromurl-go" class="btn primary" style="font-size:12.5px">🔗 この URL から PDF を取得して要約を作る</button>
         <select id="pt-fromurl-model" style="font-size:12.5px"></select>
         <label style="font-size:12.5px; display:flex; align-items:center; gap:4px"><input type="checkbox" id="pt-fromurl-share" checked> 🎁 共有 ON (半額)</label>
       </div>
       <div id="pt-fromurl-status" style="margin-top:6px; font-size:12.5px"></div>
     </div>`;
-  // モデル 選択肢を 読み込む (config 呼び出し) — 既存 の updateModelInfo の 結果を 待つ
+  // モデル選択肢を読み込む (config 呼び出し) — 既存の updateModelInfo の結果を待つ
   const setModels = () => {
     const src = document.getElementById('pt-model');
     const dst = document.getElementById('pt-fromurl-model');
@@ -216,8 +216,8 @@ function renderPdfUrlBanner(pdfUrl, titleQuery) {
         throw new Error(msg);
       }
       const blob = await resp.blob();
-      status.innerHTML = `<span style="color:#15803d">✓ PDF 取得 (${(blob.size / 1024 / 1024).toFixed(1)} MB) → 要約 開始中…</span>`;
-      btn.textContent = '⏳ 要約 依頼中…';
+      status.innerHTML = `<span style="color:#15803d">✓ PDF 取得 (${(blob.size / 1024 / 1024).toFixed(1)} MB) → 要約開始中…</span>`;
+      btn.textContent = '⏳ 要約依頼中…';
       const file = new File([blob], 'paper.pdf', {type: 'application/pdf'});
       const fd = new FormData();
       fd.append('file', file);
@@ -225,16 +225,16 @@ function renderPdfUrlBanner(pdfUrl, titleQuery) {
       fd.append('auto_share', share ? '1' : '0');
       const r2 = await fetch('/api/ai/paper_translate', {method: 'POST', body: fd, credentials: 'same-origin'});
       if (!r2.ok) {
-        let msg = '要約 開始 失敗 (HTTP ' + r2.status + ')';
+        let msg = '要約開始失敗 (HTTP ' + r2.status + ')';
         try { const j = await r2.json(); if (j.error?.message) msg = j.error.message; } catch (_) {}
         throw new Error(msg);
       }
       const j = await r2.json();
-      status.innerHTML = `<span style="color:#15803d">✅ 要約 依頼 受付。 結果ページに 移動…</span>`;
+      status.innerHTML = `<span style="color:#15803d">✅ 要約依頼受付。結果ページに移動…</span>`;
       setTimeout(() => { location.hash = '#/paper-summary/r/' + j.share_token; }, 500);
     } catch (e) {
       status.innerHTML = `<span style="color:#dc2626">失敗: ${escapeHtml(e.message || String(e))}</span>`;
-      btn.disabled = false; btn.textContent = '🔗 この URL から PDF を 取得して 要約を 作る';
+      btn.disabled = false; btn.textContent = '🔗 この URL から PDF を取得して要約を作る';
     }
   });
 }
@@ -245,7 +245,7 @@ function updateModelInfo(d) {
   if (!sel || !info) return;
   const models = d.models || { 'gpt-4o': 20 };
   const def = d.default_model || 'gpt-4o';
-  // v916 選択肢 に 「共有なら Xpt」 を 明記 (画面で 見えるまま 比較 できるように)
+  // v916 選択肢に「共有なら Xpt」を明記 (画面で見えるまま比較できるように)
   sel.innerHTML = Object.entries(models).map(([m, pt]) =>
     `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`
   ).join('');
@@ -254,10 +254,10 @@ function updateModelInfo(d) {
     const m = sel.value;
     const base = models[m] || 20;
     const shared = !!autoShare?.checked;
-    const pt = shared ? Math.floor(base / 2) : base;  // v914 共有 は 半額割引
+    const pt = shared ? Math.floor(base / 2) : base;  // v914 共有は半額割引
     info.innerHTML = `選択中: ${escapeHtml(m)} ・ 1 回 ${pt}pt` +
-      (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
-              : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
+      (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+              : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
     const btn = document.getElementById('pt-go');
     if (btn) btn.textContent = `📑 要約を作る (${pt}pt)`;
   };
@@ -287,7 +287,7 @@ async function setupAlsoFullTranslate() {
     if (!ftSettingsCache) return;
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const def = ftSettingsCache.default_model || Object.keys(models)[0];
-    // v916 「共有なら Xpt」 も 各 option に 明記
+    // v916 「共有なら Xpt」も各 option に明記
     modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
       `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
     refreshCost();
@@ -297,12 +297,12 @@ async function setupAlsoFullTranslate() {
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const m = modSel.value;
     const base = models[m] || 0;
-    // v914 同じ auto_share チェックボックスを 要約 と 全訳 の 両方に適用、 共有=半額
+    // v914 同じ auto_share チェックボックスを要約と全訳の両方に適用、共有=半額
     const shared = !!document.getElementById('pt-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
     info.innerHTML = `全訳 ${pt}pt` +
-      (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
-              : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
+      (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+              : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
   }
   dirSel.addEventListener('change', rebuildFtModels);
   modSel.addEventListener('change', refreshCost);
@@ -350,7 +350,7 @@ async function go() {
         fd2.append('file', f);
         fd2.append('direction', ftDir);
         fd2.append('model', ftModel);
-        // v913 同じ 「公開 ON」 判定を 全訳側にも 引き継ぐ (両方 とも 基本額 or 両方 とも 倍額)
+        // v913 同じ「公開 ON」判定を全訳側にも引き継ぐ (両方とも基本額 or 両方とも倍額)
         if (document.getElementById('pt-auto-share')?.checked) fd2.append('auto_share', '1');
         const r2 = await fetch('/api/ai/paper_full_translate', {
           method: 'POST', body: fd2, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' },
@@ -610,7 +610,7 @@ async function paintResult(d, token) {
   // v762 #381 既存 result_json の日本語中の不要な半角スペースを取り除いてから描画
   const r = stripJaSpacesDeep(d.result || {});
   const app = document.getElementById('app');
-  await initLabUsersCache();   // v1004 著者アバター 用
+  await initLabUsersCache();   // v1004 著者アバター用
   const shareUrl = location.origin + '/#/paper-summary/r/' + token;
   const pagesDir = d.pages_dir || null;
   const pagesCount = d.pages_count || 0;
@@ -634,7 +634,7 @@ async function paintResult(d, token) {
           <button class="btn ${isShared ? 'primary' : ''}" id="pt-share-toggle" data-on="${isShared ? 1 : 0}" style="font-size:12px; padding:3px 10px">
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
-        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (v1022 以降 課金なし)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
+        ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (v1022 以降課金なし)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
       </div>
     </div>
@@ -690,7 +690,7 @@ async function paintResult(d, token) {
   // v813 #405 ペアの全訳を作るボタン
   bindMakeFullTranslate(d);
   // v758 #377 やりなおす (本人のみ、保存 PDF で再処理)
-  // v1022 fb#480 中村さん指摘「システムの問題の可能性があるので、 課金はしないで」→ 課金なし に変更
+  // v1022 fb#480 中村さん指摘「システムの問題の可能性があるので、課金はしないで」→ 課金なしに変更
   document.getElementById('pt-redo')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     if (!confirm('保存された PDF で同じモデルで再処理します (課金なし)。続行しますか?')) return;
@@ -703,7 +703,7 @@ async function paintResult(d, token) {
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
   // v756 #372 公開 ON/OFF toggle (本人のみ)
-  // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
+  // v914 share_priced=1 の row は toggle で差額追加課金/返金。事前に確認プロンプト。
   document.getElementById('pt-share-toggle')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     const wasOn = btn.dataset.on === '1';
@@ -712,8 +712,8 @@ async function paintResult(d, token) {
       const paid = Number(d.cost_points || 0);
       const half = Math.floor(paid / 2);
       const msg = wasOn
-        ? `非公開に戻すと 半額割引 が 停止 して 差額 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`
-        : `🎁 公開 ON にすると 半額割引が発動 して ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`;
+        ? `非公開に戻すと半額割引が停止して差額 ${paid}pt が追加課金されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。続けますか?`
+        : `🎁 公開 ON にすると半額割引が発動して ${half}pt が返金されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。続けますか?`;
       if (!confirm(msg)) return;
     }
     btn.disabled = true;
@@ -734,7 +734,7 @@ async function paintResult(d, token) {
       openImageLightbox(el.dataset.ptZoom);
     });
   });
-  // v1004 著者カード の クリック → 著者ページ に 移動 (中村さん指摘「上に論文要約 と出るのは変」)。
+  // v1004 著者カードのクリック → 著者ページに移動 (中村さん指摘「上に論文要約と出るのは変」)。
   document.querySelectorAll('[data-pt-author]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -743,7 +743,7 @@ async function paintResult(d, token) {
       location.hash = '#/authors/' + encodeURIComponent(q);
     });
   });
-  // v1005 キーワード の クリック → 公開要約 の 検索
+  // v1005 キーワードのクリック → 公開要約の検索
   document.querySelectorAll('[data-pt-kw]').forEach(b => {
     b.addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -752,7 +752,7 @@ async function paintResult(d, token) {
       location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
     });
   });
-  // v1004 著者アバター Gravatar への 動的 差し替え
+  // v1004 著者アバター Gravatar への動的差し替え
   mountAuthorAvatars(document.getElementById('app'));
 }
 
@@ -765,9 +765,9 @@ function renderPaperCrossRefsAndCreate(d) {
   const hasFull = refs.some(x => x.kind === 'paper_full_translation');
   const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasFull;
   if (!refs.length && !canCreate) return '';
-  // v1020 中村さん指摘「共有とか本のPDFを開くとかのボタンの並びの下に、 全訳へとか
-  //   要約へみたいなボタンがあるけど、 そのまま横並びで提示して欲しい」→ 独立カードを
-  //   廃止して、 生ボタンHTMLだけ返す (呼び出し側の row にそのまま混ぜ込む)。
+  // v1020 中村さん指摘「共有とか本のPDFを開くとかのボタンの並びの下に、全訳へとか
+  //   要約へみたいなボタンがあるけど、そのまま横並びで提示して欲しい」→ 独立カードを
+  //   廃止して、生ボタンHTMLだけ返す (呼び出し側の row にそのまま混ぜ込む)。
   const refBtns = refs.map(x => `
     <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">
       ${x.kind === 'paper_full_translation' ? '📑 全訳へ' : '📄 要約へ'}
@@ -785,7 +785,7 @@ async function bindMakeFullTranslate(d) {
   const { openModal } = await import('../modal.js');
   btn.addEventListener('click', async () => {
     const html = `
-      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。 課金はポイント残高から。</p>
+      <p style="font-size:13px; margin:0 0 8px">この PDF で論文全訳を開始します。課金はポイント残高から。</p>
       <label class="field"><span class="lbl">方向</span>
         <select id="mft-dir" style="font-size:13px">
           <option value="en2ja" selected>英 → 日 (en2ja)</option>
@@ -855,8 +855,8 @@ function renderDetailedSections(sections, pagesDir, pagesCount) {
     </div>`;
 }
 
-// v954 リスト タイル 用 の 図 サムネ (fig=null なら 空 文字列)。 詳細ページ の renderFigure と 同じ
-//   background-position 方式 で region を 切り抜き、 タイル 内 に 64x80 の 小 サムネ 表示。
+// v954 リストタイル用の図サムネ (fig=null なら空文字列)。詳細ページの renderFigure と同じ
+//   background-position 方式で region を切り抜き、タイル内に 64x80 の小サムネ表示。
 function renderTileThumb(thumb) {
   if (!thumb || !thumb.url) return '';
   const w = 64, h = 80;
@@ -873,15 +873,15 @@ function renderTileThumb(thumb) {
   return `<div style="flex:none; width:${w}px; height:${h}px; background:#fff url('${escapeHtml(thumb.url)}') no-repeat ${bgPos}/100% auto; border:1px solid #e5e7eb; border-radius:4px"></div>`;
 }
 
-// v955 要約側でも 著者カード を 出したい。 r.authors は 文字列 (「Kelly Mack, Emma McDonnell, ...」)
-//   なので split して 名前 のみ の 簡易カード。 全訳側 (paper_translate_full.js) と同じ
-//   avatar / card スタイル に 揃える。
+// v955 要約側でも著者カードを出したい。 r.authors は文字列 (「Kelly Mack, Emma McDonnell, ...」)
+//   なので split して名前のみの簡易カード。全訳側 (paper_translate_full.js) と同じ
+//   avatar / card スタイルに揃える。
 function ptParseAuthorsFromString(s) {
   if (!s || typeof s !== 'string') return [];
   const cleaned = s
     .replace(/,\s*and\s+/gi, ', ')   // "A, B, and C" → "A, B, C"
     .replace(/\s+and\s+/gi, ', ')    // "A and B"    → "A, B"
-    .replace(/\bet al\.?/gi, '');    // 「et al.」 は 落とす
+    .replace(/\bet al\.?/gi, '');    // 「et al.」は落とす
   return cleaned.split(/[,;、]/)
     .map(x => x.trim())
     .filter(x => x.length > 1 && x.length <= 80);
@@ -895,7 +895,7 @@ function ptInitialsAvatar(name) {
   for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
   return { initials: initials.toUpperCase().slice(0, 2), color: `hsl(${hash % 360}, 55%, 55%)` };
 }
-// v1005 中村さん要望「要約にもキーワードが欲しい」。 全訳 view と同スタイルで、
+// v1005 中村さん要望「要約にもキーワードが欲しい」。全訳 view と同スタイルで、
 //   タップで公開要約一覧の検索 (#/paper-summary?q=…) に飛ぶ。
 function ptRenderKeywords(kws) {
   if (!Array.isArray(kws)) return '';
@@ -937,28 +937,28 @@ function renderFigure(fig, pagesDir, pagesCount) {
   const inRange = page && pagesCount && page >= 1 && page <= pagesCount;
   const imgUrl = (inRange && pagesDir) ? pageImgUrl(pagesDir, page, pagesCount) : null;
   // v954 crop 復活: background-image + background-position で region 位置を表示。
-  //   region=full なら 全体、 top/middle/bottom は 該当 3 分の 1 部分を 表示。
-  //   タップ で lightbox に 元 の フル ページ を 表示 (region の 精度 が 微妙 でも
-  //   本体 は 見れる)。
+  //   region=full なら全体、 top/middle/bottom は該当 3 分の 1 部分を表示。
+  //   タップで lightbox に元のフルページを表示 (region の精度が微妙でも
+  //   本体は見れる)。
   const wrap = 220;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
-  // v996 中村さんアイデア: 図 は 下 に キャプション、 表 は 上 に キャプション あるので、
-  //   pdftotext -bbox-layout で キャプション の y 座標 を 特定 して 精密 crop 可能。
-  //   crop_y_pct / crop_h_pct が result_json に 付与 されて いれば それ を 使う (精密)。
-  //   無ければ 全ページ 表示 (v995 の fallback、 region 推定 の 不精度 は 使わない)。
+  // v996 中村さんアイデア: 図は下にキャプション、表は上にキャプションあるので、
+  //   pdftotext -bbox-layout でキャプションの y 座標を特定して精密 crop 可能。
+  //   crop_y_pct / crop_h_pct が result_json に付与されていればそれを使う (精密)。
+  //   無ければ全ページ表示 (v995 の fallback、 region 推定の不精度は使わない)。
   const cropYPct = Number(fig?.crop_y_pct);
   const cropHPct = Number(fig?.crop_h_pct);
-  // v997 段組対応: crop_x_pct / crop_w_pct が あれば 該当 段 だけ 切り取る
+  // v997 段組対応: crop_x_pct / crop_w_pct があれば該当段だけ切り取る
   const cropXPct = Number.isFinite(Number(fig?.crop_x_pct)) ? Number(fig.crop_x_pct) : 5;
   const cropWPct = Number.isFinite(Number(fig?.crop_w_pct)) ? Number(fig.crop_w_pct) : 90;
   const hasCrop = Number.isFinite(cropYPct) && Number.isFinite(cropHPct) && cropHPct > 0;
   let imgElement;
   if (hasCrop) {
-    // wrap は 表示幅 (crop 領域 の 表示幅)。 A4 aspect 1.32 で crop 領域 の 実 高さ は
-    //   pageH * cropHPct/100、 幅 は pageW * cropWPct/100。 wrap 幅 に 合わせて 高さ 計算。
+    // wrap は表示幅 (crop 領域の表示幅)。 A4 aspect 1.32 で crop 領域の実高さは
+    //   pageH * cropHPct/100、幅は pageW * cropWPct/100。 wrap 幅に合わせて高さ計算。
     // 実 aspect = (cropHPct*pageH) / (cropWPct*pageW) = cropHPct/cropWPct * 1.32
     const displayH = Math.round(wrap * 1.32 * cropHPct / cropWPct);
-    // bg-size: 幅 を 100/(cropWPct/100)% = 100*100/cropWPct 倍、 高 も 同様。
+    // bg-size: 幅を 100/(cropWPct/100)% = 100*100/cropWPct 倍、高も同様。
     const bgSizeW = (10000 / cropWPct).toFixed(1);
     const bgSizeH = (10000 / cropHPct).toFixed(1);
     const bgPosX  = (100 - cropWPct > 0 ? cropXPct * 100 / (100 - cropWPct) : 0).toFixed(1);
@@ -1021,7 +1021,7 @@ function renderFactCheck(fc) {
       <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
         ${clean
           ? '要約と原文の突合、および引用文献の実在性で問題は見つかりませんでした。'
-          : `要約に <span class="bold">${issues.length}</span> 件の懸念、 引用文献に <span class="bold">${suspSources.length}</span> 件の疑いあり。 下記を確認してください。`}
+          : `要約に <span class="bold">${issues.length}</span> 件の懸念、引用文献に <span class="bold">${suspSources.length}</span> 件の疑いあり。下記を確認してください。`}
       </div>
       ${verifiedSecs.length ? `
         <div style="font-size:11.5px; color:#15803d; margin-top:4px">
@@ -1112,16 +1112,16 @@ function renderRqHypothesis(rh) {
   // v768 #387 「💡 示唆:」ラベルは廃止 (GPT が値の先頭にも「示唆:」を書く場合があり
   //   「💡 示唆: 示唆: …」になってしまうため)。値の先頭の「示唆:」「結果:」等も strip。
   const stripPrefix = (s) => String(s || '').replace(/^\s*(示唆|結果|答え)\s*[:：]\s*/u, '').trim();
-  // v1017 中村さん要望「何ページ目にあるかも明記、 RQ / 仮説 の 書き方の 勉強に なるため 原文も」
+  // v1017 中村さん要望「何ページ目にあるかも明記、 RQ / 仮説の書き方の勉強になるため原文も」
   const pageBadge = (p) => (typeof p === 'number' && p > 0)
     ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#4f46e5; border:1px solid #c7d2fe; margin-left:6px">p.${p}</span>`
     : '';
   const pageBadgeAmber = (p) => (typeof p === 'number' && p > 0)
     ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:#fff; color:#a16207; border:1px solid #fde68a; margin-left:6px">p.${p}</span>`
     : '';
-  // v1018 中村さん指摘「RQは、 RQ 自体の 原文も 示してね」→ 折り畳みを 廃止 して 常に 表示。
-  // v1020 中村さん再要望「仮説とRQは、 和訳の下に、 原文 (英語) も 示して欲しい」→
-  //   「原文:」ラベルを添えて、 何が英語原文なのか一目で分かる形に。
+  // v1018 中村さん指摘「RQは、 RQ 自体の原文も示してね」→ 折り畳みを廃止して常に表示。
+  // v1020 中村さん再要望「仮説とRQは、和訳の下に、原文 (英語) も示して欲しい」→
+  //   「原文:」ラベルを添えて、何が英語原文なのか一目で分かる形に。
   const origBlock = (orig, color) => {
     const s = String(orig || '').trim();
     if (!s) return '';

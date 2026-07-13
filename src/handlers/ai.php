@@ -1254,8 +1254,8 @@ function ai_exp_plan_check_delete(PDO $pdo, array $cfg, int $id): void {
 
 // v1047 Scrapbox URL → ページテキスト取得 (中村さん要望「実験計画書は Scrapbox に
 //   あるので、Scrapbox の URL を与えても良いようにしても良いかも。 Scrapbox の Cookie
-//   が設定されている場合だけれど」)。 既存の cosense v2 PAT 経路を使い回す (各ユーザ
-//   個別 PAT。 未登録なら 412 でエラーメッセージ)。 URL は
+//   が設定されている場合だけれど」)。既存の cosense v2 PAT 経路を使い回す (各ユーザ
+//   個別 PAT。未登録なら 412 でエラーメッセージ)。 URL は
 //   https://scrapbox.io/{project}/{title} 形式を想定。
 function ai_exp_plan_fetch_scrapbox(PDO $pdo, array $cfg): void {
     require_once __DIR__ . '/cosense.php';
@@ -1275,7 +1275,7 @@ function ai_exp_plan_fetch_scrapbox(PDO $pdo, array $cfg): void {
     $configured = cosense_project($cfg);
     if ($project !== $configured) {
         throw new ApiException('bad_request',
-            "対応プロジェクトは {$configured} のみ (指定: {$project})。 別プロジェクトから取り込むには本文を手動でコピー&ペーストしてください。", 400);
+            "対応プロジェクトは {$configured} のみ (指定: {$project})。別プロジェクトから取り込むには本文を手動でコピー&ペーストしてください。", 400);
     }
     $pat = cosense_user_pat($pdo, $uid);
     if ($pat === null) {
@@ -2477,40 +2477,40 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
     ]);
 }
 
-// v1066 fb#486 URL → PDF 取得 (DeepResearch → 要約/全訳 用)。 認証必須、 安全対策:
+// v1066 fb#486 URL → PDF 取得 (DeepResearch → 要約/全訳用)。認証必須、安全対策:
 //   - スキーム http/https のみ
 //   - private IP (10.x, 172.16-31.x, 192.168.x, 127.x, localhost) 禁止 (SSRF 対策)
 //   - Content-Type or マジックバイト (%PDF-) 確認
 //   - サイズ 30 MB まで
 //   - タイムアウト 30 秒
-//   - arXiv abs URL は 自動で pdf URL に 書き換え (arxiv.org/abs/xxxx → arxiv.org/pdf/xxxx.pdf)
+//   - arXiv abs URL は自動で pdf URL に書き換え (arxiv.org/abs/xxxx → arxiv.org/pdf/xxxx.pdf)
 function ai_fetch_pdf_from_url(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $url = trim((string)require_field($body, 'url'));
     if (!preg_match('#^https?://#i', $url)) {
-        throw new ApiException('bad_request', 'http:// or https:// の URL が 必要', 400);
+        throw new ApiException('bad_request', 'http:// or https:// の URL が必要', 400);
     }
     // arXiv abs → pdf 自動書き換え
     if (preg_match('#^https?://(?:www\.)?arxiv\.org/abs/([^/?#]+)#i', $url, $m)) {
         $url = 'https://arxiv.org/pdf/' . rawurlencode($m[1]) . '.pdf';
     }
-    // 同名 preprint サーバ pattern (openreview, biorxiv 等) は 素通し、 その他は そのまま
+    // 同名 preprint サーバ pattern (openreview, biorxiv 等) は素通し、その他はそのまま
     $parsed = @parse_url($url);
     $host = strtolower((string)($parsed['host'] ?? ''));
     if ($host === '' || in_array($host, ['localhost', '0.0.0.0', '127.0.0.1'], true)) {
-        throw new ApiException('bad_request', 'ローカルアドレスは 禁止', 400);
+        throw new ApiException('bad_request', 'ローカルアドレスは禁止', 400);
     }
-    // 名前解決 → 私設 IP か 確認
+    // 名前解決 → 私設 IP か確認
     $ip = @gethostbyname($host);
     if ($ip && $ip !== $host) {
         $bin = @inet_pton($ip);
-        if ($bin === false) throw new ApiException('bad_request', 'IP 解決 失敗', 400);
+        if ($bin === false) throw new ApiException('bad_request', 'IP 解決失敗', 400);
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            throw new ApiException('bad_request', 'private / reserved IP は 禁止 (SSRF 対策)', 403);
+            throw new ApiException('bad_request', 'private / reserved IP は禁止 (SSRF 対策)', 403);
         }
     }
-    // curl で 取得
+    // curl で取得
     $tmpPath = tempnam(sys_get_temp_dir(), 'labpay_dr_pdf_');
     if ($tmpPath === false) throw new ApiException('server_error', 'tempfile 作成失敗', 500);
     $fp = fopen($tmpPath, 'wb');
@@ -2540,20 +2540,20 @@ function ai_fetch_pdf_from_url(PDO $pdo, array $cfg): void {
     $size = filesize($tmpPath) ?: 0;
     if ($size > 30 * 1024 * 1024) {
         @unlink($tmpPath);
-        throw new ApiException('bad_request', "PDF が 大きすぎ (${size} bytes、 上限 30 MB)", 400);
+        throw new ApiException('bad_request', "PDF が大きすぎ (${size} bytes、上限 30 MB)", 400);
     }
     if ($size < 100) {
         @unlink($tmpPath);
-        throw new ApiException('bad_request', 'PDF 実体が 空 or 短すぎ', 400);
+        throw new ApiException('bad_request', 'PDF 実体が空 or 短すぎ', 400);
     }
-    // マジックバイト確認 (Content-Type は 信頼できない サイトが 多い)
+    // マジックバイト確認 (Content-Type は信頼できないサイトが多い)
     $head = (string)@file_get_contents($tmpPath, false, null, 0, 5);
     if ($head !== '%PDF-') {
         @unlink($tmpPath);
         throw new ApiException('bad_request',
-            "URL は PDF ではありません (Content-Type: $ct、 先頭: " . bin2hex(substr($head, 0, 5)) . ")。 論文ページ の HTML の場合は 「PDF」 リンクを 探して 直接 の PDF URL で 試してください。", 400);
+            "URL は PDF ではありません (Content-Type: $ct、先頭: " . bin2hex(substr($head, 0, 5)) . ")。論文ページの HTML の場合は「PDF」リンクを探して直接の PDF URL で試してください。", 400);
     }
-    // PDF を そのまま binary で 返す
+    // PDF をそのまま binary で返す
     header('Content-Type: application/pdf');
     header('Content-Length: ' . $size);
     header('Content-Disposition: inline; filename="paper.pdf"');

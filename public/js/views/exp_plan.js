@@ -69,7 +69,7 @@ export async function renderExpPlan() {
   loadList();
 }
 
-// v1047 Scrapbox URL → タイトル+本文 自動取り込み (中村さん要望「実験計画書は
+// v1047 Scrapbox URL → タイトル+本文自動取り込み (中村さん要望「実験計画書は
 //   Scrapbox にあるので、Scrapbox の URL を与えても良いようにしても良いかも」)。
 async function onFetchScrapbox() {
   const url = prompt('Scrapbox のページ URL を入力してください\n例: https://scrapbox.io/nkmr-lab/眉毛対称ガイドの実験計画');

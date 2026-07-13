@@ -36,15 +36,15 @@ export async function renderDeepResearch() {
           <select id="dr-depth"><option value="">読み込み中…</option></select>
           <div class="hint-sm" id="dr-cost-info" style="font-size:12px; margin-top:4px; color:#6b21a8"></div>
         </label>
-        <!-- v916 共有=半額割引 を もっと目立たせる。 チェックボックスに 「ON で 半額!」 を 直書き。 -->
+        <!-- v916 共有=半額割引をもっと目立たせる。チェックボックスに「ON で半額!」を直書き。 -->
         <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
           <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
             <input type="checkbox" id="dr-auto-share" style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-            <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で 半額 になります!</span>
+            <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で半額になります!</span>
           </label>
           <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
-            完了と同時に 公開 ON にする (= みんなの検索に 載せる)。 研究室 全体で 共有すると 誰かの 参考になる 資産 なので、 共有 なら 半額割引。<br>
-            あとから 公開 ON にすると 半額分 返金 / 公開 OFF に戻すと 半額割引 分 追加課金 されます。
+            完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>
+            あとから公開 ON にすると半額分返金 / 公開 OFF に戻すと半額割引分追加課金されます。
           </div>
         </div>
         <div class="row" style="gap:6px; justify-content:flex-end">
@@ -74,7 +74,7 @@ export async function renderDeepResearch() {
   await loadHistory();
   await loadSharedList('');
   document.getElementById('dr-go').addEventListener('click', go);
-  // v926 refs 詳細 の 「🔎 関連 論文 を 探す」 から の prefill を 拾って textarea に セット。
+  // v926 refs 詳細の「🔎 関連論文を探す」からの prefill を拾って textarea にセット。
   try {
     const prefill = sessionStorage.getItem('labpay.dr.prefill');
     if (prefill) {
@@ -103,20 +103,20 @@ async function loadSettings() {
   const btn = document.getElementById('dr-go');
   if (sel && cachedSettings.tiers) {
     const def = cachedSettings.default_depth || 'standard';
-    // v916 選択肢 に 「共有なら Xpt」 を 明記 (画面で 見えるまま 比較 できるように)
+    // v916 選択肢に「共有なら Xpt」を明記 (画面で見えるまま比較できるように)
     sel.innerHTML = Object.entries(cachedSettings.tiers).map(([k, t]) =>
       `<option value="${escapeHtml(k)}" ${k === def ? 'selected' : ''}>${escapeHtml(t.label)} — ${t.cost}pt (🎁 共有なら ${Math.floor(Number(t.cost) / 2)}pt)</option>`).join('');
     const refresh = () => {
       const k = sel.value;
       const t = cachedSettings.tiers[k];
-      // v914 共有 で 半額割引
+      // v914 共有で半額割引
       const shared = !!document.getElementById('dr-auto-share')?.checked;
       const base = Number(t.cost) || 0;
       const pt = shared ? Math.floor(base / 2) : base;
       if (info) {
         info.innerHTML = `選択中: ${escapeHtml(t.label)} ・ 1 回 ${pt}pt (深さにより 1-15 分)` +
-          (shared ? ` <span style="color:#15803d">(公開 ON、 半額割引 = 基本 ${base}pt の 半額)</span>`
-                  : ` <span style="color:#6b7280">(非公開、 基本額)</span>`);
+          (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+                  : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
       }
       if (btn) btn.textContent = `🔎 調査開始 (${pt}pt)`;
     };
@@ -258,7 +258,7 @@ async function go() {
   const root = document.getElementById('dr-result');
   root.innerHTML = '<div class="card"><div class="muted">⏳ OpenAI に依頼中…</div></div>';
   try {
-    // v913 auto_share を渡して cost を 基本額 or 倍額 に
+    // v913 auto_share を渡して cost を基本額 or 倍額に
     const auto_share = !!document.getElementById('dr-auto-share')?.checked;
     const r = await post('/api/ai/deep_research', { query, depth, auto_share: auto_share ? 1 : 0 });
     location.hash = '#/deep-research/r/' + r.share_token;
@@ -329,13 +329,13 @@ async function refreshShared(token) {
     if (d.status === 'pending' || d.status === 'processing') {
       // v952 経過時間を「⏳ Web を横断調査中…」の右側に表示 (ユーザ要望)
       const drAgeMin = d.created_at ? Math.floor((Date.now() - new Date(String(d.created_at).replace(' ', 'T') + '+09:00').getTime()) / 60000) : 0;
-      // v968 gpt-5 deep tier は 5-10 分 無反応 後 に 一気 に 進む こと が ある ので
-      //   最初 の 数分 は 冷静 に 待つ よう 案内、 10 分 超で stale と 見なして 再投入 ボタン。
+      // v968 gpt-5 deep tier は 5-10 分無反応後に一気に進むことがあるので
+      //   最初の数分は冷静に待つよう案内、 10 分超で stale と見なして再投入ボタン。
       const isOwnerDR = state.me?.id && Number(d.author_id) === Number(state.me.id);
       const isStaleDR = drAgeMin >= 10;
       const warmupHint = drAgeMin < 5 && (d.progress_text || '').includes('0 回')
         ? `<div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:0 6px 6px 0; font-size:12.5px">
-             💡 gpt-5 (deep) は 最初 の 5-10 分 は 「0 回 / 0 段」 のまま 無反応 で 待たされる こと が あります (OpenAI 側 の キュー / warmup)。 いきなり 一気 に 進む ので しばらく お待ちください。
+             💡 gpt-5 (deep) は最初の 5-10 分は「0 回 / 0 段」のまま無反応で待たされることがあります (OpenAI 側のキュー / warmup)。いきなり一気に進むのでしばらくお待ちください。
            </div>` : '';
       const staleBannerDR = (isStaleDR && isOwnerDR) ? `
         <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
@@ -387,15 +387,15 @@ async function refreshShared(token) {
       shareDialog('🔎 Deep Research: ' + titleShort, '#/deep-research/r/' + token,
         { pdfTitle: `Deep Research - ${shortQ}` });
     });
-    // v914 share_priced=1 の row は toggle で 差額 追加課金/返金。 事前に確認プロンプト。
+    // v914 share_priced=1 の row は toggle で差額追加課金/返金。事前に確認プロンプト。
     document.getElementById('dr-share-toggle')?.addEventListener('change', async (e) => {
       const newOn = e.target.checked;
       if (d.share_priced) {
         const paid = Number(d.cost_points || 0);
         const half = Math.floor(paid / 2);
         const msg = newOn
-          ? `🎁 公開 ON にすると 半額割引 が 発動 して ${half}pt が 返金 されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。 続けますか?`
-          : `非公開に戻すと 半額割引 が 停止 して 差額 ${paid}pt が 追加課金 されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。 続けますか?`;
+          ? `🎁 公開 ON にすると半額割引が発動して ${half}pt が返金されます。 (現在 ${paid}pt 支払済 → ${paid - half}pt に)。続けますか?`
+          : `非公開に戻すと半額割引が停止して差額 ${paid}pt が追加課金されます。 (現在 ${paid}pt 支払済 → ${paid + paid}pt に)。続けますか?`;
         if (!confirm(msg)) {
           e.target.checked = !newOn;
           return;
@@ -526,7 +526,7 @@ function paintResult(d) {
 
     ${renderDrFactCheck(r.fact_check)}
   `;
-  // v1064 fb#486 出典アクションボタン の click を wire (要約検索 / 全訳検索 / Zotero コピー)
+  // v1064 fb#486 出典アクションボタンの click を wire (要約検索 / 全訳検索 / Zotero コピー)
   root.querySelectorAll('[data-dr-src-act]').forEach(b => {
     b.addEventListener('click', async () => {
       const act = b.dataset.drSrcAct;
@@ -534,15 +534,15 @@ function paintResult(d) {
         const q = b.dataset.drQ || '';
         const url = b.dataset.drUrl || '';
         const isSum = act === 'summary';
-        // まず 既存検索 に飛ばす。 URL が あれば ?pdfurl= も 添える (v1066 で 論文要約 view
-        //   側 が pdfurl を受け取り 「PDF を 取得して 新規要約」 ボタンを 出す)。
+        // まず既存検索に飛ばす。 URL があれば ?pdfurl= も添える (v1066 で論文要約 view
+        //   側が pdfurl を受け取り「PDF を取得して新規要約」ボタンを出す)。
         const base = isSum ? '#/paper-summary' : '#/paper-translate-full';
         const params = new URLSearchParams();
         if (q) params.set('q', q);
         if (url) params.set('pdfurl', url);
         location.hash = base + (params.toString() ? '?' + params.toString() : '');
       } else if (act === 'refs') {
-        // v1065 中村さん明確化: 研究室内 の 文献管理 (/api/refs) に POST。 成功したら #/refs/{id} へ。
+        // v1065 中村さん明確化: 研究室内の文献管理 (/api/refs) に POST。成功したら #/refs/{id} へ。
         let payload;
         try { payload = JSON.parse(b.dataset.drRefPayload || '{}'); }
         catch (_) { toast('payload 解析失敗'); return; }
@@ -558,7 +558,7 @@ function paintResult(d) {
             doi: '', arxiv_id: '', year: '', abstract: '', extra: {},
           });
           b.textContent = '✅ 追加済';
-          toast('📚 文献に登録しました → 詳細ページに 移動');
+          toast('📚 文献に登録しました → 詳細ページに移動');
           setTimeout(() => { location.hash = '#/refs/' + r.id; }, 400);
         } catch (e) {
           toast('登録失敗: ' + (e.message || e));
@@ -592,8 +592,8 @@ function renderDrFactCheck(fc) {
       <div class="bold" style="color:${barColor}">🔍 出典実在性の自己検証</div>
       <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
         ${clean
-          ? `全 ${verifiedCount} 件の出典で実在性を確認しました。 疑わしい出典はありません。`
-          : `実在確認済 ${verifiedCount} 件、 疑わしい出典 <span class="bold">${susp.length}</span> 件。 下記を確認してください。`}
+          ? `全 ${verifiedCount} 件の出典で実在性を確認しました。疑わしい出典はありません。`
+          : `実在確認済 ${verifiedCount} 件、疑わしい出典 <span class="bold">${susp.length}</span> 件。下記を確認してください。`}
       </div>
       ${susp.map(s => `
         <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">
@@ -613,30 +613,30 @@ function renderDrFactCheck(fc) {
     </div>`;
 }
 
-// v1064 fb#486 中村さん要望「DeepResearch から、 zotero や、 要約、 全訳へ 行く機能を作って」
-//   v1065 中村さん明確化: 「Zotero」 は 研究室内 の 文献管理機能 (/#/refs、 /api/refs) の
-//   ことだった → 「📚 文献に追加 (研究室内)」 に変更。 直接 POST /api/refs で 登録し、
-//   登録後 は #/refs/{id} に 遷移して 詳細確認可。
+// v1064 fb#486 中村さん要望「DeepResearch から、 zotero や、要約、全訳へ行く機能を作って」
+//   v1065 中村さん明確化: 「Zotero」は研究室内の文献管理機能 (/#/refs、 /api/refs) の
+//   ことだった → 「📚 文献に追加 (研究室内)」に変更。直接 POST /api/refs で登録し、
+//   登録後は #/refs/{id} に遷移して詳細確認可。
 function renderSourceActions(src, keyId) {
   const title = (src.title || src.label || '').replace(/"/g, '');
   const url = src.url || '';
   const venue = src.venue || '';
   const author = src.first_author || '';
-  const searchQ = title.slice(0, 80);  // 検索用 に トリム
+  const searchQ = title.slice(0, 80);  // 検索用にトリム
   const refPayload = JSON.stringify({
     title,
     url,
     venue,
     authors: author ? [author] : [],
   });
-  // v1066 中村さん指摘「ボタンの横幅大きすぎ」→ .row (flex で 子要素が 伸びる) を 使わず、
-  //   inline-block + flex: 0 0 auto で 文字サイズだけ の 幅に。
+  // v1066 中村さん指摘「ボタンの横幅大きすぎ」→ .row (flex で子要素が伸びる) を使わず、
+  //   inline-block + flex: 0 0 auto で文字サイズだけの幅に。
   const btnStyle = 'font-size:11px; padding:3px 10px; flex:0 0 auto; white-space:nowrap; display:inline-flex; width:auto';
   return `
     <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:flex-start">
-      ${title && url ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この 論文 の PDF を URL から 取得して 要約 を 作る (or 既存 の 要約 を 検索)">📝 要約</button>` : title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内 の 論文要約 を 検索">📝 要約検索</button>` : ''}
-      ${title && url ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この 論文 の PDF を URL から 取得して 全訳 を 作る (or 既存 の 全訳 を 検索)">📄 全訳</button>` : title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内 の 論文全訳 を 検索">📄 全訳検索</button>` : ''}
-      ${title ? `<button class="btn" data-dr-src-act="refs" data-dr-ref-payload="${escapeHtml(refPayload)}" style="${btnStyle}" title="研究室内 の 文献管理 (#/refs) に この 文献を 登録">📚 文献に追加</button>` : ''}
+      ${title && url ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この論文の PDF を URL から取得して要約を作る (or 既存の要約を検索)">📝 要約</button>` : title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内の論文要約を検索">📝 要約検索</button>` : ''}
+      ${title && url ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この論文の PDF を URL から取得して全訳を作る (or 既存の全訳を検索)">📄 全訳</button>` : title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内の論文全訳を検索">📄 全訳検索</button>` : ''}
+      ${title ? `<button class="btn" data-dr-src-act="refs" data-dr-ref-payload="${escapeHtml(refPayload)}" style="${btnStyle}" title="研究室内の文献管理 (#/refs) にこの文献を登録">📚 文献に追加</button>` : ''}
     </div>`;
 }
 
