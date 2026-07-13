@@ -3295,14 +3295,15 @@ function renderTestWizard() {
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
       <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード (迷ったら)</summary>
       <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
-        <div><b>Q1. 従属変数のスケールは？</b></div>
+        <div><b>Q1. 差を測定したい変数 (従属変数) の 数値の特性は？</b></div>
+        <div class="hint-sm" style="margin-bottom:4px">実験で 「手法間の差」 を 見たい 数値の 性質を選んでください。</div>
         <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-          ${opt('scale', 'continuous', '連続値 (RT, 得点, 濃度等)')}
-          ${opt('scale', 'ordinal', '順序尺度 (リッカート)')}
-          ${opt('scale', 'binary_within', '2 値 (正答/誤答、同じ参加者)')}
-          ${opt('scale', 'count_within', '回数 (エラー数/発言回数、同じ参加者)')}
-          ${opt('scale', 'categorical', '名義 (カテゴリ、群比較)')}
-          ${opt('scale', 'relation', '2 変数の関係 (相関)')}
+          ${opt('scale', 'continuous', '連続値 (反応時間、得点、濃度 等)')}
+          ${opt('scale', 'ordinal', '順序尺度 (リッカート 5/7 段階 等)')}
+          ${opt('scale', 'binary_within', '2 値 (正答/誤答、成功/失敗、同じ参加者)')}
+          ${opt('scale', 'count_within', '回数 (エラー数、発言回数、同じ参加者)')}
+          ${opt('scale', 'categorical', '名義 (カテゴリ選択、群比較)')}
+          ${opt('scale', 'relation', '2 変数の関係を見たい (相関)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
           <div><b>Q2. 比較する手法 (or 条件・群) の数？</b></div>
@@ -3401,67 +3402,76 @@ function renderAnalysisGuide() {
 function renderStatFlowchartSVG() {
   return `
 <pre style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size:12px; line-height:1.5; background:#fff; padding:10px 12px; border-radius:6px; border:1px solid #d1fae5; overflow-x:auto; margin:0">
-【従属変数のスケールは？】
+【差を測定したい変数 (従属変数) の 数値の特性は？】
+(ウィザード Q1 の 6 択に対応)
 
-━━━ 連続 or 順序尺度 ━━━
+━━━ ① 連続値 (反応時間、得点、濃度 等) ━━━
   │
-  ├─ 【比較する群の数】
-  │   ├─ 1 群 (基準値との比較)
-  │   │   └─ 正規性 OK  → 1 標本 t 検定
-  │   │      正規性 NG → Wilcoxon 符号順位検定
+  ├─ 【比較する手法 (or 条件・群) の数】
+  │   ├─ 1 手法 (基準値との比較)
+  │   │   ├─ 正規性 OK  → 👤 1 標本 t 検定  [このアプリで対応]
+  │   │   └─ 正規性 NG → Wilcoxon 符号順位検定
   │   │
-  │   ├─ 2 群
+  │   ├─ 2 手法
   │   │   ├─ 独立 (別参加者)
-  │   │   │   ├─ 正規性 + 等分散 OK → 2 標本 t 検定
+  │   │   │   ├─ 正規性 + 等分散 OK → 📏 対応のない t 検定  [このアプリで対応]
   │   │   │   ├─ 正規性 OK / 等分散 NG → Welch t 検定
   │   │   │   └─ 正規性 NG → Mann-Whitney U 検定
   │   │   └─ 対応 (同じ参加者)
-  │   │       ├─ 差の正規性 OK → 対応 t 検定
+  │   │       ├─ 差の正規性 OK → 📎 対応のある t 検定  [このアプリで対応]
   │   │       └─ 差の正規性 NG → Wilcoxon 符号順位検定
   │   │
-  │   └─ 3 群以上
+  │   └─ 3 手法以上
   │       ├─ 独立
-  │       │   ├─ 正規性 + 等分散 → 一元配置 ANOVA
+  │       │   ├─ 正規性 + 等分散 → 📊 一元配置 ANOVA  [このアプリで対応]
   │       │   └─ 正規性 NG → Kruskal-Wallis
-  │       └─ 対応
-  │           ├─ 球面性 OK → 反復測定 ANOVA (このアプリで対応)
-  │           ├─ 球面性 NG → GG or HF 補正反復測定 ANOVA (このアプリで ε 指定可)
+  │       └─ 対応 (同じ参加者)
+  │           ├─ 球面性 OK → 🔁 反復測定 ANOVA  [このアプリで対応]
+  │           ├─ 球面性 NG → 🔁 反復測定 ANOVA + GG/HF 補正  [このアプリで ε 指定可]
   │           └─ 正規性 NG → Friedman 検定
   │
-  ├─ 【複雑デザイン (2 要因以上、参加者 × 刺激交差、 unbalanced 等)】
-  │   → LMM (lme4::lmer) / GLMM (lme4::glmer)
-  │      + emmeans で事後対比
-  │
-  └─ 【関係の強さ】
-      ├─ 2 変数の直線関係    → Pearson 相関 r
-      ├─ 順位の関係           → Spearman ρ / Kendall τ
-      └─ 予測 / 因果効果      → 線形回帰 / 重回帰 / MLR
-                                (交絡変数をモデルに投入)
+  └─ 【複雑デザイン (2 要因以上、参加者 × 刺激交差、 unbalanced 等)】
+      ├─ 参加者内 2 条件 → 🧠 LMM 2 レベル  [このアプリで対応]
+      ├─ 参加者 × 刺激 交差 → 🧠 LMM 3 レベル  [このアプリで対応]
+      └─ さらに複雑 → LMM/GLMM (lme4::lmer / glmer) + emmeans
 
-━━━ 名義尺度 (カテゴリ) ━━━
+━━━ ② 順序尺度 (リッカート 5/7 段階 等) ━━━
   │
-  ├─ 【1 変数の分布】
-  │   └─ カテゴリ観測数 → χ² 適合度検定
-  │
-  ├─ 【2 変数の連関】
-  │   ├─ 大きな標本 → χ² 独立性検定
-  │   ├─ 期待度数 <5 のセルあり → Fisher 直接確率検定
-  │   └─ 対応あり (Before/After 2値) → McNemar 検定
-  │
-  └─ 【2 値アウトカムの予測】
-      → ロジスティック回帰 / GLMM (family=binomial)
+  ├─ 参加者内 2 条件 → 📶 順序ロジット GLMM  [このアプリで対応]
+  ├─ 参加者内 3+ 条件 → 累積ロジット + participant random intercept
+  ├─ 独立 → Cumulative link model / Mann-Whitney U / Kruskal-Wallis
+  └─ 近似 OK なら → t/ANOVA/rmANOVA でも 概算可 (中央付近が 山型なら)
 
-━━━ 回数 (カウント) ━━━
+━━━ ③ 2 値 (正答/誤答、成功/失敗、同じ参加者) ━━━
   │
-  ├─ 平均 ≈ 分散  → Poisson GLMM (このアプリで対応)
-  ├─ 分散 >> 平均 → 負の二項 GLMM (過分散、このアプリで対応)
+  ├─ 参加者内 2 条件 → 🎯 Logistic GLMM  [このアプリで対応]
+  ├─ 独立 2 群 (別参加者) → ロジスティック回帰 / 2×2 χ² / Fisher
+  └─ 対応 Before/After 2 値 → McNemar 検定
+
+━━━ ④ 回数 (エラー数、発言回数、同じ参加者) ━━━
+  │
+  ├─ 平均 ≈ 分散  → 📊 Poisson GLMM  [このアプリで対応]
+  ├─ 分散 >> 平均 → 📈 負の二項 GLMM  [このアプリで対応]
   └─ ゼロが大量  → Zero-inflated Poisson / NB
 
-━━━ 順序尺度 (リッカート等) ━━━
+━━━ ⑤ 名義 (カテゴリ選択、群比較) ━━━
   │
-  ├─ 参加者内 2 条件 → 📶 順序ロジット GLMM (このアプリで対応)
-  ├─ 参加者内 3+ 条件 → 累積ロジット + participant random intercept
-  └─ 独立 → Cumulative link model / Mann-Whitney U / Kruskal-Wallis
+  ├─ 【1 変数の分布】
+  │   └─ カテゴリ観測数 → ⁉ χ² 適合度検定  [このアプリで対応]
+  │
+  └─ 【2 変数の連関】
+      ├─ 大きな標本 → ⁉ χ² 独立性検定  [このアプリで対応 (df 指定)]
+      └─ 期待度数 <5 のセルあり → Fisher 直接確率検定
+
+━━━ ⑥ 2 変数の関係を見たい (相関) ━━━
+  │
+  ├─ 直線関係     → 🔗 Pearson 相関 r  [このアプリで対応]
+  ├─ 順位の関係   → Spearman ρ / Kendall τ
+  └─ 予測 / 因果  → 線形回帰 / 重回帰 (交絡変数をモデルに投入)
+
+━━━ ⑦ ベイズ推論 (頻度論の代わりに 事後分布で 判定) ━━━
+  │
+  └─ 対応 t 検定 → ☯ ベイズ (JZS BF10) 対応 t  [このアプリで対応、 固定 n / 逐次 SBF]
 </pre>`;
 }
 
