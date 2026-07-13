@@ -494,7 +494,7 @@ function paintResult(d) {
                 <div style="margin-top:8px">
                   <div class="bold" style="font-size:12px; color:#4f46e5">📎 このセクションの出典</div>
                   <ul style="margin:3px 0 0 0; padding-left:20px; font-size:12.5px; line-height:1.7">
-                    ${sec.sources.map(src => `<li>${renderSourceMeta(src)}<br><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></li>`).join('')}
+                    ${sec.sources.map((src, i) => `<li>${renderSourceMeta(src)}<br><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a>${renderSourceActions(src, 'sec-' + i)}</li>`).join('')}
                   </ul>
                 </div>` : ''}
             </div>`).join('')}
@@ -513,18 +513,46 @@ function paintResult(d) {
       <div class="card">
         <div class="bold" style="color:#4f46e5">📚 全出典一覧</div>
         <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px">
-          ${r.all_sources.map(src => `
+          ${r.all_sources.map((src, i) => `
             <div style="padding:6px 10px; background:#eef2ff; border-radius:6px; font-size:12.5px">
               <div class="bold" style="color:#4f46e5">${escapeHtml(src.label || '')}</div>
               ${renderSourceMeta(src, true)}
               <div style="margin-top:2px"><a href="${escapeHtml(src.url || '')}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(src.url || '')}</a></div>
               ${src.why ? `<div style="font-size:12px; color:#374151; margin-top:2px">${renderRichText(src.why)}</div>` : ''}
+              ${renderSourceActions(src, 'all-' + i)}
             </div>`).join('')}
         </div>
       </div>` : ''}
 
     ${renderDrFactCheck(r.fact_check)}
   `;
+  // v1064 fb#486 出典アクションボタン の click を wire (要約検索 / 全訳検索 / Zotero コピー)
+  root.querySelectorAll('[data-dr-src-act]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const act = b.dataset.drSrcAct;
+      if (act === 'summary') {
+        const q = b.dataset.drQ || '';
+        location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
+      } else if (act === 'fulltrans') {
+        const q = b.dataset.drQ || '';
+        location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
+      } else if (act === 'zotero') {
+        const text = b.dataset.drZoteroText || '';
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+          }
+          toast('📚 Zotero 用にコピーしました (Zotero の Add Item by Identifier に URL を 貼り付け or 手動で 追加)');
+        } catch (e) {
+          alert('コピー失敗: ' + (e.message || e));
+        }
+      }
+    });
+  });
 }
 
 // v972 Deep Research の出典実在性の自己検証。
@@ -568,6 +596,28 @@ function renderDrFactCheck(fc) {
           ${s.explanation ? `<div style="margin-top:4px">${escapeHtml(s.explanation)}</div>` : ''}
           ${s.suggested_fix ? `<div style="margin-top:4px; padding:4px 8px; background:#f0fdf4; border-left:2px solid #16a34a; font-size:12px">💡 修正案: ${escapeHtml(s.suggested_fix)}</div>` : ''}
         </div>`).join('')}
+    </div>`;
+}
+
+// v1064 fb#486 中村さん要望「DeepResearch から、 zotero や、 要約、 全訳へ 行く機能を作って」
+//   → 各出典に 「📝 要約 / 📄 全訳 / 📚 Zotero にコピー」 の 3 アクション ボタンを追加。
+//   要約 / 全訳 は 既存の 論文要約 / 論文全訳 の 検索 (?q=title) に飛ぶ。 Zotero は URL の
+//   直接 API が 使えない (browser extension 経由 か 手動追加 が 標準) ので、 タイトル + URL
+//   + venue を クリップボードに コピーして Zotero に 貼り付けやすい 形式に。
+function renderSourceActions(src, keyId) {
+  const title = (src.title || src.label || '').replace(/"/g, '');
+  const url = src.url || '';
+  const venue = src.venue || '';
+  const author = src.first_author || '';
+  const searchQ = title.slice(0, 80);  // 検索用 に トリム
+  // Zotero にコピー する 内容: タイトル / URL / 著者 / venue の 1 行 (Zotero の 「Add by
+  //   Identifier」 は DOI/URL 単体 を 要求 する ので URL 単体 も 別ボタンに)。
+  const zoteroText = `${title}${author ? ' / ' + author : ''}${venue ? ' / ' + venue : ''}${url ? '\n' + url : ''}`;
+  return `
+    <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
+      ${title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文要約 を 検索 (見つかれば 見る、 無ければ 新規作成 リンク)">📝 要約</button>` : ''}
+      ${title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文全訳 を 検索">📄 全訳</button>` : ''}
+      ${url ? `<button class="btn" data-dr-src-act="zotero" data-dr-zotero-url="${escapeHtml(url)}" data-dr-zotero-text="${escapeHtml(zoteroText)}" style="font-size:11px; padding:2px 8px" title="Zotero 用 の 書誌情報を クリップボードに コピー (Zotero の Add by Identifier に 貼り付け)">📚 Zotero</button>` : ''}
     </div>`;
 }
 
