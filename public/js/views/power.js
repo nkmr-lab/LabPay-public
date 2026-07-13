@@ -1208,7 +1208,32 @@ function renderCohenGuideInline() {
     </details>`;
 }
 
-// v1053/v1054 予算試算 helpers (全検定共通)
+// v1055 ρ (測定間相関) の パイロットデータからの 自動計算 ヘルパー
+//   中村さん指摘「ρ の 求め方が わからない」 への対応。 パイロットや 先行研究データが
+//   あれば その 2 列 (手法 A, 手法 B) の Pearson 相関を 直接 計算して 入れられる。
+function renderRhoHelper() {
+  return `
+    <details style="margin-top:8px; padding:8px 12px; background:#faf5ff; border-radius:6px; border-left:3px solid #7b3fa0">
+      <summary style="cursor:pointer; font-weight:600; font-size:12.5px; color:#7b3fa0">🧮 パイロットデータから ρ を計算する</summary>
+      <div style="margin-top:8px; font-size:12.5px; line-height:1.7">
+        <div>2 条件 の 各参加者 の 値を 貼り付け (各行 1 名、 空白 or カンマ区切り or 改行区切り)。 Pearson 相関を 計算します。</div>
+        <div style="display:grid; gap:6px; grid-template-columns: 1fr 1fr; margin-top:8px">
+          <label class="field"><span class="lbl">手法 A の値 (各行 1 参加者)</span>
+            <textarea id="rho-a" rows="6" placeholder="例:&#10;123&#10;145&#10;98&#10;..." style="width:100%; font-family:monospace; font-size:12px"></textarea>
+          </label>
+          <label class="field"><span class="lbl">手法 B の値 (同じ参加者順)</span>
+            <textarea id="rho-b" rows="6" placeholder="例:&#10;110&#10;138&#10;95&#10;..." style="width:100%; font-family:monospace; font-size:12px"></textarea>
+          </label>
+        </div>
+        <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center">
+          <button id="rho-calc" class="btn" style="font-size:11px; padding:3px 10px">🧮 ρ を計算</button>
+          <span id="rho-result" style="font-size:12.5px"></span>
+        </div>
+      </div>
+    </details>`;
+}
+
+// v1053/v1054/v1055 予算試算 helpers (全検定共通)
 //   参加形式ごとの 総合倍率:
 //     inhouse (研究室内対面、アルバイト報告書): × 1.10 (税金分)
 //     outside (研究室外対面、Amazon ギフト券): × 1.00 (ギフト券は税金対象外)
@@ -1218,23 +1243,46 @@ const BUDGET_MODES = {
   outside:     { label: '🎁 研究室外対面 (Amazon ギフト券)',  mult: 1.00, mult_note: '× 1.00 (ギフト券は税金対象外)' },
   crowdsource: { label: '🌐 クラウドソーシング (利用料込み)',  mult: 2.00, mult_note: '× 2.00 (利用料込みで概ね 2 倍)' },
 };
+// v1055 中村さん指摘「参加者 8 名 × 3 手法だから」 → 実験時間は 1 手法あたり と 解釈し、
+//   対応系 (同じ参加者が 複数手法を試す) では 手法数を掛ける。
+function methodsPerParticipant() {
+  const t = state.test;
+  if (t === 'tp' || t === 'bayes_t') return 2;
+  if (t === 'rmanova') return state.k;
+  // LMM/GLMM 系 も 参加者内 2 条件だが、 「1 人あたりの 全実験時間」 を 別途 想定するため
+  //   ここでは 手法倍率は 1 とし、 hint で 「試行時間 も 込みで 入力してください」 と誘導
+  return 1;
+}
+function methodsBreakdownNote() {
+  const t = state.test;
+  const m = methodsPerParticipant();
+  if (m === 1) return '';
+  if (t === 'rmanova') return `× ${state.k} 手法 (rmANOVA、 1 人が 全 ${state.k} 手法を試す)`;
+  if (t === 'tp')      return `× 2 手法 (対応 t、 1 人が 両手法を試す)`;
+  if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が 両手法を試す)`;
+  return `× ${m} 手法`;
+}
 function costPerParticipant() {
   const b = state.budget;
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
-  const hours = b.minutes_per_participant / 60;
-  return hours * b.rate_per_hour * mode.mult;
+  const hoursPerMethod = b.minutes_per_participant / 60;
+  const methods = methodsPerParticipant();
+  return hoursPerMethod * methods * b.rate_per_hour * mode.mult;
 }
 function renderBudgetBlock() {
   const b = state.budget;
   const per = costPerParticipant();
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
-  const hours = b.minutes_per_participant / 60;
-  const baseYen = hours * b.rate_per_hour;
+  const methods = methodsPerParticipant();
+  const totalMinutes = b.minutes_per_participant * methods;
+  const totalHours = totalMinutes / 60;
+  const baseYen = totalHours * b.rate_per_hour;
+  const isLmm = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb'].includes(state.test);
   return stepBlock({
     title: '💰 予算試算 (1 人あたり参加費)',
-    desc: '実験時間 (分/人) × 時給 × 参加形式の倍率 で 1 人あたりの参加費を試算。 総予算は 「必要 N × 1 人あたり」 で 結果カードに 表示されます。',
+    desc: `実験時間 (分/人・<b>1 手法あたり</b>) × 手法数 × 時給 × 参加形式の倍率 で 試算。 対応系 (対応 t、 反復測定 ANOVA、 ベイズ 対応 t) は 1 人が 全手法を試すので 手法数を 自動で 掛けます。${isLmm ? ' <span style="color:#a16207">⚠ LMM/GLMM は 試行数 × 2 条件 が 別軸にあるので、 ここには 「1 人の 全実験時間」 を 直接 入力してください (手法倍率は × 1)。</span>' : ''}`,
     body: `<div style="display:grid; gap:8px; grid-template-columns: repeat(2, minmax(140px, 220px))">
-             <label class="field"><span class="lbl">実験時間 (分/人)</span>
+             <label class="field"><span class="lbl">実験時間 (分/人・1 手法)</span>
                <input type="number" id="bud-min" step="5" min="1" value="${b.minutes_per_participant}" style="width:100%">
              </label>
              <label class="field"><span class="lbl">時給 (円/時間)</span>
@@ -1248,7 +1296,7 @@ function renderBudgetBlock() {
            </div>
            <div class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px; display:inline-block">
              ⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b>
-             <span style="color:#666">(${b.minutes_per_participant} 分 = ${hours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>
+             <span style="color:#666">(${b.minutes_per_participant} 分/手法${methods > 1 ? ' × ' + methods + ' 手法 = ' + totalMinutes + ' 分' : ''} = ${totalHours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>
            </div>`,
   });
 }
@@ -1257,13 +1305,18 @@ function renderBudgetSummary(participantCount, label = '必要') {
   const total = per * participantCount;
   const b = state.budget;
   const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
-  const hours = b.minutes_per_participant / 60;
+  const methods = methodsPerParticipant();
+  const totalMinutes = b.minutes_per_participant * methods;
+  const totalHours = totalMinutes / 60;
+  const breakdown = methods > 1
+    ? `${b.minutes_per_participant} 分/手法 × ${methods} 手法 = ${totalMinutes} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}`
+    : `${b.minutes_per_participant} 分 (${totalHours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}`;
   return `
     <div class="card" style="background:#fef7ed; border-left:4px solid #ea580c">
-      <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${mode.label.replace(/^[^\s]+ /, '')}、 ${label} ${participantCount} 名)</div>
+      <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${mode.label.replace(/^[^\s]+ /, '')}、 ${label} ${participantCount} 名${methods > 1 ? ' × ' + methods + ' 手法' : ''})</div>
       <div style="font-size:22px; line-height:1.5"><b>¥${Math.round(total).toLocaleString()}</b></div>
       <div class="hint-sm" style="margin-top:6px">1 人あたり ¥${Math.round(per).toLocaleString()} × ${participantCount} 名 = ¥${Math.round(total).toLocaleString()}</div>
-      <div class="hint-sm" style="margin-top:2px">${b.minutes_per_participant} 分 (${hours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}</div>
+      <div class="hint-sm" style="margin-top:2px">${breakdown}</div>
       <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで ¥${Math.round(total * 1.10).toLocaleString()} が 実務的な 予算目安。</div>
     </div>`;
 }
@@ -1870,21 +1923,52 @@ function render() {
 
     ${state.test==='rmanova' ? stepBlock({
       title: '⑤-b 測定間相関 ρ',
-      desc: '同じ参加者の異なる測定間の想定相関。高いほど個人差がキャンセルされて検定力↑。反応時間系は 0.6-0.8、主観評価系は 0.3-0.6 が目安。わからなければ 0.5。',
+      desc: `<div>同じ参加者の 異なる 測定間の 想定相関。 「A が速い人は B でも速い」 「A で高評価する人は B でも高評価」 の 度合い。 <b>高いほど 個人差が キャンセル されて 検定力↑</b>。</div>
+        <details style="margin-top:6px; padding:6px 10px; background:#f9fafb; border-radius:6px">
+          <summary style="cursor:pointer; font-size:12px; color:#7b3fa0"><b>📖 求め方の詳細</b></summary>
+          <div style="margin-top:6px; font-size:12px; line-height:1.75">
+            <div><b>1. パイロットデータから 実測</b> (最も 正確): 各参加者の 手法 A の値 と 手法 B の値 の <code>Pearson 相関係数</code>。 R なら <code>cor(A, B)</code>、 Excel なら <code>CORREL(A列, B列)</code>。 下の 🧮 ヘルパー でも 計算可。</div>
+            <div style="margin-top:4px"><b>2. 先行研究から</b>: 同じ課題の 論文で <b>ICC</b> (級内相関、Intraclass Correlation) or <b>test-retest reliability</b> が 報告されて いる ことが 多い。 それを ρ として 採用。</div>
+            <div style="margin-top:4px"><b>3. 分野の 典型値</b> (パイロットも 先行研究も 無い場合):</div>
+            <ul style="margin:2px 0; padding-left:22px">
+              <li>反応時間系 (RT, Stroop, フランカー 等): ρ ≈ <b>0.6-0.8</b> (個人差 安定)</li>
+              <li>主観評価 (Likert, SD 法): ρ ≈ <b>0.3-0.6</b> (個人差 中程度)</li>
+              <li>正答率 (認知課題): ρ ≈ <b>0.5-0.7</b></li>
+              <li>生理指標 (HR, GSR): ρ ≈ <b>0.5-0.8</b> (トレイト成分が 強い)</li>
+              <li>気分・状態 (state PANAS 等): ρ ≈ <b>0.2-0.4</b> (状態は 変動)</li>
+            </ul>
+            <div style="margin-top:4px"><b>4. 迷ったら</b>: ρ = 0.5 (中間) が 安全。 分野が わからない ときの デフォルト。</div>
+            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ρ を 高めに 見積もる と 必要 n が 少なく 出るので、 保守的に 見積もる (小さめ) の が 安全。</div>
+          </div>
+        </details>`,
       body: `<div class="row" style="gap:4px; flex-wrap:wrap">
-               <button class="btn" data-pw-rho="0.3" style="font-size:11px; padding:2px 8px">弱 0.3</button>
-               <button class="btn" data-pw-rho="0.5" style="font-size:11px; padding:2px 8px">典型 0.5</button>
-               <button class="btn" data-pw-rho="0.7" style="font-size:11px; padding:2px 8px">強 0.7</button>
+               <button class="btn" data-pw-rho="0.2" style="font-size:11px; padding:2px 8px">とても弱 0.2 (状態変動系)</button>
+               <button class="btn" data-pw-rho="0.3" style="font-size:11px; padding:2px 8px">弱 0.3 (主観評価)</button>
+               <button class="btn" data-pw-rho="0.5" style="font-size:11px; padding:2px 8px">典型 0.5 (迷った時)</button>
+               <button class="btn" data-pw-rho="0.7" style="font-size:11px; padding:2px 8px">強 0.7 (RT/認知課題)</button>
+               <button class="btn" data-pw-rho="0.85" style="font-size:11px; padding:2px 8px">とても強 0.85 (安定な特性)</button>
              </div>
-             <input type="number" id="pw-rho" step="0.05" min="0" max="0.99" value="${state.rho}" style="width:120px; margin-top:6px">`,
+             <input type="number" id="pw-rho" step="0.05" min="0" max="0.99" value="${state.rho}" style="width:120px; margin-top:6px">
+             ${renderRhoHelper()}`,
     }) : ''}
 
     ${state.test==='rmanova' ? stepBlock({
       title: '⑤-c 球面性補正 ε (デフォルト 1.0)',
-      desc: '反復測定の球面性仮定が崩れる時の補正。 Mauchly 検定で有意なら Greenhouse-Geisser (0.5-0.8) or Huynh-Feldt (0.7-0.9) を。わからなければ 1.0 (補正なし) で。',
+      desc: `<div>反復測定 の 球面性 (sphericity) 仮定 = 「どの 2 測定の 差 も 分散が 等しい」。 崩れる と Type I 過誤が 膨らむ ので、 df を 縮めて 補正。</div>
+        <details style="margin-top:6px; padding:6px 10px; background:#f9fafb; border-radius:6px">
+          <summary style="cursor:pointer; font-size:12px; color:#7b3fa0"><b>📖 求め方の詳細</b></summary>
+          <div style="margin-top:6px; font-size:12px; line-height:1.75">
+            <div><b>1. 実データ 分析後</b>: R の <code>afex::aov_ez</code> や SPSS の GLM Repeated Measures を 走らせると Mauchly 検定 の p 値 と ε の 推定値 (Greenhouse-Geisser ε̂ / Huynh-Feldt ε̂) が 出力される ので それを 採用。</div>
+            <div style="margin-top:4px"><b>2. 事前見積もり</b> (パイロットデータや 先行研究): 分散共分散行列 を計算して ε̂ を求める (R の <code>ez::ezANOVA</code> 等)。 実務的には 2 測定 (k=2) なら ε = 1.0 (球面性は 自動成立)、 3 測定なら 0.7-0.9、 4 測定以上で 逸脱しやすく 0.5-0.8 も 珍しくない。</div>
+            <div style="margin-top:4px"><b>3. 保守的な デフォルト</b>: 心配なら ε = 0.75 (GG 典型値) で 見積もる と 安全。 ε=1 で 計算した n は 球面性違反時 に 検定力不足 になる 可能性。</div>
+            <div style="margin-top:4px"><b>4. 迷ったら</b>: k=2 なら 1.0 で 確定。 k=3 なら 0.9、 k=4+ なら 0.75。</div>
+            <div class="hint-sm" style="margin-top:6px; color:#a16207">⚠ ε を 小さく 見積もる と 必要 n が 多く 出る (保守的)。 大きめ に すると 甘い 見積もり。</div>
+          </div>
+        </details>`,
       body: `<div class="row" style="gap:4px; flex-wrap:wrap">
-               <button class="btn" data-pw-eps="1.0" style="font-size:11px; padding:2px 8px">1.0 (補正なし)</button>
-               <button class="btn" data-pw-eps="0.75" style="font-size:11px; padding:2px 8px">0.75 (GG 典型)</button>
+               <button class="btn" data-pw-eps="1.0" style="font-size:11px; padding:2px 8px">1.0 (k=2 or 球面性 OK)</button>
+               <button class="btn" data-pw-eps="0.9" style="font-size:11px; padding:2px 8px">0.9 (k=3 典型)</button>
+               <button class="btn" data-pw-eps="0.75" style="font-size:11px; padding:2px 8px">0.75 (GG 典型 / 保守)</button>
                <button class="btn" data-pw-eps="0.5" style="font-size:11px; padding:2px 8px">0.5 (深刻な違反)</button>
              </div>
              <input type="number" id="pw-eps" step="0.05" min="0.01" max="1" value="${state.epsilon}" style="width:120px; margin-top:6px">`,
@@ -1971,6 +2055,45 @@ function render() {
   document.getElementById('pw-mode')?.addEventListener('change', (e) => {
     state.mode = e.target.value; render();
   });
+  // v1055 ρ (測定間相関) をパイロットデータから 自動計算
+  const rhoCalcBtn = document.getElementById('rho-calc');
+  if (rhoCalcBtn) rhoCalcBtn.addEventListener('click', () => {
+    const parse = (s) => s.split(/[\s,\t]+/).map(x => parseFloat(x)).filter(x => isFinite(x));
+    const a = parse(document.getElementById('rho-a').value || '');
+    const b = parse(document.getElementById('rho-b').value || '');
+    const resEl = document.getElementById('rho-result');
+    if (!resEl) return;
+    if (a.length < 3 || b.length < 3) {
+      resEl.innerHTML = '<span style="color:#dc2626">両方に 3 名以上の 値が 必要です</span>';
+      return;
+    }
+    if (a.length !== b.length) {
+      resEl.innerHTML = `<span style="color:#dc2626">A (${a.length}) と B (${b.length}) の 名数が 揃って いません</span>`;
+      return;
+    }
+    const n = a.length;
+    const meanA = a.reduce((s,v)=>s+v,0)/n;
+    const meanB = b.reduce((s,v)=>s+v,0)/n;
+    let num=0, sumA2=0, sumB2=0;
+    for (let i=0; i<n; i++) {
+      const da = a[i]-meanA, db = b[i]-meanB;
+      num += da*db; sumA2 += da*da; sumB2 += db*db;
+    }
+    const denom = Math.sqrt(sumA2 * sumB2);
+    if (denom === 0) { resEl.innerHTML = '<span style="color:#dc2626">分散が 0 のため計算不可</span>'; return; }
+    const r = num / denom;
+    const strength = Math.abs(r) < 0.1 ? '無相関' : Math.abs(r) < 0.3 ? '弱い' : Math.abs(r) < 0.5 ? '中程度' : Math.abs(r) < 0.7 ? '強い' : Math.abs(r) < 0.9 ? 'とても強い' : 'ほぼ完全';
+    const clamp = Math.max(0, Math.min(0.99, r));
+    resEl.innerHTML = `<b style="color:#7b3fa0">⇒ ρ = ${r.toFixed(3)}</b> <span style="color:#666">(n=${n}, ${strength})</span> <button class="btn primary" data-rho-apply="${clamp.toFixed(3)}" style="font-size:11px; padding:2px 10px; margin-left:6px">この値を ρ に反映</button>`;
+    document.querySelector('[data-rho-apply]')?.addEventListener('click', (ev) => {
+      const v = parseFloat(ev.target.dataset.rhoApply);
+      state.rho = v;
+      const el = document.getElementById('pw-rho');
+      if (el) el.value = v;
+      resEl.innerHTML += ' <span style="color:#059669">✓ 反映しました</span>';
+    });
+  });
+
   // v1041 反復測定 ANOVA の ρ / ε プリセット
   document.querySelectorAll('[data-pw-rho]').forEach(b => {
     b.addEventListener('click', () => {
