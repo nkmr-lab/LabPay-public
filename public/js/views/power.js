@@ -3299,15 +3299,15 @@ function renderTestWizard() {
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
       <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード</summary>
       <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
-        <div><b>Q1. 差を測定したい変数 (従属変数) の 数値の特性は？</b></div>
-        <div class="hint-sm" style="margin-bottom:4px">実験で 「手法間の差」 を 見たい 数値の 性質を選んでください。</div>
+        <div><b>Q1. 差を測定したい 数値 (従属変数) の 特性は？</b></div>
+        <div class="hint-sm" style="margin-bottom:4px">実験で 「手法間の差」 を 見たい 数値の 性質を選んでください。 <b>「同じ参加者で 複数回」</b> = 1 人が 同じ課題を 何回か 繰り返す (反応時間 100 試行、 正誤 20 問 等)、 <b>「1 人 1 回」</b> = 各人 1 個の 値だけ 記録。</div>
         <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
-          ${opt('scale', 'continuous', '連続値 (反応時間、得点、濃度 等)')}
-          ${opt('scale', 'ordinal', '順序尺度 (リッカート 5/7 段階 等)')}
-          ${opt('scale', 'binary_within', '2 値 (正答/誤答、成功/失敗、同じ参加者)')}
-          ${opt('scale', 'count_within', '回数 (エラー数、発言回数、同じ参加者)')}
-          ${opt('scale', 'categorical_dist', '1 種類のカテゴリ の 分布 の 偏り (例: サイコロが公平か)')}
-          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリ の 関連 (例: 性別 × 選択科目 に 関係があるか)')}
+          ${opt('scale', 'continuous', '連続値 (反応時間、所要時間、選択率、得点 など)')}
+          ${opt('scale', 'ordinal', '順序尺度 (リッカート尺度、形容詞対 での 評価 など)')}
+          ${opt('scale', 'binary_within', '2 値 の系列 (成功/失敗、正誤 を 同じ参加者で 複数回)')}
+          ${opt('scale', 'count_within', '回数 の 系列 (エラー数、発言回数 を 同じ参加者で 複数回)')}
+          ${opt('scale', 'categorical_dist', '1 種類のカテゴリ の 分布の偏り (話者の発言比率、サイコロの目、1 人 1 回の 成功率 など)')}
+          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリ の 関連 (性別 × 選択科目、群 × 正誤 など)')}
           ${opt('scale', 'relation', '関係を見たい (身長と体重、勉強時間と成績 等の 連動)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
@@ -3447,34 +3447,42 @@ function renderStatFlowchartSVG() {
   ├─ 独立 → Cumulative link model / Mann-Whitney U / Kruskal-Wallis
   └─ 近似 OK なら → t/ANOVA/rmANOVA でも 概算可 (中央付近が 山型なら)
 
-━━━ ③ 2 値 (正答/誤答、成功/失敗、同じ参加者) ━━━
+━━━ ③ 2 値 の 系列 (成功/失敗、正誤 を 同じ参加者で 複数回) ━━━
   │
   ├─ 参加者内 2 条件 → 🎯 Logistic GLMM  [このアプリで対応]
-  ├─ 独立 2 群 (別参加者) → ロジスティック回帰 / 2×2 χ² / Fisher
-  └─ 対応 Before/After 2 値 → McNemar 検定
+  └─ 対応 Before/After (1 対) → McNemar 検定
+  (※ 1 人 1 回だけの 2 値は ⑤ 1 種類のカテゴリの 分布の偏り 側で 集計)
 
-━━━ ④ 回数 (エラー数、発言回数、同じ参加者) ━━━
+━━━ ④ 回数 の 系列 (エラー数、発言回数 を 同じ参加者で 複数回) ━━━
   │
   ├─ 平均 ≈ 分散  → 📊 Poisson GLMM  [このアプリで対応]
   ├─ 分散 >> 平均 → 📈 負の二項 GLMM  [このアプリで対応]
   └─ ゼロが大量  → Zero-inflated Poisson / NB
 
-━━━ ⑤ 名義 (カテゴリ選択、群比較) ━━━
+━━━ ⑤ 1 種類のカテゴリ の 分布 の 偏り ━━━
+   (話者の発言比率、サイコロの目、1 人 1 回の 成功率 など)
   │
-  ├─ 【1 変数の分布】
-  │   └─ カテゴリ観測数 → ⁉ χ² 適合度検定  [このアプリで対応]
-  │
-  └─ 【2 変数の連関】
-      ├─ 大きな標本 → ⁉ χ² 独立性検定  [このアプリで対応 (df 指定)]
-      └─ 期待度数 <5 のセルあり → Fisher 直接確率検定
+  └─ 期待分布 (均等 or 想定比) との ズレ → ⁉ χ² 適合度検定  [このアプリで対応]
 
-━━━ ⑥ 2 変数の関係を見たい (相関) ━━━
+━━━ ⑥ 2 種類のカテゴリ の 関連 ━━━
+   (性別 × 選択科目、群 × 正誤 など)
+  │
+  ├─ 大きな標本 → ⁉ χ² 独立性検定  [このアプリで対応 (df 指定)]
+  ├─ 期待度数 <5 のセルあり → Fisher 直接確率検定
+  └─ 対応あり Before/After 2×2 → McNemar 検定
+
+  ★ ⑤ と ⑥ は どちらも χ² の 家族 (数学的には 同じツール):
+    ⑤ は 「観測分布は 想定 (均等等) と 一致するか？」
+    ⑥ は 「変数 A と B は 独立か？」
+    研究の 問いが 違うだけ で、 計算は 同じ df ベースの χ²。
+
+━━━ ⑦ 関係を見たい (連動) ━━━
   │
   ├─ 直線関係     → 🔗 Pearson 相関 r  [このアプリで対応]
   ├─ 順位の関係   → Spearman ρ / Kendall τ
   └─ 予測 / 因果  → 線形回帰 / 重回帰 (交絡変数をモデルに投入)
 
-━━━ ⑦ ベイズ推論 (頻度論の代わりに 事後分布で 判定) ━━━
+━━━ ⑧ ベイズ推論 (頻度論の代わりに 事後分布で 判定) ━━━
   │
   └─ 対応 t 検定 → ☯ ベイズ (JZS BF10) 対応 t  [このアプリで対応、 固定 n / 逐次 SBF]
 </pre>`;
