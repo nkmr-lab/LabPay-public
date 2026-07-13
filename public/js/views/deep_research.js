@@ -536,19 +536,28 @@ function paintResult(d) {
       } else if (act === 'fulltrans') {
         const q = b.dataset.drQ || '';
         location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
-      } else if (act === 'zotero') {
-        const text = b.dataset.drZoteroText || '';
+      } else if (act === 'refs') {
+        // v1065 中村さん明確化: 研究室内 の 文献管理 (/api/refs) に POST。 成功したら #/refs/{id} へ。
+        let payload;
+        try { payload = JSON.parse(b.dataset.drRefPayload || '{}'); }
+        catch (_) { toast('payload 解析失敗'); return; }
+        if (!payload.title) { toast('タイトルなし'); return; }
+        const origText = b.textContent;
+        b.disabled = true; b.textContent = '⏳';
         try {
-          if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(text);
-          } else {
-            const ta = document.createElement('textarea');
-            ta.value = text; document.body.appendChild(ta); ta.select();
-            document.execCommand('copy'); document.body.removeChild(ta);
-          }
-          toast('📚 Zotero 用にコピーしました (Zotero の Add Item by Identifier に URL を 貼り付け or 手動で 追加)');
+          const r = await post('/api/refs', {
+            title: payload.title,
+            url:   payload.url || '',
+            venue: payload.venue || '',
+            authors: payload.authors || [],
+            doi: '', arxiv_id: '', year: '', abstract: '', extra: {},
+          });
+          b.textContent = '✅ 追加済';
+          toast('📚 文献に登録しました → 詳細ページに 移動');
+          setTimeout(() => { location.hash = '#/refs/' + r.id; }, 400);
         } catch (e) {
-          alert('コピー失敗: ' + (e.message || e));
+          toast('登録失敗: ' + (e.message || e));
+          b.disabled = false; b.textContent = origText;
         }
       }
     });
@@ -600,24 +609,26 @@ function renderDrFactCheck(fc) {
 }
 
 // v1064 fb#486 中村さん要望「DeepResearch から、 zotero や、 要約、 全訳へ 行く機能を作って」
-//   → 各出典に 「📝 要約 / 📄 全訳 / 📚 Zotero にコピー」 の 3 アクション ボタンを追加。
-//   要約 / 全訳 は 既存の 論文要約 / 論文全訳 の 検索 (?q=title) に飛ぶ。 Zotero は URL の
-//   直接 API が 使えない (browser extension 経由 か 手動追加 が 標準) ので、 タイトル + URL
-//   + venue を クリップボードに コピーして Zotero に 貼り付けやすい 形式に。
+//   v1065 中村さん明確化: 「Zotero」 は 研究室内 の 文献管理機能 (/#/refs、 /api/refs) の
+//   ことだった → 「📚 文献に追加 (研究室内)」 に変更。 直接 POST /api/refs で 登録し、
+//   登録後 は #/refs/{id} に 遷移して 詳細確認可。
 function renderSourceActions(src, keyId) {
   const title = (src.title || src.label || '').replace(/"/g, '');
   const url = src.url || '';
   const venue = src.venue || '';
   const author = src.first_author || '';
   const searchQ = title.slice(0, 80);  // 検索用 に トリム
-  // Zotero にコピー する 内容: タイトル / URL / 著者 / venue の 1 行 (Zotero の 「Add by
-  //   Identifier」 は DOI/URL 単体 を 要求 する ので URL 単体 も 別ボタンに)。
-  const zoteroText = `${title}${author ? ' / ' + author : ''}${venue ? ' / ' + venue : ''}${url ? '\n' + url : ''}`;
+  const refPayload = JSON.stringify({
+    title,
+    url,
+    venue,
+    authors: author ? [author] : [],
+  });
   return `
     <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
       ${title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文要約 を 検索 (見つかれば 見る、 無ければ 新規作成 リンク)">📝 要約</button>` : ''}
       ${title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文全訳 を 検索">📄 全訳</button>` : ''}
-      ${url ? `<button class="btn" data-dr-src-act="zotero" data-dr-zotero-url="${escapeHtml(url)}" data-dr-zotero-text="${escapeHtml(zoteroText)}" style="font-size:11px; padding:2px 8px" title="Zotero 用 の 書誌情報を クリップボードに コピー (Zotero の Add by Identifier に 貼り付け)">📚 Zotero</button>` : ''}
+      ${title ? `<button class="btn" data-dr-src-act="refs" data-dr-ref-payload="${escapeHtml(refPayload)}" style="font-size:11px; padding:2px 8px" title="研究室内 の 文献管理 (#/refs) に この 文献を 登録 (Zotero 的な機能)">📚 文献に追加</button>` : ''}
     </div>`;
 }
 
