@@ -3293,7 +3293,7 @@ function renderTestWizard() {
   }
   return `
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
-      <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード (迷ったら)</summary>
+      <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード</summary>
       <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
         <div><b>Q1. 差を測定したい変数 (従属変数) の 数値の特性は？</b></div>
         <div class="hint-sm" style="margin-bottom:4px">実験で 「手法間の差」 を 見たい 数値の 性質を選んでください。</div>
