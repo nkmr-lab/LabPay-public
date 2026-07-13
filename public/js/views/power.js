@@ -1208,36 +1208,47 @@ function renderCohenGuideInline() {
     </details>`;
 }
 
-// v1053 予算試算 helpers (全検定共通)
+// v1053/v1054 予算試算 helpers (全検定共通)
+//   参加形式ごとの 総合倍率:
+//     inhouse (研究室内対面、アルバイト報告書): × 1.10 (税金分)
+//     outside (研究室外対面、Amazon ギフト券): × 1.00 (ギフト券は税金対象外)
+//     crowdsource (クラウドソーシング、利用料込み): × 2.00
+const BUDGET_MODES = {
+  inhouse:     { label: '👥 研究室内対面 (アルバイト報告書)', mult: 1.10, mult_note: '× 1.10 (税金分)' },
+  outside:     { label: '🎁 研究室外対面 (Amazon ギフト券)',  mult: 1.00, mult_note: '× 1.00 (ギフト券は税金対象外)' },
+  crowdsource: { label: '🌐 クラウドソーシング (利用料込み)',  mult: 2.00, mult_note: '× 2.00 (利用料込みで概ね 2 倍)' },
+};
 function costPerParticipant() {
   const b = state.budget;
-  const base = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
-  return b.crowd_mode === 'crowdsource' ? base * b.crowd_multiplier : base;
+  const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
+  const hours = b.minutes_per_participant / 60;
+  return hours * b.rate_per_hour * mode.mult;
 }
 function renderBudgetBlock() {
   const b = state.budget;
   const per = costPerParticipant();
-  const perNoCrowd = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
+  const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
+  const hours = b.minutes_per_participant / 60;
+  const baseYen = hours * b.rate_per_hour;
   return stepBlock({
     title: '💰 予算試算 (1 人あたり参加費)',
-    desc: '実験時間 × 時給 × 1.10 (税金分) で 1 人あたりの参加費を試算。 クラウドソーシングを選ぶと 利用料込みで 概ね 2 倍。 総予算は 「必要 N × 1 人あたり」 で 結果カードに表示されます。',
+    desc: '実験時間 (分/人) × 時給 × 参加形式の倍率 で 1 人あたりの参加費を試算。 総予算は 「必要 N × 1 人あたり」 で 結果カードに 表示されます。',
     body: `<div style="display:grid; gap:8px; grid-template-columns: repeat(2, minmax(140px, 220px))">
-             <label class="field"><span class="lbl">実験時間 (時間/人)</span>
-               <input type="number" id="bud-hours" step="0.25" min="0.1" value="${b.hours_per_participant}" style="width:100%">
+             <label class="field"><span class="lbl">実験時間 (分/人)</span>
+               <input type="number" id="bud-min" step="5" min="1" value="${b.minutes_per_participant}" style="width:100%">
              </label>
              <label class="field"><span class="lbl">時給 (円/時間)</span>
                <input type="number" id="bud-rate" step="50" min="0" value="${b.rate_per_hour}" style="width:100%">
              </label>
              <label class="field" style="grid-column:span 2"><span class="lbl">参加形式</span>
                <select id="bud-mode" style="width:100%">
-                 <option value="inhouse" ${b.crowd_mode==='inhouse'?'selected':''}>👥 対面 / 学内 (時間 × 時給 × 1.10)</option>
-                 <option value="crowdsource" ${b.crowd_mode==='crowdsource'?'selected':''}>🌐 クラウドソーシング (× 2 倍、 利用料込み)</option>
+                 ${Object.entries(BUDGET_MODES).map(([k, v]) => `<option value="${k}" ${b.mode===k?'selected':''}>${v.label}</option>`).join('')}
                </select>
              </label>
            </div>
            <div class="hint-sm" style="margin-top:8px; padding:8px 12px; background:#eef2ff; border-radius:6px; display:inline-block">
              ⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b>
-             ${b.crowd_mode === 'crowdsource' ? `<span style="color:#666">(内訳: 対面相当 ¥${Math.round(perNoCrowd).toLocaleString()} × ${b.crowd_multiplier})</span>` : `<span style="color:#666">(内訳: ${b.hours_per_participant} 時間 × ¥${b.rate_per_hour} × ${b.tax_multiplier})</span>`}
+             <span style="color:#666">(${b.minutes_per_participant} 分 = ${hours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>
            </div>`,
   });
 }
@@ -1245,13 +1256,14 @@ function renderBudgetSummary(participantCount, label = '必要') {
   const per = costPerParticipant();
   const total = per * participantCount;
   const b = state.budget;
-  const modeLabel = b.crowd_mode === 'crowdsource' ? 'クラウドソーシング' : '対面/学内';
+  const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
+  const hours = b.minutes_per_participant / 60;
   return `
     <div class="card" style="background:#fef7ed; border-left:4px solid #ea580c">
-      <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${modeLabel}、 ${label} ${participantCount} 名)</div>
+      <div class="bold" style="color:#ea580c; margin-bottom:6px">💰 想定予算 (${mode.label.replace(/^[^\s]+ /, '')}、 ${label} ${participantCount} 名)</div>
       <div style="font-size:22px; line-height:1.5"><b>¥${Math.round(total).toLocaleString()}</b></div>
       <div class="hint-sm" style="margin-top:6px">1 人あたり ¥${Math.round(per).toLocaleString()} × ${participantCount} 名 = ¥${Math.round(total).toLocaleString()}</div>
-      <div class="hint-sm" style="margin-top:2px">${b.hours_per_participant} 時間 × ¥${b.rate_per_hour}/時 × ${b.tax_multiplier} (税金)${b.crowd_mode === 'crowdsource' ? ` × ${b.crowd_multiplier} (クラウド利用料込み)` : ''}</div>
+      <div class="hint-sm" style="margin-top:2px">${b.minutes_per_participant} 分 (${hours.toFixed(2)} 時間) × ¥${b.rate_per_hour}/時 ${mode.mult_note}</div>
       <div class="hint-sm" style="margin-top:4px; color:#a16207">💡 脱落・除外 10% 見込みで ¥${Math.round(total * 1.10).toLocaleString()} が 実務的な 予算目安。</div>
     </div>`;
 }
@@ -1595,17 +1607,15 @@ const state = {
   df: 1,             // χ² 自由度
   rho: 0.5,          // v1041 反復測定 ANOVA の測定間相関
   epsilon: 1.0,      // v1041 反復測定 ANOVA の球面性補正 (1 = 補正なし)
-  // v1053 予算試算 (全検定共通) — 中村さん指示:
-  //   「実験に必要な時間を入力したら、その時間 × 1250 円/時間 で 実験参加にかかる
-  //   お金が計算でき、そこから 必要な予算が決まる。 なお、 さらに その額 × 1.1 倍
-  //   (税金分) が必要となる。 クラウドソーシングの場合は 利用料も含めて 概ね 2 倍
-  //   程度の経費が必要」
+  // v1053 予算試算 (全検定共通)
+  //   v1054 中村さん指示で 「実験時間 を 分単位 に」 + 参加形式 を 3 つに拡張:
+  //     - 研究室内対面 (アルバイト報告書、税金分 × 1.10)
+  //     - 研究室外対面 (Amazon ギフト券、× 1.00)
+  //     - クラウドソーシング (利用料込み × 2.00)
   budget: {
-    hours_per_participant: 1.0,   // 1 人あたり実験時間 (時間)
+    minutes_per_participant: 60,  // 1 人あたり実験時間 (分)
     rate_per_hour: 1250,          // 時給 (円/時間)、 デフォルト 中村研の 標準
-    tax_multiplier: 1.10,         // 税金分 (1.10 = 10%)
-    crowd_mode: 'inhouse',        // 'inhouse' (対面/学内) or 'crowdsource'
-    crowd_multiplier: 2.0,        // クラウドソーシング 総合倍率 (利用料込み)
+    mode: 'inhouse',              // 'inhouse' | 'outside' | 'crowdsource'
   },
   // v1028 中村さん提案「実測ベースで平均 / SD から d を導く方が直感的」
   //   dataType: 'continuous' | 'likert5' | 'likert7' | 'percentage' | 'binary'
@@ -2040,26 +2050,27 @@ function render() {
     });
   });
 
-  // v1053 予算試算 の 入力変化で 即再描画 (「⇒ 1 人あたり参加費」 を 更新するため)
-  ['bud-hours', 'bud-rate'].forEach(id => {
+  // v1053/v1054 予算試算 の 入力変化で 「⇒ 1 人あたり参加費」 だけ 即差し替え
+  //   (input のフォーカスが 抜けないように 全再描画は しない)
+  ['bud-min', 'bud-rate'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => {
       syncFormToState();
-      // 予算ブロックだけ innerHTML 差し替え (フォーカスが 抜けない)
-      // → 実装コスト削減のため 「⇒ …」 部分だけ差し替え
       const per = costPerParticipant();
       const b = state.budget;
-      const perNoCrowd = b.hours_per_participant * b.rate_per_hour * b.tax_multiplier;
-      const hintEl = document.querySelector('#bud-hours')?.closest('.card')?.querySelector('.hint-sm[style*="eef2ff"]');
+      const mode = BUDGET_MODES[b.mode] || BUDGET_MODES.inhouse;
+      const hours = b.minutes_per_participant / 60;
+      const baseYen = hours * b.rate_per_hour;
+      const hintEl = document.querySelector('#bud-min')?.closest('.card')?.querySelector('.hint-sm[style*="eef2ff"]');
       if (hintEl) {
-        hintEl.innerHTML = `⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b> ${b.crowd_mode === 'crowdsource' ? `<span style="color:#666">(内訳: 対面相当 ¥${Math.round(perNoCrowd).toLocaleString()} × ${b.crowd_multiplier})</span>` : `<span style="color:#666">(内訳: ${b.hours_per_participant} 時間 × ¥${b.rate_per_hour} × ${b.tax_multiplier})</span>`}`;
+        hintEl.innerHTML = `⇒ 1 人あたり参加費: <b style="color:#7b3fa0">¥${Math.round(per).toLocaleString()}</b> <span style="color:#666">(${b.minutes_per_participant} 分 = ${hours.toFixed(2)} 時間 × ¥${b.rate_per_hour}/時 = ¥${Math.round(baseYen).toLocaleString()} → ${mode.mult_note} = ¥${Math.round(per).toLocaleString()})</span>`;
       }
     });
   });
   const bModeEl = document.getElementById('bud-mode');
   if (bModeEl) bModeEl.addEventListener('change', () => {
     syncFormToState();
-    render();  // モード切替 は 全再描画で OK (数の 変化が 目立つほうが 良い)
+    render();  // モード切替 は 全再描画で OK (総額 の 差 が 見える)
   });
 
   // v1050 ベイズ (BF10) プリセット
@@ -2470,13 +2481,13 @@ function syncFormToState() {
   const effEl = document.getElementById('pw-effect');
   if (alphaEl) state.alpha  = clampFloat(alphaEl.value, 0.001, 0.5);
   if (effEl)   state.effect = clampFloat(effEl.value, 0.001, 10);
-  // v1053 予算試算
-  const bHoursEl = document.getElementById('bud-hours');
+  // v1053/v1054 予算試算 (分/参加形式 3 択)
+  const bMinEl = document.getElementById('bud-min');
   const bRateEl = document.getElementById('bud-rate');
   const bModeEl = document.getElementById('bud-mode');
-  if (bHoursEl) state.budget.hours_per_participant = Math.max(0.05, parseFloat(bHoursEl.value) || 1);
-  if (bRateEl)  state.budget.rate_per_hour = Math.max(0, Math.round(parseFloat(bRateEl.value) || 0));
-  if (bModeEl)  state.budget.crowd_mode = bModeEl.value;
+  if (bMinEl)  state.budget.minutes_per_participant = Math.max(1, Math.round(parseFloat(bMinEl.value) || 60));
+  if (bRateEl) state.budget.rate_per_hour = Math.max(0, Math.round(parseFloat(bRateEl.value) || 0));
+  if (bModeEl && bModeEl.value in BUDGET_MODES) state.budget.mode = bModeEl.value;
   if (['t2','tp','t1','corr'].includes(state.test)) {
     const tailsEl = document.getElementById('pw-tails');
     if (tailsEl) state.tails = parseInt(tailsEl.value, 10);
