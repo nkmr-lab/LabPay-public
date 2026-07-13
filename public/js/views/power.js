@@ -3373,7 +3373,26 @@ function renderTestWizard() {
           </div>` : ''}
         ${s === 'categorical_assoc' ? `
           <div><b>Q2. 期待度数の見込み は？</b></div>
-          <div class="hint-sm" style="margin-bottom:4px">クロス表 の 各セル の 想定人数。 「n × 行合計比率 × 列合計比率」 で 計算できる 期待人数。 全セル 5 人以上 なら χ² が 使えます。 1 つでも 5 未満 なら 本来は Fisher。</div>
+          <div class="hint-sm" style="margin-bottom:6px">
+            <div><b>クロス表とは</b>: 2 種類のカテゴリを 行 × 列 で並べた 表。 例 「性別 (男/女) × 好き嫌い (好き/嫌い/どちら)」 なら 2 行 × 3 列 = <b>6 セル</b> の 表。 各セル は 「行と列 が 交差する 1 マス」 (男×好き / 男×嫌い / 男×どちら / 女×好き / 女×嫌い / 女×どちら)。</div>
+            <details style="margin-top:6px; padding:6px 10px; background:#fff; border-radius:4px">
+              <summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📊 具体例 (n=60、 男 30・女 30、 好き嫌いは 均等 と 想定した場合の 期待度数)</summary>
+              <pre style="font-family:'SF Mono', Menlo, Consolas, monospace; font-size:11px; margin:6px 0 0; overflow-x:auto">
+             好き    嫌い   どちら  合計
+      男     10      10      10    30
+      女     10      10      10    30
+      合計   20      20      20    60
+
+期待度数 = n × (行合計/n) × (列合計/n) = n × 行比率 × 列比率
+男×好き の 期待 = 60 × (30/60) × (20/60) = 60 × 0.5 × 0.333 = 10
+全セル 10 人 ≥ 5 → χ² 独立性検定が使える ✓
+
+例2: n=20 で 3 カテゴリ の 場合、 各セル 期待 ≈ 20/9 ≈ 2.2 で 5 未満
+    → Fisher 直接確率検定 が 本来 推奨
+              </pre>
+            </details>
+            <div style="margin-top:6px">1 つでも 期待度数 &lt; 5 の セルが あれば 本来は Fisher。 n が 十分大きい (30 以上) or カテゴリ数 が 少ない なら 大標本と 見なして OK。</div>
+          </div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('assoc_expected', 'large', '大標本 (全セル 期待度数 ≥5 見込み)')}
             ${opt('assoc_expected', 'small', '少数観測 (< 5 のセルあり見込み、 Fisher 想定)')}
