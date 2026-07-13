@@ -152,14 +152,91 @@ export async function renderPaperTranslate() {
   });
   // v957 hash に ?q=<keyword> が 付いていたら shared タブ に 切り替えて 検索実行
   //   (詳細ページ の 著者 / キーワード クリック から 飛んで来る 用)
-  const hashQ = (location.hash.match(/\?q=([^&]+)/) || [])[1];
+  // v1066 fb#486 hash に ?pdfurl=<url> があれば 「URL から PDF 取得して 要約」 banner を表示
+  const qParam = location.hash.includes('?') ? new URLSearchParams(location.hash.slice(location.hash.indexOf('?') + 1)) : new URLSearchParams();
+  const hashQ = qParam.get('q');
+  const hashPdfUrl = qParam.get('pdfurl');
+  if (hashPdfUrl) {
+    renderPdfUrlBanner(hashPdfUrl, hashQ || '');
+  }
   if (hashQ) {
-    const kw = decodeURIComponent(hashQ);
-    searchEl.value = kw;
+    searchEl.value = hashQ;
     switchTab('shared');
-    return;
+    if (!hashPdfUrl) return;   // pdfurl 併記時は 履歴も 見せる ため fall-through
   }
   await loadHistory();    // history 取得と同時に models / cost をロード
+}
+
+// v1066 fb#486 DeepResearch から の 「?pdfurl=...」 の 場合、 result カード の 前 に
+//   「🔗 URL から PDF を 取得して 新規要約」 の banner を 出す。 押すと fetch → File 化 →
+//   既存 の paper_translate multipart POST に 流し込む。
+function renderPdfUrlBanner(pdfUrl, titleQuery) {
+  const target = document.getElementById('pt-result');
+  if (!target) return;
+  target.innerHTML = `
+    <div class="card" style="border:2px dashed var(--primary); background:#faf5ff">
+      <div class="bold" style="color:var(--primary); font-size:14px; margin-bottom:6px">🔎 DeepResearch から の 論文</div>
+      <div style="font-size:12.5px; margin-bottom:6px">
+        <b>URL:</b> <a href="${escapeHtml(pdfUrl)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(pdfUrl)}</a>
+        ${titleQuery ? `<div style="margin-top:2px"><b>タイトル で 既存検索:</b> ${escapeHtml(titleQuery)} — 下の 履歴/公開一覧 で 該当を 確認</div>` : ''}
+      </div>
+      <div class="hint-sm" style="margin-bottom:8px">既存 の 要約 が 無ければ、 下 の ボタン で PDF を 取得して 新規要約 を 作れます。</div>
+      <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+        <button id="pt-fromurl-go" class="btn primary" style="font-size:12.5px">🔗 この URL から PDF を 取得して 要約を 作る</button>
+        <select id="pt-fromurl-model" style="font-size:12.5px"></select>
+        <label style="font-size:12.5px; display:flex; align-items:center; gap:4px"><input type="checkbox" id="pt-fromurl-share" checked> 🎁 共有 ON (半額)</label>
+      </div>
+      <div id="pt-fromurl-status" style="margin-top:6px; font-size:12.5px"></div>
+    </div>`;
+  // モデル 選択肢を 読み込む (config 呼び出し) — 既存 の updateModelInfo の 結果を 待つ
+  const setModels = () => {
+    const src = document.getElementById('pt-model');
+    const dst = document.getElementById('pt-fromurl-model');
+    if (src && dst && src.options.length > 0) dst.innerHTML = src.innerHTML;
+    else setTimeout(setModels, 300);
+  };
+  setModels();
+  document.getElementById('pt-fromurl-go').addEventListener('click', async () => {
+    const btn = document.getElementById('pt-fromurl-go');
+    const status = document.getElementById('pt-fromurl-status');
+    const model = document.getElementById('pt-fromurl-model').value || 'gpt-5';
+    const share = document.getElementById('pt-fromurl-share').checked;
+    btn.disabled = true; btn.textContent = '⏳ PDF 取得中…';
+    status.innerHTML = '';
+    try {
+      const resp = await fetch('/api/ai/fetch_pdf', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: pdfUrl }),
+      });
+      if (!resp.ok) {
+        let msg = 'PDF 取得失敗 (HTTP ' + resp.status + ')';
+        try { const j = await resp.json(); if (j.error?.message) msg = j.error.message; } catch (_) {}
+        throw new Error(msg);
+      }
+      const blob = await resp.blob();
+      status.innerHTML = `<span style="color:#15803d">✓ PDF 取得 (${(blob.size / 1024 / 1024).toFixed(1)} MB) → 要約 開始中…</span>`;
+      btn.textContent = '⏳ 要約 依頼中…';
+      const file = new File([blob], 'paper.pdf', {type: 'application/pdf'});
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('model', model);
+      fd.append('auto_share', share ? '1' : '0');
+      const r2 = await fetch('/api/ai/paper_translate', {method: 'POST', body: fd, credentials: 'same-origin'});
+      if (!r2.ok) {
+        let msg = '要約 開始 失敗 (HTTP ' + r2.status + ')';
+        try { const j = await r2.json(); if (j.error?.message) msg = j.error.message; } catch (_) {}
+        throw new Error(msg);
+      }
+      const j = await r2.json();
+      status.innerHTML = `<span style="color:#15803d">✅ 要約 依頼 受付。 結果ページに 移動…</span>`;
+      setTimeout(() => { location.hash = '#/paper-summary/r/' + j.share_token; }, 500);
+    } catch (e) {
+      status.innerHTML = `<span style="color:#dc2626">失敗: ${escapeHtml(e.message || String(e))}</span>`;
+      btn.disabled = false; btn.textContent = '🔗 この URL から PDF を 取得して 要約を 作る';
+    }
+  });
 }
 
 function updateModelInfo(d) {

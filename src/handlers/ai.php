@@ -75,6 +75,11 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_paper_translate($pdo, $cfg);
         return;
     }
+    // v1066 fb#486 URL から PDF を server-side 取得 (DeepResearch → 要約/全訳 flow で使う)
+    if ($sub === 'fetch_pdf' && $method === 'POST' && !isset($seg[2])) {
+        ai_fetch_pdf_from_url($pdo, $cfg);
+        return;
+    }
     if ($sub === 'paper_translate' && $method === 'GET' && ($seg[2] ?? '') === 'r' && isset($seg[3])) {
         ai_paper_translate_get_shared($pdo, $cfg, (string)$seg[3]);
         return;
@@ -2470,6 +2475,91 @@ function ai_paper_translate_get_shared(PDO $pdo, array $cfg, string $token): voi
         'reactions'     => $reactions,   // v789 #389
         'cross_refs'    => $crossRefs,   // v797 同 PDF の全訳等
     ]);
+}
+
+// v1066 fb#486 URL → PDF 取得 (DeepResearch → 要約/全訳 用)。 認証必須、 安全対策:
+//   - スキーム http/https のみ
+//   - private IP (10.x, 172.16-31.x, 192.168.x, 127.x, localhost) 禁止 (SSRF 対策)
+//   - Content-Type or マジックバイト (%PDF-) 確認
+//   - サイズ 30 MB まで
+//   - タイムアウト 30 秒
+//   - arXiv abs URL は 自動で pdf URL に 書き換え (arxiv.org/abs/xxxx → arxiv.org/pdf/xxxx.pdf)
+function ai_fetch_pdf_from_url(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $url = trim((string)require_field($body, 'url'));
+    if (!preg_match('#^https?://#i', $url)) {
+        throw new ApiException('bad_request', 'http:// or https:// の URL が 必要', 400);
+    }
+    // arXiv abs → pdf 自動書き換え
+    if (preg_match('#^https?://(?:www\.)?arxiv\.org/abs/([^/?#]+)#i', $url, $m)) {
+        $url = 'https://arxiv.org/pdf/' . rawurlencode($m[1]) . '.pdf';
+    }
+    // 同名 preprint サーバ pattern (openreview, biorxiv 等) は 素通し、 その他は そのまま
+    $parsed = @parse_url($url);
+    $host = strtolower((string)($parsed['host'] ?? ''));
+    if ($host === '' || in_array($host, ['localhost', '0.0.0.0', '127.0.0.1'], true)) {
+        throw new ApiException('bad_request', 'ローカルアドレスは 禁止', 400);
+    }
+    // 名前解決 → 私設 IP か 確認
+    $ip = @gethostbyname($host);
+    if ($ip && $ip !== $host) {
+        $bin = @inet_pton($ip);
+        if ($bin === false) throw new ApiException('bad_request', 'IP 解決 失敗', 400);
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            throw new ApiException('bad_request', 'private / reserved IP は 禁止 (SSRF 対策)', 403);
+        }
+    }
+    // curl で 取得
+    $tmpPath = tempnam(sys_get_temp_dir(), 'labpay_dr_pdf_');
+    if ($tmpPath === false) throw new ApiException('server_error', 'tempfile 作成失敗', 500);
+    $fp = fopen($tmpPath, 'wb');
+    if (!$fp) throw new ApiException('server_error', 'tempfile 書込失敗', 500);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_FILE           => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 6,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_USERAGENT      => 'LabPay/DR-PDF-Fetch',
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_REDIR_PROTOCOLS=> CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_BUFFERSIZE     => 65536,
+    ]);
+    $ok = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ct = strtolower((string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE));
+    $err = curl_error($ch);
+    curl_close($ch);
+    fclose($fp);
+    if (!$ok || $status < 200 || $status >= 300) {
+        @unlink($tmpPath);
+        throw new ApiException('upstream', "URL 取得失敗 (HTTP $status): " . ($err ?: '空応答'), 502);
+    }
+    $size = filesize($tmpPath) ?: 0;
+    if ($size > 30 * 1024 * 1024) {
+        @unlink($tmpPath);
+        throw new ApiException('bad_request', "PDF が 大きすぎ (${size} bytes、 上限 30 MB)", 400);
+    }
+    if ($size < 100) {
+        @unlink($tmpPath);
+        throw new ApiException('bad_request', 'PDF 実体が 空 or 短すぎ', 400);
+    }
+    // マジックバイト確認 (Content-Type は 信頼できない サイトが 多い)
+    $head = (string)@file_get_contents($tmpPath, false, null, 0, 5);
+    if ($head !== '%PDF-') {
+        @unlink($tmpPath);
+        throw new ApiException('bad_request',
+            "URL は PDF ではありません (Content-Type: $ct、 先頭: " . bin2hex(substr($head, 0, 5)) . ")。 論文ページ の HTML の場合は 「PDF」 リンクを 探して 直接 の PDF URL で 試してください。", 400);
+    }
+    // PDF を そのまま binary で 返す
+    header('Content-Type: application/pdf');
+    header('Content-Length: ' . $size);
+    header('Content-Disposition: inline; filename="paper.pdf"');
+    readfile($tmpPath);
+    @unlink($tmpPath);
+    exit;
 }
 
 function ai_paper_translate(PDO $pdo, array $cfg): void {

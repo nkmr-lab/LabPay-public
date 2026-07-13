@@ -530,12 +530,17 @@ function paintResult(d) {
   root.querySelectorAll('[data-dr-src-act]').forEach(b => {
     b.addEventListener('click', async () => {
       const act = b.dataset.drSrcAct;
-      if (act === 'summary') {
+      if (act === 'summary' || act === 'fulltrans') {
         const q = b.dataset.drQ || '';
-        location.hash = '#/paper-summary?q=' + encodeURIComponent(q);
-      } else if (act === 'fulltrans') {
-        const q = b.dataset.drQ || '';
-        location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
+        const url = b.dataset.drUrl || '';
+        const isSum = act === 'summary';
+        // まず 既存検索 に飛ばす。 URL が あれば ?pdfurl= も 添える (v1066 で 論文要約 view
+        //   側 が pdfurl を受け取り 「PDF を 取得して 新規要約」 ボタンを 出す)。
+        const base = isSum ? '#/paper-summary' : '#/paper-translate-full';
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (url) params.set('pdfurl', url);
+        location.hash = base + (params.toString() ? '?' + params.toString() : '');
       } else if (act === 'refs') {
         // v1065 中村さん明確化: 研究室内 の 文献管理 (/api/refs) に POST。 成功したら #/refs/{id} へ。
         let payload;
@@ -624,11 +629,14 @@ function renderSourceActions(src, keyId) {
     venue,
     authors: author ? [author] : [],
   });
+  // v1066 中村さん指摘「ボタンの横幅大きすぎ」→ .row (flex で 子要素が 伸びる) を 使わず、
+  //   inline-block + flex: 0 0 auto で 文字サイズだけ の 幅に。
+  const btnStyle = 'font-size:11px; padding:3px 10px; flex:0 0 auto; white-space:nowrap; display:inline-flex; width:auto';
   return `
-    <div class="row" style="gap:4px; margin-top:6px; flex-wrap:wrap">
-      ${title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文要約 を 検索 (見つかれば 見る、 無ければ 新規作成 リンク)">📝 要約</button>` : ''}
-      ${title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="font-size:11px; padding:2px 8px" title="LabPay 内 の 論文全訳 を 検索">📄 全訳</button>` : ''}
-      ${title ? `<button class="btn" data-dr-src-act="refs" data-dr-ref-payload="${escapeHtml(refPayload)}" style="font-size:11px; padding:2px 8px" title="研究室内 の 文献管理 (#/refs) に この 文献を 登録 (Zotero 的な機能)">📚 文献に追加</button>` : ''}
+    <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; justify-content:flex-start">
+      ${title && url ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この 論文 の PDF を URL から 取得して 要約 を 作る (or 既存 の 要約 を 検索)">📝 要約</button>` : title ? `<button class="btn" data-dr-src-act="summary" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内 の 論文要約 を 検索">📝 要約検索</button>` : ''}
+      ${title && url ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" data-dr-url="${escapeHtml(url)}" data-dr-title="${escapeHtml(title)}" style="${btnStyle}" title="この 論文 の PDF を URL から 取得して 全訳 を 作る (or 既存 の 全訳 を 検索)">📄 全訳</button>` : title ? `<button class="btn" data-dr-src-act="fulltrans" data-dr-q="${escapeHtml(searchQ)}" style="${btnStyle}" title="LabPay 内 の 論文全訳 を 検索">📄 全訳検索</button>` : ''}
+      ${title ? `<button class="btn" data-dr-src-act="refs" data-dr-ref-payload="${escapeHtml(refPayload)}" style="${btnStyle}" title="研究室内 の 文献管理 (#/refs) に この 文献を 登録">📚 文献に追加</button>` : ''}
     </div>`;
 }
 

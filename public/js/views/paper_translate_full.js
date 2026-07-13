@@ -108,15 +108,96 @@ export async function renderPaperTranslateFull() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadSharedList(searchEl.value || ''), 300);
   });
-  // v955 hash に ?q=<keyword> が 付いていたら shared タブ に 切り替えて 検索実行
-  const hashQ = (location.hash.match(/\?q=([^&]+)/) || [])[1];
+  // v955/v1066 hash に ?q=<keyword> や ?pdfurl=<url> を 処理
+  const qParam = location.hash.includes('?') ? new URLSearchParams(location.hash.slice(location.hash.indexOf('?') + 1)) : new URLSearchParams();
+  const hashQ = qParam.get('q');
+  const hashPdfUrl = qParam.get('pdfurl');
+  if (hashPdfUrl) {
+    renderPftPdfUrlBanner(hashPdfUrl, hashQ || '');
+  }
   if (hashQ) {
-    const kw = decodeURIComponent(hashQ);
-    searchEl.value = kw;
+    searchEl.value = hashQ;
     switchTab('shared');
-    return;
+    if (!hashPdfUrl) return;
   }
   await loadHistory();   // 初期は自分の履歴
+}
+
+// v1066 fb#486 DeepResearch から の 「?pdfurl=...」 の 場合、 「PDF から 新規全訳」 banner。
+function renderPftPdfUrlBanner(pdfUrl, titleQuery) {
+  const target = document.getElementById('pft-result');
+  if (!target) return;
+  target.innerHTML = `
+    <div class="card" style="border:2px dashed var(--primary); background:#faf5ff">
+      <div class="bold" style="color:var(--primary); font-size:14px; margin-bottom:6px">🔎 DeepResearch から の 論文</div>
+      <div style="font-size:12.5px; margin-bottom:6px">
+        <b>URL:</b> <a href="${escapeHtml(pdfUrl)}" target="_blank" rel="noopener" style="word-break:break-all">${escapeHtml(pdfUrl)}</a>
+        ${titleQuery ? `<div style="margin-top:2px"><b>タイトル で 既存検索:</b> ${escapeHtml(titleQuery)}</div>` : ''}
+      </div>
+      <div class="hint-sm" style="margin-bottom:8px">既存 の 全訳 が 無ければ、 下 の ボタン で PDF を 取得して 新規全訳 を 作れます。</div>
+      <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+        <label style="font-size:12.5px">方向:
+          <select id="pft-fromurl-dir" style="font-size:12.5px">
+            <option value="en2ja" selected>英→日</option>
+            <option value="ja2en">日→英 (5x)</option>
+          </select>
+        </label>
+        <select id="pft-fromurl-model" style="font-size:12.5px"></select>
+        <label style="font-size:12.5px; display:flex; align-items:center; gap:4px"><input type="checkbox" id="pft-fromurl-share" checked> 🎁 共有 ON (半額)</label>
+        <button id="pft-fromurl-go" class="btn primary" style="font-size:12.5px">🔗 この URL から PDF を 取得して 全訳 を 作る</button>
+      </div>
+      <div id="pft-fromurl-status" style="margin-top:6px; font-size:12.5px"></div>
+    </div>`;
+  const setModels = () => {
+    const src = document.getElementById('pft-model');
+    const dst = document.getElementById('pft-fromurl-model');
+    if (src && dst && src.options.length > 0) dst.innerHTML = src.innerHTML;
+    else setTimeout(setModels, 300);
+  };
+  setModels();
+  document.getElementById('pft-fromurl-go').addEventListener('click', async () => {
+    const btn = document.getElementById('pft-fromurl-go');
+    const status = document.getElementById('pft-fromurl-status');
+    const model = document.getElementById('pft-fromurl-model').value || 'gpt-5';
+    const share = document.getElementById('pft-fromurl-share').checked;
+    const direction = document.getElementById('pft-fromurl-dir').value;
+    btn.disabled = true; btn.textContent = '⏳ PDF 取得中…';
+    status.innerHTML = '';
+    try {
+      const resp = await fetch('/api/ai/fetch_pdf', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: pdfUrl }),
+      });
+      if (!resp.ok) {
+        let msg = 'PDF 取得失敗 (HTTP ' + resp.status + ')';
+        try { const j = await resp.json(); if (j.error?.message) msg = j.error.message; } catch (_) {}
+        throw new Error(msg);
+      }
+      const blob = await resp.blob();
+      status.innerHTML = `<span style="color:#15803d">✓ PDF 取得 (${(blob.size / 1024 / 1024).toFixed(1)} MB) → 全訳 開始中…</span>`;
+      btn.textContent = '⏳ 全訳 依頼中…';
+      const file = new File([blob], 'paper.pdf', {type: 'application/pdf'});
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('model', model);
+      fd.append('direction', direction);
+      fd.append('auto_share', share ? '1' : '0');
+      const r2 = await fetch('/api/ai/paper_translate_full', {method: 'POST', body: fd, credentials: 'same-origin'});
+      if (!r2.ok) {
+        let msg = '全訳 開始 失敗 (HTTP ' + r2.status + ')';
+        try { const j = await r2.json(); if (j.error?.message) msg = j.error.message; } catch (_) {}
+        throw new Error(msg);
+      }
+      const j = await r2.json();
+      status.innerHTML = `<span style="color:#15803d">✅ 全訳 依頼 受付。 結果ページに 移動…</span>`;
+      setTimeout(() => { location.hash = '#/paper-translate-full/r/' + j.share_token; }, 500);
+    } catch (e) {
+      status.innerHTML = `<span style="color:#dc2626">失敗: ${escapeHtml(e.message || String(e))}</span>`;
+      btn.disabled = false; btn.textContent = '🔗 この URL から PDF を 取得して 全訳 を 作る';
+    }
+  });
 }
 
 function bindEvents() {
