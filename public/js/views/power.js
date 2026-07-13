@@ -2054,7 +2054,10 @@ function render() {
       state.wizard = state.wizard || {};
       state.wizard[b.dataset.wz] = b.dataset.wzVal;
       // 上位を変えたら下位はリセット
-      if (b.dataset.wz === 'scale')   state.wizard.groups = state.wizard.related = state.wizard.normal = state.wizard.complex = '';
+      if (b.dataset.wz === 'scale')   {
+        state.wizard.groups = state.wizard.related = state.wizard.normal = state.wizard.complex = '';
+        state.wizard.relation_type = state.wizard.assoc_expected = '';
+      }
       if (b.dataset.wz === 'groups')  state.wizard.related = state.wizard.normal = state.wizard.complex = '';
       if (b.dataset.wz === 'related') state.wizard.normal = state.wizard.complex = '';
       if (b.dataset.wz === 'normal')  state.wizard.complex = '';
@@ -2069,7 +2072,7 @@ function render() {
   });
   document.querySelectorAll('[data-wz-reset]').forEach(b => {
     b.addEventListener('click', () => {
-      state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '' };
+      state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '', relation_type: '', assoc_expected: '' };
       render();
     });
   });
@@ -3235,12 +3238,16 @@ function renderSaveShareButtons(pos) {
 //   いくと、分析ガイドのフローチャートを対話的に辿った結果の検定が自動で選ばれる。
 //   選択の途中結果と適用ロジックを UI に表示。
 function renderTestWizard() {
-  const w = state.wizard || (state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '' });
+  const w = state.wizard || (state.wizard = { scale: '', groups: '', related: '', normal: '', complex: '', relation_type: '', assoc_expected: '' });
+  // 後方互換: 古い state に これらの キーが なくても OK
+  if (w.relation_type === undefined) w.relation_type = '';
+  if (w.assoc_expected === undefined) w.assoc_expected = '';
   const opt = (id, val, label) => `<button class="btn" data-wz="${id}" data-wz-val="${val}" style="font-size:11px; padding:3px 8px; ${w[id]===val?'background:#7b3fa0; color:#fff':''}">${label}</button>`;
   // 決定ロジック
   let inferred = null;
   let inferredNote = '';
   const s = w.scale, g = w.groups, r = w.related, n = w.normal, c = w.complex;
+  const rt = w.relation_type, ae = w.assoc_expected;
   // v1048 順序尺度で 2 群参加者内なら 順序ロジット GLMM を第一提案
   if (s === 'ordinal' && g === '2' && r === 'paired') {
     inferred = 'glmm_ordinal';
@@ -3283,7 +3290,17 @@ function renderTestWizard() {
       }
     }
   } else if (s === 'relation') {
-    inferred = 'corr'; inferredNote = '2 つの値の連動を見る → Pearson 相関 (順位の類似なら Spearman、検定力はほぼ同じ)';
+    // v1061 中村さん指摘: Pearson vs Spearman は 何を知りたいかで 選ばせる。 検定力は
+    //   ほぼ同じだが、 分析の 意味が違うので 明示的に。
+    if (rt === 'pearson') {
+      inferred = 'corr';
+      inferredNote = '2 つの値の 直線的な連動 → 🔗 Pearson 相関 r。 「値そのもの が どれくらい 一緒に 上下するか」 を 見る。 外れ値の影響を 受けやすい。 データの分布が 正規に近い時に 最適。';
+    } else if (rt === 'spearman') {
+      inferred = 'corr';
+      inferredNote = '2 つの値の 順位の類似 → Spearman ρ (このアプリで対応。 Pearson 相関 の 公式で 概算可、 実分析では ρ_S の 値を報告)。 「大小関係が 一致するか」 だけを 見るので 外れ値や 非線形 (単調) 関係 に 強い。 検定力は Pearson と ほぼ同じ (ARE ≈ 0.91)。';
+    } else {
+      inferredNote = 'Q2 で 「直線的な連動」 か 「順位の類似」 かを 選んでください';
+    }
   } else if (s === 'binary_within') {
     inferred = 'glmm_logit'; inferredNote = '2 値アウトカム、参加者内 → Logistic GLMM';
   } else if (s === 'count_within') {
@@ -3292,11 +3309,19 @@ function renderTestWizard() {
     inferred = 'chi2';
     inferredNote = '1 種類のカテゴリ の 分布の偏りを見る → ⁉ χ² 適合度検定 (df = カテゴリ数 − 1、 例: 3 択なら df=2)';
   } else if (s === 'categorical_assoc') {
-    inferred = 'chi2';
-    inferredNote = '2 種類のカテゴリ の 関連を見る → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、 例: 2×3 なら df=2)。 期待度数 <5 のセルがあれば Fisher 直接確率検定に。';
+    // v1061 中村さん指摘: 「期待度数 <5 なら Fisher」 だけでは わからないので 選ばせる。
+    if (ae === 'large') {
+      inferred = 'chi2';
+      inferredNote = '2 種類のカテゴリ の 関連 (期待度数 全セル ≥5) → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、 例: 2×3 なら df=2)。 このアプリで対応。';
+    } else if (ae === 'small') {
+      inferred = 'chi2';
+      inferredNote = '2 種類のカテゴリ の 関連 (期待度数 <5 のセルあり、 少数観測) → 本来は Fisher 直接確率検定 が推奨。 このアプリは Fisher の 検定力計算 は 直接持たない (Fisher は closed-form の 検定力公式が無く シミュ必須) が、 大標本近似の χ² で 概算可 (実分析での Fisher の n は 数% 差 以内)。 このアプリでは χ² 独立性検定で 見積もり、 実分析は Fisher で 行うのが 推奨。';
+    } else {
+      inferredNote = 'Q2 で 「期待度数の 見込み」 を 選んでください';
+    }
   }
   return `
-    <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g) ? 'open' : ''}>
+    <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g || rt || ae) ? 'open' : ''}>
       <summary style="cursor:pointer; font-weight:600; color:#7b3fa0; font-size:13px">🧭 選択ウィザード</summary>
       <div style="margin-top:10px; font-size:12.5px; line-height:1.9">
         <div><b>Q1. 差を測定したい 数値 (従属変数) の 特性は？</b></div>
@@ -3339,13 +3364,27 @@ function renderTestWizard() {
             ${opt('complex', 'complex', '複雑 (参加者内、複数試行)')}
             ${opt('complex', 'crossed', '参加者 × 刺激の交差')}
           </div>` : ''}
+        ${s === 'relation' ? `
+          <div><b>Q2. 何を知りたい？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">「値そのものが 一緒に上下する」 か 「大小関係だけ 一致する」 か で 選ぶ 検定が 変わります。</div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('relation_type', 'pearson', '直線的な連動 (身長と体重、時給と月収 等 の 比例っぽい 関係)')}
+            ${opt('relation_type', 'spearman', '順位の類似 (成績順位 の 一致、 満足度順 の 対応 等、 単調だが 直線とは 限らない)')}
+          </div>` : ''}
+        ${s === 'categorical_assoc' ? `
+          <div><b>Q2. 期待度数の見込み は？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">クロス表 の 各セル の 想定人数。 「n × 行合計比率 × 列合計比率」 で 計算できる 期待人数。 全セル 5 人以上 なら χ² が 使えます。 1 つでも 5 未満 なら 本来は Fisher。</div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('assoc_expected', 'large', '大標本 (全セル 期待度数 ≥5 見込み)')}
+            ${opt('assoc_expected', 'small', '少数観測 (< 5 のセルあり見込み、 Fisher 想定)')}
+          </div>` : ''}
         ${inferred ? `
           <div style="margin-top:8px; padding:8px 12px; background:#dcfce7; border-left:3px solid #059669; border-radius:0 6px 6px 0">
             <div style="color:#059669"><b>⇒ 推奨: ${escapeHtml((TESTS.find(x=>x.id===inferred)||{label:inferred}).label)}</b></div>
             <div class="hint-sm" style="margin-top:2px">${inferredNote}</div>
             <button data-wz-apply="${inferred}" class="btn primary" style="font-size:12px; padding:3px 10px; margin-top:6px">この検定を選ぶ</button>
           </div>` : (inferredNote ? `<div style="margin-top:8px; padding:6px 10px; background:#fef3c7; border-left:3px solid #a16207; border-radius:0 6px 6px 0" class="hint-sm">${inferredNote}</div>` : '')}
-        ${(s || g || r || n || c) ? `<div style="margin-top:6px"><button data-wz-reset="1" class="btn" style="font-size:11px; padding:2px 8px">↺ リセット</button></div>` : ''}
+        ${(s || g || r || n || c || rt || ae) ? `<div style="margin-top:6px"><button data-wz-reset="1" class="btn" style="font-size:11px; padding:2px 8px">↺ リセット</button></div>` : ''}
       </div>
     </details>`;
 }
