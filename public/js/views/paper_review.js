@@ -46,7 +46,7 @@ export async function renderPaperReview() {
         <div class="hint-sm" id="pr-model-info" style="font-size:11px; margin-top:4px"></div>
       </label>
       <label class="field">
-        <span class="lbl">論文 PDF (最大 30 MB、通常 〜10 ページ程度)</span>
+        <span class="lbl">論文 PDF (最大 30 MB、通常〜10 ページ程度)</span>
         <input type="file" id="pr-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pr-file-status" style="margin-top:4px"></div>
       </label>
@@ -225,7 +225,8 @@ async function go() {
     location.hash = '#/paper-review/r/' + j.share_token;
   } catch (e) {
     root.innerHTML = `<div class="card"><div class="muted">失敗: ${escapeHtml(e.message)}</div></div>`;
-    btn.disabled = false; btn.textContent = '📄 査読開始 (10pt)';
+    // 失敗時は「(Xpt)」表記を残さず、シンプルに戻す (次のモデル選択変更で refresh される)
+    btn.disabled = false; btn.textContent = '📄 査読開始';
   }
 }
 
@@ -312,7 +313,7 @@ function paint(d, shareToken, isShared) {
   document.getElementById('pr-result').innerHTML = `
     <div class="card">
       <div class="row no-print" style="gap:6px; justify-content:flex-end; margin-bottom:6px">
-        <button id="pr-pdf" class="btn" style="font-size:12px; padding:3px 10px" title="ブラウザ の 印刷 → 「PDF として 保存」">📥 PDF に する</button>
+        <button id="pr-pdf" class="btn" style="font-size:12px; padding:3px 10px" title="ブラウザの印刷 → 「PDF として保存」">📥 PDF にする</button>
       </div>
       <div class="bold" style="font-size:16px; color:var(--primary)">🎯 査読結果</div>
       <div class="meta" style="font-size:12px; margin-bottom:8px">対象会議: ${escapeHtml(d.venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
@@ -548,7 +549,7 @@ function paint(d, shareToken, isShared) {
   });
 }
 
-// v993 統計指標の妥当性 (中村さん要望)。 全体スコア + 個別 issue リスト。
+// v993 統計指標の妥当性 (中村さん要望)。全体スコア + 個別 issue リスト。
 function renderStatisticalValidity(sv) {
   const score = Number(sv.score) || 0;
   const overall = String(sv.overall_comment || '');
@@ -609,7 +610,7 @@ function renderCitationsCheck(cc) {
     <div style="margin-top:12px">
       <div class="bold" style="color:${barColor}">📚 参考文献の検証</div>
       <div style="padding:6px 10px; background:${bgColor}; border-left:3px solid ${barColor}; border-radius:0 4px 4px 0; font-size:12.5px; margin-top:4px">
-        合計 ${total} 件中、 妥当性が確認できた引用は ${verified} 件、 疑わしい引用は <span class="bold">${suspicious.length}</span> 件。
+        合計 ${total} 件中、妥当性が確認できた引用は ${verified} 件、疑わしい引用は <span class="bold">${suspicious.length}</span> 件。
       </div>
       ${suspicious.map(s => `
         <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #fecaca; border-radius:6px; font-size:12.5px">

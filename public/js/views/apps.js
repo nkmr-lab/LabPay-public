@@ -12,8 +12,8 @@ import { escapeHtml } from '../router.js';
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
   { id: 'research',  label: '🔬 研究用',                  hint: '論文要約 / 全訳 / 査読 / 原稿チェック / リライター / Deep Researchなど、AIを使って研究を直接進めるもの。' },
-  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・請求・待ち合わせ など)。' },
-  { id: 'shared',    label: '📤 共有',                    hint: 'ラボメンバーで情報や成果物を共有するもの (アルバム・ゼミ動画・チャット・ファイル送受信・締切・重要連絡・かんばん など)。' },
+  { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・請求・待ち合わせなど)。' },
+  { id: 'shared',    label: '📤 共有',                    hint: 'ラボメンバーで情報や成果物を共有するもの (アルバム・ゼミ動画・チャット・ファイル送受信・締切・重要連絡・かんばんなど)。' },
   { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。販売・購入・オークション。' },
   { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応通知を出すジャンル。' },
   { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
@@ -69,7 +69,7 @@ export const APPS = [
   { id: 'todos',         cat: 'ai',     url: '#/todos',         title: '📝 自分の TODO',     desc: 'やることメモ。サーバ保存で端末間共有。完了と未完了を分けて表示。', defaultVisible: true },
 
   // 🤖 ai — 個人ツール (AI / 計算、通知なし)
-  { id: 'chat',          cat: 'ai',     url: '#/chat',          title: '💬 AI 対話 / 翻訳',  desc: '汎用多言語チャット (中国語・イタリア語・英語など)。海外出張での翻訳・会話補助に。クイックボタンで「〇〇 に翻訳」を即発射。', defaultVisible: true },
+  { id: 'chat',          cat: 'ai',     url: '#/chat',          title: '💬 AI 対話 / 翻訳',  desc: '汎用多言語チャット (中国語・イタリア語・英語など)。海外出張での翻訳・会話補助に。クイックボタンで「〇〇に翻訳」を即発射。', defaultVisible: true },
   { id: 'help',          cat: 'ai',     url: '#/help',          title: '🤖 操作ガイド AI',   desc: 'LabPay の使い方を AI に聞けるチャット。「○○ ってどこから?」「△△ したいんだけど」に操作手順で答えます。', defaultVisible: true },
   { id: 'translate',     cat: 'ai',     url: '#/translate',     title: '🌐 画像和訳',       desc: '写真 (メニュー / 看板 / 説明文など) をアップロード → AI で日本語に翻訳。出張 / 旅行で便利。', defaultVisible: true },
 
@@ -93,35 +93,35 @@ export const APPS = [
   // v538 #169 散歩に行きたくなるアプリ
   { id: 'walk',          cat: 'health', url: '#/walk',           title: '🚶 散歩',           desc: '現在地周辺の食べある記から散歩先をランダムにおすすめ。距離 + 徒歩何分 + 方位矢印 + Google Maps 経路。未訪を優先 + 半径切替 (500m〜5km)。', defaultVisible: true },
   // v540 #171 絵しりとり (v574 から game カテゴリへ)
-  { id: 'shiritori',     cat: 'game',   url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く絵しりとり。タイムリミット付きキャンバス + ストローク記録。自分が何を描いたか + 前の人を何と予想したかを登録。周回数 + ギブアップ。 AI 予想 + 最終当ては Phase 2 で。', defaultVisible: true },
+  { id: 'shiritori',     cat: 'game',   url: '#/shiritori',      title: '🎨 絵しりとり',     desc: 'メンバーで順番に絵を描く絵しりとり。タイムリミット付きキャンバス + ストローク記録。自分が何を描いたか + 前の人を何と予想したかを登録。周回数 + ギブアップ。プレイフィー 5pt。', defaultVisible: true },
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リストでみんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
-  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文 PDF を渡すと 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み + 引用実在性検証 + 統計妥当性) を返します。', defaultVisible: true },
+  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文 PDF を渡すと章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み + 引用実在性検証 + 統計妥当性) を返します。', defaultVisible: true },
   // v748 #359 #360 #361 論文和訳要約 (落合メソッド)
-  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文 PDF から 章立て要約 + RQ/仮説 + 落合メソッド + 図表 を 構造化して 3-5 分で返す。 引用実在性の自己検証つき。', defaultVisible: true },
+  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文 PDF から章立て要約 + RQ/仮説 + 落合メソッド + 図表を構造化して 3-5 分で返す。引用実在性の自己検証つき。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け軽量版)
   // v1023 実験計画書チェック (Scrapbox 形式の実験計画書を精査)
-  { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。', defaultVisible: true },
+  { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。', defaultVisible: true },
   // v1024 サンプルサイズ / 検定力 (G*Power ベースライン)
-  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 t / ANOVA / rmANOVA / 相関 (Pearson/Spearman) / χ² / Fisher / LMM/GLMM / ベイズ の 17 検定 + 予算試算 + 論文用 R/Python コード 自動生成。', defaultVisible: true },
-  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など 1-2 ページの短原稿をチェック。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標を一通り見ます。', defaultVisible: true },
+  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 t / ANOVA / rmANOVA / 相関 (Pearson/Spearman) / χ² / Fisher / LMM/GLMM / ベイズの 17 検定 + 予算試算 + 論文用 R/Python コード自動生成。', defaultVisible: true },
+  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など 1-2 ページの短原稿をチェック。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標を一通り見ます。', defaultVisible: true },
   // v613 文字数・単語数リライター
-  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール。 サーバ側で正確にカウントして超過時は再依頼 (最大 3 回)。 英文は和訳も。 元と書き直しを色付き diff で表示。', defaultVisible: true },
+  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール。サーバ側で正確にカウントして超過時は再依頼 (最大 3 回)。英文は和訳も。元と書き直しを色付き diff で表示。', defaultVisible: true },
   // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
-  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。 サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL を構造化して返す。 引用実在性の自己検証つき。', defaultVisible: true },
+  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL を構造化して返す。引用実在性の自己検証つき。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
-  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく 章ごとのフル翻訳。 各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。 英→日 と 日→英 (em-dash 等 GPT-isms 除去込み) の 双方向対応。', defaultVisible: true },
-  // v942 公開投票 (誰でも 投票)
+  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく章ごとのフル翻訳。各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。英→日と日→英 (em-dash 等 GPT-isms 除去込み) の双方向対応。', defaultVisible: true },
+  // v942 公開投票 (誰でも投票)
   { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開URL or 4桁コードで誰でも投票できる汎用アンケート (LabPayログイン不要、SNSシェア可)。単一/複数選択 + 任意で自由記述、集計公開タイミングも選択可。外部イベント来場者やSNS向け。', defaultVisible: true },
-  // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
-  { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会 投票', desc: '2ラボ以上の合同研究会でセッション別優秀発表者を投票で決める。外部参加者も4桁コード or 公開URLで匿名投票可 (LabPayログイン不要)。投票者は所属を選び、相手ラボの発表だけに投票 (クロスラボ制約)。', defaultVisible: true },
-  // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽 に移動
+  // v941 合同研究会用投票 (v944 で research → lab-mgmt にカテゴリ移動)
+  { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会投票', desc: '2ラボ以上の合同研究会でセッション別優秀発表者を投票で決める。外部参加者も4桁コード or 公開URLで匿名投票可 (LabPayログイン不要)。投票者は所属を選び、相手ラボの発表だけに投票 (クロスラボ制約)。', defaultVisible: true },
+  // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽に移動
   { id: 'nkmr-albums',    cat: 'shared', url: '#/albums', title: '📸 中村研アルバム',
-    desc: '中村研 の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。 年別に折りたたみ、 学会 / 合宿 / 飲み会 / 卒業式 等 200+ 件の思い出。 各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
-  // v960 外部ツール ポータル (LabPay を ハブ に して 別 アプリ に 飛ぶ)
+    desc: '中村研の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。年別に折りたたみ、学会 / 合宿 / 飲み会 / 卒業式等 200+ 件の思い出。各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
+  // v960 外部ツールポータル (LabPay をハブにして別アプリに飛ぶ)
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
-    desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。 顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。 新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
+    desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
     desc: 'ラボ NFS / VPS 上のファイルをブラウザで一覧・編集・アップロード・ダウンロード。 VS Code Remote がメモリ枯渇するときの代替。 Google 認証で保護、 realpath で閉じ込め済。', defaultVisible: true },
   { id: 'db-admin',       cat: 'tools',    url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
@@ -130,25 +130,25 @@ export const APPS = [
   // v1002 個人家計簿
   // v1019 🍅 ポモドーロタイマー (個人の集中管理)
   { id: 'pomodoro',       cat: 'health', url: '#/pomodoro',      title: '🍅 ポモドーロタイマー',
-    desc: '集中25分 → 小休憩5分 を 繰り返す 集中法。 4 セット目 の 後 は 大休憩15分。 タスクラベル、 完了時 チャイム + ブラウザ通知、 集中中 は 画面 sleep 抑止、 日次実績 グラフ、 duration カスタマイズ 可。 個人の作業効率アップに。', defaultVisible: true },
+    desc: '集中25分 → 小休憩5分を繰り返す集中法。 4 セット目の後は大休憩15分。タスクラベル、完了時チャイム + ブラウザ通知、集中中は画面 sleep 抑止、日次実績グラフ、 duration カスタマイズ可。個人の作業効率アップに。', defaultVisible: true },
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
-    desc: '個人の支出を記録。 手動追加 or 領収書を撮影して OpenAI Vision で 店名/日付/金額/カテゴリを自動抽出。 月別 + カテゴリ別合計 + 明細一覧。 全て個人スコープ (他人には見えない)。', defaultVisible: true },
-  { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスクボード。 列 (Backlog/Doing/Done 等) + カード を D&D。 カードは 担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。 アサインとコメントで通知、 履歴も残る。', defaultVisible: true },
+    desc: '個人の支出を記録。手動追加 or 領収書を撮影して OpenAI Vision で店名/日付/金額/カテゴリを自動抽出。月別 + カテゴリ別合計 + 明細一覧。全て個人スコープ (他人には見えない)。', defaultVisible: true },
+  { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
   { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero的な文献管理。DOI/arXiv ID/URLからmetadata (title/authors/year/venue/abstract) を自動取得。PDF添付、タグ、BibTeX出力、検索・絞り込み、読状態、自分のnoteをラボ全員で共有。要約/全訳と相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)
-  { id: 'overleaf',     cat: 'shared',   url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウント共有の 全 Overleaf プロジェクトの 文字数推移を 可視化。 24h/7d 差分 + sparkline + 60 日履歴 + 比較グラフ。', defaultVisible: true },
+  { id: 'overleaf',     cat: 'shared',   url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウント共有の全 Overleaf プロジェクトの文字数推移を可視化。 24h/7d 差分 + sparkline + 60 日履歴 + 比較グラフ。', defaultVisible: true },
   { id: 'zemi-videos', cat: 'shared', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。誰でも動画URL + タイトル + 説明を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },
   // v553 #209 麻雀 (v574 から game カテゴリへ)
   { id: 'mahjong',       cat: 'game',   url: '#/mahjong',       title: '🀄 麻雀',           desc: '4 人で 50pt 賭けて本格麻雀 (門前/鳴き/役判定/連荘/半荘) or 1〜4 位申告で自動分配。 AI 対戦はプレイフィー 5pt の練習モード。', defaultVisible: true },
   // v568 #223 ito (v574 から game カテゴリへ)
-  { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上でプレイフィー 1pt、各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。数字を直接言わずに「強い動物の強さ」などで大小を伝える。', defaultVisible: true },
+  { id: 'ito',           cat: 'game',   url: '#/ito',            title: '🎲 ito',           desc: '2 人以上でプレイフィー 5pt、各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示する協力ゲーム。数字を直接言わずに「強い動物の強さ」などで大小を伝える。', defaultVisible: true },
   // v570 #223 人狼 (v574 から game カテゴリへ)
-  { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人でプレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。', defaultVisible: true },
+  { id: 'jinrou',        cat: 'game',   url: '#/jinrou',         title: '🐺 人狼',          desc: '4-16 人でプレイフィー 5pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。', defaultVisible: true },
   { id: 'fortune',       cat: 'game',   url: '#/fortune',        title: '🔮 今日の占い + ♈ 西洋占星術',  desc: '1 日 1 回だけ引ける運勢 (大吉 / 中吉 / 凶等 30 種)。設定 → プロフィールで誕生日を登録すると 12 星座占い (メッセージ + ラッキーカラー / アイテム / ナンバー) も一緒に表示。同じ日は同じ結果、翌日 0:00 で更新。ホームの残高エリア 🔮 アイコンからも引ける。', defaultVisible: true },
   { id: 'conf-deadlines',cat: 'shared',url: '#/conf-deadlines', title: '📅 学会〆切',    desc: '国際会議 / 国内研究会 / 論文誌の投稿〆切を登録 + 一覧。誰でも登録可、全員閲覧可。〆切順表示 + あと N 日のカウントダウン。', defaultVisible: true },
   // v576 優勝予想 (W 杯 / スポーツ大会 / 学会 best paper など)
@@ -156,13 +156,13 @@ export const APPS = [
   // v609 #235 勝敗予測 (試合のスコアを当てる)
   { id: 'score-predictions', cat: 'game', url: '#/score-predictions', title: '🎯 勝敗予測', desc: '試合のスコア (X-Y) を予想して完璧に当てた人が pot 総取り (山分け、場代5%)。誰も当たらなければ全員返金。基本20pt、 10-100pt 設定可。', defaultVisible: true },
   // v587 地雷オセロ
-  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。プレイフィー 2pt。', defaultVisible: true },
+  { id: 'othello',       cat: 'game',   url: '#/othello',        title: '💣 地雷オセロ',     desc: '通常オセロ + 各自 1 か所地雷。地雷を踏むと周囲 3x3 (9 マス) 反転。プレイフィー 5pt。', defaultVisible: true },
   // v617 #236 マルバツ (自作ゲームフレームワークサンプル)
-  { id: 'tictactoe',     cat: 'game',   url: '#/tictactoe',      title: '⭕❌ マルバツ',      desc: '3x3 のマルバツ。起案者=⭕、参加者=❌。縦/横/斜め 3 つ並べたら勝ち。プレイフィー 1pt。自作ゲームのサンプル実装 (docs/CUSTOM_GAMES.md 参照)。', defaultVisible: true },
+  { id: 'tictactoe',     cat: 'game',   url: '#/tictactoe',      title: '⭕❌ マルバツ',      desc: '3x3 のマルバツ。起案者=⭕、参加者=❌。縦/横/斜め 3 つ並べたら勝ち。プレイフィー 5pt。自作ゲームのサンプル実装 (docs/CUSTOM_GAMES.md 参照)。', defaultVisible: true },
   // v588 ビンゴ (週次)
   { id: 'bingo',         cat: 'game',   url: '#/bingo',          title: '🎰 ビンゴ',          desc: '毎週 5x5 ビンゴカードが自動生成。平日の行動 (ラボイン/らぼったー投稿/麻雀/オセロ/食べある記など) が自動カウント。達成早 + ライン数で週次リーダーボード。', defaultVisible: true },
   // v590 大富豪 (シンプル MVP)
-  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。単出し / ペア / N枚出しで同枚数 + 強い数字を出す。ジョーカーワイルド + 革命 + 8切り。プレイフィー 2pt。', defaultVisible: true },
+  { id: 'daifugo',       cat: 'game',   url: '#/daifugo',        title: '🃏 大富豪',         desc: '2-4 人。単出し / ペア / N枚出しで同枚数 + 強い数字を出す。ジョーカーワイルド + 革命 + 8切り。プレイフィー 5pt。', defaultVisible: true },
   { id: 'playlists',     cat: 'game',   url: '#/playlists',    title: '🎵 プレイリスト',    desc: 'YouTube/Spotify URLをまとめて紹介。⭐1-5評価 + コメント + ❤️お気に入り + ジャンル + シャッフル再生。', defaultVisible: true },
   { id: 'places',        cat: 'game',   url: '#/places',       title: '🍴 食べある記',      desc: 'お店情報 (住所 / 緯度経度 / 紹介文) をラボメンバーで共有。口コミ・写真・⭐評価 + 地図ビュー + tabelog URLから自動取得。', defaultVisible: true },
   { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },
@@ -220,13 +220,13 @@ const CATEGORY_ORDER = {
     'requests',                     // 請求 (集金)
     'bait',                         // アルバイト申請
   ],
-  // v1016 🧰 ツール カテゴリ の 並び順
+  // v1016 🧰 ツールカテゴリの並び順
   'tools': [
     'widgets',                      // 🧩 ウィジェットセンター
     'file-browser',                 // 🗄 ファイルブラウザ
     'db-admin',                     // 🗃 phpMyAdmin
   ],
-  // v1001 共有 タブ (中村さん指定 順)
+  // v1001 共有タブ (中村さん指定順)
   'shared': [
     'nkmr-albums',                  // 📸 中村研アルバム (最上位)
     'zemi-videos',                  // 🎥 ゼミ動画
@@ -253,8 +253,8 @@ export async function renderApps(ctx = {}) {
   const filteredCats = filterCat
     ? APP_CATEGORIES.filter(c => c.id === filterCat)
     : APP_CATEGORIES;
-  // v960 外部URL (https://…) は 別タブ で 開く よう target=_blank + rel、
-  //   タイトル 末尾 に ↗ を 付けて 見分け が つく ように。 SPA 内 リンク は 従来 通り。
+  // v960 外部URL (https://…) は別タブで開くよう target=_blank + rel、
+  //   タイトル末尾に ↗ を付けて見分けがつくように。 SPA 内リンクは従来通り。
   const renderItemRow = (a) => {
     const isExternal = /^https?:\/\//.test(a.url);
     const attr = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';

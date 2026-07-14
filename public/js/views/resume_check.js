@@ -1,4 +1,4 @@
-// v583 #225 レジュメ原稿チェック — 1-2 ページ短原稿向け軽量査読 (5pt)。
+// v583 #225 レジュメ原稿チェック — 1-2 ページ短原稿向け軽量査読 (v1068 で gpt-5 20pt に)。
 //   /#/resume-check       一覧 + 新規入力
 //   /#/resume-check/:id   詳細
 //
@@ -18,7 +18,7 @@ export async function renderResumeCheck() {
       <p class="hint" style="margin:6px 0 0; font-size:13px">
         レジュメ/概要/申請書など1-2ページの短原稿をチェック。
         論文ほど厳しくないが、背景の妥当性/論理展開/専門用語/接続詞/表記揺れ/引用を一通り見ます。
-        <b>1回5pt</b>。失敗時は自動返金。
+        <b>1回20pt</b>。失敗時は自動返金。
       </p>
     </div>
     <div class="card">
@@ -30,7 +30,7 @@ export async function renderResumeCheck() {
       <input id="rc-pdf" type="file" accept="application/pdf" class="input">
       <div class="hint-sm" style="margin-top:4px">図表入りでOK。レイアウトのままAIに渡るので論理展開が伝わりやすい。</div>
       <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
-        <button id="rc-submit" class="btn primary">5pt を支払ってチェック依頼</button>
+        <button id="rc-submit" class="btn primary">20pt を支払ってチェック依頼</button>
         <span class="hint-sm" id="rc-status"></span>
       </div>
     </div>
@@ -61,7 +61,7 @@ export async function renderResumeCheck() {
       navigate('#/resume-check/' + r.id);
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
-      btn.disabled = false; btn.textContent = '5pt を支払ってチェック依頼';
+      btn.disabled = false; btn.textContent = '20pt を支払ってチェック依頼';
     }
   });
   await renderResumeCheckList();
@@ -152,7 +152,7 @@ async function loadAndPaint(id) {
   const r = d.result || {};
   const scoreColor = (s) => s >= 4 ? '#15803d' : s === 3 ? '#946d00' : '#b91c1c';
   // v993 統計指標の妥当性 (中村さん要望)。 issues 構造が他と違う (location + issue_type +
-  //   explanation + suggestion) ので別ハンドラ。 統計記述がない原稿は score=5 で「なし」表示。
+  //   explanation + suggestion) ので別ハンドラ。統計記述がない原稿は score=5 で「なし」表示。
   const renderStatValidity = (sv) => {
     if (!sv) return '';
     const score = Number(sv.score) || 0;
