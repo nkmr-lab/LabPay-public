@@ -1953,7 +1953,10 @@ const TESTS = [
 ];
 
 const state = {
-  test: 't2',
+  // v1077 中村さん指示「検定の種類を選ぶまで、 3 以降は表示しないで」→ 空文字を
+  //   「未選択」として扱い、 ③ 以降を全部隠す。ウィザードで「この検定を選ぶ」を
+  //   押すか、ドロップダウンで選んだ瞬間に ③ 以降が現れる。
+  test: '',
   mode: 'a_priori',   // 'a_priori' | 'post_hoc'
   alpha: 0.05,
   tails: 2,
@@ -2160,7 +2163,7 @@ function render() {
     <div class="card page-header">
       <h2 style="margin:0">📐 サンプルサイズ / 検定力 ${state.loaded_name ? `<span class="hint-sm" style="font-size:13px; margin-left:8px; color:#7b3fa0">📁 ${escapeHtml(state.loaded_name)}${state.loaded_owner_name ? ' (by ' + escapeHtml(state.loaded_owner_name) + ')' : ''}</span>` : ''}</h2>
       <div class="hint-sm" style="margin-top:4px">古典的 G*Power 相当の A priori (必要 n) / Post hoc (検定力) を計算します。正規近似ベース (G*Power の非心分布計算と数%差)。 v1025+ で LMM/GLMM シミュレーション、参加者/刺激/試行の比較、コスト直結を予定。</div>
-      ${renderSaveShareButtons('top')}
+      ${state.test ? renderSaveShareButtons('top') : ''}
     </div>
 
     <!-- v1030 中村さん指示「一気に値を設定する感じになってるけど、ひとつずつ入力
@@ -2184,11 +2187,14 @@ function render() {
       body: `${renderTestWizard()}
              <div class="hint-sm" style="margin-top:12px; margin-bottom:4px; font-weight:600; color:#7b3fa0">📋 直接検定を選ぶ:</div>
              <select id="pw-test" style="width:100%">
+              <option value="" ${state.test === '' ? 'selected' : ''}>— まず検定を選んでください —</option>
               ${TESTS.map(x => `<option value="${x.id}" ${x.id===state.test?'selected':''}>${escapeHtml(x.label)}</option>`).join('')}
              </select>`,
     })}
 
-    ${state.test !== 'bayes_t' ? stepBlock({
+    ${!state.test ? `<div class="card" style="text-align:center; padding:20px; color:#6b7280; background:#faf5ff; border-left:4px solid #7b3fa0">⬆ まず ② で検定の種類を選んでください (ウィザード or ドロップダウン)。選ぶと ③ 以降が現れます。</div>` : ''}
+
+    ${state.test && state.test !== 'bayes_t' ? stepBlock({
       title: '③ 有意水準 α',
       desc: '本来「差なし」なのに「差あり」と誤判定してしまう上限 (型I過誤)。正規分布でいうと、平均から中心±約2SDより外側に来る確率が5%、±約2.58SDより外側が1%、±約3.29SDより外側が0.1%。慣習的には 0.05 が標準、多重比較や高い信頼性が要る場面では 0.01 や 0.001。',
       // v1035 中村さん指示「プリセットの下に入力欄」で導線を分かりやすく
@@ -2209,7 +2215,7 @@ function render() {
              </select>`,
     }) : ''}
 
-    ${state.test === 'bayes_t' ? '' : state.mode==='a_priori' ? stepBlock({
+    ${!state.test ? '' : state.test === 'bayes_t' ? '' : state.mode==='a_priori' ? stepBlock({
       title: '⑤ 目標検定力 1 − β',
       desc: '本当に効果があるとき、それを有意と検出できる確率 (β = 見逃し率)。0.80 だと 5 回に 1 回は本当の差を見逃す、0.90 で 10 回に 1 回、0.95 で 20 回に 1 回。α との関係で「必要な効果量とサンプル数のバランス」を決める指標で、慣習的には 0.80。厳しめの誌や事前登録では 0.90 以上を求めることもある。',
       // v1035 プリセットの下に入力欄
@@ -2308,7 +2314,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','multinom_within'].includes(state.test) ? stepBlock({
+    ${state.test && !['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','multinom_within'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい効果の大きさを標準化した値。先行研究 / パイロット / 分野の慣習で決めます。目安で決め打ち、実測データから導く、先行研究の値から計算するの 3 通りが使えます。',
       // v1035 中村さん指示「目安の下に、効果量のグループの中に、予想データからと
@@ -2335,11 +2341,12 @@ function render() {
     ${state.test === 'cochran_q' ? renderCochranQBlocks() : ''}
     ${state.test === 'multinom_within' ? renderMultinomBlocks() : ''}
 
-    ${renderBudgetBlock()}
+    ${state.test ? renderBudgetBlock() : ''}
 
+    ${state.test ? `
     <div class="card" style="text-align:center">
       <button id="pw-calc" class="btn primary" style="padding:10px 32px; font-size:15px">🧮 計算</button>
-    </div>
+    </div>` : ''}
 
     <div id="pw-result"></div>
 
@@ -2348,7 +2355,7 @@ function render() {
       <div id="pw-saved-list" class="hint-sm">読み込み中…</div>
     </div>
 
-    ${renderSaveShareButtons('bot')}
+    ${state.test ? renderSaveShareButtons('bot') : ''}
 
     ${renderAnalysisGuide()}
   `;
@@ -2818,7 +2825,7 @@ function render() {
     if (el) el.value = state.effect;
     if (box) { box.innerHTML = `<b style="color:#7b3fa0">${escapeHtml(renderDerivedLabel(d))}</b> を効果量欄に入れました。「🧮 計算」で続きへ`; box.style.color = ''; }
   });
-  document.getElementById('pw-calc').addEventListener('click', doCalc);
+  document.getElementById('pw-calc')?.addEventListener('click', doCalc);
   // v1038 保存 / 共有 / 削除 / 新規 (top と bottom の両方のボタンに貼る)
   document.querySelectorAll('[data-pw-btn]').forEach(b => {
     b.addEventListener('click', () => {
