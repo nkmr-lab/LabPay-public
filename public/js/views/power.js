@@ -338,6 +338,104 @@ function simulateCochranQ({ n, ps, rho, alpha, iterations }) {
            iterations: valid, method: 'monte_carlo_cochran_q' };
 }
 
+// v1075 中村さん指示「(参加者内 × 3+ 択 → Multinomial GLMM 未対応、外部推奨)、
+//   これ、対応できないかな？」。保守的な Composite Cochran Q + Bonferroni で近似:
+//   1) 参加者 i, 手法 j の選択 c を Gumbel-max ラティングでサンプル
+//      V_ijc = log(P_jc) + sd_p * u_ic + gumbel_ijc、 u_ic ~ N(0,1) は参加者×カテゴリ
+//      の固定効果 (方法差 j に無関係、全 K 手法で共有)、 choice = argmax_c V
+//      → sd_p = 0 なら独立多項サンプル (marginals は exactly P_jc、 Gumbel-max 定理)、
+//        sd_p > 0 で参加者ランダム効果 (「Aが好きな人はどの手法でも A を選びやすい」)
+//   2) 検定: c = 1..M それぞれで「c を選ぶ vs 選ばない」の 2 値化を作り、
+//      各カテゴリで Cochran Q を実施。 Bonferroni 補正 α_adj = α / M で
+//      少なくとも 1 本が Q > χ²(K-1) なら reject。
+//   注意: これは真の多項ロジット GLMM の LR 検定より保守的 (family-wise error 制御が
+//   Bonferroni なので)。 UI 上で honest に「conservative approximation」と明示。
+function parseMultinomP(text) {
+  const rows = String(text || '').split(/[\n;]/).map(s => s.trim()).filter(Boolean);
+  const P = [];
+  let M = null;
+  for (const row of rows) {
+    const cols = row.split(/[,、\s]+/).map(s => s.trim()).filter(Boolean).map(Number);
+    if (cols.some(x => !isFinite(x) || x < 0)) return { error: '負値 or 非数値が含まれています' };
+    if (M === null) M = cols.length;
+    else if (cols.length !== M) return { error: `列数が行ごとに違う (行 1: ${M} 列、行 ${P.length + 1}: ${cols.length} 列)` };
+    if (M < 2) return { error: '列数 (選択肢数) が 2 未満です' };
+    const sum = cols.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return { error: '行の合計が 0 です' };
+    P.push(cols.map(x => x / sum));  // 各行を正規化して確率行列に
+  }
+  if (P.length < 2) return { error: '行数 (手法数) が 2 未満です' };
+  if (M < 3) return { error: '3+ 択のみ対応。 M=2 なら Cochran Q を使ってください' };
+  return { P, K: P.length, M };
+}
+function simulateMultinomialWithin({ n, P, sd_p, alpha, iterations }) {
+  const K = P.length, M = P[0].length;
+  if (K < 2 || M < 3 || n < 3) return { power: 0 };
+  const logP = P.map(row => row.map(p => Math.log(Math.max(1e-12, p))));
+  const alphaAdj = alpha / M;   // Bonferroni
+  const chi_crit = wilsonHilferty_chiCrit(K - 1, alphaAdj);
+  const sd = Math.max(0, sd_p);
+  const sampleGumbel = () => {
+    let u = Math.random();
+    while (u <= 0 || u >= 1) u = Math.random();
+    return -Math.log(-Math.log(u));
+  };
+  const cols = new Array(K);
+  let sig = 0, valid = 0;
+  const choices = new Array(n);
+  for (let i = 0; i < n; i++) choices[i] = new Array(K);
+  for (let it = 0; it < iterations; it++) {
+    // 各参加者 × 各手法で 1 択サンプル (Gumbel-max)
+    for (let i = 0; i < n; i++) {
+      // 参加者固有のカテゴリ選好 (M 個)、全手法で共有
+      const uCat = new Array(M);
+      for (let c = 0; c < M; c++) uCat[c] = sd * randn();
+      for (let j = 0; j < K; j++) {
+        let bestC = 0, bestV = -Infinity;
+        for (let c = 0; c < M; c++) {
+          const v = logP[j][c] + uCat[c] + sampleGumbel();
+          if (v > bestV) { bestV = v; bestC = c; }
+        }
+        choices[i][j] = bestC;
+      }
+    }
+    // M 本の Cochran Q (Bonferroni)
+    let anyReject = false;
+    let hadValid = false;
+    for (let c = 0; c < M; c++) {
+      for (let j = 0; j < K; j++) cols[j] = 0;
+      let sumR = 0, sumRsq = 0;
+      for (let i = 0; i < n; i++) {
+        let r = 0;
+        for (let j = 0; j < K; j++) {
+          if (choices[i][j] === c) { cols[j]++; r++; }
+        }
+        sumR  += r;
+        sumRsq += r * r;
+      }
+      const denom = K * sumR - sumRsq;
+      if (denom <= 0) continue;                    // このカテゴリは全参加者全一致 (無情報)
+      hadValid = true;
+      const Cbar = sumR / K;
+      let num = 0;
+      for (let j = 0; j < K; j++) { const d = cols[j] - Cbar; num += d * d; }
+      const Q = K * (K - 1) * num / denom;
+      if (Q > chi_crit) { anyReject = true; break; }  // 1 本でも棄却 → H0 全体を棄却
+    }
+    if (!hadValid) continue;
+    valid++;
+    if (anyReject) sig++;
+  }
+  if (valid === 0) return { power: 0, iterations, method: 'monte_carlo_multinom_composite_q' };
+  const powerEst = sig / valid;
+  const zCrit = 1.96;
+  const denomWi = 1 + zCrit * zCrit / valid;
+  const center  = (powerEst + zCrit * zCrit / (2 * valid)) / denomWi;
+  const halfW   = zCrit * Math.sqrt(powerEst * (1 - powerEst) / valid + zCrit * zCrit / (4 * valid * valid)) / denomWi;
+  return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)],
+           iterations: valid, method: 'monte_carlo_multinom_composite_q' };
+}
+
 // v1063 fb#483 Spearman 順位相関の検定力。 Pearson の検定力公式を使い、
 //   ARE ≈ 0.912 (asymptotic relative efficiency to Pearson under bivariate normal;
 //   Kendall 1938) で補正。実効 n_effective = n × 0.912 → 必要 n は 1/0.912 ≈ 1.10 倍。
@@ -1380,6 +1478,10 @@ function methodsPerParticipant() {
   if (t === 'tp' || t === 'bayes_t') return 2;
   if (t === 'rmanova') return state.k;
   if (t === 'cochran_q') return Math.max(1, parseCochranPs(state.cochran_q.ps).length);
+  if (t === 'multinom_within') {
+    const p = parseMultinomP(state.multinom_within.P_text);
+    return p.error ? 1 : Math.max(1, p.K);
+  }
   // LMM/GLMM 系も参加者内 2 条件だが、「1 人あたりの全実験時間」を別途想定するため
   //   ここでは手法倍率は 1 とし、 hint で「試行時間も込みで入力してください」と誘導
   return 1;
@@ -1392,6 +1494,7 @@ function methodsBreakdownNote() {
   if (t === 'tp')      return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
   if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
   if (t === 'cochran_q') return `× ${m} 手法 (Cochran Q、 1 人が全 ${m} 手法を試す)`;
+  if (t === 'multinom_within') return `× ${m} 手法 (Multinomial 参加者内、 1 人が全 ${m} 手法を試す)`;
   return `× ${m} 手法`;
 }
 // v1056 中村さん指摘「本人に支払う額と実際にかかる総額は分けたほうが良い。 1.1 倍
@@ -1818,6 +1921,14 @@ const TESTS = [
   //   参加者内相関 ρ を潜在ガウスの分散分解 (z = √ρ u + √(1-ρ) ε) で入れる。
   { id: 'cochran_q', label: '🥧 Cochran Q 検定 (対応 K 手法 × 2 値、シミュベース)', eff: 'p_range',
     effGuide: [['小 range=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
+  // v1075 中村さん指示「(Multinomial GLMM) これ、対応できないかな？」。
+  //   参加者内 K 手法 × M 択 (3+ カテゴリ) の Monte Carlo。真の多項ロジット GLMM (brms
+  //   相当) の LR 検定は JS で glmm フィット困難なので、保守的近似:「c を選ぶ vs
+  //   選ばない」の 2 値化を M カテゴリ全てで走らせて Cochran Q → Bonferroni (α/M)
+  //   で少なくとも 1 本が有意なら reject。参加者ランダム効果は Gumbel-max ラティング
+  //   で多項ロジットに注入 (sd_participant がゼロなら独立の多項サンプル)。
+  { id: 'multinom_within', label: '🥧 多項カテゴリ参加者内 (K手法 × M択、Composite Cochran Q + Bonferroni)', eff: 'p_range',
+    effGuide: [['小 range=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
   // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
   { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差 (2 レベル)', eff: 'beta',
     effGuide: [['小 β=0.2', 0.2], ['中 β=0.5', 0.5], ['大 β=0.8', 0.8]] },
@@ -1968,6 +2079,13 @@ const state = {
     rho: 0.3,                    // 参加者内相関 (潜在ガウスの分散分解)
     iterations: 2000,
   },
+  // v1075 Multinomial (参加者内 K 手法 × M 択)
+  multinom_within: {
+    n: 30,                                           // 参加者数
+    P_text: '0.50, 0.30, 0.20\n0.35, 0.40, 0.25\n0.20, 0.40, 0.40',  // K 行 × M 列の確率行列
+    sd_participant: 0.5,                             // 参加者ランダム効果 SD (Gumbel-max ラティングに加算)
+    iterations: 2000,
+  },
   // v1050 ベイズ (JZS BF10)
   bayes_t: {
     n: 24,
@@ -2012,7 +2130,7 @@ function applyLoaded(d) {
   ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
   });
-  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','budget'].forEach(k => {
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','multinom_within','budget'].forEach(k => {
     if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
@@ -2029,7 +2147,7 @@ function currentConfig() {
     n_per_group: state.n_per_group, n_total: state.n_total,
     k: state.k, df: state.df,
     // v1031/1032 sim モデルも config に含める
-    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t, fisher_2x2: state.fisher_2x2, cochran_q: state.cochran_q,
+    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t, fisher_2x2: state.fisher_2x2, cochran_q: state.cochran_q, multinom_within: state.multinom_within,
     budget: state.budget,
     dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
@@ -2190,7 +2308,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q'].includes(state.test) ? stepBlock({
+    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','multinom_within'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい効果の大きさを標準化した値。先行研究 / パイロット / 分野の慣習で決めます。目安で決め打ち、実測データから導く、先行研究の値から計算するの 3 通りが使えます。',
       // v1035 中村さん指示「目安の下に、効果量のグループの中に、予想データからと
@@ -2215,6 +2333,7 @@ function render() {
     ${state.test === 'bayes_t' ? renderBayesBlocks() : ''}
     ${state.test === 'fisher_2x2' ? renderFisherBlocks() : ''}
     ${state.test === 'cochran_q' ? renderCochranQBlocks() : ''}
+    ${state.test === 'multinom_within' ? renderMultinomBlocks() : ''}
 
     ${renderBudgetBlock()}
 
@@ -2245,9 +2364,20 @@ function render() {
         state.wizard.groups = state.wizard.related = state.wizard.normal = state.wizard.complex = '';
         state.wizard.relation_type = state.wizard.assoc_expected = '';
       }
-      if (b.dataset.wz === 'groups')  state.wizard.related = state.wizard.normal = state.wizard.complex = '';
-      if (b.dataset.wz === 'related') state.wizard.normal = state.wizard.complex = '';
-      if (b.dataset.wz === 'normal')  state.wizard.complex = '';
+      // v1075 中村さん指示「選択ウィザードで選択を始めたら、 3 以降を一度クリアして
+      //   もらえると良いかも？というか、 2 を選んで初めて、 3 以降が登場すると良い」
+      //   → 上位を変えたら下位を全て空にする (下位を条件付き表示している既存の
+      //   `${... ? ... : ''}` と併せて、 Q2 変更で Q3 以降が一旦消える挙動になる)。
+      if (b.dataset.wz === 'groups') {
+        state.wizard.related = state.wizard.normal = state.wizard.complex = '';
+        state.wizard.assoc_expected = state.wizard.relation_type = '';
+      }
+      if (b.dataset.wz === 'related') {
+        state.wizard.normal = state.wizard.complex = '';
+        state.wizard.assoc_expected = '';
+      }
+      if (b.dataset.wz === 'normal')       state.wizard.complex = '';
+      if (b.dataset.wz === 'relation_type') state.wizard.assoc_expected = '';
       render();
     });
   });
@@ -2977,6 +3107,21 @@ function syncFormToState() {
     p.rho = Math.max(0, Math.min(0.999, num('cq-rho', p.rho)));
     p.iterations = Math.max(200, Math.min(20000, Math.round(num('cq-iter', p.iterations))));
   }
+  // v1075 Multinomial (参加者内 K 手法 × M 択)
+  if (state.test === 'multinom_within') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.multinom_within;
+    if (state.mode === 'post_hoc') p.n = Math.max(3, Math.round(num('mn-n', p.n)));
+    const pEl = document.getElementById('mn-p');
+    if (pEl) p.P_text = pEl.value;
+    p.sd_participant = Math.max(0, Math.min(5, num('mn-sdp', p.sd_participant)));
+    p.iterations = Math.max(200, Math.min(20000, Math.round(num('mn-iter', p.iterations))));
+  }
   // v1050 ベイズ (JZS BF10)
   if (state.test === 'bayes_t') {
     const num = (id, fallback) => {
@@ -3052,6 +3197,7 @@ function doCalc() {
   if (state.test === 'bayes_t') return doCalcBayesT();
   if (state.test === 'fisher_2x2') return doCalcFisher2x2();
   if (state.test === 'cochran_q') return doCalcCochranQ();
+  if (state.test === 'multinom_within') return doCalcMultinomWithin();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -3247,6 +3393,111 @@ function renderCochranQResult(res, t) {
   const participants = res.mode === 'a_priori' ? res.n_required : p.n;
   root.innerHTML = mainCard + renderBudgetSummary(participants, res.mode === 'a_priori' ? '必要' : '現在');
 }
+// v1075 Multinomial (K手法 × M択、参加者内) 結果 + ステップブロック
+function doCalcMultinomWithin() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.multinom_within;
+  const parsed = parseMultinomP(p.P_text);
+  if (parsed.error) {
+    root.innerHTML = `<div class="card" style="color:#dc2626">確率行列の入力エラー: ${escapeHtml(parsed.error)}<br><br>形式: 各行 = 1 手法、カンマ or 空白区切りで M 列。例:<br><code>0.50, 0.30, 0.20<br>0.35, 0.40, 0.25<br>0.20, 0.40, 0.40</code><br>(各行は自動で合計 1.0 に正規化されます)</div>`;
+    return;
+  }
+  const { P, K, M } = parsed;
+  const iterations = state.mode === 'a_priori' ? Math.min(p.iterations, 500) : p.iterations;
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション実行中… (${iterations.toLocaleString()} 回、 Composite Cochran Q + Bonferroni、 K=${K} 手法 × M=${M} 択)</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const target = state.power;
+        const runPower = (nn) => simulateMultinomialWithin({ n: nn, P, sd_p: p.sd_participant, alpha: state.alpha, iterations: 300 }).power;
+        let lo = 3, hi = 500;
+        if (runPower(hi) < target) {
+          renderMultinomResult({ mode: 'a_priori', n_required: hi, over: true, verify_power: runPower(hi), ci: [null, null], params: p, K, M, P }, t);
+          return;
+        }
+        while (hi - lo > 1) {
+          const mid = Math.ceil((lo + hi) / 2);
+          if (runPower(mid) < target) lo = mid; else hi = mid;
+        }
+        const conf = simulateMultinomialWithin({ n: hi, P, sd_p: p.sd_participant, alpha: state.alpha, iterations });
+        renderMultinomResult({ mode: 'a_priori', n_required: hi, over: false, verify_power: conf.power, ci: conf.ci, params: p, K, M, P }, t);
+      } else {
+        const res = simulateMultinomialWithin({ n: p.n, P, sd_p: p.sd_participant, alpha: state.alpha, iterations });
+        renderMultinomResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params: p, K, M, P }, t);
+      }
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
+}
+function renderMultinomResult(res, t) {
+  const root = document.getElementById('pw-result');
+  const p = res.params;
+  const { K, M, P } = res;
+  const alphaAdj = state.alpha / M;
+  const matrixHtml = P.map((row, j) => `手法 ${j + 1}: [${row.map(x => x.toFixed(3)).join(', ')}]`).join('<br>');
+  const paramLine = `α=${state.alpha} (Bonferroni 補正で各カテゴリ α_adj=${alphaAdj.toFixed(4)}), K=${K} 手法 × M=${M} 択, 参加者ランダム SD=${p.sd_participant}`;
+  let mainCard;
+  if (res.mode === 'a_priori') {
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要参加者数 (Composite Cochran Q + Bonferroni、シミュベース)</div>
+        <div style="font-size:22px; line-height:1.55">参加者 <b>${res.n_required}</b> 名 × ${K} 手法 = 延べ <b>${res.n_required * K}</b> 試行 ${res.over ? '<span style="color:#dc2626">(500 で頭打ち — 目標未達)</span>' : ''}</div>
+        <div class="hint-sm" style="margin-top:8px">検証: この n で検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b>${res.ci[0] !== null ? ` [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]` : ''}</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+        <details style="margin-top:6px"><summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📋 想定した確率行列 (行 = 手法、列 = 選択肢)</summary><div style="margin-top:4px; font-family:monospace; font-size:12px; line-height:1.7">${matrixHtml}</div></details>
+      </div>`;
+  } else {
+    const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (Composite Cochran Q + Bonferroni、シミュベース)</div>
+        <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> <span style="font-size:14px; color:#6b7280">[95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</span></div>
+        <div class="hint-sm" style="margin-top:8px">参加者 ${p.n} 名 × ${K} 手法 = 延べ ${p.n * K} 試行</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+        <details style="margin-top:6px"><summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📋 想定した確率行列 (行 = 手法、列 = 選択肢)</summary><div style="margin-top:4px; font-family:monospace; font-size:12px; line-height:1.7">${matrixHtml}</div></details>
+      </div>
+      <div class="card" style="background:#fef3c7; border-left:3px solid #a16207">
+        <div class="bold" style="color:#a16207; margin-bottom:4px">⚠ これは保守的な近似</div>
+        <div class="hint-sm" style="line-height:1.7">
+          真の多項ロジット GLMM (family=categorical) の LR 検定は JS で glmm フィットが困難なので、「c を選ぶ vs 選ばない」の 2 値化を M カテゴリで走らせ、各カテゴリで Cochran Q + Bonferroni (α/M) で family-wise error を制御しています。実際の多項 GLMM (R の <code>brms::brm(family=categorical)</code> や <code>mclogit::mblogit</code>) は LR 検定を使うので、これより <b>やや検出力が高い</b> のが通例。本アプリの数値は <b>下限見積り (安全側)</b> として使ってください。
+        </div>
+      </div>`;
+  }
+  const participants = res.mode === 'a_priori' ? res.n_required : p.n;
+  root.innerHTML = mainCard + renderBudgetSummary(participants, res.mode === 'a_priori' ? '必要' : '現在');
+}
+function renderMultinomBlocks() {
+  const p = state.multinom_within;
+  const mode = state.mode;
+  const parsed = parseMultinomP(p.P_text);
+  const infoLine = parsed.error
+    ? `<span style="color:#dc2626">エラー: ${escapeHtml(parsed.error)}</span>`
+    : `<b>現在: K=${parsed.K} 手法 × M=${parsed.M} 択 (Bonferroni: α_adj = ${state.alpha}/${parsed.M} = ${(state.alpha / parsed.M).toFixed(4)})</b>`;
+  return `
+    ${stepBlock({
+      title: '⑥ 確率行列 P (行 = 手法、列 = 選択肢)',
+      desc: `各行に 1 手法での各選択肢の想定選択率をカンマ区切り、行を改行で並べる。行数 = K 手法、列数 = M 選択肢。各行は自動で合計 1 に正規化。 <br>${infoLine}<br>例: 3 手法 × 3 択で手法 X は A 中心、手法 Y は B 中心、手法 Z は C 中心と想定するなら:<br><code>0.50, 0.30, 0.20<br>0.35, 0.40, 0.25<br>0.20, 0.40, 0.40</code>`,
+      body: `<textarea id="mn-p" style="width:100%; min-height:100px; font-family:monospace; font-size:12px" placeholder="0.50, 0.30, 0.20&#10;0.35, 0.40, 0.25&#10;0.20, 0.40, 0.40">${escapeHtml(p.P_text)}</textarea>`,
+    })}
+    ${stepBlock({
+      title: '⑦ 参加者ランダム効果 SD (sd_p)',
+      desc: `参加者ごとのカテゴリ選好の強さ (Gumbel-max ラティングに加算する N(0, sd_p²) の SD)。目安: 0 = 完全独立の多項サンプル、 0.3-0.5 = 中程度、 1.0-2.0 = 強い個人差 (「私は A が好き」がどの手法でも出やすい)。<br>
+      <b>⚠ Cochran Q (2 値) とは方向が逆</b>: 多項では sd_p が大きいと個人がカテゴリに固執する → 全手法で同じ選択 = 情報無しの行が増えて <b>むしろ power が下がる</b> ケースが多い (シミュ検証済)。迷ったら 0.3-0.5 を第一目安に、 0 と 1.0 で感度分析して安全側の n を採用するのが◎。`,
+      body: `<input type="number" id="mn-sdp" step="0.1" min="0" max="5" value="${p.sd_participant}" style="width:120px">`,
+    })}
+    ${mode === 'post_hoc' ? stepBlock({
+      title: '⑧ 参加者数 n',
+      desc: '全員が全 K 手法を試す想定 (完全対応)。',
+      body: `<input type="number" id="mn-n" step="1" min="3" value="${p.n}" style="width:120px">`,
+    }) : ''}
+    ${stepBlock({
+      title: '⚙ シミュ反復数',
+      desc: 'A priori は二分探索の各点で 300 iters を走らせるので少し時間がかかります。目安: 2000 で ~2%、 5000 で ~1.5% 誤差。 M や K が大きいほど 1 iter が重い。',
+      body: `<input type="number" id="mn-iter" step="500" min="500" max="20000" value="${p.iterations}" style="width:140px">`,
+    })}
+  `;
+}
+
 function renderCochranQBlocks() {
   const p = state.cochran_q;
   const mode = state.mode;
@@ -3711,7 +3962,8 @@ function renderTestWizard() {
       inferred = 'cochran_q';
       inferredNote = '参加者内 × 2 値 (成功/失敗) の手法差 → 🥧 Cochran Q 検定 (シミュベース、このアプリで対応)。同じ参加者が全手法を試して各回で成功/失敗を出す形。 K=2 なら McNemar 検定と等価。例: 20 名が 3 手法を全部試して各手法での正答率を比較。';
     } else if (r === 'paired' && cat === 'multi') {
-      inferredNote = '参加者内 × 3+ 択の手法差 → <b>多項ロジスティック GLMM (Multinomial GLMM)</b> が本命 (このアプリ未対応)。 R の <code>brms::brm(family=categorical)</code> や <code>mclogit::mblogit</code>、 Python の <code>statsmodels MNLogit + 混合効果</code> 等で。簡易代替: 「A を選ぶ vs 選ばない」等の 2 値化を選択肢ごとに走らせて Cochran Q (このアプリ) を M 本 + Bonferroni 補正で概算。';
+      inferred = 'multinom_within';
+      inferredNote = '参加者内 × 3+ 択の手法差 → 🥧 多項カテゴリ参加者内 (Composite Cochran Q + Bonferroni、このアプリで対応、シミュベース)。「c を選ぶ vs 選ばない」の 2 値化を M カテゴリで走らせ Cochran Q + Bonferroni (α/M) で family-wise error を制御 (保守的な近似)。真の多項ロジット GLMM (R の <code>brms::brm(family=categorical)</code> や <code>mclogit::mblogit</code> の LR 検定) より <b>やや保守的 (検出力低め)</b> なので、得られる n は下限見積り (安全側)。';
     } else if (!r) {
       inferredNote = 'Q2 で「独立 or 参加者内」を選んでください';
     } else {
@@ -4788,7 +5040,7 @@ function renderSensitivityCurve() {
                  : "Cohen's d";
   const effUnit = state.test === 'glmm_logit' ? 'OR' : (state.test === 'glmm_poisson' || state.test === 'glmm_nb') ? 'RR' : '';
   let currentEff, effRange, points;
-  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q'].includes(state.test);
+  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','multinom_within'].includes(state.test);
   if (isSim) {
     // sim 系: 効果量スキャン
     if (state.test === 'glmm_logit') {
