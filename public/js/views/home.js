@@ -412,7 +412,8 @@ export async function renderHome() {
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">今日の予定</h2>
-        <a href="#" id="home-cal-refresh" class="hint" style="margin-left:auto" title="cache を捨てて GCal を強制再取得">🔄 再取得</a>
+        <a href="#/calendar" class="hint" style="margin-left:auto; margin-right:8px" title="月表示で前後の月も見る">📅 月表示 →</a>
+        <a href="#" id="home-cal-refresh" class="hint" title="cache を捨てて GCal を強制再取得">🔄 再取得</a>
       </div>
       <div id="home-calendar" class="list"></div>
     </div>

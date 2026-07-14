@@ -276,9 +276,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $unit = (int)$r['unit_price'];
             $fee  = (int)$r['fee'];
             $qty  = (int)$r['qty'];
-            // v918 fb#466 「300pt の 商品 なのに 315pt 引かれた」 → 表示バグ 修正。
-            //   実際は Money::split で buyer_pay = price なので 買い手は unit_price そのまま 払う (fee は unit の 中 に 含まれる、
-            //   売り手 が 285pt 受取 + SYSTEM が 15pt 手数料)。 line_total に + $fee を 足す のは 二重計上。
+            // v918 fb#466 「300pt の商品なのに 315pt 引かれた」 → 表示バグ修正。
+            //   実際は Money::split で buyer_pay = price なので買い手は unit_price そのまま払う (fee は unit の中に含まれる、
+            //   売り手が 285pt 受取 + SYSTEM が 15pt 手数料)。 line_total に + $fee を足すのは二重計上。
             $line = $unit * $qty;
             $totalSpent += $line;
             $items[] = [
@@ -357,7 +357,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     // pt を出す。既に今日もらってる / 未読がある場合は no-op (silent OK)。
     // フロント側は通知バッジが 0 になるたびに ping する想定で、冪等を確保する
     // ため (user_id, awarded_on) PK で衝突したら「もう貰った」扱い。
-    // v959 fb#476 通知の Slack 配信 を カテゴリ別 に ON/OFF 設定。
+    // v959 fb#476 通知の Slack 配信をカテゴリ別に ON/OFF 設定。
     //   GET   /api/me/notify-slack → {categories: [...], prefs: {cat: bool, ...}}
     //   PATCH /api/me/notify-slack body: {cat: bool, ...} 一括 upsert
     if ($sub === 'notify-slack' && $method === 'GET') {
@@ -1585,10 +1585,15 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $j = json_decode((string)$row['calendar_filter_rules'], true);
             if (is_array($j)) $filterRules = calendar_filter_rules_clean($j);
         }
-        // 「今日 00:00 〜 明日 24:00」を timeMin/timeMax に変換 (RFC3339)。
+        // 「今日 00:00 〜明日 24:00」を timeMin/timeMax に変換 (RFC3339)。
         // クライアントが ?tz=Europe/Rome みたいに送ってきたらそれで日付境界を
         // 計算する (海外滞在時に「今日」がズレないように)。不正な TZ 名は
         // 設定 default にフォールバック。
+        // v1079 中村さん指示「月モードで表示したり、次の月とかに移動して表示したり」
+        //   → ?from=YYYY-MM-DD&to=YYYY-MM-DD の期間指定を追加。未指定なら従来通り
+        //   「今日 0:00 〜明後日 0:00」。 to は inclusive の日付として扱い、
+        //   内部で +1 day して RFC3339 に変換 (Google Calendar の timeMax は排他)。
+        //   期間は最大 62 日 (2 ヶ月分) に制限、過大なリクエストで API 負荷を防ぐ。
         $clientTz = (string)($_GET['tz'] ?? '');
         try {
             $tz = $clientTz !== '' ? new DateTimeZone($clientTz)
@@ -1596,11 +1601,33 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         } catch (Throwable $e) {
             $tz = new DateTimeZone($cfg['app']['timezone'] ?? 'Asia/Tokyo');
         }
-        $now = new DateTimeImmutable('now', $tz);
-        $today0 = $now->setTime(0, 0, 0);
-        $tomorrow24 = $today0->modify('+2 day');
-        $timeMin = $today0->format(DateTime::RFC3339);
-        $timeMax = $tomorrow24->format(DateTime::RFC3339);
+        $fromParam = (string)($_GET['from'] ?? '');
+        $toParam   = (string)($_GET['to']   ?? '');
+        if ($fromParam !== '' && $toParam !== ''
+            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromParam)
+            && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toParam)) {
+            try {
+                $fromDt = new DateTimeImmutable($fromParam . ' 00:00:00', $tz);
+                $toDt   = new DateTimeImmutable($toParam   . ' 00:00:00', $tz);
+                $toDtExclusive = $toDt->modify('+1 day');
+                $diffDays = ($toDtExclusive->getTimestamp() - $fromDt->getTimestamp()) / 86400;
+                if ($diffDays <= 0 || $diffDays > 62) {
+                    throw new ApiException('bad_request', 'from-to 期間は 1 日以上 62 日以下にしてください', 400);
+                }
+                $timeMin = $fromDt->format(DateTime::RFC3339);
+                $timeMax = $toDtExclusive->format(DateTime::RFC3339);
+            } catch (ApiException $e) {
+                throw $e;
+            } catch (Throwable $e) {
+                throw new ApiException('bad_request', 'from / to の日付形式が不正 (YYYY-MM-DD)', 400);
+            }
+        } else {
+            $now = new DateTimeImmutable('now', $tz);
+            $today0 = $now->setTime(0, 0, 0);
+            $tomorrow24 = $today0->modify('+2 day');
+            $timeMin = $today0->format(DateTime::RFC3339);
+            $timeMax = $tomorrow24->format(DateTime::RFC3339);
+        }
 
         // クライアントが送ってきた前回 ETag を per-calendar で受け取る (JSON)。
         // 全 calendar が 304 (= 変更なし) なら not_modified を返してクライアントは
@@ -1914,8 +1941,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         foreach ($stT->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $reported = (int)$r['reported_n'];
             $claimed  = (int)$r['claimed_n'];
-            // v1022 中村さん指摘「タスクとして指名しているものは、 受諾まちというのは
-            //   ちょっと変。 作業完了まち ではないか?」→ 指名タスクは "作業完了まち"、
+            // v1022 中村さん指摘「タスクとして指名しているものは、受諾まちというのは
+            //   ちょっと変。作業完了まちではないか?」→ 指名タスクは "作業完了まち"、
             //   通常タスクは従来通り "受諾まち"。
             $isNominated = !empty($r['assigned_user_ids']);
             $waitLabel = $isNominated ? '作業完了まち' : '受諾まち';
