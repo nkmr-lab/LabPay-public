@@ -488,18 +488,18 @@ route('/places',          lazy(() => import('./views/places.js'), 'renderPlaces'
 route('/places/new',      lazy(() => import('./views/places.js'), 'renderPlaceNew'));
 route('/places/map',      lazy(() => import('./views/places.js'), 'renderPlacesMap'));
 route('/places/:id',      lazy(() => import('./views/places.js'), 'renderPlaceDetail'));
-// v925 文献管理 (Zotero-like、 ラボ 共有)
+// v925 文献管理 (Zotero-like、ラボ共有)
 route('/refs',            lazy(() => import('./views/refs.js'), 'renderRefs'));
 route('/refs/new',        lazy(() => import('./views/refs.js'), 'renderRefsNew'));
-// v927 bookmarklet 生成 ページ (/:id より 先 に 登録、 順序 注意)
+// v927 bookmarklet 生成ページ (/:id より先に登録、順序注意)
 route('/refs/bookmarklet', lazy(() => import('./views/refs.js'), 'renderRefsBookmarklet'));
-// v930 参考文献 リスト 生成 ページ
+// v930 参考文献リスト生成ページ
 route('/refs/bibliography', lazy(() => import('./views/refs.js'), 'renderRefsBibliography'));
 route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetail'));
-// v934 かんばん ボード (Trello-like、 ラボ 共有)
+// v934 かんばんボード (Trello-like、ラボ共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
 route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
-// v961 中村研 アルバム集
+// v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿
 route('/authors/:name',         lazy(() => import('./views/author.js'), 'renderAuthor'));         // v1004 著者ページ
@@ -507,9 +507,9 @@ route('/authors/:name',         lazy(() => import('./views/author.js'), 'renderA
 route('/joint-events',          lazy(() => import('./views/joint.js'), 'renderJointList'));
 route('/joint-events/new',      lazy(() => import('./views/joint.js'), 'renderJointNew'));
 route('/joint-events/:id',      lazy(() => import('./views/joint.js'), 'renderJointDetail'));
-// v941 公開機能 短縮 コード ゲートウェイ (未認証 でも 開ける)
+// v941 公開機能短縮コードゲートウェイ (未認証でも開ける)
 route('/public',                lazy(() => import('./views/public_gateway.js'), 'renderPublicGateway'));
-// v942 公開投票 (誰でも 投票)
+// v942 公開投票 (誰でも投票)
 route('/public-polls',          lazy(() => import('./views/public_polls.js'), 'renderPublicPollsList'));
 route('/public-polls/new',      lazy(() => import('./views/public_polls.js'), 'renderPublicPollNew'));
 route('/public-polls/:id',      lazy(() => import('./views/public_polls.js'), 'renderPublicPollDetail'));
@@ -551,7 +551,9 @@ route('/exercise',        lazy(() => import('./views/exercise.js'), 'renderExerc
 route('/pomodoro',        lazy(() => import('./views/pomodoro.js'), 'renderPomodoro'));   // v1019 🍅 ポモドーロタイマー
 route('/exp-plan',        lazy(() => import('./views/exp_plan.js'), 'renderExpPlan'));    // v1023 🧪 実験計画書チェック
 route('/exp-plan/:id',    lazy(() => import('./views/exp_plan.js'), 'renderExpPlanDetail'));
-route('/calendar',        lazy(() => import('./views/calendar.js'), 'renderCalendar'));     // v1079 📅 Google Calendar 月表示 + Zoom 追加
+// v1079/v1083: Google Calendar 月表示は独立ページから home の「今日の予定」カード内モード切替に移設。
+// /#/calendar 旧ルートはホームへリダイレクトのみ (古いリンク互換)
+route('/calendar', () => { location.hash = '#/'; });
 route('/buy-requests',        lazy(() => import('./views/buy_requests.js'), 'renderBuyRequests'));     // v1080 🛒 購入依頼
 route('/buy-requests/new',    lazy(() => import('./views/buy_requests.js'), 'renderBuyRequestNew'));
 route('/buy-requests/:id/edit', lazy(() => import('./views/buy_requests.js'), 'renderBuyRequestEdit'));
@@ -562,7 +564,7 @@ route('/apps',           lazy(() => import('./views/apps.js'), 'renderApps'));
 // v609 #234 タブ単位のカテゴリ絞り込み
 route('/research',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'research' })));
 route('/lab-mgmt',       (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'lab-mgmt' })));
-route('/shared',         (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'shared' })));    // v999 共有 タブ
+route('/shared',         (ctx) => import('./views/apps.js').then(m => m.renderApps({ ...ctx, cat: 'shared' })));    // v999 共有タブ
 route('/contacts',       lazy(() => import('./views/contacts.js'), 'renderContacts'));
 route('/requests-hub',   lazy(() => import('./views/requests_hub.js'), 'renderRequestsHub'));
 route('/wari',           lazy(() => import('./views/wari.js'), 'renderWari'));
@@ -710,8 +712,8 @@ route('/news',                    lazy(() => import('./views/news.js'), 'renderN
 route('/screen-shares',           lazy(() => import('./views/screen_shares.js'), 'renderScreenShares')); // v718 #314
 route('/file-transfers',          lazy(() => import('./views/file_transfers.js'), 'renderFileTransfers')); // v733 #342
 
-// v945 /#/public は 未認証 でも 開ける。 query (`?c=1234`) や trailing slash が 付いても
-//   拒否 され ない よう prefix 判定 + 直後 の 文字 が 「 / ? 空文字 」 なら true。
+// v945 /#/public は未認証でも開ける。 query (`?c=1234`) や trailing slash が付いても
+//   拒否されないよう prefix 判定 + 直後の文字が「 / ? 空文字」なら true。
 function isPublicGatewayHash(hash) {
   if (hash === '#/public') return true;
   if (hash === '#/public/') return true;

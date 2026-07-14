@@ -89,7 +89,7 @@ export const HOME_ACTIONS = [
   { id: 'fortune',      url: '#fortune-toggle',      title: '今日の占い',    icon: '🔮', defaultVisible: true, jsAction: true },
   { id: 'deadlines',    url: '#/meetups?kind=deadline', title: '〆切',      icon: '📌', defaultVisible: false },
   { id: 'feedback',     url: '#/feedback',           title: 'フィードバック', icon: '📝', defaultVisible: false },
-  // v906 定例リファクタリング監査で 「ホームクイックアクセス選択肢に出てない」 と判明した
+  // v906 定例リファクタリング監査で「ホームクイックアクセス選択肢に出てない」と判明した
   //   追加機能 22件をまとめて HOME_ACTIONS に登録 (全部 defaultVisible:false で opt-in)。
   { id: 'bait',                 url: '#/bait',                 title: 'アルバイト申請', icon: '💼', defaultVisible: false },
   { id: 'bingofit',             url: '#/bingofit/closet',      title: '着回しビンゴ',   icon: '👕', defaultVisible: false },
@@ -246,7 +246,7 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に含まれているなら、 hidden に自動マージ。
 //   既存ユーザが「明示的に ON にした」場合 (= order に含まれる) は尊重。
 const NEW_DEFAULT_HIDDEN = ['weather', 'bingo', 'quote']; // v605 ビンゴも default OFF に / v809 名言 widget をデフォルト OFF (既存ユーザにも適用)
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も 既存 ユーザ に 自動 ON
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も既存ユーザに自動 ON
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -410,12 +410,17 @@ export async function renderHome() {
     </div>
 
     <div class="card" id="home-calendar-card" data-card-id="calendar" hidden>
-      <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">今日の予定</h2>
-        <a href="#/calendar" class="hint" style="margin-left:auto; margin-right:8px" title="月表示で前後の月も見る">📅 月表示 →</a>
-        <a href="#" id="home-cal-refresh" class="hint" title="cache を捨てて GCal を強制再取得">🔄 再取得</a>
+      <div class="row center" style="margin-bottom:6px; gap:6px; flex-wrap:wrap">
+        <h2 class="row-title" id="home-cal-title">今日の予定</h2>
+        <div class="row" style="gap:4px; margin-left:auto" id="home-cal-modeswitch">
+          <button class="btn" data-cal-mode="today" style="font-size:11px; padding:3px 8px" title="今日の予定">📌 今日</button>
+          <button class="btn" data-cal-mode="month" style="font-size:11px; padding:3px 8px" title="月表示 (前後月ナビ付き)">📅 月</button>
+        </div>
+        <a href="#" id="home-cal-refresh" class="hint" title="cache を捨てて GCal を強制再取得">🔄</a>
       </div>
+      <div id="home-cal-monthnav" hidden style="margin-bottom:6px"></div>
       <div id="home-calendar" class="list"></div>
+      <div id="home-cal-modal"></div>
     </div>
     <div id="home-mtg-modal" hidden></div>
 
@@ -572,7 +577,7 @@ export async function renderHome() {
       <div id="home-quote"></div>
     </div>
 
-    <!-- v970 中村研 アルバム 新着 (直近 6 件) -->
+    <!-- v970 中村研アルバム新着 (直近 6 件) -->
     <div class="card" id="home-nkmr-albums-card" data-card-id="nkmr-albums" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">📸 中村研アルバム (新着)</h2>
@@ -1037,7 +1042,7 @@ async function renderPresence() {
 }
 
 // Google Calendar 予定。連携してない人にはカード自体を隠す。連携済みで
-// 「今日 0:00 〜 明日 24:00」に予定があれば 5 件まで表示。Zoom/Meet URL
+// 「今日 0:00 〜明日 24:00」に予定があれば 5 件まで表示。Zoom/Meet URL
 // が拾えればその場でタップして join できるようリンクボタンを出す。
 //
 // 1 分ごとの auto-refresh で毎回 Google API を叩くと重いので
@@ -1231,6 +1236,35 @@ async function renderPendingKindCard(opts) {
 let calExpanded = false;
 const CAL_DEFAULT_LIMIT = 5;
 
+// v1083 中村さん指示「カレンダー月表示は、現在のスケジュール (カレンダー) 機能の
+//   モード切替で表示されて欲しい」→ 「今日 / 月」モード切替を home カードに組込み。
+//   /#/calendar 独立ページは廃止 (calendar.js 削除、 route 削除)。
+const CAL_MODE_KEY  = 'labpay-cal-mode';           // 'today' | 'month'
+const CAL_MONTH_KEY = 'labpay-cal-month-ym';       // 表示中の 'YYYY-MM'
+let calMode  = null;   // lazy init
+let calMonth = null;
+function initCalModeState() {
+  if (calMode === null) {
+    try { calMode = localStorage.getItem(CAL_MODE_KEY) || 'today'; } catch { calMode = 'today'; }
+    if (calMode !== 'today' && calMode !== 'month') calMode = 'today';
+  }
+  if (calMonth === null) {
+    const d = new Date();
+    calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+}
+function saveCalMode(m) { try { localStorage.setItem(CAL_MODE_KEY, m); } catch {} }
+function currentYm() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function shiftYm(ym, delta) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return currentYm();
+  const d = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // 終了後 N 分経過した予定を「今日の予定」から消すための設定 (1..1440)。
 // 「2 時間経ったら消したい」が default。設定 → Google Calendar 連携から変更可。
 const CAL_HIDE_KEY = 'labpay-cal-hide-after-min';
@@ -1249,8 +1283,28 @@ async function renderCalendarEvents({ force = false } = {}) {
   const root = document.getElementById('home-calendar');
   if (!card || !root) return;
   // v440 カード自体は必ず表示 (上位 try/catch で想定外の throw でも隠さない)。
-  // 旧仕様だと早期 throw で「カレンダーが消える」ように見える不具合があった。
   card.hidden = false;
+  initCalModeState();
+  // v1083 モード切替ボタン (1 度だけ bind)。選択中の見た目を都度更新。
+  document.querySelectorAll('[data-cal-mode]').forEach(btn => {
+    const active = btn.dataset.calMode === calMode;
+    btn.style.background = active ? 'var(--primary)' : '';
+    btn.style.color      = active ? '#fff' : '';
+    if (!btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => {
+        const m = btn.dataset.calMode;
+        if (m === calMode) return;
+        calMode = m; saveCalMode(m);
+        renderCalendarEvents({ force: false });
+      });
+    }
+  });
+  const titleEl = document.getElementById('home-cal-title');
+  if (titleEl) titleEl.textContent = calMode === 'month' ? '📅 月表示' : '📌 今日の予定';
+  // v1083 月モードなら別ルート
+  if (calMode === 'month') return renderCalendarMonth({ force });
+  document.getElementById('home-cal-monthnav').hidden = true;
   // v449 🔄 再取得ボタン (1 回だけ bind)。 cache を捨てて etag なしで再 fetch。
   const refreshBtn = document.getElementById('home-cal-refresh');
   if (refreshBtn && !refreshBtn.dataset.bound) {
@@ -1258,6 +1312,12 @@ async function renderCalendarEvents({ force = false } = {}) {
     refreshBtn.addEventListener('click', (ev) => {
       ev.preventDefault();
       try { localStorage.removeItem(CAL_CACHE_KEY); } catch {}
+      if (calMode === 'month') {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('labpay-cal-month-')) localStorage.removeItem(k);
+        }
+      }
       renderCalendarEvents({ force: true });
     });
   }
@@ -1457,6 +1517,316 @@ async function getCalendarsCached() {
   } catch { CACHED_CALENDARS = []; }
   return CACHED_CALENDARS;
 }
+// v1083 月表示モードのレンダラ。 home の calendar カード内に月グリッドを描画。
+//   /#/calendar 独立ページは廃止、全てこのカードで完結。中村さん指示反映。
+const CAL_MONTH_CACHE_TTL_MS = 3 * 60 * 1000;   // 3 分
+const CAL_MONTH_CACHE_PREFIX = 'labpay-cal-month-';
+const CAL_PALETTE = ['#7b3fa0', '#0369a1', '#059669', '#a16207', '#dc2626', '#c026d3', '#0891b2'];
+function calColorFor(calId) {
+  let h = 0; const s = String(calId || 'primary');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return CAL_PALETTE[h % CAL_PALETTE.length];
+}
+function localTzIana() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo'; }
+  catch { return 'Asia/Tokyo'; }
+}
+function monthRange(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  const y = Number(m[1]), mm = Number(m[2]);
+  const first = new Date(y, mm - 1, 1);
+  const last  = new Date(y, mm, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    y, m: mm,
+    from: `${y}-${pad(mm)}-01`,
+    to:   `${y}-${pad(mm)}-${pad(last.getDate())}`,
+    firstWeekday: first.getDay(),
+    daysInMonth:  last.getDate(),
+  };
+}
+function eventDayYmd(ev) {
+  const s = String(ev.start || '');
+  const pad = (n) => String(n).padStart(2, '0');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return null;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  } catch { return null; }
+}
+function readMonthCache(ym) {
+  try {
+    const raw = localStorage.getItem(CAL_MONTH_CACHE_PREFIX + ym);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.timestamp || (Date.now() - obj.timestamp) > CAL_MONTH_CACHE_TTL_MS) return null;
+    return obj.items;
+  } catch { return null; }
+}
+function writeMonthCache(ym, items) {
+  try { localStorage.setItem(CAL_MONTH_CACHE_PREFIX + ym, JSON.stringify({ items, timestamp: Date.now() })); } catch {}
+}
+
+async function renderCalendarMonth({ force = false } = {}) {
+  const nav = document.getElementById('home-cal-monthnav');
+  const root = document.getElementById('home-calendar');
+  const p = monthRange(calMonth);
+  const isCurrent = calMonth === currentYm();
+  nav.hidden = false;
+  nav.innerHTML = `
+    <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
+      <button class="btn" data-cal-nav="prev" aria-label="前月" style="padding:2px 10px">◀</button>
+      <div style="font-weight:700; min-width:100px; text-align:center">${p.y}年 ${p.m}月</div>
+      <button class="btn" data-cal-nav="next" aria-label="次月" style="padding:2px 10px">▶</button>
+      ${!isCurrent ? `<button class="btn" data-cal-nav="today" style="padding:2px 10px; font-size:11px">今月</button>` : ''}
+      <input type="month" data-cal-nav="pick" value="${calMonth}" style="padding:2px 6px; font-size:12px; margin-left:auto">
+    </div>`;
+  nav.querySelectorAll('[data-cal-nav]').forEach(el => {
+    const act = el.dataset.calNav;
+    if (act === 'pick') {
+      el.addEventListener('change', (e) => {
+        const v = e.target.value;
+        if (/^\d{4}-\d{2}$/.test(v)) { calMonth = v; renderCalendarMonth({}); }
+      });
+    } else {
+      el.addEventListener('click', () => {
+        if (act === 'prev')  calMonth = shiftYm(calMonth, -1);
+        else if (act === 'next')  calMonth = shiftYm(calMonth, +1);
+        else if (act === 'today') calMonth = currentYm();
+        renderCalendarMonth({});
+      });
+    }
+  });
+  // fetch (cache first)
+  root.innerHTML = `<div class="empty">読み込み中…</div>`;
+  let items = force ? null : readMonthCache(calMonth);
+  if (!items) {
+    try {
+      const data = await get('/api/me/calendar/events', { tz: localTzIana(), from: p.from, to: p.to });
+      items = (data && data.items) || [];
+      writeMonthCache(calMonth, items);
+    } catch (e) {
+      root.innerHTML = `<div class="empty">読み込み失敗: ${escapeHtml(e?.message || String(e))}</div>`;
+      return;
+    }
+  }
+  root.innerHTML = renderMonthGridHtml(calMonth, items);
+  wireMonthGridClicks(items);
+}
+
+function renderMonthGridHtml(ym, items) {
+  const { firstWeekday, daysInMonth, y, m } = monthRange(ym);
+  const pad = (n) => String(n).padStart(2, '0');
+  const byDate = new Map();
+  for (const ev of items) {
+    const ymd = eventDayYmd(ev);
+    if (!ymd) continue;
+    if (!byDate.has(ymd)) byDate.set(ymd, []);
+    byDate.get(ymd).push(ev);
+  }
+  for (const arr of byDate.values()) {
+    arr.sort((a, b) => {
+      if (a.all_day && !b.all_day) return -1;
+      if (!a.all_day && b.all_day) return  1;
+      return String(a.start).localeCompare(String(b.start));
+    });
+  }
+  const todayD = new Date();
+  const todayYmd = `${todayD.getFullYear()}-${pad(todayD.getMonth() + 1)}-${pad(todayD.getDate())}`;
+  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(`<div class="hm-cell hm-empty"></div>`);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ymd = `${y}-${pad(m)}-${pad(d)}`;
+    const dow = new Date(y, m - 1, d).getDay();
+    const dayEvs = byDate.get(ymd) || [];
+    const isToday = ymd === todayYmd;
+    const cls = ['hm-cell'];
+    if (isToday) cls.push('hm-today');
+    if (dow === 0) cls.push('hm-sun');
+    if (dow === 6) cls.push('hm-sat');
+    const shown = dayEvs.slice(0, 3);
+    const rest = Math.max(0, dayEvs.length - shown.length);
+    const evsHtml = shown.map((ev, idx) => {
+      const c = calColorFor(ev.calendar);
+      const time = ev.all_day ? '' : (() => {
+        const t = new Date(ev.start); return `${pad(t.getHours())}:${pad(t.getMinutes())} `;
+      })();
+      const zoom = ev.url ? '🎦' : '';
+      return `<div class="hm-ev" data-hm-day="${ymd}" data-hm-idx="${idx}"
+                   style="background:${c}22; border-left:2px solid ${c}"
+                   title="${escapeHtml(ev.title || '')}">${zoom}<b style="color:${c}">${escapeHtml(time)}</b>${escapeHtml(ev.title || '(無題)')}</div>`;
+    }).join('');
+    const more = rest > 0 ? `<div class="hm-more" data-hm-day-all="${ymd}">+${rest}</div>` : '';
+    cells.push(`<div class="${cls.join(' ')}" data-hm-day-cell="${ymd}">
+      <div class="hm-dnum">${d}</div>
+      ${evsHtml}${more}
+    </div>`);
+  }
+  while (cells.length % 7 !== 0) cells.push(`<div class="hm-cell hm-empty"></div>`);
+  return `
+    <style>
+      .hm-head { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; margin-bottom:2px }
+      .hm-head > div { text-align:center; padding:3px 0; font-size:11px; font-weight:600; background:#f3f4f6; border-radius:3px }
+      .hm-head > .hm-sun { color:#dc2626 } .hm-head > .hm-sat { color:#0369a1 }
+      .hm-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; background:#e5e7eb; border-radius:4px; padding:1px }
+      .hm-cell { background:#fff; min-height:64px; padding:2px; position:relative; cursor:pointer; border-radius:2px; overflow:hidden }
+      .hm-cell.hm-empty { background:#fafafa; cursor:default }
+      .hm-cell.hm-today { background:#fef3c7 }
+      .hm-dnum { font-size:11px; font-weight:600; color:#374151; line-height:1.2 }
+      .hm-cell.hm-sun .hm-dnum { color:#dc2626 } .hm-cell.hm-sat .hm-dnum { color:#0369a1 }
+      .hm-cell.hm-today .hm-dnum { color:#7b3fa0 }
+      .hm-ev { font-size:10px; padding:0 2px; margin-top:1px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.35 }
+      .hm-more { font-size:10px; color:#6b7280; padding:1px 2px; cursor:pointer }
+      @media (max-width:640px) {
+        .hm-cell { min-height:48px }
+        .hm-ev { font-size:9px }
+      }
+    </style>
+    <div class="hm-head">${DOW.map((d, i) => `<div class="${i===0?'hm-sun':i===6?'hm-sat':''}">${d}</div>`).join('')}</div>
+    <div class="hm-grid">${cells.join('')}</div>
+    <div class="hint-sm" style="margin-top:6px; text-align:right; color:#6b7280">合計 ${items.length} 件</div>
+  `;
+}
+
+function wireMonthGridClicks(items) {
+  const root = document.getElementById('home-calendar');
+  // event クリック
+  root.querySelectorAll('[data-hm-idx]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ymd = el.dataset.hmDay;
+      const idx = Number(el.dataset.hmIdx);
+      const day = items.filter(ev => eventDayYmd(ev) === ymd).sort((a, b) => {
+        if (a.all_day && !b.all_day) return -1;
+        if (!a.all_day && b.all_day) return  1;
+        return String(a.start).localeCompare(String(b.start));
+      });
+      openHmEventModal(day[idx]);
+    });
+  });
+  // +N や空エリアクリック
+  root.querySelectorAll('[data-hm-day-cell]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-hm-idx]')) return;   // event 側で処理済
+      const ymd = el.dataset.hmDayCell;
+      openHmDayModal(items, ymd);
+    });
+  });
+}
+
+function openHmEventModal(ev) {
+  if (!ev) return;
+  const root = document.getElementById('home-cal-modal');
+  const hasZoom = !!ev.url;
+  const canAddZoom = !ev.all_day && !hasZoom;
+  const fmtRange = (() => {
+    if (ev.all_day) return '終日';
+    try {
+      const s = new Date(ev.start), e = new Date(ev.end || ev.start);
+      const pad = (n) => String(n).padStart(2, '0');
+      const sd = `${s.getMonth()+1}/${s.getDate()} ${pad(s.getHours())}:${pad(s.getMinutes())}`;
+      const sameDay = s.toDateString() === e.toDateString();
+      const ed = sameDay ? `${pad(e.getHours())}:${pad(e.getMinutes())}` : `${e.getMonth()+1}/${e.getDate()} ${pad(e.getHours())}:${pad(e.getMinutes())}`;
+      return `${sd} – ${ed}`;
+    } catch { return ev.start || ''; }
+  })();
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" data-hm-close>
+      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; padding:20px">
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <h3 style="margin:0; font-size:16px">${escapeHtml(ev.title || '(無題)')}</h3>
+          <button class="btn" data-hm-close>×</button>
+        </div>
+        <div style="margin-top:8px; font-size:13px; color:#374151">⏰ ${escapeHtml(fmtRange)}</div>
+        ${ev.location ? `<div style="margin-top:4px; font-size:13px">📍 ${escapeHtml(ev.location)}</div>` : ''}
+        ${hasZoom ? `<div style="margin-top:8px; padding:8px 10px; background:#f0f9ff; border-radius:6px">🎦 <a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener">${escapeHtml(ev.url)}</a></div>` : ''}
+        <div style="margin-top:6px; font-size:12px; color:#6b7280">カレンダー: ${escapeHtml(ev.calendar || 'primary')}</div>
+        <div class="row" style="gap:6px; margin-top:12px; flex-wrap:wrap; justify-content:flex-end">
+          ${ev.html_url ? `<a class="btn" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener">🔗 Google で開く</a>` : ''}
+          ${canAddZoom ? `<button class="btn primary" data-hm-add-zoom data-hm-ev-id="${escapeHtml(ev.id)}" data-hm-cal="${escapeHtml(ev.calendar || 'primary')}">🎦 Zoom を追加</button>` : ''}
+          <button class="btn" data-hm-close>閉じる</button>
+        </div>
+      </div>
+    </div>`;
+  root.querySelectorAll('[data-hm-close]').forEach(el => el.addEventListener('click', (e) => {
+    if (e.target === el || e.currentTarget === el) closeHmModal();
+  }));
+  const zBtn = root.querySelector('[data-hm-add-zoom]');
+  if (zBtn) {
+    zBtn.addEventListener('click', async () => {
+      const eventId = zBtn.dataset.hmEvId;
+      const calId   = zBtn.dataset.hmCal || 'primary';
+      zBtn.disabled = true; zBtn.textContent = '作成中…';
+      try {
+        const r = await post(`/api/me/calendar/events/${encodeURIComponent(eventId)}/zoom`, { calendar_id: calId });
+        if (r?.invalidate_calendar_cache) {
+          try { localStorage.removeItem(CAL_CACHE_KEY); } catch {}
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(CAL_MONTH_CACHE_PREFIX)) localStorage.removeItem(k);
+          }
+        }
+        toast('Zoom MTG を追加しました');
+        closeHmModal();
+        renderCalendarMonth({ force: true });
+      } catch (e) {
+        toast('失敗: ' + (e?.message || e));
+        zBtn.disabled = false; zBtn.textContent = '🎦 Zoom を追加';
+      }
+    });
+  }
+}
+
+function openHmDayModal(items, ymd) {
+  const day = items.filter(ev => eventDayYmd(ev) === ymd).sort((a, b) => {
+    if (a.all_day && !b.all_day) return -1;
+    if (!a.all_day && b.all_day) return  1;
+    return String(a.start).localeCompare(String(b.start));
+  });
+  const [y, m, d] = ymd.split('-').map(Number);
+  const root = document.getElementById('home-cal-modal');
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" data-hm-close>
+      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; padding:20px">
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <h3 style="margin:0; font-size:16px">${y}年 ${m}月 ${d}日の予定</h3>
+          <button class="btn" data-hm-close>×</button>
+        </div>
+        ${day.length === 0
+          ? '<div class="hint-sm" style="margin-top:12px; color:#6b7280">予定はありません</div>'
+          : `<div style="margin-top:10px; display:flex; flex-direction:column; gap:6px">
+              ${day.map((ev, idx) => {
+                const color = calColorFor(ev.calendar);
+                const t = ev.all_day ? '終日' : (() => {
+                  const dd = new Date(ev.start); return `${String(dd.getHours()).padStart(2,'0')}:${String(dd.getMinutes()).padStart(2,'0')}`;
+                })();
+                return `<button class="btn" data-hm-open-idx="${idx}"
+                          style="text-align:left; background:${color}15; border:1px solid ${color}55; border-left:4px solid ${color}; padding:8px 10px">
+                          <div style="font-weight:600; color:${color}">${ev.url ? '🎦 ' : ''}${escapeHtml(t)} ${escapeHtml(ev.title || '(無題)')}</div>
+                          ${ev.location ? `<div style="font-size:11px; color:#6b7280; margin-top:2px">📍 ${escapeHtml(ev.location)}</div>` : ''}
+                        </button>`;
+              }).join('')}
+            </div>`}
+        <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+          <button class="btn" data-hm-close>閉じる</button>
+        </div>
+      </div>
+    </div>`;
+  root.querySelectorAll('[data-hm-close]').forEach(el => el.addEventListener('click', (e) => {
+    if (e.target === el || e.currentTarget === el) closeHmModal();
+  }));
+  root.querySelectorAll('[data-hm-open-idx]').forEach(btn => {
+    btn.addEventListener('click', () => openHmEventModal(day[Number(btn.dataset.hmOpenIdx)]));
+  });
+}
+
+function closeHmModal() {
+  const root = document.getElementById('home-cal-modal');
+  if (root) root.innerHTML = '';
+}
+
 function openMtgModal() {
   const root = document.getElementById('home-mtg-modal');
   if (!root) return;
@@ -1618,7 +1988,7 @@ async function renderFreshInvitations() {
   try {
     const d = await get('/api/invitations', { status: 'open' });
     const open = d.items || [];
-    // v513 #135 「＋ 新しく募集する」はあまり使われないので削除。ゼロ件ならカードごと
+    // v513 #135 「＋新しく募集する」はあまり使われないので削除。ゼロ件ならカードごと
     //   隠す (募集機能は #/invitations や #/apps から行ける)。
     if (!open.length) {
       if (card) card.hidden = true;
@@ -1668,7 +2038,7 @@ async function renderFreshInvitations() {
           </div>
           <div class="hint">→</div>
         </a>`;
-    }).join(''); // v513 #135 「＋ 新しく募集する」撤去に伴い addLink 連結も削除
+    }).join(''); // v513 #135 「＋新しく募集する」撤去に伴い addLink 連結も削除
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -2140,7 +2510,7 @@ async function renderConfDeadlinesWidget() {
     const d = await get('/api/conf-deadlines/upcoming?limit=8');
     const items = d.items || [];
     if (!items.length) {
-      root.innerHTML = '<div class="hint" style="font-size:13px">登録済の〆切はありません・ <a href="#/conf-deadlines/new">＋ 登録</a></div>';
+      root.innerHTML = '<div class="hint" style="font-size:13px">登録済の〆切はありません・ <a href="#/conf-deadlines/new">＋登録</a></div>';
       return;
     }
     const catIcon = { intl_conf: '🌐', domestic_conf: '🇯🇵', journal: '📰', other: '📋' };
@@ -2619,9 +2989,9 @@ async function renderHomeQuote() {
   } catch (e) { card.hidden = true; }
 }
 
-// v970 中村研 アルバム の 新着 6 件 を タイル で 表示。
-//   実 データ は /api/nkmr-albums (全件) から 取って、 sortKey (YYYY-MM-DD) 降順 の 上位 6 件。
-//   サムネ / 写真枚数 は バックグラウンド cron が 事前 fetch 済 なので、 batch endpoint で 即返却。
+// v970 中村研アルバムの新着 6 件をタイルで表示。
+//   実データは /api/nkmr-albums (全件) から取って、 sortKey (YYYY-MM-DD) 降順の上位 6 件。
+//   サムネ / 写真枚数はバックグラウンド cron が事前 fetch 済なので、 batch endpoint で即返却。
 async function renderHomeNkmrAlbums() {
   const card = document.getElementById('home-nkmr-albums-card');
   const root = document.getElementById('home-nkmr-albums');
@@ -2636,7 +3006,7 @@ async function renderHomeNkmrAlbums() {
     };
     all.sort((a, b) => keyOf(b.title).localeCompare(keyOf(a.title)));
     const top = all.slice(0, 6);
-    // サムネ / 枚数 を 引く
+    // サムネ / 枚数を引く
     let thumbs = {}, counts = {};
     try {
       const r = await post('/api/album-thumbs', { urls: top.map(a => a.url) });
@@ -2652,7 +3022,7 @@ async function renderHomeNkmrAlbums() {
             ? `<img src="${escapeHtml(t)}" loading="lazy" style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
             : `<div style="width:100%; aspect-ratio: 4/3; background:#f3f4f6; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:22px">📷</div>`;
           const flag = a.flag ? `<span style="position:absolute; left:4px; top:4px; font-size:12px; background:rgba(0,0,0,0.4); border-radius:3px; padding:0 3px">${escapeHtml(a.flag)}</span>` : '';
-          // v970.6 fb#479: 298 以上 は Google Photos の 初期 HTML 上限 に 触れて いて 実 count 不明 なので 「300+」 と 表示。
+          // v970.6 fb#479: 298 以上は Google Photos の初期 HTML 上限に触れていて実 count 不明なので「300+」と表示。
           const cnt = (typeof c === 'number' && c > 0) ? `<span style="position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,0.55); color:#fff; font-size:9.5px; padding:1px 5px; border-radius:6px">📷 ${c >= 298 ? '300+' : c}</span>` : '';
           return `
             <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
@@ -3204,11 +3574,11 @@ async function renderFreshTasks() {
       myCard.hidden = true;
     }
 
-    // 「＋ 新しくタスクを設定する」は常に出す。受けられるタスクがゼロでも、
+    // 「＋新しくタスクを設定する」は常に出す。受けられるタスクがゼロでも、
     // 「設定する」という能動的な行動が一発でできるように。
     const addLink = `
       <a class="list-item add-row" href="#/tasks?new=request">
-        <div class="grow bold" style="color:var(--primary)">＋ 新しくタスクを設定する</div>
+        <div class="grow bold" style="color:var(--primary)">＋新しくタスクを設定する</div>
         <div class="hint">→</div>
       </a>`;
     if (!available.length) {
