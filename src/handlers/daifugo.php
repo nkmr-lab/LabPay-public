@@ -6,10 +6,10 @@
 //   - 上がった順に 1 位 / 2 位 / ... の rank
 //   - ジョーカーはどの強さでも (簡易: 単体 = 最強として扱う)
 //   - 縛り / 革命 / 階段などの特殊ルールは省略 (シンプル MVP)
-//   - 1 ゲーム 1pt 預託、 1 位が pot 総取り
+//   - 1 ゲーム 5pt 預託、 1 位が pot 総取り (v1068 で 2pt → 5pt、中村さん「安すぎたので」)
 declare(strict_types=1);
 
-const DAIFUGO_FEE = 2;
+const DAIFUGO_FEE = 5;
 const DAIFUGO_MAX_PLAYERS = 4;
 const DAIFUGO_MIN_PLAYERS = 2;
 

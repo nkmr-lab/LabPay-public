@@ -5,7 +5,7 @@
 
 declare(strict_types=1);
 
-const JINROU_DEFAULT_BUYIN = 2;
+const JINROU_DEFAULT_BUYIN = 5;   // v1068 で 2pt → 5pt (中村さん「安すぎたので」)
 
 function route_jinrou(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);

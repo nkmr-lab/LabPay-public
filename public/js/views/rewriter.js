@@ -12,7 +12,7 @@ export async function renderRewriter() {
       <p class="hint" style="font-size:13px; margin:6px 0 0">
         アブストやリバッタルなど、文字数・単語数の上限と戦うためのツール。
         GPT の自己カウントは間違うので、サーバ側で正確にカウントして超過時は再依頼します (最大3回)。
-        <b>1回 1pt</b>。失敗時は自動返金。
+        <b>1回 10pt</b>。失敗時は自動返金。
       </p>
     </div>
     <div class="card">
@@ -36,7 +36,7 @@ export async function renderRewriter() {
         </label>
       </div>
       <div style="display:flex; gap:8px; align-items:center">
-        <button id="rw-go" class="btn primary">1pt を支払ってリライト</button>
+        <button id="rw-go" class="btn primary">10pt を支払ってリライト</button>
         <span id="rw-status" class="hint-sm"></span>
       </div>
     </div>
@@ -71,7 +71,7 @@ export async function renderRewriter() {
       navigate('#/rewriter/' + r.id);
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
-      btn.disabled = false; btn.textContent = '1pt を支払ってリライト';
+      btn.disabled = false; btn.textContent = '10pt を支払ってリライト';
       sts.textContent = '';
     }
   });

@@ -1,13 +1,13 @@
 <?php
 // v568 #223 ito ゲーム (協力ゲーム: 1-100 の数字を表現で当てる)。
-//   1. lobby: 起案者がお題 + メンバー選択 + 1pt 預託 → 参加者も 1pt 預託
+//   1. lobby: 起案者がお題 + メンバー選択 + 5pt 預託 → 参加者も 5pt 預託 (v1068 で 1pt→5pt)
 //   2. input: 各自に 1-100 の数字 (重複なし) が配布 → お題に沿って表現を入力
 //   3. reveal: 全員入力したら数字を公開 (小さい順)、全員で並び順を当てる
-//   4. finished: 結果表示 + pot 分配 (全員で割り勘戻し: 1pt × N → 全員 1pt 戻し、場代 0)
+//   4. finished: 結果表示 + pot 分配 (全員で割り勘戻し: 5pt × N → 全員 5pt 戻し、場代 0)
 
 declare(strict_types=1);
 
-const ITO_DEFAULT_BUYIN = 1;
+const ITO_DEFAULT_BUYIN = 5;
 const ITO_MAX_NUMBER = 100;
 
 function route_ito(PDO $pdo, array $cfg, string $method, array $seg): void {

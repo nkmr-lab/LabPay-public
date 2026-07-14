@@ -16,12 +16,12 @@ CREATE TABLE IF NOT EXISTS custom_game_kinds (
   CONSTRAINT fk_cgk_user FOREIGN KEY (created_by_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 初期 seed: 既存の マルバツ
+-- 初期 seed: 既存の マルバツ (v1068 で fee 1pt → 5pt に更新、 fee_update SQL 別途)
 INSERT IGNORE INTO custom_game_kinds (kind, display_name, description, icon, fee, js_module_url, created_by_user_id)
 VALUES ('tictactoe',
         '⭕❌ マルバツ',
-        '3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。 1pt プレイフィー、 勝者が pot 総取り (引分は半額返金)。',
+        '3x3 のマルバツ。 起案者=⭕、 参加者=❌。 縦/横/斜め 3 つ並べたら勝ち。 5pt プレイフィー、 勝者が pot 総取り (引分は半額返金)。',
         '⭕',
-        1,
+        5,
         '/js/views/tictactoe.js',
         1);

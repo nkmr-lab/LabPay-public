@@ -613,11 +613,10 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
     return trim((string)($r['choices'][0]['message']['content'] ?? ''));
 }
 
-const RESUME_CHECK_COST = 10;       // v1010 5 → 10 (中村さん「原稿チェックは 5pt → 10pt」)
-const RESUME_CHECK_MODELS = [       // v774 #396 モデル別価格 / v1010 gpt-4.1 削除、 baseline 10pt に
-    'gpt-5-mini' => 10,
-    'gpt-5'      => 15,
-    'o1'         => 25,
+const RESUME_CHECK_COST = 20;       // v1068 15 → 20 (中村さん「デフォルトgpt-5で、20ptに変更」)
+const RESUME_CHECK_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、 デフォルト gpt-5 20pt
+    'gpt-5' => 20,
+    'o1'    => 30,
 ];
 // テキスト入力時の上限。PDF 入力時は OpenAI Files 経由なので制限なし (10 MB 上限のみ)。
 const RESUME_CHECK_MAX_CHARS = 8000;
@@ -637,7 +636,7 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
         'cost_points'   => RESUME_CHECK_COST,           // 旧互換
         'max_chars'     => RESUME_CHECK_MAX_CHARS,
         'models'        => RESUME_CHECK_MODELS,         // v774 #396
-        'default_model' => 'gpt-5-mini',   // v1010 gpt-4.1 削除に伴い gpt-5-mini (最安 10pt) をデフォルトに
+        'default_model' => 'gpt-5',        // v1068 gpt-5-mini 撤廃、 デフォルト gpt-5 20pt
     ]);
 }
 
@@ -697,8 +696,8 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         }
     }
 
-    // v774 #396 モデル選択 + 動的価格。 v1010 gpt-4.1 削除に伴い default gpt-5-mini
-    $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-5-mini') : ($body['model'] ?? 'gpt-5-mini')));
+    // v774 #396 モデル選択 + 動的価格。 v1068 gpt-5-mini 撤廃、 デフォルト gpt-5
+    $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-5') : ($body['model'] ?? 'gpt-5')));
     if (!isset(RESUME_CHECK_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
     }
@@ -741,7 +740,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
     ai_resume_check_run_background($pdo, $cfg, $checkId, $text, $fileId, $reqModel);
 }
 
-function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null, string $reqModel = 'gpt-5-mini'): void {
+function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, ?string $fileId = null, string $reqModel = 'gpt-5'): void {
     try {
         $pdo->prepare("UPDATE resume_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
@@ -837,11 +836,10 @@ PROMPT;
     }
 }
 
-const PAPER_REVIEW_COST = 10;       // 旧互換 (gpt-4.1 想定の標準料金)。 v774 #396 モデル別価格へ移行。
-const PAPER_REVIEW_MODELS = [       // v774 #396 モデル別価格 / v1010 gpt-4.1 削除
-    'gpt-5-mini' => 15,
-    'gpt-5'      => 30,
-    'o1'         => 50,
+const PAPER_REVIEW_COST = 30;       // v1068 デフォルト gpt-5 = 30pt (旧 gpt-4.1 前提の 10pt は廃止)
+const PAPER_REVIEW_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、 デフォルト gpt-5 30pt
+    'gpt-5' => 30,
+    'o1'    => 50,
 ];
 // v557 #211 拡張: 査読の評価軸を明示。貢献の妥当性 / 統計記述の漏れ / 論理の流れ / 章間の一気通貫性を徹底チェック。
 const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
@@ -3048,13 +3046,9 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //     - deep (gpt-5 高 reasoning, ~12 検索, 30K in / 30K out): ~$0.70 = 約 100 円
 //   実トークン / 検索数は usage_json に残すので、実コストがズレた場合は後で調整。
 const DEEP_RESEARCH_TIERS = [
-    // v853 価格半額化 (20/50/100 → 10/25/50)
-    // v1009 中村さん「Deep Research がちと安すぎる、 2倍で良い、深いで共有なら 50pt が妥当」
-    //   → 元 (v853 前) の 20/50/100 に戻す。共有時は半額 (10/25/50)。
-    // v1012 中村さん「mini は精度が出ないので light も gpt-5 (effort=low) に」
-    'light'    => ['model' => 'gpt-5',      'effort' => 'low',    'cost' => 20,  'max_tokens' => 8000,  'label' => '軽い (gpt-5 low, ~4 検索)'],
-    'standard' => ['model' => 'gpt-5',      'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5, ~7 検索)'],
-    'deep'     => ['model' => 'gpt-5',      'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning, ~12 検索)'],
+    // v1068 中村さん「軽い (gpt-5 low) を消そう。 標準と深いだけで良い」で light 撤廃
+    'standard' => ['model' => 'gpt-5', 'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5、 ~7 検索)'],
+    'deep'     => ['model' => 'gpt-5', 'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning、 ~12 検索)'],
 ];
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = <<<'PROMPT'

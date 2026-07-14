@@ -97,19 +97,19 @@ export const APPS = [
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リストでみんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
-  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文PDFを渡すと章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み/著者へのコメント + 引用文献の実在性検証 + 統計指標の妥当性分析) を返します。ターゲット会議と査読の厳しさを指定可。モデル選択: gpt-5-mini 15pt / gpt-5 30pt (デフォルト) / o1 50pt。', defaultVisible: true },
+  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文PDFを渡すと章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み + 引用実在性検証 + 統計妥当性) を返します。 gpt-5 30pt (デフォルト) / o1 50pt。', defaultVisible: true },
   // v748 #359 #360 #361 論文和訳要約 (落合メソッド)
-  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文PDFを読ませて、全体要約 → RQ・仮説 + 結果 → 主張する貢献 → キーワード → 章立て要約 (重要図表inline) → 今後の課題 → 押さえておくべき参考文献 → 落合メソッドまとめ、という順番で構造化して3-5分で返します。back-translation + 引用実在性の自己検証つき。モデル選択: gpt-5 63pt (デフォルト) / o1 100pt。共有ONで半額 + みんなが検索・閲覧可能。', defaultVisible: true },
+  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文 PDF から 章立て要約 + RQ/仮説 + 落合メソッド + 図表 を 構造化して 3-5 分で返す。 引用実在性の自己検証つき。 gpt-5 63pt (デフォルト) / o1 100pt、 共有 ON で半額。', defaultVisible: true },
   // v583 #225 レジュメ原稿チェック (短原稿向け軽量版、 5pt)
   // v1023 実験計画書チェック (Scrapbox 形式の実験計画書を精査)
   { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。 gpt-5 で 1 回 20pt。', defaultVisible: true },
   // v1024 サンプルサイズ / 検定力 (G*Power ベースライン)
-  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 2 標本 / 対応 / 1 標本 t 検定、 一元配置 ANOVA、 Pearson 相関、 χ² に対応。 効果量の Cohen 基準もワンタップ。 無料。 v1025+ で LMM/GLMM シミュ + コスト直結を予定。', defaultVisible: true },
-  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など1-2ページの短原稿をチェック。背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標の妥当性を一通り見ます。モデル選択: gpt-5-mini 10pt (デフォルト) / gpt-5 15pt / o1 25pt。論文ほど厳密ではない軽量版。', defaultVisible: true },
+  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 t / ANOVA / rmANOVA / 相関 (Pearson/Spearman) / χ² / Fisher / LMM/GLMM / ベイズ の 17 検定 + 予算試算 + 論文用 R/Python コード 自動生成。 無料。', defaultVisible: true },
+  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など 1-2 ページの短原稿をチェック。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標を一通り見ます。 gpt-5 20pt (デフォルト) / o1 30pt。', defaultVisible: true },
   // v613 文字数・単語数リライター
-  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (10pt)。サーバ側で正確にカウントして超過時は再依頼 (最大3回)。英文は和訳も。元と書き直しを色付きdiffで表示。', defaultVisible: true },
+  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (10pt)。 サーバ側で正確にカウントして超過時は再依頼 (最大 3 回)。 英文は和訳も。 元と書き直しを色付き diff で表示。', defaultVisible: true },
   // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
-  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPTのDeep Researchを真似た多段Web調査。クエリを投げるとOpenAIがweb_searchを必要なだけ使って複数ソースを横断検索 → サブ問い分解 + セクション別調査 + 全体まとめ + 出典URL一覧を構造化して返します。引用文献の実在性を自己検証。深さ3段階 (軽い gpt-5 low 20pt / 標準 gpt-5 50pt / 深い gpt-5 高reasoning 100pt)。共有ONで半額。', defaultVisible: true },
+  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。 サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL を構造化して返す。 引用実在性の自己検証つき。 標準 (gpt-5) 50pt / 深い (gpt-5 高 reasoning) 100pt。 共有 ON で半額。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
   { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3文サンプルをback-translationで整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5 63pt / o1 100pt) と日→英 (5x、gpt-5 313pt / o1 500pt、em-dash等GPT-isms除去込み) の双方向対応。共有ONで半額。', defaultVisible: true },
   // v942 公開投票 (誰でも 投票)
@@ -133,13 +133,13 @@ export const APPS = [
     desc: '集中25分 → 小休憩5分 を 繰り返す 集中法。 4 セット目 の 後 は 大休憩15分。 タスクラベル、 完了時 チャイム + ブラウザ通知、 集中中 は 画面 sleep 抑止、 日次実績 グラフ、 duration カスタマイズ 可。 個人の作業効率アップに。', defaultVisible: true },
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。 手動追加 or 領収書を撮影して OpenAI Vision で 店名/日付/金額/カテゴリを自動抽出。 月別 + カテゴリ別合計 + 明細一覧。 全て個人スコープ (他人には見えない)。', defaultVisible: true },
-  { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスク ボード。 ラボ全員 で 共有、 起案者 が 各 ボード を 作って 列 (Backlog / Doing / Done 等) + カード を D&D で 動かす。 カード は 担当者 + ラベル + 期限 + チェックリスト + Markdown 説明 + Markdown コメント。 アサイン と コメント で 自動 通知。 ボード ごと に 履歴 (誰が いつ 何を) が 残る。 プロジェクト 進捗 / 学会 送り 出し / 週次 タスク 管理 に。', defaultVisible: true },
+  { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的 タスクボード。 列 (Backlog/Doing/Done 等) + カード を D&D。 カードは 担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。 アサインとコメントで通知、 履歴も残る。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
   { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero的な文献管理。DOI/arXiv ID/URLからmetadata (title/authors/year/venue/abstract) を自動取得。PDF添付、タグ、BibTeX出力、検索・絞り込み、読状態、自分のnoteをラボ全員で共有。要約/全訳と相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク
   { id: 'research-notes', cat: 'research', url: '#/research-notes', title: '📝 研究ノート (Cosense)', desc: 'nkmr-lab Cosense の「YYYY.MM_研究ノート_<handle>」ページを直接ロードし、今日 / 昨日の日付セクションを抽出表示。書く時は Cosense を開いて編集。 admin 側で session cookie 設定必須。', defaultVisible: true },
   // v886 Overleaf プロジェクト追跡 (教員 admin 限定)
-  { id: 'overleaf',     cat: 'shared',   url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウントで共有されてる全Overleafプロジェクトの文字数推移をラボメンバー全員で可視化。24h/7d差分やsparkline、複数プロジェクトの推移比較グラフ、60日履歴、ファイル別内訳。1か月以上更新なしのプロジェクトはグラフから除外。', defaultVisible: true },
+  { id: 'overleaf',     cat: 'shared',   url: '#/overleaf',     title: '📝 Overleaf 更新状況',  desc: '教員アカウント共有の 全 Overleaf プロジェクトの 文字数推移を 可視化。 24h/7d 差分 + sparkline + 60 日履歴 + 比較グラフ。', defaultVisible: true },
   { id: 'zemi-videos', cat: 'shared', url: '#/zemi-videos', title: '🎥 ゼミ動画', desc: 'YouTubeの限定公開ゼミ動画をタイトル/説明でキーワード検索 + その場で視聴。誰でも動画URL + タイトル + 説明を登録できる。', defaultVisible: true },
   // v586 フライト応援 (オフライン、機内で使う)
   { id: 'flight',        cat: 'game',   url: '#/flight',         title: '✈️ フライト応援',    desc: '長いフライトの進捗 (%) / 残り時間 / 経過時間を大きく可視化。完全オフラインで動作。画面自動ON維持。機内で退屈しのぎに。', defaultVisible: true },

@@ -1,8 +1,8 @@
 <?php
 // v587 地雷オセロ。 2 人対戦、各自 2 地雷を設定 → 踏むと周囲 3x3 反転。
 //   GET    /api/othello/games            一覧 (waiting / playing / 最近 finished)
-//   POST   /api/othello/games            新規卓 (1pt 預託)
-//   POST   /api/othello/games/:id/join   参加 (1pt 預託)
+//   POST   /api/othello/games            新規卓 (5pt 預託、v1068 で 2pt→5pt)
+//   POST   /api/othello/games/:id/join   参加 (5pt 預託)
 //   POST   /api/othello/games/:id/mines  地雷設定 ({cells: ['33','44']})
 //   POST   /api/othello/games/:id/move   { row, col } 手を打つ
 //   POST   /api/othello/games/:id/pass   パス (置く所がない時)
@@ -11,7 +11,7 @@
 
 declare(strict_types=1);
 
-const OTHELLO_FEE = 2;
+const OTHELLO_FEE = 5;
 
 function route_othello(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
