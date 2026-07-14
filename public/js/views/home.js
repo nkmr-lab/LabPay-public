@@ -1646,7 +1646,7 @@ async function renderCalendarMonth({ force = false } = {}) {
     }
   }
   root.innerHTML = renderMonthGridHtml(calMonth, items);
-  wireMonthGridClicks(items);
+  ensureMonthGridDelegation();
 }
 
 function renderMonthGridHtml(ym, items) {
@@ -1727,20 +1727,23 @@ function renderMonthGridHtml(ym, items) {
   `;
 }
 
-function wireMonthGridClicks(items) {
-  // v1084 中村さん指示「月表示で任意の日を選んだら、その日モードになって欲しい」
-  //   → 日セルをタップで calMode='day' に遷移、その日の全予定 +
-  //     「＋MTG を立てる」ボタンが表示される (openMtgModal を calDay 引数で開く)。
+// v1085 中村さん指摘「日をタップしても移動しないな」→ per-cell の addEventListener
+//   だと home polling による innerHTML 再描画で listener が消える瞬間がある。
+//   #home-calendar は永続なので、そこで event delegation に切替。 1 度だけ bind。
+function ensureMonthGridDelegation() {
   const root = document.getElementById('home-calendar');
-  root.querySelectorAll('[data-hm-day-cell]').forEach(el => {
-    el.addEventListener('click', () => {
-      const ymd = el.dataset.hmDayCell;
-      if (!ymd) return;
-      calDay = ymd;
-      calMode = 'day';
-      saveCalMode('day');
-      renderCalendarEvents({ force: false });
-    });
+  if (!root || root.dataset.hmDelegated) return;
+  root.dataset.hmDelegated = '1';
+  root.addEventListener('click', (ev) => {
+    if (calMode !== 'month') return;
+    const cell = ev.target.closest('[data-hm-day-cell]');
+    if (!cell || !root.contains(cell)) return;
+    const ymd = cell.dataset.hmDayCell;
+    if (!ymd) return;
+    calDay = ymd;
+    calMode = 'day';
+    saveCalMode('day');
+    renderCalendarEvents({ force: false });
   });
 }
 
