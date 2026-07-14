@@ -290,6 +290,54 @@ function simulateFisher2x2({ n_per_group, p0, p1, alpha, iterations, tails = 2 }
   return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)], iterations, method: 'monte_carlo_fisher_2x2' };
 }
 
+// v1074 Cochran Q 検定 (対応 K 手法 × 2 値) の Monte Carlo 検定力 (中村さん指示
+//   「Cochran's Q は簡単に作れる？作れるなら一応用意しておいて欲しい」)。
+//   モデル: 参加者 i、手法 j。潜在 z_ij = √ρ u_i + √(1-ρ) ε_ij (u,ε ~ N(0,1))、
+//     y_ij = 1 if z_ij < Φ⁻¹(p_j) else 0。これで手法内成功率が p_j に、
+//     参加者内相関が ρ に近似する (2 値のテトラコリック相関ベース)。
+//   Q = k(k−1) Σ_j (C_j − C̄)² / (k ΣR_i − Σ R_i²)  (C_j=列和、 R_i=行和)
+//   帰無仮説下で Q ~ χ²(k−1)。全 R_i が 0 or k (無情報) の iter は分母 0 でスキップ。
+function simulateCochranQ({ n, ps, rho, alpha, iterations }) {
+  const k = ps.length;
+  if (k < 2 || n < 3) return { power: 0 };
+  const thresh = ps.map(p => qnorm(Math.max(0.001, Math.min(0.999, p))));  // z_j = Φ⁻¹(p_j)
+  const sqRho = Math.sqrt(Math.max(0, Math.min(0.999, rho)));
+  const sqAnti = Math.sqrt(1 - Math.max(0, Math.min(0.999, rho)));
+  const chi_crit = wilsonHilferty_chiCrit(k - 1, alpha);
+  let sig = 0, valid = 0;
+  const C = new Array(k);
+  for (let it = 0; it < iterations; it++) {
+    for (let j = 0; j < k; j++) C[j] = 0;
+    let sumR = 0, sumRsq = 0;
+    for (let i = 0; i < n; i++) {
+      const u = randn();
+      let r = 0;
+      for (let j = 0; j < k; j++) {
+        const zij = sqRho * u + sqAnti * randn();
+        if (zij < thresh[j]) { C[j]++; r++; }
+      }
+      sumR  += r;
+      sumRsq += r * r;
+    }
+    const denom = k * sumR - sumRsq;
+    if (denom <= 0) continue;                        // 全員全一致 (情報なし iter)
+    valid++;
+    const Cbar = sumR / k;
+    let num = 0;
+    for (let j = 0; j < k; j++) { const d = C[j] - Cbar; num += d * d; }
+    const Q = k * (k - 1) * num / denom;
+    if (Q > chi_crit) sig++;
+  }
+  if (valid === 0) return { power: 0, iterations, method: 'monte_carlo_cochran_q' };
+  const powerEst = sig / valid;
+  const zCrit = 1.96;
+  const denomWi = 1 + zCrit * zCrit / valid;
+  const center  = (powerEst + zCrit * zCrit / (2 * valid)) / denomWi;
+  const halfW   = zCrit * Math.sqrt(powerEst * (1 - powerEst) / valid + zCrit * zCrit / (4 * valid * valid)) / denomWi;
+  return { power: powerEst, ci: [Math.max(0, center - halfW), Math.min(1, center + halfW)],
+           iterations: valid, method: 'monte_carlo_cochran_q' };
+}
+
 // v1063 fb#483 Spearman 順位相関の検定力。 Pearson の検定力公式を使い、
 //   ARE ≈ 0.912 (asymptotic relative efficiency to Pearson under bivariate normal;
 //   Kendall 1938) で補正。実効 n_effective = n × 0.912 → 必要 n は 1/0.912 ≈ 1.10 倍。
@@ -1331,6 +1379,7 @@ function methodsPerParticipant() {
   const t = state.test;
   if (t === 'tp' || t === 'bayes_t') return 2;
   if (t === 'rmanova') return state.k;
+  if (t === 'cochran_q') return Math.max(1, parseCochranPs(state.cochran_q.ps).length);
   // LMM/GLMM 系も参加者内 2 条件だが、「1 人あたりの全実験時間」を別途想定するため
   //   ここでは手法倍率は 1 とし、 hint で「試行時間も込みで入力してください」と誘導
   return 1;
@@ -1342,6 +1391,7 @@ function methodsBreakdownNote() {
   if (t === 'rmanova') return `× ${state.k} 手法 (rmANOVA、 1 人が全 ${state.k} 手法を試す)`;
   if (t === 'tp')      return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
   if (t === 'bayes_t') return `× 2 手法 (対応 t、 1 人が両手法を試す)`;
+  if (t === 'cochran_q') return `× ${m} 手法 (Cochran Q、 1 人が全 ${m} 手法を試す)`;
   return `× ${m} 手法`;
 }
 // v1056 中村さん指摘「本人に支払う額と実際にかかる総額は分けたほうが良い。 1.1 倍
@@ -1763,6 +1813,11 @@ const TESTS = [
   // v1063 fb#484 Fisher 直接確率検定 (2×2、少数観測向き) の Monte Carlo シミュベース
   { id: 'fisher_2x2', label: '🥧 Fisher 直接確率検定 (2×2、シミュベース)', eff: 'p_diff',
     effGuide: [['小 |p1-p0|=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
+  // v1074 中村さん指示「Cochran's Q は簡単に作れる？作れるなら一応用意しておいて欲しい」。
+  //   対応 K 手法 × 2 値 (成功/失敗) の Monte Carlo シミュベース検定力。
+  //   参加者内相関 ρ を潜在ガウスの分散分解 (z = √ρ u + √(1-ρ) ε) で入れる。
+  { id: 'cochran_q', label: '🥧 Cochran Q 検定 (対応 K 手法 × 2 値、シミュベース)', eff: 'p_range',
+    effGuide: [['小 range=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
   // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
   { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差 (2 レベル)', eff: 'beta',
     effGuide: [['小 β=0.2', 0.2], ['中 β=0.5', 0.5], ['大 β=0.8', 0.8]] },
@@ -1906,6 +1961,13 @@ const state = {
     p1: 0.5,          // 処置群陽性率
     iterations: 2000,
   },
+  // v1074 Cochran Q (対応 K 手法 × 2 値)
+  cochran_q: {
+    n: 30,                       // 参加者数
+    ps: '0.40, 0.55, 0.70',      // K 手法それぞれの想定成功率 (カンマ区切り)。 length = K
+    rho: 0.3,                    // 参加者内相関 (潜在ガウスの分散分解)
+    iterations: 2000,
+  },
   // v1050 ベイズ (JZS BF10)
   bayes_t: {
     n: 24,
@@ -1950,7 +2012,7 @@ function applyLoaded(d) {
   ['test','mode','alpha','tails','effect','power','n_per_group','n_total','k','df','dataType'].forEach(k => {
     if (k in cfg) state[k] = cfg[k];
   });
-  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','budget'].forEach(k => {
+  ['rawA','rawB','rawDiff','lmm','lmm3','glmm','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q','budget'].forEach(k => {
     if (cfg[k] && typeof cfg[k] === 'object') Object.assign(state[k], cfg[k]);
   });
   state.loaded_id = d.id;
@@ -1967,7 +2029,7 @@ function currentConfig() {
     n_per_group: state.n_per_group, n_total: state.n_total,
     k: state.k, df: state.df,
     // v1031/1032 sim モデルも config に含める
-    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t, fisher_2x2: state.fisher_2x2,
+    lmm: state.lmm, lmm3: state.lmm3, glmm: state.glmm, glmm_poisson: state.glmm_poisson, glmm_ordinal: state.glmm_ordinal, glmm_nb: state.glmm_nb, bayes_t: state.bayes_t, fisher_2x2: state.fisher_2x2, cochran_q: state.cochran_q,
     budget: state.budget,
     dataType: state.dataType, rawA: state.rawA, rawB: state.rawB, rawDiff: state.rawDiff,
   };
@@ -2128,7 +2190,7 @@ function render() {
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
-    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2'].includes(state.test) ? stepBlock({
+    ${!['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q'].includes(state.test) ? stepBlock({
       title: '⑥ 効果量 (' + t.eff + ')',
       desc: '検出したい効果の大きさを標準化した値。先行研究 / パイロット / 分野の慣習で決めます。目安で決め打ち、実測データから導く、先行研究の値から計算するの 3 通りが使えます。',
       // v1035 中村さん指示「目安の下に、効果量のグループの中に、予想データからと
@@ -2152,6 +2214,7 @@ function render() {
     ${state.test === 'glmm_nb' ? renderNBBlocks() : ''}
     ${state.test === 'bayes_t' ? renderBayesBlocks() : ''}
     ${state.test === 'fisher_2x2' ? renderFisherBlocks() : ''}
+    ${state.test === 'cochran_q' ? renderCochranQBlocks() : ''}
 
     ${renderBudgetBlock()}
 
@@ -2899,6 +2962,21 @@ function syncFormToState() {
     p.p1 = Math.max(0.001, Math.min(0.999, num('fisher-p1', p.p1)));
     p.iterations = Math.max(200, Math.min(20000, Math.round(num('fisher-iter', p.iterations))));
   }
+  // v1074 Cochran Q (対応 K 手法 × 2 値)
+  if (state.test === 'cochran_q') {
+    const num = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const v = parseFloat(el.value);
+      return isNaN(v) ? fallback : v;
+    };
+    const p = state.cochran_q;
+    if (state.mode === 'post_hoc') p.n = Math.max(3, Math.round(num('cq-n', p.n)));
+    const psEl = document.getElementById('cq-ps');
+    if (psEl) p.ps = psEl.value;
+    p.rho = Math.max(0, Math.min(0.999, num('cq-rho', p.rho)));
+    p.iterations = Math.max(200, Math.min(20000, Math.round(num('cq-iter', p.iterations))));
+  }
   // v1050 ベイズ (JZS BF10)
   if (state.test === 'bayes_t') {
     const num = (id, fallback) => {
@@ -2973,6 +3051,7 @@ function doCalc() {
   if (state.test === 'glmm_nb') return doCalcNBGLMM();
   if (state.test === 'bayes_t') return doCalcBayesT();
   if (state.test === 'fisher_2x2') return doCalcFisher2x2();
+  if (state.test === 'cochran_q') return doCalcCochranQ();
 
   let out = null;
   const N = state.test === 't2' ? state.n_per_group : state.n_total;
@@ -3098,6 +3177,104 @@ function renderFisherResult(res, t) {
   }
   const participants = res.mode === 'a_priori' ? res.n_required * 2 : p.n_per_group * 2;
   root.innerHTML = mainCard + renderBudgetSummary(participants, res.mode === 'a_priori' ? '必要' : '現在');
+}
+
+// v1074 Cochran Q (対応 K 手法 × 2 値) の計算 + 専用結果レンダラー
+function parseCochranPs(str) {
+  return String(str || '').split(/[,、\s]+/).map(s => s.trim()).filter(Boolean)
+    .map(Number).filter(x => isFinite(x) && x > 0 && x < 1);
+}
+function doCalcCochranQ() {
+  const t = TESTS.find(x => x.id === state.test);
+  const root = document.getElementById('pw-result');
+  const p = state.cochran_q;
+  const ps = parseCochranPs(p.ps);
+  if (ps.length < 2) {
+    root.innerHTML = `<div class="card" style="color:#dc2626">手法ごとの成功率を 2 つ以上、 0-1 の範囲で入力してください (カンマ区切り、例: 0.4, 0.55, 0.7)</div>`;
+    return;
+  }
+  const iterations = state.mode === 'a_priori' ? Math.min(p.iterations, 500) : p.iterations;
+  root.innerHTML = `<div class="card"><div class="hint-sm">シミュレーション実行中… (${iterations.toLocaleString()} 回、 Cochran Q、 K=${ps.length})</div></div>`;
+  setTimeout(() => {
+    try {
+      if (state.mode === 'a_priori') {
+        const target = state.power;
+        const runPower = (nn) => simulateCochranQ({ n: nn, ps, rho: p.rho, alpha: state.alpha, iterations: 300 }).power;
+        let lo = 3, hi = 500;
+        if (runPower(hi) < target) {
+          renderCochranQResult({ mode: 'a_priori', n_required: hi, over: true, verify_power: runPower(hi), ci: [null, null], params: p, ps }, t);
+          return;
+        }
+        while (hi - lo > 1) {
+          const mid = Math.ceil((lo + hi) / 2);
+          if (runPower(mid) < target) lo = mid; else hi = mid;
+        }
+        const conf = simulateCochranQ({ n: hi, ps, rho: p.rho, alpha: state.alpha, iterations });
+        renderCochranQResult({ mode: 'a_priori', n_required: hi, over: false, verify_power: conf.power, ci: conf.ci, params: p, ps }, t);
+      } else {
+        const res = simulateCochranQ({ n: p.n, ps, rho: p.rho, alpha: state.alpha, iterations });
+        renderCochranQResult({ mode: 'post_hoc', power: res.power, ci: res.ci, params: p, ps }, t);
+      }
+    } catch (e) { root.innerHTML = `<div class="card" style="color:#dc2626">${escapeHtml(e.message || String(e))}</div>`; }
+  }, 20);
+}
+function renderCochranQResult(res, t) {
+  const root = document.getElementById('pw-result');
+  const p = res.params;
+  const ps = res.ps;
+  const k = ps.length;
+  const range = Math.max(...ps) - Math.min(...ps);
+  const paramLine = `α=${state.alpha}, K=${k} 手法, 想定成功率 [${ps.map(x => x.toFixed(2)).join(', ')}] (幅 ${range.toFixed(2)}), 参加者内相関 ρ=${p.rho}`;
+  let mainCard;
+  if (res.mode === 'a_priori') {
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🎯 必要参加者数 (Cochran Q、シミュベース)</div>
+        <div style="font-size:22px; line-height:1.55">参加者 <b>${res.n_required}</b> 名 × ${k} 手法 = 延べ <b>${res.n_required * k}</b> 試行 ${res.over ? '<span style="color:#dc2626">(500 で頭打ち — 目標未達)</span>' : ''}</div>
+        <div class="hint-sm" style="margin-top:8px">検証: この n で検定力 = <b>${(res.verify_power * 100).toFixed(1)}%</b>${res.ci[0] !== null ? ` [95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]` : ''}</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+      </div>`;
+  } else {
+    const pctColor = res.power >= 0.8 ? '#059669' : (res.power >= 0.6 ? '#a16207' : '#dc2626');
+    mainCard = `
+      <div class="card" style="background:linear-gradient(180deg, #ede4f322, #fff); border-left:4px solid #7b3fa0">
+        <div class="bold" style="color:#7b3fa0; margin-bottom:8px">🔍 得られる検定力 (Cochran Q、シミュベース)</div>
+        <div style="font-size:28px; line-height:1.5; color:${pctColor}"><b>${(res.power * 100).toFixed(1)}%</b> <span style="font-size:14px; color:#6b7280">[95% CI: ${(res.ci[0]*100).toFixed(1)}−${(res.ci[1]*100).toFixed(1)}%]</span></div>
+        <div class="hint-sm" style="margin-top:8px">参加者 ${p.n} 名 × ${k} 手法 = 延べ ${p.n * k} 試行</div>
+        <div class="hint-sm" style="margin-top:4px">${paramLine}</div>
+      </div>`;
+  }
+  const participants = res.mode === 'a_priori' ? res.n_required : p.n;
+  root.innerHTML = mainCard + renderBudgetSummary(participants, res.mode === 'a_priori' ? '必要' : '現在');
+}
+function renderCochranQBlocks() {
+  const p = state.cochran_q;
+  const mode = state.mode;
+  const ps = parseCochranPs(p.ps);
+  const k = ps.length;
+  const range = k >= 2 ? (Math.max(...ps) - Math.min(...ps)) : 0;
+  return `
+    ${stepBlock({
+      title: '⑥ 各手法の想定成功率 (カンマ区切り)',
+      desc: `K 手法それぞれで参加者が「成功/正答/選択 A」する確率を並べる。手法数 K はここに入力した数がそのまま使われる。 <b>現在: K=${k} 手法、幅 (max−min) = ${range.toFixed(2)}</b>。例: 従来 40%、改良 55%、新規 70% を比べたいなら「0.40, 0.55, 0.70」。`,
+      body: `<input type="text" id="cq-ps" value="${escapeHtml(p.ps)}" style="width:220px" placeholder="0.40, 0.55, 0.70">`,
+    })}
+    ${stepBlock({
+      title: '⑦ 参加者内相関 ρ',
+      desc: '同じ参加者が全手法を試すため、能力の個人差が全手法で共通に効く。その相関を潜在ガウスで表現 (rmANOVA の ρ と同じ流儀)。目安: 弱 0.1、中 0.3、強 0.5。相関が高いほど検定力が上がる (個人差がノイズとしてキャンセルされる)。',
+      body: `<input type="number" id="cq-rho" step="0.05" min="0" max="0.99" value="${p.rho}" style="width:120px">`,
+    })}
+    ${mode === 'post_hoc' ? stepBlock({
+      title: '⑧ 参加者数 n',
+      desc: '全員が全 K 手法を試す想定 (完全対応)。',
+      body: `<input type="number" id="cq-n" step="1" min="3" value="${p.n}" style="width:120px">`,
+    }) : ''}
+    ${stepBlock({
+      title: '⚙ シミュ反復数',
+      desc: 'Cochran Q の Monte Carlo。 A priori は二分探索の各点で 300 iters を走らせるので少し時間がかかります。目安: 2000 で ~2%、 5000 で ~1.5% 誤差。',
+      body: `<input type="number" id="cq-iter" step="500" min="500" max="20000" value="${p.iterations}" style="width:140px">`,
+    })}
+  `;
 }
 
 // v1050 ベイズ (JZS BF10) 計算 + 専用結果レンダラー
@@ -3518,6 +3695,28 @@ function renderTestWizard() {
     } else {
       inferredNote = 'Q2 で「期待度数の見込み」を選んでください';
     }
+  } else if (s === 'categorical_methods') {
+    // v1074 中村さん指示「選択肢 A/B/C からどれを選ぶかの偏りを手法間比較する場合、
+    //   ウィザードにこのことも明記してあげるほうが良い。特に行数、列数の話は？？と
+    //   なるので、具体例と込みで出すと良い」。
+    //   参加者間 (r=indep) vs 参加者内 (r=paired) × 選択肢が 2 値か 3+ で分岐。
+    const cat = w.assoc_expected;   // 'binary' | 'multi' | ''  (assoc_expected を流用)
+    if (r === 'indep' && cat === 'binary') {
+      inferred = 'chi2';
+      inferredNote = '参加者間 × 2 値 (成功/失敗) の手法差 → 🥧 χ² 独立性検定。行 = 手法 (K)、列 = 成功/失敗 (2)。例: 3 手法 X/Y/Z × 成功/失敗 → 3×2 のクロス表、 df = (3−1)×(2−1) = 2。期待度数 <5 のセルが出るなら 🥧 Fisher に切替 (このアプリの実装は 2×2 のみ、それ以上は R/Python で)。';
+    } else if (r === 'indep' && cat === 'multi') {
+      inferred = 'chi2';
+      inferredNote = '参加者間 × 3+ 択の手法差 → 🥧 χ² 独立性検定。行 = 手法 (K)、列 = 選択肢 (M)。例: 3 手法 X/Y/Z × 選択肢 A/B/C → 3×3 のクロス表、 df = (3−1)×(3−1) = 4。例: 2 手法 × 4 択なら 2×4 で df = (2−1)×(4−1) = 3。セル数が多いと期待度数不足になりやすいので n を厚めに。';
+    } else if (r === 'paired' && cat === 'binary') {
+      inferred = 'cochran_q';
+      inferredNote = '参加者内 × 2 値 (成功/失敗) の手法差 → 🥧 Cochran Q 検定 (シミュベース、このアプリで対応)。同じ参加者が全手法を試して各回で成功/失敗を出す形。 K=2 なら McNemar 検定と等価。例: 20 名が 3 手法を全部試して各手法での正答率を比較。';
+    } else if (r === 'paired' && cat === 'multi') {
+      inferredNote = '参加者内 × 3+ 択の手法差 → <b>多項ロジスティック GLMM (Multinomial GLMM)</b> が本命 (このアプリ未対応)。 R の <code>brms::brm(family=categorical)</code> や <code>mclogit::mblogit</code>、 Python の <code>statsmodels MNLogit + 混合効果</code> 等で。簡易代替: 「A を選ぶ vs 選ばない」等の 2 値化を選択肢ごとに走らせて Cochran Q (このアプリ) を M 本 + Bonferroni 補正で概算。';
+    } else if (!r) {
+      inferredNote = 'Q2 で「独立 or 参加者内」を選んでください';
+    } else {
+      inferredNote = 'Q3 で「選択肢が 2 値か 3+ 択か」を選んでください';
+    }
   }
   return `
     <details style="margin-top:10px; padding:10px 12px; background:#faf5ff; border-radius:8px; border:1px solid #ede4f3" ${inferred || (s || g || rt || ae) ? 'open' : ''}>
@@ -3531,7 +3730,8 @@ function renderTestWizard() {
           ${opt('scale', 'binary_within', '2 値の系列 (成功/失敗、正誤を同じ参加者で複数回)')}
           ${opt('scale', 'count_within', '回数の系列 (エラー数、発言回数を同じ参加者で複数回)')}
           ${opt('scale', 'categorical_dist', '1 種類のカテゴリの分布の偏り (1 人 1 回だけの成功/失敗の集計、選択肢 A/B/C からどれを選ぶかの偏り、会議の話者ごとの発言回数、サイコロの出目など)')}
-          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリの関連 (性別 × 選択科目、群 × 正誤など)')}
+          ${opt('scale', 'categorical_assoc', '2 種類のカテゴリの関連 (性別 × 選択科目、居住地 × 志望学部など、手法差ではない一般のクロス表)')}
+          ${opt('scale', 'categorical_methods', '選択肢 (A/B/C や成功/失敗) を手法間で比較したい (X/Y/Z の手法ごとに選ばせた結果の偏り)')}
           ${opt('scale', 'relation', '関係を見たい (身長と体重、勉強時間と成績等の連動)')}
         </div>
         ${['continuous','ordinal'].includes(s) ? `
@@ -3570,6 +3770,37 @@ function renderTestWizard() {
             ${opt('relation_type', 'pearson', '直線的な連動 (身長と体重、時給と月収等の比例っぽい関係)')}
             ${opt('relation_type', 'spearman', '順位の類似 (成績順位の一致、満足度順の対応等、単調だが直線とは限らない)')}
           </div>` : ''}
+        ${s === 'categorical_methods' ? `
+          <div><b>Q2. 手法間の関係？</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">「手法 X 群 30 人、手法 Y 群 30 人…と別グループで別々に選ばせる」なら独立。「同じ参加者が全手法を試して各回で選ばせる」なら参加者内 (被験者内)。</div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('related', 'indep', '独立 (別の参加者が別の手法)')}
+            ${opt('related', 'paired', '参加者内 (同じ人が全手法)')}
+          </div>
+          ${r ? `
+          <div><b>Q3. 選択肢の数 (= クロス表の列数)</b></div>
+          <div class="hint-sm" style="margin-bottom:4px">「成功/失敗」「クリックした/しなかった」等の 2 値なら 2、「A/B/C」等 3 択以上なら 3+。手法数 (K) と選択肢数 (M) がそれぞれ行/列に対応するイメージ。</div>
+          <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
+            ${opt('assoc_expected', 'binary', '2 値 (成功/失敗、Yes/No)')}
+            ${opt('assoc_expected', 'multi',  '3 択以上 (A/B/C、松/竹/梅など)')}
+          </div>
+          <details style="margin-top:6px; padding:6px 10px; background:#fff; border-radius:4px">
+            <summary style="cursor:pointer; font-size:12px; color:#7b3fa0">📊 具体例 (3 手法 X/Y/Z × 選択肢 A/B/C、参加者間 60 名で仮想集計)</summary>
+            <pre style="font-family:'SF Mono', Menlo, Consolas, monospace; font-size:11px; margin:6px 0 0; overflow-x:auto">
+              A    B    C   合計   ← 列 (選択肢)
+  手法 X    8    7    5    20
+  手法 Y    5    9    6    20
+  手法 Z    3    5   12    20
+  合計     16   21   23    60
+
+行 = 手法 K=3、列 = 選択肢 M=3 → 3×3 クロス表
+df = (K−1) × (M−1) = 2 × 2 = 4
+🥧 χ² 独立性検定で「手法によって選択の分布が違うか」を検証。
+
+参加者内 (同じ人が 3 手法を試す) 版:
+  → 2 値 (成功/失敗) なら 🥧 Cochran Q (このアプリで対応)
+  → 3+ 択のままなら Multinomial GLMM (外部、 R brms 等)</pre>
+          </details>` : ''}` : ''}
         ${s === 'categorical_assoc' ? `
           <div><b>Q2. 期待度数の見込みは？</b></div>
           <div class="hint-sm" style="margin-bottom:6px">
@@ -3722,17 +3953,38 @@ function renderStatFlowchartSVG() {
   │
   └─ 期待分布 (均等 or 想定比) とのズレ → 🥧 χ² 適合度検定  [このアプリで対応]
 
-━━━ ⑥ 2 種類のカテゴリの関連 ━━━
-   (性別 × 選択科目、群 × 正誤など)
+━━━ ⑥ 2 種類のカテゴリの関連 (手法差ではない一般のクロス表) ━━━
+   (性別 × 選択科目、居住地 × 志望学部など)
   │
   ├─ 大きな標本 → 🥧 χ² 独立性検定  [このアプリで対応 (df 指定)]
-  ├─ 期待度数 <5 のセルあり → Fisher 直接確率検定
+  │     行 = 変数 A の水準、列 = 変数 B の水準。 df = (行−1)×(列−1)。
+  │     例: 2×3 (性別 × 好き/嫌い/どちら) なら df = 1×2 = 2。
+  ├─ 期待度数 <5 のセルあり → 🥧 Fisher 直接確率検定 (このアプリは 2×2 実装)
   └─ 対応あり Before/After 2×2 → McNemar 検定
 
-  ★ ⑤ と ⑥ はどちらも χ² の家族 (数学的には同じツール):
-    ⑤ は「観測分布は想定 (均等等) と一致するか？」
-    ⑥ は「変数 A と B は独立か？」
-    研究の問いが違うだけで、計算は同じ df ベースの χ²。
+━━━ ⑥' 手法間で選択肢の分布を比べたい ━━━
+   (X/Y/Z 手法 × A/B/C 選択、 X/Y/Z 手法 × 成功/失敗など)
+  │
+  ├─ 参加者間 (別グループが別手法)
+  │   ├─ 2 値 (成功/失敗) → 🥧 χ² 独立性検定  [このアプリで対応]
+  │   │     例: 3 手法 × 2 値 → 3×2 → df = 2×1 = 2
+  │   └─ 3+ 択 (A/B/C 等)  → 🥧 χ² 独立性検定  [このアプリで対応]
+  │         例: 3 手法 × 3 択 → 3×3 → df = 2×2 = 4
+  │         例: 2 手法 × 4 択 → 2×4 → df = 1×3 = 3
+  └─ 参加者内 (同じ人が全手法を試す)
+      ├─ 2 値 (成功/失敗)  → 🥧 Cochran Q 検定  [このアプリで対応 (シミュ)]
+      │     例: 20 名が 3 手法を全部 → K=3 の Cochran Q
+      │     K=2 なら McNemar 検定と等価
+      └─ 3+ 択 (A/B/C 等) → Multinomial GLMM  [未対応]
+            R の brms::brm(family=categorical) / mclogit::mblogit で。
+            代替: 「A を選ぶか否か」等 M 本の Cochran Q + Bonferroni 補正。
+
+  ★ ⑤ / ⑥ / ⑥' はどれも χ² の家族 (数学的には近縁):
+    ⑤   は 1 変数の分布「観測分布は想定 (均等等) と一致するか？」
+    ⑥   は 2 変数の関連「変数 A と B は独立か？」
+    ⑥'  は手法差の関連「手法 X/Y/Z で選択肢分布は同じか？」
+    ⑥ と ⑥' はどちらも χ² 独立性検定 or Fisher の枠組みだが、
+    参加者内デザインだけは Cochran Q or Multinomial GLMM に切替。
 
 ━━━ ⑦ 関係を見たい (連動) ━━━
   │
@@ -4536,7 +4788,7 @@ function renderSensitivityCurve() {
                  : "Cohen's d";
   const effUnit = state.test === 'glmm_logit' ? 'OR' : (state.test === 'glmm_poisson' || state.test === 'glmm_nb') ? 'RR' : '';
   let currentEff, effRange, points;
-  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2'].includes(state.test);
+  const isSim = ['lmm_within','lmm_crossed','glmm_logit','glmm_poisson','glmm_ordinal','glmm_nb','bayes_t','fisher_2x2','cochran_q'].includes(state.test);
   if (isSim) {
     // sim 系: 効果量スキャン
     if (state.test === 'glmm_logit') {
