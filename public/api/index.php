@@ -99,6 +99,7 @@ $routes = [
     'places'         => 'route_places',
     'refs'           => 'route_refs',        // v925 文献管理
     'kanban'         => 'route_kanban',      // v934 かんばん ボード
+    'buy-requests'   => 'route_buy_requests',// v1080 購入依頼 (#want_to_buy 後継)
     'joint-events'   => 'route_joint_events',// v941 合同研究会用投票
     'public-codes'   => 'route_public_codes',// v941 公開機能 の 4 桁 短縮 コード
     'public-polls'   => 'route_public_polls',// v942 公開投票 (誰でも 投票)
