@@ -1759,9 +1759,9 @@ const TESTS = [
   { id: 'corr',      label: '🔗 Pearson 相関',                   eff: 'r', effGuide: [['小 r=0.10', 0.10], ['中 r=0.30', 0.30], ['大 r=0.50', 0.50]] },
   // v1063 fb#483 中村さん: 順位の類似は Spearman で求める (Pearson とは別で表示)
   { id: 'corr_sp',   label: '🔗 Spearman 順位相関 (ρ)',           eff: 'r', effGuide: [['小 ρ=0.10', 0.10], ['中 ρ=0.30', 0.30], ['大 ρ=0.50', 0.50]] },
-  { id: 'chi2',  label: '⁉ χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
+  { id: 'chi2',  label: '🥧 χ² (df 指定)',                eff: 'w',        effGuide: [['小 w=0.10', 0.10], ['中 w=0.30', 0.30], ['大 w=0.50', 0.50]] },
   // v1063 fb#484 Fisher 直接確率検定 (2×2、少数観測向き) の Monte Carlo シミュベース
-  { id: 'fisher_2x2', label: '⁉ Fisher 直接確率検定 (2×2、シミュベース)', eff: 'p_diff',
+  { id: 'fisher_2x2', label: '🥧 Fisher 直接確率検定 (2×2、シミュベース)', eff: 'p_diff',
     effGuide: [['小 |p1-p0|=0.1', 0.1], ['中 0.2', 0.2], ['大 0.3', 0.3]] },
   // v1031 LMM (2 レベル: 参加者内) — シミュレーションベース
   { id: 'lmm_within', label: '🧠 混合効果モデル (LMM) — 参加者内条件差 (2 レベル)', eff: 'beta',
@@ -2124,7 +2124,7 @@ function render() {
 
     ${state.test==='chi2' ? stepBlock({
       title: '⑤-a 自由度 df',
-      desc: 'χ² 検定の自由度 (適合度検定: カテゴリ数 − 1、独立性検定: (行数−1)×(列数−1))。',
+      desc: 'χ² 検定の自由度。<br>・適合度検定 (1 変数の分布の偏りを見る) なら <b>df = カテゴリ数 − 1</b>。例: 成功/失敗の 2 択なら df=1、3 択なら df=2、サイコロの出目 (6 面) なら df=5。<br>・独立性検定 (2 変数の関係を見る) なら <b>df = (行数−1) × (列数−1)</b>。例: 2×3 のクロス表なら df=2、3×4 なら df=6。',
       body: `<input type="number" id="pw-df" step="1" min="1" max="200" value="${state.df}" style="width:120px">`,
     }) : ''}
 
@@ -3506,15 +3506,15 @@ function renderTestWizard() {
     inferred = 'glmm_poisson'; inferredNote = '回数アウトカム、参加者内 → Poisson GLMM が第一候補。分散 >> 平均 (過分散) なら 📈 負の二項 GLMM に切替を推奨。';
   } else if (s === 'categorical_dist') {
     inferred = 'chi2';
-    inferredNote = '1 種類のカテゴリの分布の偏りを見る → ⁉ χ² 適合度検定 (df = カテゴリ数 − 1、例: 3 択なら df=2)';
+    inferredNote = '1 種類のカテゴリの分布の偏りを見る → 🥧 χ² 適合度検定 (df = カテゴリ数 − 1。例: 成功/失敗の 2 択なら df=1、3 択なら df=2、サイコロの出目 6 面なら df=5)';
   } else if (s === 'categorical_assoc') {
     // v1061 中村さん指摘: 「期待度数 <5 なら Fisher」だけではわからないので選ばせる。
     if (ae === 'large') {
       inferred = 'chi2';
-      inferredNote = '2 種類のカテゴリの関連 (期待度数全セル ≥5) → ⁉ χ² 独立性検定 (df = (行数−1) × (列数−1)、例: 2×3 なら df=2)。このアプリで対応。';
+      inferredNote = '2 種類のカテゴリの関連 (期待度数全セル ≥5) → 🥧 χ² 独立性検定 (df = (行数−1) × (列数−1)、例: 2×3 なら df=2)。このアプリで対応。';
     } else if (ae === 'small') {
       inferred = 'fisher_2x2';
-      inferredNote = '2 種類のカテゴリの関連 (期待度数 <5 のセルあり、少数観測) → ⁉ Fisher 直接確率検定 (2×2、シミュベース) を推奨。このアプリで対応可能 (Monte Carlo で数千回シミュ、数秒)。 3×2 以上は別途 χ² で概算を。';
+      inferredNote = '2 種類のカテゴリの関連 (期待度数 <5 のセルあり、少数観測) → 🥧 Fisher 直接確率検定 (2×2、シミュベース) を推奨。このアプリで対応可能 (Monte Carlo で数千回シミュ、数秒)。 3×2 以上は別途 χ² で概算を。';
     } else {
       inferredNote = 'Q2 で「期待度数の見込み」を選んでください';
     }
@@ -3720,12 +3720,12 @@ function renderStatFlowchartSVG() {
    (1 人 1 回だけの成功/失敗の集計、選択肢 A/B/C の選好、
     会議の話者ごとの発言回数、サイコロの出目、好きな色のアンケートなど)
   │
-  └─ 期待分布 (均等 or 想定比) とのズレ → ⁉ χ² 適合度検定  [このアプリで対応]
+  └─ 期待分布 (均等 or 想定比) とのズレ → 🥧 χ² 適合度検定  [このアプリで対応]
 
 ━━━ ⑥ 2 種類のカテゴリの関連 ━━━
    (性別 × 選択科目、群 × 正誤など)
   │
-  ├─ 大きな標本 → ⁉ χ² 独立性検定  [このアプリで対応 (df 指定)]
+  ├─ 大きな標本 → 🥧 χ² 独立性検定  [このアプリで対応 (df 指定)]
   ├─ 期待度数 <5 のセルあり → Fisher 直接確率検定
   └─ 対応あり Before/After 2×2 → McNemar 検定
 
@@ -3813,7 +3813,7 @@ function renderTestSpecificGuide() {
       </ol>`,
     },
     chi2: {
-      title: '⁉ χ² 検定の実施フロー',
+      title: '🥧 χ² 検定の実施フロー',
       body: `<ol style="margin:6px 0; padding-left:20px">
         <li>クロス表を作り、各セルの期待度数を確認。1 つでも期待度数 <5 なら Fisher 直接確率検定に切り替え。</li>
         <li>χ² 適合度 (1 変数) or χ² 独立性 (2 変数) を判定。</li>
