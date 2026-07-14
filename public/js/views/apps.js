@@ -97,21 +97,21 @@ export const APPS = [
   // v549 #210 ティア表
   { id: 'tierlists',     cat: 'game',   url: '#/tierlists',      title: '🎯 ティア表',       desc: 'お題 + 候補リストでみんなで S/A/B/C/D 5段階のティア分け。自分の回答を保存すると他人の回答 + 全員集計が見れる。', defaultVisible: true },
   // v550 #206 論文査読
-  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文PDFを渡すと章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み + 引用実在性検証 + 統計妥当性) を返します。 gpt-5 30pt (デフォルト) / o1 50pt。', defaultVisible: true },
+  { id: 'paper-review',  cat: 'research', url: '#/paper-review',   title: '📄 論文査読',      desc: '論文 PDF を渡すと 章立て和訳要約 + 査読コメント (Accept/Reject + 強み/弱み + 引用実在性検証 + 統計妥当性) を返します。', defaultVisible: true },
   // v748 #359 #360 #361 論文和訳要約 (落合メソッド)
-  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文 PDF から 章立て要約 + RQ/仮説 + 落合メソッド + 図表 を 構造化して 3-5 分で返す。 引用実在性の自己検証つき。 gpt-5 63pt (デフォルト) / o1 100pt、 共有 ON で半額。', defaultVisible: true },
-  // v583 #225 レジュメ原稿チェック (短原稿向け軽量版、 5pt)
+  { id: 'paper-summary', cat: 'research', url: '#/paper-summary', title: '📑 論文要約', desc: '論文 PDF から 章立て要約 + RQ/仮説 + 落合メソッド + 図表 を 構造化して 3-5 分で返す。 引用実在性の自己検証つき。', defaultVisible: true },
+  // v583 #225 レジュメ原稿チェック (短原稿向け軽量版)
   // v1023 実験計画書チェック (Scrapbox 形式の実験計画書を精査)
-  { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。 gpt-5 で 1 回 20pt。', defaultVisible: true },
+  { id: 'exp-plan',       cat: 'research', url: '#/exp-plan',        title: '🧪 実験計画書チェック', desc: 'Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、 仮説と実験の対応、 データの適切さ、 統計手法、 サンプルサイズを特に重視。 6 観点別スコア + 優先度別の修正提案。', defaultVisible: true },
   // v1024 サンプルサイズ / 検定力 (G*Power ベースライン)
-  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 t / ANOVA / rmANOVA / 相関 (Pearson/Spearman) / χ² / Fisher / LMM/GLMM / ベイズ の 17 検定 + 予算試算 + 論文用 R/Python コード 自動生成。 無料。', defaultVisible: true },
-  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など 1-2 ページの短原稿をチェック。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標を一通り見ます。 gpt-5 20pt (デフォルト) / o1 30pt。', defaultVisible: true },
+  { id: 'power',          cat: 'research', url: '#/power',           title: '📐 サンプルサイズ / 検定力', desc: 'A priori (α + 検定力 + 効果量 → 必要 n) と Post hoc (α + 効果量 + n → 検定力) を計算。 t / ANOVA / rmANOVA / 相関 (Pearson/Spearman) / χ² / Fisher / LMM/GLMM / ベイズ の 17 検定 + 予算試算 + 論文用 R/Python コード 自動生成。', defaultVisible: true },
+  { id: 'resume-check',  cat: 'research', url: '#/resume-check',   title: '📝 原稿チェック',    desc: 'レジュメ / 概要 / 申請書など 1-2 ページの短原稿をチェック。 背景妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用 / 統計指標を一通り見ます。', defaultVisible: true },
   // v613 文字数・単語数リライター
-  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール (10pt)。 サーバ側で正確にカウントして超過時は再依頼 (最大 3 回)。 英文は和訳も。 元と書き直しを色付き diff で表示。', defaultVisible: true },
+  { id: 'rewriter',      cat: 'research', url: '#/rewriter',       title: '✂️ 文字数リライター', desc: 'アブストやリバッタルの文字数・単語数制限と戦うツール。 サーバ側で正確にカウントして超過時は再依頼 (最大 3 回)。 英文は和訳も。 元と書き直しを色付き diff で表示。', defaultVisible: true },
   // v781 #376 Deep Research (ChatGPT 風多段 Web 調査)
-  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。 サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL を構造化して返す。 引用実在性の自己検証つき。 標準 (gpt-5) 50pt / 深い (gpt-5 高 reasoning) 100pt。 共有 ON で半額。', defaultVisible: true },
+  { id: 'deep-research', cat: 'research', url: '#/deep-research',  title: '🔎 Deep Research',  desc: 'ChatGPT の Deep Research を真似た多段 Web 調査。 サブ問い分解 + セクション別調査 + 全体まとめ + 出典 URL を構造化して返す。 引用実在性の自己検証つき。', defaultVisible: true },
   // v788 #386 #387 #388 論文全訳 (フル翻訳 + back-translation チェック、 E↔J)
-  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく **章ごとのフル翻訳**。各章を訳 → 2-3文サンプルをback-translationで整合確認 → 用語統一 + 全体ポリッシュ。英→日 (gpt-5 63pt / o1 100pt) と日→英 (5x、gpt-5 313pt / o1 500pt、em-dash等GPT-isms除去込み) の双方向対応。共有ONで半額。', defaultVisible: true },
+  { id: 'paper-translate-full', cat: 'research', url: '#/paper-translate-full', title: '📑 論文全訳', desc: '要約でなく 章ごとのフル翻訳。 各章を訳 → 2-3 文サンプルを back-translation で整合確認 → 用語統一 + 全体ポリッシュ。 英→日 と 日→英 (em-dash 等 GPT-isms 除去込み) の 双方向対応。', defaultVisible: true },
   // v942 公開投票 (誰でも 投票)
   { id: 'public-polls', cat: 'lab-mgmt', url: '#/public-polls', title: '🗳 公開投票', desc: '公開URL or 4桁コードで誰でも投票できる汎用アンケート (LabPayログイン不要、SNSシェア可)。単一/複数選択 + 任意で自由記述、集計公開タイミングも選択可。外部イベント来場者やSNS向け。', defaultVisible: true },
   // v941 合同研究会用投票 (v944 で research → lab-mgmt に カテゴリ 移動)
