@@ -1,6 +1,6 @@
 # LabPay ハッカソン参加者ガイド
 
-> **現行バージョン: v935**。 v615 以降に大量の新機能 (refs / kanban / Overleaf / Deep Research / Semantic Scholar / conquest / habits / buzzer / zemi-videos / paper_review / paper_translate / paper_full 等) が追加済。 v932 で **`*.nkmr.io` からの CORS が全許可** に。 endpoint 一覧は [api.md](api.md) で。
+> **現行バージョン: v1072**。v615 以降に大量の新機能 (refs / kanban / Overleaf / Deep Research / Semantic Scholar / conquest / habits / buzzer / zemi-videos / paper_review / paper_translate / paper_full / 実験計画書チェック / サンプルサイズ計算 等) が追加済。v932 で **`*.nkmr.io` からの CORS が全許可**、v950 で **auth.nkmr.io 統合 (中村研 SSO)**、v1072 で **`/api/auth/sso-login` によりリダイレクト無しログイン** が可能に。endpoint 一覧は [api.md](api.md) で。
 
 LabPay の API を使って何か作ろうとしている人向けのガイドです。LabPay 自体の仕組みやデプロイ方法は気にせず、**「外部クライアントとして」** 何ができるかにフォーカスします。
 
@@ -134,14 +134,60 @@ https://pay.nkmr.io/api/
 
 ## ログインする
 
-### ブラウザ的に
+### 🌟 推奨: 中村研 SSO 経由 (v1072+, `.nkmr.io` 内アプリなら 1 行)
 
-1. ユーザに `https://pay.nkmr.io/api/auth/login` を開かせる
-2. Google でログイン
-3. LabPay 側で Cookie が立つ
-4. 以降 `fetch(url, { credentials: 'include' })` で API 叩ける (同一オリジンが必要)
+参加者アプリを `hackathon.nkmr.io` などの **`*.nkmr.io` サブドメイン** に置くなら、これが一番ラク。ブラウザは auth.nkmr.io で 1 度 Google ログインすれば `.nkmr.io` 全域で NKMRID cookie が立っており、それを使って LabPay セッションをリダイレクト無しに JSON 1 発で発行できます:
 
-### スクリプトから (推奨: dev-login)
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>My hackathon app</title>
+<script type="module">
+const PAY = 'https://pay.nkmr.io';
+
+async function api(path, opts = {}) {
+  const r = await fetch(PAY + path, {
+    ...opts,
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'labpay', 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (!r.ok) throw new Error(`${path} ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+async function ensureLoggedIn() {
+  // 1. 既に labpay_sid があれば /api/me が通る
+  try { return await api('/api/me'); } catch (_) { /* 401 → 続行 */ }
+  // 2. NKMRID から labpay_sid を発行 (リダイレクト無し、 POST 1 発)
+  try { await api('/api/auth/sso-login', { method: 'POST' }); return await api('/api/me'); }
+  catch (_) { /* まだ Google ログインしていない → 3 */ }
+  // 3. auth.nkmr.io に飛ばして Google ログイン → 戻ってきたら (1) が通る
+  location.href = 'https://auth.nkmr.io/?action=sso&return=' + encodeURIComponent(location.href);
+}
+
+const me = await ensureLoggedIn();
+document.body.textContent = `${me.user.display_name} さんの残高: ${me.balance} pt`;
+</script>
+```
+
+つまり:
+- 参加者は **中村研 Google アカウントで 1 度ログインすれば LabPay も自動で使える** (別途のログイン不要)
+- 参加者アプリ側は **LabPay 独自の Google OAuth に触らなくて済む** (`/api/auth/login` にリダイレクトさせなくて OK)
+- 「未ログイン → auth.nkmr.io に飛ばして戻ってくる」だけを 3 のフォールバックに書いておけば十分
+
+**`/api/auth/sso-login` の挙動**:
+
+| 事前状態 | 応答 | 動き |
+|---|---|---|
+| NKMRID cookie 有効 + LabPay allowlist に載っている | `200 {ok:true, user:..., first_login:..., initial_points:...}` + `labpay_sid` cookie セット | 以降 `/api/*` が全部通る |
+| NKMRID 無し / 期限切れ / 未認証 | `401 sso_required` | フロントで auth.nkmr.io に飛ばす |
+| NKMRID 有効だが LabPay allowlist に無い | `403 not_allowed` | 中村さんに allowlist 追加を依頼 |
+
+### 旧ブラウザ経由 (`/api/auth/login` リダイレクト)
+
+`/api/auth/sso-login` を使わずに従来通り `/api/auth/login` を開かせても OK (内部で同じ auth.nkmr.io にリダイレクトされる)。 SPA でリダイレクトを避けたい場合だけ上の推奨パスを使ってください。
+
+### スクリプトから (dev-login)
 
 開発・ハッカソン用に **dev login** が用意されています (主催者が許可リストに登録してくれてれば):
 

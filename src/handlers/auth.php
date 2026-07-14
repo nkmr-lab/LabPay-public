@@ -23,11 +23,11 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         json_response(['user' => $u, 'balance' => $bal,
             'in_lab' => user_is_in_lab($pdo, (int)$u['id']),
             'has_registered_mac' => $hasMac]);
-        // v963 レスポンス を 先に 返して から beacon。 従来 は beacon が
-        //   json_response の 前 に あり、 auth.nkmr.io が 少し 遅い と /api/auth/me
-        //   全体 が 遅延、 SPA 起動 が「重い」感じ に なって いた。
-        //   fastcgi_finish_request で client 側 は 即 レスポンス 受け取り、
-        //   PHP は 裏 で beacon を 送信 (1s タイムアウト の fire-and-forget)。
+        // v963 レスポンスを先に返してから beacon。従来は beacon が
+        //   json_response の前にあり、 auth.nkmr.io が少し遅いと /api/auth/me
+        //   全体が遅延、 SPA 起動が「重い」感じになっていた。
+        //   fastcgi_finish_request で client 側は即レスポンス受け取り、
+        //   PHP は裏で beacon を送信 (1s タイムアウトの fire-and-forget)。
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
         @ignore_user_abort(true);
         Auth::ssoUsageBeacon($cfg);
@@ -35,7 +35,7 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     if ($sub === 'login' && $method === 'GET') {
-        // v950 auth.nkmr.io 統合。 SSO 有効 なら 全アプリ 共通 の 認証 に 移譲。
+        // v950 auth.nkmr.io 統合。 SSO 有効なら全アプリ共通の認証に移譲。
         if (!empty($cfg['auth']['sso_enabled'])) {
             header('Location: ' . Auth::ssoAuthorizeUrl($cfg), true, 302);
             return;
@@ -60,12 +60,12 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
     }
 
     if ($sub === 'callback' && $method === 'GET') {
-        // v950 SSO: NKMRID cookie を Ed25519 で 検証。 auth.nkmr.io が return= で
-        //   飛ばして きた 直後 なので cookie は 既に .nkmr.io 全体 に 設定 済み。
+        // v950 SSO: NKMRID cookie を Ed25519 で検証。 auth.nkmr.io が return= で
+        //   飛ばしてきた直後なので cookie は既に .nkmr.io 全体に設定済み。
         if (!empty($cfg['auth']['sso_enabled'])) {
             $payload = Auth::ssoVerifyCookie($cfg);
             if (!$payload) {
-                // cookie が 無い / 期限切れ / 署名 NG → SSO に 戻して やり直し
+                // cookie が無い / 期限切れ / 署名 NG → SSO に戻してやり直し
                 header('Location: ' . Auth::ssoAuthorizeUrl($cfg), true, 302);
                 return;
             }
@@ -89,6 +89,42 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
 
         $home = rtrim((string)$cfg['app']['base_url'], '/') . '/#/';
         header('Location: ' . $home, true, 302);
+        return;
+    }
+
+    // v1072 中村さん指示「ハッカソン用のやつ、ブラウザ的にpayのauthを呼び出させてるけど、
+    //   これ実を言うと中村研の認証サービス使えばもっと楽では？」。
+    //   /api/auth/sso-login (POST): 参加者アプリが *.nkmr.io サブドメインに載っている
+    //     場合、ブラウザは既に .nkmr.io 全体で NKMRID cookie を持っている (auth.nkmr.io
+    //     で Google 認証済ならば)。その場合リダイレクト無しに JSON POST 1 回で
+    //     labpay_sid を発行できるようにする。これでハッカソン参加者は
+    //       fetch('https://pay.nkmr.io/api/auth/sso-login', {method:'POST', credentials:'include',
+    //             headers:{'X-Requested-With':'labpay'}})
+    //     の 1 行で LabPay セッションを取得可能。以降通常の /api/me, /api/transfers 等が叩ける。
+    //   NKMRID が無い / 期限切れ / 未認証なら 401 「先に auth.nkmr.io で Google ログインを」
+    //   と返し、フロントは location.href = ssoAuthorizeUrl にリダイレクトさせる想定。
+    if ($sub === 'sso-login' && $method === 'POST') {
+        if (empty($cfg['auth']['sso_enabled'])) {
+            json_error('sso_disabled', 'SSO is not enabled on this instance', 400);
+            return;
+        }
+        $payload = Auth::ssoVerifyCookie($cfg);
+        if (!$payload) {
+            json_error('sso_required', 'NKMRID cookie missing or invalid. Send user to auth.nkmr.io first.', 401);
+            return;
+        }
+        try {
+            $res = Auth::completeLogin($pdo, $cfg, (string)$payload['email']);
+        } catch (ApiException $e) {
+            json_error($e->code, $e->getMessage(), $e->httpStatus);
+            return;
+        }
+        json_response([
+            'ok' => true,
+            'user' => $res['user'],
+            'first_login' => $res['first_login'],
+            'initial_points' => $res['initial_points'],
+        ]);
         return;
     }
 

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>中村研 SSO 経由で LabPay を叩く最小サンプル</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width:640px; margin:40px auto; padding:0 16px; color:#222 }
+    h1 { font-size:20px; margin:0 0 12px }
+    .card { border:1px solid #ddd; border-radius:10px; padding:16px; margin:12px 0 }
+    .bal { font-size:36px; font-weight:700; color:#7a3aa0 }
+    .muted { color:#888; font-size:12px }
+    button { background:#7a3aa0; color:#fff; border:0; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:14px }
+    button:disabled { background:#ccc }
+    pre { background:#fafafa; border:1px solid #eee; padding:10px; overflow:auto; font-size:12px }
+  </style>
+</head>
+<body>
+  <h1>LabPay × 中村研 SSO サンプル</h1>
+  <p class="muted">
+    このページを <code>*.nkmr.io</code> サブドメイン上でホストすると、参加者は
+    中村研 Google 認証 1 度で LabPay も自動でログイン扱いになります。中村研 Google
+    でまだ認証していない参加者にはボタンで auth.nkmr.io に飛ばして戻します。
+  </p>
+
+  <div class="card" id="status">読み込み中…</div>
+  <div class="card" id="me" hidden>
+    <div class="muted" id="who"></div>
+    <div class="bal" id="bal">— pt</div>
+    <div class="muted" id="streak"></div>
+  </div>
+  <div class="card" id="need-login" hidden>
+    <p>中村研 Google でログインが必要です。</p>
+    <button id="go-login">中村研 SSO でログイン</button>
+  </div>
+  <div class="card">
+    <div class="muted">直近のログ</div>
+    <pre id="log"></pre>
+  </div>
+
+<script type="module">
+const PAY = 'https://pay.nkmr.io';
+const logEl = document.getElementById('log');
+const log = (...a) => { logEl.textContent += a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n'; };
+
+async function api(path, opts = {}) {
+  const r = await fetch(PAY + path, {
+    ...opts,
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'labpay', 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  const text = await r.text();
+  let json = null; try { json = JSON.parse(text); } catch (_) {}
+  log(opts.method || 'GET', path, '→', r.status);
+  if (!r.ok) { const msg = json?.error?.message || text || r.status; throw Object.assign(new Error(msg), { status: r.status, json }); }
+  return json;
+}
+
+async function ensureLoggedIn() {
+  // 1) 既に labpay_sid があるならそのまま使う
+  try { return await api('/api/me'); }
+  catch (e) { if (e.status !== 401) throw e; }
+  // 2) NKMRID (auth.nkmr.io の Google 認証済 cookie) から labpay_sid を発行
+  try {
+    log('SSO login を試行 …');
+    await api('/api/auth/sso-login', { method: 'POST' });
+    return await api('/api/me');
+  } catch (e) {
+    if (e.status === 401) return null; // まだ Google 未ログイン
+    throw e;
+  }
+}
+
+const me = await ensureLoggedIn();
+if (me) {
+  document.getElementById('status').textContent = '✓ ログイン済';
+  document.getElementById('me').hidden = false;
+  document.getElementById('who').textContent = me.user.display_name + ' さん (' + me.user.email + ')';
+  document.getElementById('bal').textContent = me.balance.toLocaleString() + ' pt';
+  document.getElementById('streak').textContent =
+    me.streak ? '連続ラボイン ' + me.streak.current_streak + ' 日' : '';
+} else {
+  document.getElementById('status').textContent = '未ログインです。';
+  document.getElementById('need-login').hidden = false;
+  document.getElementById('go-login').addEventListener('click', () => {
+    location.href = 'https://auth.nkmr.io/?action=sso&return=' + encodeURIComponent(location.href);
+  });
+}
+</script>
+</body>
+</html>
