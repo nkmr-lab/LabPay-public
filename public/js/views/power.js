@@ -2385,6 +2385,11 @@ function render() {
       }
       if (b.dataset.wz === 'normal')       state.wizard.complex = '';
       if (b.dataset.wz === 'relation_type') state.wizard.assoc_expected = '';
+      // v1078 中村さん指示「選択ウィザードで、他を選択したときには、直接検定を選ぶを
+      //   クリアして。また、そのときは 3 以降をまた消して」→ ウィザードで何かを
+      //   選び直したら state.test をリセット、 ③以降を再度非表示に。「この検定を
+      //   選ぶ」を再度クリックするか、ドロップダウンで選び直すと再表示。
+      state.test = '';
       render();
     });
   });
