@@ -4001,14 +4001,14 @@ function renderTestWizard() {
             ${opt('related', 'indep', '独立 (別の参加者)')}
             ${opt('related', 'paired', '対応 (同じ参加者、前後 or 条件)')}
           </div>` : ''}
-        ${['continuous','ordinal'].includes(s) && g ? `
+        ${['continuous','ordinal'].includes(s) && (g === '1' || (['2','3plus'].includes(g) && r)) ? `
           <div><b>Q4. データの分布は正規分布に近い？</b></div>
           <div class="hint-sm" style="margin-bottom:4px">「ヒストグラムを描いたら富士山型 (左右対称の山形) になる」で OK。判断に迷ったら参加者 n が 30 以上なら中心極限定理で緩く OK。リッカート尺度は中央付近が山なら OK、端に集中する場合は NG。</div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('normal', 'yes', '✅ 正規分布に近い (or n が 30 以上)')}
             ${opt('normal', 'no', '❌ 山型でなく偏った分布')}
           </div>` : ''}
-        ${['continuous'].includes(s) && g && r ? `
+        ${['continuous'].includes(s) && g && r && n ? `
           <div><b>Q5. デザインは単純？</b></div>
           <div class="row" style="gap:4px; flex-wrap:wrap; margin-bottom:6px">
             ${opt('complex', 'simple', '単純 (1 要因、 balanced)')}
