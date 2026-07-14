@@ -23,6 +23,9 @@ function route_buy_requests(PDO $pdo, array $cfg, string $method, array $seg): v
         if ($next === 'buy'      && $method === 'PATCH') { buy_requests_mark_bought  ($pdo, $cfg, $id); return; }
         if ($next === 'decline'  && $method === 'PATCH') { buy_requests_mark_declined($pdo, $cfg, $id); return; }
         if ($next === 'reopen'   && $method === 'PATCH') { buy_requests_reopen       ($pdo, $cfg, $id); return; }
+        // v1082 中村さん「もう一度お願いするボタン」→ 既存 (bought/declined/cancelled) を
+        //   コピーして新規 open 依頼を作る。依頼者本人だけ。
+        if ($next === 'reask'    && $method === 'POST')  { buy_requests_reask        ($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no buy-requests route for $method $sub", 404);
 }
@@ -255,6 +258,40 @@ function buy_requests_mark_declined(PDO $pdo, array $cfg, int $id): void {
         "🛒❌ 却下: 「{$r['title']}」{$noteLine}", 'buy_request', $id);
 
     json_response(['ok' => true]);
+}
+
+// ─── REASK (依頼者本人: 既存 closed 依頼をコピーして新規 open を作る) ────
+//   v1082 中村さん「もう一度お願いするボタンがあると良い」→ 買った/却下/取消の
+//   依頼をコピーして新規に open で出し直す。依頼者本人のみ。 admin にも通知される
+//   (新規依頼と同じ)。
+function buy_requests_reask(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT * FROM buy_requests WHERE id = ?");
+    $st->execute([$id]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', "buy_request $id not found", 404);
+    if ((int)$r['requester_user_id'] !== (int)$u['id']) {
+        throw new ApiException('forbidden', 'もう一度お願いできるのは依頼者本人のみ', 403);
+    }
+    if ($r['status'] === 'open') {
+        throw new ApiException('bad_request', 'すでに依頼中です', 400);
+    }
+    $ins = $pdo->prepare("INSERT INTO buy_requests
+        (requester_user_id, url, title, reason, quantity, price_estimate, urgency)
+        VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins->execute([$u['id'], $r['url'], $r['title'], $r['reason'],
+                   (int)$r['quantity'], $r['price_estimate'], $r['urgency']]);
+    $newId = (int)$pdo->lastInsertId();
+
+    // 通知は新規依頼と同じ (admin へ)
+    $urgencyMark = $r['urgency'] === 'urgent' ? '🚨 [緊急] ' : '';
+    $priceMark   = $r['price_estimate'] !== null ? " (想定 {$r['price_estimate']}円)" : '';
+    $qtyMark     = (int)$r['quantity'] > 1 ? " × {$r['quantity']}" : '';
+    $notify = "🛒🔁 {$urgencyMark}{$u['display_name']} さんがもう一度依頼: 「{$r['title']}」{$qtyMark}{$priceMark}";
+    notify_admins($pdo, $cfg, 'admin_notice', $notify, 'buy_request', $newId);
+    slack_notify($cfg, $notify . "\n{$r['url']}", null, '#/buy-requests');
+
+    json_response(['ok' => true, 'id' => $newId]);
 }
 
 // ─── REOPEN (admin: 買った/却下の状態を open に戻す。誤操作リカバリ用) ─

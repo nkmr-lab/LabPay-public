@@ -16,7 +16,7 @@ import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 
 const STATUS_LABEL = {
-  open:      { emoji: '🟢', label: '募集中',   color: '#059669', bg: '#f0fdf4' },
+  open:      { emoji: '📤', label: '依頼中',   color: '#059669', bg: '#f0fdf4' },
   bought:    { emoji: '✅', label: '購入済',   color: '#0369a1', bg: '#f0f9ff' },
   declined:  { emoji: '❌', label: '却下',     color: '#dc2626', bg: '#fef2f2' },
   cancelled: { emoji: '🚫', label: '取消',     color: '#6b7280', bg: '#f9fafb' },
@@ -75,12 +75,13 @@ function renderShell(tab) {
 }
 
 function renderTabs(current, counts) {
+  // v1082 中村さん指示「依頼中 / 購入済 / 却下で良い。取消とすべては要らない」
+  //   → タブは 3 つに絞る。取消済の依頼は API 上は残るが UI ではタブなし
+  //     (要調査時は URL 直打ちで ?status=cancelled でアクセス可)。
   const tabs = [
-    { id: 'open',      label: '🟢 募集中' },
+    { id: 'open',      label: '📤 依頼中' },
     { id: 'bought',    label: '✅ 購入済' },
     { id: 'declined',  label: '❌ 却下' },
-    { id: 'cancelled', label: '🚫 取消' },
-    { id: 'all',       label: '📋 すべて' },
   ];
   return `<div class="card" style="padding:6px">
     <div class="row" style="gap:4px; flex-wrap:wrap">
@@ -118,6 +119,8 @@ function renderCard(r, isAdmin) {
   const canCancel = r.is_mine && r.status === 'open';
   const canBuy = isAdmin && r.status === 'open';
   const canReopen = isAdmin && (r.status === 'bought' || r.status === 'declined' || r.status === 'cancelled');
+  // v1082 中村さん「もう一度お願いするボタン」→ 依頼者本人だけ、 closed 状態のときに表示
+  const canReask = r.is_mine && (r.status === 'bought' || r.status === 'declined' || r.status === 'cancelled');
   return `
     <div class="card" style="border-left:4px solid ${meta.color}; background:${meta.bg}44">
       <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap">
@@ -136,6 +139,7 @@ function renderCard(r, isAdmin) {
                     <button class="btn" data-br-act="decline" data-br-id="${r.id}" data-br-title="${escapeHtml(r.title)}">❌ 却下</button>` : ''}
         ${canEdit ? `<button class="btn" data-br-act="edit" data-br-id="${r.id}">✏️ 編集</button>` : ''}
         ${canCancel ? `<button class="btn" data-br-act="cancel" data-br-id="${r.id}" data-br-title="${escapeHtml(r.title)}">🚫 取消</button>` : ''}
+        ${canReask ? `<button class="btn primary" data-br-act="reask" data-br-id="${r.id}" data-br-title="${escapeHtml(r.title)}">🔁 もう一度お願いする</button>` : ''}
         ${canReopen ? `<button class="btn" data-br-act="reopen" data-br-id="${r.id}">🔄 open に戻す</button>` : ''}
       </div>
     </div>
@@ -175,6 +179,15 @@ function wireList(isAdmin) {
           await patch('/api/buy-requests/' + id + '/reopen', {});
           toast('open に戻しました');
           renderBuyRequests({ query: parseQuery() });
+        } catch (e) { toast('失敗: ' + (e?.message || e)); }
+        return;
+      }
+      if (act === 'reask') {
+        if (!confirm(`もう一度お願いしますか？\n\n${title}\n\n(同じ内容で新規依頼を作ります)`)) return;
+        try {
+          const res = await post('/api/buy-requests/' + id + '/reask', {});
+          toast(`再依頼しました (#${res.id})`);
+          navigate('#/buy-requests?status=open');
         } catch (e) { toast('失敗: ' + (e?.message || e)); }
         return;
       }
@@ -279,7 +292,8 @@ function renderForm(existing) {
     <div class="card">
       <label class="field">
         <span class="lbl">商品 URL <span style="color:#dc2626">*</span></span>
-        <input type="url" id="brf-url" required maxlength="2048" placeholder="https://www.amazon.co.jp/..." value="${existing ? escapeHtml(existing.url) : ''}" style="width:100%; box-sizing:border-box">
+        <input type="url" id="brf-url" required maxlength="2048" placeholder="https://www.yodobashi.com/product/..." value="${existing ? escapeHtml(existing.url) : ''}" style="width:100%; box-sizing:border-box">
+        <div class="hint-sm" style="margin-top:4px; color:#6b7280">ヨドバシ推奨、 Amazon 等も OK (http:// or https:// で始まる URL なら何でも)</div>
       </label>
       <label class="field">
         <span class="lbl">商品名 <span style="color:#dc2626">*</span></span>
