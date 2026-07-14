@@ -614,7 +614,7 @@ function ai_translate_to_jp(string $text, string $apiKey, string $model): string
 }
 
 const RESUME_CHECK_COST = 20;       // v1068 15 → 20 (中村さん「デフォルトgpt-5で、20ptに変更」)
-const RESUME_CHECK_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、 デフォルト gpt-5 20pt
+const RESUME_CHECK_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、デフォルト gpt-5 20pt
     'gpt-5' => 20,
     'o1'    => 30,
 ];
@@ -636,7 +636,7 @@ function ai_resume_check_list(PDO $pdo, array $cfg): void {
         'cost_points'   => RESUME_CHECK_COST,           // 旧互換
         'max_chars'     => RESUME_CHECK_MAX_CHARS,
         'models'        => RESUME_CHECK_MODELS,         // v774 #396
-        'default_model' => 'gpt-5',        // v1068 gpt-5-mini 撤廃、 デフォルト gpt-5 20pt
+        'default_model' => 'gpt-5',        // v1068 gpt-5-mini 撤廃、デフォルト gpt-5 20pt
     ]);
 }
 
@@ -696,7 +696,7 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         }
     }
 
-    // v774 #396 モデル選択 + 動的価格。 v1068 gpt-5-mini 撤廃、 デフォルト gpt-5
+    // v774 #396 モデル選択 + 動的価格。 v1068 gpt-5-mini 撤廃、デフォルト gpt-5
     $reqModel = trim((string)($isPdf ? ($_POST['model'] ?? 'gpt-5') : ($body['model'] ?? 'gpt-5')));
     if (!isset(RESUME_CHECK_MODELS[$reqModel])) {
         throw new ApiException('bad_request', '未対応モデル: ' . $reqModel, 400);
@@ -837,7 +837,7 @@ PROMPT;
 }
 
 const PAPER_REVIEW_COST = 30;       // v1068 デフォルト gpt-5 = 30pt (旧 gpt-4.1 前提の 10pt は廃止)
-const PAPER_REVIEW_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、 デフォルト gpt-5 30pt
+const PAPER_REVIEW_MODELS = [       // v1068 gpt-5-mini 撤廃 (「miniは精度出ない」)、デフォルト gpt-5 30pt
     'gpt-5' => 30,
     'o1'    => 50,
 ];
@@ -1799,8 +1799,9 @@ function _ai_share_priced_cost(int $baseCost, bool $willShare): int {
 const PAPER_TRANSLATE_MODELS = [
     // v1010 中村さん「論文要約も 1.25 倍、 gpt-4.1 は削除」
     // v1012 中村さん「mini は精度が出ないので削除」
-    'gpt-5'       => 63,   // 5 系標準 (デフォルト) (50 × 1.25)
-    'o1'          => 100,  // o1 推論モデル (深い解析) (80 × 1.25)
+    // v1071 中村さん「gpt-5 は 60pt (共有 30pt) にキリ良く」
+    'gpt-5'       => 60,   // 5 系標準 (デフォルト、共有 ON で半額 30pt)
+    'o1'          => 100,  // o1 推論モデル (深い解析)
 ];
 
 const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
@@ -3046,7 +3047,7 @@ function ai_openai_delete_file(string $fileId, string $apiKey): void {
 //     - deep (gpt-5 高 reasoning, ~12 検索, 30K in / 30K out): ~$0.70 = 約 100 円
 //   実トークン / 検索数は usage_json に残すので、実コストがズレた場合は後で調整。
 const DEEP_RESEARCH_TIERS = [
-    // v1068 中村さん「軽い (gpt-5 low) を消そう。 標準と深いだけで良い」で light 撤廃
+    // v1068 中村さん「軽い (gpt-5 low) を消そう。標準と深いだけで良い」で light 撤廃
     'standard' => ['model' => 'gpt-5', 'effort' => 'medium', 'cost' => 50,  'max_tokens' => 16000, 'label' => '標準 (gpt-5、 ~7 検索)'],
     'deep'     => ['model' => 'gpt-5', 'effort' => 'high',   'cost' => 100, 'max_tokens' => 32000, 'label' => '深い (gpt-5 高 reasoning、 ~12 検索)'],
 ];
@@ -3597,13 +3598,14 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 // v808 #403 価格調整 + デフォルトを gpt-5 に。
 // v1010 中村さん「論文全訳も 1.25 倍」。 gpt-4.1 は既に無い。
 // v1012 中村さん「mini は精度が出ないので削除」
+// v1071 中村さん「gpt-5 は 60pt (共有 30pt) にキリ良く」+「英→和は 300pt (150pt) に」
 const PAPER_FULL_TRANSLATE_MODELS_EN2JA = [
-    'gpt-5'      => 63,   // 50 × 1.25 (デフォルト)
-    'o1'         => 100,  // 80 × 1.25
+    'gpt-5'      => 60,   // デフォルト、共有 ON で半額 30pt
+    'o1'         => 100,  // 深い解析
 ];
 const PAPER_FULL_TRANSLATE_MODELS_JA2EN = [  // 5x
-    'gpt-5'      => 313,  // 250 × 1.25 (デフォルト)
-    'o1'         => 500,  // 400 × 1.25
+    'gpt-5'      => 300,  // デフォルト、共有 ON で半額 150pt (英→和の 5 倍)
+    'o1'         => 500,  // 深い解析
 ];
 
 const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
