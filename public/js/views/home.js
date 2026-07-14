@@ -1239,18 +1239,25 @@ const CAL_DEFAULT_LIMIT = 5;
 // v1083 中村さん指示「カレンダー月表示は、現在のスケジュール (カレンダー) 機能の
 //   モード切替で表示されて欲しい」→ 「今日 / 月」モード切替を home カードに組込み。
 //   /#/calendar 独立ページは廃止 (calendar.js 削除、 route 削除)。
-const CAL_MODE_KEY  = 'labpay-cal-mode';           // 'today' | 'month'
+// v1084 中村さん指示「月表示で任意の日を選んだら、その日モードになって欲しい。
+//   また、そこから Zoom とかを作成したりしたい」→ 3 モード制 (today / day / month)、
+//   月グリッドの日タップで day モードに遷移、その日から Zoom 付き MTG 作成可。
+const CAL_MODE_KEY  = 'labpay-cal-mode';           // 'today' | 'day' | 'month'
 const CAL_MONTH_KEY = 'labpay-cal-month-ym';       // 表示中の 'YYYY-MM'
 let calMode  = null;   // lazy init
 let calMonth = null;
+let calDay   = null;   // v1084 day モード時の対象日 'YYYY-MM-DD'
 function initCalModeState() {
   if (calMode === null) {
     try { calMode = localStorage.getItem(CAL_MODE_KEY) || 'today'; } catch { calMode = 'today'; }
-    if (calMode !== 'today' && calMode !== 'month') calMode = 'today';
+    if (calMode !== 'today' && calMode !== 'day' && calMode !== 'month') calMode = 'today';
   }
   if (calMonth === null) {
     const d = new Date();
     calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  if (calDay === null) {
+    calDay = todayYmd();
   }
 }
 function saveCalMode(m) { try { localStorage.setItem(CAL_MODE_KEY, m); } catch {} }
@@ -1258,11 +1265,27 @@ function currentYm() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+function todayYmd() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 function shiftYm(ym, delta) {
   const m = /^(\d{4})-(\d{2})$/.exec(ym);
   if (!m) return currentYm();
   const d = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function shiftYmd(ymd, deltaDays) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return todayYmd();
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + deltaDays);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function ymdToYm(ymd) {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd);
+  return m ? `${m[1]}-${m[2]}` : currentYm();
 }
 
 // 終了後 N 分経過した予定を「今日の予定」から消すための設定 (1..1440)。
@@ -1301,9 +1324,20 @@ async function renderCalendarEvents({ force = false } = {}) {
     }
   });
   const titleEl = document.getElementById('home-cal-title');
-  if (titleEl) titleEl.textContent = calMode === 'month' ? '📅 月表示' : '📌 今日の予定';
-  // v1083 月モードなら別ルート
+  if (titleEl) {
+    if (calMode === 'month')     titleEl.textContent = '📅 月表示';
+    else if (calMode === 'day')  titleEl.textContent = '📆 特定の日';
+    else                          titleEl.textContent = '📌 今日の予定';
+  }
+  // モードボタンの見た目更新: 今日 / 月の 2 択、 day は「今日」側の派生扱いなので non-active
+  document.querySelectorAll('[data-cal-mode]').forEach(btn => {
+    const active = btn.dataset.calMode === calMode;
+    btn.style.background = active ? 'var(--primary)' : '';
+    btn.style.color      = active ? '#fff' : '';
+  });
+  // v1083 月モード / v1084 day モードなら別ルート
   if (calMode === 'month') return renderCalendarMonth({ force });
+  if (calMode === 'day')   return renderCalendarDay({ force });
   document.getElementById('home-cal-monthnav').hidden = true;
   // v449 🔄 再取得ボタン (1 回だけ bind)。 cache を捨てて etag なしで再 fetch。
   const refreshBtn = document.getElementById('home-cal-refresh');
@@ -1671,13 +1705,16 @@ function renderMonthGridHtml(ym, items) {
       .hm-head > div { text-align:center; padding:3px 0; font-size:11px; font-weight:600; background:#f3f4f6; border-radius:3px }
       .hm-head > .hm-sun { color:#dc2626 } .hm-head > .hm-sat { color:#0369a1 }
       .hm-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; background:#e5e7eb; border-radius:4px; padding:1px }
-      .hm-cell { background:#fff; min-height:64px; padding:2px; position:relative; cursor:pointer; border-radius:2px; overflow:hidden }
+      /* v1084 明示的に flex column にして「イベントバーが横並びになる」バグを回避 */
+      .hm-cell { background:#fff; min-height:64px; padding:2px; position:relative; cursor:pointer; border-radius:2px; overflow:hidden;
+                 display:flex; flex-direction:column; align-items:stretch; gap:1px }
       .hm-cell.hm-empty { background:#fafafa; cursor:default }
       .hm-cell.hm-today { background:#fef3c7 }
       .hm-dnum { font-size:11px; font-weight:600; color:#374151; line-height:1.2 }
       .hm-cell.hm-sun .hm-dnum { color:#dc2626 } .hm-cell.hm-sat .hm-dnum { color:#0369a1 }
       .hm-cell.hm-today .hm-dnum { color:#7b3fa0 }
-      .hm-ev { font-size:10px; padding:0 2px; margin-top:1px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.35 }
+      .hm-ev { font-size:10px; padding:0 3px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+               line-height:1.4; flex-shrink:0; display:block }
       .hm-more { font-size:10px; color:#6b7280; padding:1px 2px; cursor:pointer }
       @media (max-width:640px) {
         .hm-cell { min-height:48px }
@@ -1691,27 +1728,131 @@ function renderMonthGridHtml(ym, items) {
 }
 
 function wireMonthGridClicks(items) {
+  // v1084 中村さん指示「月表示で任意の日を選んだら、その日モードになって欲しい」
+  //   → 日セルをタップで calMode='day' に遷移、その日の全予定 +
+  //     「＋MTG を立てる」ボタンが表示される (openMtgModal を calDay 引数で開く)。
   const root = document.getElementById('home-calendar');
-  // event クリック
-  root.querySelectorAll('[data-hm-idx]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ymd = el.dataset.hmDay;
-      const idx = Number(el.dataset.hmIdx);
-      const day = items.filter(ev => eventDayYmd(ev) === ymd).sort((a, b) => {
-        if (a.all_day && !b.all_day) return -1;
-        if (!a.all_day && b.all_day) return  1;
-        return String(a.start).localeCompare(String(b.start));
-      });
-      openHmEventModal(day[idx]);
+  root.querySelectorAll('[data-hm-day-cell]').forEach(el => {
+    el.addEventListener('click', () => {
+      const ymd = el.dataset.hmDayCell;
+      if (!ymd) return;
+      calDay = ymd;
+      calMode = 'day';
+      saveCalMode('day');
+      renderCalendarEvents({ force: false });
     });
   });
-  // +N や空エリアクリック
-  root.querySelectorAll('[data-hm-day-cell]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-hm-idx]')) return;   // event 側で処理済
-      const ymd = el.dataset.hmDayCell;
-      openHmDayModal(items, ymd);
+}
+
+// v1084 day モード: 特定日の予定を「今日の予定」風にリスト表示 + 「＋MTG を
+//   立てる」ボタン (openMtgModal に dateYmd 渡して当日の 10:00 プリセット)。
+//   月グリッドで日をタップ → ここに遷移。前日 / 次日 / 月表示に戻るボタン付き。
+async function renderCalendarDay({ force = false } = {}) {
+  const nav = document.getElementById('home-cal-monthnav');
+  const root = document.getElementById('home-calendar');
+  if (!nav || !root) return;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calDay);
+  if (!m) { calDay = todayYmd(); }
+  const [_, y, mm, d] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calDay);
+  const dow = new Date(Number(y), Number(mm) - 1, Number(d)).getDay();
+  const dowLabel = ['日','月','火','水','木','金','土'][dow];
+  const isToday = calDay === todayYmd();
+  const dowColor = dow === 0 ? '#dc2626' : (dow === 6 ? '#0369a1' : '#374151');
+  nav.hidden = false;
+  nav.innerHTML = `
+    <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
+      <button class="btn" data-cd-nav="prev" style="padding:2px 10px" aria-label="前日">◀</button>
+      <div style="font-weight:700; min-width:130px; text-align:center">${Number(y)}年 ${Number(mm)}月 ${Number(d)}日 <span style="color:${dowColor}">(${dowLabel})</span></div>
+      <button class="btn" data-cd-nav="next" style="padding:2px 10px" aria-label="次日">▶</button>
+      ${!isToday ? `<button class="btn" data-cd-nav="today" style="padding:2px 10px; font-size:11px">今日</button>` : ''}
+      <button class="btn" data-cd-nav="tomonth" style="padding:2px 10px; font-size:11px; margin-left:auto">⤴ 月表示</button>
+    </div>`;
+  nav.querySelectorAll('[data-cd-nav]').forEach(el => {
+    el.addEventListener('click', () => {
+      const act = el.dataset.cdNav;
+      if      (act === 'prev')   calDay = shiftYmd(calDay, -1);
+      else if (act === 'next')   calDay = shiftYmd(calDay, +1);
+      else if (act === 'today')  { calDay = todayYmd(); calMode = 'today'; saveCalMode('today'); renderCalendarEvents({}); return; }
+      else if (act === 'tomonth') { calMonth = ymdToYm(calDay); calMode = 'month'; saveCalMode('month'); renderCalendarEvents({}); return; }
+      renderCalendarDay({});
+    });
+  });
+  // fetch 対象日のみ (from/to 同日 = その 1 日のみ)
+  root.innerHTML = `<div class="empty">読み込み中…</div>`;
+  const ym = ymdToYm(calDay);
+  let dayItems = null;
+  const cached = force ? null : readMonthCache(ym);
+  if (cached) {
+    dayItems = cached.filter(ev => eventDayYmd(ev) === calDay);
+  } else {
+    try {
+      const data = await get('/api/me/calendar/events', { tz: localTzIana(), from: calDay, to: calDay });
+      dayItems = (data && data.items) || [];
+    } catch (e) {
+      root.innerHTML = `<div class="empty">読み込み失敗: ${escapeHtml(e?.message || String(e))}</div>`;
+      return;
+    }
+  }
+  // 時刻順 (all_day 先頭)
+  dayItems.sort((a, b) => {
+    if (a.all_day && !b.all_day) return -1;
+    if (!a.all_day && b.all_day) return  1;
+    return String(a.start).localeCompare(String(b.start));
+  });
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmtTime = (ev) => {
+    if (ev.all_day) return '終日';
+    const d = new Date(ev.start);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const evsHtml = dayItems.length === 0
+    ? `<div class="empty">この日の予定はありません</div>`
+    : dayItems.map((ev, idx) => {
+        const color = calColorFor(ev.calendar);
+        const zoomBtn = ev.url
+          ? `<a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener" class="btn primary" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start">📹 参加する</a>`
+          : (!ev.all_day
+              ? `<button class="btn" data-hm-day-addzoom="${escapeHtml(ev.id)}" data-hm-day-cal="${escapeHtml(ev.calendar || 'primary')}" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start; color:var(--primary)">＋ Zoom を追加</button>`
+              : '');
+        const loc = (ev.location && !/^https?:\/\//i.test(ev.location.trim())) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+        const titleHtml = ev.html_url
+          ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${escapeHtml(ev.title || '(無題)')}</a>`
+          : `<span class="bold">${escapeHtml(ev.title || '(無題)')}</span>`;
+        return `<div class="list-item" style="align-items:flex-start; gap:8px; box-shadow:inset 4px 0 0 ${color}">
+                  <div style="min-width:64px; font-weight:700; color:${color}; padding-top:1px">${escapeHtml(fmtTime(ev))}</div>
+                  <div class="grow" style="display:flex; flex-direction:column">
+                    ${titleHtml}
+                    ${loc}
+                    ${zoomBtn}
+                  </div>
+                </div>`;
+      }).join('');
+  const addRow = `<div class="list-item add-row" id="home-cal-day-add" style="cursor:pointer">
+                    <div class="grow bold" style="color:var(--primary)">＋ MTG を立てる (${Number(mm)}/${Number(d)} に)</div>
+                    <div class="hint">→</div>
+                  </div>`;
+  root.innerHTML = evsHtml + addRow;
+  document.getElementById('home-cal-day-add')?.addEventListener('click', () => openMtgModal({ dateYmd: calDay }));
+  root.querySelectorAll('[data-hm-day-addzoom]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const eventId = btn.dataset.hmDayAddzoom;
+      const calId   = btn.dataset.hmDayCal || 'primary';
+      btn.disabled = true; btn.textContent = '作成中…';
+      try {
+        const r = await post(`/api/me/calendar/events/${encodeURIComponent(eventId)}/zoom`, { calendar_id: calId });
+        if (r?.invalidate_calendar_cache) {
+          try { localStorage.removeItem(CAL_CACHE_KEY); } catch {}
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(CAL_MONTH_CACHE_PREFIX)) localStorage.removeItem(k);
+          }
+        }
+        toast('Zoom MTG を追加しました');
+        renderCalendarDay({ force: true });
+      } catch (e) {
+        toast('失敗: ' + (e?.message || e));
+        btn.disabled = false; btn.textContent = '＋ Zoom を追加';
+      }
     });
   });
 }
@@ -1827,20 +1968,27 @@ function closeHmModal() {
   if (root) root.innerHTML = '';
 }
 
-function openMtgModal() {
+function openMtgModal(opts = {}) {
   const root = document.getElementById('home-mtg-modal');
   if (!root) return;
   const now = new Date();
   const round5 = new Date(Math.ceil(now.getTime() / (5 * 60 * 1000)) * 5 * 60 * 1000);
   const pad = (n) => String(n).padStart(2, '0');
   const fmtLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // v1084 dateYmd 指定ならその日 10:00 を初期値に (day モードから開いた時)。
+  //   ただしその日が「今日」なら round5 (=すぐ MTG) の方が使いやすいのでそのまま。
+  let initialDt = round5;
+  if (opts.dateYmd && /^(\d{4})-(\d{2})-(\d{2})$/.test(opts.dateYmd) && opts.dateYmd !== todayYmd()) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(opts.dateYmd);
+    initialDt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 10, 0, 0, 0);
+  }
   root.hidden = false;
   root.innerHTML = `
     <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto"
          id="mtg-overlay">
       <div style="background:#fff; border-radius:14px; max-width:480px; width:100%; padding:20px">
         <div class="row center">
-          <h3 class="row-title">MTG を立てる</h3>
+          <h3 class="row-title">MTG を立てる${opts.dateYmd && opts.dateYmd !== todayYmd() ? ` (${Number(opts.dateYmd.split('-')[1])}/${Number(opts.dateYmd.split('-')[2])})` : ''}</h3>
           <button id="mtg-close">×</button>
         </div>
         <label class="field" style="margin-top:8px">
@@ -1855,7 +2003,7 @@ function openMtgModal() {
             <button class="btn" data-quick="30">+30分</button>
             <button class="btn" data-quick="60">+1時間</button>
           </div>
-          <input type="datetime-local" id="mtg-start" value="${fmtLocal(round5)}" style="margin-top:6px">
+          <input type="datetime-local" id="mtg-start" value="${fmtLocal(initialDt)}" style="margin-top:6px">
         </label>
         <label class="field">
           <span class="lbl">長さ</span>
