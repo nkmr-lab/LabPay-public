@@ -6,6 +6,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
+import { fundBudgets, fundBaitoAdd } from '../fund_api.js';   // v1089 fund.nkmr.io 書込
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 
@@ -27,7 +28,7 @@ export async function renderBait() {
     <div class="card page-header">
       <div class="row center">
         <h2 style="margin:0">💼 アルバイト申請</h2>
-        <a class="btn primary" href="#/bait/new">＋ 新規依頼</a>
+        <a class="btn primary" href="#/bait/new">＋新規依頼</a>
       </div>
       <p class="hint" style="font-size:13px; margin-top:6px">
         実験協力などで学生にアルバイトを依頼するときに。
@@ -44,6 +45,7 @@ export async function renderBait() {
       <h3>📤 あなたが出した依頼</h3>
       <div id="bait-out" class="list"><div class="muted">読み込み中…</div></div>
     </div>
+    <div id="bait-fund-modal"></div>
   `;
   await Promise.all([loadMyAssignments(), loadMyRequests()]);
 }
@@ -80,7 +82,8 @@ async function loadMyAssignments() {
                 <span style="flex:none; color:#7c3aed; font-weight:700">${Number(a.hours)} h</span>
                 ${a.status === 'done'
                   ? `<span class="tag ok" style="flex:none">✓ 処理済</span>`
-                  : `<button class="btn primary mr-done" data-aid="${a.id}" style="flex:none; padding:3px 10px; font-size:12px">処理済にする</button>`}
+                  : `<button class="btn mr-fundadd" data-aid="${a.id}" data-title="${escapeHtml(a.title)}" data-hours="${Number(a.hours)}" data-period="${escapeHtml(a.period || '')}" style="flex:none; padding:3px 10px; font-size:12px; color:#7b3fa0">💴 fund 登録</button>
+                     <button class="btn primary mr-done" data-aid="${a.id}" style="flex:none; padding:3px 10px; font-size:12px">処理済にする</button>`}
               </div>
               <div class="meta">${escapeHtml(a.requester_name)} から ${a.notes ? '・ ' + escapeHtml(String(a.notes).slice(0, 60)) : ''}</div>
             </div>
@@ -98,6 +101,18 @@ async function loadMyAssignments() {
         toast('処理済にしました');
         loadMyAssignments();
       } catch (e) { toast('失敗: ' + e.message); }
+    }));
+    // v1089 中村さん指示「あなた宛の依頼を処理できる仕組み」→ fund.nkmr.io に
+    //   自分のアルバイト代を登録するモーダルを開くボタン。完了時に処理済にする
+    //   オプションも付ける (デフォルト ON)。
+    root.querySelectorAll('.mr-fundadd').forEach(b => b.addEventListener('click', async (e) => {
+      e.preventDefault();
+      openBaitFundModal({
+        assignmentId: b.dataset.aid,
+        title:  b.dataset.title || '',
+        hours:  Number(b.dataset.hours) || 0,
+        period: b.dataset.period || '',
+      });
     }));
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
@@ -138,7 +153,7 @@ export async function renderBaitNew() {
   app.innerHTML = `
     <div class="card">
       <a href="#/bait" class="hint">← アルバイト申請</a>
-      <h2 style="margin:6px 0">＋ 新規依頼</h2>
+      <h2 style="margin:6px 0">＋新規依頼</h2>
     </div>
     <div class="card">
       <label class="field">
@@ -362,4 +377,154 @@ async function loadDetail(id) {
   } catch (e) {
     document.getElementById('bd-head').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// v1089 fund.nkmr.io にアルバイト代を登録するモーダル。
+//   period ("2026-05") → month=5月、 fiscal_year=2026 に自動変換。
+//   予算 (fund) は fundBudgets で取得したプルダウン、 hourly は 1250/1600 プリセット +
+//   任意入力 (work1/work2 の説明も表示)。送信成功で「LabPay 側の assignment も
+//   処理済にする」チェックを ON なら PATCH /api/bait/assignments/{id}/done も叩く。
+async function openBaitFundModal({ assignmentId, title, hours, period }) {
+  const root = document.getElementById('bait-fund-modal');
+  if (!root) return;
+  // period "2026-05" → year 2026, month 5
+  const pm = /^(\d{4})-(\d{2})$/.exec(period);
+  const y = pm ? Number(pm[1]) : new Date().getFullYear();
+  const m = pm ? Number(pm[2]) : (new Date().getMonth() + 1);
+  // 会計年度: 4-3 月 (4-12月は同年、 1-3月は前年度)
+  const fy = m >= 4 ? y : (y - 1);
+  root.innerHTML = `
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto" data-bf-close>
+      <div style="background:#fff; border-radius:14px; max-width:520px; width:100%; padding:20px" data-bf-inner>
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <h3 style="margin:0; font-size:16px">💴 fund.nkmr.io にアルバイト代を登録</h3>
+          <button class="btn" data-bf-close>×</button>
+        </div>
+        <div class="hint-sm" style="margin-top:4px; color:#6b7280">依頼: <b>${escapeHtml(title)}</b> / ${y}年 ${m}月 / ${hours} h</div>
+        <label class="field" style="margin-top:10px">
+          <span class="lbl">予算 <span style="color:#dc2626">*</span></span>
+          <select id="bf-fund" style="width:100%"><option value="">読み込み中…</option></select>
+          <div class="hint-sm" id="bf-fund-note" style="margin-top:2px; color:#6b7280"></div>
+        </label>
+        <label class="field">
+          <span class="lbl">項目 (何をやったか) <span style="color:#dc2626">*</span></span>
+          <input type="text" id="bf-item" maxlength="200" value="${escapeHtml(title || '')}">
+        </label>
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:110px">
+            <span class="lbl">対象月</span>
+            <select id="bf-month">
+              ${Array.from({length: 12}, (_, i) => i + 1).map(mm =>
+                `<option value="${mm}月" ${mm === m ? 'selected' : ''}>${mm}月</option>`).join('')}
+            </select>
+          </label>
+          <label class="field" style="flex:1; min-width:110px">
+            <span class="lbl">年度</span>
+            <input type="number" id="bf-fy" min="2020" max="2100" value="${fy}">
+          </label>
+        </div>
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:130px">
+            <span class="lbl">時給 (円) <span style="color:#dc2626">*</span></span>
+            <div class="row" style="gap:4px; margin-bottom:4px">
+              <button type="button" class="btn" data-bf-hourly="1250" style="font-size:11px; padding:2px 8px">1250</button>
+              <button type="button" class="btn" data-bf-hourly="1600" style="font-size:11px; padding:2px 8px">1600</button>
+            </div>
+            <input type="number" id="bf-hourly" min="0" step="1" value="1250">
+          </label>
+          <label class="field" style="flex:1; min-width:130px">
+            <span class="lbl">時間 (h) <span style="color:#dc2626">*</span></span>
+            <input type="number" id="bf-hours" min="0" step="0.25" value="${hours || ''}">
+          </label>
+        </div>
+        <div id="bf-amount-preview" class="hint-sm" style="text-align:right; color:#7b3fa0; font-weight:600; margin-top:-4px"></div>
+        <label style="display:flex; align-items:center; gap:6px; margin-top:12px; font-size:13px">
+          <input type="checkbox" id="bf-mark-done" checked>
+          登録後、この依頼の LabPay 側も「処理済」にする
+        </label>
+        <div class="row" style="gap:6px; margin-top:12px; justify-content:flex-end">
+          <button class="btn" data-bf-close>やめる</button>
+          <button class="btn primary" id="bf-submit">💴 fund に登録</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = () => { root.innerHTML = ''; };
+  root.querySelectorAll('[data-bf-close]').forEach(el => el.addEventListener('click', (e) => {
+    if (e.target === el || e.currentTarget === el) close();
+  }));
+  // amount preview
+  const updatePreview = () => {
+    const h  = Number(document.getElementById('bf-hourly').value) || 0;
+    const hs = Number(document.getElementById('bf-hours').value) || 0;
+    const amt = Math.round(h * hs);
+    document.getElementById('bf-amount-preview').textContent = amt > 0 ? `想定合計: ¥${amt.toLocaleString()}` : '';
+  };
+  ['bf-hourly', 'bf-hours'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
+  updatePreview();
+  root.querySelectorAll('[data-bf-hourly]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('bf-hourly').value = btn.dataset.bfHourly;
+      updatePreview();
+    });
+  });
+  // fund プルダウン埋め
+  const fundSel = document.getElementById('bf-fund');
+  const noteEl  = document.getElementById('bf-fund-note');
+  try {
+    const buds = await fundBudgets(fy);
+    if (!buds.length) {
+      fundSel.innerHTML = '<option value="">(予算リスト取得失敗)</option>';
+    } else {
+      fundSel.innerHTML = '<option value="">— 選択 —</option>' + buds.map(b => {
+        const label = b.label || b.fund || '';
+        return `<option value="${escapeHtml(b.fund || '')}"
+                        data-work1="${escapeHtml(b.work1 || '')}"
+                        data-work2="${escapeHtml(b.work2 || '')}"
+                        data-plan="${escapeHtml(b.plan || '')}">${escapeHtml(label)}</option>`;
+      }).join('');
+      fundSel.addEventListener('change', () => {
+        const opt = fundSel.selectedOptions[0];
+        if (!opt || !opt.value) { noteEl.textContent = ''; return; }
+        const plan = opt.dataset.plan  || '';
+        const w1   = opt.dataset.work1 || '';
+        const w2   = opt.dataset.work2 || '';
+        const lines = [];
+        if (plan) lines.push(plan);
+        if (w1)   lines.push('1250 円/h: ' + w1);
+        if (w2)   lines.push('1600 円/h: ' + w2);
+        noteEl.textContent = lines.join(' / ');
+      });
+    }
+  } catch (e) {
+    fundSel.innerHTML = `<option value="">${escapeHtml('予算取得失敗: ' + (e?.message || e))}</option>`;
+  }
+  // submit
+  document.getElementById('bf-submit').addEventListener('click', async () => {
+    const fund   = document.getElementById('bf-fund').value.trim();
+    const item   = document.getElementById('bf-item').value.trim();
+    const month  = document.getElementById('bf-month').value.trim();
+    const hourly = Number(document.getElementById('bf-hourly').value) || 0;
+    const hoursN = Number(document.getElementById('bf-hours').value) || 0;
+    const fyN    = Number(document.getElementById('bf-fy').value) || fy;
+    const markDone = document.getElementById('bf-mark-done').checked;
+    if (!fund)                  { toast('予算を選んでください'); return; }
+    if (!item)                  { toast('項目を入力してください'); return; }
+    if (!(hourly > 0 && hoursN > 0)) { toast('時給と時間を入力してください'); return; }
+    const btn = document.getElementById('bf-submit');
+    btn.disabled = true; btn.textContent = '登録中…';
+    try {
+      const res = await fundBaitoAdd({ fund, item, month, hourly, hours: hoursN, fiscal_year: fyN });
+      toast(`fund に登録しました (¥${(res.amount || Math.round(hourly * hoursN)).toLocaleString()})`);
+      if (markDone) {
+        try { await patch('/api/bait/assignments/' + assignmentId + '/done', { note: `fund 登録済 (id=${res.id})` }); }
+        catch (e) { toast('fund 登録は成功したが LabPay 側の処理済化に失敗: ' + (e?.message || e), 5000); }
+      }
+      close();
+      loadMyAssignments();
+    } catch (e) {
+      toast('失敗: ' + (e?.message || e), 5000);
+      btn.disabled = false; btn.textContent = '💴 fund に登録';
+    }
+  });
 }

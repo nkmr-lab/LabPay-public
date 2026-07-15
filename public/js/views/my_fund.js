@@ -18,6 +18,7 @@
 
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { fundBudgets, fundItemAdd } from '../fund_api.js';   // v1089 支払い項目 (ドクター)
 
 const FUND_API = 'https://fund.nkmr.io/api.php';
 
@@ -87,6 +88,7 @@ function renderShell() {
       </div>
     </div>
     <div id="mf-summary"></div>
+    <div id="mf-doctor-add" hidden></div>
     <div id="mf-list"></div>
     <div id="mf-modal"></div>
   `;
@@ -111,6 +113,7 @@ async function loadAndRender({ force = false } = {}) {
     document.getElementById('mf-status').value  = mfFilter.status;
     document.getElementById('mf-kw').value      = mfFilter.keyword;
     renderSummaryAndList();
+    renderDoctorAddSection();
   } catch (e) {
     const msg = String(e?.message || e);
     const isAuth = /401|403|unauth|forbidden/i.test(msg);
@@ -164,6 +167,127 @@ function renderSummaryAndList() {
         <div class="hint-sm">より詳しい情報 (課題の全体予算、他メンバーの執行等) は</div>
         <a href="https://fund.nkmr.io" target="_blank" rel="noopener" class="btn primary" style="margin-top:6px; text-decoration:none">🔗 fund.nkmr.io を開く →</a>
       </div>`;
+}
+
+// v1089 中村さん要望「研究の支払い登録についても、LabPay からできるようにしたい。
+//   具体的には、予算名、項目名、額を登録できれば良い。事務への書類提出の有無も
+//   そこから申請できるとベター」→ ドクター (mfData.isDoctor) だけに現れる追加フォーム。
+//   POST /api.php?action=add に fund/type/item/amount/status/entry_date/extra を送信。
+//   extra は書類提出フラグ + 任意メモを JSON 文字列で。送信後は再取得して一覧に反映。
+function renderDoctorAddSection() {
+  const wrap = document.getElementById('mf-doctor-add');
+  if (!wrap) return;
+  if (!mfData || !mfData.isDoctor) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const today = new Date().toISOString().slice(0, 10);
+  wrap.innerHTML = `
+    <details class="card" style="border-left:4px solid #7b3fa0">
+      <summary style="cursor:pointer; font-weight:600; color:#7b3fa0">➕ 支払い項目を追加 (ドクター専用)</summary>
+      <div style="margin-top:10px">
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:180px">
+            <span class="lbl">予算 <span style="color:#dc2626">*</span></span>
+            <select id="mfa-fund"><option value="">読み込み中…</option></select>
+          </label>
+          <label class="field" style="flex:1; min-width:130px">
+            <span class="lbl">種別 <span style="color:#dc2626">*</span></span>
+            <select id="mfa-type">
+              <option value="物品">物品</option>
+              <option value="人件費">人件費</option>
+              <option value="旅費">旅費</option>
+              <option value="サブスク">サブスク</option>
+              <option value="ドクター">ドクター</option>
+              <option value="その他">その他</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span class="lbl">項目 <span style="color:#dc2626">*</span></span>
+          <input type="text" id="mfa-item" maxlength="200" placeholder="例: SSD 2TB / 学会参加費 / モニター購入">
+        </label>
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <label class="field" style="flex:1; min-width:140px">
+            <span class="lbl">金額 (円) <span style="color:#dc2626">*</span></span>
+            <input type="number" id="mfa-amount" min="0" step="1" placeholder="例: 25000">
+          </label>
+          <label class="field" style="flex:1; min-width:130px">
+            <span class="lbl">日付</span>
+            <input type="date" id="mfa-date" value="${today}">
+          </label>
+          <label class="field" style="flex:1; min-width:110px">
+            <span class="lbl">状態</span>
+            <select id="mfa-status">
+              <option value="未" selected>未</option>
+              <option value="済">済</option>
+            </select>
+          </label>
+          <label class="field" style="flex:1; min-width:110px">
+            <span class="lbl">年度</span>
+            <input type="number" id="mfa-fy" min="2020" max="2100" value="${mfYear}">
+          </label>
+        </div>
+        <label style="display:flex; align-items:center; gap:6px; margin:8px 0; font-size:13px">
+          <input type="checkbox" id="mfa-docs">
+          📄 事務に書類提出済み (extra.docs_submitted)
+        </label>
+        <label class="field">
+          <span class="lbl">追加メモ (任意、extra.memo に入る)</span>
+          <input type="text" id="mfa-memo" maxlength="500" placeholder="対象者名 / 補足など">
+        </label>
+        <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
+          <button class="btn primary" id="mfa-submit">➕ 追加</button>
+        </div>
+      </div>
+    </details>
+  `;
+  // fund プルダウン埋め (今年度)
+  const fundSel = document.getElementById('mfa-fund');
+  fundBudgets(mfYear).then(buds => {
+    if (!buds.length) {
+      fundSel.innerHTML = '<option value="">(予算リスト取得失敗)</option>';
+      return;
+    }
+    fundSel.innerHTML = '<option value="">— 選択 —</option>' + buds.map(b => {
+      const label = b.label || b.fund || '';
+      return `<option value="${escapeHtml(b.fund || '')}">${escapeHtml(label)}</option>`;
+    }).join('');
+  }).catch(e => {
+    fundSel.innerHTML = `<option value="">${escapeHtml('取得失敗: ' + (e?.message || e))}</option>`;
+  });
+  document.getElementById('mfa-submit').addEventListener('click', async () => {
+    const fund   = document.getElementById('mfa-fund').value.trim();
+    const type   = document.getElementById('mfa-type').value;
+    const item   = document.getElementById('mfa-item').value.trim();
+    const amount = Number(document.getElementById('mfa-amount').value) || 0;
+    const date   = document.getElementById('mfa-date').value;
+    const status = document.getElementById('mfa-status').value;
+    const fy     = Number(document.getElementById('mfa-fy').value) || mfYear;
+    const docs   = document.getElementById('mfa-docs').checked;
+    const memo   = document.getElementById('mfa-memo').value.trim();
+    if (!fund)             { toast('予算を選んでください'); return; }
+    if (!item)             { toast('項目を入力してください'); return; }
+    if (!(amount > 0))     { toast('金額を入力してください'); return; }
+    const extra = {};
+    if (docs) extra.docs_submitted = true;
+    if (memo) extra.memo = memo;
+    const btn = document.getElementById('mfa-submit');
+    btn.disabled = true; btn.textContent = '追加中…';
+    try {
+      const res = await fundItemAdd({
+        fiscal_year: fy, fund, type, item, amount, status,
+        entry_date: date,
+        extra: JSON.stringify(extra),
+      });
+      toast(`追加しました (id=${res.id})`);
+      try { localStorage.removeItem('labpay-myfund-cache'); } catch {}
+      // 一覧再取得 (現在年が fy と違えば移動)
+      if (fy !== mfYear) mfYear = fy;
+      await loadAndRender({ force: true });
+    } catch (e) {
+      toast('失敗: ' + (e?.message || e), 5000);
+      btn.disabled = false; btn.textContent = '➕ 追加';
+    }
+  });
 }
 
 function renderRow(x) {
