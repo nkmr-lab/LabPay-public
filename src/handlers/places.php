@@ -129,7 +129,7 @@ function places_list(PDO $pdo, array $cfg): void {
         //   別フィールドで返す (実在しなければ原画像 fallback)。
         $r['cover_image_thumb'] = $r['cover_image'] ? thumb_url_for((string)$r['cover_image']) : null;
         // v894 #460 回転後の地図マーカー/タイル画像のキャッシュ問題対策。
-        //   ファイル mtime を ?v= に乗せて URL を一意化、 ブラウザ HTTP キャッシュも
+        //   ファイル mtime を ?v= に乗せて URL を一意化、ブラウザ HTTP キャッシュも
         //   旧 image を返さなくなる (rotate-image は in-place 書き換え → mtime 更新される)。
         $r['cover_image']       = _places_image_url_versioned((string)$r['cover_image']);
         $r['cover_image_thumb'] = _places_image_url_versioned((string)$r['cover_image_thumb']);
@@ -141,8 +141,8 @@ function places_list(PDO $pdo, array $cfg): void {
 // v894 #460 /uploads/ 配下の画像 URL に ?v=<mtime> を付けて返す。 file が無ければそのまま。
 function _places_image_url_versioned(string $url): string {
     if ($url === '') return '';
-    if (!preg_match('#^/uploads/#', $url)) return $url;  // 絶対 URL や 別系統は触らない
-    // 既存の ?v=, ?_t= は取り除いて 付け直す (旧クライアントが付けたものを上書き)
+    if (!preg_match('#^/uploads/#', $url)) return $url;  // 絶対 URL や別系統は触らない
+    // 既存の ?v=, ?_t= は取り除いて付け直す (旧クライアントが付けたものを上書き)
     $clean = preg_replace('/[?&](?:v|_t)=\d+(&|$)/', '$1', $url);
     $clean = rtrim($clean, '?&');
     $publicDir = realpath(__DIR__ . '/../../public') ?: (__DIR__ . '/../../public');
@@ -182,15 +182,15 @@ function places_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($phone) > 50) $phone = mb_substr($phone, 0, 50);
     $hours = isset($body['hours']) ? trim((string)$body['hours']) : '';
     if (mb_strlen($hours) > 2000) $hours = mb_substr($hours, 0, 2000);
-    // v920 同一 source_url が 既に 登録済 なら 拒否 (二重登録防止 の 最終砦、
-    //   通常は フロント で 事前に 気づく が、 直接 POST や race 対策)。
-    //   force=1 が 明示的に 送られたら 通す (別支店 など 意図的 な 場合)。
+    // v920 同一 source_url が既に登録済なら拒否 (二重登録防止の最終砦、
+    //   通常はフロントで事前に気づくが、直接 POST や race 対策)。
+    //   force=1 が明示的に送られたら通す (別支店など意図的な場合)。
     if ($sourceUrl !== '' && empty($body['force'])) {
         $stDup = $pdo->prepare("SELECT id, title FROM places WHERE source_url = ? LIMIT 1");
         $stDup->execute([$sourceUrl]);
         if ($ex = $stDup->fetch(PDO::FETCH_ASSOC)) {
             throw new ApiException('duplicate',
-                "同じ URL の 店 が すでに 登録済 「{$ex['title']}」 (id={$ex['id']})。 別支店 として 登録する なら force=1 を 付けて 再送信 して ください。",
+                "同じ URL の店がすでに登録済「{$ex['title']}」 (id={$ex['id']})。別支店として登録するなら force=1 を付けて再送信してください。",
                 409,
                 ['existing_id' => (int)$ex['id'], 'existing_title' => $ex['title']]);
         }
@@ -378,7 +378,7 @@ function places_delete(PDO $pdo, array $cfg, int $id): void {
 
 function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    // v921 通知 用に 起案者 と 店名 も 一緒に 引く。
+    // v921 通知用に起案者と店名も一緒に引く。
     $st = $pdo->prepare("SELECT creator_user_id, title FROM places WHERE id=?");
     $st->execute([$placeId]);
     $placeRow = $st->fetch(PDO::FETCH_ASSOC);
@@ -422,7 +422,7 @@ function places_comment_create(PDO $pdo, array $cfg, int $placeId): void {
         $imageUrlsJson,
         $rating]);
     $commentId = (int)$pdo->lastInsertId();
-    // v921 店 の 起案者 (投稿者本人 以外) に 通知。 「自分が 登録した 店 に 誰か が レビュー」 が 見えるように。
+    // v921 店の起案者 (投稿者本人以外) に通知。「自分が登録した店に誰かがレビュー」が見えるように。
     $creatorId = (int)$placeRow['creator_user_id'];
     if ($creatorId > 0 && $creatorId !== (int)$u['id']) {
         try {
@@ -554,8 +554,8 @@ function places_import_url(PDO $pdo, array $cfg): void {
         $desc = trim($mm[1]);
     }
 
-    // v920 同一 URL の 店 が 既に 登録済 か チェック (ユーザ要望)。 見つかったら
-    //   existing_place を 返して、 フロント で 「もう 登録 されて いる」 と 案内 する。
+    // v920 同一 URL の店が既に登録済かチェック (ユーザ要望)。見つかったら
+    //   existing_place を返して、フロントで「もう登録されている」と案内する。
     $existingPlace = null;
     $stDup = $pdo->prepare("SELECT p.id, p.title, p.category, p.address, p.image_url, p.creator_user_id,
                                    u.display_name AS creator_name
@@ -728,18 +728,18 @@ function rotate_image_file_inplace(string $imageUrlPath, int $degrees): void {
         @chmod($path, 0644);
     };
     $rotate($abs);
-    // v1021 中村さん指摘「口コミの画像は回転したのに、 お店リストで見える画像は回転していない」
-    //   → 従来は 主 と thumb を 独立に 同じ 角度で 回していたが、 EXIF orientation の 処理タイミング
-    //   や upload 側 での 事前 EXIF 補正 と ズレて、 主 と thumb の 縦横 が 逆に なる ケース が
-    //   発生していた。 修正: rotate 後の 主 から thumb を 再生成 (save_uploaded_file と 同じ
-    //   ロジック で 640px 縮小)。 これで 常に 主 と thumb が 同じ 向き / 縦横 に 揃う。
+    // v1021 中村さん指摘「口コミの画像は回転したのに、お店リストで見える画像は回転していない」
+    //   → 従来は主と thumb を独立に同じ角度で回していたが、 EXIF orientation の処理タイミング
+    //   や upload 側での事前 EXIF 補正とズレて、主と thumb の縦横が逆になるケースが
+    //   発生していた。修正: rotate 後の主から thumb を再生成 (save_uploaded_file と同じ
+    //   ロジックで 640px 縮小)。これで常に主と thumb が同じ向き / 縦横に揃う。
     _regenerate_thumb_from_main($abs);
 }
 
 function _regenerate_thumb_from_main(string $mainAbs): void {
     if (!is_file($mainAbs)) return;
     $thumbAbs = preg_replace('/\.[^.]+$/', '', $mainAbs) . '.thumb.jpg';
-    // 既存 thumb が 書き込み 可 か 新規作成 可 か
+    // 既存 thumb が書き込み可か新規作成可か
     if (is_file($thumbAbs) && !is_writable($thumbAbs)) return;
     $dir = dirname($thumbAbs);
     if (!is_dir($dir) || !is_writable($dir)) return;
@@ -747,6 +747,20 @@ function _regenerate_thumb_from_main(string $mainAbs): void {
         $raw = @file_get_contents($mainAbs);
         $src = $raw ? @imagecreatefromstring($raw) : false;
         if (!$src) return;
+        // v1092 中村さん報告「detail は回転しているが、お店リストのサムネは
+        //   回転していない」→ 原因は main JPG が EXIF Orientation=6 (縦写真)
+        //   だが、 imagecreatefromstring は EXIF を無視するため thumb 生成時に
+        //   pixel が横倒しのまま保存されていた。 save_uploaded_file と同じく
+        //   EXIF orientation を先に適用してから縮小する。 imagejpeg は EXIF を
+        //   保存しないので、 thumb は物理ピクセルで正しい向きになる。
+        $ext = strtolower(pathinfo($mainAbs, PATHINFO_EXTENSION));
+        if (($ext === 'jpg' || $ext === 'jpeg') && function_exists('exif_read_data')) {
+            $exif = @exif_read_data($mainAbs);
+            $ori = isset($exif['Orientation']) ? (int)$exif['Orientation'] : 1;
+            if ($ori === 3)      { $r = imagerotate($src, 180, 0); imagedestroy($src); $src = $r; }
+            elseif ($ori === 6)  { $r = imagerotate($src,  -90, 0); imagedestroy($src); $src = $r; }
+            elseif ($ori === 8)  { $r = imagerotate($src,   90, 0); imagedestroy($src); $src = $r; }
+        }
         $sw = imagesx($src); $sh = imagesy($src);
         $maxDim = 640;
         $ratio = min($maxDim / $sw, $maxDim / $sh, 1.0);
@@ -757,7 +771,7 @@ function _regenerate_thumb_from_main(string $mainAbs): void {
         imagejpeg($thumb, $thumbAbs, 90);
         @chmod($thumbAbs, 0644);
         imagedestroy($thumb); imagedestroy($src);
-    } catch (Throwable $_) { /* thumb 生成失敗 は 致命的 では ない */ }
+    } catch (Throwable $_) { /* thumb 生成失敗は致命的ではない */ }
 }
 
 function places_hero_rotate_image(PDO $pdo, array $cfg, int $id): void {
