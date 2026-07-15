@@ -987,15 +987,25 @@ function renderFigure(fig, pagesDir, pagesCount) {
        : (!page ? '(page 番号なし)'
        : (!inRange ? `(page ${page} は pages_count=${pagesCount} 範囲外)` : '(画像 URL 構築失敗)')))
     : '';
+  // v1091 中村さん報告「Figure 6 があると言われてるが、でてない」→ サーバ側で
+  //   PDF から「Figure N」キャプションを探して crop 領域を出す処理が失敗した場合
+  //   crop_missing フラグが付く (v1091 で追加)。これは AI が hallucinate した図の
+  //   強い疑い (PDF 中に該当キャプションが実在しない)。目立つ警告を出す。
+  const cropMissing = !!(fig && fig.crop_missing);
+  const suspiciousBanner = cropMissing
+    ? `<div style="margin-top:4px; padding:6px 8px; background:#fef2f2; border-left:3px solid #dc2626; border-radius:0 4px 4px 0; font-size:11px; color:#991b1b">
+         ⚠ <b>この図は AI が誤って生成した可能性が高い</b>: PDF 中に「${escapeHtml(label)}」というキャプションが見つかりませんでした。ページ画像は出せていますが、実際にこの位置にこの図がない可能性があります。
+       </div>` : '';
   return `
-    <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
+    <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid ${cropMissing ? '#dc2626' : 'var(--primary)'}; border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
         <a href="${escapeHtml(imgUrl)}" data-pt-zoom="${escapeHtml(imgUrl)}" target="_blank" rel="noopener" style="flex:none; display:block; cursor:zoom-in; min-width:120px">
           ${imgElement}
           <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
-        <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}${noImgReason ? ` <span style="font-weight:normal; color:#dc2626; font-size:11px">${escapeHtml(noImgReason)}</span>` : ''}</div>
+        <div class="bold" style="color:${cropMissing ? '#991b1b' : '#4a106d'}">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}${noImgReason ? ` <span style="font-weight:normal; color:#dc2626; font-size:11px">${escapeHtml(noImgReason)}</span>` : ''}${cropMissing ? ' <span style="font-weight:normal; color:#dc2626; font-size:11px">⚠ AI 生成疑い</span>' : ''}</div>
+        ${suspiciousBanner}
         ${cap ? `<div style="margin-top:3px"><b>キャプション:</b> ${escapeHtml(cap)}</div>` : ''}
         ${visual ? `<div style="margin-top:3px"><b>👁 視覚要素:</b> ${escapeHtml(visual)}</div>` : ''}
         ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}

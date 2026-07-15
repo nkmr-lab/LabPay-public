@@ -1892,6 +1892,14 @@ const PAPER_TRANSLATE_DEFAULT_PROMPT = <<<'PROMPT'
   自体を出さない (= 配列から除外)。不確かなら region を "full" にする。「キャプションが
   下だから bottom」等の短絡をしない、図の本体がある位置で判定する。
 
+  **さらに重要 (v1091 中村さん報告への対応)**: **論文に実在しない図番号を作らない**。
+  「Figure 6 に示されるように…」と書きたくなっても、その論文に Figure 6 が本当に
+  存在するかを **PDF 全ページを見て確認** する。中には Figure 1〜5 と supplementary
+  figure だけで Figure 6 が無い論文もある。図の番号は論文中に印字されている
+  キャプション「Figure N.」の N をそのまま使う (推測しない)。見つからないなら
+  その figure_ref を出さない。 label = "Figure N" と書いたら、その論文の PDF に
+  「Figure N.」というキャプションが本当に印字されていることを保証すること。
+
   **必須フィールド**: visual_content — 「この図 / 表に視覚的に何が描かれているか」
   を 50-150 字で具体的に説明する。例: 「3 つのボックス (消費者 / 説得者 / 文脈) と矢印
   で構成されたフロー図」「3 列 × 5 行の比較表、行は各条件、列は反応時間 / エラー率 /
@@ -2216,6 +2224,11 @@ function ai_augment_figure_crops(array $parsed, ?string $pdfPath): array {
                 $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_w_pct'] = $crop['crop_w_pct'] ?? 90;
                 $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_y_pct'] = $crop['crop_y_pct'];
                 $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_h_pct'] = $crop['crop_h_pct'];
+            } else {
+                // v1091 中村さん報告「Figure 6 があると言われてるが、でてない」
+                //   → PDF 内に「Figure N」キャプションが実在しない = AI の hallucination
+                //   疑い。 crop_missing フラグを付けて client 側で注意表示。
+                $parsed['detailed_sections'][$si]['figure_refs'][$fi]['crop_missing'] = true;
             }
         }
     }
