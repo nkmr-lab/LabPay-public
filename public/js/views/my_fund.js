@@ -61,9 +61,8 @@ function renderShell() {
     <div class="card page-header">
       <h2 style="margin:0">💴 自分宛の研究費支払い</h2>
       <div class="hint-sm" style="margin-top:4px">
-        <a href="https://fund.nkmr.io" target="_blank" rel="noopener">fund.nkmr.io</a> の SSO 直結 API から取得。
-        <b>ドクターも含めて全員、自分の分 (相手先か摘要に自分の氏名を含む行) だけ</b> が返ります。
         金額は円 (税込)、状態は <b>支払済</b> or <b>振込予定</b>。
+        <a href="https://fund.nkmr.io" target="_blank" rel="noopener" style="margin-left:8px">🔗 fund.nkmr.io で詳細を見る →</a>
       </div>
     </div>
     <div class="card">
@@ -160,7 +159,11 @@ function renderSummaryAndList() {
     listEl.innerHTML = `<div class="card" style="text-align:center; padding:30px; color:#6b7280">該当する明細はありません</div>`;
     return;
   }
-  listEl.innerHTML = filtered.map(x => renderRow(x)).join('');
+  listEl.innerHTML = filtered.map(x => renderRow(x)).join('')
+    + `<div class="card" style="text-align:center; padding:10px; margin-top:8px; background:#faf5ff; border-left:3px solid #7b3fa0">
+        <div class="hint-sm">より詳しい情報 (課題の全体予算、他メンバーの執行等) は</div>
+        <a href="https://fund.nkmr.io" target="_blank" rel="noopener" class="btn primary" style="margin-top:6px; text-decoration:none">🔗 fund.nkmr.io を開く →</a>
+      </div>`;
 }
 
 function renderRow(x) {

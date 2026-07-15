@@ -230,7 +230,8 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'conf-deadlines', // v671 デフォルト ON
   'screen-shares',  // v718 #314 デフォルト ON
   'papers-recent',  // v809 論文要約 / 全訳新着デフォルト ON
-  'my-fund',        // v1086 自分宛の研究費支払い (fund.nkmr.io) デフォルト ON
+  // v1087 中村さん指示「デフォルトでウィジェット表示はなしで良い」→ my-fund は
+  //   デフォルト非表示。設定 → ホームで個別 ON してもらう運用に。
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -3349,32 +3350,29 @@ async function renderHomeMyFund() {
                              .reduce((a, x) => a + (Number(x.amount) || 0), 0);
   // 直近 3 件 (日付降順)
   const recent = [...items].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 3);
+  // v1087 中村さん指示「もっと縦を圧縮して良い」→ サマリを 1 行に、明細も 2 件に絞って
+  //   list-item の padding も削って超コンパクトに。詳細は /#/my-fund へ。
+  const recent2 = recent.slice(0, 2);
+  const rest = items.length - recent2.length;
   root.innerHTML = `
-    <div class="row" style="gap:12px; margin-bottom:8px; flex-wrap:wrap">
-      <div style="flex:1; min-width:120px; background:#f0fdf4; border-left:3px solid #059669; padding:6px 10px; border-radius:4px">
-        <div class="hint-sm" style="color:#059669; font-weight:600">✅ 支払済 (${y}年)</div>
-        <div style="font-size:18px; font-weight:700; color:#059669">${fmtYen(paidSum)}</div>
-      </div>
-      <div style="flex:1; min-width:120px; background:#fef3c7; border-left:3px solid #a16207; padding:6px 10px; border-radius:4px">
-        <div class="hint-sm" style="color:#a16207; font-weight:600">📅 予定</div>
-        <div style="font-size:18px; font-weight:700; color:#a16207">${fmtYen(scheduledSum)}</div>
-      </div>
+    <div class="row" style="gap:10px; align-items:center; font-size:12px; padding:2px 0 4px; flex-wrap:wrap">
+      <span style="color:#6b7280">${y}年:</span>
+      <span><b style="color:#059669">✅ ${fmtYen(paidSum)}</b></span>
+      <span><b style="color:#a16207">📅 ${fmtYen(scheduledSum)}</b></span>
+      <a href="#/my-fund" class="hint" style="margin-left:auto; font-size:11px">全 ${items.length} 件 →</a>
     </div>
-    <div class="list">
-      ${recent.map(x => {
-        const isScheduled = x.status === 'scheduled';
-        const badge = isScheduled
-          ? '<span style="font-size:10px; padding:1px 6px; border-radius:4px; background:#fef3c7; color:#a16207; font-weight:600; flex:none">予定</span>'
-          : '<span style="font-size:10px; padding:1px 6px; border-radius:4px; background:#f0fdf4; color:#059669; font-weight:600; flex:none">済</span>';
-        return `<div class="list-item" style="gap:6px; align-items:center">
-          <span style="font-size:11px; color:#6b7280; min-width:36px; flex:none">${escapeHtml(myFundMonthDay(x.date))}</span>
-          ${badge}
-          <span class="grow" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px">${escapeHtml(x.tekiyo || x.name || '(名称なし)')}</span>
-          <span style="font-weight:600; font-size:13px; flex:none">${escapeHtml(fmtYen(x.amount))}</span>
-        </div>`;
-      }).join('')}
-    </div>
-    ${items.length > recent.length ? `<div class="hint-sm" style="margin-top:6px; text-align:right"><a href="#/my-fund">残り ${items.length - recent.length} 件を見る →</a></div>` : ''}
+    ${recent2.map(x => {
+      const isScheduled = x.status === 'scheduled';
+      const emoji = isScheduled ? '📅' : '✅';
+      const color = isScheduled ? '#a16207' : '#059669';
+      return `<div style="display:flex; gap:6px; align-items:center; font-size:12px; line-height:1.5; padding:1px 0">
+        <span style="color:#6b7280; font-family:monospace; min-width:34px; flex:none">${escapeHtml(myFundMonthDay(x.date))}</span>
+        <span style="flex:none">${emoji}</span>
+        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(x.tekiyo || x.name || '(名称なし)')}</span>
+        <span style="font-weight:600; color:${color}; flex:none">${escapeHtml(fmtYen(x.amount))}</span>
+      </div>`;
+    }).join('')}
+    ${rest > 0 ? `<div style="font-size:11px; color:#6b7280; text-align:right; margin-top:2px"><a href="#/my-fund" class="hint">… 他 ${rest} 件</a></div>` : ''}
   `;
 }
 
