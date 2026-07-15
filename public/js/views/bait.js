@@ -34,6 +34,10 @@ export async function renderBait() {
         実験協力などで学生にアルバイトを依頼するときに。
         受け取った側は自分の月別リストで全部見えるので、申請処理をまとめて進められます。
       </p>
+      <div class="hint-sm" style="margin-top:6px">
+        📝 アルバイト代の登録先 (中村研の予算執行 DB): <a href="https://fund.nkmr.io" target="_blank" rel="noopener">https://fund.nkmr.io</a>
+        (下の「💴 fund 登録」ボタンから LabPay 内で直接登録も可)
+      </div>
     </div>
 
     <div class="card">

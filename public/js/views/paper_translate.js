@@ -941,8 +941,8 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   タップで lightbox に元のフルページを表示 (region の精度が微妙でも
   //   本体は見れる)。
   // v1088 中村さん指示「要約の図もっと大きく表示してほしいな。 2 倍くらいにはしても良い」
-  //   → 220px → 440px (max-height も併せて 320 → 640)。 モバイルはカード幅で頭打ちになる
-  //   ので気にならない、 デスクトップで図が読みやすくなる。
+  //   → 220px → 440px (max-height も併せて 320 → 640)。モバイルはカード幅で頭打ちになる
+  //   ので気にならない、デスクトップで図が読みやすくなる。
   const wrap = 440;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
   // v996 中村さんアイデア: 図は下にキャプション、表は上にキャプションあるので、
@@ -973,20 +973,33 @@ function renderFigure(fig, pagesDir, pagesCount) {
       background-size: ${bgSizeW}% ${bgSizeH}%;
       background-color:#fff; border:1px solid #ddd; border-radius:4px"></div>`;
   } else {
-    imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; max-width:100%; height:auto; max-height:640px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
+    imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" alt="page ${page}"
+                     onerror="this.outerHTML='<div style=\\'width:${wrap}px; max-width:100%; padding:20px; background:#fef2f2; border:1px solid #fecaca; border-radius:4px; color:#dc2626; text-align:center; font-size:12px\\'>⚠ 画像読み込み失敗<br><a href=\\'${escapeHtml(imgUrl)}\\' target=_blank>直接開く</a></div>'"
+                     style="width:${wrap}px; max-width:100%; height:auto; max-height:640px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
   }
+  // v1090 中村さん報告「Figure 6 があると言われてるが、でてない」→ imgUrl が構築されて
+  //   いても onload/onerror での失敗 (キャッシュ/CORS/404) で img が見えないケースを救う。
+  //   img の onerror で src を消して alt 内の「元 URL を開く」リンクだけ残す表示にする。
+  //   さらに imgUrl 自体が null (page 範囲外や pages_dir 欠落) だった場合も「(ページ画像なし)」
+  //   バッジを text 側に出して原因を可視化する。
+  const noImgReason = !imgUrl
+    ? (!pagesDir ? '(ページ画像未生成)'
+       : (!page ? '(page 番号なし)'
+       : (!inRange ? `(page ${page} は pages_count=${pagesCount} 範囲外)` : '(画像 URL 構築失敗)')))
+    : '';
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
       ${imgUrl ? `
-        <a href="#" data-pt-zoom="${escapeHtml(imgUrl)}" style="flex:none; display:block; cursor:zoom-in">
+        <a href="${escapeHtml(imgUrl)}" data-pt-zoom="${escapeHtml(imgUrl)}" target="_blank" rel="noopener" style="flex:none; display:block; cursor:zoom-in; min-width:120px">
           ${imgElement}
           <div class="hint-sm" style="font-size:9px; text-align:center; margin-top:2px; color:#9ca3af">タップで全ページ表示</div>
         </a>` : ''}
       <div style="flex:1; min-width:0; font-size:13px">
-        <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}</div>
+        <div class="bold" style="color:#4a106d">${escapeHtml(label)}${page ? ` <span style="font-weight:normal; color:#666">(p.${page}${regionLabel})</span>` : ''}${noImgReason ? ` <span style="font-weight:normal; color:#dc2626; font-size:11px">${escapeHtml(noImgReason)}</span>` : ''}</div>
         ${cap ? `<div style="margin-top:3px"><b>キャプション:</b> ${escapeHtml(cap)}</div>` : ''}
         ${visual ? `<div style="margin-top:3px"><b>👁 視覚要素:</b> ${escapeHtml(visual)}</div>` : ''}
         ${why ? `<div style="margin-top:3px"><b>なぜ重要:</b> ${escapeHtml(why)}</div>` : ''}
+        ${imgUrl ? `<div class="hint-sm" style="margin-top:4px; font-size:10px; color:#9ca3af">画像が表示されない場合: <a href="${escapeHtml(imgUrl)}" target="_blank" rel="noopener">直接開く</a></div>` : ''}
       </div>
     </div>`;
 }
