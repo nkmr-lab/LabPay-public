@@ -940,7 +940,10 @@ function renderFigure(fig, pagesDir, pagesCount) {
   //   region=full なら全体、 top/middle/bottom は該当 3 分の 1 部分を表示。
   //   タップで lightbox に元のフルページを表示 (region の精度が微妙でも
   //   本体は見れる)。
-  const wrap = 220;
+  // v1088 中村さん指示「要約の図もっと大きく表示してほしいな。 2 倍くらいにはしても良い」
+  //   → 220px → 440px (max-height も併せて 320 → 640)。 モバイルはカード幅で頭打ちになる
+  //   ので気にならない、 デスクトップで図が読みやすくなる。
+  const wrap = 440;
   const regionLabel = region === 'top' ? '(上部)' : region === 'middle' ? '(中央)' : region === 'bottom' ? '(下部)' : '';
   // v996 中村さんアイデア: 図は下にキャプション、表は上にキャプションあるので、
   //   pdftotext -bbox-layout でキャプションの y 座標を特定して精密 crop 可能。
@@ -963,14 +966,14 @@ function renderFigure(fig, pagesDir, pagesCount) {
     const bgSizeH = (10000 / cropHPct).toFixed(1);
     const bgPosX  = (100 - cropWPct > 0 ? cropXPct * 100 / (100 - cropWPct) : 0).toFixed(1);
     const bgPosY  = (100 - cropHPct > 0 ? cropYPct * 100 / (100 - cropHPct) : 0).toFixed(1);
-    imgElement = `<div style="width:${wrap}px; height:${displayH}px;
+    imgElement = `<div style="width:${wrap}px; max-width:100%; height:${displayH}px;
       background-image: url('${escapeHtml(imgUrl)}');
       background-repeat: no-repeat;
       background-position: ${bgPosX}% ${bgPosY}%;
       background-size: ${bgSizeW}% ${bgSizeH}%;
       background-color:#fff; border:1px solid #ddd; border-radius:4px"></div>`;
   } else {
-    imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; height:auto; max-height:320px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
+    imgElement = `<img src="${escapeHtml(imgUrl)}" loading="lazy" style="width:${wrap}px; max-width:100%; height:auto; max-height:640px; object-fit:contain; background:#fff; border:1px solid #ddd; border-radius:4px; display:block">`;
   }
   return `
     <div style="display:flex; gap:10px; padding:8px 10px; background:#fafafa; border-left:3px solid var(--primary); border-radius:0 6px 6px 0; align-items:flex-start">
