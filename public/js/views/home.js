@@ -198,6 +198,7 @@ export const HOME_CARDS = [
   { id: 'fresh-tasks',    title: '新規タスク' },
   { id: 'playlists',      title: '新着プレイリスト' },
   { id: 'todos',          title: '📝 自分の TODO' },
+  { id: 'my-fund',        title: '💴 自分宛の研究費支払い (fund.nkmr.io)' },   // v1086
   { id: 'history',        title: '履歴' },
   { id: 'bingo',          title: '🎰 今週のビンゴ (進捗 / リーチ / ビンゴ数)' }, // v600 #232
   { id: 'weather',        title: '☀️ 今日の空 (天気 / 日の出日の入り)' }, // v585
@@ -229,6 +230,7 @@ const DEFAULT_VISIBLE_HOME_CARDS = [
   'conf-deadlines', // v671 デフォルト ON
   'screen-shares',  // v718 #314 デフォルト ON
   'papers-recent',  // v809 論文要約 / 全訳新着デフォルト ON
+  'my-fund',        // v1086 自分宛の研究費支払い (fund.nkmr.io) デフォルト ON
 ];
 export const DEFAULT_HIDDEN_HOME_CARDS = HOME_CARDS
   .map(c => c.id)
@@ -495,6 +497,17 @@ export async function renderHome() {
       <div id="home-todos" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
+    <!-- v1086 中村さん要望「学生が自身に対する支払いに関する情報を確認できる仕組み」
+         fund.nkmr.io の SSO API から自分宛の科研費支払をフェッチ (credentials:include で
+         *.nkmr.io 横断)。別オリジンなので widget からは常に自分の分だけがサーバで強制。 -->
+    <div class="card" id="home-myfund-card" data-card-id="my-fund" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">💴 自分宛の研究費支払い</h2>
+        <a href="#/my-fund" class="hint">全部見る →</a>
+      </div>
+      <div id="home-myfund"><div class="hint">読み込み中…</div></div>
+    </div>
+
     <div class="card" id="home-bingo-card" data-card-id="bingo" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🎰 今週のビンゴ</h2>
@@ -692,6 +705,7 @@ export async function renderHome() {
     { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日の 1 名言
     { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文要約 / 全訳新着
     { cardId: 'nkmr-albums',    fn: renderHomeNkmrAlbums,      label: 'nkmr-albums' },    // v970 中村研アルバム新着
+    { cardId: 'my-fund',        fn: renderHomeMyFund,          label: 'my-fund' },        // v1086 自分宛研究費支払い (fund.nkmr.io)
   ];
 
   // v501 #115 各カードの所要時間を計測 + console グループにダンプ。 admin に対しては
@@ -873,6 +887,7 @@ async function doHomePoll() {
     skip('history')        ? null : renderRecentTx(),
     skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文新着 widget
     skip('nkmr-albums')    ? null : renderHomeNkmrAlbums(),   // v970 アルバム新着 widget
+    skip('my-fund')        ? null : renderHomeMyFund(),        // v1086 自分宛研究費支払い widget
   ].filter(Boolean);
   await Promise.allSettled(tasks);
 }
@@ -3273,6 +3288,94 @@ async function renderHomeNotices() {
         </a>`;
     }).join('');
   } catch (_) { card.hidden = true; }
+}
+
+// v1086 中村さん要望「学生が、自身に対する支払いに関する情報を確認できる仕組みを作りたい」
+//   → fund.nkmr.io の SSO 直結 API (widget 呼びは「自分の分だけ」をサーバで強制) を叩いて
+//   home カードに簡易サマリ (今年の合計 + 直近数件) を表示。詳細は /#/my-fund で。
+//   別オリジンなので fetch は credentials:'include' 必須、未認証 or 通信失敗はカード非表示。
+const MY_FUND_URL = 'https://fund.nkmr.io/api.php';
+const MY_FUND_CACHE_KEY = 'labpay-myfund-cache';
+const MY_FUND_TTL_MS = 5 * 60 * 1000;   // 5 分
+async function fetchMyFund(year) {
+  const y = year || new Date().getFullYear();
+  const url = `${MY_FUND_URL}?action=executions&year=${y}`;
+  const r = await fetch(url, { credentials: 'include' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (!j || j.ok === false) throw new Error(j?.error || 'response error');
+  return j;
+}
+function fmtYen(n) {
+  const v = Number(n) || 0;
+  return '¥' + v.toLocaleString('ja-JP');
+}
+function myFundMonthDay(iso) {
+  if (!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  if (!m) return String(iso);
+  return `${Number(m[2])}/${Number(m[3])}`;
+}
+async function renderHomeMyFund() {
+  const card = document.getElementById('home-myfund-card');
+  const root = document.getElementById('home-myfund');
+  if (!card || !root) return;
+  const y = new Date().getFullYear();
+  // 5 分キャッシュ (widget は軽めに、詳細ページで force reload 可)
+  let data = null;
+  try {
+    const raw = localStorage.getItem(MY_FUND_CACHE_KEY);
+    if (raw) {
+      const c = JSON.parse(raw);
+      if (c && c.year === y && (Date.now() - c.timestamp) < MY_FUND_TTL_MS) data = c.data;
+    }
+  } catch {}
+  if (!data) {
+    try {
+      data = await fetchMyFund(y);
+      try { localStorage.setItem(MY_FUND_CACHE_KEY, JSON.stringify({ year: y, data, timestamp: Date.now() })); } catch {}
+    } catch (e) {
+      // 未認証 (auth.nkmr.io に fund.nkmr.io がログインしていない) 等は静かに隠す
+      card.hidden = true;
+      return;
+    }
+  }
+  const items = Array.isArray(data.executions) ? data.executions : [];
+  if (!items.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const paidSum = items.filter(x => x.status === 'paid')
+                       .reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  const scheduledSum = items.filter(x => x.status === 'scheduled')
+                             .reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  // 直近 3 件 (日付降順)
+  const recent = [...items].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 3);
+  root.innerHTML = `
+    <div class="row" style="gap:12px; margin-bottom:8px; flex-wrap:wrap">
+      <div style="flex:1; min-width:120px; background:#f0fdf4; border-left:3px solid #059669; padding:6px 10px; border-radius:4px">
+        <div class="hint-sm" style="color:#059669; font-weight:600">✅ 支払済 (${y}年)</div>
+        <div style="font-size:18px; font-weight:700; color:#059669">${fmtYen(paidSum)}</div>
+      </div>
+      <div style="flex:1; min-width:120px; background:#fef3c7; border-left:3px solid #a16207; padding:6px 10px; border-radius:4px">
+        <div class="hint-sm" style="color:#a16207; font-weight:600">📅 予定</div>
+        <div style="font-size:18px; font-weight:700; color:#a16207">${fmtYen(scheduledSum)}</div>
+      </div>
+    </div>
+    <div class="list">
+      ${recent.map(x => {
+        const isScheduled = x.status === 'scheduled';
+        const badge = isScheduled
+          ? '<span style="font-size:10px; padding:1px 6px; border-radius:4px; background:#fef3c7; color:#a16207; font-weight:600; flex:none">予定</span>'
+          : '<span style="font-size:10px; padding:1px 6px; border-radius:4px; background:#f0fdf4; color:#059669; font-weight:600; flex:none">済</span>';
+        return `<div class="list-item" style="gap:6px; align-items:center">
+          <span style="font-size:11px; color:#6b7280; min-width:36px; flex:none">${escapeHtml(myFundMonthDay(x.date))}</span>
+          ${badge}
+          <span class="grow" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px">${escapeHtml(x.tekiyo || x.name || '(名称なし)')}</span>
+          <span style="font-weight:600; font-size:13px; flex:none">${escapeHtml(fmtYen(x.amount))}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    ${items.length > recent.length ? `<div class="hint-sm" style="margin-top:6px; text-align:right"><a href="#/my-fund">残り ${items.length - recent.length} 件を見る →</a></div>` : ''}
+  `;
 }
 
 async function renderHomeTodos() {

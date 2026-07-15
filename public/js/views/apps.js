@@ -49,6 +49,7 @@ export const APPS = [
   { id: 'bingofit',      cat: 'game',     url: '#/bingofit/closet', title: '👕 着回しビンゴ (BingoFit)', desc: '手持ちの服を 25 着以上登録すると、日曜始まりの 5x5 ビンゴ盤が自動生成。着た服を盤面から開けて、ラインが揃えばビンゴ。背景は自動で透過処理されます。', defaultVisible: true },
   { id: 'meetups',       cat: 'lab-mgmt', url: '#/meetups',       title: '🤝 待ち合わせ',      desc: '集合時刻 + 場所 + メンバーを一発で全員に通知。30分後 / 1時間後などのプリセット時刻あり。', defaultVisible: true },
   { id: 'buy-requests',  cat: 'lab-mgmt', url: '#/buy-requests',  title: '🛒 購入依頼',        desc: '「これ買ってほしい」を中村さんに投げる (URL + タイトル + 数量 + 理由)。中村さんが「買った / 却下」を返す。従来 #want_to_buy Slack の後継。LabPay 台帳のお金は動かない、現物受渡しだけ。', defaultVisible: true },
+  { id: 'my-fund',       cat: 'lab-mgmt', url: '#/my-fund',       title: '💴 自分宛の研究費支払い', desc: 'fund.nkmr.io の SSO 直結 API から、自分宛の科研費支払い (相手先か摘要に自分の氏名を含む行) を年度別・状態別・キーワード検索で一覧表示。支払済 / 予定の合計も出す。widget はホームカードにも。', defaultVisible: true },
   { id: 'deadlines',     cat: 'shared', url: '#/meetups?kind=deadline', title: '📌 〆切',     desc: '〆切時刻 + 対象者を一発で全員に通知。365日先まで。待ち合わせと同じ仕組み (kind=deadline)。', defaultVisible: true },
   { id: 'timers',        cat: 'lab-mgmt', url: '#/timers',        title: '🛎 タイマー',        desc: '参加者全員で同じカウントダウンを共有。ポモドーロ / 会議の時間配分 / イベント開始までなど。', defaultVisible: true },
   { id: 'auctions',      cat: 'trade',  url: '#/auctions',      title: '🏷 オークション',    desc: '出品 + 入札。締切時刻に最高額入札者が落札。落札後は出品者が「請求を飛ばす」ボタンから請求機能で集金 (連絡先はラボ内既知前提なので表示しない)。', defaultVisible: true },

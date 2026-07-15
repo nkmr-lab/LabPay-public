@@ -555,6 +555,7 @@ route('/exp-plan/:id',    lazy(() => import('./views/exp_plan.js'), 'renderExpPl
 // /#/calendar 旧ルートはホームへリダイレクトのみ (古いリンク互換)
 route('/calendar', () => { location.hash = '#/'; });
 route('/buy-requests',        lazy(() => import('./views/buy_requests.js'), 'renderBuyRequests'));     // v1080 🛒 購入依頼
+route('/my-fund',             lazy(() => import('./views/my_fund.js'), 'renderMyFund'));                // v1086 💴 自分宛の研究費支払い (fund.nkmr.io)
 route('/buy-requests/new',    lazy(() => import('./views/buy_requests.js'), 'renderBuyRequestNew'));
 route('/buy-requests/:id/edit', lazy(() => import('./views/buy_requests.js'), 'renderBuyRequestEdit'));
 route('/power',           lazy(() => import('./views/power.js'), 'renderPower'));            // v1024 📐 サンプルサイズ / 検定力
