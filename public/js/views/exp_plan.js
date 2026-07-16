@@ -18,7 +18,7 @@ export async function renderExpPlan() {
       <div class="hint-sm" style="margin-top:4px">
         書いた実験計画書を精査。 RQ / 仮説 / 実験対応 / データ / 統計 / サンプルサイズを見ます。
         <b>初学者モード</b> は「先輩が一緒に読んでくれる」トーンで、専門用語を平易に解説付きで。
-        <b>厳密モード</b> は査読者ノリで細かく指摘。 <b>両方</b> で 40pt (タブで切り替え)。
+        <b>厳密モード</b> は査読者ノリで細かく指摘。 <b>どのモードでも 1 回 20pt</b> (両方選んでも 20pt)。
       </div>
     </div>
 
@@ -42,7 +42,7 @@ export async function renderExpPlan() {
           <div class="row" style="gap:8px; flex-wrap:wrap; font-size:13px">
             <label style="display:inline-flex; gap:4px; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
               <input type="radio" name="epc-mode" value="both" checked>
-              <span>🎓+🌱 両方 (40pt) <span class="hint-sm" style="font-size:11px">タブ切替 / おすすめ</span></span>
+              <span>🎓+🌱 両方 (20pt) <span class="hint-sm" style="font-size:11px">タブ切替 / おすすめ</span></span>
             </label>
             <label style="display:inline-flex; gap:4px; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
               <input type="radio" name="epc-mode" value="student">
@@ -136,9 +136,8 @@ async function onSubmit() {
   const mode  = document.querySelector('input[name="epc-mode"]:checked')?.value || 'both';
   if (!text || text.length < 100) { toast('実験計画書が短すぎます (100 文字以上)'); return; }
   if (text.length > MAX_CHARS)    { toast(`長すぎます (${MAX_CHARS} 文字まで)`); return; }
-  const cost = mode === 'both' ? 40 : 20;
-  const modeLabel = mode === 'both' ? '両方' : (mode === 'student' ? '初学者モード' : '厳密モード');
-  if (!confirm(`実験計画書チェック (${modeLabel}) を依頼します (${cost}pt)。続けますか?`)) return;
+  const modeLabel = mode === 'both' ? '両方 (同時実施)' : (mode === 'student' ? '初学者モード' : '厳密モード');
+  if (!confirm(`実験計画書チェック (${modeLabel}) を依頼します (20pt)。続けますか?`)) return;
   const btn = document.getElementById('epc-submit');
   btn.disabled = true; btn.textContent = '⏳ 依頼中…';
   try {
@@ -236,7 +235,7 @@ function paint(d, app) {
       <div class="card">
         <div class="bold" style="color:var(--primary)">${d.status === 'error' ? '❌ 失敗' : '⏳ 精査中…'}</div>
         ${d.error_msg ? `<div class="hint-sm" style="color:#dc2626; margin-top:6px; white-space:pre-wrap">${escapeHtml(d.error_msg)}</div>` : ''}
-        ${d.status !== 'error' ? `<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 ${d.mode === 'both' ? '両モードで 1〜3 分' : '30 秒〜 2 分'}で完了予定。</div>` : ''}
+        ${d.status !== 'error' ? `<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 ${d.mode === 'both' ? '両モードは並列実行なので 30 秒〜 2 分' : '30 秒〜 2 分'}で完了予定。</div>` : ''}
       </div>` : ''}
 
     ${isReady && (hasStrict || hasStudent) ? `

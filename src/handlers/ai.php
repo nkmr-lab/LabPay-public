@@ -599,6 +599,58 @@ function ai_openai_call(string $payload, string $apiKey): array {
     return $data;
 }
 
+// v1133 curl_multi で複数の chat.completions を並列発火。
+//   $jobs は [ラベル => payload(JSON string), ...]。 戻り値は [ラベル => 応答配列, ...]。
+//   実験計画書 both モードで strict + student を同時実行するために新設。
+function ai_openai_call_parallel(array $jobs, string $apiKey): array {
+    $mh = curl_multi_init();
+    $handles = [];
+    foreach ($jobs as $label => $payload) {
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 300,
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$label] = $ch;
+    }
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) curl_multi_select($mh, 1.0);
+    } while ($active && $status === CURLM_OK);
+
+    $results = [];
+    foreach ($handles as $label => $ch) {
+        $resp = curl_multi_getcontent($ch);
+        $err  = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+        if ($resp === false || $resp === null || $resp === '') {
+            curl_multi_close($mh);
+            throw new RuntimeException("OpenAI curl 失敗 ({$label}): $err");
+        }
+        if ($code !== 200) {
+            curl_multi_close($mh);
+            throw new RuntimeException("OpenAI HTTP $code ({$label}): " . substr($resp, 0, 300));
+        }
+        $data = json_decode($resp, true);
+        if (!is_array($data)) {
+            curl_multi_close($mh);
+            throw new RuntimeException("OpenAI 応答 parse 失敗 ({$label})");
+        }
+        $results[$label] = $data;
+    }
+    curl_multi_close($mh);
+    return $results;
+}
+
 function ai_translate_to_jp(string $text, string $apiKey, string $model): string {
     $payload = json_encode([
         'model' => $model,
@@ -1396,7 +1448,9 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
         if ($firstLine !== '') $title = mb_substr($firstLine, 0, 60);
     }
 
-    $cost = EXP_PLAN_CHECK_COST * ($mode === 'both' ? 2 : 1);
+    // v1133 中村さん「20pt のママで良いと思う。同時に実施してください」
+    //   両モードでも 20pt 固定 (内部的には 2 回 OpenAI コール、料金は据え置き)
+    $cost = EXP_PLAN_CHECK_COST;
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -1413,7 +1467,7 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
             '実験計画書チェック依頼料 (' . $mode . ')');
     });
 
-    $modeLabel = $mode === 'strict' ? '厳密モード' : ($mode === 'student' ? '初学者モード' : '両モード');
+    $modeLabel = $mode === 'strict' ? '厳密モード' : ($mode === 'student' ? '初学者モード' : '両モード (並列実行)');
     json_response_no_exit([
         'ok'          => true,
         'id'          => $checkId,
@@ -1436,7 +1490,9 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
         $apiKey = (string)$cfg['openai']['api_key'];
         $userMessage = "以下の Scrapbox 形式で書かれた実験計画書を、 system prompt の観点で精査してください。 (Scrapbox の [[ ]] は内部リンク、 # はタグ、行頭の半角スペースはインデント。記法は無視して中身を評価して良い)\n\n" . $text;
 
-        $runOne = function (string $sysPrompt) use ($apiKey, $userMessage): array {
+        // v1133 中村さん「同時に実施してください」→ mode=both は curl_multi で
+        //   strict / student を並列発火。 both で待ち時間が 2 倍にならないように。
+        $buildPayload = function (string $sysPrompt) use ($userMessage): string {
             $payloadArr = [
                 'model' => EXP_PLAN_CHECK_MODEL,
                 'messages' => [
@@ -1449,8 +1505,9 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
             if (!preg_match('/^(gpt-5|o1|o3)/', EXP_PLAN_CHECK_MODEL)) {
                 $payloadArr['temperature'] = 0.2;
             }
-            $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
-            $resp = ai_openai_call($payload, $apiKey);
+            return json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+        };
+        $parseContent = function ($resp): array {
             $content = $resp['choices'][0]['message']['content'] ?? '';
             $parsed = json_decode($content, true);
             if (!is_array($parsed)) {
@@ -1461,11 +1518,19 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
 
         $strictJson  = null;
         $studentJson = null;
-        if ($mode === 'strict' || $mode === 'both') {
-            $strictJson = json_encode($runOne(EXP_PLAN_CHECK_SYSTEM_PROMPT_STRICT), JSON_UNESCAPED_UNICODE);
-        }
-        if ($mode === 'student' || $mode === 'both') {
-            $studentJson = json_encode($runOne(EXP_PLAN_CHECK_SYSTEM_PROMPT_STUDENT), JSON_UNESCAPED_UNICODE);
+        if ($mode === 'both') {
+            // 並列: curl_multi で strict / student を同時発火
+            $jobs = [
+                'strict'  => $buildPayload(EXP_PLAN_CHECK_SYSTEM_PROMPT_STRICT),
+                'student' => $buildPayload(EXP_PLAN_CHECK_SYSTEM_PROMPT_STUDENT),
+            ];
+            $results = ai_openai_call_parallel($jobs, $apiKey);
+            $strictJson  = json_encode($parseContent($results['strict']),  JSON_UNESCAPED_UNICODE);
+            $studentJson = json_encode($parseContent($results['student']), JSON_UNESCAPED_UNICODE);
+        } elseif ($mode === 'strict') {
+            $strictJson = json_encode($parseContent(ai_openai_call($buildPayload(EXP_PLAN_CHECK_SYSTEM_PROMPT_STRICT),  $apiKey)), JSON_UNESCAPED_UNICODE);
+        } else {  // student
+            $studentJson = json_encode($parseContent(ai_openai_call($buildPayload(EXP_PLAN_CHECK_SYSTEM_PROMPT_STUDENT), $apiKey)), JSON_UNESCAPED_UNICODE);
         }
         // v1131 result_json (旧下位互換カラム) は student 優先 → strict の順で 1 つ入れる
         $legacyPayload = $studentJson ?? $strictJson;
