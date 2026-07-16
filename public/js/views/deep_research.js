@@ -14,23 +14,23 @@ let viewState = {
   lastQuery: '',
 };
 
-// v1095 中村さん指示「DeepResearch の結果ページで、プロンプトは最初の 3 行くらい
-//   残しつつ、あとは折りたたんでおいて」→ 4 行以上のクエリは <details> で折りたたむ。
-//   最初の 3 行を summary に、残り全文を open で展開できる形に。 3 行以下ならそのまま。
+// v1097 中村さん指示「DeepResearch は、最初の 100 文字くらい以降は見せなくて良いかも？」
+//   → 100 文字までを summary に、それ以降を <details> で折りたたむ。改行境界は無視して
+//   純粋に文字数で切る。100 文字以下ならそのまま (折りたたむ意味がない)。
 function renderQueryTextCollapsible(queryText) {
   const t = String(queryText || '');
-  const lines = t.split('\n');
   const style = 'padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px';
-  // 3 行以下ならそのまま (折りたたむ意味がない)
-  if (lines.length <= 3) {
+  const HEAD = 100;
+  if (t.length <= HEAD) {
     return `<div style="margin-top:8px; ${style}; white-space:pre-wrap">${escapeHtml(t)}</div>`;
   }
-  const preview = lines.slice(0, 3).join('\n');
-  const restLen = t.length - preview.length;
+  const head = t.slice(0, HEAD);
+  const rest = t.slice(HEAD);
+  const totalLines = t.split('\n').length;
   return `
     <details style="margin-top:8px; ${style}">
-      <summary style="cursor:pointer; white-space:pre-wrap; list-style:none; font-family:inherit">${escapeHtml(preview)}<div style="margin-top:4px; color:#6b21a8; font-weight:600; font-size:12px">▼ 続きを見る (${lines.length} 行 / ${restLen.toLocaleString()} 文字)</div></summary>
-      <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #c4b5fd; white-space:pre-wrap">${escapeHtml(t.slice(preview.length + 1))}</div>
+      <summary style="cursor:pointer; white-space:pre-wrap; list-style:none; font-family:inherit">${escapeHtml(head)}<span style="color:#9ca3af">…</span><div style="margin-top:4px; color:#6b21a8; font-weight:600; font-size:12px">▼ 続きを見る (${totalLines} 行 / 全 ${t.length.toLocaleString()} 文字)</div></summary>
+      <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #c4b5fd; white-space:pre-wrap">${escapeHtml(rest)}</div>
     </details>`;
 }
 
