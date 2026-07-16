@@ -140,6 +140,7 @@ $routes = [
     'tickets'        => 'route_tickets',       // v1122 チケット生成アプリ
     'labo-eats'      => 'route_labo_eats',     // v1123 ラーボーイーツ (研究室版 UBER EATS)
     'profile-book'   => 'route_profile_book',  // v1124 プロフ帳 (平成デザ)
+    'research-ai'    => 'route_research_ai',   // v1125 研究特化 AI サブスク
 ];
 
 try {
