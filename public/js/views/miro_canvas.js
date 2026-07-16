@@ -531,12 +531,14 @@ function noteHtml(n) {
               <div class="mnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
             </div>`;
   }
-  // 自分だけ見えてる時の視覚ヒント: 破線ボーダー
+  // v1109 自分だけ見えてる (= ウラ) 時の視覚ヒント: 破線ボーダー + 少しグレイアウト
+  //   中村さん指示「ウラにすると、自分の画面でも少しグレイアウトしてる感じで見せて欲しい」
   const extraBorder = (isMine && isHidden) ? '; border:2px dashed rgba(124,58,237,0.55)' : '';
+  const extraFilter = (isMine && isHidden) ? '; filter:saturate(0.45) opacity(0.82)' : '';
   return `
     <div class="mnote" data-id="${n.id}"
          style="position:absolute; left:${n.x}px; top:${n.y}px; width:${n.width}px; height:${n.height}px;
-                background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15)${extraBorder};
+                background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15)${extraBorder}${extraFilter};
                 transform:rotate(${n.rotation || 0}deg); transform-origin:center; padding:8px;
                 display:flex; flex-direction:column; user-select:none; touch-action:none; cursor:grab;
                 box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif">
