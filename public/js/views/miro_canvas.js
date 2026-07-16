@@ -251,7 +251,7 @@ function wireCanvas() {
       if (!n) return;
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.noteStartW = n.width; DRAG.noteStartH = n.height;
-    } else if (noteEl && !e.target.closest('button, textarea, input, a, .mnote-body')) {
+    } else if (noteEl && !e.target.closest('button, textarea, input, a')) {
       DRAG.mode = 'note';
       DRAG.noteId = parseInt(noteEl.dataset.id, 10);
       const n = NOTE_MAP[DRAG.noteId];
