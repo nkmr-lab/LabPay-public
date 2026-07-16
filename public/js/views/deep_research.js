@@ -14,6 +14,26 @@ let viewState = {
   lastQuery: '',
 };
 
+// v1095 中村さん指示「DeepResearch の結果ページで、プロンプトは最初の 3 行くらい
+//   残しつつ、あとは折りたたんでおいて」→ 4 行以上のクエリは <details> で折りたたむ。
+//   最初の 3 行を summary に、残り全文を open で展開できる形に。 3 行以下ならそのまま。
+function renderQueryTextCollapsible(queryText) {
+  const t = String(queryText || '');
+  const lines = t.split('\n');
+  const style = 'padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px';
+  // 3 行以下ならそのまま (折りたたむ意味がない)
+  if (lines.length <= 3) {
+    return `<div style="margin-top:8px; ${style}; white-space:pre-wrap">${escapeHtml(t)}</div>`;
+  }
+  const preview = lines.slice(0, 3).join('\n');
+  const restLen = t.length - preview.length;
+  return `
+    <details style="margin-top:8px; ${style}">
+      <summary style="cursor:pointer; white-space:pre-wrap; list-style:none; font-family:inherit">${escapeHtml(preview)}<div style="margin-top:4px; color:#6b21a8; font-weight:600; font-size:12px">▼ 続きを見る (${lines.length} 行 / ${restLen.toLocaleString()} 文字)</div></summary>
+      <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #c4b5fd; white-space:pre-wrap">${escapeHtml(t.slice(preview.length + 1))}</div>
+    </details>`;
+}
+
 export async function renderDeepResearch() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -320,7 +340,7 @@ async function refreshShared(token) {
         <div class="meta">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} ・ ${escapeHtml(d.model || '')} (${escapeHtml(d.depth || '')}) ・ ${d.cost_points}pt ・ ${escapeHtml(d.created_at || '')}
         </div>
-        <div style="margin-top:8px; padding:8px 12px; background:#f5f3ff; border-left:3px solid #6b21a8; border-radius:0 6px 6px 0; font-size:13px; white-space:pre-wrap">${escapeHtml(d.query_text)}</div>
+        ${renderQueryTextCollapsible(d.query_text)}
         ${shareToggleHtml}
       </div>
       <div id="dr-result"></div>
