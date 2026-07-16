@@ -9,9 +9,9 @@ import { toast, state } from '../app.js';
 import { shareToSns } from '../share_to_sns.js';
 
 function statusBadge(st, deadlineAt) {
-  // v907 #461 締切を 過ぎていて まだ open のままの試合は、 視覚的に 「受付中」だと
-  //   紛らわしい (もう参加できない) ので 「結果待ち」 と表示する。 DB 上の status は
-  //   結果登録 (確定) アクションで動く設計なので、 ここではビュー側で吸収。
+  // v907 #461 締切を過ぎていてまだ open のままの試合は、視覚的に「受付中」だと
+  //   紛らわしい (もう参加できない) ので「結果待ち」と表示する。 DB 上の status は
+  //   結果登録 (確定) アクションで動く設計なので、ここではビュー側で吸収。
   if (st === 'open' && deadlineAt) {
     const t = new Date(String(deadlineAt).replace(' ', 'T')).getTime();
     if (Number.isFinite(t) && t < Date.now()) {
@@ -41,7 +41,7 @@ export async function renderScorePredictions() {
           誰も完璧に当てなければ全員にフィー返金。
         </p>
         <p style="margin:8px 0 0">
-          <a class="btn primary" href="#/score-predictions/new">＋ 試合を起案する</a>
+          <a class="btn primary" href="#/score-predictions/new">＋試合を起案する</a>
         </p>
       </div>
       ${items.length ? items.map(g => `
@@ -62,7 +62,7 @@ export async function renderScorePredictions() {
           </div>
         </a>
       `).join('') : `
-        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ試合が起案されていません。「＋ 試合を起案する」からどうぞ。</div></div>
+        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ試合が起案されていません。「＋試合を起案する」からどうぞ。</div></div>
       `}
     `;
   } catch (e) {
@@ -130,7 +130,9 @@ export async function renderScorePredictionNew() {
       showGenderBulk: false,
     });
   } catch (_) {}
-  document.getElementById('spn-submit').addEventListener('click', async () => {
+  const spnBtn = document.getElementById('spn-submit');
+  const spnLabel = spnBtn.textContent;
+  spnBtn.addEventListener('click', async () => {
     const title = document.getElementById('spn-title').value.trim();
     const home  = document.getElementById('spn-home').value.trim();
     const away  = document.getElementById('spn-away').value.trim();
@@ -144,10 +146,17 @@ export async function renderScorePredictionNew() {
     if (match) body.match_at = match.replace('T', ' ') + ':00';
     if (dl)    body.deadline_at = dl.replace('T', ' ') + ':00';
     if (picker) body.notify_user_ids = [...picker.getSelected()];
+    // v1112 中村さん指摘「作成に時間がちょっとかかるため、連打で複数作成される」
+    //   → in-flight 中はボタンを disable + テキスト変更で二重送信を物理的に防ぐ
+    spnBtn.disabled = true;
+    spnBtn.textContent = '⌛ 起案中… (通知配信のため少しかかります)';
     try {
       const r = await post('/api/score_predictions/games', body);
+      if (r.deduped) toast('連打を検出したので既存の予想を開きます');
       navigate(`#/score-predictions/${r.id}`);
     } catch (e) {
+      spnBtn.disabled = false;
+      spnBtn.textContent = spnLabel;
       toast('起案失敗: ' + (e?.message || e));
     }
   });

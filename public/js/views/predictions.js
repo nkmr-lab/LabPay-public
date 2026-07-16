@@ -13,9 +13,9 @@ const MEDAL = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8�
 function medalFor(i) { return MEDAL[i] ?? `${i+1}位`; }
 
 function statusBadge(st, deadlineAt) {
-  // v907 #462 締切を 過ぎていて まだ open のままの予想は、 「受付中」だと参加できると
-  //   勘違いさせるので 「結果待ち」 と表示。 詳細ページでは effectiveStatus で同じ扱いを
-  //   既にしているが、 一覧ページでも吸収。
+  // v907 #462 締切を過ぎていてまだ open のままの予想は、「受付中」だと参加できると
+  //   勘違いさせるので「結果待ち」と表示。詳細ページでは effectiveStatus で同じ扱いを
+  //   既にしているが、一覧ページでも吸収。
   if (st === 'open' && deadlineAt) {
     const t = new Date(String(deadlineAt).replace(' ', 'T')).getTime();
     if (Number.isFinite(t) && t < Date.now()) {
@@ -46,7 +46,7 @@ export async function renderPredictions() {
           ランキング表示のスコアは 1位=5 / 2位=3 / 3位=2 / 4位=1 の一致和。
         </p>
         <p style="margin:8px 0 0">
-          <a class="btn primary" href="#/predictions/new">＋ 予想を起案する</a>
+          <a class="btn primary" href="#/predictions/new">＋予想を起案する</a>
         </p>
       </div>
       ${items.length ? items.map(g => `
@@ -95,7 +95,7 @@ export async function renderPredictionNew() {
           <select id="pn-count" class="input">
             <option value="1">1位のみ</option>
             <option value="2">1位 / 2位</option>
-            <option value="4" selected>1位 〜 4位</option>
+            <option value="4" selected>1位〜 4位</option>
           </select>
         </label>
         <label style="flex:1">
@@ -133,7 +133,12 @@ export async function renderPredictionNew() {
       showGenderBulk: false,
     });
   } catch (_) {}
-  document.getElementById('pn-submit').addEventListener('click', async () => {
+  const submitBtn = document.getElementById('pn-submit');
+  const submitLabel = submitBtn.textContent;
+  submitBtn.addEventListener('click', async () => {
+    // v1112 中村さん指摘「作成に時間がちょっとかかるため、連打で複数作成される」
+    //   → ボタンを in-flight 中は disable + テキスト変更で二重送信を物理的に防ぐ。
+    //   バリデーション不合格の時は disable しない (すぐ再度直せるように)。
     const title = document.getElementById('pn-title').value.trim();
     const desc  = document.getElementById('pn-desc').value.trim();
     const count = parseInt(document.getElementById('pn-count').value, 10);
@@ -147,7 +152,7 @@ export async function renderPredictionNew() {
       if (m) return { id: `c${i}`, name: m[2], flag: m[1] };
       return { id: `c${i}`, name: line, flag: null };
     });
-    // v1008 count と 同数 も 受け付ける (ベスト4 順位当て モード)。
+    // v1008 count と同数も受け付ける (ベスト4 順位当てモード)。
     if (candidates.length < count) {
       toast(`候補が少ないです。 ${count} 個以上入れてください`); return;
     }
@@ -155,12 +160,18 @@ export async function renderPredictionNew() {
     if (desc) body.description = desc;
     if (dl) body.deadline_at = dl.replace('T', ' ') + ':00';
     if (picker) body.notify_user_ids = [...picker.getSelected()];
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⌛ 起案中… (通知配信のため少しかかります)';
     try {
       const r = await post('/api/predictions/games', body);
+      if (r.deduped) toast('連打を検出したので既存の予想を開きます');
       navigate(`#/predictions/${r.id}`);
     } catch (e) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = submitLabel;
       toast('起案失敗: ' + (e?.message || e));
     }
+    // 成功時は navigate で画面が変わるため btn を戻す必要なし
   });
 }
 

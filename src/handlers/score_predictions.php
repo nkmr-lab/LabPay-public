@@ -237,6 +237,19 @@ function sp_create(PDO $pdo, array $cfg, int $uid): void {
         $notifyIds = array_filter($notifyIds, fn($x) => $x !== $uid);
     }
     $gameId = 0;
+    // v1112 中村さん指摘「作成に時間がちょっとかかるため、連打で複数作成される」
+    //   → 30 秒以内に同じ user が同じ (title, home, away) で作った game があれば、
+    //   それを返して INSERT せずに idempotent 動作。通知の再送もしない。
+    $dup = $pdo->prepare("SELECT id FROM score_pred_games
+                           WHERE creator_user_id = ? AND title = ? AND team_home = ? AND team_away = ?
+                             AND created_at > NOW() - INTERVAL 30 SECOND
+                           ORDER BY id DESC LIMIT 1");
+    $dup->execute([$uid, $title, $home, $away]);
+    $existingId = (int)$dup->fetchColumn();
+    if ($existingId > 0) {
+        json_response(['ok' => true, 'id' => $existingId, 'notified' => 0, 'deduped' => true]);
+        return;
+    }
     db_tx($pdo, function () use ($pdo, $uid, $title, $home, $away, $fee, $matchAt, $deadlineAt, &$gameId) {
         $pdo->prepare("INSERT INTO score_pred_games (creator_user_id, title, team_home, team_away, match_at, deadline_at, fee)
                        VALUES (?,?,?,?,?,?,?)")

@@ -231,9 +231,9 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
     $predictCount = (int)($body['predict_count'] ?? 1);
     if (!in_array($predictCount, [1, 2, 4], true)) throw new ApiException('bad_request', 'predict_count は 1, 2, 4', 400);
     $candidates = $body['candidates'] ?? [];
-    // v1008 候補 == predict_count でも 受け付ける (中村さん要望「ベスト4 の 中の 順位を
-    //   完璧に予想したひとにポイントを配分」)。 候補=predict_count なら 集合は 全員一致
-    //   に なるので、 順位を どれだけ 正確に 当てられるか の 勝負 に なる (score_weights [4,3,2,1] で 差)。
+    // v1008 候補 == predict_count でも受け付ける (中村さん要望「ベスト4 の中の順位を
+    //   完璧に予想したひとにポイントを配分」)。候補=predict_count なら集合は全員一致
+    //   になるので、順位をどれだけ正確に当てられるかの勝負になる (score_weights [4,3,2,1] で差)。
     if (!is_array($candidates) || count($candidates) < $predictCount) {
         throw new ApiException('bad_request', '候補は predict_count 個以上', 400);
     }
@@ -271,6 +271,19 @@ function predictions_create(PDO $pdo, array $cfg, int $uid): void {
         $notifyIds = array_filter($notifyIds, fn($x) => $x !== $uid); // 自分は除外
     }
     $gameId = 0;
+    // v1112 中村さん指摘「作成に時間がちょっとかかるため、連打で複数作成される」
+    //   → 30 秒以内に同じ user が同じ title で作った game があれば、それを返して
+    //   INSERT せずに idempotent 動作。通知の再送も行わない。
+    $dup = $pdo->prepare("SELECT id FROM predictions_games
+                           WHERE creator_user_id = ? AND title = ?
+                             AND created_at > NOW() - INTERVAL 30 SECOND
+                           ORDER BY id DESC LIMIT 1");
+    $dup->execute([$uid, $title]);
+    $existingId = (int)$dup->fetchColumn();
+    if ($existingId > 0) {
+        json_response(['ok' => true, 'id' => $existingId, 'notified' => 0, 'deduped' => true]);
+        return;
+    }
     db_tx($pdo, function () use ($pdo, $uid, $title, $description, $fee, $predictCount, $cleanCandidates, $deadlineAt, &$gameId) {
         $pdo->prepare("INSERT INTO predictions_games (creator_user_id, title, description, fee, predict_count, candidates_json, deadline_at)
                        VALUES (?,?,?,?,?,?,?)")
