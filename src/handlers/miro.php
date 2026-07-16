@@ -93,7 +93,7 @@ function _miro_note_shape(array $r, ?int $mySide): array {
         'created_by_user_id'=> (int)$r['created_by_user_id'],
         'created_at'        => (string)$r['created_at'],
         'updated_at'        => (string)$r['updated_at'],
-        'my_side'           => $mySide ?: 1,
+        'my_side'           => $mySide ?: 2,   // v1103: デフォは裏 (隠し) — Flip で表を出す
     ];
 }
 
@@ -277,7 +277,7 @@ function miro_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $rr = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ?");
     $rr->execute([$id]);
     $note = $rr->fetch(PDO::FETCH_ASSOC);
-    json_response(['id' => $id, 'note' => _miro_note_shape($note, 1)]);
+    json_response(['id' => $id, 'note' => _miro_note_shape($note, 2)]);
 }
 
 // PATCH /api/miro/notes/{id}  body: { x?, y?, width?, height?, rotation?, color?, front_text?, back_text?, z_bump? }

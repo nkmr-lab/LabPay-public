@@ -69,46 +69,7 @@ function shellHtml() {
       </div>
     </div>
 
-    <!-- edit modal (front / back / color / delete) -->
-    <div id="miro-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center; padding:16px">
-      <div style="background:#fff; border-radius:12px; padding:16px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px">
-        <div class="row" style="align-items:center; gap:8px">
-          <div style="font-weight:700; font-size:15px; flex:1">🗒 ノートを編集</div>
-          <button class="btn" id="mmodal-close">×</button>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center">
-          <span style="font-size:12px; color:#6b7280">色</span>
-          ${PALETTE.map(c => `<button class="mmodal-color" data-color="${c}" style="width:26px; height:26px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer"></button>`).join('')}
-        </div>
-        <div>
-          <div style="font-weight:600; font-size:13px; margin-bottom:4px">🌅 オモテ (front)</div>
-          <textarea id="mmodal-front-text" rows="4" placeholder="表側の文字" style="width:100%; box-sizing:border-box"></textarea>
-          <div id="mmodal-front-image" style="margin-top:6px"></div>
-          <div class="row" style="gap:4px; margin-top:4px">
-            <button class="btn" data-genimg="front">🎨 画像生成 (表)</button>
-            <button class="btn" data-clearimg="front" style="font-size:11px">画像を消す</button>
-          </div>
-        </div>
-        <div>
-          <div style="font-weight:600; font-size:13px; margin-bottom:4px">🌒 ウラ (back)</div>
-          <textarea id="mmodal-back-text" rows="4" placeholder="裏側の文字" style="width:100%; box-sizing:border-box"></textarea>
-          <div id="mmodal-back-image" style="margin-top:6px"></div>
-          <div class="row" style="gap:4px; margin-top:4px">
-            <button class="btn" data-genimg="back">🎨 画像生成 (裏)</button>
-            <button class="btn" data-clearimg="back" style="font-size:11px">画像を消す</button>
-          </div>
-        </div>
-        <div class="row" style="gap:6px; justify-content:space-between; margin-top:6px">
-          <button class="btn" id="mmodal-delete" style="color:#b91c1c">🗑 削除</button>
-          <div class="row" style="gap:6px">
-            <button class="btn" id="mmodal-cancel">キャンセル</button>
-            <button class="btn primary" id="mmodal-save">保存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- prompt modal for image gen -->
+    <!-- prompt modal for image gen (残り 1 つだけ、これは長い入力なのでモーダル) -->
     <div id="miro-prompt-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center; padding:16px">
       <div style="background:#fff; border-radius:12px; padding:16px; width:100%; max-width:440px; display:flex; flex-direction:column; gap:8px">
         <div style="font-weight:700">🎨 <span id="mprompt-side-label">オモテ</span>に画像を生成</div>
@@ -119,6 +80,11 @@ function shellHtml() {
           <button class="btn primary" id="mprompt-go">生成する</button>
         </div>
       </div>
+    </div>
+
+    <!-- 小さな色ポップオーバー (ノートヘッダの 🎨 で開く) -->
+    <div id="miro-color-pop" style="display:none; position:fixed; z-index:10001; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); gap:4px">
+      ${PALETTE.map(c => `<button class="mcolor-pop" data-color="${c}" style="width:24px; height:24px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer"></button>`).join('')}
     </div>
   `;
 }
@@ -154,14 +120,15 @@ function startPolling() {
       LAST_SERVER_TIME = d.server_time || LAST_SERVER_TIME;
       let dirty = false;
       for (const n of d.upserts || []) {
-        // ドラッグ中の自分の対象だと弾く (自分の上書き防止)
+        // ドラッグ中 or インライン編集中の自分のノートは弾く (自分の入力を上書きしない)
         if (DRAG.noteId === n.id) continue;
-        // 自分の side は保持 (サーバは 1 で返すけど、サーバの my_side は正)
+        if (EDITING_NOTE_ID === n.id) continue;
         NOTE_MAP[n.id] = n;
         dirty = true;
       }
       for (const id of d.deletes || []) {
         if (NOTE_MAP[id]) { delete NOTE_MAP[id]; dirty = true; }
+        if (EDITING_NOTE_ID === id) EDITING_NOTE_ID = null;   // 削除されたら編集終了
       }
       if (dirty) {
         NOTES = Object.values(NOTE_MAP);
@@ -268,7 +235,10 @@ function wireCanvas() {
     }
     DRAG.moved = false;
     DRAG.pointerId = e.pointerId;
-    try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+    // v1103 ドラッグ / パン開始時のみ pointer capture (button / textarea クリックは非拘束)
+    if (DRAG.mode !== null) {
+      try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+    }
   });
 
   vp.addEventListener('pointermove', (e) => {
@@ -311,21 +281,20 @@ function wireCanvas() {
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
     } else if (mode === 'note' && !moved && nid) {
-      // v1101 タップ (移動なし): 300 ms 以内に同じノートをもう一度タップ
-      //   → ダブルタップ扱いで編集モーダルを開く (flip はキャンセル)。
-      //   単発タップ = flip は 300 ms 待ってから実行。
+      // v1103 単発タップは何もしない (フリップは 🔄 ボタン)。ダブルタップだけで
+      //   インライン編集に入る。裏の場合は自動で表にめくってから編集。
       const now = Date.now();
       if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
-        if (TAP.flipTimer) { clearTimeout(TAP.flipTimer); TAP.flipTimer = null; }
         TAP.noteId = null; TAP.ts = 0;
-        openEditModal(nid);
+        const n = NOTE_MAP[nid];
+        if (n && (n.my_side || 2) === 2) {
+          // 裏なら flip → 表に切り替わってから inline edit
+          flipNote(nid).then(() => enterInlineEdit(nid, null)).catch(() => {});
+        } else {
+          enterInlineEdit(nid, null);
+        }
       } else {
         TAP.noteId = nid; TAP.ts = now;
-        if (TAP.flipTimer) clearTimeout(TAP.flipTimer);
-        TAP.flipTimer = setTimeout(() => {
-          TAP.flipTimer = null;
-          flipNote(nid).catch(() => {});
-        }, DBLTAP_MS);
       }
     }
   });
@@ -387,51 +356,107 @@ function highlightPalette() {
 
 // ─── rendering ────────────────────────────────────────────────
 
+// v1103 中村さん指示: 編集モーダルは廃止、ダブルタップでその場に textarea を出す。
+//   裏面は書けない (デフォは裏 = 隠し)、Flip ボタンで表を出す。
+//   単発タップは何もしない (フリップは 🔄 ボタン)。
+let EDITING_NOTE_ID = null;  // 現在インライン編集中の note.id
+let EDITING_ORIG    = '';    // Esc で戻す用の元テキスト
+
 function renderAll() {
   const layer = document.getElementById('miro-layer');
   if (!layer) return;
   applyTransform();
   // z_index でソート
   const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
+  // 編集中ノートの現在値を保存 (再描画で消えるので後で戻す)。 EDITING_NOTE_ID を
+  //   一時的に null にして innerHTML 破棄で起きる blur を空振りさせる (自動 commit で
+  //   空文字が保存されないように)。後で復元 + snapshot 付き enterInlineEdit する。
+  let editingSnapshot = null;
+  const wasEditing = EDITING_NOTE_ID;
+  if (wasEditing) {
+    const ta = document.querySelector(`.mnote[data-id="${wasEditing}"] .mnote-editta`);
+    if (ta) editingSnapshot = { value: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
+    EDITING_NOTE_ID = null;
+  }
   layer.innerHTML = sorted.map(noteHtml).join('');
-  layer.querySelectorAll('.mnote-edit').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openEditModal(parseInt(el.dataset.editId, 10));
-    });
-  });
-  layer.querySelectorAll('.mnote-flip').forEach(el => {
+  layer.querySelectorAll('[data-flip-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       flipNote(parseInt(el.dataset.flipId, 10));
     });
   });
+  layer.querySelectorAll('[data-genimg-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openImagePromptFor(parseInt(el.dataset.genimgId, 10));
+    });
+  });
+  layer.querySelectorAll('[data-clearimg-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearImageFor(parseInt(el.dataset.clearimgId, 10));
+    });
+  });
+  layer.querySelectorAll('[data-color-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openColorPop(parseInt(el.dataset.colorId, 10), el);
+    });
+  });
+  layer.querySelectorAll('[data-del-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteNote(parseInt(el.dataset.delId, 10));
+    });
+  });
+  // 編集中だった場合は再度 textarea を立て、値と選択位置を復元
+  if (wasEditing && NOTE_MAP[wasEditing]) {
+    enterInlineEdit(wasEditing, editingSnapshot);
+  }
 }
 
 function noteHtml(n) {
-  const side = n.my_side || 1;
-  const text = side === 2 ? (n.back_text || '') : (n.front_text || '');
-  const img  = side === 2 ? n.back_image_url : n.front_image_url;
-  const sideMark = side === 2 ? '🌒 ウラ' : '🌅 オモテ';
+  const side = n.my_side || 2;
   const bg = escapeHtml(n.color || '#FEF9A8');
-  const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:60%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
+  const isBack = side === 2;
+  // ヘッダ: 裏なら Flip のみ (書けない、色/画像/削除も裏でいじる意味薄い)。表なら全部出す。
+  const header = isBack
+    ? `<div style="display:flex; gap:2px; align-items:center; font-size:11px; color:#4b5563; opacity:0.75">
+         <span>🌒 ウラ</span>
+         <span style="margin-left:auto"></span>
+         <button data-flip-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="表を出す">🔄</button>
+         <button data-del-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="削除">🗑</button>
+       </div>`
+    : `<div style="display:flex; gap:2px; align-items:center; font-size:11px; color:#4b5563; opacity:0.85">
+         <span>🌅 オモテ</span>
+         <span style="margin-left:auto"></span>
+         <button data-color-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="色を変える">🎨</button>
+         <button data-genimg-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="AI 画像を生成">🖼</button>
+         ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="画像を消す">🚫</button>` : ''}
+         <button data-flip-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="裏返す">🔄</button>
+         <button data-del-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="削除">🗑</button>
+       </div>`;
+  // ボディ: 裏なら装飾のみ、表なら text + image
+  let body;
+  if (isBack) {
+    body = `<div class="mnote-body" style="flex:1; display:flex; align-items:center; justify-content:center; font-size:32px; color:rgba(0,0,0,0.15); font-weight:800; letter-spacing:0.2em; user-select:none">? ? ?</div>`;
+  } else {
+    const img = n.front_image_url;
+    const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
+    body = `<div class="mnote-body" style="flex:1; overflow:auto; font-size:14px; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
+              ${imgBlock}
+              <div class="mnote-text">${escapeHtml(n.front_text || '')}</div>
+            </div>`;
+  }
   return `
-    <div class="mnote" data-id="${n.id}"
+    <div class="mnote" data-id="${n.id}" data-side="${side}"
          style="position:absolute; left:${n.x}px; top:${n.y}px; width:${n.width}px; height:${n.height}px;
                 background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
                 transform:rotate(${n.rotation || 0}deg); transform-origin:center; padding:8px;
                 display:flex; flex-direction:column; user-select:none; touch-action:none; cursor:grab;
                 box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif">
-      <div style="display:flex; gap:4px; align-items:center; font-size:10px; color:#4b5563; opacity:0.8">
-        <span>${sideMark}</span>
-        <span style="margin-left:auto"></span>
-        <button class="mnote-flip" data-flip-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="裏返す">🔄</button>
-        <button class="mnote-edit" data-edit-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="編集">✏️</button>
-      </div>
-      <div class="mnote-body" style="flex:1; overflow:auto; font-size:14px; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
-        ${imgBlock}
-        <div>${escapeHtml(text)}</div>
-      </div>
+      ${header}
+      ${body}
       <div class="mhandle" style="position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; background:linear-gradient(135deg, transparent 40%, rgba(0,0,0,0.25) 50%, transparent 60%)"></div>
     </div>
   `;
@@ -472,109 +497,155 @@ async function flipNote(id) {
   } catch (e) { toast('反転失敗: ' + e.message); }
 }
 
-// ─── edit modal ───────────────────────────────────────────────
+// ─── inline text edit (v1103, replaces modal) ─────────────────
 
-let MODAL_NOTE_ID = null;
-let MODAL_COLOR = '#FEF9A8';
-let MODAL_FRONT_IMG = null;
-let MODAL_BACK_IMG  = null;
-
-function openEditModal(id) {
+function enterInlineEdit(id, snapshot) {
   const n = NOTE_MAP[id]; if (!n) return;
-  MODAL_NOTE_ID = id;
-  MODAL_COLOR = n.color || '#FEF9A8';
-  MODAL_FRONT_IMG = n.front_image_url || null;
-  MODAL_BACK_IMG  = n.back_image_url  || null;
-  document.getElementById('mmodal-front-text').value = n.front_text || '';
-  document.getElementById('mmodal-back-text').value  = n.back_text  || '';
-  refreshModalColors();
-  refreshModalImages();
-  document.getElementById('miro-modal').style.display = 'flex';
-  // wire once (uses live refs so re-wiring OK — replace listeners each open)
-  const close = () => { document.getElementById('miro-modal').style.display = 'none'; MODAL_NOTE_ID = null; };
-  document.getElementById('mmodal-close').onclick  = close;
-  document.getElementById('mmodal-cancel').onclick = close;
-  document.getElementById('mmodal-save').onclick   = async () => {
-    const body = {
-      color:      MODAL_COLOR,
-      front_text: document.getElementById('mmodal-front-text').value,
-      back_text:  document.getElementById('mmodal-back-text').value,
-      front_image_url: MODAL_FRONT_IMG || '',
-      back_image_url:  MODAL_BACK_IMG  || '',
+  const el = document.querySelector(`.mnote[data-id="${id}"]`);
+  if (!el) return;
+  EDITING_NOTE_ID = id;
+  EDITING_ORIG = n.front_text || '';
+  const body = el.querySelector('.mnote-body');
+  if (!body) return;
+  // 画像は残しつつ、テキスト部分だけを textarea に差し替え
+  const imgHtml = n.front_image_url
+    ? `<img src="${escapeHtml(n.front_image_url)}" style="max-width:100%; max-height:60%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">`
+    : '';
+  body.style.overflow = 'hidden';
+  body.innerHTML = `
+    ${imgHtml}
+    <textarea class="mnote-editta" placeholder="ここに書く…"
+      style="flex:1; width:100%; box-sizing:border-box; border:none; outline:none; background:transparent;
+             resize:none; font-size:14px; font-family:inherit; padding:0; color:inherit; user-select:text"
+      >${escapeHtml(snapshot ? snapshot.value : (n.front_text || ''))}</textarea>
+    <div class="hint-sm" style="font-size:10px; color:#6b7280; margin-top:2px; opacity:0.7">Enter で改行 / Esc で取消 / 外をタップで保存</div>
+  `;
+  const ta = body.querySelector('.mnote-editta');
+  ta.focus();
+  if (snapshot) {
+    try { ta.setSelectionRange(snapshot.start, snapshot.end); } catch (_) {}
+  } else {
+    // 末尾にキャレット
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_) {}
+  }
+  ta.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelInlineEdit();
+    }
+  });
+  // ドラッグを起こさないよう pointer 系をここで stop
+  ['pointerdown','pointerup','pointermove','wheel','click'].forEach(evt => {
+    ta.addEventListener(evt, (e) => e.stopPropagation());
+  });
+  ta.addEventListener('blur', () => {
+    if (EDITING_NOTE_ID === id) commitInlineEdit();
+  });
+}
+
+async function commitInlineEdit() {
+  const id = EDITING_NOTE_ID;
+  if (!id) return;
+  const el = document.querySelector(`.mnote[data-id="${id}"] .mnote-editta`);
+  const v  = el ? el.value : '';
+  EDITING_NOTE_ID = null;
+  if (v === EDITING_ORIG) { renderAll(); return; }   // 差分なし
+  try {
+    const r = await patch(`/api/miro/notes/${id}`, { front_text: v });
+    if (r.note && NOTE_MAP[id]) {
+      Object.assign(NOTE_MAP[id], r.note, { my_side: NOTE_MAP[id].my_side });
+    }
+  } catch (e) { toast('保存失敗: ' + e.message); }
+  renderAll();
+}
+function cancelInlineEdit() {
+  EDITING_NOTE_ID = null;
+  renderAll();
+}
+
+async function deleteNote(id) {
+  if (!confirm('このノートを削除するよ?')) return;
+  try {
+    await del(`/api/miro/notes/${id}`);
+    delete NOTE_MAP[id];
+    NOTES = Object.values(NOTE_MAP);
+    renderAll();
+  } catch (e) { toast('削除失敗: ' + e.message); }
+}
+
+async function clearImageFor(id) {
+  try {
+    const r = await patch(`/api/miro/notes/${id}`, { front_image_url: '' });
+    if (r.note && NOTE_MAP[id]) {
+      Object.assign(NOTE_MAP[id], r.note, { my_side: NOTE_MAP[id].my_side });
+    }
+    renderAll();
+  } catch (e) { toast('画像消し失敗: ' + e.message); }
+}
+
+// ─── color popover ────────────────────────────────────────────
+
+let COLOR_POP_NOTE_ID = null;
+
+function openColorPop(id, anchorEl) {
+  COLOR_POP_NOTE_ID = id;
+  const pop = document.getElementById('miro-color-pop');
+  const r = anchorEl.getBoundingClientRect();
+  pop.style.display = 'flex';
+  pop.style.left = Math.max(4, r.left) + 'px';
+  pop.style.top  = (r.bottom + 4) + 'px';
+  // 現在色を強調
+  const cur = NOTE_MAP[id]?.color || '#FEF9A8';
+  pop.querySelectorAll('.mcolor-pop').forEach(el => {
+    el.style.borderColor = (el.dataset.color === cur) ? '#4a106d' : 'transparent';
+    el.onclick = async (e) => {
+      e.stopPropagation();
+      const newColor = el.dataset.color;
+      pop.style.display = 'none';
+      try {
+        const rr = await patch(`/api/miro/notes/${id}`, { color: newColor });
+        if (rr.note && NOTE_MAP[id]) {
+          Object.assign(NOTE_MAP[id], rr.note, { my_side: NOTE_MAP[id].my_side });
+        }
+        renderAll();
+      } catch (err) { toast('色変更失敗: ' + err.message); }
     };
-    try {
-      const r = await patch(`/api/miro/notes/${MODAL_NOTE_ID}`, body);
-      if (r.note) NOTE_MAP[MODAL_NOTE_ID] = { ...NOTE_MAP[MODAL_NOTE_ID], ...r.note, my_side: NOTE_MAP[MODAL_NOTE_ID].my_side };
-      renderAll();
-      close();
-    } catch (e) { toast('保存失敗: ' + e.message); }
-  };
-  document.getElementById('mmodal-delete').onclick = async () => {
-    if (!confirm('このノートを削除するよ?')) return;
-    try {
-      await del(`/api/miro/notes/${MODAL_NOTE_ID}`);
-      delete NOTE_MAP[MODAL_NOTE_ID];
-      NOTES = Object.values(NOTE_MAP);
-      renderAll();
-      close();
-    } catch (e) { toast('削除失敗: ' + e.message); }
-  };
-  document.querySelectorAll('.mmodal-color').forEach(el => {
-    el.onclick = () => { MODAL_COLOR = el.dataset.color; refreshModalColors(); };
   });
-  document.querySelectorAll('[data-genimg]').forEach(el => {
-    el.onclick = () => openPromptModal(el.dataset.genimg);
-  });
-  document.querySelectorAll('[data-clearimg]').forEach(el => {
-    el.onclick = () => {
-      if (el.dataset.clearimg === 'front') MODAL_FRONT_IMG = null;
-      else MODAL_BACK_IMG = null;
-      refreshModalImages();
+  // 外クリックで閉じる (1 回だけ)
+  setTimeout(() => {
+    const off = (e) => {
+      if (!pop.contains(e.target)) {
+        pop.style.display = 'none';
+        document.removeEventListener('pointerdown', off, true);
+      }
     };
-  });
+    document.addEventListener('pointerdown', off, true);
+  }, 0);
 }
 
-function refreshModalColors() {
-  document.querySelectorAll('.mmodal-color').forEach(el => {
-    el.style.borderColor = (el.dataset.color === MODAL_COLOR) ? '#4a106d' : 'transparent';
-  });
-}
-function refreshModalImages() {
-  const f = document.getElementById('mmodal-front-image');
-  const b = document.getElementById('mmodal-back-image');
-  f.innerHTML = MODAL_FRONT_IMG
-    ? `<img src="${escapeHtml(MODAL_FRONT_IMG)}" style="max-width:100%; max-height:160px; border-radius:6px; border:1px solid #e5e7eb">`
-    : `<div class="hint-sm" style="font-size:11px; color:#9ca3af">まだ画像なし</div>`;
-  b.innerHTML = MODAL_BACK_IMG
-    ? `<img src="${escapeHtml(MODAL_BACK_IMG)}" style="max-width:100%; max-height:160px; border-radius:6px; border:1px solid #e5e7eb">`
-    : `<div class="hint-sm" style="font-size:11px; color:#9ca3af">まだ画像なし</div>`;
-}
+// ─── image gen prompt (per note, front side only) ─────────────
 
-// ─── prompt modal for image gen ───────────────────────────────
+let PROMPT_NOTE_ID = null;
 
-let PROMPT_SIDE = 'front';
-
-function openPromptModal(side) {
-  PROMPT_SIDE = side;
-  document.getElementById('mprompt-side-label').textContent = side === 'back' ? 'ウラ' : 'オモテ';
+function openImagePromptFor(id) {
+  PROMPT_NOTE_ID = id;
+  const n = NOTE_MAP[id]; if (!n) return;
+  document.getElementById('mprompt-side-label').textContent = 'オモテ';
   document.getElementById('mprompt-text').value = '';
   document.getElementById('miro-prompt-modal').style.display = 'flex';
-  const close = () => { document.getElementById('miro-prompt-modal').style.display = 'none'; };
+  const close = () => { document.getElementById('miro-prompt-modal').style.display = 'none'; PROMPT_NOTE_ID = null; };
   document.getElementById('mprompt-cancel').onclick = close;
   document.getElementById('mprompt-go').onclick = async () => {
     const prompt = document.getElementById('mprompt-text').value.trim();
     if (!prompt) { toast('プロンプトを書いてね'); return; }
-    if (!MODAL_NOTE_ID) return;
     const btn = document.getElementById('mprompt-go');
     btn.disabled = true; btn.textContent = '生成中… (最大 2 分)';
     try {
-      const r = await post(`/api/miro/notes/${MODAL_NOTE_ID}/generate-image`, { prompt, side: PROMPT_SIDE });
-      if (PROMPT_SIDE === 'front') MODAL_FRONT_IMG = r.image_url;
-      else                          MODAL_BACK_IMG  = r.image_url;
-      if (r.note && NOTE_MAP[MODAL_NOTE_ID]) {
-        Object.assign(NOTE_MAP[MODAL_NOTE_ID], r.note, { my_side: NOTE_MAP[MODAL_NOTE_ID].my_side });
+      const r = await post(`/api/miro/notes/${PROMPT_NOTE_ID}/generate-image`, { prompt, side: 'front' });
+      if (r.note && NOTE_MAP[PROMPT_NOTE_ID]) {
+        Object.assign(NOTE_MAP[PROMPT_NOTE_ID], r.note, { my_side: NOTE_MAP[PROMPT_NOTE_ID].my_side });
       }
-      refreshModalImages();
       renderAll();
       close();
       toast('画像を生成したよ');
