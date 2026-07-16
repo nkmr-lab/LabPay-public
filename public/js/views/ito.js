@@ -21,10 +21,10 @@ export async function renderIto() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🎲 ito</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/ito/new">＋ 新規卓</a>
+        <a class="btn primary" href="#/ito/new">＋ 新規卓 (5pt/人)</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        2 人以上でプレイフィー 1pt → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
+        2 人以上でプレイフィー 5pt / 人 → 各自に 1-100 の数字 → お題に沿って表現を入力 → 全員の数字を開示。
         数字を直接言わずに「強い動物の強さ」などのお題で表現の妙を楽しむ協力ゲーム。
       </div>
     </div>
@@ -66,16 +66,13 @@ export async function renderItoNew() {
     <div class="card">
       <a href="#/ito" class="hint">← 一覧</a>
       <h2 style="margin:6px 0">🎲 ito — 新規卓</h2>
+      <div class="hint-sm" style="margin-bottom:8px; padding:6px 10px; background:#fef3c7; border-radius:6px">💴 プレイフィー: <b>5pt / 人</b> (固定、戻ってきません)</div>
       <label class="field">
         <span class="lbl">お題</span>
         <input type="text" id="ito-theme" maxlength="200" placeholder="例: 強い動物の強さ">
         <div class="row" style="gap:4px; flex-wrap:wrap; margin-top:4px">
           ${PRESET_THEMES.map(t => `<button class="btn" data-theme="${escapeHtml(t)}" style="font-size:11px; padding:2px 8px">${escapeHtml(t)}</button>`).join('')}
         </div>
-      </label>
-      <label class="field">
-        <span class="lbl">プレイフィー (pt 1 人あたり、戻ってきません)</span>
-        <input type="number" id="ito-buyin" min="1" max="100" value="1">
       </label>
       <div style="margin-top:10px">
         <span class="lbl">招待するメンバー (任意、後から自由に参加もできる)</span>
@@ -112,13 +109,12 @@ export async function renderItoNew() {
   document.getElementById('ito-go').addEventListener('click', async () => {
     const theme = document.getElementById('ito-theme').value.trim();
     if (!theme) { toast('お題を入れてください'); return; }
-    const buyIn = Number(document.getElementById('ito-buyin').value) || 1;
     const memberIds = picker ? [...picker.getSelected()] : [];
     const btn = document.getElementById('ito-go');
     btn.disabled = true; btn.textContent = '作成中…';
     const instant = document.getElementById('ito-instant')?.checked && memberIds.length > 0;
     try {
-      const r = await post('/api/ito/games', { theme, buy_in: buyIn, member_ids: memberIds, instant_start: instant });
+      const r = await post('/api/ito/games', { theme, member_ids: memberIds, instant_start: instant });
       navigate('#/ito/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '卓を立てる'; }
   });

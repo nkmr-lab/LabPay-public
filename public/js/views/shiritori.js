@@ -14,7 +14,10 @@ export async function renderShiritori() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🎨 絵しりとり</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/shiritori/new">＋新規</a>
+        <a class="btn primary" href="#/shiritori/new">＋ 新規 (5pt/人)</a>
+      </div>
+      <div class="hint-sm" style="margin-top:6px; font-size:12px">
+        プレイフィー 5pt / 人 (初回ターン時に徴収、戻ってきません)。
       </div>
     </div>
     <div id="sh-list" class="list"><div class="muted">読み込み中…</div></div>

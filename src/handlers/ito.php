@@ -108,8 +108,9 @@ function ito_create(PDO $pdo, array $cfg, int $uid): void {
     $body = read_json_body();
     $theme = trim((string)require_field($body, 'theme'));
     if ($theme === '' || mb_strlen($theme) > 200) throw new ApiException('bad_request', 'theme 1-200', 400);
-    $buyIn = (int)($body['buy_in'] ?? ITO_DEFAULT_BUYIN);
-    if ($buyIn < 1 || $buyIn > 100) throw new ApiException('bad_request', 'buy_in 1-100', 400);
+    // v1134 中村さん「ito も 人狼 も 固定で お願いします。 起案時に 変更は ちょっと 変化な」
+    //   → クライアントからの buy_in は無視して常に ITO_DEFAULT_BUYIN (5pt) を使う。
+    $buyIn = ITO_DEFAULT_BUYIN;
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) $memberIds = [];
     // v632 instant_start = 全員即着席 + 一括徴収 + 数字配布 + status='input' に。

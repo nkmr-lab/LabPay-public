@@ -22,10 +22,10 @@ export async function renderJinrou() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🐺 人狼</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/jinrou/new">＋ 新規卓</a>
+        <a class="btn primary" href="#/jinrou/new">＋ 新規卓 (5pt/人)</a>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:12px">
-        4-16 人でプレイフィー 2pt → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。
+        4-16 人でプレイフィー 5pt / 人 → 役職配布 (村人 / 人狼 / 占い師 / 騎士) → 夜 (人狼襲撃 + 占い + 護衛) → 昼 (投票で追放) → 人狼全滅 or 人狼≥村人で決着。
       </div>
     </div>
     <div id="jr-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -71,10 +71,7 @@ export async function renderJinrouNew() {
       <p class="hint" style="font-size:13px">
         4 人以上で開始可能。役職構成は人数で自動調整 (4-5人: 人狼1 / 占い1 / 騎士1 / 残り村人、 6-8人: 人狼2、 9-12人: 人狼3、 13-16人: 人狼4)。
       </p>
-      <label class="field">
-        <span class="lbl">プレイフィー (pt 1 人あたり)</span>
-        <input type="number" id="jr-buyin" min="1" max="100" value="2">
-      </label>
+      <div class="hint-sm" style="margin-bottom:8px; padding:6px 10px; background:#fef3c7; border-radius:6px">💴 プレイフィー: <b>5pt / 人</b> (固定、戻ってきません)</div>
       <div style="margin-top:10px">
         <span class="lbl">招待するメンバー (任意)</span>
         <div id="jr-bulk" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:6px"></div>
@@ -101,13 +98,12 @@ export async function renderJinrouNew() {
     });
   } catch (e) { document.getElementById('jr-chips').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`; }
   document.getElementById('jr-go').addEventListener('click', async () => {
-    const buyIn = Number(document.getElementById('jr-buyin').value) || 1;
     const memberIds = picker ? [...picker.getSelected()] : [];
     const btn = document.getElementById('jr-go');
     btn.disabled = true; btn.textContent = '作成中…';
     const instant = document.getElementById('jr-instant')?.checked && memberIds.length >= 3;
     try {
-      const r = await post('/api/jinrou/games', { buy_in: buyIn, member_ids: memberIds, instant_start: instant });
+      const r = await post('/api/jinrou/games', { member_ids: memberIds, instant_start: instant });
       navigate('#/jinrou/' + r.id);
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = '卓を立てる'; }
   });

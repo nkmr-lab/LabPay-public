@@ -183,8 +183,9 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
 
 function jinrou_create(PDO $pdo, array $cfg, int $uid): void {
     $body = read_json_body();
-    $buyIn = (int)($body['buy_in'] ?? JINROU_DEFAULT_BUYIN);
-    if ($buyIn < 1 || $buyIn > 100) throw new ApiException('bad_request', 'buy_in 1-100', 400);
+    // v1134 中村さん「ito も 人狼 も 固定で お願いします。 起案時に 変更は ちょっと 変化な」
+    //   → クライアントからの buy_in は無視して常に JINROU_DEFAULT_BUYIN (5pt) を使う。
+    $buyIn = JINROU_DEFAULT_BUYIN;
     $memberIds = $body['member_ids'] ?? [];
     if (!is_array($memberIds)) $memberIds = [];
     // v632 instant_start = 全員即着席 + 一括徴収 + 役職配布 + status='night' に。

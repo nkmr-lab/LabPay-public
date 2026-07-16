@@ -36,10 +36,10 @@ export async function renderDaifugo() {
       <div class="row center" style="gap:6px">
         <h2 style="margin:0">🃏 大富豪</h2>
         <span style="flex:1"></span>
-        <button id="df-new" class="btn primary">＋新規卓 (2pt)</button>
+        <button id="df-new" class="btn primary">＋ 新規卓 (5pt/人)</button>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
-        2-4 人。単出し / ペア / N枚出し。<b>プレイフィー 2pt</b>。
+        2-4 人。単出し / ペア / N枚出し。<b>プレイフィー 5pt / 人</b> (固定、戻ってきません)。
         ジョーカーはワイルド (単体は最強)。<b>革命 (4枚同時出しで強弱反転)</b>・
         <b>8切り (「8」出しで場流し + 同プレイヤー再開)</b> 採用。
       </p>
@@ -50,7 +50,7 @@ export async function renderDaifugo() {
     const { showInviteModal } = await import('./invite_modal.js');
     const res = await showInviteModal({
       title: '🃏 大富豪新規卓',
-      description: 'プレイフィー 2pt。「対象者で即開始」なら全員から即徴収 + 通知 + 即配牌。',
+      description: 'プレイフィー 5pt / 人 (固定)。 「対象者で即開始」なら全員から即徴収 + 通知 + 即配牌。',
       minPick: 1, maxPick: 3,        // 自分 + 1〜3 人 = 2〜4 人
       allowPublic: true,
     });
