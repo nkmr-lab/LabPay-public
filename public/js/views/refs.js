@@ -1,5 +1,5 @@
 // /#/refs — Zotero-like 文献管理 (v925 MVP)。
-// ラボ全員 で 共有、 各自 note + 読状態 は 個人別。
+// ラボ全員で共有、各自 note + 読状態は個人別。
 // DOI / arXiv ID / URL から metadata 自動取得 (crossref / arxiv API)。
 
 import { get, post, patch, del } from '../api.js';
@@ -12,9 +12,9 @@ const STATUS_COLOR = { unread: '#9ca3af', reading: '#f59e0b', read: '#15803d' };
 // v929
 const ITEM_TYPES = [
   { id: 'article',      label: '📄 論文' },
-  { id: 'conference',   label: '📄 会議 論文' },
+  { id: 'conference',   label: '📄 会議論文' },
   { id: 'book',         label: '📖 書籍' },
-  { id: 'book_chapter', label: '📖 書籍 の 章' },
+  { id: 'book_chapter', label: '📖 書籍の章' },
   { id: 'thesis',       label: '🎓 学位論文' },
   { id: 'patent',       label: '⚙️ 特許' },
   { id: 'dataset',      label: '📊 データセット' },
@@ -30,7 +30,7 @@ const HIGHLIGHT_TEXT_COLORS = {
 };
 
 // v929 簡易 Markdown → HTML (見出し / 太字 / italic / 箇条書き / リンク / コード / 改行)。
-//   XSS 対策 に まず escapeHtml、 その後 に 決まった pattern だけ 復元。
+//   XSS 対策にまず escapeHtml、その後に決まった pattern だけ復元。
 function mdToHtml(src) {
   if (!src) return '';
   let s = escapeHtml(String(src));
@@ -58,7 +58,7 @@ function mdToHtml(src) {
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--primary)">$1</a>');
   // 裸の URL
   s = s.replace(/(?<!href=&quot;|href=")https?:\/\/[^\s<]+/g, m => `<a href="${m}" target="_blank" rel="noopener" style="color:var(--primary)">${m}</a>`);
-  // 改行 (段落 は 単純 に <br>)
+  // 改行 (段落は単純に <br>)
   s = s.replace(/\n/g, '<br>');
   return s;
 }
@@ -76,9 +76,9 @@ function authorsShort(authors) {
   return names.slice(0, 3).join(', ') + `, et al. (${names.length}人)`;
 }
 
-// v1006 中村さん要望「(refs 詳細に) 要約 と 同型 の 著者リスト を 付けて 欲しい」。
-//   paper_translate.js の ptRenderAuthorCards と 揃えた 見た目、 タップで
-//   #/authors/{name} (著者ページ) に 遷移。
+// v1006 中村さん要望「(refs 詳細に) 要約と同型の著者リストを付けて欲しい」。
+//   paper_translate.js の ptRenderAuthorCards と揃えた見た目、タップで
+//   #/authors/{name} (著者ページ) に遷移。
 function rfRenderAuthorCards(authors) {
   if (!Array.isArray(authors) || !authors.length) return '';
   return `
@@ -104,7 +104,7 @@ function rfRenderAuthorCards(authors) {
     </div>`;
 }
 
-// v1006 タグ / 著者 の クリック ハンドラ。 paintDetail の 差し込み 直後 に 呼ぶ。
+// v1006 タグ / 著者のクリックハンドラ。 paintDetail の差し込み直後に呼ぶ。
 function rfBindClickables() {
   document.querySelectorAll('[data-rf-tag]').forEach(b => {
     b.addEventListener('click', (ev) => {
@@ -129,7 +129,7 @@ function rfBindClickables() {
 
 export async function renderRefs() {
   // v1006 URL の ?tag=<t> ?q=<q> を listState に取り込む (詳細ページから
-  //   キーワード chip をタップしてジャンプ してきた場合)。
+  //   キーワード chip をタップしてジャンプしてきた場合)。
   const qStart = (location.hash || '').indexOf('?');
   if (qStart !== -1) {
     const qs = new URLSearchParams((location.hash || '').slice(qStart + 1));
@@ -141,20 +141,21 @@ export async function renderRefs() {
     <div class="card page-header">
       <div class="row center" style="gap:8px; flex-wrap:wrap">
         <h2 style="margin:0; flex:1">📚 文献管理</h2>
-        <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋ 文献を 追加</a>
-        <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="現在 の 絞り込み 対象 全件 の BibTeX を クリップボード に コピー">📋 BibTeX コピー</button>
-        <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献 リスト を CSL style で 一括生成">📚 参考文献</a>
-        <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱 切替">🗑</button>
+        <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋文献を追加</a>
+        <a class="btn" href="#/refs/bulk" style="font-size:12px; padding:4px 8px" title="PDF をまとめてアップロード + メタデータ自動取得 + SS 検証">📚 まとめてアップ</a>
+        <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="現在の絞り込み対象全件の BibTeX をクリップボードにコピー">📋 BibTeX コピー</button>
+        <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献リストを CSL style で一括生成">📚 参考文献</a>
+        <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱切替">🗑</button>
       </div>
     </div>
-    <!-- v928 track B: コレクション サイドバー (縦 スクロール chip) -->
+    <!-- v928 track B: コレクションサイドバー (縦スクロール chip) -->
     <div class="card" id="rf-cols-card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
         <div class="bold" style="font-size:12px">📁 コレクション</div>
-        <button id="rf-col-new" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 新規</button>
+        <button id="rf-col-new" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋新規</button>
       </div>
-      <!-- v937 fb#472: 二連 prompt() で 詰まる ケース (モバイル Safari 等) を 潰す ため
-           インライン フォーム に 差し替え。 hidden 開始、 「＋ 新規」 で toggle。 -->
+      <!-- v937 fb#472: 二連 prompt() で詰まるケース (モバイル Safari 等) を潰すため
+           インラインフォームに差し替え。 hidden 開始、「＋新規」で toggle。 -->
       <div id="rf-col-form" hidden style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center">
         <input type="text" id="rf-col-name" placeholder="コレクション名 (例: HCI論文、 CHI2026送り用)"
                style="flex:1; min-width:180px; padding:4px 8px; font-size:13px; border:1px solid #d1d5db; border-radius:4px">
@@ -165,19 +166,19 @@ export async function renderRefs() {
       </div>
       <div id="rf-cols-list" class="row" style="gap:4px; flex-wrap:wrap"></div>
     </div>
-    <!-- v928 track B: 保存した 検索 -->
+    <!-- v928 track B: 保存した検索 -->
     <div class="card" id="rf-ss-card" hidden>
       <div class="row center" style="gap:6px; margin-bottom:6px">
-        <div class="bold" style="font-size:12px">🔎 保存した 検索</div>
+        <div class="bold" style="font-size:12px">🔎 保存した検索</div>
       </div>
       <div id="rf-ss-list" class="row" style="gap:4px; flex-wrap:wrap"></div>
     </div>
     <div class="card">
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <input type="search" id="rf-q" placeholder="🔍 タイトル / 著者 / 抄録 / 会議名" style="flex:1; min-width:180px; padding:4px 8px; font-size:13px; border:1px solid #d1d5db; border-radius:4px" value="${escapeHtml(listState.q)}">
-        <input type="search" id="rf-ftq" placeholder="🔍 PDF 全文" style="width:140px; padding:4px 8px; font-size:13px; border:1px solid #a78bfa; border-radius:4px" title="PDF 添付 済 refs の 本文 検索" value="${escapeHtml(listState.fulltext_q)}">
+        <input type="search" id="rf-ftq" placeholder="🔍 PDF 全文" style="width:140px; padding:4px 8px; font-size:13px; border:1px solid #a78bfa; border-radius:4px" title="PDF 添付済 refs の本文検索" value="${escapeHtml(listState.fulltext_q)}">
         <select id="rf-status" style="font-size:12px; padding:2px 6px">
-          <option value="">🎯 状態 全部</option>
+          <option value="">🎯 状態全部</option>
           <option value="unread" ${listState.status==='unread'?'selected':''}>未読</option>
           <option value="reading" ${listState.status==='reading'?'selected':''}>読中</option>
           <option value="read" ${listState.status==='read'?'selected':''}>既読</option>
@@ -185,10 +186,10 @@ export async function renderRefs() {
         <input type="number" id="rf-year" placeholder="年" min="1900" max="2100" style="width:80px; padding:2px 6px; font-size:12px" value="${listState.year || ''}">
         <select id="rf-sort" style="font-size:12px; padding:2px 6px">
           <option value="new"   ${listState.sort==='new'   ?'selected':''}>新着順</option>
-          <option value="year"  ${listState.sort==='year'  ?'selected':''}>年 降順</option>
+          <option value="year"  ${listState.sort==='year'  ?'selected':''}>年降順</option>
           <option value="title" ${listState.sort==='title' ?'selected':''}>タイトル順</option>
         </select>
-        <button id="rf-save-search" class="btn" style="font-size:11px; padding:2px 8px" title="今 の 条件 を 保存">💾</button>
+        <button id="rf-save-search" class="btn" style="font-size:11px; padding:2px 8px" title="今の条件を保存">💾</button>
         <span id="rf-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
       <div id="rf-cur-filter" class="hint-sm" style="font-size:11px; margin-top:4px; color:#7b3fa0"></div>
@@ -197,7 +198,7 @@ export async function renderRefs() {
     <div id="rf-list" class="card"><div class="muted">読み込み中…</div></div>
   `;
   document.getElementById('rf-export').addEventListener('click', async () => {
-    // v935 ダウンロード 保存 じゃ なく クリップボード へ (BibTeX は Overleaf 貼り 付け が 主用途)
+    // v935 ダウンロード保存じゃなくクリップボードへ (BibTeX は Overleaf 貼り付けが主用途)
     const t = listState.tag ? `?tag=${encodeURIComponent(listState.tag)}` : '';
     try {
       const resp = await fetch('/api/refs/export/bibtex' + t, { credentials: 'same-origin' });
@@ -205,7 +206,7 @@ export async function renderRefs() {
       const text = await resp.text();
       const entries = (text.match(/@\w+\s*\{/g) || []).length;
       await navigator.clipboard.writeText(text);
-      toast(`📋 ${entries} 件 の BibTeX を コピー`);
+      toast(`📋 ${entries} 件の BibTeX をコピー`);
     } catch (e) { toast('失敗: ' + e.message); }
   });
   let searchTimer = null;
@@ -229,7 +230,7 @@ export async function renderRefs() {
     updateCurFilterHint();
     loadList();
   });
-  // v937 fb#472 二連 prompt() が モバイル で 詰まる 件 の 修正。 インライン フォーム トグル に。
+  // v937 fb#472 二連 prompt() がモバイルで詰まる件の修正。インラインフォームトグルに。
   const colForm = document.getElementById('rf-col-form');
   const colNameInput = document.getElementById('rf-col-name');
   document.getElementById('rf-col-new').addEventListener('click', () => {
@@ -254,7 +255,7 @@ export async function renderRefs() {
   document.getElementById('rf-col-create').addEventListener('click', submitCol);
   colNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitCol(); });
   document.getElementById('rf-save-search').addEventListener('click', async () => {
-    const name = prompt('この 検索条件 に 名前 を');
+    const name = prompt('この検索条件に名前を');
     if (!name) return;
     try {
       await post('/api/refs/saved_searches', { name, filter: {
@@ -263,7 +264,7 @@ export async function renderRefs() {
         uncategorized: listState.uncategorized, trash: listState.trash,
       } });
       await loadSavedSearchesChips();
-      toast('保存 完了');
+      toast('保存完了');
     } catch (e) { toast('失敗: ' + e.message); }
   });
   await Promise.all([loadTagsChips(), loadCollectionsChips(), loadSavedSearchesChips()]);
@@ -290,7 +291,7 @@ async function loadCollectionsChips() {
   try {
     const d = await get('/api/refs/collections');
     const items = d.items || [];
-    if (!items.length) { root.innerHTML = '<span class="muted" style="font-size:11px">まだ ありません</span>'; return; }
+    if (!items.length) { root.innerHTML = '<span class="muted" style="font-size:11px">まだありません</span>'; return; }
     const meId = Number(state.me?.id || 0);
     const isAdmin = state.me?.role === 'admin';
     // 「未分類」 chip + 各 collection chip
@@ -320,7 +321,7 @@ async function loadCollectionsChips() {
     root.querySelectorAll('.rf-col-del').forEach(x => {
       x.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        if (!confirm('この コレクション を 削除? (中の 文献 は 残ります)')) return;
+        if (!confirm('このコレクションを削除? (中の文献は残ります)')) return;
         try { await del('/api/refs/collections/' + x.dataset.cid); await loadCollectionsChips(); toast('削除'); }
         catch (e) { toast('失敗: ' + e.message); }
       });
@@ -351,7 +352,7 @@ async function loadSavedSearchesChips() {
           sort: f.sort||'new', collection_id: f.collection_id||0,
           uncategorized: !!f.uncategorized, trash: !!f.trash,
         });
-        // input 値 も 更新
+        // input 値も更新
         document.getElementById('rf-q').value = listState.q;
         document.getElementById('rf-status').value = listState.status;
         document.getElementById('rf-year').value = listState.year || '';
@@ -381,7 +382,7 @@ async function loadTagsChips() {
       return `<button class="btn rf-tag" data-tag="${escapeHtml(t.tag)}" style="font-size:11px; padding:2px 8px; ${isActive?'background:#a855f7; color:#fff; border-color:#a855f7':''}">
         ${escapeHtml(t.tag)} <span class="hint-sm">(${t.count})</span>
       </button>`;
-    }).join('') + (listState.tag ? `<button id="rf-tag-clear" class="btn" style="font-size:11px; padding:2px 8px">✕ タグ 解除</button>` : '');
+    }).join('') + (listState.tag ? `<button id="rf-tag-clear" class="btn" style="font-size:11px; padding:2px 8px">✕ タグ解除</button>` : '');
     root.querySelectorAll('.rf-tag').forEach(b => {
       b.addEventListener('click', () => {
         listState.tag = b.dataset.tag === listState.tag ? '' : b.dataset.tag;
@@ -412,12 +413,12 @@ async function loadList() {
     const items = d.items || [];
     if (!items.length) {
       root.innerHTML = `<div class="muted" style="padding:20px; text-align:center">
-        ${listState.q || listState.tag || listState.year || listState.status ? '該当なし。 条件 を 変えて 試して' : 'まだ 何も 登録 されて いません。 「＋ 文献を 追加」 から どうぞ'}
+        ${listState.q || listState.tag || listState.year || listState.status ? '該当なし。条件を変えて試して' : 'まだ何も登録されていません。「＋文献を追加」からどうぞ'}
       </div>`;
       return;
     }
     root.innerHTML = items.map(it => renderTile(it)).join('');
-    // v935 タイル 内 の タグ chip クリック で フィルタ 発火 (親 <a> の navigate を 止める)
+    // v935 タイル内のタグ chip クリックでフィルタ発火 (親 <a> の navigate を止める)
     root.querySelectorAll('.rf-tile-tag').forEach(b => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -436,8 +437,8 @@ async function loadList() {
 }
 
 function renderTile(it) {
-  // v935 タグ chip を button 化 + data-tag で 拾える ように。 親 <a> の navigate を stopPropagation で 止める。
-  //   flex:0 0 auto で 引き伸ばされ ない よう に (.row > * が flex:1 1 auto を 効かせる ので inline style で 上書き)。
+  // v935 タグ chip を button 化 + data-tag で拾えるように。親 <a> の navigate を stopPropagation で止める。
+  //   flex:0 0 auto で引き伸ばされないように (.row > * が flex:1 1 auto を効かせるので inline style で上書き)。
   const tagsHtml = (it.tags || []).map(t =>
     `<button class="tag rf-tile-tag" data-tag="${escapeHtml(t)}" style="flex:0 0 auto; background:#f3e8ff; color:#7b3fa0; font-size:11px; padding:1px 6px; border-radius:8px; border:none; cursor:pointer; font-family:inherit; line-height:1.4">${escapeHtml(t)}</button>`
   ).join(' ');
@@ -467,16 +468,16 @@ function renderTile(it) {
     </a>`;
 }
 
-// ─── 新規 追加 ────────────────────────────────────────
+// ─── 新規追加 ────────────────────────────────────────
 
 export async function renderRefsNew() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
       <a href="#/refs" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">📚 文献 を 追加</h2>
+      <h2 style="margin:6px 0 0">📚 文献を追加</h2>
       <div class="hint-sm" style="font-size:11px; margin-top:4px">
-        📖 <a href="#/refs/bookmarklet" style="color:var(--primary)">ブラウザ 用 bookmarklet を 作る</a> — 論文 ページ で 1 click 追加
+        📖 <a href="#/refs/bookmarklet" style="color:var(--primary)">ブラウザ用 bookmarklet を作る</a> — 論文ページで 1 click 追加
       </div>
     </div>
     <div class="card">
@@ -490,7 +491,7 @@ export async function renderRefsNew() {
         <button class="btn rf-tab"         data-tab="csljson" style="font-size:13px">📄 CSL-JSON</button>
         <button class="btn rf-tab"         data-tab="endnote" style="font-size:13px">📚 EndNote XML</button>
         <button class="btn rf-tab"         data-tab="ss"      style="font-size:13px">🔬 Semantic Scholar</button>
-        <button class="btn rf-tab"         data-tab="manual"  style="font-size:13px">手動 入力</button>
+        <button class="btn rf-tab"         data-tab="manual"  style="font-size:13px">手動入力</button>
       </div>
 
       <!-- DOI -->
@@ -515,7 +516,7 @@ export async function renderRefsNew() {
 
       <!-- URL -->
       <div id="rf-tab-url" class="rf-tab-panel" hidden>
-        <label class="field"><span class="lbl">🔗 URL (DOI か arXiv ID を 含む)</span>
+        <label class="field"><span class="lbl">🔗 URL (DOI か arXiv ID を含む)</span>
           <input type="url" id="rf-url" placeholder="例: https://dl.acm.org/doi/10.1145/...">
         </label>
         <div class="row" style="gap:6px; justify-content:flex-end">
@@ -523,9 +524,9 @@ export async function renderRefsNew() {
         </div>
       </div>
 
-      <!-- PDF から 抽出 -->
+      <!-- PDF から抽出 -->
       <div id="rf-tab-pdf" class="rf-tab-panel" hidden>
-        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">PDF を アップロード → pdftotext で 抽出 → DOI/arXiv 検出 or OpenAI で metadata 抽出。 gpt-5-mini を 使う (~5pt 相当)。</div>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">PDF をアップロード → pdftotext で抽出 → DOI/arXiv 検出 or OpenAI で metadata 抽出。 gpt-5-mini を使う (~5pt 相当)。</div>
         <label class="field"><span class="lbl">📄 PDF ファイル</span>
           <input type="file" id="rf-pdf-input" accept="application/pdf,.pdf">
         </label>
@@ -536,7 +537,7 @@ export async function renderRefsNew() {
 
       <!-- BibTeX / RIS 一括 import -->
       <div id="rf-tab-import" class="rf-tab-panel" hidden>
-        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">Zotero / Mendeley 等 から export した .bib または .ris を 一括 追加。 同 DOI は skip。</div>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">Zotero / Mendeley 等から export した .bib または .ris を一括追加。同 DOI は skip。</div>
         <label class="field"><span class="lbl">📥 .bib or .ris ファイル</span>
           <input type="file" id="rf-bulk-file" accept=".bib,.bibtex,.ris,text/plain">
         </label>
@@ -550,28 +551,28 @@ export async function renderRefsNew() {
       <!-- Zotero API 直接連携 -->
       <div id="rf-tab-zotero" class="rf-tab-panel" hidden>
         <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">
-          Zotero に 貯めた 文献 を API 経由 で 直接 取り込み。 <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener" style="color:var(--primary)">🔗 API key を 発行</a> (「Personal Library」 に read 権限 でOK) → 下 に 貼る。 個人 library なら user_id、 group library なら group_id を 入れる (どちらも <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener" style="color:var(--primary)">同ページ</a> に 数字 で 表示)。
+          Zotero に貯めた文献を API 経由で直接取り込み。 <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener" style="color:var(--primary)">🔗 API key を発行</a> (「Personal Library」に read 権限でOK) → 下に貼る。個人 library なら user_id、 group library なら group_id を入れる (どちらも <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener" style="color:var(--primary)">同ページ</a> に数字で表示)。
         </div>
         <label class="field"><span class="lbl">🔑 Zotero API Key</span>
-          <input type="password" id="rf-zt-key" placeholder="P9AbCd... (Zotero で 発行)">
+          <input type="password" id="rf-zt-key" placeholder="P9AbCd... (Zotero で発行)">
         </label>
         <div class="row" style="gap:6px">
           <label class="field" style="flex:1"><span class="lbl">👤 user_id (個人)</span>
             <input type="text" id="rf-zt-user" placeholder="例: 12345">
           </label>
-          <label class="field" style="flex:1"><span class="lbl">👥 group_id (group library の 場合、 どちらか 一方)</span>
+          <label class="field" style="flex:1"><span class="lbl">👥 group_id (group library の場合、どちらか一方)</span>
             <input type="text" id="rf-zt-group" placeholder="例: 67890">
           </label>
         </div>
-        <label class="field"><span class="lbl">🔢 1 ページ 分 の 件数 (最大 100)</span>
+        <label class="field"><span class="lbl">🔢 1 ページ分の件数 (最大 100)</span>
           <input type="number" id="rf-zt-limit" min="10" max="100" value="100" style="width:120px">
         </label>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px">
-            <input type="checkbox" id="rf-zt-fetch-all" checked> 🔁 全件 取得 (ページング 自動 追随)
+            <input type="checkbox" id="rf-zt-fetch-all" checked> 🔁 全件取得 (ページング自動追随)
           </label>
           <label style="display:inline-flex; gap:6px; align-items:center; font-size:12px">
-            <input type="checkbox" id="rf-zt-sync-pdfs"> 📄 PDF 添付 も 同期 (時間 かかる)
+            <input type="checkbox" id="rf-zt-sync-pdfs"> 📄 PDF 添付も同期 (時間かかる)
           </label>
         </div>
         <div class="row" style="gap:6px">
@@ -582,7 +583,7 @@ export async function renderRefsNew() {
 
       <!-- CSL-JSON ファイル -->
       <div id="rf-tab-csljson" class="rf-tab-panel" hidden>
-        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">Zotero / Papers 等 で export した CSL-JSON (.json) を upload。 一番 情報 が 残る 形式。</div>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">Zotero / Papers 等で export した CSL-JSON (.json) を upload。一番情報が残る形式。</div>
         <label class="field"><span class="lbl">📥 .json (CSL-JSON) ファイル</span>
           <input type="file" id="rf-csl-file" accept=".json,application/json">
         </label>
@@ -595,7 +596,7 @@ export async function renderRefsNew() {
       <!-- Semantic Scholar 検索 -->
       <div id="rf-tab-ss" class="rf-tab-panel" hidden>
         <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">
-          <a href="https://www.semanticscholar.org" target="_blank" rel="noopener" style="color:var(--primary)">Semantic Scholar</a> の 200M+ 論文 データベース を キーワード 検索。 結果 から 「＋ 追加」 で refs に。 認証 不要。
+          <a href="https://www.semanticscholar.org" target="_blank" rel="noopener" style="color:var(--primary)">Semantic Scholar</a> の 200M+ 論文データベースをキーワード検索。結果から「＋追加」で refs に。認証不要。
         </div>
         <label class="field"><span class="lbl">🔍 キーワード</span>
           <input type="text" id="rf-ss-q" placeholder="例: eye tracking mixed reality">
@@ -613,7 +614,7 @@ export async function renderRefsNew() {
 
       <!-- EndNote XML -->
       <div id="rf-tab-endnote" class="rf-tab-panel" hidden>
-        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">EndNote / Mendeley から export した .xml を upload。 record 要素 を 拾って 一括 追加。</div>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">EndNote / Mendeley から export した .xml を upload。 record 要素を拾って一括追加。</div>
         <label class="field"><span class="lbl">📥 .xml ファイル</span>
           <input type="file" id="rf-en-file" accept=".xml,text/xml,application/xml">
         </label>
@@ -625,13 +626,13 @@ export async function renderRefsNew() {
 
       <!-- 手動 -->
       <div id="rf-tab-manual" class="rf-tab-panel" hidden>
-        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">DOI や arXiv ID が 無い 場合。 下の フォーム に 直接 入力 して 「登録」。</div>
+        <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-bottom:6px">DOI や arXiv ID が無い場合。下のフォームに直接入力して「登録」。</div>
       </div>
 
-      <!-- 取得 結果 warning -->
+      <!-- 取得結果 warning -->
       <div id="rf-dup-warn" hidden></div>
 
-      <!-- 共通 詳細 フォーム -->
+      <!-- 共通詳細フォーム -->
       <div id="rf-form" style="margin-top:10px; padding:10px; background:#f9fafb; border-radius:6px">
         <label class="field"><span class="lbl">🏷 種類</span>
           <select id="rf-f-item-type" style="font-size:13px">
@@ -641,8 +642,8 @@ export async function renderRefsNew() {
         <label class="field"><span class="lbl">タイトル *</span>
           <input type="text" id="rf-f-title" maxlength="1000">
         </label>
-        <label class="field"><span class="lbl">著者 (カンマ 区切り)</span>
-          <input type="text" id="rf-f-authors" placeholder="例: 田中 太郎, John Smith, 山田 花子">
+        <label class="field"><span class="lbl">著者 (カンマ区切り)</span>
+          <input type="text" id="rf-f-authors" placeholder="例: 田中太郎, John Smith, 山田花子">
         </label>
         <div class="row" style="gap:6px">
           <label class="field" style="flex:1"><span class="lbl">年</span>
@@ -658,7 +659,7 @@ export async function renderRefsNew() {
         <label class="field"><span class="lbl">抄録</span>
           <textarea id="rf-f-abstract" rows="4" style="width:100%; box-sizing:border-box; font-size:13px"></textarea>
         </label>
-        <label class="field"><span class="lbl">タグ (カンマ 区切り)</span>
+        <label class="field"><span class="lbl">タグ (カンマ区切り)</span>
           <input type="text" id="rf-f-tags" placeholder="例: HCI, 視線, MR">
         </label>
         <details style="margin-top:6px">
@@ -680,13 +681,13 @@ export async function renderRefsNew() {
         <input type="hidden" id="rf-f-force" value="0">
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
           <a href="#/refs" class="btn">キャンセル</a>
-          <button id="rf-save" class="primary">＋ 登録</button>
+          <button id="rf-save" class="primary">＋登録</button>
         </div>
       </div>
     </div>
   `;
 
-  // タブ 切替
+  // タブ切替
   document.querySelectorAll('.rf-tab').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.rf-tab').forEach(x => x.classList.remove('primary'));
@@ -705,7 +706,7 @@ export async function renderRefsNew() {
     document.getElementById('rf-f-url').value      = meta.url || '';
     document.getElementById('rf-f-doi').value      = meta.doi || '';
     document.getElementById('rf-f-arxiv').value    = meta.arxiv_id || '';
-    // v929 item_type auto (crossref type から マップ)
+    // v929 item_type auto (crossref type からマップ)
     const t = (meta.type || '').toLowerCase();
     let mapped = 'article';
     if (/proceedings/.test(t)) mapped = 'conference';
@@ -723,19 +724,19 @@ export async function renderRefsNew() {
     warn.hidden = false;
     warn.innerHTML = `
       <div style="background:linear-gradient(135deg, #fef3c7, #fde68a); border:2px solid #f59e0b; border-radius:10px; padding:12px 14px; margin:8px 0">
-        <div style="font-size:15px; font-weight:700; color:#78350f">⚠️ この 文献 は 既に 登録済</div>
+        <div style="font-size:15px; font-weight:700; color:#78350f">⚠️ この文献は既に登録済</div>
         <div style="font-size:13px; color:#78350f; margin-top:4px">
           「<b>${escapeHtml(existing.title)}</b>」 (id=${existing.id})
         </div>
         <div class="row" style="gap:6px; margin-top:8px">
-          <a href="#/refs/${existing.id}" class="btn primary" style="font-size:12px">📖 既存 詳細 を 見る</a>
-          <button id="rf-dup-force-btn" class="btn" style="font-size:12px">上書き 覚悟 で 続行</button>
+          <a href="#/refs/${existing.id}" class="btn primary" style="font-size:12px">📖 既存詳細を見る</a>
+          <button id="rf-dup-force-btn" class="btn" style="font-size:12px">上書き覚悟で続行</button>
         </div>
       </div>`;
     document.getElementById('rf-dup-force-btn').addEventListener('click', () => {
       warn.hidden = true; warn.innerHTML = '';
       document.getElementById('rf-f-force').value = '1';
-      toast('force フラグ ON、 登録 進めて OK');
+      toast('force フラグ ON、登録進めて OK');
     });
   };
 
@@ -744,28 +745,28 @@ export async function renderRefsNew() {
       const r = await post('/api/refs/' + endpoint, payload);
       showDup(r.existing || null);
       fillFormFromMeta(r.meta || {});
-      toast('取得 完了、 内容 を 確認 して 「登録」');
-    } catch (e) { toast('取得 失敗: ' + e.message); }
+      toast('取得完了、内容を確認して「登録」');
+    } catch (e) { toast('取得失敗: ' + e.message); }
   };
   document.getElementById('rf-fetch-doi').addEventListener('click', () => {
     const doi = document.getElementById('rf-doi').value.trim();
-    if (!doi) { toast('DOI を 入れて'); return; }
+    if (!doi) { toast('DOI を入れて'); return; }
     doFetch('import_doi', { doi });
   });
   document.getElementById('rf-fetch-arxiv').addEventListener('click', () => {
     const arxiv_id = document.getElementById('rf-arxiv').value.trim();
-    if (!arxiv_id) { toast('arXiv ID を 入れて'); return; }
+    if (!arxiv_id) { toast('arXiv ID を入れて'); return; }
     doFetch('import_arxiv', { arxiv_id });
   });
   document.getElementById('rf-fetch-url').addEventListener('click', () => {
     const url = document.getElementById('rf-url').value.trim();
-    if (!url) { toast('URL を 入れて'); return; }
+    if (!url) { toast('URL を入れて'); return; }
     doFetch('import_url', { url });
   });
 
   document.getElementById('rf-save').addEventListener('click', async () => {
     const title = document.getElementById('rf-f-title').value.trim();
-    if (!title) { toast('タイトル は 必須'); return; }
+    if (!title) { toast('タイトルは必須'); return; }
     const extra = {};
     ['isbn','pages','volume','issue','publisher','editor','edition'].forEach(k => {
       const v = document.getElementById('rf-ex-' + k)?.value.trim() || '';
@@ -787,15 +788,15 @@ export async function renderRefsNew() {
     if (document.getElementById('rf-f-force').value === '1') payload.force = 1;
     try {
       const r = await post('/api/refs', payload);
-      toast('登録 完了');
+      toast('登録完了');
       navigate('#/refs/' + r.id);
-    } catch (e) { toast('登録 失敗: ' + e.message); }
+    } catch (e) { toast('登録失敗: ' + e.message); }
   });
 
   // v927 track A: PDF から metadata 抽出
   document.getElementById('rf-fetch-pdf')?.addEventListener('click', async () => {
     const f = document.getElementById('rf-pdf-input').files?.[0];
-    if (!f) { toast('PDF を 選んで'); return; }
+    if (!f) { toast('PDF を選んで'); return; }
     if (f.size > 30 * 1024 * 1024) { toast('30MB まで'); return; }
     const btn = document.getElementById('rf-fetch-pdf');
     btn.disabled = true; btn.textContent = '⏳ 抽出中…';
@@ -812,8 +813,8 @@ export async function renderRefsNew() {
       fillFormFromMeta(j.meta || {});
       const methodLabel = j.method === 'pdf_doi_crossref' ? 'PDF から DOI 発見 + crossref'
                        : j.method === 'pdf_arxiv_api'    ? 'PDF から arXiv ID 発見 + arxiv API'
-                       :                                   'OpenAI が 先頭 テキスト から 抽出';
-      toast(`抽出 完了 (${methodLabel})、 内容 確認 して 「登録」`);
+                       :                                   'OpenAI が先頭テキストから抽出';
+      toast(`抽出完了 (${methodLabel})、内容確認して「登録」`);
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '🔍 metadata 抽出'; }
   });
@@ -821,7 +822,7 @@ export async function renderRefsNew() {
   // v927 track A: BibTeX / RIS 一括 import
   const doBulk = async (endpoint) => {
     const f = document.getElementById('rf-bulk-file').files?.[0];
-    if (!f) { toast('ファイル を 選んで'); return; }
+    if (!f) { toast('ファイルを選んで'); return; }
     if (f.size > 5 * 1024 * 1024) { toast('5MB まで'); return; }
     const btn = document.getElementById(endpoint === 'import_bibtex' ? 'rf-do-bibtex' : 'rf-do-ris');
     btn.disabled = true; btn.textContent = '⏳ 処理中…';
@@ -837,7 +838,7 @@ export async function renderRefsNew() {
       const res = document.getElementById('rf-bulk-result');
       res.innerHTML = `
         <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px; color:#166534">
-          <div class="bold">✅ ${j.added} 件 追加、 ${j.skipped} 件 skip (計 ${j.total} 件)</div>
+          <div class="bold">✅ ${j.added} 件追加、 ${j.skipped} 件 skip (計 ${j.total} 件)</div>
           <div style="margin-top:6px; max-height:200px; overflow:auto; font-size:12px">
             ${(j.results || []).map(r =>
               r.status === 'added'
@@ -847,7 +848,7 @@ export async function renderRefsNew() {
                   : `<div style="color:#7f1d1d">⚠ skip: ${escapeHtml(r.reason || '')}</div>`
             ).join('')}
           </div>
-          <a href="#/refs" class="btn primary" style="font-size:12px; margin-top:6px">📖 一覧 で 確認</a>
+          <a href="#/refs" class="btn primary" style="font-size:12px; margin-top:6px">📖 一覧で確認</a>
         </div>`;
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = endpoint === 'import_bibtex' ? '🔽 BibTeX として import' : '🔽 RIS として import'; }
@@ -859,7 +860,7 @@ export async function renderRefsNew() {
   const renderBulkResult = (elId, j) => {
     document.getElementById(elId).innerHTML = `
       <div style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:10px; color:#166534">
-        <div class="bold">✅ ${j.added} 件 追加、 ${j.skipped} 件 skip (計 ${j.total} 件)</div>
+        <div class="bold">✅ ${j.added} 件追加、 ${j.skipped} 件 skip (計 ${j.total} 件)</div>
         <div style="margin-top:6px; max-height:220px; overflow:auto; font-size:12px">
           ${(j.results || []).slice(0, 100).map(r =>
             r.status === 'added'
@@ -870,7 +871,7 @@ export async function renderRefsNew() {
           ).join('')}
           ${(j.results || []).length > 100 ? `<div class="muted" style="margin-top:4px">…他 ${(j.results||[]).length - 100} 件</div>` : ''}
         </div>
-        <a href="#/refs" class="btn primary" style="font-size:12px; margin-top:6px">📖 一覧 で 確認</a>
+        <a href="#/refs" class="btn primary" style="font-size:12px; margin-top:6px">📖 一覧で確認</a>
       </div>`;
   };
   document.getElementById('rf-do-zotero').addEventListener('click', async () => {
@@ -884,22 +885,22 @@ export async function renderRefsNew() {
     if (!user_id && !group_id) { toast('user_id か group_id を'); return; }
     const btn = document.getElementById('rf-do-zotero');
     btn.disabled = true;
-    btn.textContent = fetch_all ? '⏳ Zotero 全件 取得中… (数分 かかります)' : '⏳ Zotero と 通信中…';
+    btn.textContent = fetch_all ? '⏳ Zotero 全件取得中… (数分かかります)' : '⏳ Zotero と通信中…';
     try {
       const j = await post('/api/refs/import_zotero', {
         api_key, user_id, group_id, limit, fetch_all, sync_pdfs,
       });
       renderBulkResult('rf-zt-result', j);
       let extra = '';
-      if (j.zotero_total != null) extra += ` (Zotero 側 全 ${j.zotero_total} 件、 ${j.fetched_pages} ページ 取得)`;
-      if (sync_pdfs) extra += ` / 📄 PDF 同期: ${j.pdf_synced} 件 追加、 ${j.pdf_skipped} skip、 ${j.pdf_errors} error`;
-      toast(`✅ ${j.added} 件 追加${extra}`);
+      if (j.zotero_total != null) extra += ` (Zotero 側全 ${j.zotero_total} 件、 ${j.fetched_pages} ページ取得)`;
+      if (sync_pdfs) extra += ` / 📄 PDF 同期: ${j.pdf_synced} 件追加、 ${j.pdf_skipped} skip、 ${j.pdf_errors} error`;
+      toast(`✅ ${j.added} 件追加${extra}`);
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '🔽 Zotero から import'; }
   });
   const doBulkFile = async (endpoint, inputId, resultElId, btnId, btnTxt) => {
     const f = document.getElementById(inputId).files?.[0];
-    if (!f) { toast('ファイル を'); return; }
+    if (!f) { toast('ファイルを'); return; }
     const btn = document.getElementById(btnId);
     btn.disabled = true; btn.textContent = '⏳ 処理中…';
     try {
@@ -912,7 +913,7 @@ export async function renderRefsNew() {
       const j = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
       renderBulkResult(resultElId, j);
-      toast(`✅ ${j.added} 件 追加`);
+      toast(`✅ ${j.added} 件追加`);
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = btnTxt; }
   };
@@ -924,7 +925,7 @@ export async function renderRefsNew() {
   // v931 Semantic Scholar 検索
   document.getElementById('rf-do-ss-search').addEventListener('click', async () => {
     const query = document.getElementById('rf-ss-q').value.trim();
-    if (!query) { toast('キーワード を'); return; }
+    if (!query) { toast('キーワードを'); return; }
     const year = Number(document.getElementById('rf-ss-year').value) || 0;
     const venue = document.getElementById('rf-ss-venue').value.trim();
     const limit = Number(document.getElementById('rf-ss-limit').value) || 20;
@@ -937,11 +938,11 @@ export async function renderRefsNew() {
     finally { btn.disabled = false; btn.textContent = '🔬 検索'; }
   });
 
-  // v927/v931 bookmarklet or Semantic Scholar から の hash param 処理
+  // v927/v931 bookmarklet or Semantic Scholar からの hash param 処理
   applyRefsNewHashParams();
 }
 
-// v931 Semantic Scholar 検索結果 の 描画 (共通、 各 item に 「＋追加」 ボタン)。
+// v931 Semantic Scholar 検索結果の描画 (共通、各 item に「＋追加」ボタン)。
 function renderSsResults(elId, items, total) {
   const el = document.getElementById(elId);
   if (!items.length) { el.innerHTML = '<span class="muted">該当なし</span>'; return; }
@@ -967,14 +968,14 @@ function renderSsResults(elId, items, total) {
           url: m.url || '',
           extra: {},
         });
-        // ss_id と citation_count を enrich で 埋める
+        // ss_id と citation_count を enrich で埋める
         try { await post('/api/refs/' + r.id + '/ss_enrich', {}); } catch (_) {}
         b.textContent = '✅';
         m.existing_ref_id = r.id;
         toast('追加');
       } catch (e) {
         toast('失敗: ' + e.message);
-        b.disabled = false; b.textContent = '＋ 追加';
+        b.disabled = false; b.textContent = '＋追加';
       }
     });
   });
@@ -992,8 +993,8 @@ function renderSsCard(m, idx) {
     m.url ? `<a href="${escapeHtml(m.url)}" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px">🔗</a>` : '',
   ].filter(Boolean).join(' · ');
   const btnHtml = m.existing_ref_id
-    ? `<a href="#/refs/${m.existing_ref_id}" class="btn" style="font-size:11px; padding:2px 8px; background:#dcfce7; color:#166534; border-color:#166534">✅ 既に あり → 開く</a>`
-    : `<button class="btn primary rf-ss-add" data-i="${idx}" style="font-size:11px; padding:2px 8px">＋ 追加</button>`;
+    ? `<a href="#/refs/${m.existing_ref_id}" class="btn" style="font-size:11px; padding:2px 8px; background:#dcfce7; color:#166534; border-color:#166534">✅ 既にあり → 開く</a>`
+    : `<button class="btn primary rf-ss-add" data-i="${idx}" style="font-size:11px; padding:2px 8px">＋追加</button>`;
   return `
     <div style="padding:8px 10px; border-bottom:1px solid #f3f4f6">
       <div class="bold" style="font-size:13px; line-height:1.4">${escapeHtml(m.title || '(no title)')}</div>
@@ -1008,7 +1009,7 @@ function renderSsCard(m, idx) {
     </div>`;
 }
 
-// v927/v931 bookmarklet + SS から の 遷移 用 の hash param 処理 (単独 関数、 renderRefsNew から 呼ぶ)。
+// v927/v931 bookmarklet + SS からの遷移用の hash param 処理 (単独関数、 renderRefsNew から呼ぶ)。
 function applyRefsNewHashParams() {
   const hash = location.hash || '';
   const qStart = hash.indexOf('?');
@@ -1017,7 +1018,7 @@ function applyRefsNewHashParams() {
     const urlParam = qs.get('url');
     const titleParam = qs.get('title');
     if (urlParam) {
-      // URL タブ に 自動 切替 + 値 セット + 自動 fetch
+      // URL タブに自動切替 + 値セット + 自動 fetch
       const urlTab = document.querySelector('.rf-tab[data-tab="url"]');
       urlTab?.click();
       const urlInput = document.getElementById('rf-url');
@@ -1028,7 +1029,7 @@ function applyRefsNewHashParams() {
   }
 }
 
-// v927 添付ファイル 一覧 の 読み込み + 描画。
+// v927 添付ファイル一覧の読み込み + 描画。
 async function loadAttachments(refId) {
   const el = document.getElementById('rf-att-list');
   if (!el) return;
@@ -1036,7 +1037,7 @@ async function loadAttachments(refId) {
     const d = await get('/api/refs/' + refId + '/attachments');
     const items = d.items || [];
     const meId = Number(state.me?.id || 0);
-    if (!items.length) { el.innerHTML = '<span class="muted">まだ 追加なし</span>'; return; }
+    if (!items.length) { el.innerHTML = '<span class="muted">まだ追加なし</span>'; return; }
     const kindEmoji = { pdf: '📄', supplement: '📎', slides: '🖼', video: '🎞', image: '🖼', other: '📁' };
     el.innerHTML = items.map(a => `
       <div class="list-item" style="padding:6px 0; border-bottom:1px solid #f3f4f6; display:flex; gap:8px; align-items:center">
@@ -1051,7 +1052,7 @@ async function loadAttachments(refId) {
         if (!confirm('削除?')) return;
         try {
           await del('/api/refs/' + refId + '/attachments/' + b.dataset.id);
-          toast('削除 完了');
+          toast('削除完了');
           loadAttachments(refId);
         } catch (e) { toast('失敗: ' + e.message); }
       });
@@ -1069,7 +1070,7 @@ async function loadHighlights(refId) {
     const d = await get('/api/refs/' + refId + '/highlights');
     const items = d.items || [];
     const meId = Number(state.me?.id || 0);
-    if (!items.length) { el.innerHTML = '<span class="muted">まだ ありません。 「＋ 追加」 で PDF から の 引用 + comment を メモ 可能</span>'; return; }
+    if (!items.length) { el.innerHTML = '<span class="muted">まだありません。「＋追加」で PDF からの引用 + comment をメモ可能</span>'; return; }
     el.innerHTML = items.map(h => {
       const bg = HIGHLIGHT_COLORS[h.color] || HIGHLIGHT_COLORS.yellow;
       const col = HIGHLIGHT_TEXT_COLORS[h.color] || HIGHLIGHT_TEXT_COLORS.yellow;
@@ -1098,14 +1099,14 @@ async function loadHighlights(refId) {
   }
 }
 
-// v928 track B: 関連 論文 の 表示 + 削除。
+// v928 track B: 関連論文の表示 + 削除。
 async function loadRelated(refId) {
   const el = document.getElementById('rf-rel-list');
   if (!el) return;
   try {
     const d = await get('/api/refs/' + refId + '/relations');
     const items = d.items || [];
-    if (!items.length) { el.innerHTML = '<span class="muted">まだ ありません</span>'; return; }
+    if (!items.length) { el.innerHTML = '<span class="muted">まだありません</span>'; return; }
     el.innerHTML = items.map(r => `
       <div class="list-item" style="padding:6px 0; border-bottom:1px solid #f3f4f6; display:flex; gap:6px; align-items:center">
         <a href="#/refs/${r.other_id}" style="flex:1; color:var(--primary); text-decoration:none; font-size:13px">
@@ -1116,7 +1117,7 @@ async function loadRelated(refId) {
       </div>`).join('');
     el.querySelectorAll('.rf-rel-del').forEach(b => {
       b.addEventListener('click', async () => {
-        if (!confirm('関連 を 外す?')) return;
+        if (!confirm('関連を外す?')) return;
         try { await del('/api/refs/' + refId + '/relations/' + b.dataset.oid); toast('外しました'); loadRelated(refId); }
         catch (e) { toast('失敗: ' + e.message); }
       });
@@ -1126,14 +1127,14 @@ async function loadRelated(refId) {
   }
 }
 
-// v930 参考文献 リスト 生成 ページ
+// v930 参考文献リスト生成ページ
 export async function renderRefsBibliography() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card">
       <a href="#/refs" class="hint">← 一覧</a>
-      <h2 style="margin:6px 0 0">📚 参考文献 リスト を 生成</h2>
-      <div class="hint-sm" style="font-size:11px; margin-top:4px">複数 の 文献 を 選んで、 まとめ て CSL style で 引用 生成。 論文 の 参考文献 セクション 作成 に。</div>
+      <h2 style="margin:6px 0 0">📚 参考文献リストを生成</h2>
+      <div class="hint-sm" style="font-size:11px; margin-top:4px">複数の文献を選んで、まとめて CSL style で引用生成。論文の参考文献セクション作成に。</div>
     </div>
     <div class="card">
       <label class="field"><span class="lbl">📄 style</span>
@@ -1148,41 +1149,41 @@ export async function renderRefsBibliography() {
         </select>
       </label>
       <div class="row" style="gap:6px; margin-bottom:8px; flex-wrap:wrap">
-        <button class="btn primary rfb-tab" data-tab="collection" style="font-size:13px">📁 コレクション から</button>
-        <button class="btn rfb-tab" data-tab="tag" style="font-size:13px">🏷 タグ から</button>
+        <button class="btn primary rfb-tab" data-tab="collection" style="font-size:13px">📁 コレクションから</button>
+        <button class="btn rfb-tab" data-tab="tag" style="font-size:13px">🏷 タグから</button>
         <button class="btn rfb-tab" data-tab="ids" style="font-size:13px">✍ ID 直接指定</button>
       </div>
       <div id="rfb-panel-collection" class="rfb-panel">
-        <label class="field"><span class="lbl">📁 コレクション を 選択</span>
+        <label class="field"><span class="lbl">📁 コレクションを選択</span>
           <select id="rfb-col-select" style="font-size:13px">
             <option value="">読み込み中…</option>
           </select>
         </label>
       </div>
       <div id="rfb-panel-tag" class="rfb-panel" hidden>
-        <label class="field"><span class="lbl">🏷 タグ を 入力</span>
+        <label class="field"><span class="lbl">🏷 タグを入力</span>
           <input type="text" id="rfb-tag-input" placeholder="例: HCI">
         </label>
       </div>
       <div id="rfb-panel-ids" class="rfb-panel" hidden>
-        <label class="field"><span class="lbl">🔢 ref ID を カンマ 区切り で 入力</span>
+        <label class="field"><span class="lbl">🔢 ref ID をカンマ区切りで入力</span>
           <textarea id="rfb-ids-input" rows="3" placeholder="例: 12, 45, 67, 89"></textarea>
         </label>
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="rfb-recommend" class="btn" style="background:#fef3c7; color:#78350f; border-color:#78350f">🎯 SS で 関連論文 おすすめ</button>
+        <button id="rfb-recommend" class="btn" style="background:#fef3c7; color:#78350f; border-color:#78350f">🎯 SS で関連論文おすすめ</button>
         <button id="rfb-gen" class="btn primary">📚 生成</button>
       </div>
     </div>
-    <!-- v931 SS 推薦 結果 -->
+    <!-- v931 SS 推薦結果 -->
     <div id="rfb-rec-result" class="card" hidden>
-      <div class="bold" style="font-size:13px; margin-bottom:6px; color:#78350f">🔬 Semantic Scholar が おすすめ する 論文</div>
+      <div class="bold" style="font-size:13px; margin-bottom:6px; color:#78350f">🔬 Semantic Scholar がおすすめする論文</div>
       <div id="rfb-rec-list"></div>
     </div>
     <div id="rfb-result" class="card" hidden>
       <div class="row center" style="gap:6px; margin-bottom:6px">
         <div class="bold" style="font-size:13px">結果 (<span id="rfb-count">0</span> 件)</div>
-        <button id="rfb-copy" class="btn primary" style="font-size:11px; padding:2px 8px; margin-left:auto">📋 全部 コピー</button>
+        <button id="rfb-copy" class="btn primary" style="font-size:11px; padding:2px 8px; margin-left:auto">📋 全部コピー</button>
       </div>
       <textarea id="rfb-out" readonly style="width:100%; box-sizing:border-box; min-height:300px; font-family:monospace; font-size:12px"></textarea>
     </div>
@@ -1195,7 +1196,7 @@ export async function renderRefsBibliography() {
       document.getElementById('rfb-panel-' + b.dataset.tab).hidden = false;
     });
   });
-  // コレクション ロード
+  // コレクションロード
   try {
     const d = await get('/api/refs/collections');
     const sel = document.getElementById('rfb-col-select');
@@ -1209,10 +1210,10 @@ export async function renderRefsBibliography() {
     const activeTab = document.querySelector('.rfb-tab.primary')?.dataset.tab || 'collection';
     if (activeTab === 'collection') {
       payload.collection_id = Number(document.getElementById('rfb-col-select').value);
-      if (!payload.collection_id) { toast('コレクション を'); return; }
+      if (!payload.collection_id) { toast('コレクションを'); return; }
     } else if (activeTab === 'tag') {
       payload.tag = document.getElementById('rfb-tag-input').value.trim();
-      if (!payload.tag) { toast('タグ を'); return; }
+      if (!payload.tag) { toast('タグを'); return; }
     } else {
       const raw = document.getElementById('rfb-ids-input').value;
       payload.ref_ids = raw.split(/[,\s]+/).map(s => Number(s.trim())).filter(Boolean);
@@ -1225,7 +1226,7 @@ export async function renderRefsBibliography() {
       document.getElementById('rfb-result').hidden = false;
       document.getElementById('rfb-count').textContent = r.count || 0;
       document.getElementById('rfb-out').value = r.bibliography || '';
-      toast('✅ 生成 完了 (' + (r.count || 0) + ' 件)');
+      toast('✅ 生成完了 (' + (r.count || 0) + ' 件)');
     } catch (e) { toast('失敗: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '📚 生成'; }
   });
@@ -1235,25 +1236,25 @@ export async function renderRefsBibliography() {
   });
   // v931 SS 推薦
   document.getElementById('rfb-recommend').addEventListener('click', async () => {
-    // まず ref_ids を 集める
+    // まず ref_ids を集める
     const activeTab = document.querySelector('.rfb-tab.primary')?.dataset.tab || 'collection';
     let refIds = [];
     if (activeTab === 'ids') {
       refIds = document.getElementById('rfb-ids-input').value.split(/[,\s]+/).map(s => Number(s.trim())).filter(Boolean);
     } else if (activeTab === 'collection') {
       const cid = Number(document.getElementById('rfb-col-select').value);
-      if (!cid) { toast('コレクション を'); return; }
+      if (!cid) { toast('コレクションを'); return; }
       const cd = await get('/api/refs?collection_id=' + cid + '&limit=100');
       refIds = (cd.items || []).map(x => x.id);
     } else {
       const tag = document.getElementById('rfb-tag-input').value.trim();
-      if (!tag) { toast('タグ を'); return; }
+      if (!tag) { toast('タグを'); return; }
       const td = await get('/api/refs?tag=' + encodeURIComponent(tag) + '&limit=100');
       refIds = (td.items || []).map(x => x.id);
     }
-    if (!refIds.length) { toast('種 に する refs が ない'); return; }
+    if (!refIds.length) { toast('種にする refs がない'); return; }
     const btn = document.getElementById('rfb-recommend');
-    btn.disabled = true; btn.textContent = '⏳ SS に 問い 合わせ中…';
+    btn.disabled = true; btn.textContent = '⏳ SS に問い合わせ中…';
     try {
       const r = await post('/api/refs/ss_recommend', { ref_ids: refIds, limit: 30 });
       const items = r.items || [];
@@ -1281,43 +1282,43 @@ export async function renderRefsBibliography() {
               m.existing_ref_id = rr.id;
             } catch (e) {
               toast('失敗: ' + e.message);
-              b.disabled = false; b.textContent = '＋ 追加';
+              b.disabled = false; b.textContent = '＋追加';
             }
           });
         });
       }
-      toast(`🎯 ${items.length} 件 おすすめ`);
+      toast(`🎯 ${items.length} 件おすすめ`);
     } catch (e) { toast('失敗: ' + e.message); }
-    finally { btn.disabled = false; btn.textContent = '🎯 SS で 関連論文 おすすめ'; }
+    finally { btn.disabled = false; btn.textContent = '🎯 SS で関連論文おすすめ'; }
   });
 }
 
-// v927 bookmarklet 生成 ページ
+// v927 bookmarklet 生成ページ
 export async function renderRefsBookmarklet() {
   const app = document.getElementById('app');
   const origin = location.origin;
   const bmCode = `javascript:(function(){var u=encodeURIComponent(location.href);var t=encodeURIComponent(document.title||'');window.open('${origin}/#/refs/new?url='+u+'&title='+t,'_blank');})();`;
   app.innerHTML = `
     <div class="card">
-      <a href="#/refs/new" class="hint">← 追加 に 戻る</a>
+      <a href="#/refs/new" class="hint">← 追加に戻る</a>
       <h2 style="margin:6px 0 0">📖 refs Bookmarklet</h2>
-      <div class="hint-sm" style="font-size:12px; margin-top:4px">論文 ページ を 開いた まま 1 クリック で LabPay に 追加。</div>
+      <div class="hint-sm" style="font-size:12px; margin-top:4px">論文ページを開いたまま 1 クリックで LabPay に追加。</div>
     </div>
     <div class="card">
-      <div class="bold" style="font-size:14px; margin-bottom:6px">1. 下の リンク を ブラウザ の ブックマーク バー に ドラッグ</div>
-      <a href="${bmCode}" style="display:inline-block; padding:8px 16px; background:#a855f7; color:#fff; text-decoration:none; border-radius:6px; font-weight:700">📖 refs に 追加</a>
-      <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:6px">ドラッグ が うまく いか ない 時 は 下の コード を コピー して ブックマーク の URL 欄 に 貼り 付け:</div>
+      <div class="bold" style="font-size:14px; margin-bottom:6px">1. 下のリンクをブラウザのブックマークバーにドラッグ</div>
+      <a href="${bmCode}" style="display:inline-block; padding:8px 16px; background:#a855f7; color:#fff; text-decoration:none; border-radius:6px; font-weight:700">📖 refs に追加</a>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-top:6px">ドラッグがうまくいかない時は下のコードをコピーしてブックマークの URL 欄に貼り付け:</div>
       <textarea readonly style="width:100%; box-sizing:border-box; font-family:monospace; font-size:11px; margin-top:4px; height:80px">${escapeHtml(bmCode)}</textarea>
     </div>
     <div class="card">
       <div class="bold" style="font-size:14px; margin-bottom:6px">2. 使い方</div>
       <ol style="font-size:13px; line-height:1.8">
-        <li>tabelog みたい に <b>論文 の 出版社 ページ</b> (ACM DL / IEEE / arXiv / Nature 等) を 開く</li>
-        <li>ブックマーク バー の 「📖 refs に 追加」 を クリック</li>
-        <li>LabPay が 新規 タブ で 開き、 URL 自動 fetch → DOI/arXiv 抽出 → metadata が 埋まる</li>
-        <li>タグ を 付けて 「登録」</li>
+        <li>tabelog みたいに <b>論文の出版社ページ</b> (ACM DL / IEEE / arXiv / Nature 等) を開く</li>
+        <li>ブックマークバーの「📖 refs に追加」をクリック</li>
+        <li>LabPay が新規タブで開き、 URL 自動 fetch → DOI/arXiv 抽出 → metadata が埋まる</li>
+        <li>タグを付けて「登録」</li>
       </ol>
-      <div class="hint-sm" style="font-size:11px; color:#6b7280">対応 サイト: DOI or arXiv ID を URL に 含む 論文 ページ。 認識 できない 場合 は 「URL」 タブ に URL だけ 埋まった 状態 で 手動 補完 する 形 に。</div>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280">対応サイト: DOI or arXiv ID を URL に含む論文ページ。認識できない場合は「URL」タブに URL だけ埋まった状態で手動補完する形に。</div>
     </div>
   `;
 }
@@ -1335,7 +1336,7 @@ export async function renderRefsDetail({ params }) {
     <div id="rf-d-body"></div>
   `;
   try {
-    await initLabUsersCache();     // v1006 著者アバター 用
+    await initLabUsersCache();     // v1006 著者アバター用
     const d = await get('/api/refs/' + id);
     paintDetail(id, d);
   } catch (e) {
@@ -1352,21 +1353,21 @@ function paintDetail(id, d) {
   const idLinks = [];
   if (d.doi)      idLinks.push(`<a href="https://doi.org/${escapeHtml(d.doi)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 DOI: ${escapeHtml(d.doi)}</a>`);
   if (d.arxiv_id) idLinks.push(`<a href="https://arxiv.org/abs/${escapeHtml(d.arxiv_id)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 arXiv: ${escapeHtml(d.arxiv_id)}</a>`);
-  if (d.url && d.url !== `https://doi.org/${d.doi}`) idLinks.push(`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 出版社 リンク</a>`);
-  // v1006 タグ を クリック 可能に (中村さん要望「論文ページ に ある キーワード も クリック 可能に」)。
-  //   #/refs?tag=<t> に 遷移 → renderRefs 側 の URL パラメータ 読み取りで tag フィルタが 効く。
+  if (d.url && d.url !== `https://doi.org/${d.doi}`) idLinks.push(`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener" style="color:var(--primary)">🔗 出版社リンク</a>`);
+  // v1006 タグをクリック可能に (中村さん要望「論文ページにあるキーワードもクリック可能に」)。
+  //   #/refs?tag=<t> に遷移 → renderRefs 側の URL パラメータ読み取りで tag フィルタが効く。
   const tagsHtml = (d.tags || []).map(t =>
     `<button data-rf-tag="${escapeHtml(t)}" class="tag" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 8px; border-radius:10px; border:1px solid #d8b4fe; cursor:pointer; font-family:inherit">${escapeHtml(t)}</button>`
   ).join(' ');
   const pdfBlock = d.pdf_path
-    ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" class="btn" style="font-size:12px; padding:3px 10px">📄 PDF を 開く</a>`
-    : `<button id="rf-pdf-upload" class="btn" style="font-size:12px; padding:3px 10px">📎 PDF を 添付</button>
+    ? `<a href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" class="btn" style="font-size:12px; padding:3px 10px">📄 PDF を開く</a>`
+    : `<button id="rf-pdf-upload" class="btn" style="font-size:12px; padding:3px 10px">📎 PDF を添付</button>
        <input type="file" id="rf-pdf-file" accept="application/pdf,.pdf" hidden>`;
   const bibBtn = `<button id="rf-bibtex-btn" class="btn" style="font-size:12px; padding:3px 10px">📋 BibTeX コピー</button>`;
-  // v929: 引用 生成 dropdown
+  // v929: 引用生成 dropdown
   const citeBtn = `
     <div style="display:inline-flex; gap:2px; align-items:stretch">
-      <button id="rf-cite-btn" class="btn" style="font-size:12px; padding:3px 8px; border-top-right-radius:0; border-bottom-right-radius:0">📄 引用 コピー</button>
+      <button id="rf-cite-btn" class="btn" style="font-size:12px; padding:3px 8px; border-top-right-radius:0; border-bottom-right-radius:0">📄 引用コピー</button>
       <select id="rf-cite-style" style="font-size:11px; padding:2px 4px; border-left:0; border-top-left-radius:0; border-bottom-left-radius:0">
         <option value="apa">APA 7</option>
         <option value="mla">MLA 9</option>
@@ -1407,7 +1408,7 @@ function paintDetail(id, d) {
     ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:4px">抄録</div><div style="font-size:13px; line-height:1.7; white-space:pre-wrap">${escapeHtml(d.abstract)}</div></div>`
     : '';
 
-  // 自分 の note + 読状態
+  // 自分の note + 読状態
   const myStatus = d.my?.status || 'unread';
   const myNote = d.my?.note || '';
   const statusBtns = ['unread','reading','read'].map(s =>
@@ -1417,24 +1418,24 @@ function paintDetail(id, d) {
   const myBlock = `
     <div class="card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
-        <div class="bold" style="font-size:13px">🎯 自分 の 状態</div>
+        <div class="bold" style="font-size:13px">🎯 自分の状態</div>
         <span class="hint-sm" style="margin-left:auto; font-size:11px">ラボ全体: 未読 ${sc.unread} / 読中 ${sc.reading} / 既読 ${sc.read}</span>
       </div>
       <div class="row" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">${statusBtns}</div>
       <label class="field">
         <div class="row center" style="gap:6px">
-          <span class="lbl" style="font-size:12px; flex:1">📝 自分 の note (Markdown 対応、 共有 されます)</span>
-          <button id="rf-note-preview-btn" class="btn" style="font-size:10px; padding:1px 6px" title="プレビュー 切替">👁</button>
+          <span class="lbl" style="font-size:12px; flex:1">📝 自分の note (Markdown 対応、共有されます)</span>
+          <button id="rf-note-preview-btn" class="btn" style="font-size:10px; padding:1px 6px" title="プレビュー切替">👁</button>
         </div>
         <textarea id="rf-my-note" rows="5" placeholder="Markdown OK: # 見出し、 **太字**、 *italic*、 - 箇条書き、 &gt; 引用、 [link](url)、 \`code\`" style="width:100%; box-sizing:border-box; font-size:13px; font-family:monospace">${escapeHtml(myNote)}</textarea>
         <div id="rf-my-note-preview" style="display:none; border:1px solid #e5e7eb; border-radius:6px; padding:8px; font-size:13px; line-height:1.6; background:#fff"></div>
       </label>
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="rf-save-note" class="btn primary" style="font-size:12px">📝 note を 保存</button>
+        <button id="rf-save-note" class="btn primary" style="font-size:12px">📝 note を保存</button>
       </div>
     </div>`;
 
-  // 他の 人 の note (共有、 v929 Markdown レンダリング)
+  // 他の人の note (共有、 v929 Markdown レンダリング)
   const othersHtml = (d.others_notes || []).map(n => `
     <div style="padding:8px 10px; border-bottom:1px solid #f3f4f6">
       <div class="row center" style="gap:6px">
@@ -1446,10 +1447,10 @@ function paintDetail(id, d) {
       <div style="font-size:13px; line-height:1.6; margin-top:4px">${mdToHtml(n.note)}</div>
     </div>`).join('');
   const othersBlock = othersHtml
-    ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:6px">💬 ラボメン の note</div>${othersHtml}</div>`
+    ? `<div class="card"><div class="bold" style="font-size:13px; margin-bottom:6px">💬 ラボメンの note</div>${othersHtml}</div>`
     : '';
 
-  // v926 相互 リンク: kind 別 に 「済」 「進行中」 を 分けて 表示。 ラボメン の 分も 拾う。
+  // v926 相互リンク: kind 別に「済」「進行中」を分けて表示。ラボメンの分も拾う。
   const linkKinds = { paper_translate: [], paper_full_translate: [], paper_review: [] };
   for (const l of (d.links || [])) {
     if (linkKinds[l.kind]) linkKinds[l.kind].push(l);
@@ -1465,33 +1466,33 @@ function paintDetail(id, d) {
     </a>`;
   };
 
-  // v926 LabPay AI 連携 カード: refs に PDF が あれば 4 種類 の 処理 を キック 可能。
+  // v926 LabPay AI 連携カード: refs に PDF があれば 4 種類の処理をキック可能。
   const hasPdf = !!d.pdf_path;
   const aiCard = hasPdf ? `
     <div class="card" style="background:linear-gradient(135deg, #ede9fe, #ddd6fe); border:2px solid #a78bfa; border-radius:10px">
       <div class="row center" style="gap:6px; margin-bottom:8px; flex-wrap:wrap">
-        <div class="bold" style="font-size:14px; color:#5b21b6">🤖 この 論文 を LabPay AI に かける</div>
+        <div class="bold" style="font-size:14px; color:#5b21b6">🤖 この論文を LabPay AI にかける</div>
       </div>
       <div class="row" style="gap:6px; flex-wrap:wrap">
         <button id="rf-ai-summary"  class="btn primary" style="font-size:12px; padding:4px 10px">📑 要約する</button>
         <button id="rf-ai-fulltrans" class="btn primary" style="font-size:12px; padding:4px 10px">📑 全訳する</button>
         <button id="rf-ai-review"   class="btn primary" style="font-size:12px; padding:4px 10px">📄 査読する</button>
-        <button id="rf-ai-dr"       class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連 論文 を 探す</button>
+        <button id="rf-ai-dr"       class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連論文を探す</button>
       </div>
       ${linkKinds.paper_translate.length ? `<div style="margin-top:8px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">要約</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_translate.map(linkChip).join('')}</div></div>` : ''}
       ${linkKinds.paper_full_translate.length ? `<div style="margin-top:6px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">全訳</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_full_translate.map(linkChip).join('')}</div></div>` : ''}
       ${linkKinds.paper_review.length ? `<div style="margin-top:6px"><div class="hint-sm" style="font-size:11px; color:#5b21b6; margin-bottom:2px">査読</div><div class="row" style="gap:4px; flex-wrap:wrap">${linkKinds.paper_review.map(linkChip).join('')}</div></div>` : ''}
     </div>` : (
-      // PDF が 無い とき: Deep Research だけ できる (query base で 動く の で)
+      // PDF が無いとき: Deep Research だけできる (query base で動くので)
       `<div class="card" style="background:#f3f4f6; border:1px dashed #9ca3af">
-        <div class="hint-sm" style="font-size:12px">📎 PDF を 添付 する と 要約 / 全訳 / 査読 が 実行 できます。 関連 論文 検索 は PDF なし でも 可 ↓</div>
+        <div class="hint-sm" style="font-size:12px">📎 PDF を添付すると要約 / 全訳 / 査読が実行できます。関連論文検索は PDF なしでも可 ↓</div>
         <div class="row" style="gap:6px; margin-top:6px">
-          <button id="rf-ai-dr" class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連 論文 を 探す (Deep Research)</button>
+          <button id="rf-ai-dr" class="btn primary" style="font-size:12px; padding:4px 10px">🔎 関連論文を探す (Deep Research)</button>
         </div>
       </div>`
     );
 
-  // v928 track B: この refs が 所属 する collections + 追加/削除
+  // v928 track B: この refs が所属する collections + 追加/削除
   const colsHtml = (d.collections || []).map(c =>
     `<span class="tag rf-col-tag" data-cid="${c.id}" style="background:#ede9fe; color:#5b21b6; font-size:11px; padding:2px 6px; border-radius:8px; cursor:pointer">${c.icon || '📁'} ${escapeHtml(c.name)} <span class="rf-col-rem" data-cid="${c.id}" style="opacity:0.5">✕</span></span>`
   ).join(' ');
@@ -1499,32 +1500,32 @@ function paintDetail(id, d) {
     <div class="card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
         <div class="bold" style="font-size:13px">📁 コレクション</div>
-        <button id="rf-col-add-btn" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 追加</button>
+        <button id="rf-col-add-btn" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋追加</button>
       </div>
       <div id="rf-cols-of-ref" class="row" style="gap:4px; flex-wrap:wrap">${colsHtml || '<span class="muted" style="font-size:12px">未分類</span>'}</div>
     </div>`;
 
-  // v928 track B: 関連 論文 (related items)
+  // v928 track B: 関連論文 (related items)
   const relatedCard = `
     <div class="card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
-        <div class="bold" style="font-size:13px">🔗 関連 論文</div>
-        <button id="rf-rel-add" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 追加</button>
+        <div class="bold" style="font-size:13px">🔗 関連論文</div>
+        <button id="rf-rel-add" class="btn" style="font-size:11px; padding:2px 8px; margin-left:auto">＋追加</button>
       </div>
       <div id="rf-rel-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
     </div>`;
 
-  // v928 track B: trash に 入って いる 場合 の 復元 バナー
+  // v928 track B: trash に入っている場合の復元バナー
   const trashBanner = d.deleted_at ? `
     <div class="card" style="background:#fef2f2; border:2px solid #dc2626">
       <div class="row center" style="gap:6px">
-        <div class="bold" style="color:#7f1d1d">🗑 この 文献 は ゴミ箱 に あります</div>
+        <div class="bold" style="color:#7f1d1d">🗑 この文献はゴミ箱にあります</div>
         <button id="rf-restore" class="btn primary" style="font-size:12px; margin-left:auto">↩ 復元</button>
       </div>
-      <div class="hint-sm" style="font-size:11px; color:#7f1d1d; margin-top:4px">削除 したのは ${escapeHtml(d.deleted_at)}。 完全削除 は admin のみ 可 (再度 「🗑 削除」 で 実行)。</div>
+      <div class="hint-sm" style="font-size:11px; color:#7f1d1d; margin-top:4px">削除したのは ${escapeHtml(d.deleted_at)}。完全削除は admin のみ可 (再度「🗑 削除」で実行)。</div>
     </div>` : '';
 
-  // v931 Semantic Scholar 連携 カード (この 論文 の 参考文献 / 被引用 / enrichment)
+  // v931 Semantic Scholar 連携カード (この論文の参考文献 / 被引用 / enrichment)
   const canSs = !!(d.doi || d.arxiv_id || d.semantic_scholar_id);
   const ccBadge = d.citation_count != null ? `<span style="color:#7b3fa0; font-size:12px">🔗 被引用 ${d.citation_count}</span>` : '';
   const rcBadge = d.reference_count != null ? `<span class="hint-sm" style="font-size:11px">📚 参考文献 ${d.reference_count}</span>` : '';
@@ -1535,33 +1536,33 @@ function paintDetail(id, d) {
         ${ccBadge} ${rcBadge}
       </div>
       <div class="row" style="gap:6px; flex-wrap:wrap">
-        <button id="rf-ss-refs"     class="btn" style="font-size:12px; padding:3px 10px">📚 参考文献 を 見る</button>
-        <button id="rf-ss-cites"    class="btn" style="font-size:12px; padding:3px 10px">🔗 被引用 論文 を 見る</button>
-        <button id="rf-ss-enrich"   class="btn" style="font-size:12px; padding:3px 10px">🔄 被引用数 を 更新</button>
+        <button id="rf-ss-refs"     class="btn" style="font-size:12px; padding:3px 10px">📚 参考文献を見る</button>
+        <button id="rf-ss-cites"    class="btn" style="font-size:12px; padding:3px 10px">🔗 被引用論文を見る</button>
+        <button id="rf-ss-enrich"   class="btn" style="font-size:12px; padding:3px 10px">🔄 被引用数を更新</button>
       </div>
       <div id="rf-ss-panel" style="margin-top:8px"></div>
     </div>` : `
     <div class="card" style="background:#f9fafb; border:1px dashed #d1d5db">
-      <div class="hint-sm" style="font-size:12px">🔬 Semantic Scholar 連携 は DOI か arXiv ID が 登録 されて いる 論文 のみ 有効。</div>
+      <div class="hint-sm" style="font-size:12px">🔬 Semantic Scholar 連携は DOI か arXiv ID が登録されている論文のみ有効。</div>
     </div>`;
 
-  // v929 highlights (PDF から の 引用 + comment、 簡易 実装)
+  // v929 highlights (PDF からの引用 + comment、簡易実装)
   const hlCard = `
     <div class="card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
         <div class="bold" style="font-size:13px">✨ ハイライト</div>
-        <button id="rf-hl-add" class="btn primary" style="font-size:11px; padding:2px 8px; margin-left:auto">＋ 追加</button>
+        <button id="rf-hl-add" class="btn primary" style="font-size:11px; padding:2px 8px; margin-left:auto">＋追加</button>
       </div>
       <div id="rf-hl-list" class="hint-sm" style="font-size:12px">読み込み中…</div>
     </div>`;
 
-  // v927 添付ファイル (attachments、 主 PDF 以外の 補足資料 / スライド 等)
+  // v927 添付ファイル (attachments、主 PDF 以外の補足資料 / スライド等)
   const attCard = `
     <div class="card">
       <div class="row center" style="gap:6px; margin-bottom:6px; flex-wrap:wrap">
         <div class="bold" style="font-size:13px">📎 添付ファイル</div>
         <label class="btn primary" style="font-size:12px; padding:3px 10px; margin-left:auto; cursor:pointer">
-          ＋ 追加
+          ＋追加
           <input type="file" id="rf-att-file" hidden>
         </label>
       </div>
@@ -1572,7 +1573,7 @@ function paintDetail(id, d) {
   loadAttachments(id);
   loadRelated(id);
   loadHighlights(id);
-  // v929 note の Markdown プレビュー 切替
+  // v929 note の Markdown プレビュー切替
   document.getElementById('rf-note-preview-btn')?.addEventListener('click', () => {
     const ta = document.getElementById('rf-my-note');
     const pv = document.getElementById('rf-my-note-preview');
@@ -1583,20 +1584,20 @@ function paintDetail(id, d) {
       pv.style.display = 'none'; ta.style.display = '';
     }
   });
-  // v929 CSL 引用 コピー
+  // v929 CSL 引用コピー
   document.getElementById('rf-cite-btn')?.addEventListener('click', async () => {
     const style = document.getElementById('rf-cite-style').value;
     try {
       const r = await get('/api/refs/' + id + '/citation?style=' + style);
       await navigator.clipboard.writeText(r.citation || '');
-      toast(`${style.toUpperCase()} 引用 を コピー`);
+      toast(`${style.toUpperCase()} 引用をコピー`);
     } catch (e) { toast('失敗: ' + e.message); }
   });
   // v929 highlights add
   document.getElementById('rf-hl-add')?.addEventListener('click', async () => {
-    const page = prompt('PDF の ページ 番号 (任意)') || '';
-    const quote = prompt('引用 テキスト (PDF から コピー して 貼付、 任意)') || '';
-    const comment = prompt('コメント / なぜ 印象的 か (任意)') || '';
+    const page = prompt('PDF のページ番号 (任意)') || '';
+    const quote = prompt('引用テキスト (PDF からコピーして貼付、任意)') || '';
+    const comment = prompt('コメント / なぜ印象的か (任意)') || '';
     if (!quote && !comment) { toast('quote か comment を'); return; }
     try {
       await post('/api/refs/' + id + '/highlights', {
@@ -1610,15 +1611,15 @@ function paintDetail(id, d) {
   // v931 Semantic Scholar
   const showSsPanel = async (endpoint, label) => {
     const panel = document.getElementById('rf-ss-panel');
-    panel.innerHTML = `<span class="muted">${label} を 取得中…</span>`;
+    panel.innerHTML = `<span class="muted">${label} を取得中…</span>`;
     try {
       const r = await get('/api/refs/' + id + '/' + endpoint);
       const items = r.items || [];
       if (!items.length) { panel.innerHTML = `<span class="muted">${label}: 0 件</span>`; return; }
       panel.innerHTML = `<div class="bold" style="font-size:12px; margin-bottom:6px; color:#78350f">${label} (${items.length} 件)</div>`;
       panel.innerHTML += items.slice(0, 30).map((m, i) => renderSsCard(m, i)).join('');
-      if (items.length > 30) panel.innerHTML += `<div class="muted" style="font-size:11px; margin-top:4px">…他 ${items.length - 30} 件 は 省略</div>`;
-      // 「＋追加」 ボタン 束ね
+      if (items.length > 30) panel.innerHTML += `<div class="muted" style="font-size:11px; margin-top:4px">…他 ${items.length - 30} 件は省略</div>`;
+      // 「＋追加」ボタン束ね
       panel.querySelectorAll('.rf-ss-add').forEach(b => {
         b.addEventListener('click', async () => {
           const idx = Number(b.dataset.i);
@@ -1633,14 +1634,14 @@ function paintDetail(id, d) {
               url: m.url || '', extra: {},
             });
             try { await post('/api/refs/' + rr.id + '/ss_enrich', {}); } catch (_) {}
-            // また、 現 ref と の 関連 を 自動 で 追加 (bidirectional)
+            // また、現 ref との関連を自動で追加 (bidirectional)
             try { await post('/api/refs/' + id + '/relations', { ref_id: rr.id, kind: 'related' }); } catch (_) {}
             b.textContent = '✅ 追加 + 関連';
             m.existing_ref_id = rr.id;
             loadRelated(id);
           } catch (e) {
             toast('失敗: ' + e.message);
-            b.disabled = false; b.textContent = '＋ 追加';
+            b.disabled = false; b.textContent = '＋追加';
           }
         });
       });
@@ -1649,7 +1650,7 @@ function paintDetail(id, d) {
     }
   };
   document.getElementById('rf-ss-refs')?.addEventListener('click', () => showSsPanel('ss_references', '📚 参考文献'));
-  document.getElementById('rf-ss-cites')?.addEventListener('click', () => showSsPanel('ss_citations', '🔗 被引用 論文'));
+  document.getElementById('rf-ss-cites')?.addEventListener('click', () => showSsPanel('ss_citations', '🔗 被引用論文'));
   document.getElementById('rf-ss-enrich')?.addEventListener('click', async () => {
     try {
       const r = await post('/api/refs/' + id + '/ss_enrich', {});
@@ -1662,12 +1663,12 @@ function paintDetail(id, d) {
     try {
       const dc = await get('/api/refs/collections');
       const items = dc.items || [];
-      if (!items.length) { toast('コレクション なし。 一覧 で 「＋ 新規」 で 作って'); return; }
+      if (!items.length) { toast('コレクションなし。一覧で「＋新規」で作って'); return; }
       const opts = items.map((c, i) => `${i+1}. ${c.icon || '📁'} ${c.name}`).join('\n');
-      const pick = prompt('番号 で 選択:\n' + opts);
+      const pick = prompt('番号で選択:\n' + opts);
       if (!pick) return;
       const idx = Number(pick) - 1;
-      if (idx < 0 || idx >= items.length) { toast('番号 不正'); return; }
+      if (idx < 0 || idx >= items.length) { toast('番号不正'); return; }
       await post('/api/refs/collections/' + items[idx].id + '/refs/' + id, {});
       toast('追加');
       renderRefsDetail({ params: { id } });
@@ -1682,14 +1683,14 @@ function paintDetail(id, d) {
   });
   // v928 track B: related add
   document.getElementById('rf-rel-add')?.addEventListener('click', async () => {
-    const refIdStr = prompt('関連 する 文献 の ID を 入力 (数字)');
+    const refIdStr = prompt('関連する文献の ID を入力 (数字)');
     if (!refIdStr) return;
     const otherId = Number(refIdStr);
     if (!otherId || otherId === id) { toast('ID 不正'); return; }
     const note = prompt('メモ (任意)') || '';
     try {
       await post('/api/refs/' + id + '/relations', { ref_id: otherId, kind: 'related', note });
-      toast('関連 追加');
+      toast('関連追加');
       loadRelated(id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -1716,7 +1717,7 @@ function paintDetail(id, d) {
       });
       const j = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
-      toast('添付 完了');
+      toast('添付完了');
       loadAttachments(id);
     } catch (e) { toast('失敗: ' + e.message); }
   });
@@ -1724,12 +1725,12 @@ function paintDetail(id, d) {
   // ── ハンドラ ──
   document.getElementById('rf-bibtex-btn')?.addEventListener('click', async () => {
     if (!d.bibtex) { toast('BibTeX なし'); return; }
-    try { await navigator.clipboard.writeText(d.bibtex); toast('BibTeX を コピー'); }
-    catch { toast('コピー 失敗'); }
+    try { await navigator.clipboard.writeText(d.bibtex); toast('BibTeX をコピー'); }
+    catch { toast('コピー失敗'); }
   });
   document.getElementById('rf-del')?.addEventListener('click', async () => {
-    if (!confirm('この 文献 を 削除 しますか? (元 に 戻せません)')) return;
-    try { await del('/api/refs/' + id); toast('削除 完了'); navigate('#/refs'); }
+    if (!confirm('この文献を削除しますか? (元に戻せません)')) return;
+    try { await del('/api/refs/' + id); toast('削除完了'); navigate('#/refs'); }
     catch (e) { toast('失敗: ' + e.message); }
   });
   document.getElementById('rf-pdf-upload')?.addEventListener('click', () => {
@@ -1748,9 +1749,9 @@ function paintDetail(id, d) {
       });
       const j = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + resp.status));
-      toast('PDF 添付 完了');
+      toast('PDF 添付完了');
       renderRefsDetail({ params: { id } });
-    } catch (e) { toast('添付 失敗: ' + e.message); }
+    } catch (e) { toast('添付失敗: ' + e.message); }
   });
   document.querySelectorAll('.rf-st').forEach(b => {
     b.addEventListener('click', async () => {
@@ -1769,13 +1770,13 @@ function paintDetail(id, d) {
     } catch (e) { toast('失敗: ' + e.message); }
   });
 
-  // v926 LabPay AI 連携 ハンドラ。 refs.pdf_path から blob を fetch して 既存 の
+  // v926 LabPay AI 連携ハンドラ。 refs.pdf_path から blob を fetch して既存の
   //   /api/ai/paper_translate / paper_full_translate / paper_review に POST する。
-  //   結果 の share_token は 次回 refs 詳細 で pdf_sha256 一致 で 自動 表示 される。
+  //   結果の share_token は次回 refs 詳細で pdf_sha256 一致で自動表示される。
   const fetchPdfBlob = async () => {
-    if (!d.pdf_path) throw new Error('PDF が 添付 されて いません');
+    if (!d.pdf_path) throw new Error('PDF が添付されていません');
     const resp = await fetch(d.pdf_path, { credentials: 'same-origin' });
-    if (!resp.ok) throw new Error('PDF 取得 失敗 HTTP ' + resp.status);
+    if (!resp.ok) throw new Error('PDF 取得失敗 HTTP ' + resp.status);
     return await resp.blob();
   };
   const pdfName = () => {
@@ -1801,9 +1802,9 @@ function paintDetail(id, d) {
       const url = endpoint.includes('paper_full') ? '#/paper-translate-full/r/' + j.share_token
                 : endpoint.includes('paper_review') ? '#/paper-review/r/' + j.share_token
                 : '#/paper-summary/r/' + j.share_token;
-      toast('開始! 完了 通知 が 届きます');
+      toast('開始! 完了通知が届きます');
       window.open(url, '_blank');
-      // refs 詳細 を リフレッシュ (「進行中」 が 出る)
+      // refs 詳細をリフレッシュ (「進行中」が出る)
       renderRefsDetail({ params: { id } });
     } catch (e) {
       toast('失敗: ' + e.message);
@@ -1812,27 +1813,27 @@ function paintDetail(id, d) {
   };
 
   document.getElementById('rf-ai-summary')?.addEventListener('click', async () => {
-    if (!confirm('要約 を 開始 します。 モデル は gpt-5 (共有 で 25pt / 非共有 で 50pt)。 続行?')) return;
+    if (!confirm('要約を開始します。モデルは gpt-5 (共有で 25pt / 非共有で 50pt)。続行?')) return;
     await runAiPost('/api/ai/paper_translate', { model: 'gpt-5', auto_share: '1' });
   });
   document.getElementById('rf-ai-fulltrans')?.addEventListener('click', async () => {
-    const dir = confirm('英→日 で 全訳 しますか? [OK=英→日 / キャンセル=別の モデル で]') ? 'en2ja' : null;
-    if (!dir) { toast('全訳 は /#/paper-translate-full から 直接 起動 して ください'); return; }
-    if (!confirm('全訳 を 開始 (' + dir + ' / gpt-5 / 共有 30pt 予定)。 続行?')) return;
+    const dir = confirm('英→日で全訳しますか? [OK=英→日 / キャンセル=別のモデルで]') ? 'en2ja' : null;
+    if (!dir) { toast('全訳は /#/paper-translate-full から直接起動してください'); return; }
+    if (!confirm('全訳を開始 (' + dir + ' / gpt-5 / 共有 30pt 予定)。続行?')) return;
     await runAiPost('/api/ai/paper_full_translate', { direction: dir, model: 'gpt-5', auto_share: '1' });
   });
   document.getElementById('rf-ai-review')?.addEventListener('click', async () => {
-    const venue = prompt('査読 の target 会議 名', d.venue || 'CHI');
+    const venue = prompt('査読の target 会議名', d.venue || 'CHI');
     if (!venue) return;
     const strictness = prompt('厳しさ: soft / normal / strict', 'normal') || 'normal';
-    if (!confirm(`査読 開始 (${venue} / ${strictness} / gpt-5 30pt)。 続行?`)) return;
+    if (!confirm(`査読開始 (${venue} / ${strictness} / gpt-5 30pt)。続行?`)) return;
     await runAiPost('/api/ai/paper_review', {
       target_venue: venue, strictness, model: 'gpt-5',
     });
   });
-  // Deep Research: PDF 不要、 タイトル + 抄録 を prefill query に して /#/deep-research へ 遷移
+  // Deep Research: PDF 不要、タイトル + 抄録を prefill query にして /#/deep-research へ遷移
   document.getElementById('rf-ai-dr')?.addEventListener('click', () => {
-    const q = `以下 の 論文 に 関連 する 最近 (2024-2026) の 論文 を 3-5 本 探して 短く 紹介 して ください。\n\n` +
+    const q = `以下の論文に関連する最近 (2024-2026) の論文を 3-5 本探して短く紹介してください。\n\n` +
               `タイトル: ${d.title}\n` +
               (d.year ? `年: ${d.year}\n` : '') +
               (d.venue ? `会議 / 誌: ${d.venue}\n` : '') +

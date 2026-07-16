@@ -495,6 +495,8 @@ route('/refs/new',        lazy(() => import('./views/refs.js'), 'renderRefsNew')
 route('/refs/bookmarklet', lazy(() => import('./views/refs.js'), 'renderRefsBookmarklet'));
 // v930 参考文献リスト生成ページ
 route('/refs/bibliography', lazy(() => import('./views/refs.js'), 'renderRefsBibliography'));
+// v1093 PDF まとめてアップロード + auto-fill + SS 検証
+route('/refs/bulk',       lazy(() => import('./views/refs_bulk.js'), 'renderRefsBulk'));
 route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetail'));
 // v934 かんばんボード (Trello-like、ラボ共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
