@@ -508,6 +508,8 @@ route('/miro/rooms/:id',        lazy(() => import('./views/miro_canvas.js'), 're
 route('/tomorrow-lab',          lazy(() => import('./views/tomorrow_lab.js'), 'renderTomorrowLab'));
 // v1120 発表順オークション
 route('/pres-order',            lazy(() => import('./views/pres_order.js'), 'renderPresOrder'));
+// v1121 ゼミ人トレカ + ガチャ
+route('/trading-cards',         lazy(() => import('./views/trading_cards.js'), 'renderTradingCards'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

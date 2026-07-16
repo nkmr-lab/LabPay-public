@@ -136,6 +136,7 @@ export const APPS = [
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。手動追加 or 領収書を撮影して OpenAI Vision で店名/日付/金額/カテゴリを自動抽出。月別 + カテゴリ別合計 + 明細一覧。全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
+  { id: 'trading-cards', cat: 'game', url: '#/trading-cards', title: '🎴 ゼミ人トレカ + ガチャ', desc: 'ラボメンのトレカ (SSR/SR/R/N) を誰でも作成。作ると本人へ承認申請が飛び、承認されると公開 pool 入り。ガチャは 1 連 30pt / 10 連 250pt (R 以上確定)。集めよう。', defaultVisible: true },
   { id: 'pres-order', cat: 'lab-mgmt', url: '#/pres-order', title: '🎪 発表順オークション', desc: '論文紹介やポスターセッションの発表順を sealed 入札で決める。全員好きな額を入れて締切 → 金額の高い順に 1 番目 / 2 番目 / … を割り当て、勝者は入札額を pot に支払う。未入札は 0pt で最下位ゾーンに並ぶ。', defaultVisible: true },
   { id: 'tomorrow-lab', cat: 'lab-mgmt', url: '#/tomorrow-lab', title: '🏫 明日、研究室に一緒に行こう', desc: '明日行くと宣言 → 誰も居ないと寂しいので集まる仕組み。最初に宣言した人が罰金 fee を設定、他の人は無料で参加。当日以降に精算 → checkin データから行かなかった人 (no-show) から罰金を徴収し、行った人 (show) で山分け。', defaultVisible: true },
   { id: 'miro', cat: 'shared', url: '#/miro', title: '🗒 Miro (ポストイット空間)', desc: 'グループで自由にポストイットを配置できる共有ボード。ドラッグで動かす / つまんでリサイズ / 色や表裏を変える / 🎨 で AI 画像生成もできる。オモテウラ (side) はユーザごと個別、人によって見えてる面が違う。2 秒 poll で准リアルタイム。', defaultVisible: true },
