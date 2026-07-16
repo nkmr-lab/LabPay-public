@@ -16,7 +16,7 @@ export async function renderHabits() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">📓 Habit Tracker</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/habits/new">＋ 新しい習慣</a>
+        <a class="btn primary" href="#/habits/new">＋新しい習慣</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
         毎日論文を読む / 早起き / 運動など、自分の習慣を登録して日毎 ✓ で積み上げ。公開すればラボメン全員が達成状況を確認できて励まし合えます。
@@ -29,7 +29,7 @@ export async function renderHabits() {
     if (!items.length) {
       document.getElementById('hb-list').innerHTML = `
         <div class="card center muted">
-          まだ習慣がありません。「＋ 新しい習慣」から始めよう。
+          まだ習慣がありません。「＋新しい習慣」から始めよう。
         </div>`;
       return;
     }
@@ -85,7 +85,7 @@ export async function renderHabitsNew() {
   app.innerHTML = `
     <div class="card page-header">
       <a href="#/habits" class="btn">← 一覧</a>
-      <h2 style="margin:6px 0 0">＋ 新しい習慣</h2>
+      <h2 style="margin:6px 0 0">＋新しい習慣</h2>
     </div>
     <div class="card">
       <label style="font-size:13px">絵文字 (任意)</label>
@@ -120,7 +120,9 @@ export async function renderHabitsNew() {
   });
 }
 
-export async function renderHabitDetail({ id }) {
+export async function renderHabitDetail({ params }) {
+  // v1118 buzzer と同じ「router は { params } を渡すのに { id } で分解」バグ
+  const id = params?.id;
   const app = document.getElementById('app');
   app.innerHTML = `<div class="muted">読込中…</div>`;
   let h;

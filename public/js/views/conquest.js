@@ -14,7 +14,7 @@ export async function renderConquest() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🏁 制覇リスト</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/conquest/new">＋ 新しいリスト</a>
+        <a class="btn primary" href="#/conquest/new">＋新しいリスト</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
         街のパン屋、通った学会、行きたい温泉など、自分だけの制覇リストを作ってチェックしていけます。
@@ -28,7 +28,7 @@ export async function renderConquest() {
     if (!items.length) {
       document.getElementById('cq-list').innerHTML = `
         <div class="card center muted">
-          まだリストがありません。「＋ 新しいリスト」から作ってみよう。
+          まだリストがありません。「＋新しいリスト」から作ってみよう。
         </div>`;
       return;
     }
@@ -67,7 +67,7 @@ export async function renderConquestNew() {
   app.innerHTML = `
     <div class="card page-header">
       <a href="#/conquest" class="btn">← 一覧</a>
-      <h2 style="margin:6px 0 0">＋ 新しい制覇リスト</h2>
+      <h2 style="margin:6px 0 0">＋新しい制覇リスト</h2>
     </div>
     <div class="card">
       <label style="font-size:13px">タイトル <span class="muted">(例: 中野区のパン屋)</span></label>
@@ -96,7 +96,9 @@ export async function renderConquestNew() {
   });
 }
 
-export async function renderConquestDetail({ id }) {
+export async function renderConquestDetail({ params }) {
+  // v1118 buzzer と同じ「router は { params } を渡すのに { id } で分解」バグ
+  const id = params?.id;
   const app = document.getElementById('app');
   app.innerHTML = `<div class="muted">読込中…</div>`;
   let d;
@@ -130,7 +132,7 @@ export async function renderConquestDetail({ id }) {
     </div>
     ${canAddItem ? `
       <div class="card">
-        <div class="bold" style="font-size:13px; margin-bottom:6px">＋ アイテムを追加</div>
+        <div class="bold" style="font-size:13px; margin-bottom:6px">＋アイテムを追加</div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           <input id="cq-item-name" type="text" maxlength="160" placeholder="お店名 / 対象名" style="flex:1; min-width:160px; padding:8px">
           <input id="cq-item-note" type="text" maxlength="400" placeholder="メモ (住所等、任意)" style="flex:1; min-width:160px; padding:8px">
