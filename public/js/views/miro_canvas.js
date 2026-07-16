@@ -231,6 +231,11 @@ const DRAG = {
   lastPatch: 0,
 };
 
+// v1101 ダブルタップで編集モーダル。単一タップ = flip、300 ms 以内に
+//   同じノートを再タップ = flip をキャンセルして編集モーダルを開く。
+const TAP = { noteId: null, ts: 0, flipTimer: null };
+const DBLTAP_MS = 300;
+
 function wireCanvas() {
   const vp    = document.getElementById('miro-viewport');
   const layer = document.getElementById('miro-layer');
@@ -306,8 +311,22 @@ function wireCanvas() {
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
     } else if (mode === 'note' && !moved && nid) {
-      // タップ (移動なし) → フリップ
-      flipNote(nid).catch(() => {});
+      // v1101 タップ (移動なし): 300 ms 以内に同じノートをもう一度タップ
+      //   → ダブルタップ扱いで編集モーダルを開く (flip はキャンセル)。
+      //   単発タップ = flip は 300 ms 待ってから実行。
+      const now = Date.now();
+      if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
+        if (TAP.flipTimer) { clearTimeout(TAP.flipTimer); TAP.flipTimer = null; }
+        TAP.noteId = null; TAP.ts = 0;
+        openEditModal(nid);
+      } else {
+        TAP.noteId = nid; TAP.ts = now;
+        if (TAP.flipTimer) clearTimeout(TAP.flipTimer);
+        TAP.flipTimer = setTimeout(() => {
+          TAP.flipTimer = null;
+          flipNote(nid).catch(() => {});
+        }, DBLTAP_MS);
+      }
     }
   });
 
