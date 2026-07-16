@@ -176,7 +176,7 @@ async function processOne(row) {
   addStep(row, '📄 PDF から metadata 抽出中…');
   const fd = new FormData();
   fd.append('file', row.file);
-  const r1 = await fetch('/api/refs/extract_pdf', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const r1 = await fetch('/api/refs/extract_pdf', { method: 'POST', headers: { 'X-Requested-With': 'labpay' }, body: fd, credentials: 'same-origin' });
   const j1 = await r1.json();
   if (!r1.ok) throw new Error(j1?.error?.message || `extract_pdf HTTP ${r1.status}`);
   let meta = j1.meta || {};
@@ -265,7 +265,7 @@ async function processOne(row) {
   addStep(row, '📎 PDF 添付中…');
   const fd2 = new FormData();
   fd2.append('file', row.file);
-  const r3 = await fetch(`/api/refs/${created.id}/attach_pdf`, { method: 'POST', body: fd2, credentials: 'same-origin' });
+  const r3 = await fetch(`/api/refs/${created.id}/attach_pdf`, { method: 'POST', headers: { 'X-Requested-With': 'labpay' }, body: fd2, credentials: 'same-origin' });
   const j3 = await r3.json();
   if (!r3.ok) throw new Error(j3?.error?.message || `attach_pdf HTTP ${r3.status}`);
   markStep(row, '✓ PDF 添付');
