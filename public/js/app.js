@@ -501,6 +501,9 @@ route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetai
 // v934 かんばんボード (Trello-like、ラボ共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
 route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
+// v1100 Miro 的な共同ポストイット空間
+route('/miro',                  lazy(() => import('./views/miro_rooms.js'), 'renderMiroRooms'));
+route('/miro/rooms/:id',        lazy(() => import('./views/miro_canvas.js'), 'renderMiroCanvas'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

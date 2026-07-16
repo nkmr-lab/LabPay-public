@@ -561,16 +561,16 @@ require_once __DIR__ . '/handlers/notices.php';
 require_once __DIR__ . '/handlers/meetups.php';
 require_once __DIR__ . '/handlers/places.php';
 require_once __DIR__ . '/handlers/refs.php';  // v925 文献管理 (Zotero-like)
-require_once __DIR__ . '/handlers/kanban.php'; // v934 かんばん ボード (Trello-like)
+require_once __DIR__ . '/handlers/kanban.php'; // v934 かんばんボード (Trello-like)
 require_once __DIR__ . '/handlers/buy_requests.php'; // v1080 購入依頼 (#want_to_buy の後継)
-require_once __DIR__ . '/handlers/public_codes.php'; // v941 公開機能 の 短縮 コード
+require_once __DIR__ . '/handlers/public_codes.php'; // v941 公開機能の短縮コード
 require_once __DIR__ . '/handlers/joint.php'; // v941 合同研究会用投票
-require_once __DIR__ . '/handlers/public_polls.php'; // v942 公開投票 (誰でも 投票)
-require_once __DIR__ . '/handlers/album_thumbs.php'; // v964 Google Photos サムネ キャッシュ
-require_once __DIR__ . '/handlers/nkmr_albums.php';  // v970 中村研 アルバム CRUD
+require_once __DIR__ . '/handlers/public_polls.php'; // v942 公開投票 (誰でも投票)
+require_once __DIR__ . '/handlers/album_thumbs.php'; // v964 Google Photos サムネキャッシュ
+require_once __DIR__ . '/handlers/nkmr_albums.php';  // v970 中村研アルバム CRUD
 require_once __DIR__ . '/handlers/expenses.php';     // v1002 個人家計簿
 require_once __DIR__ . '/handlers/authors.php';      // v1004 著者ページ
-require_once __DIR__ . '/handlers/power.php';        // v1026 サンプルサイズ / 検定力 の 保存 + 共有
+require_once __DIR__ . '/handlers/power.php';        // v1026 サンプルサイズ / 検定力の保存 + 共有
 require_once __DIR__ . '/handlers/posts.php';
 require_once __DIR__ . '/handlers/todos.php';
 require_once __DIR__ . '/handlers/sounds.php';
@@ -599,3 +599,4 @@ require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇リス�
 require_once __DIR__ . '/handlers/habits.php';       // v870 #452 Habit Tracker
 require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押しクイズ
 require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト追跡
+require_once __DIR__ . '/handlers/miro.php';         // v1100 Miro 的な共同ポストイット空間

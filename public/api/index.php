@@ -23,8 +23,8 @@ if (strpos($uri, $prefix) === 0) {
 if ($path === '' || $path === false) $path = '/';
 $seg = path_segments($path);
 
-// v932 CORS: `*.nkmr.io` (と 例外 で 明示 リスト) は 許可。 中村さん の 完全 コントロール 下 の ドメイン のみ。
-//   preflight (OPTIONS) は 認証 前 に 早期 返却 する 必要 が ある ので この 位置。
+// v932 CORS: `*.nkmr.io` (と例外で明示リスト) は許可。中村さんの完全コントロール下のドメインのみ。
+//   preflight (OPTIONS) は認証前に早期返却する必要があるのでこの位置。
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowedOriginRe = '#^https://[a-z0-9][a-z0-9-]*\.nkmr\.io$#i';
 if ($origin !== '' && preg_match($allowedOriginRe, $origin)) {
@@ -32,15 +32,15 @@ if ($origin !== '' && preg_match($allowedOriginRe, $origin)) {
     header('Access-Control-Allow-Credentials: true');
     header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
-    header('Access-Control-Max-Age: 600');   // preflight を 10 分 キャッシュ
-    header('Vary: Origin');                  // CDN / 中間 キャッシュ 汚染 防止
+    header('Access-Control-Max-Age: 600');   // preflight を 10 分キャッシュ
+    header('Vary: Origin');                  // CDN / 中間キャッシュ汚染防止
     if ($method === 'OPTIONS') {
         http_response_code(204);
         exit;
     }
 }
 
-// Always JSON (OPTIONS より 後、 通常 dispatch より 前)。
+// Always JSON (OPTIONS より後、通常 dispatch より前)。
 header('Content-Type: application/json; charset=utf-8');
 
 // Dispatch table — URL 第1セグメント → route_* 関数。新しいリソースは
@@ -69,7 +69,7 @@ $routes = [
     'nomikai'        => 'route_nomikai',
     'groups'         => 'route_groups',          // ad-hoc groups
     'scrapbox'       => 'route_scrapbox',
-    'cosense'        => 'route_cosense',          // v821 Cosense (旧 Scrapbox) 直接 連携
+    'cosense'        => 'route_cosense',          // v821 Cosense (旧 Scrapbox) 直接連携
     'fx'             => 'route_fx',
     'random-groups'  => 'route_random_groups',
     'orderings'      => 'route_orderings',
@@ -98,16 +98,16 @@ $routes = [
     'meetups'        => 'route_meetups',
     'places'         => 'route_places',
     'refs'           => 'route_refs',        // v925 文献管理
-    'kanban'         => 'route_kanban',      // v934 かんばん ボード
+    'kanban'         => 'route_kanban',      // v934 かんばんボード
     'buy-requests'   => 'route_buy_requests',// v1080 購入依頼 (#want_to_buy 後継)
     'joint-events'   => 'route_joint_events',// v941 合同研究会用投票
-    'public-codes'   => 'route_public_codes',// v941 公開機能 の 4 桁 短縮 コード
-    'public-polls'   => 'route_public_polls',// v942 公開投票 (誰でも 投票)
-    'album-thumbs'   => 'route_album_thumbs',// v964 Google Photos アルバム サムネ キャッシュ
-    'nkmr-albums'    => 'route_nkmr_albums', // v970 中村研 アルバム DB CRUD
+    'public-codes'   => 'route_public_codes',// v941 公開機能の 4 桁短縮コード
+    'public-polls'   => 'route_public_polls',// v942 公開投票 (誰でも投票)
+    'album-thumbs'   => 'route_album_thumbs',// v964 Google Photos アルバムサムネキャッシュ
+    'nkmr-albums'    => 'route_nkmr_albums', // v970 中村研アルバム DB CRUD
     'expenses'       => 'route_expenses',    // v1002 個人家計簿
     'authors'        => 'route_authors',     // v1004 著者ページ
-    'power'          => 'route_power',       // v1026 サンプルサイズ / 検定力 の 保存 + 共有
+    'power'          => 'route_power',       // v1026 サンプルサイズ / 検定力の保存 + 共有
     'posts'          => 'route_posts',
     'todos'          => 'route_todos',
     'sounds'         => 'route_sounds',
@@ -129,10 +129,11 @@ $routes = [
     'quotes'         => 'route_quotes',     // v804 名言
     'zemi-videos'    => 'route_zemi_videos', // v843 #426 ゼミ動画 (YouTube limited)
     'share'          => 'route_share',       // v853 タイトル+URL をメンバーに共有
-    'conquest'       => 'route_conquest',    // v860 #445 制覇 リスト (ユーザ作成)
+    'conquest'       => 'route_conquest',    // v860 #445 制覇リスト (ユーザ作成)
     'habits'         => 'route_habits',      // v870 #452 Habit Tracker
-    'buzzer'         => 'route_buzzer',      // v872 #454 早押し クイズ
-    'overleaf'       => 'route_overleaf',    // v886 Overleaf プロジェクト 追跡
+    'buzzer'         => 'route_buzzer',      // v872 #454 早押しクイズ
+    'overleaf'       => 'route_overleaf',    // v886 Overleaf プロジェクト追跡
+    'miro'           => 'route_miro',        // v1100 Miro 的な共同ポストイット空間
 ];
 
 try {
