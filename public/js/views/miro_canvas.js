@@ -488,7 +488,7 @@ function noteHtml(n) {
     ? `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
          <span style="font-weight:600">🌒 ウラ</span>
          <span style="margin-left:auto"></span>
-         <button data-flip-id="${n.id}" style="${btnStyle}; font-weight:600" title="表を見る">🔄 見る</button>
+         <button data-flip-id="${n.id}" style="${btnStyle}; font-weight:600" title="表を見る">👀 見る</button>
          <button data-del-id="${n.id}" style="${btnDanger}" title="削除">🗑</button>
        </div>`
     : `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
@@ -497,7 +497,7 @@ function noteHtml(n) {
          <button data-color-id="${n.id}"  style="${btnStyle}" title="色を変える">🎨</button>
          <button data-genimg-id="${n.id}" style="${btnStyle}" title="AI 画像を生成">🖼</button>
          ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="${btnStyle}" title="画像を消す">🚫</button>` : ''}
-         <button data-flip-id="${n.id}"   style="${btnStyle}; font-weight:600" title="裏に隠す">🔄 隠す</button>
+         <button data-flip-id="${n.id}"   style="${btnStyle}; font-weight:600" title="裏に隠す">🙈 隠す</button>
          <button data-del-id="${n.id}"    style="${btnDanger}" title="削除">🗑</button>
        </div>`;
   // ボディ: 裏 = タップで表を見せる大きい案内、表 = text + image
@@ -505,8 +505,8 @@ function noteHtml(n) {
   if (isBack) {
     // v1106 裏は body 全域が flip target (data-flip-body でイベント委譲)
     body = `<div class="mnote-body" data-flip-body="${n.id}" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; cursor:pointer; gap:6px">
-              <div style="font-size:36px; opacity:0.55">🔄</div>
-              <div style="font-size:13px; color:rgba(0,0,0,0.55); font-weight:600; letter-spacing:0.05em">タップで表を見る</div>
+              <div style="font-size:42px; opacity:0.55">👀</div>
+              <div style="font-size:13px; color:rgba(0,0,0,0.55); font-weight:600; letter-spacing:0.05em">タップで見る</div>
             </div>`;
   } else {
     const img = n.front_image_url;
