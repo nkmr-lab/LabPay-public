@@ -25,7 +25,7 @@ export async function renderBuzzerList() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">⚡ 早押しクイズ</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/buzzer/new">＋ 新しいセッション</a>
+        <a class="btn primary" href="#/buzzer/new">＋新しいセッション</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
         リアルのクイズで早押しボタン代わりに。出題者が「次へ」を押すと全員のスマホが入力モードになり、タップした順で順位が決まる。 1 位だけ緑で回答権を取れる。
@@ -37,7 +37,7 @@ export async function renderBuzzerList() {
     const items = d.items || [];
     if (!items.length) {
       document.getElementById('bz-list').innerHTML = `
-        <div class="card center muted">まだセッションがありません。「＋ 新しいセッション」から作ってください。</div>`;
+        <div class="card center muted">まだセッションがありません。「＋新しいセッション」から作ってください。</div>`;
       return;
     }
     document.getElementById('bz-list').innerHTML = items.map(it => `
@@ -63,7 +63,7 @@ export async function renderBuzzerNew() {
   app.innerHTML = `
     <div class="card page-header">
       <a href="#/buzzer" class="btn">← 一覧</a>
-      <h2 style="margin:6px 0 0">＋ 新しい早押しセッション</h2>
+      <h2 style="margin:6px 0 0">＋新しい早押しセッション</h2>
     </div>
     <div class="card">
       <label style="font-size:13px">タイトル (例: ゼミミニクイズ 2026.06.28)</label>
@@ -84,7 +84,12 @@ export async function renderBuzzerNew() {
   });
 }
 
-export async function renderBuzzerDetail({ id }) {
+export async function renderBuzzerDetail({ params }) {
+  // v1117 中村さん報告「早押しクイズ、セッションを作成はできるがゲームに参加できない」
+  //   原因: router は { params, query } を渡すのに、この関数は { id } を分解しようとして
+  //   id が常に undefined、GET /api/buzzer/sessions/undefined が 404 で「セッション不在」表示。
+  //   → { params } に修正して params.id を使う。
+  const id = params?.id;
   stopPoll();
   pollAbort = false;
   clientRoundStartMs = null;
