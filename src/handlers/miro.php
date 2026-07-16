@@ -76,7 +76,14 @@ function _miro_room_row(PDO $pdo, int $id): ?array {
     return $r;
 }
 
-function _miro_note_shape(array $r, ?int $mySide): array {
+// v1108 中村さん指示「隠すと見せる、自分には見えるけど、相手には見えないようにして
+//   欲しい」→ 第 2 引数は「見る側 (requester) の user_id」に。作成者本人には常に見え、
+//   is_hidden の note は他人 (作成者以外) からは隠し (裏) 状態として返す。
+function _miro_note_shape(array $r, int $requesterId): array {
+    $creatorId = (int)$r['created_by_user_id'];
+    $isMine    = ($creatorId === $requesterId);
+    $isHidden  = (int)($r['is_hidden'] ?? 0) === 1;
+    $hiddenForMe = $isHidden && !$isMine;
     return [
         'id'                => (int)$r['id'],
         'room_id'           => (int)$r['room_id'],
@@ -86,15 +93,20 @@ function _miro_note_shape(array $r, ?int $mySide): array {
         'height'            => (float)$r['height'],
         'rotation'          => (float)$r['rotation'],
         'color'             => (string)$r['color'],
-        'front_text'        => (string)($r['front_text'] ?? ''),
+        // 他人に見えない (hidden) 時は text / image を配信しない (漏洩防止)
+        'front_text'        => $hiddenForMe ? '' : (string)($r['front_text'] ?? ''),
+        'front_image_url'   => $hiddenForMe ? null : ($r['front_image_url'] ?: null),
+        // back_* は互換のため残すが UI では未使用
         'back_text'         => (string)($r['back_text']  ?? ''),
-        'front_image_url'   => $r['front_image_url'] ?: null,
         'back_image_url'    => $r['back_image_url']  ?: null,
         'z_index'           => (int)$r['z_index'],
-        'created_by_user_id'=> (int)$r['created_by_user_id'],
+        'is_hidden'         => $isHidden,
+        'hidden_for_me'     => $hiddenForMe,
+        'is_mine'           => $isMine,
+        'created_by_user_id'=> $creatorId,
+        'creator_name'      => (string)($r['creator_name'] ?? ''),
         'created_at'        => (string)$r['created_at'],
         'updated_at'        => (string)$r['updated_at'],
-        'my_side'           => $mySide ?: 2,   // v1103: デフォは裏 (隠し) — Flip で表を出す
     ];
 }
 
@@ -155,13 +167,15 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $room = _miro_room_row($pdo, $id);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    // notes 一括
-    $st = $pdo->prepare("SELECT * FROM miro_notes WHERE room_id = ? AND deleted_at IS NULL ORDER BY id ASC");
+    // notes 一括 (作成者名を LEFT JOIN で拾って shape に渡す)
+    $st = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
+                           FROM miro_notes n
+                      LEFT JOIN users u ON u.id = n.created_by_user_id
+                          WHERE n.room_id = ? AND n.deleted_at IS NULL ORDER BY n.id ASC");
     $st->execute([$id]);
-    $flips = _miro_load_my_flips($pdo, (int)$u['id'], $id);
     $notes = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $notes[] = _miro_note_shape($r, $flips[(int)$r['id']] ?? 1);
+        $notes[] = _miro_note_shape($r, (int)$u['id']);
     }
     // 自分のデフォルト色
     $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
@@ -243,15 +257,17 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
         $since = '1970-01-01 00:00:00';
     }
     // 更新/新規 (deleted 含む)
-    $st = $pdo->prepare("SELECT * FROM miro_notes WHERE room_id = ? AND updated_at > ? ORDER BY id ASC");
+    $st = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
+                           FROM miro_notes n
+                      LEFT JOIN users u ON u.id = n.created_by_user_id
+                          WHERE n.room_id = ? AND n.updated_at > ? ORDER BY n.id ASC");
     $st->execute([$id, $since]);
-    $flips = _miro_load_my_flips($pdo, (int)$u['id'], $id);
     $upserts = []; $deletes = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         if ($r['deleted_at'] !== null) {
             $deletes[] = (int)$r['id'];
         } else {
-            $upserts[] = _miro_note_shape($r, $flips[(int)$r['id']] ?? 2);
+            $upserts[] = _miro_note_shape($r, (int)$u['id']);
         }
     }
     // v1104 他人のカーソル (最終 15 秒以内、自分は除外)
@@ -333,21 +349,29 @@ function miro_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $id = (int)$pdo->lastInsertId();
     // 部屋の updated_at を bump (poll 側の部屋更新判定用)
     $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
-    $rr = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ?");
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
     $note = $rr->fetch(PDO::FETCH_ASSOC);
-    json_response(['id' => $id, 'note' => _miro_note_shape($note, 2)]);
+    json_response(['id' => $id, 'note' => _miro_note_shape($note, (int)$u['id'])]);
 }
 
-// PATCH /api/miro/notes/{id}  body: { x?, y?, width?, height?, rotation?, color?, front_text?, back_text?, z_bump? }
+// PATCH /api/miro/notes/{id}  body: { x?, y?, width?, height?, rotation?, color?, front_text?, back_text?, is_hidden?, z_bump? }
 function miro_note_patch(PDO $pdo, array $cfg, int $id): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $n = $st->fetch(PDO::FETCH_ASSOC);
     if (!$n) throw new ApiException('not_found', 'note なし', 404);
     $body = read_json_body();
     $sets = []; $params = [];
+    // v1108 is_hidden の切り替えは作成者本人のみ (他人には自分の note の見え方を
+    //   コントロールする権限がある、非作成者が勝手に隠す/見せるのは不可)
+    if (array_key_exists('is_hidden', $body)) {
+        if ((int)$n['created_by_user_id'] !== (int)$u['id']) {
+            throw new ApiException('forbidden', '隠す / 見せるは作成者本人だけ', 403);
+        }
+        $sets[] = 'is_hidden = ?'; $params[] = $body['is_hidden'] ? 1 : 0;
+    }
     foreach (['x','y'] as $k) {
         if (array_key_exists($k, $body)) { $sets[] = "$k = ?"; $params[] = (float)$body[$k]; }
     }
@@ -385,9 +409,9 @@ function miro_note_patch(PDO $pdo, array $cfg, int $id): void {
     $pdo->prepare("UPDATE miro_notes SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
     // 部屋の updated_at を bump
     $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
-    $rr = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ?");
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
-    json_response(['ok' => true, 'note' => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), 1)]);
+    json_response(['ok' => true, 'note' => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
 }
 
 function miro_note_delete(PDO $pdo, array $cfg, int $id): void {
@@ -402,24 +426,24 @@ function miro_note_delete(PDO $pdo, array $cfg, int $id): void {
 }
 
 // POST /api/miro/notes/{id}/flip  → 自分の side をトグル (1↔2)
+// v1108 /flip は per-user 状態から per-note is_hidden トグルに転換。
+//   作成者本人だけが叩ける (403 それ以外)。更新後の note を返す。
 function miro_note_flip(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT id, room_id FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
+    $st = $pdo->prepare("SELECT id, room_id, created_by_user_id, is_hidden FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $n = $st->fetch(PDO::FETCH_ASSOC);
     if (!$n) throw new ApiException('not_found', 'note なし', 404);
-    // 現在 side (無ければ 1)
-    $curr = 1;
-    $s = $pdo->prepare("SELECT side FROM miro_note_flips WHERE note_id = ? AND user_id = ?");
-    $s->execute([$id, (int)$u['id']]);
-    $ex = $s->fetch(PDO::FETCH_ASSOC);
-    if ($ex) $curr = (int)$ex['side'];
-    $next = $curr === 1 ? 2 : 1;
-    $pdo->prepare("INSERT INTO miro_note_flips (note_id, user_id, side) VALUES (?, ?, ?)
-                    ON DUPLICATE KEY UPDATE side = VALUES(side)")
-        ->execute([$id, (int)$u['id'], $next]);
-    // 部屋の updated_at は bump しない (自分だけの状態、他人には見えない)
-    json_response(['ok' => true, 'my_side' => $next]);
+    if ((int)$n['created_by_user_id'] !== (int)$u['id']) {
+        throw new ApiException('forbidden', '隠す / 見せるは作成者本人だけ', 403);
+    }
+    $next = ((int)$n['is_hidden'] === 1) ? 0 : 1;
+    $pdo->prepare("UPDATE miro_notes SET is_hidden = ?, updated_at = NOW() WHERE id = ?")->execute([$next, $id]);
+    // 部屋の updated_at も bump (poll で他人が拾えるように)
+    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
+    $rr->execute([$id]);
+    json_response(['ok' => true, 'note' => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
 }
 
 // ─── default color (user_settings) ─────────────────────────────
@@ -514,12 +538,12 @@ function miro_note_generate_image(PDO $pdo, array $cfg, int $id): void {
     $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
 
     // 全体レコード返す
-    $rr = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ?");
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
     json_response([
         'ok'        => true,
         'side'      => $side,
         'image_url' => $rel,
-        'note'      => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), 1),
+        'note'      => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id']),
     ]);
 }

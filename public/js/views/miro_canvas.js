@@ -343,19 +343,18 @@ function wireCanvas() {
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
     } else if (mode === 'note' && !moved && nid) {
-      // v1106 タップの解釈:
-      //   裏 (my_side=2): 単発タップ = 表を見る (即 flip)
-      //   表 (my_side=1): 単発タップ = 何もしない、ダブルタップ = インライン編集
+      // v1108 タップの解釈:
+      //   ・他人が隠している note: 何もしない (中身も見えないので編集不可)
+      //   ・それ以外: ダブルタップでインライン編集 (誰でも OK、LabPay の共同編集モデル)
       const n = NOTE_MAP[nid];
-      const onBack = n && (n.my_side || 2) === 2;
-      const now = Date.now();
-      if (onBack) {
-        flipNote(nid).catch(() => {});
-      } else if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
-        TAP.noteId = null; TAP.ts = 0;
-        enterInlineEdit(nid, null);
-      } else {
-        TAP.noteId = nid; TAP.ts = now;
+      if (n && !n.hidden_for_me) {
+        const now = Date.now();
+        if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
+          TAP.noteId = null; TAP.ts = 0;
+          enterInlineEdit(nid, null);
+        } else {
+          TAP.noteId = nid; TAP.ts = now;
+        }
       }
     }
   });
@@ -477,36 +476,51 @@ function renderAll() {
 }
 
 function noteHtml(n) {
-  const side = n.my_side || 2;
   const bg = escapeHtml(n.color || '#FEF9A8');
-  const isBack = side === 2;
-  // v1106 ヘッダの当たり判定を大きく: font-size↑ / padding↑、
-  //   flip / delete は文字ラベル付きボタンにして「わかりにくい」を回避。
+  // v1108 セマンティクス変更:
+  //   is_hidden は note 単位 (作成者だけが 🙈 / 👀 で切替)。
+  //   hidden_for_me = 他人が見た時に隠し状態として表示すべきか (server 計算)。
+  //   自分の is_hidden な note は自分にはずっと表 (front_text 見える)、破線ボーダ +
+  //   「🙈 自分だけ」バッジで「他人には見えてないよ」を明示。
+  const hiddenForMe = !!n.hidden_for_me;
+  const isMine     = !!n.is_mine;
+  const isHidden   = !!n.is_hidden;
   const btnStyle = 'border:none; background:rgba(255,255,255,0.35); cursor:pointer; padding:3px 8px; font-size:15px; border-radius:5px; line-height:1';
   const btnDanger = btnStyle + '; color:#991b1b';
-  const header = isBack
-    ? `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
-         <span style="font-weight:600">🌒 ウラ</span>
-         <span style="margin-left:auto"></span>
-         <button data-flip-id="${n.id}" style="${btnStyle}; font-weight:600" title="表を見る">👀 見る</button>
-         <button data-del-id="${n.id}" style="${btnDanger}" title="削除">🗑</button>
-       </div>`
-    : `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
-         <span style="font-weight:600">🌅 オモテ</span>
-         <span style="margin-left:auto"></span>
-         <button data-color-id="${n.id}"  style="${btnStyle}" title="色を変える">🎨</button>
-         <button data-genimg-id="${n.id}" style="${btnStyle}" title="AI 画像を生成">🖼</button>
-         ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="${btnStyle}" title="画像を消す">🚫</button>` : ''}
-         <button data-flip-id="${n.id}"   style="${btnStyle}; font-weight:600" title="裏に隠す">🙈 隠す</button>
-         <button data-del-id="${n.id}"    style="${btnDanger}" title="削除">🗑</button>
-       </div>`;
-  // ボディ: 裏 = タップで表を見せる大きい案内、表 = text + image
+
+  let header;
+  if (hiddenForMe) {
+    const cname = escapeHtml(n.creator_name || 'だれか');
+    header = `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
+      <span style="opacity:0.7">${cname} が隠しています</span>
+      <span style="margin-left:auto"></span>
+    </div>`;
+  } else {
+    const flipBtn = isMine
+      ? (isHidden
+          ? `<button data-flip-id="${n.id}" style="${btnStyle}" title="みんなに公開する (今は自分だけ見える)">👀</button>`
+          : `<button data-flip-id="${n.id}" style="${btnStyle}" title="自分だけ見えるようにする">🙈</button>`)
+      : '';
+    const badge = (isMine && isHidden)
+      ? `<span style="font-size:10px; color:#7c3aed; font-weight:700; background:rgba(124,58,237,0.10); padding:1px 6px; border-radius:4px" title="他の人には裏が見えています">🙈 自分だけ</span>`
+      : '';
+    header = `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
+       ${badge}
+       <span style="margin-left:auto"></span>
+       <button data-color-id="${n.id}"  style="${btnStyle}" title="色を変える">🎨</button>
+       <button data-genimg-id="${n.id}" style="${btnStyle}" title="AI 画像を生成">🖼</button>
+       ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="${btnStyle}" title="画像を消す">🚫</button>` : ''}
+       ${flipBtn}
+       <button data-del-id="${n.id}" style="${btnDanger}" title="削除">🗑</button>
+     </div>`;
+    // 誰でも削除可能 (LabPay の共同モデル)。 hide/show は作成者のみ (creator ownership)
+  }
+
   let body;
-  if (isBack) {
-    // v1106 裏は body 全域が flip target (data-flip-body でイベント委譲)
-    body = `<div class="mnote-body" data-flip-body="${n.id}" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; cursor:pointer; gap:6px">
-              <div style="font-size:42px; opacity:0.55">👀</div>
-              <div style="font-size:13px; color:rgba(0,0,0,0.55); font-weight:600; letter-spacing:0.05em">タップで見る</div>
+  if (hiddenForMe) {
+    body = `<div class="mnote-body" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; gap:6px; opacity:0.55">
+              <div style="font-size:42px">🙈</div>
+              <div style="font-size:11px; color:rgba(0,0,0,0.5); font-weight:600">隠されています</div>
             </div>`;
   } else {
     const img = n.front_image_url;
@@ -517,10 +531,12 @@ function noteHtml(n) {
               <div class="mnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
             </div>`;
   }
+  // 自分だけ見えてる時の視覚ヒント: 破線ボーダー
+  const extraBorder = (isMine && isHidden) ? '; border:2px dashed rgba(124,58,237,0.55)' : '';
   return `
-    <div class="mnote" data-id="${n.id}" data-side="${side}"
+    <div class="mnote" data-id="${n.id}"
          style="position:absolute; left:${n.x}px; top:${n.y}px; width:${n.width}px; height:${n.height}px;
-                background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
+                background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15)${extraBorder};
                 transform:rotate(${n.rotation || 0}deg); transform-origin:center; padding:8px;
                 display:flex; flex-direction:column; user-select:none; touch-action:none; cursor:grab;
                 box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif">
@@ -558,12 +574,13 @@ async function bringToFront(id) {
   } catch (_) {}
 }
 
+// v1108 flip = 作成者本人が is_hidden をトグル (他人には裏に見える / 自分にはずっと見える)
 async function flipNote(id) {
   try {
     const r = await post(`/api/miro/notes/${id}/flip`, {});
-    if (NOTE_MAP[id]) NOTE_MAP[id].my_side = r.my_side;
+    if (r.note && NOTE_MAP[id]) NOTE_MAP[id] = r.note;
     renderAll();
-  } catch (e) { toast('反転失敗: ' + e.message); }
+  } catch (e) { toast('切替失敗: ' + e.message); }
 }
 
 // ─── inline text edit (v1103, replaces modal) ─────────────────
@@ -631,7 +648,7 @@ async function commitInlineEdit() {
   try {
     const r = await patch(`/api/miro/notes/${id}`, { front_text: v });
     if (r.note && NOTE_MAP[id]) {
-      Object.assign(NOTE_MAP[id], r.note, { my_side: NOTE_MAP[id].my_side });
+      Object.assign(NOTE_MAP[id], r.note);
     }
   } catch (e) { toast('保存失敗: ' + e.message); }
   renderAll();
@@ -655,7 +672,7 @@ async function clearImageFor(id) {
   try {
     const r = await patch(`/api/miro/notes/${id}`, { front_image_url: '' });
     if (r.note && NOTE_MAP[id]) {
-      Object.assign(NOTE_MAP[id], r.note, { my_side: NOTE_MAP[id].my_side });
+      Object.assign(NOTE_MAP[id], r.note);
     }
     renderAll();
   } catch (e) { toast('画像消し失敗: ' + e.message); }
@@ -683,7 +700,7 @@ function openColorPop(id, anchorEl) {
       try {
         const rr = await patch(`/api/miro/notes/${id}`, { color: newColor });
         if (rr.note && NOTE_MAP[id]) {
-          Object.assign(NOTE_MAP[id], rr.note, { my_side: NOTE_MAP[id].my_side });
+          Object.assign(NOTE_MAP[id], rr.note);
         }
         renderAll();
       } catch (err) { toast('色変更失敗: ' + err.message); }
@@ -721,7 +738,7 @@ function openImagePromptFor(id) {
     try {
       const r = await post(`/api/miro/notes/${PROMPT_NOTE_ID}/generate-image`, { prompt, side: 'front' });
       if (r.note && NOTE_MAP[PROMPT_NOTE_ID]) {
-        Object.assign(NOTE_MAP[PROMPT_NOTE_ID], r.note, { my_side: NOTE_MAP[PROMPT_NOTE_ID].my_side });
+        Object.assign(NOTE_MAP[PROMPT_NOTE_ID], r.note);
       }
       renderAll();
       close();
