@@ -48,12 +48,12 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
 
 // ---------- helpers ----------
 
-// v911 #465 「タスクの締切と実施は別」 対応。
+// v911 #465 「タスクの締切と実施は別」対応。
 //   従来: deadline (応募締切) が過ぎた時点で auto-cancel + escrow 返金 + 全 claim 取消。
-//     ボランティア募集のように「募集 締切=応募終了、 実施は後日」 のタスクだと 応募終了と同時に
-//     全員 の 割当 が キャンセルされてしまう バグに なっていた (task#19、 応募 7/1・実施 8/6-7)。
-//   修正後: スロット (task_slots) を持つタスクは 「最終 slot ended_at」 と task.deadline の
-//     両方が過ぎるまで auto-cancel しない。 slot が無い タスクは従来通り deadline だけで判定。
+//     ボランティア募集のように「募集締切=応募終了、実施は後日」のタスクだと応募終了と同時に
+//     全員の割当がキャンセルされてしまうバグになっていた (task#19、応募 7/1・実施 8/6-7)。
+//   修正後: スロット (task_slots) を持つタスクは「最終 slot ended_at」と task.deadline の
+//     両方が過ぎるまで auto-cancel しない。 slot が無いタスクは従来通り deadline だけで判定。
 function tasks_sweep_expired(PDO $pdo, array $cfg): void {
     $st = $pdo->query("
         SELECT t.id
@@ -75,9 +75,9 @@ function tasks_sweep_expired(PDO $pdo, array $cfg): void {
     }
 }
 
-// v909 #464 タスク エスクロー の 返金先 は funded_by_system=1 なら SYSTEM、 それ以外は依頼者。
-//   ボランティア募集 (システム 持ち出し) が 期限切れで キャンセルされた 際、 起案者 (中村) に
-//   14000pt が 戻ってしまう バグ が あった。 SYSTEM から出た金 は SYSTEM に返る のが正しい。
+// v909 #464 タスクエスクローの返金先は funded_by_system=1 なら SYSTEM、それ以外は依頼者。
+//   ボランティア募集 (システム持ち出し) が期限切れでキャンセルされた際、起案者 (中村) に
+//   14000pt が戻ってしまうバグがあった。 SYSTEM から出た金は SYSTEM に返るのが正しい。
 function _tasks_refund_account(PDO $pdo, array $task): int {
     if ((int)($task['funded_by_system'] ?? 0) === 1) {
         return Ledger::accountIdByCode($pdo, 'SYSTEM');
@@ -850,6 +850,20 @@ function tasks_create(PDO $pdo, array $cfg): void {
     //   ESCROW への入金元を LabPay system user (kind='system') に切り替える。
     //   admin 以外が送ってきたら無視する (権限ガード)。
     $fundedBySystem = (!empty($body['funded_by_system']) && (($u['role'] ?? '') === 'admin')) ? 1 : 0;
+
+    // v1115 中村さん指摘「募集ボタンを押した時に上手く反映されているかわからず、複数回押してしまう」
+    //   → 30 秒以内に同じ requester が同じ title で作った task があれば idempotent に既存 id を返す。
+    //   通知配信中にダブルクリックが両方通ってしまうケースの防波堤。 escrow の二重徴収も防ぐ。
+    $dup = $pdo->prepare("SELECT id FROM tasks
+                           WHERE requester_user_id = ? AND title = ?
+                             AND created_at > NOW() - INTERVAL 30 SECOND
+                           ORDER BY id DESC LIMIT 1");
+    $dup->execute([$u['id'], $title]);
+    $existingId = (int)$dup->fetchColumn();
+    if ($existingId > 0) {
+        json_response(['ok' => true, 'id' => $existingId, 'deduped' => true]);
+        return;
+    }
 
     $taskId = db_tx($pdo, function () use ($pdo, $u, $title, $description, $url, $reward,
                                             $capacity, $perLimit, $deadline, $aud, $assignedCsv,

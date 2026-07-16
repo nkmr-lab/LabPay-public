@@ -138,7 +138,7 @@ export async function renderTasks() {
     showHistory = ev.currentTarget.checked;
     loadList();
   });
-  // ホームの「＋ 新しくタスクを設定する」経由など、 #/tasks?new=request / ?new=assign
+  // ホームの「＋新しくタスクを設定する」経由など、 #/tasks?new=request / ?new=assign
   // で来た場合は対応フォームを自動展開。query 部分はそのまま残しておくと再 render
   // で毎回開いて鬱陶しいので、 URL を綺麗にしてから開く。
   const m = (location.hash || '').match(/[?&]new=(request|assign|free)/);
@@ -456,7 +456,7 @@ async function onCreate() {
   const submitBtn = document.getElementById('t-submit');
   if (submitBtn?.disabled) return; // 既に送信中
   const submitOrig = submitBtn?.textContent || '';
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '送信中…'; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '⌛ 起案中… (通知配信のため少しかかります)'; }
   const restoreBtn = () => {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitOrig; }
   };
@@ -521,6 +521,7 @@ async function onCreate() {
 
   try {
     const created = await post('/api/tasks', payload);
+    if (created.deduped) toast('連打を検出したので既存の依頼を開きます');
     // Upload attachments after the task row is created so the task_id exists.
     // Failures here are surfaced but don't roll back the task — uploader can
     // retry from the task detail page (TODO: per-detail upload UI).
