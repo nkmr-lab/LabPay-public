@@ -141,6 +141,7 @@ $routes = [
     'labo-eats'      => 'route_labo_eats',     // v1123 ラーボーイーツ (研究室版 UBER EATS)
     'profile-book'   => 'route_profile_book',  // v1124 プロフ帳 (平成デザ)
     'research-ai'    => 'route_research_ai',   // v1125 研究特化 AI サブスク
+    'setlog'         => 'route_setlog',        // v1126 setlog (LabPay 版 Vlog)
 ];
 
 try {

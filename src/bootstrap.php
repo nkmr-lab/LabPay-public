@@ -607,3 +607,4 @@ require_once __DIR__ . '/handlers/tickets.php';       // v1122 チケット生�
 require_once __DIR__ . '/handlers/labo_eats.php';    // v1123 ラーボーイーツ (研究室版 UBER EATS)
 require_once __DIR__ . '/handlers/profile_book.php'; // v1124 プロフ帳 (平成デザ)
 require_once __DIR__ . '/handlers/research_ai.php';  // v1125 研究特化 AI サブスク
+require_once __DIR__ . '/handlers/setlog.php';        // v1126 setlog (LabPay 版 Vlog)

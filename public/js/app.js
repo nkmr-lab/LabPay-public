@@ -518,6 +518,8 @@ route('/labo-eats',             lazy(() => import('./views/labo_eats.js'), 'rend
 route('/profile-book',          lazy(() => import('./views/profile_book.js'), 'renderProfileBook'));
 // v1125 研究特化 AI サブスク
 route('/research-ai',           lazy(() => import('./views/research_ai.js'), 'renderResearchAI'));
+// v1126 setlog (LabPay 版 Vlog)
+route('/setlog',                lazy(() => import('./views/setlog.js'), 'renderSetlog'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿
