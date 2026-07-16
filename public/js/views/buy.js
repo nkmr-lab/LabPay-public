@@ -13,6 +13,19 @@ export async function renderBuy() {
       <span class="muted">残高</span>
       <span class="bold text-primary" id="buy-balance">— pt</span>
     </div>
+
+    <div class="card" style="padding:8px 10px">
+      <div class="bold" style="font-size:12.5px; color:#6b7280; margin-bottom:6px; letter-spacing:0.03em">🛍 売買アプリ</div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:6px">
+        <a href="#/buy"        style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; background:#faf7fc; color:#4a106d; text-align:center; font-size:12px"><div style="font-size:18px">🛒</div>購入</a>
+        <a href="#/sell"       style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; text-align:center; font-size:12px"><div style="font-size:18px">🏷</div>販売</a>
+        <a href="#/auctions"   style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; text-align:center; font-size:12px"><div style="font-size:18px">🏛</div>オークション</a>
+        <a href="#/labo-eats"  style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; text-align:center; font-size:12px"><div style="font-size:18px">🍱</div>ラーボーイーツ</a>
+        <a href="#/tickets"    style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; text-align:center; font-size:12px"><div style="font-size:18px">🎫</div>チケット</a>
+        <a href="#/pres-order" style="text-decoration:none; padding:8px 6px; border:1px solid var(--line); border-radius:8px; text-align:center; font-size:12px"><div style="font-size:18px">🎪</div>発表順オークション</a>
+      </div>
+    </div>
+
     <details class="card" id="buy-history">
       <summary style="cursor:pointer; font-weight:600; user-select:none">💴 自分の売買履歴 (購入 / 販売 / 収支)</summary>
       <div style="margin-top:8px">

@@ -283,11 +283,17 @@ function renderChrome() {
 // v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
 //   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。食べある記・ラボにいる人はタブから外し
 //   #/apps からアクセスする形に。全員デフォルトに戻すため、 layout key を v2 に上げる。
+// v1132 中村さん要望「一旦みんなの表示タブ設定を整理しよう。 らぼったー、売買、依頼、
+//   研究、共有、運営、娯楽、アプリに限定していこう」+「購入タブを売買タブに名前を変更、
+//   そこに 購入・販売・オークション・ラーボーイーツ・チケット・発表順オークションを配置」
+//   → id='buy' を title='売買' に rename (画面自体は購入 UI + 上部に売買アプリ集を追加)。
+//   home / groups / sell / auctions / achievements は DEFAULT_HIDDEN_TABS に (URL/apps 経由で到達可)。
+//   layout key を v3 に上げて全員のデフォルトを新配置に更新。
 export const TAB_DEFS = [
   { id: 'home',         title: 'ホーム' },
   { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
   { id: 'sns',          title: 'らぼったー (SNS)' },
-  { id: 'buy',          title: '購入' },
+  { id: 'buy',          title: '売買' },
   { id: 'sell',         title: '販売' },
   { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
   { id: 'auctions',     title: '競売 (オークション)' },
@@ -298,8 +304,9 @@ export const TAB_DEFS = [
   { id: 'apps',         title: 'アプリ' },
   { id: 'achievements', title: '実績' },
 ];
-export const DEFAULT_HIDDEN_TABS = []; // v514 デフォルトでは全部表示 (タブ自体を少数厳選)
-const TAB_LAYOUT_KEY = 'labpay-tab-layout-v2';
+// v1132 初期は 8 タブ限定 (らぼったー / 売買 / 依頼 / 研究 / 共有 / 運営 / 娯楽 / アプリ)
+export const DEFAULT_HIDDEN_TABS = ['home','groups','sell','auctions','achievements'];
+const TAB_LAYOUT_KEY = 'labpay-tab-layout-v3';
 export function readTabLayout() {
   try {
     const raw = localStorage.getItem(TAB_LAYOUT_KEY);
