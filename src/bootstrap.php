@@ -601,3 +601,4 @@ require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押しク�
 require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト追跡
 require_once __DIR__ . '/handlers/miro.php';         // v1100 Miro 的な共同ポストイット空間
 require_once __DIR__ . '/handlers/tomorrow_lab.php'; // v1119 明日、研究室に一緒に行こう
+require_once __DIR__ . '/handlers/pres_order.php';   // v1120 発表順オークション

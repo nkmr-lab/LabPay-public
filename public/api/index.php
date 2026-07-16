@@ -135,6 +135,7 @@ $routes = [
     'overleaf'       => 'route_overleaf',    // v886 Overleaf プロジェクト追跡
     'miro'           => 'route_miro',        // v1100 Miro 的な共同ポストイット空間
     'tomorrow-lab'   => 'route_tomorrow_lab', // v1119 明日、研究室に一緒に行こう
+    'pres-order'     => 'route_pres_order',   // v1120 発表順オークション
 ];
 
 try {
