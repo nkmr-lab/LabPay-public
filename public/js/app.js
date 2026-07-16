@@ -504,6 +504,8 @@ route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderK
 // v1100 Miro 的な共同ポストイット空間
 route('/miro',                  lazy(() => import('./views/miro_rooms.js'), 'renderMiroRooms'));
 route('/miro/rooms/:id',        lazy(() => import('./views/miro_canvas.js'), 'renderMiroCanvas'));
+// v1119 明日、研究室に一緒に行こう
+route('/tomorrow-lab',          lazy(() => import('./views/tomorrow_lab.js'), 'renderTomorrowLab'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿
