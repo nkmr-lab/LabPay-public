@@ -143,17 +143,26 @@ function shiritori_game_detail(PDO $pdo, int $uid, int $gid): void {
                                  image_url, ai_guess, created_at
                             FROM shiritori_drawings WHERE game_id = ? ORDER BY turn_idx ASC");
     $stD->execute([$gid]);
-    $drawings = array_map(fn($r) => [
-        'id'              => (int)$r['id'],
-        'user_id'         => (int)$r['user_id'],
-        'turn_idx'        => (int)$r['turn_idx'],
-        'round_idx'       => (int)$r['round_idx'],
-        'label_self'      => $r['label_self'],
-        'label_prev_guess'=> $r['label_prev_guess'],
-        'image_url'       => $r['image_url'],
-        'ai_guess'        => $r['ai_guess'],
-        'created_at'      => $r['created_at'],
-    ], $stD->fetchAll(PDO::FETCH_ASSOC));
+    // v1113 中村さん報告「バグ絵しりとり何書いたか参加者に表示されちゃう」
+    //   → label_self (描き手が書いたお題) と label_prev_guess (前の絵の推測)、 ai_guess は
+    //   ゲーム進行中は「本人」以外に見せない (お題ネタバレ回避)。 ended になったら全公開。
+    $isEnded = ($game['status'] === 'ended');
+    $drawings = array_map(function ($r) use ($uid, $isEnded) {
+        $mine = ((int)$r['user_id'] === $uid);
+        $canSee = $isEnded || $mine;
+        return [
+            'id'              => (int)$r['id'],
+            'user_id'         => (int)$r['user_id'],
+            'turn_idx'        => (int)$r['turn_idx'],
+            'round_idx'       => (int)$r['round_idx'],
+            'label_self'      => $canSee ? $r['label_self']       : null,
+            'label_prev_guess'=> $canSee ? $r['label_prev_guess'] : null,
+            'image_url'       => $r['image_url'],
+            'ai_guess'        => $canSee ? $r['ai_guess']         : null,
+            'created_at'      => $r['created_at'],
+            'is_mine'         => $mine,
+        ];
+    }, $stD->fetchAll(PDO::FETCH_ASSOC));
 
     // 現在の描き手 = current_turn_idx 番目のプレイヤー (mod プレイヤー数)。
     $n = max(1, count($players));
