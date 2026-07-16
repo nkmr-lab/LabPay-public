@@ -3210,6 +3210,7 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
     $st = $pdo->prepare("SELECT dr.id, dr.user_id, dr.share_token, dr.query_text, dr.model, dr.depth,
                                  dr.openai_response_id, dr.progress_text,
                                  dr.cost_points, dr.share_priced, dr.status, dr.result_json, dr.usage_json,
+                                 dr.trace_json,
                                  dr.error_msg, dr.created_at, dr.finished_at, dr.is_shared, dr.shared_at,
                                  u.display_name AS author_name, u.avatar_url AS author_avatar
                             FROM deep_researches dr JOIN users u ON u.id = dr.user_id
@@ -3236,6 +3237,7 @@ function ai_deep_research_get_shared(PDO $pdo, array $cfg, string $token): void 
         'openai_response_id' => $row['openai_response_id'] ?? null,
         'result'             => json_decode($row['result_json'] ?: 'null', true),
         'usage'              => json_decode($row['usage_json']  ?: 'null', true),
+        'trace'              => json_decode($row['trace_json']  ?: 'null', true),   // v1096 探索行動トレース
         'error_msg'          => $row['error_msg'],
         'created_at'         => $row['created_at'],
         'finished_at'        => $row['finished_at'],
@@ -3510,15 +3512,41 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
 
     $oaStatus = (string)($j['status'] ?? 'in_progress');
 
-    // 進捗集計
+    // 進捗集計 + v1096 中村さん要望「実際にどのような探索行動を行ったのか、後で
+    //   確認できるように、トレーサビリティ的観点から」→ output 配列から
+    //   web_search_call.action.query と reasoning.summary を抽出してトレースを作る。
     $searchCount = 0;
     $reasoningCount = 0;
     $hasMessage = false;
+    $trace = [];   // v1096: [ {type:'search', query, timestamp?}, {type:'reasoning', summary}, {type:'message'} ]
     foreach (($j['output'] ?? []) as $it) {
         $t = $it['type'] ?? '';
-        if ($t === 'web_search_call') $searchCount++;
-        elseif ($t === 'reasoning')   $reasoningCount++;
-        elseif ($t === 'message')     $hasMessage = true;
+        if ($t === 'web_search_call') {
+            $searchCount++;
+            // Responses API では action.query (最新) or query (旧) に検索クエリが入る
+            $q = (string)($it['action']['query'] ?? $it['query'] ?? '');
+            $st = (string)($it['status'] ?? '');
+            $trace[] = ['type' => 'search', 'query' => $q, 'status' => $st];
+        } elseif ($t === 'reasoning') {
+            $reasoningCount++;
+            // summary は配列 [{type:'summary_text', text:'...'}] or 単一文字列
+            $sum = '';
+            if (isset($it['summary']) && is_array($it['summary'])) {
+                foreach ($it['summary'] as $s) {
+                    if (is_array($s)) $sum .= (string)($s['text'] ?? '');
+                    else              $sum .= (string)$s;
+                    $sum .= "\n";
+                }
+                $sum = trim($sum);
+            } elseif (is_string($it['summary'] ?? null)) {
+                $sum = $it['summary'];
+            }
+            // summary が空でも「推論あり」として残す (順序が分かる)
+            $trace[] = ['type' => 'reasoning', 'summary' => $sum];
+        } elseif ($t === 'message') {
+            $hasMessage = true;
+            $trace[] = ['type' => 'message'];
+        }
     }
 
     if ($oaStatus === 'completed') {
@@ -3557,13 +3585,16 @@ function ai_deep_research_poll(PDO $pdo, array $cfg, array $row): array {
             'total_tokens'  => (int)($usage['total_tokens']  ?? 0),
             'search_count'  => $searchCount,
         ];
+        // v1096 トレースも保存 (search クエリ + reasoning summary の順序付き配列)
+        $traceJson = json_encode($trace, JSON_UNESCAPED_UNICODE);
         $pdo->prepare("UPDATE deep_researches
-                          SET result_json=?, usage_json=?, status='done',
+                          SET result_json=?, usage_json=?, trace_json=?, status='done',
                               progress_text=NULL, finished_at=NOW()
                         WHERE id=?")
             ->execute([
                 json_encode($parsed, JSON_UNESCAPED_UNICODE),
                 json_encode($usageRec, JSON_UNESCAPED_UNICODE),
+                $traceJson,
                 $row['id'],
             ]);
         // v913 auto_share=1 なら公開 ON に (paper_translate と同じ pattern)

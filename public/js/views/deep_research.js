@@ -462,9 +462,60 @@ function renderRichText(text) {
   return out.join('');
 }
 
+// v1096 中村さん要望「DeepResearch 機能、実際にどのような探索行動を行ったのか？
+//   みたいなことを後で確認できるようにして欲しい。トレーサビリティ的観点からも」
+//   OpenAI Responses API の output 配列から抽出した「検索クエリ + 推論 summary」の
+//   順序付きトレースを、時系列カードで表示。検索クエリは Google に飛べるリンク付き。
+function renderTraceCard(trace, searchCount) {
+  if (!trace.length) return '';   // 旧レコード (trace_json 未保存) は非表示
+  const searches = trace.filter(x => x.type === 'search');
+  const reasonings = trace.filter(x => x.type === 'reasoning');
+  const summary = `🌐 検索 ${searches.length} 回・ 🧠 推論ステップ ${reasonings.length} 段`;
+  return `
+    <details class="card" style="background:#f5f3ff; border-left:3px solid #6b21a8">
+      <summary style="cursor:pointer; font-weight:600; color:#6b21a8">🔍 探索トレース (${summary}) — タップで展開</summary>
+      <div style="margin-top:8px; font-size:12.5px; line-height:1.6; display:flex; flex-direction:column; gap:6px">
+        ${trace.map((step, i) => renderTraceStep(step, i + 1)).join('')}
+      </div>
+      <div class="hint-sm" style="margin-top:6px; color:#6b7280; font-size:11px">
+        時系列で AI が実際に行った動作: 🌐=Web 検索クエリ / 🧠=推論ステップ (要約) / 💬=最終回答生成。検索クエリは Google に飛べます。
+      </div>
+    </details>`;
+}
+function renderTraceStep(step, i) {
+  if (step.type === 'search') {
+    const q = String(step.query || '');
+    const st = step.status && step.status !== 'completed' ? ` <span class="hint-sm" style="color:#dc2626">(${escapeHtml(step.status)})</span>` : '';
+    const googleUrl = 'https://www.google.com/search?q=' + encodeURIComponent(q);
+    return `<div style="padding:4px 8px; background:#fff; border-left:3px solid #059669; border-radius:0 4px 4px 0">
+      <span style="color:#059669; font-weight:600">🌐 #${i}</span> Web 検索:
+      ${q ? `<a href="${escapeHtml(googleUrl)}" target="_blank" rel="noopener" style="color:#0284c7; text-decoration:underline">${escapeHtml(q)}</a>` : '<span class="hint-sm">(クエリ非公開)</span>'}${st}
+    </div>`;
+  }
+  if (step.type === 'reasoning') {
+    const s = String(step.summary || '').trim();
+    if (!s) {
+      return `<div style="padding:4px 8px; background:#fff; border-left:3px solid #a16207; border-radius:0 4px 4px 0">
+        <span style="color:#a16207; font-weight:600">🧠 #${i}</span> 推論ステップ <span class="hint-sm" style="color:#6b7280">(summary 未提供)</span>
+      </div>`;
+    }
+    return `<div style="padding:4px 8px; background:#fff; border-left:3px solid #a16207; border-radius:0 4px 4px 0">
+      <span style="color:#a16207; font-weight:600">🧠 #${i}</span> 推論:
+      <div style="margin-top:2px; white-space:pre-wrap; color:#374151">${escapeHtml(s)}</div>
+    </div>`;
+  }
+  if (step.type === 'message') {
+    return `<div style="padding:4px 8px; background:#fff; border-left:3px solid #7b3fa0; border-radius:0 4px 4px 0">
+      <span style="color:#7b3fa0; font-weight:600">💬 #${i}</span> 最終回答を生成
+    </div>`;
+  }
+  return `<div style="padding:4px 8px">? #${i} ${escapeHtml(step.type || '')}</div>`;
+}
+
 function paintResult(d) {
   const r = d.result || {};
   const u = d.usage || {};
+  const trace = Array.isArray(d.trace) ? d.trace : [];
   const root = document.getElementById('dr-result');
   root.innerHTML = `
     ${u.total_tokens || u.search_count ? `
@@ -473,6 +524,8 @@ function paintResult(d) {
           📊 使用量: 入力 ${u.input_tokens || 0} tok ・出力 ${u.output_tokens || 0} tok ・合計 ${u.total_tokens || 0} tok ・ Web 検索 ${u.search_count || 0} 回
         </div>
       </div>` : ''}
+
+    ${renderTraceCard(trace, u.search_count || 0)}
 
     ${r.query_understanding ? `
       <div class="card">
