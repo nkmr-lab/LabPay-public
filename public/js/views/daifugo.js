@@ -11,6 +11,16 @@ let pollTimer = null;
 const SUITS = ['♣', '♦', '♥', '♠'];
 const RANKS = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
 
+// v1116 中村さん指摘「複数枚選択したら、数秒後に選択が消えてしまう」
+//   → 2.5 秒ポーリングで innerHTML 再描画するたびにローカル Set がリセットされていた。
+//   ゲーム id ごとに module スコープで選択を保持し、再描画後に復元する。
+const SELECTED_BY_GID = new Map();  // gid → Set<card_index>
+function getSelected(gid) {
+  if (!SELECTED_BY_GID.has(gid)) SELECTED_BY_GID.set(gid, new Set());
+  return SELECTED_BY_GID.get(gid);
+}
+function clearSelected(gid) { SELECTED_BY_GID.set(gid, new Set()); }
+
 function cardLabel(c) {
   if (c === 52) return '🃏';
   const r = c % 13;
@@ -26,7 +36,7 @@ export async function renderDaifugo() {
       <div class="row center" style="gap:6px">
         <h2 style="margin:0">🃏 大富豪</h2>
         <span style="flex:1"></span>
-        <button id="df-new" class="btn primary">＋ 新規卓 (2pt)</button>
+        <button id="df-new" class="btn primary">＋新規卓 (2pt)</button>
       </div>
       <p class="hint" style="font-size:13px; margin:6px 0 0">
         2-4 人。単出し / ペア / N枚出し。<b>プレイフィー 2pt</b>。
@@ -54,7 +64,7 @@ export async function renderDaifugo() {
   try {
     const d = await get('/api/daifugo/games');
     const items = d.items || [];
-    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓がありません。「＋ 新規卓」で始めましょう。</div>'; return; }
+    if (!items.length) { document.getElementById('df-list').innerHTML = '<div class="hint">対戦卓がありません。「＋新規卓」で始めましょう。</div>'; return; }
     document.getElementById('df-list').innerHTML = items.map(g => `
       <a class="list-item" href="#/daifugo/${g.id}">
         <div class="grow">
@@ -153,21 +163,42 @@ async function paintDaifugo(gid) {
     ${d.status === 'finished' ? `
       <div class="card" style="background:linear-gradient(135deg, #fbbf24, #ef4444); color:#fff; text-align:center">
         <h3 style="margin:0">🎉 ゲーム終了</h3>
-        <div>1 位: 座 ${d.finished_ranks[0] + 1}</div>
+        <div style="margin-top:6px; text-align:left; max-width:280px; margin-left:auto; margin-right:auto">
+          ${(d.finished_ranks || []).map((seat, idx) => {
+            const p = d.players.find(pp => pp.seat === seat);
+            const name = p ? p.display_name : `座 ${seat + 1}`;
+            const emoji = ['🥇','🥈','🥉','🎖'][idx] || '·';
+            return `<div style="padding:2px 8px">${emoji} ${idx + 1} 位: <b>${escapeHtml(name)}</b></div>`;
+          }).join('')}
+        </div>
       </div>` : ''}
 
     ${d.status === 'playing' && d.my_seat !== null && myRank === null ? `
     <div class="card">
       <h3 style="margin:0 0 6px">あなたの手札 (タップで選択)</h3>
+      <div class="hint-sm" style="font-size:11px; color:#6b7280; margin-bottom:4px">
+        ${d.last_play
+          ? (d.revolution
+              ? `場: ${cardLabel(d.last_play.cards[0])}${d.last_play.cards.length>1?` × ${d.last_play.cards.length}`:''} · <b>革命中</b> → 同枚数で <b>より弱い</b> 数字を出す (青枠 = 出せる候補)`
+              : `場: ${cardLabel(d.last_play.cards[0])}${d.last_play.cards.length>1?` × ${d.last_play.cards.length}`:''} → 同枚数で <b>より強い</b> 数字を出す (青枠 = 出せる候補)`)
+          : '場は空。好きな枚数で始められる (青枠 = すべて候補)'}
+      </div>
       <div id="df-hand" style="display:flex; gap:4px; flex-wrap:wrap; padding:6px">
-        ${myHand.map(c => `<button class="df-card" data-c="${c}" style="padding:8px 10px; border:2px solid #ccc; background:#fff; border-radius:6px; font-size:18px; min-width:48px; cursor:pointer">${cardLabel(c)}</button>`).join('')}
+        ${myHand.map(c => {
+          const isJoker = c === 52;
+          const legal = isPlayableHint(c, d);
+          const bg = legal ? '#eff6ff' : '#f3f4f6';
+          const border = legal ? '#3b82f6' : '#d1d5db';
+          const opacity = legal ? '1' : '0.55';
+          return `<button class="df-card" data-c="${c}" data-legal="${legal ? 1 : 0}" style="padding:8px 10px; border:2px solid ${border}; background:${bg}; border-radius:6px; font-size:18px; min-width:48px; cursor:pointer; opacity:${opacity}; font-weight:${legal?700:400}">${cardLabel(c)}</button>`;
+        }).join('')}
       </div>
       ${d.my_turn ? `
         <div style="display:flex; gap:6px; margin-top:10px">
           <button id="df-play" class="btn primary">選んだカードを出す</button>
           ${d.last_play ? `<button id="df-pass" class="btn">パス</button>` : ''}
         </div>
-        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + より強い rank で出す。同じ数字を揃えて複数枚出せる。</div>
+        <div class="hint-sm" style="margin-top:4px">場と同じ枚数 + ${d.revolution ? 'より弱い' : 'より強い'} rank で出す。同じ数字を揃えて複数枚出せる。</div>
       ` : '<div class="hint" style="margin-top:8px">相手の番を待っています…</div>'}
       <button id="df-resign" class="btn" style="margin-top:8px; font-size:11px; color:#c00">🏳 投了 (ポイント戻りません)</button>
     </div>` : ''}
@@ -180,27 +211,61 @@ async function paintDaifugo(gid) {
   `;
 
   if (d.status === 'playing' && d.my_seat !== null && myRank === null) {
-    const selected = new Set();
+    // v1116 選択は module スコープで永続化 (再描画で失われない)
+    const selected = getSelected(gid);
+    // 現在の手札に無いカードは選択集合から除去 (前ターンの残骸を掃除)
+    const inHand = new Set(myHand);
+    for (const c of [...selected]) if (!inHand.has(c)) selected.delete(c);
+    // 復元: 既に選択されているカードを強調
+    document.querySelectorAll('.df-card').forEach(b => {
+      const c = Number(b.dataset.c);
+      if (selected.has(c)) { b.style.background = '#dbeafe'; b.style.borderColor = '#3b82f6'; b.style.outline = '2px solid #4a106d'; b.style.transform = 'translateY(-3px)'; }
+    });
     document.querySelectorAll('.df-card').forEach(b => {
       b.addEventListener('click', () => {
         const c = Number(b.dataset.c);
-        if (selected.has(c)) { selected.delete(c); b.style.background = '#fff'; b.style.borderColor = '#ccc'; }
-        else { selected.add(c); b.style.background = '#dbeafe'; b.style.borderColor = '#3b82f6'; }
+        const legal = b.dataset.legal === '1';
+        if (selected.has(c)) {
+          selected.delete(c);
+          b.style.background = legal ? '#eff6ff' : '#f3f4f6';
+          b.style.borderColor = legal ? '#3b82f6' : '#d1d5db';
+          b.style.outline = 'none';
+          b.style.transform = 'none';
+        } else {
+          selected.add(c);
+          b.style.background = '#dbeafe'; b.style.borderColor = '#3b82f6';
+          b.style.outline = '2px solid #4a106d'; b.style.transform = 'translateY(-3px)';
+        }
       });
     });
     document.getElementById('df-play')?.addEventListener('click', async () => {
       if (!selected.size) { toast('カードを選んでください'); return; }
-      try { await post(`/api/daifugo/games/${gid}/play`, { cards: [...selected] }); paintDaifugo(gid); }
+      try { await post(`/api/daifugo/games/${gid}/play`, { cards: [...selected] }); clearSelected(gid); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('df-pass')?.addEventListener('click', async () => {
-      try { await post(`/api/daifugo/games/${gid}/pass`, {}); paintDaifugo(gid); }
+      try { await post(`/api/daifugo/games/${gid}/pass`, {}); clearSelected(gid); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
     document.getElementById('df-resign')?.addEventListener('click', async () => {
       if (!confirm('🏳 投了しますか? (= ゲーム終了、ポイント戻りません)')) return;
-      try { await post(`/api/daifugo/games/${gid}/resign`, {}); paintDaifugo(gid); }
+      try { await post(`/api/daifugo/games/${gid}/resign`, {}); clearSelected(gid); paintDaifugo(gid); }
       catch (e) { toast('失敗: ' + e.message); }
     });
   }
+}
+
+// v1116 出せるカードのヒント: 場が空 or 自分の番でない時は全部 legal 扱い、
+//   場があれば同枚数の候補 (rank が strict に上/下、革命なら下) を持ちうるカードだけ「候補」に。
+//   厳密判定はサーバ側、これはあくまで見え方のヒント。
+function isPlayableHint(c, d) {
+  if (!d.my_turn) return true;                // 自分の番でなければ全部 dim にしない
+  if (c === 52) return true;                  // ジョーカーは常に候補
+  if (!d.last_play) return true;              // 場空なら何でも
+  const lastRank = d.last_play.rank;
+  const rank = cardRank(c);
+  const rev = !!d.revolution;
+  // 同枚数の N-of-a-kind を組めるか、はカード集合次第なので、rank だけで判定
+  //   (「同ランクのカードを選んで枚数を合わせられる」かは選択時に自然に絞られる)
+  return rev ? (rank < lastRank) : (rank > lastRank);
 }
