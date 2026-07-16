@@ -110,6 +110,33 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
         }
     }
 
+    // v1128 未提出者一覧 (GM 暴走 = 全員 揃わない うちに 進めて しまう 問題への 対策)。
+    //   夜 → 生存 wolf/seer/knight の action、 昼 → 生存者 全員 の vote が 必要。
+    //   村人 は 夜 何も しない ので pending から 除外。
+    $pendingUsers = [];
+    if (in_array($g['status'], ['night','day'], true)) {
+        $needActionRoles = $g['status'] === 'night'
+            ? ['wolf' => 'attack', 'seer' => 'inspect', 'knight' => 'protect']
+            : null;
+        $stAll = $pdo->prepare("SELECT p.user_id, p.role, u.display_name
+                                  FROM jinrou_players p JOIN users u ON u.id = p.user_id
+                                 WHERE p.game_id = ? AND p.alive = 1");
+        $stAll->execute([$gid]);
+        $stDone = $pdo->prepare("SELECT actor_user_id FROM jinrou_actions
+                                  WHERE game_id = ? AND round_no = ? AND phase = ?");
+        $stDone->execute([$gid, (int)$g['round_no'], $g['status']]);
+        $doneSet = array_flip(array_map('intval', $stDone->fetchAll(PDO::FETCH_COLUMN)));
+        foreach ($stAll->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $puid = (int)$p['user_id'];
+            $needs = $g['status'] === 'day'
+                ? true
+                : isset($needActionRoles[$p['role']]);
+            if (!$needs) continue;
+            if (isset($doneSet[$puid])) continue;
+            $pendingUsers[] = ['user_id' => $puid, 'display_name' => $p['display_name']];
+        }
+    }
+
     // 占い結果 (自分が占い師なら、自分が占ったターゲットの役を取得)
     $inspectResults = [];
     if ($myRole === 'seer') {
@@ -149,6 +176,8 @@ function jinrou_detail(PDO $pdo, int $uid, int $gid): void {
         'log'             => $logArr,
         'is_creator'      => (int)$g['creator_user_id'] === $uid,
         'me_joined'       => $meRow !== false && $meRow !== null,
+        'pending_users'   => $pendingUsers,      // v1128 未提出者一覧 (GM 暴走防止用)
+        'phase_key'       => $g['status'] . '-' . (int)$g['round_no'],  // v1128 client の polling 用 (変化検知)
     ]);
 }
 
@@ -341,10 +370,46 @@ function jinrou_action(PDO $pdo, int $uid, int $gid): void {
 }
 
 function jinrou_advance(PDO $pdo, array $cfg, int $uid, int $gid): void {
-    db_tx($pdo, function () use ($pdo, $cfg, $uid, $gid) {
+    $body = read_json_body();
+    $force = !empty($body['force']);
+    db_tx($pdo, function () use ($pdo, $cfg, $uid, $gid, $force) {
         $g = jinrou_lock($pdo, $gid);
         if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ進行可', 403);
         if (!in_array($g['status'], ['night','day'], true)) throw new ApiException('bad_request', '進行できる状態ではありません', 400);
+
+        // v1128 未提出者が居るのに GM が独断で進めるのを防止。
+        //   force=true が明示されないうちは 400 で拒絶し、未提出者名を返す。
+        //   force=true (client 側で強い confirm を経由) の時のみ従来通り進行。
+        if (!$force) {
+            $round = (int)$g['round_no'];
+            $needMap = $g['status'] === 'night'
+                ? ['wolf' => 'attack', 'seer' => 'inspect', 'knight' => 'protect']
+                : null;
+            $stAll = $pdo->prepare("SELECT p.user_id, p.role, u.display_name
+                                      FROM jinrou_players p JOIN users u ON u.id = p.user_id
+                                     WHERE p.game_id = ? AND p.alive = 1");
+            $stAll->execute([$gid]);
+            $stDone = $pdo->prepare("SELECT actor_user_id FROM jinrou_actions
+                                      WHERE game_id = ? AND round_no = ? AND phase = ?");
+            $stDone->execute([$gid, $round, $g['status']]);
+            $doneSet = array_flip(array_map('intval', $stDone->fetchAll(PDO::FETCH_COLUMN)));
+            $pending = [];
+            foreach ($stAll->fetchAll(PDO::FETCH_ASSOC) as $p) {
+                $puid = (int)$p['user_id'];
+                $needs = $g['status'] === 'day'
+                    ? true
+                    : isset($needMap[$p['role']]);
+                if (!$needs) continue;
+                if (isset($doneSet[$puid])) continue;
+                $pending[] = $p['display_name'];
+            }
+            if ($pending) {
+                throw new ApiException('bad_request',
+                    '未提出: ' . implode('・', $pending) . ' (待ちましょう。 やむを得ず 進めるときは 強制進行を お願いします)',
+                    400,
+                    ['pending' => $pending]);
+            }
+        }
         $log = $g['log_json'] ? (json_decode($g['log_json'], true) ?: []) : [];
         $round = (int)$g['round_no'];
         $phase = $g['status'];
@@ -418,12 +483,17 @@ function jinrou_advance(PDO $pdo, array $cfg, int $uid, int $gid): void {
     $stG = $pdo->prepare("SELECT status, round_no, winner FROM jinrou_games WHERE id = ?");
     $stG->execute([$gid]);
     $newG = $stG->fetch(PDO::FETCH_ASSOC);
+    // v1128 通知に「誰が襲われた/追放された」の具体名を含めない (アプリを開く前に
+    //   プッシュ通知でネタバレするのを避ける)。単に「フェーズが進みました。アプリを
+    //   開いて詳細を確認してください」レベルに留める。
     foreach ($stP->fetchAll(PDO::FETCH_COLUMN) as $pid) {
         try {
             if ($newG['winner']) {
-                $msg = "🐺 人狼ゲーム終了 (勝者: " . ($newG['winner'] === 'village' ? '村人' : '人狼') . ")";
+                $msg = "🐺 人狼 #{$gid} が決着。アプリで結果を開いて確認してください";
+            } elseif ($newG['status'] === 'night') {
+                $msg = "🌙 人狼 #{$gid}: 夜 (R{$newG['round_no']}) に進みました。 アプリで 開いて 進行状況を 確認してください";
             } else {
-                $msg = "🐺 人狼: " . ($newG['status'] === 'night' ? "夜 (ラウンド {$newG['round_no']})" : "昼 (ラウンド {$newG['round_no']})") . " に進みました";
+                $msg = "☀ 人狼 #{$gid}: 昼 (R{$newG['round_no']}) に進みました。 アプリで 開いて 進行状況を 確認してください";
             }
             notify_safely($pdo, $cfg, (int)$pid, 'admin_notice', $msg, 'jinrou', $gid);
         } catch (Throwable $_) {}

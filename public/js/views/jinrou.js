@@ -113,7 +113,17 @@ export async function renderJinrouNew() {
   });
 }
 
+// v1128 自動 poll 用 (フェーズが変わったら再描画、全員のクライアントが同期)
+let jrPollTimer = null;
+let jrPollGid = null;
+let jrLastPhaseKey = null;
+function stopJrPoll() {
+  if (jrPollTimer) { clearInterval(jrPollTimer); jrPollTimer = null; }
+  jrPollGid = null; jrLastPhaseKey = null;
+}
+
 export async function renderJinrouDetail({ params }) {
+  stopJrPoll();
   const gid = Number(params.id);
   const app = document.getElementById('app');
   app.innerHTML = `<div class="card"><div class="muted">読み込み中…</div></div>`;
@@ -121,6 +131,23 @@ export async function renderJinrouDetail({ params }) {
   try { g = await get('/api/jinrou/games/' + gid); }
   catch (e) { app.innerHTML = `<div class="card"><div class="muted">${escapeHtml(e.message)}</div></div>`; return; }
   paintJinrouDetail(g);
+  // v1128 進行中のみポーリング (フェーズ切替 or 未提出者数変化を検知)
+  if (['lobby','night','day'].includes(g.status)) {
+    jrPollGid = gid;
+    jrLastPhaseKey = g.phase_key + '|' + (g.pending_users?.length || 0) + '|' + g.players.length;
+    jrPollTimer = setInterval(async () => {
+      if (!location.hash.startsWith('#/jinrou/' + gid)) { stopJrPoll(); return; }
+      try {
+        const g2 = await get('/api/jinrou/games/' + gid);
+        const key2 = g2.phase_key + '|' + (g2.pending_users?.length || 0) + '|' + g2.players.length;
+        if (key2 !== jrLastPhaseKey) {
+          jrLastPhaseKey = key2;
+          paintJinrouDetail(g2);
+          if (!['lobby','night','day'].includes(g2.status)) stopJrPoll();
+        }
+      } catch (_) { /* 一時的な失敗は無視 (再試行される) */ }
+    }, 3500);
+  }
 }
 
 function paintJinrouDetail(g) {
@@ -133,6 +160,7 @@ function paintJinrouDetail(g) {
   const canStart = g.status === 'lobby' && g.is_creator && g.players.length >= 4;
   const canCancel = g.is_creator && ['lobby','night','day'].includes(g.status);
   const canAdvance = g.is_creator && ['night','day'].includes(g.status);
+  const pendingCount = (g.pending_users || []).length;    // v1128
 
   // 自分のアクション (フェーズ別)
   let actionUI = '';
@@ -244,11 +272,21 @@ function paintJinrouDetail(g) {
             </div>`;
         }).join('')}
       </div>
+      ${canAdvance && pendingCount > 0 ? `
+        <div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border:2px solid #f59e0b; border-radius:8px; font-size:13px">
+          ⏳ 未提出: <span class="bold" style="color:#b45309">${(g.pending_users || []).map(u => escapeHtml(u.display_name)).join('・')}</span>
+          <div class="hint-sm" style="font-size:11.5px; margin-top:4px; color:#a16207">
+            全員の 提出を 待って から 進行 する のが 基本 です。 反応 が 無い 場合 のみ 「強制進行」 で 次 の フェーズ へ 進めて ください。
+          </div>
+        </div>` : ''}
+      ${canAdvance && pendingCount === 0 && (g.status === 'night' || g.status === 'day') ? `
+        <div style="margin-top:8px; padding:6px 12px; background:#dcfce7; border-radius:6px; font-size:12.5px; color:#15803d">✅ 全員 提出済 — 進行して OK</div>` : ''}
       <div class="row" style="gap:6px; margin-top:10px; flex-wrap:wrap; justify-content:flex-end">
         ${canJoin   ? `<button id="jr-join"   class="primary">参加する (フィー ${g.buy_in}pt)</button>` : ''}
         ${canLeave  ? `<button id="jr-leave"  class="btn">脱退 (返金)</button>` : ''}
         ${canStart  ? `<button id="jr-start"  class="primary">役職を配って開始</button>` : ''}
-        ${canAdvance ? `<button id="jr-adv"   class="primary">${g.status === 'night' ? '夜を終える (昼へ)' : '昼を終える (次の夜へ)'}</button>` : ''}
+        ${canAdvance && pendingCount === 0 ? `<button id="jr-adv"  class="primary">${g.status === 'night' ? '夜を終える (昼へ)' : '昼を終える (次の夜へ)'}</button>` : ''}
+        ${canAdvance && pendingCount > 0  ? `<button id="jr-adv-force" class="btn" style="background:#fef3c7; border-color:#f59e0b; color:#b45309">⚠️ 強制進行 (未提出 ${pendingCount} 名 を 待たず 進む)</button>` : ''}
         ${canCancel ? `<button id="jr-cancel" class="btn danger">卓を取消</button>` : ''}
       </div>
     </div>
@@ -259,7 +297,17 @@ function paintJinrouDetail(g) {
   if (canJoin)   document.getElementById('jr-join').addEventListener('click', () => doJr(g.id, 'join'));
   if (canLeave)  document.getElementById('jr-leave').addEventListener('click', () => { if (confirm('脱退して返金しますか?')) doJr(g.id, 'leave'); });
   if (canStart)  document.getElementById('jr-start').addEventListener('click', () => { if (confirm('役職を配って開始しますか? 配布後は変更不可。')) doJr(g.id, 'start'); });
-  if (canAdvance) document.getElementById('jr-adv').addEventListener('click', () => { if (confirm('進行しますか? (アクション未提出者は無効票になります)')) doJr(g.id, 'advance'); });
+  // v1128 全員提出済ならワンタップで進行
+  const advBtn = document.getElementById('jr-adv');
+  if (advBtn) advBtn.addEventListener('click', () => { if (confirm('進行しますか?')) doJr(g.id, 'advance'); });
+  // v1128 未提出者が居るとき の 強制進行 は 明示 確認 を 挟む
+  const advForceBtn = document.getElementById('jr-adv-force');
+  if (advForceBtn) advForceBtn.addEventListener('click', () => {
+    const names = (g.pending_users || []).map(u => u.display_name).join('・');
+    if (confirm(`未提出: ${names}\n\nこの人たちを 待たずに 進めますか? (未提出は 無効票 になります)`)) {
+      doJr(g.id, 'advance', { force: true });
+    }
+  });
   if (canCancel) document.getElementById('jr-cancel').addEventListener('click', () => { if (confirm('卓を取消しますか? lobby 中なら全員返金。')) doJr(g.id, 'cancel'); });
 
   // アクションボタン
@@ -270,6 +318,7 @@ function paintJinrouDetail(g) {
       try {
         await post(`/api/jinrou/games/${g.id}/action`, { type, target_user_id: target });
         toast('提出しました');
+        jrLastPhaseKey = null; // 次ポーリング で 必ず 再描画
         await renderJinrouDetail({ params: { id: g.id } });
       } catch (e) { toast('失敗: ' + e.message); }
     });
@@ -285,9 +334,9 @@ function statusBadge(g) {
   return '';
 }
 
-async function doJr(gid, action) {
+async function doJr(gid, action, body = {}) {
   try {
-    await post(`/api/jinrou/games/${gid}/${action}`, {});
+    await post(`/api/jinrou/games/${gid}/${action}`, body);
     toast('完了');
     await renderJinrouDetail({ params: { id: gid } });
   } catch (e) { toast('失敗: ' + e.message); }
