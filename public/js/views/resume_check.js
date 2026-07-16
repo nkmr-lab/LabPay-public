@@ -16,29 +16,43 @@ export async function renderResumeCheck() {
     <div class="card page-header">
       <h2 style="margin:0">📝 原稿チェック</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px">
-        レジュメ/概要/申請書など1-2ページの短原稿をチェック。
-        論文ほど厳しくないが、背景の妥当性/論理展開/専門用語/接続詞/表記揺れ/引用を一通り見ます。
-        <b>1回20pt</b>。失敗時は自動返金。
+        レジュメ / 発表概要 / 申請書など 1-2 ページの短原稿を、 先輩が一緒に読み直すノリで
+        チェックします。 背景の妥当性 / 論理展開 / 専門用語 / 接続詞 / 表記揺れ / 引用を
+        一通り見て、 まず「良かった点」 → 「効く改善 3 つ」を返します。
+        <b>1 回 20pt</b>。失敗時は自動返金。
       </p>
     </div>
+
     <div class="card">
-      <label style="display:block; margin-bottom:8px">
-        <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル (任意)</div>
-        <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿第1稿">
-      </label>
-      <div class="bold" style="font-size:13px; margin-bottom:4px">原稿 PDF (10 MB まで)</div>
-      <input id="rc-pdf" type="file" accept="application/pdf" class="input">
-      <div class="hint-sm" style="margin-top:4px">図表入りでOK。レイアウトのままAIに渡るので論理展開が伝わりやすい。</div>
-      <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
-        <button id="rc-submit" class="btn primary">20pt を支払ってチェック依頼</button>
-        <span class="hint-sm" id="rc-status"></span>
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px">
+        <h3 style="margin:0; font-size:14px">📚 過去のチェック</h3>
+        <button id="rc-open-new" class="btn primary" style="font-size:12px; padding:4px 12px">＋ 新しく依頼する</button>
       </div>
-    </div>
-    <div class="card">
-      <h3 style="margin:0 0 6px">過去のチェック</h3>
       <div id="rc-list"><div class="hint">読み込み中…</div></div>
     </div>
+
+    <details class="card" id="rc-new-details">
+      <summary style="cursor:pointer; font-weight:700; font-size:14px; color:var(--primary)">✏️ 新しい原稿をチェックする</summary>
+      <div style="margin-top:10px">
+        <label style="display:block; margin-bottom:8px">
+          <div class="bold" style="font-size:13px; margin-bottom:4px">タイトル (任意)</div>
+          <input id="rc-title" class="input" maxlength="200" placeholder="例: WISS 2026 投稿原稿第1稿">
+        </label>
+        <div class="bold" style="font-size:13px; margin-bottom:4px">原稿 PDF (10 MB まで)</div>
+        <input id="rc-pdf" type="file" accept="application/pdf" class="input">
+        <div class="hint-sm" style="margin-top:4px">図表入りで OK。 レイアウトのまま AI に渡るので論理展開が伝わりやすい。</div>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
+          <button id="rc-submit" class="btn primary">20pt を支払ってチェック依頼</button>
+          <span class="hint-sm" id="rc-status"></span>
+        </div>
+      </div>
+    </details>
   `;
+  document.getElementById('rc-open-new').addEventListener('click', () => {
+    const det = document.getElementById('rc-new-details');
+    det.open = true;
+    det.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   document.getElementById('rc-submit').addEventListener('click', async () => {
     const title = document.getElementById('rc-title').value.trim();
     const btn   = document.getElementById('rc-submit');
@@ -210,6 +224,29 @@ async function loadAndPaint(id) {
         <span class="hint-sm">完了 ${escapeHtml(d.finished_at || '')}</span>
       </div>
     </div>
+
+    ${r.plain_summary_for_student ? `
+      <div class="card" style="background:linear-gradient(180deg,#fefce8,#fff7ed); border:2px solid #f59e0b">
+        <div class="bold" style="color:#a16207; font-size:14px; margin-bottom:6px">🌱 まず ここだけ 読めば OK</div>
+        <div style="font-size:14px; line-height:1.85; white-space:pre-wrap; color:#1f2937">${escapeHtml(r.plain_summary_for_student)}</div>
+      </div>` : ''}
+
+    ${Array.isArray(r.good_points) && r.good_points.length ? `
+      <div class="card" style="border-left:4px solid #15803d; background:#f0fdf4">
+        <div class="bold" style="color:#15803d; margin-bottom:4px">✨ ここが 良い</div>
+        <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7">
+          ${r.good_points.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+    ${Array.isArray(r.next_three_steps) && r.next_three_steps.length ? `
+      <div class="card" style="border-left:4px solid #ea580c; background:#fff7ed">
+        <div class="bold" style="color:#9a3412; margin-bottom:6px">🚀 まず この 3 ステップから 着手</div>
+        <ol style="margin:0; padding-left:20px; font-size:13.5px; line-height:1.75">
+          ${r.next_three_steps.map(x => `<li style="margin-bottom:4px">${escapeHtml(String(x))}</li>`).join('')}
+        </ol>
+      </div>` : ''}
+
     <div class="card">
       <h3 style="margin:0 0 6px">📊 総合</h3>
       <div style="font-size:20px; font-weight:700; color:${scoreColor(r.overall_score)}">${r.overall_score ?? '-'} / 5</div>

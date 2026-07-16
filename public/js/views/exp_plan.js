@@ -1,6 +1,8 @@
-// v1023 実験計画書チェック (中村さん要望「Scrapbox 形式で書かれた実験計画書をチェック。
-//   RQ / 仮説の書き方、仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを
-//   特に重視」)。 20pt / 回 flat、 gpt-5 で精査。
+// v1023 実験計画書チェック / v1131 二モード対応 (厳密 + 初学者)。
+//   中村さん要望:
+//     - 厳密にチェックするバージョンと、特に初学者向けのバージョンが欲しい
+//     - タブで内容を両方チェックできるようにするのも手
+//     - 一覧に戻ると入力ページになってしまう (履歴を先に出したい)
 
 import { escapeHtml } from '../router.js';
 import { get, post, del } from '../api.js';
@@ -13,17 +15,48 @@ export async function renderExpPlan() {
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🧪 実験計画書チェック</h2>
-      <div class="hint-sm" style="margin-top:4px">Scrapbox 形式で書いた実験計画書を精査。 RQ / 仮説の書き方、仮説と実験の対応、データの適切さ、統計手法、サンプルサイズを特に重視して構造化レポートを返します。 1 回 20pt。</div>
+      <div class="hint-sm" style="margin-top:4px">
+        書いた実験計画書を精査。 RQ / 仮説 / 実験対応 / データ / 統計 / サンプルサイズを見ます。
+        <b>初学者モード</b> は「先輩が一緒に読んでくれる」トーンで、専門用語を平易に解説付きで。
+        <b>厳密モード</b> は査読者ノリで細かく指摘。 <b>両方</b> で 40pt (タブで切り替え)。
+      </div>
     </div>
 
     <div class="card">
-      <label class="field">
-        <span class="lbl">タイトル (任意、未指定なら本文の先頭行から自動)</span>
-        <input type="text" id="epc-title" maxlength="200" placeholder="例: 眉毛対称ガイドの主観評価実験">
-      </label>
-      <label class="field">
-        <span class="lbl">実験計画書 (Scrapbox 形式で貼付、 100 文字以上〜 ${MAX_CHARS} 文字まで)</span>
-        <textarea id="epc-text" rows="18" placeholder="例:
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px">
+        <h3 style="margin:0; font-size:14px">📚 履歴</h3>
+        <button id="epc-open-new" class="btn primary" style="font-size:12px; padding:4px 12px">＋ 新しく依頼する</button>
+      </div>
+      <div id="epc-list"><div class="hint-sm">読み込み中…</div></div>
+    </div>
+
+    <details class="card" id="epc-new-details">
+      <summary style="cursor:pointer; font-weight:700; font-size:14px; color:var(--primary)">✏️ 新しく実験計画書をチェックする</summary>
+      <div style="margin-top:10px">
+        <label class="field">
+          <span class="lbl">タイトル (任意、未指定なら本文の先頭行から自動)</span>
+          <input type="text" id="epc-title" maxlength="200" placeholder="例: 眉毛対称ガイドの主観評価実験">
+        </label>
+        <label class="field">
+          <span class="lbl">チェックモード</span>
+          <div class="row" style="gap:8px; flex-wrap:wrap; font-size:13px">
+            <label style="display:inline-flex; gap:4px; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
+              <input type="radio" name="epc-mode" value="both" checked>
+              <span>🎓+🌱 両方 (40pt) <span class="hint-sm" style="font-size:11px">タブ切替 / おすすめ</span></span>
+            </label>
+            <label style="display:inline-flex; gap:4px; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
+              <input type="radio" name="epc-mode" value="student">
+              <span>🌱 初学者モード (20pt) <span class="hint-sm" style="font-size:11px">平易・具体的</span></span>
+            </label>
+            <label style="display:inline-flex; gap:4px; align-items:center; padding:6px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer">
+              <input type="radio" name="epc-mode" value="strict">
+              <span>🎓 厳密モード (20pt) <span class="hint-sm" style="font-size:11px">査読者ノリ</span></span>
+            </label>
+          </div>
+        </label>
+        <label class="field">
+          <span class="lbl">実験計画書 (Scrapbox 形式で貼付、 100 文字以上〜 ${MAX_CHARS} 文字まで)</span>
+          <textarea id="epc-text" rows="18" placeholder="例:
 [[RQ1]] 眉毛対称ガイドは、描画時間を短縮するか?
   H1: 対称ガイドあり条件は、なし条件より描画時間が短い
   H2: 対称ガイドあり条件は、対称度スコアが高い
@@ -34,26 +67,22 @@ export async function renderExpPlan() {
   タスク: 与えられた顔画像に対して眉毛を描く (10 分)
   ...
 "
-          style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px"></textarea>
-        <div id="epc-count" class="hint-sm" style="text-align:right; margin-top:2px">0 / ${MAX_CHARS} 字</div>
-      </label>
-      <div class="row" style="gap:6px; margin-top:4px; flex-wrap:wrap">
-        <button id="epc-submit" class="btn primary">🧪 精査を依頼 (20pt)</button>
-        <button id="epc-clear" class="btn">クリア</button>
-        <button id="epc-scrapbox" class="btn" title="Scrapbox のページ URL からタイトル + 本文を取り込みます (PAT 設定が必要)">🔗 Scrapboxから取り込む</button>
+            style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px"></textarea>
+          <div id="epc-count" class="hint-sm" style="text-align:right; margin-top:2px">0 / ${MAX_CHARS} 字</div>
+        </label>
+        <div class="row" style="gap:6px; margin-top:4px; flex-wrap:wrap">
+          <button id="epc-submit" class="btn primary">🧪 精査を依頼</button>
+          <button id="epc-clear" class="btn">クリア</button>
+          <button id="epc-scrapbox" class="btn" title="Scrapbox のページ URL からタイトル + 本文を取り込みます (PAT 設定が必要)">🔗 Scrapboxから取り込む</button>
+        </div>
       </div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin:0 0 6px; font-size:14px">📚 履歴</h3>
-      <div id="epc-list"><div class="hint-sm">読み込み中…</div></div>
-    </div>
+    </details>
   `;
 
   const ta = document.getElementById('epc-text');
   const cnt = document.getElementById('epc-count');
   const updateCount = () => {
-    const n = Array.from(ta.value).length;   // 文字数 (surrogate 対応)
+    const n = Array.from(ta.value).length;
     cnt.textContent = `${n.toLocaleString()} / ${MAX_CHARS.toLocaleString()} 字`;
     cnt.style.color = n > MAX_CHARS ? '#dc2626' : (n < 100 ? '#a16207' : '#6b7280');
   };
@@ -66,11 +95,14 @@ export async function renderExpPlan() {
     ta.value = ''; updateCount();
   });
   document.getElementById('epc-scrapbox').addEventListener('click', onFetchScrapbox);
+  document.getElementById('epc-open-new').addEventListener('click', () => {
+    const det = document.getElementById('epc-new-details');
+    det.open = true;
+    det.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   loadList();
 }
 
-// v1047 Scrapbox URL → タイトル+本文自動取り込み (中村さん要望「実験計画書は
-//   Scrapbox にあるので、Scrapbox の URL を与えても良いようにしても良いかも」)。
 async function onFetchScrapbox() {
   const url = prompt('Scrapbox のページ URL を入力してください\n例: https://scrapbox.io/nkmr-lab/眉毛対称ガイドの実験計画');
   if (!url || !url.trim()) return;
@@ -81,7 +113,6 @@ async function onFetchScrapbox() {
     const r = await post('/api/ai/exp_plan/fetch_scrapbox', { url: url.trim() });
     const titleEl = document.getElementById('epc-title');
     const ta = document.getElementById('epc-text');
-    // 既存本文があれば上書き確認
     if (ta.value.trim() && !confirm('現在の本文を Scrapbox の内容で上書きしますか?')) return;
     if (!titleEl.value.trim()) titleEl.value = r.title || '';
     ta.value = r.text || '';
@@ -102,18 +133,21 @@ async function onFetchScrapbox() {
 async function onSubmit() {
   const title = document.getElementById('epc-title').value.trim();
   const text  = document.getElementById('epc-text').value.trim();
+  const mode  = document.querySelector('input[name="epc-mode"]:checked')?.value || 'both';
   if (!text || text.length < 100) { toast('実験計画書が短すぎます (100 文字以上)'); return; }
   if (text.length > MAX_CHARS)    { toast(`長すぎます (${MAX_CHARS} 文字まで)`); return; }
-  if (!confirm(`実験計画書チェックを依頼します (20pt)。続けますか?`)) return;
+  const cost = mode === 'both' ? 40 : 20;
+  const modeLabel = mode === 'both' ? '両方' : (mode === 'student' ? '初学者モード' : '厳密モード');
+  if (!confirm(`実験計画書チェック (${modeLabel}) を依頼します (${cost}pt)。続けますか?`)) return;
   const btn = document.getElementById('epc-submit');
   btn.disabled = true; btn.textContent = '⏳ 依頼中…';
   try {
-    const r = await post('/api/ai/exp_plan', { title, text });
+    const r = await post('/api/ai/exp_plan', { title, text, mode });
     toast('依頼を受け付けました');
     location.hash = '#/exp-plan/' + r.id;
   } catch (e) {
     toast('失敗: ' + e.message);
-    btn.disabled = false; btn.textContent = '🧪 精査を依頼 (20pt)';
+    btn.disabled = false; btn.textContent = '🧪 精査を依頼';
   }
 }
 
@@ -122,7 +156,10 @@ async function loadList() {
   try {
     const d = await get('/api/ai/exp_plan');
     const items = d.items || [];
-    if (!items.length) { root.innerHTML = '<div class="hint-sm">まだ依頼したチェックはありません。</div>'; return; }
+    if (!items.length) {
+      root.innerHTML = '<div class="hint-sm">まだ依頼したチェックはありません。上の「＋ 新しく依頼する」から始めましょう。</div>';
+      return;
+    }
     root.innerHTML = items.map(it => `
       <a class="list-item" href="#/exp-plan/${it.id}" style="display:flex; gap:8px; padding:8px 10px; border-bottom:1px solid #f3f4f6; text-decoration:none; color:inherit">
         <div style="flex:1; min-width:0">
@@ -143,12 +180,14 @@ function statusStyle(s) {
   return 'background:#fef3c7; color:#a16207';
 }
 
+// v1131 詳細ページの表示中モード (student / strict)
+let _currentTab = 'student';
+
 export async function renderExpPlanDetail({ params }) {
   const app = document.getElementById('app');
   const id = Number(params.id);
   app.innerHTML = `<div class="card">読み込み中…</div>`;
   await refresh(id, app);
-  // pending / processing なら polling
   let timer = setInterval(async () => {
     const cur = await refresh(id, app, true);
     if (!cur || (cur.status !== 'pending' && cur.status !== 'processing')) {
@@ -170,14 +209,25 @@ async function refresh(id, app, quiet = false) {
 }
 
 function paint(d, app) {
-  const r = d.result || {};
   const isReady = d.status === 'done';
+  const hasStrict  = !!d.result_strict;
+  const hasStudent = !!d.result_student;
+  // 初回描画時のタブ選定: 両方あるなら student をデフォルト、片方だけならそれ
+  if (isReady) {
+    if (!hasStrict && hasStudent)      _currentTab = 'student';
+    else if (hasStrict && !hasStudent) _currentTab = 'strict';
+    // 両方ある / 初期値のまま student
+  }
+  const activeResult = isReady
+    ? (_currentTab === 'strict' ? d.result_strict : d.result_student) || d.result
+    : null;
+
   app.innerHTML = `
     <div class="card page-header">
       <h2 style="margin:0">🧪 ${escapeHtml(d.title || '(無題)')}</h2>
-      <div class="hint-sm">${escapeHtml(d.created_at)} · ${escapeHtml(d.model || 'gpt-5')} · ${d.cost_points}pt</div>
+      <div class="hint-sm">${escapeHtml(d.created_at)} · ${escapeHtml(d.model || 'gpt-5')} · ${d.cost_points}pt · モード: ${modeLabel(d.mode)}</div>
       <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
-        <a href="#/exp-plan" class="btn">← 一覧</a>
+        <a href="#/exp-plan" class="btn">← 一覧に戻る</a>
         <button id="epc-del" class="btn danger" style="font-size:12px">🗑 削除</button>
       </div>
     </div>
@@ -186,36 +236,20 @@ function paint(d, app) {
       <div class="card">
         <div class="bold" style="color:var(--primary)">${d.status === 'error' ? '❌ 失敗' : '⏳ 精査中…'}</div>
         ${d.error_msg ? `<div class="hint-sm" style="color:#dc2626; margin-top:6px; white-space:pre-wrap">${escapeHtml(d.error_msg)}</div>` : ''}
-        ${d.status !== 'error' ? '<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 30 秒〜 2 分で完了予定。</div>' : ''}
+        ${d.status !== 'error' ? `<div class="hint-sm" style="margin-top:6px">5 秒ごとに自動更新。 ${d.mode === 'both' ? '両モードで 1〜3 分' : '30 秒〜 2 分'}で完了予定。</div>` : ''}
       </div>` : ''}
 
-    ${isReady && r.summary_one_line ? `
-      <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
-        <div class="bold" style="color:var(--primary); margin-bottom:6px">📌 全体講評 ${scoreBadge(r.overall_score, '#7b3fa0')}</div>
-        <div style="font-size:14px; line-height:1.7">${escapeHtml(r.summary_one_line)}</div>
-      </div>` : ''}
-
-    ${isReady ? renderSection('❓ RQ の書き方',           r.rq_review,                  '#4f46e5') : ''}
-    ${isReady ? renderSection('💡 仮説の書き方',          r.hypothesis_review,          '#a16207') : ''}
-    ${isReady ? renderSection('🔗 仮説と実験の対応',      r.hypothesis_experiment_link, '#0284c7') : ''}
-    ${isReady ? renderSection('📊 データの適切さ',        r.data_appropriateness,       '#0ea5e9') : ''}
-    ${isReady ? renderSection('📈 統計手法',              r.statistics,                 '#059669') : ''}
-    ${isReady ? renderSection('👥 サンプルサイズ',        r.sample_size,                '#dc2626') : ''}
-
-    ${isReady && Array.isArray(r.top_priority_fixes) && r.top_priority_fixes.length ? `
-      <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
-        <div class="bold" style="color:#9a3412; margin-bottom:6px">🔥 優先度の高い修正提案</div>
-        <ol style="margin:0; padding-left:18px; font-size:13.5px; line-height:1.7">
-          ${r.top_priority_fixes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
-        </ol>
-      </div>` : ''}
-
-    ${isReady && Array.isArray(r.other_notes) && r.other_notes.length ? `
-      <div class="card">
-        <div class="bold" style="color:#6b7280; margin-bottom:6px">📝 その他の気づき</div>
-        <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#374151">
-          ${r.other_notes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
-        </ul>
+    ${isReady && (hasStrict || hasStudent) ? `
+      <div class="card" style="padding:0; overflow:hidden">
+        <div class="row" style="gap:0; border-bottom:1px solid var(--line)">
+          ${hasStudent ? tabBtn('student', '🌱 初学者モード', _currentTab === 'student') : ''}
+          ${hasStrict  ? tabBtn('strict',  '🎓 厳密モード',   _currentTab === 'strict')  : ''}
+        </div>
+        <div style="padding:2px 0 10px">
+          ${_currentTab === 'student'
+            ? renderStudentBody(activeResult)
+            : renderStrictBody(activeResult)}
+        </div>
       </div>` : ''}
 
     <details class="card">
@@ -223,6 +257,7 @@ function paint(d, app) {
       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; line-height:1.6; margin-top:8px; padding:8px 10px; background:#f9fafb; border-radius:6px; overflow-x:auto">${escapeHtml(d.input_text || '')}</pre>
     </details>
   `;
+
   document.getElementById('epc-del')?.addEventListener('click', async () => {
     if (!confirm('このチェック結果を削除しますか?')) return;
     try {
@@ -231,6 +266,112 @@ function paint(d, app) {
       location.hash = '#/exp-plan';
     } catch (e) { toast('失敗: ' + e.message); }
   });
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    b.addEventListener('click', () => {
+      _currentTab = b.dataset.tab;
+      paint(d, app);
+    });
+  });
+}
+
+function modeLabel(m) {
+  return m === 'strict' ? '🎓 厳密' : m === 'student' ? '🌱 初学者' : '🎓+🌱 両方';
+}
+
+function tabBtn(key, label, active) {
+  const color = key === 'strict' ? '#4f46e5' : '#a16207';
+  return `<button data-tab="${key}" style="flex:1; padding:10px 6px; border:none; background:${active ? '#fff' : '#f9fafb'}; color:${active ? color : '#6b7280'}; font-weight:${active ? '700' : '500'}; font-size:13px; cursor:pointer; border-bottom:3px solid ${active ? color : 'transparent'}">${label}</button>`;
+}
+
+// v1131 初学者モード用の描画 (plain_summary_for_student + good_points + next_three_steps を強調)
+function renderStudentBody(r) {
+  if (!r) return '<div class="hint-sm" style="padding:14px">初学者モードの結果がまだありません。</div>';
+  return `
+    ${r.plain_summary_for_student ? `
+      <div style="margin:10px 14px; padding:12px 14px; background:linear-gradient(180deg,#fefce8,#fff7ed); border:2px solid #f59e0b; border-radius:10px">
+        <div class="bold" style="color:#a16207; font-size:14px; margin-bottom:6px">🌱 まず ここだけ 読めば OK</div>
+        <div style="font-size:14px; line-height:1.85; white-space:pre-wrap; color:#1f2937">${escapeHtml(r.plain_summary_for_student)}</div>
+      </div>` : ''}
+
+    ${r.summary_one_line ? `
+      <div style="margin:10px 14px; padding:8px 12px; background:#faf7fc; border-left:4px solid var(--primary); border-radius:0 6px 6px 0">
+        <div class="bold" style="color:var(--primary); font-size:12px">📌 全体講評 ${scoreBadge(r.overall_score, '#7b3fa0')}</div>
+        <div style="font-size:13.5px; line-height:1.6; margin-top:4px">${escapeHtml(r.summary_one_line)}</div>
+      </div>` : ''}
+
+    ${Array.isArray(r.good_points) && r.good_points.length ? `
+      <div style="margin:10px 14px; padding:10px 12px; background:#dcfce7; border-left:4px solid #15803d; border-radius:0 6px 6px 0">
+        <div class="bold" style="color:#15803d; margin-bottom:4px">✨ ここが 良い</div>
+        <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7">
+          ${r.good_points.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+    ${Array.isArray(r.next_three_steps) && r.next_three_steps.length ? `
+      <div style="margin:10px 14px; padding:10px 12px; background:#fff7ed; border-left:4px solid #ea580c; border-radius:0 6px 6px 0">
+        <div class="bold" style="color:#9a3412; margin-bottom:6px">🚀 まず この 3 ステップから 着手</div>
+        <ol style="margin:0; padding-left:20px; font-size:13.5px; line-height:1.75">
+          ${r.next_three_steps.map(x => `<li style="margin-bottom:4px">${escapeHtml(String(x))}</li>`).join('')}
+        </ol>
+      </div>` : ''}
+
+    <div style="padding:0 14px">
+      ${renderSection('❓ RQ の書き方',           r.rq_review,                  '#4f46e5', true)}
+      ${renderSection('💡 仮説の書き方',          r.hypothesis_review,          '#a16207', true)}
+      ${renderSection('🔗 仮説と実験の対応',      r.hypothesis_experiment_link, '#0284c7', true)}
+      ${renderSection('📊 データの適切さ',        r.data_appropriateness,       '#0ea5e9', true)}
+      ${renderSection('📈 統計手法',              r.statistics,                 '#059669', true)}
+      ${renderSection('👥 サンプルサイズ',        r.sample_size,                '#dc2626', true)}
+
+      ${Array.isArray(r.top_priority_fixes) && r.top_priority_fixes.length ? `
+        <div class="card" style="background:#fef3c7; border-left:4px solid #d97706; margin-top:8px">
+          <div class="bold" style="color:#92400e; margin-bottom:6px">🔥 特に 効く 修正 提案</div>
+          <ol style="margin:0; padding-left:18px; font-size:13.5px; line-height:1.7">
+            ${r.top_priority_fixes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+          </ol>
+        </div>` : ''}
+
+      ${Array.isArray(r.other_notes) && r.other_notes.length ? `
+        <div class="card">
+          <div class="bold" style="color:#6b7280; margin-bottom:6px">📝 その他の気づき</div>
+          <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#374151">
+            ${r.other_notes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+    </div>`;
+}
+
+// v1131 厳密モード用の描画 (従来の paint 相当)
+function renderStrictBody(r) {
+  if (!r) return '<div class="hint-sm" style="padding:14px">厳密モードの結果がまだありません。</div>';
+  return `
+    ${r.summary_one_line ? `
+      <div style="margin:10px 14px; padding:10px 14px; background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary); border-radius:0 6px 6px 0">
+        <div class="bold" style="color:var(--primary); margin-bottom:4px">📌 全体講評 ${scoreBadge(r.overall_score, '#7b3fa0')}</div>
+        <div style="font-size:14px; line-height:1.7">${escapeHtml(r.summary_one_line)}</div>
+      </div>` : ''}
+    <div style="padding:0 14px">
+      ${renderSection('❓ RQ の書き方',           r.rq_review,                  '#4f46e5', false)}
+      ${renderSection('💡 仮説の書き方',          r.hypothesis_review,          '#a16207', false)}
+      ${renderSection('🔗 仮説と実験の対応',      r.hypothesis_experiment_link, '#0284c7', false)}
+      ${renderSection('📊 データの適切さ',        r.data_appropriateness,       '#0ea5e9', false)}
+      ${renderSection('📈 統計手法',              r.statistics,                 '#059669', false)}
+      ${renderSection('👥 サンプルサイズ',        r.sample_size,                '#dc2626', false)}
+      ${Array.isArray(r.top_priority_fixes) && r.top_priority_fixes.length ? `
+        <div class="card" style="background:#fff7ed; border-left:4px solid #ea580c">
+          <div class="bold" style="color:#9a3412; margin-bottom:6px">🔥 優先度の高い修正提案</div>
+          <ol style="margin:0; padding-left:18px; font-size:13.5px; line-height:1.7">
+            ${r.top_priority_fixes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+          </ol>
+        </div>` : ''}
+      ${Array.isArray(r.other_notes) && r.other_notes.length ? `
+        <div class="card">
+          <div class="bold" style="color:#6b7280; margin-bottom:6px">📝 その他の気づき</div>
+          <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#374151">
+            ${r.other_notes.map(x => `<li>${escapeHtml(String(x))}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+    </div>`;
 }
 
 function scoreBadge(score, color) {
@@ -239,30 +380,43 @@ function scoreBadge(score, color) {
   return `<span style="display:inline-block; margin-left:6px; font-size:12px; color:${color}">${'★'.repeat(filled)}${'☆'.repeat(5 - filled)} <span style="font-size:11px; color:#6b7280">(${score}/5)</span></span>`;
 }
 
-function renderSection(title, sec, color) {
+function renderSection(title, sec, color, isStudent) {
   if (!sec || typeof sec !== 'object') return '';
   const score = sec.score;
   const notes = sec.notes || '';
+  const why   = isStudent ? (sec.why_it_matters || '') : '';
   const issues = Array.isArray(sec.issues) ? sec.issues : [];
   return `
     <div class="card">
       <div class="bold" style="color:${color}; font-size:14px">${title} ${scoreBadge(score, color)}</div>
+      ${why ? `<div style="font-size:12px; color:#6b7280; margin-top:4px; padding:4px 8px; background:#f9fafb; border-radius:4px; font-style:italic">💭 ${escapeHtml(why)}</div>` : ''}
       ${notes ? `<div style="font-size:13px; line-height:1.7; margin-top:6px; white-space:pre-wrap">${escapeHtml(notes)}</div>` : ''}
       ${issues.length ? `
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px">
-          ${issues.map(iss => renderIssue(iss, color)).join('')}
+          ${issues.map(iss => renderIssue(iss, color, isStudent)).join('')}
         </div>` : ''}
     </div>`;
 }
 
-function renderIssue(iss, color) {
-  const severity = String(iss?.severity || '').toLowerCase();
-  const sevColor = severity === 'high' ? '#dc2626' : (severity === 'med' ? '#a16207' : '#0891b2');
-  const sevLabel = ({high: '🚨 高', med: '⚠ 中', low: 'ℹ 低'})[severity] || severity;
-  // v1044 中村さん指摘「RQ や仮説の書き方を指摘してくれるのは良いが、オリジナルが
-  //   何だったかが示されていなくて参照が面倒。原文はこれだったよを示して」
-  //   → issue の上に計画書の原文を Georgia 系で引用表示。該当なしの場合は
-  //   薄グレーで「(該当記述なし)」のみ。
+function renderIssue(iss, color, isStudent) {
+  const sev = String(iss?.severity || '').toLowerCase();
+  // v1131 学生モードは must/better/nice、厳密モードは high/med/low
+  const sevMap = isStudent
+    ? { must:  { c: '#dc2626', l: '🔥 まず直す' },
+        better:{ c: '#a16207', l: '👍 直せると良い' },
+        nice:  { c: '#0891b2', l: '✨ 余裕があれば' },
+        // 旧値も念のため受ける
+        high:  { c: '#dc2626', l: '🔥 まず直す' },
+        med:   { c: '#a16207', l: '👍 直せると良い' },
+        low:   { c: '#0891b2', l: '✨ 余裕があれば' } }
+    : { high:  { c: '#dc2626', l: '🚨 高' },
+        med:   { c: '#a16207', l: '⚠ 中' },
+        low:   { c: '#0891b2', l: 'ℹ 低' },
+        must:  { c: '#dc2626', l: '🚨 高' },
+        better:{ c: '#a16207', l: '⚠ 中' },
+        nice:  { c: '#0891b2', l: 'ℹ 低' } };
+  const sevInfo = sevMap[sev] || null;
+
   const quote = (iss?.quote || '').trim();
   const isNoQuote = quote === '(該当記述なし)' || quote === '' || quote === '(なし)';
   const quoteBlock = quote
@@ -271,10 +425,10 @@ function renderIssue(iss, color) {
         : `<div style="font-size:12px; padding:5px 9px; margin-bottom:6px; background:#f9fafb; border-left:2px solid #9ca3af; font-family: Georgia, 'Times New Roman', serif; line-height:1.55; color:#4b5563">📄 原文: ${escapeHtml(quote)}</div>`)
     : '';
   return `
-    <div style="padding:8px 10px; background:#fff; border-left:3px solid ${sevColor}; border-radius:0 6px 6px 0">
+    <div style="padding:8px 10px; background:#fff; border-left:3px solid ${sevInfo ? sevInfo.c : color}; border-radius:0 6px 6px 0">
       ${quoteBlock}
       <div style="display:flex; gap:6px; align-items:baseline; flex-wrap:wrap">
-        ${sevLabel ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:${sevColor}22; color:${sevColor}">${escapeHtml(sevLabel)}</span>` : ''}
+        ${sevInfo ? `<span style="font-size:10.5px; padding:1px 6px; border-radius:8px; background:${sevInfo.c}22; color:${sevInfo.c}">${escapeHtml(sevInfo.l)}</span>` : ''}
         <div class="bold" style="font-size:13px">${escapeHtml(iss?.issue || '')}</div>
       </div>
       ${iss?.suggestion ? `<div style="font-size:12.5px; line-height:1.65; margin-top:4px; color:#374151"><span style="color:${color}">→</span> ${escapeHtml(iss.suggestion)}</div>` : ''}

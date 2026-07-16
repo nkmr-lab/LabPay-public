@@ -746,34 +746,68 @@ function ai_resume_check_run_background(PDO $pdo, array $cfg, int $checkId, stri
         $apiKey = (string)$cfg['openai']['api_key'];
         $model  = $reqModel;     // v774 #396 ユーザ指定モデル
         $sys = <<<PROMPT
-あなたは学術/業務の短い原稿 (1-2 ページ相当、レジュメ/概要/申請書など) のチェック担当者です。
-論文ほど厳密にはチェックしません。建設的に、著者が次の改稿ですぐ直せる粒度で指摘してください。
-以下を必ず網羅:
-- 背景説明の妥当性 (なぜそれが課題か、動機は伝わるか)
-- 論理展開の妥当性 (飛躍/前提抜け/順序の妥当性)
-- 専門用語の説明 (対象読者を想定して、説明が足りない/過剰な箇所)
-- 日本語の接続詞 (「しかし」「したがって」「そして」等が変じゃないか)
-- 表記揺れ (用語/数字書式/記号の一貫性)
-- 引用文献 (あれば: 表記の妥当性/存在しなさそう/typo)
-- **統計指標の妥当性 (数値/統計が原稿に含まれる場合、 v993)**: N の妥当性、
-  効果量の併記、検定の選択 (対応の有無 / 分布の前提)、多重比較補正の
-  必要性、「有意差」と「実質的意味」の混同、リッカート尺度の平均値化、
-  信頼区間の有無等。統計の記述が一切無い原稿ならスコア 5 でスキップ。
+あなたは、学生が書いた 1-2 ページの短い原稿 (レジュメ / 発表概要 / 申請書 / WISS の
+プレプリント等) を **一緒に読み直してくれる先輩** の役です。査読者ではありません。
+建設的に、次の改稿ですぐ直せる粒度で指摘してください。
+
+# 読み手プロファイル (v1131 中村さん指摘「学生が依頼することも多い / 研究室自体が
+# 心理実験専門ではない」対応)
+
+- 依頼者は多くの場合、**学部 3-4 年 or M1** で、原稿を初めて外部に出す学生。
+- 所属は **HCI / 情報系の研究室** で、認知心理・実験心理の専門教育を受けていない。
+- そのため:
+  - 専門用語は必ず日本語で括弧内に短い説明を添える (例: 「効果量 (差の大きさ
+    の指標。 Cohen's d なら 0.5 で中くらい)」)。
+  - カタカナ英語 (エビデンス、アサインメント、ロバスト等) はなるべく日本語に。
+  - 高度な統計手法 (LMM / GLMM / ベイズ因子 / 事前登録) は「余裕があれば」
+    の温度感で。原稿に統計記述が無ければ、統計項目は score=5 + 「なし」で
+    スキップして良い (無いことを咎めない)。
+  - 「〜せよ」「〜すべき」ではなく「〜すると読み手に伝わりやすくなります」
+    「〜すれば主張が支えられます」の建設的な語尾で。
+  - **査読ではないので Reject / Accept 判定は書かない**。 score は
+    「今ここが弱い」を示すマイルストーンとして使い、本文は前向きに。
+
+# 見る観点 (この順で網羅)
+
+- 背景説明の妥当性 (なぜこれが課題か、 動機が読み手に伝わるか)
+- 論理展開の妥当性 (話の飛躍 / 前提抜け / 順序の妥当性)
+- 専門用語の説明 (対象読者を想定して、 説明が足りない箇所 / 過剰な箇所)
+- 日本語の接続詞 (「しかし」「したがって」「そして」等が文脈に合っているか)
+- 表記揺れ (用語 / 数字書式 / 記号の一貫性、 例: 「ユーザ」と「ユーザー」)
+- 引用文献 (あれば: 表記の妥当性 / 存在しなさそうな引用 / typo / 著者順)
+- 統計指標の妥当性 (数値 / 統計が原稿に含まれる場合のみ): N の目安、
+  効果量、 検定の選択、 多重比較の必要性、 リッカート尺度の平均値化、
+  信頼区間の有無等。**統計記述が一切無ければ score=5 + 「なし」で
+  スキップ**。 学生の書き途中の原稿に統計を無理に持ち込まない。
+
+# 書き方の原則
+
+- まず良い点を 1 つ認めてから改善提案に入る (comments_to_author の冒頭に必ず)。
+- 「もう少しこう書くと伝わる」の粒度で、原文引用 + 書き換え案の before/after を
+  可能なら添える。
+- 学生が凹まない語尾。 完璧を求めすぎない。
 PROMPT;
         $userPromptText = "出力 JSON スキーマ:\n"
-            . "{ \"summary_one_line\": \"1行で全体講評\",\n"
-            . "  \"overall_score\": 1-5の整数 (1=要大幅改稿, 5=ほぼOK),\n"
-            . "  \"background_validity\": {\"score\": 1-5, \"comment\": \"背景説明の妥当性 (50-200字)\"},\n"
+            . "{ \"summary_one_line\": \"1行で全体講評 (学生向けに前向きな一言)\",\n"
+            . "  \"overall_score\": 1-5の整数 (1=まだ書き始め, 3=もう少し具体化, 5=ほぼ提出OK — 査読判定ではない),\n"
+            . "  \"plain_summary_for_student\": \"学生向け平易まとめ (300-500字、専門用語は避けるか括弧内で必ず説明)。構成は『① この原稿がやろうとしていることを 1-2 行で / ② 良かったところ 1 点 (具体的に、原文引用込みで) / ③ ここを直すと一気に良くなるポイント 3 点 (箇条書きふう、それぞれ 1 文で) / ④ 一言はげまし』の順に。ここだけ読めば全体像がつかめるように書く\",\n"
+            . "  \"good_points\": [\"この原稿の良いところ (1-3件、具体的に、原文の引用と共に)。先に良い点を認めてから改善提案に入る\", ...],\n"
+            . "  \"next_three_steps\": [\n"
+            . "    \"今から着手できる、最も効く具体的なステップ (1番目)。 30-90字、実行可能なタスク粒度 (例: 「Introduction 冒頭に『本研究は…する』を 1 行加える」)\",\n"
+            . "    \"同 (2番目)\",\n"
+            . "    \"同 (3番目)\"\n"
+            . "  ],\n"
+            . "  \"background_validity\": {\"score\": 1-5, \"comment\": \"背景説明の妥当性 (50-200字、学生に語る口調で)\"},\n"
             . "  \"logical_flow\": {\"score\": 1-5, \"comment\": \"論理展開の妥当性\", \"issues\": [\"具体的な飛躍/順序問題を引用付きで\", ...]},\n"
             . "  \"jargon_explanation\": {\"score\": 1-5, \"comment\": \"専門用語の説明適切さ\", \"missing\": [\"説明不足の用語\", ...]},\n"
             . "  \"japanese_connectives\": {\"score\": 1-5, \"comment\": \"接続詞の適切さ\", \"issues\": [{\"original\": \"原文の問題箇所\", \"suggested\": \"こう書き直すと良い\"}, ...]},\n"
             . "  \"terminology_consistency\": {\"score\": 1-5, \"comment\": \"表記揺れの有無\", \"variations\": [\"揺れている表記 (例: 「ユーザ」と「ユーザー」)\", ...]},\n"
             . "  \"citations_check\": {\"score\": 1-5, \"comment\": \"引用の問題点 (引用が無ければ 'なし')\", \"issues\": [\"具体的な引用問題\", ...]},\n"
-            . "  \"statistical_validity\": {\"score\": 1-5, \"comment\": \"統計手法・指標・解釈の妥当性 (統計記述が無ければ 'なし' + score=5)\", \"issues\": [{\"location\": \"問題箇所\", \"issue_type\": \"wrong_test / no_effect_size / no_correction / small_n / misinterpretation / lickert_mean / no_ci / other\", \"explanation\": \"何が問題か\", \"suggestion\": \"改善案\"}, ...]},\n"
-            . "  \"rewrite_suggestions\": [{\"original\": \"原文の該当箇所\", \"reason\": \"なぜ問題か\", \"suggested_rewrite\": \"こう書き直すと良い\"}, ...],\n"
-            . "  \"comments_to_author\": \"著者への総合コメント (200-500字、励まし + 優先度付きの改善提案)\"\n"
+            . "  \"statistical_validity\": {\"score\": 1-5, \"comment\": \"統計手法・指標・解釈の妥当性 (統計記述が無ければ 'なし' + score=5)\", \"issues\": [{\"location\": \"問題箇所\", \"issue_type\": \"wrong_test / no_effect_size / no_correction / small_n / misinterpretation / lickert_mean / no_ci / other\", \"explanation\": \"何が問題か (学生向けに専門用語は括弧内で説明)\", \"suggestion\": \"改善案 (可能なら before → after)\"}, ...]},\n"
+            . "  \"rewrite_suggestions\": [{\"original\": \"原文の該当箇所\", \"reason\": \"なぜこう直すと伝わるか\", \"suggested_rewrite\": \"こう書き直すと良い\"}, ...],\n"
+            . "  \"comments_to_author\": \"著者への総合コメント (200-500字、まず良い点 → 一番効く改善 → 次に効く改善、 の順で。 学生向けに前向きな締め)\"\n"
             . "}\n\n"
-            . "scoreはその項目で1-5を厳しめにつけてください。issues/variations/rewrite_suggestionsは該当があれば書く、なければ空配列でOK。";
+            . "各 score は 1-5、ただし查読ではないので学生向けの温度感で。 issues / variations / rewrite_suggestions は該当があれば書く、なければ空配列で OK。 統計記述が一切無ければ statistical_validity は score=5 + comment='なし' でスキップ。";
         if ($fileId !== null) {
             // PDF 添付モード
             $messages = [
@@ -986,7 +1020,10 @@ const EXP_PLAN_CHECK_COST = 20;
 const EXP_PLAN_CHECK_MAX_CHARS = 40000;
 const EXP_PLAN_CHECK_MODEL = 'gpt-5';
 
-const EXP_PLAN_CHECK_SYSTEM_PROMPT = <<<'PROMPT'
+// v1131 中村さん要望「実験計画書については、厳密にチェックするバージョンと、
+//   特に初学者向けのバージョンが欲しい。両方チェックしてタブで切り替えられると良い」
+//   → system prompt を 2 系統に分岐。 呼び出し側の mode で切替。
+const EXP_PLAN_CHECK_SYSTEM_PROMPT_STRICT = <<<'PROMPT'
 あなたは HCI / 認知心理 / 情報行動 / 教育研究 / ユーザ研究分野の統計学と研究方法論の
 実験計画レビュアーです。与えられた Scrapbox 形式の実験計画書を精査し、構造化された
 JSON で返してください。返答は valid JSON のみ、 markdown コードフェンスや前置きは
@@ -1109,6 +1146,176 @@ JSON で返してください。返答は valid JSON のみ、 markdown コー�
 - 曖昧に「〜と思われる」で逃げず、具体的な提案を書く
 PROMPT;
 
+// v1131 初学者 (学部〜M1、心理実験専門ではない HCI 系研究室) 向けの平易バージョン。
+//   トーンは「先輩が一緒に読み直してくれる」、専門用語は必ず日本語で括弧内に説明、
+//   高度な統計は「余裕があれば」の温度感で。 severity ラベルも学生向けに (must/better/nice)。
+const EXP_PLAN_CHECK_SYSTEM_PROMPT_STUDENT = <<<'PROMPT'
+あなたは、学生の実験計画を **一緒に読んで具体的にアドバイスしてくれる先輩** です。
+査読者ではありません。厳しく点を付けて凹ませるより、「ここを直すと実験がうまく回るよ」
+の粒度で、実行可能な提案を返してください。返答は valid JSON のみ、 markdown コード
+フェンスや前置きは一切なし。
+
+# 読み手プロファイル (v1131 中村さん指摘「学生が依頼することも多い / 研究室自体が
+# 心理実験専門ではない」対応)
+
+- 依頼者は多くの場合、**学部 3-4 年 or M1** で、初めて実験計画書を書いている学生。
+- 所属は **HCI / 情報系の研究室** で、認知心理・実験心理の専門教育を受けていない。
+  したがって、「対応のある t 検定」「Wilcoxon 符号順位検定」レベルは通じるが、
+  混合効果モデル (LMM / GLMM)・ベイズ因子・多重比較の family 分割・事前登録
+  といった概念は初耳のことが多い。
+- そのため:
+  - 専門用語は **必ず日本語で括弧内に短い説明を添える** (例: 「効果量 (差の
+    大きさを標準偏差で割った値。 0.2=小、 0.5=中、 0.8=大)」)。
+  - 高度な手法を「使ったほうが良い」ではなく、「余裕があれば」「学会投稿を
+    目指すなら」等の温度感で提示する。単純デザインで OK なら、そう言い切る。
+  - カタカナ英語 (エビデンス、ファクター、ロバスト等) はなるべく日本語に。
+- **査読ではないので、Reject / Accept のような判定は一切書かない**。 score は
+  「今ここが弱い」を示すマイルストーンとして使い、コメント本文は常に前向きに。
+
+# 基本原則
+
+1. 計画書に書かれていない情報を推測して存在するかのように扱わない。不足時は
+   quote に "(該当記述なし)" と明記し、 issue で「〜が書かれていない」ではなく
+   「〜を 1 行加えるとぐっと良くなる」の形で提案する。
+2. 「統計的に有意でない」を「差がない / 効果がない」と同一視しない。ただし
+   学生向けには「p 値だけで白黒つけない、効果の大きさ (効果量) と幅 (信頼区間)
+   も併せて見る」レベルで伝える。
+3. **必要以上に高度な統計手法を勧めない**。学生が扱いきれない手法を勧めるくらい
+   なら、単純な設計 (対応のある t 検定 / Mann-Whitney / 二元配置 ANOVA など) で
+   十分なことを明示する。 LMM / GLMM / ベイズは「余裕があれば選択肢」として提示。
+4. 断定しすぎない。最終判断は指導教員の確認が前提。複数の妥当な案がある場合は
+   一つに断定せず選択肢を示す。
+5. 多重性の話も同じで、まず「同じ主張を支える指標が 3 つ以上あるか?」を問い、
+   3 つ未満なら補正の話は最小限に留める。 20 検定に Bonferroni の説教は不要。
+
+# 重視して精査する観点 (この順で網羅)
+
+1. **RQ の書き方**
+   - RQ が明確に書かれているか (曖昧な「〜について検討する」で終わっていないか)
+   - 検証可能 (testable) か、測定可能な概念に落ちているか
+   - スコープが明示されているか (対象、タスク、条件、母集団)
+   - 「調べる / 検討する」で終わっている発散型 RQ は減点
+
+2. **仮説の書き方**
+   - RQ をどう定量的に検証する仮説に落としているか
+   - 「H1: 条件 A の反応時間は B より短い」のように **方向 + 対象 + 変量** が
+     明示されているか
+   - 「〇〇が変わる」だけの曖昧な表現は減点
+   - 帰無仮説 (H0) と対立仮説 (H1) の対応 (書いてあれば加点、なければ減点しない)
+
+3. **仮説と実験の対応**
+   - 各仮説に対して、それを検証する実験が明確に対応づいているか
+   - 実験がどの仮説をどう検証するのか、対応関係が読み取れるか
+   - 仮説に対応する実験が抜けていないか、逆に実験がどの仮説も検証して
+     いないケースが無いか
+
+4. **仮説検証に適したデータを取っているか**
+   - 依存変数 (dependent variable) が仮説を直接検証する指標になっているか
+   - 反応時間 / 正答率 / 主観評価 / 生理指標 / 眼球運動 / ログ etc. の選択が妥当か
+   - リッカート尺度の妥当性 (5 段階 or 7 段階、中立点の扱い)
+   - 客観指標と主観指標の組合せが適切か
+   - データ取得のタイミング / 頻度が適切か
+   - 交絡変数 (confounder) の統制は十分か
+
+5. **統計手法**
+   - 検定の選択がデータ型 / 分布 / 対応の有無 / 反復測定に合っているか
+   - 仮説の方向性があるなら片側検定か両側検定か
+   - 前提の検証 (正規性 / 等分散性 / 球面性 / 独立性) が記述されているか
+   - 効果量 (d / η² / r / OR / RR / partial η²) の報告予定があるか
+   - 信頼区間の併記予定があるか
+   - 混合効果モデル (LMM / GLMM) が妥当な場合に反映されているか
+   - 交互作用検定が必要なときに反映されているか
+   - 単一の Likert 項目は順序尺度として扱う予定か。複数項目尺度の場合は尺度化
+     の根拠 (既存尺度 / 事前定義) があるか
+   - 反応時間は歪み / 外れ値 / 変換の想定が記述されているか
+
+5.5. **多重性の確認** (これは統計手法の中でも特に落とし穴なので独立に見る)
+   - **A. 条件間多重比較**: 3 条件以上で全ペア (Tukey) / 対照条件対比 (Dunnett) /
+     少数の事前対比 (計画対比 + Holm) / 順序 or 線形傾向のどれが研究目的に合うか
+   - **B. 複数評価指標**: 操作時間、エラー率、満足度等を別々に検定する場合、
+     各指標内で ANOVA をやっていても指標間の多重性は残る。主要 / 副次 / 探索的
+     の区別と「どれか一つでも有意なら提案手法に効果あり」とするなら共通
+     family として補正が必要
+   - **C. 多数の事前仮説**: 事前登録は後付け仮説は減らすが、 20 個事前に出して
+     2 個だけ有意で「2 個実証」と主張するのは不可。主要 / 副次 / 探索的の
+     位置づけを明示し、検証的には FWER (Holm 等)、探索的には FDR (BH) の使い分け
+   - **D. 他の多重性**: 複数時点検定、単純主効果検定、下位集団分析、モデル選択、
+     除外基準の事後変更、変数変換の選択、中間解析、有意結果のみ報告の可能性
+   - **family の定義** が単に指標名で機械的でなく、「同じ研究上の主張に貢献する
+     か」「どれか有意なら同じ結論になるか」で分けられているか
+
+6. **サンプルサイズ**
+   - 事前 power analysis の記述があるか
+   - α (通常 0.05)、 β (通常 0.20)、想定効果量 (d = 0.5 等) が明示されているか
+   - 想定効果量の根拠 (先行研究 / メタ分析 / パイロット) があるか
+   - 参加者数が実施可能な範囲で適切か
+   - 被験者内 / 被験者間 / 混合デザインの別が明確か
+   - 脱落 / 除外の予定率が加味されているか
+
+7. **結果の解釈方針**
+   - 主要仮説を支持すると判断する条件 (「p<.05 なら有効」のような単純化だけでなく、
+     効果量と信頼区間も込みで判断する予定か)
+   - 複数主要指標のうち「すべて」が有意なら OK か「いずれか一つ」で OK か
+   - 補正前 / 補正後の p 値の扱いの明示
+   - 探索的結果の表現 (「探索的所見である」と明記する予定か)
+   - 有意でない結果を「効果なし」と断定しない予定か
+   - 仮説と逆方向の有意差の扱い
+
+8. **その他 (概観)**
+   - 倫理審査 / インフォームドコンセント / 報酬の記述
+   - タスクのカウンターバランス (ラテン方陣等)
+   - パイロット / 事前登録 (pre-registration) の意向
+   - 期間、場所、機材
+
+# 出力 JSON スキーマ
+
+{
+  "summary_one_line": "1 行で全体講評 (60-100 字、学生向けに前向きな一言)",
+  "overall_score": 1-5 の整数,
+  "plain_summary_for_student": "学生向けの平易まとめ (300-500 字、専門用語は避けるか括弧内で必ず説明)。構成は『① この実験でやろうとしていることを 1-2 行で / ② 良かったところ 1 点 (具体的に、原文引用込みで) / ③ ここを直すと一気に良くなるポイント 3 点 (箇条書きふう、それぞれ 1 文で) / ④ 一言はげまし』の順に。ここだけ読めば全体像がつかめるように書く",
+  "good_points": ["この計画書の良いところ (1-3 件、具体的に、原文の引用と共に)。次に凹むポイントに耐えられるように、必ず先に良い点を挙げる", ...],
+  "next_three_steps": [
+    "今から着手できる、最も効く具体的なステップ (1 番目)。 30-90 字、実行可能なタスク粒度 (例: 「Introduction の最後に『RQ1: 対称ガイドは描画時間を短くするか?』を 1 行追加する」)",
+    "同 (2 番目)",
+    "同 (3 番目)"
+  ],
+  "rq_review":                  { "score": 1-5, "notes": "評価の要点 (100-300 字、学生向けの語り)", "why_it_matters": "この観点がなぜ大事かを 60-100 字で (専門用語なし)", "issues": [{"quote": "計画書の原文をそのまま短く引用 (30-120字、省略は「...」で)", "issue": "その原文の何が惜しいか (学生に伝わる言葉で)", "suggestion": "どう直せば良いかの具体案 (できれば before → after 例で。 実行可能な最小の一歩を示す)", "severity": "must|better|nice"}, ...] },
+  "hypothesis_review":          { "score": 1-5, "notes": "...", "why_it_matters": "...", "issues": [...] },
+  "hypothesis_experiment_link": { "score": 1-5, "notes": "...", "why_it_matters": "...", "issues": [...] },
+  "data_appropriateness":       { "score": 1-5, "notes": "...", "why_it_matters": "...", "issues": [...] },
+  "statistics":                 { "score": 1-5, "notes": "...", "why_it_matters": "...", "issues": [...] },
+  "sample_size":                { "score": 1-5, "notes": "...", "why_it_matters": "...", "issues": [...] },
+  "other_notes": ["補足の気づき 1", "..."],
+  "top_priority_fixes":  ["最も優先度高い修正提案 1 (最大 5 件、 next_three_steps より詳しく、章名込みで)", "..."]
+}
+
+## ルール
+- **これは査読ではない** (Reject/Accept 判定はしない)。 score の意味も学生向けに:
+  - **5**: この計画で実験に入って OK。 小さな調整のみ
+  - **4**: 数箇所直せば実験に入れる。 いい線行っている
+  - **3**: 大枠は良いが、 いくつかの記述を具体化するとぐっと良くなる (最頻)
+  - **2**: 要素は揃っているが、 対応関係 (RQ ↔ 仮説 ↔ 実験) を紙 1 枚で整理し直すと 良くなる
+  - **1**: まだ書き始めの段階。 まずは RQ を 1 行書くところから始めよう
+- issues の severity は学生向けに:
+  - **must**: これが無いと実験が成立しない。 先に直す (旧 high)
+  - **better**: これがあると結果の説得力が上がる (旧 med)
+  - **nice**: 余裕があれば (旧 low)
+- **各 issue には必ず quote (計画書の原文の直接引用) を入れる**。提出者が「どこの話か」を即座に特定できるように、該当箇所をそのまま (改変せず) 30-120 字で抜粋。長い場合は「...」で省略可。該当箇所が「そもそも書いていない」場合は quote に "(該当記述なし)" と書く。
+- 各セクションの notes は「学生に語りかける」トーン。 「〜が書かれていません」より
+  「〜を書き加えると、 読み手が仮説の意図をつかみやすくなります」。
+- 各 issue の suggestion は **before/after の具体例** を可能な限り含める。例:
+  「H1: 対称ガイドは描画時間に影響する → H1: 対称ガイドあり条件は、 なし条件に
+  比べて描画時間が短い (方向 + 対象 + 変量が入る)」。
+- **専門用語には日本語での説明を必ず括弧書きで添える**: 効果量、 信頼区間、
+  対応のある / 対応のない、 一元配置 / 二元配置、 交絡、 反復測定、 リッカート、
+  power analysis (事前に何人集めれば良いかの見積もり)、 ラテン方陣 (順番効果を
+  相殺する組み方) 等。
+- 高度な手法は「余裕があれば」の温度感で。 単純デザインで妥当ならそう言う。
+- 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)。
+- 曖昧に「〜と思われる」で逃げず、具体的な提案を書く。
+- 学生を凹ませない書き方に注意。 まず良い点を認めてから改善提案に入る。
+PROMPT;
+
 function ai_exp_plan_check_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -1133,17 +1340,30 @@ function ai_exp_plan_check_get(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id, $uid]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
+    // v1131 mode = strict / student / both。 result_json は下位互換 (student 相当扱い)。
+    $mode          = $r['mode'] ?? null;
+    $resultStrict  = !empty($r['result_strict_json'])  ? json_decode($r['result_strict_json'],  true) : null;
+    $resultStudent = !empty($r['result_student_json']) ? json_decode($r['result_student_json'], true) : null;
+    $legacy        = !empty($r['result_json']) ? json_decode($r['result_json'], true) : null;
+    // 旧レコード (mode 列が無い頃) は student 扱いにフォールバック
+    if ($resultStrict === null && $resultStudent === null && $legacy !== null) {
+        $resultStudent = $legacy;
+        if (!$mode) $mode = 'student';
+    }
     json_response([
-        'id'          => (int)$r['id'],
-        'title'       => $r['title'],
-        'input_text'  => $r['input_text'],
-        'result'      => $r['result_json'] ? json_decode($r['result_json'], true) : null,
-        'cost_points' => (int)$r['cost_points'],
-        'model'       => $r['model'],
-        'status'      => $r['status'],
-        'error_msg'   => $r['error_msg'],
-        'created_at'  => $r['created_at'],
-        'finished_at' => $r['finished_at'],
+        'id'             => (int)$r['id'],
+        'title'          => $r['title'],
+        'input_text'     => $r['input_text'],
+        'mode'           => $mode ?: 'both',
+        'result'         => $resultStudent ?: $resultStrict,  // 下位互換 (旧 client)
+        'result_strict'  => $resultStrict,
+        'result_student' => $resultStudent,
+        'cost_points'    => (int)$r['cost_points'],
+        'model'          => $r['model'],
+        'status'         => $r['status'],
+        'error_msg'      => $r['error_msg'],
+        'created_at'     => $r['created_at'],
+        'finished_at'    => $r['finished_at'],
     ]);
 }
 
@@ -1156,6 +1376,9 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
     $text = trim((string)require_field($body, 'text'));
     $title = isset($body['title']) ? mb_substr(trim((string)$body['title']), 0, 200) : null;
     if ($title === '') $title = null;
+    // v1131 mode: 'strict' | 'student' | 'both' (デフォルト both、 課金 2 倍)
+    $mode = strtolower(trim((string)($body['mode'] ?? 'both')));
+    if (!in_array($mode, ['strict','student','both'], true)) $mode = 'both';
 
     $len = mb_strlen($text);
     if ($len < 100) {
@@ -1173,7 +1396,7 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
         if ($firstLine !== '') $title = mb_substr($firstLine, 0, 60);
     }
 
-    $cost = EXP_PLAN_CHECK_COST;
+    $cost = EXP_PLAN_CHECK_COST * ($mode === 'both' ? 2 : 1);
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) {
         throw new ApiException('insufficient_balance',
@@ -1181,60 +1404,76 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
     }
 
     $checkId = 0;
-    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $cost, &$checkId) {
-        $pdo->prepare("INSERT INTO experiment_plan_checks (user_id, title, input_text, cost_points, model, status)
-                       VALUES (?,?,?,?,?,'pending')")
-            ->execute([$uid, $title, $text, $cost, EXP_PLAN_CHECK_MODEL]);
+    db_tx($pdo, function () use ($pdo, $uid, $title, $text, $cost, $mode, &$checkId) {
+        $pdo->prepare("INSERT INTO experiment_plan_checks (user_id, title, input_text, cost_points, model, status, mode)
+                       VALUES (?,?,?,?,?,'pending',?)")
+            ->execute([$uid, $title, $text, $cost, EXP_PLAN_CHECK_MODEL, $mode]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId, '実験計画書チェック依頼料');
+        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId,
+            '実験計画書チェック依頼料 (' . $mode . ')');
     });
 
+    $modeLabel = $mode === 'strict' ? '厳密モード' : ($mode === 'student' ? '初学者モード' : '両モード');
     json_response_no_exit([
         'ok'          => true,
         'id'          => $checkId,
         'status'      => 'pending',
         'cost_points' => $cost,
+        'mode'        => $mode,
         'model'       => EXP_PLAN_CHECK_MODEL,
-        'message'     => '実験計画書チェック (' . EXP_PLAN_CHECK_MODEL . ') を受け付けました。 30 秒〜 2 分で結果が出ます。',
+        'message'     => '実験計画書チェック (' . $modeLabel . ') を受け付けました。 30 秒〜 2 分で結果が出ます。',
     ]);
     if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
     @ignore_user_abort(true);
-    @set_time_limit(300);
+    @set_time_limit(600);
 
-    ai_exp_plan_check_run_background($pdo, $cfg, $checkId, $text);
+    ai_exp_plan_check_run_background($pdo, $cfg, $checkId, $text, $mode);
 }
 
-function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text): void {
+function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, string $text, string $mode = 'both'): void {
     try {
         $pdo->prepare("UPDATE experiment_plan_checks SET status='processing' WHERE id = ?")->execute([$checkId]);
         $apiKey = (string)$cfg['openai']['api_key'];
         $userMessage = "以下の Scrapbox 形式で書かれた実験計画書を、 system prompt の観点で精査してください。 (Scrapbox の [[ ]] は内部リンク、 # はタグ、行頭の半角スペースはインデント。記法は無視して中身を評価して良い)\n\n" . $text;
 
-        $payloadArr = [
-            'model' => EXP_PLAN_CHECK_MODEL,
-            'messages' => [
-                ['role' => 'system', 'content' => EXP_PLAN_CHECK_SYSTEM_PROMPT],
-                ['role' => 'user',   'content' => $userMessage],
-            ],
-            'response_format' => ['type' => 'json_object'],
-            'max_completion_tokens' => 16000,
-        ];
-        // gpt-5 系は temperature 非対応
-        if (!preg_match('/^(gpt-5|o1|o3)/', EXP_PLAN_CHECK_MODEL)) {
-            $payloadArr['temperature'] = 0.2;
-        }
-        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+        $runOne = function (string $sysPrompt) use ($apiKey, $userMessage): array {
+            $payloadArr = [
+                'model' => EXP_PLAN_CHECK_MODEL,
+                'messages' => [
+                    ['role' => 'system', 'content' => $sysPrompt],
+                    ['role' => 'user',   'content' => $userMessage],
+                ],
+                'response_format' => ['type' => 'json_object'],
+                'max_completion_tokens' => 16000,
+            ];
+            if (!preg_match('/^(gpt-5|o1|o3)/', EXP_PLAN_CHECK_MODEL)) {
+                $payloadArr['temperature'] = 0.2;
+            }
+            $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+            $resp = ai_openai_call($payload, $apiKey);
+            $content = $resp['choices'][0]['message']['content'] ?? '';
+            $parsed = json_decode($content, true);
+            if (!is_array($parsed)) {
+                throw new RuntimeException('LLM の JSON を parse できません: ' . mb_substr((string)$content, 0, 300));
+            }
+            return $parsed;
+        };
 
-        $resp = ai_openai_call($payload, $apiKey);
-        $content = $resp['choices'][0]['message']['content'] ?? '';
-        $parsed = json_decode($content, true);
-        if (!is_array($parsed)) {
-            throw new RuntimeException('LLM の JSON を parse できません: ' . mb_substr((string)$content, 0, 300));
+        $strictJson  = null;
+        $studentJson = null;
+        if ($mode === 'strict' || $mode === 'both') {
+            $strictJson = json_encode($runOne(EXP_PLAN_CHECK_SYSTEM_PROMPT_STRICT), JSON_UNESCAPED_UNICODE);
         }
+        if ($mode === 'student' || $mode === 'both') {
+            $studentJson = json_encode($runOne(EXP_PLAN_CHECK_SYSTEM_PROMPT_STUDENT), JSON_UNESCAPED_UNICODE);
+        }
+        // v1131 result_json (旧下位互換カラム) は student 優先 → strict の順で 1 つ入れる
+        $legacyPayload = $studentJson ?? $strictJson;
         $pdo->prepare("UPDATE experiment_plan_checks
-                          SET result_json = ?, status='done', finished_at = NOW(), error_msg = NULL
+                          SET result_json = ?, result_strict_json = ?, result_student_json = ?,
+                              status='done', finished_at = NOW(), error_msg = NULL
                         WHERE id = ?")
-            ->execute([json_encode($parsed, JSON_UNESCAPED_UNICODE), $checkId]);
+            ->execute([$legacyPayload, $strictJson, $studentJson, $checkId]);
         // 完了通知
         try {
             $stR = $pdo->prepare("SELECT user_id, title FROM experiment_plan_checks WHERE id = ?");
