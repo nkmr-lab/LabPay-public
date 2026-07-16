@@ -1,7 +1,7 @@
 <?php
-// /api/refs — Zotero-like 文献管理 (v925 MVP)。 ラボ全員 で 共有、 個人 note は 各自。
+// /api/refs — Zotero-like 文献管理 (v925 MVP)。ラボ全員で共有、個人 note は各自。
 // DOI / arXiv ID / URL から metadata 自動取得 (crossref / arxiv API)。
-// PDF 添付 は /uploads/refs/<sha>.pdf、 同 sha なら paper_translate/paper_review と 相互リンク。
+// PDF 添付は /uploads/refs/<sha>.pdf、同 sha なら paper_translate/paper_review と相互リンク。
 
 declare(strict_types=1);
 
@@ -16,11 +16,11 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'import_bibtex' && $method === 'POST') { refs_import_bibtex($pdo, $cfg); return; }
     if ($sub === 'import_ris'    && $method === 'POST') { refs_import_ris($pdo, $cfg);    return; }
     if ($sub === 'extract_pdf'   && $method === 'POST') { refs_extract_pdf($pdo, $cfg);   return; }
-    // v929: Zotero API 直接 + CSL-JSON + EndNote XML の 追加 import
+    // v929: Zotero API 直接 + CSL-JSON + EndNote XML の追加 import
     if ($sub === 'import_zotero'  && $method === 'POST') { refs_import_zotero($pdo, $cfg);  return; }
     if ($sub === 'import_csljson' && $method === 'POST') { refs_import_csljson($pdo, $cfg); return; }
     if ($sub === 'import_endnote' && $method === 'POST') { refs_import_endnote($pdo, $cfg); return; }
-    // v930: 参考文献 リスト 生成 (複数 ref に 対して 一括 CSL 引用)
+    // v930: 参考文献リスト生成 (複数 ref に対して一括 CSL 引用)
     if ($sub === 'bibliography'   && $method === 'POST') { refs_bibliography($pdo, $cfg);   return; }
     // v931: Semantic Scholar 連携
     if ($sub === 'ss_search'      && $method === 'POST') { refs_ss_search($pdo, $cfg);      return; }
@@ -65,7 +65,7 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'note'       && $method === 'PATCH')  { refs_note_set($pdo, $cfg, $id); return; }
         if ($next === 'attach_pdf' && $method === 'POST')   { refs_attach_pdf($pdo, $cfg, $id); return; }
         if ($next === 'bibtex'     && $method === 'GET')    { refs_bibtex_single($pdo, $cfg, $id); return; }
-        // v927 追加 添付
+        // v927 追加添付
         if ($next === 'attachments' && $method === 'GET')   { refs_attachments_list($pdo, $cfg, $id); return; }
         if ($next === 'attachments' && $method === 'POST')  { refs_attachments_upload($pdo, $cfg, $id); return; }
         if ($next === 'attachments' && ctype_digit((string)($seg[3] ?? '')) && $method === 'DELETE') {
@@ -100,7 +100,7 @@ function route_refs(PDO $pdo, array $cfg, string $method, array $seg): void {
 // helpers
 // ─────────────────────────────────────────────────────
 
-// DOI 正規化: URL や doi.org prefix を 剥がして 「10.xxxx/yyy」 だけ に する。
+// DOI 正規化: URL や doi.org prefix を剥がして「10.xxxx/yyy」だけにする。
 function _refs_normalize_doi(string $raw): string {
     $s = trim($raw);
     $s = preg_replace('#^https?://(dx\.)?doi\.org/#i', '', $s);
@@ -109,7 +109,7 @@ function _refs_normalize_doi(string $raw): string {
     return $s;
 }
 
-// arXiv ID 正規化: URL や バージョン を 保ったまま id だけ 抽出。
+// arXiv ID 正規化: URL やバージョンを保ったまま id だけ抽出。
 //   例: https://arxiv.org/abs/2401.12345v2 → 2401.12345v2
 //       arXiv:2401.12345 → 2401.12345
 function _refs_normalize_arxiv(string $raw): ?string {
@@ -127,7 +127,7 @@ function _refs_normalize_arxiv(string $raw): ?string {
 }
 
 // crossref: DOI → JSON metadata。 https://api.crossref.org/works/{doi}
-//   認証 不要、 mailto を 付ける と polite pool に。
+//   認証不要、 mailto を付けると polite pool に。
 function _refs_fetch_crossref(string $doi, string $email = 'labpay@nkmr.io'): ?array {
     $url = 'https://api.crossref.org/works/' . rawurlencode($doi) . '?mailto=' . rawurlencode($email);
     $ch = curl_init($url);
@@ -157,6 +157,14 @@ function _refs_fetch_crossref(string $doi, string $email = 'labpay@nkmr.io'): ?a
     elseif (isset($m['published-online']['date-parts'][0][0])) $year = (int)$m['published-online']['date-parts'][0][0];
     $venue = (string)($m['container-title'][0] ?? $m['event']['name'] ?? '');
     $title = (string)(($m['title'][0] ?? '') ?: '');
+    // v1099 crossref の subject (キーワード / トピック) は論文によっては埋まっている。
+    //   例: "Human-Computer Interaction", "Hardware and Architecture" 等。
+    //   pdf 本文の Keywords 行と併せて bulk import に使う。
+    $keywords = [];
+    foreach ((array)($m['subject'] ?? []) as $s) {
+        $s = trim((string)$s);
+        if ($s !== '') $keywords[] = $s;
+    }
     return [
         'doi'      => $doi,
         'title'    => $title,
@@ -167,6 +175,7 @@ function _refs_fetch_crossref(string $doi, string $email = 'labpay@nkmr.io'): ?a
         'url'      => (string)($m['URL'] ?? ('https://doi.org/' . $doi)),
         'type'     => (string)($m['type'] ?? ''),
         'publisher'=> (string)($m['publisher'] ?? ''),
+        'keywords' => $keywords,
     ];
 }
 
@@ -183,7 +192,7 @@ function _refs_fetch_arxiv(string $id): ?array {
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     if ($code !== 200 || !$body) return null;
-    // 単純 に XML から 必要 部分だけ 抜き取る。
+    // 単純に XML から必要部分だけ抜き取る。
     $x = @simplexml_load_string($body);
     if (!$x) return null;
     $x->registerXPathNamespace('a', 'http://www.w3.org/2005/Atom');
@@ -215,7 +224,7 @@ function _refs_fetch_arxiv(string $id): ?array {
     ];
 }
 
-// BibTeX 生成 (最小限)。 crossref 型 も arxiv 型 も カバー。
+// BibTeX 生成 (最小限)。 crossref 型も arxiv 型もカバー。
 function _refs_generate_bibtex(array $r): string {
     $keyBase = 'ref';
     if (!empty($r['authors_json'])) {
@@ -285,14 +294,14 @@ function refs_import_doi(PDO $pdo, array $cfg): void {
     if ($raw === '') throw new ApiException('bad_request', 'doi 必要', 400);
     $doi = _refs_normalize_doi($raw);
     if (!preg_match('#^10\.\d{4,9}/#', $doi)) {
-        throw new ApiException('bad_request', 'DOI 形式が 正しく ない (例: 10.1145/xxxxx.yyyyy)', 400);
+        throw new ApiException('bad_request', 'DOI 形式が正しくない (例: 10.1145/xxxxx.yyyyy)', 400);
     }
-    // 既存 チェック
+    // 既存チェック
     $st = $pdo->prepare("SELECT id, title FROM refs WHERE doi = ? LIMIT 1");
     $st->execute([$doi]);
     $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
     $meta = _refs_fetch_crossref($doi);
-    if (!$meta) throw new ApiException('fetch_failed', 'crossref から metadata が 取れなかった (DOI が 未登録 or 障害)', 502);
+    if (!$meta) throw new ApiException('fetch_failed', 'crossref から metadata が取れなかった (DOI が未登録 or 障害)', 502);
     json_response([
         'meta'     => $meta,
         'existing' => $existing ? ['id' => (int)$existing['id'], 'title' => $existing['title']] : null,
@@ -305,19 +314,19 @@ function refs_import_arxiv(PDO $pdo, array $cfg): void {
     $raw = (string)($body['arxiv_id'] ?? '');
     if ($raw === '') throw new ApiException('bad_request', 'arxiv_id 必要', 400);
     $id = _refs_normalize_arxiv($raw);
-    if (!$id) throw new ApiException('bad_request', 'arXiv ID 形式が 正しく ない (例: 2401.12345)', 400);
+    if (!$id) throw new ApiException('bad_request', 'arXiv ID 形式が正しくない (例: 2401.12345)', 400);
     $st = $pdo->prepare("SELECT id, title FROM refs WHERE arxiv_id = ? LIMIT 1");
     $st->execute([$id]);
     $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
     $meta = _refs_fetch_arxiv($id);
-    if (!$meta) throw new ApiException('fetch_failed', 'arxiv API から metadata が 取れなかった', 502);
+    if (!$meta) throw new ApiException('fetch_failed', 'arxiv API から metadata が取れなかった', 502);
     json_response([
         'meta'     => $meta,
         'existing' => $existing ? ['id' => (int)$existing['id'], 'title' => $existing['title']] : null,
     ]);
 }
 
-// 汎用 URL: DOI or arXiv ID が URL 内に あれば 抽出 して 対応 endpoint に 委譲。
+// 汎用 URL: DOI or arXiv ID が URL 内にあれば抽出して対応 endpoint に委譲。
 function refs_import_url(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -331,7 +340,7 @@ function refs_import_url(PDO $pdo, array $cfg): void {
         $st->execute([$doi]);
         $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
         $meta = _refs_fetch_crossref($doi);
-        if (!$meta) throw new ApiException('fetch_failed', 'crossref から 取れなかった', 502);
+        if (!$meta) throw new ApiException('fetch_failed', 'crossref から取れなかった', 502);
         json_response(['meta' => $meta, 'existing' => $existing ?: null]);
         return;
     }
@@ -342,11 +351,11 @@ function refs_import_url(PDO $pdo, array $cfg): void {
         $st->execute([$id]);
         $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
         $meta = _refs_fetch_arxiv($id);
-        if (!$meta) throw new ApiException('fetch_failed', 'arxiv から 取れなかった', 502);
+        if (!$meta) throw new ApiException('fetch_failed', 'arxiv から取れなかった', 502);
         json_response(['meta' => $meta, 'existing' => $existing ?: null]);
         return;
     }
-    throw new ApiException('bad_request', 'DOI or arXiv ID を URL から 抽出 できなかった。 直接 「DOI」 タブ で 入力 して ください', 400);
+    throw new ApiException('bad_request', 'DOI or arXiv ID を URL から抽出できなかった。直接「DOI」タブで入力してください', 400);
 }
 
 // ─────────────────────────────────────────────────────
@@ -364,13 +373,13 @@ function refs_create(PDO $pdo, array $cfg): void {
     if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
     $arxivId = trim((string)($body['arxiv_id'] ?? ''));
     if ($arxivId !== '') $arxivId = _refs_normalize_arxiv($arxivId) ?? '';
-    // 二重登録 防止 (force=1 で バイパス 可)
+    // 二重登録防止 (force=1 でバイパス可)
     if ($doi !== '' && empty($body['force'])) {
         $st = $pdo->prepare("SELECT id, title FROM refs WHERE doi = ? LIMIT 1");
         $st->execute([$doi]);
         if ($ex = $st->fetch(PDO::FETCH_ASSOC)) {
             throw new ApiException('duplicate',
-                "同じ DOI が すでに 登録済 「{$ex['title']}」 (id={$ex['id']})。 上書き するなら force=1。",
+                "同じ DOI がすでに登録済「{$ex['title']}」 (id={$ex['id']})。上書きするなら force=1。",
                 409, ['existing_id' => (int)$ex['id']]);
         }
     }
@@ -379,7 +388,7 @@ function refs_create(PDO $pdo, array $cfg): void {
         $st->execute([$arxivId]);
         if ($ex = $st->fetch(PDO::FETCH_ASSOC)) {
             throw new ApiException('duplicate',
-                "同じ arXiv ID が すでに 登録済 「{$ex['title']}」 (id={$ex['id']})。 上書き するなら force=1。",
+                "同じ arXiv ID がすでに登録済「{$ex['title']}」 (id={$ex['id']})。上書きするなら force=1。",
                 409, ['existing_id' => (int)$ex['id']]);
         }
     }
@@ -405,7 +414,7 @@ function refs_create(PDO $pdo, array $cfg): void {
         $tagsJson, $extraJson, (int)$u['id'],
     ]);
     $refId = (int)$pdo->lastInsertId();
-    // BibTeX を あらかじめ 焼き込む (後で 参照 楽)。
+    // BibTeX をあらかじめ焼き込む (後で参照楽)。
     $row = $pdo->query("SELECT * FROM refs WHERE id = " . $refId)->fetch(PDO::FETCH_ASSOC);
     $bibtex = _refs_generate_bibtex_v2($row);
     $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([$bibtex, $refId]);
@@ -418,7 +427,7 @@ function refs_list(PDO $pdo, array $cfg): void {
     $q      = trim((string)($_GET['q'] ?? ''));
     $tag    = trim((string)($_GET['tag'] ?? ''));
     $year   = (int)($_GET['year'] ?? 0);
-    $status = trim((string)($_GET['status'] ?? ''));  // 自分の 読状態
+    $status = trim((string)($_GET['status'] ?? ''));  // 自分の読状態
     $sort   = (string)($_GET['sort'] ?? 'new');       // new | year | title
     $limit  = min(200, max(1, (int)($_GET['limit'] ?? 50)));
     $offset = max(0, (int)($_GET['offset'] ?? 0));
@@ -485,7 +494,7 @@ function refs_list(PDO $pdo, array $cfg): void {
         return $r;
     }, $st->fetchAll(PDO::FETCH_ASSOC));
 
-    // 総件数 (ページング 用、 filter 反映)
+    // 総件数 (ページング用、 filter 反映)
     $countSql = "SELECT COUNT(*) FROM refs r
                  LEFT JOIN ref_notes n ON n.ref_id = r.id AND n.user_id = ?
                  WHERE 1=1";
@@ -524,14 +533,14 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
                          WHERE r.id = ?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$r) throw new ApiException('not_found', '文献 が 見つからない', 404);
+    if (!$r) throw new ApiException('not_found', '文献が見つからない', 404);
 
-    // 自分 の note + 状態
+    // 自分の note + 状態
     $stN = $pdo->prepare("SELECT note, status FROM ref_notes WHERE ref_id = ? AND user_id = ?");
     $stN->execute([$id, $uid]);
     $mine = $stN->fetch(PDO::FETCH_ASSOC) ?: ['note' => null, 'status' => 'unread'];
 
-    // ラボメン の note / 状態 (自分 以外、 note が ある分 だけ)
+    // ラボメンの note / 状態 (自分以外、 note がある分だけ)
     $stO = $pdo->prepare("SELECT n.user_id, n.note, n.status, n.updated_at,
                                  u.display_name, u.avatar_url
                             FROM ref_notes n JOIN users u ON u.id = n.user_id
@@ -540,15 +549,15 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
     $stO->execute([$id, $uid]);
     $othersNotes = $stO->fetchAll(PDO::FETCH_ASSOC);
 
-    // 各 状態 の 人数 (ラボ全員 の 進捗 感)
+    // 各状態の人数 (ラボ全員の進捗感)
     $stS = $pdo->prepare("SELECT status, COUNT(*) AS n FROM ref_notes WHERE ref_id = ? GROUP BY status");
     $stS->execute([$id]);
     $statusCounts = ['unread' => 0, 'reading' => 0, 'read' => 0];
     foreach ($stS as $row) $statusCounts[$row['status']] = (int)$row['n'];
 
-    // v926 相互 リンク 拡張: 同 PDF SHA の paper_translate / paper_full / paper_review を
-    //   ラボ全員 の 分 まで 拾う (共有 済 or 自分 の)。 status=done は 「開く」、 processing は 「進行中」。
-    //   これ で 「A さん が 既に 要約 済 の 論文」 が refs 詳細 に 出て 二重処理 防止。
+    // v926 相互リンク拡張: 同 PDF SHA の paper_translate / paper_full / paper_review を
+    //   ラボ全員の分まで拾う (共有済 or 自分の)。 status=done は「開く」、 processing は「進行中」。
+    //   これで「A さんが既に要約済の論文」が refs 詳細に出て二重処理防止。
     $links = [];
     if (!empty($r['pdf_sha256'])) {
         // paper_translate (要約)
@@ -594,8 +603,8 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
                 'runner_avatar'=> $pf['runner_avatar'],
             ];
         }
-        // paper_review (査読): pdf_path が refs.pdf_path と 一致 で 追う。 paper_reviews は
-        //   pdf_sha256 列 を 持って ない ので パス 一致 で 拾う (どちら も /uploads/refs/... 参照)。
+        // paper_review (査読): pdf_path が refs.pdf_path と一致で追う。 paper_reviews は
+        //   pdf_sha256 列を持ってないのでパス一致で拾う (どちらも /uploads/refs/... 参照)。
         if (!empty($r['pdf_path'])) {
             $stPR = $pdo->prepare("SELECT pr.id, pr.share_token, pr.status, pr.user_id,
                                            pr.target_venue,
@@ -619,7 +628,7 @@ function refs_detail(PDO $pdo, array $cfg, int $id): void {
         }
     }
 
-    // v928 track B: この refs が 所属 する collections
+    // v928 track B: この refs が所属する collections
     $stC = $pdo->prepare("SELECT c.id, c.name, c.icon FROM ref_collections c
                             JOIN ref_collection_items ci ON ci.collection_id = c.id
                            WHERE ci.ref_id = ? ORDER BY c.name");
@@ -666,13 +675,13 @@ function refs_edit(PDO $pdo, array $cfg, int $id): void {
     if (!$addedBy) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($addedBy !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者 or admin のみ 編集可', 403);
+        throw new ApiException('forbidden', '登録者 or admin のみ編集可', 403);
     }
     $body = read_json_body();
     $sets = []; $args = [];
     if (array_key_exists('title', $body)) {
         $t = trim((string)$body['title']);
-        if ($t === '') throw new ApiException('bad_request', 'title 空 不可', 400);
+        if ($t === '') throw new ApiException('bad_request', 'title 空不可', 400);
         $sets[] = 'title = ?'; $args[] = mb_substr($t, 0, 1000);
     }
     if (array_key_exists('year', $body)) {
@@ -708,7 +717,7 @@ function refs_edit(PDO $pdo, array $cfg, int $id): void {
     if (!$sets) { json_response(['ok' => true]); return; }
     $args[] = $id;
     $pdo->prepare("UPDATE refs SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
-    // bibtex を 再生成
+    // bibtex を再生成
     $r = $pdo->query("SELECT * FROM refs WHERE id = " . (int)$id)->fetch(PDO::FETCH_ASSOC);
     $pdo->prepare("UPDATE refs SET bibtex = ? WHERE id = ?")->execute([_refs_generate_bibtex_v2($r), $id]);
     json_response(['ok' => true]);
@@ -722,12 +731,12 @@ function refs_delete(PDO $pdo, array $cfg, int $id): void {
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$r['added_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者 or admin のみ 削除可', 403);
+        throw new ApiException('forbidden', '登録者 or admin のみ削除可', 403);
     }
-    // v928 track B: 既に trash に 入って いる 時 は 完全 削除 (hard delete)。 それ 以外 は soft delete。
+    // v928 track B: 既に trash に入っている時は完全削除 (hard delete)。それ以外は soft delete。
     if (!empty($r['deleted_at'])) {
-        // 完全削除 は admin だけ 許可
-        if (!$isAdmin) throw new ApiException('forbidden', 'trash 内 の 完全削除 は admin のみ', 403);
+        // 完全削除は admin だけ許可
+        if (!$isAdmin) throw new ApiException('forbidden', 'trash 内の完全削除は admin のみ', 403);
         $stF = $pdo->prepare("SELECT pdf_path FROM refs WHERE id = ?");
         $stF->execute([$id]);
         $pdf = (string)$stF->fetchColumn();
@@ -743,23 +752,23 @@ function refs_delete(PDO $pdo, array $cfg, int $id): void {
     json_response(['ok' => true, 'action' => 'trashed']);
 }
 
-// v928 track B: trash から 復元
+// v928 track B: trash から復元
 function refs_restore(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT added_by_user_id FROM refs WHERE id = ? AND deleted_at IS NOT NULL");
     $st->execute([$id]);
     $addedBy = (int)$st->fetchColumn();
-    if (!$addedBy) throw new ApiException('not_found', 'trash 内 に 存在せず', 404);
+    if (!$addedBy) throw new ApiException('not_found', 'trash 内に存在せず', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($addedBy !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者 or admin のみ 復元可', 403);
+        throw new ApiException('forbidden', '登録者 or admin のみ復元可', 403);
     }
     $pdo->prepare("UPDATE refs SET deleted_at = NULL WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
 }
 
 // ─────────────────────────────────────────────────────
-// note (自分 の note + 読状態)
+// note (自分の note + 読状態)
 // ─────────────────────────────────────────────────────
 
 function refs_note_set(PDO $pdo, array $cfg, int $id): void {
@@ -768,7 +777,7 @@ function refs_note_set(PDO $pdo, array $cfg, int $id): void {
     // 存在確認
     $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id = ?");
     $ex->execute([$id]);
-    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献なし', 404);
     $body = read_json_body();
     $note = null;
     if (array_key_exists('note', $body)) {
@@ -786,7 +795,7 @@ function refs_note_set(PDO $pdo, array $cfg, int $id): void {
                            note = COALESCE(VALUES(note), note),
                            status = IF(VALUES(status) IS NULL OR VALUES(status) = '', status, VALUES(status))");
     $st->execute([$id, $uid, $note, $status ?: 'unread']);
-    // 更新後 の row を 返す
+    // 更新後の row を返す
     $stR = $pdo->prepare("SELECT note, status FROM ref_notes WHERE ref_id = ? AND user_id = ?");
     $stR->execute([$id, $uid]);
     $row = $stR->fetch(PDO::FETCH_ASSOC) ?: ['note' => null, 'status' => 'unread'];
@@ -804,20 +813,20 @@ function refs_attach_pdf(PDO $pdo, array $cfg, int $id): void {
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    // PDF 添付 は ラボメン 誰でも 可 (共有 資産 として)。 起案者 縛り は 付けない。
+    // PDF 添付はラボメン誰でも可 (共有資産として)。起案者縛りは付けない。
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
     if (!str_starts_with($contentType, 'multipart/form-data')) {
-        throw new ApiException('bad_request', 'multipart/form-data で 送って', 400);
+        throw new ApiException('bad_request', 'multipart/form-data で送って', 400);
     }
     if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-        throw new ApiException('bad_request', 'file (PDF) が 必要', 400);
+        throw new ApiException('bad_request', 'file (PDF) が必要', 400);
     }
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
     if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', 'PDF は 30 MB まで', 400);
     $tmp = $f['tmp_name'];
     $head = @file_get_contents($tmp, false, null, 0, 5);
-    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF で ない', 400);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF でない', 400);
     $sha = hash_file('sha256', $tmp);
     $publicDir = '/var/www/labpay/public';
     $rel = '/uploads/refs/' . substr($sha, 0, 2) . '/' . $sha . '.pdf';
@@ -825,19 +834,19 @@ function refs_attach_pdf(PDO $pdo, array $cfg, int $id): void {
     @mkdir(dirname($abs), 0775, true);
     if (!copy($tmp, $abs)) throw new ApiException('server_error', 'PDF 保存失敗', 500);
     @chmod($abs, 0644);
-    // 旧 PDF (別ファイル) は 削除
+    // 旧 PDF (別ファイル) は削除
     if (!empty($r['pdf_path']) && $r['pdf_path'] !== $rel) {
         $oldAbs = $publicDir . $r['pdf_path'];
         if (is_file($oldAbs)) @unlink($oldAbs);
     }
-    // v930 PDF から fulltext を 抽出 して 保存 (全文検索 用)
+    // v930 PDF から fulltext を抽出して保存 (全文検索用)
     $fulltext = _refs_extract_pdf_fulltext($abs);
     $pdo->prepare("UPDATE refs SET pdf_path = ?, pdf_sha256 = ?, `fulltext` = ? WHERE id = ?")
         ->execute([$rel, $sha, $fulltext, $id]);
     json_response(['ok' => true, 'pdf_path' => $rel, 'pdf_sha256' => $sha, 'fulltext_chars' => mb_strlen((string)$fulltext)]);
 }
 
-// v930 pdftotext で PDF 全ページ を text 抽出 (fulltext 検索 用)。
+// v930 pdftotext で PDF 全ページを text 抽出 (fulltext 検索用)。
 function _refs_extract_pdf_fulltext(string $absPath): ?string {
     if (!is_file($absPath)) return null;
     $txtOut = sys_get_temp_dir() . '/refs_ft_' . uniqid() . '.txt';
@@ -846,7 +855,7 @@ function _refs_extract_pdf_fulltext(string $absPath): ?string {
     if ($rc !== 0 || !is_file($txtOut)) return null;
     $text = (string)file_get_contents($txtOut);
     @unlink($txtOut);
-    // MEDIUMTEXT 上限 (~16 MB) の 範囲 に 抑える。 通常 論文 の PDF は 100KB 以下 に なる。
+    // MEDIUMTEXT 上限 (~16 MB) の範囲に抑える。通常論文の PDF は 100KB 以下になる。
     if (strlen($text) > 8 * 1024 * 1024) $text = substr($text, 0, 8 * 1024 * 1024);
     return $text !== '' ? $text : null;
 }
@@ -905,16 +914,16 @@ function refs_tags(PDO $pdo, array $cfg): void {
 }
 
 // ─────────────────────────────────────────────────────
-// v927 track A: BibTeX / RIS ファイル 一括 import
+// v927 track A: BibTeX / RIS ファイル一括 import
 // ─────────────────────────────────────────────────────
 
-// ざっくり BibTeX パーサ (ネスト braces 対応、 主要 field を 拾う)。
-//   Zotero や Mendeley の 標準 export で 動く 想定。 個別 の 難解 pattern は 諦める。
+// ざっくり BibTeX パーサ (ネスト braces 対応、主要 field を拾う)。
+//   Zotero や Mendeley の標準 export で動く想定。個別の難解 pattern は諦める。
 function _refs_parse_bibtex(string $content): array {
     $entries = [];
-    // @type{key, field = {value}, field = "value", ...} を 抽出
+    // @type{key, field = {value}, field = "value", ...} を抽出
     if (!preg_match_all('/@(\w+)\s*\{\s*([^,\s]+)\s*,(.*?)\n\s*\}\s*(?=@|\z)/is', $content, $m, PREG_SET_ORDER)) {
-        // 最後 の エントリ は `\n}` の 後 に 何も 無い ケース も 拾う
+        // 最後のエントリは `\n}` の後に何も無いケースも拾う
         preg_match_all('/@(\w+)\s*\{\s*([^,\s]+)\s*,(.+)/is', $content, $m, PREG_SET_ORDER);
     }
     foreach ($m as $ent) {
@@ -923,8 +932,8 @@ function _refs_parse_bibtex(string $content): array {
         $key  = $ent[2];
         $bodyRaw = $ent[3];
         $fields = [];
-        // field = { ... } または field = "..." または field = value を 拾う。
-        //   ネスト braces に 弱いが 標準 export で は 大体 動く。
+        // field = { ... } または field = "..." または field = value を拾う。
+        //   ネスト braces に弱いが標準 export では大体動く。
         $len = strlen($bodyRaw); $i = 0;
         while ($i < $len) {
             // field 名
@@ -964,7 +973,7 @@ function _refs_parse_bibtex(string $content): array {
     return $entries;
 }
 
-// RIS: 行 ベース。 TY = 開始、 ER = 終端。 AU / TI / PY / JO / DO / N2 (abstract) など。
+// RIS: 行ベース。 TY = 開始、 ER = 終端。 AU / TI / PY / JO / DO / N2 (abstract) など。
 function _refs_parse_ris(string $content): array {
     $entries = [];
     $cur = null;
@@ -988,14 +997,14 @@ function _refs_parse_ris(string $content): array {
     return $entries;
 }
 
-// BibTeX の 生 authors 文字列 「A and B and C」 を [{name}, ...] に。
+// BibTeX の生 authors 文字列「A and B and C」を [{name}, ...] に。
 function _refs_split_bibtex_authors(string $raw): array {
     $parts = preg_split('/\s+and\s+/i', $raw);
     $out = [];
     foreach ($parts as $p) {
         $p = trim($p);
         if ($p === '') continue;
-        // 「Family, Given」 → 「Given Family」 に 正規化
+        // 「Family, Given」 → 「Given Family」に正規化
         if (strpos($p, ',') !== false) {
             [$family, $given] = array_map('trim', explode(',', $p, 2));
             $p = ($given !== '' ? $given . ' ' : '') . $family;
@@ -1016,11 +1025,11 @@ function refs_import_bibtex(PDO $pdo, array $cfg): void {
         $body = read_json_body();
         $content = (string)($body['bibtex'] ?? '');
     }
-    if ($content === '') throw new ApiException('bad_request', 'file か bibtex 本文 が 必要', 400);
+    if ($content === '') throw new ApiException('bad_request', 'file か bibtex 本文が必要', 400);
     if (strlen($content) > 5 * 1024 * 1024) throw new ApiException('bad_request', '5MB まで', 400);
 
     $parsed = _refs_parse_bibtex($content);
-    if (!$parsed) throw new ApiException('bad_request', 'BibTeX エントリ が 見つからなかった', 400);
+    if (!$parsed) throw new ApiException('bad_request', 'BibTeX エントリが見つからなかった', 400);
 
     $added = 0; $skipped = 0; $results = [];
     foreach ($parsed as $ent) {
@@ -1030,7 +1039,7 @@ function refs_import_bibtex(PDO $pdo, array $cfg): void {
         $doi = isset($f['doi']) ? _refs_normalize_doi($f['doi']) : '';
         if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
         $arxiv = isset($f['eprint']) ? _refs_normalize_arxiv($f['eprint']) : null;
-        // 既存 チェック
+        // 既存チェック
         if ($doi !== '') {
             $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
             $st->execute([$doi]);
@@ -1079,11 +1088,11 @@ function refs_import_ris(PDO $pdo, array $cfg): void {
         $body = read_json_body();
         $content = (string)($body['ris'] ?? '');
     }
-    if ($content === '') throw new ApiException('bad_request', 'file か ris 本文 が 必要', 400);
+    if ($content === '') throw new ApiException('bad_request', 'file か ris 本文が必要', 400);
     if (strlen($content) > 5 * 1024 * 1024) throw new ApiException('bad_request', '5MB まで', 400);
 
     $parsed = _refs_parse_ris($content);
-    if (!$parsed) throw new ApiException('bad_request', 'RIS エントリ が 見つからなかった', 400);
+    if (!$parsed) throw new ApiException('bad_request', 'RIS エントリが見つからなかった', 400);
 
     $added = 0; $skipped = 0; $results = [];
     foreach ($parsed as $ent) {
@@ -1123,23 +1132,92 @@ function refs_import_ris(PDO $pdo, array $cfg): void {
 // v927 track A: PDF から metadata 抽出 (pdftotext + crossref + OpenAI)
 // ─────────────────────────────────────────────────────
 
+// v1099 PDF テキストの先頭数千字から Keywords 行を検出。
+//   ACM: "CCS Concepts: ..." + "Additional Key Words and Phrases: X, Y, Z"
+//   IEEE: "Index Terms— X, Y, Z"
+//   Springer / Elsevier: "Keywords: X, Y, Z" (改行で続く場合も対応)
+//   小文字化してキーを認識、区切りはカンマ / セミコロン / 中黒。
+//   返り値は最大 15 件、 1 件 60 文字まで。
+function _refs_extract_keywords_from_text(string $text): array {
+    $head = mb_substr($text, 0, 8000);
+    // 改行で区切って各行を走査、見つかったら続きの行も 1 行だけ追加取り込み
+    $lines = preg_split('/\r?\n/', $head);
+    $rawKw = '';
+    $patterns = [
+        '/^\s*(?:additional\s+)?key\s*words?(?:\s+and\s+phrases)?\s*[:：\-—]\s*(.+)$/i',
+        '/^\s*keywords?\s*[:：\-—]\s*(.+)$/i',
+        '/^\s*index\s+terms?\s*[:：\-—]\s*(.+)$/i',
+        '/^\s*ccs\s+concepts?\s*[:：\-—]\s*(.+)$/i',
+    ];
+    $n = count($lines);
+    for ($i = 0; $i < $n; $i++) {
+        foreach ($patterns as $p) {
+            if (preg_match($p, $lines[$i], $mm)) {
+                $rawKw = trim($mm[1]);
+                // 続きの行がインデントだけで続いている場合 (折り返し) は 1 行だけ継続
+                for ($j = $i + 1; $j < min($i + 4, $n); $j++) {
+                    $nx = trim($lines[$j]);
+                    if ($nx === '') break;
+                    // 次のセクションヘッダぽい (大文字 or 番号始まり) なら break
+                    if (preg_match('/^\s*(\d+\.|[A-Z][A-Z ]{3,}|abstract|introduction|１\.|1 )/', $nx)) break;
+                    $rawKw .= ', ' . $nx;
+                }
+                break 2;
+            }
+        }
+    }
+    if ($rawKw === '') return [];
+    // 区切り: カンマ / セミコロン / 中黒 / ・ / • / | / bullet
+    $parts = preg_split('/\s*[,;、|・•]\s*/u', $rawKw);
+    $out = [];
+    foreach ($parts as $p) {
+        $p = trim($p, " .\t\n\r\0\x0B");
+        if ($p === '') continue;
+        if (mb_strlen($p) > 60) $p = mb_substr($p, 0, 60);
+        // 明らかに長すぎ (文になっている) は除外
+        if (mb_strlen($p) < 2) continue;
+        if (!in_array($p, $out, true)) $out[] = $p;
+        if (count($out) >= 15) break;
+    }
+    return $out;
+}
+
+// v1099 2 つのキーワード配列を順序保存で重複除去 (a を優先)、最大 15 件。
+function _refs_merge_keywords(array $a, array $b): array {
+    $out = [];
+    $seen = [];
+    foreach ([$a, $b] as $arr) {
+        foreach ($arr as $k) {
+            $k = trim((string)$k);
+            if ($k === '') continue;
+            if (mb_strlen($k) > 60) $k = mb_substr($k, 0, 60);
+            $key = mb_strtolower($k);
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $out[] = $k;
+            if (count($out) >= 15) return $out;
+        }
+    }
+    return $out;
+}
+
 function refs_extract_pdf(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     ai_assert_configured($cfg);
     $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
     if (!str_starts_with($contentType, 'multipart/form-data')) {
-        throw new ApiException('bad_request', 'multipart/form-data で 送って', 400);
+        throw new ApiException('bad_request', 'multipart/form-data で送って', 400);
     }
     if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-        throw new ApiException('bad_request', 'file (PDF) が 必要', 400);
+        throw new ApiException('bad_request', 'file (PDF) が必要', 400);
     }
     $f = $_FILES['file'];
     if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '30MB まで', 400);
     $tmp = $f['tmp_name'];
     $head = @file_get_contents($tmp, false, null, 0, 5);
-    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF で ない', 400);
+    if ($head !== '%PDF-') throw new ApiException('bad_request', 'PDF でない', 400);
 
-    // pdftotext で 先頭 2 ページ を テキスト化
+    // pdftotext で先頭 2 ページをテキスト化
     $txtOut = sys_get_temp_dir() . '/refs_pdftxt_' . uniqid() . '.txt';
     $cmd = sprintf('pdftotext -f 1 -l 2 -layout %s %s 2>&1',
         escapeshellarg($tmp), escapeshellarg($txtOut));
@@ -1149,17 +1227,24 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
         $text = (string)file_get_contents($txtOut);
         @unlink($txtOut);
     }
-    if ($text === '') throw new ApiException('server_error', 'PDF から テキスト を 抽出 できなかった', 500);
+    if ($text === '') throw new ApiException('server_error', 'PDF からテキストを抽出できなかった', 500);
 
-    // 1) 本文 から DOI を 検出 → crossref
+    // v1099 PDF 本文に明示された Keywords / Index Terms / CCS Concepts を先に抽出。
+    //   crossref / arXiv API にはキーワードが無いことが多いので、論文内の明示
+    //   キーワードを最も信頼して merge する。
+    $pdfKeywords = _refs_extract_keywords_from_text($text);
+
+    // 1) 本文から DOI を検出 → crossref
     if (preg_match('#\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)\b#', $text, $m)) {
         $doi = _refs_normalize_doi(rtrim($m[1], '.,)'));
         $meta = _refs_fetch_crossref($doi);
         if ($meta) {
-            // 既存 チェック
+            // 既存チェック
             $st = $pdo->prepare("SELECT id, title FROM refs WHERE doi = ? LIMIT 1");
             $st->execute([$doi]);
             $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+            // PDF 内明示キーワードを優先 merge (crossref subject があれば後ろに足す)
+            $meta['keywords'] = _refs_merge_keywords($pdfKeywords, (array)($meta['keywords'] ?? []));
             json_response([
                 'method'   => 'pdf_doi_crossref',
                 'meta'     => $meta,
@@ -1168,7 +1253,7 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
             return;
         }
     }
-    // 2) arxiv ID を 検出
+    // 2) arxiv ID を検出
     if (preg_match('#\b(?:arXiv[:\s]*)?([0-9]{4}\.[0-9]{4,6})(v\d+)?\b#i', $text, $m)) {
         $id = $m[1] . ($m[2] ?? '');
         $meta = _refs_fetch_arxiv($id);
@@ -1176,6 +1261,7 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
             $st = $pdo->prepare("SELECT id, title FROM refs WHERE arxiv_id = ? LIMIT 1");
             $st->execute([$id]);
             $existing = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+            $meta['keywords'] = $pdfKeywords;
             json_response([
                 'method'   => 'pdf_arxiv_api',
                 'meta'     => $meta,
@@ -1184,14 +1270,14 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
             return;
         }
     }
-    // 3) OpenAI に 「先頭 テキスト から metadata を JSON で 抽出」 させる
+    // 3) OpenAI に「先頭テキストから metadata を JSON で抽出」させる
     $head = mb_substr($text, 0, 4000);
     $apiKey = (string)$cfg['openai']['api_key'];
     $payload = [
         'model' => 'gpt-5-mini',
         'messages' => [
-            ['role' => 'system', 'content' => '研究論文 の 先頭 部分 の テキスト を 受け取り、 metadata を JSON で 返します。 keys: title (string), authors (array of string), year (int or null), venue (string or null), abstract (string or null), doi (string or null)。 見つからない 項目 は null。 出力 は JSON のみ、 コメント不要。'],
-            ['role' => 'user', 'content' => "以下 の テキスト から metadata を 抽出:\n\n" . $head],
+            ['role' => 'system', 'content' => '研究論文の先頭部分のテキストを受け取り、 metadata を JSON で返します。 keys: title (string), authors (array of string), year (int or null), venue (string or null), abstract (string or null), doi (string or null), keywords (array of string, 最大 15 件、論文中の Keywords / Index Terms / Additional Key Words / CCS Concepts 相当。明示が無ければタイトルと abstract から主要なトピック語を 3〜8 件生成)。見つからない項目は null。出力は JSON のみ、コメント不要。'],
+            ['role' => 'user', 'content' => "以下のテキストから metadata を抽出:\n\n" . $head],
         ],
         'response_format' => ['type' => 'json_object'],
         'max_completion_tokens' => 4000,
@@ -1211,11 +1297,19 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
     $j = json_decode((string)$resp, true);
     $content = $j['choices'][0]['message']['content'] ?? '';
     $parsed = json_decode((string)$content, true);
-    if (!is_array($parsed)) throw new ApiException('upstream_error', 'OpenAI が JSON を 返さなかった', 502);
-    // authors を array of {name} に 正規化
+    if (!is_array($parsed)) throw new ApiException('upstream_error', 'OpenAI が JSON を返さなかった', 502);
+    // authors を array of {name} に正規化
     $authors = [];
     foreach ((array)($parsed['authors'] ?? []) as $a) {
         if (is_string($a) && trim($a) !== '') $authors[] = ['name' => trim($a)];
+    }
+    // v1099 OpenAI が返した keywords を正規化。明示抽出 (pdfKeywords) と併せて前優先で merge。
+    $openaiKw = [];
+    foreach ((array)($parsed['keywords'] ?? []) as $k) {
+        if (is_string($k)) {
+            $k = trim($k);
+            if ($k !== '') $openaiKw[] = $k;
+        }
     }
     $meta = [
         'title'    => (string)($parsed['title'] ?? ''),
@@ -1224,8 +1318,9 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
         'venue'    => (string)($parsed['venue'] ?? ''),
         'abstract' => (string)($parsed['abstract'] ?? ''),
         'doi'      => (string)($parsed['doi'] ?? ''),
+        'keywords' => _refs_merge_keywords($pdfKeywords, $openaiKw),
     ];
-    // 既存 チェック (DOI 有り なら)
+    // 既存チェック (DOI 有りなら)
     $existing = null;
     if ($meta['doi'] !== '') {
         $doi2 = _refs_normalize_doi($meta['doi']);
@@ -1241,7 +1336,7 @@ function refs_extract_pdf(PDO $pdo, array $cfg): void {
 }
 
 // ─────────────────────────────────────────────────────
-// v927 track A: ref_attachments (複数 添付)
+// v927 track A: ref_attachments (複数添付)
 // ─────────────────────────────────────────────────────
 
 function refs_attachments_list(PDO $pdo, array $cfg, int $refId): void {
@@ -1259,9 +1354,9 @@ function refs_attachments_upload(PDO $pdo, array $cfg, int $refId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id = ?");
     $ex->execute([$refId]);
-    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献なし', 404);
     if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-        throw new ApiException('bad_request', 'file が 必要', 400);
+        throw new ApiException('bad_request', 'file が必要', 400);
     }
     $f = $_FILES['file'];
     if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
@@ -1299,7 +1394,7 @@ function refs_attachments_delete(PDO $pdo, array $cfg, int $refId, int $attId): 
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$r['uploaded_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', 'アップロード者 or admin のみ 削除可', 403);
+        throw new ApiException('forbidden', 'アップロード者 or admin のみ削除可', 403);
     }
     $abs = '/var/www/labpay/public' . $r['path'];
     if (is_file($abs)) @unlink($abs);
@@ -1308,12 +1403,12 @@ function refs_attachments_delete(PDO $pdo, array $cfg, int $refId, int $attId): 
 }
 
 // ─────────────────────────────────────────────────────
-// v928 track B: Collections (フォルダ 階層)
+// v928 track B: Collections (フォルダ階層)
 // ─────────────────────────────────────────────────────
 
 function refs_collections_list(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
-    // 各 collection の refs 件数 も 一緒に 返す (deleted 除外)
+    // 各 collection の refs 件数も一緒に返す (deleted 除外)
     $st = $pdo->query("
         SELECT c.id, c.name, c.description, c.parent_id, c.icon, c.owner_user_id, c.created_at,
                u.display_name AS owner_name,
@@ -1352,7 +1447,7 @@ function refs_collection_detail(PDO $pdo, array $cfg, int $cid): void {
                          WHERE c.id = ?");
     $st->execute([$cid]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$r) throw new ApiException('not_found', 'コレクション なし', 404);
+    if (!$r) throw new ApiException('not_found', 'コレクションなし', 404);
     json_response($r);
 }
 
@@ -1364,13 +1459,13 @@ function refs_collection_edit(PDO $pdo, array $cfg, int $cid): void {
     if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($ownerId !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '作成者 or admin のみ 編集可', 403);
+        throw new ApiException('forbidden', '作成者 or admin のみ編集可', 403);
     }
     $body = read_json_body();
     $sets = []; $args = [];
     if (array_key_exists('name', $body)) {
         $t = trim((string)$body['name']);
-        if ($t === '') throw new ApiException('bad_request', 'name 空 不可', 400);
+        if ($t === '') throw new ApiException('bad_request', 'name 空不可', 400);
         $sets[] = 'name = ?'; $args[] = mb_substr($t, 0, 200);
     }
     if (array_key_exists('description', $body)) {
@@ -1398,13 +1493,13 @@ function refs_collection_delete(PDO $pdo, array $cfg, int $cid): void {
     if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ($ownerId !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '作成者 or admin のみ 削除可', 403);
+        throw new ApiException('forbidden', '作成者 or admin のみ削除可', 403);
     }
-    // 子 collection が あれば 拒否 (先に 移動 して 貰う)
+    // 子 collection があれば拒否 (先に移動して貰う)
     $stC = $pdo->prepare("SELECT COUNT(*) FROM ref_collections WHERE parent_id = ?");
     $stC->execute([$cid]);
     if ((int)$stC->fetchColumn() > 0) {
-        throw new ApiException('conflict', 'サブフォルダ が 残って います。 先に 移動 or 削除 して ください', 409);
+        throw new ApiException('conflict', 'サブフォルダが残っています。先に移動 or 削除してください', 409);
     }
     $pdo->prepare("DELETE FROM ref_collections WHERE id = ?")->execute([$cid]);
     json_response(['ok' => true]);
@@ -1414,10 +1509,10 @@ function refs_collection_add_ref(PDO $pdo, array $cfg, int $cid, int $refId): vo
     $u = Auth::requireUser($pdo, $cfg);
     $ex1 = $pdo->prepare("SELECT 1 FROM ref_collections WHERE id = ?");
     $ex1->execute([$cid]);
-    if (!$ex1->fetchColumn()) throw new ApiException('not_found', 'コレクション なし', 404);
+    if (!$ex1->fetchColumn()) throw new ApiException('not_found', 'コレクションなし', 404);
     $ex2 = $pdo->prepare("SELECT 1 FROM refs WHERE id = ? AND deleted_at IS NULL");
     $ex2->execute([$refId]);
-    if (!$ex2->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    if (!$ex2->fetchColumn()) throw new ApiException('not_found', '文献なし', 404);
     $ins = $pdo->prepare("INSERT IGNORE INTO ref_collection_items (collection_id, ref_id, added_by_user_id)
                           VALUES (?, ?, ?)");
     $ins->execute([$cid, $refId, (int)$u['id']]);
@@ -1432,7 +1527,7 @@ function refs_collection_remove_ref(PDO $pdo, array $cfg, int $cid, int $refId):
 }
 
 // ─────────────────────────────────────────────────────
-// v928 track B: Saved searches (個人 別)
+// v928 track B: Saved searches (個人別)
 // ─────────────────────────────────────────────────────
 
 function refs_saved_searches_list(PDO $pdo, array $cfg): void {
@@ -1456,7 +1551,7 @@ function refs_saved_searches_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($name) > 200) $name = mb_substr($name, 0, 200);
     $filter = $body['filter'] ?? [];
     if (!is_array($filter)) $filter = [];
-    // 保存 する field を 限定 (信頼できる key のみ)
+    // 保存する field を限定 (信頼できる key のみ)
     $keep = ['q','tag','year','status','sort','collection_id','uncategorized','trash'];
     $safe = [];
     foreach ($keep as $k) if (isset($filter[$k])) $safe[$k] = $filter[$k];
@@ -1472,18 +1567,18 @@ function refs_saved_search_delete(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $ownerId = (int)$st->fetchColumn();
     if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
-    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人 のみ 削除可', 403);
+    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人のみ削除可', 403);
     $pdo->prepare("DELETE FROM ref_saved_searches WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
 }
 
 // ─────────────────────────────────────────────────────
-// v928 track B: Related items (双方向 リンク)
+// v928 track B: Related items (双方向リンク)
 // ─────────────────────────────────────────────────────
 
 function refs_relations_list(PDO $pdo, array $cfg, int $refId): void {
     Auth::requireUser($pdo, $cfg);
-    // A 側 も B 側 も 両方 拾う (どちら 経由 で 登録 されていても 同 じ 関係 と 見なす)
+    // A 側も B 側も両方拾う (どちら経由で登録されていても同じ関係と見なす)
     $st = $pdo->prepare("
         (SELECT rr.b_ref_id AS other_id, rr.kind, rr.note, rr.created_at, rr.created_by_user_id,
                 r.title, r.year, r.venue
@@ -1508,17 +1603,17 @@ function refs_relations_add(PDO $pdo, array $cfg, int $refId): void {
     if (!in_array($kind, ['related','cites','same_topic'], true)) $kind = 'related';
     $note = trim((string)($body['note'] ?? '')) ?: null;
     if ($note && mb_strlen($note) > 500) $note = mb_substr($note, 0, 500);
-    // 正規化: 小さい ID を a に (二重登録 防止)
+    // 正規化: 小さい ID を a に (二重登録防止)
     $a = min($refId, $otherId);
     $b = max($refId, $otherId);
     $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id IN (?, ?) AND deleted_at IS NULL");
     $ex->execute([$a, $b]);
     if ($ex->rowCount() < 2) {
-        // rowCount は SELECT で 使えない ので 別 方法 で
+        // rowCount は SELECT で使えないので別方法で
     }
     $stC = $pdo->prepare("SELECT COUNT(*) FROM refs WHERE id IN (?, ?) AND deleted_at IS NULL");
     $stC->execute([$a, $b]);
-    if ((int)$stC->fetchColumn() < 2) throw new ApiException('not_found', '文献 が 存在せず', 404);
+    if ((int)$stC->fetchColumn() < 2) throw new ApiException('not_found', '文献が存在せず', 404);
     $ins = $pdo->prepare("INSERT IGNORE INTO ref_relations (a_ref_id, b_ref_id, kind, note, created_by_user_id)
                           VALUES (?, ?, ?, ?, ?)");
     $ins->execute([$a, $b, $kind, $note, (int)$u['id']]);
@@ -1541,7 +1636,7 @@ const REFS_ITEM_TYPES = ['article','book','book_chapter','thesis','conference','
 
 function _refs_normalize_item_type(string $s): string {
     $s = strtolower(trim($s));
-    // Zotero / crossref の 別名 を マップ
+    // Zotero / crossref の別名をマップ
     $map = [
         'journal-article' => 'article',
         'journalArticle'  => 'article',
@@ -1564,7 +1659,7 @@ function _refs_extra_from_body(array $body): ?string {
     $extra = $body['extra'] ?? ($body['extra_json'] ?? null);
     if (is_string($extra) && $extra !== '') { $tmp = json_decode($extra, true); if (is_array($tmp)) $extra = $tmp; }
     if (!is_array($extra)) return null;
-    // 許可 field (Zotero の CSL 由来 と BibTeX 由来 を 主要 だけ 抜粋)
+    // 許可 field (Zotero の CSL 由来と BibTeX 由来を主要だけ抜粋)
     $allowed = ['isbn','issn','publisher','edition','pages','volume','issue','number','series','address',
                 'chapter','editor','thesis_type','institution','school','patent_number','application_number',
                 'howpublished','organization','note','month','language'];
@@ -1578,7 +1673,7 @@ function _refs_extra_from_body(array $body): ?string {
     return $safe ? json_encode($safe, JSON_UNESCAPED_UNICODE) : null;
 }
 
-// BibTeX 型 を item_type から 決める。
+// BibTeX 型を item_type から決める。
 function _refs_bibtex_type(string $itemType): string {
     return [
         'article'      => 'article',
@@ -1594,8 +1689,8 @@ function _refs_bibtex_type(string $itemType): string {
     ][$itemType] ?? 'article';
 }
 
-// v929: _refs_generate_bibtex を item_type + extra 対応 に アップグレード。
-//   (既存 関数 を 上書き)
+// v929: _refs_generate_bibtex を item_type + extra 対応にアップグレード。
+//   (既存関数を上書き)
 function _refs_generate_bibtex_v2(array $r): string {
     $itemType = (string)($r['item_type'] ?? 'article');
     $bibType  = _refs_bibtex_type($itemType);
@@ -1622,7 +1717,7 @@ function _refs_generate_bibtex_v2(array $r): string {
         }
     }
     if (!empty($r['year']))     $lines[] = '  year = {' . (int)$r['year'] . '},';
-    // venue field: item_type で 名前 変える (BibTeX 慣習)
+    // venue field: item_type で名前変える (BibTeX 慣習)
     if (!empty($r['venue'])) {
         $venueField = $bibType === 'inproceedings' ? 'booktitle'
                    : ($bibType === 'inbook' ? 'booktitle'
@@ -1655,7 +1750,7 @@ function _refs_generate_bibtex_v2(array $r): string {
 }
 
 // ─────────────────────────────────────────────────────
-// v929: CSL 引用 生成 (APA / MLA / Chicago / IEEE)
+// v929: CSL 引用生成 (APA / MLA / Chicago / IEEE)
 // ─────────────────────────────────────────────────────
 
 function _refs_author_short(array $a): string {
@@ -1776,13 +1871,13 @@ function refs_citation(PDO $pdo, array $cfg, int $id): void {
 }
 
 // ─────────────────────────────────────────────────────
-// v929: highlights (PDF ハイライト、 簡易 実装 = page + quote + comment + color)
+// v929: highlights (PDF ハイライト、簡易実装 = page + quote + comment + color)
 // ─────────────────────────────────────────────────────
 
 function refs_highlights_list(PDO $pdo, array $cfg, int $refId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // 自分 の 全 highlight + 他人 の 共有 highlight
+    // 自分の全 highlight + 他人の共有 highlight
     $st = $pdo->prepare("SELECT h.id, h.page, h.quote_text, h.comment, h.color, h.is_shared,
                                 h.user_id, h.created_at, h.updated_at,
                                 u.display_name, u.avatar_url
@@ -1797,7 +1892,7 @@ function refs_highlights_add(PDO $pdo, array $cfg, int $refId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $ex = $pdo->prepare("SELECT 1 FROM refs WHERE id = ?");
     $ex->execute([$refId]);
-    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献 なし', 404);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', '文献なし', 404);
     $body = read_json_body();
     $page = isset($body['page']) && $body['page'] !== '' ? (int)$body['page'] : null;
     $quote = trim((string)($body['quote_text'] ?? ''));
@@ -1805,7 +1900,7 @@ function refs_highlights_add(PDO $pdo, array $cfg, int $refId): void {
     $color = (string)($body['color'] ?? 'yellow');
     if (!in_array($color, ['yellow','red','green','blue','purple'], true)) $color = 'yellow';
     $isShared = isset($body['is_shared']) ? (int)!!$body['is_shared'] : 1;
-    if ($quote === '' && $comment === '') throw new ApiException('bad_request', 'quote か comment が 必要', 400);
+    if ($quote === '' && $comment === '') throw new ApiException('bad_request', 'quote か comment が必要', 400);
     $ins = $pdo->prepare("INSERT INTO ref_highlights
         (ref_id, user_id, page, quote_text, comment, color, is_shared) VALUES (?,?,?,?,?,?,?)");
     $ins->execute([$refId, (int)$u['id'], $page, $quote ?: null, $comment ?: null, $color, $isShared]);
@@ -1818,7 +1913,7 @@ function refs_highlights_edit(PDO $pdo, array $cfg, int $refId, int $hid): void 
     $st->execute([$hid, $refId]);
     $ownerId = (int)$st->fetchColumn();
     if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
-    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人 のみ 編集可', 403);
+    if ($ownerId !== (int)$u['id']) throw new ApiException('forbidden', '本人のみ編集可', 403);
     $body = read_json_body();
     $sets = []; $args = [];
     if (array_key_exists('page', $body))       { $sets[] = 'page = ?';       $args[] = $body['page'] === '' ? null : (int)$body['page']; }
@@ -1843,19 +1938,19 @@ function refs_highlights_delete(PDO $pdo, array $cfg, int $refId, int $hid): voi
     $ownerId = (int)$st->fetchColumn();
     if (!$ownerId) throw new ApiException('not_found', 'not found', 404);
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ($ownerId !== (int)$u['id'] && !$isAdmin) throw new ApiException('forbidden', '本人 or admin のみ 削除可', 403);
+    if ($ownerId !== (int)$u['id'] && !$isAdmin) throw new ApiException('forbidden', '本人 or admin のみ削除可', 403);
     $pdo->prepare("DELETE FROM ref_highlights WHERE id = ?")->execute([$hid]);
     json_response(['ok' => true]);
 }
 
 // ─────────────────────────────────────────────────────
-// v929: 世の中 の 文献管理 システム から の import
+// v929: 世の中の文献管理システムからの import
 //   - Zotero API 直接連携 (最強)
 //   - CSL-JSON ファイル (Zotero / Mendeley / Papers ネイティブ)
 //   - EndNote XML (Mendeley / EndNote export)
 // ─────────────────────────────────────────────────────
 
-// _refs_insert_shared: 型別 の 一括 insert ヘルパ。
+// _refs_insert_shared: 型別の一括 insert ヘルパ。
 //   $items: [ {doi?, arxiv_id?, title, item_type, authors: [{name}], year, venue, abstract, url, tags: [], extra: {}} ]
 function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
     $added = 0; $skipped = 0; $results = [];
@@ -1867,7 +1962,7 @@ function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
         if ($doi !== '' && !preg_match('#^10\.\d{4,9}/#', $doi)) $doi = '';
         $arxiv = null;
         if (!empty($it['arxiv_id'])) $arxiv = _refs_normalize_arxiv((string)$it['arxiv_id']);
-        // 既存 チェック
+        // 既存チェック
         if ($doi !== '') {
             $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
             $st->execute([$doi]);
@@ -1923,7 +2018,7 @@ function _refs_insert_batch(PDO $pdo, int $uid, array $items): array {
 }
 
 // Zotero API: users/USER_ID/items or groups/GROUP_ID/items。 API key 認証。
-//   v930 対応: fetch_all=1 で 全ページ ループ、 sync_pdfs=1 で 各 item の PDF attachment も 同期。
+//   v930 対応: fetch_all=1 で全ページループ、 sync_pdfs=1 で各 item の PDF attachment も同期。
 function refs_import_zotero(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
@@ -1931,12 +2026,12 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
     $apiKey  = trim((string)($body['api_key'] ?? ''));
     $userId  = trim((string)($body['user_id'] ?? ''));
     $groupId = trim((string)($body['group_id'] ?? ''));
-    $limit   = min(100, max(10, (int)($body['limit'] ?? 100)));  // Zotero 標準 の 1 ページ 上限 は 100
+    $limit   = min(100, max(10, (int)($body['limit'] ?? 100)));  // Zotero 標準の 1 ページ上限は 100
     $fetchAll = !empty($body['fetch_all']);
     $syncPdfs = !empty($body['sync_pdfs']);
     $maxItems = min(5000, max(50, (int)($body['max_items'] ?? 2000)));  // safety cap
-    if ($apiKey === '') throw new ApiException('bad_request', 'api_key 必要 (https://www.zotero.org/settings/keys で 発行)', 400);
-    if ($userId === '' && $groupId === '') throw new ApiException('bad_request', 'user_id か group_id が 必要', 400);
+    if ($apiKey === '') throw new ApiException('bad_request', 'api_key 必要 (https://www.zotero.org/settings/keys で発行)', 400);
+    if ($userId === '' && $groupId === '') throw new ApiException('bad_request', 'user_id か group_id が必要', 400);
     $base = $groupId !== '' ? "https://api.zotero.org/groups/{$groupId}/items"
                             : "https://api.zotero.org/users/{$userId}/items";
 
@@ -1950,7 +2045,7 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
         if ($httpCode === 403) throw new ApiException('forbidden', 'Zotero API: 認証失敗 (api_key / user_id 確認)', 403);
         if ($httpCode !== 200 || !$rawBody) throw new ApiException('upstream_error', 'Zotero API HTTP ' . $httpCode, 502);
         $arr = json_decode((string)$rawBody, true);
-        if (!is_array($arr)) throw new ApiException('upstream_error', 'Zotero レスポンス 不正', 502);
+        if (!is_array($arr)) throw new ApiException('upstream_error', 'Zotero レスポンス不正', 502);
         // Total-Results ヘッダ
         if ($totalReported === null && preg_match('/Total-Results:\s*(\d+)/i', $headerBlob, $m)) {
             $totalReported = (int)$m[1];
@@ -1970,7 +2065,7 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
             if ($key !== '') $itemKeyToIndex[$key] = count($collectedItems) - 1;
         }
         if (!$fetchAll) break;
-        if (count($arr) < $limit) break;  // これ が 最後 の ページ
+        if (count($arr) < $limit) break;  // これが最後のページ
         if (count($collectedItems) >= $maxItems) break;
         $start += $limit;
     }
@@ -1981,23 +2076,23 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
     // v930 PDF attachment 同期 (fetch_all + sync_pdfs 有効時)
     $pdfSynced = 0; $pdfSkipped = 0; $pdfErrors = 0;
     if ($syncPdfs && !empty($res['results'])) {
-        // added / dup 両方 対象 (dup も 「PDF 未添付」 なら 補完 する 価値 あり)
+        // added / dup 両方対象 (dup も「PDF 未添付」なら補完する価値あり)
         foreach ($res['results'] as $r) {
             if (!in_array($r['status'], ['added', 'dup'], true)) continue;
             $refId = $r['status'] === 'added' ? (int)$r['id'] : (int)$r['existing_id'];
             if (!$refId) continue;
-            // どの Zotero item から 来たか 逆引き … は していない ので、 tag で 拾う: title 一致 で
-            // itemKeyToIndex を 使う のは insertBatch 内 で 順序 が 保たれる 前提 に なる が、 dup も skip
-            // されて index が ずれる。 そこ で items 配列 の index を 使わず、 title で 逆引き する。
+            // どの Zotero item から来たか逆引き … はしていないので、 tag で拾う: title 一致で
+            // itemKeyToIndex を使うのは insertBatch 内で順序が保たれる前提になるが、 dup も skip
+            // されて index がずれる。そこで items 配列の index を使わず、 title で逆引きする。
             $title = (string)($r['title'] ?? '');
             if ($title === '') continue;
-            // 対応 Zotero key を 探す
+            // 対応 Zotero key を探す
             $matchedKey = null;
             foreach ($itemKeyToIndex as $k => $i) {
                 if (($collectedItems[$i]['title'] ?? '') === $title) { $matchedKey = $k; break; }
             }
             if (!$matchedKey) { $pdfSkipped++; continue; }
-            // 既に refs.pdf_path が ある なら skip
+            // 既に refs.pdf_path があるなら skip
             $stChk = $pdo->prepare("SELECT pdf_path FROM refs WHERE id = ?");
             $stChk->execute([$refId]);
             $existingPdf = (string)$stChk->fetchColumn();
@@ -2008,7 +2103,7 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
             if ($ccode !== 200 || !$cbody) { $pdfErrors++; continue; }
             $children = json_decode((string)$cbody, true);
             if (!is_array($children)) { $pdfErrors++; continue; }
-            // PDF attachment を 探す (contentType application/pdf)
+            // PDF attachment を探す (contentType application/pdf)
             $attKey = null;
             foreach ($children as $child) {
                 $d = $child['data'] ?? [];
@@ -2046,7 +2141,7 @@ function refs_import_zotero(PDO $pdo, array $cfg): void {
     json_response($res);
 }
 
-// Zotero API 用 の curl ヘルパ (header と body を 分離)。
+// Zotero API 用の curl ヘルパ (header と body を分離)。
 function _refs_zotero_curl(string $url, string $apiKey): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -2069,7 +2164,7 @@ function _refs_zotero_curl(string $url, string $apiKey): array {
     return [(int)$code, $body, $headerBlob];
 }
 
-// Zotero PDF ダウンロード 用 (binary、 header 分離 不要)。
+// Zotero PDF ダウンロード用 (binary、 header 分離不要)。
 function _refs_zotero_curl_binary(string $url, string $apiKey): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -2089,7 +2184,7 @@ function _refs_zotero_curl_binary(string $url, string $apiKey): array {
 }
 
 // ─────────────────────────────────────────────────────
-// v930: 参考文献 リスト 生成 (bibliography、 複数 ref を CSL style で 一括)
+// v930: 参考文献リスト生成 (bibliography、複数 ref を CSL style で一括)
 // ─────────────────────────────────────────────────────
 
 function refs_bibliography(PDO $pdo, array $cfg): void {
@@ -2100,7 +2195,7 @@ function refs_bibliography(PDO $pdo, array $cfg): void {
     if (!empty($body['ref_ids']) && is_array($body['ref_ids'])) {
         foreach ($body['ref_ids'] as $x) if (ctype_digit((string)$x)) $ids[] = (int)$x;
     } elseif (!empty($body['collection_id'])) {
-        // collection 全 refs を 拾う
+        // collection 全 refs を拾う
         $cid = (int)$body['collection_id'];
         $st = $pdo->prepare("SELECT ci.ref_id FROM ref_collection_items ci
                               JOIN refs r ON r.id = ci.ref_id
@@ -2115,12 +2210,12 @@ function refs_bibliography(PDO $pdo, array $cfg): void {
         $st->execute(['%"' . str_replace('"', '', $tag) . '"%']);
         foreach ($st as $row) $ids[] = (int)$row['id'];
     }
-    if (!$ids) throw new ApiException('bad_request', 'ref_ids か collection_id か tag が 必要', 400);
+    if (!$ids) throw new ApiException('bad_request', 'ref_ids か collection_id か tag が必要', 400);
     if (count($ids) > 500) $ids = array_slice($ids, 0, 500);
     $place = implode(',', array_fill(0, count($ids), '?'));
     $st = $pdo->prepare("SELECT * FROM refs WHERE id IN ($place)");
     $st->execute($ids);
-    // 元の 順序 を 維持
+    // 元の順序を維持
     $rowsById = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $rowsById[(int)$r['id']] = $r;
     $lines = [];
@@ -2145,10 +2240,10 @@ function refs_bibliography(PDO $pdo, array $cfg): void {
 
 // v930 追加 CSL styles
 
-// Nature 系: 番号 参照、 authors comma、 太字 vol。
+// Nature 系: 番号参照、 authors comma、太字 vol。
 function _refs_citation_nature(array $r, array $authors, int $num): string {
     $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
-    // Nature: 「Surname, F. M.」 スタイル
+    // Nature: 「Surname, F. M.」スタイル
     $names = array_map(function ($n) {
         $parts = explode(' ', $n);
         $family = array_pop($parts);
@@ -2166,7 +2261,7 @@ function _refs_citation_nature(array $r, array $authors, int $num): string {
     return "$num. $auth $title.$venue$tail.";
 }
 
-// Science 系: 番号 参照、 vol., pp., year
+// Science 系: 番号参照、 vol., pp., year
 function _refs_citation_science(array $r, array $authors, int $num): string {
     $names = array_map(function ($a) {
         $n = (string)($a['name'] ?? '');
@@ -2189,10 +2284,10 @@ function _refs_citation_science(array $r, array $authors, int $num): string {
 // ─────────────────────────────────────────────────────
 // v931: Semantic Scholar 連携
 //   https://api.semanticscholar.org/graph/v1
-//   認証 不要 (key 有れば レート上限 up)、 5000 req / 5 min。
+//   認証不要 (key 有ればレート上限 up)、 5000 req / 5 min。
 // ─────────────────────────────────────────────────────
 
-// 汎用 GET 呼び出し (key 有れば x-api-key ヘッダ 付ける)。
+// 汎用 GET 呼び出し (key 有れば x-api-key ヘッダ付ける)。
 function _refs_ss_get(string $url, array $cfg): array {
     $ch = curl_init($url);
     $headers = ['Accept: application/json'];
@@ -2229,7 +2324,7 @@ function _refs_ss_post(string $url, array $payload, array $cfg): array {
     return [(int)$code, is_string($body) ? $body : ''];
 }
 
-// SS の paper node を local な meta shape に 変換。
+// SS の paper node を local な meta shape に変換。
 function _refs_ss_paper_to_meta(array $p): array {
     $authors = [];
     foreach ((array)($p['authors'] ?? []) as $a) {
@@ -2255,7 +2350,7 @@ function _refs_ss_paper_to_meta(array $p): array {
     ];
 }
 
-// Semantic Scholar 検索 (キーワード + 任意 年 / venue フィルタ)。
+// Semantic Scholar 検索 (キーワード + 任意年 / venue フィルタ)。
 function refs_ss_search(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -2271,15 +2366,15 @@ function refs_ss_search(PDO $pdo, array $cfg): void {
     if ($year > 0) $url .= '&year=' . $year;
     if ($venue !== '') $url .= '&venue=' . urlencode($venue);
     [$code, $rawBody] = _refs_ss_get($url, $cfg);
-    if ($code === 429) throw new ApiException('rate_limited', 'Semantic Scholar rate limit — 少し 待ってから 再試行', 429);
+    if ($code === 429) throw new ApiException('rate_limited', 'Semantic Scholar rate limit — 少し待ってから再試行', 429);
     if ($code !== 200) throw new ApiException('upstream_error', 'Semantic Scholar HTTP ' . $code, 502);
     $j = json_decode((string)$rawBody, true);
-    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス 不正', 502);
+    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス不正', 502);
     $items = [];
     $seen = [];
     foreach ((array)($j['data'] ?? []) as $p) {
         $m = _refs_ss_paper_to_meta((array)$p);
-        // 既存 refs に あるか チェック (DOI / arXiv / ss_id で)
+        // 既存 refs にあるかチェック (DOI / arXiv / ss_id で)
         $existingId = null;
         if ($m['doi'] !== '') {
             $st = $pdo->prepare("SELECT id FROM refs WHERE doi = ? LIMIT 1");
@@ -2305,7 +2400,7 @@ function refs_ss_search(PDO $pdo, array $cfg): void {
     ]);
 }
 
-// References (この 論文 が 引用 して いる 論文 一覧)
+// References (この論文が引用している論文一覧)
 function refs_ss_references(PDO $pdo, array $cfg, int $refId): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id, title FROM refs WHERE id = ?");
@@ -2313,12 +2408,12 @@ function refs_ss_references(PDO $pdo, array $cfg, int $refId): void {
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $ssRef = _refs_ss_paper_id_from_ref($r);
-    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が ない と Semantic Scholar 検索 できません', 400);
+    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id がないと Semantic Scholar 検索できません', 400);
     $fields = 'paperId,title,authors,year,venue,externalIds,citationCount,url';
     $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($ssRef) . '/references?limit=100&fields=' . urlencode($fields);
     [$code, $rawBody] = _refs_ss_get($url, $cfg);
     if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
-    if ($code === 404) throw new ApiException('not_found', 'この 論文 は Semantic Scholar に 見つかりません', 404);
+    if ($code === 404) throw new ApiException('not_found', 'この論文は Semantic Scholar に見つかりません', 404);
     if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
     $j = json_decode((string)$rawBody, true);
     $items = [];
@@ -2332,7 +2427,7 @@ function refs_ss_references(PDO $pdo, array $cfg, int $refId): void {
     json_response(['items' => $items]);
 }
 
-// Citations (この 論文 を 引用 して いる 論文 一覧)
+// Citations (この論文を引用している論文一覧)
 function refs_ss_citations(PDO $pdo, array $cfg, int $refId): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id, title FROM refs WHERE id = ?");
@@ -2340,12 +2435,12 @@ function refs_ss_citations(PDO $pdo, array $cfg, int $refId): void {
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $ssRef = _refs_ss_paper_id_from_ref($r);
-    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が ない と 検索 できません', 400);
+    if (!$ssRef) throw new ApiException('bad_request', 'DOI / arXiv / ss_id がないと検索できません', 400);
     $fields = 'paperId,title,authors,year,venue,externalIds,citationCount,url';
     $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($ssRef) . '/citations?limit=100&fields=' . urlencode($fields);
     [$code, $rawBody] = _refs_ss_get($url, $cfg);
     if ($code === 429) throw new ApiException('rate_limited', 'SS rate limit', 429);
-    if ($code === 404) throw new ApiException('not_found', 'この 論文 は SS に 見つかりません', 404);
+    if ($code === 404) throw new ApiException('not_found', 'この論文は SS に見つかりません', 404);
     if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
     $j = json_decode((string)$rawBody, true);
     $items = [];
@@ -2359,7 +2454,7 @@ function refs_ss_citations(PDO $pdo, array $cfg, int $refId): void {
     json_response(['items' => $items]);
 }
 
-// ref から SS paper ID を 生成 する ヘルパ (ss_id / DOI / arXiv の 順で)。
+// ref から SS paper ID を生成するヘルパ (ss_id / DOI / arXiv の順で)。
 function _refs_ss_paper_id_from_ref(array $r): ?string {
     if (!empty($r['semantic_scholar_id'])) return (string)$r['semantic_scholar_id'];
     if (!empty($r['doi']))                 return 'DOI:' . (string)$r['doi'];
@@ -2389,7 +2484,7 @@ function _refs_ss_find_existing(PDO $pdo, array $m): ?int {
     return null;
 }
 
-// Recommend: 与えられた ref_ids 相当 の 論文 に 「似た」 論文 を SS が おすすめ。
+// Recommend: 与えられた ref_ids 相当の論文に「似た」論文を SS がおすすめ。
 function refs_ss_recommend(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -2405,7 +2500,7 @@ function refs_ss_recommend(PDO $pdo, array $cfg): void {
         $pid = _refs_ss_paper_id_from_ref($r);
         if ($pid) $positives[] = $pid;
     }
-    if (!$positives) throw new ApiException('bad_request', '選んだ refs に DOI / arXiv / ss_id が 1 つも なくて SS で 引けません', 400);
+    if (!$positives) throw new ApiException('bad_request', '選んだ refs に DOI / arXiv / ss_id が 1 つもなくて SS で引けません', 400);
     $limit = min(50, max(5, (int)($body['limit'] ?? 20)));
     $fields = 'paperId,title,authors,year,venue,abstract,externalIds,citationCount,url';
     $url = 'https://api.semanticscholar.org/recommendations/v1/papers?limit=' . $limit . '&fields=' . urlencode($fields);
@@ -2422,7 +2517,7 @@ function refs_ss_recommend(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
-// Enrich: 既存 ref に citation_count / reference_count / semantic_scholar_id を SS から 取って 埋める。
+// Enrich: 既存 ref に citation_count / reference_count / semantic_scholar_id を SS から取って埋める。
 function refs_ss_enrich(PDO $pdo, array $cfg, int $refId): void {
     Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT doi, arxiv_id, semantic_scholar_id FROM refs WHERE id = ?");
@@ -2430,7 +2525,7 @@ function refs_ss_enrich(PDO $pdo, array $cfg, int $refId): void {
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'not found', 404);
     $pid = _refs_ss_paper_id_from_ref($r);
-    if (!$pid) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が 必要', 400);
+    if (!$pid) throw new ApiException('bad_request', 'DOI / arXiv / ss_id が必要', 400);
     $fields = 'paperId,citationCount,referenceCount';
     $url = 'https://api.semanticscholar.org/graph/v1/paper/' . rawurlencode($pid) . '?fields=' . urlencode($fields);
     [$code, $rawBody] = _refs_ss_get($url, $cfg);
@@ -2438,7 +2533,7 @@ function refs_ss_enrich(PDO $pdo, array $cfg, int $refId): void {
     if ($code === 404) throw new ApiException('not_found', '未発見', 404);
     if ($code !== 200) throw new ApiException('upstream_error', 'SS HTTP ' . $code, 502);
     $j = json_decode((string)$rawBody, true);
-    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス 不正', 502);
+    if (!is_array($j)) throw new ApiException('upstream_error', 'SS レスポンス不正', 502);
     $ssId = (string)($j['paperId'] ?? '');
     $cnt  = isset($j['citationCount'])  ? (int)$j['citationCount']  : null;
     $rcnt = isset($j['referenceCount']) ? (int)$j['referenceCount'] : null;
@@ -2448,7 +2543,7 @@ function refs_ss_enrich(PDO $pdo, array $cfg, int $refId): void {
     json_response(['ok' => true, 'citation_count' => $cnt, 'reference_count' => $rcnt, 'semantic_scholar_id' => $ssId]);
 }
 
-// ACM SIG 系: 番号 参照、 会議 論文 向け、 Author. Year. Title. In Venue.
+// ACM SIG 系: 番号参照、会議論文向け、 Author. Year. Title. In Venue.
 function _refs_citation_acm(array $r, array $authors, int $num): string {
     $names = array_map(fn($a) => (string)($a['name'] ?? ''), $authors);
     if (count($names) === 1) $auth = $names[0];
@@ -2463,7 +2558,7 @@ function _refs_citation_acm(array $r, array $authors, int $num): string {
     return "[$num] $auth. $year. $title.$venue$pages.$doi";
 }
 
-// CSL-JSON: Zotero / Mendeley / Papers の 共通 export 形式。
+// CSL-JSON: Zotero / Mendeley / Papers の共通 export 形式。
 function _refs_csljson_to_local(array $csl): array {
     $authors = [];
     foreach ((array)($csl['author'] ?? []) as $a) {
@@ -2482,7 +2577,7 @@ function _refs_csljson_to_local(array $csl): array {
         if (!empty($csl[$ck])) $extra[$lk] = (string)$csl[$ck];
     }
     $tags = [];
-    // CSL: keyword は space or comma 区切り 文字列
+    // CSL: keyword は space or comma 区切り文字列
     if (!empty($csl['keyword'])) {
         foreach (preg_split('/[;,]/', (string)$csl['keyword']) as $t) {
             $t = trim($t); if ($t !== '') $tags[] = $t;
@@ -2511,23 +2606,23 @@ function refs_import_csljson(PDO $pdo, array $cfg): void {
         $body = read_json_body();
         $content = (string)($body['csljson'] ?? '');
     }
-    if ($content === '') throw new ApiException('bad_request', 'file か csljson 本文 が 必要', 400);
+    if ($content === '') throw new ApiException('bad_request', 'file か csljson 本文が必要', 400);
     if (strlen($content) > 10 * 1024 * 1024) throw new ApiException('bad_request', '10MB まで', 400);
     $arr = json_decode($content, true);
     if (!is_array($arr)) throw new ApiException('bad_request', 'CSL-JSON パース失敗', 400);
-    // 単体 object か 配列 か 両方 対応
+    // 単体 object か配列か両方対応
     if (isset($arr['title']) || isset($arr['author'])) $arr = [$arr];
     $items = [];
     foreach ($arr as $csl) {
         if (!is_array($csl)) continue;
         $items[] = _refs_csljson_to_local($csl);
     }
-    if (!$items) throw new ApiException('bad_request', 'エントリ が 0 件', 400);
+    if (!$items) throw new ApiException('bad_request', 'エントリが 0 件', 400);
     $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
     json_response($res);
 }
 
-// EndNote XML: Mendeley / EndNote export の 標準 XML。
+// EndNote XML: Mendeley / EndNote export の標準 XML。
 function refs_import_endnote(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $content = '';
@@ -2537,15 +2632,15 @@ function refs_import_endnote(PDO $pdo, array $cfg): void {
         $body = read_json_body();
         $content = (string)($body['xml'] ?? '');
     }
-    if ($content === '') throw new ApiException('bad_request', 'file か xml 本文 が 必要', 400);
+    if ($content === '') throw new ApiException('bad_request', 'file か xml 本文が必要', 400);
     if (strlen($content) > 20 * 1024 * 1024) throw new ApiException('bad_request', '20MB まで', 400);
     libxml_use_internal_errors(true);
     $xml = @simplexml_load_string($content);
     if (!$xml) throw new ApiException('bad_request', 'XML パース失敗', 400);
-    // 標準 EndNote XML の 構造: <xml><records><record>...</record></records></xml>
+    // 標準 EndNote XML の構造: <xml><records><record>...</record></records></xml>
     $records = $xml->xpath('//record');
     if (!$records) $records = $xml->xpath('//records/record');
-    if (!$records) throw new ApiException('bad_request', 'record 要素 なし', 400);
+    if (!$records) throw new ApiException('bad_request', 'record 要素なし', 400);
     $items = [];
     foreach ($records as $rec) {
         $title = trim((string)($rec->titles->title ?? ''));
@@ -2576,7 +2671,7 @@ function refs_import_endnote(PDO $pdo, array $cfg): void {
             'item_type' => $itemType, 'extra' => $extra,
         ];
     }
-    if (!$items) throw new ApiException('bad_request', 'エントリ が 0 件', 400);
+    if (!$items) throw new ApiException('bad_request', 'エントリが 0 件', 400);
     $res = _refs_insert_batch($pdo, (int)$u['id'], $items);
     json_response($res);
 }

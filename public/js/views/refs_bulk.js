@@ -181,7 +181,9 @@ async function processOne(row) {
   if (!r1.ok) throw new Error(j1?.error?.message || `extract_pdf HTTP ${r1.status}`);
   let meta = j1.meta || {};
   const method = j1.method || 'unknown';
-  markStep(row, `✓ metadata 抽出 (${method === 'pdf_doi_crossref' ? 'DOI→Crossref' : method === 'pdf_arxiv_api' ? 'arXiv API' : method === 'pdf_openai_extract' ? 'OpenAI 推定' : method})`);
+  const kwCount = Array.isArray(meta.keywords) ? meta.keywords.length : 0;
+  const kwPart = kwCount ? ` / 🏷 キーワード ${kwCount} 件` : '';
+  markStep(row, `✓ metadata 抽出 (${method === 'pdf_doi_crossref' ? 'DOI→Crossref' : method === 'pdf_arxiv_api' ? 'arXiv API' : method === 'pdf_openai_extract' ? 'OpenAI 推定' : method})${kwPart}`);
 
   // 既存が返っていれば skip
   if (j1.existing && j1.existing.id) {
@@ -233,6 +235,8 @@ async function processOne(row) {
   // 3) Create ref
   addStep(row, '📝 refs に登録中…');
   const authors = (meta.authors || []).map(a => (typeof a === 'string' ? { name: a } : a)).filter(a => a && a.name);
+  // v1099 キーワード = PDF 明示 (Keywords: ...) + crossref subject + OpenAI 抽出、順序保持で 30 件まで
+  const tags = Array.isArray(meta.keywords) ? meta.keywords.slice(0, 30) : [];
   const createBody = {
     title:    meta.title || row.name.replace(/\.pdf$/i, ''),
     doi:      meta.doi || undefined,
@@ -242,6 +246,7 @@ async function processOne(row) {
     abstract: meta.abstract || undefined,
     url:      meta.url || undefined,
     authors,
+    tags,
   };
   let created;
   try {
