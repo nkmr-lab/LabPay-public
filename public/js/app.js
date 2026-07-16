@@ -512,6 +512,8 @@ route('/pres-order',            lazy(() => import('./views/pres_order.js'), 'ren
 route('/trading-cards',         lazy(() => import('./views/trading_cards.js'), 'renderTradingCards'));
 // v1122 チケット生成アプリ
 route('/tickets',               lazy(() => import('./views/tickets.js'), 'renderTickets'));
+// v1123 ラーボーイーツ (研究室版 UBER EATS)
+route('/labo-eats',             lazy(() => import('./views/labo_eats.js'), 'renderLaboEats'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

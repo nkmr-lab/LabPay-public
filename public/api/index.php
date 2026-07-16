@@ -138,6 +138,7 @@ $routes = [
     'pres-order'     => 'route_pres_order',   // v1120 発表順オークション
     'trading-cards'  => 'route_trading_cards', // v1121 ゼミ人トレカ + ガチャ
     'tickets'        => 'route_tickets',       // v1122 チケット生成アプリ
+    'labo-eats'      => 'route_labo_eats',     // v1123 ラーボーイーツ (研究室版 UBER EATS)
 ];
 
 try {
