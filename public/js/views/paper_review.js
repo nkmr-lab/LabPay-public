@@ -320,6 +320,13 @@ function paint(d, shareToken, isShared) {
       ${r.decision ? `<div style="font-size:18px; font-weight:700; padding:6px 12px; background:${decColor}22; color:${decColor}; border-left:5px solid ${decColor}; border-radius:6px; display:inline-block">${escapeHtml(r.decision)}${r.score ? ` (Score ${r.score}/5)` : ''}${r.confidence ? ` (Confidence ${r.confidence}/5)` : ''}</div>` : ''}
       ${r.summary_one_line ? `<div class="meta" style="font-size:13px; margin-top:6px">${escapeHtml(r.summary_one_line)}</div>` : ''}
 
+      ${r.plain_summary_for_student ? `
+      <div style="margin-top:12px; padding:12px 14px; background:linear-gradient(180deg,#fefce8,#fff7ed); border:2px solid #f59e0b; border-radius:10px">
+        <div class="bold" style="color:#a16207; font-size:14px; margin-bottom:6px">🌱 まずこれだけ読めば OK (学生向け平易まとめ)</div>
+        <div style="font-size:14px; line-height:1.85; white-space:pre-wrap; color:#1f2937">${escapeHtml(r.plain_summary_for_student)}</div>
+        <div class="meta" style="font-size:11px; margin-top:6px; color:#a16207">↓ 詳しい査読は下につづく</div>
+      </div>` : ''}
+
       ${d.response_text ? `
       <div style="margin-top:10px">
         <div class="bold" style="color:#6b21a8">🗨️ 著者の回答文</div>

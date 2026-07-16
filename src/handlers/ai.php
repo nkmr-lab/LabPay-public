@@ -956,6 +956,28 @@ const PAPER_REVIEW_DEFAULT_PROMPT = <<<PROMPT
 - 例: 「世界初」 → 「To our knowledge, this is the first attempt in the field of ...」 + 「我々の知る限り、 ◯◯ の分野で最初の試みである」
 - 例: 「効果的だった」 → 「Condition A reduced mean response time by X ms compared to B (p<.01, d=0.5), suggesting users tend to prefer A.」 + 「条件 A は B より平均反応時間が X ms 短く (p<.01, d=0.5)、ユーザーは A を好む傾向が示唆された」
 - 旧フィールド名 (suggested_rewrite, original のみ) は後方互換で残しても OK だが、上記 5 フィールドを揃えることを優先
+
+【読み手プロファイルと文体 (v1127 中村さん要望「査読結果が難しいと聞いた」対応)】
+- この査読結果を読むのは主に **学部生〜修士 2 年の学生** (投稿経験浅め、査読プロセス初体験の場合あり)。
+- そのため以下を守ること:
+  1. **専門用語には必ず日本語の言い換えか短い説明をカッコで添える**。以下は特に添え必須:
+     p-hacking → 「p-hacking (試行錯誤で有意な組み合わせを探してしまうこと)」
+     HARKing → 「HARKing (結果を見てから仮説を後付けする行為)」
+     sphericity → 「球面性 (反復測定分散分析で仮定される、対応する測定間の分散差の等しさ)」
+     Bonferroni 補正 → 「Bonferroni 補正 (何回も検定するときに厳しめの基準に直す方法)」
+     GLMM / 混合効果モデル → 「混合効果モデル (個人差を考慮に入れられる統計モデル)」
+     Cohen's d → 「Cohen's d (2 群の差の大きさを標準偏差で割った効果量)」
+     effect size / 効果量 → 初出時に「効果量 (差の大きさ)」を添える
+     limitation → 「限界 (この研究で言えないこと)」
+     pre-registration → 「事前登録 (分析計画を実験前に公開して固定する仕組み)」
+     confounding → 「交絡 (原因と結果に第三の変数が絡んでしまうこと)」
+     rebuttal → 「rebuttal (査読への返答文)」
+     参考文献関連の hallucination → 「AI の作り話 (実在しない論文をそれっぽく引用してしまう現象)」
+  2. **英語のカタカナ語をそのまま置かない**。「アノテート」→「印を付ける」、「アサインする」→「割り当てる」、「クラリファイする」→「はっきりさせる」等。
+  3. **「だから直せ」ではなく「だからこう直すとよい」の建設的な語尾**。命令形 (〜せよ / 〜すべき) は最低限にし、「〜すると読み手に伝わりやすくなる」「〜すれば主張が支えられる」のように 効果を添える。
+  4. **完璧を求めすぎる査読を避ける**。学生の成長段階を尊重し、まず 1 つ良い点を認め、次に最も効くリライトを 1 つ挙げてから、残りをリスト化する構成を weaknesses / comments_to_authors で意識する。
+  5. **文長は 60 字目安**、専門用語連打を避ける。 3 語連続の外来語 (例:「アドホックなヒューリスティックなアサインメント」) は日本語に分解。
+  6. 出力 JSON に **plain_summary_for_student** フィールド (300-600 字) を必ず含める。ここは特に、専門用語ゼロで書き、査読が全体として「この論文の良かったところ / 一番効く改善 3 点 / 次に進むための一言」を学生向けにまとめる。上記のチェックリストや詳細評価は他フィールドに残しつつ、 plain_summary_for_student だけ読めば全体像が掴めるようにする。
 PROMPT;
 
 // v1023 実験計画書チェック (中村さん要望「Scrapbox 形式の実験計画書を精査、 RQ / 仮説の書き方、
@@ -1530,6 +1552,7 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
         . "    \"decision\": \"Strong Accept / Accept / Weak Accept / Borderline / Weak Reject / Reject / Strong Reject\",\n"
         . "    \"score\": 1-5 の整数,\n"
         . "    \"summary_one_line\": \"査読要約 1 行\",\n"
+        . "    \"plain_summary_for_student\": \"学生向けの平易な要約 (300-600 字、専門用語は使わないか必ず日本語で説明を添える)。構成は『① 何を評価している論文かを 1-2 行で / ② 良かったところ 1 点 / ③ いま一番効く改善 3 点 (箇条書きふう、それぞれ 1 文) / ④ 次に進むための一言』の順で書く\",\n"
         . "    \"contribution_validity\": \"貢献の妥当性に関する評価 (100-300 字)\",\n"
         . "    \"author_claimed_contributions\": [\"著者が論文中で明示的に主張する貢献 (1 件ずつ)\", ...],\n"
         . "    \"reviewer_perceived_contributions\": [\"GPT が論文を読んで独立に解釈した『実質的な貢献』 1〜5 件\", ...],\n"
