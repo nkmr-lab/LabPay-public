@@ -142,7 +142,7 @@ export async function renderRefs() {
       <div class="row center" style="gap:8px; flex-wrap:wrap">
         <h2 style="margin:0; flex:1">📚 文献管理</h2>
         <a class="btn primary" href="#/refs/new" style="font-size:13px; padding:4px 12px">＋文献を追加</a>
-        <a class="btn" href="#/refs/bulk" style="font-size:12px; padding:4px 8px" title="PDF をまとめてアップロード + メタデータ自動取得 + SS 検証">📚 まとめてアップ</a>
+        <a class="btn" href="#/refs/bulk" style="font-size:12px; padding:4px 8px" title="PDF をまとめてアップロード + メタデータ自動取得 + SS 検証">📚 PDF まとめてアップ</a>
         <button id="rf-export" class="btn" style="font-size:12px; padding:4px 8px" title="現在の絞り込み対象全件の BibTeX をクリップボードにコピー">📋 BibTeX コピー</button>
         <a class="btn" href="#/refs/bibliography" style="font-size:12px; padding:4px 8px" title="参考文献リストを CSL style で一括生成">📚 参考文献</a>
         <button id="rf-toggle-trash" class="btn" style="font-size:12px; padding:4px 8px" title="ゴミ箱切替">🗑</button>
