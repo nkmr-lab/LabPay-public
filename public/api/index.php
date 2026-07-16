@@ -139,6 +139,7 @@ $routes = [
     'trading-cards'  => 'route_trading_cards', // v1121 ゼミ人トレカ + ガチャ
     'tickets'        => 'route_tickets',       // v1122 チケット生成アプリ
     'labo-eats'      => 'route_labo_eats',     // v1123 ラーボーイーツ (研究室版 UBER EATS)
+    'profile-book'   => 'route_profile_book',  // v1124 プロフ帳 (平成デザ)
 ];
 
 try {

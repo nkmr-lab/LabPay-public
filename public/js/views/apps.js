@@ -136,6 +136,7 @@ export const APPS = [
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。手動追加 or 領収書を撮影して OpenAI Vision で店名/日付/金額/カテゴリを自動抽出。月別 + カテゴリ別合計 + 明細一覧。全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
+  { id: 'profile-book', cat: 'archive', url: '#/profile-book', title: '🎀 プロフ帳 (平成デザ)', desc: '基本情報 + 心理テスト + 匿名質問。基本情報を 6 個以上埋めると +50pt reward。他人のプロフ閲覧 10pt (一度アンロックで無制限)、匿名質問投稿 10pt、質問回答 +5pt。手書き風フォント + パステル背景。', defaultVisible: true },
   { id: 'labo-eats', cat: 'shared', url: '#/labo-eats', title: '🍱 ラーボーイーツ', desc: '研究室にいる人が外にいる人に「ついで買い」を頼めるサービス。基本料 50pt + 距離 10pt/100m + 商品代 (実費)。依頼 → 引受 → 引渡 (商品代入力) → 依頼者が受取確定で全額支払。', defaultVisible: true },
   { id: 'tickets', cat: 'trade', url: '#/tickets', title: '🎫 チケット', desc: '「◯◯します」「◯◯できる権利」を pt で売買できる社内マーケット。誰でも発行 → 対象者が pt を払って使う → 発行者に pt 入る。例: 運転しますチケット / 席を選べる / 罰ゲーム回避 / 好きなお菓子選べる。発行時に対象 (全員 / 学年限定) と有効期限、発行枚数を指定。', defaultVisible: true },
   { id: 'trading-cards', cat: 'game', url: '#/trading-cards', title: '🎴 ゼミ人トレカ + ガチャ', desc: 'ラボメンのトレカ (SSR/SR/R/N) を誰でも作成。作ると本人へ承認申請が飛び、承認されると公開 pool 入り。ガチャは 1 連 30pt / 10 連 250pt (R 以上確定)。集めよう。', defaultVisible: true },

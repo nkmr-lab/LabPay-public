@@ -605,3 +605,4 @@ require_once __DIR__ . '/handlers/pres_order.php';   // v1120 発表順オーク
 require_once __DIR__ . '/handlers/trading_cards.php'; // v1121 ゼミ人トレカ + ガチャ
 require_once __DIR__ . '/handlers/tickets.php';       // v1122 チケット生成アプリ
 require_once __DIR__ . '/handlers/labo_eats.php';    // v1123 ラーボーイーツ (研究室版 UBER EATS)
+require_once __DIR__ . '/handlers/profile_book.php'; // v1124 プロフ帳 (平成デザ)
