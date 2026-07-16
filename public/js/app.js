@@ -289,20 +289,26 @@ function renderChrome() {
 //   → id='buy' を title='売買' に rename (画面自体は購入 UI + 上部に売買アプリ集を追加)。
 //   home / groups / sell / auctions / achievements は DEFAULT_HIDDEN_TABS に (URL/apps 経由で到達可)。
 //   layout key を v3 に上げて全員のデフォルトを新配置に更新。
+// v1136 中村さん指摘「あーなるほど、ハードコードしないでほしいね」→ 従来は index.html
+//   の <nav id="tabs"> に <a data-tab-id=... > をハードコードしていて、 TAB_DEFS の
+//   title を書き換えても DOM のテキストは変わらないバグを発生させていた。 SSOT として
+//   TAB_DEFS に url + labelText (+ groups の specialHidden) を持たせ、 nav は
+//   applyTabLayout() 内で TAB_DEFS から動的生成する構造に変更。 index.html の nav
+//   要素は空 (<nav id="tabs" hidden></nav>) にした。
 export const TAB_DEFS = [
-  { id: 'home',         title: 'ホーム' },
-  { id: 'groups',       title: 'グループ',           note: '(自分が入ってる時のみ)' },
-  { id: 'sns',          title: 'らぼったー (SNS)' },
-  { id: 'buy',          title: '売買' },
-  { id: 'sell',         title: '販売' },
-  { id: 'requests',     title: '依頼 (タスク + 募集 + 投票)' },
-  { id: 'auctions',     title: '競売 (オークション)' },
-  { id: 'research',     title: '研究' },
-  { id: 'shared',       title: '共有' },
-  { id: 'lab-mgmt',     title: '運営' },
-  { id: 'games',        title: '娯楽' },
-  { id: 'apps',         title: 'アプリ' },
-  { id: 'achievements', title: '実績' },
+  { id: 'home',         url: '#/',             title: 'ホーム' },
+  { id: 'groups',       url: '#/groups',       title: 'グループ',           note: '(自分が入ってる時のみ)', specialHidden: 'noGroups' },
+  { id: 'sns',          url: '#/sns',          title: 'らぼったー' },
+  { id: 'buy',          url: '#/buy',          title: '売買' },
+  { id: 'sell',         url: '#/sell',         title: '販売' },
+  { id: 'requests',     url: '#/requests-hub', title: '依頼' },
+  { id: 'auctions',     url: '#/auctions',     title: '競売' },
+  { id: 'research',     url: '#/research',     title: '研究' },
+  { id: 'shared',       url: '#/shared',       title: '共有' },
+  { id: 'lab-mgmt',     url: '#/lab-mgmt',     title: '運営' },
+  { id: 'games',        url: '#/games',        title: '娯楽' },
+  { id: 'apps',         url: '#/apps',         title: 'アプリ' },
+  { id: 'achievements', url: '#/achievements', title: '実績' },
 ];
 // v1132 初期は 8 タブ限定 (らぼったー / 売買 / 依頼 / 研究 / 共有 / 運営 / 娯楽 / アプリ)
 export const DEFAULT_HIDDEN_TABS = ['home','groups','sell','auctions','achievements'];
@@ -328,9 +334,30 @@ export function writeTabLayout(layout) {
     }));
   } catch {}
 }
+// v1136 nav の子要素を TAB_DEFS から (再) 生成。 rebuild=true なら丸ごと作り直す
+//   (title 変更をハードコードなしで反映するため)。 通常呼び出しでも「まだ何も無い」
+//   ケース (初回) は生成する。
+function rebuildNav(nav) {
+  nav.textContent = '';
+  for (const t of TAB_DEFS) {
+    const a = document.createElement('a');
+    a.href = t.url;
+    a.dataset.tabId = t.id;
+    a.textContent = t.title;
+    if (t.id === 'groups') {
+      a.id = 'tab-groups';
+      // groups タブはメンバーが 1 つ以上のグループに入ってる時だけ表示
+      a.hidden = !state.hasGroups;
+    }
+    nav.appendChild(a);
+  }
+}
+
 export function applyTabLayout() {
   const nav = document.getElementById('tabs');
   if (!nav) return;
+  // v1136 SSOT: TAB_DEFS から nav を毎回 rebuild (title 変更が確実に反映される)
+  rebuildNav(nav);
   const layout = readTabLayout();
   const links = Array.from(nav.querySelectorAll(':scope > [data-tab-id]'));
   const linkMap = new Map(links.map(l => [l.dataset.tabId, l]));

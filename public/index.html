@@ -23,7 +23,7 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <a href="#/" class="brand">LabPay <span class="brand-version" id="brand-version" style="cursor:pointer" title="バージョン履歴">v1135</span></a>
+    <a href="#/" class="brand">LabPay <span class="brand-version" id="brand-version" style="cursor:pointer" title="バージョン履歴">v1136</span></a>
     <script type="module">
       import { showVersionHistory } from '/js/version_history.js';
       document.getElementById('brand-version')?.addEventListener('click', (ev) => {
@@ -43,28 +43,16 @@
     </div>
   </header>
 
-  <nav id="tabs" hidden>
-    <a href="#/"             data-tab-id="home">ホーム</a>
-    <a href="#/groups"       data-tab-id="groups" id="tab-groups" hidden>グループ</a>
-    <a href="#/sns"          data-tab-id="sns">らぼったー</a>
-    <a href="#/buy"          data-tab-id="buy">売買</a>
-    <a href="#/sell"         data-tab-id="sell">販売</a>
-    <a href="#/requests-hub" data-tab-id="requests">依頼</a>
-    <a href="#/auctions"     data-tab-id="auctions">競売</a>
-    <a href="#/research"     data-tab-id="research">研究</a>
-    <a href="#/shared"       data-tab-id="shared">共有</a>
-    <a href="#/lab-mgmt"     data-tab-id="lab-mgmt">運営</a>
-    <a href="#/games"        data-tab-id="games">娯楽</a>
-    <a href="#/apps"         data-tab-id="apps">アプリ</a>
-    <a href="#/achievements" data-tab-id="achievements">実績</a>
-  </nav>
+  <!-- v1136 タブは js/app.js の TAB_DEFS を single source of truth に、
+       applyTabLayout() の中で動的生成 (rebuildNav) するので nav の中身は空。 -->
+  <nav id="tabs" hidden></nav>
 
   <!-- v500 #113 #114 起動中は中身が空なので、 最初に大きくバージョンを出して
        「ちゃんと起動してるよ」 を伝える。 app.js が hydrate したら自動で上書きされる。
        (app.innerHTML = ... が走ると消える) -->
   <main id="app">
     <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
-      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1135</span></div>
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1136</span></div>
       <div style="font-size:12px; color:#666; margin-top:8px" id="splash-updated">最終更新: 取得中…</div>
       <div style="margin-top:30px">
         <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>
