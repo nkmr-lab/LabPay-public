@@ -510,6 +510,8 @@ route('/tomorrow-lab',          lazy(() => import('./views/tomorrow_lab.js'), 'r
 route('/pres-order',            lazy(() => import('./views/pres_order.js'), 'renderPresOrder'));
 // v1121 ゼミ人トレカ + ガチャ
 route('/trading-cards',         lazy(() => import('./views/trading_cards.js'), 'renderTradingCards'));
+// v1122 チケット生成アプリ
+route('/tickets',               lazy(() => import('./views/tickets.js'), 'renderTickets'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

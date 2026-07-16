@@ -603,3 +603,4 @@ require_once __DIR__ . '/handlers/miro.php';         // v1100 Miro 的な共同�
 require_once __DIR__ . '/handlers/tomorrow_lab.php'; // v1119 明日、研究室に一緒に行こう
 require_once __DIR__ . '/handlers/pres_order.php';   // v1120 発表順オークション
 require_once __DIR__ . '/handlers/trading_cards.php'; // v1121 ゼミ人トレカ + ガチャ
+require_once __DIR__ . '/handlers/tickets.php';       // v1122 チケット生成アプリ

@@ -137,6 +137,7 @@ $routes = [
     'tomorrow-lab'   => 'route_tomorrow_lab', // v1119 明日、研究室に一緒に行こう
     'pres-order'     => 'route_pres_order',   // v1120 発表順オークション
     'trading-cards'  => 'route_trading_cards', // v1121 ゼミ人トレカ + ガチャ
+    'tickets'        => 'route_tickets',       // v1122 チケット生成アプリ
 ];
 
 try {
