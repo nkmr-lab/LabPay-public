@@ -624,6 +624,18 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
                 $canRon = !empty($ronCheck['ok']);
             }
         }
+        // v1129 中村さん「麻雀で鳴けない」→ 原因: mahjong_state の response
+        //   に naki_chances が入っておらず、 client で myNakiChances が
+        //   常に空 → ポン / チー / カン ボタンが 描画 されず 鳴けなかった。
+        //   自分の seat 分の 候補 だけ を 返す (相手 の 候補 を 漏らさない)。
+        $myNakiChances = [];
+        if ($mySeat !== null && !empty($state['naki_chances'])
+            && ($state['awaiting'] === 'naki_window' || $state['awaiting'] === 'ron_chance')
+            && !in_array($mySeat, $state['naki_passed'] ?? [], true)) {
+            foreach ($state['naki_chances'] as $c) {
+                if (($c['seat'] ?? null) === $mySeat) $myNakiChances[] = $c;
+            }
+        }
         $pub = [
             'phase'           => $state['phase'],
             'round_wind'      => $state['round_wind'],
@@ -642,6 +654,7 @@ function mahjong_state(PDO $pdo, int $uid, int $gid): void {
             'can_tsumo'       => $canTsumo,
             'can_ron'         => $canRon,
             'can_riichi'      => $canRiichi,
+            'naki_chances'    => $myNakiChances,   // v1129 自分の 鳴き候補
         ];
     }
     json_response([
