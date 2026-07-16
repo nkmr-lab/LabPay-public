@@ -121,7 +121,16 @@ export async function renderChatRoom({ params }) {
     const allRooms = roomsData.rooms || [];
     // タブ描画 (チャンネル + DM すべて + 未読バッジ)。
     const tabsEl = document.getElementById('cr-tabs');
-    tabsEl.innerHTML = allRooms.map(r => {
+    // v1130 中村さん報告「チャット開いてみたら × ボタン押してもホームに戻れなかった」→
+    //   chat-rooms は position:fixed top:96px の全画面レイアウトで、既定の brand /
+    //   ヘッダを覆ってしまい戻る動線がタブ列しかなかった。 tabs 左端に「✕ 閉じる」を
+    //   足して、必ずホームに戻れるようにする。 sticky で左に固定してスクロールでも消えない。
+    const closeTab = `
+      <a href="#/" title="チャットを閉じてホームへ"
+         style="display:inline-flex; align-items:center; gap:4px; padding:8px 10px; text-decoration:none; color:#fff; font-size:16px; white-space:nowrap; background:#2d0a2f; position:sticky; left:0; z-index:1; flex:none">
+        <span>✕</span>
+      </a>`;
+    tabsEl.innerHTML = closeTab + allRooms.map(r => {
       const active = r.room_key === _currentRoom;
       const unread = Number(r.unread) || 0;
       const badge = unread > 0
