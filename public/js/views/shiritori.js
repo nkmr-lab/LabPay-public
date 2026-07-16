@@ -14,7 +14,7 @@ export async function renderShiritori() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🎨 絵しりとり</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/shiritori/new">＋ 新規</a>
+        <a class="btn primary" href="#/shiritori/new">＋新規</a>
       </div>
     </div>
     <div id="sh-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -23,7 +23,7 @@ export async function renderShiritori() {
     const d = await get('/api/shiritori/games');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('sh-list').innerHTML = '<div class="empty">まだゲームがありません。「＋ 新規」から作成してください。</div>';
+      document.getElementById('sh-list').innerHTML = '<div class="empty">まだゲームがありません。「＋新規」から作成してください。</div>';
       return;
     }
     document.getElementById('sh-list').innerHTML = items.map(g => {
@@ -188,7 +188,8 @@ function paintDrawingRow(d, players) {
       <div class="grow">
         <div class="bold" style="font-size:13px">${escapeHtml(name)} (Turn ${d.turn_idx + 1})</div>
         ${imgBlock}
-        <div style="margin-top:4px; font-size:13px">本人: <span class="bold">${escapeHtml(d.label_self)}</span></div>
+        ${d.label_self ? `<div style="margin-top:4px; font-size:13px">本人: <span class="bold">${escapeHtml(d.label_self)}</span></div>` :
+                         `<div style="margin-top:4px; font-size:12px; color:#9ca3af">🔒 お題は終了後に公開</div>`}
         ${d.label_prev_guess ? `<div style="font-size:12px" class="meta">前を予想: 「${escapeHtml(d.label_prev_guess)}」</div>` : ''}
       </div>
     </div>`;
@@ -206,9 +207,9 @@ function paintMyTurn(root, g) {
       <div class="bold" style="margin-bottom:6px">✏️ あなたの番 (残り <span id="sh-timer">${g.time_limit_sec}</span> 秒)</div>
       <canvas id="sh-canvas" width="500" height="500"
               style="width:100%; max-width:500px; aspect-ratio:1/1; background:#fff; border:2px solid var(--primary, #4a106d); border-radius:8px; touch-action:none; display:block; margin:0 auto"></canvas>
-      <div class="row" style="gap:6px; margin-top:8px; justify-content:center">
-        ${[2,3,5,8].map(w => `<button class="btn" data-pen-w="${w}" style="font-size:11px; padding:2px 8px">${w}px</button>`).join('')}
-        ${['#000','#dc2626','#16a34a','#2563eb','#a16207'].map(c => `<button class="btn" data-pen-c="${c}" style="font-size:11px; padding:2px 8px; background:${c}; color:#fff">●</button>`).join('')}
+      <div class="row" style="gap:6px; margin-top:8px; justify-content:center; flex-wrap:wrap">
+        ${[2,3,5,8].map(w => `<button class="btn sh-pen-w" data-pen-w="${w}" style="font-size:11px; padding:2px 8px">${w}px</button>`).join('')}
+        ${['#000','#dc2626','#16a34a','#2563eb','#a16207'].map(c => `<button class="btn sh-pen-c" data-pen-c="${c}" style="font-size:11px; padding:2px 8px; background:${c}; color:#fff">●</button>`).join('')}
       </div>
       <div class="hint-sm" style="margin-top:4px; text-align:center">消す機能はありません (一度描いたら戻せない)。</div>
       <div style="margin-top:10px">
@@ -230,12 +231,30 @@ function paintMyTurn(root, g) {
     submitTurn(g);
   });
   document.getElementById('sh-submit').addEventListener('click', () => submitTurn(g));
-  document.querySelectorAll('[data-pen-w]').forEach(b => b.addEventListener('click', () => {
-    if (canvasState) canvasState.penWidth = Number(b.dataset.penW);
+  // v1114 中村さん指摘「選択している色がわからない」+ 線幅も同様
+  //   → 選択中のボタンに白い縁 + 太線 + scale で強調表示。初期選択も反映。
+  const refreshPenUI = () => {
+    if (!canvasState) return;
+    document.querySelectorAll('.sh-pen-w').forEach(b => {
+      const on = Number(b.dataset.penW) === canvasState.penWidth;
+      b.style.outline = on ? '3px solid #4a106d' : 'none';
+      b.style.fontWeight = on ? '700' : '400';
+      b.style.transform  = on ? 'scale(1.1)' : 'scale(1)';
+    });
+    document.querySelectorAll('.sh-pen-c').forEach(b => {
+      const on = b.dataset.penC === canvasState.penColor;
+      b.style.outline = on ? '3px solid #ffd94a' : 'none';
+      b.style.outlineOffset = on ? '2px' : '0';
+      b.style.transform = on ? 'scale(1.15)' : 'scale(1)';
+    });
+  };
+  document.querySelectorAll('.sh-pen-w').forEach(b => b.addEventListener('click', () => {
+    if (canvasState) { canvasState.penWidth = Number(b.dataset.penW); refreshPenUI(); }
   }));
-  document.querySelectorAll('[data-pen-c]').forEach(b => b.addEventListener('click', () => {
-    if (canvasState) canvasState.penColor = b.dataset.penC;
+  document.querySelectorAll('.sh-pen-c').forEach(b => b.addEventListener('click', () => {
+    if (canvasState) { canvasState.penColor = b.dataset.penC; refreshPenUI(); }
   }));
+  setTimeout(refreshPenUI, 0);   // canvasState 初期化後に反映
 }
 
 function setupCanvas(g) {
