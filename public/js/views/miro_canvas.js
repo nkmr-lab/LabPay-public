@@ -69,6 +69,12 @@ export async function renderMiroCanvas({ params }) {
 
 function shellHtml() {
   return `
+    <style>
+      #miro-shell .mnote-body::-webkit-scrollbar,
+      #miro-shell .mnote-editta::-webkit-scrollbar { display:none }
+      #miro-shell .mnote-body,
+      #miro-shell .mnote-editta { scrollbar-width:none; -ms-overflow-style:none }
+    </style>
     <div id="miro-shell" style="position:fixed; inset:0; display:flex; flex-direction:column; background:#fafafa; z-index:100">
       <!-- toolbar -->
       <div id="miro-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
@@ -501,7 +507,7 @@ function noteHtml(n) {
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
     // v1104 文字数に応じて動的フォントサイズ (少ないと大きく、多いと小さく)
     const fpx = dynamicFontSize(n.front_text || '', n.width, n.height);
-    body = `<div class="mnote-body" style="flex:1; overflow:auto; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
+    body = `<div class="mnote-body" style="flex:1; overflow:hidden; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
               ${imgBlock}
               <div class="mnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
             </div>`;
@@ -576,7 +582,8 @@ function enterInlineEdit(id, snapshot) {
     ${imgHtml}
     <textarea class="mnote-editta" placeholder="ここに書く…"
       style="flex:1; width:100%; box-sizing:border-box; border:none; outline:none; background:transparent;
-             resize:none; font-size:${fpx}px; line-height:1.25; text-align:center; font-family:inherit; padding:0; color:inherit; user-select:text"
+             resize:none; overflow:hidden; scrollbar-width:none;
+             font-size:${fpx}px; line-height:1.25; text-align:center; font-family:inherit; padding:0; color:inherit; user-select:text"
       >${escapeHtml(initVal)}</textarea>
     <div class="hint-sm" style="font-size:10px; color:#6b7280; margin-top:2px; opacity:0.7">Enter で改行 / Esc で取消 / 外をタップで保存</div>
   `;
