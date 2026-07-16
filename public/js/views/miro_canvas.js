@@ -81,6 +81,7 @@ function shellHtml() {
         <a href="#/miro" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
         <div id="miro-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
         <button class="btn" id="miro-add" title="ノートを追加">➕ ノート</button>
+        <button class="btn" id="miro-refs" title="自分の文献ストックから貼る">📚 論文</button>
         <div id="miro-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
           ${PALETTE.map(c => `<button class="mpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
         </div>
@@ -121,6 +122,29 @@ function shellHtml() {
     <!-- 小さな色ポップオーバー (ノートヘッダの 🎨 で開く) -->
     <div id="miro-color-pop" style="display:none; position:fixed; z-index:10001; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); gap:4px">
       ${PALETTE.map(c => `<button class="mcolor-pop" data-color="${c}" style="width:24px; height:24px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer"></button>`).join('')}
+    </div>
+
+    <!-- v1110 refs ピッカー (📚 から開く、検索 + チェックリスト) -->
+    <div id="miro-refs-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
+      <div style="background:#fff; border-radius:12px; padding:14px; width:100%; max-width:600px; max-height:90vh; display:flex; flex-direction:column; gap:8px">
+        <div class="row" style="align-items:center; gap:8px">
+          <div style="font-weight:700; flex:1">📚 文献ストックから貼る</div>
+          <button class="btn" id="mrefs-close">×</button>
+        </div>
+        <div class="row" style="gap:6px">
+          <input type="text" id="mrefs-q" placeholder="タイトル / 著者 / venue で絞り込み" style="flex:1; padding:6px 8px">
+        </div>
+        <div id="mrefs-list" style="flex:1; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:6px; min-height:200px; max-height:50vh">
+          <div class="muted">読み込み中…</div>
+        </div>
+        <div class="row" style="gap:6px; align-items:center; justify-content:space-between">
+          <div class="hint-sm" id="mrefs-count" style="font-size:12px; color:#6b7280">0 件選択中</div>
+          <div class="row" style="gap:6px">
+            <button class="btn" id="mrefs-cancel">キャンセル</button>
+            <button class="btn primary" id="mrefs-go" disabled>選んだ論文を貼る</button>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -382,6 +406,7 @@ function zoomAtScreen(sx, sy, newScale) {
 
 function wireToolbar() {
   document.getElementById('miro-add').addEventListener('click', createNoteAtCenter);
+  document.getElementById('miro-refs').addEventListener('click', openRefsPicker);
   document.getElementById('miro-zoom-in').addEventListener('click', () => {
     const vp = document.getElementById('miro-viewport');
     zoomAtScreen(vp.clientWidth / 2 + vp.getBoundingClientRect().left,
@@ -936,4 +961,112 @@ function wireMinimap() {
   svg.addEventListener('pointermove', (e) => { if (e.buttons & 1) { e.stopPropagation(); panTo(e); } });
   toggle.addEventListener('click', (e) => { e.stopPropagation(); MINIMAP_OPEN = false; renderMinimap(); });
   opener.addEventListener('click', (e) => { e.stopPropagation(); MINIMAP_OPEN = true;  renderMinimap(); });
+}
+
+// ─── v1110 refs → miro note の一括貼付 ─────────────────────────
+
+let REFS_CACHE = [];              // 読み込んだ refs (直近クエリの結果)
+const REFS_SELECTED = new Set();  // 選択中 ref_id
+
+function openRefsPicker() {
+  REFS_SELECTED.clear();
+  const modal = document.getElementById('miro-refs-modal');
+  modal.style.display = 'flex';
+  document.getElementById('mrefs-close').onclick  = closeRefsPicker;
+  document.getElementById('mrefs-cancel').onclick = closeRefsPicker;
+  document.getElementById('mrefs-go').onclick     = commitRefsPicker;
+  const q = document.getElementById('mrefs-q');
+  q.value = '';
+  q.oninput = debounce(() => loadRefs(q.value.trim()), 250);
+  updateRefsFooter();
+  loadRefs('');
+}
+function closeRefsPicker() {
+  document.getElementById('miro-refs-modal').style.display = 'none';
+}
+
+async function loadRefs(query) {
+  const root = document.getElementById('mrefs-list');
+  root.innerHTML = '<div class="muted">読み込み中…</div>';
+  try {
+    const params = new URLSearchParams({ limit: '100', sort: 'new' });
+    if (query) params.set('q', query);
+    const d = await get('/api/refs?' + params.toString());
+    REFS_CACHE = d.items || [];
+    if (!REFS_CACHE.length) {
+      root.innerHTML = '<div class="muted">見つかりませんでした。</div>';
+      return;
+    }
+    renderRefsList();
+  } catch (e) {
+    root.innerHTML = `<div class="muted" style="color:#b91c1c">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderRefsList() {
+  const root = document.getElementById('mrefs-list');
+  root.innerHTML = REFS_CACHE.map(r => {
+    const checked = REFS_SELECTED.has(r.id) ? 'checked' : '';
+    let authors = [];
+    try { authors = JSON.parse(r.authors_json || '[]'); } catch (_) {}
+    const firstAuthor = authors[0]?.name || '';
+    const meta = [firstAuthor && (authors.length > 1 ? firstAuthor + '+' : firstAuthor),
+                  r.year || '', r.venue || ''].filter(Boolean).join(' · ');
+    return `<label class="mref-row" style="display:flex; gap:6px; align-items:flex-start; padding:6px 8px; border-bottom:1px solid #f3f4f6; cursor:pointer">
+      <input type="checkbox" data-ref-id="${r.id}" ${checked} style="margin-top:3px">
+      <div style="flex:1; min-width:0">
+        <div style="font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(r.title || '(no title)')}</div>
+        <div style="font-size:11px; color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(meta)}</div>
+      </div>
+    </label>`;
+  }).join('');
+  root.querySelectorAll('input[type=checkbox]').forEach(el => {
+    el.addEventListener('change', () => {
+      const id = parseInt(el.dataset.refId, 10);
+      if (el.checked) REFS_SELECTED.add(id); else REFS_SELECTED.delete(id);
+      updateRefsFooter();
+    });
+  });
+}
+
+function updateRefsFooter() {
+  const n = REFS_SELECTED.size;
+  document.getElementById('mrefs-count').textContent = `${n} 件選択中` + (n > 50 ? ' (50 件までにしてね)' : '');
+  const btn = document.getElementById('mrefs-go');
+  btn.disabled = n === 0 || n > 50;
+  btn.textContent = n === 0 ? '選んだ論文を貼る' : `選んだ ${n} 件を貼る`;
+}
+
+async function commitRefsPicker() {
+  const ids = [...REFS_SELECTED];
+  if (!ids.length) return;
+  const btn = document.getElementById('mrefs-go');
+  btn.disabled = true; btn.textContent = '貼っています…';
+  try {
+    // 現在の視野中央 (world 座標) を center に
+    const vp = document.getElementById('miro-viewport');
+    const rect = vp.getBoundingClientRect();
+    const mid = screenToWorld(rect.left + vp.clientWidth / 2, rect.top + vp.clientHeight / 2);
+    const r = await post(`/api/miro/rooms/${ROOM_ID}/notes-from-refs`, {
+      ref_ids: ids,
+      center_x: mid.x,
+      center_y: mid.y,
+    });
+    for (const n of (r.notes || [])) NOTE_MAP[n.id] = n;
+    NOTES = Object.values(NOTE_MAP);
+    renderAll();
+    toast(`${r.created} 件を貼ったよ`);
+    closeRefsPicker();
+  } catch (e) {
+    toast('貼付失敗: ' + e.message);
+    btn.disabled = false; btn.textContent = '選んだ論文を貼る';
+  }
+}
+
+function debounce(fn, ms) {
+  let t = null;
+  return (...args) => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => { t = null; fn(...args); }, ms);
+  };
 }

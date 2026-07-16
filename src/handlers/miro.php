@@ -27,6 +27,7 @@ function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === '' && $method === 'DELETE') { miro_room_archive($pdo, $cfg, $id);        return; }
             if ($next === 'notes'   && $method === 'GET')  { miro_notes_list  ($pdo, $cfg, $id);   return; }
             if ($next === 'notes'   && $method === 'POST') { miro_notes_create($pdo, $cfg, $id);   return; }
+            if ($next === 'notes-from-refs' && $method === 'POST') { miro_notes_from_refs($pdo, $cfg, $id); return; }
             if ($next === 'updates' && $method === 'GET')  { miro_room_updates($pdo, $cfg, $id);   return; }
             if ($next === 'cursor'  && $method === 'POST') { miro_cursor_upsert($pdo, $cfg, $id);  return; }
         }
@@ -60,20 +61,40 @@ function _miro_norm_color(?string $c, string $fallback = MIRO_DEFAULT_COLOR): st
 }
 
 function _miro_room_row(PDO $pdo, int $id): ?array {
-    $st = $pdo->prepare("SELECT r.id, r.title, r.description, r.bg_color, r.creator_user_id,
+    $st = $pdo->prepare("SELECT r.id, r.title, r.description, r.bg_color, r.visibility, r.owner_group_id, r.creator_user_id,
                                 r.created_at, r.updated_at, r.archived_at,
                                 u.display_name AS creator_name, u.avatar_url AS creator_avatar,
+                                g.title AS group_title,
                                 (SELECT COUNT(*) FROM miro_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
                            FROM miro_rooms r
                       LEFT JOIN users u ON u.id = r.creator_user_id
+                      LEFT JOIN adhoc_groups g ON g.id = r.owner_group_id
                           WHERE r.id = ?");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) return null;
     $r['id']              = (int)$r['id'];
     $r['creator_user_id'] = (int)$r['creator_user_id'];
+    $r['owner_group_id']  = $r['owner_group_id'] !== null ? (int)$r['owner_group_id'] : null;
     $r['note_count']      = (int)$r['note_count'];
     return $r;
+}
+
+// v1110 visibility 判定: この user はこの room を見られるか?
+function _miro_room_visible_to_user(PDO $pdo, array $room, int $uid): bool {
+    $vis = (string)($room['visibility'] ?? 'lab');
+    if ($vis === 'lab')     return true;
+    if ($vis === 'private') return (int)$room['creator_user_id'] === $uid;
+    if ($vis === 'group') {
+        $gid = $room['owner_group_id'] !== null ? (int)$room['owner_group_id'] : 0;
+        if ($gid <= 0) return false;
+        // 作成者は自分の部屋を常に見られる (グループ抜けても)
+        if ((int)$room['creator_user_id'] === $uid) return true;
+        $st = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id = ? AND user_id = ?");
+        $st->execute([$gid, $uid]);
+        return (bool)$st->fetchColumn();
+    }
+    return false;
 }
 
 // v1108 中村さん指示「隠すと見せる、自分には見えるけど、相手には見えないようにして
@@ -125,28 +146,44 @@ function _miro_load_my_flips(PDO $pdo, int $userId, int $roomId): array {
 
 // ─── rooms ───────────────────────────────────────────────────────
 
-// GET /api/miro/rooms → 全部屋 (archived 除く、 updated_at DESC)
+// GET /api/miro/rooms → 自分に見える部屋のみ (visibility フィルタ)
 function miro_rooms_list(PDO $pdo, array $cfg): void {
-    Auth::requireUser($pdo, $cfg);
-    $st = $pdo->query("SELECT r.id, r.title, r.description, r.bg_color, r.creator_user_id,
-                              r.created_at, r.updated_at,
-                              u.display_name AS creator_name, u.avatar_url AS creator_avatar,
-                              (SELECT COUNT(*) FROM miro_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
-                         FROM miro_rooms r
-                    LEFT JOIN users u ON u.id = r.creator_user_id
-                        WHERE r.archived_at IS NULL
-                     ORDER BY r.updated_at DESC");
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    // visibility フィルタを SQL レベルで:
+    //   lab: 全員
+    //   private: creator = 自分
+    //   group: 自分が group メンバー OR 自分が creator
+    $st = $pdo->prepare("SELECT r.id, r.title, r.description, r.bg_color, r.visibility, r.owner_group_id, r.creator_user_id,
+                                r.created_at, r.updated_at,
+                                u.display_name AS creator_name, u.avatar_url AS creator_avatar,
+                                g.title AS group_title,
+                                (SELECT COUNT(*) FROM miro_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
+                           FROM miro_rooms r
+                      LEFT JOIN users u ON u.id = r.creator_user_id
+                      LEFT JOIN adhoc_groups g ON g.id = r.owner_group_id
+                          WHERE r.archived_at IS NULL
+                            AND (
+                              r.visibility = 'lab'
+                              OR (r.visibility = 'private' AND r.creator_user_id = ?)
+                              OR (r.visibility = 'group' AND (r.creator_user_id = ? OR EXISTS (
+                                    SELECT 1 FROM adhoc_group_members m WHERE m.group_id = r.owner_group_id AND m.user_id = ?
+                                  )))
+                            )
+                       ORDER BY r.updated_at DESC");
+    $st->execute([$uid, $uid, $uid]);
     $items = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $r['id']              = (int)$r['id'];
         $r['creator_user_id'] = (int)$r['creator_user_id'];
+        $r['owner_group_id']  = $r['owner_group_id'] !== null ? (int)$r['owner_group_id'] : null;
         $r['note_count']      = (int)$r['note_count'];
         $items[] = $r;
     }
     json_response(['items' => $items]);
 }
 
-// POST /api/miro/rooms  body: { title, description?, bg_color? }
+// POST /api/miro/rooms  body: { title, description?, bg_color?, visibility?, owner_group_id? }
 function miro_rooms_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -156,9 +193,21 @@ function miro_rooms_create(PDO $pdo, array $cfg): void {
     $desc = trim((string)($body['description'] ?? ''));
     if (mb_strlen($desc) > 2000) $desc = mb_substr($desc, 0, 2000);
     $bg = _miro_norm_color($body['bg_color'] ?? null, '#FAFAFA');
-    $st = $pdo->prepare("INSERT INTO miro_rooms (title, description, bg_color, creator_user_id)
-                         VALUES (?, ?, ?, ?)");
-    $st->execute([$title, $desc ?: null, $bg, (int)$u['id']]);
+    // v1110 visibility: lab / group / private
+    $vis = (string)($body['visibility'] ?? 'lab');
+    if (!in_array($vis, ['lab','group','private'], true)) $vis = 'lab';
+    $gid = null;
+    if ($vis === 'group') {
+        $gid = isset($body['owner_group_id']) ? (int)$body['owner_group_id'] : 0;
+        if ($gid <= 0) throw new ApiException('bad_request', 'group スコープには owner_group_id 必須', 400);
+        // 自分が member の group か確認
+        $mck = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id = ? AND user_id = ?");
+        $mck->execute([$gid, (int)$u['id']]);
+        if (!$mck->fetchColumn()) throw new ApiException('forbidden', 'その group のメンバーではありません', 403);
+    }
+    $st = $pdo->prepare("INSERT INTO miro_rooms (title, description, bg_color, visibility, owner_group_id, creator_user_id)
+                         VALUES (?, ?, ?, ?, ?, ?)");
+    $st->execute([$title, $desc ?: null, $bg, $vis, $gid, (int)$u['id']]);
     $id = (int)$pdo->lastInsertId();
     json_response(['id' => $id, 'room' => _miro_room_row($pdo, $id)]);
 }
@@ -167,6 +216,9 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $room = _miro_room_row($pdo, $id);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
     // notes 一括 (作成者名を LEFT JOIN で拾って shape に渡す)
     $st = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
                            FROM miro_notes n
@@ -208,9 +260,12 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
 }
 
 function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
-    Auth::requireUser($pdo, $cfg);
+    $u = Auth::requireUser($pdo, $cfg);
     $r = _miro_room_row($pdo, $id);
     if (!$r) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $r, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
     $body = read_json_body();
     $sets = []; $params = [];
     if (array_key_exists('title', $body)) {
@@ -226,6 +281,24 @@ function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
     }
     if (array_key_exists('bg_color', $body)) {
         $sets[] = 'bg_color = ?'; $params[] = _miro_norm_color((string)$body['bg_color'], '#FAFAFA');
+    }
+    // v1110 visibility 切替は作成者のみ
+    if (array_key_exists('visibility', $body)) {
+        if ((int)$r['creator_user_id'] !== (int)$u['id']) {
+            throw new ApiException('forbidden', '公開範囲の変更は作成者のみ', 403);
+        }
+        $vis = (string)$body['visibility'];
+        if (!in_array($vis, ['lab','group','private'], true)) throw new ApiException('bad_request', 'visibility 不正', 400);
+        $gid = null;
+        if ($vis === 'group') {
+            $gid = isset($body['owner_group_id']) ? (int)$body['owner_group_id'] : 0;
+            if ($gid <= 0) throw new ApiException('bad_request', 'group スコープには owner_group_id 必須', 400);
+            $mck = $pdo->prepare("SELECT 1 FROM adhoc_group_members WHERE group_id = ? AND user_id = ?");
+            $mck->execute([$gid, (int)$u['id']]);
+            if (!$mck->fetchColumn()) throw new ApiException('forbidden', 'その group のメンバーではありません', 403);
+        }
+        $sets[] = 'visibility = ?'; $params[] = $vis;
+        $sets[] = 'owner_group_id = ?'; $params[] = $gid;
     }
     if (!$sets) { json_response(['ok' => true]); return; }
     $params[] = $id;
@@ -252,6 +325,9 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     $room = _miro_room_row($pdo, $id);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
     $since = (string)($_GET['since'] ?? '1970-01-01 00:00:00');
     if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $since)) {
         $since = '1970-01-01 00:00:00';
@@ -305,10 +381,12 @@ function miro_cursor_upsert(PDO $pdo, array $cfg, int $roomId): void {
     $body = read_json_body();
     $x = (float)($body['x'] ?? 0);
     $y = (float)($body['y'] ?? 0);
-    // 部屋の存在確認だけ (毎回 room 全体を読むのは重いので軽く)
-    $ex = $pdo->prepare("SELECT 1 FROM miro_rooms WHERE id = ?");
-    $ex->execute([$roomId]);
-    if (!$ex->fetchColumn()) throw new ApiException('not_found', 'room なし', 404);
+    // v1110 visibility 確認 (部屋自体が見えない相手には位置報告もさせない)
+    $room = _miro_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
     $pdo->prepare("INSERT INTO miro_cursors (room_id, user_id, x, y) VALUES (?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), updated_at = CURRENT_TIMESTAMP(3)")
         ->execute([$roomId, (int)$u['id'], $x, $y]);
@@ -328,6 +406,9 @@ function miro_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $room = _miro_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
     // 上限チェック
     $cnt = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
     if ($cnt >= MIRO_MAX_NOTES_PER_ROOM) {
@@ -471,6 +552,133 @@ function miro_default_color_put(PDO $pdo, array $cfg): void {
                     ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = NOW()")
         ->execute([(int)$u['id'], json_encode($c)]);
     json_response(['ok' => true, 'color' => $c]);
+}
+
+// ─── v1110 refs → miro note の一括展開 ─────────────────────────
+// POST /api/miro/rooms/{roomId}/notes-from-refs
+//   body: { ref_ids: [int,...], center_x?: number, center_y?: number }
+//   → 各 ref から front_text を組み立てて note を生成、center 付近にグリッド配置。
+//     配置: 220x220 + 20px gap、cols = ceil(sqrt(N))、self default color、
+//     front_text = "Title\n\nAuthor+ (Year) VenueShort"
+function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _miro_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
+    $body = read_json_body();
+    $ids = [];
+    foreach ((array)($body['ref_ids'] ?? []) as $x) if (ctype_digit((string)$x) || is_int($x)) $ids[] = (int)$x;
+    $ids = array_values(array_unique($ids));
+    if (!$ids) throw new ApiException('bad_request', 'ref_ids 必要', 400);
+    if (count($ids) > 50) throw new ApiException('bad_request', '一度に貼れるのは 50 本まで', 400);
+    // 上限
+    $existing = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
+    if ($existing + count($ids) > MIRO_MAX_NOTES_PER_ROOM) {
+        throw new ApiException('bad_request', 'この部屋の note 上限 ' . MIRO_MAX_NOTES_PER_ROOM . ' を超えます', 400);
+    }
+    $cx = isset($body['center_x']) ? (float)$body['center_x'] : 0.0;
+    $cy = isset($body['center_y']) ? (float)$body['center_y'] : 0.0;
+    // refs を取得
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $rs = $pdo->prepare("SELECT id, title, authors_json, year, venue FROM refs WHERE id IN ($place) AND deleted_at IS NULL");
+    $rs->execute($ids);
+    $refs = [];
+    foreach ($rs->fetchAll(PDO::FETCH_ASSOC) as $r) $refs[(int)$r['id']] = $r;
+    if (!$refs) throw new ApiException('not_found', '指定した refs が見つかりません', 404);
+    // ユーザ指定順序を保つ
+    $ordered = [];
+    foreach ($ids as $id) if (isset($refs[$id])) $ordered[] = $refs[$id];
+
+    $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    $W = 240; $H = 220; $GAP = 20;
+    $cols = max(1, (int)ceil(sqrt(count($ordered))));
+    $rows = (int)ceil(count($ordered) / $cols);
+    $totalW = $cols * $W + ($cols - 1) * $GAP;
+    $totalH = $rows * $H + ($rows - 1) * $GAP;
+    $x0 = $cx - $totalW / 2;
+    $y0 = $cy - $totalH / 2;
+
+    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
+    $ins = $pdo->prepare("INSERT INTO miro_notes
+        (room_id, x, y, width, height, color, front_text, z_index, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $createdIds = [];
+    foreach ($ordered as $i => $r) {
+        $col = $i % $cols;
+        $row = intdiv($i, $cols);
+        $x = $x0 + $col * ($W + $GAP);
+        $y = $y0 + $row * ($H + $GAP);
+        $frontText = _miro_ref_to_note_text($r);
+        $z = $zBase + $i + 1;
+        $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $frontText ?: null, $z, (int)$u['id']]);
+        $createdIds[] = (int)$pdo->lastInsertId();
+    }
+    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    // 作成した note を返す
+    $out = [];
+    if ($createdIds) {
+        $place2 = implode(',', array_fill(0, count($createdIds), '?'));
+        $q = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
+                              FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
+                             WHERE n.id IN ($place2)");
+        $q->execute($createdIds);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _miro_note_shape($r, (int)$u['id']);
+    }
+    json_response(['ok' => true, 'created' => count($createdIds), 'notes' => $out]);
+}
+
+// venue 省略化: "Proceedings of the CHI Conference..." → "CHI"、
+//   "ACM Transactions on Graphics" → "ACM TOG" 相当を簡易ルールで。
+function _miro_shorten_venue(?string $v): string {
+    $v = trim((string)$v);
+    if ($v === '') return '';
+    $short = $v;
+    $lower = mb_strtolower($v);
+    $map = [
+        'chi conference' => 'CHI', 'uist' => 'UIST', 'siggraph asia' => 'SIGGRAPH Asia', 'siggraph' => 'SIGGRAPH',
+        'ubicomp' => 'UbiComp', 'iswc' => 'ISWC', 'cscw' => 'CSCW', 'ismar' => 'ISMAR',
+        'ieee vr' => 'IEEE VR', 'ismir' => 'ISMIR', 'nips' => 'NeurIPS', 'neurips' => 'NeurIPS',
+        'icml' => 'ICML', 'cvpr' => 'CVPR', 'iccv' => 'ICCV', 'eccv' => 'ECCV',
+        'acm transactions on graphics' => 'TOG', 'transactions on visualization' => 'TVCG',
+        'human factors in computing systems' => 'CHI', 'nature' => 'Nature', 'science' => 'Science',
+    ];
+    foreach ($map as $needle => $abbr) {
+        if (str_contains($lower, $needle)) { $short = $abbr; break; }
+    }
+    // Proceedings of the...  → 頭 5 語くらいに短縮
+    if ($short === $v && mb_strlen($v) > 30) {
+        $short = mb_substr($v, 0, 30) . '…';
+    }
+    return $short;
+}
+
+function _miro_ref_to_note_text(array $r): string {
+    $title = trim((string)($r['title'] ?? ''));
+    if (mb_strlen($title) > 140) $title = mb_substr($title, 0, 137) . '…';
+    $authors = json_decode((string)($r['authors_json'] ?? '[]'), true);
+    $first = '';
+    $n = is_array($authors) ? count($authors) : 0;
+    if ($n > 0 && !empty($authors[0]['name'])) {
+        // 姓だけ取り出す (英語の場合は最後の単語、日本語はそのまま)
+        $name = (string)$authors[0]['name'];
+        if (preg_match('/[A-Za-z]/', $name) && strpos($name, ' ') !== false) {
+            $parts = explode(' ', trim($name));
+            $first = end($parts);
+        } else {
+            $first = $name;
+        }
+        if ($n > 1) $first .= '+';
+    }
+    $year = !empty($r['year']) ? (int)$r['year'] : null;
+    $venue = _miro_shorten_venue($r['venue'] ?? null);
+    $meta = [];
+    if ($first !== '') $meta[] = $first;
+    if ($year)         $meta[] = '(' . $year . ')';
+    if ($venue !== '') $meta[] = $venue;
+    $metaLine = implode(' ', $meta);
+    return $title . ($metaLine !== '' ? "\n\n" . $metaLine : '');
 }
 
 // ─── image generation (OpenAI gpt-image-1) ─────────────────────
