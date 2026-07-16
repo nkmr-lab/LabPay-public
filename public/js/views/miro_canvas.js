@@ -31,23 +31,45 @@ let POLL_TIMER = null;
 let ROOM_ID = 0;
 let MY_DEFAULT_COLOR = '#FEF9A8';
 let LEAVE_HANDLER = null;
+// v1104 他人カーソル (user_id → {x, y, name, avatar, ts, seen}) + 送信スロットル
+let CURSORS = {};
+let MY_CURSOR = { x: 0, y: 0 };
+let CURSOR_POST_TIMER = null;
+let CURSOR_LAST_POSTED = 0;
+let CURSOR_POST_ANIM = null;
+// v1104 ミニマップの開閉
+let MINIMAP_OPEN = true;
 
 export async function renderMiroCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
   if (!ROOM_ID) { navigate('/miro'); return; }
   const app = document.getElementById('app');
   app.innerHTML = shellHtml();
+  // v1104 miro モードは画面いっぱいで使いたい (トップバー / タブバーを隠す)
+  const topbar = document.getElementById('topbar');
+  const tabs   = document.getElementById('tabs');
+  const wasTopHidden = topbar ? topbar.hidden : true;
+  const wasTabsHidden = tabs ? tabs.hidden : true;
+  if (topbar) topbar.style.display = 'none';
+  if (tabs)   tabs.style.display   = 'none';
   wireToolbar();
   wireCanvas();
   await loadInitial();
   startPolling();
-  LEAVE_HANDLER = () => stopPolling();
+  LEAVE_HANDLER = () => {
+    stopPolling();
+    if (topbar) topbar.style.display = wasTopHidden  ? '' : '';
+    if (tabs)   tabs.style.display   = wasTabsHidden ? '' : '';
+    // display を消せば hidden 属性の元制御に戻る
+    if (topbar) topbar.style.removeProperty('display');
+    if (tabs)   tabs.style.removeProperty('display');
+  };
   window.addEventListener('hashchange', LEAVE_HANDLER, { once: true });
 }
 
 function shellHtml() {
   return `
-    <div id="miro-shell" style="position:fixed; inset:56px 0 60px 0; display:flex; flex-direction:column; background:#fafafa">
+    <div id="miro-shell" style="position:fixed; inset:0; display:flex; flex-direction:column; background:#fafafa; z-index:100">
       <!-- toolbar -->
       <div id="miro-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
         <a href="#/miro" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
@@ -66,6 +88,14 @@ function shellHtml() {
       <!-- viewport -->
       <div id="miro-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; cursor:grab; background:#fafafa">
         <div id="miro-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform"></div>
+        <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
+        <div id="miro-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
+        <!-- v1104 minimap: 右下に全体マップ (ノート = 小さい色付き矩形、現在視野 = 枠) -->
+        <div id="miro-minimap" style="position:absolute; right:10px; bottom:10px; width:180px; height:130px; background:rgba(255,255,255,0.92); border:1px solid #d1d5db; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); overflow:hidden; touch-action:none; cursor:pointer; z-index:5">
+          <svg id="miro-minimap-svg" width="180" height="130" viewBox="0 0 180 130" style="display:block"></svg>
+          <button id="miro-minimap-toggle" title="ミニマップを閉じる" style="position:absolute; right:2px; top:2px; width:18px; height:18px; padding:0; border:none; background:rgba(0,0,0,0.05); border-radius:4px; font-size:11px; line-height:1; cursor:pointer">×</button>
+        </div>
+        <button id="miro-minimap-open" title="ミニマップを開く" style="display:none; position:absolute; right:10px; bottom:10px; width:38px; height:38px; padding:0; border:1px solid #d1d5db; background:rgba(255,255,255,0.92); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); font-size:18px; cursor:pointer; z-index:5">🗺</button>
       </div>
     </div>
 
@@ -103,9 +133,21 @@ async function loadInitial() {
     document.getElementById('miro-title').textContent = ROOM.title;
     document.getElementById('miro-viewport').style.background = ROOM.bg_color || '#fafafa';
     highlightPalette();
+    // v1104 初回カーソル
+    const nowMs = Date.now();
+    CURSORS = {};
+    for (const c of (d.cursors || [])) CURSORS[c.user_id] = { ...c, seen: nowMs };
     // 初回は中央にフィット
     fitAll();
+    // マウス未動作時のオフスクリーン距離表示用に、初期カーソルを視野中央 world 座標に
+    const vp = document.getElementById('miro-viewport');
+    const mid = screenToWorld(vp.getBoundingClientRect().left + vp.clientWidth / 2,
+                              vp.getBoundingClientRect().top  + vp.clientHeight / 2);
+    MY_CURSOR.x = mid.x; MY_CURSOR.y = mid.y;
     renderAll();
+    renderCursors();
+    renderMinimap();
+    wireMinimap();
   } catch (e) {
     document.getElementById('miro-viewport').innerHTML =
       `<div style="padding:16px; color:#b91c1c">読み込み失敗: ${escapeHtml(e.message)}</div>`;
@@ -134,6 +176,13 @@ function startPolling() {
         NOTES = Object.values(NOTE_MAP);
         renderAll();
       }
+      // v1104 他人カーソルを取り込む (poll ごとに全リフレッシュ、シンプル)
+      const nowMs = Date.now();
+      const nextCursors = {};
+      for (const c of d.cursors || []) nextCursors[c.user_id] = { ...c, seen: nowMs };
+      CURSORS = nextCursors;
+      renderCursors();
+      renderMinimap();
     } catch (_) {}
   }, 2000);
 }
@@ -149,6 +198,9 @@ function applyTransform() {
   layer.style.transform = `translate(${VIEW.tx}px, ${VIEW.ty}px) scale(${VIEW.scale})`;
   const lbl = document.getElementById('miro-zoom-label');
   if (lbl) lbl.textContent = Math.round(VIEW.scale * 100) + '%';
+  // v1104 視野が変わったらカーソル位置とミニマップの視野枠も動かす
+  renderCursors();
+  renderMinimap();
 }
 function screenToWorld(sx, sy) {
   const rect = document.getElementById('miro-viewport').getBoundingClientRect();
@@ -242,6 +294,10 @@ function wireCanvas() {
   });
 
   vp.addEventListener('pointermove', (e) => {
+    // v1104 自分のカーソル位置 (world 座標) を常時追跡してスロットル送信
+    const w = screenToWorld(e.clientX, e.clientY);
+    MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
+    scheduleCursorPost();
     if (DRAG.mode === null) return;
     const dx = e.clientX - DRAG.startX;
     const dy = e.clientY - DRAG.startY;
@@ -443,9 +499,11 @@ function noteHtml(n) {
   } else {
     const img = n.front_image_url;
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
-    body = `<div class="mnote-body" style="flex:1; overflow:auto; font-size:14px; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
+    // v1104 文字数に応じて動的フォントサイズ (少ないと大きく、多いと小さく)
+    const fpx = dynamicFontSize(n.front_text || '', n.width, n.height);
+    body = `<div class="mnote-body" style="flex:1; overflow:auto; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
               ${imgBlock}
-              <div class="mnote-text">${escapeHtml(n.front_text || '')}</div>
+              <div class="mnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
             </div>`;
   }
   return `
@@ -512,16 +570,23 @@ function enterInlineEdit(id, snapshot) {
     ? `<img src="${escapeHtml(n.front_image_url)}" style="max-width:100%; max-height:60%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">`
     : '';
   body.style.overflow = 'hidden';
+  const initVal = snapshot ? snapshot.value : (n.front_text || '');
+  const fpx = dynamicFontSize(initVal, n.width, n.height);
   body.innerHTML = `
     ${imgHtml}
     <textarea class="mnote-editta" placeholder="ここに書く…"
       style="flex:1; width:100%; box-sizing:border-box; border:none; outline:none; background:transparent;
-             resize:none; font-size:14px; font-family:inherit; padding:0; color:inherit; user-select:text"
-      >${escapeHtml(snapshot ? snapshot.value : (n.front_text || ''))}</textarea>
+             resize:none; font-size:${fpx}px; line-height:1.25; text-align:center; font-family:inherit; padding:0; color:inherit; user-select:text"
+      >${escapeHtml(initVal)}</textarea>
     <div class="hint-sm" style="font-size:10px; color:#6b7280; margin-top:2px; opacity:0.7">Enter で改行 / Esc で取消 / 外をタップで保存</div>
   `;
   const ta = body.querySelector('.mnote-editta');
   ta.focus();
+  // 入力しながらフォントサイズを再計算
+  ta.addEventListener('input', () => {
+    const npx = dynamicFontSize(ta.value, n.width, n.height);
+    ta.style.fontSize = npx + 'px';
+  });
   if (snapshot) {
     try { ta.setSelectionRange(snapshot.start, snapshot.end); } catch (_) {}
   } else {
@@ -655,4 +720,189 @@ function openImagePromptFor(id) {
       btn.disabled = false; btn.textContent = '生成する';
     }
   };
+}
+
+// ─── v1104 dynamic font size ──────────────────────────────────
+//   文字数と note サイズから font-px を推定。少ないと大きく、多いと
+//   小さく。単純にバケット + 少しだけ width で調整。
+function dynamicFontSize(text, width, height) {
+  const n = String(text || '').length;
+  // 幅の縮小比 (基準 220px)
+  const wr = Math.max(0.6, Math.min(2.0, (width || 220) / 220));
+  let base;
+  if (n === 0)       base = 20;
+  else if (n <= 3)   base = 52;
+  else if (n <= 8)   base = 38;
+  else if (n <= 20)  base = 28;
+  else if (n <= 50)  base = 20;
+  else if (n <= 120) base = 16;
+  else               base = 13;
+  return Math.max(11, Math.round(base * wr));
+}
+
+// ─── v1104 cursor: throttled post + render + minimap ──────────
+
+const CURSOR_POST_INTERVAL_MS = 200;   // 送信は 200 ms スロットル
+const CURSOR_TTL_MS           = 15000; // 15 秒以内が生きてるカーソル
+
+function scheduleCursorPost() {
+  const now = Date.now();
+  const dt = now - CURSOR_LAST_POSTED;
+  if (dt >= CURSOR_POST_INTERVAL_MS) {
+    CURSOR_LAST_POSTED = now;
+    postCursor();
+  } else if (!CURSOR_POST_TIMER) {
+    CURSOR_POST_TIMER = setTimeout(() => {
+      CURSOR_POST_TIMER = null;
+      CURSOR_LAST_POSTED = Date.now();
+      postCursor();
+    }, CURSOR_POST_INTERVAL_MS - dt);
+  }
+}
+function postCursor() {
+  if (!ROOM_ID) return;
+  post(`/api/miro/rooms/${ROOM_ID}/cursor`, { x: MY_CURSOR.x, y: MY_CURSOR.y }).catch(() => {});
+}
+
+// user_id からユニークな色を作る (HSL の hue を hash から)。
+function colorForUser(uid) {
+  const h = (uid * 137) % 360;
+  return `hsl(${h}, 72%, 45%)`;
+}
+
+function worldToScreen(wx, wy) {
+  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  return {
+    x: wx * VIEW.scale + VIEW.tx,
+    y: wy * VIEW.scale + VIEW.ty,
+    vw: rect.width,
+    vh: rect.height,
+  };
+}
+
+function renderCursors() {
+  const root = document.getElementById('miro-cursors');
+  if (!root) return;
+  const nowMs = Date.now();
+  // 期限切れを間引き
+  for (const uid in CURSORS) {
+    if (nowMs - (CURSORS[uid].seen || 0) > CURSOR_TTL_MS) delete CURSORS[uid];
+  }
+  const list = Object.values(CURSORS);
+  if (!list.length) { root.innerHTML = ''; return; }
+  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const vw = rect.width, vh = rect.height;
+  root.innerHTML = list.map(c => {
+    const s = worldToScreen(c.x, c.y);
+    const col = colorForUser(c.user_id);
+    const name = escapeHtml(c.name || '?');
+    // 視野内: 通常のポインタアイコン + 名前ラベル
+    if (s.x >= 0 && s.x <= vw && s.y >= 0 && s.y <= vh) {
+      return `<div style="position:absolute; left:${s.x}px; top:${s.y}px; transform:translate(-2px,-2px); pointer-events:none">
+        <svg width="18" height="24" viewBox="0 0 18 24" style="filter:drop-shadow(0 1px 1px rgba(0,0,0,0.35))">
+          <path d="M 2 2 L 2 18 L 6 14 L 9 22 L 12 21 L 9 13 L 15 13 Z" fill="${col}" stroke="#fff" stroke-width="1"/>
+        </svg>
+        <div style="display:inline-block; background:${col}; color:#fff; font-size:10px; padding:1px 5px; border-radius:3px; margin-left:14px; margin-top:-6px; white-space:nowrap; font-weight:600">${name}</div>
+      </div>`;
+    }
+    // 視野外: エッジに矢印マーカー (最も近い辺)
+    const cx = vw / 2, cy = vh / 2;
+    const dx = s.x - cx, dy = s.y - cy;
+    // 中心からの方向ベクトルを viewport 矩形と交わる点に射影
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    const t = 12; // 端からのマージン
+    const halfW = vw / 2 - t, halfH = vh / 2 - t;
+    let ex, ey;
+    if (ax * halfH > ay * halfW) {
+      // 左右辺で当たる
+      ex = cx + (dx > 0 ? halfW : -halfW);
+      ey = cy + dy * (halfW / ax);
+    } else {
+      // 上下辺で当たる
+      ex = cx + dx * (halfH / ay);
+      ey = cy + (dy > 0 ? halfH : -halfH);
+    }
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    // 距離 (world) をユーザに見せると親切
+    const dist = Math.round(Math.hypot(c.x - MY_CURSOR.x, c.y - MY_CURSOR.y));
+    return `<div style="position:absolute; left:${ex}px; top:${ey}px; transform:translate(-50%,-50%); pointer-events:none">
+      <div style="width:22px; height:22px; border-radius:50%; background:${col}; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,0.3); position:relative">
+        ${escapeHtml((c.name || '?').charAt(0))}
+        <div style="position:absolute; left:100%; top:50%; transform:translate(-2px,-50%) rotate(${angle}deg); width:0; height:0; border-left:8px solid ${col}; border-top:5px solid transparent; border-bottom:5px solid transparent"></div>
+      </div>
+      <div style="text-align:center; font-size:10px; color:${col}; font-weight:700; margin-top:2px; white-space:nowrap; background:rgba(255,255,255,0.85); border-radius:3px; padding:1px 4px">${name} ${dist > 100 ? `<span style="opacity:0.6">${dist}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── v1104 minimap render + interaction ───────────────────────
+
+function renderMinimap() {
+  const mm = document.getElementById('miro-minimap');
+  const svg = document.getElementById('miro-minimap-svg');
+  const open = document.getElementById('miro-minimap-open');
+  if (!mm || !svg || !open) return;
+  mm.style.display = MINIMAP_OPEN ? 'block' : 'none';
+  open.style.display = MINIMAP_OPEN ? 'none' : 'block';
+  if (!MINIMAP_OPEN) return;
+  const W = 180, H = 130, PAD = 6;
+  // world 範囲 = 全ノート + 現在の視野
+  const notes = Object.values(NOTE_MAP);
+  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const vw = rect.width || 800, vh = rect.height || 600;
+  // 視野の world 左上・右下
+  const vTL = { x: (-VIEW.tx) / VIEW.scale, y: (-VIEW.ty) / VIEW.scale };
+  const vBR = { x: (vw - VIEW.tx) / VIEW.scale, y: (vh - VIEW.ty) / VIEW.scale };
+  let minX = vTL.x, minY = vTL.y, maxX = vBR.x, maxY = vBR.y;
+  for (const n of notes) {
+    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.width); maxY = Math.max(maxY, n.y + n.height);
+  }
+  // カーソル位置も範囲に含める
+  for (const c of Object.values(CURSORS)) {
+    minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+  }
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const s = Math.min((W - PAD * 2) / spanX, (H - PAD * 2) / spanY);
+  const ox = PAD - minX * s + ((W - PAD * 2) - spanX * s) / 2;
+  const oy = PAD - minY * s + ((H - PAD * 2) - spanY * s) / 2;
+  // ノート矩形
+  const noteRects = notes.map(n =>
+    `<rect x="${(n.x * s + ox).toFixed(1)}" y="${(n.y * s + oy).toFixed(1)}" width="${Math.max(2, n.width * s).toFixed(1)}" height="${Math.max(2, n.height * s).toFixed(1)}" fill="${escapeHtml(n.color || '#FEF9A8')}" opacity="0.85"/>`
+  ).join('');
+  // 他人カーソル
+  const cursorDots = Object.values(CURSORS).map(c =>
+    `<circle cx="${(c.x * s + ox).toFixed(1)}" cy="${(c.y * s + oy).toFixed(1)}" r="2.5" fill="${colorForUser(c.user_id)}" stroke="#fff" stroke-width="0.5"/>`
+  ).join('');
+  // 視野枠
+  const viewRect = `<rect x="${(vTL.x * s + ox).toFixed(1)}" y="${(vTL.y * s + oy).toFixed(1)}" width="${((vBR.x - vTL.x) * s).toFixed(1)}" height="${((vBR.y - vTL.y) * s).toFixed(1)}" fill="rgba(74,16,109,0.10)" stroke="#4a106d" stroke-width="1"/>`;
+  svg.innerHTML = noteRects + viewRect + cursorDots;
+  // クリック → world 中心へパン
+  svg.__mm_transform = { s, ox, oy };
+}
+
+function wireMinimap() {
+  const svg = document.getElementById('miro-minimap-svg');
+  const toggle = document.getElementById('miro-minimap-toggle');
+  const opener = document.getElementById('miro-minimap-open');
+  if (!svg || !toggle || !opener) return;
+  const panTo = (e) => {
+    const t = svg.__mm_transform; if (!t) return;
+    const r = svg.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    // 逆変換で world 座標
+    const wx = (mx - t.ox) / t.s;
+    const wy = (my - t.oy) / t.s;
+    // wx/wy を viewport の中央に来るようにパン
+    const vp = document.getElementById('miro-viewport');
+    VIEW.tx = vp.clientWidth  / 2 - wx * VIEW.scale;
+    VIEW.ty = vp.clientHeight / 2 - wy * VIEW.scale;
+    applyTransform();
+  };
+  svg.addEventListener('pointerdown', (e) => { e.stopPropagation(); panTo(e); });
+  svg.addEventListener('pointermove', (e) => { if (e.buttons & 1) { e.stopPropagation(); panTo(e); } });
+  toggle.addEventListener('click', (e) => { e.stopPropagation(); MINIMAP_OPEN = false; renderMinimap(); });
+  opener.addEventListener('click', (e) => { e.stopPropagation(); MINIMAP_OPEN = true;  renderMinimap(); });
 }

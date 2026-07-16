@@ -28,6 +28,7 @@ function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'notes'   && $method === 'GET')  { miro_notes_list  ($pdo, $cfg, $id);   return; }
             if ($next === 'notes'   && $method === 'POST') { miro_notes_create($pdo, $cfg, $id);   return; }
             if ($next === 'updates' && $method === 'GET')  { miro_room_updates($pdo, $cfg, $id);   return; }
+            if ($next === 'cursor'  && $method === 'POST') { miro_cursor_upsert($pdo, $cfg, $id);  return; }
         }
     }
     // /api/miro/notes/{id} ...
@@ -164,9 +165,29 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
     }
     // 自分のデフォルト色
     $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    // v1104 他人カーソル (最終 15 秒)
+    $cur = $pdo->prepare("SELECT c.user_id, c.x, c.y,
+                                 UNIX_TIMESTAMP(c.updated_at) AS ts,
+                                 u.display_name AS name, u.avatar_url AS avatar
+                            FROM miro_cursors c JOIN users u ON u.id = c.user_id
+                           WHERE c.room_id = ? AND c.user_id != ?
+                             AND c.updated_at > (NOW(3) - INTERVAL 15 SECOND)");
+    $cur->execute([$id, (int)$u['id']]);
+    $cursors = [];
+    foreach ($cur->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $cursors[] = [
+            'user_id' => (int)$r['user_id'],
+            'name'    => (string)$r['name'],
+            'avatar'  => $r['avatar'] ?: null,
+            'x'       => (float)$r['x'],
+            'y'       => (float)$r['y'],
+            'ts'      => (float)$r['ts'],
+        ];
+    }
     json_response([
         'room'          => $room,
         'notes'         => $notes,
+        'cursors'       => $cursors,
         'my_default_color' => $defColor,
         'server_time'   => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
     ]);
@@ -230,15 +251,53 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
         if ($r['deleted_at'] !== null) {
             $deletes[] = (int)$r['id'];
         } else {
-            $upserts[] = _miro_note_shape($r, $flips[(int)$r['id']] ?? 1);
+            $upserts[] = _miro_note_shape($r, $flips[(int)$r['id']] ?? 2);
         }
+    }
+    // v1104 他人のカーソル (最終 15 秒以内、自分は除外)
+    $cur = $pdo->prepare("SELECT c.user_id, c.x, c.y,
+                                 UNIX_TIMESTAMP(c.updated_at) AS ts,
+                                 u.display_name AS name, u.avatar_url AS avatar
+                            FROM miro_cursors c JOIN users u ON u.id = c.user_id
+                           WHERE c.room_id = ? AND c.user_id != ?
+                             AND c.updated_at > (NOW(3) - INTERVAL 15 SECOND)");
+    $cur->execute([$id, (int)$u['id']]);
+    $cursors = [];
+    foreach ($cur->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $cursors[] = [
+            'user_id' => (int)$r['user_id'],
+            'name'    => (string)$r['name'],
+            'avatar'  => $r['avatar'] ?: null,
+            'x'       => (float)$r['x'],
+            'y'       => (float)$r['y'],
+            'ts'      => (float)$r['ts'],
+        ];
     }
     json_response([
         'upserts'     => $upserts,
         'deletes'     => $deletes,
+        'cursors'     => $cursors,
         'server_time' => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
         'room_updated_at' => $room['updated_at'],
     ]);
+}
+
+// POST /api/miro/rooms/{id}/cursor  body: { x, y }
+//   自分のカーソル位置 (world 座標) を upsert。 room_updated_at は bump しない。
+function miro_cursor_upsert(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $x = (float)($body['x'] ?? 0);
+    $y = (float)($body['y'] ?? 0);
+    // 部屋の存在確認だけ (毎回 room 全体を読むのは重いので軽く)
+    $ex = $pdo->prepare("SELECT 1 FROM miro_rooms WHERE id = ?");
+    $ex->execute([$roomId]);
+    if (!$ex->fetchColumn()) throw new ApiException('not_found', 'room なし', 404);
+    $pdo->prepare("INSERT INTO miro_cursors (room_id, user_id, x, y) VALUES (?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), updated_at = CURRENT_TIMESTAMP(3)")
+        ->execute([$roomId, (int)$u['id'], $x, $y]);
+    // 空応答 (呼び出し側は捨てる)
+    json_response(['ok' => true]);
 }
 
 // ─── notes ───────────────────────────────────────────────────────
