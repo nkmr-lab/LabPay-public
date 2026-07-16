@@ -343,18 +343,17 @@ function wireCanvas() {
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
     } else if (mode === 'note' && !moved && nid) {
-      // v1103 単発タップは何もしない (フリップは 🔄 ボタン)。ダブルタップだけで
-      //   インライン編集に入る。裏の場合は自動で表にめくってから編集。
+      // v1106 タップの解釈:
+      //   裏 (my_side=2): 単発タップ = 表を見る (即 flip)
+      //   表 (my_side=1): 単発タップ = 何もしない、ダブルタップ = インライン編集
+      const n = NOTE_MAP[nid];
+      const onBack = n && (n.my_side || 2) === 2;
       const now = Date.now();
-      if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
+      if (onBack) {
+        flipNote(nid).catch(() => {});
+      } else if (TAP.noteId === nid && (now - TAP.ts) < DBLTAP_MS) {
         TAP.noteId = null; TAP.ts = 0;
-        const n = NOTE_MAP[nid];
-        if (n && (n.my_side || 2) === 2) {
-          // 裏なら flip → 表に切り替わってから inline edit
-          flipNote(nid).then(() => enterInlineEdit(nid, null)).catch(() => {});
-        } else {
-          enterInlineEdit(nid, null);
-        }
+        enterInlineEdit(nid, null);
       } else {
         TAP.noteId = nid; TAP.ts = now;
       }
@@ -481,31 +480,37 @@ function noteHtml(n) {
   const side = n.my_side || 2;
   const bg = escapeHtml(n.color || '#FEF9A8');
   const isBack = side === 2;
-  // ヘッダ: 裏なら Flip のみ (書けない、色/画像/削除も裏でいじる意味薄い)。表なら全部出す。
+  // v1106 ヘッダの当たり判定を大きく: font-size↑ / padding↑、
+  //   flip / delete は文字ラベル付きボタンにして「わかりにくい」を回避。
+  const btnStyle = 'border:none; background:rgba(255,255,255,0.35); cursor:pointer; padding:3px 8px; font-size:15px; border-radius:5px; line-height:1';
+  const btnDanger = btnStyle + '; color:#991b1b';
   const header = isBack
-    ? `<div style="display:flex; gap:2px; align-items:center; font-size:11px; color:#4b5563; opacity:0.75">
-         <span>🌒 ウラ</span>
+    ? `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
+         <span style="font-weight:600">🌒 ウラ</span>
          <span style="margin-left:auto"></span>
-         <button data-flip-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="表を出す">🔄</button>
-         <button data-del-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="削除">🗑</button>
+         <button data-flip-id="${n.id}" style="${btnStyle}; font-weight:600" title="表を見る">🔄 見る</button>
+         <button data-del-id="${n.id}" style="${btnDanger}" title="削除">🗑</button>
        </div>`
-    : `<div style="display:flex; gap:2px; align-items:center; font-size:11px; color:#4b5563; opacity:0.85">
-         <span>🌅 オモテ</span>
+    : `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
+         <span style="font-weight:600">🌅 オモテ</span>
          <span style="margin-left:auto"></span>
-         <button data-color-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="色を変える">🎨</button>
-         <button data-genimg-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="AI 画像を生成">🖼</button>
-         ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="画像を消す">🚫</button>` : ''}
-         <button data-flip-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:14px" title="裏返す">🔄</button>
-         <button data-del-id="${n.id}" style="border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px" title="削除">🗑</button>
+         <button data-color-id="${n.id}"  style="${btnStyle}" title="色を変える">🎨</button>
+         <button data-genimg-id="${n.id}" style="${btnStyle}" title="AI 画像を生成">🖼</button>
+         ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="${btnStyle}" title="画像を消す">🚫</button>` : ''}
+         <button data-flip-id="${n.id}"   style="${btnStyle}; font-weight:600" title="裏に隠す">🔄 隠す</button>
+         <button data-del-id="${n.id}"    style="${btnDanger}" title="削除">🗑</button>
        </div>`;
-  // ボディ: 裏なら装飾のみ、表なら text + image
+  // ボディ: 裏 = タップで表を見せる大きい案内、表 = text + image
   let body;
   if (isBack) {
-    body = `<div class="mnote-body" style="flex:1; display:flex; align-items:center; justify-content:center; font-size:32px; color:rgba(0,0,0,0.15); font-weight:800; letter-spacing:0.2em; user-select:none">? ? ?</div>`;
+    // v1106 裏は body 全域が flip target (data-flip-body でイベント委譲)
+    body = `<div class="mnote-body" data-flip-body="${n.id}" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; cursor:pointer; gap:6px">
+              <div style="font-size:36px; opacity:0.55">🔄</div>
+              <div style="font-size:13px; color:rgba(0,0,0,0.55); font-weight:600; letter-spacing:0.05em">タップで表を見る</div>
+            </div>`;
   } else {
     const img = n.front_image_url;
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
-    // v1104 文字数に応じて動的フォントサイズ (少ないと大きく、多いと小さく)
     const fpx = dynamicFontSize(n.front_text || '', n.width, n.height);
     body = `<div class="mnote-body" style="flex:1; overflow:hidden; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
               ${imgBlock}
