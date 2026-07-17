@@ -19,6 +19,10 @@ var/log/
 *.swo
 *~
 
+# Python bytecode (scripts/overleaf_collector.py の実行時副生成物)
+__pycache__/
+*.pyc
+
 # OS metadata
 .DS_Store
 Thumbs.db
