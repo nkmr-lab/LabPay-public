@@ -180,6 +180,19 @@ export const APPS = [
   { id: 'sns',           cat: 'game',   url: '#/sns',           title: '💬 らぼったー',       desc: 'シンプルなつぶやき (テキスト + 画像 + 位置 + @メンション + 返信 + 👍 ❤ ⭐ リアクション)。フォローなし — 全員の投稿が見える。', defaultVisible: true },
   // v884 #457 実績 (アプリ一覧に入れ忘れていた)
   { id: 'achievements',  cat: 'archive', url: '#/achievements', title: '🏆 実績',           desc: 'ラボ内で達成してきた実績を一覧表示。売買/投稿/食べある記/ゲーム/筋トレ/論文要約など各種行動が記念バッジとして並び、AI が称号 (例「らぼ酒場の主」) を命名してくれる。', defaultVisible: true },
+  // v1151 中村さん指摘「全てタブに入っていない機能が結構ある」→ 独立ページで動くのに apps.js 未登録だった 12 個を追加。
+  { id: 'send',          cat: 'trade',    url: '#/send',           title: '💸 個人送金',        desc: '相手を選んで pt を送る (プロフィール → 「💸 LabPay で送金」経由でも起動)。 効果音つき。', defaultVisible: true },
+  { id: 'wishlist',      cat: 'trade',    url: '#/wishlist',       title: '🛍 これ欲しい',      desc: 'ラボにあると嬉しい商品を掲示。 誰かが「出ました!」で達成扱い。 リクエスト → 出品 に つながる。', defaultVisible: true },
+  { id: 'tasks',         cat: 'lab-mgmt', url: '#/tasks',          title: '✅ タスク',           desc: '報酬付きの依頼 → 引き受け → 承認、 エスクロー預け。 時間枠分割 / 指名 / ファイル添付対応。', defaultVisible: true },
+  { id: 'invitations',   cat: 'lab-mgmt', url: '#/invitations',    title: '📢 募集',             desc: 'お昼ご飯 / ビアガーデン / ポケモン GO などカジュアル招集。 参加表明型、 6h で自動 close。', defaultVisible: true },
+  { id: 'wari',          cat: 'tools',    url: '#/wari',           title: '🧮 ワリカ (計算)',   desc: '合計金額 + 通貨 + 人数から 1 人あたりを 即算出。 多通貨 + JPY 換算、 DB 保存なしの計算機。 グループ内ワリカとは別、 その場計算用。', defaultVisible: true },
+  { id: 'my-games',      cat: 'game',     url: '#/my-games',       title: '🎮 自作ゲーム管理',   desc: 'cg2 (自作ゲーム v2 フレームワーク) 用に、 自作の 2 人対戦 JS をアップロード / 編集 / 削除。 詳細 → docs/CUSTOM_GAMES.md。', defaultVisible: true },
+  { id: 'walk-mode',     cat: 'health',   url: '#/walk-mode',      title: '🚶 散歩モード',       desc: '全画面マップ + Wake Lock + GPS 5 秒 polling で軌跡 polyline 記録 → SNS 投稿可能。 過去軌跡重ね合わせ表示。', defaultVisible: true },
+  { id: 'quotes',        cat: 'ai',       url: '#/quotes',         title: '💬 名言集',           desc: '偉人 / 漫画 / アニメの名言を日単位で 1 件。 ラボメンによる名言登録も可能。 ホームウィジェットとしても表示可 (デフォルト OFF)。', defaultVisible: true },
+  { id: 'papers-recent', cat: 'research', url: '#/papers-recent',  title: '📚 最近の論文まとめ', desc: 'ラボ内で 公開された 論文要約 / 全訳 / 査読 / Deep Research の 最近一覧。 ⭐ ブックマーク済 / いいね順 / 検索。', defaultVisible: true },
+  { id: 'news',          cat: 'shared',   url: '#/news',           title: '📰 LabPay ニュース',  desc: 'LabPay の更新情報 (新機能 / 修正)。 版履歴のダイジェスト。', defaultVisible: true },
+  { id: 'activity',      cat: 'archive',  url: '#/activity',       title: '📊 活動ログ',         desc: 'ラボ内の最近の取引 / 投稿 / 参加 / 実績更新を時系列で一覧。', defaultVisible: true },
+  { id: 'history',       cat: 'archive',  url: '#/history',        title: '💴 個人取引履歴',     desc: '自分の 送金 / 購入 / 販売 / 実績報酬 / タスク報酬 の 履歴を時系列で。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';

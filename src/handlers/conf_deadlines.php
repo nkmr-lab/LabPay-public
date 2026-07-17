@@ -181,15 +181,13 @@ function cd_create(PDO $pdo, array $cfg): void {
 }
 
 function cd_update(PDO $pdo, array $cfg, int $id): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT created_by_user_id FROM conf_deadlines WHERE id = ? AND deleted_at IS NULL");
+    // v1151 中村さん指示「学会の〆切は誰もが変更できるようにしたい」
+    //   → 登録者 / admin 限定 → ログイン済ユーザ全員が編集可に緩和。
+    //   学会〆切は 「公式情報の 皆で 育てる 掲示板」的な扱い。
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT id FROM conf_deadlines WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
-    $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '見つかりません', 404);
-    $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ((int)$row['created_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者または admin のみ', 403);
-    }
+    if (!$st->fetchColumn()) throw new ApiException('not_found', '見つかりません', 404);
     $body = read_json_body();
     $v = cd_validate($body);
     $pdo->prepare("UPDATE conf_deadlines
@@ -203,15 +201,13 @@ function cd_update(PDO $pdo, array $cfg, int $id): void {
 }
 
 function cd_delete(PDO $pdo, array $cfg, int $id): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT created_by_user_id FROM conf_deadlines WHERE id = ? AND deleted_at IS NULL");
+    // v1151 削除も 全員可 (学会情報 は 皆で 育てる 掲示板)。
+    //   ただし 「登録者 / admin ではない誰か が 誤って 消した」ケースの ロールバック用に
+    //   物理削除 ではなく deleted_at で soft-delete のまま (現状仕様維持)。
+    Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT id FROM conf_deadlines WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
-    $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) throw new ApiException('not_found', '見つかりません', 404);
-    $isAdmin = (string)($u['role'] ?? '') === 'admin';
-    if ((int)$row['created_by_user_id'] !== (int)$u['id'] && !$isAdmin) {
-        throw new ApiException('forbidden', '登録者または admin のみ', 403);
-    }
+    if (!$st->fetchColumn()) throw new ApiException('not_found', '見つかりません', 404);
     $pdo->prepare("UPDATE conf_deadlines SET deleted_at = NOW() WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
 }
