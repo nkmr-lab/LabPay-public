@@ -891,13 +891,20 @@ function bindRowHandlers() {
       ev.stopPropagation();
       // v785 #383 投稿者 / admin なら共有 lightbox の onRotate を渡す (サーバで画像上書き保存)
       const postId = el.dataset.rotPostId;
-      if (postId) {
-        openSharedLightbox(el.dataset.zoomSrc, {
-          onRotate: (degrees) => post(`/api/posts/${postId}/rotate-image`, { degrees }),
-        });
-      } else {
-        openSharedLightbox(el.dataset.zoomSrc);
-      }
+      // v1149 中村さん要望「複数の画像を拡大しているときにはスワイプで次の画像に」
+      //   → 同じ投稿カード内 (data-post-id が同じ) の [data-zoom-src] を全て集めて
+      //   lightbox に配列で渡す。 単発投稿は 1 枚配列で動作 (下位互換)。
+      const row = el.closest('[data-post-id]');
+      const siblings = row ? [...row.querySelectorAll('[data-zoom-src]')] : [el];
+      const images = siblings.map(s => s.dataset.zoomSrc);
+      const startIndex = Math.max(0, siblings.indexOf(el));
+      const opts = { images, index: startIndex };
+      // rotate は 1 枚目のみ (lightbox 側で index=0 以外は 非表示)
+      if (postId) opts.onRotate = (degrees, idx) =>
+        idx === 0
+          ? post(`/api/posts/${postId}/rotate-image`, { degrees })
+          : Promise.reject(new Error('回転できるのは 1 枚目だけです'));
+      openSharedLightbox(el.dataset.zoomSrc, opts);
     });
   });
   document.querySelectorAll('[data-react-post]').forEach(el => {

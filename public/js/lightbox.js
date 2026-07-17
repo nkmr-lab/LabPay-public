@@ -2,27 +2,41 @@
 //   もの。同じ「別タブで開くと戻れない」問題が places.js でも起きていたので、
 //   共有モジュールに切り出して両方から使えるようにした。
 //
-//   使い方: import { openImageLightbox } from '../lightbox.js'; openImageLightbox(src);
-//   挙動: × ボタン / 背景タップ / 画像タップ / Esc で閉じる。 body スクロールロック。
-//   大きな画像で体感数秒空くので XHR で progress 表示。
+// 使い方:
+//   単発:   openImageLightbox(src)
+//   複数:   openImageLightbox(src, { images: [url1, url2, ...], index: 0 }) — v1149
+//     - 左右矢印 ← → ボタン + キーボード ArrowLeft/ArrowRight + タッチ swipe で 次/前 の画像
+//     - カウンター「3 / 7」を 右下 に表示
+//   閉じる: × ボタン / 背景タップ / 画像タップ / Esc / ブラウザ戻る
+//   回転:   opts.onRotate: (degrees, index) => Promise を渡すと 🔄 ボタン表示
+//           (複数画像時は 1 枚目 index=0 のときだけ回転可、 それ以外 では 非表示)
 
 export function openImageLightbox(src, opts = {}) {
-  // v754 #370 opts.onRotate: async (degrees) => void があると
-  //   オーバーレイ内に「🔄 回転」ボタンを表示。タップで onRotate(90) を呼んで、
-  //   解決後 cache-bust で再ロードして表示し直す。
   const onRotate = typeof opts.onRotate === 'function' ? opts.onRotate : null;
-  // v856 #440 閉じた時に外側を refresh するためのコールバック
   const onClose  = typeof opts.onClose  === 'function' ? opts.onClose  : null;
+  // v1149 複数画像対応 (images 配列 + index)。 opts.images が無ければ src 単発。
+  const images = Array.isArray(opts.images) && opts.images.length ? opts.images.slice(0, 100) : [src];
+  let index = Math.max(0, Math.min(images.length - 1, Number(opts.index) || 0));
+  if (!images[index]) index = 0;
+  const isMulti = images.length > 1;
+
   const old = document.getElementById('lb-overlay');
   if (old) old.remove();
   const box = document.createElement('div');
   box.id = 'lb-overlay';
-  box.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; cursor:zoom-out';
+  box.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; cursor:zoom-out; touch-action:pan-y';
   box.innerHTML = `
     <button id="lb-close" aria-label="閉じる"
-            style="position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.92); border:none; font-size:22px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center">×</button>
+            style="position:absolute; top:12px; right:12px; width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.92); border:none; font-size:22px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2">×</button>
     ${onRotate ? `<button id="lb-rotate" title="90° 回転"
-            style="position:absolute; top:12px; right:64px; height:44px; padding:0 14px; border-radius:22px; background:rgba(255,255,255,0.92); border:none; font-size:14px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; gap:4px">🔄 回転</button>` : ''}
+            style="position:absolute; top:12px; right:64px; height:44px; padding:0 14px; border-radius:22px; background:rgba(255,255,255,0.92); border:none; font-size:14px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; gap:4px; z-index:2">🔄 回転</button>` : ''}
+    ${isMulti ? `
+      <button id="lb-prev" aria-label="前の画像"
+              style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,0.85); border:none; font-size:24px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2">‹</button>
+      <button id="lb-next" aria-label="次の画像"
+              style="position:absolute; right:12px; top:50%; transform:translateY(-50%); width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,0.85); border:none; font-size:24px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2">›</button>
+      <div id="lb-counter" style="position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); color:#fff; padding:4px 12px; border-radius:12px; font-size:13px; font-weight:600; z-index:2">${index + 1} / ${images.length}</div>
+    ` : ''}
     <div id="lb-loading" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; color:#fff; font-size:14px">
       <div style="width:36px; height:36px; border:3px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:lb-spin 1s linear infinite"></div>
       <div id="lb-pct">読み込み中…</div>
@@ -34,12 +48,14 @@ export function openImageLightbox(src, opts = {}) {
   const imgEl = box.querySelector('#lb-img');
   const loadEl = box.querySelector('#lb-loading');
   const pctEl = box.querySelector('#lb-pct');
-  // 同じ src を何度 cache-bust しても同じ URL で fetch するように、現在表示中の URL を持つ
-  let currentSrc = src;
+  const counterEl = box.querySelector('#lb-counter');
+  const rotateBtn = box.querySelector('#lb-rotate');
+  let currentSrc = images[index];
   function loadImage(url) {
     if (loadEl && !loadEl.parentNode) box.insertBefore(loadEl, imgEl);
     if (imgEl.src && imgEl.src.startsWith('blob:')) URL.revokeObjectURL(imgEl.src);
     imgEl.style.visibility = 'hidden';
+    if (pctEl) pctEl.textContent = '読み込み中…';
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.responseType = 'blob';
@@ -65,33 +81,48 @@ export function openImageLightbox(src, opts = {}) {
     xhr.onerror = () => { if (pctEl) pctEl.textContent = '読み込み失敗'; };
     xhr.send();
   }
+  function updateRotateVisibility() {
+    // 複数画像時は 1 枚目 (index=0) のみ回転可
+    if (rotateBtn) rotateBtn.style.display = (isMulti && index !== 0) ? 'none' : '';
+  }
+  function go(newIndex) {
+    if (!isMulti) return;
+    if (newIndex < 0) newIndex = images.length - 1;
+    if (newIndex >= images.length) newIndex = 0;
+    if (newIndex === index) return;
+    index = newIndex;
+    currentSrc = images[index];
+    if (counterEl) counterEl.textContent = `${index + 1} / ${images.length}`;
+    updateRotateVisibility();
+    loadImage(currentSrc);
+  }
+  updateRotateVisibility();
   loadImage(currentSrc);
 
-  if (onRotate) {
-    box.querySelector('#lb-rotate').addEventListener('click', async (ev) => {
+  if (onRotate && rotateBtn) {
+    rotateBtn.addEventListener('click', async (ev) => {
       ev.stopPropagation();
       const btn = ev.currentTarget;
       btn.disabled = true;
-      const old = btn.textContent; btn.textContent = '処理中…';
+      const oldText = btn.textContent; btn.textContent = '処理中…';
       try {
-        await onRotate(90);
-        // cache-bust で再ロード
+        await onRotate(90, index);
+        // cache-bust で再ロード + images 配列も更新
         const base = currentSrc.replace(/[?&]v=\d+(&|$)/, '').replace(/\?$/, '');
         const sep = base.includes('?') ? '&' : '?';
         currentSrc = base + sep + 'v=' + Date.now();
+        images[index] = currentSrc;
         loadImage(currentSrc);
       } catch (e) {
         alert('回転失敗: ' + (e?.message || e));
       } finally {
-        btn.disabled = false; btn.textContent = old;
+        btn.disabled = false; btn.textContent = oldText;
       }
     });
   }
 
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
-  // popstate を拾って閉じる: スマホの戻るボタンやスワイプで「戻る」と
-  //   思った時に SPA ナビゲーションせずライトボックスだけ閉じるように。
   history.pushState({ lb: 1 }, '');
   let closing = false;
   const close = () => {
@@ -101,18 +132,53 @@ export function openImageLightbox(src, opts = {}) {
     document.body.style.overflow = prevOverflow;
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('popstate', onPop);
-    // 自分が push した state の場合だけ pop 戻す (popstate 経由の close では skip)
     if (history.state && history.state.lb) history.back();
     if (onClose) { try { onClose(); } catch (_) {} }
   };
-  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  const onKey = (ev) => {
+    if (ev.key === 'Escape') { close(); return; }
+    if (isMulti && ev.key === 'ArrowLeft')  { ev.preventDefault(); go(index - 1); }
+    if (isMulti && ev.key === 'ArrowRight') { ev.preventDefault(); go(index + 1); }
+  };
   const onPop = () => { closing = true; box.remove(); document.body.style.overflow = prevOverflow; document.removeEventListener('keydown', onKey); window.removeEventListener('popstate', onPop); if (onClose) { try { onClose(); } catch (_) {} } };
   document.addEventListener('keydown', onKey);
   window.addEventListener('popstate', onPop);
-  document.getElementById('lb-close').addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
+  box.querySelector('#lb-close').addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
+  const prevBtn = box.querySelector('#lb-prev');
+  const nextBtn = box.querySelector('#lb-next');
+  if (prevBtn) prevBtn.addEventListener('click', (ev) => { ev.stopPropagation(); go(index - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', (ev) => { ev.stopPropagation(); go(index + 1); });
+
+  // v1149 touch swipe (左右 40px 以上 で ±1、 縦スワイプは 閉じない)
+  if (isMulti) {
+    let sx = 0, sy = 0, swiping = false;
+    box.addEventListener('touchstart', (ev) => {
+      if (ev.touches.length !== 1) return;
+      sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; swiping = true;
+    }, { passive: true });
+    box.addEventListener('touchend', (ev) => {
+      if (!swiping) return;
+      swiping = false;
+      const t = ev.changedTouches[0];
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        // 横スワイプ → 前 / 次
+        ev.preventDefault();
+        ev.stopPropagation();   // タップ判定を潰してオーバーレイの close を止める
+        if (dx > 0) go(index - 1); else go(index + 1);
+        // 直後の click で close されないようにフラグ
+        box.dataset.swiped = '1';
+        setTimeout(() => { delete box.dataset.swiped; }, 300);
+      }
+    }, { passive: false });
+  }
+
   box.addEventListener('click', (ev) => {
-    // ライトボックス内のボタン (× / 🔄) はタップで閉じない、それ以外タップで閉じる
-    if (ev.target.closest('#lb-close, #lb-rotate')) return;
+    // ライトボックス内のボタン (× / 🔄 / ← / →) はタップで閉じない
+    if (ev.target.closest('#lb-close, #lb-rotate, #lb-prev, #lb-next, #lb-counter')) return;
+    // 直前が swipe だった場合は閉じない (v1149)
+    if (box.dataset.swiped) return;
     close();
   });
 }
