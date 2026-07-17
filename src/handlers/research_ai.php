@@ -1,28 +1,31 @@
 <?php
-// v1125 研究特化 AI サブスク (MVP)
-//   200pt/60 件 (1 ヶ月)、 1000pt/無制限 (1 ヶ月)。研究特化 system prompt +
-//   相談テンプレート library。 Scrapbox 連携は Phase 2。
-//
-// API:
-//   GET  /api/research-ai                    → 自分の sub 状態 + テンプレート一覧 + 直近履歴
-//   POST /api/research-ai/subscribe          → { plan: 'quota60' | 'unlimited' } pt 徴収 + sub 開始
-//   POST /api/research-ai/chat               → { message, template_key? } → sub check → OpenAI 呼び + 履歴 + 使用回数減
-//   GET  /api/research-ai/chats              → 履歴 (直近 100 件)
+// v1125 研究特化 AI サブスク (MVP) → v1142 大改修:
+//   件数 → トークン量課金、スレッド化 (会話単位で履歴管理)、共有 (他者もチャット投稿可)、
+//   PDF / 画像 添付 (OpenAI Files API 経由)、ChatGPT / Claude 風の UX。
 
 declare(strict_types=1);
 
-const RAI_PLAN_QUOTA60_COST     = 200;
-const RAI_PLAN_QUOTA60_MSGS     = 60;
-const RAI_PLAN_UNLIMITED_COST   = 1000;
-const RAI_SUB_DURATION_DAYS     = 30;
+// ── プランと料金 (v1142) ───────────────────────────────────────────
+const RAI_SUB_DURATION_DAYS         = 30;
+const RAI_LEGACY_QUOTA60_COST       = 200;   // 旧 quota60 (件数)
+const RAI_LEGACY_QUOTA60_MSGS       = 60;
+const RAI_LEGACY_UNLIMITED_COST     = 1000;
+// 新: トークンチケット (使い切り)
+const RAI_TOKENS_TICKET_S_COST      = 200;   // 200pt → 100k トークン
+const RAI_TOKENS_TICKET_S_TOKENS    = 100_000;
+const RAI_TOKENS_TICKET_L_COST      = 500;   // 500pt → 300k トークン
+const RAI_TOKENS_TICKET_L_TOKENS    = 300_000;
+// 新: 無制限だが週次上限
+const RAI_UNLIMITED_WEEKLY_COST     = 1000;  // 1000pt / 30 日
+const RAI_UNLIMITED_WEEKLY_LIMIT    = 500_000; // 1 週間 500k tokens
 
 function rai_templates(): array {
     return [
-        ['key' => 'theme_review',    'title' => '📝 研究テーマ相談',    'placeholder' => 'テーマ / 悩み / 方向性の入力', 'sys' => '研究計画に精通したメンター AI として、以下の研究テーマや悩みに対して、掘り下げるべき論点 + 隣接分野 + キーとなる先行研究 + 次の一歩を、Bullet で簡潔に提案してください。'],
+        ['key' => 'theme_review',    'title' => '📝 研究テーマ相談',    'placeholder' => 'テーマ / 悩み / 方向性の入力', 'sys' => '研究計画に精通したメンター AI として、以下の研究テーマや悩みに対して、掘り下げるべき論点 + 隣接分野 + キーとなる先行研究 + 次の一歩を、 Bullet で簡潔に提案してください。'],
         ['key' => 'exp_design',      'title' => '🧪 実験デザインチェック','placeholder' => 'RQ + 実験計画', 'sys' => '実験心理・HCI の査読者として、以下の実験計画の弱点 (交絡・バイアス・サンプルサイズ・生態妥当性・統計手法) を厳しく指摘し、改善案を出してください。'],
         ['key' => 'abstract_polish', 'title' => '✒️ アブスト磨き',       'placeholder' => 'アブスト原稿', 'sys' => '査読者視点で、以下のアブストラクトの (a) 主張の明快さ (b) 貢献の specificity (c) 動機の説得力を評価し、改善版を提示してください。'],
         ['key' => 'related_work',    'title' => '📚 関連研究整理',        'placeholder' => 'テーマ or キーワード', 'sys' => '以下のテーマに関連する研究の系譜を「基盤研究 → 現代の主流 → 最新動向」の 3 段で整理し、代表的な論文 (著者・年・要旨) を Bullet で挙げてください。学術的な確度を優先、不確かなら "確認要" と明記。'],
-        ['key' => 'rebuttal',        'title' => '📮 リバッタル文起草',    'placeholder' => '査読コメント (原文)', 'sys' => '査読コメントに対する rebuttal を、defensive でなく建設的なトーンで、査読者の懸念を認めた上で本質的な反論 / 補足実験 / 修正約束を混ぜて起草してください。'],
+        ['key' => 'rebuttal',        'title' => '📮 リバッタル文起草',    'placeholder' => '査読コメント (原文)', 'sys' => '査読コメントに対する rebuttal を、 defensive でなく建設的なトーンで、査読者の懸念を認めた上で本質的な反論 / 補足実験 / 修正約束を混ぜて起草してください。'],
         ['key' => 'kaken_writing',   'title' => '💴 科研費文章調整',       'placeholder' => '応募書類の下書き', 'sys' => '科研費応募書類の査読者として、以下の文章の (a) 学術的貢献の明確さ (b) 方法の実現可能性 (c) 波及効果を評価し、より通りやすい表現に書き直してください。'],
         ['key' => 'freetalk',        'title' => '💬 汎用チャット',         'placeholder' => '何でも質問', 'sys' => '研究に関する汎用アシスタント。質問に対して簡潔かつ正確に答えてください。'],
     ];
@@ -30,72 +33,136 @@ function rai_templates(): array {
 
 function route_research_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
-    if ($sub === '' && $method === 'GET')          { rai_status($pdo, $cfg);      return; }
-    if ($sub === 'subscribe' && $method === 'POST'){ rai_subscribe($pdo, $cfg);   return; }
-    if ($sub === 'chat' && $method === 'POST')     { rai_chat($pdo, $cfg);        return; }
-    if ($sub === 'chats' && $method === 'GET')     { rai_chats($pdo, $cfg);       return; }
+    if ($sub === '' && $method === 'GET')            { rai_status($pdo, $cfg);      return; }
+    if ($sub === 'subscribe' && $method === 'POST')  { rai_subscribe($pdo, $cfg);   return; }
+    if ($sub === 'threads' && $method === 'GET' && !isset($seg[2])) { rai_thread_list($pdo, $cfg); return; }
+    if ($sub === 'threads' && $method === 'POST' && !isset($seg[2])) { rai_thread_create($pdo, $cfg); return; }
+    if ($sub === 'threads' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        $tid = (int)$seg[2];
+        if (!isset($seg[3]) && $method === 'GET')    { rai_thread_get($pdo, $cfg, $tid); return; }
+        if (!isset($seg[3]) && $method === 'DELETE') { rai_thread_delete($pdo, $cfg, $tid); return; }
+        if (($seg[3] ?? '') === 'share' && $method === 'PATCH')    { rai_thread_share($pdo, $cfg, $tid); return; }
+        if (($seg[3] ?? '') === 'messages' && $method === 'POST')  { rai_thread_post_message($pdo, $cfg, $tid); return; }
+        if (($seg[3] ?? '') === 'title' && $method === 'PATCH')    { rai_thread_rename($pdo, $cfg, $tid); return; }
+    }
+    if ($sub === 'uploads' && $method === 'POST' && !isset($seg[2])) { rai_upload($pdo, $cfg); return; }
+    // 旧 API (v1125): freeform chat (thread なし)
+    if ($sub === 'chat' && $method === 'POST')       { rai_legacy_chat($pdo, $cfg); return; }
+    if ($sub === 'chats' && $method === 'GET')       { rai_legacy_chats($pdo, $cfg); return; }
     throw new ApiException('not_found', "no research-ai route for $method $sub", 404);
 }
 
+// ── サブスクリプション状態 ───────────────────────────────────────
 function _rai_active_sub(PDO $pdo, int $uid): ?array {
     $st = $pdo->prepare("SELECT * FROM research_ai_subscriptions WHERE user_id = ? AND expires_at > NOW()");
     $st->execute([$uid]);
-    return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    if (!$row) return null;
+    // 週次リセット
+    if (($row['plan'] ?? '') === 'unlimited_weekly' && $row['week_reset_at'] && strtotime($row['week_reset_at']) <= time()) {
+        $newReset = date('Y-m-d H:i:s', strtotime('+7 days'));
+        $pdo->prepare("UPDATE research_ai_subscriptions SET weekly_used = 0, week_reset_at = ? WHERE user_id = ?")
+            ->execute([$newReset, $uid]);
+        $row['weekly_used'] = 0;
+        $row['week_reset_at'] = $newReset;
+    }
+    return $row;
 }
 
 function rai_status(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $sub = _rai_active_sub($pdo, $uid);
-    $st = $pdo->prepare("SELECT id, template_key, LEFT(user_message, 80) AS user_message_short, LEFT(ai_response, 200) AS ai_response_short, created_at FROM research_ai_chats WHERE user_id = ? ORDER BY id DESC LIMIT 10");
-    $st->execute([$uid]);
     json_response([
-        'subscription' => $sub ? [
-            'plan'       => $sub['plan'],
-            'quota_left' => $sub['quota_left'] !== null ? (int)$sub['quota_left'] : null,
-            'expires_at' => $sub['expires_at'],
-            'started_at' => $sub['started_at'],
-        ] : null,
-        'templates'   => rai_templates(),
-        'plans'       => [
-            ['key' => 'quota60',   'cost' => RAI_PLAN_QUOTA60_COST,   'msgs' => RAI_PLAN_QUOTA60_MSGS, 'duration_days' => RAI_SUB_DURATION_DAYS, 'label' => sprintf('%dpt / %d 件 (%d 日)', RAI_PLAN_QUOTA60_COST, RAI_PLAN_QUOTA60_MSGS, RAI_SUB_DURATION_DAYS)],
-            ['key' => 'unlimited', 'cost' => RAI_PLAN_UNLIMITED_COST, 'msgs' => null, 'duration_days' => RAI_SUB_DURATION_DAYS, 'label' => sprintf('%dpt / 無制限 (%d 日)', RAI_PLAN_UNLIMITED_COST, RAI_SUB_DURATION_DAYS)],
-        ],
-        'recent_chats' => $st->fetchAll(PDO::FETCH_ASSOC),
+        'subscription' => $sub ? rai_shape_sub($sub) : null,
+        'templates'    => rai_templates(),
+        'plans'        => rai_plans_public(),
     ]);
+}
+
+function rai_shape_sub(array $sub): array {
+    return [
+        'plan'          => $sub['plan'],
+        'quota_left'    => $sub['quota_left'] !== null ? (int)$sub['quota_left'] : null,
+        'tokens_left'   => $sub['tokens_left'] !== null ? (int)$sub['tokens_left'] : null,
+        'tokens_used'   => (int)($sub['tokens_used'] ?? 0),
+        'weekly_limit'  => $sub['weekly_limit'] !== null ? (int)$sub['weekly_limit'] : null,
+        'weekly_used'   => (int)($sub['weekly_used'] ?? 0),
+        'week_reset_at' => $sub['week_reset_at'],
+        'expires_at'    => $sub['expires_at'],
+        'started_at'    => $sub['started_at'],
+    ];
+}
+
+function rai_plans_public(): array {
+    return [
+        ['key' => 'tokens_ticket_s', 'cost' => RAI_TOKENS_TICKET_S_COST, 'tokens' => RAI_TOKENS_TICKET_S_TOKENS,
+         'duration_days' => RAI_SUB_DURATION_DAYS,
+         'label' => sprintf('%dpt / %dk トークン (%d 日)', RAI_TOKENS_TICKET_S_COST, RAI_TOKENS_TICKET_S_TOKENS / 1000, RAI_SUB_DURATION_DAYS),
+         'hint'  => '軽く試したい向け'],
+        ['key' => 'tokens_ticket_l', 'cost' => RAI_TOKENS_TICKET_L_COST, 'tokens' => RAI_TOKENS_TICKET_L_TOKENS,
+         'duration_days' => RAI_SUB_DURATION_DAYS,
+         'label' => sprintf('%dpt / %dk トークン (%d 日)', RAI_TOKENS_TICKET_L_COST, RAI_TOKENS_TICKET_L_TOKENS / 1000, RAI_SUB_DURATION_DAYS),
+         'hint'  => '普段使い'],
+        ['key' => 'unlimited_weekly', 'cost' => RAI_UNLIMITED_WEEKLY_COST, 'tokens' => null,
+         'duration_days' => RAI_SUB_DURATION_DAYS,
+         'weekly_limit' => RAI_UNLIMITED_WEEKLY_LIMIT,
+         'label' => sprintf('%dpt / 週 %dk 上限 (%d 日)', RAI_UNLIMITED_WEEKLY_COST, RAI_UNLIMITED_WEEKLY_LIMIT / 1000, RAI_SUB_DURATION_DAYS),
+         'hint'  => 'ヘビーユーザ向け、 週次自動リセット'],
+    ];
 }
 
 function rai_subscribe(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $body = read_json_body();
-    $plan = $body['plan'] ?? '';
-    if (!in_array($plan, ['quota60','unlimited'], true)) throw new ApiException('bad_request', "plan は 'quota60' or 'unlimited'", 400);
-    $cost = $plan === 'unlimited' ? RAI_PLAN_UNLIMITED_COST : RAI_PLAN_QUOTA60_COST;
-    $quota = $plan === 'unlimited' ? null : RAI_PLAN_QUOTA60_MSGS;
+    $plan = (string)($body['plan'] ?? '');
+    $planDef = null;
+    foreach (rai_plans_public() as $p) if ($p['key'] === $plan) { $planDef = $p; break; }
+    if (!$planDef) throw new ApiException('bad_request', 'unknown plan', 400);
+    $cost = (int)$planDef['cost'];
     $bal = Ledger::balanceOfUser($pdo, $uid);
     if ($bal < $cost) throw new ApiException('insufficient_balance', "残高不足 (要 {$cost}pt、現在 {$bal}pt)", 400);
     $pdo->beginTransaction();
     try {
         Ledger::transfer($pdo, $uid, 1, $cost, 'ai_subscribe', 'research_ai_sub', $uid, "研究特化 AI サブスク ({$plan})");
-        $expires = (new DateTime())->modify('+' . RAI_SUB_DURATION_DAYS . ' days')->format('Y-m-d H:i:s');
-        // 既存があれば延長 (残 quota は加算、期限は max)
+        $expires = date('Y-m-d H:i:s', strtotime('+' . RAI_SUB_DURATION_DAYS . ' days'));
         $existing = _rai_active_sub($pdo, $uid);
         if ($existing) {
-            // 既存 sub があれば期限を延長 (max)、quota は max
-            $newQuota = null;
-            if ($plan === 'unlimited' || $existing['plan'] === 'unlimited') {
-                $newQuota = null;
-            } else {
-                $newQuota = ((int)$existing['quota_left']) + $quota;
-            }
+            // 同 plan なら加算、異 plan なら plan 昇格 (unlimited_weekly が最強)。
             $newExpires = max($existing['expires_at'], $expires);
-            $newPlan = ($plan === 'unlimited' || $existing['plan'] === 'unlimited') ? 'unlimited' : 'quota60';
-            $pdo->prepare("UPDATE research_ai_subscriptions SET plan = ?, quota_left = ?, expires_at = ?, cost_paid = cost_paid + ? WHERE user_id = ?")
-                ->execute([$newPlan, $newQuota, $newExpires, $cost, $uid]);
+            $newTokensLeft   = $existing['tokens_left'];
+            $newWeeklyLimit  = $existing['weekly_limit'];
+            $newPlan = $existing['plan'];
+            $newWeekReset = $existing['week_reset_at'];
+            if ($plan === 'unlimited_weekly') {
+                $newPlan = 'unlimited_weekly';
+                $newTokensLeft = null;
+                $newWeeklyLimit = RAI_UNLIMITED_WEEKLY_LIMIT;
+                $newWeekReset = $newWeekReset ?: date('Y-m-d H:i:s', strtotime('+7 days'));
+            } else {
+                // tickets: tokens_left に加算 (unlimited でなければ)
+                if (($existing['plan'] ?? '') !== 'unlimited_weekly' && ($existing['plan'] ?? '') !== 'unlimited') {
+                    $newPlan = 'tokens_ticket';
+                    $newTokensLeft = (int)($existing['tokens_left'] ?? 0) + (int)$planDef['tokens'];
+                } else {
+                    // unlimited 加入者に ticket は無意味 (期間だけ延長)
+                    $newTokensLeft = $existing['tokens_left'];
+                }
+            }
+            $pdo->prepare("UPDATE research_ai_subscriptions
+                              SET plan = ?, tokens_left = ?, weekly_limit = ?, week_reset_at = ?, expires_at = ?, cost_paid = cost_paid + ?
+                            WHERE user_id = ?")
+                ->execute([$newPlan, $newTokensLeft, $newWeeklyLimit, $newWeekReset, $newExpires, $cost, $uid]);
         } else {
-            $pdo->prepare("INSERT INTO research_ai_subscriptions (user_id, plan, quota_left, expires_at, cost_paid) VALUES (?, ?, ?, ?, ?)")
-                ->execute([$uid, $plan, $quota, $expires, $cost]);
+            $isUnlimited = $plan === 'unlimited_weekly';
+            $tokensLeft = $isUnlimited ? null : (int)$planDef['tokens'];
+            $weeklyLimit = $isUnlimited ? RAI_UNLIMITED_WEEKLY_LIMIT : null;
+            $weekReset  = $isUnlimited ? date('Y-m-d H:i:s', strtotime('+7 days')) : null;
+            $storePlan = $isUnlimited ? 'unlimited_weekly' : 'tokens_ticket';
+            $pdo->prepare("INSERT INTO research_ai_subscriptions (user_id, plan, quota_left, tokens_left, weekly_limit, week_reset_at, expires_at, cost_paid)
+                            VALUES (?, ?, NULL, ?, ?, ?, ?, ?)")
+                ->execute([$uid, $storePlan, $tokensLeft, $weeklyLimit, $weekReset, $expires, $cost]);
         }
         $pdo->commit();
     } catch (Throwable $e) {
@@ -105,64 +172,346 @@ function rai_subscribe(PDO $pdo, array $cfg): void {
     rai_status($pdo, $cfg);
 }
 
-function rai_chat(PDO $pdo, array $cfg): void {
+// ── スレッド操作 ────────────────────────────────────────────────
+function _rai_thread_visible(PDO $pdo, int $tid, int $uid): array {
+    $st = $pdo->prepare("SELECT * FROM research_ai_threads WHERE id = ? AND deleted_at IS NULL");
+    $st->execute([$tid]);
+    $th = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$th) throw new ApiException('not_found', 'thread not found', 404);
+    if ((int)$th['owner_user_id'] === $uid) return $th;
+    if ((int)$th['is_shared'] === 1) {
+        $ids = json_decode($th['shared_user_ids'] ?: '[]', true) ?: [];
+        if (in_array($uid, array_map('intval', $ids), true)) return $th;
+    }
+    throw new ApiException('forbidden', 'このスレッドを閲覧する権限がありません', 403);
+}
+
+function rai_thread_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    ai_assert_configured($cfg);
+    $uid = (int)$u['id'];
+    // 自分が owner のスレッド + 自分が shared_user_ids に含まれているスレッド
+    $st = $pdo->prepare("SELECT t.id, t.owner_user_id, u.display_name AS owner_name, u.avatar_url AS owner_avatar,
+                                 t.title, t.template_key, t.is_shared, t.shared_user_ids,
+                                 t.last_message_at, t.created_at
+                            FROM research_ai_threads t JOIN users u ON u.id = t.owner_user_id
+                           WHERE t.deleted_at IS NULL
+                             AND (t.owner_user_id = ?
+                               OR (t.is_shared = 1 AND JSON_CONTAINS(COALESCE(t.shared_user_ids,'[]'), CAST(? AS JSON))))
+                           ORDER BY COALESCE(t.last_message_at, t.created_at) DESC
+                           LIMIT 100");
+    $st->execute([$uid, (string)$uid]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['id']              = (int)$r['id'];
+        $r['owner_user_id']   = (int)$r['owner_user_id'];
+        $r['is_shared']       = (int)$r['is_shared'] === 1;
+        $r['shared_user_ids'] = $r['shared_user_ids'] ? (json_decode($r['shared_user_ids'], true) ?: []) : [];
+        $r['is_mine']         = $r['owner_user_id'] === $uid;
+    }
+    unset($r);
+    json_response(['items' => $rows]);
+}
+
+function rai_thread_create(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $body = read_json_body();
-    $msg = trim((string)($body['message'] ?? ''));
-    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
-    if (mb_strlen($msg) > 4000) $msg = mb_substr($msg, 0, 4000);
+    $title = trim((string)($body['title'] ?? '新しいチャット'));
+    if ($title === '') $title = '新しいチャット';
+    if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200);
     $tplKey = trim((string)($body['template_key'] ?? 'freetalk'));
-    $tpl = null;
-    foreach (rai_templates() as $t) if ($t['key'] === $tplKey) { $tpl = $t; break; }
-    if (!$tpl) $tpl = rai_templates()[count(rai_templates()) - 1];   // freetalk
-    // sub チェック
-    $sub = _rai_active_sub($pdo, $uid);
-    if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まず購入してください', 403);
-    if ($sub['plan'] === 'quota60' && (int)$sub['quota_left'] <= 0) {
-        throw new ApiException('forbidden', '今月のクォータを使い切りました', 403);
+    $st = $pdo->prepare("INSERT INTO research_ai_threads (owner_user_id, title, template_key, last_message_at)
+                          VALUES (?, ?, ?, NOW())");
+    $st->execute([$uid, $title, $tplKey]);
+    $tid = (int)$pdo->lastInsertId();
+    json_response(['ok' => true, 'id' => $tid]);
+}
+
+function rai_thread_get(PDO $pdo, array $cfg, int $tid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    // メッセージ
+    $st = $pdo->prepare("SELECT c.id, c.speaker_user_id, u.display_name AS speaker_name, u.avatar_url AS speaker_avatar,
+                                 c.user_message, c.ai_response, c.tokens_prompt, c.tokens_completion, c.tokens_total,
+                                 c.created_at
+                            FROM research_ai_chats c LEFT JOIN users u ON u.id = c.speaker_user_id
+                           WHERE c.thread_id = ?
+                           ORDER BY c.id");
+    $st->execute([$tid]);
+    $messages = $st->fetchAll(PDO::FETCH_ASSOC);
+    // attachments を chat_id ごとにまとめる
+    $stA = $pdo->prepare("SELECT id, chat_id, kind, mime, filename, url FROM research_ai_attachments WHERE chat_id IN (SELECT id FROM research_ai_chats WHERE thread_id = ?)");
+    $stA->execute([$tid]);
+    $attByChat = [];
+    foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $attByChat[(int)$a['chat_id']][] = $a;
     }
-    // OpenAI 呼び出し
-    $payload = json_encode([
-        'model'   => (string)($cfg['openai']['model'] ?? 'gpt-5-mini'),
-        'messages' => [
-            ['role' => 'system', 'content' => $tpl['sys']],
-            ['role' => 'user',   'content' => $msg],
-        ],
-    ], JSON_UNESCAPED_UNICODE);
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . (string)$cfg['openai']['api_key']],
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_TIMEOUT    => 60,
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if (!$resp || $code >= 400) throw new ApiException('upstream_error', "OpenAI HTTP {$code}", 502);
-    $j = json_decode((string)$resp, true);
-    $aiText = $j['choices'][0]['message']['content'] ?? '';
-    if ($aiText === '') throw new ApiException('upstream_error', 'OpenAI 空応答', 502);
-    // 履歴保存 + quota 減
-    $pdo->prepare("INSERT INTO research_ai_chats (user_id, template_key, user_message, ai_response) VALUES (?, ?, ?, ?)")
-        ->execute([$uid, $tpl['key'], $msg, $aiText]);
-    if ($sub['plan'] === 'quota60') {
-        $pdo->prepare("UPDATE research_ai_subscriptions SET quota_left = quota_left - 1 WHERE user_id = ?")->execute([$uid]);
+    foreach ($messages as &$m) {
+        $m['id'] = (int)$m['id'];
+        $m['speaker_user_id'] = $m['speaker_user_id'] !== null ? (int)$m['speaker_user_id'] : null;
+        $m['tokens_total'] = $m['tokens_total'] !== null ? (int)$m['tokens_total'] : null;
+        $m['attachments'] = $attByChat[$m['id']] ?? [];
     }
-    $sub2 = _rai_active_sub($pdo, $uid);
+    unset($m);
     json_response([
-        'ok'         => true,
-        'response'   => $aiText,
-        'quota_left' => $sub2['quota_left'] !== null ? (int)$sub2['quota_left'] : null,
+        'thread' => [
+            'id' => (int)$th['id'],
+            'owner_user_id' => (int)$th['owner_user_id'],
+            'title' => $th['title'],
+            'template_key' => $th['template_key'],
+            'is_shared' => (int)$th['is_shared'] === 1,
+            'shared_user_ids' => $th['shared_user_ids'] ? (json_decode($th['shared_user_ids'], true) ?: []) : [],
+            'created_at' => $th['created_at'],
+            'is_mine' => (int)$th['owner_user_id'] === $uid,
+        ],
+        'messages' => $messages,
     ]);
 }
 
-function rai_chats(PDO $pdo, array $cfg): void {
+function rai_thread_delete(PDO $pdo, array $cfg, int $tid): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT id, template_key, user_message, ai_response, created_at FROM research_ai_chats WHERE user_id = ? ORDER BY id DESC LIMIT 100");
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    if ((int)$th['owner_user_id'] !== $uid) throw new ApiException('forbidden', 'オーナーのみ削除可', 403);
+    $pdo->prepare("UPDATE research_ai_threads SET deleted_at = NOW() WHERE id = ?")->execute([$tid]);
+    json_response(['ok' => true]);
+}
+
+function rai_thread_rename(PDO $pdo, array $cfg, int $tid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    if ((int)$th['owner_user_id'] !== $uid) throw new ApiException('forbidden', 'オーナーのみ改名可', 403);
+    $body = read_json_body();
+    $title = trim((string)($body['title'] ?? ''));
+    if ($title === '' || mb_strlen($title) > 200) throw new ApiException('bad_request', 'title 1..200', 400);
+    $pdo->prepare("UPDATE research_ai_threads SET title = ? WHERE id = ?")->execute([$title, $tid]);
+    json_response(['ok' => true]);
+}
+
+function rai_thread_share(PDO $pdo, array $cfg, int $tid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    if ((int)$th['owner_user_id'] !== $uid) throw new ApiException('forbidden', 'オーナーのみ共有設定変更可', 403);
+    $body = read_json_body();
+    $isShared = !empty($body['is_shared']) ? 1 : 0;
+    $ids = $body['shared_user_ids'] ?? [];
+    if (!is_array($ids)) $ids = [];
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    $ids = array_values(array_filter($ids, fn($v) => $v > 0 && $v !== $uid));
+    $pdo->prepare("UPDATE research_ai_threads SET is_shared = ?, shared_user_ids = ? WHERE id = ?")
+        ->execute([$isShared, json_encode($ids, JSON_UNESCAPED_UNICODE), $tid]);
+    // 共有された人に通知
+    if ($isShared && $ids) {
+        global $CFG;
+        $stO = $pdo->prepare("SELECT display_name FROM users WHERE id = ?");
+        $stO->execute([$uid]);
+        $ownerName = (string)$stO->fetchColumn();
+        $tplTitle = (string)($th['title'] ?? 'AI チャット');
+        foreach ($ids as $rid) {
+            try { notify_safely($pdo, $CFG, (int)$rid, 'admin_notice',
+                "🔬 {$ownerName} が研究 AI チャット「{$tplTitle}」を共有しました (投稿も可)",
+                'research_ai_thread', $tid); } catch (Throwable $_) {}
+        }
+    }
+    json_response(['ok' => true]);
+}
+
+// ── メッセージ投稿 (OpenAI 呼び + トークン記録 + サブスク減) ─────────
+function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    // 投稿できるのは owner or 共有先
+    $body = read_json_body();
+    $msg = trim((string)($body['message'] ?? ''));
+    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
+    if (mb_strlen($msg) > 8000) $msg = mb_substr($msg, 0, 8000);
+    $attachIds = $body['attachment_ids'] ?? [];
+    if (!is_array($attachIds)) $attachIds = [];
+    $attachIds = array_values(array_filter(array_map('intval', $attachIds), fn($v) => $v > 0));
+
+    // トークン消費は「投稿者本人のサブスク」から引く
+    //   ChatGPT 的に、共有先の人が投稿すれば、その人のサブスクトークンが減る。
+    $sub = _rai_active_sub($pdo, $uid);
+    if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まず購入してください', 403);
+    $plan = (string)$sub['plan'];
+    if ($plan === 'quota60' && (int)$sub['quota_left'] <= 0) {
+        throw new ApiException('forbidden', 'クォータ (件数) を使い切りました', 403);
+    }
+    if ($plan === 'tokens_ticket' && (int)($sub['tokens_left'] ?? 0) <= 0) {
+        throw new ApiException('forbidden', 'トークンチケットを使い切りました。 追加購入してください', 403);
+    }
+    if ($plan === 'unlimited_weekly') {
+        $used = (int)($sub['weekly_used'] ?? 0);
+        $lim  = (int)($sub['weekly_limit'] ?? 0);
+        if ($lim > 0 && $used >= $lim) {
+            throw new ApiException('forbidden', '今週の利用上限に到達しました (' . date('n/j H:i', strtotime((string)$sub['week_reset_at'])) . ' にリセット)', 403);
+        }
+    }
+
+    // これまでの会話を組み立てる (thread 内の user_message / ai_response を交互に)
+    $stH = $pdo->prepare("SELECT user_message, ai_response FROM research_ai_chats WHERE thread_id = ? ORDER BY id LIMIT 20");
+    $stH->execute([$tid]);
+    $history = $stH->fetchAll(PDO::FETCH_ASSOC);
+    // template の sys prompt を取得
+    $tpl = null;
+    foreach (rai_templates() as $t) if ($t['key'] === ($th['template_key'] ?? '')) { $tpl = $t; break; }
+    if (!$tpl) foreach (rai_templates() as $t) if ($t['key'] === 'freetalk') { $tpl = $t; break; }
+    $messages = [['role' => 'system', 'content' => $tpl['sys']]];
+    foreach ($history as $h) {
+        if (!empty($h['user_message'])) $messages[] = ['role' => 'user', 'content' => $h['user_message']];
+        if (!empty($h['ai_response']))  $messages[] = ['role' => 'assistant', 'content' => $h['ai_response']];
+    }
+    // 添付ファイル: 画像 / PDF → OpenAI file_id を messages.content の user role に埋め込み
+    $stA = $pdo->prepare("SELECT id, kind, mime, filename, url, openai_file_id FROM research_ai_attachments WHERE id = ? AND uploader_user_id = ?");
+    $userContent = [];
+    foreach ($attachIds as $aid) {
+        $stA->execute([$aid, $uid]);
+        $att = $stA->fetch(PDO::FETCH_ASSOC);
+        if (!$att) continue;
+        if ($att['openai_file_id']) {
+            $userContent[] = ['type' => 'file', 'file' => ['file_id' => $att['openai_file_id']]];
+        }
+    }
+    $userContent[] = ['type' => 'text', 'text' => $msg];
+    $messages[] = ['role' => 'user', 'content' => count($userContent) === 1 ? $msg : $userContent];
+
+    // OpenAI 呼び
+    $model = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
+    $payloadArr = [
+        'model' => $model,
+        'messages' => $messages,
+    ];
+    // gpt-5 系は max_completion_tokens、他は max_tokens
+    if (preg_match('/^(gpt-5|o1|o3)/', $model)) {
+        $payloadArr['max_completion_tokens'] = 4000;
+    } else {
+        $payloadArr['temperature'] = 0.4;
+        $payloadArr['max_tokens'] = 4000;
+    }
+    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
+    $resp = ai_openai_call($payload, (string)$cfg['openai']['api_key']);
+    $aiText = $resp['choices'][0]['message']['content'] ?? '';
+    if ($aiText === '') throw new ApiException('upstream_error', 'OpenAI 空応答', 502);
+    $usage = $resp['usage'] ?? [];
+    $tokPrompt     = (int)($usage['prompt_tokens'] ?? 0);
+    $tokCompletion = (int)($usage['completion_tokens'] ?? 0);
+    $tokTotal      = (int)($usage['total_tokens'] ?? ($tokPrompt + $tokCompletion));
+
+    $pdo->beginTransaction();
+    try {
+        $stI = $pdo->prepare("INSERT INTO research_ai_chats
+            (user_id, template_key, user_message, ai_response, thread_id, speaker_user_id, tokens_prompt, tokens_completion, tokens_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stI->execute([(int)$th['owner_user_id'], $th['template_key'], $msg, $aiText, $tid, $uid, $tokPrompt, $tokCompletion, $tokTotal]);
+        $chatId = (int)$pdo->lastInsertId();
+        // 添付を chat_id に紐付け
+        if ($attachIds) {
+            $place = implode(',', array_fill(0, count($attachIds), '?'));
+            $pdo->prepare("UPDATE research_ai_attachments SET chat_id = ? WHERE id IN ($place) AND uploader_user_id = ?")
+                ->execute(array_merge([$chatId], $attachIds, [$uid]));
+        }
+        // スレッドの last_message_at 更新
+        $pdo->prepare("UPDATE research_ai_threads SET last_message_at = NOW() WHERE id = ?")->execute([$tid]);
+        // サブスク減算 (投稿者本人)
+        if ($plan === 'quota60') {
+            $pdo->prepare("UPDATE research_ai_subscriptions SET quota_left = quota_left - 1, tokens_used = tokens_used + ? WHERE user_id = ?")
+                ->execute([$tokTotal, $uid]);
+        } elseif ($plan === 'tokens_ticket') {
+            $pdo->prepare("UPDATE research_ai_subscriptions SET tokens_left = GREATEST(0, tokens_left - ?), tokens_used = tokens_used + ? WHERE user_id = ?")
+                ->execute([$tokTotal, $tokTotal, $uid]);
+        } elseif ($plan === 'unlimited_weekly') {
+            $pdo->prepare("UPDATE research_ai_subscriptions SET weekly_used = weekly_used + ?, tokens_used = tokens_used + ? WHERE user_id = ?")
+                ->execute([$tokTotal, $tokTotal, $uid]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+
+    $sub2 = _rai_active_sub($pdo, $uid);
+    json_response([
+        'ok' => true,
+        'chat_id' => $chatId,
+        'response' => $aiText,
+        'tokens_used_this_call' => $tokTotal,
+        'subscription' => $sub2 ? rai_shape_sub($sub2) : null,
+    ]);
+}
+
+// ── アップロード (画像 / PDF → サーバ保存 + OpenAI Files API) ────
+function rai_upload(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $uid = (int)$u['id'];
+    if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+        throw new ApiException('bad_request', 'file が必要', 400);
+    }
+    $f = $_FILES['file'];
+    if ($f['error'] !== UPLOAD_ERR_OK) throw new ApiException('bad_request', 'upload error ' . $f['error'], 400);
+    if ($f['size'] > 30 * 1024 * 1024) throw new ApiException('bad_request', '30 MB まで', 400);
+    $mime = strtolower((string)($f['type'] ?? ''));
+    $name = (string)($f['name'] ?? 'upload');
+    $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $kind = null;
+    if (preg_match('#^image/#', $mime) || in_array($ext, ['png','jpg','jpeg','webp','gif'], true)) $kind = 'image';
+    elseif ($mime === 'application/pdf' || $ext === 'pdf') $kind = 'pdf';
+    else throw new ApiException('bad_request', '画像 or PDF のみ受け付けます', 400);
+
+    // サーバ保存
+    $publicDir = '/var/www/labpay/public';
+    $subDir = '/uploads/research_ai/' . date('Y/m');
+    @mkdir($publicDir . $subDir, 0775, true);
+    $safeName = bin2hex(random_bytes(6)) . '.' . ($ext ?: ($kind === 'image' ? 'png' : 'pdf'));
+    $rel = $subDir . '/' . $safeName;
+    if (!move_uploaded_file($f['tmp_name'], $publicDir . $rel)) {
+        throw new ApiException('server_error', 'ファイル保存に失敗', 500);
+    }
+    @chmod($publicDir . $rel, 0644);
+
+    // OpenAI Files API に upload (user_data purpose)
+    $apiKey = (string)$cfg['openai']['api_key'];
+    $fileId = null;
+    try {
+        $fileId = ai_openai_upload_pdf($publicDir . $rel, $name, $apiKey);   // 汎用 (画像も可)
+    } catch (Throwable $e) {
+        // OpenAI 側で失敗しても、サーバ側は保持しておく (再 upload 可)
+        fwrite(STDERR, "[rai_upload] OpenAI files failed: " . $e->getMessage() . "\n");
+    }
+
+    $pdo->prepare("INSERT INTO research_ai_attachments (uploader_user_id, kind, mime, size_bytes, filename, url, openai_file_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)")
+        ->execute([$uid, $kind, $mime ?: ($kind === 'image' ? 'image/png' : 'application/pdf'),
+                   (int)$f['size'], mb_substr($name, 0, 255), $rel, $fileId]);
+    $aid = (int)$pdo->lastInsertId();
+    json_response(['ok' => true, 'id' => $aid, 'kind' => $kind, 'url' => $rel, 'filename' => $name, 'openai_file_id' => $fileId]);
+}
+
+// ── 旧 API (v1125) 互換 ───────────────────────────────────────────
+function rai_legacy_chat(PDO $pdo, array $cfg): void {
+    // 従来の /api/research-ai/chat (thread 不使用の 1 発チャット) は動作継続。
+    // 内部で thread を暗黙生成 → post_message に委譲、しても良いが、
+    // v1142 では簡潔にレガシー用のショートパスとして残しつつ内部で thread 作成に流す。
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $tplKey = trim((string)($body['template_key'] ?? 'freetalk'));
+    // 新しい scratch thread を作って POST message に流す
+    $st = $pdo->prepare("INSERT INTO research_ai_threads (owner_user_id, title, template_key, last_message_at) VALUES (?, ?, ?, NOW())");
+    $st->execute([(int)$u['id'], mb_substr((string)($body['message'] ?? '一発チャット'), 0, 60), $tplKey]);
+    $tid = (int)$pdo->lastInsertId();
+    // input body から必要フィールドを継承して post_message を呼ぶ
+    $_POST_prev = $body;
+    // 実装簡略化: 直接コール
+    rai_thread_post_message($pdo, $cfg, $tid);
+}
+function rai_legacy_chats(PDO $pdo, array $cfg): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT id, template_key, user_message, ai_response, created_at, thread_id FROM research_ai_chats WHERE user_id = ? ORDER BY id DESC LIMIT 100");
     $st->execute([(int)$u['id']]);
     json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
 }
