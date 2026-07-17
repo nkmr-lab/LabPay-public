@@ -143,6 +143,27 @@ function route_ai(PDO $pdo, array $cfg, string $method, array $seg): void {
         ai_exp_plan_fetch_scrapbox($pdo, $cfg);
         return;
     }
+    // v1141 修正 TODO チェックリスト (paper_review / resume_check / exp_plan 共通)
+    //   GET  /api/ai/checklist?source_type=X&source_id=Y  → items 一覧
+    //   POST /api/ai/checklist { source_type, source_id, items: [{item_key, text_snippet}, ...] } → bulk upsert
+    //   PATCH /api/ai/checklist/{id} { checked: bool }    → 進捗更新
+    //   POST /api/ai/checklist/{id}/to_todo              → 自分の TODO に転送
+    if ($sub === 'checklist' && $method === 'GET' && !isset($seg[2])) {
+        ai_checklist_list($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'checklist' && $method === 'POST' && !isset($seg[2])) {
+        ai_checklist_bulk_upsert($pdo, $cfg);
+        return;
+    }
+    if ($sub === 'checklist' && $method === 'PATCH' && isset($seg[2]) && ctype_digit((string)$seg[2])) {
+        ai_checklist_patch($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
+    if ($sub === 'checklist' && $method === 'POST' && isset($seg[2]) && ctype_digit((string)$seg[2]) && ($seg[3] ?? '') === 'to_todo') {
+        ai_checklist_to_todo($pdo, $cfg, (int)$seg[2]);
+        return;
+    }
     // v613 文字数 / 単語数制限リライター
     if ($sub === 'rewriter' && $method === 'POST' && !isset($seg[2])) {
         ai_rewriter_run($pdo, $cfg);
@@ -5880,4 +5901,138 @@ function ai_bookmarks_enrich(PDO $pdo, string $kind, array &$items, int $myUid):
         $it['my_bookmarked']  = $info['mine'];
     }
     unset($it);
+}
+
+// ─── v1141 修正 TODO チェックリスト (paper_review / resume_check / exp_plan 共通) ───
+
+const AI_CHECKLIST_SOURCE_TYPES = ['paper_review', 'resume_check', 'exp_plan'];
+
+function ai_checklist_assert_source(string $sourceType, int $sourceId): void {
+    if (!in_array($sourceType, AI_CHECKLIST_SOURCE_TYPES, true)) {
+        throw new ApiException('bad_request', 'invalid source_type', 400);
+    }
+    if ($sourceId <= 0) {
+        throw new ApiException('bad_request', 'invalid source_id', 400);
+    }
+}
+
+function ai_checklist_list(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $sourceType = (string)($_GET['source_type'] ?? '');
+    $sourceId   = (int)($_GET['source_id'] ?? 0);
+    ai_checklist_assert_source($sourceType, $sourceId);
+    $st = $pdo->prepare("SELECT c.id, c.item_key, c.text_snippet, c.checked,
+                                 c.checked_by_user_id, c.checked_at, c.todo_id, c.todo_by_user_id,
+                                 u1.display_name AS checked_by_name,
+                                 u2.display_name AS todo_by_name
+                            FROM ai_checklist_items c
+                            LEFT JOIN users u1 ON u1.id = c.checked_by_user_id
+                            LEFT JOIN users u2 ON u2.id = c.todo_by_user_id
+                           WHERE c.source_type = ? AND c.source_id = ?
+                           ORDER BY c.id");
+    $st->execute([$sourceType, $sourceId]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['id']       = (int)$r['id'];
+        $r['checked']  = (bool)$r['checked'];
+        $r['checked_by_user_id'] = $r['checked_by_user_id'] !== null ? (int)$r['checked_by_user_id'] : null;
+        $r['todo_id']  = $r['todo_id'] !== null ? (int)$r['todo_id'] : null;
+        $r['todo_by_user_id'] = $r['todo_by_user_id'] !== null ? (int)$r['todo_by_user_id'] : null;
+    }
+    unset($r);
+    json_response(['items' => $rows]);
+}
+
+function ai_checklist_bulk_upsert(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $sourceType = (string)($body['source_type'] ?? '');
+    $sourceId   = (int)($body['source_id'] ?? 0);
+    ai_checklist_assert_source($sourceType, $sourceId);
+    $items = $body['items'] ?? [];
+    if (!is_array($items)) throw new ApiException('bad_request', 'items must be array', 400);
+    if (count($items) > 200) throw new ApiException('bad_request', 'too many items', 400);
+    $st = $pdo->prepare("INSERT INTO ai_checklist_items (source_type, source_id, item_key, text_snippet)
+                          VALUES (?, ?, ?, ?)
+                          ON DUPLICATE KEY UPDATE text_snippet = VALUES(text_snippet)");
+    foreach ($items as $it) {
+        $key = (string)($it['item_key'] ?? '');
+        $txt = trim((string)($it['text_snippet'] ?? ''));
+        if ($key === '' || mb_strlen($key) > 80) continue;
+        if ($txt === '') continue;
+        if (mb_strlen($txt) > 500) $txt = mb_substr($txt, 0, 500);
+        $st->execute([$sourceType, $sourceId, $key, $txt]);
+    }
+    // upsert 後の一覧を返す
+    ai_checklist_list($pdo, $cfg);
+}
+
+function ai_checklist_patch(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $body = read_json_body();
+    if (!array_key_exists('checked', $body)) throw new ApiException('bad_request', 'checked required', 400);
+    $checked = !empty($body['checked']) ? 1 : 0;
+    $st = $pdo->prepare("SELECT id FROM ai_checklist_items WHERE id = ?");
+    $st->execute([$id]);
+    if (!$st->fetchColumn()) throw new ApiException('not_found', 'not found', 404);
+    if ($checked) {
+        $pdo->prepare("UPDATE ai_checklist_items
+                          SET checked = 1, checked_by_user_id = ?, checked_at = NOW()
+                        WHERE id = ?")
+            ->execute([$uid, $id]);
+    } else {
+        $pdo->prepare("UPDATE ai_checklist_items
+                          SET checked = 0, checked_by_user_id = NULL, checked_at = NULL
+                        WHERE id = ?")
+            ->execute([$id]);
+    }
+    json_response(['ok' => true, 'id' => $id, 'checked' => (bool)$checked]);
+}
+
+function ai_checklist_to_todo(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $st = $pdo->prepare("SELECT * FROM ai_checklist_items WHERE id = ?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'not found', 404);
+
+    // 既に自分の TODO に転送済かチェック (二重登録防止、 todo_by_user_id が自分なら skip)
+    if ((int)($row['todo_by_user_id'] ?? 0) === $uid && !empty($row['todo_id'])) {
+        // 対応する TODO が生きてるか確認
+        $stT = $pdo->prepare("SELECT id FROM user_todos WHERE id = ? AND user_id = ? AND deleted_at IS NULL");
+        $stT->execute([(int)$row['todo_id'], $uid]);
+        if ($stT->fetchColumn()) {
+            json_response(['ok' => true, 'todo_id' => (int)$row['todo_id'], 'already' => true]);
+            return;
+        }
+    }
+
+    // 結果ページ URL を生成 (source_type + source_id で判別)
+    $urlByType = [
+        'paper_review'  => '/#/paper-review/',   // 続きは share_token 必要だが結果ページで解決可
+        'resume_check'  => '/#/resume-check/',
+        'exp_plan'      => '/#/exp-plan/',
+    ];
+    $srcUrl = ($urlByType[$row['source_type']] ?? '/#/') . (int)$row['source_id'];
+
+    $prefix = [
+        'paper_review'  => '📄 査読修正: ',
+        'resume_check'  => '📝 原稿修正: ',
+        'exp_plan'      => '🧪 計画書修正: ',
+    ][$row['source_type']] ?? '📝 修正: ';
+    $todoBody = $prefix . $row['text_snippet'];
+    if (mb_strlen($todoBody) > 990) $todoBody = mb_substr($todoBody, 0, 990) . '…';
+
+    $pdo->prepare("INSERT INTO user_todos (user_id, body, sort_order, url) VALUES (?, ?, 0, ?)")
+        ->execute([$uid, $todoBody, $srcUrl]);
+    $todoId = (int)$pdo->lastInsertId();
+
+    $pdo->prepare("UPDATE ai_checklist_items
+                      SET todo_id = ?, todo_by_user_id = ?
+                    WHERE id = ?")
+        ->execute([$todoId, $uid, $id]);
+
+    json_response(['ok' => true, 'todo_id' => $todoId, 'already' => false]);
 }

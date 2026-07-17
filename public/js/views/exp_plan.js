@@ -7,6 +7,7 @@
 import { escapeHtml } from '../router.js';
 import { get, post, del } from '../api.js';
 import { toast } from '../app.js';
+import { renderChecklistBox } from '../ai_checklist.js';   // v1141
 
 const MAX_CHARS = 40000;
 
@@ -231,6 +232,8 @@ function paint(d, app) {
       </div>
     </div>
 
+    <div id="epc-checklist-mount"></div>
+
     ${!isReady ? `
       <div class="card">
         <div class="bold" style="color:var(--primary)">${d.status === 'error' ? '❌ 失敗' : '⏳ 精査中…'}</div>
@@ -271,6 +274,15 @@ function paint(d, app) {
       paint(d, app);
     });
   });
+  // v1141 修正 TODO チェックリスト (画面上部) — 学生モード優先で候補抽出、両モードで
+  //   同じ source (exp_plan + id) を共有するのでチェック状態は 1 セット
+  if (isReady && d.id && activeResult) {
+    renderChecklistBox(document.getElementById('epc-checklist-mount'), {
+      sourceType: 'exp_plan',
+      sourceId: Number(d.id),
+      resultJson: activeResult,
+    });
+  }
 }
 
 function modeLabel(m) {

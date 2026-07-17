@@ -7,6 +7,7 @@ import { get, put } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { state, toast } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
+import { renderChecklistBox } from '../ai_checklist.js';   // v1141
 
 let cachedSettings = null;
 
@@ -308,6 +309,8 @@ async function refreshShared(token) {
 
 function paint(d, shareToken, isShared) {
   const r = d.review || {};
+  // v1141 修正 TODO チェックリスト (画面上部)
+  const checklistMountId = 'pr-checklist-mount';
   const decColor = decisionColor(r.decision || '');
   const shareUrl = shareToken ? (location.origin + '/#/paper-review/r/' + shareToken) : '';
   document.getElementById('pr-result').innerHTML = `
@@ -317,6 +320,7 @@ function paint(d, shareToken, isShared) {
       </div>
       <div class="bold" style="font-size:16px; color:var(--primary)">🎯 査読結果</div>
       <div class="meta" style="font-size:12px; margin-bottom:8px">対象会議: ${escapeHtml(d.venue || '')} · 厳しさ: ${escapeHtml(d.strictness || '')}</div>
+      <div id="${checklistMountId}"></div>
       ${r.decision ? `<div style="font-size:18px; font-weight:700; padding:6px 12px; background:${decColor}22; color:${decColor}; border-left:5px solid ${decColor}; border-radius:6px; display:inline-block">${escapeHtml(r.decision)}${r.score ? ` (Score ${r.score}/5)` : ''}${r.confidence ? ` (Confidence ${r.confidence}/5)` : ''}</div>` : ''}
       ${r.summary_one_line ? `<div class="meta" style="font-size:13px; margin-top:6px">${escapeHtml(r.summary_one_line)}</div>` : ''}
 
@@ -554,6 +558,14 @@ function paint(d, shareToken, isShared) {
     const title = d.sections?.[0]?.title || d.venue || '査読';
     printAsPdf(`査読 (${d.venue || 'venue'}) - ${title}`);
   });
+  // v1141 修正 TODO チェックリスト (画面上部) — 結果が届いてれば描画
+  if (d.id && d.review) {
+    renderChecklistBox(document.getElementById(checklistMountId), {
+      sourceType: 'paper_review',
+      sourceId: Number(d.id),
+      resultJson: d,   // paper_review は d 全体を渡す (extract 側で d.review を見る)
+    });
+  }
 }
 
 // v993 統計指標の妥当性 (中村さん要望)。全体スコア + 個別 issue リスト。

@@ -7,6 +7,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { renderChecklistBox } from '../ai_checklist.js';   // v1141
 
 const POLL_MS = 5000;
 
@@ -225,6 +226,8 @@ async function loadAndPaint(id) {
       </div>
     </div>
 
+    <div id="rc-checklist-mount"></div>
+
     ${r.plain_summary_for_student ? `
       <div class="card" style="background:linear-gradient(180deg,#fefce8,#fff7ed); border:2px solid #f59e0b">
         <div class="bold" style="color:#a16207; font-size:14px; margin-bottom:6px">🌱 まず ここだけ 読めば OK</div>
@@ -280,4 +283,10 @@ async function loadAndPaint(id) {
       <div style="white-space:pre-wrap; font-size:13px; line-height:1.5; padding:8px; margin-top:6px; background:#fafafa; border-radius:6px; max-height:400px; overflow:auto">${escapeHtml(d.input_text || '')}</div>
     </details>
   `;
+  // v1141 修正 TODO チェックリスト (画面上部)
+  renderChecklistBox(document.getElementById('rc-checklist-mount'), {
+    sourceType: 'resume_check',
+    sourceId: Number(d.id),
+    resultJson: r,
+  });
 }
