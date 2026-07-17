@@ -153,8 +153,12 @@ export async function renderChecklistBox(rootEl, { sourceType, sourceId, resultJ
         <div class="hint-sm" id="acl-progress" style="font-size:12px; color:#6b7280">読み込み中…</div>
       </div>
       <div id="acl-list" style="display:flex; flex-direction:column; gap:4px"></div>
-      <div class="hint-sm" style="font-size:11px; margin-top:6px; color:#6b7280">
-        全員が閲覧・チェック可 (共有)。 各項目の「+TODO」で自分の TODO に放り込めます。
+      <div class="row" style="justify-content:space-between; align-items:center; margin-top:6px; gap:6px; flex-wrap:wrap">
+        <div class="hint-sm" style="font-size:11px; color:#6b7280; flex:1; min-width:0">
+          全員が閲覧・チェック可 (共有)。 各項目の「+TODO」で自分の TODO に放り込めます。
+        </div>
+        <!-- v1150 中村さん指摘「導線が問題ないか」→ 追加した TODO をすぐ見に行けるように -->
+        <a href="#/todos" class="btn" style="font-size:11px; padding:3px 10px; flex:none">📝 自分の TODO を見る →</a>
       </div>
     </div>
   `;

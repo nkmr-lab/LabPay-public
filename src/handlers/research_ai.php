@@ -189,27 +189,44 @@ function _rai_thread_visible(PDO $pdo, int $tid, int $uid): array {
 function rai_thread_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    // 自分が owner のスレッド + 自分が shared_user_ids に含まれているスレッド
+    // v1150 fix: 旧 SQL は JSON_CONTAINS(..., CAST(? AS JSON)) を使っていたが、
+    //   MariaDB では bind パラメータの CAST AS JSON が「Invalid JSON literal」で
+    //   500 になっていた (中村さん報告)。 owner || is_shared の rough フィルタで
+    //   まとめて取得し、 shared_user_ids の 判定は PHP で行う (スレッド数は 高々
+    //   数百 なので パフォーマンス問題なし)。
     $st = $pdo->prepare("SELECT t.id, t.owner_user_id, u.display_name AS owner_name, u.avatar_url AS owner_avatar,
                                  t.title, t.template_key, t.is_shared, t.shared_user_ids,
                                  t.last_message_at, t.created_at
                             FROM research_ai_threads t JOIN users u ON u.id = t.owner_user_id
                            WHERE t.deleted_at IS NULL
-                             AND (t.owner_user_id = ?
-                               OR (t.is_shared = 1 AND JSON_CONTAINS(COALESCE(t.shared_user_ids,'[]'), CAST(? AS JSON))))
+                             AND (t.owner_user_id = ? OR t.is_shared = 1)
                            ORDER BY COALESCE(t.last_message_at, t.created_at) DESC
-                           LIMIT 100");
-    $st->execute([$uid, (string)$uid]);
+                           LIMIT 300");
+    $st->execute([$uid]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$r) {
-        $r['id']              = (int)$r['id'];
-        $r['owner_user_id']   = (int)$r['owner_user_id'];
-        $r['is_shared']       = (int)$r['is_shared'] === 1;
-        $r['shared_user_ids'] = $r['shared_user_ids'] ? (json_decode($r['shared_user_ids'], true) ?: []) : [];
-        $r['is_mine']         = $r['owner_user_id'] === $uid;
+    $items = [];
+    foreach ($rows as $r) {
+        $ownerUid = (int)$r['owner_user_id'];
+        $shared = $r['shared_user_ids'] ? (json_decode($r['shared_user_ids'], true) ?: []) : [];
+        $shared = array_map('intval', is_array($shared) ? $shared : []);
+        $visible = ($ownerUid === $uid) || ((int)$r['is_shared'] === 1 && in_array($uid, $shared, true));
+        if (!$visible) continue;
+        $items[] = [
+            'id'              => (int)$r['id'],
+            'owner_user_id'   => $ownerUid,
+            'owner_name'      => $r['owner_name'],
+            'owner_avatar'    => $r['owner_avatar'],
+            'title'           => $r['title'],
+            'template_key'    => $r['template_key'],
+            'is_shared'       => (int)$r['is_shared'] === 1,
+            'shared_user_ids' => $shared,
+            'last_message_at' => $r['last_message_at'],
+            'created_at'      => $r['created_at'],
+            'is_mine'         => $ownerUid === $uid,
+        ];
+        if (count($items) >= 100) break;
     }
-    unset($r);
-    json_response(['items' => $rows]);
+    json_response(['items' => $items]);
 }
 
 function rai_thread_create(PDO $pdo, array $cfg): void {

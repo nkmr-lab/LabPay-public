@@ -240,13 +240,17 @@ function paintThread() {
   body.innerHTML = `
     <div style="max-width:900px; margin:0 auto; display:flex; flex-direction:column; min-height:100%">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
-        <div style="min-width:0; flex:1">
-          <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
-            <div class="bold" style="font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" id="rai-title" title="タップで編集">${escapeHtml(th.title || '無題')}</div>
-            ${sharedPill}
-            ${seedPill}
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1">
+          <!-- v1150 スマホで サイドバー (履歴) に戻るボタン。 デスクトップは サイドバー常時表示なので 非表示 -->
+          <button id="rai-back-sidebar" class="btn" style="flex:none; font-size:16px; padding:4px 10px; display:none" title="履歴に戻る">☰</button>
+          <div style="min-width:0; flex:1">
+            <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
+              <div class="bold" style="font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" id="rai-title" title="タップで編集">${escapeHtml(th.title || '無題')}</div>
+              ${sharedPill}
+              ${seedPill}
+            </div>
+            <div class="hint-sm" style="font-size:11px; color:#6b7280">${escapeHtml(tplName)} · 作成: ${escapeHtml(th.created_at)}</div>
           </div>
-          <div class="hint-sm" style="font-size:11px; color:#6b7280">${escapeHtml(tplName)} · 作成: ${escapeHtml(th.created_at)}</div>
         </div>
         <div class="row" style="gap:6px; flex-wrap:wrap">
           ${canShare ? `<button id="rai-share" class="btn" style="font-size:12px">${th.is_shared ? '🔗 共有設定' : '👥 共有する'}</button>` : ''}
@@ -308,6 +312,21 @@ function paintThread() {
       await refresh();
     } catch (e) { toast('失敗: ' + e.message); }
   });
+
+  // v1150 スマホで サイドバー (履歴) に戻る (デスクトップは サイドバー常時表示なので 非表示)
+  const backBtn = document.getElementById('rai-back-sidebar');
+  if (backBtn) {
+    // 表示切替は applyMobileLayout の副次として、ここでは スマホ判定で on/off
+    const updateBack = () => {
+      backBtn.style.display = window.matchMedia(MOBILE_QUERY).matches ? '' : 'none';
+    };
+    updateBack();
+    window.matchMedia(MOBILE_QUERY).addEventListener('change', updateBack);
+    backBtn.addEventListener('click', () => {
+      CURRENT_TID = null;   // メイン→サイドバー切替 (履歴一覧に戻る)
+      applyMobileLayout();
+    });
+  }
 
   document.getElementById('rai-share')?.addEventListener('click', () => showShareModal(th));
 

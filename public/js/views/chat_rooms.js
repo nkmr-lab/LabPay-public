@@ -165,7 +165,9 @@ export async function renderChatRoom({ params }) {
   const shell = document.getElementById('cr-shell');
   shell.innerHTML = `
     <div id="cr-topbar" style="display:flex; align-items:stretch; background:#3f0e40; color:#fff; flex:none">
-      <div style="flex:1; overflow-x:auto; display:flex; gap:2px; padding:0">
+      <!-- v1150 中村さん指摘「PC で見た時は タブが不要なので、 タブ消してください。 3 つが同時に見えてるだけで OK」
+           → cr-tabs コンテナは スマホ (<900px) のみ表示、 PC では applyPaneVisibility が hidden に -->
+      <div id="cr-tabs" style="flex:1; overflow-x:auto; display:flex; gap:2px; padding:0">
         ${rooms.map(r => {
           const active = r.room_key === _focusRoom;
           const unread = Number(r.unread) || 0;
@@ -238,14 +240,30 @@ function wirePane(key) {
   const inputEl = document.querySelector(`[data-pane-input="${cssSel(key)}"]`);
   const sendEl  = document.querySelector(`[data-pane-send="${cssSel(key)}"]`);
   if (!inputEl || !sendEl) return;
+  // v1150 中村さん報告「タイミングによっては同じメッセージが 2 回投稿されてしまう」
+  //   → 送信中は sending フラグ + button/input disable で 2 回目クリック / Ctrl+Enter 連打を弾く。
+  //   POST 完了 (成功 / 失敗) で解除。
+  let sending = false;
   const send = async () => {
+    if (sending) return;
     const body = inputEl.value.trim();
     if (!body) return;
+    sending = true;
+    sendEl.disabled = true;
+    inputEl.readOnly = true;
+    const origLabel = sendEl.textContent;
+    sendEl.textContent = '⌛';
     try {
       await post(`/api/chat/rooms/${encodeURIComponent(key)}/messages`, { body });
       inputEl.value = '';
       await loadMessagesFor(key, true);
     } catch (e) { toast('失敗: ' + e.message); }
+    finally {
+      sending = false;
+      sendEl.disabled = false;
+      inputEl.readOnly = false;
+      sendEl.textContent = origLabel;
+    }
   };
   sendEl.addEventListener('click', send);
   inputEl.addEventListener('keydown', e => {
@@ -281,6 +299,9 @@ function cssSel(s) {
 
 function applyPaneVisibility() {
   const mobile = isMobile();
+  // v1150 PC では 3 pane 同時見えるので上部タブバー不要。 スマホでは切替に必要なので表示
+  const tabs = document.getElementById('cr-tabs');
+  if (tabs) tabs.style.display = mobile ? 'flex' : 'none';
   document.querySelectorAll('[data-pane]').forEach(pane => {
     const key = pane.dataset.pane;
     const focused = key === _focusRoom;
@@ -288,11 +309,11 @@ function applyPaneVisibility() {
       pane.style.display = focused ? 'flex' : 'none';
     } else {
       pane.style.display = 'flex';
-      // フォーカス中を色で強調
-      pane.style.background = focused ? '#fff' : '#fafaf7';
+      // PC は 3 pane 見えるので focus 強調不要 (「選択中」バッジも非表示)
+      pane.style.background = '#fff';
     }
     const hint = document.querySelector(`[data-pane-focus-hint="${cssSel(key)}"]`);
-    if (hint) hint.style.display = (!mobile && focused) ? 'inline' : 'none';
+    if (hint) hint.style.display = 'none';
   });
   // panes grid が 1 pane 表示 (スマホ) の場合は 1fr のまま、複数 pane 表示の場合は grid を維持
   const panesEl = document.getElementById('cr-panes');
