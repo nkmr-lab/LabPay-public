@@ -7,7 +7,7 @@
 import { escapeHtml } from '../router.js';
 import { get, post, del } from '../api.js';
 import { toast } from '../app.js';
-import { renderChecklistBox } from '../ai_checklist.js';   // v1141
+import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
 const MAX_CHARS = 40000;
 
@@ -232,6 +232,7 @@ function paint(d, app) {
       </div>
     </div>
 
+    <div id="epc-ask-ai-mount" style="margin:6px 0"></div>
     <div id="epc-checklist-mount"></div>
 
     ${!isReady ? `
@@ -281,6 +282,11 @@ function paint(d, app) {
       sourceType: 'exp_plan',
       sourceId: Number(d.id),
       resultJson: activeResult,
+    });
+    // v1144 AI と話す
+    renderAskAiButton(document.getElementById('epc-ask-ai-mount'), {
+      sourceType: 'exp_plan', sourceId: Number(d.id),
+      title: (activeResult.summary_one_line || d.title || '実験計画書チェック'),
     });
   }
 }

@@ -68,9 +68,19 @@ async function refresh() {
     STATE = await get('/api/research-ai');
     const t = await get('/api/research-ai/threads');
     THREADS = t.items || [];
+    // v1144 AI 結果ページから「AI と話す」で新規作成された thread があれば優先で開く
+    let requestedTid = null;
+    try {
+      const raw = localStorage.getItem('labpay-rai-open-tid');
+      if (raw) {
+        requestedTid = Number(raw);
+        localStorage.removeItem('labpay-rai-open-tid');
+      }
+    } catch (_) {}
     paintSidebar();
-    if (!CURRENT_TID && THREADS.length) {
-      // 最初の thread を開く
+    if (requestedTid && THREADS.some(t => t.id === requestedTid)) {
+      await openThread(requestedTid);
+    } else if (!CURRENT_TID && THREADS.length) {
       await openThread(THREADS[0].id);
     } else if (CURRENT_TID) {
       await openThread(CURRENT_TID, true);
@@ -205,6 +215,22 @@ function paintThread() {
   const sharedPill = th.is_shared
     ? `<span style="background:#dcfce7; color:#166534; padding:1px 8px; border-radius:8px; font-size:11px">🔗 共有中 (${(th.shared_user_ids || []).length} 名)</span>`
     : '';
+  // v1144 元 AI 結果からの派生スレッドはバッジ + 戻るリンク
+  const seedTypeLabel = {
+    paper_review: '📄 論文査読',
+    resume_check: '📝 原稿チェック',
+    exp_plan: '🧪 実験計画書',
+    paper_summary: '📑 論文要約',
+    paper_translate: '📑 論文要約',
+    paper_translate_full: '📑 論文全訳',
+  }[th.seed_source_type] || '';
+  const seedUrlByType = {
+    paper_review: '/#/paper-review/', resume_check: '/#/resume-check/', exp_plan: '/#/exp-plan/',
+    paper_summary: '/#/paper-summary/', paper_translate: '/#/paper-summary/', paper_translate_full: '/#/paper-translate-full/',
+  };
+  const seedPill = th.seed_source_type && th.seed_source_id
+    ? `<a href="${seedUrlByType[th.seed_source_type] || '/#/'}${th.seed_source_id}" style="background:#f5f3ff; color:#4a106d; padding:1px 8px; border-radius:8px; font-size:11px; text-decoration:none">← ${escapeHtml(seedTypeLabel)} #${th.seed_source_id}</a>`
+    : '';
   const plansHtml = (STATE?.plans || []).map(p => `
     <button class="btn" data-rai-buy="${p.key}" style="font-size:11px; padding:4px 10px">${escapeHtml(p.label)}</button>
   `).join('');
@@ -218,6 +244,7 @@ function paintThread() {
           <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
             <div class="bold" style="font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" id="rai-title" title="タップで編集">${escapeHtml(th.title || '無題')}</div>
             ${sharedPill}
+            ${seedPill}
           </div>
           <div class="hint-sm" style="font-size:11px; color:#6b7280">${escapeHtml(tplName)} · 作成: ${escapeHtml(th.created_at)}</div>
         </div>

@@ -7,7 +7,7 @@
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
-import { renderChecklistBox } from '../ai_checklist.js';   // v1141
+import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
 const POLL_MS = 5000;
 
@@ -226,6 +226,7 @@ async function loadAndPaint(id) {
       </div>
     </div>
 
+    <div id="rc-ask-ai-mount" style="margin:6px 0"></div>
     <div id="rc-checklist-mount"></div>
 
     ${r.plain_summary_for_student ? `
@@ -288,5 +289,10 @@ async function loadAndPaint(id) {
     sourceType: 'resume_check',
     sourceId: Number(d.id),
     resultJson: r,
+  });
+  // v1144 AI と話す
+  renderAskAiButton(document.getElementById('rc-ask-ai-mount'), {
+    sourceType: 'resume_check', sourceId: Number(d.id),
+    title: (r.summary_one_line || d.title || '原稿チェック'),
   });
 }

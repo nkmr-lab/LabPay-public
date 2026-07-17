@@ -10,6 +10,7 @@ import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../au
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 import { shareDialog } from '../share_to_sns.js';
+import { renderAskAiButton } from '../ai_checklist.js';   // v1144
 
 let settings = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -716,6 +717,16 @@ async function paint(d) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id });
       }
     } catch (_) {}
+    // v1144 AI と話す (全訳ヘッダの末尾に mount)
+    const mount = document.createElement('div');
+    mount.id = 'pft-ask-ai-mount';
+    mount.style.margin = '8px 0';
+    const header = document.querySelector('.page-header') || document.querySelector('.card');
+    if (header && !document.getElementById('pft-ask-ai-mount')) header.appendChild(mount);
+    renderAskAiButton(mount, {
+      sourceType: 'paper_translate_full', sourceId: Number(d.id),
+      title: (d.pdf_name || '論文全訳'),
+    });
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);

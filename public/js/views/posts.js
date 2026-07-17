@@ -8,6 +8,57 @@ import { state, toast } from '../app.js';
 import { loadLeaflet } from './group_map.js';
 import { openImageLightbox as openSharedLightbox } from '../lightbox.js';  // v785 #383 回転付き lightbox
 
+// v1143 複数画像を「おしゃれ」レイアウトで描画。 1 枚=大 / 2 枚=横並び 1:1 / 3 枚=大 + 小2 縦積み /
+//   4 枚=2x2 / 5+ 枚=3x3 に 「他 N 枚」 chip オーバーレイ (最大 10 枚表示)。 全て cursor:zoom-in で lightbox。
+function renderImagesLayout(p, canRotImage) {
+  const imgs = Array.isArray(p.images) ? p.images : [];
+  if (!imgs.length) return '';
+  const n = imgs.length;
+  const rotAttr = canRotImage ? ` data-rot-post-id="${p.id}"` : '';
+  const cell = (i, extraStyle = '', overlayHtml = '') => {
+    const im = imgs[i];
+    if (!im) return '';
+    return `<div style="position:relative; overflow:hidden; border-radius:6px; ${extraStyle}">
+      <img data-zoom-src="${escapeHtml(im.url)}"${i === 0 ? rotAttr : ''} src="${escapeHtml(im.thumb_url || im.url)}" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in; display:block">
+      ${overlayHtml}
+    </div>`;
+  };
+  const wrap = (inner, gridStyle) => `<div style="display:grid; gap:4px; margin-top:6px; ${gridStyle}">${inner}</div>`;
+  if (n === 1) {
+    // 1 枚: 縦横比を保って max 300px (旧仕様と同等)
+    const im = imgs[0];
+    return `<img data-zoom-src="${escapeHtml(im.url)}"${rotAttr} src="${escapeHtml(im.thumb_url || im.url)}" loading="lazy" decoding="async" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px; cursor:zoom-in">`;
+  }
+  if (n === 2) {
+    return wrap(cell(0, 'aspect-ratio:1/1') + cell(1, 'aspect-ratio:1/1'),
+      'grid-template-columns:1fr 1fr; max-width:520px');
+  }
+  if (n === 3) {
+    // 左に大 (2 行分)、右に小 2 枚
+    return `<div style="display:grid; grid-template-columns:2fr 1fr; grid-template-rows:1fr 1fr; gap:4px; margin-top:6px; max-width:520px; aspect-ratio:3/2">
+      ${cell(0, 'grid-row:1/3')}
+      ${cell(1, '')}
+      ${cell(2, '')}
+    </div>`;
+  }
+  if (n === 4) {
+    return wrap(cell(0, 'aspect-ratio:1/1') + cell(1, 'aspect-ratio:1/1') + cell(2, 'aspect-ratio:1/1') + cell(3, 'aspect-ratio:1/1'),
+      'grid-template-columns:1fr 1fr; max-width:520px');
+  }
+  // 5+ 枚: 3x3 モザイク、 最後の セル に 「+N」 オーバーレイ (imgs 全部を lightbox で見られる)
+  const shown = Math.min(n, 9);
+  const remaining = n - shown;
+  const cells = [];
+  for (let i = 0; i < shown; i++) {
+    const isLast = (i === shown - 1) && remaining > 0;
+    const overlay = isLast
+      ? `<div style="position:absolute; inset:0; background:rgba(0,0,0,0.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; pointer-events:none">+${remaining}</div>`
+      : '';
+    cells.push(cell(i, 'aspect-ratio:1/1', overlay));
+  }
+  return wrap(cells.join(''), 'grid-template-columns:repeat(3, 1fr); max-width:520px');
+}
+
 function fmtRelative(s) {
   if (!s) return '';
   const dt = new Date(String(s).replace(' ', 'T'));
@@ -220,7 +271,7 @@ function postCard(p, opts = {}) {
           ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
         </div>
         ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px; overflow-wrap:anywhere; word-break:break-word; min-width:0">${renderBodyHtml(p.body)}</div>` : ''}
-        ${p.image_url ? `<img data-zoom-src="${escapeHtml(p.image_url)}"${canRotImage ? ` data-rot-post-id="${p.id}"` : ''} src="${escapeHtml(p.image_thumb_url || p.image_url)}" loading="lazy" decoding="async" style="max-width:100%; max-height:300px; border-radius:8px; margin-top:6px; cursor:zoom-in">` : ''}
+        ${renderImagesLayout(p, canRotImage)}
         <div class="row" style="gap:14px; margin-top:6px; font-size:12px">
           ${reactionsHtml(p)}
           ${replyHash ? `<a class="hint" href="${replyHash}">💬 ${p.reply_count}</a>` : ''}
@@ -442,13 +493,14 @@ function composerHtml(parentId) {
       <textarea id="po-body" maxlength="2000" rows="3" placeholder="${escapeHtml(placeholder)}"></textarea>
       <div id="po-mention-pop" style="display:none; position:absolute; left:14px; right:14px; top:auto; z-index:50; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:240px; overflow:auto"></div>
       <div class="row" style="gap:6px; margin-top:6px; align-items:center; flex-wrap:wrap">
-        <input type="file" id="po-img" accept="image/*" style="flex:1; min-width:140px">
+        <input type="file" id="po-img" accept="image/*" multiple style="flex:1; min-width:140px">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px">
           <input type="checkbox" id="po-loc"> 📍 現在地を添付
         </label>
         <button id="po-submit" class="primary" style="margin-left:auto" data-parent="${parentId || ''}">投稿</button>
       </div>
       <div class="hint-sm" id="po-img-status"></div>
+      <div id="po-img-thumbs" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px"></div>
     </div>`;
 }
 
@@ -534,7 +586,8 @@ function bindMentionAutocomplete() {
   }, { capture: true });
 }
 
-let composerImageUrl = null;
+let composerImageUrl = null;   // v1143 下位互換 (1 枚目)
+let composerImageUrls = [];    // v1143 複数画像 (最大 10 枚)
 let composerCoords = null;
 // v537 #195 画像 EXIF GPS は「現在地」 (geolocation) より優先。画像から取得した GPS は
 //   別変数で保持し、 submit 時に EXIF があればそちらを採用 (= 後から locChk を ON にして
@@ -548,8 +601,26 @@ function readLocPref() {
 function writeLocPref(on) {
   try { localStorage.setItem(PO_LOC_PREF_KEY, on ? 'on' : 'off'); } catch {}
 }
+// v1143 投稿フォームの複数画像プレビュー (× で個別削除)
+function renderComposerThumbs() {
+  const el = document.getElementById('po-img-thumbs');
+  if (!el) return;
+  el.innerHTML = composerImageUrls.map((u, i) => `
+    <div style="position:relative; display:inline-block">
+      <img src="${escapeHtml(u)}" style="width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--line)">
+      <button data-po-rm="${i}" title="削除" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:10px; background:#dc2626; color:#fff; border:none; font-size:11px; cursor:pointer">×</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-po-rm]').forEach(b => b.addEventListener('click', () => {
+    const i = Number(b.dataset.poRm);
+    composerImageUrls.splice(i, 1);
+    if (!composerImageUrls.length) composerImageUrl = null;
+    else composerImageUrl = composerImageUrls[0];
+    renderComposerThumbs();
+  }));
+}
 function bindComposer(parentId) {
   composerImageUrl = null;
+  composerImageUrls = [];
   composerCoords = null;
   composerImageExifCoords = null;
   bindMentionAutocomplete();  // v467 @ 補完
@@ -560,46 +631,59 @@ function bindComposer(parentId) {
   const submitBtn = document.getElementById('po-submit');
   // v860 #446 file input change とクリップボード paste 双方から同じアップロード
   //   フローを呼べるように共通関数化。
-  const uploadComposerImage = async (f) => {
-    if (!f) { composerImageUrl = null; imgStatus.textContent = ''; return; }
-    imgStatus.textContent = '⏳ アップロード中…';
+  // v1143 複数画像対応: 単発 or 複数どちらも受ける。 EXIF GPS は最初の 1 枚から取得。
+  const uploadComposerImage = async (files) => {
+    if (!files || !files.length) return;
+    const arr = Array.from(files).slice(0, 10 - composerImageUrls.length);
+    if (!arr.length) { toast('画像は 10 枚まで'); return; }
     if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.uploading = '1'; }
-    composerImageExifCoords = null;
-    readExifGps(f).then(gps => {
-      if (gps) {
-        composerImageExifCoords = { lat: gps.lat, lng: gps.lng };
-        toast(`📍 写真のEXIFから位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
+    for (let idx = 0; idx < arr.length; idx++) {
+      const f = arr[idx];
+      imgStatus.textContent = `⏳ アップロード中… (${idx + 1}/${arr.length})`;
+      // EXIF GPS: 最初のファイルからのみ (既に取得済ならスキップ)
+      if (idx === 0 && !composerImageExifCoords) {
+        readExifGps(f).then(gps => {
+          if (gps) {
+            composerImageExifCoords = { lat: gps.lat, lng: gps.lng };
+            toast(`📍 写真の EXIF から位置取得 (${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)})`);
+          }
+        }).catch(() => {});
       }
-    }).catch(() => {});
-    let uploadFile = f;
-    try {
-      const resized = await maybeResizeJpegPreserveExif(f);
-      if (resized !== f) {
-        uploadFile = resized;
-        imgStatus.textContent = `⏳ 縮小してアップロード中… (${(f.size / 1024 / 1024).toFixed(1)} MB → ${(resized.size / 1024 / 1024).toFixed(1)} MB)`;
+      let uploadFile = f;
+      try {
+        const resized = await maybeResizeJpegPreserveExif(f);
+        if (resized !== f) uploadFile = resized;
+      } catch (_) {}
+      const fd = new FormData();
+      fd.append('file', uploadFile);
+      try {
+        const resp = await fetch('/api/uploads/image', {
+          method: 'POST', body: fd, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'labpay' },
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const url = j.url || j.path;
+        composerImageUrls.push(url);
+        if (!composerImageUrl) composerImageUrl = url;   // 下位互換
+      } catch (e) {
+        imgStatus.textContent = '失敗: ' + (e?.message || e);
+        if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
+        renderComposerThumbs();
+        return;
       }
-    } catch (_) {}
-    const fd = new FormData();
-    fd.append('file', uploadFile);
-    try {
-      const resp = await fetch('/api/uploads/image', {
-        method: 'POST', body: fd, credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'labpay' },
-      });
-      const j = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        const msg = j?.error?.message || j?.error || ('HTTP ' + resp.status);
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-      }
-      composerImageUrl = j.url || j.path;
-      imgStatus.innerHTML = `<span style="color:#0e7c63">✓ アップロード完了</span>`;
-    } catch (e) {
-      imgStatus.textContent = '失敗: ' + (e?.message || e);
-    } finally {
-      if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
     }
+    imgStatus.innerHTML = `<span style="color:#0e7c63">✓ ${composerImageUrls.length} 枚 アップロード完了</span>`;
+    renderComposerThumbs();
+    if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
   };
-  imgInput?.addEventListener('change', () => uploadComposerImage(imgInput.files[0]));
+  imgInput?.addEventListener('change', () => {
+    uploadComposerImage(imgInput.files);
+    imgInput.value = '';   // 同じファイル再選択できるように
+  });
   // v860 #446 クリップボード (画像) を textarea に paste でアップロード。
   //   Win の「Print Screen + Snipping Tool」や Mac の ⌘+Shift+4 で撮った
   //   スクショを直接貼り付けられる。画像 type で拾えれば preventDefault して
@@ -615,7 +699,7 @@ function bindComposer(parentId) {
         const ext = ((blob.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
         const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
         toast('📋 クリップボード画像をアップロード中…');
-        await uploadComposerImage(file);
+        await uploadComposerImage([file]);   // v1143 array 化
         return;
       }
     }
@@ -645,13 +729,14 @@ function bindComposer(parentId) {
   });
   document.getElementById('po-submit')?.addEventListener('click', async () => {
     const body = document.getElementById('po-body').value.trim();
-    if (!body && !composerImageUrl) { toast('本文か画像が必要です'); return; }
+    if (!body && !composerImageUrls.length && !composerImageUrl) { toast('本文か画像が必要です'); return; }
     // v537 #195 EXIF GPS が画像にあれば必ず優先 (geolocation で composerCoords が
     //   設定されていても上書き)。写真の位置 = 撮影地を投稿位置として正確に。
     const finalCoords = composerImageExifCoords || composerCoords;
     const payload = {
       body,
-      image_url: composerImageUrl || '',
+      image_url:  composerImageUrls[0] || composerImageUrl || '',   // v1143 下位互換
+      image_urls: composerImageUrls,                                // v1143 複数枚
       parent_id: parentId || null,
       lat: finalCoords?.lat ?? null,
       lng: finalCoords?.lng ?? null,
@@ -667,7 +752,8 @@ function bindComposer(parentId) {
       // v482 #69 位置情報 ON/OFF は永続設定なので、投稿後もリセットしない。
       //   ただし添付された座標は新しい投稿では取り直したいので、 ON なら
       //   再取得する。
-      composerImageUrl = null; composerCoords = null;
+      composerImageUrl = null; composerImageUrls = []; composerCoords = null;
+      renderComposerThumbs();
       const locChk = document.getElementById('po-loc');
       if (locChk && locChk.checked && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(

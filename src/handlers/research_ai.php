@@ -220,11 +220,110 @@ function rai_thread_create(PDO $pdo, array $cfg): void {
     if ($title === '') $title = '新しいチャット';
     if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200);
     $tplKey = trim((string)($body['template_key'] ?? 'freetalk'));
-    $st = $pdo->prepare("INSERT INTO research_ai_threads (owner_user_id, title, template_key, last_message_at)
-                          VALUES (?, ?, ?, NOW())");
-    $st->execute([$uid, $title, $tplKey]);
+    // v1144 AI 結果から派生 (「この結果について AI と話す」ボタン)
+    //   source_type / source_id を指定すると 該当 AI 結果の JSON を要約して
+    //   seed_context として保存、 以降の会話で system prompt に前置きされる。
+    $seedType = trim((string)($body['seed_source_type'] ?? ''));
+    $seedId   = (int)($body['seed_source_id'] ?? 0);
+    $seedContext = null;
+    if ($seedType !== '' && $seedId > 0) {
+        $seedContext = rai_build_seed_context($pdo, $seedType, $seedId, $uid);
+    }
+    $st = $pdo->prepare("INSERT INTO research_ai_threads
+        (owner_user_id, title, template_key, last_message_at, seed_source_type, seed_source_id, seed_context)
+        VALUES (?, ?, ?, NOW(), ?, ?, ?)");
+    $st->execute([$uid, $title, $tplKey,
+                  $seedType ?: null, $seedId ?: null, $seedContext]);
     $tid = (int)$pdo->lastInsertId();
     json_response(['ok' => true, 'id' => $tid]);
+}
+
+// v1144 AI 結果 (paper_review / resume_check / exp_plan / paper_summary /
+//   paper_translate / paper_translate_full) を読み、 チャット context として
+//   要約テキストを組み立てる。 元結果は 元テーブルから取得、 権限は 「元結果の
+//   owner or share_token 経由で見えているユーザ」だが、 ここでは owner のみ許可
+//   (share_token 対応は 将来 拡張)。
+function rai_build_seed_context(PDO $pdo, string $sourceType, int $sourceId, int $uid): ?string {
+    $sourceType = strtolower(preg_replace('/[^a-z_]/', '', $sourceType));
+    $allowed = ['paper_review','resume_check','exp_plan','paper_summary','paper_translate','paper_translate_full'];
+    if (!in_array($sourceType, $allowed, true)) return null;
+    $ctx = "以下は、この会話で扱う「元 AI 結果」の要約です。 ユーザは この結果について 追加で質問したり、 理解を深めたり、 修正案を相談したいと考えています。 適宜この文脈を踏まえて答えてください。\n\n";
+    try {
+        if ($sourceType === 'paper_review') {
+            $st = $pdo->prepare("SELECT pdf_name, target_venue, strictness, review_json FROM paper_reviews WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)$r['review_json'], true) ?: [];
+            $ctx .= "【元: 論文査読】\n";
+            $ctx .= "対象 PDF: {$r['pdf_name']} / 会議: {$r['target_venue']} / 厳しさ: {$r['strictness']}\n";
+            if (!empty($rv['decision'])) $ctx .= "判定: {$rv['decision']} (Score {$rv['score']}/5)\n";
+            if (!empty($rv['summary_one_line'])) $ctx .= "1 行要約: {$rv['summary_one_line']}\n";
+            if (!empty($rv['plain_summary_for_student'])) $ctx .= "学生向け要約:\n{$rv['plain_summary_for_student']}\n";
+            if (!empty($rv['weaknesses'])) $ctx .= "弱み:\n- " . implode("\n- ", array_slice($rv['weaknesses'], 0, 8)) . "\n";
+            if (!empty($rv['comments_to_authors'])) $ctx .= "コメント: " . mb_substr($rv['comments_to_authors'], 0, 800) . "\n";
+        } elseif ($sourceType === 'resume_check') {
+            $st = $pdo->prepare("SELECT title, result_json FROM resume_checks WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)$r['result_json'], true) ?: [];
+            $ctx .= "【元: 原稿チェック】\n";
+            $ctx .= "タイトル: {$r['title']}\n";
+            if (!empty($rv['summary_one_line'])) $ctx .= "1 行要約: {$rv['summary_one_line']}\n";
+            if (!empty($rv['plain_summary_for_student'])) $ctx .= "学生向け要約:\n{$rv['plain_summary_for_student']}\n";
+            if (!empty($rv['next_three_steps'])) $ctx .= "次の 3 ステップ:\n- " . implode("\n- ", $rv['next_three_steps']) . "\n";
+            if (!empty($rv['comments_to_author'])) $ctx .= "総合コメント: " . mb_substr($rv['comments_to_author'], 0, 800) . "\n";
+        } elseif ($sourceType === 'exp_plan') {
+            $st = $pdo->prepare("SELECT title, result_json, result_strict_json, result_student_json FROM experiment_plan_checks WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)($r['result_student_json'] ?: $r['result_json'] ?: $r['result_strict_json']), true) ?: [];
+            $ctx .= "【元: 実験計画書チェック】\n";
+            $ctx .= "タイトル: {$r['title']}\n";
+            if (!empty($rv['summary_one_line'])) $ctx .= "1 行要約: {$rv['summary_one_line']}\n";
+            if (!empty($rv['plain_summary_for_student'])) $ctx .= "学生向け要約:\n{$rv['plain_summary_for_student']}\n";
+            if (!empty($rv['top_priority_fixes'])) $ctx .= "優先修正:\n- " . implode("\n- ", array_slice($rv['top_priority_fixes'], 0, 8)) . "\n";
+        } elseif ($sourceType === 'paper_summary') {
+            $st = $pdo->prepare("SELECT pdf_name, result_json FROM paper_translates WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)$r['result_json'], true) ?: [];
+            $ctx .= "【元: 論文要約】\n";
+            $ctx .= "PDF: {$r['pdf_name']}\n";
+            if (!empty($rv['summary_ja'])) $ctx .= "要約:\n" . mb_substr($rv['summary_ja'], 0, 1200) . "\n";
+            if (!empty($rv['contributions'])) $ctx .= "貢献:\n- " . implode("\n- ", array_slice((array)$rv['contributions'], 0, 6)) . "\n";
+        } elseif ($sourceType === 'paper_translate') {
+            $st = $pdo->prepare("SELECT pdf_name, result_json FROM paper_translates WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)$r['result_json'], true) ?: [];
+            $ctx .= "【元: 論文要約 (翻訳含む)】\n";
+            $ctx .= "PDF: {$r['pdf_name']}\n";
+            if (!empty($rv['summary_ja'])) $ctx .= mb_substr($rv['summary_ja'], 0, 1500) . "\n";
+        } elseif ($sourceType === 'paper_translate_full') {
+            $st = $pdo->prepare("SELECT pdf_name, translations_json FROM paper_full_translations WHERE id = ? AND user_id = ?");
+            $st->execute([$sourceId, $uid]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$r) return null;
+            $rv = json_decode((string)$r['translations_json'], true) ?: [];
+            $ctx .= "【元: 論文全訳】\n";
+            $ctx .= "PDF: {$r['pdf_name']}\n";
+            if (is_array($rv) && !empty($rv)) {
+                $first = $rv[0] ?? null;
+                if ($first && isset($first['ja'])) $ctx .= "冒頭訳: " . mb_substr((string)$first['ja'], 0, 1200) . "\n";
+                $ctx .= "章数: " . count($rv) . " 章\n";
+            }
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+    // 全体で 4000 字上限に (トークン節約)
+    if (mb_strlen($ctx) > 4000) $ctx = mb_substr($ctx, 0, 4000) . "...(省略)";
+    return $ctx;
 }
 
 function rai_thread_get(PDO $pdo, array $cfg, int $tid): void {
@@ -264,6 +363,10 @@ function rai_thread_get(PDO $pdo, array $cfg, int $tid): void {
             'shared_user_ids' => $th['shared_user_ids'] ? (json_decode($th['shared_user_ids'], true) ?: []) : [],
             'created_at' => $th['created_at'],
             'is_mine' => (int)$th['owner_user_id'] === $uid,
+            // v1144 AI 結果由来のスレッドか
+            'seed_source_type' => $th['seed_source_type'] ?? null,
+            'seed_source_id'   => $th['seed_source_id']   !== null ? (int)$th['seed_source_id'] : null,
+            'has_seed_context' => !empty($th['seed_context']),
         ],
         'messages' => $messages,
     ]);
@@ -361,7 +464,12 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
     $tpl = null;
     foreach (rai_templates() as $t) if ($t['key'] === ($th['template_key'] ?? '')) { $tpl = $t; break; }
     if (!$tpl) foreach (rai_templates() as $t) if ($t['key'] === 'freetalk') { $tpl = $t; break; }
-    $messages = [['role' => 'system', 'content' => $tpl['sys']]];
+    // v1144 seed_context (元 AI 結果) を system prompt の前に加える
+    $sysContent = $tpl['sys'];
+    if (!empty($th['seed_context'])) {
+        $sysContent = $th['seed_context'] . "\n\n---\n\n" . $sysContent;
+    }
+    $messages = [['role' => 'system', 'content' => $sysContent]];
     foreach ($history as $h) {
         if (!empty($h['user_message'])) $messages[] = ['role' => 'user', 'content' => $h['user_message']];
         if (!empty($h['ai_response']))  $messages[] = ['role' => 'assistant', 'content' => $h['ai_response']];

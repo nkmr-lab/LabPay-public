@@ -9,6 +9,7 @@ import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../au
 import { state, toast } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 import { shareDialog } from '../share_to_sns.js';
+import { renderAskAiButton } from '../ai_checklist.js';   // v1144
 
 let sharedPollTimer = null;
 let viewState = { mineSort: 'new', mineOnly_mine: false, pubSort: 'new', mineOnly_pub: false, lastQuery: '' };
@@ -637,6 +638,7 @@ async function paintResult(d, token) {
         ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (v1022 以降課金なし)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
       </div>
+      <div id="pt-ask-ai-mount" style="margin-top:8px"></div>
     </div>
 
     ${ptRenderAuthorCards(r.authors)}
@@ -677,6 +679,11 @@ async function paintResult(d, token) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_translate', refId: d.id });
       }
     } catch (_) { /* fall through */ }
+    // v1144 AI と話す
+    renderAskAiButton(document.getElementById('pt-ask-ai-mount'), {
+      sourceType: 'paper_translate', sourceId: Number(d.id),
+      title: (r.title_ja || r.title_orig || d.pdf_name || '論文要約'),
+    });
   }
   // v1018 「PDFにする」ボタンは共有モーダル内に移動
   document.getElementById('pt-share-dialog')?.addEventListener('click', () => {

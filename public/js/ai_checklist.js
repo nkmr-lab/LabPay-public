@@ -4,8 +4,47 @@
 // しよう (これは他者ともシェア)。 また、そのTODOリストを、自身のTODOに放り込む機能を追加」
 
 import { get, post, patch } from './api.js';
-import { escapeHtml } from './router.js';
+import { escapeHtml, navigate } from './router.js';
 import { toast, state } from './app.js';
+
+// v1144 「🔬 この結果について AI と話す」ボタンを結果ページ上部に配置するヘルパ。
+//   押すと 研究 AI サブスクの新規スレッドを作成 (seed_source_type + seed_source_id を渡す)、
+//   スレッド画面に遷移する。 未加入なら加入導線へ。
+export function renderAskAiButton(rootEl, { sourceType, sourceId, title }) {
+  if (!rootEl) return;
+  rootEl.innerHTML = `
+    <button class="btn primary" id="ask-ai-btn" style="font-size:13px; padding:6px 14px">
+      🔬 この結果について AI と話す
+    </button>
+    <span class="hint-sm" style="font-size:11px; margin-left:6px; color:#6b7280">
+      (研究 AI サブスクの新規スレッドが立ちます。 元結果の要約が context として自動で入ります)
+    </span>
+  `;
+  document.getElementById('ask-ai-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ask-ai-btn');
+    btn.disabled = true; btn.textContent = '⌛ スレッド作成中…';
+    try {
+      const r = await post('/api/research-ai/threads', {
+        title: (title ? String(title).slice(0, 60) : 'AI 結果について') + ' について AI と話す',
+        template_key: 'freetalk',
+        seed_source_type: sourceType,
+        seed_source_id: sourceId,
+      });
+      navigate('#/research-ai');
+      // research_ai.js は URL params でスレッド指定はしていないので、少し待って選択させる代替:
+      //   グローバル state に格納して開くのが望ましいが、簡便に localStorage を使って
+      //   research_ai 側で「開いてほしいスレッド」を拾わせる。
+      try { localStorage.setItem('labpay-rai-open-tid', String(r.id)); } catch(_) {}
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '🔬 この結果について AI と話す';
+      if (e.message?.includes('403')) {
+        if (confirm('研究 AI サブスク未加入です。 サブスクページへ移動しますか?')) location.hash = '#/research-ai';
+      } else {
+        toast('失敗: ' + e.message);
+      }
+    }
+  });
+}
 
 // AI 結果 JSON から「修正すべき点」候補を安定 key 付きで抽出。
 //   source_type ごとにフィールドの意味が違うので分岐。

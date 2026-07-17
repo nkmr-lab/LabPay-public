@@ -72,12 +72,28 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
     foreach ($stR->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $replies[(int)$r['parent_id']] = (int)$r['n'];
     }
+    // v1143 複数画像 (post_images) を bulk fetch
+    $imagesByPost = [];
+    try {
+        $stImg = $pdo->prepare("SELECT post_id, image_url FROM post_images WHERE post_id IN ($place) ORDER BY post_id, position");
+        $stImg->execute($ids);
+        foreach ($stImg->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $pid = (int)$r['post_id'];
+            $url = (string)$r['image_url'];
+            $imagesByPost[$pid][] = ['url' => $url, 'thumb_url' => thumb_url_for($url)];
+        }
+    } catch (Throwable $_) { /* テーブル未反映時は無視 */ }
     $out = [];
     foreach ($rows as $r) {
         $id = (int)$r['id'];
         $counts = $reactions[$id]['counts'] ?? [];
         $mine = $reactions[$id]['mine'] ?? [];
         $heartN = $counts['heart'] ?? 0;
+        // v1143 複数画像: post_images から集約 (無ければ image_url の 1 枚に フォールバック)
+        $images = $imagesByPost[$id] ?? [];
+        if (!$images && $r['image_url']) {
+            $images = [['url' => (string)$r['image_url'], 'thumb_url' => thumb_url_for((string)$r['image_url'])]];
+        }
         $out[] = [
             'id'              => $id,
             'user_id'         => (int)$r['user_id'],
@@ -87,7 +103,9 @@ function posts_serialize_rows(PDO $pdo, array $rows, int $meId): array {
             //   クライアント posts.js が `author_kind === 'system'` で判定する。
             'author_kind'     => $r['author_kind'] ?? null,
             'body'            => $r['body'],
-            'image_url'       => $r['image_url'],
+            'image_url'       => $r['image_url'],   // 下位互換 (1 枚目)
+            // v1143 複数画像は 'images' 配列で提供 ({ url, thumb_url })
+            'images'          => $images,
             // v494 #101 サムネが実在する時だけそのURLを返す。存在しなければ null。
             //   クライアントは image_thumb_url ?? image_url を使う。
             'image_thumb_url' => $r['image_url'] ? thumb_url_for((string)$r['image_url']) : null,
@@ -171,15 +189,33 @@ function posts_create(PDO $pdo, array $cfg): void {
     $body = read_json_body();
     $text = isset($body['body']) ? trim((string)$body['body']) : '';
     if (mb_strlen($text) > 2000) $text = mb_substr($text, 0, 2000);
+    // v1143 複数画像対応: image_urls 配列 (最大 10 枚)。 既存 image_url 単発も引き続き受付。
+    $imageUrls = [];
+    if (isset($body['image_urls']) && is_array($body['image_urls'])) {
+        foreach ($body['image_urls'] as $u1) {
+            $u1 = trim((string)$u1);
+            if ($u1 === '') continue;
+            if (mb_strlen($u1) > 500) $u1 = mb_substr($u1, 0, 500);
+            $imageUrls[] = $u1;
+            if (count($imageUrls) >= 10) break;
+        }
+    }
+    // 下位互換: 旧 image_url 単発
     $imageUrl = trim((string)($body['image_url'] ?? ''));
     if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
+    if ($imageUrl !== '' && !in_array($imageUrl, $imageUrls, true)) {
+        array_unshift($imageUrls, $imageUrl);
+        if (count($imageUrls) > 10) $imageUrls = array_slice($imageUrls, 0, 10);
+    }
+    // 先頭を posts.image_url に (下位互換)、 全部を post_images に保存
+    $primaryImage = $imageUrls[0] ?? '';
     $parentId = isset($body['parent_id']) && $body['parent_id'] !== '' && $body['parent_id'] !== null
                   ? (int)$body['parent_id'] : null;
     $lat = isset($body['lat']) && $body['lat'] !== '' && $body['lat'] !== null ? (float)$body['lat'] : null;
     $lng = isset($body['lng']) && $body['lng'] !== '' && $body['lng'] !== null ? (float)$body['lng'] : null;
     if ($lat !== null && ($lat < -90 || $lat > 90))   throw new ApiException('bad_request', 'lat 範囲外', 400);
     if ($lng !== null && ($lng < -180 || $lng > 180)) throw new ApiException('bad_request', 'lng 範囲外', 400);
-    if ($text === '' && $imageUrl === '') {
+    if ($text === '' && empty($imageUrls)) {
         throw new ApiException('bad_request', '本文か画像が必要', 400);
     }
     if ($parentId !== null) {
@@ -225,13 +261,20 @@ function posts_create(PDO $pdo, array $cfg): void {
     }
     $pid = 0;
     $mentioned = [];
-    db_tx($pdo, function () use ($pdo, $u, $text, $imageUrl, $lat, $lng, $parentId, $linkedFeedbackId, &$pid, &$mentioned) {
+    db_tx($pdo, function () use ($pdo, $u, $text, $primaryImage, $imageUrls, $lat, $lng, $parentId, $linkedFeedbackId, &$pid, &$mentioned) {
         $ins = $pdo->prepare("INSERT INTO posts (user_id, body, image_url, lat, lng, parent_id, feedback_id, created_at)
                               VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
         $ins->execute([(int)$u['id'], $text !== '' ? $text : null,
-                       $imageUrl !== '' ? $imageUrl : null,
+                       $primaryImage !== '' ? $primaryImage : null,
                        $lat, $lng, $parentId, $linkedFeedbackId]);
         $pid = (int)$pdo->lastInsertId();
+        // v1143 2 枚目以降は post_images に保存 (1 枚目も含めて記録して読出時に統一)
+        if (!empty($imageUrls)) {
+            $stI = $pdo->prepare("INSERT INTO post_images (post_id, position, image_url) VALUES (?, ?, ?)");
+            foreach ($imageUrls as $i => $u1) {
+                $stI->execute([$pid, $i, $u1]);
+            }
+        }
         // @メンション抽出 (display_name の前方一致で簡易)
         if ($text !== '' && preg_match_all('/@([\p{L}\p{N}_\-\.]{1,40})/u', $text, $m)) {
             $names = array_unique($m[1]);
