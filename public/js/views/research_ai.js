@@ -397,13 +397,25 @@ function renderMsg(m, ownerUid, meId) {
 }
 
 async function onAttachFile(ev) {
-  const f = ev.target.files?.[0];
+  const fileInput = ev.target;
+  const f = fileInput.files?.[0];
   if (!f) return;
   if (f.size > 30 * 1024 * 1024) { toast('30 MB まで'); return; }
+  // v1145 元々の label の innerHTML 書き換えは input を破壊してリスナが失われる
+  //   問題があった。 label の textNode だけ差し替え、 <input> は保持する。
+  const label = fileInput.closest('label');
+  const swapLabelIcon = (icon) => {
+    if (!label) return;
+    // label 内の テキストノード だけを差し替え (input は残す)
+    for (const node of Array.from(label.childNodes)) {
+      if (node.nodeType === Node.TEXT_NODE) { node.textContent = icon; return; }
+    }
+    // fallback: 先頭に text ノードを 追加
+    label.insertBefore(document.createTextNode(icon), label.firstChild);
+  };
+  swapLabelIcon('⌛');
   const fd = new FormData();
   fd.append('file', f);
-  const btn = document.querySelector('label[for] input[type=file], #rai-file')?.closest('label');
-  if (btn) btn.textContent = '⌛';
   try {
     const res = await fetch('/api/research-ai/uploads', { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'labpay' } });
     const r = await res.json();
@@ -411,7 +423,10 @@ async function onAttachFile(ev) {
     PENDING_ATTACHMENTS.push({ id: r.id, kind: r.kind, url: r.url, filename: r.filename });
     paintAttachPreview();
   } catch (e) { toast('失敗: ' + e.message); }
-  finally { ev.target.value = ''; const l = document.querySelector('label[for="rai-file"], label > input#rai-file')?.parentElement; if (l) l.innerHTML = '📎<input type="file" id="rai-file" accept="image/*,application/pdf" hidden>'; document.getElementById('rai-file')?.addEventListener('change', onAttachFile); }
+  finally {
+    fileInput.value = '';   // 同じファイル再選択を許可
+    swapLabelIcon('📎');
+  }
 }
 
 function paintAttachPreview() {

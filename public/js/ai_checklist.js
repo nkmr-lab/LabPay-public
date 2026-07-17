@@ -37,8 +37,11 @@ export function renderAskAiButton(rootEl, { sourceType, sourceId, title }) {
       try { localStorage.setItem('labpay-rai-open-tid', String(r.id)); } catch(_) {}
     } catch (e) {
       btn.disabled = false; btn.textContent = '🔬 この結果について AI と話す';
-      if (e.message?.includes('403')) {
-        if (confirm('研究 AI サブスク未加入です。 サブスクページへ移動しますか?')) location.hash = '#/research-ai';
+      // v1145 renderAskAiButton の 403 判定を message 文字列マッチから
+      //   status/code ベースに (api.js は Error に e.status / e.code を付与している)
+      const isUnsub = e.status === 403 || e.code === 'forbidden' || /サブスク/.test(e.message || '');
+      if (isUnsub) {
+        if (confirm('研究 AI サブスク未加入か クォータ不足です。 サブスクページへ移動しますか?')) location.hash = '#/research-ai';
       } else {
         toast('失敗: ' + e.message);
       }
