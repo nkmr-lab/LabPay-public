@@ -307,7 +307,7 @@ export const TAB_DEFS = [
   { id: 'shared',       url: '#/shared',       title: '共有' },
   { id: 'lab-mgmt',     url: '#/lab-mgmt',     title: '運営' },
   { id: 'games',        url: '#/games',        title: '娯楽' },
-  { id: 'apps',         url: '#/apps',         title: 'アプリ' },
+  { id: 'apps',         url: '#/apps',         title: '全て' },
   { id: 'achievements', url: '#/achievements', title: '実績' },
 ];
 // v1132 初期は 8 タブ限定 (らぼったー / 売買 / 依頼 / 研究 / 共有 / 運営 / 娯楽 / アプリ)

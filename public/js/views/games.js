@@ -55,7 +55,7 @@ const GAMES = [
   // v837 cat='game' の APPS に揃える (apps.js との同期漏れ修正)
   { id: 'cg2',       icon: '🎮', name: '自作ゲームv2 (cg2)', url: '#/cg2',
     desc: 'p5.jsベースの准リアルタイムmultiplayerフレームワーク。マルバツ/ニム/ライツアウト/すごろくのサンプル付き' },
-  { id: 'bingofit',  icon: '👕', name: '着回しビンゴ', url: '#/bingofit/closet',
+  { id: 'bingofit',  icon: '👕', name: 'BingoFit', url: '#/bingofit/closet',
     desc: '手持ちの服を25着以上登録すると、日曜始まりの5x5ビンゴ盤が自動生成。着た服を盤面から開けてラインが揃えばビンゴ' },
   { id: 'bingo',     icon: '🎰', name: 'ビンゴ (週次)', url: '#/bingo',
     desc: '毎週5x5ビンゴカードが自動生成。平日の行動(ラボイン/らぼったー投稿/麻雀/オセロ/食べある記など)が自動カウント' },

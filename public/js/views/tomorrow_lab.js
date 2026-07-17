@@ -30,12 +30,11 @@ export async function renderTomorrowLab() {
       </p>
     </div>
     <div class="card">
-      <div class="bold" style="margin-bottom:8px">➕ 「明日行く」を宣言</div>
+      <div class="bold" style="margin-bottom:4px">➕ 「明日行く」を宣言</div>
+      <!-- v1139 中村さん「明日、研究室に一緒に行こうは、明日なので、対象日は指定しない感じで」
+           → 対象日入力を削除、常に翌日 (tomorrowIso) を送る -->
+      <div class="hint-sm" style="margin-bottom:8px; font-size:12px; color:#6b7280">対象日は自動で <b>${fmtDate(tomorrowIso())}</b> (明日)。</div>
       <div class="row" style="gap:6px; flex-wrap:wrap; align-items:end">
-        <label style="flex:1; min-width:130px">
-          <div style="font-size:12px; color:#6b7280">対象日</div>
-          <input type="date" id="tla-date" value="${tomorrowIso()}" style="width:100%; padding:6px; box-sizing:border-box">
-        </label>
         <label style="flex:0 0 100px">
           <div style="font-size:12px; color:#6b7280">罰金 (5-500pt)</div>
           <input type="number" id="tla-fee" min="5" max="500" value="20" style="width:100%; padding:6px; box-sizing:border-box">
@@ -47,7 +46,7 @@ export async function renderTomorrowLab() {
         <button class="btn primary" id="tla-create">宣言する</button>
       </div>
       <div class="hint-sm" style="margin-top:6px; font-size:11px; color:#6b7280">
-        同じ日に既存プランがあれば自動でそれに参加します。罰金設定は「初回宣言者」の値が採用されます。
+        既に明日のプランがあれば自動でそれに参加します。 罰金設定は「初回宣言者」の値が採用されます。
       </div>
     </div>
     <div id="tla-list"><div class="muted">読み込み中…</div></div>
@@ -57,10 +56,10 @@ export async function renderTomorrowLab() {
 }
 
 async function createPlan() {
-  const date = document.getElementById('tla-date').value;
+  // v1139 対象日は常に「明日」固定 (旧: <input type=date>)。
+  const date = tomorrowIso();
   const fee  = parseInt(document.getElementById('tla-fee').value, 10);
   const memo = document.getElementById('tla-memo').value.trim();
-  if (!date) { toast('日付を入れてね'); return; }
   const btn = document.getElementById('tla-create');
   btn.disabled = true; btn.textContent = '⌛ 送信中…';
   try {

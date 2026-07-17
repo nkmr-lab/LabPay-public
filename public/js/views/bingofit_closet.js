@@ -14,7 +14,7 @@ export async function renderBingofitCloset() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div style="max-width:720px; margin:0 auto; padding:12px">
-      <h2 style="margin:0 0 12px; font-size:20px">👕 着回しビンゴ - クローゼット</h2>
+      <h2 style="margin:0 0 12px; font-size:20px">👕 BingoFit - クローゼット</h2>
       <div style="font-size:12px; color:#666; margin-bottom:14px; line-height:1.6">
         手持ちの服を 25 着以上登録すると、日曜始まりの週次ビンゴ盤が自動生成されます。
         着た服を盤面から開けて、ラインが揃えばビンゴ! 背景は自動で透過処理されます (1 分以内に完了)。

@@ -316,24 +316,24 @@ class Achievements {
         ],
         // v741 #288 BingoFit (着回しビンゴ) 実績
         'bingofit_lines_total' => [
-            'title' => '着回しビンゴ職人',
-            'desc'  => '着回しビンゴの通算ライン数',
+            'title' => 'BingoFit 職人',
+            'desc'  => 'BingoFit の通算ライン数',
             'unit'  => 'ライン',
             'icon'  => '👕',
             'tiers' => [
-                ['count' => 1,   'label' => '初着回しビンゴ',      'medal' => '🥉'],
+                ['count' => 1,   'label' => '初 BingoFit',        'medal' => '🥉'],
                 ['count' => 5,   'label' => '揃えるファッション', 'medal' => '🥈'],
                 ['count' => 20,  'label' => '着回しマスター',      'medal' => '🥇'],
                 ['count' => 50,  'label' => 'ワードローブの化身','medal' => '💎'],
             ],
         ],
         'bingofit_weeks_won' => [
-            'title' => '着回し週次ハンター',
-            'desc'  => '着回しビンゴを 1 ライン以上達成した週の数',
+            'title' => 'BingoFit 週次ハンター',
+            'desc'  => 'BingoFit を 1 ライン以上達成した週の数',
             'unit'  => '週',
             'icon'  => '🗓',
             'tiers' => [
-                ['count' => 1,   'label' => '着回しデビュー',     'medal' => '🥉'],
+                ['count' => 1,   'label' => 'BingoFit デビュー',   'medal' => '🥉'],
                 ['count' => 4,   'label' => '月イチ着回し',       'medal' => '🥈'],
                 ['count' => 12,  'label' => '3 ヶ月着回し',       'medal' => '🥇'],
                 ['count' => 30,  'label' => '半年級着回し',      'medal' => '💎'],
@@ -341,7 +341,7 @@ class Achievements {
         ],
         'bingofit_full_houses' => [
             'title' => 'フルハウスキング',
-            'desc'  => '着回しビンゴで 25 マスすべて開けた週の数 (毎日違う服)',
+            'desc'  => 'BingoFit で 25 マスすべて開けた週の数 (毎日違う服)',
             'unit'  => '週',
             'icon'  => '🌟',
             'tiers' => [
@@ -353,7 +353,7 @@ class Achievements {
         ],
         'bingofit_items_active' => [
             'title' => 'クローゼットの厚み',
-            'desc'  => '着回しビンゴに登録されたアクティブ衣類数',
+            'desc'  => 'BingoFit に登録されたアクティブ衣類数',
             'unit'  => '着',
             'icon'  => '🧥',
             'tiers' => [

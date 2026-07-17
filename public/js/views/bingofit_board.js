@@ -1,4 +1,4 @@
-// v740 BingoFit 盤面ビュー: 5x5 着回しビンゴ。タップでマスを開ける / 取り消す。
+// v740 BingoFit 盤面ビュー: 5x5 BingoFit。タップでマスを開ける / 取り消す。
 // 完成ライン (横 / 縦 / 斜め) は枠ハイライト + 「ビンゴ N!」をヘッダーに。
 
 import { get, post, del } from '../api.js';
@@ -10,7 +10,7 @@ export async function renderBingofitBoard() {
   app.innerHTML = `
     <div style="max-width:720px; margin:0 auto; padding:12px">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-        <h2 style="margin:0; font-size:18px">🎯 今週の着回しビンゴ</h2>
+        <h2 style="margin:0; font-size:18px">🎯 今週のBingoFit</h2>
         <a href="#/bingofit/closet" style="font-size:12px; color:#4a106d">👕 クローゼット</a>
       </div>
       <div id="bf-board-meta" style="font-size:12px; color:#666; margin-bottom:10px"></div>
@@ -25,7 +25,7 @@ export async function renderBingofitHistory() {
   app.innerHTML = `
     <div style="max-width:720px; margin:0 auto; padding:12px">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-        <h2 style="margin:0; font-size:18px">📊 着回しビンゴ - 履歴</h2>
+        <h2 style="margin:0; font-size:18px">📊 BingoFit - 履歴</h2>
         <a href="#/bingofit/closet" style="font-size:12px; color:#4a106d">👕 クローゼット</a>
       </div>
       <div id="bf-history">読み込み中...</div>

@@ -92,7 +92,7 @@ export const HOME_ACTIONS = [
   // v906 定例リファクタリング監査で「ホームクイックアクセス選択肢に出てない」と判明した
   //   追加機能 22件をまとめて HOME_ACTIONS に登録 (全部 defaultVisible:false で opt-in)。
   { id: 'bait',                 url: '#/bait',                 title: 'アルバイト申請', icon: '💼', defaultVisible: false },
-  { id: 'bingofit',             url: '#/bingofit/closet',      title: '着回しビンゴ',   icon: '👕', defaultVisible: false },
+  { id: 'bingofit',             url: '#/bingofit/closet',      title: 'BingoFit',       icon: '👕', defaultVisible: false },
   { id: 'buzzer',               url: '#/buzzer',               title: '早押しクイズ',   icon: '⚡', defaultVisible: false },
   { id: 'cg2',                  url: '#/cg2',                  title: '自作ゲームv2',   icon: '🎮', defaultVisible: false },
   { id: 'chat-rooms',           url: '#/chat-rooms',           title: 'チャット',       icon: '💬', defaultVisible: false },
@@ -520,7 +520,7 @@ export async function renderHome() {
     <!-- v741 #288 BingoFit (着回しビンゴ) widget。衣類 25 着未満なら隠す。 -->
     <div class="card" id="home-bingofit-card" data-card-id="bingofit" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">👕 今週の着回しビンゴ</h2>
+        <h2 class="row-title">👕 今週の BingoFit</h2>
         <a href="#/bingofit/board" class="hint">詳細 →</a>
       </div>
       <div id="home-bingofit"><div class="hint">読み込み中…</div></div>
