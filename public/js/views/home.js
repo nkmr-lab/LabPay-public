@@ -301,7 +301,20 @@ const DEFAULT_ORDER = [
 // v592b 新規追加のカード (= ユーザの保存 order に含まれない未知 ID) が
 //   DEFAULT_HIDDEN_HOME_CARDS に含まれているなら、 hidden に自動マージ。
 //   既存ユーザが「明示的に ON にした」場合 (= order に含まれる) は尊重。
-const NEW_DEFAULT_HIDDEN = ['weather', 'bingo', 'quote']; // v605 ビンゴも default OFF に / v809 名言 widget をデフォルト OFF (既存ユーザにも適用)
+// v1152 中村さん報告「ホームウィジェット、表示されてないのが ON になってる」
+//   root cause: v1152 で SHORTCUT_CARDS_DEFS に 23 個追加した際、 既存ユーザーの
+//   localStorage の hidden にはそれらの id が入っておらず、 merge ロジックで
+//   「未知の id は デフォルト visible」扱いになっていた。 → NEW_DEFAULT_HIDDEN に
+//   全部追加、 既存ユーザーの order にも無ければ hidden セットに自動 マージ。
+const NEW_DEFAULT_HIDDEN = [
+  'weather', 'bingo', 'quote', // v605 / v809
+  // v1152 追加した SHORTCUT カード全部 (default OFF)
+  'sc-bokete', 'sc-setlog', 'sc-profile-book', 'sc-trading-cards',
+  'sc-tomorrow-lab', 'sc-pres-order', 'sc-tickets', 'sc-labo-eats',
+  'sc-research-ai', 'sc-exp-plan', 'sc-miro', 'sc-kanban', 'sc-refs',
+  'sc-joint-events', 'sc-public-polls', 'sc-expenses', 'sc-buy-requests',
+  'sc-my-games', 'sc-quotes', 'sc-news', 'sc-pomodoro', 'sc-power', 'sc-walk-mode',
+];
 const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も既存ユーザに自動 ON
 export function readHomeLayout() {
   const merge = (order, hidden) => {
