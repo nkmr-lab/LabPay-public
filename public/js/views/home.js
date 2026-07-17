@@ -113,6 +113,33 @@ export const HOME_ACTIONS = [
   { id: 'tictactoe',            url: '#/tictactoe',            title: 'マルバツ',       icon: '⭕', defaultVisible: false },
   { id: 'widgets',              url: '#/widgets',              title: 'ウィジェットセンター', icon: '🧩', defaultVisible: false },
   { id: 'zemi-videos',          url: '#/zemi-videos',          title: 'ゼミ動画',       icon: '🎥', defaultVisible: false },
+  // v1152 中村さん指摘「アイコンの設定にそれぞれのものがあるかチェック。今存在しないものは
+  //   デフォルトで出さなくて良いけど、表示として追加できるように」
+  //   → apps.js にはあるが HOME_ACTIONS に未登録だった 23 機能を defaultVisible:false で追加
+  //   (設定 → ホーム上部のクイックボタン から個別 ON 可能に)
+  { id: 'bokete',               url: '#/bokete',               title: 'ぼけて',         icon: '😆', defaultVisible: false },
+  { id: 'setlog',               url: '#/setlog',               title: 'setlog',         icon: '📸', defaultVisible: false },
+  { id: 'profile-book',         url: '#/profile-book',         title: 'プロフ帳',       icon: '🎀', defaultVisible: false },
+  { id: 'trading-cards',        url: '#/trading-cards',        title: 'ゼミ人トレカ',   icon: '🎴', defaultVisible: false },
+  { id: 'tomorrow-lab',         url: '#/tomorrow-lab',         title: '明日ラボ行こう', icon: '🏫', defaultVisible: false },
+  { id: 'pres-order',           url: '#/pres-order',           title: '発表順オークション', icon: '🎪', defaultVisible: false },
+  { id: 'tickets',              url: '#/tickets',              title: 'チケット',       icon: '🎫', defaultVisible: false },
+  { id: 'labo-eats',            url: '#/labo-eats',            title: 'ラーボーイーツ', icon: '🍱', defaultVisible: false },
+  { id: 'research-ai',          url: '#/research-ai',          title: '研究 AI サブスク', icon: '🔬', defaultVisible: false },
+  { id: 'exp-plan',             url: '#/exp-plan',             title: '実験計画書チェック', icon: '🧪', defaultVisible: false },
+  { id: 'miro',                 url: '#/miro',                 title: 'Miro (ポストイット)', icon: '🗒', defaultVisible: false },
+  { id: 'kanban',               url: '#/kanban',               title: 'かんばん',       icon: '📋', defaultVisible: false },
+  { id: 'refs',                 url: '#/refs',                 title: '文献管理',       icon: '📚', defaultVisible: false },
+  { id: 'joint-events',         url: '#/joint-events',         title: '合同研究会投票', icon: '🎪', defaultVisible: false },
+  { id: 'public-polls',         url: '#/public-polls',         title: '公開投票',       icon: '🗳', defaultVisible: false },
+  { id: 'expenses',             url: '#/expenses',             title: '家計簿',         icon: '💰', defaultVisible: false },
+  { id: 'buy-requests',         url: '#/buy-requests',         title: '購入依頼',       icon: '🛒', defaultVisible: false },
+  { id: 'my-games',             url: '#/my-games',             title: '自作ゲーム管理', icon: '🎮', defaultVisible: false },
+  { id: 'quotes',               url: '#/quotes',               title: '名言集',         icon: '💬', defaultVisible: false },
+  { id: 'news',                 url: '#/news',                 title: 'LabPay ニュース', icon: '📰', defaultVisible: false },
+  { id: 'pomodoro',             url: '#/pomodoro',             title: 'ポモドーロ',     icon: '🍅', defaultVisible: false },
+  { id: 'power',                url: '#/power',                title: '検定力 / 標本数', icon: '📐', defaultVisible: false },
+  { id: 'walk-mode',            url: '#/walk-mode',            title: '散歩モード',     icon: '🚶', defaultVisible: false },
   // 設定ボタン自身も HOME_ACTIONS 経由で表示制御。これを隠したら上部ナビの
   // 「設定」から同じ場所に辿れるので詰まらない。
   { id: 'settings',     url: '#/settings?focus=home-actions', title: '設定 (このボタン列)', icon: '⚙', defaultVisible: true },
@@ -172,6 +199,32 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-health',       title: '⚖️ 体重 / BMI',     url: '#/health',       desc: '体重・身長を記録、 BMI 自動計算 + グラフ' },
   { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内歩数ランキング' },
   { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で落札' },
+  // v1152 中村さん指摘「ウィジェットの設定にそれぞれのものがあるかチェック」→
+  //   apps.js にあるが ホームウィジェットに登録されていなかった新機能を リンク型ウィジェット
+  //   として追加。 defaultVisible:false なので 設定 → ホームウィジェット から個別 ON。
+  { id: 'sc-bokete',        title: '😆 ぼけて (bokete)', url: '#/bokete',        desc: '画像大喜利。お題を出してみんなでボケる → ⭐ で評価 → ランキング' },
+  { id: 'sc-setlog',        title: '📸 setlog',         url: '#/setlog',        desc: '1 日を短いクリップ (画像 + 短キャプション) で断片記録するラボ内 Vlog' },
+  { id: 'sc-profile-book',  title: '🎀 プロフ帳',        url: '#/profile-book',  desc: '基本情報 + 心理テスト + 匿名質問。閲覧 pt / 回答 pt' },
+  { id: 'sc-trading-cards', title: '🎴 ゼミ人トレカ',    url: '#/trading-cards', desc: 'ラボメンのトレカを作成 → 本人承認 → ガチャで集める' },
+  { id: 'sc-tomorrow-lab',  title: '🏫 明日ラボ行こう',  url: '#/tomorrow-lab',  desc: '明日行くと宣言 + 罰金設定 → 行かなかった人が行った人へ pt を送る' },
+  { id: 'sc-pres-order',    title: '🎪 発表順オークション', url: '#/pres-order',  desc: 'ゼミ発表の順番を sealed 入札で決める' },
+  { id: 'sc-tickets',       title: '🎫 チケット',        url: '#/tickets',       desc: '「◯◯します / できる権利」を pt で売買。 例: 運転しますチケット' },
+  { id: 'sc-labo-eats',     title: '🍱 ラーボーイーツ',  url: '#/labo-eats',     desc: '研究室にいる人が外にいる人に「ついで買い」を頼む。 基本料 50pt + 距離' },
+  { id: 'sc-research-ai',   title: '🔬 研究 AI サブスク', url: '#/research-ai',  desc: '研究特化の AI チャット (トークン制、スレッド共有、 PDF / 画像添付)' },
+  { id: 'sc-exp-plan',      title: '🧪 実験計画書チェック', url: '#/exp-plan',   desc: 'RQ / 仮説 / 実験対応 / 統計 / サンプルサイズを AI で精査' },
+  { id: 'sc-miro',          title: '🗒 Miro (ポストイット)', url: '#/miro',      desc: 'ポストイット空間 + 他人カーソル + オモテウラ表示' },
+  { id: 'sc-kanban',        title: '📋 かんばん',        url: '#/kanban',        desc: 'Trello 的タスクボード。 D&D、担当、ラベル、チェックリスト、コメント' },
+  { id: 'sc-refs',          title: '📚 文献管理',        url: '#/refs',          desc: 'Zotero 的、 DOI / arXiv / PDF から自動取込、コレクション、ハイライト' },
+  { id: 'sc-joint-events',  title: '🎪 合同研究会投票', url: '#/joint-events',  desc: '合同研究会でセッションごとに相手ラボ発表を評価' },
+  { id: 'sc-public-polls',  title: '🗳 公開投票',        url: '#/public-polls',  desc: 'login 不要の 公開 URL で誰でも投票' },
+  { id: 'sc-expenses',      title: '💰 家計簿',          url: '#/expenses',      desc: '領収書を写真から OCR で 金額 / 店 / カテゴリ 自動抽出' },
+  { id: 'sc-buy-requests',  title: '🛒 購入依頼',        url: '#/buy-requests',  desc: '「これ買ってほしい」を中村さんに投げる (#want_to_buy の後継)' },
+  { id: 'sc-my-games',      title: '🎮 自作ゲーム管理',  url: '#/my-games',      desc: 'cg2 用の自作 2 人対戦 JS をアップロード / 編集' },
+  { id: 'sc-quotes',        title: '💬 名言集',          url: '#/quotes',        desc: '偉人 / 漫画 / アニメの名言 (ラボメン投稿も可)' },
+  { id: 'sc-news',          title: '📰 LabPay ニュース', url: '#/news',          desc: 'LabPay の更新情報 / 新機能案内' },
+  { id: 'sc-pomodoro',      title: '🍅 ポモドーロ',      url: '#/pomodoro',      desc: '25 分集中 + 5 分休憩の 繰り返しタイマー' },
+  { id: 'sc-power',         title: '📐 検定力 / 標本数', url: '#/power',         desc: 'G*Power 相当 + LMM/GLMM シミュ + ベイズ + 予算試算' },
+  { id: 'sc-walk-mode',     title: '🚶 散歩モード',      url: '#/walk-mode',     desc: '全画面マップ + GPS 5 秒 polling で軌跡 polyline 記録' },
 ];
 
 // v497 #103 ホームに置く要素は「ウィジェット」と呼ぶ。設定画面の表示名も変更。
