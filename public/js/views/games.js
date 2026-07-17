@@ -65,6 +65,15 @@ const GAMES = [
   // v872 #454 早押しクイズ (リアル現場)
   { id: 'buzzer',    icon: '⚡', name: '早押しクイズ', url: '#/buzzer',
     desc: 'リアル現場 (ゼミ / 飲み会等) で出題者が口頭出題 → 参加者がスマホで早押しボタン。 1 位緑 / 他赤 + 1 位との差を ms で表示' },
+  // v1140 中村さん指摘「娯楽タブに、ぷろふ、とれか、せっとろぐが移動してきてないね」
+  //   → v1139 で apps.js のカテゴリは game に移したが、 games.js の GAMES にも
+  //   entry を追加しないと娯楽タブに出ない (GAMES は独立リスト)
+  { id: 'profile-book',  icon: '🎀', name: 'プロフ帳 (平成デザ)', url: '#/profile-book',
+    desc: '基本情報 + 心理テスト + 匿名質問。 埋めて 50pt、 閲覧 10pt、 質問 10pt、 回答 5pt。 パステルグラデ + ドット枠 + 手書き風フォント' },
+  { id: 'trading-cards', icon: '🎴', name: 'ゼミ人トレカ + ガチャ', url: '#/trading-cards',
+    desc: 'ラボメンのトレカ (SSR/SR/R/N) を誰でも作成 → 本人承認で公開。 ガチャ 1 連 30pt / 10 連 250pt (R 以上確定)' },
+  { id: 'setlog',        icon: '📸', name: 'setlog', url: '#/setlog',
+    desc: '1 日を短いクリップ (写真 + 短キャプション) で断片記録するラボ内 Vlog (BeReal 的)。 今日のみんなのフィード + 日別 / ユーザ別のログ' },
 ];
 
 const CATEGORIES = [
@@ -100,6 +109,10 @@ const GAME_CATEGORY = {
   bingo:         'collect',   // v837
   conquest:      'collect',   // v873 #445 ユーザ自由制覇リストも「集める / 制覇する」へ
   buzzer:        'party',     // v873 #454 早押しクイズはパーティーへ
+  // v1140 apps.js の game カテゴリ入りと合わせて娯楽タブでも見えるように
+  'profile-book':  'community',  // ラボメン同士でお互いを知る
+  'trading-cards': 'collect',    // カードを集める
+  setlog:          'community',  // みんなの今日をシェア
 };
 
 export function renderGames() {

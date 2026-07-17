@@ -1,25 +1,45 @@
 // /#/chat-rooms — Slack 風チャット (#248)。 3 固定チャンネル (重要 / 連絡 / 相談) + 1対1 DM。
 // 軽 polling (2 秒) で既存メッセージを増分取得。
 // (既存 /chat は AI 翻訳用なので別パス)
+//
+// v1140 中村さん要望まとめて:
+//   - 右上のバツボタンが機能していない → 右上に「✕ ホームへ」を新設 (常時表示)
+//   - 左上のバツボタンは不要 → v1130 で tabs 左端に追加した ✕ を削除
+//   - 重要 / 連絡 / 相談は 3 スレッド同時に見える感じが良い
+//     → デスクトップ (>=900px) では 3 主要チャンネルを横並び 3 ペイン、
+//       スマホでは選択中の 1 ペインのみ表示 (タブ切替)
+//   - DM を開いた時は従来通り 1 ペイン (メインチャンネルへのショートカット付き)
 
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 
 const POLL_MS = 2000;
+const MOBILE_QUERY = '(max-width: 899px)';
 
-let _pollTimer = null;
-let _lastMsgId = 0;
-let _currentRoom = null;
+// 主要チャンネル (「重要 / 連絡 / 相談」の 3 つを想定)
+//   room.type === 'ch' のうち API が返す全チャンネルを対象にする。
+//   数が多い場合も先頭 3 つを 3-pane に、余りは選択時に置き換える (in-place)。
 
-function stopPoll() {
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+// --- module state ---
+const _panes = new Map();   // roomKey -> { lastMsgId, pollTimer, roomInfo }
+let _focusRoom = null;
+let _mediaQuery = null;
+let _mediaListener = null;
+
+function stopAllPolls() {
+  for (const p of _panes.values()) {
+    if (p.pollTimer) { clearInterval(p.pollTimer); p.pollTimer = null; }
+  }
+  _panes.clear();
 }
+
+function isMobile() { return window.matchMedia(MOBILE_QUERY).matches; }
 
 // ─── /#/chat-rooms (ルーム一覧、 Slack 風サイドバー) ─
 // v726 #328 タブ UI に統一したので、ここを訪れたら最初のチャンネルへ自動遷移。
 export async function renderChatRooms() {
-  stopPoll();
+  stopAllPolls();
   try {
     const d = await get('/api/chat/rooms');
     const rooms = d.rooms || [];
@@ -95,117 +115,213 @@ function roomRow(r) {
 }
 
 // ─── /#/chat-rooms/:roomKey (メッセージストリーム) ─
-// v726 #328 layout 改修:
-//   (a) チャンネル / DM 選択をタブ的に上部に並べる + 未読件数バッジ。
-//   (b) 入力欄を viewport 下に固定 (旧版は card 内 flex 末尾でスクロール先にあった)。
 export async function renderChatRoom({ params }) {
-  stopPoll();
-  _currentRoom = decodeURIComponent(params.roomKey);
-  _lastMsgId = 0;
+  stopAllPolls();
+  cleanupMediaListener();
+  _focusRoom = decodeURIComponent(params.roomKey);
   const app = document.getElementById('app');
-  app.innerHTML = `
-    <div id="cr-shell" style="position:fixed; top:96px; left:0; right:0; bottom:0; display:flex; flex-direction:column; background:#fff; z-index:2">
-      <div id="cr-tabs" style="display:flex; overflow-x:auto; background:#3f0e40; flex:none; gap:2px; padding:0"></div>
-      <div id="cr-head" style="padding:6px 12px; font-size:12px; color:#555; background:#f3f4f6; border-bottom:1px solid var(--line); flex:none">読み込み中…</div>
-      <div id="cr-stream" style="flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:2px; background:#fff; min-height:0">
-        <div class="muted">読み込み中…</div>
-      </div>
-      <div style="border-top:1px solid var(--line); padding:8px 10px; background:#fafafa; display:flex; gap:6px; align-items:flex-end; flex:none">
-        <textarea id="cr-input" rows="2" maxlength="4000" placeholder="メッセージを入力 (Ctrl+Enter で送信)" style="flex:1; box-sizing:border-box; resize:none; min-height:36px; max-height:140px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
-        <button id="cr-send" class="btn primary" style="flex:none">送信</button>
-      </div>
-    </div>
-  `;
+  app.innerHTML = `<div id="cr-shell" style="position:fixed; top:96px; left:0; right:0; bottom:0; background:#fff; z-index:2; display:flex; flex-direction:column">
+    <div class="muted" style="padding:14px">読み込み中…</div>
+  </div>`;
+
+  let rooms = [];
   try {
     const roomsData = await get('/api/chat/rooms');
-    const allRooms = roomsData.rooms || [];
-    // タブ描画 (チャンネル + DM すべて + 未読バッジ)。
-    const tabsEl = document.getElementById('cr-tabs');
-    // v1130 中村さん報告「チャット開いてみたら × ボタン押してもホームに戻れなかった」→
-    //   chat-rooms は position:fixed top:96px の全画面レイアウトで、既定の brand /
-    //   ヘッダを覆ってしまい戻る動線がタブ列しかなかった。 tabs 左端に「✕ 閉じる」を
-    //   足して、必ずホームに戻れるようにする。 sticky で左に固定してスクロールでも消えない。
-    const closeTab = `
-      <a href="#/" title="チャットを閉じてホームへ"
-         style="display:inline-flex; align-items:center; gap:4px; padding:8px 10px; text-decoration:none; color:#fff; font-size:16px; white-space:nowrap; background:#2d0a2f; position:sticky; left:0; z-index:1; flex:none">
-        <span>✕</span>
-      </a>`;
-    tabsEl.innerHTML = closeTab + allRooms.map(r => {
-      const active = r.room_key === _currentRoom;
-      const unread = Number(r.unread) || 0;
-      const badge = unread > 0
-        ? `<span style="background:#dc2626; color:#fff; font-weight:700; font-size:10px; padding:1px 6px; border-radius:9px; margin-left:4px">${unread > 99 ? '99+' : unread}</span>`
-        : '';
-      return `
-        <a href="#/chat-rooms/${encodeURIComponent(r.room_key)}"
-           style="display:inline-flex; align-items:center; gap:4px; padding:8px 12px; text-decoration:none; color:#fff; font-size:13px; white-space:nowrap; border-bottom:3px solid ${active ? '#fff' : 'transparent'}; background:${active ? 'rgba(255,255,255,0.1)' : 'transparent'}; ${unread && !active ? 'font-weight:700' : ''}">
-          <span>${escapeHtml(r.icon || '#️⃣')}</span>
-          <span>${escapeHtml(r.name)}</span>
-          ${badge}
-        </a>`;
-    }).join('');
-    const r = allRooms.find(x => x.room_key === _currentRoom);
-    let headHtml = '';
-    if (r) {
-      headHtml = `<span class="bold" style="font-size:13px">${escapeHtml(r.icon)} ${escapeHtml(r.name)}</span>` +
-                 (r.description ? ` ・ ${escapeHtml(r.description)}` : '');
-    } else if (_currentRoom.startsWith('dm:')) {
-      const [a, b] = _currentRoom.slice(3).split('-').map(Number);
-      const meId = Number(state.me?.id);
-      const otherUid = meId === a ? b : a;
-      try {
-        const u = await get('/api/users');
-        const other = (u.items || []).find(x => x.id === otherUid);
-        if (other) headHtml = `💬 ${escapeHtml(other.display_name)} との DM`;
-      } catch (_) {}
-    }
-    document.getElementById('cr-head').innerHTML = headHtml || `<span class="muted">${escapeHtml(_currentRoom)}</span>`;
-    await loadMessages();
+    rooms = roomsData.rooms || [];
   } catch (e) {
-    document.getElementById('cr-stream').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    document.getElementById('cr-shell').innerHTML =
+      `<div class="muted" style="padding:14px">${escapeHtml(e.message)}</div>`;
     return;
   }
 
-  const input = document.getElementById('cr-input');
+  const channels = rooms.filter(r => r.type === 'ch');
+  const focusRoomInfo = rooms.find(r => r.room_key === _focusRoom);
+  const isDM = _focusRoom.startsWith('dm:');
+  const isChannel = !isDM;
+
+  // 3-pane: 主要チャンネル (先頭 3 つ) を横並び。 DM 時は 1 pane。
+  const paneRooms = isChannel
+    ? channels.slice(0, 3).map(r => r.room_key === _focusRoom ? r : r)
+    : [focusRoomInfo || { room_key: _focusRoom, name: '', icon: '💬', type: 'dm' }];
+
+  // フォーカスされているチャンネルが 3-pane の先頭 3 に含まれていない場合は 3-pane の 3 番目を差し替え
+  if (isChannel && !paneRooms.some(r => r.room_key === _focusRoom) && focusRoomInfo) {
+    paneRooms[Math.max(0, paneRooms.length - 1)] = focusRoomInfo;
+  }
+
+  // DM header (相手名の解決)
+  let dmHeader = '';
+  if (isDM) {
+    const [a, b] = _focusRoom.slice(3).split('-').map(Number);
+    const meId = Number(state.me?.id);
+    const otherUid = meId === a ? b : a;
+    try {
+      const u = await get('/api/users');
+      const other = (u.items || []).find(x => x.id === otherUid);
+      if (other) dmHeader = `💬 ${escapeHtml(other.display_name)} との DM`;
+    } catch (_) {}
+  }
+
+  const shell = document.getElementById('cr-shell');
+  shell.innerHTML = `
+    <div id="cr-topbar" style="display:flex; align-items:stretch; background:#3f0e40; color:#fff; flex:none">
+      <div style="flex:1; overflow-x:auto; display:flex; gap:2px; padding:0">
+        ${rooms.map(r => {
+          const active = r.room_key === _focusRoom;
+          const unread = Number(r.unread) || 0;
+          const badge = unread > 0
+            ? `<span style="background:#dc2626; color:#fff; font-weight:700; font-size:10px; padding:1px 6px; border-radius:9px; margin-left:4px">${unread > 99 ? '99+' : unread}</span>`
+            : '';
+          return `<a href="#/chat-rooms/${encodeURIComponent(r.room_key)}"
+             style="display:inline-flex; align-items:center; gap:4px; padding:8px 12px; text-decoration:none; color:#fff; font-size:13px; white-space:nowrap; border-bottom:3px solid ${active ? '#fff' : 'transparent'}; background:${active ? 'rgba(255,255,255,0.1)' : 'transparent'}; ${unread && !active ? 'font-weight:700' : ''}">
+            <span>${escapeHtml(r.icon || '#️⃣')}</span>
+            <span>${escapeHtml(r.name || r.room_key)}</span>
+            ${badge}
+          </a>`;
+        }).join('')}
+      </div>
+      <a href="#/" id="cr-close" title="チャットを閉じてホームへ"
+         style="display:inline-flex; align-items:center; padding:0 14px; text-decoration:none; color:#fff; font-size:20px; background:#2d0a2f; flex:none">✕</a>
+    </div>
+    <div id="cr-panes" style="flex:1; min-height:0; display:grid; gap:0; grid-template-columns:${isChannel ? 'repeat(' + paneRooms.length + ', 1fr)' : '1fr'}"></div>
+  `;
+
+  // pane HTML を組む (mobile 判定は CSS で切替)
+  const panesEl = document.getElementById('cr-panes');
+  panesEl.innerHTML = paneRooms.map(r => paneHtml(r, isDM ? dmHeader : '')).join('');
+
+  // 各 pane を初期化 (load + polling + input)
+  for (const r of paneRooms) {
+    _panes.set(r.room_key, { lastMsgId: 0, pollTimer: null, roomInfo: r });
+    wirePane(r.room_key);
+    await loadMessagesFor(r.room_key, true);
+  }
+
+  // 選択されている pane 以外を dim (スマホでは選択中のみ表示)
+  applyPaneVisibility();
+
+  // 画面サイズ変化に追従
+  _mediaQuery = window.matchMedia(MOBILE_QUERY);
+  _mediaListener = () => applyPaneVisibility();
+  _mediaQuery.addEventListener('change', _mediaListener);
+}
+
+function cleanupMediaListener() {
+  if (_mediaQuery && _mediaListener) {
+    _mediaQuery.removeEventListener('change', _mediaListener);
+  }
+  _mediaQuery = null; _mediaListener = null;
+}
+
+function paneHtml(r, dmHeaderOverride) {
+  const key = r.room_key;
+  const title = dmHeaderOverride
+    ? dmHeaderOverride
+    : `${escapeHtml(r.icon || '#️⃣')} ${escapeHtml(r.name || key)}${r.description ? ` <span class="hint-sm" style="font-weight:normal; font-size:11px; margin-left:4px; color:#616061">${escapeHtml(r.description)}</span>` : ''}`;
+  return `
+    <section data-pane="${escapeHtml(key)}" style="display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--line); background:#fff">
+      <div class="cr-pane-head" data-pane-head="${escapeHtml(key)}" style="padding:6px 12px; font-size:13px; color:#1d1c1d; background:#f8f8f8; border-bottom:1px solid var(--line); flex:none; display:flex; align-items:center; justify-content:space-between; gap:6px">
+        <div class="bold" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${title}</div>
+        <div class="hint-sm" data-pane-focus-hint="${escapeHtml(key)}" style="font-size:10px; color:#7b3fa0; display:none">選択中</div>
+      </div>
+      <div data-pane-stream="${escapeHtml(key)}" style="flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:2px; background:#fff; min-height:0">
+        <div class="muted">読み込み中…</div>
+      </div>
+      <div style="border-top:1px solid var(--line); padding:8px 10px; background:#fafafa; display:flex; gap:6px; align-items:flex-end; flex:none">
+        <textarea data-pane-input="${escapeHtml(key)}" rows="2" maxlength="4000" placeholder="メッセージを入力 (Ctrl+Enter で送信)" style="flex:1; box-sizing:border-box; resize:none; min-height:36px; max-height:140px; border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-family:inherit; font-size:14px"></textarea>
+        <button data-pane-send="${escapeHtml(key)}" class="btn primary" style="flex:none">送信</button>
+      </div>
+    </section>`;
+}
+
+function wirePane(key) {
+  const inputEl = document.querySelector(`[data-pane-input="${cssSel(key)}"]`);
+  const sendEl  = document.querySelector(`[data-pane-send="${cssSel(key)}"]`);
+  if (!inputEl || !sendEl) return;
   const send = async () => {
-    const body = input.value.trim();
+    const body = inputEl.value.trim();
     if (!body) return;
     try {
-      await post(`/api/chat/rooms/${encodeURIComponent(_currentRoom)}/messages`, { body });
-      input.value = '';
-      await loadMessages(true);
+      await post(`/api/chat/rooms/${encodeURIComponent(key)}/messages`, { body });
+      inputEl.value = '';
+      await loadMessagesFor(key, true);
     } catch (e) { toast('失敗: ' + e.message); }
   };
-  document.getElementById('cr-send').addEventListener('click', send);
-  input.addEventListener('keydown', e => {
+  sendEl.addEventListener('click', send);
+  inputEl.addEventListener('keydown', e => {
     if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); send(); }
   });
+  // pane クリックで focus を切り替え (デスクトップ 3-pane 上で入力先を明示)
+  const paneEl = document.querySelector(`[data-pane="${cssSel(key)}"]`);
+  paneEl?.addEventListener('click', () => {
+    if (_focusRoom !== key) {
+      _focusRoom = key;
+      applyPaneVisibility();
+    }
+  });
 
-  _pollTimer = setInterval(() => {
-    if (!document.getElementById('cr-stream')) { stopPoll(); return; }
+  // polling
+  const p = _panes.get(key);
+  if (!p) return;
+  p.pollTimer = setInterval(() => {
+    if (!document.querySelector(`[data-pane-stream="${cssSel(key)}"]`)) {
+      if (p.pollTimer) clearInterval(p.pollTimer);
+      _panes.delete(key);
+      return;
+    }
     if (document.hidden) return;
-    loadMessages().catch(() => {});
+    loadMessagesFor(key).catch(() => {});
   }, POLL_MS);
 }
 
-async function loadMessages(scrollToBottom = false) {
-  const stream = document.getElementById('cr-stream');
+function cssSel(s) {
+  // data-* 属性セレクタで安全に使えるように " を escape (room_key は英数と : - _ 前提)
+  return String(s).replace(/"/g, '\\"');
+}
+
+function applyPaneVisibility() {
+  const mobile = isMobile();
+  document.querySelectorAll('[data-pane]').forEach(pane => {
+    const key = pane.dataset.pane;
+    const focused = key === _focusRoom;
+    if (mobile) {
+      pane.style.display = focused ? 'flex' : 'none';
+    } else {
+      pane.style.display = 'flex';
+      // フォーカス中を色で強調
+      pane.style.background = focused ? '#fff' : '#fafaf7';
+    }
+    const hint = document.querySelector(`[data-pane-focus-hint="${cssSel(key)}"]`);
+    if (hint) hint.style.display = (!mobile && focused) ? 'inline' : 'none';
+  });
+  // panes grid が 1 pane 表示 (スマホ) の場合は 1fr のまま、複数 pane 表示の場合は grid を維持
+  const panesEl = document.getElementById('cr-panes');
+  if (panesEl) {
+    const visible = [...panesEl.querySelectorAll('[data-pane]')].filter(p => p.style.display !== 'none').length;
+    panesEl.style.gridTemplateColumns = visible <= 1 ? '1fr' : `repeat(${visible}, 1fr)`;
+  }
+}
+
+async function loadMessagesFor(key, scrollToBottom = false) {
+  const p = _panes.get(key);
+  if (!p) return;
+  const stream = document.querySelector(`[data-pane-stream="${cssSel(key)}"]`);
   if (!stream) return;
-  const d = await get(`/api/chat/rooms/${encodeURIComponent(_currentRoom)}/messages?since_id=${_lastMsgId}`);
+  const d = await get(`/api/chat/rooms/${encodeURIComponent(key)}/messages?since_id=${p.lastMsgId}`);
   const items = d.items || [];
   if (!items.length) {
-    if (_lastMsgId === 0) {
+    if (p.lastMsgId === 0) {
       stream.innerHTML = '<div class="muted">まだメッセージがありません</div>';
     }
     return;
   }
-  const isInitial = _lastMsgId === 0;
+  const isInitial = p.lastMsgId === 0;
   const meId = Number(state.me?.id);
   const html = items.map(m => renderMsg(m, meId)).join('');
   if (isInitial) stream.innerHTML = html;
   else stream.insertAdjacentHTML('beforeend', html);
-  _lastMsgId = items[items.length - 1].id;
-  patch(`/api/chat/rooms/${encodeURIComponent(_currentRoom)}/read`, { last_read_id: _lastMsgId }).catch(() => {});
+  p.lastMsgId = items[items.length - 1].id;
+  patch(`/api/chat/rooms/${encodeURIComponent(key)}/read`, { last_read_id: p.lastMsgId }).catch(() => {});
   if (isInitial || scrollToBottom || stream.scrollTop + stream.clientHeight >= stream.scrollHeight - 100) {
     requestAnimationFrame(() => { stream.scrollTop = stream.scrollHeight; });
   }
@@ -222,8 +338,7 @@ async function loadMessages(scrollToBottom = false) {
   });
 }
 
-// v670 Slack 風メッセージ表示: 全メッセージ左寄せ、アバター + 名前 + 時刻をヘッダに、
-// 削除ボタンは hover で出る (.cm-row:hover .cm-del で表示)。
+// v670 Slack 風メッセージ表示
 function renderMsg(m, meId) {
   if (m.deleted_at) {
     return `<div class="cm-row" style="font-size:12px; color:#999; padding:4px 0; font-style:italic">(削除されたメッセージ)</div>`;
