@@ -422,25 +422,12 @@ function rai_thread_share(PDO $pdo, array $cfg, int $tid): void {
     json_response(['ok' => true]);
 }
 
-// ── メッセージ投稿 (OpenAI 呼び + トークン記録 + サブスク減) ─────────
-function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    ai_assert_configured($cfg);
-    $uid = (int)$u['id'];
-    $th = _rai_thread_visible($pdo, $tid, $uid);
-    // 投稿できるのは owner or 共有先
-    $body = read_json_body();
-    $msg = trim((string)($body['message'] ?? ''));
-    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
-    if (mb_strlen($msg) > 8000) $msg = mb_substr($msg, 0, 8000);
-    $attachIds = $body['attachment_ids'] ?? [];
-    if (!is_array($attachIds)) $attachIds = [];
-    $attachIds = array_values(array_filter(array_map('intval', $attachIds), fn($v) => $v > 0));
+// v1148 リファクタ: rai_thread_post_message が 150 行 超で見通し悪かったので
+//   3 つの ヘルパに 分割: サブスク チェック / メッセージ組立 / OpenAI 呼び。
+//   本体は オーケストレーション だけを 担う。
 
-    // トークン消費は「投稿者本人のサブスク」から引く
-    //   ChatGPT 的に、共有先の人が投稿すれば、その人のサブスクトークンが減る。
-    $sub = _rai_active_sub($pdo, $uid);
-    if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まず購入してください', 403);
+// ─ サブスクの残高 チェック (投稿前 に エラーで 弾く) ─
+function _rai_assert_sub_available(array $sub): void {
     $plan = (string)$sub['plan'];
     if ($plan === 'quota60' && (int)$sub['quota_left'] <= 0) {
         throw new ApiException('forbidden', 'クォータ (件数) を使い切りました', 403);
@@ -452,15 +439,29 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
         $used = (int)($sub['weekly_used'] ?? 0);
         $lim  = (int)($sub['weekly_limit'] ?? 0);
         if ($lim > 0 && $used >= $lim) {
-            throw new ApiException('forbidden', '今週の利用上限に到達しました (' . date('n/j H:i', strtotime((string)$sub['week_reset_at'])) . ' にリセット)', 403);
+            throw new ApiException('forbidden',
+                '今週の利用上限に到達しました (' . date('n/j H:i', strtotime((string)$sub['week_reset_at'])) . ' にリセット)', 403);
         }
     }
+}
 
-    // これまでの会話を組み立てる (thread 内の user_message / ai_response を交互に)
-    $stH = $pdo->prepare("SELECT user_message, ai_response FROM research_ai_chats WHERE thread_id = ? ORDER BY id LIMIT 20");
-    $stH->execute([$tid]);
-    $history = $stH->fetchAll(PDO::FETCH_ASSOC);
-    // template の sys prompt を取得
+// ─ サブスク トークン 減算 (投稿完了後、投稿者本人 の 分から) ─
+function _rai_decrement_sub(PDO $pdo, int $uid, string $plan, int $tokTotal): void {
+    if ($plan === 'quota60') {
+        $pdo->prepare("UPDATE research_ai_subscriptions SET quota_left = quota_left - 1, tokens_used = tokens_used + ? WHERE user_id = ?")
+            ->execute([$tokTotal, $uid]);
+    } elseif ($plan === 'tokens_ticket') {
+        $pdo->prepare("UPDATE research_ai_subscriptions SET tokens_left = GREATEST(0, tokens_left - ?), tokens_used = tokens_used + ? WHERE user_id = ?")
+            ->execute([$tokTotal, $tokTotal, $uid]);
+    } elseif ($plan === 'unlimited_weekly') {
+        $pdo->prepare("UPDATE research_ai_subscriptions SET weekly_used = weekly_used + ?, tokens_used = tokens_used + ? WHERE user_id = ?")
+            ->execute([$tokTotal, $tokTotal, $uid]);
+    }
+}
+
+// ─ OpenAI に投げる messages 配列を構築 (system prompt + 履歴 + 今回の user + 添付) ─
+function _rai_build_messages(PDO $pdo, array $th, int $uid, string $msg, array $attachIds): array {
+    // template の sys prompt
     $tpl = null;
     foreach (rai_templates() as $t) if ($t['key'] === ($th['template_key'] ?? '')) { $tpl = $t; break; }
     if (!$tpl) foreach (rai_templates() as $t) if ($t['key'] === 'freetalk') { $tpl = $t; break; }
@@ -470,45 +471,72 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
         $sysContent = $th['seed_context'] . "\n\n---\n\n" . $sysContent;
     }
     $messages = [['role' => 'system', 'content' => $sysContent]];
-    foreach ($history as $h) {
+    // 履歴 (直近 20 件、 user_message + ai_response を 交互 に)
+    $stH = $pdo->prepare("SELECT user_message, ai_response FROM research_ai_chats WHERE thread_id = ? ORDER BY id LIMIT 20");
+    $stH->execute([(int)$th['id']]);
+    foreach ($stH->fetchAll(PDO::FETCH_ASSOC) as $h) {
         if (!empty($h['user_message'])) $messages[] = ['role' => 'user', 'content' => $h['user_message']];
         if (!empty($h['ai_response']))  $messages[] = ['role' => 'assistant', 'content' => $h['ai_response']];
     }
-    // 添付ファイル: 画像 / PDF → OpenAI file_id を messages.content の user role に埋め込み
-    $stA = $pdo->prepare("SELECT id, kind, mime, filename, url, openai_file_id FROM research_ai_attachments WHERE id = ? AND uploader_user_id = ?");
+    // 今回投稿 (添付 は 画像 / PDF → OpenAI file_id を content 配列に)
+    $stA = $pdo->prepare("SELECT openai_file_id FROM research_ai_attachments WHERE id = ? AND uploader_user_id = ?");
     $userContent = [];
     foreach ($attachIds as $aid) {
         $stA->execute([$aid, $uid]);
         $att = $stA->fetch(PDO::FETCH_ASSOC);
-        if (!$att) continue;
-        if ($att['openai_file_id']) {
+        if ($att && !empty($att['openai_file_id'])) {
             $userContent[] = ['type' => 'file', 'file' => ['file_id' => $att['openai_file_id']]];
         }
     }
     $userContent[] = ['type' => 'text', 'text' => $msg];
     $messages[] = ['role' => 'user', 'content' => count($userContent) === 1 ? $msg : $userContent];
+    return $messages;
+}
 
-    // OpenAI 呼び
-    $model = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
-    $payloadArr = [
-        'model' => $model,
-        'messages' => $messages,
-    ];
-    // gpt-5 系は max_completion_tokens、他は max_tokens
+// ─ OpenAI chat.completions を叩いて (テキスト, プロンプトtok, 応答tok, 合計tok) を返す ─
+function _rai_call_openai(string $model, string $apiKey, array $messages): array {
+    $payloadArr = ['model' => $model, 'messages' => $messages];
+    // gpt-5 系は max_completion_tokens、他は max_tokens (temperature 対応)
     if (preg_match('/^(gpt-5|o1|o3)/', $model)) {
         $payloadArr['max_completion_tokens'] = 4000;
     } else {
         $payloadArr['temperature'] = 0.4;
         $payloadArr['max_tokens'] = 4000;
     }
-    $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
-    $resp = ai_openai_call($payload, (string)$cfg['openai']['api_key']);
+    $resp = ai_openai_call(json_encode($payloadArr, JSON_UNESCAPED_UNICODE), $apiKey);
     $aiText = $resp['choices'][0]['message']['content'] ?? '';
     if ($aiText === '') throw new ApiException('upstream_error', 'OpenAI 空応答', 502);
     $usage = $resp['usage'] ?? [];
-    $tokPrompt     = (int)($usage['prompt_tokens'] ?? 0);
+    $tokPrompt     = (int)($usage['prompt_tokens']     ?? 0);
     $tokCompletion = (int)($usage['completion_tokens'] ?? 0);
-    $tokTotal      = (int)($usage['total_tokens'] ?? ($tokPrompt + $tokCompletion));
+    $tokTotal      = (int)($usage['total_tokens']      ?? ($tokPrompt + $tokCompletion));
+    return [$aiText, $tokPrompt, $tokCompletion, $tokTotal];
+}
+
+// ── メッセージ投稿 (v1148 リファクタ: ヘルパに 分割してオーケストレーションだけ) ─────
+function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    ai_assert_configured($cfg);
+    $uid = (int)$u['id'];
+    $th = _rai_thread_visible($pdo, $tid, $uid);
+    $body = read_json_body();
+    $msg = trim((string)($body['message'] ?? ''));
+    if ($msg === '') throw new ApiException('bad_request', 'message required', 400);
+    if (mb_strlen($msg) > 8000) $msg = mb_substr($msg, 0, 8000);
+    $attachIds = $body['attachment_ids'] ?? [];
+    if (!is_array($attachIds)) $attachIds = [];
+    $attachIds = array_values(array_filter(array_map('intval', $attachIds), fn($v) => $v > 0));
+
+    // トークン消費は「投稿者本人のサブスク」から引く (共有先が投稿すれば その人のトークン)
+    $sub = _rai_active_sub($pdo, $uid);
+    if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まず購入してください', 403);
+    _rai_assert_sub_available($sub);
+    $plan = (string)$sub['plan'];
+
+    $messages = _rai_build_messages($pdo, $th, $uid, $msg, $attachIds);
+    $model = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
+    [$aiText, $tokPrompt, $tokCompletion, $tokTotal]
+        = _rai_call_openai($model, (string)$cfg['openai']['api_key'], $messages);
 
     $pdo->beginTransaction();
     try {
@@ -525,17 +553,8 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
         }
         // スレッドの last_message_at 更新
         $pdo->prepare("UPDATE research_ai_threads SET last_message_at = NOW() WHERE id = ?")->execute([$tid]);
-        // サブスク減算 (投稿者本人)
-        if ($plan === 'quota60') {
-            $pdo->prepare("UPDATE research_ai_subscriptions SET quota_left = quota_left - 1, tokens_used = tokens_used + ? WHERE user_id = ?")
-                ->execute([$tokTotal, $uid]);
-        } elseif ($plan === 'tokens_ticket') {
-            $pdo->prepare("UPDATE research_ai_subscriptions SET tokens_left = GREATEST(0, tokens_left - ?), tokens_used = tokens_used + ? WHERE user_id = ?")
-                ->execute([$tokTotal, $tokTotal, $uid]);
-        } elseif ($plan === 'unlimited_weekly') {
-            $pdo->prepare("UPDATE research_ai_subscriptions SET weekly_used = weekly_used + ?, tokens_used = tokens_used + ? WHERE user_id = ?")
-                ->execute([$tokTotal, $tokTotal, $uid]);
-        }
+        // v1148 リファクタ: サブスク減算は _rai_decrement_sub ヘルパに集約
+        _rai_decrement_sub($pdo, $uid, $plan, $tokTotal);
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();

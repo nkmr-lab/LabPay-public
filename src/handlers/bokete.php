@@ -58,17 +58,34 @@ function _bokete_topic_shape(array $r, int $uid): array {
 function bokete_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
-    $st = $pdo->prepare("SELECT t.id, t.creator_user_id, t.image_url, t.title, t.deadline_at, t.created_at,
-                                 u.display_name AS creator_name, u.avatar_url AS creator_avatar,
-                                 (SELECT COUNT(*) FROM bokete_answers a WHERE a.topic_id = t.id AND a.deleted_at IS NULL) AS answer_count,
-                                 (SELECT COALESCE(MAX(sc.n),0) FROM
-                                    (SELECT COUNT(*) AS n FROM bokete_stars s
-                                       JOIN bokete_answers a ON a.id = s.answer_id
-                                      WHERE a.topic_id = t.id AND a.deleted_at IS NULL
-                                      GROUP BY s.answer_id) sc) AS top_stars
-                            FROM bokete_topics t JOIN users u ON u.id = t.creator_user_id
-                           WHERE t.deleted_at IS NULL
-                           ORDER BY t.id DESC LIMIT 50");
+    // v1148 fix: v1147 の 相関 derived table (SELECT ... FROM (... WHERE a.topic_id = t.id))
+    //   は MariaDB では「Unknown column t.id」で 500 になっていた。
+    //   LEFT JOIN で 一括集計する 形に書き直し (性能も 良い)。
+    $st = $pdo->prepare("
+        SELECT t.id, t.creator_user_id, t.image_url, t.title, t.deadline_at, t.created_at,
+               u.display_name AS creator_name, u.avatar_url AS creator_avatar,
+               COALESCE(ac.answer_count, 0) AS answer_count,
+               COALESCE(sc.top_stars,    0) AS top_stars
+          FROM bokete_topics t
+          JOIN users u ON u.id = t.creator_user_id
+          LEFT JOIN (
+            SELECT topic_id, COUNT(*) AS answer_count
+              FROM bokete_answers WHERE deleted_at IS NULL
+             GROUP BY topic_id
+          ) ac ON ac.topic_id = t.id
+          LEFT JOIN (
+            SELECT ans.topic_id, MAX(cnt) AS top_stars
+              FROM (
+                SELECT a.topic_id, s.answer_id, COUNT(*) AS cnt
+                  FROM bokete_stars s
+                  JOIN bokete_answers a ON a.id = s.answer_id
+                 WHERE a.deleted_at IS NULL
+                 GROUP BY a.topic_id, s.answer_id
+              ) ans
+             GROUP BY ans.topic_id
+          ) sc ON sc.topic_id = t.id
+         WHERE t.deleted_at IS NULL
+         ORDER BY t.id DESC LIMIT 50");
     $st->execute();
     $items = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
