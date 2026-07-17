@@ -27,12 +27,19 @@ function statusBadge(st, deadlineAt) {
   }
 }
 
+// v1138 中村さん「勝敗予想は、キャンセルになったやつは表示しなくて良いかな。
+//   キャンセルを表示というチェックボックスを用意して、それがあれば表示する感じで」
+const SP_SHOW_CANCELLED_KEY = 'labpay-sp-show-cancelled';
+
 export async function renderScorePredictions() {
   const app = document.getElementById('app');
   app.innerHTML = `<div class="card"><div class="hint">読み込み中…</div></div>`;
   try {
     const d = await get('/api/score_predictions/games');
-    const items = d.items || [];
+    const rawItems = d.items || [];
+    const showCancelled = localStorage.getItem(SP_SHOW_CANCELLED_KEY) === '1';
+    const items = showCancelled ? rawItems : rawItems.filter(g => g.status !== 'cancelled');
+    const cancelledCount = rawItems.filter(g => g.status === 'cancelled').length;
     app.innerHTML = `
       <div class="card page-header">
         <h2 style="margin:0">🎯 勝敗予測</h2>
@@ -40,12 +47,16 @@ export async function renderScorePredictions() {
           試合のスコア (例: 3-2) を完璧に当てた人が pot 総取り (山分け)。場代 5%。
           誰も完璧に当てなければ全員にフィー返金。
         </p>
-        <p style="margin:8px 0 0">
-          <a class="btn primary" href="#/score-predictions/new">＋試合を起案する</a>
-        </p>
+        <div class="row" style="margin-top:8px; gap:10px; align-items:center; flex-wrap:wrap">
+          <a class="btn primary" href="#/score-predictions/new">＋ 試合を起案する</a>
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#6b7280">
+            <input type="checkbox" id="sp-show-cancelled" ${showCancelled ? 'checked' : ''}>
+            キャンセルも表示${cancelledCount > 0 ? ` (${cancelledCount})` : ''}
+          </label>
+        </div>
       </div>
       ${items.length ? items.map(g => `
-        <a class="card" href="#/score-predictions/${g.id}" style="display:block; text-decoration:none; color:inherit">
+        <a class="card" href="#/score-predictions/${g.id}" style="display:block; text-decoration:none; color:inherit${g.status === 'cancelled' ? '; opacity:0.55' : ''}">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
             <div class="bold" style="flex:1">${escapeHtml(g.team_home)} <span class="hint">対</span> ${escapeHtml(g.team_away)}</div>
             ${statusBadge(g.status, g.deadline_at)}
@@ -62,9 +73,13 @@ export async function renderScorePredictions() {
           </div>
         </a>
       `).join('') : `
-        <div class="card"><div class="hint" style="text-align:center; padding:20px">まだ試合が起案されていません。「＋試合を起案する」からどうぞ。</div></div>
+        <div class="card"><div class="hint" style="text-align:center; padding:20px">${rawItems.length && !showCancelled ? 'キャンセル済のみです。 上のチェックで表示できます。' : 'まだ試合が起案されていません。 「＋試合を起案する」からどうぞ。'}</div></div>
       `}
     `;
+    document.getElementById('sp-show-cancelled')?.addEventListener('change', (ev) => {
+      localStorage.setItem(SP_SHOW_CANCELLED_KEY, ev.target.checked ? '1' : '0');
+      renderScorePredictions();
+    });
   } catch (e) {
     app.innerHTML = `<div class="card"><div class="hint">読み込み失敗: ${escapeHtml(String(e?.message || e))}</div></div>`;
   }
