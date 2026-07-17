@@ -33,8 +33,38 @@ const GROUP_ACTIONS = [
   { id: 'rollcalls', label: '📣 点呼',           wariDep: false },
   { id: 'timers',    label: '⏱️ タイマー',       wariDep: false },
   { id: 'meetups',   label: '🤝 待ち合わせ',     wariDep: false },
-  { id: 'translate', label: '🌐 画像翻訳',       wariDep: false },
+  { id: 'translate', label: '🌐 画像翻訳 + 翻訳ログ', wariDep: false },
 ];
+
+// v1137 中村さん要望「グループの設定、シンプルと遊び、国内出張用、国際会議出張用となると良いかな」
+//   → 用途プリセットを 4 つ用意。 選ぶと下の feat_* / feat_actions がまとめて設定される
+//   (もちろん個別に上書き可)。 コア機能 (フィード / ファイル・画像 / チャット) は全プリセット共通で常時 ON。
+const GROUP_PRESETS = {
+  simple: {
+    label: '🧻 シンプル',
+    hint: 'フィード / ファイル・画像 / 投票・アンケート / 点呼 / チャット だけ',
+    wari: false, schedule: false, lodging: false, flight: false,
+    actions: ['polls', 'rollcalls'],
+  },
+  fun: {
+    label: '🎉 遊び',
+    hint: 'シンプル + ワリカ・レシート・支出記録・ルーレット・飲み会割り勘・待ち合わせ',
+    wari: true, schedule: false, lodging: false, flight: false,
+    actions: ['polls','rollcalls','receipt','expense','roulette','nomikai','meetups'],
+  },
+  domestic: {
+    label: '🚄 国内出張・国内会議',
+    hint: '遊び + スケジュール・宿泊地・航空券・タイマー',
+    wari: true, schedule: true, lodging: true, flight: true,
+    actions: ['polls','rollcalls','receipt','expense','roulette','nomikai','meetups','timers'],
+  },
+  international: {
+    label: '✈️ 国際会議・海外出張',
+    hint: '国内 + 翻訳ログ + 画像翻訳',
+    wari: true, schedule: true, lodging: true, flight: true,
+    actions: ['polls','rollcalls','receipt','expense','roulette','nomikai','meetups','timers','translate'],
+  },
+};
 // アクションが有効か (g.feat_actions が null = 「全 ON」、配列ならその中に含まれる物)
 function actionEnabled(g, id) {
   const list = g?.feat_actions;
@@ -103,8 +133,13 @@ export async function renderGroups() {
         <div id="gr-count" class="muted" style="font-size:12px; margin-top:6px">0 人選択中</div>
       </div>
       <div class="field">
+        <span class="lbl">用途プリセット</span>
+        <div class="hint-sm" style="margin-bottom:6px">選ぶと下の「使う機能」がまとめて設定されます。個別に上書き可。 コア機能 (フィード / ファイル・画像 / チャット) は全プリセット共通で常に有効。</div>
+        <div id="gr-preset-radios" style="display:flex; flex-direction:column; gap:4px"></div>
+      </div>
+      <div class="field">
         <span class="lbl">使う機能 (後から ON/OFF 可)</span>
-        <div class="hint-sm" style="margin-bottom:4px">必要なものだけ ON に。 OFF にしても既に登録したデータは残ります。</div>
+        <div class="hint-sm" style="margin-bottom:4px">プリセットを選ぶと自動で更新されます。 OFF にしても既に登録したデータは残ります。</div>
         <label style="display:flex; align-items:center; gap:8px; margin:4px 0">
           <span class="switch"><input type="checkbox" id="gr-feat-sched"><span class="slider"></span></span>
           <span>📅 スケジュール (学会・出張など)</span>
@@ -145,18 +180,45 @@ export async function renderGroups() {
     loadList();
   });
   await populatePicker();
-  // アクション 8 個のチェックボックスを並べる (デフォルト全 ON)
+  // アクション 9 個のチェックボックスを並べる (checkedはこの後プリセットで上書き)
   const actBox = document.getElementById('gr-feat-actions');
   if (actBox) {
     actBox.innerHTML = GROUP_ACTIONS.map(a => `
       <label style="display:flex; align-items:center; gap:8px; margin:2px 0">
-        <span class="switch"><input type="checkbox" data-act="${a.id}" checked><span class="slider"></span></span>
-        <span>${a.label}</span>
+        <span class="switch"><input type="checkbox" data-act="${a.id}"><span class="slider"></span></span>
+        <span>${a.label}${a.wariDep ? ' <span class="muted" style="font-size:11px">(ワリカ要)</span>' : ''}</span>
       </label>`).join('');
+  }
+  // v1137 用途プリセット (シンプル / 遊び / 国内 / 国際) を選ぶと feature 群を bulk 設定。
+  //   デフォルトは「遊び」= 従来 UI の初期値 (wari on / それ以外 off) と概ね合致。
+  const presetBox = document.getElementById('gr-preset-radios');
+  if (presetBox) {
+    presetBox.innerHTML = Object.entries(GROUP_PRESETS).map(([key, p]) => `
+      <label style="display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; cursor:pointer; font-size:13px">
+        <input type="radio" name="gr-preset" value="${key}" ${key === 'fun' ? 'checked' : ''}>
+        <span><b>${p.label}</b> <span class="hint-sm" style="font-size:11.5px; margin-left:4px">${escapeHtml(p.hint)}</span></span>
+      </label>`).join('');
+    presetBox.querySelectorAll('input[name="gr-preset"]').forEach(r => {
+      r.addEventListener('change', () => applyGroupPresetToForm(r.value));
+    });
+    applyGroupPresetToForm('fun');   // 初期反映
   }
   document.getElementById('gr-submit').addEventListener('click', onCreate);
   document.getElementById('gr-image-file').addEventListener('change', onGroupImageFile);
   await loadList();
+}
+
+function applyGroupPresetToForm(name) {
+  const p = GROUP_PRESETS[name];
+  if (!p) return;
+  const setCk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v; };
+  setCk('gr-feat-sched',   p.schedule);
+  setCk('gr-feat-lodging', p.lodging);
+  setCk('gr-feat-flight',  p.flight);
+  setCk('gr-feat-wari',    p.wari);
+  document.querySelectorAll('#gr-feat-actions input[data-act]').forEach(cb => {
+    cb.checked = p.actions.includes(cb.dataset.act);
+  });
 }
 
 async function onGroupImageFile(ev) {
@@ -675,6 +737,9 @@ function applyGroupFeatures(g) {
   if (lodCard)   lodCard.hidden   = !g.feat_lodging;
   if (fltCard)   fltCard.hidden   = !g.feat_flight;
   if (wariCard)  wariCard.hidden  = !g.feat_wari;
+  // v1137 翻訳ログセクションを feat_actions.translate に連動 (国際会議プリセットのみ ON)
+  const trCard = document.getElementById('gd-tr-card');
+  if (trCard) trCard.hidden = !actionEnabled(g, 'translate');
   if (g.feat_schedule) loadSchedule(groupId);
   if (g.feat_lodging)  loadLodgings(groupId);
   if (g.feat_flight)   loadFlights(groupId);
