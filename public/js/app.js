@@ -554,6 +554,10 @@ route('/profile-book',          lazy(() => import('./views/profile_book.js'), 'r
 route('/research-ai',           lazy(() => import('./views/research_ai.js'), 'renderResearchAI'));
 // v1126 setlog (LabPay 版 Vlog)
 route('/setlog',                lazy(() => import('./views/setlog.js'), 'renderSetlog'));
+// v1147 bokete (画像大喜利)
+route('/bokete',                lazy(() => import('./views/bokete.js'), 'renderBokete'));
+route('/bokete/new',            lazy(() => import('./views/bokete.js'), 'renderBoketeNew'));
+route('/bokete/:id',            lazy(() => import('./views/bokete.js'), 'renderBoketeTopic'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

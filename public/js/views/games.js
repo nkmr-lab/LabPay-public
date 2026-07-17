@@ -74,6 +74,9 @@ const GAMES = [
     desc: 'ラボメンのトレカ (SSR/SR/R/N) を誰でも作成 → 本人承認で公開。 ガチャ 1 連 30pt / 10 連 250pt (R 以上確定)' },
   { id: 'setlog',        icon: '📸', name: 'setlog', url: '#/setlog',
     desc: '1 日を短いクリップ (写真 + 短キャプション) で断片記録するラボ内 Vlog (BeReal 的)。 今日のみんなのフィード + 日別 / ユーザ別のログ' },
+  // v1147 中村さん要望「boketeの機能をつくって」
+  { id: 'bokete',        icon: '😆', name: 'ぼけて (bokete)', url: '#/bokete',
+    desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、 みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料' },
 ];
 
 const CATEGORIES = [
@@ -113,6 +116,7 @@ const GAME_CATEGORY = {
   'profile-book':  'community',  // ラボメン同士でお互いを知る
   'trading-cards': 'collect',    // カードを集める
   setlog:          'community',  // みんなの今日をシェア
+  bokete:          'party',      // v1147 大喜利は パーティー ゲーム
 };
 
 export function renderGames() {
