@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-  <!-- v1003 fb#469 & #471 iOS Safari 対策: input focus 時 の auto-zoom を 抑止。
-       maximum-scale=1 は 現代 iOS では accessibility の ため ユーザ 手動 の ピンチズーム は
-       依然 効く (Apple は accessibility 目的 で user gesture を 尊重)、 focus zoom だけ 止まる。 -->
+  <!-- v1003 fb#469 & #471 iOS Safari 対策: input focus 時の auto-zoom を抑止。
+       maximum-scale=1 は現代 iOS では accessibility のためユーザ手動のピンチズームは
+       依然効く (Apple は accessibility 目的で user gesture を尊重)、 focus zoom だけ止まる。 -->
   <meta name="theme-color" content="#4a106d">
   <!-- iOS Safari auto-detects 8+ digit numbers as phone numbers; JAN codes get linkified
        and tapping them prompts "call this number?". Disable globally. -->
@@ -23,13 +23,18 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <!-- v1154 バージョン履歴バッジのクリックが効かなくなっていた (中村さん報告) 修正:
-         旧: <a href="#/"> の 内側 に <span onclick> を 入れていたが、
-             一部ブラウザ (特に モバイル Safari) で span からの preventDefault が
-             親 a のリンク遷移を止めきれず、 モーダルが 開いた 瞬間にホーム遷移で 消えていた。
-         新: LabPay 文字と v1154 バッジを 兄弟要素に分離し、 v バッジは <button> 単独 に。 -->
+    <!-- v1156 fb#490 中村さん報告「バージョンをクリックしても更新履歴が表示されない」
+         の再挑戦 (v1155 の全面書き換えは reload ループを招いて緊急 revert したので
+         今回は最小手術)。 button → a に変更し、 href に GitHub commits へのフォールバック
+         を張る。通常は onclick で preventDefault → showVersionHistory() のモーダル、
+         もし何らかの原因 (SW キャッシュで inline script が古い / モジュールロード失敗 /
+         DOM 準備前 click) で showVersionHistory が未定義でも、素の <a> として GitHub
+         コミット一覧に飛ぶため「クリックしても何も起きない」状態にはなり得ない。
+         onclick 側では preventDefault + stopPropagation で親 a (#/) 遷移も止める。 -->
     <span class="brand"><a href="#/" style="text-decoration:none; color:inherit">LabPay</a>
-      <button type="button" class="brand-version" id="brand-version" title="バージョン履歴">v1154</button></span>
+      <a class="brand-version" id="brand-version" title="バージョン履歴 (クリックでモーダル、失敗時は GitHub 遷移)"
+         href="https://github.com/nkmr-lab/LabPay/commits/main" target="_blank" rel="noopener"
+         onclick="if(window.showVersionHistory){event.preventDefault();event.stopPropagation();window.showVersionHistory();}">v1156</a></span>
     <script type="module">
       import { showVersionHistory } from '/js/version_history.js';
       document.getElementById('brand-version')?.addEventListener('click', (ev) => {
@@ -49,16 +54,16 @@
     </div>
   </header>
 
-  <!-- v1154 タブは js/app.js の TAB_DEFS を single source of truth に、
+  <!-- v1156 タブは js/app.js の TAB_DEFS を single source of truth に、
        applyTabLayout() の中で動的生成 (rebuildNav) するので nav の中身は空。 -->
   <nav id="tabs" hidden></nav>
 
-  <!-- v500 #113 #114 起動中は中身が空なので、 最初に大きくバージョンを出して
-       「ちゃんと起動してるよ」 を伝える。 app.js が hydrate したら自動で上書きされる。
+  <!-- v500 #113 #114 起動中は中身が空なので、最初に大きくバージョンを出して
+       「ちゃんと起動してるよ」を伝える。 app.js が hydrate したら自動で上書きされる。
        (app.innerHTML = ... が走ると消える) -->
   <main id="app">
     <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
-      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1154</span></div>
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1156</span></div>
       <div style="font-size:12px; color:#666; margin-top:8px" id="splash-updated">最終更新: 取得中…</div>
       <div style="margin-top:30px">
         <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>
@@ -81,17 +86,17 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
-        // v911 #378 新 シェル が deploy された 時 に 自動 リロード し 新 app.js / 新 ルート
-        //   を 取り込む。 初回 install で SW の controller が 付く ケース で 無限 ループ に
-        //   なら ない よう、 既に controller が ある = 既存 セッション の 時 だけ reload。
+        // v911 #378 新シェルが deploy された時に自動リロードし新 app.js / 新ルート
+        //   を取り込む。初回 install で SW の controller が付くケースで無限ループに
+        //   ならないよう、既に controller がある = 既存セッションの時だけ reload。
         // v1003 中村さん指摘「ホームで2回ロードしてしまうところある」の主因は
         //   controllerchange 後の 5s 自動 reload。 SW 更新は次回起動時に自然に反映される
-        //   ので、 UI操作中の強制 reload は完全撤廃。 タブが隠れた瞬間にだけ defer reload
+        //   ので、 UI操作中の強制 reload は完全撤廃。タブが隠れた瞬間にだけ defer reload
         //   する形に (バックグラウンドでは目立たないので体感二重ロードにならない)。
         if (navigator.serviceWorker.controller) {
           navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (window.__labpay_reloaded_for_sw) return;
-            // タブが 「隠れた」 瞬間 だけ 1 回 reload。 表示中の reload は 出さない。
+            // タブが「隠れた」瞬間だけ 1 回 reload。表示中の reload は出さない。
             const onHide = () => {
               if (document.hidden && !window.__labpay_reloaded_for_sw) {
                 window.__labpay_reloaded_for_sw = true;
