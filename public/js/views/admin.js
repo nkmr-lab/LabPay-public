@@ -603,15 +603,14 @@ function renderSystemFlowTable(title, items, total, color) {
 function renderDashboard(d) {
   const el = document.getElementById('dash');
   if (!el) return;
-  // v802 SYSTEM の「ユーザ直接やり取り」と「ESCROW 経由」を分けて、戻りは直接だけで計算
+  // v1160 SYSTEM ↔ ESCROW の「経由」表示を撤去 (中村さん指摘「そもそも収支として
+  //   つけなくて良いのでは?」)。 SYSTEM 持ち出しタスクの deposit は大抵 refund で
+  //   相殺され SYSTEM 収支として意味が無い、 rake 等の本物の SYSTEM 収入は
+  //   ESCROW 累計払出内訳 (rake 型) で見える。 SYSTEM 収支は「ユーザ直接」のみに。
   const incUserHtml   = renderSystemFlowTable('💰 SYSTEM 収入: ユーザ直接 (=「戻り」集計対象)',
                                               d.system_income_user,    d.system_income_user_total    || 0, '#15803d');
-  const incEscHtml    = renderSystemFlowTable('🔁 SYSTEM 収入: ESCROW 経由 (循環、戻りには入れない)',
-                                              d.system_income_escrow,  d.system_income_escrow_total  || 0, '#0891b2');
   const outUserHtml   = renderSystemFlowTable('💸 SYSTEM 支出: ユーザ直接 (= 配布)',
                                               d.system_outflow_user,   d.system_outflow_user_total   || 0, '#b45309');
-  const outEscHtml    = renderSystemFlowTable('🔁 SYSTEM 支出: ESCROW へ (循環、戻りには入れない)',
-                                              d.system_outflow_escrow, d.system_outflow_escrow_total || 0, '#7c3aed');
   const escInHtml     = renderSystemFlowTable('📥 ESCROW に入った内訳 (預け入れ)',
                                               d.escrow_income_by_type,  d.escrow_income_total  || 0, '#0891b2');
   const escOutHtml    = renderSystemFlowTable('📤 ESCROW から出た内訳 (精算 / 返金)',
@@ -627,8 +626,6 @@ function renderDashboard(d) {
           <th>SYSTEM 支出 (ユーザ直接)</th><td class="right mono" style="color:#b45309">${(d.system_outflow_user_total || 0).toLocaleString()}</td></tr>
       <tr><th>SYSTEM 戻り (直接のみ)</th><td class="right mono" style="color:${netReturn >= 0 ? '#15803d' : '#b91c1c'}">${netReturn.toLocaleString()}</td>
           <th>取扱高 (購入合計)</th><td class="right mono">${d.turnover.toLocaleString()}</td></tr>
-      <tr><th>SYSTEM 収入 (ESCROW 経由)</th><td class="right mono" style="color:#0891b2">${(d.system_income_escrow_total || 0).toLocaleString()}</td>
-          <th>SYSTEM 支出 (ESCROW へ)</th><td class="right mono" style="color:#7c3aed">${(d.system_outflow_escrow_total || 0).toLocaleString()}</td></tr>
       <tr><th>ESCROW 累計預入</th><td class="right mono" style="color:#0891b2">${(d.escrow_income_total || 0).toLocaleString()}</td>
           <th>ESCROW 累計払出</th><td class="right mono" style="color:#7c3aed">${(d.escrow_outflow_total || 0).toLocaleString()}</td></tr>
       <tr><th>ユーザー保有合計</th><td class="right mono">${d.held_by_users.toLocaleString()}</td>
@@ -642,8 +639,6 @@ function renderDashboard(d) {
     </table>
     ${incUserHtml}
     ${outUserHtml}
-    ${incEscHtml}
-    ${outEscHtml}
     ${escInHtml}
     ${escOutHtml}
   `;
