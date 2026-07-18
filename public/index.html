@@ -23,13 +23,13 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <!-- v1153 バージョン履歴バッジのクリックが効かなくなっていた (中村さん報告) 修正:
+    <!-- v1154 バージョン履歴バッジのクリックが効かなくなっていた (中村さん報告) 修正:
          旧: <a href="#/"> の 内側 に <span onclick> を 入れていたが、
              一部ブラウザ (特に モバイル Safari) で span からの preventDefault が
              親 a のリンク遷移を止めきれず、 モーダルが 開いた 瞬間にホーム遷移で 消えていた。
-         新: LabPay 文字と v1153 バッジを 兄弟要素に分離し、 v バッジは <button> 単独 に。 -->
+         新: LabPay 文字と v1154 バッジを 兄弟要素に分離し、 v バッジは <button> 単独 に。 -->
     <span class="brand"><a href="#/" style="text-decoration:none; color:inherit">LabPay</a>
-      <button type="button" class="brand-version" id="brand-version" title="バージョン履歴">v1153</button></span>
+      <button type="button" class="brand-version" id="brand-version" title="バージョン履歴">v1154</button></span>
     <script type="module">
       import { showVersionHistory } from '/js/version_history.js';
       document.getElementById('brand-version')?.addEventListener('click', (ev) => {
@@ -49,7 +49,7 @@
     </div>
   </header>
 
-  <!-- v1153 タブは js/app.js の TAB_DEFS を single source of truth に、
+  <!-- v1154 タブは js/app.js の TAB_DEFS を single source of truth に、
        applyTabLayout() の中で動的生成 (rebuildNav) するので nav の中身は空。 -->
   <nav id="tabs" hidden></nav>
 
@@ -58,7 +58,7 @@
        (app.innerHTML = ... が走ると消える) -->
   <main id="app">
     <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
-      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1153</span></div>
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1154</span></div>
       <div style="font-size:12px; color:#666; margin-top:8px" id="splash-updated">最終更新: 取得中…</div>
       <div style="margin-top:30px">
         <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>

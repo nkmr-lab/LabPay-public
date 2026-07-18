@@ -344,6 +344,7 @@ export async function renderOverleafList({ query = {} } = {}) {
         : '';
       body.innerHTML = filterChip + singleDayNote + renderCompareChart(active, mf, activeFilter) + staleSummary;
       wireFilterChip();
+      wireOverleafChartHover();  // v1154 fb#489 グラフのカスタム tooltip を wire
       return;
     }
 
@@ -462,6 +463,7 @@ function renderCompareChart(items, mf, filterStr = '') {
     const hue = (idx * 360 / Math.max(sortedByCount.length, 1)) % 360;
     const color = `hsl(${hue.toFixed(0)}, 65%, 45%)`;
     const displayName = shortenName(p.name, filterStr);
+    const escName = escapeHtml(displayName);
     const sparkPoints = (p.sparkline || []).map(s => ({
       d: s.d,
       v: s[mf.sparkKey] || 0,
@@ -470,23 +472,24 @@ function renderCompareChart(items, mf, filterStr = '') {
     })).filter(pt => Number.isFinite(pt.x) && Number.isFinite(pt.y));
     if (!sparkPoints.length) return;
     const ptsStr = sparkPoints.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ');
-    // v905 折れ線に <title> でホバー時にプロジェクト名を表示
-    lines.push(`<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"><title>${escapeHtml(displayName)}</title></polyline>`);
-    // v905 各データ点に小さな可視ドット + <title> で 「名前: 値 (日付)」 ツールチップ。
-    //   ホバー判定領域を 広げるため透明な大きい円を上から重ねる。
+    // v1154 fb#489 (メンバー25さん要望) 折れ線 と 各点 に data-* を付けて、
+    //   HTML カスタムツールチップで「どの overleaf か + 値 + 日付」を表示。
+    //   SVG native <title> は 500ms 遅延 + スタイル不能 で 分かりにくかった。
+    lines.push(`<polyline data-ovl-name="${escName}" points="${ptsStr}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" style="cursor:crosshair"><title>${escName}</title></polyline>`);
     sparkPoints.forEach(pt => {
-      const dateStr = String(pt.d).slice(5).replace('-', '/');  // MM-DD → MM/DD
+      const dateStr = String(pt.d).slice(5).replace('-', '/');
       const title = `${displayName}: ${pt.v.toLocaleString()} ${mf.unit} (${dateStr})`;
-      lines.push(`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2.5" fill="${color}" opacity="0.7"><title>${escapeHtml(title)}</title></circle>`);
-      lines.push(`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="8" fill="${color}" fill-opacity="0" style="cursor:crosshair; pointer-events:all"><title>${escapeHtml(title)}</title></circle>`);
+      lines.push(`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2.5" fill="${color}" opacity="0.7"></circle>`);
+      // ヒットボックス (透明 r=8) に data-* を仕込んで tooltip 情報を持たせる
+      lines.push(`<circle data-ovl-name="${escName}" data-ovl-value="${pt.v.toLocaleString()}" data-ovl-unit="${escapeHtml(mf.unit)}" data-ovl-date="${escapeHtml(dateStr)}" data-ovl-color="${color}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="8" fill="${color}" fill-opacity="0" style="cursor:crosshair; pointer-events:all"><title>${escapeHtml(title)}</title></circle>`);
     });
-    // 終点 (最新値) は大きめのドット
     const last = sparkPoints[sparkPoints.length - 1];
-    lines.push(`<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1"><title>${escapeHtml(displayName)}: ${last.v.toLocaleString()} ${mf.unit} (最新)</title></circle>`);
+    const lastDateStr = String(last.d).slice(5).replace('-', '/');
+    lines.push(`<circle data-ovl-name="${escName}" data-ovl-value="${last.v.toLocaleString()}" data-ovl-unit="${escapeHtml(mf.unit)} (最新)" data-ovl-date="${escapeHtml(lastDateStr)}" data-ovl-color="${color}" cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1" style="cursor:crosshair"><title>${escName}: ${last.v.toLocaleString()} ${mf.unit} (最新)</title></circle>`);
     legend.push(`
       <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:#fafafa; border-radius:10px; font-size:11px" title="${escapeHtml(p.name)}">
         <span style="display:inline-block; width:10px; height:10px; background:${color}; border-radius:2px"></span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px">${escapeHtml(displayName)}</span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px">${escName}</span>
         <span class="muted">(${(p.latest?.[mf.latest] || 0).toLocaleString()})</span>
       </div>`);
   });
@@ -494,15 +497,62 @@ function renderCompareChart(items, mf, filterStr = '') {
   return `
     <div class="card">
       <h3 style="margin:0 0 8px; font-size:14px">📊 ${escapeHtml(mf.unit)}の推移比較 (直近60日)</h3>
-      <svg width="100%" viewBox="0 0 ${w} ${h}" style="display:block; max-width:100%; background:#fff">
-        ${yAxis.join('')}
-        ${lines.join('')}
-        ${xLabels.join('')}
-      </svg>
+      <div class="ovl-chart-wrap" style="position:relative">
+        <svg id="ovl-compare-svg" width="100%" viewBox="0 0 ${w} ${h}" style="display:block; max-width:100%; background:#fff">
+          ${yAxis.join('')}
+          ${lines.join('')}
+          ${xLabels.join('')}
+        </svg>
+        <div id="ovl-chart-tooltip" hidden style="position:absolute; pointer-events:none; background:rgba(30,30,45,0.95); color:#fff; padding:6px 10px; border-radius:6px; font-size:12px; line-height:1.4; box-shadow:0 4px 12px rgba(0,0,0,0.25); z-index:2; white-space:nowrap; max-width:280px"></div>
+      </div>
       <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
         ${legend.join('')}
       </div>
     </div>`;
+}
+
+// v1154 fb#489 グラフのカスタム tooltip を wire (DOM 挿入後に呼ぶ)。
+//   polyline / circle の hover で 「どのプロジェクトか + 値 + 日付」を マウス位置に追随して表示。
+function wireOverleafChartHover() {
+  const wrap = document.querySelector('.ovl-chart-wrap');
+  const svg  = document.getElementById('ovl-compare-svg');
+  const tip  = document.getElementById('ovl-chart-tooltip');
+  if (!wrap || !svg || !tip) return;
+  const show = (t, ev) => {
+    const name  = t.getAttribute('data-ovl-name')  || '';
+    const value = t.getAttribute('data-ovl-value') || '';
+    const unit  = t.getAttribute('data-ovl-unit')  || '';
+    const date  = t.getAttribute('data-ovl-date')  || '';
+    const color = t.getAttribute('data-ovl-color') || '#7b3fa0';
+    if (!name) return;
+    let html = `<div style="font-weight:700; color:${color}; margin-bottom:2px">${name}</div>`;
+    if (value) html += `<div style="font-size:11px; opacity:0.9">${value} ${unit || ''}${date ? ' ・ ' + date : ''}</div>`;
+    tip.innerHTML = html;
+    tip.hidden = false;
+    positionTip(ev);
+  };
+  const positionTip = (ev) => {
+    const rect = wrap.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    // マウス位置 + オフセット、 wrap 内に収める
+    const tw = tip.offsetWidth  || 220;
+    const th = tip.offsetHeight || 40;
+    let left = x + 12; let top = y + 12;
+    if (left + tw > rect.width)  left = Math.max(4, x - tw - 12);
+    if (top  + th > rect.height) top  = Math.max(4, y - th - 12);
+    tip.style.left = left + 'px';
+    tip.style.top  = top  + 'px';
+  };
+  svg.addEventListener('mousemove', (ev) => {
+    const t = ev.target;
+    if (t && (t.tagName === 'circle' || t.tagName === 'polyline') && t.hasAttribute('data-ovl-name')) {
+      show(t, ev);
+    } else {
+      tip.hidden = true;
+    }
+  });
+  svg.addEventListener('mouseleave', () => { tip.hidden = true; });
 }
 
 export async function renderOverleafDetail({ params }) {
