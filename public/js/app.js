@@ -12,6 +12,9 @@ import { renderHome } from './views/home.js';
 import { preloadSounds } from './sounds.js';
 import { installGlobalAudioUnlock } from './audio_unlock.js';
 import { bootSettingsSync } from './settings_sync.js';
+// v1155 fb#490 バージョン履歴を app.js から直接 bind (index.html inline script
+//   経由だと SW キャッシュ / モジュール読み込みタイミング次第で無効化される事があった)。
+import { showVersionHistory } from './version_history.js';
 
 // 遅延ロードヘルパー: route 時に初回だけ import する。 import() が返す
 //   Promise はブラウザがキャッシュするので、同じページを 2 回目開くと
@@ -267,6 +270,18 @@ function renderChrome() {
   }
   const groupsTab = document.getElementById('tab-groups');
   if (groupsTab) groupsTab.hidden = !state.hasGroups;
+  // v1155 fb#490 バージョンバッジのクリックが効かないという中村さん報告に対する
+  //   保険策。 index.html の inline module script が SW キャッシュ由来で古いか、
+  //   評価タイミングでリスナ付与前に click されているケースを想定し、 renderChrome
+  //   が走るたび idempotent に addEventListener しなおす (フラグでdedupe)。
+  const brandVerBtn = document.getElementById('brand-version');
+  if (brandVerBtn && !brandVerBtn.dataset.vhBound) {
+    brandVerBtn.dataset.vhBound = '1';
+    brandVerBtn.addEventListener('click', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      try { showVersionHistory(); } catch (e) { console.error('showVersionHistory failed', e); }
+    });
+  }
   applyTabLayout();
 }
 
@@ -283,9 +298,9 @@ function renderChrome() {
 // v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
 //   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。食べある記・ラボにいる人はタブから外し
 //   #/apps からアクセスする形に。全員デフォルトに戻すため、 layout key を v2 に上げる。
-// v1132 中村さん要望「一旦みんなの表示タブ設定を整理しよう。 らぼったー、売買、依頼、
+// v1132 中村さん要望「一旦みんなの表示タブ設定を整理しよう。らぼったー、売買、依頼、
 //   研究、共有、運営、娯楽、アプリに限定していこう」+「購入タブを売買タブに名前を変更、
-//   そこに 購入・販売・オークション・ラーボーイーツ・チケット・発表順オークションを配置」
+//   そこに購入・販売・オークション・ラーボーイーツ・チケット・発表順オークションを配置」
 //   → id='buy' を title='売買' に rename (画面自体は購入 UI + 上部に売買アプリ集を追加)。
 //   home / groups / sell / auctions / achievements は DEFAULT_HIDDEN_TABS に (URL/apps 経由で到達可)。
 //   layout key を v3 に上げて全員のデフォルトを新配置に更新。
@@ -335,7 +350,7 @@ export function writeTabLayout(layout) {
   } catch {}
 }
 // v1136 nav の子要素を TAB_DEFS から (再) 生成。 rebuild=true なら丸ごと作り直す
-//   (title 変更をハードコードなしで反映するため)。 通常呼び出しでも「まだ何も無い」
+//   (title 変更をハードコードなしで反映するため)。通常呼び出しでも「まだ何も無い」
 //   ケース (初回) は生成する。
 function rebuildNav(nav) {
   nav.textContent = '';
