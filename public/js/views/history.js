@@ -74,7 +74,9 @@ function renderBalanceChart(items, currentBalance) {
   const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xPad = Math.max(1, xMax - xMin);
   const yPad = Math.max(1, yMax - yMin) * 0.1;
-  const yLo = yMin - yPad, yHi = yMax + yPad;
+  // v1161 中村さん要望「座標の軸は 0 から」→ 下限は常に 0 (残高がマイナスになる稀なケース
+  //   だけ下に伸ばす)。上端は今まで通り 10% パディング。
+  const yLo = Math.min(0, yMin), yHi = yMax + yPad;
   const sx = t => padL + (t - xMin) / (xMax - xMin || 1) * (W - padL - padR);
   const sy = v => padT + (1 - (v - yLo) / (yHi - yLo || 1)) * (H - padT - padB);
 
