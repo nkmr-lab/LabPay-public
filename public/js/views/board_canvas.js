@@ -94,10 +94,10 @@ function shellHtml() {
         <div id="board-import-wrap" style="position:relative; display:inline-flex">
           <button class="btn" id="board-import" title="外部素材を取り込む">📥 インポート ▾</button>
           <div id="board-import-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
-            <button class="btn board-import-item" data-import="refs"   style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">📚 論文 (文献ストックから)</button>
-            <button class="btn board-import-item" data-import="places" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🍜 食べある記 (画像主体)</button>
-            <button class="btn board-import-item" data-import="images" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🖼 画像ファイル (複数可)</button>
-            <button class="btn board-import-item" data-import="videos" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🎬 動画ファイル (複数可)</button>
+            <button class="btn board-import-item" data-import="refs"   style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">📚 文献管理から</button>
+            <button class="btn board-import-item" data-import="places" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🍜 食べある記から</button>
+            <button class="btn board-import-item" data-import="images" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🖼 画像 (PCから)</button>
+            <button class="btn board-import-item" data-import="videos" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🎬 動画 (PCから)</button>
           </div>
         </div>
         <!-- 隠し input: インポートメニューから起動 -->
@@ -365,6 +365,7 @@ function wireCanvas() {
   vp.addEventListener('pointerdown', (e) => {
     // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
     if (MODE === 'draw' && !e.target.closest('button, .bnote')) {
+      e.preventDefault();  // v1178 マウス drag → text-selection や dragstart を確実に抑止
       const w = screenToWorld(e.clientX, e.clientY);
       CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
       DRAG.mode = 'draw';
@@ -517,6 +518,52 @@ function wireCanvas() {
     const factor = Math.exp(delta * 0.0015);
     zoomAtScreen(e.clientX, e.clientY, VIEW.scale * factor);
   }, { passive: false });
+
+  // v1178 中村さん報告「手書きできないねぇ」→ pointerdown がマウスで想定通り走らない
+  //   ケース (どの環境か不明、一部ブラウザで SVG overlay や user-select 絡み) を回避する
+  //   ため mousedown/move/up を描画モード限定で保険実装。 mode='draw' の時のみ動作、
+  //   ポインタイベントと二重発火する可能性はあるが、 CURRENT_STROKE の有無チェックで
+  //   二回目起動を弾く。
+  vp.addEventListener('mousedown', (e) => {
+    if (MODE !== 'draw') return;
+    if (e.target.closest('button, .bnote')) return;
+    if (CURRENT_STROKE) return;  // pointerdown で既に開始済み
+    e.preventDefault();
+    const w = screenToWorld(e.clientX, e.clientY);
+    CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
+    DRAG.mode = 'draw';
+    renderCurrentStroke();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (DRAG.mode !== 'draw' || !CURRENT_STROKE) return;
+    const w = screenToWorld(e.clientX, e.clientY);
+    const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
+    const dx = w.x - last.x, dy = w.y - last.y;
+    if (dx * dx + dy * dy > 4) {
+      CURRENT_STROKE.points.push({ x: w.x, y: w.y });
+      renderCurrentStroke();
+    }
+  });
+  window.addEventListener('mouseup', async (e) => {
+    if (DRAG.mode !== 'draw' || !CURRENT_STROKE) return;
+    const stroke = CURRENT_STROKE;
+    CURRENT_STROKE = null;
+    DRAG.mode = null;
+    if (stroke.points.length < 2) { renderCurrentStroke(); return; }
+    try {
+      const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
+        points: stroke.points, color: stroke.color, width: stroke.width,
+      });
+      if (r && r.stroke) {
+        STROKE_MAP[r.stroke.id] = r.stroke;
+        STROKES = Object.values(STROKE_MAP);
+      }
+    } catch (err) {
+      toast('保存失敗: ' + err.message);
+    }
+    renderCurrentStroke();
+    renderStrokes();
+  });
 }
 
 function zoomAtScreen(sx, sy, newScale) {
