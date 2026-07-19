@@ -558,6 +558,10 @@ route('/setlog',                lazy(() => import('./views/setlog.js'), 'renderS
 route('/bokete',                lazy(() => import('./views/bokete.js'), 'renderBokete'));
 route('/bokete/new',            lazy(() => import('./views/bokete.js'), 'renderBoketeNew'));
 route('/bokete/:id',            lazy(() => import('./views/bokete.js'), 'renderBoketeTopic'));
+// v1164 実験協力者募集
+route('/exp-recruits',          lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitsList'));
+route('/exp-recruits/new',      lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitNew'));
+route('/exp-recruits/:id',      lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitDetail'));
 // v961 中村研アルバム集
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿

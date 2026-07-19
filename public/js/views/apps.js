@@ -136,6 +136,7 @@ export const APPS = [
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。手動追加 or 領収書を撮影して OpenAI Vision で店名/日付/金額/カテゴリを自動抽出。月別 + カテゴリ別合計 + 明細一覧。全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
+  { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。 枠 (時間帯や日程) と定員を並べて公開、 メンバーは空いてる枠に自分でエントリー。 実施者は代理追加も可能。 参加者は自分の枠を後から確認できる。', defaultVisible: false },
   { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料。', defaultVisible: true },
   { id: 'setlog', cat: 'game', url: '#/setlog', title: '📸 setlog (LabPay 版 Vlog)', desc: '1 日を短いクリップ (写真 + キャプション) で断片記録するラボ内 Vlog (BeReal 的)。写真を随時ポスト → 日別・ユーザ別に時系列でまとまる。今日のみんなのフィードもある。', defaultVisible: true },
   { id: 'research-ai', cat: 'research', url: '#/research-ai', title: '🔬 研究特化 AI サブスク', desc: '研究に特化したプロンプトテンプレート付きチャット (研究テーマ相談 / 実験デザインチェック / アブスト磨き / 関連研究整理 / リバッタル起草 / 科研費文章 / 汎用)。サブスク: 200pt/60件 or 1000pt/無制限 (30 日)。', defaultVisible: true },
